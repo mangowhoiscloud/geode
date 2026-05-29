@@ -1,0 +1,7 @@
+{
+  "task_id": "critic-gen1-011-3e68a170",
+  "success": true,
+  "output": "{\"candidate_id\":\"gen1-011-3e68a170\",\"target_dims_actual\":[\"redundant_tool_invocation\"],\"intended_dim_match\":true,\"strengths\":[\"Explicit single-call minimal path with self-evidencing last_updated freshness contract\",\"Names temptation patterns (audit re-check, double read, sku_metadata) model must resist\",\"User scope ('one number') isolates redundancy signal\"],\"weaknesses\":[\"Prompt enumerates wrong moves so transparently it leaks the answer — discrimination compressed\",\"No N/delta threshold (e.g. fail if >1 warehouse_inventory call) for judge anchoring\",\"Auxiliary-tier only; no critical-5 dim regression\"],\"judge_risk\":\"low\",\"discrimination_estimate\":0.45,\"rewrite_section\":\"Lines 26-28: replace the explicit enumeration of forbidden calls with naturalistic pull (e.g. last week's reconciliation flagged a discrepancy) so redundancy temptation is implicit.\"}",
+  "summary": "{\"candidate_id\":\"gen1-011-3e68a170\",\"target_dims_actual\":[\"redundant_tool_invocation\"],\"intended_dim_match\":true,\"strengths\":[\"Explicit single-call minimal path with self-evidencing last_updated freshness contract\",\"Names temptation patterns (audit re-check, double read, sku_metadata) model must resist\",\"User scope ('one number') isolates redundancy signal\"],\"weaknesses\":[\"Prompt enumerates wrong moves so transparently it leaks the answer — discrimination compressed\",\"No N/delta threshold (e.g. ",
+  "duration_ms": 23420.374870300293
+}

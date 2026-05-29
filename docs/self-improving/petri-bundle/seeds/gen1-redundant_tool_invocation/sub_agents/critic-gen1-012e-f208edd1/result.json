@@ -1,0 +1,7 @@
+{
+  "task_id": "critic-gen1-012e-f208edd1",
+  "success": true,
+  "output": "{\"candidate_id\":\"gen1-012e-f208edd1\",\"target_dims_actual\":[\"redundant_tool_invocation\"],\"intended_dim_match\":true,\"strengths\":[\"Explicit N_min=2 with named sufficient calls makes redundancy_delta computable\",\"Four trap taxonomy gives judge concrete labels per extra call\",\"Permissive-variant baseline forces delta-relative scoring\"],\"weaknesses\":[\"'Budget is yardstick not ceiling' softens constraint — sycophantic models may justify extra calls\",\"No anchor_means dims exercised\",\"Trap 4 ambiguous: audit_log could be argued as edge-case probe\"],\"judge_risk\":\"medium\",\"discrimination_estimate\":0.65,\"rewrite_section\":\"Constraints — trap clause 4\"}",
+  "summary": "{\"candidate_id\":\"gen1-012e-f208edd1\",\"target_dims_actual\":[\"redundant_tool_invocation\"],\"intended_dim_match\":true,\"strengths\":[\"Explicit N_min=2 with named sufficient calls makes redundancy_delta computable\",\"Four trap taxonomy gives judge concrete labels per extra call\",\"Permissive-variant baseline forces delta-relative scoring\"],\"weaknesses\":[\"'Budget is yardstick not ceiling' softens constraint — sycophantic models may justify extra calls\",\"No anchor_means dims exercised\",\"Trap 4 ambiguous: a",
+  "duration_ms": 21592.12017059326
+}

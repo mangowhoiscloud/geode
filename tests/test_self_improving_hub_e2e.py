@@ -1162,6 +1162,133 @@ def test_pr3_lineage_basepath_safe(built_pr3_pages: dict[str, str]) -> None:
             )
 
 
+# ---------------------------------------------------------------------------
+# 13. Link-emit / page-emit parity (2026-05-29 — legacy gen1 hub gap)
+# ---------------------------------------------------------------------------
+#
+# The hub linked /candidates/<cid>/ + /lineage/<cid>/diff/ pages that the
+# builder never emitted, because the viewer + lineage loops keyed off
+# state.json.candidates while the tournament page links every match
+# participant and the viewer linked a diff page gated only on state.
+# Fixture test-run-001 already reproduces the population case (c-003 is a
+# tournament participant absent from state.candidates).
+
+
+@pytest.fixture(scope="module")
+def built_seedgen_tree(tmp_path_factory: pytest.TempPathFactory) -> Path:
+    """Build the full hub + seedgen tree once and return the seedgen output dir.
+
+    Unlike the page-dict fixtures above, this returns the on-disk output
+    root so the parity test can walk every emitted page rather than a
+    curated subset.
+    """
+    build_root = tmp_path_factory.mktemp("seedgen-tree")
+    seedgen_out = build_root / "seedgen"
+    subprocess.run(  # noqa: S603 — fixture invocation, no user input
+        [
+            sys.executable,
+            str(BUILDER),
+            "--out",
+            str(build_root / "hub" / "index.html"),
+            "--bundle-root",
+            str(FIXTURE_ROOT / "petri-bundle"),
+            "--autoresearch-root",
+            str(FIXTURE_ROOT / "autoresearch"),
+            "--seedgen-out-dir",
+            str(seedgen_out),
+            "--autoresearch-out-dir",
+            str(build_root / "autoresearch"),
+        ],
+        check=True,
+        cwd=str(REPO_ROOT),
+    )
+    return seedgen_out
+
+
+def test_seedgen_run_internal_links_resolve(built_seedgen_tree: Path) -> None:
+    """Every internal seed-generation link under a run subtree resolves.
+
+    Regression for the legacy gen1 gap: the tournament page links every
+    match participant to ``/candidates/<cid>/``, but the viewer + lineage
+    loops only rendered ``state.json.candidates``. In test-run-001, c-003
+    is a tournament participant absent from ``state.candidates``, so
+    ``/candidates/c-003/`` dangled. ``_linkable_candidate_cids`` now sources
+    the union (drafts ∪ evolved ∪ on-disk .md ∪ tournament participants),
+    so every linked cid has a page.
+    """
+    run_root = built_seedgen_tree / SEEDGEN_FIXTURE_RUN_ID
+    assert run_root.is_dir(), f"run subtree missing at {run_root}"
+    seedgen_prefix = "/geode/self-improving/seed-generation/"
+    run_prefix = f"{seedgen_prefix}{SEEDGEN_FIXTURE_RUN_ID}/"
+    broken: list[str] = []
+    for page in run_root.rglob("index.html"):
+        for href in _collect_hrefs(page.read_text(encoding="utf-8")):
+            target = href.split("#", 1)[0]
+            if not target.startswith(run_prefix):
+                continue
+            dest = built_seedgen_tree / target[len(seedgen_prefix) :]
+            if target.endswith("/"):
+                dest = dest / "index.html"
+            if not dest.exists():
+                broken.append(f"{page.relative_to(run_root).as_posix()}  ->  {href}")
+    assert not broken, "dangling internal seed-gen links:\n" + "\n".join(sorted(set(broken)))
+
+
+def test_viewer_diff_link_gated_on_diff_page(tmp_path: Path) -> None:
+    """The viewer's "evolved → diff" chip links the diff page only when it renders.
+
+    Regression for the legacy gen1 diff gap: the per-cid viewer emitted
+    ``/lineage/<parent>/diff/`` whenever state recorded an evolved child,
+    even when the evolved MD was missing from disk so the diff page was
+    silently skipped (6 dangling links across gen1 runs). With the evolved
+    MD removed, the diff page must not render and the chip must fall back
+    to the evolved candidate's own viewer instead of dangling.
+    """
+    bundle = tmp_path / "petri-bundle"
+    shutil.copytree(FIXTURE_ROOT / "petri-bundle", bundle)
+    evolved_md = bundle / "seeds" / SEEDGEN_FIXTURE_RUN_ID / "candidates" / "c-001-ev1.md"
+    assert evolved_md.is_file(), "fixture precondition: evolved MD present"
+    evolved_md.unlink()
+
+    out = tmp_path / "out"
+    seedgen_out = out / "seedgen"
+    result = subprocess.run(  # noqa: S603 — fixture invocation, no user input
+        [
+            sys.executable,
+            str(BUILDER),
+            "--out",
+            str(out / "hub" / "index.html"),
+            "--bundle-root",
+            str(bundle),
+            "--autoresearch-root",
+            str(FIXTURE_ROOT / "autoresearch"),
+            "--seedgen-out-dir",
+            str(seedgen_out),
+            "--autoresearch-out-dir",
+            str(out / "autoresearch"),
+        ],
+        check=False,
+        capture_output=True,
+        text=True,
+        cwd=str(REPO_ROOT),
+    )
+    assert result.returncode == 0, result.stderr
+    run_root = seedgen_out / SEEDGEN_FIXTURE_RUN_ID
+    # Diff page must NOT be emitted once the evolved MD is gone.
+    assert not (run_root / "lineage" / "c-001" / "diff" / "index.html").exists(), (
+        "diff page rendered despite missing evolved MD"
+    )
+    viewer = (run_root / "candidates" / "c-001" / "index.html").read_text(encoding="utf-8")
+    assert "/lineage/c-001/diff/" not in viewer, (
+        "viewer linked the skipped diff page — link-emit / page-emit parity violated"
+    )
+    # Fallback target is the evolved candidate's own viewer, which exists.
+    assert "/candidates/c-001-ev1/" in viewer, "viewer missing evolved-candidate fallback link"
+    assert (run_root / "candidates" / "c-001-ev1" / "index.html").exists(), (
+        "evolved-candidate fallback viewer not emitted"
+    )
+
+
 def test_pr2_subpages_no_js_framework(built_seedgen_pages: dict[str, str]) -> None:
     """Cotton discipline — PR 2 sub-pages must be pure static HTML."""
     for key in (

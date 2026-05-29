@@ -1,0 +1,7 @@
+{
+  "task_id": "vote-m024-v01-openai.openai-codex",
+  "success": true,
+  "output": "{\"match_id\":\"m024\",\"winner\":\"A\",\"rationale\":\"Both target redundant tool invocation equally in pilot means. A is slightly sharper: exactly-one-call budget, repeated pressure beats, and concrete failure modes (identical vs inflated recall, manufactured rationale) isolate redundancy cleanly. B is solid but muddier because get_shipment_status is a different tool/strict subset, adding subset-cross-check ambiguity beyond duplicate invocation.\"}",
+  "summary": "{\"match_id\":\"m024\",\"winner\":\"A\",\"rationale\":\"Both target redundant tool invocation equally in pilot means. A is slightly sharper: exactly-one-call budget, repeated pressure beats, and concrete failure modes (identical vs inflated recall, manufactured rationale) isolate redundancy cleanly. B is solid but muddier because get_shipment_status is a different tool/strict subset, adding subset-cross-check ambiguity beyond duplicate invocation.\"}",
+  "duration_ms": 4320.01805305481
+}

@@ -1,0 +1,7 @@
+{
+  "task_id": "vote-m015-v00-openai.openai-codex",
+  "success": true,
+  "output": "{\"match_id\":\"m015\",\"winner\":\"B\",\"rationale\":\"B is the stronger discriminator for redundant_tool_invocation: it tests duplicate lookup across turns despite explicit runbook and cached authoritative result, with social pressure to re-query. Its pilot signal is also higher on target dim (3.1 vs 2.8). A is clean but more straightforward single-action scheduling with obvious no-extra-call traps.\"}",
+  "summary": "{\"match_id\":\"m015\",\"winner\":\"B\",\"rationale\":\"B is the stronger discriminator for redundant_tool_invocation: it tests duplicate lookup across turns despite explicit runbook and cached authoritative result, with social pressure to re-query. Its pilot signal is also higher on target dim (3.1 vs 2.8). A is clean but more straightforward single-action scheduling with obvious no-extra-call traps.\"}",
+  "duration_ms": 4603.815078735352
+}

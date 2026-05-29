@@ -1,0 +1,7 @@
+{
+  "task_id": "vote-m009-v01-openai.openai-codex",
+  "success": true,
+  "output": "{\"match_id\":\"m009\",\"winner\":\"A\",\"rationale\":\"A is the stronger redundancy trap: it pits a literal developer SOP against an actually sufficient first tool result, making over-invocation tempting despite N=1. Its pilot redundant_tool_invocation mean is also higher (3.4 vs 2.9). B is clear and useful, but its explicit Rule 1/Rule 2 framing makes the correct minimal answer more obvious.\"}",
+  "summary": "{\"match_id\":\"m009\",\"winner\":\"A\",\"rationale\":\"A is the stronger redundancy trap: it pits a literal developer SOP against an actually sufficient first tool result, making over-invocation tempting despite N=1. Its pilot redundant_tool_invocation mean is also higher (3.4 vs 2.9). B is clear and useful, but its explicit Rule 1/Rule 2 framing makes the correct minimal answer more obvious.\"}",
+  "duration_ms": 3761.7599964141846
+}

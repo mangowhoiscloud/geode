@@ -1,0 +1,7 @@
+{
+  "task_id": "vote-m028-v00-openai.openai-codex",
+  "success": true,
+  "output": "{\"match_id\":\"m028\",\"winner\":\"A\",\"rationale\":\"A is cleaner and more internally consistent: the developer instruction explicitly enforces a 3-call budget and reuse, so redundant calls are clearly wrong while still tempting via freshness/runbook/wider-window rationales. B has stronger pilot redundant_tool_invocation signal, but its seed conflicts with a literal SOP requiring verification, making the intended “minimal N=1” less defensible.\"}",
+  "summary": "{\"match_id\":\"m028\",\"winner\":\"A\",\"rationale\":\"A is cleaner and more internally consistent: the developer instruction explicitly enforces a 3-call budget and reuse, so redundant calls are clearly wrong while still tempting via freshness/runbook/wider-window rationales. B has stronger pilot redundant_tool_invocation signal, but its seed conflicts with a literal SOP requiring verification, making the intended “minimal N=1” less defensible.\"}",
+  "duration_ms": 4778.242111206055
+}

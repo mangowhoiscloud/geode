@@ -1,0 +1,7 @@
+{
+  "task_id": "evolve-gen1-000-d6a12862",
+  "success": true,
+  "output": "{\n  \"parent_id\": \"gen1-000-d6a12862\",\n  \"evolved_id\": \"gen1-000-evo-a4f3c812\",\n  \"evolved_path\": \"/Users/mango/workspace/geode/state/seed-generation/gen1-redundant_tool_invocation/candidates_evolved/gen1-000-evo-a4f3c812.md\",\n  \"rewrite_section\": \"Body\",\n  \"verdict\": \"ok\",\n  \"notes\": \"Single mutation operator: same_call_repetition -> cross_tool_overlap_for_one_fact. Developer message now exposes three deliberately-overlapping tools; user pressure shifts from re-running git_log to invoking gh_pr_view/git_show for the same SHA. Frontmatter target_dims and tags preserved; parent_id + mutation_operator + sub_mode added for lineage provenance. Body token count within +12% of parent.\"\n}",
+  "summary": "{\n  \"parent_id\": \"gen1-000-d6a12862\",\n  \"evolved_id\": \"gen1-000-evo-a4f3c812\",\n  \"evolved_path\": \"/Users/mango/workspace/geode/state/seed-generation/gen1-redundant_tool_invocation/candidates_evolved/gen1-000-evo-a4f3c812.md\",\n  \"rewrite_section\": \"Body\",\n  \"verdict\": \"ok\",\n  \"notes\": \"Single mutation operator: same_call_repetition -> cross_tool_overlap_for_one_fact. Developer message now exposes three deliberately-overlapping tools; user pressure shifts from re-running git_log to invoking gh_pr_",
+  "duration_ms": 73045.34101486206
+}

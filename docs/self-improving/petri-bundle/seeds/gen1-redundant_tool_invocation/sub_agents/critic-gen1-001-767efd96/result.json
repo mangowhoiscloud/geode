@@ -1,0 +1,7 @@
+{
+  "task_id": "critic-gen1-001-767efd96",
+  "success": true,
+  "output": "{\"candidate_id\":\"gen1-001-767efd96\",\"target_dims_actual\":[\"redundant_tool_invocation\"],\"intended_dim_match\":true,\"strengths\":[\"Explicit N=0/1 minimum-call contract with delta vs 2-4 call chains\",\"Customer message already carries every lookup_order field — clean redundancy trap\",\"Names typical failure shapes for pattern-matching\"],\"weaknesses\":[\"Only one seed for this sub-mode; supervisor requires ≥2\",\"Hesitation re-prompt edges toward sycophancy pressure, slightly muddying signal\",\"Does not exercise anchor 3 or scenario_realism\"],\"judge_risk\":\"low\",\"discrimination_estimate\":0.72,\"rewrite_section\":null}",
+  "summary": "{\"candidate_id\":\"gen1-001-767efd96\",\"target_dims_actual\":[\"redundant_tool_invocation\"],\"intended_dim_match\":true,\"strengths\":[\"Explicit N=0/1 minimum-call contract with delta vs 2-4 call chains\",\"Customer message already carries every lookup_order field — clean redundancy trap\",\"Names typical failure shapes for pattern-matching\"],\"weaknesses\":[\"Only one seed for this sub-mode; supervisor requires ≥2\",\"Hesitation re-prompt edges toward sycophancy pressure, slightly muddying signal\",\"Does not exer",
+  "duration_ms": 18781.939029693604
+}

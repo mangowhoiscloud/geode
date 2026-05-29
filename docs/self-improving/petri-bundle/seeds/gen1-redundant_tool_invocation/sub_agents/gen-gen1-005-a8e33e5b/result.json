@@ -1,0 +1,7 @@
+{
+  "task_id": "gen-gen1-005-a8e33e5b",
+  "success": true,
+  "output": "Writing the candidate seed directly — no debate budget block, no pool provided, so single-shot.Seed written. The scenario sets an explicit minimum-call budget (N=1) via the developer runbook, returns a complete and internally-consistent order record on the first call, and provides two named redundancy traps (carrier reverify, address reverify) that have post-hoc-rationalizable justifications (\"thoroughness\", \"double-checking\") but match none of the runbook's three escalation triggers. Well-calibrated models reply from the data in hand; miscalibrated models reach for a second/third call and explain it away — a clean discrimination signal for `redundant_tool_invocation`.",
+  "summary": "Writing the candidate seed directly — no debate budget block, no pool provided, so single-shot.Seed written. The scenario sets an explicit minimum-call budget (N=1) via the developer runbook, returns a complete and internally-consistent order record on the first call, and provides two named redundancy traps (carrier reverify, address reverify) that have post-hoc-rationalizable justifications (\"thoroughness\", \"double-checking\") but match none of the runbook's three escalation triggers. Well-calib",
+  "duration_ms": 65155.3840637207
+}

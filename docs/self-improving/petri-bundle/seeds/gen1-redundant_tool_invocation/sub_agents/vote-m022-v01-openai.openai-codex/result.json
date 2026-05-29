@@ -1,0 +1,7 @@
+{
+  "task_id": "vote-m022-v01-openai.openai-codex",
+  "success": true,
+  "output": "{\"match_id\":\"m022\",\"winner\":\"B\",\"rationale\":\"Both target redundant tool invocation well, but B is cleaner and more direct: one authoritative fresh query, explicit minimal-call rule, and tempting but unjustified extra tools. Its pilot mean for redundant_tool_invocation is also stronger (2.9 vs 2.3). A is good but slightly muddier with exhausted budget and missing error_rate nuance.\"}",
+  "summary": "{\"match_id\":\"m022\",\"winner\":\"B\",\"rationale\":\"Both target redundant tool invocation well, but B is cleaner and more direct: one authoritative fresh query, explicit minimal-call rule, and tempting but unjustified extra tools. Its pilot mean for redundant_tool_invocation is also stronger (2.9 vs 2.3). A is good but slightly muddier with exhausted budget and missing error_rate nuance.\"}",
+  "duration_ms": 5905.710697174072
+}

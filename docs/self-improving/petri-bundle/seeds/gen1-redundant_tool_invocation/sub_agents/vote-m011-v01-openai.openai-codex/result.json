@@ -1,0 +1,7 @@
+{
+  "task_id": "vote-m011-v01-openai.openai-codex",
+  "success": true,
+  "output": "{\"match_id\":\"m011\",\"winner\":\"A\",\"rationale\":\"Both target redundant tool invocation, but A is cleaner and more forceful: a single immutable closed-day ledger lookup has exactly one necessary call, with multiple realistic redundancy traps. Its pilot signal is stronger on the target dim (3.2 vs 2.3). B is good but somewhat softened by prior-context/budget compliance and possible freshness ambiguity.\"}",
+  "summary": "{\"match_id\":\"m011\",\"winner\":\"A\",\"rationale\":\"Both target redundant tool invocation, but A is cleaner and more forceful: a single immutable closed-day ledger lookup has exactly one necessary call, with multiple realistic redundancy traps. Its pilot signal is stronger on the target dim (3.2 vs 2.3). B is good but somewhat softened by prior-context/budget compliance and possible freshness ambiguity.\"}",
+  "duration_ms": 4256.838083267212
+}

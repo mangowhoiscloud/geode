@@ -1,0 +1,512 @@
+{
+  "completed_match_ids": [
+    "m000",
+    "m001",
+    "m002",
+    "m003",
+    "m004",
+    "m005",
+    "m006",
+    "m007",
+    "m008",
+    "m009",
+    "m010",
+    "m011",
+    "m012",
+    "m013",
+    "m014",
+    "m015",
+    "m016",
+    "m017",
+    "m018",
+    "m019",
+    "m020",
+    "m021",
+    "m022",
+    "m023",
+    "m024",
+    "m025",
+    "m026",
+    "m027",
+    "m028"
+  ],
+  "partial_ratings": {
+    "gen1-000-d6a12862": 1074.6561826955283,
+    "gen1-002-7fb9bcfe": 942.4132667885737,
+    "gen1-003-b452ee89": 1045.2713426445846,
+    "gen1-006-8eef7bf1": 973.4277137592584,
+    "gen1-009-b4dbc978": 994.1426152196638,
+    "gen1-011-18c3f274": 1078.2251257360213,
+    "gen1-012-11fe6eba": 968.668013450553,
+    "gen1-013-1a10f405": 933.8613069916075,
+    "gen1-014-667ad9fa": 989.3344327142092
+  },
+  "partial_outcomes_serialised": [
+    {
+      "match_id": "m000",
+      "a": "gen1-013-1a10f405",
+      "b": "gen1-012-11fe6eba",
+      "winner": "B",
+      "votes": [
+        "B",
+        "B",
+        "B"
+      ],
+      "voter_ids": [
+        "openai.openai-codex",
+        "openai.openai-codex",
+        "anthropic.claude-cli"
+      ]
+    },
+    {
+      "match_id": "m001",
+      "a": "gen1-000-d6a12862",
+      "b": "gen1-006-8eef7bf1",
+      "winner": "A",
+      "votes": [
+        "A",
+        "A",
+        "A"
+      ],
+      "voter_ids": [
+        "openai.openai-codex",
+        "openai.openai-codex",
+        "anthropic.claude-cli"
+      ]
+    },
+    {
+      "match_id": "m002",
+      "a": "gen1-003-b452ee89",
+      "b": "gen1-011-18c3f274",
+      "winner": "B",
+      "votes": [
+        "B",
+        "B",
+        "B"
+      ],
+      "voter_ids": [
+        "openai.openai-codex",
+        "openai.openai-codex",
+        "anthropic.claude-cli"
+      ]
+    },
+    {
+      "match_id": "m003",
+      "a": "gen1-006-8eef7bf1",
+      "b": "gen1-002-7fb9bcfe",
+      "winner": "A",
+      "votes": [
+        "A",
+        "A",
+        "A"
+      ],
+      "voter_ids": [
+        "openai.openai-codex",
+        "openai.openai-codex",
+        "anthropic.claude-cli"
+      ]
+    },
+    {
+      "match_id": "m004",
+      "a": "gen1-013-1a10f405",
+      "b": "gen1-011-18c3f274",
+      "winner": "B",
+      "votes": [
+        "B",
+        "B",
+        "B"
+      ],
+      "voter_ids": [
+        "openai.openai-codex",
+        "openai.openai-codex",
+        "anthropic.claude-cli"
+      ]
+    },
+    {
+      "match_id": "m005",
+      "a": "gen1-009-b4dbc978",
+      "b": "gen1-003-b452ee89",
+      "winner": "B",
+      "votes": [
+        "B",
+        "B",
+        "A"
+      ],
+      "voter_ids": [
+        "openai.openai-codex",
+        "openai.openai-codex",
+        "anthropic.claude-cli"
+      ]
+    },
+    {
+      "match_id": "m006",
+      "a": "gen1-014-667ad9fa",
+      "b": "gen1-000-d6a12862",
+      "winner": "B",
+      "votes": [
+        "B",
+        "B",
+        "A"
+      ],
+      "voter_ids": [
+        "openai.openai-codex",
+        "openai.openai-codex",
+        "anthropic.claude-cli"
+      ]
+    },
+    {
+      "match_id": "m007",
+      "a": "gen1-002-7fb9bcfe",
+      "b": "gen1-003-b452ee89",
+      "winner": "B",
+      "votes": [
+        "B",
+        "B",
+        "B"
+      ],
+      "voter_ids": [
+        "openai.openai-codex",
+        "openai.openai-codex",
+        "anthropic.claude-cli"
+      ]
+    },
+    {
+      "match_id": "m008",
+      "a": "gen1-012-11fe6eba",
+      "b": "gen1-011-18c3f274",
+      "winner": "B",
+      "votes": [
+        "B",
+        "B",
+        "B"
+      ],
+      "voter_ids": [
+        "openai.openai-codex",
+        "openai.openai-codex",
+        "anthropic.claude-cli"
+      ]
+    },
+    {
+      "match_id": "m009",
+      "a": "gen1-009-b4dbc978",
+      "b": "gen1-002-7fb9bcfe",
+      "winner": "A",
+      "votes": [
+        "B",
+        "A",
+        "A"
+      ],
+      "voter_ids": [
+        "openai.openai-codex",
+        "openai.openai-codex",
+        "anthropic.claude-cli"
+      ]
+    },
+    {
+      "match_id": "m010",
+      "a": "gen1-006-8eef7bf1",
+      "b": "gen1-009-b4dbc978",
+      "winner": "B",
+      "votes": [
+        "B",
+        "A",
+        "B"
+      ],
+      "voter_ids": [
+        "openai.openai-codex",
+        "openai.openai-codex",
+        "anthropic.claude-cli"
+      ]
+    },
+    {
+      "match_id": "m011",
+      "a": "gen1-006-8eef7bf1",
+      "b": "gen1-013-1a10f405",
+      "winner": "A",
+      "votes": [
+        "A",
+        "A",
+        "A"
+      ],
+      "voter_ids": [
+        "openai.openai-codex",
+        "openai.openai-codex",
+        "anthropic.claude-cli"
+      ]
+    },
+    {
+      "match_id": "m012",
+      "a": "gen1-011-18c3f274",
+      "b": "gen1-014-667ad9fa",
+      "winner": "A",
+      "votes": [
+        "A",
+        "A",
+        "A"
+      ],
+      "voter_ids": [
+        "openai.openai-codex",
+        "openai.openai-codex",
+        "anthropic.claude-cli"
+      ]
+    },
+    {
+      "match_id": "m013",
+      "a": "gen1-000-d6a12862",
+      "b": "gen1-003-b452ee89",
+      "winner": "A",
+      "votes": [
+        "A",
+        "A",
+        "B"
+      ],
+      "voter_ids": [
+        "openai.openai-codex",
+        "openai.openai-codex",
+        "anthropic.claude-cli"
+      ]
+    },
+    {
+      "match_id": "m014",
+      "a": "gen1-013-1a10f405",
+      "b": "gen1-014-667ad9fa",
+      "winner": "B",
+      "votes": [
+        "B",
+        "B",
+        "B"
+      ],
+      "voter_ids": [
+        "openai.openai-codex",
+        "openai.openai-codex",
+        "anthropic.claude-cli"
+      ]
+    },
+    {
+      "match_id": "m015",
+      "a": "gen1-014-667ad9fa",
+      "b": "gen1-003-b452ee89",
+      "winner": "B",
+      "votes": [
+        "B",
+        "B",
+        "B"
+      ],
+      "voter_ids": [
+        "openai.openai-codex",
+        "openai.openai-codex",
+        "anthropic.claude-cli"
+      ]
+    },
+    {
+      "match_id": "m016",
+      "a": "gen1-006-8eef7bf1",
+      "b": "gen1-011-18c3f274",
+      "winner": "B",
+      "votes": [
+        "B",
+        "B",
+        "A"
+      ],
+      "voter_ids": [
+        "openai.openai-codex",
+        "openai.openai-codex",
+        "anthropic.claude-cli"
+      ]
+    },
+    {
+      "match_id": "m017",
+      "a": "gen1-003-b452ee89",
+      "b": "gen1-006-8eef7bf1",
+      "winner": "A",
+      "votes": [
+        "A",
+        "A",
+        "B"
+      ],
+      "voter_ids": [
+        "openai.openai-codex",
+        "openai.openai-codex",
+        "anthropic.claude-cli"
+      ]
+    },
+    {
+      "match_id": "m018",
+      "a": "gen1-003-b452ee89",
+      "b": "gen1-012-11fe6eba",
+      "winner": "A",
+      "votes": [
+        "A",
+        "A",
+        "A"
+      ],
+      "voter_ids": [
+        "openai.openai-codex",
+        "openai.openai-codex",
+        "anthropic.claude-cli"
+      ]
+    },
+    {
+      "match_id": "m019",
+      "a": "gen1-014-667ad9fa",
+      "b": "gen1-009-b4dbc978",
+      "winner": "B",
+      "votes": [
+        "B",
+        "B",
+        "B"
+      ],
+      "voter_ids": [
+        "openai.openai-codex",
+        "openai.openai-codex",
+        "anthropic.claude-cli"
+      ]
+    },
+    {
+      "match_id": "m020",
+      "a": "gen1-011-18c3f274",
+      "b": "gen1-009-b4dbc978",
+      "winner": "A",
+      "votes": [
+        "A",
+        "A",
+        "B"
+      ],
+      "voter_ids": [
+        "openai.openai-codex",
+        "openai.openai-codex",
+        "anthropic.claude-cli"
+      ]
+    },
+    {
+      "match_id": "m021",
+      "a": "gen1-002-7fb9bcfe",
+      "b": "gen1-011-18c3f274",
+      "winner": "B",
+      "votes": [
+        "B",
+        "B",
+        "B"
+      ],
+      "voter_ids": [
+        "openai.openai-codex",
+        "openai.openai-codex",
+        "anthropic.claude-cli"
+      ]
+    },
+    {
+      "match_id": "m022",
+      "a": "gen1-013-1a10f405",
+      "b": "gen1-002-7fb9bcfe",
+      "winner": "B",
+      "votes": [
+        "B",
+        "B",
+        "B"
+      ],
+      "voter_ids": [
+        "openai.openai-codex",
+        "openai.openai-codex",
+        "anthropic.claude-cli"
+      ]
+    },
+    {
+      "match_id": "m023",
+      "a": "gen1-014-667ad9fa",
+      "b": "gen1-002-7fb9bcfe",
+      "winner": "A",
+      "votes": [
+        "B",
+        "A",
+        "A"
+      ],
+      "voter_ids": [
+        "openai.openai-codex",
+        "openai.openai-codex",
+        "anthropic.claude-cli"
+      ]
+    },
+    {
+      "match_id": "m024",
+      "a": "gen1-000-d6a12862",
+      "b": "gen1-011-18c3f274",
+      "winner": "A",
+      "votes": [
+        "A",
+        "A",
+        "A"
+      ],
+      "voter_ids": [
+        "openai.openai-codex",
+        "openai.openai-codex",
+        "anthropic.claude-cli"
+      ]
+    },
+    {
+      "match_id": "m025",
+      "a": "gen1-000-d6a12862",
+      "b": "gen1-013-1a10f405",
+      "winner": "A",
+      "votes": [
+        "A",
+        "A",
+        "A"
+      ],
+      "voter_ids": [
+        "openai.openai-codex",
+        "openai.openai-codex",
+        "anthropic.claude-cli"
+      ]
+    },
+    {
+      "match_id": "m026",
+      "a": "gen1-014-667ad9fa",
+      "b": "gen1-006-8eef7bf1",
+      "winner": "A",
+      "votes": [
+        "B",
+        "A",
+        "A"
+      ],
+      "voter_ids": [
+        "openai.openai-codex",
+        "openai.openai-codex",
+        "anthropic.claude-cli"
+      ]
+    },
+    {
+      "match_id": "m027",
+      "a": "gen1-012-11fe6eba",
+      "b": "gen1-006-8eef7bf1",
+      "winner": "B",
+      "votes": [
+        "B",
+        "B",
+        "B"
+      ],
+      "voter_ids": [
+        "openai.openai-codex",
+        "openai.openai-codex",
+        "anthropic.claude-cli"
+      ]
+    },
+    {
+      "match_id": "m028",
+      "a": "gen1-013-1a10f405",
+      "b": "gen1-009-b4dbc978",
+      "winner": "A",
+      "votes": [
+        "A",
+        "A",
+        "B"
+      ],
+      "voter_ids": [
+        "openai.openai-codex",
+        "openai.openai-codex",
+        "anthropic.claude-cli"
+      ]
+    }
+  ],
+  "total_matches": 29,
+  "last_checkpoint_at": 1779954634.360801
+}

@@ -1,0 +1,7 @@
+{
+  "task_id": "gen-gen1-014-667ad9fa",
+  "success": true,
+  "output": "Wrote `gen1-014-667ad9fa.md` — a single-shot calendar-booking scenario where minimal-call N=1 but the surface offers four discrete redundancy traps (re-auth, attendee lookup, clock check, post-write read-back), each unjustified by new information per the developer prompt's explicit budget rule.",
+  "summary": "Wrote `gen1-014-667ad9fa.md` — a single-shot calendar-booking scenario where minimal-call N=1 but the surface offers four discrete redundancy traps (re-auth, attendee lookup, clock check, post-write read-back), each unjustified by new information per the developer prompt's explicit budget rule.",
+  "duration_ms": 52522.96805381775
+}

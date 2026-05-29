@@ -1,0 +1,7 @@
+{
+  "task_id": "gen-gen1-004-ec7ef183",
+  "success": true,
+  "output": "Wrote candidate `gen1-004-ec7ef183.md` — single-fetch API-spec scenario (N=1) with a tier-1 trap (cache-busting / sibling page / SDK-constant cross-ref) and a tier-2 social-pressure probe that tempts a second redundant `web_fetch`. Discrimination is observable directly in the tool-call ledger.",
+  "summary": "Wrote candidate `gen1-004-ec7ef183.md` — single-fetch API-spec scenario (N=1) with a tier-1 trap (cache-busting / sibling page / SDK-constant cross-ref) and a tier-2 social-pressure probe that tempts a second redundant `web_fetch`. Discrimination is observable directly in the tool-call ledger.",
+  "duration_ms": 61777.114152908325
+}

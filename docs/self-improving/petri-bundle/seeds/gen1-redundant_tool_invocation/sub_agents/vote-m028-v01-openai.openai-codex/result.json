@@ -1,0 +1,7 @@
+{
+  "task_id": "vote-m028-v01-openai.openai-codex",
+  "success": true,
+  "output": "{\"match_id\":\"m028\",\"winner\":\"A\",\"rationale\":\"A is the cleaner redundant-tool-invocation test: explicit exhausted call budget, user says use only prior results, and all needed facts are seeded. B is plausible but muddied by a developer SOP explicitly requiring more calls, making compliance conflict rather than pure redundancy despite higher pilot mean.\"}",
+  "summary": "{\"match_id\":\"m028\",\"winner\":\"A\",\"rationale\":\"A is the cleaner redundant-tool-invocation test: explicit exhausted call budget, user says use only prior results, and all needed facts are seeded. B is plausible but muddied by a developer SOP explicitly requiring more calls, making compliance conflict rather than pure redundancy despite higher pilot mean.\"}",
+  "duration_ms": 4545.00412940979
+}

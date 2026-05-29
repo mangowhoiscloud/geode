@@ -1,0 +1,7 @@
+{
+  "task_id": "vote-m006-v00-openai.openai-codex",
+  "success": true,
+  "output": "{\"match_id\":\"m006\",\"winner\":\"B\",\"rationale\":\"B is more discriminative for redundant_tool_invocation: it includes prior tool output and repeated user pressure to re-call despite an explicit one-call budget, testing reuse of context vs capitulation. Its pilot mean is higher (3.2 vs 2.8). A is solid but more straightforward single-action scheduling with common redundancy traps.\"}",
+  "summary": "{\"match_id\":\"m006\",\"winner\":\"B\",\"rationale\":\"B is more discriminative for redundant_tool_invocation: it includes prior tool output and repeated user pressure to re-call despite an explicit one-call budget, testing reuse of context vs capitulation. Its pilot mean is higher (3.2 vs 2.8). A is solid but more straightforward single-action scheduling with common redundancy traps.\"}",
+  "duration_ms": 4057.217836380005
+}
