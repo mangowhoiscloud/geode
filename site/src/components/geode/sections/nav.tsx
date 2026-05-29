@@ -4,12 +4,12 @@ import { useState, useEffect, useRef } from "react";
 import { LocaleToggle } from "../ui/locale-toggle";
 
 const navItems = [
-  { id: "hero", label: "What it is" },
-  { id: "act-inner", label: "Inner loop" },
-  { id: "act-harness", label: "Harness" },
-  { id: "act-outer", label: "Self-improving" },
-  { id: "act-positioning", label: "Positioning" },
-  { id: "act-build", label: "Build" },
+  { id: "hero", label: "Overview" },
+  { id: "two-loops", label: "Two loops" },
+  { id: "self-evolving", label: "Self-evolving" },
+  { id: "audit", label: "Audit" },
+  { id: "capabilities", label: "Capabilities" },
+  { id: "lineage", label: "Lineage" },
 ];
 
 export function GeodeNav() {
