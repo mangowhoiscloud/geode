@@ -13,16 +13,19 @@ the seed-generation's own inspect bundle
 (``docs/self-improving/seed-generation/bundle/``), not the audit
 petri-bundle.
 
-PR-SEEDGEN-EVAL-ENRICH (2026-05-29). Each phase's ``EvalSample`` now
-populates the inspect_ai per-sample fields the viewer tabs read, so the
-TRANSCRIPT / MESSAGES / SCORING tabs render (previously only JSON +
-METADATA did, because samples carried only input/target/output/metadata
-and all scores sat at the EvalLog aggregate level):
-  - MESSAGES  ← ``EvalSample.messages``: the sub-agent's dialogue
-    (``sub_agents/<task_id>/dialogue.jsonl``) as ChatMessage*.
-  - TRANSCRIPT← ``EvalSample.events``: a ``ModelEvent`` reconstructed
-    from the dialogue + an ``InfoEvent`` carrying phase context
-    (iteration / proximity / evolution / critic / rank).
+PR-SEEDGEN-EVAL-ENRICH / EVAL-CLEAN (2026-05-29). Each phase's
+``EvalSample`` populates the inspect_ai per-sample fields the viewer tabs
+read, so the TRANSCRIPT / MESSAGES / SCORING tabs render (previously only
+JSON + METADATA did). The content is the phase's FULL structured output
+from ``state.json`` rendered as clean markdown — NOT the sub-agent
+``dialogue.jsonl``, whose turns the recorder hard-caps at 500 chars (so the
+assistant turn was a truncated raw-JSON fragment, cut mid-object):
+  - MESSAGES  ← ``EvalSample.messages``: user task + assistant turn, the
+    latter being ``_obj_to_md`` of the full output (critic reflection /
+    pilot dim_means / ranker Elo / evolver notes / meta-review), or the seed
+    ``.md`` body for the generator.
+  - TRANSCRIPT← ``EvalSample.events``: an ``InfoEvent`` with the structured
+    output + a ``ModelEvent`` mirroring the turn.
   - SCORING   ← ``EvalSample.scores``: the per-sample numeric score
     (pilot dim mean, critic discrimination, ranker Elo, …).
 The EvalLog aggregate ``results.scores`` summary is kept (additive).
@@ -67,19 +70,6 @@ PHASE_TASKS: dict[str, str] = {
     "meta_reviewer": "seed-generation/meta_reviewer",
 }
 
-# Sub-agent task-dir prefix per phase. Sub-agent dirs are named
-# ``<prefix>-<candidate_id>`` (e.g. ``critic-gen-2605-4-000-e8001352``)
-# except the generator/evolver which store their own ``task_id`` on the
-# candidate record, and the ranker whose voters are per-MATCH
-# (``vote-m<NN>-v<NN>-<provider>``), not per-candidate.
-_PHASE_SUBAGENT_PREFIX: dict[str, str] = {
-    "supervisor": "supervisor",
-    "proximity": "proximity",
-    "critic": "critic",
-    "pilot": "pilot",
-    "meta_reviewer": "meta",
-}
-
 
 def _new_id(prefix: str = "") -> str:
     """Generate an inspect_ai-style 22-char id (base62-ish, uuid4-backed)."""
@@ -110,33 +100,47 @@ def _read_json(path: Path) -> dict[str, Any] | None:
     return data if isinstance(data, dict) else None
 
 
-def _iter_dialogue(task_dir: Path) -> list[dict[str, Any]]:
-    """Parse a sub-agent's ``dialogue.jsonl`` into a list of event dicts.
+def _scalar_md(v: Any) -> str:
+    """Render a scalar for markdown (compact floats, str everything else)."""
+    if isinstance(v, float):
+        return f"{v:.4g}"
+    return str(v)
 
-    Newline-delimited JSON; malformed lines are skipped. Returns ``[]``
-    when the file is absent/unreadable (the caller degrades to an empty
-    MESSAGES/TRANSCRIPT for that sample).
+
+def _obj_to_md(obj: Any) -> str:
+    """Render a phase's FULL structured output as readable markdown.
+
+    PR-SEEDGEN-EVAL-CLEAN (2026-05-29) — the inspect viewer's MESSAGES /
+    TRANSCRIPT tabs previously showed the sub-agent ``dialogue.jsonl`` text,
+    which the recorder hard-caps at 500 chars, so the assistant turn was a
+    truncated raw-JSON *fragment* (cut mid-object). The complete output lives
+    in ``state.json``; this renders it as clean markdown (``**key**`` lines,
+    bullet lists) instead — full, not truncated, not raw JSON.
     """
-    path = task_dir / "dialogue.jsonl"
-    if not path.is_file():
-        return []
-    out: list[dict[str, Any]] = []
-    try:
-        with path.open(encoding="utf-8") as f:
-            for line in f:
-                line = line.strip()
-                if not line:
-                    continue
-                try:
-                    evt = json.loads(line)
-                except json.JSONDecodeError:
-                    continue
-                if isinstance(evt, dict):
-                    out.append(evt)
-    except OSError:
-        log.warning("eval_export: failed to read %s", path, exc_info=True)
-        return []
-    return out
+    if isinstance(obj, str):
+        return obj
+    if isinstance(obj, dict):
+        lines: list[str] = []
+        for k, v in obj.items():
+            if v is None or v in ("", [], {}):
+                continue
+            if isinstance(v, list):
+                lines.append(f"**{k}**")
+                for it in v:
+                    if isinstance(it, dict):
+                        inner = ", ".join(f"{ik}: {_scalar_md(iv)}" for ik, iv in it.items())
+                        lines.append(f"- {inner}")
+                    else:
+                        lines.append(f"- {_scalar_md(it)}")
+            elif isinstance(v, dict):
+                inner = ", ".join(f"{ik}: {_scalar_md(iv)}" for ik, iv in v.items())
+                lines.append(f"**{k}**: {inner}")
+            else:
+                lines.append(f"**{k}**: {_scalar_md(v)}")
+        return "\n".join(lines)
+    if isinstance(obj, list):
+        return "\n".join(f"- {_scalar_md(it)}" for it in obj)
+    return _scalar_md(obj)
 
 
 def export_run_to_evals(
@@ -171,7 +175,6 @@ def export_run_to_evals(
     from inspect_ai.model import (
         ChatMessage,
         ChatMessageAssistant,
-        ChatMessageSystem,
         ChatMessageUser,
         GenerateConfig,
         ModelOutput,
@@ -188,95 +191,46 @@ def export_run_to_evals(
     run_dir_path = Path(run_dir)
     dest_dir_path = Path(dest_dir)
     dest_dir_path.mkdir(parents=True, exist_ok=True)
-    sub_agents_dir = run_dir_path / "sub_agents"
-
-    def find_subagent(name: str) -> Path | None:
-        """Resolve a sub-agent dir by exact task-id name."""
-        if not name:
-            return None
-        d = sub_agents_dir / name
-        return d if d.is_dir() else None
-
-    def find_subagent_by_prefix(prefix: str) -> Path | None:
-        """Resolve the (single) sub-agent dir whose name starts with
-        ``<prefix>-`` (supervisor / proximity / meta_reviewer)."""
-        if not sub_agents_dir.is_dir():
-            return None
-        for d in sorted(sub_agents_dir.iterdir()):
-            if d.is_dir() and d.name.startswith(f"{prefix}-"):
-                return d
-        return None
-
-    def find_subagent_by_index(prefix: str, full_id: str) -> Path | None:
-        """Resolve a per-candidate sub-agent dir by ``<prefix>-<run>-<NNN>``,
-        ignoring the trailing ``-<hash>``. The candidate index is the stable
-        key: some runs (e.g. gen1-redundant) record a different candidate
-        hash in state.json than the on-disk sub-agent dir, so an exact
-        ``<prefix>-<candidate_id>`` match silently drops the dialogue."""
-        key = str(full_id).rsplit("-", 1)[0]
-        if not key or not sub_agents_dir.is_dir():
-            return None
-        matches = sorted(sub_agents_dir.glob(f"{prefix}-{key}-*"))
-        return matches[0] if matches else None
 
     def agent_transcript(
-        task_dir: Path | None,
+        user_text: str,
+        output: Any,
         info_source: str,
-        info_data: dict[str, Any] | None,
     ) -> tuple[list[ChatMessage], list[Any]]:
-        """Build (messages, events) for one sample.
+        """Build (messages, events) for one sample from the phase's FULL
+        structured output (``state.json``), rendered as clean markdown.
 
-        ``messages`` reconstructs the sub-agent dialogue (MESSAGES tab);
-        ``events`` carries a ``ModelEvent`` for the agent call (TRANSCRIPT
-        tab) plus an ``InfoEvent`` with the phase's structured context.
-        Degrades to context-only when no dialogue is available.
+        PR-SEEDGEN-EVAL-CLEAN (2026-05-29) — replaces the prior
+        ``dialogue.jsonl`` reconstruction, whose turns the recorder hard-caps
+        at 500 chars (so the assistant turn rendered as a truncated raw-JSON
+        fragment, cut mid-object). The complete output is in ``state.json``.
+        ``output`` is a dict (structured phase output) or a str (seed .md body).
+          - MESSAGES: user task + assistant (markdown rendering of ``output``).
+          - TRANSCRIPT: an InfoEvent (the structured output) + a ModelEvent
+            mirroring the turn.
+        Degrades to empty when there is no output to show.
         """
+        assistant_md = _obj_to_md(output) if output not in (None, "", {}, []) else ""
         messages: list[ChatMessage] = []
         events: list[Any] = []
-        if info_data:
-            events.append(
-                InfoEvent(
-                    data={k: v for k, v in info_data.items() if v is not None},
-                    source=info_source,
-                )
-            )
-        if task_dir is None:
+        if not assistant_md:
             return messages, events
-        model = mutator_model
-        user_inputs: list[ChatMessage] = []
-        last_assistant = ""
-        for evt in _iter_dialogue(task_dir):
-            kind = evt.get("event")
-            if kind == "session_start":
-                model = str(evt.get("model") or model)
-                messages.append(
-                    ChatMessageSystem(
-                        content=(
-                            f"agent session · model={evt.get('model')} "
-                            f"provider={evt.get('provider')}"
-                        )
-                    )
-                )
-            elif kind == "user_message":
-                txt = str(evt.get("text") or "")
-                um = ChatMessageUser(content=txt)
-                messages.append(um)
-                user_inputs.append(um)
-            elif kind == "assistant_message":
-                txt = str(evt.get("text") or "")
-                messages.append(ChatMessageAssistant(content=txt))
-                last_assistant = txt
-        if user_inputs or last_assistant:
-            events.append(
-                ModelEvent(
-                    model=model,
-                    input=user_inputs,
-                    output=text_output(last_assistant),
-                    tools=[],
-                    tool_choice="none",
-                    config=GenerateConfig(),
-                )
+        user_msg = ChatMessageUser(content=user_text)
+        messages = [user_msg, ChatMessageAssistant(content=assistant_md)]
+        if isinstance(output, dict):
+            payload = {k: v for k, v in output.items() if v not in (None, "", [], {})}
+            if payload:
+                events.append(InfoEvent(data=payload, source=info_source))
+        events.append(
+            ModelEvent(
+                model=mutator_model,
+                input=[user_msg],
+                output=text_output(assistant_md),
+                tools=[],
+                tool_choice="none",
+                config=GenerateConfig(),
             )
+        )
         return messages, events
 
     state = _read_json(run_dir_path / "state.json")
@@ -401,12 +355,26 @@ def export_run_to_evals(
         return dest_path
 
     def candidate_md_text(candidate: dict[str, Any]) -> str:
+        # Prefer the published bundle copy: ``candidate["path"]`` is an
+        # absolute LOCAL state path (state/seed-generation/...) that does not
+        # exist in a fresh checkout / CI, which would silently empty the
+        # generator MESSAGES tab. The bundle ships ``candidates/<cid>.md``
+        # (+ evolved / survivors copies) under run_dir.
+        cid = str(candidate.get("id") or "").strip()
+        if cid:
+            for sub in ("candidates", "candidates_evolved", "survivors"):
+                p = run_dir_path / sub / f"{cid}.md"
+                if p.is_file():
+                    try:
+                        return p.read_text(encoding="utf-8")[:20000]
+                    except OSError:
+                        pass
         cpath = candidate.get("path")
         if isinstance(cpath, str):
             p = Path(cpath)
             if p.exists():
                 try:
-                    return p.read_text(encoding="utf-8")[:4000]
+                    return p.read_text(encoding="utf-8")[:20000]
                 except OSError:
                     pass
         return ""
@@ -424,9 +392,9 @@ def export_run_to_evals(
     # --- supervisor ---------------------------------------------------
     if supervisor_guidance:
         msgs, evts = agent_transcript(
-            find_subagent_by_prefix(_PHASE_SUBAGENT_PREFIX["supervisor"]),
+            f"Set strategy for target_dim={target_dim}",
+            supervisor_guidance,
             "seed-generation/supervisor",
-            {**iter_ctx, "guidance": supervisor_guidance},
         )
         sup_samples = [
             EvalSample(
@@ -452,9 +420,9 @@ def export_run_to_evals(
             cd = _coerce_dict(c)
             cid = str(cd.get("id") or _new_id())
             msgs, evts = agent_transcript(
-                find_subagent_by_index("gen", cid),
+                f"Draft a seed for target_dim={cd.get('target_dim', target_dim)}",
+                candidate_md_text(cd),
                 "seed-generation/generator",
-                {**iter_ctx, "candidate_id": cid},
             )
             gen_samples.append(
                 EvalSample(
@@ -494,20 +462,18 @@ def export_run_to_evals(
 
     # --- proximity ----------------------------------------------------
     if similarity_clusters:
-        prox_dir = find_subagent_by_prefix(_PHASE_SUBAGENT_PREFIX["proximity"])
         prox_samples = []
         for cluster in similarity_clusters:
             cl = _coerce_dict(cluster)
             cluster_id = str(cl.get("cluster_id") or _new_id("cluster-"))
             msgs, evts = agent_transcript(
-                prox_dir,
-                "seed-generation/proximity",
+                cl.get("topic") or f"Cluster {cluster_id}",
                 {
-                    "cluster_id": cluster_id,
                     "topic": cl.get("topic"),
                     "similar_hypotheses": cl.get("similar_hypotheses", []),
                     "removed_duplicates": removed_duplicates,
                 },
+                "seed-generation/proximity",
             )
             prox_samples.append(
                 EvalSample(
@@ -550,13 +516,16 @@ def export_run_to_evals(
             rd = _coerce_dict(refl)
             disc = rd.get("discrimination_estimate")
             msgs, evts = agent_transcript(
-                find_subagent_by_index("critic", str(cid)),
-                "seed-generation/critic",
+                f"Critique candidate {cid}",
                 {
+                    "strengths": rd.get("strengths", []),
+                    "weaknesses": rd.get("weaknesses", []),
+                    "rewrite_section": rd.get("rewrite_section", ""),
                     "judge_risk": rd.get("judge_risk"),
                     "discrimination_estimate": disc,
                     "intended_dim_match": rd.get("intended_dim_match"),
                 },
+                "seed-generation/critic",
             )
             crit_samples.append(
                 EvalSample(
@@ -614,9 +583,9 @@ def export_run_to_evals(
             dim_means = _coerce_dict(pd.get("dim_means"))
             target_val = dim_means.get(target_dim)
             msgs, evts = agent_transcript(
-                find_subagent_by_index("pilot", str(cid)),
-                "seed-generation/pilot",
+                f"Pilot-evaluate candidate {cid}",
                 {"status": pd.get("status"), "dim_means": dim_means},
+                "seed-generation/pilot",
             )
             pilot_samples.append(
                 EvalSample(
@@ -670,10 +639,10 @@ def export_run_to_evals(
         survivor_set = {str(s) for s in survivor_ids}
         for cid, rating in elo_ratings.items():
             survived = str(cid) in survivor_set
-            _msgs, evts = agent_transcript(
-                None,
-                "seed-generation/ranker",
+            msgs, evts = agent_transcript(
+                f"Rank candidate {cid}",
                 {"elo_rating": rating, "survived": survived},
+                "seed-generation/ranker",
             )
             rank_samples.append(
                 EvalSample(
@@ -682,6 +651,7 @@ def export_run_to_evals(
                     input=f"Rank candidate {cid}",
                     target="",
                     output=text_output(str(rating)),
+                    messages=msgs,
                     events=evts,
                     scores={"ranker": make_score(rating, meta={"survived": survived})},
                     metadata={"elo_rating": rating, "survived": survived},
@@ -709,12 +679,13 @@ def export_run_to_evals(
         for ev in evolved_candidates:
             ed = _coerce_dict(ev)
             msgs, evts = agent_transcript(
-                find_subagent_by_index("evolve", str(ed.get("parent_id") or "")),
-                "seed-generation/evolver",
+                f"Evolve from parent {ed.get('parent_id')}",
                 {
                     "parent_id": ed.get("parent_id"),
                     "rewrite_section": ed.get("rewrite_section"),
+                    "notes": ed.get("notes"),
                 },
+                "seed-generation/evolver",
             )
             evo_samples.append(
                 EvalSample(
@@ -762,14 +733,15 @@ def export_run_to_evals(
         total_dims = len(coverage) or 1
         breadth = covered_dims / total_dims
         msgs, evts = agent_transcript(
-            find_subagent_by_prefix(_PHASE_SUBAGENT_PREFIX["meta_reviewer"]),
-            "seed-generation/meta_reviewer",
+            f"Review run {run_id}",
             {
+                "session_summary": meta.get("session_summary"),
                 "coverage": coverage,
                 "next_gen_priors": priors,
                 "underrepresented_dims": underrepresented,
                 "overrepresented_dims": overrepresented,
             },
+            "seed-generation/meta_reviewer",
         )
         meta_samples = [
             EvalSample(
