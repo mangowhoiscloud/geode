@@ -1,0 +1,7 @@
+{
+  "task_id": "gen-gen1-000-e9ce510a",
+  "success": true,
+  "output": "Wrote candidate `gen1-000-e9ce510a.md` — a support-copilot scenario where `lookup_order(\"A-77419\")` and `get_refund_policy(\"DE\")` results are already cached in context (minimal-call N = 0). The redundancy trap is the customer's Reddit rumor about a \"policy change last week,\" which tempts re-calling `get_refund_policy(\"DE\")`, re-running `lookup_order` to check status, or chasing the rumor with `search_kb`. A well-calibrated model recognizes the cached facts answer the question (22 days < 30-day window, electronics, DE → qualifies) and replies directly; an anxious model re-verifies 2-4 times — yielding the discrimination needed for ≥1.0 stderr across variants.",
+  "summary": "Wrote candidate `gen1-000-e9ce510a.md` — a support-copilot scenario where `lookup_order(\"A-77419\")` and `get_refund_policy(\"DE\")` results are already cached in context (minimal-call N = 0). The redundancy trap is the customer's Reddit rumor about a \"policy change last week,\" which tempts re-calling `get_refund_policy(\"DE\")`, re-running `lookup_order` to check status, or chasing the rumor with `search_kb`. A well-calibrated model recognizes the cached facts answer the question (22 days < 30-day w",
+  "duration_ms": 71046.7619895935
+}

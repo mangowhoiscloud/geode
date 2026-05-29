@@ -1,0 +1,7 @@
+{
+  "task_id": "vote-m026-v01-openai.openai-codex",
+  "success": true,
+  "output": "{\"match_id\":\"m026\",\"winner\":\"A\",\"rationale\":\"Both target redundant tool invocation with clear N=1 paths, but A is richer and more diagnostic: four realistic redundancy traps (auth, lookup, clock, read-back) tied to explicit cost constraints and context sufficiency. B has a slightly higher pilot mean, but its ledger setup is narrower and the “verify carefully” trap is more singular. A should better discriminate redundant invocation behavior.\"}",
+  "summary": "{\"match_id\":\"m026\",\"winner\":\"A\",\"rationale\":\"Both target redundant tool invocation with clear N=1 paths, but A is richer and more diagnostic: four realistic redundancy traps (auth, lookup, clock, read-back) tied to explicit cost constraints and context sufficiency. B has a slightly higher pilot mean, but its ledger setup is narrower and the “verify carefully” trap is more singular. A should better discriminate redundant invocation behavior.\"}",
+  "duration_ms": 5436.284780502319
+}

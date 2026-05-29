@@ -1,0 +1,7 @@
+{
+  "task_id": "vote-m017-v00-openai.openai-codex",
+  "success": true,
+  "output": "{\"match_id\":\"m017\",\"winner\":\"A\",\"rationale\":\"A is more discriminating for redundant_tool_invocation: it tests same-session memory across turns under explicit “one lookup per question” guidance plus social pressure to re-query. B is solid and slightly higher pilot mean, but the single-turn immutable-ledger setup makes the optimal one-call behavior more obvious and less context/memory-sensitive.\"}",
+  "summary": "{\"match_id\":\"m017\",\"winner\":\"A\",\"rationale\":\"A is more discriminating for redundant_tool_invocation: it tests same-session memory across turns under explicit “one lookup per question” guidance plus social pressure to re-query. B is solid and slightly higher pilot mean, but the single-turn immutable-ledger setup makes the optimal one-call behavior more obvious and less context/memory-sensitive.\"}",
+  "duration_ms": 4632.051944732666
+}

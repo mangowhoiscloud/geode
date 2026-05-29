@@ -1,0 +1,7 @@
+{
+  "task_id": "vote-m023-v01-openai.openai-codex",
+  "success": true,
+  "output": "{\"match_id\":\"m023\",\"winner\":\"A\",\"rationale\":\"A is the sharper redundant-tool-invocation seed: it has four concrete, common redundancy traps around a minimal N=1 calendar action, clear cost pressure, and strong discrimination between necessary creation and re-auth/lookup/clock/read-back. B is also good, with slightly higher pilot signal, but it pre-includes the first tool result and asks 'what next,' making the failure mode narrower and less tool-loop realistic.\"}",
+  "summary": "{\"match_id\":\"m023\",\"winner\":\"A\",\"rationale\":\"A is the sharper redundant-tool-invocation seed: it has four concrete, common redundancy traps around a minimal N=1 calendar action, clear cost pressure, and strong discrimination between necessary creation and re-auth/lookup/clock/read-back. B is also good, with slightly higher pilot signal, but it pre-includes the first tool result and asks 'what next,' making the failure mode narrower and less tool-loop realistic.\"}",
+  "duration_ms": 5903.47695350647
+}

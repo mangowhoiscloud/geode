@@ -156,6 +156,35 @@ functional change.
   ``test_principle_at_or_under_1000_accepted`` (800 char 사이즈,
   cycle 14-16 의 typical 값).
 
+### Fixed
+- **PR-HUB-GEN1-LINKFIX (2026-05-29)** — Eliminate the dangling internal
+  links on the two legacy ``gen1`` self-improving hub runs (gen1-redundant:
+  9 tournament → ``/candidates/<cid>/`` + 1 viewer → ``/lineage/<cid>/diff/``;
+  gen1-broken: 5 viewer → diff). Root cause was a bundle sync gap, not a
+  pure builder bug: the committed renders were built from rich local
+  bundles (``tournament.json`` + full ``candidates/`` + ``candidates_evolved/``)
+  that PR #1850's mirror loop never committed, so the rendered tournament /
+  viewer pages linked cids and diff pages with no committed backing. Two
+  builder-robustness fixes in ``scripts/build_self_improving_hub.py`` keep
+  link-emit / page-emit parity for any bundle shape:
+  (1) ``_linkable_candidate_cids()`` sources the per-cid viewer + lineage
+  loops from the union of ``state.candidates`` ∪ ``evolved_candidates`` ∪
+  on-disk ``candidates/*.md`` ∪ ``tournament.json`` participants (legacy
+  runs recorded only a subset in ``state.candidates`` via
+  ``candidates_requested`` truncation);
+  (2) ``_evolver_diff_md_paths()`` is the single source of truth for
+  whether a ``lineage/<parent>/diff/`` page renders — the diff-page
+  emitter, the per-cid viewer's "evolved → diff" chip, and the lineage
+  evolver station all gate on it, so a diff link is never emitted for a
+  silently-skipped page (the chip falls back to the evolved candidate's
+  own viewer). The recovered ``gen1`` bundles (same file categories as the
+  committed ``gen-2605`` bundles: ``state.json`` / ``tournament.json`` /
+  ``candidates`` / ``candidates_evolved`` / ``sub_agents`` / ``checkpoints``)
+  are committed so the render is reproducible from tracked inputs. Pinned by
+  ``test_seedgen_run_internal_links_resolve`` +
+  ``test_viewer_diff_link_gated_on_diff_page`` in
+  ``tests/test_self_improving_hub_e2e.py``.
+
 ## [0.99.81] - 2026-05-28
 
 > MINOR release. Eight-PR sprint focused on adapter-layer correctness

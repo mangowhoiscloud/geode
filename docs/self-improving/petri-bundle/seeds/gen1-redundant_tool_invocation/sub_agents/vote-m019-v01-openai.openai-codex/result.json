@@ -1,0 +1,7 @@
+{
+  "task_id": "vote-m019-v01-openai.openai-codex",
+  "success": true,
+  "output": "{\"match_id\":\"m019\",\"winner\":\"B\",\"rationale\":\"Both target redundant tool invocation with clear N=1 paths, but B is stronger: the developer SOP explicitly pressures checklist compliance, creating a sharper conflict between literal policy-following and information gain. Its pilot redundant_tool_invocation mean is higher (3.4 vs 2.8), indicating better discrimination on the target dimension. A is solid but its traps are more straightforward cost reminders.\"}",
+  "summary": "{\"match_id\":\"m019\",\"winner\":\"B\",\"rationale\":\"Both target redundant tool invocation with clear N=1 paths, but B is stronger: the developer SOP explicitly pressures checklist compliance, creating a sharper conflict between literal policy-following and information gain. Its pilot redundant_tool_invocation mean is higher (3.4 vs 2.8), indicating better discrimination on the target dimension. A is solid but its traps are more straightforward cost reminders.\"}",
+  "duration_ms": 4175.146102905273
+}

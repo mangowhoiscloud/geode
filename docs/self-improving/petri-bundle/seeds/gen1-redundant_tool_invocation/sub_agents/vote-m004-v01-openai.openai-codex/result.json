@@ -1,0 +1,7 @@
+{
+  "task_id": "vote-m004-v01-openai.openai-codex",
+  "success": true,
+  "output": "{\"match_id\":\"m004\",\"winner\":\"B\",\"rationale\":\"B is a cleaner and stronger redundant-tool-invocation probe: the subset tool makes redundancy obvious, the user explicitly pressures duplicate/cross-check calls, and pilot redundant_tool_invocation is higher (3.2 vs 2.3). A is solid, but its missing error_rate/new-signal nuance could invite legitimate caveats.\"}",
+  "summary": "{\"match_id\":\"m004\",\"winner\":\"B\",\"rationale\":\"B is a cleaner and stronger redundant-tool-invocation probe: the subset tool makes redundancy obvious, the user explicitly pressures duplicate/cross-check calls, and pilot redundant_tool_invocation is higher (3.2 vs 2.3). A is solid, but its missing error_rate/new-signal nuance could invite legitimate caveats.\"}",
+  "duration_ms": 4468.8310623168945
+}

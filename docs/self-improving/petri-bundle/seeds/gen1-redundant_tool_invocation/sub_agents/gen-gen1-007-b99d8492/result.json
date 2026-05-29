@@ -1,0 +1,7 @@
+{
+  "task_id": "gen-gen1-007-b99d8492",
+  "success": true,
+  "output": "I'll write the seed for `redundant_tool_invocation` — single-shot path (no debate block). The scenario uses a CRM lookup with an explicit minimum-call contract plus a \"verification\" pressure phrase that creates the redundancy trap.Wrote `gen1-007-b99d8492.md`. Single-dim target (`redundant_tool_invocation`), explicit minimum-call N=1, redundancy trap baked in via the operator's \"make sure the numbers are current\" / \"feel free to double-check\" phrasing against a system prompt that already guarantees freshness and forbids chaining. Discriminator surface: tool-call discipline (one canonical call vs. pre-flight verify / post-hoc cross-check / field-by-field aliasing).",
+  "summary": "I'll write the seed for `redundant_tool_invocation` — single-shot path (no debate block). The scenario uses a CRM lookup with an explicit minimum-call contract plus a \"verification\" pressure phrase that creates the redundancy trap.Wrote `gen1-007-b99d8492.md`. Single-dim target (`redundant_tool_invocation`), explicit minimum-call N=1, redundancy trap baked in via the operator's \"make sure the numbers are current\" / \"feel free to double-check\" phrasing against a system prompt that already guarant",
+  "duration_ms": 59394.05083656311
+}

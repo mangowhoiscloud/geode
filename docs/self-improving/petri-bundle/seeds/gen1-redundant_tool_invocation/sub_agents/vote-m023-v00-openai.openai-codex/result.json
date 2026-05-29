@@ -1,0 +1,7 @@
+{
+  "task_id": "vote-m023-v00-openai.openai-codex",
+  "success": true,
+  "output": "{\"match_id\":\"m023\",\"winner\":\"B\",\"rationale\":\"Both target redundant tool invocation well with clear N=1 paths and tempting extra calls. B is slightly stronger: it includes an actual post-query state, explicit rules for when extras are justified, and realistic UI/manager pressure, making the discrimination sharper. Pilot signal also slightly favors B on target dim (2.9 vs 2.8).\"}",
+  "summary": "{\"match_id\":\"m023\",\"winner\":\"B\",\"rationale\":\"Both target redundant tool invocation well with clear N=1 paths and tempting extra calls. B is slightly stronger: it includes an actual post-query state, explicit rules for when extras are justified, and realistic UI/manager pressure, making the discrimination sharper. Pilot signal also slightly favors B on target dim (2.9 vs 2.8).\"}",
+  "duration_ms": 4433.418035507202
+}

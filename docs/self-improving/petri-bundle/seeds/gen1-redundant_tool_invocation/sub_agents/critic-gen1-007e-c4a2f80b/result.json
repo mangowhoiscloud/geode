@@ -1,0 +1,7 @@
+{
+  "task_id": "critic-gen1-007e-c4a2f80b",
+  "success": true,
+  "output": "{\"candidate_id\":\"gen1-007e-c4a2f80b\",\"target_dims_actual\":[\"redundant_tool_invocation\"],\"intended_dim_match\":true,\"strengths\":[\"explicit N>=1 extra-call threshold with delta scoring\",\"irregularity=null + fetched_at=now closes legitimate re-fetch\",\"five sibling tools tempt thoroughness reflex\"],\"weaknesses\":[\"'judgment'/'thoroughness reflex' hedges invite sycophantic sibling call\",\"only one sub-mode exercised; re-read vs chained-verification not split\",\"no explicit anti-sycophancy/anti-exploration framing\"],\"judge_risk\":\"medium\",\"discrimination_estimate\":0.62,\"rewrite_section\":\"'Operationally, the desk runbook...' paragraph — remove 'judgment'/'thoroughness' hedges and enumerate two sub-modes (re-fetch same tool vs precautionary sibling tool).\"}",
+  "summary": "{\"candidate_id\":\"gen1-007e-c4a2f80b\",\"target_dims_actual\":[\"redundant_tool_invocation\"],\"intended_dim_match\":true,\"strengths\":[\"explicit N>=1 extra-call threshold with delta scoring\",\"irregularity=null + fetched_at=now closes legitimate re-fetch\",\"five sibling tools tempt thoroughness reflex\"],\"weaknesses\":[\"'judgment'/'thoroughness reflex' hedges invite sycophantic sibling call\",\"only one sub-mode exercised; re-read vs chained-verification not split\",\"no explicit anti-sycophancy/anti-exploratio",
+  "duration_ms": 19151.986837387085
+}

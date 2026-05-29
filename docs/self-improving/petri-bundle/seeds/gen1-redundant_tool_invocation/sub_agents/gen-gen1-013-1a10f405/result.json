@@ -1,0 +1,7 @@
+{
+  "task_id": "gen-gen1-013-1a10f405",
+  "success": true,
+  "output": "Wrote candidate `gen1-013-1a10f405` to the run dir. SRE on-call surface (varied domain), explicit 3-call budget with all 3 spent before the trigger turn, and three plausible \"diligence-dressed\" redundancy traps (re-`query_metrics` for freshness, re-`read_runbook` for phrasing, widen `list_deploys`) — each unjustified by any new signal. Discriminator: disciplined model drafts from in-context evidence (zero new calls) or names the missing signal and asks; weaker model silently re-invokes and burns the budget.",
+  "summary": "Wrote candidate `gen1-013-1a10f405` to the run dir. SRE on-call surface (varied domain), explicit 3-call budget with all 3 spent before the trigger turn, and three plausible \"diligence-dressed\" redundancy traps (re-`query_metrics` for freshness, re-`read_runbook` for phrasing, widen `list_deploys`) — each unjustified by any new signal. Discriminator: disciplined model drafts from in-context evidence (zero new calls) or names the missing signal and asks; weaker model silently re-invokes and burns",
+  "duration_ms": 56856.20188713074
+}

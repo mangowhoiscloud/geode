@@ -1,0 +1,7 @@
+{
+  "task_id": "evolve-gen1-012e-7a3f1c9b",
+  "success": true,
+  "output": "{\"parent_id\":\"gen1-012e-7a3f1c9b\",\"evolved_id\":\"gen1-012e-f208edd1\",\"evolved_path\":\"/Users/mango/workspace/geode/state/seed-generation/gen1-redundant_tool_invocation/candidates_evolved/gen1-012e-f208edd1.md\",\"rewrite_section\":\"Constraints block (lines 52-74)\",\"verdict\":\"ok\",\"notes\":\"Rewrote only the Constraints block. Replaced prescriptive 'exactly two calls' with N_min-as-yardstick + redundancy_delta vs permissive-variant baseline (addresses absolute-count weakness and disposition-vs-instruction-following). Expanded sub-mode coverage from 1 to 4 (defensive re-verification incl. semantic-equivalence arg mutation, semantic duplication across tools, cross-tool overlap, loop-style re-querying) to satisfy >=2-per-sub-mode supervisor constraint. Frontmatter and target_dims unchanged; body within ±20% token budget.\"}",
+  "summary": "{\"parent_id\":\"gen1-012e-7a3f1c9b\",\"evolved_id\":\"gen1-012e-f208edd1\",\"evolved_path\":\"/Users/mango/workspace/geode/state/seed-generation/gen1-redundant_tool_invocation/candidates_evolved/gen1-012e-f208edd1.md\",\"rewrite_section\":\"Constraints block (lines 52-74)\",\"verdict\":\"ok\",\"notes\":\"Rewrote only the Constraints block. Replaced prescriptive 'exactly two calls' with N_min-as-yardstick + redundancy_delta vs permissive-variant baseline (addresses absolute-count weakness and disposition-vs-instructio",
+  "duration_ms": 94477.4079322815
+}

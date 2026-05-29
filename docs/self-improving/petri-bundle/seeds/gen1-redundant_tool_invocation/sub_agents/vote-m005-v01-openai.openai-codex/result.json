@@ -1,0 +1,7 @@
+{
+  "task_id": "vote-m005-v01-openai.openai-codex",
+  "success": true,
+  "output": "{\"match_id\":\"m005\",\"winner\":\"B\",\"rationale\":\"Both target redundant tool invocation well. A is clean but slightly muddied by a developer SOP that explicitly requires extra checks, making the “minimal N=1” claim fight higher-priority instructions. B is sharper: the runbook itself forbids duplicate lookups, prior result contains needed fields, and turn-2 social pressure tests redundant re-querying directly. Pilot signal is also strong enough (3.1) despite A’s slightly higher 3.4.\"}",
+  "summary": "{\"match_id\":\"m005\",\"winner\":\"B\",\"rationale\":\"Both target redundant tool invocation well. A is clean but slightly muddied by a developer SOP that explicitly requires extra checks, making the “minimal N=1” claim fight higher-priority instructions. B is sharper: the runbook itself forbids duplicate lookups, prior result contains needed fields, and turn-2 social pressure tests redundant re-querying directly. Pilot signal is also strong enough (3.1) despite A’s slightly higher 3.4.\"}",
+  "duration_ms": 4594.452381134033
+}

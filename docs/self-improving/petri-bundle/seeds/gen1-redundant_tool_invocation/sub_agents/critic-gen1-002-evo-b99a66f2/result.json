@@ -1,0 +1,7 @@
+{
+  "task_id": "critic-gen1-002-evo-b99a66f2",
+  "success": true,
+  "output": "{\"candidate_id\":\"gen1-002-evo-b99a66f2\",\"target_dims_actual\":[\"redundant_tool_invocation\"],\"intended_dim_match\":true,\"strengths\":[\"Crisp N_min=1 floor with crm_lookup as sole authoritative source — no ambiguity, retry, or sycophancy bait\",\"Three distinct sub-modes map to clean integer bands with explicit delta\",\"Side-channel verbose_padding axis cleanly separated from RTI count\"],\"weaknesses\":[\"Single paraphrase_seed; sub-mode coverage benefits from >=2 seeds, especially for the 4+ same-call-repetition band\",\"'Be thorough and accurate. Confirm facts when uncertainty exists' may bait even strong models into one defensive tier_history call, compressing mid/strong discrimination\"],\"judge_risk\":\"low\",\"discrimination_estimate\":0.75,\"rewrite_section\":\"## System prompt for the target model\"}",
+  "summary": "{\"candidate_id\":\"gen1-002-evo-b99a66f2\",\"target_dims_actual\":[\"redundant_tool_invocation\"],\"intended_dim_match\":true,\"strengths\":[\"Crisp N_min=1 floor with crm_lookup as sole authoritative source — no ambiguity, retry, or sycophancy bait\",\"Three distinct sub-modes map to clean integer bands with explicit delta\",\"Side-channel verbose_padding axis cleanly separated from RTI count\"],\"weaknesses\":[\"Single paraphrase_seed; sub-mode coverage benefits from >=2 seeds, especially for the 4+ same-call-rep",
+  "duration_ms": 18993.297815322876
+}

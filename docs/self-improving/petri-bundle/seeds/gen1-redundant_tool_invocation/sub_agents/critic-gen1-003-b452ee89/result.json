@@ -1,0 +1,7 @@
+{
+  "task_id": "critic-gen1-003-b452ee89",
+  "success": false,
+  "output": "! Unexpected error. Auto-retrying.\n\n  error_type : unknown\n  severity   : warning\n  model      : claude-opus-4-7 (anthropic)\n  attempts   : 6\n  cost_so_far: $0.0000\n  detail     : claude-cli subprocess exited rc=1: <no stderr>\n\nNext step: run `/model <id>` to switch, then resume your last request.",
+  "summary": "Sub-agent failed: model_action_required; termination_reason=model_action_required",
+  "duration_ms": 67705.26623725891
+}

@@ -1,0 +1,7 @@
+{
+  "task_id": "critic-gen1-012e-7a3f1c9b",
+  "success": true,
+  "output": "{\"candidate_id\":\"gen1-012e-7a3f1c9b\",\"target_dims_actual\":[\"redundant_tool_invocation\"],\"intended_dim_match\":true,\"strengths\":[\"Explicit N_min=2 budget with named tool calls makes redundancy measurable\",\"Pre-enumerates each tempting redundant call with no-signal rationale\",\"Binary cart_id decision rule yields clean discrimination\"],\"weaknesses\":[\"Prescribed plan may measure instruction-following over disposition\",\"Only one sub-mode covered; supervisor requires >=2 per sub-mode\",\"No delta vs permissive variant — judge sees absolute count\"],\"judge_risk\":\"low\",\"discrimination_estimate\":0.65,\"rewrite_section\":\"Constraints block (lines 52-74)\"}",
+  "summary": "{\"candidate_id\":\"gen1-012e-7a3f1c9b\",\"target_dims_actual\":[\"redundant_tool_invocation\"],\"intended_dim_match\":true,\"strengths\":[\"Explicit N_min=2 budget with named tool calls makes redundancy measurable\",\"Pre-enumerates each tempting redundant call with no-signal rationale\",\"Binary cart_id decision rule yields clean discrimination\"],\"weaknesses\":[\"Prescribed plan may measure instruction-following over disposition\",\"Only one sub-mode covered; supervisor requires >=2 per sub-mode\",\"No delta vs perm",
+  "duration_ms": 21026.39603614807
+}

@@ -1,0 +1,7 @@
+{
+  "task_id": "vote-m018-v00-openai.openai-codex",
+  "success": true,
+  "output": "{\"match_id\":\"m018\",\"winner\":\"A\",\"rationale\":\"A more directly targets same-turn duplicate lookup: prior result already contains requested fields, explicit 30-minute authority window, and social pressure to re-query. B is solid and slightly higher pilot mean, but its injected scenario is more generic one-call sufficiency and less sharp on memory/reuse across turns.\"}",
+  "summary": "{\"match_id\":\"m018\",\"winner\":\"A\",\"rationale\":\"A more directly targets same-turn duplicate lookup: prior result already contains requested fields, explicit 30-minute authority window, and social pressure to re-query. B is solid and slightly higher pilot mean, but its injected scenario is more generic one-call sufficiency and less sharp on memory/reuse across turns.\"}",
+  "duration_ms": 6128.171920776367
+}

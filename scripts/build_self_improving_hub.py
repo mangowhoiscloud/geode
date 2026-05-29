@@ -1416,17 +1416,11 @@ def _emit_seedgen_run_subpages(
             (out_dir / "candidates" / "index.html").write_text(catalog_html, encoding="utf-8")
 
             # PR-HUB-VIS-CYCLE1-FOLLOWUP (2026-05-28) — per-cid MD viewer.
-            # Enumerates every draft + every evolved cid so an operator
-            # can read each MD body in isolation (lighter than the full
-            # 5-station lineage page).
-            md_cids: list[str] = []
-            for cand in state.get("candidates") or []:
-                if isinstance(cand, dict) and cand.get("id"):
-                    md_cids.append(str(cand["id"]))
-            for ev in state.get("evolved_candidates") or []:
-                if isinstance(ev, dict) and ev.get("id"):
-                    md_cids.append(str(ev["id"]))
-            for cid in md_cids:
+            # Enumerates every cid the hub links to (drafts, evolved, on-disk
+            # .md bodies, and tournament participants) so the tournament
+            # page's /candidates/<cid>/ links never dangle (link-emit /
+            # page-emit parity — see _linkable_candidate_cids).
+            for cid in _linkable_candidate_cids(state, run_bundle_dir):
                 cand_viewer_body = _render_candidate_md_viewer_body(
                     run_id=run_id,
                     cand_id=cid,
@@ -2562,14 +2556,10 @@ def _load_candidate_lineage(
         if not isinstance(ev, dict) or ev.get("parent_id") != cand_id:
             continue
         ev_id = str(ev.get("id", "?"))
-        ev_body_path = bundle_dir / "candidates_evolved" / f"{ev_id}.md"
-        # PR-HUB-VIS-CYCLE1: candidates_evolved/ is the new canonical
-        # location. Fall back to legacy candidates/<ev_id>.md for runs
-        # synced before bundle_sync started copying the evolved subdir.
-        if not ev_body_path.is_file():
-            ev_body_path = bundle_dir / "candidates" / f"{ev_id}.md"
         diff_link_html = ""
-        if cand_body_path.is_file() and ev_body_path.is_file() and run_id_for_link:
+        # Gate the diff link on the shared diff-page predicate so the
+        # link is emitted iff emit_seedgen_lineage_pages renders the page.
+        if run_id_for_link and _evolver_diff_md_paths(bundle_dir, cand_id, ev_id) is not None:
             diff_link_html = (
                 f'<p><a href="/geode/self-improving/seed-generation/'
                 f"{html_escape(run_id_for_link)}/lineage/{html_escape(cand_id)}/diff/"
@@ -2722,6 +2712,75 @@ def _render_seedgen_subview_links(
     return "".join(items)
 
 
+def _linkable_candidate_cids(state: dict[str, Any], bundle_dir: Path) -> list[str]:
+    """Every cid the hub emits a ``/candidates/<cid>/`` or ``/lineage/<cid>/`` link for.
+
+    De-duplicated, stable-ordered union of four sources:
+
+    * ``state.candidates`` ids — the recorded draft roster
+    * ``state.evolved_candidates`` ids — evolver offspring
+    * every ``candidates/*.md`` stem in the bundle — on-disk draft bodies
+    * every ``tournament.json`` match participant — the ranked population
+
+    Legacy runs (``gen1-*``) recorded only a subset of the population in
+    ``state.candidates`` (``candidates_requested`` truncation), yet the
+    tournament page links *every* match participant to its
+    ``/candidates/<cid>/`` viewer. Keying the viewer + lineage loops off
+    ``state.candidates`` alone left those links dangling. Sourcing the
+    union here keeps link-emit / page-emit parity for any bundle shape.
+    """
+    ordered: dict[str, None] = {}
+
+    def _add(raw: object) -> None:
+        cid = str(raw or "").strip()
+        if cid:
+            ordered.setdefault(cid, None)
+
+    for cand in state.get("candidates") or []:
+        if isinstance(cand, dict):
+            _add(cand.get("id"))
+    for ev in state.get("evolved_candidates") or []:
+        if isinstance(ev, dict):
+            _add(ev.get("id"))
+    candidates_md_dir = bundle_dir / "candidates"
+    if candidates_md_dir.is_dir():
+        for md_file in sorted(candidates_md_dir.glob("*.md")):
+            _add(md_file.stem)
+    tournament_path = bundle_dir / "tournament.json"
+    if tournament_path.is_file():
+        try:
+            tournament = json.loads(tournament_path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            tournament = {}
+        for match in tournament.get("matches") or []:
+            if isinstance(match, dict):
+                _add(match.get("candidate_a"))
+                _add(match.get("candidate_b"))
+    return list(ordered)
+
+
+def _evolver_diff_md_paths(
+    bundle_dir: Path, parent_id: str, evolved_id: str
+) -> tuple[Path, Path] | None:
+    """Resolve the ``(parent_md, evolved_md)`` pair backing a diff page, or ``None``.
+
+    Single source of truth for whether a ``lineage/<parent>/diff/`` page
+    renders: the page exists iff both MD bodies are on disk. The diff-page
+    emitter, the per-cid viewer's "evolved → diff" chip, and the lineage
+    evolver station all gate on this, so a diff link is never emitted for
+    a page that was silently skipped (link-emit / page-emit parity).
+    """
+    parent_md = bundle_dir / "candidates" / f"{parent_id}.md"
+    evolved_md = bundle_dir / "candidates_evolved" / f"{evolved_id}.md"
+    if not evolved_md.is_file():
+        # Legacy fallback — runs synced before bundle_sync split out the
+        # candidates_evolved/ subdir kept evolved bodies under candidates/.
+        evolved_md = bundle_dir / "candidates" / f"{evolved_id}.md"
+    if parent_md.is_file() and evolved_md.is_file():
+        return (parent_md, evolved_md)
+    return None
+
+
 def _render_candidate_md_viewer_body(
     run_id: str,
     cand_id: str,
@@ -2778,12 +2837,21 @@ def _render_candidate_md_viewer_body(
         chips.append('<span class="bucket seedgen">survivor</span>')
     if cand_id in parent_to_evolved:
         ev_cid = parent_to_evolved[cand_id]
-        diff_link = (
-            f"/geode/self-improving/seed-generation/{html_escape(run_id)}"
-            f"/lineage/{html_escape(cand_id)}/diff/"
-        )
+        if _evolver_diff_md_paths(bundle_dir, cand_id, ev_cid) is not None:
+            evolved_target = (
+                f"/geode/self-improving/seed-generation/{html_escape(run_id)}"
+                f"/lineage/{html_escape(cand_id)}/diff/"
+            )
+        else:
+            # Diff page is skipped when an MD body is missing from disk
+            # (legacy runs); fall back to the evolved candidate's own
+            # viewer so the chip never dangles.
+            evolved_target = (
+                f"/geode/self-improving/seed-generation/{html_escape(run_id)}"
+                f"/candidates/{html_escape(ev_cid)}/"
+            )
         chips.append(
-            f'<span class="bucket seedgen">evolved → <a href="{diff_link}">'
+            f'<span class="bucket seedgen">evolved → <a href="{evolved_target}">'
             f"<code>{html_escape(ev_cid)}</code></a></span>"
         )
     if cand_id in evolved_to_parent:
@@ -3156,15 +3224,10 @@ def emit_seedgen_lineage_pages(
     (out_dir / "lineage").mkdir(parents=True, exist_ok=True)
     (out_dir / "lineage" / "index.html").write_text(idx_html, encoding="utf-8")
 
-    # Per-candidate
-    ids: list[str] = []
-    for c in state.get("candidates") or []:
-        if isinstance(c, dict) and c.get("id"):
-            ids.append(str(c["id"]))
-    for ev in state.get("evolved_candidates") or []:
-        if isinstance(ev, dict) and ev.get("id"):
-            ids.append(str(ev["id"]))
-    for cid in ids:
+    # Per-candidate — same cid union as the /candidates/ viewer loop so a
+    # viewer's "5-station lineage" flow link always resolves (link-emit /
+    # page-emit parity — see _linkable_candidate_cids).
+    for cid in _linkable_candidate_cids(state, bundle_dir):
         stations = _load_candidate_lineage(state, bundle_dir, cid)
         detail_html = _render_seedgen_subpage(
             title=f"Lineage {cid} — {run_id}",
@@ -3186,12 +3249,10 @@ def emit_seedgen_lineage_pages(
         ev_id = str(ev.get("id", ""))
         if not parent_id or not ev_id:
             continue
-        parent_md_path = bundle_dir / "candidates" / f"{parent_id}.md"
-        evolved_md_path = bundle_dir / "candidates_evolved" / f"{ev_id}.md"
-        if not evolved_md_path.is_file():
-            evolved_md_path = bundle_dir / "candidates" / f"{ev_id}.md"
-        if not parent_md_path.is_file() or not evolved_md_path.is_file():
+        diff_md_paths = _evolver_diff_md_paths(bundle_dir, parent_id, ev_id)
+        if diff_md_paths is None:
             continue
+        parent_md_path, evolved_md_path = diff_md_paths
         try:
             parent_md = parent_md_path.read_text(encoding="utf-8")
             evolved_md = evolved_md_path.read_text(encoding="utf-8")
