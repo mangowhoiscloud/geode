@@ -1172,136 +1172,92 @@ pre.msg.cand-body {
   background: var(--rule);
 }
 
-/* PR-HUB-HERO-VIS (2026-05-28) — 8-phase pipeline hero animation on
-   /seed-generation/ index page. Pure CSS keyframes loop every 18s,
-   highlighting each phase box in turn. Inspired by Google AICoScientist
-   hero but rendered server-side (no MP4) — works offline, no JS dep.
-   Honours prefers-reduced-motion so the legend below stays usable. */
-.seedgen-hero {
-  margin: .25rem 0 1.75rem;
-  padding: 1rem 1.25rem 1.25rem;
-  border: 1px solid var(--rule);
-  border-radius: 6px;
-  background: var(--paper);
+/* PR-HUB-LOOP-VIZ (2026-05-29) — the co-scientist loop as a STATIC diagram
+   (prelude runs once; an iterating core repeats x N with evolved fed back).
+   Replaces the animated 8-box hero (slop). Flat hairline boxes, no animation,
+   no colored accents (CLAUDE.md de-slop). Arrows are CSS pseudo-elements so
+   the markup stays a clean <ol> of phases. */
+.seedgen-pipeline {
+  margin: .5rem 0 2rem;
 }
-.seedgen-hero-caption {
-  margin: 0 0 .8rem;
+.seedgen-pipeline figcaption {
+  max-width: 72ch;
+  margin: 0 0 1.25rem;
+  color: var(--ink-soft);
   font-size: .9rem;
+  line-height: 1.6;
+}
+.seedgen-pipeline figcaption strong { color: var(--ink); }
+.pipe-tag {
+  display: inline-block;
+  margin-bottom: .45rem;
+  font-family: var(--font-mono);
+  font-size: .68rem;
+  text-transform: uppercase;
+  letter-spacing: .08em;
+  color: var(--ink-faint);
+}
+.pipe-row {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: .9rem .4rem;
+}
+.pipe-row li {
+  position: relative;
+  flex: 1 1 9rem;
+  min-width: 8.5rem;
+  display: flex;
+  flex-direction: column;
+  gap: .2rem;
+  padding: .55rem .7rem;
+  border: 1px solid var(--rule);
+  border-radius: 3px;
+  background: var(--paper-tint);
+}
+.pipe-name {
+  font-family: var(--font-mono);
+  font-size: .82rem;
+  font-weight: 600;
+  color: var(--ink);
+}
+.pipe-sub {
+  font-size: .72rem;
   color: var(--ink-soft);
-  line-height: 1.5;
 }
-.seedgen-hero-caption strong { color: var(--ink); }
-.seedgen-hero-svg-wrap {
-  width: 100%;
-  overflow-x: auto;
+.pipe-row li:not(:last-child)::after {
+  content: "\2192";
+  position: absolute;
+  right: -.46rem;
+  top: 50%;
+  transform: translateY(-50%);
+  color: var(--ink-faint);
+  font-size: .8rem;
 }
-.seedgen-hero-svg {
-  width: 100%;
-  height: auto;
-  min-width: 940px;       /* viewBox is 1240×360; keep readable */
-  max-width: 1240px;
-  display: block;
+.pipe-feed {
+  margin: .5rem 0 .5rem 1.1rem;
+  color: var(--ink-faint);
+  font-size: .95rem;
+  line-height: 1;
 }
-.seedgen-hero-svg .phase-box,
-.seedgen-hero-svg .phase-box-stack {
-  transition: fill 350ms ease, stroke 350ms ease;
+.pipe-loop {
+  padding: .75rem .85rem .6rem;
+  border: 1px solid var(--rule);
+  border-radius: 4px;
 }
-
-/* 18-second loop: each phase = 2s highlighted + 16s muted. */
-@keyframes seedgen-hero-phase {
-  0%, 100% { fill: var(--paper-tint); stroke: var(--rule); }
-  /* boxes are muted by default; .active class drives highlight below */
-}
-.seedgen-hero-svg .phase[data-phase="0"] .phase-box { animation: seedgen-hero-box-0 18s linear infinite; }
-.seedgen-hero-svg .phase[data-phase="1"] .phase-box { animation: seedgen-hero-box-1 18s linear infinite; }
-.seedgen-hero-svg .phase[data-phase="2"] .phase-box { animation: seedgen-hero-box-2 18s linear infinite; }
-.seedgen-hero-svg .phase[data-phase="3"] .phase-box { animation: seedgen-hero-box-3 18s linear infinite; }
-.seedgen-hero-svg .phase[data-phase="4"] .phase-box { animation: seedgen-hero-box-4 18s linear infinite; }
-.seedgen-hero-svg .phase[data-phase="5"] .phase-box { animation: seedgen-hero-box-5 18s linear infinite; }
-.seedgen-hero-svg .phase[data-phase="6"] .phase-box { animation: seedgen-hero-box-6 18s linear infinite; }
-.seedgen-hero-svg .phase[data-phase="7"] .phase-box { animation: seedgen-hero-box-7 18s linear infinite; }
-
-/* Each phase gets ~2s of highlight at its slot. Window 12.5% wide. */
-@keyframes seedgen-hero-box-0 {
-  0%, 4% { fill: #d1e7dd; stroke: #198754; }
-  12.5%, 100% { fill: var(--paper-tint); stroke: var(--rule); }
-}
-@keyframes seedgen-hero-box-1 {
-  0%, 12.5% { fill: var(--paper-tint); stroke: var(--rule); }
-  12.5001%, 16.5% { fill: #d1e7dd; stroke: #198754; }
-  25%, 100% { fill: var(--paper-tint); stroke: var(--rule); }
-}
-@keyframes seedgen-hero-box-2 {
-  0%, 25% { fill: var(--paper-tint); stroke: var(--rule); }
-  25.0001%, 29% { fill: #d1e7dd; stroke: #198754; }
-  37.5%, 100% { fill: var(--paper-tint); stroke: var(--rule); }
-}
-@keyframes seedgen-hero-box-3 {
-  0%, 37.5% { fill: var(--paper-tint); stroke: var(--rule); }
-  37.5001%, 41.5% { fill: #d1e7dd; stroke: #198754; }
-  50%, 100% { fill: var(--paper-tint); stroke: var(--rule); }
-}
-@keyframes seedgen-hero-box-4 {
-  0%, 50% { fill: var(--paper-tint); stroke: var(--rule); }
-  50.0001%, 54% { fill: #d1e7dd; stroke: #198754; }
-  62.5%, 100% { fill: var(--paper-tint); stroke: var(--rule); }
-}
-@keyframes seedgen-hero-box-5 {
-  0%, 62.5% { fill: var(--paper-tint); stroke: var(--rule); }
-  62.5001%, 66.5% { fill: #d1e7dd; stroke: #198754; }
-  75%, 100% { fill: var(--paper-tint); stroke: var(--rule); }
-}
-@keyframes seedgen-hero-box-6 {
-  0%, 75% { fill: var(--paper-tint); stroke: var(--rule); }
-  75.0001%, 79% { fill: #d1e7dd; stroke: #198754; }
-  87.5%, 100% { fill: var(--paper-tint); stroke: var(--rule); }
-}
-@keyframes seedgen-hero-box-7 {
-  0%, 87.5% { fill: var(--paper-tint); stroke: var(--rule); }
-  87.5001%, 91.5% { fill: #d1e7dd; stroke: #198754; }
-  100% { fill: var(--paper-tint); stroke: var(--rule); }
-}
-
-/* Caption text cycles through phase names + descriptions in lockstep. */
-.seedgen-hero-svg .caption-name {
-  animation: seedgen-hero-caption-name 18s steps(8, jump-none) infinite;
-}
-.seedgen-hero-svg .caption-desc {
-  animation: seedgen-hero-caption-desc 18s steps(8, jump-none) infinite;
-}
-.seedgen-hero-svg .ticker-value {
-  animation: seedgen-hero-ticker 18s steps(8, jump-none) infinite;
-}
-
-/* Hack: animate `--text` custom prop via @property, but SVG `<tspan>` text
-   content can't be animated by CSS directly. So we ship the steady-state
-   text as supervisor + use the legend below as the canonical caption.
-   The box highlight + the input/output arrow already convey the order. */
-
-/* Reduce motion preference — pause animations, show all boxes muted. */
-@media (prefers-reduced-motion: reduce) {
-  .seedgen-hero-svg .phase-box,
-  .seedgen-hero-svg .phase-box-stack,
-  .seedgen-hero-svg .caption-name,
-  .seedgen-hero-svg .caption-desc,
-  .seedgen-hero-svg .ticker-value {
-    animation: none !important;
-  }
-  /* show all boxes in highlighted state when motion is reduced — legend
-     below covers the sequence */
-  .seedgen-hero-svg .phase-box { fill: #f0f9f4; stroke: #b7dcc4; }
-}
-
-.seedgen-hero-legend {
-  margin: 1rem 0 0;
-  padding-left: 1.4rem;
-  font-size: .85rem;
+.pipe-loopback {
+  margin: .6rem 0 0;
+  padding-top: .5rem;
+  border-top: 1px dashed var(--rule);
+  font-size: .76rem;
   color: var(--ink-soft);
-  line-height: 1.55;
-  counter-reset: phase-counter;
 }
-.seedgen-hero-legend li {
-  margin: .25rem 0;
-  list-style: decimal;
+.pipe-loopback-arrow {
+  margin-right: .25rem;
+  color: var(--ink-faint);
 }
-.seedgen-hero-legend li strong { color: var(--ink); font-weight: 600; }
+@media (max-width: 720px) {
+  .pipe-row li:not(:last-child)::after { display: none; }
+}
