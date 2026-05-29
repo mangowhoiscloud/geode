@@ -1,7 +1,7 @@
 """C.2 (2026-05-25) — mutations.jsonl reader (history access for mutator + meta-judge).
 
 ``mutations.jsonl`` 은 self-improving loop 의 single-ledger SoT — apply row
-(``kind="applied"`` / ``"applied_sibling"``) + attribution row
+(``kind="applied"``) + attribution row
 (``kind="attribution"``) 가 한 file 에 row-append. 본 module 이전엔 writer
 (``runner.append_mutation`` / ``attribution.write_attribution``) 만 있고
 reader 부재 — F3 신호 (mutator 가 자기 history 를 못 봄 → repetitive mutation
@@ -11,7 +11,7 @@ reader 부재 — F3 신호 (mutator 가 자기 history 를 못 봄 → repetiti
 
 - :func:`iter_mutations` — kind filter + limit 지원, malformed row graceful skip
 - :func:`read_recent_attributions` — N 최근 attribution row 만
-- :func:`read_recent_applies` — N 최근 apply row 만 (sibling 포함/제외)
+- :func:`read_recent_applies` — N 최근 ``kind="applied"`` row 만
 
 Pydantic 검증으로 schema drift fail-fast. ``extra="allow"`` 라 legacy /
 future-added field 도 호환.
@@ -47,8 +47,8 @@ _KINDS_ATTRIBUTION: frozenset[str] = frozenset({"attribution"})
 def _parse_row(raw: str) -> ApplyRecord | AttributionRecord | None:
     """Parse one JSONL line. Returns ``None`` on malformed / unknown kind.
 
-    Discriminator: top-level ``kind`` field. ``applied`` / ``applied_sibling``
-    → ApplyRecord, ``attribution`` → AttributionRecord. 다른 kind 는 future-
+    Discriminator: top-level ``kind`` field. ``applied`` → ApplyRecord,
+    ``attribution`` → AttributionRecord. 다른 kind 는 future-
     proof skip (log.debug 만).
     """
     raw_strip = raw.strip()
@@ -93,8 +93,8 @@ def iter_mutations(
     path
         JSONL file. Default = ``MUTATION_AUDIT_LOG_PATH``.
     kinds
-        Iterable of kind strings to keep (``"applied"`` / ``"applied_sibling"``
-        / ``"attribution"``). ``None`` = all kinds.
+        Iterable of kind strings to keep (``"applied"`` / ``"attribution"``).
+        ``None`` = all kinds.
     limit
         Max rows to yield (post-filter). ``None`` = unlimited.
 

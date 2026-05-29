@@ -89,11 +89,9 @@ class ApplyRecord(BaseModel):
 
     ts: float
     kind: str = Field(default="applied", pattern=r"^applied$")
-    """``applied`` is the canonical kind. The ``applied_sibling`` variant
-    is a vestigial reader-side allowance (no current writer) retained so
-    legacy on-disk rows from the removed group-sampling era still parse;
-    PR-GROUP-REMOVAL (2026-05-29) reverted the loop to pure (1+1)-ES so
-    every fresh row is ``applied``."""
+    """``applied`` is the only valid kind — PR-GROUP-REMOVAL (2026-05-29)
+    reverted the loop to pure (1+1)-ES. Legacy group-era ``applied_sibling``
+    rows no longer validate; the reader skips them gracefully."""
     mutation_id: str
     target_kind: str
     target_section: str
@@ -1185,10 +1183,8 @@ def append_audit_log(
     # documents the payload schema:
     #   {"mutation_id": str, "target_kind": str, "target_path": str,
     #    "ts": float, "run_id": str}
-    # ``kind`` rides as an extra field so listeners can distinguish
-    # ``"applied"`` (the canonical SoT-committed mutation) from
-    # ``"applied_sibling"`` / ``"pre_audit_sibling"`` (group sampling
-    # variants, no SoT effect but still part of the experiment record).
+    # ``kind`` rides as an extra field; it is always ``"applied"`` now
+    # (the single (1+1)-ES SoT-committed mutation).
     from core.hooks.system import HookEvent
     from core.self_improving_loop._hooks import _fire_hook
 

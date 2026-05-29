@@ -964,8 +964,7 @@ def run_audit(
     # PR-TOOL-DESCRIPTIONS-MUTATE (2026-05-27, Codex MCP review fix-up)
     # — three resolution rules together close the dual-SoT drift:
     # (1) honour any env override the caller already set (preserves
-    #     ``_run_autoresearch_subprocess``'s sibling-SoT temp path
-    #     for group sampling — pre-fix this audit block clobbered it),
+    #     ``_run_autoresearch_subprocess`` or an operator already set),
     # (2) when the operator-local file exists, use it (matches the
     #     runtime reader's 3-layer resolution at
     #     ``core/agent/tool_descriptions_policy.py``),
