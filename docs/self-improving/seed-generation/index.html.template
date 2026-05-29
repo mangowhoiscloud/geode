@@ -281,7 +281,7 @@
           <th scope="col">draft &rarr; surv</th>
           <th scope="col">evolved</th>
           <th scope="col">iterations</th>
-          <th scope="col">cost</th>
+          <th scope="col">tokens</th>
         </tr>
       </thead>
       <tbody>
@@ -309,10 +309,10 @@
       <dd>Coverage report + next_gen_priors for the next iteration. 1 call.</dd>
     </dl>
 
-    <h2 class="section"><span>Cost rollup &middot; across all runs</span></h2>
+    <h2 class="section"><span>Token rollup &middot; across all runs</span></h2>
     <dl class="cost-grid">
-      <dt>total USD</dt>
-      <dd>${{ cost_total_usd }}</dd>
+      <dt>total tokens</dt>
+      <dd>{{ cost_total_tokens }}</dd>
       <dt>prompt_tokens</dt>
       <dd>{{ cost_prompt_tokens }}</dd>
       <dt>completion_tk</dt>

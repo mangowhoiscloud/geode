@@ -574,7 +574,7 @@ def test_seedgen_run_page_renders(built_seedgen_pages: dict[str, str]) -> None:
         "Reflections",
         "Pilot scores",
         "Meta-review",
-        "Cost rollup",
+        "Token rollup",
     ]
     h2_blocks = re.findall(r"<h2 class=\"section\"[^>]*>.*?</h2>", run_html, flags=re.DOTALL)
     h2_joined = " ".join(h2_blocks)
@@ -1057,7 +1057,9 @@ def test_pr2_agent_detail_paginates_via_details(built_seedgen_pages: dict[str, s
         f"expected ≥3 <details> blocks in agent detail; got {html.count('<details')}"
     )
     assert "session_end" in html
-    assert "USD" in html or "$" in html, "cost label missing"
+    # Cost (USD, $0 on subscription) was replaced by token counts (2026-05-29).
+    assert "tokens" in html, "token label missing"
+    assert "USD" not in html and "cost (USD)" not in html, "stale USD cost label remains"
     # Anchor back to /agents/ index for navigation.
     assert f"/seed-generation/{SEEDGEN_FIXTURE_RUN_ID}/agents/" in html
 
