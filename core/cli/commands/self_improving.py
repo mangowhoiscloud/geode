@@ -1317,6 +1317,12 @@ def _cmd_matrix(opts: list[str]) -> None:
     total_kinds = len(matrix)
     total_dims = len({dim for dims in matrix.values() for dim in dims})
     console.print(f"    [muted]{total_kinds} kinds × {total_dims} dims tracked[/muted]")
+    # Cells are the cumulative attribution-weighted contribution
+    # (``attribution_score × observed_dim``). The sign is NOT a clean
+    # goodness signal — ``attribution_score`` is itself signed [-1, 1] —
+    # so this view keeps its raw contribution semantics. The canonical
+    # "+ = improvement" polarity view lives on the per-mutation
+    # ``signed_improvement`` attribution field (PR-SIL-MULTIOBJ A4).
     console.print()
     kind_width = max(len(k) for k in matrix)
     for kind in sorted(matrix):

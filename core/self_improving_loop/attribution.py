@@ -42,6 +42,8 @@ from typing import TYPE_CHECKING, Any
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from core.self_improving_loop.signal_polarity import to_signed_improvement
+
 if TYPE_CHECKING:
     from plugins.seed_generation.baseline_reader import BaselineSnapshot
 
@@ -62,6 +64,12 @@ class AttributionRecord(BaseModel):
     kind: str = Field(default="attribution", pattern=r"^attribution$")
     mutation_id: str
     observed_dim: dict[str, float] = Field(default_factory=dict)
+    signed_improvement: dict[str, float] = Field(default_factory=dict)
+    """PR-SIL-MULTIOBJ A4 (2026-05-29) — ``observed_dim`` polarity-
+    normalised so ``+`` always means *improvement* and ``-`` *regression*,
+    regardless of the metric's native direction (Petri dims are
+    lower-is-better, so their sign is flipped here). Display/record only;
+    fitness math is unchanged. Legacy rows omit the field → ``{}``."""
     ci95: dict[str, float] = Field(default_factory=dict)
     significant: dict[str, bool] = Field(default_factory=dict)
     attribution_score: float = 0.0
@@ -258,6 +266,7 @@ def compute_attribution(
         "kind": "attribution",
         "mutation_id": mutation_id,
         "observed_dim": {},
+        "signed_improvement": {},
         "ci95": {},
         "significant": {},
         "attribution_score": 0.0,
@@ -302,6 +311,10 @@ def compute_attribution(
     score = _attribution_score(expected_dim, observed)
 
     payload["observed_dim"] = observed
+    # PR-SIL-MULTIOBJ A4 — canonical "+ = improvement" view of observed_dim.
+    payload["signed_improvement"] = {
+        dim: round(to_signed_improvement(dim, delta), 6) for dim, delta in observed.items()
+    }
     payload["ci95"] = ci
     payload["significant"] = significant
     payload["attribution_score"] = score

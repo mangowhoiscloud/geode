@@ -2207,6 +2207,50 @@ N1_FITNESS_MARGIN_FLOOR = 0.20
 BOOTSTRAP_FITNESS_FLOOR: float = 0.30
 
 
+def _apply_rollback_condition_gate(
+    *,
+    ok: bool,
+    reason: str,
+    condition: str,
+    observed_dim: dict[str, float],
+    baseline_dim: dict[str, float] | None,
+) -> tuple[bool, str]:
+    """PR-SIL-MULTIOBJ A2 (2026-05-29) — secondary per-dim reject gate.
+
+    Auto-evaluates the mutator's own ``rollback_condition`` predicate
+    (``core.self_improving_loop.rollback_condition.evaluate_rollback_condition``)
+    as a guard *in addition to* the primary ``_should_promote`` scalar
+    gate. Returns a possibly-flipped ``(ok, reason)``.
+
+    Properties (safety-preserving by construction):
+
+    - Only ever flips ``True → False`` (a promote can be vetoed; a reject
+      is never resurrected). The primary gate stays authoritative for
+      rejections.
+    - Dim-based predicates only — ``observed_fitness`` / ``baseline_fitness``
+      are intentionally NOT passed, so the evaluator's "fitness regresses"
+      patterns no-op here (those are already covered by the primary gate).
+      This pass adds only the *per-dim* guards the scalar cannot express,
+      e.g. ``"critical dim regresses by more than 0.5"`` or
+      ``"any dim regresses by more than 1.0"``.
+    - No-op when not promoting, when the predicate is empty/unparseable
+      (``evaluate_rollback_condition`` returns ``False`` on free-text), or
+      when there is no baseline to compare against — so legacy / manual
+      runs are unaffected.
+    """
+    if not ok or not condition.strip() or baseline_dim is None:
+        return ok, reason
+    from core.self_improving_loop.rollback_condition import evaluate_rollback_condition
+
+    if evaluate_rollback_condition(
+        condition.strip(),
+        observed_dim=observed_dim,
+        baseline_dim=baseline_dim,
+    ):
+        return False, f"rollback_condition fired [{condition.strip()}] (secondary per-dim gate)"
+    return ok, reason
+
+
 def _should_promote(
     current_means: dict[str, float],
     current_stderr: dict[str, float],
@@ -2576,6 +2620,14 @@ def main() -> int:
         action="store_true",
         help="skip baseline.json — gate stays dormant even if the file exists",
     )
+    parser.add_argument(
+        "--purge-cache",
+        action="store_true",
+        help="clear inspect_ai's generate trajectory cache before the audit "
+        "(closed-loop measurement hygiene; no-op under --dry-run). Use for a "
+        "fresh baseline or the first cycle of a batch so a residual cached "
+        "trajectory cannot replay a stale score (PR-SIL-MULTIOBJ A3).",
+    )
     promote_group = parser.add_mutually_exclusive_group()
     promote_group.add_argument(
         "--promote",
@@ -2600,6 +2652,19 @@ def main() -> int:
     gen_tag = _resolve_gen_tag(commit)
 
     cfg = _get_autoresearch_config()
+    # PR-SIL-MULTIOBJ A3 (2026-05-29) — optional cache hygiene before a
+    # real audit. Skipped under --dry-run (no subprocess). Best-effort:
+    # the purge helper is graceful when the [audit] extra is absent.
+    if args.purge_cache and not args.dry_run:
+        from plugins.petri_audit.runner import purge_inspect_cache
+
+        _purged = purge_inspect_cache()
+        _emit_journal(
+            session_id,
+            gen_tag,
+            "inspect_cache_purged",
+            payload={"purged": _purged},
+        )
     _emit_journal(
         session_id,
         gen_tag,
@@ -2899,6 +2964,19 @@ def main() -> int:
             baseline_ux_means=_baseline_ux_means or None,
             admire_means=admire_means_current,
             baseline_admire_means=_baseline_admire_means or None,
+        )
+        # PR-SIL-MULTIOBJ A2 (2026-05-29) — secondary reject gate. The
+        # mutator's own ``rollback_condition`` predicate (propagated via
+        # GEODE_SIL_ROLLBACK_CONDITION by the runner) is auto-evaluated
+        # here. It can only flip a promote → reject (never the reverse),
+        # after which the existing reject branch below performs the SoT
+        # revert.
+        ok, reason = _apply_rollback_condition_gate(
+            ok=ok,
+            reason=reason,
+            condition=os.environ.get("GEODE_SIL_ROLLBACK_CONDITION", ""),
+            observed_dim=dim_means,
+            baseline_dim=baseline_means,
         )
         if ok:
             _write_baseline(dim_means, dim_stderr, **_baseline_provenance)
@@ -3205,6 +3283,13 @@ def main() -> int:
     # path (even when GEODE_SIL_* env not set) so non-group callers ignore
     # it safely.
     #
+    # PR-SIL-MULTIOBJ A1 (2026-05-29) — the sentinel now also carries the
+    # per-dim ``dim_means`` (+ ``dim_stderr``) vector so the group caller
+    # can run a Tchebycheff (worst-weighted-gap) selection over siblings
+    # instead of the linear scalar-only advantage. Additive only: the
+    # legacy parser path reads ``fitness`` + ``audit_run_id`` and ignores
+    # the extra keys, so single-mutation / non-pareto callers are unaffected.
+    #
     # Codex MCP review #8 (2026-05-25) — failure path (e.g. early-return
     # at line ~2030 audit failure 또는 quota gate trip) DOES NOT emit this
     # sentinel. The parser (``_parse_fitness_from_subprocess_stdout``) is
@@ -3212,9 +3297,16 @@ def main() -> int:
     # RuntimeError 로 cycle abort. 즉 failure path 의 no-sentinel 은 의도된
     # 동작 (silent zero-fitness fallback 회피).
     print(
-        f"FITNESS_RESULT: "
-        f'{{"fitness": {float(fitness):.6f}, '
-        f'"audit_run_id": "{_sil_audit_run_id}"}}'
+        "FITNESS_RESULT: "
+        + json.dumps(
+            {
+                "fitness": round(float(fitness), 6),
+                "audit_run_id": _sil_audit_run_id,
+                "dim_means": {k: float(v) for k, v in dim_means.items()},
+                "dim_stderr": {k: float(v) for k, v in (dim_stderr or {}).items()},
+            },
+            ensure_ascii=False,
+        )
     )
 
     return 0
