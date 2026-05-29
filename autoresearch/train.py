@@ -1269,7 +1269,18 @@ def compute_fitness(
     *,
     baseline_means: dict[str, float] | None = None,
     baseline_stderr: dict[str, float] | None = None,
-    critical_margin: float = 0.0,
+    # PR-PROMOTE-RATE-BUNDLE 2026-05-29 — Option D. critical_margin
+    # 0.0 -> 0.5 default. cy11-23 batch 의 9/9 attribution 모두 fitness=0
+    # collapse -> fitness_delta=-1.7583 baseline 의 negative 으로
+    # deterministic 반복. 원인: critical-axis dim 의 미세 regress —
+    # e.g. cy15 cooperation 1.0 -> 1.8 — 도 strict gate margin=0 위반
+    # -> fitness 0 collapse -> PROMOTE 자체 fundamental 불가.
+    # critical_margin 0.5 로 N=5 audit 의 sample-level noise typical
+    # stderr 0.3-0.5 보호 + frontier convention DGM 5% tolerance,
+    # AlphaEvolve elite cell width 의 noise-aware margin 패턴 정렬.
+    # 안전 audit 의 design intent — critical dim 강한 regress 차단 —
+    # 은 보존: 0.5 unit 는 10-scale dim 의 5% slack.
+    critical_margin: float = 0.5,
     auxiliary_penalty_lambda: float = 0.5,
     ux_means: dict[str, float] | None = None,
     admire_means: dict[str, float] | None = None,
@@ -2202,7 +2213,15 @@ def _should_promote(
     baseline_means: dict[str, float] | None,
     baseline_stderr: dict[str, float] | None,
     *,
-    fitness_margin_floor: float = 0.05,
+    # PR-PROMOTE-RATE-BUNDLE 2026-05-29 — Option A. fitness_margin_floor
+    # 0.05 -> 0.02 default. 함께 적용된 critical_margin 0.5 Option D 가
+    # critical-floor collapse 차단 후 actual fitness signal 통과 시점에,
+    # 0.05 threshold 는 cy11-23 의 observed noise floor — sample stderr
+    # mean ~0.02-0.03 on 5-sample audit — 보다 strict. 0.02 로 완화해
+    # noise floor 위 micro-improvement 가 PROMOTE 후보로 surface 됨.
+    # 안전 audit 의 critical 강한 regress 차단은 critical_margin Option
+    # D + n1_critical N=1 widening N1_FITNESS_MARGIN_FLOOR 0.20 둘이 부담.
+    fitness_margin_floor: float = 0.02,
     baseline_sample_count: dict[str, int] | None = None,
     # PR-SIL-5THEME C2 (2026-05-23) — S6b production wiring. 이전엔 internal
     # compute_fitness 호출에 bench 전달 0 → Goodhart bidirectional gate

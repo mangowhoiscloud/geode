@@ -195,6 +195,36 @@ def check_repetitive_mutation(
     ``is_repetitive`` is False — useful for telemetry that wants to
     log near-misses without blocking the mutation.
     """
+    # PR-PROMOTE-RATE-BUNDLE (2026-05-29) — Option C. Axis-family dedup.
+    # Pre-fix the value-similarity gate (kind + section + new_value)
+    # let the mutator sweep the same (kind, section) axis with different
+    # values forever — cycle 14-22 의 8 attempted mutations 모두
+    # ``hyperparam × {max_turns, reflection_depth}`` family. cycle 23 만
+    # cross-kind 진입. mutator 의 axis-family fixation = exploration 부족
+    # → PROMOTE rate ↓.
+    # Family-level gate: same (kind, section) prior apply 가 N≥3 면
+    # value 무관 reject. mutator 가 다른 axis (section 또는 kind)
+    # 시도하도록 강제. Threshold 3 은 frontier convention (DGM "3-attempt
+    # axis rotation", AlphaEvolve "elite cell saturation") 와 정렬 — N=2
+    # 는 너무 strict (value sweep 1번도 못함), N=5 는 너무 loose
+    # (cy18-20 같은 wrong-direction 3-sweep 그대로 허용).
+    _AXIS_REPEAT_LIMIT = 3
+    same_axis_count = sum(
+        1
+        for row in recent_applies
+        if getattr(row, "target_kind", "") == mutation.target_kind
+        and getattr(row, "target_section", "") == mutation.target_section
+    )
+    if same_axis_count >= _AXIS_REPEAT_LIMIT:
+        # Synthetic similarity=1.0 marks the family exhaustion path so
+        # downstream telemetry can distinguish value-clone vs axis-saturation.
+        return RepetitionFinding(
+            is_repetitive=True,
+            max_similarity=1.0,
+            matched_mutation_id=f"axis_family_exhausted_{same_axis_count}",
+            matched_target_section=mutation.target_section,
+        )
+
     best_ratio = 0.0
     best_id: str | None = None
     best_section: str | None = None
