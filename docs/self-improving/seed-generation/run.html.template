@@ -82,10 +82,23 @@
       {{ mutator_chip }}
     </div>
 
-    <h2 class="section"><span>Sub-views</span></h2>
-    <div class="run-subviews">{{ subview_links }}</div>
+    <nav class="subview-nav" aria-label="Run sub-views">{{ subview_links }}</nav>
 
-    <h2 class="section"><span>Candidates &middot; {{ candidates_count_label }}</span></h2>
+    <nav class="run-map" aria-label="Run sections">
+      <span class="scope">Population</span>
+      <a href="#candidates">Candidates</a>
+      <a href="#survivors">Survivors</a>
+      <a href="#evolved">Evolved</a>
+      <span class="scope">Evaluation</span>
+      <a href="#reflections">Reflections</a>
+      <a href="#pilot">Pilot scores</a>
+      <a href="#phases">Phase logs</a>
+      <span class="scope">Outcome</span>
+      <a href="#meta-review">Meta-review</a>
+      <a href="#tokens">Tokens</a>
+    </nav>
+
+    <h2 class="section" id="candidates"><span>Candidates &middot; {{ candidates_count_label }}</span></h2>
     <table class="records">
       <thead>
         <tr>
@@ -100,7 +113,7 @@
       </tbody>
     </table>
 
-    <h2 class="section"><span>Survivors &middot; {{ survivors_count_label }}</span></h2>
+    <h2 class="section" id="survivors"><span>Survivors &middot; {{ survivors_count_label }}</span></h2>
     <table class="records">
       <thead>
         <tr>
@@ -115,7 +128,7 @@
       </tbody>
     </table>
 
-    <h2 class="section"><span>Evolved &middot; {{ evolved_count_label }}</span></h2>
+    <h2 class="section" id="evolved"><span>Evolved &middot; {{ evolved_count_label }}</span></h2>
     <table class="records">
       <thead>
         <tr>
@@ -130,7 +143,7 @@
       </tbody>
     </table>
 
-    <h2 class="section"><span>Phase .eval cards &middot; {{ phase_count_label }}</span></h2>
+    <h2 class="section" id="phases"><span>Phase .eval cards &middot; {{ phase_count_label }}</span></h2>
     <table class="records phases">
       <thead>
         <tr>
@@ -146,16 +159,20 @@
       </tbody>
     </table>
 
-    <h2 class="section"><span>Reflections &middot; {{ reflections_count_label }}</span></h2>
+    <details class="section-fold" id="reflections" open>
+      <summary><span>Reflections &middot; {{ reflections_count_label }}</span></summary>
 {{ reflections_block }}
+    </details>
 
-    <h2 class="section"><span>Pilot scores &middot; 22-dim matrix</span></h2>
+    <details class="section-fold" id="pilot" open>
+      <summary><span>Pilot scores &middot; 22-dim matrix</span></summary>
 {{ pilot_heatmap }}
+    </details>
 
-    <h2 class="section"><span>Meta-review</span></h2>
+    <h2 class="section" id="meta-review"><span>Meta-review</span></h2>
 {{ meta_review_block }}
 
-    <h2 class="section"><span>Token rollup</span></h2>
+    <h2 class="section" id="tokens"><span>Token rollup</span></h2>
     <dl class="cost-grid">
       <dt>total tokens</dt>
       <dd>{{ cost_total_tokens }}</dd>
