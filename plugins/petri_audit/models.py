@@ -114,7 +114,9 @@ class AuditModelMappingError(ValueError):
     """Raised when a model id cannot be mapped to an ``inspect_ai`` identifier."""
 
 
-def to_inspect_model(geode_id: str, *, use_oauth: bool | None = None) -> str:
+def to_inspect_model(
+    geode_id: str, *, use_oauth: bool | None = None, source: str | None = None
+) -> str:
     """Map a GEODE model id to an ``inspect_ai`` ``provider/model`` identifier.
 
     Used for the ``auditor`` and ``judge`` Petri model-roles. The ``target``
@@ -155,7 +157,17 @@ def to_inspect_model(geode_id: str, *, use_oauth: bool | None = None) -> str:
             f"gpt-*, o3, o4-mini, glm-*) or a raw 'provider/model' string."
         )
 
-    source_override = _source_from_use_oauth(geode_id, provider, use_oauth)
+    # PR-CRED-SOURCE-CENTRALIZE — an explicit per-role ``source``
+    # (``[self_improving_loop.petri.<role>].source``) wins over the
+    # use_oauth-derived default, so an operator who pins ``source = "api_key"``
+    # for the auditor/judge actually routes there. ``auto`` (the unpinned
+    # default) defers to use_oauth detection + the manifest cascade.
+    from core.config.credential_source import CredentialSource
+
+    if source and source != CredentialSource.AUTO:
+        source_override: str | None = source
+    else:
+        source_override = _source_from_use_oauth(geode_id, provider, use_oauth)
 
     # Cap 'auto' cascade for ids the provider's OAuth backend can't serve
     # (e.g. o3 / o4-mini are not on the Codex catalogue) — force api_key
@@ -182,10 +194,15 @@ def to_inspect_model(geode_id: str, *, use_oauth: bool | None = None) -> str:
             override=source_override,
             fallback_to_payg=self_improving_loop_fallback_policy(),
         )
-    except CredentialResolutionError:
-        # No credential resolves — legacy behaviour returned the api_key
-        # prefix anyway and let inspect_ai surface the env-var error at
-        # call time. Preserve that.
+    except CredentialResolutionError as exc:
+        # PR-CRED-SOURCE-CENTRALIZE — when the STRICT subscription gate fired
+        # (``fallback_to_payg=False`` + only PAYG left), re-raise. Silently
+        # routing to ``api_key`` here would defeat the resolution-time PAYG
+        # guard that this refactor relies on as the safety boundary. Only the
+        # non-strict "no credential at all" case preserves the legacy api_key
+        # prefix (inspect_ai surfaces the env-var error at call time).
+        if exc.subscription_only:
+            raise
         source = "api_key"
 
     manifest = load_manifest()

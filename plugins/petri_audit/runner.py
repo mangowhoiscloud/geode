@@ -625,6 +625,13 @@ def run_audit(
     # to work in ``dry_run`` mode (CI smoke runs, slash dry-runs,
     # `geode audit` without env keys). Credential resolution happens
     # later, only on the real-run branch.
+    # PR-CRED-SOURCE-CENTRALIZE — capture the per-role ``source`` override
+    # (``[self_improving_loop.petri.<role>].source``) alongside the model so an
+    # explicit ``source = "api_key"`` for the auditor/judge actually routes
+    # there. Previously only ``model`` was read, so the per-role source was a
+    # silent no-op. Defaults None → to_inspect_model's use_oauth/cascade decides.
+    auditor_source: str | None = None
+    judge_source: str | None = None
     if auditor is None or judge is None or target is None:
         from plugins.petri_audit.manifest import load_manifest
         from plugins.petri_audit.user_overrides import read_role_override
@@ -637,17 +644,19 @@ def run_audit(
                 continue
             if slot == "target" and target is not None:
                 continue
-            override_model = read_role_override(role).get("model")
-            resolved = override_model or manifest.get_role(role).default_model
+            override = read_role_override(role)
+            resolved = override.get("model") or manifest.get_role(role).default_model
             if slot == "auditor":
                 auditor = resolved
+                auditor_source = override.get("source")
             elif slot == "judge":
                 judge = resolved
+                judge_source = override.get("source")
             else:
                 target = resolved
     assert auditor is not None and judge is not None and target is not None  # narrowed
-    inspect_auditor = to_inspect_model(auditor, use_oauth=use_oauth)
-    inspect_judge = to_inspect_model(judge, use_oauth=use_oauth)
+    inspect_auditor = to_inspect_model(auditor, use_oauth=use_oauth, source=auditor_source)
+    inspect_judge = to_inspect_model(judge, use_oauth=use_oauth, source=judge_source)
     inspect_target = to_inspect_target(target)
     # Booster A — when audit-mode is active (GEODE_AUDIT_UNRESTRICTED=1,
     # set by ``cli_audit.audit(--unrestricted)`` before this call), inject

@@ -84,3 +84,36 @@ def test_settings_credential_source_validates_against_canonical() -> None:
 
     with pytest.raises(ValidationError):
         Settings(anthropic_credential_source="not-a-real-source")
+
+
+def test_explicit_per_role_api_key_routes_to_anthropic_api() -> None:
+    """An explicit per-role ``source = "api_key"`` routes the model to the
+    Anthropic API adapter (not ``claude-cli``) — the operator PAYG opt-in this
+    refactor enables. Without the runner→to_inspect_model source threading
+    (Codex review fix) this opt-in was a silent no-op.
+    """
+    from plugins.petri_audit.models import to_inspect_model
+
+    api_key_routed = to_inspect_model("claude-opus-4-8", source="api_key")
+    cli_routed = to_inspect_model("claude-opus-4-8", source="claude-cli")
+    assert api_key_routed != cli_routed
+    assert api_key_routed.startswith("anthropic/")  # PAYG API adapter prefix
+    assert cli_routed.startswith("claude-cli/")  # subscription OAuth adapter prefix
+
+
+def test_to_inspect_model_reraises_strict_subscription_abort(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """When the strict subscription gate fires (``subscription_only=True``),
+    ``to_inspect_model`` must re-raise rather than silently routing to
+    ``api_key`` — otherwise the resolution-time PAYG guard is defeated
+    (Codex review fix)."""
+    from plugins.petri_audit import credential_source as cs
+    from plugins.petri_audit import models
+
+    def _raise_strict(provider: str, **_kw: object) -> str:
+        raise cs.CredentialResolutionError("anthropic", ["claude-cli"], subscription_only=True)
+
+    monkeypatch.setattr(cs, "resolve_credential_source", _raise_strict)
+    with pytest.raises(cs.CredentialResolutionError):
+        models.to_inspect_model("claude-opus-4-8")
