@@ -13,38 +13,41 @@
 /* §3 Tokens                                                    */
 /* ============================================================ */
 :root {
-  /* Ink / paper / rule */
-  --ink: #1a1f29;
-  --ink-soft: #4a5260;
-  --ink-faint: #7d8694;
-  --rule: #e5e8ec;
-  --rule-soft: #f1f3f5;
-  --paper: #ffffff;
-  --paper-tint: #f8f9fa;
+  /* Ink / paper / rule — dark warm Anthropic palette, aligned with the docs
+     site (site/DESIGN.md §2). Warm near-black stone substrate + cream ink so
+     the self-improving hub reads as the same editorial dossier as /docs. */
+  --ink: #ede7da;
+  --ink-soft: #b5ac97;
+  --ink-faint: #807665;
+  --rule: #3a342d;
+  --rule-soft: #2a2520;
+  --paper: #181816;
+  --paper-tint: #23211f;
 
-  /* Accent (Bootstrap --bs-blue) */
-  --accent: #0d6efd;
-  --accent-faint: #e7f1ff;
+  /* Accent — AMETHYST (docs DESIGN.md --acc-artifact: runtime / model / OS).
+     The hub is the self-improving runtime surface, so it takes the runtime hue. */
+  --accent: #a573e8;
+  --accent-faint: #2a2338;
 
-  /* Harness chip palette (§3 — 4 chips, palette explosion forbidden) */
-  --chip-payg-bg: #f1f3f5;
-  --chip-payg-fg: #4a5260;
-  --chip-claude-bg: #efe7fb;
-  --chip-claude-fg: #5a2ca0;
-  --chip-codex-bg: #d1e7dd;
-  --chip-codex-fg: #0a3622;
-  --chip-geode-bg: #cfe2ff;
-  --chip-geode-fg: #052c65;
+  /* Harness chip palette (§3 — 4 chips). Dark bg + light fg for warm-dark. */
+  --chip-payg-bg: #2a2520;
+  --chip-payg-fg: #b5ac97;
+  --chip-claude-bg: #2e2640;
+  --chip-claude-fg: #c9a4f0;
+  --chip-codex-bg: #1d3329;
+  --chip-codex-fg: #7fcfa3;
+  --chip-geode-bg: #262a3c;
+  --chip-geode-fg: #a8c2ff;
 
-  /* Surface bucket palette (§3 — 3 buckets) */
-  --bucket-petri: #0d6efd;
-  --bucket-seedgen: #198754;
-  --bucket-autoresearch: #b45309;
+  /* Surface bucket palette (§3 — 3 buckets). Light-on-dark inline labels. */
+  --bucket-petri: #8ab4ff;
+  --bucket-seedgen: #6fcf97;
+  --bucket-autoresearch: #d5b27a;
 
-  /* Warning / stale baseline banner (reuses autoresearch tone per §3 strict-rule 2) */
-  --warning-bg: #fff4e6;
-  --warning-fg: #7a3e08;
-  --warning-rule: #f4cd9d;
+  /* Warning / stale baseline banner (warm citrine tone per §3 strict-rule 2) */
+  --warning-bg: #2e2417;
+  --warning-fg: #d5b27a;
+  --warning-rule: #5a4a2a;
 
   /* Type scale (§4) */
   --font-sans: -apple-system, BlinkMacSystemFont, "Helvetica Neue", Arial, sans-serif;
@@ -361,7 +364,7 @@ table.records .sub-row .id {
   font-family: var(--font-mono);
 }
 
-.warning code { background: rgba(255,255,255,.55); }
+.warning code { background: rgba(255,255,255,.08); }
 
 /* ============================================================ */
 /* §9 Build info footer                                         */
@@ -725,7 +728,7 @@ table.records.heatmap td.score-na     { background: transparent; color: var(--in
   font-family: var(--font-mono);
 }
 
-.warning-banner code { background: rgba(255, 255, 255, .55); }
+.warning-banner code { background: rgba(255, 255, 255, .08); }
 
 /* Generation timeline row highlight — the currently-promoted    */
 /* row is .active and gets a left rule + tinted background       */
@@ -940,8 +943,8 @@ table.records.votes td.rationale {
   color: var(--bucket-seedgen);
 }
 .bucket.tie {
-  background: rgba(108,117,125,.12);
-  color: #6c757d;
+  background: rgba(128,118,101,.18);
+  color: var(--ink-faint);
 }
 
 /* ---------------------------------------------------------------------
@@ -1145,42 +1148,42 @@ pre.msg.cand-body {
 
 /* Each phase gets ~2s of highlight at its slot. Window 12.5% wide. */
 @keyframes seedgen-hero-box-0 {
-  0%, 4% { fill: #d1e7dd; stroke: #198754; }
+  0%, 4% { fill: rgba(111, 207, 151, .22); stroke: #6fcf97; }
   12.5%, 100% { fill: var(--paper-tint); stroke: var(--rule); }
 }
 @keyframes seedgen-hero-box-1 {
   0%, 12.5% { fill: var(--paper-tint); stroke: var(--rule); }
-  12.5001%, 16.5% { fill: #d1e7dd; stroke: #198754; }
+  12.5001%, 16.5% { fill: rgba(111, 207, 151, .22); stroke: #6fcf97; }
   25%, 100% { fill: var(--paper-tint); stroke: var(--rule); }
 }
 @keyframes seedgen-hero-box-2 {
   0%, 25% { fill: var(--paper-tint); stroke: var(--rule); }
-  25.0001%, 29% { fill: #d1e7dd; stroke: #198754; }
+  25.0001%, 29% { fill: rgba(111, 207, 151, .22); stroke: #6fcf97; }
   37.5%, 100% { fill: var(--paper-tint); stroke: var(--rule); }
 }
 @keyframes seedgen-hero-box-3 {
   0%, 37.5% { fill: var(--paper-tint); stroke: var(--rule); }
-  37.5001%, 41.5% { fill: #d1e7dd; stroke: #198754; }
+  37.5001%, 41.5% { fill: rgba(111, 207, 151, .22); stroke: #6fcf97; }
   50%, 100% { fill: var(--paper-tint); stroke: var(--rule); }
 }
 @keyframes seedgen-hero-box-4 {
   0%, 50% { fill: var(--paper-tint); stroke: var(--rule); }
-  50.0001%, 54% { fill: #d1e7dd; stroke: #198754; }
+  50.0001%, 54% { fill: rgba(111, 207, 151, .22); stroke: #6fcf97; }
   62.5%, 100% { fill: var(--paper-tint); stroke: var(--rule); }
 }
 @keyframes seedgen-hero-box-5 {
   0%, 62.5% { fill: var(--paper-tint); stroke: var(--rule); }
-  62.5001%, 66.5% { fill: #d1e7dd; stroke: #198754; }
+  62.5001%, 66.5% { fill: rgba(111, 207, 151, .22); stroke: #6fcf97; }
   75%, 100% { fill: var(--paper-tint); stroke: var(--rule); }
 }
 @keyframes seedgen-hero-box-6 {
   0%, 75% { fill: var(--paper-tint); stroke: var(--rule); }
-  75.0001%, 79% { fill: #d1e7dd; stroke: #198754; }
+  75.0001%, 79% { fill: rgba(111, 207, 151, .22); stroke: #6fcf97; }
   87.5%, 100% { fill: var(--paper-tint); stroke: var(--rule); }
 }
 @keyframes seedgen-hero-box-7 {
   0%, 87.5% { fill: var(--paper-tint); stroke: var(--rule); }
-  87.5001%, 91.5% { fill: #d1e7dd; stroke: #198754; }
+  87.5001%, 91.5% { fill: rgba(111, 207, 151, .22); stroke: #6fcf97; }
   100% { fill: var(--paper-tint); stroke: var(--rule); }
 }
 
@@ -1211,7 +1214,7 @@ pre.msg.cand-body {
   }
   /* show all boxes in highlighted state when motion is reduced — legend
      below covers the sequence */
-  .seedgen-hero-svg .phase-box { fill: #f0f9f4; stroke: #b7dcc4; }
+  .seedgen-hero-svg .phase-box { fill: var(--paper-tint); stroke: var(--rule); }
 }
 
 .seedgen-hero-legend {

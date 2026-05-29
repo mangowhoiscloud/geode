@@ -47,6 +47,17 @@ functional change.
 
 ## [Unreleased]
 
+### Changed
+- **PR-HUB-DARK-PALETTE (2026-05-29)** — Re-palette the self-improving hub
+  (`docs/self-improving/assets/hub.css`) from the light Bootstrap-ish scheme to
+  the dark warm Anthropic palette of the docs site (`site/DESIGN.md` §2): warm
+  near-black stone substrate (`--paper #181816`), cream ink (`--ink #ede7da`),
+  amethyst runtime accent (`--accent #a573e8`) + citrine warm signal, so the
+  hub and `/docs` read as one cohesive editorial surface. Semantic-token flip
+  plus dark variants for the hardcoded sites (harness chips, bucket labels,
+  warning code background, seed-generation hero SVG, tie chip). HTML is
+  unchanged — every hub page links `hub.css`, so the theme flips on deploy.
+
 ### Fixed
 - **PR-HUB-AGENTS-CHIP-WRAP (2026-05-29)** — Two self-improving hub display
   fixes. (1) The seed-generation `/agents/` page mislabeled every cli-local
