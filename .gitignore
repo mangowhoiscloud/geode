@@ -44,6 +44,12 @@ logs/
 !docs/petri-bundle/logs/**
 !docs/self-improving/petri-bundle/logs/
 !docs/self-improving/petri-bundle/logs/**
+# Exception: seed-generation inspect bundle ("별도 뎁스"). The seedgen phase
+# .eval logs live in their OWN bundle (separate from the audit petri-bundle)
+# so the audit viewer stays scoped to alignment audits. Same publish/track
+# rationale as the petri-bundle logs above.
+!docs/self-improving/seed-generation/bundle/logs/
+!docs/self-improving/seed-generation/bundle/logs/**
 # Exception: self-improving hub E2E fixture. The hub builder
 # (scripts/build_self_improving_hub.py) reads listing.json from
 # this path during tests/test_self_improving_hub_e2e.py; without
