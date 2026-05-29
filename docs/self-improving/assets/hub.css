@@ -886,6 +886,14 @@ table.seedgen-agents th.num {
   text-align: right;
   font-variant-numeric: tabular-nums;
 }
+/* Baseline audit transcript: the auditor↔target conversation sits in a
+   left-ruled group so it reads as one unit, separated from the per-seed
+   judge-score table that follows it inside the same <details>. */
+.audit-conversation {
+  margin: .25rem 0 .85rem;
+  padding-left: .6rem;
+  border-left: 2px solid var(--rule-soft);
+}
 details.turn {
   border: 1px solid var(--rule-soft);
   border-radius: 6px;

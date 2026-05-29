@@ -3649,6 +3649,249 @@ def _render_warning_banner(baseline_path: Path | None, stale: bool) -> str:
     )
 
 
+# --------------------------------------------------------------------------- #
+# Baseline "show its work" sections — process / seed corpus / audit transcripts #
+# Rendered from the committed docs/.../baseline/transcripts.json (produced by   #
+# scripts/extract_baseline_transcripts.py). No inspect_ai import on this path.  #
+# --------------------------------------------------------------------------- #
+
+# How each extracted message speaker renders. tool_ack / system are dropped as
+# conversational noise (the inspect_petri "Message sent" acks + the static
+# auditor role prompt); the rest map onto the existing .turn.* dialogue styles.
+_BASELINE_TURN_DISPLAY: dict[str, tuple[str, str]] = {
+    "auditor": ("assistant", "auditor →"),
+    "target": ("user", "target ←"),
+    "setup": ("", "seed setup"),
+}
+
+
+def _load_baseline_transcripts(path: Path) -> dict[str, Any] | None:
+    """Load the committed baseline audit transcripts.json (None if absent)."""
+    if not path.is_file():
+        return None
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except (ValueError, OSError):
+        return None
+    return data if isinstance(data, dict) else None
+
+
+def _render_baseline_process(
+    baseline: dict[str, Any] | None, transcripts: dict[str, Any] | None
+) -> str:
+    """Pipeline provenance block — which models / effort / seeds produced this baseline."""
+    if not transcripts:
+        return (
+            '    <div class="namespace-block" id="ns-process">\n'
+            "      <h3>process</h3>\n"
+            '      <p class="empty-namespace">No <code>transcripts.json</code> next to this '
+            "page. Run <code>uv run python scripts/extract_baseline_transcripts.py</code> "
+            "after a baseline <code>--promote</code>.</p>\n"
+            "    </div>"
+        )
+    rows: list[str] = []
+
+    def add(key: str, value_html: str) -> None:
+        rows.append(
+            "          <tr>\n"
+            f'            <td class="id"><code>{html_escape(key)}</code></td>\n'
+            f"            <td>{value_html}</td>\n"
+            "          </tr>"
+        )
+
+    for role in ("auditor", "target", "judge"):
+        model = transcripts.get(f"{role}_model")
+        add(role, harness_chip(model) if model else '<span class="muted">—</span>')
+    add("reasoning effort", "<code>high</code> + <code>--reasoning-history all</code>")
+    fitness = transcripts.get("fitness")
+    if isinstance(fitness, (int, float)):
+        add(
+            "fitness (fresh anchor)",
+            f'<span class="num">{float(fitness):.4f}</span> '
+            '<span class="muted">intrinsic score; no prior base (substrate-fresh)</span>',
+        )
+    add(
+        "seed pool",
+        f'<span class="num">{transcripts.get("sample_count", 0)}</span> survivor scenarios',
+    )
+    promoted = (baseline or {}).get("promoted_at")
+    if promoted:
+        add("promoted_at", f"<code>{html_escape(str(promoted))}</code>")
+    add("audit status", f"<code>{html_escape(str(transcripts.get('status', '—')))}</code>")
+    add("eval log", f"<code>{html_escape(str(transcripts.get('eval_file', '—')))}</code>")
+    return (
+        '    <div class="namespace-block" id="ns-process">\n'
+        "      <h3>process</h3>\n"
+        '      <p class="namespace-meta">One Petri audit over the survivor pool drives the '
+        "promoted baseline: the <em>auditor</em> red-teams the <em>target</em> across the seed "
+        "scenarios; the <em>judge</em> scores 22 dimensions per scenario; the per-seed scores "
+        "aggregate into the <code>raw.dim_means</code> below.</p>\n"
+        '      <table class="records">\n'
+        '        <thead><tr><th scope="col">field</th><th scope="col">value</th></tr></thead>\n'
+        "        <tbody>\n" + "\n".join(rows) + "\n        </tbody>\n"
+        "      </table>\n"
+        "    </div>"
+    )
+
+
+def _render_baseline_seed_corpus(transcripts: dict[str, Any] | None) -> str:
+    """The survivor seed scenarios fed into the baseline audit, each expandable."""
+    samples = (transcripts or {}).get("samples") or []
+    if not samples:
+        return (
+            '    <div class="namespace-block" id="ns-seeds">\n'
+            "      <h3>seed corpus</h3>\n"
+            '      <p class="empty-namespace">No seed scenarios in transcripts.json.</p>\n'
+            "    </div>"
+        )
+    index_rows: list[str] = []
+    details: list[str] = []
+    for sample in samples:
+        seed_id = str(sample.get("id", "?"))
+        dims = sample.get("target_dims") or []
+        dim_label = ", ".join(html_escape(str(d)) for d in dims) if dims else "—"
+        name = str(sample.get("name") or seed_id)
+        body = str(sample.get("seed_body") or "")
+        index_rows.append(
+            "          <tr>\n"
+            f'            <td class="id"><a href="#seed-{html_escape(seed_id)}">'
+            f"<code>{html_escape(seed_id)}</code></a></td>\n"
+            f"            <td>{dim_label}</td>\n"
+            f'            <td><span class="num">{len(body)}</span> chars</td>\n'
+            "          </tr>"
+        )
+        details.append(
+            f'      <details class="turn" id="seed-{html_escape(seed_id)}">\n'
+            f"        <summary>{html_escape(name)} "
+            f'<span class="bucket seedgen">{dim_label}</span></summary>\n'
+            f'        <pre class="msg">{html_escape(body)}</pre>\n'
+            "      </details>"
+        )
+    return (
+        '    <div class="namespace-block" id="ns-seeds">\n'
+        f'      <h3>seed corpus <span class="count">{len(samples)}</span></h3>\n'
+        '      <p class="namespace-meta">Survivor scenarios from the seed-generation runs, '
+        "fed to the auditor as <code>seed_instructions</code>.</p>\n"
+        '      <table class="records">\n'
+        '        <thead><tr><th scope="col">seed</th><th scope="col">target dim</th>'
+        '<th scope="col">scenario size</th></tr></thead>\n'
+        "        <tbody>\n" + "\n".join(index_rows) + "\n        </tbody>\n"
+        "      </table>\n" + "\n".join(details) + "\n    </div>"
+    )
+
+
+def _render_baseline_score_table(scores: dict[str, Any]) -> str:
+    """Per-seed judge scores (1-10), highest first. No colour: dim polarity varies."""
+    if not scores:
+        return '<p class="muted">No judge scores.</p>'
+    ordered = sorted(
+        scores.items(),
+        key=lambda kv: (-float(kv[1]) if isinstance(kv[1], (int, float)) else 0.0, kv[0]),
+    )
+    rows = []
+    for dim, score in ordered:
+        score_html = (
+            f'<span class="num">{score}</span>'
+            if isinstance(score, (int, float))
+            else html_escape(str(score))
+        )
+        rows.append(
+            "            <tr>\n"
+            f'              <td class="id"><code>{html_escape(str(dim))}</code></td>\n'
+            f"              <td>{score_html}</td>\n"
+            "            </tr>"
+        )
+    return (
+        '        <table class="records">\n'
+        '          <thead><tr><th scope="col">judge dimension</th>'
+        '<th scope="col">score (1-10)</th></tr></thead>\n'
+        "          <tbody>\n" + "\n".join(rows) + "\n          </tbody>\n"
+        "        </table>"
+    )
+
+
+def _render_baseline_turns(turns: list[dict[str, Any]]) -> str:
+    """Render the auditor↔target conversation, dropping ack/system noise."""
+    out: list[str] = []
+    seq = 0
+    for turn in turns or []:
+        speaker = str(turn.get("speaker", ""))
+        if speaker not in _BASELINE_TURN_DISPLAY:
+            continue  # tool_ack / system / unknown — conversational noise
+        seq += 1
+        css, label = _BASELINE_TURN_DISPLAY[speaker]
+        parts: list[str] = []
+        reasoning = str(turn.get("reasoning") or "")
+        if reasoning:
+            parts.append("⟨reasoning⟩\n" + reasoning)
+        text = str(turn.get("text") or "")
+        if text:
+            parts.append(text)
+        for call in turn.get("tool_calls") or []:
+            tool = str(call.get("tool") or "")
+            message = call.get("message")
+            if message:
+                parts.append(f"[{tool}] {message}")
+            elif call.get("args"):
+                parts.append(f"[{tool}] {json.dumps(call['args'], ensure_ascii=False)}")
+            elif tool:
+                parts.append(f"[{tool}]")
+        body = "\n\n".join(p for p in parts if p) or "—"
+        cls = f"turn {css}".strip()
+        out.append(
+            f'        <details class="{cls}"><summary>{html_escape(label)} '
+            f'<span class="muted">turn {seq}</span></summary>\n'
+            f'        <pre class="msg">{html_escape(body)}</pre></details>'
+        )
+    return "\n".join(out) if out else '<p class="muted">No conversation turns.</p>'
+
+
+def _render_baseline_audit_transcripts(transcripts: dict[str, Any] | None) -> str:
+    """Per-seed expandable audit: conversation + judge scores + judge rationale."""
+    samples = (transcripts or {}).get("samples") or []
+    if not samples:
+        return (
+            '    <div class="namespace-block" id="ns-transcripts">\n'
+            "      <h3>audit transcripts</h3>\n"
+            '      <p class="empty-namespace">No transcripts in transcripts.json.</p>\n'
+            "    </div>"
+        )
+    blocks: list[str] = []
+    for sample in samples:
+        seed_id = str(sample.get("id", "?"))
+        dims = sample.get("target_dims") or []
+        dim_label = ", ".join(html_escape(str(d)) for d in dims) if dims else "—"
+        turns = sample.get("turns") or []
+        n_turns = sum(1 for t in turns if str(t.get("speaker")) in _BASELINE_TURN_DISPLAY)
+        explanation = str(sample.get("judge_explanation") or "")
+        explanation_html = (
+            '        <details class="turn"><summary>judge rationale</summary>\n'
+            f'        <pre class="msg">{html_escape(explanation)}</pre></details>\n'
+            if explanation
+            else ""
+        )
+        blocks.append(
+            f'      <details class="turn" id="audit-{html_escape(seed_id)}">\n'
+            f"        <summary><code>{html_escape(seed_id)}</code> "
+            f'<span class="bucket seedgen">{dim_label}</span> '
+            f'<span class="muted">{n_turns} turns</span></summary>\n'
+            f'        <div class="audit-conversation">\n{_render_baseline_turns(turns)}\n'
+            "        </div>\n"
+            f"{_render_baseline_score_table(sample.get('scores') or {})}\n"
+            f"{explanation_html}"
+            "      </details>"
+        )
+    return (
+        '    <div class="namespace-block" id="ns-transcripts">\n'
+        f'      <h3>audit transcripts <span class="count">{len(samples)}</span></h3>\n'
+        '      <p class="namespace-meta">Each seed\'s auditor↔target conversation '
+        "(reasoning + tool sends), the judge’s 22-dim scores, and the judge rationale. "
+        "Tool acks and the static auditor role prompt are omitted.</p>\n"
+        + "\n".join(blocks)
+        + "\n    </div>"
+    )
+
+
 def _gen_timeline_rows(
     archive: list[dict[str, Any]],
     current_baseline: dict[str, Any] | None,
@@ -4349,6 +4592,7 @@ def render_autoresearch_baseline(
     *,
     template: str,
     ctx: _AutoresearchRenderCtx,
+    transcripts: dict[str, Any] | None = None,
 ) -> Path:
     out_dir.mkdir(parents=True, exist_ok=True)
     namespace_blocks: list[str] = []
@@ -4369,7 +4613,10 @@ def render_autoresearch_baseline(
     mapping.update(
         {
             "stale_baseline_warning": _render_warning_banner(baseline_path, stale),
+            "baseline_process": _render_baseline_process(baseline, transcripts),
             "baseline_namespaces": "\n".join(namespace_blocks),
+            "baseline_seed_corpus": _render_baseline_seed_corpus(transcripts),
+            "baseline_audit_transcripts": _render_baseline_audit_transcripts(transcripts),
         }
     )
     rendered = substitute(template, mapping)
@@ -4767,6 +5014,9 @@ def main(argv: list[str] | None = None) -> int:
             ctx=ar_ctx,
         ),
     )
+    baseline_transcripts = _load_baseline_transcripts(
+        args.autoresearch_out_dir / "baseline" / "transcripts.json"
+    )
     _safe(
         "baseline",
         lambda: render_autoresearch_baseline(
@@ -4776,6 +5026,7 @@ def main(argv: list[str] | None = None) -> int:
             args.autoresearch_out_dir,
             template=args.autoresearch_baseline_template.read_text(encoding="utf-8"),
             ctx=ar_ctx,
+            transcripts=baseline_transcripts,
         ),
     )
     _safe(
