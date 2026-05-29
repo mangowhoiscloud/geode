@@ -662,6 +662,45 @@ def test_petri_bundle_excludes_seedgen_logs() -> None:
     )
 
 
+def test_seedgen_eval_samples_populate_viewer_tabs() -> None:
+    """Enriched seed-generation .eval samples drive the inspect viewer's
+    MESSAGES / TRANSCRIPT / SCORING tabs, not just JSON / METADATA.
+
+    PR-SEEDGEN-EVAL-ENRICH (2026-05-29). Reads a committed critic .eval from
+    the seed-generation bundle and asserts a sample carries non-empty
+    `messages` (MESSAGES tab), transcript `events` including a `model` event
+    (TRANSCRIPT tab), and a per-sample `scores` dict (SCORING tab).
+
+    .eval members are zstd-compressed (compress_type=93), which stdlib
+    zipfile cannot decode on Python 3.12, so we read via inspect_ai (which
+    handles it). Skips when the [audit] extra is absent — the CI audit job
+    (`uv sync --extra audit`) runs it; the structural split invariant is
+    pinned separately by ``test_petri_bundle_excludes_seedgen_logs``.
+    """
+    pytest.importorskip("inspect_ai.log")
+    from inspect_ai.log import read_eval_log
+
+    logs = REPO_ROOT / "docs/self-improving/seed-generation/bundle/logs"
+    critic = sorted(logs.glob("*seedgen-critic_*.eval"))
+    assert critic, "no critic .eval in the seed-generation bundle"
+    # Check EVERY run's critic log — not just the first — so a per-run
+    # sample<->sub-agent association break (e.g. a candidate-hash mismatch
+    # in one run's state.json) is caught, not masked by a passing run.
+    for log_path in critic:
+        log_obj = read_eval_log(str(log_path))
+        assert log_obj.samples, f"{log_path.name}: no samples"
+        sample = log_obj.samples[0]
+        assert sample.messages, (
+            f"{log_path.name}: MESSAGES tab empty — sample.messages not populated "
+            "(sub-agent dialogue not associated?)"
+        )
+        event_types = {getattr(e, "event", None) for e in (sample.events or [])}
+        assert "model" in event_types, (
+            f"{log_path.name}: TRANSCRIPT missing a ModelEvent; got {event_types}"
+        )
+        assert sample.scores, f"{log_path.name}: SCORING tab empty — no sample.scores"
+
+
 def test_seedgen_url_basepath_safety(built_seedgen_pages: dict[str, str]) -> None:
     """Every ``<a href>`` on both seedgen pages is /geode/-prefixed or external."""
     for label in ("index", "run"):
@@ -778,16 +817,28 @@ def test_autoresearch_landing_renders(built_autoresearch_pages: dict[str, str]) 
 
 
 def test_autoresearch_baseline_renders(built_autoresearch_pages: dict[str, str]) -> None:
-    """Baseline page renders 7 namespace blocks for the v2 schema, plus
-    harness chips on the audit namespace's 3 model fields."""
+    """Baseline page renders the 7 v2-schema namespace blocks plus the 3
+    "show its work" sections (process / seed corpus / audit transcripts),
+    and harness chips on the audit namespace's 3 model fields.
+
+    PR-BASELINE-HUB-SHOW-WORK (2026-05-29): the page gained process / seeds /
+    transcripts sections (each a `namespace-block` container), so the total
+    block count is now 7 baseline namespaces + 3 sections = 10. The 3 sections
+    render their empty-state block when no `transcripts.json` is present (the
+    fixture case), so the count holds regardless of transcript data.
+    """
     html = built_autoresearch_pages["baseline"]
-    # 7 namespace block ids (no warning banner for live baseline).
+    # 7 baseline.json namespace block ids (no warning banner for live baseline).
     expected_blocks = ("metadata", "raw", "normalized", "axes", "fitness", "audit", "promotion")
     for ns in expected_blocks:
         assert f'id="ns-{ns}"' in html, f"baseline namespace block {ns!r} missing"
-    # Total `namespace-block` divs must equal 7.
-    assert html.count('class="namespace-block"') == 7, (
-        f"expected 7 namespace blocks, got {html.count('class="namespace-block"')}"
+    # 3 "show its work" section block ids.
+    for section in ("process", "seeds", "transcripts"):
+        assert f'id="ns-{section}"' in html, f"baseline section {section!r} missing"
+    # Total `namespace-block` divs = 7 namespaces + 3 sections.
+    assert html.count('class="namespace-block"') == 10, (
+        f"expected 10 namespace blocks (7 namespaces + 3 sections), "
+        f"got {html.count('class="namespace-block"')}"
     )
     # Audit namespace renders harness chips for 3 model roles.
     assert "chip claude" in html, "auditor/judge claude chip missing"

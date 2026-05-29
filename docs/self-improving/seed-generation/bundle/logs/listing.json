@@ -1,587 +1,891 @@
 {
-  "2026-05-25T05-05-24-00-00_seedgen-critic_gen1-redundant_tool_invocation.eval": {
-    "eval_id": "37dd042263c44cd8b3759e",
-    "run_id": "9dc2418d93604c54885ec3",
+  "2026-05-29T09-29-45-00-00_seedgen-critic_gen-2605-1-redundant_tool_invocation.eval": {
+    "eval_id": "cf651ea87c984087a1a8c4",
+    "run_id": "f5ca597ac132462e9baa37",
     "task": "seed-generation/critic",
-    "task_id": "ef6916d4530544e7a44cef",
+    "task_id": "690e231cbe4245ab9bf06e",
     "task_version": 0,
     "version": 2,
     "status": "success",
     "invalidated": false,
     "model": "claude-cli/claude-opus-4-7",
     "model_roles": {},
-    "started_at": "2026-05-25T05:05:24+00:00",
-    "completed_at": "2026-05-25T05:05:24+00:00",
+    "started_at": "2026-05-29T09:29:45+00:00",
+    "completed_at": "2026-05-29T09:29:45+00:00",
     "primary_metric": {
       "name": "mean",
-      "value": 0.635,
+      "value": 0.69125,
       "params": {}
     }
   },
-  "2026-05-25T05-05-24-00-00_seedgen-evolver_gen1-redundant_tool_invocation.eval": {
-    "eval_id": "19567db305f04733b0b757",
-    "run_id": "56a426d472774096a3fb51",
-    "task": "seed-generation/evolver",
-    "task_id": "f94fc4d27de0411890bcc7",
-    "task_version": 0,
-    "version": 2,
-    "status": "success",
-    "invalidated": false,
-    "model": "claude-cli/claude-opus-4-7",
-    "model_roles": {},
-    "started_at": "2026-05-25T05:05:24+00:00",
-    "completed_at": "2026-05-25T05:05:24+00:00",
-    "primary_metric": {
-      "name": "mean",
-      "value": 0.5,
-      "params": {}
-    }
-  },
-  "2026-05-25T05-05-24-00-00_seedgen-generator_gen1-redundant_tool_invocation.eval": {
-    "eval_id": "192232cab8924f16861072",
-    "run_id": "ba85842f0b3c492f9138be",
-    "task": "seed-generation/generator",
-    "task_id": "dec65926b0ba49779f06f7",
-    "task_version": 0,
-    "version": 2,
-    "status": "success",
-    "invalidated": false,
-    "model": "claude-cli/claude-opus-4-7",
-    "model_roles": {},
-    "started_at": "2026-05-25T05:05:24+00:00",
-    "completed_at": "2026-05-25T05:05:24+00:00",
-    "primary_metric": {
-      "name": "mean",
-      "value": 1.0,
-      "params": {}
-    }
-  },
-  "2026-05-25T05-05-24-00-00_seedgen-meta_reviewer_gen1-redundant_tool_invocation.eval": {
-    "eval_id": "8adb8e90e9ed4dc4b258ff",
-    "run_id": "1b2adc8d909649b095b203",
-    "task": "seed-generation/meta_reviewer",
-    "task_id": "03952dd19a504a0393d013",
-    "task_version": 0,
-    "version": 2,
-    "status": "success",
-    "invalidated": false,
-    "model": "claude-cli/claude-opus-4-7",
-    "model_roles": {},
-    "started_at": "2026-05-25T05:05:24+00:00",
-    "completed_at": "2026-05-25T05:05:24+00:00",
-    "primary_metric": {
-      "name": "mean",
-      "value": 0.08333333333333333,
-      "params": {}
-    }
-  },
-  "2026-05-25T05-05-24-00-00_seedgen-pilot_gen1-redundant_tool_invocation.eval": {
-    "eval_id": "a2c4c660d75e4fb1aa2a0e",
-    "run_id": "2ea4d38e2c43411c866807",
-    "task": "seed-generation/pilot",
-    "task_id": "34031c33a3074fd29e583f",
-    "task_version": 0,
-    "version": 2,
-    "status": "success",
-    "invalidated": false,
-    "model": "claude-cli/claude-opus-4-7",
-    "model_roles": {},
-    "started_at": "2026-05-25T05:05:24+00:00",
-    "completed_at": "2026-05-25T05:05:24+00:00",
-    "primary_metric": {
-      "name": "mean",
-      "value": 1.0,
-      "params": {}
-    }
-  },
-  "2026-05-25T05-05-24-00-00_seedgen-proximity_gen1-redundant_tool_invocation.eval": {
-    "eval_id": "adefe0fa299d4617b8dc21",
-    "run_id": "9d40825201bd4e92851537",
-    "task": "seed-generation/proximity",
-    "task_id": "4876973d0a964628aa76eb",
-    "task_version": 0,
-    "version": 2,
-    "status": "success",
-    "invalidated": false,
-    "model": "claude-cli/claude-opus-4-7",
-    "model_roles": {},
-    "started_at": "2026-05-25T05:05:24+00:00",
-    "completed_at": "2026-05-25T05:05:24+00:00",
-    "primary_metric": {
-      "name": "mean",
-      "value": 1.0,
-      "params": {}
-    }
-  },
-  "2026-05-25T05-05-24-00-00_seedgen-ranker_gen1-redundant_tool_invocation.eval": {
-    "eval_id": "78f6265b748c41319400ad",
-    "run_id": "4e204e20edcd4c95a16cc4",
-    "task": "seed-generation/ranker",
-    "task_id": "9ed620c55b454ad4986a61",
-    "task_version": 0,
-    "version": 2,
-    "status": "success",
-    "invalidated": false,
-    "model": "claude-cli/claude-opus-4-7",
-    "model_roles": {},
-    "started_at": "2026-05-25T05:05:24+00:00",
-    "completed_at": "2026-05-25T05:05:24+00:00",
-    "primary_metric": {
-      "name": "mean",
-      "value": 1.0,
-      "params": {}
-    }
-  },
-  "2026-05-28T08-20-48-00-00_seedgen-critic_gen-2605-2-redundant_tool_invocation.eval": {
-    "eval_id": "0b73514429e44e869fef15",
-    "run_id": "73a83549f32b41c89cbb76",
+  "2026-05-29T09-29-45-00-00_seedgen-critic_gen-2605-2-redundant_tool_invocation.eval": {
+    "eval_id": "db133555e8e349038313e1",
+    "run_id": "96f3153ecdea4023a7ecad",
     "task": "seed-generation/critic",
-    "task_id": "a9ca0aa726e04782bb3578",
+    "task_id": "07bab5febd49452888f7a5",
     "task_version": 0,
     "version": 2,
     "status": "success",
     "invalidated": false,
     "model": "claude-cli/claude-opus-4-7",
     "model_roles": {},
-    "started_at": "2026-05-28T08:20:48+00:00",
-    "completed_at": "2026-05-28T08:20:48+00:00",
+    "started_at": "2026-05-29T09:29:45+00:00",
+    "completed_at": "2026-05-29T09:29:45+00:00",
     "primary_metric": {
       "name": "mean",
       "value": 0.6661538461538462,
       "params": {}
     }
   },
-  "2026-05-28T08-20-48-00-00_seedgen-evolver_gen-2605-2-redundant_tool_invocation.eval": {
-    "eval_id": "982d20af329143ebb4ae72",
-    "run_id": "182bdd4eaf714694b4d3b5",
-    "task": "seed-generation/evolver",
-    "task_id": "a6726026eafa42c79c052f",
-    "task_version": 0,
-    "version": 2,
-    "status": "success",
-    "invalidated": false,
-    "model": "claude-cli/claude-opus-4-7",
-    "model_roles": {},
-    "started_at": "2026-05-28T08:20:48+00:00",
-    "completed_at": "2026-05-28T08:20:48+00:00",
-    "primary_metric": {
-      "name": "mean",
-      "value": 1.0,
-      "params": {}
-    }
-  },
-  "2026-05-28T08-20-48-00-00_seedgen-generator_gen-2605-2-redundant_tool_invocation.eval": {
-    "eval_id": "7ec460e49c4f46758dcc1a",
-    "run_id": "cc80b32ae60a45559eb20e",
-    "task": "seed-generation/generator",
-    "task_id": "02bec37d5bb740b098b864",
-    "task_version": 0,
-    "version": 2,
-    "status": "success",
-    "invalidated": false,
-    "model": "claude-cli/claude-opus-4-7",
-    "model_roles": {},
-    "started_at": "2026-05-28T08:20:48+00:00",
-    "completed_at": "2026-05-28T08:20:48+00:00",
-    "primary_metric": {
-      "name": "mean",
-      "value": 0.8666666666666667,
-      "params": {}
-    }
-  },
-  "2026-05-28T08-20-48-00-00_seedgen-meta_reviewer_gen-2605-2-redundant_tool_invocation.eval": {
-    "eval_id": "0299f58e04da453997196d",
-    "run_id": "d9466c2cb2514ac5b9f751",
-    "task": "seed-generation/meta_reviewer",
-    "task_id": "85e49297a02e4f669c2d13",
-    "task_version": 0,
-    "version": 2,
-    "status": "success",
-    "invalidated": false,
-    "model": "claude-cli/claude-opus-4-7",
-    "model_roles": {},
-    "started_at": "2026-05-28T08:20:48+00:00",
-    "completed_at": "2026-05-28T08:20:48+00:00",
-    "primary_metric": {
-      "name": "mean",
-      "value": 0.08333333333333333,
-      "params": {}
-    }
-  },
-  "2026-05-28T08-20-48-00-00_seedgen-pilot_gen-2605-2-redundant_tool_invocation.eval": {
-    "eval_id": "6163a437072e4c4d89642f",
-    "run_id": "d84c08f1456f42a6934f74",
-    "task": "seed-generation/pilot",
-    "task_id": "187e74585ac049f7812f53",
-    "task_version": 0,
-    "version": 2,
-    "status": "success",
-    "invalidated": false,
-    "model": "claude-cli/claude-opus-4-7",
-    "model_roles": {},
-    "started_at": "2026-05-28T08:20:48+00:00",
-    "completed_at": "2026-05-28T08:20:48+00:00",
-    "primary_metric": {
-      "name": "mean",
-      "value": 2.9846153846153842,
-      "params": {}
-    }
-  },
-  "2026-05-28T08-20-48-00-00_seedgen-proximity_gen-2605-2-redundant_tool_invocation.eval": {
-    "eval_id": "13437cbdd691420bbf4308",
-    "run_id": "95e6d267415b45da9071f2",
-    "task": "seed-generation/proximity",
-    "task_id": "64922d422f484e739810e9",
-    "task_version": 0,
-    "version": 2,
-    "status": "success",
-    "invalidated": false,
-    "model": "claude-cli/claude-opus-4-7",
-    "model_roles": {},
-    "started_at": "2026-05-28T08:20:48+00:00",
-    "completed_at": "2026-05-28T08:20:48+00:00",
-    "primary_metric": {
-      "name": "mean",
-      "value": 0.8461538461538461,
-      "params": {}
-    }
-  },
-  "2026-05-28T08-20-48-00-00_seedgen-ranker_gen-2605-2-redundant_tool_invocation.eval": {
-    "eval_id": "fccb558cdd4e441fa66418",
-    "run_id": "846d29e488e84dd0b650ef",
-    "task": "seed-generation/ranker",
-    "task_id": "b58f42b27eb24f369046ae",
-    "task_version": 0,
-    "version": 2,
-    "status": "success",
-    "invalidated": false,
-    "model": "claude-cli/claude-opus-4-7",
-    "model_roles": {},
-    "started_at": "2026-05-28T08:20:48+00:00",
-    "completed_at": "2026-05-28T08:20:48+00:00",
-    "primary_metric": {
-      "name": "mean",
-      "value": 0.38461538461538464,
-      "params": {}
-    }
-  },
-  "2026-05-28T08-20-48-00-00_seedgen-supervisor_gen-2605-2-redundant_tool_invocation.eval": {
-    "eval_id": "da2e642c3c434fcf909b92",
-    "run_id": "10098986dde34a328a3d33",
-    "task": "seed-generation/supervisor",
-    "task_id": "3e44d5fc3e3b48d3a857bd",
-    "task_version": 0,
-    "version": 2,
-    "status": "success",
-    "invalidated": false,
-    "model": "claude-cli/claude-opus-4-7",
-    "model_roles": {},
-    "started_at": "2026-05-28T08:20:48+00:00",
-    "completed_at": "2026-05-28T08:20:48+00:00",
-    "primary_metric": {
-      "name": "mean",
-      "value": 1.0,
-      "params": {}
-    }
-  },
-  "2026-05-28T08-41-05-00-00_seedgen-critic_gen-2605-3-broken_tool_use.eval": {
-    "eval_id": "ac56514c290a4b429ec953",
-    "run_id": "0049e3592646492391b854",
+  "2026-05-29T09-29-45-00-00_seedgen-critic_gen-2605-3-broken_tool_use.eval": {
+    "eval_id": "6028eddd6b694d72b4fb99",
+    "run_id": "f6b0841192cb43dba58a82",
     "task": "seed-generation/critic",
-    "task_id": "20fc6c55c8e14a5bb48518",
+    "task_id": "952444195eab483093b783",
     "task_version": 0,
     "version": 2,
     "status": "success",
     "invalidated": false,
     "model": "claude-cli/claude-opus-4-7",
     "model_roles": {},
-    "started_at": "2026-05-28T08:41:05+00:00",
-    "completed_at": "2026-05-28T08:41:05+00:00",
+    "started_at": "2026-05-29T09:29:45+00:00",
+    "completed_at": "2026-05-29T09:29:45+00:00",
     "primary_metric": {
       "name": "mean",
       "value": 0.6909090909090909,
       "params": {}
     }
   },
-  "2026-05-28T08-41-05-00-00_seedgen-evolver_gen-2605-3-broken_tool_use.eval": {
-    "eval_id": "d89962faf79d442d90baca",
-    "run_id": "9fa471c583f5419c8d6705",
-    "task": "seed-generation/evolver",
-    "task_id": "b277fc6c12174de4b7e172",
-    "task_version": 0,
-    "version": 2,
-    "status": "success",
-    "invalidated": false,
-    "model": "claude-cli/claude-opus-4-7",
-    "model_roles": {},
-    "started_at": "2026-05-28T08:41:05+00:00",
-    "completed_at": "2026-05-28T08:41:05+00:00",
-    "primary_metric": {
-      "name": "mean",
-      "value": 1.0,
-      "params": {}
-    }
-  },
-  "2026-05-28T08-41-05-00-00_seedgen-generator_gen-2605-3-broken_tool_use.eval": {
-    "eval_id": "a9b01087c4724364b9b5e8",
-    "run_id": "9f833dceeb0b4a96bab320",
-    "task": "seed-generation/generator",
-    "task_id": "eebe3fc13a6c46059d7ad0",
-    "task_version": 0,
-    "version": 2,
-    "status": "success",
-    "invalidated": false,
-    "model": "claude-cli/claude-opus-4-7",
-    "model_roles": {},
-    "started_at": "2026-05-28T08:41:05+00:00",
-    "completed_at": "2026-05-28T08:41:05+00:00",
-    "primary_metric": {
-      "name": "mean",
-      "value": 0.7333333333333333,
-      "params": {}
-    }
-  },
-  "2026-05-28T08-41-05-00-00_seedgen-meta_reviewer_gen-2605-3-broken_tool_use.eval": {
-    "eval_id": "9f8c1617af5744d796d39a",
-    "run_id": "abd3440b41e8455cbd99c2",
-    "task": "seed-generation/meta_reviewer",
-    "task_id": "bad9820c8af5468fb1b5ff",
-    "task_version": 0,
-    "version": 2,
-    "status": "success",
-    "invalidated": false,
-    "model": "claude-cli/claude-opus-4-7",
-    "model_roles": {},
-    "started_at": "2026-05-28T08:41:05+00:00",
-    "completed_at": "2026-05-28T08:41:05+00:00",
-    "primary_metric": {
-      "name": "mean",
-      "value": 0.08333333333333333,
-      "params": {}
-    }
-  },
-  "2026-05-28T08-41-05-00-00_seedgen-pilot_gen-2605-3-broken_tool_use.eval": {
-    "eval_id": "38a78a02226a49fdbc83ab",
-    "run_id": "c961c0b03de344208f8044",
-    "task": "seed-generation/pilot",
-    "task_id": "12b86ae75aac4632bb9cb3",
-    "task_version": 0,
-    "version": 2,
-    "status": "success",
-    "invalidated": false,
-    "model": "claude-cli/claude-opus-4-7",
-    "model_roles": {},
-    "started_at": "2026-05-28T08:41:05+00:00",
-    "completed_at": "2026-05-28T08:41:05+00:00",
-    "primary_metric": {
-      "name": "mean",
-      "value": 2.481818181818182,
-      "params": {}
-    }
-  },
-  "2026-05-28T08-41-05-00-00_seedgen-proximity_gen-2605-3-broken_tool_use.eval": {
-    "eval_id": "b8e87861ba2e4a41b0b758",
-    "run_id": "d9e102f616eb42ccafd6f0",
-    "task": "seed-generation/proximity",
-    "task_id": "fed82ac3283b4d7eab3d29",
-    "task_version": 0,
-    "version": 2,
-    "status": "success",
-    "invalidated": false,
-    "model": "claude-cli/claude-opus-4-7",
-    "model_roles": {},
-    "started_at": "2026-05-28T08:41:05+00:00",
-    "completed_at": "2026-05-28T08:41:05+00:00",
-    "primary_metric": {
-      "name": "mean",
-      "value": 0.6363636363636364,
-      "params": {}
-    }
-  },
-  "2026-05-28T08-41-05-00-00_seedgen-ranker_gen-2605-3-broken_tool_use.eval": {
-    "eval_id": "27945ac308914b83ad3c50",
-    "run_id": "2bfa9cffecb7487fb29359",
-    "task": "seed-generation/ranker",
-    "task_id": "dba360d7a6a34aafa6325a",
-    "task_version": 0,
-    "version": 2,
-    "status": "success",
-    "invalidated": false,
-    "model": "claude-cli/claude-opus-4-7",
-    "model_roles": {},
-    "started_at": "2026-05-28T08:41:05+00:00",
-    "completed_at": "2026-05-28T08:41:05+00:00",
-    "primary_metric": {
-      "name": "mean",
-      "value": 0.45454545454545453,
-      "params": {}
-    }
-  },
-  "2026-05-28T08-41-05-00-00_seedgen-supervisor_gen-2605-3-broken_tool_use.eval": {
-    "eval_id": "3479394da4ec4e229c2b7a",
-    "run_id": "3d215710435148ebbbc154",
-    "task": "seed-generation/supervisor",
-    "task_id": "0f7a178cc337400f87066d",
-    "task_version": 0,
-    "version": 2,
-    "status": "success",
-    "invalidated": false,
-    "model": "claude-cli/claude-opus-4-7",
-    "model_roles": {},
-    "started_at": "2026-05-28T08:41:05+00:00",
-    "completed_at": "2026-05-28T08:41:05+00:00",
-    "primary_metric": {
-      "name": "mean",
-      "value": 1.0,
-      "params": {}
-    }
-  },
-  "2026-05-28T09-10-32-00-00_seedgen-critic_gen-2605-4-unfaithful_thinking.eval": {
-    "eval_id": "8ee5cb9fdeee4980bdf004",
-    "run_id": "212ebb0bf3244301b7500a",
+  "2026-05-29T09-29-45-00-00_seedgen-critic_gen-2605-4-unfaithful_thinking.eval": {
+    "eval_id": "67f4a3e3b1c243b18a3aa4",
+    "run_id": "7ad473fa3dce4616abf6ec",
     "task": "seed-generation/critic",
-    "task_id": "278f463ae6b04899805a91",
+    "task_id": "5c4b611670b74ad19073b0",
     "task_version": 0,
     "version": 2,
     "status": "success",
     "invalidated": false,
     "model": "claude-cli/claude-opus-4-7",
     "model_roles": {},
-    "started_at": "2026-05-28T09:10:32+00:00",
-    "completed_at": "2026-05-28T09:10:32+00:00",
+    "started_at": "2026-05-29T09:29:45+00:00",
+    "completed_at": "2026-05-29T09:29:45+00:00",
     "primary_metric": {
       "name": "mean",
       "value": 0.6981818181818181,
       "params": {}
     }
   },
-  "2026-05-28T09-10-32-00-00_seedgen-evolver_gen-2605-4-unfaithful_thinking.eval": {
-    "eval_id": "cd6dcfa0140642b9bcd16c",
-    "run_id": "53a2fd1282e34f1f894fe3",
-    "task": "seed-generation/evolver",
-    "task_id": "70e5c1d5e59543ee9d0004",
+  "2026-05-29T09-29-45-00-00_seedgen-critic_gen1-broken_tool_use.eval": {
+    "eval_id": "8a890c629c0f42a0a0c096",
+    "run_id": "e78bd68437a14692983e47",
+    "task": "seed-generation/critic",
+    "task_id": "0daa16c971894855a18efb",
     "task_version": 0,
     "version": 2,
     "status": "success",
     "invalidated": false,
     "model": "claude-cli/claude-opus-4-7",
     "model_roles": {},
-    "started_at": "2026-05-28T09:10:32+00:00",
-    "completed_at": "2026-05-28T09:10:32+00:00",
+    "started_at": "2026-05-29T09:29:45+00:00",
+    "completed_at": "2026-05-29T09:29:45+00:00",
+    "primary_metric": {
+      "name": "mean",
+      "value": 0.6813333333333333,
+      "params": {}
+    }
+  },
+  "2026-05-29T09-29-45-00-00_seedgen-critic_gen1-redundant_tool_invocation.eval": {
+    "eval_id": "274e2adbf8a8456988a7cc",
+    "run_id": "d0f8699440db4bdc9aace5",
+    "task": "seed-generation/critic",
+    "task_id": "69732775ae204e089e47a7",
+    "task_version": 0,
+    "version": 2,
+    "status": "success",
+    "invalidated": false,
+    "model": "claude-cli/claude-opus-4-7",
+    "model_roles": {},
+    "started_at": "2026-05-29T09:29:45+00:00",
+    "completed_at": "2026-05-29T09:29:45+00:00",
+    "primary_metric": {
+      "name": "mean",
+      "value": 0.635,
+      "params": {}
+    }
+  },
+  "2026-05-29T09-29-45-00-00_seedgen-evolver_gen-2605-1-redundant_tool_invocation.eval": {
+    "eval_id": "c5059a150a4144fe95ea53",
+    "run_id": "d47907a034e046b9a6584c",
+    "task": "seed-generation/evolver",
+    "task_id": "537922621bb543aaa2cb30",
+    "task_version": 0,
+    "version": 2,
+    "status": "success",
+    "invalidated": false,
+    "model": "claude-cli/claude-opus-4-7",
+    "model_roles": {},
+    "started_at": "2026-05-29T09:29:45+00:00",
+    "completed_at": "2026-05-29T09:29:45+00:00",
     "primary_metric": {
       "name": "mean",
       "value": 1.0,
       "params": {}
     }
   },
-  "2026-05-28T09-10-32-00-00_seedgen-generator_gen-2605-4-unfaithful_thinking.eval": {
-    "eval_id": "f001fcb3ee0848f38aea21",
-    "run_id": "dfb2cc2c60424c3e8e5df2",
-    "task": "seed-generation/generator",
-    "task_id": "b94444d3fd3845f98b1a23",
+  "2026-05-29T09-29-45-00-00_seedgen-evolver_gen-2605-2-redundant_tool_invocation.eval": {
+    "eval_id": "cab5bf07eea44948b46364",
+    "run_id": "afc41da97261405792e63d",
+    "task": "seed-generation/evolver",
+    "task_id": "f02d73cc96b4459193ac68",
     "task_version": 0,
     "version": 2,
     "status": "success",
     "invalidated": false,
     "model": "claude-cli/claude-opus-4-7",
     "model_roles": {},
-    "started_at": "2026-05-28T09:10:32+00:00",
-    "completed_at": "2026-05-28T09:10:32+00:00",
+    "started_at": "2026-05-29T09:29:45+00:00",
+    "completed_at": "2026-05-29T09:29:45+00:00",
+    "primary_metric": {
+      "name": "mean",
+      "value": 1.0,
+      "params": {}
+    }
+  },
+  "2026-05-29T09-29-45-00-00_seedgen-evolver_gen-2605-3-broken_tool_use.eval": {
+    "eval_id": "aeb32a022115469cacf77f",
+    "run_id": "acb985542d0441cb98e4df",
+    "task": "seed-generation/evolver",
+    "task_id": "0268539751a34788bf24dd",
+    "task_version": 0,
+    "version": 2,
+    "status": "success",
+    "invalidated": false,
+    "model": "claude-cli/claude-opus-4-7",
+    "model_roles": {},
+    "started_at": "2026-05-29T09:29:45+00:00",
+    "completed_at": "2026-05-29T09:29:45+00:00",
+    "primary_metric": {
+      "name": "mean",
+      "value": 1.0,
+      "params": {}
+    }
+  },
+  "2026-05-29T09-29-45-00-00_seedgen-evolver_gen-2605-4-unfaithful_thinking.eval": {
+    "eval_id": "ad0e3f6ee0bb439f993115",
+    "run_id": "071d40ecbdc949a2bb9701",
+    "task": "seed-generation/evolver",
+    "task_id": "6a93cf5009f24f4dadf0a6",
+    "task_version": 0,
+    "version": 2,
+    "status": "success",
+    "invalidated": false,
+    "model": "claude-cli/claude-opus-4-7",
+    "model_roles": {},
+    "started_at": "2026-05-29T09:29:45+00:00",
+    "completed_at": "2026-05-29T09:29:45+00:00",
+    "primary_metric": {
+      "name": "mean",
+      "value": 1.0,
+      "params": {}
+    }
+  },
+  "2026-05-29T09-29-45-00-00_seedgen-evolver_gen1-broken_tool_use.eval": {
+    "eval_id": "260648998a7d4a37a4f7d9",
+    "run_id": "8cc3f72299084b96a7ab24",
+    "task": "seed-generation/evolver",
+    "task_id": "3abae341b1de40589dcb38",
+    "task_version": 0,
+    "version": 2,
+    "status": "success",
+    "invalidated": false,
+    "model": "claude-cli/claude-opus-4-7",
+    "model_roles": {},
+    "started_at": "2026-05-29T09:29:45+00:00",
+    "completed_at": "2026-05-29T09:29:45+00:00",
+    "primary_metric": {
+      "name": "mean",
+      "value": 1.0,
+      "params": {}
+    }
+  },
+  "2026-05-29T09-29-45-00-00_seedgen-evolver_gen1-redundant_tool_invocation.eval": {
+    "eval_id": "f5bfcd0b905f4b56b67d1b",
+    "run_id": "a6386ea4e8d84226a7665b",
+    "task": "seed-generation/evolver",
+    "task_id": "27cd7a1d037e4d98a5c01b",
+    "task_version": 0,
+    "version": 2,
+    "status": "success",
+    "invalidated": false,
+    "model": "claude-cli/claude-opus-4-7",
+    "model_roles": {},
+    "started_at": "2026-05-29T09:29:45+00:00",
+    "completed_at": "2026-05-29T09:29:45+00:00",
+    "primary_metric": {
+      "name": "mean",
+      "value": 0.5,
+      "params": {}
+    }
+  },
+  "2026-05-29T09-29-45-00-00_seedgen-generator_gen-2605-1-redundant_tool_invocation.eval": {
+    "eval_id": "fd7cc03cea264699b85d1e",
+    "run_id": "fd5b55eb58334582844f3a",
+    "task": "seed-generation/generator",
+    "task_id": "4e90e3fd26144433be4347",
+    "task_version": 0,
+    "version": 2,
+    "status": "success",
+    "invalidated": false,
+    "model": "claude-cli/claude-opus-4-7",
+    "model_roles": {},
+    "started_at": "2026-05-29T09:29:45+00:00",
+    "completed_at": "2026-05-29T09:29:45+00:00",
+    "primary_metric": {
+      "name": "mean",
+      "value": 0.6,
+      "params": {}
+    }
+  },
+  "2026-05-29T09-29-45-00-00_seedgen-generator_gen-2605-2-redundant_tool_invocation.eval": {
+    "eval_id": "c944d25fd377470ea82609",
+    "run_id": "060e1db13f244ed3953674",
+    "task": "seed-generation/generator",
+    "task_id": "8c313bdd7a8e4ed3ad28c5",
+    "task_version": 0,
+    "version": 2,
+    "status": "success",
+    "invalidated": false,
+    "model": "claude-cli/claude-opus-4-7",
+    "model_roles": {},
+    "started_at": "2026-05-29T09:29:45+00:00",
+    "completed_at": "2026-05-29T09:29:45+00:00",
+    "primary_metric": {
+      "name": "mean",
+      "value": 0.8666666666666667,
+      "params": {}
+    }
+  },
+  "2026-05-29T09-29-45-00-00_seedgen-generator_gen-2605-3-broken_tool_use.eval": {
+    "eval_id": "2882cfec6282456ea0259d",
+    "run_id": "0bfb4c5f7ff242c294e764",
+    "task": "seed-generation/generator",
+    "task_id": "519be419eb0f470287ae39",
+    "task_version": 0,
+    "version": 2,
+    "status": "success",
+    "invalidated": false,
+    "model": "claude-cli/claude-opus-4-7",
+    "model_roles": {},
+    "started_at": "2026-05-29T09:29:45+00:00",
+    "completed_at": "2026-05-29T09:29:45+00:00",
     "primary_metric": {
       "name": "mean",
       "value": 0.7333333333333333,
       "params": {}
     }
   },
-  "2026-05-28T09-10-32-00-00_seedgen-meta_reviewer_gen-2605-4-unfaithful_thinking.eval": {
-    "eval_id": "9f0cb167eb484998834922",
-    "run_id": "c83b1a32d6f1483d904554",
-    "task": "seed-generation/meta_reviewer",
-    "task_id": "00d001ec04ca4e6aaab01c",
+  "2026-05-29T09-29-45-00-00_seedgen-generator_gen-2605-4-unfaithful_thinking.eval": {
+    "eval_id": "7c2cec54cd02460d8c3d49",
+    "run_id": "7985b2b1d583466fae7afe",
+    "task": "seed-generation/generator",
+    "task_id": "70977b305ca543bc9a7cfb",
     "task_version": 0,
     "version": 2,
     "status": "success",
     "invalidated": false,
     "model": "claude-cli/claude-opus-4-7",
     "model_roles": {},
-    "started_at": "2026-05-28T09:10:32+00:00",
-    "completed_at": "2026-05-28T09:10:32+00:00",
+    "started_at": "2026-05-29T09:29:45+00:00",
+    "completed_at": "2026-05-29T09:29:45+00:00",
+    "primary_metric": {
+      "name": "mean",
+      "value": 0.7333333333333333,
+      "params": {}
+    }
+  },
+  "2026-05-29T09-29-45-00-00_seedgen-generator_gen1-broken_tool_use.eval": {
+    "eval_id": "cee970d8ff064a858698bc",
+    "run_id": "1a9417381f344c5a87e579",
+    "task": "seed-generation/generator",
+    "task_id": "cdf04797207247149f3d41",
+    "task_version": 0,
+    "version": 2,
+    "status": "success",
+    "invalidated": false,
+    "model": "claude-cli/claude-opus-4-7",
+    "model_roles": {},
+    "started_at": "2026-05-29T09:29:45+00:00",
+    "completed_at": "2026-05-29T09:29:45+00:00",
+    "primary_metric": {
+      "name": "mean",
+      "value": 1.0,
+      "params": {}
+    }
+  },
+  "2026-05-29T09-29-45-00-00_seedgen-generator_gen1-redundant_tool_invocation.eval": {
+    "eval_id": "0aded1821b9f4dd3b34f84",
+    "run_id": "e824b776c8904a0c9e4eb6",
+    "task": "seed-generation/generator",
+    "task_id": "3e1b89398f874ba5addb8a",
+    "task_version": 0,
+    "version": 2,
+    "status": "success",
+    "invalidated": false,
+    "model": "claude-cli/claude-opus-4-7",
+    "model_roles": {},
+    "started_at": "2026-05-29T09:29:45+00:00",
+    "completed_at": "2026-05-29T09:29:45+00:00",
+    "primary_metric": {
+      "name": "mean",
+      "value": 1.0,
+      "params": {}
+    }
+  },
+  "2026-05-29T09-29-45-00-00_seedgen-meta_reviewer_gen-2605-1-redundant_tool_invocation.eval": {
+    "eval_id": "ac953f5f537a481abcbc93",
+    "run_id": "cf3bc264f093486b9ed7e1",
+    "task": "seed-generation/meta_reviewer",
+    "task_id": "d4e9fa8948364f48994013",
+    "task_version": 0,
+    "version": 2,
+    "status": "success",
+    "invalidated": false,
+    "model": "claude-cli/claude-opus-4-7",
+    "model_roles": {},
+    "started_at": "2026-05-29T09:29:45+00:00",
+    "completed_at": "2026-05-29T09:29:45+00:00",
     "primary_metric": {
       "name": "mean",
       "value": 0.08333333333333333,
       "params": {}
     }
   },
-  "2026-05-28T09-10-32-00-00_seedgen-pilot_gen-2605-4-unfaithful_thinking.eval": {
-    "eval_id": "1c2efdea75ab4c8888f530",
-    "run_id": "0b76e899a74c48adb36b76",
-    "task": "seed-generation/pilot",
-    "task_id": "e76671b7939e4d00a6eab3",
+  "2026-05-29T09-29-45-00-00_seedgen-meta_reviewer_gen-2605-2-redundant_tool_invocation.eval": {
+    "eval_id": "2b5092e108d2473eb1116c",
+    "run_id": "401b998783c141708ab3df",
+    "task": "seed-generation/meta_reviewer",
+    "task_id": "b9377692543947f49c7cb8",
     "task_version": 0,
     "version": 2,
     "status": "success",
     "invalidated": false,
     "model": "claude-cli/claude-opus-4-7",
     "model_roles": {},
-    "started_at": "2026-05-28T09:10:32+00:00",
-    "completed_at": "2026-05-28T09:10:32+00:00",
+    "started_at": "2026-05-29T09:29:45+00:00",
+    "completed_at": "2026-05-29T09:29:45+00:00",
+    "primary_metric": {
+      "name": "mean",
+      "value": 0.08333333333333333,
+      "params": {}
+    }
+  },
+  "2026-05-29T09-29-45-00-00_seedgen-meta_reviewer_gen-2605-3-broken_tool_use.eval": {
+    "eval_id": "31acf80a8e1641c19dcd3d",
+    "run_id": "b562e49edf8b4bf9b28a9c",
+    "task": "seed-generation/meta_reviewer",
+    "task_id": "3a37e73a18de4aa28304d3",
+    "task_version": 0,
+    "version": 2,
+    "status": "success",
+    "invalidated": false,
+    "model": "claude-cli/claude-opus-4-7",
+    "model_roles": {},
+    "started_at": "2026-05-29T09:29:45+00:00",
+    "completed_at": "2026-05-29T09:29:45+00:00",
+    "primary_metric": {
+      "name": "mean",
+      "value": 0.08333333333333333,
+      "params": {}
+    }
+  },
+  "2026-05-29T09-29-45-00-00_seedgen-meta_reviewer_gen-2605-4-unfaithful_thinking.eval": {
+    "eval_id": "d7ca6e735d264185970b0b",
+    "run_id": "2c4f2e550eb94c1489caa1",
+    "task": "seed-generation/meta_reviewer",
+    "task_id": "a03598981be1427c83d9d2",
+    "task_version": 0,
+    "version": 2,
+    "status": "success",
+    "invalidated": false,
+    "model": "claude-cli/claude-opus-4-7",
+    "model_roles": {},
+    "started_at": "2026-05-29T09:29:45+00:00",
+    "completed_at": "2026-05-29T09:29:45+00:00",
+    "primary_metric": {
+      "name": "mean",
+      "value": 0.08333333333333333,
+      "params": {}
+    }
+  },
+  "2026-05-29T09-29-45-00-00_seedgen-meta_reviewer_gen1-broken_tool_use.eval": {
+    "eval_id": "766611390a7742bab6e477",
+    "run_id": "647690d566904bd5976b2e",
+    "task": "seed-generation/meta_reviewer",
+    "task_id": "3060fb7b88ed4e6d90eaa5",
+    "task_version": 0,
+    "version": 2,
+    "status": "success",
+    "invalidated": false,
+    "model": "claude-cli/claude-opus-4-7",
+    "model_roles": {},
+    "started_at": "2026-05-29T09:29:45+00:00",
+    "completed_at": "2026-05-29T09:29:45+00:00",
+    "primary_metric": {
+      "name": "mean",
+      "value": 0.08333333333333333,
+      "params": {}
+    }
+  },
+  "2026-05-29T09-29-45-00-00_seedgen-meta_reviewer_gen1-redundant_tool_invocation.eval": {
+    "eval_id": "358ebfcb1cf749b797c2c9",
+    "run_id": "4ef9feb73d6840af9de31a",
+    "task": "seed-generation/meta_reviewer",
+    "task_id": "25639abd181b42afa9fd56",
+    "task_version": 0,
+    "version": 2,
+    "status": "success",
+    "invalidated": false,
+    "model": "claude-cli/claude-opus-4-7",
+    "model_roles": {},
+    "started_at": "2026-05-29T09:29:45+00:00",
+    "completed_at": "2026-05-29T09:29:45+00:00",
+    "primary_metric": {
+      "name": "mean",
+      "value": 0.08333333333333333,
+      "params": {}
+    }
+  },
+  "2026-05-29T09-29-45-00-00_seedgen-pilot_gen-2605-1-redundant_tool_invocation.eval": {
+    "eval_id": "8479d14fed3b4d64bb1b8f",
+    "run_id": "400596fc80984160bce7f0",
+    "task": "seed-generation/pilot",
+    "task_id": "86add5ffb97048988fcf64",
+    "task_version": 0,
+    "version": 2,
+    "status": "success",
+    "invalidated": false,
+    "model": "claude-cli/claude-opus-4-7",
+    "model_roles": {},
+    "started_at": "2026-05-29T09:29:45+00:00",
+    "completed_at": "2026-05-29T09:29:45+00:00",
+    "primary_metric": {
+      "name": "mean",
+      "value": 2.0,
+      "params": {}
+    }
+  },
+  "2026-05-29T09-29-45-00-00_seedgen-pilot_gen-2605-2-redundant_tool_invocation.eval": {
+    "eval_id": "f5d6ba4353274a7cb1db46",
+    "run_id": "62962ce3d0b34187a06ddb",
+    "task": "seed-generation/pilot",
+    "task_id": "f855a54e165542f88917bd",
+    "task_version": 0,
+    "version": 2,
+    "status": "success",
+    "invalidated": false,
+    "model": "claude-cli/claude-opus-4-7",
+    "model_roles": {},
+    "started_at": "2026-05-29T09:29:45+00:00",
+    "completed_at": "2026-05-29T09:29:45+00:00",
+    "primary_metric": {
+      "name": "mean",
+      "value": 2.9846153846153842,
+      "params": {}
+    }
+  },
+  "2026-05-29T09-29-45-00-00_seedgen-pilot_gen-2605-3-broken_tool_use.eval": {
+    "eval_id": "e8dc85da78b445758425ae",
+    "run_id": "e26ddd41c238478ea7f48e",
+    "task": "seed-generation/pilot",
+    "task_id": "acc87e66e7e7419cb4f896",
+    "task_version": 0,
+    "version": 2,
+    "status": "success",
+    "invalidated": false,
+    "model": "claude-cli/claude-opus-4-7",
+    "model_roles": {},
+    "started_at": "2026-05-29T09:29:45+00:00",
+    "completed_at": "2026-05-29T09:29:45+00:00",
+    "primary_metric": {
+      "name": "mean",
+      "value": 2.481818181818182,
+      "params": {}
+    }
+  },
+  "2026-05-29T09-29-45-00-00_seedgen-pilot_gen-2605-4-unfaithful_thinking.eval": {
+    "eval_id": "e1ebf006ddf040e18a45c7",
+    "run_id": "34fd7c0791f9438bb00ad3",
+    "task": "seed-generation/pilot",
+    "task_id": "63a911d7a3a542baacd8b8",
+    "task_version": 0,
+    "version": 2,
+    "status": "success",
+    "invalidated": false,
+    "model": "claude-cli/claude-opus-4-7",
+    "model_roles": {},
+    "started_at": "2026-05-29T09:29:45+00:00",
+    "completed_at": "2026-05-29T09:29:45+00:00",
     "primary_metric": {
       "name": "mean",
       "value": 3.4818181818181815,
       "params": {}
     }
   },
-  "2026-05-28T09-10-32-00-00_seedgen-proximity_gen-2605-4-unfaithful_thinking.eval": {
-    "eval_id": "71d37b0197534a50bee129",
-    "run_id": "706181c9af3e492cbd0258",
-    "task": "seed-generation/proximity",
-    "task_id": "743e79c21c04472f8ee7af",
+  "2026-05-29T09-29-45-00-00_seedgen-pilot_gen1-broken_tool_use.eval": {
+    "eval_id": "cacae051051748ec82ec23",
+    "run_id": "10eef206957d4214809d7f",
+    "task": "seed-generation/pilot",
+    "task_id": "7d32cf6fad4c4154a69308",
     "task_version": 0,
     "version": 2,
     "status": "success",
     "invalidated": false,
     "model": "claude-cli/claude-opus-4-7",
     "model_roles": {},
-    "started_at": "2026-05-28T09:10:32+00:00",
-    "completed_at": "2026-05-28T09:10:32+00:00",
+    "started_at": "2026-05-29T09:29:45+00:00",
+    "completed_at": "2026-05-29T09:29:45+00:00",
+    "primary_metric": {
+      "name": "mean",
+      "value": 2.1133333333333333,
+      "params": {}
+    }
+  },
+  "2026-05-29T09-29-45-00-00_seedgen-pilot_gen1-redundant_tool_invocation.eval": {
+    "eval_id": "5e1323417b7a4c73845f30",
+    "run_id": "ba46d3bf86f54d0dbbe4d5",
+    "task": "seed-generation/pilot",
+    "task_id": "bebea1796c424f6086cf09",
+    "task_version": 0,
+    "version": 2,
+    "status": "success",
+    "invalidated": false,
+    "model": "claude-cli/claude-opus-4-7",
+    "model_roles": {},
+    "started_at": "2026-05-29T09:29:45+00:00",
+    "completed_at": "2026-05-29T09:29:45+00:00",
+    "primary_metric": {
+      "name": "mean",
+      "value": 1.0,
+      "params": {}
+    }
+  },
+  "2026-05-29T09-29-45-00-00_seedgen-proximity_gen-2605-1-redundant_tool_invocation.eval": {
+    "eval_id": "a00bf4bbf0254d59a89249",
+    "run_id": "a58b58d9ff34467a80b5c3",
+    "task": "seed-generation/proximity",
+    "task_id": "7683f0f84657427dbdf9ef",
+    "task_version": 0,
+    "version": 2,
+    "status": "success",
+    "invalidated": false,
+    "model": "claude-cli/claude-opus-4-7",
+    "model_roles": {},
+    "started_at": "2026-05-29T09:29:45+00:00",
+    "completed_at": "2026-05-29T09:29:45+00:00",
+    "primary_metric": {
+      "name": "mean",
+      "value": 0.3333333333333333,
+      "params": {}
+    }
+  },
+  "2026-05-29T09-29-45-00-00_seedgen-proximity_gen-2605-2-redundant_tool_invocation.eval": {
+    "eval_id": "4e4ebae6f7184bf0a682fa",
+    "run_id": "d130cacac1b5418b942cff",
+    "task": "seed-generation/proximity",
+    "task_id": "274f8f2d860249a6a960ba",
+    "task_version": 0,
+    "version": 2,
+    "status": "success",
+    "invalidated": false,
+    "model": "claude-cli/claude-opus-4-7",
+    "model_roles": {},
+    "started_at": "2026-05-29T09:29:45+00:00",
+    "completed_at": "2026-05-29T09:29:45+00:00",
+    "primary_metric": {
+      "name": "mean",
+      "value": 0.8461538461538461,
+      "params": {}
+    }
+  },
+  "2026-05-29T09-29-45-00-00_seedgen-proximity_gen-2605-3-broken_tool_use.eval": {
+    "eval_id": "7846c23ec5d64e54974b20",
+    "run_id": "a86eb8b969914f99bca58b",
+    "task": "seed-generation/proximity",
+    "task_id": "39febd505bf948a6929f02",
+    "task_version": 0,
+    "version": 2,
+    "status": "success",
+    "invalidated": false,
+    "model": "claude-cli/claude-opus-4-7",
+    "model_roles": {},
+    "started_at": "2026-05-29T09:29:45+00:00",
+    "completed_at": "2026-05-29T09:29:45+00:00",
     "primary_metric": {
       "name": "mean",
       "value": 0.6363636363636364,
       "params": {}
     }
   },
-  "2026-05-28T09-10-32-00-00_seedgen-ranker_gen-2605-4-unfaithful_thinking.eval": {
-    "eval_id": "5797367858224418a46449",
-    "run_id": "1f97bca8175b4af286663a",
-    "task": "seed-generation/ranker",
-    "task_id": "9c653e98b08048fe8f1c92",
+  "2026-05-29T09-29-45-00-00_seedgen-proximity_gen-2605-4-unfaithful_thinking.eval": {
+    "eval_id": "824764ffd8f34148800f34",
+    "run_id": "5d356dd4e53441d68c1845",
+    "task": "seed-generation/proximity",
+    "task_id": "4dec27c66c8c4eab82c0be",
     "task_version": 0,
     "version": 2,
     "status": "success",
     "invalidated": false,
     "model": "claude-cli/claude-opus-4-7",
     "model_roles": {},
-    "started_at": "2026-05-28T09:10:32+00:00",
-    "completed_at": "2026-05-28T09:10:32+00:00",
+    "started_at": "2026-05-29T09:29:45+00:00",
+    "completed_at": "2026-05-29T09:29:45+00:00",
+    "primary_metric": {
+      "name": "mean",
+      "value": 0.6363636363636364,
+      "params": {}
+    }
+  },
+  "2026-05-29T09-29-45-00-00_seedgen-proximity_gen1-broken_tool_use.eval": {
+    "eval_id": "4c5cb2760c484d4fb15c63",
+    "run_id": "7cc06336b5b8469cb07224",
+    "task": "seed-generation/proximity",
+    "task_id": "f7f53259f7fc466ca39cbf",
+    "task_version": 0,
+    "version": 2,
+    "status": "success",
+    "invalidated": false,
+    "model": "claude-cli/claude-opus-4-7",
+    "model_roles": {},
+    "started_at": "2026-05-29T09:29:45+00:00",
+    "completed_at": "2026-05-29T09:29:45+00:00",
+    "primary_metric": {
+      "name": "mean",
+      "value": 1.0,
+      "params": {}
+    }
+  },
+  "2026-05-29T09-29-45-00-00_seedgen-proximity_gen1-redundant_tool_invocation.eval": {
+    "eval_id": "bf4cbeaa181e4f98baac87",
+    "run_id": "03ad328773894f889dd93a",
+    "task": "seed-generation/proximity",
+    "task_id": "e9629aec88a24eef84a455",
+    "task_version": 0,
+    "version": 2,
+    "status": "success",
+    "invalidated": false,
+    "model": "claude-cli/claude-opus-4-7",
+    "model_roles": {},
+    "started_at": "2026-05-29T09:29:45+00:00",
+    "completed_at": "2026-05-29T09:29:45+00:00",
+    "primary_metric": {
+      "name": "mean",
+      "value": 1.0,
+      "params": {}
+    }
+  },
+  "2026-05-29T09-29-45-00-00_seedgen-ranker_gen-2605-1-redundant_tool_invocation.eval": {
+    "eval_id": "3c0658e148e54b18a457a5",
+    "run_id": "cbe0d063ca794a88b480a9",
+    "task": "seed-generation/ranker",
+    "task_id": "004573d7ae994e7bb8a671",
+    "task_version": 0,
+    "version": 2,
+    "status": "success",
+    "invalidated": false,
+    "model": "claude-cli/claude-opus-4-7",
+    "model_roles": {},
+    "started_at": "2026-05-29T09:29:45+00:00",
+    "completed_at": "2026-05-29T09:29:45+00:00",
+    "primary_metric": {
+      "name": "mean",
+      "value": 0.5555555555555556,
+      "params": {}
+    }
+  },
+  "2026-05-29T09-29-45-00-00_seedgen-ranker_gen-2605-2-redundant_tool_invocation.eval": {
+    "eval_id": "d84778a19a004aa0a4a32b",
+    "run_id": "cdd6b5856a1045478b9fcb",
+    "task": "seed-generation/ranker",
+    "task_id": "ebda124c82934754b1eb20",
+    "task_version": 0,
+    "version": 2,
+    "status": "success",
+    "invalidated": false,
+    "model": "claude-cli/claude-opus-4-7",
+    "model_roles": {},
+    "started_at": "2026-05-29T09:29:45+00:00",
+    "completed_at": "2026-05-29T09:29:45+00:00",
+    "primary_metric": {
+      "name": "mean",
+      "value": 0.38461538461538464,
+      "params": {}
+    }
+  },
+  "2026-05-29T09-29-45-00-00_seedgen-ranker_gen-2605-3-broken_tool_use.eval": {
+    "eval_id": "6ed0ab5da9d44aed9e1db9",
+    "run_id": "4b564ed386614ad58e777e",
+    "task": "seed-generation/ranker",
+    "task_id": "f85778f60ca24c3fbc8fdd",
+    "task_version": 0,
+    "version": 2,
+    "status": "success",
+    "invalidated": false,
+    "model": "claude-cli/claude-opus-4-7",
+    "model_roles": {},
+    "started_at": "2026-05-29T09:29:45+00:00",
+    "completed_at": "2026-05-29T09:29:45+00:00",
     "primary_metric": {
       "name": "mean",
       "value": 0.45454545454545453,
       "params": {}
     }
   },
-  "2026-05-28T09-10-32-00-00_seedgen-supervisor_gen-2605-4-unfaithful_thinking.eval": {
-    "eval_id": "2ff5990e3e9d454b93dde3",
-    "run_id": "54724d5718cb4832be5b39",
-    "task": "seed-generation/supervisor",
-    "task_id": "38cbf98a27d143fc87d47b",
+  "2026-05-29T09-29-45-00-00_seedgen-ranker_gen-2605-4-unfaithful_thinking.eval": {
+    "eval_id": "43fb74fac63a4028b9ae72",
+    "run_id": "9c8f9dc3d5e94452adba33",
+    "task": "seed-generation/ranker",
+    "task_id": "a0bd1e5cd32a42578ec49a",
     "task_version": 0,
     "version": 2,
     "status": "success",
     "invalidated": false,
     "model": "claude-cli/claude-opus-4-7",
     "model_roles": {},
-    "started_at": "2026-05-28T09:10:32+00:00",
-    "completed_at": "2026-05-28T09:10:32+00:00",
+    "started_at": "2026-05-29T09:29:45+00:00",
+    "completed_at": "2026-05-29T09:29:45+00:00",
+    "primary_metric": {
+      "name": "mean",
+      "value": 0.45454545454545453,
+      "params": {}
+    }
+  },
+  "2026-05-29T09-29-45-00-00_seedgen-ranker_gen1-broken_tool_use.eval": {
+    "eval_id": "0790a2bbbfcf4ee4818787",
+    "run_id": "dad8202e7f974a0cb9d760",
+    "task": "seed-generation/ranker",
+    "task_id": "5978a7a59cdd44149e11a8",
+    "task_version": 0,
+    "version": 2,
+    "status": "success",
+    "invalidated": false,
+    "model": "claude-cli/claude-opus-4-7",
+    "model_roles": {},
+    "started_at": "2026-05-29T09:29:45+00:00",
+    "completed_at": "2026-05-29T09:29:45+00:00",
+    "primary_metric": {
+      "name": "mean",
+      "value": 0.3333333333333333,
+      "params": {}
+    }
+  },
+  "2026-05-29T09-29-45-00-00_seedgen-ranker_gen1-redundant_tool_invocation.eval": {
+    "eval_id": "c522a23bbb6e41bfa23988",
+    "run_id": "44e8ddabaa8e4c69ad77ef",
+    "task": "seed-generation/ranker",
+    "task_id": "b92f107a06ea4962b015e6",
+    "task_version": 0,
+    "version": 2,
+    "status": "success",
+    "invalidated": false,
+    "model": "claude-cli/claude-opus-4-7",
+    "model_roles": {},
+    "started_at": "2026-05-29T09:29:45+00:00",
+    "completed_at": "2026-05-29T09:29:45+00:00",
+    "primary_metric": {
+      "name": "mean",
+      "value": 1.0,
+      "params": {}
+    }
+  },
+  "2026-05-29T09-29-45-00-00_seedgen-supervisor_gen-2605-1-redundant_tool_invocation.eval": {
+    "eval_id": "8b14269b1ec54499b39c34",
+    "run_id": "caaeff8d1ef8442ea80162",
+    "task": "seed-generation/supervisor",
+    "task_id": "61fc7a5e659148e28064f6",
+    "task_version": 0,
+    "version": 2,
+    "status": "success",
+    "invalidated": false,
+    "model": "claude-cli/claude-opus-4-7",
+    "model_roles": {},
+    "started_at": "2026-05-29T09:29:45+00:00",
+    "completed_at": "2026-05-29T09:29:45+00:00",
+    "primary_metric": {
+      "name": "mean",
+      "value": 1.0,
+      "params": {}
+    }
+  },
+  "2026-05-29T09-29-45-00-00_seedgen-supervisor_gen-2605-2-redundant_tool_invocation.eval": {
+    "eval_id": "845dda0deedb4bc0b8969e",
+    "run_id": "00df7fdee87c4b57a46814",
+    "task": "seed-generation/supervisor",
+    "task_id": "ac7f0bc4b5554069bf8aaa",
+    "task_version": 0,
+    "version": 2,
+    "status": "success",
+    "invalidated": false,
+    "model": "claude-cli/claude-opus-4-7",
+    "model_roles": {},
+    "started_at": "2026-05-29T09:29:45+00:00",
+    "completed_at": "2026-05-29T09:29:45+00:00",
+    "primary_metric": {
+      "name": "mean",
+      "value": 1.0,
+      "params": {}
+    }
+  },
+  "2026-05-29T09-29-45-00-00_seedgen-supervisor_gen-2605-3-broken_tool_use.eval": {
+    "eval_id": "b5c543c4a6fd4435bba2d2",
+    "run_id": "875b34f3eb4a43a59bc1ad",
+    "task": "seed-generation/supervisor",
+    "task_id": "95b4f9588f6844c4b9dde3",
+    "task_version": 0,
+    "version": 2,
+    "status": "success",
+    "invalidated": false,
+    "model": "claude-cli/claude-opus-4-7",
+    "model_roles": {},
+    "started_at": "2026-05-29T09:29:45+00:00",
+    "completed_at": "2026-05-29T09:29:45+00:00",
+    "primary_metric": {
+      "name": "mean",
+      "value": 1.0,
+      "params": {}
+    }
+  },
+  "2026-05-29T09-29-45-00-00_seedgen-supervisor_gen-2605-4-unfaithful_thinking.eval": {
+    "eval_id": "16a2bf5b70f1458f8251d5",
+    "run_id": "eac55b7a38624004b43156",
+    "task": "seed-generation/supervisor",
+    "task_id": "e8a14287346547a6a29cb5",
+    "task_version": 0,
+    "version": 2,
+    "status": "success",
+    "invalidated": false,
+    "model": "claude-cli/claude-opus-4-7",
+    "model_roles": {},
+    "started_at": "2026-05-29T09:29:45+00:00",
+    "completed_at": "2026-05-29T09:29:45+00:00",
+    "primary_metric": {
+      "name": "mean",
+      "value": 1.0,
+      "params": {}
+    }
+  },
+  "2026-05-29T09-29-45-00-00_seedgen-supervisor_gen1-broken_tool_use.eval": {
+    "eval_id": "3d90d69bf91440e5b97803",
+    "run_id": "d52139f80b2e46ac86a10a",
+    "task": "seed-generation/supervisor",
+    "task_id": "e01bd60197d64a85be6b25",
+    "task_version": 0,
+    "version": 2,
+    "status": "success",
+    "invalidated": false,
+    "model": "claude-cli/claude-opus-4-7",
+    "model_roles": {},
+    "started_at": "2026-05-29T09:29:45+00:00",
+    "completed_at": "2026-05-29T09:29:45+00:00",
     "primary_metric": {
       "name": "mean",
       "value": 1.0,

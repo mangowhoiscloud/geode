@@ -47,6 +47,22 @@ functional change.
 
 ## [Unreleased]
 
+### Added
+- **PR-BASELINE-HUB-SHOW-WORK (2026-05-29)** — The autoresearch **baseline**
+  hub page now *shows its work* instead of rendering only the `baseline.json`
+  scalars. Four sections: **Process** (auditor / target / judge models, reasoning
+  effort, seed-pool size, fresh-anchor fitness, eval log), **Measured values**
+  (the existing `baseline.json` namespaces), **Seed corpus** (each survivor
+  scenario fed to the auditor, expandable), and **Audit transcripts** (per-seed
+  auditor↔target conversation + the judge's 22-dim scores + judge rationale).
+  New `scripts/extract_baseline_transcripts.py` reads the audit `.eval` once (it
+  alone imports `inspect_ai`) and writes a git-tracked
+  `docs/self-improving/autoresearch/baseline/transcripts.json`;
+  `scripts/build_self_improving_hub.py` renders from that JSON, so the Pages
+  build needs neither `inspect_ai` nor a local `.eval`. The fitness shown is the
+  **fresh-anchor** intrinsic score (no prior base) — a substrate change (seed
+  pool) makes a prior-base comparison spurious via the critical floor.
+
 ## [0.99.85] - 2026-05-29
 
 ### Changed
