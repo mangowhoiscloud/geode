@@ -10,8 +10,18 @@ import { useLocale, t } from "../locale-context";
  * The change is non-parametric: the weights are frozen and only the harness
  * around them moves. Each candidate change is measured by an adversarial
  * safety audit (Petri-grade). The three-row table states the contract:
- * what mutates, what never mutates, and how the change is measured.
+ * what mutates, what never mutates, and how the change is measured. Below it,
+ * a cycle-flow visual shows the SHAPE of the outer loop, mutate then audit
+ * then attribute then promote-or-revert, in petri-blue mono labels over a
+ * hairline. No fabricated fitness numbers.
  */
+const cycleSteps: { ko: string; en: string }[] = [
+  { ko: "정책 변형", en: "mutate a policy" },
+  { ko: "감사 (안전 루브릭)", en: "audit (safety rubric)" },
+  { ko: "기여도 분석", en: "attribute" },
+  { ko: "승격 또는 되돌림", en: "promote or revert" },
+];
+
 export function SelfEvolvingSection() {
   const locale = useLocale();
   return (
@@ -79,6 +89,30 @@ export function SelfEvolvingSection() {
             </tbody>
           </table>
         </div>
+
+        <div className="mt-6 rounded border border-[var(--rule)] bg-[var(--code-bg)] p-4">
+          <div className="font-mono text-[10px] tracking-[0.2em] uppercase text-[var(--ink-3)]">
+            {t(locale, "외부 루프", "outer loop")}
+          </div>
+          <div className="mt-3 flex flex-wrap items-center gap-x-2 gap-y-2 font-mono text-[12.5px]">
+            {cycleSteps.map((step, index) => (
+              <span key={step.en} className="flex items-center gap-x-2">
+                <span className="text-[var(--acc-artifact)]">{t(locale, step.ko, step.en)}</span>
+                {index < cycleSteps.length - 1 && (
+                  <span className="text-[var(--ink-3)]">{"→"}</span>
+                )}
+              </span>
+            ))}
+            <span className="text-[var(--ink-3)]">{"↺"}</span>
+          </div>
+        </div>
+        <p className="mt-3 text-[var(--ink-2)] leading-[1.75] text-[14px]">
+          {t(
+            locale,
+            "한 사이클의 모양입니다. 변형이 승격되면 다음 사이클의 기준선이 되고, 되돌려지면 같은 기준선에서 다시 시작합니다.",
+            "The shape of one cycle. A promoted mutation becomes the next cycle's baseline; a reverted one restarts from the same baseline."
+          )}
+        </p>
 
         <a
           href="/geode/docs/capabilities/autoresearch"

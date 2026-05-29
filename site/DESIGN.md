@@ -31,27 +31,26 @@
 | `--ink-3` | `#807665` | Captions, metadata. |
 | `--rule` | `#3A342D` | Hairline borders. Slightly more visible than substrate. |
 | `--rule-soft` | `#2A2520` | Softer divider, between sections. |
-| `--acc-artifact` | `#A573E8` | **AMETHYST** — OS / artifact / runtime / model. Distinct from existing DAG-SVG hue space. |
-| `--acc-line` | `#D5B27A` | **CITRINE** — scaffold / line / process / CI. Warm complement to amethyst. |
-| `--acc-soft` | `#C9A4F0` | Hover / elevated state for the amethyst accent. |
-| `--acc-si` | `#5B9BFF` | **PETRI-BLUE** — Self-Improving Loop section identity. The self-improving hub's signature (`#0d6efd`, Bootstrap blue) lightened for AA contrast on the dark substrate. Scoped to the `04-self-improving` docs section only (see §11.1). |
-| `--acc-si-soft` | `#8FBCFF` | Hover state for the self-improving accent. |
+| `--acc-artifact` | `#4D9BFF` | **PETRI-BLUE** — primary accent. The self-improving hub's signature (`#0d6efd`, Bootstrap blue) lightened for AA on the dark substrate. OS / artifact / runtime / the live system. |
+| `--acc-line` | `#D5B27A` | **CITRINE** — secondary. scaffold / line / process / CI. Warm complement to the petri-blue primary. |
+| `--acc-soft` | `#7FB5FF` | Hover / elevated state for the petri-blue accent. |
+| `--acc-si` | `#4D9BFF` | Self-Improving identity, now **unified with the primary** accent so the whole site (portfolio + docs + hub) reads as one petri-blue identity. |
+| `--acc-si-soft` | `#7FB5FF` | Hover state for the self-improving accent. |
 | `--code-bg` | `#0E0E0C` | Code block background. |
 | `--code-text` | `#DDD3BE` | Code block text. Same as `--ink-1`. |
 | `--code-string` | `#D5B27A` | Code strings (citrine, kindred to line accent). |
 
-**Identity rationale.** Amethyst and citrine are the two crystals
-most often found inside an actual geode cavity — the system's name
-is a literal reference. The accent pair maps cleanly to GEODE's
-two-mode discipline: artifact (the OS itself) gets amethyst, line
-(the scaffold that builds it) gets citrine. This puts GEODE's color
-identity outside the cyan / pink / indigo / gold / green / purple /
-coral / blue palette already occupied by the inner DAG SVGs, so
-section accents and DAG visualizations do not fight each other.
+**Identity rationale.** The primary accent is **petri-blue** (`#4D9BFF`), the
+self-improving hub's signature (`#0d6efd`) adapted for the dark substrate, so
+the portfolio, the docs, and the hub all read as one system. PR-PALETTE-REGROUND
+(2026-05-30) re-grounded it from amethyst to this hub identity. Citrine
+(`#D5B27A`) is the secondary, kept for the scaffold / line / process axis as a
+warm complement. The two-mode discipline holds: artifact / runtime / the live
+system gets petri-blue, the scaffold that builds it gets citrine.
 
 **Single substrate.** Every page is dark by design. There is no light mode. There is no dark-panel-on-light-page pattern. Mascot PNGs and SVG diagrams that were authored for dark mediums sit naturally on this substrate.
 
-**Two accents, plus one scoped section identity.** Amethyst (artifact / OS) and citrine (scaffold / line / process) are the two global accents — no other hues in general content, and the recursion table uses both side-by-side as visual signal. The single exception is `--acc-si` (petri-blue): the Self-Improving Loop section identity, propagated from the hub's signature so the docs section and the hub read as one system. It appears ONLY inside the `04-self-improving` docs section (§11.1), never in global chrome (header, footer, cross-section nav). The mechanism is a `data-doc-section` attribute on the docs shell root plus a `--section-accent` custom property; outside that section `--section-accent` resolves to `--acc-artifact`.
+**Two accents, now one unified identity.** Petri-blue (artifact / OS / the live system, primary) and citrine (scaffold / line / process, secondary) are the two global accents. As of PR-PALETTE-REGROUND the petri-blue primary IS the hub signature, so `--acc-si` equals `--acc-artifact`: the Self-Improving Loop docs section no longer needs a distinct hue, and portfolio + docs + hub share one petri-blue. The `data-doc-section` + `--section-accent` mechanism remains in place (it resolves to `--acc-artifact` everywhere now), so re-introducing a scoped section hue later is a one-line change.
 
 ## 3. Typography Rules
 
@@ -170,7 +169,7 @@ section accents and DAG visualizations do not fight each other.
 - Don't introduce gradients (text or background).
 - Don't add motion beyond `transition-colors`. No spring, no slide, no fade-in beyond the once-per-page-load 0.4s opacity fade.
 - Don't add emojis to UI chrome (titles, headings, labels).
-- Don't introduce new accent colors. Two accents — amber for artifact, graphite for line — and that's it.
+- Don't introduce new accent colors. Two accents. Petri-blue for artifact, citrine for line, and that is it.
 - Don't use `dark-panel` or `mascot-inset` utilities — they were transitional and are removed in the dark-mode reset.
 - Don't add larger corner radii than `rounded-lg` (8px).
 
@@ -324,11 +323,11 @@ The viewer (`index.html`) uses Bootstrap's default dark palette. The GEODE-autho
 | Rule | `#3a3f44` | `--rule` (`#3A342D`) |
 | Body ink | `#dee2e6` | `--ink` (`#EDE7DA`) |
 | Muted | `#adb5bd` | `--ink-2` (`#B5AC97`) |
-| Accent | `#0d6efd` (Bootstrap blue) | `--acc-si` (`#5B9BFF`) in the `04-self-improving` section; `--acc-artifact` (`#A573E8`) elsewhere |
+| Accent | `#0d6efd` (Bootstrap blue) | `--acc-artifact` (`#4D9BFF`), the site-wide petri-blue primary (the bundle blue lightened for AA on dark) |
 
 This bridge palette (substrate / elevated / rule / ink) appears **only** in `docs/petri-bundle/landing.html` and any future static HTML co-located under `docs/petri-bundle/`. Next.js docs pages continue to use the §2 substrate/ink tokens, with no exception.
 
-**Accent is the one deliberate exception.** The self-improving hub's signature is the petri Bootstrap-blue `#0d6efd`. It is the identity color of the whole self-improving surface (hub + petri bundle), so the docs propagate it — as `--acc-si` (`#5B9BFF`, lightened for AA on dark) — into the `04-self-improving` docs section: the sidebar group label, the page eyebrow, in-prose links, table-header underline, `pre`/`code` accents, and card-hover borders. This is scoped by a `data-doc-section="04-self-improving"` attribute on the docs shell root (`docs-shell.tsx`) driving a `--section-accent` custom property; outside that section the accent stays `--acc-artifact`. The bridge palette and this accent propagation are documented here so the cross-surface continuity is explicit, not a drift accident.
+**Accent continuity is now automatic.** The self-improving hub's signature is the petri Bootstrap-blue `#0d6efd`, the identity color of the whole self-improving surface (hub + petri bundle). As of PR-PALETTE-REGROUND that color IS the site-wide primary `--acc-artifact` (`#4D9BFF`, lightened for AA on dark), so the bundle, the docs, and the portfolio share one petri-blue with no scoping needed. The `data-doc-section="04-self-improving"` + `--section-accent` mechanism in `docs-shell.tsx` remains (it resolves to `--acc-artifact` everywhere now), so re-introducing a distinct scoped hue later is a one-line change.
 
 The hub's own token source of truth is `docs/design/self-improving-hub-system.md §3` (the light signature palette: white paper, `#0d6efd` accent, 3 surface buckets). The hub stays light (its native identity); docs stay dark — the shared thread is the signature accent, not the light/dark mode.
 

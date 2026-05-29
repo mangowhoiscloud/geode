@@ -16,7 +16,7 @@ h1, h2 {
 
 :root {
   /* GEODE Editorial — geode mineral palette
-     Identity: amethyst (artifact accent) + citrine (line accent),
+     Identity: petri-blue (artifact accent) + citrine (line accent),
      the two minerals most often found inside an actual geode cavity.
      Deliberately distinct from Anthropic terracotta and from the
      cyan/pink/indigo/gold/green/purple/coral palette already in use
@@ -34,11 +34,11 @@ h1, h2 {
   --rule:         #3A342D;   /* hairline, slightly more visible */
   --rule-soft:    #2A2520;
 
-  --acc-artifact: #A573E8;   /* AMETHYST — OS / artifact / runtime / model */
-  --acc-line:     #D5B27A;   /* CITRINE — scaffold / line / process / CI */
-  --acc-soft:     #C9A4F0;   /* amethyst hover */
-  --acc-si:       #5B9BFF;   /* SELF-IMPROVING signature — the hub's petri Bootstrap-blue (#0d6efd) lightened for AA on dark. Section-identity accent for the Self-Improving Loop docs section (see DESIGN.md §11.1). */
-  --acc-si-soft:  #8FBCFF;   /* self-improving hover */
+  --acc-artifact: #4D9BFF;   /* PETRI-BLUE — primary accent. The self-improving hub's signature (#0d6efd, Bootstrap blue) lightened for AA on the dark substrate. OS / artifact / runtime / the live system. (PR-PALETTE-REGROUND 2026-05-30: re-grounded from amethyst #A573E8 to unify the site with the hub + petri-bundle identity.) */
+  --acc-line:     #D5B27A;   /* CITRINE — secondary. scaffold / line / process / CI. Warm complement to the petri-blue primary. */
+  --acc-soft:     #7FB5FF;   /* petri-blue hover */
+  --acc-si:       #4D9BFF;   /* SELF-IMPROVING signature — now UNIFIED with the primary accent: the whole site carries the hub's petri-blue identity, so the docs Self-Improving section no longer reads as a separate hue. */
+  --acc-si-soft:  #7FB5FF;   /* self-improving hover */
 
   --code-bg:      #0E0E0C;
   --code-text:    #DDD3BE;
