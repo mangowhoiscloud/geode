@@ -75,207 +75,45 @@
     <h1 class="page-title">Seed Generation &middot; All runs</h1>
     <p class="page-sub">Per-run catalog of GEODE's autonomous seed-generation pipeline. Each row links to a per-run detail page with candidates, survivors, evolved variants, pilot scores, and meta-review. Mutator chip shows the LLM responsible for drafting + critiquing + evolving candidates.</p>
 
-    <!-- PR-HUB-HERO-VIS (2026-05-28) — 8-phase pipeline hero animation.
-         Pure SVG + CSS keyframes; loops every 18s. Inspired by Google
-         AICoScientist hero (storage.googleapis.com/.../AICoScientist-0-Hero.mp4)
-         but rendered server-side so first-time visitors understand the
-         seed-generation flow without watching an MP4. -->
-    <figure class="seedgen-hero">
-      <figcaption class="seedgen-hero-caption">
-        <strong>How it works.</strong> A research goal (target_dim) enters at the left;
-        8 specialised agents run sequentially over ~30 minutes to produce ranked,
-        evolved seed scenarios + a coverage report for the next iteration.
+    <!-- PR-HUB-LOOP-VIZ (2026-05-29) — the co-scientist loop as a STATIC
+         diagram: a one-time prelude feeds an iterating core that repeats x N
+         (evolved candidates fed back). Replaces the linear animated SVG hero
+         (slop). No animation; flat hairline boxes per the CLAUDE.md de-slop
+         rules; the iterator is shown by the loop bracket + feed-back line. -->
+    <figure class="seedgen-pipeline">
+      <figcaption>
+        <strong>The co-scientist loop.</strong> A one-time prelude drafts and
+        de-dups candidates, then an iterating core critiques, scores, ranks, and
+        evolves them, repeating each iteration with the evolver's offspring fed
+        back as the next round's candidates.
       </figcaption>
-      <div class="seedgen-hero-svg-wrap">
-        <svg viewBox="0 0 1240 360" role="img"
-             aria-labelledby="seedgen-hero-title seedgen-hero-desc"
-             class="seedgen-hero-svg" xmlns="http://www.w3.org/2000/svg">
-          <title id="seedgen-hero-title">Seed-generation 8-phase pipeline</title>
-          <desc id="seedgen-hero-desc">
-            Animated flow diagram: research goal → supervisor → generator
-            (parallel × N) → proximity → critic → pilot → ranker (Elo tournament)
-            → evolver → meta_reviewer → next_gen_priors. Each phase is highlighted
-            in turn over an 18-second loop.
-          </desc>
-          <defs>
-            <!-- arrow marker -->
-            <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5"
-                    markerWidth="6" markerHeight="6" orient="auto-start-reverse">
-              <path d="M0 0 L10 5 L0 10 z" fill="#7d8694"/>
-            </marker>
-            <marker id="arrow-active" viewBox="0 0 10 10" refX="9" refY="5"
-                    markerWidth="6" markerHeight="6" orient="auto-start-reverse">
-              <path d="M0 0 L10 5 L0 10 z" fill="#198754"/>
-            </marker>
-          </defs>
 
-          <!-- Input + output anchors -->
-          <g class="anchor">
-            <rect x="10" y="160" width="100" height="40" rx="4" fill="#f8f9fa"
-                  stroke="#e5e8ec"/>
-            <text x="60" y="178" text-anchor="middle" class="anchor-label"
-                  font-size="11" fill="#4a5260">research</text>
-            <text x="60" y="192" text-anchor="middle" class="anchor-label"
-                  font-size="11" fill="#4a5260">goal</text>
-          </g>
-          <g class="anchor">
-            <rect x="1130" y="160" width="100" height="40" rx="4" fill="#f8f9fa"
-                  stroke="#e5e8ec"/>
-            <text x="1180" y="178" text-anchor="middle" class="anchor-label"
-                  font-size="11" fill="#4a5260">next_gen</text>
-            <text x="1180" y="192" text-anchor="middle" class="anchor-label"
-                  font-size="11" fill="#4a5260">priors</text>
-          </g>
-
-          <!-- 8 phase nodes — laid out in a single row, evenly spaced -->
-          <!-- Phase 1: supervisor -->
-          <g class="phase" data-phase="0">
-            <rect x="130" y="140" width="110" height="80" rx="5"
-                  fill="#f8f9fa" stroke="#e5e8ec" class="phase-box"/>
-            <text x="185" y="170" text-anchor="middle" font-size="13"
-                  font-weight="600" fill="#1a1f29">supervisor</text>
-            <text x="185" y="190" text-anchor="middle" font-size="10"
-                  fill="#4a5260">1 call</text>
-            <text x="185" y="205" text-anchor="middle" font-size="10"
-                  fill="#4a5260">strategy</text>
-          </g>
-          <!-- Phase 2: generator (parallel N) -->
-          <g class="phase" data-phase="1">
-            <rect x="260" y="140" width="110" height="80" rx="5"
-                  fill="#f8f9fa" stroke="#e5e8ec" class="phase-box"/>
-            <rect x="266" y="146" width="110" height="80" rx="5"
-                  fill="#f8f9fa" stroke="#e5e8ec" class="phase-box-stack"
-                  opacity="0.5"/>
-            <rect x="272" y="152" width="110" height="80" rx="5"
-                  fill="#f8f9fa" stroke="#e5e8ec" class="phase-box-stack"
-                  opacity="0.3"/>
-            <text x="315" y="180" text-anchor="middle" font-size="13"
-                  font-weight="600" fill="#1a1f29">generator</text>
-            <text x="315" y="200" text-anchor="middle" font-size="10"
-                  fill="#4a5260">× N parallel</text>
-            <text x="315" y="215" text-anchor="middle" font-size="10"
-                  fill="#4a5260">drafts MDs</text>
-          </g>
-          <!-- Phase 3: proximity -->
-          <g class="phase" data-phase="2">
-            <rect x="395" y="140" width="110" height="80" rx="5"
-                  fill="#f8f9fa" stroke="#e5e8ec" class="phase-box"/>
-            <text x="450" y="170" text-anchor="middle" font-size="13"
-                  font-weight="600" fill="#1a1f29">proximity</text>
-            <text x="450" y="190" text-anchor="middle" font-size="10"
-                  fill="#4a5260">dedup</text>
-            <text x="450" y="205" text-anchor="middle" font-size="10"
-                  fill="#4a5260">(no LLM)</text>
-          </g>
-          <!-- Phase 4: critic -->
-          <g class="phase" data-phase="3">
-            <rect x="520" y="140" width="110" height="80" rx="5"
-                  fill="#f8f9fa" stroke="#e5e8ec" class="phase-box"/>
-            <text x="575" y="170" text-anchor="middle" font-size="13"
-                  font-weight="600" fill="#1a1f29">critic</text>
-            <text x="575" y="190" text-anchor="middle" font-size="10"
-                  fill="#4a5260">strengths /</text>
-            <text x="575" y="205" text-anchor="middle" font-size="10"
-                  fill="#4a5260">weaknesses</text>
-          </g>
-          <!-- Phase 5: pilot -->
-          <g class="phase" data-phase="4">
-            <rect x="645" y="140" width="110" height="80" rx="5"
-                  fill="#f8f9fa" stroke="#e5e8ec" class="phase-box"/>
-            <text x="700" y="170" text-anchor="middle" font-size="13"
-                  font-weight="600" fill="#1a1f29">pilot</text>
-            <text x="700" y="190" text-anchor="middle" font-size="10"
-                  fill="#4a5260">per-dim</text>
-            <text x="700" y="205" text-anchor="middle" font-size="10"
-                  fill="#4a5260">audit</text>
-          </g>
-          <!-- Phase 6: ranker -->
-          <g class="phase" data-phase="5">
-            <rect x="770" y="140" width="110" height="80" rx="5"
-                  fill="#f8f9fa" stroke="#e5e8ec" class="phase-box"/>
-            <text x="825" y="170" text-anchor="middle" font-size="13"
-                  font-weight="600" fill="#1a1f29">ranker</text>
-            <text x="825" y="190" text-anchor="middle" font-size="10"
-                  fill="#4a5260">Elo</text>
-            <text x="825" y="205" text-anchor="middle" font-size="10"
-                  fill="#4a5260">tournament</text>
-          </g>
-          <!-- Phase 7: evolver -->
-          <g class="phase" data-phase="6">
-            <rect x="895" y="140" width="110" height="80" rx="5"
-                  fill="#f8f9fa" stroke="#e5e8ec" class="phase-box"/>
-            <text x="950" y="170" text-anchor="middle" font-size="13"
-                  font-weight="600" fill="#1a1f29">evolver</text>
-            <text x="950" y="190" text-anchor="middle" font-size="10"
-                  fill="#4a5260">mutates</text>
-            <text x="950" y="205" text-anchor="middle" font-size="10"
-                  fill="#4a5260">top-K</text>
-          </g>
-          <!-- Phase 8: meta_reviewer -->
-          <g class="phase" data-phase="7">
-            <rect x="1020" y="140" width="110" height="80" rx="5"
-                  fill="#f8f9fa" stroke="#e5e8ec" class="phase-box"/>
-            <text x="1075" y="170" text-anchor="middle" font-size="13"
-                  font-weight="600" fill="#1a1f29">meta_reviewer</text>
-            <text x="1075" y="190" text-anchor="middle" font-size="10"
-                  fill="#4a5260">coverage +</text>
-            <text x="1075" y="205" text-anchor="middle" font-size="10"
-                  fill="#4a5260">next priors</text>
-          </g>
-
-          <!-- Flow arrows between consecutive phases (and end-anchors) -->
-          <line x1="110" y1="180" x2="128" y2="180" stroke="#7d8694"
-                stroke-width="1.5" marker-end="url(#arrow)"/>
-          <line x1="240" y1="180" x2="258" y2="180" stroke="#7d8694"
-                stroke-width="1.5" marker-end="url(#arrow)"/>
-          <line x1="370" y1="180" x2="393" y2="180" stroke="#7d8694"
-                stroke-width="1.5" marker-end="url(#arrow)"/>
-          <line x1="505" y1="180" x2="518" y2="180" stroke="#7d8694"
-                stroke-width="1.5" marker-end="url(#arrow)"/>
-          <line x1="630" y1="180" x2="643" y2="180" stroke="#7d8694"
-                stroke-width="1.5" marker-end="url(#arrow)"/>
-          <line x1="755" y1="180" x2="768" y2="180" stroke="#7d8694"
-                stroke-width="1.5" marker-end="url(#arrow)"/>
-          <line x1="880" y1="180" x2="893" y2="180" stroke="#7d8694"
-                stroke-width="1.5" marker-end="url(#arrow)"/>
-          <line x1="1005" y1="180" x2="1018" y2="180" stroke="#7d8694"
-                stroke-width="1.5" marker-end="url(#arrow)"/>
-          <line x1="1130" y1="180" x2="1128" y2="180" stroke="#7d8694"
-                stroke-width="1.5" marker-end="url(#arrow)"/>
-
-          <!-- "Currently:" running caption (animated via CSS) -->
-          <g class="phase-caption">
-            <text x="620" y="60" text-anchor="middle" font-size="14"
-                  font-weight="600" fill="#198754" class="caption-current">
-              Currently: <tspan class="caption-name">supervisor</tspan>
-            </text>
-            <text x="620" y="82" text-anchor="middle" font-size="12"
-                  fill="#4a5260" class="caption-desc">
-              Sets target_dim focus + phase guidance for the run.
-            </text>
-          </g>
-
-          <!-- Output ticker — what each phase produces -->
-          <g class="output-ticker">
-            <text x="620" y="290" text-anchor="middle" font-size="12"
-                  fill="#7d8694" class="ticker-line">
-              <tspan class="ticker-label">produces:</tspan>
-              <tspan class="ticker-value" font-weight="600" fill="#198754">research_goal_analysis</tspan>
-            </text>
-          </g>
-        </svg>
+      <div class="pipe-stage">
+        <span class="pipe-tag">Prelude &middot; runs once</span>
+        <ol class="pipe-row">
+          <li><span class="pipe-name">supervisor</span><span class="pipe-sub">strategy + guidance</span></li>
+          <li><span class="pipe-name">literature_review</span><span class="pipe-sub">paper analysis (opt)</span></li>
+          <li><span class="pipe-name">generator</span><span class="pipe-sub">N draft seed MDs</span></li>
+          <li><span class="pipe-name">proximity</span><span class="pipe-sub">cluster + dedup</span></li>
+        </ol>
       </div>
-      <!-- 8-phase legend (read-once for accessibility, mirrors animation) -->
-      <ol class="seedgen-hero-legend">
-        <li><strong>supervisor</strong>:1 LLM call · sets target_dim focus + per-phase guidance for the run.</li>
-        <li><strong>generator</strong>:N parallel LLM calls · drafts N candidate seed MDs from the supervisor's plan.</li>
-        <li><strong>proximity</strong>:no LLM · clusters near-duplicate drafts and drops them so downstream stages don't waste budget.</li>
-        <li><strong>critic</strong>:N calls · per-candidate strengths / weaknesses / judge_risk / rewrite_section.</li>
-        <li><strong>pilot</strong>:N calls · runs each surviving seed through a small audit, returns per-dim mean scores.</li>
-        <li><strong>ranker</strong>:pairwise tournament · 3-voter judge panel awards Elo points; top-K become survivors.</li>
-        <li><strong>evolver</strong>:K calls · mutates each survivor into a new variant (Jaccard-similarity guard prevents collapse).</li>
-        <li><strong>meta_reviewer</strong>:1 call · coverage report across 22 dims + next_gen_priors for the next iteration.</li>
-      </ol>
+
+      <div class="pipe-feed" aria-hidden="true">&#x2193;</div>
+
+      <div class="pipe-stage pipe-loop">
+        <span class="pipe-tag">Iteration loop &middot; &times; N</span>
+        <ol class="pipe-row">
+          <li><span class="pipe-name">critic</span><span class="pipe-sub">strengths / weaknesses</span></li>
+          <li><span class="pipe-name">pilot</span><span class="pipe-sub">per-dim audit</span></li>
+          <li><span class="pipe-name">ranker</span><span class="pipe-sub">3-voter Elo tournament</span></li>
+          <li><span class="pipe-name">evolver</span><span class="pipe-sub">mutate top-K survivors</span></li>
+          <li><span class="pipe-name">meta_reviewer</span><span class="pipe-sub">coverage + next priors</span></li>
+        </ol>
+        <p class="pipe-loopback">
+          <span class="pipe-loopback-arrow" aria-hidden="true">&#x21BA;</span>
+          evolved candidates feed back: <code>meta_reviewer &rarr; critic</code>
+        </p>
+      </div>
     </figure>
 
     <h2 class="section"><span>Runs &middot; 6 runs</span></h2>
@@ -399,7 +237,7 @@
         <span class="chip geode">GEODE</span>self-target wrapper.
       </p>
       <p class="version-stamp">
-        Rendered against GEODE <code>v0.99.86</code> &middot; DESIGN.md schema 1 &middot; built 2026-05-29 10:24.
+        Rendered against GEODE <code>v0.99.86</code> &middot; DESIGN.md schema 1 &middot; built 2026-05-29 10:54.
         Dim subset: 22 (geode_5axes). Pipeline phases: 8. Baseline schema: v2 (PR-2).
       </p>
     </div>
