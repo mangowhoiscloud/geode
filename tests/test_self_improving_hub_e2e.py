@@ -544,6 +544,12 @@ def test_seedgen_index_renders(built_seedgen_pages: dict[str, str], built_html: 
     assert "Seed runs (docs)" in index_html, "relabeled seed-runs docs link missing"
     # Runs table — at least 1 row, fixture run id present.
     assert SEEDGEN_FIXTURE_RUN_ID in index_html, "fixture run row missing from index"
+    # PR-HUB-LOOP-VIZ: the co-scientist loop is a static iteration-aware diagram
+    # (prelude + iterating core + feed-back), not the old animated 8-box hero.
+    assert 'class="seedgen-pipeline"' in index_html, "loop pipeline diagram missing"
+    assert "Iteration loop" in index_html, "iteration-loop stage label missing"
+    assert "feed back" in index_html, "evolved feed-back (the iterator) not shown"
+    assert "seedgen-hero" not in index_html, "old animated hero must be gone (slop)"
     # Active link contract — All runs is active on this page.
     assert 'aria-current="page"' in index_html, "no aria-current on active link"
     # Sidebar tree (sections list) is byte-equal across hub + seedgen index.
