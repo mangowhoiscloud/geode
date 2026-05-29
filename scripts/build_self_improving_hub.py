@@ -1562,6 +1562,95 @@ def _phase_from_task_id(task_id: str) -> str:
     return "unknown"
 
 
+def _render_hub_sidebar(
+    common: dict[str, str],
+    *,
+    active_section: str = "seedgen",
+) -> str:
+    """Render the rich sidebar shared by all hub pages.
+
+    Mirrors the ``<aside class="sidebar">`` block in
+    ``docs/self-improving/seed-generation/run.html.template`` so sub-pages
+    (agents / timeline / tournament / lineage / candidates) inherit the
+    same brand, section counts, nav-list classes, and CSS hooks as
+    cycle-root pages — previously, this function emitted a flatter shell
+    that hub.css did not target (no ``.sidebar`` / ``.brand-sub`` /
+    ``.count`` / ``.nav-list`` rules), so deep paths rendered as
+    plain-text bullets without the dense-table layout.
+
+    ``active_section`` marks one of {"hub", "petri", "seedgen",
+    "autoresearch"} as the current top-level area so the matching link
+    gets ``class="active" aria-current="page"``.
+    """
+    base = "/geode/self-improving"
+    active = {
+        "hub": ' class="active" aria-current="page"' if active_section == "hub" else "",
+        "petri": (' class="active" aria-current="page"' if active_section == "petri" else ""),
+        "seedgen": (' class="active" aria-current="page"' if active_section == "seedgen" else ""),
+        "autoresearch": (
+            ' class="active" aria-current="page"' if active_section == "autoresearch" else ""
+        ),
+    }
+    petri_recent = common["sidebar_petri_recent"]
+    seedgen_runs = common["sidebar_seedgen_runs"]
+    petri_count = common["petri_count"]
+    seedgen_count_label = common["seedgen_count_label"]
+    ar_label = html_escape(common["autoresearch_status_label"])
+    return f"""<aside class="sidebar">
+    <nav aria-label="Hub navigation">
+      <div class="brand">GEODE</div>
+      <div class="brand-sub">/self-improving</div>
+
+      <div class="nav-section">Hub</div>
+      <ul class="nav-list">
+        <li><a href="{base}/"{active["hub"]}>Overview</a></li>
+      </ul>
+
+      <div class="nav-section">Petri Audit <span class="count">{petri_count}</span></div>
+      <ul class="nav-list">
+        <li><a href="{base}/petri-bundle/">SPA log viewer &#x2197;</a></li>
+        <li><a href="{base}/petri-bundle/"{active["petri"]}>Recent audits</a>
+          <ul class="sub-nav">
+{petri_recent}
+          </ul>
+        </li>
+      </ul>
+
+      <div class="nav-section">Seed Generation \
+<span class="count">{seedgen_count_label}</span></div>
+      <ul class="nav-list">
+        <li><a href="{base}/seed-generation/"{active["seedgen"]}>All runs</a>
+          <ul class="sub-nav">
+{seedgen_runs}
+          </ul>
+        </li>
+        <li><a href="/geode/docs/petri/seeds">Run dashboard &#x2197;</a></li>
+      </ul>
+
+      <div class="nav-section">Autoresearch <span class="count">{ar_label}</span></div>
+      <ul class="nav-list">
+        <li><a href="{base}/autoresearch/baseline/">Baseline</a></li>
+        <li><a href="{base}/autoresearch/mutations/">Mutations</a></li>
+        <li><a href="{base}/autoresearch/results/">Results</a></li>
+        <li><a href="{base}/autoresearch/policies/">Policies</a></li>
+      </ul>
+
+      <div class="nav-section">Docs</div>
+      <ul class="nav-list">
+        <li><a href="/geode/docs/petri/overview">Petri overview</a></li>
+        <li><a href="/geode/docs/petri/run">Run an audit</a></li>
+        <li><a href="/geode/docs/petri/judge-dimensions">Judge dimensions</a></li>
+      </ul>
+
+      <div class="nav-section">Meta</div>
+      <ul class="nav-list">
+        <li>\
+<a href="https://github.com/mangowhoiscloud/geode" rel="noopener">GitHub &#x2197;</a></li>
+      </ul>
+    </nav>
+  </aside>"""
+
+
 def _render_seedgen_subpage(
     *,
     title: str,
@@ -1571,52 +1660,15 @@ def _render_seedgen_subpage(
 ) -> str:
     """Common shell for a seedgen sub-page (agents / timeline / tournament).
 
-    Renders the standard hub layout (sidebar + Meta block + content) so
-    every sub-page is sidebar-consistent. ``active_link`` controls which
-    sub-link gets ``aria-current="page"``.
+    Renders the standard hub layout (sidebar + content) so every
+    sub-page is sidebar-consistent with cycle-root pages. ``active_link``
+    is retained on the public signature for caller back-compat but no
+    longer drives sidebar markup — sub-page navigation now lives in the
+    in-content sub-views grid (see ``run.html.template``) rather than
+    sidebar bullets.
     """
-    active_agents = ' aria-current="page"' if active_link == "agents" else ""
-    active_timeline = ' aria-current="page"' if active_link == "timeline" else ""
-    active_tournament = ' aria-current="page"' if active_link == "tournament" else ""
-    rid = common["run_id"]
-    base = "/geode/self-improving"
-    seedgen_root_label = f"Runs ({common['seedgen_count_label']})"
-    ar_label = html_escape(common["autoresearch_status_label"])
-    sidebar_html = (
-        '<aside aria-label="GEODE Self-Improving Hub navigation">'
-        '<h1 class="brand">GEODE Self-Improving Hub</h1>'
-        '<div class="nav-section">Hub</div>'
-        f'<ul><li><a href="{base}/">Overview</a></li></ul>'
-        '<div class="nav-section">Petri Audit</div>'
-        f'<ul><li><a href="{base}/petri-bundle/">Bundle</a></li>'
-        f"{common['sidebar_petri_recent']}</ul>"
-        '<div class="nav-section">Seed Generation</div>'
-        "<ul>"
-        f'<li><a href="{base}/seed-generation/">{seedgen_root_label}</a></li>'
-        f"{common['sidebar_seedgen_runs']}"
-        f'<li><a href="{base}/seed-generation/{rid}/agents/"{active_agents}>Agents</a></li>'
-        f'<li><a href="{base}/seed-generation/{rid}/timeline/"{active_timeline}>Timeline</a></li>'
-        f'<li><a href="{base}/seed-generation/{rid}/tournament/"{active_tournament}>'
-        "Tournament</a></li>"
-        f'<li><a href="{base}/seed-generation/{rid}/lineage/"'
-        f"{' aria-current="page"' if active_link == 'lineage' else ''}>Lineage</a></li>"
-        f'<li><a href="{base}/seed-generation/{rid}/candidates/"'
-        f"{' aria-current="page"' if active_link == 'candidates' else ''}>Candidates</a></li>"
-        f'<li><a href="{base}/seed-generation/active/"'
-        f"{' aria-current="page"' if active_link == 'active' else ''}>Active runs</a></li>"
-        "</ul>"
-        '<div class="nav-section">Autoresearch</div>'
-        f'<ul><li><a href="{base}/autoresearch/">{ar_label}</a></li></ul>'
-        '<div class="nav-section">Docs</div>'
-        "<ul>"
-        '<li><a href="/geode/docs/petri/overview">Petri overview</a></li>'
-        '<li><a href="/geode/docs/petri/run">Run an audit</a></li>'
-        '<li><a href="/geode/docs/petri/judge-dimensions">Judge dimensions</a></li>'
-        "</ul>"
-        '<div class="nav-section">Meta</div>'
-        '<ul><li><a href="https://github.com/mangowhoiscloud/geode">GitHub</a></li></ul>'
-        "</aside>"
-    )
+    _ = active_link  # callers still pass it; reserved for future per-section highlighting
+    sidebar_html = _render_hub_sidebar(common, active_section="seedgen")
     return f"""<!doctype html>
 <html lang="en">
 <head>
@@ -1626,20 +1678,20 @@ def _render_seedgen_subpage(
 <link rel="stylesheet" href="/geode/self-improving/assets/hub.css">
 </head>
 <body>
+
 <div class="shell">
-{sidebar_html}
-<main class="content">
-  <header class="page-head">
-    <h2>{html_escape(title)}</h2>
-  </header>
-  {body}
-  <div class="build-info">
-    <p class="version-stamp">
-      Rendered against GEODE <code>v{common["geode_version"]}</code> &middot;
-      DESIGN.md schema {common["design_schema_version"]} &middot; built {common["build_date"]}.
-    </p>
-  </div>
-</main>
+  {sidebar_html}
+
+  <main class="content">
+    <h1 class="page-title">{html_escape(title)}</h1>
+    {body}
+    <div class="build-info">
+      <p class="version-stamp">
+        Rendered against GEODE <code>v{common["geode_version"]}</code> &middot;
+        DESIGN.md schema {common["design_schema_version"]} &middot; built {common["build_date"]}.
+      </p>
+    </div>
+  </main>
 </div>
 </body>
 </html>
