@@ -912,7 +912,10 @@ def _scan_phase_eval_logs(run_id: str) -> dict[str, dict[str, Any]]:
     unreadable files are silently skipped — the caller falls back to
     the slug link.
     """
-    logs_dir = REPO_ROOT / "docs" / "self-improving" / "petri-bundle" / "logs"
+    # PR-SEEDGEN-BUNDLE-SPLIT (2026-05-29) — seedgen phase .eval logs now
+    # live in the seed-generation's own inspect bundle, not the audit
+    # petri-bundle. Deep-links (below) target that bundle's SPA.
+    logs_dir = REPO_ROOT / "docs" / "self-improving" / "seed-generation" / "bundle" / "logs"
     if not logs_dir.is_dir():
         return {}
     result: dict[str, dict[str, Any]] = {}
@@ -966,8 +969,10 @@ def _render_phase_rows(run_id: str) -> tuple[str, int]:
         info = phase_meta.get(phase)
         task_slug = info["task_name"] if info else f"seed-generation/{phase}"
         route_key = info["task_id"] if info else task_slug
-        spa_link = f"/geode/self-improving/petri-bundle/#/tasks/{html_escape(str(route_key))}"
-        link_label = "&#x2197; SPA" if info else "&#x2197; SPA (slug)"
+        spa_link = (
+            f"/geode/self-improving/seed-generation/bundle/#/tasks/{html_escape(str(route_key))}"
+        )
+        link_label = "&#x2197; viewer" if info else "&#x2197; viewer (slug)"
         rows.append(
             "        <tr>\n"
             f'          <td class="id">{html_escape(phase)}</td>\n'

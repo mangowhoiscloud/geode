@@ -609,7 +609,12 @@ def test_seedgen_pilot_heatmap_renders(built_seedgen_pages: dict[str, str]) -> N
 
 
 def test_seedgen_phase_eval_links_point_at_spa(built_seedgen_pages: dict[str, str]) -> None:
-    """Each phase .eval card links to ``/geode/self-improving/petri-bundle/#/tasks/...``."""
+    """Each phase .eval card links to the SEED-GENERATION bundle viewer.
+
+    PR-SEEDGEN-BUNDLE-SPLIT (2026-05-29) — seedgen phase logs moved out of
+    the audit petri-bundle into the seed-generation's own inspect bundle, so
+    the deep-links target ``/geode/self-improving/seed-generation/bundle/#/tasks/``.
+    """
     run_html = built_seedgen_pages["run"]
     # Pull the phase-link table cells.
     phase_links = re.findall(
@@ -618,11 +623,43 @@ def test_seedgen_phase_eval_links_point_at_spa(built_seedgen_pages: dict[str, st
     )
     assert phase_links, "no phase .eval card links rendered"
     for link in phase_links:
-        assert link.startswith("/geode/self-improving/petri-bundle/#/tasks/"), (
-            f"phase link {link!r} not pointing at SPA task slug"
+        assert link.startswith("/geode/self-improving/seed-generation/bundle/#/tasks/"), (
+            f"phase link {link!r} not pointing at the seed-generation bundle viewer"
         )
+    # No phase link may point at the audit petri-bundle (scope split).
+    assert "/geode/self-improving/petri-bundle/#/tasks/" not in run_html or all(
+        "petri-bundle" not in link for link in phase_links
+    ), "phase links must not target the audit petri-bundle after the split"
     # 8 phases per DESIGN.md §6.
     assert len(phase_links) == 8, f"expected 8 phase links, got {len(phase_links)}"
+
+
+def test_petri_bundle_excludes_seedgen_logs() -> None:
+    """The audit petri-bundle must not carry seed-generation phase logs.
+
+    PR-SEEDGEN-BUNDLE-SPLIT (2026-05-29) — seedgen phase .eval logs live in
+    their own inspect bundle so the alignment-audit viewer stays scoped to
+    audits. Pins the split against drift (an eval_export regression that
+    repopulates the audit bundle, or a stale listing key).
+    """
+    pb_listing = REPO_ROOT / "docs/self-improving/petri-bundle/logs/listing.json"
+    pb = json.loads(pb_listing.read_text(encoding="utf-8"))
+    seedgen_in_audit = [k for k in pb if "seedgen" in k]
+    assert not seedgen_in_audit, (
+        f"audit petri-bundle still lists seedgen logs: {seedgen_in_audit[:3]}"
+    )
+
+    sg_listing = REPO_ROOT / "docs/self-improving/seed-generation/bundle/logs/listing.json"
+    assert sg_listing.is_file(), "seed-generation bundle listing.json missing"
+    sg = json.loads(sg_listing.read_text(encoding="utf-8"))
+    assert any("seedgen" in k for k in sg), "seed-generation bundle has no seedgen logs"
+
+    # The seed-generation bundle ships its own SPA shell reading co-located logs.
+    idx = REPO_ROOT / "docs/self-improving/seed-generation/bundle/index.html"
+    assert idx.is_file(), "seed-generation bundle index.html (SPA shell) missing"
+    assert '"log_dir": "logs"' in idx.read_text(encoding="utf-8"), (
+        "seed-generation bundle SPA must read its co-located ./logs"
+    )
 
 
 def test_seedgen_url_basepath_safety(built_seedgen_pages: dict[str, str]) -> None:
