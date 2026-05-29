@@ -22,8 +22,9 @@
 #
 # Supported model lineup (CSP-10, 2026-05-22) — only models currently exposed
 # by Claude Code CLI (anthropic.claude-cli) or Codex CLI (openai.openai-codex)
-# may appear in allowed_models. Anthropic surface: claude-opus-4-7 /
-# claude-sonnet-4-6 / claude-haiku-4-5. Codex surface: gpt-5.5 / gpt-5.4 /
+# may appear in allowed_models. Anthropic surface: claude-opus-4-8 /
+# claude-opus-4-7 / claude-sonnet-4-6 / claude-haiku-4-5. Codex surface:
+# gpt-5.5 / gpt-5.4 /
 # gpt-5.4-mini / gpt-5.3-codex (see core/llm/model_pricing.toml).
 
 [seed_generation]
@@ -58,6 +59,7 @@ enabled_roles = [
 [seed_generation.role.generator]
 default_model = "claude-opus-4-7"
 allowed_models = [
+    "claude-opus-4-8",
     "claude-opus-4-7",
     "claude-sonnet-4-6",
     "gpt-5.5",
@@ -78,6 +80,7 @@ default_model = "claude-opus-4-7"
 # subscription can route critic on the strongest available reasoning
 # model when running through ``source = "claude-cli"``.
 allowed_models = [
+    "claude-opus-4-8",
     "claude-opus-4-7",
     "claude-sonnet-4-6",
     "claude-haiku-4-5",
@@ -95,6 +98,7 @@ default_model = "claude-opus-4-7"
 # ``claude-opus-4-7`` accepted for the same Claude Code Max routing
 # reason as critic — proximity is also a reasoning-heavy role.
 allowed_models = [
+    "claude-opus-4-8",
     "claude-opus-4-7",
     "claude-sonnet-4-6",
     "claude-haiku-4-5",
@@ -115,6 +119,7 @@ default_model = "claude-opus-4-7"
 # Override paths: operators can pin a faster/cheaper model via the
 # allowlist below when the 90s wall-time becomes a bottleneck.
 allowed_models = [
+    "claude-opus-4-8",
     "claude-opus-4-7",
     "claude-haiku-4-5",
     "gpt-5.4-mini",
@@ -127,6 +132,7 @@ role_contract = "plugins/seed_generation/agents/pilot.md"
 # the panel's voter binding (below) drives actual LLM calls.
 default_model = "claude-opus-4-7"
 allowed_models = [
+    "claude-opus-4-8",
     "claude-opus-4-7",
     "claude-sonnet-4-6",
     "gpt-5.5",
@@ -136,6 +142,7 @@ role_contract = "plugins/seed_generation/agents/ranker.md"
 [seed_generation.role.evolver]
 default_model = "claude-opus-4-7"
 allowed_models = [
+    "claude-opus-4-8",
     "claude-opus-4-7",
     "claude-sonnet-4-6",
     "gpt-5.5",
@@ -145,6 +152,7 @@ role_contract = "plugins/seed_generation/agents/evolver.md"
 [seed_generation.role.meta_reviewer]
 default_model = "claude-opus-4-7"
 allowed_models = [
+    "claude-opus-4-8",
     "claude-opus-4-7",
     "claude-sonnet-4-6",
     "gpt-5.5",
@@ -161,6 +169,7 @@ role_contract = "plugins/seed_generation/agents/meta_reviewer.md"
 [seed_generation.role.supervisor]
 default_model = "claude-opus-4-7"
 allowed_models = [
+    "claude-opus-4-8",
     "claude-opus-4-7",
     "claude-sonnet-4-6",
     "gpt-5.5",
@@ -177,6 +186,7 @@ role_contract = "plugins/seed_generation/agents/supervisor.md"
 [seed_generation.role.literature_review]
 default_model = "claude-opus-4-7"
 allowed_models = [
+    "claude-opus-4-8",
     "claude-opus-4-7",
     "claude-sonnet-4-6",
     "gpt-5.5",

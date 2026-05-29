@@ -372,8 +372,8 @@ class Settings(BaseSettings):
 
     # Agentic Loop — effort level (replaces thinking_budget for Opus 4.6+ / Sonnet 4.6+)
     # Maps to Anthropic output_config.effort + OpenAI reasoning.effort.
-    # v0.56.0 R4-mini — ``xhigh`` added; Opus 4.7-only (the adapter
-    # downgrades to ``"max"`` on Opus 4.6 / Sonnet 4.6).
+    # v0.56.0 R4-mini — ``xhigh`` added; Opus 4.7+ only (4.7 / 4.8 — the
+    # adapter downgrades to ``"max"`` on Opus 4.6 / Sonnet 4.6).
     agentic_effort: str = "high"  # "low" | "medium" | "high" | "max" | "xhigh"
 
     # Credential source — chosen via the ``/login source`` picker. The picker

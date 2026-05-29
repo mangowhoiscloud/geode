@@ -7,7 +7,7 @@ cycle/default helpers are tested directly.
 
 Pinned 2026-04-28 against:
   - Anthropic effort enum: docs.anthropic.com / platform.claude.com
-    (low/medium/high/max/xhigh; xhigh is Opus 4.7-only)
+    (low/medium/high/max/xhigh; xhigh is Opus 4.7+ — 4.7 / 4.8)
   - OpenAI Responses effort enum: openai-python `shared/reasoning_effort.py`
     (none/minimal/low/medium/high/xhigh)
   - Codex enum: codex-rs `protocol/src/openai_models.rs:43-51`
@@ -26,6 +26,10 @@ from core.cli.effort_picker import (
 
 
 class TestAnthropicEnum:
+    def test_opus_4_8_includes_xhigh(self) -> None:
+        levels = supported_efforts("claude-opus-4-8", "anthropic")
+        assert levels == ("low", "medium", "high", "max", "xhigh")
+
     def test_opus_4_7_includes_xhigh(self) -> None:
         levels = supported_efforts("claude-opus-4-7", "anthropic")
         assert levels == ("low", "medium", "high", "max", "xhigh")
@@ -46,9 +50,11 @@ class TestAnthropicEnum:
 
     def test_default_is_high(self) -> None:
         # Anthropic API default is "high" per platform.claude.com docs.
-        # Opus 4.7's official guidance recommends xhigh as the *starting
+        # Opus 4.7+ official guidance recommends xhigh as the *starting
         # point* for coding/agentic — picker surfaces xhigh as the
-        # default for that model only (sonnet stays on high).
+        # default for the xhigh-capable Opus models (4.7 / 4.8); sonnet
+        # and Opus 4.6 stay on high.
+        assert default_effort("claude-opus-4-8", "anthropic") == "xhigh"
         assert default_effort("claude-opus-4-7", "anthropic") == "xhigh"
         assert default_effort("claude-sonnet-4-6", "anthropic") == "high"
         assert default_effort("claude-opus-4-6", "anthropic") == "high"

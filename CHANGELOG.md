@@ -47,6 +47,32 @@ functional change.
 
 ## [Unreleased]
 
+### Added
+- **PR-OPUS-4-8-COMPAT (2026-05-29)** — Register Opus 4.8
+  (``claude-opus-4-8``, 1M context) alongside Opus 4.7 across every
+  surface where 4.7 was the compatible frontier. Adapter capability
+  gates: added to ``_CONTEXT_MGMT_MODELS`` / ``_ADAPTIVE_MODELS`` /
+  ``_XHIGH_EFFORT_MODELS`` in ``core/llm/providers/anthropic.py`` so the
+  agentic loop sends the context-management + compaction beta header,
+  omits sampling params under adaptive thinking, and accepts the
+  ``xhigh`` effort level. CLI UI/UX: ``core/cli/effort_picker.py``
+  (``_ANTHROPIC_ADAPTIVE_MODELS`` / ``_ANTHROPIC_XHIGH_MODELS`` + picker
+  blurb), ``/model`` menu profile in ``core/cli/commands/_state.py``,
+  and ``/login`` plan-pin hints in ``core/cli/commands/login.py``.
+  Pricing + 1M context window in ``core/llm/model_pricing.toml``
+  (mirrors the $5/$25 Opus tier). Self-improving loop: added to the
+  auditor / target / judge ``allowed_models`` in
+  ``plugins/petri_audit/petri.plugin.toml`` (role defaults unchanged —
+  this is compatibility, not a default switch). Capability grounding:
+  ctx7 platform docs index only up to the 4.6/4.7 family pages, so the
+  4.8-specific 1M-context / adaptive-thinking / ``xhigh`` acceptance is
+  confirmed live by the running harness (the ``/model`` selector
+  configures ``claude-opus-4-8`` with "xhigh effort" by default). Pinned
+  by ``test_opus_4_8_supports_xhigh``, ``test_opus_4_8_includes_xhigh``,
+  ``test_opus_4_8_registered_for_context_management``, and the
+  ``claude-opus-4-8`` row in
+  ``test_adaptive_models_omit_sampling_params``.
+
 ### Changed
 - **PR-PROMOTE-RATE-BUNDLE (2026-05-29)** — Three-option bundle to
   unblock the cy11-23 batch's 0/9 PROMOTE rate. Diagnostic: 6/9
