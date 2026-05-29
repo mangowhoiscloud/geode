@@ -4,12 +4,13 @@ import Link from "next/link";
 import { DocsShell, Bi } from "@/components/geode-docs/docs-shell";
 import { DOCS_SITEMAP } from "@/lib/geode-docs/sitemap";
 import { useLocale, t } from "@/components/geode/locale-context";
-import { GEODE_SOT } from "@/data/geode/sot";
 
 export default function DocsIndex() {
   const locale = useLocale();
-  const summaryEn = `A general-purpose autonomous execution agent built on LangGraph. v${GEODE_SOT.version}, Python 3.12+, ${GEODE_SOT.modules.core} core + ${GEODE_SOT.modules.plugins} plugins = ${GEODE_SOT.modules.total} modules, ${GEODE_SOT.tests.standard.toLocaleString()} tests, 81 hook events, 59 tools.`;
-  const summaryKo = `LangGraph 기반 범용 자율 실행 에이전트. v${GEODE_SOT.version}, Python 3.12+, core ${GEODE_SOT.modules.core} + plugins ${GEODE_SOT.modules.plugins} = ${GEODE_SOT.modules.total} 모듈, ${GEODE_SOT.tests.standard.toLocaleString()} 테스트, 81 훅, 59 도구.`;
+  const summaryEn =
+    "A general-purpose autonomous execution agent built on LangGraph. A long-running harness for research, analysis, automation, and scheduling.";
+  const summaryKo =
+    "LangGraph 기반 범용 자율 실행 에이전트. 연구, 분석, 자동화, 스케줄링을 스스로 수행하는 장기 실행 하네스.";
   return (
     <DocsShell
       slug=""
