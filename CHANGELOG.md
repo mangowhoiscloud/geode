@@ -47,6 +47,8 @@ functional change.
 
 ## [Unreleased]
 
+## [0.99.85] - 2026-05-29
+
 ### Changed
 - **PR-CRED-SOURCE-CENTRALIZE (2026-05-29)** — Centralize the LLM
   credential-source value set into one canonical
