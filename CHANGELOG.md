@@ -48,6 +48,17 @@ functional change.
 ## [Unreleased]
 
 ### Changed
+- **PR-HUB-COST-TOKENS (2026-05-29)** — Replace every USD "cost" figure on the
+  self-improving hub with token counts. Subscription runs report
+  `usd_spent` as $0.00, so the dollar columns were dead. The seed-generation
+  runs tables, the per-run + cross-run rollups (renamed "Cost rollup" →
+  "Token rollup", USD line dropped, an aggregate `total_tokens` added on top of
+  the prompt/completion breakdown — no duplicate axis), the agents table + agent
+  detail, and the timeline per-phase/per-agent lines now show
+  `prompt + completion` tokens (sub-agent totals from each `session_end`,
+  run/rollup totals from `prompt_tokens`/`completion_tokens`). `SeedGenRow` +
+  `_load_subagents` gained a `total_tokens` field. Pinned by the agent-detail +
+  run-page token assertions in `test_self_improving_hub_e2e`.
 - **PR-HUB-DARK-PALETTE (2026-05-29)** — Re-palette the self-improving hub
   (`docs/self-improving/assets/hub.css`) from the light Bootstrap-ish scheme to
   the dark warm Anthropic palette of the docs site (`site/DESIGN.md` §2): warm

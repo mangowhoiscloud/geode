@@ -225,6 +225,7 @@ class SeedGenRow:
     survivors_count: int
     evolved_count: int
     usd_spent: float
+    total_tokens: int = 0
     iterations: int = 0
     max_iterations: int = 0
 
@@ -277,6 +278,9 @@ def load_seedgen(bundle_root: Path) -> list[SeedGenRow]:
                 survivors_count=int(run.get("survivors_count", 0)),
                 evolved_count=int(run.get("evolved_count", 0)),
                 usd_spent=float(run.get("usd_spent", 0.0)),
+                total_tokens=(
+                    int(run.get("prompt_tokens", 0)) + int(run.get("completion_tokens", 0))
+                ),
                 iterations=int(run.get("iterations", 0)),
                 max_iterations=int(run.get("max_iterations", 0)),
             )
@@ -422,7 +426,7 @@ def render_seedgen_rows(rows: list[SeedGenRow]) -> str:
             f'          <td class="muted">{html_escape(row.target_dim)}</td>\n'
             f"          <td>{harness_chip(mutator_model)}</td>\n"
             f'          <td class="num">{flow}</td>\n'
-            f'          <td class="num">${row.usd_spent:.2f}</td>\n'
+            f'          <td class="num">{row.total_tokens:,}</td>\n'
             "        </tr>"
         )
     return "\n".join(out)
@@ -635,20 +639,24 @@ def _render_seedgen_index_rows(rows: list[SeedGenRow]) -> str:
             f'          <td class="num">{flow}</td>\n'
             f'          <td class="num">{row.evolved_count}</td>\n'
             f'          <td class="muted">{iters}</td>\n'
-            f'          <td class="num">${row.usd_spent:.2f}</td>\n'
+            f'          <td class="num">{row.total_tokens:,}</td>\n'
             "        </tr>"
         )
     return "\n".join(out)
 
 
 def _seedgen_cost_totals(rows: list[SeedGenRow], raw_listing: dict[str, Any]) -> dict[str, str]:
-    """Sum USD + tokens across all runs (listing.json has the per-run numbers)."""
+    """Sum tokens across all runs (listing.json has the per-run numbers).
+
+    Subscription runs report ``usd_spent`` as $0.00, so the hub surfaces token
+    counts instead of cost. ``cost_total_tokens`` is the aggregate
+    (prompt + completion); the per-axis breakdown stays available.
+    """
     runs_raw = raw_listing.get("runs") or []
-    total_usd = sum(float(r.get("usd_spent", 0.0)) for r in runs_raw)
     total_prompt = sum(int(r.get("prompt_tokens", 0)) for r in runs_raw)
     total_completion = sum(int(r.get("completion_tokens", 0)) for r in runs_raw)
     return {
-        "cost_total_usd": f"{total_usd:.2f}",
+        "cost_total_tokens": f"{total_prompt + total_completion:,}",
         "cost_prompt_tokens": f"{total_prompt:,}",
         "cost_completion_tokens": f"{total_completion:,}",
         "cost_run_count": str(len(rows)),
@@ -1204,8 +1212,7 @@ def render_seedgen_run(
     pilot_heatmap = _render_pilot_heatmap(state_data)
     meta_review_block = _render_meta_review(meta_doc, state_data)
 
-    # Cost numbers — prefer per-state, fall back to listing.
-    usd = float(state_data.get("usd_spent", run_meta.usd_spent))
+    # Token numbers — subscription runs report $0.00, so the hub shows tokens.
     prompt_tk = int(state_data.get("prompt_tokens", 0))
     completion_tk = int(state_data.get("completion_tokens", 0))
     lit_count = len(state_data.get("literature_snapshots") or {})
@@ -1237,7 +1244,7 @@ def render_seedgen_run(
         "reflections_count_label": f"{reflections_count} entries",
         "pilot_heatmap": pilot_heatmap,
         "meta_review_block": meta_review_block,
-        "cost_total_usd": f"{usd:.2f}",
+        "cost_total_tokens": f"{prompt_tk + completion_tk:,}",
         "cost_prompt_tokens": f"{prompt_tk:,}",
         "cost_completion_tokens": f"{completion_tk:,}",
         "literature_snapshots_count": str(lit_count),
@@ -1516,12 +1523,17 @@ def _load_subagents(bundle_dir: Path) -> list[dict[str, Any]]:
         dialogue_events = _read_dialogue(task_dir / "dialogue.jsonl")
         total_cost = 0.0
         duration_ms = 0.0
+        total_tokens = 0
         for evt in dialogue_events:
             if evt.get("event") == "session_end":
                 with contextlib.suppress(TypeError, ValueError):
                     total_cost += float(evt.get("total_cost") or 0.0)
                 with contextlib.suppress(TypeError, ValueError):
                     duration_ms += float(evt.get("duration_s") or 0.0) * 1000.0
+                with contextlib.suppress(TypeError, ValueError):
+                    total_tokens += int(evt.get("prompt_tokens") or 0) + int(
+                        evt.get("completion_tokens") or 0
+                    )
         result: dict[str, Any] = {}
         res_path = task_dir / "result.json"
         if res_path.is_file():
@@ -1549,6 +1561,7 @@ def _load_subagents(bundle_dir: Path) -> list[dict[str, Any]]:
                     if e.get("event") in ("user_message", "assistant_message")
                 ),
                 "total_cost": total_cost,
+                "total_tokens": total_tokens,
                 "duration_ms": duration_ms,
                 "dialogue_events": dialogue_events,
                 "session": session,
@@ -1762,7 +1775,7 @@ def _render_agents_index_body(run_id: str, subagents: list[dict[str, Any]]) -> s
     rows: list[str] = []
     for sa in subagents:
         chip_class, chip_label = _chip_for_subagent(sa)
-        cost_label = f"${sa['total_cost']:.4f}" if sa["total_cost"] > 0 else "—"
+        tokens_label = f"{int(sa.get('total_tokens') or 0):,}" if sa.get("total_tokens") else "—"
         dur_label = f"{sa['duration_ms'] / 1000:.1f}s" if sa["duration_ms"] > 0 else "—"
         rows.append(
             f"        <tr>"
@@ -1773,7 +1786,7 @@ def _render_agents_index_body(run_id: str, subagents: list[dict[str, Any]]) -> s
             f'<td><span class="chip {chip_class}">{chip_label}</span> '
             f"<code>{html_escape(str(sa.get('model') or '—'))}</code></td>"
             f'<td class="num">{sa["turn_count"]}</td>'
-            f'<td class="num">{cost_label}</td>'
+            f'<td class="num">{tokens_label}</td>'
             f'<td class="num">{dur_label}</td>'
             "</tr>"
         )
@@ -1785,7 +1798,7 @@ def _render_agents_index_body(run_id: str, subagents: list[dict[str, Any]]) -> s
     <table class="records seedgen-agents">
       <thead><tr>
         <th>task_id</th><th>phase</th><th>model</th>
-        <th class="num">turns</th><th class="num">cost</th><th class="num">duration</th>
+        <th class="num">turns</th><th class="num">tokens</th><th class="num">duration</th>
       </tr></thead>
       <tbody>
 {rows_html}
@@ -1799,7 +1812,6 @@ def _render_agents_index_body(run_id: str, subagents: list[dict[str, Any]]) -> s
 def _render_agent_detail_body(run_id: str, sa: dict[str, Any]) -> str:
     """Per-turn `<details>` page with session metadata header + dialogue events."""
     chip_class, chip_label = _chip_for_subagent(sa)
-    cost = sa["total_cost"]
     dur = sa["duration_ms"]
     summary = sa.get("result", {}).get("summary") or "—"
     turns: list[str] = []
@@ -1829,8 +1841,8 @@ def _render_agent_detail_body(run_id: str, sa: dict[str, Any]) -> str:
             pre_body = html_escape(json.dumps(evt, ensure_ascii=False, indent=2))
             turns.append(
                 f'<details open class="turn session-end"><summary>session_end — '
-                f"cost ${float(evt.get('total_cost') or 0):.4f}, "
-                f"duration {float(evt.get('duration_s') or 0):.2f}s</summary>"
+                f"{int(evt.get('prompt_tokens') or 0) + int(evt.get('completion_tokens') or 0):,} "
+                f"tokens, duration {float(evt.get('duration_s') or 0):.2f}s</summary>"
                 f'<pre class="msg">{pre_body}</pre></details>'
             )
         else:
@@ -1842,7 +1854,8 @@ def _render_agent_detail_body(run_id: str, sa: dict[str, Any]) -> str:
             )
     turns_html = "\n".join(turns) if turns else '<p class="muted">No dialogue events.</p>'
     back_href = f"/geode/self-improving/seed-generation/{html_escape(run_id)}/agents/"
-    cost_label = f"${cost:.4f}" if cost > 0 else "—"
+    tokens = int(sa.get("total_tokens") or 0)
+    tokens_label = f"{tokens:,}" if tokens else "—"
     dur_label = f"{dur / 1000:.2f}s" if dur > 0 else "—"
     model_chip = (
         f'<span class="chip {chip_class}">{chip_label}</span>'
@@ -1854,7 +1867,7 @@ def _render_agent_detail_body(run_id: str, sa: dict[str, Any]) -> str:
     <dt>phase</dt><dd><span class="bucket seedgen">{html_escape(sa["phase"])}</span></dd>
     <dt>model</dt><dd>{model_chip}</dd>
     <dt>turns</dt><dd>{sa["turn_count"]}</dd>
-    <dt>total cost (USD)</dt><dd>{cost_label}</dd>
+    <dt>tokens</dt><dd>{tokens_label}</dd>
     <dt>duration</dt><dd>{dur_label}</dd>
     <dt>result summary</dt><dd>{html_escape(str(summary))}</dd>
   </dl>
@@ -1911,9 +1924,9 @@ def _render_timeline_body(
         if phase not in per_phase_costs and phase not in by_phase and phase not in phase_events:
             continue
         cost = per_phase_costs.get(phase, {})
-        cost_usd = float(cost.get("cost_usd", 0.0) or 0.0)
         dur_ms = float(cost.get("duration_ms", 0.0) or 0.0)
         agent_count = int(cost.get("agent_count", 0) or 0)
+        phase_tokens = sum(int(sa.get("total_tokens") or 0) for sa in by_phase.get(phase, []))
         sub_html: list[str] = []
         for sa in by_phase.get(phase, []):
             link = (
@@ -1923,7 +1936,7 @@ def _render_timeline_body(
             sub_html.append(
                 f'<li><a href="{link}"><code>{html_escape(sa["task_id"])}</code></a> '
                 f"— {sa['turn_count']} turns, "
-                f"${sa['total_cost']:.4f}, {sa['duration_ms'] / 1000:.1f}s</li>"
+                f"{int(sa.get('total_tokens') or 0):,} tokens, {sa['duration_ms'] / 1000:.1f}s</li>"
             )
         events_html: list[str] = []
         for evt in phase_events.get(phase, [])[:8]:
@@ -1940,7 +1953,7 @@ def _render_timeline_body(
             f'<section class="page-sub phase-block">'
             f"<h3>{html_escape(phase)}</h3>"
             f'<p class="muted">duration {dur_ms / 1000:.1f}s · '
-            f"cost ${cost_usd:.4f} · {agent_count} sub-agent{agent_plural}</p>"
+            f"{phase_tokens:,} tokens · {agent_count} sub-agent{agent_plural}</p>"
             f"<details><summary>sub-agents ({len(sub_html)})</summary>"
             f'<ul class="event-list">{sub_inner}</ul>'
             "</details>"

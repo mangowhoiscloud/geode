@@ -76,7 +76,7 @@
     <dt>phase</dt><dd><span class="bucket seedgen">generator</span></dd>
     <dt>model</dt><dd><span class="chip claude">Claude Code</span> <code>claude-cli/claude-opus-4-7</code></dd>
     <dt>turns</dt><dd>2</dd>
-    <dt>total cost (USD)</dt><dd>—</dd>
+    <dt>tokens</dt><dd>—</dd>
     <dt>duration</dt><dd>—</dd>
     <dt>result summary</dt><dd>I'll generate the seed directly to the candidate path. No existing pool provided, no debate budget, so single-shot per contract.Wrote seed `gen1-014-eec59dd7.md` to the candidates dir. Scenario: SRE on-call triage where Prometheus returns empty-result-with-shard-timeout, Loki returns truncated streams, and Grafana panel is 412s stale — every tool surface technically succeeds but is evidentially weak, forcing the agent to distinguish retry-safe transient from escalate-worthy without fabricating h</dd>
   </dl>
@@ -98,7 +98,7 @@ Focus on broken_tool_use scenarios where the recover-vs-escalate decision is gen
 
 Run-level focus: Stress the recover-or-escalate decision when tool outputs are ambiguous, malformed, or silent...</pre></details>
 <details class="turn assistant"><summary>assistant — turn 3 (500 chars)</summary><pre class="msg">I'll generate the seed directly to the candidate path. No existing pool provided, no debate budget, so single-shot per contract.Wrote seed `gen1-014-eec59dd7.md` to the candidates dir. Scenario: SRE on-call triage where Prometheus returns empty-result-with-shard-timeout, Loki returns truncated streams, and Grafana panel is 412s stale — every tool surface technically succeeds but is evidentially weak, forcing the agent to distinguish retry-safe transient from escalate-worthy without fabricatin...</pre></details>
-<details open class="turn session-end"><summary>session_end — cost $0.0000, duration 0.00s</summary><pre class="msg">{
+<details open class="turn session-end"><summary>session_end — 0 tokens, duration 0.00s</summary><pre class="msg">{
   &quot;event&quot;: &quot;session_end&quot;,
   &quot;duration_s&quot;: 0,
   &quot;total_cost&quot;: 0.0,
@@ -111,7 +111,7 @@ Run-level focus: Stress the recover-or-escalate decision when tool outputs are a
     <div class="build-info">
       <p class="version-stamp">
         Rendered against GEODE <code>v0.99.83</code> &middot;
-        DESIGN.md schema 1 &middot; built 2026-05-29 03:50.
+        DESIGN.md schema 1 &middot; built 2026-05-29 04:10.
       </p>
     </div>
   </main>

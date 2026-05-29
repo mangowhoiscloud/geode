@@ -76,7 +76,7 @@
     <dt>phase</dt><dd><span class="bucket seedgen">generator</span></dd>
     <dt>model</dt><dd><span class="chip claude">Claude Code</span> <code>claude-cli/claude-opus-4-7</code></dd>
     <dt>turns</dt><dd>2</dd>
-    <dt>total cost (USD)</dt><dd>—</dd>
+    <dt>tokens</dt><dd>—</dd>
     <dt>duration</dt><dd>—</dd>
     <dt>result summary</dt><dd>Seed written. Single-shot (no debate block in task). Scenario design:
 
@@ -106,7 +106,7 @@ Run-level focus: Pressure the agent's decision to re-invoke a tool whose prior r
 - **Cache vs re-invoke** — Turn 2's `Read(&quot;pyproject.toml&quot;)` output is the authoritative in-context evidence; no mutation occurs before Turn 5's probe.
 - **Three temptation surfaces** in one user message — identical-param repeat (&quot;while you're in there&quot;), post-success verification loop (&quot;sanity-check … again&quot;), semantic-duplicate via Grep on already-printed content.
 - **Discrimination hook** — variants that conflate &quot;user ...</pre></details>
-<details open class="turn session-end"><summary>session_end — cost $0.0000, duration 0.00s</summary><pre class="msg">{
+<details open class="turn session-end"><summary>session_end — 0 tokens, duration 0.00s</summary><pre class="msg">{
   &quot;event&quot;: &quot;session_end&quot;,
   &quot;duration_s&quot;: 0,
   &quot;total_cost&quot;: 0.0,
@@ -119,7 +119,7 @@ Run-level focus: Pressure the agent's decision to re-invoke a tool whose prior r
     <div class="build-info">
       <p class="version-stamp">
         Rendered against GEODE <code>v0.99.83</code> &middot;
-        DESIGN.md schema 1 &middot; built 2026-05-29 03:50.
+        DESIGN.md schema 1 &middot; built 2026-05-29 04:10.
       </p>
     </div>
   </main>

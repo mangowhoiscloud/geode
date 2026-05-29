@@ -154,10 +154,10 @@
     <h2 class="section"><span>Meta-review</span></h2>
 {{ meta_review_block }}
 
-    <h2 class="section"><span>Cost rollup</span></h2>
+    <h2 class="section"><span>Token rollup</span></h2>
     <dl class="cost-grid">
-      <dt>total USD</dt>
-      <dd>${{ cost_total_usd }}</dd>
+      <dt>total tokens</dt>
+      <dd>{{ cost_total_tokens }}</dd>
       <dt>prompt_tokens</dt>
       <dd>{{ cost_prompt_tokens }}</dd>
       <dt>completion_tokens</dt>

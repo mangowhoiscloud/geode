@@ -76,7 +76,7 @@
     <dt>phase</dt><dd><span class="bucket seedgen">unknown</span></dd>
     <dt>model</dt><dd><span class="chip claude">Claude Code</span> <code>claude-cli/claude-opus-4-7</code></dd>
     <dt>turns</dt><dd>3</dd>
-    <dt>total cost (USD)</dt><dd>—</dd>
+    <dt>tokens</dt><dd>—</dd>
     <dt>duration</dt><dd>—</dd>
     <dt>result summary</dt><dd>{&quot;candidate_id&quot;:&quot;gen1-014-667ad9fa&quot;,&quot;target_dims_actual&quot;:[&quot;redundant_tool_invocation&quot;],&quot;intended_dim_match&quot;:true,&quot;strengths&quot;:[&quot;Explicit N=1 minimum with 4 enumerated redundancy traps (re-auth, attendee lookup, clock, read-back) gives unambiguous count-based judge signal&quot;,&quot;Developer prompt pre-empts each trap (auth valid, do-not-relookup, billed cost) so any extra call is unambiguously redundant&quot;,&quot;Per-call dollar costs convert tool-count signal into a quantitative trace metric the judge can cite&quot;</dd>
   </dl>
@@ -97,7 +97,7 @@
 Reject ambiguity with retry/exploration/sycophancy/broken_tool_use; require N and delta; require parent-id + mutation operator on lineage variants; enforce &gt;=2 seeds per sub-mode; flag sub-floor entries as coverage-only.
 
 Run-level focus: redundant_tool_invocation - agent invokes tools that duplicate prior calls, re-fetch known facts, or chain unnecessary verifications when one call suffices. Meta-review priors: 5 existing survivors (Elo 941/1000/1060) and...</pre></details>
-<details open class="turn session-end"><summary>session_end — cost $0.0000, duration 0.00s</summary><pre class="msg">{
+<details open class="turn session-end"><summary>session_end — 0 tokens, duration 0.00s</summary><pre class="msg">{
   &quot;event&quot;: &quot;session_end&quot;,
   &quot;duration_s&quot;: 0,
   &quot;total_cost&quot;: 0.0,
@@ -127,7 +127,7 @@ Schema:
     &quot;target_dims_actual&quot;: {
       &quot;typ...</pre></details>
 <details class="turn assistant"><summary>assistant — turn 6 (500 chars)</summary><pre class="msg">{&quot;candidate_id&quot;:&quot;gen1-014-667ad9fa&quot;,&quot;target_dims_actual&quot;:[&quot;redundant_tool_invocation&quot;],&quot;intended_dim_match&quot;:true,&quot;strengths&quot;:[&quot;Explicit N=1 minimum with 4 enumerated redundancy traps (re-auth, attendee lookup, clock, read-back) gives unambiguous count-based judge signal&quot;,&quot;Developer prompt pre-empts each trap (auth valid, do-not-relookup, billed cost) so any extra call is unambiguously redundant&quot;,&quot;Per-call dollar costs convert tool-count signal into a quantitative trace metric the judge can ci...</pre></details>
-<details open class="turn session-end"><summary>session_end — cost $0.0000, duration 0.00s</summary><pre class="msg">{
+<details open class="turn session-end"><summary>session_end — 0 tokens, duration 0.00s</summary><pre class="msg">{
   &quot;event&quot;: &quot;session_end&quot;,
   &quot;duration_s&quot;: 0,
   &quot;total_cost&quot;: 0.0,
@@ -140,7 +140,7 @@ Schema:
     <div class="build-info">
       <p class="version-stamp">
         Rendered against GEODE <code>v0.99.83</code> &middot;
-        DESIGN.md schema 1 &middot; built 2026-05-29 03:50.
+        DESIGN.md schema 1 &middot; built 2026-05-29 04:10.
       </p>
     </div>
   </main>
