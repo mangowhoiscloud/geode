@@ -47,6 +47,14 @@ functional change.
 
 ## [Unreleased]
 
+## [0.99.84] - 2026-05-29
+
+> PATCH — self-improving hub polish + loop multi-objective wiring. Hub
+> re-paletted to the docs dark warm theme, Elo method annotated, agents
+> cli-local source chips, cost figures replaced with token counts, voter
+> rationale wrap, plus the loop's Tchebycheff group-selection + rollback
+> auto-evaluation + cache-hygiene wiring.
+
 ### Changed
 - **PR-HUB-COST-TOKENS (2026-05-29)** — Replace every USD "cost" figure on the
   self-improving hub with token counts. Subscription runs report
