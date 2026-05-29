@@ -566,7 +566,7 @@ def render_stale_banner(state: AutoresearchState) -> str:
         return ""
     return (
         '    <div class="warning" role="status">'
-        "Autoresearch baseline is stale &mdash; rendering from "
+        "Autoresearch baseline is stale, rendering from "
         f"<code>{html_escape(state.baseline_path.name if state.baseline_path else '')}</code>. "
         "No live <code>baseline.json</code> present in <code>autoresearch/state/</code>."
         "</div>"
@@ -768,7 +768,21 @@ def _render_pilot_heatmap(state: dict[str, Any]) -> str:
     )
 
 
-def _render_candidates_rows(state: dict[str, Any]) -> tuple[str, int]:
+def _cid_viewer_link(cid: str, run_id: str, *, code: bool = False) -> str:
+    """Anchor a candidate id to its generated-original viewer page.
+
+    PR-HUB-DESLOP (2026-05-29) — run-page tables link gen-* ids to
+    ``/candidates/<cid>/`` (the rendered seed body) instead of an in-page
+    ``#cand-`` anchor. Every candidate / survivor / evolved id is in
+    :func:`_linkable_candidate_cids`, so the viewer page always exists.
+    """
+    esc = html_escape(cid)
+    base = f"/geode/self-improving/seed-generation/{html_escape(run_id)}"
+    inner = f"<code>{esc}</code>" if code else esc
+    return f'<a href="{base}/candidates/{esc}/">{inner}</a>'
+
+
+def _render_candidates_rows(state: dict[str, Any], run_id: str) -> tuple[str, int]:
     candidates = state.get("candidates") or []
     if not candidates:
         return (
@@ -782,8 +796,7 @@ def _render_candidates_rows(state: dict[str, Any]) -> tuple[str, int]:
         task_id = str(cand.get("task_id", ""))
         rows.append(
             "        <tr>\n"
-            f'          <td class="id"><a href="#cand-{html_escape(cand_id)}" '
-            f'id="cand-{html_escape(cand_id)}">{html_escape(cand_id)}</a></td>\n'
+            f'          <td class="id">{_cid_viewer_link(cand_id, run_id)}</td>\n'
             f'          <td class="muted">{html_escape(target_dim)}</td>\n'
             f'          <td class="muted">{_fmt_duration_ms(cand.get("duration_ms"))}</td>\n'
             f"          <td><code>{html_escape(task_id)}</code></td>\n"
@@ -792,7 +805,7 @@ def _render_candidates_rows(state: dict[str, Any]) -> tuple[str, int]:
     return "\n".join(rows), len(candidates)
 
 
-def _render_survivors_rows(state: dict[str, Any]) -> tuple[str, int]:
+def _render_survivors_rows(state: dict[str, Any], run_id: str) -> tuple[str, int]:
     survivors = state.get("survivors") or []
     elo_ratings = state.get("elo_ratings") or {}
     pilot_scores = state.get("pilot_scores") or {}
@@ -820,8 +833,7 @@ def _render_survivors_rows(state: dict[str, Any]) -> tuple[str, int]:
         children = children_count.get(sid_str, 0)
         rows.append(
             "        <tr>\n"
-            f'          <td class="id"><a href="#cand-{html_escape(sid_str)}">'
-            f"{html_escape(sid_str)}</a></td>\n"
+            f'          <td class="id">{_cid_viewer_link(sid_str, run_id)}</td>\n'
             f"          <td>{elo_cell}</td>\n"
             f'          <td class="muted">{html_escape(pilot_status)}</td>\n'
             f'          <td class="num">{children}</td>\n'
@@ -830,7 +842,7 @@ def _render_survivors_rows(state: dict[str, Any]) -> tuple[str, int]:
     return "\n".join(rows), len(survivors)
 
 
-def _render_evolved_rows(state: dict[str, Any]) -> tuple[str, int]:
+def _render_evolved_rows(state: dict[str, Any], run_id: str) -> tuple[str, int]:
     evolved = state.get("evolved_candidates") or []
     if not evolved:
         return (
@@ -847,9 +859,8 @@ def _render_evolved_rows(state: dict[str, Any]) -> tuple[str, int]:
             notes = notes[:197].rstrip() + "…"
         rows.append(
             "        <tr>\n"
-            f'          <td class="id"><code>{html_escape(ev_id)}</code></td>\n'
-            f'          <td><a href="#cand-{html_escape(parent)}"><code>'
-            f"{html_escape(parent)}</code></a></td>\n"
+            f'          <td class="id">{_cid_viewer_link(ev_id, run_id, code=True)}</td>\n'
+            f"          <td>{_cid_viewer_link(parent, run_id, code=True)}</td>\n"
             f'          <td class="muted">{html_escape(rewrite)}</td>\n'
             f'          <td class="muted">{html_escape(notes)}</td>\n'
             "        </tr>"
@@ -1209,9 +1220,9 @@ def render_seedgen_run(
     state_data: dict[str, Any] = state or {}
     cohort = str(state_data.get("cohort", ""))
 
-    cand_rows, cand_count = _render_candidates_rows(state_data)
-    surv_rows, surv_count = _render_survivors_rows(state_data)
-    evolved_rows, evolved_count = _render_evolved_rows(state_data)
+    cand_rows, cand_count = _render_candidates_rows(state_data, run_meta.run_id)
+    surv_rows, surv_count = _render_survivors_rows(state_data, run_meta.run_id)
+    evolved_rows, evolved_count = _render_evolved_rows(state_data, run_meta.run_id)
     phase_rows, phase_count = _render_phase_rows(run_meta.run_id)
     reflections_block, reflections_count = _render_reflections(state_data)
     pilot_heatmap = _render_pilot_heatmap(state_data)
@@ -2737,19 +2748,20 @@ def _render_seedgen_subview_links(
     survivors_count: int,
     evolved_count: int,
 ) -> str:
-    """4-card grid linking to the run's sub-views.
+    """Dense inline sub-view nav linking to the run's sub-views.
 
-    PR-HUB-VIS-CYCLE1-FOLLOWUP (2026-05-28) — addresses operator
-    feedback that the tournament / candidates / lineage / agents pages
-    had no on-page entry point (only the sidebar). Rendered as a
-    `<div class="run-subviews">` containing 4 anchored cards with the
-    count + a single-line description each.
+    PR-HUB-VIS-CYCLE1-FOLLOWUP (2026-05-28) added on-page entry points for
+    the tournament / candidates / lineage / agents pages. PR-HUB-DESLOP
+    (2026-05-29) re-renders them as a flat inline link row (``.subview-nav``)
+    instead of a box-card grid — box-card-as-navigation is a slop signal
+    (CLAUDE.md). Each entry is a text link + count; the one-line description
+    is a hover ``title`` so the row stays scannable.
 
     All 4 routes are emitted unconditionally by
     :func:`_emit_seedgen_run_subpages`, so the links are always valid.
     """
     base = f"/geode/self-improving/seed-generation/{html_escape(run_id)}"
-    cards = [
+    entries = [
         (
             f"{base}/candidates/",
             "Candidates",
@@ -2760,13 +2772,13 @@ def _render_seedgen_subview_links(
             f"{base}/tournament/",
             "Tournament",
             "match history",
-            "MD ↔ MD pairings, voter rationale, per-cid Elo summary",
+            "MD vs MD pairings, voter rationale, per-cid Elo summary",
         ),
         (
             f"{base}/lineage/",
             "Lineage",
             f"{candidates_count + evolved_count} cids",
-            "Per-candidate 5-station journey (generator → evolver)",
+            "Per-candidate 5-station journey (generator to evolver)",
         ),
         (
             f"{base}/agents/",
@@ -2776,13 +2788,11 @@ def _render_seedgen_subview_links(
         ),
     ]
     items: list[str] = []
-    for href, label, count_label, desc in cards:
+    for href, label, count_label, desc in entries:
         items.append(
-            f'<a class="subview-card" href="{href}">'
-            f"<h3>{html_escape(label)} "
-            f'<span class="count muted">{html_escape(count_label)}</span></h3>'
-            f'<p class="muted">{html_escape(desc)}</p>'
-            "</a>"
+            f'<span><a href="{href}" title="{html_escape(desc)}">'
+            f"{html_escape(label)}</a> "
+            f'<span class="count">{html_escape(count_label)}</span></span>'
         )
     return "".join(items)
 
@@ -3647,7 +3657,7 @@ def _render_warning_banner(baseline_path: Path | None, stale: bool) -> str:
     return (
         '    <div class="warning-banner" role="status">'
         "Autoresearch baseline read from <code>"
-        f"{html_escape(baseline_path.name)}</code> &mdash; no live "
+        f"{html_escape(baseline_path.name)}</code>, no live "
         "<code>baseline.json</code> present in <code>autoresearch/state/</code>. "
         "Run <code>uv run python autoresearch/train.py --promote</code> to refresh."
         "</div>"
