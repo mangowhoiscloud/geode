@@ -37,6 +37,8 @@ h1, h2 {
   --acc-artifact: #A573E8;   /* AMETHYST — OS / artifact / runtime / model */
   --acc-line:     #D5B27A;   /* CITRINE — scaffold / line / process / CI */
   --acc-soft:     #C9A4F0;   /* amethyst hover */
+  --acc-si:       #5B9BFF;   /* SELF-IMPROVING signature — the hub's petri Bootstrap-blue (#0d6efd) lightened for AA on dark. Section-identity accent for the Self-Improving Loop docs section (see DESIGN.md §11.1). */
+  --acc-si-soft:  #8FBCFF;   /* self-improving hover */
 
   --code-bg:      #0E0E0C;
   --code-text:    #DDD3BE;

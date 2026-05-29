@@ -82,6 +82,8 @@ Visitors range from operators (daily status check) to external readers (PR demo)
 3. **No gradients, no shadows.** Hairline borders only (`var(--rule)`).
 4. **No emoji.** Per `[[feedback-no-box-ui-no-emoji]]`. Role labels are uppercase letterforms with `.role-label` class.
 
+**Signature accent propagation.** `--accent` (`#0d6efd`, the petri Bootstrap-blue) is the signature of the whole self-improving surface. The docs site (dark) propagates it as its `07-self-improving` section identity — token `--acc-si` (`#5B9BFF`, the same hue lightened for AA on the dark substrate). The hub stays light (this palette); the docs stay dark; the shared thread is the accent, not the mode. Docs-side policy: `site/DESIGN.md §11.1`.
+
 ## 4. Typography
 
 | Variable | Family | Weights | Use |

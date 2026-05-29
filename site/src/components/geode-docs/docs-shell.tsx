@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { type ReactNode } from "react";
+import { type ReactNode, type CSSProperties } from "react";
 import { useLocale, useSetLocale, t } from "@/components/geode/locale-context";
 import { DOCS_SITEMAP, adjacentPages, findPage, QUADRANT_META, type DocQuadrant } from "@/lib/geode-docs/sitemap";
 import { GEODE_SOT } from "@/data/geode/sot";
@@ -42,9 +42,17 @@ function Sidebar() {
         {t(locale, "GEODE Docs", "GEODE Docs")}
       </Link>
       <div className="mt-2 space-y-5">
-        {DOCS_SITEMAP.map((section) => (
+        {DOCS_SITEMAP.map((section) => {
+          // The Self-Improving Loop section carries the petri-blue signature
+          // accent (see DESIGN.md §11.1); every other section stays muted.
+          const sectionAccent =
+            section.id === "07-self-improving" ? "var(--acc-si)" : undefined;
+          return (
           <div key={section.id}>
-            <div className="px-3 text-[10px] uppercase tracking-[0.18em] text-white/40 font-semibold mb-2">
+            <div
+              className="px-3 text-[10px] uppercase tracking-[0.18em] text-white/40 font-semibold mb-2"
+              style={sectionAccent ? { color: sectionAccent } : undefined}
+            >
               {t(locale, section.titleKo, section.title)}
             </div>
             <ul className="space-y-0.5">
@@ -62,6 +70,7 @@ function Sidebar() {
                           ? "bg-white/[0.06] text-[#F0F0FF]"
                           : "text-white/60 hover:text-[#F0F0FF] hover:bg-white/[0.03]")
                       }
+                      style={active && sectionAccent ? { color: sectionAccent } : undefined}
                     >
                       <span
                         className="shrink-0 inline-block w-1 h-1 rounded-full"
@@ -78,7 +87,8 @@ function Sidebar() {
               })}
             </ul>
           </div>
-        ))}
+          );
+        })}
       </div>
     </nav>
   );
@@ -94,7 +104,7 @@ function PrevNext({ slug }: { slug: string }) {
         {prev && (
           <Link
             href={pageHref(prev.slug)}
-            className="block group rounded-lg border border-white/[0.06] p-4 hover:border-white/[0.12] transition-colors"
+            className="docs-card block group rounded-lg border border-white/[0.06] p-4 hover:border-white/[0.12] transition-colors"
           >
             <div className="text-[10px] uppercase tracking-wider text-white/40 mb-1">
               {t(locale, "이전", "Previous")}
@@ -109,7 +119,7 @@ function PrevNext({ slug }: { slug: string }) {
         {next && (
           <Link
             href={pageHref(next.slug)}
-            className="block group rounded-lg border border-white/[0.06] p-4 hover:border-white/[0.12] transition-colors"
+            className="docs-card block group rounded-lg border border-white/[0.06] p-4 hover:border-white/[0.12] transition-colors"
           >
             <div className="text-[10px] uppercase tracking-wider text-white/40 mb-1">
               {t(locale, "다음", "Next")}
@@ -178,8 +188,22 @@ export function DocsShell({
     summary && summaryKo ? t(locale, summaryKo, summary) : summary;
   const found = findPage(slug);
   const quadrant = found?.page.quadrant;
+  const currentSection = DOCS_SITEMAP.find((s) =>
+    s.pages.some((p) => p.slug === slug)
+  );
+  // Self-Improving Loop section carries the petri-blue signature; every other
+  // section inherits the default amethyst artifact accent. --section-accent is
+  // consumed by the eyebrow here and by the [data-doc-section] rules in docs.css.
+  const sectionAccent =
+    currentSection?.id === "07-self-improving"
+      ? "var(--acc-si)"
+      : "var(--acc-artifact)";
   return (
-    <div className="min-h-screen bg-[#0B1628] text-[#F0F0FF]">
+    <div
+      className="min-h-screen bg-[#0B1628] text-[#F0F0FF]"
+      data-doc-section={currentSection?.id}
+      style={{ ["--section-accent"]: sectionAccent } as CSSProperties}
+    >
       <header className="sticky top-0 z-30 border-b border-white/[0.06] bg-[#0B1628]/85 backdrop-blur">
         <div className="max-w-7xl mx-auto flex items-center justify-between px-6 py-4">
           <div className="flex items-center gap-6">
@@ -211,6 +235,14 @@ export function DocsShell({
 
         <main className="flex-1 min-w-0 max-w-3xl">
           <div className="mb-10">
+            {currentSection && (
+              <div
+                className="mb-2 text-[11px] font-mono uppercase tracking-[0.2em]"
+                style={{ color: "var(--section-accent)" }}
+              >
+                {t(locale, currentSection.titleKo, currentSection.title)}
+              </div>
+            )}
             {quadrant && (
               <div className="mb-3">
                 <QuadrantChip quadrant={quadrant} />

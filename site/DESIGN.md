@@ -34,6 +34,8 @@
 | `--acc-artifact` | `#A573E8` | **AMETHYST** — OS / artifact / runtime / model. Distinct from existing DAG-SVG hue space. |
 | `--acc-line` | `#D5B27A` | **CITRINE** — scaffold / line / process / CI. Warm complement to amethyst. |
 | `--acc-soft` | `#C9A4F0` | Hover / elevated state for the amethyst accent. |
+| `--acc-si` | `#5B9BFF` | **PETRI-BLUE** — Self-Improving Loop section identity. The self-improving hub's signature (`#0d6efd`, Bootstrap blue) lightened for AA contrast on the dark substrate. Scoped to the `07-self-improving` docs section only (see §11.1). |
+| `--acc-si-soft` | `#8FBCFF` | Hover state for the self-improving accent. |
 | `--code-bg` | `#0E0E0C` | Code block background. |
 | `--code-text` | `#DDD3BE` | Code block text. Same as `--ink-1`. |
 | `--code-string` | `#D5B27A` | Code strings (citrine, kindred to line accent). |
@@ -49,7 +51,7 @@ section accents and DAG visualizations do not fight each other.
 
 **Single substrate.** Every page is dark by design. There is no light mode. There is no dark-panel-on-light-page pattern. Mascot PNGs and SVG diagrams that were authored for dark mediums sit naturally on this substrate.
 
-**Two accents only.** Amber-terracotta for artifact / OS content. Graphite-blue for scaffold / line / process content. No other hues. Recursion table uses both side-by-side as visual signal.
+**Two accents, plus one scoped section identity.** Amethyst (artifact / OS) and citrine (scaffold / line / process) are the two global accents — no other hues in general content, and the recursion table uses both side-by-side as visual signal. The single exception is `--acc-si` (petri-blue): the Self-Improving Loop section identity, propagated from the hub's signature so the docs section and the hub read as one system. It appears ONLY inside the `07-self-improving` docs section (§11.1), never in global chrome (header, footer, cross-section nav). The mechanism is a `data-doc-section` attribute on the docs shell root plus a `--section-accent` custom property; outside that section `--section-accent` resolves to `--acc-artifact`.
 
 ## 3. Typography Rules
 
@@ -322,9 +324,13 @@ The viewer (`index.html`) uses Bootstrap's default dark palette. The GEODE-autho
 | Rule | `#3a3f44` | `--rule` (`#3A342D`) |
 | Body ink | `#dee2e6` | `--ink` (`#EDE7DA`) |
 | Muted | `#adb5bd` | `--ink-2` (`#B5AC97`) |
-| Accent | `#0d6efd` (Bootstrap blue) | `--acc-artifact` (`#A573E8`) |
+| Accent | `#0d6efd` (Bootstrap blue) | `--acc-si` (`#5B9BFF`) in the `07-self-improving` section; `--acc-artifact` (`#A573E8`) elsewhere |
 
-This palette appears **only** in `docs/petri-bundle/landing.html` and any future static HTML co-located under `docs/petri-bundle/`. Next.js docs pages (under `site/`) continue to use the §2 tokens, with no exception. The bridge palette is documented here so the substrate continuity is explicit, not a drift accident.
+This bridge palette (substrate / elevated / rule / ink) appears **only** in `docs/petri-bundle/landing.html` and any future static HTML co-located under `docs/petri-bundle/`. Next.js docs pages continue to use the §2 substrate/ink tokens, with no exception.
+
+**Accent is the one deliberate exception.** The self-improving hub's signature is the petri Bootstrap-blue `#0d6efd`. It is the identity color of the whole self-improving surface (hub + petri bundle), so the docs propagate it — as `--acc-si` (`#5B9BFF`, lightened for AA on dark) — into the `07-self-improving` docs section: the sidebar group label, the page eyebrow, in-prose links, table-header underline, `pre`/`code` accents, and card-hover borders. This is scoped by a `data-doc-section="07-self-improving"` attribute on the docs shell root (`docs-shell.tsx`) driving a `--section-accent` custom property; outside that section the accent stays `--acc-artifact`. The bridge palette and this accent propagation are documented here so the cross-surface continuity is explicit, not a drift accident.
+
+The hub's own token source of truth is `docs/design/self-improving-hub-system.md §3` (the light signature palette: white paper, `#0d6efd` accent, 3 surface buckets). The hub stays light (its native identity); docs stay dark — the shared thread is the signature accent, not the light/dark mode.
 
 ### 11.2 Anti-slop on bridge surfaces
 
