@@ -1603,10 +1603,14 @@ def test_should_promote_accepts_significant_improvement() -> None:
 
 
 def test_should_promote_floor_protects_against_zero_stderr() -> None:
-    """``fitness_margin_floor`` kicks in when baseline_stderr is empty."""
+    """``fitness_margin_floor`` kicks in when baseline_stderr is empty.
+
+    PR-PROMOTE-RATE-BUNDLE (2026-05-29) — Option A lowered the default
+    floor 0.05 → 0.02; this test still pins the floor-mechanism shape
+    (margin string surfaces in reason) but updates the literal."""
     baseline_means = dict.fromkeys(CRITICAL_DIMS, 3.0)
     baseline_stderr: dict[str, float] = {}  # empty → margin would be 0
-    # Tiny gain that would pass with margin=0 but fails with floor=0.05.
+    # Tiny gain that would pass with margin=0 but fails with floor=0.02.
     current_means = dict.fromkeys(CRITICAL_DIMS, 2.99)
     ok, reason = _should_promote(
         current_means,
@@ -1615,7 +1619,7 @@ def test_should_promote_floor_protects_against_zero_stderr() -> None:
         baseline_stderr=baseline_stderr,
     )
     assert ok is False
-    assert "margin 0.05" in reason
+    assert "margin 0.02" in reason
 
 
 # ---------------------------------------------------------------------------

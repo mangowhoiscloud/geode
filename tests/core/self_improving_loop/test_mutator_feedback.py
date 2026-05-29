@@ -252,6 +252,143 @@ def test_dedup_empty_recent_returns_safe_finding() -> None:
     assert finding.matched_mutation_id is None
 
 
+# ---------------------------------------------------------------------------
+# PR-PROMOTE-RATE-BUNDLE 2026-05-29 — Option C. Axis-family dedup
+# ---------------------------------------------------------------------------
+
+
+def test_axis_family_dedup_triggers_after_three_same_section() -> None:
+    """Three prior applies on the same (kind, section) → axis-family
+    exhausted; any further value on that axis rejects regardless of
+    new_value similarity.
+
+    Origin: cy14-22 batch observed mutator sweeping the same axis
+    (max_turns / reflection_depth) for 8 consecutive cycles. Value-only
+    dedup (the legacy gate) caught exact reruns but allowed value sweep.
+    Family-level gate forces cross-axis exploration after N=3 attempts.
+    """
+    mutation = _StubMutation(
+        target_kind="hyperparam",
+        target_section="reflection_depth",
+        new_value="6",
+    )
+    recent = [
+        _StubApplyRecord(
+            target_kind="hyperparam",
+            target_section="reflection_depth",
+            new_value="1",
+            mutation_id="cy18",
+        ),
+        _StubApplyRecord(
+            target_kind="hyperparam",
+            target_section="reflection_depth",
+            new_value="4",
+            mutation_id="cy19",
+        ),
+        _StubApplyRecord(
+            target_kind="hyperparam",
+            target_section="reflection_depth",
+            new_value="2",
+            mutation_id="cy20",
+        ),
+    ]
+    finding = check_repetitive_mutation(mutation, recent, threshold=0.85)
+    assert finding.is_repetitive
+    assert finding.max_similarity == 1.0
+    assert finding.matched_mutation_id is not None
+    assert "axis_family_exhausted" in finding.matched_mutation_id
+
+
+def test_axis_family_dedup_two_same_section_still_allowed() -> None:
+    """Two prior applies on same axis → still under the limit; allowed."""
+    mutation = _StubMutation(
+        target_kind="hyperparam",
+        target_section="max_turns",
+        new_value="6",
+    )
+    recent = [
+        _StubApplyRecord(
+            target_kind="hyperparam",
+            target_section="max_turns",
+            new_value="3",
+            mutation_id="cy14",
+        ),
+        _StubApplyRecord(
+            target_kind="hyperparam",
+            target_section="max_turns",
+            new_value="4",
+            mutation_id="cy15",
+        ),
+    ]
+    finding = check_repetitive_mutation(mutation, recent, threshold=0.85)
+    # 2 < 3 limit + new_value "6" ≠ "3" or "4" → not repetitive.
+    assert not finding.is_repetitive
+
+
+def test_axis_family_dedup_counts_only_same_kind_and_section() -> None:
+    """Different (kind, section) prior applies don't contribute to the
+    same-axis count. cy18 reflection_depth + cy14 max_turns + cy15
+    max_turns → reflection_depth axis only has 1 prior."""
+    mutation = _StubMutation(
+        target_kind="hyperparam",
+        target_section="reflection_depth",
+        new_value="6",
+    )
+    recent = [
+        _StubApplyRecord(
+            target_kind="hyperparam",
+            target_section="reflection_depth",
+            new_value="1",
+            mutation_id="cy18",
+        ),
+        _StubApplyRecord(
+            target_kind="hyperparam",
+            target_section="max_turns",
+            new_value="3",
+            mutation_id="cy14",
+        ),
+        _StubApplyRecord(
+            target_kind="hyperparam",
+            target_section="max_turns",
+            new_value="4",
+            mutation_id="cy15",
+        ),
+        _StubApplyRecord(
+            target_kind="prompt",
+            target_section="role",
+            new_value="You are GEODE.",
+            mutation_id="cy11",
+        ),
+    ]
+    finding = check_repetitive_mutation(mutation, recent, threshold=0.85)
+    # reflection_depth count = 1, max_turns count = 2 (different axis),
+    # role count = 0 (different axis) → mutation's axis at 1 < limit.
+    assert not finding.is_repetitive
+
+
+def test_axis_family_dedup_cross_kind_unaffected() -> None:
+    """Family count is per (kind, section). Different kind even with
+    same section name doesn't add to the count."""
+    mutation = _StubMutation(
+        target_kind="tool_descriptions",
+        target_section="reflection_depth",  # quirky reuse for the test
+        new_value="anything",
+    )
+    recent = [
+        _StubApplyRecord(
+            target_kind="hyperparam",
+            target_section="reflection_depth",
+            new_value=str(v),
+            mutation_id=f"cy{18 + i}",
+        )
+        for i, v in enumerate([1, 4, 2])
+    ]
+    finding = check_repetitive_mutation(mutation, recent, threshold=0.85)
+    # All 3 priors are hyperparam × reflection_depth; mutation is
+    # tool_descriptions × reflection_depth — different kind → count = 0.
+    assert not finding.is_repetitive
+
+
 def test_dedup_records_best_match_even_when_no_trigger() -> None:
     mutation = _StubMutation(target_kind="prompt", target_section="lead", new_value="Foo")
     recent = [
