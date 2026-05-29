@@ -47,6 +47,8 @@ functional change.
 
 ## [Unreleased]
 
+## [0.99.86] - 2026-05-29
+
 ### Added
 - **PR-BASELINE-HUB-SHOW-WORK (2026-05-29)** — The autoresearch **baseline**
   hub page now *shows its work* instead of rendering only the `baseline.json`
