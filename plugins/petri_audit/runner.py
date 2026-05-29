@@ -625,16 +625,18 @@ def run_audit(
     # to work in ``dry_run`` mode (CI smoke runs, slash dry-runs,
     # `geode audit` without env keys). Credential resolution happens
     # later, only on the real-run branch.
-    # PR-CRED-SOURCE-CENTRALIZE — capture the per-role ``source`` override
-    # (``[self_improving_loop.petri.<role>].source``) alongside the model so an
-    # explicit ``source = "api_key"`` for the auditor/judge actually routes
-    # there. Previously only ``model`` was read, so the per-role source was a
-    # silent no-op. Defaults None → to_inspect_model's use_oauth/cascade decides.
-    auditor_source: str | None = None
-    judge_source: str | None = None
+    # PR-CRED-SOURCE-CENTRALIZE — the per-role ``source`` override
+    # (``[self_improving_loop.petri.<role>].source``) for auditor/judge is read
+    # *independently* of whether the model axis was supplied via argv, so an
+    # explicit ``source = "api_key"`` routes those roles even when the operator
+    # pins the model. Previously only ``model`` was read → the per-role source
+    # was a silent no-op. None → to_inspect_model's use_oauth/cascade decides.
+    from plugins.petri_audit.user_overrides import read_role_override
+
+    auditor_source: str | None = read_role_override("auditor").get("source")
+    judge_source: str | None = read_role_override("judge").get("source")
     if auditor is None or judge is None or target is None:
         from plugins.petri_audit.manifest import load_manifest
-        from plugins.petri_audit.user_overrides import read_role_override
 
         manifest = load_manifest()
         for slot, role in (("auditor", "auditor"), ("judge", "judge"), ("target", "target")):
@@ -644,14 +646,13 @@ def run_audit(
                 continue
             if slot == "target" and target is not None:
                 continue
-            override = read_role_override(role)
-            resolved = override.get("model") or manifest.get_role(role).default_model
+            resolved = (
+                read_role_override(role).get("model") or manifest.get_role(role).default_model
+            )
             if slot == "auditor":
                 auditor = resolved
-                auditor_source = override.get("source")
             elif slot == "judge":
                 judge = resolved
-                judge_source = override.get("source")
             else:
                 target = resolved
     assert auditor is not None and judge is not None and target is not None  # narrowed

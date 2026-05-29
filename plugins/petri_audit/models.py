@@ -293,10 +293,20 @@ def list_audit_models() -> list[tuple[str, str]]:
     here. Skips models whose provider the mapping rules don't recognise
     (defensive — should be empty in practice).
     """
+    from plugins.petri_audit.credential_source import CredentialResolutionError
+
     pairs: list[tuple[str, str]] = []
     for geode_id in MODEL_PRICING:
         try:
             pairs.append((geode_id, to_inspect_model(geode_id)))
         except AuditModelMappingError:
             continue
+        except CredentialResolutionError:
+            # PR-CRED-SOURCE-CENTRALIZE — catalog listing (--help / tool
+            # description) must stay credential-INDEPENDENT. Now that
+            # ``to_inspect_model`` re-raises the strict subscription gate
+            # (``fallback_to_payg=False``), fall back to the deterministic
+            # api_key-adapter prefix so every catalog model is still listed
+            # regardless of runtime credential availability.
+            pairs.append((geode_id, to_inspect_model(geode_id, source="api_key")))
     return pairs
