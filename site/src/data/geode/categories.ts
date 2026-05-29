@@ -171,13 +171,13 @@ export const geodeCategories: CategoryData[] = [
     postsCount: 3,
     statusKo: "Typer + Rich + NL Router",
     statusEn: "Typer + Rich + NL Router",
-    techBadges: ["Typer", "Rich", "NL Router", "REPL", "17 Tools"],
+    techBadges: ["Typer", "Rich", "NL Router", "REPL", "59 Tools"],
     descriptionKo:
-      "Typer 기반 CLI와 대화형 REPL로 분석을 실행합니다. Rich Live Display로 graph.stream() 이벤트를 실시간 렌더링하고, NL Router가 자연어 입력을 CLI 명령으로 자동 변환합니다. 5개 카테고리 17개 Tool(Data 3, Signal 5, Analysis 3, Memory 3, Output 3)을 제공합니다.",
+      "Typer 기반 CLI와 대화형 REPL로 작업을 실행합니다. Rich Live Display로 graph.stream() 이벤트를 실시간 렌더링하고, NL Router가 자연어 입력을 CLI 명령으로 자동 변환합니다. 59개 Tool(5개 상시 로드 + 54개 지연 로드)을 제공합니다.",
     descriptionEn:
-      "Typer-based CLI and interactive REPL for running analyses. Rich Live Display renders graph.stream() events in real-time, NL Router auto-converts natural language to CLI commands. 17 Tools across 5 categories (Data 3, Signal 5, Analysis 3, Memory 3, Output 3).",
+      "Typer-based CLI and interactive REPL for running tasks. Rich Live Display renders graph.stream() events in real-time, NL Router auto-converts natural language to CLI commands. 59 tools (5 always-loaded + 54 deferred).",
     achievements: [
-      { icon: "⌨️", titleKo: "Typer CLI analyze, batch, compare + 17 Tools 5카테고리", titleEn: "Typer CLI analyze, batch, compare + 17 Tools 5 categories", modalId: "modal-geode-cli" },
+      { icon: "⌨️", titleKo: "Typer CLI + 자연어 입력 + 59 Tools (상시 5 / 지연 54)", titleEn: "Typer CLI + natural-language input + 59 tools (5 always / 54 deferred)", modalId: "modal-geode-cli" },
       { icon: "🎨", titleKo: "Rich Live Display graph.stream() 실시간 파이프라인 시각화", titleEn: "Rich Live Display graph.stream() real-time pipeline visualization", modalId: "modal-geode-rich-display" },
       { icon: "🗣️", titleKo: "NL Router 자연어 → CLI 명령 자동 변환", titleEn: "NL Router natural language → CLI command auto-conversion", modalId: "modal-geode-nl-router" },
     ],
