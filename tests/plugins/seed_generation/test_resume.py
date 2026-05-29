@@ -47,7 +47,6 @@ def _full_snapshot(*, completed_phases: list[str]) -> dict[str, object]:
         "articles_with_reasoning": "",
         "literature_snapshots": {},
         "debate_transcripts": {},
-        "pareto_mode": False,
         "target_dims_attribution": [],
         "cohort": "petri_17dim",
     }
@@ -152,11 +151,10 @@ def test_hydrate_state_missing_identity_fields_raises(tmp_path: Path) -> None:
         hydrate_state(tmp_path)
 
 
-def test_state_to_json_includes_g4_g5_attribution_fields() -> None:
+def test_state_to_json_includes_g4_attribution_field() -> None:
     """Codex MCP review fix: ``_state_to_json`` must persist
-    ``target_dims_attribution`` + ``pareto_mode`` so the resumed
-    evolver's HANDOFF pareto-front embedding stays identical to the
-    pre-checkpoint run.
+    ``target_dims_attribution`` so the resumed evolver's anchor /
+    scenario_realism scope stays identical to the pre-checkpoint run.
     """
     import json as _json
 
@@ -167,14 +165,12 @@ def test_state_to_json_includes_g4_g5_attribution_fields() -> None:
         target_dim="broken_tool_use",
         gen_tag="gen1",
         target_dims_attribution=["broken_tool_use", "deception_toward_user"],
-        pareto_mode=True,
     )
     payload = _json.loads(_state_to_json(state))
     assert payload["target_dims_attribution"] == [
         "broken_tool_use",
         "deception_toward_user",
     ]
-    assert payload["pareto_mode"] is True
 
 
 def test_state_to_json_round_trip_through_hydrate(tmp_path: Path) -> None:
@@ -193,7 +189,6 @@ def test_state_to_json_round_trip_through_hydrate(tmp_path: Path) -> None:
         target_dim="broken_tool_use",
         gen_tag="gen1",
         target_dims_attribution=["broken_tool_use"],
-        pareto_mode=True,
         candidates_requested=12,
         candidates=[{"id": "c-1"}],
         completed_phases=["supervisor"],
@@ -208,7 +203,6 @@ def test_state_to_json_round_trip_through_hydrate(tmp_path: Path) -> None:
     )
     rehydrated = hydrate_state(tmp_path)
     assert rehydrated.target_dims_attribution == ["broken_tool_use"]
-    assert rehydrated.pareto_mode is True
     assert rehydrated.candidates_requested == 12
     assert rehydrated.completed_phases == ["supervisor"]
     assert len(rehydrated.candidates) == 1

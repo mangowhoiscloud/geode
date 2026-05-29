@@ -48,7 +48,7 @@ import os
 import tomllib
 import warnings
 from pathlib import Path
-from typing import Annotated, Any, Literal
+from typing import Annotated, Any
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
@@ -242,95 +242,6 @@ class AutoresearchConfig(BaseModel):
     """In-process mutator runner binding. Consumed by
     :func:`core.self_improving_loop.runner._default_llm_call`."""
 
-    # P1-revised (2026-05-25) — DAPO-inspired variance gate + GRPO-inspired
-    # group-relative scoring 의 *selection* layer 만 inference-time 으로 채택.
-    # **Not policy optimization; no parameter update; no gradient.** 본 sprint
-    # plan: ``docs/plans/2026-05-25-baseline-fitness-rl-grounding.md``.
-    group_size: Annotated[int, Field(ge=1, le=8)] = 1
-    """Number of sibling mutations to propose+audit per self-improving cycle.
-
-    - ``1`` (default): legacy (1+1)-ES + previous-baseline 비교. group sampling
-      disabled, backward-compat 보존.
-    - ``2`` (MVP): N=2 sibling parallel mutator call + sequential audit + group
-      mean/std → DAPO-inspired variance gate + GRPO-inspired z-score ranking.
-      P1-revised 의 시작값.
-    - ``4`` (full): frontier-inspired (GRPO uses N=8 for *training* — here we
-      use it for *selection* only, cost-trimmed). audit cost 4x 부담.
-
-    cost 영향 — N 배 audit cost (subscription source 는 quota window 안에서
-    무료, ``core/llm/audit_lane.py`` OL-P2 audit_lane=1 으로 sequential 강제).
-    """
-
-    group_variance_threshold: Annotated[float, Field(ge=0.0, le=1.0)] = 0.01
-    """DAPO-inspired variance gate threshold ε.
-
-    N sibling mutation 의 fitness std 가 이 값 미만이면 group 폐기 (cycle skip
-    + log). gate 의 의도: 모든 sibling 이 비슷한 결과를 내면 selection signal
-    0 → 무신호 cycle 의 audit cost 낭비 회피 (DAPO paper reports wall-clock
-    25% saving when applied as a *training* filter — here we use it as a
-    *selection* gate, separate concern).
-
-    Default 0.01 is a placeholder — no externally-verified production value
-    is currently grounded for this knob. PR-VAR-ADAPTIVE (2026-05-27)
-    closes the follow-up with the ``group_variance_threshold_mode`` /
-    ``group_variance_history_window`` / ``group_variance_percentile``
-    knobs below. When ``mode="percentile"`` and the history has ≥window
-    entries, this fixed value is ignored in favour of the percentile.
-    """
-
-    group_variance_threshold_mode: Literal["fixed", "percentile"] = "fixed"
-    """PR-VAR-ADAPTIVE (2026-05-27) — variance gate threshold source.
-
-    - ``"fixed"`` (default, backward-compat): use
-      ``group_variance_threshold`` as the hard floor regardless of
-      observed history. Legacy behaviour preserved.
-    - ``"percentile"``: read
-      ``autoresearch/state/group_variance_history.jsonl`` (git-tracked),
-      filter to the most recent ``group_variance_history_window``
-      entries for the active ``target_kind`` (when available — else
-      pooled across kinds), and use the ``group_variance_percentile``
-      th-percentile std as the threshold. When the history has fewer
-      than the window count, falls back to the fixed value so an
-      operator can enable the mode without bootstrapping a synthetic
-      history. Closes the 2026-05-26 attribution sprint Phase A
-      audit's "fitness-scale drift" concern — operators changing
-      fitness_margin_floor or weight schemas no longer need to
-      manually re-tune the variance threshold.
-    """
-
-    group_variance_history_window: Annotated[int, Field(ge=5, le=1000)] = 30
-    """PR-VAR-ADAPTIVE (2026-05-27) — number of history entries to use
-    when computing the percentile threshold. Default 30 ≈ 25 day window
-    at min_interval=20h. Below the window count the percentile mode
-    falls back to ``group_variance_threshold`` (fixed). Range floor of
-    5 ensures the percentile has enough samples to be meaningful;
-    ceiling of 1000 caps memory + read latency."""
-
-    group_variance_percentile: Annotated[float, Field(gt=0.0, lt=1.0)] = 0.05
-    """PR-VAR-ADAPTIVE (2026-05-27) — which percentile of historical
-    group std becomes the threshold. ``0.05`` = 5th percentile (skip
-    only the bottom 5% of historical variance, i.e. the truly
-    low-signal groups). Higher values (e.g. ``0.10``) are more
-    aggressive at filtering. Must be in ``(0.0, 1.0)`` — exact 0 / 1
-    are degenerate."""
-
-    max_group_resamples: Annotated[int, Field(ge=0, le=10)] = 0
-    """PR-RESAMPLE-BUDGET (2026-05-27) — number of additional group
-    proposals to attempt when ``_compute_group_advantage`` returns
-    ``filtered_low_variance``. ``0`` (default) preserves legacy
-    behaviour (one shot, low-variance group → cycle skip). Non-zero
-    enables a retry loop bounded by this budget. DAPO frontier
-    equivalent: ``max_num_gen_batches`` — informative-batch
-    retention. Each retry costs N audit subprocesses, so the
-    operator-facing knob is bounded at 10."""
-
-    resample_on_low_variance: bool = False
-    """PR-RESAMPLE-BUDGET (2026-05-27) — must be True for
-    ``max_group_resamples`` to take effect. Separate flag (vs reading
-    ``max_group_resamples > 0`` directly) so an operator can pre-set
-    the budget but keep the feature disabled until A/B data validates
-    it. Default False preserves backward-compat."""
-
     mutator_feedback_window: Annotated[int, Field(ge=0, le=200)] = 20
     """PR-MUTATOR-HISTORY-FEEDBACK (2026-05-27) — number of most-recent
     ``ApplyRecord`` + ``AttributionRecord`` rows fed back into the
@@ -386,48 +297,6 @@ class AutoresearchConfig(BaseModel):
     can drop to ``0.75`` for stricter dedup or raise to ``0.95`` to
     only block exact-duplicate proposals.
     """
-
-    pareto_mode: bool = False
-    """P2-revised (2026-05-25) — Pareto archive + Dynamic Reward Weighting
-    enable knob. plan ``docs/plans/2026-05-25-p2-pareto-archive-dynamic-reward-weighting.md``.
-
-    - ``False`` (default, legacy): apply_group_proposals 의 top-1 by linear
-      advantage. PR-5 P1-revised 동작 그대로.
-    - ``True``: archive 의 Pareto-non-dominated set 에 mutation insert +
-      sample. concave Pareto front 영역 도달 가능 (Das-Dennis 1997 한계
-      회피). group_size>=2 와 결합 시 의미 (single mutation 은 archive
-      비교 없음).
-
-    pareto_mode=True 시 ``baseline_archive.jsonl`` writer 활성.
-    """
-
-    hypervolume_reference_point: dict[str, float] = Field(default_factory=dict)
-    """P2-revised — hypervolume 계산의 reference point (per-dim nadir,
-    worst-case). 빈 dict 이면 archive entry 의 dim 최솟값 자동 사용.
-
-    Higher-is-better convention — caller 는 good-low palette dim 의 score
-    를 미리 invert (e.g., ``10 - input_hallucination_score``). reference
-    point 는 unreachable worst-case (e.g., dim 별 0).
-    """
-
-    sub_agent_count: Annotated[int, Field(ge=1, le=5)] = 1
-    """P4 (2026-05-25, Kimi K2.6 PARL inference-time 변형) — swarm-level
-    sub-agent 개수. plan ``docs/plans/2026-05-25-p4-parl-swarm-scaffolding.md``.
-
-    - ``1`` (default, legacy): single mutation chain. P1-revised group
-      sampling (group_size) 만 활성.
-    - ``3``: MVP — 3 sub-agent 가 각자 다른 agent_contract policy slice
-      로 mutation chain 진행. swarm-mean baseline.
-    - ``5``: full — Kimi K2.6 PARL 의 inference-time 축소판.
-
-    audit cost = sub_agent_count × group_size × per-cycle cost. config
-    cap = 5 로 unconstrained cost explosion 방지.
-    """
-
-    swarm_aggregation: Literal["mean", "median", "max"] = "mean"
-    """P4 — sub-agent fitness aggregation strategy. ``mean`` 이 PARL 의
-    swarm-mean 패턴 (Kimi K2.6 추정). ``median`` 은 outlier-resilient,
-    ``max`` 는 best-of-M exploration."""
 
     anchor_confidence_mode: bool = False
     """P3-revised (2026-05-25, SPCT + Meta-Rewarding) — anchor 3

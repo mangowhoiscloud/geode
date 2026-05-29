@@ -2,8 +2,8 @@
 
 Coverage:
 
-- ``format_mutator_feedback_block`` — empty iterables / credit-only /
-  matrix-only / combined output / cap at top-N dims per kind.
+- ``format_mutator_feedback_block`` — empty iterables / matrix output /
+  header count / cap at top-N dims per kind.
 - ``check_repetitive_mutation`` — distinct kinds skip, distinct sections
   skip, similar new_value crosses threshold, max_similarity reported
   even on no-match.
@@ -36,7 +36,6 @@ class _StubApplyRecord:
     target_section: str = ""
     new_value: str = ""
     expected_dim: dict[str, float] = field(default_factory=dict)
-    group_advantage: float | None = None
     kind: str = "applied"
 
 
@@ -61,28 +60,6 @@ class _StubMutation:
 
 def test_feedback_block_empty_inputs_returns_empty_string() -> None:
     assert format_mutator_feedback_block([], []) == ""
-
-
-def test_feedback_block_renders_per_dim_credit_when_present() -> None:
-    applies = [
-        _StubApplyRecord(
-            mutation_id="m1",
-            expected_dim={"safety": 0.5, "helpfulness": 0.5},
-            group_advantage=0.4,
-        ),
-        _StubApplyRecord(
-            mutation_id="m2",
-            expected_dim={"safety": 1.0},
-            group_advantage=-0.2,
-        ),
-    ]
-    block = format_mutator_feedback_block(applies, [])
-    assert "Per-dim credit" in block
-    # safety received 0.5*(0.5/1.0) + 1.0*(1.0/1.0) of the (signed) advantage:
-    # = 0.4 * 0.5 + (-0.2) * 1.0 = 0.2 - 0.2 = 0.0 → won't appear high in rank,
-    # but should be referenced.
-    assert "safety" in block
-    assert "helpfulness" in block
 
 
 def test_feedback_block_renders_matrix_section_when_attribution_present() -> None:
@@ -110,11 +87,18 @@ def test_feedback_block_renders_matrix_section_when_attribution_present() -> Non
 
 
 def test_feedback_block_header_counts_match_inputs() -> None:
-    """When there is per-dim signal the header reports the apply count."""
+    """When there is matrix signal the header reports the apply count."""
     applies_signal = [
-        _StubApplyRecord(mutation_id="m0", expected_dim={"safety": 1.0}, group_advantage=0.5)
+        _StubApplyRecord(mutation_id="m0", target_kind="prompt", target_section="lead")
     ]
-    block_with_signal = format_mutator_feedback_block(applies_signal, [])
+    attributions_signal = [
+        _StubAttributionRecord(
+            mutation_id="m0",
+            observed_dim={"safety": 0.5},
+            attribution_score=1.0,
+        )
+    ]
+    block_with_signal = format_mutator_feedback_block(applies_signal, attributions_signal)
     assert "last 1 apply" in block_with_signal
 
 

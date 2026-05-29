@@ -3,13 +3,11 @@
 Two related but distinct mutator-side observability/guard surfaces:
 
 1. **Feedback summary** — :func:`format_mutator_feedback_block` reads the
-   most-recent N apply + attribution rows, computes per-dim credit
-   (``aggregate_credit_history``) + (kind × dim) matrix
-   (``compute_kind_dim_matrix``), and renders a compact text block
-   the runner prepends to the mutator's user prompt. Closes the F3
-   fragmentation signal — pre-PR the mutator never saw which dims
-   its previous mutations had been crediting nor which kinds had
-   moved which dims. Now it sees both, every cycle.
+   most-recent N apply + attribution rows, computes the (kind × dim)
+   matrix (``compute_kind_dim_matrix``), and renders a compact text
+   block the runner prepends to the mutator's user prompt. Closes the
+   F3 fragmentation signal — pre-PR the mutator never saw which kinds
+   had moved which dims. Now it sees that, every cycle.
 
 2. **Dedup guard** — :func:`check_repetitive_mutation` rejects a
    proposed mutation whose
@@ -48,7 +46,7 @@ log = logging.getLogger(__name__)
 
 
 _TOP_DIMS_IN_BLOCK = 5
-"""Cap on the number of dim rows surfaced in the credit/matrix summary
+"""Cap on the number of dim rows surfaced in the matrix summary
 block. The mutator prompt budget rules in the contract suffix limit
 the user message; surfacing the top-N most-attributed dims keeps the
 signal load-bearing without inflating the block. Five aligns with
@@ -72,20 +70,15 @@ def format_mutator_feedback_block(
     """Render a compact "what your recent mutations did" block.
 
     Returns the empty string when both iterables are empty (or contain
-    no records with usable ``group_advantage`` / ``expected_dim`` /
-    ``observed_dim``) so the caller can drop the block entirely on a
-    fresh repo — no noise in the prompt before any history exists.
+    no records with usable ``expected_dim`` / ``observed_dim``) so the
+    caller can drop the block entirely on a fresh repo — no noise in the
+    prompt before any history exists.
 
     The block is intentionally textual (not JSON) so the mutator LLM
     can read it left-to-right without burning tokens on the JSON
     overhead. Format::
 
         ## Recent mutation feedback (last N rows)
-
-        Per-dim credit (cumulative signed advantage):
-        - dim_name_a: +0.42
-        - dim_name_b: -0.18
-        - ...
 
         Kind x Dim (top dims by absolute impact per kind):
         - prompt: dim_x (+0.31), dim_y (-0.09), ...
@@ -98,7 +91,6 @@ def format_mutator_feedback_block(
     attribution_records
         Iterable of recent :class:`AttributionRecord` rows. Consumed once.
     """
-    from core.self_improving_loop.credit_assignment import aggregate_credit_history
     from core.self_improving_loop.kind_dim_matrix import (
         compute_kind_dim_matrix,
         rank_dims_by_kind,
@@ -109,10 +101,9 @@ def format_mutator_feedback_block(
     if not apply_list and not attribution_list:
         return ""
 
-    credit = aggregate_credit_history(apply_list)
     matrix = compute_kind_dim_matrix(apply_list, attribution_list)
 
-    if not credit and not matrix:
+    if not matrix:
         return ""
 
     lines: list[str] = [
@@ -120,16 +111,6 @@ def format_mutator_feedback_block(
         f"{len(attribution_list)} attribution rows)",
         "",
     ]
-
-    if credit:
-        # Rank by absolute credit so big-impact dims (positive or negative)
-        # surface first.
-        ranked_credit = sorted(credit.items(), key=lambda kv: abs(kv[1]), reverse=True)
-        lines.append("Per-dim credit (cumulative signed group-advantage share):")
-        for dim, value in ranked_credit[:_TOP_DIMS_IN_BLOCK]:
-            sign = "+" if value >= 0 else ""
-            lines.append(f"- {dim}: {sign}{value:.3f}")
-        lines.append("")
 
     if matrix:
         lines.append("Kind x Dim (top dims by absolute attribution per kind):")

@@ -105,15 +105,6 @@ def test_discriminator_routes_applied_to_apply_record(tmp_path: Path) -> None:
     assert rows[0].mutation_id == "m1"
 
 
-def test_discriminator_routes_applied_sibling_to_apply_record(tmp_path: Path) -> None:
-    log = tmp_path / "mutations.jsonl"
-    _write_jsonl(log, [_apply_row("m1", kind="applied_sibling", group_id="g1")])
-    rows = list(iter_mutations(log))
-    assert len(rows) == 1
-    assert isinstance(rows[0], ApplyRecord)
-    assert rows[0].kind == "applied_sibling"
-
-
 def test_discriminator_routes_attribution_to_attribution_record(tmp_path: Path) -> None:
     log = tmp_path / "mutations.jsonl"
     _write_jsonl(log, [_attribution_row("m1")])
@@ -275,52 +266,6 @@ def test_read_recent_applies_skips_attribution_rows(tmp_path: Path) -> None:
     recent = read_recent_applies(10, log)
     assert [r.mutation_id for r in recent] == ["m1", "m2"]
     assert all(isinstance(r, ApplyRecord) for r in recent)
-
-
-def test_read_recent_applies_include_siblings(tmp_path: Path) -> None:
-    log = tmp_path / "mutations.jsonl"
-    _write_jsonl(
-        log,
-        [
-            _apply_row("m1", kind="applied"),
-            _apply_row("m2", kind="applied_sibling", group_id="g1"),
-            _apply_row("m3", kind="applied_sibling", group_id="g1"),
-            _apply_row("m4", kind="applied"),
-        ],
-    )
-    without = read_recent_applies(10, log, include_siblings=False)
-    assert [r.mutation_id for r in without] == ["m1", "m4"]
-    with_sib = read_recent_applies(10, log, include_siblings=True)
-    assert [r.mutation_id for r in with_sib] == ["m1", "m2", "m3", "m4"]
-
-
-def test_read_recent_applies_slice_through_sibling_group_chronological(
-    tmp_path: Path,
-) -> None:
-    """Codex MCP review WARN — N slice 가 sibling group 가운데서 자를 때
-    chronological order 보존 + partial group 명시 (caller 가 group_id 로
-    재구성 책임). 본 test 가 그 invariant pin."""
-    log = tmp_path / "mutations.jsonl"
-    _write_jsonl(
-        log,
-        [
-            _apply_row("m1", kind="applied"),
-            _apply_row("m2", kind="applied_sibling", group_id="g1"),
-            _apply_row("m3", kind="applied_sibling", group_id="g1"),
-            _apply_row("m4", kind="applied", group_id="g1"),  # group g1 의 top-1
-            _apply_row("m5", kind="applied_sibling", group_id="g2"),
-            _apply_row("m6", kind="applied", group_id="g2"),
-        ],
-    )
-    # N=3 → 마지막 3 row (m4 / m5 / m6) — group g1 의 sibling m2/m3 잘려나감
-    sliced = read_recent_applies(3, log, include_siblings=True)
-    assert [r.mutation_id for r in sliced] == ["m4", "m5", "m6"]
-    # group_id 만으로 caller 가 partial group 인지 확인 가능 (m5 의 g2 는
-    # m6 와 같은 group 의 sibling, full group 보존)
-    g1_in_slice = [r for r in sliced if r.group_id == "g1"]
-    g2_in_slice = [r for r in sliced if r.group_id == "g2"]
-    assert len(g1_in_slice) == 1  # partial — sibling m2/m3 missing
-    assert len(g2_in_slice) == 2  # full — sibling m5 + apply m6
 
 
 def test_read_recent_attributions_negative_n_raises(tmp_path: Path) -> None:

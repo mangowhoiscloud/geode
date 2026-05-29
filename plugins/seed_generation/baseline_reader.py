@@ -335,8 +335,8 @@ def pick_regression_target_dims(
     PR-SG-SELECTION-ALIGN (2026-05-25) — G4. Plural counterpart of
     :func:`pick_regression_target_dim`. Used by the seed-gen
     orchestrator to populate ``PipelineState.target_dims_attribution``
-    so the Pareto archive (P2) knows which axes the next generation
-    should keep on its non-dominated front.
+    — the attribution dim scope the critic / pilot / evolver reason
+    about for the next generation.
 
     Tie-break: descending by mean value, alphabetical on equal mean.
     Returns an empty list when ``snapshot.dim_means`` is empty or no

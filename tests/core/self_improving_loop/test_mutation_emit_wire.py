@@ -119,43 +119,6 @@ def test_append_audit_log_emits_mutation_applied(tmp_path: Path) -> None:
     assert isinstance(payload["ts"], float)
 
 
-def test_append_audit_log_emit_sibling_kind(tmp_path: Path) -> None:
-    """Sibling rows (``kind="applied_sibling"``) also emit MUTATION_APPLIED
-    — listeners distinguish by the ``kind`` extra field. group sampling
-    + dedup-detection downstream readers need the sibling rows."""
-    from core.self_improving_loop.runner import Mutation, append_audit_log
-
-    hooks = HookSystem()
-    captured: list[dict[str, Any]] = []
-    hooks.register(
-        HookEvent.MUTATION_APPLIED,
-        lambda event, data: captured.append(data),
-        name="capture_sibling_kind",
-    )
-    set_self_improving_loop_hooks(hooks)
-
-    mutation = Mutation(
-        mutation_id="sibling-mid",
-        target_kind="tool_policy",
-        target_section="some_section",
-        new_value="value",
-        rationale="sibling sample",
-        target_dim="dim_y",
-    )
-    append_audit_log(
-        mutation,
-        previous_value="",
-        log_path=tmp_path / "mutations.jsonl",
-        audit_run_id="sibling-run-id",
-        kind="applied_sibling",
-        group_id="group-001",
-        group_advantage=0.1,
-    )
-    assert len(captured) == 1
-    assert captured[0]["kind"] == "applied_sibling"
-    assert captured[0]["target_kind"] == "tool_policy"
-
-
 def test_write_baseline_emits_baseline_promoted(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

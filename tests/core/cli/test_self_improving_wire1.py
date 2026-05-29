@@ -1,22 +1,24 @@
 """PR-WIRE-1 (2026-05-26) — orphan helper CLI wiring.
 
 The 2026-05-26 autoresearch attribution sprint Phase A audit identified
-three production-orphan helpers in ``core/self_improving_loop/``:
+production-orphan helpers in ``core/self_improving_loop/``:
 
-* ``compute_credit_assignment`` / ``aggregate_credit_history``
-  (credit_assignment.py) — 0 production callers
 * ``compute_kind_dim_matrix`` / ``rank_dims_by_kind`` /
   ``rank_kinds_by_dim`` (kind_dim_matrix.py) — 0 production callers
 * ``evaluate_rollback_condition`` (rollback_condition.py) — 0 production
   callers; only the *field* ``rollback_condition`` on Mutation was
   wired (displayed in CLI), never evaluated.
 
-This PR adds three REPL sub-actions that invoke each helper:
-``/self-improving credit``, ``matrix``, ``rollback-check``. The tests
+This PR adds two REPL sub-actions that invoke each helper:
+``/self-improving matrix``, ``rollback-check``. The tests
 pin (a) that the dispatcher routes the new actions, (b) that each
 sub-command actually invokes the helper at runtime (not just renders
 a placeholder), (c) graceful empty-state output when the prerequisite
 data is missing, (d) the ``--last N`` argv parsing.
+
+(The ``credit`` sub-action wiring ``aggregate_credit_history`` was
+removed with the group-sampling machinery in PR-GROUP-REMOVAL,
+2026-05-29.)
 """
 
 from __future__ import annotations
@@ -35,7 +37,6 @@ def _write_apply_row(
     target_kind: str,
     target_section: str,
     expected_dim: dict[str, float] | None = None,
-    group_advantage: float | None = None,
     rollback_condition: str = "",
 ) -> None:
     log_path.parent.mkdir(parents=True, exist_ok=True)
@@ -48,7 +49,6 @@ def _write_apply_row(
         "previous_value": "orig",
         "new_value": "new",
         "expected_dim": expected_dim or {},
-        "group_advantage": group_advantage,
         "rollback_condition": rollback_condition,
     }
     with log_path.open("a", encoding="utf-8") as fh:
@@ -85,11 +85,11 @@ def _write_attribution_row(
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.parametrize("action", ["credit", "matrix", "rollback-check"])
+@pytest.mark.parametrize("action", ["matrix", "rollback-check"])
 def test_dispatcher_routes_new_action_to_handler(
     action: str, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """``cmd_self_improving("credit")`` must invoke ``_cmd_credit``, etc.
+    """``cmd_self_improving("matrix")`` must invoke ``_cmd_matrix``, etc.
     Pin the dispatcher branch so a typo in the action string fails fast
     in CI instead of silently falling through to the unknown-action path."""
     from core.cli.commands import self_improving as mod
@@ -97,7 +97,6 @@ def test_dispatcher_routes_new_action_to_handler(
     calls: list[tuple[str, list[str]]] = []
 
     handler_attr = {
-        "credit": "_cmd_credit",
         "matrix": "_cmd_matrix",
         "rollback-check": "_cmd_rollback_check",
     }[action]
@@ -115,14 +114,13 @@ def test_dispatcher_routes_new_action_to_handler(
 def test_unknown_action_help_lists_new_subcommands(
     capsys: pytest.CaptureFixture[str],
 ) -> None:
-    """The unknown-action help text must mention credit / matrix /
+    """The unknown-action help text must mention matrix /
     rollback-check so an operator who typos a sub-action sees the new
     wiring as available."""
     from core.cli.commands.self_improving import cmd_self_improving
 
     cmd_self_improving("nonexistent-action")
     output = capsys.readouterr().out
-    assert "credit" in output
     assert "matrix" in output
     assert "rollback-check" in output
 
@@ -151,94 +149,6 @@ def test_parse_last_n_invalid_falls_back() -> None:
     assert _parse_last_n(["--last", "0"]) == 20
     assert _parse_last_n(["--last", "-5"]) == 20
     assert _parse_last_n(["--last"]) == 20  # missing value
-
-
-# ---------------------------------------------------------------------------
-# _cmd_credit — wires aggregate_credit_history
-# ---------------------------------------------------------------------------
-
-
-def test_credit_invokes_aggregator_on_real_apply_rows(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-    capsys: pytest.CaptureFixture[str],
-) -> None:
-    """Pin that ``/self-improving credit`` actually calls the previously
-    orphan ``aggregate_credit_history`` helper at runtime — not a stub,
-    not a placeholder. The test writes 2 apply rows with non-empty
-    ``expected_dim`` + ``group_advantage`` so the aggregator returns a
-    populated dict, then checks the dim names appear in stdout."""
-    from core.cli.commands.self_improving import _cmd_credit
-
-    log_path = tmp_path / "mutations.jsonl"
-    _write_apply_row(
-        log_path,
-        mutation_id="m1",
-        target_kind="prompt",
-        target_section="role",
-        expected_dim={"output_quality": 0.5, "conciseness": -0.2},
-        group_advantage=0.8,
-    )
-    _write_apply_row(
-        log_path,
-        mutation_id="m2",
-        target_kind="tool_policy",
-        target_section="prefer_grep",
-        expected_dim={"output_quality": 0.3},
-        group_advantage=-0.4,
-    )
-
-    monkeypatch.setattr("core.paths.MUTATION_AUDIT_LOG_PATH", log_path)
-
-    _cmd_credit([])
-    output = capsys.readouterr().out
-
-    assert "Credit assignment" in output
-    assert "output_quality" in output
-    assert "conciseness" in output
-
-
-def test_credit_empty_state_when_no_rows(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-    capsys: pytest.CaptureFixture[str],
-) -> None:
-    """Empty mutations.jsonl → muted empty-state line, no crash."""
-    from core.cli.commands.self_improving import _cmd_credit
-
-    log_path = tmp_path / "mutations.jsonl"
-    monkeypatch.setattr("core.paths.MUTATION_AUDIT_LOG_PATH", log_path)
-
-    _cmd_credit([])
-    output = capsys.readouterr().out
-
-    assert "no applied mutations yet" in output
-
-
-def test_credit_empty_state_when_no_advantage_signal(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-    capsys: pytest.CaptureFixture[str],
-) -> None:
-    """Apply rows without ``group_advantage`` (legacy group_size=1 mode)
-    → aggregator returns empty dict → muted "no signal" line."""
-    from core.cli.commands.self_improving import _cmd_credit
-
-    log_path = tmp_path / "mutations.jsonl"
-    _write_apply_row(
-        log_path,
-        mutation_id="m1",
-        target_kind="prompt",
-        target_section="role",
-        expected_dim={"output_quality": 0.5},
-        group_advantage=None,  # legacy mode
-    )
-    monkeypatch.setattr("core.paths.MUTATION_AUDIT_LOG_PATH", log_path)
-
-    _cmd_credit([])
-    output = capsys.readouterr().out
-
-    assert "no group_advantage" in output
 
 
 # ---------------------------------------------------------------------------
