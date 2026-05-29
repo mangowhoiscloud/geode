@@ -1,7 +1,8 @@
 """``admire_means`` fitness 축 — ADR-012 S2.
 
-S1 의 ``ux_means`` (행동 metric) 옆에 추가되는 **체감 품질** 양의 압력
-축. ``plugins/seed_generation/agents/ranker.py`` 의 ELO + 3-voter
+ADR-012 S2 의 **체감 품질** 양의 압력 축 (S1 ``ux_means`` 행동 축은
+PR-MARGIN-FITNESS-SCALE 2026-05-30 에 제거됨).
+``plugins/seed_generation/agents/ranker.py`` 의 ELO + 3-voter
 cross-provider panel 인프라를 정책 mutation 평가 채널로 확장 — mutation
 의 before/after 응답을 동일 panel 이 pairwise 평가, win-rate 를 fitness
 신호로 변환.
@@ -22,11 +23,10 @@ conclusions α floor) 미만이면 LLM-judge 가 human 기준에서 벗어나는
 신호 — Goodhart fooling 위험. ``compute_admire_aggregate`` 가 이 축으로
 win-rate 를 가중치 dampen 하는 방식으로 처리.
 
-**ADR-012 §Decision.2 의 fitness 3축 다축화**:
+**ADR-012 §Decision.2 의 fitness 2축 다축화** (ux-removed 2026-05-30):
 
-- ``dim_means`` (Petri 17-dim, 음의 압력) — 가중치 0.4
-- ``ux_means`` (행동 4-field, 양의 압력, S1 신설) — 가중치 0.3
-- ``admire_means`` (체감 2-field, 양의 압력, 이 모듈) — 가중치 0.3
+- ``dim_means`` (Petri 17-dim, 음의 압력) — 가중치 0.70
+- ``admire_means`` (체감 2-field, 양의 압력, 이 모듈) — 가중치 0.30
 
 S2 + PR-AR-L4c (2026-05-26) 로 schema + math + ranker handoff
 converter (``admire_means_from_eval_result``) 가 모두 wire. 실제 ranker
@@ -95,7 +95,7 @@ CALIBRATION_THRESHOLD: float = KRIPPENDORFF_TENTATIVE_FLOOR
 def compute_admire_aggregate(admire_means: dict[str, float] | None) -> float:
     """2-field weighted sum with calibration dampening → 0-1 scalar.
 
-    ``None`` → 0.5 neutral (S1 의 ``ux_means`` 와 동일 패턴 — no-op signal).
+    ``None`` → 0.5 neutral (양의 압력 축 부재 시의 no-op signal).
 
     Calibration dampening — ``human_calibration_corr`` < ``CALIBRATION_THRESHOLD``
     (0.7) 이면 LLM-judge 의 ``pairwise_win_rate`` 신호가 human 기준에서

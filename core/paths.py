@@ -287,14 +287,16 @@ GLOBAL_SKILL_CATALOG_PATH = GLOBAL_POLICIES_DIR / "skill-catalog.json"
 OPERATOR_LOCAL_SKILL_CATALOG_PATH = GLOBAL_SELF_IMPROVING_LOOP_DIR / "skill-catalog.json"
 # ADR-013 T3 (2026-05-21) — Response style guide mutation SoT. Typed enum
 # schema (tone / verbosity_level / response_format / code_style) — mutator
-# picks from constrained alternatives → ux_means 의 success_rate +
-# revert_ratio 직접 영향. wrapper-sections.json (G5a/G5b) 의 free-form
-# 텍스트 mutation 과 분리: T3 는 constrained typed 선택지.
+# picks from constrained alternatives. (ux_means fitness 축은
+# PR-MARGIN-FITNESS-SCALE 2026-05-30 에 제거 — 이제 Petri dim 경유로만
+# fitness 영향.) wrapper-sections.json (G5a/G5b) 의 free-form 텍스트
+# mutation 과 분리: T3 는 constrained typed 선택지.
 GLOBAL_STYLE_GUIDE_PATH = GLOBAL_POLICIES_DIR / "style-guide.json"
 OPERATOR_LOCAL_STYLE_GUIDE_PATH = GLOBAL_SELF_IMPROVING_LOOP_DIR / "style-guide.json"
 # ADR-013 T4 (2026-05-21) — Provider routing mutation SoT. Mutator picks
 # per-model preferred plan chain (plan_id ordered list). OpenRouter-style
-# explicit routing — fitness 4축의 ux_means.token_cost_norm 직접 영향.
+# explicit routing — per-call cost knob. (ux_means.token_cost_norm fitness
+# 축은 PR-MARGIN-FITNESS-SCALE 2026-05-30 에 제거.)
 GLOBAL_PROVIDER_ROUTING_PATH = GLOBAL_POLICIES_DIR / "provider-routing.json"
 OPERATOR_LOCAL_PROVIDER_ROUTING_PATH = GLOBAL_SELF_IMPROVING_LOOP_DIR / "provider-routing.json"
 # ADR-013 T5 (2026-05-21) — Cache breakpoint policy mutation SoT. Mutator
@@ -308,8 +310,9 @@ OPERATOR_LOCAL_CACHE_POLICY_PATH = GLOBAL_SELF_IMPROVING_LOOP_DIR / "cache-polic
 # evolves the keyword/phrase list that primes the LLM's task-triage
 # heuristics — complexity / risk / time-pressure markers injected into
 # the system prompt static block. Promptbreeder-식 evolution: agent
-# uses indicators to classify task → better triage → ux_means success
-# rate ↑.
+# uses indicators to classify task → better triage. (ux_means success_rate
+# fitness 축은 PR-MARGIN-FITNESS-SCALE 2026-05-30 에 제거 — 이제 Petri dim
+# 경유로만 fitness 영향.)
 GLOBAL_HEURISTICS_PATH = GLOBAL_POLICIES_DIR / "heuristics.json"
 OPERATOR_LOCAL_HEURISTICS_PATH = GLOBAL_SELF_IMPROVING_LOOP_DIR / "heuristics.json"
 # ADR-012 S5 (2026-05-21) — in-context slot configuration SoT. Declares

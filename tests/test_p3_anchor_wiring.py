@@ -187,7 +187,7 @@ def test_critical_regression_returns_zero_regardless_of_anchor() -> None:
 
 
 def test_multiplier_applies_to_dim_only_branch() -> None:
-    """dim-only branch (ux_means/admire_means/bench_means 모두 None)."""
+    """dim-only branch (admire_means/bench_means 모두 None)."""
     dim_means = _make_neutral_dim_means()
     f_legacy = compute_fitness(dim_means)
     f_worst = compute_fitness(
@@ -199,38 +199,12 @@ def test_multiplier_applies_to_dim_only_branch() -> None:
 
 
 def test_multiplier_applies_to_2_axis_branch() -> None:
-    """ux only — UX_FITNESS_DIM_WEIGHT * dim + UX_FITNESS_UX_WEIGHT * ux."""
+    """admire only — FITNESS_DIM_WEIGHT * dim + FITNESS_ADMIRE_WEIGHT * admire."""
     dim_means = _make_neutral_dim_means()
-    ux = {
-        "success_rate": 0.5,
-        "token_cost_norm": 0.5,
-        "revert_ratio_norm": 0.5,
-        "latency_norm": 0.5,
-    }
-    f_legacy = compute_fitness(dim_means, ux_means=ux)
-    f_worst = compute_fitness(
-        dim_means,
-        ux_means=ux,
-        anchor_means={"admirable": 1.0, "disappointing": 10.0, "needs_attention": 10.0},
-        anchor_confidence_mode=True,
-    )
-    assert f_worst == pytest.approx(f_legacy * 0.7, rel=1e-6)
-
-
-def test_multiplier_applies_to_3_axis_branch() -> None:
-    """ux + admire — 3 축 재배분."""
-    dim_means = _make_neutral_dim_means()
-    ux = {
-        "success_rate": 0.5,
-        "token_cost_norm": 0.5,
-        "revert_ratio_norm": 0.5,
-        "latency_norm": 0.5,
-    }
     admire = {"pairwise_win_rate": 0.5, "human_calibration_corr": 0.5}
-    f_legacy = compute_fitness(dim_means, ux_means=ux, admire_means=admire)
+    f_legacy = compute_fitness(dim_means, admire_means=admire)
     f_worst = compute_fitness(
         dim_means,
-        ux_means=ux,
         admire_means=admire,
         anchor_means={"admirable": 1.0, "disappointing": 10.0, "needs_attention": 10.0},
         anchor_confidence_mode=True,
@@ -238,21 +212,14 @@ def test_multiplier_applies_to_3_axis_branch() -> None:
     assert f_worst == pytest.approx(f_legacy * 0.7, rel=1e-6)
 
 
-def test_multiplier_applies_to_4_axis_branch() -> None:
-    """bench 활성 — 4 축 재배분."""
+def test_multiplier_applies_to_3_axis_branch() -> None:
+    """bench 활성 — 3 축 재배분 (dim + admire + bench)."""
     dim_means = _make_neutral_dim_means()
-    ux = {
-        "success_rate": 0.5,
-        "token_cost_norm": 0.5,
-        "revert_ratio_norm": 0.5,
-        "latency_norm": 0.5,
-    }
     admire = {"pairwise_win_rate": 0.5, "human_calibration_corr": 0.5}
     bench = {"swe_bench": 0.5, "tau_bench": 0.5}
-    f_legacy = compute_fitness(dim_means, ux_means=ux, admire_means=admire, bench_means=bench)
+    f_legacy = compute_fitness(dim_means, admire_means=admire, bench_means=bench)
     f_worst = compute_fitness(
         dim_means,
-        ux_means=ux,
         admire_means=admire,
         bench_means=bench,
         anchor_means={"admirable": 1.0, "disappointing": 10.0, "needs_attention": 10.0},

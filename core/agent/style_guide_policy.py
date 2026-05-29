@@ -2,9 +2,11 @@
 
 Mutator picks from a constrained typed enum (vs. wrapper-sections.json's
 free-form text mutation) so the loop can explore the small, expressive
-style space efficiently. Targets ``ux_means`` of the fitness 4-axis —
-``success_rate`` (does the agent finish the task) + ``revert_ratio``
-(does the user roll back).
+style space efficiently. This used to target the ``ux_means`` fitness
+axis (``success_rate`` / ``revert_ratio``); that axis was removed in
+PR-MARGIN-FITNESS-SCALE (2026-05-30) — fitness is now pure Petri dim
+aggregate, so style mutations only move fitness via their effect on the
+Petri behaviour dims.
 
 **SoT schema** (모든 entry optional, 각 value 는 enum):
 

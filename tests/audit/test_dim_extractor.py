@@ -134,6 +134,7 @@ class TestEdgeCases:
             "dim_stderr": {},
             "sample_count": {},
             "measurement_modality": {},
+            "per_sample": [],
         }
 
     def test_empty_samples_returns_empty(
@@ -149,6 +150,7 @@ class TestEdgeCases:
             "dim_stderr": {},
             "sample_count": {},
             "measurement_modality": {},
+            "per_sample": [],
         }
 
     def test_read_failure_swallowed(self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
@@ -168,6 +170,7 @@ class TestEdgeCases:
             "dim_stderr": {},
             "sample_count": {},
             "measurement_modality": {},
+            "per_sample": [],
         }
 
     def test_non_numeric_values_skipped(

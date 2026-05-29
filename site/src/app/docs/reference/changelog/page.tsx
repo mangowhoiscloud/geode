@@ -236,7 +236,7 @@ export default function Page() {
             className={
               "px-4 py-1.5 transition-colors " +
               (locale === "ko"
-                ? "bg-[#A573E8]/20 text-[#A573E8] font-medium"
+                ? "bg-[var(--acc-artifact)]/20 text-[var(--acc-artifact)] font-medium"
                 : "text-white/55 hover:text-white")
             }
           >

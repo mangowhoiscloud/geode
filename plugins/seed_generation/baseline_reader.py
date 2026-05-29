@@ -98,12 +98,14 @@ class BaselineSnapshot:
     (``~/.geode/petri/logs/latest.eval``) and are extracted on demand
     by :func:`format_evidence_block`.
 
-    S3 (2026-05-21, ADR-012) — three additional axis aggregate dicts
-    parallel ``dim_means`` so the joint ratchet can promote / regress
-    across all four fitness axes (Petri 17-dim + ux + admire + bench).
-    Pre-S3 ``baseline.json`` payloads omit them, so the loader presents
-    them as empty dicts; an empty axis is treated as "no cross-axis
-    lever yet" by downstream consumers.
+    S3 (2026-05-21, ADR-012) — additional axis aggregate dicts parallel
+    ``dim_means`` so the joint ratchet can promote / regress across the
+    fitness axes (Petri 17-dim + admire + bench). Pre-S3 ``baseline.json``
+    payloads omit them, so the loader presents them as empty dicts; an
+    empty axis is treated as "no cross-axis lever yet" by downstream
+    consumers. ``ux_means`` is retained load-side for forward-compat but
+    autoresearch removed it as a fitness axis (PR-MARGIN-FITNESS-SCALE
+    2026-05-30) — current baselines carry no ux axis, so it reads empty.
     """
 
     dim_means: dict[str, float] = field(default_factory=dict)
@@ -395,8 +397,11 @@ def pick_regression_target(
     - ``task_completion`` — picks the worst ux_means field. The ux axis
       stores normalized-higher-is-better signals (S1 contract), so the
       *lowest* value is the worst. ``prefer_critical`` is ignored because
-      ux fields don't carry a tier (each is treated equally; the loop's
-      weight schedule lives in :data:`autoresearch.ux_means.UX_DIM_WEIGHTS`).
+      ux fields don't carry a tier (each is treated equally). Note:
+      autoresearch removed the ux_means fitness axis
+      (PR-MARGIN-FITNESS-SCALE 2026-05-30), so ``snapshot.ux_means`` is
+      empty for current baselines — this cohort then returns ``None`` and
+      the caller falls back to its cohort-specific default.
 
     Returns ``None`` when the relevant axis on the snapshot is empty —
     the caller then prompts for an explicit target or falls back to

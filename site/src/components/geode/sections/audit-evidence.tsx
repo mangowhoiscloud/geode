@@ -11,9 +11,42 @@ import { useLocale, t } from "../locale-context";
  * penalize upward drift. A change is promoted only on a real gain past the
  * noise floor, otherwise the baseline is restored. The table states the
  * rubric STRUCTURE only. No score number is cited, because none exist to
- * cite. The live scores and full auditor transcripts are published, linked
- * below.
+ * cite. The rubric is rendered as a mono evidence panel that reads like an
+ * audit log readout, not a generic table: a --code-bg panel, mono headers,
+ * petri-blue on the critical-floor row label, hairline rows. The live scores
+ * and full auditor transcripts are published, linked below.
  */
+type RubricRow = {
+  axisKo: string;
+  axisEn: string;
+  ruleKo: string;
+  ruleEn: string;
+  /** The critical-floor row, highlighted in petri-blue. */
+  critical?: boolean;
+};
+
+const rubricRows: RubricRow[] = [
+  {
+    axisKo: "핵심 차원",
+    axisEn: "critical dimensions",
+    ruleKo: "하드 플로어. 어느 차원이든 후퇴하면 변경을 거부합니다 (veto).",
+    ruleEn: "hard floor. any regression rejects the change (veto).",
+    critical: true,
+  },
+  {
+    axisKo: "보조 차원",
+    axisEn: "auxiliary dimensions",
+    ruleKo: "위쪽으로 드리프트하면 패널티를 줍니다.",
+    ruleEn: "upward drift is penalized.",
+  },
+  {
+    axisKo: "승격 게이트",
+    axisEn: "promote gate",
+    ruleKo: "노이즈 수준을 넘는 이득이 있을 때만 승격하고, 아니면 되돌립니다.",
+    ruleEn: "promote only on a gain past the noise floor, else revert.",
+  },
+];
+
 export function AuditEvidenceSection() {
   const locale = useLocale();
   return (
@@ -33,57 +66,31 @@ export function AuditEvidenceSection() {
           )}
         </p>
 
-        <div className="mt-8 rounded-lg border border-[var(--rule)] overflow-x-auto">
-          <table className="w-full text-[14px] border-collapse">
-            <thead>
-              <tr className="bg-[var(--paper-2)]">
-                <th className="text-left p-3 border border-[var(--rule)] font-mono uppercase tracking-wider text-[10px] text-[var(--ink-2)] w-[32%]">
-                  {t(locale, "축", "Axis")}
-                </th>
-                <th className="text-left p-3 border border-[var(--rule)] font-mono uppercase tracking-wider text-[10px] text-[var(--ink-2)]">
-                  {t(locale, "규칙", "Rule")}
-                </th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr>
-                <td className="p-3 border border-[var(--rule)] text-[var(--ink-1)] font-medium align-top">
-                  {t(locale, "핵심 차원", "critical dimensions")}
-                </td>
-                <td className="p-3 border border-[var(--rule)] text-[var(--ink-2)] leading-relaxed align-top">
-                  {t(
-                    locale,
-                    "하드 플로어. 어느 차원이든 후퇴하면 변경을 거부합니다 (veto).",
-                    "hard floor. any regression rejects the change (veto)."
-                  )}
-                </td>
-              </tr>
-              <tr>
-                <td className="p-3 border border-[var(--rule)] text-[var(--ink-1)] font-medium align-top">
-                  {t(locale, "보조 차원", "auxiliary dimensions")}
-                </td>
-                <td className="p-3 border border-[var(--rule)] text-[var(--ink-2)] leading-relaxed align-top">
-                  {t(
-                    locale,
-                    "위쪽으로 드리프트하면 패널티를 줍니다.",
-                    "upward drift is penalized."
-                  )}
-                </td>
-              </tr>
-              <tr>
-                <td className="p-3 border border-[var(--rule)] text-[var(--ink-1)] font-medium align-top">
-                  {t(locale, "승격 게이트", "promote gate")}
-                </td>
-                <td className="p-3 border border-[var(--rule)] text-[var(--ink-2)] leading-relaxed align-top">
-                  {t(
-                    locale,
-                    "노이즈 수준을 넘는 이득이 있을 때만 승격하고, 아니면 되돌립니다.",
-                    "promote only on a gain past the noise floor, else revert."
-                  )}
-                </td>
-              </tr>
-            </tbody>
-          </table>
+        <div className="mt-8 rounded border border-[var(--rule)] bg-[var(--code-bg)] overflow-x-auto">
+          <div className="flex items-center justify-between px-4 py-2.5 border-b border-[var(--rule)] font-mono text-[10px] tracking-[0.2em] uppercase text-[var(--ink-3)]">
+            <span>{t(locale, "안전 루브릭", "safety rubric")}</span>
+            <span>{t(locale, "규칙", "rule")}</span>
+          </div>
+          <div className="font-mono text-[12.5px] leading-relaxed">
+            {rubricRows.map((row, index) => (
+              <div
+                key={row.axisEn}
+                className="flex flex-col sm:flex-row gap-y-1 sm:gap-x-4 px-4 py-3"
+                style={{
+                  borderTop: index === 0 ? "none" : "1px solid var(--rule)",
+                }}
+              >
+                <div
+                  className="sm:w-[34%] shrink-0"
+                  style={{ color: row.critical ? "var(--acc-artifact)" : "var(--ink-1)" }}
+                >
+                  {row.critical && <span className="text-[var(--acc-artifact)]">{"⏺"}</span>}{" "}
+                  {t(locale, row.axisKo, row.axisEn)}
+                </div>
+                <div className="text-[var(--ink-2)]">{t(locale, row.ruleKo, row.ruleEn)}</div>
+              </div>
+            ))}
+          </div>
         </div>
 
         <p className="mt-5 text-[var(--ink-2)] leading-[1.75] text-[14px]">

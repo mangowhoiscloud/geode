@@ -18,10 +18,9 @@ from pathlib import Path
 
 from autoresearch.bench_means import BENCH_DIM_WEIGHTS
 from autoresearch.train import (
-    FITNESS_ADMIRE_4AX,
-    FITNESS_BENCH_4AX,
-    FITNESS_DIM_4AX,
-    FITNESS_UX_4AX,
+    FITNESS_ADMIRE_3AX,
+    FITNESS_BENCH_3AX,
+    FITNESS_DIM_3AX,
 )
 
 ADR_PATH = (
@@ -37,43 +36,42 @@ def _adr_text() -> str:
 
 
 # ---------------------------------------------------------------------------
-# §Decision.2 — 4축 명세 invariants
+# §Decision.2 — 3축 명세 invariants (ux-removed 2026-05-30)
 # ---------------------------------------------------------------------------
 
 
-def test_adr012_decision2_header_says_4axis() -> None:
-    """§Decision.2 의 헤더가 "4축" 명시 (이전 "3축" 에서 amend).
+def test_adr012_decision2_header_says_3axis() -> None:
+    """§Decision.2 의 헤더가 "3축" 명시 (PR-MARGIN-FITNESS-SCALE 에서 ux
+    제거 후 4축 → 3축 amend).
 
-    Why: amendment 가 빠지면 doc 가 코드의 `FITNESS_BENCH_4AX` 명세와
+    Why: amendment 가 빠지면 doc 가 코드의 `FITNESS_*_3AX` 명세와
     drift — PR-G5b #1350 의 "X-driven" 거짓 claim 과 동형 anti-deception.
     """
     txt = _adr_text()
-    assert "### 2. Fitness 다축화 — 4축 multi-axis strict-reject ratchet" in txt
+    assert "### 2. Fitness 다축화 — 3축 multi-axis strict-reject ratchet" in txt
 
 
 def test_adr012_decision2_weights_match_code_constants() -> None:
-    """§Decision.2 의 "축별 권장 가중치" 줄 4 개 weight 가 코드 상수와 일치.
+    """§Decision.2 의 "축별 권장 가중치" 줄 3 개 weight 가 코드 상수와 일치.
 
-    코드 상수는 ``autoresearch/train.py:344-350`` 의 ``FITNESS_*_4AX``
-    (합 1.0 assert). 이 테스트가 ADR 측 표기 ``0.30 / 0.25 / 0.20 / 0.25``
+    코드 상수는 ``autoresearch/train.py`` 의 ``FITNESS_*_3AX``
+    (합 1.0 assert). 이 테스트가 ADR 측 표기 ``0.55 / 0.20 / 0.25``
     가 코드와 같은지 검증 — 둘 다 1.0 이라도 분배가 다르면 fail.
     """
     txt = _adr_text()
-    # 첫 amendment 의 가중치 줄
+    # 3축 가중치 줄 (ux-removed)
     pattern = (
         r"`dim_means`\s*(\d+\.\d+)\s*,\s*"
-        r"`ux_means`\s*(\d+\.\d+)\s*,\s*"
         r"`admire_means`\s*(\d+\.\d+)\s*,\s*"
         r"`bench_means`\s*(\d+\.\d+)"
     )
     match = re.search(pattern, txt)
-    assert match is not None, "ADR §Decision.2 의 4-axis 가중치 표기 미발견"
+    assert match is not None, "ADR §Decision.2 의 3-axis 가중치 표기 미발견"
     adr_weights = tuple(float(g) for g in match.groups())
     code_weights = (
-        FITNESS_DIM_4AX,
-        FITNESS_UX_4AX,
-        FITNESS_ADMIRE_4AX,
-        FITNESS_BENCH_4AX,
+        FITNESS_DIM_3AX,
+        FITNESS_ADMIRE_3AX,
+        FITNESS_BENCH_3AX,
     )
     assert adr_weights == code_weights, f"ADR weights {adr_weights} != code weights {code_weights}"
 

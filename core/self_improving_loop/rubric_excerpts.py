@@ -8,7 +8,7 @@ the agent of the rubric directives for those dims.
 
 **Why**: when the loop has been promoting baselines for a while, certain
 dimensions tend to *drift downward* (mutators are noisy — a prompt edit
-that boosts ``ux_means`` can erode ``input_hallucination`` etc.). The
+tuned for one dim can erode ``input_hallucination`` etc.). The
 agent's next turn benefits from an in-context reminder of "don't drop
 the ball on these dims" — frontier harnesses (Claude Code's
 ``<system-reminder>`` for behavior anchors, Codex CLI's

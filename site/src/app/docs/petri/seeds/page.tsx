@@ -175,14 +175,14 @@ function RunDetailBlock({ detail, locale }: { detail: RunDetail; locale: "ko" | 
   return (
     <details id={`run-${run.run_id}`} className="my-4 border border-white/10 rounded-md">
       <summary className="cursor-pointer px-4 py-3 hover:bg-white/[0.03] select-none">
-        <code className="text-[#A573E8]">{run.run_id}</code>
+        <code className="text-[var(--acc-artifact)]">{run.run_id}</code>
         <span className="ml-3 text-white/50 text-sm">{headerKo}</span>
         {/* GitHub Pages does not serve directory listings, so we link a
             concrete served file (state.json) inside the per-run directory
             instead of `<run_id>/`. PR-SEEDS-PER-RUN-LINK (2026-05-25). */}
         <a
           href={`${RAW_BUNDLE_URL}${run.run_id}/state.json`}
-          className="ml-3 text-white/40 text-xs hover:text-[#A573E8]"
+          className="ml-3 text-white/40 text-xs hover:text-[var(--acc-artifact)]"
         >
           [{rawLinkLabel} ↗]
         </a>
