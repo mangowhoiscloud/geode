@@ -46,7 +46,7 @@ function Sidebar() {
           // The Self-Improving Loop section carries the petri-blue signature
           // accent (see DESIGN.md §11.1); every other section stays muted.
           const sectionAccent =
-            section.id === "07-self-improving" ? "var(--acc-si)" : undefined;
+            section.id === "04-self-improving" ? "var(--acc-si)" : undefined;
           return (
           <div key={section.id}>
             <div
@@ -195,7 +195,7 @@ export function DocsShell({
   // section inherits the default amethyst artifact accent. --section-accent is
   // consumed by the eyebrow here and by the [data-doc-section] rules in docs.css.
   const sectionAccent =
-    currentSection?.id === "07-self-improving"
+    currentSection?.id === "04-self-improving"
       ? "var(--acc-si)"
       : "var(--acc-artifact)";
   return (

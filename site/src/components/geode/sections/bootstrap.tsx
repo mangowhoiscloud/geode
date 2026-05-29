@@ -6,12 +6,12 @@ import { ScrollReveal } from "../scroll-reveal";
 import { useLocale, t } from "../locale-context";
 
 const steps = [
-  { id: 1, name: "Hooks", detailKo: "HookSystem 81 events (P30→P200)", detailEn: "HookSystem 81 events (P30→P200)", subKo: "전 모듈이 의존하는 이벤트 버스. 가장 먼저 기동되어 이후 단계의 발화를 수신할 준비를 마친다", subEn: "Event bus that every module depends on. Brought up first so all subsequent stages can fire into a wired bus", color: "#4ECDC4" },
+  { id: 1, name: "Hooks", detailKo: "HookSystem (P30→P200)", detailEn: "HookSystem (P30→P200)", subKo: "전 모듈이 의존하는 이벤트 버스. 가장 먼저 기동되어 이후 단계의 발화를 수신할 준비를 마친다", subEn: "Event bus that every module depends on. Brought up first so all subsequent stages can fire into a wired bus", color: "#4ECDC4" },
   { id: 2, name: "Session", detailKo: "InMemory / Hybrid SessionStore", detailEn: "InMemory / Hybrid SessionStore", subKo: "SessionMode(REPL/IPC/DAEMON)에 따라 스토어 분기", subEn: "Store branches by SessionMode (REPL/IPC/DAEMON)", color: "#60A5FA" },
   { id: 3, name: "Memory", detailKo: "ProjectMemory + MonoLake + UserProfile + Journal", detailEn: "ProjectMemory + MonoLake + UserProfile + Journal", subKo: "5-Tier 메모리 계층 마운트. Session 스토어에 의존", subEn: "Mount 5-tier memory hierarchy. Depends on session store", color: "#F4B8C8" },
   { id: 4, name: "Config", detailKo: ".env hot-reload + constraint validation", detailEn: ".env hot-reload + constraint validation", subKo: "ConfigWatcher 시작. Hook으로 CONFIG_RELOADED 발화", subEn: "Start ConfigWatcher. Fires CONFIG_RELOADED via Hook", color: "#F5C542" },
   { id: 5, name: "TaskGraph", detailKo: "create_geode_task_graph() + HookBridge", detailEn: "create_geode_task_graph() + HookBridge", subKo: "Hook 이벤트와 Task 상태를 브릿지 연결", subEn: "Bridge Hook events to Task state transitions", color: "#818CF8" },
-  { id: 6, name: "Prompt", detailKo: "SkillRegistry discover + PromptAssembler", detailEn: "SkillRegistry discover + PromptAssembler", subKo: "41 스캐폴드 스킬을 5계층 디렉토리에서 디스커버하고 시스템 프롬프트를 조립한다. 결과는 frozen=True 의 AssembledPrompt", subEn: "Discover 41 scaffold skills across 5-tier directories and assemble the system prompt. Result is a frozen AssembledPrompt", color: "#C084FC" },
+  { id: 6, name: "Prompt", detailKo: "SkillRegistry discover + PromptAssembler", detailEn: "SkillRegistry discover + PromptAssembler", subKo: "스캐폴드 스킬을 5계층 디렉토리에서 디스커버하고 시스템 프롬프트를 조립한다. 결과는 frozen=True 의 AssembledPrompt", subEn: "Discover scaffold skills across 5-tier directories and assemble the system prompt. Result is a frozen AssembledPrompt", color: "#C084FC" },
   { id: 7, name: "Graph", detailKo: "StateGraph compile + checkpoint setup", detailEn: "StateGraph compile + checkpoint setup", subKo: "LangGraph 파이프라인 컴파일. 부트스트랩 완료", subEn: "Compile LangGraph pipeline. Bootstrap complete", color: "#34D399" },
 ];
 

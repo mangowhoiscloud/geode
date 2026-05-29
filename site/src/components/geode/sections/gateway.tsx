@@ -249,7 +249,7 @@ export function GatewaySection() {
                       <span className="w-2.5 h-2.5 rounded-full bg-[#28C840]/80" />
                       <span className="ml-2 text-[10px] text-white/20">geode</span>
                     </div>
-                    <pre className="text-white/40 whitespace-pre">{`  `}<span style={{color:"#9775c4"}}>╲╲</span><span className="text-white/80">{`( ◕ ᵕ ◕ )`}</span><span style={{color:"#9775c4"}}>╱╱</span>{`  `}<span style={{color:"#5f9ea0",fontWeight:700}}>GEODE</span>{` v0.65.0`}</pre>
+                    <pre className="text-white/40 whitespace-pre">{`  `}<span style={{color:"#9775c4"}}>╲╲</span><span className="text-white/80">{`( ◕ ᵕ ◕ )`}</span><span style={{color:"#9775c4"}}>╱╱</span>{`  `}<span style={{color:"#5f9ea0",fontWeight:700}}>GEODE</span></pre>
                     <pre className="text-white/25 whitespace-pre">{`                       claude-opus-4-7 · autonomous execution agent`}</pre>
                     <pre className="text-white/20 whitespace-pre">{`                       /Users/mango/workspace/resume`}</pre>
                     <pre className="text-white/25 whitespace-pre mt-2">{`  `}<span className="text-white/30">harness:</span>{` GEODE`}</pre>

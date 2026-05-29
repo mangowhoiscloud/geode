@@ -25,16 +25,16 @@ export default function Page() {
             <table>
               <thead><tr><th>패턴</th><th>Artifact (출시되는 OS)</th><th>Line (그것을 빌드하는 라인)</th></tr></thead>
               <tbody>
-                <tr><td>Hash ratchet</td><td>프롬프트 해시 18개 핀</td><td>CI 5단계 게이트</td></tr>
+                <tr><td>Hash ratchet</td><td>프롬프트 해시 핀</td><td>CI 5단계 게이트</td></tr>
                 <tr><td>Layered memory</td><td>5계층 ContextAssembler</td><td>4계층 CLAUDE.md (managed → user → project → local)</td></tr>
-                <tr><td>Hooks</td><td>81 runtime 이벤트</td><td>41 scaffold skills</td></tr>
-                <tr><td>Declarative guardrails</td><td>G1-G4 verification</td><td>CANNOT/CAN 22 규칙</td></tr>
-                <tr><td>Loop + termination</td><td>while(tool_use), 50 라운드, 5 종료 경로</td><td>8-Step workflow</td></tr>
+                <tr><td>Hooks</td><td>runtime 이벤트</td><td>scaffold skills</td></tr>
+                <tr><td>Declarative guardrails</td><td>G1-G4 verification</td><td>CANNOT/CAN 규칙</td></tr>
+                <tr><td>Loop + termination</td><td>while(tool_use), 50 라운드 cap, 종료 경로</td><td>8-Step workflow</td></tr>
               </tbody>
             </table>
 
             <h2>왜 중요한가</h2>
-            <p>같은 규율이 두 스코프에서 동일하게 작동한다는 사실은 GEODE의 설계가 <em>비유적 추상화</em>가 아니라 <em>실제 운영 가능한 패턴</em>임을 보여줍니다. 9행의 표 하나가 그 자기일치의 전부입니다.</p>
+            <p>같은 규율이 두 스코프에서 동일하게 작동한다는 사실은 GEODE의 설계가 <em>비유적 추상화</em>가 아니라 <em>실제 운영 가능한 패턴</em>임을 보여줍니다. 위 표 하나가 그 자기일치의 전부입니다.</p>
 
             <h2>비교: 다른 에이전트 시스템</h2>
             <ul>
@@ -58,16 +58,16 @@ export default function Page() {
             <table>
               <thead><tr><th>Pattern</th><th>Artifact (the OS that ships)</th><th>Line (the line that builds it)</th></tr></thead>
               <tbody>
-                <tr><td>Hash ratchet</td><td>20 prompt-hash pins</td><td>5-stage CI gate</td></tr>
+                <tr><td>Hash ratchet</td><td>prompt-hash pins</td><td>5-stage CI gate</td></tr>
                 <tr><td>Layered memory</td><td>5-tier ContextAssembler</td><td>4-tier CLAUDE.md (managed → user → project → local)</td></tr>
-                <tr><td>Hooks</td><td>81 runtime events</td><td>41 scaffold skills</td></tr>
-                <tr><td>Declarative guardrails</td><td>G1-G4 verification</td><td>CANNOT/CAN 22 rules</td></tr>
-                <tr><td>Loop + termination</td><td>while(tool_use), 50 rounds, 5 termination paths</td><td>8-step workflow</td></tr>
+                <tr><td>Hooks</td><td>runtime events</td><td>scaffold skills</td></tr>
+                <tr><td>Declarative guardrails</td><td>G1-G4 verification</td><td>CANNOT/CAN rules</td></tr>
+                <tr><td>Loop + termination</td><td>while(tool_use), 50-round cap, termination paths</td><td>8-step workflow</td></tr>
               </tbody>
             </table>
 
             <h2>Why it matters</h2>
-            <p>The fact that the same discipline operates identically at two scopes shows GEODE's design is not a <em>metaphor</em> but a <em>workable pattern</em>. A single table of nine rows is the entirety of that self-consistency.</p>
+            <p>The fact that the same discipline operates identically at two scopes shows GEODE's design is not a <em>metaphor</em> but a <em>workable pattern</em>. A single table is the entirety of that self-consistency.</p>
 
             <h2>Compared to other agent systems</h2>
             <ul>

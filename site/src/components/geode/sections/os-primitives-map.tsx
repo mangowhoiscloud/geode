@@ -6,13 +6,13 @@ const mappings = [
   {
     karpathy: "LLM (kernel/CPU)",
     geode: "Layer 1 — Model",
-    geodeDetail: "4 providers × 14 models",
+    geodeDetail: "Multiple providers and models",
     geodeFile: "core/llm/providers/{anthropic,openai,codex,glm}.py",
   },
   {
     karpathy: "Tools (browser, calc, python)",
     geode: "Layer 2 — Tools",
-    geodeDetail: "59 tools (5 always-loaded + 54 deferred)",
+    geodeDetail: "Always-loaded core + deferred tool loading",
     geodeFile: "core/tools/registry.py:215",
   },
   {
@@ -24,7 +24,7 @@ const mappings = [
   {
     karpathy: "Network",
     geode: "Layer 2 — MCP",
-    geodeDetail: "16 MCP servers + 25K token guard",
+    geodeDetail: "MCP servers + 25K token guard",
     geodeFile: "core/mcp/manager.py",
   },
   {
@@ -54,13 +54,13 @@ const mappings = [
   {
     karpathy: "(implicit) Shell + syscall ABI",
     geode: "Layer 3 — Slash commands + Tool protocol",
-    geodeDetail: "/model /stop /clean /uninstall /status + 59 tools",
+    geodeDetail: "/model /stop /clean /uninstall /status + tool protocol",
     geodeFile: "core/cli/commands.py:41 + core/tools/base.py:35",
   },
   {
     karpathy: "(implicit) IPC / dbus / journald",
     geode: "Layer 3 — Hooks + IPC events",
-    geodeDetail: "81 hook events + structured IPC",
+    geodeDetail: "Hook event bus + structured IPC",
     geodeFile: "core/hooks/system.py:28",
   },
 ];
@@ -80,8 +80,8 @@ export function OsPrimitivesMapSection() {
           <p className="mt-4 text-[var(--ink-2)] max-w-3xl leading-relaxed text-[15px]">
             {t(
               locale,
-              "카르파시가 제시한 LLM-OS 다이어그램의 각 구성요소를 GEODE의 실제 모듈에 매핑한 결과입니다. 13개 구성요소가 모두 코드베이스에 존재하며, 거의 일대일 대응 관계를 보입니다. 운영체제 등급의 시스템이라는 표현이 비유로 끝나지 않는 근거입니다.",
-              "Each component from Karpathy's LLM-OS diagram is mapped here to an actual module in GEODE. All 13 components exist in the codebase with near one-to-one correspondence. This is the basis for treating “OS-grade system” as more than a metaphor."
+              "카르파시가 제시한 LLM-OS 다이어그램의 각 구성요소를 GEODE의 실제 모듈에 매핑한 결과입니다. 다이어그램의 구성요소가 모두 코드베이스에 존재하며, 거의 일대일 대응 관계를 보입니다. 운영체제 등급의 시스템이라는 표현이 비유로 끝나지 않는 근거입니다.",
+              "Each component from Karpathy's LLM-OS diagram is mapped here to an actual module in GEODE. Every component from the diagram exists in the codebase with near one-to-one correspondence. This is the basis for treating “OS-grade system” as more than a metaphor."
             )}
           </p>
         </div>

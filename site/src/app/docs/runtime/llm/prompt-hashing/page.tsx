@@ -8,8 +8,8 @@ export default function Page() {
       slug="runtime/llm/prompt-hashing"
       title="Prompt Hashing"
       titleKo="프롬프트 해싱"
-      summary="A SHA-256 hash ratchet (Karpathy P4) that breaks CI on unintended prompt drift. 18 templates pinned, re-pin workflow documented."
-      summaryKo="의도치 않은 prompt drift 발생 시 CI를 중단시키는 SHA-256 해시 잠금장치 (Karpathy P4). 18개 템플릿이 핀으로 고정되고, 재핀(re-pin) 절차가 문서화되어 있습니다."
+      summary="A SHA-256 hash ratchet (Karpathy P4) that breaks CI on unintended prompt drift. Core templates pinned, re-pin workflow documented."
+      summaryKo="의도치 않은 prompt drift 발생 시 CI를 중단시키는 SHA-256 해시 잠금장치 (Karpathy P4). 핵심 템플릿이 핀으로 고정되고, 재핀(re-pin) 절차가 문서화되어 있습니다."
     >
       <Bi
         ko={
@@ -25,7 +25,7 @@ def _hash_axes(data) -> str:
         json.dumps(data, sort_keys=True).encode()
     ).hexdigest()[:12]`}</pre>
             <p>
-              12자리 hex = 48비트. 18개 prompt라는 닫힌 집합에서 충돌 확률은
+              12자리 hex = 48비트. 닫힌 prompt 집합에서 충돌 확률은
               무시할 수 있습니다. 목표는 탐지이지 암호학적 보안이 아닙니다.
             </p>
             <p>
@@ -33,7 +33,7 @@ def _hash_axes(data) -> str:
               결정적이도록 <code>sort_keys=True</code>를 사용합니다.
             </p>
 
-            <h2>18개의 고정 엔트리</h2>
+            <h2>고정 엔트리</h2>
             <pre>{`PROMPT_VERSIONS / _PINNED_HASHES (sorted)
 
   AGENTIC_SUFFIX             5630f3a61683
@@ -55,7 +55,7 @@ def _hash_axes(data) -> str:
   SYNTHESIZER_TOOLS_SUFFIX   1fd89d3ece5a
   SYNTHESIZER_USER           e0bb4afab940`}</pre>
             <p>
-              두 dict 모두 정확히 18개 key를 가지며, key set이 동일합니다.
+              두 dict 모두 동일한 key set을 가집니다.
             </p>
 
             <h2>verify_prompt_integrity</h2>
@@ -142,7 +142,7 @@ def _hash_axes(data) -> str:
     ).hexdigest()[:12]`}</pre>
             <p>
               Twelve hex characters = 48 bits. Collision probability is negligible
-              for the closed set of 18 prompts; the goal is detection, not
+              for the closed set of prompts; the goal is detection, not
               cryptographic security.
             </p>
             <p>
@@ -151,7 +151,7 @@ def _hash_axes(data) -> str:
               dict orderings.
             </p>
 
-            <h2>The 18 pinned entries</h2>
+            <h2>The pinned entries</h2>
             <pre>{`PROMPT_VERSIONS / _PINNED_HASHES (sorted)
 
   AGENTIC_SUFFIX             5630f3a61683
@@ -173,7 +173,7 @@ def _hash_axes(data) -> str:
   SYNTHESIZER_TOOLS_SUFFIX   1fd89d3ece5a
   SYNTHESIZER_USER           e0bb4afab940`}</pre>
             <p>
-              Both dictionaries have exactly 18 keys; their key sets are equal.
+              Both dictionaries share an identical key set.
             </p>
 
             <h2>verify_prompt_integrity</h2>

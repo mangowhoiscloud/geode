@@ -11,10 +11,10 @@ export default function Page() {
       summary="GEODE's architecture splits into four layers, each with distinct responsibilities and replaceability boundaries."
       summaryKo="GEODE 아키텍처는 책임과 교체 경계가 분리된 4개 계층으로 구성됩니다."
     >
-      <pre>{`Layer 4 — Agent      AgenticLoop, while(tool_use), error recovery
-Layer 3 — Harness    CLI, Gateway, IPC, Hooks, Lifecycle, UI
-Layer 2 — Runtime    LLM router, providers, prompts, tools, MCP, memory, skills
-Layer 1 — Model      Anthropic / OpenAI / Codex Plus / GLM (3 chains, 9 models)`}</pre>
+      <pre>{`Layer 4, Agent      AgenticLoop, while(tool_use), error recovery
+Layer 3, Harness    CLI, Gateway, IPC, Hooks, Lifecycle, UI
+Layer 2, Runtime    LLM router, providers, prompts, tools, MCP, memory, skills
+Layer 1, Model      Anthropic / OpenAI / Codex Plus / GLM (provider fallback chains)`}</pre>
 
       <Bi
         ko={
@@ -40,11 +40,11 @@ Layer 1 — Model      Anthropic / OpenAI / Codex Plus / GLM (3 chains, 9 models
             </p>
             <p>주요 서브시스템 (자세한 내역은 <a href="/geode/docs/architecture/system-index">시스템 색인</a> 참조):</p>
             <ul>
-              <li><code>core/llm/</code>. 41 모듈, 프롬프트 + 프로바이더 라우터</li>
-              <li><code>core/tools/</code>. 17 모듈, 59 도구, 지연 로딩 (5 always-loaded)</li>
-              <li><code>core/mcp/</code>. 17 모듈, 25K 토큰 가드</li>
-              <li><code>core/memory/</code>. 14 모듈, 5계층 컨텍스트</li>
-              <li><code>core/hooks/</code>. 10 모듈, 81 라이프사이클 이벤트</li>
+              <li><code>core/llm/</code>. 프롬프트 + 프로바이더 라우터</li>
+              <li><code>core/tools/</code>. 도구 레지스트리, 지연 로딩 (상시 로드 티어 포함)</li>
+              <li><code>core/mcp/</code>. 25K 토큰 결과 가드</li>
+              <li><code>core/memory/</code>. 5계층 컨텍스트</li>
+              <li><code>core/hooks/</code>. 라이프사이클 이벤트</li>
             </ul>
 
             <h2>Layer 3 — Harness</h2>
@@ -95,11 +95,11 @@ Layer 1 — Model      Anthropic / OpenAI / Codex Plus / GLM (3 chains, 9 models
             </p>
             <p>Notable subsystems (see <a href="/geode/docs/architecture/system-index">System Index</a>):</p>
             <ul>
-              <li><code>core/llm/</code>. 41 modules, the prompt + provider router</li>
-              <li><code>core/tools/</code>. 17 modules, 59 tools, deferred loading (5 always-loaded)</li>
-              <li><code>core/mcp/</code>. 17 modules, 25K token guard</li>
-              <li><code>core/memory/</code>. 14 modules, 5-tier context</li>
-              <li><code>core/hooks/</code>. 10 modules, 81 lifecycle events</li>
+              <li><code>core/llm/</code>. the prompt + provider router</li>
+              <li><code>core/tools/</code>. tool registry, deferred loading (with an always-loaded tier)</li>
+              <li><code>core/mcp/</code>. 25K token result guard</li>
+              <li><code>core/memory/</code>. 5-tier context</li>
+              <li><code>core/hooks/</code>. lifecycle events</li>
             </ul>
 
             <h2>Layer 3 — Harness</h2>

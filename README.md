@@ -4,7 +4,7 @@
 
 <p align="center">
   <img src="https://img.shields.io/badge/while(tool__use)-agentic%20loop-1e293b?style=flat-square" alt="while(tool_use)">
-  <img src="https://img.shields.io/badge/57%20agentic%20tools-MCP%20native-1e293b?style=flat-square" alt="57 Agentic Tools">
+  <img src="https://img.shields.io/badge/self--improving-non--parametric-1e293b?style=flat-square" alt="Self-improving (non-parametric)">
   <img src="https://img.shields.io/badge/LangGraph-StateGraph-1e293b?style=flat-square" alt="LangGraph">
   <a href="https://github.com/mangowhoiscloud/geode/actions"><img src="https://img.shields.io/github/actions/workflow/status/mangowhoiscloud/geode/ci.yml?style=flat-square&label=ci&logo=github&logoColor=white" alt="CI"></a>
 </p>
@@ -13,22 +13,39 @@
   <img src="https://img.shields.io/badge/Anthropic-Opus_4.7-cc785c?style=flat-square&logo=anthropic&logoColor=white" alt="Anthropic Opus 4.7">
   <img src="https://img.shields.io/badge/OpenAI-GPT--5.5-412991?style=flat-square&logo=openai&logoColor=white" alt="OpenAI GPT-5.5">
   <img src="https://img.shields.io/badge/ZhipuAI-GLM--5.1-1a73e8?style=flat-square" alt="ZhipuAI GLM-5.1">
-  <img src="https://img.shields.io/badge/+10_fallback-models-555?style=flat-square" alt="+10 fallback models">
 </p>
 
 <p align="center">
+  <a href="https://mangowhoiscloud.github.io/geode/">Site</a>
+  ·
   <a href="https://mangowhoiscloud.github.io/geode/docs">Docs</a>
+  ·
+  <a href="https://mangowhoiscloud.github.io/geode/self-improving/">Self-improving hub</a>
   ·
   <a href="README.ko.md">한국어</a>
 </p>
 
-# GEODE v0.99.87 — Long-running Autonomous Execution Harness
+# GEODE v0.99.87 — A Self-improving Autonomous Execution Agent
 
-A general-purpose autonomous agent for exploratory research and signal prediction. You ask in plain language. GEODE plans, calls tools, and reports — for one prompt or a long-running session.
+A general-purpose autonomous agent that also rewrites the scaffolding it runs on. You ask in plain language; GEODE plans, calls tools, and reports, for one prompt or a long-running session. Underneath, an outer loop keeps tuning the system that runs your tasks.
 
 > **Have a ChatGPT Plus, Pro, Business, Edu, or Enterprise plan?** Route GEODE through that subscription. No API key. [Subscription setup ↓](#path-a--chatgpt-subscription-the-recommended-path-for-openai-users)
 >
 > **Claude Pro / Max?** Anthropic's terms (effective 2026-01-09) forbid third-party harness from using the Claude Code OAuth token, so GEODE doesn't read it. Use an Anthropic API key instead (Path B). Your Console account is the same; new accounts get $5 free credit.
+
+---
+
+## The self-improving loop
+
+GEODE is a self-evolving agent on the **non-parametric branch**: it improves by mutating its own scaffolding (system prompt, tool policy, task decomposition, reflection, skills, agent contracts, tool descriptions, hyperparameters), never the model weights. Fitness is an adversarial **safety** audit, not a capability benchmark: Petri-grade, multi-dimensional, with a hard floor on critical safety dimensions, so any change that regresses one is rejected. The test set itself co-evolves, a co-scientist pipeline grows adversarial seeds alongside the agent.
+
+Selection is an honest **(1+1) champion chain**: mutate, audit, promote on a real gain, otherwise revert. Two loops run together. An inner agentic loop runs a task; an outer loop tunes the system that runs tasks. The loop lineage (Promptbreeder, STOP, ADAS, DGM, GEPA) is well established. GEODE re-aims it from capability to safety, from weights to scaffolding, on co-evolved adversarial seeds. A recombination occupying an empty cell, not a new primitive.
+
+- **[The closed loop →](https://mangowhoiscloud.github.io/geode/docs/capabilities/autoresearch)** — autoresearch, mutate / audit / promote / revert end to end
+- **[Two loops →](https://mangowhoiscloud.github.io/geode/docs/concepts/two-loops)** — the inner-vs-outer mental model
+- **[Lineage and positioning →](https://mangowhoiscloud.github.io/geode/docs/capabilities/lineage)** — where GEODE sits among prior self-improving loops
+- **[Self-improving hub →](https://mangowhoiscloud.github.io/geode/self-improving/)** — live generations, mutations, and promotion decisions
+- **[Petri bundle →](https://mangowhoiscloud.github.io/geode/self-improving/petri-bundle/)** — the live safety-audit transcript viewer
 
 ---
 
@@ -327,8 +344,9 @@ geode update                  # source checkout
 
 | Feature | What it does |
 |---------|-------------|
-| **`while(tool_use)` loop** | The single primitive every behavior is built on. Sub-agents, plans, batches — all instances of the same loop |
-| **57 agentic tools + MCP catalog** | Web search, file ops, scheduling, memory, calendar, Slack/Discord, Korean job-board search, plus the Anthropic-published MCP registry (200 servers, cached at `~/.geode/mcp/registry-cache.json`). Auto-installed on first use |
+| **`while(tool_use)` loop** | The single primitive every behavior is built on. Sub-agents, plans, batches are all instances of the same loop |
+| **Self-improving outer loop** | Mutates GEODE's own scaffolding, audits each change against an adversarial safety rubric, and promotes only on a real gain. See [the closed loop](https://mangowhoiscloud.github.io/geode/docs/capabilities/autoresearch) |
+| **Agentic tools + MCP catalog** | Web search, file ops, scheduling, memory, calendar, Slack/Discord, Korean job-board search, plus the Anthropic-published MCP registry (cached at `~/.geode/mcp/registry-cache.json`). Auto-installed on first use |
 | **3-provider failover** | Anthropic + OpenAI + ZhipuAI. Subscription OAuth (Codex) auto-detected; pay-as-you-go API keys also work; failover is in-provider only (no surprise cross-vendor charges, v0.53.0 governance) |
 | **5-tier memory** | SOUL (0) → User Profile (0.5) → Organization (1) → Project (2) → Session (3). Persistent, survives daemon restarts |
 | **Plan-mode + audit trail** | `create_plan` + `approve_plan` + `list_plans` for multi-step work. Disk-persistent (`.geode/plans.json`), survives restarts |
@@ -340,18 +358,18 @@ geode update                  # source checkout
 
 ## How GEODE compares
 
-Grounded against the actual state of each frontier harness as of May 2026: **Claude Code v2.1.72** (build 2026-03-09), **Codex CLI v0.130.0** (released 2026-05-08), **OpenClaw v2026.5.12-beta.1**, **GEODE v0.99.87**. Marker legend: ✅✅ leader on the axis · ✅ supported · ⚠️ partial / qualified · ❌ absent · n/a not applicable.
+A qualitative read on where GEODE sits next to the frontier harnesses (Claude Code, Codex CLI, OpenClaw) as of May 2026. This is about posture, not benchmarks. Marker legend: ✅✅ leader on the axis · ✅ supported · ⚠️ partial / qualified · ❌ absent · n/a not applicable.
 
 <details>
 <summary><strong>A. Runtime posture</strong> — how the agent stays alive</summary>
 
 | | Claude Code | Codex CLI | OpenClaw | **GEODE** |
 |---|---|---|---|---|
-| Always-on daemon | ❌ per-invocation | ⚠️ opt-in `codex remote-control` (v0.130+) | ✅✅ launchd / systemd control plane | ✅ `geode serve` daemon |
+| Always-on daemon | ❌ per-invocation | ⚠️ opt-in `codex remote-control` | ✅✅ launchd / systemd control plane | ✅ `geode serve` daemon |
 | Native scheduler (cron) | ❌ (claude.ai web-only) | ❌ (Codex Cloud Automations only — [issue #8317](https://github.com/openai/codex/issues/8317)) | ✅ `cron add/edit/list` CLI | ✅ cron + event triggers |
-| Thin CLI ↔ daemon IPC | ❌ | ⚠️ remote-control server mode | ✅ Gateway / Agent split | ✅ IPC server (v0.48+) |
-| Sub-agent isolation | ✅ Agent tool + `run_in_background` | ✅ `multi_agent` feature, default `max_threads=6` | ✅✅ Lane Queue + Session bindings | ✅ Lane + depth / cost guard |
-| Session resume / fork | ✅ JSONL transcripts | ✅ `/resume` + `/fork` slash commands | ✅ Session bindings with TTL | ✅ session resume (v0.21+) |
+| Thin CLI ↔ daemon IPC | ❌ | ⚠️ remote-control server mode | ✅ Gateway / Agent split | ✅ IPC server |
+| Sub-agent isolation | ✅ Agent tool + `run_in_background` | ✅ `multi_agent` feature | ✅✅ Lane Queue + Session bindings | ✅ Lane + depth / cost guard |
+| Session resume / fork | ✅ JSONL transcripts | ✅ `/resume` + `/fork` slash commands | ✅ Session bindings with TTL | ✅ session resume |
 
 </details>
 
@@ -361,10 +379,10 @@ Grounded against the actual state of each frontier harness as of May 2026: **Cla
 | | Claude Code | Codex CLI | OpenClaw | **GEODE** |
 |---|---|---|---|---|
 | Slack | ❌ (MCP plugin possible) | ⚠️ Codex Cloud only, not CLI | ✅ Socket Mode, first-class | ✅ Socket Mode, first-class |
-| Discord / Telegram / other chat | ❌ | ❌ | ✅✅ 23+ channels (Discord, Telegram, WhatsApp, Signal, iMessage, Teams, Matrix, Feishu, LINE, ...) | ✅ Discord + Telegram pollers |
+| Discord / Telegram / other chat | ❌ | ❌ | ✅✅ many channels (Discord, Telegram, WhatsApp, Signal, iMessage, Teams, Matrix, Feishu, LINE, ...) | ✅ Discord + Telegram pollers |
 | IDE plugin | ❌ (Chrome MCP extension only) | ✅✅ VS Code · JetBrains · Cursor · Windsurf | ❌ | ❌ |
 | Web UI | ✅ claude.ai/code | ✅ Codex Cloud | ⚠️ WebChat plugin | ❌ (docs site only) |
-| MCP server catalog | ✅ first-class | ✅ first-class | ✅ first-class | ✅ Anthropic-published registry (200 servers, cached at `~/.geode/mcp/registry-cache.json`) |
+| MCP server catalog | ✅ first-class | ✅ first-class | ✅ first-class | ✅ Anthropic-published registry (cached at `~/.geode/mcp/registry-cache.json`) |
 
 </details>
 
@@ -375,9 +393,9 @@ Grounded against the actual state of each frontier harness as of May 2026: **Cla
 |---|---|---|---|---|
 | Multi-provider failover | ✅ Anthropic + AWS Bedrock + Google Vertex (env routing) | ✅✅ OpenAI + Azure + Bedrock + Ollama + any OpenAI-compatible (`model_providers` config) | ✅ `auth.order` cooldown-based auto-failover | ✅ Anthropic + OpenAI + ZhipuAI, in-provider only |
 | Subscription OAuth tier | ✅ Pro / Max | ✅✅ Plus · Pro · Business · Edu · Enterprise | ⚠️ OpenAI + Gemini onboarding | ⚠️ ChatGPT only (Plus / Pro / Business / Edu / Enterprise) — Anthropic ToS (2026-01-09) blocks third-party Claude OAuth |
-| Token / cost budget guard | ⚠️ cache token tracking only | ⚠️ retry caps (`request_max_retries`) | ⚠️ partial | ✅ **200K token guard** (v0.40), explicit budget governance |
-| Context overflow handling | ✅ autocompaction | ⚠️ skills progressive disclosure (~2% budget) + fork | ✅ compaction + transcript streaming (252 MB → 27 MB peak) | ✅✅ **5-layer context overflow** (v0.39+) |
-| Cross-vendor failover policy | ❌ | ⚠️ manual `model_providers` switch | ✅ automatic | ❌ by design (v0.53 governance — no surprise cross-vendor charges) |
+| Token / cost budget guard | ⚠️ cache token tracking only | ⚠️ retry caps (`request_max_retries`) | ⚠️ partial | ✅ explicit token + cost budget governance |
+| Context overflow handling | ✅ autocompaction | ⚠️ skills progressive disclosure + fork | ✅ compaction + transcript streaming | ✅✅ layered context-overflow handling |
+| Cross-vendor failover policy | ❌ | ⚠️ manual `model_providers` switch | ✅ automatic | ❌ by design (no surprise cross-vendor charges) |
 
 </details>
 
@@ -386,11 +404,11 @@ Grounded against the actual state of each frontier harness as of May 2026: **Cla
 
 | | Claude Code | Codex CLI | OpenClaw | **GEODE** |
 |---|---|---|---|---|
-| Memory tiers | ⚠️ 3 (user / project / local settings merge) | ✅ hierarchical AGENTS.md (global `~/.codex/` + repo + nested dirs) | ⚠️ session-scoped | ✅✅ **5-tier** (SOUL · User · Org · Project · Session) |
+| Memory tiers | ⚠️ user / project / local settings merge | ✅ hierarchical AGENTS.md (global `~/.codex/` + repo + nested dirs) | ⚠️ session-scoped | ✅✅ **multi-tier** (SOUL · User · Org · Project · Session) |
 | Disk-persistent plans | ✅ TodoWrite persistence | ⚠️ via resumable threads | ✅ task registry | ✅ `.geode/plans.json` |
-| Permission / sandbox layers | ✅ 3-mode (default / auto / bypass) + Confirmation UI | ✅ `sandbox_mode` 3-level (read-only / workspace-write / danger-full-access) | ✅✅ Policy Chain (40+ audit surfaces) | ✅ Policy Chain + tool gates |
+| Permission / sandbox layers | ✅ default / auto / bypass modes + Confirmation UI | ✅ `sandbox_mode` (read-only / workspace-write / danger-full-access) | ✅✅ Policy Chain across many audit surfaces | ✅ Policy Chain + tool gates |
 | Multi-layer guardrails | ⚠️ permission + hooks | ⚠️ hooks + sandbox | ✅ `audit.runtime` engine | ✅✅ **core verification** (G1-G4 + Cross-LLM Krippendorff α ≥ 0.67 + Rights Risk, plugin extension points for bias/calibration) |
-| Hook event count | ⚠️ 5 (PreToolUse / PostToolUse / SessionStart / Notification / ConfigChange) | ⚠️ 6 (SessionStart / UserPromptSubmit / PreToolUse / PostToolUse / PermissionRequest / Stop) | ✅ 5 event types · many bundled handlers | ✅✅ **69 events** (`docs/architecture/hook-system.md`) |
+| Hook events | ⚠️ PreToolUse / PostToolUse / SessionStart / Notification / ConfigChange | ⚠️ SessionStart / UserPromptSubmit / PreToolUse / PostToolUse / PermissionRequest / Stop | ✅ several event types · many bundled handlers | ✅✅ broad event surface (`docs/architecture/hook-system.md`) |
 
 </details>
 
@@ -399,19 +417,20 @@ Grounded against the actual state of each frontier harness as of May 2026: **Cla
 
 | | Claude Code | Codex CLI | OpenClaw | **GEODE** |
 |---|---|---|---|---|
-| Plugin / extension surfaces | ✅ manifest + marketplace (user / project / local scopes) | ✅ `/plugins` slash command + plugin sharing (v0.130+) | ✅✅ 4 extension points (Channel · Tool · Skill · Hook) via `@openclaw/plugin-sdk` | ✅ runtime SkillRegistry + MCP/tool surfaces |
-| Skill system | ✅ Deferred tools + SKILL.md manifest | ✅ SKILL.md + progressive disclosure (`.agents/skills/`) | ✅ skill filter + archive upload | ✅ runtime `SkillRegistry` (14 skills across bundled/global/project scopes) |
+| Plugin / extension surfaces | ✅ manifest + marketplace (user / project / local scopes) | ✅ `/plugins` slash command + plugin sharing | ✅✅ extension points (Channel · Tool · Skill · Hook) via `@openclaw/plugin-sdk` | ✅ runtime SkillRegistry + MCP/tool surfaces |
+| Skill system | ✅ Deferred tools + SKILL.md manifest | ✅ SKILL.md + progressive disclosure (`.agents/skills/`) | ✅ skill filter + archive upload | ✅ runtime `SkillRegistry` across bundled/global/project scopes |
 | **Swappable pipeline DAG** | ❌ | ❌ | ⚠️ flows (channel-setup / doctor / provider — not a DAG abstraction) | ⚠️ external package responsibility; GEODE core no longer ships a pipeline port |
-| Trace / replay / Run Log | ✅ `tengu_*` telemetry + `/insights` HTML | ⚠️ `/status` + `/debug-config` only | ✅ ACP session lineage + Task Registry | ✅ Native RunLog + Petri eval integration (v0.90+) |
+| Trace / replay / Run Log | ✅ `tengu_*` telemetry + `/insights` HTML | ⚠️ `/status` + `/debug-config` only | ✅ ACP session lineage + Task Registry | ✅ Native RunLog + Petri eval integration |
+| Self-improving safety loop | ❌ | ❌ | ❌ | ✅✅ outer loop: scaffold mutation + adversarial safety audit + (1+1) promote/revert |
 | Cross-LLM verification | ❌ | ❌ | ❌ | ✅✅ Krippendorff α ≥ 0.67 inter-rater agreement gate |
 
 </details>
 
 ---
 
-Use **Claude Code** or **Codex** for short coding sessions inside an IDE or via cloud sync. Use **OpenClaw** to run a multi-channel chat agent fleet across 23+ messaging surfaces. Use **GEODE** when an agent must work over hours or days with multi-tier memory, multi-layer verification, scheduling, and daemon-backed tool execution.
+Use **Claude Code** or **Codex** for short coding sessions inside an IDE or via cloud sync. Use **OpenClaw** to run a multi-channel chat agent fleet across many messaging surfaces. Use **GEODE** when an agent must work over hours or days with multi-tier memory, multi-layer verification, scheduling, and daemon-backed tool execution, and when you want that agent to keep improving its own scaffolding under a safety floor.
 
-> Sources — Claude Code v2.1.72 (build 2026-03-09, reverse-engineered reference). Codex CLI v0.130.0 release notes + [developers.openai.com/codex/config-reference](https://developers.openai.com/codex/config-reference) + [github.com/openai/codex](https://github.com/openai/codex). OpenClaw v2026.5.12-beta.1 (1.8M LoC TypeScript). GEODE — `CHANGELOG.md` (`v0.39` context overflow, `v0.40` 200K guard, `v0.85` 4-layer stack, `v0.90` Petri observability).
+> Sources — Claude Code (reverse-engineered reference). Codex CLI release notes + [developers.openai.com/codex/config-reference](https://developers.openai.com/codex/config-reference) + [github.com/openai/codex](https://github.com/openai/codex). OpenClaw (TypeScript). GEODE — `CHANGELOG.md` and the [self-improving hub](https://mangowhoiscloud.github.io/geode/self-improving/).
 
 ---
 
@@ -420,15 +439,15 @@ Use **Claude Code** or **Codex** for short coding sessions inside an IDE or via 
 
 GEODE has two control layers:
 
-- **Scaffold (production)** — Claude Code + `CLAUDE.md` + development Skills + CI Hooks. The external harness that produces GEODE's code and guarantees quality.
-- **GEODE Runtime (agent)** — `while(tool_use)` loop + 57 agentic tools + native ToolRegistry + runtime Skills + 69 runtime Hooks + 5-Layer Verification. The internal system of the autonomously executing agent.
+- **Scaffold (production)** — Claude Code + `CLAUDE.md` + development Skills + CI Hooks. The external harness that produces GEODE's code and guarantees quality. The self-improving outer loop also mutates parts of this scaffold.
+- **GEODE Runtime (agent)** — `while(tool_use)` loop + agentic tools + native ToolRegistry + runtime Skills + runtime Hooks + multi-layer Verification. The internal system of the autonomously executing agent.
 
 4-Layer Stack (Model → Runtime → Harness → Agent) + Sub-Agent System + 5-Tier Memory.
 
 ```mermaid
 graph LR
     AG["Agent<br/>AgenticLoop, SubAgent<br/>CLIPoller, Gateway"] --> HA["Harness<br/>SessionLane, PolicyChain<br/>TaskGraph, HookSystem"]
-    HA --> RT["Runtime<br/>Agentic tools(53), MCP catalog<br/>Memory, Skills"]
+    HA --> RT["Runtime<br/>Agentic tools, MCP catalog<br/>Memory, Skills"]
     RT --> MD["Model<br/>Claude, OpenAI, GLM"]
 
     style AG fill:#1e293b,stroke:#3b82f6,color:#e2e8f0
@@ -440,8 +459,8 @@ graph LR
 | Layer | Core | Entry points |
 |-------|------|--------------|
 | **Agent** | AgenticLoop, SubAgentManager, CLIPoller, Gateway | `core/cli/`, `core/gateway/` |
-| **Harness** | SessionLane, LaneQueue(global:8), PolicyChain, TaskGraph, HookSystem(69) | `core/orchestration/`, `core/hooks/` |
-| **Runtime** | Agentic tools(53), native ToolRegistry(16), MCP Catalog (200 via Anthropic registry plus project-configured servers), runtime Skills, Memory(5-Tier), PlanStore | `core/tools/`, `core/memory/`, `core/orchestration/plan_store.py` |
+| **Harness** | SessionLane, LaneQueue, PolicyChain, TaskGraph, HookSystem | `core/orchestration/`, `core/hooks/` |
+| **Runtime** | Agentic tools, native ToolRegistry, MCP Catalog (Anthropic registry plus project-configured servers), runtime Skills, Memory (multi-tier), PlanStore | `core/tools/`, `core/memory/`, `core/orchestration/plan_store.py` |
 | **Model** | ClaudeAdapter, OpenAIAdapter, CodexAdapter, GLMAdapter | `core/llm/` |
 
 `.geode/` — agent context lifecycle (5-tier hierarchy assembled into every LLM call):
@@ -472,13 +491,13 @@ Tier 3    Session         In-memory — conversation, tool results, plans
 <details>
 <summary><strong>Development workflow (Scaffold)</strong></summary>
 
-CANNOT (guardrails) before CAN (freedom). 7-step workflow + quality gates. CI ratchet — 5 jobs (pytest, mypy, ruff, import-order, test-count) must pass before any merge. Test count is monotonically increasing only.
+CANNOT (guardrails) before CAN (freedom). A 7-step workflow plus quality gates. The CI ratchet (pytest, mypy, ruff, import-order, test-count) must pass before any merge. Test count is monotonically increasing only.
 
 | Gate | Command | Target |
 |------|---------|--------|
 | Lint | `uv run ruff check core/ tests/` | 0 errors |
 | Type | `uv run mypy core/` | 0 errors |
-| Test | `uv run pytest tests/ -q` | 4700+ pass |
+| Test | `uv run pytest tests/ -q` | all pass |
 
 See [CONTRIBUTING.md](CONTRIBUTING.md) and [docs/workflow.md](docs/workflow.md).
 

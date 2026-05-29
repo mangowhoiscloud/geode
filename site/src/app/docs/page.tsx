@@ -1,6 +1,5 @@
 "use client";
 
-import Link from "next/link";
 import { DocsShell, Bi } from "@/components/geode-docs/docs-shell";
 import { DOCS_SITEMAP } from "@/lib/geode-docs/sitemap";
 import { useLocale, t } from "@/components/geode/locale-context";
@@ -8,9 +7,9 @@ import { useLocale, t } from "@/components/geode/locale-context";
 export default function DocsIndex() {
   const locale = useLocale();
   const summaryEn =
-    "A general-purpose autonomous execution agent built on LangGraph. A long-running harness for research, analysis, automation, and scheduling.";
+    "A self-evolving autonomous agent. An inner loop runs a task; an outer loop rewrites the system that runs tasks, kept honest by an adversarial safety audit.";
   const summaryKo =
-    "LangGraph 기반 범용 자율 실행 에이전트. 연구, 분석, 자동화, 스케줄링을 스스로 수행하는 장기 실행 하네스.";
+    "스스로 진화하는 자율 에이전트. 안쪽 루프가 작업을 처리하고, 바깥쪽 루프가 작업을 처리하는 시스템 자체를 고쳐 씁니다. 그 과정을 적대적 안전 감사가 검증합니다.";
   return (
     <DocsShell
       slug=""
@@ -24,10 +23,18 @@ export default function DocsIndex() {
           <>
             <h2>GEODE 는 무엇인가</h2>
             <p>
-              GEODE 는 LangGraph 위에 올린 <strong>장기 실행 자율 실행
-              하네스</strong>입니다. 4 계층 (Model · Runtime · Harness · Agent)
-              으로 연구, 분석, 자동화, 스케줄링을 스스로 수행하고,
-              <code>geode serve</code> 데몬 + 메신저 게이트웨이로 상주합니다.
+              GEODE 는 <strong>비-파라메트릭 계열의 자기 진화 에이전트</strong>
+              입니다. 모델 가중치는 절대 건드리지 않습니다. 대신 자기 자신을
+              둘러싼 스캐폴드, 즉 시스템 프롬프트, 도구 정책, 작업 분해, 반성
+              루프, 스킬 카탈로그, 에이전트 계약, 도구 설명, 하이퍼파라미터를
+              직접 바꿔 나아집니다.
+            </p>
+            <p>
+              변화의 적합도는 능력 벤치마크가 아니라 <strong>적대적 안전
+              감사</strong>로 측정합니다. Petri 급의 다차원 감사이며, 핵심 안전
+              차원에는 하한선이 있어 그 선을 넘어 후퇴하는 변화는 거부합니다.
+              평가에 쓰는 seed 도 고정돼 있지 않습니다. co-scientist 파이프라인이
+              에이전트와 나란히 적대적 seed 분포를 키웁니다.
             </p>
             <h2>두 개의 루프</h2>
             <p>
@@ -35,21 +42,22 @@ export default function DocsIndex() {
             </p>
             <ul>
               <li>
-                <strong>Inner loop (Agentic Loop)</strong> — 한 작업을 푸는{" "}
-                <code>while(tool_use)</code> 실행 루프. 50 라운드 상한, 5 종료
-                경로, 59 도구 + 지연 로딩 (아키텍처 / 런타임 / 하네스 섹션).
+                <strong>Inner loop (Agentic Loop)</strong>. 한 작업을 푸는{" "}
+                <code>while(tool_use)</code> 실행 루프입니다. 라운드 상한과 종료
+                경로 안에서 도구를 지연 로딩하며 일을 끝까지 처리합니다.
               </li>
               <li>
-                <strong>Outer loop (Self-Improving Loop)</strong> — GEODE 가
-                자기 자신을 개선하는 폐루프. mutation → Petri audit → attribution
-                → promote/revert (autoresearch) 와, Petri seed 를 co-scientist
-                토너먼트로 진화시키는 seed-generation 이 맞물립니다 (Self-Improving
-                Loop 섹션).
+                <strong>Outer loop (Self-Improving Loop)</strong>. 작업을 처리하는
+                시스템 자체를 다듬는 폐루프입니다. 스캐폴드를 변형하고, 감사하고,
+                결과를 귀속한 뒤, 실제 이득이 있을 때만 승격하고 아니면 되돌립니다.
+                정직한 (1+1) 챔피언 체인입니다.
               </li>
             </ul>
-            <p className="text-white/40 text-sm">
-              코드베이스와 wiki(<code>mango-wiki/projects/geode</code>)에서 추출,
-              현재 프로덕션 버전을 반영합니다.
+            <p>
+              루프의 계보(Promptbreeder, STOP, ADAS, DGM, GEPA)는 이미 잘 닦여
+              있습니다. GEODE 는 그 루프를 능력에서 안전으로, 가중치에서
+              스캐폴드로, 그리고 함께 진화하는 적대적 seed 위로 다시 겨냥합니다.
+              새로운 primitive 가 아니라, 비어 있던 칸을 채우는 재조합입니다.
             </p>
           </>
         }
@@ -57,105 +65,118 @@ export default function DocsIndex() {
           <>
             <h2>What GEODE is</h2>
             <p>
-              GEODE is a <strong>long-running autonomous execution harness</strong>{" "}
-              built on LangGraph. A four-layer stack (Model · Runtime · Harness ·
-              Agent) runs research, analysis, automation, and scheduling on its
-              own, resident behind a <code>geode serve</code> daemon and messaging
-              gateways.
+              GEODE is a <strong>self-evolving agent on the non-parametric
+              branch</strong>. It never updates model weights. Instead it improves
+              by mutating the scaffolding around itself: its system prompt, tool
+              policy, task decomposition, reflection loop, skill catalog, agent
+              contracts, tool descriptions, and hyperparameters.
+            </p>
+            <p>
+              Its fitness signal is an <strong>adversarial safety audit</strong>,
+              not a capability benchmark. The audit is Petri-grade and
+              multi-dimensional, and critical safety dimensions sit behind a hard
+              floor: a change that regresses them is rejected. The evaluation
+              seeds are not fixed either. A co-scientist pipeline grows an
+              adversarial seed distribution alongside the agent.
             </p>
             <h2>Two loops</h2>
             <p>The defining idea is <strong>two loops</strong>:</p>
             <ul>
               <li>
-                <strong>Inner loop (the Agentic Loop)</strong> — the{" "}
-                <code>while(tool_use)</code> primitive that solves one task: a
-                50-round cap, five termination paths, 59 tools with deferred
-                loading (the Architecture / Runtime / Harness sections).
+                <strong>Inner loop (the Agentic Loop)</strong>. The{" "}
+                <code>while(tool_use)</code> primitive that solves one task. It
+                works through a task within a round cap and a set of termination
+                paths, loading tools on demand.
               </li>
               <li>
-                <strong>Outer loop (the Self-Improving Loop)</strong> — the closed
-                loop where GEODE improves itself: mutation → Petri audit →
-                attribution → promote/revert (autoresearch), meshed with
-                seed-generation evolving the Petri seed corpus through a
-                co-scientist tournament (the Self-Improving Loop section).
+                <strong>Outer loop (the Self-Improving Loop)</strong>. A closed
+                loop that tunes the system that runs tasks. It mutates the
+                scaffolding, audits the result, attributes it, then promotes on a
+                real gain and otherwise reverts. An honest (1+1) champion chain.
               </li>
             </ul>
-            <p className="text-white/40 text-sm">
-              Generated from the codebase and the wiki at{" "}
-              <code>mango-wiki/projects/geode</code>, reflecting the current
-              production version.
+            <p>
+              The loop lineage (Promptbreeder, STOP, ADAS, DGM, GEPA) is
+              well-established. GEODE re-aims it from capability to safety, from
+              weights to scaffolding, on co-evolved adversarial seeds. A
+              recombination occupying an empty cell, not a new primitive.
             </p>
           </>
         }
       />
 
       <h2>{t(locale, "섹션", "Sections")}</h2>
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-3 not-prose">
-        {DOCS_SITEMAP.filter((s) => s.id !== "intro").map((section) => (
-          <Link
+      <div className="not-prose mt-3 border-t border-[var(--rule)]">
+        {DOCS_SITEMAP.map((section) => (
+          <a
             key={section.id}
-            href={`/docs/${section.pages[0]?.slug ?? ""}`}
-            className="block rounded-lg border border-white/[0.06] hover:border-white/[0.14] p-4 transition-colors group"
+            href={`/geode/docs/${section.pages[0]?.slug ?? ""}`}
+            className="flex flex-col gap-0.5 border-b border-[var(--rule)] py-3 group"
           >
-            <div className="text-[10px] uppercase tracking-[0.18em] text-white/40 mb-1.5">
-              {section.id}
-            </div>
-            <div className="text-[#F0F0FF] font-display font-semibold text-lg group-hover:text-white">
+            <span className="font-display font-semibold text-[#F0F0FF] group-hover:text-white">
+              <span className="mr-2 text-[10px] uppercase tracking-[0.18em] text-white/40">
+                {section.id}
+              </span>
               {t(locale, section.titleKo, section.title)}
-            </div>
-            <div className="mt-1 text-sm text-white/60">
-              {section.pages.length}{" "}
-              {t(
-                locale,
-                section.pages.length === 1 ? "페이지" : "페이지",
-                section.pages.length === 1 ? "page" : "pages"
-              )}
-              {" . "}
-              {section.pages.slice(0, 3).map((p, i) => (
+            </span>
+            <span className="text-sm text-white/55">
+              {section.pages.slice(0, 4).map((p, i) => (
                 <span key={p.slug}>
                   {i > 0 && ", "}
                   {t(locale, p.titleKo, p.title)}
                 </span>
               ))}
-              {section.pages.length > 3 && ", …"}
-            </div>
-          </Link>
+              {section.pages.length > 4 && ", …"}
+            </span>
+          </a>
         ))}
       </div>
 
       <Bi
         ko={
           <>
-            <h2>상태</h2>
-            <p>
-              모든 섹션은 푸터의 날짜 기준 콘텐츠 완료 상태입니다. 페이지는
-              자동 생성된 API 레퍼런스가 아니라 사람이 큐레이팅한 내러티브입니다.
-              메트릭은 GEODE_SOT (`site/src/data/geode/sot.ts`)에서 자동 sync됩니다.
-            </p>
-
-            <h2>이 문서가 다루지 않는 것</h2>
+            <h2>다음에 어디로</h2>
             <ul>
-              <li>API 레퍼런스 자동 생성 (이 사이트는 사람이 작성한 내러티브)</li>
-              <li>검색 인덱스 (사이드바가 네비게이션 표면)</li>
-              <li>버전별 문서 (현재 main 브랜치만 반영)</li>
+              <li>
+                <a href="/geode/docs/overview/how-it-runs">GEODE가 작업을 처리하는 흐름</a>.
+                요청 하나가 처음부터 끝까지 어떻게 흐르는지 따라갑니다.
+              </li>
+              <li>
+                <a href="/geode/docs/concepts/two-loops">두 개의 루프</a>. 나머지
+                문서가 기대는 멘탈 모델입니다.
+              </li>
+              <li>
+                <a href="/geode/docs/capabilities/autoresearch">자기개선 루프(폐루프)</a>.
+                스캐폴드를 변형하고, 감사하고, 승격하거나 되돌리는 바깥쪽 루프입니다.
+              </li>
+              <li>
+                <a href="/geode/docs/capabilities/lineage">계보와 좌표</a>. 이
+                루프가 self-evolving agents 문헌에서 어디에 위치하는지 짚습니다.
+              </li>
             </ul>
           </>
         }
         en={
           <>
-            <h2>Status</h2>
-            <p>
-              All sections are content-complete as of the date in the footer.
-              Pages are hand-curated narrative, not an auto-generated API
-              reference. Metrics are auto-synced from GEODE_SOT
-              (<code>site/src/data/geode/sot.ts</code>).
-            </p>
-
-            <h2>Out of scope</h2>
+            <h2>Where to go next</h2>
             <ul>
-              <li>API reference auto-generation (this site is hand-curated narrative).</li>
-              <li>Search index (the sidebar is the navigation surface).</li>
-              <li>Versioned docs (the site reflects the current main branch).</li>
+              <li>
+                <a href="/geode/docs/overview/how-it-runs">How GEODE runs a task</a>.
+                One request, traced end to end.
+              </li>
+              <li>
+                <a href="/geode/docs/concepts/two-loops">The two loops</a>. The
+                mental model the rest of the docs build on.
+              </li>
+              <li>
+                <a href="/geode/docs/capabilities/autoresearch">The self-improving loop</a>.
+                The outer loop that mutates the scaffolding, audits, and promotes
+                or reverts.
+              </li>
+              <li>
+                <a href="/geode/docs/capabilities/lineage">Lineage and positioning</a>.
+                Where this loop sits in the self-evolving agents literature.
+              </li>
             </ul>
           </>
         }

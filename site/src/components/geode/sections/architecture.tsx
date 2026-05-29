@@ -9,8 +9,8 @@ import { useLocale, t } from "../locale-context";
 const ALL = [0, 1, 2, 3, 4]; // all components highlighted (shared resources)
 const layers = [
   { id: "Model",   color: "#818CF8", y: 10,  components: ["ClaudeAdapter", "OpenAIAdapter", "GLMAdapter"], highlight: { ipc: [0, 1, 2], daemon: [0, 1, 2], scheduler: [0, 1, 2] } },
-  { id: "Runtime", color: "#4ECDC4", y: 78,  components: ["ToolRegistry(43)", "MCP", "Skills(18)", "Memory(5T)"], highlight: { ipc: [0, 1, 2, 3], daemon: [0, 1, 2, 3], scheduler: [0, 1, 2, 3] } },
-  { id: "Harness", color: "#F5C542", y: 146, components: ["SessionLane", "Lane(global,8)", "PolicyChain", "HookSystem(48)"], highlight: { ipc: [0, 1, 2, 3], daemon: [0, 1, 2, 3], scheduler: [0, 1, 2, 3] } },
+  { id: "Runtime", color: "#4ECDC4", y: 78,  components: ["ToolRegistry", "MCP", "Skills", "Memory(5T)"], highlight: { ipc: [0, 1, 2, 3], daemon: [0, 1, 2, 3], scheduler: [0, 1, 2, 3] } },
+  { id: "Harness", color: "#F5C542", y: 146, components: ["SessionLane", "Lane(global,8)", "PolicyChain", "HookSystem"], highlight: { ipc: [0, 1, 2, 3], daemon: [0, 1, 2, 3], scheduler: [0, 1, 2, 3] } },
   { id: "Agent",   color: "#F4B8C8", y: 214, components: ["AgenticLoop", "SubAgent", "CLIPoller", "Gateway", "Scheduler"], highlight: { ipc: [0, 1, 2], daemon: [0, 1, 3], scheduler: [0, 1, 4] } },
 ];
 
@@ -209,7 +209,7 @@ export function ArchitectureSection() {
               <text x={757} y={140} textAnchor="middle" fill="#34D399" fillOpacity={0.25}
                 fontSize={7} fontFamily="ui-monospace, monospace"
                 style={{ writingMode: "vertical-rl" } as React.CSSProperties}>
-                HOOKS 48
+                HOOKS
               </text>
 
               {/* Cross-cutting: DomainPort */}
@@ -259,7 +259,7 @@ export function ArchitectureSection() {
               <span className="text-[#34D399] text-sm">⟂</span>
               <span className="text-xs text-[#9BB0CC]">
                 <span className="font-medium text-[#34D399]/70">HookSystem</span>
-                {" "}{t(locale, "81 events, 4계층 수직 관통", "81 events across all 4 layers")}
+                {" "}{t(locale, "이벤트 버스가 4계층을 수직 관통", "Event bus runs vertically through all 4 layers")}
               </span>
             </div>
             <div className="flex items-center gap-3 px-4 py-2.5 rounded-xl border border-dashed border-[#C084FC]/15 bg-[#C084FC]/[0.02]">

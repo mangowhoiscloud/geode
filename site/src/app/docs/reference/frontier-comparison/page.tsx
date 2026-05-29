@@ -86,7 +86,7 @@ export default function Page() {
                   <td>cron + standing order</td>
                   <td>skill auto-generate</td>
                   <td>overnight 루프</td>
-                  <td>81 이벤트 + 스케줄러</td>
+                  <td>hook 이벤트 + 스케줄러</td>
                 </tr>
                 <tr>
                   <td>멀티 LLM</td>
@@ -172,7 +172,7 @@ export default function Page() {
               <thead><tr><th>축</th><th>GEODE</th><th>Hermes</th><th>OpenClaw</th><th>Claude Code</th></tr></thead>
               <tbody>
                 <tr><td>알고리즘</td><td>SHA-256[:12]</td><td>None</td><td>SHA-256 (전체)</td><td>SHA-256[:3]</td></tr>
-                <tr><td>핀 / CI 게이트</td><td><strong>예</strong>. <code>_PINNED_HASHES</code> × 18</td><td>None</td><td>탐지만</td><td>None (attribution만)</td></tr>
+                <tr><td>핀 / CI 게이트</td><td><strong>예</strong>. <code>_PINNED_HASHES</code></td><td>None</td><td>탐지만</td><td>None (attribution만)</td></tr>
                 <tr><td>정규화</td><td>UTF-8 / json sort_keys</td><td>mtime + size manifest</td><td>CRLF strip + sort + lowercase</td><td>(model, toolNames, sysLen) tuple</td></tr>
               </tbody>
             </table>
@@ -297,7 +297,7 @@ export default function Page() {
                   <td>cron + standing orders</td>
                   <td>skill auto-generate</td>
                   <td>overnight loop</td>
-                  <td>81 events + scheduler</td>
+                  <td>hook events + scheduler</td>
                 </tr>
                 <tr>
                   <td>Multi-LLM</td>
@@ -387,7 +387,7 @@ export default function Page() {
               <thead><tr><th>Axis</th><th>GEODE</th><th>Hermes</th><th>OpenClaw</th><th>Claude Code</th></tr></thead>
               <tbody>
                 <tr><td>Algorithm</td><td>SHA-256[:12]</td><td>None</td><td>SHA-256 (full)</td><td>SHA-256[:3]</td></tr>
-                <tr><td>Pin / CI gate</td><td><strong>Yes</strong> — <code>_PINNED_HASHES</code> × 18</td><td>None</td><td>Detection only</td><td>None (attribution only)</td></tr>
+                <tr><td>Pin / CI gate</td><td><strong>Yes</strong>. <code>_PINNED_HASHES</code></td><td>None</td><td>Detection only</td><td>None (attribution only)</td></tr>
                 <tr><td>Normalization</td><td>UTF-8 / json sort_keys</td><td>mtime + size manifest</td><td>CRLF strip + sort + lowercase</td><td>(model, toolNames, sysLen) tuple</td></tr>
               </tbody>
             </table>

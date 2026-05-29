@@ -23,7 +23,7 @@ export default function Page() {
             <table>
               <thead><tr><th>시스템</th><th>출처</th><th>GEODE가 가져온 것</th></tr></thead>
               <tbody>
-                <tr><td><strong>Claude Code</strong></td><td><a href="https://docs.anthropic.com/en/docs/claude-code/overview">docs.anthropic.com</a></td><td>while(tool_use) primitive, CLAUDE.md 스캐폴드 패턴, 4-tier memory, 81 hooks 패턴.</td></tr>
+                <tr><td><strong>Claude Code</strong></td><td><a href="https://docs.anthropic.com/en/docs/claude-code/overview">docs.anthropic.com</a></td><td>while(tool_use) primitive, CLAUDE.md 스캐폴드 패턴, 4-tier memory, hooks 패턴.</td></tr>
                 <tr><td><strong>Codex CLI</strong></td><td>OpenAI Codex</td><td>thin CLI + IPC daemon, OAuth flow, sandbox policy.</td></tr>
                 <tr><td><strong>OpenClaw</strong></td><td><a href="https://github.com/openclaw/openclaw">github.com/openclaw/openclaw</a></td><td>Gateway-centric routing, Lane Queue 동시성, Session 격리, Plugin 발견, Policy Chain.</td></tr>
                 <tr><td><strong>Karpathy autoresearch</strong></td><td><a href="https://github.com/karpathy/autoresearch">github.com/karpathy/autoresearch</a> (2026-03)</td><td>Fixed wall-budget으로 비교 가능성 보존. Frozen scoreboard 분리. git monotone ratchet. Token-economic loop. Simplicity criterion.</td></tr>
@@ -62,7 +62,7 @@ export default function Page() {
             <h2>Petri / inspect_ai</h2>
             <ul>
               <li>
-                <strong>Anthropic Alignment Science Petri</strong> — alignment audit framework (Auditor·Target·Judge 3-role, 173 seeds, 38 dims). 본 docs <a href="/geode/docs/petri/overview">Petri × GEODE</a> 챕터 전체.
+                <strong>Anthropic Alignment Science Petri</strong>. alignment audit framework (Auditor·Target·Judge 3-role, seed corpus scored across judge dimensions). 본 docs <a href="/geode/docs/petri/overview">Petri × GEODE</a> 챕터 전체.
               </li>
               <li>
                 <strong>inspect_ai (UK AISI)</strong>{" "}
@@ -87,7 +87,7 @@ export default function Page() {
                 <strong>mango-wiki/projects/geode/official-docs/v0.65.0/</strong> — 이전 docs 정식 sitemap (10 section). 현 docs의 부모 구조.
               </li>
               <li>
-                <strong>resume/common/GEODE-BULLET-MAP.md</strong> — 76개 시스템 × 17 불릿 카테고리 SSOT 커버리지 매핑. 레주메·인터뷰 인용용.
+                <strong>resume/common/GEODE-BULLET-MAP.md</strong>. 시스템별 불릿 카테고리 SSOT 커버리지 매핑. 레주메·인터뷰 인용용.
               </li>
               <li>
                 <strong>resume/common/narratives/autoresearch-ratchet-reference.md</strong> — Karpathy autoresearch의 5가지 reusable pattern을 GEODE·Crumb에 매핑.
@@ -127,7 +127,7 @@ export default function Page() {
             <table>
               <thead><tr><th>System</th><th>Source</th><th>What GEODE took</th></tr></thead>
               <tbody>
-                <tr><td><strong>Claude Code</strong></td><td><a href="https://docs.anthropic.com/en/docs/claude-code/overview">docs.anthropic.com</a></td><td>while(tool_use) primitive, CLAUDE.md scaffold pattern, 4-tier memory, 81-hook pattern.</td></tr>
+                <tr><td><strong>Claude Code</strong></td><td><a href="https://docs.anthropic.com/en/docs/claude-code/overview">docs.anthropic.com</a></td><td>while(tool_use) primitive, CLAUDE.md scaffold pattern, 4-tier memory, hook pattern.</td></tr>
                 <tr><td><strong>Codex CLI</strong></td><td>OpenAI Codex</td><td>thin CLI plus IPC daemon, OAuth flow, sandbox policy.</td></tr>
                 <tr><td><strong>OpenClaw</strong></td><td><a href="https://github.com/openclaw/openclaw">github.com/openclaw/openclaw</a></td><td>Gateway-centric routing, Lane Queue concurrency, Session isolation, plugin discovery, Policy Chain.</td></tr>
                 <tr><td><strong>Karpathy autoresearch</strong></td><td><a href="https://github.com/karpathy/autoresearch">github.com/karpathy/autoresearch</a> (2026-03)</td><td>Fixed wall-budget for comparability. Frozen scoreboard. git monotone ratchet. Token-economic loop. Simplicity criterion.</td></tr>
@@ -166,8 +166,8 @@ export default function Page() {
             <h2>Petri / inspect_ai</h2>
             <ul>
               <li>
-                <strong>Anthropic Alignment Science Petri</strong> — alignment audit framework (Auditor, Target, Judge,
-                173 seeds, 38 dims). Covered in the <a href="/geode/docs/petri/overview">Petri × GEODE</a> chapter.
+                <strong>Anthropic Alignment Science Petri</strong>. Alignment audit framework (Auditor, Target, Judge,
+                a seed corpus scored across judge dimensions). Covered in the <a href="/geode/docs/petri/overview">Petri × GEODE</a> chapter.
               </li>
               <li>
                 <strong>inspect_ai (UK AISI)</strong>{" "}
@@ -198,7 +198,7 @@ export default function Page() {
                 (10 sections). The parent structure of the current docs.
               </li>
               <li>
-                <strong>resume/common/GEODE-BULLET-MAP.md</strong> — SSOT coverage mapping for 76 systems by 17 bullet
+                <strong>resume/common/GEODE-BULLET-MAP.md</strong>. SSOT coverage mapping of systems by bullet
                 categories. Used for resume and interview citations.
               </li>
               <li>

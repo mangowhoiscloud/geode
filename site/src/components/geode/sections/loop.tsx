@@ -13,7 +13,7 @@ const scenarios: { tab: string; lines: Line[] }[] = [
     lines: [
       { type: "prompt", text: "mango@mangoui-MacBookAir resume % geode" },
       { type: "dots", text: "", rich: <><br/></> },
-      { type: "dots", text: '  ╲╲( ◕ ᵕ ◕ )╱╱  GEODE v0.65.0', rich: <>{`  `}<span style={{color:"#9775c4"}}>╲╲</span><span style={{color:"#fff"}}>{`( ◕ ᵕ ◕ )`}</span><span style={{color:"#9775c4"}}>╱╱</span>{`  `}<span style={{color:"#5f9ea0",fontWeight:700}}>GEODE</span>{` v0.65.0`}</> },
+      { type: "dots", text: '  ╲╲( ◕ ᵕ ◕ )╱╱  GEODE', rich: <>{`  `}<span style={{color:"#9775c4"}}>╲╲</span><span style={{color:"#fff"}}>{`( ◕ ᵕ ◕ )`}</span><span style={{color:"#9775c4"}}>╱╱</span>{`  `}<span style={{color:"#5f9ea0",fontWeight:700}}>GEODE</span></> },
       { type: "dots", text: "                       claude-opus-4-7 · autonomous execution agent", rich: <span style={{color:"#d4a0a0",opacity:0.5}}>{`                       claude-opus-4-7 · autonomous execution agent`}</span> },
       { type: "dots", text: "                       /Users/mango/workspace/resume", rich: <span style={{opacity:0.35}}>{`                       /Users/mango/workspace/resume`}</span> },
       { type: "dots", text: "" },
@@ -71,14 +71,14 @@ const scenarios: { tab: string; lines: Line[] }[] = [
   {
     tab: "plan-mode",
     lines: [
-      { type: "prompt", text: "> CHANGELOG 정리하고 v0.65 릴리즈 준비해", input: true },
-      { type: "status", text: '  ● plan: "v0.65 릴리즈" (3 steps)' },
-      { type: "phase", text: "    1. CHANGELOG [Unreleased] → [0.65.0] 정리" },
+      { type: "prompt", text: "> CHANGELOG 정리하고 다음 릴리즈 준비해", input: true },
+      { type: "status", text: '  ● plan: "release prep" (3 steps)' },
+      { type: "phase", text: "    1. CHANGELOG [Unreleased] → 릴리즈 버전으로 정리" },
       { type: "phase", text: "    2. 4곳 버전 동기화 (pyproject, CLAUDE, README, CHANGELOG)" },
       { type: "phase", text: "    3. git tag + PR 생성" },
       { type: "prompt", text: "  approve? [Y/n/A] > A", input: true },
-      { type: "tool", text: '  ⎿ ▸ run_bash(command="sed -i \'s/Unreleased/0.65.0/\' ...")' },
-      { type: "tool", text: '  ⎿ ▸ note_save(title="CHANGELOG v0.65")' },
+      { type: "tool", text: '  ⎿ ▸ run_bash(command="sed -i \'s/Unreleased/.../\' ...")' },
+      { type: "tool", text: '  ⎿ ▸ note_save(title="CHANGELOG release prep")' },
       { type: "exec", text: "  ⎿ ✓ 3/3 steps · PR #524 생성" },
       { type: "token", text: "  ⎿ ✢ claude-opus-4-7 · ↓6.8k ↑2.1k · $0.066 · 8.2s" },
     ],

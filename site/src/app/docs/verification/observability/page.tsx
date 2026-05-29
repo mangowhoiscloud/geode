@@ -23,35 +23,35 @@ export default function Page() {
             <table>
               <thead><tr><th>렌즈</th><th>관측 단위</th><th>grain</th><th>위치</th><th>도입</th></tr></thead>
               <tbody>
-                <tr><td><strong>Hooks</strong></td><td>이벤트 (81개)</td><td>micro (μs to ms)</td><td><code>core/hooks/system.py</code></td><td>core</td></tr>
+                <tr><td><strong>Hooks</strong></td><td>이벤트</td><td>micro (μs to ms)</td><td><code>core/hooks/system.py</code></td><td>core</td></tr>
                 <tr><td><strong>RunLog</strong></td><td>run (LLM 호출 1회)</td><td>medium (s)</td><td><code>~/.geode/runlog/</code> JSONL</td><td>core</td></tr>
                 <tr><td><strong>Audit diagnostics</strong></td><td>call (input/output/cost)</td><td>per-call (assertion-grade)</td><td><code>core.audit.diagnostics</code></td><td>v0.92.0</td></tr>
-                <tr><td><strong>Petri Audit</strong></td><td>scenario (N seeds × M turns)</td><td>session (min to hour)</td><td><a href="/geode/docs/petri/overview">Petri × GEODE</a></td><td>v0.92.0+</td></tr>
+                <tr><td><strong>Petri Audit</strong></td><td>scenario (seeds × turns 격자)</td><td>session (min to hour)</td><td><a href="/geode/docs/petri/overview">Petri × GEODE</a></td><td>v0.92.0+</td></tr>
               </tbody>
             </table>
 
             <h2>렌즈 1. Hook 시스템</h2>
             <p>
-              가장 빠른 grain. 모든 lifecycle 이벤트가 발화되고, 14 카테고리로 그룹화됩니다.
+              가장 빠른 grain. 모든 lifecycle 이벤트가 발화되고, 카테고리로 그룹화됩니다.
               listener는 <code>trigger</code> (fire-and-forget) / <code>trigger_with_result</code> (결과 수집) / <code>trigger_interceptor</code> (intercept 가능) 셋 중 하나로 등록.
             </p>
             <table>
-              <thead><tr><th>카테고리</th><th>이벤트 개수</th><th>대표 이벤트</th></tr></thead>
+              <thead><tr><th>카테고리</th><th>대표 이벤트</th></tr></thead>
               <tbody>
-                <tr><td>pipeline</td><td>3</td><td>PIPELINE_START, PIPELINE_END, PIPELINE_ERROR</td></tr>
-                <tr><td>node</td><td>4</td><td>NODE_ENTER, NODE_EXIT, NODE_ERROR, NODE_RETRY</td></tr>
-                <tr><td>analysis</td><td>3</td><td>ANALYST_START, ANALYST_COMPLETE, ANALYST_FAILED</td></tr>
-                <tr><td>verification</td><td>2</td><td>VERIFICATION_PASS, VERIFICATION_FAIL</td></tr>
-                <tr><td>automation</td><td>5</td><td>DRIFT_DETECTED, MODEL_PROMOTED, OUTCOME_COLLECTED, EXPERT_VOTE_CAST, FEEDBACK_PHASE_CHANGED</td></tr>
-                <tr><td>memory</td><td>4</td><td>MEMORY_SAVED, RULE_CREATED, RULE_UPDATED, RULE_DELETED</td></tr>
-                <tr><td>tool</td><td>8</td><td>TOOL_EXEC_START/END/FAILED, TOOL_RECOVERY_START/END, TOOL_APPROVAL_REQUEST/GRANTED/DENIED</td></tr>
-                <tr><td>session</td><td>2</td><td>SESSION_START, SESSION_END</td></tr>
-                <tr><td>model</td><td>1</td><td>MODEL_SWITCHED</td></tr>
-                <tr><td>llm</td><td>4</td><td>LLM_CALL_START, LLM_CALL_END, LLM_CALL_FAILED, LLM_CALL_RETRY</td></tr>
-                <tr><td>approval</td><td>2</td><td>APPROVAL_REQUEST, APPROVAL_GRANTED</td></tr>
-                <tr><td>context</td><td>2</td><td>CONTEXT_OVERFLOW, CONTEXT_RESET</td></tr>
-                <tr><td>prompt</td><td>1</td><td>PROMPT_ASSEMBLED</td></tr>
-                <tr><td>(reserved)</td><td>17</td><td>plugin-specific, 도메인 어댑터가 추가</td></tr>
+                <tr><td>pipeline</td><td>PIPELINE_START, PIPELINE_END, PIPELINE_ERROR</td></tr>
+                <tr><td>node</td><td>NODE_ENTER, NODE_EXIT, NODE_ERROR, NODE_RETRY</td></tr>
+                <tr><td>analysis</td><td>ANALYST_START, ANALYST_COMPLETE, ANALYST_FAILED</td></tr>
+                <tr><td>verification</td><td>VERIFICATION_PASS, VERIFICATION_FAIL</td></tr>
+                <tr><td>automation</td><td>DRIFT_DETECTED, MODEL_PROMOTED, OUTCOME_COLLECTED, EXPERT_VOTE_CAST, FEEDBACK_PHASE_CHANGED</td></tr>
+                <tr><td>memory</td><td>MEMORY_SAVED, RULE_CREATED, RULE_UPDATED, RULE_DELETED</td></tr>
+                <tr><td>tool</td><td>TOOL_EXEC_START/END/FAILED, TOOL_RECOVERY_START/END, TOOL_APPROVAL_REQUEST/GRANTED/DENIED</td></tr>
+                <tr><td>session</td><td>SESSION_START, SESSION_END</td></tr>
+                <tr><td>model</td><td>MODEL_SWITCHED</td></tr>
+                <tr><td>llm</td><td>LLM_CALL_START, LLM_CALL_END, LLM_CALL_FAILED, LLM_CALL_RETRY</td></tr>
+                <tr><td>approval</td><td>APPROVAL_REQUEST, APPROVAL_GRANTED</td></tr>
+                <tr><td>context</td><td>CONTEXT_OVERFLOW, CONTEXT_RESET</td></tr>
+                <tr><td>prompt</td><td>PROMPT_ASSEMBLED</td></tr>
+                <tr><td>(reserved)</td><td>plugin-specific, 도메인 어댑터가 추가</td></tr>
               </tbody>
             </table>
             <p>
@@ -105,13 +105,13 @@ class CallDiagnostic:
 
             <h2>렌즈 4. Petri Audit</h2>
             <p>
-              세션 단위 grain. N seeds × M turns의 격자로 misalignment risk를 측정. Auditor(적대) · Target(GEODE) · Judge 3-role 구성.
+              세션 단위 grain. seeds × turns 격자로 misalignment risk를 측정. Auditor(적대) · Target(GEODE) · Judge 3-role 구성.
             </p>
             <ul>
               <li>전체 통합: <a href="/geode/docs/petri/overview">Petri × GEODE Integration</a></li>
-              <li>시나리오: <a href="/geode/docs/petri/scenarios">Petri Scenarios</a> (173 default + 13 GEODE-specific)</li>
+              <li>시나리오: <a href="/geode/docs/petri/scenarios">Petri Scenarios</a> (Petri 기본 + GEODE 전용)</li>
               <li>실행: <a href="/geode/docs/petri/run">Petri Run</a></li>
-              <li>차원: <a href="/geode/docs/petri/judge-dimensions">17/38 Judge 차원</a></li>
+              <li>차원: <a href="/geode/docs/petri/judge-dimensions">Judge 차원</a></li>
             </ul>
 
             <h2>Usage Ledger (v0.66+)</h2>
@@ -168,36 +168,36 @@ $ jq -c 'select(.cache_read_tokens > 0)' ~/.geode/usage/2026-05-12.jsonl  # 캐�
             <table>
               <thead><tr><th>Lens</th><th>Unit</th><th>Grain</th><th>Where</th><th>Since</th></tr></thead>
               <tbody>
-                <tr><td><strong>Hooks</strong></td><td>events (81)</td><td>micro (μs to ms)</td><td><code>core/hooks/system.py</code></td><td>core</td></tr>
+                <tr><td><strong>Hooks</strong></td><td>events</td><td>micro (μs to ms)</td><td><code>core/hooks/system.py</code></td><td>core</td></tr>
                 <tr><td><strong>RunLog</strong></td><td>run (one LLM call)</td><td>medium (seconds)</td><td><code>~/.geode/runlog/</code> JSONL</td><td>core</td></tr>
                 <tr><td><strong>Audit diagnostics</strong></td><td>call (input/output/cost)</td><td>per-call assertion-grade</td><td><code>core.audit.diagnostics</code></td><td>v0.92.0</td></tr>
-                <tr><td><strong>Petri Audit</strong></td><td>scenario (N seeds × M turns)</td><td>session (minutes to hours)</td><td><a href="/geode/docs/petri/overview">Petri × GEODE</a></td><td>v0.92.0+</td></tr>
+                <tr><td><strong>Petri Audit</strong></td><td>scenario (seeds × turns grid)</td><td>session (minutes to hours)</td><td><a href="/geode/docs/petri/overview">Petri × GEODE</a></td><td>v0.92.0+</td></tr>
               </tbody>
             </table>
 
             <h2>Lens 1. Hook system</h2>
             <p>
-              The fastest grain. Every lifecycle event fires; events are grouped into 14 categories.
+              The fastest grain. Every lifecycle event fires; events are grouped into categories.
               Listeners register via one of three trigger modes: <code>trigger</code> (fire-and-forget),
               <code>trigger_with_result</code> (collect handler return values), or <code>trigger_interceptor</code> (can block or modify the event).
             </p>
             <table>
-              <thead><tr><th>Category</th><th>Events</th><th>Examples</th></tr></thead>
+              <thead><tr><th>Category</th><th>Examples</th></tr></thead>
               <tbody>
-                <tr><td>pipeline</td><td>3</td><td>PIPELINE_START, PIPELINE_END, PIPELINE_ERROR</td></tr>
-                <tr><td>node</td><td>4</td><td>NODE_ENTER, NODE_EXIT, NODE_ERROR, NODE_RETRY</td></tr>
-                <tr><td>analysis</td><td>3</td><td>ANALYST_START, ANALYST_COMPLETE, ANALYST_FAILED</td></tr>
-                <tr><td>verification</td><td>2</td><td>VERIFICATION_PASS, VERIFICATION_FAIL</td></tr>
-                <tr><td>automation</td><td>5</td><td>DRIFT_DETECTED, MODEL_PROMOTED, OUTCOME_COLLECTED, EXPERT_VOTE_CAST, FEEDBACK_PHASE_CHANGED</td></tr>
-                <tr><td>memory</td><td>4</td><td>MEMORY_SAVED, RULE_CREATED, RULE_UPDATED, RULE_DELETED</td></tr>
-                <tr><td>tool</td><td>8</td><td>TOOL_EXEC_START/END/FAILED, TOOL_RECOVERY_START/END, TOOL_APPROVAL_REQUEST/GRANTED/DENIED</td></tr>
-                <tr><td>session</td><td>2</td><td>SESSION_START, SESSION_END</td></tr>
-                <tr><td>model</td><td>1</td><td>MODEL_SWITCHED</td></tr>
-                <tr><td>llm</td><td>4</td><td>LLM_CALL_START, LLM_CALL_END, LLM_CALL_FAILED, LLM_CALL_RETRY</td></tr>
-                <tr><td>approval</td><td>2</td><td>APPROVAL_REQUEST, APPROVAL_GRANTED</td></tr>
-                <tr><td>context</td><td>2</td><td>CONTEXT_OVERFLOW, CONTEXT_RESET</td></tr>
-                <tr><td>prompt</td><td>1</td><td>PROMPT_ASSEMBLED</td></tr>
-                <tr><td>(reserved)</td><td>17</td><td>plugin-specific, added by external packages</td></tr>
+                <tr><td>pipeline</td><td>PIPELINE_START, PIPELINE_END, PIPELINE_ERROR</td></tr>
+                <tr><td>node</td><td>NODE_ENTER, NODE_EXIT, NODE_ERROR, NODE_RETRY</td></tr>
+                <tr><td>analysis</td><td>ANALYST_START, ANALYST_COMPLETE, ANALYST_FAILED</td></tr>
+                <tr><td>verification</td><td>VERIFICATION_PASS, VERIFICATION_FAIL</td></tr>
+                <tr><td>automation</td><td>DRIFT_DETECTED, MODEL_PROMOTED, OUTCOME_COLLECTED, EXPERT_VOTE_CAST, FEEDBACK_PHASE_CHANGED</td></tr>
+                <tr><td>memory</td><td>MEMORY_SAVED, RULE_CREATED, RULE_UPDATED, RULE_DELETED</td></tr>
+                <tr><td>tool</td><td>TOOL_EXEC_START/END/FAILED, TOOL_RECOVERY_START/END, TOOL_APPROVAL_REQUEST/GRANTED/DENIED</td></tr>
+                <tr><td>session</td><td>SESSION_START, SESSION_END</td></tr>
+                <tr><td>model</td><td>MODEL_SWITCHED</td></tr>
+                <tr><td>llm</td><td>LLM_CALL_START, LLM_CALL_END, LLM_CALL_FAILED, LLM_CALL_RETRY</td></tr>
+                <tr><td>approval</td><td>APPROVAL_REQUEST, APPROVAL_GRANTED</td></tr>
+                <tr><td>context</td><td>CONTEXT_OVERFLOW, CONTEXT_RESET</td></tr>
+                <tr><td>prompt</td><td>PROMPT_ASSEMBLED</td></tr>
+                <tr><td>(reserved)</td><td>plugin-specific, added by external packages</td></tr>
               </tbody>
             </table>
             <p>
@@ -254,14 +254,14 @@ class CallDiagnostic:
 
             <h2>Lens 4. Petri Audit</h2>
             <p>
-              Session-level grain. An N seeds by M turns grid measures misalignment risk. Three roles: Auditor
+              Session-level grain. A seeds by turns grid measures misalignment risk. Three roles: Auditor
               (adversarial), Target (GEODE), Judge.
             </p>
             <ul>
               <li>Integration: <a href="/geode/docs/petri/overview">Petri × GEODE Integration</a></li>
-              <li>Scenarios: <a href="/geode/docs/petri/scenarios">Petri Scenarios</a> (173 default plus 13 GEODE-specific)</li>
+              <li>Scenarios: <a href="/geode/docs/petri/scenarios">Petri Scenarios</a> (Petri defaults plus GEODE-specific)</li>
               <li>Run: <a href="/geode/docs/petri/run">Petri Run</a></li>
-              <li>Dimensions: <a href="/geode/docs/petri/judge-dimensions">17 / 38 Judge Dimensions</a></li>
+              <li>Dimensions: <a href="/geode/docs/petri/judge-dimensions">Judge Dimensions</a></li>
             </ul>
 
             <h2>Usage Ledger (since v0.66)</h2>

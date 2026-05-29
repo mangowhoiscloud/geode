@@ -8,13 +8,13 @@ export default function Page() {
       slug="runtime/llm/providers"
       title="Providers"
       titleKo="프로바이더"
-      summary="Three fallback chains, four adapters, 14 models. Provider-agnostic LLM router with explicit chain ordering. Five v0.94+ guards: HTML data-URL, tool_choice normalization, prompt_cache_key, GLM thinking gate, agentic_call streaming."
-      summaryKo="3개의 폴백 체인, 4개의 어댑터, 14개의 모델. 명시적 체인 순서를 갖는 프로바이더 독립 LLM router. v0.94+ 가드 5종 추가: HTML data-URL, tool_choice 정규화, prompt_cache_key, GLM thinking 게이트, agentic_call 스트리밍."
+      summary="Provider fallback chains across adapters. Provider-agnostic LLM router with explicit chain ordering. v0.94+ guards: HTML data-URL, tool_choice normalization, prompt_cache_key, GLM thinking gate, agentic_call streaming."
+      summaryKo="어댑터별 프로바이더 폴백 체인. 명시적 체인 순서를 갖는 프로바이더 독립 LLM router. v0.94+ 가드: HTML data-URL, tool_choice 정규화, prompt_cache_key, GLM thinking 게이트, agentic_call 스트리밍."
     >
       <Bi
         ko={
           <>
-            <h2>네 개의 어댑터</h2>
+            <h2>어댑터</h2>
             <table>
               <thead><tr><th>파일</th><th>프로바이더</th><th>체인 내 모델</th></tr></thead>
               <tbody>
@@ -92,7 +92,7 @@ GLM_FALLBACK_CHAIN       = ["glm-5.1", "glm-5", "glm-5-turbo",
         }
         en={
           <>
-            <h2>The four adapters</h2>
+            <h2>The adapters</h2>
             <table>
               <thead><tr><th>File</th><th>Provider</th><th>Models in chain</th></tr></thead>
               <tbody>

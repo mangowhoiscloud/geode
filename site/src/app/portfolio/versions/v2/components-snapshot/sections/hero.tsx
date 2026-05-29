@@ -4,13 +4,6 @@ import Image from "next/image";
 import { motion } from "framer-motion";
 import Link from "next/link";
 
-const stats = [
-  { value: "6", label: "Layers", sub: "L0–L5" },
-  { value: "98", label: "Tools", sub: "54 + 44 MCP" },
-  { value: "45", label: "Hooks", sub: "lifecycle" },
-  { value: "2.9K+", label: "Tests", sub: "CI ratchet" },
-];
-
 export function HeroSection() {
   return (
     <section className="relative min-h-screen flex flex-col items-center justify-center overflow-hidden">
@@ -29,12 +22,6 @@ export function HeroSection() {
           <h1 className="text-[clamp(3.5rem,10vw,7rem)] font-black tracking-[-0.04em] leading-none bg-gradient-to-b from-white via-white/90 to-white/40 bg-clip-text text-transparent">
             GEODE
           </h1>
-          <div className="mt-3 flex items-center justify-center gap-3">
-            <span className="inline-flex items-center gap-2 px-3 py-1 rounded-full border border-[#4ECDC4]/20 bg-[#4ECDC4]/5 text-xs font-mono text-[#4ECDC4]/80">
-              <span className="w-1.5 h-1.5 rounded-full bg-[#4ECDC4] animate-pulse" />
-              v0.30
-            </span>
-          </div>
         </motion.div>
 
         <motion.div
@@ -61,32 +48,12 @@ export function HeroSection() {
         >
           <p className="text-lg text-[#8B9CC0]">Autonomous Execution Harness</p>
           <p className="text-sm text-white/45 mt-1.5 max-w-md text-center leading-relaxed">
-            게임 IP 가치 추론부터 Java 마이그레이션까지 —
+            게임 IP 가치 추론부터 Java 마이그레이션까지.
             Scaffold가 제약하고, Loop가 실행하고, Runtime이 검증하는 자율 실행 하네스.
-            Solo-built · 3개월 · 현재 진행형.
+            단독 개발, 현재 진행형.
           </p>
         </motion.div>
 
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.8, delay: 0.6 }}
-          className="flex items-center gap-10 mt-6"
-        >
-          {stats.map((s) => (
-            <div key={s.label} className="text-center">
-              <div className="text-3xl font-extrabold tracking-tight text-white/90">
-                {s.value}
-              </div>
-              <div className="text-[10px] font-mono text-[#7A8CA8] uppercase tracking-widest mt-1">
-                {s.label}
-              </div>
-              <div className="text-[11px] font-mono text-white/25 mt-0.5">
-                {s.sub}
-              </div>
-            </div>
-          ))}
-        </motion.div>
 
         <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.9 }} className="flex items-center gap-3 mt-4">
           <Link
