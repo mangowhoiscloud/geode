@@ -817,16 +817,28 @@ def test_autoresearch_landing_renders(built_autoresearch_pages: dict[str, str]) 
 
 
 def test_autoresearch_baseline_renders(built_autoresearch_pages: dict[str, str]) -> None:
-    """Baseline page renders 7 namespace blocks for the v2 schema, plus
-    harness chips on the audit namespace's 3 model fields."""
+    """Baseline page renders the 7 v2-schema namespace blocks plus the 3
+    "show its work" sections (process / seed corpus / audit transcripts),
+    and harness chips on the audit namespace's 3 model fields.
+
+    PR-BASELINE-HUB-SHOW-WORK (2026-05-29): the page gained process / seeds /
+    transcripts sections (each a `namespace-block` container), so the total
+    block count is now 7 baseline namespaces + 3 sections = 10. The 3 sections
+    render their empty-state block when no `transcripts.json` is present (the
+    fixture case), so the count holds regardless of transcript data.
+    """
     html = built_autoresearch_pages["baseline"]
-    # 7 namespace block ids (no warning banner for live baseline).
+    # 7 baseline.json namespace block ids (no warning banner for live baseline).
     expected_blocks = ("metadata", "raw", "normalized", "axes", "fitness", "audit", "promotion")
     for ns in expected_blocks:
         assert f'id="ns-{ns}"' in html, f"baseline namespace block {ns!r} missing"
-    # Total `namespace-block` divs must equal 7.
-    assert html.count('class="namespace-block"') == 7, (
-        f"expected 7 namespace blocks, got {html.count('class="namespace-block"')}"
+    # 3 "show its work" section block ids.
+    for section in ("process", "seeds", "transcripts"):
+        assert f'id="ns-{section}"' in html, f"baseline section {section!r} missing"
+    # Total `namespace-block` divs = 7 namespaces + 3 sections.
+    assert html.count('class="namespace-block"') == 10, (
+        f"expected 10 namespace blocks (7 namespaces + 3 sections), "
+        f"got {html.count('class="namespace-block"')}"
     )
     # Audit namespace renders harness chips for 3 model roles.
     assert "chip claude" in html, "auditor/judge claude chip missing"
