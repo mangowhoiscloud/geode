@@ -1263,7 +1263,6 @@ def _mint_audit_run_id() -> str:
     return uuid.uuid4().hex[:12]
 
 
-
 def _run_autoresearch_subprocess(
     *,
     repo_root: Path,
