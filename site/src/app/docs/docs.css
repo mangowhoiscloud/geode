@@ -133,3 +133,31 @@
   color: #F0F0FF;
   font-weight: 600;
 }
+
+/* ── Self-Improving Loop section identity ──────────────────────────────────
+   The hub (docs/self-improving/) owns a petri Bootstrap-blue signature
+   (#0d6efd). It is propagated here as the section-identity accent for the
+   07-self-improving docs section so the two surfaces read as one system.
+   Scoped via [data-doc-section] on the shell root (set in docs-shell.tsx), so
+   every other section keeps the default docs accent. See DESIGN.md §11.1. */
+[data-doc-section="07-self-improving"] .docs-prose a {
+  color: var(--acc-si);
+}
+[data-doc-section="07-self-improving"] .docs-prose a:hover {
+  color: var(--acc-si-soft);
+}
+[data-doc-section="07-self-improving"] .docs-prose blockquote {
+  border-left-color: color-mix(in srgb, var(--acc-si) 55%, transparent);
+}
+[data-doc-section="07-self-improving"] .docs-prose thead th {
+  border-bottom: 2px solid var(--acc-si);
+}
+[data-doc-section="07-self-improving"] .docs-prose pre {
+  border-color: color-mix(in srgb, var(--acc-si) 32%, rgba(255, 255, 255, 0.06));
+}
+[data-doc-section="07-self-improving"] .docs-prose :not(pre) > code {
+  color: var(--acc-si);
+}
+[data-doc-section="07-self-improving"] .docs-card:hover {
+  border-color: color-mix(in srgb, var(--acc-si) 45%, transparent);
+}
