@@ -47,6 +47,8 @@ functional change.
 
 ## [Unreleased]
 
+## [0.99.82] - 2026-05-29
+
 ### Added
 - **PR-OPUS-4-8-COMPAT (2026-05-29)** — Register Opus 4.8
   (``claude-opus-4-8``, 1M context) alongside Opus 4.7 across every
