@@ -1238,7 +1238,7 @@ def _cmd_matrix(opts: list[str]) -> None:
     )
 
     last_n = _parse_last_n(opts)
-    apply_rows = read_recent_applies(n=last_n, path=MUTATION_AUDIT_LOG_PATH, include_siblings=False)
+    apply_rows = read_recent_applies(n=last_n, path=MUTATION_AUDIT_LOG_PATH)
     attr_rows = read_recent_attributions(n=last_n, path=MUTATION_AUDIT_LOG_PATH)
 
     console.print()
@@ -1301,7 +1301,7 @@ def _cmd_rollback_check(opts: list[str]) -> None:
     from core.self_improving_loop.rollback_condition import evaluate_rollback_condition
 
     last_n = _parse_last_n(opts)
-    apply_rows = read_recent_applies(n=last_n, path=MUTATION_AUDIT_LOG_PATH, include_siblings=False)
+    apply_rows = read_recent_applies(n=last_n, path=MUTATION_AUDIT_LOG_PATH)
     attr_rows = read_recent_attributions(n=last_n, path=MUTATION_AUDIT_LOG_PATH)
 
     console.print()

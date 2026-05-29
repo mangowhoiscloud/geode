@@ -40,7 +40,7 @@ if TYPE_CHECKING:
 log = logging.getLogger(__name__)
 
 
-_KINDS_APPLY: frozenset[str] = frozenset({"applied", "applied_sibling"})
+_KINDS_APPLY: frozenset[str] = frozenset({"applied"})
 _KINDS_ATTRIBUTION: frozenset[str] = frozenset({"attribution"})
 
 
@@ -142,24 +142,17 @@ def read_recent_attributions(
 def read_recent_applies(
     n: int = 10,
     path: Path | None = None,
-    *,
-    include_siblings: bool = False,
 ) -> list[ApplyRecord]:
-    """Return the most-recent N apply rows.
+    """Return the most-recent N ``kind="applied"`` rows.
 
     Parameters
     ----------
     n
         Number of recent rows to return.
-    include_siblings
-        ``False`` (default) → ``kind="applied"`` only (top-1 채택). ``True``
-        → ``applied_sibling`` (group 의 non-best, in-memory only) 포함 — group
-        statistic 재구성 / repetitive-mutation 검사용.
     """
     if n <= 0:
         raise ValueError(f"n must be >= 1, got {n}")
-    kinds = {"applied", "applied_sibling"} if include_siblings else {"applied"}
-    rows = [r for r in iter_mutations(path, kinds=kinds) if isinstance(r, ApplyRecord)]
+    rows = [r for r in iter_mutations(path, kinds={"applied"}) if isinstance(r, ApplyRecord)]
     return rows[-n:]
 
 

@@ -327,10 +327,10 @@ def audit_seeds_generate(
         "--target-dims-attribution",
         help=(
             "PR-SG-SELECTION-ALIGN (2026-05-25, G4): comma-separated dim "
-            "names the Pareto archive (P2, selection layer) should track "
-            "for non-dominated candidates this run. Defaults to top-3 from "
-            "``pick_regression_target_dims`` when --target-dim auto-picks. "
-            "Omit to keep the single-dim contract (empty list)."
+            "names defining the attribution / evolver dim scope this run "
+            "(critic / pilot / evolver reason about these dims). Defaults to "
+            "top-3 from ``pick_regression_target_dims`` when --target-dim "
+            "auto-picks. Omit to keep the single-dim contract (empty list)."
         ),
     ),
     smoke_log: str | None = typer.Option(
@@ -742,7 +742,7 @@ def run_audit_seeds(
         # heavy SubAgentManager wiring isn't paid on a dry preview.
         try:
             # PR-SG-SELECTION-ALIGN (2026-05-25, G4) — default the
-            # Pareto-scope dim list. Explicit CLI value wins; otherwise
+            # attribution dim scope. Explicit CLI value wins; otherwise
             # auto-pick top-3 from the same baseline snapshot the
             # singular ``target_dim`` was picked from. When neither is
             # set (e.g. no baseline yet, explicit single-dim run) the
@@ -752,8 +752,8 @@ def run_audit_seeds(
             # narrowed to the same trigger as ``--target-dim auto``. When
             # the operator passes ``--target-dim broken_tool_use`` (or any
             # explicit dim), the singular intent is theirs and the plural
-            # Pareto scope should NOT silently expand to top-3. Auto-pick
-            # of attribution fires only when the singular dim itself was
+            # attribution scope should NOT silently expand to top-3.
+            # Auto-pick fires only when the singular dim itself was
             # auto-picked (target_dim None or "auto" on the CLI).
             target_dim_was_auto = (target_dim is None) or (
                 isinstance(target_dim, str) and target_dim.lower() == "auto"

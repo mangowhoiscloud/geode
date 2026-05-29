@@ -717,8 +717,7 @@ def _load_hyperparam_overrides() -> dict[str, str]:
     SoT and return the override dict, or ``{}`` on absence / parse failure.
 
     Resolution order matches the other policy SoTs:
-      1. ``GEODE_HYPERPARAM_OVERRIDE`` env var (set by audit subprocess
-         + sibling sampling, see runner.py ``_SIBLING_SOT_ENV_MAP``)
+      1. ``GEODE_HYPERPARAM_OVERRIDE`` env var (set by the audit subprocess)
       2. ``GLOBAL_HYPERPARAM_POLICY_PATH``
          (``autoresearch/state/policies/hyperparam.json``)
 

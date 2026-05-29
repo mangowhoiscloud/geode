@@ -347,9 +347,10 @@ GLOBAL_DPO_PACK_PATH = GLOBAL_SELF_IMPROVING_LOOP_DIR / "dpo" / "pack.jsonl"
 # with the other path constants. The runner re-exports the constant
 # for backwards compat with existing callers.
 MUTATION_AUDIT_LOG_PATH = _AUTORESEARCH_STATE_DIR / "mutations.jsonl"
-# P2-revised (2026-05-25) — Pareto archive 의 git-tracked JSONL.
-# Append-only, mutation 의 17-dim fitness vector 보존. AlphaEvolve
-# evolutionary DB + DGM lineage archive 의 frontier 패턴 차용.
+# git-tracked, append-only baseline history JSONL. (The Pareto-archive
+# writer that originally populated it was removed in PR-GROUP-REMOVAL;
+# the hub still reads any rows for the autoresearch timeline, and the
+# baseline-registry follow-up repurposes it as the promote-history SoT.)
 BASELINE_ARCHIVE_PATH = _AUTORESEARCH_STATE_DIR / "baseline_archive.jsonl"
 GLOBAL_AUTH_TOML = GEODE_HOME / "auth.toml"
 # PR-4 C-3 (2026-05-21) — cross-session episodic action-outcome log

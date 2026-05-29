@@ -88,7 +88,7 @@ class ApplyRecord(BaseModel):
     model_config = ConfigDict(extra="allow", populate_by_name=True)
 
     ts: float
-    kind: str = Field(default="applied", pattern=r"^applied(_sibling)?$")
+    kind: str = Field(default="applied", pattern=r"^applied$")
     """``applied`` is the canonical kind. The ``applied_sibling`` variant
     is a vestigial reader-side allowance (no current writer) retained so
     legacy on-disk rows from the removed group-sampling era still parse;
@@ -405,11 +405,10 @@ def build_runner_context() -> RunnerContext:
     recent_applies: tuple[ApplyRecord, ...] = ()
     if history_n > 0:
         # Single ledger read shared by both surfaces — read once at the
-        # widest window and slice for each consumer. include_siblings=True
-        # because the dedup guard wants to see in-memory sibling mutations
-        # too (a sibling that scored just below the top-1 may be repeated
-        # next cycle if the LLM didn't internalise the dedup contract).
-        applies_window = read_recent_applies(history_n, include_siblings=True)
+        # widest window and slice for each consumer. Single-mutation loop
+        # ((1+1)-ES) writes only ``kind="applied"`` rows (group sampling
+        # removed, PR-GROUP-REMOVAL).
+        applies_window = read_recent_applies(history_n)
         attributions_window = read_recent_attributions(history_n) if feedback_n > 0 else []
         if feedback_n > 0:
             feedback_block = format_mutator_feedback_block(
@@ -1268,57 +1267,6 @@ def _mint_audit_run_id() -> str:
     return uuid.uuid4().hex[:12]
 
 
-_SIBLING_SOT_ENV_MAP: dict[str, str] = {
-    "prompt": "GEODE_WRAPPER_OVERRIDE",
-    "tool_policy": "GEODE_TOOL_POLICY_OVERRIDE",
-    "decomposition": "GEODE_DECOMPOSITION_POLICY_OVERRIDE",
-    "reflection": "GEODE_REFLECTION_POLICY_OVERRIDE",
-    "skill_catalog": "GEODE_SKILL_CATALOG_OVERRIDE",
-    "agent_contract": "GEODE_AGENT_CONTRACTS_OVERRIDE",
-    # PR-TOOL-DESCRIPTIONS-MUTATE (2026-05-27) — env wiring already
-    # exists in ``autoresearch/train.py`` (line ~878) for STRICT audit
-    # reads; the graduation requires the sibling-SoT propagation map
-    # to cover the new ``TARGET_KINDS`` entry too so group sampling
-    # can spawn audit subprocesses pointed at the temp tool-descriptions
-    # variant.
-    "tool_descriptions": "GEODE_TOOL_DESCRIPTIONS_OVERRIDE",
-    # PR-HYPERPARAM-FOUNDATION (2026-05-28) — env literal landed in
-    # ``autoresearch/train.py`` so the env-map ↔ TARGET_KINDS invariant
-    # passes against the 8-kind tuple. The audit-subprocess consumer
-    # (``plugins/petri_audit/runner.py:build_command`` reading the SoT
-    # and translating to inspect-petri ``-T`` flags) ships in PR-3
-    # (PR-HYPERPARAM-WIRE). Until then the env var is set but no
-    # reader inside the audit subprocess loads it — a deliberate 2-PR
-    # seam (foundation → wire-through).
-    "hyperparam": "GEODE_HYPERPARAM_OVERRIDE",
-}
-"""P1-revised — sibling SoT temp file path 를 propagation 할 env var
-mapping (per ``Mutation.target_kind``). W3 인프라 (``autoresearch/train.py:809+``)
-의 ``GEODE_*_OVERRIDE`` 와 동일 — sibling audit subprocess 가 strict mode
-로 temp SoT 를 read 하도록 강제."""
-
-_SIBLING_SOT_STRICT_ENV_MAP: dict[str, str] = {
-    "tool_policy": "GEODE_TOOL_POLICY_STRICT",
-    "decomposition": "GEODE_DECOMPOSITION_POLICY_STRICT",
-    "reflection": "GEODE_REFLECTION_POLICY_STRICT",
-    "skill_catalog": "GEODE_SKILL_CATALOG_STRICT",
-    "agent_contract": "GEODE_AGENT_CONTRACTS_STRICT",
-    # PR-TOOL-DESCRIPTIONS-MUTATE (2026-05-27) — strict-load env so the
-    # sibling audit subprocess fails fast on schema drift in the temp
-    # tool-descriptions JSON, matching the other nested-schema kinds.
-    "tool_descriptions": "GEODE_TOOL_DESCRIPTIONS_STRICT",
-    # PR-HYPERPARAM-FOUNDATION (2026-05-28) — strict-load env name
-    # mirrors the other simple-shape kinds. PR-3 (PR-HYPERPARAM-WIRE)
-    # will land the reader that honours the STRICT flag (current
-    # build_command reads inspect-petri argv directly, but the wire-
-    # through PR adds an SoT->argv translator that will respect
-    # STRICT=1 on schema drift).
-    "hyperparam": "GEODE_HYPERPARAM_STRICT",
-}
-"""``GEODE_<KIND>_STRICT=1`` mapping — sibling audit 의 strict-load.
-``prompt`` kind 는 ``_load_wrapper_override`` 가 env path 가 set 되면
-자동 strict (W3 PR-3 패턴) 라 별도 STRICT flag 불필요."""
-
 
 def _run_autoresearch_subprocess(
     *,
@@ -1327,10 +1275,6 @@ def _run_autoresearch_subprocess(
     audit_run_id: str = "",
     mutation_id: str = "",
     expected_dim: dict[str, float] | None = None,
-    sibling_sot_kind: str = "",
-    sibling_sot_path: Path | None = None,
-    group_id: str = "",
-    no_promote: bool = False,
     rollback_condition: str = "",
 ) -> subprocess.CompletedProcess[str]:
     """Spawn ``autoresearch/train.py`` for the post-mutation audit.
@@ -1347,31 +1291,18 @@ def _run_autoresearch_subprocess(
     append. env 누락 시 hook 가 graceful skip (legacy --promote /
     manual run 보존).
 
-    P1-revised (2026-05-25 baseline RL grounding) — ``sibling_sot_kind``
-    / ``sibling_sot_path`` / ``group_id`` / ``no_promote`` parameter
-    추가. group sampling 의 sibling audit 가 (1) temp SoT path 를
-    canonical SoT 대신 read 하도록 env override + STRICT, (2) baseline.json
-    promote 차단 (--no-promote argv), (3) attribution row 에 group_id
-    propagation.
+    PR-SIL-MULTIOBJ A2 (2026-05-29) — ``rollback_condition`` env-propagated
+    so train.py's promote decision can auto-evaluate it as a *secondary*
+    reject gate (empty string ⇒ env unset ⇒ train.py skips the check).
     """
     argv = ["uv", "run", "python", "autoresearch/train.py"]
     if dry_run:
         argv.append("--dry-run")
-    if no_promote:
-        argv.append("--no-promote")
     env = os.environ.copy()
     if audit_run_id and mutation_id:
         env["GEODE_SIL_AUDIT_RUN_ID"] = audit_run_id
         env["GEODE_SIL_MUTATION_ID"] = mutation_id
         env["GEODE_SIL_EXPECTED_DIM"] = json.dumps(expected_dim or {}, ensure_ascii=False)
-    if group_id:
-        env["GEODE_SIL_GROUP_ID"] = group_id
-    # PR-SIL-MULTIOBJ A2 (2026-05-29) — propagate the mutation's
-    # ``rollback_condition`` predicate so train.py's promote decision can
-    # auto-evaluate it (``evaluate_rollback_condition``) as a *secondary*
-    # reject gate. Empty string ⇒ env unset ⇒ train.py skips the check
-    # (legacy behaviour). The sibling no_promote audits never promote, so
-    # this only bites on the winner's promote run.
     if rollback_condition:
         env["GEODE_SIL_ROLLBACK_CONDITION"] = rollback_condition
     # PR-11 P3.1 (2026-05-25) — anchor_confidence_mode env forward. config
@@ -1382,17 +1313,6 @@ def _run_autoresearch_subprocess(
 
     if load_self_improving_loop_config().autoresearch.anchor_confidence_mode:
         env["GEODE_SIL_ANCHOR_CONFIDENCE_MODE"] = "1"
-    if sibling_sot_kind and sibling_sot_path is not None:
-        env_var = _SIBLING_SOT_ENV_MAP.get(sibling_sot_kind)
-        if env_var is None:
-            raise ValueError(
-                f"sibling_sot_kind {sibling_sot_kind!r} has no env mapping; "
-                f"expected one of {list(_SIBLING_SOT_ENV_MAP)!r}"
-            )
-        env[env_var] = str(sibling_sot_path)
-        strict_var = _SIBLING_SOT_STRICT_ENV_MAP.get(sibling_sot_kind)
-        if strict_var is not None:
-            env[strict_var] = "1"
     return subprocess.run(  # noqa: S603  # nosec B603 — argv built from constants
         argv,
         cwd=str(repo_root),
