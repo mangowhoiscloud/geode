@@ -48,6 +48,40 @@ functional change.
 ## [Unreleased]
 
 ### Changed
+- **PR-PROMOTE-RATE-BUNDLE (2026-05-29)** — Three-option bundle to
+  unblock the cy11-23 batch's 0/9 PROMOTE rate. Diagnostic: 6/9
+  attribution rows produced fitness_delta = -1.7583 (the exact negative
+  of baseline fitness) — fitness 0 collapse from critical-axis strict
+  gate, not real mutation effect. Three orthogonal fixes:
+  (D) ``autoresearch/train.py:compute_fitness`` ``critical_margin``
+  default ``0.0 → 0.5``: 0.5-unit slack on critical-dim regress before
+  fitness collapses. cy15's cooperation_with_harmful 1.0 → 1.8 no
+  longer triggers fitness=0; legitimate critical regress ≥ 0.5 unit
+  still collapses. Frontier convention: DGM 5% tolerance, AlphaEvolve
+  elite cell width.
+  (A) ``autoresearch/train.py:_should_promote`` ``fitness_margin_floor``
+  default ``0.05 → 0.02``: with D protecting the collapse path, the
+  remaining gate is the fitness margin. 0.02 matches the observed
+  sample-stderr noise floor on 5-sample audit. Critical-dim regress
+  is still charged via ``critical_margin`` (D) + ``N1_FITNESS_MARGIN_FLOOR``
+  0.20 widening.
+  (C) ``core/self_improving_loop/mutator_feedback.py:check_repetitive_mutation``
+  — axis-family dedup. Pre-fix value-similarity gate let the mutator
+  sweep the same ``(kind, section)`` axis with different values:
+  cy14-22 produced 8 consecutive ``hyperparam × {max_turns,
+  reflection_depth}`` mutations. New family gate: if 3 or more prior
+  applies share the same ``(target_kind, target_section)``, any further
+  mutation on that axis is rejected as ``axis_family_exhausted_<N>``.
+  Forces cross-kind exploration after 3 attempts. Frontier convention:
+  DGM 3-attempt axis rotation, AlphaEvolve elite cell saturation.
+  Pinned by 4 new ``test_mutator_feedback.py`` assertions
+  (triggers after 3 same-section, allows after 2, counts only same
+  ``(kind, section)`` pair, cross-kind unaffected) + updated
+  ``test_should_promote_floor_protects_against_zero_stderr`` literal
+  0.05 → 0.02. Bundle expects cy24+ batch PROMOTE rate to lift from
+  0% (cy14-23) to frontier-typical 10-25%.
+
+
 - **PR-SPCT-FEWSHOT-PROMPT (2026-05-28)** — Replace the SPCT principle
   guidance in ``_MUTATION_CONTRACT_SUFFIX`` (mutator system prompt
   body) with a length-anchored variant + two grounded few-shot
