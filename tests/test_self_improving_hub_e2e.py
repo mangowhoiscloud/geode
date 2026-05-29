@@ -662,6 +662,45 @@ def test_petri_bundle_excludes_seedgen_logs() -> None:
     )
 
 
+def test_seedgen_eval_samples_populate_viewer_tabs() -> None:
+    """Enriched seed-generation .eval samples drive the inspect viewer's
+    MESSAGES / TRANSCRIPT / SCORING tabs, not just JSON / METADATA.
+
+    PR-SEEDGEN-EVAL-ENRICH (2026-05-29). Reads a committed critic .eval from
+    the seed-generation bundle and asserts a sample carries non-empty
+    `messages` (MESSAGES tab), transcript `events` including a `model` event
+    (TRANSCRIPT tab), and a per-sample `scores` dict (SCORING tab).
+
+    .eval members are zstd-compressed (compress_type=93), which stdlib
+    zipfile cannot decode on Python 3.12, so we read via inspect_ai (which
+    handles it). Skips when the [audit] extra is absent — the CI audit job
+    (`uv sync --extra audit`) runs it; the structural split invariant is
+    pinned separately by ``test_petri_bundle_excludes_seedgen_logs``.
+    """
+    pytest.importorskip("inspect_ai.log")
+    from inspect_ai.log import read_eval_log
+
+    logs = REPO_ROOT / "docs/self-improving/seed-generation/bundle/logs"
+    critic = sorted(logs.glob("*seedgen-critic_*.eval"))
+    assert critic, "no critic .eval in the seed-generation bundle"
+    # Check EVERY run's critic log — not just the first — so a per-run
+    # sample<->sub-agent association break (e.g. a candidate-hash mismatch
+    # in one run's state.json) is caught, not masked by a passing run.
+    for log_path in critic:
+        log_obj = read_eval_log(str(log_path))
+        assert log_obj.samples, f"{log_path.name}: no samples"
+        sample = log_obj.samples[0]
+        assert sample.messages, (
+            f"{log_path.name}: MESSAGES tab empty — sample.messages not populated "
+            "(sub-agent dialogue not associated?)"
+        )
+        event_types = {getattr(e, "event", None) for e in (sample.events or [])}
+        assert "model" in event_types, (
+            f"{log_path.name}: TRANSCRIPT missing a ModelEvent; got {event_types}"
+        )
+        assert sample.scores, f"{log_path.name}: SCORING tab empty — no sample.scores"
+
+
 def test_seedgen_url_basepath_safety(built_seedgen_pages: dict[str, str]) -> None:
     """Every ``<a href>`` on both seedgen pages is /geode/-prefixed or external."""
     for label in ("index", "run"):
