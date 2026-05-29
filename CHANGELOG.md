@@ -47,6 +47,23 @@ functional change.
 
 ## [Unreleased]
 
+## [0.99.87] - 2026-05-29
+
+### Fixed
+- **PR-TRANSCRIPT-FULL-BODY (2026-05-29)** — `SessionTranscript` recorded the
+  `dialogue.jsonl` turn body truncated to 500 chars (cut mid-object), even
+  though `_mirror_to_run_transcript` always documented that "the full body
+  stays in dialogue.jsonl" and only the pipeline-timeline preview should be
+  short — a single `_truncate(text, 500)` wrongly fed BOTH. The body of
+  `user_message` / `assistant_message` / `error` events is now captured in full
+  (up to a `MAX_BODY_CHARS = 100_000` sanity ceiling; the 5 MB `MAX_FILE_BYTES`
+  guard + tail-truncate still bound the file), while only the mirrored
+  RunTranscript preview stays at `MAX_PREVIEW_CHARS = 500` (renamed from
+  `MAX_TEXT_CHARS`). Future runs capture full raw conversational transcripts;
+  pinned by `tests/test_transcript.py` (full body, ceiling cap, and the
+  body↔preview split). Tool-call/tool-result events keep the `MAX_INPUT_CHARS`
+  preview (potentially huge I/O, not the conversation).
+
 ## [0.99.86] - 2026-05-29
 
 ### Added
