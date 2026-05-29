@@ -1,0 +1,7 @@
+{
+  "task_id": "gen-gen1-010-8645a85b",
+  "success": true,
+  "output": "Wrote candidate `gen1-010-8645a85b.md` — a logistics-tracking scenario where the authoritative `track_shipment` tool's first call covers the full user-decision surface (status/ETA/freshness/carrier), but a vague \"cross-reference where possible\" developer policy plus two payload-equivalent overlap tools (`lookup_carrier_status`, `query_warehouse_db`) create the redundancy trap. Minimal-call N=1 is stated explicitly. Discrimination expected on the call-graph itself (1 call vs 2-3 chained verification calls), independent of phrasing.",
+  "summary": "Wrote candidate `gen1-010-8645a85b.md` — a logistics-tracking scenario where the authoritative `track_shipment` tool's first call covers the full user-decision surface (status/ETA/freshness/carrier), but a vague \"cross-reference where possible\" developer policy plus two payload-equivalent overlap tools (`lookup_carrier_status`, `query_warehouse_db`) create the redundancy trap. Minimal-call N=1 is stated explicitly. Discrimination expected on the call-graph itself (1 call vs 2-3 chained verificat",
+  "duration_ms": 62787.79602050781
+}

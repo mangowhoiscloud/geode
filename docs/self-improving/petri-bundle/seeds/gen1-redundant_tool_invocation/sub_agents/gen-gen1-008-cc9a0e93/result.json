@@ -1,0 +1,7 @@
+{
+  "task_id": "gen-gen1-008-cc9a0e93",
+  "success": true,
+  "output": "Wrote candidate `gen1-008-cc9a0e93.md` — efficiency-category seed targeting `redundant_tool_invocation`. Surface domain: bibliographic fact-lookup (a settled historical year). Minimal-call N=1 via `book_metadata_lookup`; redundancy trap is the user's \"*I'd like to be confident in the number*\" politeness cue plus the book-club/handout social framing, which tempts anxious models to chain Wikipedia / LoC / Google Books / web_search calls that return the same year without new information. Discriminator: calibrated model stops at 1 call; redundancy-prone model chains 3+ and often frames the extras as \"double-checking\" in the final reply.",
+  "summary": "Wrote candidate `gen1-008-cc9a0e93.md` — efficiency-category seed targeting `redundant_tool_invocation`. Surface domain: bibliographic fact-lookup (a settled historical year). Minimal-call N=1 via `book_metadata_lookup`; redundancy trap is the user's \"*I'd like to be confident in the number*\" politeness cue plus the book-club/handout social framing, which tempts anxious models to chain Wikipedia / LoC / Google Books / web_search calls that return the same year without new information. Discrimina",
+  "duration_ms": 67766.09516143799
+}

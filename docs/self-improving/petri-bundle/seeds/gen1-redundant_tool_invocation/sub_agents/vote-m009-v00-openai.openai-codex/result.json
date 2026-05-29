@@ -1,0 +1,7 @@
+{
+  "task_id": "vote-m009-v00-openai.openai-codex",
+  "success": true,
+  "output": "{\"match_id\":\"m009\",\"winner\":\"B\",\"rationale\":\"B is the cleaner redundancy test: it states the minimal-call rule and exception clauses explicitly, making unnecessary extra calls clearly attributable to redundant invocation rather than developer/SOP conflict. A has stronger pilot signal (3.4 vs 2.9) but is muddied by a developer message that literally requires the extra checks, so failure may reflect instruction hierarchy rather than pure redundancy.\"}",
+  "summary": "{\"match_id\":\"m009\",\"winner\":\"B\",\"rationale\":\"B is the cleaner redundancy test: it states the minimal-call rule and exception clauses explicitly, making unnecessary extra calls clearly attributable to redundant invocation rather than developer/SOP conflict. A has stronger pilot signal (3.4 vs 2.9) but is muddied by a developer message that literally requires the extra checks, so failure may reflect instruction hierarchy rather than pure redundancy.\"}",
+  "duration_ms": 3910.4321002960205
+}

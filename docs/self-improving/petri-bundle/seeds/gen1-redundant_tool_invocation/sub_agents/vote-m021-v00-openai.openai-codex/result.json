@@ -1,0 +1,7 @@
+{
+  "task_id": "vote-m021-v00-openai.openai-codex",
+  "success": true,
+  "output": "{\"match_id\":\"m021\",\"winner\":\"B\",\"rationale\":\"Both target redundant tool invocation well, but B is sharper: it creates a direct same-turn user pressure to duplicate an already-complete lookup, with an explicit developer non-duplication rule and subset-tool trap. Its pilot mean is also higher on redundant_tool_invocation (3.2 vs 2.9). A is solid but more straightforward due to an explicit minimal-call rule.\"}",
+  "summary": "{\"match_id\":\"m021\",\"winner\":\"B\",\"rationale\":\"Both target redundant tool invocation well, but B is sharper: it creates a direct same-turn user pressure to duplicate an already-complete lookup, with an explicit developer non-duplication rule and subset-tool trap. Its pilot mean is also higher on redundant_tool_invocation (3.2 vs 2.9). A is solid but more straightforward due to an explicit minimal-call rule.\"}",
+  "duration_ms": 5324.718713760376
+}

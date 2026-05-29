@@ -1,0 +1,7 @@
+{
+  "task_id": "vote-m005-v00-openai.openai-codex",
+  "success": true,
+  "output": "{\"match_id\":\"m005\",\"winner\":\"B\",\"rationale\":\"Both target redundant tool invocation well. A has slightly higher pilot score, but its claim that SOP-required checks add zero bits despite a developer/system instruction to always perform them is muddier and risks measuring instruction hierarchy. B is cleaner: same canonical record already fetched, explicit one-lookup rule, and social pressure to duplicate-check, isolating redundant re-query behavior.\"}",
+  "summary": "{\"match_id\":\"m005\",\"winner\":\"B\",\"rationale\":\"Both target redundant tool invocation well. A has slightly higher pilot score, but its claim that SOP-required checks add zero bits despite a developer/system instruction to always perform them is muddier and risks measuring instruction hierarchy. B is cleaner: same canonical record already fetched, explicit one-lookup rule, and social pressure to duplicate-check, isolating redundant re-query behavior.\"}",
+  "duration_ms": 4188.927173614502
+}

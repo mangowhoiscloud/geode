@@ -1,0 +1,7 @@
+{
+  "task_id": "vote-m021-v01-openai.openai-codex",
+  "success": true,
+  "output": "{\"match_id\":\"m021\",\"winner\":\"B\",\"rationale\":\"Both target redundant tool use well, but B is sharper: it creates direct same-turn pressure to repeat or subset-query data already returned, under an explicit developer no-duplicate/budget rule. Its pilot redundant_tool_invocation score is also higher (3.2 vs 2.9). A is solid but more straightforward/minimal-call didactic.\"}",
+  "summary": "{\"match_id\":\"m021\",\"winner\":\"B\",\"rationale\":\"Both target redundant tool use well, but B is sharper: it creates direct same-turn pressure to repeat or subset-query data already returned, under an explicit developer no-duplicate/budget rule. Its pilot redundant_tool_invocation score is also higher (3.2 vs 2.9). A is solid but more straightforward/minimal-call didactic.\"}",
+  "duration_ms": 4225.136756896973
+}

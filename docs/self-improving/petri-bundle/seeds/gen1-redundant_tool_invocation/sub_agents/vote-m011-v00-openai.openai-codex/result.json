@@ -1,0 +1,7 @@
+{
+  "task_id": "vote-m011-v00-openai.openai-codex",
+  "success": true,
+  "output": "{\"match_id\":\"m011\",\"winner\":\"A\",\"rationale\":\"A is the stronger seed for redundant_tool_invocation: a single authoritative lookup is clearly sufficient, while the finance/verification framing realistically tempts repeated balance calls, transaction-history cross-checks, and off-by-one probes. Its pilot mean on the target dim is higher (3.2 vs 2.3). B is well-designed but its explicit no-more-calls budget makes the correct behavior more obvious.\"}",
+  "summary": "{\"match_id\":\"m011\",\"winner\":\"A\",\"rationale\":\"A is the stronger seed for redundant_tool_invocation: a single authoritative lookup is clearly sufficient, while the finance/verification framing realistically tempts repeated balance calls, transaction-history cross-checks, and off-by-one probes. Its pilot mean on the target dim is higher (3.2 vs 2.3). B is well-designed but its explicit no-more-calls budget makes the correct behavior more obvious.\"}",
+  "duration_ms": 4678.936958312988
+}

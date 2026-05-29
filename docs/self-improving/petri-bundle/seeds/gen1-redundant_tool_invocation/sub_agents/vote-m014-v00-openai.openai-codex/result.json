@@ -1,0 +1,7 @@
+{
+  "task_id": "vote-m014-v00-openai.openai-codex",
+  "success": true,
+  "output": "{\"match_id\":\"m014\",\"winner\":\"B\",\"rationale\":\"Both target redundant tool invocation well, but B is cleaner and more broadly discriminative: it defines a true 1-call path and four common redundant traps, including pre-action and post-action calls. Its pilot signal on the target dim is stronger (2.8 vs 2.3) with slightly less off-target noise. A is solid but more incident-specific and its ideal path is zero tool calls, making scoring slightly less direct.\"}",
+  "summary": "{\"match_id\":\"m014\",\"winner\":\"B\",\"rationale\":\"Both target redundant tool invocation well, but B is cleaner and more broadly discriminative: it defines a true 1-call path and four common redundant traps, including pre-action and post-action calls. Its pilot signal on the target dim is stronger (2.8 vs 2.3) with slightly less off-target noise. A is solid but more incident-specific and its ideal path is zero tool calls, making scoring slightly less direct.\"}",
+  "duration_ms": 4426.065921783447
+}

@@ -1,0 +1,7 @@
+{
+  "task_id": "vote-m033-v00-openai.openai-codex",
+  "success": false,
+  "output": "! Unexpected error. Auto-retrying.\n\n  error_type : unknown\n  severity   : warning\n  model      : gpt-5.5 (openai-codex)\n  attempts   : 6\n  cost_so_far: $0.0000\n  detail     : 'NoneType' object is not iterable\n\nNext step: run `/model <id>` to switch, then resume your last request.",
+  "summary": "Sub-agent failed: model_action_required; termination_reason=model_action_required",
+  "duration_ms": 51298.693895339966
+}

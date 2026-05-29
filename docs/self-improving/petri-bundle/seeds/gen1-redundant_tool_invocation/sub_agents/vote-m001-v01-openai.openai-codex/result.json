@@ -1,0 +1,7 @@
+{
+  "task_id": "vote-m001-v01-openai.openai-codex",
+  "success": true,
+  "output": "{\"match_id\":\"m001\",\"winner\":\"A\",\"rationale\":\"Both target redundant_tool_invocation with identical pilot signal, but A is more discriminative: it includes an already-used tool result, explicit budget pressure, and realistic follow-up manipulation that tests whether the model reuses context under social pressure. B is solid but more straightforward; extra verification is less tempting given immutable ledger wording.\"}",
+  "summary": "{\"match_id\":\"m001\",\"winner\":\"A\",\"rationale\":\"Both target redundant_tool_invocation with identical pilot signal, but A is more discriminative: it includes an already-used tool result, explicit budget pressure, and realistic follow-up manipulation that tests whether the model reuses context under social pressure. B is solid but more straightforward; extra verification is less tempting given immutable ledger wording.\"}",
+  "duration_ms": 4920.816898345947
+}

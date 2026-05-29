@@ -47,6 +47,60 @@ functional change.
 
 ## [Unreleased]
 
+## [0.99.83] - 2026-05-29
+
+> PATCH — self-improving hub data-integrity sprint. gen1 broken-link
+> recovery (bundle sync gap), mutations page rebuilt against the live
+> flat schema, and the gen1-broken tournament re-evaluated with the
+> recovered Codex voter.
+
+### Fixed
+- **PR-GEN1-BROKEN-REEVAL (2026-05-29)** — Re-evaluate the `gen1-broken_tool_use`
+  self-improving run's tournament with the recovered Codex voter. The original
+  run hit 118/118 `openai-codex` `voter_call_failed` (a transient Codex outage),
+  so all 59 matches lost quorum, every candidate's Elo stayed flat at 1000.0,
+  and survivors fell back to id-order. Codex is healthy again (verified —
+  `effort="none"` voters return valid structured votes), so the Ranker was
+  re-run against the same 15 existing candidate MDs (no regeneration): 177/177
+  votes succeeded (codex 118/118, claude-cli 59/59), 0 quorum lost. The
+  recovered `tournament.json` (real per-voter panel + Elo deltas) and
+  `state.json` (`elo_ratings` now spanning 878–1116, merit-ordered `survivors`)
+  replace the corrupted records; gen1-002 (lowest Elo) drops out and gen1-005
+  enters the survivor set. A `reeval` provenance block records the original
+  failure + that `evolved_candidates` predate the re-evaluation (retained as the
+  historical record). Hub re-rendered: the tournament page's "ranker integrity
+  warning" is gone (0% parse_error, 59 ratified).
+- **PR-MUTATIONS-REDESIGN (2026-05-29)** — Rebuild the autoresearch
+  `/self-improving/autoresearch/mutations/` page against the live
+  `mutations.jsonl` schema. The renderer keyed off a stale nested
+  `ts_utc` / `mutation{}` / `mutator{}` / `verdict` shape (the fixture
+  matched it so the E2E stayed green), but the runner now emits a flat
+  schema in two row kinds — an APPLY record (`target_kind` /
+  `target_section` / `previous_value` → `new_value` / `rationale` /
+  `principle` / `target_dim`) and a separate ATTRIBUTION record
+  (`fitness_before` / `fitness_after` / `fitness_delta` /
+  `attribution_score` / `significant` / `observed_dim`) — so every column
+  rendered empty against production data. `_join_mutation_records()` now
+  joins the two kinds by `mutation_id` (one row per mutation, newest
+  applied first; attribution may be absent until the post-mutation audit
+  lands), and the table surfaces applied-at, target, aimed dim + measured
+  move + significance chip, `fitness_before → fitness_after` Δ,
+  attribution score, a derived outcome chip (improved / regressed / noise
+  / pending audit), and a `payload` drill-down (before → after value,
+  rationale, principle, rollback_condition, audit_run_id). The
+  non-functional CSS-only filter mockup (static chips with no behaviour)
+  is removed in favour of a real aggregate summary block
+  (`_render_mutations_summary`: outcome counts + mean Δfitness + target
+  kinds + aimed dims); the dead `.filter-strip` CSS is pruned. Fixture +
+  `test_autoresearch_mutations_table_renders` rewritten to the live flat
+  schema. Folded a Codex-MCP catch: the **policies** page's "mutated by"
+  cross-ref shared the same drift (it indexed `mutation["target_section"]`
+  with a `::` filename prefix + `ts_utc`, so every row rendered `—`); it
+  now maps the flat `target_kind` → policy filename via
+  `_TARGET_KIND_TO_POLICY_FILE` (a stdlib-only mirror of core's
+  `_KIND_TO_PATH`, pinned in lockstep by `test_policy_file_map_matches_core`)
+  and shows the latest section + applied-at + outcome per file.
+
 ## [0.99.82] - 2026-05-29
 
 ### Added
@@ -155,6 +209,35 @@ functional change.
   ``test_principle_exceeds_1000_raises`` (1001 char) + 추가
   ``test_principle_at_or_under_1000_accepted`` (800 char 사이즈,
   cycle 14-16 의 typical 값).
+
+### Fixed
+- **PR-HUB-GEN1-LINKFIX (2026-05-29)** — Eliminate the dangling internal
+  links on the two legacy ``gen1`` self-improving hub runs (gen1-redundant:
+  9 tournament → ``/candidates/<cid>/`` + 1 viewer → ``/lineage/<cid>/diff/``;
+  gen1-broken: 5 viewer → diff). Root cause was a bundle sync gap, not a
+  pure builder bug: the committed renders were built from rich local
+  bundles (``tournament.json`` + full ``candidates/`` + ``candidates_evolved/``)
+  that PR #1850's mirror loop never committed, so the rendered tournament /
+  viewer pages linked cids and diff pages with no committed backing. Two
+  builder-robustness fixes in ``scripts/build_self_improving_hub.py`` keep
+  link-emit / page-emit parity for any bundle shape:
+  (1) ``_linkable_candidate_cids()`` sources the per-cid viewer + lineage
+  loops from the union of ``state.candidates`` ∪ ``evolved_candidates`` ∪
+  on-disk ``candidates/*.md`` ∪ ``tournament.json`` participants (legacy
+  runs recorded only a subset in ``state.candidates`` via
+  ``candidates_requested`` truncation);
+  (2) ``_evolver_diff_md_paths()`` is the single source of truth for
+  whether a ``lineage/<parent>/diff/`` page renders — the diff-page
+  emitter, the per-cid viewer's "evolved → diff" chip, and the lineage
+  evolver station all gate on it, so a diff link is never emitted for a
+  silently-skipped page (the chip falls back to the evolved candidate's
+  own viewer). The recovered ``gen1`` bundles (same file categories as the
+  committed ``gen-2605`` bundles: ``state.json`` / ``tournament.json`` /
+  ``candidates`` / ``candidates_evolved`` / ``sub_agents`` / ``checkpoints``)
+  are committed so the render is reproducible from tracked inputs. Pinned by
+  ``test_seedgen_run_internal_links_resolve`` +
+  ``test_viewer_diff_link_gated_on_diff_page`` in
+  ``tests/test_self_improving_hub_e2e.py``.
 
 ## [0.99.81] - 2026-05-28
 

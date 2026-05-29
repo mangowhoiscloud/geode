@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Mutations &middot; Autoresearch &middot; GEODE Self-Improving Hub</title>
-<meta name="description" content="Autoresearch mutation ledger — per-row ApplyRecord (W4 schema, 2026-05-25). Target section, verdict, Δfitness.">
+<meta name="description" content="Autoresearch mutation ledger — apply + attribution records joined by mutation_id. Target, before→after, Δfitness, outcome.">
 <link rel="stylesheet" href="/geode/self-improving/assets/hub.css">
 </head>
 <body>
@@ -66,29 +66,20 @@
 
   <main class="content">
     <h1 class="page-title">Mutations <span class="bucket autoresearch">autoresearch</span></h1>
-    <p class="page-sub">Append-only ledger of mutations applied by the self-improving-loop runner. One row per <code>mutations.jsonl</code> line; expand <code>&lt;details&gt;</code> for full payload (ApplyRecord W4 schema, 2026-05-25, v0.99.54+).</p>
+    <p class="page-sub">Each mutation the self-improving-loop runner applied, joined by <code>mutation_id</code> from the <code>mutations.jsonl</code> apply record (target &middot; before &rarr; after &middot; rationale) and its attribution record (&Delta;fitness &middot; significance), the latter landing once the post-mutation audit completes. Expand <code>payload</code> for the full change.</p>
 
-    <div class="filter-strip" role="group" aria-label="Mutation filter chips">
-      <span class="filter-label">filter</span>
-      <span class="filter-chip active">all</span>
-      <span class="filter-chip">applied</span>
-      <span class="filter-chip">reverted</span>
-      <span class="filter-chip">pending</span>
-      <span class="filter-label" style="margin-left: .8rem;">target</span>
-{{ filter_target_chips }}
-    </div>
+{{ mutations_summary }}
 
     <h2 class="section"><span>Mutations &middot; {{ mutations_section_label }}</span></h2>
     <table class="records">
       <thead>
         <tr>
-          <th scope="col">ts_utc</th>
-          <th scope="col">gen_tag</th>
-          <th scope="col">target_section</th>
-          <th scope="col">kind</th>
-          <th scope="col">mutator</th>
-          <th scope="col">verdict</th>
+          <th scope="col">applied</th>
+          <th scope="col">target</th>
+          <th scope="col">aimed dim</th>
           <th scope="col">&Delta; fitness</th>
+          <th scope="col" class="num">attribution</th>
+          <th scope="col">outcome</th>
         </tr>
       </thead>
       <tbody>
@@ -97,7 +88,7 @@
     </table>
 
     <div class="build-info">
-      <p>Source: <code>autoresearch/state/mutations.jsonl</code> (ApplyRecord W4 schema, 2026-05-25, v0.99.54+).</p>
+      <p>Source: <code>autoresearch/state/mutations.jsonl</code> — apply + attribution records joined by <code>mutation_id</code>.</p>
       <p>Published by <code>.github/workflows/pages.yml</code> on every <code>main</code> push.</p>
       <p>Repo: <a href="https://github.com/mangowhoiscloud/geode" rel="noopener">github.com/mangowhoiscloud/geode</a></p>
       <p>Harness chip legend:

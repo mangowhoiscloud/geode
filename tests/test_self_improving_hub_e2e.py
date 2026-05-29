@@ -801,18 +801,34 @@ def test_autoresearch_baseline_stale_warning(tmp_path: Path) -> None:
 def test_autoresearch_mutations_table_renders(
     built_autoresearch_pages: dict[str, str],
 ) -> None:
-    """Mutations page has the table + filter strip + at least 1 row from fixture."""
+    """Mutations page joins apply+attribution records into one row each, with a
+    summary block, real columns, outcome chips, and a payload drill-down.
+
+    Regression for the 2026-05-29 schema drift: the renderer keyed off a
+    nested ``ts_utc``/``mutation``/``verdict`` schema the runner no longer
+    emits, so every column rendered empty against production data. The
+    fixture now uses the live flat schema (apply rows + attribution rows).
+    """
     html = built_autoresearch_pages["mutations"]
-    # Filter strip CSS-only component.
-    assert 'class="filter-strip"' in html, "mutation filter-strip missing"
-    # At least one fixture row's target section appears.
-    assert "wrapper-sections.json::sycophancy_guardrail" in html, "fixture row 1 missing"
-    assert "tool-policy.json::dispatch" in html, "fixture row 2 missing"
-    # Δfitness color classes appear (positive + negative + chips).
-    assert "delta-positive" in html, "delta-positive class missing on at least one row"
-    assert "delta-negative" in html, "delta-negative class missing on at least one row"
-    # Verdict values surface.
-    assert "applied" in html and "reverted" in html, "expected verdict labels missing"
+    # Non-functional filter mockup removed.
+    assert 'class="filter-strip"' not in html, "non-functional filter-strip should be removed"
+    # Summary block (replaces the filter) with real aggregates.
+    assert "status-grid" in html, "mutations summary status-grid missing"
+    assert "improved" in html and "regressed" in html and "pending audit" in html, (
+        "summary outcome breakdown missing"
+    )
+    # Real flat-schema fields surface (apply record).
+    assert "tool_result_handling" in html, "apply target_section missing"
+    assert "dispatch" in html, "apply target_section (regress row) missing"
+    assert "redundant_tool_invocation" in html, "aimed dim missing"
+    # Δfitness colours from the joined attribution records.
+    assert "delta-positive" in html, "delta-positive (improved) missing"
+    assert "delta-negative" in html, "delta-negative (regressed) missing"
+    # Outcome labels for each branch.
+    for outcome in ("improved", "regressed", "noise", "pending"):
+        assert outcome in html, f"outcome label {outcome!r} missing"
+    # before -> after change surfaces in the payload drill-down.
+    assert "<details>" in html and "previous" in html, "payload drill-down (before/after) missing"
 
 
 def test_autoresearch_results_sparkline(built_autoresearch_pages: dict[str, str]) -> None:
@@ -877,6 +893,50 @@ def test_autoresearch_policies_lists_14_files(
     row_count = tbody_match.group(1).count("<tr>")
     assert row_count == len(fixture_files), (
         f"expected {len(fixture_files)} policy rows, got {row_count}"
+    )
+
+
+def test_policies_mutated_by_cross_ref_uses_flat_schema(
+    built_autoresearch_pages: dict[str, str],
+) -> None:
+    """The 'mutated by' column links the latest mutation per policy file via the
+    flat target_kind -> filename map (not the stale nested ts_utc/mutation schema).
+
+    Fixture mutations target prompt (-> wrapper-sections.json),
+    tool_policy (-> tool-policy.json) and decomposition (-> decomposition.json),
+    so those rows show the section + outcome rather than an em-dash. Regression
+    guard for the schema drift that also broke this cross-ref (Codex MCP catch).
+    """
+    html = built_autoresearch_pages["policies"]
+    # The latest prompt mutation's section surfaces on the wrapper-sections row.
+    assert "verbosity_control" in html, "prompt mutation cross-ref missing on policies page"
+    # The regressed tool_policy mutation surfaces its dispatch section + outcome.
+    assert "regressed" in html, "tool_policy mutation outcome cross-ref missing"
+
+
+def test_policy_file_map_matches_core() -> None:
+    """Drift guard for the dual SoT: the builder's stdlib-only
+    ``_TARGET_KIND_TO_POLICY_FILE`` must match core's authoritative
+    ``_KIND_TO_PATH`` filenames. If the runner adds/renames a target_kind,
+    this fails until the builder map is synced.
+    """
+    import importlib.util
+
+    spec = importlib.util.spec_from_file_location("_hub_builder", BUILDER)
+    assert spec is not None and spec.loader is not None
+    builder = importlib.util.module_from_spec(spec)
+    # Register before exec so @dataclass decorators in the module resolve
+    # their __module__ via sys.modules (else dataclasses._is_type crashes).
+    sys.modules[spec.name] = builder
+    spec.loader.exec_module(builder)
+
+    from core.self_improving_loop.policies import _KIND_TO_PATH
+
+    core_map = {kind: path.name for kind, path in _KIND_TO_PATH.items()}
+    builder_map = builder._TARGET_KIND_TO_POLICY_FILE
+    assert core_map == builder_map, (
+        "builder _TARGET_KIND_TO_POLICY_FILE drifted from core _KIND_TO_PATH; "
+        f"builder={builder_map} core={core_map}"
     )
 
 
@@ -1160,6 +1220,133 @@ def test_pr3_lineage_basepath_safe(built_pr3_pages: dict[str, str]) -> None:
             assert href.startswith("/geode/"), (
                 f"PR3 page {key} href {href!r} missing /geode/ basePath"
             )
+
+
+# ---------------------------------------------------------------------------
+# 13. Link-emit / page-emit parity (2026-05-29 — legacy gen1 hub gap)
+# ---------------------------------------------------------------------------
+#
+# The hub linked /candidates/<cid>/ + /lineage/<cid>/diff/ pages that the
+# builder never emitted, because the viewer + lineage loops keyed off
+# state.json.candidates while the tournament page links every match
+# participant and the viewer linked a diff page gated only on state.
+# Fixture test-run-001 already reproduces the population case (c-003 is a
+# tournament participant absent from state.candidates).
+
+
+@pytest.fixture(scope="module")
+def built_seedgen_tree(tmp_path_factory: pytest.TempPathFactory) -> Path:
+    """Build the full hub + seedgen tree once and return the seedgen output dir.
+
+    Unlike the page-dict fixtures above, this returns the on-disk output
+    root so the parity test can walk every emitted page rather than a
+    curated subset.
+    """
+    build_root = tmp_path_factory.mktemp("seedgen-tree")
+    seedgen_out = build_root / "seedgen"
+    subprocess.run(  # noqa: S603 — fixture invocation, no user input
+        [
+            sys.executable,
+            str(BUILDER),
+            "--out",
+            str(build_root / "hub" / "index.html"),
+            "--bundle-root",
+            str(FIXTURE_ROOT / "petri-bundle"),
+            "--autoresearch-root",
+            str(FIXTURE_ROOT / "autoresearch"),
+            "--seedgen-out-dir",
+            str(seedgen_out),
+            "--autoresearch-out-dir",
+            str(build_root / "autoresearch"),
+        ],
+        check=True,
+        cwd=str(REPO_ROOT),
+    )
+    return seedgen_out
+
+
+def test_seedgen_run_internal_links_resolve(built_seedgen_tree: Path) -> None:
+    """Every internal seed-generation link under a run subtree resolves.
+
+    Regression for the legacy gen1 gap: the tournament page links every
+    match participant to ``/candidates/<cid>/``, but the viewer + lineage
+    loops only rendered ``state.json.candidates``. In test-run-001, c-003
+    is a tournament participant absent from ``state.candidates``, so
+    ``/candidates/c-003/`` dangled. ``_linkable_candidate_cids`` now sources
+    the union (drafts ∪ evolved ∪ on-disk .md ∪ tournament participants),
+    so every linked cid has a page.
+    """
+    run_root = built_seedgen_tree / SEEDGEN_FIXTURE_RUN_ID
+    assert run_root.is_dir(), f"run subtree missing at {run_root}"
+    seedgen_prefix = "/geode/self-improving/seed-generation/"
+    run_prefix = f"{seedgen_prefix}{SEEDGEN_FIXTURE_RUN_ID}/"
+    broken: list[str] = []
+    for page in run_root.rglob("index.html"):
+        for href in _collect_hrefs(page.read_text(encoding="utf-8")):
+            target = href.split("#", 1)[0]
+            if not target.startswith(run_prefix):
+                continue
+            dest = built_seedgen_tree / target[len(seedgen_prefix) :]
+            if target.endswith("/"):
+                dest = dest / "index.html"
+            if not dest.exists():
+                broken.append(f"{page.relative_to(run_root).as_posix()}  ->  {href}")
+    assert not broken, "dangling internal seed-gen links:\n" + "\n".join(sorted(set(broken)))
+
+
+def test_viewer_diff_link_gated_on_diff_page(tmp_path: Path) -> None:
+    """The viewer's "evolved → diff" chip links the diff page only when it renders.
+
+    Regression for the legacy gen1 diff gap: the per-cid viewer emitted
+    ``/lineage/<parent>/diff/`` whenever state recorded an evolved child,
+    even when the evolved MD was missing from disk so the diff page was
+    silently skipped (6 dangling links across gen1 runs). With the evolved
+    MD removed, the diff page must not render and the chip must fall back
+    to the evolved candidate's own viewer instead of dangling.
+    """
+    bundle = tmp_path / "petri-bundle"
+    shutil.copytree(FIXTURE_ROOT / "petri-bundle", bundle)
+    evolved_md = bundle / "seeds" / SEEDGEN_FIXTURE_RUN_ID / "candidates" / "c-001-ev1.md"
+    assert evolved_md.is_file(), "fixture precondition: evolved MD present"
+    evolved_md.unlink()
+
+    out = tmp_path / "out"
+    seedgen_out = out / "seedgen"
+    result = subprocess.run(  # noqa: S603 — fixture invocation, no user input
+        [
+            sys.executable,
+            str(BUILDER),
+            "--out",
+            str(out / "hub" / "index.html"),
+            "--bundle-root",
+            str(bundle),
+            "--autoresearch-root",
+            str(FIXTURE_ROOT / "autoresearch"),
+            "--seedgen-out-dir",
+            str(seedgen_out),
+            "--autoresearch-out-dir",
+            str(out / "autoresearch"),
+        ],
+        check=False,
+        capture_output=True,
+        text=True,
+        cwd=str(REPO_ROOT),
+    )
+    assert result.returncode == 0, result.stderr
+    run_root = seedgen_out / SEEDGEN_FIXTURE_RUN_ID
+    # Diff page must NOT be emitted once the evolved MD is gone.
+    assert not (run_root / "lineage" / "c-001" / "diff" / "index.html").exists(), (
+        "diff page rendered despite missing evolved MD"
+    )
+    viewer = (run_root / "candidates" / "c-001" / "index.html").read_text(encoding="utf-8")
+    assert "/lineage/c-001/diff/" not in viewer, (
+        "viewer linked the skipped diff page — link-emit / page-emit parity violated"
+    )
+    # Fallback target is the evolved candidate's own viewer, which exists.
+    assert "/candidates/c-001-ev1/" in viewer, "viewer missing evolved-candidate fallback link"
+    assert (run_root / "candidates" / "c-001-ev1" / "index.html").exists(), (
+        "evolved-candidate fallback viewer not emitted"
+    )
 
 
 def test_pr2_subpages_no_js_framework(built_seedgen_pages: dict[str, str]) -> None:

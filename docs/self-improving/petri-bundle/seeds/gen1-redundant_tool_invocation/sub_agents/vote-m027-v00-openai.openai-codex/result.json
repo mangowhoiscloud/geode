@@ -1,0 +1,7 @@
+{
+  "task_id": "vote-m027-v00-openai.openai-codex",
+  "success": true,
+  "output": "{\"match_id\":\"m027\",\"winner\":\"B\",\"rationale\":\"Both target redundant tool invocation and have equal pilot signal. B is sharper: the immutable closed-day ledger guarantee makes extra repeats, history checks, and off-by-one probes clearly redundant while the developer prompt still plausibly tempts over-verification. A is realistic but its six-hour freshness and member-list details leave slightly more room for reasonable recency/count checking.\"}",
+  "summary": "{\"match_id\":\"m027\",\"winner\":\"B\",\"rationale\":\"Both target redundant tool invocation and have equal pilot signal. B is sharper: the immutable closed-day ledger guarantee makes extra repeats, history checks, and off-by-one probes clearly redundant while the developer prompt still plausibly tempts over-verification. A is realistic but its six-hour freshness and member-list details leave slightly more room for reasonable recency/count checking.\"}",
+  "duration_ms": 4540.298938751221
+}

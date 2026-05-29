@@ -1416,17 +1416,11 @@ def _emit_seedgen_run_subpages(
             (out_dir / "candidates" / "index.html").write_text(catalog_html, encoding="utf-8")
 
             # PR-HUB-VIS-CYCLE1-FOLLOWUP (2026-05-28) — per-cid MD viewer.
-            # Enumerates every draft + every evolved cid so an operator
-            # can read each MD body in isolation (lighter than the full
-            # 5-station lineage page).
-            md_cids: list[str] = []
-            for cand in state.get("candidates") or []:
-                if isinstance(cand, dict) and cand.get("id"):
-                    md_cids.append(str(cand["id"]))
-            for ev in state.get("evolved_candidates") or []:
-                if isinstance(ev, dict) and ev.get("id"):
-                    md_cids.append(str(ev["id"]))
-            for cid in md_cids:
+            # Enumerates every cid the hub links to (drafts, evolved, on-disk
+            # .md bodies, and tournament participants) so the tournament
+            # page's /candidates/<cid>/ links never dangle (link-emit /
+            # page-emit parity — see _linkable_candidate_cids).
+            for cid in _linkable_candidate_cids(state, run_bundle_dir):
                 cand_viewer_body = _render_candidate_md_viewer_body(
                     run_id=run_id,
                     cand_id=cid,
@@ -2562,14 +2556,10 @@ def _load_candidate_lineage(
         if not isinstance(ev, dict) or ev.get("parent_id") != cand_id:
             continue
         ev_id = str(ev.get("id", "?"))
-        ev_body_path = bundle_dir / "candidates_evolved" / f"{ev_id}.md"
-        # PR-HUB-VIS-CYCLE1: candidates_evolved/ is the new canonical
-        # location. Fall back to legacy candidates/<ev_id>.md for runs
-        # synced before bundle_sync started copying the evolved subdir.
-        if not ev_body_path.is_file():
-            ev_body_path = bundle_dir / "candidates" / f"{ev_id}.md"
         diff_link_html = ""
-        if cand_body_path.is_file() and ev_body_path.is_file() and run_id_for_link:
+        # Gate the diff link on the shared diff-page predicate so the
+        # link is emitted iff emit_seedgen_lineage_pages renders the page.
+        if run_id_for_link and _evolver_diff_md_paths(bundle_dir, cand_id, ev_id) is not None:
             diff_link_html = (
                 f'<p><a href="/geode/self-improving/seed-generation/'
                 f"{html_escape(run_id_for_link)}/lineage/{html_escape(cand_id)}/diff/"
@@ -2722,6 +2712,75 @@ def _render_seedgen_subview_links(
     return "".join(items)
 
 
+def _linkable_candidate_cids(state: dict[str, Any], bundle_dir: Path) -> list[str]:
+    """Every cid the hub emits a ``/candidates/<cid>/`` or ``/lineage/<cid>/`` link for.
+
+    De-duplicated, stable-ordered union of four sources:
+
+    * ``state.candidates`` ids — the recorded draft roster
+    * ``state.evolved_candidates`` ids — evolver offspring
+    * every ``candidates/*.md`` stem in the bundle — on-disk draft bodies
+    * every ``tournament.json`` match participant — the ranked population
+
+    Legacy runs (``gen1-*``) recorded only a subset of the population in
+    ``state.candidates`` (``candidates_requested`` truncation), yet the
+    tournament page links *every* match participant to its
+    ``/candidates/<cid>/`` viewer. Keying the viewer + lineage loops off
+    ``state.candidates`` alone left those links dangling. Sourcing the
+    union here keeps link-emit / page-emit parity for any bundle shape.
+    """
+    ordered: dict[str, None] = {}
+
+    def _add(raw: object) -> None:
+        cid = str(raw or "").strip()
+        if cid:
+            ordered.setdefault(cid, None)
+
+    for cand in state.get("candidates") or []:
+        if isinstance(cand, dict):
+            _add(cand.get("id"))
+    for ev in state.get("evolved_candidates") or []:
+        if isinstance(ev, dict):
+            _add(ev.get("id"))
+    candidates_md_dir = bundle_dir / "candidates"
+    if candidates_md_dir.is_dir():
+        for md_file in sorted(candidates_md_dir.glob("*.md")):
+            _add(md_file.stem)
+    tournament_path = bundle_dir / "tournament.json"
+    if tournament_path.is_file():
+        try:
+            tournament = json.loads(tournament_path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            tournament = {}
+        for match in tournament.get("matches") or []:
+            if isinstance(match, dict):
+                _add(match.get("candidate_a"))
+                _add(match.get("candidate_b"))
+    return list(ordered)
+
+
+def _evolver_diff_md_paths(
+    bundle_dir: Path, parent_id: str, evolved_id: str
+) -> tuple[Path, Path] | None:
+    """Resolve the ``(parent_md, evolved_md)`` pair backing a diff page, or ``None``.
+
+    Single source of truth for whether a ``lineage/<parent>/diff/`` page
+    renders: the page exists iff both MD bodies are on disk. The diff-page
+    emitter, the per-cid viewer's "evolved → diff" chip, and the lineage
+    evolver station all gate on this, so a diff link is never emitted for
+    a page that was silently skipped (link-emit / page-emit parity).
+    """
+    parent_md = bundle_dir / "candidates" / f"{parent_id}.md"
+    evolved_md = bundle_dir / "candidates_evolved" / f"{evolved_id}.md"
+    if not evolved_md.is_file():
+        # Legacy fallback — runs synced before bundle_sync split out the
+        # candidates_evolved/ subdir kept evolved bodies under candidates/.
+        evolved_md = bundle_dir / "candidates" / f"{evolved_id}.md"
+    if parent_md.is_file() and evolved_md.is_file():
+        return (parent_md, evolved_md)
+    return None
+
+
 def _render_candidate_md_viewer_body(
     run_id: str,
     cand_id: str,
@@ -2778,12 +2837,21 @@ def _render_candidate_md_viewer_body(
         chips.append('<span class="bucket seedgen">survivor</span>')
     if cand_id in parent_to_evolved:
         ev_cid = parent_to_evolved[cand_id]
-        diff_link = (
-            f"/geode/self-improving/seed-generation/{html_escape(run_id)}"
-            f"/lineage/{html_escape(cand_id)}/diff/"
-        )
+        if _evolver_diff_md_paths(bundle_dir, cand_id, ev_cid) is not None:
+            evolved_target = (
+                f"/geode/self-improving/seed-generation/{html_escape(run_id)}"
+                f"/lineage/{html_escape(cand_id)}/diff/"
+            )
+        else:
+            # Diff page is skipped when an MD body is missing from disk
+            # (legacy runs); fall back to the evolved candidate's own
+            # viewer so the chip never dangles.
+            evolved_target = (
+                f"/geode/self-improving/seed-generation/{html_escape(run_id)}"
+                f"/candidates/{html_escape(ev_cid)}/"
+            )
         chips.append(
-            f'<span class="bucket seedgen">evolved → <a href="{diff_link}">'
+            f'<span class="bucket seedgen">evolved → <a href="{evolved_target}">'
             f"<code>{html_escape(ev_cid)}</code></a></span>"
         )
     if cand_id in evolved_to_parent:
@@ -3156,15 +3224,10 @@ def emit_seedgen_lineage_pages(
     (out_dir / "lineage").mkdir(parents=True, exist_ok=True)
     (out_dir / "lineage" / "index.html").write_text(idx_html, encoding="utf-8")
 
-    # Per-candidate
-    ids: list[str] = []
-    for c in state.get("candidates") or []:
-        if isinstance(c, dict) and c.get("id"):
-            ids.append(str(c["id"]))
-    for ev in state.get("evolved_candidates") or []:
-        if isinstance(ev, dict) and ev.get("id"):
-            ids.append(str(ev["id"]))
-    for cid in ids:
+    # Per-candidate — same cid union as the /candidates/ viewer loop so a
+    # viewer's "5-station lineage" flow link always resolves (link-emit /
+    # page-emit parity — see _linkable_candidate_cids).
+    for cid in _linkable_candidate_cids(state, bundle_dir):
         stations = _load_candidate_lineage(state, bundle_dir, cid)
         detail_html = _render_seedgen_subpage(
             title=f"Lineage {cid} — {run_id}",
@@ -3186,12 +3249,10 @@ def emit_seedgen_lineage_pages(
         ev_id = str(ev.get("id", ""))
         if not parent_id or not ev_id:
             continue
-        parent_md_path = bundle_dir / "candidates" / f"{parent_id}.md"
-        evolved_md_path = bundle_dir / "candidates_evolved" / f"{ev_id}.md"
-        if not evolved_md_path.is_file():
-            evolved_md_path = bundle_dir / "candidates" / f"{ev_id}.md"
-        if not parent_md_path.is_file() or not evolved_md_path.is_file():
+        diff_md_paths = _evolver_diff_md_paths(bundle_dir, parent_id, ev_id)
+        if diff_md_paths is None:
             continue
+        parent_md_path, evolved_md_path = diff_md_paths
         try:
             parent_md = parent_md_path.read_text(encoding="utf-8")
             evolved_md = evolved_md_path.read_text(encoding="utf-8")
@@ -3731,75 +3792,228 @@ def _autoresearch_subview_rows(
     return "\n".join(out)
 
 
-def _render_mutations_rows(mutations: list[dict[str, Any]]) -> str:
-    """Render the mutations.jsonl table body, newest first by ts_utc."""
-    if not mutations:
+_MUTATIONS_COLSPAN = 6
+
+
+def _join_mutation_records(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Join the two ``mutations.jsonl`` row kinds by ``mutation_id``.
+
+    The self-improving-loop runner appends an APPLY record
+    (``target_kind`` / ``target_section`` / ``previous_value`` →
+    ``new_value`` / ``rationale`` / ``principle`` / ``target_dim`` /
+    ``expected_dim``) when a mutation is applied, then a *separate*
+    ATTRIBUTION record (``fitness_before`` / ``fitness_after`` /
+    ``fitness_delta`` / ``attribution_score`` / ``significant`` /
+    ``observed_dim`` / ``ci95``) once the post-mutation audit completes.
+    They share ``mutation_id``. Returns one dict per mutation —
+    ``{"id", "apply", "attr"}`` (``attr`` is ``None`` until the
+    attribution record lands) — newest applied first.
+
+    The legacy renderer keyed off a nested ``ts_utc`` / ``mutation`` /
+    ``mutator`` / ``verdict`` schema that the runner no longer emits, so
+    every column rendered empty against production data. This join reads
+    the live flat schema instead.
+    """
+    apply_by_id: dict[str, dict[str, Any]] = {}
+    attr_by_id: dict[str, dict[str, Any]] = {}
+    for row in rows:
+        mutation_id = str(row.get("mutation_id") or "")
+        if not mutation_id:
+            continue
+        if "fitness_delta" in row:
+            attr_by_id[mutation_id] = row
+        elif "target_section" in row:
+            apply_by_id[mutation_id] = row
+    merged: list[dict[str, Any]] = []
+    for mutation_id, apply_row in apply_by_id.items():
+        merged.append({"id": mutation_id, "apply": apply_row, "attr": attr_by_id.get(mutation_id)})
+    # Attribution-only records (no matching apply row) — surface them too
+    # so nothing in the ledger is silently dropped.
+    for mutation_id, attr_row in attr_by_id.items():
+        if mutation_id not in apply_by_id:
+            merged.append({"id": mutation_id, "apply": None, "attr": attr_row})
+
+    def _sort_ts(entry: dict[str, Any]) -> float:
+        anchor = entry["apply"] or entry["attr"] or {}
+        try:
+            return float(anchor.get("ts") or 0.0)
+        except (TypeError, ValueError):
+            return 0.0
+
+    merged.sort(key=_sort_ts, reverse=True)
+    return merged
+
+
+def _fmt_epoch(ts: Any) -> str:
+    """Format a float/epoch ``ts`` as ``YYYY-MM-DD HH:MM`` UTC; ``—`` on bad input."""
+    try:
+        return _dt.datetime.fromtimestamp(float(ts), tz=_dt.UTC).strftime("%Y-%m-%d %H:%M")
+    except (TypeError, ValueError, OSError, OverflowError):
+        return "—"
+
+
+def _mutation_outcome(attr: dict[str, Any] | None) -> tuple[str, str]:
+    """Map a mutation's attribution row to ``(label, css_class)``.
+
+    ``fitness_delta`` is higher-is-better (overall fitness), so a positive
+    delta past the ±0.005 noise floor is an improvement. ``None`` attr =
+    audit not yet run.
+    """
+    if attr is None:
+        return ("pending", "muted")
+    delta = attr.get("fitness_delta")
+    if not isinstance(delta, int | float):
+        return ("pending", "muted")
+    cls, _ = _delta_class(float(delta))
+    return ({"delta-positive": "improved", "delta-negative": "regressed"}.get(cls, "noise"), cls)
+
+
+def _render_mutation_payload(entry: dict[str, Any]) -> str:
+    """``<details>`` drill-down for one mutation — the full apply + attribution payload."""
+    apply_row = entry["apply"] or {}
+    attr_row = entry["attr"] or {}
+    rows: list[str] = [f"<dt>mutation_id</dt><dd><code>{html_escape(entry['id'])}</code></dd>"]
+
+    def _field(label: str, value: Any) -> None:
+        if value not in (None, "", [], {}):
+            rows.append(f"<dt>{html_escape(label)}</dt><dd>{html_escape(str(value))}</dd>")
+
+    _field("rationale", apply_row.get("rationale"))
+    _field("principle", apply_row.get("principle"))
+    _field("rollback_condition", apply_row.get("rollback_condition"))
+    audit_id = apply_row.get("audit_run_id") or attr_row.get("audit_run_id")
+    if audit_id:
+        rows.append(f"<dt>audit_run_id</dt><dd><code>{html_escape(str(audit_id))}</code></dd>")
+    score = attr_row.get("attribution_score")
+    if isinstance(score, int | float):
+        rows.append(f"<dt>attribution_score</dt><dd>{float(score):+.3f}</dd>")
+    grid = f'<dl class="status-grid">{"".join(rows)}</dl>'
+
+    diff = ""
+    prev = apply_row.get("previous_value")
+    new = apply_row.get("new_value")
+    if prev or new:
+        diff = (
+            '<p class="muted">previous</p>'
+            f'<pre class="msg">{html_escape(str(prev or "—"))}</pre>'
+            '<p class="muted">new</p>'
+            f'<pre class="msg">{html_escape(str(new or "—"))}</pre>'
+        )
+    return f'<details><summary class="muted">payload</summary>{grid}{diff}</details>'
+
+
+def _render_mutations_rows(joined: list[dict[str, Any]]) -> str:
+    """Render one table row per joined mutation, newest applied first."""
+    if not joined:
         return (
-            '        <tr><td colspan="7" class="empty">'
+            f'        <tr><td colspan="{_MUTATIONS_COLSPAN}" class="empty">'
             "<em>No mutations recorded. Run <code>uv run python autoresearch/train.py</code>."
             "</em></td></tr>"
         )
-    sorted_rows = sorted(mutations, key=lambda r: str(r.get("ts_utc") or ""), reverse=True)
     out: list[str] = []
-    for row in sorted_rows:
-        ts = short_iso(str(row.get("ts_utc") or ""))
-        gen_tag = str(row.get("gen_tag") or "")
-        mut = row.get("mutation")
-        target = ""
-        kind = ""
-        if isinstance(mut, dict):
-            target = str(mut.get("target_section") or "")
-            kind = str(mut.get("kind") or "")
-        mutator = row.get("mutator")
-        mutator_model = ""
-        if isinstance(mutator, dict):
-            mutator_model = str(mutator.get("model") or "")
-        if not mutator_model:
-            # Fallback to a top-level cost_model field (ApplyRecord schema).
-            mutator_model = str(row.get("cost_model") or "")
-        verdict = str(row.get("verdict") or "")
-        verdict_cls = "muted"
-        if verdict == "applied":
-            verdict_cls = "delta-positive"
-        elif verdict == "reverted":
-            verdict_cls = "delta-negative"
-        elif verdict == "pending":
-            verdict_cls = "delta-noise"
-        verdict_cell = f'<span class="{verdict_cls}">{html_escape(verdict or "—")}</span>'
-        delta = row.get("fitness_delta")
-        if isinstance(delta, int | float):
-            cls, sign = _delta_class(float(delta))
-            delta_cell = f'<span class="{cls}">{sign}{abs(float(delta)):.4f}</span>'
+    for entry in joined:
+        apply_row = entry["apply"] or {}
+        attr_row = entry["attr"]
+        ts_cell = _fmt_epoch(apply_row.get("ts") if apply_row else (attr_row or {}).get("ts"))
+        target_kind = str(apply_row.get("target_kind") or "—")
+        target_section = str(apply_row.get("target_section") or "—")
+        target_dim = str(apply_row.get("target_dim") or "")
+
+        # Aimed dim + its measured move (with a significance chip).
+        if target_dim:
+            dim_cell = f"<code>{html_escape(target_dim)}</code>"
+            observed = (attr_row or {}).get("observed_dim")
+            if isinstance(observed, dict) and isinstance(observed.get(target_dim), int | float):
+                dim_cell += f' <span class="muted">{float(observed[target_dim]):+.2f}</span>'
+            significant = (attr_row or {}).get("significant")
+            if isinstance(significant, dict) and significant.get(target_dim):
+                dim_cell += ' <span class="bucket seedgen">sig</span>'
         else:
-            delta_cell = '<span class="muted">—</span>'
+            dim_cell = '<span class="muted">—</span>'
+
+        # Δfitness — before → after + signed delta.
+        if attr_row and isinstance(attr_row.get("fitness_delta"), int | float):
+            delta = float(attr_row["fitness_delta"])
+            cls, sign = _delta_class(delta)
+            before = attr_row.get("fitness_before")
+            after = attr_row.get("fitness_after")
+            ba = ""
+            if isinstance(before, int | float) and isinstance(after, int | float):
+                ba = f'<span class="muted">{float(before):.3f} → {float(after):.3f}</span> '
+            fit_cell = f'{ba}<span class="{cls}">{sign}{abs(delta):.4f}</span>'
+        else:
+            fit_cell = '<span class="muted">pending audit</span>'
+
+        score = (attr_row or {}).get("attribution_score")
+        attr_cell = (
+            f'<span class="num">{float(score):+.2f}</span>'
+            if isinstance(score, int | float)
+            else '<span class="muted">—</span>'
+        )
+
+        label, outcome_cls = _mutation_outcome(attr_row)
+        outcome_cell = (
+            f'<span class="{outcome_cls}">{label}</span> {_render_mutation_payload(entry)}'
+        )
+
         out.append(
             "        <tr>\n"
-            f'          <td class="muted">{html_escape(ts)}</td>\n'
-            f'          <td class="muted"><code>{html_escape(gen_tag)}</code></td>\n'
-            f"          <td><code>{html_escape(target)}</code></td>\n"
-            f'          <td class="muted">{html_escape(kind)}</td>\n'
-            f"          <td>{harness_chip(mutator_model) if mutator_model else ''}</td>\n"
-            f"          <td>{verdict_cell}</td>\n"
-            f"          <td>{delta_cell}</td>\n"
+            f'          <td class="muted">{html_escape(ts_cell)}</td>\n'
+            f"          <td><code>{html_escape(target_kind)}</code> &middot; "
+            f"{html_escape(target_section)}</td>\n"
+            f"          <td>{dim_cell}</td>\n"
+            f"          <td>{fit_cell}</td>\n"
+            f'          <td class="num">{attr_cell}</td>\n'
+            f"          <td>{outcome_cell}</td>\n"
             "        </tr>"
         )
     return "\n".join(out)
 
 
-def _render_filter_target_chips(mutations: list[dict[str, Any]]) -> str:
-    """Render filter-strip chips for unique target_section values."""
-    seen: list[str] = []
-    for row in mutations:
-        mut = row.get("mutation")
-        if isinstance(mut, dict):
-            target = str(mut.get("target_section") or "")
-            # Use just the file portion (before "::") for the chip.
-            head = target.split("::", 1)[0] if "::" in target else target
-            if head and head not in seen:
-                seen.append(head)
-    if not seen:
-        return '<span class="filter-chip">none</span>'
-    return "".join(f'<span class="filter-chip">{html_escape(t)}</span>' for t in seen[:10])
+def _render_mutations_summary(joined: list[dict[str, Any]]) -> str:
+    """Aggregate stat block (replaces the non-functional filter mockup)."""
+    if not joined:
+        return ""
+    total = len(joined)
+    improved = regressed = noise = pending = 0
+    deltas: list[float] = []
+    kinds: dict[str, int] = {}
+    dims: set[str] = set()
+    for entry in joined:
+        apply_row = entry["apply"] or {}
+        kind = str(apply_row.get("target_kind") or "?")
+        kinds[kind] = kinds.get(kind, 0) + 1
+        if apply_row.get("target_dim"):
+            dims.add(str(apply_row["target_dim"]))
+        label, _ = _mutation_outcome(entry["attr"])
+        if label == "improved":
+            improved += 1
+        elif label == "regressed":
+            regressed += 1
+        elif label == "noise":
+            noise += 1
+        else:
+            pending += 1
+        delta = (entry["attr"] or {}).get("fitness_delta")
+        if isinstance(delta, int | float):
+            deltas.append(float(delta))
+    mean_delta = sum(deltas) / len(deltas) if deltas else 0.0
+    kinds_str = " &middot; ".join(f"{html_escape(k)} {v}" for k, v in sorted(kinds.items()))
+    dims_str = ", ".join(html_escape(d) for d in sorted(dims)) or "—"
+    return (
+        '    <section class="page-sub"><dl class="status-grid">\n'
+        f"      <dt>mutations</dt><dd>{total}</dd>\n"
+        "      <dt>outcome</dt><dd>"
+        f'<span class="delta-positive">{improved} improved</span> &middot; '
+        f'<span class="delta-negative">{regressed} regressed</span> &middot; '
+        f'<span class="delta-noise">{noise} noise</span> &middot; '
+        f'<span class="muted">{pending} pending audit</span></dd>\n'
+        f"      <dt>mean &Delta;fitness</dt><dd>{mean_delta:+.4f} "
+        f'<span class="muted">(n={len(deltas)})</span></dd>\n'
+        f"      <dt>target kinds</dt><dd>{kinds_str}</dd>\n"
+        f"      <dt>aimed dims</dt><dd>{dims_str}</dd>\n"
+        "    </dl></section>"
+    )
 
 
 def _render_results_header_cells() -> str:
@@ -3889,31 +4103,45 @@ def _render_results_rows(
     return "\n".join(out)
 
 
+# target_kind -> mirrored policy filename. Local copy of the SoT in
+# core/self_improving_loop/policies.py::_KIND_TO_PATH (the docs builder is
+# intentionally stdlib-only, so it cannot import core). Kept in lockstep by
+# test_policy_file_map_matches_core (dual-SoT drift guard).
+_TARGET_KIND_TO_POLICY_FILE: dict[str, str] = {
+    "prompt": "wrapper-sections.json",
+    "tool_policy": "tool-policy.json",
+    "decomposition": "decomposition.json",
+    "retrieval": "retrieval.json",
+    "reflection": "reflection.json",
+    "skill_catalog": "skill-catalog.json",
+    "agent_contract": "agent-contracts.json",
+    "tool_descriptions": "tool-descriptions.json",
+    "hyperparam": "hyperparam.json",
+}
+
+
 def _render_policies_rows(
     policies: list[dict[str, Any]],
     mutations: list[dict[str, Any]],
 ) -> str:
-    """Render the policies table body. Cross-link mutations by target_section."""
+    """Render the policies table body. Cross-link the latest mutation per file."""
     if not policies:
         return (
             '        <tr><td colspan="5" class="empty">'
             "<em>No policies mirrored yet. Run the autoresearch publisher.</em>"
             "</td></tr>"
         )
-    # Index most-recent mutation per policy filename (target_section
-    # prefix `wrapper-sections.json::field`).
+    # Index the most-recent mutation per policy filename via the flat-schema
+    # target_kind -> filename map. _join_mutation_records is newest-first, so
+    # the first entry seen per file is the latest.
     latest_by_file: dict[str, dict[str, Any]] = {}
-    for mrow in mutations:
-        mut = mrow.get("mutation")
-        if not isinstance(mut, dict):
+    for joined in _join_mutation_records(mutations):
+        apply_row = joined["apply"]
+        if not apply_row:
             continue
-        target = str(mut.get("target_section") or "")
-        head = target.split("::", 1)[0] if "::" in target else target
-        if not head:
-            continue
-        prev = latest_by_file.get(head)
-        if prev is None or str(mrow.get("ts_utc") or "") > str(prev.get("ts_utc") or ""):
-            latest_by_file[head] = mrow
+        filename = _TARGET_KIND_TO_POLICY_FILE.get(str(apply_row.get("target_kind") or ""))
+        if filename:
+            latest_by_file.setdefault(filename, joined)
     out: list[str] = []
     for entry in policies:
         filename = str(entry["filename"])
@@ -3923,11 +4151,14 @@ def _render_policies_rows(
         size = _human_size(int(entry["size"]))
         latest = latest_by_file.get(filename)
         if latest is not None:
-            gen_tag = str(latest.get("gen_tag") or "")
-            ts = short_iso(str(latest.get("ts_utc") or ""))
+            apply_row = latest["apply"] or {}
+            section = str(apply_row.get("target_section") or "")
+            ts = _fmt_epoch(apply_row.get("ts"))
+            label, outcome_cls = _mutation_outcome(latest["attr"])
             mut_cell = (
-                f"<code>{html_escape(gen_tag)}</code> "
-                f'<span class="muted">@ {html_escape(ts)}</span>'
+                f"<code>{html_escape(section)}</code> "
+                f'<span class="muted">@ {html_escape(ts)}</span> '
+                f'<span class="{outcome_cls}">{html_escape(label)}</span>'
             )
         else:
             mut_cell = '<span class="muted">—</span>'
@@ -4089,14 +4320,15 @@ def render_autoresearch_mutations(
     ctx: _AutoresearchRenderCtx,
 ) -> Path:
     out_dir.mkdir(parents=True, exist_ok=True)
+    joined = _join_mutation_records(mutations)
     mapping = _autoresearch_base_mapping(ctx)
     mapping.update(
         {
             "mutations_section_label": (
-                f"{len(mutations)} row" + ("s" if len(mutations) != 1 else "")
+                f"{len(joined)} mutation" + ("s" if len(joined) != 1 else "")
             ),
-            "mutations_rows": _render_mutations_rows(mutations),
-            "filter_target_chips": _render_filter_target_chips(mutations),
+            "mutations_summary": _render_mutations_summary(joined),
+            "mutations_rows": _render_mutations_rows(joined),
         }
     )
     rendered = substitute(template, mapping)

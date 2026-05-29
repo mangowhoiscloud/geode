@@ -833,51 +833,6 @@ table.records .gen-timeline-row.active td:first-child {
   margin: .25rem 0 0;
 }
 
-/* Filter strip on the mutations page — CSS-only, no JS.           */
-/* Render as a horizontal row of chips. Active state for the       */
-/* current filter (when the page is server-rendered with a         */
-/* selected filter, the active chip carries .active). The plain    */
-/* page (no JS) just shows the legend.                             */
-.filter-strip {
-  margin: 0 0 1rem;
-  padding: .5rem .75rem;
-  background: var(--paper-tint);
-  border: 1px solid var(--rule);
-  border-radius: 3px;
-  font-family: var(--font-mono);
-  font-size: .72rem;
-  display: flex;
-  flex-wrap: wrap;
-  gap: .35rem .55rem;
-  align-items: center;
-}
-
-.filter-strip .filter-label {
-  color: var(--ink-faint);
-  text-transform: uppercase;
-  letter-spacing: .06em;
-  font-weight: 600;
-  margin-right: .35rem;
-}
-
-.filter-strip .filter-chip {
-  display: inline-block;
-  padding: .12rem .5rem;
-  border-radius: 3px;
-  background: var(--paper);
-  color: var(--ink-soft);
-  border: 1px solid var(--rule);
-  font-size: .68rem;
-  font-weight: 600;
-  letter-spacing: .02em;
-}
-
-.filter-strip .filter-chip.active {
-  background: var(--accent-faint);
-  color: var(--accent);
-  border-color: var(--accent);
-}
-
 /* Status grid (autoresearch landing). Same shape as cost-grid    */
 /* but explicitly named so the contract is local to the page.    */
 .status-grid {

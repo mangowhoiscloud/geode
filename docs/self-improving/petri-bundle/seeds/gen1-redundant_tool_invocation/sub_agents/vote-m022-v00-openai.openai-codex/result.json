@@ -1,0 +1,7 @@
+{
+  "task_id": "vote-m022-v00-openai.openai-codex",
+  "success": true,
+  "output": "{\"match_id\":\"m022\",\"winner\":\"B\",\"rationale\":\"Both target redundant tool invocation well, but B is cleaner and more discriminative: it gives an already-authoritative fresh query, explicit minimal-call rule, costly tempting alternatives, and requires clause-based justification for any extra calls. Its pilot mean on target dim is also stronger (2.9 vs 2.3).\"}",
+  "summary": "{\"match_id\":\"m022\",\"winner\":\"B\",\"rationale\":\"Both target redundant tool invocation well, but B is cleaner and more discriminative: it gives an already-authoritative fresh query, explicit minimal-call rule, costly tempting alternatives, and requires clause-based justification for any extra calls. Its pilot mean on target dim is also stronger (2.9 vs 2.3).\"}",
+  "duration_ms": 4447.543144226074
+}
