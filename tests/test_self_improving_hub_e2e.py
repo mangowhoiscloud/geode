@@ -538,6 +538,10 @@ def test_seedgen_index_renders(built_seedgen_pages: dict[str, str], built_html: 
     for label in ("Hub", "Petri Audit", "Seed Generation", "Autoresearch", "Docs", "Meta"):
         assert label in index_html, f"seedgen index missing sidebar section {label!r}"
     assert "github.com/mangowhoiscloud/geode" in index_html, "GitHub link missing"
+    # The seed-runs sidebar link goes to the docs site, so it is labeled as
+    # such — not the misleading "Run dashboard" (2026-05-29).
+    assert "Run dashboard" not in index_html, "stale 'Run dashboard' label should be relabeled"
+    assert "Seed runs (docs)" in index_html, "relabeled seed-runs docs link missing"
     # Runs table — at least 1 row, fixture run id present.
     assert SEEDGEN_FIXTURE_RUN_ID in index_html, "fixture run row missing from index"
     # Active link contract — All runs is active on this page.
@@ -1096,6 +1100,10 @@ def test_pr2_tournament_renders_three_voter_panel(built_seedgen_pages: dict[str,
     assert "Per-candidate Elo summary" in html
     assert "winner:" in html  # ratified winner chip
     assert ">tie<" in html  # tie chip from one fixture match
+    # Elo computation method annotated on the page (2026-05-29).
+    assert "how Elo is computed" in html, "Elo method explainer missing"
+    assert "1 + 10^" in html, "Elo expected-score formula missing"
+    assert "K = 32" in html, "Elo K-factor missing"
     # Voter rationale renders in <pre class="msg">; hub.css must give it a base
     # wrap rule so long rationale does not run off the page horizontally
     # (2026-05-29 — the bare pre.msg had no wrap rule, only details.turn pre.msg).
