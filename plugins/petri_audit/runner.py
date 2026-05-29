@@ -294,6 +294,50 @@ def build_command(
     return cmd
 
 
+def purge_inspect_cache() -> bool:
+    """Clear inspect_ai's generate trajectory cache before a fresh run.
+
+    PR-SIL-MULTIOBJ A3 (2026-05-29) — the closed loop's audits run with
+    the trajectory cache OFF (no ``-T cache=true``; see ``cli_audit.py``
+    default), but a *residual* cache from an earlier ``geode audit
+    --cache`` run, or from a partially-failed audit on the same host,
+    can still be hit: the cache key is ``(model config, input messages,
+    base_url, tools, expiry, scopes, epoch)``, so a stale trajectory for
+    an identical seed replays its recorded score and silently corrupts a
+    mutation-vs-baseline comparison. Calling this before a fresh baseline
+    extraction or a cycle batch removes that residue.
+
+    Uses inspect_ai's own ``cache_clear`` as the single source of truth
+    for the cache location — the path (``cache_path()``) is platform- and
+    config-dependent, so it is **not** hardcoded here. Graceful: when the
+    ``[audit]`` extra is absent (default ``uv sync``), logs and returns
+    ``False`` rather than raising, so non-audit callers are unaffected.
+
+    Returns ``True`` when the purge completed (cache now empty, whether or
+    not it had content), ``False`` when inspect_ai is unavailable or the
+    clear raised.
+    """
+    try:
+        from inspect_ai.model import cache_clear, cache_path
+    except ImportError:
+        log.warning(
+            "purge_inspect_cache: inspect_ai not installed ([audit] extra) — skipping cache purge"
+        )
+        return False
+    try:
+        target = cache_path()
+        cleared = cache_clear()
+    except Exception as exc:  # pragma: no cover — defensive (inspect_ai internals)
+        log.warning("purge_inspect_cache: cache_clear failed — %s", exc)
+        return False
+    log.info(
+        "purge_inspect_cache: cleared inspect_ai generate cache at %s (cache_clear=%s)",
+        target,
+        cleared,
+    )
+    return True
+
+
 def _validate_dim_path(resolved: Any) -> None:
     """Validate a resolved ``--dim-set`` value (path-like).
 

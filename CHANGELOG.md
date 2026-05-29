@@ -47,6 +47,45 @@ functional change.
 
 ## [Unreleased]
 
+### Added
+- **PR-SIL-MULTIOBJ (2026-05-29)** — Wire the self-improving loop's
+  previously orphan multi-objective infrastructure into the live decision
+  path, plus measurement hygiene. Four parts:
+  - **Tchebycheff group selection (A1)** — `apply_group_proposals` now
+    selects the winning sibling by a Tchebycheff (worst-weighted-gap)
+    scalar via `_select_best_idx`, calling the previously test-only
+    `compute_tchebycheff` / `compute_ideal_point` with `DIM_WEIGHTS` so a
+    critical-axis gap dominates an auxiliary gap (non-compensatory,
+    safety-first). Gated on `pareto_mode` + `group_size ≥ 2`; the default
+    path keeps the linear GRPO-whitened advantage unchanged. The
+    `FITNESS_RESULT` sentinel emitted by `autoresearch/train.py` now
+    additively carries the per-sibling `dim_means` / `dim_stderr` vector
+    (parsed by the new graceful `_parse_dim_means_from_subprocess_stdout`)
+    — the multi-dim capture the prior `pareto_mode` archive PR deferred.
+  - **`rollback_condition` auto-evaluation (A2)** — the mutator's own
+    `rollback_condition` predicate is now propagated to the audit
+    subprocess via `GEODE_SIL_ROLLBACK_CONDITION` and auto-evaluated as a
+    *secondary* per-dim reject gate (calls the previously
+    observability-only `evaluate_rollback_condition`). Two paths: the
+    single-mutation promote path evaluates it in
+    `_apply_rollback_condition_gate` after `_should_promote` (flips
+    promote → reject); the group path evaluates the winner's predicate in
+    `apply_group_proposals` against its measured dim vector vs the
+    promoted baseline and skips the commit on a fire. It can only veto —
+    never the reverse; the primary scalar safety gate is unchanged.
+  - **inspect-ai cache hygiene (A3)** — new `purge_inspect_cache()`
+    (delegates to inspect_ai's own `cache_clear`, graceful without the
+    `[audit]` extra) + a `--purge-cache` flag on `autoresearch/train.py`
+    for closed-loop measurement hygiene, pinned by a regression test that
+    `_build_audit_command` never enables the trajectory cache.
+  - **signal polarity normalisation (A4)** — new `signal_polarity` helper
+    (`to_signed_improvement` / `metric_polarity`) emits a canonical
+    `signed_improvement` field on every attribution row (`+` = improvement
+    regardless of a metric's native direction — Petri dims are
+    lower-is-better, so their sign is flipped). The higher-is-better field
+    set is derived from the canonical ux/admire/bench weight dicts (no
+    second copy, pinned by a drift test).
+
 ### Fixed
 - **PR-HUB-AGENTS-CHIP-WRAP (2026-05-29)** — Two self-improving hub display
   fixes. (1) The seed-generation `/agents/` page mislabeled every cli-local

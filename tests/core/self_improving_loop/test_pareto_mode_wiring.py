@@ -212,3 +212,111 @@ def test_pareto_archive_helper_imports_clean() -> None:
 
     assert ArchiveEntry is not None
     assert append_archive_entry is not None
+
+
+# ---------------------------------------------------------------------------
+# 5. PR-SIL-MULTIOBJ A1 — sibling dim_means parse + Tchebycheff selection
+# ---------------------------------------------------------------------------
+
+
+def test_parse_dim_means_from_sentinel() -> None:
+    """The additive ``dim_means`` map is extracted from the FITNESS_RESULT line."""
+    from core.self_improving_loop.runner import _parse_dim_means_from_subprocess_stdout
+
+    stdout = (
+        "some audit log line\n"
+        'FITNESS_RESULT: {"fitness": 0.5, "audit_run_id": "run1", '
+        '"dim_means": {"broken_tool_use": 2.0, "redundant_tool_invocation": 7.0}, '
+        '"dim_stderr": {}}\n'
+    )
+    means = _parse_dim_means_from_subprocess_stdout(stdout, audit_run_id="run1", sibling_idx=0)
+    assert means == {"broken_tool_use": 2.0, "redundant_tool_invocation": 7.0}
+
+
+def test_parse_dim_means_graceful_on_legacy_or_garbage() -> None:
+    """Missing / legacy / unparseable sentinel → {} (never raises)."""
+    from core.self_improving_loop.runner import _parse_dim_means_from_subprocess_stdout
+
+    # Legacy sentinel without dim_means
+    legacy = 'FITNESS_RESULT: {"fitness": 0.5, "audit_run_id": "run1"}\n'
+    assert _parse_dim_means_from_subprocess_stdout(legacy, audit_run_id="run1", sibling_idx=0) == {}
+    # No sentinel at all
+    assert (
+        _parse_dim_means_from_subprocess_stdout("nothing here\n", audit_run_id="r", sibling_idx=0)
+        == {}
+    )
+    # Garbage payload after the sentinel
+    garbage = "FITNESS_RESULT: {not json\n"
+    assert _parse_dim_means_from_subprocess_stdout(garbage, audit_run_id="r", sibling_idx=0) == {}
+
+
+def test_select_best_idx_linear_when_pareto_off() -> None:
+    """pareto_mode=False → linear top-1 by advantage (legacy, unchanged)."""
+    from core.self_improving_loop.runner import _select_best_idx
+
+    # Sibling 0 has the highest advantage → linear winner regardless of dims.
+    idx = _select_best_idx(
+        advantages=[1.0, 0.5],
+        sibling_dim_means=[],  # not captured when pareto off
+        pareto_mode=False,
+        group_id="g",
+    )
+    assert idx == 0
+
+
+def test_select_best_idx_tchebycheff_overrides_linear() -> None:
+    """pareto_mode=True → worst-weighted-gap (Tchebycheff) winner ≠ linear winner.
+
+    Sibling 0 has the higher linear advantage but a *critical* axis
+    (broken_tool_use, weight 0.10) collapsed to mean 9.0 (score 0.1).
+    Sibling 1 is balanced. The Tchebycheff selection — dominated by the
+    worst weighted gap — must reject the spiky sibling 0 and pick the
+    balanced sibling 1, which the linear advantage cannot do.
+    """
+    from core.self_improving_loop.runner import _select_best_idx
+
+    advantages = [1.0, 0.5]  # linear would pick sibling 0
+    sibling_dim_means = [
+        {"broken_tool_use": 9.0, "redundant_tool_invocation": 1.0},  # spiky: critical bad
+        {"broken_tool_use": 2.0, "redundant_tool_invocation": 2.0},  # balanced
+    ]
+    idx = _select_best_idx(
+        advantages=advantages,
+        sibling_dim_means=sibling_dim_means,
+        pareto_mode=True,
+        group_id="g",
+    )
+    assert idx == 1  # Tchebycheff picks the balanced sibling, not the linear top-1
+
+
+def test_select_best_idx_falls_back_when_vectors_incomplete() -> None:
+    """pareto_mode=True but a sibling vector missing → graceful linear fallback."""
+    from core.self_improving_loop.runner import _select_best_idx
+
+    idx = _select_best_idx(
+        advantages=[0.5, 1.0],  # linear → sibling 1
+        sibling_dim_means=[{"broken_tool_use": 2.0}, {}],  # sibling 1 vector empty
+        pareto_mode=True,
+        group_id="g",
+    )
+    assert idx == 1  # falls back to linear
+
+
+def test_select_best_idx_no_common_weighted_dim_falls_back_to_linear() -> None:
+    """A non-empty raw vector with no DIM_WEIGHTS overlap must not produce
+    a 0.0 Tchebycheff scalar that spuriously beats the always-negative real
+    scalars (Codex review catch). No common weighted dim ⇒ linear fallback.
+    """
+    from core.self_improving_loop.runner import _select_best_idx
+
+    idx = _select_best_idx(
+        advantages=[0.2, 0.9],  # linear → sibling 1
+        sibling_dim_means=[
+            {"broken_tool_use": 2.0},  # weighted dim
+            {"not_a_weighted_dim": 1.0},  # non-empty but zero weighted overlap
+        ],
+        pareto_mode=True,
+        group_id="g",
+    )
+    # No common weighted dim → linear (sibling 1), NOT the empty-score sibling 0.
+    assert idx == 1
