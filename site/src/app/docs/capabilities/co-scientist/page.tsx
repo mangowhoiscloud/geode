@@ -46,8 +46,10 @@ meta_reviewer       coverage / gap 분석 → next_gen_priors`}</pre>
 
             <h2>Elo 토너먼트 (ranker)</h2>
             <p>
-              각 후보는 1000 에서 시작합니다. 매치마다 3-voter 패널이 다수결로
-              승자를 정하고 (&ge;2/3, 미달 시 quorum_lost 로 rating 불변), Elo 는{" "}
+              각 후보는 1000 에서 시작합니다. 매치마다 3-voter 패널이 투표하고,
+              과반(&ge;2/3)이면 A 또는 B 가 승자, 그 외에는 tie(0.5/0.5)로
+              처리되어 양쪽 rating 이 갱신됩니다. 유효 표가 2 미만이면
+              quorum_lost 로 매치를 건너뛰고 rating 은 불변입니다. Elo 는{" "}
               <code>R += K &middot; (S - E)</code> (K=32, E 는 로지스틱 기대값)로
               갱신됩니다. 최종 rating 상위 5 가 survivor 입니다. 자세한 식은{" "}
               <code>plugins/seed_generation/tournament.py</code> + 토너먼트 페이지의
@@ -93,9 +95,11 @@ meta_reviewer       coverage / gap analysis -> next_gen_priors`}</pre>
 
             <h2>The Elo tournament (ranker)</h2>
             <p>
-              Every candidate starts at 1000. Each match's 3-voter panel picks a
-              majority winner (&ge;2 of 3; fewer than 2 valid votes is a
-              quorum_lost with no rating change), and Elo updates by{" "}
+              Every candidate starts at 1000. Each match's 3-voter panel votes:
+              a strict majority (&ge;2 of 3) makes A or B the winner, anything
+              else is a tie scored 0.5/0.5 and both ratings still update. Fewer
+              than 2 valid votes is a quorum_lost, where the match is skipped
+              with no rating change. Elo updates by{" "}
               <code>R += K &middot; (S - E)</code> (K=32, E the logistic
               expected score). The top 5 final ratings are the survivors. The
               full formula is in <code>plugins/seed_generation/tournament.py</code>{" "}

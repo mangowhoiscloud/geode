@@ -23,7 +23,7 @@ const mirrors = [
   },
   {
     pattern: "Discovery + extension points",
-    artifactLabel: "58 runtime hooks",
+    artifactLabel: "81 runtime hooks",
     artifactBody: "PROMPT_ASSEMBLED, TOOL_EXEC_*, SESSION_START, etc. 14 groups.",
     artifactFile: "core/hooks/system.py:28 (HookEvent enum)",
     scaffoldLabel: "41 scaffold skills",
