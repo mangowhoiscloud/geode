@@ -696,13 +696,22 @@ def test_petri_bundle_excludes_seedgen_logs() -> None:
 
 
 def test_seedgen_eval_samples_populate_viewer_tabs() -> None:
-    """Enriched seed-generation .eval samples drive the inspect viewer's
-    MESSAGES / TRANSCRIPT / SCORING tabs, not just JSON / METADATA.
+    """Seed-generation .eval samples follow the 3-axis tab contract — each
+    datum lives in exactly ONE viewer tab, no triplication.
 
-    PR-SEEDGEN-EVAL-ENRICH (2026-05-29). Reads a committed critic .eval from
-    the seed-generation bundle and asserts a sample carries non-empty
-    `messages` (MESSAGES tab), transcript `events` including a `model` event
-    (TRANSCRIPT tab), and a per-sample `scores` dict (SCORING tab).
+    PR-SEEDGEN-EVAL-ALIGN (2026-05-29). A seed-generation phase is a structured
+    output, not a chat, so the synthetic MESSAGES + the TRANSCRIPT ``ModelEvent``
+    were dropped (they duplicated the InfoEvent), and the output scalars no
+    longer appear in BOTH the Score's metadata and the sample's metadata. The
+    invariants on a committed critic .eval:
+      - MESSAGES  empty (`sample.messages == []`).
+      - TRANSCRIPT carries a single ``InfoEvent`` (`event == "info"`, no
+        ``model`` event) whose ``data`` holds the full reflection.
+      - SCORING   has a per-sample score WITH a non-empty ``explanation`` (no
+        "(No Explanation)") and NO ``Score.metadata`` (scalars are in the Info
+        record, not re-copied).
+      - METADATA  is provenance only — never the output scalars
+        (``judge_risk`` / ``discrimination_estimate`` / ``intended_dim_match``).
 
     .eval members are zstd-compressed (compress_type=93), which stdlib
     zipfile cannot decode on Python 3.12, so we read via inspect_ai (which
@@ -714,44 +723,61 @@ def test_seedgen_eval_samples_populate_viewer_tabs() -> None:
     from inspect_ai.log import read_eval_log
 
     logs = REPO_ROOT / "docs/self-improving/seed-generation/bundle/logs"
-    critic = sorted(logs.glob("*seedgen-critic_*.eval"))
+    all_logs = sorted(logs.glob("*seedgen-*.eval"))
+    assert all_logs, "no seedgen .eval in the seed-generation bundle"
+    critic = [p for p in all_logs if "_seedgen-critic_" in p.name]
     assert critic, "no critic .eval in the seed-generation bundle"
-    # Check EVERY run's critic log — not just the first — so a per-run
-    # sample<->sub-agent association break (e.g. a candidate-hash mismatch
-    # in one run's state.json) is caught, not masked by a passing run.
-    for log_path in critic:
+    # Provenance is the ONLY thing allowed in per-sample metadata; any output
+    # scalar (judge_risk, discrimination, status, survived, elo_rating, …)
+    # leaking here means it is duplicated against the InfoEvent record.
+    provenance_keys = {"iteration", "max_iterations", "task_id"}
+    # Sweep EVERY phase's EVERY sample — not just the first critic — so a
+    # regression in any one phase (pilot/ranker/meta/…) is caught, not masked.
+    for log_path in all_logs:
         log_obj = read_eval_log(str(log_path))
         assert log_obj.samples, f"{log_path.name}: no samples"
-        sample = log_obj.samples[0]
-        assert sample.messages, (
-            f"{log_path.name}: MESSAGES tab empty — sample.messages not populated "
-            "(sub-agent dialogue not associated?)"
-        )
-        event_types = {getattr(e, "event", None) for e in (sample.events or [])}
-        assert "model" in event_types, (
-            f"{log_path.name}: TRANSCRIPT missing a ModelEvent; got {event_types}"
-        )
-        assert sample.scores, f"{log_path.name}: SCORING tab empty — no sample.scores"
-        # PR-SEEDGEN-EVAL-CLEAN: the assistant turn is clean markdown built from
-        # state, NOT a raw / 500-truncated JSON fragment from dialogue.jsonl.
-        asst = next(
-            (m for m in sample.messages if getattr(m, "role", None) == "assistant"),
-            None,
-        )
-        assert asst is not None, f"{log_path.name}: no assistant message"
-        content = asst.content if isinstance(asst.content, str) else str(asst.content)
-        assert not content.lstrip().startswith("{"), (
-            f"{log_path.name}: assistant content is raw JSON (should be clean markdown)"
-        )
+        is_generator = "_seedgen-generator_" in log_path.name
+        for sample in log_obj.samples:
+            assert not sample.messages, (
+                f"{log_path.name}: MESSAGES should be empty (a phase is a structured "
+                "output, not a chat)"
+            )
+            event_types = {getattr(e, "event", None) for e in (sample.events or [])}
+            assert "model" not in event_types, (
+                f"{log_path.name}: TRANSCRIPT still has a ModelEvent (should be Info-only)"
+            )
+            if is_generator:
+                # Seed .md body lives in EvalSample.output (read from the
+                # published bundle copy, not the absent local state path).
+                assert (sample.output.completion or "").strip(), (
+                    f"{log_path.name}: generator OUTPUT empty — candidate .md body not "
+                    "read from the bundle"
+                )
+            else:
+                assert "info" in event_types, (
+                    f"{log_path.name}: TRANSCRIPT missing the InfoEvent; got {event_types}"
+                )
+                info = next(e for e in sample.events if getattr(e, "event", None) == "info")
+                assert info.data, f"{log_path.name}: InfoEvent.data empty"
+            score = next(iter(sample.scores.values()))
+            assert score.explanation, (
+                f"{log_path.name}: SCORING shows '(No Explanation)' — explanation unset"
+            )
+            assert score.metadata is None, (
+                f"{log_path.name}: Score.metadata duplicates the Info record / sample metadata"
+            )
+            leaked = set((sample.metadata or {}).keys()) - provenance_keys
+            assert not leaked, (
+                f"{log_path.name}: METADATA carries non-provenance keys {leaked} "
+                "(output scalars belong only in the Info record)"
+            )
 
-    # Generator messages come from the published seed .md body (not the
-    # recorded absolute state path, which is absent in a fresh checkout/CI).
-    for log_path in sorted(logs.glob("*seedgen-generator_*.eval")):
-        log_obj = read_eval_log(str(log_path))
-        assert log_obj.samples and log_obj.samples[0].messages, (
-            f"{log_path.name}: generator MESSAGES empty — candidate .md body not "
-            "read from the bundle"
-        )
+    # Critic record completeness — the full reflection, not a trimmed subset.
+    crit_sample = read_eval_log(str(critic[0])).samples[0]
+    crit_info = next(e for e in crit_sample.events if getattr(e, "event", None) == "info")
+    assert {"strengths", "weaknesses", "rewrite_section"} <= set(crit_info.data.keys()), (
+        f"{critic[0].name}: InfoEvent.data missing the full reflection record"
+    )
 
 
 def test_seedgen_url_basepath_safety(built_seedgen_pages: dict[str, str]) -> None:
