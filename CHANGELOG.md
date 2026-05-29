@@ -48,6 +48,21 @@ functional change.
 ## [Unreleased]
 
 ### Fixed
+- **PR-GEN1-BROKEN-REEVAL (2026-05-29)** — Re-evaluate the `gen1-broken_tool_use`
+  self-improving run's tournament with the recovered Codex voter. The original
+  run hit 118/118 `openai-codex` `voter_call_failed` (a transient Codex outage),
+  so all 59 matches lost quorum, every candidate's Elo stayed flat at 1000.0,
+  and survivors fell back to id-order. Codex is healthy again (verified —
+  `effort="none"` voters return valid structured votes), so the Ranker was
+  re-run against the same 15 existing candidate MDs (no regeneration): 177/177
+  votes succeeded (codex 118/118, claude-cli 59/59), 0 quorum lost. The
+  recovered `tournament.json` (real per-voter panel + Elo deltas) and
+  `state.json` (`elo_ratings` now spanning 878–1116, merit-ordered `survivors`)
+  replace the corrupted records; gen1-002 (lowest Elo) drops out and gen1-005
+  enters the survivor set. A `reeval` provenance block records the original
+  failure + that `evolved_candidates` predate the re-evaluation (retained as the
+  historical record). Hub re-rendered: the tournament page's "ranker integrity
+  warning" is gone (0% parse_error, 59 ratified).
 - **PR-MUTATIONS-REDESIGN (2026-05-29)** — Rebuild the autoresearch
   `/self-improving/autoresearch/mutations/` page against the live
   `mutations.jsonl` schema. The renderer keyed off a stale nested
