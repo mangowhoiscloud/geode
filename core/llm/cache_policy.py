@@ -14,8 +14,11 @@ apply on Anthropic API calls (the ``n_breakpoints`` argument to
   hit rate. Right choice for short tasks where the history doesn't
   amortize the overhead.
 
-Targets ``ux_means.token_cost_norm`` + ``latency_norm`` (cache hits
-reduce latency too).
+Cache hits reduce per-call cost and latency. This used to target the
+``ux_means`` fitness axis (``token_cost_norm`` + ``latency_norm``); that
+axis was removed in PR-MARGIN-FITNESS-SCALE (2026-05-30) — fitness is now
+pure Petri dim aggregate, so this remains a cost/latency knob with no
+dedicated fitness lever.
 
 **SoT schema** (모든 field optional):
 

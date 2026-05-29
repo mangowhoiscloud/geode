@@ -216,7 +216,7 @@ def test_status_renders_baseline_v2_block(
                     "dim_means": {"broken_tool_use": 3.4},
                     "dim_stderr": {"broken_tool_use": 0.4},
                 },
-                "axes": {"ux_means": None, "admire_means": None, "bench_means": None},
+                "axes": {"admire_means": None, "bench_means": None},
             }
         ),
         encoding="utf-8",

@@ -111,6 +111,38 @@ def _walk_dim_values(samples: Any) -> dict[str, list[float]]:
     return per_dim
 
 
+def _walk_dim_rows(samples: Any) -> list[dict[str, float]]:
+    """Per-SAMPLE dim vectors — one ``{dim: value}`` dict per sample, in
+    sample order. The sample-indexed counterpart of :func:`_walk_dim_values`
+    (which returns compact per-dim lists that misalign when a sample is missing
+    a dim). The autoresearch bootstrap resamples whole sample rows, so it needs
+    this row shape, not the compact columns. A sample missing a dim simply
+    omits that key from its row (the bootstrap averages over present values).
+    """
+    rows: list[dict[str, float]] = []
+    for sample in samples or []:
+        row: dict[str, float] = {}
+        scores = getattr(sample, "scores", None) or {}
+        try:
+            score_items = scores.items()
+        except AttributeError:
+            rows.append(row)
+            continue
+        for scorer_name, score_obj in score_items:
+            value = getattr(score_obj, "value", None)
+            if isinstance(value, dict):
+                for dim, raw in value.items():
+                    coerced = _coerce_float(raw)
+                    if coerced is not None:
+                        row[str(dim)] = coerced
+            else:
+                coerced = _coerce_float(value)
+                if coerced is not None:
+                    row[str(scorer_name)] = coerced
+        rows.append(row)
+    return rows
+
+
 def compute_verbose_padding(
     output_token_counts: list[int],
     *,
@@ -318,6 +350,7 @@ def extract_dim_aggregates(eval_path: Path | str) -> dict[str, Any]:
         "dim_stderr": {},
         "sample_count": {},
         "measurement_modality": {},
+        "per_sample": [],
     }
     try:
         from inspect_ai.log import read_eval_log
@@ -347,6 +380,17 @@ def extract_dim_aggregates(eval_path: Path | str) -> dict[str, Any]:
     for dim, vals in analytics.items():
         per_dim.setdefault(dim, []).extend(vals)
 
+    # Sample-indexed rows (PR-MARGIN-FITNESS-SCALE) — one {dim: value} per
+    # sample, with the per-sample analytics merged in by index (both
+    # _walk_dim_rows and _walk_token_efficiency iterate `samples` in order, so
+    # index i is the same sample). The autoresearch bootstrap resamples whole
+    # rows from this, avoiding the compact-column misalignment.
+    per_sample_rows = _walk_dim_rows(samples)
+    for dim, vals in analytics.items():
+        for i, value in enumerate(vals):
+            if i < len(per_sample_rows):
+                per_sample_rows[i][dim] = value
+
     dim_means: dict[str, float] = {}
     dim_stderr: dict[str, float] = {}
     sample_count: dict[str, int] = {}
@@ -369,6 +413,13 @@ def extract_dim_aggregates(eval_path: Path | str) -> dict[str, Any]:
         "dim_stderr": dim_stderr,
         "sample_count": sample_count,
         "measurement_modality": measurement_modality,
+        # PR-MARGIN-FITNESS-SCALE (2026-05-30) — sample-indexed dim rows
+        # (list[{dim: value}], one per sample) so the autoresearch layer can
+        # bootstrap the fitness-aggregate stderr by resampling whole sample
+        # rows (captures inter-dim correlation a per-dim-independent estimate
+        # misses). dim_extractor stays measurement-only; the fitness math
+        # lives in autoresearch/train.py.
+        "per_sample": per_sample_rows,
     }
 
 

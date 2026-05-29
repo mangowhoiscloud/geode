@@ -47,6 +47,44 @@ functional change.
 
 ## [Unreleased]
 
+## [0.99.88] - 2026-05-30
+
+### Fixed
+- **PR-MARGIN-FITNESS-SCALE (2026-05-30) — promote-gate margin scale.** The
+  self-improving loop's `_should_promote` margin used
+  `max(baseline_stderr.values())`, applying the noisiest single dim's 1–10
+  *dim-scale* stderr (e.g. `input_hallucination` ≈ 0.97) as a 0–1
+  *fitness-scale* threshold — a ~75× over-estimate that made every mutation
+  structurally unpromotable (a 2026-05-30 10-cycle run produced 6 real audits,
+  0 promotions, all "gain +0.01 ≤ margin 0.97" while the true
+  fitness-aggregate stderr was ~0.013). The margin is now the gain's own
+  stderr on the fitness scale — `√(σ_prior² + σ_current²)` — floored at a
+  zero-noise epsilon (`fitness_margin_floor` 0.005, `N1_FITNESS_MARGIN_FLOOR`
+  0.05). `σ` prefers a sample bootstrap (`_fitness_stderr_bootstrap`, captures
+  inter-dim correlation) and falls back to the per-dim-independent Monte-Carlo
+  estimate (`_fitness_scale_stderr`) when per-sample data is absent.
+
+### Changed
+- **Bootstrap fitness-stderr wired end-to-end.** `run_audit` now returns a
+  7-tuple (adds `per_sample`, the sample-indexed dim rows from `dim_extractor`);
+  `main()` bootstraps the audit's fitness-scale stderr and persists it as
+  `baseline.json` `raw.fitness_stderr`; the next cycle's promote gate reads it
+  back (`_load_baseline_fitness_stderr`) as the prior σ.
+
+### Removed
+- **`ux_means` fitness axis.** Fitness is back to a pure Petri dim aggregate
+  plus the reserved `admire_means` / `bench_means` axes. The `ux_means` axis
+  gave the promote gate no usable signal (its collector returned an empty dict
+  on cycle 0) and complicated the margin redesign. Deleted `autoresearch/ux_means.py`;
+  `compute_fitness` / `_should_promote` / `_write_baseline` / `_load_baseline`
+  drop their `ux_means` parameters (the loader tuple goes 5→4); multi-axis
+  fitness weights renormalise to `FITNESS_DIM_3AX 0.55 / FITNESS_ADMIRE_3AX 0.20
+  / FITNESS_BENCH_3AX 0.25` (3-axis) and `FITNESS_DIM_WEIGHT 0.70 /
+  FITNESS_ADMIRE_WEIGHT 0.30` (admire-only 2-axis). ADR-012/013 amended;
+  `core/self_improving_loop/signal_polarity.py` drops the `UX_DIM_WEIGHTS`
+  union. The seed-generation `BaselineSnapshot.ux_means` slot is kept load-side
+  for forward-compat (reads empty for current baselines).
+
 ## [0.99.87] - 2026-05-29
 
 ### Fixed

@@ -192,8 +192,8 @@ def _load_baseline_event() -> BundleEvent | None:
 
     Codex MCP catch (PR-OL-A3 fix-up): real `baseline.json` (written by
     ``autoresearch/train.py:_persist_baseline``) carries only aggregate
-    payload (``dim_means`` / ``dim_stderr`` + optional ``ux_means`` /
-    ``admire_means`` / ``bench_means``) — NO ``timestamp`` or
+    payload (``dim_means`` / ``dim_stderr`` + optional ``admire_means`` /
+    ``bench_means``) — NO ``timestamp`` or
     ``fitness`` scalar fields. We therefore derive the event timestamp
     from the file's mtime (the moment of promotion) and synthesise the
     detail from the dim count + a "promoted" marker. Tests can still

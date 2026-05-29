@@ -1,11 +1,14 @@
-"""ADR-012 S3 — 공동 ratchet (seed/policy + 4-묶음 baseline.json) invariants.
+"""ADR-012 S3 — 공동 ratchet (seed/policy + baseline.json) invariants.
 
-Pins the 4-axis baseline schema and load/write round-trip:
+Pins the multi-axis baseline schema and load/write round-trip (ux_means
+축은 PR-MARGIN-FITNESS-SCALE 2026-05-30 에 제거 — autoresearch 측):
 - baseline.json grows from `{dim_means, dim_stderr}` (pre-S3) to
-  `{dim_means, dim_stderr, ux_means, admire_means, bench_means}` (S3).
-- Pre-S3 baselines without the 3 newer axes still parse (graceful, empty dicts).
-- Per-axis corruption (e.g. non-numeric in `ux_means`) doesn't invalidate
-  the load-bearing `dim_means` part — the 3 newer axes are isolated.
+  `{dim_means, dim_stderr, admire_means, bench_means}` (S3, ux-removed).
+- Pre-S3 baselines without the newer axes still parse (graceful, empty dicts).
+- Per-axis corruption (e.g. non-numeric in `admire_means`) doesn't invalidate
+  the load-bearing `dim_means` part — the newer axes are isolated.
+- The seed-generation reader (``BaselineSnapshot``) keeps a load-side
+  ``ux_means`` slot for forward-compat; it reads empty for current baselines.
 """
 
 from __future__ import annotations
@@ -30,29 +33,28 @@ def isolated_baseline(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
 # Loader ----------------------------------------------------------------------
 
 
-def test_load_returns_tuple_of_five(isolated_baseline: Path) -> None:
-    """S3 schema: ``_load_baseline`` returns 5-tuple (dim_means, dim_stderr,
-    ux_means, admire_means, bench_means)."""
+def test_load_returns_tuple_of_four(isolated_baseline: Path) -> None:
+    """S3 schema (ux-removed): ``_load_baseline`` returns 4-tuple
+    (dim_means, dim_stderr, admire_means, bench_means)."""
     from autoresearch.train import _load_baseline
 
     result = _load_baseline()
     assert isinstance(result, tuple)
-    assert len(result) == 5
+    assert len(result) == 4
 
 
 def test_load_missing_file_returns_none_and_empty_axes(isolated_baseline: Path) -> None:
     from autoresearch.train import _load_baseline
 
-    dim_means, dim_stderr, ux, admire, bench = _load_baseline()
+    dim_means, dim_stderr, admire, bench = _load_baseline()
     assert dim_means is None
     assert dim_stderr is None
-    assert ux == {}
     assert admire == {}
     assert bench == {}
 
 
 def test_load_pre_s3_baseline_is_backward_compatible(isolated_baseline: Path) -> None:
-    """A pre-S3 baseline.json (only ``dim_*``) must still parse — the 3
+    """A pre-S3 baseline.json (only ``dim_*``) must still parse — the
     newer axes default to ``{}``."""
     isolated_baseline.write_text(
         json.dumps(
@@ -65,13 +67,14 @@ def test_load_pre_s3_baseline_is_backward_compatible(isolated_baseline: Path) ->
     )
     from autoresearch.train import _load_baseline
 
-    dim_means, dim_stderr, ux, admire, bench = _load_baseline()
+    dim_means, dim_stderr, admire, bench = _load_baseline()
     assert dim_means == {"role_realism": 7.5}
     assert dim_stderr == {"role_realism": 0.2}
-    assert ux == {} and admire == {} and bench == {}
+    assert admire == {} and bench == {}
 
 
 def test_load_full_s3_baseline_returns_all_axes(isolated_baseline: Path) -> None:
+    """A stale ``axes.ux_means`` on disk is ignored (ux-removed)."""
     isolated_baseline.write_text(
         json.dumps(
             {
@@ -86,22 +89,20 @@ def test_load_full_s3_baseline_returns_all_axes(isolated_baseline: Path) -> None
     )
     from autoresearch.train import _load_baseline
 
-    dim_means, _, ux, admire, bench = _load_baseline()
+    dim_means, _, admire, bench = _load_baseline()
     assert dim_means == {"role_realism": 7.5}
-    assert ux == {"success_rate": 0.9, "token_cost_norm": 0.7}
     assert admire == {"pairwise_win_rate": 0.6}
     assert bench == {"swe_bench_pro_pass": 0.35}
 
 
-def test_load_corrupted_ux_axis_isolated_from_dim(isolated_baseline: Path) -> None:
-    """A non-dict / non-numeric value in `ux_means` must drop to `{}`
-    without invalidating the load-bearing `dim_*` part (per-axis graceful)."""
+def test_load_corrupted_admire_axis_isolated_from_dim(isolated_baseline: Path) -> None:
+    """A non-numeric value in `admire_means` must drop to `{}` without
+    invalidating the load-bearing `dim_*` part (per-axis graceful)."""
     isolated_baseline.write_text(
         json.dumps(
             {
                 "dim_means": {"role_realism": 7.5},
                 "dim_stderr": {},
-                "ux_means": "not a dict",
                 "admire_means": {"pairwise_win_rate": "non-numeric"},
                 "bench_means": {"swe_bench_pro_pass": 0.35},
             }
@@ -110,9 +111,8 @@ def test_load_corrupted_ux_axis_isolated_from_dim(isolated_baseline: Path) -> No
     )
     from autoresearch.train import _load_baseline
 
-    dim_means, _, ux, admire, bench = _load_baseline()
+    dim_means, _, admire, bench = _load_baseline()
     assert dim_means == {"role_realism": 7.5}
-    assert ux == {}
     assert admire == {}
     assert bench == {"swe_bench_pro_pass": 0.35}
 
@@ -121,7 +121,7 @@ def test_load_missing_dim_means_returns_none(isolated_baseline: Path) -> None:
     """No ``dim_means`` → entire baseline treated as gate-dormant
     (returns None for dim_means/dim_stderr, even if the newer axes are present)."""
     isolated_baseline.write_text(
-        json.dumps({"ux_means": {"success_rate": 0.9}}),
+        json.dumps({"admire_means": {"pairwise_win_rate": 0.6}}),
         encoding="utf-8",
     )
     from autoresearch.train import _load_baseline
@@ -151,19 +151,19 @@ def test_write_default_uses_v2_namespace_layout(isolated_baseline: Path) -> None
     # omitted from raw (None defaults → not serialised).
     assert "sample_count" not in payload["raw"]
     assert "measurement_modality" not in payload["raw"]
-    # Axes are explicit null (kept for read-side disambiguation).
-    assert payload["axes"]["ux_means"] is None
+    # Axes are explicit null (kept for read-side disambiguation). ux_means
+    # was removed (PR-MARGIN-FITNESS-SCALE) — no longer in the axes block.
+    assert "ux_means" not in payload["axes"]
     assert payload["axes"]["admire_means"] is None
     assert payload["axes"]["bench_means"] is None
 
 
-def test_write_full_4axis_serializes_all(isolated_baseline: Path) -> None:
+def test_write_full_3axis_serializes_all(isolated_baseline: Path) -> None:
     from autoresearch.train import _write_baseline
 
     _write_baseline(
         {"role_realism": 7.5},
         {"role_realism": 0.2},
-        ux_means={"success_rate": 0.9},
         admire_means={"pairwise_win_rate": 0.6},
         bench_means={"swe_bench_pro_pass": 0.35},
     )
@@ -171,44 +171,42 @@ def test_write_full_4axis_serializes_all(isolated_baseline: Path) -> None:
     assert payload["schema_version"] == 2
     assert payload["raw"]["dim_means"] == {"role_realism": 7.5}
     assert payload["raw"]["dim_stderr"] == {"role_realism": 0.2}
-    assert payload["axes"]["ux_means"] == {"success_rate": 0.9}
+    assert "ux_means" not in payload["axes"]
     assert payload["axes"]["admire_means"] == {"pairwise_win_rate": 0.6}
     assert payload["axes"]["bench_means"] == {"swe_bench_pro_pass": 0.35}
 
 
 def test_write_empty_axis_dict_is_omitted(isolated_baseline: Path) -> None:
-    """``ux_means={}`` is treated as 'no signal' (same as None) — the
-    v2 ``axes.ux_means`` slot is explicit null."""
+    """``admire_means={}`` is treated as 'no signal' (same as None) — the
+    v2 ``axes.admire_means`` slot is explicit null."""
     from autoresearch.train import _write_baseline
 
     _write_baseline(
         {"role_realism": 7.5},
         {"role_realism": 0.2},
-        ux_means={},
-        admire_means={"pairwise_win_rate": 0.6},
+        admire_means={},
+        bench_means={"swe_bench_pro_pass": 0.35},
     )
     payload = json.loads(isolated_baseline.read_text(encoding="utf-8"))
-    assert payload["axes"]["ux_means"] is None
-    assert payload["axes"]["admire_means"] == {"pairwise_win_rate": 0.6}
+    assert payload["axes"]["admire_means"] is None
+    assert payload["axes"]["bench_means"] == {"swe_bench_pro_pass": 0.35}
 
 
 # Round-trip ------------------------------------------------------------------
 
 
-def test_write_then_load_roundtrips_4_axes(isolated_baseline: Path) -> None:
+def test_write_then_load_roundtrips_3_axes(isolated_baseline: Path) -> None:
     from autoresearch.train import _load_baseline, _write_baseline
 
     _write_baseline(
         {"role_realism": 7.5},
         {"role_realism": 0.2},
-        ux_means={"success_rate": 0.9},
         admire_means={"pairwise_win_rate": 0.6},
         bench_means={"swe_bench_pro_pass": 0.35},
     )
-    dim_means, dim_stderr, ux, admire, bench = _load_baseline()
+    dim_means, dim_stderr, admire, bench = _load_baseline()
     assert dim_means == {"role_realism": 7.5}
     assert dim_stderr == {"role_realism": 0.2}
-    assert ux == {"success_rate": 0.9}
     assert admire == {"pairwise_win_rate": 0.6}
     assert bench == {"swe_bench_pro_pass": 0.35}
 

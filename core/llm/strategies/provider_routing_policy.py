@@ -2,10 +2,12 @@
 
 Mutator picks the **preferred plan-chain** for each model (plan_id ordered
 list). `resolve_routing(model)` consults this override before falling back
-to the user-set `PlanRegistry.set_routing(model, ...)` chain. Targets
-``ux_means.token_cost_norm`` — choosing a cheaper plan (PAYG vs
-SUBSCRIPTION) for the same model reduces per-call cost without changing
-behavior.
+to the user-set `PlanRegistry.set_routing(model, ...)` chain. Choosing a
+cheaper plan (PAYG vs SUBSCRIPTION) for the same model reduces per-call
+cost without changing behavior. This used to target the ``ux_means``
+fitness axis (``token_cost_norm``); that axis was removed in
+PR-MARGIN-FITNESS-SCALE (2026-05-30) — fitness is now pure Petri dim
+aggregate, so this remains a cost knob with no dedicated fitness lever.
 
 **SoT schema** (모든 entry optional):
 

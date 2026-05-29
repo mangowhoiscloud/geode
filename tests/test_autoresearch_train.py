@@ -585,7 +585,7 @@ def test_real_mode_invokes_subprocess_with_override_env(
         return result
 
     monkeypatch.setattr(auto_train.subprocess, "run", _fake_run)
-    dim_means, dim_stderr, _audit_s, _total_s, _sc, _mm = run_audit(dry_run=False)
+    dim_means, dim_stderr, _audit_s, _total_s, _sc, _mm, _ps = run_audit(dry_run=False)
     assert "--seed-select" in captured["argv"]
     assert dim_means["input_hallucination"] == 2.0
     assert dim_stderr == {}
@@ -614,7 +614,7 @@ def test_real_mode_parses_dim_stderr_when_emitted(
         return result
 
     monkeypatch.setattr(auto_train.subprocess, "run", _fake_run)
-    _means, dim_stderr, _audit_s, _total_s, _sc, _mm = run_audit(dry_run=False)
+    _means, dim_stderr, _audit_s, _total_s, _sc, _mm, _ps = run_audit(dry_run=False)
     assert dim_stderr["input_hallucination"] == pytest.approx(0.5)
 
 
@@ -674,7 +674,7 @@ def test_real_mode_prefers_eval_archive_when_extract_succeeds(
 
     monkeypatch.setattr(core.audit.dim_extractor, "extract_dim_aggregates", _fake_extract)
 
-    dim_means, _stderr, _audit_s, _total_s, sc, mm = run_audit(dry_run=False)
+    dim_means, _stderr, _audit_s, _total_s, sc, mm, _ps = run_audit(dry_run=False)
     assert dim_means["broken_tool_use"] == 1.0
     assert dim_means["input_hallucination"] == 1.0
     assert sc["broken_tool_use"] == 5
@@ -719,7 +719,7 @@ def test_real_mode_falls_back_to_stdout_when_archive_empty(
         },
     )
 
-    dim_means, _stderr, _audit_s, _total_s, _sc, _mm = run_audit(dry_run=False)
+    dim_means, _stderr, _audit_s, _total_s, _sc, _mm, _ps = run_audit(dry_run=False)
     # Empty archive → stdout JSON's 9.9 wins.
     assert dim_means["broken_tool_use"] == 9.9
 
@@ -756,13 +756,13 @@ def test_real_mode_falls_back_to_stdout_when_archive_raises(
 
     monkeypatch.setattr(core.audit.dim_extractor, "extract_dim_aggregates", _raising_extract)
 
-    dim_means, _stderr, _audit_s, _total_s, _sc, _mm = run_audit(dry_run=False)
+    dim_means, _stderr, _audit_s, _total_s, _sc, _mm, _ps = run_audit(dry_run=False)
     # Extract raised → stdout JSON's 7.7 wins; no exception propagates.
     assert dim_means["broken_tool_use"] == 7.7
 
 
 def test_dry_run_emits_finite_fitness() -> None:
-    dim_means, dim_stderr, audit_seconds, _, _sc, _mm = run_audit(dry_run=True)
+    dim_means, dim_stderr, audit_seconds, _, _sc, _mm, _ps = run_audit(dry_run=True)
     assert dim_means["broken_tool_use"] == pytest.approx(3.4)
     assert dim_stderr == {}
     assert audit_seconds == 0.0
@@ -1388,7 +1388,7 @@ def test_write_baseline_emits_schema_v2_layout(
     top-level meta (``schema_version``, ``session_id``, ``commit``,
     ``ts_utc``) + ``raw`` namespace (dim_means / dim_stderr /
     sample_count / measurement_modality / eval_archive / rubric_version)
-    + ``axes`` namespace (ux/admire/bench).
+    + ``axes`` namespace (admire/bench; ux removed 2026-05-30).
     """
     state_dir = tmp_path
     monkeypatch.setattr(auto_train, "BASELINE_PATH", state_dir / "baseline.json")
@@ -1403,7 +1403,7 @@ def test_write_baseline_emits_schema_v2_layout(
         eval_archive="/var/folders/fake.eval",
         session_id="sess-1",
         commit="abc1234",
-        ux_means={"success_rate": 0.9},
+        admire_means={"pairwise_win_rate": 0.9},
     )
     payload = json.loads((state_dir / "baseline.json").read_text())
     assert payload["schema_version"] == 2
@@ -1417,9 +1417,9 @@ def test_write_baseline_emits_schema_v2_layout(
     assert raw["eval_archive"] == "/var/folders/fake.eval"
     assert raw["rubric_version"] == auto_train.PETRI_RUBRIC_VERSION
     axes = payload["axes"]
-    assert axes["ux_means"] == {"success_rate": 0.9}
-    # admire / bench are None when not supplied
-    assert axes["admire_means"] is None
+    assert axes["admire_means"] == {"pairwise_win_rate": 0.9}
+    # ux removed (PR-MARGIN-FITNESS-SCALE); bench None when not supplied
+    assert "ux_means" not in axes
     assert axes["bench_means"] is None
 
 
@@ -1428,10 +1428,10 @@ def test_load_baseline_reads_schema_v2(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """``_load_baseline`` must consume the schema_version=2 layout
-    and return the same (dim_means, dim_stderr, ux, admire, bench)
-    tuple shape as for v1 — backwards compat for downstream callers
-    (``_should_promote`` etc.) that don't know about the namespace
-    split yet."""
+    and return the (dim_means, dim_stderr, admire, bench) 4-tuple shape
+    as for v1 — backwards compat for downstream callers
+    (``_should_promote`` etc.). A stale ``axes.ux_means`` on disk is
+    ignored (ux removed 2026-05-30)."""
     baseline_path = tmp_path / "baseline.json"
     monkeypatch.setattr(auto_train, "BASELINE_PATH", baseline_path)
     baseline_path.write_text(
@@ -1451,18 +1451,17 @@ def test_load_baseline_reads_schema_v2(
                 },
                 "axes": {
                     "ux_means": {"success_rate": 0.9},
-                    "admire_means": None,
+                    "admire_means": {"pairwise_win_rate": 0.6},
                     "bench_means": None,
                 },
             }
         ),
         encoding="utf-8",
     )
-    means, stderr, ux, admire, bench = auto_train._load_baseline()
+    means, stderr, admire, bench = auto_train._load_baseline()
     assert means == {"broken_tool_use": 3.4}
     assert stderr == {"broken_tool_use": 0.4}
-    assert ux == {"success_rate": 0.9}
-    assert admire == {}
+    assert admire == {"pairwise_win_rate": 0.6}
     assert bench == {}
 
 
@@ -1471,9 +1470,9 @@ def test_load_baseline_still_reads_v1_flat_payload(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """Legacy v1 baseline.json (no ``schema_version`` key, top-level flat
-    ``{dim_means, dim_stderr, [ux_means]}``) must still load. Pre-PR-2
+    ``{dim_means, dim_stderr, [admire_means]}``) must still load. Pre-PR-2
     files in the wild stay valid until the next promotion overwrites
-    them in v2 shape."""
+    them in v2 shape. A stale flat ``ux_means`` is ignored."""
     baseline_path = tmp_path / "baseline.json"
     monkeypatch.setattr(auto_train, "BASELINE_PATH", baseline_path)
     baseline_path.write_text(
@@ -1482,15 +1481,15 @@ def test_load_baseline_still_reads_v1_flat_payload(
                 "dim_means": {"broken_tool_use": 3.4},
                 "dim_stderr": {"broken_tool_use": 0.4},
                 "ux_means": {"success_rate": 0.9},
+                "admire_means": {"pairwise_win_rate": 0.6},
             }
         ),
         encoding="utf-8",
     )
-    means, stderr, ux, admire, bench = auto_train._load_baseline()
+    means, stderr, admire, bench = auto_train._load_baseline()
     assert means == {"broken_tool_use": 3.4}
     assert stderr == {"broken_tool_use": 0.4}
-    assert ux == {"success_rate": 0.9}
-    assert admire == {}
+    assert admire == {"pairwise_win_rate": 0.6}
     assert bench == {}
 
 
@@ -1498,8 +1497,8 @@ def test_write_then_load_round_trip_v2(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Write a v2 baseline then load it back. The 5-tuple return signature
-    of ``_load_baseline`` must hold for downstream callers."""
+    """Write a v2 baseline then load it back. The 4-tuple return signature
+    of ``_load_baseline`` must hold for downstream callers (ux removed)."""
     baseline_path = tmp_path / "baseline.json"
     monkeypatch.setattr(auto_train, "BASELINE_PATH", baseline_path)
     dim_means = {"broken_tool_use": 3.4, "input_hallucination": 3.7}
@@ -1512,14 +1511,14 @@ def test_write_then_load_round_trip_v2(
             "broken_tool_use": "judge_llm",
             "input_hallucination": "judge_llm",
         },
-        ux_means={"success_rate": 0.9},
+        admire_means={"pairwise_win_rate": 0.9},
         session_id="sess-rt",
         commit="cafef00d",
     )
-    loaded_means, loaded_stderr, ux, admire, bench = auto_train._load_baseline()
+    loaded_means, loaded_stderr, admire, bench = auto_train._load_baseline()
     assert loaded_means == dim_means
     assert loaded_stderr == dim_stderr
-    assert ux == {"success_rate": 0.9}
+    assert admire == {"pairwise_win_rate": 0.9}
 
 
 def test_resolve_eval_archive_path_returns_none_when_symlink_missing(
@@ -1618,14 +1617,15 @@ def test_should_promote_accepts_significant_improvement() -> None:
 
 
 def test_should_promote_floor_protects_against_zero_stderr() -> None:
-    """``fitness_margin_floor`` kicks in when baseline_stderr is empty.
+    """``fitness_margin_floor`` (the zero-noise epsilon) kicks in when there
+    is no measurable fitness noise (empty stderr → MC σ = 0).
 
-    PR-PROMOTE-RATE-BUNDLE (2026-05-29) — Option A lowered the default
-    floor 0.05 → 0.02; this test still pins the floor-mechanism shape
-    (margin string surfaces in reason) but updates the literal."""
+    PR-MARGIN-FITNESS-SCALE (2026-05-30) — the floor is now a FITNESS-scale
+    epsilon (0.005), the zero-noise guard beneath the bootstrap gain-stderr
+    margin. This test pins that the floor surfaces in the reason string."""
     baseline_means = dict.fromkeys(CRITICAL_DIMS, 3.0)
-    baseline_stderr: dict[str, float] = {}  # empty → margin would be 0
-    # Tiny gain that would pass with margin=0 but fails with floor=0.02.
+    baseline_stderr: dict[str, float] = {}  # empty → gain stderr = 0
+    # Tiny gain (~0.0005) that would pass with margin=0 but fails the 0.005 floor.
     current_means = dict.fromkeys(CRITICAL_DIMS, 2.99)
     ok, reason = _should_promote(
         current_means,
@@ -1634,7 +1634,7 @@ def test_should_promote_floor_protects_against_zero_stderr() -> None:
         baseline_stderr=baseline_stderr,
     )
     assert ok is False
-    assert "margin 0.02" in reason
+    assert "margin 0.0050" in reason
 
 
 # ---------------------------------------------------------------------------
@@ -1653,8 +1653,9 @@ def test_should_promote_widens_margin_when_critical_dim_n1() -> None:
     """
     baseline_means = dict.fromkeys(CRITICAL_DIMS, 3.0)
     baseline_stderr = dict.fromkeys(CRITICAL_DIMS, 0.0)  # N=1 → stderr 0
-    # 0.06 improvement (well above 0.05 default floor) on every critical dim.
-    current_means = dict.fromkeys(CRITICAL_DIMS, 1.5)
+    # ~0.015 fitness gain: above the 0.005 default floor (would promote at
+    # N>=2) but below the 0.05 N=1 widening floor → rejected only by widening.
+    current_means = dict.fromkeys(CRITICAL_DIMS, 2.7)
     ok, reason = _should_promote(
         current_means,
         dict.fromkeys(CRITICAL_DIMS, 0.0),
@@ -1663,7 +1664,7 @@ def test_should_promote_widens_margin_when_critical_dim_n1() -> None:
         baseline_sample_count=dict.fromkeys(CRITICAL_DIMS, 1),
     )
     assert ok is False
-    assert "0.2000" in reason or "margin 0.20" in reason
+    assert "margin 0.0500" in reason
     assert "N=1 critical" in reason
 
 
@@ -1673,8 +1674,8 @@ def test_should_promote_keeps_default_margin_when_critical_dim_n_ge_2() -> None:
     the gate for well-sampled baselines."""
     baseline_means = dict.fromkeys(CRITICAL_DIMS, 3.0)
     baseline_stderr = dict.fromkeys(CRITICAL_DIMS, 0.0)
-    # Same 0.06 gain that PR-3 N=1 path rejects above.
-    current_means = dict.fromkeys(CRITICAL_DIMS, 1.5)
+    # Same ~0.015 gain the N=1 path rejects above — here it clears the 0.005 floor.
+    current_means = dict.fromkeys(CRITICAL_DIMS, 2.7)
     ok, _reason = _should_promote(
         current_means,
         dict.fromkeys(CRITICAL_DIMS, 0.0),
@@ -1682,7 +1683,7 @@ def test_should_promote_keeps_default_margin_when_critical_dim_n_ge_2() -> None:
         baseline_stderr=baseline_stderr,
         baseline_sample_count=dict.fromkeys(CRITICAL_DIMS, 5),
     )
-    # 0.06 raw gain on every critical dim > 0.05 floor → promote.
+    # ~0.015 gain > 0.005 default floor (N>=2 → no widening) → promote.
     assert ok is True
 
 
@@ -1729,7 +1730,7 @@ def test_should_promote_n1_gate_fires_when_single_critical_dim_n1() -> None:
     where one slow-to-converge dim drags the whole margin wider."""
     baseline_means = dict.fromkeys(CRITICAL_DIMS, 3.0)
     baseline_stderr = dict.fromkeys(CRITICAL_DIMS, 0.0)
-    current_means = dict.fromkeys(CRITICAL_DIMS, 1.5)
+    current_means = dict.fromkeys(CRITICAL_DIMS, 2.7)  # ~0.015 gain (< 0.05 N=1 floor)
     sample_count = dict.fromkeys(CRITICAL_DIMS, 5)
     # Single critical dim at N=1.
     first_critical = next(iter(CRITICAL_DIMS))
