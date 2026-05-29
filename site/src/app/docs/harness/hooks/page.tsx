@@ -8,8 +8,8 @@ export default function Page() {
       slug="harness/hooks"
       title="Hook System"
       titleKo="훅 시스템"
-      summary="81 lifecycle events grouped into 14 categories. Listeners can observe, intercept, or modify."
-      summaryKo="81개 라이프사이클 이벤트, 14개 카테고리로 분류. 리스너가 관찰, 가로채기, 수정 가능."
+      summary="Lifecycle events grouped into categories. Listeners can observe, intercept, or modify."
+      summaryKo="라이프사이클 이벤트를 카테고리로 분류. 리스너가 관찰, 가로채기, 수정 가능."
     >
       <Bi
         ko={
@@ -28,26 +28,26 @@ export default function Page() {
 
             <h2>이벤트 그룹</h2>
             <table>
-              <thead><tr><th>그룹</th><th>개수</th><th>이벤트</th></tr></thead>
+              <thead><tr><th>그룹</th><th>이벤트</th></tr></thead>
               <tbody>
-                <tr><td>pipeline</td><td>3</td><td>PIPELINE_START, PIPELINE_END, PIPELINE_ERROR</td></tr>
-                <tr><td>node</td><td>4</td><td>NODE_ENTER, NODE_EXIT, NODE_ERROR, NODE_RETRY</td></tr>
-                <tr><td>analysis</td><td>3</td><td>ANALYST_START, ANALYST_COMPLETE, ANALYST_FAILED</td></tr>
-                <tr><td>verification</td><td>2</td><td>VERIFICATION_PASS, VERIFICATION_FAIL</td></tr>
-                <tr><td>automation</td><td>5</td><td>DRIFT_DETECTED, MODEL_PROMOTED, OUTCOME_COLLECTED, EXPERT_VOTE_CAST, FEEDBACK_PHASE_CHANGED</td></tr>
-                <tr><td>memory</td><td>4</td><td>MEMORY_SAVED, RULE_CREATED, RULE_UPDATED, RULE_DELETED</td></tr>
-                <tr><td>tool</td><td>8</td><td>TOOL_EXEC_START/END/FAILED, TOOL_RECOVERY_START/END, TOOL_APPROVAL_REQUEST/GRANTED/DENIED</td></tr>
-                <tr><td>session</td><td>2</td><td>SESSION_START, SESSION_END</td></tr>
-                <tr><td>model</td><td>1</td><td>MODEL_SWITCHED</td></tr>
-                <tr><td>llm</td><td>4</td><td>LLM_CALL_START, LLM_CALL_END, LLM_CALL_FAILED, LLM_CALL_RETRY</td></tr>
-                <tr><td>approval</td><td>2</td><td>APPROVAL_REQUEST, APPROVAL_GRANTED</td></tr>
-                <tr><td>context</td><td>2</td><td>CONTEXT_OVERFLOW, CONTEXT_RESET</td></tr>
-                <tr><td>prompt</td><td>1</td><td>PROMPT_ASSEMBLED</td></tr>
-                <tr><td>turn</td><td>1</td><td>TURN_COMPLETE</td></tr>
+                <tr><td>pipeline</td><td>PIPELINE_START, PIPELINE_END, PIPELINE_ERROR</td></tr>
+                <tr><td>node</td><td>NODE_ENTER, NODE_EXIT, NODE_ERROR, NODE_RETRY</td></tr>
+                <tr><td>analysis</td><td>ANALYST_START, ANALYST_COMPLETE, ANALYST_FAILED</td></tr>
+                <tr><td>verification</td><td>VERIFICATION_PASS, VERIFICATION_FAIL</td></tr>
+                <tr><td>automation</td><td>DRIFT_DETECTED, MODEL_PROMOTED, OUTCOME_COLLECTED, EXPERT_VOTE_CAST, FEEDBACK_PHASE_CHANGED</td></tr>
+                <tr><td>memory</td><td>MEMORY_SAVED, RULE_CREATED, RULE_UPDATED, RULE_DELETED</td></tr>
+                <tr><td>tool</td><td>TOOL_EXEC_START/END/FAILED, TOOL_RECOVERY_START/END, TOOL_APPROVAL_REQUEST/GRANTED/DENIED</td></tr>
+                <tr><td>session</td><td>SESSION_START, SESSION_END</td></tr>
+                <tr><td>model</td><td>MODEL_SWITCHED</td></tr>
+                <tr><td>llm</td><td>LLM_CALL_START, LLM_CALL_END, LLM_CALL_FAILED, LLM_CALL_RETRY</td></tr>
+                <tr><td>approval</td><td>APPROVAL_REQUEST, APPROVAL_GRANTED</td></tr>
+                <tr><td>context</td><td>CONTEXT_OVERFLOW, CONTEXT_RESET</td></tr>
+                <tr><td>prompt</td><td>PROMPT_ASSEMBLED</td></tr>
+                <tr><td>turn</td><td>TURN_COMPLETE</td></tr>
               </tbody>
             </table>
             <p>
-              총 14개 그룹, 81개 이벤트 (표에는 주요 항목만 요약). <code>core/hooks/system.py</code>
+              표에는 주요 항목만 요약했습니다. <code>core/hooks/system.py</code>
               소스 주석은 이벤트를 더 세분화하여 (subagent 라이프사이클, agentic turn, 세션,
               LLM 호출, 도구 승인, serve 라이프사이클, MCP 서버) 분류하며, 표에서는 관련 하위
               섹션을 묶어서 표시했습니다.
@@ -100,29 +100,29 @@ hooks.register(
 
             <h2>Event groups</h2>
             <table>
-              <thead><tr><th>Group</th><th>Count</th><th>Events</th></tr></thead>
+              <thead><tr><th>Group</th><th>Events</th></tr></thead>
               <tbody>
-                <tr><td>pipeline</td><td>3</td><td>PIPELINE_START, PIPELINE_END, PIPELINE_ERROR</td></tr>
-                <tr><td>node</td><td>4</td><td>NODE_ENTER, NODE_EXIT, NODE_ERROR, NODE_RETRY</td></tr>
-                <tr><td>analysis</td><td>3</td><td>ANALYST_START, ANALYST_COMPLETE, ANALYST_FAILED</td></tr>
-                <tr><td>verification</td><td>2</td><td>VERIFICATION_PASS, VERIFICATION_FAIL</td></tr>
-                <tr><td>automation</td><td>5</td><td>DRIFT_DETECTED, MODEL_PROMOTED, OUTCOME_COLLECTED, EXPERT_VOTE_CAST, FEEDBACK_PHASE_CHANGED</td></tr>
-                <tr><td>memory</td><td>4</td><td>MEMORY_SAVED, RULE_CREATED, RULE_UPDATED, RULE_DELETED</td></tr>
-                <tr><td>tool</td><td>8</td><td>TOOL_EXEC_START/END/FAILED, TOOL_RECOVERY_START/END, TOOL_APPROVAL_REQUEST/GRANTED/DENIED</td></tr>
-                <tr><td>session</td><td>2</td><td>SESSION_START, SESSION_END</td></tr>
-                <tr><td>model</td><td>1</td><td>MODEL_SWITCHED</td></tr>
-                <tr><td>llm</td><td>4</td><td>LLM_CALL_START, LLM_CALL_END, LLM_CALL_FAILED, LLM_CALL_RETRY</td></tr>
-                <tr><td>approval</td><td>2</td><td>APPROVAL_REQUEST, APPROVAL_GRANTED</td></tr>
-                <tr><td>context</td><td>2</td><td>CONTEXT_OVERFLOW, CONTEXT_RESET</td></tr>
-                <tr><td>prompt</td><td>1</td><td>PROMPT_ASSEMBLED</td></tr>
-                <tr><td>turn</td><td>1</td><td>TURN_COMPLETE</td></tr>
+                <tr><td>pipeline</td><td>PIPELINE_START, PIPELINE_END, PIPELINE_ERROR</td></tr>
+                <tr><td>node</td><td>NODE_ENTER, NODE_EXIT, NODE_ERROR, NODE_RETRY</td></tr>
+                <tr><td>analysis</td><td>ANALYST_START, ANALYST_COMPLETE, ANALYST_FAILED</td></tr>
+                <tr><td>verification</td><td>VERIFICATION_PASS, VERIFICATION_FAIL</td></tr>
+                <tr><td>automation</td><td>DRIFT_DETECTED, MODEL_PROMOTED, OUTCOME_COLLECTED, EXPERT_VOTE_CAST, FEEDBACK_PHASE_CHANGED</td></tr>
+                <tr><td>memory</td><td>MEMORY_SAVED, RULE_CREATED, RULE_UPDATED, RULE_DELETED</td></tr>
+                <tr><td>tool</td><td>TOOL_EXEC_START/END/FAILED, TOOL_RECOVERY_START/END, TOOL_APPROVAL_REQUEST/GRANTED/DENIED</td></tr>
+                <tr><td>session</td><td>SESSION_START, SESSION_END</td></tr>
+                <tr><td>model</td><td>MODEL_SWITCHED</td></tr>
+                <tr><td>llm</td><td>LLM_CALL_START, LLM_CALL_END, LLM_CALL_FAILED, LLM_CALL_RETRY</td></tr>
+                <tr><td>approval</td><td>APPROVAL_REQUEST, APPROVAL_GRANTED</td></tr>
+                <tr><td>context</td><td>CONTEXT_OVERFLOW, CONTEXT_RESET</td></tr>
+                <tr><td>prompt</td><td>PROMPT_ASSEMBLED</td></tr>
+                <tr><td>turn</td><td>TURN_COMPLETE</td></tr>
               </tbody>
             </table>
             <p>
-              Total: 14 groups, 81 events (table summarises the major ones). The
+              The table summarises the major events. The
               <code>core/hooks/system.py</code> source comments group events into
               finer sub-sections (subagent lifecycle, agentic turn, session,
-              LLM call, tool approval, serve lifecycle, MCP server) — the table
+              LLM call, tool approval, serve lifecycle, MCP server), and the table
               rolls related sub-sections together.
             </p>
 

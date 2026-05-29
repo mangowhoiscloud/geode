@@ -4,11 +4,7 @@ import { useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import { useLocale, t } from "../locale-context";
-import {
-  GEODE_SOT,
-  GEODE_CUMULATIVE_KO,
-  GEODE_CUMULATIVE_EN,
-} from "@/data/geode/sot";
+import { GEODE_SOT } from "@/data/geode/sot";
 
 const videoTabs = [
   { id: "demo", labelKo: "에이전트 및 스캐폴드 시연", labelEn: "Agent & Scaffold demo", src: "https://www.youtube.com/embed/1IftYShGxak", title: "GEODE Agent Demo" },
@@ -37,8 +33,8 @@ export function HeroSection() {
         <p className="mt-4 font-display text-[clamp(1.25rem,2.5vw,1.6rem)] text-[var(--ink-1)] leading-snug">
           {t(
             locale,
-            "스스로를 빌드하는 자율 에이전트 하네스.",
-            "A self-hosting agent harness for autonomous execution."
+            "스스로를 고쳐 쓰는 자율 에이전트 하네스.",
+            "A self-rewriting agent harness for autonomous execution."
           )}
         </p>
 
@@ -46,8 +42,15 @@ export function HeroSection() {
           <p>
             {t(
               locale,
-              "안드레이 카르파시의 LLM-OS 다이어그램을 코드로 옮긴 한 가지 답입니다. GEODE는 모델 라우팅, 도구 실행, 메모리, 스케줄링, 관측성을 하나의 자율 실행 하네스로 묶습니다.",
-              "GEODE renders Andrej Karpathy's LLM-OS diagram in production code. It combines model routing, tool execution, memory, scheduling, and observability into one autonomous execution harness."
+              "GEODE는 비-파라메트릭 계열의 자기 진화 에이전트입니다. 모델 가중치는 절대 건드리지 않습니다. 대신 자기 자신을 둘러싼 스캐폴드, 즉 시스템 프롬프트와 도구 정책, 작업 분해와 반성 루프, 스킬 카탈로그를 직접 바꿔 나아집니다.",
+              "GEODE is a self-evolving agent on the non-parametric branch. It never updates model weights. Instead it improves by mutating the scaffolding around itself: its system prompt, tool policy, task decomposition, reflection loop, and skill catalog."
+            )}
+          </p>
+          <p className="mt-3">
+            {t(
+              locale,
+              "변화의 적합도는 능력 벤치마크가 아니라 적대적 안전 감사로 측정합니다. 핵심 안전 차원에는 하한선이 있어, 그 선을 넘어 후퇴하는 변화는 거부합니다.",
+              "Its fitness signal is an adversarial safety audit, not a capability benchmark. Critical safety dimensions sit behind a hard floor: a change that regresses them is rejected."
             )}
           </p>
         </div>
@@ -56,10 +59,6 @@ export function HeroSection() {
           <span className="opacity-50">$</span> geode{"\n"}
           <span className="opacity-50">&gt;</span> inspect this repository and summarize release blockers
         </div>
-
-        <p className="mt-6 font-mono text-[12px] text-[var(--ink-3)]">
-          {t(locale, GEODE_CUMULATIVE_KO, GEODE_CUMULATIVE_EN)}
-        </p>
 
         <div className="mt-10 flex items-center gap-3">
           <Link

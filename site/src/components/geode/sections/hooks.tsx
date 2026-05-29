@@ -36,17 +36,17 @@ const events = [
     descKo: "매 턴 종료 → 자동 메모리 축적", descEn: "Each turn end: auto memory accumulation" },
 ];
 
-/* ── Version timeline data ── */
+/* ── Version timeline data (qualitative milestones) ── */
 const versions = [
-  { ver: "v0.10", count: 26, descKo: "L1 관측만. RunLog 단독", descEn: "L1 observe only. RunLog alone" },
-  { ver: "v0.31", count: 42, descKo: "L2 반응 추가. drift → 자동 재분석", descEn: "L2 react added. drift: auto-reanalysis" },
-  { ver: "v0.35", count: 40, descKo: "6개 orphan 제거. CRITICAL 미연결 수정", descEn: "6 orphans removed. Fixed CRITICAL None bug" },
-  { ver: "v0.37", count: 40, descKo: "Unified bootstrap. ONE HookSystem 보장", descEn: "Unified bootstrap. ONE HookSystem guaranteed" },
-  { ver: "v0.42", count: 46, descKo: "+4 운영 이벤트. SHUTDOWN, CONFIG_RELOADED, MCP 연결 추적", descEn: "+4 operational events. SHUTDOWN, CONFIG_RELOADED, MCP connection tracking" },
-  { ver: "v0.45", count: 48, descKo: "+2 관측 이벤트. SessionMetrics, LLM resilience 지원", descEn: "+2 observability events. SessionMetrics, LLM resilience support" },
-  { ver: "v0.48", count: 55, descKo: "+6 hook interceptor. block/modify chain", descEn: "+6 interceptor pattern. block/modify chain" },
-  { ver: "v0.65", count: 58, descKo: "+3 prompt + lifecycle. PROMPT_ASSEMBLED 추가", descEn: "+3 prompt + lifecycle. PROMPT_ASSEMBLED added" },
-  { ver: "v0.99", count: 81, descKo: "+23 subagent / agentic turn / serve / MCP 라이프사이클 이벤트", descEn: "+23 subagent / agentic-turn / serve / MCP lifecycle events" },
+  { ver: "v0.10", descKo: "L1 관측만. RunLog 단독", descEn: "L1 observe only. RunLog alone" },
+  { ver: "v0.31", descKo: "L2 반응 추가. drift → 자동 재분석", descEn: "L2 react added. drift: auto-reanalysis" },
+  { ver: "v0.35", descKo: "orphan 이벤트 제거. CRITICAL 미연결 수정", descEn: "Orphan events removed. Fixed CRITICAL None bug" },
+  { ver: "v0.37", descKo: "Unified bootstrap. ONE HookSystem 보장", descEn: "Unified bootstrap. ONE HookSystem guaranteed" },
+  { ver: "v0.42", descKo: "운영 이벤트 추가. SHUTDOWN, CONFIG_RELOADED, MCP 연결 추적", descEn: "Operational events added. SHUTDOWN, CONFIG_RELOADED, MCP connection tracking" },
+  { ver: "v0.45", descKo: "관측 이벤트 추가. SessionMetrics, LLM resilience 지원", descEn: "Observability events added. SessionMetrics, LLM resilience support" },
+  { ver: "v0.48", descKo: "hook interceptor. block/modify chain", descEn: "Interceptor pattern. block/modify chain" },
+  { ver: "v0.65", descKo: "prompt + lifecycle. PROMPT_ASSEMBLED 추가", descEn: "prompt + lifecycle. PROMPT_ASSEMBLED added" },
+  { ver: "v0.99", descKo: "subagent / agentic turn / serve / MCP 라이프사이클 이벤트", descEn: "subagent / agentic-turn / serve / MCP lifecycle events" },
 ];
 
 /* ── Design decisions data ── */
@@ -55,8 +55,8 @@ const decisions = [
     ko: "도구 실행은 asyncio.gather로 병렬화하지만, Hook은 동기 체인을 유지합니다. P50→P80→P85 순서가 깨지면 RunLog 없이 Snapshot이 먼저 실행되는 문제가 발생하기 때문입니다. 관측 핸들러는 ~ms 단위라 전체 레이턴시에 영향이 미미합니다.",
     en: "Tool execution uses asyncio.gather for parallelism, but Hooks maintain a sync chain. If P50→P80→P85 ordering breaks, Snapshot could execute before RunLog. Observer handlers run in ~ms, so latency impact is negligible." },
   { title: "Prune, then Restore", color: "#E87080",
-    ko: "v0.35.1에서 핸들러 0개인 6 이벤트를 제거했습니다(46→40). v0.42에서 운영 모니터링 필요로 4종을 재추가(SHUTDOWN_STARTED, CONFIG_RELOADED, MCP_SERVER_CONNECTED/FAILED)하여 46으로 복원. v0.45에서 LLM resilience 관측을 위해 2종 추가(48). 필요할 때만 존재시키는 원칙을 검증했습니다.",
-    en: "In v0.35.1, removed 6 events with zero handlers (46→40). In v0.42, re-added 4 operational events (SHUTDOWN_STARTED, CONFIG_RELOADED, MCP_SERVER_CONNECTED/FAILED), restoring to 46. In v0.45, added 2 for LLM resilience observability (48). Validated the principle: events exist only when needed." },
+    ko: "v0.35.1에서 핸들러가 하나도 없는 이벤트를 제거했습니다. v0.42에서 운영 모니터링 필요로 SHUTDOWN_STARTED, CONFIG_RELOADED, MCP_SERVER_CONNECTED/FAILED를 재추가했고, v0.45에서 LLM resilience 관측 이벤트를 더했습니다. 필요할 때만 존재시키는 원칙을 검증했습니다.",
+    en: "In v0.35.1, removed events with zero handlers. In v0.42, re-added operational events (SHUTDOWN_STARTED, CONFIG_RELOADED, MCP_SERVER_CONNECTED/FAILED), and in v0.45 added LLM resilience observability events. Validated the principle: events exist only when needed." },
   { title: "Unified Wiring", color: "#34D399",
     ko: "v0.35.0 이전에는 serve/scheduler에서 HookSystem이 미연결되어, serve에서 발화한 이벤트를 REPL 핸들러가 수신하지 못했습니다. GeodeRuntime이 단일 HookSystem을 소유하도록 전환하여 전 모드 이벤트 전파를 보장합니다.",
     en: "Before v0.35.0, HookSystem was not wired in serve/scheduler. Events fired in serve couldn't be received by REPL handlers. Switching to a single HookSystem owned by GeodeRuntime guarantees event propagation across all modes." },
@@ -144,8 +144,8 @@ export function HooksSection() {
           labelColor="#4ECDC4"
           title={t(locale, "이벤트 기반 리플 패턴", "Event-Driven Ripple Pattern")}
           description={t(locale,
-            "비결정적 LLM 시스템은 모든 경로를 테스트할 수 없습니다. 초기에는 노드 간 직접 콜백으로 관측했지만, 26개 파일에 의존성이 퍼지며 순환 참조가 발생했습니다. Hook 이벤트 버스로 전환하여 발화 측은 누가 듣는지 모르고, 핸들러는 누가 쏘는지 모르는 완전 분리를 달성했습니다. v0.10(26) → v0.31(42, 반응) → v0.35(40, orphan 정리) → v0.37(통합) → v0.42(46, 운영) → v0.45(48, 관측)로 성숙했습니다.",
-            "Non-deterministic LLM systems cannot test every path. Initially we observed via direct callbacks between nodes, but dependencies spread across 26 files, creating circular references. Switching to a Hook event bus achieved full decoupling: emitters don't know who listens, handlers don't know who fires. Matured from v0.10 (26) → v0.31 (42, react) → v0.35 (40, orphan cleanup) → v0.37 (unified) → v0.42 (46, operational) → v0.45 (48, observability)."
+            "비결정적 LLM 시스템은 모든 경로를 테스트할 수 없습니다. 초기에는 노드 간 직접 콜백으로 관측했지만, 의존성이 여러 파일로 퍼지며 순환 참조가 발생했습니다. Hook 이벤트 버스로 전환하여 발화 측은 누가 듣는지 모르고, 핸들러는 누가 쏘는지 모르는 완전 분리를 달성했습니다. v0.10 관측 → v0.31 반응 → v0.35 orphan 정리 → v0.37 통합 → v0.42 운영 → v0.45 관측 순으로 성숙했습니다.",
+            "Non-deterministic LLM systems cannot test every path. Initially we observed via direct callbacks between nodes, but dependencies spread across many files, creating circular references. Switching to a Hook event bus achieved full decoupling: emitters don't know who listens, handlers don't know who fires. Matured from v0.10 observe to v0.31 react, v0.35 orphan cleanup, v0.37 unified, v0.42 operational, v0.45 observability."
           )}
         />
 
@@ -188,9 +188,8 @@ export function HooksSection() {
                 <animate attributeName="stroke-opacity" values="0.1;0" dur="3s" repeatCount="indefinite" />
               </circle>
               <rect x={300} y={88} width={100} height={64} rx={12} fill="#0C1220" stroke="#4ECDC4" strokeWidth={1} strokeOpacity={0.35} />
-              <text x={350} y={112} textAnchor="middle" fill="#4ECDC4" fontSize={11} fontFamily="ui-monospace, monospace" fontWeight={700}>HookSystem</text>
-              <text x={350} y={128} textAnchor="middle" fill="#4ECDC4" fillOpacity={0.4} fontSize={7} fontFamily="ui-monospace, monospace">81 events</text>
-              <text x={350} y={142} textAnchor="middle" fill="#4ECDC4" fillOpacity={0.3} fontSize={7} fontFamily="ui-monospace, monospace">priority-sorted</text>
+              <text x={350} y={116} textAnchor="middle" fill="#4ECDC4" fontSize={11} fontFamily="ui-monospace, monospace" fontWeight={700}>HookSystem</text>
+              <text x={350} y={132} textAnchor="middle" fill="#4ECDC4" fillOpacity={0.3} fontSize={7} fontFamily="ui-monospace, monospace">priority-sorted</text>
 
               {/* Handler chain (right, sorted by priority) */}
               {[
@@ -403,8 +402,6 @@ export function HooksSection() {
                     <circle cx={x} cy={30} r={6} fill={hoveredVersion === i ? "#4ECDC4" : "#1E293B"} stroke="#4ECDC4" strokeWidth={1} strokeOpacity={hoveredVersion === i ? 0.8 : 0.3} />
                     {/* Version label */}
                     <text x={x} y={14} textAnchor="middle" fill="white" fillOpacity={0.5} fontSize={9} fontFamily="ui-monospace,monospace" fontWeight={600}>{v.ver}</text>
-                    {/* Count */}
-                    <text x={x} y={50} textAnchor="middle" fill="white" fillOpacity={0.25} fontSize={8} fontFamily="ui-monospace,monospace">({v.count})</text>
                   </g>
                 );
               })}

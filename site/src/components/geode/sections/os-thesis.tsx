@@ -73,7 +73,7 @@ export function OsThesisSection() {
               "The pipeline that builds the system follows the same pattern. On the shipping side, 20 prompt hashes are pinned as a ratchet; on the build side, five CI stages are pinned the same way. The rule that keeps output stable and the rule that keeps the build stable have the same shape."
             )}
           </p>
-          {/* Cumulative stats line removed — single source lives in hero via GEODE_SOT. */}
+          {/* Cumulative stats line removed. Lead with character, not counts. */}
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">

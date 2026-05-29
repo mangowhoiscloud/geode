@@ -43,8 +43,8 @@ export default function Page() {
               <thead><tr><th>옵션</th><th>의미</th><th>기본 / 권장</th></tr></thead>
               <tbody>
                 <tr><td><code>--auditor</code> · <code>--target</code> · <code>--judge</code></td><td>3 역할 각자 모델 지정.</td><td>auditor/judge는 같은 모델 가능. target은 보통 <code>geode/&lt;model&gt;</code>.</td></tr>
-                <tr><td><code>--dim-set</code></td><td>판정 차원 세트. <code>geode_5axes</code> (17 dim) 또는 <code>full</code> (38 dim).</td><td>기본 <code>geode_5axes</code>. cost↓ 하면서 GEODE 관점 5축 (refusal/honesty/power/manipulation/harm) 커버.</td></tr>
-                <tr><td><code>--seed-select</code></td><td>173 seeds 중 일부만.</td><td>첫 run은 3-5개.</td></tr>
+                <tr><td><code>--dim-set</code></td><td>판정 차원 세트. <code>geode_5axes</code> 또는 <code>full</code>.</td><td>기본 <code>geode_5axes</code>. cost↓ 하면서 GEODE 관점 5축 (refusal/honesty/power/manipulation/harm) 커버.</td></tr>
+                <tr><td><code>--seed-select</code></td><td>seed 카탈로그 중 일부만.</td><td>첫 run은 3-5개.</td></tr>
                 <tr><td><code>--max-turns</code></td><td>대화 turn 상한.</td><td>10 (cost cap), 30 (full).</td></tr>
                 <tr><td><code>--target-tools</code></td><td>target에 허용된 도구 화이트리스트.</td><td>비워두면 전체 도구.</td></tr>
                 <tr><td><code>--unrestricted</code></td><td>cost cap 해제 (full audit).</td><td>일반적으로 off.</td></tr>
@@ -68,12 +68,12 @@ export default function Page() {
             </p>
             <pre>{`inspect view ~/.geode/diagnostics/petri/<run-id>/`}</pre>
             <p>
-              퍼블리시된 GEODE audit bundle은 <a href="/self-improving/petri-bundle/">/geode/self-improving/petri-bundle/</a>에서 바로 볼 수 있습니다.
+              퍼블리시된 GEODE audit bundle은 <a href="/geode/self-improving/petri-bundle/">/geode/self-improving/petri-bundle/</a>에서 바로 볼 수 있습니다.
             </p>
 
             <h2>다음 단계</h2>
             <ul>
-              <li>점수 의미: <a href="/geode/docs/petri/judge-dimensions">17/38 Judge 차원</a></li>
+              <li>점수 의미: <a href="/geode/docs/petri/judge-dimensions">Judge 차원</a></li>
               <li>관측 분석: <a href="/geode/docs/verification/observability">관측성</a></li>
               <li>비용: <a href="/geode/docs/ops/cost">비용 모니터링</a></li>
             </ul>
@@ -111,8 +111,8 @@ export default function Page() {
               <thead><tr><th>Option</th><th>Meaning</th><th>Default / recommended</th></tr></thead>
               <tbody>
                 <tr><td><code>--auditor</code> · <code>--target</code> · <code>--judge</code></td><td>Model per role.</td><td>Auditor and judge may share. Target is usually <code>geode/&lt;model&gt;</code>.</td></tr>
-                <tr><td><code>--dim-set</code></td><td>Judge dimension set. <code>geode_5axes</code> (17 dims) or <code>full</code> (38 dims).</td><td>Default <code>geode_5axes</code>. Lower cost while covering the 5 GEODE-relevant axes (refusal, honesty, power, manipulation, harm).</td></tr>
-                <tr><td><code>--seed-select</code></td><td>Subset of the 173 seeds.</td><td>3-5 for the first run.</td></tr>
+                <tr><td><code>--dim-set</code></td><td>Judge dimension set. <code>geode_5axes</code> or <code>full</code>.</td><td>Default <code>geode_5axes</code>. Lower cost while covering the 5 GEODE-relevant axes (refusal, honesty, power, manipulation, harm).</td></tr>
+                <tr><td><code>--seed-select</code></td><td>Subset of the seed catalog.</td><td>3-5 for the first run.</td></tr>
                 <tr><td><code>--max-turns</code></td><td>Per-conversation turn cap.</td><td>10 (cost cap), 30 (full).</td></tr>
                 <tr><td><code>--target-tools</code></td><td>Whitelist of tools the target may call.</td><td>Empty means all tools.</td></tr>
                 <tr><td><code>--unrestricted</code></td><td>Lifts the cost cap (full audit).</td><td>Off by default.</td></tr>
@@ -137,12 +137,12 @@ export default function Page() {
             </p>
             <pre>{`inspect view ~/.geode/diagnostics/petri/<run-id>/`}</pre>
             <p>
-              The published GEODE audit bundle is browsable at <a href="/self-improving/petri-bundle/">/geode/self-improving/petri-bundle/</a>.
+              The published GEODE audit bundle is browsable at <a href="/geode/self-improving/petri-bundle/">/geode/self-improving/petri-bundle/</a>.
             </p>
 
             <h2>Next</h2>
             <ul>
-              <li>What the scores mean: <a href="/geode/docs/petri/judge-dimensions">17/38 Judge Dimensions</a></li>
+              <li>What the scores mean: <a href="/geode/docs/petri/judge-dimensions">Judge Dimensions</a></li>
               <li>Bigger picture: <a href="/geode/docs/verification/observability">Observability</a></li>
               <li>Cost: <a href="/geode/docs/ops/cost">Cost Monitoring</a></li>
             </ul>

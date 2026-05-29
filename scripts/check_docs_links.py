@@ -140,15 +140,20 @@ def discover_build_time_copies(repo_root: Path) -> set[str]:
     """Paths that the Pages workflow injects into ``site/out/`` at build time
     so they appear at deploy URL even though they live outside ``site/``.
 
-    Currently the only build-time copy is ``docs/self-improving/petri-bundle/`` →
-    ``site/out/petri-bundle/`` (`.github/workflows/pages.yml` Copy step).
-    If more are added later, register them here.
+    The Pages Copy step copies ``docs/self-improving/.`` wholesale into
+    ``site/out/self-improving/`` (so the hub root and the petri-bundle deploy
+    under ``/geode/self-improving/...``), plus a legacy redirect copy of
+    ``docs/petri-bundle/`` into ``site/out/petri-bundle/`` when that dir exists.
+    Registering ``/self-improving/`` with a trailing slash lets the prefix
+    rule accept every link under the copied hub tree.
     """
     out: set[str] = set()
+    if (repo_root / "docs" / "self-improving" / "index.html").exists():
+        out.add("/self-improving/")
+        out.add("/self-improving")
     if (repo_root / "docs" / "petri-bundle" / "index.html").exists():
         out.add("/petri-bundle/")
         out.add("/petri-bundle")
-        out.add("/self-improving/petri-bundle")
     return out
 
 

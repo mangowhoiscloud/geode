@@ -4,7 +4,7 @@
 
 <p align="center">
   <img src="https://img.shields.io/badge/while(tool__use)-agentic%20loop-1e293b?style=flat-square" alt="while(tool_use)">
-  <img src="https://img.shields.io/badge/57%20agentic%20tools-MCP%20native-1e293b?style=flat-square" alt="57 Agentic Tools">
+  <img src="https://img.shields.io/badge/self--improving-non--parametric-1e293b?style=flat-square" alt="Self-improving (non-parametric)">
   <img src="https://img.shields.io/badge/LangGraph-StateGraph-1e293b?style=flat-square" alt="LangGraph">
   <a href="https://github.com/mangowhoiscloud/geode/actions"><img src="https://img.shields.io/github/actions/workflow/status/mangowhoiscloud/geode/ci.yml?style=flat-square&label=ci&logo=github&logoColor=white" alt="CI"></a>
 </p>
@@ -13,18 +13,39 @@
   <img src="https://img.shields.io/badge/Anthropic-Opus_4.7-cc785c?style=flat-square&logo=anthropic&logoColor=white" alt="Anthropic Opus 4.7">
   <img src="https://img.shields.io/badge/OpenAI-GPT--5.5-412991?style=flat-square&logo=openai&logoColor=white" alt="OpenAI GPT-5.5">
   <img src="https://img.shields.io/badge/ZhipuAI-GLM--5.1-1a73e8?style=flat-square" alt="ZhipuAI GLM-5.1">
-  <img src="https://img.shields.io/badge/+10_fallback-models-555?style=flat-square" alt="+10 fallback models">
 </p>
 
-[English](README.md)
+<p align="center">
+  <a href="https://mangowhoiscloud.github.io/geode/">사이트</a>
+  ·
+  <a href="https://mangowhoiscloud.github.io/geode/docs">문서</a>
+  ·
+  <a href="https://mangowhoiscloud.github.io/geode/self-improving/">Self-improving 허브</a>
+  ·
+  <a href="README.md">English</a>
+</p>
 
-# GEODE v0.99.87 — Long-running Autonomous Execution Harness
+# GEODE v0.99.87 — A Self-improving Autonomous Execution Agent
 
-탐색적 리서치와 시그널 예측을 위한 범용 자율 에이전트. 자연어로 물으면 GEODE 가 계획을 세우고, 도구를 호출해, 결과를 보고합니다. 1회성 프롬프트도, 장시간 세션도 동일하게.
+자기 자신이 올라탄 scaffold 를 스스로 고쳐쓰는 범용 자율 에이전트. 자연어로 물으면 GEODE 가 계획을 세우고, 도구를 호출해, 결과를 보고합니다. 1회성 프롬프트도, 장시간 세션도 동일하게. 그 아래에서는 outer loop 가 작업을 수행하는 시스템 자체를 계속 다듬습니다.
 
 > **ChatGPT Plus, Pro, Business, Edu, Enterprise 결제 중이신가요?** 그 구독을 GEODE 가 그대로 씁니다. API 키 필요 없습니다. [구독 setup ↓](#path-a--chatgpt-구독-openai-사용자에게-권장)
 >
 > **Claude Pro / Max 사용자라면** — 2026-01-09 발효된 Anthropic 약관이 Claude Code OAuth 토큰의 외부 도구 재사용을 금지합니다. 그래서 GEODE 는 그 토큰을 읽지 않습니다. 대신 Anthropic API 키 (Path B) 를 쓰시면 됩니다. Console 계정은 같고, 신규 가입자는 $5 무료 크레딧을 받습니다.
+
+---
+
+## Self-improving loop
+
+GEODE 는 **non-parametric** 갈래의 자기진화 에이전트입니다. 모델 가중치가 아니라 자신의 scaffold (시스템 프롬프트, 도구 정책, 작업 분해, reflection, 스킬, 에이전트 계약, 도구 설명, 하이퍼파라미터) 를 변이시켜 개선합니다. fitness 는 capability 벤치마크가 아니라 적대적 **안전성** audit 입니다. Petri 급, 다차원이며, critical 안전 차원에는 하드 floor 가 걸려 있어 그 차원을 후퇴시키는 변경은 거부됩니다. 테스트 셋 자체도 함께 진화합니다. co-scientist 파이프라인이 에이전트와 나란히 적대적 seed 를 키웁니다.
+
+선택은 정직한 **(1+1) 챔피언 체인**입니다. 변이하고, audit 하고, 실제 이득이 있을 때만 promote 하고, 아니면 revert 합니다. 두 개의 loop 가 함께 돕니다. inner agentic loop 는 작업을 수행하고, outer loop 는 작업을 수행하는 시스템을 다듬습니다. 이 loop 계보 (Promptbreeder, STOP, ADAS, DGM, GEPA) 는 이미 잘 정립돼 있습니다. GEODE 는 그것을 capability 에서 safety 로, 가중치에서 scaffold 로, co-evolved 적대적 seed 위로 다시 겨냥합니다. 새 primitive 가 아니라, 비어 있던 칸을 채우는 재조합입니다.
+
+- **[closed loop →](https://mangowhoiscloud.github.io/geode/docs/capabilities/autoresearch)** — autoresearch, 변이 / audit / promote / revert 전 과정
+- **[Two loops →](https://mangowhoiscloud.github.io/geode/docs/concepts/two-loops)** — inner 와 outer 의 멘탈 모델
+- **[계보와 포지셔닝 →](https://mangowhoiscloud.github.io/geode/docs/capabilities/lineage)** — 기존 self-improving loop 들 사이에서 GEODE 의 위치
+- **[Self-improving 허브 →](https://mangowhoiscloud.github.io/geode/self-improving/)** — 실제 generation, 변이, promote 결정
+- **[Petri bundle →](https://mangowhoiscloud.github.io/geode/self-improving/petri-bundle/)** — 안전성 audit transcript 를 보는 라이브 뷰어
 
 ---
 
@@ -322,8 +343,9 @@ geode update                  # 소스 체크아웃
 
 | 기능 | 설명 |
 |------|------|
-| **`while(tool_use)` 루프** | 모든 자율 행동의 단일 원시 동작. 서브에이전트, 플랜, 배치 — 전부 같은 루프의 인스턴스 |
-| **57 agentic tools + MCP 카탈로그** | 웹 검색, 파일 작업, 스케줄링, 메모리, 캘린더, Slack/Discord, 한국 채용공고 검색, 그리고 Anthropic 발행 MCP 레지스트리 (200 서버, `~/.geode/mcp/registry-cache.json` 에 캐시). 첫 사용 시 자동 설치 |
+| **`while(tool_use)` 루프** | 모든 자율 행동의 단일 원시 동작. 서브에이전트, 플랜, 배치 모두 같은 루프의 인스턴스 |
+| **Self-improving outer loop** | GEODE 자신의 scaffold 를 변이시키고, 각 변경을 적대적 안전성 루브릭으로 audit 한 뒤, 실제 이득이 있을 때만 promote 합니다. [closed loop](https://mangowhoiscloud.github.io/geode/docs/capabilities/autoresearch) 참고 |
+| **Agentic tools + MCP 카탈로그** | 웹 검색, 파일 작업, 스케줄링, 메모리, 캘린더, Slack/Discord, 한국 채용공고 검색, 그리고 Anthropic 발행 MCP 레지스트리 (`~/.geode/mcp/registry-cache.json` 에 캐시). 첫 사용 시 자동 설치 |
 | **3-프로바이더 페일오버** | Anthropic + OpenAI + ZhipuAI. 구독 OAuth (Codex) 자동 감지; 사용량 과금 API 키도 사용 가능; 페일오버는 동일 프로바이더 내에서만 (예상치 못한 vendor 횡단 과금 없음, v0.53.0 거버넌스) |
 | **5-tier 메모리** | SOUL (0) → User Profile (0.5) → Organization (1) → Project (2) → Session (3). 영속화, 데몬 재시작 후에도 유지 |
 | **Plan-mode + audit trail** | `create_plan` + `approve_plan` + `list_plans` 로 다단계 작업 관리. 디스크 영구화 (`.geode/plans.json`), 재시작 후에도 유지 |
@@ -335,18 +357,18 @@ geode update                  # 소스 체크아웃
 
 ## GEODE 비교
 
-각 frontier 하네스의 실제 상태 기준 (2026 년 5 월): **Claude Code v2.1.72** (빌드 2026-03-09), **Codex CLI v0.130.0** (2026-05-08 릴리즈), **OpenClaw v2026.5.12-beta.1**, **GEODE v0.99.87**. 마커: ✅✅ 해당 축의 리더 · ✅ 지원 · ⚠️ 부분 / 제한적 · ❌ 없음 · n/a 적용 불가.
+frontier 하네스 (Claude Code, Codex CLI, OpenClaw) 옆에서 GEODE 가 어디 서 있는지 정성적으로 본 표입니다 (2026 년 5 월 기준). 벤치마크가 아니라 자세에 관한 것입니다. 마커: ✅✅ 해당 축의 리더 · ✅ 지원 · ⚠️ 부분 / 제한적 · ❌ 없음 · n/a 적용 불가.
 
 <details>
 <summary><strong>A. 런타임 자세</strong> — 에이전트가 어떻게 떠 있는가</summary>
 
 | | Claude Code | Codex CLI | OpenClaw | **GEODE** |
 |---|---|---|---|---|
-| 상시 데몬 | ❌ per-invocation | ⚠️ opt-in `codex remote-control` (v0.130+) | ✅✅ launchd / systemd 컨트롤 plane | ✅ `geode serve` 데몬 |
+| 상시 데몬 | ❌ per-invocation | ⚠️ opt-in `codex remote-control` | ✅✅ launchd / systemd 컨트롤 plane | ✅ `geode serve` 데몬 |
 | 네이티브 스케줄러 (cron) | ❌ (claude.ai 웹 전용) | ❌ (Codex Cloud Automations 전용 — [issue #8317](https://github.com/openai/codex/issues/8317)) | ✅ `cron add/edit/list` CLI | ✅ cron + 이벤트 트리거 |
-| Thin CLI ↔ 데몬 IPC | ❌ | ⚠️ remote-control 서버 모드 | ✅ Gateway / Agent 분리 | ✅ IPC 서버 (v0.48+) |
-| Sub-agent 격리 | ✅ Agent 도구 + `run_in_background` | ✅ `multi_agent` 기능, 기본 `max_threads=6` | ✅✅ Lane Queue + Session bindings | ✅ Lane + depth / cost 가드 |
-| 세션 resume / fork | ✅ JSONL 트랜스크립트 | ✅ `/resume` + `/fork` 슬래시 커맨드 | ✅ Session bindings + TTL | ✅ session resume (v0.21+) |
+| Thin CLI ↔ 데몬 IPC | ❌ | ⚠️ remote-control 서버 모드 | ✅ Gateway / Agent 분리 | ✅ IPC 서버 |
+| Sub-agent 격리 | ✅ Agent 도구 + `run_in_background` | ✅ `multi_agent` 기능 | ✅✅ Lane Queue + Session bindings | ✅ Lane + depth / cost 가드 |
+| 세션 resume / fork | ✅ JSONL 트랜스크립트 | ✅ `/resume` + `/fork` 슬래시 커맨드 | ✅ Session bindings + TTL | ✅ session resume |
 
 </details>
 
@@ -356,10 +378,10 @@ geode update                  # 소스 체크아웃
 | | Claude Code | Codex CLI | OpenClaw | **GEODE** |
 |---|---|---|---|---|
 | Slack | ❌ (MCP 플러그인 가능) | ⚠️ Codex Cloud 전용, CLI 는 미지원 | ✅ Socket Mode, first-class | ✅ Socket Mode, first-class |
-| Discord / Telegram / 기타 chat | ❌ | ❌ | ✅✅ 23+ 채널 (Discord, Telegram, WhatsApp, Signal, iMessage, Teams, Matrix, Feishu, LINE, ...) | ✅ Discord + Telegram 폴러 |
+| Discord / Telegram / 기타 chat | ❌ | ❌ | ✅✅ 다수 채널 (Discord, Telegram, WhatsApp, Signal, iMessage, Teams, Matrix, Feishu, LINE, ...) | ✅ Discord + Telegram 폴러 |
 | IDE 플러그인 | ❌ (Chrome MCP 확장만) | ✅✅ VS Code · JetBrains · Cursor · Windsurf | ❌ | ❌ |
 | Web UI | ✅ claude.ai/code | ✅ Codex Cloud | ⚠️ WebChat 플러그인 | ❌ (문서 사이트만) |
-| MCP 서버 카탈로그 | ✅ first-class | ✅ first-class | ✅ first-class | ✅ Anthropic 배포 레지스트리 (200 서버, `~/.geode/mcp/registry-cache.json` 캐시) |
+| MCP 서버 카탈로그 | ✅ first-class | ✅ first-class | ✅ first-class | ✅ Anthropic 배포 레지스트리 (`~/.geode/mcp/registry-cache.json` 캐시) |
 
 </details>
 
@@ -370,9 +392,9 @@ geode update                  # 소스 체크아웃
 |---|---|---|---|---|
 | 멀티 프로바이더 페일오버 | ✅ Anthropic + AWS Bedrock + Google Vertex (환경변수 라우팅) | ✅✅ OpenAI + Azure + Bedrock + Ollama + OpenAI-호환 엔드포인트 전체 (`model_providers` 설정) | ✅ `auth.order` 쿨다운 기반 자동 페일오버 | ✅ Anthropic + OpenAI + ZhipuAI, in-provider 전용 |
 | 구독 OAuth tier | ✅ Pro / Max | ✅✅ Plus · Pro · Business · Edu · Enterprise | ⚠️ OpenAI + Gemini 온보딩 | ⚠️ ChatGPT 만 (Plus / Pro / Business / Edu / Enterprise) — Anthropic 약관 (2026-01-09) 이 3rd-party Claude OAuth 차단 |
-| 토큰 / 비용 예산 가드 | ⚠️ 캐시 토큰 추적만 | ⚠️ 재시도 cap 만 (`request_max_retries`) | ⚠️ 부분 | ✅ **200K 토큰 가드** (v0.40), 명시적 예산 거버넌스 |
-| 컨텍스트 overflow 처리 | ✅ 자동 컴팩션 | ⚠️ Skills progressive disclosure (~2% 예산) + fork | ✅ 컴팩션 + 트랜스크립트 스트리밍 (252 MB → 27 MB 피크) | ✅✅ **5-layer 컨텍스트 overflow** (v0.39+) |
-| 벤더 간 페일오버 정책 | ❌ | ⚠️ `model_providers` 수동 전환 | ✅ 자동 | ❌ 의도적 (v0.53 거버넌스 — 예기치 못한 cross-vendor 과금 방지) |
+| 토큰 / 비용 예산 가드 | ⚠️ 캐시 토큰 추적만 | ⚠️ 재시도 cap 만 (`request_max_retries`) | ⚠️ 부분 | ✅ 명시적 토큰 + 비용 예산 거버넌스 |
+| 컨텍스트 overflow 처리 | ✅ 자동 컴팩션 | ⚠️ Skills progressive disclosure + fork | ✅ 컴팩션 + 트랜스크립트 스트리밍 | ✅✅ 계층형 컨텍스트 overflow 처리 |
+| 벤더 간 페일오버 정책 | ❌ | ⚠️ `model_providers` 수동 전환 | ✅ 자동 | ❌ 의도적 (예기치 못한 cross-vendor 과금 방지) |
 
 </details>
 
@@ -381,11 +403,11 @@ geode update                  # 소스 체크아웃
 
 | | Claude Code | Codex CLI | OpenClaw | **GEODE** |
 |---|---|---|---|---|
-| 메모리 tier | ⚠️ 3 (user / project / local 세팅 머지) | ✅ 계층적 AGENTS.md (전역 `~/.codex/` + repo + nested dirs) | ⚠️ 세션 범위 | ✅✅ **5-tier** (SOUL · User · Org · Project · Session) |
+| 메모리 tier | ⚠️ user / project / local 세팅 머지 | ✅ 계층적 AGENTS.md (전역 `~/.codex/` + repo + nested dirs) | ⚠️ 세션 범위 | ✅✅ **multi-tier** (SOUL · User · Org · Project · Session) |
 | 디스크 영구 plan | ✅ TodoWrite 영속화 | ⚠️ resumable 스레드 경유 | ✅ task registry | ✅ `.geode/plans.json` |
-| 권한 / 샌드박스 계층 | ✅ 3-mode (default / auto / bypass) + Confirmation UI | ✅ `sandbox_mode` 3 단계 (read-only / workspace-write / danger-full-access) | ✅✅ Policy Chain (40+ 감사 표면) | ✅ Policy Chain + 도구 게이트 |
+| 권한 / 샌드박스 계층 | ✅ default / auto / bypass 모드 + Confirmation UI | ✅ `sandbox_mode` (read-only / workspace-write / danger-full-access) | ✅✅ Policy Chain, 다수 감사 표면 | ✅ Policy Chain + 도구 게이트 |
 | 다중 계층 가드레일 | ⚠️ 권한 + hooks | ⚠️ hooks + 샌드박스 | ✅ `audit.runtime` 엔진 | ✅✅ **코어 검증** (G1-G4 + Cross-LLM Krippendorff α ≥ 0.67 + Rights Risk, 편향/캘리브레이션용 플러그인 확장점) |
-| Hook 이벤트 수 | ⚠️ 5 (PreToolUse / PostToolUse / SessionStart / Notification / ConfigChange) | ⚠️ 6 (SessionStart / UserPromptSubmit / PreToolUse / PostToolUse / PermissionRequest / Stop) | ✅ 5 이벤트 타입 · 다수 번들 핸들러 | ✅✅ **58 이벤트** (`docs/architecture/hook-system.md`) |
+| Hook 이벤트 | ⚠️ PreToolUse / PostToolUse / SessionStart / Notification / ConfigChange | ⚠️ SessionStart / UserPromptSubmit / PreToolUse / PostToolUse / PermissionRequest / Stop | ✅ 여러 이벤트 타입 · 다수 번들 핸들러 | ✅✅ 넓은 이벤트 표면 (`docs/architecture/hook-system.md`) |
 
 </details>
 
@@ -394,19 +416,20 @@ geode update                  # 소스 체크아웃
 
 | | Claude Code | Codex CLI | OpenClaw | **GEODE** |
 |---|---|---|---|---|
-| 플러그인 / 확장 표면 | ✅ manifest + 마켓플레이스 (user / project / local 스코프) | ✅ `/plugins` 슬래시 커맨드 + 플러그인 공유 (v0.130+) | ✅✅ 4 확장 지점 (Channel · Tool · Skill · Hook) via `@openclaw/plugin-sdk` | ✅ 런타임 SkillRegistry + MCP/tool 표면 |
-| Skill 시스템 | ✅ Deferred tools + SKILL.md manifest | ✅ SKILL.md + progressive disclosure (`.agents/skills/`) | ✅ 스킬 필터 + archive 업로드 | ✅ 런타임 `SkillRegistry` (14 skills · bundled/global/project 스코프) |
+| 플러그인 / 확장 표면 | ✅ manifest + 마켓플레이스 (user / project / local 스코프) | ✅ `/plugins` 슬래시 커맨드 + 플러그인 공유 | ✅✅ 확장 지점 (Channel · Tool · Skill · Hook) via `@openclaw/plugin-sdk` | ✅ 런타임 SkillRegistry + MCP/tool 표면 |
+| Skill 시스템 | ✅ Deferred tools + SKILL.md manifest | ✅ SKILL.md + progressive disclosure (`.agents/skills/`) | ✅ 스킬 필터 + archive 업로드 | ✅ 런타임 `SkillRegistry`, bundled/global/project 스코프 |
 | **교체 가능한 파이프라인 DAG** | ❌ | ❌ | ⚠️ flows (channel-setup / doctor / provider — DAG 추상화 아님) | ⚠️ 외부 패키지 책임. GEODE core 는 더 이상 파이프라인 포트를 제공하지 않음 |
-| 트레이스 / 리플레이 / Run Log | ✅ `tengu_*` 텔레메트리 + `/insights` HTML | ⚠️ `/status` + `/debug-config` 만 | ✅ ACP 세션 lineage + Task Registry | ✅ 자체 RunLog + Petri eval 통합 (v0.90+) |
+| 트레이스 / 리플레이 / Run Log | ✅ `tengu_*` 텔레메트리 + `/insights` HTML | ⚠️ `/status` + `/debug-config` 만 | ✅ ACP 세션 lineage + Task Registry | ✅ 자체 RunLog + Petri eval 통합 |
+| Self-improving 안전성 loop | ❌ | ❌ | ❌ | ✅✅ outer loop: scaffold 변이 + 적대적 안전성 audit + (1+1) promote/revert |
 | Cross-LLM 검증 | ❌ | ❌ | ❌ | ✅✅ Krippendorff α ≥ 0.67 평가자 간 일치도 게이트 |
 
 </details>
 
 ---
 
-IDE 내부 또는 클라우드 동기화로 짧은 코딩 세션을 돌릴 땐 **Claude Code** / **Codex**. 23+ 메시징 표면에 걸친 멀티 채널 chat 에이전트 fleet 을 운영할 땐 **OpenClaw**. 다중 tier 메모리 + 다중 계층 검증 + 스케줄링 + 데몬 기반 도구 실행으로 몇 시간 / 며칠 작업을 이어갈 땐 **GEODE**.
+IDE 내부 또는 클라우드 동기화로 짧은 코딩 세션을 돌릴 땐 **Claude Code** / **Codex**. 다수의 메시징 표면에 걸친 멀티 채널 chat 에이전트 fleet 을 운영할 땐 **OpenClaw**. 다중 tier 메모리 + 다중 계층 검증 + 스케줄링 + 데몬 기반 도구 실행으로 몇 시간 / 며칠 작업을 이어가고, 그 에이전트가 안전성 floor 아래에서 자신의 scaffold 를 계속 개선하길 원할 땐 **GEODE**.
 
-> 출처 — Claude Code v2.1.72 (빌드 2026-03-09, 역공학 레퍼런스). Codex CLI v0.130.0 릴리즈 노트 + [developers.openai.com/codex/config-reference](https://developers.openai.com/codex/config-reference) + [github.com/openai/codex](https://github.com/openai/codex). OpenClaw v2026.5.12-beta.1 (1.8M LoC TypeScript). GEODE — `CHANGELOG.md` (`v0.39` 컨텍스트 overflow, `v0.40` 200K 가드, `v0.85` 4-layer stack, `v0.90` Petri 관측성).
+> 출처 — Claude Code (역공학 레퍼런스). Codex CLI 릴리즈 노트 + [developers.openai.com/codex/config-reference](https://developers.openai.com/codex/config-reference) + [github.com/openai/codex](https://github.com/openai/codex). OpenClaw (TypeScript). GEODE — `CHANGELOG.md` 와 [self-improving 허브](https://mangowhoiscloud.github.io/geode/self-improving/).
 
 ---
 
@@ -415,15 +438,15 @@ IDE 내부 또는 클라우드 동기화로 짧은 코딩 세션을 돌릴 땐 *
 
 GEODE 는 두 개의 컨트롤 레이어가 있습니다:
 
-- **Scaffold (생산)** — Claude Code + `CLAUDE.md` + 개발 Skills + CI Hooks. GEODE 의 코드를 만들고 품질을 보장하는 외부 하네스.
-- **GEODE Runtime (에이전트)** — `while(tool_use)` 루프 + 57 agentic tools + native ToolRegistry + 런타임 Skills + 69 런타임 Hooks + 5-Layer Verification. 자율 실행 에이전트의 내부 시스템.
+- **Scaffold (생산)** — Claude Code + `CLAUDE.md` + 개발 Skills + CI Hooks. GEODE 의 코드를 만들고 품질을 보장하는 외부 하네스. self-improving outer loop 가 이 scaffold 의 일부도 변이시킵니다.
+- **GEODE Runtime (에이전트)** — `while(tool_use)` 루프 + agentic tools + native ToolRegistry + 런타임 Skills + 런타임 Hooks + 다중 계층 Verification. 자율 실행 에이전트의 내부 시스템.
 
 4-Layer Stack (Model → Runtime → Harness → Agent) + 서브에이전트 시스템 + 5-Tier 메모리.
 
 ```mermaid
 graph LR
     AG["Agent<br/>AgenticLoop, SubAgent<br/>CLIPoller, Gateway"] --> HA["Harness<br/>SessionLane, PolicyChain<br/>TaskGraph, HookSystem"]
-    HA --> RT["Runtime<br/>Agentic tools(53), MCP catalog<br/>Memory, Skills"]
+    HA --> RT["Runtime<br/>Agentic tools, MCP catalog<br/>Memory, Skills"]
     RT --> MD["Model<br/>Claude, OpenAI, GLM"]
 
     style AG fill:#1e293b,stroke:#3b82f6,color:#e2e8f0
@@ -435,8 +458,8 @@ graph LR
 | Layer | 핵심 | Entry points |
 |-------|------|--------------|
 | **Agent** | AgenticLoop, SubAgentManager, CLIPoller, Gateway | `core/cli/`, `core/gateway/` |
-| **Harness** | SessionLane, LaneQueue(global:8), PolicyChain, TaskGraph, HookSystem(69) | `core/orchestration/`, `core/hooks/` |
-| **Runtime** | Agentic tools(53), native ToolRegistry(16), MCP Catalog (200 via Anthropic registry plus project-configured servers), 런타임 Skills, Memory(5-Tier), PlanStore | `core/tools/`, `core/memory/`, `core/orchestration/plan_store.py` |
+| **Harness** | SessionLane, LaneQueue, PolicyChain, TaskGraph, HookSystem | `core/orchestration/`, `core/hooks/` |
+| **Runtime** | Agentic tools, native ToolRegistry, MCP Catalog (Anthropic registry + 프로젝트 설정 서버), 런타임 Skills, Memory (multi-tier), PlanStore | `core/tools/`, `core/memory/`, `core/orchestration/plan_store.py` |
 | **Model** | ClaudeAdapter, OpenAIAdapter, CodexAdapter, GLMAdapter | `core/llm/` |
 
 `.geode/` — 에이전트 컨텍스트 라이프사이클 (모든 LLM 호출에 5-tier 계층 어셈블):
@@ -467,13 +490,13 @@ Tier 3    Session         메모리 — 대화, 도구 결과, 플랜
 <details>
 <summary><strong>개발 워크플로 (Scaffold)</strong></summary>
 
-CANNOT (가드레일) 이 CAN (자유) 보다 먼저. 7-step 워크플로 + 품질 게이트. CI 래칫 — 5 잡 (pytest, mypy, ruff, import-order, test-count) 통과해야 머지. 테스트 카운트는 단조 증가만 허용.
+CANNOT (가드레일) 이 CAN (자유) 보다 먼저. 7-step 워크플로 + 품질 게이트. CI 래칫 (pytest, mypy, ruff, import-order, test-count) 을 통과해야 머지. 테스트 카운트는 단조 증가만 허용.
 
 | Gate | 명령 | 목표 |
 |------|------|------|
 | Lint | `uv run ruff check core/ tests/` | 0 에러 |
 | Type | `uv run mypy core/` | 0 에러 |
-| Test | `uv run pytest tests/ -q` | 4700+ pass |
+| Test | `uv run pytest tests/ -q` | 전체 통과 |
 
 [CONTRIBUTING.md](CONTRIBUTING.md) 와 [docs/workflow.md](docs/workflow.md) 참고.
 

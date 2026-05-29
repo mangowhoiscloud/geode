@@ -364,7 +364,7 @@ export default function Page() {
             <p>
               raw 파일을 직접 보려면 <a href={RAW_BUNDLE_URL}><code>{RAW_BUNDLE_URL}</code></a> 의 정적 viewer 또는
               per-run <code>state.json</code> / <code>survivors.json</code> 파일 (디렉토리 listing 은 Pages 에서 제공 X).
-              inspect_ai <code>.eval</code> 아카이브 viewer 는 <a href="/self-improving/petri-bundle/">/geode/self-improving/petri-bundle/</a> 에 별도.
+              inspect_ai <code>.eval</code> 아카이브 viewer 는 <a href="/geode/self-improving/petri-bundle/">/geode/self-improving/petri-bundle/</a> 에 별도.
             </p>
 
             <h2>전체 Run</h2>
@@ -397,7 +397,7 @@ export default function Page() {
             <p>
               For raw files use the static viewer at <a href={RAW_BUNDLE_URL}><code>{RAW_BUNDLE_URL}</code></a> or open
               per-run <code>state.json</code> / <code>survivors.json</code> directly (Pages does not serve directory listings).
-              The inspect_ai <code>.eval</code> archive viewer lives separately at <a href="/self-improving/petri-bundle/">/geode/self-improving/petri-bundle/</a>.
+              The inspect_ai <code>.eval</code> archive viewer lives separately at <a href="/geode/self-improving/petri-bundle/">/geode/self-improving/petri-bundle/</a>.
             </p>
 
             <h2>All runs</h2>

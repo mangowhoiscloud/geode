@@ -23,7 +23,7 @@ export default function Page() {
 
             <h2>파일</h2>
             <ul>
-              <li><code>core/orchestration/</code>. 19개 모듈</li>
+              <li><code>core/orchestration/</code>. StateGraph 조합 계층</li>
               <li><code>core/graph.py</code>. 최상위 StateGraph 빌더 진입점</li>
               <li><code>core/state.py</code>. <code>GeodeState</code> TypedDict (모든 노드가 받는 상태 형상)</li>
             </ul>
@@ -81,7 +81,7 @@ Output`}</pre>
 
             <h2>Files</h2>
             <ul>
-              <li><code>core/orchestration/</code>. 19 modules</li>
+              <li><code>core/orchestration/</code>. the StateGraph composition layer</li>
               <li><code>core/graph.py</code> — top-level StateGraph builder entry</li>
               <li><code>core/state.py</code> — <code>GeodeState</code> TypedDict (the state shape every node receives)</li>
             </ul>

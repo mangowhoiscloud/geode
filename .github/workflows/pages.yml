@@ -186,6 +186,45 @@ jobs:
             ls -la site/out/petri-bundle/ | head
           fi
 
+      # Source-level internal link gate (no network, fast). Catches broken
+      # /docs nav, anchors, and basePath-missing hrefs before deploy.
+      - name: Internal link audit (source)
+        working-directory: ${{ github.workspace }}
+        run: uv run python scripts/check_docs_links.py
+
+      # Resolve the /geode basePath for the external checker: the built files
+      # live in site/out but ship under /geode/..., so symlink _lc/geode ->
+      # site/out and point lychee's --root-dir at _lc. The symlink lives outside
+      # the scanned globs, so there is no recursive globbing.
+      - name: Stage built HTML for link checking
+        working-directory: ${{ github.workspace }}
+        run: |
+          mkdir -p _lc
+          ln -sfn "${{ github.workspace }}/site/out" _lc/geode
+
+      # External broken-link checker (lychee) over the ACTUAL built HTML that
+      # ships to Pages: internal nav, anchors, copied hub surfaces, and outbound
+      # links. Reporting mode (jobSummary) so a transient external rate-limit
+      # does not block a deploy; the internal gate above is the hard blocker.
+      # Flip `fail: true` to make external rot block once the summary reads clean.
+      - name: Broken-link check on built HTML (lychee)
+        uses: lycheeverse/lychee-action@v2
+        with:
+          args: >-
+            --root-dir ${{ github.workspace }}/_lc
+            --fallback-extensions html
+            --cache --max-cache-age 1d
+            --max-retries 2 --retry-wait-time 2 --timeout 20
+            --accept 200,206,403,429
+            site/out/index.html
+            site/out/docs.html
+            site/out/about.html
+            'site/out/docs/**/*.html'
+            'site/out/portfolio/**/*.html'
+          fail: false
+          jobSummary: true
+          output: lychee-report.md
+
       - uses: actions/configure-pages@v5
 
       - uses: actions/upload-pages-artifact@v3

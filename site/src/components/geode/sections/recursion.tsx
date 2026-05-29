@@ -23,10 +23,10 @@ const mirrors = [
   },
   {
     pattern: "Discovery + extension points",
-    artifactLabel: "81 runtime hooks",
-    artifactBody: "PROMPT_ASSEMBLED, TOOL_EXEC_*, SESSION_START, etc. 14 groups.",
+    artifactLabel: "Runtime hooks",
+    artifactBody: "PROMPT_ASSEMBLED, TOOL_EXEC_*, SESSION_START, etc., grouped by lifecycle stage.",
     artifactFile: "core/hooks/system.py:28 (HookEvent enum)",
-    scaffoldLabel: "41 scaffold skills",
+    scaffoldLabel: "Scaffold skills",
     scaffoldBody: "frontmatter + body. 5-tier discovery (bundled → user → project).",
     scaffoldFile: ".claude/skills/*/SKILL.md",
   },
@@ -36,7 +36,7 @@ const mirrors = [
     artifactBody: "Schema → Range → Grounding → Coherence. Fail-fast ladder on output.",
     artifactFile: "core/verification/guardrails.py",
     scaffoldLabel: "CANNOT/CAN rules",
-    scaffoldBody: "22 absolute prohibitions on actions. Wiring Verification anti-disconnect.",
+    scaffoldBody: "Absolute prohibitions on actions. Wiring Verification anti-disconnect.",
     scaffoldFile: "CLAUDE.md (Implementation Workflow § CANNOT)",
   },
   {

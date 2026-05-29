@@ -20,7 +20,7 @@ export default function Page() {
             <table>
               <thead><tr><th>계층</th><th>OS 비유</th><th>책임</th></tr></thead>
               <tbody>
-                <tr><td><strong>L1 Model</strong></td><td>커널 / CPU</td><td>LLM 자체. 4 프로바이더 × 14 모델. 추론.</td></tr>
+                <tr><td><strong>L1 Model</strong></td><td>커널 / CPU</td><td>LLM 자체. 여러 프로바이더와 모델. 추론.</td></tr>
                 <tr><td><strong>L2 Runtime</strong></td><td>시스템콜 + 드라이버</td><td>도구·MCP·메모리·컨텍스트. LLM이 외부와 닿는 모든 경로.</td></tr>
                 <tr><td><strong>L3 Harness</strong></td><td>셸 + init</td><td>CLI·serve·hooks·gateway. 사용자/메신저가 시스템과 닿는 경로.</td></tr>
                 <tr><td><strong>L4 Agent</strong></td><td>실행 루프</td><td>while(tool_use). 항상 도는 실행 단위.</td></tr>
@@ -37,7 +37,7 @@ export default function Page() {
               <li>운영체제 구조와 1대1 대응이라는 점에서 4가 자연스러움.</li>
             </ul>
 
-            <p className="text-white/40 text-sm"><em>참조:</em> portfolio §2 Primitives Mapping (13행), wiki/concepts/geode-architecture.md</p>
+            <p className="text-white/40 text-sm"><em>참조:</em> portfolio §2 Primitives Mapping, wiki/concepts/geode-architecture.md</p>
           </>
         }
         en={
@@ -48,7 +48,7 @@ export default function Page() {
             <table>
               <thead><tr><th>Layer</th><th>OS analogue</th><th>Owns</th></tr></thead>
               <tbody>
-                <tr><td><strong>L1 Model</strong></td><td>Kernel / CPU</td><td>The LLM itself. 4 providers, 14 models. Inference.</td></tr>
+                <tr><td><strong>L1 Model</strong></td><td>Kernel / CPU</td><td>The LLM itself. Multiple providers and models. Inference.</td></tr>
                 <tr><td><strong>L2 Runtime</strong></td><td>Syscalls + drivers</td><td>Tools, MCP, memory, context. Every path the LLM uses to touch the outside.</td></tr>
                 <tr><td><strong>L3 Harness</strong></td><td>Shell + init</td><td>CLI, serve, hooks, gateway. Every path users and messengers use to reach the system.</td></tr>
                 <tr><td><strong>L4 Agent</strong></td><td>Execution loop</td><td>while(tool_use). The always-running execution unit.</td></tr>
@@ -65,7 +65,7 @@ export default function Page() {
               <li>Four matches the OS analogy 1:1, which is the natural decomposition.</li>
             </ul>
 
-            <p className="text-white/40 text-sm"><em>See:</em> portfolio §2 Primitives Mapping (13 rows), wiki/concepts/geode-architecture.md.</p>
+            <p className="text-white/40 text-sm"><em>See:</em> portfolio §2 Primitives Mapping, wiki/concepts/geode-architecture.md.</p>
           </>
         }
       />

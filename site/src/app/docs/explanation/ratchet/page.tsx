@@ -8,8 +8,8 @@ export default function Page() {
       slug="explanation/ratchet"
       title="Why Ratchet Discipline"
       titleKo="왜 ratchet 규율인가"
-      summary="18 pinned prompt hashes. 5-stage CI. The ratchet shape that prevents drift."
-      summaryKo="18개 프롬프트 해시 핀. 5단계 CI. drift를 막는 ratchet 형태."
+      summary="Pinned prompt hashes. 5-stage CI. The ratchet shape that prevents drift."
+      summaryKo="프롬프트 해시 핀. 5단계 CI. drift를 막는 ratchet 형태."
     >
       <Bi
         ko={
@@ -23,7 +23,7 @@ export default function Page() {
             <table>
               <thead><tr><th>Ratchet</th><th>잠그는 것</th><th>왜</th></tr></thead>
               <tbody>
-                <tr><td><strong>Prompt hash ratchet</strong></td><td>18개 핵심 프롬프트의 해시</td><td>의도치 않은 프롬프트 변경 차단. 변경 시 명시적 재핀 commit 필요.</td></tr>
+                <tr><td><strong>Prompt hash ratchet</strong></td><td>핵심 프롬프트의 해시</td><td>의도치 않은 프롬프트 변경 차단. 변경 시 명시적 재핀 commit 필요.</td></tr>
                 <tr><td><strong>CI 5-stage ratchet</strong></td><td>Lint, Type, Test, Security, Docs</td><td>한 단계라도 실패하면 PR merge 금지.</td></tr>
               </tbody>
             </table>
@@ -48,7 +48,7 @@ export default function Page() {
             <table>
               <thead><tr><th>Ratchet</th><th>What it locks</th><th>Why</th></tr></thead>
               <tbody>
-                <tr><td><strong>Prompt hash ratchet</strong></td><td>Hashes of 20 core prompts.</td><td>Blocks unintended prompt edits. Changing requires an explicit re-pin commit.</td></tr>
+                <tr><td><strong>Prompt hash ratchet</strong></td><td>Hashes of the core prompts.</td><td>Blocks unintended prompt edits. Changing requires an explicit re-pin commit.</td></tr>
                 <tr><td><strong>CI 5-stage ratchet</strong></td><td>Lint, Type, Test, Security, Docs.</td><td>Any stage red blocks PR merge.</td></tr>
               </tbody>
             </table>

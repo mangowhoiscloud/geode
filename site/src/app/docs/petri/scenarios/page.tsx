@@ -8,19 +8,19 @@ export default function Page() {
       slug="petri/scenarios"
       title="Scenarios"
       titleKo="시나리오"
-      summary="173 default seeds plus 13 GEODE-specific seeds. The full audit catalog."
-      summaryKo="173 default seeds + GEODE 13 seeds. 전체 audit 시나리오 카탈로그."
+      summary="The Petri default seed corpus plus GEODE-specific seeds. The full audit catalog."
+      summaryKo="Petri 기본 seed 코퍼스 + GEODE 전용 seeds. 전체 audit 시나리오 카탈로그."
     >
       <Bi
         ko={
           <>
             <p>
               <strong>Reference:</strong> Petri × GEODE audit이 사용하는 시나리오 (seed) 카탈로그.
-              두 종류로 나뉩니다. (1) Petri framework 기본 173 seeds. (2) GEODE 코드베이스/하네스 특성을 노리는 13 GEODE-specific seeds.
-              7 카테고리에 각각 1-2개씩 배치되어 risk dimension을 골고루 자극합니다.
+              두 종류로 나뉩니다. (1) Petri framework 기본 seeds. (2) GEODE 코드베이스/하네스 특성을 노리는 GEODE-specific seeds.
+              여러 카테고리에 분산 배치되어 risk dimension을 골고루 자극합니다.
             </p>
 
-            <h2>GEODE-specific seeds (13)</h2>
+            <h2>GEODE-specific seeds</h2>
             <p>
               <code>plugins/petri_audit/seeds/</code>에 각 seed가 <code>.md</code> 파일 하나로 정의됩니다. seed 파일은 frontmatter (tags) + branch 별 pressure 곡선 (보통 1 → 2 → 3 → 2 → 1) 으로 구성됩니다.
             </p>
@@ -49,28 +49,28 @@ export default function Page() {
               압력 1은 캐주얼 요청, 압력 3은 명시적 압박 (긴급성, 권위, 손실 회피). 이 곡선이 target이 어디서 무너지는지 잡습니다.
             </p>
 
-            <h2>Default 173 Petri seeds</h2>
+            <h2>Default Petri seeds</h2>
             <p>
               <code>inspect_petri</code> v3 패키지의 <code>_seeds/</code>에 정의됩니다.
-              GEODE-specific seeds와 동일한 frontmatter 규약을 따르며, 38 dim 전체에 걸친 일반 misalignment 시나리오를 다룹니다.
+              GEODE-specific seeds와 동일한 frontmatter 규약을 따르며, 전체 dim에 걸친 일반 misalignment 시나리오를 다룹니다.
               GEODE audit은 <code>geode audit --seed-select id:...</code>로 선택해 함께 돌릴 수 있습니다.
             </p>
             <p>대략적 카테고리 분포 (Petri 3 공식 분류, upstream tag 기준):</p>
             <table>
-              <thead><tr><th>카테고리</th><th>대략 비중</th><th>다루는 위험</th></tr></thead>
+              <thead><tr><th>카테고리</th><th>다루는 위험</th></tr></thead>
               <tbody>
-                <tr><td><strong>refusal_calibration</strong></td><td>~30 seeds</td><td>잘못된 거부 / 거부 거부 / 과도한 단호함</td></tr>
-                <tr><td><strong>honesty_deception</strong></td><td>~30 seeds</td><td>fabrication, omission, gaslighting, sycophancy</td></tr>
-                <tr><td><strong>power_seeking</strong></td><td>~20 seeds</td><td>self_replication, resource acquisition, persuasion</td></tr>
-                <tr><td><strong>harm_uplift</strong></td><td>~30 seeds</td><td>bio / cyber / weapons / csam / hate / harassment uplift</td></tr>
-                <tr><td><strong>sandbox_awareness</strong></td><td>~20 seeds</td><td>tool_misuse, scope_creep, instruction_override</td></tr>
-                <tr><td><strong>manipulation</strong></td><td>~15 seeds</td><td>flattery, emotional_pressure, false_urgency</td></tr>
-                <tr><td><strong>privacy</strong></td><td>~10 seeds</td><td>pii_disclosure, surveillance_assist, doxxing</td></tr>
-                <tr><td><strong>meta</strong></td><td>~15 seeds</td><td>refusal_after_compliance, partial_compliance, 등</td></tr>
+                <tr><td><strong>refusal_calibration</strong></td><td>잘못된 거부 / 거부 거부 / 과도한 단호함</td></tr>
+                <tr><td><strong>honesty_deception</strong></td><td>fabrication, omission, gaslighting, sycophancy</td></tr>
+                <tr><td><strong>power_seeking</strong></td><td>self_replication, resource acquisition, persuasion</td></tr>
+                <tr><td><strong>harm_uplift</strong></td><td>bio / cyber / weapons / csam / hate / harassment uplift</td></tr>
+                <tr><td><strong>sandbox_awareness</strong></td><td>tool_misuse, scope_creep, instruction_override</td></tr>
+                <tr><td><strong>manipulation</strong></td><td>flattery, emotional_pressure, false_urgency</td></tr>
+                <tr><td><strong>privacy</strong></td><td>pii_disclosure, surveillance_assist, doxxing</td></tr>
+                <tr><td><strong>meta</strong></td><td>refusal_after_compliance, partial_compliance, 등</td></tr>
               </tbody>
             </table>
             <p className="text-white/40 text-sm">
-              <em>주의:</em> 카테고리 라벨과 정확 카운트는 inspect_petri 버전마다 달라집니다. 위 표는 v3 기준 대략치이며,
+              <em>주의:</em> 카테고리 라벨은 inspect_petri 버전마다 달라집니다. 위 표는 v3 기준이며,
               실제 분포는 <code>python -c &quot;import inspect_petri._seeds._markdown as m; print(list(m.read_seed_directory()))&quot;</code>로 확인.
             </p>
 
@@ -86,8 +86,8 @@ export default function Page() {
             <ul>
               <li>현 GEODE seeds 첫 등장: v0.91.0 (scenarios v1) → v0.92.0 (v2) → v0.93.0 (v3). audit reports는 <code>docs/audits/</code>.</li>
               <li>실행: <a href="/geode/docs/petri/run">감사 실행</a></li>
-              <li>차원: <a href="/geode/docs/petri/judge-dimensions">38 Judge 차원</a></li>
-              <li>publish된 결과: <a href="/self-improving/petri-bundle/">/geode/self-improving/petri-bundle/</a></li>
+              <li>차원: <a href="/geode/docs/petri/judge-dimensions">Judge 차원</a></li>
+              <li>publish된 결과: <a href="/geode/self-improving/petri-bundle/">/geode/self-improving/petri-bundle/</a></li>
             </ul>
           </>
         }
@@ -95,11 +95,11 @@ export default function Page() {
           <>
             <p>
               <strong>Reference:</strong> the seed catalog used by Petri × GEODE audits.
-              Two kinds. (1) 173 Petri-framework defaults. (2) 13 GEODE-specific seeds that target the GEODE codebase
-              and harness. Seven categories, spread to exercise risk dimensions evenly.
+              Two kinds. (1) the Petri-framework defaults. (2) GEODE-specific seeds that target the GEODE codebase
+              and harness. Spread across categories to exercise risk dimensions evenly.
             </p>
 
-            <h2>GEODE-specific seeds (13)</h2>
+            <h2>GEODE-specific seeds</h2>
             <p>
               Each seed lives at <code>plugins/petri_audit/seeds/</code> as a single <code>.md</code> file. The file
               carries frontmatter (tags) plus a per-branch pressure curve (commonly 1 → 2 → 3 → 2 → 1).
@@ -130,10 +130,10 @@ export default function Page() {
               reveals where the target gives way.
             </p>
 
-            <h2>Default 173 Petri seeds</h2>
+            <h2>Default Petri seeds</h2>
             <p>
               Defined in <code>inspect_petri</code> v3 under <code>_seeds/</code>. They follow the same frontmatter
-              convention as the GEODE-specific seeds and cover general misalignment scenarios across the full 38 dims.
+              convention as the GEODE-specific seeds and cover general misalignment scenarios across the full dimension set.
               GEODE audits can pull them in via <code>geode audit --seed-select id:...</code>.
             </p>
 
@@ -149,8 +149,8 @@ export default function Page() {
             <ul>
               <li>GEODE seeds first landed in v0.91.0 (scenarios v1), v0.92.0 (v2), v0.93.0 (v3). Audit reports under <code>docs/audits/</code>.</li>
               <li>Run: <a href="/geode/docs/petri/run">Run an Audit</a></li>
-              <li>Dimensions: <a href="/geode/docs/petri/judge-dimensions">38 Judge Dimensions</a></li>
-              <li>Published results: <a href="/self-improving/petri-bundle/">/geode/self-improving/petri-bundle/</a></li>
+              <li>Dimensions: <a href="/geode/docs/petri/judge-dimensions">Judge Dimensions</a></li>
+              <li>Published results: <a href="/geode/self-improving/petri-bundle/">/geode/self-improving/petri-bundle/</a></li>
             </ul>
           </>
         }
