@@ -576,10 +576,16 @@ def test_seedgen_run_page_renders(built_seedgen_pages: dict[str, str]) -> None:
         "Meta-review",
         "Token rollup",
     ]
-    h2_blocks = re.findall(r"<h2 class=\"section\"[^>]*>.*?</h2>", run_html, flags=re.DOTALL)
-    h2_joined = " ".join(h2_blocks)
+    # Section heads live in <h2 class="section"> OR (for the foldable heavy
+    # sections — reflections / pilot) in a <details> <summary>. PR-HUB-DESLOP.
+    head_blocks = re.findall(
+        r"<h2 class=\"section\"[^>]*>.*?</h2>|<summary>.*?</summary>",
+        run_html,
+        flags=re.DOTALL,
+    )
+    heads_joined = " ".join(head_blocks)
     for section in required_sections:
-        assert section in h2_joined, f"run page missing section h2 {section!r}"
+        assert section in heads_joined, f"run page missing section head {section!r}"
     # Header banner + mutator banner present.
     assert "run-detail-header" in run_html, "run page missing run-detail-header banner"
     assert "mutator-banner" in run_html, "run page missing mutator-banner"
@@ -587,6 +593,27 @@ def test_seedgen_run_page_renders(built_seedgen_pages: dict[str, str]) -> None:
     assert f'<h1 class="page-title">{SEEDGEN_FIXTURE_RUN_ID}' in run_html, (
         "run id missing from <h1>"
     )
+    # PR-HUB-DESLOP: dense inline sub-view nav + in-page section map (no box cards).
+    assert 'class="subview-nav"' in run_html, "run page missing dense sub-view nav"
+    assert "subview-card" not in run_html, "box-card sub-view grid is slop"
+    assert 'class="run-map"' in run_html, "run page missing in-page section map"
+    # Candidate ids link to the generated-original viewer, not an in-page #cand anchor.
+    assert f"/seed-generation/{SEEDGEN_FIXTURE_RUN_ID}/candidates/" in run_html, (
+        "candidate ids must link to the /candidates/<cid>/ viewer"
+    )
+    assert 'href="#cand-' not in run_html, "candidate ids must not link to in-page #cand anchors"
+
+
+def test_hub_css_has_no_slop_patterns() -> None:
+    """Guard the two registered slop patterns (CLAUDE.md §Docs, PR-HUB-DESLOP):
+    colored left-border accent bars (`border-left … var(--bucket-*)`) and
+    box-card navigation (`.subview-card` / `.run-subviews`)."""
+    css = (REPO_ROOT / "docs/self-improving/assets/hub.css").read_text(encoding="utf-8")
+    colored_left = re.findall(r"border-left:[^;]*var\(--bucket", css)
+    assert not colored_left, f"colored left-border accent bars are slop: {colored_left}"
+    assert ".subview-card" not in css, "box-card sub-view nav (.subview-card) is slop"
+    assert ".run-subviews" not in css, "box-card sub-view grid (.run-subviews) is slop"
+    assert ".subview-nav" in css, "expected the dense inline .subview-nav replacement"
 
 
 def test_seedgen_pilot_heatmap_renders(built_seedgen_pages: dict[str, str]) -> None:
