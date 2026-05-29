@@ -259,7 +259,7 @@ export function ArchitectureSection() {
               <span className="text-[#34D399] text-sm">⟂</span>
               <span className="text-xs text-[#9BB0CC]">
                 <span className="font-medium text-[#34D399]/70">HookSystem</span>
-                {" "}{t(locale, "58 events, 4계층 수직 관통", "58 events across all 4 layers")}
+                {" "}{t(locale, "81 events, 4계층 수직 관통", "81 events across all 4 layers")}
               </span>
             </div>
             <div className="flex items-center gap-3 px-4 py-2.5 rounded-xl border border-dashed border-[#C084FC]/15 bg-[#C084FC]/[0.02]">

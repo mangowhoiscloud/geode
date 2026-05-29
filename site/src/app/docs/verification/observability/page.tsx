@@ -23,7 +23,7 @@ export default function Page() {
             <table>
               <thead><tr><th>렌즈</th><th>관측 단위</th><th>grain</th><th>위치</th><th>도입</th></tr></thead>
               <tbody>
-                <tr><td><strong>Hooks</strong></td><td>이벤트 (58개)</td><td>micro (μs to ms)</td><td><code>core/hooks/system.py</code></td><td>core</td></tr>
+                <tr><td><strong>Hooks</strong></td><td>이벤트 (81개)</td><td>micro (μs to ms)</td><td><code>core/hooks/system.py</code></td><td>core</td></tr>
                 <tr><td><strong>RunLog</strong></td><td>run (LLM 호출 1회)</td><td>medium (s)</td><td><code>~/.geode/runlog/</code> JSONL</td><td>core</td></tr>
                 <tr><td><strong>Audit diagnostics</strong></td><td>call (input/output/cost)</td><td>per-call (assertion-grade)</td><td><code>core.audit.diagnostics</code></td><td>v0.92.0</td></tr>
                 <tr><td><strong>Petri Audit</strong></td><td>scenario (N seeds × M turns)</td><td>session (min to hour)</td><td><a href="/geode/docs/petri/overview">Petri × GEODE</a></td><td>v0.92.0+</td></tr>
@@ -168,7 +168,7 @@ $ jq -c 'select(.cache_read_tokens > 0)' ~/.geode/usage/2026-05-12.jsonl  # 캐�
             <table>
               <thead><tr><th>Lens</th><th>Unit</th><th>Grain</th><th>Where</th><th>Since</th></tr></thead>
               <tbody>
-                <tr><td><strong>Hooks</strong></td><td>events (58)</td><td>micro (μs to ms)</td><td><code>core/hooks/system.py</code></td><td>core</td></tr>
+                <tr><td><strong>Hooks</strong></td><td>events (81)</td><td>micro (μs to ms)</td><td><code>core/hooks/system.py</code></td><td>core</td></tr>
                 <tr><td><strong>RunLog</strong></td><td>run (one LLM call)</td><td>medium (seconds)</td><td><code>~/.geode/runlog/</code> JSONL</td><td>core</td></tr>
                 <tr><td><strong>Audit diagnostics</strong></td><td>call (input/output/cost)</td><td>per-call assertion-grade</td><td><code>core.audit.diagnostics</code></td><td>v0.92.0</td></tr>
                 <tr><td><strong>Petri Audit</strong></td><td>scenario (N seeds × M turns)</td><td>session (minutes to hours)</td><td><a href="/geode/docs/petri/overview">Petri × GEODE</a></td><td>v0.92.0+</td></tr>

@@ -86,7 +86,7 @@ export default function Page() {
                   <td>cron + standing order</td>
                   <td>skill auto-generate</td>
                   <td>overnight 루프</td>
-                  <td>58 이벤트 + 스케줄러</td>
+                  <td>81 이벤트 + 스케줄러</td>
                 </tr>
                 <tr>
                   <td>멀티 LLM</td>
@@ -297,7 +297,7 @@ export default function Page() {
                   <td>cron + standing orders</td>
                   <td>skill auto-generate</td>
                   <td>overnight loop</td>
-                  <td>58 events + scheduler</td>
+                  <td>81 events + scheduler</td>
                 </tr>
                 <tr>
                   <td>Multi-LLM</td>

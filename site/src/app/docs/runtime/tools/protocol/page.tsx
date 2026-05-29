@@ -8,8 +8,8 @@ export default function Page() {
       slug="runtime/tools/protocol"
       title="Tool Protocol"
       titleKo="도구 프로토콜"
-      summary="Tool protocol, registry, deferred loading. 53 tools (6 always-loaded + 47 deferred), single JSON SOT at core/tools/definitions.json."
-      summaryKo="도구 프로토콜, 레지스트리, 지연 로딩. 53개 도구 (상시 로드 6개 + 지연 로드 47개), 단일 JSON SOT가 core/tools/definitions.json에 있습니다."
+      summary="Tool protocol, registry, deferred loading. 59 tools (5 always-loaded + 54 deferred), single JSON SOT at core/tools/definitions.json."
+      summaryKo="도구 프로토콜, 레지스트리, 지연 로딩. 59개 도구 (상시 로드 5개 + 지연 로드 54개), 단일 JSON SOT가 core/tools/definitions.json에 있습니다."
     >
       <Bi
         ko={
@@ -37,20 +37,20 @@ export default function Page() {
 
             <h2>지연 로딩</h2>
             <p>
-              도구가 56개일 때 모든 LLM 호출마다 정의 전체를 보내면 턴당 약 10K
+              도구가 59개일 때 모든 LLM 호출마다 정의 전체를 보내면 턴당 약 10K
               토큰의 input을 태우게 됩니다. GEODE는 카탈로그를 분할합니다.
             </p>
             <table>
               <thead><tr><th>티어</th><th>개수</th><th>동작</th></tr></thead>
               <tbody>
-                <tr><td>상시 로드</td><td>6</td><td>모든 LLM 호출에서 전송. <code>memory_search</code>, <code>show_help</code>, <code>general_web_search</code> 등 코어 도구만 포함합니다.</td></tr>
-                <tr><td>지연 로드</td><td>55</td><td><code>tool_search</code>로 발견 가능, 요청 시 로드. 전체 도구 수가 <code>defer_threshold</code> (기본 10) 를 넘으면 활성화됩니다.</td></tr>
+                <tr><td>상시 로드</td><td>5</td><td>모든 LLM 호출에서 전송. <code>memory_search</code>, <code>memory_get</code>, <code>memory_save</code>, <code>web_search</code>, <code>wanted_jobs_search</code>.</td></tr>
+                <tr><td>지연 로드</td><td>54</td><td><code>tool_search</code>로 발견 가능, 요청 시 로드. 전체 도구 수가 <code>defer_threshold</code> (기본 10) 를 넘으면 활성화됩니다.</td></tr>
               </tbody>
             </table>
             <p>
-              총 도구 수. <strong>61</strong> (<code>core/tools/definitions.json</code>로
+              총 도구 수. <strong>59</strong> (<code>core/tools/definitions.json</code>로
               실측 확인). 상시 로드 도구의 frozenset은{" "}
-              <code>core/tools/registry.py:209-218</code>에{" "}
+              <code>core/tools/registry.py:215-223</code>에{" "}
               <code>ALWAYS_LOADED_TOOLS</code>로 정의됩니다.
             </p>
             <p>
@@ -111,20 +111,20 @@ export default function Page() {
 
             <h2>Deferred loading</h2>
             <p>
-              With 53 tools, sending all definitions on every LLM call would burn
+              With 59 tools, sending all definitions on every LLM call would burn
               ~10K tokens of input per turn. GEODE splits the catalog:
             </p>
             <table>
               <thead><tr><th>Tier</th><th>Count</th><th>Behaviour</th></tr></thead>
               <tbody>
-                <tr><td>Always-loaded</td><td>6</td><td>Sent on every LLM call: core tools such as <code>memory_search</code>, <code>show_help</code>, and <code>general_web_search</code>.</td></tr>
-                <tr><td>Deferred</td><td>55</td><td>Discoverable via <code>tool_search</code>, loaded on demand. Activates when total tools exceed <code>defer_threshold</code> (default 10).</td></tr>
+                <tr><td>Always-loaded</td><td>5</td><td>Sent on every LLM call: <code>memory_search</code>, <code>memory_get</code>, <code>memory_save</code>, <code>web_search</code>, <code>wanted_jobs_search</code>.</td></tr>
+                <tr><td>Deferred</td><td>54</td><td>Discoverable via <code>tool_search</code>, loaded on demand. Activates when total tools exceed <code>defer_threshold</code> (default 10).</td></tr>
               </tbody>
             </table>
             <p>
-              Total tool count: <strong>61</strong> (verified via{" "}
+              Total tool count: <strong>59</strong> (verified via{" "}
               <code>core/tools/definitions.json</code>). The frozenset of
-              always-loaded tools lives at <code>core/tools/registry.py:209-218</code>{" "}
+              always-loaded tools lives at <code>core/tools/registry.py:215-223</code>{" "}
               as <code>ALWAYS_LOADED_TOOLS</code>.
             </p>
             <p>

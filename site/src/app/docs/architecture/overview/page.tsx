@@ -41,10 +41,10 @@ Layer 1 — Model      Anthropic / OpenAI / Codex Plus / GLM (3 chains, 9 models
             <p>주요 서브시스템 (자세한 내역은 <a href="/geode/docs/architecture/system-index">시스템 색인</a> 참조):</p>
             <ul>
               <li><code>core/llm/</code>. 41 모듈, 프롬프트 + 프로바이더 라우터</li>
-              <li><code>core/tools/</code>. 17 모듈, 53 도구, 지연 로딩 (6 always-loaded)</li>
+              <li><code>core/tools/</code>. 17 모듈, 59 도구, 지연 로딩 (5 always-loaded)</li>
               <li><code>core/mcp/</code>. 17 모듈, 25K 토큰 가드</li>
               <li><code>core/memory/</code>. 14 모듈, 5계층 컨텍스트</li>
-              <li><code>core/hooks/</code>. 10 모듈, 58 라이프사이클 이벤트</li>
+              <li><code>core/hooks/</code>. 10 모듈, 81 라이프사이클 이벤트</li>
             </ul>
 
             <h2>Layer 3 — Harness</h2>
@@ -96,10 +96,10 @@ Layer 1 — Model      Anthropic / OpenAI / Codex Plus / GLM (3 chains, 9 models
             <p>Notable subsystems (see <a href="/geode/docs/architecture/system-index">System Index</a>):</p>
             <ul>
               <li><code>core/llm/</code>. 41 modules, the prompt + provider router</li>
-              <li><code>core/tools/</code>. 17 modules, 53 tools, deferred loading (6 always-loaded)</li>
+              <li><code>core/tools/</code>. 17 modules, 59 tools, deferred loading (5 always-loaded)</li>
               <li><code>core/mcp/</code>. 17 modules, 25K token guard</li>
               <li><code>core/memory/</code>. 14 modules, 5-tier context</li>
-              <li><code>core/hooks/</code>. 10 modules, 58 lifecycle events</li>
+              <li><code>core/hooks/</code>. 10 modules, 81 lifecycle events</li>
             </ul>
 
             <h2>Layer 3 — Harness</h2>

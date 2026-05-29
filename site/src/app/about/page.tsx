@@ -25,7 +25,7 @@ const personal: Entry[] = [
     taglineKo: "자율 에이전트 기반 운영체제 구현",
     bodyKo:
       "LLM 위에서 동작하는 자율 에이전트를 운영체제로 다룹니다. 모델 라우팅·도구 실행·메모리·스케줄링·관측성을 하나의 런타임으로 묶었습니다. 64회 릴리스, 236 모듈, 4,380 테스트, 핀 고정 프롬프트 20개, 단독 개발. 안드레이 카르파시의 LLM-OS 다이어그램을 코드로 옮긴 사례입니다.",
-    chips: ["LangGraph", "Hook 58 events", "4-Layer", "Plugin namespace", "Cache control"],
+    chips: ["LangGraph", "Hook 81 events", "4-Layer", "Plugin namespace", "Cache control"],
     accent: "var(--acc-artifact)",
   },
   {
