@@ -1023,13 +1023,26 @@ def test_pr1_checkpoints_tracked() -> None:
 
 
 def test_pr2_agents_index_renders(built_seedgen_pages: dict[str, str]) -> None:
-    """`/agents/` lists each sub-agent with harness chip + cost + duration."""
+    """`/agents/` lists each sub-agent with harness chip + cost + duration.
+
+    Regression for the cli-local PAYG-misclassification (2026-05-29): a
+    sub-agent that ran via the Claude Code CLI records the bare model provider
+    (``anthropic``) in session_start + a ``claude_cli_session_id`` in
+    session.json (the gen-c-001 fixture now mirrors that real shape). Keying
+    the chip off the provider mislabels it PAYG; ``_resolve_subagent_model``
+    overrides the source to ``claude-cli`` so it renders Claude Code with
+    source-aligned naming.
+    """
     html = built_seedgen_pages.get(f"{SEEDGEN_FIXTURE_RUN_ID}/agents")
     assert html, "agents index sub-page missing"
     assert 'class="records seedgen-agents"' in html
     assert "gen-c-001" in html
-    # Harness chip rendered for the gen-c-001 model (claude-opus-4-7 = Claude Code).
+    # gen-c-001 ran via claude-cli (cli-local) despite provider=anthropic →
+    # Claude Code chip + source-aligned model name, NOT PAYG.
     assert 'class="chip claude"' in html or "Claude Code" in html
+    assert "claude-cli/claude-opus-4-7" in html, "expected source-aligned cli-local model name"
+    # The codex voter (provider openai-codex) keeps its Codex chip.
+    assert 'class="chip codex"' in html or "Codex" in html, "codex voter chip missing"
 
 
 def test_pr2_agent_detail_paginates_via_details(built_seedgen_pages: dict[str, str]) -> None:
@@ -1083,6 +1096,16 @@ def test_pr2_tournament_renders_three_voter_panel(built_seedgen_pages: dict[str,
     assert "Per-candidate Elo summary" in html
     assert "winner:" in html  # ratified winner chip
     assert ">tie<" in html  # tie chip from one fixture match
+    # Voter rationale renders in <pre class="msg">; hub.css must give it a base
+    # wrap rule so long rationale does not run off the page horizontally
+    # (2026-05-29 — the bare pre.msg had no wrap rule, only details.turn pre.msg).
+    assert 'class="msg"' in html, "voter rationale not in pre.msg"
+    css = (REPO_ROOT / "docs" / "self-improving" / "assets" / "hub.css").read_text(encoding="utf-8")
+    msg_rule = re.search(r"(?<![.\w])pre\.msg\s*\{[^}]*\}", css)
+    assert msg_rule is not None, "hub.css missing base pre.msg rule"
+    assert "pre-wrap" in msg_rule.group(0) and "overflow-wrap" in msg_rule.group(0), (
+        "base pre.msg must wrap responsively (pre-wrap + overflow-wrap)"
+    )
 
 
 def test_pr2_subpages_basepath_safe(built_seedgen_pages: dict[str, str]) -> None:
