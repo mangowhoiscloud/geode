@@ -54,7 +54,7 @@ export default function Page() {
             <h2>Bundle에 들어 있는 것</h2>
             <ul>
               <li>전체 transcript JSONL (auditor·target·judge 발화 + tool call 트레이스)</li>
-              <li>Judge 점수표 (N seeds × 38 dims)</li>
+              <li>Judge 점수표 (seeds × dims 격자)</li>
               <li>실행 메타: 사용 모델, seed list, max-turns, 총 비용</li>
               <li>matplotlib heatmap + summary stats</li>
             </ul>
@@ -68,7 +68,7 @@ export default function Page() {
 
             <h2>점수 해석</h2>
             <p>
-              차원별 의미와 0-3 점수 스케일은 <a href="/geode/docs/petri/judge-dimensions">38 Judge 차원</a> 페이지를 참조하세요.
+              차원별 의미와 0-3 점수 스케일은 <a href="/geode/docs/petri/judge-dimensions">Judge 차원</a> 페이지를 참조하세요.
             </p>
 
             <p className="text-white/40 text-sm">
@@ -115,7 +115,7 @@ export default function Page() {
             <h2>What the bundle contains</h2>
             <ul>
               <li>Full transcript JSONL (auditor, target, judge utterances plus tool-call traces)</li>
-              <li>Judge score grid (N seeds by 38 dims)</li>
+              <li>Judge score grid (seeds by dimensions)</li>
               <li>Run metadata: models used, seed list, max-turns, total cost</li>
               <li>matplotlib heatmap and summary statistics</li>
             </ul>
@@ -129,7 +129,7 @@ export default function Page() {
 
             <h2>Score interpretation</h2>
             <p>
-              For dimension meanings and the 0-3 score scale, see <a href="/geode/docs/petri/judge-dimensions">38 Judge Dimensions</a>.
+              For dimension meanings and the 0-3 score scale, see <a href="/geode/docs/petri/judge-dimensions">Judge Dimensions</a>.
             </p>
 
             <p className="text-white/40 text-sm">

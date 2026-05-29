@@ -1,5 +1,4 @@
 import Link from "next/link";
-import { GEODE_CUMULATIVE_EN, GEODE_CUMULATIVE_KO } from "@/data/geode/sot";
 
 /**
  * GEODE site landing — /geode/
@@ -16,9 +15,9 @@ const primary = [
   {
     href: "/portfolio",
     eyebrow: "Portfolio / 포트폴리오",
-    title: "GEODE를 왜 만들었나 — 스스로를 빌드하는 에이전트 하네스.",
+    title: "GEODE를 왜 만들었나. 스스로를 고쳐 쓰는 에이전트 하네스.",
     body:
-      "Karpathy의 LLM-OS 다이어그램을 코드로 옮긴 한 가지 답입니다. Model routing, tool execution, memory, scheduling, observability를 하나의 autonomous execution harness로 묶었습니다.",
+      "비-파라메트릭 계열의 자기 진화 에이전트입니다. 모델 가중치는 건드리지 않고, 자기 자신을 둘러싼 스캐폴드를 직접 바꿔 나아갑니다. 변화의 적합도는 적대적 안전 감사로 검증합니다.",
     accent: "var(--acc-artifact)",
   },
   {
@@ -52,12 +51,18 @@ export default function Home() {
             GEODE
           </h1>
           <p className="mt-4 font-display text-[clamp(1.1rem,2vw,1.4rem)] text-[var(--ink-1)] leading-snug">
-            스스로를 빌드하는 자율 에이전트 하네스.
+            스스로를 고쳐 쓰는 자율 에이전트 하네스.
           </p>
-          <p className="mt-6 font-mono text-[12px] text-[var(--ink-3)]">
-            {GEODE_CUMULATIVE_KO}
-            <br />
-            {GEODE_CUMULATIVE_EN}
+          <p className="mt-6 max-w-2xl text-[14px] leading-[1.7] text-[var(--ink-2)]">
+            GEODE는 모델 가중치를 건드리지 않습니다. 자기 자신을 둘러싼 스캐폴드,
+            즉 시스템 프롬프트와 도구 정책, 작업 분해와 반성 루프를 직접 바꿔
+            나아집니다. 그 변화의 적합도는 능력 벤치마크가 아니라 적대적 안전
+            감사로 측정합니다.
+          </p>
+          <p className="mt-2 max-w-2xl text-[14px] leading-[1.7] text-[var(--ink-3)]">
+            A self-rewriting agent harness. It never updates model weights; it
+            mutates the scaffolding around itself and keeps a change only when an
+            adversarial safety audit confirms a real gain.
           </p>
         </header>
 

@@ -35,8 +35,8 @@ const chapters: Chapter[] = [
     bodyEn:
       "The initial domain experiment validated a LangGraph StateGraph execution DAG. v0.8 added natural-language Plan / Sub-agent integration, v0.10 brought SubAgent parallel execution and SchedulerService production wiring.",
     chips: [
-      { v: "v0.6.0", ko: "MVP · 56 commits · 1,879 tests", en: "MVP · 56 commits · 1,879 tests" },
-      { v: "v0.7.0", ko: "NL Router 17 tools", en: "NL Router 17 tools" },
+      { v: "v0.6.0", ko: "MVP", en: "MVP" },
+      { v: "v0.7.0", ko: "NL Router", en: "NL Router" },
       { v: "v0.8.0", ko: "Plan / Sub-agent NL", en: "Plan / Sub-agent NL" },
       { v: "v0.10.0", ko: "SubAgent 병렬 + Scheduler", en: "SubAgent parallel + Scheduler" },
     ],
@@ -91,7 +91,7 @@ const chapters: Chapter[] = [
       "v0.48 evolved Hooks from observer to observer + interceptor and added six events — USER_INPUT_RECEIVED, TOOL_EXEC_START/END, COST_WARNING/LIMIT_EXCEEDED, EXECUTION_CANCELLED. v0.49 opened GEODE as OSS and promoted Claude Opus 4.7 and GLM-5.1 to primary models.",
     chips: [
       { v: "v0.45–47", ko: "Scheduler hardening", en: "Scheduler hardening" },
-      { v: "v0.48.0", ko: "Hook interceptor · 55 events", en: "Hook interceptor · 55 events" },
+      { v: "v0.48.0", ko: "Hook interceptor", en: "Hook interceptor" },
       { v: "v0.49.0", ko: "OSS · Opus 4.7 · GLM-5.1", en: "OSS · Opus 4.7 · GLM-5.1" },
     ],
   },
@@ -168,27 +168,10 @@ export function TimelineSection() {
           <p className="max-w-2xl text-[var(--ink-2)] text-[15px] leading-relaxed mb-8">
             {t(
               locale,
-              "초기 실행 DAG 실험에서 자율 실행 하네스로 자라는 데 54일이 걸렸습니다. CHANGELOG에 기록된 64회 릴리스를 7개 챕터로 묶어 정리했습니다.",
-              "From an initial execution-DAG experiment to a general-purpose autonomous execution harness in 54 days. The 64 releases recorded in CHANGELOG are grouped here into seven chapters."
+              "초기 실행 DAG 실험에서 자율 실행 하네스로 자라온 과정입니다. CHANGELOG에 기록된 릴리스를 7개 챕터로 묶어 정리했습니다.",
+              "From an initial execution-DAG experiment to a general-purpose autonomous execution harness. The releases recorded in CHANGELOG are grouped here into seven chapters."
             )}
           </p>
-
-          {/* Cadence stat strip */}
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-x-6 gap-y-3 mb-12 pt-5 pb-5 border-t border-b border-[var(--rule)]">
-            {[
-              { kKo: "기간", kEn: "Span", v: "2026-03-10 → 05-02" },
-              { kKo: "릴리스", kEn: "Releases", v: "64 · ≈1.2 / day" },
-              { kKo: "테스트", kEn: "Tests", v: "1,879 → 4,380" },
-              { kKo: "모듈", kEn: "Modules", v: "115 → 236" },
-            ].map((s) => (
-              <div key={s.kEn}>
-                <div className="font-mono text-[10px] uppercase tracking-[0.18em] text-[var(--ink-3)] mb-0.5">
-                  {locale === "en" ? s.kEn : s.kKo}
-                </div>
-                <div className="font-mono text-[12.5px] text-[var(--ink-1)]">{s.v}</div>
-              </div>
-            ))}
-          </div>
         </ScrollReveal>
 
         <ScrollRevealGroup className="relative" stagger={0.08}>

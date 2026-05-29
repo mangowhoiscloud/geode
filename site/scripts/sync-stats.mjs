@@ -1,20 +1,18 @@
 #!/usr/bin/env node
-// sync-stats.mjs — pull live GEODE metrics into src/data/geode/sot.ts and
-// the full CHANGELOG into src/data/geode/changelog.ts.
+// sync-stats.mjs — sync functional metadata from the GEODE repo into the site.
 //
 // Reads from the GEODE repo at GEODE_REPO (default ../geode):
-//   - pyproject.toml         → version
-//   - filesystem (core/, plugins/) → module counts
-//   - CHANGELOG.md           → release count (excludes [Unreleased]) plus
-//                              the full per-version body for changelog.ts
-//   - git log                → first commit YYYY-MM
-//   - CLAUDE.md              → test counts (avoids slow pytest --collect-only)
+//   - pyproject.toml → version (written to src/data/geode/sot.ts)
+//   - CHANGELOG.md   → the full per-version body (src/data/geode/changelog.ts)
+//   - sitemap.ts     → the page list for public/llms.txt + llms-full.txt
+//
+// Inventory counts (modules / tests / releases) are intentionally NOT synced:
+// the docs describe what the system does, not how much of it there is.
 //
 // Run:  npm run sync-stats
 // Override GEODE repo: GEODE_REPO=/abs/path npm run sync-stats
 
 import { readFileSync, writeFileSync, existsSync } from "node:fs";
-import { execSync } from "node:child_process";
 import { resolve, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -48,43 +46,6 @@ function readVersion() {
   const m = pyproject.match(/^version\s*=\s*"([^"]+)"/m);
   if (!m) fail("could not parse version from pyproject.toml");
   return m[1];
-}
-
-function countModules(dir) {
-  const out = execSync(
-    `find ${dir} -name "*.py" -type f -not -path "*/.*" | wc -l`,
-    { cwd: GEODE_REPO, encoding: "utf8" }
-  );
-  return parseInt(out.trim(), 10);
-}
-
-function countReleases() {
-  const changelog = readFileSync(resolve(GEODE_REPO, "CHANGELOG.md"), "utf8");
-  const matches = changelog.match(/^## \[([^\]]+)\]/gm) ?? [];
-  return matches.filter((line) => !/Unreleased/i.test(line)).length;
-}
-
-function readSince() {
-  const out = execSync(
-    `git log --reverse --pretty=format:"%ad" --date=format:"%Y-%m" | head -1`,
-    { cwd: GEODE_REPO, encoding: "utf8", shell: "/bin/bash" }
-  );
-  return out.trim();
-}
-
-function readTestCounts() {
-  const claudeMd = readFileSync(resolve(GEODE_REPO, "CLAUDE.md"), "utf8");
-  const m =
-    claudeMd.match(/Tests\*{0,2}\s*[:|]\s*(\d[\d,]*)\s*\(\+\s*(\d+)\s*live\)/i) ??
-    claudeMd.match(/(\d{3,})\s*\+\s*(\d+)\s*live/i);
-  if (!m) {
-    console.warn("sync-stats: could not parse test counts from CLAUDE.md; using 0/0");
-    return { standard: 0, live: 0 };
-  }
-  return {
-    standard: parseInt(m[1].replace(/,/g, ""), 10),
-    live: parseInt(m[2], 10),
-  };
 }
 
 // Parse CHANGELOG.md into structured entries.
@@ -129,11 +90,14 @@ function parseChangelog() {
 
 function writeSot(v) {
   const today = new Date().toISOString().slice(0, 10);
-  const total = v.core + v.plugins;
-  const totalTests = v.standard + v.live;
 
+  // PR-DOCS-REDESIGN (2026-05-30) — the SOT no longer carries inventory counts
+  // (modules / tests / releases). The docs describe what the system does, not
+  // how much of it there is, so only the functional fields remain: the package
+  // version (used in the footer, system-index, and the portfolio hero badge)
+  // and the sync date.
   const body = `/**
- * GEODE Single Source of Truth — site-wide metrics.
+ * GEODE Single Source of Truth — site-wide functional metadata.
  *
  * Auto-synced from the GEODE repo via \`npm run sync-stats\`.
  * Do not edit manually. Edit the GEODE repo and re-run sync.
@@ -143,30 +107,8 @@ function writeSot(v) {
 
 export const GEODE_SOT = {
   version: "${v.version}",
-  modules: {
-    core: ${v.core},
-    plugins: ${v.plugins},
-    total: ${total},
-  },
-  tests: {
-    standard: ${v.standard},
-    live: ${v.live},
-    total: ${totalTests},
-  },
-  releases: ${v.releases},
-  since: "${v.since}",
   syncedAt: "${today}",
 } as const;
-
-export const GEODE_CUMULATIVE_KO =
-  \`v\${GEODE_SOT.version} · \${GEODE_SOT.modules.total} 모듈 · \` +
-  \`\${GEODE_SOT.tests.standard.toLocaleString()} 테스트 · \` +
-  \`\${GEODE_SOT.releases} 릴리스 · 단독 개발 · since \${GEODE_SOT.since}\`;
-
-export const GEODE_CUMULATIVE_EN =
-  \`v\${GEODE_SOT.version} · \${GEODE_SOT.modules.total} modules · \` +
-  \`\${GEODE_SOT.tests.standard.toLocaleString()} tests · \` +
-  \`\${GEODE_SOT.releases} releases · solo · since \${GEODE_SOT.since}\`;
 `;
   writeFileSync(SOT_FILE, body);
 }
@@ -255,7 +197,7 @@ function writeLlmsTxt(pages, version) {
   const lines = [];
   lines.push("# GEODE");
   lines.push("");
-  lines.push(`GEODE v${version}. A self-hosting agent harness for autonomous execution.`);
+  lines.push(`GEODE v${version}. A self-evolving autonomous execution agent.`);
   lines.push("");
   lines.push(`Last sync: ${today}`);
   lines.push("");
@@ -304,8 +246,8 @@ function writeLlmsFullTxt(pages, version) {
   const lines = [];
   lines.push("# GEODE");
   lines.push("");
-  lines.push(`GEODE v${version}. A self-hosting agent harness for autonomous execution.`);
-  lines.push(`스스로를 빌드하는 자율 에이전트 하네스.`);
+  lines.push(`GEODE v${version}. A self-evolving autonomous execution agent.`);
+  lines.push(`스스로 진화하는 자율 실행 에이전트.`);
   lines.push("");
   lines.push(`Last sync: ${today}`);
   lines.push("");
@@ -334,19 +276,9 @@ function writeLlmsFullTxt(pages, version) {
 function main() {
   console.log(`sync-stats: reading from ${GEODE_REPO}`);
   const version = readVersion();
-  const core = countModules("core");
-  const plugins = countModules("plugins");
-  const releases = countReleases();
-  const since = readSince();
-  const { standard, live } = readTestCounts();
-
   console.log(`  version  : ${version}`);
-  console.log(`  modules  : ${core} core + ${plugins} plugins = ${core + plugins}`);
-  console.log(`  tests    : ${standard} standard + ${live} live`);
-  console.log(`  releases : ${releases}`);
-  console.log(`  since    : ${since}`);
 
-  writeSot({ version, core, plugins, standard, live, releases, since });
+  writeSot({ version });
   console.log(`sync-stats: wrote ${SOT_FILE}`);
 
   const entries = parseChangelog();

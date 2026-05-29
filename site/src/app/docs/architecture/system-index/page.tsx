@@ -9,166 +9,116 @@ export default function Page() {
       slug="architecture/system-index"
       title="System Index"
       titleKo="시스템 색인"
-      summary={`Every first-class subsystem in GEODE v${GEODE_SOT.version}. Module count and main entry point. Live numbers from System Metrics SOT.`}
-      summaryKo={`GEODE v${GEODE_SOT.version}의 모든 1급 서브시스템. 모듈 수와 주요 진입점. 라이브 수치는 시스템 메트릭 SOT.`}
+      summary={`Every first-class subsystem in GEODE v${GEODE_SOT.version}. Root path and main entry point per subsystem.`}
+      summaryKo={`GEODE v${GEODE_SOT.version}의 모든 1급 서브시스템. 서브시스템별 루트 경로와 주요 진입점.`}
     >
       <Bi
         ko={
           <>
-            <h2>프로젝트 통계 (라이브 SOT)</h2>
-            <pre>{`# 버전: ${GEODE_SOT.version}
-# core   ${GEODE_SOT.modules.core} modules
-# plugins ${GEODE_SOT.modules.plugins} modules
-# total  ${GEODE_SOT.modules.total} modules
-# tests  ${GEODE_SOT.tests.standard.toLocaleString()} + ${GEODE_SOT.tests.live} live
-# releases ${GEODE_SOT.releases}
-# since   ${GEODE_SOT.since}
-# synced  ${GEODE_SOT.syncedAt}`}</pre>
-
-            <h2>L4 Agent (1개)</h2>
+            <h2>L4 Agent</h2>
             <table>
-              <thead><tr><th>서브시스템</th><th>루트</th><th>모듈</th><th>진입점</th></tr></thead>
+              <thead><tr><th>서브시스템</th><th>루트</th><th>진입점</th></tr></thead>
               <tbody>
-                <tr><td><strong>agent</strong></td><td><code>core/agent/</code></td><td>14</td><td><code>loop.py:162 AgenticLoop</code></td></tr>
+                <tr><td><strong>agent</strong></td><td><code>core/agent/</code></td><td><code>loop.py:162 AgenticLoop</code></td></tr>
               </tbody>
             </table>
 
-            <h2>L3 Harness (6개)</h2>
+            <h2>L3 Harness</h2>
             <table>
-              <thead><tr><th>서브시스템</th><th>루트</th><th>모듈</th><th>진입점</th></tr></thead>
+              <thead><tr><th>서브시스템</th><th>루트</th><th>진입점</th></tr></thead>
               <tbody>
-                <tr><td>cli</td><td><code>core/cli/</code></td><td>30</td><td><code>commands.py:41 ModelProfile</code></td></tr>
-                <tr><td>gateway</td><td><code>core/cli/serve/</code></td><td>—</td><td><code>geode serve</code></td></tr>
-                <tr><td>hooks</td><td><code>core/hooks/</code></td><td>7</td><td><code>system.py:200 HookSystem</code></td></tr>
-                <tr><td>wiring</td><td><code>core/wiring/</code></td><td>5+</td><td>bootstrap entry (v0.87.0 lifecycle → wiring rename)</td></tr>
-                <tr><td>channels</td><td><code>core/channels/</code></td><td>4</td><td>adapter classes</td></tr>
-                <tr><td>ui</td><td><code>core/ui/</code></td><td>8</td><td>spinners, progress</td></tr>
+                <tr><td>cli</td><td><code>core/cli/</code></td><td><code>commands.py:41 ModelProfile</code></td></tr>
+                <tr><td>gateway</td><td><code>core/cli/serve/</code></td><td><code>geode serve</code></td></tr>
+                <tr><td>hooks</td><td><code>core/hooks/</code></td><td><code>system.py:200 HookSystem</code></td></tr>
+                <tr><td>wiring</td><td><code>core/wiring/</code></td><td>bootstrap entry (v0.87.0 lifecycle → wiring rename)</td></tr>
+                <tr><td>channels</td><td><code>core/channels/</code></td><td>adapter classes</td></tr>
+                <tr><td>ui</td><td><code>core/ui/</code></td><td>spinners, progress</td></tr>
               </tbody>
             </table>
 
-            <h2>L2 Runtime (13개)</h2>
+            <h2>L2 Runtime</h2>
             <table>
-              <thead><tr><th>서브시스템</th><th>루트</th><th>모듈</th><th>진입점</th></tr></thead>
+              <thead><tr><th>서브시스템</th><th>루트</th><th>진입점</th></tr></thead>
               <tbody>
-                <tr><td>llm</td><td><code>core/llm/</code></td><td>15</td><td><code>agentic_response.py:46</code></td></tr>
-                <tr><td>llm/prompts</td><td><code>core/llm/prompts/</code></td><td>2 + .md</td><td><code>__init__.py</code></td></tr>
-                <tr><td>llm/providers</td><td><code>core/llm/providers/</code></td><td>5</td><td><code>anthropic.py</code></td></tr>
-                <tr><td>tools</td><td><code>core/tools/</code></td><td>16</td><td><code>base.py:35 Tool</code></td></tr>
-                <tr><td>mcp</td><td><code>core/mcp/</code></td><td>20</td><td><code>manager.py MCPManager</code></td></tr>
-                <tr><td>memory</td><td><code>core/memory/</code></td><td>14</td><td><code>context.py:46</code></td></tr>
-                <tr><td>skills</td><td><code>core/skills/</code></td><td>6</td><td><code>skill_registry.py</code></td></tr>
-                <tr><td>verification</td><td><code>core/verification/</code></td><td>7</td><td><code>guardrails.py</code></td></tr>
-                <tr><td>scheduler</td><td><code>core/scheduler/</code></td><td>6</td><td><code>scheduler.py:76</code></td></tr>
-                <tr><td>automation</td><td><code>core/automation/</code></td><td>8</td><td><code>model_registry.py</code></td></tr>
-                <tr><td>orchestration</td><td><code>core/orchestration/</code></td><td>19</td><td><code>graph.py</code></td></tr>
-                <tr><td>auth</td><td><code>core/auth/</code></td><td>14</td><td>OAuth profile rotator</td></tr>
+                <tr><td>llm</td><td><code>core/llm/</code></td><td><code>agentic_response.py:46</code></td></tr>
+                <tr><td>llm/prompts</td><td><code>core/llm/prompts/</code></td><td><code>__init__.py</code></td></tr>
+                <tr><td>llm/providers</td><td><code>core/llm/providers/</code></td><td><code>anthropic.py</code></td></tr>
+                <tr><td>tools</td><td><code>core/tools/</code></td><td><code>base.py:35 Tool</code></td></tr>
+                <tr><td>mcp</td><td><code>core/mcp/</code></td><td><code>manager.py MCPManager</code></td></tr>
+                <tr><td>memory</td><td><code>core/memory/</code></td><td><code>context.py:46</code></td></tr>
+                <tr><td>skills</td><td><code>core/skills/</code></td><td><code>skill_registry.py</code></td></tr>
+                <tr><td>verification</td><td><code>core/verification/</code></td><td><code>guardrails.py</code></td></tr>
+                <tr><td>scheduler</td><td><code>core/scheduler/</code></td><td><code>scheduler.py:76</code></td></tr>
+                <tr><td>automation</td><td><code>core/automation/</code></td><td><code>model_registry.py</code></td></tr>
+                <tr><td>orchestration</td><td><code>core/orchestration/</code></td><td><code>graph.py</code></td></tr>
+                <tr><td>auth</td><td><code>core/auth/</code></td><td>OAuth profile rotator</td></tr>
               </tbody>
             </table>
 
-            <h2>번들 플러그인 (1개)</h2>
+            <h2>번들 플러그인</h2>
             <table>
-              <thead><tr><th>플러그인</th><th>루트</th><th>모듈</th><th>주요 구성</th></tr></thead>
+              <thead><tr><th>플러그인</th><th>루트</th><th>주요 구성</th></tr></thead>
               <tbody>
                 <tr>
                   <td><strong>petri_audit</strong></td>
                   <td><code>plugins/petri_audit/</code></td>
-                  <td>17</td>
                   <td>Petri × GEODE alignment audit runner, seed catalog, judge dimensions</td>
                 </tr>
-              </tbody>
-            </table>
-
-            <h2>인벤토리 합계</h2>
-            <table>
-              <tbody>
-                <tr><th>Core 모듈</th><td>{GEODE_SOT.modules.core}</td></tr>
-                <tr><th>플러그인 모듈</th><td>{GEODE_SOT.modules.plugins}</td></tr>
-                <tr><th>테스트</th><td>{GEODE_SOT.tests.standard.toLocaleString()} + {GEODE_SOT.tests.live} live</td></tr>
-                <tr><th>훅 이벤트</th><td>81 (14 groups)</td></tr>
-                <tr><th>도구</th><td>59 registered tools with deferred loading</td></tr>
-                <tr><th>MCP 서버</th><td>16</td></tr>
-                <tr><th>슬래시 명령</th><td>15개 이상</td></tr>
-                <tr><th>핀된 프롬프트 템플릿</th><td>20 (17 .md + 3 axes)</td></tr>
               </tbody>
             </table>
           </>
         }
         en={
           <>
-            <h2>Project statistics (live SOT)</h2>
-            <pre>{`# version: ${GEODE_SOT.version}
-# core   ${GEODE_SOT.modules.core} modules
-# plugins ${GEODE_SOT.modules.plugins} modules
-# total  ${GEODE_SOT.modules.total} modules
-# tests  ${GEODE_SOT.tests.standard.toLocaleString()} + ${GEODE_SOT.tests.live} live
-# releases ${GEODE_SOT.releases}
-# since   ${GEODE_SOT.since}
-# synced  ${GEODE_SOT.syncedAt}`}</pre>
-
-            <h2>L4 Agent (1)</h2>
+            <h2>L4 Agent</h2>
             <table>
-              <thead><tr><th>Subsystem</th><th>Root</th><th>Modules</th><th>Entry</th></tr></thead>
+              <thead><tr><th>Subsystem</th><th>Root</th><th>Entry</th></tr></thead>
               <tbody>
-                <tr><td><strong>agent</strong></td><td><code>core/agent/</code></td><td>14</td><td><code>loop.py:162 AgenticLoop</code></td></tr>
+                <tr><td><strong>agent</strong></td><td><code>core/agent/</code></td><td><code>loop.py:162 AgenticLoop</code></td></tr>
               </tbody>
             </table>
 
-            <h2>L3 Harness (6)</h2>
+            <h2>L3 Harness</h2>
             <table>
-              <thead><tr><th>Subsystem</th><th>Root</th><th>Modules</th><th>Entry</th></tr></thead>
+              <thead><tr><th>Subsystem</th><th>Root</th><th>Entry</th></tr></thead>
               <tbody>
-                <tr><td>cli</td><td><code>core/cli/</code></td><td>30</td><td><code>commands.py:41 ModelProfile</code></td></tr>
-                <tr><td>gateway</td><td><code>core/cli/serve/</code></td><td>—</td><td><code>geode serve</code></td></tr>
-                <tr><td>hooks</td><td><code>core/hooks/</code></td><td>7</td><td><code>system.py:200 HookSystem</code></td></tr>
-                <tr><td>wiring</td><td><code>core/wiring/</code></td><td>5+</td><td>bootstrap entry (v0.87.0 lifecycle → wiring rename)</td></tr>
-                <tr><td>channels</td><td><code>core/channels/</code></td><td>4</td><td>adapter classes</td></tr>
-                <tr><td>ui</td><td><code>core/ui/</code></td><td>8</td><td>spinners, progress</td></tr>
+                <tr><td>cli</td><td><code>core/cli/</code></td><td><code>commands.py:41 ModelProfile</code></td></tr>
+                <tr><td>gateway</td><td><code>core/cli/serve/</code></td><td><code>geode serve</code></td></tr>
+                <tr><td>hooks</td><td><code>core/hooks/</code></td><td><code>system.py:200 HookSystem</code></td></tr>
+                <tr><td>wiring</td><td><code>core/wiring/</code></td><td>bootstrap entry (v0.87.0 lifecycle → wiring rename)</td></tr>
+                <tr><td>channels</td><td><code>core/channels/</code></td><td>adapter classes</td></tr>
+                <tr><td>ui</td><td><code>core/ui/</code></td><td>spinners, progress</td></tr>
               </tbody>
             </table>
 
-            <h2>L2 Runtime (13)</h2>
+            <h2>L2 Runtime</h2>
             <table>
-              <thead><tr><th>Subsystem</th><th>Root</th><th>Modules</th><th>Entry</th></tr></thead>
+              <thead><tr><th>Subsystem</th><th>Root</th><th>Entry</th></tr></thead>
               <tbody>
-                <tr><td>llm</td><td><code>core/llm/</code></td><td>15</td><td><code>agentic_response.py:46</code></td></tr>
-                <tr><td>llm/prompts</td><td><code>core/llm/prompts/</code></td><td>2 + .md</td><td><code>__init__.py</code></td></tr>
-                <tr><td>llm/providers</td><td><code>core/llm/providers/</code></td><td>5</td><td><code>anthropic.py</code></td></tr>
-                <tr><td>tools</td><td><code>core/tools/</code></td><td>16</td><td><code>base.py:35 Tool</code></td></tr>
-                <tr><td>mcp</td><td><code>core/mcp/</code></td><td>20</td><td><code>manager.py MCPManager</code></td></tr>
-                <tr><td>memory</td><td><code>core/memory/</code></td><td>14</td><td><code>context.py:46</code></td></tr>
-                <tr><td>skills</td><td><code>core/skills/</code></td><td>6</td><td><code>skill_registry.py</code></td></tr>
-                <tr><td>verification</td><td><code>core/verification/</code></td><td>7</td><td><code>guardrails.py</code></td></tr>
-                <tr><td>scheduler</td><td><code>core/scheduler/</code></td><td>6</td><td><code>scheduler.py:76</code></td></tr>
-                <tr><td>automation</td><td><code>core/automation/</code></td><td>8</td><td><code>model_registry.py</code></td></tr>
-                <tr><td>orchestration</td><td><code>core/orchestration/</code></td><td>19</td><td><code>graph.py</code></td></tr>
-                <tr><td>auth</td><td><code>core/auth/</code></td><td>14</td><td>OAuth profile rotator</td></tr>
+                <tr><td>llm</td><td><code>core/llm/</code></td><td><code>agentic_response.py:46</code></td></tr>
+                <tr><td>llm/prompts</td><td><code>core/llm/prompts/</code></td><td><code>__init__.py</code></td></tr>
+                <tr><td>llm/providers</td><td><code>core/llm/providers/</code></td><td><code>anthropic.py</code></td></tr>
+                <tr><td>tools</td><td><code>core/tools/</code></td><td><code>base.py:35 Tool</code></td></tr>
+                <tr><td>mcp</td><td><code>core/mcp/</code></td><td><code>manager.py MCPManager</code></td></tr>
+                <tr><td>memory</td><td><code>core/memory/</code></td><td><code>context.py:46</code></td></tr>
+                <tr><td>skills</td><td><code>core/skills/</code></td><td><code>skill_registry.py</code></td></tr>
+                <tr><td>verification</td><td><code>core/verification/</code></td><td><code>guardrails.py</code></td></tr>
+                <tr><td>scheduler</td><td><code>core/scheduler/</code></td><td><code>scheduler.py:76</code></td></tr>
+                <tr><td>automation</td><td><code>core/automation/</code></td><td><code>model_registry.py</code></td></tr>
+                <tr><td>orchestration</td><td><code>core/orchestration/</code></td><td><code>graph.py</code></td></tr>
+                <tr><td>auth</td><td><code>core/auth/</code></td><td>OAuth profile rotator</td></tr>
               </tbody>
             </table>
 
-            <h2>Bundled Plugins (1)</h2>
+            <h2>Bundled Plugins</h2>
             <table>
-              <thead><tr><th>Plugin</th><th>Root</th><th>Modules</th><th>Highlights</th></tr></thead>
+              <thead><tr><th>Plugin</th><th>Root</th><th>Highlights</th></tr></thead>
               <tbody>
                 <tr>
                   <td><strong>petri_audit</strong></td>
                   <td><code>plugins/petri_audit/</code></td>
-                  <td>17</td>
                   <td>Petri × GEODE alignment audit runner, seed catalog, judge dimensions</td>
                 </tr>
-              </tbody>
-            </table>
-
-            <h2>Inventory totals</h2>
-            <table>
-              <tbody>
-                <tr><th>Core modules</th><td>{GEODE_SOT.modules.core}</td></tr>
-                <tr><th>Plugin modules</th><td>{GEODE_SOT.modules.plugins}</td></tr>
-                <tr><th>Tests</th><td>{GEODE_SOT.tests.standard.toLocaleString()} + {GEODE_SOT.tests.live} live</td></tr>
-                <tr><th>Hook events</th><td>81 (14 groups)</td></tr>
-                <tr><th>Tools</th><td>59 registered tools with deferred loading</td></tr>
-                <tr><th>MCP servers</th><td>16</td></tr>
-                <tr><th>Slash commands</th><td>15+</td></tr>
-                <tr><th>Prompt templates pinned</th><td>20 (17 .md + 3 axes)</td></tr>
               </tbody>
             </table>
           </>

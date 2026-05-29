@@ -8,8 +8,8 @@ export default function Page() {
       slug="runtime/tools/mcp"
       title="MCP Servers"
       titleKo="MCP 서버"
-      summary="16 MCP servers managed by core/mcp. Token guards, lifecycle, and adapters for Apple Calendar, Discord, Slack, Signal."
-      summaryKo="core/mcp가 관리하는 16개 MCP 서버. 토큰 가드, 라이프사이클, Apple Calendar, Discord, Slack, Signal 어댑터."
+      summary="MCP servers managed by core/mcp. Token guards, lifecycle, and adapters for Apple Calendar, Discord, Slack, Signal."
+      summaryKo="core/mcp가 관리하는 MCP 서버. 토큰 가드, 라이프사이클, Apple Calendar, Discord, Slack, Signal 어댑터."
     >
       <Bi
         ko={
@@ -18,7 +18,7 @@ export default function Page() {
             <p>
               Model Context Protocol. 외부 프로세스 서비스로서 LLM에 도구를
               노출하는 표준입니다. GEODE는 MCP 서버를 <strong>소비</strong>하기도
-              하고 (16개), 자기 자신을 MCP 서버로 <strong>노출</strong>하기도
+              하고, 자기 자신을 MCP 서버로 <strong>노출</strong>하기도
               합니다 (<code>core/mcp_server.py</code>).
             </p>
 
@@ -49,8 +49,8 @@ export default function Page() {
               절단이 콘텐츠가 아니라 포매팅 노이즈를 제거하게 합니다.
             </p>
 
-            <h2>16개의 서버</h2>
-            <p>v0.64.0 기준 목록 (환경별 가용성에 따라 달라질 수 있음).</p>
+            <h2>관리되는 서버</h2>
+            <p>대표 목록 (환경별 가용성에 따라 달라질 수 있음).</p>
             <ul>
               <li>filesystem, git, github</li>
               <li>web (fetch + search)</li>
@@ -92,7 +92,7 @@ export default function Page() {
             <p>
               Model Context Protocol — a standard for exposing tools to LLMs as
               out-of-process services. GEODE both <strong>consumes</strong> MCP
-              servers (16 of them) and <strong>exposes itself</strong> as one (
+              servers and <strong>exposes itself</strong> as one (
               <code>core/mcp_server.py</code>).
             </p>
 
@@ -124,8 +124,8 @@ export default function Page() {
               than content.
             </p>
 
-            <h2>The 16 servers</h2>
-            <p>The list as of v0.64.0 (subject to environment-specific availability):</p>
+            <h2>Managed servers</h2>
+            <p>A representative list (subject to environment-specific availability):</p>
             <ul>
               <li>filesystem, git, github</li>
               <li>web (fetch + search)</li>

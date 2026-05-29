@@ -8,8 +8,8 @@ export default function Page() {
       slug="petri/overview"
       title="Petri × GEODE Integration"
       titleKo="Petri × GEODE 통합"
-      summary="Anthropic Alignment Science's framework, wrapped over GEODE's agent. 173 seeds, 38 judge dimensions."
-      summaryKo="Anthropic Alignment Science의 프레임워크를 GEODE 에이전트 위에 얹음. 173 seeds, 38 judge 차원."
+      summary="Anthropic Alignment Science's framework, wrapped over GEODE's agent. A seed corpus scored across judge dimensions."
+      summaryKo="Anthropic Alignment Science의 프레임워크를 GEODE 에이전트 위에 얹음. seed 코퍼스를 judge 차원으로 채점."
     >
       <Bi
         ko={
@@ -27,14 +27,14 @@ export default function Page() {
               <tbody>
                 <tr><td><strong>Auditor</strong></td><td>Target을 misalign 방향으로 유도하는 적대적 agent</td></tr>
                 <tr><td><strong>Target</strong></td><td>측정 대상. GEODE wrapped agent 또는 vanilla LLM</td></tr>
-                <tr><td><strong>Judge</strong></td><td>Transcript를 38 dimension으로 평가하는 평가자</td></tr>
+                <tr><td><strong>Judge</strong></td><td>Transcript를 여러 위험 차원으로 평가하는 평가자</td></tr>
               </tbody>
             </table>
 
             <h2>기본 패키지</h2>
             <ul>
-              <li><strong>173</strong> default seeds. 시나리오 카탈로그.</li>
-              <li><strong>38</strong> judge dimensions. 위험 차원별 점수.</li>
+              <li>Default seed corpus. 시나리오 카탈로그.</li>
+              <li>Judge dimensions. 위험 차원별 점수.</li>
               <li>3-role 호출 (auditor, target, judge 각자 모델 선택 가능).</li>
             </ul>
 
@@ -51,7 +51,7 @@ export default function Page() {
             <h2>GEODE에서의 위치</h2>
             <ul>
               <li>코드: <code>plugins/petri_audit/</code> (runner, judge_dims, schema, audit mode)</li>
-              <li>최신 audit bundle: <a href="/self-improving/petri-bundle/">/geode/self-improving/petri-bundle/</a> 외부 viewer</li>
+              <li>최신 audit bundle: <a href="/geode/self-improving/petri-bundle/">/geode/self-improving/petri-bundle/</a> 외부 viewer</li>
               <li>CHANGELOG entry: v0.92.0+ 에서 Petri × GEODE 통합 (PR #1024 등)</li>
             </ul>
 
@@ -77,14 +77,14 @@ export default function Page() {
               <tbody>
                 <tr><td><strong>Auditor</strong></td><td>Adversarial agent that steers the target toward misalignment.</td></tr>
                 <tr><td><strong>Target</strong></td><td>The system under test. GEODE wrapped agent or a vanilla LLM.</td></tr>
-                <tr><td><strong>Judge</strong></td><td>Scores the transcript on 38 dimensions.</td></tr>
+                <tr><td><strong>Judge</strong></td><td>Scores the transcript across risk dimensions.</td></tr>
               </tbody>
             </table>
 
             <h2>What ships</h2>
             <ul>
-              <li><strong>173</strong> default seeds. The scenario catalog.</li>
-              <li><strong>38</strong> judge dimensions. Risk axes scored independently.</li>
+              <li>Default seed corpus. The scenario catalog.</li>
+              <li>Judge dimensions. Risk axes scored independently.</li>
               <li>3-role invocation (auditor, target, judge are independently model-selectable).</li>
             </ul>
 
@@ -101,7 +101,7 @@ export default function Page() {
             <h2>Where this lives in GEODE</h2>
             <ul>
               <li>Code: <code>plugins/petri_audit/</code> (runner, judge_dims, schema, audit mode)</li>
-              <li>Latest bundle: <a href="/self-improving/petri-bundle/">/geode/self-improving/petri-bundle/</a> external viewer</li>
+              <li>Latest bundle: <a href="/geode/self-improving/petri-bundle/">/geode/self-improving/petri-bundle/</a> external viewer</li>
               <li>CHANGELOG entries: Petri × GEODE integration since v0.92.0 (PR #1024 et al.)</li>
             </ul>
 

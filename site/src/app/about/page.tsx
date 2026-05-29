@@ -20,30 +20,30 @@ const personal: Entry[] = [
     id: "geode",
     href: "/portfolio",
     range: "2026.03 → 진행 중",
-    status: "v0.65.0 · 64 releases",
+    status: "Self-evolving agent · solo",
     titleKo: "GEODE",
-    taglineKo: "자율 에이전트 기반 운영체제 구현",
+    taglineKo: "스스로를 고쳐 쓰는 자율 에이전트 하네스",
     bodyKo:
-      "LLM 위에서 동작하는 자율 에이전트를 운영체제로 다룹니다. 모델 라우팅·도구 실행·메모리·스케줄링·관측성을 하나의 런타임으로 묶었습니다. 64회 릴리스, 236 모듈, 4,380 테스트, 핀 고정 프롬프트 20개, 단독 개발. 안드레이 카르파시의 LLM-OS 다이어그램을 코드로 옮긴 사례입니다.",
-    chips: ["LangGraph", "Hook 81 events", "4-Layer", "Plugin namespace", "Cache control"],
+      "비-파라메트릭 계열의 자기 진화 에이전트입니다. 모델 가중치는 건드리지 않고, 자기 자신을 둘러싼 스캐폴드, 즉 시스템 프롬프트와 도구 정책, 작업 분해와 반성 루프를 직접 바꿔 나아집니다. 안쪽의 agentic 루프가 작업을 처리하고, 바깥쪽 루프가 그 시스템을 다듬습니다. 변화의 적합도는 능력 벤치마크가 아니라 적대적 안전 감사로 측정하고, 핵심 안전 차원에는 하한선을 둬 후퇴하는 변화는 거부합니다.",
+    chips: ["Non-parametric self-evolution", "Adversarial safety audit", "Two loops", "Co-evolved seeds", "LangGraph"],
     accent: "var(--acc-artifact)",
   },
   {
     id: "eco2",
     href: "/eco2",
     range: "2025.10 → 2026.02",
-    status: "SeSACTHON 2025 Excellence · 4 / 181",
+    status: "SeSACTHON 2025 Excellence",
     titleKo: "Eco²",
     taglineKo: "멀티에이전트 재활용 챗봇 백엔드",
     bodyKo:
-      "5인 팀 MVP에서 백엔드와 인프라를 단독으로 맡으면서, Cursor 기반 스캐폴드로 LLM을 “생산과 개발의 체계”로 처음 운용해 본 프로젝트입니다. 본선 우수상 이후 약 3개월간 단독으로 고도화하면서 Chat 도메인을 LangGraph 멀티 에이전트로 재구성해 사용자 입장에서의 Agent 사용성을 끌어올렸고, LLM × 2 + Rule-based 파이프라인을 VU 1,000 / 97.8% / 373 RPM까지 스케일업했습니다. EFK · Prometheus · Grafana · Jaeger 4-pillar 관측 스택은 직접 세웠습니다. GEODE의 직접적인 발판이 된 작업입니다.",
+      "5인 팀 MVP에서 백엔드와 인프라를 단독으로 맡으면서, Cursor 기반 스캐폴드로 LLM을 “생산과 개발의 체계”로 처음 운용해 본 프로젝트입니다. 본선 이후 약 3개월간 단독으로 고도화하면서 Chat 도메인을 LangGraph 멀티 에이전트로 재구성해 사용자 입장에서의 Agent 사용성을 끌어올렸고, LLM × 2 + Rule-based 파이프라인을 부하 테스트로 검증했습니다. EFK · Prometheus · Grafana · Jaeger 관측 스택은 직접 세웠습니다. GEODE의 직접적인 발판이 된 작업입니다.",
     chips: [
       "Cursor + Scaffold (LLM as dev system)",
       "Chat Agent UX",
       "LangGraph multi-agent",
-      "Event Bus 3-Tier",
-      "Swiss Cheese eval 99.8 / 100",
-      "K8s 14 → 24",
+      "Event Bus tiers",
+      "Swiss Cheese eval",
+      "K8s autoscaling",
     ],
     accent: "var(--acc-line)",
   },
@@ -60,8 +60,8 @@ const freelance: Entry[] = [
     bulletsKo: [
       "타겟은 TTree 근태관리 레거시 시스템(Java / Spring · 19 도메인 4 그룹: attendance · organization · reporting · communication)입니다. 한국 근로기준법 56조 등 규제 제약과 야간 22:00 분기, 부서 N+1 쿼리 같은 실제 프로덕션 패턴 위에서 에이전트가 explore-before-act로 동작합니다.",
       "Slack 채널 관측에서 사용자 시그널만 추출하고(원문 미수집), Profile Merge(confidence scoring + temporal decay) → Directive Generation → Paperclip Company Skills API PATCH로 이어지는 파이프라인으로 에이전트 시스템 프롬프트에 주입해 자동화 정도를 점진적으로 올립니다.",
-      "Hub-Spoke 12 에이전트(Engineering 9 + Finance 3) — CTO 라우터 → PO · Planner → Dual Squad(Squad 1: attendance · organization / Squad 2: reporting · communication) Lead · Dev · QA. 16 Skill + 24 event handler + 9 Slack intent command 운용.",
-      "21-Crack pipeline guardrails(C1–C21)가 \"YAML은 LLM에 대한 권고일 뿐\"이라는 전제 위에서 phase skip · scorecard 누락 · anti-deception을 이벤트 단위로 검출하고 자동 되돌립니다. 운영 안전선은 Per-agent + company-wide circuit breaker로 묶입니다.",
+      "Hub-Spoke 에이전트 토폴로지(Engineering + Finance). CTO 라우터 → PO · Planner → Dual Squad(Squad 1: attendance · organization / Squad 2: reporting · communication) Lead · Dev · QA. Skill + event handler + Slack intent command 운용.",
+      "Crack pipeline guardrails(C1.C21)가 \"YAML은 LLM에 대한 권고일 뿐\"이라는 전제 위에서 phase skip · scorecard 누락 · anti-deception을 이벤트 단위로 검출하고 자동 되돌립니다. 운영 안전선은 Per-agent + company-wide circuit breaker로 묶입니다.",
       "자매 코드베이스로 kiki-appmaker가 별도 운영됩니다(아래 항목). 2026-04-29 boundary 확정. Kiki는 정체성·플러그인·MCP·스킬·시그널 수집을 담당합니다.",
     ],
     chips: [
@@ -69,7 +69,7 @@ const freelance: Entry[] = [
       "Slack signal → directive",
       "Hub-Spoke 12 agents",
       "Dual squad",
-      "C1–C21 guardrails",
+      "Crack guardrails",
       "Paperclip Skills API",
     ],
     accent: "var(--acc-line)",
@@ -84,14 +84,14 @@ const freelance: Entry[] = [
     bulletsKo: [
       "사용자 한 줄 프롬프트에서 출발해 PM Lead(SPEC) → CDO Lead(DESIGN_SYSTEM 9-섹션) → CTO Lead(구현 + SELF_CHECK) → QA Lead(QA_REPORT) → 자동 판정(합격 → 배포 / 불합격 → Do 최대 3회 복귀)을 1회전 돌리는 PDCA host-mode 워크플로우입니다.",
       "Production path는 User issue → CTO triage → PO + Planner SPEC → P4 검증 → Designer DESIGN → Lead FIFO → Developer → QA(최대 3 재작업) → Lead SCORECARD → PO ACCEPTANCE → CTO Release → DevOps 배포로 단계 스킵을 막습니다. 두 가지 모드(Paperclip claude_local 컨테이너 / 호스트 maintenance)를 분리합니다.",
-      "17-agent external-company provisioning(8 Lead + 1 Worker + 2 Specialty) + 5단계 install workspace(10-core paperclip / 20-patches kiki-patches rebase / 30-plugins / 40-team / 50-dashboards). bkit automation L4(Full-Auto) 8 가드레일.",
+      "external-company provisioning(Lead / Worker / Specialty 역할)과 install workspace 단계(core paperclip / kiki-patches rebase / plugins / team / dashboards)를 묶습니다. bkit automation L4(Full-Auto)는 가드레일 위에서 동작합니다.",
       "Design은 awesome-design-md 컬렉션을 npx getdesign으로 설치한 뒤 DESIGN_SYSTEM.md 9섹션을 커스터마이징합니다. 기본 스택은 Next.js App Router + MySQL + standalone.",
       "PIN system match-3 game series(PIN-36 daily challenge → PIN-44 daily seed + share URL → PIN-48 M2 howto-gen → PIN-59 / 60 audio + sprite → M3-A / B / C)는 manager-facing pitch demo로 운용합니다.",
     ],
     chips: [
       "PDCA host-mode",
-      "17-agent provisioning",
-      "5-stage install",
+      "Agent provisioning",
+      "Staged install workspace",
       "awesome-design-md",
       "bkit L4 Full-Auto",
       "PIN match-3 demo",
@@ -102,14 +102,14 @@ const freelance: Entry[] = [
 
 const now = [
   { date: "2026-05-03", body: "포트폴리오 재구성. Eco² (SeSACTHON 2025 Excellence) · Kiki (TTree 레거시 유지보수) · Kiki AppMaker (공장형 PDCA) 세 작업물 합류, 개인 / pinxlab 프리랜서 분리." },
-  { date: "2026-05-02", body: "Crumb 최종 설계 lock — 4-actor(Coord / Planner Lead / Engineering Lead / Builder.fallback) + Engineering Lead 내부 CourtEval(Grader · Critic · Defender · Re-grader, ACL 2025) + 28 kind transcript JSONL + OpenTelemetry GenAI alias. GEODE v0.65.0 messages cache_control 머지, CHANGELOG 64 릴리스를 7챕터 타임라인으로 재구성." },
+  { date: "2026-05-02", body: "Crumb 최종 설계 lock. 4-actor(Coord / Planner Lead / Engineering Lead / Builder.fallback) + Engineering Lead 내부 CourtEval(Grader · Critic · Defender · Re-grader, ACL 2025) + kind 단위 transcript JSONL + OpenTelemetry GenAI alias. GEODE messages cache_control 머지, CHANGELOG를 챕터 타임라인으로 재구성." },
   { date: "2026-05-01", body: "Bagelcode 신작팀 과제 전형 Crumb 착수(마감 2026-05-03 23:59 KST). PDCA chain 토폴로지를 ICML 2025 §F(Resilience, chain 10.5% 저하) 근거로 폐기하고 Hub-Ledger-Spoke로 재정렬. Phaser 3.80 single-file ≤ 60KB game.html(LLM 첫시도 성공률 94%)로 게임 스택 lock. Frontier 사료 80+종(orchestration · caching · XML · production · mobile-game · observability)으로 의사결정을 학술 grounding." },
 ];
 
 const recognition = [
   {
     label: "SeSACTHON 2025 Excellence",
-    detail: "Eco² · 181팀 중 4위 · MVP 백엔드/인프라 단독 + 본선 이후 단독 고도화 (2025.10 → 2026.02)",
+    detail: "Eco² · MVP 백엔드/인프라 단독 + 본선 이후 단독 고도화 (2025.10 → 2026.02)",
   },
   {
     label: "Furiosa AI · SWE, Agent System",
@@ -117,16 +117,16 @@ const recognition = [
   },
   {
     label: "Nexon AI Engineer 면접 진출",
-    detail: "코딩 과제 합격, 면접 탈락 — GEODE의 시작점이 된 전형",
+    detail: "코딩 과제 합격, 면접 탈락. GEODE의 시작점이 된 전형",
   },
   {
-    label: "기술 블로그 361편 / YouTube 213 subs",
+    label: "기술 블로그 / YouTube",
     detail: "rooftopsnow.tistory.com / Harness 카테고리",
   },
 ];
 
 const influences = [
-  { name: "Andrej Karpathy", note: "LLM-OS sketch (Intro to LLMs, 2023), autoresearch ratchet discipline (P1–P10)" },
+  { name: "Andrej Karpathy", note: "LLM-OS sketch (Intro to LLMs, 2023), autoresearch ratchet discipline (P1 to P10)" },
   { name: "Anthropic Claude Code", note: "while(tool_use) primitive, hook system, CLAUDE.md 스캐폴드 패턴" },
   { name: "OpenClaw", note: "Policy Chain, Lane Queue, Session 격리, Plugin discovery" },
   { name: "Hermes Agent", note: "system_and_3 cache_control, 멀티채널 personal agent 패턴" },
@@ -156,7 +156,7 @@ function ProjectEntry({ e }: { e: Entry }) {
         >
           {e.titleKo}
           <span className="ml-2 font-sans text-[14px] font-normal text-[var(--ink-1)]">
-            — {e.taglineKo}
+            {e.taglineKo}
           </span>
         </h3>
         {e.bodyKo && (
