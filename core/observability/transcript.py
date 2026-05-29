@@ -52,7 +52,15 @@ def _get_default_transcript_dir() -> Path:
 
 
 DEFAULT_TRANSCRIPT_DIR = _get_default_transcript_dir()
-MAX_TEXT_CHARS = 500
+# PR-TRANSCRIPT-FULL-BODY (2026-05-29) — the ``dialogue.jsonl`` turn body is now
+# captured in full (up to MAX_BODY_CHARS, a sanity ceiling far above any real
+# turn; the 5 MB MAX_FILE_BYTES guard + tail-truncate bound the *file*). Only the
+# preview lifted up into the pipeline-timeline RunTranscript stays short — which
+# is exactly the split ``_mirror_to_run_transcript`` always documented ("the full
+# body stays in dialogue.jsonl"). Previously one 500-char ``_truncate`` fed BOTH
+# the body and the preview, so the recorded turn was a fragment cut mid-object.
+MAX_BODY_CHARS = 100_000
+MAX_PREVIEW_CHARS = 500
 MAX_INPUT_CHARS = 300
 CLEANUP_AGE_DAYS = 30
 MAX_FILE_BYTES = 5 * 1024 * 1024  # 5MB per transcript
@@ -181,23 +189,23 @@ class SessionTranscript:
         self._update_index()
 
     def record_user_message(self, text: str) -> None:
-        truncated = _truncate(text, MAX_TEXT_CHARS)
-        self._append({"event": "user_message", "text": truncated})
+        # Full body to dialogue.jsonl; a short preview to the pipeline timeline.
+        self._append({"event": "user_message", "text": _truncate(text, MAX_BODY_CHARS)})
         self._mirror_to_run_transcript(
             action="agent.user_message",
             entity_type="task",
             entity_id=self._session_id,
-            details={"text": truncated},
+            details={"text": _truncate(text, MAX_PREVIEW_CHARS)},
         )
 
     def record_assistant_message(self, text: str) -> None:
-        truncated = _truncate(text, MAX_TEXT_CHARS)
-        self._append({"event": "assistant_message", "text": truncated})
+        # Full body to dialogue.jsonl; a short preview to the pipeline timeline.
+        self._append({"event": "assistant_message", "text": _truncate(text, MAX_BODY_CHARS)})
         self._mirror_to_run_transcript(
             action="agent.assistant_message",
             entity_type="task",
             entity_id=self._session_id,
-            details={"text": truncated},
+            details={"text": _truncate(text, MAX_PREVIEW_CHARS)},
         )
 
     def record_tool_call(self, tool: str, tool_input: dict[str, Any]) -> None:
@@ -317,7 +325,7 @@ class SessionTranscript:
             {
                 "event": "error",
                 "type": error_type,
-                "msg": _truncate(message, MAX_TEXT_CHARS),
+                "msg": _truncate(message, MAX_BODY_CHARS),
             }
         )
 

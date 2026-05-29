@@ -6,8 +6,9 @@ import json
 import time
 
 from core.observability.transcript import (
+    MAX_BODY_CHARS,
     MAX_INPUT_CHARS,
-    MAX_TEXT_CHARS,
+    MAX_PREVIEW_CHARS,
     SessionTranscript,
     _truncate,
     cleanup_old_transcripts,
@@ -94,13 +95,58 @@ class TestSessionTranscript:
         assert events[0]["event"] == "subagent_start"
         assert events[1]["event"] == "subagent_complete"
 
-    def test_text_truncation(self, tmp_path):
+    def test_body_captured_in_full(self, tmp_path):
+        # PR-TRANSCRIPT-FULL-BODY — the dialogue.jsonl turn body is NO LONGER
+        # capped at the old 500 preview limit; a real-size turn is kept whole.
         tx = SessionTranscript("s-trunc", tmp_path / "transcripts")
         long_text = "x" * 1000
         tx.record_user_message(long_text)
 
         events = tx.read_events()
-        assert len(events[0]["text"]) == MAX_TEXT_CHARS
+        assert events[0]["text"] == long_text  # full body, not a 500-char fragment
+
+    def test_body_capped_at_ceiling(self, tmp_path):
+        # The only bound on a single turn is the MAX_BODY_CHARS sanity ceiling
+        # (so one pathological turn cannot dwarf the 5MB file guard).
+        tx = SessionTranscript("s-trunc-ceiling", tmp_path / "transcripts")
+        tx.record_assistant_message("y" * (MAX_BODY_CHARS + 5000))
+
+        events = tx.read_events()
+        assert len(events[0]["text"]) == MAX_BODY_CHARS
+        assert events[0]["text"].endswith("...")
+
+    def test_pipeline_preview_stays_short(self, tmp_path):
+        # The split the mirror always documented: the FULL body lands in
+        # dialogue.jsonl, only a short PREVIEW is lifted into the pipeline
+        # timeline (RunTranscript). Pinned so a future edit can't re-truncate
+        # the body or let the preview balloon.
+        import json
+
+        from core.observability.run_dir import run_dir_scope
+        from core.self_improving_loop.run_transcript import (
+            RunTranscript,
+            run_transcript_scope,
+        )
+
+        long_text = "z" * 4000
+        run_path = tmp_path / "transcript.jsonl"
+        with run_dir_scope(str(tmp_path)):
+            journal = RunTranscript(
+                session_id="s-mirror",
+                gen_tag="gen1",
+                component="seed-generation",
+                path=run_path,
+            )
+            with run_transcript_scope(journal):
+                tx = SessionTranscript("s-mirror", tmp_path / "transcripts")
+                tx.record_assistant_message(long_text)
+
+        # dialogue.jsonl body is full…
+        assert tx.read_events()[0]["text"] == long_text
+        # …but the mirrored pipeline-timeline row is a short preview.
+        rows = [json.loads(ln) for ln in run_path.read_text().splitlines() if ln.strip()]
+        mirror = next(r for r in rows if r.get("action") == "agent.assistant_message")
+        assert len(mirror["payload"]["text"]) <= MAX_PREVIEW_CHARS
 
     def test_input_truncation(self, tmp_path):
         tx = SessionTranscript("s-trunc2", tmp_path / "transcripts")
