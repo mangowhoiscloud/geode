@@ -37,7 +37,6 @@ Test strategy:
 
 from __future__ import annotations
 
-import contextlib
 import dataclasses
 import json
 import logging
@@ -66,12 +65,9 @@ __all__ = [
     "Proposal",
     "RunnerContext",
     "SelfImprovingLoopRunner",
-    "_compute_group_advantage",
-    "append_group_variance_history",
     "apply_mutation",
     "build_runner_context",
     "parse_mutation",
-    "resolve_group_variance_threshold",
 ]
 
 
@@ -111,12 +107,6 @@ class ApplyRecord(BaseModel):
     cost_elapsed_seconds: float | None = None
     cost_model: str | None = None
     audit_run_id: str | None = None
-    group_id: str | None = None
-    """P1-revised — group sampling cross-ref key. 같은 cycle 의 N sibling
-    apply row + attribution row 가 모두 같은 group_id 를 가져 group statistic
-    재구성 가능. group_size=1 (legacy) 일 때 None."""
-    group_advantage: float | None = None
-    """P1-revised — advantage normalization z-score. group_size=1 일 때 None."""
     principle: str | None = Field(default=None, max_length=1000)
     """P3-revised (2026-05-25, SPCT) — mutator 가 mutation 직전 명시
     한 self-generated judging principle. SPCT (DeepSeek-GRM 2026-Q1) 패턴.
@@ -132,13 +122,6 @@ class ApplyRecord(BaseModel):
     이라면 causal_hypothesis 는 *causal chain*. post-audit observed_dim
     이 hypothesis 와 일치하는지 cross-check (별도 wiring). None 일 때
     legacy (CRM 이전). max 500 chars (parse_mutation guard)."""
-    swarm_id: str | None = None
-    """P4 (2026-05-25, Kimi K2.6 PARL inference-time) — swarm-level grouping
-    key. multi-level: swarm_id (level 2) + group_id (level 1). 1=disabled
-    legacy."""
-    sub_agent_index: int | None = None
-    """P4 — sub-agent index (0..sub_agent_count-1) in the swarm.
-    contribution decomposition 시 식별 key."""
 
 
 @dataclass(frozen=True)
@@ -217,10 +200,6 @@ class Mutation:
         baseline_fitness: float | None = None,
         audit_run_id: str = "",
         kind: str = "applied",
-        group_id: str = "",
-        group_advantage: float | None = None,
-        swarm_id: str = "",
-        sub_agent_index: int | None = None,
     ) -> dict[str, Any]:
         """Render the mutation as one audit-log row.
 
@@ -231,12 +210,6 @@ class Mutation:
         W3 (2026-05-25 attribution wiring) — ``audit_run_id`` parameter
         추가. ``Mutation`` 자체는 frozen dataclass 라 LLM 응답 구조
         immutable 유지; audit_run_id 는 runner-side context.
-
-        P1-revised (2026-05-25 baseline RL grounding) — ``kind`` /
-        ``group_id`` / ``group_advantage`` parameter 추가. group sampling
-        의 sibling row (``kind="applied_sibling"``) + group cross-ref.
-        group_size=1 (legacy) 일 때 default 그대로 (``kind="applied"``,
-        group_id="" → row 에서 column 생략).
         """
         row: dict[str, Any] = {
             "ts": timestamp if timestamp is not None else time.time(),
@@ -254,17 +227,6 @@ class Mutation:
         }
         if audit_run_id:
             row["audit_run_id"] = audit_run_id
-        if group_id:
-            row["group_id"] = group_id
-        if group_advantage is not None:
-            row["group_advantage"] = round(float(group_advantage), 6)
-        # P4 (2026-05-25, PR-14 wiring) — multi-level swarm grouping.
-        # ``sub_agent_index=0`` 이 valid (첫 sub-agent) 이므로 None 으로
-        # 구분 — legacy non-swarm mode 는 None.
-        if swarm_id:
-            row["swarm_id"] = swarm_id
-        if sub_agent_index is not None:
-            row["sub_agent_index"] = int(sub_agent_index)
         # PR-SIL-5THEME C4 — cost 컬럼은 non-zero 일 때만 emit. 0 값
         # (legacy 또는 mock LLM 호출) 은 column 자체 생략 — JSONL 의
         # noise 절감 + legacy reader 무영향.
@@ -1320,265 +1282,6 @@ def _parse_dim_means_from_subprocess_stdout(
     return {}
 
 
-def _select_best_idx(
-    *,
-    advantages: list[float],
-    sibling_dim_means: list[dict[str, float]],
-    pareto_mode: bool,
-    group_id: str,
-) -> int:
-    """Pick the winning sibling index from a group audit.
-
-    Default (``pareto_mode`` off, or any sibling missing its dim vector):
-    linear top-1 by the GRPO-whitened advantage — unchanged legacy
-    behaviour.
-
-    ``pareto_mode`` on **and** every sibling carries a full dim vector:
-    Tchebycheff (worst-weighted-gap) selection. Each sibling's raw
-    ``dim_means`` is transformed to higher-is-better scores via
-    ``_dim_score``; the ideal point z* is the per-dim best across the
-    group; the winner minimises the max weighted gap to z*
-    (``compute_tchebycheff`` returns the negated gap, so ``argmax`` =
-    closest to ideal). ``DIM_WEIGHTS`` are reused as the Tchebycheff
-    weights so a critical-axis gap (weight 0.10) dominates an auxiliary
-    gap (~0.0333) — a non-compensatory, safety-first selection that the
-    linear scalar advantage cannot express. Both candidate indices are
-    logged for comparison.
-    """
-    linear_idx = max(range(len(advantages)), key=lambda i: advantages[i])
-    if not pareto_mode:
-        return linear_idx
-    if len(sibling_dim_means) != len(advantages) or any(not dm for dm in sibling_dim_means):
-        log.warning(
-            "self-improving-loop: group %s — pareto_mode set but sibling dim "
-            "vectors incomplete (%d/%d non-empty); linear advantage selection",
-            group_id,
-            sum(1 for dm in sibling_dim_means if dm),
-            len(advantages),
-        )
-        return linear_idx
-
-    from autoresearch.train import DIM_WEIGHTS, _dim_score
-
-    from core.self_improving_loop.tchebycheff import (
-        compute_ideal_point,
-        compute_tchebycheff,
-    )
-
-    score_vectors = [
-        {dim: _dim_score(means[dim]) for dim in DIM_WEIGHTS if dim in means}
-        for means in sibling_dim_means
-    ]
-    # Score every sibling on the SAME axes — the intersection of weighted
-    # dims present in all siblings. Without this a sibling whose raw vector
-    # has no DIM_WEIGHTS overlap (or only a partial set) would yield an
-    # empty / short score vector and a Tchebycheff scalar of 0.0, which —
-    # since real scalars are negated gaps (≤ 0) — would spuriously beat
-    # every genuine sibling at ``argmax``. Empty intersection ⇒ linear
-    # fallback (no fair multi-dim comparison is possible).
-    common_dims = set.intersection(*(set(v) for v in score_vectors))
-    if not common_dims:
-        log.warning(
-            "self-improving-loop: group %s — no weighted dim common to all "
-            "siblings; linear advantage selection",
-            group_id,
-        )
-        return linear_idx
-    score_vectors = [{dim: vec[dim] for dim in common_dims} for vec in score_vectors]
-    ideal = compute_ideal_point(score_vectors)
-    tcheby = [
-        compute_tchebycheff(vec, weights=DIM_WEIGHTS, ideal_point=ideal) for vec in score_vectors
-    ]
-    tcheby_idx = max(range(len(tcheby)), key=lambda i: tcheby[i])
-    log.info(
-        "self-improving-loop: group %s — selection linear=sibling[%d] "
-        "tchebycheff=sibling[%d] (tcheby scalars=%s)",
-        group_id,
-        linear_idx,
-        tcheby_idx,
-        [round(t, 4) for t in tcheby],
-    )
-    return tcheby_idx
-
-
-def append_group_variance_history(
-    *,
-    group_id: str,
-    target_kind: str,
-    std: float,
-    n_siblings: int,
-    history_path: Path | None = None,
-) -> bool:
-    """Append one row to ``group_variance_history.jsonl``.
-
-    PR-VAR-ADAPTIVE (2026-05-27) — feeds the percentile resolver.
-    Every group-sampling cycle (regardless of accept/reject) appends
-    its observed std so the threshold can adapt to fitness-scale
-    drift without operator intervention.
-
-    Best-effort: any OSError (parent missing, disk full) logs at
-    WARNING and returns False. Callers ignore the return value
-    because telemetry failure must not break the mutator loop.
-    """
-    from core.paths import GROUP_VARIANCE_HISTORY_PATH
-
-    target = history_path if history_path is not None else GROUP_VARIANCE_HISTORY_PATH
-    row = {
-        "ts": time.time(),
-        "group_id": group_id,
-        "target_kind": target_kind,
-        "std": float(std),
-        "n_siblings": int(n_siblings),
-    }
-    try:
-        target.parent.mkdir(parents=True, exist_ok=True)
-        with target.open("a", encoding="utf-8") as fh:
-            fh.write(json.dumps(row, ensure_ascii=False) + "\n")
-    except OSError as exc:
-        log.warning("self-improving-loop: variance history append failed: %s", exc)
-        return False
-    return True
-
-
-def resolve_group_variance_threshold(
-    cfg_autoresearch: Any,
-    *,
-    target_kind: str | None = None,
-    history_path: Path | None = None,
-) -> tuple[float, str]:
-    """Resolve the variance gate threshold for the upcoming cycle.
-
-    PR-VAR-ADAPTIVE (2026-05-27) — when
-    ``group_variance_threshold_mode == "percentile"`` and the history
-    file contains at least ``group_variance_history_window`` entries
-    matching ``target_kind`` (or pooled across kinds when
-    ``target_kind`` is None), returns the corresponding percentile of
-    historical ``std`` values. Otherwise returns the legacy fixed
-    ``group_variance_threshold`` value.
-
-    Returns ``(threshold, source)`` where ``source`` is ``"fixed"`` or
-    ``"percentile"`` so callers can log which path fired (useful for
-    operators watching the adaptive knob converge on a stable value).
-
-    Best-effort: missing file / malformed rows / read OSError all
-    fall through to the fixed value (legacy behaviour preserved).
-    """
-    from core.paths import GROUP_VARIANCE_HISTORY_PATH
-
-    fixed = float(cfg_autoresearch.group_variance_threshold)
-    if getattr(cfg_autoresearch, "group_variance_threshold_mode", "fixed") != "percentile":
-        return fixed, "fixed"
-
-    window = int(getattr(cfg_autoresearch, "group_variance_history_window", 30))
-    percentile = float(getattr(cfg_autoresearch, "group_variance_percentile", 0.05))
-
-    target = history_path if history_path is not None else GROUP_VARIANCE_HISTORY_PATH
-    if not target.is_file():
-        return fixed, "fixed"
-
-    matched_stds: list[float] = []
-    try:
-        with target.open("r", encoding="utf-8") as fh:
-            for line in fh:
-                line = line.strip()
-                if not line:
-                    continue
-                try:
-                    row = json.loads(line)
-                except json.JSONDecodeError:
-                    continue
-                if not isinstance(row, dict):
-                    continue
-                if target_kind is not None and row.get("target_kind") != target_kind:
-                    continue
-                raw_std = row.get("std")
-                if isinstance(raw_std, int | float):
-                    matched_stds.append(float(raw_std))
-    except OSError:
-        log.warning("self-improving-loop: variance history read failed", exc_info=True)
-        return fixed, "fixed"
-
-    if len(matched_stds) < window:
-        return fixed, "fixed"
-
-    # Take the most recent ``window`` entries (history is append-only
-    # so file order == chronological).
-    recent = matched_stds[-window:]
-    recent_sorted = sorted(recent)
-    # Linear-interpolation percentile (matches numpy.quantile default).
-    pos = percentile * (len(recent_sorted) - 1)
-    lo_idx = int(pos)
-    hi_idx = min(lo_idx + 1, len(recent_sorted) - 1)
-    frac = pos - lo_idx
-    interpolated = recent_sorted[lo_idx] * (1 - frac) + recent_sorted[hi_idx] * frac
-    return interpolated, "percentile"
-
-
-def _compute_group_advantage(
-    fitness_values: list[float],
-    threshold: float,
-    *,
-    mutator_temperature: float,
-) -> tuple[list[float] | None, str]:
-    """P1-revised (2026-05-25) — DAPO-inspired variance gate + GRPO-inspired group-relative scoring.
-
-    **Not policy optimization; no parameter update; no gradient.** This is
-    an *inference-time* candidate-selection heuristic — N sibling
-    mutations are audited in parallel, low-signal groups (std < ε) are
-    skipped, and the remaining group's z-score is used to pick top-1
-    for canonical SoT commit.
-
-    Plan: ``docs/plans/2026-05-25-baseline-fitness-rl-grounding.md`` §4.1.
-
-    Frontier inspiration (concept reference only — abstract-level
-    descriptions verified via WebFetch 2026-05-26; specific formulas
-    are NOT formally cited here because the PDF full-text was not
-    full-text-audited for this sprint; do not re-claim any specific
-    DAPO/GRPO result as "exact" without re-verifying against the PDF):
-
-    - DAPO (ByteDance/Tsinghua, arXiv 2503.14476). Abstract introduces
-      "Decoupled Clip and Dynamic Sampling Policy Optimization". The
-      idea of skipping low-signal sampling groups is what GEODE
-      borrows for *selection-time* filtering — distinct from DAPO's
-      *training-time* use.
-    - GRPO (DeepSeekMath, arXiv 2402.03300). Abstract describes GRPO
-      as a PPO variant using group-relative scoring. GEODE uses
-      group-relative z-score ranking as a *selection* score for
-      top-1 sibling mutation commit — distinct from GRPO's use as a
-      policy-update advantage.
-
-    Returns (scores, status):
-    - status="ok" + scores = z-score ranking if group std > threshold
-    - status="filtered_low_variance" + scores=None if std < threshold
-      → caller cycle skip (audit cost wasted 회피)
-    - status="group_too_small" if N < 2 (legacy group_size=1 mode 는 caller
-      가 본 helper 호출 안 함, 본 분기는 invariant test 용)
-
-    Raises RuntimeError when ``mutator_temperature`` < 0.1 — deterministic
-    mutation 은 N rollout 모두 같음 → group std=0 → variance filter 영구
-    trigger → loop 영구 cycle skip 의 silent infinite-loop. plan §6 risk 표.
-    """
-    if mutator_temperature < 0.1:
-        raise RuntimeError(
-            f"P1-revised group sampling requires mutator temperature >= 0.1 "
-            f"(current: {mutator_temperature}). Deterministic mutation 은 N "
-            f"rollout 모두 같음 → group std=0 → variance filter 영구 trigger. "
-            f"Settings.temperature_self_improving_mutation (env "
-            f"GEODE_TEMPERATURE_SELF_IMPROVING_MUTATION) 을 >= 0.1 로 override."
-        )
-    n = len(fitness_values)
-    if n < 2:
-        return None, "group_too_small"
-    mean_val = sum(fitness_values) / n
-    var_val = sum((r - mean_val) ** 2 for r in fitness_values) / n
-    std_val = var_val**0.5
-    if std_val < threshold:
-        return None, "filtered_low_variance"
-    eps = 1e-8
-    advantages = [(r - mean_val) / (std_val + eps) for r in fitness_values]
-    return advantages, "ok"
-
-
 def append_audit_log(
     mutation: Mutation,
     *,
@@ -1587,10 +1290,6 @@ def append_audit_log(
     log_path: Path | None = None,
     audit_run_id: str = "",
     kind: str = "applied",
-    group_id: str = "",
-    group_advantage: float | None = None,
-    swarm_id: str = "",
-    sub_agent_index: int | None = None,
 ) -> Path:
     """Append one mutation row to the git-tracked audit jsonl.
 
@@ -1600,11 +1299,6 @@ def append_audit_log(
     W3 (2026-05-25 attribution wiring) — ``audit_run_id`` forwarded to
     ``Mutation.to_audit_row`` so the apply row carries the cross-ref
     key to the matching attribution row.
-
-    P1-revised (2026-05-25 baseline RL grounding) — ``kind`` / ``group_id``
-    / ``group_advantage`` forwarded. group sampling 의 sibling row
-    (``kind="applied_sibling"``) + group cross-ref. group_size=1 (legacy)
-    일 때 default 그대로.
     """
     target = log_path if log_path is not None else MUTATION_AUDIT_LOG_PATH
     target.parent.mkdir(parents=True, exist_ok=True)
@@ -1613,10 +1307,6 @@ def append_audit_log(
         baseline_fitness=baseline_fitness,
         audit_run_id=audit_run_id,
         kind=kind,
-        group_id=group_id,
-        group_advantage=group_advantage,
-        swarm_id=swarm_id,
-        sub_agent_index=sub_agent_index,
     )
     # W4 (2026-05-25) — Pydantic schema validation. drift 가 발생하면
     # ValidationError 가 fail-fast 로 raise → 잘못된 row 가 git-tracked
@@ -1999,581 +1689,9 @@ class SelfImprovingLoopRunner:
             baseline_fitness=baseline_fitness,
         )
 
-    def propose_group(self, n: int) -> list[Proposal]:
-        """P1-revised (2026-05-25) — propose N sibling Mutations in parallel.
-
-        Frontier inspiration: GRPO-inspired group sampling (DeepSeekMath
-        arXiv 2402.03300 — borrows the N-sibling-parallel idea, not the
-        policy-update gradient) + Promptbreeder 의 multi-prompt 동시 평가.
-        plan ``docs/plans/2026-05-25-baseline-fitness-rl-grounding.md`` §4.3 MVP scope.
-
-        Each sibling shares the same baseline state (same system + user
-        prompt). Stochasticity comes from ``Settings.temperature_self_improving_mutation``
-        (default 1.0, must be >= 0.1 — see _compute_group_advantage guard).
-        N parallel calls run in a ThreadPoolExecutor — mutator API endpoint
-        is stateless and each call is independent.
-
-        - ``n=1`` → returns ``[self.propose()]`` (legacy fallback)
-        - ``n>=2`` → parallel propose, N distinct Proposals (stochastic)
-
-        Audit cost is N × per-cycle audit cost (apply_group_proposals
-        spawns N sequential audit subprocesses); mutator LLM cost is N ×
-        per-call cost (parallel here).
-        """
-        if n < 1:
-            # Codex MCP review (slop) — n=0/negative 의 silent single propose
-            # 는 misleading. config knob 은 ``Field(ge=1, le=8)`` 라 정상
-            # path 에서 도달 안 함, 단 direct call 의 type-confusion 방지.
-            raise ValueError(f"propose_group: n must be >= 1, got {n}")
-        if n == 1:
-            return [self.propose()]
-        import concurrent.futures
-        import contextvars
-
-        # Codex MCP review (slop) — ThreadPoolExecutor 는 ContextVar 를 자동
-        # 전파하지 않는다. session metrics / cost ledger ContextVar 가 thread
-        # 안에서 unset → parent session aggregate 와 분리될 위험. 각 submit
-        # 마다 ``copy_context()`` 로 main thread 의 ctx snapshot 을 fresh copy
-        # 해 thread 안에서 run — 같은 Context 객체를 여러 thread 에서 enter
-        # 할 수 없는 제약 (RuntimeError "already entered") 회피.
-
-        def _propose_with_fresh_ctx() -> Proposal:
-            return contextvars.copy_context().run(self.propose)
-
-        proposals: list[Proposal] = []
-        with concurrent.futures.ThreadPoolExecutor(max_workers=n) as executor:
-            futures = [executor.submit(_propose_with_fresh_ctx) for _ in range(n)]
-            for future in concurrent.futures.as_completed(futures):
-                proposals.append(future.result())
-        return proposals
-
-    def apply_group_proposals(
-        self,
-        proposals: list[Proposal],
-        *,
-        swarm_id: str = "",
-        sub_agent_index: int | None = None,
-        _resample_attempt: int = 0,
-    ) -> Mutation | None:
-        """P1-revised (2026-05-25) — apply N sibling proposals → audit →
-        variance gate → group-relative scoring → top-1 commit.
-
-        Frontier inspiration: DAPO-inspired variance gate (arXiv 2503.14476;
-        skip low-signal groups) + GRPO-inspired whitening (DeepSeekMath
-        arXiv 2402.03300; z-score ranking, used here as a *selection*
-        score, not a policy-update advantage). plan §4.3 + §5 (W3 env
-        propagation infra 재활용).
-
-        Steps:
-
-        1. Mint single ``group_id`` for the cycle.
-        2. For each sibling: write sibling SoT to OS temp file
-           (``write_sibling_in_memory``) — does NOT touch the canonical
-           ``autoresearch/state/policies/*.json`` SoT. Production
-           AgenticLoop 의 reader 는 이 temp file 을 안 봄.
-        3. Spawn N audit subprocesses sequentially (OL-P2 audit_lane=1
-           host enforcement preserved). Each subprocess receives the
-           sibling temp SoT path via env (``GEODE_<KIND>_OVERRIDE`` —
-           W3 STRICT-mode infra) + ``GEODE_SIL_GROUP_ID`` + per-sibling
-           ``GEODE_SIL_AUDIT_RUN_ID`` / ``GEODE_SIL_MUTATION_ID`` /
-           ``GEODE_SIL_EXPECTED_DIM`` (W2/W3 PR-3 infra).
-        4. Parse fitness from subprocess stdout (``FITNESS_RESULT: <json>``
-           sentinel printed by ``autoresearch/train.py`` end-of-run).
-        5. ``_compute_group_advantage`` — variance filter + whitening.
-           ``status="filtered_low_variance"`` → cycle skip, no SoT commit,
-           sibling temp files cleaned. Returns ``None``.
-        6. ``status="ok"`` → top-1 by advantage. Apply top-1 mutation to
-           canonical SoT via ``apply_mutation`` + ``append_audit_log``
-           with ``kind="applied"`` + ``group_id`` + ``group_advantage``.
-           Sibling rows (N-1) written with ``kind="applied_sibling"``.
-
-        Returns the accepted Mutation, or ``None`` if variance filter
-        triggered (cycle skipped).
-
-        Requires ``rerun_enabled=True`` — group advantage 가 real fitness
-        에 의존하므로 audit 가 실제로 fire 되어야 함.
-        """
-        # PR-VAR-ADAPTIVE (2026-05-27) Codex MCP review must-fix #1 —
-        # enforce homogeneous ``target_kind`` across siblings BEFORE
-        # any audit cost or rerun-enabled gate. The variance signal is
-        # only meaningful when N siblings touch the same SoT surface
-        # (different surfaces have different std scales, so mixing
-        # collapses the percentile resolver's per-kind filter).
-        if proposals:
-            _kinds = {p.mutation.target_kind for p in proposals}
-            if len(_kinds) > 1:
-                raise ValueError(
-                    f"apply_group_proposals requires homogeneous target_kind "
-                    f"across siblings (variance signal is per-kind, see "
-                    f"PR-VAR-ADAPTIVE); got {_kinds!r}"
-                )
-
-        if len(proposals) == 1:
-            return self.apply_proposal(
-                proposals[0],
-                swarm_id=swarm_id,
-                sub_agent_index=sub_agent_index,
-            )
-        if not self.rerun_enabled:
-            raise RuntimeError(
-                "P1-revised group sampling requires rerun_enabled=True "
-                "(group advantage needs actual fitness from audit). "
-                "Use apply_proposal() with a single proposal for "
-                "rerun_disabled mode."
-            )
-        if self.rerun_dry_run:
-            # Codex MCP review #4 (2026-05-25) — dry-run synthetic fitness 는
-            # 모든 sibling 에 deterministic 값 (autoresearch/train.py:770+
-            # hardcoded dim_means) → group std=0 → variance filter 영구 trigger
-            # → group 영구 skip 의 silent dead loop. 또한 train.py 의 W2 hook 가
-            # ``if not args.dry_run`` 분기로 attribution row 자체 안 만듦.
-            # rerun_dry_run=True 와 group N>=2 는 양립 불가능.
-            raise RuntimeError(
-                "P1-revised group sampling requires rerun_dry_run=False "
-                "for N>=2 (dry-run synthesises deterministic fitness → "
-                "group std=0 → variance filter 영구 trigger + attribution "
-                "row 미작성). Either set rerun_dry_run=False to spend real "
-                "audit budget, or use apply_proposal() with a single proposal."
-            )
-
-        from core.config import settings
-        from core.config.self_improving_loop import load_self_improving_loop_config
-
-        cfg = load_self_improving_loop_config()
-        # PR-VAR-ADAPTIVE (2026-05-27) — variance gate threshold resolved
-        # via ``resolve_group_variance_threshold``. When
-        # ``group_variance_threshold_mode == "percentile"`` and the
-        # history has >= window entries for this target_kind, the
-        # threshold adapts to fitness-scale drift; otherwise falls
-        # through to the legacy fixed value. ``threshold_source`` is
-        # logged so operators can verify the adaptive knob is firing.
-        # Homogeneous ``target_kind`` is already enforced at function
-        # entry above (PR-VAR-ADAPTIVE Codex MCP review must-fix #1).
-        _resolve_kind = proposals[0].mutation.target_kind if proposals else None
-        # Codex MCP review must-fix #2 — threshold is re-resolved on each
-        # ``_resample_attempt`` (the recursive call re-enters this
-        # function), which means a resample sees the just-appended std
-        # of the failed attempt. This is intentional: each retry is a
-        # fresh selection cycle and the threshold should reflect the
-        # latest percentile. To freeze across retries, an operator
-        # would set ``mode="fixed"`` (which ignores history entirely).
-        threshold, threshold_source = resolve_group_variance_threshold(
-            cfg.autoresearch, target_kind=_resolve_kind
-        )
-        mutator_temp = settings.temperature_self_improving_mutation
-
-        # Codex MCP review #5 (2026-05-25) — temperature guard 를 N audit 비용
-        # 지출 전에 raise 하도록 사전 fire. _compute_group_advantage 도 동일
-        # guard 보유 (defense in depth).
-        if mutator_temp < 0.1:
-            raise RuntimeError(
-                f"P1-revised group sampling requires mutator temperature >= 0.1 "
-                f"(current: {mutator_temp}). Settings.temperature_self_improving_mutation "
-                f"또는 GEODE_TEMPERATURE_SELF_IMPROVING_MUTATION env 를 >= 0.1 로 set."
-            )
-
-        group_id = _mint_audit_run_id()
-        log.info(
-            "self-improving-loop: group %s — N=%d sibling propose+audit start",
-            group_id,
-            len(proposals),
-        )
-
-        fitness_values: list[float] = []
-        sibling_dim_means: list[dict[str, float]] = []  # PR-SIL-MULTIOBJ A1
-        audit_run_ids: list[str] = []
-        sibling_sot_paths: list[Path] = []
-        sibling_previous_values: list[str] = []
-
-        try:
-            for idx, proposal in enumerate(proposals):
-                # In-memory (= OS temp file) sibling SoT
-                new_sections, previous_value, sibling_sot_path = (
-                    _apply_sibling_in_memory_with_value(proposal)
-                )
-                sibling_sot_paths.append(sibling_sot_path)
-                sibling_previous_values.append(previous_value)
-
-                audit_run_id = _mint_audit_run_id()
-                audit_run_ids.append(audit_run_id)
-
-                # parents[2] = repo root (see apply_proposal note above —
-                # MUTATION_AUDIT_LOG_PATH = <repo>/autoresearch/state/mutations.jsonl).
-                repo_root = (self.audit_log_path or MUTATION_AUDIT_LOG_PATH).resolve().parents[2]
-
-                proc = _run_autoresearch_subprocess(
-                    repo_root=repo_root,
-                    dry_run=self.rerun_dry_run,
-                    audit_run_id=audit_run_id,
-                    mutation_id=proposal.mutation.mutation_id,
-                    expected_dim=proposal.mutation.expected_dim,
-                    sibling_sot_kind=proposal.mutation.target_kind,
-                    sibling_sot_path=sibling_sot_path,
-                    group_id=group_id,
-                    no_promote=True,
-                )
-                fitness = _parse_fitness_from_subprocess_stdout(
-                    proc.stdout, audit_run_id=audit_run_id, sibling_idx=idx
-                )
-                fitness_values.append(fitness)
-                # PR-SIL-MULTIOBJ A1 — capture the per-dim vector only when
-                # pareto_mode is on (the sole consumer is the Tchebycheff
-                # selection below); pareto-off keeps the legacy linear path
-                # with zero extra parsing.
-                if cfg.autoresearch.pareto_mode:
-                    sibling_dim_means.append(
-                        _parse_dim_means_from_subprocess_stdout(
-                            proc.stdout, audit_run_id=audit_run_id, sibling_idx=idx
-                        )
-                    )
-
-            advantages, status = _compute_group_advantage(
-                fitness_values,
-                threshold,
-                mutator_temperature=mutator_temp,
-            )
-
-            # PR-VAR-ADAPTIVE (2026-05-27) — append the observed group
-            # std to the history file (best-effort; failure logs WARNING
-            # but doesn't break the cycle). The resolver above reads
-            # this on the *next* cycle to compute the percentile
-            # threshold, so the gate self-adapts to fitness-scale drift.
-            # We log regardless of filtered/ok status — both are valid
-            # variance signals to learn from.
-            if len(fitness_values) >= 2:
-                _mean = sum(fitness_values) / len(fitness_values)
-                _observed_std = (
-                    sum((v - _mean) ** 2 for v in fitness_values) / len(fitness_values)
-                ) ** 0.5
-                append_group_variance_history(
-                    group_id=group_id,
-                    target_kind=_resolve_kind or "",
-                    std=_observed_std,
-                    n_siblings=len(fitness_values),
-                )
-
-            if status == "filtered_low_variance":
-                # PR-RESAMPLE-BUDGET (2026-05-27) — when
-                # ``resample_on_low_variance=True`` and we haven't
-                # exhausted ``max_group_resamples``, propose a fresh
-                # sibling group and retry the audit. DAPO frontier
-                # equivalent: ``max_num_gen_batches`` informative-batch
-                # retention. The default config (budget=0, flag=False)
-                # preserves the legacy "filtered → cycle skip" behaviour.
-                _max_resamples = (
-                    int(cfg.autoresearch.max_group_resamples)
-                    if cfg.autoresearch.resample_on_low_variance
-                    else 0
-                )
-                if _resample_attempt < _max_resamples:
-                    log.info(
-                        "self-improving-loop: group %s filtered (low variance, "
-                        "std < %s, source=%s). resample attempt %d/%d.",
-                        group_id,
-                        threshold,
-                        threshold_source,
-                        _resample_attempt + 1,
-                        _max_resamples,
-                    )
-                    # Cleanup sibling temp files of this attempt before
-                    # recursing — the new attempt will create its own.
-                    for sibling_path in sibling_sot_paths:
-                        with contextlib.suppress(OSError):
-                            sibling_path.unlink(missing_ok=True)
-                    new_proposals = self.propose_group(len(proposals))
-                    return self.apply_group_proposals(
-                        new_proposals,
-                        swarm_id=swarm_id,
-                        sub_agent_index=sub_agent_index,
-                        _resample_attempt=_resample_attempt + 1,
-                    )
-                log.info(
-                    "self-improving-loop: group %s filtered (low variance, "
-                    "std < %s, source=%s). cycle skipped, no SoT commit "
-                    "(after %d resample attempt(s)).",
-                    group_id,
-                    threshold,
-                    threshold_source,
-                    _resample_attempt,
-                )
-                return None
-            if status != "ok" or advantages is None:
-                log.warning(
-                    "self-improving-loop: group %s status=%s; no advantage computed",
-                    group_id,
-                    status,
-                )
-                return None
-
-            # PR-15 A.1 (2026-05-25) — pareto_mode archive writer wiring.
-            # config.pareto_mode=True 시 N sibling 의 fitness vector 를
-            # baseline_archive.jsonl 에 append (Pareto non-dominated insert
-            # 자동, dominated entry prune). selection layer (top-1) 는 그대로
-            # linear advantage 유지 — multi-dim vector 가 audit subprocess
-            # 의 dim_means 까지 capture 되는 후속 PR 에서 archive sampler 로
-            # 전환. 본 PR scope = lineage writer only.
-            if cfg.autoresearch.pareto_mode:
-                from core.paths import BASELINE_ARCHIVE_PATH
-                from core.self_improving_loop.pareto_archive import (
-                    ArchiveEntry,
-                    append_archive_entry,
-                )
-
-                _archive_appended = 0
-                _archive_failed = 0
-                for idx, proposal in enumerate(proposals):
-                    # PR-PARETO-INTEGRATE (2026-05-27) Codex MCP review
-                    # must-fix #1 — tag with ``phase="pre_audit_sibling"``
-                    # so this sibling row (fitness scalar, pre-audit) is
-                    # distinguishable from train.py's post-audit row
-                    # (full dim_means + promoted decision). Both writers
-                    # share the mutation_id join key but downstream
-                    # readers filter by phase.
-                    entry = ArchiveEntry(
-                        mutation_id=proposal.mutation.mutation_id,
-                        group_id=group_id,
-                        audit_run_id=audit_run_ids[idx],
-                        ts=time.time(),
-                        dim_means={"fitness": float(fitness_values[idx])},
-                        dim_stderr={},
-                        phase="pre_audit_sibling",
-                    )
-                    try:
-                        append_archive_entry(entry, archive_path=BASELINE_ARCHIVE_PATH)
-                        _archive_appended += 1
-                    except OSError as exc:
-                        _archive_failed += 1
-                        log.warning(
-                            "self-improving-loop: archive append failed for sibling[%d] — %s",
-                            idx,
-                            exc,
-                        )
-                # Codex MCP review WARN #4 — success log 가 실제 append 카운트
-                # 와 일치해야 함 (silent partial failure 회피).
-                log.info(
-                    "self-improving-loop: group %s — pareto_mode archive: %d appended, %d failed",
-                    group_id,
-                    _archive_appended,
-                    _archive_failed,
-                )
-
-            # Top-1 — Tchebycheff (worst-weighted-gap) when pareto_mode +
-            # full sibling dim vectors are available; else linear advantage.
-            best_idx = _select_best_idx(
-                advantages=advantages,
-                sibling_dim_means=sibling_dim_means,
-                pareto_mode=cfg.autoresearch.pareto_mode,
-                group_id=group_id,
-            )
-            best_proposal = proposals[best_idx]
-            log.info(
-                "self-improving-loop: group %s — best=sibling[%d] advantage=%.4f fitness=%.4f",
-                group_id,
-                best_idx,
-                advantages[best_idx],
-                fitness_values[best_idx],
-            )
-
-            # PR-SIL-MULTIOBJ A2 (group path) — secondary reject gate for
-            # the group winner. Group mode commits the winner directly
-            # (no ``_should_promote`` re-run, so train.py's A2 gate never
-            # fires here), so evaluate the mutator's ``rollback_condition``
-            # against the winner's measured dim vector (captured above for
-            # A1) vs the promoted baseline. A firing predicate skips the
-            # commit (cycle yields no SoT change) — it can only veto, never
-            # loosen. Gated on pareto_mode (vectors present) + a non-empty
-            # predicate; unparseable predicates evaluate False (no-op).
-            if (
-                cfg.autoresearch.pareto_mode
-                and best_proposal.mutation.rollback_condition
-                and best_idx < len(sibling_dim_means)
-                and sibling_dim_means[best_idx]
-            ):
-                from plugins.seed_generation.baseline_reader import load_baseline
-
-                from core.self_improving_loop.rollback_condition import (
-                    evaluate_rollback_condition,
-                )
-
-                _baseline_snap = load_baseline()
-                _baseline_dim = _baseline_snap.dim_means if _baseline_snap is not None else None
-                if _baseline_dim and evaluate_rollback_condition(
-                    best_proposal.mutation.rollback_condition,
-                    observed_dim=sibling_dim_means[best_idx],
-                    baseline_dim=_baseline_dim,
-                ):
-                    log.info(
-                        "self-improving-loop: group %s — winner sibling[%d] "
-                        "rollback_condition fired [%s]; skipping commit (no SoT change)",
-                        group_id,
-                        best_idx,
-                        best_proposal.mutation.rollback_condition,
-                    )
-                    return None
-
-            # Commit best to canonical SoT + apply row (kind="applied")
-            _committed_sections, previous_value = apply_mutation(
-                best_proposal.mutation,
-                current_sections=best_proposal.target_sections,
-            )
-            try:
-                log_path = append_audit_log(
-                    best_proposal.mutation,
-                    previous_value=previous_value,
-                    log_path=self.audit_log_path,
-                    audit_run_id=audit_run_ids[best_idx],
-                    kind="applied",
-                    group_id=group_id,
-                    group_advantage=advantages[best_idx],
-                    swarm_id=swarm_id,
-                    sub_agent_index=sub_agent_index,
-                )
-            except OSError as exc:
-                self._rollback_sot(
-                    best_proposal.original_sections,
-                    mutation=best_proposal.mutation,
-                    exc=exc,
-                    audit_run_id=audit_run_ids[best_idx],
-                    reason="audit_log_write_fail",
-                )
-                raise
-
-            # Sibling rows (kind="applied_sibling")
-            # Codex MCP review (slop) — previous_value 를 보존 (이전 ""
-            # placeholder 였음). sibling 의 in-memory SoT 의 mutation 직전
-            # 값 → history audit + dedup detection 에 의미.
-            for i, sibling_proposal in enumerate(proposals):
-                if i == best_idx:
-                    continue
-                append_audit_log(
-                    sibling_proposal.mutation,
-                    previous_value=sibling_previous_values[i],
-                    log_path=self.audit_log_path,
-                    audit_run_id=audit_run_ids[i],
-                    kind="applied_sibling",
-                    group_id=group_id,
-                    group_advantage=advantages[i],
-                    swarm_id=swarm_id,
-                    sub_agent_index=sub_agent_index,
-                )
-
-            if self.commit_enabled:
-                _git_commit_audit_log(log_path, mutation=best_proposal.mutation)
-
-            self._append_self_improving_loop_index(best_proposal.mutation, previous_value)
-            return best_proposal.mutation
-        finally:
-            for sibling_path in sibling_sot_paths:
-                try:
-                    sibling_path.unlink(missing_ok=True)
-                except OSError:
-                    log.warning(
-                        "self-improving-loop: sibling temp file cleanup failed for %s",
-                        sibling_path,
-                    )
-
-    def propose_swarm(self, m: int, n: int) -> list[list[Proposal]]:
-        """P4 (PR-14, 2026-05-25) — multi-level swarm propose.
-
-        M sub-agent × N sibling = M groups of N proposals. Each sub-agent
-        runs an independent :meth:`propose_group` call. Sub-agent slice
-        differentiation (per-sub-agent agent_contract policy) is deferred
-        to A.8 follow-up — this PR keeps the same prompt across all
-        sub-agents and lets stochasticity (temperature >= 0.1) provide
-        the inter-agent diversity. Kimi K2.6 의 inference-time PARL 패턴.
-
-        Sequential (not parallel) for cost predictability — propose_group
-        already parallelises N sibling LLM calls inside one sub-agent, so
-        running M sub-agents sequentially keeps the parallelism bounded
-        at N (no M×N thread pool explosion).
-        """
-        if m < 1:
-            raise ValueError(f"propose_swarm: m must be >= 1, got {m}")
-        if n < 1:
-            raise ValueError(f"propose_swarm: n must be >= 1, got {n}")
-        swarm_groups: list[list[Proposal]] = []
-        for sub_agent_index in range(m):
-            log.info(
-                "self-improving-loop: swarm sub-agent %d/%d — propose_group(n=%d)",
-                sub_agent_index + 1,
-                m,
-                n,
-            )
-            swarm_groups.append(self.propose_group(n))
-        return swarm_groups
-
-    def apply_swarm_proposals(self, swarm_proposals: list[list[Proposal]]) -> Mutation | None:
-        """P4 (PR-14, 2026-05-25) — apply M sub-agent groups → return
-        last-committed sub-agent's chosen mutation (MVP last-wins).
-
-        Steps:
-
-        1. Mint single ``swarm_id`` for the cycle (shared by all sub-
-           agents' apply / sibling rows in mutations.jsonl).
-        2. For each sub-agent group → :meth:`apply_group_proposals` with
-           ``swarm_id`` + ``sub_agent_index`` forwarded. Each sub-agent
-           returns the group's best Mutation (or None on variance-filter
-           skip).
-        3. Returns the last sub-agent's mutation (last-wins commit on
-           canonical SoT). When all sub-agents skipped via variance
-           filter → returns ``None`` (full-swarm cycle skip).
-
-        MVP scope (deliberate) — swarm-level fitness aggregation via
-        :func:`aggregate_swarm_fitness` is *not* applied here because
-        ``Mutation`` doesn't carry post-audit fitness back through
-        ``apply_group_proposals``; the helper exists in
-        ``core/self_improving_loop/swarm_scaffolding.py`` and is used
-        out-of-band by callers that read mutations.jsonl ApplyRecord
-        rows via PR-12 ``mutations_reader`` (each row carries
-        ``baseline_fitness`` + ``group_advantage``). A.8 follow-up will
-        wire sub-agent contract slices so the "last-wins" commit becomes
-        per-slice (no SoT collision), and a downstream wrapper will use
-        the reader + ``aggregate_swarm_fitness`` to produce an explicit
-        swarm-level fitness scalar. Until then, swarm mode's primary
-        value is the mutations.jsonl observability surface — operators
-        can grep ``swarm_id`` + ``sub_agent_index`` for cross-sub-agent
-        analysis even without runtime aggregation.
-        """
-        if not swarm_proposals:
-            raise ValueError("apply_swarm_proposals: empty swarm")
-        swarm_id = _mint_audit_run_id()
-        log.info(
-            "self-improving-loop: swarm %s — M=%d sub-agents (sequential)",
-            swarm_id,
-            len(swarm_proposals),
-        )
-
-        sub_agent_mutations: list[Mutation | None] = []
-        for sub_agent_index, group in enumerate(swarm_proposals):
-            chosen = self.apply_group_proposals(
-                group, swarm_id=swarm_id, sub_agent_index=sub_agent_index
-            )
-            sub_agent_mutations.append(chosen)
-
-        # Filter sub-agents that returned None (variance-filter skip).
-        valid_mutations = [m for m in sub_agent_mutations if m is not None]
-        if not valid_mutations:
-            log.info(
-                "self-improving-loop: swarm %s — all sub-agents skipped "
-                "(variance filter); no swarm commit",
-                swarm_id,
-            )
-            return None
-
-        log.info(
-            "self-improving-loop: swarm %s — %d/%d sub-agents committed",
-            swarm_id,
-            len(valid_mutations),
-            len(swarm_proposals),
-        )
-        return valid_mutations[-1]
-
     def apply_proposal(
         self,
         proposal: Proposal,
-        *,
-        swarm_id: str = "",
-        sub_agent_index: int | None = None,
     ) -> Mutation:
         """Apply a previously-proposed mutation — write SoT, audit
         log, (optional) git commit, (optional) autoresearch rerun.
@@ -2594,14 +1712,6 @@ class SelfImprovingLoopRunner:
         row 와 attribution row 가 audit_run_id 로 join 가능. mint 는
         rerun_enabled 일 때만 (rerun_disabled 면 audit 가 안 일어나
         attribution row 도 없으니 audit_run_id 무의미).
-
-        P4 (PR-14, 2026-05-25) — ``swarm_id`` + ``sub_agent_index`` 인자
-        추가. 일반 caller 는 default ("" / None) 로 legacy 동작 보존.
-        ``apply_swarm_proposals`` → ``apply_group_proposals(n=1 group)`` →
-        ``apply_proposal`` singleton shortcut path 에서 swarm metadata
-        가 누락되지 않도록 forward (Codex MCP review #1662 catch — MVP
-        path ``sub_agent_count>=2, group_size=1`` 에서 swarm row 가
-        silent half-wire 되는 patch).
         """
         audit_run_id = _mint_audit_run_id() if self.rerun_enabled else ""
         _new_sections, previous_value = apply_mutation(
@@ -2613,8 +1723,6 @@ class SelfImprovingLoopRunner:
                 previous_value=previous_value,
                 log_path=self.audit_log_path,
                 audit_run_id=audit_run_id,
-                swarm_id=swarm_id,
-                sub_agent_index=sub_agent_index,
             )
         except OSError as exc:
             self._rollback_sot(
@@ -2648,42 +1756,21 @@ class SelfImprovingLoopRunner:
         return proposal.mutation
 
     def run_once(self) -> Mutation | None:
-        """Execute one full propose+apply iteration. Backwards-compat
-        wrapper around :meth:`propose` + :meth:`apply_proposal` so
-        existing callers (and the autoresearch self-improving loop)
-        keep working unchanged.
+        """Execute one full propose+apply iteration — a single
+        (1+1)-ES keep-or-revert mutation compared against the previous
+        baseline. Thin wrapper around :meth:`propose` + :meth:`apply_proposal`.
 
-        P1-revised (2026-05-25) — ``AutoresearchConfig.group_size`` knob
-        분기:
-        - ``group_size=1`` (default, legacy): :meth:`propose` +
-          :meth:`apply_proposal` 그대로 (single mutation, REINFORCE-style)
-        - ``group_size>=2``: :meth:`propose_group` +
-          :meth:`apply_group_proposals` (DAPO-inspired variance gate +
-          GRPO-inspired score whitening, mutation-selection only — not
-          policy gradient / not RL training)
-
-        Variance filter trigger 시 ``None`` 반환 (cycle skip, no SoT
-        commit). legacy mode 는 항상 ``Mutation`` 반환.
+        PR-DROP-GROUP-SAMPLING (2026-05-29) — the (1+λ) group/swarm sampling +
+        Tchebycheff/pareto selection layer was removed. It was dormant at
+        ``group_size=1`` and vestigial for a no-gradient selection loop: the
+        group-relative z-score advantage is argmax-invariant (no gradient to
+        scale), and best-of-N over the noisy/expensive Petri audit amplifies
+        winner's-curse selection. The loop is now purely single-mutation.
 
         Raises :class:`ValueError` on parse / validation failure so
         the caller can decide whether to retry.
         """
-        from core.config.self_improving_loop import load_self_improving_loop_config
-
-        cfg = load_self_improving_loop_config()
-        group_size = cfg.autoresearch.group_size
-        sub_agent_count = cfg.autoresearch.sub_agent_count
-        if sub_agent_count >= 2:
-            # P4 (PR-14, 2026-05-25) — multi-level swarm mode. Cost cap is
-            # ``sub_agent_count * group_size`` audits per cycle; operator
-            # is expected to keep ``group_size=1`` when ``sub_agent_count>=2``
-            # to bound cost to M audits, unless they explicitly want M×N.
-            swarm_proposals = self.propose_swarm(sub_agent_count, group_size)
-            return self.apply_swarm_proposals(swarm_proposals)
-        if group_size <= 1:
-            return self.apply_proposal(self.propose())
-        proposals = self.propose_group(group_size)
-        return self.apply_group_proposals(proposals)
+        return self.apply_proposal(self.propose())
 
     @staticmethod
     def _rollback_sot(
