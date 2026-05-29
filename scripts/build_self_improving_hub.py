@@ -1662,7 +1662,7 @@ def _render_hub_sidebar(
 {seedgen_runs}
           </ul>
         </li>
-        <li><a href="/geode/docs/petri/seeds">Run dashboard &#x2197;</a></li>
+        <li><a href="/geode/docs/petri/seeds">Seed runs (docs) &#x2197;</a></li>
       </ul>
 
       <div class="nav-section">Autoresearch <span class="count">{ar_label}</span></div>
@@ -2084,6 +2084,19 @@ def _render_tournament_body(run_id: str, bundle_dir: Path | None) -> str:
         f"{quorum_lost_total} quorum_lost · "
         f"voter parse_error rate {voter_pct:.1f}% "
         f"({voter_fail}/{voter_ok + voter_fail})</p>"
+        '<details class="elo-method"><summary class="muted">how Elo is computed</summary>'
+        '<dl class="status-grid">'
+        "<dt>initial rating</dt><dd>every candidate seeds at <code>1000</code></dd>"
+        "<dt>expected score</dt><dd><code>E_a = 1 / (1 + 10^((R_b - R_a) / 400))</code> "
+        "(logistic; a 400-point gap &asymp; 10:1 odds)</dd>"
+        "<dt>update</dt><dd><code>R_a += K &middot; (S_a - E_a)</code> with "
+        "<code>K = 32</code>; win <code>S=1</code>, tie <code>S=0.5</code>, "
+        "loss <code>S=0</code></dd>"
+        "<dt>per match</dt><dd>3-voter panel, majority winner (&ge;2 of 3); "
+        "&lt;2 valid votes &rarr; <code>quorum_lost</code>, no rating change</dd>"
+        "<dt>survivors</dt><dd>top 5 by final rating (id-ordered tie-break)</dd>"
+        '</dl><p class="muted">Source: '
+        "<code>plugins/seed_generation/tournament.py</code>.</p></details>"
         "<h3>Per-candidate Elo summary</h3>"
         '<table class="records">'
         "<thead><tr><th>cid</th><th>W-L-T</th><th>quorum_lost</th>"

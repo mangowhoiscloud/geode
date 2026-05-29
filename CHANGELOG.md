@@ -59,6 +59,15 @@ functional change.
   unchanged — every hub page links `hub.css`, so the theme flips on deploy.
 
 ### Fixed
+- **PR-HUB-POLISH (2026-05-29)** — Two hub display corrections bundled with the
+  dark re-palette. (1) The tournament page now annotates **how Elo is computed**
+  (initial 1000, logistic expected score `1/(1+10^((R_b-R_a)/400))`, update
+  `R += K·(S-E)` with `K=32`, 3-voter majority ≥2 else quorum_lost, top-5
+  survivors) in a `<details>` next to the per-candidate Elo summary, sourced
+  from `plugins/seed_generation/tournament.py`. (2) The "Run dashboard ↗"
+  sidebar link was relabeled **"Seed runs (docs) ↗"** across the single sidebar
+  source (`_render_hub_sidebar`) + the 7 page templates — it links to the docs
+  site's seed-runs page, not an in-hub dashboard.
 - **PR-HUB-AGENTS-CHIP-WRAP (2026-05-29)** — Two self-improving hub display
   fixes. (1) The seed-generation `/agents/` page mislabeled every cli-local
   sub-agent as **PAYG**: session.json omits model/provider for CLI-managed
