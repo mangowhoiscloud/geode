@@ -1438,6 +1438,42 @@ def _emit_seedgen_run_subpages(
                 (cand_viewer_dir / "index.html").write_text(cand_viewer_html, encoding="utf-8")
 
 
+def _resolve_subagent_model(
+    session: dict[str, Any], dialogue_events: list[dict[str, Any]]
+) -> tuple[str, str]:
+    """Return ``(display_model, provider)`` for a sub-agent's harness chip.
+
+    The chip reflects the execution **source**, not the model's billing
+    provider. Seed-generation sub-agents run via either the Claude Code CLI
+    (``claude_cli_session_id`` in session.json; session_start records the bare
+    model provider ``anthropic``) or the Codex CLI (session_start already
+    records the source-aligned provider ``openai-codex``). Keying the chip off
+    the bare provider mislabels every cli-local run as PAYG.
+
+    Resolution: take model + provider from ``dialogue.jsonl``'s session_start
+    (the actual run record; session.json omits them for cli-managed agents),
+    fall back to session.json, then override the source to ``claude-cli`` when
+    ``claude_cli_session_id`` is present. The returned ``display_model`` is
+    source-prefixed (``claude-cli/claude-opus-4-7``) so ``_harness_chip``
+    resolves the correct chip and the table shows aligned naming.
+    """
+    sess_model = ""
+    sess_provider = ""
+    for evt in dialogue_events:
+        if isinstance(evt, dict) and evt.get("event") == "session_start":
+            sess_model = str(evt.get("model") or "")
+            sess_provider = str(evt.get("provider") or "")
+            break
+    if not sess_model:
+        sess_model = str(session.get("model") or "")
+    if not sess_provider:
+        sess_provider = str(session.get("provider") or "")
+    source = "claude-cli" if session.get("claude_cli_session_id") else sess_provider
+    if source and sess_model and "/" not in sess_model:
+        return (f"{source}/{sess_model}", sess_provider)
+    return (sess_model, sess_provider)
+
+
 def _load_subagents(bundle_dir: Path) -> list[dict[str, Any]]:
     """Walk ``sub_agents/<task_id>/`` and project per-agent rows.
 
@@ -1493,12 +1529,20 @@ def _load_subagents(bundle_dir: Path) -> list[dict[str, Any]]:
                 result = json.loads(res_path.read_text(encoding="utf-8"))
             except (OSError, json.JSONDecodeError):
                 result = {}
+        # Resolve the harness chip's model from the actual run record. The
+        # chip must reflect the execution SOURCE (claude-cli = Claude Code,
+        # openai-codex = Codex), NOT the model's billing provider (anthropic /
+        # openai = PAYG). session.json omits model/provider for cli-managed
+        # sub-agents, so prefer dialogue.jsonl's session_start; the codex path
+        # already records source-aligned provider "openai-codex", while the
+        # claude-cli path records bare "anthropic" + a claude_cli_session_id.
+        model, provider = _resolve_subagent_model(session, dialogue_events)
         rows.append(
             {
                 "task_id": task_dir.name,
                 "phase": phase,
-                "model": session.get("model", "—"),
-                "provider": session.get("provider", "—"),
+                "model": model,
+                "provider": provider,
                 "turn_count": sum(
                     1
                     for e in dialogue_events

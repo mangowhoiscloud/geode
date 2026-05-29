@@ -47,6 +47,24 @@ functional change.
 
 ## [Unreleased]
 
+### Fixed
+- **PR-HUB-AGENTS-CHIP-WRAP (2026-05-29)** — Two self-improving hub display
+  fixes. (1) The seed-generation `/agents/` page mislabeled every cli-local
+  sub-agent as **PAYG**: session.json omits model/provider for CLI-managed
+  agents, so the harness chip fell back to an empty model → PAYG default.
+  `_resolve_subagent_model()` now reads the real model + provider from
+  `dialogue.jsonl`'s `session_start` and reflects the execution **source**,
+  not the model's billing provider — a `claude_cli_session_id` marks a Claude
+  Code (cli-local) run (chip + source-aligned `claude-cli/claude-opus-4-7`
+  naming) while the codex path already records `openai-codex`. gen-2605-2 went
+  from 196 PAYG rows to 98 Claude Code + 98 Codex, 0 PAYG. (2) The voter
+  rationale `<pre class="msg">` on the tournament + lineage ranker station had
+  no base wrap rule and ran off the page horizontally; added a base `pre.msg`
+  rule (`pre-wrap` + `word-break` + `overflow-wrap: anywhere`) so it wraps
+  responsively. Pinned by the strengthened `test_pr2_agents_index_renders`
+  (gen-c-001 fixture now mirrors the real `anthropic` + `claude_cli_session_id`
+  shape) + a `pre.msg` wrap assertion in `test_pr2_tournament_renders_three_voter_panel`.
+
 ## [0.99.83] - 2026-05-29
 
 > PATCH — self-improving hub data-integrity sprint. gen1 broken-link

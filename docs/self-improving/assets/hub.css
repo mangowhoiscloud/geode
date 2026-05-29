@@ -889,9 +889,15 @@ details.turn > summary {
 details.turn.user > summary { color: var(--bucket-petri); }
 details.turn.assistant > summary { color: var(--bucket-seedgen); }
 details.turn.session-end > summary { color: var(--bucket-autoresearch); }
-details.turn pre.msg {
+/* Every .msg block (voter rationale on the tournament + lineage ranker
+   station, debate turns, parse_error notes) wraps responsively. Without a
+   base rule the bare <pre class="msg"> defaulted to no-wrap and ran off the
+   page horizontally. overflow-wrap:anywhere also breaks long unbroken tokens
+   (urls, json). */
+pre.msg {
   white-space: pre-wrap;
   word-break: break-word;
+  overflow-wrap: anywhere;
   background: var(--paper-tint);
   padding: .55rem .7rem;
   border-radius: 4px;
