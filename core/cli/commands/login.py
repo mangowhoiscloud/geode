@@ -958,7 +958,7 @@ def _login_use(rest: str) -> None:
         "glm": ["glm-5.1", "glm-5", "glm-5-turbo"],
         "openai": ["gpt-5.4", "gpt-5.4-mini"],
         "openai-codex": ["gpt-5.3-codex", "gpt-5.4-mini"],
-        "anthropic": ["claude-opus-4-7", "claude-sonnet-4-6"],
+        "anthropic": ["claude-opus-4-8", "claude-opus-4-7", "claude-sonnet-4-6"],
     }
     for model in model_hints.get(plan.provider, []):
         existing = [pid for pid in registry.get_routing(model) if pid != plan.id]

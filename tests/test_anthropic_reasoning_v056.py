@@ -10,9 +10,9 @@ official docs (see ``docs/research/reasoning-depth-audit.md``):
       ``anthropic_adapter.py:1440``.
 
   B3: ``xhigh`` effort is accepted by GEODE's enum but is version-
-      gated to Opus 4.7. On Opus 4.6 / Sonnet 4.6 it downgrades to
-      ``"max"`` (those models reject ``xhigh`` with 400). Mirrors
-      Hermes ``_supports_xhigh_effort`` substring-based gate.
+      gated to Opus 4.7+ (4.7 and 4.8). On Opus 4.6 / Sonnet 4.6 it
+      downgrades to ``"max"`` (those models reject ``xhigh`` with 400).
+      Mirrors Hermes ``_supports_xhigh_effort`` substring-based gate.
 
   C2: Signature round-trip on tool-use multi-turn. All three
       reference codebases (OpenClaw, Claude Code, Hermes) preserve
@@ -33,7 +33,10 @@ from core.llm.providers.anthropic import (
 
 
 class TestXHighEffortGate:
-    """B3 — ``xhigh`` is Opus 4.7-only; downgrades to ``"max"`` elsewhere."""
+    """B3 — ``xhigh`` is Opus 4.7+ (4.7 / 4.8); downgrades to ``"max"`` elsewhere."""
+
+    def test_opus_4_8_supports_xhigh(self) -> None:
+        assert _supports_xhigh_effort("claude-opus-4-8") is True
 
     def test_opus_4_7_supports_xhigh(self) -> None:
         assert _supports_xhigh_effort("claude-opus-4-7") is True

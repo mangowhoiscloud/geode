@@ -33,8 +33,17 @@ _ANTHROPIC_ADAPTIVE_EFFORTS = ("low", "medium", "high", "max", "xhigh")
 _OPENAI_REASONING_EFFORTS = ("none", "minimal", "low", "medium", "high", "xhigh")
 _GLM_HYBRID_EFFORTS = ("disabled", "enabled")
 
-_ANTHROPIC_ADAPTIVE_MODELS = frozenset({"claude-opus-4-7", "claude-opus-4-6", "claude-sonnet-4-6"})
-_ANTHROPIC_XHIGH_MODELS = frozenset({"claude-opus-4-7"})
+# Keep these in sync with the adapter capability gates
+# (``core/llm/providers/anthropic.py`` ``_ADAPTIVE_MODELS`` /
+# ``_XHIGH_EFFORT_MODELS``) — the picker only surfaces an effort knob the
+# API will actually accept. Opus 4.8 (claude-opus-4-8) joins 4.7 in both
+# sets: confirmed live by the running harness (Claude Code's /model selector
+# configures claude-opus-4-8 with "xhigh effort"); ctx7 platform docs index
+# only up to the 4.6/4.7 family pages.
+_ANTHROPIC_ADAPTIVE_MODELS = frozenset(
+    {"claude-opus-4-8", "claude-opus-4-7", "claude-opus-4-6", "claude-sonnet-4-6"}
+)
+_ANTHROPIC_XHIGH_MODELS = frozenset({"claude-opus-4-8", "claude-opus-4-7"})
 
 _OPENAI_RESPONSES_MODELS_PREFIX = ("gpt-5",)
 
@@ -86,9 +95,10 @@ def default_effort(model: str, provider: str) -> str | None:
         return None
     if provider == "anthropic":
         # Anthropic API default is "high" per platform.claude.com docs.
-        # Opus 4.7 official guidance recommends "xhigh" as the *starting
-        # point* for coding/agentic — surface it as the default for that
-        # model so the picker shows what the model actually wants.
+        # Opus 4.7+ official guidance recommends "xhigh" as the *starting
+        # point* for coding/agentic — surface it as the default for the
+        # xhigh-capable models (4.7 / 4.8) so the picker shows what the
+        # model actually wants.
         if model in _ANTHROPIC_XHIGH_MODELS:
             return "xhigh"
         return "high"
@@ -116,7 +126,8 @@ def cycle_effort(current: str, levels: tuple[str, ...], direction: int) -> str:
 
 _MODEL_DESCRIPTIONS: dict[str, str] = {
     # Anthropic
-    "claude-opus-4-7": "Opus 4.7 with 1M context · Most capable for complex work",
+    "claude-opus-4-8": "Opus 4.8 with 1M context · Most capable for complex work",
+    "claude-opus-4-7": "Opus 4.7 with 1M context · High-capability reasoning",
     "claude-opus-4-6": "Opus 4.6 · Strong general-purpose reasoning",
     "claude-sonnet-4-6": "Sonnet 4.6 · Best for everyday tasks",
     "claude-haiku-4-5": "Haiku 4.5 · Fastest for quick answers",

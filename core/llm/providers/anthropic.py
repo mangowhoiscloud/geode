@@ -591,8 +591,11 @@ _API_ALLOWED_KEYS = frozenset(
 # Haiku 4.5 (2025-10-01) predates compact-2026-01-12 and rejects the beta
 # header with a 400 whose message contains "context" — misclassified as
 # context_overflow.  Only 1M-context models are known to support it.
+# Opus 4.8 (claude-opus-4-8) ships with a 1M context window and Claude Code
+# runs it under server-side compaction, so it inherits the same contract.
 _CONTEXT_MGMT_MODELS: frozenset[str] = frozenset(
     {
+        "claude-opus-4-8",
         "claude-opus-4-7",
         "claude-opus-4-6",
         "claude-opus-4-5",
@@ -606,8 +609,12 @@ _CONTEXT_MGMT_MODELS: frozenset[str] = frozenset(
 # (https://platform.claude.com/docs/en/about-claude/models/whats-new-claude-4-7
 # #sampling-parameters-removed) and are also rejected by Opus 4.6 when
 # adaptive thinking is on.  Omit them entirely on these models.
+# Opus 4.8 continues the 4.6+ adaptive-thinking contract (the effort knob —
+# incl. ``xhigh`` — only exists for adaptive models, and this session runs
+# claude-opus-4-8 under adaptive thinking; see _XHIGH_EFFORT_MODELS note).
 _ADAPTIVE_MODELS: frozenset[str] = frozenset(
     {
+        "claude-opus-4-8",
         "claude-opus-4-7",
         "claude-opus-4-6",
         "claude-sonnet-4-6",
@@ -621,7 +628,12 @@ _ADAPTIVE_MODELS: frozenset[str] = frozenset(
 # coding/agentic workloads (platform.claude.com/docs/en/build-with-claude/
 # effort) — but only the GEODE caller can opt in by setting
 # ``agentic.effort = "xhigh"``; we never auto-upgrade ``high → xhigh``.
-_XHIGH_EFFORT_MODELS: frozenset[str] = frozenset({"claude-opus-4-7"})
+# Opus 4.8 (claude-opus-4-8) accepts ``xhigh`` — confirmed live: Claude Code
+# configures this model with "xhigh effort" by default (the /model selector
+# emits it). ctx7 platform docs only index up to the 4.6/4.7 family pages, so
+# the 4.8-specific acceptance is grounded by the running harness rather than a
+# doc page.
+_XHIGH_EFFORT_MODELS: frozenset[str] = frozenset({"claude-opus-4-8", "claude-opus-4-7"})
 
 
 def _supports_xhigh_effort(model: str) -> bool:

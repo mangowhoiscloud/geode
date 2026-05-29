@@ -91,7 +91,7 @@ def _run_agentic_call(model: str) -> dict[str, Any]:
 
 @pytest.mark.parametrize(
     "model",
-    ["claude-opus-4-7", "claude-opus-4-6", "claude-sonnet-4-6"],
+    ["claude-opus-4-8", "claude-opus-4-7", "claude-opus-4-6", "claude-sonnet-4-6"],
 )
 def test_adaptive_models_omit_sampling_params(model: str) -> None:
     """Opus 4.6+ / Sonnet 4.6 reject temperature; it must not be sent."""
@@ -109,6 +109,15 @@ def test_adaptive_models_omit_sampling_params(model: str) -> None:
 def test_opus_4_7_registered_for_context_management() -> None:
     """Opus 4.7 must enable the context-management + compaction beta header."""
     kwargs = _run_agentic_call("claude-opus-4-7")
+    headers = kwargs.get("extra_headers") or {}
+    beta = headers.get("anthropic-beta", "")
+    assert "context-management-2025-06-27" in beta
+    assert "compact-2026-01-12" in beta
+
+
+def test_opus_4_8_registered_for_context_management() -> None:
+    """Opus 4.8 (1M context) inherits the context-management + compaction beta."""
+    kwargs = _run_agentic_call("claude-opus-4-8")
     headers = kwargs.get("extra_headers") or {}
     beta = headers.get("anthropic-beta", "")
     assert "context-management-2025-06-27" in beta
