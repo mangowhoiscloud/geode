@@ -24,6 +24,7 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Any
 
+from core.config.credential_source import CredentialSource
 from pydantic import BaseModel, Field, model_validator
 
 __all__ = [
@@ -41,8 +42,9 @@ DEFAULT_MANIFEST_PATH = Path(__file__).parent / "petri.plugin.toml"
 
 # "auto" is a sentinel — resolved at binding time via
 # ``settings.{provider}_credential_source`` + keychain probe — so it
-# never appears as a concrete adapter key.
-AUTO_SOURCE = "auto"
+# never appears as a concrete adapter key. Sourced from the canonical
+# enum (PR-CRED-SOURCE-CENTRALIZE) so it can't drift from the config layer.
+AUTO_SOURCE = CredentialSource.AUTO.value
 
 
 class RoleSpec(BaseModel):

@@ -47,6 +47,27 @@ functional change.
 
 ## [Unreleased]
 
+### Changed
+- **PR-CRED-SOURCE-CENTRALIZE (2026-05-29)** — Centralize the LLM
+  credential-source value set into one canonical
+  `core.config.credential_source.CredentialSource` (StrEnum). It was previously
+  defined four ways with *inconsistent membership* — `self_improving_loop.Source`
+  (no `api_key`), the mutator-config `source` Literal (with `api_key`),
+  `seed_generation.auth_coverage.Source` (no `auto`), and bare-`str`
+  `settings.{anthropic,openai}_credential_source` — plus the petri `AUTO_SOURCE` /
+  `PAYG_SOURCE` magic constants, so a change in one silently diverged from the
+  others. All now reference the single enum (`Source` is a re-export;
+  `auth_coverage.Source` is a drift-pinned concrete subset; the settings fields
+  validate against it via a field-validator; the petri constants derive from it).
+  The `project_payg_exclusion_decision` PAYG safety — a subscription-only run must
+  not *silently* fall through to PAYG — moves from a **type-level exclusion**
+  (which caused the fragmentation and blocked an operator's explicit opt-in) to
+  the existing **resolution-time `fallback_to_payg` gate**: `api_key` is a valid
+  config value again, but `auto` expansion still never silently bills the API key.
+  Pinned by `test_credential_source_centralized.py` (enum-drift invariants) and
+  the rewritten `test_d1_provider_closure.py` (api_key now accepted at config,
+  closure enforced at resolution).
+
 ## [0.99.84] - 2026-05-29
 
 > PATCH — self-improving hub polish + loop multi-objective wiring. Hub

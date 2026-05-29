@@ -38,6 +38,8 @@ import logging
 import threading
 from typing import Any
 
+from core.config.credential_source import CredentialSource
+
 from plugins.petri_audit.adapters import (
     get_adapter_metadata,
     is_adapter_available,
@@ -62,8 +64,11 @@ _lock = threading.Lock()
 _suppressed: set[tuple[str, str]] = set()
 
 
-PAYG_SOURCE = "api_key"
+PAYG_SOURCE = CredentialSource.API_KEY.value
 """The conventional name for any pay-as-you-go credential source.
+
+Sourced from the canonical :class:`core.config.credential_source.CredentialSource`
+(PR-CRED-SOURCE-CENTRALIZE) so the PAYG id can't drift from the config layer.
 
 Every provider in the Petri manifest has ``api_key`` as its PAYG entry
 (``anthropic.api_key``, ``openai.api_key``, ``zhipuai.api_key``).
