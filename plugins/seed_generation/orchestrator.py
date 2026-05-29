@@ -118,13 +118,11 @@ def _state_to_json(state: PipelineState) -> str:
         # ADR-012 S4 (2026-05-21) — persist cohort so a state.json
         # replay re-hydrates the same picker semantics.
         "cohort": state.cohort,
-        # PR-SG-SELECTION-ALIGN (2026-05-25, G4) — Pareto attribution
-        # set. Resume path must rehydrate this; otherwise the evolver's
-        # HANDOFF pareto_front embedding silently changes between the
-        # pre-checkpoint and resumed run. Codex MCP review of
-        # PR-CHECKPOINT-RESUME-TIMEBUDGET caught the omission.
+        # PR-SG-SELECTION-ALIGN (2026-05-25, G4) — attribution dim set.
+        # Resume path must rehydrate this so the evolver's anchor /
+        # scenario_realism scope stays stable across a resume. Codex MCP
+        # review of PR-CHECKPOINT-RESUME-TIMEBUDGET caught the omission.
         "target_dims_attribution": list(state.target_dims_attribution),
-        "pareto_mode": state.pareto_mode,
         "gen_tag": state.gen_tag,
         "candidates_requested": state.candidates_requested,
         "pool_path_in": str(state.pool_path_in) if state.pool_path_in else None,
@@ -268,22 +266,13 @@ class PipelineState:
     # as a ux_means field (e.g. ``"success_rate"``).
     # See :mod:`plugins.seed_generation.baseline_reader.SEED_COHORTS`.
     cohort: str = "petri_17dim"
-    # PR-SG-SELECTION-ALIGN (2026-05-25) — G4. Plural Pareto scope
+    # PR-SG-SELECTION-ALIGN (2026-05-25) — G4. Plural attribution scope
     # alongside singular ``target_dim`` (run-level INTENT). When
-    # populated, this is the dim set the selection layer's Pareto
-    # archive (P2, ``core/self_improving_loop/pareto_archive.py``)
-    # tracks for non-dominated candidates. Empty list preserves the
+    # populated, this is the dim set the evolver frames its anchor /
+    # scenario_realism rewrite around. Empty list preserves the
     # pre-G4 single-dim contract — callers that only set
     # ``target_dim`` behave exactly as before.
     target_dims_attribution: list[str] = field(default_factory=list)
-    # PR-SG-SELECTION-ALIGN-FIX (2026-05-25, V4) — G5 gate. Mirrors
-    # ``core.config.self_improving_loop.AutoresearchConfig.pareto_mode``.
-    # The evolver only embeds ``pareto_front`` into its HANDOFF when
-    # this is True, even if ``baseline_archive.jsonl`` exists from a
-    # prior pareto_mode=True cycle. Prevents the half-disconnect of
-    # surfacing archive state to the LLM while selection layer
-    # isn't actively curating the front.
-    pareto_mode: bool = False
     candidates_requested: int = 15
     # CSP-5 (2026-05-22) — paper §3 iteration loop. Default 0 keeps
     # the pre-CSP-5 single-pass behaviour (Pipeline.arun() executes

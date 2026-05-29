@@ -9,8 +9,8 @@ on three envs being set:
 Operator standalone runs (``uv run python autoresearch/train.py``,
 ``--promote``) had none of those envs, so the attribution row was
 silently skipped — downstream consumers (operator analytics; a
-future source-aware ``compute_credit_assignment`` variant) had no
-ledger visibility into manual runs.
+future source-aware attribution variant) had no ledger visibility
+into manual runs.
 
 PR-AR-L6 splits the gate:
 
@@ -116,8 +116,7 @@ def test_jsonl_rows_can_be_filtered_by_source(tmp_path: Path) -> None:
     can't drop the field without also updating downstream filters.
 
     Note: this tests the *data-availability* contract. The actual
-    source-aware variant of ``compute_credit_assignment`` is downstream
-    work (see CHANGELOG)."""
+    source-aware attribution variant is downstream work (see CHANGELOG)."""
     log_path = tmp_path / "mutations.jsonl"
     # 1 mutator row + 1 manual row.
     write_attribution(

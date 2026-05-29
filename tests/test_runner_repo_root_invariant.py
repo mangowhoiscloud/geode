@@ -1,11 +1,10 @@
 """Regression pin for the ``repo_root`` computation used by
 
-``SelfImprovingLoopRunner.apply_proposal`` and
-``apply_group_proposals`` when they invoke the autoresearch
-re-audit subprocess.
+``SelfImprovingLoopRunner.apply_proposal`` when it invokes the
+autoresearch re-audit subprocess.
 
-Both call sites derive ``repo_root`` from
-``MUTATION_AUDIT_LOG_PATH.resolve().parents[N]`` and then pass it as
+The call site derives ``repo_root`` from
+``MUTATION_AUDIT_LOG_PATH.resolve().parents[N]`` and then passes it as
 ``cwd`` to ``_run_autoresearch_subprocess``. The argv inside that
 subprocess is ``["uv", "run", "python", "autoresearch/train.py"]``,
 so the cwd MUST be the repo root — otherwise the relative path

@@ -43,7 +43,6 @@ from __future__ import annotations
 
 import json
 import logging
-import os
 from pathlib import Path
 
 from core.paths import (
@@ -388,9 +387,8 @@ def load_policy(kind: str) -> dict[str, str]:
 
 
 def _serialize_policy_payload(kind: str, sections: dict[str, str]) -> str:
-    """Codex MCP review F4 (Dedup) — ``write_policy`` 와 ``write_sibling_in_memory``
-    가 동일한 serialization (``_NESTED_KINDS`` flatten + JSON sort_keys) 을
-    중복 구현하던 것을 helper 로 추출. 두 caller 가 same payload format 보장.
+    """Shared policy serialization (``_NESTED_KINDS`` flatten + JSON
+    sort_keys), extracted so ``write_policy`` has one payload format.
     """
     serializable: dict[str, object]
     if kind in _NESTED_KINDS:
@@ -403,46 +401,6 @@ def _serialize_policy_payload(kind: str, sections: dict[str, str]) -> str:
         indent=2,
         sort_keys=True,
     )
-
-
-def write_sibling_in_memory(kind: str, sections: dict[str, str]) -> Path:
-    """Write policy sections to a TEMPORARY file (not the SoT path).
-
-    P1-revised (2026-05-25 baseline RL grounding) — group sampling 의
-    sibling SoT variant. plan ``docs/plans/2026-05-25-baseline-fitness-rl-grounding.md``
-    §4.3 MVP scope: "sibling SoT 처리 = in-memory (disk write 없음)".
-
-    실제는 OS temp file 로 write (audit subprocess 가 별 프로세스라
-    env path 로 받아 read 해야 하므로 in-process dict 만으로는 불가능).
-    단 정식 SoT path (``autoresearch/state/policies/*.json``) 는 건드리지
-    않아 production GEODE AgenticLoop 의 ``_load_wrapper_override`` 가
-    이 sibling variant 를 보지 않음 — top-1 accept 후에만 ``write_policy``
-    가 정식 SoT 에 commit.
-
-    Returns the temp file path. Caller (apply_group_proposals) 가 audit
-    subprocess spawn 시 env (``GEODE_<KIND>_OVERRIDE``) 로 propagate +
-    cycle 종료 후 ``Path.unlink(missing_ok=True)`` cleanup 책임.
-
-    Schema 처리는 ``write_policy`` 와 동일 (``_NESTED_KINDS`` flatten +
-    JSON sort_keys). 단 atomic temp+rename 은 불필요 (temp 자체).
-    """
-    if kind not in TARGET_KINDS:
-        raise ValueError(f"unknown target_kind {kind!r}, expected one of {TARGET_KINDS!r}")
-    import tempfile
-
-    payload = _serialize_policy_payload(kind, sections)
-    fd, temp_path_str = tempfile.mkstemp(
-        suffix=f"-{kind}-sibling.json",
-        prefix="geode-sibling-",
-        text=False,
-    )
-    try:
-        with os.fdopen(fd, "w", encoding="utf-8") as fh:
-            fh.write(payload + "\n")
-    except OSError:
-        Path(temp_path_str).unlink(missing_ok=True)
-        raise
-    return Path(temp_path_str)
 
 
 def write_policy(kind: str, sections: dict[str, str]) -> Path:
@@ -466,8 +424,6 @@ def write_policy(kind: str, sections: dict[str, str]) -> Path:
     path = policy_path(kind)
     _maybe_migrate_legacy_sot(kind, path)
     path.parent.mkdir(parents=True, exist_ok=True)
-    # Codex MCP review F4 (Dedup) — _serialize_policy_payload 가
-    # write_sibling_in_memory 와 같은 serialization 보장.
     payload = _serialize_policy_payload(kind, sections)
     tmp = path.with_suffix(path.suffix + ".tmp")
     tmp.write_text(payload + "\n", encoding="utf-8")
@@ -573,5 +529,4 @@ __all__ = [
     "load_policy",
     "policy_path",
     "write_policy",
-    "write_sibling_in_memory",
 ]

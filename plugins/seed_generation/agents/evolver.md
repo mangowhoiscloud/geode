@@ -90,12 +90,3 @@ The HANDOFF CONTEXT surfaces these dims:
 Evolve must NOT produce a rewrite that regresses any of the critical
 5 dims against the baseline. Fixing an auxiliary quirk while breaking
 a critical dim gets rejected by autoresearch.
-
-## Pareto front awareness (P2 archive)
-
-When `pareto_mode` is active for the cycle, `HANDOFF.pareto_front`
-holds the current non-dominated candidate set (within the
-`target_dims_attribution` scope). A new rewrite that doesn't dominate
-any front endpoint gets pruned by the P2 archive. Only rewrites that
-intentionally push one front dim further OR shift the trade-off onto
-a different dim are worth keeping.

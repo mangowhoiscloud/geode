@@ -327,10 +327,10 @@ def audit_seeds_generate(
         "--target-dims-attribution",
         help=(
             "PR-SG-SELECTION-ALIGN (2026-05-25, G4): comma-separated dim "
-            "names the Pareto archive (P2, selection layer) should track "
-            "for non-dominated candidates this run. Defaults to top-3 from "
-            "``pick_regression_target_dims`` when --target-dim auto-picks. "
-            "Omit to keep the single-dim contract (empty list)."
+            "names defining the attribution / evolver dim scope this run "
+            "(critic / pilot / evolver reason about these dims). Defaults to "
+            "top-3 from ``pick_regression_target_dims`` when --target-dim "
+            "auto-picks. Omit to keep the single-dim contract (empty list)."
         ),
     ),
     smoke_log: str | None = typer.Option(
@@ -742,7 +742,7 @@ def run_audit_seeds(
         # heavy SubAgentManager wiring isn't paid on a dry preview.
         try:
             # PR-SG-SELECTION-ALIGN (2026-05-25, G4) — default the
-            # Pareto-scope dim list. Explicit CLI value wins; otherwise
+            # attribution dim scope. Explicit CLI value wins; otherwise
             # auto-pick top-3 from the same baseline snapshot the
             # singular ``target_dim`` was picked from. When neither is
             # set (e.g. no baseline yet, explicit single-dim run) the
@@ -752,8 +752,8 @@ def run_audit_seeds(
             # narrowed to the same trigger as ``--target-dim auto``. When
             # the operator passes ``--target-dim broken_tool_use`` (or any
             # explicit dim), the singular intent is theirs and the plural
-            # Pareto scope should NOT silently expand to top-3. Auto-pick
-            # of attribution fires only when the singular dim itself was
+            # attribution scope should NOT silently expand to top-3.
+            # Auto-pick fires only when the singular dim itself was
             # auto-picked (target_dim None or "auto" on the CLI).
             target_dim_was_auto = (target_dim is None) or (
                 isinstance(target_dim, str) and target_dim.lower() == "auto"
@@ -774,20 +774,6 @@ def run_audit_seeds(
                         "seed-generation: --target-dims-attribution auto → "
                         f"{resolved_attribution!r} (top-3 worst-regressed)\n"
                     )
-            # PR-SG-SELECTION-ALIGN-FIX (2026-05-25, V4) — read
-            # ``AutoresearchConfig.pareto_mode`` for the G5 gate.
-            # Best-effort: fall through to False when the config
-            # surface is unavailable in test contexts (mirrors the
-            # _get_seed_generation_config defensive pattern above).
-            pareto_mode = False
-            try:
-                from core.config.self_improving_loop import (
-                    load_self_improving_loop_config,
-                )
-
-                pareto_mode = bool(load_self_improving_loop_config().autoresearch.pareto_mode)
-            except Exception:
-                pareto_mode = False
             _dispatch_pipeline(
                 picker_result=picker_result,
                 target_dim=resolved_dim,
@@ -800,7 +786,6 @@ def run_audit_seeds(
                 meta_review_snapshot=meta_review_snapshot,
                 max_iterations=max_iterations,
                 target_dims_attribution=resolved_attribution,
-                pareto_mode=pareto_mode,
             )
         except Exception as exc:  # pragma: no cover - bubbles up rich error
             journal.append(
@@ -834,7 +819,6 @@ def _dispatch_pipeline(
     meta_review_snapshot: Any = None,
     max_iterations: int = 0,
     target_dims_attribution: list[str] | None = None,
-    pareto_mode: bool = False,
 ) -> None:
     """Build orchestrator + run.
 
@@ -870,7 +854,6 @@ def _dispatch_pipeline(
         run_id=run_id,
         target_dim=target_dim,
         target_dims_attribution=list(target_dims_attribution or []),
-        pareto_mode=pareto_mode,
         gen_tag=gen_tag,
         candidates_requested=candidates_requested,
         run_dir=run_dir,

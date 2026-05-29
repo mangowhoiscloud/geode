@@ -73,7 +73,6 @@ def _write_apply_row(
     target_section: str = "role",
     new_value: str = "Be concise.",
     expected_dim: dict[str, float] | None = None,
-    group_advantage: float | None = None,
 ) -> None:
     """Helper — append an ``applied`` row to ``mutations.jsonl``."""
     row: dict[str, object] = {
@@ -90,8 +89,33 @@ def _write_apply_row(
         "rollback_condition": "",
         "baseline_fitness": None,
     }
-    if group_advantage is not None:
-        row["group_advantage"] = group_advantage
+    audit_log.parent.mkdir(parents=True, exist_ok=True)
+    with audit_log.open("a", encoding="utf-8") as fh:
+        fh.write(json.dumps(row) + "\n")
+
+
+def _write_attribution_row(
+    audit_log: Path,
+    *,
+    mutation_id: str,
+    observed_dim: dict[str, float],
+    attribution_score: float = 1.0,
+) -> None:
+    """Helper — append an ``attribution`` row to ``mutations.jsonl``.
+
+    The feedback block's kind × dim matrix needs a matched apply +
+    attribution pair on ``mutation_id`` to produce a non-empty rollup.
+    """
+    row: dict[str, object] = {
+        "ts": 1779800001.0,
+        "kind": "attribution",
+        "mutation_id": mutation_id,
+        "observed_dim": observed_dim,
+        "ci95": dict.fromkeys(observed_dim, 0.05),
+        "significant": dict.fromkeys(observed_dim, True),
+        "attribution_score": attribution_score,
+        "missing_baseline": False,
+    }
     audit_log.parent.mkdir(parents=True, exist_ok=True)
     with audit_log.open("a", encoding="utf-8") as fh:
         fh.write(json.dumps(row) + "\n")
@@ -142,7 +166,6 @@ def test_build_runner_context_disables_feedback_when_window_zero(
         isolated_mutator_state["audit_log"],
         mutation_id="m1",
         expected_dim={"safety": 0.5},
-        group_advantage=0.4,
     )
 
     ctx = build_runner_context()
@@ -154,9 +177,9 @@ def test_build_runner_context_disables_feedback_when_window_zero(
 def test_build_runner_context_populates_feedback_block_when_enabled(
     isolated_mutator_state: dict[str, Path], monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """With ``mutator_feedback_window>0`` and a history row carrying
-    ``group_advantage`` + ``expected_dim``, the user prompt surfaces
-    the feedback block."""
+    """With ``mutator_feedback_window>0`` and a matched apply +
+    attribution pair, the user prompt surfaces the kind × dim feedback
+    block."""
     from core.self_improving_loop.runner import (
         _build_user_prompt,
         build_runner_context,
@@ -167,7 +190,11 @@ def test_build_runner_context_populates_feedback_block_when_enabled(
         isolated_mutator_state["audit_log"],
         mutation_id="m1",
         expected_dim={"safety": 1.0},
-        group_advantage=0.4,
+    )
+    _write_attribution_row(
+        isolated_mutator_state["audit_log"],
+        mutation_id="m1",
+        observed_dim={"safety": 0.6},
     )
 
     ctx = build_runner_context()

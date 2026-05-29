@@ -1,8 +1,10 @@
 """PR-SG-SELECTION-ALIGN (2026-05-25) — seed-gen ↔ selection-layer alignment.
 
 Tests for G1 (anchor 3 surface) + G2 (scenario_realism) + G3 (tier .md
-drift) + G4 (target_dims_attribution + pick_regression_target_dims) +
-G5 (Pareto front evolver embed).
+drift) + G4 (target_dims_attribution + pick_regression_target_dims).
+
+(G5 Pareto front evolver embed was removed with the group/swarm
+machinery in PR-GROUP-REMOVAL, 2026-05-29.)
 
 Plan: docs/plans/2026-05-25-seed-gen-selection-layer-alignment.md.
 """
@@ -348,99 +350,26 @@ class TestAgentHandoffEmbedding:
         assert "target_dims_attribution" not in handoff
 
 
-# ─────────────────────── G5 — Pareto front (evolver) ─────────────────────────
+# ─── Evolver attribution embedding (Pareto archive query removed) ─────────────
 
 
-class TestParetoFrontReader:
-    def test_returns_empty_when_archive_missing(self, tmp_path: Path) -> None:
-        from core.self_improving_loop.pareto_archive import read_pareto_front
+class TestEvolverAttributionEmbed:
+    """PR-GROUP-REMOVAL (2026-05-29) — the Pareto archive query
+    (``read_pareto_front`` / ``pareto_mode`` / ``EVOLVE_HANDOFF.pareto_front``)
+    was removed with the group/swarm machinery. The evolver still
+    embeds ``target_dims_attribution`` (anchor / scenario_realism
+    scope) and MUST NOT embed a ``pareto_front`` key.
+    """
 
-        archive_path = tmp_path / "baseline_archive.jsonl"
-        assert read_pareto_front(archive_path, ["broken_tool_use"]) == []
-
-    def test_returns_empty_when_target_dims_empty(self, tmp_path: Path) -> None:
-        from core.self_improving_loop.pareto_archive import read_pareto_front
-
-        archive_path = tmp_path / "baseline_archive.jsonl"
-        archive_path.write_text(
-            json.dumps(
-                {
-                    "mutation_id": "m1",
-                    "ts": 1.0,
-                    "dim_means": {"broken_tool_use": 1.2},
-                }
-            )
-            + "\n",
-            encoding="utf-8",
-        )
-        assert read_pareto_front(archive_path, []) == []
-
-    def test_returns_non_dominated_projection(self, tmp_path: Path) -> None:
-        from core.self_improving_loop.pareto_archive import read_pareto_front
-
-        archive_path = tmp_path / "baseline_archive.jsonl"
-        rows = [
-            # m1: better on dim1, worse on dim2 — non-dominated
-            {"mutation_id": "m1", "ts": 1.0, "dim_means": {"dim1": 2.0, "dim2": 0.5}},
-            # m2: dominated by m3 in scope [dim1, dim2]
-            {"mutation_id": "m2", "ts": 2.0, "dim_means": {"dim1": 0.5, "dim2": 0.5}},
-            # m3: dominates m2; non-dominated vs m1 (trade-off on dim2)
-            {"mutation_id": "m3", "ts": 3.0, "dim_means": {"dim1": 1.0, "dim2": 1.5}},
-        ]
-        archive_path.write_text(
-            "".join(json.dumps(r) + "\n" for r in rows),
-            encoding="utf-8",
-        )
-        front = read_pareto_front(archive_path, ["dim1", "dim2"])
-        ids = {row["id"] for row in front}
-        assert ids == {"m1", "m3"}
-        # All returned rows expose dims + fitness scalar.
-        for row in front:
-            assert set(row["dims"].keys()) == {"dim1", "dim2"}
-            assert isinstance(row["fitness"], float)
-
-    def test_skips_rows_without_target_dims(self, tmp_path: Path) -> None:
-        from core.self_improving_loop.pareto_archive import read_pareto_front
-
-        archive_path = tmp_path / "baseline_archive.jsonl"
-        archive_path.write_text(
-            json.dumps(
-                {
-                    "mutation_id": "m1",
-                    "ts": 1.0,
-                    "dim_means": {"other_dim": 1.0},
-                }
-            )
-            + "\n",
-            encoding="utf-8",
-        )
-        assert read_pareto_front(archive_path, ["broken_tool_use"]) == []
-
-
-class TestEvolverParetoFrontEmbed:
-    def _state_with_archive(self, tmp_path: Path, *, pareto_mode: bool = True) -> object:
+    def _state(self, tmp_path: Path) -> object:
         from plugins.seed_generation.baseline_reader import BaselineSnapshot
         from plugins.seed_generation.orchestrator import PipelineState
 
-        # Write an archive with one row in scope.
-        archive_path = tmp_path / "baseline_archive.jsonl"
-        archive_path.write_text(
-            json.dumps(
-                {
-                    "mutation_id": "m-frontier",
-                    "ts": 1.0,
-                    "dim_means": {"broken_tool_use": 1.7, "input_hallucination": 0.9},
-                }
-            )
-            + "\n",
-            encoding="utf-8",
-        )
         state = PipelineState(
             run_id="r",
             target_dim="broken_tool_use",
             gen_tag="g",
             target_dims_attribution=["broken_tool_use", "input_hallucination"],
-            pareto_mode=pareto_mode,
             baseline_snapshot=BaselineSnapshot(dim_means={"broken_tool_use": 1.0}, dim_stderr={}),
             run_dir=tmp_path,
         )
@@ -452,12 +381,7 @@ class TestEvolverParetoFrontEmbed:
             }
         ]
         state.survivors = ["gen1-000-aaaaaaaa"]
-        state.reflections = {
-            "gen1-000-aaaaaaaa": {
-                "weaknesses": ["w1"],
-                "rewrite_section": "Body",
-            }
-        }
+        state.reflections = {"gen1-000-aaaaaaaa": {"weaknesses": ["w1"], "rewrite_section": "Body"}}
         state.pilot_scores = {
             "gen1-000-aaaaaaaa": {
                 "dim_means": {"broken_tool_use": 1.0, "input_hallucination": 0.7},
@@ -465,21 +389,20 @@ class TestEvolverParetoFrontEmbed:
         }
         return state
 
-    def test_pareto_front_embedded_when_archive_present(self, tmp_path: Path) -> None:
+    def test_embeds_attribution_and_omits_pareto_front(self, tmp_path: Path) -> None:
         from plugins.seed_generation.agents.evolver import Evolver
 
-        state = self._state_with_archive(tmp_path)
+        state = self._state(tmp_path)
         evolver = Evolver(MagicMock())
         tasks = evolver._build_tasks(state, {state.candidates[0]["id"]: state.candidates[0]})  # type: ignore[attr-defined]
         handoff = _extract_handoff(tasks[0].description)
-        assert "pareto_front" in handoff
-        assert handoff["pareto_front"][0]["id"] == "m-frontier"
         assert handoff["target_dims_attribution"] == [
             "broken_tool_use",
             "input_hallucination",
         ]
+        assert "pareto_front" not in handoff
 
-    def test_pareto_front_omitted_when_attribution_empty(self, tmp_path: Path) -> None:
+    def test_attribution_omitted_when_attribution_empty(self, tmp_path: Path) -> None:
         from plugins.seed_generation.agents.evolver import Evolver
         from plugins.seed_generation.baseline_reader import BaselineSnapshot
         from plugins.seed_generation.orchestrator import PipelineState
@@ -488,8 +411,7 @@ class TestEvolverParetoFrontEmbed:
             run_id="r",
             target_dim="broken_tool_use",
             gen_tag="g",
-            target_dims_attribution=[],  # empty → no Pareto scope
-            pareto_mode=True,
+            target_dims_attribution=[],  # empty → no attribution scope
             baseline_snapshot=BaselineSnapshot(dim_means={"broken_tool_use": 1.0}, dim_stderr={}),
             run_dir=tmp_path,
         )
@@ -508,25 +430,3 @@ class TestEvolverParetoFrontEmbed:
         handoff = _extract_handoff(tasks[0].description)
         assert "pareto_front" not in handoff
         assert "target_dims_attribution" not in handoff
-
-    def test_pareto_front_omitted_when_pareto_mode_false(self, tmp_path: Path) -> None:
-        """PR-SG-SELECTION-ALIGN-FIX (V4) — gate: even when the
-        archive exists from a prior pareto_mode=True cycle AND the
-        current run has a non-empty target_dims_attribution, the
-        evolver MUST NOT embed pareto_front when ``state.pareto_mode``
-        is False (default). Plan §9 said "when pareto_mode active";
-        Codex MCP review flagged the missing guard.
-        """
-        from plugins.seed_generation.agents.evolver import Evolver
-
-        state = self._state_with_archive(tmp_path, pareto_mode=False)
-        evolver = Evolver(MagicMock())
-        tasks = evolver._build_tasks(state, {state.candidates[0]["id"]: state.candidates[0]})  # type: ignore[attr-defined]
-        handoff = _extract_handoff(tasks[0].description)
-        # target_dims_attribution still surfaces — that's just metadata.
-        assert handoff["target_dims_attribution"] == [
-            "broken_tool_use",
-            "input_hallucination",
-        ]
-        # pareto_front omitted because the live mode is linear scalarization.
-        assert "pareto_front" not in handoff

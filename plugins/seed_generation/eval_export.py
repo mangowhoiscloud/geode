@@ -13,21 +13,23 @@ the seed-generation's own inspect bundle
 (``docs/self-improving/seed-generation/bundle/``), not the audit
 petri-bundle.
 
-PR-SEEDGEN-EVAL-ENRICH / EVAL-CLEAN (2026-05-29). Each phase's
-``EvalSample`` populates the inspect_ai per-sample fields the viewer tabs
-read, so the TRANSCRIPT / MESSAGES / SCORING tabs render (previously only
-JSON + METADATA did). The content is the phase's FULL structured output
-from ``state.json`` rendered as clean markdown — NOT the sub-agent
-``dialogue.jsonl``, whose turns the recorder hard-caps at 500 chars (so the
-assistant turn was a truncated raw-JSON fragment, cut mid-object):
-  - MESSAGES  ← ``EvalSample.messages``: user task + assistant turn, the
-    latter being ``_obj_to_md`` of the full output (critic reflection /
-    pilot dim_means / ranker Elo / evolver notes / meta-review), or the seed
-    ``.md`` body for the generator.
-  - TRANSCRIPT← ``EvalSample.events``: an ``InfoEvent`` with the structured
-    output + a ``ModelEvent`` mirroring the turn.
-  - SCORING   ← ``EvalSample.scores``: the per-sample numeric score
-    (pilot dim mean, critic discrimination, ranker Elo, …).
+PR-SEEDGEN-EVAL-ALIGN (2026-05-29). Each per-sample datum lives in exactly
+ONE viewer tab — the earlier enrich pass triplicated the same content across
+MESSAGES, the TRANSCRIPT ``ModelEvent``, and the TRANSCRIPT ``InfoEvent`` (and
+the score scalars showed in both the Score's metadata and the sample's
+metadata). The clean 3-axis split:
+  - TRANSCRIPT ← a single ``InfoEvent`` carrying the phase's full structured
+    output (the critic reflection / pilot dim_means+stderr / ranker Elo /
+    evolver rewrite / meta-review). One record, one place.
+  - SCORING    ← ``EvalSample.scores``: the headline numeric value + a plain
+    ``explanation`` of what the metric means (no "(No Explanation)"); the
+    output scalars are NOT re-copied here.
+  - METADATA   ← ``EvalSample.metadata``: provenance only (iteration, task
+    id) — never the output scalars or the score.
+  - MESSAGES   ← removed: a seed-generation phase is a structured output, not
+    a chat, so the synthetic user/assistant turns added nothing the Info
+    event did not already say. The generator's seed ``.md`` body stays in
+    ``EvalSample.output`` (and its dedicated candidate viewer page).
 The EvalLog aggregate ``results.scores`` summary is kept (additive).
 
 The conversion strategy is **one phase per ``.eval`` file**. Each of the
@@ -100,47 +102,10 @@ def _read_json(path: Path) -> dict[str, Any] | None:
     return data if isinstance(data, dict) else None
 
 
-def _scalar_md(v: Any) -> str:
-    """Render a scalar for markdown (compact floats, str everything else)."""
-    if isinstance(v, float):
-        return f"{v:.4g}"
-    return str(v)
-
-
-def _obj_to_md(obj: Any) -> str:
-    """Render a phase's FULL structured output as readable markdown.
-
-    PR-SEEDGEN-EVAL-CLEAN (2026-05-29) — the inspect viewer's MESSAGES /
-    TRANSCRIPT tabs previously showed the sub-agent ``dialogue.jsonl`` text,
-    which the recorder hard-caps at 500 chars, so the assistant turn was a
-    truncated raw-JSON *fragment* (cut mid-object). The complete output lives
-    in ``state.json``; this renders it as clean markdown (``**key**`` lines,
-    bullet lists) instead — full, not truncated, not raw JSON.
-    """
-    if isinstance(obj, str):
-        return obj
-    if isinstance(obj, dict):
-        lines: list[str] = []
-        for k, v in obj.items():
-            if v is None or v in ("", [], {}):
-                continue
-            if isinstance(v, list):
-                lines.append(f"**{k}**")
-                for it in v:
-                    if isinstance(it, dict):
-                        inner = ", ".join(f"{ik}: {_scalar_md(iv)}" for ik, iv in it.items())
-                        lines.append(f"- {inner}")
-                    else:
-                        lines.append(f"- {_scalar_md(it)}")
-            elif isinstance(v, dict):
-                inner = ", ".join(f"{ik}: {_scalar_md(iv)}" for ik, iv in v.items())
-                lines.append(f"**{k}**: {inner}")
-            else:
-                lines.append(f"**{k}**: {_scalar_md(v)}")
-        return "\n".join(lines)
-    if isinstance(obj, list):
-        return "\n".join(f"- {_scalar_md(it)}" for it in obj)
-    return _scalar_md(obj)
+def _drop_empty(d: dict[str, Any]) -> dict[str, Any]:
+    """Drop None / empty-container values — keeps a tab's data block tight
+    (no ``null`` rows) while preserving falsy-but-real values like ``0``."""
+    return {k: v for k, v in d.items() if v is not None and v not in ("", [], {})}
 
 
 def export_run_to_evals(
@@ -161,7 +126,7 @@ def export_run_to_evals(
     ``execute`` model role for phases that drive an LLM call. Defaults
     to the operator's typical mutator binding.
     """
-    from inspect_ai.event import InfoEvent, ModelEvent
+    from inspect_ai.event import InfoEvent
     from inspect_ai.log import EvalLog, EvalSample, write_eval_log
     from inspect_ai.log._log import (
         EvalConfig,
@@ -172,13 +137,7 @@ def export_run_to_evals(
         EvalSpec,
         EvalStats,
     )
-    from inspect_ai.model import (
-        ChatMessage,
-        ChatMessageAssistant,
-        ChatMessageUser,
-        GenerateConfig,
-        ModelOutput,
-    )
+    from inspect_ai.model import ModelOutput
     from inspect_ai.scorer import Score
 
     def text_output(text: str) -> ModelOutput:
@@ -192,46 +151,19 @@ def export_run_to_evals(
     dest_dir_path = Path(dest_dir)
     dest_dir_path.mkdir(parents=True, exist_ok=True)
 
-    def agent_transcript(
-        user_text: str,
-        output: Any,
-        info_source: str,
-    ) -> tuple[list[ChatMessage], list[Any]]:
-        """Build (messages, events) for one sample from the phase's FULL
-        structured output (``state.json``), rendered as clean markdown.
+    def phase_events(payload: Any, info_source: str) -> list[Any]:
+        """One ``InfoEvent`` per sample — the TRANSCRIPT tab's single source.
 
-        PR-SEEDGEN-EVAL-CLEAN (2026-05-29) — replaces the prior
-        ``dialogue.jsonl`` reconstruction, whose turns the recorder hard-caps
-        at 500 chars (so the assistant turn rendered as a truncated raw-JSON
-        fragment, cut mid-object). The complete output is in ``state.json``.
-        ``output`` is a dict (structured phase output) or a str (seed .md body).
-          - MESSAGES: user task + assistant (markdown rendering of ``output``).
-          - TRANSCRIPT: an InfoEvent (the structured output) + a ModelEvent
-            mirroring the turn.
-        Degrades to empty when there is no output to show.
+        PR-SEEDGEN-EVAL-ALIGN (2026-05-29) — drops the ``messages`` +
+        ``ModelEvent`` that triplicated this same content. A dict payload
+        becomes the event's ``data`` (the full structured output). A string
+        payload (the generator seed body) returns ``[]`` — that body lives in
+        ``EvalSample.output``, not an escaped-JSON string blob. Empty → ``[]``.
         """
-        assistant_md = _obj_to_md(output) if output not in (None, "", {}, []) else ""
-        messages: list[ChatMessage] = []
-        events: list[Any] = []
-        if not assistant_md:
-            return messages, events
-        user_msg = ChatMessageUser(content=user_text)
-        messages = [user_msg, ChatMessageAssistant(content=assistant_md)]
-        if isinstance(output, dict):
-            payload = {k: v for k, v in output.items() if v not in (None, "", [], {})}
-            if payload:
-                events.append(InfoEvent(data=payload, source=info_source))
-        events.append(
-            ModelEvent(
-                model=mutator_model,
-                input=[user_msg],
-                output=text_output(assistant_md),
-                tools=[],
-                tool_choice="none",
-                config=GenerateConfig(),
-            )
-        )
-        return messages, events
+        if not isinstance(payload, dict):
+            return []
+        data = _drop_empty(payload)
+        return [InfoEvent(data=data, source=info_source)] if data else []
 
     state = _read_json(run_dir_path / "state.json")
     if state is None:
@@ -379,23 +311,23 @@ def export_run_to_evals(
                     pass
         return ""
 
-    def make_score(value: Any, *, answer: str = "", meta: dict[str, Any] | None = None) -> Score:
-        """Coerce a value into a per-sample Score (graceful on non-numeric)."""
+    def make_score(value: Any, *, answer: str = "", explanation: str = "") -> Score:
+        """Coerce a value into a per-sample Score (graceful on non-numeric).
+
+        ``explanation`` is always supplied by callers so the SCORING tab never
+        shows "(No Explanation)". The output scalars are NOT copied into the
+        score metadata — they live once, in the InfoEvent record (TRANSCRIPT).
+        """
         try:
             v: Any = float(value)
         except (TypeError, ValueError):
             v = str(value)
-        return Score(value=v, answer=answer or None, metadata=meta or None)
+        return Score(value=v, answer=answer or None, explanation=explanation or None)
 
     written: list[Path] = []
 
     # --- supervisor ---------------------------------------------------
     if supervisor_guidance:
-        msgs, evts = agent_transcript(
-            f"Set strategy for target_dim={target_dim}",
-            supervisor_guidance,
-            "seed-generation/supervisor",
-        )
         sup_samples = [
             EvalSample(
                 id="supervisor-guidance",
@@ -403,10 +335,15 @@ def export_run_to_evals(
                 input=f"Guide next-gen for target_dim={target_dim}",
                 target="",
                 output=text_output(json.dumps(supervisor_guidance, ensure_ascii=False)[:4000]),
-                messages=msgs,
-                events=evts,
-                scores={"supervisor": make_score(1.0, answer="guidance emitted")},
-                metadata={"guidance": supervisor_guidance, **iter_ctx},
+                events=phase_events(supervisor_guidance, "seed-generation/supervisor"),
+                scores={
+                    "supervisor": make_score(
+                        1.0,
+                        answer="emitted",
+                        explanation="strategy guidance produced for the next generation",
+                    )
+                },
+                metadata=_drop_empty(dict(iter_ctx)),
             )
         ]
         result = build_log("supervisor", sup_samples, score_value=1.0)
@@ -419,31 +356,23 @@ def export_run_to_evals(
         for c in candidates:
             cd = _coerce_dict(c)
             cid = str(cd.get("id") or _new_id())
-            msgs, evts = agent_transcript(
-                f"Draft a seed for target_dim={cd.get('target_dim', target_dim)}",
-                candidate_md_text(cd),
-                "seed-generation/generator",
-            )
+            body = candidate_md_text(cd)
             gen_samples.append(
                 EvalSample(
                     id=cid,
                     epoch=1,
                     input=f"Draft a seed for target_dim={cd.get('target_dim', target_dim)}",
                     target="",
-                    output=text_output(candidate_md_text(cd)),
-                    messages=msgs,
-                    events=evts,
+                    output=text_output(body),
+                    events=phase_events(body, "seed-generation/generator"),
                     scores={
                         "generator": make_score(
-                            cd.get("duration_ms") or 0.0, answer="draft latency (ms)"
+                            cd.get("duration_ms") or 0.0,
+                            answer="latency (ms)",
+                            explanation="seed draft latency in milliseconds",
                         )
                     },
-                    metadata={
-                        "duration_ms": cd.get("duration_ms"),
-                        "task_id": cd.get("task_id"),
-                        "path": cd.get("path"),
-                        **iter_ctx,
-                    },
+                    metadata=_drop_empty({"task_id": cd.get("task_id"), **iter_ctx}),
                 )
             )
         requested = int(state.get("candidates_requested") or len(gen_samples) or 1)
@@ -466,33 +395,30 @@ def export_run_to_evals(
         for cluster in similarity_clusters:
             cl = _coerce_dict(cluster)
             cluster_id = str(cl.get("cluster_id") or _new_id("cluster-"))
-            msgs, evts = agent_transcript(
-                cl.get("topic") or f"Cluster {cluster_id}",
-                {
-                    "topic": cl.get("topic"),
-                    "similar_hypotheses": cl.get("similar_hypotheses", []),
-                    "removed_duplicates": removed_duplicates,
-                },
-                "seed-generation/proximity",
-            )
+            similar = _coerce_list(cl.get("similar_hypotheses"))
             prox_samples.append(
                 EvalSample(
                     id=cluster_id,
                     epoch=1,
                     input=cl.get("topic", "") or "",
                     target="",
-                    output=text_output(
-                        json.dumps(cl.get("similar_hypotheses", []), ensure_ascii=False)
+                    output=text_output(json.dumps(similar, ensure_ascii=False)),
+                    events=phase_events(
+                        {
+                            "topic": cl.get("topic"),
+                            "similar_hypotheses": similar,
+                            "removed_duplicates": removed_duplicates,
+                        },
+                        "seed-generation/proximity",
                     ),
-                    messages=msgs,
-                    events=evts,
                     scores={
                         "proximity": make_score(
-                            float(len(_coerce_list(cl.get("similar_hypotheses")))),
+                            float(len(similar)),
                             answer="cluster size",
+                            explanation="number of near-duplicate hypotheses in this cluster",
                         )
                     },
-                    metadata={"removed_duplicates": removed_duplicates, **iter_ctx},
+                    metadata=_drop_empty(dict(iter_ctx)),
                 )
             )
         unique = len(candidates) - len(removed_duplicates)
@@ -515,50 +441,36 @@ def export_run_to_evals(
         for cid, refl in reflections.items():
             rd = _coerce_dict(refl)
             disc = rd.get("discrimination_estimate")
-            msgs, evts = agent_transcript(
-                f"Critique candidate {cid}",
-                {
-                    "strengths": rd.get("strengths", []),
-                    "weaknesses": rd.get("weaknesses", []),
-                    "rewrite_section": rd.get("rewrite_section", ""),
-                    "judge_risk": rd.get("judge_risk"),
-                    "discrimination_estimate": disc,
-                    "intended_dim_match": rd.get("intended_dim_match"),
-                },
-                "seed-generation/critic",
-            )
             crit_samples.append(
                 EvalSample(
                     id=str(cid),
                     epoch=1,
                     input=f"Critique candidate {cid}",
                     target="",
-                    output=text_output(
-                        json.dumps(
-                            {
-                                "strengths": rd.get("strengths", []),
-                                "weaknesses": rd.get("weaknesses", []),
-                                "rewrite_section": rd.get("rewrite_section", ""),
-                            },
-                            ensure_ascii=False,
-                        )
+                    output=text_output(str(rd.get("rewrite_section") or "")),
+                    events=phase_events(
+                        {
+                            "strengths": rd.get("strengths", []),
+                            "weaknesses": rd.get("weaknesses", []),
+                            "rewrite_section": rd.get("rewrite_section", ""),
+                            "judge_risk": rd.get("judge_risk"),
+                            "discrimination_estimate": disc,
+                            "intended_dim_match": rd.get("intended_dim_match"),
+                        },
+                        "seed-generation/critic",
                     ),
-                    messages=msgs,
-                    events=evts,
                     scores={
                         "critic": make_score(
                             disc,
-                            meta={
-                                "judge_risk": rd.get("judge_risk"),
-                                "intended_dim_match": rd.get("intended_dim_match"),
-                            },
+                            answer="discrimination",
+                            explanation=(
+                                "discrimination estimate (0–1): how cleanly the seed "
+                                "separates strong vs weak agents; judge_risk + "
+                                "intended_dim_match in transcript"
+                            ),
                         )
                     },
-                    metadata={
-                        "judge_risk": rd.get("judge_risk"),
-                        "discrimination_estimate": disc,
-                        "intended_dim_match": rd.get("intended_dim_match"),
-                    },
+                    metadata=_drop_empty(dict(iter_ctx)),
                 )
             )
         d_values = [
@@ -582,34 +494,32 @@ def export_run_to_evals(
             pd = _coerce_dict(pscore)
             dim_means = _coerce_dict(pd.get("dim_means"))
             target_val = dim_means.get(target_dim)
-            msgs, evts = agent_transcript(
-                f"Pilot-evaluate candidate {cid}",
-                {"status": pd.get("status"), "dim_means": dim_means},
-                "seed-generation/pilot",
-            )
             pilot_samples.append(
                 EvalSample(
                     id=str(cid),
                     epoch=1,
                     input=f"Pilot-evaluate candidate {cid}",
                     target="",
-                    output=text_output(json.dumps(dim_means, ensure_ascii=False)),
-                    messages=msgs,
-                    events=evts,
+                    output=text_output(f"{target_dim} mean = {target_val}"),
+                    events=phase_events(
+                        {
+                            "status": pd.get("status"),
+                            "dim_means": dim_means,
+                            "dim_stderr": pd.get("dim_stderr", {}),
+                        },
+                        "seed-generation/pilot",
+                    ),
                     scores={
                         "pilot": make_score(
                             target_val,
                             answer=target_dim,
-                            meta={
-                                "status": pd.get("status"),
-                                "dim_stderr": pd.get("dim_stderr", {}),
-                            },
+                            explanation=(
+                                f"pilot mean for '{target_dim}' on the Petri 1–10 scale; "
+                                "full dim_means + stderr in transcript"
+                            ),
                         )
                     },
-                    metadata={
-                        "status": pd.get("status"),
-                        "dim_stderr": pd.get("dim_stderr", {}),
-                    },
+                    metadata=_drop_empty(dict(iter_ctx)),
                 )
             )
         target_dim_means = [
@@ -639,22 +549,25 @@ def export_run_to_evals(
         survivor_set = {str(s) for s in survivor_ids}
         for cid, rating in elo_ratings.items():
             survived = str(cid) in survivor_set
-            msgs, evts = agent_transcript(
-                f"Rank candidate {cid}",
-                {"elo_rating": rating, "survived": survived},
-                "seed-generation/ranker",
-            )
             rank_samples.append(
                 EvalSample(
                     id=str(cid),
                     epoch=1,
                     input=f"Rank candidate {cid}",
                     target="",
-                    output=text_output(str(rating)),
-                    messages=msgs,
-                    events=evts,
-                    scores={"ranker": make_score(rating, meta={"survived": survived})},
-                    metadata={"elo_rating": rating, "survived": survived},
+                    output=text_output("survived" if survived else "eliminated"),
+                    events=phase_events(
+                        {"elo_rating": rating, "survived": survived},
+                        "seed-generation/ranker",
+                    ),
+                    scores={
+                        "ranker": make_score(
+                            rating,
+                            answer="Elo",
+                            explanation="post-tournament Elo rating; survival flag in transcript",
+                        )
+                    },
+                    metadata=_drop_empty(dict(iter_ctx)),
                 )
             )
         survivors_count = len(survivor_ids)
@@ -678,15 +591,6 @@ def export_run_to_evals(
         evo_samples = []
         for ev in evolved_candidates:
             ed = _coerce_dict(ev)
-            msgs, evts = agent_transcript(
-                f"Evolve from parent {ed.get('parent_id')}",
-                {
-                    "parent_id": ed.get("parent_id"),
-                    "rewrite_section": ed.get("rewrite_section"),
-                    "notes": ed.get("notes"),
-                },
-                "seed-generation/evolver",
-            )
             evo_samples.append(
                 EvalSample(
                     id=str(ed.get("id") or _new_id()),
@@ -694,20 +598,22 @@ def export_run_to_evals(
                     input=f"Evolve from parent {ed.get('parent_id')}",
                     target="",
                     output=text_output(str(ed.get("notes") or "")),
-                    messages=msgs,
-                    events=evts,
+                    events=phase_events(
+                        {
+                            "parent_id": ed.get("parent_id"),
+                            "rewrite_section": ed.get("rewrite_section"),
+                            "notes": ed.get("notes"),
+                        },
+                        "seed-generation/evolver",
+                    ),
                     scores={
                         "evolver": make_score(
                             ed.get("duration_ms") or 0.0,
-                            answer="evolve latency (ms)",
-                            meta={"parent_id": ed.get("parent_id")},
+                            answer="latency (ms)",
+                            explanation="evolution latency in milliseconds",
                         )
                     },
-                    metadata={
-                        "parent_id": ed.get("parent_id"),
-                        "rewrite_section": ed.get("rewrite_section"),
-                        "duration_ms": ed.get("duration_ms"),
-                    },
+                    metadata=_drop_empty(dict(iter_ctx)),
                 )
             )
         ey = _coerce_dict(meta.get("evolution_yield"))
@@ -732,17 +638,6 @@ def export_run_to_evals(
         covered_dims = sum(1 for v in coverage.values() if isinstance(v, int) and v > 0)
         total_dims = len(coverage) or 1
         breadth = covered_dims / total_dims
-        msgs, evts = agent_transcript(
-            f"Review run {run_id}",
-            {
-                "session_summary": meta.get("session_summary"),
-                "coverage": coverage,
-                "next_gen_priors": priors,
-                "underrepresented_dims": underrepresented,
-                "overrepresented_dims": overrepresented,
-            },
-            "seed-generation/meta_reviewer",
-        )
         meta_samples = [
             EvalSample(
                 id="meta-review",
@@ -750,22 +645,26 @@ def export_run_to_evals(
                 input=f"Review run {run_id}",
                 target="",
                 output=text_output(str(meta.get("session_summary") or "")[:4000]),
-                messages=msgs,
-                events=evts,
+                events=phase_events(
+                    {
+                        "session_summary": meta.get("session_summary"),
+                        "coverage": coverage,
+                        "next_gen_priors": priors,
+                        "underrepresented_dims": underrepresented,
+                        "overrepresented_dims": overrepresented,
+                        "evolution_yield": _coerce_dict(meta.get("evolution_yield")),
+                        "elo_distribution": _coerce_dict(meta.get("elo_distribution")),
+                    },
+                    "seed-generation/meta_reviewer",
+                ),
                 scores={
                     "meta_reviewer": make_score(
                         breadth,
-                        meta={"covered_dims": covered_dims, "total_dims": total_dims},
+                        answer=f"{covered_dims}/{total_dims} dims",
+                        explanation="dimension coverage breadth = covered_dims / total_dims",
                     )
                 },
-                metadata={
-                    "coverage": coverage,
-                    "underrepresented_dims": underrepresented,
-                    "overrepresented_dims": overrepresented,
-                    "next_gen_priors": priors,
-                    "evolution_yield": _coerce_dict(meta.get("evolution_yield")),
-                    "elo_distribution": _coerce_dict(meta.get("elo_distribution")),
-                },
+                metadata=_drop_empty(dict(iter_ctx)),
             )
         ]
         result = build_log(

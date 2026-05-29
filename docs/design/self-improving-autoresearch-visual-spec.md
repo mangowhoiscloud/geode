@@ -526,7 +526,7 @@ The filter strip is a **read-only summary** of the unique values present in the 
   <dt>target_kind</dt>
   <dd><code>prompt</code> · <code>tool_policy</code> · <code>decomposition</code> · <code>reflection</code></dd>
   <dt>verdict</dt>
-  <dd><span class="verdict-applied">applied</span> · <span class="verdict-applied-sibling">applied_sibling</span> · <span class="verdict-attribution">attribution</span></dd>
+  <dd><span class="verdict-applied">applied</span> · <span class="verdict-attribution">attribution</span></dd>
 </dl>
 ```
 
@@ -540,12 +540,12 @@ The single table is sorted **newest first by `ts`** (the float timestamp field o
 
 ### 6.3 Mutations table columns (9 cols)
 
-Each line in `mutations.jsonl` is either an `ApplyRecord` (`kind = "applied"` or `"applied_sibling"`) or an `AttributionRecord` (`kind = "attribution"`). The table renders both kinds in one stream, distinguished by row-class.
+Each line in `mutations.jsonl` is either an `ApplyRecord` (`kind = "applied"`) or an `AttributionRecord` (`kind = "attribution"`). The table renders both kinds in one stream, distinguished by row-class.
 
 | col | source field (ApplyRecord) | source field (AttributionRecord) | format |
 |---|---|---|---|
 | ts | `row.ts` (float UNIX ts) | `row.ts` | short ISO via `_dt.datetime.fromtimestamp(row.ts, tz=UTC)` |
-| kind | `applied` / `applied_sibling` | `attribution` | `<span class="verdict-{kind}">` |
+| kind | `applied` | `attribution` | `<span class="verdict-{kind}">` |
 | mut_id | `row.mutation_id` | `row.mutation_id` | mono, anchor `id="mut-{mut_id}"` on first occurrence |
 | target_section | `row.target_section` (e.g. `wrapper-sections.json::sycophancy_guardrail`) | (paired via mut_id; show same as the ApplyRecord) | mono, truncate to 40 chars |
 | target_kind | `row.target_kind` (`prompt` / `tool_policy` / …) | (paired) | mono |
