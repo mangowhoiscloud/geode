@@ -8,8 +8,8 @@ import { GEODE_SOT } from "@/data/geode/sot";
 
 export default function DocsIndex() {
   const locale = useLocale();
-  const summaryEn = `A general-purpose autonomous execution agent built on LangGraph. v${GEODE_SOT.version}, Python 3.12+, ${GEODE_SOT.modules.core} core + ${GEODE_SOT.modules.plugins} plugins = ${GEODE_SOT.modules.total} modules, ${GEODE_SOT.tests.standard.toLocaleString()} tests, 58 hook events, 53 tools.`;
-  const summaryKo = `LangGraph 기반 범용 자율 실행 에이전트. v${GEODE_SOT.version}, Python 3.12+, core ${GEODE_SOT.modules.core} + plugins ${GEODE_SOT.modules.plugins} = ${GEODE_SOT.modules.total} 모듈, ${GEODE_SOT.tests.standard.toLocaleString()} 테스트, 58 훅, 53 도구.`;
+  const summaryEn = `A general-purpose autonomous execution agent built on LangGraph. v${GEODE_SOT.version}, Python 3.12+, ${GEODE_SOT.modules.core} core + ${GEODE_SOT.modules.plugins} plugins = ${GEODE_SOT.modules.total} modules, ${GEODE_SOT.tests.standard.toLocaleString()} tests, 81 hook events, 59 tools.`;
+  const summaryKo = `LangGraph 기반 범용 자율 실행 에이전트. v${GEODE_SOT.version}, Python 3.12+, core ${GEODE_SOT.modules.core} + plugins ${GEODE_SOT.modules.plugins} = ${GEODE_SOT.modules.total} 모듈, ${GEODE_SOT.tests.standard.toLocaleString()} 테스트, 81 훅, 59 도구.`;
   return (
     <DocsShell
       slug=""
@@ -21,22 +21,68 @@ export default function DocsIndex() {
       <Bi
         ko={
           <>
-            <h2>이 문서에서 다루는 것</h2>
+            <h2>GEODE 는 무엇인가</h2>
             <p>
-              본 사이트는 GEODE 의 아키텍처, 런타임, 하네스, 플러그인 생태계를
-              다룹니다. 코드베이스와 wiki(<code>mango-wiki/projects/geode</code>)
-              에서 추출되어 현재 프로덕션 버전을 반영합니다.
+              GEODE 는 LangGraph 위에 올린 <strong>장기 실행 자율 실행
+              하네스</strong>입니다. 4 계층 (Model · Runtime · Harness · Agent)
+              으로 연구, 분석, 자동화, 스케줄링을 스스로 수행하고,
+              <code>geode serve</code> 데몬 + 메신저 게이트웨이로 상주합니다.
+            </p>
+            <h2>두 개의 루프</h2>
+            <p>
+              GEODE 를 가르는 핵심은 <strong>두 개의 루프</strong>입니다.
+            </p>
+            <ul>
+              <li>
+                <strong>Inner loop (Agentic Loop)</strong> — 한 작업을 푸는{" "}
+                <code>while(tool_use)</code> 실행 루프. 50 라운드 상한, 5 종료
+                경로, 59 도구 + 지연 로딩 (아키텍처 / 런타임 / 하네스 섹션).
+              </li>
+              <li>
+                <strong>Outer loop (Self-Improving Loop)</strong> — GEODE 가
+                자기 자신을 개선하는 폐루프. mutation → Petri audit → attribution
+                → promote/revert (autoresearch) 와, Petri seed 를 co-scientist
+                토너먼트로 진화시키는 seed-generation 이 맞물립니다 (Self-Improving
+                Loop 섹션).
+              </li>
+            </ul>
+            <p className="text-white/40 text-sm">
+              코드베이스와 wiki(<code>mango-wiki/projects/geode</code>)에서 추출,
+              현재 프로덕션 버전을 반영합니다.
             </p>
           </>
         }
         en={
           <>
-            <h2>What you&apos;ll find here</h2>
+            <h2>What GEODE is</h2>
             <p>
-              This site documents GEODE&apos;s architecture, runtime, harness,
-              and plugin ecosystem. It is generated from the codebase and the
-              wiki at <code>mango-wiki/projects/geode</code>, and reflects the
-              current production version.
+              GEODE is a <strong>long-running autonomous execution harness</strong>{" "}
+              built on LangGraph. A four-layer stack (Model · Runtime · Harness ·
+              Agent) runs research, analysis, automation, and scheduling on its
+              own, resident behind a <code>geode serve</code> daemon and messaging
+              gateways.
+            </p>
+            <h2>Two loops</h2>
+            <p>The defining idea is <strong>two loops</strong>:</p>
+            <ul>
+              <li>
+                <strong>Inner loop (the Agentic Loop)</strong> — the{" "}
+                <code>while(tool_use)</code> primitive that solves one task: a
+                50-round cap, five termination paths, 59 tools with deferred
+                loading (the Architecture / Runtime / Harness sections).
+              </li>
+              <li>
+                <strong>Outer loop (the Self-Improving Loop)</strong> — the closed
+                loop where GEODE improves itself: mutation → Petri audit →
+                attribution → promote/revert (autoresearch), meshed with
+                seed-generation evolving the Petri seed corpus through a
+                co-scientist tournament (the Self-Improving Loop section).
+              </li>
+            </ul>
+            <p className="text-white/40 text-sm">
+              Generated from the codebase and the wiki at{" "}
+              <code>mango-wiki/projects/geode</code>, reflecting the current
+              production version.
             </p>
           </>
         }
