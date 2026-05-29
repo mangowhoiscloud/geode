@@ -732,6 +732,26 @@ def test_seedgen_eval_samples_populate_viewer_tabs() -> None:
             f"{log_path.name}: TRANSCRIPT missing a ModelEvent; got {event_types}"
         )
         assert sample.scores, f"{log_path.name}: SCORING tab empty — no sample.scores"
+        # PR-SEEDGEN-EVAL-CLEAN: the assistant turn is clean markdown built from
+        # state, NOT a raw / 500-truncated JSON fragment from dialogue.jsonl.
+        asst = next(
+            (m for m in sample.messages if getattr(m, "role", None) == "assistant"),
+            None,
+        )
+        assert asst is not None, f"{log_path.name}: no assistant message"
+        content = asst.content if isinstance(asst.content, str) else str(asst.content)
+        assert not content.lstrip().startswith("{"), (
+            f"{log_path.name}: assistant content is raw JSON (should be clean markdown)"
+        )
+
+    # Generator messages come from the published seed .md body (not the
+    # recorded absolute state path, which is absent in a fresh checkout/CI).
+    for log_path in sorted(logs.glob("*seedgen-generator_*.eval")):
+        log_obj = read_eval_log(str(log_path))
+        assert log_obj.samples and log_obj.samples[0].messages, (
+            f"{log_path.name}: generator MESSAGES empty — candidate .md body not "
+            "read from the bundle"
+        )
 
 
 def test_seedgen_url_basepath_safety(built_seedgen_pages: dict[str, str]) -> None:
