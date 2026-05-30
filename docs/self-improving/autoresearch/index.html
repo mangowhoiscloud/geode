@@ -26,9 +26,9 @@
         <li><a href="/geode/self-improving/petri-bundle/">SPA log viewer &#x2197;</a></li>
         <li><a href="/geode/self-improving/petri-bundle/">Recent audits</a>
           <ul class="sub-nav">
-            <li><a href="/geode/self-improving/petri-bundle/#/tasks/j93DMHTB2Lfea8rTHsB4gn">audit_j93DMHTB</a></li>
-            <li><a href="/geode/self-improving/petri-bundle/#/tasks/LhvVEmc69G22QuXe64xctt">audit_LhvVEmc6</a></li>
-            <li><a href="/geode/self-improving/petri-bundle/#/tasks/AdsporVRpyMvfbWhkFAaDD">audit_AdsporVR</a></li>
+            <li><a href="/geode/self-improving/petri-bundle/#/logs/2026-05-26T23-57-39-00-00_audit_j93DMHTB2Lfea8rTHsB4gn.eval">audit_j93DMHTB</a></li>
+            <li><a href="/geode/self-improving/petri-bundle/#/logs/2026-05-26T23-51-32-00-00_audit_LhvVEmc69G22QuXe64xctt.eval">audit_LhvVEmc6</a></li>
+            <li><a href="/geode/self-improving/petri-bundle/#/logs/2026-05-26T23-42-50-00-00_audit_AdsporVRpyMvfbWhkFAaDD.eval">audit_AdsporVR</a></li>
           </ul>
         </li>
       </ul>
@@ -82,13 +82,13 @@
       <dt>current baseline</dt><dd><code>—</code></dd>
       <dt>fitness</dt><dd><span class="num">—</span></dd>
       <dt>last promote</dt><dd><span class="muted">—</span></dd>
-      <dt>mutations.jsonl</dt><dd>17 rows &middot; <span class='muted'>2026-05-29 03:48</span></dd>
+      <dt>mutations.jsonl</dt><dd>12 rows &middot; <span class='muted'>2026-05-30 08:55</span></dd>
       <dt>results.tsv</dt><dd>0 rows &middot; <span class='muted'>—</span></dd>
-      <dt>policies/</dt><dd>1 files &middot; <span class='muted'>2026-05-29 03:48</span></dd>
+      <dt>policies/</dt><dd>3 files &middot; <span class='muted'>2026-05-30 08:55</span></dd>
       <dt>source</dt><dd><code>baseline.json</code></dd>
     </dl>
 
-    <h2 class="section"><span>Generation timeline &middot; 0 rows</span></h2>
+    <h2 class="section"><span>Generation timeline &middot; 1 row</span></h2>
     <table class="records">
       <thead>
         <tr>
@@ -104,6 +104,25 @@
       </tbody>
     </table>
 
+    <h2 class="section"><span>Baseline registry &middot; grouped by epoch</span></h2>
+    <p class="page-sub">Each promote appends a <code>kind="baseline"</code> row to <code>baseline_archive.jsonl</code>, partitioned into content-addressed <strong>epochs</strong> (be-NNN) keyed by a hash of the production+measurement spec (margin rule, fitness/margin logic version, the four roles' model+source, rubric, dim set, bench, seed-pool identity). Baselines from different epochs were produced under different logic and are <strong>not comparable</strong> — they are never merged into one table.</p>
+    <div class="namespace-block">
+      <h3>pre-epoch (backfill pending) <span class="count">1 baseline</span></h3>
+      <p class="namespace-meta">Predates the content-addressed epoch schema — not yet partitioned. Re-backfilled with epoch fields once the canonical fitness is settled.</p>
+      <table class="records">
+        <thead><tr><th scope="col">baseline-id</th><th scope="col">ts</th><th scope="col">fitness</th><th scope="col">fitness_stderr</th><th scope="col">promoted by</th></tr></thead>
+        <tbody>
+        <tr>
+          <td class="id"><code>baseline-2605-1</code></td>
+          <td class="muted">2026-05-29 09:18</td>
+          <td><span class="num">0.7915</span></td>
+          <td><span class="muted">—</span></td>
+          <td class="muted">backfill</td>
+        </tr>
+        </tbody>
+      </table>
+    </div>
+
     <h2 class="section"><span>Sub-views &middot; 4 autoresearch sub-pages</span></h2>
     <table class="records">
       <thead>
@@ -117,14 +136,14 @@
       <tbody>
         <tr>
           <td class="id"><a href="/geode/self-improving/autoresearch/baseline/">Baseline</a> <span class="bucket autoresearch">autoresearch</span></td>
-          <td>1 (current promoted) &middot; <span class='muted'>archive: 0 rows</span></td>
-          <td class="muted">2026-05-29 02:49</td>
+          <td>1 (current promoted) &middot; <span class='muted'>archive: 1 rows</span></td>
+          <td class="muted">2026-05-30 08:55</td>
           <td class="id"><a href="/geode/self-improving/autoresearch/baseline/">open &rarr;</a></td>
         </tr>
         <tr>
           <td class="id"><a href="/geode/self-improving/autoresearch/mutations/">Mutations</a> <span class="bucket autoresearch">autoresearch</span></td>
-          <td>17 rows</td>
-          <td class="muted">2026-05-29 03:48</td>
+          <td>12 rows</td>
+          <td class="muted">2026-05-30 08:55</td>
           <td class="id"><a href="/geode/self-improving/autoresearch/mutations/">open &rarr;</a></td>
         </tr>
         <tr>
@@ -135,8 +154,8 @@
         </tr>
         <tr>
           <td class="id"><a href="/geode/self-improving/autoresearch/policies/">Policies</a> <span class="bucket autoresearch">autoresearch</span></td>
-          <td>1 files</td>
-          <td class="muted">2026-05-29 03:48</td>
+          <td>3 files</td>
+          <td class="muted">2026-05-30 08:55</td>
           <td class="id"><a href="/geode/self-improving/autoresearch/policies/">open &rarr;</a></td>
         </tr>
       </tbody>
@@ -153,7 +172,7 @@
         <span class="chip geode">GEODE</span>self-target wrapper.
       </p>
       <p class="version-stamp">
-        Rendered against GEODE <code>v0.99.83</code> &middot; DESIGN.md schema 1 &middot; built 2026-05-29 04:10.
+        Rendered against GEODE <code>v0.99.92</code> &middot; DESIGN.md schema 1 &middot; built 2026-05-30 08:55.
         Dim subset: 22 (geode_5axes). Pipeline phases: 8. Baseline schema: v2 (PR-2).
       </p>
     </div>
