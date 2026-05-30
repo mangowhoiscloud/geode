@@ -361,10 +361,11 @@ def required_samples(
         delta = 0.0
 
     # ``replicate`` is a count for display only — guard the cast so a malformed
-    # value (e.g. a stray non-int) degrades to 1 rather than raising.
+    # value (a stray non-int, or ``float("inf")`` which raises OverflowError on
+    # ``int()``) degrades to 1 rather than raising.
     try:
         replicate_count = max(1, int(replicate))
-    except (TypeError, ValueError):
+    except (TypeError, ValueError, OverflowError):
         replicate_count = 1
 
     n_seed: int | None

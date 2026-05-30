@@ -452,14 +452,16 @@ def _resolve_audit_replicate(cli_override: int | None = None) -> int:
             log.warning("audit replicate env %s=%r is < 1; ignoring", env_name, raw)
     if cli_override is not None:
         try:
+            # OverflowError guards ``int(float("inf"))`` (argparse type=int rejects
+            # it at parse, but the resolver is also called directly).
             return max(1, int(cli_override))
-        except (TypeError, ValueError):
+        except (TypeError, ValueError, OverflowError):
             log.warning("audit replicate CLI value %r is not an integer; ignoring", cli_override)
     configured = getattr(_get_autoresearch_config(), "replicate", None)
     if configured is not None:
         try:
             return max(1, int(configured))
-        except (TypeError, ValueError):
+        except (TypeError, ValueError, OverflowError):
             log.warning(
                 "replicate config value %r is not an integer; using default %d",
                 configured,
@@ -3921,14 +3923,47 @@ def main() -> int:
         baseline_admire_means=_baseline_admire_means,
         anchor_confidence_mode=_anchor_confidence_mode,
     )
-    _baseline_fitness_stderr_for_ci = (
+    # gain σ = √(σ_current² + σ_baseline²) — the SAME quantity (and the SAME
+    # bootstrap-then-MC-fallback) the promote gate's ``_should_promote`` builds, so
+    # DEFAULT_GAIN_CI_Z=1.0 reconciles the verdict with the gate EXACTLY:
+    #   - σ_current: prefer ``current_fitness_stderr`` (the sample bootstrap); when
+    #     ``None`` (dry-run / <2 rows) fall back to ``_fitness_scale_stderr`` on the
+    #     CURRENT dims — the gate's IDENTICAL fallback (else a v1/summary baseline's
+    #     verdict σ would be 0 while the gate's is the MC estimate → contradiction).
+    #   - σ_baseline: prefer the persisted ``raw.fitness_stderr``; when ``None``
+    #     (v1 / pre-E4 baseline) fall back to ``_fitness_scale_stderr`` on the
+    #     BASELINE dims — again the gate's identical fallback.
+    _verdict_baseline_anchor = (
+        {d: baseline_means[d] for d in ANCHOR_DIMS if d in baseline_means}
+        if baseline_means
+        else None
+    )
+    _persisted_baseline_fitness_stderr = (
         _load_baseline_fitness_stderr() if not args.no_baseline else None
     )
-    # gain σ = √(σ_current² + σ_baseline²) — the SAME quantity the promote gate's
-    # margin scales (so DEFAULT_GAIN_CI_Z=1.0 reconciles the verdict with the gate).
-    _sigma_current_sq = (current_fitness_stderr or 0.0) ** 2
-    _sigma_baseline_sq = (_baseline_fitness_stderr_for_ci or 0.0) ** 2
-    _gain_stderr = (_sigma_current_sq + _sigma_baseline_sq) ** 0.5
+    if current_fitness_stderr is not None:
+        _sigma_current = current_fitness_stderr
+    else:
+        _sigma_current = _fitness_scale_stderr(
+            dim_means,
+            dim_stderr,
+            measurement_modality=measurement_modality or None,
+            admire_means=admire_means_current,
+            anchor_means=_anchor_means_current or None,
+            anchor_confidence_mode=_anchor_confidence_mode,
+        )
+    if _persisted_baseline_fitness_stderr is not None or baseline_means is None:
+        _sigma_baseline = _persisted_baseline_fitness_stderr or 0.0
+    else:
+        _sigma_baseline = _fitness_scale_stderr(
+            baseline_means,
+            baseline_stderr,
+            measurement_modality=_load_baseline_measurement_modality() or None,
+            admire_means=_baseline_admire_means or None,
+            anchor_means=_verdict_baseline_anchor,
+            anchor_confidence_mode=_anchor_confidence_mode,
+        )
+    _gain_stderr = (_sigma_current**2 + _sigma_baseline**2) ** 0.5
     # The gate's EFFECTIVE floor (the ``max``'s zero-noise term) — the verdict must
     # honour it too or it would claim "significant" on a sub-floor gain the gate
     # rejects. Reproduce the gate's N=1-widening: the floor widens to

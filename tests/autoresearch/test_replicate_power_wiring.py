@@ -125,6 +125,8 @@ def test_resolver_cli_overrides_graceful_on_nonfinite(monkeypatch: pytest.Monkey
     assert auto_train._resolve_target_effect_size(float("nan")) == pytest.approx(0.03)
     assert auto_train._resolve_target_effect_size(float("inf")) == pytest.approx(0.03)
     assert auto_train._resolve_target_effect_size(-1.0) == pytest.approx(0.03)
+    # int(float("inf")) raises OverflowError — the replicate resolver must catch it
+    assert auto_train._resolve_audit_replicate(float("inf")) == 2  # falls back to config
 
 
 # --- main() static wiring guards (E2 / E3 convention) ------------------------
@@ -173,8 +175,14 @@ def test_main_verdict_uses_gate_sigma_and_floor() -> None:
     gate's effective floor (Codex MCP catches — the verdict previously used combined
     σ + ignored the floor, both of which could contradict the gate)."""
     source = inspect.getsource(auto_train.main)
-    # gain σ uses the gate's current_fitness_stderr (not the combined σ)
-    assert "_sigma_current_sq = (current_fitness_stderr or 0.0) ** 2" in source
+    # gain σ uses the gate's current_fitness_stderr (the bootstrap), NOT the
+    # combined within+between σ
+    assert "if current_fitness_stderr is not None:" in source
+    assert "_sigma_current = current_fitness_stderr" in source
+    # σ fallback mirrors the gate's MC fallback when the bootstrap / persisted
+    # stderr is absent (so a v1/summary baseline's verdict σ is not falsely 0)
+    assert "_sigma_current = _fitness_scale_stderr(" in source
+    assert "_sigma_baseline = _fitness_scale_stderr(" in source
     # the verdict passes the gate's effective floor
     assert "floor=_gate_effective_floor" in source
     # the floor reproduces the gate's N=1 widening

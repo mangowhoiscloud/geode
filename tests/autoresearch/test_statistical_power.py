@@ -224,10 +224,15 @@ def test_power_formula_nonfinite_delta_graceful() -> None:
 
 
 def test_power_formula_malformed_replicate_graceful() -> None:
-    """A malformed ``replicate`` count degrades to 1, never raises (graceful cast)."""
+    """A malformed ``replicate`` count degrades to 1, never raises (graceful cast).
+    Includes ``float('inf')`` which raises OverflowError on ``int()`` (Codex MCP
+    catch — the guard must catch OverflowError too)."""
     req = sp.required_samples(0.013, target_effect_size=0.02, replicate="oops")  # type: ignore[arg-type]
     assert req.replicate == 1
     assert req.n_seed == 7  # the rest of the formula is unaffected
+    req_inf = sp.required_samples(0.013, target_effect_size=0.02, replicate=float("inf"))  # type: ignore[arg-type]
+    assert req_inf.replicate == 1
+    assert req_inf.n_seed == 7
 
 
 def test_power_line_real_campaign_shape() -> None:
