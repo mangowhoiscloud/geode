@@ -45,6 +45,24 @@ functional change.
 
 ---
 
+## [0.99.103] - 2026-05-31
+
+### Fixed
+- **PR-AUDIT-CONCURRENCY-KNOB (2026-05-31) — make the audit-concurrency env knobs
+  actually take effect.** `plugins/petri_audit/runner.py` `build_command()` hardcoded
+  `--max-connections 1` + `--max-samples 1` (the single-OAuth ~5 req/s safe pin from
+  PR-OL-AUDIT-BURST-FIX). PR-CAMPAIGN-DRIVER's `scripts/run_campaign.py` already exports
+  `GEODE_AUDIT_MAX_CONNECTIONS` / `GEODE_AUDIT_MAX_SAMPLES` (default 8/3) for a
+  higher-limit lane (PAYG `api_key` auditor/judge, or a multi-account pool), but those
+  reads were silently no-op'd in the runner, so parallel audits were impossible and
+  audit wall-clock stayed serial. `build_command()` now reads both caps from the
+  environment via a `_cap()` helper that defaults to 1, clamps to a minimum of 1, and
+  falls back to 1 on a missing or non-integer value (graceful boundary) — so the
+  single-OAuth path is byte-identical to the prior hardcoded behaviour. Pinned by four
+  new tests in `tests/test_ol_audit_burst_fix.py` (unset → 1/1, override → 8/3,
+  non-integer → 1/1, sub-1 → clamped to 1); the two pre-existing default-pin tests now
+  clear the env so an ambient export can't flake them.
+
 ## [0.99.102] - 2026-05-31
 
 ### Added
