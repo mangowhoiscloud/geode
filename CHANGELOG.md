@@ -64,6 +64,10 @@ functional change.
   bodies. This drops the body-less phantom `gen1-002-f4580bc8` from
   `gen1-broken_tool_use` (`survivors.json` 5 → 4, now matching `state.json`).
   Pinned by `tests/plugins/seed_generation/test_survivors_path_relative.py`.
+  Both served viewers — the static `petri-bundle/seeds/index.html` and the
+  Next.js `docs/petri/seeds` table — now use the bundle-relative path verbatim
+  instead of reconstructing `candidates/<basename>`, so an evolved survivor
+  (`candidates_evolved/<id>.md`) resolves instead of 404-ing.
 
 ## [0.99.89] - 2026-05-30
 

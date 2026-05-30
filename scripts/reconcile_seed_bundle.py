@@ -22,8 +22,9 @@ body ``<id>.md`` exists in the run's ``candidates/`` or ``candidates_evolved/``.
 This script reconciles all three views to the valid set, writing only
 BUNDLE-RELATIVE paths so the bundle is self-contained on any clone.
 
-The script is idempotent — a second run over an already-reconciled bundle
-makes no further changes (beyond re-copying identical bodies).
+The script is content-idempotent — a second run over an already-reconciled
+bundle re-writes ``survivors.json`` byte-identically and re-copies identical
+bodies, so ``git status`` stays clean (no further changes land).
 
 Run from the repo root::
 

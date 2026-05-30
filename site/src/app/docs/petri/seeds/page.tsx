@@ -209,8 +209,12 @@ function RunDetailBlock({ detail, locale }: { detail: RunDetail; locale: "ko" | 
                   const pilotStatus = asString(pilotObj.status) || ".";
                   const candidatePath = asString(sObj.path);
                   const filename = candidatePath.split("/").pop() ?? "";
-                  const fileHref = filename
-                    ? `${RAW_BUNDLE_URL}${run.run_id}/candidates/${filename}`
+                  // survivors.json stores a bundle-relative path
+                  // (candidates/ or candidates_evolved/). Use it verbatim so
+                  // evolved survivors resolve instead of 404-ing on a forced
+                  // candidates/ prefix.
+                  const fileHref = candidatePath
+                    ? `${RAW_BUNDLE_URL}${run.run_id}/${candidatePath}`
                     : undefined;
                   const evolved = evolvedByParent.get(sid) ?? [];
                   // next.config.ts has `trailingSlash: false` so links must NOT end in `/`.
