@@ -91,6 +91,42 @@ def _load_wrapper_override() -> str | None:
     return None
 
 
+def _emit_scaffold_diag(wrapper_override: str | None, *, audit_mode: bool) -> None:
+    """Emit a diagnostic recording whether the mutated scaffold reached the prompt.
+
+    PR-AUDIT-SCAFFOLD-WIRE (2026-05-31) — the Petri audit target is GEODE
+    itself; the closed-loop's fitness signal is only causal if the mutated
+    wrapper scaffold (``wrapper-sections.json``) is the base of the target's
+    system prompt. ``inspect_ai``'s ``.eval`` ModelEvent only records the
+    messages Petri passed to ``GeodeModelAPI.generate`` (the seed scenario),
+    NOT the prompt AgenticLoop builds internally — so the scaffold's presence
+    was previously unobservable from the archive alone. This diag closes that
+    gap: it records ``wrapper_override_present`` + its length + the resolution
+    source so a post-mortem can confirm the scaffold was injected without
+    relying on the (scenario-only) inspect ModelEvent.
+
+    Best-effort — never raises; a diag failure must not break prompt build.
+    """
+    try:
+        from core.audit.diagnostics import diag
+
+        present = wrapper_override is not None
+        env_set = bool(os.environ.get(_WRAPPER_OVERRIDE_ENV))
+        source = (
+            "env"
+            if env_set
+            else ("sot_file" if _WRAPPER_SECTIONS_SOT_PATH.is_file() else "generic_prefix")
+        )
+        diag(
+            "system_prompt.scaffold",
+            f"wrapper_override_present={present} "
+            f"override_chars={len(wrapper_override) if wrapper_override else 0} "
+            f"source={source} audit_mode={audit_mode}",
+        )
+    except Exception:  # pragma: no cover — diagnostics must never break prompt build
+        log.debug("scaffold diag emission failed", exc_info=True)
+
+
 def _strict_load(path: Path) -> str:
     """Audit-subprocess path: schema failures raise RuntimeError."""
     if not path.is_file():
@@ -205,7 +241,19 @@ def build_system_prompt(model: str = "") -> str:
 
     if _audit_mode_active():
         # G3 — minimal prompt for alignment audits.
-        static = with_math_output_formatting(wrapper_override) if wrapper_override else ""
+        #
+        # PR-AUDIT-SCAFFOLD-WIRE (2026-05-31) — the wrapper override is the
+        # MUTATED GEODE scaffold (``wrapper-sections.json``). It MUST be the
+        # base of the audit target's system prompt so scaffold mutations
+        # causally move fitness; the auditor's seed scenario rides on
+        # ``system_suffix`` (see ``core/agent/loop/_context.py``). Pre-fix
+        # this branch returned ONLY dynamic context when the override
+        # resolved to ``None`` (env unset + no SoT file) — a scaffold-free
+        # target, the causal-disconnect path. Fall back to the same
+        # domain-neutral base the non-audit branch uses (``_generic_static_
+        # prefix``) so the target always carries a GEODE base scaffold; the
+        # mutated wrapper layers on top when present.
+        static = with_math_output_formatting(wrapper_override or _generic_static_prefix())
         parts: list[str] = []
         if model:
             mc = _build_model_card(model)
@@ -213,9 +261,8 @@ def build_system_prompt(model: str = "") -> str:
                 parts.append(mc)
         parts.append(_build_date_context())
         dynamic = PROMPT_CACHE_BOUNDARY + "\n\n" + "\n\n".join(parts)
-        if static:
-            return static + "\n\n" + dynamic
-        return dynamic
+        _emit_scaffold_diag(wrapper_override, audit_mode=True)
+        return static + "\n\n" + dynamic
 
     static = with_math_output_formatting(wrapper_override or _generic_static_prefix())
 
@@ -275,6 +322,7 @@ def build_system_prompt(model: str = "") -> str:
 
     dynamic = "\n\n".join(dynamic_parts)
 
+    _emit_scaffold_diag(wrapper_override, audit_mode=False)
     return static + "\n\n" + PROMPT_CACHE_BOUNDARY + "\n\n" + dynamic
 
 
