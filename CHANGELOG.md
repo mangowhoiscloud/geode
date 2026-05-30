@@ -45,6 +45,49 @@ functional change.
 
 ---
 
+## [0.99.96] - 2026-05-30
+
+### Added
+- **E4 (2026-05-30) — statistical power: per-mutation replicate, fitness-gain
+  "ci excludes 0" verdict, and per-campaign power analysis.** The self-improving
+  loop now only CLAIMS a fitness gain when statistics support it (else an HONEST
+  NULL), and tells the operator how many samples are needed:
+  - **`--replicate M` (default `M=1` → zero cost / behaviour change).** Runs the
+    audit `M` times per mutation/cycle so the WITHIN-mutation variance (provider
+    non-determinism) is estimated SEPARATELY from the BETWEEN-seed variance (the
+    `N` samples inside one audit). `M=1` runs the audit exactly once (no loop
+    overhead) and leaves within-variance honestly unestimated, as before;
+    `within_mutation_stderr` + `between_seed_stderr` are recorded distinctly on the
+    cycle (attribution) + promoted-baseline records. Resolved env →
+    `--replicate` → config → `1`.
+  - **Explicit fitness-gain "ci excludes 0" verdict.** A confidence interval on the
+    fitness gain (current vs baseline) is computed and recorded with `gain_ci_low`
+    / `gain_ci_high` / a boolean `gain_ci_excludes_zero` + a human verdict string
+    (`"gain significant"` / `"no evidence yet"`). This is an evidence statement
+    LAYERED ON TOP of the promote gate (it never weakens the gate); at the chosen
+    `DEFAULT_GAIN_CI_Z = 1.0` it reconciles EXACTLY with the gate's
+    `√(σp²+σc²)` σ-margin, so a null run reports "no evidence yet" honestly rather
+    than looking like a silent reject. A bootstrap cycle (no baseline) reports "no
+    evidence yet" (no baseline to gain over).
+  - **Per-campaign power analysis.** Given the observed within+between variance σ,
+    a target effect size δ, α=0.05 and power=0.8, the standard two-sample
+    mean-difference formula `n ≈ 2(z_{α/2}+z_β)²σ²/δ²` computes the required
+    `N_seed × M_replicate` to DETECT δ, emitted per campaign as a log + stdout line.
+    For the real N≈8 / observed stderr≈0.013 case, detecting δ=0.02 at 80% power
+    needs `N_seed≥7 × M_replicate≥1`.
+  - **Flagged knobs.** δ default `0.02` (just above the gate's `0.005` noise floor,
+    ~1.5× the empirical ~0.013 fitness stderr) is `--target-effect-size` / config
+    overridable; the CI method is normal-approximation (`gain ± z·gain_stderr`),
+    chosen over bootstrap because the gain stderr is already a bootstrap estimate
+    and the normal-approx keeps the module pure + reconciled with the gate.
+  - New module `core/self_improving_loop/statistical_power.py`
+    (`decompose_variance`, `gain_ci_excludes_zero`, `required_samples`,
+    `format_power_line`, + the `VarianceDecomposition` / `GainEvidence` /
+    `PowerRequirement` / `PowerRecordFields` dataclasses). All record fields are
+    additive + None-omitting so `M=1` / pre-E4 readers are backward-compatible.
+
+---
+
 ## [0.99.95] - 2026-05-30
 
 ### Added

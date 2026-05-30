@@ -115,6 +115,26 @@ class AttributionRecord(BaseModel):
     the ledger; it is recorded for every arm (``0`` for gate / never) so the row
     is uniform. Legacy rows omit both → ``None`` via these defaults; a curve
     consumer filters the JSONL stream on ``promote_policy`` to split the arms."""
+    within_mutation_stderr: float | None = None
+    between_seed_stderr: float | None = None
+    """E4 (2026-05-30) — the within-mutation (provider non-determinism, across the
+    ``--replicate M`` repeated audits) and between-seed (seed heterogeneity, the N
+    samples inside one audit) fitness-stderr DECOMPOSITION, kept distinct so the two
+    noise sources are not conflated. Both on the 0-1 fitness scale.
+    ``within_mutation_stderr`` is ``None`` for the default ``M=1`` path (within
+    variance is unestimable from a single replicate — honestly unestimated, not 0).
+    Legacy rows omit both → ``None`` via these defaults (backward-compatible)."""
+    gain_ci_low: float | None = None
+    gain_ci_high: float | None = None
+    gain_ci_excludes_zero: bool | None = None
+    gain_verdict: str | None = None
+    """E4 (2026-05-30) — the EXPLICIT "ci excludes 0" evidence statement on the
+    fitness gain (current vs baseline) on the 0-1 scale: the CI bounds, a boolean
+    ``gain_ci_excludes_zero`` (``True`` iff ``gain_ci_low > 0`` — a CLAIMED gain),
+    and a human ``gain_verdict`` (``"gain significant"`` / ``"no evidence yet"``).
+    This is the honest-null evidence layer ON TOP of the promote gate (it never
+    weakens the gate; at ``DEFAULT_GAIN_CI_Z=1.0`` it reconciles with the gate's
+    σ-margin). Legacy rows omit all four → ``None`` (backward-compatible)."""
     audit_run_id: str | None = None
     source: str | None = None
     """PR-AR-L6 (2026-05-26) — distinguishes mutator-driven cycle rows
@@ -266,6 +286,12 @@ def compute_attribution(
     held_out_bench_id: str | None = None,
     promote_policy: str | None = None,
     promote_policy_seed: int | None = None,
+    within_mutation_stderr: float | None = None,
+    between_seed_stderr: float | None = None,
+    gain_ci_low: float | None = None,
+    gain_ci_high: float | None = None,
+    gain_ci_excludes_zero: bool | None = None,
+    gain_verdict: str | None = None,
 ) -> dict[str, Any]:
     """Compute the attribution payload for one applied mutation.
 
@@ -358,6 +384,25 @@ def compute_attribution(
         payload["promote_policy_seed"] = int(
             promote_policy_seed if promote_policy_seed is not None else 0
         )
+    # E4 (2026-05-30) — variance decomposition + the explicit "ci excludes 0" gain
+    # evidence. Each field is recorded only when supplied (``None`` → omitted) so a
+    # default ``M=1`` cycle (within unestimable) and legacy rows keep their exact
+    # shape — purely additive, never a new required key. ``within_mutation_stderr``
+    # stays ``None`` on the M=1 path (honest: a single replicate cannot observe
+    # provider jitter), while ``between_seed_stderr`` + the gain CI are present
+    # whenever the audit had ≥2 sample rows.
+    if within_mutation_stderr is not None:
+        payload["within_mutation_stderr"] = round(float(within_mutation_stderr), 6)
+    if between_seed_stderr is not None:
+        payload["between_seed_stderr"] = round(float(between_seed_stderr), 6)
+    if gain_ci_excludes_zero is not None:
+        payload["gain_ci_low"] = round(float(gain_ci_low), 6) if gain_ci_low is not None else None
+        payload["gain_ci_high"] = (
+            round(float(gain_ci_high), 6) if gain_ci_high is not None else None
+        )
+        payload["gain_ci_excludes_zero"] = bool(gain_ci_excludes_zero)
+        if gain_verdict is not None:
+            payload["gain_verdict"] = str(gain_verdict)
     if baseline_before is None or baseline_after is None:
         return payload
 
@@ -413,6 +458,12 @@ def write_attribution(
     held_out_bench_id: str | None = None,
     promote_policy: str | None = None,
     promote_policy_seed: int | None = None,
+    within_mutation_stderr: float | None = None,
+    between_seed_stderr: float | None = None,
+    gain_ci_low: float | None = None,
+    gain_ci_high: float | None = None,
+    gain_ci_excludes_zero: bool | None = None,
+    gain_verdict: str | None = None,
 ) -> dict[str, Any]:
     """Compute + append attribution in one call.
 
@@ -444,6 +495,12 @@ def write_attribution(
         held_out_bench_id=held_out_bench_id,
         promote_policy=promote_policy,
         promote_policy_seed=promote_policy_seed,
+        within_mutation_stderr=within_mutation_stderr,
+        between_seed_stderr=between_seed_stderr,
+        gain_ci_low=gain_ci_low,
+        gain_ci_high=gain_ci_high,
+        gain_ci_excludes_zero=gain_ci_excludes_zero,
+        gain_verdict=gain_verdict,
     )
     append_attribution_log(payload, log_path=log_path)
     return payload
