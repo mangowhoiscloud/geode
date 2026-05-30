@@ -105,6 +105,77 @@ export default function DocsIndex() {
         }
       />
 
+      <Bi
+        ko={
+          <>
+            <h2>레퍼런스: GEODE의 좌표부터</h2>
+            <p>
+              레퍼런스의 진입점은 검증 절차가 아니라{" "}
+              <strong>자기개선 폐루프의 계보와 좌표</strong>입니다. GEODE가 어떤
+              프론티어 시스템에서 무엇을 빌려오고, 어디서 갈라지는지부터 짚습니다.
+            </p>
+            <ul>
+              <li>
+                <a href="/geode/docs/reference/frontier-comparison">프론티어 비교</a>.
+                Claude Code, Codex CLI, OpenClaw, Hermes에서 빌려온 것과 갈라지는 지점.
+              </li>
+              <li>
+                <a href="/geode/docs/capabilities/lineage">계보와 좌표</a>. 이 루프가
+                self-evolving agents 문헌에서 어디에 위치하는지.
+              </li>
+              <li>
+                <a href="/geode/docs/capabilities/co-scientist">Co-scientist 루프</a>.
+                적대적 seed 분포를 함께 진화시키는 다중 역할 루프.
+              </li>
+              <li>
+                <a href="/geode/docs/reference/external-references">외부 참고</a>. GEODE가
+                인용하는 frontier 시스템과 선행 작업.
+              </li>
+            </ul>
+            <p className="text-white/55 text-sm">
+              검증과 가드레일(G1-G4, BiasBuster, Cross-LLM, 원인 분류 트리, 관측성)은
+              이제 별도 섹션{" "}
+              <a href="/geode/docs/verification/guardrails">검증과 가드레일</a>로
+              묶였습니다.
+            </p>
+          </>
+        }
+        en={
+          <>
+            <h2>Reference: GEODE&apos;s position first</h2>
+            <p>
+              The reference entry point leads with the{" "}
+              <strong>self-improving loop&apos;s lineage and position</strong>, not the
+              validation machinery. Start with what GEODE borrows from frontier
+              systems and where it differs.
+            </p>
+            <ul>
+              <li>
+                <a href="/geode/docs/reference/frontier-comparison">Frontier comparison</a>.
+                What GEODE borrows from Claude Code, Codex CLI, OpenClaw, Hermes, and where it differs.
+              </li>
+              <li>
+                <a href="/geode/docs/capabilities/lineage">Lineage and positioning</a>.
+                Where this loop sits in the self-evolving agents literature.
+              </li>
+              <li>
+                <a href="/geode/docs/capabilities/co-scientist">Co-scientist loop</a>.
+                The multi-role loop that co-evolves the adversarial seed distribution.
+              </li>
+              <li>
+                <a href="/geode/docs/reference/external-references">External references</a>.
+                The frontier systems and prior work GEODE cites.
+              </li>
+            </ul>
+            <p className="text-white/55 text-sm">
+              Verification and guardrails (G1-G4, BiasBuster, Cross-LLM, the cause
+              decision tree, observability) now live in their own section,{" "}
+              <a href="/geode/docs/verification/guardrails">Verification and Guardrails</a>.
+            </p>
+          </>
+        }
+      />
+
       <h2>{t(locale, "섹션", "Sections")}</h2>
       <div className="not-prose mt-3 border-t border-[var(--rule)]">
         {DOCS_SITEMAP.map((section) => (

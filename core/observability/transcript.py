@@ -177,13 +177,28 @@ class SessionTranscript:
         duration_s: float = 0,
         total_cost: float = 0,
         rounds: int = 0,
+        prompt_tokens: int = 0,
+        completion_tokens: int = 0,
     ) -> None:
+        """Append the ``session_end`` event.
+
+        PR-SEEDGEN-TOKENS (2026-05-30) — ``prompt_tokens`` /
+        ``completion_tokens`` are written so the seed-generation
+        orchestrator's per-phase cost grid can sum them off each
+        sub-agent's ``dialogue.jsonl`` (``_persist_per_phase_costs``
+        already reads these keys). They are 0 for subscription / CLI
+        calls (the subscription path does not expose token usage), so
+        only API-key / payg sub-agents contribute non-zero values —
+        counts are never fabricated.
+        """
         self._append(
             {
                 "event": "session_end",
                 "duration_s": round(duration_s, 1),
                 "total_cost": round(total_cost, 4),
                 "rounds": rounds,
+                "prompt_tokens": prompt_tokens,
+                "completion_tokens": completion_tokens,
             }
         )
         self._update_index()

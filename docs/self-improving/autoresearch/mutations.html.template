@@ -47,6 +47,7 @@
         <li><a href="/geode/self-improving/autoresearch/baseline/">Baseline</a></li>
         <li><a href="/geode/self-improving/autoresearch/mutations/" class="active" aria-current="page">Mutations</a></li>
         <li><a href="/geode/self-improving/autoresearch/results/">Results</a></li>
+        <li><a href="/geode/self-improving/autoresearch/evidence/">Evidence</a></li>
         <li><a href="/geode/self-improving/autoresearch/policies/">Policies</a></li>
       </ul>
 
@@ -86,6 +87,8 @@
 {{ mutations_rows }}
       </tbody>
     </table>
+
+{{ held_out_curve }}
 
     <div class="build-info">
       <p>Source: <code>autoresearch/state/mutations.jsonl</code> — apply + attribution records joined by <code>mutation_id</code>.</p>

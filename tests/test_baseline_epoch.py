@@ -80,6 +80,7 @@ def test_each_surface_field_moves_the_hash() -> None:
         "rubric_version": _base_spec(rubric_version="v4"),
         "dim_set": _base_spec(dim_set="full"),
         "bench": _base_spec(bench=True),
+        "promote_policy": _base_spec(promote_policy="random"),  # E3 — control arm
         "seed_pool_id": _base_spec(seed_pool_id="pool-deadbeef0002"),
         "role_model": _base_spec(
             role_provenance={**_ROLE_PROV, "target": {**_ROLE_PROV["target"], "model": "gpt-6"}}
@@ -109,6 +110,35 @@ def test_spec_excludes_instance_fields() -> None:
     forbidden = {"dim_means", "fitness", "fitness_stderr", "seed_count", "ts_utc", "commit", "id"}
     assert forbidden.isdisjoint(spec)
     assert spec["spec_schema_version"] == SPEC_SCHEMA_VERSION
+
+
+# --- E3: promote_policy control arm in the spec (schema 2) -------------------
+
+
+def test_schema_is_version_2() -> None:
+    """E3 bumped the spec field-set version 1 → 2 (promote_policy added). Old
+    schema-1 rows fall into a prior epoch (correct — no retroactive recompute)."""
+    assert SPEC_SCHEMA_VERSION == "2"
+    assert _base_spec()["spec_schema_version"] == "2"
+
+
+def test_gate_vs_random_spec_distinct_epoch() -> None:
+    """A gate spec and a random spec hash to DIFFERENT epochs — the selection arm
+    and the random-accept control are different production logic and must never be
+    averaged into one comparison."""
+    h_gate = compute_epoch_hash(_base_spec(promote_policy="gate"))
+    h_random = compute_epoch_hash(_base_spec(promote_policy="random"))
+    h_never = compute_epoch_hash(_base_spec(promote_policy="never"))
+    assert len({h_gate, h_random, h_never}) == 3
+
+
+def test_promote_policy_in_spec_seed_is_not() -> None:
+    """``promote_policy`` is a production-logic axis (in the hashed spec), but the
+    RNG SEED is an instance/reproducibility field — two random campaigns with
+    different seeds are the same logic, so the seed must NOT fragment the epoch."""
+    spec = _base_spec(promote_policy="random")
+    assert spec["promote_policy"] == "random"
+    assert "promote_policy_seed" not in spec
 
 
 # --- label resolution --------------------------------------------------------
@@ -195,3 +225,47 @@ def test_seed_pool_content_hash_expands_user(
     monkeypatch.setenv("HOME", str(home))
     assert seed_pool_content_hash("~/pool") == seed_pool_content_hash(str(pool))
     assert seed_pool_content_hash("~/pool").startswith("pool-")
+
+
+def test_seed_pool_content_hash_ignores_manifest_json(tmp_path: Path) -> None:
+    """A pool dir's hash is its ``.md`` BODIES only — the assembler's
+    ``manifest.json`` (and its ``generated_at`` timestamp) must NOT move it.
+
+    Regression for the masked bug: the pre-fix ``rglob("*")`` folded
+    ``manifest.json`` into the hash, so the runtime hash on the live pool dir
+    (manifest present) diverged from the assembler's body-only hash AND changed
+    whenever the manifest timestamp changed — fragmenting identical survivor
+    bodies into different epochs. The masking earlier test re-hashed a
+    bodies-only COPY; this one keeps the manifest IN the dir and asserts (a) the
+    hash equals the bodies-only hash and (b) it is invariant when the manifest's
+    timestamp changes.
+    """
+    pool = tmp_path / "pool"
+    pool.mkdir()
+    (pool / "a.md").write_text("body-a", encoding="utf-8")
+    (pool / "b.md").write_text("body-b", encoding="utf-8")
+
+    # Reference: bodies only (no manifest in the dir).
+    bodies_only = seed_pool_content_hash(str(pool))
+    assert bodies_only.startswith("pool-")
+
+    # (a) Adding manifest.json with a timestamp must not move the hash.
+    (pool / "manifest.json").write_text(
+        '{"generated_at": "2026-05-30T00:00:00+00:00", "x": 1}', encoding="utf-8"
+    )
+    with_manifest = seed_pool_content_hash(str(pool))
+    assert with_manifest == bodies_only
+
+    # (b) Mutating ONLY the manifest's timestamp must not move the hash.
+    (pool / "manifest.json").write_text(
+        '{"generated_at": "2099-12-31T23:59:59+00:00", "x": 2}', encoding="utf-8"
+    )
+    assert seed_pool_content_hash(str(pool)) == bodies_only
+
+    # An UNRELATED non-.md incidental file is likewise excluded.
+    (pool / "notes.txt").write_text("scratch", encoding="utf-8")
+    assert seed_pool_content_hash(str(pool)) == bodies_only
+
+    # But a real .md body edit STILL moves the hash (the fix did not over-narrow).
+    (pool / "a.md").write_text("body-a-EDITED", encoding="utf-8")
+    assert seed_pool_content_hash(str(pool)) != bodies_only

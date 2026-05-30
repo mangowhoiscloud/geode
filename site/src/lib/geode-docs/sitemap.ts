@@ -19,6 +19,17 @@
  * carries the petri-blue accent). Vanity counts (tool / hook / module / seed
  * numbers) are removed from every title and summary; the system is described
  * by what it does, not by how much of it there is.
+ *
+ * PR-DOCS-REFERENCE-LINEAGE (2026-05-30) — the Reference section used to open
+ * with the verification/* cluster (guardrails, biasbuster, cross-llm, cause
+ * tree, observability), which read as an awkward "reference" entry point. The
+ * section now leads with GEODE's positioning references — frontier comparison
+ * (what GEODE borrows vs. how it differs) and external references — so the
+ * reference entry point foregrounds the self-improving-loop lineage rather than
+ * validation. The verification/* cluster moved into its own section,
+ * "Verification and Guardrails" (id 08b), so it is no longer the face of
+ * Reference. Lineage and Co-scientist stay in The Self-Improving Loop section
+ * (their home); the docs landing reference grouping cross-links to them.
  */
 
 export type DocQuadrant = "tutorial" | "how-to" | "reference" | "explanation";
@@ -145,19 +156,26 @@ export const DOCS_SITEMAP: DocSection[] = [
     title: "Reference",
     titleKo: "레퍼런스",
     pages: [
+      { slug: "reference/frontier-comparison", title: "Frontier comparison", titleKo: "프론티어 비교", summary: "What GEODE borrows from Claude Code, Codex CLI, OpenClaw, and Hermes, and where it differs. The reference entry point for GEODE's position in the lineage.", summaryKo: "GEODE가 Claude Code, Codex CLI, OpenClaw, Hermes에서 무엇을 빌려오고, 어디서 갈라지는지 정리합니다. 계보 속 GEODE의 좌표를 짚는 레퍼런스 진입점입니다.", quadrant: "reference" },
+      { slug: "reference/external-references", title: "External references", titleKo: "외부 참고", summary: "Frontier agent systems, design standards, and prior work GEODE cites — the self-evolving-agents lineage behind the loop.", summaryKo: "GEODE가 인용하는 frontier 에이전트 시스템, 디자인 표준, 선행 작업입니다. 루프 뒤에 있는 self-evolving agents 계보입니다.", quadrant: "reference" },
       { slug: "harness/cli", title: "CLI and slash commands", titleKo: "CLI와 슬래시 명령", summary: "The thin gateway and IPC, and the slash commands it accepts.", summaryKo: "thin 게이트웨이와 IPC, 그리고 받는 슬래시 명령들입니다.", quadrant: "reference" },
+      { slug: "runtime/automation", title: "Automation sidecar", titleKo: "자동화 사이드카", summary: "The feedback loop and model promotion, with drift detection between agent and runtime.", summaryKo: "피드백 루프와 모델 프로모션입니다. 에이전트와 런타임 사이에서 drift를 감지합니다.", quadrant: "reference" },
+      { slug: "runtime/computer-use", title: "Computer use", titleKo: "컴퓨터 사용", summary: "Provider-agnostic desktop automation, Anthropic and OpenAI unified.", summaryKo: "프로바이더 독립 데스크탑 자동화입니다. Anthropic과 OpenAI를 통합합니다.", quadrant: "reference" },
+      { slug: "runtime/ui/cli-latex", title: "CLI LaTeX rendering", titleKo: "CLI LaTeX 렌더링", summary: "Rendering math in the terminal. Detection, Unicode flatten, pretty print, image fallback.", summaryKo: "터미널에서 수식을 렌더링합니다. 감지, Unicode flatten, pretty print, 이미지 폴백을 거칩니다.", quadrant: "reference" },
+      { slug: "reference/changelog", title: "CHANGELOG", titleKo: "CHANGELOG", summary: "Full version history, synced from CHANGELOG.md on every main push.", summaryKo: "main push마다 CHANGELOG.md에서 동기화되는 전체 버전 이력입니다.", quadrant: "reference" },
+      { slug: "reference/petri-bundle-isolation", title: "Petri bundle isolation", titleKo: "Petri 번들 격리", summary: "Operator reference for the publish workflow, validator, and hygiene ratchet.", summaryKo: "publish 워크플로우, validator, hygiene ratchet의 운영자 레퍼런스입니다.", quadrant: "reference" },
+    ],
+  },
+  {
+    id: "08b-verification",
+    title: "Verification and Guardrails",
+    titleKo: "검증과 가드레일",
+    pages: [
       { slug: "verification/guardrails", title: "Guardrails G1-G4", titleKo: "가드레일 G1-G4", summary: "Schema, range, grounding, consistency. A fail-fast ladder over LLM output.", summaryKo: "Schema, range, grounding, consistency입니다. LLM 출력 위의 fail-fast 사다리입니다.", quadrant: "reference" },
       { slug: "verification/biasbuster", title: "BiasBuster", titleKo: "BiasBuster", summary: "Confirmation, recency, and anchoring detection on top of the guardrails.", summaryKo: "가드레일 위에 얹는 confirmation, recency, anchoring 편향 탐지입니다.", quadrant: "reference" },
       { slug: "verification/cross-llm", title: "Cross-LLM verification", titleKo: "Cross-LLM 검증", summary: "An independent second opinion. A different provider re-scores the verdict.", summaryKo: "독립적인 second opinion입니다. 다른 프로바이더가 판정을 다시 채점합니다.", quadrant: "reference" },
       { slug: "verification/cause-decision-tree", title: "Cause decision tree", titleKo: "원인 분류 트리", summary: "Map a failure cause to a recovery action, instead of blindly retrying.", summaryKo: "무작정 재시도하는 대신, 실패 원인을 복구 행동에 매핑합니다.", quadrant: "reference" },
       { slug: "verification/observability", title: "Observability", titleKo: "관측성", summary: "The lenses on a run. Hooks, runlog, audit diagnostics, Petri.", summaryKo: "실행을 들여다보는 렌즈들입니다. 훅, runlog, audit diagnostics, Petri입니다.", quadrant: "reference" },
-      { slug: "runtime/automation", title: "Automation sidecar", titleKo: "자동화 사이드카", summary: "The feedback loop and model promotion, with drift detection between agent and runtime.", summaryKo: "피드백 루프와 모델 프로모션입니다. 에이전트와 런타임 사이에서 drift를 감지합니다.", quadrant: "reference" },
-      { slug: "runtime/computer-use", title: "Computer use", titleKo: "컴퓨터 사용", summary: "Provider-agnostic desktop automation, Anthropic and OpenAI unified.", summaryKo: "프로바이더 독립 데스크탑 자동화입니다. Anthropic과 OpenAI를 통합합니다.", quadrant: "reference" },
-      { slug: "runtime/ui/cli-latex", title: "CLI LaTeX rendering", titleKo: "CLI LaTeX 렌더링", summary: "Rendering math in the terminal. Detection, Unicode flatten, pretty print, image fallback.", summaryKo: "터미널에서 수식을 렌더링합니다. 감지, Unicode flatten, pretty print, 이미지 폴백을 거칩니다.", quadrant: "reference" },
-      { slug: "reference/external-references", title: "External references", titleKo: "외부 참고", summary: "Frontier agent systems, design standards, and prior work GEODE cites.", summaryKo: "GEODE가 인용하는 frontier 에이전트 시스템, 디자인 표준, 선행 작업입니다.", quadrant: "reference" },
-      { slug: "reference/frontier-comparison", title: "Frontier comparison", titleKo: "프론티어 비교", summary: "Where GEODE sits next to Claude Code, Codex CLI, OpenClaw, and Hermes.", summaryKo: "GEODE가 Claude Code, Codex CLI, OpenClaw, Hermes 옆에서 어디에 위치하는지 비교합니다.", quadrant: "reference" },
-      { slug: "reference/changelog", title: "CHANGELOG", titleKo: "CHANGELOG", summary: "Full version history, synced from CHANGELOG.md on every main push.", summaryKo: "main push마다 CHANGELOG.md에서 동기화되는 전체 버전 이력입니다.", quadrant: "reference" },
-      { slug: "reference/petri-bundle-isolation", title: "Petri bundle isolation", titleKo: "Petri 번들 격리", summary: "Operator reference for the publish workflow, validator, and hygiene ratchet.", summaryKo: "publish 워크플로우, validator, hygiene ratchet의 운영자 레퍼런스입니다.", quadrant: "reference" },
     ],
   },
   {

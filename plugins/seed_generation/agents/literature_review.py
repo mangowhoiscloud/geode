@@ -51,6 +51,7 @@ from plugins.seed_generation.agents.base import (
     BaseSeedAgent,
     SeedAgentResult,
     parse_structured_output,
+    sum_sub_result_tokens,
 )
 from plugins.seed_generation.json_schemas import LITERATURE_REVIEW_SCHEMA
 from plugins.seed_generation.orchestrator import PipelineState
@@ -132,12 +133,18 @@ class LiteratureReview(BaseSeedAgent):
             )
 
         result = results[0]
+        # PR-SEEDGEN-TOKENS (2026-05-30) — forward sub-agent LLM usage (0
+        # for subscription calls) onto every return below.
+        prompt_tokens, completion_tokens, usd_spent = sum_sub_result_tokens(results)
         if not result.success:
             return SeedAgentResult(
                 role=self.role,
                 status="error",
                 error_category="literature_review_failed",
                 error_message=result.error or "literature_review sub-agent failed",
+                prompt_tokens=prompt_tokens,
+                completion_tokens=completion_tokens,
+                usd_spent=usd_spent,
             )
 
         parsed = parse_structured_output(
@@ -159,6 +166,9 @@ class LiteratureReview(BaseSeedAgent):
                     "articles_with_reasoning": "",
                     "literature_snapshots": {},
                 },
+                prompt_tokens=prompt_tokens,
+                completion_tokens=completion_tokens,
+                usd_spent=usd_spent,
             )
 
         articles = str(parsed.get("articles_with_reasoning", "") or "")
@@ -174,6 +184,9 @@ class LiteratureReview(BaseSeedAgent):
                 "articles_with_reasoning": articles,
                 "literature_snapshots": literature_snapshots,
             },
+            prompt_tokens=prompt_tokens,
+            completion_tokens=completion_tokens,
+            usd_spent=usd_spent,
         )
 
     def _max_papers(self) -> int:

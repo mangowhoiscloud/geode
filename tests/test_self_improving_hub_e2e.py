@@ -64,13 +64,19 @@ def _run_builder(
     bundle_root: Path | None = None,
     autoresearch_root: Path | None = None,
     seedgen_out_dir: Path | None = None,
+    autoresearch_out_dir: Path | None = None,
 ) -> subprocess.CompletedProcess[str]:
     """Run the hub builder against fixture roots, output into ``out_dir``."""
     out_dir.mkdir(parents=True, exist_ok=True)
-    # Default the seedgen output to a sibling under the test's own out_dir so
-    # builder runs never write into production paths.
+    # Redirect EVERY output dir to a sibling under the test's own out_dir so a
+    # builder run never writes into the production docs/ tree. The builder
+    # defaults --out / --seedgen-out-dir / --autoresearch-out-dir to
+    # docs/self-improving/..., so any flag left at its default silently renders
+    # fixture data into the worktree (the contamination this isolation fixes).
     if seedgen_out_dir is None:
         seedgen_out_dir = out_dir / "seed-generation"
+    if autoresearch_out_dir is None:
+        autoresearch_out_dir = out_dir / "autoresearch"
     cmd: list[str] = [
         sys.executable,
         str(BUILDER),
@@ -78,6 +84,8 @@ def _run_builder(
         str(out_dir / "index.html"),
         "--seedgen-out-dir",
         str(seedgen_out_dir),
+        "--autoresearch-out-dir",
+        str(autoresearch_out_dir),
     ]
     if bundle_root is not None:
         cmd.extend(["--bundle-root", str(bundle_root)])
@@ -517,6 +525,7 @@ def built_seedgen_pages(tmp_path_factory: pytest.TempPathFactory) -> dict[str, s
     out = tmp_path_factory.mktemp("seedgen-out")
     hub_out = out / "hub"
     seedgen_out = out / "seedgen"
+    autoresearch_out = out / "autoresearch"
     result = subprocess.run(  # noqa: S603 — fixture invocation
         [
             sys.executable,
@@ -529,6 +538,11 @@ def built_seedgen_pages(tmp_path_factory: pytest.TempPathFactory) -> dict[str, s
             str(FIXTURE_ROOT / "autoresearch"),
             "--seedgen-out-dir",
             str(seedgen_out),
+            # Redirect autoresearch output to tmp too — without this flag the
+            # builder renders into docs/self-improving/autoresearch/, dirtying
+            # the worktree on every run.
+            "--autoresearch-out-dir",
+            str(autoresearch_out),
         ],
         check=False,
         capture_output=True,
@@ -903,7 +917,7 @@ def built_autoresearch_pages(tmp_path_factory: pytest.TempPathFactory) -> dict[s
         f"autoresearch builder failed: stdout={result.stdout!r} stderr={result.stderr!r}"
     )
     pages: dict[str, str] = {}
-    for name in ("index", "baseline", "mutations", "results", "policies"):
+    for name in ("index", "baseline", "mutations", "results", "evidence", "policies"):
         # `index` is the landing page; the rest are dir/index.html for trailing-slash URLs.
         path = (
             autoresearch_out / "index.html"
@@ -1152,6 +1166,471 @@ def test_autoresearch_mutations_table_renders(
         assert outcome in html, f"outcome label {outcome!r} missing"
     # before -> after change surfaces in the payload drill-down.
     assert "<details>" in html and "previous" in html, "payload drill-down (before/after) missing"
+
+
+def test_autoresearch_held_out_curve_renders(
+    built_autoresearch_pages: dict[str, str],
+) -> None:
+    """E2: the per-cycle held-out (fixed-ruler) fitness curve renders as a dense
+    table on the mutations page, reading ``held_out_fitness`` from the attribution
+    rows, ordered chronologically with a Δ-vs-prior column and the bench id."""
+    html = built_autoresearch_pages["mutations"]
+    assert "Held-out fitness curve" in html, "held-out curve section heading missing"
+    # The fixture has 3 attribution rows with held_out_fitness → 3 generations.
+    assert "3 generations" in html, "held-out curve generation count wrong"
+    # The recorded fixed-ruler values surface (rounded to 4 dp in the table).
+    assert "0.6120" in html and "0.5980" in html and "0.6340" in html, (
+        "held-out fitness values missing from the curve"
+    )
+    # Δ-vs-prior direction: gen2 regressed (negative), gen3 improved (positive).
+    assert "delta-negative" in html and "delta-positive" in html, (
+        "held-out curve Δ-vs-prior direction classes missing"
+    )
+    # The content-addressed bench id (the fixed ruler's fingerprint) is shown.
+    assert "pool-c16d186178e1" in html, "held-out bench id missing"
+    # NO-SLOP: the curve uses a dense <table class="records">, never a card grid /
+    # accent bar / emoji (CLAUDE.md §Docs, feedback_no_box_ui_no_emoji).
+    assert "border-left" not in html and "card-grid" not in html, (
+        "held-out curve must not introduce accent-bar / card-grid slop"
+    )
+    assert not _find_emoji(html), "held-out curve must not introduce emoji"
+
+
+def test_autoresearch_held_out_curve_omitted_without_bench(tmp_path: Path) -> None:
+    """E2: with NO held-out fields in any attribution row (no bench configured),
+    the curve section is omitted entirely — no empty scaffolding."""
+    import json as _json
+
+    # Copy the fixture, then strip the held_out_* fields from every row.
+    fixture_copy = tmp_path / "fixture"
+    shutil.copytree(FIXTURE_ROOT, fixture_copy)
+    mutations_path = fixture_copy / "autoresearch" / "state" / "mutations.jsonl"
+    stripped_lines: list[str] = []
+    for line in mutations_path.read_text(encoding="utf-8").splitlines():
+        if not line.strip():
+            continue
+        row = _json.loads(line)
+        row.pop("held_out_fitness", None)
+        row.pop("held_out_bench_id", None)
+        stripped_lines.append(_json.dumps(row))
+    mutations_path.write_text("\n".join(stripped_lines) + "\n", encoding="utf-8")
+
+    out = tmp_path / "out"
+    result = subprocess.run(  # noqa: S603 — test invocation
+        [
+            sys.executable,
+            str(BUILDER),
+            "--out",
+            str(out / "hub" / "index.html"),
+            "--bundle-root",
+            str(fixture_copy / "petri-bundle"),
+            "--autoresearch-root",
+            str(fixture_copy / "autoresearch"),
+            "--seedgen-out-dir",
+            str(out / "seedgen"),
+            "--autoresearch-out-dir",
+            str(out / "autoresearch"),
+        ],
+        check=False,
+        capture_output=True,
+        text=True,
+        cwd=str(REPO_ROOT),
+    )
+    assert result.returncode == 0, f"builder failed: {result.stderr!r}"
+    mutations_html = (out / "autoresearch" / "mutations" / "index.html").read_text(encoding="utf-8")
+    assert "Held-out fitness curve" not in mutations_html, (
+        "held-out curve section must be omitted when no row carries held_out_fitness"
+    )
+    # The unresolved-marker guard must not leave a literal {{ held_out_curve }}.
+    assert "held_out_curve" not in mutations_html
+
+
+def test_held_out_curve_unit_orders_and_signs_deltas() -> None:
+    """Direct unit test of the curve renderer: rows are ordered by ts (not file
+    order), the first generation has no Δ, and a regress vs an improvement on the
+    FIXED ruler get the correct signed delta classes."""
+    from scripts.build_self_improving_hub import _render_held_out_curve
+
+    # Deliberately out of ts order in the list — the renderer must sort by ts.
+    rows = [
+        {
+            "kind": "attribution",
+            "ts": 30.0,
+            "held_out_fitness": 0.70,
+            "held_out_bench_id": "pool-x",
+        },
+        {
+            "kind": "attribution",
+            "ts": 10.0,
+            "held_out_fitness": 0.60,
+            "held_out_bench_id": "pool-x",
+        },
+        {
+            "kind": "attribution",
+            "ts": 20.0,
+            "held_out_fitness": 0.55,
+            "held_out_bench_id": "pool-x",
+        },
+        # An apply row + a no-bench attribution row are ignored.
+        {"kind": "applied", "ts": 25.0, "target_section": "x"},
+        {"kind": "attribution", "ts": 40.0},
+    ]
+    html = _render_held_out_curve(rows)
+    # 3 generations (only the 3 attribution rows with held_out_fitness).
+    assert "3 generations" in html
+    # Chronological: 0.60 (gen1, no delta) → 0.55 (gen2, -0.0500) → 0.70 (gen3, +0.1500).
+    assert html.index("0.6000") < html.index("0.5500") < html.index("0.7000")
+    assert "-0.0500" in html and "delta-negative" in html
+    assert "+0.1500" in html and "delta-positive" in html
+    # Single ruler → "fixed ruler <code>pool-x</code>".
+    assert "fixed ruler" in html and "pool-x" in html
+
+
+def test_held_out_curve_unit_flags_changed_ruler() -> None:
+    """If the frozen bench id changes mid-run (a 'frozen' set was edited), the
+    curve note flags that the values are NOT fully comparable."""
+    from scripts.build_self_improving_hub import _render_held_out_curve
+
+    rows = [
+        {"kind": "attribution", "ts": 10.0, "held_out_fitness": 0.6, "held_out_bench_id": "pool-a"},
+        {"kind": "attribution", "ts": 20.0, "held_out_fitness": 0.6, "held_out_bench_id": "pool-b"},
+    ]
+    html = _render_held_out_curve(rows)
+    assert "rulers changed" in html and "NOT fully comparable" in html
+
+
+def test_held_out_curve_unit_graceful_skips_bad_values() -> None:
+    """Graceful contract: a non-numeric held_out_fitness AND a non-numeric ts are
+    BOTH skipped (neither can place a positionable curve point) rather than
+    raising — the render never sinks on a malformed row, and an unpositionable
+    point never mis-orders the order-dependent Δ column."""
+    from scripts.build_self_improving_hub import _render_held_out_curve
+
+    rows = [
+        # bad fitness → skipped (cannot place a value)
+        {"kind": "attribution", "ts": 10.0, "held_out_fitness": "oops", "held_out_bench_id": "p"},
+        # bad ts → skipped (cannot position on the generation axis)
+        {
+            "kind": "attribution",
+            "ts": "bad",
+            "held_out_fitness": 0.5,
+            "held_out_bench_id": "pool-x",
+        },
+        # the only well-formed row places the single point
+        {"kind": "attribution", "ts": 20.0, "held_out_fitness": 0.7, "held_out_bench_id": "pool-x"},
+    ]
+    html = _render_held_out_curve(rows)
+    assert "1 generation" in html
+    assert "0.7000" in html
+    # The bad-ts row's fitness (0.5) must NOT appear — it was skipped, not floated.
+    assert "0.5000" not in html
+
+
+# ---------------------------------------------------------------------------
+# E6 (2026-05-30) — the honest evidence page (methods + results + power)
+# ---------------------------------------------------------------------------
+
+
+def test_evidence_page_renders_three_sections(
+    built_autoresearch_pages: dict[str, str],
+) -> None:
+    """E6: the evidence page renders the 3 sections (methods / results / power),
+    has the Evidence bucket title, and resolves every template marker."""
+    html = built_autoresearch_pages["evidence"]
+    assert "1 &middot; Methods" in html, "Methods section heading missing"
+    assert "2 &middot; Results" in html, "Results section heading missing"
+    assert "3 &middot; Power" in html, "Power section heading missing"
+    # Methods names the frozen ruler vs the pinned pool + the 3 arms + E5 pins + epoch.
+    assert "held-out ruler" in html and "pool-68dc6f0c9745" in html, (
+        "methods must name the frozen held-out ruler vs the pinned selection pool"
+    )
+    for arm in ("gate", "random", "never"):
+        assert arm in html, f"methods must name the {arm!r} control arm"
+    assert "prompt_hash" in html and "applied_diff_hash" in html, "E5 pins not described"
+    assert "epoch" in html.lower(), "content-addressed epoch partition not described"
+    # No unresolved template markers.
+    assert "{{" not in html and "}}" not in html, "unresolved template markers on evidence page"
+
+
+def test_evidence_page_graceful_empty_state(
+    built_autoresearch_pages: dict[str, str],
+) -> None:
+    """E6 CRITICAL: with no matched 3-arm held-out campaign on disk (the real
+    fixture has no promote_policy / gain rows), the page renders the full structure
+    + an HONEST 'awaiting' / 'no evidence yet' state — never a crash, never a
+    fabricated number, never a placeholder like XXXX."""
+    html = built_autoresearch_pages["evidence"]
+    # Honest empty states present.
+    assert "awaiting" in html.lower(), "missing honest 'awaiting campaign' empty state"
+    assert "no evidence" in html.lower(), "missing honest 'no evidence yet' verdict"
+    # NO fabricated number / placeholder.
+    assert "XXXX" not in html, "placeholder XXXX present — measured values only"
+    # The power section, with no recorded sigma, says 'indeterminate' rather than
+    # inventing an N.
+    assert "indeterminate" in html.lower(), (
+        "power section must report N indeterminate when sigma is unrecorded, not fabricate"
+    )
+
+
+def test_evidence_page_states_zero_promotions_as_trust(
+    built_autoresearch_pages: dict[str, str],
+) -> None:
+    """E6 honest framing: 0 promotions is stated as a TRUST-INCREASING result, not
+    a failure (operator's verbatim intent)."""
+    html = built_autoresearch_pages["evidence"]
+    assert "trust-increasing" in html.lower(), (
+        "0-promotion framing as trust-increasing missing from evidence page"
+    )
+
+
+def test_evidence_page_no_slop(built_autoresearch_pages: dict[str, str]) -> None:
+    """E6 no-slop (CLAUDE.md §Docs, feedback_no_box_ui_no_emoji): no colored
+    left-border accent bar, no card-grid navigation, no emoji. Dense tables only."""
+    html = built_autoresearch_pages["evidence"]
+    assert "border-left" not in html, "colored accent bar (border-left) is slop"
+    assert "card-grid" not in html and "subview-card" not in html, "card-grid nav is slop"
+    assert not _find_emoji(html), f"emoji on evidence page: {_find_emoji(html)!r}"
+    # The evidence content uses dense <table class="records"> + <dl class="status-grid">.
+    assert 'class="records"' in html and 'class="status-grid"' in html, (
+        "evidence page must use dense table / definition-list, not card grid"
+    )
+
+
+def test_evidence_page_in_nav_and_subview(
+    built_autoresearch_pages: dict[str, str],
+) -> None:
+    """E6 wiring: the Evidence link is in every autoresearch sidebar + the landing
+    sub-view table now lists 5 sub-pages including Evidence."""
+    for name, html in built_autoresearch_pages.items():
+        assert "/geode/self-improving/autoresearch/evidence/" in html, (
+            f"autoresearch {name} sidebar missing the Evidence nav link"
+        )
+    landing = built_autoresearch_pages["index"]
+    assert "5 autoresearch sub-pages" in landing, "landing sub-view count not bumped to 5"
+    assert "Evidence" in landing, "Evidence sub-view row missing from landing"
+
+
+def test_evidence_results_populated_per_arm_curve() -> None:
+    """E6 RESULTS (populated path): with multi-arm held-out + gain rows, the renderer
+    splits the per-cycle held-out curve PER ARM, computes a 3-arm comparison on the
+    fixed ruler, counts promotions per arm, and renders the ci-excludes-0 verdict.
+    Reads exactly the fields E2-E4 write (held_out_fitness / promote_policy /
+    gain_ci_excludes_zero / gain_verdict)."""
+    from scripts.build_self_improving_hub import (
+        _render_evidence_results,
+        _render_evidence_verdict,
+    )
+
+    mutations = [
+        # gate arm — two held-out cycles, an improvement.
+        {
+            "kind": "attribution",
+            "ts": 10.0,
+            "held_out_fitness": 0.60,
+            "held_out_bench_id": "pool-x",
+            "promote_policy": "gate",
+            "gain_ci_low": 0.01,
+            "gain_ci_high": 0.05,
+            "gain_ci_excludes_zero": True,
+            "gain_verdict": "gain significant",
+        },
+        {
+            "kind": "attribution",
+            "ts": 20.0,
+            "held_out_fitness": 0.64,
+            "held_out_bench_id": "pool-x",
+            "promote_policy": "gate",
+        },
+        # random arm — one held-out cycle, no gain evidence.
+        {
+            "kind": "attribution",
+            "ts": 15.0,
+            "held_out_fitness": 0.59,
+            "held_out_bench_id": "pool-x",
+            "promote_policy": "random",
+            "gain_ci_low": -0.02,
+            "gain_ci_high": 0.02,
+            "gain_ci_excludes_zero": False,
+            "gain_verdict": "no evidence yet",
+        },
+    ]
+    archive = [
+        {"kind": "baseline", "ts_utc": "2026-05-30T00:00:00+00:00", "promote_policy": "gate"},
+    ]
+    results_html = _render_evidence_results(mutations, archive)
+    # Per-arm curve: the gate arm shows 2 generations, random shows 1.
+    assert "gate" in results_html and "random" in results_html and "never" in results_html
+    assert "0.6000" in results_html and "0.6400" in results_html, "gate arm curve values missing"
+    assert "0.5900" in results_html, "random arm curve value missing"
+    # 3-arm comparison: gate has 1 promotion (from the archive row).
+    assert "3-arm comparison" in results_html
+    # never arm has no held-out cycle → honest per-arm empty state.
+    assert "No held-out cycle recorded for this arm yet" in results_html
+
+    verdict_html = _render_evidence_verdict(mutations, archive)
+    assert "gain significant" in verdict_html, "significant verdict not surfaced"
+    assert "no evidence yet" in verdict_html, "honest null verdict not surfaced"
+    # The CI bounds are rendered (read from the recorded fields).
+    assert "+0.0100" in verdict_html and "+0.0500" in verdict_html, "gain CI bounds missing"
+
+
+def test_evidence_untagged_baseline_not_counted_as_gate_arm() -> None:
+    """E6 honesty (Codex review): a pre-E3 promoted baseline carrying NO
+    promote_policy must NOT be silently attributed to the gate arm — that would
+    fabricate a matched-campaign result. It is counted in an explicit
+    'untagged (pre-arm)' bucket, and the gate arm shows 0 arm-tagged promotions."""
+    from scripts.build_self_improving_hub import _render_evidence_results
+
+    mutations: list = []  # no held-out / arm rows on disk
+    archive = [{"kind": "baseline", "ts_utc": "2026-05-30T00:00:00+00:00"}]  # no promote_policy
+    html = _render_evidence_results(mutations, archive)
+    # The untagged bucket appears + names the pre-arm origin.
+    assert "untagged" in html and "pre-arm" in html, "untagged baseline must be a separate bucket"
+    # The comparison note must NOT claim a gate-arm promotion; it states the baseline
+    # predates the control arms (singular verb for the single fixture baseline).
+    assert "predates the control arms" in html, (
+        "an untagged promotion must be flagged as predating the arms, not folded into gate"
+    )
+    # The gate arm row shows 0 promotions (the untagged baseline is NOT counted there).
+    gate_idx = html.find("selection (promote gate)")
+    assert gate_idx != -1
+    # The gate row's promotions cell (last <td class="num"> in that <tr>) is 0.
+    gate_row = html[gate_idx : html.find("</tr>", gate_idx)]
+    assert ">1<" not in gate_row, "untagged baseline wrongly counted as a gate-arm promotion"
+
+
+def test_evidence_verdict_renders_archive_iso_timestamp() -> None:
+    """E6 parity (Codex review): a promoted-baseline verdict row carries an ISO-string
+    ts_utc, which must be formatted (not dropped as '—' by a numeric-only cast)."""
+    from scripts.build_self_improving_hub import _render_evidence_verdict
+
+    archive = [
+        {
+            "kind": "baseline",
+            "ts_utc": "2026-05-30T12:34:56+00:00",
+            "promote_policy": "gate",
+            "gain_ci_excludes_zero": False,
+            "gain_verdict": "no evidence yet",
+        }
+    ]
+    html = _render_evidence_verdict([], archive)
+    assert "no evidence yet" in html
+    # The ISO date surfaces (short form) — the archive ts is no longer dropped.
+    assert "2026-05-30" in html, "archive ISO ts_utc must be formatted, not rendered as —"
+
+
+def test_evidence_power_reads_recorded_sigma() -> None:
+    """E6 POWER (populated path): the required-N line is COMPUTED from the recorded
+    combined sigma (within/between stderr), never fabricated. The N matches the
+    writer's formula for the same sigma."""
+    from scripts.build_self_improving_hub import _render_evidence_power, _required_n_seed
+
+    mutations = [
+        {
+            "kind": "attribution",
+            "ts": 10.0,
+            "within_mutation_stderr": 0.0,
+            "between_seed_stderr": 0.013,
+        },
+    ]
+    html = _render_evidence_power(mutations)
+    # sigma = sqrt(0^2 + 0.013^2) = 0.0130 — surfaced as the recorded sigma.
+    assert "0.0130" in html, "recorded combined sigma not surfaced in power section"
+    # required-N computed from that sigma (not indeterminate when sigma is recorded).
+    sigma = (0.0**2 + 0.013**2) ** 0.5
+    expected_n = _required_n_seed(sigma)
+    assert expected_n is not None
+    assert str(expected_n) in html, f"required N_seed {expected_n} not rendered from recorded sigma"
+    assert "indeterminate" not in html.lower(), "should not say indeterminate when sigma recorded"
+
+
+def test_evidence_power_indeterminate_when_no_sigma() -> None:
+    """E6 POWER honest empty: with no recorded variance signal, the required-N is
+    reported as 'indeterminate' (not a fabricated number)."""
+    from scripts.build_self_improving_hub import _render_evidence_power
+
+    # No within/between stderr on any row → sigma unknown.
+    mutations = [{"kind": "attribution", "ts": 10.0, "held_out_fitness": 0.6}]
+    html = _render_evidence_power(mutations)
+    assert "indeterminate" in html.lower(), "power must report indeterminate when sigma unknown"
+    assert "not yet estimated" in html.lower(), "sigma cell must say not-yet-estimated"
+
+
+def test_evidence_required_n_seed_matches_core_formula() -> None:
+    """E6 drift guard: the stdlib power-formula mirror in the builder reproduces
+    core.self_improving_loop.statistical_power.required_samples for the same sigma."""
+    from core.self_improving_loop.statistical_power import (
+        DEFAULT_ALPHA,
+        DEFAULT_POWER,
+        DEFAULT_TARGET_EFFECT_SIZE,
+        required_samples,
+    )
+    from scripts.build_self_improving_hub import (
+        _POWER_DEFAULT_ALPHA,
+        _POWER_DEFAULT_POWER,
+        _POWER_DEFAULT_TARGET_EFFECT_SIZE,
+        _required_n_seed,
+    )
+
+    # Constants must match the SoT (the stdlib mirror is otherwise silently stale).
+    assert _POWER_DEFAULT_TARGET_EFFECT_SIZE == DEFAULT_TARGET_EFFECT_SIZE
+    assert _POWER_DEFAULT_ALPHA == DEFAULT_ALPHA
+    assert _POWER_DEFAULT_POWER == DEFAULT_POWER
+    for sigma in (0.0, 0.005, 0.013, 0.05, 0.2):
+        assert _required_n_seed(sigma) == required_samples(sigma).n_seed, (
+            f"builder _required_n_seed({sigma}) diverges from required_samples"
+        )
+    # Graceful: None / negative / non-finite sigma → None (no crash, no fabrication).
+    assert _required_n_seed(None) is None
+    assert _required_n_seed(-1.0) is None
+    assert _required_n_seed(float("nan")) is None
+
+
+def test_evidence_arm_map_matches_core() -> None:
+    """E6 drift guard: the builder's 3 control-arm names match the writer-side
+    _VALID_PROMOTE_POLICIES SoT in autoresearch/train.py (parsed textually, since the
+    builder is stdlib-only)."""
+    from scripts.build_self_improving_hub import _EVIDENCE_ARMS
+
+    train_src = (REPO_ROOT / "autoresearch" / "train.py").read_text(encoding="utf-8")
+    m = re.search(r"_VALID_PROMOTE_POLICIES\s*=\s*frozenset\(\{([^}]*)\}\)", train_src)
+    assert m is not None, "could not locate _VALID_PROMOTE_POLICIES in train.py"
+    core_arms = set(re.findall(r'"([a-z_]+)"', m.group(1)))
+    builder_arms = {arm for arm, _label in _EVIDENCE_ARMS}
+    assert builder_arms == core_arms, f"builder arms {builder_arms} drift from core {core_arms}"
+
+
+def test_evidence_results_graceful_on_malformed_rows() -> None:
+    """E6 graceful contract: a non-numeric held_out_fitness / ts / gain CI bound is
+    skipped, not raised — the render never sinks on a malformed ledger row."""
+    from scripts.build_self_improving_hub import (
+        _render_evidence_power,
+        _render_evidence_results,
+        _render_evidence_verdict,
+    )
+
+    mutations = [
+        {"kind": "attribution", "ts": "bad", "held_out_fitness": 0.6, "promote_policy": "gate"},
+        {"kind": "attribution", "ts": 10.0, "held_out_fitness": "oops", "promote_policy": "gate"},
+        {
+            "kind": "attribution",
+            "ts": 20.0,
+            "gain_ci_excludes_zero": False,
+            "gain_ci_low": "x",
+            "gain_ci_high": None,
+        },
+        {"kind": "attribution", "ts": 30.0, "within_mutation_stderr": "nope"},
+    ]
+    archive: list = []
+    # None of these raise.
+    results_html = _render_evidence_results(mutations, archive)
+    verdict_html = _render_evidence_verdict(mutations, archive)
+    power_html = _render_evidence_power(mutations)
+    assert "3-arm comparison" in results_html
+    # The malformed gain CI row still produces a verdict row, with a "—" CI cell.
+    assert "no evidence yet" in verdict_html
+    # The malformed sigma row leaves sigma unestimated → indeterminate.
+    assert "indeterminate" in power_html.lower()
 
 
 def test_autoresearch_results_sparkline(built_autoresearch_pages: dict[str, str]) -> None:
@@ -1465,6 +1944,7 @@ def built_pr3_pages(tmp_path_factory: pytest.TempPathFactory) -> dict[str, str]:
     """
     out = tmp_path_factory.mktemp("seedgen-out-p3")
     seedgen_out = out / "seedgen"
+    autoresearch_out = out / "autoresearch"
     subprocess.run(  # noqa: S603
         [
             sys.executable,
@@ -1477,6 +1957,10 @@ def built_pr3_pages(tmp_path_factory: pytest.TempPathFactory) -> dict[str, str]:
             str(FIXTURE_ROOT / "autoresearch"),
             "--seedgen-out-dir",
             str(seedgen_out),
+            # Redirect autoresearch output to tmp too — otherwise the builder
+            # writes into docs/self-improving/autoresearch/ and dirties the tree.
+            "--autoresearch-out-dir",
+            str(autoresearch_out),
         ],
         check=True,
         cwd=str(REPO_ROOT),
@@ -1740,3 +2224,97 @@ def test_pr1_tournament_schema_complete() -> None:
     assert seen_winners == {"A", "B", "tie"}, (
         f"tournament fixture must cover A/B/tie outcomes (got {sorted(seen_winners)})"
     )
+
+
+# ---------------------------------------------------------------------------
+# E1b — pre-E1 mixed-scale rows excluded from the 0-1 Δfitness aggregate
+# ---------------------------------------------------------------------------
+#
+# E1 (PR-MARGIN-FITNESS-SCALE) reconciled per-mutation fitness_before /
+# fitness_delta to the 0-1 compute_fitness scale, but the 8 rows already in
+# autoresearch/state/mutations.jsonl carry the OLD dim-aggregate scale
+# (fitness_before ≈ 1.73-2.29, delta ≈ -1.7). The ledger is intentionally not
+# rewritten, so the hub must drop those rows from the 0-1 mean-Δ aggregate and
+# tag them per-row. These tests pin that display-side heuristic.
+
+
+def _joined_mutation(*, mid: str, fitness_before: Any, fitness_delta: Any) -> dict[str, Any]:
+    """Build a single joined mutation entry (apply + attr) for the summary/row
+    renderers. ``fitness_before > 1.0`` marks a pre-E1 mixed-scale row."""
+    attr: dict[str, Any] = {"mutation_id": mid, "fitness_delta": fitness_delta}
+    if fitness_before is not None:
+        attr["fitness_before"] = fitness_before
+        if isinstance(fitness_delta, int | float) and isinstance(fitness_before, int | float):
+            attr["fitness_after"] = fitness_before + fitness_delta
+    apply_row = {"mutation_id": mid, "target_section": "sec", "target_kind": "policy"}
+    return {"id": mid, "apply": apply_row, "attr": attr}
+
+
+def test_mutations_summary_mean_delta_over_post_e1_rows_only() -> None:
+    """Mixed input: two post-E1 (≤1.0) rows + two pre-E1 (>1.0) rows. The mean-Δ
+    aggregate must be computed over ONLY the ≤1.0 rows, and n must reflect that."""
+    builder = _load_builder_module()
+    joined = [
+        _joined_mutation(mid="post-a", fitness_before=0.70, fitness_delta=0.10),
+        _joined_mutation(mid="post-b", fitness_before=0.60, fitness_delta=0.20),
+        _joined_mutation(mid="pre-a", fitness_before=1.7333, fitness_delta=-1.7333),
+        _joined_mutation(mid="pre-b", fitness_before=1.7583, fitness_delta=-1.1110),
+    ]
+    html = builder._render_mutations_summary(joined)
+    # mean over the two 0-1 rows only = (0.10 + 0.20) / 2 = +0.1500.
+    assert "+0.1500" in html, "mean-Δfitness not computed over the post-E1 rows only"
+    assert "(n=2, 0-1 scale only)" in html, "aggregate n must exclude the >1.0 pre-E1 rows"
+    # The pre-E1 rows are surfaced as excluded, not folded into the mean.
+    assert "2 pre-E1 (mixed scale, excluded)" in html
+    # The garbage old-scale mean (≈ -0.6 across all four) must never appear.
+    assert "-0.6" not in html and "-1.7" not in html
+
+
+def test_mutations_pre_e1_rows_annotated_and_uncounted() -> None:
+    """The >1.0 rows render a 'pre-E1 (mixed scale)' tag in the per-row Δ cell and
+    are classified ``pre-E1`` (not improved/regressed/noise) by the outcome map."""
+    builder = _load_builder_module()
+    pre = _joined_mutation(mid="pre-a", fitness_before=2.29, fitness_delta=-1.76)
+    post = _joined_mutation(mid="post-a", fitness_before=0.65, fitness_delta=0.05)
+    rows_html = builder._render_mutations_rows([pre, post])
+    assert "pre-E1 (mixed scale)" in rows_html, "pre-E1 row not annotated in the Δ cell"
+    # The bogus old-scale delta must not be rendered for the pre-E1 row.
+    assert "1.7600" not in rows_html, "pre-E1 row rendered its meaningless old-scale delta"
+    # Outcome classification: pre-E1 row is its own bucket, post-E1 row is improved.
+    assert builder._mutation_outcome(pre["attr"]) == ("pre-E1", "muted")
+    assert builder._mutation_outcome(post["attr"])[0] == "improved"
+    # The detection helper is the single robust gate.
+    assert builder._is_pre_e1_mixed_scale(pre["attr"]) is True
+    assert builder._is_pre_e1_mixed_scale(post["attr"]) is False
+
+
+def test_mutations_summary_all_mixed_yields_zero_aggregate() -> None:
+    """An all-pre-E1 input (the current real ledger state — 8 rows, all >1.0) must
+    yield an EMPTY/zero aggregate (n=0, mean +0.0000), never a garbage average."""
+    builder = _load_builder_module()
+    joined = [
+        _joined_mutation(mid="pre-a", fitness_before=1.7333, fitness_delta=-1.7333),
+        _joined_mutation(mid="pre-b", fitness_before=1.7583, fitness_delta=-1.7583),
+        _joined_mutation(mid="pre-c", fitness_before=2.29, fitness_delta=-1.11),
+    ]
+    html = builder._render_mutations_summary(joined)
+    assert "+0.0000" in html, "all-mixed input must yield a zero mean, not a garbage average"
+    assert "(n=0, 0-1 scale only)" in html, "all-mixed input must report n=0"
+    assert "3 pre-E1 (mixed scale, excluded)" in html
+    assert "-1.7" not in html and "-1.1" not in html, "old-scale deltas leaked into the aggregate"
+
+
+def test_mutations_pre_e1_heuristic_graceful_on_missing_fitness_before() -> None:
+    """Graceful contract: a missing / non-numeric / None fitness_before is NOT
+    treated as mixed-scale (it cannot be proven old-scale), so it falls through to
+    normal handling rather than raising."""
+    builder = _load_builder_module()
+    assert builder._is_pre_e1_mixed_scale(None) is False
+    assert builder._is_pre_e1_mixed_scale({}) is False
+    assert builder._is_pre_e1_mixed_scale({"fitness_before": None}) is False
+    assert builder._is_pre_e1_mixed_scale({"fitness_before": "1.73"}) is False  # non-numeric
+    # A JSON bool must NOT be read as numeric 1.0 (isinstance(True, int) is True).
+    assert builder._is_pre_e1_mixed_scale({"fitness_before": True}) is False
+    # A boundary 1.0 (the inclusive top of the 0-1 scale) is NOT mixed.
+    assert builder._is_pre_e1_mixed_scale({"fitness_before": 1.0}) is False
+    assert builder._is_pre_e1_mixed_scale({"fitness_before": 1.0001}) is True

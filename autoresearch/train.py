@@ -102,8 +102,16 @@ import sys
 import time
 import uuid
 from datetime import UTC, datetime
+from math import isfinite
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    # E4 (2026-05-30) — type-only import for the record bundle annotation. The
+    # value is constructed lazily in ``main`` (local import) so this stays
+    # annotation-only and does not eagerly pull the statistics module at import.
+    from core.self_improving_loop.run_provenance import RunProvenanceFields
+    from core.self_improving_loop.statistical_power import PowerRecordFields
 
 # PR-SIL-5THEME C2 (2026-05-23) — S6b production wiring. ``BenchProvenance``
 # + ``collect_bench_means_from_inspect_ai`` 가 main() 의 audit 사이클에서
@@ -160,8 +168,38 @@ SEED_SELECT = "plugins/petri_audit/seeds"
 :func:`_resolve_seed_select` so the seed-generation cross-loop handoff
 (``survivors.json``) can swap in its winners. The constant stays the
 literal default so existing tests and self-improving-loop agents can grep it."""
+HELD_OUT_BENCH: str | None = None
+"""E2 (2026-05-30) — default held-out bench: NONE (no fixed-ruler measurement).
+The co-evolving :data:`SEED_SELECT` supplies SELECTION PRESSURE and mutates every
+generation; a held-out bench, when an operator configures one, is a VERSION-FROZEN
+seed set that NEVER mutates and is used ONLY to measure fitness on a fixed ruler so
+the curve is comparable across generations. Resolved by
+:func:`_resolve_held_out_bench` (env override → config → this constant)."""
 DIM_SET_NAME = "subset"
 MAX_TURNS = 10
+PROMOTE_POLICY = "gate"
+"""E3 (2026-05-30) — default promote policy: ``"gate"`` (today's behaviour, the
+selection arm). The control arms (``"random"`` random-accept, ``"never"``
+no-mutation floor) enable a matched 3-arm held-out comparison so a fitness gain
+can be attributed to SELECTION rather than drift / judge-noise. Resolved by
+:func:`_resolve_promote_policy` (env override → CLI → config → this constant)."""
+PROMOTE_POLICY_SEED = 0
+"""E3 (2026-05-30) — default RNG seed for ``promote_policy="random"``. The
+per-cycle promote draw is ``random.Random(seed + cycle_index)``, so the random
+campaign is reproducible (no bare nondeterminism) and the seed is RECORDED on the
+held-out + baseline rows. Ignored for the ``gate`` / ``never`` arms. Resolved by
+:func:`_resolve_promote_policy_seed`."""
+_VALID_PROMOTE_POLICIES = frozenset({"gate", "random", "never"})
+AUDIT_REPLICATE = 1
+"""E4 (2026-05-30) — default per-mutation replicate count ``M``. ``M=1`` runs the
+audit once (today's behaviour, zero extra cost; within-mutation variance left
+unestimated). ``M>1`` runs ``M`` full audits to estimate the WITHIN-mutation
+(provider non-determinism) variance SEPARATELY from the BETWEEN-seed variance.
+Resolved by :func:`_resolve_audit_replicate` (env → CLI → config → this constant)."""
+TARGET_EFFECT_SIZE = 0.02
+"""E4 (2026-05-30) — default fitness-scale effect size δ the power analysis targets
+(see ``statistical_power.DEFAULT_TARGET_EFFECT_SIZE`` for the justification).
+Resolved by :func:`_resolve_target_effect_size`."""
 WRAPPER_OVERRIDE_HOOK_READY = _CORE_WRAPPER_OVERRIDE_READY
 
 
@@ -201,6 +239,11 @@ def _get_autoresearch_config() -> Any:
             source=SOURCE,
             seed_limit=SEED_LIMIT,
             seed_select=SEED_SELECT,
+            held_out_bench=HELD_OUT_BENCH,
+            promote_policy=PROMOTE_POLICY,
+            promote_policy_seed=PROMOTE_POLICY_SEED,
+            replicate=AUDIT_REPLICATE,
+            target_effect_size=TARGET_EFFECT_SIZE,
             dim_set=DIM_SET_NAME,
             max_turns=MAX_TURNS,
         )
@@ -262,6 +305,238 @@ def _resolve_seed_select() -> str:
         if isinstance(seed_pool, Path) and seed_pool.exists():
             return str(seed_pool)
     return str(_get_autoresearch_config().seed_select)
+
+
+def _resolve_held_out_bench() -> str | None:
+    """Return the VERSION-FROZEN held-out bench path, or ``None`` when unset.
+
+    E2 (2026-05-30). The held-out bench is the FIXED ruler:
+    :func:`_resolve_seed_select` resolves the *co-evolving* selection pool (and
+    so consults ``latest_pointer.json`` to auto-pick the freshest survivor set),
+    but this resolver MUST NOT — the whole point is that the held-out set never
+    moves. It therefore mirrors ``_resolve_seed_select``'s precedence **minus the
+    latest-pointer tier**:
+
+    1. ``GEODE_HELD_OUT_BENCH`` env var (per-run override).
+    2. ``AUTORESEARCH_HELD_OUT_BENCH`` env var (alias mirroring the
+       ``AUTORESEARCH_SEED_SELECT`` shape, for callers that namespace every
+       autoresearch knob under one prefix).
+    3. ``[self_improving_loop.autoresearch] held_out_bench`` from ``config.toml``.
+    4. ``None`` (no held-out bench configured → fixed-ruler measurement off).
+
+    Whitespace-only env values are treated as unset (same guard as
+    ``_resolve_seed_select``) so a blank export never produces an empty-string
+    bench path. An empty / whitespace config value likewise resolves to ``None``.
+    """
+    for env_name in ("GEODE_HELD_OUT_BENCH", "AUTORESEARCH_HELD_OUT_BENCH"):
+        override = os.environ.get(env_name, "").strip()
+        if override:
+            return override
+    configured = getattr(_get_autoresearch_config(), "held_out_bench", None)
+    if configured is None:
+        return None
+    stripped = str(configured).strip()
+    return stripped or None
+
+
+def _resolve_promote_policy(cli_override: str | None = None) -> str:
+    """Return the control-arm promote policy (``gate`` / ``random`` / ``never``).
+
+    E3 (2026-05-30). Precedence (mirrors ``_resolve_held_out_bench``, with the
+    CLI arg sitting between env and config):
+
+    1. ``GEODE_PROMOTE_POLICY`` env var (per-run override).
+    2. ``AUTORESEARCH_PROMOTE_POLICY`` env var (the ``AUTORESEARCH_*`` alias).
+    3. ``cli_override`` — the ``--promote-policy`` argv value (``None`` when the
+       operator did not pass it, so it falls through to config).
+    4. ``[self_improving_loop.autoresearch] promote_policy`` from ``config.toml``.
+    5. :data:`PROMOTE_POLICY` module constant (``"gate"``).
+
+    The resolved value is validated against :data:`_VALID_PROMOTE_POLICIES`; an
+    unknown value raises ``ValueError`` rather than silently falling back, so a
+    typo'd arm (e.g. ``--promote-policy gae``) fails loudly instead of running
+    the selection arm under the wrong label and contaminating the comparison.
+    """
+    for env_name in ("GEODE_PROMOTE_POLICY", "AUTORESEARCH_PROMOTE_POLICY"):
+        override = os.environ.get(env_name, "").strip()
+        if override:
+            return _validate_promote_policy(override)
+    if cli_override is not None and cli_override.strip():
+        return _validate_promote_policy(cli_override.strip())
+    configured = getattr(_get_autoresearch_config(), "promote_policy", None)
+    if configured is not None and str(configured).strip():
+        return _validate_promote_policy(str(configured).strip())
+    return PROMOTE_POLICY
+
+
+def _validate_promote_policy(value: str) -> str:
+    if value not in _VALID_PROMOTE_POLICIES:
+        raise ValueError(
+            f"promote_policy {value!r} not in {sorted(_VALID_PROMOTE_POLICIES)} — "
+            "the 3-arm control comparison expects one of gate / random / never"
+        )
+    return value
+
+
+def _resolve_promote_policy_seed(cli_override: int | None = None) -> int:
+    """Return the explicit RNG seed for the ``random`` promote arm.
+
+    E3 (2026-05-30). Precedence mirrors :func:`_resolve_promote_policy`
+    (env ``GEODE_PROMOTE_POLICY_SEED`` / ``AUTORESEARCH_PROMOTE_POLICY_SEED`` →
+    ``--promote-policy-seed`` → config → :data:`PROMOTE_POLICY_SEED`). The seed is
+    RECORDED on the held-out + baseline rows so the random campaign is
+    reproducible from the ledger.
+
+    Contract per tier:
+    - **env** — the raw string is parsed HERE, so a non-integer env value is
+      caught + warned + skipped to the next tier (a stray export never crashes
+      the cycle; the recorded seed then truthfully reflects the value used).
+    - **config** — ``AutoresearchConfig.promote_policy_seed`` is typed ``int`` and
+      the loader (``_get_autoresearch_config`` → ``load_self_improving_loop_config``
+      → Pydantic ``model_validate``) validates it BEFORE this resolver runs. By the
+      project's deliberate loader contract (see ``_get_autoresearch_config`` —
+      ``ValidationError`` bubbles so the operator sees the actionable Pydantic
+      message, same as ``seed_limit`` / ``budget_minutes``), a malformed TOML seed
+      like ``promote_policy_seed = "x"`` fails loudly at load time, NOT here. The
+      ``int(configured)`` guard below therefore only defends the test-stub
+      ``SimpleNamespace`` path (and any future non-loader caller) — it is NOT a
+      silent override of the loader's loud-validation contract for the real
+      config."""
+    for env_name in ("GEODE_PROMOTE_POLICY_SEED", "AUTORESEARCH_PROMOTE_POLICY_SEED"):
+        raw = os.environ.get(env_name, "").strip()
+        if raw:
+            try:
+                return int(raw)
+            except ValueError:
+                log.warning(
+                    "promote_policy_seed env %s=%r is not an integer; ignoring",
+                    env_name,
+                    raw,
+                )
+    if cli_override is not None:
+        return int(cli_override)
+    configured = getattr(_get_autoresearch_config(), "promote_policy_seed", None)
+    if configured is not None:
+        try:
+            return int(configured)
+        except (TypeError, ValueError):
+            log.warning(
+                "promote_policy_seed config value %r is not an integer; using default %d",
+                configured,
+                PROMOTE_POLICY_SEED,
+            )
+    return PROMOTE_POLICY_SEED
+
+
+def _resolve_audit_replicate(cli_override: int | None = None) -> int:
+    """Return the per-mutation replicate count ``M`` (E4).
+
+    Precedence mirrors :func:`_resolve_promote_policy`
+    (env ``GEODE_AUDIT_REPLICATE`` / ``AUTORESEARCH_REPLICATE`` → CLI
+    ``--replicate`` → config ``replicate`` → :data:`AUDIT_REPLICATE` (``1``)).
+
+    Graceful contract per tier: a non-integer / <1 env value is warned + skipped
+    to the next tier (a stray export never crashes or silently changes cost). The
+    config tier is Pydantic-validated (``ge=1, le=20``) at load time, so the
+    ``int()`` guard below only defends the test-stub ``SimpleNamespace`` path. The
+    final value is floored at 1 (``M`` is always a positive count)."""
+    for env_name in ("GEODE_AUDIT_REPLICATE", "AUTORESEARCH_REPLICATE"):
+        raw = os.environ.get(env_name, "").strip()
+        if raw:
+            try:
+                parsed = int(raw)
+            except ValueError:
+                log.warning("audit replicate env %s=%r is not an integer; ignoring", env_name, raw)
+                continue
+            if parsed >= 1:
+                return parsed
+            log.warning("audit replicate env %s=%r is < 1; ignoring", env_name, raw)
+    if cli_override is not None:
+        try:
+            # OverflowError guards ``int(float("inf"))`` (argparse type=int rejects
+            # it at parse, but the resolver is also called directly).
+            return max(1, int(cli_override))
+        except (TypeError, ValueError, OverflowError):
+            log.warning("audit replicate CLI value %r is not an integer; ignoring", cli_override)
+    configured = getattr(_get_autoresearch_config(), "replicate", None)
+    if configured is not None:
+        try:
+            return max(1, int(configured))
+        except (TypeError, ValueError, OverflowError):
+            log.warning(
+                "replicate config value %r is not an integer; using default %d",
+                configured,
+                AUDIT_REPLICATE,
+            )
+    return AUDIT_REPLICATE
+
+
+def _resolve_target_effect_size(cli_override: float | None = None) -> float:
+    """Return the fitness-scale effect size δ the power analysis targets (E4).
+
+    Precedence mirrors :func:`_resolve_audit_replicate`
+    (env ``GEODE_TARGET_EFFECT_SIZE`` / ``AUTORESEARCH_TARGET_EFFECT_SIZE`` → CLI
+    ``--target-effect-size`` → config ``target_effect_size`` → :data:`TARGET_EFFECT_SIZE`).
+
+    Graceful contract: a non-numeric / non-positive env value is warned + skipped
+    to the next tier; the config tier is Pydantic-validated (``gt=0, le=1``) at load
+    time so the ``float()`` guard only defends the test-stub path. A non-positive
+    final value falls back to the default (δ ≤ 0 is ill-posed for the power
+    formula)."""
+    for env_name in ("GEODE_TARGET_EFFECT_SIZE", "AUTORESEARCH_TARGET_EFFECT_SIZE"):
+        raw = os.environ.get(env_name, "").strip()
+        if raw:
+            try:
+                parsed = float(raw)
+            except ValueError:
+                log.warning("target effect size env %s=%r is not a float; ignoring", env_name, raw)
+                continue
+            if isfinite(parsed) and parsed > 0.0:
+                return parsed
+            log.warning(
+                "target effect size env %s=%r is not a finite positive float; ignoring",
+                env_name,
+                raw,
+            )
+    if cli_override is not None:
+        try:
+            cli_value = float(cli_override)
+        except (TypeError, ValueError):
+            cli_value = 0.0
+        # argparse ``type=float`` accepts ``"nan"`` / ``"inf"`` — reject a
+        # non-finite / non-positive δ (ill-posed for the power formula) rather than
+        # letting it through (graceful contract).
+        if isfinite(cli_value) and cli_value > 0.0:
+            return cli_value
+    configured = getattr(_get_autoresearch_config(), "target_effect_size", None)
+    if configured is not None:
+        try:
+            value = float(configured)
+        except (TypeError, ValueError):
+            log.warning(
+                "target_effect_size config value %r is not a float; using default %s",
+                configured,
+                TARGET_EFFECT_SIZE,
+            )
+        else:
+            if isfinite(value) and value > 0.0:
+                return value
+    return TARGET_EFFECT_SIZE
+
+
+def _random_accept_draw(seed: int, cycle_index: int) -> bool:
+    """Deterministic per-cycle coin-flip for ``promote_policy="random"``.
+
+    The draw is ``random.Random(seed + cycle_index).random() < 0.5`` — a SEEDED
+    RNG (NOT bare ``random.random()``), so the entire random campaign is
+    reproducible: the same ``(seed, cycle_index)`` always yields the same promote
+    decision, and a different seed yields an independent campaign. ``cycle_index``
+    is the campaign's per-cycle generation index so successive cycles draw
+    independent (but reproducible) flips rather than all sharing one draw.
+    """
+    import random as _random
+
+    return _random.Random(seed + cycle_index).random() < 0.5
 
 
 # ---------------------------------------------------------------------------
@@ -833,6 +1108,77 @@ def _build_audit_command() -> list[str]:
     return argv
 
 
+def _audit_sampling_params_as_sent() -> dict[str, Any]:
+    """The generation params GEODE ACTUALLY sends for the audit (E5 reproducibility pin).
+
+    Records WHAT WAS SENT for auditability — NOT a determinism contract. GEODE's
+    audit dispatch is a ``geode audit`` subprocess (:func:`_build_audit_command`)
+    that controls only a SUBSET of generation params: ``max_turns`` / ``seeds`` /
+    ``dim_set`` / ``source``, and the inspect_ai connection caps
+    (``max_connections=1`` / ``max_samples=1``, pinned in
+    ``plugins/petri_audit/runner.py:build_command``). These are the resolved
+    EFFECTIVE values (mutation-SoT override → config), identical to what
+    ``_build_audit_command`` puts on the argv.
+
+    The per-token sampling knobs (``temperature`` / ``top_p`` / ``max_tokens``) are
+    NOT pinned by GEODE — they fall to the inspect_ai + provider (claude-cli /
+    codex-cli OAuth) defaults — so they are recorded as
+    :data:`~core.self_improving_loop.run_provenance.SAMPLING_UNPINNED` rather than a
+    fabricated value. This is the honest "GEODE did not set this" record; a future
+    PR that pins these knobs (and a ctx7-verified backend-determinism live test)
+    would write the real numbers here.
+    """
+    from core.self_improving_loop.run_provenance import SAMPLING_UNPINNED
+
+    cfg = _get_autoresearch_config()
+    overrides = _load_hyperparam_overrides()
+    return {
+        # GEODE-pinned audit-dispatch params (the resolved effective values).
+        "max_turns": _hyperparam_int(overrides, "max_turns", cfg.max_turns),
+        "seeds": _hyperparam_int(overrides, "seed_limit", cfg.seed_limit),
+        "dim_set": _effective_dim_set(),
+        "source": getattr(cfg, "source", "auto"),
+        "max_connections": 1,
+        "max_samples": 1,
+        # Per-token knobs GEODE does not pin → backend default (UNVERIFIED for
+        # deterministic replay; see run_provenance module docstring + ctx7 note).
+        "temperature": SAMPLING_UNPINNED,
+        "top_p": SAMPLING_UNPINNED,
+        "max_tokens": SAMPLING_UNPINNED,
+    }
+
+
+def _applied_diff_for_mutation(mutation_id: str) -> tuple[str | None, str | None, str | None]:
+    """The scaffold mutation APPLIED this cycle, as a reproducible reference (E5 pin).
+
+    Returns ``(target_section, new_value, target_kind)`` for the
+    ``kind="applied"`` row in ``mutations.jsonl`` whose ``mutation_id`` matches the
+    cycle's applied mutation — the EXACT content the apply step committed. The
+    caller hashes ``new_value`` (``applied_diff_hash``) + records the section + kind
+    so the row carries the diff reference without joining the apply row.
+
+    ``("", "", "")``-shaped graceful return — all ``None`` — when ``mutation_id`` is
+    empty (manual / no-mutation cycle) or no matching apply row exists (a fresh
+    ledger, or the apply row hasn't been written yet). Never raises: a reader-side
+    failure must not break the ledger write.
+    """
+    if not mutation_id:
+        return None, None, None
+    try:
+        from core.self_improving_loop.mutations_reader import read_recent_applies
+
+        for record in reversed(read_recent_applies(n=200)):
+            if record.mutation_id == mutation_id:
+                return record.target_section, record.new_value, record.target_kind
+    except Exception:  # pragma: no cover — defensive; pin simply omitted on failure
+        log.warning(
+            "self-improving-loop applied-diff lookup failed for mutation %s",
+            mutation_id,
+            exc_info=True,
+        )
+    return None, None, None
+
+
 def _dump_wrapper_override() -> Path:
     """Write the mutation target dict to a JSON file consumed by the runtime."""
     STATE_DIR.mkdir(parents=True, exist_ok=True)
@@ -1216,6 +1562,108 @@ def run_audit(
         measurement_modality,
         per_sample,
     )
+
+
+def score_held_out_bench(
+    bench_path: str,
+    *,
+    dry_run: bool = False,
+    session_id: str = "",
+    gen_tag: str = "",
+    anchor_confidence_mode: bool = False,
+) -> tuple[float, dict[str, float], str]:
+    """Measure fitness on the VERSION-FROZEN held-out bench — the fixed ruler.
+
+    E2 (2026-05-30). ``bench_path`` is a directory (or selector) of frozen seeds
+    that the mutator / seed-generation loop NEVER touches, so the fitness it
+    yields is comparable ACROSS generations (unlike the co-evolving
+    ``seed_select`` pool, whose fitness is only a within-generation ranking
+    signal). This is the value that forms the *evidence curve*.
+
+    Returns ``(held_out_fitness, held_out_dim_means, held_out_bench_id)`` where:
+
+    - ``held_out_fitness`` is the SAME 0-1 :func:`compute_fitness` the promote
+      gate uses (``baseline_means=None`` → the fresh-anchor intrinsic aggregate,
+      matching ``_append_baseline_registry_row``'s ``intrinsic_fitness``; no
+      cross-baseline critical-floor comparison, which would be spurious against a
+      frozen ruler that is by construction a *different* seed set from the
+      promoted baseline's pool). The ``anchor_confidence_mode`` flag the gate runs
+      under is threaded through so the held-out curve and the baselines it is
+      compared against share ONE fitness formula path — when the mode is on, the
+      anchor-confidence multiplier applies the same way it does to ``current_raw``:
+      the held-out's OWN ``ANCHOR_DIMS`` subset is passed as ``anchor_means``
+      alongside the flag (passing the flag without the subset would silently no-op
+      the multiplier, leaving the curve on the mode-off formula). ``baseline_means``
+      stays ``None`` (the held-out has no prior baseline → the fresh-anchor
+      intrinsic, no cross-baseline floor) and ``admire_means`` is ``None`` (the
+      held-out audit produces no admire signal — ``run_audit`` returns dims only).
+    - ``held_out_dim_means`` is the per-dim aggregate on the Petri 1-10
+      concerning-behaviour scale (lower-is-better dims), straight from
+      :func:`run_audit`.
+    - ``held_out_bench_id`` is ``seed_pool_content_hash(bench_path)`` — the
+      content-addressed identity of the frozen bench, so two runs on the same
+      frozen set always carry the same id regardless of mtime / absolute path,
+      and a silent edit to the "frozen" set is detectable as an id change.
+
+    The audit runs by overriding ``AUTORESEARCH_SEED_SELECT`` to ``bench_path``
+    for the duration of this call only (restored in a ``finally`` so the live
+    co-evolving resolution is never left mutated). The override is the same lever
+    ``_build_audit_command`` → ``_resolve_seed_select`` already honours, so no new
+    argv plumbing is introduced. ``dry_run=True`` produces the synthetic dim set
+    (no quota spent) so the wiring is unit-testable.
+
+    CADENCE / WIRING (E2-wire, 2026-05-30): this entry point IS dispatched from
+    the live cycle in :func:`main`, once per cycle, gated on
+    ``_resolve_held_out_bench()`` being set and ``not dry_run`` (a configured
+    bench → score; ``None`` → skip, zero cost, backward-compatible). The operator
+    chose EVERY-cycle cadence so the fixed-ruler fitness-vs-generation curve is
+    captured every generation; the result is recorded into the per-cycle
+    attribution row (``mutations.jsonl`` — the curve SoT) AND, on a promote, the
+    baseline registry row.
+    """
+    from core.self_improving_loop.baseline_epoch import seed_pool_content_hash
+
+    held_out_bench_id = seed_pool_content_hash(bench_path)
+    _prior_override = os.environ.get("AUTORESEARCH_SEED_SELECT")
+    os.environ["AUTORESEARCH_SEED_SELECT"] = bench_path
+    try:
+        (
+            held_out_dim_means,
+            held_out_dim_stderr,
+            _audit_seconds,
+            _total_seconds,
+            _sample_count,
+            held_out_modality,
+            _per_sample,
+        ) = run_audit(dry_run, session_id=session_id, gen_tag=gen_tag)
+    finally:
+        if _prior_override is None:
+            os.environ.pop("AUTORESEARCH_SEED_SELECT", None)
+        else:
+            os.environ["AUTORESEARCH_SEED_SELECT"] = _prior_override
+    # Same fitness formula path as the gate's ``current_raw`` (train.py
+    # ``_should_promote``) — so the held-out curve and the baselines it is
+    # compared against share ONE fitness definition: ``baseline_means=None``
+    # (fresh-anchor intrinsic, no cross-baseline floor), modality threaded for the
+    # analytics-weight scale, the SHARED ``anchor_confidence_mode`` flag, the
+    # held-out's OWN ``ANCHOR_DIMS`` subset as ``anchor_means`` (the gate extracts
+    # the same subset from its current dims — passing ``anchor_confidence_mode``
+    # without it would silently no-op the multiplier, leaving the curve on the
+    # mode-off formula), and ``admire_means=None`` (the held-out audit emits no
+    # admire signal — ``run_audit`` returns dims only).
+    held_out_anchor = {
+        dim: held_out_dim_means[dim] for dim in ANCHOR_DIMS if dim in held_out_dim_means
+    }
+    held_out_fitness = compute_fitness(
+        held_out_dim_means,
+        held_out_dim_stderr,
+        baseline_means=None,
+        measurement_modality=held_out_modality or None,
+        anchor_means=held_out_anchor or None,
+        anchor_confidence_mode=anchor_confidence_mode,
+        admire_means=None,
+    )
+    return float(held_out_fitness), held_out_dim_means, held_out_bench_id
 
 
 # ---------------------------------------------------------------------------
@@ -1824,6 +2272,26 @@ def _resolve_gen_tag(commit: str) -> str:
     return f"autoresearch-{commit}-gen{counter}"
 
 
+def _gen_cycle_index(gen_tag: str) -> int:
+    """Extract the per-cycle index for the ``random`` promote arm's draw.
+
+    E3 (2026-05-30). The random arm draws ``Random(seed + cycle_index)`` per
+    cycle, so it needs a stable monotonic index. The gen_tag carries a ``-genN``
+    suffix (:func:`_resolve_gen_tag`) which IS the campaign's monotonic cycle
+    counter, so it is reused as the index. A gen_tag without the suffix (an
+    operator-pinned ``AUTORESEARCH_GEN_TAG``) falls back to ``0`` — the draw is
+    still deterministic from the seed, just not per-cycle independent (the
+    operator opted out of the auto counter, so the cycle structure is theirs to
+    own). Always returns a non-negative int (graceful contract — never raises)."""
+    m = _GEN_SUFFIX_RE.search(gen_tag)
+    if m is None:
+        return 0
+    try:
+        return int(m.group(1))
+    except ValueError:  # pragma: no cover — regex restricts to \d+
+        return 0
+
+
 def _append_session_index(
     *,
     session_id: str,
@@ -2163,6 +2631,12 @@ def _append_baseline_registry_row(
     promoted_by: str,
     role_provenance: dict[str, dict[str, str]] | None = None,
     seed_select: str | None = None,
+    held_out_fitness: float | None = None,
+    held_out_bench_id: str | None = None,
+    promote_policy: str = "gate",
+    promote_policy_seed: int = 0,
+    power_stats: PowerRecordFields | None = None,
+    run_provenance: RunProvenanceFields | None = None,
 ) -> None:
     """Append one ``kind="baseline"`` registry row to ``baseline_archive.jsonl``.
 
@@ -2187,6 +2661,25 @@ def _append_baseline_registry_row(
     *current* pool (correct for a live promote, which fires right after its own
     audit), but a backfill of a historical baseline must pass the pool it was
     measured under (the live pointer may have moved).
+
+    ``held_out_fitness`` / ``held_out_bench_id`` (E2, 2026-05-30) — the
+    fixed-ruler measurement. ``seed_select`` co-evolves, so the row's intrinsic
+    ``fitness`` (measured on the co-evolving pool) is NOT comparable across
+    generations; ``held_out_fitness`` is the SAME 0-1 :func:`compute_fitness`
+    computed on the VERSION-FROZEN held-out bench (see
+    :func:`score_held_out_bench`) and so IS the cross-generation evidence curve.
+    ``held_out_bench_id`` is the bench's content-addressed identity (the ruler's
+    fingerprint). Both are **omitted** from the row when ``None`` (no held-out
+    bench configured) so existing readers see the same shape — the held-out
+    fields are purely additive and never a new required key.
+
+    ``promote_policy`` / ``promote_policy_seed`` (E3, 2026-05-30) — the control
+    arm (``gate`` / ``random`` / ``never``) this baseline was produced under, and
+    the RNG seed RECORDED for the ``random`` arm (``0`` for gate / never). They
+    are recorded BOTH as top-level row fields (so the 3-arm comparison can split
+    rows directly) AND inside the hashed ``baseline_spec`` (so the three arms land
+    in distinct epochs — gate ≠ random ≠ never production logic, correctly not
+    averaged). ``gate`` (default) reproduces today's selection-arm row + epoch.
     """
     if margin_rule not in _VALID_MARGIN_RULES:
         raise ValueError(
@@ -2227,6 +2720,10 @@ def _append_baseline_registry_row(
         bench=bench_means is not None,
         role_provenance=role_provenance,
         seed_pool_id=seed_pool_content_hash(_seed_select),
+        # E3 (2026-05-30) — control-arm policy in the hashed spec: gate / random /
+        # never produce baselines under different production logic, so they hash
+        # to DIFFERENT epochs (correctly NOT averaged into one comparison).
+        promote_policy=promote_policy,
     )
     epoch_hash = compute_epoch_hash(baseline_spec)
     _label_map_path = _baseline_archive_path().parent / "baseline_epochs.json"
@@ -2255,6 +2752,13 @@ def _append_baseline_registry_row(
         "fitness_stderr": (float(fitness_stderr) if fitness_stderr is not None else None),
         "margin_rule": margin_rule,
         "bench": bool(bench_means),
+        # E3 (2026-05-30) — control-arm tag (gate / random / never) as a top-level
+        # row field (in addition to being inside the hashed ``baseline_spec``) so
+        # the 3-arm comparison can split rows without re-parsing the spec.
+        # ``promote_policy_seed`` is recorded for every arm (0 for gate / never) so
+        # the random arm's promoted baseline is reproducible from the ledger.
+        "promote_policy": str(promote_policy),
+        "promote_policy_seed": int(promote_policy_seed),
         "seed_select": _seed_select,
         "seed_count": int(seed_count),
         # PR-BASELINE-EPOCH — content-addressed partition. epoch_hash is the
@@ -2275,6 +2779,44 @@ def _append_baseline_registry_row(
         "eval_archive": (Path(eval_archive).name if eval_archive else None),
         "dim_means": {k: float(v) for k, v in dim_means.items()},
     }
+    # E2 (2026-05-30) — fixed-ruler evidence. Recorded ONLY when a held-out bench
+    # was scored (both fields present together); omitted entirely otherwise so
+    # the row shape is unchanged for the no-bench path (additive, never a new
+    # required key). ``held_out_fitness`` is the SAME 0-1 compute_fitness on the
+    # VERSION-FROZEN bench → comparable across generations, unlike the
+    # co-evolving-pool ``fitness`` above. ``held_out_bench_id`` is the ruler's
+    # content-address (so a silent edit to the "frozen" set is detectable).
+    if held_out_fitness is not None and held_out_bench_id is not None:
+        row["held_out_fitness"] = float(held_out_fitness)
+        row["held_out_bench_id"] = str(held_out_bench_id)
+    # E4 (2026-05-30) — fitness-noise decomposition + the explicit gain-evidence
+    # verdict on the promoted baseline row. Each field is recorded only when present
+    # (M=1 leaves within ``None``; pre-E4 promotes pass ``power_stats=None`` → the
+    # whole block is omitted) so the row shape is unchanged for the legacy path —
+    # additive, never a new required key.
+    if power_stats is not None:
+        if power_stats.within_mutation_stderr is not None:
+            row["within_mutation_stderr"] = float(power_stats.within_mutation_stderr)
+        if power_stats.between_seed_stderr is not None:
+            row["between_seed_stderr"] = float(power_stats.between_seed_stderr)
+        if power_stats.gain_ci_excludes_zero is not None:
+            row["gain_ci_low"] = (
+                float(power_stats.gain_ci_low) if power_stats.gain_ci_low is not None else None
+            )
+            row["gain_ci_high"] = (
+                float(power_stats.gain_ci_high) if power_stats.gain_ci_high is not None else None
+            )
+            row["gain_ci_excludes_zero"] = bool(power_stats.gain_ci_excludes_zero)
+            if power_stats.gain_verdict is not None:
+                row["gain_verdict"] = str(power_stats.gain_verdict)
+    # E5 (2026-05-30) — reproducibility pins (prompt_hash + applied_diff +
+    # sampling_params + rng_seed) so the promoted baseline's row is independently
+    # re-runnable. ``as_record_kwargs`` returns ONLY the present (non-None) pins, so
+    # a pre-E5 promote (run_provenance=None) writes NO E5 key — the row shape is
+    # unchanged (additive, never a new required key). The pins record WHAT WAS SENT
+    # (auditability); they make no backend-determinism claim (see run_provenance).
+    if run_provenance is not None:
+        row.update(run_provenance.as_record_kwargs())
     archive_path = _baseline_archive_path()
     archive_path.parent.mkdir(parents=True, exist_ok=True)
     with archive_path.open("a", encoding="utf-8") as fh:
@@ -2313,6 +2855,27 @@ def _write_baseline(
     # (the prior σ in the gain-stderr margin). ``None`` (dry-run, summary-
     # only path) → key omitted → next gate falls back to the MC estimate.
     fitness_stderr: float | None = None,
+    # E2 (2026-05-30) — fixed-ruler evidence threaded to the registry row.
+    # ``None`` (default) → no held-out bench configured → the held-out fields are
+    # omitted from the row (backward-compatible). The promote caller computes
+    # these via ``score_held_out_bench`` when ``_resolve_held_out_bench()`` is set.
+    held_out_fitness: float | None = None,
+    held_out_bench_id: str | None = None,
+    # E3 (2026-05-30) — control-arm tag forwarded to the registry row + the epoch
+    # spec. ``"gate"`` (default) reproduces today's selection-arm row + epoch.
+    promote_policy: str = "gate",
+    promote_policy_seed: int = 0,
+    # E4 (2026-05-30) — the fitness-noise DECOMPOSITION (persisted on the promoted
+    # baseline's ``raw`` namespace alongside ``fitness_stderr``) + the explicit
+    # gain-evidence verdict (on the registry row), bundled into ONE optional
+    # parameter. ``None`` (default) → the keys are omitted (backward-compatible: an
+    # M=1 / pre-E4 baseline keeps its exact shape).
+    power_stats: PowerRecordFields | None = None,
+    # E5 (2026-05-30) — reproducibility pins (prompt_hash + applied_diff +
+    # sampling_params + rng_seed) forwarded to the registry row so the promoted
+    # baseline is independently re-runnable. ``None`` (default) → no E5 key written
+    # (backward-compatible — a pre-E5 baseline keeps its exact shape).
+    run_provenance: RunProvenanceFields | None = None,
 ) -> None:
     """Persist current audit's aggregates as the new baseline.
 
@@ -2364,6 +2927,13 @@ def _write_baseline(
     # stderr so the next cycle's promote gate reads it as the prior σ.
     if fitness_stderr is not None:
         raw_payload["fitness_stderr"] = float(fitness_stderr)
+    # E4 (2026-05-30) — the within-mutation / between-seed decomposition (both on
+    # the 0-1 fitness scale). Recorded only when present (M=1 leaves within ``None``
+    # → omitted) so the ``raw`` namespace stays backward-compatible.
+    if power_stats is not None and power_stats.within_mutation_stderr is not None:
+        raw_payload["within_mutation_stderr"] = float(power_stats.within_mutation_stderr)
+    if power_stats is not None and power_stats.between_seed_stderr is not None:
+        raw_payload["between_seed_stderr"] = float(power_stats.between_seed_stderr)
     # PR-SIL-5THEME C2 — bench provenance slots. dim 측 PR-1 패턴과 symmetric.
     if bench_stderr:
         raw_payload["bench_stderr"] = {k: float(v) for k, v in bench_stderr.items()}
@@ -2429,6 +2999,16 @@ def _write_baseline(
         commit=commit,
         ts_utc=_ts_utc,
         promoted_by="operator" if manual_promote else "gate",
+        # E2 (2026-05-30) — fixed-ruler evidence (omitted from the row when None).
+        held_out_fitness=held_out_fitness,
+        held_out_bench_id=held_out_bench_id,
+        # E3 (2026-05-30) — control-arm tag → registry row + epoch spec.
+        promote_policy=promote_policy,
+        promote_policy_seed=promote_policy_seed,
+        # E4 (2026-05-30) — fitness-noise decomposition + gain-evidence verdict.
+        power_stats=power_stats,
+        # E5 (2026-05-30) — reproducibility pins forwarded to the registry row.
+        run_provenance=run_provenance,
     )
     # Emit BASELINE_PROMOTED after the write succeeds. ``reason``
     # quotes the gate verdict text from ``_should_promote`` (or the
@@ -2460,6 +3040,13 @@ def _write_baseline(
 # fitness-aggregate stderr would be under-estimated (N=1 dims contribute
 # zero MC noise).
 N1_FITNESS_MARGIN_FLOOR = 0.05
+
+# PR-MARGIN-FITNESS-SCALE (2026-05-30) — the base zero-noise floor (the ``max``'s
+# non-σ term in the promote margin). Single SoT for both ``_should_promote``'s
+# ``fitness_margin_floor`` default AND the E4 gain-CI verdict's floor term (so the
+# verdict never claims significance on a sub-floor gain the gate rejects — they
+# must not drift). See the gain_ci_excludes_zero docstring for the reconciliation.
+_FITNESS_MARGIN_FLOOR_DEFAULT = 0.005
 
 # PR-MARGIN-FITNESS-SCALE (2026-05-30) — the promote margin lives on the
 # FITNESS scale (0–1 weighted aggregate), not the raw dim scale (1–10). The
@@ -2654,7 +3241,7 @@ def _should_promote(
     # baseline is ~0.013, so the floor only kicks in when both audits carry
     # ~zero measurement noise. Critical-regress protection stays with
     # critical_margin (Option D) + the N=1 widening floor (0.05).
-    fitness_margin_floor: float = 0.005,
+    fitness_margin_floor: float = _FITNESS_MARGIN_FLOOR_DEFAULT,
     # PR-MARGIN-FITNESS-SCALE (2026-05-30) — sample-bootstrap fitness stderr
     # (captures inter-dim correlation) passed by the audit caller. When None
     # (tests / v1 baselines / summary-only path) the margin falls back to the
@@ -3098,6 +3685,53 @@ def main() -> int:
         help="never write baseline.json, even when the auto-rule passes "
         "(observe-only mode for debugging)",
     )
+    # E3 (2026-05-30) — control-arm promote policy for a matched 3-arm held-out
+    # comparison. ``default=None`` (NOT "gate") so that omitting the flag falls
+    # through to env / config in ``_resolve_promote_policy``; an explicit
+    # ``--promote-policy gate`` overrides config the same way the other arms do.
+    parser.add_argument(
+        "--promote-policy",
+        choices=sorted(_VALID_PROMOTE_POLICIES),
+        default=None,
+        help="control arm for the matched 3-arm held-out comparison: 'gate' "
+        "(today's selection gate), 'random' (random-accept control — mutation "
+        "applied + audited as normal but promote is a SEEDED coin-flip), or "
+        "'never' (no-mutation floor — baseline frozen, pure drift / judge-noise "
+        "curve). env GEODE_PROMOTE_POLICY / config promote_policy override; "
+        "default resolves to 'gate'.",
+    )
+    parser.add_argument(
+        "--promote-policy-seed",
+        type=int,
+        default=None,
+        help="explicit RNG seed for --promote-policy random (the per-cycle draw "
+        "is Random(seed + cycle_index)); RECORDED on the held-out + baseline rows "
+        "so the random campaign is reproducible. Ignored for gate / never.",
+    )
+    # E4 (2026-05-30) — statistical power knobs. ``default=None`` so omitting them
+    # falls through to env / config in the resolvers (an explicit value overrides
+    # config the same way the other arms do).
+    parser.add_argument(
+        "--replicate",
+        type=int,
+        default=None,
+        metavar="M",
+        help="run the audit M times per mutation/cycle to estimate WITHIN-mutation "
+        "variance (provider non-determinism) SEPARATELY from BETWEEN-seed variance. "
+        "M=1 (default) runs once with zero extra cost (within-variance unestimated, "
+        "as today); M>1 runs M full audits (cost scales linearly). env "
+        "GEODE_AUDIT_REPLICATE / AUTORESEARCH_REPLICATE / config replicate override.",
+    )
+    parser.add_argument(
+        "--target-effect-size",
+        type=float,
+        default=None,
+        metavar="DELTA",
+        help="the fitness-scale effect size delta the per-campaign power analysis "
+        "targets (default ~0.02, just above the promote gate's noise floor). Feeds "
+        "the required N_seed x M_replicate line. env GEODE_TARGET_EFFECT_SIZE / "
+        "AUTORESEARCH_TARGET_EFFECT_SIZE / config target_effect_size override.",
+    )
     args = parser.parse_args()
 
     session_id = _resolve_session_id()
@@ -3107,6 +3741,21 @@ def main() -> int:
     # gen_tag pair as the eventual sessions.jsonl row.
     commit = os.environ.get("GIT_COMMIT", "HEAD")[:7]
     gen_tag = _resolve_gen_tag(commit)
+
+    # E3 (2026-05-30) — resolve the control-arm promote policy + seed once,
+    # up-front (env → CLI → config → default), so the SAME values tag both the
+    # per-cycle held-out record AND the baseline registry row, and drive the
+    # promote decision below. ``cycle_index`` for the random arm's per-cycle draw
+    # is the gen counter parsed from gen_tag (monotonic within a campaign), so
+    # successive cycles draw independent-but-reproducible coin-flips.
+    promote_policy = _resolve_promote_policy(args.promote_policy)
+    promote_policy_seed = _resolve_promote_policy_seed(args.promote_policy_seed)
+    _cycle_index = _gen_cycle_index(gen_tag)
+    # E4 (2026-05-30) — statistical power knobs. ``replicate`` (M) gates the
+    # per-mutation replicate loop below; ``target_effect_size`` (delta) feeds the
+    # per-campaign power line. Both resolved up-front (env → CLI → config → default).
+    audit_replicate = _resolve_audit_replicate(args.replicate)
+    target_effect_size = _resolve_target_effect_size(args.target_effect_size)
 
     cfg = _get_autoresearch_config()
     # PR-SIL-MULTIOBJ A3 (2026-05-29) — optional cache hygiene before a
@@ -3144,20 +3793,68 @@ def main() -> int:
         },
     )
 
+    # PR-11 P3.1 — anchor_confidence_mode is an env-gate (set by runner.py); read
+    # it up-front so the per-replicate raw-fitness (E4 within-mutation decomposition)
+    # is computed under the SAME fitness-formula path as the gate's ``current_raw``.
+    _anchor_mode_env = os.environ.get("GEODE_SIL_ANCHOR_CONFIDENCE_MODE", "").strip()
+    _anchor_confidence_mode = _anchor_mode_env == "1"
+    # E4 (2026-05-30) — per-mutation REPLICATE loop. Run the audit ``M`` times
+    # (M=1 default → exactly ONE call, no loop overhead / cost change — the
+    # representative tuple below is that single call's result, byte-identical to
+    # the pre-E4 path). M>1 runs M full audits so the WITHIN-mutation fitness
+    # variance (provider non-determinism, same mutation + seeds) can be estimated
+    # SEPARATELY from the BETWEEN-seed variance (the per-audit bootstrap stderr).
+    # The LAST replicate is the representative measurement that drives the existing
+    # promote / record / attribution flow (a single deterministic choice — not an
+    # average — so the downstream dims/stderr/per_sample stay a real audit's data).
+    _replicate_raw_fitnesses: list[float] = []
+    _replicate_between_seed_stderrs: list[float | None] = []
+    dim_means: dict[str, float] = {}
+    dim_stderr: dict[str, float] = {}
+    audit_seconds = 0.0
+    total_seconds = 0.0
+    sample_count: dict[str, int] = {}
+    measurement_modality: dict[str, str] = {}
+    per_sample: list[dict[str, float]] = []
     try:
-        (
-            dim_means,
-            dim_stderr,
-            audit_seconds,
-            total_seconds,
-            sample_count,
-            measurement_modality,
-            per_sample,
-        ) = run_audit(
-            dry_run=args.dry_run,
-            session_id=session_id,
-            gen_tag=gen_tag,
-        )
+        for _replicate_idx in range(audit_replicate):
+            (
+                dim_means,
+                dim_stderr,
+                audit_seconds,
+                total_seconds,
+                sample_count,
+                measurement_modality,
+                per_sample,
+            ) = run_audit(
+                dry_run=args.dry_run,
+                session_id=session_id,
+                gen_tag=gen_tag,
+            )
+            # Per-replicate RAW fitness on the same scale the gate's ``current_raw``
+            # uses (``baseline_means=None`` plain weighted sum, modality + anchor
+            # threaded, bench OMITTED — identical to the gain/σ math's scope) so the
+            # spread across replicates measures the WHOLE-audit fitness wobble.
+            _rep_anchor = {d: dim_means[d] for d in ANCHOR_DIMS if d in dim_means}
+            _replicate_raw_fitnesses.append(
+                compute_fitness(
+                    dim_means,
+                    dim_stderr,
+                    measurement_modality=measurement_modality or None,
+                    anchor_means=_rep_anchor or None,
+                    anchor_confidence_mode=_anchor_confidence_mode,
+                    admire_means=None,
+                )
+            )
+            # Per-replicate BETWEEN-seed stderr — the bootstrap over THIS audit's N
+            # sample rows (seed heterogeneity). ``None`` for <2 rows (dry-run path).
+            _replicate_between_seed_stderrs.append(
+                _fitness_stderr_bootstrap(
+                    per_sample,
+                    measurement_modality=measurement_modality or None,
+                    anchor_confidence_mode=_anchor_confidence_mode,
+                )
+            )
     except Exception as exc:
         # P0b — audit_failed marker for stream consumers. The specific
         # cause (subprocess_timeout / RuntimeError) has its own event
@@ -3232,11 +3929,9 @@ def main() -> int:
     # PR-SIL-5THEME C3 (2026-05-23) — measurement_modality 를
     # compute_fitness 에 forward 해서 analytics dim 의 가중치를 0.5× 로 scale.
     # 이전엔 modality 가 schema 에 emit 됐어도 fitness 계산에서 0 영향이었다.
-    # PR-11 P3.1 (2026-05-25) — anchor_means 추출 + mode env-gate. GEODE config
-    # 의 ``anchor_confidence_mode`` 가 runner.py 에서 env 로 forward (PR-11 동시
-    # 수정). 본 caller 는 dim_means 의 anchor 3 subset 을 빌드해서 forward.
-    _anchor_mode_env = os.environ.get("GEODE_SIL_ANCHOR_CONFIDENCE_MODE", "").strip()
-    _anchor_confidence_mode = _anchor_mode_env == "1"
+    # PR-11 P3.1 (2026-05-25) — anchor_means 추출. ``_anchor_confidence_mode`` 는
+    # E4 의 replicate loop 직전에서 이미 한 번 resolve 됨 (env-gate, runner.py 가
+    # forward). 본 caller 는 dim_means 의 anchor 3 subset 을 빌드해서 forward.
     _anchor_means_current = {d: dim_means[d] for d in ANCHOR_DIMS if d in dim_means}
     # PR-AR-L4b (2026-05-26, ux-removed 2026-05-30) — admire_means caller
     # wiring. admire_means is the Scope A handoff slot — reserved as None
@@ -3266,6 +3961,252 @@ def main() -> int:
         measurement_modality=measurement_modality or None,
         anchor_confidence_mode=_anchor_confidence_mode,
     )
+    # E4 (2026-05-30) — STATISTICAL POWER. Three operator deliverables, computed
+    # here so they ride the existing record / log sinks below:
+    #
+    #   (1) variance decomposition — split the observed fitness noise into the
+    #       WITHIN-mutation component (provider non-determinism, the spread of the
+    #       per-replicate raw fitnesses) and the BETWEEN-seed component (seed
+    #       heterogeneity, the per-audit bootstrap stderr). M=1 leaves within
+    #       UNESTIMATED (None) and combined == between (today's single-σ path).
+    #   (2) explicit "ci excludes 0" gain verdict — an HONEST NULL ("no evidence
+    #       yet") layered ON TOP of the promote gate, reconciled with its margin.
+    #   (3) per-campaign power line — required N_seed × M_replicate to detect δ.
+    from core.self_improving_loop.statistical_power import (
+        PowerRecordFields,
+        decompose_variance,
+        format_power_line,
+        gain_ci_excludes_zero,
+        required_samples,
+    )
+
+    variance_decomposition = decompose_variance(
+        _replicate_raw_fitnesses,
+        _replicate_between_seed_stderrs,
+    )
+    # The gain-CI VERDICT must reconcile EXACTLY with the promote gate (no
+    # contradiction), so it consumes the gate's OWN inputs — NOT the combined σ /
+    # replicate-mean, which would diverge from what ``_should_promote`` actually
+    # compares. Concretely the verdict uses:
+    #   - current_raw = the REPRESENTATIVE (last) replicate's raw fitness (the same
+    #     ``dim_means`` the gate scores — ``_current_raw_for_representative``), NOT
+    #     the replicate mean.
+    #   - σ_current = ``current_fitness_stderr`` (the gate's ``current_fitness_stderr``
+    #     bootstrap), NOT the combined within+between σ.
+    #   - σ_baseline = ``_load_baseline_fitness_stderr`` (the gate's prior σ).
+    # so gain_stderr = √(σp²+σc²) is the IDENTICAL quantity the gate's margin scales.
+    # The within-mutation jitter from M>1 is NOT folded into the verdict's σ (it
+    # would break the gate-reconciliation); it is reported in the DECOMPOSITION and
+    # in the power line's combined σ instead. Use the representative replicate's raw
+    # so the verdict's ``current_raw`` matches the gate's ``current_raw`` exactly.
+    _current_raw_for_representative = (
+        _replicate_raw_fitnesses[-1] if _replicate_raw_fitnesses else float(fitness)
+    )
+    _baseline_raw_for_gain = _baseline_raw_fitness(
+        baseline_means,
+        baseline_stderr,
+        baseline_measurement_modality=_load_baseline_measurement_modality()
+        if not args.no_baseline
+        else {},
+        baseline_admire_means=_baseline_admire_means,
+        anchor_confidence_mode=_anchor_confidence_mode,
+    )
+    # gain σ = √(σ_current² + σ_baseline²) — the SAME quantity (and the SAME
+    # bootstrap-then-MC-fallback) the promote gate's ``_should_promote`` builds, so
+    # DEFAULT_GAIN_CI_Z=1.0 reconciles the verdict with the gate EXACTLY:
+    #   - σ_current: prefer ``current_fitness_stderr`` (the sample bootstrap); when
+    #     ``None`` (dry-run / <2 rows) fall back to ``_fitness_scale_stderr`` on the
+    #     CURRENT dims — the gate's IDENTICAL fallback (else a v1/summary baseline's
+    #     verdict σ would be 0 while the gate's is the MC estimate → contradiction).
+    #   - σ_baseline: prefer the persisted ``raw.fitness_stderr``; when ``None``
+    #     (v1 / pre-E4 baseline) fall back to ``_fitness_scale_stderr`` on the
+    #     BASELINE dims — again the gate's identical fallback.
+    _verdict_baseline_anchor = (
+        {d: baseline_means[d] for d in ANCHOR_DIMS if d in baseline_means}
+        if baseline_means
+        else None
+    )
+    _persisted_baseline_fitness_stderr = (
+        _load_baseline_fitness_stderr() if not args.no_baseline else None
+    )
+    if current_fitness_stderr is not None:
+        _sigma_current = current_fitness_stderr
+    else:
+        _sigma_current = _fitness_scale_stderr(
+            dim_means,
+            dim_stderr,
+            measurement_modality=measurement_modality or None,
+            admire_means=admire_means_current,
+            anchor_means=_anchor_means_current or None,
+            anchor_confidence_mode=_anchor_confidence_mode,
+        )
+    if _persisted_baseline_fitness_stderr is not None or baseline_means is None:
+        _sigma_baseline = _persisted_baseline_fitness_stderr or 0.0
+    else:
+        _sigma_baseline = _fitness_scale_stderr(
+            baseline_means,
+            baseline_stderr,
+            measurement_modality=_load_baseline_measurement_modality() or None,
+            admire_means=_baseline_admire_means or None,
+            anchor_means=_verdict_baseline_anchor,
+            anchor_confidence_mode=_anchor_confidence_mode,
+        )
+    _gain_stderr = (_sigma_current**2 + _sigma_baseline**2) ** 0.5
+    # The gate's EFFECTIVE floor (the ``max``'s zero-noise term) — the verdict must
+    # honour it too or it would claim "significant" on a sub-floor gain the gate
+    # rejects. Reproduce the gate's N=1-widening: the floor widens to
+    # ``N1_FITNESS_MARGIN_FLOOR`` when a critical dim was measured from N≤1 judge_llm
+    # samples (see ``_should_promote``); else the base ``fitness_margin_floor``.
+    _gate_effective_floor = _FITNESS_MARGIN_FLOOR_DEFAULT
+    if not args.no_baseline:
+        _verdict_sample_count = _load_baseline_sample_count()
+        _verdict_modality = _load_baseline_measurement_modality()
+        _verdict_n1_critical = bool(_verdict_sample_count) and any(
+            _verdict_sample_count.get(dim, 0) <= 1
+            and (_verdict_modality or {}).get(dim, "judge_llm") in JUDGE_LLM_MODALITIES
+            for dim in CRITICAL_DIMS
+        )
+        if _verdict_n1_critical:
+            _gate_effective_floor = N1_FITNESS_MARGIN_FLOOR
+    # HONEST NULL on a bootstrap cycle: with NO baseline there is nothing to "gain
+    # over", so a gain cannot be CLAIMED regardless of how high the current fitness
+    # is. The verdict is forced to "no evidence yet" (gain=0 → ci straddles 0) — the
+    # bootstrap promote is the gate's own concern (a fresh-start admit), NOT a
+    # statistically-supported improvement. (Reporting "significant" here — as a naive
+    # ``gain = current_fitness`` would — is exactly the false claim E4 must avoid.)
+    if _baseline_raw_for_gain is None:
+        gain_evidence = gain_ci_excludes_zero(0.0, 0.0)
+    else:
+        gain_evidence = gain_ci_excludes_zero(
+            _current_raw_for_representative - _baseline_raw_for_gain,
+            _gain_stderr,
+            floor=_gate_effective_floor,
+        )
+    # Per-campaign power requirement: required N_seed × M to detect δ at 80% power.
+    # The power analysis DOES use the combined within+between σ (the full noise
+    # budget the operator must overcome), unlike the gate-reconciled verdict above.
+    power_requirement = required_samples(
+        variance_decomposition.combined_stderr,
+        target_effect_size=target_effect_size,
+        replicate=audit_replicate,
+    )
+    _power_line = format_power_line(power_requirement)
+    log.info("E4 %s", _power_line)
+    log.info(
+        "E4 gain evidence: gain=%+.4f ci=[%+.4f, %+.4f] excludes_zero=%s verdict=%r",
+        gain_evidence.gain,
+        gain_evidence.ci_low,
+        gain_evidence.ci_high,
+        gain_evidence.gain_ci_excludes_zero,
+        gain_evidence.verdict,
+    )
+    _emit_journal(
+        session_id,
+        gen_tag,
+        "statistical_power",
+        payload={
+            "replicate": audit_replicate,
+            "within_mutation_stderr": variance_decomposition.within_mutation_stderr,
+            "between_seed_stderr": variance_decomposition.between_seed_stderr,
+            "combined_stderr": variance_decomposition.combined_stderr,
+            "gain": round(gain_evidence.gain, 6),
+            "gain_stderr": round(gain_evidence.gain_stderr, 6),
+            "gain_ci_low": round(gain_evidence.ci_low, 6),
+            "gain_ci_high": round(gain_evidence.ci_high, 6),
+            "gain_ci_excludes_zero": gain_evidence.gain_ci_excludes_zero,
+            "gain_verdict": gain_evidence.verdict,
+            "target_effect_size": target_effect_size,
+            "required_n_seed": power_requirement.n_seed,
+            "power_line": _power_line,
+        },
+    )
+    # E4 — bundle the new fields for the two record sinks. Both shapes are
+    # None-omitting + additive so M=1 / legacy readers are backward-compatible (a
+    # missing key never breaks a reader). ``_e4_power_stats`` (a PowerRecordFields)
+    # → the on-promote baseline registry row (single arg, under the max-args
+    # ratchet); ``_e4_record_fields`` (kwargs dict) → the per-cycle attribution row.
+    _e4_power_stats = PowerRecordFields.from_evidence(variance_decomposition, gain_evidence)
+    _e4_record_fields: dict[str, Any] = {
+        "within_mutation_stderr": _e4_power_stats.within_mutation_stderr,
+        "between_seed_stderr": _e4_power_stats.between_seed_stderr,
+        "gain_ci_low": _e4_power_stats.gain_ci_low,
+        "gain_ci_high": _e4_power_stats.gain_ci_high,
+        "gain_ci_excludes_zero": _e4_power_stats.gain_ci_excludes_zero,
+        "gain_verdict": _e4_power_stats.gain_verdict,
+    }
+    print(f"e4_power_line:            {_power_line}")
+    print(
+        f"e4_gain_verdict:          {gain_evidence.verdict} "
+        f"(ci excludes 0: {gain_evidence.gain_ci_excludes_zero})"
+    )
+    # E5 (2026-05-30) — REPRODUCIBILITY PINS. Captured at the POINT OF TRUTH (this
+    # cycle's audit dispatch) so each pin reflects what was ACTUALLY sent, not a
+    # re-derived guess: ``prompt_hash`` from the mutation-applied
+    # ``WRAPPER_PROMPT_SECTIONS`` (the exact wrapper system prompt the target ran
+    # under, the same dict ``_dump_wrapper_override`` writes); ``applied_diff`` from
+    # the ``kind="applied"`` row of THIS cycle's mutation; ``sampling_params`` from
+    # the audit dispatch's resolved effective params; ``rng_seed`` recorded as sent
+    # (``None`` — GEODE sends no ``--seed`` to the audit subprocess; the honest
+    # record, distinct from E3's ``promote_policy_seed``). The bundle is None-omitting
+    # so a manual / no-mutation / dry-run cycle still produces only the pins it has.
+    # Records WHAT WAS SENT (auditability) — no backend-determinism claim.
+    from core.self_improving_loop.run_provenance import build_run_provenance
+
+    _e5_applied_target, _e5_applied_value, _e5_applied_kind = _applied_diff_for_mutation(
+        os.environ.get("GEODE_SIL_MUTATION_ID", "").strip()
+    )
+    _e5_run_provenance = build_run_provenance(
+        wrapper_sections=WRAPPER_PROMPT_SECTIONS,
+        applied_target_section=_e5_applied_target,
+        applied_new_value=_e5_applied_value,
+        applied_target_kind=_e5_applied_kind,
+        sampling_params=_audit_sampling_params_as_sent(),
+        # GEODE sends no audit/generation seed — recorded as sent (None). NOT a
+        # fabricated value, and NO determinism claim (see run_provenance docstring).
+        rng_seed=None,
+    )
+    print(f"e5_prompt_hash:           {_e5_run_provenance.prompt_hash or '(none)'}")
+    # E2 (2026-05-30) — per-cycle fixed-ruler measurement. The held-out bench is
+    # a VERSION-FROZEN seed set DISJOINT from the co-evolving ``seed_select`` pool
+    # the audit above ran on, so its fitness is comparable ACROSS generations.
+    # CADENCE (operator decision): EVERY cycle, not just on promote — so the loop
+    # captures a fitness-vs-generation curve on the FIXED ruler every generation.
+    # COST GUARD: ``score_held_out_bench`` runs a SECOND full audit, so it fires
+    # ONLY when (a) an operator has configured a bench (``_resolve_held_out_bench``
+    # → ``None`` ⇒ skip, zero overhead, backward-compatible) AND (b) this is not a
+    # dry-run (synthetic dims carry no fixed-ruler signal). Failures are non-fatal
+    # — a held-out scoring error must never sink the primary cycle's promote /
+    # attribution path, so the curve simply skips this generation on error.
+    _held_out_fitness: float | None = None
+    _held_out_bench_id: str | None = None
+    _held_out_bench = _resolve_held_out_bench()
+    if _held_out_bench and not args.dry_run:
+        try:
+            # The per-dim aggregate is returned for completeness but not recorded
+            # here — the E2-wire curve is fitness-vs-generation on the fixed
+            # ruler (one scalar per cycle) + the bench id; per-dim held-out
+            # breakdowns are a later (E6) methods-page concern.
+            _held_out_fitness, _held_out_dims_unused, _held_out_bench_id = score_held_out_bench(
+                _held_out_bench,
+                session_id=session_id,
+                gen_tag=gen_tag,
+                anchor_confidence_mode=_anchor_confidence_mode,
+            )
+            del _held_out_dims_unused
+            log.info(
+                "held-out bench scored: fitness=%.6f bench_id=%s (fixed-ruler, every-cycle)",
+                _held_out_fitness,
+                _held_out_bench_id,
+            )
+        except Exception:  # pragma: no cover — defensive; curve skips this gen
+            log.warning(
+                "held-out bench scoring failed for bench %r; the fixed-ruler curve "
+                "skips this generation (primary cycle unaffected)",
+                _held_out_bench,
+                exc_info=True,
+            )
+            _held_out_fitness = None
+            _held_out_bench_id = None
     # P0b — per-dim score breakdown lives in the journal (event-scoped).
     # Aggregate fitness is recorded in sessions.jsonl (SoT, P0a §6); the
     # breakdown is not in sessions.jsonl so it belongs here, not duplicated.
@@ -3371,6 +4312,34 @@ def main() -> int:
         # PR-MARGIN-FITNESS-SCALE (2026-05-30) — persist this audit's
         # fitness-scale stderr so the NEXT cycle reads it as the prior σ.
         "fitness_stderr": current_fitness_stderr,
+        # E2 (2026-05-30) — fixed-ruler evidence, now WIRED (operator cadence =
+        # EVERY cycle). Scored once per cycle above (``score_held_out_bench``,
+        # cost-guarded on a configured bench + non-dry-run); the SAME values flow
+        # into both the per-cycle attribution row (the curve SoT) and — on a
+        # promote — this baseline registry row (so the promoted baseline carries
+        # its fixed-ruler fitness too). Both ``None`` when no bench is configured
+        # → ``_append_baseline_registry_row`` omits them (backward-compatible).
+        # FLAGGED follow-up (out of E2 scope): whether the epoch spec's
+        # ``seed_pool_id`` should additionally pin the FROZEN ``held_out_bench_id``
+        # — see ``baseline_epoch.build_baseline_spec``.
+        "held_out_fitness": _held_out_fitness,
+        "held_out_bench_id": _held_out_bench_id,
+        # E3 (2026-05-30) — control-arm tag on the baseline registry row, so the
+        # three arms' baselines are distinguishable + land in their own epoch
+        # (build_baseline_spec hashes promote_policy → gate ≠ random ≠ never).
+        # The seed is recorded so the random arm's promoted baseline is traceable.
+        "promote_policy": promote_policy,
+        "promote_policy_seed": promote_policy_seed,
+        # E4 (2026-05-30) — fitness-noise decomposition + gain-evidence verdict on
+        # the promoted baseline, bundled into one PowerRecordFields arg. All
+        # None-omitting (M=1 leaves within unestimated; pre-E4 baselines omit the
+        # block) so the row shape stays backward-compatible.
+        "power_stats": _e4_power_stats,
+        # E5 (2026-05-30) — reproducibility pins (prompt_hash + applied_diff +
+        # sampling_params + rng_seed) on the promoted baseline's registry row so it
+        # is independently re-runnable. None-omitting bundle (a pin with no value is
+        # omitted) → backward-compatible row shape.
+        "run_provenance": _e5_run_provenance,
     }
     if args.dry_run:
         promoted_line = "false (dry-run)"
@@ -3384,8 +4353,52 @@ def main() -> int:
         # by operator override, not by the auto-promote gate.
         _write_baseline(dim_means, dim_stderr, manual_promote=True, **_baseline_provenance)
         promoted_line = "true (--promote, manual override)"
+    elif promote_policy == "never":
+        # E3 (2026-05-30) — no-mutation floor: NEVER promote (baseline frozen
+        # across the whole campaign). The held-out is still scored every cycle
+        # (above), so the curve shows pure drift / judge-noise — the floor the
+        # gate + random arms must beat. The mutation IS still generated + audited
+        # (the audit above already ran) so the loop structure is identical to the
+        # other arms — we only suppress the PROMOTE. A mutator-driven cycle still
+        # reverts the SoT (same as a gate reject) so the rejected mutation does
+        # not accumulate and the next cycle starts from the frozen baseline.
+        ok, reason = False, "promote_policy=never (no-mutation floor)"
+        _sil_mid_for_revert = os.environ.get("GEODE_SIL_MUTATION_ID", "").strip()
+        if _sil_mid_for_revert:
+            revert_ok, revert_detail = _revert_sot_after_reject(_sil_mid_for_revert)
+            reason = (
+                f"{reason}; SoT reverted ({revert_detail})"
+                if revert_ok
+                else f"{reason}; SoT revert FAILED ({revert_detail})"
+            )
+        promoted_line = f"false ({reason})"
+    elif promote_policy == "random":
+        # E3 (2026-05-30) — random-accept control: the mutation is applied +
+        # audited exactly as the gate arm (the audit above already ran), but the
+        # PROMOTE decision is a SEEDED coin-flip, NOT the fitness gate. The draw
+        # is ``Random(promote_policy_seed + cycle_index)`` so the entire random
+        # campaign is reproducible from the recorded seed (no bare randomness).
+        ok = _random_accept_draw(promote_policy_seed, _cycle_index)
+        reason = (
+            f"promote_policy=random (seed={promote_policy_seed}, "
+            f"cycle={_cycle_index}, draw={'accept' if ok else 'reject'})"
+        )
+        if ok:
+            _write_baseline(dim_means, dim_stderr, **_baseline_provenance)
+        else:
+            # Same revert semantics as a gate reject (mutator-driven only).
+            _sil_mid_for_revert = os.environ.get("GEODE_SIL_MUTATION_ID", "").strip()
+            if _sil_mid_for_revert:
+                revert_ok, revert_detail = _revert_sot_after_reject(_sil_mid_for_revert)
+                reason = (
+                    f"{reason}; SoT reverted ({revert_detail})"
+                    if revert_ok
+                    else f"{reason}; SoT revert FAILED ({revert_detail})"
+                )
+        promoted_line = f"{str(ok).lower()} ({reason})"
     else:
-        # PR-3 of petri-schema-v2 (2026-05-23) — surface the v2
+        # promote_policy == "gate" — the SELECTION arm (today's behaviour,
+        # unchanged). PR-3 of petri-schema-v2 (2026-05-23) — surface the v2
         # ``raw.sample_count`` map to the promotion gate so a baseline
         # measured from N=1 samples on a critical dim requires a wider
         # margin (0.20) before being overwritten. v1 baselines emit no
@@ -3564,6 +4577,30 @@ def main() -> int:
                 fitness_after=float(fitness),
                 audit_run_id=_sil_audit_run_id,
                 source=_sil_source,
+                # E2 (2026-05-30) — per-cycle fixed-ruler evidence into
+                # mutations.jsonl. Recorded on EVERY cycle when a held-out bench
+                # is configured (both None when not → the row omits them, legacy
+                # shape preserved). This is the cross-generation curve the hub
+                # renders; ``fitness_after`` above is the co-evolving-pool value
+                # (within-generation ranking only).
+                held_out_fitness=_held_out_fitness,
+                held_out_bench_id=_held_out_bench_id,
+                # E3 (2026-05-30) — control-arm tag on the per-cycle held-out
+                # record so the gate / random / never arms' curves are
+                # distinguishable + comparable on the shared frozen ruler. The
+                # seed is recorded so the random arm is reproducible from the
+                # ledger (0 for gate / never).
+                promote_policy=promote_policy,
+                promote_policy_seed=promote_policy_seed,
+                # E4 (2026-05-30) — variance decomposition + the explicit "ci
+                # excludes 0" gain evidence on the per-cycle attribution row. All
+                # fields are None-omitting (M=1 leaves within unestimated; legacy
+                # rows omit the whole block) so the row stays backward-compatible.
+                **_e4_record_fields,
+                # E5 (2026-05-30) — reproducibility pins on the per-cycle attribution
+                # row (prompt_hash + applied_diff + sampling_params + rng_seed). The
+                # bundle is None-omitting so a no-pin cycle keeps the legacy shape.
+                run_provenance=_e5_run_provenance,
             )
         except Exception:  # pragma: no cover — defensive
             log.warning(

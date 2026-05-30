@@ -2125,6 +2125,9 @@ def test_main_dry_run_emits_full_p0b_event_sequence(
         "config_snapshot",
         "wrapper_override_dumped",
         "baseline_decision",
+        # E4 (2026-05-30) — statistical_power fires after the baseline decision (it
+        # needs the baseline to compute the gain CI) and before per_dim_scores.
+        "statistical_power",
         "per_dim_scores",
         "audit_finished",
     ], f"event sequence mismatch: {events}"
@@ -2187,6 +2190,14 @@ def test_main_dry_run_emits_full_p0b_event_sequence(
         "missing_dims emit drift — main() must use compute_missing_dims, not a literal"
     )
     assert set(by_event["audit_finished"].keys()) == {"dry_run"}
+    # E4 — statistical_power payload carries the decomposition + verdict + power line.
+    sp_payload = by_event["statistical_power"]
+    assert sp_payload["replicate"] == 1  # M=1 default
+    assert sp_payload["within_mutation_stderr"] is None  # M=1 leaves within unestimated
+    assert sp_payload["gain_verdict"] == "no evidence yet"  # no baseline → honest null
+    assert sp_payload["gain_ci_excludes_zero"] is False
+    assert sp_payload["target_effect_size"] == pytest.approx(0.02)
+    assert "power_line" in sp_payload
 
 
 def test_main_dry_run_payloads_exclude_sessions_jsonl_canonical_fields(

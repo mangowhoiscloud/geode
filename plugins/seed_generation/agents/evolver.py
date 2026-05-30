@@ -44,6 +44,7 @@ from plugins.seed_generation.agents.base import (
     BaseSeedAgent,
     SeedAgentResult,
     parse_structured_output,
+    sum_sub_result_tokens,
 )
 from plugins.seed_generation.json_schemas import EVOLVE_SCHEMA
 from plugins.seed_generation.orchestrator import PipelineState
@@ -167,6 +168,10 @@ class Evolver(BaseSeedAgent):
         )
         results = await self._manager.adelegate(tasks, announce=False)
 
+        # PR-SEEDGEN-TOKENS (2026-05-30) — sum sub-agent LLM usage (0 for
+        # subscription calls) into this phase's result.
+        prompt_tokens, completion_tokens, usd_spent = sum_sub_result_tokens(results)
+
         tasks_by_id: dict[str, Any] = {t.task_id: t for t in tasks}
         evolved_rows: list[dict[str, Any]] = []
         failed: list[tuple[str, str]] = []
@@ -249,11 +254,17 @@ class Evolver(BaseSeedAgent):
                     f"or returned verdict != 'ok'; "
                     f"first error: {failed[0][1] if failed else 'verdict_not_ok'}"
                 ),
+                prompt_tokens=prompt_tokens,
+                completion_tokens=completion_tokens,
+                usd_spent=usd_spent,
             )
 
         return SeedAgentResult(
             role=self.role,
             output={"evolved_candidates": evolved_rows},
+            prompt_tokens=prompt_tokens,
+            completion_tokens=completion_tokens,
+            usd_spent=usd_spent,
         )
 
     def _build_tasks(

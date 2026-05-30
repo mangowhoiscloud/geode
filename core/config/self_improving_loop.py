@@ -48,7 +48,7 @@ import os
 import tomllib
 import warnings
 from pathlib import Path
-from typing import Annotated, Any
+from typing import Annotated, Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
@@ -352,6 +352,89 @@ class AutoresearchConfig(BaseModel):
     collapsing onto it. Operators who want faster smoke runs should
     pass ``--dry-run`` instead of setting a low ``seed_limit``."""
     seed_select: str = "plugins/petri_audit/seeds"
+    """The **co-evolving** seed pool that supplies SELECTION PRESSURE.
+
+    This pool *mutates across generations* — the seed-generation co-scientist
+    grows / replaces adversarial seeds alongside the agent, and
+    :func:`autoresearch.train._resolve_seed_select` swaps in the freshest
+    survivor pool. Because the seed set moves every generation, the fitness it
+    produces is a *moving ruler*: useful for ranking candidates WITHIN a
+    generation (the (1+1) accept/revert decision), NOT for comparing fitness
+    ACROSS generations. Cross-generation comparability is the job of
+    :attr:`held_out_bench`."""
+    held_out_bench: str | None = None
+    """E2 (2026-05-30) — a **VERSION-FROZEN held-out** seed set, NEVER mutated,
+    used ONLY to MEASURE fitness on a *fixed ruler*.
+
+    Where :attr:`seed_select` co-evolves (and so cannot anchor a cross-generation
+    fitness curve), ``held_out_bench`` is a directory of frozen seeds that the
+    mutator / seed-generation loop must NOT touch. Scoring the champion on this
+    fixed set every promote yields a ``held_out_fitness`` whose values ARE
+    comparable across generations — it is the only curve that counts as evidence
+    of real improvement.
+
+    ``None`` (default) → no held-out bench is configured; the held-out fields are
+    omitted from the baseline registry row (backward-compatible: existing readers
+    see the same shape they always have). Set this to a frozen seed directory path
+    (absolute, ``~``-relative, or repo-relative — same shape as ``seed_select``)
+    to activate the fixed-ruler measurement.
+
+    Resolution precedence is mirrored from ``seed_select`` in
+    :func:`autoresearch.train._resolve_held_out_bench` (env
+    ``GEODE_HELD_OUT_BENCH`` / ``AUTORESEARCH_HELD_OUT_BENCH`` → this config field
+    → ``None``)."""
+    promote_policy: Literal["gate", "random", "never"] = "gate"
+    """E3 (2026-05-30) — the **control-arm promote policy** for a matched 3-arm
+    held-out comparison (selection vs no-mutation vs random-accept):
+
+    - ``"gate"`` (default) — today's behaviour: the ``_should_promote`` fitness
+      gate decides. The SELECTION arm.
+    - ``"random"`` — random-accept control: the mutation is still applied +
+      audited, but the PROMOTE decision is a coin-flip from a SEEDED RNG
+      (``promote_policy_seed`` + the cycle index), NOT the gate. Reproducible.
+    - ``"never"`` — no-mutation floor: never promote (baseline frozen across the
+      campaign). Each cycle still scores the held-out → the curve shows pure
+      drift / judge-noise — the floor the other arms must beat.
+
+    Each arm is run as its OWN full N-cycle campaign; the per-cycle held-out
+    records are tagged with this policy so the three arms' curves are
+    distinguishable + comparable on the shared frozen ruler. ``promote_policy``
+    is also part of the baseline epoch spec (gate / random / never hash to
+    different epochs — different production logic, correctly not averaged).
+
+    Resolution precedence mirrors ``held_out_bench``:
+    :func:`autoresearch.train._resolve_promote_policy` (env
+    ``GEODE_PROMOTE_POLICY`` / ``AUTORESEARCH_PROMOTE_POLICY`` → CLI
+    ``--promote-policy`` → this config field → ``"gate"``)."""
+    promote_policy_seed: int = 0
+    """E3 (2026-05-30) — the explicit RNG seed for ``promote_policy="random"``.
+
+    The random arm's per-cycle promote draw is ``Random(seed + cycle_index)``,
+    so the entire random campaign is reproducible (no bare nondeterminism) and is
+    RECORDED on the held-out + baseline rows. Ignored for the ``gate`` / ``never``
+    arms. Resolution precedence mirrors ``promote_policy``
+    (:func:`autoresearch.train._resolve_promote_policy_seed`)."""
+    replicate: Annotated[int, Field(ge=1, le=20)] = 1
+    """E4 (2026-05-30) — per-mutation REPLICATE count ``M``.
+
+    The audit is run ``M`` times per mutation/cycle to estimate the WITHIN-mutation
+    variance (provider non-determinism) SEPARATELY from the BETWEEN-seed variance
+    (the N samples inside one audit). ``M=1`` (default) leaves today's behaviour
+    unchanged — the audit runs once, within-mutation variance is honestly left
+    unestimated, and there is NO extra cost. ``M>1`` runs ``M`` full audits (so the
+    cost scales linearly — the operator opts in for the variance decomposition).
+    Resolution precedence mirrors ``promote_policy`` (env ``GEODE_AUDIT_REPLICATE``
+    / ``AUTORESEARCH_REPLICATE`` → CLI ``--replicate`` → this config field → ``1``)."""
+    target_effect_size: Annotated[float, Field(gt=0.0, le=1.0)] = 0.02
+    """E4 (2026-05-30) — the fitness-scale effect size δ the power analysis targets.
+
+    Feeds :func:`core.self_improving_loop.statistical_power.required_samples` to
+    compute the required ``N_seed × M_replicate`` to DETECT δ at α=0.05 / 80% power.
+    Default ~0.02 sits just above the promote gate's zero-noise floor — see the
+    ``DEFAULT_TARGET_EFFECT_SIZE`` docstring for the full justification. Resolution
+    precedence mirrors ``replicate`` (env ``GEODE_TARGET_EFFECT_SIZE`` /
+    ``AUTORESEARCH_TARGET_EFFECT_SIZE`` → CLI ``--target-effect-size`` → this config
+    field → ``0.02``)."""
     dim_set: str = "subset"
     max_turns: Annotated[int, Field(ge=1, le=200)] = 10
 

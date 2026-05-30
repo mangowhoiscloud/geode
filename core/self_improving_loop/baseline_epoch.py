@@ -25,7 +25,15 @@ from typing import Any
 #: change. Because it is part of the hashed spec, a bump puts pre-change and
 #: post-change baselines in different epochs (correct — the *definition* of a
 #: baseline changed) without retroactively recomputing any stored hash.
-SPEC_SCHEMA_VERSION = "1"
+#:
+#: "1" → "2" (E3, 2026-05-30): added ``promote_policy`` to the spec. The promote
+#: policy (gate / random / never) is production logic — the gate arm SELECTS on
+#: fitness, the random arm coin-flips, the never arm freezes the baseline — so
+#: the three arms produce baselines under genuinely different production logic
+#: and must not be averaged into one epoch. Old schema-1 rows fall into a prior
+#: epoch (correct — no retroactive recompute; the gate arm under schema 2 simply
+#: opens a new epoch alongside the legacy gate-only rows).
+SPEC_SCHEMA_VERSION = "2"
 
 #: Roles whose (model, source) bind the production+measurement surface. ``lane``
 #: is DERIVED from ``source`` (see role_provenance) so it is not hashed.
@@ -44,6 +52,7 @@ def build_baseline_spec(
     bench: bool,
     role_provenance: Mapping[str, Mapping[str, str]],
     seed_pool_id: str | None,
+    promote_policy: str = "gate",
 ) -> dict[str, Any]:
     """Assemble the canonical baseline spec (the surface that is hashed).
 
@@ -53,6 +62,17 @@ def build_baseline_spec(
     redundant). ``seed_pool_id`` is the seed pool's *identity* (content hash),
     not its bodies — ``None``/`""` when no pool is pinned (the pool axis then
     contributes a stable empty value rather than fragmenting epochs).
+
+    ``promote_policy`` (E3, 2026-05-30; schema 2) — the control-arm promote
+    policy: ``"gate"`` (selection arm, the fitness gate), ``"random"``
+    (random-accept control), or ``"never"`` (no-mutation floor). It is part of
+    the hashed surface because the three arms produce baselines under different
+    production logic, so a gate spec and a random spec hash to DIFFERENT epochs
+    (the 3-arm comparison happens via the per-cycle held-out records tagged by
+    arm, NOT by averaging the arms inside one epoch). Defaults to ``"gate"`` so
+    a caller that omits it reproduces today's selection-arm spec; combined with
+    the schema 1→2 bump, schema-1 gate rows and schema-2 gate rows already sit
+    in different epochs, so the seed_pool / role / margin axes are unaffected.
     """
     roles = {
         role: {
@@ -69,6 +89,7 @@ def build_baseline_spec(
         "rubric_version": str(rubric_version),
         "dim_set": str(dim_set),
         "bench": bool(bench),
+        "promote_policy": str(promote_policy),
         "roles": roles,
         "seed_pool_id": "" if seed_pool_id is None else str(seed_pool_id),
     }
@@ -114,11 +135,22 @@ def seed_pool_content_hash(seed_select: str | None) -> str:
     """Stable identity of the seed pool the audit ran on (decision B).
 
     ``seed_select`` is whatever ``_resolve_seed_select`` returned (a pool path or
-    a selector string). If it points at a directory, hash the **content** (each
-    contained file's relative path + sha256, sorted) so the same survivor set
-    always yields the same id regardless of mtime / absolute location. If it is a
-    plain string selector (or a missing path), hash the string verbatim. Empty
-    input → ``""`` (the spec's pool axis then contributes a stable empty value).
+    a selector string). If it points at a directory, hash ONLY the **seed bodies**
+    — each contained ``.md`` file's relative path + sha256, sorted — so the same
+    survivor set always yields the same id regardless of mtime / absolute
+    location. If it is a plain string selector (or a missing path), hash the
+    string verbatim. Empty input → ``""`` (the spec's pool axis then contributes
+    a stable empty value).
+
+    Pool identity is the *seeds*, never incidental files. The assembler
+    (:mod:`scripts.assemble_seed_pool`) writes a ``manifest.json`` INTO the pool
+    dir, and that manifest carries a ``generated_at`` timestamp — recursing every
+    file (the pre-fix ``rglob("*")``) folded that timestamp into the hash, making
+    the runtime hash NON-DETERMINISTIC across re-assembly and divergent from both
+    the assembler's body-only hash (computed before the manifest is written) and
+    the committed doc pins. Restricting to ``*.md`` bodies (and excluding
+    ``manifest.json`` plus any non-``.md`` incidental file) restores the
+    "same survivor bodies → same hash" frozen-ruler invariant.
     """
     if not seed_select:
         return ""
@@ -127,11 +159,14 @@ def seed_pool_content_hash(seed_select: str | None) -> str:
     path = Path(seed_select).expanduser()
     if path.is_dir():
         parts: list[str] = []
-        for f in sorted(path.rglob("*")):
-            if f.is_file():
-                rel = f.relative_to(path).as_posix()
-                body = hashlib.sha256(f.read_bytes()).hexdigest()
-                parts.append(f"{rel}:{body}")
+        # ``*.md`` only — survivor bodies are the pool's identity. ``manifest.json``
+        # (a non-``.md`` incidental with a ``generated_at`` timestamp) and any
+        # other non-``.md`` file are excluded so the hash is body-deterministic.
+        for body_file in sorted(path.rglob("*.md")):
+            if body_file.is_file():
+                rel = body_file.relative_to(path).as_posix()
+                body_digest = hashlib.sha256(body_file.read_bytes()).hexdigest()
+                parts.append(f"{rel}:{body_digest}")
         digest = hashlib.sha256("\n".join(parts).encode("utf-8")).hexdigest()
         return f"pool-{digest[:_HASH_PREFIX_LEN]}"
     return f"sel-{hashlib.sha256(str(seed_select).encode('utf-8')).hexdigest()[:_HASH_PREFIX_LEN]}"

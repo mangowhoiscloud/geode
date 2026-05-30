@@ -3,8 +3,8 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Policies &middot; Autoresearch &middot; GEODE Self-Improving Hub</title>
-<meta name="description" content="Autoresearch policies — 14 git-tracked policy SoT files under autoresearch/state/policies/, one row per file with JSON pretty-print drill-down.">
+<title>Evidence &middot; Autoresearch &middot; GEODE Self-Improving Hub</title>
+<meta name="description" content="Honest evidence page for scaffold-selection: methods (frozen held-out ruler vs pinned selection pool, 3 control arms, replicate + ci-excludes-0, reproducibility pins, content-addressed epochs), results (per-arm held-out curve, 3-arm comparison, promotion count, ci verdict), and power (required N x M, honest null).">
 <link rel="stylesheet" href="/geode/self-improving/assets/hub.css">
 </head>
 <body>
@@ -47,8 +47,8 @@
         <li><a href="/geode/self-improving/autoresearch/baseline/">Baseline</a></li>
         <li><a href="/geode/self-improving/autoresearch/mutations/">Mutations</a></li>
         <li><a href="/geode/self-improving/autoresearch/results/">Results</a></li>
-        <li><a href="/geode/self-improving/autoresearch/evidence/">Evidence</a></li>
-        <li><a href="/geode/self-improving/autoresearch/policies/" class="active" aria-current="page">Policies</a></li>
+        <li><a href="/geode/self-improving/autoresearch/evidence/" class="active" aria-current="page">Evidence</a></li>
+        <li><a href="/geode/self-improving/autoresearch/policies/">Policies</a></li>
       </ul>
 
       <div class="nav-section">Docs</div>
@@ -66,27 +66,25 @@
   </aside>
 
   <main class="content">
-    <h1 class="page-title">Policies <span class="bucket autoresearch">autoresearch</span></h1>
-    <p class="page-sub">14 git-tracked policy SoT files under <code>autoresearch/state/policies/</code>. Each row links to the live JSON via a <code>&lt;details&gt;</code> drill-down. The "mutated by" cell points at the most recent <code>mutations.jsonl</code> row touching that policy.</p>
+    <h1 class="page-title">Evidence <span class="bucket autoresearch">autoresearch</span></h1>
+    <p class="page-sub">One honest page to judge a single question: <strong>does scaffold-selection actually improve safety fitness?</strong> Methods, results, and power, read from the git-tracked ledgers (<code>mutations.jsonl</code> + <code>baseline_archive.jsonl</code>) — measured values only, no fabricated numbers. <strong>0 promotions is a trust-increasing result, not a failure</strong>: a loop that promotes nothing on null evidence is behaving correctly. Where a matched campaign has not run yet, the section says so plainly rather than inventing a curve.</p>
 
-    <h2 class="section"><span>Policies &middot; {{ policies_section_label }}</span></h2>
-    <table class="records">
-      <thead>
-        <tr>
-          <th scope="col">file</th>
-          <th scope="col">last write</th>
-          <th scope="col">size</th>
-          <th scope="col">mutated by</th>
-          <th scope="col">view</th>
-        </tr>
-      </thead>
-      <tbody>
-{{ policies_rows }}
-      </tbody>
-    </table>
+    <h2 class="section"><span>1 &middot; Methods</span></h2>
+    <p class="page-sub">The experimental design, honestly. The only valid evidence of cross-generation improvement is the <strong>frozen held-out ruler</strong>; everything else (the co-evolving selection pool, a single arm's drift, judge noise) is a confound the design isolates.</p>
+{{ methods_grid }}
+{{ methods_arms }}
+
+    <h2 class="section"><span>2 &middot; Results</span></h2>
+    <p class="page-sub">Read from the recorded ledgers. The per-cycle held-out curve PER ARM (split by <code>promote_policy</code>), the 3-arm comparison on the fixed ruler, promotion count per arm, and the ci-excludes-0 verdict. Pre-E1 mixed-scale rows (<code>fitness_before &gt; 1.0</code>) are excluded from aggregates. When no matched 3-arm held-out campaign has been recorded, this section renders the honest "awaiting" state below.</p>
+{{ results_arms }}
+{{ results_verdict }}
+
+    <h2 class="section"><span>3 &middot; Power</span></h2>
+    <p class="page-sub">How many samples are needed to detect a target effect &delta; at 80% power, given the observed fitness-noise &sigma; (recorded E4 decomposition). When the gain CI includes 0 the verdict is "no evidence yet" — stated plainly, not hedged.</p>
+{{ power_block }}
 
     <div class="build-info">
-      <p>Source: <code>autoresearch/state/policies/*.json</code> (14 git-tracked SoT files) &amp; <code>mutations.jsonl</code> for cross-link.</p>
+      <p>Source: <code>autoresearch/state/mutations.jsonl</code> (per-cycle attribution rows: <code>held_out_fitness</code> &middot; <code>promote_policy</code> &middot; <code>gain_ci_excludes_zero</code> &middot; <code>gain_verdict</code> &middot; <code>within_mutation_stderr</code> &middot; <code>between_seed_stderr</code>) + <code>baseline_archive.jsonl</code> (promoted-baseline rows per arm).</p>
       <p>Published by <code>.github/workflows/pages.yml</code> on every <code>main</code> push.</p>
       <p>Repo: <a href="https://github.com/mangowhoiscloud/geode" rel="noopener">github.com/mangowhoiscloud/geode</a></p>
       <p>Harness chip legend:

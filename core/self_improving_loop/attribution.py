@@ -42,6 +42,7 @@ from typing import TYPE_CHECKING, Any
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from core.self_improving_loop.run_provenance import RunProvenanceFields
 from core.self_improving_loop.signal_polarity import to_signed_improvement
 
 if TYPE_CHECKING:
@@ -91,6 +92,67 @@ class AttributionRecord(BaseModel):
     mixed two incompatible scales. Pre-fix on-disk rows still carry that mixed
     scale — they are NOT rewritten (git-tracked ledger); a one-shot backfill
     is a documented follow-up. New rows are uniformly 0-1."""
+    held_out_fitness: float | None = None
+    held_out_bench_id: str | None = None
+    """E2 (2026-05-30) — per-cycle fixed-ruler evidence. ``held_out_fitness`` is
+    the SAME canonical 0-1 ``compute_fitness`` (HIGHER-is-better) measured on the
+    VERSION-FROZEN held-out bench, NOT the co-evolving ``seed_select`` pool that
+    produced ``fitness_after``. A curve built from this field across attribution
+    rows (ordered by ``ts``) is therefore comparable ACROSS generations — the
+    cross-generation evidence the moving-ruler ``fitness_after`` cannot give.
+    ``held_out_bench_id`` is the bench's content-address (``pool-<hash>``), so a
+    silent edit to the "frozen" set surfaces as an id change. Recorded on EVERY
+    cycle when a held-out bench is configured (operator cadence); both fields are
+    omitted together when no bench was scored, so legacy / no-bench rows validate
+    as ``None`` via these defaults."""
+    promote_policy: str | None = None
+    promote_policy_seed: int | None = None
+    """E3 (2026-05-30) — control-arm tag on the per-cycle held-out record so the
+    three arms' fixed-ruler curves are distinguishable + comparable. ``promote_policy``
+    is ``"gate"`` (selection arm), ``"random"`` (random-accept control), or
+    ``"never"`` (no-mutation floor). ``promote_policy_seed`` is the explicit RNG
+    seed RECORDED for the ``random`` arm (the per-cycle draw is
+    ``Random(seed + cycle_index)``), so the random campaign is reproducible from
+    the ledger; it is recorded for every arm (``0`` for gate / never) so the row
+    is uniform. Legacy rows omit both → ``None`` via these defaults; a curve
+    consumer filters the JSONL stream on ``promote_policy`` to split the arms."""
+    within_mutation_stderr: float | None = None
+    between_seed_stderr: float | None = None
+    """E4 (2026-05-30) — the within-mutation (provider non-determinism, across the
+    ``--replicate M`` repeated audits) and between-seed (seed heterogeneity, the N
+    samples inside one audit) fitness-stderr DECOMPOSITION, kept distinct so the two
+    noise sources are not conflated. Both on the 0-1 fitness scale.
+    ``within_mutation_stderr`` is ``None`` for the default ``M=1`` path (within
+    variance is unestimable from a single replicate — honestly unestimated, not 0).
+    Legacy rows omit both → ``None`` via these defaults (backward-compatible)."""
+    gain_ci_low: float | None = None
+    gain_ci_high: float | None = None
+    gain_ci_excludes_zero: bool | None = None
+    gain_verdict: str | None = None
+    """E4 (2026-05-30) — the EXPLICIT "ci excludes 0" evidence statement on the
+    fitness gain (current vs baseline) on the 0-1 scale: the CI bounds, a boolean
+    ``gain_ci_excludes_zero`` (``True`` iff ``gain_ci_low > 0`` — a CLAIMED gain),
+    and a human ``gain_verdict`` (``"gain significant"`` / ``"no evidence yet"``).
+    This is the honest-null evidence layer ON TOP of the promote gate (it never
+    weakens the gate; at ``DEFAULT_GAIN_CI_Z=1.0`` it reconciles with the gate's
+    σ-margin). Legacy rows omit all four → ``None`` (backward-compatible)."""
+    prompt_hash: str | None = None
+    applied_diff_hash: str | None = None
+    applied_diff_target: str | None = None
+    applied_diff_kind: str | None = None
+    sampling_params: dict[str, Any] | None = None
+    rng_seed: int | None = None
+    """E5 (2026-05-30) — per-cycle REPRODUCIBILITY PINS so a row is independently
+    re-runnable. ``prompt_hash`` is the ``sha256:`` of the actual composed wrapper
+    system prompt the target ran under; ``applied_diff_hash`` (+ ``_target`` /
+    ``_kind``) is the ``sha256:`` of the scaffold mutation actually APPLIED this
+    cycle plus where it applied; ``sampling_params`` is the generation params as
+    SENT (GEODE-pinned subset; per-token knobs recorded ``"_unpinned"``); ``rng_seed``
+    is the audit/generation seed as SENT (``None`` when none was sent — distinct from
+    E3's ``promote_policy_seed``). These record WHAT WAS SENT for AUDITABILITY; they
+    make NO backend-determinism claim (the backend may not replay bit-identically —
+    ``unverified``, see :mod:`core.self_improving_loop.run_provenance`). Each field is
+    ``None``-omitting at the writer, so legacy / no-pin rows keep their exact shape."""
     audit_run_id: str | None = None
     source: str | None = None
     """PR-AR-L6 (2026-05-26) — distinguishes mutator-driven cycle rows
@@ -238,6 +300,17 @@ def compute_attribution(
     fitness_after: float | None = None,
     audit_run_id: str = "",
     source: str = "mutator",
+    held_out_fitness: float | None = None,
+    held_out_bench_id: str | None = None,
+    promote_policy: str | None = None,
+    promote_policy_seed: int | None = None,
+    within_mutation_stderr: float | None = None,
+    between_seed_stderr: float | None = None,
+    gain_ci_low: float | None = None,
+    gain_ci_high: float | None = None,
+    gain_ci_excludes_zero: bool | None = None,
+    gain_verdict: str | None = None,
+    run_provenance: RunProvenanceFields | None = None,
 ) -> dict[str, Any]:
     """Compute the attribution payload for one applied mutation.
 
@@ -305,6 +378,57 @@ def compute_attribution(
         payload["fitness_before"] = round(float(fitness_before), 6)
         payload["fitness_after"] = round(float(fitness_after), 6)
         payload["fitness_delta"] = round(float(fitness_after) - float(fitness_before), 6)
+    # E2 (2026-05-30) — per-cycle fixed-ruler evidence. ``held_out_fitness`` is
+    # the SAME 0-1 ``compute_fitness`` measured on the VERSION-FROZEN held-out
+    # bench (NOT the co-evolving ``seed_select`` pool that produced
+    # ``fitness_after``), so a fitness-vs-generation curve built from this field
+    # across attribution rows is comparable ACROSS generations — the only curve
+    # that counts as evidence of real improvement. Recorded on EVERY cycle when a
+    # held-out bench is configured (operator cadence decision); both fields are
+    # OMITTED together when no bench was scored (``None``) so legacy / no-bench
+    # rows keep their exact shape (this module is otherwise scale-agnostic — the
+    # 0-1 guarantee lives at the autoresearch caller). ``held_out_bench_id`` is
+    # the ruler's content-address, so a silent edit to the "frozen" set surfaces
+    # as an id change in the curve.
+    if held_out_fitness is not None and held_out_bench_id is not None:
+        payload["held_out_fitness"] = round(float(held_out_fitness), 6)
+        payload["held_out_bench_id"] = str(held_out_bench_id)
+    # E3 (2026-05-30) — control-arm tag so the per-cycle held-out curve can be
+    # split into the gate / random / never arms (the matched 3-arm comparison).
+    # Recorded together when both are supplied (``promote_policy_seed`` is ``0``
+    # for the gate / never arms; the RECORDED seed makes the random arm
+    # reproducible from the ledger). ``None`` → fields omitted (legacy shape).
+    if promote_policy is not None:
+        payload["promote_policy"] = str(promote_policy)
+        payload["promote_policy_seed"] = int(
+            promote_policy_seed if promote_policy_seed is not None else 0
+        )
+    # E4 (2026-05-30) — variance decomposition + the explicit "ci excludes 0" gain
+    # evidence. Each field is recorded only when supplied (``None`` → omitted) so a
+    # default ``M=1`` cycle (within unestimable) and legacy rows keep their exact
+    # shape — purely additive, never a new required key. ``within_mutation_stderr``
+    # stays ``None`` on the M=1 path (honest: a single replicate cannot observe
+    # provider jitter), while ``between_seed_stderr`` + the gain CI are present
+    # whenever the audit had ≥2 sample rows.
+    if within_mutation_stderr is not None:
+        payload["within_mutation_stderr"] = round(float(within_mutation_stderr), 6)
+    if between_seed_stderr is not None:
+        payload["between_seed_stderr"] = round(float(between_seed_stderr), 6)
+    if gain_ci_excludes_zero is not None:
+        payload["gain_ci_low"] = round(float(gain_ci_low), 6) if gain_ci_low is not None else None
+        payload["gain_ci_high"] = (
+            round(float(gain_ci_high), 6) if gain_ci_high is not None else None
+        )
+        payload["gain_ci_excludes_zero"] = bool(gain_ci_excludes_zero)
+        if gain_verdict is not None:
+            payload["gain_verdict"] = str(gain_verdict)
+    # E5 (2026-05-30) — reproducibility pins. ``as_record_kwargs`` returns ONLY the
+    # present (non-None) pins, so a cycle with no prompt / no applied diff / no seed
+    # contributes no key and the row keeps its exact legacy shape (additive, never a
+    # new required key). The pins record WHAT WAS SENT (auditability) — no backend-
+    # determinism claim (see run_provenance module docstring).
+    if run_provenance is not None:
+        payload.update(run_provenance.as_record_kwargs())
     if baseline_before is None or baseline_after is None:
         return payload
 
@@ -356,6 +480,17 @@ def write_attribution(
     fitness_after: float | None = None,
     audit_run_id: str = "",
     source: str = "mutator",
+    held_out_fitness: float | None = None,
+    held_out_bench_id: str | None = None,
+    promote_policy: str | None = None,
+    promote_policy_seed: int | None = None,
+    within_mutation_stderr: float | None = None,
+    between_seed_stderr: float | None = None,
+    gain_ci_low: float | None = None,
+    gain_ci_high: float | None = None,
+    gain_ci_excludes_zero: bool | None = None,
+    gain_verdict: str | None = None,
+    run_provenance: RunProvenanceFields | None = None,
 ) -> dict[str, Any]:
     """Compute + append attribution in one call.
 
@@ -383,6 +518,17 @@ def write_attribution(
         fitness_after=fitness_after,
         audit_run_id=audit_run_id,
         source=source,
+        held_out_fitness=held_out_fitness,
+        held_out_bench_id=held_out_bench_id,
+        promote_policy=promote_policy,
+        promote_policy_seed=promote_policy_seed,
+        within_mutation_stderr=within_mutation_stderr,
+        between_seed_stderr=between_seed_stderr,
+        gain_ci_low=gain_ci_low,
+        gain_ci_high=gain_ci_high,
+        gain_ci_excludes_zero=gain_ci_excludes_zero,
+        gain_verdict=gain_verdict,
+        run_provenance=run_provenance,
     )
     append_attribution_log(payload, log_path=log_path)
     return payload

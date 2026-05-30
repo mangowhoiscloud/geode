@@ -33,6 +33,8 @@ _EXPECTED_ROW_KEYS = {
     "fitness_stderr",
     "margin_rule",
     "bench",
+    "promote_policy",  # E3 — control-arm tag (gate / random / never)
+    "promote_policy_seed",  # E3 — RNG seed recorded for the random arm
     "seed_select",
     "seed_count",
     "epoch_hash",  # PR-BASELINE-EPOCH — content-addressed partition discriminator
@@ -371,7 +373,7 @@ def test_row_self_verifies_epoch_hash(isolated: Path) -> None:
         {"broken_tool_use": 3.0}, {"broken_tool_use": 0.1}, sample_count={"broken_tool_use": 16}
     )
     row = _rows(isolated / "baseline_archive.jsonl")[0]
-    assert row["spec_schema_version"] == "1"
+    assert row["spec_schema_version"] == "2"  # E3 — promote_policy added to spec
     assert compute_epoch_hash(row["baseline_spec"]) == row["epoch_hash"]
     assert row["epoch_label"] == "be-001"  # first epoch seen in this tmp registry
 

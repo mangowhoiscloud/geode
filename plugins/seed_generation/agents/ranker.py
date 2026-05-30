@@ -50,6 +50,7 @@ from plugins.seed_generation.agents.base import (
     BaseSeedAgent,
     SeedAgentResult,
     parse_structured_output,
+    sum_sub_result_tokens,
 )
 from plugins.seed_generation.json_schemas import VOTE_SCHEMA
 from plugins.seed_generation.orchestrator import PipelineState
@@ -392,12 +393,29 @@ class Ranker(BaseSeedAgent):
             survivors[:3],
         )
 
+        # PR-SEEDGEN-TOKENS (2026-05-30) — total the per-match voter usage
+        # stashed on each ``detail["usage"]`` during ``_play_match``. Only
+        # freshly-played matches appear in ``match_details`` (resumed runs
+        # already counted earlier matches), so no double-counting on resume.
+        prompt_tokens = 0
+        completion_tokens = 0
+        usd_spent = 0.0
+        for detail in match_details:
+            usage = detail.get("usage")
+            if isinstance(usage, dict):
+                prompt_tokens += int(usage.get("prompt_tokens", 0) or 0)
+                completion_tokens += int(usage.get("completion_tokens", 0) or 0)
+                usd_spent += float(usage.get("usd_spent", 0.0) or 0.0)
+
         return SeedAgentResult(
             role=self.role,
             output={
                 "elo_ratings": ratings,
                 "survivors": survivors,
             },
+            prompt_tokens=prompt_tokens,
+            completion_tokens=completion_tokens,
+            usd_spent=usd_spent,
         )
 
     async def _play_match_with_checkpoint_report(
@@ -585,6 +603,12 @@ class Ranker(BaseSeedAgent):
         results = await self._manager.adelegate(tasks, announce=False)
         tasks_by_id: dict[str, Any] = {t.task_id: t for t in tasks}
 
+        # PR-SEEDGEN-TOKENS (2026-05-30) — sum every voter sub-agent's LLM
+        # usage for this match. payg voters (API key) report real numbers;
+        # subscription / CLI voters report 0 (usage not exposed). Stashed on
+        # ``detail["usage"]`` so the phase-level rollup below can total it.
+        match_pt, match_ct, match_usd = sum_sub_result_tokens(results)
+
         votes: list[str] = []
         voter_ids: list[str] = []
         voter_details: list[dict[str, Any]] = []
@@ -643,6 +667,11 @@ class Ranker(BaseSeedAgent):
             "candidate_a": match.a,
             "candidate_b": match.b,
             "votes": voter_details,
+            "usage": {
+                "prompt_tokens": match_pt,
+                "completion_tokens": match_ct,
+                "usd_spent": match_usd,
+            },
         }
 
         if len(votes) < 2:

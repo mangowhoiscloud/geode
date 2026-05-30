@@ -45,7 +45,286 @@ functional change.
 
 ---
 
-## [Unreleased]
+## [0.99.98] - 2026-05-30
+
+### Added
+- **E6 (2026-05-30) — honest evidence page: methods + results + power.** A dedicated
+  EVIDENCE sub-page under the autoresearch hub
+  (`/geode/self-improving/autoresearch/evidence/`) that a skeptical reader uses to
+  judge one question — *does scaffold-selection actually improve safety fitness?* —
+  reading ONLY the git-tracked ledgers (`mutations.jsonl` attribution rows +
+  `baseline_archive.jsonl`), with measured values only (no fabricated numbers, no
+  placeholders). Rendered by `scripts/build_self_improving_hub.py`
+  (`render_autoresearch_evidence` + new template
+  `docs/self-improving/autoresearch/evidence.html.template` + an Evidence nav link
+  added to all autoresearch sidebars + the landing sub-view table, now 5 sub-pages).
+  Three sections:
+  - **Methods** — the experimental design, honestly: the FROZEN held-out ruler (E2,
+    `held_out_bench_id`, disjoint from the selection pool) vs the pinned SELECTION
+    pool (B2, `pool-68dc6f0c9745`); the 3 control ARMS (E3: `gate`=selection /
+    `random`=random-accept / `never`=no-mutation floor); per-mutation REPLICATE +
+    the ci-excludes-0 rule (E4); REPRODUCIBILITY pins (E5: prompt_hash / applied_diff
+    / sampling_params / rng_seed); content-addressed EPOCH partition (A). Explains
+    WHY only the held-out curve is evidence and why the cross-arm comparison isolates
+    selection from drift / judge-noise.
+  - **Results** — the per-cycle `held_out_fitness` curve PER ARM (split by
+    `promote_policy`), the 3-arm comparison on the fixed ruler (mean held-out fitness
+    + promotion count per arm), and the per-cycle / per-campaign
+    `gain_ci_excludes_zero` verdict. Dense tables; pre-E1 mixed-scale rows excluded
+    from aggregates. **0 promotions is stated plainly as a TRUST-INCREASING result.**
+  - **Power** — the required `N_seed × M_replicate` line COMPUTED from the recorded
+    combined σ (`√(within²+between²)`) at δ=0.02 / α=0.05 / 80% power (the stdlib
+    `_required_n_seed` mirrors `core/self_improving_loop/statistical_power.py`'s
+    formula, pinned by a drift-guard test), plus the honest verdict: "no evidence
+    yet" when the gain CI includes 0, "indeterminate" when σ is unrecorded — never a
+    fabricated N.
+  - **Graceful empty state.** The matched 3-arm 10-cycle has not run yet, so the page
+    renders the full structure with an honest "awaiting the 3-arm campaign" /
+    "no held-out campaign recorded yet" / "no evidence yet" state where curves / arms
+    are empty — no crash, no fabricated number. The same renderer populates when the
+    campaign later writes the rows. 11 new tests in
+    `tests/test_self_improving_hub_e2e.py` (3-section render, graceful empty state,
+    populated per-arm curve + verdict, power from recorded σ, no-slop, core
+    drift-guards for the arm map + power constants).
+
+## [0.99.97] - 2026-05-30
+
+### Added
+- **E5 (2026-05-30) — per-cycle reproducibility pins: prompt hash, applied diff,
+  sampling params, RNG seed.** Each self-improving-loop ledger row is now
+  INDEPENDENTLY RE-RUNNABLE — a third party can reconstruct exactly what produced
+  an audit result. Four pins are captured at the point of truth (the audit
+  dispatch) and recorded on BOTH per-cycle sinks (the `mutations.jsonl`
+  attribution row and the `baseline_archive.jsonl` registry row), all
+  None-omitting so legacy / no-pin rows keep their exact shape:
+  - **`prompt_hash`** — `sha256:` of the ACTUAL composed wrapper/scaffold system
+    prompt the audit target ran under (the mutation-applied
+    `WRAPPER_PROMPT_SECTIONS`, canonically serialised then hashed — stable for the
+    same prompt, sensitive to any section edit).
+  - **`applied_diff`** — the scaffold mutation actually APPLIED this cycle as a
+    reproducible reference: `sha256:` of the applied content (`new_value`) plus the
+    `applied_diff_target` (section) + `applied_diff_kind` it edited, read from the
+    `kind="applied"` apply row — not a re-derived guess.
+  - **`sampling_params`** — the generation params as SENT for the audit. GEODE's
+    audit dispatch (a `geode audit` subprocess) controls only a subset (`max_turns`
+    / `seeds` / `dim_set` / `source` / `max_connections=1` / `max_samples=1`),
+    recorded as the resolved effective values; the per-token knobs
+    (`temperature` / `top_p` / `max_tokens`) GEODE does NOT pin are recorded as an
+    explicit `"_unpinned"` marker (inspect_ai + provider defaults), not a fabricated
+    value.
+  - **`rng_seed`** — the audit/generation seed as SENT (distinct from E3's
+    `promote_policy_seed`). GEODE sends NO `--seed` to the audit subprocess today,
+    so the honest record is `None` (no seed sent), never a fabricated number.
+  - **Auditability, not determinism.** These pins record WHAT WAS SENT and make NO
+    backend-determinism claim. A ctx7 lookup of inspect_ai
+    (`/ukgovernmentbeis/inspect_ai`, 2026-05-30) confirmed `GenerateConfig` ACCEPTS
+    `seed` / `temperature` / `top_p` (SDK contract) but did NOT document that any
+    backend — least of all GEODE's claude-cli / codex-cli OAuth subscription
+    providers — HONORS `seed` for bit-identical replay; the contract is therefore
+    `unverified — live test required`, and no determinism flag is set to `True`.
+  - New module `core/self_improving_loop/run_provenance.py` (`hash_text`,
+    `compose_wrapper_prompt`, `build_run_provenance`, `RunProvenanceFields` bundle).
+    Threaded through `attribution.write_attribution` / `compute_attribution` +
+    `train.py`'s `_write_baseline` → `_append_baseline_registry_row`. 24 new tests
+    in `tests/autoresearch/test_reproducibility_pins.py`.
+
+---
+
+## [0.99.96] - 2026-05-30
+
+### Added
+- **E4 (2026-05-30) — statistical power: per-mutation replicate, fitness-gain
+  "ci excludes 0" verdict, and per-campaign power analysis.** The self-improving
+  loop now only CLAIMS a fitness gain when statistics support it (else an HONEST
+  NULL), and tells the operator how many samples are needed:
+  - **`--replicate M` (default `M=1` → zero cost / behaviour change).** Runs the
+    audit `M` times per mutation/cycle so the WITHIN-mutation variance (provider
+    non-determinism) is estimated SEPARATELY from the BETWEEN-seed variance (the
+    `N` samples inside one audit). `M=1` runs the audit exactly once (no loop
+    overhead) and leaves within-variance honestly unestimated, as before;
+    `within_mutation_stderr` + `between_seed_stderr` are recorded distinctly on the
+    cycle (attribution) + promoted-baseline records. Resolved env →
+    `--replicate` → config → `1`.
+  - **Explicit fitness-gain "ci excludes 0" verdict.** A confidence interval on the
+    fitness gain (current vs baseline) is computed and recorded with `gain_ci_low`
+    / `gain_ci_high` / a boolean `gain_ci_excludes_zero` + a human verdict string
+    (`"gain significant"` / `"no evidence yet"`). This is an evidence statement
+    LAYERED ON TOP of the promote gate (it never weakens the gate); at the chosen
+    `DEFAULT_GAIN_CI_Z = 1.0` it reconciles EXACTLY with the gate's
+    `√(σp²+σc²)` σ-margin, so a null run reports "no evidence yet" honestly rather
+    than looking like a silent reject. A bootstrap cycle (no baseline) reports "no
+    evidence yet" (no baseline to gain over).
+  - **Per-campaign power analysis.** Given the observed within+between variance σ,
+    a target effect size δ, α=0.05 and power=0.8, the standard two-sample
+    mean-difference formula `n ≈ 2(z_{α/2}+z_β)²σ²/δ²` computes the required
+    `N_seed × M_replicate` to DETECT δ, emitted per campaign as a log + stdout line.
+    For the real N≈8 / observed stderr≈0.013 case, detecting δ=0.02 at 80% power
+    needs `N_seed≥7 × M_replicate≥1`.
+  - **Flagged knobs.** δ default `0.02` (just above the gate's `0.005` noise floor,
+    ~1.5× the empirical ~0.013 fitness stderr) is `--target-effect-size` / config
+    overridable; the CI method is normal-approximation (`gain ± z·gain_stderr`),
+    chosen over bootstrap because the gain stderr is already a bootstrap estimate
+    and the normal-approx keeps the module pure + reconciled with the gate.
+  - New module `core/self_improving_loop/statistical_power.py`
+    (`decompose_variance`, `gain_ci_excludes_zero`, `required_samples`,
+    `format_power_line`, + the `VarianceDecomposition` / `GainEvidence` /
+    `PowerRequirement` / `PowerRecordFields` dataclasses). All record fields are
+    additive + None-omitting so `M=1` / pre-E4 readers are backward-compatible.
+
+---
+
+## [0.99.95] - 2026-05-30
+
+### Added
+- **E3 (2026-05-30) — `--promote-policy {gate|random|never}` control arms for a
+  matched 3-arm held-out comparison.** Enables attributing a fitness gain to
+  SELECTION rather than drift / judge-noise by running each arm as its own full
+  N-cycle campaign on the frozen held-out bench:
+  - `gate` (default) — today's behaviour: the `_should_promote` fitness gate
+    decides (the SELECTION arm). The default path is unchanged in shape.
+  - `random` — random-accept control: the mutation is still applied + audited as
+    normal, but the PROMOTE decision is a SEEDED coin-flip
+    (`random.Random(seed + cycle_index)` in `_random_accept_draw`), NOT the gate.
+    The seed is an explicit arg/config (`--promote-policy-seed`) and is RECORDED
+    on both the held-out + baseline rows, so the random campaign is reproducible.
+  - `never` — no-mutation floor: never promote (baseline frozen across the
+    campaign). The mutation is still generated + audited (loop structure
+    identical to the other arms), only the promote is suppressed; a
+    mutator-driven cycle still reverts the SoT so the floor stays honest. The
+    held-out is scored every cycle → the curve shows pure drift / judge-noise,
+    the floor the other arms must beat.
+
+  Resolved by `autoresearch.train._resolve_promote_policy` /
+  `_resolve_promote_policy_seed` (env `GEODE_PROMOTE_POLICY` /
+  `AUTORESEARCH_PROMOTE_POLICY` → CLI → config → default). `promote_policy` +
+  `promote_policy_seed` are recorded on BOTH the per-cycle held-out attribution
+  row (`mutations.jsonl`) AND the baseline registry row, so the three arms'
+  held-out curves are distinguishable + comparable on the shared frozen ruler.
+  `promote_policy` is also added to the baseline epoch spec
+  (`core.self_improving_loop.baseline_epoch.build_baseline_spec`), bumping
+  `SPEC_SCHEMA_VERSION` `"1"` → `"2"`: gate / random / never hash to DIFFERENT
+  epochs (different production logic, correctly NOT averaged); the held-out bench
+  id is unchanged (the shared ruler does not move). Pinned by
+  `tests/autoresearch/test_promote_policy_control_arms.py` +
+  `tests/test_baseline_epoch.py` (gate vs random vs never distinct epochs, schema
+  2, seeded draw reproducibility).
+- **PR-SEEDGEN-TOKENS (2026-05-30) — per-agent (per-phase) + run-level token
+  usage tracking for the seed-generation pipeline.** The LLM `usage` a sub-agent
+  already produces (`AgenticResult.usage`, via `TokenTracker.delta_since`) now
+  survives the worker subprocess IPC instead of being dropped before it reaches
+  the aggregators. New token + cost fields (`prompt_tokens` / `completion_tokens`
+  / `usd_spent`) thread along the full chain:
+  `WorkerResult` (populated from `agentic_result.usage`) → `IsolationResult`
+  (parsed from the worker stdout JSON) → `SubResult` (set in
+  `SubAgentManager._to_sub_result`) → each of the 9 seed agents sums its
+  sub-results' usage (via the new `sum_sub_result_tokens` helper in
+  `agents/base.py`) into the returned `SeedAgentResult` → the existing
+  orchestrator run-level rollup (`state.prompt_tokens += result.prompt_tokens`)
+  lights up unchanged. Separately, the per-phase cost grid now works:
+  `Transcript.record_session_end` (and its `_lifecycle` caller, which already
+  read the tracker for `total_cost`) also write `prompt_tokens` /
+  `completion_tokens` from the tracker accumulator into each sub-agent's
+  `dialogue.jsonl` `session_end` event, which the orchestrator's
+  `_persist_per_phase_costs` already sums. Pinned by
+  `tests/test_worker.py` (WorkerResult usage roundtrip),
+  `tests/core/agent/test_sub_result_token_forwarding.py`
+  (IsolationResult → SubResult),
+  `tests/plugins/seed_generation/test_critic.py` (agent rollup +
+  subscription-zero), and `tests/test_session_transcript.py` (session_end token
+  keys).
+
+### Fixed
+- **PR-SEEDGEN-TOKENS (2026-05-30) — seed-generation runs reported all-zero
+  tokens/cost.** The aggregation infrastructure already existed but every link
+  between the producer (`AgenticResult.usage`) and the aggregators dropped the
+  usage: `WorkerResult` / `IsolationResult` / `SubResult` had no usage fields,
+  the agents never assigned tokens, and `record_session_end` never wrote token
+  keys. Plumbed end-to-end (see Added).
+  **Honest limitation:** subscription / CLI-routed calls (claude-cli, codex-cli)
+  return an empty `UsageSummary()` — the subscription path does not expose token
+  usage (`core/llm/adapters/claude_cli.py`, `core/llm/adapters/codex_cli.py`).
+  Token counts are therefore reported only for API-key / payg calls (e.g. payg
+  ranker voters); subscription-routed phases honestly stay 0 and are never
+  fabricated. This is why most phases still show 0 cost today.
+
+## [0.99.94] - 2026-05-30
+
+### Fixed
+- **Seed-pool content hash is now bodies-only (frozen-ruler determinism).**
+  `core.self_improving_loop.baseline_epoch.seed_pool_content_hash` recursed
+  `path.rglob("*")` (ALL files), but `scripts/assemble_seed_pool.py` writes a
+  `manifest.json` INTO the pool dir whose `generated_at` is a timestamp. So the
+  runtime hash on a live pool dir (a) diverged from the assembler's body-only hash
+  and the committed doc pins, and (b) was NON-DETERMINISTIC across re-assembly
+  (the timestamp moved the hash) — re-assembling identical survivor bodies
+  fragmented baselines into different epochs, defeating the "same spec → same
+  hash" frozen-ruler invariant. The hash now fingerprints ONLY the seed `.md`
+  bodies (`rglob("*.md")`, sorted relative-path + sha256), which is exactly the
+  file set the audit's pool loader reads (`directory.glob("*.md")`); `manifest.json`
+  and any other non-`.md` incidental file are excluded. Verified against the live
+  pool dirs WITH `manifest.json` present: selection pool reproduces
+  `pool-68dc6f0c9745`, held-out bench reproduces `pool-c16d186178e1`, and two
+  assemblies with different `--now` timestamps yield the same hash. The
+  `held-out-bench.md` reproduction note is corrected to state the body-only
+  addressing. Pinned by `tests/test_baseline_epoch.py` (masked-scenario:
+  manifest + timestamp invariance) + `tests/test_assemble_seed_pool.py`.
+- **Held-out fitness now shares the gate's fitness formula path.**
+  `score_held_out_bench` (`autoresearch/train.py`) omitted the
+  `anchor_confidence_mode` flag that the promote gate's `current_raw` runs under,
+  so when anchor-confidence mode was on the held-out evidence curve was computed
+  on a subtly different fitness DEFINITION than the baselines it is compared
+  against. The shared flag is now threaded from `main()` into the scorer's
+  `compute_fitness` call WITH the held-out's own `ANCHOR_DIMS` subset as
+  `anchor_means` (the same subset the gate's `current_raw` extracts from its
+  current dims — threading the flag without the subset would silently no-op the
+  multiplier); `baseline_means=None` (fresh-anchor intrinsic, no prior baseline)
+  and `admire_means=None` (the held-out audit emits no admire signal). Pinned by
+  `tests/autoresearch/test_held_out_bench.py`.
+- **Seed-pool assembly fails closed on a path-escaping survivor id.**
+  `scripts/assemble_seed_pool.py` copied each body to `pool_dir / f"{survivor_id}.md"`
+  without validating `survivor_id` is a safe single path segment, so a `../`- or
+  `/`-containing id from the seeds tree could escape the pool dir. A new
+  `_assert_safe_dest_basename` rejects any id that is not a single segment (naming
+  the bad id + run) before the copy. Pinned by `tests/test_assemble_seed_pool.py`.
+
+## [0.99.93] - 2026-05-30
+
+### Added
+- **E2 / E2-wire (2026-05-30) — version-frozen held-out bench + per-cycle
+  fixed-ruler fitness curve.** The co-evolving `seed_select` pool supplies
+  *selection pressure* and mutates every generation, so its fitness is a moving
+  ruler (valid for the within-generation `(1+1)` accept/revert, not for
+  cross-generation comparison). A new **version-frozen held-out bench** is the
+  fixed ruler: `autoresearch/train.py` gains `held_out_bench` config +
+  `_resolve_held_out_bench()` (env `GEODE_HELD_OUT_BENCH` /
+  `AUTORESEARCH_HELD_OUT_BENCH` → config → `None`; deliberately **without** the
+  co-evolving latest-pointer tier) + `score_held_out_bench()` (the same 0-1
+  `compute_fitness` the gate uses, with a content-hash-stable `held_out_bench_id`).
+  `scripts/assemble_seed_pool.py` gains explicit `--select-runs` / `--exclude-runs`
+  so the held-out set is assembled from runs **disjoint** from the selection pool
+  (`gen-2605-1` + `gen-2605-2` + the `gen1-*` runs — 16 frozen survivors,
+  content-hash `pool-c16d186178e1`, reproducible from committed survivor bodies;
+  the assembled dir lives under gitignored `state/`). `main()` now **dispatches**
+  the scorer once per cycle (operator cadence = EVERY cycle), gated on a configured
+  bench + non-dry-run (`None` → skip, zero cost, backward-compatible); the result
+  is recorded into BOTH the per-cycle `kind="attribution"` row in
+  `autoresearch/state/mutations.jsonl` (the cross-generation curve SoT) and, on a
+  promote, the `kind="baseline"` registry row. The self-improving hub renders a
+  dense **Held-out fitness curve** table on the autoresearch mutations page
+  (per-generation held-out fitness + Δ-vs-prior on the fixed ruler + bench id),
+  omitted entirely when no bench is configured. Reproduction + wiring documented
+  in `docs/self-improving/held-out-bench.md`. Pinned by
+  `tests/autoresearch/test_held_out_bench.py`, `tests/test_attribution_belief.py`,
+  `tests/test_assemble_seed_pool.py`, and `tests/test_self_improving_hub_e2e.py`.
+
+### Fixed
+- **E1 (2026-05-30) — fitness ledger scale reconcile.** `mutations.jsonl`
+  attribution rows previously mixed scales: `fitness_before` was written as the
+  1-10 Petri dim-mean (lower-is-better) while `fitness_after` was the 0-1
+  `compute_fitness` output (higher-is-better), so `fitness_delta` was nonsense.
+  Both sides now use the same 0-1 `compute_fitness` scale; pre-fix on-disk rows
+  are not rewritten (git-tracked ledger — a one-shot backfill is a documented
+  follow-up).
 
 ## [0.99.92] - 2026-05-30
 
@@ -73,7 +352,6 @@ functional change.
   USD column, the USD rollup row, and the total-spend summary are removed; the
   run rollup keeps the tracked fields (iters, literature_snapshots,
   debate_transcripts).
-
 
 ## [0.99.91] - 2026-05-30
 
