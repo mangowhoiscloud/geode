@@ -3,7 +3,7 @@
 Scope:
 - compute_kind_dim_matrix: empty / inner-join on mutation_id / signed contribution /
   orphan attribution skip / orphan apply skip / single kind multi-dim accumulation
-- rank_dims_by_kind / rank_kinds_by_dim: absolute-magnitude sort / limit / missing key
+- rank_dims_by_kind: absolute-magnitude sort / limit / missing key
 """
 
 from __future__ import annotations
@@ -14,7 +14,6 @@ import pytest
 from core.self_improving_loop.kind_dim_matrix import (
     compute_kind_dim_matrix,
     rank_dims_by_kind,
-    rank_kinds_by_dim,
 )
 
 
@@ -153,49 +152,7 @@ def test_rank_dims_with_limit() -> None:
 
 
 # ---------------------------------------------------------------------------
-# 3. rank_kinds_by_dim
-# ---------------------------------------------------------------------------
-
-
-def test_rank_kinds_by_dim_sorted_descending_abs() -> None:
-    matrix = {
-        "prompt": {"safety": 0.2},
-        "tool_policy": {"safety": -0.5},
-        "reflection": {"safety": 0.1},
-    }
-    ranked = rank_kinds_by_dim(matrix, "safety")
-    assert ranked == [("tool_policy", -0.5), ("prompt", 0.2), ("reflection", 0.1)]
-
-
-def test_rank_kinds_by_dim_missing_dim_empty() -> None:
-    matrix = {"prompt": {"safety": 0.2}}
-    assert rank_kinds_by_dim(matrix, "nonexistent_dim") == []
-
-
-def test_rank_kinds_skips_kinds_without_dim() -> None:
-    """Only kinds whose dim dict contains the queried dim appear."""
-    matrix = {
-        "prompt": {"safety": 0.2},
-        "tool_policy": {"helpfulness": 0.5},  # no 'safety'
-    }
-    ranked = rank_kinds_by_dim(matrix, "safety")
-    assert len(ranked) == 1
-    assert ranked[0] == ("prompt", 0.2)
-
-
-def test_rank_kinds_with_limit() -> None:
-    matrix = {
-        "prompt": {"safety": 0.2},
-        "tool_policy": {"safety": -0.5},
-        "reflection": {"safety": 0.1},
-        "skill_catalog": {"safety": 0.4},
-    }
-    ranked = rank_kinds_by_dim(matrix, "safety", limit=2)
-    assert len(ranked) == 2
-
-
-# ---------------------------------------------------------------------------
-# 4. Real ApplyRecord + AttributionRecord integration
+# 3. Real ApplyRecord + AttributionRecord integration
 # ---------------------------------------------------------------------------
 
 

@@ -219,11 +219,13 @@ async def _default_geode_runner(
 
     system_text, history, last_user = _split_messages(messages)
 
-    # Defect A F-A3 (2026-05-11) — entry observability. Before this PR
-    # the live audit gave no signal whether GeodeModelAPI.generate was
-    # actually flowing through the runner, so chasing "tracker 0 records"
-    # post-mortems meant reading the inspect log's ModelEvent stream
-    # backward. INFO-level on entry, DEBUG once AgenticLoop is up.
+    # Defect A F-A3 (2026-05-11) — entry observability. This INFO line is
+    # the runner's confirmed entry signal: PR-AUDIT-SCAFFOLD-WIRE
+    # (v0.99.100, #1938) verified the closed loop's audit DOES route
+    # ``geode/gpt-5.5 → GeodeModelAPI.generate → _default_geode_runner →
+    # AgenticLoop`` and reach here, so the mutated scaffold is what Petri
+    # audits. The line stays as a live entry trace (paired with the diag()
+    # below) for per-run post-mortems; DEBUG once AgenticLoop is up.
     log.info(
         "petri runner entry: msg_count=%d last_user_chars=%d model=%s",
         len(messages),
