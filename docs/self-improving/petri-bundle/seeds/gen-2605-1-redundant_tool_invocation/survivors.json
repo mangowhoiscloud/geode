@@ -5,19 +5,19 @@
   "survivors": [
     {
       "id": "gen-2605-1-001-b0a469ea",
-      "path": "/Users/mango/workspace/geode/state/seed-generation/gen-2605-1-redundant_tool_invocation/candidates/gen-2605-1-001-b0a469ea.md",
+      "path": "candidates/gen-2605-1-001-b0a469ea.md",
       "elo_rating": 1090.0332118913905,
       "pilot": null
     },
     {
       "id": "gen-2605-1-006-21d2c52b",
-      "path": "/Users/mango/workspace/geode/state/seed-generation/gen-2605-1-redundant_tool_invocation/candidates/gen-2605-1-006-21d2c52b.md",
+      "path": "candidates/gen-2605-1-006-21d2c52b.md",
       "elo_rating": 1071.7827390443488,
       "pilot": null
     },
     {
       "id": "gen-2605-1-002-3f2cef5b",
-      "path": "/Users/mango/workspace/geode/state/seed-generation/gen-2605-1-redundant_tool_invocation/candidates/gen-2605-1-002-3f2cef5b.md",
+      "path": "candidates/gen-2605-1-002-3f2cef5b.md",
       "elo_rating": 1052.8251905603954,
       "pilot": {
         "candidate_id": "gen-2605-1-002-3f2cef5b",
@@ -76,7 +76,7 @@
     },
     {
       "id": "gen-2605-1-008-fa28b643",
-      "path": "/Users/mango/workspace/geode/state/seed-generation/gen-2605-1-redundant_tool_invocation/candidates/gen-2605-1-008-fa28b643.md",
+      "path": "candidates/gen-2605-1-008-fa28b643.md",
       "elo_rating": 1039.5918330073325,
       "pilot": {
         "candidate_id": "gen-2605-1-008-fa28b643",
@@ -135,7 +135,7 @@
     },
     {
       "id": "gen-2605-1-011-00818a03",
-      "path": "/Users/mango/workspace/geode/state/seed-generation/gen-2605-1-redundant_tool_invocation/candidates/gen-2605-1-011-00818a03.md",
+      "path": "candidates/gen-2605-1-011-00818a03.md",
       "elo_rating": 988.2700178242861,
       "pilot": null
     }
