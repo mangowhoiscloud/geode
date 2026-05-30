@@ -197,8 +197,11 @@ class GainEvidence:
     ci_high: float
     """Normal-approx CI bounds: ``gain ± DEFAULT_GAIN_CI_Z · gain_stderr``."""
     gain_ci_excludes_zero: bool
-    """``True`` iff the CI lies entirely ABOVE 0 (``ci_low > 0``) — a CLAIMED gain.
-    A CI straddling 0 (or below it) is NOT evidence of a gain."""
+    """``True`` iff the CI lies entirely ABOVE 0 (``ci_low > 0``) AND the gain clears
+    the gate's zero-noise ``floor`` — a CLAIMED gain. A CI straddling 0 (or below
+    it), OR a gain inside the floor, is NOT evidence of a gain. (The floor term is
+    what keeps the verdict from claiming significance on a sub-floor gain the gate
+    rejects — see :func:`gain_ci_excludes_zero`.)"""
     verdict: str
     """Human evidence string: ``"gain significant"`` when the CI excludes 0 on the
     positive side, else ``"no evidence yet"`` (honest null)."""
@@ -216,6 +219,7 @@ def gain_ci_excludes_zero(
     *,
     z: float = DEFAULT_GAIN_CI_Z,
     alpha: float = DEFAULT_ALPHA,
+    floor: float = 0.0,
 ) -> GainEvidence:
     """Compute the explicit "ci excludes 0" evidence statement for a fitness gain.
 
@@ -229,22 +233,32 @@ def gain_ci_excludes_zero(
     The promote gate (``train.py`` ``_should_promote``) promotes iff
     ``current_raw > prior_raw + margin`` where
     ``margin = max(_MARGIN_GAIN_SIGMA · gain_stderr, floor)`` and
-    ``_MARGIN_GAIN_SIGMA = 1.0``. Ignoring the zero-noise ``floor`` (which only
-    binds when ``gain_stderr ≈ 0``), the gate condition is exactly
-    ``gain > 1.0 · gain_stderr`` ⇔ ``gain - z·gain_stderr > 0`` ⇔ ``ci_low > 0``
-    at ``z = DEFAULT_GAIN_CI_Z = 1.0``. So this verdict and the gate agree by
-    construction: when the gate promotes on the σ-margin, the CI excludes 0 and the
-    verdict is "gain significant"; when the gate rejects on the σ-margin, the CI
-    includes 0 and the verdict is "no evidence yet". (The verdict deliberately does
-    NOT re-apply the gate's ``floor`` / N=1 widening / critical-axis reject — those
-    are SAFETY widenings the gate owns; the verdict is the EVIDENCE statement, so it
-    can be "no evidence yet" on a gain the floor also rejects, but it can NEVER say
-    "significant" on a gain the σ-margin rejects. The gate stays authoritative for
-    promotion; this never weakens it.)
+    ``_MARGIN_GAIN_SIGMA = 1.0``. This verdict reproduces BOTH terms of that
+    ``max`` so it NEVER claims significance on a gain the gate rejects:
 
-    Graceful contract: a non-numeric / non-finite ``gain`` or ``gain_stderr`` is
-    coerced to a safe value (``0.0`` gain, ``0.0`` stderr) so the verdict path never
-    raises on a malformed input — it simply reports no evidence.
+    - σ-margin term: ``gain > 1.0 · gain_stderr`` ⇔ ``gain - z·gain_stderr > 0``
+      ⇔ ``ci_low > 0`` at ``z = DEFAULT_GAIN_CI_Z = 1.0`` (the gate's
+      ``_MARGIN_GAIN_SIGMA``). When the caller passes the SAME ``gain_stderr``
+      (``√(σp²+σc²)``) the gate uses, the CI-excludes-0 test and the gate's σ-margin
+      are the IDENTICAL inequality.
+    - floor term: ``gain > floor`` reproduces the gate's zero-noise ``floor`` (the
+      ``max``'s second argument — the effective floor, i.e. the N=1-widened floor
+      when applicable). Without it, a small-positive gain with ≈0 stderr would have
+      ``ci_low > 0`` (significant) while the gate rejects on the floor — exactly the
+      contradiction E4 must avoid. Pass ``floor=0.0`` (default) only when the caller
+      has no floor to honour (the pure-stats unit tests); the live caller passes the
+      gate's effective floor.
+
+    A gain is therefore "gain significant" iff ``ci_low > 0`` AND ``gain > floor`` —
+    the conjunction the gate's ``current_raw > prior_raw + max(σ-margin, floor)``
+    enforces. The verdict can still be "no evidence yet" on a gain the gate's N=1 /
+    critical-axis SAFETY widenings additionally reject (those are the gate's to own),
+    but it can NEVER be "significant" where the gate's margin rejects. The gate stays
+    authoritative for promotion; this never weakens it.
+
+    Graceful contract: a non-numeric / non-finite ``gain``, ``gain_stderr`` or
+    ``floor`` is coerced to a safe value (``0.0``) so the verdict path never raises
+    on a malformed input — it simply reports no evidence.
     """
     try:
         gain_value = float(gain)
@@ -258,11 +272,20 @@ def gain_ci_excludes_zero(
         stderr_value = 0.0
     if not isfinite(stderr_value) or stderr_value < 0.0:
         stderr_value = 0.0
+    try:
+        floor_value = float(floor)
+    except (TypeError, ValueError):
+        floor_value = 0.0
+    if not isfinite(floor_value) or floor_value < 0.0:
+        floor_value = 0.0
 
     half_width = z * stderr_value
     ci_low = gain_value - half_width
     ci_high = gain_value + half_width
-    excludes_zero = ci_low > 0.0
+    # Both the gate's margin terms: the CI must exclude 0 (σ-margin) AND the gain
+    # must clear the zero-noise floor — the conjunction the gate's
+    # max(σ-margin, floor) enforces, so the verdict never contradicts the gate.
+    excludes_zero = ci_low > 0.0 and gain_value > floor_value
     return GainEvidence(
         gain=gain_value,
         gain_stderr=stderr_value,
@@ -332,6 +355,17 @@ def required_samples(
         delta = float(target_effect_size)
     except (TypeError, ValueError):
         delta = 0.0
+    # NaN must NOT slip past ``delta <= 0.0`` (NaN comparisons are False) into the
+    # divide → ``int(nan)`` would raise. Force a non-finite δ to the ill-posed 0.0.
+    if not isfinite(delta):
+        delta = 0.0
+
+    # ``replicate`` is a count for display only — guard the cast so a malformed
+    # value (e.g. a stray non-int) degrades to 1 rather than raising.
+    try:
+        replicate_count = max(1, int(replicate))
+    except (TypeError, ValueError):
+        replicate_count = 1
 
     n_seed: int | None
     if sigma_value is None or delta <= 0.0:
@@ -342,8 +376,9 @@ def required_samples(
         z_alpha = NormalDist().inv_cdf(1.0 - alpha / 2.0)
         z_beta = NormalDist().inv_cdf(power)
         raw_n = 2.0 * (z_alpha + z_beta) ** 2 * (sigma_value**2) / (delta**2)
-        # ceil without importing math: int() truncates toward zero, add 1 unless
-        # already an exact integer. raw_n is always > 0 here.
+        # ceil without importing math.ceil: int() truncates toward zero, add 1
+        # unless already an exact integer. raw_n is always finite + > 0 here
+        # (sigma_value > 0, delta > 0, both finite).
         truncated = int(raw_n)
         n_seed = truncated if truncated == raw_n else truncated + 1
         n_seed = max(1, n_seed)
@@ -354,7 +389,7 @@ def required_samples(
         alpha=alpha,
         power=power,
         n_seed=n_seed,
-        replicate=max(1, int(replicate)),
+        replicate=replicate_count,
     )
 
 

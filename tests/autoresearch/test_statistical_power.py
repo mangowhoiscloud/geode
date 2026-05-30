@@ -137,11 +137,29 @@ def test_verdict_reconciles_with_promote_gate_margin() -> None:
 
 
 def test_gain_verdict_graceful_on_nan() -> None:
-    """Graceful contract: a non-finite gain / stderr never raises — it degrades to
-    a no-evidence verdict."""
+    """Graceful contract: a non-finite gain / stderr / floor never raises — it
+    degrades to a no-evidence verdict."""
     ev = sp.gain_ci_excludes_zero(gain=float("nan"), gain_stderr=float("inf"))
     assert ev.gain_ci_excludes_zero is False
     assert ev.verdict == sp.NO_EVIDENCE_YET
+    ev2 = sp.gain_ci_excludes_zero(gain=0.1, gain_stderr=0.0, floor=float("nan"))
+    # a non-finite floor degrades to 0.0 → the σ-margin term still decides
+    assert ev2.gain_ci_excludes_zero is True
+
+
+def test_verdict_honours_gate_floor() -> None:
+    """A small-positive gain BELOW the gate's zero-noise floor with ≈0 stderr must
+    NOT be claimed significant — the gate rejects it on the floor, so the verdict
+    must too (Codex MCP catch: the verdict previously ignored the floor and would
+    falsely say 'significant')."""
+    # gain 0.003 < floor 0.005, stderr 0 → ci_low = 0.003 > 0 BUT below floor
+    ev = sp.gain_ci_excludes_zero(gain=0.003, gain_stderr=0.0, floor=0.005)
+    assert ev.gain_ci_excludes_zero is False, "sub-floor gain must not be significant"
+    assert ev.verdict == sp.NO_EVIDENCE_YET
+    # a gain ABOVE the floor with ≈0 stderr IS significant (clears both terms)
+    ev2 = sp.gain_ci_excludes_zero(gain=0.02, gain_stderr=0.0, floor=0.005)
+    assert ev2.gain_ci_excludes_zero is True
+    assert ev2.verdict == sp.GAIN_SIGNIFICANT
 
 
 # --- deliverable 3: power-analysis formula ------------------------------------
@@ -193,6 +211,23 @@ def test_power_formula_illposed_delta_graceful() -> None:
     """δ ≤ 0 is ill-posed (divide-by-zero) → indeterminate, not a crash."""
     req = sp.required_samples(0.013, target_effect_size=0.0)
     assert req.n_seed is None
+
+
+def test_power_formula_nonfinite_delta_graceful() -> None:
+    """δ = NaN must NOT slip past the ``δ <= 0`` guard into ``int(nan)`` (NaN
+    comparisons are False) — it degrades to indeterminate, not a crash (Codex MCP
+    catch)."""
+    req = sp.required_samples(0.013, target_effect_size=float("nan"))
+    assert req.n_seed is None
+    req2 = sp.required_samples(0.013, target_effect_size=float("inf"))
+    assert req2.n_seed is None
+
+
+def test_power_formula_malformed_replicate_graceful() -> None:
+    """A malformed ``replicate`` count degrades to 1, never raises (graceful cast)."""
+    req = sp.required_samples(0.013, target_effect_size=0.02, replicate="oops")  # type: ignore[arg-type]
+    assert req.replicate == 1
+    assert req.n_seed == 7  # the rest of the formula is unaffected
 
 
 def test_power_line_real_campaign_shape() -> None:

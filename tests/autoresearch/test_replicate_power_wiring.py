@@ -110,6 +110,21 @@ def test_target_effect_size_malformed_env_falls_back(monkeypatch: pytest.MonkeyP
     # non-positive env likewise skipped (ill-posed for the power formula)
     monkeypatch.setenv("GEODE_TARGET_EFFECT_SIZE", "0")
     assert auto_train._resolve_target_effect_size(None) == pytest.approx(0.03)
+    # non-finite env (nan/inf) likewise skipped (would crash the power formula)
+    monkeypatch.setenv("GEODE_TARGET_EFFECT_SIZE", "nan")
+    assert auto_train._resolve_target_effect_size(None) == pytest.approx(0.03)
+
+
+def test_resolver_cli_overrides_graceful_on_nonfinite(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Graceful contract (Codex MCP catch): a non-finite / malformed CLI override
+    (argparse ``type=float`` accepts ``nan``/``inf``) must not crash — it degrades to
+    the config / default tier."""
+    _clear_env(monkeypatch)
+    _stub_config(monkeypatch, replicate=2, target_effect_size=0.03)
+    # nan/inf δ from the CLI must not propagate into the power formula
+    assert auto_train._resolve_target_effect_size(float("nan")) == pytest.approx(0.03)
+    assert auto_train._resolve_target_effect_size(float("inf")) == pytest.approx(0.03)
+    assert auto_train._resolve_target_effect_size(-1.0) == pytest.approx(0.03)
 
 
 # --- main() static wiring guards (E2 / E3 convention) ------------------------
@@ -150,6 +165,35 @@ def test_main_emits_power_line_and_verdict() -> None:
     assert "e4_power_line:" in source
     assert "e4_gain_verdict:" in source
     assert 'log.info("E4 %s", _power_line)' in source
+
+
+def test_main_verdict_uses_gate_sigma_and_floor() -> None:
+    """The gain VERDICT must reconcile with the promote gate: it uses the gate's own
+    σ (``current_fitness_stderr``, NOT the combined within+between σ) and passes the
+    gate's effective floor (Codex MCP catches — the verdict previously used combined
+    σ + ignored the floor, both of which could contradict the gate)."""
+    source = inspect.getsource(auto_train.main)
+    # gain σ uses the gate's current_fitness_stderr (not the combined σ)
+    assert "_sigma_current_sq = (current_fitness_stderr or 0.0) ** 2" in source
+    # the verdict passes the gate's effective floor
+    assert "floor=_gate_effective_floor" in source
+    # the floor reproduces the gate's N=1 widening
+    assert "N1_FITNESS_MARGIN_FLOOR" in source
+    # the power analysis (NOT the verdict) is the one that uses the combined σ
+    power_call = source.index("power_requirement = required_samples(")
+    assert "variance_decomposition.combined_stderr" in source[power_call : power_call + 200]
+
+
+def test_fitness_margin_floor_default_is_single_sot() -> None:
+    """The gate's ``fitness_margin_floor`` default and the verdict's floor must be
+    the SAME constant (no dual-SoT drift) — both read _FITNESS_MARGIN_FLOOR_DEFAULT."""
+    import inspect as _inspect
+
+    gate_sig = _inspect.signature(auto_train._should_promote)
+    assert (
+        gate_sig.parameters["fitness_margin_floor"].default
+        == auto_train._FITNESS_MARGIN_FLOOR_DEFAULT
+    )
 
 
 def test_main_threads_e4_fields_into_both_sinks() -> None:

@@ -102,6 +102,7 @@ import sys
 import time
 import uuid
 from datetime import UTC, datetime
+from math import isfinite
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -450,7 +451,10 @@ def _resolve_audit_replicate(cli_override: int | None = None) -> int:
                 return parsed
             log.warning("audit replicate env %s=%r is < 1; ignoring", env_name, raw)
     if cli_override is not None:
-        return max(1, int(cli_override))
+        try:
+            return max(1, int(cli_override))
+        except (TypeError, ValueError):
+            log.warning("audit replicate CLI value %r is not an integer; ignoring", cli_override)
     configured = getattr(_get_autoresearch_config(), "replicate", None)
     if configured is not None:
         try:
@@ -484,11 +488,23 @@ def _resolve_target_effect_size(cli_override: float | None = None) -> float:
             except ValueError:
                 log.warning("target effect size env %s=%r is not a float; ignoring", env_name, raw)
                 continue
-            if parsed > 0.0:
+            if isfinite(parsed) and parsed > 0.0:
                 return parsed
-            log.warning("target effect size env %s=%r is not positive; ignoring", env_name, raw)
-    if cli_override is not None and float(cli_override) > 0.0:
-        return float(cli_override)
+            log.warning(
+                "target effect size env %s=%r is not a finite positive float; ignoring",
+                env_name,
+                raw,
+            )
+    if cli_override is not None:
+        try:
+            cli_value = float(cli_override)
+        except (TypeError, ValueError):
+            cli_value = 0.0
+        # argparse ``type=float`` accepts ``"nan"`` / ``"inf"`` — reject a
+        # non-finite / non-positive δ (ill-posed for the power formula) rather than
+        # letting it through (graceful contract).
+        if isfinite(cli_value) and cli_value > 0.0:
+            return cli_value
     configured = getattr(_get_autoresearch_config(), "target_effect_size", None)
     if configured is not None:
         try:
@@ -500,7 +516,7 @@ def _resolve_target_effect_size(cli_override: float | None = None) -> float:
                 TARGET_EFFECT_SIZE,
             )
         else:
-            if value > 0.0:
+            if isfinite(value) and value > 0.0:
                 return value
     return TARGET_EFFECT_SIZE
 
@@ -2935,6 +2951,13 @@ def _write_baseline(
 # zero MC noise).
 N1_FITNESS_MARGIN_FLOOR = 0.05
 
+# PR-MARGIN-FITNESS-SCALE (2026-05-30) — the base zero-noise floor (the ``max``'s
+# non-σ term in the promote margin). Single SoT for both ``_should_promote``'s
+# ``fitness_margin_floor`` default AND the E4 gain-CI verdict's floor term (so the
+# verdict never claims significance on a sub-floor gain the gate rejects — they
+# must not drift). See the gain_ci_excludes_zero docstring for the reconciliation.
+_FITNESS_MARGIN_FLOOR_DEFAULT = 0.005
+
 # PR-MARGIN-FITNESS-SCALE (2026-05-30) — the promote margin lives on the
 # FITNESS scale (0–1 weighted aggregate), not the raw dim scale (1–10). The
 # correct noise unit is the stderr of ``compute_fitness`` itself, estimated by
@@ -3128,7 +3151,7 @@ def _should_promote(
     # baseline is ~0.013, so the floor only kicks in when both audits carry
     # ~zero measurement noise. Critical-regress protection stays with
     # critical_margin (Option D) + the N=1 widening floor (0.05).
-    fitness_margin_floor: float = 0.005,
+    fitness_margin_floor: float = _FITNESS_MARGIN_FLOOR_DEFAULT,
     # PR-MARGIN-FITNESS-SCALE (2026-05-30) — sample-bootstrap fitness stderr
     # (captures inter-dim correlation) passed by the audit caller. When None
     # (tests / v1 baselines / summary-only path) the margin falls back to the
@@ -3871,19 +3894,23 @@ def main() -> int:
         _replicate_raw_fitnesses,
         _replicate_between_seed_stderrs,
     )
-    # The "current" σ for the gain CI is the combined within+between stderr when M>1
-    # (so the CI accounts for provider jitter too), else the per-audit bootstrap
-    # (today's quantity) — keeps the M=1 verdict identical to the gate's margin math.
-    _current_sigma_for_ci = (
-        variance_decomposition.combined_stderr
-        if audit_replicate > 1 and variance_decomposition.combined_stderr is not None
-        else current_fitness_stderr
-    )
-    # current_raw on the gate's scale (mean over replicates; == the single audit
-    # when M=1). prior_raw is the baseline's 0-1 compute_fitness (the gate's
-    # ``prior_raw``); ``None`` when there is no baseline.
-    _current_raw_for_gain = (
-        statistics.fmean(_replicate_raw_fitnesses) if _replicate_raw_fitnesses else float(fitness)
+    # The gain-CI VERDICT must reconcile EXACTLY with the promote gate (no
+    # contradiction), so it consumes the gate's OWN inputs — NOT the combined σ /
+    # replicate-mean, which would diverge from what ``_should_promote`` actually
+    # compares. Concretely the verdict uses:
+    #   - current_raw = the REPRESENTATIVE (last) replicate's raw fitness (the same
+    #     ``dim_means`` the gate scores — ``_current_raw_for_representative``), NOT
+    #     the replicate mean.
+    #   - σ_current = ``current_fitness_stderr`` (the gate's ``current_fitness_stderr``
+    #     bootstrap), NOT the combined within+between σ.
+    #   - σ_baseline = ``_load_baseline_fitness_stderr`` (the gate's prior σ).
+    # so gain_stderr = √(σp²+σc²) is the IDENTICAL quantity the gate's margin scales.
+    # The within-mutation jitter from M>1 is NOT folded into the verdict's σ (it
+    # would break the gate-reconciliation); it is reported in the DECOMPOSITION and
+    # in the power line's combined σ instead. Use the representative replicate's raw
+    # so the verdict's ``current_raw`` matches the gate's ``current_raw`` exactly.
+    _current_raw_for_representative = (
+        _replicate_raw_fitnesses[-1] if _replicate_raw_fitnesses else float(fitness)
     )
     _baseline_raw_for_gain = _baseline_raw_fitness(
         baseline_means,
@@ -3899,9 +3926,25 @@ def main() -> int:
     )
     # gain σ = √(σ_current² + σ_baseline²) — the SAME quantity the promote gate's
     # margin scales (so DEFAULT_GAIN_CI_Z=1.0 reconciles the verdict with the gate).
-    _sigma_current_sq = (_current_sigma_for_ci or 0.0) ** 2
+    _sigma_current_sq = (current_fitness_stderr or 0.0) ** 2
     _sigma_baseline_sq = (_baseline_fitness_stderr_for_ci or 0.0) ** 2
     _gain_stderr = (_sigma_current_sq + _sigma_baseline_sq) ** 0.5
+    # The gate's EFFECTIVE floor (the ``max``'s zero-noise term) — the verdict must
+    # honour it too or it would claim "significant" on a sub-floor gain the gate
+    # rejects. Reproduce the gate's N=1-widening: the floor widens to
+    # ``N1_FITNESS_MARGIN_FLOOR`` when a critical dim was measured from N≤1 judge_llm
+    # samples (see ``_should_promote``); else the base ``fitness_margin_floor``.
+    _gate_effective_floor = _FITNESS_MARGIN_FLOOR_DEFAULT
+    if not args.no_baseline:
+        _verdict_sample_count = _load_baseline_sample_count()
+        _verdict_modality = _load_baseline_measurement_modality()
+        _verdict_n1_critical = bool(_verdict_sample_count) and any(
+            _verdict_sample_count.get(dim, 0) <= 1
+            and (_verdict_modality or {}).get(dim, "judge_llm") in JUDGE_LLM_MODALITIES
+            for dim in CRITICAL_DIMS
+        )
+        if _verdict_n1_critical:
+            _gate_effective_floor = N1_FITNESS_MARGIN_FLOOR
     # HONEST NULL on a bootstrap cycle: with NO baseline there is nothing to "gain
     # over", so a gain cannot be CLAIMED regardless of how high the current fitness
     # is. The verdict is forced to "no evidence yet" (gain=0 → ci straddles 0) — the
@@ -3912,9 +3955,13 @@ def main() -> int:
         gain_evidence = gain_ci_excludes_zero(0.0, 0.0)
     else:
         gain_evidence = gain_ci_excludes_zero(
-            _current_raw_for_gain - _baseline_raw_for_gain, _gain_stderr
+            _current_raw_for_representative - _baseline_raw_for_gain,
+            _gain_stderr,
+            floor=_gate_effective_floor,
         )
     # Per-campaign power requirement: required N_seed × M to detect δ at 80% power.
+    # The power analysis DOES use the combined within+between σ (the full noise
+    # budget the operator must overcome), unlike the gate-reconciled verdict above.
     power_requirement = required_samples(
         variance_decomposition.combined_stderr,
         target_effect_size=target_effect_size,
