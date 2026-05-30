@@ -322,6 +322,38 @@ def test_docs_petri_links_match_next_routes(built_html: str) -> None:
     )
 
 
+def test_audit_deeplinks_use_logs_route_and_resolve(built_html: str) -> None:
+    """Audit/seed deep-links must target the Inspect View ``/logs/<file>``
+    route and each linked filename must exist in the bundle's
+    ``logs/listing.json`` so the link actually opens the transcript.
+
+    Regression guard for PR-HUB-AUDIT-DEEPLINK (2026-05-30): the prior
+    ``#/tasks/<task_id>`` form has no matching route in the bundle's hash
+    router (``createHashRouter`` exposes only ``/logs/*``; the SPA navigates
+    via ``/logs/${encodeURIComponent(file)}``), so every deep-link silently
+    fell back to the run list instead of the specific log. Verified against
+    the real bundle JS, not assumption — see the CANNOT rule in CLAUDE.md.
+    """
+    from urllib.parse import unquote
+
+    # 1. The dead route must never reappear anywhere in the rendered hub.
+    assert "#/tasks/" not in built_html, (
+        "Inspect View has no /tasks/ route — use #/logs/<encodeURIComponent(eval_filename)>"
+    )
+
+    # 2. Every petri-bundle deep-link must resolve to a real listing entry.
+    listing_path = FIXTURE_ROOT / "petri-bundle" / "logs" / "listing.json"
+    valid_files = set(json.loads(listing_path.read_text(encoding="utf-8")))
+    deeplinks = re.findall(r"/geode/self-improving/petri-bundle/#/logs/([^\"#]+)", built_html)
+    assert deeplinks, "no petri audit /logs/ deep-links rendered — generator regressed"
+    for enc in deeplinks:
+        fname = unquote(enc)
+        assert fname in valid_files, (
+            f"audit deep-link targets {fname!r}, absent from logs/listing.json "
+            f"(link would fall back to the run list)"
+        )
+
+
 # ---------------------------------------------------------------------------
 # 6. Version stamp
 # ---------------------------------------------------------------------------
@@ -645,25 +677,33 @@ def test_seedgen_pilot_heatmap_renders(built_seedgen_pages: dict[str, str]) -> N
 def test_seedgen_phase_eval_links_point_at_spa(built_seedgen_pages: dict[str, str]) -> None:
     """Each phase .eval card links to the SEED-GENERATION bundle viewer.
 
-    PR-SEEDGEN-BUNDLE-SPLIT (2026-05-29) — seedgen phase logs moved out of
-    the audit petri-bundle into the seed-generation's own inspect bundle, so
-    the deep-links target ``/geode/self-improving/seed-generation/bundle/#/tasks/``.
+    PR-SEEDGEN-BUNDLE-SPLIT (2026-05-29) — seedgen phase logs live in the
+    seed-generation's own inspect bundle, so deep-links target
+    ``/geode/self-improving/seed-generation/bundle/``.
+
+    PR-HUB-AUDIT-DEEPLINK (2026-05-30) — the deep-link uses the Inspect View
+    ``#/logs/<encodeURIComponent(filename)>`` route (the only log route the
+    bundle's hash router exposes); the prior ``#/tasks/<task_id>`` form had no
+    matching route and silently fell back to the run list. When a phase has no
+    .eval yet, the link is the bundle run-list root (no dead hash).
     """
     run_html = built_seedgen_pages["run"]
+    bundle_base = "/geode/self-improving/seed-generation/bundle/"
     # Pull the phase-link table cells.
     phase_links = re.findall(
         r'<td class="phase-link"><a href="([^"]+)"',
         run_html,
     )
     assert phase_links, "no phase .eval card links rendered"
+    assert "#/tasks/" not in run_html, "Inspect View has no /tasks/ route — use #/logs/<file>"
     for link in phase_links:
-        assert link.startswith("/geode/self-improving/seed-generation/bundle/#/tasks/"), (
-            f"phase link {link!r} not pointing at the seed-generation bundle viewer"
-        )
+        # Either a resolvable /logs/<file> deep-link or the bundle run-list root.
+        ok = link == bundle_base or link.startswith(f"{bundle_base}#/logs/")
+        assert ok, f"phase link {link!r} not pointing at the seed-generation bundle viewer"
     # No phase link may point at the audit petri-bundle (scope split).
-    assert "/geode/self-improving/petri-bundle/#/tasks/" not in run_html or all(
-        "petri-bundle" not in link for link in phase_links
-    ), "phase links must not target the audit petri-bundle after the split"
+    assert all("petri-bundle" not in link for link in phase_links), (
+        "phase links must not target the audit petri-bundle after the split"
+    )
     # 8 phases per DESIGN.md §6.
     assert len(phase_links) == 8, f"expected 8 phase links, got {len(phase_links)}"
 

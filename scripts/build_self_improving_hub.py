@@ -39,6 +39,7 @@ import sys
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
+from urllib.parse import quote
 
 LOG = logging.getLogger("build_self_improving_hub")
 
@@ -157,6 +158,19 @@ def html_escape(value: str) -> str:
     )
 
 
+def inspect_log_route(log_file: str) -> str:
+    """Deep-link hash for the Inspect View SPA that opens a specific .eval.
+
+    The bundled viewer is a hash router whose only log route is ``/logs/*``;
+    it navigates via ``/logs/${encodeURIComponent(file)}`` (see the bundle's
+    assets/index.js). There is **no** ``/tasks/`` route — ``#/tasks/<id>``
+    silently falls back to the run list, so deep-links must key on the .eval
+    *filename* (the logs/listing.json key), not the task_id. See the CANNOT
+    rule in CLAUDE.md (PR-HUB-AUDIT-DEEPLINK, 2026-05-30).
+    """
+    return f"#/logs/{quote(log_file, safe='')}"
+
+
 def read_pyproject_version(path: Path = PYPROJECT) -> str:
     """Extract `version = "..."` from pyproject.toml (PEP-518 table=project)."""
     text = path.read_text(encoding="utf-8")
@@ -209,6 +223,7 @@ def fmt_mtime(path: Path) -> str:
 @dataclass
 class PetriRow:
     task_id: str
+    log_file: str
     seeds: str
     auditor: str
     target: str
@@ -237,7 +252,9 @@ def load_petri(bundle_root: Path) -> list[PetriRow]:
         return []
     raw: dict[str, dict[str, Any]] = json.loads(listing.read_text(encoding="utf-8"))
     rows: list[PetriRow] = []
-    for entry in raw.values():
+    # The listing key IS the .eval filename the Inspect View hash router loads
+    # via /logs/<encodeURIComponent(file)> — keep it so deep-links resolve.
+    for fname, entry in raw.items():
         if entry.get("task") != "inspect_petri/audit":
             continue
         model_roles = entry.get("model_roles") or {}
@@ -249,6 +266,7 @@ def load_petri(bundle_root: Path) -> list[PetriRow]:
         rows.append(
             PetriRow(
                 task_id=str(entry.get("task_id", "")),
+                log_file=str(fname),
                 seeds=str(seeds_val),
                 auditor=str(model_roles.get("auditor", "")),
                 target=str(model_roles.get("target", "")),
@@ -388,7 +406,7 @@ def render_petri_rows(rows: list[PetriRow]) -> str:
     out: list[str] = []
     for row in rows[:PETRI_ROW_LIMIT]:
         task_short = row.task_id[:8] if row.task_id else "unknown"
-        anchor = f"/geode/self-improving/petri-bundle/#/tasks/{html_escape(row.task_id)}"
+        anchor = f"/geode/self-improving/petri-bundle/{inspect_log_route(row.log_file)}"
         out.append(
             "        <tr>\n"
             f'          <td class="id"><a href="{anchor}">audit_{html_escape(task_short)}</a> '
@@ -543,7 +561,7 @@ def render_sidebar_petri(rows: list[PetriRow]) -> str:
     out: list[str] = []
     for row in rows[:PETRI_SIDEBAR_LIMIT]:
         task_short = row.task_id[:8] if row.task_id else "unknown"
-        anchor = f"/geode/self-improving/petri-bundle/#/tasks/{html_escape(row.task_id)}"
+        anchor = f"/geode/self-improving/petri-bundle/{inspect_log_route(row.log_file)}"
         out.append(f'            <li><a href="{anchor}">audit_{html_escape(task_short)}</a></li>')
     return "\n".join(out)
 
@@ -911,17 +929,17 @@ def _read_eval_header(log_path: Path) -> dict[str, Any] | None:
 
 
 def _scan_phase_eval_logs(run_id: str) -> dict[str, dict[str, Any]]:
-    """Scan ``petri-bundle/logs/`` for ``seedgen-<phase>_<run_id>.eval``
-    files and extract each one's ``eval.task_id`` from header.json.
+    """Scan the seed-generation bundle's ``logs/`` for
+    ``seedgen-<phase>_<run_id>.eval`` files and record each one's path.
 
-    PR-HUB-VIS-CYCLE1-FOLLOWUP (2026-05-28) — the inspect_ai SPA route
-    ``#/tasks/<task_id>`` expects the 22-char header task_id, not the
-    slash-separated ``seed-generation/<phase>`` task slug. Build-time
-    read the actual task_id so links are guaranteed to load.
+    The deep-link only needs the .eval *filename* (the Inspect View hash
+    router loads ``/logs/<encodeURIComponent(file)>`` — there is no
+    ``/tasks/`` route; see ``inspect_log_route``). ``task_id`` is still read
+    from the header for display/debugging but is **not** the route key.
 
     Returns ``{phase: {task_id, task_name, log_path}}``. Missing or
-    unreadable files are silently skipped — the caller falls back to
-    the slug link.
+    unreadable files are silently skipped — the caller falls back to the
+    bundle run-list link.
     """
     # PR-SEEDGEN-BUNDLE-SPLIT (2026-05-29) — seedgen phase .eval logs now
     # live in the seed-generation's own inspect bundle, not the audit
@@ -957,12 +975,11 @@ def _scan_phase_eval_logs(run_id: str) -> dict[str, dict[str, Any]]:
 def _render_phase_rows(run_id: str) -> tuple[str, int]:
     """Render per-phase .eval card rows.
 
-    PR-HUB-VIS-CYCLE1-FOLLOWUP (2026-05-28) — SPA link now uses the
-    22-char ``task_id`` extracted from the .eval header instead of the
-    ``seed-generation/<phase>`` slug. The slug form silently fails to
-    resolve on the inspect_ai SPA; ``task_id`` is the canonical route
-    key. Falls back to the slug + ``(slug)`` link annotation when the
-    .eval header is missing or unreadable.
+    PR-HUB-AUDIT-DEEPLINK (2026-05-30) — SPA deep-link targets the Inspect
+    View ``/logs/<encodeURIComponent(filename)>`` route (the only log route
+    the bundle's hash router exposes). The earlier ``#/tasks/<task_id>`` form
+    has no matching route and silently lands on the run list. Falls back to
+    the bundle run-list link when no .eval exists for a phase yet.
     """
     phases = (
         "supervisor",
@@ -979,11 +996,16 @@ def _render_phase_rows(run_id: str) -> tuple[str, int]:
     for phase in phases:
         info = phase_meta.get(phase)
         task_slug = info["task_name"] if info else f"seed-generation/{phase}"
-        route_key = info["task_id"] if info else task_slug
-        spa_link = (
-            f"/geode/self-improving/seed-generation/bundle/#/tasks/{html_escape(str(route_key))}"
-        )
-        link_label = "&#x2197; viewer" if info else "&#x2197; viewer (slug)"
+        bundle_base = "/geode/self-improving/seed-generation/bundle/"
+        if info:
+            # Deep-link to the specific .eval via the Inspect View /logs/* route
+            # (keyed on filename, not task_id — see inspect_log_route).
+            spa_link = f"{bundle_base}{inspect_log_route(Path(info['log_path']).name)}"
+            link_label = "&#x2197; viewer"
+        else:
+            # No .eval for this phase yet — land on the run list, not a dead hash.
+            spa_link = bundle_base
+            link_label = "&#x2197; viewer (run list)"
         rows.append(
             "        <tr>\n"
             f'          <td class="id">{html_escape(phase)}</td>\n'
