@@ -45,6 +45,38 @@ functional change.
 
 ---
 
+## [0.99.100] - 2026-05-31
+
+### Fixed
+- **PR-AUDIT-SCAFFOLD-WIRE (2026-05-31) — guarantee the mutated scaffold reaches
+  the Petri audit target + restrict the mutable hyperparam surface.** The
+  self-improving loop's fitness signal is only causal if the mutated scaffold
+  (`autoresearch/state/policies/wrapper-sections.json`) is the base of the audit
+  target's system prompt. Diagnosis: the target routes correctly
+  (`geode/gpt-5.5` → `GeodeModelAPI` → `_default_geode_runner` → `AgenticLoop`,
+  scaffold = base prompt, auditor scenario = `system_suffix`), and the closed-loop
+  propagates the scaffold via the `GEODE_WRAPPER_OVERRIDE` env hook — but two real
+  gaps existed: (1) in audit-mode (`GEODE_AUDIT_UNRESTRICTED=1`), when no scaffold
+  resolved (env unset + SoT file absent) `build_system_prompt`
+  (`core/agent/system_prompt.py`) returned ONLY dynamic context — a scaffold-free
+  target; it now falls back to the domain-neutral GEODE base prefix so the target
+  always carries a base scaffold. (2) `_dump_wrapper_override`
+  (`autoresearch/train.py`) dumped the module-load-time `WRAPPER_PROMPT_SECTIONS`
+  snapshot; it now reads the SoT live via `load_wrapper_prompt_sections` so a
+  same-interpreter mutate→audit cannot evaluate a stale scaffold. A new
+  `system_prompt.scaffold` diagnostic records `wrapper_override_present` + length +
+  resolution source so scaffold presence is observable without relying on the
+  (scenario-only) inspect `.eval` ModelEvent.
+- **Mutable `hyperparam` surface restricted to `reflection_depth` only**
+  (operator decision, 2026-05-31). `max_turns` / `seed_limit` / `dim_set` are
+  audit-MEASUREMENT parameters — mutating them confounds the mutated-vs-baseline
+  fitness comparison — and are now rejected at `parse_mutation` / `apply_mutation`
+  (`_validate_hyperparam_bounds`, `core/self_improving_loop/runner.py`) with an
+  explanatory error. `reflection_depth` (a genuine AgenticLoop runtime knob) stays
+  mutable. Pinned by `tests/test_geode_target_scaffold_injection.py` +
+  `tests/test_policy_mutation.py`. Procedure documented in
+  `docs/self-improving/campaign-procedure.md`.
+
 ## [0.99.99] - 2026-05-30
 
 ### Added

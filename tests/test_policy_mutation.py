@@ -517,24 +517,30 @@ def test_global_policy_paths_under_policies_dir() -> None:
 
 
 def test_hyperparam_bounds_accepts_valid_int() -> None:
-    """Valid integer-section + in-bounds value → no raise."""
+    """Valid integer-section + in-bounds value → no raise.
+
+    PR-AUDIT-SCAFFOLD-WIRE (2026-05-31) — ``reflection_depth`` is now the
+    ONLY mutable hyperparam knob; ``max_turns`` / ``seed_limit`` moved to the
+    fixed-measurement set (see ``test_hyperparam_*_fixed_measurement_*``).
+    """
     from core.self_improving_loop.runner import _validate_hyperparam_bounds
 
-    _validate_hyperparam_bounds("max_turns", "5")
-    _validate_hyperparam_bounds("max_turns", "1")
-    _validate_hyperparam_bounds("max_turns", "20")
-    _validate_hyperparam_bounds("seed_limit", "8")
-    _validate_hyperparam_bounds("seed_limit", "50")
+    _validate_hyperparam_bounds("reflection_depth", "1")
     _validate_hyperparam_bounds("reflection_depth", "3")
     _validate_hyperparam_bounds("reflection_depth", "5")
 
 
-def test_hyperparam_bounds_accepts_valid_categorical() -> None:
-    """Valid categorical-section + allowed value → no raise."""
+def test_hyperparam_max_turns_seed_limit_dim_set_are_fixed_measurement_params() -> None:
+    """PR-AUDIT-SCAFFOLD-WIRE (2026-05-31, operator decision) — the three
+    audit-MEASUREMENT parameters are NOT mutable: a mutator that changes the
+    turn budget / sample count / dim set would confound the mutated-vs-baseline
+    fitness comparison. They are rejected at the bounds validator with an
+    explanatory error, distinct from the generic 'unknown key' message."""
     from core.self_improving_loop.runner import _validate_hyperparam_bounds
 
-    _validate_hyperparam_bounds("dim_set", "subset")
-    _validate_hyperparam_bounds("dim_set", "full")
+    for section, value in (("max_turns", "5"), ("seed_limit", "8"), ("dim_set", "subset")):
+        with pytest.raises(ValueError, match="FIXED audit-measurement parameter"):
+            _validate_hyperparam_bounds(section, value)
 
 
 def test_hyperparam_bounds_rejects_unknown_section() -> None:
@@ -553,12 +559,6 @@ def test_hyperparam_bounds_rejects_out_of_range_int() -> None:
     from core.self_improving_loop.runner import _validate_hyperparam_bounds
 
     with pytest.raises(ValueError, match="out of bounds"):
-        _validate_hyperparam_bounds("max_turns", "0")
-    with pytest.raises(ValueError, match="out of bounds"):
-        _validate_hyperparam_bounds("max_turns", "21")
-    with pytest.raises(ValueError, match="out of bounds"):
-        _validate_hyperparam_bounds("seed_limit", "51")
-    with pytest.raises(ValueError, match="out of bounds"):
         _validate_hyperparam_bounds("reflection_depth", "0")
     with pytest.raises(ValueError, match="out of bounds"):
         _validate_hyperparam_bounds("reflection_depth", "6")
@@ -570,23 +570,9 @@ def test_hyperparam_bounds_rejects_non_integer_string() -> None:
     from core.self_improving_loop.runner import _validate_hyperparam_bounds
 
     with pytest.raises(ValueError, match="integer-convertible"):
-        _validate_hyperparam_bounds("max_turns", "high")
+        _validate_hyperparam_bounds("reflection_depth", "high")
     with pytest.raises(ValueError, match="integer-convertible"):
-        _validate_hyperparam_bounds("seed_limit", "many")
-    with pytest.raises(ValueError, match="integer-convertible"):
-        _validate_hyperparam_bounds("max_turns", "5.5")
-
-
-def test_hyperparam_bounds_rejects_invalid_categorical() -> None:
-    """Categorical-section + value not in allow-set → ValueError."""
-    from core.self_improving_loop.runner import _validate_hyperparam_bounds
-
-    with pytest.raises(ValueError, match="must be one of"):
-        _validate_hyperparam_bounds("dim_set", "bogus")
-    with pytest.raises(ValueError, match="must be one of"):
-        _validate_hyperparam_bounds("dim_set", "all")
-    with pytest.raises(ValueError, match="must be one of"):
-        _validate_hyperparam_bounds("dim_set", "")
+        _validate_hyperparam_bounds("reflection_depth", "3.5")
 
 
 def test_parse_mutation_hyperparam_kind_valid() -> None:
@@ -598,21 +584,21 @@ def test_parse_mutation_hyperparam_kind_valid() -> None:
     payload = json.dumps(
         {
             "target_kind": "hyperparam",
-            "target_section": "max_turns",
+            "target_section": "reflection_depth",
             "new_value": "3",
-            "rationale": "Try shorter audit budget — cycle 1-12 had Δ=0 for redundant_tool_invocation under prompt mutation; shorter turn budget directly reduces tool-call surface.",
+            "rationale": "Try deeper reflection — cycle 1-12 had Δ=0 for redundant_tool_invocation under prompt mutation; an extra reflection pass lets the agent prune redundant tool calls before emitting.",
             "target_dim": "redundant_tool_invocation",
             "expected_dim": {"redundant_tool_invocation": -1.0},
         }
     )
     m = parse_mutation(payload)
     assert m.target_kind == "hyperparam"
-    assert m.target_section == "max_turns"
+    assert m.target_section == "reflection_depth"
     assert m.new_value == "3"
 
 
 def test_parse_mutation_hyperparam_kind_rejects_out_of_bounds() -> None:
-    """Mutator proposing ``max_turns=999`` is caught at parse, not at
+    """Mutator proposing ``reflection_depth=999`` is caught at parse, not at
     audit subprocess invocation. Cycle protection."""
     import json
 
@@ -621,15 +607,39 @@ def test_parse_mutation_hyperparam_kind_rejects_out_of_bounds() -> None:
     payload = json.dumps(
         {
             "target_kind": "hyperparam",
-            "target_section": "max_turns",
+            "target_section": "reflection_depth",
             "new_value": "999",
-            "rationale": "more turns",
+            "rationale": "more reflection",
             "target_dim": "redundant_tool_invocation",
             "expected_dim": {"redundant_tool_invocation": -0.5},
         }
     )
     with pytest.raises(ValueError, match="out of bounds"):
         parse_mutation(payload)
+
+
+def test_parse_mutation_hyperparam_rejects_fixed_measurement_sections() -> None:
+    """PR-AUDIT-SCAFFOLD-WIRE (2026-05-31) — a hyperparam mutation targeting a
+    fixed audit-measurement parameter is rejected at parse, before the audit
+    subprocess. Pins the operator decision that only reflection_depth is
+    mutator-tunable."""
+    import json
+
+    from core.self_improving_loop.runner import parse_mutation
+
+    for section, value in (("max_turns", "3"), ("seed_limit", "20"), ("dim_set", "full")):
+        payload = json.dumps(
+            {
+                "target_kind": "hyperparam",
+                "target_section": section,
+                "new_value": value,
+                "rationale": "attempt to tune the audit measurement surface",
+                "target_dim": "redundant_tool_invocation",
+                "expected_dim": {"redundant_tool_invocation": -0.5},
+            }
+        )
+        with pytest.raises(ValueError, match="FIXED audit-measurement parameter"):
+            parse_mutation(payload)
 
 
 def test_apply_mutation_hyperparam_kind_writes_sot(
@@ -644,17 +654,20 @@ def test_apply_mutation_hyperparam_kind_writes_sot(
 
     target = tmp_path / "hyperparam.json"
     _redirect_kind(monkeypatch, "hyperparam", target)
+    # The fixed-measurement keys may still sit in the SoT as operator-set
+    # defaults; only reflection_depth is mutator-tunable (PR-AUDIT-SCAFFOLD-WIRE).
     starting = {"max_turns": "5", "seed_limit": "8", "dim_set": "subset", "reflection_depth": "3"}
     mutation = Mutation(
-        target_section="max_turns",
-        new_value="7",
+        target_section="reflection_depth",
+        new_value="4",
         rationale="test apply path",
         target_kind="hyperparam",
     )
     new_sections, previous_value = apply_mutation(mutation, current_sections=starting)
-    assert previous_value == "5"
-    assert new_sections["max_turns"] == "7"
-    # Other keys unchanged
+    assert previous_value == "3"
+    assert new_sections["reflection_depth"] == "4"
+    # The fixed-measurement keys are left untouched by an apply.
+    assert new_sections["max_turns"] == "5"
     assert new_sections["seed_limit"] == "8"
     assert new_sections["dim_set"] == "subset"
 
@@ -671,12 +684,33 @@ def test_apply_mutation_hyperparam_kind_rejects_out_of_bounds(
     target = tmp_path / "hyperparam.json"
     _redirect_kind(monkeypatch, "hyperparam", target)
     bad = Mutation(
-        target_section="max_turns",
+        target_section="reflection_depth",
         new_value="999",
         rationale="bypass parse",
         target_kind="hyperparam",
     )
     with pytest.raises(ValueError, match="out of bounds"):
-        apply_mutation(bad, current_sections={"max_turns": "5"})
+        apply_mutation(bad, current_sections={"reflection_depth": "3"})
     # Bounds violation must precede the write.
+    assert not target.exists()
+
+
+def test_apply_mutation_hyperparam_rejects_fixed_measurement_section(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """apply_mutation also rejects a fixed-measurement section (defense in
+    depth — an externally-constructed Mutation that bypassed parse_mutation
+    still cannot mutate the audit-measurement surface)."""
+    from core.self_improving_loop.runner import Mutation, apply_mutation
+
+    target = tmp_path / "hyperparam.json"
+    _redirect_kind(monkeypatch, "hyperparam", target)
+    bad = Mutation(
+        target_section="seed_limit",
+        new_value="20",
+        rationale="bypass parse",
+        target_kind="hyperparam",
+    )
+    with pytest.raises(ValueError, match="FIXED audit-measurement parameter"):
+        apply_mutation(bad, current_sections={"seed_limit": "8"})
     assert not target.exists()

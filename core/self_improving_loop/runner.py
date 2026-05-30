@@ -509,14 +509,17 @@ _MUTATION_CONTRACT_SUFFIX = (
     "Omit for prompt-level mutations. For ``tool_descriptions``, the "
     "``target_section`` uses dotted notation: ``<tool_name>.description`` "
     "(string replacement) or ``<tool_name>.hints`` (comma-separated list "
-    "of hint strings). For ``hyperparam``, the ``target_section`` is one of "
-    "``max_turns`` (integer, bounds [1, 20]), ``seed_limit`` (integer, "
-    "bounds [1, 50]), ``reflection_depth`` (integer, bounds [1, 5]), or "
-    "``dim_set`` (categorical, ∈ {subset, full}); ``new_value`` is the "
-    'string-encoded value (``"5"`` not ``5``). Use a hyperparam mutation '
-    "when the regression dim's measurement_modality is ``tool_log`` or "
-    "``token_count`` (programmatic / mechanism-level) and prompt mutations "
-    "have repeatedly produced ``Δ ≈ 0`` for the target dim. (``retrieval`` "
+    "of hint strings). For ``hyperparam``, the ONLY mutable ``target_section`` "
+    "is ``reflection_depth`` (integer, bounds [1, 5]); ``new_value`` is the "
+    'string-encoded value (``"5"`` not ``5``). The audit-measurement '
+    "parameters ``max_turns`` / ``seed_limit`` / ``dim_set`` are FIXED "
+    "(PR-AUDIT-SCAFFOLD-WIRE, 2026-05-31) and a mutation targeting them is "
+    "REJECTED — they change how/what the audit measures, which would confound "
+    "the mutated-vs-baseline fitness comparison. Use a reflection_depth "
+    "hyperparam mutation when the regression dim's measurement_modality is "
+    "``tool_log`` or ``token_count`` (programmatic / mechanism-level) and "
+    "prompt mutations have repeatedly produced ``Δ ≈ 0`` for the target dim. "
+    "(``retrieval`` "
     "was deprecated in ADR-012 S0d, 2026-05-21 — see policies.py "
     "docstring.)\n"
     "- **Principle-first (P3-revised, 2026-05-25, SPCT pattern)**: BEFORE "
@@ -537,12 +540,13 @@ _MUTATION_CONTRACT_SUFFIX = (
     "principle targets redundant_tool_invocation by tightening the LLM's "
     "mental model of when re-querying is justified — the tool_log modality "
     'measures dedup count, so prompt-level dedup discipline is the lever."\n'
-    '  GOOD (391 chars): "redundant_tool_invocation is a tool_log '
-    "measurement: it counts repeated tool calls within an episode. Magnitude "
-    "is mechanically bounded above by max_turns (N turns → at most N-1 "
-    "redundancies possible), so shrinking the turn budget is a direct "
-    "mechanism-level lever, distinct from the prompt-level coaching that "
-    'cycle 11-14 attempted."\n'
+    '  GOOD (398 chars): "redundant_tool_invocation is a tool_log '
+    "measurement: it counts repeated tool calls within an episode. An extra "
+    "reflection pass (reflection_depth) lets the agent re-read its own prior "
+    "tool output and prune a re-query before emitting it, so deepening "
+    "reflection is a direct mechanism-level lever — distinct from the "
+    "prompt-level coaching that cycle 11-14 attempted, and the only mutable "
+    'hyperparam (max_turns / seed_limit / dim_set are fixed measurement)."\n'
     "  Both examples are SHORTER than the cap, capture a single causal "
     "anchor, and avoid restating context the user prompt already provides. "
     "Your principle should be NO LONGER than these examples; restating "
@@ -888,24 +892,38 @@ def _default_llm_call(system_prompt: str, user_prompt: str) -> str:
 #   _HYPERPARAM_INT_BOUNDS:   key → (min, max) for integer-valued knobs
 #   _HYPERPARAM_CATEGORICAL:  key → allowed-string set
 #
+# PR-AUDIT-SCAFFOLD-WIRE (2026-05-31, operator decision) — the mutable
+# hyperparam surface is restricted to ``reflection_depth`` ONLY. The other
+# three knobs (``max_turns`` / ``seed_limit`` / ``dim_set``) are MEASUREMENT
+# parameters: they change *how / what* the audit measures (turn budget,
+# sample count, judged dim set), which confounds the fitness comparison
+# between a mutated scaffold and its baseline — a mutation that "improves"
+# fitness merely by shrinking the dim set or the sample fan-out is a
+# measurement artifact, not a real scaffold gain. Those three are now FIXED
+# audit-spec parameters owned by the autoresearch config (and the
+# baseline-epoch spec hash); they are rejected at ``_validate_hyperparam_
+# bounds`` so a mutator cannot propose them. ``reflection_depth`` stays
+# mutable because it is a genuine GEODE *runtime* behaviour knob (AgenticLoop
+# reflection-iteration cap), not an audit-measurement parameter, so tuning it
+# is a legitimate scaffold change whose effect the FIXED measurement captures
+# honestly.
+#
 # Bounds chosen so a worst-case mutator proposal cannot:
-#   - run the audit forever (``max_turns ≤ 20`` keeps single-sample
-#     wall-clock under ~60 min even on the slowest claude-cli OAuth lane)
-#   - explode the audit cost (``seed_limit ≤ 50`` caps the per-cycle
-#     sample fan-out — current default 8)
-#   - silently disable the loop (``max_turns ≥ 1``, ``seed_limit ≥ 1``)
-#   - select an undefined dim_set (only ``subset`` / ``full`` are
-#     resolved by ``plugins/petri_audit/dim_set_resolver.py``)
+#   - silently disable reflection (``reflection_depth ≥ 1``)
+#   - explode per-turn latency / cost (``reflection_depth ≤ 5``)
 _HYPERPARAM_INT_BOUNDS: dict[str, tuple[int, int]] = {
-    "max_turns": (1, 20),
-    "seed_limit": (1, 50),
     "reflection_depth": (1, 5),
 }
-_HYPERPARAM_CATEGORICAL: dict[str, frozenset[str]] = {
-    "dim_set": frozenset({"subset", "full"}),
-}
+_HYPERPARAM_CATEGORICAL: dict[str, frozenset[str]] = {}
 _HYPERPARAM_ALLOWED_KEYS: frozenset[str] = frozenset(
     list(_HYPERPARAM_INT_BOUNDS.keys()) + list(_HYPERPARAM_CATEGORICAL.keys())
+)
+# Measurement parameters that USED to be mutable (PR-HYPERPARAM-FOUNDATION)
+# but are now FIXED (PR-AUDIT-SCAFFOLD-WIRE). Tracked separately so the
+# rejection error message can explain *why* (confound) rather than just
+# "unknown key", and so a regression test can pin the non-mutability.
+_HYPERPARAM_FIXED_MEASUREMENT_KEYS: frozenset[str] = frozenset(
+    {"max_turns", "seed_limit", "dim_set"}
 )
 
 
@@ -919,6 +937,14 @@ def _validate_hyperparam_bounds(section: str, value: str) -> None:
     (``_MUTATION_CONTRACT_SUFFIX``) so a fail-closed parse here mirrors
     what the LLM was told.
     """
+    if section in _HYPERPARAM_FIXED_MEASUREMENT_KEYS:
+        raise ValueError(
+            f"hyperparam target_section {section!r} is a FIXED audit-measurement "
+            "parameter and is not mutable (PR-AUDIT-SCAFFOLD-WIRE, 2026-05-31): "
+            "mutating turn budget / sample count / dim set confounds the "
+            "mutated-vs-baseline fitness comparison. Only reflection_depth is "
+            f"mutable; allowed set: {sorted(_HYPERPARAM_ALLOWED_KEYS)!r}."
+        )
     if section not in _HYPERPARAM_ALLOWED_KEYS:
         raise ValueError(
             f"hyperparam target_section {section!r} not in allowed set "
@@ -935,9 +961,14 @@ def _validate_hyperparam_bounds(section: str, value: str) -> None:
         if not (lo <= n <= hi):
             raise ValueError(f"hyperparam {section}={n} out of bounds [{lo}, {hi}]")
         return
-    # categorical branch — must hit, since _HYPERPARAM_ALLOWED_KEYS
-    # is the union of the two maps.
-    allowed = _HYPERPARAM_CATEGORICAL[section]
+    # Categorical branch. ``_HYPERPARAM_CATEGORICAL`` is currently empty
+    # (PR-AUDIT-SCAFFOLD-WIRE removed ``dim_set`` — a measurement param — and
+    # ``reflection_depth`` is integer-valued), so a valid ``section`` always
+    # hits the int branch above and this branch is reserved for a future
+    # categorical knob. Kept (not deleted) so re-adding one only needs a map
+    # entry. ``allowed`` is empty for any section that reaches here, so the
+    # value is rejected — fail-closed.
+    allowed = _HYPERPARAM_CATEGORICAL.get(section, frozenset())
     if value not in allowed:
         raise ValueError(
             f"hyperparam {section} new_value {value!r} must be one of {sorted(allowed)!r}"
