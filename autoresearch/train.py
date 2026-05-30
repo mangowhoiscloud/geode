@@ -2060,6 +2060,137 @@ def _resolve_eval_archive_path() -> str | None:
     return None
 
 
+# --------------------------------------------------------------------------- #
+# Baseline registry (PR-BASELINE-REGISTRY, 2026-05-30) — baselines as          #
+# first-class indexed runs (like seed-generation runs). ``baseline.json``      #
+# stays the active anchor; every promote ALSO appends a ``kind="baseline"``    #
+# row to ``baseline_archive.jsonl`` so the hub can serve every baseline that   #
+# has existed, lossless + differentiated by its measurement criteria. The      #
+# ``margin_rule`` field is the key discriminator — it tells a pre-fix          #
+# ``dim-stderr`` baseline (the ~75×-too-large margin → 0-approve) apart from a #
+# post-fix ``fitness-stderr`` baseline, so the two serve side-by-side as a     #
+# controlled comparison. (Re-implements feature/baseline-registry @69b9d95f    #
+# Phase 1 — see docs/self-improving/baseline-schema-history.md — minus the     #
+# removed ux_means axis + dead Pareto coupling, plus margin_rule/fitness_stderr.)
+# --------------------------------------------------------------------------- #
+_BASELINE_REGISTRY_KIND = "baseline"
+_CURRENT_MARGIN_RULE = "fitness-stderr"
+"""The promote-gate margin rule the current code enforces (PR-MARGIN-FITNESS-
+SCALE). Live promotes stamp this; the pre-fix vanilla baseline is backfilled
+with ``"dim-stderr"`` to mark the buggy-margin cohort it was measured under."""
+
+
+def _baseline_archive_path() -> Path:
+    """Registry path — derived from ``BASELINE_PATH`` so it follows the same
+    test monkeypatch (sibling of ``baseline.json``); equals
+    ``core.paths.BASELINE_ARCHIVE_PATH`` in production."""
+    return BASELINE_PATH.parent / "baseline_archive.jsonl"
+
+
+def _next_baseline_id(now: datetime) -> str:
+    """Return the next sequential baseline id (``baseline-<YYMM>-<seq>``).
+
+    ``seq`` is a 1-based counter over the ``kind="baseline"`` rows already in
+    ``baseline_archive.jsonl`` — stable + monotonic across promotes, mirroring
+    the seed-generation run-id scheme. ``now`` is passed in (not read) so the
+    id is deterministic for a given caller clock.
+    """
+    archive_path = _baseline_archive_path()
+    seq = 1
+    if archive_path.is_file():
+        for line in archive_path.read_text(encoding="utf-8").splitlines():
+            stripped = line.strip()
+            if not stripped:
+                continue
+            try:
+                if json.loads(stripped).get("kind") == _BASELINE_REGISTRY_KIND:
+                    seq += 1
+            except json.JSONDecodeError:
+                continue
+    return f"baseline-{now.strftime('%y%m')}-{seq}"
+
+
+def _append_baseline_registry_row(
+    baseline_id: str,
+    *,
+    dim_means: dict[str, float],
+    dim_stderr: dict[str, float],
+    sample_count: dict[str, int] | None,
+    measurement_modality: dict[str, str] | None,
+    admire_means: dict[str, float] | None,
+    bench_means: dict[str, float] | None,
+    fitness_stderr: float | None,
+    margin_rule: str,
+    eval_archive: str | None,
+    session_id: str,
+    commit: str,
+    ts_utc: str,
+    promoted_by: str,
+    models: dict[str, str] | None = None,
+) -> None:
+    """Append one ``kind="baseline"`` registry row to ``baseline_archive.jsonl``.
+
+    Records the measurement criteria the hub baseline index + per-baseline page
+    need to serve baselines losslessly + differentiated: the models
+    (auditor/target/judge/mutator), seed pool, the **fresh-anchor** intrinsic
+    fitness (``baseline_means=None`` — no prior-base critical-floor comparison,
+    which a seed-pool change makes spurious) + its ``fitness_stderr``, the
+    ``margin_rule`` cohort discriminator, the ``bench`` axis flag, and the
+    aggregate ``dim_means``.
+
+    ``models`` overrides the model ids (keys: ``auditor`` / ``target`` /
+    ``judge`` / ``mutator_model`` / ``mutator_source``). When ``None`` the live
+    promote path reads them from ``_get_autoresearch_config()`` (kept un-threaded
+    so the promote call sites stay unchanged in shape). The backfill script
+    passes ``models`` explicitly because a historical baseline was measured under
+    a config that has since changed — its models are not in the live config.
+    """
+    if models is None:
+        cfg = _get_autoresearch_config()
+        models = {
+            "auditor": cfg.auditor.model,
+            "target": cfg.target.model,
+            "judge": cfg.judge.model,
+            "mutator_model": cfg.mutator.default_model,
+            "mutator_source": str(cfg.mutator.source),
+        }
+    # Intrinsic fitness on the same (dim + admire) scale the promote gate's
+    # ``current_raw`` uses — bench is OFF (Path C) so it is not threaded here.
+    intrinsic_fitness = compute_fitness(
+        dim_means,
+        dim_stderr,
+        baseline_means=None,
+        admire_means=admire_means,
+        measurement_modality=measurement_modality,
+    )
+    seed_count = max(sample_count.values()) if sample_count else 0
+    row: dict[str, Any] = {
+        "kind": _BASELINE_REGISTRY_KIND,
+        "id": baseline_id,
+        "ts_utc": ts_utc,
+        "commit": commit,
+        "session_id": session_id,
+        "promoted_by": promoted_by,
+        "fitness": float(intrinsic_fitness),
+        "fitness_stderr": (float(fitness_stderr) if fitness_stderr is not None else None),
+        "margin_rule": margin_rule,
+        "bench": bool(bench_means),
+        "seed_select": _resolve_seed_select(),
+        "seed_count": int(seed_count),
+        "auditor_model": models["auditor"],
+        "target_model": models["target"],
+        "judge_model": models["judge"],
+        "mutator_model": models["mutator_model"],
+        "mutator_source": models["mutator_source"],
+        "eval_archive": eval_archive,
+        "dim_means": {k: float(v) for k, v in dim_means.items()},
+    }
+    archive_path = _baseline_archive_path()
+    archive_path.parent.mkdir(parents=True, exist_ok=True)
+    with archive_path.open("a", encoding="utf-8") as fh:
+        fh.write(json.dumps(row, ensure_ascii=False, sort_keys=True) + "\n")
+
+
 def _write_baseline(
     dim_means: dict[str, float],
     dim_stderr: dict[str, float],
@@ -2154,11 +2285,17 @@ def _write_baseline(
         "admire_means": ({k: float(v) for k, v in admire_means.items()} if admire_means else None),
         "bench_means": ({k: float(v) for k, v in bench_means.items()} if bench_means else None),
     }
+    # PR-BASELINE-REGISTRY (2026-05-30) — allocate the registry id + freeze a
+    # single timestamp shared by the anchor stamp and the registry row.
+    _now = datetime.now(UTC)
+    _ts_utc = _now.strftime("%Y-%m-%dT%H:%M:%SZ")
+    baseline_id = _next_baseline_id(_now)
     baseline_payload: dict[str, Any] = {
         "schema_version": 2,
+        "baseline_id": baseline_id,  # links the active anchor to its registry row
         "session_id": session_id,
         "commit": commit,
-        "ts_utc": datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ"),
+        "ts_utc": _ts_utc,
         "raw": raw_payload,
         "axes": axes_payload,
     }
@@ -2182,6 +2319,26 @@ def _write_baseline(
     BASELINE_PATH.write_text(
         json.dumps(baseline_payload, indent=2, sort_keys=True) + "\n",
         encoding="utf-8",
+    )
+    # PR-BASELINE-REGISTRY (2026-05-30) — append the registry row only AFTER the
+    # anchor write succeeds, so the registry never lists a baseline whose anchor
+    # write failed. margin_rule = the current code's gate rule (fitness-stderr);
+    # the pre-fix vanilla baseline is backfilled separately as "dim-stderr".
+    _append_baseline_registry_row(
+        baseline_id,
+        dim_means=dim_means,
+        dim_stderr=dim_stderr,
+        sample_count=sample_count,
+        measurement_modality=measurement_modality,
+        admire_means=admire_means,
+        bench_means=bench_means,
+        fitness_stderr=fitness_stderr,
+        margin_rule=_CURRENT_MARGIN_RULE,
+        eval_archive=eval_archive,
+        session_id=session_id,
+        commit=commit,
+        ts_utc=_ts_utc,
+        promoted_by="operator" if manual_promote else "gate",
     )
     # Emit BASELINE_PROMOTED after the write succeeds. ``reason``
     # quotes the gate verdict text from ``_should_promote`` (or the

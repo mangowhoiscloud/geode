@@ -47,6 +47,27 @@ functional change.
 
 ## [Unreleased]
 
+## [0.99.89] - 2026-05-30
+
+### Added
+- **PR-BASELINE-REGISTRY (2026-05-30) — baselines as first-class indexed runs.**
+  Every promote now appends one `kind="baseline"` row to the git-tracked
+  `autoresearch/state/baseline_archive.jsonl` (the self-improving hub's baseline
+  index reads it), while `baseline.json` stays the active anchor (now stamped
+  with its `baseline_id`). Each row records the measurement criteria the hub
+  serves losslessly + differentiated: `margin_rule`
+  (`dim-stderr` | `fitness-stderr` — the pre-fix vanilla vs post-fix cohort
+  discriminator), `fitness_stderr`, `bench` flag, seed pool, role models
+  (auditor/target/judge/mutator), intrinsic fresh-anchor fitness, and
+  `dim_means`. `_next_baseline_id` mirrors the seed-generation
+  `baseline-<YYMM>-<seq>` scheme. `scripts/backfill_baseline_registry_row.py`
+  registers pre-registry baselines from a saved snapshot (models passed
+  explicitly — a historical baseline's config has since changed). Re-implements
+  `feature/baseline-registry @69b9d95f` Phase 1 on the ux-removed /
+  fitness-scale-margin code (Pareto coupling dropped; `margin_rule` /
+  `fitness_stderr` added). Schema lineage archived in
+  `docs/self-improving/baseline-schema-history.md`.
+
 ## [0.99.88] - 2026-05-30
 
 ### Fixed

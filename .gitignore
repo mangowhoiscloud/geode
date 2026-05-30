@@ -206,10 +206,11 @@ autoresearch/state/*
 # every applied wrapper-prompt mutation is committed via _git_commit_audit_log.
 # The trailing negation lets `git add autoresearch/state/mutations.jsonl` succeed.
 !autoresearch/state/mutations.jsonl
-# PR-15 A.1 (2026-05-25) — Pareto archive ledger. Same git-tracked invariant
-# as mutations.jsonl — pareto_mode=True 시 baseline_archive.jsonl 에 entry
-# append, dominated entry prune lineage 보존. silent-ignored writer 회피
-# (PR-G5b #1350 precedent).
+# PR-BASELINE-REGISTRY (2026-05-30) — baseline registry ledger (one
+# ``kind="baseline"`` row per promote, the hub's baseline index reads it).
+# Same git-tracked invariant as mutations.jsonl — silent-ignored writer 회피
+# (PR-G5b #1350 precedent). (Originally added for the dropped pareto archive;
+# now the lossless baseline-history registry — _append_baseline_registry_row.)
 !autoresearch/state/baseline_archive.jsonl
 # PR-VAR-ADAPTIVE (2026-05-27) — historical group-std samples for the
 # percentile-based variance gate. Same git-tracked invariant as

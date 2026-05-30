@@ -151,5 +151,11 @@ def test_manual_promote_additive_only_rest_of_payload_identical(
         manual.pop(stamp, None)
     auto.pop("ts_utc", None)
     manual.pop("ts_utc", None)
+    # PR-BASELINE-REGISTRY (2026-05-30) — baseline_id is a per-promote unique
+    # registry id (the 2nd write increments the sequence), so it legitimately
+    # differs between the two calls; it is not part of the data-shape identity
+    # this test guards (same treatment as ts_utc).
+    auto.pop("baseline_id", None)
+    manual.pop("baseline_id", None)
 
     assert auto == manual
