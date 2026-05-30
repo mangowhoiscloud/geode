@@ -92,8 +92,13 @@ Assembled seed pool: state/seed-pools/held-out
 If the printed `content hash` is **not** `pool-c16d186178e1`, the frozen survivor
 set changed (a run was added/pruned, or survivor bodies edited) — STOP and
 re-pin a new hash, rather than scoring against a drifted "frozen" ruler. The
-`held_out_bench_id` recorded in every cycle row IS this content hash, so a silent
-edit also surfaces as an id change in the curve.
+`held_out_bench_id` recorded in every cycle row IS this content hash, computed by
+`seed_pool_content_hash` on the live bench dir: it hashes ONLY the seed `.md`
+bodies (the assembler's `manifest.json` — and its `generated_at` timestamp — is
+excluded), so the recorded id equals this pin even though the live dir also holds
+`manifest.json`, and re-assembling the same survivor bodies always reproduces it
+regardless of the manifest timestamp. A silent body edit thus surfaces as an id
+change in the curve.
 
 ## 3. Launch wiring — `GEODE_HELD_OUT_BENCH`
 

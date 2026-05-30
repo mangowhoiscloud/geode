@@ -407,6 +407,38 @@ def _assert_no_duplicate_destinations(selected: list[SelectedRun]) -> None:
             first_owner[survivor_id] = run.run_id
 
 
+def _assert_safe_dest_basename(survivor_id: str, *, run_id: str) -> None:
+    """Raise ``SystemExit`` unless ``survivor_id`` is a safe single path segment.
+
+    The flat pool copies a body to ``pool_dir / f"{survivor_id}.md"``. The
+    survivor id comes from the (trusted-but-still) seeds tree, so a crafted id
+    containing ``/`` or ``..`` (or an absolute leading ``/``) would let the
+    destination escape ``pool_dir`` and clobber a file outside the pool. Validate
+    that the id is exactly one path segment — no separator, no parent ref, not
+    absolute — and fail CLOSED (naming the bad id + its run) before the copy, so
+    a path-escape can never write outside the pool.
+    """
+    candidate = str(survivor_id)
+    bad = (
+        not candidate
+        or candidate in (".", "..")
+        or "/" in candidate
+        or "\\" in candidate
+        or Path(candidate).is_absolute()
+        # ``Path(candidate).name`` strips any directory component; if it differs
+        # from the raw id, the id carried a separator / parent-ref the simple
+        # checks above might miss on some platforms.
+        or Path(candidate).name != candidate
+    )
+    if bad:
+        raise SystemExit(
+            f"survivor id {survivor_id!r} in run {run_id!r} is not a safe single "
+            "path segment (contains a separator, a parent reference, or is "
+            f"absolute); refusing to copy to a destination that could escape the "
+            "pool dir"
+        )
+
+
 def assemble_pool(
     *,
     seeds_root: Path,
@@ -451,9 +483,12 @@ def assemble_pool(
     _ensure_out_dir(pool_dir, force=force)
 
     # Deterministic copy order: runs in (already sorted) selection order, then
-    # survivors in id order. Flat <id>.md destinations.
+    # survivors in id order. Flat <id>.md destinations. Each id is validated as a
+    # safe single path segment first, so a crafted ``../`` / ``/`` id from the
+    # seeds tree can never escape ``pool_dir``.
     for run in selected:
         for survivor_id, body_path in run.survivors:
+            _assert_safe_dest_basename(survivor_id, run_id=run.run_id)
             shutil.copyfile(body_path, pool_dir / f"{survivor_id}.md")
 
     content_hash = seed_pool_content_hash(str(pool_dir))

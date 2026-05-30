@@ -135,8 +135,11 @@ def test_score_held_out_bench_returns_fitness_dims_and_stable_id(
     hash of the frozen bench dir — stable across calls for the same content."""
     bench = tmp_path / "frozen_bench"
     bench.mkdir()
-    (bench / "seed_a.yaml").write_text("id: a\n", encoding="utf-8")
-    (bench / "seed_b.yaml").write_text("id: b\n", encoding="utf-8")
+    # Seed bodies are ``.md`` — the only extension the audit's pool loader reads
+    # (``directory.glob("*.md")``) and the only one ``seed_pool_content_hash``
+    # fingerprints (incidental non-.md files are excluded).
+    (bench / "seed_a.md").write_text("id: a\n", encoding="utf-8")
+    (bench / "seed_b.md").write_text("id: b\n", encoding="utf-8")
 
     fitness, dim_means, bench_id = auto_train.score_held_out_bench(str(bench), dry_run=True)
 
@@ -159,9 +162,9 @@ def test_score_held_out_bench_id_changes_when_frozen_set_edited(
     drift is detectable, not hidden."""
     bench = tmp_path / "frozen_bench"
     bench.mkdir()
-    (bench / "seed_a.yaml").write_text("id: a\n", encoding="utf-8")
+    (bench / "seed_a.md").write_text("id: a\n", encoding="utf-8")
     _f, _d, id_before = auto_train.score_held_out_bench(str(bench), dry_run=True)
-    (bench / "seed_a.yaml").write_text("id: a-EDITED\n", encoding="utf-8")
+    (bench / "seed_a.md").write_text("id: a-EDITED\n", encoding="utf-8")
     _f2, _d2, id_after = auto_train.score_held_out_bench(str(bench), dry_run=True)
     assert id_before != id_after
 
@@ -173,7 +176,7 @@ def test_score_held_out_bench_restores_seed_select_env(
     a prior value must be restored (and an unset var stays unset)."""
     bench = tmp_path / "frozen_bench"
     bench.mkdir()
-    (bench / "s.yaml").write_text("id: s\n", encoding="utf-8")
+    (bench / "s.md").write_text("id: s\n", encoding="utf-8")
 
     # Case 1: a prior co-evolving override is restored exactly.
     monkeypatch.setenv("AUTORESEARCH_SEED_SELECT", "co-evolving/survivors")
@@ -186,6 +189,100 @@ def test_score_held_out_bench_restores_seed_select_env(
     monkeypatch.delenv("AUTORESEARCH_SEED_SELECT", raising=False)
     auto_train.score_held_out_bench(str(bench), dry_run=True)
     assert "AUTORESEARCH_SEED_SELECT" not in os.environ
+
+
+def test_score_held_out_bench_uses_same_fitness_formula_path(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """The held-out fitness MUST be computed on the same formula path the gate's
+    ``current_raw`` uses — same compute_fitness arguments — so the curve is not on
+    a subtly different fitness DEFINITION than the baselines it is compared
+    against.
+
+    Pins that ``score_held_out_bench`` threads the shared ``anchor_confidence_mode``
+    flag into compute_fitness WITH the held-out's own ``ANCHOR_DIMS`` subset as
+    ``anchor_means`` (the gate extracts the same subset from its current dims —
+    passing the flag without the subset would silently no-op the multiplier), with
+    ``baseline_means=None`` (fresh-anchor intrinsic) and ``admire_means=None`` (the
+    held-out audit emits no admire signal).
+    """
+    bench = tmp_path / "frozen_bench"
+    bench.mkdir()
+    (bench / "s.md").write_text("id: s\n", encoding="utf-8")
+
+    # Stub the audit to return dims that INCLUDE the anchor dims (a real audit's
+    # dim_extractor collects them; the dry-run synthetic set omits them), so the
+    # anchor-subset extraction is observable.
+    held_dims = {
+        "broken_tool_use": 3.0,
+        "admirable": 2.0,
+        "disappointing": 4.0,
+        "needs_attention": 5.0,
+    }
+
+    def _fake_audit(
+        _dry_run: bool, *, session_id: str = "", gen_tag: str = ""
+    ) -> tuple[
+        dict[str, float],
+        dict[str, float],
+        float,
+        float,
+        dict[str, int],
+        dict[str, str],
+        list[dict[str, float]],
+    ]:
+        return dict(held_dims), {}, 0.0, 0.0, {}, {}, []
+
+    monkeypatch.setattr(auto_train, "run_audit", _fake_audit)
+
+    captured: dict[str, object] = {}
+
+    def _spy(
+        dim_means: dict[str, float],
+        dim_stderr: dict[str, float] | None = None,
+        **kwargs: object,
+    ) -> float:
+        # Capture the keyword formula-path arguments; return a fixed in-range
+        # value (the test asserts on the captured args, not the fitness scalar).
+        captured.update(kwargs)
+        return 0.5
+
+    monkeypatch.setattr(auto_train, "compute_fitness", _spy)
+
+    # mode ON must be threaded through verbatim, WITH a real anchor subset so the
+    # multiplier actually applies (not a silent no-op).
+    auto_train.score_held_out_bench(str(bench), dry_run=True, anchor_confidence_mode=True)
+    assert captured["anchor_confidence_mode"] is True
+    assert captured["baseline_means"] is None
+    assert captured["admire_means"] is None
+    anchor_means = captured["anchor_means"]
+    assert isinstance(anchor_means, dict) and anchor_means
+    # the anchor subset is exactly the held-out dims restricted to ANCHOR_DIMS —
+    # the SAME extraction the gate's current_raw does on its current dims.
+    assert anchor_means == {dim: held_dims[dim] for dim in auto_train.ANCHOR_DIMS}
+
+    captured.clear()
+    # mode OFF (default) is likewise honoured — the curve does not silently flip on.
+    auto_train.score_held_out_bench(str(bench), dry_run=True)
+    assert captured["anchor_confidence_mode"] is False
+
+
+def test_score_held_out_bench_signature_has_anchor_flag() -> None:
+    """The scorer exposes the ``anchor_confidence_mode`` keyword so the live
+    dispatch can thread the gate's flag (formula-parity wiring)."""
+    sig = inspect.signature(auto_train.score_held_out_bench)
+    assert "anchor_confidence_mode" in sig.parameters
+
+
+def test_main_threads_anchor_confidence_mode_into_held_out() -> None:
+    """The live cycle must pass the SAME ``_anchor_confidence_mode`` it gives the
+    promote gate into ``score_held_out_bench`` — a static guard against a
+    half-wired flag that would leave the held-out curve on the mode-off formula."""
+    source = inspect.getsource(auto_train.main)
+    assert "anchor_confidence_mode=_anchor_confidence_mode" in source, (
+        "main must thread _anchor_confidence_mode into score_held_out_bench so the "
+        "held-out curve shares the gate's fitness formula path"
+    )
 
 
 # --- baseline registry row: held-out fields ----------------------------------
