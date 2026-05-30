@@ -42,6 +42,7 @@ from typing import TYPE_CHECKING, Any
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from core.self_improving_loop.run_provenance import RunProvenanceFields
 from core.self_improving_loop.signal_polarity import to_signed_improvement
 
 if TYPE_CHECKING:
@@ -135,6 +136,23 @@ class AttributionRecord(BaseModel):
     This is the honest-null evidence layer ON TOP of the promote gate (it never
     weakens the gate; at ``DEFAULT_GAIN_CI_Z=1.0`` it reconciles with the gate's
     σ-margin). Legacy rows omit all four → ``None`` (backward-compatible)."""
+    prompt_hash: str | None = None
+    applied_diff_hash: str | None = None
+    applied_diff_target: str | None = None
+    applied_diff_kind: str | None = None
+    sampling_params: dict[str, Any] | None = None
+    rng_seed: int | None = None
+    """E5 (2026-05-30) — per-cycle REPRODUCIBILITY PINS so a row is independently
+    re-runnable. ``prompt_hash`` is the ``sha256:`` of the actual composed wrapper
+    system prompt the target ran under; ``applied_diff_hash`` (+ ``_target`` /
+    ``_kind``) is the ``sha256:`` of the scaffold mutation actually APPLIED this
+    cycle plus where it applied; ``sampling_params`` is the generation params as
+    SENT (GEODE-pinned subset; per-token knobs recorded ``"_unpinned"``); ``rng_seed``
+    is the audit/generation seed as SENT (``None`` when none was sent — distinct from
+    E3's ``promote_policy_seed``). These record WHAT WAS SENT for AUDITABILITY; they
+    make NO backend-determinism claim (the backend may not replay bit-identically —
+    ``unverified``, see :mod:`core.self_improving_loop.run_provenance`). Each field is
+    ``None``-omitting at the writer, so legacy / no-pin rows keep their exact shape."""
     audit_run_id: str | None = None
     source: str | None = None
     """PR-AR-L6 (2026-05-26) — distinguishes mutator-driven cycle rows
@@ -292,6 +310,7 @@ def compute_attribution(
     gain_ci_high: float | None = None,
     gain_ci_excludes_zero: bool | None = None,
     gain_verdict: str | None = None,
+    run_provenance: RunProvenanceFields | None = None,
 ) -> dict[str, Any]:
     """Compute the attribution payload for one applied mutation.
 
@@ -403,6 +422,13 @@ def compute_attribution(
         payload["gain_ci_excludes_zero"] = bool(gain_ci_excludes_zero)
         if gain_verdict is not None:
             payload["gain_verdict"] = str(gain_verdict)
+    # E5 (2026-05-30) — reproducibility pins. ``as_record_kwargs`` returns ONLY the
+    # present (non-None) pins, so a cycle with no prompt / no applied diff / no seed
+    # contributes no key and the row keeps its exact legacy shape (additive, never a
+    # new required key). The pins record WHAT WAS SENT (auditability) — no backend-
+    # determinism claim (see run_provenance module docstring).
+    if run_provenance is not None:
+        payload.update(run_provenance.as_record_kwargs())
     if baseline_before is None or baseline_after is None:
         return payload
 
@@ -464,6 +490,7 @@ def write_attribution(
     gain_ci_high: float | None = None,
     gain_ci_excludes_zero: bool | None = None,
     gain_verdict: str | None = None,
+    run_provenance: RunProvenanceFields | None = None,
 ) -> dict[str, Any]:
     """Compute + append attribution in one call.
 
@@ -501,6 +528,7 @@ def write_attribution(
         gain_ci_high=gain_ci_high,
         gain_ci_excludes_zero=gain_ci_excludes_zero,
         gain_verdict=gain_verdict,
+        run_provenance=run_provenance,
     )
     append_attribution_log(payload, log_path=log_path)
     return payload
