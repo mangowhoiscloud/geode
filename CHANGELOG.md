@@ -47,6 +47,27 @@ functional change.
 
 ## [Unreleased]
 
+## [0.99.92] - 2026-05-30
+
+### Fixed
+- **PR-HUB-AUDIT-DEEPLINK (2026-05-30) — audit/seed deep-links reach the transcript.**
+  The self-improving hub linked Petri audit rows, the audit sidebar, and
+  seed-generation phase rows via `#/tasks/<task_id>` — a route the bundled
+  Inspect View hash router does not define (`createHashRouter` exposes only
+  `/logs/*`; the SPA navigates via `/logs/${encodeURIComponent(file)}`), so
+  every deep-link silently fell back to the run list instead of opening the
+  specific log. `scripts/build_self_improving_hub.py` keys deep-links on the
+  `.eval` filename (the `logs/listing.json` key, preserved through
+  `load_petri` + new `PetriRow.log_file`) via a shared `inspect_log_route()`
+  emitting `#/logs/<encodeURIComponent(file)>`; seed-generation phase rows do
+  the same and fall back to the bundle run-list root when a phase has no
+  `.eval` yet. The two docstrings that enshrined the wrong `#/tasks/` premise
+  are corrected. Guarded by
+  `tests/test_self_improving_hub_e2e.py::test_audit_deeplinks_use_logs_route_and_resolve`
+  (no `#/tasks/`; every linked filename resolves in `listing.json`) and a new
+  CLAUDE.md CANNOT row (verify vendored-SPA routes against the bundle JS).
+
+
 ## [0.99.91] - 2026-05-30
 
 ### Added
