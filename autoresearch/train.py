@@ -2133,30 +2133,27 @@ def _append_baseline_registry_row(
     commit: str,
     ts_utc: str,
     promoted_by: str,
-    models: dict[str, str] | None = None,
+    role_provenance: dict[str, dict[str, str]] | None = None,
     seed_select: str | None = None,
 ) -> None:
     """Append one ``kind="baseline"`` registry row to ``baseline_archive.jsonl``.
 
     Records the measurement criteria the hub baseline index + per-baseline page
-    need to serve baselines losslessly + differentiated: the models
-    (auditor/target/judge/mutator), seed pool, the **fresh-anchor** intrinsic
-    fitness (``baseline_means=None`` — no prior-base critical-floor comparison,
-    which a seed-pool change makes spurious) + its ``fitness_stderr``, the
-    ``margin_rule`` cohort discriminator, the ``bench`` axis flag, and the
-    aggregate ``dim_means``.
+    need to serve baselines losslessly + differentiated: per-role provenance,
+    seed pool, the **fresh-anchor** intrinsic fitness (``baseline_means=None`` —
+    no prior-base critical-floor comparison, which a seed-pool change makes
+    spurious) + its ``fitness_stderr``, the ``margin_rule`` cohort discriminator,
+    the ``bench`` axis flag, and the aggregate ``dim_means``.
 
-    ``models`` overrides the **model + source** per role (keys: ``auditor`` /
-    ``target`` / ``judge`` / ``mutator_model`` + their ``*_source`` siblings
-    ``auditor_source`` / ``target_source`` / ``judge_source`` / ``mutator_source``).
-    Each role's *source* (PAYG ``api_key`` vs ``openai-codex`` / ``claude-cli``
-    subscription) is load-bearing provenance — the same model id behaves
-    differently per credential lane, so the registry records both. When ``None``
-    the live promote path reads them from ``_get_autoresearch_config()`` (kept
+    ``role_provenance`` is the ``{role: {model, source, lane}}`` block (see
+    :mod:`core.self_improving_loop.role_provenance`) for auditor / target /
+    judge / mutator. The credential *lane* (PAYG / Subscription / CLI) is
+    load-bearing — the same model behaves differently per lane — so the registry
+    records model + source + lane, not just the model. ``None`` → the live
+    promote path collects it from ``_get_autoresearch_config()`` (kept
     un-threaded so the promote call sites stay unchanged in shape). The backfill
-    script passes ``models`` explicitly because a historical baseline was
-    measured under a config that has since changed — its bindings are not in the
-    live config.
+    script passes it explicitly because a historical baseline was measured under
+    a config that has since changed — its bindings are not in the live config.
 
     ``seed_select`` likewise overrides the seed pool: ``None`` re-resolves the
     *current* pool (correct for a live promote, which fires right after its own
@@ -2168,18 +2165,10 @@ def _append_baseline_registry_row(
             f"margin_rule {margin_rule!r} not in {sorted(_VALID_MARGIN_RULES)} — "
             "the registry's vanilla↔fixed discriminator must be a known value"
         )
-    if models is None:
-        cfg = _get_autoresearch_config()
-        models = {
-            "auditor": cfg.auditor.model,
-            "auditor_source": str(cfg.auditor.source),
-            "target": cfg.target.model,
-            "target_source": str(cfg.target.source),
-            "judge": cfg.judge.model,
-            "judge_source": str(cfg.judge.source),
-            "mutator_model": cfg.mutator.default_model,
-            "mutator_source": str(cfg.mutator.source),
-        }
+    if role_provenance is None:
+        from core.self_improving_loop.role_provenance import collect_role_provenance
+
+        role_provenance = collect_role_provenance(_get_autoresearch_config())
     # Intrinsic fitness on the same (dim + admire) scale the promote gate's
     # ``current_raw`` uses — bench is OFF (Path C) so it is not threaded here.
     intrinsic_fitness = compute_fitness(
@@ -2203,14 +2192,10 @@ def _append_baseline_registry_row(
         "bench": bool(bench_means),
         "seed_select": seed_select if seed_select is not None else _resolve_seed_select(),
         "seed_count": int(seed_count),
-        "auditor_model": models["auditor"],
-        "auditor_source": models["auditor_source"],
-        "target_model": models["target"],
-        "target_source": models["target_source"],
-        "judge_model": models["judge"],
-        "judge_source": models["judge_source"],
-        "mutator_model": models["mutator_model"],
-        "mutator_source": models["mutator_source"],
+        # per-role {model, source, lane} — shared SoT with the mutations.jsonl
+        # cycle ledger (core.self_improving_loop.role_provenance) so the two
+        # git-tracked ledgers never drift on the credential lane.
+        "role_provenance": role_provenance,
         # basename only — baseline_archive.jsonl is git-tracked, so an absolute
         # ~/.geode/... path would leak a user path (feedback_no_hardcoded_user_paths)
         # + not resolve on another machine. Readers join against ~/.geode/petri/logs/.

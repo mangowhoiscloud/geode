@@ -76,13 +76,22 @@ also dead (group/Pareto sampling was dropped from develop, 2026-05-29).
                                                   # vanilla(buggy) ↔ margin-fixed discriminator
   "bench": bool,                    # bench axis active (Path C; currently false)
   "seed_select": ..., "seed_count": int,
-  # per-role model + source (PAYG api_key vs subscription openai-codex/claude-cli):
-  # the same model id behaves differently per credential lane, so BOTH are recorded.
-  "auditor_model"/"auditor_source"/"target_model"/"target_source": ...,
-  "judge_model"/"judge_source"/"mutator_model"/"mutator_source": ...,
+  # per-role {model, source, lane} for auditor/target/judge/mutator. The
+  # credential LANE (PAYG | Subscription | CLI) is load-bearing — the same model
+  # id behaves differently per lane — so model + source + lane are all recorded.
+  # Shared SoT (core.self_improving_loop.role_provenance) with mutations.jsonl,
+  # so the two git-tracked ledgers never drift. Display id: GEODE/{model}/{lane}.
+  "role_provenance": { "auditor": {"model": str, "source": str, "lane": str},
+                       "target":  {...}, "judge": {...}, "mutator": {...} },
   "eval_archive": "<basename>.eval"|null,   # basename only — the file is git-tracked
   "dim_means": {dim: float} }
 ```
+
+`source`→`lane`: `api_key`→`PAYG`, `openai-codex`→`Subscription`,
+`claude-cli`→`CLI`, `auto`→`Auto`. The **same `role_provenance` block** is
+written to every `mutations.jsonl` apply row (every cycle — promote OR reject),
+so the credential lane each role ran under is observable without parsing the
+`.eval`.
 
 `margin_rule` is the key field: it lets the hub serve the pre-fix `vanilla`
 baseline (`margin_rule="dim-stderr"`, the ~75×-too-large margin that produced

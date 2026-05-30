@@ -15,6 +15,7 @@ from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
+from core.self_improving_loop.role_provenance import build_role_provenance
 
 from autoresearch import train as auto_train
 
@@ -34,14 +35,7 @@ _EXPECTED_ROW_KEYS = {
     "bench",
     "seed_select",
     "seed_count",
-    "auditor_model",
-    "auditor_source",
-    "target_model",
-    "target_source",
-    "judge_model",
-    "judge_source",
-    "mutator_model",
-    "mutator_source",
+    "role_provenance",  # nested {role: {model, source, lane}} — shared SoT
     "eval_archive",
     "dim_means",
 }
@@ -53,10 +47,10 @@ def isolated(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     writer resolves role models / seed_select without ``~/.geode/config.toml``."""
     monkeypatch.setattr(auto_train, "BASELINE_PATH", tmp_path / "baseline.json")
     fake_cfg = SimpleNamespace(
-        auditor=SimpleNamespace(model="aud-m", source="aud-src"),
-        target=SimpleNamespace(model="tgt-m", source="tgt-src"),
-        judge=SimpleNamespace(model="jdg-m", source="jdg-src"),
-        mutator=SimpleNamespace(default_model="mut-m", source="mut-src"),
+        auditor=SimpleNamespace(model="aud-m", source="api_key"),  # → PAYG
+        target=SimpleNamespace(model="tgt-m", source="openai-codex"),  # → Subscription
+        judge=SimpleNamespace(model="jdg-m", source="claude-cli"),  # → CLI
+        mutator=SimpleNamespace(default_model="mut-m", source="openai-codex"),
         seed_select="petri_17dim",
     )
     monkeypatch.setattr(auto_train, "_get_autoresearch_config", lambda: fake_cfg)
@@ -120,11 +114,12 @@ def test_write_baseline_appends_registry_row(isolated: Path) -> None:
     assert row["fitness_stderr"] == pytest.approx(0.013)
     assert row["seed_count"] == 16
     assert row["bench"] is False
-    assert row["auditor_model"] == "aud-m"
-    assert row["auditor_source"] == "aud-src"  # per-role source observability
-    assert row["target_source"] == "tgt-src"
-    assert row["judge_source"] == "jdg-src"
-    assert row["mutator_source"] == "mut-src"
+    prov = row["role_provenance"]
+    # per-role model + source + lane (the credential-lane observability)
+    assert prov["auditor"] == {"model": "aud-m", "source": "api_key", "lane": "PAYG"}
+    assert prov["target"]["lane"] == "Subscription"  # openai-codex
+    assert prov["judge"]["lane"] == "CLI"  # claude-cli
+    assert prov["mutator"]["model"] == "mut-m"
     assert row["eval_archive"] == "x.eval"  # basename only (no leaked abs path)
 
 
@@ -177,24 +172,23 @@ def test_models_override_used_for_backfill(isolated: Path) -> None:
         commit="HEAD",
         ts_utc="2026-05-29T09:18:30Z",
         promoted_by="backfill",
-        models={
-            "auditor": "vanilla-aud",
-            "auditor_source": "api_key",
-            "target": "vanilla-tgt",
-            "target_source": "openai-codex",
-            "judge": "vanilla-jdg",
-            "judge_source": "api_key",
-            "mutator_model": "vanilla-mut",
-            "mutator_source": "vanilla-src",
-        },
+        role_provenance=build_role_provenance(
+            {
+                "auditor": ("vanilla-aud", "api_key"),
+                "target": ("vanilla-tgt", "openai-codex"),
+                "judge": ("vanilla-jdg", "api_key"),
+                "mutator": ("vanilla-mut", "openai-codex"),
+            }
+        ),
     )
     row = _rows(isolated / "baseline_archive.jsonl")[0]
     assert set(row) == _EXPECTED_ROW_KEYS
     assert row["id"] == "baseline-2605-1"
     assert row["margin_rule"] == "dim-stderr"
     assert row["promoted_by"] == "backfill"
-    assert row["auditor_model"] == "vanilla-aud"  # override, not the live "aud-m"
-    assert row["auditor_source"] == "api_key"
+    prov = row["role_provenance"]
+    assert prov["auditor"] == {"model": "vanilla-aud", "source": "api_key", "lane": "PAYG"}
+    assert prov["target"]["lane"] == "Subscription"  # override, not the live cfg
     assert row["seed_count"] == 8
 
 
@@ -216,16 +210,14 @@ def test_vanilla_and_fixed_rows_coexist_differentiated(isolated: Path) -> None:
         commit="HEAD",
         ts_utc="2026-05-29T09:18:30Z",
         promoted_by="backfill",
-        models={
-            "auditor": "v-a",
-            "auditor_source": "v-as",
-            "target": "v-t",
-            "target_source": "v-ts",
-            "judge": "v-j",
-            "judge_source": "v-js",
-            "mutator_model": "v-m",
-            "mutator_source": "v-s",
-        },
+        role_provenance=build_role_provenance(
+            {
+                "auditor": ("v-a", "api_key"),
+                "target": ("v-t", "openai-codex"),
+                "judge": ("v-j", "claude-cli"),
+                "mutator": ("v-m", "openai-codex"),
+            }
+        ),
     )
     auto_train._write_baseline(
         {"broken_tool_use": 2.5}, {"broken_tool_use": 0.1}, sample_count={"broken_tool_use": 16}
@@ -255,16 +247,14 @@ def test_invalid_margin_rule_rejected(isolated: Path) -> None:
             commit="c",
             ts_utc="2026-06-01T00:00:00Z",
             promoted_by="backfill",
-            models={
-                "auditor": "a",
-                "auditor_source": "as",
-                "target": "t",
-                "target_source": "ts",
-                "judge": "j",
-                "judge_source": "js",
-                "mutator_model": "m",
-                "mutator_source": "s",
-            },
+            role_provenance=build_role_provenance(
+                {
+                    "auditor": ("a", "api_key"),
+                    "target": ("t", "openai-codex"),
+                    "judge": ("j", "claude-cli"),
+                    "mutator": ("m", "openai-codex"),
+                }
+            ),
         )
 
 
@@ -286,16 +276,14 @@ def test_seed_select_override_freezes_historical_pool(isolated: Path) -> None:
         commit="c",
         ts_utc="2026-05-29T09:18:30Z",
         promoted_by="backfill",
-        models={
-            "auditor": "a",
-            "auditor_source": "as",
-            "target": "t",
-            "target_source": "ts",
-            "judge": "j",
-            "judge_source": "js",
-            "mutator_model": "m",
-            "mutator_source": "s",
-        },
+        role_provenance=build_role_provenance(
+            {
+                "auditor": ("a", "api_key"),
+                "target": ("t", "openai-codex"),
+                "judge": ("j", "claude-cli"),
+                "mutator": ("m", "openai-codex"),
+            }
+        ),
         seed_select="gen-2605-4-unfaithful+gen-2605-3-broken",
     )
     row = _rows(isolated / "baseline_archive.jsonl")[0]
@@ -360,9 +348,9 @@ def test_backfill_script_end_to_end(isolated: Path) -> None:
     assert row["id"] == "baseline-2605-1"
     assert row["margin_rule"] == "dim-stderr"
     assert row["seed_select"] == "vanilla-pool"
-    assert row["auditor_model"] == "v-aud"
-    assert row["auditor_source"] == "api_key"
-    assert row["target_source"] == "openai-codex"
+    prov = row["role_provenance"]
+    assert prov["auditor"] == {"model": "v-aud", "source": "api_key", "lane": "PAYG"}
+    assert prov["target"] == {"model": "v-tgt", "source": "openai-codex", "lane": "Subscription"}
     assert row["seed_count"] == 8
     assert row["eval_archive"] == "vanilla.eval"  # basename of /vanilla.eval
     assert row["promoted_by"] == "backfill"

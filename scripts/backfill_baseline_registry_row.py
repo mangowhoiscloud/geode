@@ -81,6 +81,7 @@ def main(argv: list[str] | None = None) -> int:
         _baseline_archive_path,
         _next_baseline_id,
     )
+    from core.self_improving_loop.role_provenance import build_role_provenance
 
     payload = _load_snapshot(args.snapshot)
     raw = payload.get("raw") or {}
@@ -112,16 +113,14 @@ def main(argv: list[str] | None = None) -> int:
         commit=str(payload.get("commit") or ""),
         ts_utc=ts_utc,
         promoted_by=args.promoted_by,
-        models={
-            "auditor": args.auditor,
-            "auditor_source": args.auditor_source,
-            "target": args.target,
-            "target_source": args.target_source,
-            "judge": args.judge,
-            "judge_source": args.judge_source,
-            "mutator_model": args.mutator_model,
-            "mutator_source": args.mutator_source,
-        },
+        role_provenance=build_role_provenance(
+            {
+                "auditor": (args.auditor, args.auditor_source),
+                "target": (args.target, args.target_source),
+                "judge": (args.judge, args.judge_source),
+                "mutator": (args.mutator_model, args.mutator_source),
+            }
+        ),
         seed_select=args.seed_select,
     )
     print(f"appended {baseline_id} (margin_rule={args.margin_rule}) to {_baseline_archive_path()}")
