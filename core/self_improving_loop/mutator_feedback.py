@@ -56,11 +56,11 @@ dashboard surface), so the mutator sees the same compact rollup the
 operator inspects."""
 
 _TOP_KINDS_IN_BLOCK = 3
-"""Cap on the number of kinds surfaced per dim in the matrix block.
-Mirrors ``rank_kinds_by_dim(..., limit=3)`` convention from the same
-operator CLI surface. The active mutator surface is currently 6 kinds
-(``TARGET_KINDS``), so top-3 surfaces the dominant half without
-saturating the line length."""
+"""Cap on the number of dim rows surfaced per kind in the matrix block.
+Passed as ``rank_dims_by_kind(matrix, kind, limit=...)`` — the same
+convention the operator CLI surface uses — so each of the active
+``TARGET_KINDS`` shows only its top-3 most-attributed dims, keeping the
+block dense without saturating the line length."""
 
 
 def format_mutator_feedback_block(

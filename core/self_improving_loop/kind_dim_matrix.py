@@ -12,8 +12,6 @@ attribution 으로는 (kind × dim) interaction 추적 불가.
   produce.
 - :func:`rank_dims_by_kind(matrix, kind)` — 한 kind 가 가장 영향 준 dim 들
   내림차순.
-- :func:`rank_kinds_by_dim(matrix, dim)` — 한 dim 에 가장 영향 준 kind 들
-  내림차순.
 
 PR-12 ``read_recent_applies`` + PR-12 ``read_recent_attributions`` 결과를
 caller 가 inject — module 자체는 pure (I/O X). caller (CLI / dashboard) 가
@@ -90,23 +88,7 @@ def rank_dims_by_kind(
     return ranked
 
 
-def rank_kinds_by_dim(
-    matrix: dict[str, dict[str, float]],
-    dim: str,
-    *,
-    limit: int | None = None,
-) -> list[tuple[str, float]]:
-    """Return ``[(kind, score), ...]`` sorted by absolute score descending
-    for the given dim. Empty list when no kind has touched the dim."""
-    kinds_touching = [(kind, dims.get(dim, 0.0)) for kind, dims in matrix.items() if dim in dims]
-    ranked = sorted(kinds_touching, key=lambda kv: abs(kv[1]), reverse=True)
-    if limit is not None:
-        return ranked[:limit]
-    return ranked
-
-
 __all__ = [
     "compute_kind_dim_matrix",
     "rank_dims_by_kind",
-    "rank_kinds_by_dim",
 ]
