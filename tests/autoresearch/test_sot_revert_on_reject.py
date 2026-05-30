@@ -245,10 +245,11 @@ def test_revert_returns_false_when_writer_raises(tmp_path: Path) -> None:
 
 
 def test_only_kind_applied_is_considered_not_applied_sibling(tmp_path: Path) -> None:
-    """``applied_sibling`` rows (group sampling's non-best) must NOT be
-    used as revert targets — those mutations were never committed to the
-    canonical SoT (sibling-only temp file via
-    ``policies.write_sibling_in_memory``)."""
+    """Legacy ``applied_sibling`` rows (from the removed group-sampling
+    era — PR-GROUP-REMOVAL) must NOT be used as revert targets: those
+    non-best siblings were never committed to the canonical SoT. The
+    current (1+1)-ES reader filters on ``kind="applied"`` only, so this
+    pins that a stray legacy row is ignored rather than reverted."""
     from autoresearch.train import _revert_sot_after_reject
 
     log_path = tmp_path / "mutations.jsonl"

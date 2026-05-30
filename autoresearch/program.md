@@ -104,23 +104,29 @@ To verify self-improving-loop plumbing without spending budget, use `--dry-run`
 
   `hyperparam` (PR-HYPERPARAM-FOUNDATION, 2026-05-28) is structurally
   the same `dict[str, str]` schema but semantically distinct: each
-  value is a **string-encoded numeric or categorical** that the audit
-  subprocess + AgenticLoop runtime convert at consumption time. The
-  4 allowed sections + bounds are:
+  value is a **string-encoded numeric** that the AgenticLoop runtime
+  converts at consumption time. PR-AUDIT-SCAFFOLD-WIRE (2026-05-31,
+  operator decision) restricted the MUTABLE surface to one section:
 
   | Section             | Type        | Bounds                  |
   |---------------------|-------------|-------------------------|
-  | `max_turns`         | int         | [1, 20]                 |
-  | `seed_limit`        | int         | [1, 50]                 |
   | `reflection_depth`  | int         | [1, 5]                  |
-  | `dim_set`           | categorical | {`subset`, `full`}      |
 
-  `parse_mutation` + `apply_mutation` both reject hyperparam mutations
-  outside these bounds (fail-closed at two layers). Use a hyperparam
-  mutation when the regression dim's `measurement_modality` is
-  `tool_log` or `token_count` (programmatic / mechanism-level) and
-  prompt mutations have repeatedly produced `Δ ≈ 0` for the target dim
-  — cycle 1-12 (2026-05-26 → 05-28) observed exactly this pattern for
+  `max_turns` / `seed_limit` / `dim_set` are NO LONGER mutable — they
+  are FIXED audit-MEASUREMENT parameters (turn budget, sample count,
+  judged dim set). Mutating them would change *how / what* the audit
+  measures, confounding the mutated-vs-baseline fitness comparison, so
+  `parse_mutation` + `apply_mutation` REJECT them (fail-closed at two
+  layers, with an explanatory error). They remain readable as
+  operator-set defaults in `hyperparam.json` (consumed by
+  `_build_audit_command`), just not mutator-changeable.
+
+  `parse_mutation` + `apply_mutation` also reject `reflection_depth`
+  values outside [1, 5]. Use a hyperparam (`reflection_depth`) mutation
+  when the regression dim's `measurement_modality` is `tool_log` or
+  `token_count` (programmatic / mechanism-level) and prompt mutations
+  have repeatedly produced `Δ ≈ 0` for the target dim — cycle 1-12
+  (2026-05-26 → 05-28) observed exactly this pattern for
   `redundant_tool_invocation`, which is what motivates the slot.
 
   `retrieval` was deprecated in ADR-012 S0d (2026-05-21) — the reader

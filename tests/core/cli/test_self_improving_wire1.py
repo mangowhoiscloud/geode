@@ -3,8 +3,8 @@
 The 2026-05-26 autoresearch attribution sprint Phase A audit identified
 production-orphan helpers in ``core/self_improving_loop/``:
 
-* ``compute_kind_dim_matrix`` / ``rank_dims_by_kind`` /
-  ``rank_kinds_by_dim`` (kind_dim_matrix.py) — 0 production callers
+* ``compute_kind_dim_matrix`` / ``rank_dims_by_kind`` (kind_dim_matrix.py)
+  — 0 production callers
 * ``evaluate_rollback_condition`` (rollback_condition.py) — 0 production
   callers; only the *field* ``rollback_condition`` on Mutation was
   wired (displayed in CLI), never evaluated.
@@ -18,7 +18,9 @@ data is missing, (d) the ``--last N`` argv parsing.
 
 (The ``credit`` sub-action wiring ``aggregate_credit_history`` was
 removed with the group-sampling machinery in PR-GROUP-REMOVAL,
-2026-05-29.)
+2026-05-29. The transpose helper ``rank_kinds_by_dim`` — never wired by
+this PR, transpose of the still-wired ``rank_dims_by_kind`` — was removed
+as dead code in PR-CLEANUP-SIL, 2026-05-31.)
 """
 
 from __future__ import annotations

@@ -1181,11 +1181,22 @@ def _applied_diff_for_mutation(mutation_id: str) -> tuple[str | None, str | None
 
 
 def _dump_wrapper_override() -> Path:
-    """Write the mutation target dict to a JSON file consumed by the runtime."""
+    """Write the *current* mutation target dict to the runtime-consumed JSON.
+
+    PR-AUDIT-SCAFFOLD-WIRE (2026-05-31) — reads the SoT live via
+    :func:`load_wrapper_prompt_sections` rather than the module-load-time
+    :data:`WRAPPER_PROMPT_SECTIONS` snapshot. The closed-loop normally
+    re-invokes ``autoresearch.train`` in a fresh subprocess per cycle (so the
+    snapshot and the SoT agree), but a same-interpreter caller that mutates
+    ``wrapper-sections.json`` and then calls ``run_audit`` would otherwise dump
+    the stale pre-mutation scaffold — the audit subprocess would then evaluate
+    the OLD scaffold, silently breaking the mutation→fitness causal link. The
+    live read makes the dumped override match whatever is on disk right now.
+    """
     STATE_DIR.mkdir(parents=True, exist_ok=True)
     override = STATE_DIR / "wrapper-override.json"
     override.write_text(
-        json.dumps(WRAPPER_PROMPT_SECTIONS, indent=2, ensure_ascii=False),
+        json.dumps(load_wrapper_prompt_sections(), indent=2, ensure_ascii=False),
         encoding="utf-8",
     )
     return override

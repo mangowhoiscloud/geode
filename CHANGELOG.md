@@ -45,6 +45,76 @@ functional change.
 
 ---
 
+## [0.99.101] - 2026-05-31
+
+### Removed
+- **PR-CLEANUP-SIL (2026-05-31) — remove the one grep-proven dead self-improving-loop
+  helper + refresh stale doubt comments.** A conservative cleanup pass over the
+  self-improving loop, applying the audit-before-migrate discipline (grep-prove
+  caller=0 before deleting; FLAG when in doubt). The three helpers a stale memory
+  note flagged as "orphan" (`credit_assignment`, `kind_dim_matrix`,
+  `evaluate_rollback_condition`) were re-audited: `credit_assignment` no longer
+  exists (removed with PR-GROUP-REMOVAL), while `compute_kind_dim_matrix` and
+  `evaluate_rollback_condition` are now production-wired (the former via
+  `format_mutator_feedback_block` → `core/self_improving_loop/runner.py`, the latter
+  via `_apply_rollback_condition_gate` → `autoresearch/train.py`'s promote gate) — so
+  they were kept. The only genuinely-dead remnant: `rank_kinds_by_dim`
+  (`core/self_improving_loop/kind_dim_matrix.py`), the transpose of the still-wired
+  `rank_dims_by_kind`, never given a caller by PR-WIRE-1. Removed the function, its
+  `__all__` entry, its docstring bullet, and its four unit tests
+  (`tests/core/self_improving_loop/test_kind_dim_matrix.py`).
+
+### Fixed
+- **PR-CLEANUP-SIL (2026-05-31) — stale-comment refresh (no behaviour change).** The
+  petri target runner's F-A3 entry-observability comment
+  (`plugins/petri_audit/targets/geode_target.py`) no longer reads as lingering doubt
+  about whether `GeodeModelAPI.generate` is invoked — it now affirms that
+  PR-AUDIT-SCAFFOLD-WIRE (#1938) verified the `geode/gpt-5.5 → GeodeModelAPI.generate
+  → _default_geode_runner → AgenticLoop` route. The `_TOP_KINDS_IN_BLOCK` docstring
+  in `core/self_improving_loop/mutator_feedback.py` now describes its actual use as
+  the `rank_dims_by_kind(..., limit=...)` per-kind dim cap (the code's actual call)
+  instead of the removed transpose helper. The
+  group/swarm/Pareto/Tchebycheff/`group_size`/`applied_sibling` sweep found the
+  CODE already removed by PR-DROP-GROUP-SAMPLING / PR-GROUP-REMOVAL — only explanatory
+  comments/docstrings on still-live code plus two legitimate regression tests that
+  pin that legacy `applied_sibling` rows are *ignored* by the current (1+1)-ES reader
+  (`tests/autoresearch/test_sot_revert_on_reject.py`,
+  `tests/core/self_improving_loop/test_mutations_reader.py`, both kept) — so no
+  executable code was cut there. One stale docstring in `test_sot_revert_on_reject.py`
+  that cited the removed `policies.write_sibling_in_memory` was corrected.
+
+## [0.99.100] - 2026-05-31
+
+### Fixed
+- **PR-AUDIT-SCAFFOLD-WIRE (2026-05-31) — guarantee the mutated scaffold reaches
+  the Petri audit target + restrict the mutable hyperparam surface.** The
+  self-improving loop's fitness signal is only causal if the mutated scaffold
+  (`autoresearch/state/policies/wrapper-sections.json`) is the base of the audit
+  target's system prompt. Diagnosis: the target routes correctly
+  (`geode/gpt-5.5` → `GeodeModelAPI` → `_default_geode_runner` → `AgenticLoop`,
+  scaffold = base prompt, auditor scenario = `system_suffix`), and the closed-loop
+  propagates the scaffold via the `GEODE_WRAPPER_OVERRIDE` env hook — but two real
+  gaps existed: (1) in audit-mode (`GEODE_AUDIT_UNRESTRICTED=1`), when no scaffold
+  resolved (env unset + SoT file absent) `build_system_prompt`
+  (`core/agent/system_prompt.py`) returned ONLY dynamic context — a scaffold-free
+  target; it now falls back to the domain-neutral GEODE base prefix so the target
+  always carries a base scaffold. (2) `_dump_wrapper_override`
+  (`autoresearch/train.py`) dumped the module-load-time `WRAPPER_PROMPT_SECTIONS`
+  snapshot; it now reads the SoT live via `load_wrapper_prompt_sections` so a
+  same-interpreter mutate→audit cannot evaluate a stale scaffold. A new
+  `system_prompt.scaffold` diagnostic records `wrapper_override_present` + length +
+  resolution source so scaffold presence is observable without relying on the
+  (scenario-only) inspect `.eval` ModelEvent.
+- **Mutable `hyperparam` surface restricted to `reflection_depth` only**
+  (operator decision, 2026-05-31). `max_turns` / `seed_limit` / `dim_set` are
+  audit-MEASUREMENT parameters — mutating them confounds the mutated-vs-baseline
+  fitness comparison — and are now rejected at `parse_mutation` / `apply_mutation`
+  (`_validate_hyperparam_bounds`, `core/self_improving_loop/runner.py`) with an
+  explanatory error. `reflection_depth` (a genuine AgenticLoop runtime knob) stays
+  mutable. Pinned by `tests/test_geode_target_scaffold_injection.py` +
+  `tests/test_policy_mutation.py`. Procedure documented in
+  `docs/self-improving/campaign-procedure.md`.
+
 ## [0.99.99] - 2026-05-30
 
 ### Added
