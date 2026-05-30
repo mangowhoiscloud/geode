@@ -432,3 +432,67 @@ def test_epoch_label_map_persisted_git_tracked(isolated: Path) -> None:
     assert (
         _json.loads(label_map.read_text(encoding="utf-8"))[row["epoch_hash"]] == row["epoch_label"]
     )
+
+
+# --- PR-BASELINE-LINEAGE: historical-spec override ---------------------------
+
+
+def _append_minimal(isolated: Path, baseline_id: str, **kw: object) -> dict:
+    """Append one row via the low-level writer + return it (extra kw forwarded)."""
+    auto_train._append_baseline_registry_row(
+        baseline_id,
+        dim_means={"broken_tool_use": 3.0},
+        dim_stderr={"broken_tool_use": 0.2},
+        sample_count={"broken_tool_use": 8},
+        measurement_modality=None,
+        admire_means=None,
+        bench_means=None,
+        fitness_stderr=None,
+        margin_rule="dim-stderr",
+        eval_archive=None,
+        session_id="s",
+        commit="c",
+        ts_utc="2026-05-29T09:18:30Z",
+        promoted_by="backfill",
+        **kw,
+    )
+    return _rows(isolated / "baseline_archive.jsonl")[-1]
+
+
+def test_historical_spec_override_yields_distinct_epoch(isolated: Path) -> None:
+    """A backfilled baseline with a historical spec (pre-fix version tags +
+    legacy policy) hashes to a DIFFERENT epoch than the live-default row, and the
+    row records the historical tags it was stamped with."""
+    from core.self_improving_loop.baseline_epoch import HistoricalSpecOverride
+
+    live = _append_minimal(isolated, "baseline-2605-9")  # no override → live constants
+    legacy = _append_minimal(
+        isolated,
+        "baseline-2605-1",
+        promote_policy="legacy",
+        historical_spec=HistoricalSpecOverride(
+            fitness_formula_version="0", margin_logic_version="0"
+        ),
+    )
+    assert legacy["baseline_spec"]["fitness_formula_version"] == "0"
+    assert legacy["baseline_spec"]["margin_logic_version"] == "0"
+    assert legacy["baseline_spec"]["promote_policy"] == "legacy"
+    assert legacy["epoch_hash"] != live["epoch_hash"]
+    # the live row used the live constants (NOT "0") — byte-identical-live path
+    assert live["baseline_spec"]["fitness_formula_version"] == auto_train.FITNESS_FORMULA_VERSION
+    assert live["baseline_spec"]["promote_policy"] == "gate"
+
+
+def test_historical_spec_fitness_preserved_not_recomputed(isolated: Path) -> None:
+    """A historical baseline's MEASURED fitness is recorded verbatim, NOT
+    recomputed under today's compute_fitness (which would overwrite it)."""
+    from core.self_improving_loop.baseline_epoch import HistoricalSpecOverride
+
+    recomputed = _append_minimal(isolated, "baseline-2605-8")  # no override → recompute
+    preserved = _append_minimal(
+        isolated,
+        "baseline-2605-1",
+        historical_spec=HistoricalSpecOverride(fitness=0.4242),
+    )
+    assert preserved["fitness"] == 0.4242  # verbatim, not the dim-derived value
+    assert recomputed["fitness"] != 0.4242  # live path genuinely recomputed

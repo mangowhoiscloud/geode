@@ -110,6 +110,7 @@ if TYPE_CHECKING:
     # E4 (2026-05-30) — type-only import for the record bundle annotation. The
     # value is constructed lazily in ``main`` (local import) so this stays
     # annotation-only and does not eagerly pull the statistics module at import.
+    from core.self_improving_loop.baseline_epoch import HistoricalSpecOverride
     from core.self_improving_loop.run_provenance import RunProvenanceFields
     from core.self_improving_loop.statistical_power import PowerRecordFields
 
@@ -2637,6 +2638,7 @@ def _append_baseline_registry_row(
     promote_policy_seed: int = 0,
     power_stats: PowerRecordFields | None = None,
     run_provenance: RunProvenanceFields | None = None,
+    historical_spec: HistoricalSpecOverride | None = None,
 ) -> None:
     """Append one ``kind="baseline"`` registry row to ``baseline_archive.jsonl``.
 
@@ -2706,14 +2708,29 @@ def _append_baseline_registry_row(
     )
 
     _seed_select = seed_select if seed_select is not None else _resolve_seed_select()
+    # Historical-spec override (backfill of a baseline measured under PRE-current
+    # logic). Each field None / no override → the LIVE constant, so the live
+    # promote path is byte-identical. A historical baseline (e.g. pre-margin-fix
+    # vanilla) supplies its true version tags so it hashes to its OWN epoch.
+    _hist = historical_spec
     baseline_spec = build_baseline_spec(
         margin_rule=margin_rule,
-        margin_logic_version=MARGIN_LOGIC_VERSION,
-        fitness_formula_version=FITNESS_FORMULA_VERSION,
-        rubric_version=PETRI_RUBRIC_VERSION,
+        margin_logic_version=(
+            _hist.margin_logic_version
+            if _hist and _hist.margin_logic_version
+            else MARGIN_LOGIC_VERSION
+        ),
+        fitness_formula_version=(
+            _hist.fitness_formula_version
+            if _hist and _hist.fitness_formula_version
+            else FITNESS_FORMULA_VERSION
+        ),
+        rubric_version=(
+            _hist.rubric_version if _hist and _hist.rubric_version else PETRI_RUBRIC_VERSION
+        ),
         # the dim_set the audit was MEASURED on (override wins over config), not
         # the stale config default — else a `full`-override run is mis-stamped.
-        dim_set=_effective_dim_set(),
+        dim_set=(_hist.dim_set if _hist and _hist.dim_set else _effective_dim_set()),
         # `is not None`, not `bool(...)` — match compute_fitness's bench-active
         # test (train.py: `bench_means is not None`) so an empty-but-active bench
         # dict is not mis-stamped bench=false.
@@ -2733,13 +2750,19 @@ def _append_baseline_registry_row(
         save_epoch_label_map(_label_map_path, _label_map)
     # Intrinsic fitness on the same (dim + admire) scale the promote gate's
     # ``current_raw`` uses — bench is OFF (Path C) so it is not threaded here.
-    intrinsic_fitness = compute_fitness(
-        dim_means,
-        dim_stderr,
-        baseline_means=None,
-        admire_means=admire_means,
-        measurement_modality=measurement_modality,
-    )
+    # A historical backfill PRESERVES its measured fitness (it was scored under
+    # its own formula; recomputing would overwrite it with a current-formula
+    # value). The live path (no override) recomputes exactly as before.
+    if _hist is not None and _hist.fitness is not None:
+        intrinsic_fitness: float = _hist.fitness
+    else:
+        intrinsic_fitness = compute_fitness(
+            dim_means,
+            dim_stderr,
+            baseline_means=None,
+            admire_means=admire_means,
+            measurement_modality=measurement_modality,
+        )
     seed_count = max(sample_count.values()) if sample_count else 0
     row: dict[str, Any] = {
         "kind": _BASELINE_REGISTRY_KIND,

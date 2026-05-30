@@ -1,6 +1,6 @@
 [project]
 name = "geode-agent"
-version = "0.99.98"
+version = "0.99.99"
 description = "GEODE — 범용 자율 실행 에이전트"
 license = "Apache-2.0"
 readme = "README.md"
@@ -339,7 +339,7 @@ ignore = [
 max-complexity = 62
 
 [tool.ruff.lint.pylint]
-max-args = 22         # Worst: 22 (_append_baseline_registry_row — a provenance wiring sink: per-role/seed/bench/held-out/control-arm/power fields; E4 added the bundled power_stats arg, E5 the bundled run_provenance arg). Target: 8.
+max-args = 23         # Worst: 23 (_append_baseline_registry_row — a provenance wiring sink: per-role/seed/bench/held-out/control-arm/power fields; E4 added the bundled power_stats arg, E5 the bundled run_provenance arg, baseline-lineage the bundled historical_spec override). Target: 8.
 max-branches = 68     # Worst: 68. Target: 15.
 max-returns = 18      # Worst: 18 (PLR0911 silenced project-wide; this kept for ratchet visibility).
 max-statements = 273  # Worst: 273 (god method in cli/__init__.py). Target: 60.

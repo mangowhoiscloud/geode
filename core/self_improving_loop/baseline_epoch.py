@@ -18,6 +18,7 @@ from __future__ import annotations
 import hashlib
 import json
 from collections.abc import Mapping
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
@@ -40,6 +41,36 @@ SPEC_SCHEMA_VERSION = "2"
 _SPEC_ROLES = ("auditor", "target", "judge", "mutator")
 
 _HASH_PREFIX_LEN = 12
+
+
+@dataclass(frozen=True)
+class HistoricalSpecOverride:
+    """Optional spec fields for backfilling a baseline measured under PRE-current
+    production logic, so it hashes to its OWN epoch instead of today's.
+
+    The live promote path never sets these — each ``None`` field falls back to
+    the live constant at the call site, so omitting the override reproduces the
+    current spec byte-for-byte. The backfill path (a historical baseline whose
+    logic differs from today's) supplies the true historical values, e.g. the
+    pre-margin-fix vanilla baseline carries ``fitness_formula_version="0"`` /
+    ``margin_logic_version="0"`` so it lands in a distinct genesis epoch rather
+    than being mis-stamped with the current logic version. ``promote_policy`` is
+    a separate first-class param of the registry writer (not bundled here) since
+    the live path already threads it.
+
+    ``fitness`` is the historical baseline's MEASURED fitness — when set, the
+    registry writer records it verbatim instead of RE-COMPUTING via today's
+    ``compute_fitness`` (a historical baseline was scored under its own formula,
+    so recomputing would overwrite its measured value with a current-formula
+    number). ``None`` → the live behaviour (recompute), so the live promote path
+    is unaffected.
+    """
+
+    fitness_formula_version: str | None = None
+    margin_logic_version: str | None = None
+    rubric_version: str | None = None
+    dim_set: str | None = None
+    fitness: float | None = None
 
 
 def build_baseline_spec(
@@ -206,6 +237,7 @@ def save_epoch_label_map(path: Path, label_map: Mapping[str, str]) -> None:
 
 __all__ = [
     "SPEC_SCHEMA_VERSION",
+    "HistoricalSpecOverride",
     "build_baseline_spec",
     "canonical_spec_json",
     "compute_epoch_hash",
