@@ -45,6 +45,49 @@ functional change.
 
 ---
 
+## [0.99.97] - 2026-05-30
+
+### Added
+- **E5 (2026-05-30) — per-cycle reproducibility pins: prompt hash, applied diff,
+  sampling params, RNG seed.** Each self-improving-loop ledger row is now
+  INDEPENDENTLY RE-RUNNABLE — a third party can reconstruct exactly what produced
+  an audit result. Four pins are captured at the point of truth (the audit
+  dispatch) and recorded on BOTH per-cycle sinks (the `mutations.jsonl`
+  attribution row and the `baseline_archive.jsonl` registry row), all
+  None-omitting so legacy / no-pin rows keep their exact shape:
+  - **`prompt_hash`** — `sha256:` of the ACTUAL composed wrapper/scaffold system
+    prompt the audit target ran under (the mutation-applied
+    `WRAPPER_PROMPT_SECTIONS`, canonically serialised then hashed — stable for the
+    same prompt, sensitive to any section edit).
+  - **`applied_diff`** — the scaffold mutation actually APPLIED this cycle as a
+    reproducible reference: `sha256:` of the applied content (`new_value`) plus the
+    `applied_diff_target` (section) + `applied_diff_kind` it edited, read from the
+    `kind="applied"` apply row — not a re-derived guess.
+  - **`sampling_params`** — the generation params as SENT for the audit. GEODE's
+    audit dispatch (a `geode audit` subprocess) controls only a subset (`max_turns`
+    / `seeds` / `dim_set` / `source` / `max_connections=1` / `max_samples=1`),
+    recorded as the resolved effective values; the per-token knobs
+    (`temperature` / `top_p` / `max_tokens`) GEODE does NOT pin are recorded as an
+    explicit `"_unpinned"` marker (inspect_ai + provider defaults), not a fabricated
+    value.
+  - **`rng_seed`** — the audit/generation seed as SENT (distinct from E3's
+    `promote_policy_seed`). GEODE sends NO `--seed` to the audit subprocess today,
+    so the honest record is `None` (no seed sent), never a fabricated number.
+  - **Auditability, not determinism.** These pins record WHAT WAS SENT and make NO
+    backend-determinism claim. A ctx7 lookup of inspect_ai
+    (`/ukgovernmentbeis/inspect_ai`, 2026-05-30) confirmed `GenerateConfig` ACCEPTS
+    `seed` / `temperature` / `top_p` (SDK contract) but did NOT document that any
+    backend — least of all GEODE's claude-cli / codex-cli OAuth subscription
+    providers — HONORS `seed` for bit-identical replay; the contract is therefore
+    `unverified — live test required`, and no determinism flag is set to `True`.
+  - New module `core/self_improving_loop/run_provenance.py` (`hash_text`,
+    `compose_wrapper_prompt`, `build_run_provenance`, `RunProvenanceFields` bundle).
+    Threaded through `attribution.write_attribution` / `compute_attribution` +
+    `train.py`'s `_write_baseline` → `_append_baseline_registry_row`. 24 new tests
+    in `tests/autoresearch/test_reproducibility_pins.py`.
+
+---
+
 ## [0.99.96] - 2026-05-30
 
 ### Added

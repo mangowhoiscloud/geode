@@ -110,6 +110,7 @@ if TYPE_CHECKING:
     # E4 (2026-05-30) — type-only import for the record bundle annotation. The
     # value is constructed lazily in ``main`` (local import) so this stays
     # annotation-only and does not eagerly pull the statistics module at import.
+    from core.self_improving_loop.run_provenance import RunProvenanceFields
     from core.self_improving_loop.statistical_power import PowerRecordFields
 
 # PR-SIL-5THEME C2 (2026-05-23) — S6b production wiring. ``BenchProvenance``
@@ -1105,6 +1106,77 @@ def _build_audit_command() -> list[str]:
     if getattr(cfg, "source", "auto") != "api_key":
         argv.append("--use-oauth")
     return argv
+
+
+def _audit_sampling_params_as_sent() -> dict[str, Any]:
+    """The generation params GEODE ACTUALLY sends for the audit (E5 reproducibility pin).
+
+    Records WHAT WAS SENT for auditability — NOT a determinism contract. GEODE's
+    audit dispatch is a ``geode audit`` subprocess (:func:`_build_audit_command`)
+    that controls only a SUBSET of generation params: ``max_turns`` / ``seeds`` /
+    ``dim_set`` / ``source``, and the inspect_ai connection caps
+    (``max_connections=1`` / ``max_samples=1``, pinned in
+    ``plugins/petri_audit/runner.py:build_command``). These are the resolved
+    EFFECTIVE values (mutation-SoT override → config), identical to what
+    ``_build_audit_command`` puts on the argv.
+
+    The per-token sampling knobs (``temperature`` / ``top_p`` / ``max_tokens``) are
+    NOT pinned by GEODE — they fall to the inspect_ai + provider (claude-cli /
+    codex-cli OAuth) defaults — so they are recorded as
+    :data:`~core.self_improving_loop.run_provenance.SAMPLING_UNPINNED` rather than a
+    fabricated value. This is the honest "GEODE did not set this" record; a future
+    PR that pins these knobs (and a ctx7-verified backend-determinism live test)
+    would write the real numbers here.
+    """
+    from core.self_improving_loop.run_provenance import SAMPLING_UNPINNED
+
+    cfg = _get_autoresearch_config()
+    overrides = _load_hyperparam_overrides()
+    return {
+        # GEODE-pinned audit-dispatch params (the resolved effective values).
+        "max_turns": _hyperparam_int(overrides, "max_turns", cfg.max_turns),
+        "seeds": _hyperparam_int(overrides, "seed_limit", cfg.seed_limit),
+        "dim_set": _effective_dim_set(),
+        "source": getattr(cfg, "source", "auto"),
+        "max_connections": 1,
+        "max_samples": 1,
+        # Per-token knobs GEODE does not pin → backend default (UNVERIFIED for
+        # deterministic replay; see run_provenance module docstring + ctx7 note).
+        "temperature": SAMPLING_UNPINNED,
+        "top_p": SAMPLING_UNPINNED,
+        "max_tokens": SAMPLING_UNPINNED,
+    }
+
+
+def _applied_diff_for_mutation(mutation_id: str) -> tuple[str | None, str | None, str | None]:
+    """The scaffold mutation APPLIED this cycle, as a reproducible reference (E5 pin).
+
+    Returns ``(target_section, new_value, target_kind)`` for the
+    ``kind="applied"`` row in ``mutations.jsonl`` whose ``mutation_id`` matches the
+    cycle's applied mutation — the EXACT content the apply step committed. The
+    caller hashes ``new_value`` (``applied_diff_hash``) + records the section + kind
+    so the row carries the diff reference without joining the apply row.
+
+    ``("", "", "")``-shaped graceful return — all ``None`` — when ``mutation_id`` is
+    empty (manual / no-mutation cycle) or no matching apply row exists (a fresh
+    ledger, or the apply row hasn't been written yet). Never raises: a reader-side
+    failure must not break the ledger write.
+    """
+    if not mutation_id:
+        return None, None, None
+    try:
+        from core.self_improving_loop.mutations_reader import read_recent_applies
+
+        for record in reversed(read_recent_applies(n=200)):
+            if record.mutation_id == mutation_id:
+                return record.target_section, record.new_value, record.target_kind
+    except Exception:  # pragma: no cover — defensive; pin simply omitted on failure
+        log.warning(
+            "self-improving-loop applied-diff lookup failed for mutation %s",
+            mutation_id,
+            exc_info=True,
+        )
+    return None, None, None
 
 
 def _dump_wrapper_override() -> Path:
@@ -2564,6 +2636,7 @@ def _append_baseline_registry_row(
     promote_policy: str = "gate",
     promote_policy_seed: int = 0,
     power_stats: PowerRecordFields | None = None,
+    run_provenance: RunProvenanceFields | None = None,
 ) -> None:
     """Append one ``kind="baseline"`` registry row to ``baseline_archive.jsonl``.
 
@@ -2736,6 +2809,14 @@ def _append_baseline_registry_row(
             row["gain_ci_excludes_zero"] = bool(power_stats.gain_ci_excludes_zero)
             if power_stats.gain_verdict is not None:
                 row["gain_verdict"] = str(power_stats.gain_verdict)
+    # E5 (2026-05-30) — reproducibility pins (prompt_hash + applied_diff +
+    # sampling_params + rng_seed) so the promoted baseline's row is independently
+    # re-runnable. ``as_record_kwargs`` returns ONLY the present (non-None) pins, so
+    # a pre-E5 promote (run_provenance=None) writes NO E5 key — the row shape is
+    # unchanged (additive, never a new required key). The pins record WHAT WAS SENT
+    # (auditability); they make no backend-determinism claim (see run_provenance).
+    if run_provenance is not None:
+        row.update(run_provenance.as_record_kwargs())
     archive_path = _baseline_archive_path()
     archive_path.parent.mkdir(parents=True, exist_ok=True)
     with archive_path.open("a", encoding="utf-8") as fh:
@@ -2790,6 +2871,11 @@ def _write_baseline(
     # parameter. ``None`` (default) → the keys are omitted (backward-compatible: an
     # M=1 / pre-E4 baseline keeps its exact shape).
     power_stats: PowerRecordFields | None = None,
+    # E5 (2026-05-30) — reproducibility pins (prompt_hash + applied_diff +
+    # sampling_params + rng_seed) forwarded to the registry row so the promoted
+    # baseline is independently re-runnable. ``None`` (default) → no E5 key written
+    # (backward-compatible — a pre-E5 baseline keeps its exact shape).
+    run_provenance: RunProvenanceFields | None = None,
 ) -> None:
     """Persist current audit's aggregates as the new baseline.
 
@@ -2921,6 +3007,8 @@ def _write_baseline(
         promote_policy_seed=promote_policy_seed,
         # E4 (2026-05-30) — fitness-noise decomposition + gain-evidence verdict.
         power_stats=power_stats,
+        # E5 (2026-05-30) — reproducibility pins forwarded to the registry row.
+        run_provenance=run_provenance,
     )
     # Emit BASELINE_PROMOTED after the write succeeds. ``reason``
     # quotes the gate verdict text from ``_should_promote`` (or the
@@ -4051,6 +4139,33 @@ def main() -> int:
         f"e4_gain_verdict:          {gain_evidence.verdict} "
         f"(ci excludes 0: {gain_evidence.gain_ci_excludes_zero})"
     )
+    # E5 (2026-05-30) — REPRODUCIBILITY PINS. Captured at the POINT OF TRUTH (this
+    # cycle's audit dispatch) so each pin reflects what was ACTUALLY sent, not a
+    # re-derived guess: ``prompt_hash`` from the mutation-applied
+    # ``WRAPPER_PROMPT_SECTIONS`` (the exact wrapper system prompt the target ran
+    # under, the same dict ``_dump_wrapper_override`` writes); ``applied_diff`` from
+    # the ``kind="applied"`` row of THIS cycle's mutation; ``sampling_params`` from
+    # the audit dispatch's resolved effective params; ``rng_seed`` recorded as sent
+    # (``None`` — GEODE sends no ``--seed`` to the audit subprocess; the honest
+    # record, distinct from E3's ``promote_policy_seed``). The bundle is None-omitting
+    # so a manual / no-mutation / dry-run cycle still produces only the pins it has.
+    # Records WHAT WAS SENT (auditability) — no backend-determinism claim.
+    from core.self_improving_loop.run_provenance import build_run_provenance
+
+    _e5_applied_target, _e5_applied_value, _e5_applied_kind = _applied_diff_for_mutation(
+        os.environ.get("GEODE_SIL_MUTATION_ID", "").strip()
+    )
+    _e5_run_provenance = build_run_provenance(
+        wrapper_sections=WRAPPER_PROMPT_SECTIONS,
+        applied_target_section=_e5_applied_target,
+        applied_new_value=_e5_applied_value,
+        applied_target_kind=_e5_applied_kind,
+        sampling_params=_audit_sampling_params_as_sent(),
+        # GEODE sends no audit/generation seed — recorded as sent (None). NOT a
+        # fabricated value, and NO determinism claim (see run_provenance docstring).
+        rng_seed=None,
+    )
+    print(f"e5_prompt_hash:           {_e5_run_provenance.prompt_hash or '(none)'}")
     # E2 (2026-05-30) — per-cycle fixed-ruler measurement. The held-out bench is
     # a VERSION-FROZEN seed set DISJOINT from the co-evolving ``seed_select`` pool
     # the audit above ran on, so its fitness is comparable ACROSS generations.
@@ -4220,6 +4335,11 @@ def main() -> int:
         # None-omitting (M=1 leaves within unestimated; pre-E4 baselines omit the
         # block) so the row shape stays backward-compatible.
         "power_stats": _e4_power_stats,
+        # E5 (2026-05-30) — reproducibility pins (prompt_hash + applied_diff +
+        # sampling_params + rng_seed) on the promoted baseline's registry row so it
+        # is independently re-runnable. None-omitting bundle (a pin with no value is
+        # omitted) → backward-compatible row shape.
+        "run_provenance": _e5_run_provenance,
     }
     if args.dry_run:
         promoted_line = "false (dry-run)"
@@ -4477,6 +4597,10 @@ def main() -> int:
                 # fields are None-omitting (M=1 leaves within unestimated; legacy
                 # rows omit the whole block) so the row stays backward-compatible.
                 **_e4_record_fields,
+                # E5 (2026-05-30) — reproducibility pins on the per-cycle attribution
+                # row (prompt_hash + applied_diff + sampling_params + rng_seed). The
+                # bundle is None-omitting so a no-pin cycle keeps the legacy shape.
+                run_provenance=_e5_run_provenance,
             )
         except Exception:  # pragma: no cover — defensive
             log.warning(
