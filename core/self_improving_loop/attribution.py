@@ -79,6 +79,18 @@ class AttributionRecord(BaseModel):
     fitness_before: float | None = None
     fitness_after: float | None = None
     fitness_delta: float | None = None
+    """``fitness_before`` / ``fitness_after`` / ``fitness_delta`` are on the
+    canonical FITNESS scale: 0-1, HIGHER-is-better (the ``compute_fitness``
+    output, NOT the 1-10 lower-is-better Petri ``dim_means`` aggregate).
+    ``fitness_delta = fitness_after - fitness_before`` so a positive delta is
+    an improvement on the same scale both sides share.
+
+    PR-MARGIN-FITNESS-SCALE E1 (2026-05-30) reconciled the scale: before it,
+    the autoresearch caller wrote ``mean(baseline_means)`` (1-10 dim mean) as
+    ``fitness_before`` while ``fitness_after`` was already 0-1, so the delta
+    mixed two incompatible scales. Pre-fix on-disk rows still carry that mixed
+    scale — they are NOT rewritten (git-tracked ledger); a one-shot backfill
+    is a documented follow-up. New rows are uniformly 0-1."""
     audit_run_id: str | None = None
     source: str | None = None
     """PR-AR-L6 (2026-05-26) — distinguishes mutator-driven cycle rows
@@ -280,6 +292,15 @@ def compute_attribution(
     # 없으므로 caller 가 명시 fitness_before / fitness_after 전달. 둘 다
     # 명시되면 fitness_delta = after - before 계산해서 payload 에 동봉.
     # 부재 시 키 자체 미출현 (legacy reader 무영향).
+    #
+    # SCALE CONTRACT (PR-MARGIN-FITNESS-SCALE E1, 2026-05-30) — both
+    # ``fitness_before`` and ``fitness_after`` are on the canonical 0-1
+    # ``compute_fitness`` scale (HIGHER-is-better), so ``after - before`` is a
+    # meaningful same-scale delta. The autoresearch caller guarantees this by
+    # computing ``fitness_before`` through the same ``compute_fitness`` that
+    # produced ``fitness_after``. (This module is scale-agnostic — it just
+    # subtracts — so the guarantee lives at the caller; the docstring records
+    # it so a future caller does not regress to a mixed scale.)
     if fitness_before is not None and fitness_after is not None:
         payload["fitness_before"] = round(float(fitness_before), 6)
         payload["fitness_after"] = round(float(fitness_after), 6)
