@@ -4070,6 +4070,11 @@ def _epoch_spec_summary(spec: dict[str, Any], role_prov: dict[str, Any]) -> str:
             "Re-backfilled with epoch fields once the canonical fitness is settled."
         )
     margin = html_escape(str(spec.get("margin_rule") or "—"))
+    # promote_policy (E3) — the control arm / version marker for the epoch:
+    # gate (selection) / random / never, or "legacy" for a pre-arm baseline. It
+    # is part of the hashed spec, so showing it makes the versioned lineage
+    # readable (which arm/version each stacked epoch is).
+    policy = html_escape(str(spec.get("promote_policy") or "—"))
     dim_set = html_escape(str(spec.get("dim_set") or "—"))
     rubric = html_escape(str(spec.get("rubric_version") or "—"))
     bench = "on" if spec.get("bench") else "off"
@@ -4082,9 +4087,9 @@ def _epoch_spec_summary(spec: dict[str, Any], role_prov: dict[str, Any]) -> str:
         lane = html_escape(str(prov.get("lane") or "—"))
         role_bits.append(f"{role} <code>{model}</code>&middot;{lane}")
     return (
-        f"margin <code>{margin}</code> &middot; dim_set <code>{dim_set}</code> &middot; "
-        f"rubric <code>{rubric}</code> &middot; bench {bench} &middot; "
-        f"pool <code>{pool}</code><br>{' &middot; '.join(role_bits)}"
+        f"margin <code>{margin}</code> &middot; policy <code>{policy}</code> &middot; "
+        f"dim_set <code>{dim_set}</code> &middot; rubric <code>{rubric}</code> &middot; "
+        f"bench {bench} &middot; pool <code>{pool}</code><br>{' &middot; '.join(role_bits)}"
     )
 
 
