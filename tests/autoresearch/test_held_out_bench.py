@@ -6,7 +6,7 @@ generation, so the fitness it produces is a moving ruler (not comparable across
 generations). The held-out bench is a VERSION-FROZEN seed set used ONLY to MEASURE
 fitness on a fixed ruler, so its curve IS the cross-generation evidence.
 
-Pins three contracts:
+Pins four contracts:
   1. ``_resolve_held_out_bench`` precedence (env GEODE_/AUTORESEARCH_ → config →
      None) and that it NEVER consults the co-evolving latest_pointer.
   2. ``score_held_out_bench`` records ``held_out_fitness`` (the same 0-1
@@ -15,10 +15,15 @@ Pins three contracts:
   3. The baseline registry row stays backward-compatible when no held-out bench is
      configured (held-out keys omitted — no new required key), and gains exactly
      the two additive keys when a bench is scored.
+  4. (E2-wire, 2026-05-30) ``main`` ACTUALLY dispatches ``score_held_out_bench``
+     in the live cycle path — gated on a configured bench + non-dry-run — and
+     feeds the result into BOTH the per-cycle attribution row and the on-promote
+     baseline provenance. Guards against "defined but never invoked" mis-wiring.
 """
 
 from __future__ import annotations
 
+import inspect
 import json
 from pathlib import Path
 from types import SimpleNamespace
@@ -256,3 +261,66 @@ def test_row_omits_held_out_when_only_one_field_present(isolated: Path) -> None:
     row = _rows(isolated / "baseline_archive.jsonl")[0]
     assert "held_out_fitness" not in row
     assert "held_out_bench_id" not in row
+
+
+# --- E2-wire: per-cycle live dispatch in main() ------------------------------
+
+
+def test_main_dispatches_score_held_out_bench_in_live_cycle() -> None:
+    """The live cycle path in ``main`` MUST call ``score_held_out_bench`` — not
+    merely define it. Static pin against the "defined but never invoked"
+    mis-wiring: the call site, the resolver, and the cost guard (configured bench
+    + non-dry-run) must all be present in ``main``'s source.
+
+    A full subprocess integration of train.py would spend real audit quota
+    (score_held_out_bench runs a SECOND audit), so — mirroring
+    test_dry_run_no_attribution's rationale — this pins the wiring at the source
+    level, which is the cheap, regression-proof guard."""
+    source = inspect.getsource(auto_train.main)
+    # Resolver consulted in the live path.
+    assert "_held_out_bench = _resolve_held_out_bench()" in source, (
+        "main no longer resolves the held-out bench in the live cycle path"
+    )
+    # Cost guard: only when a bench is configured AND not a dry-run.
+    assert "if _held_out_bench and not args.dry_run:" in source, (
+        "held-out scoring must be gated on a configured bench + non-dry-run "
+        "(None bench → skip, zero cost, backward-compatible)"
+    )
+    # The scoring function is actually CALLED (not just imported / referenced).
+    assert "score_held_out_bench(" in source, (
+        "main defines the held-out fields but never invokes score_held_out_bench "
+        "— the per-cycle scoring is mis-wired (dead)"
+    )
+
+
+def test_main_feeds_held_out_into_attribution_and_provenance() -> None:
+    """The scored values must flow into BOTH sinks: the per-cycle attribution row
+    (the curve SoT, EVERY cycle) and the on-promote baseline provenance."""
+    source = inspect.getsource(auto_train.main)
+    # Attribution row (write_attribution kwargs) — the per-cycle curve SoT.
+    assert "held_out_fitness=_held_out_fitness" in source, (
+        "main does not forward held_out_fitness into the attribution row"
+    )
+    assert "held_out_bench_id=_held_out_bench_id" in source, (
+        "main does not forward held_out_bench_id into the attribution row"
+    )
+    # Baseline provenance dict (on-promote registry row).
+    assert '"held_out_fitness": _held_out_fitness' in source, (
+        "main does not thread held_out_fitness into the baseline provenance"
+    )
+    assert '"held_out_bench_id": _held_out_bench_id' in source, (
+        "main does not thread held_out_bench_id into the baseline provenance"
+    )
+
+
+def test_main_held_out_scoring_failure_is_non_fatal() -> None:
+    """A held-out scoring error must NOT sink the primary cycle — the curve skips
+    the generation (fields reset to None) and the promote / attribution path
+    continues. Pin the defensive guard."""
+    source = inspect.getsource(auto_train.main)
+    # try/except wrapping the score call, resetting both fields on failure.
+    assert "except Exception:" in source
+    assert "_held_out_fitness = None" in source and "_held_out_bench_id = None" in source, (
+        "held-out scoring failure must reset both fields so the curve skips this "
+        "generation without corrupting the row"
+    )

@@ -22,12 +22,29 @@ drops phantom survivors whose body was pruned.
 Run selection
 =============
 
-Runs are time-ordered by a STABLE key parsed from ``gen_tag`` — NOT by
-filesystem mtime — so selection is reproducible across clones / re-syncs.
-``gen-<stamp>-<counter>`` -> ``(stamp, counter)`` (e.g. ``gen-2605-4`` ->
-``(2605, 4)``); a legacy bare ``gen1`` -> ``(1,)`` (sorts below ``gen-2605-*``).
-The top ``--runs`` (default 2) by descending key are selected; on the real seeds
-tree that is ``gen-2605-4`` + ``gen-2605-3``.
+Two mutually-exclusive modes:
+
+- **Top-N (default)** — runs are time-ordered by a STABLE key parsed from
+  ``gen_tag`` (NOT filesystem mtime, so selection is reproducible across clones /
+  re-syncs). ``gen-<stamp>-<counter>`` -> ``(stamp, counter)`` (e.g.
+  ``gen-2605-4`` -> ``(2605, 4)``); a legacy bare ``gen1`` -> ``(1,)`` (sorts
+  below ``gen-2605-*``). The top ``--runs`` (default 2) by descending key are
+  selected; on the real seeds tree that is ``gen-2605-4`` + ``gen-2605-3`` — the
+  CO-EVOLVING selection pool the 10-cycle audits a candidate against.
+
+- **Explicit (E2)** — ``--select-runs <id>,<id>,...`` pins the EXACT set of run
+  ids (every match is taken; ``--runs`` is ignored). This is how the
+  VERSION-FROZEN *held-out bench* is assembled: from runs OTHER than the
+  selection pool (``gen-2605-1`` + ``gen-2605-2`` + the ``gen1-*`` runs), so the
+  held-out ruler is DISJOINT from the seeds that supply selection pressure.
+  ``--exclude-runs <id>,<id>,...`` is the complement — drop named runs from
+  whichever mode is active (e.g. top-N minus the selection pool). Selection-run
+  ids that match no run dir are a fatal error (a typo must not silently shrink
+  the frozen bench).
+
+Both modes share the same valid-survivor filter and the same content-hash
+identity, so a held-out bench assembled by ``--select-runs`` is just as
+deterministic + reproducible-from-committed-survivors as the default pool.
 
 Output
 ======
@@ -136,6 +153,22 @@ def parse_gen_tag_key(gen_tag: str) -> tuple[int, ...] | None:
         return None
 
 
+def _split_run_ids(raw: str) -> tuple[str, ...]:
+    """Parse a comma-separated ``--select-runs`` / ``--exclude-runs`` value.
+
+    Whitespace around each id is stripped and empty fields are dropped (so a
+    trailing comma or a blank value resolves to an empty tuple, never a phantom
+    ``""`` run id). Order is preserved for a deterministic, readable manifest;
+    duplicates are de-duped while keeping first-seen order.
+    """
+    seen: dict[str, None] = {}
+    for field in str(raw).split(","):
+        candidate = field.strip()
+        if candidate:
+            seen.setdefault(candidate, None)
+    return tuple(seen)
+
+
 def _load_json_object(path: Path) -> dict[str, Any]:
     """Read a JSON object from ``path``; raise ``SystemExit`` on any failure.
 
@@ -236,8 +269,10 @@ def select_runs(
     *,
     runs: int,
     per_run: int | None,
+    select_run_ids: tuple[str, ...] = (),
+    exclude_run_ids: tuple[str, ...] = (),
 ) -> list[SelectedRun]:
-    """Time-sort run dirs by ``gen_tag`` and return the top ``runs`` with survivors.
+    """Discover run dirs, filter, and return the chosen runs with survivors.
 
     Run dirs are discovered by the presence of ``state.json`` (the canonical
     per-run marker). Each run's sort key comes from its ``state.json["gen_tag"]``.
@@ -246,18 +281,44 @@ def select_runs(
     a warning, so a malformed dir name (e.g. ``gen-9999-x``) can never be picked
     as most-recent over a well-formed run (FIX 2). Ordering is descending by
     ``(sort_key, run_id)`` — ``run_id`` as the tie-break keeps selection
-    total/deterministic when two runs share a gen_tag. Runs with zero valid
-    survivors are still considered for selection slots but contribute no bodies
-    (an empty run does not silently promote a lower-ranked run).
+    total/deterministic when two runs share a gen_tag (e.g. two ``gen1`` runs).
+
+    Selection mode (E2):
+
+    - ``select_run_ids`` empty → **top-N**: return the highest ``runs`` by
+      descending key (the default co-evolving pool).
+    - ``select_run_ids`` non-empty → **explicit**: return EXACTLY the run dirs
+      whose ``run_id`` is in the set, in the same deterministic descending order,
+      ignoring ``runs``. A requested id matching no discovered run dir is a fatal
+      ``SystemExit`` (a typo must not silently shrink a frozen held-out bench).
+
+    ``exclude_run_ids`` is applied in BOTH modes BEFORE the cut: any discovered
+    run whose ``run_id`` is in the set is removed from consideration (so top-N
+    fills its slots from the remaining runs, and explicit selection can name a
+    superset minus a few). Excluding a run that does not exist is a no-op (it was
+    going to be absent anyway).
+
+    Runs with zero valid survivors are still considered for selection slots but
+    contribute no bodies (an empty run does not silently promote a lower-ranked
+    run); :func:`assemble_pool` rejects the assembled pool if the TOTAL survivor
+    count is zero.
     """
     root = Path(seeds_root)
     if not root.is_dir():
         raise SystemExit(f"seeds root {root} does not exist or is not a directory")
 
+    select_set = set(select_run_ids)
+    exclude_set = set(exclude_run_ids)
+
     discovered: list[SelectedRun] = []
+    discovered_ids: set[str] = set()
     for run_dir in sorted(p for p in root.iterdir() if p.is_dir()):
         state_path = run_dir / "state.json"
         if not state_path.is_file():
+            continue
+        run_id = run_dir.name
+        discovered_ids.add(run_id)
+        if run_id in exclude_set:
             continue
         state = _load_json_object(state_path)
         # The raw tag is recorded verbatim in the manifest; only the SORT KEY is
@@ -268,7 +329,7 @@ def select_runs(
             _LOGGER.warning(
                 "run %s has a missing/empty/malformed gen_tag %r; "
                 "sorting it lowest (never selected over a well-formed run)",
-                run_dir.name,
+                run_id,
                 gen_tag,
             )
             sort_key = _MALFORMED_SORT_KEY
@@ -277,7 +338,7 @@ def select_runs(
         survivors = collect_valid_survivors(run_dir, per_run=per_run)
         discovered.append(
             SelectedRun(
-                run_id=run_dir.name,
+                run_id=run_id,
                 gen_tag=gen_tag,
                 sort_key=sort_key,
                 survivors=survivors,
@@ -285,7 +346,28 @@ def select_runs(
         )
 
     discovered.sort(key=lambda run: (run.sort_key, run.run_id), reverse=True)
-    return discovered[:runs]
+
+    if not select_set:
+        # Top-N mode (default co-evolving pool).
+        return discovered[:runs]
+
+    # Explicit mode — pin EXACTLY the requested run ids. A requested id that
+    # matched no discovered run dir is fatal (a typo must not silently shrink a
+    # frozen held-out bench). ``exclude_set`` may legitimately have removed a
+    # requested id already → that too is a fatal contradiction, surfaced here.
+    missing = sorted(rid for rid in select_set if rid not in discovered_ids)
+    if missing:
+        raise SystemExit(
+            f"--select-runs named run id(s) {missing} not found under {root}; "
+            f"discovered run dirs: {sorted(discovered_ids)}"
+        )
+    contradicted = sorted(select_set & exclude_set)
+    if contradicted:
+        raise SystemExit(
+            f"run id(s) {contradicted} are in BOTH --select-runs and --exclude-runs; "
+            "remove the contradiction"
+        )
+    return [run for run in discovered if run.run_id in select_set]
 
 
 def _ensure_out_dir(out_dir: Path, *, force: bool) -> None:
@@ -333,13 +415,23 @@ def assemble_pool(
     per_run: int | None,
     force: bool,
     now: str | None,
+    select_run_ids: tuple[str, ...] = (),
+    exclude_run_ids: tuple[str, ...] = (),
 ) -> dict[str, Any]:
     """Build the flat pool + manifest deterministically; return the manifest dict.
 
     ``now`` is supplied by the caller (the manifest's ``generated_at``) — the
     deterministic core never calls ``datetime.now``, so tests are reproducible.
+    ``select_run_ids`` / ``exclude_run_ids`` forward to :func:`select_runs` (E2
+    explicit held-out assembly); empty → the top-N default pool.
     """
-    selected = select_runs(seeds_root, runs=runs, per_run=per_run)
+    selected = select_runs(
+        seeds_root,
+        runs=runs,
+        per_run=per_run,
+        select_run_ids=select_run_ids,
+        exclude_run_ids=exclude_run_ids,
+    )
     total = sum(len(run.survivors) for run in selected)
     if total == 0:
         raise SystemExit(
@@ -370,8 +462,14 @@ def assemble_pool(
         "schema_version": 1,
         "generated_at": now,
         "seeds_root": str(seeds_root),
+        # E2 — "explicit" when the held-out bench pinned exact run ids, else
+        # "top_n" (the default co-evolving pool). Records WHICH lever produced
+        # this pool so a frozen bench's provenance is self-describing.
+        "selection_mode": "explicit" if select_run_ids else "top_n",
         "runs_requested": runs,
         "per_run_cap": per_run,
+        "select_run_ids": sorted(select_run_ids),
+        "exclude_run_ids": sorted(exclude_run_ids),
         "selected_run_ids": [run.run_id for run in selected],
         "runs": [
             {
@@ -397,6 +495,7 @@ def _print_summary(manifest: dict[str, Any], *, out_dir: Path) -> None:
     print(f"Assembled seed pool: {out_dir}")
     print(f"  content hash : {manifest['content_hash']}")
     print(f"  total seeds  : {manifest['total_survivors']}")
+    print(f"  selection    : {manifest['selection_mode']}")
     print(f"  generated_at : {manifest['generated_at']}")
     print("  runs         :")
     for run in manifest["runs"]:
@@ -415,7 +514,23 @@ def main(argv: list[str] | None = None) -> int:
         "--runs",
         type=int,
         default=DEFAULT_RUNS,
-        help=f"number of most-recent runs to include (default: {DEFAULT_RUNS})",
+        help=f"number of most-recent runs to include in TOP-N mode (default: {DEFAULT_RUNS}); "
+        "ignored when --select-runs is given",
+    )
+    parser.add_argument(
+        "--select-runs",
+        type=str,
+        default="",
+        help="comma-separated EXACT run dir ids to pin (E2 explicit mode for a frozen "
+        "held-out bench, e.g. the runs DISJOINT from the selection pool); ignores --runs. "
+        "A named id that matches no run dir is a fatal error.",
+    )
+    parser.add_argument(
+        "--exclude-runs",
+        type=str,
+        default="",
+        help="comma-separated run dir ids to DROP from consideration in either mode "
+        "(e.g. top-N minus the selection pool); excluding an absent run is a no-op.",
     )
     parser.add_argument(
         "--per-run",
@@ -448,6 +563,9 @@ def main(argv: list[str] | None = None) -> int:
     if args.per_run is not None and args.per_run <= 0:
         raise SystemExit("--per-run must be a positive integer when given")
 
+    select_run_ids = _split_run_ids(args.select_runs)
+    exclude_run_ids = _split_run_ids(args.exclude_runs)
+
     manifest = assemble_pool(
         seeds_root=args.seeds_root,
         out_dir=args.out,
@@ -455,6 +573,8 @@ def main(argv: list[str] | None = None) -> int:
         per_run=args.per_run,
         force=args.force,
         now=args.now,
+        select_run_ids=select_run_ids,
+        exclude_run_ids=exclude_run_ids,
     )
     _print_summary(manifest, out_dir=args.out)
     return 0

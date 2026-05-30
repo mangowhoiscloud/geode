@@ -1296,12 +1296,14 @@ def score_held_out_bench(
     argv plumbing is introduced. ``dry_run=True`` produces the synthetic dim set
     (no quota spent) so the wiring is unit-testable.
 
-    CADENCE / WIRING (E2 Phase 3): this entry point is intentionally NOT yet
-    dispatched from the live cycle — see :func:`_held_out_record_fields`, which
-    the promote path consumes when a bench is configured. Calling it every cycle
-    (vs only on promote) is a flagged follow-up decision; the conservative
-    default records the held-out fitness only when a promote writes a baseline
-    row.
+    CADENCE / WIRING (E2-wire, 2026-05-30): this entry point IS dispatched from
+    the live cycle in :func:`main`, once per cycle, gated on
+    ``_resolve_held_out_bench()`` being set and ``not dry_run`` (a configured
+    bench → score; ``None`` → skip, zero cost, backward-compatible). The operator
+    chose EVERY-cycle cadence so the fixed-ruler fitness-vs-generation curve is
+    captured every generation; the result is recorded into the per-cycle
+    attribution row (``mutations.jsonl`` — the curve SoT) AND, on a promote, the
+    baseline registry row.
     """
     from core.self_improving_loop.baseline_epoch import seed_pool_content_hash
 
@@ -3412,6 +3414,46 @@ def main() -> int:
         measurement_modality=measurement_modality or None,
         anchor_confidence_mode=_anchor_confidence_mode,
     )
+    # E2 (2026-05-30) — per-cycle fixed-ruler measurement. The held-out bench is
+    # a VERSION-FROZEN seed set DISJOINT from the co-evolving ``seed_select`` pool
+    # the audit above ran on, so its fitness is comparable ACROSS generations.
+    # CADENCE (operator decision): EVERY cycle, not just on promote — so the loop
+    # captures a fitness-vs-generation curve on the FIXED ruler every generation.
+    # COST GUARD: ``score_held_out_bench`` runs a SECOND full audit, so it fires
+    # ONLY when (a) an operator has configured a bench (``_resolve_held_out_bench``
+    # → ``None`` ⇒ skip, zero overhead, backward-compatible) AND (b) this is not a
+    # dry-run (synthetic dims carry no fixed-ruler signal). Failures are non-fatal
+    # — a held-out scoring error must never sink the primary cycle's promote /
+    # attribution path, so the curve simply skips this generation on error.
+    _held_out_fitness: float | None = None
+    _held_out_bench_id: str | None = None
+    _held_out_bench = _resolve_held_out_bench()
+    if _held_out_bench and not args.dry_run:
+        try:
+            # The per-dim aggregate is returned for completeness but not recorded
+            # here — the E2-wire curve is fitness-vs-generation on the fixed
+            # ruler (one scalar per cycle) + the bench id; per-dim held-out
+            # breakdowns are a later (E6) methods-page concern.
+            _held_out_fitness, _held_out_dims_unused, _held_out_bench_id = score_held_out_bench(
+                _held_out_bench,
+                session_id=session_id,
+                gen_tag=gen_tag,
+            )
+            del _held_out_dims_unused
+            log.info(
+                "held-out bench scored: fitness=%.6f bench_id=%s (fixed-ruler, every-cycle)",
+                _held_out_fitness,
+                _held_out_bench_id,
+            )
+        except Exception:  # pragma: no cover — defensive; curve skips this gen
+            log.warning(
+                "held-out bench scoring failed for bench %r; the fixed-ruler curve "
+                "skips this generation (primary cycle unaffected)",
+                _held_out_bench,
+                exc_info=True,
+            )
+            _held_out_fitness = None
+            _held_out_bench_id = None
     # P0b — per-dim score breakdown lives in the journal (event-scoped).
     # Aggregate fitness is recorded in sessions.jsonl (SoT, P0a §6); the
     # breakdown is not in sessions.jsonl so it belongs here, not duplicated.
@@ -3517,28 +3559,18 @@ def main() -> int:
         # PR-MARGIN-FITNESS-SCALE (2026-05-30) — persist this audit's
         # fitness-scale stderr so the NEXT cycle reads it as the prior σ.
         "fitness_stderr": current_fitness_stderr,
-        # E2 (2026-05-30) — fixed-ruler evidence. DELIBERATELY un-wired in the
-        # live promote path: ``score_held_out_bench`` runs a SECOND full audit
-        # (real quota cost), so dispatching it from every promote would silently
-        # double audit cost — a genuine cadence decision the operator must make,
-        # not one this PR should bake in. The end-to-end RECORD path is fully
-        # functional (these two slots flow through ``_write_baseline`` →
-        # ``_append_baseline_registry_row`` and are omitted from the row when
-        # None), so wiring is a 1-line activation once the cadence is chosen.
-        #
-        # TO WIRE (conservative cadence = score on promote, record in the row):
-        #   _hob = _resolve_held_out_bench()
-        #   if _hob and not args.dry_run:
-        #       _ho_fit, _ho_dims, _ho_id = score_held_out_bench(
-        #           _hob, session_id=session_id, gen_tag=gen_tag)
-        #       _baseline_provenance["held_out_fitness"] = _ho_fit
-        #       _baseline_provenance["held_out_bench_id"] = _ho_id
-        # FLAGGED follow-up: (a) every-cycle vs only-on-promote cadence (the
-        # second audit's cost); (b) whether the epoch spec's seed_pool_id should
-        # become the FROZEN held_out_bench_id instead of the co-evolving pool
-        # (the comparability ruler) — see baseline_epoch.build_baseline_spec.
-        "held_out_fitness": None,
-        "held_out_bench_id": None,
+        # E2 (2026-05-30) — fixed-ruler evidence, now WIRED (operator cadence =
+        # EVERY cycle). Scored once per cycle above (``score_held_out_bench``,
+        # cost-guarded on a configured bench + non-dry-run); the SAME values flow
+        # into both the per-cycle attribution row (the curve SoT) and — on a
+        # promote — this baseline registry row (so the promoted baseline carries
+        # its fixed-ruler fitness too). Both ``None`` when no bench is configured
+        # → ``_append_baseline_registry_row`` omits them (backward-compatible).
+        # FLAGGED follow-up (out of E2 scope): whether the epoch spec's
+        # ``seed_pool_id`` should additionally pin the FROZEN ``held_out_bench_id``
+        # — see ``baseline_epoch.build_baseline_spec``.
+        "held_out_fitness": _held_out_fitness,
+        "held_out_bench_id": _held_out_bench_id,
     }
     if args.dry_run:
         promoted_line = "false (dry-run)"
@@ -3732,6 +3764,14 @@ def main() -> int:
                 fitness_after=float(fitness),
                 audit_run_id=_sil_audit_run_id,
                 source=_sil_source,
+                # E2 (2026-05-30) — per-cycle fixed-ruler evidence into
+                # mutations.jsonl. Recorded on EVERY cycle when a held-out bench
+                # is configured (both None when not → the row omits them, legacy
+                # shape preserved). This is the cross-generation curve the hub
+                # renders; ``fitness_after`` above is the co-evolving-pool value
+                # (within-generation ranking only).
+                held_out_fitness=_held_out_fitness,
+                held_out_bench_id=_held_out_bench_id,
             )
         except Exception:  # pragma: no cover — defensive
             log.warning(

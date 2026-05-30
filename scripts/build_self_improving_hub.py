@@ -4512,6 +4512,122 @@ def _render_mutations_summary(joined: list[dict[str, Any]]) -> str:
     )
 
 
+def _collect_held_out_curve(mutations: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Pull the per-cycle held-out fitness points from the attribution rows (E2).
+
+    Reads ``kind="attribution"`` rows that carry ``held_out_fitness`` — the
+    fixed-ruler measurement recorded EVERY cycle when a held-out bench is
+    configured (``autoresearch/train.py`` E2-wire). Rows without the field
+    (no-bench / legacy) are skipped. Points are ordered by ``ts`` ascending so the
+    list reads chronologically — generation 1 first — which is how a
+    fitness-vs-generation curve is read.
+
+    Graceful contract: every schema-typed cast is guarded. A row whose ``ts`` or
+    ``held_out_fitness`` is non-numeric is skipped (it cannot place a point on the
+    curve) rather than raising — a malformed row never sinks the whole render.
+    Returns ``[{ts, held_out_fitness, held_out_bench_id, mutation_id}]``.
+    """
+    points: list[dict[str, Any]] = []
+    for row in mutations:
+        if not isinstance(row, dict) or row.get("kind") != "attribution":
+            continue
+        raw_fitness = row.get("held_out_fitness")
+        if raw_fitness is None:
+            continue
+        try:
+            held_out_fitness = float(raw_fitness)
+        except (TypeError, ValueError):
+            continue
+        raw_ts = row.get("ts")
+        # Graceful at the cast boundary: a missing / non-numeric ts is SKIPPED, not
+        # defaulted. The curve is ordered by ts and its Δ-vs-prior column depends on
+        # that order, so a point with no valid position would mis-place itself (and
+        # corrupt two deltas). A row with no positionable ts cannot be a curve point.
+        if not isinstance(raw_ts, int | float) or isinstance(raw_ts, bool):
+            continue
+        ts_value = float(raw_ts)
+        points.append(
+            {
+                "ts": ts_value,
+                "held_out_fitness": held_out_fitness,
+                "held_out_bench_id": str(row.get("held_out_bench_id") or "—"),
+                "mutation_id": str(row.get("mutation_id") or "—"),
+            }
+        )
+    points.sort(key=lambda point: point["ts"])
+    return points
+
+
+def _render_held_out_curve(mutations: list[dict[str, Any]]) -> str:
+    """Render the per-cycle held-out (fixed-ruler) fitness curve as a dense table.
+
+    The held-out bench is VERSION-FROZEN, so this fitness IS comparable across
+    generations (unlike the co-evolving-pool ``fitness_after`` in the mutations
+    table above). One row per cycle that scored the bench: generation index,
+    timestamp, held-out fitness (0-1, HIGHER-is-better), its delta from the prior
+    generation (a positive delta = improvement on the fixed ruler), and the
+    bench's content-address. When no cycle has recorded a held-out point the
+    section is omitted entirely (empty string) so a loop without a configured
+    bench shows no empty scaffolding. Dense table only — no card grid, accent
+    bar, or emoji.
+    """
+    points = _collect_held_out_curve(mutations)
+    if not points:
+        return ""
+    bench_ids = sorted({point["held_out_bench_id"] for point in points})
+    ruler_note = (
+        f"fixed ruler <code>{html_escape(bench_ids[0])}</code>"
+        if len(bench_ids) == 1
+        else f"rulers changed across the run: {len(bench_ids)} distinct bench ids "
+        "(a frozen bench was edited — the curve below is NOT fully comparable)"
+    )
+    rows: list[str] = []
+    prior_fitness: float | None = None
+    for index, point in enumerate(points, start=1):
+        fitness = point["held_out_fitness"]
+        if prior_fitness is None:
+            delta_cell = '<td class="num muted">—</td>'
+        else:
+            delta = fitness - prior_fitness
+            cls = "delta-positive" if delta > 0 else ("delta-negative" if delta < 0 else "muted")
+            delta_cell = f'<td class="num {cls}">{delta:+.4f}</td>'
+        prior_fitness = fitness
+        bench_id_cell = html_escape(point["held_out_bench_id"])
+        rows.append(
+            "        <tr>\n"
+            f'          <td class="num">{index}</td>\n'
+            f'          <td class="muted">{html_escape(_fmt_epoch(point["ts"]))}</td>\n'
+            f'          <td class="num">{fitness:.4f}</td>\n'
+            f"          {delta_cell}\n"
+            f'          <td class="muted"><code>{bench_id_cell}</code></td>\n'
+            "        </tr>"
+        )
+    rows_html = "\n".join(rows)
+    return (
+        '    <h2 class="section"><span>Held-out fitness curve &middot; '
+        f"{len(points)} generation" + ("s" if len(points) != 1 else "") + "</span></h2>\n"
+        '    <p class="page-sub">Per-cycle fitness on the VERSION-FROZEN held-out bench '
+        "(<code>held_out_fitness</code> in the attribution rows). Because the bench never "
+        "mutates, these values ARE comparable across generations — the cross-generation "
+        "evidence the co-evolving-pool &Delta;fitness above cannot give. Scored every cycle "
+        f"a held-out bench is configured. {ruler_note}.</p>\n"
+        '    <table class="records">\n'
+        "      <thead>\n"
+        "        <tr>\n"
+        '          <th scope="col" class="num">gen</th>\n'
+        '          <th scope="col">measured</th>\n'
+        '          <th scope="col" class="num">held-out fitness</th>\n'
+        '          <th scope="col" class="num">&Delta; vs prior</th>\n'
+        '          <th scope="col">bench id</th>\n'
+        "        </tr>\n"
+        "      </thead>\n"
+        "      <tbody>\n"
+        f"{rows_html}\n"
+        "      </tbody>\n"
+        "    </table>"
+    )
+
+
 def _render_results_header_cells() -> str:
     """Render the 12 <th> cells for the results table header."""
     out: list[str] = []
@@ -4830,6 +4946,11 @@ def render_autoresearch_mutations(
             ),
             "mutations_summary": _render_mutations_summary(joined),
             "mutations_rows": _render_mutations_rows(joined),
+            # E2 — per-cycle held-out (fixed-ruler) fitness curve from the raw
+            # attribution rows (NOT the joined apply+attr pairs — a held-out point
+            # exists on every cycle's attribution row, independent of whether the
+            # cycle applied a mutation). Empty string when no bench was scored.
+            "held_out_curve": _render_held_out_curve(mutations),
         }
     )
     rendered = substitute(template, mapping)
