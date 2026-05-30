@@ -56,6 +56,12 @@ def main(argv: list[str] | None = None) -> int:
     )
     parser.add_argument("--promoted-by", default="backfill")
     parser.add_argument("--baseline-id", default=None, help="default: next sequential id")
+    parser.add_argument(
+        "--seed-select",
+        default=None,
+        help="seed pool the baseline was measured under (default: current pool; "
+        "pass explicitly for a historical baseline whose pointer has moved)",
+    )
     parser.add_argument("--auditor", required=True)
     parser.add_argument("--target", required=True)
     parser.add_argument("--judge", required=True)
@@ -110,6 +116,7 @@ def main(argv: list[str] | None = None) -> int:
             "mutator_model": args.mutator_model,
             "mutator_source": args.mutator_source,
         },
+        seed_select=args.seed_select,
     )
     print(f"appended {baseline_id} (margin_rule={args.margin_rule}) to {_baseline_archive_path()}")
     return 0

@@ -221,3 +221,121 @@ def test_vanilla_and_fixed_rows_coexist_differentiated(isolated: Path) -> None:
     rules = {r["margin_rule"] for r in rows}
     assert rules == {"dim-stderr", "fitness-stderr"}
     assert len(rows) == 2
+
+
+def test_invalid_margin_rule_rejected(isolated: Path) -> None:
+    """The shared writer guards the discriminator — a typo must not silently
+    land an un-queryable margin_rule."""
+    with pytest.raises(ValueError, match="margin_rule"):
+        auto_train._append_baseline_registry_row(
+            "baseline-2606-1",
+            dim_means={"broken_tool_use": 3.0},
+            dim_stderr={},
+            sample_count=None,
+            measurement_modality=None,
+            admire_means=None,
+            bench_means=None,
+            fitness_stderr=None,
+            margin_rule="dimstderr",  # typo
+            eval_archive=None,
+            session_id="s",
+            commit="c",
+            ts_utc="2026-06-01T00:00:00Z",
+            promoted_by="backfill",
+            models={
+                "auditor": "a",
+                "target": "t",
+                "judge": "j",
+                "mutator_model": "m",
+                "mutator_source": "s",
+            },
+        )
+
+
+def test_seed_select_override_freezes_historical_pool(isolated: Path) -> None:
+    """Backfill freezes the measured pool; the live ``_resolve_seed_select``
+    (here stubbed to ``petri_17dim``) must not overwrite it."""
+    auto_train._append_baseline_registry_row(
+        "baseline-2605-1",
+        dim_means={"broken_tool_use": 3.0},
+        dim_stderr={},
+        sample_count=None,
+        measurement_modality=None,
+        admire_means=None,
+        bench_means=None,
+        fitness_stderr=None,
+        margin_rule="dim-stderr",
+        eval_archive=None,
+        session_id="s",
+        commit="c",
+        ts_utc="2026-05-29T09:18:30Z",
+        promoted_by="backfill",
+        models={
+            "auditor": "a",
+            "target": "t",
+            "judge": "j",
+            "mutator_model": "m",
+            "mutator_source": "s",
+        },
+        seed_select="gen-2605-4-unfaithful+gen-2605-3-broken",
+    )
+    row = _rows(isolated / "baseline_archive.jsonl")[0]
+    assert row["seed_select"] == "gen-2605-4-unfaithful+gen-2605-3-broken"
+
+
+def test_backfill_script_end_to_end(isolated: Path) -> None:
+    """The backfill CLI maps its args onto a registry row (covers arg→row
+    mapping, not just the shared helper)."""
+    from scripts.backfill_baseline_registry_row import main as backfill_main
+
+    snapshot = isolated / "vanilla.json"
+    snapshot.write_text(
+        json.dumps(
+            {
+                "schema_version": 2,
+                "session_id": "sess-vanilla",
+                "commit": "HEAD",
+                "ts_utc": "2026-05-29T09:18:30Z",
+                "raw": {
+                    "dim_means": {"broken_tool_use": 3.25},
+                    "dim_stderr": {"broken_tool_use": 0.3},
+                    "sample_count": {"broken_tool_use": 8},
+                    "eval_archive": "/vanilla.eval",
+                },
+                "axes": {"admire_means": None, "bench_means": None, "ux_means": {"x": 1.0}},
+            }
+        ),
+        encoding="utf-8",
+    )
+    rc = backfill_main(
+        [
+            "--snapshot",
+            str(snapshot),
+            "--margin-rule",
+            "dim-stderr",
+            "--baseline-id",
+            "baseline-2605-1",
+            "--seed-select",
+            "vanilla-pool",
+            "--auditor",
+            "v-aud",
+            "--target",
+            "v-tgt",
+            "--judge",
+            "v-jdg",
+            "--mutator-model",
+            "v-mut",
+            "--mutator-source",
+            "v-src",
+        ]
+    )
+    assert rc == 0
+    row = _rows(isolated / "baseline_archive.jsonl")[0]
+    assert set(row) == _EXPECTED_ROW_KEYS
+    assert row["id"] == "baseline-2605-1"
+    assert row["margin_rule"] == "dim-stderr"
+    assert row["seed_select"] == "vanilla-pool"
+    assert row["auditor_model"] == "v-aud"
+    assert row["seed_count"] == 8
+    assert row["eval_archive"] == "/vanilla.eval"
+    assert row["promoted_by"] == "backfill"

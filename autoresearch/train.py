@@ -2078,6 +2078,7 @@ _CURRENT_MARGIN_RULE = "fitness-stderr"
 """The promote-gate margin rule the current code enforces (PR-MARGIN-FITNESS-
 SCALE). Live promotes stamp this; the pre-fix vanilla baseline is backfilled
 with ``"dim-stderr"`` to mark the buggy-margin cohort it was measured under."""
+_VALID_MARGIN_RULES = frozenset({"dim-stderr", "fitness-stderr"})
 
 
 def _baseline_archive_path() -> Path:
@@ -2094,6 +2095,12 @@ def _next_baseline_id(now: datetime) -> str:
     ``baseline_archive.jsonl`` — stable + monotonic across promotes, mirroring
     the seed-generation run-id scheme. ``now`` is passed in (not read) so the
     id is deterministic for a given caller clock.
+
+    Assumes a **single writer**: the self-improving loop serialises audits (and
+    therefore promotes) via the inter-process audit lane
+    (PR-OL-AUDIT-BURST-FIX), so the read-count-then-append is race-free in
+    practice. Two genuinely-concurrent promotes (not a supported mode) could
+    read the same count and collide — out of scope until parallel loops exist.
     """
     archive_path = _baseline_archive_path()
     seq = 1
@@ -2127,6 +2134,7 @@ def _append_baseline_registry_row(
     ts_utc: str,
     promoted_by: str,
     models: dict[str, str] | None = None,
+    seed_select: str | None = None,
 ) -> None:
     """Append one ``kind="baseline"`` registry row to ``baseline_archive.jsonl``.
 
@@ -2144,7 +2152,17 @@ def _append_baseline_registry_row(
     so the promote call sites stay unchanged in shape). The backfill script
     passes ``models`` explicitly because a historical baseline was measured under
     a config that has since changed — its models are not in the live config.
+
+    ``seed_select`` likewise overrides the seed pool: ``None`` re-resolves the
+    *current* pool (correct for a live promote, which fires right after its own
+    audit), but a backfill of a historical baseline must pass the pool it was
+    measured under (the live pointer may have moved).
     """
+    if margin_rule not in _VALID_MARGIN_RULES:
+        raise ValueError(
+            f"margin_rule {margin_rule!r} not in {sorted(_VALID_MARGIN_RULES)} — "
+            "the registry's vanilla↔fixed discriminator must be a known value"
+        )
     if models is None:
         cfg = _get_autoresearch_config()
         models = {
@@ -2175,7 +2193,7 @@ def _append_baseline_registry_row(
         "fitness_stderr": (float(fitness_stderr) if fitness_stderr is not None else None),
         "margin_rule": margin_rule,
         "bench": bool(bench_means),
-        "seed_select": _resolve_seed_select(),
+        "seed_select": seed_select if seed_select is not None else _resolve_seed_select(),
         "seed_count": int(seed_count),
         "auditor_model": models["auditor"],
         "target_model": models["target"],
