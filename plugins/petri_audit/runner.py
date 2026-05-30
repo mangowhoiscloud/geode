@@ -243,6 +243,7 @@ def build_command(
     _validate_seed_select_path(seed_select)
 
     cmd: list[str] = ["inspect", "eval", "inspect_petri/audit"]
+
     # PR-OL-AUDIT-BURST-FIX (2026-05-22) FIX-1+2 — serialise inspect_ai's
     # per-provider connection pool (default 10) and per-sample
     # parallelism (default also 10) down to 1 each. Matches Paperclip's
@@ -256,8 +257,19 @@ def build_command(
     # of fan-out parallel. Trade: actually completing > 0 samples.
     # Operators with a multi-account pool (future AccountPool sprint)
     # can lift these caps; the single-OAuth default stays at 1.
-    cmd.extend(["--max-connections", "1"])
-    cmd.extend(["--max-samples", "1"])
+    #
+    # An operator on a higher-limit lane (PAYG api_key, or a multi-account
+    # pool) lifts these via GEODE_AUDIT_MAX_CONNECTIONS / _MAX_SAMPLES. A
+    # missing or non-integer value falls back to 1 (graceful boundary), so
+    # the single-OAuth path is byte-identical to the original behaviour.
+    def _cap(env_name: str) -> int:
+        try:
+            return max(1, int(os.environ.get(env_name, "1")))
+        except (TypeError, ValueError):
+            return 1
+
+    cmd.extend(["--max-connections", str(_cap("GEODE_AUDIT_MAX_CONNECTIONS"))])
+    cmd.extend(["--max-samples", str(_cap("GEODE_AUDIT_MAX_SAMPLES"))])
     if seeds > 0:
         cmd.extend(["--limit", str(seeds)])
     cmd.extend(["--model-role", f"auditor={auditor}"])

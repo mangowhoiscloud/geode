@@ -5,10 +5,12 @@ when Anthropic Max OAuth subscription is shared between host Claude
 Code + audit subprocess + inspect_ai's 10-default-connection burst):
 
 FIX-1 — ``_build_audit_command`` argv pins ``--max-connections 1``
-        (inspect_ai default is 10 per provider).
+        by default (inspect_ai default is 10 per provider). An operator
+        on a higher-limit lane lifts it via GEODE_AUDIT_MAX_CONNECTIONS.
 
-FIX-2 — same argv pins ``--max-samples 1`` (serialises inspect_ai's
-        per-sample parallelism on top of per-connection).
+FIX-2 — same argv pins ``--max-samples 1`` by default (serialises
+        inspect_ai's per-sample parallelism on top of per-connection);
+        lifted via GEODE_AUDIT_MAX_SAMPLES.
 
 FIX-3 — ``core/llm/audit_lane.py`` module-level Lane (max_concurrent=1,
         15-min timeout) wraps the ``subprocess.run`` call so cron +
@@ -60,8 +62,15 @@ def _build_inspect_cmd() -> list[str]:
     )
 
 
-def test_inspect_cmd_pins_max_connections_one() -> None:
-    """FIX-1 — ``--max-connections 1`` is in the `inspect eval` argv."""
+def test_inspect_cmd_pins_max_connections_one(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """FIX-1 — ``--max-connections 1`` is in the `inspect eval` argv.
+
+    Clear the env knob so an ambient ``GEODE_AUDIT_MAX_CONNECTIONS`` on the
+    dev/CI host can't flake this default-pin assertion.
+    """
+    monkeypatch.delenv("GEODE_AUDIT_MAX_CONNECTIONS", raising=False)
     cmd = _build_inspect_cmd()
     assert "--max-connections" in cmd, (
         "OL-AUDIT-BURST-FIX FIX-1 regressed: --max-connections missing — "
@@ -71,8 +80,15 @@ def test_inspect_cmd_pins_max_connections_one() -> None:
     assert cmd[idx + 1] == "1"
 
 
-def test_inspect_cmd_pins_max_samples_one() -> None:
-    """FIX-2 — ``--max-samples 1`` is in the `inspect eval` argv."""
+def test_inspect_cmd_pins_max_samples_one(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """FIX-2 — ``--max-samples 1`` is in the `inspect eval` argv.
+
+    Clear the env knob so an ambient ``GEODE_AUDIT_MAX_SAMPLES`` on the
+    dev/CI host can't flake this default-pin assertion.
+    """
+    monkeypatch.delenv("GEODE_AUDIT_MAX_SAMPLES", raising=False)
     cmd = _build_inspect_cmd()
     assert "--max-samples" in cmd, (
         "OL-AUDIT-BURST-FIX FIX-2 regressed: --max-samples missing — "
@@ -80,6 +96,54 @@ def test_inspect_cmd_pins_max_samples_one() -> None:
     )
     idx = cmd.index("--max-samples")
     assert cmd[idx + 1] == "1"
+
+
+def test_inspect_cmd_caps_default_to_one_when_env_unset(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """With the env knobs unset the OAuth-safe 1/1 default holds — byte-
+    identical to the pre-knob hardcoded behaviour."""
+    monkeypatch.delenv("GEODE_AUDIT_MAX_CONNECTIONS", raising=False)
+    monkeypatch.delenv("GEODE_AUDIT_MAX_SAMPLES", raising=False)
+    cmd = _build_inspect_cmd()
+    assert cmd[cmd.index("--max-connections") + 1] == "1"
+    assert cmd[cmd.index("--max-samples") + 1] == "1"
+
+
+def test_inspect_cmd_caps_honour_env_override(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A higher-limit lane (PAYG api_key / multi-account pool) lifts the
+    caps via GEODE_AUDIT_MAX_CONNECTIONS / _MAX_SAMPLES."""
+    monkeypatch.setenv("GEODE_AUDIT_MAX_CONNECTIONS", "8")
+    monkeypatch.setenv("GEODE_AUDIT_MAX_SAMPLES", "3")
+    cmd = _build_inspect_cmd()
+    assert cmd[cmd.index("--max-connections") + 1] == "8"
+    assert cmd[cmd.index("--max-samples") + 1] == "3"
+
+
+def test_inspect_cmd_caps_fall_back_on_non_integer_env(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A non-integer env value falls back to 1 (graceful boundary) rather
+    than crashing build_command — keeps the OAuth path safe under typos."""
+    monkeypatch.setenv("GEODE_AUDIT_MAX_CONNECTIONS", "x")
+    monkeypatch.setenv("GEODE_AUDIT_MAX_SAMPLES", "")
+    cmd = _build_inspect_cmd()
+    assert cmd[cmd.index("--max-connections") + 1] == "1"
+    assert cmd[cmd.index("--max-samples") + 1] == "1"
+
+
+def test_inspect_cmd_caps_clamp_below_one_to_one(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A 0 / negative env value clamps up to 1 — inspect_ai requires >= 1
+    and a 0-connection pool would deadlock the audit."""
+    monkeypatch.setenv("GEODE_AUDIT_MAX_CONNECTIONS", "0")
+    monkeypatch.setenv("GEODE_AUDIT_MAX_SAMPLES", "-4")
+    cmd = _build_inspect_cmd()
+    assert cmd[cmd.index("--max-connections") + 1] == "1"
+    assert cmd[cmd.index("--max-samples") + 1] == "1"
 
 
 def test_inspect_cmd_burst_flags_before_model_role() -> None:
