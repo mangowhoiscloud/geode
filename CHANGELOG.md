@@ -45,6 +45,48 @@ functional change.
 
 ---
 
+## [0.99.98] - 2026-05-30
+
+### Added
+- **E6 (2026-05-30) — honest evidence page: methods + results + power.** A dedicated
+  EVIDENCE sub-page under the autoresearch hub
+  (`/geode/self-improving/autoresearch/evidence/`) that a skeptical reader uses to
+  judge one question — *does scaffold-selection actually improve safety fitness?* —
+  reading ONLY the git-tracked ledgers (`mutations.jsonl` attribution rows +
+  `baseline_archive.jsonl`), with measured values only (no fabricated numbers, no
+  placeholders). Rendered by `scripts/build_self_improving_hub.py`
+  (`render_autoresearch_evidence` + new template
+  `docs/self-improving/autoresearch/evidence.html.template` + an Evidence nav link
+  added to all autoresearch sidebars + the landing sub-view table, now 5 sub-pages).
+  Three sections:
+  - **Methods** — the experimental design, honestly: the FROZEN held-out ruler (E2,
+    `held_out_bench_id`, disjoint from the selection pool) vs the pinned SELECTION
+    pool (B2, `pool-68dc6f0c9745`); the 3 control ARMS (E3: `gate`=selection /
+    `random`=random-accept / `never`=no-mutation floor); per-mutation REPLICATE +
+    the ci-excludes-0 rule (E4); REPRODUCIBILITY pins (E5: prompt_hash / applied_diff
+    / sampling_params / rng_seed); content-addressed EPOCH partition (A). Explains
+    WHY only the held-out curve is evidence and why the cross-arm comparison isolates
+    selection from drift / judge-noise.
+  - **Results** — the per-cycle `held_out_fitness` curve PER ARM (split by
+    `promote_policy`), the 3-arm comparison on the fixed ruler (mean held-out fitness
+    + promotion count per arm), and the per-cycle / per-campaign
+    `gain_ci_excludes_zero` verdict. Dense tables; pre-E1 mixed-scale rows excluded
+    from aggregates. **0 promotions is stated plainly as a TRUST-INCREASING result.**
+  - **Power** — the required `N_seed × M_replicate` line COMPUTED from the recorded
+    combined σ (`√(within²+between²)`) at δ=0.02 / α=0.05 / 80% power (the stdlib
+    `_required_n_seed` mirrors `core/self_improving_loop/statistical_power.py`'s
+    formula, pinned by a drift-guard test), plus the honest verdict: "no evidence
+    yet" when the gain CI includes 0, "indeterminate" when σ is unrecorded — never a
+    fabricated N.
+  - **Graceful empty state.** The matched 3-arm 10-cycle has not run yet, so the page
+    renders the full structure with an honest "awaiting the 3-arm campaign" /
+    "no held-out campaign recorded yet" / "no evidence yet" state where curves / arms
+    are empty — no crash, no fabricated number. The same renderer populates when the
+    campaign later writes the rows. 11 new tests in
+    `tests/test_self_improving_hub_e2e.py` (3-section render, graceful empty state,
+    populated per-arm curve + verdict, power from recorded σ, no-slop, core
+    drift-guards for the arm map + power constants).
+
 ## [0.99.97] - 2026-05-30
 
 ### Added

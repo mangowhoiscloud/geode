@@ -917,7 +917,7 @@ def built_autoresearch_pages(tmp_path_factory: pytest.TempPathFactory) -> dict[s
         f"autoresearch builder failed: stdout={result.stdout!r} stderr={result.stderr!r}"
     )
     pages: dict[str, str] = {}
-    for name in ("index", "baseline", "mutations", "results", "policies"):
+    for name in ("index", "baseline", "mutations", "results", "evidence", "policies"):
         # `index` is the landing page; the rest are dir/index.html for trailing-slash URLs.
         path = (
             autoresearch_out / "index.html"
@@ -1324,6 +1324,313 @@ def test_held_out_curve_unit_graceful_skips_bad_values() -> None:
     assert "0.7000" in html
     # The bad-ts row's fitness (0.5) must NOT appear — it was skipped, not floated.
     assert "0.5000" not in html
+
+
+# ---------------------------------------------------------------------------
+# E6 (2026-05-30) — the honest evidence page (methods + results + power)
+# ---------------------------------------------------------------------------
+
+
+def test_evidence_page_renders_three_sections(
+    built_autoresearch_pages: dict[str, str],
+) -> None:
+    """E6: the evidence page renders the 3 sections (methods / results / power),
+    has the Evidence bucket title, and resolves every template marker."""
+    html = built_autoresearch_pages["evidence"]
+    assert "1 &middot; Methods" in html, "Methods section heading missing"
+    assert "2 &middot; Results" in html, "Results section heading missing"
+    assert "3 &middot; Power" in html, "Power section heading missing"
+    # Methods names the frozen ruler vs the pinned pool + the 3 arms + E5 pins + epoch.
+    assert "held-out ruler" in html and "pool-68dc6f0c9745" in html, (
+        "methods must name the frozen held-out ruler vs the pinned selection pool"
+    )
+    for arm in ("gate", "random", "never"):
+        assert arm in html, f"methods must name the {arm!r} control arm"
+    assert "prompt_hash" in html and "applied_diff_hash" in html, "E5 pins not described"
+    assert "epoch" in html.lower(), "content-addressed epoch partition not described"
+    # No unresolved template markers.
+    assert "{{" not in html and "}}" not in html, "unresolved template markers on evidence page"
+
+
+def test_evidence_page_graceful_empty_state(
+    built_autoresearch_pages: dict[str, str],
+) -> None:
+    """E6 CRITICAL: with no matched 3-arm held-out campaign on disk (the real
+    fixture has no promote_policy / gain rows), the page renders the full structure
+    + an HONEST 'awaiting' / 'no evidence yet' state — never a crash, never a
+    fabricated number, never a placeholder like XXXX."""
+    html = built_autoresearch_pages["evidence"]
+    # Honest empty states present.
+    assert "awaiting" in html.lower(), "missing honest 'awaiting campaign' empty state"
+    assert "no evidence" in html.lower(), "missing honest 'no evidence yet' verdict"
+    # NO fabricated number / placeholder.
+    assert "XXXX" not in html, "placeholder XXXX present — measured values only"
+    # The power section, with no recorded sigma, says 'indeterminate' rather than
+    # inventing an N.
+    assert "indeterminate" in html.lower(), (
+        "power section must report N indeterminate when sigma is unrecorded, not fabricate"
+    )
+
+
+def test_evidence_page_states_zero_promotions_as_trust(
+    built_autoresearch_pages: dict[str, str],
+) -> None:
+    """E6 honest framing: 0 promotions is stated as a TRUST-INCREASING result, not
+    a failure (operator's verbatim intent)."""
+    html = built_autoresearch_pages["evidence"]
+    assert "trust-increasing" in html.lower(), (
+        "0-promotion framing as trust-increasing missing from evidence page"
+    )
+
+
+def test_evidence_page_no_slop(built_autoresearch_pages: dict[str, str]) -> None:
+    """E6 no-slop (CLAUDE.md §Docs, feedback_no_box_ui_no_emoji): no colored
+    left-border accent bar, no card-grid navigation, no emoji. Dense tables only."""
+    html = built_autoresearch_pages["evidence"]
+    assert "border-left" not in html, "colored accent bar (border-left) is slop"
+    assert "card-grid" not in html and "subview-card" not in html, "card-grid nav is slop"
+    assert not _find_emoji(html), f"emoji on evidence page: {_find_emoji(html)!r}"
+    # The evidence content uses dense <table class="records"> + <dl class="status-grid">.
+    assert 'class="records"' in html and 'class="status-grid"' in html, (
+        "evidence page must use dense table / definition-list, not card grid"
+    )
+
+
+def test_evidence_page_in_nav_and_subview(
+    built_autoresearch_pages: dict[str, str],
+) -> None:
+    """E6 wiring: the Evidence link is in every autoresearch sidebar + the landing
+    sub-view table now lists 5 sub-pages including Evidence."""
+    for name, html in built_autoresearch_pages.items():
+        assert "/geode/self-improving/autoresearch/evidence/" in html, (
+            f"autoresearch {name} sidebar missing the Evidence nav link"
+        )
+    landing = built_autoresearch_pages["index"]
+    assert "5 autoresearch sub-pages" in landing, "landing sub-view count not bumped to 5"
+    assert "Evidence" in landing, "Evidence sub-view row missing from landing"
+
+
+def test_evidence_results_populated_per_arm_curve() -> None:
+    """E6 RESULTS (populated path): with multi-arm held-out + gain rows, the renderer
+    splits the per-cycle held-out curve PER ARM, computes a 3-arm comparison on the
+    fixed ruler, counts promotions per arm, and renders the ci-excludes-0 verdict.
+    Reads exactly the fields E2-E4 write (held_out_fitness / promote_policy /
+    gain_ci_excludes_zero / gain_verdict)."""
+    from scripts.build_self_improving_hub import (
+        _render_evidence_results,
+        _render_evidence_verdict,
+    )
+
+    mutations = [
+        # gate arm — two held-out cycles, an improvement.
+        {
+            "kind": "attribution",
+            "ts": 10.0,
+            "held_out_fitness": 0.60,
+            "held_out_bench_id": "pool-x",
+            "promote_policy": "gate",
+            "gain_ci_low": 0.01,
+            "gain_ci_high": 0.05,
+            "gain_ci_excludes_zero": True,
+            "gain_verdict": "gain significant",
+        },
+        {
+            "kind": "attribution",
+            "ts": 20.0,
+            "held_out_fitness": 0.64,
+            "held_out_bench_id": "pool-x",
+            "promote_policy": "gate",
+        },
+        # random arm — one held-out cycle, no gain evidence.
+        {
+            "kind": "attribution",
+            "ts": 15.0,
+            "held_out_fitness": 0.59,
+            "held_out_bench_id": "pool-x",
+            "promote_policy": "random",
+            "gain_ci_low": -0.02,
+            "gain_ci_high": 0.02,
+            "gain_ci_excludes_zero": False,
+            "gain_verdict": "no evidence yet",
+        },
+    ]
+    archive = [
+        {"kind": "baseline", "ts_utc": "2026-05-30T00:00:00+00:00", "promote_policy": "gate"},
+    ]
+    results_html = _render_evidence_results(mutations, archive)
+    # Per-arm curve: the gate arm shows 2 generations, random shows 1.
+    assert "gate" in results_html and "random" in results_html and "never" in results_html
+    assert "0.6000" in results_html and "0.6400" in results_html, "gate arm curve values missing"
+    assert "0.5900" in results_html, "random arm curve value missing"
+    # 3-arm comparison: gate has 1 promotion (from the archive row).
+    assert "3-arm comparison" in results_html
+    # never arm has no held-out cycle → honest per-arm empty state.
+    assert "No held-out cycle recorded for this arm yet" in results_html
+
+    verdict_html = _render_evidence_verdict(mutations, archive)
+    assert "gain significant" in verdict_html, "significant verdict not surfaced"
+    assert "no evidence yet" in verdict_html, "honest null verdict not surfaced"
+    # The CI bounds are rendered (read from the recorded fields).
+    assert "+0.0100" in verdict_html and "+0.0500" in verdict_html, "gain CI bounds missing"
+
+
+def test_evidence_untagged_baseline_not_counted_as_gate_arm() -> None:
+    """E6 honesty (Codex review): a pre-E3 promoted baseline carrying NO
+    promote_policy must NOT be silently attributed to the gate arm — that would
+    fabricate a matched-campaign result. It is counted in an explicit
+    'untagged (pre-arm)' bucket, and the gate arm shows 0 arm-tagged promotions."""
+    from scripts.build_self_improving_hub import _render_evidence_results
+
+    mutations: list = []  # no held-out / arm rows on disk
+    archive = [{"kind": "baseline", "ts_utc": "2026-05-30T00:00:00+00:00"}]  # no promote_policy
+    html = _render_evidence_results(mutations, archive)
+    # The untagged bucket appears + names the pre-arm origin.
+    assert "untagged" in html and "pre-arm" in html, "untagged baseline must be a separate bucket"
+    # The comparison note must NOT claim a gate-arm promotion; it states the baseline
+    # predates the control arms (singular verb for the single fixture baseline).
+    assert "predates the control arms" in html, (
+        "an untagged promotion must be flagged as predating the arms, not folded into gate"
+    )
+    # The gate arm row shows 0 promotions (the untagged baseline is NOT counted there).
+    gate_idx = html.find("selection (promote gate)")
+    assert gate_idx != -1
+    # The gate row's promotions cell (last <td class="num"> in that <tr>) is 0.
+    gate_row = html[gate_idx : html.find("</tr>", gate_idx)]
+    assert ">1<" not in gate_row, "untagged baseline wrongly counted as a gate-arm promotion"
+
+
+def test_evidence_verdict_renders_archive_iso_timestamp() -> None:
+    """E6 parity (Codex review): a promoted-baseline verdict row carries an ISO-string
+    ts_utc, which must be formatted (not dropped as '—' by a numeric-only cast)."""
+    from scripts.build_self_improving_hub import _render_evidence_verdict
+
+    archive = [
+        {
+            "kind": "baseline",
+            "ts_utc": "2026-05-30T12:34:56+00:00",
+            "promote_policy": "gate",
+            "gain_ci_excludes_zero": False,
+            "gain_verdict": "no evidence yet",
+        }
+    ]
+    html = _render_evidence_verdict([], archive)
+    assert "no evidence yet" in html
+    # The ISO date surfaces (short form) — the archive ts is no longer dropped.
+    assert "2026-05-30" in html, "archive ISO ts_utc must be formatted, not rendered as —"
+
+
+def test_evidence_power_reads_recorded_sigma() -> None:
+    """E6 POWER (populated path): the required-N line is COMPUTED from the recorded
+    combined sigma (within/between stderr), never fabricated. The N matches the
+    writer's formula for the same sigma."""
+    from scripts.build_self_improving_hub import _render_evidence_power, _required_n_seed
+
+    mutations = [
+        {
+            "kind": "attribution",
+            "ts": 10.0,
+            "within_mutation_stderr": 0.0,
+            "between_seed_stderr": 0.013,
+        },
+    ]
+    html = _render_evidence_power(mutations)
+    # sigma = sqrt(0^2 + 0.013^2) = 0.0130 — surfaced as the recorded sigma.
+    assert "0.0130" in html, "recorded combined sigma not surfaced in power section"
+    # required-N computed from that sigma (not indeterminate when sigma is recorded).
+    sigma = (0.0**2 + 0.013**2) ** 0.5
+    expected_n = _required_n_seed(sigma)
+    assert expected_n is not None
+    assert str(expected_n) in html, f"required N_seed {expected_n} not rendered from recorded sigma"
+    assert "indeterminate" not in html.lower(), "should not say indeterminate when sigma recorded"
+
+
+def test_evidence_power_indeterminate_when_no_sigma() -> None:
+    """E6 POWER honest empty: with no recorded variance signal, the required-N is
+    reported as 'indeterminate' (not a fabricated number)."""
+    from scripts.build_self_improving_hub import _render_evidence_power
+
+    # No within/between stderr on any row → sigma unknown.
+    mutations = [{"kind": "attribution", "ts": 10.0, "held_out_fitness": 0.6}]
+    html = _render_evidence_power(mutations)
+    assert "indeterminate" in html.lower(), "power must report indeterminate when sigma unknown"
+    assert "not yet estimated" in html.lower(), "sigma cell must say not-yet-estimated"
+
+
+def test_evidence_required_n_seed_matches_core_formula() -> None:
+    """E6 drift guard: the stdlib power-formula mirror in the builder reproduces
+    core.self_improving_loop.statistical_power.required_samples for the same sigma."""
+    from core.self_improving_loop.statistical_power import (
+        DEFAULT_ALPHA,
+        DEFAULT_POWER,
+        DEFAULT_TARGET_EFFECT_SIZE,
+        required_samples,
+    )
+    from scripts.build_self_improving_hub import (
+        _POWER_DEFAULT_ALPHA,
+        _POWER_DEFAULT_POWER,
+        _POWER_DEFAULT_TARGET_EFFECT_SIZE,
+        _required_n_seed,
+    )
+
+    # Constants must match the SoT (the stdlib mirror is otherwise silently stale).
+    assert _POWER_DEFAULT_TARGET_EFFECT_SIZE == DEFAULT_TARGET_EFFECT_SIZE
+    assert _POWER_DEFAULT_ALPHA == DEFAULT_ALPHA
+    assert _POWER_DEFAULT_POWER == DEFAULT_POWER
+    for sigma in (0.0, 0.005, 0.013, 0.05, 0.2):
+        assert _required_n_seed(sigma) == required_samples(sigma).n_seed, (
+            f"builder _required_n_seed({sigma}) diverges from required_samples"
+        )
+    # Graceful: None / negative / non-finite sigma → None (no crash, no fabrication).
+    assert _required_n_seed(None) is None
+    assert _required_n_seed(-1.0) is None
+    assert _required_n_seed(float("nan")) is None
+
+
+def test_evidence_arm_map_matches_core() -> None:
+    """E6 drift guard: the builder's 3 control-arm names match the writer-side
+    _VALID_PROMOTE_POLICIES SoT in autoresearch/train.py (parsed textually, since the
+    builder is stdlib-only)."""
+    from scripts.build_self_improving_hub import _EVIDENCE_ARMS
+
+    train_src = (REPO_ROOT / "autoresearch" / "train.py").read_text(encoding="utf-8")
+    m = re.search(r"_VALID_PROMOTE_POLICIES\s*=\s*frozenset\(\{([^}]*)\}\)", train_src)
+    assert m is not None, "could not locate _VALID_PROMOTE_POLICIES in train.py"
+    core_arms = set(re.findall(r'"([a-z_]+)"', m.group(1)))
+    builder_arms = {arm for arm, _label in _EVIDENCE_ARMS}
+    assert builder_arms == core_arms, f"builder arms {builder_arms} drift from core {core_arms}"
+
+
+def test_evidence_results_graceful_on_malformed_rows() -> None:
+    """E6 graceful contract: a non-numeric held_out_fitness / ts / gain CI bound is
+    skipped, not raised — the render never sinks on a malformed ledger row."""
+    from scripts.build_self_improving_hub import (
+        _render_evidence_power,
+        _render_evidence_results,
+        _render_evidence_verdict,
+    )
+
+    mutations = [
+        {"kind": "attribution", "ts": "bad", "held_out_fitness": 0.6, "promote_policy": "gate"},
+        {"kind": "attribution", "ts": 10.0, "held_out_fitness": "oops", "promote_policy": "gate"},
+        {
+            "kind": "attribution",
+            "ts": 20.0,
+            "gain_ci_excludes_zero": False,
+            "gain_ci_low": "x",
+            "gain_ci_high": None,
+        },
+        {"kind": "attribution", "ts": 30.0, "within_mutation_stderr": "nope"},
+    ]
+    archive: list = []
+    # None of these raise.
+    results_html = _render_evidence_results(mutations, archive)
+    verdict_html = _render_evidence_verdict(mutations, archive)
+    power_html = _render_evidence_power(mutations)
+    assert "3-arm comparison" in results_html
+    # The malformed gain CI row still produces a verdict row, with a "—" CI cell.
+    assert "no evidence yet" in verdict_html
+    # The malformed sigma row leaves sigma unestimated → indeterminate.
+    assert "indeterminate" in power_html.lower()
 
 
 def test_autoresearch_results_sparkline(built_autoresearch_pages: dict[str, str]) -> None:

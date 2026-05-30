@@ -34,10 +34,12 @@ import contextlib
 import datetime as _dt
 import json
 import logging
+import math
 import re
 import sys
 from dataclasses import dataclass
 from pathlib import Path
+from statistics import NormalDist
 from typing import Any
 from urllib.parse import quote
 
@@ -71,7 +73,31 @@ AUTORESEARCH_RESULTS_TEMPLATE = (
 AUTORESEARCH_POLICIES_TEMPLATE = (
     REPO_ROOT / "docs" / "self-improving" / "autoresearch" / "policies.html.template"
 )
+AUTORESEARCH_EVIDENCE_TEMPLATE = (
+    REPO_ROOT / "docs" / "self-improving" / "autoresearch" / "evidence.html.template"
+)
 PYPROJECT = REPO_ROOT / "pyproject.toml"
+
+# E6 (2026-05-30) — the three control arms of the matched held-out comparison.
+# Mirrors the writer-side ``_VALID_PROMOTE_POLICIES`` in ``autoresearch/train.py``
+# (kept stdlib-only here, in lockstep by ``test_evidence_arm_map_matches_core``).
+# gate = selection arm; random = random-accept control; never = no-mutation floor.
+_EVIDENCE_ARMS: tuple[tuple[str, str], ...] = (
+    ("gate", "selection (promote gate)"),
+    ("random", "random-accept control"),
+    ("never", "no-mutation floor"),
+)
+
+# E6 (2026-05-30) — the standard two-sample mean-difference power constants,
+# MIRRORING the SoT in ``core/self_improving_loop/statistical_power.py`` (this
+# builder is intentionally stdlib-only so it cannot import core). The defaults
+# below are the same δ / α / power the writer powers for; the formula
+# (``n ≈ 2(z_{α/2}+z_β)²σ²/δ²``) is reproduced in ``_required_n_seed`` so the page
+# computes N from the RECORDED σ (never a fabricated number). Kept in lockstep by
+# ``test_evidence_power_constants_match_core``.
+_POWER_DEFAULT_TARGET_EFFECT_SIZE = 0.02
+_POWER_DEFAULT_ALPHA = 0.05
+_POWER_DEFAULT_POWER = 0.8
 
 # 12-col header from autoresearch/train.py:1284 RESULTS_TSV_HEADER.
 # Verified against actual code (P-Phase-6 baseline 2026-05-26).
@@ -4280,8 +4306,14 @@ def _autoresearch_subview_rows(
     results_mtime: str,
     policies_mtime: str,
     baseline_mtime: str,
+    held_out_count: int,
 ) -> str:
-    """Render the 4-row sub-view table on the landing page."""
+    """Render the 5-row sub-view table on the landing page.
+
+    ``held_out_count`` is the number of per-cycle held-out points recorded so far
+    (the evidence page's synthesis input); a 0 reads as "awaiting" on that row,
+    matching the page's graceful empty state.
+    """
     rows = [
         (
             "Baseline",
@@ -4301,6 +4333,16 @@ def _autoresearch_subview_rows(
             f"{results_count} rows",
             results_mtime,
             "/geode/self-improving/autoresearch/results/",
+        ),
+        (
+            "Evidence",
+            (
+                f"{held_out_count} held-out points"
+                if held_out_count
+                else "<span class='muted'>awaiting campaign</span>"
+            ),
+            mutations_mtime,
+            "/geode/self-improving/autoresearch/evidence/",
         ),
         (
             "Policies",
@@ -4703,6 +4745,561 @@ def _render_held_out_curve(mutations: list[dict[str, Any]]) -> str:
     )
 
 
+# --------------------------------------------------------------------------- #
+# E6 (2026-05-30) — the honest evidence page (methods + results + power).      #
+# Reads the recorded ledgers ONLY (mutations.jsonl attribution rows +          #
+# baseline_archive.jsonl promoted rows). Measured values only — when a matched #
+# 3-arm held-out campaign has not run yet, every section renders an honest     #
+# "awaiting" state rather than a fabricated curve / placeholder number.        #
+# --------------------------------------------------------------------------- #
+def _required_n_seed(sigma: float | None) -> int | None:
+    """Required N_seed per arm to detect ``_POWER_DEFAULT_TARGET_EFFECT_SIZE`` at
+    ``_POWER_DEFAULT_POWER`` given the RECORDED combined fitness-stderr ``sigma``.
+
+    Mirrors ``core.self_improving_loop.statistical_power.required_samples`` (the
+    stdlib-only builder cannot import core): the textbook two-sample mean-difference
+    sample size ``n ≈ 2·(z_{α/2}+z_β)²·σ²/δ²`` per arm, rounded UP. Computed from the
+    σ actually recorded on the E4 rows — NOT a fabricated number — so the page never
+    invents an N.
+
+    Graceful contract: ``sigma is None`` (no variance observed yet), a non-finite /
+    negative σ, or δ ≤ 0 yields ``None`` (the caller renders "indeterminate" rather
+    than crashing). σ == 0 (perfectly stable) yields 1 (a single sample detects any
+    δ > 0 when there is no noise) — identical to the writer's contract.
+    """
+    if sigma is None:
+        return None
+    try:
+        sigma_value = float(sigma)
+    except (TypeError, ValueError):
+        return None
+    if not math.isfinite(sigma_value) or sigma_value < 0.0:
+        return None
+    delta = _POWER_DEFAULT_TARGET_EFFECT_SIZE
+    if delta <= 0.0:
+        return None
+    if sigma_value == 0.0:
+        return 1
+    z_alpha = NormalDist().inv_cdf(1.0 - _POWER_DEFAULT_ALPHA / 2.0)
+    z_beta = NormalDist().inv_cdf(_POWER_DEFAULT_POWER)
+    raw_n = 2.0 * (z_alpha + z_beta) ** 2 * (sigma_value**2) / (delta**2)
+    truncated = int(raw_n)
+    n_seed = truncated if truncated == raw_n else truncated + 1
+    return max(1, n_seed)
+
+
+def _held_out_attribution_rows(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Attribution rows carrying a numeric ``held_out_fitness``, ordered by ts.
+
+    Graceful at every cast: a non-numeric ``held_out_fitness`` / ``ts`` is skipped
+    (it cannot place a positionable curve point) rather than raising. ``promote_policy``
+    defaults to ``"gate"`` when the row predates E3 (legacy rows are the selection arm).
+    """
+    points: list[dict[str, Any]] = []
+    for row in rows:
+        if not isinstance(row, dict) or row.get("kind") != "attribution":
+            continue
+        raw_fitness = row.get("held_out_fitness")
+        if raw_fitness is None:
+            continue
+        try:
+            fitness = float(raw_fitness)
+        except (TypeError, ValueError):
+            continue
+        raw_ts = row.get("ts")
+        if not isinstance(raw_ts, int | float) or isinstance(raw_ts, bool):
+            continue
+        arm = row.get("promote_policy")
+        arm_tagged = isinstance(arm, str) and bool(arm)
+        points.append(
+            {
+                "ts": float(raw_ts),
+                "held_out_fitness": fitness,
+                "held_out_bench_id": str(row.get("held_out_bench_id") or "—"),
+                # A pre-E3 row has no promote_policy. ``arm`` carries the display label
+                # (``"untagged"`` so it is never confused with a real arm) and
+                # ``arm_tagged`` records whether the row genuinely declared an arm — the
+                # results renderer keeps untagged rows OUT of the gate arm so a
+                # pre-experiment cycle never masquerades as matched-campaign evidence.
+                "arm": str(arm) if arm_tagged else "untagged",
+                "arm_tagged": arm_tagged,
+            }
+        )
+    points.sort(key=lambda point: point["ts"])
+    return points
+
+
+def _evidence_gain_verdicts(
+    mutations: list[dict[str, Any]],
+    archive: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    """Collect the recorded ci-excludes-0 gain verdicts from both ledgers.
+
+    Reads ``gain_ci_excludes_zero`` / ``gain_verdict`` / ``gain_ci_low`` /
+    ``gain_ci_high`` from the attribution rows (per-cycle, numeric ``ts`` epoch) and
+    the ``kind="baseline"`` archive rows (per-campaign promote, ISO-string ``ts_utc``).
+    The two ledgers carry DIFFERENT timestamp shapes, so each is formatted with its
+    own formatter (``_fmt_epoch`` for the numeric cycle ts, ``short_iso`` for the
+    archive ISO string) — a previous version floated both and dropped the archive ts.
+    A row with no recorded verdict (``gain_ci_excludes_zero`` not a bool) contributes
+    nothing. Graceful at every cast: a non-numeric CI bound renders "—", never raises.
+    """
+    out: list[dict[str, Any]] = []
+
+    def _maybe_float(value: Any) -> float | None:
+        if isinstance(value, bool) or not isinstance(value, int | float):
+            return None
+        try:
+            return float(value)
+        except (TypeError, ValueError):
+            return None
+
+    def _scan(source_rows: list[dict[str, Any]], source: str, ts_label: str) -> None:
+        for row in source_rows:
+            excludes = row.get("gain_ci_excludes_zero")
+            if not isinstance(excludes, bool):
+                continue
+            raw_ts = row.get(ts_label)
+            ts_display = "—"
+            if (
+                source == "cycle"
+                and isinstance(raw_ts, int | float)
+                and not isinstance(raw_ts, bool)
+            ):
+                ts_display = _fmt_epoch(float(raw_ts))
+            elif source == "promote" and isinstance(raw_ts, str) and raw_ts:
+                ts_display = short_iso(raw_ts) or raw_ts
+            arm_tag = row.get("promote_policy")
+            out.append(
+                {
+                    "source": source,
+                    "ts_display": ts_display,
+                    # Untagged (pre-E3) rows are labelled "untagged", never silently
+                    # attributed to the gate arm (matches the results-section fix).
+                    "arm": str(arm_tag) if isinstance(arm_tag, str) and arm_tag else "untagged",
+                    "excludes_zero": excludes,
+                    "verdict": (
+                        str(row.get("gain_verdict"))
+                        if isinstance(row.get("gain_verdict"), str) and row.get("gain_verdict")
+                        else ("gain significant" if excludes else "no evidence yet")
+                    ),
+                    "ci_low": _maybe_float(row.get("gain_ci_low")),
+                    "ci_high": _maybe_float(row.get("gain_ci_high")),
+                }
+            )
+
+    _scan(mutations, "cycle", "ts")
+    _scan(archive, "promote", "ts_utc")
+    return out
+
+
+def _evidence_combined_sigma(mutations: list[dict[str, Any]]) -> float | None:
+    """Most-recent recorded combined fitness-stderr ``√(within²+between²)``.
+
+    Reads ``within_mutation_stderr`` + ``between_seed_stderr`` from the LATEST
+    attribution row that recorded either (ordered by ts). A missing component is
+    treated as 0 (the other dominates) — identical to the writer's
+    ``VarianceDecomposition.combined_stderr`` contract. Returns ``None`` when no row
+    recorded either component (no variance signal yet → the power line says so).
+    Graceful: every cast guarded.
+    """
+    latest_ts: float = float("-inf")
+    latest_sigma: float | None = None
+    for row in mutations:
+        if not isinstance(row, dict) or row.get("kind") != "attribution":
+            continue
+        raw_ts = row.get("ts")
+        if not isinstance(raw_ts, int | float) or isinstance(raw_ts, bool):
+            continue
+        within = row.get("within_mutation_stderr")
+        between = row.get("between_seed_stderr")
+
+        def _comp(value: Any) -> float | None:
+            if isinstance(value, bool) or not isinstance(value, int | float):
+                return None
+            try:
+                f = float(value)
+            except (TypeError, ValueError):
+                return None
+            return f if math.isfinite(f) and f >= 0.0 else None
+
+        w = _comp(within)
+        b = _comp(between)
+        if w is None and b is None:
+            continue
+        combined = ((w or 0.0) ** 2 + (b or 0.0) ** 2) ** 0.5
+        if float(raw_ts) >= latest_ts:
+            latest_ts = float(raw_ts)
+            latest_sigma = combined
+    return latest_sigma
+
+
+def _render_evidence_methods() -> str:
+    """Render the METHODS grid — the experimental design, stated honestly.
+
+    Static design facts (the design does not change per-render), as a dense
+    definition list: the frozen held-out ruler vs the pinned selection pool (E2/B2),
+    the per-mutation replicate + ci-excludes-0 rule (E4), reproducibility pins (E5),
+    and the content-addressed epoch partition (A). Plain text + monospace only — no
+    card grid, accent bar, or emoji.
+    """
+    rows: list[tuple[str, str]] = [
+        (
+            "held-out ruler (E2)",
+            "VERSION-FROZEN bench (<code>held_out_bench_id</code>), an older-runs set "
+            "DISJOINT from the selection pool. <code>held_out_fitness</code> is the SAME "
+            "0-1 <code>compute_fitness</code> (HIGHER-is-better) scored on it EVERY cycle. "
+            "Because the bench never mutates, this curve IS comparable across generations.",
+        ),
+        (
+            "selection pool (B2)",
+            "the PINNED co-evolving pool <code>pool-68dc6f0c9745</code> the loop selects on. "
+            "It co-evolves, so the intrinsic <code>fitness</code> measured on it is NOT "
+            "cross-generation evidence — only the held-out ruler is.",
+        ),
+        (
+            "3 control arms (E3)",
+            "<code>gate</code> = selection (promote gate) &middot; <code>random</code> = "
+            "random-accept control &middot; <code>never</code> = no-mutation floor. The "
+            "cross-arm comparison on the SAME fixed ruler isolates selection from drift + "
+            "judge noise: if gate does not beat random + never on the held-out curve, the "
+            "improvement is not from selection.",
+        ),
+        (
+            "replicate + ci-excludes-0 (E4)",
+            "per-mutation replicate <code>M</code> (repeated audits of the same cycle) "
+            "decomposes provider jitter (within) from seed heterogeneity (between). A gain "
+            "is CLAIMED only when its confidence interval excludes 0 "
+            "(<code>gain_ci_excludes_zero</code>); otherwise the honest verdict is "
+            '"no evidence yet".',
+        ),
+        (
+            "reproducibility pins (E5)",
+            "each cycle records <code>prompt_hash</code> &middot; <code>applied_diff_hash</code> "
+            "&middot; <code>sampling_params</code> &middot; <code>rng_seed</code> so a third "
+            "party can reconstruct WHAT WAS SENT (auditability — no backend-determinism claim).",
+        ),
+        (
+            "epoch partition (A)",
+            "every promoted baseline is hashed into a content-addressed epoch (be-NNN) keyed "
+            "on the production+measurement spec; baselines from different epochs were produced "
+            "under different logic and are never averaged into one comparison.",
+        ),
+    ]
+    out: list[str] = ['    <dl class="status-grid">']
+    for label, value in rows:
+        out.append(f"      <dt>{html_escape(label)}</dt><dd>{value}</dd>")
+    out.append("    </dl>")
+    return "\n".join(out)
+
+
+def _render_evidence_methods_arms() -> str:
+    """Render the 3-arm definition table for the methods section (dense table)."""
+    rows: list[str] = []
+    for arm, label in _EVIDENCE_ARMS:
+        rows.append(
+            "        <tr>\n"
+            f"          <td><code>{html_escape(arm)}</code></td>\n"
+            f"          <td>{html_escape(label)}</td>\n"
+            "        </tr>"
+        )
+    rows_html = "\n".join(rows)
+    return (
+        '    <h3 class="section"><span>Control arms</span></h3>\n'
+        '    <table class="records">\n'
+        "      <thead>\n"
+        "        <tr>\n"
+        '          <th scope="col"><code>promote_policy</code></th>\n'
+        '          <th scope="col">role on the fixed ruler</th>\n'
+        "        </tr>\n"
+        "      </thead>\n"
+        "      <tbody>\n"
+        f"{rows_html}\n"
+        "      </tbody>\n"
+        "    </table>"
+    )
+
+
+def _render_evidence_arm_curve(arm: str, label: str, points: list[dict[str, Any]]) -> str:
+    """Render one arm's per-cycle held-out curve (or its honest empty state)."""
+    if not points:
+        return (
+            f'    <h3 class="section"><span>{html_escape(label)} '
+            f"&middot; <code>{html_escape(arm)}</code></span></h3>\n"
+            '    <p class="empty"><em>No held-out cycle recorded for this arm yet — '
+            "awaiting the matched 3-arm campaign.</em></p>"
+        )
+    rows: list[str] = []
+    prior: float | None = None
+    for index, point in enumerate(points, start=1):
+        fitness = point["held_out_fitness"]
+        if prior is None:
+            delta_cell = '<td class="num muted">—</td>'
+        else:
+            delta = fitness - prior
+            cls = "delta-positive" if delta > 0 else ("delta-negative" if delta < 0 else "muted")
+            delta_cell = f'<td class="num {cls}">{delta:+.4f}</td>'
+        prior = fitness
+        rows.append(
+            "        <tr>\n"
+            f'          <td class="num">{index}</td>\n'
+            f'          <td class="muted">{html_escape(_fmt_epoch(point["ts"]))}</td>\n'
+            f'          <td class="num">{fitness:.4f}</td>\n'
+            f"          {delta_cell}\n"
+            "        </tr>"
+        )
+    rows_html = "\n".join(rows)
+    return (
+        f'    <h3 class="section"><span>{html_escape(label)} '
+        f"&middot; <code>{html_escape(arm)}</code> &middot; "
+        f"{len(points)} generation" + ("s" if len(points) != 1 else "") + "</span></h3>\n"
+        '    <table class="records">\n'
+        "      <thead>\n"
+        "        <tr>\n"
+        '          <th scope="col" class="num">gen</th>\n'
+        '          <th scope="col">measured</th>\n'
+        '          <th scope="col" class="num">held-out fitness</th>\n'
+        '          <th scope="col" class="num">&Delta; vs prior</th>\n'
+        "        </tr>\n"
+        "      </thead>\n"
+        "      <tbody>\n"
+        f"{rows_html}\n"
+        "      </tbody>\n"
+        "    </table>"
+    )
+
+
+def _render_evidence_results(
+    mutations: list[dict[str, Any]],
+    archive: list[dict[str, Any]],
+) -> str:
+    """Render the RESULTS section: per-arm held-out curve + 3-arm comparison +
+    promotion count per arm. Honest empty state when no campaign has run.
+
+    A held-out point / promoted baseline that carries NO ``promote_policy`` (a pre-E3
+    row, written before the control arms existed) is NOT silently attributed to the
+    ``gate`` arm — that would fabricate a gate-arm campaign result where none was run.
+    Untagged rows are counted in an explicit ``untagged (pre-arm)`` bucket so a
+    pre-experiment promotion never masquerades as matched-campaign arm evidence.
+    """
+    points = _held_out_attribution_rows(mutations)
+    by_arm: dict[str, list[dict[str, Any]]] = {arm: [] for arm, _ in _EVIDENCE_ARMS}
+    untagged_points: list[dict[str, Any]] = []
+    for point in points:
+        if point["arm_tagged"]:
+            by_arm.setdefault(point["arm"], []).append(point)
+        else:
+            untagged_points.append(point)
+
+    # Promotion count per arm from the promoted-baseline registry rows. An untagged
+    # baseline (pre-E3) is counted SEPARATELY — never folded into the gate arm.
+    promo_by_arm: dict[str, int] = {arm: 0 for arm, _ in _EVIDENCE_ARMS}
+    untagged_promos = 0
+    for row in archive:
+        if not isinstance(row, dict) or row.get("kind") != "baseline":
+            continue
+        arm = row.get("promote_policy")
+        if isinstance(arm, str) and arm in promo_by_arm:
+            promo_by_arm[arm] += 1
+        else:
+            untagged_promos += 1
+
+    blocks: list[str] = []
+
+    # 3-arm comparison summary (mean held-out fitness + promotion count per arm),
+    # plus an explicit untagged (pre-arm) row when any untagged data exists.
+    comparison_rows: list[str] = []
+    summary_rows: list[tuple[str, str, list[dict[str, Any]], int]] = [
+        (arm, label, by_arm.get(arm, []), promo_by_arm.get(arm, 0)) for arm, label in _EVIDENCE_ARMS
+    ]
+    if untagged_points or untagged_promos:
+        summary_rows.append(
+            ("untagged", "pre-arm (no promote_policy)", untagged_points, untagged_promos)
+        )
+    for arm, label, arm_points, promo in summary_rows:
+        if arm_points:
+            mean_fitness = sum(p["held_out_fitness"] for p in arm_points) / len(arm_points)
+            mean_cell = f'<td class="num">{mean_fitness:.4f}</td>'
+            n_cell = f'<td class="num">{len(arm_points)}</td>'
+        else:
+            mean_cell = '<td class="num muted">—</td>'
+            n_cell = '<td class="num muted">0</td>'
+        comparison_rows.append(
+            "        <tr>\n"
+            f"          <td><code>{html_escape(arm)}</code> "
+            f'<span class="muted">{html_escape(label)}</span></td>\n'
+            f"          {n_cell}\n"
+            f"          {mean_cell}\n"
+            f'          <td class="num">{promo}</td>\n'
+            "        </tr>"
+        )
+    comparison_html = "\n".join(comparison_rows)
+    total_points = len(points)
+    arm_tagged_points = sum(len(v) for v in by_arm.values())
+    if arm_tagged_points == 0:
+        untagged_note = (
+            f" {untagged_promos} promoted baseline"
+            + ("s" if untagged_promos != 1 else "")
+            + (" predate" if untagged_promos != 1 else " predates")
+            + " the control arms (no <code>promote_policy</code> tag) — counted in "
+            "the untagged row, NOT attributed to any arm."
+            if untagged_promos
+            else ""
+        )
+        comparison_note = (
+            "No arm-tagged held-out cycle recorded yet — the matched 3-arm campaign has "
+            "not run. The table below shows the structure; arm values populate when the "
+            "campaign writes <code>held_out_fitness</code> + <code>promote_policy</code> rows."
+            + untagged_note
+        )
+    else:
+        arm_promos = sum(promo_by_arm.values())
+        comparison_note = (
+            "Mean held-out fitness (the fixed ruler) per arm. Selection (<code>gate</code>) "
+            "is only evidenced if it beats BOTH controls on this ruler. "
+            f"Arm-tagged promotions: <strong>{arm_promos}</strong>"
+            + (
+                " — <strong>0 promotions is a trust-increasing result</strong>: the loop "
+                "correctly promoted nothing on null evidence."
+                if arm_promos == 0
+                else "."
+            )
+        )
+    blocks.append(
+        '    <h3 class="section"><span>3-arm comparison &middot; fixed ruler</span></h3>\n'
+        f'    <p class="page-sub">{comparison_note}</p>\n'
+        '    <table class="records">\n'
+        "      <thead>\n"
+        "        <tr>\n"
+        '          <th scope="col">arm</th>\n'
+        '          <th scope="col" class="num">held-out cycles</th>\n'
+        '          <th scope="col" class="num">mean held-out fitness</th>\n'
+        '          <th scope="col" class="num">promotions</th>\n'
+        "        </tr>\n"
+        "      </thead>\n"
+        "      <tbody>\n"
+        f"{comparison_html}\n"
+        "      </tbody>\n"
+        "    </table>"
+    )
+
+    # Per-arm curve (one table per arm; honest empty state per arm).
+    if total_points == 0:
+        blocks.append(
+            '    <p class="empty"><em>No held-out campaign recorded yet — awaiting the '
+            "matched 3-arm 10-cycle run. The per-arm curves render here once "
+            "<code>autoresearch/train.py</code> writes them.</em></p>"
+        )
+    else:
+        for arm, label in _EVIDENCE_ARMS:
+            blocks.append(_render_evidence_arm_curve(arm, label, by_arm.get(arm, [])))
+        if untagged_points:
+            blocks.append(
+                _render_evidence_arm_curve(
+                    "untagged", "pre-arm (no promote_policy)", untagged_points
+                )
+            )
+    return "\n".join(blocks)
+
+
+def _render_evidence_verdict(
+    mutations: list[dict[str, Any]],
+    archive: list[dict[str, Any]],
+) -> str:
+    """Render the per-cycle / per-campaign ci-excludes-0 verdict table (RESULTS).
+
+    Honest empty state when no row recorded a verdict yet.
+    """
+    verdicts = _evidence_gain_verdicts(mutations, archive)
+    if not verdicts:
+        return (
+            '    <h3 class="section"><span>Gain verdict &middot; ci excludes 0</span></h3>\n'
+            '    <p class="empty"><em>No gain verdict recorded yet — no cycle or promote has '
+            "written <code>gain_ci_excludes_zero</code>. With no evidence on disk, the honest "
+            "statement is: <strong>no evidence of a gain yet.</strong></em></p>"
+        )
+    rows: list[str] = []
+    for entry in verdicts:
+        excludes = bool(entry["excludes_zero"])
+        v_cls = "delta-positive" if excludes else "muted"
+        ci_low = entry["ci_low"]
+        ci_high = entry["ci_high"]
+        if ci_low is not None and ci_high is not None:
+            ci_cell = f'<td class="num">[{ci_low:+.4f}, {ci_high:+.4f}]</td>'
+        else:
+            ci_cell = '<td class="num muted">—</td>'
+        ts_cell = f'<td class="muted">{html_escape(str(entry["ts_display"]))}</td>'
+        rows.append(
+            "        <tr>\n"
+            f'          <td class="muted">{html_escape(entry["source"])}</td>\n'
+            f"          {ts_cell}\n"
+            f"          <td><code>{html_escape(entry['arm'])}</code></td>\n"
+            f"          {ci_cell}\n"
+            f'          <td><span class="{v_cls}">{html_escape(entry["verdict"])}</span></td>\n'
+            "        </tr>"
+        )
+    rows_html = "\n".join(rows)
+    return (
+        '    <h3 class="section"><span>Gain verdict &middot; ci excludes 0 &middot; '
+        f"{len(verdicts)} recorded</span></h3>\n"
+        '    <p class="page-sub">The explicit "ci excludes 0" evidence statement on the '
+        "fitness gain. <code>gain significant</code> only when the CI lies entirely above 0; "
+        "otherwise the honest null: <code>no evidence yet</code>.</p>\n"
+        '    <table class="records">\n'
+        "      <thead>\n"
+        "        <tr>\n"
+        '          <th scope="col">source</th>\n'
+        '          <th scope="col">measured</th>\n'
+        '          <th scope="col">arm</th>\n'
+        '          <th scope="col" class="num">gain CI</th>\n'
+        '          <th scope="col">verdict</th>\n'
+        "        </tr>\n"
+        "      </thead>\n"
+        "      <tbody>\n"
+        f"{rows_html}\n"
+        "      </tbody>\n"
+        "    </table>"
+    )
+
+
+def _render_evidence_power(mutations: list[dict[str, Any]]) -> str:
+    """Render the POWER section: the required-N line from the recorded σ + the
+    honest verdict. Never fabricates a number — σ unknown → "indeterminate"."""
+    sigma = _evidence_combined_sigma(mutations)
+    n_seed = _required_n_seed(sigma)
+    delta = _POWER_DEFAULT_TARGET_EFFECT_SIZE
+    alpha = _POWER_DEFAULT_ALPHA
+    power = _POWER_DEFAULT_POWER
+    if n_seed is None:
+        power_line = (
+            f"To detect &delta;={delta:.4f} fitness at {power:.0%} power "
+            f"(&alpha;={alpha:.2f}), observed &sigma; is <strong>unknown</strong> &mdash; "
+            "N indeterminate (insufficient variance signal; run <code>--replicate M&ge;2</code> "
+            "or a multi-sample audit to estimate &sigma;)."
+        )
+        sigma_cell = "<em>not yet estimated</em>"
+        n_cell = "<em>indeterminate</em>"
+    else:
+        power_line = (
+            f"To detect &delta;={delta:.4f} fitness at {power:.0%} power "
+            f"(&alpha;={alpha:.2f}), observed &sigma;={sigma:.4f} &rarr; "
+            f"need N_seed&ge;<strong>{n_seed}</strong> &times; M_replicate&ge;1."
+        )
+        sigma_cell = f'<span class="num">{sigma:.4f}</span>'
+        n_cell = f'<span class="num">{n_seed}</span>'
+    return (
+        '    <dl class="status-grid">\n'
+        f'      <dt>target effect &delta;</dt><dd><span class="num">{delta:.4f}</span> '
+        "(fitness scale, HIGHER-is-better)</dd>\n"
+        f'      <dt>significance &alpha;</dt><dd><span class="num">{alpha:.2f}</span></dd>\n'
+        f'      <dt>target power</dt><dd><span class="num">{power:.0%}</span></dd>\n'
+        f"      <dt>observed &sigma; (recorded)</dt><dd>{sigma_cell}</dd>\n"
+        f"      <dt>required N_seed per arm</dt><dd>{n_cell}</dd>\n"
+        "    </dl>\n"
+        f'    <p class="page-sub">{power_line}</p>'
+    )
+
+
 def _render_results_header_cells() -> str:
     """Render the 12 <th> cells for the results table header."""
     out: list[str] = []
@@ -4919,6 +5516,7 @@ def render_autoresearch_landing(
     *,
     template: str,
     ctx: _AutoresearchRenderCtx,
+    held_out_count: int = 0,
 ) -> Path:
     out_dir.mkdir(parents=True, exist_ok=True)
     mapping = _autoresearch_base_mapping(ctx)
@@ -4947,6 +5545,7 @@ def render_autoresearch_landing(
                 results_mtime=results_mtime,
                 policies_mtime=policies_mtime,
                 baseline_mtime=baseline_mtime,
+                held_out_count=held_out_count,
             ),
         }
     )
@@ -5121,6 +5720,43 @@ def render_autoresearch_policies(
     return out_path
 
 
+def render_autoresearch_evidence(
+    mutations: list[dict[str, Any]],
+    archive: list[dict[str, Any]],
+    out_dir: Path,
+    *,
+    template: str,
+    ctx: _AutoresearchRenderCtx,
+) -> Path:
+    """Render the E6 evidence page (methods + results + power) at
+    ``autoresearch/evidence/index.html``.
+
+    Reads the recorded ledgers ONLY (``mutations`` = mutations.jsonl rows;
+    ``archive`` = baseline_archive.jsonl rows). Every section degrades gracefully to
+    an honest "awaiting campaign" / "no evidence yet" state when the matched 3-arm
+    held-out campaign has not run — no crash, no fabricated number.
+    """
+    out_dir.mkdir(parents=True, exist_ok=True)
+    mapping = _autoresearch_base_mapping(ctx)
+    mapping.update(
+        {
+            "methods_grid": _render_evidence_methods(),
+            "methods_arms": _render_evidence_methods_arms(),
+            "results_arms": _render_evidence_results(mutations, archive),
+            "results_verdict": _render_evidence_verdict(mutations, archive),
+            "power_block": _render_evidence_power(mutations),
+        }
+    )
+    rendered = substitute(template, mapping)
+    leftover = re.findall(r"\{\{\s*([a-zA-Z_]+)\s*\}\}", rendered)
+    if leftover:
+        raise RuntimeError(f"autoresearch evidence unresolved markers: {sorted(set(leftover))}")
+    out_path = out_dir / "evidence" / "index.html"
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    out_path.write_text(rendered, encoding="utf-8")
+    return out_path
+
+
 # --------------------------------------------------------------------------- #
 # Substitution + write                                                        #
 # --------------------------------------------------------------------------- #
@@ -5193,6 +5829,11 @@ def main(argv: list[str] | None = None) -> int:
         "--autoresearch-policies-template",
         type=Path,
         default=AUTORESEARCH_POLICIES_TEMPLATE,
+    )
+    parser.add_argument(
+        "--autoresearch-evidence-template",
+        type=Path,
+        default=AUTORESEARCH_EVIDENCE_TEMPLATE,
     )
     args = parser.parse_args(argv)
 
@@ -5364,6 +6005,11 @@ def main(argv: list[str] | None = None) -> int:
         build_date=build_date,
     )
 
+    # E6 (2026-05-30) — held-out point count drives the landing sub-view row's
+    # "N held-out points" / "awaiting campaign" label (the same recorded data the
+    # evidence page synthesises). Counts attribution rows carrying held_out_fitness.
+    held_out_count = len(_held_out_attribution_rows(mutations_rows))
+
     # Each renderer runs independently; log and continue on failure so
     # one broken page doesn't prevent the others from publishing.
     def _safe(name: str, fn: Any) -> None:
@@ -5392,6 +6038,7 @@ def main(argv: list[str] | None = None) -> int:
             out_dir=args.autoresearch_out_dir,
             template=args.autoresearch_landing_template.read_text(encoding="utf-8"),
             ctx=ar_ctx,
+            held_out_count=held_out_count,
         ),
     )
     baseline_transcripts = _load_baseline_transcripts(
@@ -5435,6 +6082,16 @@ def main(argv: list[str] | None = None) -> int:
             mutations_rows,
             args.autoresearch_out_dir,
             template=args.autoresearch_policies_template.read_text(encoding="utf-8"),
+            ctx=ar_ctx,
+        ),
+    )
+    _safe(
+        "evidence",
+        lambda: render_autoresearch_evidence(
+            mutations_rows,
+            archive_rows,
+            args.autoresearch_out_dir,
+            template=args.autoresearch_evidence_template.read_text(encoding="utf-8"),
             ctx=ar_ctx,
         ),
     )
