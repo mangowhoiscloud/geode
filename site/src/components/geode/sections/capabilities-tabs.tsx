@@ -173,18 +173,18 @@ const tabs: Tab[] = [
 
 function TabSession({ tab, locale }: { tab: Tab; locale: Locale }) {
   return (
-    <div className="rounded border border-[var(--rule)] bg-[var(--code-bg)] p-4 font-mono text-[12.5px] leading-relaxed text-[var(--code-text)]">
+    <div className="rounded-lg border border-[var(--rule)] bg-[var(--code-bg)] p-5 font-mono text-[13px] leading-relaxed text-[var(--code-text)]">
       <div>
-        {!tab.cli && <span className="text-[var(--ink-3)]">geode &gt;</span>}{" "}
-        <span className="text-[var(--ink-1)]">{t(locale, tab.prompt.ko, tab.prompt.en)}</span>
+        {!tab.cli && <span className="text-[var(--acc-artifact)] font-medium">geode &gt;</span>}{" "}
+        <span className="text-[var(--ink)]">{t(locale, tab.prompt.ko, tab.prompt.en)}</span>
       </div>
       {tab.actions.map((action) => (
-        <div key={action.en} className="mt-2 text-[var(--ink-2)]">
-          <span className="text-[var(--acc-artifact)]">{"⏺"}</span>{" "}
+        <div key={action.en} className="mt-2.5 text-[var(--ink-2)]">
+          <span className="text-[var(--acc-artifact)] text-[15px]">{"⏺"}</span>{" "}
           {t(locale, action.ko, action.en)}
         </div>
       ))}
-      <div className="mt-3 text-[var(--ink-1)]">{t(locale, tab.result.ko, tab.result.en)}</div>
+      <div className="mt-4 text-[var(--ink-1)]">{t(locale, tab.result.ko, tab.result.en)}</div>
     </div>
   );
 }
@@ -194,12 +194,15 @@ export function CapabilitiesTabsSection() {
   const [active, setActive] = useState(tabs[0].id);
   const current = tabs.find((tab) => tab.id === active) ?? tabs[0];
   return (
-    <section className="px-6 py-20">
+    <section className="px-6 py-24">
       <div className="max-w-3xl mx-auto">
-        <div className="font-mono text-[11px] tracking-[0.24em] uppercase text-[var(--acc-artifact)]">
-          Capabilities
+        <div className="flex items-center gap-2">
+          <span className="h-px w-6 bg-[var(--acc-artifact)]" />
+          <span className="text-[12px] tracking-[0.22em] uppercase text-[var(--acc-artifact)] font-medium">
+            Capabilities
+          </span>
         </div>
-        <h2 className="mt-3 font-display tracking-tight text-[var(--ink)] text-[clamp(1.7rem,3.6vw,2.4rem)] leading-[1.12] font-semibold">
+        <h2 className="mt-4 font-display tracking-tight text-[var(--ink)] text-[clamp(1.85rem,3.8vw,2.6rem)] leading-[1.12] font-semibold">
           {t(locale, "구성", "What's inside")}
         </h2>
         <p className="mt-4 text-[var(--ink-2)] leading-[1.75] text-[16px]">
@@ -210,16 +213,17 @@ export function CapabilitiesTabsSection() {
           )}
         </p>
 
-        <div className="mt-8">
+        <div className="mt-10">
           <div className="flex flex-wrap gap-x-1 border-b border-[var(--rule)]">
             {tabs.map((tab) => (
               <button
                 key={tab.id}
                 onClick={() => setActive(tab.id)}
-                className="px-3 py-2 text-[12.5px] font-mono whitespace-nowrap transition-colors"
+                className="px-3.5 py-2.5 text-[13px] font-mono whitespace-nowrap transition-colors"
                 style={{
-                  color: active === tab.id ? "var(--ink)" : "var(--ink-3)",
-                  borderBottom: `2px solid ${active === tab.id ? "var(--acc-line)" : "transparent"}`,
+                  color: active === tab.id ? "var(--acc-artifact)" : "var(--ink-3)",
+                  fontWeight: active === tab.id ? 500 : 400,
+                  borderBottom: `2px solid ${active === tab.id ? "var(--acc-artifact)" : "transparent"}`,
                   marginBottom: "-1px",
                 }}
               >
