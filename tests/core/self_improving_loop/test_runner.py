@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Any
 
 import pytest
@@ -150,6 +151,37 @@ def test_append_audit_log_writes_jsonl_row(tmp_path: Path) -> None:
     assert row["new_value"] == "y"
     assert row["baseline_fitness"] == 0.85
     assert "ts" in row
+
+
+def test_append_audit_log_records_role_provenance(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """PR-ROLE-PROVENANCE — every cycle's apply row carries per-role
+    {model, source, lane} so the credential lane is observable on a REJECT
+    (no baseline_archive row), not just on promote."""
+    import core.config.self_improving_loop as cfg_mod
+
+    fake = SimpleNamespace(
+        autoresearch=SimpleNamespace(
+            auditor=SimpleNamespace(model="claude-opus-4-8", source="api_key"),
+            target=SimpleNamespace(model="gpt-5.5", source="openai-codex"),
+            judge=SimpleNamespace(model="claude-opus-4-8", source="claude-cli"),
+            mutator=SimpleNamespace(default_model="gpt-5.5", source="openai-codex"),
+        )
+    )
+    monkeypatch.setattr(cfg_mod, "load_self_improving_loop_config", lambda: fake)
+    log_path = tmp_path / "mutations.jsonl"
+    append_audit_log(
+        Mutation(target_section="x", new_value="y", rationale="r"),
+        previous_value="old",
+        log_path=log_path,
+    )
+    row = json.loads(log_path.read_text(encoding="utf-8").splitlines()[0])
+    prov = row["role_provenance"]
+    assert prov["auditor"] == {"model": "claude-opus-4-8", "source": "api_key", "lane": "PAYG"}
+    assert prov["target"]["lane"] == "Subscription"  # openai-codex
+    assert prov["judge"]["lane"] == "CLI"  # claude-cli
+    assert prov["mutator"]["model"] == "gpt-5.5"
 
 
 def test_append_audit_log_appends_to_existing(tmp_path: Path) -> None:

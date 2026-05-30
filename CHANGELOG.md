@@ -47,6 +47,39 @@ functional change.
 
 ## [Unreleased]
 
+## [0.99.89] - 2026-05-30
+
+### Added
+- **PR-BASELINE-REGISTRY (2026-05-30) — baselines as first-class indexed runs.**
+  Every promote now appends one `kind="baseline"` row to the git-tracked
+  `autoresearch/state/baseline_archive.jsonl` (the self-improving hub's baseline
+  index reads it), while `baseline.json` stays the active anchor (now stamped
+  with its `baseline_id`). Each row records the measurement criteria the hub
+  serves losslessly + differentiated: `margin_rule`
+  (`dim-stderr` | `fitness-stderr` — the pre-fix vanilla vs post-fix cohort
+  discriminator), `fitness_stderr`, `bench` flag, seed pool, intrinsic
+  fresh-anchor fitness, and `dim_means`. `eval_archive` is stored as a basename
+  (the registry is git-tracked — no leaked absolute paths).
+  `_next_baseline_id` mirrors the seed-generation
+  `baseline-<YYMM>-<seq>` scheme. `scripts/backfill_baseline_registry_row.py`
+  registers pre-registry baselines from a saved snapshot (bindings passed
+  explicitly — a historical baseline's config has since changed). Re-implements
+  `feature/baseline-registry @69b9d95f` Phase 1 on the ux-removed /
+  fitness-scale-margin code (Pareto coupling dropped; `margin_rule` /
+  `fitness_stderr` added). Schema lineage archived in
+  `docs/self-improving/baseline-schema-history.md`.
+- **PR-ROLE-PROVENANCE (2026-05-30) — per-role model + credential-lane
+  observability.** New `core/self_improving_loop/role_provenance.py` is the
+  single source of truth for the per-role `{model, source, lane}` block
+  (auditor/target/judge/mutator). The credential **lane** — `api_key`→`PAYG`,
+  `openai-codex`→`Subscription`, `claude-cli`→`CLI`, `auto`→`Auto` — is recorded
+  because the same model id behaves differently per lane; display id is
+  `GEODE/{model}/{lane}`. The block is written to **every cycle's**
+  `mutations.jsonl` apply row (`MutationApplyRow.role_provenance`, via
+  `append_audit_log`) — so a rejected cycle's lanes are observable, not just a
+  promoted one's — and to the `baseline_archive.jsonl` row (same shared helper,
+  no drift between the two git-tracked ledgers).
+
 ## [0.99.88] - 2026-05-30
 
 ### Fixed

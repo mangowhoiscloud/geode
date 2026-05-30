@@ -122,6 +122,13 @@ class ApplyRecord(BaseModel):
     이라면 causal_hypothesis 는 *causal chain*. post-audit observed_dim
     이 hypothesis 와 일치하는지 cross-check (별도 wiring). None 일 때
     legacy (CRM 이전). max 500 chars (parse_mutation guard)."""
+    role_provenance: dict[str, dict[str, str]] | None = None
+    """PR-ROLE-PROVENANCE (2026-05-30) — per-role ``{model, source, lane}`` for
+    auditor / target / judge / mutator, recorded on EVERY cycle (promote or
+    reject) so the credential lane (PAYG / Subscription / CLI) is observable
+    without parsing the ``.eval``. Shared SoT with ``baseline_archive.jsonl``
+    (:mod:`core.self_improving_loop.role_provenance`). ``None`` on legacy rows /
+    when the config could not be resolved at append time."""
 
 
 @dataclass(frozen=True)
@@ -1170,6 +1177,20 @@ def append_audit_log(
         audit_run_id=audit_run_id,
         kind=kind,
     )
+    # PR-ROLE-PROVENANCE (2026-05-30) — stamp the per-role {model, source, lane}
+    # onto EVERY cycle's apply row (promote or reject), so the credential lane is
+    # observable from the git-tracked ledger without parsing the .eval. Shared
+    # SoT with baseline_archive.jsonl. Best-effort: a config-load failure must
+    # never block the ledger write (observability is not a correctness boundary).
+    try:
+        from core.config.self_improving_loop import load_self_improving_loop_config
+        from core.self_improving_loop.role_provenance import collect_role_provenance
+
+        row["role_provenance"] = collect_role_provenance(
+            load_self_improving_loop_config().autoresearch
+        )
+    except Exception:  # pragma: no cover — observability best-effort
+        log.debug("role_provenance collect failed for apply row", exc_info=True)
     # W4 (2026-05-25) — Pydantic schema validation. drift 가 발생하면
     # ValidationError 가 fail-fast 로 raise → 잘못된 row 가 git-tracked
     # ledger 에 들어가지 않음. backward-compat 은 ApplyRecord 의
