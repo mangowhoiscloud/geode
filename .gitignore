@@ -212,6 +212,10 @@ autoresearch/state/*
 # (PR-G5b #1350 precedent). (Originally added for the dropped pareto archive;
 # now the lossless baseline-history registry — _append_baseline_registry_row.)
 !autoresearch/state/baseline_archive.jsonl
+# PR-BASELINE-EPOCH (2026-05-30) — epoch_hash → be-NNN label map (the hub groups
+# baselines by epoch via these labels). git-tracked alongside the registry so the
+# label assignment is stable + shared, not a silent-ignored local writer.
+!autoresearch/state/baseline_epochs.json
 # PR-VAR-ADAPTIVE (2026-05-27) — historical group-std samples for the
 # percentile-based variance gate. Same git-tracked invariant as
 # mutations.jsonl / baseline_archive.jsonl. Without this negation the

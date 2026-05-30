@@ -35,6 +35,10 @@ _EXPECTED_ROW_KEYS = {
     "bench",
     "seed_select",
     "seed_count",
+    "epoch_hash",  # PR-BASELINE-EPOCH — content-addressed partition discriminator
+    "epoch_label",  # be-NNN display label
+    "baseline_spec",  # the hashed surface (row self-verifies)
+    "spec_schema_version",
     "role_provenance",  # nested {role: {model, source, lane}} — shared SoT
     "eval_archive",
     "dim_means",
@@ -353,4 +357,76 @@ def test_backfill_script_end_to_end(isolated: Path) -> None:
     assert prov["target"] == {"model": "v-tgt", "source": "openai-codex", "lane": "Subscription"}
     assert row["seed_count"] == 8
     assert row["eval_archive"] == "vanilla.eval"  # basename of /vanilla.eval
-    assert row["promoted_by"] == "backfill"
+
+
+# --- PR-BASELINE-EPOCH: content-addressed epoch on the row -------------------
+
+
+def test_row_self_verifies_epoch_hash(isolated: Path) -> None:
+    """A stored row recomputes to its own epoch_hash from the stored
+    baseline_spec — the content-address can't have been faked at write time."""
+    from core.self_improving_loop.baseline_epoch import compute_epoch_hash
+
+    auto_train._write_baseline(
+        {"broken_tool_use": 3.0}, {"broken_tool_use": 0.1}, sample_count={"broken_tool_use": 16}
+    )
+    row = _rows(isolated / "baseline_archive.jsonl")[0]
+    assert row["spec_schema_version"] == "1"
+    assert compute_epoch_hash(row["baseline_spec"]) == row["epoch_hash"]
+    assert row["epoch_label"] == "be-001"  # first epoch seen in this tmp registry
+
+
+def test_distinct_margin_rules_fall_into_distinct_epochs(isolated: Path) -> None:
+    """margin_rule is part of the hashed spec, so the vanilla (dim-stderr) and
+    fixed (fitness-stderr) baselines land in DIFFERENT epochs with DIFFERENT
+    labels — they must never be averaged into one comparison."""
+    auto_train._append_baseline_registry_row(
+        "baseline-2605-1",
+        dim_means={"broken_tool_use": 3.25},
+        dim_stderr={"broken_tool_use": 0.3},
+        sample_count={"broken_tool_use": 8},
+        measurement_modality=None,
+        admire_means=None,
+        bench_means=None,
+        fitness_stderr=None,
+        margin_rule="dim-stderr",
+        eval_archive=None,
+        session_id="sess-vanilla",
+        commit="HEAD",
+        ts_utc="2026-05-29T09:18:30Z",
+        promoted_by="backfill",
+        role_provenance=build_role_provenance(
+            {
+                "auditor": ("aud-m", "api_key"),
+                "target": ("tgt-m", "openai-codex"),
+                "judge": ("jdg-m", "claude-cli"),
+                "mutator": ("mut-m", "openai-codex"),
+            }
+        ),
+        seed_select="petri_17dim",  # same pool as the live fixture → only margin_rule differs
+    )
+    auto_train._write_baseline(  # live path stamps fitness-stderr + the fixture's roles/pool
+        {"broken_tool_use": 3.25},
+        {"broken_tool_use": 0.3},
+        sample_count={"broken_tool_use": 8},
+    )
+    vanilla, fixed = _rows(isolated / "baseline_archive.jsonl")
+    assert vanilla["baseline_spec"]["margin_rule"] == "dim-stderr"
+    assert fixed["baseline_spec"]["margin_rule"] == "fitness-stderr"
+    assert vanilla["epoch_hash"] != fixed["epoch_hash"]
+    assert {vanilla["epoch_label"], fixed["epoch_label"]} == {"be-001", "be-002"}
+
+
+def test_epoch_label_map_persisted_git_tracked(isolated: Path) -> None:
+    """The epoch_hash→be-NNN map is written next to the archive (git-tracked,
+    shared) so the label assignment is stable across machines, not a local-only
+    in-memory accident."""
+    import json as _json
+
+    auto_train._write_baseline({"broken_tool_use": 3.0}, {"broken_tool_use": 0.1})
+    label_map = isolated / "baseline_epochs.json"
+    assert label_map.is_file()
+    row = _rows(isolated / "baseline_archive.jsonl")[0]
+    assert (
+        _json.loads(label_map.read_text(encoding="utf-8"))[row["epoch_hash"]] == row["epoch_label"]
+    )
