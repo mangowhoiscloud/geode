@@ -114,11 +114,22 @@ def seed_pool_content_hash(seed_select: str | None) -> str:
     """Stable identity of the seed pool the audit ran on (decision B).
 
     ``seed_select`` is whatever ``_resolve_seed_select`` returned (a pool path or
-    a selector string). If it points at a directory, hash the **content** (each
-    contained file's relative path + sha256, sorted) so the same survivor set
-    always yields the same id regardless of mtime / absolute location. If it is a
-    plain string selector (or a missing path), hash the string verbatim. Empty
-    input → ``""`` (the spec's pool axis then contributes a stable empty value).
+    a selector string). If it points at a directory, hash ONLY the **seed bodies**
+    — each contained ``.md`` file's relative path + sha256, sorted — so the same
+    survivor set always yields the same id regardless of mtime / absolute
+    location. If it is a plain string selector (or a missing path), hash the
+    string verbatim. Empty input → ``""`` (the spec's pool axis then contributes
+    a stable empty value).
+
+    Pool identity is the *seeds*, never incidental files. The assembler
+    (:mod:`scripts.assemble_seed_pool`) writes a ``manifest.json`` INTO the pool
+    dir, and that manifest carries a ``generated_at`` timestamp — recursing every
+    file (the pre-fix ``rglob("*")``) folded that timestamp into the hash, making
+    the runtime hash NON-DETERMINISTIC across re-assembly and divergent from both
+    the assembler's body-only hash (computed before the manifest is written) and
+    the committed doc pins. Restricting to ``*.md`` bodies (and excluding
+    ``manifest.json`` plus any non-``.md`` incidental file) restores the
+    "same survivor bodies → same hash" frozen-ruler invariant.
     """
     if not seed_select:
         return ""
@@ -127,11 +138,14 @@ def seed_pool_content_hash(seed_select: str | None) -> str:
     path = Path(seed_select).expanduser()
     if path.is_dir():
         parts: list[str] = []
-        for f in sorted(path.rglob("*")):
-            if f.is_file():
-                rel = f.relative_to(path).as_posix()
-                body = hashlib.sha256(f.read_bytes()).hexdigest()
-                parts.append(f"{rel}:{body}")
+        # ``*.md`` only — survivor bodies are the pool's identity. ``manifest.json``
+        # (a non-``.md`` incidental with a ``generated_at`` timestamp) and any
+        # other non-``.md`` file are excluded so the hash is body-deterministic.
+        for body_file in sorted(path.rglob("*.md")):
+            if body_file.is_file():
+                rel = body_file.relative_to(path).as_posix()
+                body_digest = hashlib.sha256(body_file.read_bytes()).hexdigest()
+                parts.append(f"{rel}:{body_digest}")
         digest = hashlib.sha256("\n".join(parts).encode("utf-8")).hexdigest()
         return f"pool-{digest[:_HASH_PREFIX_LEN]}"
     return f"sel-{hashlib.sha256(str(seed_select).encode('utf-8')).hexdigest()[:_HASH_PREFIX_LEN]}"

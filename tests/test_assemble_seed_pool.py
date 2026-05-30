@@ -20,6 +20,7 @@ from pathlib import Path
 import pytest
 from core.self_improving_loop.baseline_epoch import seed_pool_content_hash
 from scripts.assemble_seed_pool import (
+    _assert_safe_dest_basename,
     _split_run_ids,
     assemble_pool,
     collect_valid_survivors,
@@ -239,15 +240,55 @@ def test_flat_copy_and_manifest_correctness(seeds_tree: Path, tmp_path: Path) ->
     assert by_run["gen-2605-3-broken_tool_use"]["survivor_ids"] == ["g3-001", "g3-evolved"]
     assert manifest["generated_at"] == "2026-05-30T00:00:00+00:00"
 
-    # Manifest content_hash matches a fresh hash of the out dir. The manifest.json
-    # itself is part of the dir; the recorded hash was computed before it was
-    # written, so re-hash a sibling copy holding only the .md bodies.
+    # Manifest content_hash matches a fresh hash of the ACTUAL out dir — the one
+    # that NOW holds manifest.json. ``seed_pool_content_hash`` hashes only the
+    # ``.md`` bodies, so the runtime hash on the live dir equals the assembler's
+    # body-only hash (recorded before the manifest was written). This is the
+    # masked-bug guard: the pre-fix ``rglob("*")`` folded manifest.json's
+    # timestamp into the hash, so this equality FAILED on the live dir.
+    assert (out_dir / "manifest.json").is_file()
+    assert manifest["content_hash"] == seed_pool_content_hash(str(out_dir))
+    assert manifest["content_hash"].startswith("pool-")
+
+    # Sanity: it also equals a bodies-only sibling copy (manifest absent), proving
+    # the two are one and the same identity regardless of the incidental file.
     bodies_only = tmp_path / "bodies_only"
     bodies_only.mkdir()
     for md in out_dir.glob("*.md"):
         (bodies_only / md.name).write_text(md.read_text(encoding="utf-8"), encoding="utf-8")
     assert manifest["content_hash"] == seed_pool_content_hash(str(bodies_only))
-    assert manifest["content_hash"].startswith("pool-")
+
+
+def test_runtime_hash_invariant_to_manifest_timestamp(seeds_tree: Path, tmp_path: Path) -> None:
+    """End-to-end: assembling the SAME survivor bodies with DIFFERENT ``--now``
+    timestamps yields the SAME runtime ``seed_pool_content_hash`` on the live pool
+    dirs (manifest present). Regression for the non-determinism the masked bug
+    introduced — a re-assembly with a fresh timestamp must NOT fork the epoch.
+    """
+    out_a = tmp_path / "pool_a"
+    out_b = tmp_path / "pool_b"
+    manifest_a = assemble_pool(
+        seeds_root=seeds_tree,
+        out_dir=out_a,
+        runs=2,
+        per_run=None,
+        force=False,
+        now="2026-05-30T00:00:00+00:00",
+    )
+    manifest_b = assemble_pool(
+        seeds_root=seeds_tree,
+        out_dir=out_b,
+        runs=2,
+        per_run=None,
+        force=False,
+        now="2099-12-31T23:59:59+00:00",  # different timestamp
+    )
+    # The two manifests carry DIFFERENT generated_at...
+    assert manifest_a["generated_at"] != manifest_b["generated_at"]
+    # ...yet the runtime hash on each live dir (manifest present) is identical.
+    hash_a = seed_pool_content_hash(str(out_a))
+    hash_b = seed_pool_content_hash(str(out_b))
+    assert hash_a == hash_b == manifest_a["content_hash"] == manifest_b["content_hash"]
 
 
 def test_determinism_same_inputs_same_pool_and_hash(seeds_tree: Path, tmp_path: Path) -> None:
@@ -398,6 +439,62 @@ def test_duplicate_survivor_id_across_runs_fails_closed(tmp_path: Path) -> None:
     assert "gen-2605-3-b" in message
     # Fail-closed BEFORE writing: no pool dir was created.
     assert not out_dir.exists()
+
+
+# --- survivor_id dest-basename path-escape guard -----------------------------
+
+
+@pytest.mark.parametrize(
+    "bad_id",
+    ["evil/../escape", "sub/dir", "..", ".", "/abs", "back\\slash", ""],
+)
+def test_assert_safe_dest_basename_rejects_escapes(bad_id: str) -> None:
+    """An id that is not a single safe path segment fails closed (SystemExit
+    naming the bad id), so it can never be copied to a dest outside the pool."""
+    with pytest.raises(SystemExit) as excinfo:
+        _assert_safe_dest_basename(bad_id, run_id="gen-2605-4-x")
+    assert repr(bad_id) in str(excinfo.value)
+
+
+def test_assert_safe_dest_basename_accepts_normal_ids() -> None:
+    """A normal gen_tag-prefixed survivor id is a valid single segment."""
+    _assert_safe_dest_basename("gen-2605-4-003-e2b9759a", run_id="gen-2605-4-x")
+
+
+def test_assemble_pool_fails_closed_on_escaping_survivor_id(tmp_path: Path) -> None:
+    """A survivor whose id contains ``/`` (run-local body, so it passes the
+    valid-survivor filter) would copy to ``pool_dir / sub/evil.md`` — escaping the
+    flat pool. assemble_pool must fail closed BEFORE writing, naming the bad id.
+    """
+    seeds_root = tmp_path / "seeds"
+    run_dir = seeds_root / "gen-2605-4-x"
+    body_rel = "candidates/sub/evil.md"  # run-local nested body for a "/"-id
+    body_abs = run_dir / body_rel
+    body_abs.parent.mkdir(parents=True, exist_ok=True)
+    body_abs.write_text("escaping body\n", encoding="utf-8")
+    # The id itself carries a ``/`` — its body lives at a run-local nested path, so
+    # the valid-survivor filter accepts it. Only the dest-basename guard stops it.
+    (run_dir / "state.json").write_text(
+        json.dumps({"gen_tag": "gen-2605-4", "survivors": ["sub/evil"]}),
+        encoding="utf-8",
+    )
+    (run_dir / "survivors.json").write_text(
+        json.dumps({"survivors": [{"id": "sub/evil", "path": body_rel, "elo_rating": 1000.0}]}),
+        encoding="utf-8",
+    )
+    out_dir = tmp_path / "pool"
+    with pytest.raises(SystemExit) as excinfo:
+        assemble_pool(
+            seeds_root=seeds_root,
+            out_dir=out_dir,
+            runs=2,
+            per_run=None,
+            force=False,
+            now=None,
+        )
+    assert "sub/evil" in str(excinfo.value)
+    # No stray escaped file was written outside the pool.
+    assert not (out_dir / "sub").exists()
 
 
 # --- FIX 2: missing/empty gen_tag sorts lowest, never selected ---------------

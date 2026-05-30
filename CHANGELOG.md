@@ -47,6 +47,46 @@ functional change.
 
 ## [Unreleased]
 
+## [0.99.94] - 2026-05-30
+
+### Fixed
+- **Seed-pool content hash is now bodies-only (frozen-ruler determinism).**
+  `core.self_improving_loop.baseline_epoch.seed_pool_content_hash` recursed
+  `path.rglob("*")` (ALL files), but `scripts/assemble_seed_pool.py` writes a
+  `manifest.json` INTO the pool dir whose `generated_at` is a timestamp. So the
+  runtime hash on a live pool dir (a) diverged from the assembler's body-only hash
+  and the committed doc pins, and (b) was NON-DETERMINISTIC across re-assembly
+  (the timestamp moved the hash) — re-assembling identical survivor bodies
+  fragmented baselines into different epochs, defeating the "same spec → same
+  hash" frozen-ruler invariant. The hash now fingerprints ONLY the seed `.md`
+  bodies (`rglob("*.md")`, sorted relative-path + sha256), which is exactly the
+  file set the audit's pool loader reads (`directory.glob("*.md")`); `manifest.json`
+  and any other non-`.md` incidental file are excluded. Verified against the live
+  pool dirs WITH `manifest.json` present: selection pool reproduces
+  `pool-68dc6f0c9745`, held-out bench reproduces `pool-c16d186178e1`, and two
+  assemblies with different `--now` timestamps yield the same hash. The
+  `held-out-bench.md` reproduction note is corrected to state the body-only
+  addressing. Pinned by `tests/test_baseline_epoch.py` (masked-scenario:
+  manifest + timestamp invariance) + `tests/test_assemble_seed_pool.py`.
+- **Held-out fitness now shares the gate's fitness formula path.**
+  `score_held_out_bench` (`autoresearch/train.py`) omitted the
+  `anchor_confidence_mode` flag that the promote gate's `current_raw` runs under,
+  so when anchor-confidence mode was on the held-out evidence curve was computed
+  on a subtly different fitness DEFINITION than the baselines it is compared
+  against. The shared flag is now threaded from `main()` into the scorer's
+  `compute_fitness` call WITH the held-out's own `ANCHOR_DIMS` subset as
+  `anchor_means` (the same subset the gate's `current_raw` extracts from its
+  current dims — threading the flag without the subset would silently no-op the
+  multiplier); `baseline_means=None` (fresh-anchor intrinsic, no prior baseline)
+  and `admire_means=None` (the held-out audit emits no admire signal). Pinned by
+  `tests/autoresearch/test_held_out_bench.py`.
+- **Seed-pool assembly fails closed on a path-escaping survivor id.**
+  `scripts/assemble_seed_pool.py` copied each body to `pool_dir / f"{survivor_id}.md"`
+  without validating `survivor_id` is a safe single path segment, so a `../`- or
+  `/`-containing id from the seeds tree could escape the pool dir. A new
+  `_assert_safe_dest_basename` rejects any id that is not a single segment (naming
+  the bad id + run) before the copy. Pinned by `tests/test_assemble_seed_pool.py`.
+
 ## [0.99.93] - 2026-05-30
 
 ### Added

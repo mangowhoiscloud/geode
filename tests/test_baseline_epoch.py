@@ -195,3 +195,47 @@ def test_seed_pool_content_hash_expands_user(
     monkeypatch.setenv("HOME", str(home))
     assert seed_pool_content_hash("~/pool") == seed_pool_content_hash(str(pool))
     assert seed_pool_content_hash("~/pool").startswith("pool-")
+
+
+def test_seed_pool_content_hash_ignores_manifest_json(tmp_path: Path) -> None:
+    """A pool dir's hash is its ``.md`` BODIES only — the assembler's
+    ``manifest.json`` (and its ``generated_at`` timestamp) must NOT move it.
+
+    Regression for the masked bug: the pre-fix ``rglob("*")`` folded
+    ``manifest.json`` into the hash, so the runtime hash on the live pool dir
+    (manifest present) diverged from the assembler's body-only hash AND changed
+    whenever the manifest timestamp changed — fragmenting identical survivor
+    bodies into different epochs. The masking earlier test re-hashed a
+    bodies-only COPY; this one keeps the manifest IN the dir and asserts (a) the
+    hash equals the bodies-only hash and (b) it is invariant when the manifest's
+    timestamp changes.
+    """
+    pool = tmp_path / "pool"
+    pool.mkdir()
+    (pool / "a.md").write_text("body-a", encoding="utf-8")
+    (pool / "b.md").write_text("body-b", encoding="utf-8")
+
+    # Reference: bodies only (no manifest in the dir).
+    bodies_only = seed_pool_content_hash(str(pool))
+    assert bodies_only.startswith("pool-")
+
+    # (a) Adding manifest.json with a timestamp must not move the hash.
+    (pool / "manifest.json").write_text(
+        '{"generated_at": "2026-05-30T00:00:00+00:00", "x": 1}', encoding="utf-8"
+    )
+    with_manifest = seed_pool_content_hash(str(pool))
+    assert with_manifest == bodies_only
+
+    # (b) Mutating ONLY the manifest's timestamp must not move the hash.
+    (pool / "manifest.json").write_text(
+        '{"generated_at": "2099-12-31T23:59:59+00:00", "x": 2}', encoding="utf-8"
+    )
+    assert seed_pool_content_hash(str(pool)) == bodies_only
+
+    # An UNRELATED non-.md incidental file is likewise excluded.
+    (pool / "notes.txt").write_text("scratch", encoding="utf-8")
+    assert seed_pool_content_hash(str(pool)) == bodies_only
+
+    # But a real .md body edit STILL moves the hash (the fix did not over-narrow).
+    (pool / "a.md").write_text("body-a-EDITED", encoding="utf-8")
+    assert seed_pool_content_hash(str(pool)) != bodies_only

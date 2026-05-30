@@ -1264,6 +1264,7 @@ def score_held_out_bench(
     dry_run: bool = False,
     session_id: str = "",
     gen_tag: str = "",
+    anchor_confidence_mode: bool = False,
 ) -> tuple[float, dict[str, float], str]:
     """Measure fitness on the VERSION-FROZEN held-out bench — the fixed ruler.
 
@@ -1280,7 +1281,16 @@ def score_held_out_bench(
       matching ``_append_baseline_registry_row``'s ``intrinsic_fitness``; no
       cross-baseline critical-floor comparison, which would be spurious against a
       frozen ruler that is by construction a *different* seed set from the
-      promoted baseline's pool).
+      promoted baseline's pool). The ``anchor_confidence_mode`` flag the gate runs
+      under is threaded through so the held-out curve and the baselines it is
+      compared against share ONE fitness formula path — when the mode is on, the
+      anchor-confidence multiplier applies the same way it does to ``current_raw``:
+      the held-out's OWN ``ANCHOR_DIMS`` subset is passed as ``anchor_means``
+      alongside the flag (passing the flag without the subset would silently no-op
+      the multiplier, leaving the curve on the mode-off formula). ``baseline_means``
+      stays ``None`` (the held-out has no prior baseline → the fresh-anchor
+      intrinsic, no cross-baseline floor) and ``admire_means`` is ``None`` (the
+      held-out audit produces no admire signal — ``run_audit`` returns dims only).
     - ``held_out_dim_means`` is the per-dim aggregate on the Petri 1-10
       concerning-behaviour scale (lower-is-better dims), straight from
       :func:`run_audit`.
@@ -1325,11 +1335,27 @@ def score_held_out_bench(
             os.environ.pop("AUTORESEARCH_SEED_SELECT", None)
         else:
             os.environ["AUTORESEARCH_SEED_SELECT"] = _prior_override
+    # Same fitness formula path as the gate's ``current_raw`` (train.py
+    # ``_should_promote``) — so the held-out curve and the baselines it is
+    # compared against share ONE fitness definition: ``baseline_means=None``
+    # (fresh-anchor intrinsic, no cross-baseline floor), modality threaded for the
+    # analytics-weight scale, the SHARED ``anchor_confidence_mode`` flag, the
+    # held-out's OWN ``ANCHOR_DIMS`` subset as ``anchor_means`` (the gate extracts
+    # the same subset from its current dims — passing ``anchor_confidence_mode``
+    # without it would silently no-op the multiplier, leaving the curve on the
+    # mode-off formula), and ``admire_means=None`` (the held-out audit emits no
+    # admire signal — ``run_audit`` returns dims only).
+    held_out_anchor = {
+        dim: held_out_dim_means[dim] for dim in ANCHOR_DIMS if dim in held_out_dim_means
+    }
     held_out_fitness = compute_fitness(
         held_out_dim_means,
         held_out_dim_stderr,
         baseline_means=None,
         measurement_modality=held_out_modality or None,
+        anchor_means=held_out_anchor or None,
+        anchor_confidence_mode=anchor_confidence_mode,
+        admire_means=None,
     )
     return float(held_out_fitness), held_out_dim_means, held_out_bench_id
 
@@ -3438,6 +3464,7 @@ def main() -> int:
                 _held_out_bench,
                 session_id=session_id,
                 gen_tag=gen_tag,
+                anchor_confidence_mode=_anchor_confidence_mode,
             )
             del _held_out_dims_unused
             log.info(
