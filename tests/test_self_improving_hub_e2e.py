@@ -1898,3 +1898,97 @@ def test_pr1_tournament_schema_complete() -> None:
     assert seen_winners == {"A", "B", "tie"}, (
         f"tournament fixture must cover A/B/tie outcomes (got {sorted(seen_winners)})"
     )
+
+
+# ---------------------------------------------------------------------------
+# E1b — pre-E1 mixed-scale rows excluded from the 0-1 Δfitness aggregate
+# ---------------------------------------------------------------------------
+#
+# E1 (PR-MARGIN-FITNESS-SCALE) reconciled per-mutation fitness_before /
+# fitness_delta to the 0-1 compute_fitness scale, but the 8 rows already in
+# autoresearch/state/mutations.jsonl carry the OLD dim-aggregate scale
+# (fitness_before ≈ 1.73-2.29, delta ≈ -1.7). The ledger is intentionally not
+# rewritten, so the hub must drop those rows from the 0-1 mean-Δ aggregate and
+# tag them per-row. These tests pin that display-side heuristic.
+
+
+def _joined_mutation(*, mid: str, fitness_before: Any, fitness_delta: Any) -> dict[str, Any]:
+    """Build a single joined mutation entry (apply + attr) for the summary/row
+    renderers. ``fitness_before > 1.0`` marks a pre-E1 mixed-scale row."""
+    attr: dict[str, Any] = {"mutation_id": mid, "fitness_delta": fitness_delta}
+    if fitness_before is not None:
+        attr["fitness_before"] = fitness_before
+        if isinstance(fitness_delta, int | float) and isinstance(fitness_before, int | float):
+            attr["fitness_after"] = fitness_before + fitness_delta
+    apply_row = {"mutation_id": mid, "target_section": "sec", "target_kind": "policy"}
+    return {"id": mid, "apply": apply_row, "attr": attr}
+
+
+def test_mutations_summary_mean_delta_over_post_e1_rows_only() -> None:
+    """Mixed input: two post-E1 (≤1.0) rows + two pre-E1 (>1.0) rows. The mean-Δ
+    aggregate must be computed over ONLY the ≤1.0 rows, and n must reflect that."""
+    builder = _load_builder_module()
+    joined = [
+        _joined_mutation(mid="post-a", fitness_before=0.70, fitness_delta=0.10),
+        _joined_mutation(mid="post-b", fitness_before=0.60, fitness_delta=0.20),
+        _joined_mutation(mid="pre-a", fitness_before=1.7333, fitness_delta=-1.7333),
+        _joined_mutation(mid="pre-b", fitness_before=1.7583, fitness_delta=-1.1110),
+    ]
+    html = builder._render_mutations_summary(joined)
+    # mean over the two 0-1 rows only = (0.10 + 0.20) / 2 = +0.1500.
+    assert "+0.1500" in html, "mean-Δfitness not computed over the post-E1 rows only"
+    assert "(n=2, 0-1 scale only)" in html, "aggregate n must exclude the >1.0 pre-E1 rows"
+    # The pre-E1 rows are surfaced as excluded, not folded into the mean.
+    assert "2 pre-E1 (mixed scale, excluded)" in html
+    # The garbage old-scale mean (≈ -0.6 across all four) must never appear.
+    assert "-0.6" not in html and "-1.7" not in html
+
+
+def test_mutations_pre_e1_rows_annotated_and_uncounted() -> None:
+    """The >1.0 rows render a 'pre-E1 (mixed scale)' tag in the per-row Δ cell and
+    are classified ``pre-E1`` (not improved/regressed/noise) by the outcome map."""
+    builder = _load_builder_module()
+    pre = _joined_mutation(mid="pre-a", fitness_before=2.29, fitness_delta=-1.76)
+    post = _joined_mutation(mid="post-a", fitness_before=0.65, fitness_delta=0.05)
+    rows_html = builder._render_mutations_rows([pre, post])
+    assert "pre-E1 (mixed scale)" in rows_html, "pre-E1 row not annotated in the Δ cell"
+    # The bogus old-scale delta must not be rendered for the pre-E1 row.
+    assert "1.7600" not in rows_html, "pre-E1 row rendered its meaningless old-scale delta"
+    # Outcome classification: pre-E1 row is its own bucket, post-E1 row is improved.
+    assert builder._mutation_outcome(pre["attr"]) == ("pre-E1", "muted")
+    assert builder._mutation_outcome(post["attr"])[0] == "improved"
+    # The detection helper is the single robust gate.
+    assert builder._is_pre_e1_mixed_scale(pre["attr"]) is True
+    assert builder._is_pre_e1_mixed_scale(post["attr"]) is False
+
+
+def test_mutations_summary_all_mixed_yields_zero_aggregate() -> None:
+    """An all-pre-E1 input (the current real ledger state — 8 rows, all >1.0) must
+    yield an EMPTY/zero aggregate (n=0, mean +0.0000), never a garbage average."""
+    builder = _load_builder_module()
+    joined = [
+        _joined_mutation(mid="pre-a", fitness_before=1.7333, fitness_delta=-1.7333),
+        _joined_mutation(mid="pre-b", fitness_before=1.7583, fitness_delta=-1.7583),
+        _joined_mutation(mid="pre-c", fitness_before=2.29, fitness_delta=-1.11),
+    ]
+    html = builder._render_mutations_summary(joined)
+    assert "+0.0000" in html, "all-mixed input must yield a zero mean, not a garbage average"
+    assert "(n=0, 0-1 scale only)" in html, "all-mixed input must report n=0"
+    assert "3 pre-E1 (mixed scale, excluded)" in html
+    assert "-1.7" not in html and "-1.1" not in html, "old-scale deltas leaked into the aggregate"
+
+
+def test_mutations_pre_e1_heuristic_graceful_on_missing_fitness_before() -> None:
+    """Graceful contract: a missing / non-numeric / None fitness_before is NOT
+    treated as mixed-scale (it cannot be proven old-scale), so it falls through to
+    normal handling rather than raising."""
+    builder = _load_builder_module()
+    assert builder._is_pre_e1_mixed_scale(None) is False
+    assert builder._is_pre_e1_mixed_scale({}) is False
+    assert builder._is_pre_e1_mixed_scale({"fitness_before": None}) is False
+    assert builder._is_pre_e1_mixed_scale({"fitness_before": "1.73"}) is False  # non-numeric
+    # A JSON bool must NOT be read as numeric 1.0 (isinstance(True, int) is True).
+    assert builder._is_pre_e1_mixed_scale({"fitness_before": True}) is False
+    # A boundary 1.0 (the inclusive top of the 0-1 scale) is NOT mixed.
+    assert builder._is_pre_e1_mixed_scale({"fitness_before": 1.0}) is False
+    assert builder._is_pre_e1_mixed_scale({"fitness_before": 1.0001}) is True

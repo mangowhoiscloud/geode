@@ -4172,6 +4172,34 @@ def _delta_class(delta: float) -> tuple[str, str]:
     return ("delta-noise", "±")
 
 
+def _is_pre_e1_mixed_scale(attr: dict[str, Any] | None) -> bool:
+    """True when an attribution row predates PR-MARGIN-FITNESS-SCALE E1 (mixed scale).
+
+    E1 (2026-05-30) reconciled per-mutation ``fitness_before`` / ``fitness_delta``
+    to the canonical 0-1 ``compute_fitness`` scale. The 8 rows already committed to
+    ``autoresearch/state/mutations.jsonl`` still carry the OLD dim-aggregate scale
+    (``fitness_before`` was the 1-10 ``dim_means`` mean, so it sits ≈ 1.73-2.29 and
+    ``fitness_delta`` ≈ -1.1 to -1.76 — both meaningless against a 0-1 row). The
+    git-tracked ledger is intentionally NOT rewritten (a one-shot historical
+    backfill is a separate, out-of-scope follow-up), so the hub fixes the scale
+    mismatch on the DISPLAY side.
+
+    Robust heuristic — ``fitness_before > 1.0``: post-E1 fitness is bounded to 0-1,
+    so any ``fitness_before`` above 1.0 can only be the old dim-mean scale; a new row
+    never exceeds 1.0. Graceful contract: a missing / non-numeric ``fitness_before``
+    (no attr yet, or malformed) is treated as NOT mixed — it simply is not a row we
+    can prove to be on the old scale, so it falls through to normal handling. ``bool``
+    is excluded explicitly (``isinstance(True, int)`` is True in Python) so a
+    malformed ``fitness_before: true`` is not mistaken for a numeric ``1.0``.
+    """
+    if attr is None:
+        return False
+    before = attr.get("fitness_before")
+    if isinstance(before, bool) or not isinstance(before, int | float):
+        return False
+    return float(before) > 1.0
+
+
 def _autoresearch_status_grid(
     baseline: dict[str, Any] | None,
     baseline_path: Path | None,
@@ -4317,9 +4345,11 @@ def _join_mutation_records(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
     :func:`_delta_class` is a fitness-scale epsilon (matching the promote
     gate's ``fitness_margin_floor``). NOTE — pre-E1 rows on disk carry a mixed
     scale (``fitness_before`` was the 1-10 ``dim_means`` aggregate, so
-    ``fitness_delta`` for those rows is meaningless, often ≈ -1.7); they are
-    rendered as-is (the ledger is not rewritten). A one-shot backfill of
-    historical rows is a documented follow-up.
+    ``fitness_delta`` for those rows is meaningless, often ≈ -1.7). The ledger is
+    intentionally NOT rewritten (a one-shot backfill of historical rows is a
+    documented, out-of-scope follow-up); instead :func:`_is_pre_e1_mixed_scale`
+    detects them on the DISPLAY side so the per-row renderer tags them and the
+    summary aggregate excludes them — see :func:`_render_mutations_summary`.
 
     Returns one dict per mutation —
     ``{"id", "apply", "attr"}`` (``attr`` is ``None`` until the
@@ -4373,12 +4403,15 @@ def _mutation_outcome(attr: dict[str, Any] | None) -> tuple[str, str]:
 
     ``fitness_delta`` is the 0-1 ``compute_fitness`` scale (HIGHER-is-better),
     so a positive delta past the ±0.005 fitness-scale noise floor is an
-    improvement. ``None`` attr = audit not yet run. (Pre-PR-MARGIN-FITNESS-
-    SCALE-E1 rows carry a mixed-scale ``fitness_delta`` — see
-    :func:`_join_mutations`.)
+    improvement. ``None`` attr = audit not yet run. Pre-PR-MARGIN-FITNESS-SCALE-E1
+    rows carry a mixed-scale ``fitness_delta`` (see :func:`_is_pre_e1_mixed_scale`)
+    and classify as ``pre-E1`` so they are EXCLUDED from the improved/regressed/
+    noise tallies instead of polluting them with an old-scale ≈ -1.7 delta.
     """
     if attr is None:
         return ("pending", "muted")
+    if _is_pre_e1_mixed_scale(attr):
+        return ("pre-E1", "muted")
     delta = attr.get("fitness_delta")
     if not isinstance(delta, int | float):
         return ("pending", "muted")
@@ -4449,8 +4482,12 @@ def _render_mutations_rows(joined: list[dict[str, Any]]) -> str:
         else:
             dim_cell = '<span class="muted">—</span>'
 
-        # Δfitness — before → after + signed delta.
-        if attr_row and isinstance(attr_row.get("fitness_delta"), int | float):
+        # Δfitness — before → after + signed delta. Pre-E1 mixed-scale rows show a
+        # "pre-E1 (mixed scale)" tag instead of a bogus old-scale delta; they are
+        # also dropped from the summary aggregate (see _render_mutations_summary).
+        if _is_pre_e1_mixed_scale(attr_row):
+            fit_cell = '<span class="muted">pre-E1 (mixed scale)</span>'
+        elif attr_row and isinstance(attr_row.get("fitness_delta"), int | float):
             delta = float(attr_row["fitness_delta"])
             cls, sign = _delta_class(delta)
             before = attr_row.get("fitness_before")
@@ -4493,7 +4530,13 @@ def _render_mutations_summary(joined: list[dict[str, Any]]) -> str:
     if not joined:
         return ""
     total = len(joined)
-    improved = regressed = noise = pending = 0
+    improved = regressed = noise = pending = pre_e1 = 0
+    # Only 0-1 ``compute_fitness``-scale deltas enter the mean. Pre-E1 rows
+    # (fitness_before > 1.0, old dim-mean scale) would skew the mean toward an
+    # ≈ -1.7 garbage value, so they are excluded from both the aggregate and the
+    # improved/regressed/noise tallies (see _is_pre_e1_mixed_scale). An all-pre-E1
+    # input therefore yields an empty `deltas` list → mean of 0.0 with n=0, not a
+    # bogus average.
     deltas: list[float] = []
     kinds: dict[str, int] = {}
     dims: set[str] = set()
@@ -4503,21 +4546,31 @@ def _render_mutations_summary(joined: list[dict[str, Any]]) -> str:
         kinds[kind] = kinds.get(kind, 0) + 1
         if apply_row.get("target_dim"):
             dims.add(str(apply_row["target_dim"]))
-        label, _ = _mutation_outcome(entry["attr"])
+        attr_row = entry["attr"]
+        label, _ = _mutation_outcome(attr_row)
         if label == "improved":
             improved += 1
         elif label == "regressed":
             regressed += 1
         elif label == "noise":
             noise += 1
+        elif label == "pre-E1":
+            pre_e1 += 1
         else:
             pending += 1
-        delta = (entry["attr"] or {}).get("fitness_delta")
+        if _is_pre_e1_mixed_scale(attr_row):
+            continue
+        delta = (attr_row or {}).get("fitness_delta")
         if isinstance(delta, int | float):
             deltas.append(float(delta))
     mean_delta = sum(deltas) / len(deltas) if deltas else 0.0
     kinds_str = " &middot; ".join(f"{html_escape(k)} {v}" for k, v in sorted(kinds.items()))
     dims_str = ", ".join(html_escape(d) for d in sorted(dims)) or "—"
+    pre_e1_cell = (
+        f' &middot; <span class="muted">{pre_e1} pre-E1 (mixed scale, excluded)</span>'
+        if pre_e1
+        else ""
+    )
     return (
         '    <section class="page-sub"><dl class="status-grid">\n'
         f"      <dt>mutations</dt><dd>{total}</dd>\n"
@@ -4525,9 +4578,9 @@ def _render_mutations_summary(joined: list[dict[str, Any]]) -> str:
         f'<span class="delta-positive">{improved} improved</span> &middot; '
         f'<span class="delta-negative">{regressed} regressed</span> &middot; '
         f'<span class="delta-noise">{noise} noise</span> &middot; '
-        f'<span class="muted">{pending} pending audit</span></dd>\n'
+        f'<span class="muted">{pending} pending audit</span>{pre_e1_cell}</dd>\n'
         f"      <dt>mean &Delta;fitness</dt><dd>{mean_delta:+.4f} "
-        f'<span class="muted">(n={len(deltas)})</span></dd>\n'
+        f'<span class="muted">(n={len(deltas)}, 0-1 scale only)</span></dd>\n'
         f"      <dt>target kinds</dt><dd>{kinds_str}</dd>\n"
         f"      <dt>aimed dims</dt><dd>{dims_str}</dd>\n"
         "    </dl></section>"
