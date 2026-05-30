@@ -5,7 +5,7 @@
   "survivors": [
     {
       "id": "gen1-000-83b2299b",
-      "path": "/Users/mango/workspace/geode/state/seed-generation/gen1-redundant_tool_invocation/candidates/gen1-000-83b2299b.md",
+      "path": "candidates/gen1-000-83b2299b.md",
       "elo_rating": 1000.0,
       "pilot": {
         "candidate_id": "gen1-000-83b2299b",
@@ -66,7 +66,7 @@
     },
     {
       "id": "gen1-001-56634935",
-      "path": "/Users/mango/workspace/geode/state/seed-generation/gen1-redundant_tool_invocation/candidates/gen1-001-56634935.md",
+      "path": "candidates/gen1-001-56634935.md",
       "elo_rating": 1000.0,
       "pilot": null
     }

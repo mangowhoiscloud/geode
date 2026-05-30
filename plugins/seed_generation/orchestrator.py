@@ -822,9 +822,14 @@ class Pipeline:
                  "target_dim": "...",
                  "run_id": "...",
                  "survivors": [
-                   {"id": "...", "path": "<candidate.md path>",
+                   {"id": "...", "path": "candidates/<id>.md",
                     "elo_rating": 1612.4, "pilot": {...} | null}
                  ]
+
+           ``path`` is RELATIVE to ``run_dir`` (e.g. ``candidates/<id>.md``
+           or ``candidates_evolved/<id>.md``) so a clone on another machine
+           — or a GitHub-Pages mirror — resolves bodies without a broken
+           absolute path into the original generation scratch tree.
                }
 
         2. ``survivors/`` — directory of **file copies** (was: symlinks,
@@ -846,17 +851,28 @@ class Pipeline:
         if self.state.run_dir is None:
             return
         candidates_by_id = {c["id"]: c for c in self.state.candidates}
+        run_dir = self.state.run_dir
         rows: list[dict[str, Any]] = []
+        # Absolute source path per row, kept out of the JSON payload — the
+        # copy loop below copies from here while the row stores only the
+        # run-dir-relative path (cross-machine / Pages-safe).
+        copy_sources: list[str | None] = []
         for cid in self.state.survivors:
             cand = candidates_by_id.get(cid, {})
+            cand_path = cand.get("path")
+            # Store path RELATIVE to run_dir so survivors.json is
+            # self-contained — an absolute scratch-tree path breaks on a
+            # clone / GitHub-Pages mirror where that tree is absent.
+            rel = os.path.relpath(cand_path, run_dir) if cand_path else None
             rows.append(
                 {
                     "id": cid,
-                    "path": cand.get("path"),
+                    "path": rel,
                     "elo_rating": self.state.elo_ratings.get(cid),
                     "pilot": self.state.pilot_scores.get(cid),
                 }
             )
+            copy_sources.append(cand_path)
         payload = {
             "gen_tag": self.state.gen_tag,
             "target_dim": self.state.target_dim,
@@ -880,8 +896,10 @@ class Pipeline:
                     entry.unlink()
             import shutil
 
-            for row in rows:
-                src_str = row.get("path")
+            # Copy from the absolute source (``copy_sources``), not the now
+            # run-dir-relative ``row["path"]`` — the relative path would not
+            # resolve from the process CWD.
+            for src_str in copy_sources:
                 if not src_str:
                     continue
                 src = Path(src_str)

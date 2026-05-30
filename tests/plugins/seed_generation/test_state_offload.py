@@ -150,7 +150,10 @@ def test_persist_survivors_writes_survivors_json(tmp_path: Path) -> None:
     assert isinstance(rows, list)
     assert len(rows) == 1
     assert rows[0]["id"] == "c-00"
-    assert rows[0]["path"] == str(cand_path)
+    # path is RELATIVE to run_dir (tmp_path) — never absolute, so the bundle
+    # is self-contained on a cross-machine clone / GitHub-Pages mirror.
+    assert rows[0]["path"] == "candidates/c-00.md"
+    assert not rows[0]["path"].startswith("/")
     assert rows[0]["elo_rating"] == 1010.0
     assert rows[0]["pilot"] == {"dim_means": {"d": 0.5}}
 

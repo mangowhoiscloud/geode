@@ -47,6 +47,28 @@ functional change.
 
 ## [Unreleased]
 
+## [0.99.90] - 2026-05-30
+
+### Fixed
+- **PR-SEED-RECONCILE (2026-05-30) — self-contained survivor bundle.**
+  `Pipeline._persist_survivors` now writes each `survivors.json` row's `path`
+  RELATIVE to `run_dir` (e.g. `candidates/<id>.md`) instead of an absolute
+  scratch-tree path that broke on a clone / GitHub-Pages mirror; the copy loop
+  reads the absolute source from a separate `copy_sources` list so the
+  run-dir-relative row path never has to resolve from the process CWD. New
+  `scripts/reconcile_seed_bundle.py` reconciles the three drifted views of each
+  served run — `state.json["survivors"]` ↔ `survivors.json` ↔ the `survivors/`
+  body directory — to the valid set (a survivor is valid iff it is in
+  `state.json["survivors"]` AND its `<id>.md` body exists under `candidates/`
+  or `candidates_evolved/`), rewriting bundle-relative paths and pruning stale
+  bodies. This drops the body-less phantom `gen1-002-f4580bc8` from
+  `gen1-broken_tool_use` (`survivors.json` 5 → 4, now matching `state.json`).
+  Pinned by `tests/plugins/seed_generation/test_survivors_path_relative.py`.
+  Both served viewers — the static `petri-bundle/seeds/index.html` and the
+  Next.js `docs/petri/seeds` table — now use the bundle-relative path verbatim
+  instead of reconstructing `candidates/<basename>`, so an evolved survivor
+  (`candidates_evolved/<id>.md`) resolves instead of 404-ing.
+
 ## [0.99.89] - 2026-05-30
 
 ### Added

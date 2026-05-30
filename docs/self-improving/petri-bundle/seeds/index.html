@@ -303,7 +303,9 @@ function renderRunBody({ runId, base, state, survivors, meta }) {
         .join(", ");
       const pilotStatus = s.pilot?.status ?? "—";
       const filename = (s.path ?? "").split("/").pop() ?? "";
-      const href = filename ? `${base}candidates/${filename}` : "#";
+      // s.path is bundle-relative (candidates/ or candidates_evolved/); honor
+      // it verbatim so evolved survivors resolve instead of 404-ing.
+      const href = s.path ? `${base}${s.path}` : "#";
       parts.push(`
         <tr>
           <td class="cid"><a href="${escapeHtml(href)}">${escapeHtml(s.id)}</a></td>
