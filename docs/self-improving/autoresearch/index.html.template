@@ -91,6 +91,10 @@
       </tbody>
     </table>
 
+    <h2 class="section"><span>Baseline registry &middot; grouped by epoch</span></h2>
+    <p class="page-sub">Each promote appends a <code>kind="baseline"</code> row to <code>baseline_archive.jsonl</code>, partitioned into content-addressed <strong>epochs</strong> (be-NNN) keyed by a hash of the production+measurement spec (margin rule, fitness/margin logic version, the four roles' model+source, rubric, dim set, bench, seed-pool identity). Baselines from different epochs were produced under different logic and are <strong>not comparable</strong> — they are never merged into one table.</p>
+{{ baseline_registry_index }}
+
     <h2 class="section"><span>Sub-views &middot; 4 autoresearch sub-pages</span></h2>
     <table class="records">
       <thead>

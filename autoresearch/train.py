@@ -415,6 +415,20 @@ assert abs(FITNESS_DIM_3AX + FITNESS_ADMIRE_3AX + FITNESS_BENCH_3AX - 1.0) < 1e-
     "3-axis fitness weights must sum to 1.0"
 )
 
+# PR-BASELINE-EPOCH (2026-05-30) — production-logic version tags hashed into the
+# baseline epoch discriminator (see .claude/skills/baseline-epoch-partition).
+# These are DELIBERATE semantic-version tags, NOT a source hash: bump when the
+# *meaning* of the fitness aggregate / promote margin changes, so baselines under
+# a different scoring/gate rule land in a different epoch. ``test_logic_version_guard``
+# pins a golden value per version → a silent logic change without a bump FAILs.
+FITNESS_FORMULA_VERSION = "1"
+"""``compute_fitness`` semantics (ux-removed dim aggregate + stability + the
+admire/bench multi-axis branches + anchor multiplier). Bump on any change that
+moves the aggregate for a fixed input."""
+MARGIN_LOGIC_VERSION = "1"
+"""``_should_promote`` margin rule — fitness-scale gain-stderr √(σp²+σc²) floored
+(PR-MARGIN-FITNESS-SCALE). Bump when the margin formula / floors change."""
+
 CRITICAL_DIMS: tuple[str, ...] = tuple(d for d, t in AXIS_TIERS.items() if t == "critical")
 AUXILIARY_DIMS: tuple[str, ...] = tuple(d for d, t in AXIS_TIERS.items() if t == "auxiliary")
 INFO_DIMS: tuple[str, ...] = tuple(d for d, t in AXIS_TIERS.items() if t == "info")
@@ -740,6 +754,20 @@ def _load_hyperparam_overrides() -> dict[str, str]:
     return {str(k): str(v) for k, v in data.items() if isinstance(k, str)}
 
 
+def _effective_dim_set() -> str:
+    """The dim_set the audit actually runs with — a hyperparam override wins over
+    the config default, mirroring the audit-argv precedence below.
+
+    Shared by the audit dispatch AND the baseline-epoch stamping so the stamped
+    ``dim_set`` is the one the baseline was MEASURED on, never a stale config
+    default (else a ``full``-override run would be stamped ``subset`` and merge
+    into a non-comparable epoch).
+    """
+    cfg = _get_autoresearch_config()
+    overrides = _load_hyperparam_overrides()
+    return str(overrides.get("dim_set") or getattr(cfg, "dim_set", DIM_SET_NAME))
+
+
 def _build_audit_command() -> list[str]:
     """Construct the ``geode audit`` subprocess argv.
 
@@ -777,7 +805,7 @@ def _build_audit_command() -> list[str]:
     cfg = _get_autoresearch_config()
     overrides = _load_hyperparam_overrides()
     effective_seed_limit = _hyperparam_int(overrides, "seed_limit", cfg.seed_limit)
-    effective_dim_set = overrides.get("dim_set") or cfg.dim_set
+    effective_dim_set = _effective_dim_set()
     effective_max_turns = _hyperparam_int(overrides, "max_turns", cfg.max_turns)
     geode_bin = shutil.which("geode")
     argv = [geode_bin, "audit"] if geode_bin is not None else ["uv", "run", "geode", "audit"]
@@ -2169,6 +2197,43 @@ def _append_baseline_registry_row(
         from core.self_improving_loop.role_provenance import collect_role_provenance
 
         role_provenance = collect_role_provenance(_get_autoresearch_config())
+    # PR-BASELINE-EPOCH (2026-05-30) — content-addressed epoch discriminator.
+    # Hash the production+measurement spec (margin_rule + logic version tags +
+    # role model/source + rubric/dim-set + bench + seed-pool identity) → epoch.
+    # Spec change ⇒ new epoch; the row self-verifies (stored spec re-hashes to
+    # epoch_hash). See .claude/skills/baseline-epoch-partition/SKILL.md.
+    from core.self_improving_loop.baseline_epoch import (
+        SPEC_SCHEMA_VERSION,
+        build_baseline_spec,
+        compute_epoch_hash,
+        load_epoch_label_map,
+        resolve_epoch_label,
+        save_epoch_label_map,
+        seed_pool_content_hash,
+    )
+
+    _seed_select = seed_select if seed_select is not None else _resolve_seed_select()
+    baseline_spec = build_baseline_spec(
+        margin_rule=margin_rule,
+        margin_logic_version=MARGIN_LOGIC_VERSION,
+        fitness_formula_version=FITNESS_FORMULA_VERSION,
+        rubric_version=PETRI_RUBRIC_VERSION,
+        # the dim_set the audit was MEASURED on (override wins over config), not
+        # the stale config default — else a `full`-override run is mis-stamped.
+        dim_set=_effective_dim_set(),
+        # `is not None`, not `bool(...)` — match compute_fitness's bench-active
+        # test (train.py: `bench_means is not None`) so an empty-but-active bench
+        # dict is not mis-stamped bench=false.
+        bench=bench_means is not None,
+        role_provenance=role_provenance,
+        seed_pool_id=seed_pool_content_hash(_seed_select),
+    )
+    epoch_hash = compute_epoch_hash(baseline_spec)
+    _label_map_path = _baseline_archive_path().parent / "baseline_epochs.json"
+    _label_map = load_epoch_label_map(_label_map_path)
+    epoch_label, _epoch_is_new = resolve_epoch_label(epoch_hash, label_map=_label_map)
+    if _epoch_is_new:
+        save_epoch_label_map(_label_map_path, _label_map)
     # Intrinsic fitness on the same (dim + admire) scale the promote gate's
     # ``current_raw`` uses — bench is OFF (Path C) so it is not threaded here.
     intrinsic_fitness = compute_fitness(
@@ -2190,8 +2255,16 @@ def _append_baseline_registry_row(
         "fitness_stderr": (float(fitness_stderr) if fitness_stderr is not None else None),
         "margin_rule": margin_rule,
         "bench": bool(bench_means),
-        "seed_select": seed_select if seed_select is not None else _resolve_seed_select(),
+        "seed_select": _seed_select,
         "seed_count": int(seed_count),
+        # PR-BASELINE-EPOCH — content-addressed partition. epoch_hash is the
+        # comparability discriminator; epoch_label (be-NNN) is for display;
+        # baseline_spec is the hashed surface (row self-verifies); spec_schema_version
+        # versions the field-set (write-time frozen — no retroactive recompute).
+        "epoch_hash": epoch_hash,
+        "epoch_label": epoch_label,
+        "baseline_spec": baseline_spec,
+        "spec_schema_version": SPEC_SCHEMA_VERSION,
         # per-role {model, source, lane} — shared SoT with the mutations.jsonl
         # cycle ledger (core.self_improving_loop.role_provenance) so the two
         # git-tracked ledgers never drift on the credential lane.
