@@ -4286,7 +4286,20 @@ def _join_mutation_records(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
     ATTRIBUTION record (``fitness_before`` / ``fitness_after`` /
     ``fitness_delta`` / ``attribution_score`` / ``significant`` /
     ``observed_dim`` / ``ci95``) once the post-mutation audit completes.
-    They share ``mutation_id``. Returns one dict per mutation —
+    They share ``mutation_id``.
+
+    SCALE CONTRACT (PR-MARGIN-FITNESS-SCALE E1, 2026-05-30) —
+    ``fitness_before`` / ``fitness_after`` / ``fitness_delta`` are all on the
+    canonical 0-1 ``compute_fitness`` scale (HIGHER-is-better), so a positive
+    ``fitness_delta`` is an improvement and the ±0.005 noise floor in
+    :func:`_delta_class` is a fitness-scale epsilon (matching the promote
+    gate's ``fitness_margin_floor``). NOTE — pre-E1 rows on disk carry a mixed
+    scale (``fitness_before`` was the 1-10 ``dim_means`` aggregate, so
+    ``fitness_delta`` for those rows is meaningless, often ≈ -1.7); they are
+    rendered as-is (the ledger is not rewritten). A one-shot backfill of
+    historical rows is a documented follow-up.
+
+    Returns one dict per mutation —
     ``{"id", "apply", "attr"}`` (``attr`` is ``None`` until the
     attribution record lands) — newest applied first.
 
@@ -4336,9 +4349,11 @@ def _fmt_epoch(ts: Any) -> str:
 def _mutation_outcome(attr: dict[str, Any] | None) -> tuple[str, str]:
     """Map a mutation's attribution row to ``(label, css_class)``.
 
-    ``fitness_delta`` is higher-is-better (overall fitness), so a positive
-    delta past the ±0.005 noise floor is an improvement. ``None`` attr =
-    audit not yet run.
+    ``fitness_delta`` is the 0-1 ``compute_fitness`` scale (HIGHER-is-better),
+    so a positive delta past the ±0.005 fitness-scale noise floor is an
+    improvement. ``None`` attr = audit not yet run. (Pre-PR-MARGIN-FITNESS-
+    SCALE-E1 rows carry a mixed-scale ``fitness_delta`` — see
+    :func:`_join_mutations`.)
     """
     if attr is None:
         return ("pending", "muted")

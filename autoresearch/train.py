@@ -2889,6 +2889,47 @@ def _should_promote(
     )
 
 
+def _baseline_raw_fitness(
+    baseline_means: dict[str, float] | None,
+    baseline_stderr: dict[str, float] | None,
+    *,
+    baseline_measurement_modality: dict[str, str] | None,
+    baseline_admire_means: dict[str, float] | None,
+    anchor_confidence_mode: bool,
+) -> float | None:
+    """Baseline-side fitness on the canonical 0-1 scale (HIGHER-is-better).
+
+    PR-MARGIN-FITNESS-SCALE E1 (2026-05-30) — the single source of truth for
+    "what is the baseline's fitness?", shared by the attribution ledger's
+    ``fitness_before`` and the few-shot/DPO pile's ``fitness_delta`` so both
+    are produced by the SAME :func:`compute_fitness` call that yields the
+    current-side ``fitness_after``. It mirrors the promote gate's ``prior_raw``
+    (:func:`_should_promote`): ``compute_fitness`` with ``baseline_means=None``
+    (plain weighted "raw" sum — no cross-axis gate, no bench), the
+    baseline-side modality, the baseline ``ANCHOR_DIMS`` subset, the reserved
+    baseline admire slot, and the shared ``anchor_confidence_mode``.
+
+    Returns ``None`` when there is no baseline (``baseline_means`` falsy / N=0
+    first audit) — the caller writes ``fitness_before=None`` as before.
+
+    NOTE — direction: this is the FITNESS scale (0-1, higher-is-better), NOT
+    the Petri ``dim_means`` aggregate (1-10, lower-is-better). The pre-fix
+    ledger conflated the two; ``mean(baseline_means)`` is the WRONG quantity
+    here and must never be substituted back in.
+    """
+    if not baseline_means:
+        return None
+    anchor_subset = {dim: baseline_means[dim] for dim in ANCHOR_DIMS if dim in baseline_means}
+    return compute_fitness(
+        baseline_means,
+        baseline_stderr,
+        measurement_modality=baseline_measurement_modality or None,
+        anchor_means=anchor_subset or None,
+        anchor_confidence_mode=anchor_confidence_mode,
+        admire_means=baseline_admire_means or None,
+    )
+
+
 def _revert_sot_after_reject(
     mutation_id: str,
     *,
@@ -3484,8 +3525,35 @@ def main() -> int:
                 dim_means=dict(dim_means),
                 dim_stderr=dict(dim_stderr or {}),
             )
-            _sil_fitness_before = (
-                sum(baseline_means.values()) / len(baseline_means) if baseline_means else None
+            # PR-MARGIN-FITNESS-SCALE E1 (2026-05-30) — fitness_before is the
+            # BASELINE's ``compute_fitness`` value on the canonical 0-1 scale
+            # (HIGHER-is-better), produced by the SAME function that yields
+            # ``fitness_after`` so the two are directly comparable. It mirrors
+            # the promote gate's ``prior_raw`` (``_should_promote`` →
+            # ``compute_fitness(baseline_means, baseline_stderr, ...)`` with
+            # ``baseline_means=None`` i.e. the plain weighted "raw" sum, the
+            # baseline-side modality, the baseline anchor subset, and the same
+            # ``anchor_confidence_mode``). Threaded args here EXACTLY match
+            # that call (admire stays the reserved baseline slot
+            # ``_baseline_admire_means``; bench is intentionally omitted on the
+            # raw side, identical to ``prior_raw``).
+            #
+            # BUG FIX: the prior code wrote ``mean(baseline_means)`` — the
+            # 1-10 dim-aggregate (LOWER-is-better), an incompatible scale —
+            # so ``fitness_before`` (1-10) and ``fitness_after`` (0-1) were on
+            # different scales and ``fitness_delta`` was nonsense. We now keep
+            # both on the 0-1 fitness scale.
+            #
+            # SCALE NOTE: pre-fix ``mutations.jsonl`` rows carry the old mixed
+            # scale (``fitness_before`` = 1-10 dim mean). They are NOT rewritten
+            # here (git-tracked ledger). A one-shot backfill of historical rows
+            # to the 0-1 scale is a FOLLOW-UP task, deliberately out of scope.
+            _sil_fitness_before = _baseline_raw_fitness(
+                baseline_means,
+                baseline_stderr,
+                baseline_measurement_modality=_load_baseline_measurement_modality(),
+                baseline_admire_means=_baseline_admire_means,
+                anchor_confidence_mode=_anchor_confidence_mode,
             )
             write_attribution(
                 mutation_id=_sil_mutation_id,
@@ -3604,9 +3672,22 @@ def main() -> int:
         if not args.dry_run and "true" in promoted_line.lower():
             from core.llm.few_shot_pool import append_exemplar
 
+            # PR-MARGIN-FITNESS-SCALE E1 (2026-05-30) — fitness_delta on the
+            # canonical 0-1 scale: ``fitness_after - fitness_before`` where
+            # ``fitness_before`` is the baseline's 0-1 ``compute_fitness`` value
+            # (same helper as the attribution ledger above), NOT the 1-10
+            # dim-aggregate mean the prior code subtracted. With no baseline the
+            # delta is the current fitness itself (as before).
+            _baseline_fitness_before = _baseline_raw_fitness(
+                baseline_means,
+                baseline_stderr,
+                baseline_measurement_modality=_load_baseline_measurement_modality(),
+                baseline_admire_means=_baseline_admire_means,
+                anchor_confidence_mode=_anchor_confidence_mode,
+            )
             fitness_delta = (
-                fitness - (sum(baseline_means.values()) / len(baseline_means))
-                if baseline_means
+                fitness - _baseline_fitness_before
+                if _baseline_fitness_before is not None
                 else fitness
             )
             append_exemplar(
