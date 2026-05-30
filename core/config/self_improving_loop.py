@@ -352,6 +352,37 @@ class AutoresearchConfig(BaseModel):
     collapsing onto it. Operators who want faster smoke runs should
     pass ``--dry-run`` instead of setting a low ``seed_limit``."""
     seed_select: str = "plugins/petri_audit/seeds"
+    """The **co-evolving** seed pool that supplies SELECTION PRESSURE.
+
+    This pool *mutates across generations* — the seed-generation co-scientist
+    grows / replaces adversarial seeds alongside the agent, and
+    :func:`autoresearch.train._resolve_seed_select` swaps in the freshest
+    survivor pool. Because the seed set moves every generation, the fitness it
+    produces is a *moving ruler*: useful for ranking candidates WITHIN a
+    generation (the (1+1) accept/revert decision), NOT for comparing fitness
+    ACROSS generations. Cross-generation comparability is the job of
+    :attr:`held_out_bench`."""
+    held_out_bench: str | None = None
+    """E2 (2026-05-30) — a **VERSION-FROZEN held-out** seed set, NEVER mutated,
+    used ONLY to MEASURE fitness on a *fixed ruler*.
+
+    Where :attr:`seed_select` co-evolves (and so cannot anchor a cross-generation
+    fitness curve), ``held_out_bench`` is a directory of frozen seeds that the
+    mutator / seed-generation loop must NOT touch. Scoring the champion on this
+    fixed set every promote yields a ``held_out_fitness`` whose values ARE
+    comparable across generations — it is the only curve that counts as evidence
+    of real improvement.
+
+    ``None`` (default) → no held-out bench is configured; the held-out fields are
+    omitted from the baseline registry row (backward-compatible: existing readers
+    see the same shape they always have). Set this to a frozen seed directory path
+    (absolute, ``~``-relative, or repo-relative — same shape as ``seed_select``)
+    to activate the fixed-ruler measurement.
+
+    Resolution precedence is mirrored from ``seed_select`` in
+    :func:`autoresearch.train._resolve_held_out_bench` (env
+    ``GEODE_HELD_OUT_BENCH`` / ``AUTORESEARCH_HELD_OUT_BENCH`` → this config field
+    → ``None``)."""
     dim_set: str = "subset"
     max_turns: Annotated[int, Field(ge=1, le=200)] = 10
 

@@ -160,6 +160,13 @@ SEED_SELECT = "plugins/petri_audit/seeds"
 :func:`_resolve_seed_select` so the seed-generation cross-loop handoff
 (``survivors.json``) can swap in its winners. The constant stays the
 literal default so existing tests and self-improving-loop agents can grep it."""
+HELD_OUT_BENCH: str | None = None
+"""E2 (2026-05-30) — default held-out bench: NONE (no fixed-ruler measurement).
+The co-evolving :data:`SEED_SELECT` supplies SELECTION PRESSURE and mutates every
+generation; a held-out bench, when an operator configures one, is a VERSION-FROZEN
+seed set that NEVER mutates and is used ONLY to measure fitness on a fixed ruler so
+the curve is comparable across generations. Resolved by
+:func:`_resolve_held_out_bench` (env override → config → this constant)."""
 DIM_SET_NAME = "subset"
 MAX_TURNS = 10
 WRAPPER_OVERRIDE_HOOK_READY = _CORE_WRAPPER_OVERRIDE_READY
@@ -201,6 +208,7 @@ def _get_autoresearch_config() -> Any:
             source=SOURCE,
             seed_limit=SEED_LIMIT,
             seed_select=SEED_SELECT,
+            held_out_bench=HELD_OUT_BENCH,
             dim_set=DIM_SET_NAME,
             max_turns=MAX_TURNS,
         )
@@ -262,6 +270,38 @@ def _resolve_seed_select() -> str:
         if isinstance(seed_pool, Path) and seed_pool.exists():
             return str(seed_pool)
     return str(_get_autoresearch_config().seed_select)
+
+
+def _resolve_held_out_bench() -> str | None:
+    """Return the VERSION-FROZEN held-out bench path, or ``None`` when unset.
+
+    E2 (2026-05-30). The held-out bench is the FIXED ruler:
+    :func:`_resolve_seed_select` resolves the *co-evolving* selection pool (and
+    so consults ``latest_pointer.json`` to auto-pick the freshest survivor set),
+    but this resolver MUST NOT — the whole point is that the held-out set never
+    moves. It therefore mirrors ``_resolve_seed_select``'s precedence **minus the
+    latest-pointer tier**:
+
+    1. ``GEODE_HELD_OUT_BENCH`` env var (per-run override).
+    2. ``AUTORESEARCH_HELD_OUT_BENCH`` env var (alias mirroring the
+       ``AUTORESEARCH_SEED_SELECT`` shape, for callers that namespace every
+       autoresearch knob under one prefix).
+    3. ``[self_improving_loop.autoresearch] held_out_bench`` from ``config.toml``.
+    4. ``None`` (no held-out bench configured → fixed-ruler measurement off).
+
+    Whitespace-only env values are treated as unset (same guard as
+    ``_resolve_seed_select``) so a blank export never produces an empty-string
+    bench path. An empty / whitespace config value likewise resolves to ``None``.
+    """
+    for env_name in ("GEODE_HELD_OUT_BENCH", "AUTORESEARCH_HELD_OUT_BENCH"):
+        override = os.environ.get(env_name, "").strip()
+        if override:
+            return override
+    configured = getattr(_get_autoresearch_config(), "held_out_bench", None)
+    if configured is None:
+        return None
+    stripped = str(configured).strip()
+    return stripped or None
 
 
 # ---------------------------------------------------------------------------
@@ -1218,6 +1258,80 @@ def run_audit(
     )
 
 
+def score_held_out_bench(
+    bench_path: str,
+    *,
+    dry_run: bool = False,
+    session_id: str = "",
+    gen_tag: str = "",
+) -> tuple[float, dict[str, float], str]:
+    """Measure fitness on the VERSION-FROZEN held-out bench — the fixed ruler.
+
+    E2 (2026-05-30). ``bench_path`` is a directory (or selector) of frozen seeds
+    that the mutator / seed-generation loop NEVER touches, so the fitness it
+    yields is comparable ACROSS generations (unlike the co-evolving
+    ``seed_select`` pool, whose fitness is only a within-generation ranking
+    signal). This is the value that forms the *evidence curve*.
+
+    Returns ``(held_out_fitness, held_out_dim_means, held_out_bench_id)`` where:
+
+    - ``held_out_fitness`` is the SAME 0-1 :func:`compute_fitness` the promote
+      gate uses (``baseline_means=None`` → the fresh-anchor intrinsic aggregate,
+      matching ``_append_baseline_registry_row``'s ``intrinsic_fitness``; no
+      cross-baseline critical-floor comparison, which would be spurious against a
+      frozen ruler that is by construction a *different* seed set from the
+      promoted baseline's pool).
+    - ``held_out_dim_means`` is the per-dim aggregate on the Petri 1-10
+      concerning-behaviour scale (lower-is-better dims), straight from
+      :func:`run_audit`.
+    - ``held_out_bench_id`` is ``seed_pool_content_hash(bench_path)`` — the
+      content-addressed identity of the frozen bench, so two runs on the same
+      frozen set always carry the same id regardless of mtime / absolute path,
+      and a silent edit to the "frozen" set is detectable as an id change.
+
+    The audit runs by overriding ``AUTORESEARCH_SEED_SELECT`` to ``bench_path``
+    for the duration of this call only (restored in a ``finally`` so the live
+    co-evolving resolution is never left mutated). The override is the same lever
+    ``_build_audit_command`` → ``_resolve_seed_select`` already honours, so no new
+    argv plumbing is introduced. ``dry_run=True`` produces the synthetic dim set
+    (no quota spent) so the wiring is unit-testable.
+
+    CADENCE / WIRING (E2 Phase 3): this entry point is intentionally NOT yet
+    dispatched from the live cycle — see :func:`_held_out_record_fields`, which
+    the promote path consumes when a bench is configured. Calling it every cycle
+    (vs only on promote) is a flagged follow-up decision; the conservative
+    default records the held-out fitness only when a promote writes a baseline
+    row.
+    """
+    from core.self_improving_loop.baseline_epoch import seed_pool_content_hash
+
+    held_out_bench_id = seed_pool_content_hash(bench_path)
+    _prior_override = os.environ.get("AUTORESEARCH_SEED_SELECT")
+    os.environ["AUTORESEARCH_SEED_SELECT"] = bench_path
+    try:
+        (
+            held_out_dim_means,
+            held_out_dim_stderr,
+            _audit_seconds,
+            _total_seconds,
+            _sample_count,
+            held_out_modality,
+            _per_sample,
+        ) = run_audit(dry_run, session_id=session_id, gen_tag=gen_tag)
+    finally:
+        if _prior_override is None:
+            os.environ.pop("AUTORESEARCH_SEED_SELECT", None)
+        else:
+            os.environ["AUTORESEARCH_SEED_SELECT"] = _prior_override
+    held_out_fitness = compute_fitness(
+        held_out_dim_means,
+        held_out_dim_stderr,
+        baseline_means=None,
+        measurement_modality=held_out_modality or None,
+    )
+    return float(held_out_fitness), held_out_dim_means, held_out_bench_id
+
+
 # ---------------------------------------------------------------------------
 # Fitness — 17-dim weighted aggregate + stability axis (20-dim universe)
 # ---------------------------------------------------------------------------
@@ -2163,6 +2277,8 @@ def _append_baseline_registry_row(
     promoted_by: str,
     role_provenance: dict[str, dict[str, str]] | None = None,
     seed_select: str | None = None,
+    held_out_fitness: float | None = None,
+    held_out_bench_id: str | None = None,
 ) -> None:
     """Append one ``kind="baseline"`` registry row to ``baseline_archive.jsonl``.
 
@@ -2187,6 +2303,17 @@ def _append_baseline_registry_row(
     *current* pool (correct for a live promote, which fires right after its own
     audit), but a backfill of a historical baseline must pass the pool it was
     measured under (the live pointer may have moved).
+
+    ``held_out_fitness`` / ``held_out_bench_id`` (E2, 2026-05-30) — the
+    fixed-ruler measurement. ``seed_select`` co-evolves, so the row's intrinsic
+    ``fitness`` (measured on the co-evolving pool) is NOT comparable across
+    generations; ``held_out_fitness`` is the SAME 0-1 :func:`compute_fitness`
+    computed on the VERSION-FROZEN held-out bench (see
+    :func:`score_held_out_bench`) and so IS the cross-generation evidence curve.
+    ``held_out_bench_id`` is the bench's content-addressed identity (the ruler's
+    fingerprint). Both are **omitted** from the row when ``None`` (no held-out
+    bench configured) so existing readers see the same shape — the held-out
+    fields are purely additive and never a new required key.
     """
     if margin_rule not in _VALID_MARGIN_RULES:
         raise ValueError(
@@ -2275,6 +2402,16 @@ def _append_baseline_registry_row(
         "eval_archive": (Path(eval_archive).name if eval_archive else None),
         "dim_means": {k: float(v) for k, v in dim_means.items()},
     }
+    # E2 (2026-05-30) — fixed-ruler evidence. Recorded ONLY when a held-out bench
+    # was scored (both fields present together); omitted entirely otherwise so
+    # the row shape is unchanged for the no-bench path (additive, never a new
+    # required key). ``held_out_fitness`` is the SAME 0-1 compute_fitness on the
+    # VERSION-FROZEN bench → comparable across generations, unlike the
+    # co-evolving-pool ``fitness`` above. ``held_out_bench_id`` is the ruler's
+    # content-address (so a silent edit to the "frozen" set is detectable).
+    if held_out_fitness is not None and held_out_bench_id is not None:
+        row["held_out_fitness"] = float(held_out_fitness)
+        row["held_out_bench_id"] = str(held_out_bench_id)
     archive_path = _baseline_archive_path()
     archive_path.parent.mkdir(parents=True, exist_ok=True)
     with archive_path.open("a", encoding="utf-8") as fh:
@@ -2313,6 +2450,12 @@ def _write_baseline(
     # (the prior σ in the gain-stderr margin). ``None`` (dry-run, summary-
     # only path) → key omitted → next gate falls back to the MC estimate.
     fitness_stderr: float | None = None,
+    # E2 (2026-05-30) — fixed-ruler evidence threaded to the registry row.
+    # ``None`` (default) → no held-out bench configured → the held-out fields are
+    # omitted from the row (backward-compatible). The promote caller computes
+    # these via ``score_held_out_bench`` when ``_resolve_held_out_bench()`` is set.
+    held_out_fitness: float | None = None,
+    held_out_bench_id: str | None = None,
 ) -> None:
     """Persist current audit's aggregates as the new baseline.
 
@@ -2429,6 +2572,9 @@ def _write_baseline(
         commit=commit,
         ts_utc=_ts_utc,
         promoted_by="operator" if manual_promote else "gate",
+        # E2 (2026-05-30) — fixed-ruler evidence (omitted from the row when None).
+        held_out_fitness=held_out_fitness,
+        held_out_bench_id=held_out_bench_id,
     )
     # Emit BASELINE_PROMOTED after the write succeeds. ``reason``
     # quotes the gate verdict text from ``_should_promote`` (or the
@@ -3371,6 +3517,28 @@ def main() -> int:
         # PR-MARGIN-FITNESS-SCALE (2026-05-30) — persist this audit's
         # fitness-scale stderr so the NEXT cycle reads it as the prior σ.
         "fitness_stderr": current_fitness_stderr,
+        # E2 (2026-05-30) — fixed-ruler evidence. DELIBERATELY un-wired in the
+        # live promote path: ``score_held_out_bench`` runs a SECOND full audit
+        # (real quota cost), so dispatching it from every promote would silently
+        # double audit cost — a genuine cadence decision the operator must make,
+        # not one this PR should bake in. The end-to-end RECORD path is fully
+        # functional (these two slots flow through ``_write_baseline`` →
+        # ``_append_baseline_registry_row`` and are omitted from the row when
+        # None), so wiring is a 1-line activation once the cadence is chosen.
+        #
+        # TO WIRE (conservative cadence = score on promote, record in the row):
+        #   _hob = _resolve_held_out_bench()
+        #   if _hob and not args.dry_run:
+        #       _ho_fit, _ho_dims, _ho_id = score_held_out_bench(
+        #           _hob, session_id=session_id, gen_tag=gen_tag)
+        #       _baseline_provenance["held_out_fitness"] = _ho_fit
+        #       _baseline_provenance["held_out_bench_id"] = _ho_id
+        # FLAGGED follow-up: (a) every-cycle vs only-on-promote cadence (the
+        # second audit's cost); (b) whether the epoch spec's seed_pool_id should
+        # become the FROZEN held_out_bench_id instead of the co-evolving pool
+        # (the comparability ruler) — see baseline_epoch.build_baseline_spec.
+        "held_out_fitness": None,
+        "held_out_bench_id": None,
     }
     if args.dry_run:
         promoted_line = "false (dry-run)"
