@@ -3401,6 +3401,13 @@ def _load_baseline(state_dir: Path) -> tuple[dict[str, Any] | None, bool, Path |
     return (data, True, chosen)
 
 
+# PR-BASELINE-REGISTRY (2026-05-30) — discriminator for the registry's
+# baseline rows (mirrors ``autoresearch.train._BASELINE_REGISTRY_KIND``). The
+# legacy gen timeline filters these out; the dedicated index lands in a
+# follow-up phase.
+_BASELINE_REGISTRY_ROW_KIND = "baseline"
+
+
 def _load_baseline_archive(state_dir: Path) -> list[dict[str, Any]]:
     """Return list of dicts from ``baseline_archive.jsonl``.
 
@@ -3911,7 +3918,14 @@ def _gen_timeline_rows(
     archive: list[dict[str, Any]],
     current_baseline: dict[str, Any] | None,
 ) -> str:
-    """Render ``baseline_archive.jsonl`` rows newest-first, with Δfitness."""
+    """Render the legacy gen/mutation timeline rows newest-first, with Δfitness.
+
+    PR-BASELINE-REGISTRY (2026-05-30) — the registry's ``kind="baseline"`` rows
+    use a different schema (``id`` / ``margin_rule`` / models, no ``gen_tag``)
+    and get their own dense index in a follow-up phase; skip them here so this
+    legacy timeline does not render them with blank ids.
+    """
+    archive = [r for r in archive if r.get("kind") != _BASELINE_REGISTRY_ROW_KIND]
     if not archive:
         return (
             '        <tr><td colspan="5" class="empty">'
