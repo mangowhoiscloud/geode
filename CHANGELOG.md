@@ -45,6 +45,47 @@ functional change.
 
 ---
 
+## [0.99.102] - 2026-05-31
+
+### Added
+- **PR-CAMPAIGN-DRIVER (2026-05-31) — committed, unit-tested self-improving campaign
+  driver (`scripts/run_campaign.py` + `scripts/watch_campaign.py`).** Implements
+  `docs/self-improving/campaign-procedure.md` as a real, importable module + CLI that
+  *sequences* the existing pieces (it decides no policy of its own):
+  - **gen-0 K-repeat baseline** (default K=5) — runs K manual measurements of the
+    genesis scaffold via `uv run python autoresearch/train.py` (real audit, no
+    mutation, `source="manual"`; the 1st bootstrap-establishes `baseline.json`),
+    reads each run's `held_out_fitness` + `fitness` from the new `kind="attribution"`
+    rows in `mutations.jsonl`, and computes the **noise band** (mean ± stderr of the K
+    held-out values). Then snapshots the full scaffold SoT
+    (`autoresearch/state/policies/*.{json,jsonl}` + `baseline.json`) to a gen-0 dir.
+  - **3-arm loop** (`never → random → gate`, gate LAST) — each arm restores the gen-0
+    snapshot (matched reset), sets `GEODE_PROMOTE_POLICY` (+ deterministic
+    `GEODE_PROMOTE_POLICY_SEED=424200+i` for `random`), runs N (default 10) cycles with
+    `commit_enabled=(arm=="gate")`.
+  - **propose-guard** — wraps `SelfImprovingLoopRunner.propose()` in a re-proposal loop
+    (up to M=8) that re-proposes on `RepetitiveMutationError` OR a measurement-hyperparam
+    `ValueError` (`seed_limit`/`max_turns`/`dim_set` now rejected), then skips the cycle
+    as a logged no-op rather than crashing the campaign.
+  - **degeneracy guard** — reads the newest `.eval` via `inspect_ai.log.read_eval_log`
+    and requires `status=success` + samples>0 + >0 scored dims (falls back to the
+    attribution row's `between_seed_stderr` ≥ floor when `inspect_ai` is absent); HALTs
+    the campaign on a degenerate audit.
+  - **flushed progress log** to `autoresearch/state/campaign-progress.log` (a gitignored
+    runtime artifact) tee'd to stdout — one line per cycle plus gen-0 noise-band +
+    per-arm summaries (long-task-watcher: flushed echo, not buffered).
+  - **env setup** — sets `GEODE_CODEX_OAUTH_POLL_DISABLED=1`, `AUTORESEARCH_SEED_SELECT`,
+    `GEODE_HELD_OUT_BENCH`, and `GEODE_AUDIT_MAX_SAMPLES`/`GEODE_AUDIT_MAX_CONNECTIONS`
+    (default 3/8 — a forward-looking knob; the single-OAuth `petri_audit/runner.py` lane
+    still pins `--max-samples 1 --max-connections 1`). `ANTHROPIC_API_KEY` is the
+    operator shell wrapper's responsibility.
+  - `--dry-run` passes through to `train.py` + the runner so the whole chain is
+    smoke-testable with synthetic audits (no PAYG/network). `scripts/watch_campaign.py`
+    gives an on-demand digest from the progress log + mutator attribution rows
+    (split by `promote_policy`) + baseline epochs.
+  - 23 unit tests in `tests/test_run_campaign.py` mock every boundary (propose,
+    train.py subprocess, `read_eval_log`, SoT files) — NO live audits.
+
 ## [0.99.101] - 2026-05-31
 
 ### Removed
