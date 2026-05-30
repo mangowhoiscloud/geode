@@ -66,6 +66,13 @@ functional change.
   `tests/test_self_improving_hub_e2e.py::test_audit_deeplinks_use_logs_route_and_resolve`
   (no `#/tasks/`; every linked filename resolves in `listing.json`) and a new
   CLAUDE.md CANNOT row (verify vendored-SPA routes against the bundle JS).
+- **PR-SEEDS-UNTRACKED-COST (2026-05-30) — drop untracked cost from the seeds page.**
+  `docs/petri/seeds` showed per-run + total spend in USD (`$0.00` for every
+  run — subscription-lane seed generation reports neither `usd_spent` nor token
+  counts), a measured-but-always-zero metric. Per "measured values only" the
+  USD column, the USD rollup row, and the total-spend summary are removed; the
+  run rollup keeps the tracked fields (iters, literature_snapshots,
+  debate_transcripts).
 
 
 ## [0.99.91] - 2026-05-30
