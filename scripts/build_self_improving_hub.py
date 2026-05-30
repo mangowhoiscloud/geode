@@ -4810,14 +4810,19 @@ def _held_out_attribution_rows(rows: list[dict[str, Any]]) -> list[dict[str, Any
         if not isinstance(raw_ts, int | float) or isinstance(raw_ts, bool):
             continue
         arm = row.get("promote_policy")
+        arm_tagged = isinstance(arm, str) and bool(arm)
         points.append(
             {
                 "ts": float(raw_ts),
                 "held_out_fitness": fitness,
                 "held_out_bench_id": str(row.get("held_out_bench_id") or "—"),
-                # Legacy rows (pre-E3) have no promote_policy → treat as the gate arm
-                # (the only arm that existed before the control arms were added).
-                "arm": str(arm) if isinstance(arm, str) and arm else "gate",
+                # A pre-E3 row has no promote_policy. ``arm`` carries the display label
+                # (``"untagged"`` so it is never confused with a real arm) and
+                # ``arm_tagged`` records whether the row genuinely declared an arm — the
+                # results renderer keeps untagged rows OUT of the gate arm so a
+                # pre-experiment cycle never masquerades as matched-campaign evidence.
+                "arm": str(arm) if arm_tagged else "untagged",
+                "arm_tagged": arm_tagged,
             }
         )
     points.sort(key=lambda point: point["ts"])
@@ -4831,10 +4836,13 @@ def _evidence_gain_verdicts(
     """Collect the recorded ci-excludes-0 gain verdicts from both ledgers.
 
     Reads ``gain_ci_excludes_zero`` / ``gain_verdict`` / ``gain_ci_low`` /
-    ``gain_ci_high`` from the attribution rows (per-cycle) and the
-    ``kind="baseline"`` archive rows (per-campaign promote). A row with no recorded
-    verdict (``gain_ci_excludes_zero is None``) contributes nothing. Graceful at the
-    cast boundary: a non-numeric CI bound is rendered as "—", never raises.
+    ``gain_ci_high`` from the attribution rows (per-cycle, numeric ``ts`` epoch) and
+    the ``kind="baseline"`` archive rows (per-campaign promote, ISO-string ``ts_utc``).
+    The two ledgers carry DIFFERENT timestamp shapes, so each is formatted with its
+    own formatter (``_fmt_epoch`` for the numeric cycle ts, ``short_iso`` for the
+    archive ISO string) — a previous version floated both and dropped the archive ts.
+    A row with no recorded verdict (``gain_ci_excludes_zero`` not a bool) contributes
+    nothing. Graceful at every cast: a non-numeric CI bound renders "—", never raises.
     """
     out: list[dict[str, Any]] = []
 
@@ -4846,20 +4854,29 @@ def _evidence_gain_verdicts(
         except (TypeError, ValueError):
             return None
 
-    def _scan(source_rows: list[dict[str, Any]], source: str, ts_key: str) -> None:
+    def _scan(source_rows: list[dict[str, Any]], source: str, ts_label: str) -> None:
         for row in source_rows:
             excludes = row.get("gain_ci_excludes_zero")
             if not isinstance(excludes, bool):
                 continue
+            raw_ts = row.get(ts_label)
+            ts_display = "—"
+            if (
+                source == "cycle"
+                and isinstance(raw_ts, int | float)
+                and not isinstance(raw_ts, bool)
+            ):
+                ts_display = _fmt_epoch(float(raw_ts))
+            elif source == "promote" and isinstance(raw_ts, str) and raw_ts:
+                ts_display = short_iso(raw_ts) or raw_ts
+            arm_tag = row.get("promote_policy")
             out.append(
                 {
                     "source": source,
-                    "ts": _maybe_float(row.get(ts_key)),
-                    "arm": (
-                        str(row.get("promote_policy"))
-                        if isinstance(row.get("promote_policy"), str) and row.get("promote_policy")
-                        else "gate"
-                    ),
+                    "ts_display": ts_display,
+                    # Untagged (pre-E3) rows are labelled "untagged", never silently
+                    # attributed to the gate arm (matches the results-section fix).
+                    "arm": str(arm_tag) if isinstance(arm_tag, str) and arm_tag else "untagged",
                     "excludes_zero": excludes,
                     "verdict": (
                         str(row.get("gain_verdict"))
@@ -5057,27 +5074,49 @@ def _render_evidence_results(
     archive: list[dict[str, Any]],
 ) -> str:
     """Render the RESULTS section: per-arm held-out curve + 3-arm comparison +
-    promotion count per arm. Honest empty state when no campaign has run."""
+    promotion count per arm. Honest empty state when no campaign has run.
+
+    A held-out point / promoted baseline that carries NO ``promote_policy`` (a pre-E3
+    row, written before the control arms existed) is NOT silently attributed to the
+    ``gate`` arm — that would fabricate a gate-arm campaign result where none was run.
+    Untagged rows are counted in an explicit ``untagged (pre-arm)`` bucket so a
+    pre-experiment promotion never masquerades as matched-campaign arm evidence.
+    """
     points = _held_out_attribution_rows(mutations)
     by_arm: dict[str, list[dict[str, Any]]] = {arm: [] for arm, _ in _EVIDENCE_ARMS}
+    untagged_points: list[dict[str, Any]] = []
     for point in points:
-        by_arm.setdefault(point["arm"], []).append(point)
+        if point["arm_tagged"]:
+            by_arm.setdefault(point["arm"], []).append(point)
+        else:
+            untagged_points.append(point)
 
-    # Promotion count per arm from the promoted-baseline registry rows.
+    # Promotion count per arm from the promoted-baseline registry rows. An untagged
+    # baseline (pre-E3) is counted SEPARATELY — never folded into the gate arm.
     promo_by_arm: dict[str, int] = {arm: 0 for arm, _ in _EVIDENCE_ARMS}
+    untagged_promos = 0
     for row in archive:
         if not isinstance(row, dict) or row.get("kind") != "baseline":
             continue
         arm = row.get("promote_policy")
-        key = str(arm) if isinstance(arm, str) and arm else "gate"
-        promo_by_arm[key] = promo_by_arm.get(key, 0) + 1
+        if isinstance(arm, str) and arm in promo_by_arm:
+            promo_by_arm[arm] += 1
+        else:
+            untagged_promos += 1
 
     blocks: list[str] = []
 
-    # 3-arm comparison summary (mean held-out fitness + promotion count per arm).
+    # 3-arm comparison summary (mean held-out fitness + promotion count per arm),
+    # plus an explicit untagged (pre-arm) row when any untagged data exists.
     comparison_rows: list[str] = []
-    for arm, label in _EVIDENCE_ARMS:
-        arm_points = by_arm.get(arm, [])
+    summary_rows: list[tuple[str, str, list[dict[str, Any]], int]] = [
+        (arm, label, by_arm.get(arm, []), promo_by_arm.get(arm, 0)) for arm, label in _EVIDENCE_ARMS
+    ]
+    if untagged_points or untagged_promos:
+        summary_rows.append(
+            ("untagged", "pre-arm (no promote_policy)", untagged_points, untagged_promos)
+        )
+    for arm, label, arm_points, promo in summary_rows:
         if arm_points:
             mean_fitness = sum(p["held_out_fitness"] for p in arm_points) / len(arm_points)
             mean_cell = f'<td class="num">{mean_fitness:.4f}</td>'
@@ -5085,7 +5124,6 @@ def _render_evidence_results(
         else:
             mean_cell = '<td class="num muted">—</td>'
             n_cell = '<td class="num muted">0</td>'
-        promo = promo_by_arm.get(arm, 0)
         comparison_rows.append(
             "        <tr>\n"
             f"          <td><code>{html_escape(arm)}</code> "
@@ -5097,22 +5135,33 @@ def _render_evidence_results(
         )
     comparison_html = "\n".join(comparison_rows)
     total_points = len(points)
-    total_promos = sum(promo_by_arm.values())
-    if total_points == 0:
+    arm_tagged_points = sum(len(v) for v in by_arm.values())
+    if arm_tagged_points == 0:
+        untagged_note = (
+            f" {untagged_promos} promoted baseline"
+            + ("s" if untagged_promos != 1 else "")
+            + (" predate" if untagged_promos != 1 else " predates")
+            + " the control arms (no <code>promote_policy</code> tag) — counted in "
+            "the untagged row, NOT attributed to any arm."
+            if untagged_promos
+            else ""
+        )
         comparison_note = (
-            "No held-out cycle recorded on any arm yet — the matched 3-arm campaign has "
-            "not run. The table below shows the structure; values populate when the "
+            "No arm-tagged held-out cycle recorded yet — the matched 3-arm campaign has "
+            "not run. The table below shows the structure; arm values populate when the "
             "campaign writes <code>held_out_fitness</code> + <code>promote_policy</code> rows."
+            + untagged_note
         )
     else:
+        arm_promos = sum(promo_by_arm.values())
         comparison_note = (
             "Mean held-out fitness (the fixed ruler) per arm. Selection (<code>gate</code>) "
             "is only evidenced if it beats BOTH controls on this ruler. "
-            f"Promotions across all arms: <strong>{total_promos}</strong>"
+            f"Arm-tagged promotions: <strong>{arm_promos}</strong>"
             + (
                 " — <strong>0 promotions is a trust-increasing result</strong>: the loop "
                 "correctly promoted nothing on null evidence."
-                if total_promos == 0
+                if arm_promos == 0
                 else "."
             )
         )
@@ -5144,6 +5193,12 @@ def _render_evidence_results(
     else:
         for arm, label in _EVIDENCE_ARMS:
             blocks.append(_render_evidence_arm_curve(arm, label, by_arm.get(arm, [])))
+        if untagged_points:
+            blocks.append(
+                _render_evidence_arm_curve(
+                    "untagged", "pre-arm (no promote_policy)", untagged_points
+                )
+            )
     return "\n".join(blocks)
 
 
@@ -5173,12 +5228,7 @@ def _render_evidence_verdict(
             ci_cell = f'<td class="num">[{ci_low:+.4f}, {ci_high:+.4f}]</td>'
         else:
             ci_cell = '<td class="num muted">—</td>'
-        ts_value = entry["ts"]
-        ts_cell = (
-            f'<td class="muted">{html_escape(_fmt_epoch(ts_value))}</td>'
-            if isinstance(ts_value, float)
-            else '<td class="muted">—</td>'
-        )
+        ts_cell = f'<td class="muted">{html_escape(str(entry["ts_display"]))}</td>'
         rows.append(
             "        <tr>\n"
             f'          <td class="muted">{html_escape(entry["source"])}</td>\n'

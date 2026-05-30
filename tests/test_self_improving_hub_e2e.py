@@ -1474,6 +1474,51 @@ def test_evidence_results_populated_per_arm_curve() -> None:
     assert "+0.0100" in verdict_html and "+0.0500" in verdict_html, "gain CI bounds missing"
 
 
+def test_evidence_untagged_baseline_not_counted_as_gate_arm() -> None:
+    """E6 honesty (Codex review): a pre-E3 promoted baseline carrying NO
+    promote_policy must NOT be silently attributed to the gate arm — that would
+    fabricate a matched-campaign result. It is counted in an explicit
+    'untagged (pre-arm)' bucket, and the gate arm shows 0 arm-tagged promotions."""
+    from scripts.build_self_improving_hub import _render_evidence_results
+
+    mutations: list = []  # no held-out / arm rows on disk
+    archive = [{"kind": "baseline", "ts_utc": "2026-05-30T00:00:00+00:00"}]  # no promote_policy
+    html = _render_evidence_results(mutations, archive)
+    # The untagged bucket appears + names the pre-arm origin.
+    assert "untagged" in html and "pre-arm" in html, "untagged baseline must be a separate bucket"
+    # The comparison note must NOT claim a gate-arm promotion; it states the baseline
+    # predates the control arms (singular verb for the single fixture baseline).
+    assert "predates the control arms" in html, (
+        "an untagged promotion must be flagged as predating the arms, not folded into gate"
+    )
+    # The gate arm row shows 0 promotions (the untagged baseline is NOT counted there).
+    gate_idx = html.find("selection (promote gate)")
+    assert gate_idx != -1
+    # The gate row's promotions cell (last <td class="num"> in that <tr>) is 0.
+    gate_row = html[gate_idx : html.find("</tr>", gate_idx)]
+    assert ">1<" not in gate_row, "untagged baseline wrongly counted as a gate-arm promotion"
+
+
+def test_evidence_verdict_renders_archive_iso_timestamp() -> None:
+    """E6 parity (Codex review): a promoted-baseline verdict row carries an ISO-string
+    ts_utc, which must be formatted (not dropped as '—' by a numeric-only cast)."""
+    from scripts.build_self_improving_hub import _render_evidence_verdict
+
+    archive = [
+        {
+            "kind": "baseline",
+            "ts_utc": "2026-05-30T12:34:56+00:00",
+            "promote_policy": "gate",
+            "gain_ci_excludes_zero": False,
+            "gain_verdict": "no evidence yet",
+        }
+    ]
+    html = _render_evidence_verdict([], archive)
+    assert "no evidence yet" in html
+    # The ISO date surfaces (short form) — the archive ts is no longer dropped.
+    assert "2026-05-30" in html, "archive ISO ts_utc must be formatted, not rendered as —"
+
+
 def test_evidence_power_reads_recorded_sigma() -> None:
     """E6 POWER (populated path): the required-N line is COMPUTED from the recorded
     combined sigma (within/between stderr), never fabricated. The N matches the
