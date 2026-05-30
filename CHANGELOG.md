@@ -47,6 +47,38 @@ functional change.
 
 ## [Unreleased]
 
+## [0.99.91] - 2026-05-30
+
+### Added
+- **PR-BASELINE-EPOCH (2026-05-30) — content-addressed baseline epochs.**
+  The baseline registry (`autoresearch/state/baseline_archive.jsonl`) now
+  partitions every `kind="baseline"` row into an **epoch** keyed by a hash of
+  the baseline production+measurement spec, so baselines produced under
+  different logic are never silently compared. New
+  `core/self_improving_loop/baseline_epoch.py` builds the spec
+  (`margin_rule` + `margin_logic_version` + `fitness_formula_version` +
+  `rubric_version` + `dim_set` + `bench` + the four roles' `model`+`source` +
+  `seed_pool_id`), serializes it canonically (`sort_keys`, fixed separators),
+  and computes `epoch_hash = sha256(...)[:12]`; a hash-first-seen
+  `be-NNN` label is assigned and persisted in git-tracked
+  `autoresearch/state/baseline_epochs.json`. `autoresearch/train.py` stamps
+  `baseline_spec` + `spec_schema_version` + `epoch_hash` + `epoch_label` onto
+  each registry row at write time (write-time frozen — never retroactively
+  recomputed; the row self-verifies). Two new version constants
+  (`FITNESS_FORMULA_VERSION`, `MARGIN_LOGIC_VERSION`) are bumped on *semantic*
+  logic change and pinned by `tests/test_logic_version_guard.py` (a golden
+  fitness + golden margin per version — a silent logic change fails the gate
+  until the version is bumped, opening a new epoch). The seed pool enters the
+  spec as a **content-hash** (`seed_pool_content_hash` — survivor bodies, not
+  mtime/location), so a seed-set change is a new epoch. The self-improving hub
+  serves baselines under a **Baseline registry · grouped by epoch** section:
+  one dense sub-series per epoch (label + spec summary + per-baseline table),
+  never two epochs in one comparison table; pre-epoch rows render in an honest
+  "backfill pending" bucket rather than a fabricated hash. Codified in the
+  `baseline-epoch-partition` scaffold skill. Pinned by
+  `tests/test_baseline_epoch.py`, `tests/autoresearch/test_baseline_registry.py`,
+  and `tests/test_self_improving_hub_e2e.py`.
+
 ## [0.99.90] - 2026-05-30
 
 ### Fixed

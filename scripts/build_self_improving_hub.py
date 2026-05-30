@@ -4002,6 +4002,145 @@ def _gen_timeline_rows(
     return "\n".join(out)
 
 
+_EPOCH_SPEC_ROLES = ("auditor", "target", "judge", "mutator")
+
+#: Sentinel epoch id for rows written before the epoch schema (no ``epoch_hash``).
+_PRE_EPOCH = "pre-epoch"
+
+
+def _epoch_spec_summary(spec: dict[str, Any], role_prov: dict[str, Any]) -> str:
+    """One dense line describing the production+measurement surface of an epoch.
+
+    The surface is shared by every baseline in the epoch (that is what the hash
+    partitions on), so it renders once per epoch rather than per row. Pulls the
+    comparability fields from ``baseline_spec`` and the credential lane from the
+    row's ``role_provenance`` (lane is derived from source, not hashed).
+    """
+    if not spec:
+        return (
+            "Predates the content-addressed epoch schema — not yet partitioned. "
+            "Re-backfilled with epoch fields once the canonical fitness is settled."
+        )
+    margin = html_escape(str(spec.get("margin_rule") or "—"))
+    dim_set = html_escape(str(spec.get("dim_set") or "—"))
+    rubric = html_escape(str(spec.get("rubric_version") or "—"))
+    bench = "on" if spec.get("bench") else "off"
+    pool = html_escape(str(spec.get("seed_pool_id") or "—"))
+    role_bits: list[str] = []
+    for role in _EPOCH_SPEC_ROLES:
+        prov = role_prov.get(role) if isinstance(role_prov, dict) else None
+        prov = prov if isinstance(prov, dict) else {}
+        model = html_escape(str(prov.get("model") or "—"))
+        lane = html_escape(str(prov.get("lane") or "—"))
+        role_bits.append(f"{role} <code>{model}</code>&middot;{lane}")
+    return (
+        f"margin <code>{margin}</code> &middot; dim_set <code>{dim_set}</code> &middot; "
+        f"rubric <code>{rubric}</code> &middot; bench {bench} &middot; "
+        f"pool <code>{pool}</code><br>{' &middot; '.join(role_bits)}"
+    )
+
+
+def _render_baseline_registry_index(archive: list[dict[str, Any]]) -> str:
+    """Render the ``kind="baseline"`` registry rows grouped by content-addressed
+    epoch (PR-BASELINE-EPOCH).
+
+    Each epoch is a sub-series (like a ``gen-*`` seed-generation run): the
+    ``epoch_label`` (be-NNN) + short hash as the heading, a one-line spec summary,
+    then a dense table of that epoch's baselines. Epochs are NEVER merged into one
+    comparison table — they were produced under different logic and are not
+    comparable (that is the whole point of the partition). Epochs are ordered
+    newest-first by their most-recent baseline; rows within an epoch likewise.
+    """
+    rows = [r for r in archive if r.get("kind") == _BASELINE_REGISTRY_ROW_KIND]
+    if not rows:
+        return (
+            '    <p class="empty-namespace">No <code>kind="baseline"</code> registry rows yet. '
+            "A row is appended on every promote (<code>autoresearch/train.py</code>).</p>"
+        )
+    # Group by epoch_hash, preserving each epoch's label + spec from its first row.
+    # Rows written before the epoch schema (no epoch_hash) bucket under a single
+    # honest "pre-epoch" group rather than a fabricated hash — they are
+    # re-backfilled once the epoch fields are computable (see E1 fitness reconcile).
+    epochs: dict[str, dict[str, Any]] = {}
+    for row in rows:
+        eh = str(row.get("epoch_hash") or _PRE_EPOCH)
+        spec = row.get("baseline_spec")
+        prov = row.get("role_provenance")
+        default_label = "pre-epoch (backfill pending)" if eh == _PRE_EPOCH else eh[:12]
+        bucket = epochs.setdefault(
+            eh,
+            {
+                "label": str(row.get("epoch_label") or default_label),
+                "spec": spec if isinstance(spec, dict) else {},
+                "role_prov": prov if isinstance(prov, dict) else {},
+                "rows": [],
+            },
+        )
+        bucket["rows"].append(row)
+
+    def _max_ts(bucket: dict[str, Any]) -> str:
+        return max((str(r.get("ts_utc") or "") for r in bucket["rows"]), default="")
+
+    # Real epochs first (newest-first by their most-recent baseline); the
+    # pre-epoch bucket always sorts last regardless of its rows' timestamps.
+    def _sort_key(item: tuple[str, dict[str, Any]]) -> tuple[int, str]:
+        eh, bucket = item
+        return (0 if eh == _PRE_EPOCH else 1, _max_ts(bucket))
+
+    blocks: list[str] = []
+    for eh, bucket in sorted(epochs.items(), key=_sort_key, reverse=True):
+        epoch_rows = sorted(bucket["rows"], key=lambda r: str(r.get("ts_utc") or ""), reverse=True)
+        body: list[str] = []
+        for row in epoch_rows:
+            fitness = row.get("fitness")
+            fit_cell = (
+                f'<span class="num">{float(fitness):.4f}</span>'
+                if isinstance(fitness, int | float)
+                else '<span class="muted">—</span>'
+            )
+            stderr = row.get("fitness_stderr")
+            stderr_cell = (
+                f'<span class="num">{float(stderr):.4f}</span>'
+                if isinstance(stderr, int | float)
+                else '<span class="muted">—</span>'
+            )
+            row_id = html_escape(str(row.get("id") or "—"))
+            row_ts = html_escape(short_iso(str(row.get("ts_utc") or "")))
+            promoted = html_escape(str(row.get("promoted_by") or "—"))
+            body.append(
+                "        <tr>\n"
+                f'          <td class="id"><code>{row_id}</code></td>\n'
+                f'          <td class="muted">{row_ts}</td>\n'
+                f"          <td>{fit_cell}</td>\n"
+                f"          <td>{stderr_cell}</td>\n"
+                f'          <td class="muted">{promoted}</td>\n'
+                "        </tr>"
+            )
+        count = len(epoch_rows)
+        label = html_escape(str(bucket["label"]))
+        summary = _epoch_spec_summary(bucket["spec"], bucket["role_prov"])
+        plural = "s" if count != 1 else ""
+        # The raw hash is shown only for real epochs (pre-epoch has none).
+        hash_cell = ""
+        if eh != _PRE_EPOCH:
+            hash_cell = f' <code class="muted">{html_escape(eh[:12])}</code>'
+        blocks.append(
+            '    <div class="namespace-block">\n'
+            f"      <h3>{label} "
+            f'<span class="count">{count} baseline{plural}</span>{hash_cell}</h3>\n'
+            f'      <p class="namespace-meta">{summary}</p>\n'
+            '      <table class="records">\n'
+            "        <thead><tr>"
+            '<th scope="col">baseline-id</th><th scope="col">ts</th>'
+            '<th scope="col">fitness</th><th scope="col">fitness_stderr</th>'
+            '<th scope="col">promoted by</th></tr></thead>\n'
+            "        <tbody>\n" + "\n".join(body) + "\n        </tbody>\n"
+            "      </table>\n"
+            "    </div>"
+        )
+    return "\n".join(blocks)
+
+
 def _delta_class(delta: float) -> tuple[str, str]:
     """Map a Δfitness value to a CSS class + sign char."""
     if delta > 0.005:
@@ -4592,6 +4731,7 @@ def render_autoresearch_landing(
             ),
             "timeline_section_label": (f"{len(archive)} row" + ("s" if len(archive) != 1 else "")),
             "timeline_rows": _gen_timeline_rows(archive, baseline),
+            "baseline_registry_index": _render_baseline_registry_index(archive),
             "subview_rows": _autoresearch_subview_rows(
                 archive_count=len(archive),
                 mutations_count=mutations_count,

@@ -43,6 +43,7 @@ import subprocess
 import sys
 from html.parser import HTMLParser
 from pathlib import Path
+from typing import Any
 
 import pytest
 
@@ -893,6 +894,117 @@ def test_autoresearch_landing_renders(built_autoresearch_pages: dict[str, str]) 
     ):
         assert label in html, f"sub-view row {label!r} missing"
         assert href in html, f"sub-view link {href!r} missing"
+    # PR-BASELINE-EPOCH: the content-addressed baseline-registry section is present
+    # (its token resolved — an unresolved {{ }} marker would fail the builder).
+    assert "Baseline registry" in html, "baseline registry section header missing"
+
+
+def _load_builder_module() -> Any:
+    """Import the stdlib-only hub builder as a module (mirrors
+    test_policy_file_map_matches_core)."""
+    import importlib.util
+
+    spec = importlib.util.spec_from_file_location("_hub_builder_epoch", BUILDER)
+    assert spec is not None and spec.loader is not None
+    builder = importlib.util.module_from_spec(spec)
+    sys.modules[spec.name] = builder
+    spec.loader.exec_module(builder)
+    return builder
+
+
+def _epoch_row(*, eid: str, ts: str, epoch_hash: str, epoch_label: str, margin: str) -> dict:
+    return {
+        "kind": "baseline",
+        "id": eid,
+        "ts_utc": ts,
+        "fitness": 0.73,
+        "fitness_stderr": 0.013,
+        "promoted_by": "gate",
+        "epoch_hash": epoch_hash,
+        "epoch_label": epoch_label,
+        "baseline_spec": {
+            "margin_rule": margin,
+            "dim_set": "subset",
+            "rubric_version": "v3-22dim-PR0",
+            "bench": False,
+            "seed_pool_id": "sel-aaaa",
+        },
+        "role_provenance": {
+            "auditor": {"model": "opus-4-8", "source": "api_key", "lane": "PAYG"},
+            "target": {"model": "gpt-5.5", "source": "openai-codex", "lane": "Subscription"},
+            "judge": {"model": "opus-4-8", "source": "claude-cli", "lane": "CLI"},
+            "mutator": {"model": "gpt-5.5", "source": "openai-codex", "lane": "Subscription"},
+        },
+    }
+
+
+def test_baseline_registry_index_groups_distinct_epochs() -> None:
+    """Two margin_rule epochs render as two SEPARATE blocks (never merged), and
+    the legacy gen-* timeline (different schema) is unaffected."""
+    builder = _load_builder_module()
+    vanilla = _epoch_row(
+        eid="baseline-2605-1",
+        ts="2026-05-29T09:18:30Z",
+        epoch_hash="36c4727cf762",
+        epoch_label="be-001",
+        margin="dim-stderr",
+    )
+    fixed = _epoch_row(
+        eid="baseline-2606-1",
+        ts="2026-05-30T10:00:00Z",
+        epoch_hash="33d454c3523e",
+        epoch_label="be-002",
+        margin="fitness-stderr",
+    )
+    html = builder._render_baseline_registry_index([vanilla, fixed])
+    # two distinct epoch blocks, not one comparison table
+    assert html.count('class="namespace-block"') == 2
+    assert "be-001" in html and "be-002" in html
+    # newest epoch first
+    assert html.index("be-002") < html.index("be-001")
+    # both margin rules surfaced as the epoch discriminator
+    assert "dim-stderr" in html and "fitness-stderr" in html
+    # credential-lane observability present per role
+    assert "Subscription" in html and "CLI" in html and "PAYG" in html
+    # no slop (accent bars / card grids)
+    assert "border-left" not in html and "card-grid" not in html
+
+
+def test_baseline_registry_index_empty_state() -> None:
+    builder = _load_builder_module()
+    # legacy gen-* rows (no kind="baseline") → empty state, not a crash
+    legacy = [{"gen_tag": "gen-1", "ts_utc": "2026-05-01T00:00:00Z", "fitness": 0.5}]
+    html = builder._render_baseline_registry_index(legacy)
+    assert "No <code>" in html and "namespace-block" not in html
+
+
+def test_baseline_registry_index_pre_epoch_row_honest() -> None:
+    """A committed kind="baseline" row WITHOUT epoch fields (pre-schema) renders
+    in an honest 'pre-epoch (backfill pending)' bucket — never a fabricated hash —
+    and that bucket sorts AFTER real epochs even when its ts is newer."""
+    builder = _load_builder_module()
+    pre = {
+        "kind": "baseline",
+        "id": "baseline-2605-1",
+        "ts_utc": "2026-06-30T00:00:00Z",  # deliberately newest
+        "fitness": 0.7915,
+        "fitness_stderr": None,
+        "promoted_by": "backfill",
+    }  # no epoch_hash / epoch_label / baseline_spec
+    real = _epoch_row(
+        eid="baseline-2606-1",
+        ts="2026-05-30T10:00:00Z",
+        epoch_hash="33d454c3523e",
+        epoch_label="be-002",
+        margin="fitness-stderr",
+    )
+    html = builder._render_baseline_registry_index([pre, real])
+    assert "pre-epoch (backfill pending)" in html
+    assert "Predates the content-addressed epoch schema" in html
+    # real epoch (be-002) renders BEFORE the pre-epoch bucket despite older ts
+    assert html.index("be-002") < html.index("pre-epoch (backfill pending)")
+    # no fabricated hash for the pre-epoch bucket
+    assert '<code class="muted">pre-epoch</code>' not in html
 
 
 def test_autoresearch_baseline_renders(built_autoresearch_pages: dict[str, str]) -> None:
