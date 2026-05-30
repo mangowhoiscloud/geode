@@ -136,6 +136,38 @@ class TestWorkerResult:
         data = res.to_dict()
         assert "error" not in data
 
+    def test_usage_fields_roundtrip(self) -> None:
+        """PR-SEEDGEN-TOKENS — token + cost fields survive IPC serialization.
+
+        The worker runs the sub-agent in a subprocess; without these
+        fields the parent dropped ``agentic_result.usage`` entirely and
+        every seed-gen run reported zero tokens. Pin the roundtrip so the
+        regression cannot return silently.
+        """
+        res = WorkerResult(
+            task_id="t-usage",
+            success=True,
+            output="done",
+            prompt_tokens=4096,
+            completion_tokens=512,
+            usd_spent=0.0231,
+        )
+        restored = WorkerResult.from_dict(res.to_dict())
+        assert restored.prompt_tokens == 4096
+        assert restored.completion_tokens == 512
+        assert restored.usd_spent == 0.0231
+
+    def test_usage_defaults_zero(self) -> None:
+        """Subscription / CLI calls expose no usage → fields default to 0.
+
+        ``from_dict`` of a legacy payload (no usage keys) must not raise
+        and must leave the counts at 0 — we never fabricate tokens.
+        """
+        restored = WorkerResult.from_dict({"task_id": "t-sub", "success": True})
+        assert restored.prompt_tokens == 0
+        assert restored.completion_tokens == 0
+        assert restored.usd_spent == 0.0
+
 
 # ---------------------------------------------------------------------------
 # Worker subprocess integration (no LLM call)

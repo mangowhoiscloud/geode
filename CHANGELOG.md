@@ -47,6 +47,46 @@ functional change.
 
 ## [Unreleased]
 
+### Added
+- **PR-SEEDGEN-TOKENS (2026-05-30) — per-agent (per-phase) + run-level token
+  usage tracking for the seed-generation pipeline.** The LLM `usage` a sub-agent
+  already produces (`AgenticResult.usage`, via `TokenTracker.delta_since`) now
+  survives the worker subprocess IPC instead of being dropped before it reaches
+  the aggregators. New token + cost fields (`prompt_tokens` / `completion_tokens`
+  / `usd_spent`) thread along the full chain:
+  `WorkerResult` (populated from `agentic_result.usage`) → `IsolationResult`
+  (parsed from the worker stdout JSON) → `SubResult` (set in
+  `SubAgentManager._to_sub_result`) → each of the 9 seed agents sums its
+  sub-results' usage (via the new `sum_sub_result_tokens` helper in
+  `agents/base.py`) into the returned `SeedAgentResult` → the existing
+  orchestrator run-level rollup (`state.prompt_tokens += result.prompt_tokens`)
+  lights up unchanged. Separately, the per-phase cost grid now works:
+  `Transcript.record_session_end` (and its `_lifecycle` caller, which already
+  read the tracker for `total_cost`) also write `prompt_tokens` /
+  `completion_tokens` from the tracker accumulator into each sub-agent's
+  `dialogue.jsonl` `session_end` event, which the orchestrator's
+  `_persist_per_phase_costs` already sums. Pinned by
+  `tests/test_worker.py` (WorkerResult usage roundtrip),
+  `tests/core/agent/test_sub_result_token_forwarding.py`
+  (IsolationResult → SubResult),
+  `tests/plugins/seed_generation/test_critic.py` (agent rollup +
+  subscription-zero), and `tests/test_session_transcript.py` (session_end token
+  keys).
+
+### Fixed
+- **PR-SEEDGEN-TOKENS (2026-05-30) — seed-generation runs reported all-zero
+  tokens/cost.** The aggregation infrastructure already existed but every link
+  between the producer (`AgenticResult.usage`) and the aggregators dropped the
+  usage: `WorkerResult` / `IsolationResult` / `SubResult` had no usage fields,
+  the agents never assigned tokens, and `record_session_end` never wrote token
+  keys. Plumbed end-to-end (see Added).
+  **Honest limitation:** subscription / CLI-routed calls (claude-cli, codex-cli)
+  return an empty `UsageSummary()` — the subscription path does not expose token
+  usage (`core/llm/adapters/claude_cli.py`, `core/llm/adapters/codex_cli.py`).
+  Token counts are therefore reported only for API-key / payg calls (e.g. payg
+  ranker voters); subscription-routed phases honestly stay 0 and are never
+  fabricated. This is why most phases still show 0 cost today.
+
 ## [0.99.94] - 2026-05-30
 
 ### Fixed

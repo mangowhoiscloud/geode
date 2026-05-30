@@ -47,13 +47,18 @@ import abc
 import json
 import logging
 import re
-from collections.abc import Sequence
+from collections.abc import Iterable, Sequence
 from dataclasses import dataclass, field
 from typing import Any, Literal
 
 log = logging.getLogger(__name__)
 
-__all__ = ["BaseSeedAgent", "SeedAgentResult", "parse_structured_output"]
+__all__ = [
+    "BaseSeedAgent",
+    "SeedAgentResult",
+    "parse_structured_output",
+    "sum_sub_result_tokens",
+]
 
 
 # Matches a fenced code block containing JSON. The optional language tag
@@ -180,6 +185,38 @@ class SeedAgentResult:
     @property
     def success(self) -> bool:
         return self.status == "ok"
+
+
+def sum_sub_result_tokens(
+    results: Iterable[Any],
+) -> tuple[int, int, float]:
+    """Sum ``(prompt_tokens, completion_tokens, usd_spent)`` over sub-results.
+
+    PR-SEEDGEN-TOKENS (2026-05-30) — fan-out roles (generator / ranker /
+    pilot) and single-shot roles delegate via ``SubAgentManager`` and get
+    back a ``list[SubResult]``. Each ``SubResult`` now carries the worker
+    subprocess's LLM usage (forwarded through ``IsolationResult``). Roles
+    call this to fold every spawned sub-agent's usage into the single
+    ``SeedAgentResult`` they return; the orchestrator's run-level rollup
+    (``orchestrator.py``) then sums those into ``PipelineState``.
+
+    HARD LIMITATION: subscription / CLI-routed calls (claude-cli,
+    codex-cli) return an empty ``UsageSummary()`` — the subscription path
+    does not expose token usage — so their contribution is honestly 0.
+    Only API-key / payg sub-agents (e.g. payg ranker voters) add non-zero
+    numbers. Counts are never fabricated.
+
+    Accepts any iterable of objects exposing the three attributes so it
+    works on real ``SubResult`` instances and lightweight test stubs.
+    """
+    prompt_tokens = 0
+    completion_tokens = 0
+    usd_spent = 0.0
+    for result in results:
+        prompt_tokens += int(getattr(result, "prompt_tokens", 0) or 0)
+        completion_tokens += int(getattr(result, "completion_tokens", 0) or 0)
+        usd_spent += float(getattr(result, "usd_spent", 0.0) or 0.0)
+    return prompt_tokens, completion_tokens, usd_spent
 
 
 class BaseSeedAgent(abc.ABC):

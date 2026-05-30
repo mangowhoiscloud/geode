@@ -312,7 +312,14 @@ class SubTask:
 
 @dataclass
 class SubResult:
-    """Result from a sub-agent execution."""
+    """Result from a sub-agent execution.
+
+    PR-SEEDGEN-TOKENS (2026-05-30) — ``prompt_tokens`` / ``completion_tokens``
+    / ``usd_spent`` carry the sub-agent's LLM usage so fan-out roles
+    (generator / ranker / pilot) and single-shot roles can sum it into
+    their returned ``SeedAgentResult``. These are 0 for subscription /
+    CLI-routed calls (the subscription path does not expose token usage).
+    """
 
     task_id: str
     description: str
@@ -320,6 +327,10 @@ class SubResult:
     output: dict[str, Any] = field(default_factory=dict)
     error: str | None = None
     duration_ms: float = 0.0
+    # LLM usage for this sub-agent (0 for subscription calls — not faked).
+    prompt_tokens: int = 0
+    completion_tokens: int = 0
+    usd_spent: float = 0.0
 
     def to_dict(self) -> dict[str, Any]:
         """Serialize to dict, omitting None-valued fields."""
@@ -979,6 +990,12 @@ class SubAgentManager:
                 success=False,
                 error=isolation.error,
                 duration_ms=isolation.duration_ms,
+                # PR-SEEDGEN-TOKENS — a sub-agent can burn tokens before
+                # failing; forward whatever the worker reported (0 for
+                # subscription calls) so cost accounting stays honest.
+                prompt_tokens=isolation.prompt_tokens,
+                completion_tokens=isolation.completion_tokens,
+                usd_spent=isolation.usd_spent,
             )
         output: dict[str, Any]
         raw_text = isolation.output or ""
@@ -1007,6 +1024,10 @@ class SubAgentManager:
             success=True,
             output=output,
             duration_ms=isolation.duration_ms,
+            # PR-SEEDGEN-TOKENS — forward worker LLM usage to fan-out roles.
+            prompt_tokens=isolation.prompt_tokens,
+            completion_tokens=isolation.completion_tokens,
+            usd_spent=isolation.usd_spent,
         )
 
     def _to_agent_result(self, task: SubTask, isolation: IsolationResult | None) -> SubAgentResult:

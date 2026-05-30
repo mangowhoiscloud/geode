@@ -293,6 +293,81 @@ def test_critic_pins_candidate_id_from_task() -> None:
 
 
 # ---------------------------------------------------------------------------
+# PR-SEEDGEN-TOKENS (2026-05-30) — per-agent token rollup
+# ---------------------------------------------------------------------------
+
+
+class _TokenManager:
+    """Returns SubResults carrying per-sub-agent LLM usage.
+
+    Mirrors the real worker IPC contract: each ``SubResult`` now carries
+    ``prompt_tokens`` / ``completion_tokens`` / ``usd_spent`` forwarded
+    from the worker subprocess. ``include_usage=False`` simulates the
+    subscription / CLI path where usage is honestly 0 (the adapters return
+    an empty UsageSummary).
+    """
+
+    def __init__(self, *, include_usage: bool = True) -> None:
+        self._include_usage = include_usage
+
+    async def adelegate(self, tasks, *, announce: bool = True) -> list:
+        return self.delegate(tasks, announce=announce)
+
+    def delegate(self, tasks: list[SubTask], *, announce: bool = True) -> list[SubResult]:
+        results: list[SubResult] = []
+        for t in tasks:
+            candidate_id = t.args["candidate_id"]
+            results.append(
+                SubResult(
+                    task_id=t.task_id,
+                    description=t.description,
+                    success=True,
+                    output=dict(_good_critique(candidate_id)),
+                    duration_ms=42.0,
+                    prompt_tokens=300 if self._include_usage else 0,
+                    completion_tokens=120 if self._include_usage else 0,
+                    usd_spent=0.012 if self._include_usage else 0.0,
+                )
+            )
+        return results
+
+
+def test_critic_sums_sub_result_tokens_into_result() -> None:
+    """The chain producer→SubResult→SeedAgentResult: per-agent token rollup.
+
+    Three candidate sub-agents each report 300/120 tokens + $0.012; the
+    Critic must fold all three into the single SeedAgentResult so the
+    orchestrator's run-level rollup (which sums result.* into state.*)
+    lights up instead of reporting zeros.
+    """
+    state = _make_state(3)
+    _seed_candidates(state, 3)
+    manager = _TokenManager(include_usage=True)
+    result = asyncio.run(Critic(manager=manager).aexecute(state))  # type: ignore[arg-type]
+    assert result.success
+    assert result.prompt_tokens == 300 * 3
+    assert result.completion_tokens == 120 * 3
+    assert result.usd_spent == 0.012 * 3
+
+
+def test_critic_reports_zero_tokens_for_subscription_calls() -> None:
+    """HARD CONSTRAINT — subscription / CLI calls expose no usage.
+
+    When every sub-agent ran on a subscription adapter (empty
+    UsageSummary), the rolled-up tokens stay honestly 0 — never
+    fabricated.
+    """
+    state = _make_state(2)
+    _seed_candidates(state, 2)
+    manager = _TokenManager(include_usage=False)
+    result = asyncio.run(Critic(manager=manager).aexecute(state))  # type: ignore[arg-type]
+    assert result.success
+    assert result.prompt_tokens == 0
+    assert result.completion_tokens == 0
+    assert result.usd_spent == 0.0
+
+
+# ---------------------------------------------------------------------------
 # G3 — baseline evidence injection (2026-05-20 self-improving-loop wiring)
 # ---------------------------------------------------------------------------
 

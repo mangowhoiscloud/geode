@@ -43,7 +43,11 @@ import json
 import logging
 from typing import TYPE_CHECKING, Any
 
-from plugins.seed_generation.agents.base import BaseSeedAgent, SeedAgentResult
+from plugins.seed_generation.agents.base import (
+    BaseSeedAgent,
+    SeedAgentResult,
+    sum_sub_result_tokens,
+)
 from plugins.seed_generation.handoff_schemas import embed_handoff, extract_anchor_means
 from plugins.seed_generation.json_schemas import PILOT_SCHEMA
 from plugins.seed_generation.orchestrator import PipelineState
@@ -124,6 +128,10 @@ class Pilot(BaseSeedAgent):
         # announce=False — orchestrator already announces the parent phase.
         results = await self._manager.adelegate(tasks, announce=False)
 
+        # PR-SEEDGEN-TOKENS (2026-05-30) — sum sub-agent LLM usage (0 for
+        # subscription calls) into this phase's result.
+        prompt_tokens, completion_tokens, usd_spent = sum_sub_result_tokens(results)
+
         # S2-fix pattern — pair by task_id dict lookup, never by position.
         tasks_by_id: dict[str, Any] = {t.task_id: t for t in tasks}
         pilot_scores: dict[str, dict[str, object]] = {}
@@ -165,11 +173,17 @@ class Pilot(BaseSeedAgent):
                     f"all {len(tasks)} pilot sub-agents failed; "
                     f"first error: {failed[0][1] if failed else 'unknown'}"
                 ),
+                prompt_tokens=prompt_tokens,
+                completion_tokens=completion_tokens,
+                usd_spent=usd_spent,
             )
 
         return SeedAgentResult(
             role=self.role,
             output={"pilot_scores": pilot_scores},
+            prompt_tokens=prompt_tokens,
+            completion_tokens=completion_tokens,
+            usd_spent=usd_spent,
         )
 
     def _build_tasks(self, state: PipelineState) -> list[SubTask]:

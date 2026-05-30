@@ -68,6 +68,7 @@ from plugins.seed_generation.agents.base import (
     BaseSeedAgent,
     SeedAgentResult,
     parse_structured_output,
+    sum_sub_result_tokens,
 )
 from plugins.seed_generation.json_schemas import SUPERVISOR_SCHEMA
 from plugins.seed_generation.orchestrator import PipelineState
@@ -139,12 +140,18 @@ class Supervisor(BaseSeedAgent):
             )
 
         result = results[0]
+        # PR-SEEDGEN-TOKENS (2026-05-30) — forward sub-agent LLM usage (0
+        # for subscription calls) onto every return below.
+        prompt_tokens, completion_tokens, usd_spent = sum_sub_result_tokens(results)
         if not result.success:
             return SeedAgentResult(
                 role=self.role,
                 status="error",
                 error_category="supervisor_failed",
                 error_message=result.error or "supervisor sub-agent failed",
+                prompt_tokens=prompt_tokens,
+                completion_tokens=completion_tokens,
+                usd_spent=usd_spent,
             )
         parsed = parse_structured_output(
             result.output,
@@ -156,11 +163,17 @@ class Supervisor(BaseSeedAgent):
                 status="error",
                 error_category="supervisor_failed",
                 error_message=(f"malformed supervisor payload: result.output={result.output!r}"),
+                prompt_tokens=prompt_tokens,
+                completion_tokens=completion_tokens,
+                usd_spent=usd_spent,
             )
 
         return SeedAgentResult(
             role=self.role,
             output={"supervisor_guidance": parsed},
+            prompt_tokens=prompt_tokens,
+            completion_tokens=completion_tokens,
+            usd_spent=usd_spent,
         )
 
     def _build_task(self, state: PipelineState) -> SubTask:
