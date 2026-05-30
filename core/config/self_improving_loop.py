@@ -48,7 +48,7 @@ import os
 import tomllib
 import warnings
 from pathlib import Path
-from typing import Annotated, Any
+from typing import Annotated, Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
@@ -383,6 +383,37 @@ class AutoresearchConfig(BaseModel):
     :func:`autoresearch.train._resolve_held_out_bench` (env
     ``GEODE_HELD_OUT_BENCH`` / ``AUTORESEARCH_HELD_OUT_BENCH`` → this config field
     → ``None``)."""
+    promote_policy: Literal["gate", "random", "never"] = "gate"
+    """E3 (2026-05-30) — the **control-arm promote policy** for a matched 3-arm
+    held-out comparison (selection vs no-mutation vs random-accept):
+
+    - ``"gate"`` (default) — today's behaviour: the ``_should_promote`` fitness
+      gate decides. The SELECTION arm.
+    - ``"random"`` — random-accept control: the mutation is still applied +
+      audited, but the PROMOTE decision is a coin-flip from a SEEDED RNG
+      (``promote_policy_seed`` + the cycle index), NOT the gate. Reproducible.
+    - ``"never"`` — no-mutation floor: never promote (baseline frozen across the
+      campaign). Each cycle still scores the held-out → the curve shows pure
+      drift / judge-noise — the floor the other arms must beat.
+
+    Each arm is run as its OWN full N-cycle campaign; the per-cycle held-out
+    records are tagged with this policy so the three arms' curves are
+    distinguishable + comparable on the shared frozen ruler. ``promote_policy``
+    is also part of the baseline epoch spec (gate / random / never hash to
+    different epochs — different production logic, correctly not averaged).
+
+    Resolution precedence mirrors ``held_out_bench``:
+    :func:`autoresearch.train._resolve_promote_policy` (env
+    ``GEODE_PROMOTE_POLICY`` / ``AUTORESEARCH_PROMOTE_POLICY`` → CLI
+    ``--promote-policy`` → this config field → ``"gate"``)."""
+    promote_policy_seed: int = 0
+    """E3 (2026-05-30) — the explicit RNG seed for ``promote_policy="random"``.
+
+    The random arm's per-cycle promote draw is ``Random(seed + cycle_index)``,
+    so the entire random campaign is reproducible (no bare nondeterminism) and is
+    RECORDED on the held-out + baseline rows. Ignored for the ``gate`` / ``never``
+    arms. Resolution precedence mirrors ``promote_policy``
+    (:func:`autoresearch.train._resolve_promote_policy_seed`)."""
     dim_set: str = "subset"
     max_turns: Annotated[int, Field(ge=1, le=200)] = 10
 
