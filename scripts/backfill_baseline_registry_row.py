@@ -70,6 +70,46 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--judge-source", required=True)
     parser.add_argument("--mutator-model", required=True)
     parser.add_argument("--mutator-source", required=True)
+    # Historical-spec overrides — for a baseline measured under PRE-current logic,
+    # so it hashes to its OWN epoch instead of today's. Omit → the live constant
+    # (the live promote path is unaffected). E.g. the pre-margin-fix vanilla
+    # baseline: --fitness-formula-version 0 --margin-logic-version 0
+    # --promote-policy legacy (predates the E3 control-arm taxonomy).
+    parser.add_argument(
+        "--promote-policy",
+        default=None,
+        help="historical promote policy in the hashed spec (e.g. 'legacy' for a "
+        "pre-arm baseline); default = live 'gate'",
+    )
+    parser.add_argument(
+        "--fitness-formula-version",
+        default=None,
+        help="historical fitness_formula_version (e.g. '0' pre-margin-fix); "
+        "default = live constant",
+    )
+    parser.add_argument(
+        "--margin-logic-version",
+        default=None,
+        help="historical margin_logic_version (e.g. '0' pre-margin-fix); default = live constant",
+    )
+    parser.add_argument(
+        "--rubric-version",
+        default=None,
+        help="historical rubric_version; default = live PETRI_RUBRIC_VERSION",
+    )
+    parser.add_argument(
+        "--dim-set",
+        default=None,
+        help="historical dim_set; default = live effective dim_set",
+    )
+    parser.add_argument(
+        "--fitness",
+        type=float,
+        default=None,
+        help="the baseline's MEASURED fitness (recorded verbatim, NOT recomputed "
+        "under today's compute_fitness — a historical baseline was scored under "
+        "its own formula); default = recompute from dim_means",
+    )
     args = parser.parse_args(argv)
 
     # Imported here (not at module top) so the script's --help works without a
@@ -81,6 +121,7 @@ def main(argv: list[str] | None = None) -> int:
         _baseline_archive_path,
         _next_baseline_id,
     )
+    from core.self_improving_loop.baseline_epoch import HistoricalSpecOverride
     from core.self_improving_loop.role_provenance import build_role_provenance
 
     payload = _load_snapshot(args.snapshot)
@@ -122,8 +163,20 @@ def main(argv: list[str] | None = None) -> int:
             }
         ),
         seed_select=args.seed_select,
+        promote_policy=(args.promote_policy or "gate"),
+        historical_spec=HistoricalSpecOverride(
+            fitness_formula_version=args.fitness_formula_version,
+            margin_logic_version=args.margin_logic_version,
+            rubric_version=args.rubric_version,
+            dim_set=args.dim_set,
+            fitness=args.fitness,
+        ),
     )
-    print(f"appended {baseline_id} (margin_rule={args.margin_rule}) to {_baseline_archive_path()}")
+    epoch = args.promote_policy or "gate"
+    print(
+        f"appended {baseline_id} (margin_rule={args.margin_rule}, promote_policy={epoch}) "
+        f"to {_baseline_archive_path()}"
+    )
     return 0
 
 

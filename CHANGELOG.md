@@ -45,6 +45,33 @@ functional change.
 
 ---
 
+## [0.99.99] - 2026-05-30
+
+### Added
+- **PR-BASELINE-LINEAGE (2026-05-30) — versioned baseline stacking storage.**
+  Before a re-measurement re-does the self-improving hub's baseline side, the
+  storage structure now serves PREVIOUS + NEW baselines **stacked + versioned**,
+  each in its own production-logic epoch. A backfilled baseline can carry its
+  TRUE historical spec via `HistoricalSpecOverride`
+  (`core/self_improving_loop/baseline_epoch.py`) — `fitness_formula_version` /
+  `margin_logic_version` / `rubric_version` / `dim_set` (plus `promote_policy`
+  as a first-class arg) — so it hashes to its OWN epoch instead of being
+  mis-stamped with the live constants; each field absent → the live constant, so
+  the live promote path is byte-identical (pinned). The override also carries the
+  baseline's MEASURED `fitness`, which the writer records verbatim instead of
+  recomputing under today's `compute_fitness` (a historical baseline was scored
+  under its own formula). `scripts/backfill_baseline_registry_row.py` gains the
+  matching CLI flags (incl. `--fitness`). The vanilla `baseline-2605-1` row
+  (previously `epoch_hash=None`) is re-backfilled as the **genesis epoch
+  `be-001`** (margin_rule `dim-stderr`, version tags `"0"`,
+  `promote_policy="legacy"`), self-verifying, with its measured fitness (0.7915)
+  **preserved** (not recomputed); `autoresearch/state/baseline_epochs.json`
+  records the hash→label map. The hub's baseline-registry section renders the
+  epoch-grouped **versioned lineage** (`be-001` legacy + future v0.99.99+ epochs
+  stacking as separate blocks, never overwriting), with `promote_policy` shown
+  per epoch. Pinned by `tests/test_baseline_lineage.py` +
+  `tests/autoresearch/test_baseline_registry.py`.
+
 ## [0.99.98] - 2026-05-30
 
 ### Added
