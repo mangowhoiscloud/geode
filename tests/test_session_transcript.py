@@ -100,6 +100,40 @@ class TestSessionTranscriptIndex:
         assert data["sessions"]["s-test"]["event_count"] == 2
 
 
+class TestSessionEndTokens:
+    """PR-SEEDGEN-TOKENS (2026-05-30) — ``session_end`` carries token keys.
+
+    The seed-generation orchestrator's ``_persist_per_phase_costs`` sums
+    ``prompt_tokens`` / ``completion_tokens`` off each sub-agent's
+    ``dialogue.jsonl`` ``session_end`` event. Pin that the recorder writes
+    those keys so the per-phase cost grid lights up for API-key / payg
+    sub-agents (subscription calls honestly report 0).
+    """
+
+    def test_token_keys_written(self, tx: SessionTranscript) -> None:
+        tx.record_session_end(
+            duration_s=12.0,
+            total_cost=0.042,
+            rounds=4,
+            prompt_tokens=1234,
+            completion_tokens=567,
+        )
+        end = tx.read_events()[-1]
+        assert end["event"] == "session_end"
+        assert end["prompt_tokens"] == 1234
+        assert end["completion_tokens"] == 567
+        assert end["total_cost"] == 0.042
+
+    def test_token_keys_default_zero_for_subscription(self, tx: SessionTranscript) -> None:
+        # Subscription / CLI calls expose no usage → fields stay 0, never
+        # fabricated. The recorder must still emit the keys so the
+        # orchestrator's ``int(evt.get("prompt_tokens") or 0)`` read works.
+        tx.record_session_end(rounds=1)
+        end = tx.read_events()[-1]
+        assert end["prompt_tokens"] == 0
+        assert end["completion_tokens"] == 0
+
+
 class TestCleanup:
     """Old transcript cleanup."""
 

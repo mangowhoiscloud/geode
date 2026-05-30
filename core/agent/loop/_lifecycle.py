@@ -73,16 +73,32 @@ def record_transcript_end(loop: AgenticLoop, result: Any) -> None:
             loop._transcript.record_assistant_message(text)
         rounds = getattr(result, "rounds", 0)
 
-        # Read accumulated cost from TokenTracker (was missing → always $0)
+        # Read accumulated cost + tokens from TokenTracker (was missing →
+        # always $0 / 0 tokens). PR-SEEDGEN-TOKENS (2026-05-30) adds the
+        # token reads so the session_end event carries prompt/completion
+        # tokens for the seed-generation per-phase cost grid. These are 0
+        # for subscription / CLI calls (the subscription adapters return an
+        # empty UsageSummary — usage is not exposed), so the accumulator
+        # only reflects API-key / payg calls. Never fabricated.
         total_cost = 0.0
+        prompt_tokens = 0
+        completion_tokens = 0
         try:
             from core.llm.token_tracker import get_tracker
 
-            total_cost = get_tracker().accumulator.total_cost_usd
+            accumulator = get_tracker().accumulator
+            total_cost = accumulator.total_cost_usd
+            prompt_tokens = accumulator.total_input_tokens
+            completion_tokens = accumulator.total_output_tokens
         except Exception:
-            log.debug("Could not read session cost from TokenTracker")
+            log.debug("Could not read session cost/tokens from TokenTracker")
 
-        loop._transcript.record_session_end(rounds=rounds, total_cost=total_cost)
+        loop._transcript.record_session_end(
+            rounds=rounds,
+            total_cost=total_cost,
+            prompt_tokens=prompt_tokens,
+            completion_tokens=completion_tokens,
+        )
     except Exception:
         log.debug("Transcript end recording failed", exc_info=True)
 

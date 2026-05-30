@@ -50,7 +50,14 @@ class IsolationConfig:
 
 @dataclass
 class IsolationResult:
-    """Result from an isolated execution."""
+    """Result from an isolated execution.
+
+    PR-SEEDGEN-TOKENS (2026-05-30) — ``prompt_tokens`` / ``completion_tokens``
+    / ``usd_spent`` carry the worker subprocess's LLM usage up to the
+    ``SubAgentManager`` so seed-generation roles can roll it up. These are
+    0 for subscription / CLI-routed calls (the subscription path does not
+    expose token usage) and only populated for API-key / payg calls.
+    """
 
     session_id: str
     success: bool
@@ -61,6 +68,10 @@ class IsolationResult:
     started_at: float = 0.0
     completed_at: float = 0.0
     metadata: dict[str, Any] = field(default_factory=dict)
+    # LLM usage forwarded from the worker (0 for subscription calls).
+    prompt_tokens: int = 0
+    completion_tokens: int = 0
+    usd_spent: float = 0.0
 
     def to_dict(self) -> dict[str, Any]:
         """Serialize to dict, omitting None-valued fields."""
@@ -482,6 +493,11 @@ class IsolatedRunner:
                 started_at=started,
                 completed_at=completed,
                 metadata=dict(config.metadata),
+                # PR-SEEDGEN-TOKENS (2026-05-30) — carry worker LLM usage up.
+                # 0 for subscription / CLI calls (no usage exposed).
+                prompt_tokens=result_data.get("prompt_tokens", 0),
+                completion_tokens=result_data.get("completion_tokens", 0),
+                usd_spent=result_data.get("usd_spent", 0.0),
             )
 
             if config.post_to_main:

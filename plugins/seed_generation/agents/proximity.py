@@ -52,6 +52,7 @@ from plugins.seed_generation.agents.base import (
     BaseSeedAgent,
     SeedAgentResult,
     parse_structured_output,
+    sum_sub_result_tokens,
 )
 from plugins.seed_generation.json_schemas import PROXIMITY_SCHEMA
 from plugins.seed_generation.orchestrator import PipelineState
@@ -135,12 +136,18 @@ class Proximity(BaseSeedAgent):
                 error_message="SubAgentManager returned no results for proximity task.",
             )
         result = results[0]
+        # PR-SEEDGEN-TOKENS (2026-05-30) — forward sub-agent LLM usage (0
+        # for subscription calls) onto every return below.
+        prompt_tokens, completion_tokens, usd_spent = sum_sub_result_tokens(results)
         if not result.success:
             return SeedAgentResult(
                 role=self.role,
                 status="error",
                 error_category="proximity_failed",
                 error_message=result.error or "proximity sub-agent failed",
+                prompt_tokens=prompt_tokens,
+                completion_tokens=completion_tokens,
+                usd_spent=usd_spent,
             )
         parsed = parse_structured_output(result.output, required_fields=_REQUIRED_FIELDS)
         if parsed is None:
@@ -149,6 +156,9 @@ class Proximity(BaseSeedAgent):
                 status="error",
                 error_category="proximity_failed",
                 error_message=(f"malformed proximity payload: result.output={result.output!r}"),
+                prompt_tokens=prompt_tokens,
+                completion_tokens=completion_tokens,
+                usd_spent=usd_spent,
             )
 
         clusters = parsed.get("similarity_clusters", [])
@@ -160,6 +170,9 @@ class Proximity(BaseSeedAgent):
                 error_message=(
                     f"similarity_clusters must be a list, got {type(clusters).__name__}"
                 ),
+                prompt_tokens=prompt_tokens,
+                completion_tokens=completion_tokens,
+                usd_spent=usd_spent,
             )
 
         removed_ids, removed_rows = _select_removals(state.candidates, clusters)
@@ -178,6 +191,9 @@ class Proximity(BaseSeedAgent):
                 "similarity_clusters": clusters,
                 "removed_duplicates": removed_rows,
             },
+            prompt_tokens=prompt_tokens,
+            completion_tokens=completion_tokens,
+            usd_spent=usd_spent,
         )
 
     def _build_task(self, state: PipelineState) -> SubTask:

@@ -55,7 +55,11 @@ import uuid
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
-from plugins.seed_generation.agents.base import BaseSeedAgent, SeedAgentResult
+from plugins.seed_generation.agents.base import (
+    BaseSeedAgent,
+    SeedAgentResult,
+    sum_sub_result_tokens,
+)
 from plugins.seed_generation.orchestrator import PipelineState
 
 if TYPE_CHECKING:
@@ -141,6 +145,10 @@ class Generator(BaseSeedAgent):
         # events.
         results = await self._manager.adelegate(tasks, announce=False)
 
+        # PR-SEEDGEN-TOKENS (2026-05-30) — fold every sub-agent's LLM
+        # usage into this phase's result (0 for subscription calls).
+        prompt_tokens, completion_tokens, usd_spent = sum_sub_result_tokens(results)
+
         # S2-fix (2026-05-18) — pair results by task_id, NOT by positional zip.
         # ``SubAgentManager.delegate`` returns SubResult in *completion* order
         # (poll loop in ``core/agent/sub_agent.py``), not submission order, so
@@ -188,6 +196,9 @@ class Generator(BaseSeedAgent):
                     f"all {len(tasks)} candidate sub-agents failed; "
                     f"first error: {failed[0][1] if failed else 'unknown'}"
                 ),
+                prompt_tokens=prompt_tokens,
+                completion_tokens=completion_tokens,
+                usd_spent=usd_spent,
             )
 
         # CSP-13 (2026-05-23) — Loop 2 (debate-turn). When the manifest
@@ -202,7 +213,13 @@ class Generator(BaseSeedAgent):
         if debate_transcripts:
             output["debate_transcripts"] = debate_transcripts
 
-        return SeedAgentResult(role=self.role, output=output)
+        return SeedAgentResult(
+            role=self.role,
+            output=output,
+            prompt_tokens=prompt_tokens,
+            completion_tokens=completion_tokens,
+            usd_spent=usd_spent,
+        )
 
     def _num_turns(self) -> int:
         """Resolve the per-role ``num_turns`` knob (CSP-13).

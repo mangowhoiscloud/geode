@@ -151,7 +151,23 @@ class WorkerRequest:
 
 @dataclass
 class WorkerResult:
-    """Serializable result from worker subprocess to parent process."""
+    """Serializable result from worker subprocess to parent process.
+
+    PR-SEEDGEN-TOKENS (2026-05-30) — carry per-call LLM usage across the
+    worker IPC boundary so the seed-generation pipeline can roll up
+    per-agent / per-phase / run-level token + cost. The sub-agent's
+    ``AgenticResult.usage`` (captured via ``TokenTracker.delta_since`` in
+    ``core/agent/loop/_lifecycle.py``) was previously dropped here because
+    ``WorkerResult`` had no usage fields, so everything serialized to the
+    parent reported zeros.
+
+    HARD LIMITATION: subscription / CLI-routed calls (claude-cli,
+    codex-cli) return an empty ``UsageSummary()`` — the subscription path
+    does not expose token usage (see ``core/llm/adapters/claude_cli.py``
+    and ``core/llm/adapters/codex_cli.py``). For those calls these fields
+    are honestly left at 0; only API-key / payg calls populate real
+    numbers. We never fabricate counts.
+    """
 
     task_id: str
     success: bool
@@ -159,6 +175,10 @@ class WorkerResult:
     summary: str = ""  # Truncated summary (max 500 chars)
     error: str | None = None
     duration_ms: float = 0.0
+    # LLM usage for this sub-agent invocation (0 for subscription calls).
+    prompt_tokens: int = 0
+    completion_tokens: int = 0
+    usd_spent: float = 0.0
 
     def to_dict(self) -> dict[str, Any]:
         return {k: v for k, v in asdict(self).items() if v is not None}
@@ -172,6 +192,9 @@ class WorkerResult:
             summary=data.get("summary", ""),
             error=data.get("error"),
             duration_ms=data.get("duration_ms", 0.0),
+            prompt_tokens=data.get("prompt_tokens", 0),
+            completion_tokens=data.get("completion_tokens", 0),
+            usd_spent=data.get("usd_spent", 0.0),
         )
 
 
@@ -509,12 +532,28 @@ def _run_agentic(request: WorkerRequest) -> WorkerResult:
     elapsed_ms = (time.time() - started) * 1000
     success, summary, text = _resolve_worker_outcome(agentic_result)
 
+    # PR-SEEDGEN-TOKENS (2026-05-30) — surface the sub-agent's per-arun
+    # usage to the parent. ``agentic_result.usage`` is an ``LLMUsage``
+    # aggregate (or None when the loop made no LLM call); subscription /
+    # CLI calls leave it empty so the fields stay 0 — never fabricated.
+    prompt_tokens = 0
+    completion_tokens = 0
+    usd_spent = 0.0
+    usage = agentic_result.usage if agentic_result is not None else None
+    if usage is not None:
+        prompt_tokens = usage.input_tokens
+        completion_tokens = usage.output_tokens
+        usd_spent = usage.cost_usd
+
     return WorkerResult(
         task_id=request.task_id,
         success=success,
         output=text,
         summary=summary,
         duration_ms=elapsed_ms,
+        prompt_tokens=prompt_tokens,
+        completion_tokens=completion_tokens,
+        usd_spent=usd_spent,
     )
 
 
