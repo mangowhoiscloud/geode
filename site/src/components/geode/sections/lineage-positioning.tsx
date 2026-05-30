@@ -49,12 +49,15 @@ const influences: Influence[] = [
 export function LineagePositioningSection() {
   const locale = useLocale();
   return (
-    <section className="px-6 py-20">
+    <section className="px-6 py-24">
       <div className="max-w-3xl mx-auto">
-        <div className="font-mono text-[11px] tracking-[0.24em] uppercase text-[var(--acc-artifact)]">
-          Where it sits
+        <div className="flex items-center gap-2">
+          <span className="h-px w-6 bg-[var(--acc-artifact)]" />
+          <span className="text-[12px] tracking-[0.22em] uppercase text-[var(--acc-artifact)] font-medium">
+            Where it sits
+          </span>
         </div>
-        <h2 className="mt-3 font-display tracking-tight text-[var(--ink)] text-[clamp(1.7rem,3.6vw,2.4rem)] leading-[1.12] font-semibold">
+        <h2 className="mt-4 font-display tracking-tight text-[var(--ink)] text-[clamp(1.85rem,3.8vw,2.6rem)] leading-[1.12] font-semibold">
           {t(locale, "계보 위의 정직한 자리", "An honest place in the lineage")}
         </h2>
         <p className="mt-4 text-[var(--ink-2)] leading-[1.75] text-[16px]">
@@ -71,10 +74,10 @@ export function LineagePositioningSection() {
               key={influence.nameEn}
               className="border-t border-[var(--rule)] py-3 first:border-t-0"
             >
-              <dt className="font-mono text-[13px] text-[var(--ink-1)]">
+              <dt className="font-mono text-[13.5px] text-[var(--acc-artifact)] font-medium">
                 {t(locale, influence.nameKo, influence.nameEn)}
               </dt>
-              <dd className="mt-1 text-[var(--ink-2)] leading-[1.6] text-[15px]">
+              <dd className="mt-1.5 text-[var(--ink-1)] leading-[1.6] text-[15px]">
                 {t(locale, influence.tookKo, influence.tookEn)}
               </dd>
             </div>

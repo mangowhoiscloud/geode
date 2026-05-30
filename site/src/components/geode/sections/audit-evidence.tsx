@@ -50,12 +50,15 @@ const rubricRows: RubricRow[] = [
 export function AuditEvidenceSection() {
   const locale = useLocale();
   return (
-    <section className="px-6 py-20">
+    <section className="px-6 py-24">
       <div className="max-w-3xl mx-auto">
-        <div className="font-mono text-[11px] tracking-[0.24em] uppercase text-[var(--acc-artifact)]">
-          How it is measured
+        <div className="flex items-center gap-2">
+          <span className="h-px w-6 bg-[var(--acc-artifact)]" />
+          <span className="text-[12px] tracking-[0.22em] uppercase text-[var(--acc-artifact)] font-medium">
+            How it is measured
+          </span>
         </div>
-        <h2 className="mt-3 font-display tracking-tight text-[var(--ink)] text-[clamp(1.7rem,3.6vw,2.4rem)] leading-[1.12] font-semibold">
+        <h2 className="mt-4 font-display tracking-tight text-[var(--ink)] text-[clamp(1.85rem,3.8vw,2.6rem)] leading-[1.12] font-semibold">
           {t(locale, "적대적 감사로 측정", "Measured by an adversarial audit")}
         </h2>
         <p className="mt-4 text-[var(--ink-2)] leading-[1.75] text-[16px]">
@@ -66,25 +69,30 @@ export function AuditEvidenceSection() {
           )}
         </p>
 
-        <div className="mt-8 rounded border border-[var(--rule)] bg-[var(--code-bg)] overflow-x-auto">
-          <div className="flex items-center justify-between px-4 py-2.5 border-b border-[var(--rule)] font-mono text-[10px] tracking-[0.2em] uppercase text-[var(--ink-3)]">
+        <div className="mt-10 rounded-lg border border-[var(--rule)] bg-[var(--code-bg)] overflow-x-auto">
+          <div className="flex items-center justify-between px-5 py-3 border-b border-[var(--rule)] font-mono text-[11px] tracking-[0.2em] uppercase text-[var(--acc-artifact)] font-medium">
             <span>{t(locale, "안전 루브릭", "safety rubric")}</span>
             <span>{t(locale, "규칙", "rule")}</span>
           </div>
-          <div className="font-mono text-[12.5px] leading-relaxed">
+          <div className="font-mono text-[13px] leading-relaxed">
             {rubricRows.map((row, index) => (
               <div
                 key={row.axisEn}
-                className="flex flex-col sm:flex-row gap-y-1 sm:gap-x-4 px-4 py-3"
+                className="flex flex-col sm:flex-row gap-y-1 sm:gap-x-4 px-5 py-4"
                 style={{
                   borderTop: index === 0 ? "none" : "1px solid var(--rule)",
                 }}
               >
                 <div
                   className="sm:w-[34%] shrink-0"
-                  style={{ color: row.critical ? "var(--acc-artifact)" : "var(--ink-1)" }}
+                  style={{
+                    color: row.critical ? "var(--acc-artifact)" : "var(--ink-1)",
+                    fontWeight: row.critical ? 500 : 400,
+                  }}
                 >
-                  {row.critical && <span className="text-[var(--acc-artifact)]">{"⏺"}</span>}{" "}
+                  {row.critical && (
+                    <span className="text-[var(--acc-artifact)] text-[15px]">{"⏺"}</span>
+                  )}{" "}
                   {t(locale, row.axisKo, row.axisEn)}
                 </div>
                 <div className="text-[var(--ink-2)]">{t(locale, row.ruleKo, row.ruleEn)}</div>
