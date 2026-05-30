@@ -64,13 +64,19 @@ def _run_builder(
     bundle_root: Path | None = None,
     autoresearch_root: Path | None = None,
     seedgen_out_dir: Path | None = None,
+    autoresearch_out_dir: Path | None = None,
 ) -> subprocess.CompletedProcess[str]:
     """Run the hub builder against fixture roots, output into ``out_dir``."""
     out_dir.mkdir(parents=True, exist_ok=True)
-    # Default the seedgen output to a sibling under the test's own out_dir so
-    # builder runs never write into production paths.
+    # Redirect EVERY output dir to a sibling under the test's own out_dir so a
+    # builder run never writes into the production docs/ tree. The builder
+    # defaults --out / --seedgen-out-dir / --autoresearch-out-dir to
+    # docs/self-improving/..., so any flag left at its default silently renders
+    # fixture data into the worktree (the contamination this isolation fixes).
     if seedgen_out_dir is None:
         seedgen_out_dir = out_dir / "seed-generation"
+    if autoresearch_out_dir is None:
+        autoresearch_out_dir = out_dir / "autoresearch"
     cmd: list[str] = [
         sys.executable,
         str(BUILDER),
@@ -78,6 +84,8 @@ def _run_builder(
         str(out_dir / "index.html"),
         "--seedgen-out-dir",
         str(seedgen_out_dir),
+        "--autoresearch-out-dir",
+        str(autoresearch_out_dir),
     ]
     if bundle_root is not None:
         cmd.extend(["--bundle-root", str(bundle_root)])
@@ -517,6 +525,7 @@ def built_seedgen_pages(tmp_path_factory: pytest.TempPathFactory) -> dict[str, s
     out = tmp_path_factory.mktemp("seedgen-out")
     hub_out = out / "hub"
     seedgen_out = out / "seedgen"
+    autoresearch_out = out / "autoresearch"
     result = subprocess.run(  # noqa: S603 — fixture invocation
         [
             sys.executable,
@@ -529,6 +538,11 @@ def built_seedgen_pages(tmp_path_factory: pytest.TempPathFactory) -> dict[str, s
             str(FIXTURE_ROOT / "autoresearch"),
             "--seedgen-out-dir",
             str(seedgen_out),
+            # Redirect autoresearch output to tmp too — without this flag the
+            # builder renders into docs/self-improving/autoresearch/, dirtying
+            # the worktree on every run.
+            "--autoresearch-out-dir",
+            str(autoresearch_out),
         ],
         check=False,
         capture_output=True,
@@ -1623,6 +1637,7 @@ def built_pr3_pages(tmp_path_factory: pytest.TempPathFactory) -> dict[str, str]:
     """
     out = tmp_path_factory.mktemp("seedgen-out-p3")
     seedgen_out = out / "seedgen"
+    autoresearch_out = out / "autoresearch"
     subprocess.run(  # noqa: S603
         [
             sys.executable,
@@ -1635,6 +1650,10 @@ def built_pr3_pages(tmp_path_factory: pytest.TempPathFactory) -> dict[str, str]:
             str(FIXTURE_ROOT / "autoresearch"),
             "--seedgen-out-dir",
             str(seedgen_out),
+            # Redirect autoresearch output to tmp too — otherwise the builder
+            # writes into docs/self-improving/autoresearch/ and dirties the tree.
+            "--autoresearch-out-dir",
+            str(autoresearch_out),
         ],
         check=True,
         cwd=str(REPO_ROOT),
