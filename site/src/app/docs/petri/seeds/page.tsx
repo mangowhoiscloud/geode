@@ -74,10 +74,6 @@ function statusOf(run: ListingRun): "ok" | "partial" | "fail" {
   return "ok";
 }
 
-function fmtUSD(n: number | undefined | null): string {
-  return `$${(n ?? 0).toFixed(2)}`;
-}
-
 function fmtInt(n: number | undefined | null): string {
   return (n ?? 0).toLocaleString();
 }
@@ -104,8 +100,8 @@ const STATUS_LABEL_KO = { ok: "정상", partial: "부분", fail: "실패" } as c
 function RunsTable({ runs, locale }: { runs: RunDetail[]; locale: "ko" | "en" }) {
   const headers =
     locale === "ko"
-      ? ["run_id", "gen_tag", "target_dim", "상태", "draft → surv", "evolved", "iters", "비용 USD"]
-      : ["run_id", "gen_tag", "target_dim", "status", "draft → surv", "evolved", "iters", "cost USD"];
+      ? ["run_id", "gen_tag", "target_dim", "상태", "draft → surv", "evolved", "iters"]
+      : ["run_id", "gen_tag", "target_dim", "status", "draft → surv", "evolved", "iters"];
   const STATUS_LABEL = locale === "ko" ? STATUS_LABEL_KO : STATUS_LABEL_EN;
 
   return (
@@ -133,7 +129,6 @@ function RunsTable({ runs, locale }: { runs: RunDetail[]; locale: "ko" | "en" })
               <td>{run.candidates_drafted} → {run.survivors_count}</td>
               <td>{run.evolved_count}</td>
               <td>{run.iterations}</td>
-              <td>{fmtUSD(run.usd_spent)}</td>
             </tr>
           );
         })}
@@ -164,7 +159,7 @@ function RunDetailBlock({ detail, locale }: { detail: RunDetail; locale: "ko" | 
   const eloDist = asObject(metaObj.elo_distribution);
 
   const heading = locale === "ko" ? "생존 후보" : "Survivors";
-  const costHeading = locale === "ko" ? "비용 집계" : "Cost rollup";
+  const costHeading = locale === "ko" ? "Run 집계" : "Run rollup";
   const summaryHeading = locale === "ko" ? "메타 리뷰 요약" : "Meta-review summary";
   const priorsHeading = locale === "ko" ? "다음 세대 prior" : "Next-gen priors";
   const yieldHeading = locale === "ko" ? "진화 산출" : "Evolution yield";
@@ -254,9 +249,6 @@ function RunDetailBlock({ detail, locale }: { detail: RunDetail; locale: "ko" | 
         <h3>{costHeading}</h3>
         <table>
           <tbody>
-            <tr><th>total USD</th><td>{fmtUSD(asNumber(stateObj.usd_spent))}</td></tr>
-            <tr><th>prompt_tokens</th><td>{fmtInt(asNumber(stateObj.prompt_tokens))}</td></tr>
-            <tr><th>completion_tokens</th><td>{fmtInt(asNumber(stateObj.completion_tokens))}</td></tr>
             <tr>
               <th>{locale === "ko" ? "iter / max" : "iters / max"}</th>
               <td>{asNumber(stateObj.current_iteration)} / {asNumber(stateObj.max_iterations)}</td>
@@ -346,15 +338,14 @@ export default function Page() {
   const totalRuns = runs.length;
   const totalCandidates = runs.reduce((a, r) => a + r.run.candidates_drafted, 0);
   const totalSurvivors = runs.reduce((a, r) => a + r.run.survivors_count, 0);
-  const totalCost = runs.reduce((a, r) => a + r.run.usd_spent, 0);
 
   return (
     <DocsShell
       slug="petri/seeds"
       title="Seed Generation Runs"
       titleKo="Seed 생성 Run"
-      summary={`${totalRuns} runs · ${totalCandidates} candidates drafted · ${totalSurvivors} survived · ${fmtUSD(totalCost)} total spend.`}
-      summaryKo={`${totalRuns}개 run · ${totalCandidates}개 후보 생성 · ${totalSurvivors}개 생존 · ${fmtUSD(totalCost)} 총 비용.`}
+      summary={`${totalRuns} runs · ${totalCandidates} candidates drafted · ${totalSurvivors} survived.`}
+      summaryKo={`${totalRuns}개 run · ${totalCandidates}개 후보 생성 · ${totalSurvivors}개 생존.`}
     >
       <Bi
         ko={
