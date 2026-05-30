@@ -47,6 +47,45 @@ functional change.
 
 ## [Unreleased]
 
+## [0.99.93] - 2026-05-30
+
+### Added
+- **E2 / E2-wire (2026-05-30) — version-frozen held-out bench + per-cycle
+  fixed-ruler fitness curve.** The co-evolving `seed_select` pool supplies
+  *selection pressure* and mutates every generation, so its fitness is a moving
+  ruler (valid for the within-generation `(1+1)` accept/revert, not for
+  cross-generation comparison). A new **version-frozen held-out bench** is the
+  fixed ruler: `autoresearch/train.py` gains `held_out_bench` config +
+  `_resolve_held_out_bench()` (env `GEODE_HELD_OUT_BENCH` /
+  `AUTORESEARCH_HELD_OUT_BENCH` → config → `None`; deliberately **without** the
+  co-evolving latest-pointer tier) + `score_held_out_bench()` (the same 0-1
+  `compute_fitness` the gate uses, with a content-hash-stable `held_out_bench_id`).
+  `scripts/assemble_seed_pool.py` gains explicit `--select-runs` / `--exclude-runs`
+  so the held-out set is assembled from runs **disjoint** from the selection pool
+  (`gen-2605-1` + `gen-2605-2` + the `gen1-*` runs — 16 frozen survivors,
+  content-hash `pool-c16d186178e1`, reproducible from committed survivor bodies;
+  the assembled dir lives under gitignored `state/`). `main()` now **dispatches**
+  the scorer once per cycle (operator cadence = EVERY cycle), gated on a configured
+  bench + non-dry-run (`None` → skip, zero cost, backward-compatible); the result
+  is recorded into BOTH the per-cycle `kind="attribution"` row in
+  `autoresearch/state/mutations.jsonl` (the cross-generation curve SoT) and, on a
+  promote, the `kind="baseline"` registry row. The self-improving hub renders a
+  dense **Held-out fitness curve** table on the autoresearch mutations page
+  (per-generation held-out fitness + Δ-vs-prior on the fixed ruler + bench id),
+  omitted entirely when no bench is configured. Reproduction + wiring documented
+  in `docs/self-improving/held-out-bench.md`. Pinned by
+  `tests/autoresearch/test_held_out_bench.py`, `tests/test_attribution_belief.py`,
+  `tests/test_assemble_seed_pool.py`, and `tests/test_self_improving_hub_e2e.py`.
+
+### Fixed
+- **E1 (2026-05-30) — fitness ledger scale reconcile.** `mutations.jsonl`
+  attribution rows previously mixed scales: `fitness_before` was written as the
+  1-10 Petri dim-mean (lower-is-better) while `fitness_after` was the 0-1
+  `compute_fitness` output (higher-is-better), so `fitness_delta` was nonsense.
+  Both sides now use the same 0-1 `compute_fitness` scale; pre-fix on-disk rows
+  are not rewritten (git-tracked ledger — a one-shot backfill is a documented
+  follow-up).
+
 ## [0.99.92] - 2026-05-30
 
 ### Fixed
@@ -73,7 +112,6 @@ functional change.
   USD column, the USD rollup row, and the total-spend summary are removed; the
   run rollup keeps the tracked fields (iters, literature_snapshots,
   debate_transcripts).
-
 
 ## [0.99.91] - 2026-05-30
 

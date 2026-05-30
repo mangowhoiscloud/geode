@@ -25,7 +25,7 @@
   <a href="README.md">English</a>
 </p>
 
-# GEODE v0.99.92 — A Self-improving Autonomous Execution Agent
+# GEODE v0.99.93 — A Self-improving Autonomous Execution Agent
 
 자기 자신이 올라탄 scaffold 를 스스로 고쳐쓰는 범용 자율 에이전트. 자연어로 물으면 GEODE 가 계획을 세우고, 도구를 호출해, 결과를 보고합니다. 1회성 프롬프트도, 장시간 세션도 동일하게. 그 아래에서는 outer loop 가 작업을 수행하는 시스템 자체를 계속 다듬습니다.
 
@@ -37,7 +37,7 @@
 
 ## Self-improving loop
 
-GEODE 는 **non-parametric** 갈래의 자기진화 에이전트입니다. 모델 가중치가 아니라 자신의 scaffold (시스템 프롬프트, 도구 정책, 작업 분해, reflection, 스킬, 에이전트 계약, 도구 설명, 하이퍼파라미터) 를 변이시켜 개선합니다. fitness 는 capability 벤치마크가 아니라 적대적 **안전성** audit 입니다. Petri 급, 다차원이며, critical 안전 차원에는 하드 floor 가 걸려 있어 그 차원을 후퇴시키는 변경은 거부됩니다. 테스트 셋 자체도 함께 진화합니다. co-scientist 파이프라인이 에이전트와 나란히 적대적 seed 를 키웁니다.
+GEODE 는 **non-parametric** 갈래의 자기진화 에이전트입니다. 모델 가중치가 아니라 자신의 scaffold (시스템 프롬프트, 도구 정책, 작업 분해, reflection, 스킬, 에이전트 계약, 도구 설명, 하이퍼파라미터) 를 변이시켜 개선합니다. fitness 는 capability 벤치마크가 아니라 적대적 **안전성** audit 입니다. Petri 급, 다차원이며, critical 안전 차원에는 하드 floor 가 걸려 있어 그 차원을 후퇴시키는 변경은 거부됩니다. **선택** seed 는 함께 진화합니다 — co-scientist 파이프라인이 에이전트와 나란히 적대적 seed 를 키웁니다 — 따라서 이들은 고정된 자가 아니라 움직이는 선택 압력을 가합니다. 세대 간 fitness 는 절대 변이하지 않는 별도의 **버전 고정 held-out 벤치** 위에서 측정합니다. 실제 개선의 증거로 인정되는 것은 그 held-out 곡선뿐입니다.
 
 선택은 정직한 **(1+1) 챔피언 체인**입니다. 변이하고, audit 하고, 실제 이득이 있을 때만 promote 하고, 아니면 revert 합니다. 두 개의 loop 가 함께 돕니다. inner agentic loop 는 작업을 수행하고, outer loop 는 작업을 수행하는 시스템을 다듬습니다. 이 loop 계보 (Promptbreeder, STOP, ADAS, DGM, GEPA) 는 이미 잘 정립돼 있습니다. GEODE 는 그것을 capability 에서 safety 로, 가중치에서 scaffold 로, co-evolved 적대적 seed 위로 다시 겨냥합니다. 새 primitive 가 아니라, 비어 있던 칸을 채우는 재조합입니다.
 

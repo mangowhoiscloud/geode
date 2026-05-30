@@ -87,6 +87,8 @@
       </tbody>
     </table>
 
+{{ held_out_curve }}
+
     <div class="build-info">
       <p>Source: <code>autoresearch/state/mutations.jsonl</code> — apply + attribution records joined by <code>mutation_id</code>.</p>
       <p>Published by <code>.github/workflows/pages.yml</code> on every <code>main</code> push.</p>

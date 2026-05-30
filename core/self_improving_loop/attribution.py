@@ -91,6 +91,19 @@ class AttributionRecord(BaseModel):
     mixed two incompatible scales. Pre-fix on-disk rows still carry that mixed
     scale — they are NOT rewritten (git-tracked ledger); a one-shot backfill
     is a documented follow-up. New rows are uniformly 0-1."""
+    held_out_fitness: float | None = None
+    held_out_bench_id: str | None = None
+    """E2 (2026-05-30) — per-cycle fixed-ruler evidence. ``held_out_fitness`` is
+    the SAME canonical 0-1 ``compute_fitness`` (HIGHER-is-better) measured on the
+    VERSION-FROZEN held-out bench, NOT the co-evolving ``seed_select`` pool that
+    produced ``fitness_after``. A curve built from this field across attribution
+    rows (ordered by ``ts``) is therefore comparable ACROSS generations — the
+    cross-generation evidence the moving-ruler ``fitness_after`` cannot give.
+    ``held_out_bench_id`` is the bench's content-address (``pool-<hash>``), so a
+    silent edit to the "frozen" set surfaces as an id change. Recorded on EVERY
+    cycle when a held-out bench is configured (operator cadence); both fields are
+    omitted together when no bench was scored, so legacy / no-bench rows validate
+    as ``None`` via these defaults."""
     audit_run_id: str | None = None
     source: str | None = None
     """PR-AR-L6 (2026-05-26) — distinguishes mutator-driven cycle rows
@@ -238,6 +251,8 @@ def compute_attribution(
     fitness_after: float | None = None,
     audit_run_id: str = "",
     source: str = "mutator",
+    held_out_fitness: float | None = None,
+    held_out_bench_id: str | None = None,
 ) -> dict[str, Any]:
     """Compute the attribution payload for one applied mutation.
 
@@ -305,6 +320,21 @@ def compute_attribution(
         payload["fitness_before"] = round(float(fitness_before), 6)
         payload["fitness_after"] = round(float(fitness_after), 6)
         payload["fitness_delta"] = round(float(fitness_after) - float(fitness_before), 6)
+    # E2 (2026-05-30) — per-cycle fixed-ruler evidence. ``held_out_fitness`` is
+    # the SAME 0-1 ``compute_fitness`` measured on the VERSION-FROZEN held-out
+    # bench (NOT the co-evolving ``seed_select`` pool that produced
+    # ``fitness_after``), so a fitness-vs-generation curve built from this field
+    # across attribution rows is comparable ACROSS generations — the only curve
+    # that counts as evidence of real improvement. Recorded on EVERY cycle when a
+    # held-out bench is configured (operator cadence decision); both fields are
+    # OMITTED together when no bench was scored (``None``) so legacy / no-bench
+    # rows keep their exact shape (this module is otherwise scale-agnostic — the
+    # 0-1 guarantee lives at the autoresearch caller). ``held_out_bench_id`` is
+    # the ruler's content-address, so a silent edit to the "frozen" set surfaces
+    # as an id change in the curve.
+    if held_out_fitness is not None and held_out_bench_id is not None:
+        payload["held_out_fitness"] = round(float(held_out_fitness), 6)
+        payload["held_out_bench_id"] = str(held_out_bench_id)
     if baseline_before is None or baseline_after is None:
         return payload
 
@@ -356,6 +386,8 @@ def write_attribution(
     fitness_after: float | None = None,
     audit_run_id: str = "",
     source: str = "mutator",
+    held_out_fitness: float | None = None,
+    held_out_bench_id: str | None = None,
 ) -> dict[str, Any]:
     """Compute + append attribution in one call.
 
@@ -383,6 +415,8 @@ def write_attribution(
         fitness_after=fitness_after,
         audit_run_id=audit_run_id,
         source=source,
+        held_out_fitness=held_out_fitness,
+        held_out_bench_id=held_out_bench_id,
     )
     append_attribution_log(payload, log_path=log_path)
     return payload

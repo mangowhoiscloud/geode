@@ -1154,6 +1154,164 @@ def test_autoresearch_mutations_table_renders(
     assert "<details>" in html and "previous" in html, "payload drill-down (before/after) missing"
 
 
+def test_autoresearch_held_out_curve_renders(
+    built_autoresearch_pages: dict[str, str],
+) -> None:
+    """E2: the per-cycle held-out (fixed-ruler) fitness curve renders as a dense
+    table on the mutations page, reading ``held_out_fitness`` from the attribution
+    rows, ordered chronologically with a Δ-vs-prior column and the bench id."""
+    html = built_autoresearch_pages["mutations"]
+    assert "Held-out fitness curve" in html, "held-out curve section heading missing"
+    # The fixture has 3 attribution rows with held_out_fitness → 3 generations.
+    assert "3 generations" in html, "held-out curve generation count wrong"
+    # The recorded fixed-ruler values surface (rounded to 4 dp in the table).
+    assert "0.6120" in html and "0.5980" in html and "0.6340" in html, (
+        "held-out fitness values missing from the curve"
+    )
+    # Δ-vs-prior direction: gen2 regressed (negative), gen3 improved (positive).
+    assert "delta-negative" in html and "delta-positive" in html, (
+        "held-out curve Δ-vs-prior direction classes missing"
+    )
+    # The content-addressed bench id (the fixed ruler's fingerprint) is shown.
+    assert "pool-c16d186178e1" in html, "held-out bench id missing"
+    # NO-SLOP: the curve uses a dense <table class="records">, never a card grid /
+    # accent bar / emoji (CLAUDE.md §Docs, feedback_no_box_ui_no_emoji).
+    assert "border-left" not in html and "card-grid" not in html, (
+        "held-out curve must not introduce accent-bar / card-grid slop"
+    )
+    assert not _find_emoji(html), "held-out curve must not introduce emoji"
+
+
+def test_autoresearch_held_out_curve_omitted_without_bench(tmp_path: Path) -> None:
+    """E2: with NO held-out fields in any attribution row (no bench configured),
+    the curve section is omitted entirely — no empty scaffolding."""
+    import json as _json
+
+    # Copy the fixture, then strip the held_out_* fields from every row.
+    fixture_copy = tmp_path / "fixture"
+    shutil.copytree(FIXTURE_ROOT, fixture_copy)
+    mutations_path = fixture_copy / "autoresearch" / "state" / "mutations.jsonl"
+    stripped_lines: list[str] = []
+    for line in mutations_path.read_text(encoding="utf-8").splitlines():
+        if not line.strip():
+            continue
+        row = _json.loads(line)
+        row.pop("held_out_fitness", None)
+        row.pop("held_out_bench_id", None)
+        stripped_lines.append(_json.dumps(row))
+    mutations_path.write_text("\n".join(stripped_lines) + "\n", encoding="utf-8")
+
+    out = tmp_path / "out"
+    result = subprocess.run(  # noqa: S603 — test invocation
+        [
+            sys.executable,
+            str(BUILDER),
+            "--out",
+            str(out / "hub" / "index.html"),
+            "--bundle-root",
+            str(fixture_copy / "petri-bundle"),
+            "--autoresearch-root",
+            str(fixture_copy / "autoresearch"),
+            "--seedgen-out-dir",
+            str(out / "seedgen"),
+            "--autoresearch-out-dir",
+            str(out / "autoresearch"),
+        ],
+        check=False,
+        capture_output=True,
+        text=True,
+        cwd=str(REPO_ROOT),
+    )
+    assert result.returncode == 0, f"builder failed: {result.stderr!r}"
+    mutations_html = (out / "autoresearch" / "mutations" / "index.html").read_text(encoding="utf-8")
+    assert "Held-out fitness curve" not in mutations_html, (
+        "held-out curve section must be omitted when no row carries held_out_fitness"
+    )
+    # The unresolved-marker guard must not leave a literal {{ held_out_curve }}.
+    assert "held_out_curve" not in mutations_html
+
+
+def test_held_out_curve_unit_orders_and_signs_deltas() -> None:
+    """Direct unit test of the curve renderer: rows are ordered by ts (not file
+    order), the first generation has no Δ, and a regress vs an improvement on the
+    FIXED ruler get the correct signed delta classes."""
+    from scripts.build_self_improving_hub import _render_held_out_curve
+
+    # Deliberately out of ts order in the list — the renderer must sort by ts.
+    rows = [
+        {
+            "kind": "attribution",
+            "ts": 30.0,
+            "held_out_fitness": 0.70,
+            "held_out_bench_id": "pool-x",
+        },
+        {
+            "kind": "attribution",
+            "ts": 10.0,
+            "held_out_fitness": 0.60,
+            "held_out_bench_id": "pool-x",
+        },
+        {
+            "kind": "attribution",
+            "ts": 20.0,
+            "held_out_fitness": 0.55,
+            "held_out_bench_id": "pool-x",
+        },
+        # An apply row + a no-bench attribution row are ignored.
+        {"kind": "applied", "ts": 25.0, "target_section": "x"},
+        {"kind": "attribution", "ts": 40.0},
+    ]
+    html = _render_held_out_curve(rows)
+    # 3 generations (only the 3 attribution rows with held_out_fitness).
+    assert "3 generations" in html
+    # Chronological: 0.60 (gen1, no delta) → 0.55 (gen2, -0.0500) → 0.70 (gen3, +0.1500).
+    assert html.index("0.6000") < html.index("0.5500") < html.index("0.7000")
+    assert "-0.0500" in html and "delta-negative" in html
+    assert "+0.1500" in html and "delta-positive" in html
+    # Single ruler → "fixed ruler <code>pool-x</code>".
+    assert "fixed ruler" in html and "pool-x" in html
+
+
+def test_held_out_curve_unit_flags_changed_ruler() -> None:
+    """If the frozen bench id changes mid-run (a 'frozen' set was edited), the
+    curve note flags that the values are NOT fully comparable."""
+    from scripts.build_self_improving_hub import _render_held_out_curve
+
+    rows = [
+        {"kind": "attribution", "ts": 10.0, "held_out_fitness": 0.6, "held_out_bench_id": "pool-a"},
+        {"kind": "attribution", "ts": 20.0, "held_out_fitness": 0.6, "held_out_bench_id": "pool-b"},
+    ]
+    html = _render_held_out_curve(rows)
+    assert "rulers changed" in html and "NOT fully comparable" in html
+
+
+def test_held_out_curve_unit_graceful_skips_bad_values() -> None:
+    """Graceful contract: a non-numeric held_out_fitness AND a non-numeric ts are
+    BOTH skipped (neither can place a positionable curve point) rather than
+    raising — the render never sinks on a malformed row, and an unpositionable
+    point never mis-orders the order-dependent Δ column."""
+    from scripts.build_self_improving_hub import _render_held_out_curve
+
+    rows = [
+        # bad fitness → skipped (cannot place a value)
+        {"kind": "attribution", "ts": 10.0, "held_out_fitness": "oops", "held_out_bench_id": "p"},
+        # bad ts → skipped (cannot position on the generation axis)
+        {
+            "kind": "attribution",
+            "ts": "bad",
+            "held_out_fitness": 0.5,
+            "held_out_bench_id": "pool-x",
+        },
+        # the only well-formed row places the single point
+        {"kind": "attribution", "ts": 20.0, "held_out_fitness": 0.7, "held_out_bench_id": "pool-x"},
+    ]
+    html = _render_held_out_curve(rows)
+    assert "1 generation" in html
+    assert "0.7000" in html
+    # The bad-ts row's fitness (0.5) must NOT appear — it was skipped, not floated.
+    assert "0.5000" not in html
+
+
 def test_autoresearch_results_sparkline(built_autoresearch_pages: dict[str, str]) -> None:
     """Results page renders the Unicode block-char fitness sparkline +
     a 12-col table header sourced from RESULTS_TSV_HEADER."""
