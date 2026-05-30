@@ -57,9 +57,12 @@ functional change.
   with its `baseline_id`). Each row records the measurement criteria the hub
   serves losslessly + differentiated: `margin_rule`
   (`dim-stderr` | `fitness-stderr` — the pre-fix vanilla vs post-fix cohort
-  discriminator), `fitness_stderr`, `bench` flag, seed pool, role models
-  (auditor/target/judge/mutator), intrinsic fresh-anchor fitness, and
-  `dim_means`. `_next_baseline_id` mirrors the seed-generation
+  discriminator), `fitness_stderr`, `bench` flag, seed pool, per-role
+  **model + source** (auditor/target/judge/mutator — the credential lane,
+  PAYG `api_key` vs subscription, is load-bearing provenance), intrinsic
+  fresh-anchor fitness, and `dim_means`. `eval_archive` is stored as a basename
+  (the registry is git-tracked — no leaked absolute paths).
+  `_next_baseline_id` mirrors the seed-generation
   `baseline-<YYMM>-<seq>` scheme. `scripts/backfill_baseline_registry_row.py`
   registers pre-registry baselines from a saved snapshot (models passed
   explicitly — a historical baseline's config has since changed). Re-implements

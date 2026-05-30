@@ -2146,12 +2146,17 @@ def _append_baseline_registry_row(
     ``margin_rule`` cohort discriminator, the ``bench`` axis flag, and the
     aggregate ``dim_means``.
 
-    ``models`` overrides the model ids (keys: ``auditor`` / ``target`` /
-    ``judge`` / ``mutator_model`` / ``mutator_source``). When ``None`` the live
-    promote path reads them from ``_get_autoresearch_config()`` (kept un-threaded
-    so the promote call sites stay unchanged in shape). The backfill script
-    passes ``models`` explicitly because a historical baseline was measured under
-    a config that has since changed — its models are not in the live config.
+    ``models`` overrides the **model + source** per role (keys: ``auditor`` /
+    ``target`` / ``judge`` / ``mutator_model`` + their ``*_source`` siblings
+    ``auditor_source`` / ``target_source`` / ``judge_source`` / ``mutator_source``).
+    Each role's *source* (PAYG ``api_key`` vs ``openai-codex`` / ``claude-cli``
+    subscription) is load-bearing provenance — the same model id behaves
+    differently per credential lane, so the registry records both. When ``None``
+    the live promote path reads them from ``_get_autoresearch_config()`` (kept
+    un-threaded so the promote call sites stay unchanged in shape). The backfill
+    script passes ``models`` explicitly because a historical baseline was
+    measured under a config that has since changed — its bindings are not in the
+    live config.
 
     ``seed_select`` likewise overrides the seed pool: ``None`` re-resolves the
     *current* pool (correct for a live promote, which fires right after its own
@@ -2167,8 +2172,11 @@ def _append_baseline_registry_row(
         cfg = _get_autoresearch_config()
         models = {
             "auditor": cfg.auditor.model,
+            "auditor_source": str(cfg.auditor.source),
             "target": cfg.target.model,
+            "target_source": str(cfg.target.source),
             "judge": cfg.judge.model,
+            "judge_source": str(cfg.judge.source),
             "mutator_model": cfg.mutator.default_model,
             "mutator_source": str(cfg.mutator.source),
         }
@@ -2196,11 +2204,17 @@ def _append_baseline_registry_row(
         "seed_select": seed_select if seed_select is not None else _resolve_seed_select(),
         "seed_count": int(seed_count),
         "auditor_model": models["auditor"],
+        "auditor_source": models["auditor_source"],
         "target_model": models["target"],
+        "target_source": models["target_source"],
         "judge_model": models["judge"],
+        "judge_source": models["judge_source"],
         "mutator_model": models["mutator_model"],
         "mutator_source": models["mutator_source"],
-        "eval_archive": eval_archive,
+        # basename only — baseline_archive.jsonl is git-tracked, so an absolute
+        # ~/.geode/... path would leak a user path (feedback_no_hardcoded_user_paths)
+        # + not resolve on another machine. Readers join against ~/.geode/petri/logs/.
+        "eval_archive": (Path(eval_archive).name if eval_archive else None),
         "dim_means": {k: float(v) for k, v in dim_means.items()},
     }
     archive_path = _baseline_archive_path()

@@ -35,8 +35,11 @@ _EXPECTED_ROW_KEYS = {
     "seed_select",
     "seed_count",
     "auditor_model",
+    "auditor_source",
     "target_model",
+    "target_source",
     "judge_model",
+    "judge_source",
     "mutator_model",
     "mutator_source",
     "eval_archive",
@@ -50,9 +53,9 @@ def isolated(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     writer resolves role models / seed_select without ``~/.geode/config.toml``."""
     monkeypatch.setattr(auto_train, "BASELINE_PATH", tmp_path / "baseline.json")
     fake_cfg = SimpleNamespace(
-        auditor=SimpleNamespace(model="aud-m"),
-        target=SimpleNamespace(model="tgt-m"),
-        judge=SimpleNamespace(model="jdg-m"),
+        auditor=SimpleNamespace(model="aud-m", source="aud-src"),
+        target=SimpleNamespace(model="tgt-m", source="tgt-src"),
+        judge=SimpleNamespace(model="jdg-m", source="jdg-src"),
         mutator=SimpleNamespace(default_model="mut-m", source="mut-src"),
         seed_select="petri_17dim",
     )
@@ -118,8 +121,11 @@ def test_write_baseline_appends_registry_row(isolated: Path) -> None:
     assert row["seed_count"] == 16
     assert row["bench"] is False
     assert row["auditor_model"] == "aud-m"
+    assert row["auditor_source"] == "aud-src"  # per-role source observability
+    assert row["target_source"] == "tgt-src"
+    assert row["judge_source"] == "jdg-src"
     assert row["mutator_source"] == "mut-src"
-    assert row["eval_archive"] == "/x.eval"
+    assert row["eval_archive"] == "x.eval"  # basename only (no leaked abs path)
 
 
 def test_write_baseline_stamps_id_into_anchor(isolated: Path) -> None:
@@ -173,8 +179,11 @@ def test_models_override_used_for_backfill(isolated: Path) -> None:
         promoted_by="backfill",
         models={
             "auditor": "vanilla-aud",
+            "auditor_source": "api_key",
             "target": "vanilla-tgt",
+            "target_source": "openai-codex",
             "judge": "vanilla-jdg",
+            "judge_source": "api_key",
             "mutator_model": "vanilla-mut",
             "mutator_source": "vanilla-src",
         },
@@ -185,6 +194,7 @@ def test_models_override_used_for_backfill(isolated: Path) -> None:
     assert row["margin_rule"] == "dim-stderr"
     assert row["promoted_by"] == "backfill"
     assert row["auditor_model"] == "vanilla-aud"  # override, not the live "aud-m"
+    assert row["auditor_source"] == "api_key"
     assert row["seed_count"] == 8
 
 
@@ -208,8 +218,11 @@ def test_vanilla_and_fixed_rows_coexist_differentiated(isolated: Path) -> None:
         promoted_by="backfill",
         models={
             "auditor": "v-a",
+            "auditor_source": "v-as",
             "target": "v-t",
+            "target_source": "v-ts",
             "judge": "v-j",
+            "judge_source": "v-js",
             "mutator_model": "v-m",
             "mutator_source": "v-s",
         },
@@ -244,8 +257,11 @@ def test_invalid_margin_rule_rejected(isolated: Path) -> None:
             promoted_by="backfill",
             models={
                 "auditor": "a",
+                "auditor_source": "as",
                 "target": "t",
+                "target_source": "ts",
                 "judge": "j",
+                "judge_source": "js",
                 "mutator_model": "m",
                 "mutator_source": "s",
             },
@@ -272,8 +288,11 @@ def test_seed_select_override_freezes_historical_pool(isolated: Path) -> None:
         promoted_by="backfill",
         models={
             "auditor": "a",
+            "auditor_source": "as",
             "target": "t",
+            "target_source": "ts",
             "judge": "j",
+            "judge_source": "js",
             "mutator_model": "m",
             "mutator_source": "s",
         },
@@ -319,14 +338,20 @@ def test_backfill_script_end_to_end(isolated: Path) -> None:
             "vanilla-pool",
             "--auditor",
             "v-aud",
+            "--auditor-source",
+            "api_key",
             "--target",
             "v-tgt",
+            "--target-source",
+            "openai-codex",
             "--judge",
             "v-jdg",
+            "--judge-source",
+            "api_key",
             "--mutator-model",
             "v-mut",
             "--mutator-source",
-            "v-src",
+            "openai-codex",
         ]
     )
     assert rc == 0
@@ -336,6 +361,8 @@ def test_backfill_script_end_to_end(isolated: Path) -> None:
     assert row["margin_rule"] == "dim-stderr"
     assert row["seed_select"] == "vanilla-pool"
     assert row["auditor_model"] == "v-aud"
+    assert row["auditor_source"] == "api_key"
+    assert row["target_source"] == "openai-codex"
     assert row["seed_count"] == 8
-    assert row["eval_archive"] == "/vanilla.eval"
+    assert row["eval_archive"] == "vanilla.eval"  # basename of /vanilla.eval
     assert row["promoted_by"] == "backfill"

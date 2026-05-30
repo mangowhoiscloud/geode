@@ -63,8 +63,11 @@ def main(argv: list[str] | None = None) -> int:
         "pass explicitly for a historical baseline whose pointer has moved)",
     )
     parser.add_argument("--auditor", required=True)
+    parser.add_argument("--auditor-source", required=True, help="e.g. api_key (PAYG)")
     parser.add_argument("--target", required=True)
+    parser.add_argument("--target-source", required=True, help="e.g. openai-codex (subscription)")
     parser.add_argument("--judge", required=True)
+    parser.add_argument("--judge-source", required=True)
     parser.add_argument("--mutator-model", required=True)
     parser.add_argument("--mutator-source", required=True)
     args = parser.parse_args(argv)
@@ -111,8 +114,11 @@ def main(argv: list[str] | None = None) -> int:
         promoted_by=args.promoted_by,
         models={
             "auditor": args.auditor,
+            "auditor_source": args.auditor_source,
             "target": args.target,
+            "target_source": args.target_source,
             "judge": args.judge,
+            "judge_source": args.judge_source,
             "mutator_model": args.mutator_model,
             "mutator_source": args.mutator_source,
         },

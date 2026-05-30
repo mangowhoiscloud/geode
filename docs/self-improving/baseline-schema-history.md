@@ -76,8 +76,12 @@ also dead (group/Pareto sampling was dropped from develop, 2026-05-29).
                                                   # vanilla(buggy) ↔ margin-fixed discriminator
   "bench": bool,                    # bench axis active (Path C; currently false)
   "seed_select": ..., "seed_count": int,
-  "auditor_model"/"target_model"/"judge_model"/"mutator_model"/"mutator_source": ...,
-  "eval_archive": ..., "dim_means": {dim: float} }
+  # per-role model + source (PAYG api_key vs subscription openai-codex/claude-cli):
+  # the same model id behaves differently per credential lane, so BOTH are recorded.
+  "auditor_model"/"auditor_source"/"target_model"/"target_source": ...,
+  "judge_model"/"judge_source"/"mutator_model"/"mutator_source": ...,
+  "eval_archive": "<basename>.eval"|null,   # basename only — the file is git-tracked
+  "dim_means": {dim: float} }
 ```
 
 `margin_rule` is the key field: it lets the hub serve the pre-fix `vanilla`
