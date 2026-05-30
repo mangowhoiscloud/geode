@@ -16,12 +16,15 @@ import { useLocale, t } from "../locale-context";
 export function TwoLoopsSection() {
   const locale = useLocale();
   return (
-    <section className="px-6 py-20">
+    <section className="px-6 py-24">
       <div className="max-w-3xl mx-auto">
-        <div className="font-mono text-[11px] tracking-[0.24em] uppercase text-[var(--acc-artifact)]">
-          How it works
+        <div className="flex items-center gap-2">
+          <span className="h-px w-6 bg-[var(--acc-artifact)]" />
+          <span className="text-[12px] tracking-[0.22em] uppercase text-[var(--acc-artifact)] font-medium">
+            How it works
+          </span>
         </div>
-        <h2 className="mt-3 font-display tracking-tight text-[var(--ink)] text-[clamp(1.7rem,3.6vw,2.4rem)] leading-[1.12] font-semibold">
+        <h2 className="mt-4 font-display tracking-tight text-[var(--ink)] text-[clamp(1.85rem,3.8vw,2.6rem)] leading-[1.12] font-semibold">
           {t(locale, "두 개의 루프", "Two loops")}
         </h2>
         <p className="mt-4 text-[var(--ink-2)] leading-[1.75] text-[16px]">
@@ -32,10 +35,10 @@ export function TwoLoopsSection() {
           )}
         </p>
 
-        <div className="mt-8 flex justify-center">
+        <div className="mt-10 flex justify-center">
           <svg
-            viewBox="0 0 460 280"
-            className="w-full max-w-[460px] h-auto"
+            viewBox="0 0 560 320"
+            className="w-full max-w-xl h-auto"
             role="img"
             aria-label={t(
               locale,
@@ -49,8 +52,8 @@ export function TwoLoopsSection() {
                 viewBox="0 0 10 10"
                 refX="8"
                 refY="5"
-                markerWidth="7"
-                markerHeight="7"
+                markerWidth="8"
+                markerHeight="8"
                 orient="auto-start-reverse"
               >
                 <path d="M 0 1 L 9 5 L 0 9 z" fill="var(--acc-artifact)" />
@@ -70,21 +73,21 @@ export function TwoLoopsSection() {
 
             {/* Outer loop (citrine). scaffold / process */}
             <rect
-              x="14"
-              y="14"
-              width="432"
-              height="252"
-              rx="18"
+              x="16"
+              y="16"
+              width="528"
+              height="288"
+              rx="20"
               fill="none"
               stroke="var(--acc-line)"
-              strokeWidth="1.5"
+              strokeWidth="1.75"
             />
             <text
-              x="230"
-              y="40"
+              x="280"
+              y="46"
               textAnchor="middle"
               fill="var(--acc-line)"
-              fontSize="12.5"
+              fontSize="14"
               fontFamily="var(--font-fira-code), ui-monospace, monospace"
               letterSpacing="0.5"
             >
@@ -92,30 +95,31 @@ export function TwoLoopsSection() {
             </text>
             {/* Outer loop return arrow along the bottom edge */}
             <path
-              d="M 360 252 L 100 252"
+              d="M 440 288 L 120 288"
               fill="none"
               stroke="var(--acc-line)"
-              strokeWidth="1.5"
+              strokeWidth="1.75"
               markerEnd="url(#two-loops-head-outer)"
             />
 
-            {/* Inner loop (amethyst). artifact / runtime, nested inside */}
+            {/* Inner loop (petri-blue, dominant). artifact / runtime, nested inside */}
             <rect
-              x="78"
-              y="74"
-              width="304"
-              height="132"
-              rx="14"
+              x="92"
+              y="84"
+              width="376"
+              height="152"
+              rx="16"
               fill="none"
               stroke="var(--acc-artifact)"
-              strokeWidth="1.5"
+              strokeWidth="3"
             />
             <text
-              x="230"
-              y="98"
+              x="280"
+              y="116"
               textAnchor="middle"
               fill="var(--acc-artifact)"
-              fontSize="12.5"
+              fontSize="15"
+              fontWeight="500"
               fontFamily="var(--font-fira-code), ui-monospace, monospace"
               letterSpacing="0.5"
             >
@@ -123,10 +127,10 @@ export function TwoLoopsSection() {
             </text>
             {/* Inner loop return arrow along the inner bottom edge */}
             <path
-              d="M 320 192 L 140 192"
+              d="M 392 216 L 168 216"
               fill="none"
               stroke="var(--acc-artifact)"
-              strokeWidth="1.5"
+              strokeWidth="3"
               markerEnd="url(#two-loops-head-inner)"
             />
           </svg>

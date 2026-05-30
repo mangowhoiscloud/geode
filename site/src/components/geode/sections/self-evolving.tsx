@@ -25,12 +25,15 @@ const cycleSteps: { ko: string; en: string }[] = [
 export function SelfEvolvingSection() {
   const locale = useLocale();
   return (
-    <section className="px-6 py-20">
+    <section className="px-6 py-24">
       <div className="max-w-3xl mx-auto">
-        <div className="font-mono text-[11px] tracking-[0.24em] uppercase text-[var(--acc-artifact)]">
-          The differentiator
+        <div className="flex items-center gap-2">
+          <span className="h-px w-6 bg-[var(--acc-artifact)]" />
+          <span className="text-[12px] tracking-[0.22em] uppercase text-[var(--acc-artifact)] font-medium">
+            The differentiator
+          </span>
         </div>
-        <h2 className="mt-3 font-display tracking-tight text-[var(--ink)] text-[clamp(1.7rem,3.6vw,2.4rem)] leading-[1.12] font-semibold">
+        <h2 className="mt-4 font-display tracking-tight text-[var(--ink)] text-[clamp(1.85rem,3.8vw,2.6rem)] leading-[1.12] font-semibold">
           {t(locale, "self-evolving, 비-파라메트릭", "Self-evolving, non-parametric")}
         </h2>
         <p className="mt-4 text-[var(--ink-2)] leading-[1.75] text-[16px]">
@@ -41,24 +44,24 @@ export function SelfEvolvingSection() {
           )}
         </p>
 
-        <div className="mt-8 rounded-lg border border-[var(--rule)] overflow-x-auto">
+        <div className="mt-10 rounded-lg border border-[var(--rule)] bg-[var(--paper-2)] overflow-x-auto">
           <table className="w-full text-[14px] border-collapse">
             <thead>
               <tr className="bg-[var(--paper-2)]">
-                <th className="text-left p-3 border border-[var(--rule)] font-mono uppercase tracking-wider text-[10px] text-[var(--ink-2)] w-[26%]">
+                <th className="text-left px-5 py-3.5 border-b border-[var(--rule)] font-mono uppercase tracking-[0.18em] text-[11px] text-[var(--acc-artifact)] font-medium w-[28%]">
                   {t(locale, "측면", "Aspect")}
                 </th>
-                <th className="text-left p-3 border border-[var(--rule)] font-mono uppercase tracking-wider text-[10px] text-[var(--ink-2)]">
+                <th className="text-left px-5 py-3.5 border-b border-[var(--rule)] font-mono uppercase tracking-[0.18em] text-[11px] text-[var(--acc-artifact)] font-medium">
                   {t(locale, "값", "Value")}
                 </th>
               </tr>
             </thead>
             <tbody>
               <tr>
-                <td className="p-3 border border-[var(--rule)] font-mono text-[12px] text-[var(--acc-artifact)] align-top">
+                <td className="px-5 py-4 border-b border-[var(--rule)] font-mono text-[13px] text-[var(--acc-artifact)] font-medium align-top">
                   {t(locale, "바꾸는 것", "mutates")}
                 </td>
-                <td className="p-3 border border-[var(--rule)] text-[var(--ink-2)] leading-relaxed align-top">
+                <td className="px-5 py-4 border-b border-[var(--rule)] text-[var(--ink-1)] leading-relaxed align-top">
                   {t(
                     locale,
                     "스캐폴딩: 시스템 프롬프트, 도구 정책, 작업 분해, 리플렉션, 스킬",
@@ -67,18 +70,18 @@ export function SelfEvolvingSection() {
                 </td>
               </tr>
               <tr>
-                <td className="p-3 border border-[var(--rule)] font-mono text-[12px] text-[var(--acc-artifact)] align-top">
+                <td className="px-5 py-4 border-b border-[var(--rule)] font-mono text-[13px] text-[var(--ink-2)] align-top">
                   {t(locale, "절대 안 바꾸는 것", "never")}
                 </td>
-                <td className="p-3 border border-[var(--rule)] text-[var(--ink-2)] leading-relaxed align-top">
+                <td className="px-5 py-4 border-b border-[var(--rule)] text-[var(--ink-2)] leading-relaxed align-top">
                   {t(locale, "모델 가중치", "model weights")}
                 </td>
               </tr>
               <tr>
-                <td className="p-3 border border-[var(--rule)] font-mono text-[12px] text-[var(--acc-artifact)] align-top">
+                <td className="px-5 py-4 font-mono text-[13px] text-[var(--ink-2)] align-top">
                   {t(locale, "측정 방법", "measured by")}
                 </td>
-                <td className="p-3 border border-[var(--rule)] text-[var(--ink-2)] leading-relaxed align-top">
+                <td className="px-5 py-4 text-[var(--ink-2)] leading-relaxed align-top">
                   {t(
                     locale,
                     "적대적 안전 감사 (Petri 등급)",
