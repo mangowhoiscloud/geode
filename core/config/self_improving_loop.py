@@ -414,6 +414,27 @@ class AutoresearchConfig(BaseModel):
     RECORDED on the held-out + baseline rows. Ignored for the ``gate`` / ``never``
     arms. Resolution precedence mirrors ``promote_policy``
     (:func:`autoresearch.train._resolve_promote_policy_seed`)."""
+    replicate: Annotated[int, Field(ge=1, le=20)] = 1
+    """E4 (2026-05-30) — per-mutation REPLICATE count ``M``.
+
+    The audit is run ``M`` times per mutation/cycle to estimate the WITHIN-mutation
+    variance (provider non-determinism) SEPARATELY from the BETWEEN-seed variance
+    (the N samples inside one audit). ``M=1`` (default) leaves today's behaviour
+    unchanged — the audit runs once, within-mutation variance is honestly left
+    unestimated, and there is NO extra cost. ``M>1`` runs ``M`` full audits (so the
+    cost scales linearly — the operator opts in for the variance decomposition).
+    Resolution precedence mirrors ``promote_policy`` (env ``GEODE_AUDIT_REPLICATE``
+    / ``AUTORESEARCH_REPLICATE`` → CLI ``--replicate`` → this config field → ``1``)."""
+    target_effect_size: Annotated[float, Field(gt=0.0, le=1.0)] = 0.02
+    """E4 (2026-05-30) — the fitness-scale effect size δ the power analysis targets.
+
+    Feeds :func:`core.self_improving_loop.statistical_power.required_samples` to
+    compute the required ``N_seed × M_replicate`` to DETECT δ at α=0.05 / 80% power.
+    Default ~0.02 sits just above the promote gate's zero-noise floor — see the
+    ``DEFAULT_TARGET_EFFECT_SIZE`` docstring for the full justification. Resolution
+    precedence mirrors ``replicate`` (env ``GEODE_TARGET_EFFECT_SIZE`` /
+    ``AUTORESEARCH_TARGET_EFFECT_SIZE`` → CLI ``--target-effect-size`` → this config
+    field → ``0.02``)."""
     dim_set: str = "subset"
     max_turns: Annotated[int, Field(ge=1, le=200)] = 10
 

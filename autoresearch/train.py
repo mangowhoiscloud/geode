@@ -103,7 +103,13 @@ import time
 import uuid
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    # E4 (2026-05-30) — type-only import for the record bundle annotation. The
+    # value is constructed lazily in ``main`` (local import) so this stays
+    # annotation-only and does not eagerly pull the statistics module at import.
+    from core.self_improving_loop.statistical_power import PowerRecordFields
 
 # PR-SIL-5THEME C2 (2026-05-23) — S6b production wiring. ``BenchProvenance``
 # + ``collect_bench_means_from_inspect_ai`` 가 main() 의 audit 사이클에서
@@ -182,6 +188,16 @@ campaign is reproducible (no bare nondeterminism) and the seed is RECORDED on th
 held-out + baseline rows. Ignored for the ``gate`` / ``never`` arms. Resolved by
 :func:`_resolve_promote_policy_seed`."""
 _VALID_PROMOTE_POLICIES = frozenset({"gate", "random", "never"})
+AUDIT_REPLICATE = 1
+"""E4 (2026-05-30) — default per-mutation replicate count ``M``. ``M=1`` runs the
+audit once (today's behaviour, zero extra cost; within-mutation variance left
+unestimated). ``M>1`` runs ``M`` full audits to estimate the WITHIN-mutation
+(provider non-determinism) variance SEPARATELY from the BETWEEN-seed variance.
+Resolved by :func:`_resolve_audit_replicate` (env → CLI → config → this constant)."""
+TARGET_EFFECT_SIZE = 0.02
+"""E4 (2026-05-30) — default fitness-scale effect size δ the power analysis targets
+(see ``statistical_power.DEFAULT_TARGET_EFFECT_SIZE`` for the justification).
+Resolved by :func:`_resolve_target_effect_size`."""
 WRAPPER_OVERRIDE_HOOK_READY = _CORE_WRAPPER_OVERRIDE_READY
 
 
@@ -224,6 +240,8 @@ def _get_autoresearch_config() -> Any:
             held_out_bench=HELD_OUT_BENCH,
             promote_policy=PROMOTE_POLICY,
             promote_policy_seed=PROMOTE_POLICY_SEED,
+            replicate=AUDIT_REPLICATE,
+            target_effect_size=TARGET_EFFECT_SIZE,
             dim_set=DIM_SET_NAME,
             max_turns=MAX_TURNS,
         )
@@ -406,6 +424,85 @@ def _resolve_promote_policy_seed(cli_override: int | None = None) -> int:
                 PROMOTE_POLICY_SEED,
             )
     return PROMOTE_POLICY_SEED
+
+
+def _resolve_audit_replicate(cli_override: int | None = None) -> int:
+    """Return the per-mutation replicate count ``M`` (E4).
+
+    Precedence mirrors :func:`_resolve_promote_policy`
+    (env ``GEODE_AUDIT_REPLICATE`` / ``AUTORESEARCH_REPLICATE`` → CLI
+    ``--replicate`` → config ``replicate`` → :data:`AUDIT_REPLICATE` (``1``)).
+
+    Graceful contract per tier: a non-integer / <1 env value is warned + skipped
+    to the next tier (a stray export never crashes or silently changes cost). The
+    config tier is Pydantic-validated (``ge=1, le=20``) at load time, so the
+    ``int()`` guard below only defends the test-stub ``SimpleNamespace`` path. The
+    final value is floored at 1 (``M`` is always a positive count)."""
+    for env_name in ("GEODE_AUDIT_REPLICATE", "AUTORESEARCH_REPLICATE"):
+        raw = os.environ.get(env_name, "").strip()
+        if raw:
+            try:
+                parsed = int(raw)
+            except ValueError:
+                log.warning("audit replicate env %s=%r is not an integer; ignoring", env_name, raw)
+                continue
+            if parsed >= 1:
+                return parsed
+            log.warning("audit replicate env %s=%r is < 1; ignoring", env_name, raw)
+    if cli_override is not None:
+        return max(1, int(cli_override))
+    configured = getattr(_get_autoresearch_config(), "replicate", None)
+    if configured is not None:
+        try:
+            return max(1, int(configured))
+        except (TypeError, ValueError):
+            log.warning(
+                "replicate config value %r is not an integer; using default %d",
+                configured,
+                AUDIT_REPLICATE,
+            )
+    return AUDIT_REPLICATE
+
+
+def _resolve_target_effect_size(cli_override: float | None = None) -> float:
+    """Return the fitness-scale effect size δ the power analysis targets (E4).
+
+    Precedence mirrors :func:`_resolve_audit_replicate`
+    (env ``GEODE_TARGET_EFFECT_SIZE`` / ``AUTORESEARCH_TARGET_EFFECT_SIZE`` → CLI
+    ``--target-effect-size`` → config ``target_effect_size`` → :data:`TARGET_EFFECT_SIZE`).
+
+    Graceful contract: a non-numeric / non-positive env value is warned + skipped
+    to the next tier; the config tier is Pydantic-validated (``gt=0, le=1``) at load
+    time so the ``float()`` guard only defends the test-stub path. A non-positive
+    final value falls back to the default (δ ≤ 0 is ill-posed for the power
+    formula)."""
+    for env_name in ("GEODE_TARGET_EFFECT_SIZE", "AUTORESEARCH_TARGET_EFFECT_SIZE"):
+        raw = os.environ.get(env_name, "").strip()
+        if raw:
+            try:
+                parsed = float(raw)
+            except ValueError:
+                log.warning("target effect size env %s=%r is not a float; ignoring", env_name, raw)
+                continue
+            if parsed > 0.0:
+                return parsed
+            log.warning("target effect size env %s=%r is not positive; ignoring", env_name, raw)
+    if cli_override is not None and float(cli_override) > 0.0:
+        return float(cli_override)
+    configured = getattr(_get_autoresearch_config(), "target_effect_size", None)
+    if configured is not None:
+        try:
+            value = float(configured)
+        except (TypeError, ValueError):
+            log.warning(
+                "target_effect_size config value %r is not a float; using default %s",
+                configured,
+                TARGET_EFFECT_SIZE,
+            )
+        else:
+            if value > 0.0:
+                return value
+    return TARGET_EFFECT_SIZE
 
 
 def _random_accept_draw(seed: int, cycle_index: int) -> bool:
@@ -2448,6 +2545,7 @@ def _append_baseline_registry_row(
     held_out_bench_id: str | None = None,
     promote_policy: str = "gate",
     promote_policy_seed: int = 0,
+    power_stats: PowerRecordFields | None = None,
 ) -> None:
     """Append one ``kind="baseline"`` registry row to ``baseline_archive.jsonl``.
 
@@ -2600,6 +2698,26 @@ def _append_baseline_registry_row(
     if held_out_fitness is not None and held_out_bench_id is not None:
         row["held_out_fitness"] = float(held_out_fitness)
         row["held_out_bench_id"] = str(held_out_bench_id)
+    # E4 (2026-05-30) — fitness-noise decomposition + the explicit gain-evidence
+    # verdict on the promoted baseline row. Each field is recorded only when present
+    # (M=1 leaves within ``None``; pre-E4 promotes pass ``power_stats=None`` → the
+    # whole block is omitted) so the row shape is unchanged for the legacy path —
+    # additive, never a new required key.
+    if power_stats is not None:
+        if power_stats.within_mutation_stderr is not None:
+            row["within_mutation_stderr"] = float(power_stats.within_mutation_stderr)
+        if power_stats.between_seed_stderr is not None:
+            row["between_seed_stderr"] = float(power_stats.between_seed_stderr)
+        if power_stats.gain_ci_excludes_zero is not None:
+            row["gain_ci_low"] = (
+                float(power_stats.gain_ci_low) if power_stats.gain_ci_low is not None else None
+            )
+            row["gain_ci_high"] = (
+                float(power_stats.gain_ci_high) if power_stats.gain_ci_high is not None else None
+            )
+            row["gain_ci_excludes_zero"] = bool(power_stats.gain_ci_excludes_zero)
+            if power_stats.gain_verdict is not None:
+                row["gain_verdict"] = str(power_stats.gain_verdict)
     archive_path = _baseline_archive_path()
     archive_path.parent.mkdir(parents=True, exist_ok=True)
     with archive_path.open("a", encoding="utf-8") as fh:
@@ -2648,6 +2766,12 @@ def _write_baseline(
     # spec. ``"gate"`` (default) reproduces today's selection-arm row + epoch.
     promote_policy: str = "gate",
     promote_policy_seed: int = 0,
+    # E4 (2026-05-30) — the fitness-noise DECOMPOSITION (persisted on the promoted
+    # baseline's ``raw`` namespace alongside ``fitness_stderr``) + the explicit
+    # gain-evidence verdict (on the registry row), bundled into ONE optional
+    # parameter. ``None`` (default) → the keys are omitted (backward-compatible: an
+    # M=1 / pre-E4 baseline keeps its exact shape).
+    power_stats: PowerRecordFields | None = None,
 ) -> None:
     """Persist current audit's aggregates as the new baseline.
 
@@ -2699,6 +2823,13 @@ def _write_baseline(
     # stderr so the next cycle's promote gate reads it as the prior σ.
     if fitness_stderr is not None:
         raw_payload["fitness_stderr"] = float(fitness_stderr)
+    # E4 (2026-05-30) — the within-mutation / between-seed decomposition (both on
+    # the 0-1 fitness scale). Recorded only when present (M=1 leaves within ``None``
+    # → omitted) so the ``raw`` namespace stays backward-compatible.
+    if power_stats is not None and power_stats.within_mutation_stderr is not None:
+        raw_payload["within_mutation_stderr"] = float(power_stats.within_mutation_stderr)
+    if power_stats is not None and power_stats.between_seed_stderr is not None:
+        raw_payload["between_seed_stderr"] = float(power_stats.between_seed_stderr)
     # PR-SIL-5THEME C2 — bench provenance slots. dim 측 PR-1 패턴과 symmetric.
     if bench_stderr:
         raw_payload["bench_stderr"] = {k: float(v) for k, v in bench_stderr.items()}
@@ -2770,6 +2901,8 @@ def _write_baseline(
         # E3 (2026-05-30) — control-arm tag → registry row + epoch spec.
         promote_policy=promote_policy,
         promote_policy_seed=promote_policy_seed,
+        # E4 (2026-05-30) — fitness-noise decomposition + gain-evidence verdict.
+        power_stats=power_stats,
     )
     # Emit BASELINE_PROMOTED after the write succeeds. ``reason``
     # quotes the gate verdict text from ``_should_promote`` (or the
@@ -3462,6 +3595,30 @@ def main() -> int:
         "is Random(seed + cycle_index)); RECORDED on the held-out + baseline rows "
         "so the random campaign is reproducible. Ignored for gate / never.",
     )
+    # E4 (2026-05-30) — statistical power knobs. ``default=None`` so omitting them
+    # falls through to env / config in the resolvers (an explicit value overrides
+    # config the same way the other arms do).
+    parser.add_argument(
+        "--replicate",
+        type=int,
+        default=None,
+        metavar="M",
+        help="run the audit M times per mutation/cycle to estimate WITHIN-mutation "
+        "variance (provider non-determinism) SEPARATELY from BETWEEN-seed variance. "
+        "M=1 (default) runs once with zero extra cost (within-variance unestimated, "
+        "as today); M>1 runs M full audits (cost scales linearly). env "
+        "GEODE_AUDIT_REPLICATE / AUTORESEARCH_REPLICATE / config replicate override.",
+    )
+    parser.add_argument(
+        "--target-effect-size",
+        type=float,
+        default=None,
+        metavar="DELTA",
+        help="the fitness-scale effect size delta the per-campaign power analysis "
+        "targets (default ~0.02, just above the promote gate's noise floor). Feeds "
+        "the required N_seed x M_replicate line. env GEODE_TARGET_EFFECT_SIZE / "
+        "AUTORESEARCH_TARGET_EFFECT_SIZE / config target_effect_size override.",
+    )
     args = parser.parse_args()
 
     session_id = _resolve_session_id()
@@ -3481,6 +3638,11 @@ def main() -> int:
     promote_policy = _resolve_promote_policy(args.promote_policy)
     promote_policy_seed = _resolve_promote_policy_seed(args.promote_policy_seed)
     _cycle_index = _gen_cycle_index(gen_tag)
+    # E4 (2026-05-30) — statistical power knobs. ``replicate`` (M) gates the
+    # per-mutation replicate loop below; ``target_effect_size`` (delta) feeds the
+    # per-campaign power line. Both resolved up-front (env → CLI → config → default).
+    audit_replicate = _resolve_audit_replicate(args.replicate)
+    target_effect_size = _resolve_target_effect_size(args.target_effect_size)
 
     cfg = _get_autoresearch_config()
     # PR-SIL-MULTIOBJ A3 (2026-05-29) — optional cache hygiene before a
@@ -3518,20 +3680,68 @@ def main() -> int:
         },
     )
 
+    # PR-11 P3.1 — anchor_confidence_mode is an env-gate (set by runner.py); read
+    # it up-front so the per-replicate raw-fitness (E4 within-mutation decomposition)
+    # is computed under the SAME fitness-formula path as the gate's ``current_raw``.
+    _anchor_mode_env = os.environ.get("GEODE_SIL_ANCHOR_CONFIDENCE_MODE", "").strip()
+    _anchor_confidence_mode = _anchor_mode_env == "1"
+    # E4 (2026-05-30) — per-mutation REPLICATE loop. Run the audit ``M`` times
+    # (M=1 default → exactly ONE call, no loop overhead / cost change — the
+    # representative tuple below is that single call's result, byte-identical to
+    # the pre-E4 path). M>1 runs M full audits so the WITHIN-mutation fitness
+    # variance (provider non-determinism, same mutation + seeds) can be estimated
+    # SEPARATELY from the BETWEEN-seed variance (the per-audit bootstrap stderr).
+    # The LAST replicate is the representative measurement that drives the existing
+    # promote / record / attribution flow (a single deterministic choice — not an
+    # average — so the downstream dims/stderr/per_sample stay a real audit's data).
+    _replicate_raw_fitnesses: list[float] = []
+    _replicate_between_seed_stderrs: list[float | None] = []
+    dim_means: dict[str, float] = {}
+    dim_stderr: dict[str, float] = {}
+    audit_seconds = 0.0
+    total_seconds = 0.0
+    sample_count: dict[str, int] = {}
+    measurement_modality: dict[str, str] = {}
+    per_sample: list[dict[str, float]] = []
     try:
-        (
-            dim_means,
-            dim_stderr,
-            audit_seconds,
-            total_seconds,
-            sample_count,
-            measurement_modality,
-            per_sample,
-        ) = run_audit(
-            dry_run=args.dry_run,
-            session_id=session_id,
-            gen_tag=gen_tag,
-        )
+        for _replicate_idx in range(audit_replicate):
+            (
+                dim_means,
+                dim_stderr,
+                audit_seconds,
+                total_seconds,
+                sample_count,
+                measurement_modality,
+                per_sample,
+            ) = run_audit(
+                dry_run=args.dry_run,
+                session_id=session_id,
+                gen_tag=gen_tag,
+            )
+            # Per-replicate RAW fitness on the same scale the gate's ``current_raw``
+            # uses (``baseline_means=None`` plain weighted sum, modality + anchor
+            # threaded, bench OMITTED — identical to the gain/σ math's scope) so the
+            # spread across replicates measures the WHOLE-audit fitness wobble.
+            _rep_anchor = {d: dim_means[d] for d in ANCHOR_DIMS if d in dim_means}
+            _replicate_raw_fitnesses.append(
+                compute_fitness(
+                    dim_means,
+                    dim_stderr,
+                    measurement_modality=measurement_modality or None,
+                    anchor_means=_rep_anchor or None,
+                    anchor_confidence_mode=_anchor_confidence_mode,
+                    admire_means=None,
+                )
+            )
+            # Per-replicate BETWEEN-seed stderr — the bootstrap over THIS audit's N
+            # sample rows (seed heterogeneity). ``None`` for <2 rows (dry-run path).
+            _replicate_between_seed_stderrs.append(
+                _fitness_stderr_bootstrap(
+                    per_sample,
+                    measurement_modality=measurement_modality or None,
+                    anchor_confidence_mode=_anchor_confidence_mode,
+                )
+            )
     except Exception as exc:
         # P0b — audit_failed marker for stream consumers. The specific
         # cause (subprocess_timeout / RuntimeError) has its own event
@@ -3606,11 +3816,9 @@ def main() -> int:
     # PR-SIL-5THEME C3 (2026-05-23) — measurement_modality 를
     # compute_fitness 에 forward 해서 analytics dim 의 가중치를 0.5× 로 scale.
     # 이전엔 modality 가 schema 에 emit 됐어도 fitness 계산에서 0 영향이었다.
-    # PR-11 P3.1 (2026-05-25) — anchor_means 추출 + mode env-gate. GEODE config
-    # 의 ``anchor_confidence_mode`` 가 runner.py 에서 env 로 forward (PR-11 동시
-    # 수정). 본 caller 는 dim_means 의 anchor 3 subset 을 빌드해서 forward.
-    _anchor_mode_env = os.environ.get("GEODE_SIL_ANCHOR_CONFIDENCE_MODE", "").strip()
-    _anchor_confidence_mode = _anchor_mode_env == "1"
+    # PR-11 P3.1 (2026-05-25) — anchor_means 추출. ``_anchor_confidence_mode`` 는
+    # E4 의 replicate loop 직전에서 이미 한 번 resolve 됨 (env-gate, runner.py 가
+    # forward). 본 caller 는 dim_means 의 anchor 3 subset 을 빌드해서 forward.
     _anchor_means_current = {d: dim_means[d] for d in ANCHOR_DIMS if d in dim_means}
     # PR-AR-L4b (2026-05-26, ux-removed 2026-05-30) — admire_means caller
     # wiring. admire_means is the Scope A handoff slot — reserved as None
@@ -3639,6 +3847,127 @@ def main() -> int:
         per_sample,
         measurement_modality=measurement_modality or None,
         anchor_confidence_mode=_anchor_confidence_mode,
+    )
+    # E4 (2026-05-30) — STATISTICAL POWER. Three operator deliverables, computed
+    # here so they ride the existing record / log sinks below:
+    #
+    #   (1) variance decomposition — split the observed fitness noise into the
+    #       WITHIN-mutation component (provider non-determinism, the spread of the
+    #       per-replicate raw fitnesses) and the BETWEEN-seed component (seed
+    #       heterogeneity, the per-audit bootstrap stderr). M=1 leaves within
+    #       UNESTIMATED (None) and combined == between (today's single-σ path).
+    #   (2) explicit "ci excludes 0" gain verdict — an HONEST NULL ("no evidence
+    #       yet") layered ON TOP of the promote gate, reconciled with its margin.
+    #   (3) per-campaign power line — required N_seed × M_replicate to detect δ.
+    from core.self_improving_loop.statistical_power import (
+        PowerRecordFields,
+        decompose_variance,
+        format_power_line,
+        gain_ci_excludes_zero,
+        required_samples,
+    )
+
+    variance_decomposition = decompose_variance(
+        _replicate_raw_fitnesses,
+        _replicate_between_seed_stderrs,
+    )
+    # The "current" σ for the gain CI is the combined within+between stderr when M>1
+    # (so the CI accounts for provider jitter too), else the per-audit bootstrap
+    # (today's quantity) — keeps the M=1 verdict identical to the gate's margin math.
+    _current_sigma_for_ci = (
+        variance_decomposition.combined_stderr
+        if audit_replicate > 1 and variance_decomposition.combined_stderr is not None
+        else current_fitness_stderr
+    )
+    # current_raw on the gate's scale (mean over replicates; == the single audit
+    # when M=1). prior_raw is the baseline's 0-1 compute_fitness (the gate's
+    # ``prior_raw``); ``None`` when there is no baseline.
+    _current_raw_for_gain = (
+        statistics.fmean(_replicate_raw_fitnesses) if _replicate_raw_fitnesses else float(fitness)
+    )
+    _baseline_raw_for_gain = _baseline_raw_fitness(
+        baseline_means,
+        baseline_stderr,
+        baseline_measurement_modality=_load_baseline_measurement_modality()
+        if not args.no_baseline
+        else {},
+        baseline_admire_means=_baseline_admire_means,
+        anchor_confidence_mode=_anchor_confidence_mode,
+    )
+    _baseline_fitness_stderr_for_ci = (
+        _load_baseline_fitness_stderr() if not args.no_baseline else None
+    )
+    # gain σ = √(σ_current² + σ_baseline²) — the SAME quantity the promote gate's
+    # margin scales (so DEFAULT_GAIN_CI_Z=1.0 reconciles the verdict with the gate).
+    _sigma_current_sq = (_current_sigma_for_ci or 0.0) ** 2
+    _sigma_baseline_sq = (_baseline_fitness_stderr_for_ci or 0.0) ** 2
+    _gain_stderr = (_sigma_current_sq + _sigma_baseline_sq) ** 0.5
+    # HONEST NULL on a bootstrap cycle: with NO baseline there is nothing to "gain
+    # over", so a gain cannot be CLAIMED regardless of how high the current fitness
+    # is. The verdict is forced to "no evidence yet" (gain=0 → ci straddles 0) — the
+    # bootstrap promote is the gate's own concern (a fresh-start admit), NOT a
+    # statistically-supported improvement. (Reporting "significant" here — as a naive
+    # ``gain = current_fitness`` would — is exactly the false claim E4 must avoid.)
+    if _baseline_raw_for_gain is None:
+        gain_evidence = gain_ci_excludes_zero(0.0, 0.0)
+    else:
+        gain_evidence = gain_ci_excludes_zero(
+            _current_raw_for_gain - _baseline_raw_for_gain, _gain_stderr
+        )
+    # Per-campaign power requirement: required N_seed × M to detect δ at 80% power.
+    power_requirement = required_samples(
+        variance_decomposition.combined_stderr,
+        target_effect_size=target_effect_size,
+        replicate=audit_replicate,
+    )
+    _power_line = format_power_line(power_requirement)
+    log.info("E4 %s", _power_line)
+    log.info(
+        "E4 gain evidence: gain=%+.4f ci=[%+.4f, %+.4f] excludes_zero=%s verdict=%r",
+        gain_evidence.gain,
+        gain_evidence.ci_low,
+        gain_evidence.ci_high,
+        gain_evidence.gain_ci_excludes_zero,
+        gain_evidence.verdict,
+    )
+    _emit_journal(
+        session_id,
+        gen_tag,
+        "statistical_power",
+        payload={
+            "replicate": audit_replicate,
+            "within_mutation_stderr": variance_decomposition.within_mutation_stderr,
+            "between_seed_stderr": variance_decomposition.between_seed_stderr,
+            "combined_stderr": variance_decomposition.combined_stderr,
+            "gain": round(gain_evidence.gain, 6),
+            "gain_stderr": round(gain_evidence.gain_stderr, 6),
+            "gain_ci_low": round(gain_evidence.ci_low, 6),
+            "gain_ci_high": round(gain_evidence.ci_high, 6),
+            "gain_ci_excludes_zero": gain_evidence.gain_ci_excludes_zero,
+            "gain_verdict": gain_evidence.verdict,
+            "target_effect_size": target_effect_size,
+            "required_n_seed": power_requirement.n_seed,
+            "power_line": _power_line,
+        },
+    )
+    # E4 — bundle the new fields for the two record sinks. Both shapes are
+    # None-omitting + additive so M=1 / legacy readers are backward-compatible (a
+    # missing key never breaks a reader). ``_e4_power_stats`` (a PowerRecordFields)
+    # → the on-promote baseline registry row (single arg, under the max-args
+    # ratchet); ``_e4_record_fields`` (kwargs dict) → the per-cycle attribution row.
+    _e4_power_stats = PowerRecordFields.from_evidence(variance_decomposition, gain_evidence)
+    _e4_record_fields: dict[str, Any] = {
+        "within_mutation_stderr": _e4_power_stats.within_mutation_stderr,
+        "between_seed_stderr": _e4_power_stats.between_seed_stderr,
+        "gain_ci_low": _e4_power_stats.gain_ci_low,
+        "gain_ci_high": _e4_power_stats.gain_ci_high,
+        "gain_ci_excludes_zero": _e4_power_stats.gain_ci_excludes_zero,
+        "gain_verdict": _e4_power_stats.gain_verdict,
+    }
+    print(f"e4_power_line:            {_power_line}")
+    print(
+        f"e4_gain_verdict:          {gain_evidence.verdict} "
+        f"(ci excludes 0: {gain_evidence.gain_ci_excludes_zero})"
     )
     # E2 (2026-05-30) — per-cycle fixed-ruler measurement. The held-out bench is
     # a VERSION-FROZEN seed set DISJOINT from the co-evolving ``seed_select`` pool
@@ -3804,6 +4133,11 @@ def main() -> int:
         # The seed is recorded so the random arm's promoted baseline is traceable.
         "promote_policy": promote_policy,
         "promote_policy_seed": promote_policy_seed,
+        # E4 (2026-05-30) — fitness-noise decomposition + gain-evidence verdict on
+        # the promoted baseline, bundled into one PowerRecordFields arg. All
+        # None-omitting (M=1 leaves within unestimated; pre-E4 baselines omit the
+        # block) so the row shape stays backward-compatible.
+        "power_stats": _e4_power_stats,
     }
     if args.dry_run:
         promoted_line = "false (dry-run)"
@@ -4056,6 +4390,11 @@ def main() -> int:
                 # ledger (0 for gate / never).
                 promote_policy=promote_policy,
                 promote_policy_seed=promote_policy_seed,
+                # E4 (2026-05-30) — variance decomposition + the explicit "ci
+                # excludes 0" gain evidence on the per-cycle attribution row. All
+                # fields are None-omitting (M=1 leaves within unestimated; legacy
+                # rows omit the whole block) so the row stays backward-compatible.
+                **_e4_record_fields,
             )
         except Exception:  # pragma: no cover — defensive
             log.warning(
