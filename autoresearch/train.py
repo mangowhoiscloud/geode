@@ -169,6 +169,19 @@ the curve is comparable across generations. Resolved by
 :func:`_resolve_held_out_bench` (env override → config → this constant)."""
 DIM_SET_NAME = "subset"
 MAX_TURNS = 10
+PROMOTE_POLICY = "gate"
+"""E3 (2026-05-30) — default promote policy: ``"gate"`` (today's behaviour, the
+selection arm). The control arms (``"random"`` random-accept, ``"never"``
+no-mutation floor) enable a matched 3-arm held-out comparison so a fitness gain
+can be attributed to SELECTION rather than drift / judge-noise. Resolved by
+:func:`_resolve_promote_policy` (env override → CLI → config → this constant)."""
+PROMOTE_POLICY_SEED = 0
+"""E3 (2026-05-30) — default RNG seed for ``promote_policy="random"``. The
+per-cycle promote draw is ``random.Random(seed + cycle_index)``, so the random
+campaign is reproducible (no bare nondeterminism) and the seed is RECORDED on the
+held-out + baseline rows. Ignored for the ``gate`` / ``never`` arms. Resolved by
+:func:`_resolve_promote_policy_seed`."""
+_VALID_PROMOTE_POLICIES = frozenset({"gate", "random", "never"})
 WRAPPER_OVERRIDE_HOOK_READY = _CORE_WRAPPER_OVERRIDE_READY
 
 
@@ -209,6 +222,8 @@ def _get_autoresearch_config() -> Any:
             seed_limit=SEED_LIMIT,
             seed_select=SEED_SELECT,
             held_out_bench=HELD_OUT_BENCH,
+            promote_policy=PROMOTE_POLICY,
+            promote_policy_seed=PROMOTE_POLICY_SEED,
             dim_set=DIM_SET_NAME,
             max_turns=MAX_TURNS,
         )
@@ -302,6 +317,110 @@ def _resolve_held_out_bench() -> str | None:
         return None
     stripped = str(configured).strip()
     return stripped or None
+
+
+def _resolve_promote_policy(cli_override: str | None = None) -> str:
+    """Return the control-arm promote policy (``gate`` / ``random`` / ``never``).
+
+    E3 (2026-05-30). Precedence (mirrors ``_resolve_held_out_bench``, with the
+    CLI arg sitting between env and config):
+
+    1. ``GEODE_PROMOTE_POLICY`` env var (per-run override).
+    2. ``AUTORESEARCH_PROMOTE_POLICY`` env var (the ``AUTORESEARCH_*`` alias).
+    3. ``cli_override`` — the ``--promote-policy`` argv value (``None`` when the
+       operator did not pass it, so it falls through to config).
+    4. ``[self_improving_loop.autoresearch] promote_policy`` from ``config.toml``.
+    5. :data:`PROMOTE_POLICY` module constant (``"gate"``).
+
+    The resolved value is validated against :data:`_VALID_PROMOTE_POLICIES`; an
+    unknown value raises ``ValueError`` rather than silently falling back, so a
+    typo'd arm (e.g. ``--promote-policy gae``) fails loudly instead of running
+    the selection arm under the wrong label and contaminating the comparison.
+    """
+    for env_name in ("GEODE_PROMOTE_POLICY", "AUTORESEARCH_PROMOTE_POLICY"):
+        override = os.environ.get(env_name, "").strip()
+        if override:
+            return _validate_promote_policy(override)
+    if cli_override is not None and cli_override.strip():
+        return _validate_promote_policy(cli_override.strip())
+    configured = getattr(_get_autoresearch_config(), "promote_policy", None)
+    if configured is not None and str(configured).strip():
+        return _validate_promote_policy(str(configured).strip())
+    return PROMOTE_POLICY
+
+
+def _validate_promote_policy(value: str) -> str:
+    if value not in _VALID_PROMOTE_POLICIES:
+        raise ValueError(
+            f"promote_policy {value!r} not in {sorted(_VALID_PROMOTE_POLICIES)} — "
+            "the 3-arm control comparison expects one of gate / random / never"
+        )
+    return value
+
+
+def _resolve_promote_policy_seed(cli_override: int | None = None) -> int:
+    """Return the explicit RNG seed for the ``random`` promote arm.
+
+    E3 (2026-05-30). Precedence mirrors :func:`_resolve_promote_policy`
+    (env ``GEODE_PROMOTE_POLICY_SEED`` / ``AUTORESEARCH_PROMOTE_POLICY_SEED`` →
+    ``--promote-policy-seed`` → config → :data:`PROMOTE_POLICY_SEED`). The seed is
+    RECORDED on the held-out + baseline rows so the random campaign is
+    reproducible from the ledger.
+
+    Contract per tier:
+    - **env** — the raw string is parsed HERE, so a non-integer env value is
+      caught + warned + skipped to the next tier (a stray export never crashes
+      the cycle; the recorded seed then truthfully reflects the value used).
+    - **config** — ``AutoresearchConfig.promote_policy_seed`` is typed ``int`` and
+      the loader (``_get_autoresearch_config`` → ``load_self_improving_loop_config``
+      → Pydantic ``model_validate``) validates it BEFORE this resolver runs. By the
+      project's deliberate loader contract (see ``_get_autoresearch_config`` —
+      ``ValidationError`` bubbles so the operator sees the actionable Pydantic
+      message, same as ``seed_limit`` / ``budget_minutes``), a malformed TOML seed
+      like ``promote_policy_seed = "x"`` fails loudly at load time, NOT here. The
+      ``int(configured)`` guard below therefore only defends the test-stub
+      ``SimpleNamespace`` path (and any future non-loader caller) — it is NOT a
+      silent override of the loader's loud-validation contract for the real
+      config."""
+    for env_name in ("GEODE_PROMOTE_POLICY_SEED", "AUTORESEARCH_PROMOTE_POLICY_SEED"):
+        raw = os.environ.get(env_name, "").strip()
+        if raw:
+            try:
+                return int(raw)
+            except ValueError:
+                log.warning(
+                    "promote_policy_seed env %s=%r is not an integer; ignoring",
+                    env_name,
+                    raw,
+                )
+    if cli_override is not None:
+        return int(cli_override)
+    configured = getattr(_get_autoresearch_config(), "promote_policy_seed", None)
+    if configured is not None:
+        try:
+            return int(configured)
+        except (TypeError, ValueError):
+            log.warning(
+                "promote_policy_seed config value %r is not an integer; using default %d",
+                configured,
+                PROMOTE_POLICY_SEED,
+            )
+    return PROMOTE_POLICY_SEED
+
+
+def _random_accept_draw(seed: int, cycle_index: int) -> bool:
+    """Deterministic per-cycle coin-flip for ``promote_policy="random"``.
+
+    The draw is ``random.Random(seed + cycle_index).random() < 0.5`` — a SEEDED
+    RNG (NOT bare ``random.random()``), so the entire random campaign is
+    reproducible: the same ``(seed, cycle_index)`` always yields the same promote
+    decision, and a different seed yields an independent campaign. ``cycle_index``
+    is the campaign's per-cycle generation index so successive cycles draw
+    independent (but reproducible) flips rather than all sharing one draw.
+    """
+    import random as _random
+
+    return _random.Random(seed + cycle_index).random() < 0.5
 
 
 # ---------------------------------------------------------------------------
@@ -1966,6 +2085,26 @@ def _resolve_gen_tag(commit: str) -> str:
     return f"autoresearch-{commit}-gen{counter}"
 
 
+def _gen_cycle_index(gen_tag: str) -> int:
+    """Extract the per-cycle index for the ``random`` promote arm's draw.
+
+    E3 (2026-05-30). The random arm draws ``Random(seed + cycle_index)`` per
+    cycle, so it needs a stable monotonic index. The gen_tag carries a ``-genN``
+    suffix (:func:`_resolve_gen_tag`) which IS the campaign's monotonic cycle
+    counter, so it is reused as the index. A gen_tag without the suffix (an
+    operator-pinned ``AUTORESEARCH_GEN_TAG``) falls back to ``0`` — the draw is
+    still deterministic from the seed, just not per-cycle independent (the
+    operator opted out of the auto counter, so the cycle structure is theirs to
+    own). Always returns a non-negative int (graceful contract — never raises)."""
+    m = _GEN_SUFFIX_RE.search(gen_tag)
+    if m is None:
+        return 0
+    try:
+        return int(m.group(1))
+    except ValueError:  # pragma: no cover — regex restricts to \d+
+        return 0
+
+
 def _append_session_index(
     *,
     session_id: str,
@@ -2307,6 +2446,8 @@ def _append_baseline_registry_row(
     seed_select: str | None = None,
     held_out_fitness: float | None = None,
     held_out_bench_id: str | None = None,
+    promote_policy: str = "gate",
+    promote_policy_seed: int = 0,
 ) -> None:
     """Append one ``kind="baseline"`` registry row to ``baseline_archive.jsonl``.
 
@@ -2342,6 +2483,14 @@ def _append_baseline_registry_row(
     fingerprint). Both are **omitted** from the row when ``None`` (no held-out
     bench configured) so existing readers see the same shape — the held-out
     fields are purely additive and never a new required key.
+
+    ``promote_policy`` / ``promote_policy_seed`` (E3, 2026-05-30) — the control
+    arm (``gate`` / ``random`` / ``never``) this baseline was produced under, and
+    the RNG seed RECORDED for the ``random`` arm (``0`` for gate / never). They
+    are recorded BOTH as top-level row fields (so the 3-arm comparison can split
+    rows directly) AND inside the hashed ``baseline_spec`` (so the three arms land
+    in distinct epochs — gate ≠ random ≠ never production logic, correctly not
+    averaged). ``gate`` (default) reproduces today's selection-arm row + epoch.
     """
     if margin_rule not in _VALID_MARGIN_RULES:
         raise ValueError(
@@ -2382,6 +2531,10 @@ def _append_baseline_registry_row(
         bench=bench_means is not None,
         role_provenance=role_provenance,
         seed_pool_id=seed_pool_content_hash(_seed_select),
+        # E3 (2026-05-30) — control-arm policy in the hashed spec: gate / random /
+        # never produce baselines under different production logic, so they hash
+        # to DIFFERENT epochs (correctly NOT averaged into one comparison).
+        promote_policy=promote_policy,
     )
     epoch_hash = compute_epoch_hash(baseline_spec)
     _label_map_path = _baseline_archive_path().parent / "baseline_epochs.json"
@@ -2410,6 +2563,13 @@ def _append_baseline_registry_row(
         "fitness_stderr": (float(fitness_stderr) if fitness_stderr is not None else None),
         "margin_rule": margin_rule,
         "bench": bool(bench_means),
+        # E3 (2026-05-30) — control-arm tag (gate / random / never) as a top-level
+        # row field (in addition to being inside the hashed ``baseline_spec``) so
+        # the 3-arm comparison can split rows without re-parsing the spec.
+        # ``promote_policy_seed`` is recorded for every arm (0 for gate / never) so
+        # the random arm's promoted baseline is reproducible from the ledger.
+        "promote_policy": str(promote_policy),
+        "promote_policy_seed": int(promote_policy_seed),
         "seed_select": _seed_select,
         "seed_count": int(seed_count),
         # PR-BASELINE-EPOCH — content-addressed partition. epoch_hash is the
@@ -2484,6 +2644,10 @@ def _write_baseline(
     # these via ``score_held_out_bench`` when ``_resolve_held_out_bench()`` is set.
     held_out_fitness: float | None = None,
     held_out_bench_id: str | None = None,
+    # E3 (2026-05-30) — control-arm tag forwarded to the registry row + the epoch
+    # spec. ``"gate"`` (default) reproduces today's selection-arm row + epoch.
+    promote_policy: str = "gate",
+    promote_policy_seed: int = 0,
 ) -> None:
     """Persist current audit's aggregates as the new baseline.
 
@@ -2603,6 +2767,9 @@ def _write_baseline(
         # E2 (2026-05-30) — fixed-ruler evidence (omitted from the row when None).
         held_out_fitness=held_out_fitness,
         held_out_bench_id=held_out_bench_id,
+        # E3 (2026-05-30) — control-arm tag → registry row + epoch spec.
+        promote_policy=promote_policy,
+        promote_policy_seed=promote_policy_seed,
     )
     # Emit BASELINE_PROMOTED after the write succeeds. ``reason``
     # quotes the gate verdict text from ``_should_promote`` (or the
@@ -3272,6 +3439,29 @@ def main() -> int:
         help="never write baseline.json, even when the auto-rule passes "
         "(observe-only mode for debugging)",
     )
+    # E3 (2026-05-30) — control-arm promote policy for a matched 3-arm held-out
+    # comparison. ``default=None`` (NOT "gate") so that omitting the flag falls
+    # through to env / config in ``_resolve_promote_policy``; an explicit
+    # ``--promote-policy gate`` overrides config the same way the other arms do.
+    parser.add_argument(
+        "--promote-policy",
+        choices=sorted(_VALID_PROMOTE_POLICIES),
+        default=None,
+        help="control arm for the matched 3-arm held-out comparison: 'gate' "
+        "(today's selection gate), 'random' (random-accept control — mutation "
+        "applied + audited as normal but promote is a SEEDED coin-flip), or "
+        "'never' (no-mutation floor — baseline frozen, pure drift / judge-noise "
+        "curve). env GEODE_PROMOTE_POLICY / config promote_policy override; "
+        "default resolves to 'gate'.",
+    )
+    parser.add_argument(
+        "--promote-policy-seed",
+        type=int,
+        default=None,
+        help="explicit RNG seed for --promote-policy random (the per-cycle draw "
+        "is Random(seed + cycle_index)); RECORDED on the held-out + baseline rows "
+        "so the random campaign is reproducible. Ignored for gate / never.",
+    )
     args = parser.parse_args()
 
     session_id = _resolve_session_id()
@@ -3281,6 +3471,16 @@ def main() -> int:
     # gen_tag pair as the eventual sessions.jsonl row.
     commit = os.environ.get("GIT_COMMIT", "HEAD")[:7]
     gen_tag = _resolve_gen_tag(commit)
+
+    # E3 (2026-05-30) — resolve the control-arm promote policy + seed once,
+    # up-front (env → CLI → config → default), so the SAME values tag both the
+    # per-cycle held-out record AND the baseline registry row, and drive the
+    # promote decision below. ``cycle_index`` for the random arm's per-cycle draw
+    # is the gen counter parsed from gen_tag (monotonic within a campaign), so
+    # successive cycles draw independent-but-reproducible coin-flips.
+    promote_policy = _resolve_promote_policy(args.promote_policy)
+    promote_policy_seed = _resolve_promote_policy_seed(args.promote_policy_seed)
+    _cycle_index = _gen_cycle_index(gen_tag)
 
     cfg = _get_autoresearch_config()
     # PR-SIL-MULTIOBJ A3 (2026-05-29) — optional cache hygiene before a
@@ -3598,6 +3798,12 @@ def main() -> int:
         # — see ``baseline_epoch.build_baseline_spec``.
         "held_out_fitness": _held_out_fitness,
         "held_out_bench_id": _held_out_bench_id,
+        # E3 (2026-05-30) — control-arm tag on the baseline registry row, so the
+        # three arms' baselines are distinguishable + land in their own epoch
+        # (build_baseline_spec hashes promote_policy → gate ≠ random ≠ never).
+        # The seed is recorded so the random arm's promoted baseline is traceable.
+        "promote_policy": promote_policy,
+        "promote_policy_seed": promote_policy_seed,
     }
     if args.dry_run:
         promoted_line = "false (dry-run)"
@@ -3611,8 +3817,52 @@ def main() -> int:
         # by operator override, not by the auto-promote gate.
         _write_baseline(dim_means, dim_stderr, manual_promote=True, **_baseline_provenance)
         promoted_line = "true (--promote, manual override)"
+    elif promote_policy == "never":
+        # E3 (2026-05-30) — no-mutation floor: NEVER promote (baseline frozen
+        # across the whole campaign). The held-out is still scored every cycle
+        # (above), so the curve shows pure drift / judge-noise — the floor the
+        # gate + random arms must beat. The mutation IS still generated + audited
+        # (the audit above already ran) so the loop structure is identical to the
+        # other arms — we only suppress the PROMOTE. A mutator-driven cycle still
+        # reverts the SoT (same as a gate reject) so the rejected mutation does
+        # not accumulate and the next cycle starts from the frozen baseline.
+        ok, reason = False, "promote_policy=never (no-mutation floor)"
+        _sil_mid_for_revert = os.environ.get("GEODE_SIL_MUTATION_ID", "").strip()
+        if _sil_mid_for_revert:
+            revert_ok, revert_detail = _revert_sot_after_reject(_sil_mid_for_revert)
+            reason = (
+                f"{reason}; SoT reverted ({revert_detail})"
+                if revert_ok
+                else f"{reason}; SoT revert FAILED ({revert_detail})"
+            )
+        promoted_line = f"false ({reason})"
+    elif promote_policy == "random":
+        # E3 (2026-05-30) — random-accept control: the mutation is applied +
+        # audited exactly as the gate arm (the audit above already ran), but the
+        # PROMOTE decision is a SEEDED coin-flip, NOT the fitness gate. The draw
+        # is ``Random(promote_policy_seed + cycle_index)`` so the entire random
+        # campaign is reproducible from the recorded seed (no bare randomness).
+        ok = _random_accept_draw(promote_policy_seed, _cycle_index)
+        reason = (
+            f"promote_policy=random (seed={promote_policy_seed}, "
+            f"cycle={_cycle_index}, draw={'accept' if ok else 'reject'})"
+        )
+        if ok:
+            _write_baseline(dim_means, dim_stderr, **_baseline_provenance)
+        else:
+            # Same revert semantics as a gate reject (mutator-driven only).
+            _sil_mid_for_revert = os.environ.get("GEODE_SIL_MUTATION_ID", "").strip()
+            if _sil_mid_for_revert:
+                revert_ok, revert_detail = _revert_sot_after_reject(_sil_mid_for_revert)
+                reason = (
+                    f"{reason}; SoT reverted ({revert_detail})"
+                    if revert_ok
+                    else f"{reason}; SoT revert FAILED ({revert_detail})"
+                )
+        promoted_line = f"{str(ok).lower()} ({reason})"
     else:
-        # PR-3 of petri-schema-v2 (2026-05-23) — surface the v2
+        # promote_policy == "gate" — the SELECTION arm (today's behaviour,
+        # unchanged). PR-3 of petri-schema-v2 (2026-05-23) — surface the v2
         # ``raw.sample_count`` map to the promotion gate so a baseline
         # measured from N=1 samples on a critical dim requires a wider
         # margin (0.20) before being overwritten. v1 baselines emit no
@@ -3799,6 +4049,13 @@ def main() -> int:
                 # (within-generation ranking only).
                 held_out_fitness=_held_out_fitness,
                 held_out_bench_id=_held_out_bench_id,
+                # E3 (2026-05-30) — control-arm tag on the per-cycle held-out
+                # record so the gate / random / never arms' curves are
+                # distinguishable + comparable on the shared frozen ruler. The
+                # seed is recorded so the random arm is reproducible from the
+                # ledger (0 for gate / never).
+                promote_policy=promote_policy,
+                promote_policy_seed=promote_policy_seed,
             )
         except Exception:  # pragma: no cover — defensive
             log.warning(

@@ -104,6 +104,17 @@ class AttributionRecord(BaseModel):
     cycle when a held-out bench is configured (operator cadence); both fields are
     omitted together when no bench was scored, so legacy / no-bench rows validate
     as ``None`` via these defaults."""
+    promote_policy: str | None = None
+    promote_policy_seed: int | None = None
+    """E3 (2026-05-30) — control-arm tag on the per-cycle held-out record so the
+    three arms' fixed-ruler curves are distinguishable + comparable. ``promote_policy``
+    is ``"gate"`` (selection arm), ``"random"`` (random-accept control), or
+    ``"never"`` (no-mutation floor). ``promote_policy_seed`` is the explicit RNG
+    seed RECORDED for the ``random`` arm (the per-cycle draw is
+    ``Random(seed + cycle_index)``), so the random campaign is reproducible from
+    the ledger; it is recorded for every arm (``0`` for gate / never) so the row
+    is uniform. Legacy rows omit both → ``None`` via these defaults; a curve
+    consumer filters the JSONL stream on ``promote_policy`` to split the arms."""
     audit_run_id: str | None = None
     source: str | None = None
     """PR-AR-L6 (2026-05-26) — distinguishes mutator-driven cycle rows
@@ -253,6 +264,8 @@ def compute_attribution(
     source: str = "mutator",
     held_out_fitness: float | None = None,
     held_out_bench_id: str | None = None,
+    promote_policy: str | None = None,
+    promote_policy_seed: int | None = None,
 ) -> dict[str, Any]:
     """Compute the attribution payload for one applied mutation.
 
@@ -335,6 +348,16 @@ def compute_attribution(
     if held_out_fitness is not None and held_out_bench_id is not None:
         payload["held_out_fitness"] = round(float(held_out_fitness), 6)
         payload["held_out_bench_id"] = str(held_out_bench_id)
+    # E3 (2026-05-30) — control-arm tag so the per-cycle held-out curve can be
+    # split into the gate / random / never arms (the matched 3-arm comparison).
+    # Recorded together when both are supplied (``promote_policy_seed`` is ``0``
+    # for the gate / never arms; the RECORDED seed makes the random arm
+    # reproducible from the ledger). ``None`` → fields omitted (legacy shape).
+    if promote_policy is not None:
+        payload["promote_policy"] = str(promote_policy)
+        payload["promote_policy_seed"] = int(
+            promote_policy_seed if promote_policy_seed is not None else 0
+        )
     if baseline_before is None or baseline_after is None:
         return payload
 
@@ -388,6 +411,8 @@ def write_attribution(
     source: str = "mutator",
     held_out_fitness: float | None = None,
     held_out_bench_id: str | None = None,
+    promote_policy: str | None = None,
+    promote_policy_seed: int | None = None,
 ) -> dict[str, Any]:
     """Compute + append attribution in one call.
 
@@ -417,6 +442,8 @@ def write_attribution(
         source=source,
         held_out_fitness=held_out_fitness,
         held_out_bench_id=held_out_bench_id,
+        promote_policy=promote_policy,
+        promote_policy_seed=promote_policy_seed,
     )
     append_attribution_log(payload, log_path=log_path)
     return payload

@@ -45,9 +45,41 @@ functional change.
 
 ---
 
-## [Unreleased]
+## [0.99.95] - 2026-05-30
 
 ### Added
+- **E3 (2026-05-30) — `--promote-policy {gate|random|never}` control arms for a
+  matched 3-arm held-out comparison.** Enables attributing a fitness gain to
+  SELECTION rather than drift / judge-noise by running each arm as its own full
+  N-cycle campaign on the frozen held-out bench:
+  - `gate` (default) — today's behaviour: the `_should_promote` fitness gate
+    decides (the SELECTION arm). The default path is unchanged in shape.
+  - `random` — random-accept control: the mutation is still applied + audited as
+    normal, but the PROMOTE decision is a SEEDED coin-flip
+    (`random.Random(seed + cycle_index)` in `_random_accept_draw`), NOT the gate.
+    The seed is an explicit arg/config (`--promote-policy-seed`) and is RECORDED
+    on both the held-out + baseline rows, so the random campaign is reproducible.
+  - `never` — no-mutation floor: never promote (baseline frozen across the
+    campaign). The mutation is still generated + audited (loop structure
+    identical to the other arms), only the promote is suppressed; a
+    mutator-driven cycle still reverts the SoT so the floor stays honest. The
+    held-out is scored every cycle → the curve shows pure drift / judge-noise,
+    the floor the other arms must beat.
+
+  Resolved by `autoresearch.train._resolve_promote_policy` /
+  `_resolve_promote_policy_seed` (env `GEODE_PROMOTE_POLICY` /
+  `AUTORESEARCH_PROMOTE_POLICY` → CLI → config → default). `promote_policy` +
+  `promote_policy_seed` are recorded on BOTH the per-cycle held-out attribution
+  row (`mutations.jsonl`) AND the baseline registry row, so the three arms'
+  held-out curves are distinguishable + comparable on the shared frozen ruler.
+  `promote_policy` is also added to the baseline epoch spec
+  (`core.self_improving_loop.baseline_epoch.build_baseline_spec`), bumping
+  `SPEC_SCHEMA_VERSION` `"1"` → `"2"`: gate / random / never hash to DIFFERENT
+  epochs (different production logic, correctly NOT averaged); the held-out bench
+  id is unchanged (the shared ruler does not move). Pinned by
+  `tests/autoresearch/test_promote_policy_control_arms.py` +
+  `tests/test_baseline_epoch.py` (gate vs random vs never distinct epochs, schema
+  2, seeded draw reproducibility).
 - **PR-SEEDGEN-TOKENS (2026-05-30) — per-agent (per-phase) + run-level token
   usage tracking for the seed-generation pipeline.** The LLM `usage` a sub-agent
   already produces (`AgenticResult.usage`, via `TokenTracker.delta_since`) now
