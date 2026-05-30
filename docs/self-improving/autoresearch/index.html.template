@@ -47,6 +47,7 @@
         <li><a href="/geode/self-improving/autoresearch/baseline/">Baseline</a></li>
         <li><a href="/geode/self-improving/autoresearch/mutations/">Mutations</a></li>
         <li><a href="/geode/self-improving/autoresearch/results/">Results</a></li>
+        <li><a href="/geode/self-improving/autoresearch/evidence/">Evidence</a></li>
         <li><a href="/geode/self-improving/autoresearch/policies/">Policies</a></li>
       </ul>
 
@@ -95,7 +96,7 @@
     <p class="page-sub">Each promote appends a <code>kind="baseline"</code> row to <code>baseline_archive.jsonl</code>, partitioned into content-addressed <strong>epochs</strong> (be-NNN) keyed by a hash of the production+measurement spec (margin rule, fitness/margin logic version, the four roles' model+source, rubric, dim set, bench, seed-pool identity). Baselines from different epochs were produced under different logic and are <strong>not comparable</strong> — they are never merged into one table.</p>
 {{ baseline_registry_index }}
 
-    <h2 class="section"><span>Sub-views &middot; 4 autoresearch sub-pages</span></h2>
+    <h2 class="section"><span>Sub-views &middot; 5 autoresearch sub-pages</span></h2>
     <table class="records">
       <thead>
         <tr>

@@ -13,6 +13,7 @@ sibling_pages:
   - self-improving-autoresearch-baseline.md
   - self-improving-autoresearch-mutations.md
   - self-improving-autoresearch-results.md
+  - self-improving-autoresearch-evidence.md
   - self-improving-autoresearch-policies.md
 ---
 
