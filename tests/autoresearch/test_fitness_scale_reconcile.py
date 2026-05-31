@@ -30,6 +30,7 @@ from __future__ import annotations
 
 from autoresearch.train import (
     ANCHOR_DIMS,
+    AUXILIARY_DIMS,
     AXIS_TIERS,
     _baseline_raw_fitness,
     compute_fitness,
@@ -204,3 +205,53 @@ def test_no_baseline_yields_none_fitness_before() -> None:
         )
         is None
     )
+
+
+def test_fitness_after_uses_plain_current_recipe_not_penalized() -> None:
+    """PR-GATE-RECIPE (2026-06-01) — the attribution ``fitness_after`` is the
+    PLAIN current-side ``compute_fitness`` (the gate's ``current_raw`` recipe,
+    no ``baseline_means``), NOT the PENALIZED headline. Pairing a penalized
+    ``fitness_after`` with the PLAIN ``fitness_before`` produced a mixed-scale
+    ``fitness_delta`` that did not reflect the gate's ``current_raw - prior_raw``
+    decision (the bug that made the all-reject campaign read as unpromotable).
+    """
+    base = dict.fromkeys(AXIS_TIERS, 2.0)
+    stderr = dict.fromkeys(AXIS_TIERS, 0.1)
+    cur = dict(base)
+    for dim in AUXILIARY_DIMS:  # auxiliary regress (higher = worse); critical held
+        cur[dim] = 4.0
+    anchor = {dim: cur[dim] for dim in ANCHOR_DIMS if dim in cur} or None
+
+    plain = compute_fitness(
+        cur,
+        stderr,
+        measurement_modality=None,
+        anchor_means=anchor,
+        anchor_confidence_mode=False,
+        admire_means=None,
+    )
+    penalized = compute_fitness(
+        cur,
+        stderr,
+        baseline_means=base,
+        baseline_stderr=stderr,
+        measurement_modality=None,
+        anchor_means=anchor,
+        anchor_confidence_mode=False,
+        admire_means=None,
+    )
+    # The aux-shortfall penalty strictly lowers the penalized headline, so the
+    # two recipes are NOT interchangeable — fitness_after must be the plain one.
+    assert 0.0 < penalized < plain
+    # fitness_before is the plain baseline (= the gate's prior_raw). The honest
+    # gate gain is plain_after − plain_before; the OLD ledger used
+    # penalized_after − plain_before, which understated the gain by the penalty.
+    fb = _baseline_raw_fitness(
+        base,
+        stderr,
+        baseline_measurement_modality=None,
+        baseline_admire_means=None,
+        anchor_confidence_mode=False,
+    )
+    assert fb is not None
+    assert (plain - fb) > (penalized - fb)

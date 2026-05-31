@@ -664,14 +664,18 @@ def aggregate_dim_means(
 
     Each element of ``per_measure_dim_means`` is one gen-0 measure's RAW
     ``dim_means`` (parsed from its ``FITNESS_RESULT:`` stdout line). For every dim
-    that appears in AT LEAST ONE measure, the mean is taken over the measures
-    where the dim is PRESENT (a dim missing from some measures is averaged over
-    the present ones, not treated as zero — keep it simple + correct). The stderr
-    is the sample stderr ``stdev(present_values) / sqrt(n_present)`` when
-    ``n_present >= 2``, else ``0.0`` (a single observation has no measurable
-    band). Returns ``(mean_dims, stderr_dims, present_count_dims)``; the third
-    dict records how many of the K measures contributed to each dim so the caller
-    can log a partial-coverage warning.
+    that appears in AT LEAST ONE measure, the mean is a TRIMMED mean: when ≥ 4
+    measures are present for the dim, the single highest and single lowest are
+    dropped and the middle ``n−2`` are averaged (operator request 2026-06-01 —
+    a Petri dim's per-repeat scores can be bimodal / outlier-prone, so one
+    lucky-high + one lucky-low repeat would otherwise skew both ``prior_raw`` and
+    the noise band). With < 4 present values trimming is not meaningful, so it
+    falls back to the plain mean. The stderr is the sample stderr over the SAME
+    (trimmed or plain) value set, ``stdev / sqrt(n)`` when ``n >= 2`` else ``0.0``.
+    ``present_count`` records the ORIGINAL number of measures that contributed to
+    each dim (NOT the post-trim count) so the caller's partial-coverage warning
+    still compares against ``K``. Returns ``(mean_dims, stderr_dims,
+    present_count_dims)``.
 
     This is the CORE fix: ``baseline.json``'s ``raw.dim_means`` must be a robust
     central estimate across the K identical-scaffold repeats, not the single
@@ -690,9 +694,13 @@ def aggregate_dim_means(
         if not present:  # pragma: no cover — dims came from the measures
             continue
         present_count[dim] = len(present)
-        mean_dims[dim] = statistics.fmean(present)
+        # Trimmed mean: drop the single highest + single lowest repeat when
+        # ≥ 4 are present (operator request 2026-06-01). Below 4, trimming
+        # would leave < 2 points, so fall back to the plain mean.
+        trimmed = sorted(present)[1:-1] if len(present) >= 4 else present
+        mean_dims[dim] = statistics.fmean(trimmed)
         stderr_dims[dim] = (
-            statistics.stdev(present) / (len(present) ** 0.5) if len(present) >= 2 else 0.0
+            statistics.stdev(trimmed) / (len(trimmed) ** 0.5) if len(trimmed) >= 2 else 0.0
         )
     return mean_dims, stderr_dims, present_count
 

@@ -450,6 +450,27 @@ def test_aggregate_dim_means_partial_coverage_averages_present_only() -> None:
     assert stderr_dims["extra"] == 0.0  # single observation → no band
 
 
+def test_aggregate_dim_means_trims_high_low_outlier() -> None:
+    # PR-GATE-RECIPE (2026-06-01) — K=5 ≥ 4 → drop the single highest (20) and
+    # single lowest (0) repeats; average the middle three (4,5,6) → 5.0, NOT the
+    # plain mean 7.0. present_count stays the ORIGINAL 5 (not the post-trim 3) so
+    # the caller's partial-coverage check still compares against K.
+    measures = [{"d": v} for v in (0.0, 4.0, 5.0, 6.0, 20.0)]
+    mean_dims, stderr_dims, present = rc.aggregate_dim_means(measures)
+    assert mean_dims["d"] == pytest.approx(5.0)  # trimmed mean of [4,5,6]
+    assert mean_dims["d"] != pytest.approx(7.0)  # the plain (untrimmed) mean
+    assert stderr_dims["d"] == pytest.approx(1.0 / 3**0.5)  # stdev([4,5,6])/sqrt(3)
+    assert present == {"d": 5}
+
+
+def test_aggregate_dim_means_no_trim_below_four() -> None:
+    # K=3 < 4 → trimming would leave < 2 points; fall back to the plain mean.
+    measures = [{"d": v} for v in (0.0, 5.0, 10.0)]
+    mean_dims, _stderr, present = rc.aggregate_dim_means(measures)
+    assert mean_dims["d"] == pytest.approx(5.0)  # plain mean of all three
+    assert present == {"d": 3}
+
+
 def test_write_kmean_baseline_overwrites_dims_preserving_schema(
     campaign_state: dict[str, Path],
 ) -> None:

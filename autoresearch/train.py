@@ -3985,6 +3985,29 @@ def main() -> int:
         anchor_confidence_mode=_anchor_confidence_mode,
         admire_means=admire_means_current,
     )
+    # PR-GATE-RECIPE (2026-06-01) — the PLAIN weighted fitness, computed with
+    # the EXACT recipe the promote gate uses for ``current_raw``
+    # (``_should_promote`` → ``compute_fitness(current_means, …)`` with NO
+    # ``baseline_means`` and NO ``bench_means``). ``fitness`` above is the
+    # PENALIZED headline (auxiliary-shortfall penalty + critical strict-reject
+    # vs the baseline) kept for the run-record sinks (results_tsv/jsonl). The
+    # two differ by the aux penalty, which is inherently asymmetric (candidate
+    # vs baseline, but baseline vs itself = 0). The attribution ledger's
+    # ``fitness_after`` MUST be this plain value so that
+    # ``fitness_after − fitness_before`` equals the gate's real
+    # ``current_raw − prior_raw`` decision (``fitness_before`` already mirrors
+    # ``prior_raw`` = plain, via ``_baseline_raw_fitness``). Before this fix the
+    # ledger delta mixed [penalized candidate] − [plain baseline], which did
+    # NOT reflect the gate and caused repeated mis-reads of the "all-reject"
+    # campaign as structurally unpromotable.
+    fitness_plain = compute_fitness(
+        dim_means,
+        dim_stderr,
+        measurement_modality=measurement_modality or None,
+        anchor_means=_anchor_means_current or None,
+        anchor_confidence_mode=_anchor_confidence_mode,
+        admire_means=admire_means_current,
+    )
     # PR-MARGIN-FITNESS-SCALE (2026-05-30) — bootstrap this audit's
     # fitness-scale stderr from the per-sample rows (captures inter-dim
     # correlation; gold-standard margin estimate). ``None`` for <2 sample
@@ -4608,7 +4631,15 @@ def main() -> int:
                 baseline_before=_sil_baseline_before,
                 baseline_after=_sil_baseline_after,
                 fitness_before=_sil_fitness_before,
-                fitness_after=float(fitness),
+                # PR-GATE-RECIPE (2026-06-01) — PLAIN fitness (gate's
+                # ``current_raw`` recipe), so ``fitness_after − fitness_before``
+                # == the gate's real ``current_raw − prior_raw`` gain. Was
+                # ``float(fitness)`` (PENALIZED), which made the ledger delta a
+                # mixed [penalized − plain] number that misrepresented the gate.
+                # SCALE NOTE: pre-fix rows carry the old penalized
+                # ``fitness_after``; a one-shot backfill is a FOLLOW-UP (same
+                # deferral as the PR-MARGIN-FITNESS-SCALE before-scale note).
+                fitness_after=float(fitness_plain),
                 audit_run_id=_sil_audit_run_id,
                 source=_sil_source,
                 # E2 (2026-05-30) — per-cycle fixed-ruler evidence into
@@ -4749,6 +4780,8 @@ def main() -> int:
             # (same helper as the attribution ledger above), NOT the 1-10
             # dim-aggregate mean the prior code subtracted. With no baseline the
             # delta is the current fitness itself (as before).
+            # PR-GATE-RECIPE (2026-06-01) — ``fitness_plain`` (the plain gate
+            # ``current_raw`` recipe), matching the ledger ``fitness_after`` above.
             _baseline_fitness_before = _baseline_raw_fitness(
                 baseline_means,
                 baseline_stderr,
@@ -4757,9 +4790,9 @@ def main() -> int:
                 anchor_confidence_mode=_anchor_confidence_mode,
             )
             fitness_delta = (
-                fitness - _baseline_fitness_before
+                fitness_plain - _baseline_fitness_before
                 if _baseline_fitness_before is not None
-                else fitness
+                else fitness_plain
             )
             append_exemplar(
                 user_msg=prompt_label,

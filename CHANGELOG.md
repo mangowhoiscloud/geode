@@ -45,6 +45,36 @@ functional change.
 
 ---
 
+## [0.99.106] - 2026-06-01
+
+### Fixed
+- **PR-GATE-RECIPE (2026-06-01) — the self-improving loop's attribution
+  `fitness_delta` now equals the promote gate's actual decision.** The gate
+  (`autoresearch/train.py::_should_promote`) compares `current_raw` vs
+  `prior_raw`, both the PLAIN `compute_fitness` (no `baseline_means`, so no
+  auxiliary-shortfall penalty / critical strict-reject) — but the attribution
+  ledger wrote `fitness_after` as the PENALIZED `compute_fitness` (with
+  `baseline_means`), while `fitness_before` was plain. The resulting
+  `fitness_delta` was a mixed `[penalized − plain]` number that did NOT reflect
+  the gate's `current_raw − prior_raw` gain, causing post-campaign analysis to
+  mis-read an all-reject run as "structurally unpromotable." `fitness_after`
+  (attribution ledger) and the OL-C2 few-shot/DPO exemplar `fitness_delta` now
+  use a new `fitness_plain` computed with the gate's exact `current_raw` recipe,
+  so both sit on the same plain scale as `fitness_before`. The penalized headline
+  `fitness` is preserved for the run-record sinks (results_tsv/jsonl). SCALE
+  NOTE: `mutations.jsonl` rows written before this PR carry the old penalized
+  `fitness_after`; the hub mean-delta aggregate
+  (`scripts/build_self_improving_hub.py`) must discriminate pre-/post-PR rows (by
+  merge-timestamp boundary or a recipe marker) before re-publishing, to avoid
+  mixing scales — tracked for the hub PR (Codex MCP M2).
+
+### Changed
+- **Trimmed gen-0 K-mean baseline** — `scripts/run_campaign.py::aggregate_dim_means`
+  now drops the single highest + single lowest per-dim repeat (when ≥ 4 present)
+  before averaging, reducing outlier / bimodal-dim skew on `prior_raw` and the
+  noise band; falls back to the plain mean below K = 4. `present_count` still
+  records the original (pre-trim) count so the partial-coverage warning is intact.
+
 ## [0.99.105] - 2026-05-31
 
 ### Removed
