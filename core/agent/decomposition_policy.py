@@ -25,7 +25,7 @@ prompt 를 로드하지만 ``decomposition.json`` 과는 미연결 (PR-AUDIT-5SL
 ``system_prompt`` 가 있으면 다른 두 field 는 무시 (override 우선).
 
 **Resolution order** (PR-BACKFILL-SOT 2026-05-21, shared
-:mod:`core.self_improving_loop.sot_resolution`):
+:mod:`core.self_improving.loop.sot_resolution`):
 
 1. ``GEODE_DECOMPOSITION_POLICY_OVERRIDE`` env var — explicit override.
 
@@ -48,7 +48,7 @@ from core.paths import (
     GLOBAL_DECOMPOSITION_POLICY_PATH,
     OPERATOR_LOCAL_DECOMPOSITION_POLICY_PATH,
 )
-from core.self_improving_loop.sot_resolution import resolve_sot
+from core.self_improving.loop.sot_resolution import resolve_sot
 
 log = logging.getLogger(__name__)
 

@@ -27,9 +27,9 @@ Before starting a new experiment run, confirm with the user:
 3. **Read the in-scope files end-to-end**. Only the four files below
    matter:
    - `autoresearch/README.md` — driver overview + role split with petri.
-   - `autoresearch/prepare.py` — seed pool + rubric sanity check. **Do
+   - `core/self_improving/prepare.py` — seed pool + rubric sanity check. **Do
      not modify.**
-   - `autoresearch/train.py` — the single file the agent modifies.
+   - `core/self_improving/train.py` — the single file the agent modifies.
      Holds the wrapper-prompt sections, the audit invocation, and the
      fitness output.
    - `autoresearch/program.md` — this file. Read only.
@@ -66,7 +66,7 @@ Before starting a new experiment run, confirm with the user:
 One experiment = one audit, wall-clock ~5 min. Real-mode invocation:
 
 ```bash
-uv run python autoresearch/train.py > autoresearch/state/run.log 2>&1
+uv run python -m core.self_improving.train > autoresearch/state/run.log 2>&1
 ```
 
 To verify self-improving-loop plumbing without spending budget, use `--dry-run`
@@ -363,7 +363,7 @@ On the `autoresearch/<tag>` branch, **loop forever**:
    one hypothesis. Edit the code directly.
 3. Commit: `git commit -am "exp: <short description>"`.
 4. Run the audit:
-   `uv run python autoresearch/train.py > autoresearch/state/run.log 2>&1`
+   `uv run python -m core.self_improving.train > autoresearch/state/run.log 2>&1`
    (redirect — never flood stdout). Append `--dry-run` for
    plumbing-only smoke. If `state/baseline.json` exists, the
    cross-axis gate fires automatically (see "Cross-axis gate" above).

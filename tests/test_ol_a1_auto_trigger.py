@@ -85,7 +85,7 @@ def test_top_level_self_improving_loop_config_carries_scheduler() -> None:
 def test_lock_acquire_returns_fd_when_uncontended(
     trigger_paths: tuple[Path, Path],
 ) -> None:
-    from core.self_improving_loop.auto_trigger import (
+    from core.self_improving.loop.auto_trigger import (
         acquire_auto_trigger_lock,
         release_auto_trigger_lock,
     )
@@ -99,7 +99,7 @@ def test_lock_acquire_returns_fd_when_uncontended(
 
 def test_lock_blocks_second_acquire(trigger_paths: tuple[Path, Path]) -> None:
     """Second acquire while first is held → None (no exception)."""
-    from core.self_improving_loop.auto_trigger import (
+    from core.self_improving.loop.auto_trigger import (
         acquire_auto_trigger_lock,
         release_auto_trigger_lock,
     )
@@ -119,7 +119,7 @@ def test_lock_blocks_second_acquire(trigger_paths: tuple[Path, Path]) -> None:
 
 
 def test_lock_creates_parent_dir(tmp_path: Path) -> None:
-    from core.self_improving_loop.auto_trigger import (
+    from core.self_improving.loop.auto_trigger import (
         acquire_auto_trigger_lock,
         release_auto_trigger_lock,
     )
@@ -138,7 +138,7 @@ def test_lock_creates_parent_dir(tmp_path: Path) -> None:
 
 
 def test_read_timestamp_missing_returns_none(trigger_paths: tuple[Path, Path]) -> None:
-    from core.self_improving_loop.auto_trigger import read_last_run_timestamp
+    from core.self_improving.loop.auto_trigger import read_last_run_timestamp
 
     _, ts_path = trigger_paths
     assert read_last_run_timestamp(ts_path) is None
@@ -147,7 +147,7 @@ def test_read_timestamp_missing_returns_none(trigger_paths: tuple[Path, Path]) -
 def test_write_then_read_timestamp_round_trip(
     trigger_paths: tuple[Path, Path],
 ) -> None:
-    from core.self_improving_loop.auto_trigger import (
+    from core.self_improving.loop.auto_trigger import (
         read_last_run_timestamp,
         write_last_run_timestamp,
     )
@@ -160,7 +160,7 @@ def test_write_then_read_timestamp_round_trip(
 def test_read_timestamp_unparseable_returns_none(
     trigger_paths: tuple[Path, Path],
 ) -> None:
-    from core.self_improving_loop.auto_trigger import read_last_run_timestamp
+    from core.self_improving.loop.auto_trigger import read_last_run_timestamp
 
     _, ts_path = trigger_paths
     ts_path.parent.mkdir(parents=True, exist_ok=True)
@@ -176,14 +176,14 @@ def test_read_timestamp_unparseable_returns_none(
 def test_min_interval_satisfied_when_no_prior_run(
     trigger_paths: tuple[Path, Path],
 ) -> None:
-    from core.self_improving_loop.auto_trigger import is_min_interval_satisfied
+    from core.self_improving.loop.auto_trigger import is_min_interval_satisfied
 
     _, ts_path = trigger_paths
     assert is_min_interval_satisfied(min_interval_minutes=60, timestamp_path=ts_path)
 
 
 def test_min_interval_blocked_when_recent(trigger_paths: tuple[Path, Path]) -> None:
-    from core.self_improving_loop.auto_trigger import (
+    from core.self_improving.loop.auto_trigger import (
         is_min_interval_satisfied,
         write_last_run_timestamp,
     )
@@ -197,7 +197,7 @@ def test_min_interval_blocked_when_recent(trigger_paths: tuple[Path, Path]) -> N
 def test_min_interval_satisfied_when_old_enough(
     trigger_paths: tuple[Path, Path],
 ) -> None:
-    from core.self_improving_loop.auto_trigger import (
+    from core.self_improving.loop.auto_trigger import (
         is_min_interval_satisfied,
         write_last_run_timestamp,
     )
@@ -235,7 +235,7 @@ class _FakeRunner:
 
 
 def test_disabled_short_circuits(trigger_paths: tuple[Path, Path]) -> None:
-    from core.self_improving_loop.auto_trigger import auto_trigger_mutator
+    from core.self_improving.loop.auto_trigger import auto_trigger_mutator
 
     lock_path, ts_path = trigger_paths
     runner = _FakeRunner()
@@ -252,7 +252,7 @@ def test_disabled_short_circuits(trigger_paths: tuple[Path, Path]) -> None:
 
 
 def test_interval_blocked_skips_runner(trigger_paths: tuple[Path, Path]) -> None:
-    from core.self_improving_loop.auto_trigger import (
+    from core.self_improving.loop.auto_trigger import (
         auto_trigger_mutator,
         write_last_run_timestamp,
     )
@@ -275,7 +275,7 @@ def test_interval_blocked_skips_runner(trigger_paths: tuple[Path, Path]) -> None
 
 
 def test_lock_busy_skips_runner(trigger_paths: tuple[Path, Path]) -> None:
-    from core.self_improving_loop.auto_trigger import (
+    from core.self_improving.loop.auto_trigger import (
         acquire_auto_trigger_lock,
         auto_trigger_mutator,
         release_auto_trigger_lock,
@@ -302,7 +302,7 @@ def test_lock_busy_skips_runner(trigger_paths: tuple[Path, Path]) -> None:
 def test_fired_updates_timestamp_and_releases_lock(
     trigger_paths: tuple[Path, Path],
 ) -> None:
-    from core.self_improving_loop.auto_trigger import (
+    from core.self_improving.loop.auto_trigger import (
         acquire_auto_trigger_lock,
         auto_trigger_mutator,
         read_last_run_timestamp,
@@ -335,7 +335,7 @@ def test_runner_error_does_not_update_timestamp(
     trigger_paths: tuple[Path, Path],
 ) -> None:
     """Generic exception → runner_error state, timestamp unchanged."""
-    from core.self_improving_loop.auto_trigger import (
+    from core.self_improving.loop.auto_trigger import (
         auto_trigger_mutator,
         read_last_run_timestamp,
     )
@@ -360,7 +360,7 @@ def test_parse_error_distinct_from_runner_error(
     trigger_paths: tuple[Path, Path],
 ) -> None:
     """ValueError → parse_error (LLM produced garbage), not runner_error."""
-    from core.self_improving_loop.auto_trigger import auto_trigger_mutator
+    from core.self_improving.loop.auto_trigger import auto_trigger_mutator
 
     lock_path, ts_path = trigger_paths
     runner = _FakeRunner(raises=ValueError("missing target_section"))
@@ -382,7 +382,7 @@ def test_runner_factory_raising_yields_runner_error(
     (e.g., lazy import fails, runner __init__ side-effect), the function
     must still return ``runner_error`` — not propagate. Otherwise the
     'never raises' contract is violated and the scheduler loop crashes."""
-    from core.self_improving_loop.auto_trigger import auto_trigger_mutator
+    from core.self_improving.loop.auto_trigger import auto_trigger_mutator
 
     lock_path, ts_path = trigger_paths
 
@@ -414,12 +414,12 @@ def test_post_lock_interval_recheck_blocks_when_timestamp_freshens(
     patching ``acquire_auto_trigger_lock`` to write a fresh timestamp
     as a side effect (peer landed a fire just before we acquired).
     """
-    from core.self_improving_loop.auto_trigger import (
+    from core.self_improving.loop.auto_trigger import (
         auto_trigger_mutator,
         write_last_run_timestamp,
     )
 
-    from core.self_improving_loop import auto_trigger as at_module
+    from core.self_improving.loop import auto_trigger as at_module
 
     lock_path, ts_path = trigger_paths
     now = 3000000.0
@@ -450,7 +450,7 @@ def test_lock_released_even_after_runner_raises(
 ) -> None:
     """Failure path must NOT leak the lockfile — next firing should
     succeed on lock acquisition."""
-    from core.self_improving_loop.auto_trigger import (
+    from core.self_improving.loop.auto_trigger import (
         acquire_auto_trigger_lock,
         auto_trigger_mutator,
         release_auto_trigger_lock,
@@ -474,7 +474,7 @@ def test_register_auto_trigger_skips_when_disabled() -> None:
     """enabled=False → trigger_manager.register NOT called."""
     from unittest.mock import MagicMock
 
-    from core.self_improving_loop.auto_trigger import register_auto_trigger
+    from core.self_improving.loop.auto_trigger import register_auto_trigger
 
     mgr = MagicMock()
     result = register_auto_trigger(mgr, enabled=False, cron="0 */6 * * *", min_interval_minutes=60)
@@ -488,7 +488,7 @@ def test_register_auto_trigger_registers_when_enabled() -> None:
     from unittest.mock import MagicMock
 
     from core.scheduler.triggers import TriggerType
-    from core.self_improving_loop.auto_trigger import (
+    from core.self_improving.loop.auto_trigger import (
         AUTO_TRIGGER_TRIGGER_ID,
         register_auto_trigger,
     )
@@ -515,9 +515,9 @@ def test_registered_callback_invokes_auto_trigger_mutator(
     operator's real ``~/.geode/self-improving-loop/`` state."""
     from unittest.mock import MagicMock
 
-    from core.self_improving_loop.auto_trigger import register_auto_trigger
+    from core.self_improving.loop.auto_trigger import register_auto_trigger
 
-    from core.self_improving_loop import auto_trigger as at_module
+    from core.self_improving.loop import auto_trigger as at_module
 
     lock_path, ts_path = trigger_paths
     monkeypatch.setattr(at_module, "AUTO_TRIGGER_LOCK_PATH", lock_path)
@@ -544,11 +544,11 @@ def test_default_runner_factory_imports_runner_lazily() -> None:
     import sys
 
     # Drop the runner if cached, so we can detect a lazy import
-    mod_name = "core.self_improving_loop.runner"
+    mod_name = "core.self_improving.loop.runner"
     original_runner = sys.modules.pop(mod_name, None)
     try:
         # Importing auto_trigger should NOT trigger the runner import
-        at_mod = importlib.import_module("core.self_improving_loop.auto_trigger")
+        at_mod = importlib.import_module("core.self_improving.loop.auto_trigger")
         importlib.reload(at_mod)
         assert mod_name not in sys.modules, (
             "auto_trigger must lazy-import SelfImprovingLoopRunner — "

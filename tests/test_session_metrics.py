@@ -244,7 +244,7 @@ def test_session_metrics_scope_restores_on_exception() -> None:
 def test_session_metrics_accumulates_through_propose_helper_api(monkeypatch: Any) -> None:
     """C4 의 ``_reset_last_llm_call_usage`` / ``_consume_last_llm_call_usage``
     가 SessionMetrics 와 정확히 sync — backward-compat path 검증."""
-    from core.self_improving_loop.runner import (
+    from core.self_improving.loop.runner import (
         _consume_last_llm_call_usage,
         _reset_last_llm_call_usage,
     )

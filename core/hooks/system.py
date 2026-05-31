@@ -45,7 +45,7 @@ def _mirror_hook_to_active_transcript(event: HookEvent, data: dict[str, Any]) ->
     """
     try:
         from core.observability.activity_registry import map_hook_to_activity
-        from core.self_improving_loop.run_transcript import current_run_transcript
+        from core.self_improving.loop.run_transcript import current_run_transcript
 
         run_transcript = current_run_transcript()
         if run_transcript is None:
@@ -285,7 +285,7 @@ class HookEvent(Enum):
     # sprints: (a) autoresearch attribution sprint Phase G
     # (PR-SOT-REVERT-ON-REJECT, PR-SOT-REVERT-ON-AUDIT-FAIL) — the
     # writers will emit these once the SoT-revert paths land in
-    # ``autoresearch/train.py:2407-2455`` + ``runner.py:1882-1888``;
+    # ``core/self_improving/train.py:2407-2455`` + ``runner.py:1882-1888``;
     # (b) observability central SoT sprint PR-5 wildcard firehose +
     # PR-10 autoresearch indexer — the wildcard listener captures
     # every event into ``events`` SQLite, the autoresearch_indexer

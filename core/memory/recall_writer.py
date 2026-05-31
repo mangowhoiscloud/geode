@@ -68,7 +68,7 @@ __all__ = [
 ]
 
 GEODE_MEMORY_RECALL_DIR_ENV = "GEODE_MEMORY_RECALL_DIR"
-"""Match M4.4.1 reader's env var (`core/self_improving_loop/memory_recall.py`)
+"""Match M4.4.1 reader's env var (`core/self_improving/loop/memory_recall.py`)
 so writer + reader honour the same operator override."""
 
 _DEFAULT_RECALL_DIR = GLOBAL_MEMORY_DIR / "recall"

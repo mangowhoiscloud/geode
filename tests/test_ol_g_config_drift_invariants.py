@@ -8,7 +8,7 @@ PR-1 G-B/G-D/G-E (2026-05-21) closed three config drift surfaces:
   constants and ``AutoresearchConfig.target_model`` /
   ``judge_model`` fields are deprecated no-ops; the real SoT is the
   ``[self_improving_loop.petri.<role>].model`` section consulted by
-  ``autoresearch.train._petri_role_model`` and
+  ``core.self_improving.train._petri_role_model`` and
   ``plugins.petri_audit.registry.get_binding``.
 - **G-D**: ``core/hooks/llm_extract_learning.py`` 의 ``"glm-4.7-flash"``
   literal → ``settings.learning_extract_model`` config-overridable.
@@ -88,7 +88,7 @@ def test_g_b_autoresearch_petri_role_is_canonical_sot() -> None:
 
 
 def test_g_b_autoresearch_resolves_role_model_through_helper() -> None:
-    """``autoresearch.train`` resolves per-role models via the helper —
+    """``core.self_improving.train`` resolves per-role models via the helper —
     no surviving module-constant SoT.
 
     Single-SoT (2026-05-22) — the legacy ``TARGET_MODEL`` /
@@ -97,7 +97,7 @@ def test_g_b_autoresearch_resolves_role_model_through_helper() -> None:
     surface is ``_petri_role_model(role)`` which consults the manifest
     + ``[self_improving_loop.petri.<role>]`` overrides.
     """
-    from autoresearch import train
+    from core.self_improving import train
 
     assert callable(getattr(train, "_petri_role_model", None)), (
         "G-B regressed: _petri_role_model helper removed — role resolution path broken"

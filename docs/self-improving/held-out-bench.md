@@ -102,7 +102,7 @@ change in the curve.
 
 ## 3. Launch wiring — `GEODE_HELD_OUT_BENCH`
 
-The held-out bench is resolved by `autoresearch/train.py` `_resolve_held_out_bench`
+The held-out bench is resolved by `core/self_improving/train.py` `_resolve_held_out_bench`
 with this precedence (mirroring `_resolve_seed_select` **minus** the
 `latest_pointer.json` auto-pick tier — the held-out ruler must never move):
 

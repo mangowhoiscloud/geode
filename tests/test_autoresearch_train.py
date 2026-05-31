@@ -20,7 +20,7 @@ from typing import Any
 from unittest.mock import MagicMock
 
 import pytest
-from autoresearch.train import (
+from core.self_improving.train import (
     AUXILIARY_DIMS,
     AXIS_TIERS,
     CRITICAL_DIMS,
@@ -43,7 +43,7 @@ from autoresearch.train import (
     run_audit,
 )
 
-from autoresearch import train as auto_train
+from core.self_improving import train as auto_train
 
 
 def test_build_audit_command_uses_current_geode_audit_flags() -> None:
@@ -112,7 +112,7 @@ def test_pr0_new_dims_present_in_axis_tiers() -> None:
 
 
 def test_seed_select_points_at_hierarchical_tree() -> None:
-    from autoresearch.train import SEED_SELECT
+    from core.self_improving.train import SEED_SELECT
 
     assert SEED_SELECT == "plugins/petri_audit/seeds"
 
@@ -124,7 +124,7 @@ def test_seed_select_points_at_hierarchical_tree() -> None:
 
 def test_get_autoresearch_config_returns_config_object() -> None:
     """Helper returns an object exposing all 8 autoresearch fields."""
-    from autoresearch.train import _get_autoresearch_config
+    from core.self_improving.train import _get_autoresearch_config
 
     cfg = _get_autoresearch_config()
     for attr in (
@@ -152,7 +152,8 @@ def test_get_autoresearch_config_defaults_match_module_constants(
     remain as module constants for the SimpleNamespace fallback when
     ``core.config`` is unimportable.
     """
-    from autoresearch.train import (
+    from core.config.self_improving_loop import AutoresearchConfig
+    from core.self_improving.train import (
         BUDGET_MINUTES,
         DIM_SET_NAME,
         MAX_TURNS,
@@ -161,7 +162,6 @@ def test_get_autoresearch_config_defaults_match_module_constants(
         SOURCE,
         _get_autoresearch_config,
     )
-    from core.config.self_improving_loop import AutoresearchConfig
 
     # Isolate from the operator's ``~/.geode/config.toml`` — point
     # ``GEODE_CONFIG_TOML`` at an empty tmp path so the loader falls
@@ -792,7 +792,7 @@ def test_compute_missing_dims_empty_when_all_present() -> None:
     empty. Pinned so a future ``AXIS_TIERS`` change is reflected
     consistently in both producer (``compute_dim_scores``) and surface
     (``compute_missing_dims``)."""
-    from autoresearch.train import AXIS_TIERS
+    from core.self_improving.train import AXIS_TIERS
 
     dim_means = dict.fromkeys(AXIS_TIERS, 5.0)
     assert compute_missing_dims(dim_means) == []
@@ -819,7 +819,7 @@ def test_compute_missing_dims_lists_absent_dims_sorted() -> None:
 
 def test_compute_missing_dims_handles_empty_input() -> None:
     """Empty ``dim_means`` → every ``AXIS_TIERS`` dim is missing."""
-    from autoresearch.train import AXIS_TIERS
+    from core.self_improving.train import AXIS_TIERS
 
     missing = compute_missing_dims({})
     assert set(missing) == set(AXIS_TIERS)
@@ -1042,7 +1042,7 @@ def test_print_summary_emits_all_15_dim_names(capsys: pytest.CaptureFixture[str]
 
 def test_results_tsv_row_has_12_columns() -> None:
     """P1a — results.tsv schema: 12 tab-separated columns (session_id + gen_tag prepended)."""
-    from autoresearch.train import RESULTS_TSV_HEADER, format_results_tsv_row
+    from core.self_improving.train import RESULTS_TSV_HEADER, format_results_tsv_row
 
     assert len(RESULTS_TSV_HEADER) == 12
     assert RESULTS_TSV_HEADER[0] == "session_id"
@@ -1069,7 +1069,7 @@ def test_results_tsv_row_has_12_columns() -> None:
 
 def test_results_tsv_row_critical_min_surfaces_regression() -> None:
     """critical_min column makes a single critical dim regression visible."""
-    from autoresearch.train import format_results_tsv_row
+    from core.self_improving.train import format_results_tsv_row
 
     # broken_tool_use at 9.0 → critical dim score = 0.1 (worst of 5 critical)
     dim_means = {"broken_tool_use": 9.0}
@@ -1091,7 +1091,7 @@ def test_results_tsv_row_critical_min_surfaces_regression() -> None:
 
 def test_results_tsv_row_sanitizes_tabs_and_newlines_in_description() -> None:
     """Description must not break the TSV — tabs/newlines stripped."""
-    from autoresearch.train import format_results_tsv_row
+    from core.self_improving.train import format_results_tsv_row
 
     row = format_results_tsv_row(
         session_id="s",
@@ -1108,7 +1108,7 @@ def test_results_tsv_row_sanitizes_tabs_and_newlines_in_description() -> None:
 
 def test_results_tsv_row_dim_count_engaged() -> None:
     """dim_count_engaged counts how many AXIS_TIERS dims appear in dim_means."""
-    from autoresearch.train import format_results_tsv_row
+    from core.self_improving.train import format_results_tsv_row
 
     dim_means = {"broken_tool_use": 3.0, "overrefusal": 1.0, "eval_awareness": 1.0}
     row = format_results_tsv_row(
@@ -1127,7 +1127,7 @@ def test_results_tsv_row_dim_count_engaged() -> None:
 
 def test_results_jsonl_row_carries_full_20_dim_signal() -> None:
     """JSONL has all 20 dim means + stderrs + scores, regardless of audit emit."""
-    from autoresearch.train import format_results_jsonl_row
+    from core.self_improving.train import format_results_jsonl_row
 
     dim_means = {"broken_tool_use": 3.0}
     dim_stderr = {"broken_tool_use": 0.5}
@@ -1161,7 +1161,7 @@ def test_results_jsonl_row_carries_full_20_dim_signal() -> None:
 
 def test_results_jsonl_row_dim_scores_defaults_when_caller_passes_partial() -> None:
     """Buggy caller passing a partial dim_scores cannot drop fields."""
-    from autoresearch.train import format_results_jsonl_row
+    from core.self_improving.train import format_results_jsonl_row
 
     line = format_results_jsonl_row(
         session_id="s",
@@ -1191,7 +1191,7 @@ def test_results_jsonl_row_emits_pr5_provenance_when_supplied() -> None:
     the caller threads them through. Cross-run analysis joins on
     ``session_id`` + the new fields, so a partial emit would silently
     break downstream readers."""
-    from autoresearch.train import format_results_jsonl_row
+    from core.self_improving.train import format_results_jsonl_row
 
     dim_means = {"broken_tool_use": 3.0, "input_hallucination": 2.0}
     dim_stderr = {"broken_tool_use": 0.5, "input_hallucination": 0.4}
@@ -1237,7 +1237,7 @@ def test_results_jsonl_row_pr5_defaults_when_provenance_absent() -> None:
     set). Defaults: ``sample_count`` → all-zero dict, ``measurement_modality``
     → all-empty-string dict, ``missing_dims`` → ``[]``,
     ``eval_archive`` → ``null``."""
-    from autoresearch.train import format_results_jsonl_row
+    from core.self_improving.train import format_results_jsonl_row
 
     line = format_results_jsonl_row(
         session_id="s",
@@ -1262,7 +1262,7 @@ def test_results_jsonl_row_pr5_defaults_when_provenance_absent() -> None:
 def test_results_jsonl_row_pr5_handles_partial_provenance() -> None:
     """Partial sample_count / modality (some dims missing) must default
     the absent dims to 0 / "" without dropping the present ones."""
-    from autoresearch.train import format_results_jsonl_row
+    from core.self_improving.train import format_results_jsonl_row
 
     line = format_results_jsonl_row(
         session_id="s",
@@ -1287,7 +1287,7 @@ def test_results_jsonl_row_pr5_handles_partial_provenance() -> None:
 
 def test_results_jsonl_row_is_single_line() -> None:
     """JSONL lines must be single-line (no embedded newlines)."""
-    from autoresearch.train import format_results_jsonl_row
+    from core.self_improving.train import format_results_jsonl_row
 
     line = format_results_jsonl_row(
         session_id="s",
@@ -1306,7 +1306,7 @@ def test_results_jsonl_row_is_single_line() -> None:
 
 def test_results_jsonl_round_trip() -> None:
     """Emitted JSONL must parse back to a valid dict with all expected keys."""
-    from autoresearch.train import format_results_jsonl_row
+    from core.self_improving.train import format_results_jsonl_row
 
     line = format_results_jsonl_row(
         session_id="s",
@@ -1856,7 +1856,7 @@ def test_resolve_gen_tag_default_includes_commit(
     PR-GEN-COUNTER (2026-05-26) — the resolver now appends a monotonic
     ``-gen{N}`` counter derived from sessions.jsonl history. With no
     history, the first emission is ``gen1``."""
-    from autoresearch import train as train_mod
+    from core.self_improving import train as train_mod
 
     monkeypatch.delenv("AUTORESEARCH_GEN_TAG", raising=False)
     monkeypatch.setattr(train_mod, "SESSIONS_INDEX_PATH", tmp_path / "missing.jsonl")
@@ -1869,7 +1869,7 @@ def test_resolve_gen_tag_treats_whitespace_as_unset(
     """Whitespace-only env value is treated as unset, so the resolver
     falls back to ``autoresearch-<commit>-gen<N>`` (post PR-GEN-COUNTER
     shape, gen1 for fresh history)."""
-    from autoresearch import train as train_mod
+    from core.self_improving import train as train_mod
 
     monkeypatch.setenv("AUTORESEARCH_GEN_TAG", "   ")
     monkeypatch.setattr(train_mod, "SESSIONS_INDEX_PATH", tmp_path / "missing.jsonl")
@@ -2078,13 +2078,13 @@ def test_run_audit_dry_run_emits_p0b_events(
 
 
 def _drive_main_dry_run(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> tuple[int, Path, Path]:
-    """Drive ``autoresearch.train.main()`` under ``--dry-run`` with all FS
+    """Drive ``core.self_improving.train.main()`` under ``--dry-run`` with all FS
     paths redirected into ``tmp_path``. Returns ``(exit_code, journal_path,
     sessions_path)``. The journal_path is the file for the run's
     session_id (resolved by main); the test reads it back to assert
     event ordering and payload shape."""
-    import autoresearch.train as auto_train
     import core.paths
+    import core.self_improving.train as auto_train
 
     sip_home = tmp_path / "self-improving-loop"
     monkeypatch.setattr(core.paths, "GLOBAL_SELF_IMPROVING_LOOP_DIR", sip_home)
@@ -2098,7 +2098,7 @@ def _drive_main_dry_run(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> tupl
     # No baseline file → baseline_decision payload reflects the empty case.
     monkeypatch.setenv("AUTORESEARCH_VERDICT", "pending")
     monkeypatch.setenv("AUTORESEARCH_DESCRIPTION", "test-dry-run")
-    monkeypatch.setattr(sys, "argv", ["autoresearch/train.py", "--dry-run"])
+    monkeypatch.setattr(sys, "argv", ["core/self_improving/train.py", "--dry-run"])
     exit_code = auto_train.main()
 
     # Find the single run dir under sip_home (session_id resolved at runtime).
@@ -2171,7 +2171,7 @@ def test_main_dry_run_emits_full_p0b_event_sequence(
     # PR-4 Codex catch — pin actual content, not just key presence.
     # ``_drive_main_dry_run`` produces 5 dims (the dry-run synthesizer);
     # the missing list should hold all other ``AXIS_TIERS`` dims.
-    from autoresearch.train import AXIS_TIERS
+    from core.self_improving.train import AXIS_TIERS
 
     emitted_missing = by_event["per_dim_scores"]["missing_dims"]
     expected_missing = sorted(
@@ -2235,7 +2235,7 @@ def test_run_audit_subprocess_timeout_emits_event(
     timeout), ``run_audit`` must emit ``subprocess_timeout`` at error
     level before propagating, then the caller's audit_failed handler
     fires from main()."""
-    import autoresearch.train as auto_train
+    import core.self_improving.train as auto_train
 
     _redirect_journal(tmp_path, monkeypatch)
     monkeypatch.setattr(auto_train, "WRAPPER_OVERRIDE_HOOK_READY", True)

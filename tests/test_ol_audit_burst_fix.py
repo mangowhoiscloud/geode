@@ -37,7 +37,7 @@ import pytest
 # Codex MCP catch (PR-OL-AUDIT-BURST-FIX fix-up): the burst flags must
 # land in the actual `inspect eval` argv assembled by
 # `plugins/petri_audit/runner.py::build_command`, NOT in the outer
-# `geode audit` argv assembled by `autoresearch/train.py::_build_audit_command`.
+# `geode audit` argv assembled by `core/self_improving/train.py::_build_audit_command`.
 # The `geode audit` Typer command doesn't accept `--max-connections` —
 # the flags would be rejected before reaching `inspect eval`.
 
@@ -160,7 +160,7 @@ def test_geode_audit_argv_does_not_pass_inspect_flags() -> None:
     """`geode audit` (Typer wrapper) does NOT accept --max-connections;
     the burst flags must stay out of the outer argv. Codex MCP catch.
     """
-    from autoresearch import train
+    from core.self_improving import train
 
     argv = train._build_audit_command()
     assert "--max-connections" not in argv, (
@@ -281,16 +281,16 @@ def test_audit_lane_lazy_init_is_thread_safe() -> None:
 
 
 def test_audit_train_source_grep_pins_lane_integration() -> None:
-    """Source-level pin: ``autoresearch/train.py`` must call the audit
+    """Source-level pin: ``core/self_improving/train.py`` must call the audit
     lane around the subprocess. A future refactor that drops the
     ``with acquire_audit_lane(...)`` wrapper re-introduces the
     overlapping-audit race.
     """
-    from autoresearch import train
+    from core.self_improving import train
 
     source = Path(train.__file__).read_text(encoding="utf-8")
     assert "from core.llm.audit_lane import acquire_audit_lane" in source, (
-        "FIX-3 regressed: autoresearch/train.py no longer imports the audit lane."
+        "FIX-3 regressed: core/self_improving/train.py no longer imports the audit lane."
     )
     assert "with acquire_audit_lane(" in source, (
         "FIX-3 regressed: subprocess.run no longer wrapped in audit lane."

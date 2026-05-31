@@ -20,7 +20,7 @@ from collections.abc import Iterator
 from pathlib import Path
 
 import pytest
-from core.self_improving_loop.dpo_redaction import (
+from core.self_improving.loop.dpo_redaction import (
     PII_PATTERNS,
     redact_pack,
     redact_pack_row,

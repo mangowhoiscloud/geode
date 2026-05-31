@@ -913,7 +913,7 @@ class GeodeSelfImprovingHero(Scene):
         self.arrow_label_s2_to_s3 = arrow_label_s2_to_s3
         self.play(Create(s2_to_s3), FadeIn(arrow_label_s2_to_s3), run_time=0.4)
 
-        # Grounded against ``autoresearch/train.py`` (``compute_fitness``
+        # Grounded against ``core/self_improving/train.py`` (``compute_fitness``
         # + ``_dim_score`` + ``_stability_score``). The ``10`` is the
         # Petri rubric scale max (1-10, lower = better); ``score(m)``
         # normalises to [0, 1] with a max-floor at 0. ``w_stab = 0.10``

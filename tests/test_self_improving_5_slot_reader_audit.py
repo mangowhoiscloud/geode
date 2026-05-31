@@ -35,7 +35,7 @@ _READER_SEARCH_DIRS: tuple[str, ...] = (
     "core/orchestration",
     "core/skills",
     "core/llm",
-    "core/self_improving_loop",
+    "core/self_improving/loop",
     "plugins",
     "autoresearch",
 )
@@ -245,7 +245,7 @@ def test_active_slots_registered_as_mutation_targets() -> None:
     reader + 미래 재추가)."""
     import importlib
 
-    mod = importlib.import_module("core.self_improving_loop.policies")
+    mod = importlib.import_module("core.self_improving.loop.policies")
     target_kinds = set(getattr(mod, "TARGET_KINDS", ()))
     expected = {
         "prompt",
@@ -264,7 +264,7 @@ def test_active_slots_registered_as_mutation_targets() -> None:
         "hyperparam 은 PR-DROP-HYPERPARAM-MUTATION 이후 deprecate"
     )
     # path constant 보존 — 미래 복원용 + runtime config reader
-    src = _read("core/self_improving_loop/policies.py")
+    src = _read("core/self_improving/loop/policies.py")
     assert '"retrieval": GLOBAL_RETRIEVAL_POLICY_PATH' in src, (
         "GLOBAL_RETRIEVAL_POLICY_PATH 매핑은 deprecate 후에도 보존 필요"
     )

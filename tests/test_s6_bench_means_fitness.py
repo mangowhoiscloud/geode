@@ -8,14 +8,14 @@ dim + admire + bench.
 
 from __future__ import annotations
 
-from autoresearch.bench_means import (
+from core.self_improving.bench_means import (
     BENCH_DIM_WEIGHTS,
     collect_bench_means_from_inspect_ai,
     compute_bench_aggregate,
     detect_cross_validation_conflict,
     validate_bench_schema,
 )
-from autoresearch.train import (
+from core.self_improving.train import (
     FITNESS_ADMIRE_3AX,
     FITNESS_ADMIRE_WEIGHT,
     FITNESS_BENCH_3AX,
@@ -211,13 +211,13 @@ def test_collect_returns_bench_provenance_dataclass() -> None:
     가 ``BenchProvenance`` dataclass 반환으로 교체. nominal smoke 환경
     (Docker / inspect-evals / inspect-harbor 부재 + ``GEODE_BENCH_S6B_LIVE``
     unset) 에선 모든 bench 가 ``missing_benches`` 에 등록."""
-    from autoresearch.bench_means import BenchProvenance
+    from core.self_improving.bench_means import BenchProvenance
 
     result = collect_bench_means_from_inspect_ai(target_model="gpt-5")
     assert isinstance(result, BenchProvenance)
     # 7-field universe 가 어딘가에 등장해야 함 (means 든 missing 이든)
     accounted = set(result.bench_means) | set(result.missing_benches)
-    from autoresearch.bench_means import BENCH_DIM_WEIGHTS
+    from core.self_improving.bench_means import BENCH_DIM_WEIGHTS
 
     assert accounted == set(BENCH_DIM_WEIGHTS)
     # rubric_version 은 항상 present (cohort tag)

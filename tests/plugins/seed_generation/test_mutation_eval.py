@@ -5,7 +5,7 @@ Four invariants:
 
 1. **Cross-module contract** — ``MutationEvalResult.pairwise_win_rate``
    field name MUST match the key in
-   ``autoresearch.admire_means.ADMIRE_DIM_WEIGHTS``. Pin via string
+   ``core.self_improving.admire_means.ADMIRE_DIM_WEIGHTS``. Pin via string
    grep on both source files (no runtime cross-package import — the
    seed_generation plugin must stay autoresearch-free per the
    handoff boundary).
@@ -47,7 +47,7 @@ from plugins.seed_generation.picker import VoterBinding
 
 def test_pairwise_win_rate_field_name_matches_autoresearch_admire() -> None:
     """``MutationEvalResult.pairwise_win_rate`` field MUST match the key
-    in ``autoresearch.admire_means.ADMIRE_DIM_WEIGHTS``.
+    in ``core.self_improving.admire_means.ADMIRE_DIM_WEIGHTS``.
 
     Pinned via string-grep on both source files (NO runtime import of
     autoresearch from this test — the seed_generation plugin must
@@ -55,7 +55,9 @@ def test_pairwise_win_rate_field_name_matches_autoresearch_admire() -> None:
     that renames either side would trip this test.
     """
     repo_root = Path(__file__).parents[3]
-    autoresearch_src = (repo_root / "autoresearch" / "admire_means.py").read_text(encoding="utf-8")
+    autoresearch_src = (repo_root / "core" / "self_improving" / "admire_means.py").read_text(
+        encoding="utf-8"
+    )
     mutation_eval_src = (repo_root / "plugins" / "seed_generation" / "mutation_eval.py").read_text(
         encoding="utf-8"
     )

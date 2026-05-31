@@ -27,7 +27,7 @@ import pytest
 
 def test_invoke_claude_cli_argv_shape(monkeypatch: pytest.MonkeyPatch) -> None:
     """``claude --print --output-format text --append-system-prompt <SYS> <USER>``."""
-    from core.self_improving_loop import cli_subprocess
+    from core.self_improving.loop import cli_subprocess
 
     monkeypatch.setattr(cli_subprocess.shutil, "which", lambda b: f"/usr/local/bin/{b}")
     captured: dict[str, list[str]] = {}
@@ -52,7 +52,7 @@ def test_invoke_claude_cli_argv_shape(monkeypatch: pytest.MonkeyPatch) -> None:
 
 def test_invoke_codex_cli_argv_shape(monkeypatch: pytest.MonkeyPatch) -> None:
     """``codex exec --skip-git-repo-check <COMBINED system+user>``."""
-    from core.self_improving_loop import cli_subprocess
+    from core.self_improving.loop import cli_subprocess
 
     monkeypatch.setattr(cli_subprocess.shutil, "which", lambda b: f"/usr/local/bin/{b}")
     captured: dict[str, list[str]] = {}
@@ -74,7 +74,7 @@ def test_invoke_codex_cli_argv_shape(monkeypatch: pytest.MonkeyPatch) -> None:
 
 def test_invoke_claude_cli_missing_binary(monkeypatch: pytest.MonkeyPatch) -> None:
     """Missing binary → CliInvocationError with actionable install hint."""
-    from core.self_improving_loop import cli_subprocess
+    from core.self_improving.loop import cli_subprocess
 
     monkeypatch.setattr(cli_subprocess.shutil, "which", lambda b: None)
     monkeypatch.delenv(cli_subprocess.CLAUDE_CLI_BIN_ENV, raising=False)
@@ -84,7 +84,7 @@ def test_invoke_claude_cli_missing_binary(monkeypatch: pytest.MonkeyPatch) -> No
 
 def test_binary_env_override_used(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     """``GEODE_CLAUDE_CLI_BIN`` overrides PATH lookup."""
-    from core.self_improving_loop import cli_subprocess
+    from core.self_improving.loop import cli_subprocess
 
     bin_path = tmp_path / "custom_claude"
     bin_path.write_text("#!/bin/sh\n")
@@ -104,7 +104,7 @@ def test_binary_env_override_used(monkeypatch: pytest.MonkeyPatch, tmp_path: Pat
 
 def test_invoke_nonzero_exit_raises(monkeypatch: pytest.MonkeyPatch) -> None:
     """Non-zero exit → CliInvocationError carrying stderr clip."""
-    from core.self_improving_loop import cli_subprocess
+    from core.self_improving.loop import cli_subprocess
 
     monkeypatch.setattr(cli_subprocess.shutil, "which", lambda b: f"/bin/{b}")
 
@@ -118,7 +118,7 @@ def test_invoke_nonzero_exit_raises(monkeypatch: pytest.MonkeyPatch) -> None:
 
 def test_invoke_timeout_raises(monkeypatch: pytest.MonkeyPatch) -> None:
     """``subprocess.TimeoutExpired`` → ``CliInvocationError`` with timeout hint."""
-    from core.self_improving_loop import cli_subprocess
+    from core.self_improving.loop import cli_subprocess
 
     monkeypatch.setattr(cli_subprocess.shutil, "which", lambda b: f"/bin/{b}")
 
@@ -164,7 +164,7 @@ def test_default_llm_call_dispatches_to_claude_cli(monkeypatch: pytest.MonkeyPat
     not the plain-text shape the mutator parser consumes. Codex MCP
     BLOCKER fix-up.
     """
-    from core.self_improving_loop import runner
+    from core.self_improving.loop import runner
 
     cfg_mock = MagicMock()
     cfg_mock.autoresearch.mutator.default_model = "claude-opus-4-7"
@@ -184,7 +184,7 @@ def test_default_llm_call_dispatches_to_claude_cli(monkeypatch: pytest.MonkeyPat
         invoked["user"] = user_prompt
         return "from claude-cli"
 
-    monkeypatch.setattr("core.self_improving_loop.cli_subprocess.invoke_claude_cli", _fake_invoke)
+    monkeypatch.setattr("core.self_improving.loop.cli_subprocess.invoke_claude_cli", _fake_invoke)
     result = runner._default_llm_call("SYS", "USR")
     assert result == "from claude-cli"
     assert invoked == {"called": True, "system": "SYS", "user": "USR"}
@@ -197,7 +197,7 @@ def test_default_llm_call_dispatches_to_codex_cli(monkeypatch: pytest.MonkeyPatc
     Step J-b.2 rationale on keeping CLI subscription branches on the
     plain-text helpers.
     """
-    from core.self_improving_loop import runner
+    from core.self_improving.loop import runner
 
     cfg_mock = MagicMock()
     cfg_mock.autoresearch.mutator.default_model = "gpt-5-codex"
@@ -212,7 +212,7 @@ def test_default_llm_call_dispatches_to_codex_cli(monkeypatch: pytest.MonkeyPatc
     def _fake_invoke(*, system_prompt: str, user_prompt: str) -> str:
         return "from codex-cli"
 
-    monkeypatch.setattr("core.self_improving_loop.cli_subprocess.invoke_codex_cli", _fake_invoke)
+    monkeypatch.setattr("core.self_improving.loop.cli_subprocess.invoke_codex_cli", _fake_invoke)
     result = runner._default_llm_call("SYS", "USR")
     assert result == "from codex-cli"
 
@@ -228,7 +228,7 @@ def test_default_llm_call_normalizes_openai_codex_provider(
     the legacy key so the API path resolves to ``openai-payg`` instead
     of erroring with ``AdapterNotFoundError``.
     """
-    from core.self_improving_loop import runner
+    from core.self_improving.loop import runner
 
     cfg_mock = MagicMock()
     cfg_mock.autoresearch.mutator.default_model = "gpt-5.5"
@@ -282,7 +282,7 @@ def test_default_llm_call_normalizes_openai_codex_provider(
 def test_normalize_provider_for_registry_passes_through_known_keys() -> None:
     """Non-codex provider keys pass through ``_normalize_provider_for_registry``
     unchanged so the helper is conservative."""
-    from core.self_improving_loop.runner import _normalize_provider_for_registry
+    from core.self_improving.loop.runner import _normalize_provider_for_registry
 
     assert _normalize_provider_for_registry("anthropic") == "anthropic"
     assert _normalize_provider_for_registry("openai") == "openai"
@@ -298,7 +298,7 @@ def test_default_llm_call_api_key_path_unchanged(monkeypatch: pytest.MonkeyPatch
     ``resolve_agentic_adapter(provider).agentic_call(...)`` →
     ``resolve_for(provider, "payg").acomplete(req)``.
     """
-    from core.self_improving_loop import runner
+    from core.self_improving.loop import runner
 
     cfg_mock = MagicMock()
     cfg_mock.autoresearch.mutator.default_model = "claude-opus-4-7"

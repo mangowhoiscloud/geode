@@ -17,18 +17,18 @@ invariants.
 Remaining wiring (unchanged):
 - ``PetriRoleConfig.source`` / ``AutoresearchConfig.source`` default
   ``claude-cli`` (subscription-first).
-- ``autoresearch/prepare.py`` ``check_subscription_cli_for_source`` pre-flight.
+- ``core/self_improving/prepare.py`` ``check_subscription_cli_for_source`` pre-flight.
 """
 
 from __future__ import annotations
 
 import pytest
-from autoresearch.prepare import check_subscription_cli_for_source
 from core.config.credential_source import CredentialSource
 from core.config.self_improving_loop import (
     AutoresearchConfig,
     PetriRoleConfig,
 )
+from core.self_improving.prepare import check_subscription_cli_for_source
 
 # ---------------------------------------------------------------------------
 # 1. Source literal — api_key reject
@@ -105,7 +105,7 @@ def test_preflight_claude_cli_missing_binary_returns_actionable_error(
     """``claude`` binary 가 PATH 에 없으면 actionable error 메시지 반환."""
     monkeypatch.delenv("GEODE_CLAUDE_CLI_BIN", raising=False)
     # shutil.which("claude") 가 None 반환하도록 mock
-    import autoresearch.prepare as prepare_module
+    import core.self_improving.prepare as prepare_module
 
     monkeypatch.setattr(prepare_module.shutil, "which", lambda _: None)
 
@@ -120,7 +120,7 @@ def test_preflight_codex_cli_missing_binary_returns_actionable_error(
 ) -> None:
     """``codex`` binary 부재 시 actionable error."""
     monkeypatch.delenv("GEODE_CODEX_CLI_BIN", raising=False)
-    import autoresearch.prepare as prepare_module
+    import core.self_improving.prepare as prepare_module
 
     monkeypatch.setattr(prepare_module.shutil, "which", lambda _: None)
 
@@ -135,7 +135,7 @@ def test_preflight_claude_cli_env_override_wins(
 ) -> None:
     """GEODE_CLAUDE_CLI_BIN env override 가 shutil.which 보다 우선."""
     monkeypatch.setenv("GEODE_CLAUDE_CLI_BIN", "/custom/path/claude")
-    import autoresearch.prepare as prepare_module
+    import core.self_improving.prepare as prepare_module
 
     # shutil.which 가 다른 값을 반환해도 env override 가 이김
     monkeypatch.setattr(prepare_module.shutil, "which", lambda _: "/usr/local/bin/claude")

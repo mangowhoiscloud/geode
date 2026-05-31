@@ -12,7 +12,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from autoresearch.bench_means import (
+from core.self_improving.bench_means import (
     BENCH_DIM_WEIGHTS,
     BENCH_PORT_MAP,
     BENCH_REQUIRES_DOCKER,
@@ -148,7 +148,7 @@ def test_results_jsonl_row_emits_bench_columns_when_provenance_passed() -> None:
     ``missing_benches`` / ``bench_rubric_version``) emit."""
     import json
 
-    from autoresearch.train import format_results_jsonl_row
+    from core.self_improving.train import format_results_jsonl_row
 
     prov = BenchProvenance(
         bench_means={"swe_bench_pro_pass": 0.42, "gpqa_diamond": 0.71},
@@ -192,7 +192,7 @@ def test_results_jsonl_row_default_empty_when_no_provenance() -> None:
     schema 일관성 유지. legacy reader backward-compat."""
     import json
 
-    from autoresearch.train import format_results_jsonl_row
+    from core.self_improving.train import format_results_jsonl_row
 
     row = json.loads(
         format_results_jsonl_row(
@@ -226,7 +226,7 @@ def test_write_baseline_persists_bench_provenance(monkeypatch: Any, tmp_path: An
     import json
     from pathlib import Path
 
-    from autoresearch import train as train_module
+    from core.self_improving import train as train_module
 
     target = tmp_path / "baseline.json"
     monkeypatch.setattr(train_module, "BASELINE_PATH", Path(target))
@@ -259,7 +259,7 @@ def test_should_promote_passes_bench_to_compute_fitness() -> None:
     """``_should_promote`` 가 bench_means + baseline_bench_means 를
     internal ``compute_fitness`` 호출에 forward. 이전엔 미전달 → Goodhart
     cross-validation gate 가 promote 결정에 0 영향. 이제 forward → fire 가능."""
-    from autoresearch.train import _should_promote
+    from core.self_improving.train import _should_promote
 
     # alignment_only_fooling scenario: dim 개선 (lower) + bench regress (lower)
     dim_means = {"broken_tool_use": 2.0}  # promote (lower than baseline 3.0)

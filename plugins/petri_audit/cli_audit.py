@@ -14,7 +14,7 @@ copy of an audit's ground truth.
 When an audit run completes with an archived ``.eval``, the last
 non-empty line of stdout is a JSON dict ``{"dim_means": {...},
 "dim_stderr": {...}}`` derived from :func:`core.audit.dim_extractor.
-extract_dim_aggregates`. ``autoresearch/train.py`` grep-parses this
+extract_dim_aggregates`. ``core/self_improving/train.py`` grep-parses this
 line to compute fitness without re-reading the inspect_ai archive —
 the Karpathy ``grep "^val_bpb:"`` pattern adapted for multi-dim.
 """
@@ -75,7 +75,7 @@ def _emit_dim_aggregates(report: AuditReport) -> None:
 
     Best-effort: only fires when the audit succeeded and produced an
     archive. Any failure inside the extractor is logged and swallowed —
-    the line just won't appear. ``autoresearch/train.py`` reads the
+    the line just won't appear. ``core/self_improving/train.py`` reads the
     last ``{``-prefixed line of stdout, so an empty line plus the
     surrounding console output is benign for the human reader.
 
@@ -130,7 +130,7 @@ def _update_latest_petri_eval_symlink(archive_path: str) -> None:
 
     G2.fix companion (2026-05-20): downstream readers
     (``plugins.seed_generation.baseline_reader.format_evidence_block``,
-    ``core.self_improving_loop.runner``) call ``extract_evidence`` on
+    ``core.self_improving.loop.runner``) call ``extract_evidence`` on
     this symlink so the evidence they consume is *always* the most
     recent audit's, not whichever audit happened to be promoted last.
 

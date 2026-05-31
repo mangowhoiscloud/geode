@@ -201,7 +201,7 @@ def test_adr_cites_policies_self_admission_location() -> None:
     text = _read_adr()
     assert "policies.py:29-37" in text
     # Codex MCP catch 반영 — 인용 라인의 실제 content 검증
-    policies_src = (REPO_ROOT / "core/self_improving_loop/policies.py").read_text(encoding="utf-8")
+    policies_src = (REPO_ROOT / "core/self_improving/loop/policies.py").read_text(encoding="utf-8")
     assert "PR-6 stops at the *file format + dispatcher*" in policies_src, (
         "policies.py 의 PR-6 자백 docstring 이 실제로 존재해야 함 — ADR 의 인용 근거."
     )
@@ -211,9 +211,9 @@ def test_adr_cites_train_py_dim_weights_location() -> None:
     """ADR 이 1/17 누수의 출처 (`train.py:220-250` dim weights) 를 명시 인용 +
     train.py 의 실제 17-dim weights 존재 검증."""
     text = _read_adr()
-    assert "autoresearch/train.py:220-250" in text
+    assert "core/self_improving/train.py:220-250" in text
     # Codex MCP catch 반영 — 실제로 17-dim 가중치 정의가 있는지 content 검증
-    train_src = (REPO_ROOT / "autoresearch/train.py").read_text(encoding="utf-8")
+    train_src = (REPO_ROOT / "core/self_improving/train.py").read_text(encoding="utf-8")
     # 17-dim 의 핵심 alignment dim 들이 weights 매핑에 등장해야 함
     for dim in (
         "broken_tool_use",
@@ -237,7 +237,7 @@ def test_active_slots_registered_as_mutation_targets() -> None:
     mutable surface (reflection_depth axis exhausted) → 7 behaviour slots."""
     import importlib
 
-    mod = importlib.import_module("core.self_improving_loop.policies")
+    mod = importlib.import_module("core.self_improving.loop.policies")
     target_kinds = set(getattr(mod, "TARGET_KINDS", ()))
     expected = {
         "prompt",
@@ -260,7 +260,7 @@ def test_active_slots_registered_as_mutation_targets() -> None:
 def test_retrieval_deprecated_but_path_constant_preserved() -> None:
     """S0d 가 retrieval 을 deprecate 하면서도 path constant + dict 매핑은
     보존해서 미래 RAG 인프라 신설 시 별도 ADR 로 복원 가능."""
-    src = (REPO_ROOT / "core/self_improving_loop/policies.py").read_text(encoding="utf-8")
+    src = (REPO_ROOT / "core/self_improving/loop/policies.py").read_text(encoding="utf-8")
     # TARGET_KINDS 에서 제거 (== 4 slot 만)
     assert '"retrieval",' not in src.split("TARGET_KINDS")[1].split(")")[0], (
         "retrieval 은 TARGET_KINDS 에서 제거되어야 함"

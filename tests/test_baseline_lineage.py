@@ -18,7 +18,7 @@ import sys
 from pathlib import Path
 from typing import Any
 
-from core.self_improving_loop.baseline_epoch import (
+from core.self_improving.loop.baseline_epoch import (
     HistoricalSpecOverride,
     build_baseline_spec,
     compute_epoch_hash,

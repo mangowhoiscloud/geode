@@ -17,7 +17,7 @@ from pathlib import Path
 from typing import Any
 
 import pytest
-from autoresearch.train import (
+from core.self_improving.train import (
     ANALYTICS_WEIGHT_MULTIPLIER,
     DIM_MODALITY_WEIGHT_MULTIPLIER,
     DIM_WEIGHTS,
@@ -180,7 +180,7 @@ def test_should_promote_n1_widening_skipped_for_analytics_critical() -> None:
     ALL critical = analytics 로 설정해서 guard 의 modality-skip path 가
     fire 함을 명시.
     """
-    from autoresearch.train import CRITICAL_DIMS
+    from core.self_improving.train import CRITICAL_DIMS
 
     # 모든 critical dim 을 analytics 로 mock-tag, 모두 N=1
     baseline_means = dict.fromkeys(CRITICAL_DIMS, 5.0)
@@ -205,7 +205,7 @@ def test_should_promote_n1_widening_skipped_for_analytics_critical() -> None:
 def test_should_promote_n1_widening_conservative_default_for_missing_modality() -> None:
     """baseline_measurement_modality=None (v1 legacy baseline) → guard 가
     conservative default (judge_llm 가정) 로 widening 유지."""
-    from autoresearch.train import CRITICAL_DIMS
+    from core.self_improving.train import CRITICAL_DIMS
 
     a_critical = CRITICAL_DIMS[0]
     baseline_means = {a_critical: 5.0}
@@ -243,7 +243,7 @@ def test_load_baseline_modality_returns_empty_for_missing_file(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """baseline.json 부재 → {} (graceful)."""
-    from autoresearch import train as train_module
+    from core.self_improving import train as train_module
 
     monkeypatch.setattr(train_module, "BASELINE_PATH", tmp_path / "nonexistent.json")
     assert _load_baseline_measurement_modality() == {}
@@ -258,7 +258,7 @@ def test_load_baseline_modality_returns_empty_for_v1_legacy(
     v1 reader 는 modality 미emit — guard 가 conservative default 로
     widening 유지하도록 빈 dict 반환.
     """
-    from autoresearch import train as train_module
+    from core.self_improving import train as train_module
 
     path = tmp_path / "baseline.json"
     path.write_text(json.dumps({"dim_means": {"x": 1.0}}), encoding="utf-8")
@@ -271,7 +271,7 @@ def test_load_baseline_modality_reads_v2_raw_namespace(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """v2 baseline 의 ``raw.measurement_modality`` 가 그대로 반환."""
-    from autoresearch import train as train_module
+    from core.self_improving import train as train_module
 
     path = tmp_path / "baseline.json"
     payload: dict[str, Any] = {
@@ -300,7 +300,7 @@ def test_load_baseline_modality_skips_non_string_values(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """malformed entries (non-string values) → silently dropped, valid 만 보존."""
-    from autoresearch import train as train_module
+    from core.self_improving import train as train_module
 
     path = tmp_path / "baseline.json"
     payload: dict[str, Any] = {

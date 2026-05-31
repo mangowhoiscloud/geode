@@ -8,7 +8,7 @@ Pins:
 - ``format_rubric_block`` renders ``<rubric-warning>`` block; empty →
   empty string.
 - ``DIM_RUBRIC`` covers the 17 fitness dims (5 critical + 12 auxiliary)
-  defined in ``autoresearch.train.AXIS_TIERS``.
+  defined in ``core.self_improving.train.AXIS_TIERS``.
 - Orchestrator: ``rubric_excerpts`` slot active + baseline has
   regressions → block prepended to system prompt.
 """
@@ -28,7 +28,7 @@ def baseline_path(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Iterator[P
     target = tmp_path / "state" / "baseline.json"
     target.parent.mkdir(parents=True, exist_ok=True)
     monkeypatch.setattr(
-        "core.self_improving_loop.rubric_excerpts.resolve_baseline_path",
+        "core.self_improving.loop.rubric_excerpts.resolve_baseline_path",
         lambda: target,
     )
     yield target
@@ -39,8 +39,8 @@ def baseline_path(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Iterator[P
 
 def test_dim_rubric_covers_all_fitness_dims() -> None:
     """Every dim in ``AXIS_TIERS`` (critical + auxiliary) needs a rubric line."""
-    from autoresearch.train import AXIS_TIERS
-    from core.self_improving_loop.rubric_excerpts import DIM_RUBRIC
+    from core.self_improving.loop.rubric_excerpts import DIM_RUBRIC
+    from core.self_improving.train import AXIS_TIERS
 
     fitness_dims = {d for d, t in AXIS_TIERS.items() if t in ("critical", "auxiliary")}
     missing = fitness_dims - set(DIM_RUBRIC.keys())
@@ -48,7 +48,7 @@ def test_dim_rubric_covers_all_fitness_dims() -> None:
 
 
 def test_dim_rubric_entries_are_non_empty_strings() -> None:
-    from core.self_improving_loop.rubric_excerpts import DIM_RUBRIC
+    from core.self_improving.loop.rubric_excerpts import DIM_RUBRIC
 
     for dim, line in DIM_RUBRIC.items():
         assert isinstance(line, str) and line.strip(), f"empty rubric for {dim}"
@@ -58,27 +58,27 @@ def test_dim_rubric_entries_are_non_empty_strings() -> None:
 
 
 def test_load_baseline_missing_file_returns_none(baseline_path: Path) -> None:
-    from core.self_improving_loop.rubric_excerpts import load_baseline
+    from core.self_improving.loop.rubric_excerpts import load_baseline
 
     assert load_baseline() is None  # file not written yet
 
 
 def test_load_baseline_malformed_json_returns_none(baseline_path: Path) -> None:
-    from core.self_improving_loop.rubric_excerpts import load_baseline
+    from core.self_improving.loop.rubric_excerpts import load_baseline
 
     baseline_path.write_text("not json at all", encoding="utf-8")
     assert load_baseline() is None
 
 
 def test_load_baseline_non_dict_root_returns_none(baseline_path: Path) -> None:
-    from core.self_improving_loop.rubric_excerpts import load_baseline
+    from core.self_improving.loop.rubric_excerpts import load_baseline
 
     baseline_path.write_text(json.dumps([1, 2, 3]), encoding="utf-8")
     assert load_baseline() is None
 
 
 def test_load_baseline_valid_returns_dict(baseline_path: Path) -> None:
-    from core.self_improving_loop.rubric_excerpts import load_baseline
+    from core.self_improving.loop.rubric_excerpts import load_baseline
 
     payload = {
         "dim_means": {"broken_tool_use": 0.7},
@@ -94,7 +94,7 @@ def test_load_baseline_valid_returns_dict(baseline_path: Path) -> None:
 
 
 def test_find_returns_empty_for_top_k_zero() -> None:
-    from core.self_improving_loop.rubric_excerpts import find_worst_regressions
+    from core.self_improving.loop.rubric_excerpts import find_worst_regressions
 
     baseline = {
         "dim_means": {"d1": 0.5},
@@ -108,7 +108,7 @@ def test_find_worst_regressions_reads_v2_raw_dim_means() -> None:
     ``schema_version=2``, ``dim_means`` lives under ``raw.dim_means``.
     The function must source from there, not from the top-level
     ``dim_means`` key (which v2 baselines do not carry)."""
-    from core.self_improving_loop.rubric_excerpts import find_worst_regressions
+    from core.self_improving.loop.rubric_excerpts import find_worst_regressions
 
     baseline_v2 = {
         "schema_version": 2,
@@ -124,7 +124,7 @@ def test_find_worst_regressions_reads_v2_raw_dim_means() -> None:
 
 def test_find_skips_improving_dims() -> None:
     """Dims where current >= baseline are excluded — slot focuses on risks."""
-    from core.self_improving_loop.rubric_excerpts import find_worst_regressions
+    from core.self_improving.loop.rubric_excerpts import find_worst_regressions
 
     baseline = {
         "dim_means": {"improved": 0.95, "regressed": 0.5},
@@ -136,7 +136,7 @@ def test_find_skips_improving_dims() -> None:
 
 
 def test_find_sorts_by_regression_desc() -> None:
-    from core.self_improving_loop.rubric_excerpts import find_worst_regressions
+    from core.self_improving.loop.rubric_excerpts import find_worst_regressions
 
     baseline = {
         "dim_means": {"a": 0.6, "b": 0.4, "c": 0.7},
@@ -148,7 +148,7 @@ def test_find_sorts_by_regression_desc() -> None:
 
 
 def test_find_top_k_caps() -> None:
-    from core.self_improving_loop.rubric_excerpts import find_worst_regressions
+    from core.self_improving.loop.rubric_excerpts import find_worst_regressions
 
     baseline = {
         "dim_means": {"a": 0.5, "b": 0.5, "c": 0.5, "d": 0.5},
@@ -160,7 +160,7 @@ def test_find_top_k_caps() -> None:
 
 def test_find_tolerates_missing_means(baseline_path: Path) -> None:
     """Baseline without ``dim_means`` / ``baseline_means`` → empty list."""
-    from core.self_improving_loop.rubric_excerpts import find_worst_regressions
+    from core.self_improving.loop.rubric_excerpts import find_worst_regressions
 
     assert find_worst_regressions({}, top_k=3) == []
     assert find_worst_regressions({"dim_means": {}}, top_k=3) == []
@@ -168,7 +168,7 @@ def test_find_tolerates_missing_means(baseline_path: Path) -> None:
 
 
 def test_find_skips_non_numeric_values() -> None:
-    from core.self_improving_loop.rubric_excerpts import find_worst_regressions
+    from core.self_improving.loop.rubric_excerpts import find_worst_regressions
 
     baseline = {
         "dim_means": {"good": 0.5, "bad_type": "not a number"},
@@ -180,7 +180,7 @@ def test_find_skips_non_numeric_values() -> None:
 
 def test_find_attaches_rubric_when_dim_in_table() -> None:
     """Known dims pick up DIM_RUBRIC entry; unknowns get empty string."""
-    from core.self_improving_loop.rubric_excerpts import find_worst_regressions
+    from core.self_improving.loop.rubric_excerpts import find_worst_regressions
 
     baseline = {
         "dim_means": {"broken_tool_use": 0.5, "made_up_dim": 0.5},
@@ -198,13 +198,13 @@ def test_find_attaches_rubric_when_dim_in_table() -> None:
 
 
 def test_format_empty_returns_empty_string() -> None:
-    from core.self_improving_loop.rubric_excerpts import format_rubric_block
+    from core.self_improving.loop.rubric_excerpts import format_rubric_block
 
     assert format_rubric_block([]) == ""
 
 
 def test_format_renders_rubric_block() -> None:
-    from core.self_improving_loop.rubric_excerpts import (
+    from core.self_improving.loop.rubric_excerpts import (
         DimRegression,
         format_rubric_block,
     )
@@ -239,11 +239,11 @@ def test_orchestrator_prepends_rubric_block(
     baseline_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """rubric_excerpts slot active + baseline has regression → block in system."""
-    from core.self_improving_loop.in_context_slots import (
+    from core.self_improving.loop.in_context_slots import (
         SLOT_RUBRIC_EXCERPTS,
         InContextSlot,
     )
-    from core.self_improving_loop.in_context_wiring import apply_in_context_slots
+    from core.self_improving.loop.in_context_wiring import apply_in_context_slots
 
     baseline_path.write_text(
         json.dumps(
@@ -255,7 +255,7 @@ def test_orchestrator_prepends_rubric_block(
         encoding="utf-8",
     )
     monkeypatch.setattr(
-        "core.self_improving_loop.in_context_slots._load_in_context_slots_override",
+        "core.self_improving.loop.in_context_slots._load_in_context_slots_override",
         lambda: {
             SLOT_RUBRIC_EXCERPTS: InContextSlot(
                 name=SLOT_RUBRIC_EXCERPTS,
@@ -275,15 +275,15 @@ def test_orchestrator_no_op_when_baseline_missing(
     baseline_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """rubric_excerpts slot active but baseline.json absent → system unchanged."""
-    from core.self_improving_loop.in_context_slots import (
+    from core.self_improving.loop.in_context_slots import (
         SLOT_RUBRIC_EXCERPTS,
         InContextSlot,
     )
-    from core.self_improving_loop.in_context_wiring import apply_in_context_slots
+    from core.self_improving.loop.in_context_wiring import apply_in_context_slots
 
     # baseline_path fixture creates the parent dir but not the file
     monkeypatch.setattr(
-        "core.self_improving_loop.in_context_slots._load_in_context_slots_override",
+        "core.self_improving.loop.in_context_slots._load_in_context_slots_override",
         lambda: {
             SLOT_RUBRIC_EXCERPTS: InContextSlot(
                 name=SLOT_RUBRIC_EXCERPTS,

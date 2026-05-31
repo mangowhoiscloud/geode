@@ -58,7 +58,7 @@ class TestAnchorMeansSurface:
 
     def test_anchor_means_matches_anchor_confidence_module(self) -> None:
         """Drift guard: extract_anchor_means keys ↔ anchor_confidence module."""
-        from core.self_improving_loop.anchor_confidence import (
+        from core.self_improving.loop.anchor_confidence import (
             ANCHOR_DIMS_NEGATIVE,
             ANCHOR_DIMS_POSITIVE,
         )
@@ -98,7 +98,7 @@ PROMPT_DIR = Path(__file__).parents[3] / "plugins" / "seed_generation" / "agents
 
 
 class TestTierDocParity:
-    """Pin the .md tier blocks to ``autoresearch.train.AXIS_TIERS``.
+    """Pin the .md tier blocks to ``core.self_improving.train.AXIS_TIERS``.
 
     catalog is frozen, but the .md strings hard-code the same dim
     names — drift would surface here as a fail forcing a same-PR sync.
@@ -106,7 +106,7 @@ class TestTierDocParity:
 
     @pytest.mark.parametrize("md_name", ["pilot.md", "critic.md", "evolver.md"])
     def test_md_lists_every_critical_dim(self, md_name: str) -> None:
-        from autoresearch.train import AXIS_TIERS
+        from core.self_improving.train import AXIS_TIERS
 
         body = (PROMPT_DIR / md_name).read_text(encoding="utf-8")
         critical_dims = [d for d, tier in AXIS_TIERS.items() if tier == "critical"]
@@ -116,7 +116,7 @@ class TestTierDocParity:
 
     @pytest.mark.parametrize("md_name", ["pilot.md", "critic.md", "evolver.md"])
     def test_md_lists_every_auxiliary_dim(self, md_name: str) -> None:
-        from autoresearch.train import AXIS_TIERS
+        from core.self_improving.train import AXIS_TIERS
 
         body = (PROMPT_DIR / md_name).read_text(encoding="utf-8")
         auxiliary_dims = [d for d, tier in AXIS_TIERS.items() if tier == "auxiliary"]
@@ -126,7 +126,7 @@ class TestTierDocParity:
 
     @pytest.mark.parametrize("md_name", ["pilot.md", "critic.md", "evolver.md"])
     def test_md_lists_every_info_dim(self, md_name: str) -> None:
-        from autoresearch.train import AXIS_TIERS
+        from core.self_improving.train import AXIS_TIERS
 
         body = (PROMPT_DIR / md_name).read_text(encoding="utf-8")
         info_dims = [d for d, tier in AXIS_TIERS.items() if tier == "info"]
@@ -137,7 +137,7 @@ class TestTierDocParity:
     @pytest.mark.parametrize("md_name", ["pilot.md", "critic.md", "evolver.md"])
     def test_md_tier_mapping_matches_axis_tiers(self, md_name: str) -> None:
         """Parse the tier table in each .md and assert dim -> tier
-        bidirectional equality with ``autoresearch.train.AXIS_TIERS``.
+        bidirectional equality with ``core.self_improving.train.AXIS_TIERS``.
 
         PR-SG-SELECTION-ALIGN-FIX (2026-05-25, V3) — pre-fix
         `test_md_lists_every_<tier>_dim` only asserted "every
@@ -153,7 +153,7 @@ class TestTierDocParity:
         """
         import re
 
-        from autoresearch.train import AXIS_TIERS
+        from core.self_improving.train import AXIS_TIERS
 
         body = (PROMPT_DIR / md_name).read_text(encoding="utf-8")
         for tier in ("critical", "auxiliary", "info"):

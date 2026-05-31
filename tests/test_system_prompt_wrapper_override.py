@@ -164,14 +164,14 @@ def test_sot_fallback_non_string_values_uses_default(
 
 
 def test_sot_path_parity_with_autoresearch() -> None:
-    """G5a — autoresearch.train.WRAPPER_SECTIONS_SOT_PATH ===
+    """G5a — core.self_improving.train.WRAPPER_SECTIONS_SOT_PATH ===
     core.agent.system_prompt._WRAPPER_SECTIONS_SOT_PATH.
 
     The two SoT path constants are deliberately *duplicated* (not
     imported) to keep the import-linter "Agent stays pure" contract
     intact, so the parity must be pinned by a test instead.
     """
-    from autoresearch import train as auto_train
     from core.agent import system_prompt
+    from core.self_improving import train as auto_train
 
     assert auto_train.WRAPPER_SECTIONS_SOT_PATH == system_prompt._WRAPPER_SECTIONS_SOT_PATH

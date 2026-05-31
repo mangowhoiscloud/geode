@@ -1,12 +1,19 @@
-"""autoresearch — GEODE self-improving loop driver.
+"""autoresearch — GEODE self-improving loop DATA + program SoT.
 
-Runs the wrapper-prompt mutation loop on top of petri's per-dim
-baseline. petri owns the measurement layer (rubric + dim scoring);
-this package owns the aggregation + selection layer (tier weights +
-fitness + auto-promote). This ``__init__`` is deliberately empty —
-the self-improving-loop agent never imports the package, it just
-invokes ``uv run python autoresearch/train.py`` (the single-script
-invocation idiom borrowed from Karpathy autoresearch, MIT 2026-03).
+The loop *CODE* moved to :mod:`core.self_improving` (umbrella package,
+PR-SELF-IMPROVING-UMBRELLA 2026-05-31). What stays here is the runtime
+*DATA* and the program SoT the running campaign + gitignore guards depend
+on, deliberately left in place:
 
-Reference: ``autoresearch/README.md`` + ``autoresearch/program.md``.
+* ``autoresearch/state/`` — baseline.json, mutations.jsonl, policies/,
+  seed-pools, the campaign progress log (the canonical state directory the
+  running campaign writes to; ``core.self_improving.train`` /
+  ``core.self_improving.campaign`` resolve ``REPO_ROOT/"autoresearch"/"state"``).
+* ``autoresearch/program.md`` — the program SoT the mutator reads.
+* ``autoresearch/README.md`` — the loop overview.
+
+This ``__init__`` is deliberately side-effect-free; nothing imports the
+package for behaviour. To run the loop, invoke
+``python -m core.self_improving.train`` (single audit) or
+``python -m core.self_improving.campaign`` (the campaign driver).
 """

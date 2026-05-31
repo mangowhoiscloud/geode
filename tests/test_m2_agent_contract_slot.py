@@ -24,7 +24,7 @@ from core.agent.agent_contracts_policy import (
 )
 
 from core.agent import agent_contracts_policy
-from core.self_improving_loop import policies as pol
+from core.self_improving.loop import policies as pol
 
 
 @pytest.fixture

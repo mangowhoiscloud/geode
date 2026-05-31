@@ -13,7 +13,7 @@ the very next ``gpt-5.5`` turn surfaced
    ``provider="openai-codex"`` call to ``resolve_for("openai", "payg")``
    → ``openai-payg`` adapter → ``api.openai.com``.
 2. ``core/agent/loop/_reflection.py:292`` and
-   ``core/self_improving_loop/runner.py:830`` hard-coded ``"payg"`` so
+   ``core/self_improving/loop/runner.py:830`` hard-coded ``"payg"`` so
    subscription-only Pattern B reflected / mutated through the depleted
    PAYG endpoint while the main loop sat on the subscription endpoint.
 3. ``core/llm/errors.py:_classify_openai_error`` treated
@@ -227,7 +227,7 @@ def test_reflection_node_no_longer_hardcodes_payg() -> None:
 def test_self_improving_runner_no_longer_hardcodes_payg() -> None:
     """Source-level pin: self-improving mutator uses ``infer_source(provider)``."""
     runner_source = (
-        Path(__file__).resolve().parents[1] / "core" / "self_improving_loop" / "runner.py"
+        Path(__file__).resolve().parents[1] / "core" / "self_improving" / "loop" / "runner.py"
     ).read_text(encoding="utf-8")
     assert 'resolve_for(_normalize_provider_for_registry(provider), "payg")' not in runner_source, (
         "runner.py still hard-codes the payg source on the mutator path."

@@ -1,6 +1,8 @@
-"""Unit tests for the self-improving campaign driver (``scripts/run_campaign.py``).
+"""Unit tests for the self-improving campaign driver (``core/self_improving/campaign.py``).
 
-PR-CAMPAIGN-DRIVER (2026-05-31). NO live audits — every boundary is mocked:
+PR-CAMPAIGN-DRIVER (2026-05-31); relocated under the ``core.self_improving``
+umbrella by PR-SELF-IMPROVING-UMBRELLA (2026-05-31). NO live audits — every
+boundary is mocked:
 the mutator ``propose()``, the ``train.py`` subprocess, ``read_eval_log``, and
 the SoT files (via monkeypatched module-level path constants). The tests cover:
 
@@ -17,14 +19,20 @@ the SoT files (via monkeypatched module-level path constants). The tests cover:
 from __future__ import annotations
 
 import json
+import subprocess
+import sys
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
 
+import core.self_improving.campaign as rc
 import pytest
-import scripts.run_campaign as rc
-from core.self_improving_loop.mutator_feedback import RepetitionFinding, RepetitiveMutationError
-from core.self_improving_loop.runner import Mutation, Proposal
+from core.self_improving.loop.mutator_feedback import RepetitionFinding, RepetitiveMutationError
+from core.self_improving.loop.runner import Mutation, Proposal
+
+# tests/test_run_campaign.py → parents[1] = repo root (where ``core/`` is importable
+# so ``python -m core.self_improving.campaign`` / ``…train`` resolve their package).
+_REPO_ROOT = Path(__file__).resolve().parents[1]
 
 # ---------------------------------------------------------------------------
 # Fixtures — redirect the module-level SoT paths into tmp dirs
@@ -1016,3 +1024,55 @@ def test_read_latest_attribution_picks_newest(campaign_state: dict[str, Path]) -
 
 def test_read_latest_attribution_none_when_absent(campaign_state: dict[str, Path]) -> None:
     assert rc.read_latest_attribution(campaign_state["mutations"]) is None
+
+
+# ---------------------------------------------------------------------------
+# Relocation regression — real subprocess dry-run end-to-end
+# ---------------------------------------------------------------------------
+
+
+def test_campaign_dry_run_via_real_subprocess_completes() -> None:
+    """``python -m core.self_improving.campaign --dry-run`` runs end-to-end green.
+
+    PR-SELF-IMPROVING-UMBRELLA (2026-05-31) relocated the campaign driver +
+    audit runner under ``core.self_improving``. This test exercises the REAL
+    moved import wiring + the ``-m core.self_improving.train`` spawn path the
+    way the operator runs it — NOT the mocked-subprocess smoke
+    (``test_dry_run_end_to_end_smoke``). It is the "logic didn't break" gate:
+    a future move that orphans an import or breaks the
+    ``campaign → -m core.self_improving.train`` spawn fails here, in the normal
+    ``not live`` suite, with NO network / PAYG spend (``--dry-run`` synthesises
+    every audit). The campaign writes only to the repo's real
+    ``autoresearch/state`` log files in append mode, which is the same
+    behaviour as the operator dry-run; it never promotes (dry-run skips the
+    baseline rewrite + git commit).
+    """
+    proc = subprocess.run(  # noqa: S603 — argv is constant, no shell
+        [
+            sys.executable,
+            "-m",
+            "core.self_improving.campaign",
+            "--dry-run",
+            "--n",
+            "1",
+            "--arms",
+            "never,random,gate",
+        ],
+        cwd=str(_REPO_ROOT),
+        capture_output=True,
+        text=True,
+        check=False,
+        timeout=600,
+    )
+    assert proc.returncode == 0, (
+        f"campaign dry-run exited {proc.returncode} — the moved import wiring or "
+        f"the '-m core.self_improving.train' spawn regressed.\n"
+        f"stdout tail:\n{proc.stdout[-2000:]}\n"
+        f"stderr tail:\n{proc.stderr[-2000:]}"
+    )
+    combined = proc.stdout + proc.stderr
+    assert "campaign complete" in combined, (
+        "campaign dry-run did not reach 'campaign complete' — orchestration "
+        f"halted early.\nstdout tail:\n{proc.stdout[-2000:]}\n"
+        f"stderr tail:\n{proc.stderr[-2000:]}"
+    )

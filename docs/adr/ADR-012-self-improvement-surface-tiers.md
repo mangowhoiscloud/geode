@@ -6,7 +6,7 @@ Proposed (2026-05-21)
 
 ## Context
 
-GEODE 는 weight-invariant evolutionary agent 군 (AlphaEvolve / Voyager / Reflexion / Promptbreeder 와 동위) 에 위치한다. 모델 가중치를 수정하는 대신, 모델 외부의 **에이전트 wrapper 정책** 5축을 mutator LLM 으로 진화시키고, autoresearch 의 fitness gate 가 Petri 17-dim 평가로 monotonic ratchet 을 제공한다 (`autoresearch/train.py`).
+GEODE 는 weight-invariant evolutionary agent 군 (AlphaEvolve / Voyager / Reflexion / Promptbreeder 와 동위) 에 위치한다. 모델 가중치를 수정하는 대신, 모델 외부의 **에이전트 wrapper 정책** 5축을 mutator LLM 으로 진화시키고, autoresearch 의 fitness gate 가 Petri 17-dim 평가로 monotonic ratchet 을 제공한다 (`core/self_improving/train.py`).
 
 이 ADR 은 두 가지 직교 발견을 함께 다룬다.
 
@@ -59,7 +59,7 @@ PR-AUDIT-5SLOT (`docs/audits/2026-05-21-self-improving-loop-5-slot-reader-audit.
 |---|---|---|
 | Bootstrap | `core/runtime.py`, `core/agent/loop/` | 자기 호출 경로 → 무한루프/자기파괴 |
 | Self-improving runner | `core/self_improving_loop/runner.py` | mutator 자기 수정 → ratchet 우회 |
-| Fitness gate | `autoresearch/train.py`, `compute_fitness`, `baseline.json` 평가 코드 | 평가 기준 mutate → monotonic 보장 무력화 |
+| Fitness gate | `core/self_improving/train.py`, `compute_fitness`, `baseline.json` 평가 코드 | 평가 기준 mutate → monotonic 보장 무력화 |
 | CI ratchet | `tests/test_ratchet_policies_in_repo.py` | guard 자체 mutate → CANNOT 우회 |
 | HookSystem | `core/hooks/system.py` | policy chain 우회 |
 | Mutator agent contract | mutator 자신의 system prompt | 재귀 자기수정 |
@@ -70,7 +70,7 @@ PR-AUDIT-5SLOT (`docs/audits/2026-05-21-self-improving-loop-5-slot-reader-audit.
 
 ### 2. Fitness 다축화 — 3축 multi-axis strict-reject ratchet
 
-> **2026-05-30 amendment (PR-MARGIN-FITNESS-SCALE)** — `ux_means` (행동 metric) 축이 fitness 에서 **제거**됐다. fitness 는 순수 Petri dim aggregate + (예약된) `admire_means` + `bench_means` 의 **3축** 으로 회귀. 근거: ux collector 가 cycle-0 에 빈 dict 를 반환해 promote gate 에 의미있는 신호를 주지 못했고, margin 재설계(아래 §S6 의 fitness-scale gain-stderr) 시 fitness 를 dim-scale 로 단순화하는 편이 명확. 코드 상수 `FITNESS_DIM_3AX 0.55 / FITNESS_ADMIRE_3AX 0.20 / FITNESS_BENCH_3AX 0.25` (`autoresearch/train.py`, sum=1.0 assert) + admire-only 2축 `FITNESS_DIM_WEIGHT 0.70 / FITNESS_ADMIRE_WEIGHT 0.30` 가 ground-truth.
+> **2026-05-30 amendment (PR-MARGIN-FITNESS-SCALE)** — `ux_means` (행동 metric) 축이 fitness 에서 **제거**됐다. fitness 는 순수 Petri dim aggregate + (예약된) `admire_means` + `bench_means` 의 **3축** 으로 회귀. 근거: ux collector 가 cycle-0 에 빈 dict 를 반환해 promote gate 에 의미있는 신호를 주지 못했고, margin 재설계(아래 §S6 의 fitness-scale gain-stderr) 시 fitness 를 dim-scale 로 단순화하는 편이 명확. 코드 상수 `FITNESS_DIM_3AX 0.55 / FITNESS_ADMIRE_3AX 0.20 / FITNESS_BENCH_3AX 0.25` (`core/self_improving/train.py`, sum=1.0 assert) + admire-only 2축 `FITNESS_DIM_WEIGHT 0.70 / FITNESS_ADMIRE_WEIGHT 0.30` 가 ground-truth.
 >
 > **2026-05-23 amendment (PR-SIL-5THEME C1, superseded by 2026-05-30)** — 초안의 3축 (dim + ux + admire) 에서 **bench_means** 가 추가되어 4축 으로 확장됐었다. 초기 운영의 `seed_pool_diversity` 슬롯은 cohort diversity 신호 readers 의 부재 + ELO tournament 가 panel diversity 를 이미 흡수하는 점이 확인돼 **명시적 deprecate**.
 
@@ -220,7 +220,7 @@ Boris 의 6 근거 중 4개 (1/2/5/6) 가 GEODE 의 `retrieval` slot 에 직접 
 
 ### S6. Bench fitness axis — 7-bench frontier federation (2026-05-23 신설)
 
-> **신설 근거**: 코드 (`autoresearch/bench_means.py` + `autoresearch/train.py` 의 `FITNESS_BENCH_3AX=0.25`; ux 제거 전엔 `FITNESS_BENCH_4AX`) 가 `bench_means` fitness 축을 이미 정의했고 §Decision.2 가 그 사실을 명세화 했지만 (이 amendment), bench 축의 *구성* — 어느 7 benchmark, 가중치, frontier 갱신 근거 — 가 ADR 측에 누락돼 있었다. 본 §S6 가 그 빈자리를 채운다. (ux 제거 2026-05-30 후 bench 는 3번째 축.)
+> **신설 근거**: 코드 (`core/self_improving/bench_means.py` + `core/self_improving/train.py` 의 `FITNESS_BENCH_3AX=0.25`; ux 제거 전엔 `FITNESS_BENCH_4AX`) 가 `bench_means` fitness 축을 이미 정의했고 §Decision.2 가 그 사실을 명세화 했지만 (이 amendment), bench 축의 *구성* — 어느 7 benchmark, 가중치, frontier 갱신 근거 — 가 ADR 측에 누락돼 있었다. 본 §S6 가 그 빈자리를 채운다. (ux 제거 2026-05-30 후 bench 는 3번째 축.)
 
 #### S6.1 — Bench 의 역할
 
@@ -255,7 +255,7 @@ Boris 의 6 근거 중 4개 (1/2/5/6) 가 GEODE 의 `retrieval` slot 에 직접 
 - **alignment_only_fooling**: dim_means promote (Petri 개선) + bench_means regress (capability 저하) → fooling 의심, strict reject
 - **capability_at_alignment_cost**: bench_means promote + dim critical regress → capability gain at alignment cost, strict reject
 
-두 conflict 모두 `compute_fitness → 0.0` 발화 (`autoresearch/bench_means.py:detect_cross_validation_conflict` + `autoresearch/train.py:compute_fitness` 의 bench(3-axis) 분기에서 호출).
+두 conflict 모두 `compute_fitness → 0.0` 발화 (`core/self_improving/bench_means.py:detect_cross_validation_conflict` + `core/self_improving/train.py:compute_fitness` 의 bench(3-axis) 분기에서 호출).
 
 #### S6.5 — Frontier sources (2026-05)
 
@@ -298,7 +298,7 @@ Boris 의 6 근거 중 4개 (1/2/5/6) 가 GEODE 의 `retrieval` slot 에 직접 
 
 #### S6b.4 — `prepare.py` 의 Docker pre-flight (A1 명세)
 
-`autoresearch/prepare.py` 에 신규 헬퍼:
+`core/self_improving/prepare.py` 에 신규 헬퍼:
 - `_check_docker_available()`: `docker --version` + image pull dry-run
 - `_check_inspect_evals_installed()`: `inspect_evals` / `inspect_harbor` import 가용성
 - 결과를 `missing_benches` 에 미리 등록 → collector 가 호출 안 함
@@ -409,7 +409,7 @@ PR-AUDIT-5SLOT 으로 진단 완료. dead slot 별 reader 신설:
 - Karpathy autoresearch — 본 ADR 의 fitness gate 본체. baseline.json + dim_means 17개 + compute_fitness
 - `docs/audits/2026-05-21-self-improving-loop-5-slot-reader-audit.md` — S0 진단의 근거 문서
 - `core/self_improving_loop/policies.py:29-37` — PR-6 의 의도적 follow-up 미완 자백 (1/5 누수의 출처)
-- `autoresearch/train.py:220-250` — 17-dim 가중치 + `compute_fitness` 의 음의 압력 편향 (1/17 누수의 출처)
+- `core/self_improving/train.py:220-250` — 17-dim 가중치 + `compute_fitness` 의 음의 압력 편향 (1/17 누수의 출처)
 - `plugins/seed_generation/agents/ranker.py` — `admire_means` 의 ELO + 3-voter panel 인프라 재사용 출발점
 
 ## 후속 PR 시퀀스 (이 ADR 머지 후 즉시)

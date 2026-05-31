@@ -44,7 +44,7 @@ def test_default_config_has_safe_defaults() -> None:
 
 
 def test_autoresearch_defaults_match_train_module() -> None:
-    """Defaults mirror the existing autoresearch/train.py module constants.
+    """Defaults mirror the existing core/self_improving/train.py module constants.
 
     PR-MINIMAL-2 (2026-05-21):
     - ``target_model`` / ``judge_model`` defaults flipped to ``None``
@@ -164,7 +164,7 @@ def test_get_autoresearch_config_propagates_validation_error_to_operator(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """PR-C-P1 Codex MCP catch — ``autoresearch.train._get_autoresearch_config``
+    """PR-C-P1 Codex MCP catch — ``core.self_improving.train._get_autoresearch_config``
     used to ``except Exception:`` and silently fall back to the module
     defaults, so an operator config with ``seed_limit = 2`` (< new
     ``ge=5`` floor) produced no error. The narrowed catch now lets
@@ -181,7 +181,7 @@ def test_get_autoresearch_config_propagates_validation_error_to_operator(
 seed_limit = 2
 """,
     )
-    import autoresearch.train as auto_train
+    import core.self_improving.train as auto_train
     from core.config import self_improving_loop as sil_config
 
     # Capture the unpatched loader, then monkeypatch the import target
@@ -411,7 +411,7 @@ def test_default_path_resolves_to_global_config_toml(
 
 def _make_journal(tmp_path: Path):
     """Construct a RunTranscript pointing at a temp file."""
-    from core.self_improving_loop.run_transcript import RunTranscript
+    from core.self_improving.loop.run_transcript import RunTranscript
 
     return RunTranscript(
         session_id="p2-test",
@@ -432,7 +432,7 @@ def test_load_emits_file_missing_notice_into_session_journal(tmp_path: Path) -> 
     """When config file is absent and a RunTranscript scope is active,
     the loader emits a ``self_improving_loop_config_defaults_applied``
     event with ``reason='file_missing'``."""
-    from core.self_improving_loop.run_transcript import run_transcript_scope
+    from core.self_improving.loop.run_transcript import run_transcript_scope
 
     journal = _make_journal(tmp_path)
     missing = tmp_path / "nope.toml"
@@ -450,7 +450,7 @@ def test_load_emits_file_missing_notice_into_session_journal(tmp_path: Path) -> 
 def test_load_emits_section_missing_notice_into_session_journal(tmp_path: Path) -> None:
     """File exists but the ``[self_improving_loop]`` section is absent →
     notice with ``reason='section_missing'``."""
-    from core.self_improving_loop.run_transcript import run_transcript_scope
+    from core.self_improving.loop.run_transcript import run_transcript_scope
 
     journal = _make_journal(tmp_path)
     path = tmp_path / "config.toml"
@@ -469,7 +469,7 @@ def test_load_emits_read_error_notice_as_warn(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """OSError on read → notice with ``reason='read_error'`` at level ``warn``."""
-    from core.self_improving_loop.run_transcript import run_transcript_scope
+    from core.self_improving.loop.run_transcript import run_transcript_scope
 
     journal = _make_journal(tmp_path)
     path = tmp_path / "config.toml"
@@ -503,7 +503,7 @@ def test_load_silent_when_no_run_transcript_scope(tmp_path: Path) -> None:
 def test_load_does_not_emit_notice_when_section_present(tmp_path: Path) -> None:
     """When the [self_improving_loop] section is populated, no
     defaults-applied event fires — the loader is using user values."""
-    from core.self_improving_loop.run_transcript import run_transcript_scope
+    from core.self_improving.loop.run_transcript import run_transcript_scope
 
     journal = _make_journal(tmp_path)
     path = tmp_path / "config.toml"

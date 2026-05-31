@@ -79,7 +79,7 @@ AUTORESEARCH_EVIDENCE_TEMPLATE = (
 PYPROJECT = REPO_ROOT / "pyproject.toml"
 
 # E6 (2026-05-30) — the three control arms of the matched held-out comparison.
-# Mirrors the writer-side ``_VALID_PROMOTE_POLICIES`` in ``autoresearch/train.py``
+# Mirrors the writer-side ``_VALID_PROMOTE_POLICIES`` in ``core/self_improving/train.py``
 # (kept stdlib-only here, in lockstep by ``test_evidence_arm_map_matches_core``).
 # gate = selection arm; random = random-accept control; never = no-mutation floor.
 _EVIDENCE_ARMS: tuple[tuple[str, str], ...] = (
@@ -89,7 +89,7 @@ _EVIDENCE_ARMS: tuple[tuple[str, str], ...] = (
 )
 
 # E6 (2026-05-30) — the standard two-sample mean-difference power constants,
-# MIRRORING the SoT in ``core/self_improving_loop/statistical_power.py`` (this
+# MIRRORING the SoT in ``core/self_improving/loop/statistical_power.py`` (this
 # builder is intentionally stdlib-only so it cannot import core). The defaults
 # below are the same δ / α / power the writer powers for; the formula
 # (``n ≈ 2(z_{α/2}+z_β)²σ²/δ²``) is reproduced in ``_required_n_seed`` so the page
@@ -99,7 +99,7 @@ _POWER_DEFAULT_TARGET_EFFECT_SIZE = 0.02
 _POWER_DEFAULT_ALPHA = 0.05
 _POWER_DEFAULT_POWER = 0.8
 
-# 12-col header from autoresearch/train.py:1284 RESULTS_TSV_HEADER.
+# 12-col header from core/self_improving/train.py:1284 RESULTS_TSV_HEADER.
 # Verified against actual code (P-Phase-6 baseline 2026-05-26).
 AUTORESEARCH_RESULTS_TSV_HEADER: tuple[str, ...] = (
     "session_id",
@@ -490,7 +490,7 @@ def render_autoresearch_rows(state: AutoresearchState) -> str:
         gen_label = "—"
         models_cell = (
             '<span class="muted">no baseline written yet — run '
-            "<code>uv run python autoresearch/train.py --promote</code></span>"
+            "<code>uv run python -m core.self_improving.train --promote</code></span>"
         )
         fitness_cell = '<span class="muted">.</span>'
     elif baseline is None:
@@ -3450,7 +3450,7 @@ def _load_baseline(state_dir: Path) -> tuple[dict[str, Any] | None, bool, Path |
 
 
 # PR-BASELINE-REGISTRY (2026-05-30) — discriminator for the registry's
-# baseline rows (mirrors ``autoresearch.train._BASELINE_REGISTRY_KIND``). The
+# baseline rows (mirrors ``core.self_improving.train._BASELINE_REGISTRY_KIND``). The
 # legacy gen timeline filters these out; the dedicated index lands in a
 # follow-up phase.
 _BASELINE_REGISTRY_ROW_KIND = "baseline"
@@ -3714,7 +3714,7 @@ def _render_warning_banner(baseline_path: Path | None, stale: bool) -> str:
         "Autoresearch baseline read from <code>"
         f"{html_escape(baseline_path.name)}</code>, no live "
         "<code>baseline.json</code> present in <code>autoresearch/state/</code>. "
-        "Run <code>uv run python autoresearch/train.py --promote</code> to refresh."
+        "Run <code>uv run python -m core.self_improving.train --promote</code> to refresh."
         "</div>"
     )
 
@@ -4108,7 +4108,7 @@ def _render_baseline_registry_index(archive: list[dict[str, Any]]) -> str:
     if not rows:
         return (
             '    <p class="empty-namespace">No <code>kind="baseline"</code> registry rows yet. '
-            "A row is appended on every promote (<code>autoresearch/train.py</code>).</p>"
+            "A row is appended on every promote (<code>core/self_improving/train.py</code>).</p>"
         )
     # Group by epoch_hash, preserving each epoch's label + spec from its first row.
     # Rows written before the epoch schema (no epoch_hash) bucket under a single
@@ -4247,7 +4247,7 @@ def _autoresearch_status_grid(
             ("current baseline", "<em>no baseline yet</em>"),
             (
                 "next action",
-                "<code>uv run python autoresearch/train.py --promote</code>",
+                "<code>uv run python -m core.self_improving.train --promote</code>",
             ),
         ]
     else:
@@ -4505,7 +4505,7 @@ def _render_mutations_rows(joined: list[dict[str, Any]]) -> str:
     if not joined:
         return (
             f'        <tr><td colspan="{_MUTATIONS_COLSPAN}" class="empty">'
-            "<em>No mutations recorded. Run <code>uv run python autoresearch/train.py</code>."
+            "<em>No mutations recorded. Run <code>uv run python -m core.self_improving.train</code>."
             "</em></td></tr>"
         )
     out: list[str] = []
@@ -4639,7 +4639,7 @@ def _collect_held_out_curve(mutations: list[dict[str, Any]]) -> list[dict[str, A
 
     Reads ``kind="attribution"`` rows that carry ``held_out_fitness`` — the
     fixed-ruler measurement recorded EVERY cycle when a held-out bench is
-    configured (``autoresearch/train.py`` E2-wire). Rows without the field
+    configured (``core/self_improving/train.py`` E2-wire). Rows without the field
     (no-bench / legacy) are skipped. Points are ordered by ``ts`` ascending so the
     list reads chronologically — generation 1 first — which is how a
     fitness-vs-generation curve is read.
@@ -4761,7 +4761,7 @@ def _required_n_seed(sigma: float | None) -> int | None:
     """Required N_seed per arm to detect ``_POWER_DEFAULT_TARGET_EFFECT_SIZE`` at
     ``_POWER_DEFAULT_POWER`` given the RECORDED combined fitness-stderr ``sigma``.
 
-    Mirrors ``core.self_improving_loop.statistical_power.required_samples`` (the
+    Mirrors ``core.self_improving.loop.statistical_power.required_samples`` (the
     stdlib-only builder cannot import core): the textbook two-sample mean-difference
     sample size ``n ≈ 2·(z_{α/2}+z_β)²·σ²/δ²`` per arm, rounded UP. Computed from the
     σ actually recorded on the E4 rows — NOT a fabricated number — so the page never
@@ -5193,7 +5193,7 @@ def _render_evidence_results(
         blocks.append(
             '    <p class="empty"><em>No held-out campaign recorded yet — awaiting the '
             "matched 3-arm 10-cycle run. The per-arm curves render here once "
-            "<code>autoresearch/train.py</code> writes them.</em></p>"
+            "<code>core/self_improving/train.py</code> writes them.</em></p>"
         )
     else:
         for arm, label in _EVIDENCE_ARMS:
@@ -5393,7 +5393,7 @@ def _render_results_rows(
 
 
 # target_kind -> mirrored policy filename. Local copy of the SoT in
-# core/self_improving_loop/policies.py::_KIND_TO_PATH (the docs builder is
+# core/self_improving/loop/policies.py::_KIND_TO_PATH (the docs builder is
 # intentionally stdlib-only, so it cannot import core). Kept in lockstep by
 # test_policy_file_map_matches_core (dual-SoT drift guard).
 _TARGET_KIND_TO_POLICY_FILE: dict[str, str] = {
@@ -5581,7 +5581,7 @@ def render_autoresearch_baseline(
             "      <h3>no baseline</h3>\n"
             '      <p class="empty-namespace">No live <code>baseline.json</code> '
             "and no <code>baseline.json.outdated-*</code> snapshot found. Run "
-            "<code>uv run python autoresearch/train.py --promote</code>.</p>\n"
+            "<code>uv run python -m core.self_improving.train --promote</code>.</p>\n"
             "    </div>"
         )
     else:

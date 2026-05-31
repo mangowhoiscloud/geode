@@ -1,6 +1,6 @@
 """PR-BASELINE-EPOCH (2026-05-30) — content-addressed epoch discriminator.
 
-Pins the pure spec→hash→label module (``core.self_improving_loop.baseline_epoch``):
+Pins the pure spec→hash→label module (``core.self_improving.loop.baseline_epoch``):
 determinism, surface-sensitivity (every spec field moves the hash), instance-blindness
 (measured values are not in the spec), canonical serialization, sequential labels, and
 the seed-pool content-hash. The registry-integration guards (row self-verifies, distinct
@@ -12,7 +12,7 @@ from __future__ import annotations
 from pathlib import Path
 
 import pytest
-from core.self_improving_loop.baseline_epoch import (
+from core.self_improving.loop.baseline_epoch import (
     SPEC_SCHEMA_VERSION,
     build_baseline_spec,
     canonical_spec_json,
