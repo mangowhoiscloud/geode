@@ -497,31 +497,22 @@ _MUTATION_CONTRACT_SUFFIX = (
     "next audit.\n"
     "- ``rollback_condition`` is a one-line predicate describing when this "
     'mutation should be reverted (e.g. ``"helpfulness drops below 0.4"``).\n'
-    "- ``target_kind`` selects the policy SoT to mutate. One of "
-    "``prompt`` (default, wrapper-sections.json), ``tool_policy`` "
-    "(tool-policy.json), ``decomposition`` (decomposition.json), "
-    "``reflection`` (reflection.json), ``skill_catalog`` "
-    "(skill-catalog.json), ``agent_contract`` (agent-contracts.json), "
-    "``tool_descriptions`` (tool-descriptions.json — PR-TOOL-DESCRIPTIONS-MUTATE "
-    "graduation, 2026-05-27), or ``hyperparam`` (hyperparam.json — "
-    "PR-HYPERPARAM-FOUNDATION graduation, 2026-05-28: numeric / categorical "
-    "audit-budget tuning). "
+    "- ``target_kind`` selects the policy SoT to mutate. One of the 7 "
+    "behaviour kinds: ``prompt`` (default, wrapper-sections.json), "
+    "``tool_policy`` (tool-policy.json), ``decomposition`` "
+    "(decomposition.json), ``reflection`` (reflection.json), "
+    "``skill_catalog`` (skill-catalog.json), ``agent_contract`` "
+    "(agent-contracts.json), or ``tool_descriptions`` (tool-descriptions.json "
+    "— PR-TOOL-DESCRIPTIONS-MUTATE graduation, 2026-05-27). "
     "Omit for prompt-level mutations. For ``tool_descriptions``, the "
     "``target_section`` uses dotted notation: ``<tool_name>.description`` "
     "(string replacement) or ``<tool_name>.hints`` (comma-separated list "
-    "of hint strings). For ``hyperparam``, the ONLY mutable ``target_section`` "
-    "is ``reflection_depth`` (integer, bounds [1, 5]); ``new_value`` is the "
-    'string-encoded value (``"5"`` not ``5``). The audit-measurement '
-    "parameters ``max_turns`` / ``seed_limit`` / ``dim_set`` are FIXED "
-    "(PR-AUDIT-SCAFFOLD-WIRE, 2026-05-31) and a mutation targeting them is "
-    "REJECTED — they change how/what the audit measures, which would confound "
-    "the mutated-vs-baseline fitness comparison. Use a reflection_depth "
-    "hyperparam mutation when the regression dim's measurement_modality is "
-    "``tool_log`` or ``token_count`` (programmatic / mechanism-level) and "
-    "prompt mutations have repeatedly produced ``Δ ≈ 0`` for the target dim. "
-    "(``retrieval`` "
-    "was deprecated in ADR-012 S0d, 2026-05-21 — see policies.py "
-    "docstring.)\n"
+    "of hint strings). The ``hyperparam`` kind (audit-budget / "
+    "reflection_depth knobs) is NOT mutable (PR-DROP-HYPERPARAM-MUTATION, "
+    "2026-05-31): the measurement params (seed_limit / max_turns / dim_set) "
+    "are fixed audit config and the reflection_depth axis is exhausted, so a "
+    "``hyperparam`` mutation is REJECTED at parse. (``retrieval`` was "
+    "deprecated in ADR-012 S0d, 2026-05-21 — see policies.py docstring.)\n"
     "- **Principle-first (P3-revised, 2026-05-25, SPCT pattern)**: BEFORE "
     "selecting ``target_section`` and writing ``new_value``, explicitly state "
     "the judging principle that motivates this mutation — what specific axis "
@@ -540,13 +531,13 @@ _MUTATION_CONTRACT_SUFFIX = (
     "principle targets redundant_tool_invocation by tightening the LLM's "
     "mental model of when re-querying is justified — the tool_log modality "
     'measures dedup count, so prompt-level dedup discipline is the lever."\n'
-    '  GOOD (398 chars): "redundant_tool_invocation is a tool_log '
-    "measurement: it counts repeated tool calls within an episode. An extra "
-    "reflection pass (reflection_depth) lets the agent re-read its own prior "
-    "tool output and prune a re-query before emitting it, so deepening "
-    "reflection is a direct mechanism-level lever — distinct from the "
-    "prompt-level coaching that cycle 11-14 attempted, and the only mutable "
-    'hyperparam (max_turns / seed_limit / dim_set are fixed measurement)."\n'
+    '  GOOD (412 chars): "redundant_tool_invocation is a tool_log '
+    "measurement: it counts repeated tool calls within an episode. The "
+    "reflection policy (target_kind=reflection) governs whether the agent "
+    "re-reads its own prior tool output before emitting a new call, so "
+    "tightening the reflection policy's re-query discipline is a direct "
+    "mechanism-level lever — distinct from the prompt-level coaching that "
+    'cycle 11-14 attempted."\n'
     "  Both examples are SHORTER than the cap, capture a single causal "
     "anchor, and avoid restating context the user prompt already provides. "
     "Your principle should be NO LONGER than these examples; restating "
@@ -886,93 +877,53 @@ def _default_llm_call(system_prompt: str, user_prompt: str) -> str:
     return text
 
 
-# PR-HYPERPARAM-FOUNDATION (2026-05-28) — bounds map for the
-# ``hyperparam`` target_kind. Two shapes:
+# PR-DROP-HYPERPARAM-MUTATION (2026-05-31, operator decision) — the
+# ``hyperparam`` target_kind is REMOVED from the mutable surface entirely.
 #
-#   _HYPERPARAM_INT_BOUNDS:   key → (min, max) for integer-valued knobs
-#   _HYPERPARAM_CATEGORICAL:  key → allowed-string set
+# History: PR-HYPERPARAM-FOUNDATION (2026-05-28) opened a numeric / categorical
+# hyperparam mutation slot (max_turns / seed_limit / dim_set / reflection_depth);
+# PR-AUDIT-SCAFFOLD-WIRE (2026-05-31) then restricted it to ``reflection_depth``
+# ONLY (the other three rejected as audit-measurement params that confound the
+# mutated-vs-baseline comparison). But ``reflection_depth`` is an EXHAUSTED axis:
+# after ≥3 prior applies the axis-family dedup in ``mutator_feedback.py``
+# (``_AXIS_REPEAT_LIMIT = 3``) rejects every new ``reflection_depth`` proposal as
+# repetitive (synthetic ``axis_family_exhausted_*``, similarity 1.000). With only
+# one mutable section left, a live campaign exhausts all 8 propose-guard attempts
+# every cycle → every cycle SKIPs → zero data. So the kind is dropped from
+# ``TARGET_KINDS`` (``policies.py``) and the mutator now proposes only the 7
+# behaviour kinds and diversifies.
 #
-# PR-AUDIT-SCAFFOLD-WIRE (2026-05-31, operator decision) — the mutable
-# hyperparam surface is restricted to ``reflection_depth`` ONLY. The other
-# three knobs (``max_turns`` / ``seed_limit`` / ``dim_set``) are MEASUREMENT
-# parameters: they change *how / what* the audit measures (turn budget,
-# sample count, judged dim set), which confounds the fitness comparison
-# between a mutated scaffold and its baseline — a mutation that "improves"
-# fitness merely by shrinking the dim set or the sample fan-out is a
-# measurement artifact, not a real scaffold gain. Those three are now FIXED
-# audit-spec parameters owned by the autoresearch config (and the
-# baseline-epoch spec hash); they are rejected at ``_validate_hyperparam_
-# bounds`` so a mutator cannot propose them. ``reflection_depth`` stays
-# mutable because it is a genuine GEODE *runtime* behaviour knob (AgenticLoop
-# reflection-iteration cap), not an audit-measurement parameter, so tuning it
-# is a legitimate scaffold change whose effect the FIXED measurement captures
-# honestly.
+# The per-section bounds machinery (``_HYPERPARAM_INT_BOUNDS`` /
+# ``_HYPERPARAM_FIXED_MEASUREMENT_KEYS`` / ``_HYPERPARAM_CATEGORICAL``) is now
+# moot — ALL hyperparam mutations are rejected — and is removed rather than
+# left as dead branches. A single clear rejection replaces it.
 #
-# Bounds chosen so a worst-case mutator proposal cannot:
-#   - silently disable reflection (``reflection_depth ≥ 1``)
-#   - explode per-turn latency / cost (``reflection_depth ≤ 5``)
-_HYPERPARAM_INT_BOUNDS: dict[str, tuple[int, int]] = {
-    "reflection_depth": (1, 5),
-}
-_HYPERPARAM_CATEGORICAL: dict[str, frozenset[str]] = {}
-_HYPERPARAM_ALLOWED_KEYS: frozenset[str] = frozenset(
-    list(_HYPERPARAM_INT_BOUNDS.keys()) + list(_HYPERPARAM_CATEGORICAL.keys())
-)
-# Measurement parameters that USED to be mutable (PR-HYPERPARAM-FOUNDATION)
-# but are now FIXED (PR-AUDIT-SCAFFOLD-WIRE). Tracked separately so the
-# rejection error message can explain *why* (confound) rather than just
-# "unknown key", and so a regression test can pin the non-mutability.
-_HYPERPARAM_FIXED_MEASUREMENT_KEYS: frozenset[str] = frozenset(
-    {"max_turns", "seed_limit", "dim_set"}
-)
+# PRESERVED: ``autoresearch/state/policies/hyperparam.json`` and its RUNTIME
+# readers (``autoresearch.train._load_hyperparam_overrides`` →
+# seed_limit/max_turns/dim_set/reflection_depth consumed by the audit subprocess
+# + AgenticLoop). Only the MUTATION surface is gone.
 
 
-def _validate_hyperparam_bounds(section: str, value: str) -> None:
-    """Validate a ``hyperparam`` mutation's ``(target_section, new_value)`` pair.
+def _reject_hyperparam_mutation() -> None:
+    """Reject any ``target_kind="hyperparam"`` mutation.
 
-    Raises :class:`ValueError` if ``section`` is unknown, if a numeric
-    section's ``value`` cannot be cast to int, or if the resulting
-    integer / categorical is outside the documented bounds. The bounds
-    are documented inline in the mutator system-prompt suffix
-    (``_MUTATION_CONTRACT_SUFFIX``) so a fail-closed parse here mirrors
-    what the LLM was told.
+    ``hyperparam`` is no longer a mutable kind (PR-DROP-HYPERPARAM-MUTATION,
+    2026-05-31). It is removed from ``TARGET_KINDS`` so the generic
+    not-in-TARGET_KINDS guard already fails closed, but this dedicated
+    rejection gives the operator a *specific* explanation rather than the
+    generic enumeration — measurement params are fixed config and the
+    ``reflection_depth`` axis is exhausted.
+
+    Always raises :class:`ValueError`.
     """
-    if section in _HYPERPARAM_FIXED_MEASUREMENT_KEYS:
-        raise ValueError(
-            f"hyperparam target_section {section!r} is a FIXED audit-measurement "
-            "parameter and is not mutable (PR-AUDIT-SCAFFOLD-WIRE, 2026-05-31): "
-            "mutating turn budget / sample count / dim set confounds the "
-            "mutated-vs-baseline fitness comparison. Only reflection_depth is "
-            f"mutable; allowed set: {sorted(_HYPERPARAM_ALLOWED_KEYS)!r}."
-        )
-    if section not in _HYPERPARAM_ALLOWED_KEYS:
-        raise ValueError(
-            f"hyperparam target_section {section!r} not in allowed set "
-            f"{sorted(_HYPERPARAM_ALLOWED_KEYS)!r}"
-        )
-    if section in _HYPERPARAM_INT_BOUNDS:
-        lo, hi = _HYPERPARAM_INT_BOUNDS[section]
-        try:
-            n = int(value)
-        except (TypeError, ValueError) as exc:
-            raise ValueError(
-                f"hyperparam {section} new_value {value!r} must be an integer-convertible string"
-            ) from exc
-        if not (lo <= n <= hi):
-            raise ValueError(f"hyperparam {section}={n} out of bounds [{lo}, {hi}]")
-        return
-    # Categorical branch. ``_HYPERPARAM_CATEGORICAL`` is currently empty
-    # (PR-AUDIT-SCAFFOLD-WIRE removed ``dim_set`` — a measurement param — and
-    # ``reflection_depth`` is integer-valued), so a valid ``section`` always
-    # hits the int branch above and this branch is reserved for a future
-    # categorical knob. Kept (not deleted) so re-adding one only needs a map
-    # entry. ``allowed`` is empty for any section that reaches here, so the
-    # value is rejected — fail-closed.
-    allowed = _HYPERPARAM_CATEGORICAL.get(section, frozenset())
-    if value not in allowed:
-        raise ValueError(
-            f"hyperparam {section} new_value {value!r} must be one of {sorted(allowed)!r}"
-        )
+    raise ValueError(
+        "hyperparam is not a mutable kind — measurement params "
+        "(seed_limit / max_turns / dim_set) are fixed audit config, and the "
+        "reflection_depth axis is exhausted (PR-DROP-HYPERPARAM-MUTATION, "
+        "2026-05-31). Propose one of the 7 behaviour kinds instead "
+        "(prompt / tool_policy / tool_descriptions / decomposition / "
+        "reflection / skill_catalog / agent_contract)."
+    )
 
 
 def parse_mutation(raw: str) -> Mutation:
@@ -1081,16 +1032,16 @@ def parse_mutation(raw: str) -> Mutation:
     if not isinstance(kind_raw, str):
         raise ValueError(f"target_kind must be a string, got {type(kind_raw).__name__}")
     target_kind = kind_raw.strip() or "prompt"
+    # PR-DROP-HYPERPARAM-MUTATION (2026-05-31) — ``hyperparam`` is dropped
+    # from TARGET_KINDS so the generic guard below already fails closed; this
+    # dedicated branch wins first so the mutator gets the *specific* reason
+    # (measurement params fixed + reflection_depth axis exhausted) rather than
+    # the generic enumeration. apply_mutation applies the same gate (boundary
+    # completeness, CLAUDE.md → Wiring Verification → Conditional Read Parity).
+    if target_kind == "hyperparam":
+        _reject_hyperparam_mutation()
     if target_kind not in TARGET_KINDS:
         raise ValueError(f"target_kind {target_kind!r} is not one of {TARGET_KINDS!r}")
-    # PR-HYPERPARAM-FOUNDATION (2026-05-28) — hyperparam kind 별 bounds
-    # 검사. mutator 가 ``max_turns=999`` 같은 유효 범위 밖 numeric 또는
-    # ``dim_set="bogus"`` 같은 유효 카테고리 밖 값을 propose 시 audit
-    # 시점에 silently crash 하기 전에 parse 시점에 fail-closed.
-    # Boundary completeness rule (CLAUDE.md → CANNOT → Quality):
-    # apply 시점에도 동일 가드를 적용해 두 layer 모두 보호.
-    if target_kind == "hyperparam":
-        _validate_hyperparam_bounds(target_section.strip(), new_value)
     mutation_id_raw = payload.get("mutation_id")
     # Mutation has a default_factory; pass only when the LLM supplied one.
     if isinstance(mutation_id_raw, str) and mutation_id_raw.strip():
@@ -1158,15 +1109,15 @@ def apply_mutation(
         write_wrapper_prompt_sections(sections)
         return sections, previous_value
 
-    # PR-HYPERPARAM-FOUNDATION (2026-05-28) — second-layer bounds gate.
-    # parse_mutation already validates at LLM-response time, but the
-    # apply path is reached from other entrypoints (manual ``apply_mutation``
-    # calls in tests / slash / re-runs of a parsed mutation), so a
-    # ``Mutation`` constructed outside ``parse_mutation`` cannot rely on
-    # the first gate. Defensive depth (CLAUDE.md → Wiring Verification →
-    # Conditional Read Parity).
+    # PR-DROP-HYPERPARAM-MUTATION (2026-05-31) — second-layer rejection.
+    # parse_mutation already rejects at LLM-response time, but the apply path
+    # is reached from other entrypoints (manual ``apply_mutation`` calls in
+    # tests / slash / re-runs of a parsed mutation), so a ``Mutation``
+    # constructed outside ``parse_mutation`` cannot rely on the first gate.
+    # Defensive depth (CLAUDE.md → Wiring Verification → Conditional Read
+    # Parity). ``hyperparam`` is no longer mutable — reject before any write.
     if mutation.target_kind == "hyperparam":
-        _validate_hyperparam_bounds(mutation.target_section, mutation.new_value)
+        _reject_hyperparam_mutation()
 
     # PR-6 policy kinds — tool_policy / decomposition / retrieval /
     # reflection. ``current_sections`` override is honoured for symmetry

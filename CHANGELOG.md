@@ -45,6 +45,41 @@ functional change.
 
 ---
 
+## [0.99.105] - 2026-05-31
+
+### Removed
+- **PR-DROP-HYPERPARAM-MUTATION (2026-05-31) — remove `hyperparam` from the
+  self-improving loop's mutation surface.** The mutator deterministically fixated
+  on `reflection_depth`: PR-AUDIT-SCAFFOLD-WIRE (#1938) had restricted the mutable
+  `hyperparam` kind to `reflection_depth` ONLY (`max_turns` / `seed_limit` /
+  `dim_set` rejected as audit-measurement params), but `reflection_depth` is an
+  exhausted axis — after ≥3 prior applies the axis-family dedup in
+  `core/self_improving_loop/mutator_feedback.py` (`_AXIS_REPEAT_LIMIT = 3`) rejects
+  every new `reflection_depth` proposal as repetitive (synthetic
+  `axis_family_exhausted_*`, similarity 1.000). With one mutable section left, a
+  live campaign exhausted all 8 propose-guard attempts every cycle → every cycle
+  SKIPped → zero data. `hyperparam` is now removed from
+  `core/self_improving_loop/policies.py::TARGET_KINDS` (the mutable surface is the
+  7 *behaviour* kinds: prompt, tool_policy, tool_descriptions, decomposition,
+  reflection, skill_catalog, agent_contract), so the mutator diversifies. A
+  mutation carrying `target_kind="hyperparam"` is rejected at `parse_mutation` /
+  `apply_mutation` (`runner.py::_reject_hyperparam_mutation`) with a clear message
+  ("hyperparam is not a mutable kind — measurement params are fixed config;
+  reflection_depth axis exhausted"); the PR-AUDIT-SCAFFOLD-WIRE per-section bounds
+  machinery (`_HYPERPARAM_INT_BOUNDS` / `_HYPERPARAM_FIXED_MEASUREMENT_KEYS` /
+  `_HYPERPARAM_CATEGORICAL` / `_validate_hyperparam_bounds`) is removed (no dead
+  branches). The mutator-feedback "Kind × Dim" attribution block is filtered to
+  active `TARGET_KINDS` so a historical `hyperparam` row no longer steers the
+  mutator into a parse-rejection SKIP. The
+  `autoresearch/state/policies/hyperparam.json` SoT and its runtime readers
+  (`autoresearch.train._load_hyperparam_overrides` →
+  seed_limit/max_turns/dim_set/reflection_depth consumed by the audit subprocess +
+  AgenticLoop) are preserved — only the mutation surface is gone; the
+  `_KIND_TO_PATH` mapping is kept (mirroring the deprecated `retrieval` slot) for
+  future re-add. Mutator system-prompt contract text + `autoresearch/program.md`
+  CAN-table updated to list only the 7 behaviour kinds. Docs:
+  `docs/self-improving/campaign-procedure.md` §2.1/§2.2.
+
 ## [0.99.104] - 2026-05-31
 
 ### Fixed

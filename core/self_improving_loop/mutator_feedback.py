@@ -112,9 +112,22 @@ def format_mutator_feedback_block(
         "",
     ]
 
+    # PR-DROP-HYPERPARAM-MUTATION (2026-05-31) — restrict the rendered kinds
+    # to the *active* mutable surface. The attribution matrix is built from
+    # historical apply/attribution rows, which can include kinds the mutator
+    # can no longer propose (``hyperparam`` was removed; ``retrieval`` was
+    # deprecated). Surfacing a retired kind here — under the "favour kinds
+    # that have moved the regression target_dim historically" guidance below
+    # — would steer the mutator straight into a ``parse_mutation`` rejection
+    # and a wasted SKIP. Filter to ``TARGET_KINDS`` so the feedback only
+    # recommends kinds the mutator can actually dispatch to.
+    from core.self_improving_loop.policies import TARGET_KINDS
+
     if matrix:
         lines.append("Kind x Dim (top dims by absolute attribution per kind):")
         for kind in sorted(matrix):
+            if kind not in TARGET_KINDS:
+                continue
             ranked = rank_dims_by_kind(matrix, kind, limit=_TOP_KINDS_IN_BLOCK)
             if not ranked:
                 continue

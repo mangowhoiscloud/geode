@@ -86,6 +86,38 @@ def test_feedback_block_renders_matrix_section_when_attribution_present() -> Non
     assert "broken_tool_use" in block
 
 
+def test_feedback_block_excludes_retired_hyperparam_kind() -> None:
+    """PR-DROP-HYPERPARAM-MUTATION (2026-05-31) — a historical ``hyperparam``
+    apply row must NOT be surfaced in the feedback block. The block tells the
+    mutator to "favour kinds that have moved the regression target_dim
+    historically"; if a retired kind appeared there the mutator would propose
+    it and the cycle would SKIP at ``parse_mutation`` rejection. Active kinds
+    in the same matrix are still surfaced."""
+    applies = [
+        _StubApplyRecord(
+            mutation_id="m_hp",
+            target_kind="hyperparam",
+            target_section="reflection_depth",
+        ),
+        _StubApplyRecord(mutation_id="m_p", target_kind="prompt", target_section="lead"),
+    ]
+    attributions = [
+        _StubAttributionRecord(
+            mutation_id="m_hp",
+            observed_dim={"redundant_tool_invocation": -0.5},
+            attribution_score=1.0,
+        ),
+        _StubAttributionRecord(
+            mutation_id="m_p",
+            observed_dim={"safety": 0.4},
+            attribution_score=1.0,
+        ),
+    ]
+    block = format_mutator_feedback_block(applies, attributions)
+    assert "prompt:" in block, "active kind should still be surfaced"
+    assert "hyperparam:" not in block, "retired hyperparam kind must be filtered out"
+
+
 def test_feedback_block_header_counts_match_inputs() -> None:
     """When there is matrix signal the header reports the apply count."""
     applies_signal = [

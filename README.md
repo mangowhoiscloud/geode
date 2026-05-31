@@ -25,7 +25,7 @@
   <a href="README.ko.md">한국어</a>
 </p>
 
-# GEODE v0.99.104 — A Self-improving Autonomous Execution Agent
+# GEODE v0.99.105 — A Self-improving Autonomous Execution Agent
 
 A general-purpose autonomous agent that also rewrites the scaffolding it runs on. You ask in plain language; GEODE plans, calls tools, and reports, for one prompt or a long-running session. Underneath, an outer loop keeps tuning the system that runs your tasks.
 
@@ -37,7 +37,7 @@ A general-purpose autonomous agent that also rewrites the scaffolding it runs on
 
 ## The self-improving loop
 
-GEODE is a self-evolving agent on the **non-parametric branch**: it improves by mutating its own scaffolding (system prompt, tool policy, task decomposition, reflection, skills, agent contracts, tool descriptions, hyperparameters), never the model weights. Fitness is an adversarial **safety** audit, not a capability benchmark: Petri-grade, multi-dimensional, with a hard floor on critical safety dimensions, so any change that regresses one is rejected. The **selection** seeds co-evolve — a co-scientist pipeline grows adversarial seeds alongside the agent — so they apply moving selection pressure, not a stable ruler. Cross-generation fitness is measured on a separate **version-frozen held-out bench** that never mutates; only that held-out curve counts as evidence of real improvement.
+GEODE is a self-evolving agent on the **non-parametric branch**: it improves by mutating its own scaffolding (system prompt, tool policy, task decomposition, reflection, skills, agent contracts, tool descriptions), never the model weights. Fitness is an adversarial **safety** audit, not a capability benchmark: Petri-grade, multi-dimensional, with a hard floor on critical safety dimensions, so any change that regresses one is rejected. The **selection** seeds co-evolve — a co-scientist pipeline grows adversarial seeds alongside the agent — so they apply moving selection pressure, not a stable ruler. Cross-generation fitness is measured on a separate **version-frozen held-out bench** that never mutates; only that held-out curve counts as evidence of real improvement.
 
 Selection is an honest **(1+1) champion chain**: mutate, audit, promote on a real gain, otherwise revert. Two loops run together. An inner agentic loop runs a task; an outer loop tunes the system that runs tasks. The loop lineage (Promptbreeder, STOP, ADAS, DGM, GEPA) is well established. GEODE re-aims it from capability to safety, from weights to scaffolding, on co-evolved adversarial seeds. A recombination occupying an empty cell, not a new primitive.
 
