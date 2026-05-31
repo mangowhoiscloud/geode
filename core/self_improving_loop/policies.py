@@ -180,11 +180,30 @@ def _maybe_migrate_legacy_sot(kind: str, new_path: Path) -> None:
 # reader-only surface graduates in its own follow-up PR (matching the
 # ADR-012 M1/M2 precedent that opened ``skill_catalog`` and
 # ``agent_contract``). Mutator emitting a ``target_kind`` not in
-# ``TARGET_KINDS`` fails fast at ``parse_mutation`` (``runner.py:914``
+# ``TARGET_KINDS`` fails fast at ``parse_mutation`` (``runner.py``
 # ValueError) — fail-closed by design. The reader-only set is pinned
 # by ``tests/core/self_improving_loop/test_target_kind_surface_doc.py``
 # so a future PR that promotes any of them must remove the entry
 # explicitly rather than silently expanding mutator dispatch.
+#
+# PR-DROP-HYPERPARAM-MUTATION (2026-05-31, operator decision) — ``hyperparam``
+# is REMOVED from the mutable surface. PR-HYPERPARAM-FOUNDATION (2026-05-28)
+# had graduated it, then PR-AUDIT-SCAFFOLD-WIRE (2026-05-31) restricted the
+# mutable section to ``reflection_depth`` ONLY (max_turns/seed_limit/dim_set
+# rejected as measurement params). But ``reflection_depth`` is an EXHAUSTED
+# axis: after ≥3 prior applies the axis-family dedup in
+# ``mutator_feedback.py`` rejects every new ``reflection_depth`` proposal as
+# repetitive (synthetic ``axis_family_exhausted_*``, similarity 1.000), so a
+# campaign exhausts all 8 propose-guard attempts every cycle → all cycles SKIP
+# → zero data. Removing the kind frees the mutator to propose only the 7
+# *behaviour* kinds and diversify. The ``hyperparam.json`` SoT and its RUNTIME
+# readers (seed_limit/max_turns/dim_set/reflection_depth consumed by the audit
+# subprocess + AgenticLoop via ``autoresearch.train._load_hyperparam_overrides``)
+# are PRESERVED — only the MUTATION surface is removed. ``_KIND_TO_PATH`` keeps
+# the ``hyperparam`` mapping (same path-literal guard as the deprecated
+# ``retrieval`` slot) so a future ADR can re-add it to ``TARGET_KINDS`` without
+# re-deriving the path. Rejection message lives in
+# ``runner.py::_reject_hyperparam_mutation``.
 TARGET_KINDS: tuple[str, ...] = (
     "prompt",
     "tool_policy",
@@ -215,26 +234,11 @@ TARGET_KINDS: tuple[str, ...] = (
     # ``_LIST_FIELDS_BY_KIND`` mapping below converts the comma-joined
     # mutation row back to a list on write.
     "tool_descriptions",
-    # PR-HYPERPARAM-FOUNDATION (2026-05-28) — numeric / categorical
-    # hyperparameter mutation slot. Distinct from the 7 text-artifact
-    # kinds above: this slot tunes the audit-subprocess command line
-    # + AgenticLoop runtime configuration directly (max_turns →
-    # ``-T max_turns=<n>``, seed_limit → ``--limit <n>``, dim_set →
-    # ``-T judge_dimensions=<value>``, reflection_depth → AgenticLoop
-    # reflection-iteration cap). Flat ``dict[str, str]`` schema with
-    # string-encoded values (``{"max_turns": "5"}``); runtime readers
-    # convert at the consumption site. Bounds enforced at
-    # ``parse_mutation`` via ``_HYPERPARAM_INT_BOUNDS`` /
-    # ``_HYPERPARAM_CATEGORICAL`` (see ``runner.py``) so a mutator
-    # proposing ``max_turns=999`` fails fast instead of silently
-    # crashing the next audit. Motivated by cycle 1-12 (2026-05-26 →
-    # 05-28) where 11/12 prompt-only mutations could not move
-    # ``redundant_tool_invocation`` (tool_log modality, programmatic
-    # tool-call dedup) — turn-budget mutation is the first surface
-    # the loop has that reaches that mechanism layer. PR-3
-    # (PR-HYPERPARAM-WIRE) lands the audit-subprocess argv builder +
-    # AgenticLoop reader.
-    "hyperparam",
+    # NOTE: ``hyperparam`` was a mutable slot from PR-HYPERPARAM-FOUNDATION
+    # (2026-05-28) through PR-AUDIT-SCAFFOLD-WIRE (2026-05-31) and is REMOVED
+    # by PR-DROP-HYPERPARAM-MUTATION (2026-05-31) — see the block above. The
+    # SoT + runtime readers stay; only the mutation surface is gone. The
+    # remaining 7 entries are all *behaviour* kinds.
 )
 
 # Each kind maps to the SoT file. ``prompt`` re-points to the legacy
@@ -242,6 +246,10 @@ TARGET_KINDS: tuple[str, ...] = (
 #
 # ``retrieval`` 매핑은 S0d 이후 deprecated 상태 — ``TARGET_KINDS`` 에서
 # 제외돼 mutation dispatch 가 발생하지 않지만 path constant 는 보존.
+# ``hyperparam`` 매핑도 PR-DROP-HYPERPARAM-MUTATION (2026-05-31) 이후 동일 —
+# ``TARGET_KINDS`` 에서 제외돼 mutation dispatch 불가하지만, runtime config
+# readers (``autoresearch.train._load_hyperparam_overrides``) 와 미래 ADR
+# 재추가를 위해 path 매핑 보존.
 _KIND_TO_PATH: dict[str, Path] = {
     "prompt": GLOBAL_WRAPPER_SECTIONS_PATH,
     "tool_policy": GLOBAL_TOOL_POLICY_PATH,
