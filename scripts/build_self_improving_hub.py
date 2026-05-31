@@ -88,6 +88,42 @@ _EVIDENCE_ARMS: tuple[tuple[str, str], ...] = (
     ("never", "no-mutation floor"),
 )
 
+# PR-HUB-CAMPAIGN-VIZ (2026-06-01) — the live 3-arm campaign per-cycle ledger.
+# campaign-progress.log lives next to mutations.jsonl in the autoresearch state
+# dir; the gen-0 K-mean snapshot is a SIBLING of the autoresearch root
+# (``<repo>/state/campaign/gen-0-snapshot/``), written by the campaign runner.
+_CAMPAIGN_PROGRESS_LOG = "campaign-progress.log"
+_CAMPAIGN_GEN0_SNAPSHOT = ("state", "campaign", "gen-0-snapshot", "baseline.json")
+# The Petri eval-log MANIFEST (one row per audit archive) + the Inspect-View
+# deep-link base. The MANIFEST is the only ledger linking a cycle's completed_at
+# to its .eval archive filename + the seeds it scored + its per-sample dims.
+_AUDIT_MANIFEST = ("docs", "audits", "eval-logs", "MANIFEST.jsonl")
+_EVAL_SUMMARY_DIR = ("docs", "audits", "eval-logs")
+_PETRI_BUNDLE_DEEPLINK_BASE = "/geode/self-improving/petri-bundle/"
+# A cycle's attribution-row ``ts`` is written within a few seconds of the audit
+# archive's ``completed_at``; a generous 180s tolerance matches a cycle to its
+# audit without ever stitching two distinct audits (they are >10min apart).
+_AUDIT_MATCH_TOLERANCE_S = 180.0
+
+# Per-cycle parse of campaign-progress.log. SoT for the line format is the campaign
+# driver ``core/self_improving/campaign.py`` (the ``progress.emit(...)`` writers), kept
+# in lockstep by ``test_campaign_regex_matches_digest_sot``.
+# "... arm 'gate' cycle 3/10: fitness_after=0.67 fitness_delta=-0.13 held_out=0.79 reject ..."
+_CAMPAIGN_CYCLE_RE = re.compile(
+    r"arm '(?P<arm>\w+)' cycle (?P<n>\d+)/(?P<total>\d+): "
+    r"(?:fitness_after=(?P<sel>[\d.]+) fitness_delta=(?P<delta>[-\d.]+) "
+    r"held_out=(?P<held>[\d.]+) (?P<verdict>\w+)"
+    r"|(?P<skip>SKIP[^\n]*))"
+)
+_CAMPAIGN_GEN0_RE = re.compile(
+    r"gen-0 baseline repeat (?P<n>\d+)/(?P<total>\d+): "
+    r"held_out=(?P<held>[\d.]+) fitness=(?P<sel>[\d.]+)"
+)
+_CAMPAIGN_NOISE_RE = re.compile(
+    r"gen-0 noise band: K=(?P<k>\d+) held_out_mean=(?P<mean>[\d.]+) stderr=(?P<stderr>[\d.]+)"
+)
+_CAMPAIGN_TS_RE = re.compile(r"^(?P<ts>\d{4}-\d\d-\d\dT\d\d:\d\d:\d\dZ)")
+
 # E6 (2026-05-30) — the standard two-sample mean-difference power constants,
 # MIRRORING the SoT in ``core/self_improving/loop/statistical_power.py`` (this
 # builder is intentionally stdlib-only so it cannot import core). The defaults
@@ -3499,6 +3535,230 @@ def _load_mutations(state_dir: Path) -> list[dict[str, Any]]:
     return rows
 
 
+def _load_campaign_progress(state_dir: Path) -> dict[str, Any]:
+    """Parse ``campaign-progress.log`` into per-cycle records + the gen-0 noise band.
+
+    The campaign runner is the AUTHORITATIVE source for the per-cycle **verdict**
+    (``promote`` / ``reject`` / ``SKIP``) and the gen-0 K-mean baseline band —
+    neither is in ``mutations.jsonl`` (its attribution rows carry the numbers but
+    not the gate decision, and a SKIP cycle writes no attribution row at all). Mirrors
+    the live log-line format written by ``core/self_improving/campaign.py`` (the SoT)
+    so the two stay in lockstep.
+
+    Returns ``{"cycles": [{arm, n, total, sel, held, delta, verdict, skip, ts}],
+    "gen0": [{n, total, sel, held}], "noise": {k, mean, stderr} | None}``. Every
+    numeric cast is guarded — a malformed line contributes nothing rather than
+    raising. Missing file → empty structure (the renderer shows an honest awaiting
+    state). NOTE the verdict here is the GATE decision, which is the one SoT a
+    promoted-baseline read cannot give (it only records the promotes, never the
+    rejects/SKIPs) — so this is the per-cycle ``latest`` SoT, distinct from the
+    ``promoted`` baseline_archive SoT.
+    """
+    path = state_dir / _CAMPAIGN_PROGRESS_LOG
+    out: dict[str, Any] = {"cycles": [], "gen0": [], "noise": None}
+    if not path.exists():
+        return out
+    try:
+        log_lines = path.read_text(encoding="utf-8").splitlines()
+    except OSError:
+        # A read/permission error reads the same as "no campaign yet" — never abort
+        # the whole build (this loader runs BEFORE the per-page _safe() wrapper).
+        return out
+    for line in log_lines:
+        ts_match = _CAMPAIGN_TS_RE.search(line)
+        line_ts = ts_match.group("ts") if ts_match else ""
+        cycle = _CAMPAIGN_CYCLE_RE.search(line)
+        if cycle:
+            rec: dict[str, Any] = {
+                "arm": cycle.group("arm"),
+                "n": int(cycle.group("n")),
+                "total": int(cycle.group("total")),
+                "ts": line_ts,
+                "skip": bool(cycle.group("skip")),
+            }
+            if not rec["skip"]:
+                # The regex only matches numeric literals, so float() is safe here;
+                # still guarded for the contract-completeness rule.
+                try:
+                    rec["sel"] = float(cycle.group("sel"))
+                    rec["held"] = float(cycle.group("held"))
+                    rec["delta"] = float(cycle.group("delta"))
+                except (TypeError, ValueError):
+                    continue
+                rec["verdict"] = cycle.group("verdict")
+            out["cycles"].append(rec)
+            continue
+        gen0 = _CAMPAIGN_GEN0_RE.search(line)
+        if gen0:
+            # The regex only captures numeric literals, so the cast is contract-safe;
+            # suppressing here keeps a hypothetically-malformed group from sinking the
+            # whole parse (graceful-contract completeness at the cast boundary).
+            with contextlib.suppress(TypeError, ValueError):
+                out["gen0"].append(
+                    {
+                        "n": int(gen0.group("n")),
+                        "total": int(gen0.group("total")),
+                        "sel": float(gen0.group("sel")),
+                        "held": float(gen0.group("held")),
+                    }
+                )
+            continue
+        noise = _CAMPAIGN_NOISE_RE.search(line)
+        if noise and out["noise"] is None:
+            with contextlib.suppress(TypeError, ValueError):
+                out["noise"] = {
+                    "k": int(noise.group("k")),
+                    "mean": float(noise.group("mean")),
+                    "stderr": float(noise.group("stderr")),
+                }
+    return out
+
+
+def _load_campaign_gen0_baseline(repo_root: Path) -> dict[str, Any] | None:
+    """Read the campaign gen-0 K-mean snapshot baseline.json.
+
+    Located at ``<repo>/state/campaign/gen-0-snapshot/baseline.json`` (a sibling of
+    the autoresearch root — NOT ``autoresearch/state/baseline.json``, which is the
+    top-level promoted SoT). Carries ``raw.dim_means`` (24 dims, Petri 1-10 scale,
+    LOWER-is-better) + ``raw.fitness_stderr`` — the per-dim floor the campaign's
+    per-cycle held-out is compared against. Returns ``None`` (honest awaiting state)
+    when the snapshot is absent or malformed.
+    """
+    path = repo_root.joinpath(*_CAMPAIGN_GEN0_SNAPSHOT)
+    if not path.exists():
+        return None
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except (json.JSONDecodeError, OSError):
+        return None
+    return data if isinstance(data, dict) else None
+
+
+def _load_audit_manifest(repo_root: Path) -> list[dict[str, Any]]:
+    """Parse the Petri eval-log MANIFEST into completed-at-keyed audit records.
+
+    The MANIFEST (``docs/audits/eval-logs/MANIFEST.jsonl``) is the ONLY ledger that
+    links an audit's ``completed_at`` to its ``.eval`` archive filename, the
+    ``seed_ids`` it scored, and the per-sample ``summary_yaml``. The campaign does
+    NOT write a per-cycle eval pointer into mutations.jsonl (the ``audit_run_id`` is
+    a 12-char hash that matches no eval filename), so the cycle→eval link is
+    reconstructed by matching the cycle's ``ts`` to the nearest ``completed_at``
+    (see :func:`_match_audit_for_cycle`). Returns rows with a parsed epoch
+    ``completed_ts`` (``float('nan')`` on a bad timestamp → never matches a cycle).
+    """
+    path = repo_root.joinpath(*_AUDIT_MANIFEST)
+    if not path.exists():
+        return []
+    try:
+        manifest_lines = path.read_text(encoding="utf-8").splitlines()
+    except OSError:
+        # A read error reads the same as "no MANIFEST" — never abort the build (this
+        # loader runs BEFORE the per-page _safe() wrapper).
+        return []
+    rows: list[dict[str, Any]] = []
+    for line in manifest_lines:
+        line = line.strip()
+        if not line:
+            continue
+        try:
+            entry = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+        if not isinstance(entry, dict):
+            continue
+        completed = entry.get("completed_at")
+        completed_ts = float("nan")
+        if isinstance(completed, str) and completed:
+            try:
+                completed_ts = _dt.datetime.fromisoformat(completed).timestamp()
+            except ValueError:
+                completed_ts = float("nan")
+        entry["completed_ts"] = completed_ts
+        rows.append(entry)
+    return rows
+
+
+def _match_audit_for_cycle(
+    cycle_ts: float, manifest: list[dict[str, Any]]
+) -> dict[str, Any] | None:
+    """Return the MANIFEST audit whose ``completed_at`` is closest to ``cycle_ts``.
+
+    A cycle's attribution-row ``ts`` is the post-audit write time, within a few
+    seconds of the audit archive's ``completed_at`` (empirically Δ ≤ 3s on the live
+    campaign; distinct audits are >10 min apart). Matches only within
+    ``_AUDIT_MATCH_TOLERANCE_S`` so a cycle with NO recorded audit (a SKIP, or a
+    pre-MANIFEST cycle) returns ``None`` rather than mis-attributing a far-away
+    archive — the renderer then shows "no eval recorded" instead of a wrong link.
+    Graceful: a non-finite ``cycle_ts`` matches nothing.
+    """
+    if not math.isfinite(cycle_ts):
+        return None
+    best: dict[str, Any] | None = None
+    best_gap = _AUDIT_MATCH_TOLERANCE_S
+    for row in manifest:
+        completed = row.get("completed_ts")
+        if not isinstance(completed, int | float) or not math.isfinite(float(completed)):
+            continue
+        gap = abs(float(completed) - cycle_ts)
+        if gap <= best_gap:
+            best_gap = gap
+            best = row
+    return best
+
+
+def _load_summary_dims(repo_root: Path, summary_yaml: str) -> dict[str, Any] | None:
+    """Read a per-audit ``*.summary.yaml`` for its per-sample non-baseline dim scores.
+
+    The summary YAML (sibling of the MANIFEST) carries ``samples_summary`` — one
+    entry per seed with its ``seed_id`` + ``non_baseline_dims`` (the dims that moved
+    off the baseline floor for that sample, Petri 1-10, LOWER-is-better). Parsed with
+    a tiny stdlib reader (the builder is intentionally dep-free, so no PyYAML): only
+    the shallow keys this panel needs are extracted, aggregated to a per-dim count of
+    samples that engaged each dim. Returns ``None`` when the file is absent /
+    unreadable. NOTE this is a deliberately minimal reader — it handles the flat
+    ``samples_summary`` block the campaign writes, not arbitrary YAML.
+    """
+    if not summary_yaml:
+        return None
+    path = repo_root.joinpath(*_EVAL_SUMMARY_DIR, summary_yaml)
+    if not path.exists():
+        return None
+    dim_engaged: dict[str, int] = {}
+    seed_ids: list[str] = []
+    in_dims = False
+    dims_indent = 0
+    try:
+        lines = path.read_text(encoding="utf-8").splitlines()
+    except OSError:
+        return None
+    for raw in lines:
+        stripped = raw.strip()
+        indent = len(raw) - len(raw.lstrip(" "))
+        if stripped.startswith("- id:") or stripped.startswith("seed_id:"):
+            value = stripped.split(":", 1)[1].strip()
+            if value and value not in seed_ids:
+                seed_ids.append(value)
+            in_dims = False
+            continue
+        if stripped == "non_baseline_dims:":
+            in_dims = True
+            dims_indent = indent
+            continue
+        if in_dims:
+            # A dim line is more-indented than the ``non_baseline_dims:`` key and is
+            # ``<dim>: <int>``; any line at/under the block indent ends the block.
+            if indent <= dims_indent or ":" not in stripped:
+                in_dims = False
+            else:
+                dim_name = stripped.split(":", 1)[0].strip()
+                if dim_name:
+                    dim_engaged[dim_name] = dim_engaged.get(dim_name, 0) + 1
+                continue
+    if not dim_engaged and not seed_ids:
+        return None
+    return {"dim_engaged": dim_engaged, "sample_count": len(seed_ids)}
+
+
 def _load_results_tsv(state_dir: Path) -> list[dict[str, str]]:
     """Return list of dicts from ``results.tsv``.
 
@@ -4940,6 +5200,417 @@ def _evidence_combined_sigma(mutations: list[dict[str, Any]]) -> float | None:
     return latest_sigma
 
 
+# --------------------------------------------------------------------------- #
+# PR-HUB-CAMPAIGN-VIZ (2026-06-01) — the live 3-arm campaign per-cycle ledger. #
+# Datadog-style dense faceted panels: per-arm cycle table (verdict / seeds /    #
+# Petri eval deep-link / dim engagement / selection-vs-held_out divergence) +   #
+# the gen-0 K-mean noise band + the gate-margin rule. Reads the campaign-       #
+# progress.log (verdict SoT) + mutations.jsonl attribution rows + the eval-log  #
+# MANIFEST (eval link + seeds + per-sample dims). Measured values only.         #
+# --------------------------------------------------------------------------- #
+_VERDICT_CLASS: dict[str, str] = {
+    "promote": "delta-positive",
+    "reject": "delta-noise",
+    "SKIP": "muted",
+}
+
+
+def _campaign_gen0_means(progress: dict[str, Any]) -> tuple[float | None, float | None]:
+    """Mean (selection, held-out) over the gen-0 K-mean repeats.
+
+    These anchor the per-cycle divergence: an arm's cycle is compared to the SAME
+    gen-0 baseline both arms started from. Selection-pool fitness and held-out
+    fitness sit on different scales (selection ~0.67, held-out ~0.82), so the
+    winner's-curse signal is the DIVERGENCE OF THEIR DELTAS vs this gen-0 anchor —
+    NOT the absolute level gap. Returns ``(None, None)`` when no gen-0 repeat is
+    recorded (the divergence column then degrades to an honest em-dash).
+    """
+    gen0 = progress.get("gen0") or []
+    sels = [float(r["sel"]) for r in gen0 if isinstance(r.get("sel"), int | float)]
+    helds = [float(r["held"]) for r in gen0 if isinstance(r.get("held"), int | float)]
+    sel_mean = sum(sels) / len(sels) if sels else None
+    held_mean = sum(helds) / len(helds) if helds else None
+    return (sel_mean, held_mean)
+
+
+def _campaign_full_attr(mutations: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """All arm-tagged ``kind="attribution"`` rows, ts-ascending, full payload.
+
+    Unlike :func:`_held_out_attribution_rows` (which projects to the curve fields),
+    this keeps the whole row so the cycle panel can read ``fitness_after`` /
+    ``between_seed_stderr`` / ``audit_run_id`` alongside ``held_out_fitness``.
+    """
+    out: list[dict[str, Any]] = []
+    for row in mutations:
+        if not isinstance(row, dict) or row.get("kind") != "attribution":
+            continue
+        arm = row.get("promote_policy")
+        if not (isinstance(arm, str) and arm):
+            continue
+        raw_ts = row.get("ts")
+        if not isinstance(raw_ts, int | float) or isinstance(raw_ts, bool):
+            continue
+        out.append(row)
+    out.sort(key=lambda r: float(r["ts"]))
+    return out
+
+
+def _render_gen0_noise_band(progress: dict[str, Any]) -> str:
+    """Render the gen-0 K-mean baseline + its measurement noise band.
+
+    The campaign re-measures the UNMUTATED gen-0 scaffold K times to establish the
+    noise floor every arm is judged against. Reads the parsed campaign-progress.log
+    (``gen0`` repeats + the ``noise`` band line). The held-out band (mean ± stderr)
+    is the ruler: an arm's per-cycle held-out must clear mean+stderr to be evidence
+    of real gain, not noise. Honest empty state when no gen-0 measure is recorded.
+    """
+    gen0 = progress.get("gen0") or []
+    noise = progress.get("noise")
+    if not gen0 and not noise:
+        return (
+            '    <h3 class="section"><span>gen-0 baseline noise band</span></h3>\n'
+            '    <p class="empty"><em>No gen-0 baseline measure recorded yet — the '
+            "campaign establishes the noise floor before the arms run.</em></p>"
+        )
+    rows: list[str] = []
+    for rep in gen0:
+        try:
+            n = int(rep["n"])
+            total = int(rep["total"])
+            sel = float(rep["sel"])
+            held = float(rep["held"])
+        except (KeyError, TypeError, ValueError):
+            continue
+        rows.append(
+            "        <tr>\n"
+            f'          <td class="num">{n}/{total}</td>\n'
+            f'          <td class="num">{sel:.4f}</td>\n'
+            f'          <td class="num">{held:.4f}</td>\n'
+            "        </tr>"
+        )
+    rows_html = "\n".join(rows) or (
+        '        <tr><td colspan="3" class="empty"><em>no repeats parsed</em></td></tr>'
+    )
+    band_line = ""
+    if isinstance(noise, dict):
+        try:
+            k = int(noise["k"])
+            mean = float(noise["mean"])
+            stderr = float(noise["stderr"])
+            band_line = (
+                f'    <p class="page-sub">K={k} held-out noise band: '
+                f'<span class="num">{mean:.4f}</span> &plusmn; '
+                f'<span class="num">{stderr:.4f}</span> stderr. An arm beats noise only '
+                "when its held-out clears <code>mean + stderr</code> "
+                f'(&gt; <span class="num">{mean + stderr:.4f}</span>). held-out fitness is '
+                "0-1, HIGHER-is-better.</p>\n"
+            )
+        except (KeyError, TypeError, ValueError):
+            band_line = ""
+    return (
+        '    <h3 class="section"><span>gen-0 baseline noise band &middot; K-mean '
+        "re-measure</span></h3>\n"
+        f"{band_line}"
+        '    <table class="records">\n'
+        "      <thead>\n"
+        "        <tr>\n"
+        '          <th scope="col" class="num">repeat</th>\n'
+        '          <th scope="col" class="num">selection fitness</th>\n'
+        '          <th scope="col" class="num">held-out fitness</th>\n'
+        "        </tr>\n"
+        "      </thead>\n"
+        f"      <tbody>\n{rows_html}\n      </tbody>\n"
+        "    </table>"
+    )
+
+
+def _render_campaign_margin_rule(
+    gen0_baseline: dict[str, Any] | None, progress: dict[str, Any]
+) -> str:
+    """State the promote-gate margin RULE + the recorded baseline stderr (no fabrication).
+
+    The per-cycle promote margin is NOT persisted as a single number per cycle, so
+    rather than inventing one, the rule is stated verbatim (SoT
+    ``core/self_improving/train.py::_should_promote``) and the one input that IS recorded —
+    the gen-0 baseline's ``raw.fitness_stderr`` — is surfaced. The "gate decision so
+    far" line is COMPUTED from the recorded gate-arm ``fitness_delta`` values
+    (campaign-progress.log), NOT a hard-coded claim — so it never goes stale as the
+    campaign continues and never contradicts the data (e.g. a cycle whose delta is
+    positive is counted honestly).
+    """
+    stderr_cell = "<em>not recorded</em>"
+    if isinstance(gen0_baseline, dict):
+        raw = gen0_baseline.get("raw")
+        if isinstance(raw, dict):
+            fs = raw.get("fitness_stderr")
+            if isinstance(fs, int | float) and not isinstance(fs, bool):
+                stderr_cell = f'<span class="num">{float(fs):.4f}</span>'
+    # Compute the gate-arm delta summary from the recorded cycles (no fabrication).
+    gate_deltas = [
+        float(c["delta"])
+        for c in (progress.get("cycles") or [])
+        if c.get("arm") == "gate"
+        and not c.get("skip")
+        and isinstance(c.get("delta"), int | float)
+        and not isinstance(c.get("delta"), bool)
+    ]
+    if not gate_deltas:
+        decision_cell = "no gate-arm cycle recorded yet &mdash; the gate is mid-run / awaiting"
+    else:
+        n_positive = sum(1 for d in gate_deltas if d > 0)
+        n_total = len(gate_deltas)
+        best = max(gate_deltas)
+        promotes = sum(
+            1
+            for c in (progress.get("cycles") or [])
+            if c.get("arm") == "gate" and not c.get("skip") and c.get("verdict") == "promote"
+        )
+        decision_cell = (
+            f"{n_positive}/{n_total} measured gate cycles have a positive "
+            f"<code>fitness_delta</code> (best {best:+.4f}); promoted <strong>{promotes}</strong>. "
+            "A reject when no gain clears the margin is correct, not a tuning failure"
+        )
+    return (
+        '    <h3 class="section"><span>promote-gate margin rule</span></h3>\n'
+        '    <p class="page-sub">The gate promotes only when the fitness gain clears '
+        "its own margin (SoT <code>core/self_improving/train.py::_should_promote</code>). The "
+        "margin is NOT persisted per-cycle, so the RULE + the recorded baseline stderr "
+        "are shown rather than a fabricated number.</p>\n"
+        '    <dl class="status-grid">\n'
+        "      <dt>margin</dt><dd><code>max(1.0&middot;&radic;(&sigma;_prior&sup2;+"
+        "&sigma;_current&sup2;), 0.005 floor, 0.05 if baseline N=1 critical)</code></dd>\n"
+        "      <dt>fitness scale</dt><dd>0-1 <code>compute_fitness</code>, "
+        "HIGHER-is-better</dd>\n"
+        f"      <dt>gen-0 baseline fitness_stderr</dt><dd>{stderr_cell}</dd>\n"
+        f"      <dt>gate decision so far</dt><dd>{decision_cell}</dd>\n"
+        "    </dl>"
+    )
+
+
+def _render_campaign_cycles(
+    progress: dict[str, Any],
+    mutations: list[dict[str, Any]],
+    manifest: list[dict[str, Any]],
+    repo_root: Path,
+) -> str:
+    """Render the per-arm faceted per-cycle campaign table (the Datadog drill-down).
+
+    One section per arm; one row per cycle. Columns surface EVERY value the loop
+    emits per cycle: selection fitness (from the attribution row), held-out fitness
+    (frozen ruler), the selection-vs-held_out DIVERGENCE (the winner's-curse signal),
+    Δheld-out vs prior (dim-direction-aware: held-out is higher-is-better), the
+    verdict (promote/reject/SKIP from campaign-progress.log), the seeds the cycle
+    scored + the Petri eval deep-link + dim-engagement count (matched from the
+    MANIFEST by completed_at). Honest cells when a value is not recorded — never
+    fabricated. SKIP cycles (no attribution row) show as SKIP with em-dash numbers.
+
+    SoT split, stated on the page: the verdict + SKIP are the per-cycle ``latest``
+    SoT (campaign-progress.log); the promoted champions are the ``promoted`` SoT
+    (baseline_archive). They are NOT conflated.
+    """
+    cycle_recs = progress.get("cycles") or []
+    full_attr = _campaign_full_attr(mutations)
+    if not cycle_recs and not full_attr:
+        return (
+            '    <h3 class="section"><span>per-cycle campaign drill-down</span></h3>\n'
+            '    <p class="empty"><em>No campaign cycle recorded yet — awaiting the '
+            "matched 3-arm 10-cycle run.</em></p>"
+        )
+
+    # Index attribution rows by (arm, rounded-ts) so a cycle log line can pull its
+    # recorded numbers. The progress-log ts is ISO 8601; the attribution ts is epoch.
+    # Match within the same tolerance used for the eval (a cycle's two writes — log
+    # line + attribution row — are seconds apart).
+    attr_by_arm_ts: dict[str, list[dict[str, Any]]] = {arm: [] for arm, _ in _EVIDENCE_ARMS}
+    for row in full_attr:
+        attr_by_arm_ts.setdefault(str(row.get("promote_policy")), []).append(row)
+
+    def _attr_for(arm: str, iso_ts: str) -> dict[str, Any] | None:
+        if not iso_ts:
+            return None
+        try:
+            cycle_ts = _dt.datetime.fromisoformat(iso_ts.replace("Z", "+00:00")).timestamp()
+        except ValueError:
+            return None
+        best: dict[str, Any] | None = None
+        best_gap = _AUDIT_MATCH_TOLERANCE_S
+        for row in attr_by_arm_ts.get(arm, []):
+            gap = abs(float(row["ts"]) - cycle_ts)
+            if gap <= best_gap:
+                best_gap = gap
+                best = row
+        return best
+
+    blocks: list[str] = []
+    blocks.append(
+        '    <h3 class="section"><span>per-cycle campaign drill-down &middot; '
+        "verdict / seeds / Petri eval / divergence</span></h3>\n"
+        '    <p class="page-sub">One row per cycle, faceted by arm. <strong>verdict</strong> '
+        "+ <strong>SKIP</strong> are the per-cycle <em>latest</em> SoT "
+        "(<code>campaign-progress.log</code>) &mdash; distinct from the <em>promoted</em> "
+        "champion SoT (<code>baseline_archive.jsonl</code>, the 3-arm table above). "
+        "<strong>divergence</strong> = (selection &minus; gen-0 selection) &minus; "
+        "(held-out &minus; gen-0 held-out): the gap between how much the cycle moved the "
+        "selection proxy vs the frozen ruler. A <em>positive</em> divergence is the "
+        "winner's-curse signal (selection rose more than the held-out ruler). selection + "
+        "held-out are 0-1 fitness (HIGHER-is-better) but on DIFFERENT scales, so they are "
+        "anchored to their own gen-0 mean before subtracting; the held-out &Delta;-vs-prior "
+        "arrow is green when it rises.</p>"
+    )
+
+    gen0_sel_mean, gen0_held_mean = _campaign_gen0_means(progress)
+    for arm, label in _EVIDENCE_ARMS:
+        arm_cycles = [c for c in cycle_recs if c.get("arm") == arm]
+        if not arm_cycles:
+            blocks.append(
+                f'    <h4 class="section"><span>{html_escape(label)} &middot; '
+                f"<code>{html_escape(arm)}</code></span></h4>\n"
+                '    <p class="empty"><em>No cycle recorded for this arm yet.</em></p>'
+            )
+            continue
+        rows: list[str] = []
+        prior_held: float | None = None
+        promotes = rejects = skips = 0
+        for c in arm_cycles:
+            n = c.get("n")
+            total = c.get("total")
+            cyc_label = f"{n}/{total}"
+            if c.get("skip"):
+                skips += 1
+                rows.append(
+                    "        <tr>\n"
+                    f'          <td class="num">{html_escape(cyc_label)}</td>\n'
+                    '          <td class="num muted">&mdash;</td>\n'
+                    '          <td class="num muted">&mdash;</td>\n'
+                    '          <td class="num muted">&mdash;</td>\n'
+                    '          <td class="num muted">&mdash;</td>\n'
+                    '          <td><span class="muted">SKIP</span></td>\n'
+                    '          <td class="muted">&mdash;</td>\n'
+                    "        </tr>"
+                )
+                continue
+            verdict = str(c.get("verdict") or "")
+            if verdict == "promote":
+                promotes += 1
+            elif verdict == "reject":
+                rejects += 1
+            try:
+                sel = float(c["sel"])
+                held = float(c["held"])
+            except (KeyError, TypeError, ValueError):
+                continue
+            # Divergence = how much the cycle moved selection vs the frozen ruler,
+            # each anchored to its OWN gen-0 mean (the two scales are not comparable
+            # directly). A positive divergence (selection rose more than held-out) is
+            # the winner's-curse signal → red. When the gen-0 anchor is unrecorded the
+            # cell degrades to an honest em-dash rather than a bogus level-gap.
+            if gen0_sel_mean is None or gen0_held_mean is None:
+                div_cls = "muted"
+                div_text = "&mdash;"
+            else:
+                divergence = (sel - gen0_sel_mean) - (held - gen0_held_mean)
+                div_cls = (
+                    "delta-negative"
+                    if divergence > 0.005
+                    else ("delta-positive" if divergence < -0.005 else "delta-noise")
+                )
+                div_text = f"{divergence:+.4f}"
+            # Δ held-out vs prior cycle: held-out is HIGHER-is-better, so a rise is good.
+            if prior_held is None:
+                held_delta_cell = '<td class="num muted">&mdash;</td>'
+            else:
+                d = held - prior_held
+                dcls = "delta-positive" if d > 0 else ("delta-negative" if d < 0 else "delta-noise")
+                held_delta_cell = f'<td class="num {dcls}">{d:+.4f}</td>'
+            prior_held = held
+            v_cls = _VERDICT_CLASS.get(verdict, "muted")
+            verdict_cell = f'<span class="{v_cls}">{html_escape(verdict or "&mdash;")}</span>'
+
+            # Eval / seeds / dims from the MANIFEST, matched by the attribution-row ts.
+            attr = _attr_for(arm, str(c.get("ts") or ""))
+            eval_cell = '<span class="muted">no eval recorded</span>'
+            if attr is not None:
+                audit = _match_audit_for_cycle(float(attr["ts"]), manifest)
+                if audit is not None:
+                    eval_cell = _render_campaign_eval_cell(audit, repo_root)
+            rows.append(
+                "        <tr>\n"
+                f'          <td class="num">{html_escape(cyc_label)}</td>\n'
+                f'          <td class="num">{sel:.4f}</td>\n'
+                f'          <td class="num">{held:.4f}</td>\n'
+                f'          <td class="num {div_cls}">{div_text}</td>\n'
+                f"          {held_delta_cell}\n"
+                f"          <td>{verdict_cell}</td>\n"
+                f"          <td>{eval_cell}</td>\n"
+                "        </tr>"
+            )
+        rows_html = "\n".join(rows)
+        seed_note = ""
+        # Surface the held-out seed pool once per arm from the first matched audit.
+        first_attr = _attr_for(arm, str((arm_cycles[0] or {}).get("ts") or ""))
+        if first_attr is not None:
+            first_audit = _match_audit_for_cycle(float(first_attr["ts"]), manifest)
+            if first_audit is not None:
+                seeds = first_audit.get("seed_ids")
+                if isinstance(seeds, list) and seeds:
+                    seed_note = (
+                        '    <p class="page-sub">held-out seed pool ('
+                        f"{len(seeds)} seeds): "
+                        + ", ".join(f"<code>{html_escape(str(s))}</code>" for s in seeds[:10])
+                        + "</p>\n"
+                    )
+        blocks.append(
+            f'    <h4 class="section"><span>{html_escape(label)} &middot; '
+            f"<code>{html_escape(arm)}</code> &middot; "
+            f"promote {promotes} &middot; reject {rejects} &middot; SKIP {skips}</span></h4>\n"
+            f"{seed_note}"
+            '    <table class="records">\n'
+            "      <thead>\n"
+            "        <tr>\n"
+            '          <th scope="col" class="num">cycle</th>\n'
+            '          <th scope="col" class="num">selection</th>\n'
+            '          <th scope="col" class="num">held-out</th>\n'
+            '          <th scope="col" class="num">divergence</th>\n'
+            '          <th scope="col" class="num">&Delta; held-out</th>\n'
+            '          <th scope="col">verdict</th>\n'
+            '          <th scope="col">Petri eval &middot; dims</th>\n'
+            "        </tr>\n"
+            "      </thead>\n"
+            f"      <tbody>\n{rows_html}\n      </tbody>\n"
+            "    </table>"
+        )
+    return "\n".join(blocks)
+
+
+def _render_campaign_eval_cell(audit: dict[str, Any], repo_root: Path) -> str:
+    """Render the Petri-eval deep-link + dim-engagement count for one matched audit.
+
+    The deep-link targets the Inspect-View ``#/logs/<encodeURIComponent(file)>``
+    route ONLY (via :func:`inspect_log_route`) — keyed on the ``.eval`` archive
+    filename (the ``logs/listing.json`` key), never the task_id (which has no route).
+    The dim-engagement count comes from the matched ``summary_yaml`` (count of dims
+    that moved off the baseline floor across the audit's samples). Honest "&mdash;"
+    when a field is absent.
+    """
+    archive = audit.get("archive")
+    if not (isinstance(archive, str) and archive):
+        return '<span class="muted">no archive</span>'
+    deep_link = f"{_PETRI_BUNDLE_DEEPLINK_BASE}{inspect_log_route(archive)}"
+    short_name = archive.split("_audit_")[0] if "_audit_" in archive else archive[:19]
+    cell = f'<a href="{deep_link}"><code>{html_escape(short_name)}</code></a>'
+    summary_yaml = audit.get("summary_yaml")
+    if isinstance(summary_yaml, str) and summary_yaml:
+        dims = _load_summary_dims(repo_root, summary_yaml)
+        if dims is not None:
+            engaged = dims.get("dim_engaged") or {}
+            n_dims = len(engaged)
+            n_samples = dims.get("sample_count") or 0
+            cell += (
+                f' <span class="muted">&middot; {n_dims} dims engaged / {n_samples} samples</span>'
+            )
+    return cell
+
+
 def _render_evidence_methods() -> str:
     """Render the METHODS grid — the experimental design, stated honestly.
 
@@ -5733,14 +6404,21 @@ def render_autoresearch_evidence(
     *,
     template: str,
     ctx: _AutoresearchRenderCtx,
+    progress: dict[str, Any],
+    gen0_baseline: dict[str, Any] | None,
+    manifest: list[dict[str, Any]],
+    repo_root: Path,
 ) -> Path:
-    """Render the E6 evidence page (methods + results + power) at
+    """Render the E6 evidence page (methods + results + power + live campaign) at
     ``autoresearch/evidence/index.html``.
 
     Reads the recorded ledgers ONLY (``mutations`` = mutations.jsonl rows;
-    ``archive`` = baseline_archive.jsonl rows). Every section degrades gracefully to
-    an honest "awaiting campaign" / "no evidence yet" state when the matched 3-arm
-    held-out campaign has not run — no crash, no fabricated number.
+    ``archive`` = baseline_archive.jsonl rows; ``progress`` = parsed
+    campaign-progress.log; ``gen0_baseline`` = the gen-0 K-mean snapshot;
+    ``manifest`` = the eval-log MANIFEST for the per-cycle Petri eval deep-link +
+    seeds + dims). Every section degrades gracefully to an honest "awaiting
+    campaign" / "no evidence yet" state when the matched 3-arm held-out campaign has
+    not run — no crash, no fabricated number.
     """
     out_dir.mkdir(parents=True, exist_ok=True)
     mapping = _autoresearch_base_mapping(ctx)
@@ -5751,6 +6429,10 @@ def render_autoresearch_evidence(
             "results_arms": _render_evidence_results(mutations, archive),
             "results_verdict": _render_evidence_verdict(mutations, archive),
             "power_block": _render_evidence_power(mutations),
+            # PR-HUB-CAMPAIGN-VIZ — the live per-cycle 3-arm drill-down.
+            "campaign_noise_band": _render_gen0_noise_band(progress),
+            "campaign_margin_rule": _render_campaign_margin_rule(gen0_baseline, progress),
+            "campaign_cycles": _render_campaign_cycles(progress, mutations, manifest, repo_root),
         }
     )
     rendered = substitute(template, mapping)
@@ -5988,6 +6670,13 @@ def main(argv: list[str] | None = None) -> int:
     results_tsv_rows = _load_results_tsv(ar_state_dir)
     results_jsonl_rows = _load_results_jsonl(ar_state_dir)
     policies_entries = _list_policies(ar_state_dir / "policies")
+    # PR-HUB-CAMPAIGN-VIZ — the live 3-arm campaign ledgers. The campaign-progress.log
+    # sits in the autoresearch state dir; the gen-0 snapshot + the eval-log MANIFEST
+    # live under the repo root (a sibling of the autoresearch root).
+    campaign_progress = _load_campaign_progress(ar_state_dir)
+    campaign_repo_root = args.autoresearch_root.parent
+    campaign_gen0_baseline = _load_campaign_gen0_baseline(campaign_repo_root)
+    audit_manifest = _load_audit_manifest(campaign_repo_root)
 
     LOG.info(
         "autoresearch loaded baseline=%s stale=%s archive=%d mutations=%d "
@@ -6099,6 +6788,10 @@ def main(argv: list[str] | None = None) -> int:
             args.autoresearch_out_dir,
             template=args.autoresearch_evidence_template.read_text(encoding="utf-8"),
             ctx=ar_ctx,
+            progress=campaign_progress,
+            gen0_baseline=campaign_gen0_baseline,
+            manifest=audit_manifest,
+            repo_root=campaign_repo_root,
         ),
     )
 

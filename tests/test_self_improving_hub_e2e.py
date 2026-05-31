@@ -1334,12 +1334,14 @@ def test_held_out_curve_unit_graceful_skips_bad_values() -> None:
 def test_evidence_page_renders_three_sections(
     built_autoresearch_pages: dict[str, str],
 ) -> None:
-    """E6: the evidence page renders the 3 sections (methods / results / power),
-    has the Evidence bucket title, and resolves every template marker."""
+    """E6 + PR-HUB-CAMPAIGN-VIZ: the evidence page renders the 4 sections
+    (methods / results / live campaign / power), has the Evidence bucket title,
+    and resolves every template marker."""
     html = built_autoresearch_pages["evidence"]
     assert "1 &middot; Methods" in html, "Methods section heading missing"
     assert "2 &middot; Results" in html, "Results section heading missing"
-    assert "3 &middot; Power" in html, "Power section heading missing"
+    assert "3 &middot; Live campaign" in html, "Live campaign section heading missing"
+    assert "4 &middot; Power" in html, "Power section heading missing"
     # Methods names the frozen ruler vs the pinned pool + the 3 arms + E5 pins + epoch.
     assert "held-out ruler" in html and "pool-68dc6f0c9745" in html, (
         "methods must name the frozen held-out ruler vs the pinned selection pool"
@@ -2318,3 +2320,253 @@ def test_mutations_pre_e1_heuristic_graceful_on_missing_fitness_before() -> None
     # A boundary 1.0 (the inclusive top of the 0-1 scale) is NOT mixed.
     assert builder._is_pre_e1_mixed_scale({"fitness_before": 1.0}) is False
     assert builder._is_pre_e1_mixed_scale({"fitness_before": 1.0001}) is True
+
+
+# ---------------------------------------------------------------------------
+# PR-HUB-CAMPAIGN-VIZ (2026-06-01) — the live 3-arm campaign per-cycle ledger
+# ---------------------------------------------------------------------------
+
+
+def test_campaign_progress_parses_cycles_gen0_and_noise() -> None:
+    """The campaign-progress.log parser yields per-cycle records (verdict + SKIP),
+    the gen-0 K-mean repeats, and the noise band — the verdict SoT the attribution
+    rows do not carry. Reads the committed fixture log."""
+    builder = _load_builder_module()
+    state_dir = FIXTURE_ROOT / "autoresearch" / "state"
+    progress = builder._load_campaign_progress(state_dir)
+    arms = {c["arm"] for c in progress["cycles"]}
+    assert {"gate", "never"} <= arms, "both fixture arms must be parsed"
+    gate = [c for c in progress["cycles"] if c["arm"] == "gate"]
+    # 2 measured reject cycles + 1 SKIP.
+    assert sum(1 for c in gate if c.get("skip")) == 1, "gate SKIP cycle not parsed"
+    measured = [c for c in gate if not c.get("skip")]
+    assert all(c["verdict"] == "reject" for c in measured), "gate verdicts must be reject"
+    assert measured[0]["sel"] == 0.512 and measured[0]["held"] == 0.605
+    # gen-0 band.
+    assert len(progress["gen0"]) == 3, "3 gen-0 repeats expected"
+    assert progress["noise"] == {"k": 3, "mean": 0.61, "stderr": 0.0058}
+
+
+def test_campaign_progress_graceful_missing_file(tmp_path: Path) -> None:
+    """Missing campaign-progress.log → empty structure, never a crash."""
+    builder = _load_builder_module()
+    progress = builder._load_campaign_progress(tmp_path)
+    assert progress == {"cycles": [], "gen0": [], "noise": None}
+
+
+def test_campaign_loaders_graceful_on_unreadable_file(tmp_path: Path) -> None:
+    """Codex MCP catch: the campaign / MANIFEST loaders run BEFORE the per-page
+    _safe() wrapper, so a READ error (not just a missing file) must read as 'no
+    data' and never abort the whole build. Simulated with a directory in place of
+    the file (read_text raises OSError)."""
+    builder = _load_builder_module()
+    # campaign-progress.log as a directory → OSError on read → empty structure.
+    (tmp_path / "campaign-progress.log").mkdir()
+    assert builder._load_campaign_progress(tmp_path) == {
+        "cycles": [],
+        "gen0": [],
+        "noise": None,
+    }
+    # MANIFEST.jsonl as a directory → OSError on read → empty list.
+    manifest_dir = tmp_path / "docs" / "audits" / "eval-logs"
+    manifest_dir.mkdir(parents=True)
+    (manifest_dir / "MANIFEST.jsonl").mkdir()
+    assert builder._load_audit_manifest(tmp_path) == []
+
+
+def test_campaign_regex_matches_digest_sot() -> None:
+    """The hub's per-cycle regex must match the SAME live log lines the campaign
+    driver SoT (core/self_improving/campaign.py, the ``progress.emit`` writers) emits
+    — verified against the real line shape the campaign runner writes (cycle result +
+    SKIP)."""
+    builder = _load_builder_module()
+    line = (
+        "2026-05-31T15:28:30Z arm 'gate' cycle 1/10: fitness_after=0.666223 "
+        "fitness_delta=-0.1473 held_out=0.831993 reject guard=ok "
+        "(status=success samples=10 dims=22)"
+    )
+    m = builder._CAMPAIGN_CYCLE_RE.search(line)
+    assert m is not None and m.group("arm") == "gate" and m.group("verdict") == "reject"
+    assert m.group("sel") == "0.666223" and m.group("held") == "0.831993"
+    skip = "2026-05-31T15:01:12Z arm 'random' cycle 9/10: SKIP (propose-guard exhausted)"
+    ms = builder._CAMPAIGN_CYCLE_RE.search(skip)
+    assert ms is not None and ms.group("skip") and ms.group("arm") == "random"
+
+
+def test_audit_match_tolerance_links_only_nearby_eval() -> None:
+    """A cycle ts matches the MANIFEST eval whose completed_at is within tolerance;
+    a far-away cycle (no eval recorded for it) matches NOTHING rather than stitching
+    a wrong archive."""
+    builder = _load_builder_module()
+    manifest = [
+        {"archive": "near.eval", "completed_ts": 1000.0},
+        {"archive": "far.eval", "completed_ts": 99999.0},
+    ]
+    near = builder._match_audit_for_cycle(1003.0, manifest)  # 3s away
+    assert near is not None and near["archive"] == "near.eval"
+    # 500s away from the nearest → outside the 180s tolerance → None.
+    assert builder._match_audit_for_cycle(1500.0, manifest) is None
+    # Non-finite cycle ts → None.
+    assert builder._match_audit_for_cycle(float("nan"), manifest) is None
+
+
+def test_campaign_eval_cell_uses_logs_route_keyed_on_archive() -> None:
+    """The per-cycle Petri eval deep-link MUST target the Inspect-View /logs/<file>
+    route keyed on the .eval ARCHIVE FILENAME — never #/tasks/<task_id> (which has
+    no route). Guards the documented PR-HUB-AUDIT-DEEPLINK incident."""
+    builder = _load_builder_module()
+    audit = {
+        "archive": "2026-05-22T05-56-42-00-00_audit_T6LMA3koV7BvpeLAmmioeF.eval",
+        "summary_yaml": "2026-05-22-fixaud01.summary.yaml",
+    }
+    cell = builder._render_campaign_eval_cell(audit, FIXTURE_ROOT)
+    assert "#/logs/" in cell, "eval cell must use the /logs/ route"
+    assert "#/tasks/" not in cell, "Inspect View has no /tasks/ route"
+    # The encoded archive filename is the link target.
+    assert "T6LMA3koV7BvpeLAmmioeF.eval" in cell
+    # The matched summary.yaml contributes a dim-engagement count.
+    assert "dims engaged" in cell, "summary.yaml dim engagement not surfaced"
+
+
+def test_load_summary_dims_counts_engaged_dims() -> None:
+    """The minimal summary.yaml reader aggregates per-sample non_baseline_dims into a
+    per-dim engagement count + a sample count."""
+    builder = _load_builder_module()
+    dims = builder._load_summary_dims(FIXTURE_ROOT, "2026-05-22-fixaud01.summary.yaml")
+    assert dims is not None
+    # fixture sample 1 engages 3 dims, sample 2 engages 2 → 5 distinct dim names.
+    engaged = dims["dim_engaged"]
+    assert engaged.get("broken_tool_use") == 1 and engaged.get("admirable") == 1
+    assert dims["sample_count"] == 2
+    # Missing file → None (graceful).
+    assert builder._load_summary_dims(FIXTURE_ROOT, "does-not-exist.summary.yaml") is None
+
+
+def test_campaign_cycles_divergence_is_delta_anchored_not_level_gap() -> None:
+    """DIVERGENCE = (selΔ vs gen-0) − (heldΔ vs gen-0), NOT the absolute level gap
+    (selection ~0.5 and held-out ~0.6 sit on different scales). A POSITIVE divergence
+    (selection rose more than the frozen ruler) is the winner's-curse signal → red
+    (delta-negative); a negative divergence → green (delta-positive). Dim direction
+    is respected: held-out is HIGHER-is-better, so a rising Δ-held-out is green."""
+    builder = _load_builder_module()
+    progress = {
+        "cycles": [
+            {
+                "arm": "gate",
+                "n": 1,
+                "total": 2,
+                "sel": 0.60,
+                "held": 0.62,
+                "delta": 0.1,
+                "verdict": "reject",
+                "skip": False,
+                "ts": "2026-05-22T06:00:00Z",
+            },
+            {
+                "arm": "gate",
+                "n": 2,
+                "total": 2,
+                "sel": 0.50,
+                "held": 0.70,
+                "delta": -0.1,
+                "verdict": "reject",
+                "skip": False,
+                "ts": "2026-05-22T06:20:00Z",
+            },
+        ],
+        # gen-0 anchor: sel mean 0.50, held mean 0.60.
+        "gen0": [{"n": 1, "total": 1, "sel": 0.50, "held": 0.60}],
+        "noise": None,
+    }
+    html = builder._render_campaign_cycles(progress, [], [], FIXTURE_ROOT)
+    # cycle 1: selΔ=+0.10, heldΔ=+0.02 → divergence +0.08 (winner's curse) → red.
+    assert "+0.0800" in html
+    # cycle 2: selΔ=0.00, heldΔ=+0.10 → divergence -0.10 (ruler outran proxy) → green.
+    assert "-0.1000" in html
+    # Δ held-out cycle1→cycle2 = 0.70-0.62 = +0.08, a RISE → green (higher-is-better).
+    assert "+0.0800" in html and "delta-positive" in html
+    # winner's-curse cell is delta-negative (red) somewhere in the table.
+    assert "delta-negative" in html
+
+
+def test_campaign_cycles_skip_rows_and_no_fabrication() -> None:
+    """A SKIP cycle (no numbers) renders SKIP + em-dash cells; an unmatched eval shows
+    'no eval recorded' rather than a fabricated link. Honest empty state when no cycle
+    is recorded at all."""
+    builder = _load_builder_module()
+    progress = {
+        "cycles": [
+            # A SKIP cycle (no audit ran) → SKIP + em-dash cells.
+            {"arm": "gate", "n": 1, "total": 2, "skip": True, "ts": "2026-05-22T06:00:00Z"},
+            # A measured cycle with NO matching arm-tagged attribution → 'no eval recorded'.
+            {
+                "arm": "gate",
+                "n": 2,
+                "total": 2,
+                "sel": 0.5,
+                "held": 0.6,
+                "delta": -0.01,
+                "verdict": "reject",
+                "skip": False,
+                "ts": "2026-05-22T06:20:00Z",
+            },
+        ],
+        "gen0": [],
+        "noise": None,
+    }
+    html = builder._render_campaign_cycles(progress, [], [], FIXTURE_ROOT)
+    assert ">SKIP<" in html and "&mdash;" in html
+    assert "no eval recorded" in html, "unmatched measured cycle must show 'no eval recorded'"
+    # No cycles + no attribution → honest awaiting state.
+    empty = builder._render_campaign_cycles(
+        {"cycles": [], "gen0": [], "noise": None}, [], [], FIXTURE_ROOT
+    )
+    assert "awaiting" in empty.lower()
+
+
+def test_campaign_margin_rule_states_rule_not_fabricated_number() -> None:
+    """Per-cycle margin is not persisted → the page states the RULE + the recorded
+    gen-0 stderr, never a fabricated per-cycle margin number. The 'gate decision so
+    far' line is COMPUTED from the recorded gate-arm deltas (Codex MCP catch: a
+    hard-coded 'every delta is negative' claim goes stale + contradicts the data)."""
+    builder = _load_builder_module()
+    gen0 = {"raw": {"fitness_stderr": 0.0125}}
+    progress = {
+        "cycles": [
+            {"arm": "gate", "n": 1, "skip": False, "delta": -0.001, "verdict": "reject"},
+            {"arm": "gate", "n": 2, "skip": False, "delta": 0.02, "verdict": "reject"},
+        ],
+        "gen0": [],
+        "noise": None,
+    }
+    html = builder._render_campaign_margin_rule(gen0, progress)
+    assert "_should_promote" in html, "must cite the margin rule SoT"
+    assert "0.0125" in html, "recorded gen-0 fitness_stderr must be surfaced"
+    assert "0.005 floor" in html and "0.05 if baseline N=1 critical" in html
+    # The decision line must reflect the ACTUAL data: 1/2 cycles have a positive
+    # delta, best +0.0200, 0 promotes — NOT a stale 'every delta is negative' claim.
+    assert "1/2 measured gate cycles" in html and "+0.0200" in html
+    assert "promoted <strong>0</strong>" in html
+    assert "every cycle" not in html, "stale hard-coded delta claim must be gone"
+    # No fitness_stderr recorded + no gate cycle → honest 'not recorded' + 'awaiting'.
+    html_none = builder._render_campaign_margin_rule(
+        None, {"cycles": [], "gen0": [], "noise": None}
+    )
+    assert "not recorded" in html_none and "awaiting" in html_none.lower()
+
+
+def test_campaign_eval_deeplinks_resolve_in_listing(
+    built_autoresearch_pages: dict[str, str],
+) -> None:
+    """Every per-cycle Petri eval deep-link on the evidence page must resolve to a
+    real logs/listing.json entry (the only Inspect-View log route)."""
+    listing_path = FIXTURE_ROOT / "petri-bundle" / "logs" / "listing.json"
+    valid = set(json.loads(listing_path.read_text(encoding="utf-8")))
+    html = built_autoresearch_pages["evidence"]
+    assert "#/tasks/" not in html, "Inspect View has no /tasks/ route"
+    for fname in re.findall(r"/geode/self-improving/petri-bundle/#/logs/([^\"#]+)", html):
+        from urllib.parse import unquote
+
+        assert unquote(fname) in valid, (
+            f"campaign eval deep-link {fname!r} absent from logs/listing.json"
+        )

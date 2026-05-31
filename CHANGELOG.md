@@ -45,6 +45,43 @@ functional change.
 
 ---
 
+## [0.99.108] - 2026-06-01
+
+### Added
+- **PR-HUB-CAMPAIGN-VIZ (2026-06-01) — live 3-arm campaign drill-down on the
+  self-improving hub's evidence page.** `scripts/build_self_improving_hub.py` now
+  reads the running campaign's per-cycle ledger and renders a Datadog-style dense
+  faceted panel (new evidence section "3 · Live campaign", Power renumbered to 4):
+  the gen-0 K-mean **noise band** (`mean ± stderr`, the floor every arm is judged
+  against), the **promote-gate margin rule** (stated verbatim from
+  `core/self_improving/train.py::_should_promote` + the recorded gen-0
+  `fitness_stderr` — no fabricated per-cycle margin; the "gate decision so far" line
+  is COMPUTED from the recorded gate-arm `fitness_delta`s, not hard-coded), and a
+  **per-cycle table faceted by arm** (never / random / gate) surfacing selection vs
+  held-out fitness, their gen-0-anchored **divergence** (the winner's-curse signal,
+  dim-direction-aware coloring), Δ-held-out vs prior, the **verdict** (promote /
+  reject / SKIP from `campaign-progress.log`, the *latest* SoT — kept distinct from
+  the *promoted* `baseline_archive.jsonl` SoT), the held-out **seed pool**, and a
+  deep-linked **Petri eval** (`#/logs/<eval_filename>` route only — never `#/tasks/`)
+  with the per-audit dim-engagement count. New stdlib-only loaders read
+  `campaign-progress.log`, the gen-0 snapshot (`state/campaign/gen-0-snapshot/`), and
+  the eval-log `MANIFEST.jsonl`; the cycle→eval link is reconstructed by matching the
+  attribution-row `ts` to the MANIFEST `completed_at` within a 180s tolerance. Every
+  section degrades to an honest "awaiting" / "in progress" / "no eval recorded" state
+  while the campaign is mid-run — measured values only.
+- **Codex M2 — mixed-fitness-recipe guard on the mean-delta aggregate.** After
+  PR-GATE-RECIPE (#1947, v0.99.106) the attribution ledger's `fitness_after` /
+  `fitness_delta` switched from the PENALIZED `compute_fitness` to the gate's PLAIN
+  `current_raw` recipe. Rows written before that merge carry the old penalized
+  number, so the hub must not blend the two recipes into one mean. With no per-row
+  recipe marker yet, the hub tags rows whose `ts` is before the #1947 merge boundary
+  (`2026-05-31T21:05:49Z`, epoch `1748725549`) as legacy-penalized and excludes them
+  from the plain-recipe mean-delta aggregate (surfacing the split count honestly). A
+  per-row `fitness_recipe` marker is the robust long-term replacement for this
+  ts-boundary heuristic.
+
+---
+
 ## [0.99.107] - 2026-06-01
 
 ### Changed

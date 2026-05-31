@@ -79,12 +79,18 @@
 {{ results_arms }}
 {{ results_verdict }}
 
-    <h2 class="section"><span>3 &middot; Power</span></h2>
+    <h2 class="section"><span>3 &middot; Live campaign</span></h2>
+    <p class="page-sub">The running 3-arm campaign, drilled down per cycle. The gen-0 K-mean noise band fixes the floor every arm is judged against; the promote-gate margin rule says why a cycle rejects; the per-cycle table surfaces every value the loop emits — selection vs held-out fitness, their <strong>divergence</strong> (the winner's-curse signal), the verdict (promote / reject / SKIP), the seeds scored, and the deep-linked Petri eval. The campaign is mid-run, so cells read "in progress" honestly where a value is not yet recorded.</p>
+{{ campaign_noise_band }}
+{{ campaign_margin_rule }}
+{{ campaign_cycles }}
+
+    <h2 class="section"><span>4 &middot; Power</span></h2>
     <p class="page-sub">How many samples are needed to detect a target effect &delta; at 80% power, given the observed fitness-noise &sigma; (recorded E4 decomposition). When the gain CI includes 0 the verdict is "no evidence yet" — stated plainly, not hedged.</p>
 {{ power_block }}
 
     <div class="build-info">
-      <p>Source: <code>autoresearch/state/mutations.jsonl</code> (per-cycle attribution rows: <code>held_out_fitness</code> &middot; <code>promote_policy</code> &middot; <code>gain_ci_excludes_zero</code> &middot; <code>gain_verdict</code> &middot; <code>within_mutation_stderr</code> &middot; <code>between_seed_stderr</code>) + <code>baseline_archive.jsonl</code> (promoted-baseline rows per arm).</p>
+      <p>Source: <code>autoresearch/state/mutations.jsonl</code> (per-cycle attribution rows: <code>held_out_fitness</code> &middot; <code>promote_policy</code> &middot; <code>gain_ci_excludes_zero</code> &middot; <code>gain_verdict</code> &middot; <code>within_mutation_stderr</code> &middot; <code>between_seed_stderr</code>) + <code>baseline_archive.jsonl</code> (promoted-baseline rows per arm) + <code>autoresearch/state/campaign-progress.log</code> (per-cycle verdict / SKIP, gen-0 noise band) + <code>state/campaign/gen-0-snapshot/baseline.json</code> (gen-0 K-mean baseline) + <code>docs/audits/eval-logs/MANIFEST.jsonl</code> (per-cycle Petri eval deep-link, seeds, dims).</p>
       <p>Published by <code>.github/workflows/pages.yml</code> on every <code>main</code> push.</p>
       <p>Repo: <a href="https://github.com/mangowhoiscloud/geode" rel="noopener">github.com/mangowhoiscloud/geode</a></p>
       <p>Harness chip legend:
