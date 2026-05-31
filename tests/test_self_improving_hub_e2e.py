@@ -1166,6 +1166,17 @@ def test_autoresearch_mutations_table_renders(
         assert outcome in html, f"outcome label {outcome!r} missing"
     # before -> after change surfaces in the payload drill-down.
     assert "<details>" in html and "previous" in html, "payload drill-down (before/after) missing"
+    # Codex M2 — the fixture carries one pre-#1947 (penalized-recipe) attribution row
+    # (mut004penalized, ts before the boundary). The rendered page must surface it as
+    # EXCLUDED and tag it per-row, and the mean-Δ must be the 3 plain rows only — not a
+    # blend with the penalized -0.35. (3 plain deltas 0.1, -0.08, 0.002 → mean +0.0073.)
+    assert "1 penalized recipe (pre-#1947, excluded)" in html, (
+        "pre-#1947 penalized row not surfaced as excluded in the rendered summary"
+    )
+    assert "penalized recipe (pre-#1947)" in html, "penalized row not tagged in the per-row Δ cell"
+    assert "+0.0073" in html and "0-1 plain-recipe rows only" in html, (
+        "mean-Δ blended the penalized recipe instead of using the plain rows only"
+    )
 
 
 def test_autoresearch_held_out_curve_renders(
@@ -2265,7 +2276,9 @@ def test_mutations_summary_mean_delta_over_post_e1_rows_only() -> None:
     html = builder._render_mutations_summary(joined)
     # mean over the two 0-1 rows only = (0.10 + 0.20) / 2 = +0.1500.
     assert "+0.1500" in html, "mean-Δfitness not computed over the post-E1 rows only"
-    assert "(n=2, 0-1 scale only)" in html, "aggregate n must exclude the >1.0 pre-E1 rows"
+    assert "(n=2, 0-1 plain-recipe rows only)" in html, (
+        "aggregate n must exclude the >1.0 pre-E1 rows"
+    )
     # The pre-E1 rows are surfaced as excluded, not folded into the mean.
     assert "2 pre-E1 (mixed scale, excluded)" in html
     # The garbage old-scale mean (≈ -0.6 across all four) must never appear.
@@ -2301,7 +2314,7 @@ def test_mutations_summary_all_mixed_yields_zero_aggregate() -> None:
     ]
     html = builder._render_mutations_summary(joined)
     assert "+0.0000" in html, "all-mixed input must yield a zero mean, not a garbage average"
-    assert "(n=0, 0-1 scale only)" in html, "all-mixed input must report n=0"
+    assert "(n=0, 0-1 plain-recipe rows only)" in html, "all-mixed input must report n=0"
     assert "3 pre-E1 (mixed scale, excluded)" in html
     assert "-1.7" not in html and "-1.1" not in html, "old-scale deltas leaked into the aggregate"
 
@@ -2320,6 +2333,115 @@ def test_mutations_pre_e1_heuristic_graceful_on_missing_fitness_before() -> None
     # A boundary 1.0 (the inclusive top of the 0-1 scale) is NOT mixed.
     assert builder._is_pre_e1_mixed_scale({"fitness_before": 1.0}) is False
     assert builder._is_pre_e1_mixed_scale({"fitness_before": 1.0001}) is True
+
+
+# ---------------------------------------------------------------------------
+# M2 — pre-#1947 (penalized-recipe) rows excluded from the plain-recipe mean-Δ
+# ---------------------------------------------------------------------------
+#
+# PR-GATE-RECIPE (#1947, v0.99.106) switched the attribution ledger's
+# fitness_after / fitness_delta from the PENALIZED compute_fitness (baseline_means
+# penalty) to the gate's PLAIN current_raw recipe. Both sit on the 0-1 scale (so
+# the pre-E1 > 1.0 guard does NOT catch them), but a penalized delta and a plain
+# delta are produced by DIFFERENT recipes and must not be averaged together. With
+# no per-row fitness_recipe marker yet, the hub discriminates by the #1947 merge
+# timestamp (commit 2aa3b9a0, 2026-05-31T21:05:49Z UTC, epoch 1780261549). These tests
+# pin that a pre-boundary (penalized) row is never blended into the post-boundary
+# (plain) mean.
+
+# The #1947 merge boundary epoch (Codex M2 ts-boundary discriminator).
+# Commit 2aa3b9a0, 2026-05-31T21:05:49Z UTC.
+_GATE_BOUNDARY = 1780261549.0
+
+
+def _joined_recipe_mutation(*, mid: str, ts: Any, fitness_delta: Any) -> dict[str, Any]:
+    """A joined entry on the 0-1 scale (fitness_before ≤ 1.0, so NOT pre-E1) carrying
+    a ``ts`` — the only discriminator for the penalized (pre-#1947) vs plain recipe."""
+    attr: dict[str, Any] = {
+        "mutation_id": mid,
+        "ts": ts,
+        "fitness_before": 0.70,
+        "fitness_delta": fitness_delta,
+        "fitness_after": 0.70 + fitness_delta if isinstance(fitness_delta, int | float) else None,
+    }
+    apply_row = {"mutation_id": mid, "ts": ts, "target_section": "sec", "target_kind": "policy"}
+    return {"id": mid, "apply": apply_row, "attr": attr}
+
+
+def test_pre_gate_recipe_penalized_heuristic_uses_ts_boundary() -> None:
+    """The discriminator is the #1947 merge ts: a row strictly before the boundary is
+    penalized-recipe (legacy); at/after it is plain. Graceful on a missing/bad ts."""
+    builder = _load_builder_module()
+    assert builder._GATE_RECIPE_BOUNDARY_TS == _GATE_BOUNDARY
+    # Strictly before the boundary → penalized (legacy).
+    assert builder._is_pre_gate_recipe_penalized({"ts": _GATE_BOUNDARY - 1}) is True
+    # At/after the boundary → plain (post-#1947).
+    assert builder._is_pre_gate_recipe_penalized({"ts": _GATE_BOUNDARY}) is False
+    assert builder._is_pre_gate_recipe_penalized({"ts": _GATE_BOUNDARY + 1}) is False
+    # Graceful contract: a missing / non-numeric / bool ts is NOT proven legacy.
+    assert builder._is_pre_gate_recipe_penalized(None) is False
+    assert builder._is_pre_gate_recipe_penalized({}) is False
+    assert builder._is_pre_gate_recipe_penalized({"ts": None}) is False
+    assert builder._is_pre_gate_recipe_penalized({"ts": "1700000000"}) is False
+    assert builder._is_pre_gate_recipe_penalized({"ts": True}) is False
+
+
+def test_mean_delta_does_not_blend_penalized_and_plain_recipes() -> None:
+    """Codex M2 — a pre-#1947 (penalized) row and a post-#1947 (plain) row, both on
+    the 0-1 scale, must NOT be averaged into one mean-Δfitness. The pre-boundary row
+    is excluded (and surfaced as such); the mean is the plain row(s) only."""
+    builder = _load_builder_module()
+    joined = [
+        # Penalized recipe (pre-#1947): a large negative delta from the baseline_means
+        # penalty — blending it would drag the mean toward ≈ -0.20.
+        _joined_recipe_mutation(mid="legacy-a", ts=_GATE_BOUNDARY - 3600, fitness_delta=-0.40),
+        _joined_recipe_mutation(mid="legacy-b", ts=_GATE_BOUNDARY - 60, fitness_delta=-0.30),
+        # Plain recipe (post-#1947): the gate's current_raw decision.
+        _joined_recipe_mutation(mid="plain-a", ts=_GATE_BOUNDARY + 60, fitness_delta=0.05),
+        _joined_recipe_mutation(mid="plain-b", ts=_GATE_BOUNDARY + 3600, fitness_delta=0.15),
+    ]
+    html = builder._render_mutations_summary(joined)
+    # Mean over the two PLAIN rows only = (0.05 + 0.15) / 2 = +0.1000.
+    assert "+0.1000" in html, "mean-Δ must be the plain-recipe rows only, not a blend"
+    assert "(n=2, 0-1 plain-recipe rows only)" in html, "n must exclude pre-#1947 penalized rows"
+    # The penalized rows are surfaced as excluded, never folded into the mean.
+    assert "2 penalized recipe (pre-#1947, excluded)" in html
+    # The blended mean (≈ -0.125 across all four) must never appear.
+    assert "-0.12" not in html and "-0.40" not in html and "-0.30" not in html
+
+
+def test_penalized_recipe_row_annotated_and_uncounted_in_outcome() -> None:
+    """A pre-#1947 (penalized) row renders a distinct 'penalized recipe (pre-#1947)'
+    tag in the per-row Δ cell and classifies as its own ``penalized-recipe`` bucket
+    (not improved/regressed/noise)."""
+    builder = _load_builder_module()
+    legacy = _joined_recipe_mutation(mid="legacy-a", ts=_GATE_BOUNDARY - 3600, fitness_delta=-0.40)
+    plain = _joined_recipe_mutation(mid="plain-a", ts=_GATE_BOUNDARY + 3600, fitness_delta=0.15)
+    rows_html = builder._render_mutations_rows([legacy, plain])
+    assert "penalized recipe (pre-#1947)" in rows_html, "penalized row not annotated in Δ cell"
+    # The penalized old-recipe delta must not be rendered for that row.
+    assert "0.4000" not in rows_html, "penalized row rendered its non-comparable recipe delta"
+    # Outcome classification: penalized row is its own bucket; plain row is improved.
+    assert builder._mutation_outcome(legacy["attr"]) == ("penalized-recipe", "muted")
+    assert builder._mutation_outcome(plain["attr"])[0] == "improved"
+
+
+def test_current_campaign_rows_are_all_pre_1947_penalized() -> None:
+    """The just-finished campaign ran BEFORE #1947 merged, so every current
+    mutations.jsonl attribution row's ts is before the boundary → all tagged legacy
+    (penalized) → an all-legacy input yields a zero/empty plain-recipe mean, never a
+    blended number. Mirrors the all-mixed pre-E1 guard for the recipe axis."""
+    builder = _load_builder_module()
+    joined = [
+        _joined_recipe_mutation(mid="cy-a", ts=_GATE_BOUNDARY - 7200, fitness_delta=-0.14),
+        _joined_recipe_mutation(mid="cy-b", ts=_GATE_BOUNDARY - 3600, fitness_delta=-0.13),
+        _joined_recipe_mutation(mid="cy-c", ts=_GATE_BOUNDARY - 600, fitness_delta=-0.16),
+    ]
+    html = builder._render_mutations_summary(joined)
+    assert "+0.0000" in html, "all-penalized input must yield a zero mean, not a blend"
+    assert "(n=0, 0-1 plain-recipe rows only)" in html, "all-penalized input must report n=0"
+    assert "3 penalized recipe (pre-#1947, excluded)" in html
+    assert "-0.1" not in html, "penalized recipe deltas leaked into the aggregate"
 
 
 # ---------------------------------------------------------------------------

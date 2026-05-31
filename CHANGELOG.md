@@ -75,7 +75,8 @@ functional change.
   `current_raw` recipe. Rows written before that merge carry the old penalized
   number, so the hub must not blend the two recipes into one mean. With no per-row
   recipe marker yet, the hub tags rows whose `ts` is before the #1947 merge boundary
-  (`2026-05-31T21:05:49Z`, epoch `1748725549`) as legacy-penalized and excludes them
+  (commit `2aa3b9a0`, `2026-05-31T21:05:49Z` UTC, epoch `1780261549`) as
+  legacy-penalized and excludes them
   from the plain-recipe mean-delta aggregate (surfacing the split count honestly). A
   per-row `fitness_recipe` marker is the robust long-term replacement for this
   ts-boundary heuristic.

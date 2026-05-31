@@ -4491,6 +4491,42 @@ def _is_pre_e1_mixed_scale(attr: dict[str, Any] | None) -> bool:
     return float(before) > 1.0
 
 
+# Codex M2 — the PR-GATE-RECIPE (#1947, v0.99.106) merge boundary. Before that merge
+# the attribution ledger wrote ``fitness_after`` / ``fitness_delta`` with the PENALIZED
+# ``compute_fitness`` (``baseline_means`` → auxiliary-shortfall penalty / critical
+# strict-reject); at/after it both are the gate's PLAIN ``current_raw`` recipe. The two
+# recipes are NOT comparable, so the hub must never blend a pre-boundary (penalized)
+# row into the same mean-delta aggregate as a post-boundary (plain) row. There is no
+# per-row recipe marker yet, so this ts-boundary is the discriminator — the merge time
+# of #1947 (commit 2aa3b9a0, 2026-05-31T21:05:49Z UTC = epoch 1780261549). A per-row
+# ``fitness_recipe`` marker on the attribution row is the robust long-term replacement
+# for this heuristic.
+_GATE_RECIPE_BOUNDARY_TS = 1780261549.0  # 2026-05-31T21:05:49Z UTC, #1947 merge (2aa3b9a0)
+
+
+def _is_pre_gate_recipe_penalized(attr: dict[str, Any] | None) -> bool:
+    """True when an attribution row predates PR-GATE-RECIPE (#1947) — penalized recipe.
+
+    Pre-#1947 rows carry the PENALIZED ``fitness_after`` / ``fitness_delta`` (computed
+    with ``baseline_means``), while post-#1947 rows carry the gate's PLAIN
+    ``current_raw`` recipe. Both sit on the 0-1 scale (so :func:`_is_pre_e1_mixed_scale`
+    does NOT catch them — that guard only fires on the old > 1.0 dim-mean scale), but
+    they are produced by DIFFERENT fitness recipes, so a penalized delta must not be
+    averaged into a plain-recipe mean. Until a per-row ``fitness_recipe`` marker exists
+    (the robust long-term replacement), the discriminator is the #1947 merge timestamp:
+    a row whose ``ts`` is before :data:`_GATE_RECIPE_BOUNDARY_TS` is penalized-recipe
+    (legacy). Graceful contract: a missing / non-numeric ``ts`` (or ``bool``, since
+    ``isinstance(True, int)`` is True) is treated as NOT pre-boundary — it cannot be
+    proven legacy, so it falls through to normal plain-recipe handling.
+    """
+    if attr is None:
+        return False
+    ts = attr.get("ts")
+    if isinstance(ts, bool) or not isinstance(ts, int | float):
+        return False
+    return float(ts) < _GATE_RECIPE_BOUNDARY_TS
+
+
 def _autoresearch_status_grid(
     baseline: dict[str, Any] | None,
     baseline_path: Path | None,
@@ -4658,6 +4694,14 @@ def _join_mutation_records(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
     detects them on the DISPLAY side so the per-row renderer tags them and the
     summary aggregate excludes them — see :func:`_render_mutations_summary`.
 
+    RECIPE CONTRACT (PR-GATE-RECIPE #1947, 2026-05-31, Codex M2) — within the 0-1
+    scale there are still TWO fitness recipes: rows written before #1947 carry the
+    PENALIZED ``fitness_after`` / ``fitness_delta`` (``baseline_means`` penalty),
+    rows at/after carry the gate's PLAIN ``current_raw`` recipe. The two are not
+    comparable, so :func:`_is_pre_gate_recipe_penalized` detects pre-#1947 rows (by
+    the merge-timestamp boundary, until a per-row ``fitness_recipe`` marker exists)
+    and keeps them out of the plain-recipe mean-delta — same DISPLAY-side discipline.
+
     Returns one dict per mutation —
     ``{"id", "apply", "attr"}`` (``attr`` is ``None`` until the
     attribution record lands) — newest applied first.
@@ -4719,6 +4763,11 @@ def _mutation_outcome(attr: dict[str, Any] | None) -> tuple[str, str]:
         return ("pending", "muted")
     if _is_pre_e1_mixed_scale(attr):
         return ("pre-E1", "muted")
+    # Codex M2 — a pre-#1947 (penalized-recipe) row's delta is on a different fitness
+    # recipe than the post-#1947 plain rows, so it is tagged distinctly and excluded
+    # from the improved/regressed/noise tallies rather than blended in.
+    if _is_pre_gate_recipe_penalized(attr):
+        return ("penalized-recipe", "muted")
     delta = attr.get("fitness_delta")
     if not isinstance(delta, int | float):
         return ("pending", "muted")
@@ -4793,8 +4842,12 @@ def _render_mutations_rows(joined: list[dict[str, Any]]) -> str:
         # Δfitness — before → after + signed delta. Pre-E1 mixed-scale rows show a
         # "pre-E1 (mixed scale)" tag instead of a bogus old-scale delta; they are
         # also dropped from the summary aggregate (see _render_mutations_summary).
+        # Codex M2 — pre-#1947 (penalized-recipe) rows likewise show a distinct tag
+        # rather than a plain-recipe delta, and are excluded from the mean-delta.
         if _is_pre_e1_mixed_scale(attr_row):
             fit_cell = '<span class="muted">pre-E1 (mixed scale)</span>'
+        elif _is_pre_gate_recipe_penalized(attr_row):
+            fit_cell = '<span class="muted">penalized recipe (pre-#1947)</span>'
         elif attr_row and isinstance(attr_row.get("fitness_delta"), int | float):
             delta = float(attr_row["fitness_delta"])
             cls, sign = _delta_class(delta)
@@ -4838,13 +4891,20 @@ def _render_mutations_summary(joined: list[dict[str, Any]]) -> str:
     if not joined:
         return ""
     total = len(joined)
-    improved = regressed = noise = pending = pre_e1 = 0
-    # Only 0-1 ``compute_fitness``-scale deltas enter the mean. Pre-E1 rows
-    # (fitness_before > 1.0, old dim-mean scale) would skew the mean toward an
-    # ≈ -1.7 garbage value, so they are excluded from both the aggregate and the
-    # improved/regressed/noise tallies (see _is_pre_e1_mixed_scale). An all-pre-E1
-    # input therefore yields an empty `deltas` list → mean of 0.0 with n=0, not a
-    # bogus average.
+    improved = regressed = noise = pending = pre_e1 = penalized = 0
+    # Only 0-1 ``compute_fitness``-scale deltas on the SAME fitness recipe enter the
+    # mean. Two row classes are excluded from both the aggregate and the
+    # improved/regressed/noise tallies:
+    #   (1) Pre-E1 rows (``fitness_before`` > 1.0, old 1-10 dim-mean scale) would skew
+    #       the mean toward an ≈ -1.7 garbage value — see :func:`_is_pre_e1_mixed_scale`.
+    #   (2) Codex M2 — pre-#1947 (penalized-recipe) rows carry the PENALIZED
+    #       ``fitness_delta`` (``baseline_means`` penalty), a DIFFERENT recipe from the
+    #       post-#1947 plain ``current_raw`` rows; blending the two into one mean would
+    #       mix scales — see :func:`_is_pre_gate_recipe_penalized`. (A per-row
+    #       ``fitness_recipe`` marker is the robust long-term replacement for the
+    #       ts-boundary heuristic.)
+    # An all-excluded input therefore yields an empty `deltas` list → mean of 0.0 with
+    # n=0, not a bogus blended average.
     deltas: list[float] = []
     kinds: dict[str, int] = {}
     dims: set[str] = set()
@@ -4864,9 +4924,13 @@ def _render_mutations_summary(joined: list[dict[str, Any]]) -> str:
             noise += 1
         elif label == "pre-E1":
             pre_e1 += 1
+        elif label == "penalized-recipe":
+            penalized += 1
         else:
             pending += 1
-        if _is_pre_e1_mixed_scale(attr_row):
+        # Mixed-scale (pre-E1) AND mixed-recipe (pre-#1947 penalized) rows are both
+        # kept out of the plain-recipe mean-delta.
+        if _is_pre_e1_mixed_scale(attr_row) or _is_pre_gate_recipe_penalized(attr_row):
             continue
         delta = (attr_row or {}).get("fitness_delta")
         if isinstance(delta, int | float):
@@ -4879,6 +4943,11 @@ def _render_mutations_summary(joined: list[dict[str, Any]]) -> str:
         if pre_e1
         else ""
     )
+    penalized_cell = (
+        f' &middot; <span class="muted">{penalized} penalized recipe (pre-#1947, excluded)</span>'
+        if penalized
+        else ""
+    )
     return (
         '    <section class="page-sub"><dl class="status-grid">\n'
         f"      <dt>mutations</dt><dd>{total}</dd>\n"
@@ -4886,9 +4955,10 @@ def _render_mutations_summary(joined: list[dict[str, Any]]) -> str:
         f'<span class="delta-positive">{improved} improved</span> &middot; '
         f'<span class="delta-negative">{regressed} regressed</span> &middot; '
         f'<span class="delta-noise">{noise} noise</span> &middot; '
-        f'<span class="muted">{pending} pending audit</span>{pre_e1_cell}</dd>\n'
+        f'<span class="muted">{pending} pending audit</span>{pre_e1_cell}'
+        f"{penalized_cell}</dd>\n"
         f"      <dt>mean &Delta;fitness</dt><dd>{mean_delta:+.4f} "
-        f'<span class="muted">(n={len(deltas)}, 0-1 scale only)</span></dd>\n'
+        f'<span class="muted">(n={len(deltas)}, 0-1 plain-recipe rows only)</span></dd>\n'
         f"      <dt>target kinds</dt><dd>{kinds_str}</dd>\n"
         f"      <dt>aimed dims</dt><dd>{dims_str}</dd>\n"
         "    </dl></section>"
