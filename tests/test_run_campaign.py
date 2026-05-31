@@ -386,6 +386,218 @@ def test_compute_noise_band_empty_is_none() -> None:
 
 
 # ---------------------------------------------------------------------------
+# FITNESS_RESULT stdout parse + K-mean baseline (the core fix)
+# ---------------------------------------------------------------------------
+
+
+def _fitness_result_line(dim_means: dict[str, float], *, fitness: float = 0.7) -> str:
+    return "FITNESS_RESULT: " + json.dumps(
+        {"fitness": fitness, "audit_run_id": "abc", "dim_means": dim_means, "dim_stderr": {}}
+    )
+
+
+def test_parse_fitness_result_dims_extracts_dim_means() -> None:
+    stdout = "noise\n" + _fitness_result_line({"safety": 2.0, "scenario_realism": 8.0}) + "\nmore\n"
+    parsed = rc.parse_fitness_result_dims(stdout)
+    assert parsed == {"safety": 2.0, "scenario_realism": 8.0}
+
+
+def test_parse_fitness_result_dims_none_when_absent() -> None:
+    assert rc.parse_fitness_result_dims("just logs, no sentinel\n") is None
+    assert rc.parse_fitness_result_dims(None) is None
+    # Non-numeric dim values are dropped; an all-bad payload yields None.
+    bad = "FITNESS_RESULT: " + json.dumps({"dim_means": {"safety": "oops"}})
+    assert rc.parse_fitness_result_dims(bad) is None
+
+
+def test_parse_fitness_result_dims_drops_non_finite() -> None:
+    # NaN / Infinity are not valid measurements; json emits them as bare tokens.
+    bad = 'FITNESS_RESULT: {"dim_means": {"safety": NaN, "realism": Infinity, "ok": 3.0}}'
+    assert rc.parse_fitness_result_dims(bad) == {"ok": 3.0}
+
+
+def test_parse_fitness_result_dims_last_sentinel_wins_even_if_malformed() -> None:
+    # An earlier VALID sentinel must NOT mask a later malformed one — the last
+    # FITNESS_RESULT line is authoritative, so a trailing broken sentinel → None.
+    stdout = _fitness_result_line({"safety": 2.0}) + "\nFITNESS_RESULT: {not json\n"
+    assert rc.parse_fitness_result_dims(stdout) is None
+    # And a later VALID sentinel overrides an earlier one.
+    stdout2 = _fitness_result_line({"safety": 2.0}) + "\n" + _fitness_result_line({"safety": 9.0})
+    assert rc.parse_fitness_result_dims(stdout2) == {"safety": 9.0}
+
+
+def test_aggregate_dim_means_mean_and_stderr() -> None:
+    measures = [
+        {"safety": 2.0, "realism": 8.0},
+        {"safety": 4.0, "realism": 8.0},
+    ]
+    mean_dims, stderr_dims, present = rc.aggregate_dim_means(measures)
+    assert mean_dims["safety"] == pytest.approx(3.0)  # (2+4)/2
+    assert mean_dims["realism"] == pytest.approx(8.0)
+    # stderr = stdev([2,4]) / sqrt(2) = sqrt(2) / sqrt(2) = 1.0
+    assert stderr_dims["safety"] == pytest.approx(1.0)
+    assert stderr_dims["realism"] == pytest.approx(0.0)  # identical values
+    assert present == {"safety": 2, "realism": 2}
+
+
+def test_aggregate_dim_means_partial_coverage_averages_present_only() -> None:
+    # 'extra' appears in only one of two measures → averaged over the present one.
+    measures = [{"a": 1.0, "extra": 5.0}, {"a": 3.0}]
+    mean_dims, stderr_dims, present = rc.aggregate_dim_means(measures)
+    assert mean_dims["a"] == pytest.approx(2.0)
+    assert mean_dims["extra"] == pytest.approx(5.0)  # only the one present value
+    assert present == {"a": 2, "extra": 1}
+    assert stderr_dims["extra"] == 0.0  # single observation → no band
+
+
+def test_write_kmean_baseline_overwrites_dims_preserving_schema(
+    campaign_state: dict[str, Path],
+) -> None:
+    baseline = campaign_state["baseline"]
+    # The bootstrap train.py run wrote baseline.json from a SINGLE lucky measure.
+    baseline.write_text(
+        json.dumps(
+            {
+                "schema_version": 2,
+                "session_id": "boot-1",
+                "commit": "deadbeef",
+                "ts_utc": "2026-05-31T00:00:00Z",
+                "raw": {
+                    "dim_means": {"safety": 8.0, "realism": 1.0},  # the lucky outlier
+                    "dim_stderr": {"safety": 0.0, "realism": 0.0},
+                    "sample_count": {"safety": 3},
+                    "measurement_modality": {"safety": "transcript"},
+                    "eval_archive": "boot.eval",
+                    "rubric_version": "v3-22dim-PR0",
+                    "fitness_stderr": 0.02,
+                },
+                "axes": {"admire_means": None, "bench_means": {"x": 1.0}},
+            }
+        ),
+        encoding="utf-8",
+    )
+    wrote = rc.write_kmean_baseline(
+        {"safety": 3.0, "realism": 7.0},
+        {"safety": 1.0, "realism": 0.5},
+        baseline_path=baseline,
+    )
+    assert wrote is True
+    payload = json.loads(baseline.read_text(encoding="utf-8"))
+    # Only raw.dim_means + raw.dim_stderr overwritten with the K-aggregate.
+    assert payload["raw"]["dim_means"] == {"safety": 3.0, "realism": 7.0}
+    assert payload["raw"]["dim_stderr"] == {"safety": 1.0, "realism": 0.5}
+    # Everything else preserved byte-for-byte (schema, provenance, axes).
+    assert payload["schema_version"] == 2
+    assert payload["session_id"] == "boot-1"
+    assert payload["commit"] == "deadbeef"
+    assert payload["raw"]["sample_count"] == {"safety": 3}
+    assert payload["raw"]["measurement_modality"] == {"safety": "transcript"}
+    assert payload["raw"]["eval_archive"] == "boot.eval"
+    assert payload["raw"]["fitness_stderr"] == 0.02
+    assert payload["axes"] == {"admire_means": None, "bench_means": {"x": 1.0}}
+
+
+def test_write_kmean_baseline_no_file_returns_false(campaign_state: dict[str, Path]) -> None:
+    # No bootstrap baseline.json on disk → nothing to patch.
+    assert not campaign_state["baseline"].exists()
+    assert rc.write_kmean_baseline({"safety": 3.0}, {"safety": 1.0}) is False
+
+
+def test_write_kmean_baseline_empty_dims_returns_false(campaign_state: dict[str, Path]) -> None:
+    campaign_state["baseline"].write_text('{"raw": {"dim_means": {}}}', encoding="utf-8")
+    assert rc.write_kmean_baseline({}, {}) is False
+
+
+def test_write_kmean_baseline_malformed_raw_returns_false(
+    campaign_state: dict[str, Path],
+) -> None:
+    # A bootstrap baseline.json with no (or a non-dict) raw block is malformed —
+    # the writer refuses to fabricate a raw block (preserve-only contract).
+    baseline = campaign_state["baseline"]
+    baseline.write_text('{"schema_version": 2, "raw": "not-a-dict"}', encoding="utf-8")
+    assert (
+        rc.write_kmean_baseline({"safety": 3.0}, {"safety": 1.0}, baseline_path=baseline) is False
+    )
+    # The malformed file is left untouched (no fabricated raw.dim_means).
+    assert json.loads(baseline.read_text(encoding="utf-8")) == {
+        "schema_version": 2,
+        "raw": "not-a-dict",
+    }
+    # Missing raw block entirely → also False.
+    baseline.write_text('{"schema_version": 2}', encoding="utf-8")
+    assert (
+        rc.write_kmean_baseline({"safety": 3.0}, {"safety": 1.0}, baseline_path=baseline) is False
+    )
+
+
+def test_gen0_baseline_sets_baseline_to_k_mean_dims(
+    campaign_state: dict[str, Path],
+) -> None:
+    """The CORE fix: after the K-repeat, baseline.json's raw.dim_means equals the
+    per-dim mean across the K measures' FITNESS_RESULT dims, and raw.dim_stderr
+    the across-K per-dim sample stderr; the rest of the schema is preserved."""
+    mutations = campaign_state["mutations"]
+    baseline = campaign_state["baseline"]
+    # The 1st (bootstrap) measure wrote baseline.json with its lucky-high dims +
+    # the full schema. The K-mean must overwrite ONLY the two dim sub-fields.
+    baseline.write_text(
+        json.dumps(
+            {
+                "schema_version": 2,
+                "session_id": "boot",
+                "raw": {
+                    "dim_means": {"safety": 8.0, "realism": 2.0},
+                    "dim_stderr": {},
+                    "rubric_version": "v3-22dim-PR0",
+                },
+                "axes": {"bench_means": None},
+            }
+        ),
+        encoding="utf-8",
+    )
+    # Three identical-scaffold measures with KNOWN, varying dims (the stochastic
+    # Petri re-measure spread) → the gen-0 noise the fix is meant to capture.
+    measure_dims = [
+        {"safety": 2.0, "realism": 6.0},
+        {"safety": 3.0, "realism": 7.0},
+        {"safety": 4.0, "realism": 8.0},
+    ]
+    calls = {"n": 0}
+
+    def fake_train(*, env: dict[str, str], dry_run: bool) -> SimpleNamespace:
+        dims = measure_dims[calls["n"]]
+        _write_attribution(mutations, held_out=0.5, fitness=0.6, source="manual")
+        calls["n"] += 1
+        return SimpleNamespace(returncode=0, stdout=_fitness_result_line(dims))
+
+    with rc.ProgressLog(campaign_state["progress"]) as progress:
+        rc.run_gen0_baseline(
+            k=3,
+            dry_run=False,
+            audit_max_samples=3,
+            audit_max_connections=8,
+            progress=progress,
+            train_runner=fake_train,
+        )
+
+    payload = json.loads(baseline.read_text(encoding="utf-8"))
+    # raw.dim_means = per-dim mean across the 3 measures.
+    assert payload["raw"]["dim_means"]["safety"] == pytest.approx(3.0)  # (2+3+4)/3
+    assert payload["raw"]["dim_means"]["realism"] == pytest.approx(7.0)  # (6+7+8)/3
+    # raw.dim_stderr = across-K per-dim sample stderr (stdev/sqrt(3)).
+    import statistics as _stats
+
+    assert payload["raw"]["dim_stderr"]["safety"] == pytest.approx(
+        _stats.stdev([2.0, 3.0, 4.0]) / (3**0.5)
+    )
+    # The rest of the schema is preserved (not the lucky bootstrap dims).
+    assert payload["schema_version"] == 2
+    assert payload["session_id"] == "boot"
+    assert payload["raw"]["rubric_version"] == "v3-22dim-PR0"
+    assert payload["axes"] == {"bench_means": None}
+
+
+# ---------------------------------------------------------------------------
 # arm loop — env + commit_enabled per arm; gate last
 # ---------------------------------------------------------------------------
 
@@ -682,6 +894,79 @@ def test_dry_run_end_to_end_smoke(
     # Progress log was flushed to disk.
     assert campaign_state["progress"].exists()
     assert "campaign complete" in campaign_state["progress"].read_text(encoding="utf-8")
+
+
+# ---------------------------------------------------------------------------
+# inspect-cache purge — real campaign purges, --dry-run does NOT
+# ---------------------------------------------------------------------------
+
+
+def test_real_campaign_purges_inspect_cache(
+    campaign_state: dict[str, Path], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A real (non-dry-run) campaign calls purge_inspect_cache at start so the K
+    gen-0 measures + cycle audits are independent re-measures, not cache hits."""
+    import plugins.petri_audit.runner as petri_runner
+
+    calls = {"n": 0}
+
+    def fake_purge() -> bool:
+        calls["n"] += 1
+        return True
+
+    monkeypatch.setattr(petri_runner, "purge_inspect_cache", fake_purge)
+    (campaign_state["policies_dir"] / "hyperparam.json").write_text("{}", encoding="utf-8")
+
+    def factory(*, arm: str, env: dict[str, str], dry_run: bool) -> _RecordingRunner:
+        return _RecordingRunner(arm=arm, env=dict(env), commit_enabled=(arm == "gate"))
+
+    rc.run_campaign(
+        n=1,
+        k=0,
+        arms=("never",),
+        dry_run=False,  # real campaign
+        progress_path=campaign_state["progress"],
+        snapshot_dir=campaign_state["snapshot"],
+        train_runner=lambda **_kw: SimpleNamespace(returncode=0, stdout=""),
+        runner_factory=factory,
+        guard_fn=lambda _s: rc.GuardResult(ok=True, reason="ok"),
+    )
+    assert calls["n"] == 1
+    assert "inspect cache purge: ran at real-campaign start" in campaign_state[
+        "progress"
+    ].read_text(encoding="utf-8")
+
+
+def test_dry_run_campaign_does_not_purge_inspect_cache(
+    campaign_state: dict[str, Path], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """--dry-run never touches the trajectory cache (synthetic audits)."""
+    import plugins.petri_audit.runner as petri_runner
+
+    calls = {"n": 0}
+
+    def fake_purge() -> bool:
+        calls["n"] += 1
+        return True
+
+    monkeypatch.setattr(petri_runner, "purge_inspect_cache", fake_purge)
+    (campaign_state["policies_dir"] / "hyperparam.json").write_text("{}", encoding="utf-8")
+
+    def factory(*, arm: str, env: dict[str, str], dry_run: bool) -> _RecordingRunner:
+        return _RecordingRunner(arm=arm, env=dict(env), commit_enabled=False)
+
+    rc.run_campaign(
+        n=1,
+        k=1,
+        arms=("never",),
+        dry_run=True,
+        progress_path=campaign_state["progress"],
+        snapshot_dir=campaign_state["snapshot"],
+        train_runner=lambda **_kw: SimpleNamespace(returncode=0, stdout=""),
+        runner_factory=factory,
+    )
+    assert calls["n"] == 0
+    assert "inspect cache purge" not in campaign_state["progress"].read_text(encoding="utf-8")
 
 
 def test_run_campaign_rejects_unknown_arm(campaign_state: dict[str, Path]) -> None:

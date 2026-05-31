@@ -45,6 +45,41 @@ functional change.
 
 ---
 
+## [0.99.104] - 2026-05-31
+
+### Fixed
+- **PR-CAMPAIGN-GEN0-KMEAN (2026-05-31) — gen-0 baseline = K-mean dims, not the
+  single lucky-outlier bootstrap measure; purge the inspect_ai trajectory cache at
+  real-campaign start.** Two fixes to `scripts/run_campaign.py` (the self-improving
+  campaign driver):
+  - **K-mean baseline (the core fix).** The driver's gen-0 K-repeat left
+    `baseline.json`'s `raw.dim_means` pinned to the SINGLE bootstrap measurement (the
+    1st of K). The Petri audit is stochastic: 3 independent re-measures of the IDENTICAL
+    genesis scaffold gave fitness 0.807 / 0.663 / 0.662 (cache confirmed empty). With the
+    baseline pinned to the lucky-high 0.807, every ~0.66 cycle looked like a −0.14
+    regression, so the promote gate (`current_raw = compute_fitness(cycle_dims)` vs
+    `prior_raw = compute_fitness(baseline_dims)`, both intrinsic) was structurally
+    near-0-approve and the campaign could not test selection. The driver now parses each
+    gen-0 measure's RAW per-dim `dim_means` from `train.py`'s `FITNESS_RESULT:` stdout
+    sentinel, and after the K-repeat overwrites ONLY `baseline.json`'s `raw.dim_means`
+    (→ per-dim K-mean) and `raw.dim_stderr` (→ across-K per-dim sample stderr, the real
+    noise band), preserving the rest of the schema (`schema_version` / `session_id` /
+    `commit` / `ts_utc` / `axes` / `raw.{sample_count, measurement_modality,
+    eval_archive, fitness_stderr, rubric_version, …}`). A dim missing from some measures
+    is averaged over the present ones (partial-coverage logged). Skipped under
+    `--dry-run` (train.py's synthetic `FITNESS_RESULT` dims must not freeze a synthetic
+    baseline) — `write_kmean_baseline` / `aggregate_dim_means` / `parse_fitness_result_dims`.
+  - **inspect cache purge at real-campaign start.** A real (non-`--dry-run`) campaign now
+    calls `plugins.petri_audit.runner.purge_inspect_cache()` (guarded import) before the
+    K gen-0 measures so the identical-scaffold repeats + all cycle audits are INDEPENDENT
+    re-measures, not replays of a stale trajectory cached at
+    `~/Library/Caches/inspect_ai/generate/`. Skipped under `--dry-run`.
+  - **Tests** (`tests/test_run_campaign.py`, +10, all mocked — NO live audit): K-mean
+    baseline write asserts `raw.dim_means` = per-dim mean + `raw.dim_stderr` = across-K
+    stderr with the rest of the schema preserved; `FITNESS_RESULT` parse (incl.
+    non-numeric drop + absent → None); `aggregate_dim_means` mean/stderr + partial
+    coverage; cache purge runs on a real run and NOT on `--dry-run`. 37 tests pass.
+
 ## [0.99.103] - 2026-05-31
 
 ### Fixed

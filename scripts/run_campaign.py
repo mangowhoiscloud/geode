@@ -10,7 +10,14 @@ importable module with a CLI front end. The driver does NOT decide policy — it
   no mutation, ``source="manual"``; the first run bootstrap-establishes
   ``baseline.json``). The campaign spawns it via ``uv run python
   autoresearch/train.py`` and reads each run's ``held_out_fitness`` + ``fitness``
-  from the new ``kind="attribution"`` rows it appends to ``mutations.jsonl``.
+  from the new ``kind="attribution"`` rows it appends to ``mutations.jsonl``,
+  plus each run's RAW per-dim ``dim_means`` from the ``FITNESS_RESULT:`` stdout
+  sentinel. After the K gen-0 repeats it overwrites ``baseline.json``'s
+  ``raw.dim_means`` with the per-dim K-MEAN (and ``raw.dim_stderr`` with the
+  across-K per-dim sample stderr), so the promote gate's ``prior_raw =
+  compute_fitness(mean_dims)`` is a robust central estimate of the stochastic
+  Petri audit — not the single (possibly lucky-outlier) bootstrap measure that
+  would otherwise pin the gate to a structurally near-0-approve state.
 * ``core.self_improving_loop.runner.SelfImprovingLoopRunner`` — one
   ``propose()`` + guard + ``apply_proposal()`` per cycle. The driver wraps
   ``propose()`` in a re-proposal loop (the *propose-guard*) so a
@@ -21,12 +28,19 @@ importable module with a CLI front end. The driver does NOT decide policy — it
   3 arms in the order **never → random → gate** (gate LAST), each from a matched
   gen-0 SoT reset.
 
+At the start of a REAL (non-``--dry-run``) campaign the driver purges
+``inspect_ai``'s trajectory cache (``plugins.petri_audit.runner.purge_inspect_cache``,
+the cache at ``~/Library/Caches/inspect_ai/generate/``) so the K gen-0 measures
++ all cycle audits are INDEPENDENT re-measures, not replays of a stale cached
+trajectory for an identical seed. Skipped under ``--dry-run`` (synthetic audits
+never touch the cache).
+
 The campaign is split into pure, testable units (snapshot/restore, the
-propose-guard, the degeneracy guard, the gen-0 noise-band collection) so the
-unit suite in ``tests/test_run_campaign.py`` can exercise every boundary with
-mocks and NO live audit / network / PAYG spend. ``--dry-run`` passes the flag
-through to ``train.py`` AND to the runner (``rerun_dry_run=True``) so the whole
-chain can be smoke-tested end-to-end with synthetic audits.
+propose-guard, the degeneracy guard, the gen-0 noise-band collection + K-mean
+baseline write) so the unit suite in ``tests/test_run_campaign.py`` can exercise
+every boundary with mocks and NO live audit / network / PAYG spend. ``--dry-run``
+passes the flag through to ``train.py`` AND to the runner (``rerun_dry_run=True``)
+so the whole chain can be smoke-tested end-to-end with synthetic audits.
 
 ENV SETUP (operator handoff)
 ----------------------------
@@ -58,6 +72,7 @@ from __future__ import annotations
 import argparse
 import json
 import logging
+import math
 import os
 import shutil
 import statistics
@@ -385,12 +400,71 @@ def _as_float(value: object) -> float | None:
     if isinstance(value, bool):
         return None
     if isinstance(value, (int, float)):
-        return float(value)
+        num = float(value)
+        # Reject non-finite (NaN / ±Inf): not a valid measurement, and json.dumps
+        # would otherwise write non-standard JSON into baseline.json (Codex MCP
+        # finding — graceful boundary at the schema-typed cast).
+        return num if math.isfinite(num) else None
     return None
 
 
 def _as_str(value: object) -> str | None:
     return value if isinstance(value, str) else None
+
+
+# ---------------------------------------------------------------------------
+# FITNESS_RESULT stdout parse (gen-0 per-measure raw dim_means)
+# ---------------------------------------------------------------------------
+
+#: The structured stdout sentinel ``autoresearch/train.py`` emits on the success
+#: path (``train.py`` ~L4786): ``FITNESS_RESULT: {"fitness": ..., "dim_means":
+#: {...}, "dim_stderr": {...}, "audit_run_id": ...}``. The campaign tail-parses
+#: it to recover each gen-0 measure's RAW per-dim ``dim_means`` (the attribution
+#: row in ``mutations.jsonl`` carries only the baseline-relative ``observed_dim``
+#: delta, not the raw means), so the gen-0 K-mean can be computed from the
+#: identical-scaffold repeats.
+_FITNESS_RESULT_PREFIX = "FITNESS_RESULT: "
+
+
+def parse_fitness_result_dims(stdout: str | None) -> dict[str, float] | None:
+    """Parse the ``dim_means`` dict from a ``train.py`` ``FITNESS_RESULT:`` line.
+
+    Takes the LAST ``FITNESS_RESULT:``-prefixed line (a single ``train.py`` run
+    emits exactly one on success; keying on the *last* one keeps the contract
+    "last sentinel wins" robust to interleaved log noise) and returns its
+    ``dim_means`` as a ``{dim: float}`` dict. Returns ``None`` when no sentinel
+    line exists, the last one is not parseable JSON / has no ``dim_means`` dict,
+    or no numeric dim survives (a ``--dry-run`` / failed run emits none) — so a
+    caller skips that measure rather than fold a phantom zero-dim row into the
+    K-mean. A later malformed sentinel is NOT silently masked by an earlier valid
+    one (Codex MCP finding): the last sentinel line is authoritative. Non-numeric
+    / non-finite dim values are dropped (graceful per the contract-boundary rule —
+    every schema-typed cast is guarded, not just the outer parse).
+    """
+    if not stdout:
+        return None
+    last_payload: str | None = None
+    for raw in stdout.splitlines():
+        line = raw.strip()
+        if line.startswith(_FITNESS_RESULT_PREFIX):
+            last_payload = line[len(_FITNESS_RESULT_PREFIX) :].strip()
+    if last_payload is None:
+        return None
+    try:
+        obj = json.loads(last_payload)
+    except json.JSONDecodeError:
+        return None
+    if not isinstance(obj, dict):
+        return None
+    dim_means_raw = obj.get("dim_means")
+    if not isinstance(dim_means_raw, dict):
+        return None
+    parsed: dict[str, float] = {}
+    for key, value in dim_means_raw.items():
+        num = _as_float(value)
+        if isinstance(key, str) and num is not None:
+            parsed[key] = num
+    return parsed or None
 
 
 # ---------------------------------------------------------------------------
@@ -583,6 +657,95 @@ def compute_noise_band(
     return NoiseBand(k=k, held_out_values=held, fitness_values=fit, mean=mean, stderr=stderr)
 
 
+def aggregate_dim_means(
+    per_measure_dim_means: Sequence[dict[str, float]],
+) -> tuple[dict[str, float], dict[str, float], dict[str, int]]:
+    """Per-dim mean + across-K sample stderr over the K gen-0 measures.
+
+    Each element of ``per_measure_dim_means`` is one gen-0 measure's RAW
+    ``dim_means`` (parsed from its ``FITNESS_RESULT:`` stdout line). For every dim
+    that appears in AT LEAST ONE measure, the mean is taken over the measures
+    where the dim is PRESENT (a dim missing from some measures is averaged over
+    the present ones, not treated as zero — keep it simple + correct). The stderr
+    is the sample stderr ``stdev(present_values) / sqrt(n_present)`` when
+    ``n_present >= 2``, else ``0.0`` (a single observation has no measurable
+    band). Returns ``(mean_dims, stderr_dims, present_count_dims)``; the third
+    dict records how many of the K measures contributed to each dim so the caller
+    can log a partial-coverage warning.
+
+    This is the CORE fix: ``baseline.json``'s ``raw.dim_means`` must be a robust
+    central estimate across the K identical-scaffold repeats, not the single
+    (possibly lucky-high / lucky-low) bootstrap measure — otherwise every cycle's
+    ``compute_fitness(cycle_dims)`` vs ``compute_fitness(baseline_dims)`` gate
+    compares against an outlier and the campaign is structurally near-0-approve.
+    """
+    dims: set[str] = set()
+    for measure in per_measure_dim_means:
+        dims.update(measure.keys())
+    mean_dims: dict[str, float] = {}
+    stderr_dims: dict[str, float] = {}
+    present_count: dict[str, int] = {}
+    for dim in sorted(dims):
+        present = [m[dim] for m in per_measure_dim_means if dim in m]
+        if not present:  # pragma: no cover — dims came from the measures
+            continue
+        present_count[dim] = len(present)
+        mean_dims[dim] = statistics.fmean(present)
+        stderr_dims[dim] = (
+            statistics.stdev(present) / (len(present) ** 0.5) if len(present) >= 2 else 0.0
+        )
+    return mean_dims, stderr_dims, present_count
+
+
+def write_kmean_baseline(
+    mean_dims: dict[str, float],
+    stderr_dims: dict[str, float],
+    *,
+    baseline_path: Path | None = None,
+) -> bool:
+    """Overwrite ``baseline.json``'s ``raw.dim_means`` + ``raw.dim_stderr`` with
+    the K-aggregate, preserving the rest of the schema.
+
+    The bootstrap ``train.py`` run already wrote ``baseline.json`` from its SINGLE
+    measure (1st of K). This rewrites ONLY ``raw.dim_means`` (→ K-mean) and
+    ``raw.dim_stderr`` (→ across-K per-dim sample stderr, the real noise band),
+    leaving every other field intact: top-level ``schema_version`` / ``session_id``
+    / ``commit`` / ``ts_utc``, ``axes``, and the rest of ``raw``
+    (``sample_count`` / ``measurement_modality`` / ``eval_archive`` /
+    ``fitness_stderr`` / ``rubric_version`` / …). So the promote gate's
+    ``prior_raw = compute_fitness(raw.dim_means)`` reads the robust central
+    estimate.
+
+    Returns ``True`` when the rewrite landed, ``False`` when there is no
+    ``baseline.json`` to patch (the bootstrap never established one — e.g. all K
+    runs failed) or no aggregate dims were collected (nothing to write).
+    """
+    target = baseline_path if baseline_path is not None else BASELINE_JSON
+    if not mean_dims:
+        return False
+    if not target.exists():
+        return False
+    try:
+        payload = json.loads(target.read_text(encoding="utf-8"))
+    except (json.JSONDecodeError, OSError):
+        return False
+    if not isinstance(payload, dict):
+        return False
+    raw_block = payload.get("raw")
+    if not isinstance(raw_block, dict):
+        # A bootstrap baseline.json with no (or a non-dict) ``raw`` block is
+        # malformed — the bootstrap train.py run did not establish the expected
+        # schema. Refuse to fabricate a ``raw`` block (that would violate the
+        # "overwrite ONLY raw.dim_means + raw.dim_stderr" contract and mask the
+        # broken bootstrap); return False so the caller logs written=False
+        # (Codex MCP finding — preserve-only contract).
+        return False
+    raw_block["dim_means"] = {dim: float(v) for dim, v in mean_dims.items()}
+    raw_block["dim_stderr"] = {dim: float(v) for dim, v in stderr_dims.items()}
+    target.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    return True
+
+
 def run_gen0_baseline(
     *,
     k: int,
@@ -606,6 +769,11 @@ def run_gen0_baseline(
     runner_fn = train_runner if train_runner is not None else _spawn_train_subprocess
     held_out_values: list[float] = []
     fitness_values: list[float] = []
+    # Each gen-0 measure's RAW per-dim ``dim_means`` (parsed from its
+    # ``FITNESS_RESULT:`` stdout line) — the K-mean of these replaces
+    # ``baseline.json``'s single-bootstrap ``raw.dim_means`` so the promote gate
+    # compares cycles against a robust central estimate, not a lucky outlier.
+    per_measure_dim_means: list[dict[str, float]] = []
     for i in range(1, k + 1):
         env = build_campaign_env(
             audit_max_samples=audit_max_samples,
@@ -620,6 +788,10 @@ def run_gen0_baseline(
                 f"{getattr(result, 'returncode', '?')} — skipping signal read"
             )
             continue
+        # Recover this measure's raw dim_means from the FITNESS_RESULT sentinel.
+        measure_dims = parse_fitness_result_dims(getattr(result, "stdout", None))
+        if measure_dims:
+            per_measure_dim_means.append(measure_dims)
         # Require a NEW attribution row from THIS run (no stale-row reuse).
         signal = read_latest_attribution(min_rows=rows_before)
         if signal is None:
@@ -634,10 +806,40 @@ def run_gen0_baseline(
             fitness_values.append(signal.fitness)
         progress.emit(
             f"gen-0 baseline repeat {i}/{k}: held_out={signal.held_out_fitness} "
-            f"fitness={signal.fitness} source={signal.source}"
+            f"fitness={signal.fitness} source={signal.source} "
+            f"dims_parsed={len(measure_dims) if measure_dims else 0}"
         )
     band = compute_noise_band(held_out_values, fitness_values, k=k)
     progress.emit(band.summary())
+    # CORE FIX — rewrite baseline.json's raw.dim_means to the K-mean dims (and
+    # raw.dim_stderr to the across-K per-dim sample stderr), so prior_raw =
+    # compute_fitness(mean_dims) is a robust central estimate, not the single
+    # lucky-high/low bootstrap measure (every other field is preserved).
+    #
+    # Under --dry-run the K-mean write is SKIPPED: train.py --dry-run emits a
+    # FITNESS_RESULT line with SYNTHETIC dims (so per_measure_dim_means is
+    # populated), but persisting those would freeze a synthetic baseline — the
+    # same reason train.py short-circuits its own promote gate on dry-run. The
+    # smoke must leave baseline.json untouched.
+    if dry_run:
+        progress.emit(
+            f"gen-0 K-mean baseline: dry-run — skipped baseline.json rewrite "
+            f"(parsed {len(per_measure_dim_means)}/{k} synthetic FITNESS_RESULT measures)"
+        )
+    elif per_measure_dim_means:
+        mean_dims, stderr_dims, present_count = aggregate_dim_means(per_measure_dim_means)
+        wrote = write_kmean_baseline(mean_dims, stderr_dims)
+        partial = sorted(d for d, c in present_count.items() if c < len(per_measure_dim_means))
+        progress.emit(
+            f"gen-0 K-mean baseline: collected {len(per_measure_dim_means)}/{k} measures, "
+            f"{len(mean_dims)} dims; baseline.json raw.dim_means←K-mean "
+            f"(written={wrote})" + (f"; partial-coverage dims={partial}" if partial else "")
+        )
+    else:
+        progress.emit(
+            f"gen-0 K-mean baseline: no FITNESS_RESULT dims parsed from {k} measures "
+            "(all failed) — baseline.json raw.dim_means left as bootstrap"
+        )
     return band
 
 
@@ -898,6 +1100,35 @@ def _cycle_line(
 
 
 # ---------------------------------------------------------------------------
+# inspect_ai trajectory-cache purge (FIX 2 — real-campaign start)
+# ---------------------------------------------------------------------------
+
+
+def _purge_inspect_cache_at_start(progress: ProgressLog) -> bool:
+    """Call ``plugins.petri_audit.runner.purge_inspect_cache`` at real-campaign
+    start, logging the outcome.
+
+    The import is GUARDED: ``plugins.petri_audit`` pulls in ``inspect_ai`` (the
+    ``[audit]`` extra), which is absent in a base ``uv sync`` env. When the import
+    fails the purge is a logged no-op (``False``) rather than a crash, so a
+    non-audit invocation of the driver still runs. ``purge_inspect_cache`` itself
+    is graceful for the same reason (returns ``False`` when ``inspect_ai`` is
+    unavailable), so this is belt-and-braces.
+    """
+    try:
+        from plugins.petri_audit.runner import purge_inspect_cache
+    except ImportError as exc:
+        progress.emit(f"inspect cache purge: skipped (petri_audit/inspect_ai unavailable — {exc})")
+        return False
+    purged = purge_inspect_cache()
+    progress.emit(
+        f"inspect cache purge: ran at real-campaign start (purged={purged}) — "
+        "K gen-0 measures + cycle audits are independent re-measures, not cache replays"
+    )
+    return purged
+
+
+# ---------------------------------------------------------------------------
 # Top-level campaign
 # ---------------------------------------------------------------------------
 
@@ -930,6 +1161,15 @@ def run_campaign(
             f"campaign start: n={n} k={k} arms={list(arms)} dry_run={dry_run} "
             f"audit_max_samples={audit_max_samples} audit_max_connections={audit_max_connections}"
         )
+        # FIX 2 — purge inspect_ai's trajectory cache at the start of a REAL
+        # campaign so the K gen-0 measures + all cycle audits are independent
+        # re-measures, not replays of a stale cached trajectory (the cache at
+        # ``~/Library/Caches/inspect_ai/generate/`` keys on the input messages, so
+        # an identical-scaffold gen-0 repeat would otherwise hit the same cached
+        # score K times). Skipped under --dry-run (synthetic audits never touch
+        # the cache).
+        if not dry_run:
+            _purge_inspect_cache_at_start(progress)
         band = run_gen0_baseline(
             k=k,
             dry_run=dry_run,
