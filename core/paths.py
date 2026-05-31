@@ -230,7 +230,7 @@ GLOBAL_SELF_IMPROVING_LOOP_DIR = GEODE_HOME / "self-improving-loop"
 # names match the new directory's "policies" semantics rather than
 # the legacy "source of truth" label. Lazy migration of any legacy
 # ``~/.geode/self-improving-loop/<file>.json`` payload is handled
-# by :mod:`core.self_improving_loop.policies`.
+# by :mod:`core.self_improving.loop.policies`.
 _REPO_ROOT = Path(__file__).resolve().parents[1]
 _AUTORESEARCH_STATE_DIR = _REPO_ROOT / "autoresearch" / "state"
 GLOBAL_POLICIES_DIR = _AUTORESEARCH_STATE_DIR / "policies"
@@ -240,7 +240,7 @@ Kept for the lazy migration path so an upgrade of an existing
 operator install copies their last-known wrapper/policy state into
 the new in-repo location on first read/write."""
 # G5a (2026-05-20) — cross-process SoT for the AgenticLoop wrapper prompt
-# sections. Written by ``autoresearch.train.write_wrapper_prompt_sections``
+# sections. Written by ``core.self_improving.train.write_wrapper_prompt_sections``
 # after a self-improving-loop promotion; read by
 # ``core.agent.system_prompt._load_wrapper_override`` for daily GEODE runs.
 GLOBAL_WRAPPER_SECTIONS_PATH = GLOBAL_POLICIES_DIR / "wrapper-sections.json"
@@ -250,7 +250,7 @@ GLOBAL_WRAPPER_SECTIONS_PATH = GLOBAL_POLICIES_DIR / "wrapper-sections.json"
 # ``wrapper-sections.json``. ``prompt`` keeps the legacy wrapper-
 # sections name so older mutation rows replay correctly; the others
 # land in fresh files because they evolve independently. Read /
-# written by :mod:`core.self_improving_loop.policies`.
+# written by :mod:`core.self_improving.loop.policies`.
 GLOBAL_TOOL_POLICY_PATH = GLOBAL_POLICIES_DIR / "tool-policy.json"
 GLOBAL_DECOMPOSITION_POLICY_PATH = GLOBAL_POLICIES_DIR / "decomposition.json"
 GLOBAL_RETRIEVAL_POLICY_PATH = GLOBAL_POLICIES_DIR / "retrieval.json"
@@ -346,7 +346,7 @@ GLOBAL_DPO_PACK_PATH = GLOBAL_SELF_IMPROVING_LOOP_DIR / "dpo" / "pack.jsonl"
 # applied mutation. Lives in-repo alongside the 5 policy SoT JSONs
 # so the git-as-optimiser ledger and the current-state files are
 # co-located. Previously declared in
-# ``core/self_improving_loop/runner.py``; moved here for consistency
+# ``core/self_improving/loop/runner.py``; moved here for consistency
 # with the other path constants. The runner re-exports the constant
 # for backwards compat with existing callers.
 MUTATION_AUDIT_LOG_PATH = _AUTORESEARCH_STATE_DIR / "mutations.jsonl"

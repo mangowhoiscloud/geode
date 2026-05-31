@@ -132,7 +132,7 @@ def test_petri_manifest_supports_cell(cell: AuthCell) -> None:
 
 @pytest.mark.parametrize("cell", _cells_for("autoresearch"))
 def test_autoresearch_can_target_cell(cell: AuthCell) -> None:
-    """`autoresearch/train.py`'s flags can drive each cell's provider.
+    """`core/self_improving/train.py`'s flags can drive each cell's provider.
 
     PR-MINIMAL-2 (2026-05-21) — ``USE_OAUTH: bool`` module constant
     replaced by ``SOURCE: str`` (B1: aligns shape with
@@ -142,7 +142,7 @@ def test_autoresearch_can_target_cell(cell: AuthCell) -> None:
     branch. The test just confirms the constants + flag plumbing
     exist; live OAuth probing is out of scope here.
     """
-    from autoresearch import train
+    from core.self_improving import train
 
     assert hasattr(train, "SOURCE")
     # Single-SoT (2026-05-22) — ``TARGET_MODEL`` / ``JUDGE_MODEL``

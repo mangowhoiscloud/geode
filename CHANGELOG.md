@@ -45,6 +45,49 @@ functional change.
 
 ---
 
+## [0.99.107] - 2026-06-01
+
+### Changed
+- **PR-SELF-IMPROVING-UMBRELLA (2026-05-31) — consolidate the scattered
+  self-improving-loop CODE under one `core/self_improving/` umbrella package.**
+  The loop runtime moved `core/self_improving_loop/` → `core/self_improving/loop/`
+  (32 files); the audit runner + axis helpers moved `autoresearch/{train,prepare,
+  admire_means,bench_means}.py` → `core/self_improving/`; the campaign driver +
+  digest moved `scripts/{run_campaign,watch_campaign}.py` →
+  `core/self_improving/{campaign,watch_campaign}.py`. The loop is now invoked as
+  modules: `python -m core.self_improving.train` (audit) and
+  `python -m core.self_improving.campaign` (campaign), replacing the path-based
+  `python autoresearch/train.py` / `python scripts/run_campaign.py` spawns
+  (updated at both spawn sites — `core/self_improving/campaign.py` and
+  `core/self_improving/loop/runner.py`). The mutually-coupled lazy-import
+  structure is preserved (`train` lazy-imports `loop.*` in function bodies;
+  `loop.rollback_condition` module-imports `train.CRITICAL_DIMS`), so no
+  module-load circular import is introduced. All ~200 `import` / `from`
+  references across `core/`, `plugins/`, `tests/`, `scripts/`, `autoresearch/`
+  and docs were rewritten; the import-linter contracts gained an
+  `ignore_imports` entry for the now-visible lazy
+  `core.self_improving.train → core.cli.quota_banner` edge (was invisible while
+  `train` lived outside the `core` root_package).
+- **DATA stays put.** `autoresearch/state/` (baseline.json, mutations.jsonl,
+  policies/, seed-pools, campaign-progress.log) is UNCHANGED — `train` /
+  `campaign` keep resolving `REPO_ROOT/"autoresearch"/"state"` as a literal so
+  the running campaign + the `test_policy_files_not_gitignored` guard are
+  unaffected. `autoresearch/program.md` + `README.md` remain as the program SoT
+  and were updated to reflect the code relocation. The `__file__`-based
+  `parents[N]` repo-root arithmetic in every moved module was re-based for the
+  new depth.
+
+### Added
+- **Dry-run relocation regression test.**
+  `tests/test_run_campaign.py::test_campaign_dry_run_via_real_subprocess_completes`
+  runs `python -m core.self_improving.campaign --dry-run` as a real subprocess
+  end-to-end (offline synthetic, no network / PAYG) and asserts it reaches
+  `campaign complete`, so a future move that orphans an import or breaks the
+  `campaign → -m core.self_improving.train` spawn fails in the normal
+  `not live` suite.
+
+---
+
 ## [0.99.106] - 2026-06-01
 
 ### Fixed
@@ -74,6 +117,8 @@ functional change.
   before averaging, reducing outlier / bimodal-dim skew on `prior_raw` and the
   noise band; falls back to the plain mean below K = 4. `present_count` still
   records the original (pre-trim) count so the partial-coverage warning is intact.
+
+---
 
 ## [0.99.105] - 2026-05-31
 

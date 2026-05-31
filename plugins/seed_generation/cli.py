@@ -84,7 +84,7 @@ audit_seeds_app = typer.Typer(
 # duplicates every write to the log file. Subprocesses spawned later
 # (claude-cli, codex) actually run with PIPE-captured stdout/stderr
 # (``core/orchestration/isolated_execution.py:414`` +
-# ``core/self_improving_loop/cli_subprocess.py:97`` both use
+# ``core/self_improving/loop/cli_subprocess.py:97`` both use
 # ``capture_output=True`` / ``stdout=PIPE``), so their raw output
 # never reaches the parent's terminal anyway — it lands in the
 # per-task ``state/seed-generation/<run>/sub_agents/<task>/`` records
@@ -424,7 +424,7 @@ def run_audit_seeds_resume(
 
     from core.observability.run_dir import run_dir_scope
     from core.paths import STATE_SEED_GENERATION_DIR
-    from core.self_improving_loop.run_transcript import RunTranscript, run_transcript_scope
+    from core.self_improving.loop.run_transcript import RunTranscript, run_transcript_scope
 
     from plugins.seed_generation.resume import (
         ResumeError,
@@ -551,7 +551,7 @@ def _resolve_target_dim(
        return ``(None, None)``; the caller surfaces an exit code.
 
     Lazy import so the import graph stays:
-    cli → baseline_reader (only when needed) → autoresearch.train (lazy
+    cli → baseline_reader (only when needed) → core.self_improving.train (lazy
     inside baseline_reader).
     """
     from plugins.seed_generation.baseline_reader import (
@@ -655,7 +655,7 @@ def run_audit_seeds(
 
     from core.observability.run_dir import run_dir_scope
     from core.paths import STATE_SEED_GENERATION_DIR
-    from core.self_improving_loop.run_transcript import RunTranscript, run_transcript_scope
+    from core.self_improving.loop.run_transcript import RunTranscript, run_transcript_scope
 
     run_id = f"{gen_tag}-{resolved_dim}"
     # PR-Q (2026-05-24) — run-dir-as-anchor consolidation. The pipeline
@@ -832,7 +832,7 @@ def _dispatch_pipeline(
     before this dispatch land in the same per-session journal.
     Pipeline lifecycle markers (``pipeline_started`` /
     ``pipeline_finished``) and the post-run ``cost_divergence`` event
-    are emitted via :func:`core.self_improving_loop.run_transcript.current_run_transcript`.
+    are emitted via :func:`core.self_improving.loop.run_transcript.current_run_transcript`.
     """
     # CSP-7 (2026-05-22) — per-run artefacts moved into the repo
     # under ``state/seed-generation/`` (env-overridable via
@@ -840,7 +840,7 @@ def _dispatch_pipeline(
     # ``~/.geode/seed-generation/`` — machine-specific, broke
     # cross-host reproducibility.
     from core.paths import STATE_SEED_GENERATION_DIR
-    from core.self_improving_loop.run_transcript import current_run_transcript
+    from core.self_improving.loop.run_transcript import current_run_transcript
 
     from plugins.seed_generation.orchestrator import (
         Pipeline,

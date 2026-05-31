@@ -92,7 +92,7 @@ def test_write_creates_md_file(recall_dir: Path) -> None:
 def test_write_round_trips_with_m4_4_1_reader(recall_dir: Path) -> None:
     """Writer output must parse cleanly via M4.4.1's reader."""
     from core.memory.recall_writer import write_recall_entry
-    from core.self_improving_loop.memory_recall import load_memory_entries
+    from core.self_improving.loop.memory_recall import load_memory_entries
 
     write_recall_entry(
         name="feedback-roundtrip",
@@ -207,7 +207,7 @@ def test_write_escapes_newlines_in_type_label(recall_dir: Path) -> None:
     the reader's parser.
     """
     from core.memory.recall_writer import write_recall_entry
-    from core.self_improving_loop.memory_recall import load_memory_entries
+    from core.self_improving.loop.memory_recall import load_memory_entries
 
     write_recall_entry(
         name="original-name",

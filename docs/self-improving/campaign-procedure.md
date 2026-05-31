@@ -32,7 +32,7 @@ spec hash — see `baseline-epoch-partition`).
 
 The mutable scaffold is the set of policy artifacts under
 `autoresearch/state/policies/`, dispatched by `mutation.target_kind`
-(`core/self_improving_loop/policies.py::TARGET_KINDS`).
+(`core/self_improving/loop/policies.py::TARGET_KINDS`).
 
 ### 2.1 TARGET_KINDS (7 behaviour kinds)
 
@@ -73,7 +73,7 @@ PR-DROP-HYPERPARAM-MUTATION (2026-05-31) — see §2.2.
     pinned by
     `tests/test_policy_mutation.py::test_parse_mutation_rejects_hyperparam_kind_with_clear_message`).
     The `hyperparam.json` SoT and its runtime readers
-    (`autoresearch.train._load_hyperparam_overrides`) are preserved — only the
+    (`core.self_improving.train._load_hyperparam_overrides`) are preserved — only the
     mutation surface is removed.
   - The `gpt-5.5` target weights (the base model is never trained).
   - The seed pools (cycle-input + held-out) — frozen rulers, see §4.
@@ -110,11 +110,11 @@ The baseline is content-addressed into a **baseline-epoch** (`be-NNN`): the full
 production+measurement spec (margin_rule, fitness/margin logic version, the 4
 roles' model+source, rubric/dim-set, bench, seed-pool identity) is hashed; a spec
 change starts a new epoch series (like seed-gen `gen-*`). See the
-`baseline-epoch-partition` skill and `core/self_improving_loop/baseline_epoch.py`.
+`baseline-epoch-partition` skill and `core/self_improving/loop/baseline_epoch.py`.
 
 ## 5. Per-cycle flow
 
-Driven by `core/self_improving_loop/runner.py::SelfImprovingLoop.run_once`:
+Driven by `core/self_improving/loop/runner.py::SelfImprovingLoop.run_once`:
 
 1. **Mutate** — the mutator LLM proposes one `(target_kind, target_section,
    new_value)`; `parse_mutation` validates it (bounds, char caps, the fixed-
@@ -123,7 +123,7 @@ Driven by `core/self_improving_loop/runner.py::SelfImprovingLoop.run_once`:
 3. **Audit** — `run_once` with `rerun_enabled=True`, `rerun_dry_run=False` runs
    the real Petri audit (selection + held-out). The mutated scaffold is surfaced
    to the audit subprocess via the `GEODE_WRAPPER_OVERRIDE` env hook + the in-repo
-   policy-override env vars (`autoresearch/train.py`).
+   policy-override env vars (`core/self_improving/train.py`).
 4. **Gate** — the promote gate compares candidate fitness vs baseline. The
    **margin** is a **fitness-scale stderr** (`√(σ_p² + σ_c²)` bootstrap over the
    per-sample dim rows; PR-MARGIN-FITNESS-SCALE, 2026-05-30) — NOT the per-dim

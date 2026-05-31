@@ -24,7 +24,7 @@ dim) 직접 영향.
 빈 entry / 누락 tool / 부적합 schema → no-op (default description 유지).
 
 **Resolution order** (PR-BACKFILL-SOT 2026-05-21, shared
-:mod:`core.self_improving_loop.sot_resolution`):
+:mod:`core.self_improving.loop.sot_resolution`):
 
 1. ``GEODE_TOOL_DESCRIPTIONS_OVERRIDE`` env var — explicit override.
 
@@ -48,7 +48,7 @@ from pathlib import Path
 from typing import Any
 
 from core.paths import GLOBAL_TOOL_DESCRIPTIONS_PATH, OPERATOR_LOCAL_TOOL_DESCRIPTIONS_PATH
-from core.self_improving_loop.sot_resolution import resolve_sot
+from core.self_improving.loop.sot_resolution import resolve_sot
 
 log = logging.getLogger(__name__)
 

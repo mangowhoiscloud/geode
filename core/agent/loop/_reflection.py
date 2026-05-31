@@ -67,7 +67,7 @@ def _normalize_provider_for_registry(provider: str) -> str:
     provider-key vocabulary.
 
     Step J-b.3 (2026-05-23) — duplicates the same translation used by
-    :func:`core.self_improving_loop.runner._normalize_provider_for_registry`.
+    :func:`core.self_improving.loop.runner._normalize_provider_for_registry`.
     The legacy resolver returns ``"openai-codex"`` for gpt-5.x; the
     Path-B registry collapses that to ``"openai"`` and lets the
     ``source`` axis pick between ``payg`` / ``subscription`` /

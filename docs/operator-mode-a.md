@@ -60,7 +60,7 @@ loop autonomously.
    - Agent reads the current baseline + meta-review + 5 policy SoTs
      from `autoresearch/state/policies/`.
    - Agent edits ONE mutation target (per the program.md CAN list).
-   - Agent runs `uv run python autoresearch/train.py` and waits
+   - Agent runs `uv run python -m core.self_improving.train` and waits
      for the `---` separator output.
    - Agent decides promote/reject per the 3-rule gate in
      `_should_promote`.
@@ -117,9 +117,9 @@ section (PR-MINIMAL-2 G1a defaults to `Settings.model` for both).
 - `autoresearch/state/mutations.jsonl` — git-tracked audit ledger
   (one row per applied / rejected / rolled_back mutation)
 - `autoresearch/state/baseline.json` — fitness baseline snapshot
-  (writer: `autoresearch/train.py:_should_promote`)
+  (writer: `core/self_improving/train.py:_should_promote`)
 - `autoresearch/state/results.tsv` — operator-facing 12-col
-  results journal (writer: `autoresearch/train.py:main`)
+  results journal (writer: `core/self_improving/train.py:main`)
 - `autoresearch/state/results.jsonl` — full 20-dim per-row
   archive
 

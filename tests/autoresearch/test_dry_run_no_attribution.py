@@ -6,7 +6,7 @@ item #7) flagged the risk of ``--dry-run`` runs writing synthetic
 noise-accumulation surface for downstream credit-assignment readers.
 
 Current state (post-PR-AR-L6, already in develop main as of 2026-05-26):
-``autoresearch/train.py:2692`` guards attribution writes with
+``core/self_improving/train.py:2692`` guards attribution writes with
 ``_attribution_should_write = not args.dry_run``. The skip is real.
 
 This PR doesn't change behaviour — it adds an invariant test so the
@@ -22,7 +22,7 @@ import inspect
 
 def test_attribution_write_guarded_by_not_dry_run() -> None:
     """Static pin: the substring ``_attribution_should_write = not args.dry_run``
-    must remain in ``autoresearch.train.main``. Any future refactor that
+    must remain in ``core.self_improving.train.main``. Any future refactor that
     removes the guard will break this assertion, forcing the author to
     re-prove the skip semantics rather than silently regressing.
 
@@ -30,7 +30,7 @@ def test_attribution_write_guarded_by_not_dry_run() -> None:
     integration test of train.py with mocked Petri output) would be
     orders of magnitude slower and equally string-matchy at the
     assertion level."""
-    from autoresearch import train as train_mod
+    from core.self_improving import train as train_mod
 
     source = inspect.getsource(train_mod)
     assert "_attribution_should_write = not args.dry_run" in source, (
@@ -44,7 +44,7 @@ def test_attribution_block_skips_when_should_write_false() -> None:
     """Static pin: the attribution write block must be conditional on
     ``_attribution_should_write`` (not unconditional). Catches the
     refactor where someone moves the write out of the if-guard."""
-    from autoresearch import train as train_mod
+    from core.self_improving import train as train_mod
 
     source = inspect.getsource(train_mod)
     assert "if _attribution_should_write:" in source, (

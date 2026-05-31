@@ -90,7 +90,7 @@ re-pin a new hash before launching, rather than auditing against a drifted pool.
 ## 3. Launch wiring — `AUTORESEARCH_SEED_SELECT`
 
 The 10-cycle is wired to this pool via the `AUTORESEARCH_SEED_SELECT` env
-export, which is **tier-1 precedence** in `autoresearch/train.py`
+export, which is **tier-1 precedence** in `core/self_improving/train.py`
 `_resolve_seed_select` (it beats the `latest_pointer.json` auto-pick, the
 `config.toml` `[self_improving_loop.autoresearch] seed_select`, and the
 `SEED_SELECT` module constant). The env export wins unconditionally, so the

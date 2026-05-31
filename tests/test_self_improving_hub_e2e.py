@@ -1558,8 +1558,8 @@ def test_evidence_power_indeterminate_when_no_sigma() -> None:
 
 def test_evidence_required_n_seed_matches_core_formula() -> None:
     """E6 drift guard: the stdlib power-formula mirror in the builder reproduces
-    core.self_improving_loop.statistical_power.required_samples for the same sigma."""
-    from core.self_improving_loop.statistical_power import (
+    core.self_improving.loop.statistical_power.required_samples for the same sigma."""
+    from core.self_improving.loop.statistical_power import (
         DEFAULT_ALPHA,
         DEFAULT_POWER,
         DEFAULT_TARGET_EFFECT_SIZE,
@@ -1588,11 +1588,11 @@ def test_evidence_required_n_seed_matches_core_formula() -> None:
 
 def test_evidence_arm_map_matches_core() -> None:
     """E6 drift guard: the builder's 3 control-arm names match the writer-side
-    _VALID_PROMOTE_POLICIES SoT in autoresearch/train.py (parsed textually, since the
+    _VALID_PROMOTE_POLICIES SoT in core/self_improving/train.py (parsed textually, since the
     builder is stdlib-only)."""
     from scripts.build_self_improving_hub import _EVIDENCE_ARMS
 
-    train_src = (REPO_ROOT / "autoresearch" / "train.py").read_text(encoding="utf-8")
+    train_src = (REPO_ROOT / "core" / "self_improving" / "train.py").read_text(encoding="utf-8")
     m = re.search(r"_VALID_PROMOTE_POLICIES\s*=\s*frozenset\(\{([^}]*)\}\)", train_src)
     assert m is not None, "could not locate _VALID_PROMOTE_POLICIES in train.py"
     core_arms = set(re.findall(r'"([a-z_]+)"', m.group(1)))
@@ -1732,7 +1732,7 @@ def test_policy_file_map_matches_core() -> None:
     sys.modules[spec.name] = builder
     spec.loader.exec_module(builder)
 
-    from core.self_improving_loop.policies import _KIND_TO_PATH
+    from core.self_improving.loop.policies import _KIND_TO_PATH
 
     core_map = {kind: path.name for kind, path in _KIND_TO_PATH.items()}
     builder_map = builder._TARGET_KIND_TO_POLICY_FILE

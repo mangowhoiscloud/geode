@@ -50,7 +50,7 @@ def _additive(properties: dict[str, Any], required: list[str]) -> dict[str, Any]
 
 
 # PR-SG-SELECTION-ALIGN (2026-05-25) — G1 anchor 3 dims field.
-# Mirrors ``core.self_improving_loop.anchor_confidence.ANCHOR_DIMS_*``
+# Mirrors ``core.self_improving.loop.anchor_confidence.ANCHOR_DIMS_*``
 # so the seed-gen LLM sees the same three dim names that drive the
 # fitness multiplier (P3, ``anchor_confidence.compute_anchor_
 # confidence_multiplier``). Surface fields are optional — when
@@ -288,7 +288,7 @@ def extract_anchor_means(dim_means: dict[str, Any]) -> dict[str, float]:
     """Project ``dim_means`` to the anchor 3 triplet only.
 
     PR-SG-SELECTION-ALIGN (2026-05-25, G1) — mirrors
-    ``core.self_improving_loop.anchor_confidence.ANCHOR_DIMS_POSITIVE``
+    ``core.self_improving.loop.anchor_confidence.ANCHOR_DIMS_POSITIVE``
     + ``ANCHOR_DIMS_NEGATIVE``. Returns ``{}`` when none of the three
     dims are present so the handoff JSON omits the ``anchor_means``
     key entirely (avoids surfacing empty dicts that the LLM may

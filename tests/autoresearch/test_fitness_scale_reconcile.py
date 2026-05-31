@@ -12,7 +12,7 @@ So ``fitness_delta = fitness_after - fitness_before`` subtracted a 1-10 dim
 mean from a 0-1 fitness → nonsense (e.g. ≈ -1.7, deterministically negative).
 
 E1 reconciles both sides to the single 0-1 ``compute_fitness`` scale via the
-:func:`autoresearch.train._baseline_raw_fitness` helper (the shared SoT for
+:func:`core.self_improving.train._baseline_raw_fitness` helper (the shared SoT for
 the attribution ledger's ``fitness_before`` and the few-shot/DPO pile's
 ``fitness_delta``). This file pins:
 
@@ -28,14 +28,14 @@ the attribution ledger's ``fitness_before`` and the few-shot/DPO pile's
 
 from __future__ import annotations
 
-from autoresearch.train import (
+from core.self_improving.loop.attribution import compute_attribution
+from core.self_improving.train import (
     ANCHOR_DIMS,
     AUXILIARY_DIMS,
     AXIS_TIERS,
     _baseline_raw_fitness,
     compute_fitness,
 )
-from core.self_improving_loop.attribution import compute_attribution
 from plugins.seed_generation.baseline_reader import BaselineSnapshot
 
 # A complete dim_means over every AXIS_TIERS dim so the "missing dim = best

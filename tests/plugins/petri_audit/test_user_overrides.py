@@ -430,7 +430,7 @@ def test_read_role_emits_journal_when_self_improving_loop_unavailable(
     import json
     import sys
 
-    from core.self_improving_loop.run_transcript import RunTranscript, run_transcript_scope
+    from core.self_improving.loop.run_transcript import RunTranscript, run_transcript_scope
 
     journal = RunTranscript(
         session_id="s-legacy",
@@ -473,7 +473,7 @@ def test_read_role_no_emit_when_self_improving_loop_available(
     """
     import json
 
-    from core.self_improving_loop.run_transcript import RunTranscript, run_transcript_scope
+    from core.self_improving.loop.run_transcript import RunTranscript, run_transcript_scope
 
     journal = RunTranscript(
         session_id="s-newpath",

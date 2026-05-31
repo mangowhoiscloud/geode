@@ -483,7 +483,7 @@ def build_hooks(
     # call :func:`_fire_hook` with the payload schema documented on
     # the ``HookEvent.MUTATION_*`` / ``BASELINE_PROMOTED`` enum.
     def _reg_self_improving_loop_hooks() -> None:
-        from core.self_improving_loop._hooks import set_self_improving_loop_hooks
+        from core.self_improving.loop._hooks import set_self_improving_loop_hooks
 
         set_self_improving_loop_hooks(hooks)
 

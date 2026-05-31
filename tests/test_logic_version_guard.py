@@ -8,12 +8,12 @@ or the ``_should_promote`` margin (without bumping the tag) moves the value and
 FAILs here, forcing the bump + a new golden (which then opens a new epoch).
 
 When you intentionally change the logic: bump the version constant in
-``autoresearch/train.py`` AND add the new golden below.
+``core/self_improving/train.py`` AND add the new golden below.
 """
 
 from __future__ import annotations
 
-from autoresearch.train import (
+from core.self_improving.train import (
     AXIS_TIERS,
     FITNESS_FORMULA_VERSION,
     MARGIN_LOGIC_VERSION,

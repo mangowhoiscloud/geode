@@ -49,7 +49,7 @@ def test_default_baseline_has_no_manual_promote_field(
     """Auto-promote path (default ``manual_promote=False``) writes the
     legacy v2-schema baseline shape WITHOUT the stamp fields. This
     pins backward-compat for callers that omit the new flag."""
-    from autoresearch import train as train_mod
+    from core.self_improving import train as train_mod
 
     baseline_path = tmp_path / "baseline.json"
     monkeypatch.setattr(train_mod, "BASELINE_PATH", baseline_path)
@@ -76,7 +76,7 @@ def test_manual_promote_stamps_baseline_with_three_fields(
     """``manual_promote=True`` → baseline.json gets all three stamp
     fields. Downstream reader sees ``manual_promote: true`` and knows
     the value came from operator override, not gate approval."""
-    from autoresearch import train as train_mod
+    from core.self_improving import train as train_mod
 
     baseline_path = tmp_path / "baseline.json"
     monkeypatch.setattr(train_mod, "BASELINE_PATH", baseline_path)
@@ -100,7 +100,7 @@ def test_manual_promote_promoted_at_equals_ts_utc(
     """``promoted_at`` and ``ts_utc`` share the same timestamp source —
     no drift between when the baseline was *written* and when it was
     *promoted* (they're the same event in the manual-promote path)."""
-    from autoresearch import train as train_mod
+    from core.self_improving import train as train_mod
 
     baseline_path = tmp_path / "baseline.json"
     monkeypatch.setattr(train_mod, "BASELINE_PATH", baseline_path)
@@ -122,7 +122,7 @@ def test_manual_promote_additive_only_rest_of_payload_identical(
     """The stamp is additive: every other field in the baseline payload
     must be identical between ``manual_promote=False`` and
     ``manual_promote=True``. Catches accidental shape drift."""
-    from autoresearch import train as train_mod
+    from core.self_improving import train as train_mod
 
     auto_path = tmp_path / "auto.json"
     manual_path = tmp_path / "manual.json"

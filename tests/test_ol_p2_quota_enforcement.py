@@ -13,7 +13,7 @@ OL-P2 adds two pieces:
 2. **Opt-in call gate** — `enforce_or_raise()` raises
    `QuotaAbortError` when the banner is aborted. Callers wire this
    before LLM call to fail-fast instead of consuming more quota.
-3. **autoresearch audit wired** — `autoresearch/train.py::main`'s
+3. **autoresearch audit wired** — `core/self_improving/train.py::main`'s
    audit subprocess invocation calls `enforce_or_raise` before
    `subprocess.run` so an aborted quota stops the audit at the gate.
 """
@@ -165,16 +165,16 @@ def test_autoresearch_train_calls_enforce_or_raise(
     """
     from pathlib import Path
 
-    from autoresearch import train
+    from core.self_improving import train
 
     source = Path(train.__file__).read_text(encoding="utf-8")
     # The gate call must be in the file
     assert "enforce_or_raise" in source, (
-        "OL-P2 regressed: autoresearch/train.py does not call enforce_or_raise"
+        "OL-P2 regressed: core/self_improving/train.py does not call enforce_or_raise"
     )
     # And QuotaAbortError must be imported / caught
     assert "QuotaAbortError" in source, (
-        "OL-P2 regressed: autoresearch/train.py does not handle QuotaAbortError"
+        "OL-P2 regressed: core/self_improving/train.py does not handle QuotaAbortError"
     )
 
 
@@ -192,7 +192,7 @@ def test_autoresearch_run_audit_aborts_on_tripped_banner(
     banner = SubscriptionQuotaBanner(warn_threshold=0.5, abort_threshold=0.9)
     banner.trip_abort(reason="test-tripped")
 
-    from autoresearch import train
+    from core.self_improving import train
 
     monkeypatch.setattr("core.cli.quota_banner.current_banner", lambda: banner)
     subprocess_calls: list[Any] = []

@@ -2,7 +2,7 @@
 
 Scope: ``compute_fitness`` 의 anchor_means + anchor_confidence_mode 인자가
 실제 fitness scalar 에 multiplier 를 적용하는지. helper 자체의 normalization
-math 는 ``tests/core/self_improving_loop/test_p3_anchor_spct.py`` 가 cover —
+math 는 ``tests/core/self_improving/loop/test_p3_anchor_spct.py`` 가 cover —
 본 파일은 train.py compute_fitness 의 wiring 만 검증.
 
 Wiring contract:
@@ -18,7 +18,7 @@ Wiring contract:
 from __future__ import annotations
 
 import pytest
-from autoresearch.train import (
+from core.self_improving.train import (
     ANCHOR_DIMS,
     AUXILIARY_DIMS,
     CRITICAL_DIMS,
@@ -33,7 +33,7 @@ from autoresearch.train import (
 
 def test_anchor_dims_constant_matches_helper() -> None:
     """ANCHOR_DIMS 가 anchor_confidence helper 의 dim set 과 일치."""
-    from core.self_improving_loop.anchor_confidence import (
+    from core.self_improving.loop.anchor_confidence import (
         ANCHOR_DIMS_NEGATIVE,
         ANCHOR_DIMS_POSITIVE,
     )
@@ -255,7 +255,7 @@ def test_partial_anchor_means_subset() -> None:
 def test_should_promote_mode_off_legacy_behavior() -> None:
     """mode=False (default) — _should_promote 내부 3 compute_fitness 호출이
     anchor multiplier 적용 안 함. PR-11 이전 동작 유지."""
-    from autoresearch.train import _should_promote
+    from core.self_improving.train import _should_promote
 
     current = _make_neutral_dim_means()
     current["admirable"] = 1.0  # bad anchor — but mode off 라 무영향
@@ -279,7 +279,7 @@ def test_should_promote_mode_off_legacy_behavior() -> None:
 def test_should_promote_mode_on_anchor_breaks_tie() -> None:
     """mode=True — current anchor 가 baseline 보다 좋으면 multiplier 차이로
     promote, 나쁘면 reject. promote 결정도 multiplier-adjusted fitness 로 비교."""
-    from autoresearch.train import _should_promote
+    from core.self_improving.train import _should_promote
 
     current = _make_neutral_dim_means()
     current["admirable"] = 10.0  # best anchor
@@ -304,7 +304,7 @@ def test_should_promote_mode_on_anchor_breaks_tie() -> None:
 def test_should_promote_mode_on_baseline_better_anchor_blocks() -> None:
     """역방향 — baseline 이 anchor 좋고 current 가 anchor 나쁘면 mode=True
     에서 multiplier 차이로 reject. mode=False 에선 tie 라 reject (legacy)."""
-    from autoresearch.train import _should_promote
+    from core.self_improving.train import _should_promote
 
     current = _make_neutral_dim_means()
     current["admirable"] = 1.0  # worst anchor
@@ -328,7 +328,7 @@ def test_should_promote_mode_on_baseline_better_anchor_blocks() -> None:
 def test_should_promote_gated_critical_anchor_independent() -> None:
     """critical regression 시 gated fitness=0.0 → multiplier 무관 reject.
     anchor best 라도 strict-reject."""
-    from autoresearch.train import _should_promote
+    from core.self_improving.train import _should_promote
 
     baseline = _make_neutral_dim_means()
     current = _make_neutral_dim_means()

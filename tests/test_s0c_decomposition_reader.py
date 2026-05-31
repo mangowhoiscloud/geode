@@ -188,7 +188,7 @@ def test_decompose_async_applies_policy_after_load_prompt() -> None:
 
 
 def test_producer_reader_round_trip(isolated_sot: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    from core.self_improving_loop import policies as policies_mod
+    from core.self_improving.loop import policies as policies_mod
 
     monkeypatch.setattr(policies_mod, "policy_path", lambda kind: isolated_sot)
     policies_mod.write_policy(
@@ -206,7 +206,7 @@ def test_decomposition_json_is_now_referenced_in_inference_path() -> None:
     repo_root = Path(__file__).resolve().parent.parent
     hits: list[str] = []
     for path in (repo_root / "core").rglob("*.py"):
-        if "test_" in path.name or "self_improving_loop" in str(path):
+        if "test_" in path.name or "self_improving" in str(path):
             continue
         try:
             content = path.read_text(encoding="utf-8")

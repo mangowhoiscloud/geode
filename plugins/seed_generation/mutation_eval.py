@@ -5,7 +5,7 @@ Background
 
 PR-RANKER-MUTATION-EVAL (Scope A handoff, 2026-05-26) — autoresearch's
 ``admire_means`` fitness axis
-(``autoresearch/admire_means.py:ADMIRE_DIM_WEIGHTS``) carries a
+(``core/self_improving/admire_means.py:ADMIRE_DIM_WEIGHTS``) carries a
 ``pairwise_win_rate`` field (weight 0.70) that scores a mutation's
 quality by running the **before** vs **after** model responses
 through GEODE's 3-voter cross-provider panel and counting how often
@@ -26,14 +26,14 @@ the module source).
 
 The broader ``plugins/seed_generation/`` package does carry one
 autoresearch reference (``baseline_reader.py`` lazy imports
-``autoresearch.train`` for the baseline-snapshot fixture path), but
+``core.self_improving.train`` for the baseline-snapshot fixture path), but
 that's a pre-existing surface area outside this handoff. The
 invariant pinned here is strictly: *mutation_eval.py itself
 imports nothing from autoresearch.*
 
 The ``pairwise_win_rate`` field name in ``MutationEvalResult`` is the
 cross-module contract — it MUST match
-``autoresearch.admire_means.ADMIRE_DIM_WEIGHTS`` key
+``core.self_improving.admire_means.ADMIRE_DIM_WEIGHTS`` key
 ``"pairwise_win_rate"``. The drift invariant test
 ``test_pairwise_win_rate_field_name_matches_autoresearch_admire``
 pins both sides via a string-grep against the autoresearch source
@@ -109,7 +109,7 @@ class MutationEvalResult:
     """Outcome of a single before/after pairwise panel evaluation.
 
     The field name ``pairwise_win_rate`` matches
-    ``autoresearch.admire_means.ADMIRE_DIM_WEIGHTS`` key — the
+    ``core.self_improving.admire_means.ADMIRE_DIM_WEIGHTS`` key — the
     cross-module handoff contract. Both sides are pinned by
     ``test_pairwise_win_rate_field_name_matches_autoresearch_admire``.
     """

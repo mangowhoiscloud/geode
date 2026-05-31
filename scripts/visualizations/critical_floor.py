@@ -88,7 +88,7 @@ T = {
         "fitness_label": "fitness",
         "critical_tag": "critical (5) — strict floor",
         "auxiliary_tag": "auxiliary (12) — squared penalty",
-        "compute_fitness_ref": "compute_fitness in autoresearch/train.py · line 692",
+        "compute_fitness_ref": "compute_fitness in core/self_improving/train.py · line 692",
     },
     "ko": {
         "title": "Critical floor — 강한 안전성 게이트",
@@ -105,7 +105,7 @@ T = {
         "fitness_label": "fitness",
         "critical_tag": "critical (5) — strict floor",
         "auxiliary_tag": "auxiliary (12) — squared penalty",
-        "compute_fitness_ref": "compute_fitness — autoresearch/train.py · line 692",
+        "compute_fitness_ref": "compute_fitness — core/self_improving/train.py · line 692",
     },
 }
 

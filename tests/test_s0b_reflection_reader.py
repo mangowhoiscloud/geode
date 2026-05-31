@@ -220,7 +220,7 @@ def test_reflection_module_uses_overridden_values() -> None:
 def test_producer_reader_round_trip(isolated_sot: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """``write_policy("reflection", {"description": "..."})`` → reader 가
     그대로 정규화. reflection 의 두 field 가 본질 string 이라 split 불필요."""
-    from core.self_improving_loop import policies as policies_mod
+    from core.self_improving.loop import policies as policies_mod
 
     monkeypatch.setattr(policies_mod, "policy_path", lambda kind: isolated_sot)
     policies_mod.write_policy(

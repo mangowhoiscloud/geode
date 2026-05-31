@@ -22,13 +22,13 @@ from collections.abc import Iterator
 from pathlib import Path
 
 import pytest
-from core.self_improving_loop.dpo_pack import (
+from core.self_improving.loop.dpo_pack import (
     BuildResult,
     build_dpo_pack,
     pair_signature,
 )
-from core.self_improving_loop.eval_journaling import emit_eval_response_recorded
-from core.self_improving_loop.run_transcript import (
+from core.self_improving.loop.eval_journaling import emit_eval_response_recorded
+from core.self_improving.loop.run_transcript import (
     RunTranscript,
     run_transcript_scope,
 )

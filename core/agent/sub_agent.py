@@ -894,7 +894,7 @@ class SubAgentManager:
         # Falls back to "agentic_loop" when there's no active transcript
         # (REPL / ad-hoc spawn outside an orchestrator scope).
         try:
-            from core.self_improving_loop.run_transcript import current_run_transcript
+            from core.self_improving.loop.run_transcript import current_run_transcript
 
             run_transcript = current_run_transcript()
             data["component"] = (

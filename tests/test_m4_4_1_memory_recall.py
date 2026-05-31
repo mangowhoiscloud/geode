@@ -55,7 +55,7 @@ def _write_memory(
 
 
 def test_resolve_returns_env_override(recall_dir: Path) -> None:
-    from core.self_improving_loop.memory_recall import resolve_recall_dir
+    from core.self_improving.loop.memory_recall import resolve_recall_dir
 
     assert resolve_recall_dir() == recall_dir
 
@@ -64,7 +64,7 @@ def test_resolve_env_override_missing_returns_none(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
     monkeypatch.setenv("GEODE_MEMORY_RECALL_DIR", str(tmp_path / "nope"))
-    from core.self_improving_loop.memory_recall import resolve_recall_dir
+    from core.self_improving.loop.memory_recall import resolve_recall_dir
 
     assert resolve_recall_dir() is None
 
@@ -75,10 +75,10 @@ def test_resolve_default_dir_missing_returns_none(
     monkeypatch.delenv("GEODE_MEMORY_RECALL_DIR", raising=False)
     # Point default dir at a guaranteed-missing path
     monkeypatch.setattr(
-        "core.self_improving_loop.memory_recall._DEFAULT_RECALL_DIR",
+        "core.self_improving.loop.memory_recall._DEFAULT_RECALL_DIR",
         Path("/no/such/dir/exists"),
     )
-    from core.self_improving_loop.memory_recall import resolve_recall_dir
+    from core.self_improving.loop.memory_recall import resolve_recall_dir
 
     assert resolve_recall_dir() is None
 
@@ -89,16 +89,16 @@ def test_resolve_default_dir_missing_returns_none(
 def test_load_returns_empty_when_no_recall_dir(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.delenv("GEODE_MEMORY_RECALL_DIR", raising=False)
     monkeypatch.setattr(
-        "core.self_improving_loop.memory_recall._DEFAULT_RECALL_DIR",
+        "core.self_improving.loop.memory_recall._DEFAULT_RECALL_DIR",
         Path("/no/such/dir"),
     )
-    from core.self_improving_loop.memory_recall import load_memory_entries
+    from core.self_improving.loop.memory_recall import load_memory_entries
 
     assert load_memory_entries() == []
 
 
 def test_load_parses_frontmatter(recall_dir: Path) -> None:
-    from core.self_improving_loop.memory_recall import load_memory_entries
+    from core.self_improving.loop.memory_recall import load_memory_entries
 
     _write_memory(
         recall_dir / "feedback-sample.md",
@@ -118,7 +118,7 @@ def test_load_parses_frontmatter(recall_dir: Path) -> None:
 
 def test_load_skips_malformed_files(recall_dir: Path) -> None:
     """Files without frontmatter delimiters are silently dropped."""
-    from core.self_improving_loop.memory_recall import load_memory_entries
+    from core.self_improving.loop.memory_recall import load_memory_entries
 
     (recall_dir / "broken.md").write_text("no frontmatter at all\n", encoding="utf-8")
     _write_memory(
@@ -137,7 +137,7 @@ def test_load_skips_malformed_files(recall_dir: Path) -> None:
 
 def test_rank_by_overlap(recall_dir: Path) -> None:
     """Memory with matching keywords beats one without (same mtime)."""
-    from core.self_improving_loop.memory_recall import (
+    from core.self_improving.loop.memory_recall import (
         load_memory_entries,
         rank_memory_entries,
     )
@@ -164,7 +164,7 @@ def test_rank_by_overlap(recall_dir: Path) -> None:
 
 def test_rank_recency_tiebreak(recall_dir: Path) -> None:
     """Zero overlap on both → fresher file wins."""
-    from core.self_improving_loop.memory_recall import (
+    from core.self_improving.loop.memory_recall import (
         load_memory_entries,
         rank_memory_entries,
     )
@@ -190,7 +190,7 @@ def test_rank_recency_tiebreak(recall_dir: Path) -> None:
 
 
 def test_rank_top_k_zero_returns_empty(recall_dir: Path) -> None:
-    from core.self_improving_loop.memory_recall import (
+    from core.self_improving.loop.memory_recall import (
         load_memory_entries,
         rank_memory_entries,
     )
@@ -200,7 +200,7 @@ def test_rank_top_k_zero_returns_empty(recall_dir: Path) -> None:
 
 
 def test_rank_top_k_caps_results(recall_dir: Path) -> None:
-    from core.self_improving_loop.memory_recall import (
+    from core.self_improving.loop.memory_recall import (
         load_memory_entries,
         rank_memory_entries,
     )
@@ -216,7 +216,7 @@ def test_rank_top_k_caps_results(recall_dir: Path) -> None:
 
 
 def test_format_empty_returns_empty_string() -> None:
-    from core.self_improving_loop.memory_recall import format_memory_block
+    from core.self_improving.loop.memory_recall import format_memory_block
 
     assert format_memory_block([]) == ""
 
@@ -225,7 +225,7 @@ def test_format_preserves_description_when_body_empty() -> None:
     """Regression — earlier ``desc = a or b.splitlines()[0] if b else ""`` had
     wrong precedence (ternary binds looser than ``or``), dropping a valid
     description when ``body == ""``. Pin the explicit-branches form."""
-    from core.self_improving_loop.memory_recall import (
+    from core.self_improving.loop.memory_recall import (
         MemoryEntry,
         format_memory_block,
     )
@@ -244,7 +244,7 @@ def test_format_preserves_description_when_body_empty() -> None:
 
 def test_format_falls_back_to_body_first_line_when_no_description() -> None:
     """No description but non-empty body → first body line surfaces."""
-    from core.self_improving_loop.memory_recall import (
+    from core.self_improving.loop.memory_recall import (
         MemoryEntry,
         format_memory_block,
     )
@@ -262,7 +262,7 @@ def test_format_falls_back_to_body_first_line_when_no_description() -> None:
 
 
 def test_format_renders_block_with_type_tags(recall_dir: Path) -> None:
-    from core.self_improving_loop.memory_recall import (
+    from core.self_improving.loop.memory_recall import (
         format_memory_block,
         load_memory_entries,
     )
@@ -288,14 +288,14 @@ def test_orchestrator_prepends_memory_block(
     recall_dir: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """memory_recall slot active + recall dir has match → block lands in system."""
-    from core.self_improving_loop.in_context_slots import (
+    from core.self_improving.loop.in_context_slots import (
         SLOT_MEMORY_RECALL,
         InContextSlot,
     )
-    from core.self_improving_loop.in_context_wiring import apply_in_context_slots
+    from core.self_improving.loop.in_context_wiring import apply_in_context_slots
 
     monkeypatch.setattr(
-        "core.self_improving_loop.in_context_slots._load_in_context_slots_override",
+        "core.self_improving.loop.in_context_slots._load_in_context_slots_override",
         lambda: {
             SLOT_MEMORY_RECALL: InContextSlot(
                 name=SLOT_MEMORY_RECALL,
@@ -323,19 +323,19 @@ def test_orchestrator_no_op_when_recall_dir_missing(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """memory_recall slot active but no recall dir → system unchanged."""
-    from core.self_improving_loop.in_context_slots import (
+    from core.self_improving.loop.in_context_slots import (
         SLOT_MEMORY_RECALL,
         InContextSlot,
     )
-    from core.self_improving_loop.in_context_wiring import apply_in_context_slots
+    from core.self_improving.loop.in_context_wiring import apply_in_context_slots
 
     monkeypatch.delenv("GEODE_MEMORY_RECALL_DIR", raising=False)
     monkeypatch.setattr(
-        "core.self_improving_loop.memory_recall._DEFAULT_RECALL_DIR",
+        "core.self_improving.loop.memory_recall._DEFAULT_RECALL_DIR",
         Path("/no/such/dir"),
     )
     monkeypatch.setattr(
-        "core.self_improving_loop.in_context_slots._load_in_context_slots_override",
+        "core.self_improving.loop.in_context_slots._load_in_context_slots_override",
         lambda: {
             SLOT_MEMORY_RECALL: InContextSlot(
                 name=SLOT_MEMORY_RECALL,

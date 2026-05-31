@@ -275,7 +275,7 @@ def _on_retry_journal_emit(
     seed-generation run) so the helper is safe to wire unconditionally.
     """
     try:
-        from core.self_improving_loop.run_transcript import current_run_transcript
+        from core.self_improving.loop.run_transcript import current_run_transcript
 
         journal = current_run_transcript()
         if journal is None:
@@ -725,7 +725,7 @@ class ClaudeAgenticAdapter:
         # overhead for operators who have not opted in. Per-slot
         # graceful: any reader/apply failure is logged at DEBUG and
         # the original ``messages`` / ``system`` flow through unchanged.
-        from core.self_improving_loop.in_context_wiring import apply_in_context_slots
+        from core.self_improving.loop.in_context_wiring import apply_in_context_slots
 
         messages, system = apply_in_context_slots(messages, system=system)
 

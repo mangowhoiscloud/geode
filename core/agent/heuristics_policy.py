@@ -45,7 +45,7 @@ from pathlib import Path
 from typing import Any
 
 from core.paths import GLOBAL_HEURISTICS_PATH, OPERATOR_LOCAL_HEURISTICS_PATH
-from core.self_improving_loop.sot_resolution import resolve_sot
+from core.self_improving.loop.sot_resolution import resolve_sot
 
 log = logging.getLogger(__name__)
 

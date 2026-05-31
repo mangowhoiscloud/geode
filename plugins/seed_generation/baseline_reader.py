@@ -34,7 +34,7 @@ on-disk ``baseline.json`` into prompt-ready strings. Tests inject a
 fake snapshot directly via the dataclass; only ``load_baseline``
 touches the filesystem.
 
-The dim tier list mirrors :mod:`autoresearch.train`'s ``AXIS_TIERS`` —
+The dim tier list mirrors :mod:`core.self_improving.train`'s ``AXIS_TIERS`` —
 imported lazily so the module stays cheap when only the reader contracts
 (``format_evidence_block`` on a hand-built snapshot) are needed.
 """
@@ -118,7 +118,7 @@ class BaselineSnapshot:
 def _default_baseline_path() -> Path | None:
     """Resolve autoresearch's ``BASELINE_PATH`` lazily.
 
-    Lazy because importing :mod:`autoresearch.train` at module load
+    Lazy because importing :mod:`core.self_improving.train` at module load
     drags every fitness helper + datetime + uuid into the seed-gen
     cold start. Importing only when the reader is actually called
     keeps ``plugins/seed_generation`` lightweight for the tests that
@@ -129,11 +129,11 @@ def _default_baseline_path() -> Path | None:
     supplied ``--target-dim``.
     """
     try:
-        from autoresearch.train import BASELINE_PATH
+        from core.self_improving.train import BASELINE_PATH
 
         return Path(BASELINE_PATH)
     except Exception:  # pragma: no cover — defensive
-        log.debug("baseline_reader: autoresearch.train unavailable", exc_info=True)
+        log.debug("baseline_reader: core.self_improving.train unavailable", exc_info=True)
         return None
 
 
@@ -255,7 +255,7 @@ def _operational_dim_set() -> frozenset[str]:
     everything than silently exclude a dim).
     """
     try:
-        from autoresearch.train import AUXILIARY_DIMS, CRITICAL_DIMS
+        from core.self_improving.train import AUXILIARY_DIMS, CRITICAL_DIMS
 
         return frozenset(CRITICAL_DIMS) | frozenset(AUXILIARY_DIMS)
     except Exception:  # pragma: no cover
@@ -270,7 +270,7 @@ def pick_regression_target_dim(
     """Return the worst-regressed dim worth targeting in the next generation.
 
     "Worst" = highest baseline mean among the *operational* dim tier
-    (``critical | auxiliary`` from :mod:`autoresearch.train`). The petri
+    (``critical | auxiliary`` from :mod:`core.self_improving.train`). The petri
     rubric maps higher value → more concerning, so the dim with the
     largest mean is the one the next round of seed-generation should
     attack hardest. Ties on value break alphabetically for stable
@@ -278,7 +278,7 @@ def pick_regression_target_dim(
 
     ``prefer_critical=True`` (default) prioritises a critical-tier dim
     when one exists with a mean above the highest auxiliary mean,
-    matching the gate semantics in :func:`autoresearch.train.compute_fitness`
+    matching the gate semantics in :func:`core.self_improving.train.compute_fitness`
     (critical regressions collapse fitness to 0.0). When no critical
     dim has higher mean than the top auxiliary, the picker falls
     through to the global maximum.
@@ -301,7 +301,7 @@ def pick_regression_target_dim(
 
     def _critical_dims() -> frozenset[str]:
         try:
-            from autoresearch.train import CRITICAL_DIMS
+            from core.self_improving.train import CRITICAL_DIMS
 
             return frozenset(CRITICAL_DIMS)
         except Exception:  # pragma: no cover
@@ -361,7 +361,7 @@ def pick_regression_target_dims(
 
     def _critical_dims_local() -> frozenset[str]:
         try:
-            from autoresearch.train import CRITICAL_DIMS
+            from core.self_improving.train import CRITICAL_DIMS
 
             return frozenset(CRITICAL_DIMS)
         except Exception:  # pragma: no cover

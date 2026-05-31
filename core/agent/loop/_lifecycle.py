@@ -171,7 +171,7 @@ def _final_hook_payloads(
     agent_kind = "subagent" if getattr(loop, "_parent_session_id", "") else "repl"
     component = "agentic_loop"
     try:
-        from core.self_improving_loop.run_transcript import current_run_transcript
+        from core.self_improving.loop.run_transcript import current_run_transcript
 
         run_transcript = current_run_transcript()
         if run_transcript is not None:

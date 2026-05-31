@@ -1,7 +1,7 @@
 """PR-WIRE-1 (2026-05-26) — orphan helper CLI wiring.
 
 The 2026-05-26 autoresearch attribution sprint Phase A audit identified
-production-orphan helpers in ``core/self_improving_loop/``:
+production-orphan helpers in ``core/self_improving/loop/``:
 
 * ``compute_kind_dim_matrix`` / ``rank_dims_by_kind`` (kind_dim_matrix.py)
   — 0 production callers
