@@ -4505,7 +4505,8 @@ def _render_mutations_rows(joined: list[dict[str, Any]]) -> str:
     if not joined:
         return (
             f'        <tr><td colspan="{_MUTATIONS_COLSPAN}" class="empty">'
-            "<em>No mutations recorded. Run <code>uv run python -m core.self_improving.train</code>."
+            "<em>No mutations recorded. Run "
+            "<code>uv run python -m core.self_improving.train</code>."
             "</em></td></tr>"
         )
     out: list[str] = []
