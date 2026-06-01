@@ -830,3 +830,126 @@ def test_ranker_voter_task_ids_match_mutation_eval_shape() -> None:
         f"Ranker task_id shape drifted from mutation_eval — "
         f"got {tasks[0].task_id!r}, expected {expected_first!r}."
     )
+
+
+# ── PR-SEEDGEN-DIFFICULTY-SELECTION — difficulty-calibrated survivor pick ──
+
+
+def _state_with_pilot_difficulty(n: int, hard_idx: int) -> PipelineState:
+    """A candidate state where ``c-{hard_idx}`` has the HIGHEST pilot
+    target_dim elicitation (hardest seed) regardless of how the Elo
+    tournament shakes out. All other candidates carry low target_dim
+    elicitation. ``target_dim`` is ``broken_tool_use`` (see
+    ``_state_with_candidates``).
+    """
+    state = _state_with_candidates(n)
+    state.pilot_scores = {}
+    for i in range(n):
+        # The hard candidate elicits 9.0; everyone else a low 1.0.
+        target_mean = 9.0 if i == hard_idx else 1.0
+        state.pilot_scores[f"c-{i:02d}"] = {
+            "candidate_id": f"c-{i:02d}",
+            "dim_means": {"broken_tool_use": target_mean},
+            "dim_stderr": {"broken_tool_use": 0.1},
+            "status": "ok",
+        }
+    return state
+
+
+def test_ranker_difficulty_mode_picks_hardest_seed_first() -> None:
+    """Difficulty mode surfaces the high-elicitation seed as the #1
+    survivor even when Elo would not rank it first."""
+    hard_idx = 5
+    state = _state_with_pilot_difficulty(8, hard_idx=hard_idx)
+    manager = _AlwaysAWinsManager()
+    ranker = Ranker(
+        manager=cast(Any, manager),
+        voters=_voters(),
+        selection="difficulty",
+        rng=random.Random(0),
+    )
+    result = asyncio.run(ranker.aexecute(state))
+    assert result.success
+    survivors = result.output["survivors"]
+    assert survivors[0] == f"c-{hard_idx:02d}", (
+        f"difficulty mode must rank the hardest seed (pilot target_dim 9.0) "
+        f"first; got survivors={survivors}"
+    )
+
+
+def test_ranker_difficulty_mode_can_invert_elo_order() -> None:
+    """On the SAME final ratings, elo and difficulty modes disagree:
+    elo picks its top-rated seed, difficulty picks the high-elicitation
+    seed — confirming the modes are genuinely different selection paths."""
+    hard_idx = 5
+    state_elo = _state_with_pilot_difficulty(8, hard_idx=hard_idx)
+    state_diff = _state_with_pilot_difficulty(8, hard_idx=hard_idx)
+
+    elo_ranker = Ranker(
+        manager=cast(Any, _AlwaysAWinsManager()),
+        voters=_voters(),
+        selection="elo",
+        rng=random.Random(0),
+    )
+    diff_ranker = Ranker(
+        manager=cast(Any, _AlwaysAWinsManager()),
+        voters=_voters(),
+        selection="difficulty",
+        rng=random.Random(0),
+    )
+    elo_result = asyncio.run(elo_ranker.aexecute(state_elo))
+    diff_result = asyncio.run(diff_ranker.aexecute(state_diff))
+
+    # Same RNG + same manager → identical Elo ratings in both runs.
+    assert elo_result.output["elo_ratings"] == diff_result.output["elo_ratings"]
+    # Difficulty always leads with the hardest seed; elo leads with its
+    # top-Elo seed. The hard seed need not be elo's top, so the two
+    # survivor lists differ here (the whole point of the feature).
+    assert diff_result.output["survivors"][0] == f"c-{hard_idx:02d}"
+    assert elo_result.output["survivors"] != diff_result.output["survivors"]
+
+
+def test_ranker_difficulty_missing_pilot_does_not_crash() -> None:
+    """A candidate with no pilot score must not crash difficulty mode and
+    must sort after candidates that DO have a difficulty signal."""
+    state = _state_with_candidates(4)
+    # Only c-01 has a pilot dim_means for the target_dim.
+    state.pilot_scores = {
+        "c-01": {
+            "candidate_id": "c-01",
+            "dim_means": {"broken_tool_use": 7.0},
+            "dim_stderr": {"broken_tool_use": 0.1},
+            "status": "ok",
+        }
+    }
+    ranker = Ranker(
+        manager=cast(Any, _AlwaysAWinsManager()),
+        voters=_voters(),
+        selection="difficulty",
+        rng=random.Random(0),
+    )
+    result = asyncio.run(ranker.aexecute(state))
+    assert result.success
+    # The only candidate with a usable difficulty signal leads.
+    assert result.output["survivors"][0] == "c-01"
+
+
+def test_ranker_default_selection_is_elo() -> None:
+    """Default (no ``selection`` arg) keeps the historical Elo-only path,
+    so the survivor list matches an explicit elo-mode run."""
+    state_default = _state_with_pilot_difficulty(6, hard_idx=3)
+    state_elo = _state_with_pilot_difficulty(6, hard_idx=3)
+    default_ranker = Ranker(
+        manager=cast(Any, _AlwaysAWinsManager()),
+        voters=_voters(),
+        rng=random.Random(7),
+    )
+    elo_ranker = Ranker(
+        manager=cast(Any, _AlwaysAWinsManager()),
+        voters=_voters(),
+        selection="elo",
+        rng=random.Random(7),
+    )
+    default_result = asyncio.run(default_ranker.aexecute(state_default))
+    elo_result = asyncio.run(elo_ranker.aexecute(state_elo))
+    assert default_result.output["survivors"] == elo_result.output["survivors"]

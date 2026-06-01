@@ -30,22 +30,29 @@ P1-P7 prevention checklist application:
 from __future__ import annotations
 
 import math
+import os
 import random
-from collections.abc import Iterable
+from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
 from typing import Literal
 
 __all__ = [
     "DEFAULT_K_FACTOR",
+    "DEFAULT_SURVIVOR_SELECTION",
     "DEFAULT_TOP_K",
     "INITIAL_RATING",
+    "SURVIVOR_SELECTION_ENV",
     "MatchOutcome",
     "MatchPlan",
+    "SurvivorSelection",
     "apply_match",
     "expected_score",
     "initial_ratings",
     "outcome_score",
     "plan_matches",
+    "rank_by_difficulty",
+    "resolve_survivor_selection",
+    "select_survivors",
     "top_k",
 ]
 
@@ -53,6 +60,30 @@ __all__ = [
 INITIAL_RATING: float = 1000.0
 DEFAULT_K_FACTOR: float = 32.0
 DEFAULT_TOP_K: int = 5
+
+
+SurvivorSelection = Literal["elo", "difficulty"]
+"""How the Ranker picks survivors from the rated candidate set.
+
+- ``"elo"`` (default, unchanged behaviour) — top-K by descending Elo
+  rating (tournament win-rate via the 3-judge panel).
+- ``"difficulty"`` — top-K by descending measured pilot
+  ``dim_means[target_dim]`` (Petri 1-10, HIGHER = more misbehaviour
+  elicited = HARDER for the target = LOWER target fitness = MORE
+  headroom for a mutation to improve). Selects the seeds the target
+  struggles most with, instead of the ones the panel rated "best".
+"""
+
+DEFAULT_SURVIVOR_SELECTION: SurvivorSelection = "elo"
+"""Default survivor selection mode — Elo, so existing runs are unchanged
+unless the operator opts in to difficulty-calibrated selection."""
+
+SURVIVOR_SELECTION_ENV = "GEODE_SEED_SURVIVOR_SELECTION"
+"""Operator override — set to ``difficulty`` to pick the hardest seeds
+(highest pilot target_dim elicitation) instead of the top-Elo seeds.
+Any unrecognised / empty value falls back to
+:data:`DEFAULT_SURVIVOR_SELECTION` (the knob must never harden into an
+invalid mode from a typo)."""
 
 
 WinnerLabel = Literal["A", "B", "tie"]
@@ -200,6 +231,124 @@ def top_k(
     """
     ranked = sorted(ratings.items(), key=lambda kv: (-kv[1], kv[0]))
     return [cid for cid, _ in ranked[:k]]
+
+
+def resolve_survivor_selection() -> SurvivorSelection:
+    """Resolve the effective survivor-selection mode from the environment.
+
+    Reads :data:`SURVIVOR_SELECTION_ENV`. Recognises ``"elo"`` /
+    ``"difficulty"`` (case-insensitive, surrounding whitespace stripped);
+    any other value — including an empty string or a typo — falls back to
+    :data:`DEFAULT_SURVIVOR_SELECTION` so the knob can never harden into an
+    invalid mode mid-run.
+    """
+    raw = os.environ.get(SURVIVOR_SELECTION_ENV, "").strip().lower()
+    if raw == "difficulty":
+        return "difficulty"
+    if raw == "elo":
+        return "elo"
+    return DEFAULT_SURVIVOR_SELECTION
+
+
+def _difficulty_signal(
+    pilot_means: Mapping[str, Mapping[str, object]],
+    candidate_id: str,
+    target_dim: str,
+) -> float | None:
+    """Return the candidate's pilot ``dim_means[target_dim]`` as a float.
+
+    Graceful contract at every schema-typed boundary: a missing candidate,
+    a non-mapping pilot entry, a missing ``target_dim`` key, a non-numeric
+    value, or a non-finite float (``NaN`` / ``inf``) all resolve to ``None``
+    (sorts last in the difficulty ranking) rather than raising. ``bool`` is
+    rejected explicitly so a stray ``True`` cannot masquerade as ``1.0``.
+    The non-finite guard matters because pilot ``dim_means`` arrives via
+    ``json.loads``, which parses ``NaN`` / ``Infinity`` — ``NaN`` would make
+    the sort insertion-dependent and ``inf`` would always rank first,
+    silently overriding a measured-hard seed.
+    """
+    means = pilot_means.get(candidate_id)
+    if not isinstance(means, Mapping):
+        return None
+    value = means.get(target_dim)
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        return None
+    signal = float(value)
+    if not math.isfinite(signal):
+        return None
+    return signal
+
+
+def rank_by_difficulty(
+    ratings: Mapping[str, float],
+    pilot_means: Mapping[str, Mapping[str, object]],
+    target_dim: str,
+) -> list[str]:
+    """Rank every rated candidate hardest-first by pilot ``target_dim`` elicitation.
+
+    The sort key per candidate is ``(-difficulty, -elo_rating, candidate_id)``:
+
+    1. **difficulty** — the pilot's measured ``dim_means[target_dim]``
+       (Petri 1-10, HIGHER = harder). Descending, so the seed the target
+       struggles most with leads.
+    2. **elo_rating** — descending Elo as a deterministic tie-break when
+       two candidates elicited the same difficulty (the harder-AND-better
+       seed wins the tie).
+    3. **candidate_id** — lexicographic, the final tie-break so the order
+       is stable across re-runs (matters for the survivors.json / pool
+       content-hash determinism downstream).
+
+    A candidate with no usable difficulty signal (missing / non-numeric
+    pilot ``dim_means[target_dim]``) sorts AFTER every candidate that has
+    one — it is never crashed on and never promoted above a measured-hard
+    seed. ``ratings`` defines the candidate universe (one entry per rated
+    candidate); ``pilot_means`` is the read-only difficulty source.
+    """
+
+    # Candidates with a signal sort before those without; ``has_signal`` is
+    # the primary key (False sorts last under reverse-of-(-x) ordering, so
+    # we encode it as 0/1 and negate alongside the difficulty value).
+    def _sort_key(candidate_id: str) -> tuple[int, float, float, str]:
+        signal = _difficulty_signal(pilot_means, candidate_id, target_dim)
+        has_signal = 1 if signal is not None else 0
+        difficulty = signal if signal is not None else 0.0
+        elo = ratings.get(candidate_id, INITIAL_RATING)
+        # Negate has_signal + difficulty + elo for descending; id ascending.
+        return (-has_signal, -difficulty, -elo, candidate_id)
+
+    return sorted(ratings.keys(), key=_sort_key)
+
+
+def select_survivors(
+    ratings: Mapping[str, float],
+    *,
+    k: int = DEFAULT_TOP_K,
+    selection: SurvivorSelection = DEFAULT_SURVIVOR_SELECTION,
+    pilot_means: Mapping[str, Mapping[str, object]] | None = None,
+    target_dim: str | None = None,
+) -> list[str]:
+    """Pick the top-``k`` survivors under the chosen selection mode.
+
+    - ``selection="elo"`` (default) — delegates to :func:`top_k`; identical
+      to the historical behaviour (top-K by descending Elo).
+    - ``selection="difficulty"`` — ranks ALL rated candidates by measured
+      pilot ``dim_means[target_dim]`` (hardest first via
+      :func:`rank_by_difficulty`), then truncates to ``k``. This keeps the
+      seeds the target struggles most with, which Elo would otherwise
+      discard (a high-elicitation seed can carry a lower Elo than an easy
+      one — see gen-2605-3). Falls back to Elo when ``target_dim`` is
+      absent / blank or ``pilot_means`` is empty, so a misconfigured
+      difficulty request degrades to the safe default rather than
+      returning an arbitrary order.
+    """
+    if selection != "difficulty":
+        return top_k(dict(ratings), k=k)
+    if not target_dim or not pilot_means:
+        # Difficulty requested but no usable signal source — degrade to
+        # Elo so the run still produces a deterministic survivor set.
+        return top_k(dict(ratings), k=k)
+    ranked = rank_by_difficulty(ratings, pilot_means, target_dim)
+    return ranked[:k]
 
 
 def majority_winner(votes: tuple[WinnerLabel, ...]) -> WinnerLabel:
