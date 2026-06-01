@@ -109,9 +109,10 @@ role_contract = "plugins/seed_generation/agents/proximity.md"
 
 [seed_generation.role.pilot]
 # Pilot orchestrates a Petri inner-loop audit per candidate. Default
-# tier moved to ``claude-opus-4-7`` (PR-UPGRADE-ROLES-TOP-TIER,
-# 2026-05-26) under operator directive that all role LLMs run on the
-# Anthropic top tier — see CHANGELOG. The 90s wall-time cap in
+# tier is ``claude-opus-4-8`` (PR-UPGRADE-ROLES-TOP-TIER 2026-05-26 set
+# opus-4-7; PR-SEEDGEN-OPUS-4-8 2026-06-01 bumped it) under operator
+# directive that all role LLMs run on the Anthropic top tier — see
+# CHANGELOG. The 90s wall-time cap in
 # pilot.md is unchanged; operators tightening the per-candidate
 # budget can override the model via
 # ``~/.geode/config.toml``'s ``[seed_generation.role.pilot] model``.
