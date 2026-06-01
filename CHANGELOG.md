@@ -45,6 +45,28 @@ functional change.
 
 ---
 
+## [0.99.118] - 2026-06-02
+
+### Fixed
+- **PR-CAMPAIGN-LOAD-ENV (2026-06-02) — the campaign/audit subprocess chain now
+  loads `~/.geode/.env`, so the PAYG `ANTHROPIC_API_KEY` reaches the petri
+  auditor/judge.** Only `geode serve` + the REPL called
+  `setup_contextvars(load_env=True)`; the campaign chain
+  (`campaign.py` → `train.py` → `geode audit` → `inspect eval`) never loaded the
+  env file, so the api_key-sourced anthropic auditor/judge
+  (`[self_improving_loop.petri.{auditor,judge}] source=api_key`) found no
+  credential and inspect_ai's native anthropic provider raised "Could not
+  resolve authentication method" during the auditor's token-count step → every
+  cycle audit errored → degenerate gen-0 baseline (2 dims, no fitness). The
+  seed-generation **pilot** path was unaffected because it runs INSIDE the serve
+  daemon, whose `os.environ` already had the key — which is why pilot audits
+  succeeded while campaign cycle audits failed with the identical role binding.
+  New `core.self_improving.train._load_global_env()` (shared by `train.main` +
+  `campaign.main`) loads the global env with `override=False` (an
+  already-exported shell key still wins). The stale campaign docstring that made
+  this the operator's shell responsibility is corrected. Pinned by
+  `tests/test_autoresearch_train.py::test_load_global_env_*`.
+
 ## [0.99.117] - 2026-06-01
 
 ### Fixed
