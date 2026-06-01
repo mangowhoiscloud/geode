@@ -45,6 +45,25 @@ functional change.
 
 ---
 
+## [0.99.112] - 2026-06-01
+
+### Fixed
+- **PR-HUB-PAYLOAD-FULLWIDTH (2026-06-01) — self-improving hub mutations
+  payload drill-down no longer renders right-skewed.** On the autoresearch
+  mutations table, each row's expandable `payload` `<details>` was emitted
+  inside the narrow last (outcome) `<td>`, so the opened JSON inherited that
+  column's width and rendered squeezed into a thin right-hand strip. The
+  `<details>` now ships in its own full-width `<tr class="mutation-payload-row">`
+  `<td colspan>` row below each mutation (same pattern the policies/results
+  `.policy-json` drill-downs already use), wrapped in a neutral-hairline
+  `.mutation-payload` box. New `hub.css` rules drop the inner `.status-grid`
+  780px cap and keep the before/after `pre.msg` blocks wrapping to full width.
+  Fixed once in `scripts/build_self_improving_hub.py` + `hub.css`, so the
+  full-width layout propagates to every page depth on rebuild. Pinned by
+  `test_autoresearch_mutations_table_renders` (asserts the colspan row +
+  `.mutation-payload` wrapper). The policies/results JSON drill-downs already
+  used the full-width pattern and were unaffected.
+
 ## [0.99.111] - 2026-06-01
 
 ### Changed

@@ -4776,7 +4776,14 @@ def _mutation_outcome(attr: dict[str, Any] | None) -> tuple[str, str]:
 
 
 def _render_mutation_payload(entry: dict[str, Any]) -> str:
-    """``<details>`` drill-down for one mutation — the full apply + attribution payload."""
+    """``<details>`` drill-down for one mutation — the full apply + attribution payload.
+
+    Emitted as its own full-width ``<tr><td colspan>`` row (see
+    :func:`_render_mutations_rows`), NOT inside the narrow outcome cell — so the
+    expanded ``status-grid`` + before/after ``pre`` blocks break out to the full
+    table width instead of being squeezed right. The wrapping ``div.mutation-payload``
+    is the full-width container the CSS targets.
+    """
     apply_row = entry["apply"] or {}
     attr_row = entry["attr"] or {}
     rows: list[str] = [f"<dt>mutation_id</dt><dd><code>{html_escape(entry['id'])}</code></dd>"]
@@ -4806,7 +4813,10 @@ def _render_mutation_payload(entry: dict[str, Any]) -> str:
             '<p class="muted">new</p>'
             f'<pre class="msg">{html_escape(str(new or "—"))}</pre>'
         )
-    return f'<details><summary class="muted">payload</summary>{grid}{diff}</details>'
+    return (
+        '<details><summary class="muted">payload</summary>'
+        f'<div class="mutation-payload">{grid}{diff}</div></details>'
+    )
 
 
 def _render_mutations_rows(joined: list[dict[str, Any]]) -> str:
@@ -4868,8 +4878,16 @@ def _render_mutations_rows(joined: list[dict[str, Any]]) -> str:
         )
 
         label, outcome_cls = _mutation_outcome(attr_row)
-        outcome_cell = (
-            f'<span class="{outcome_cls}">{label}</span> {_render_mutation_payload(entry)}'
+        outcome_cell = f'<span class="{outcome_cls}">{label}</span>'
+
+        # The expandable payload lives in its OWN full-width row (colspan), not in
+        # the narrow outcome cell — otherwise the opened <details> is squeezed into
+        # the last column and renders right-skewed. Same pattern as the policies /
+        # results JSON drill-downs (see _render_policies_rows).
+        payload_row = (
+            '\n        <tr class="mutation-payload-row">\n'
+            f'          <td colspan="{_MUTATIONS_COLSPAN}">{_render_mutation_payload(entry)}</td>\n'
+            "        </tr>"
         )
 
         out.append(
@@ -4881,7 +4899,7 @@ def _render_mutations_rows(joined: list[dict[str, Any]]) -> str:
             f"          <td>{fit_cell}</td>\n"
             f'          <td class="num">{attr_cell}</td>\n'
             f"          <td>{outcome_cell}</td>\n"
-            "        </tr>"
+            "        </tr>" + payload_row
         )
     return "\n".join(out)
 
