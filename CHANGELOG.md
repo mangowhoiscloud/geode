@@ -45,6 +45,24 @@ functional change.
 
 ---
 
+## [0.99.113] - 2026-06-01
+
+### Removed
+- **PR-CLEANUP-EXPERIMENTAL-PATHS (2026-06-01) — drop the `experimental/`
+  parking lot.** Removed `experimental/` (the unvalidated memory prototypes:
+  `vector_store` / `raptor` / `embeddings` / `rag_router` + their tests) — it had
+  **0 production importers** (default-excluded from every gate) and had sat
+  un-promoted. Dropped its now-dangling `experimental` entries from the ruff
+  `extend-exclude` and deptry `extend_exclude` lists.
+
+### Fixed
+- **Cross-machine portability — removed hardcoded `/Users/mango` absolute paths.**
+  `core/llm/adapters/codex_cli.py` codex-binary hint `/Users/mango/.local/bin/codex`
+  → `os.path.expanduser("~/.local/bin/codex")` (PATH lookup stays first, so this is
+  the per-user fallback). `scripts/probes/probe_codex_oauth_*.py` hardcoded
+  `/Users/mango/workspace/geode` → `Path(__file__).resolve().parents[2]`-relative
+  repo root, so the probes run on any checkout.
+
 ## [0.99.112] - 2026-06-01
 
 ### Fixed
