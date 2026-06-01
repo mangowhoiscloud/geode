@@ -61,9 +61,15 @@ functional change.
     param; when supplied (the KEYS of the runner-propagated
     `GEODE_SIL_EXPECTED_DIM`, resolved by `_resolve_targeted_dims`) the binding
     comparison moves to the RESHAPED targeted SUB-FITNESS over only the targeted
-    surface. The critical strict-reject (`gated == 0.0`) is RETAINED as the
-    symmetric downside + overfit floor — the targeted gate only ever ADDS a
-    requirement, never relaxes one.
+    surface. This REPLACES the plain-aggregate margin as the binding UPSIDE
+    decision — it deliberately promotes a real targeted-dim gain the aggregate
+    would have diluted-and-rejected (the whole point of the fix), which is why the
+    logic-version tags bump and a new baseline epoch opens. The critical
+    strict-reject (`gated == 0.0`) downside veto is RETAINED and still runs FIRST,
+    so the targeted gate can never bypass a critical-dim regression. ALL weighted
+    targeted dims must be present in both current+baseline, else it falls through
+    to the aggregate gate (closes the "suppress the hard dim's measurement → win"
+    Goodhart vector).
   * **(3) IRT-discrimination reshape.** `compute_fitness(reshape=True)` applies
     the monotone logistic ICC `σ(6·(score−0.5))` (`_icc_reshape`) to each per-dim
     0–1 score before aggregating — peak sensitivity at mid-range, ~5× suppressed

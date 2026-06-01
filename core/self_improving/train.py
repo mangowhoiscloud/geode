@@ -3761,14 +3761,20 @@ def _should_promote(
         # perturb a dim it never sees — so a targeted dim DROPPED from the current
         # audit would otherwise reshape to ~0.95 with ~0 σ and falsely promote
         # (a Goodhart vector: suppress the targeted measurement → free "win").
-        # A missing targeted dim therefore disqualifies it from the targeted set;
-        # an empty residual set falls through to the full-aggregate gate (which has
-        # its own missing-dim handling + the critical strict-reject).
-        targeted_set = frozenset(
-            dim
-            for dim in (frozenset(targeted_dims) & set(DIM_WEIGHTS))
-            if dim in current_means and dim in baseline_means
+        # STRICT (all-or-fall-through): EVERY weighted targeted dim must be present
+        # in BOTH current and baseline means. If ANY is missing, the WHOLE targeted
+        # decision is disqualified and we fall through to the full-aggregate gate
+        # (which has its own missing-dim handling + the critical strict-reject).
+        # Promoting on the present SUBSET would let a multi-dim campaign win by
+        # dropping the hard dim's measurement (``{A,B}`` with ``B`` suppressed →
+        # promote on ``A`` alone) — the same Goodhart vector as a single missing
+        # dim, just partial. So a missing targeted dim invalidates the targeted
+        # gate entirely rather than shrinking its surface.
+        _weighted_targeted = frozenset(targeted_dims) & set(DIM_WEIGHTS)
+        _all_present = bool(_weighted_targeted) and all(
+            dim in current_means and dim in baseline_means for dim in _weighted_targeted
         )
+        targeted_set = _weighted_targeted if _all_present else frozenset()
         if targeted_set:
             # NOTE — the targeted sub-fitness is PURELY the targeted dims: the
             # anchor multiplier is intentionally OMITTED (``anchor_means=None`` /

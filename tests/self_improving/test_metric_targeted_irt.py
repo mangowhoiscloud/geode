@@ -365,6 +365,33 @@ def test_targeted_dim_missing_from_current_does_not_false_promote() -> None:
     assert ok is False
 
 
+def test_partial_targeted_set_missing_one_falls_through_not_subset_promote() -> None:
+    """Codex MCP review (strict all-or-fall-through): targeting ``{A, B}`` where B
+    is DROPPED from the current audit must NOT promote on the present subset A —
+    that is the same "suppress the hard dim's measurement → win" Goodhart vector as
+    a single missing dim, just partial. ALL weighted targeted dims must be present
+    in both current+baseline, else the WHOLE targeted decision is disqualified and
+    the gate falls through to the full-aggregate path."""
+    base = _floor_universe()
+    base[_TARGET_AUX] = 4.6  # A — present both sides, genuinely improved below
+    base[_TARGET_CRIT] = 4.6  # B — a 2nd weighted targeted dim
+    cur = dict(base)
+    cur[_TARGET_AUX] = 3.0  # A improves (the easy win)
+    del cur[_TARGET_CRIT]  # B's measurement DROPPED from the current audit
+
+    ok, reason = _should_promote(
+        cur,
+        _LOW_NOISE,
+        base,
+        _LOW_NOISE,
+        baseline_fitness_stderr=0.013,
+        current_fitness_stderr=0.013,
+        targeted_dims=frozenset({_TARGET_AUX, _TARGET_CRIT}),
+    )
+    # B missing → no targeted branch (must NOT promote on A alone) → aggregate gate.
+    assert "targeted[" not in reason
+
+
 def test_targeted_subfitness_is_anchor_independent() -> None:
     """The targeted sub-fitness sums ONLY the targeted dims: unrelated anchor-dim
     movement must NOT change the targeted promote decision (anchors are omitted in
