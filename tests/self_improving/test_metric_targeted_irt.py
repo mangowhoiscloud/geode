@@ -388,8 +388,12 @@ def test_partial_targeted_set_missing_one_falls_through_not_subset_promote() -> 
         current_fitness_stderr=0.013,
         targeted_dims=frozenset({_TARGET_AUX, _TARGET_CRIT}),
     )
-    # B missing → no targeted branch (must NOT promote on A alone) → aggregate gate.
+    # B missing → no targeted branch AND no aggregate fall-through promote (the
+    # aggregate would score the dropped B as best-case = a free win). The gate must
+    # REJECT: cannot verify the declared {A,B} gain when B's measurement is gone.
     assert "targeted[" not in reason
+    assert ok is False
+    assert "missing from audit" in reason
 
 
 def test_targeted_subfitness_is_anchor_independent() -> None:

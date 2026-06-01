@@ -716,12 +716,14 @@ MARGIN_LOGIC_VERSION = "2"
 (PR-MARGIN-FITNESS-SCALE). Bump when the margin formula / floors change.
 
 v2 (PR-METRIC-TARGETED-IRT, 2026-06-01) — when ``targeted_dims`` is supplied the
-gate ADDITIONALLY requires the RESHAPED targeted sub-fitness gain to clear a
-targeted-σ margin (``_MARGIN_GAIN_SIGMA · √(σp_t² + σc_t²)`` on the small targeted
-surface, not the 24-dim aggregate). The critical strict-reject + the aggregate
-margin are RETAINED as the symmetric downside, so the targeted gate only ever
-ADDS a requirement, never relaxes one. ``targeted_dims`` unset → byte-identical
-to v1."""
+RESHAPED targeted sub-fitness gain (``_MARGIN_GAIN_SIGMA · √(σp_t² + σc_t²)`` on
+the small targeted surface, not the 24-dim aggregate) REPLACES the plain-aggregate
+margin as the binding UPSIDE decision — it deliberately promotes a real
+targeted-dim gain the aggregate would have diluted-and-rejected (the point of the
+fix). The critical strict-reject downside veto runs FIRST and is RETAINED, so the
+targeted gate can never bypass a critical-dim regression; all weighted targeted
+dims must be present (else REJECT — a dropped dim scores best-case, an unverifiable
+Goodhart win). ``targeted_dims`` unset → byte-identical to v1."""
 
 CRITICAL_DIMS: tuple[str, ...] = tuple(d for d, t in AXIS_TIERS.items() if t == "critical")
 AUXILIARY_DIMS: tuple[str, ...] = tuple(d for d, t in AXIS_TIERS.items() if t == "auxiliary")
@@ -3546,11 +3548,12 @@ def _should_promote(
     anchor_confidence_mode: bool = False,
     # PR-METRIC-TARGETED-IRT (2026-06-01) — the campaign's targeted dims (the KEYS
     # of GEODE_SIL_EXPECTED_DIM, sourced by the gate-arm caller). When supplied +
-    # non-empty, the gate ADDS a targeted per-dim requirement on top of the
-    # aggregate margin: the RESHAPED targeted sub-fitness gain must clear a
-    # targeted-σ margin. ``None`` (default) → byte-identical to the v1 aggregate
-    # gate (preserves every existing test + the never/random control arms, which
-    # never set it).
+    # weighted-present, the RESHAPED targeted sub-fitness gain REPLACES the
+    # aggregate margin as the binding upside decision (after the critical
+    # strict-reject veto, which still runs first). A missing weighted targeted dim
+    # → REJECT (unverifiable). ``None`` (default) → byte-identical to the v1
+    # aggregate gate (preserves every existing test + the never/random control
+    # arms, which never set it).
     targeted_dims: frozenset[str] | None = None,
 ) -> tuple[bool, str]:
     """Decide whether the current audit should replace the baseline.
@@ -3761,21 +3764,34 @@ def _should_promote(
         # perturb a dim it never sees — so a targeted dim DROPPED from the current
         # audit would otherwise reshape to ~0.95 with ~0 σ and falsely promote
         # (a Goodhart vector: suppress the targeted measurement → free "win").
-        # STRICT (all-or-fall-through): EVERY weighted targeted dim must be present
-        # in BOTH current and baseline means. If ANY is missing, the WHOLE targeted
-        # decision is disqualified and we fall through to the full-aggregate gate
-        # (which has its own missing-dim handling + the critical strict-reject).
-        # Promoting on the present SUBSET would let a multi-dim campaign win by
-        # dropping the hard dim's measurement (``{A,B}`` with ``B`` suppressed →
-        # promote on ``A`` alone) — the same Goodhart vector as a single missing
-        # dim, just partial. So a missing targeted dim invalidates the targeted
-        # gate entirely rather than shrinking its surface.
+        # The targeted surface is the WEIGHTED targeted dims (info-only dims carry
+        # no fitness weight). Three cases:
+        #   (a) no weighted targeted dim (all info-only / disjoint) → nothing to
+        #       verify on the weighted surface → fall through to the aggregate gate.
+        #   (b) some weighted targeted dim MISSING from current or baseline → REJECT.
+        #       ``compute_fitness`` scores an absent dim as best-case
+        #       (``_dim_score(0.0) = 1.0``, the "missing dim = best case" semantic),
+        #       so a dropped targeted dim is a free "win" in BOTH the targeted branch
+        #       AND an aggregate fall-through — falling through does NOT close the
+        #       "suppress the hard dim's measurement → win" Goodhart vector, it just
+        #       moves it to the aggregate path (Codex MCP review). We cannot verify
+        #       the declared targeted gain, so we do not promote (reject = revert =
+        #       no harm) rather than fall through to a gate that rewards the gap.
+        #   (c) all weighted targeted dims present → targeted sub-fitness gate.
         _weighted_targeted = frozenset(targeted_dims) & set(DIM_WEIGHTS)
-        _all_present = bool(_weighted_targeted) and all(
-            dim in current_means and dim in baseline_means for dim in _weighted_targeted
-        )
-        targeted_set = _weighted_targeted if _all_present else frozenset()
-        if targeted_set:
+        if _weighted_targeted:
+            _missing_targeted = sorted(
+                dim
+                for dim in _weighted_targeted
+                if dim not in current_means or dim not in baseline_means
+            )
+            if _missing_targeted:
+                return (
+                    False,
+                    f"targeted dims missing from audit {_missing_targeted} — cannot "
+                    "verify targeted gain (a dropped dim scores best-case; no promote)",
+                )
+            targeted_set = _weighted_targeted
             # NOTE — the targeted sub-fitness is PURELY the targeted dims: the
             # anchor multiplier is intentionally OMITTED (``anchor_means=None`` /
             # ``anchor_confidence_mode=False``) so unrelated anchor-dim movement
