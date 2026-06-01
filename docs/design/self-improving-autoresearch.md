@@ -19,10 +19,10 @@ Landing page for the autoresearch surface — the closed-loop self-improvement e
 
 | Runtime SoT | Bundle mirror destination |
 |---|---|
-| `autoresearch/state/baseline.json` | `docs/self-improving/autoresearch/baseline.json` |
-| `autoresearch/state/baseline_archive.jsonl` | `docs/self-improving/autoresearch/baseline_archive.jsonl` |
-| `autoresearch/state/mutations.jsonl` | `docs/self-improving/autoresearch/mutations.jsonl` |
-| `autoresearch/state/policies/*.json` | `docs/self-improving/autoresearch/policies/*.json` (14 files) |
+| `state/self_improving/baseline.json` | `docs/self-improving/autoresearch/baseline.json` |
+| `state/self_improving/baseline_archive.jsonl` | `docs/self-improving/autoresearch/baseline_archive.jsonl` |
+| `state/self_improving/mutations.jsonl` | `docs/self-improving/autoresearch/mutations.jsonl` |
+| `state/self_improving/policies/*.json` | `docs/self-improving/autoresearch/policies/*.json` (14 files) |
 | `autoresearch/results.tsv` | `docs/self-improving/autoresearch/results.tsv` |
 | `autoresearch/results.jsonl` | `docs/self-improving/autoresearch/results.jsonl` |
 
@@ -86,7 +86,7 @@ Sort: newest first. Highlight current baseline row with `.active` styling.
 
 | Scenario | Treatment |
 |---|---|
-| `baseline.json` missing | Status block reads "no baseline yet — run <code>uv run python autoresearch/train.py --promote</code>" |
+| `baseline.json` missing | Status block reads "no baseline yet — run <code>uv run python core/self_improving/train.py --promote</code>" |
 | `baseline_archive.jsonl` 0 rows | timeline section empty table |
 | All artifacts missing | landing reads "autoresearch publisher not yet wired — see <code>plugins/autoresearch/bundle_sync.py</code>" |
 

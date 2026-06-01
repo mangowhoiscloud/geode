@@ -430,7 +430,7 @@ def _walk_evidence(samples: Any) -> dict[str, list[dict[str, Any]]]:
     :func:`_walk_dim_values` consumes, but instead of collecting plain
     floats it preserves the judge's explanation + the
     ``metadata.highlights`` quote anchor for each (sample, dim) cell.
-    These two fields are what the post-G2 ``autoresearch/state/baseline.json``
+    These two fields are what the post-G2 ``state/autoresearch/baseline.json``
     carries as "engineering evidence" — the *why* behind each dim's
     numeric score so the G5 self-improving-loop runner can rewrite
     GEODE's wrapper prompt with anchored grounding, not just a scalar

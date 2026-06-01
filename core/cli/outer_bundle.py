@@ -2,14 +2,14 @@
 
 OL-A3 (2026-05-22) prerequisite stack now in place:
 
-- ``~/.geode/self-improving-loop/auto_trigger_history.jsonl`` (OL-A1.5)
+- ``~/.geode/autoresearch/handoff/auto_trigger_history.jsonl`` (OL-A1.5)
   — per-firing JSONL, one row per terminal state of the auto-trigger
   state machine (fired / lock_busy / interval_blocked / runner_error /
   parse_error).
-- ``autoresearch/state/mutations.jsonl`` — git-tracked mutation audit
+- ``state/autoresearch/mutations.jsonl`` — git-tracked mutation audit
   ledger (one row per ``apply_mutation`` call: applied / rejected /
   rolled_back).
-- ``autoresearch/state/baseline.json`` — current fitness baseline
+- ``state/autoresearch/baseline.json`` — current fitness baseline
   (promoted only — failing audits do not update it; see PR-G2 #1346
   retrospective).
 
@@ -51,7 +51,7 @@ import typer
 from rich.console import Console
 from rich.table import Table
 
-from core.paths import GLOBAL_SELF_IMPROVING_LOOP_DIR
+from core.paths import AUTORESEARCH_STATE_DIR
 from core.self_improving.loop.auto_trigger import AUTO_TRIGGER_HISTORY_PATH
 
 log = logging.getLogger(__name__)
@@ -329,7 +329,7 @@ def outer_bundle_command(
     Output (default) is a Rich table sorted ascending by timestamp.
     ``--json`` switches to JSONL-on-stdout for downstream tools.
 
-    Files outside ``~/.geode/`` and ``autoresearch/state/`` are
+    Files outside ``~/.geode/`` and ``state/autoresearch/`` are
     ignored. Missing files render as an empty bundle (no error).
     """
     events = load_bundle_events(limit=limit)
@@ -348,8 +348,7 @@ def outer_bundle_command(
             "mutations.jsonl + baseline.json all empty/absent.[/muted]"
         )
         console.print(
-            f"[muted]Looked for: {AUTO_TRIGGER_HISTORY_PATH} + "
-            f"{GLOBAL_SELF_IMPROVING_LOOP_DIR.parent}/autoresearch/state/[/muted]"
+            f"[muted]Looked for: {AUTO_TRIGGER_HISTORY_PATH} + {AUTORESEARCH_STATE_DIR}/[/muted]"
         )
         return
     _render_table(events)

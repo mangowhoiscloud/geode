@@ -21,7 +21,7 @@ Designed against four frontier references:
    ``input_tokens / output_tokens / cache_*_tokens / reasoning_tokens
    / api_call_count / billing_provider / estimated_cost_usd`` column
    set is the persistence shape. ``SessionMetrics.to_session_row()``
-   emits the same shape so a future ``~/.geode/self-improving-loop/
+   emits the same shape so a future ``~/.geode/autoresearch/handoff/
    sessions.jsonl`` row can carry these aggregates without separate
    wiring.
 

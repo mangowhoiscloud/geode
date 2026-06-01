@@ -33,7 +33,7 @@ sibling_pages:
 > from the existing `assets/hub.css` token table.
 >
 > Every citation of a field name, constant, or schema is grounded to a
-> `file:line` in `autoresearch/train.py`, `core/paths.py`, or
+> `file:line` in `core/self_improving/train.py`, `core/paths.py`, or
 > `core/self_improving_loop/{runner,attribution}.py`. No general intuition.
 
 ---
@@ -46,10 +46,10 @@ sibling_pages:
 4. **Seed-gen visual spec** ([`self-improving-seed-generation-visual-spec.md`](./self-improving-seed-generation-visual-spec.md)) — Reference for the same-pattern second surface (heatmap-cell ramp, cost-grid, per-row `<details>` drilldown markup).
 5. **Port mapping** ([`autoresearch-port-mapping.md`](./autoresearch-port-mapping.md)) — Authoritative for schema namespaces (§6), pinned constants (§7), and the no-publisher decision below (§3 here).
 6. **Real data** — Sole input to the build script:
-   - `autoresearch/state/baseline.json` (live) or `autoresearch/state/baseline.json.outdated-YYYYMMDD` (fallback)
-   - `autoresearch/state/baseline_archive.jsonl`
-   - `autoresearch/state/mutations.jsonl`
-   - `autoresearch/state/policies/*.json` (13 files + `few-shot-pool.jsonl` = 14)
+   - `state/self_improving/baseline.json` (live) or `state/self_improving/baseline.json.outdated-YYYYMMDD` (fallback)
+   - `state/self_improving/baseline_archive.jsonl`
+   - `state/self_improving/mutations.jsonl`
+   - `state/self_improving/policies/*.json` (13 files + `few-shot-pool.jsonl` = 14)
    - `autoresearch/results.tsv` + `autoresearch/results.jsonl`
 
 This spec governs 5 pages. Where it diverges from (1)/(2)/(3) the higher-rank doc wins — flag a fix-up PR.
@@ -110,7 +110,7 @@ Identical contract to seed-gen visual spec §13:
     Fitness axes: 4 (dim 0.30 / ux 0.25 / admire 0.20 / bench 0.25).
   </p>
   <p class="muted">
-    Source artifacts read directly from <code>autoresearch/state/</code>
+    Source artifacts read directly from <code>state/self_improving/</code>
     (git-tracked policies + gitignored ledgers; see §3).
   </p>
 </footer>
@@ -122,7 +122,7 @@ All values build-time substituted by `scripts/build_self_improving_hub.py` from 
 
 ## 3. No-publisher decision
 
-**Decision (2026-05-26)**: The hub builder reads `autoresearch/state/*` directly. **No publisher mirror module.**
+**Decision (2026-05-26)**: The hub builder reads `state/self_improving/*` directly. **No publisher mirror module.**
 
 ### 3.1 Why no publisher
 
@@ -130,17 +130,17 @@ The port-mapping document ([`autoresearch-port-mapping.md`](./autoresearch-port-
 
 | File | Tracked? | Source-of-truth location |
 |---|---|---|
-| `autoresearch/state/policies/*.json` (13 files) | **git-tracked** (per [`core/paths.py:235-313`](../../core/paths.py)) | `autoresearch/state/policies/` |
-| `autoresearch/state/policies/few-shot-pool.jsonl` | **git-tracked** ([`core/paths.py:318`](../../core/paths.py)) | `autoresearch/state/policies/` |
-| `autoresearch/state/baseline.json` | gitignored (per `autoresearch/state/*` rule) but stable absolute path | `autoresearch/state/baseline.json` |
-| `autoresearch/state/baseline_archive.jsonl` | gitignored ([`core/paths.py:339`](../../core/paths.py)) but stable | `autoresearch/state/baseline_archive.jsonl` |
-| `autoresearch/state/mutations.jsonl` | gitignored ([`core/paths.py:335`](../../core/paths.py)) but stable | `autoresearch/state/mutations.jsonl` |
+| `state/self_improving/policies/*.json` (13 files) | **git-tracked** (per [`core/paths.py:235-313`](../../core/paths.py)) | `state/self_improving/policies/` |
+| `state/self_improving/policies/few-shot-pool.jsonl` | **git-tracked** ([`core/paths.py:318`](../../core/paths.py)) | `state/self_improving/policies/` |
+| `state/self_improving/baseline.json` | gitignored (per `state/self_improving/*` rule) but stable absolute path | `state/self_improving/baseline.json` |
+| `state/self_improving/baseline_archive.jsonl` | gitignored ([`core/paths.py:339`](../../core/paths.py)) but stable | `state/self_improving/baseline_archive.jsonl` |
+| `state/self_improving/mutations.jsonl` | gitignored ([`core/paths.py:335`](../../core/paths.py)) but stable | `state/self_improving/mutations.jsonl` |
 | `autoresearch/results.tsv` | gitignored | `autoresearch/results.tsv` |
 | `autoresearch/results.jsonl` | gitignored | `autoresearch/results.jsonl` |
 
-Both the 14 policy files (git-tracked) and the 5 ledger files (gitignored but stable absolute paths under `STATE_DIR`, [`autoresearch/train.py:577`](../../autoresearch/train.py)) are already accessible at build time from the repo root. A publisher would add:
+Both the 14 policy files (git-tracked) and the 5 ledger files (gitignored but stable absolute paths under `STATE_DIR`, [`core/self_improving/train.py:577`](../../core/self_improving/train.py)) are already accessible at build time from the repo root. A publisher would add:
 
-1. Duplicate write path (`autoresearch/state/X` → `docs/self-improving/autoresearch/X`)
+1. Duplicate write path (`state/self_improving/X` → `docs/self-improving/autoresearch/X`)
 2. New writer hook that must fire on every promote/iteration (per Wiring Verification CANNOT in CLAUDE.md — "Read-Write parity" risk)
 3. A second SoT to keep drift-free (per `[[feedback-latest-vs-promoted-sot.md]]`)
 
@@ -148,7 +148,7 @@ GitHub Pages CI already reads from the repo at build time. The builder simply op
 
 ### 3.2 Where the builder reads from
 
-`scripts/build_self_improving_hub.py:load_autoresearch()` (current implementation at [line 255](../../scripts/build_self_improving_hub.py)) already reads `autoresearch/state/` directly. It looks at the live `baseline.json` first and falls back to the most recent `baseline.json.outdated-*` per the same function ([lines 262-273](../../scripts/build_self_improving_hub.py)).
+`scripts/build_self_improving_hub.py:load_autoresearch()` (current implementation at [line 255](../../scripts/build_self_improving_hub.py)) already reads `state/self_improving/` directly. It looks at the live `baseline.json` first and falls back to the most recent `baseline.json.outdated-*` per the same function ([lines 262-273](../../scripts/build_self_improving_hub.py)).
 
 Phase 6 extends this loader. The Phase 5 stub returns a small struct
 (`AutoresearchState` at [line 238](../../scripts/build_self_improving_hub.py)) used only on the hub landing; Phase 6 adds 4 fuller renderers + helpers (see §10 below).
@@ -170,7 +170,7 @@ When ALL artifacts (baseline + archive + mutations + results + policies) are mis
 **File**: `docs/self-improving/autoresearch/index.html`
 **Sidebar `.active`**: `Autoresearch > Overview`
 **Page title**: `Autoresearch · Closed-Loop Self-Improvement`
-**Page sub**: `Baseline + mutations + results + 14 policies. The self-improving loop reads autoresearch/state/ directly — no mirror.`
+**Page sub**: `Baseline + mutations + results + 14 policies. The self-improving loop reads state/self_improving/ directly — no mirror.`
 
 ### 4.1 Anatomy (top-down)
 
@@ -198,7 +198,7 @@ Two scenarios, both render the same `<div class="warning-banner">` shape:
 
 | Condition | Banner body |
 |---|---|
-| `state.baseline_path is None` | `No live baseline. Run <code>uv run python autoresearch/train.py --promote</code> to bootstrap.` |
+| `state.baseline_path is None` | `No live baseline. Run <code>uv run python core/self_improving/train.py --promote</code> to bootstrap.` |
 | `state.baseline_stale is True` (i.e. reading from `baseline.json.outdated-YYYYMMDD`) | `Stale snapshot — reading <code>{filename}</code>. The live baseline.json is absent or has been rotated.` |
 
 Markup:
@@ -219,7 +219,7 @@ CSS in §11.
 | `<dt>` | `<dd>` content | Source |
 |---|---|---|
 | current baseline | `<code>{gen_tag}</code>` or `—` | `baseline.json.session_id` / `gen_tag` (in raw metadata; see `train.py:1810-1818` for the v2 layout) |
-| fitness scalar | `<code>{value:.4f}</code>` or `—` | Computed via `compute_fitness(...)` ([`train.py:1100`](../../autoresearch/train.py)) at audit time and stored in the v2 `fitness` namespace (PR-3 TBD; for now fall back to v1 inferred from `dim_means` via the same formula at build time, OR show `schema v1 (no fitness block)` if missing) |
+| fitness scalar | `<code>{value:.4f}</code>` or `—` | Computed via `compute_fitness(...)` ([`train.py:1100`](../../core/self_improving/train.py)) at audit time and stored in the v2 `fitness` namespace (PR-3 TBD; for now fall back to v1 inferred from `dim_means` via the same formula at build time, OR show `schema v1 (no fitness block)` if missing) |
 | last promote | `<code>{ts_utc}</code>` (short form) | `baseline.json.promotion.timestamp` (v2 `promotion` namespace, PR-5 TBD); else `baseline.json.ts_utc` (top-level, v2); else `—` |
 | auditor model | harness chip + `<code>` | `baseline.json.audit.auditor_model` (v2 `audit` namespace, PR-4 TBD); else `—` |
 | target model | harness chip + `<code>` | `baseline.json.audit.target_model`; else `—` |
@@ -232,7 +232,7 @@ If any audit block field is missing, render `<span class="muted">schema v1 (no a
 
 ### 4.4 Generation timeline (`<table class="records">`)
 
-Source: `autoresearch/state/baseline_archive.jsonl` ([`core/paths.py:339`](../../core/paths.py) — `BASELINE_ARCHIVE_PATH`). Each row in that JSONL is one promoted baseline snapshot (append-only, see [`core/self_improving_loop/runner.py:1621-1645`](../../core/self_improving_loop/runner.py)).
+Source: `state/self_improving/baseline_archive.jsonl` ([`core/paths.py:339`](../../core/paths.py) — `BASELINE_ARCHIVE_PATH`). Each row in that JSONL is one promoted baseline snapshot (append-only, see [`core/self_improving_loop/runner.py:1621-1645`](../../core/self_improving_loop/runner.py)).
 
 6 columns:
 
@@ -282,7 +282,7 @@ Each row carries a `<span class="bucket autoresearch">autoresearch</span>` chip 
 **File**: `docs/self-improving/autoresearch/baseline/index.html`
 **Sidebar `.active`**: `Autoresearch > Baseline`
 **Page title**: `Baseline · Current Promoted State`
-**Page sub**: `Latest <code>autoresearch/state/baseline.json</code> rendered by schema-v2 namespace (raw / axes / [normalized / fitness / audit / promotion]).`
+**Page sub**: `Latest <code>state/self_improving/baseline.json</code> rendered by schema-v2 namespace (raw / axes / [normalized / fitness / audit / promotion]).`
 
 ### 5.1 Anatomy (top-down)
 
@@ -361,7 +361,7 @@ The page must NOT 500 on v1 baseline data. The Phase 6 E2E test
 The 20-row dim tables (Raw + Normalized) share the same column layout. **22-row** label was a stale early-draft figure; the operational dim count is **20 + 1 stability synth = 21** rows in the per-dim view; here we render only the 20 dims and surface stability separately if `normalized.stability_score` is present.
 
 Order: **CRITICAL_DIMS first (5), then AUXILIARY_DIMS (12), then INFO_DIMS (3)**.
-Sourced from [`autoresearch/train.py:426-428`](../../autoresearch/train.py):
+Sourced from [`core/self_improving/train.py:426-428`](../../core/self_improving/train.py):
 
 ```python
 CRITICAL_DIMS  = tuple(d for d, t in AXIS_TIERS.items() if t == "critical")    # 5
@@ -438,10 +438,10 @@ Per-axis details:
 
 | axis | weight constant | source (file:line) | fields |
 |---|---|---|---|
-| dim | `FITNESS_DIM_4AX = 0.30` | [`train.py:418`](../../autoresearch/train.py) | 20 dims + stability; aggregated by `compute_fitness()` ([`train.py:1100`](../../autoresearch/train.py)) |
-| ux | `FITNESS_UX_4AX = 0.25` | [`train.py:419`](../../autoresearch/train.py) | 4 fields — `autoresearch/ux_means.py:71-78` |
-| admire | `FITNESS_ADMIRE_4AX = 0.20` | [`train.py:420`](../../autoresearch/train.py) | 2 fields — `autoresearch/admire_means.py:55-58` |
-| bench | `FITNESS_BENCH_4AX = 0.25` | [`train.py:421`](../../autoresearch/train.py) | 7 fields — `autoresearch/bench_means.py:188-196` |
+| dim | `FITNESS_DIM_4AX = 0.30` | [`train.py:418`](../../core/self_improving/train.py) | 20 dims + stability; aggregated by `compute_fitness()` ([`train.py:1100`](../../core/self_improving/train.py)) |
+| ux | `FITNESS_UX_4AX = 0.25` | [`train.py:419`](../../core/self_improving/train.py) | 4 fields — `autoresearch/ux_means.py:71-78` |
+| admire | `FITNESS_ADMIRE_4AX = 0.20` | [`train.py:420`](../../core/self_improving/train.py) | 2 fields — `autoresearch/admire_means.py:55-58` |
+| bench | `FITNESS_BENCH_4AX = 0.25` | [`train.py:421`](../../core/self_improving/train.py) | 7 fields — `autoresearch/bench_means.py:188-196` |
 
 If an `axes.X` value is `null`: row renders `<td><span class="muted">null (axis not configured)</span></td>` for the aggregate + collapsed `<details>` with `<em>No data</em>` inside.
 
@@ -463,7 +463,7 @@ Per master DESIGN.md §3, each of `auditor_model` / `target_model` / `judge_mode
 </dl>
 ```
 
-Pinned rubric version constant: `PETRI_RUBRIC_VERSION = "v3-22dim-PR0"` ([`train.py:1754`](../../autoresearch/train.py)) — render the value live, not hard-coded in HTML.
+Pinned rubric version constant: `PETRI_RUBRIC_VERSION = "v3-22dim-PR0"` ([`train.py:1754`](../../core/self_improving/train.py)) — render the value live, not hard-coded in HTML.
 
 ### 5.7 Outgoing links
 
@@ -478,7 +478,7 @@ If `baseline.json` is absent and no `.outdated-*` exists either:
 <div class="warning-banner" role="status">
   <span class="warning-banner__label">no baseline</span>
   <span class="warning-banner__body">
-    Run <code>uv run python autoresearch/train.py --promote</code> to bootstrap.
+    Run <code>uv run python core/self_improving/train.py --promote</code> to bootstrap.
   </span>
 </div>
 ```
@@ -633,7 +633,7 @@ Pick the block char by `|delta|` magnitude bucket; positive deltas use the char 
 | `< 0.500` | `▇` |
 | `≥ 0.500` | `█` |
 
-(Buckets calibrated against the `BOOTSTRAP_FITNESS_FLOOR = 0.30` at [`train.py:1905`](../../autoresearch/train.py) — half a bootstrap shift = `▇`.)
+(Buckets calibrated against the `BOOTSTRAP_FITNESS_FLOOR = 0.30` at [`train.py:1905`](../../core/self_improving/train.py) — half a bootstrap shift = `▇`.)
 
 ### 6.6 Outgoing links
 
@@ -641,7 +641,7 @@ Pick the block char by `|delta|` magnitude bucket; positive deltas use the char 
 
 ### 6.7 Empty state
 
-`<em>No mutations recorded. Run <code>uv run python autoresearch/train.py</code>.</em>` — single empty-table row, identical pattern to seed-gen index.
+`<em>No mutations recorded. Run <code>uv run python core/self_improving/train.py</code>.</em>` — single empty-table row, identical pattern to seed-gen index.
 
 ---
 
@@ -650,7 +650,7 @@ Pick the block char by `|delta|` magnitude bucket; positive deltas use the char 
 **File**: `docs/self-improving/autoresearch/results/index.html`
 **Sidebar `.active`**: `Autoresearch > Results`
 **Page title**: `Results · Per-Iteration TSV + Full Per-Dim`
-**Page sub**: `Every <code>autoresearch/train.py</code> invocation emits one row. TSV is the 12-col summary; JSONL is the full per-dim signal.`
+**Page sub**: `Every <code>core/self_improving/train.py</code> invocation emits one row. TSV is the 12-col summary; JSONL is the full per-dim signal.`
 
 ### 7.1 Anatomy
 
@@ -679,7 +679,7 @@ h2.section          "RESULTS · {N} ITERATIONS"
 
 ### 7.3 Results table — 12 cols (verified)
 
-Verified against [`autoresearch/train.py:1284-1297`](../../autoresearch/train.py):
+Verified against [`core/self_improving/train.py:1284-1297`](../../core/self_improving/train.py):
 
 ```python
 RESULTS_TSV_HEADER: tuple[str, ...] = (
@@ -717,7 +717,7 @@ Column rendering:
 | verdict | `<span class="verdict-{value}">` | colour-coded per §6.5 palette |
 | description | prose, max 80 chars (truncate with `…`) | mono small text, `--ink-soft` |
 
-Numeric formatting matches the source (`format_results_tsv_row` at [`train.py:1318-1355`](../../autoresearch/train.py) emits `f"{fitness:.6f}"` to disk; we **re-format to 4 decimal** for display per the per-page DESIGN.md §6 verification checklist). The `critical_min`/`critical_mean`/`auxiliary_mean`/`stability_score`/`info_mean` come pre-formatted at `.4f` in the TSV; display them at **2 decimal** for table density (the full precision lives in the drill-down).
+Numeric formatting matches the source (`format_results_tsv_row` at [`train.py:1318-1355`](../../core/self_improving/train.py) emits `f"{fitness:.6f}"` to disk; we **re-format to 4 decimal** for display per the per-page DESIGN.md §6 verification checklist). The `critical_min`/`critical_mean`/`auxiliary_mean`/`stability_score`/`info_mean` come pre-formatted at `.4f` in the TSV; display them at **2 decimal** for table density (the full precision lives in the drill-down).
 
 ### 7.4 Sparkline column for fitness (no SVG, no JS)
 
@@ -738,7 +738,7 @@ First row (no previous): renders `·` (neutral middle-dot), no colour class. The
 
 ### 7.5 Per-row `<details>` drilldown
 
-Drilldown pulls the full per-dim signal from `autoresearch/results.jsonl` (one JSON object per line). The builder joins `results.tsv` row N to `results.jsonl` row N by **line index** (not by session_id — the runner emits them in tandem, see [`train.py:2341-2356`](../../autoresearch/train.py)).
+Drilldown pulls the full per-dim signal from `autoresearch/results.jsonl` (one JSON object per line). The builder joins `results.tsv` row N to `results.jsonl` row N by **line index** (not by session_id — the runner emits them in tandem, see [`train.py:2341-2356`](../../core/self_improving/train.py)).
 
 Drilldown markup:
 
@@ -760,7 +760,7 @@ Drilldown markup:
       </dl>
       <p class="muted">
         Per <code>train.py:ANALYTICS_WEIGHT_MULTIPLIER = 0.5</code>
-        (<a href="../../../../autoresearch/train.py#L347">L347</a>),
+        (<a href="../../../../core/self_improving/train.py#L347">L347</a>),
         analytics-modality dims contribute at half weight to fitness.
       </p>
     </details>
@@ -783,7 +783,7 @@ If `results.jsonl` has fewer rows than `results.tsv` (or vice-versa), the builde
 
 ### 7.7 Empty state
 
-`<tr><td colspan="12" class="empty"><em>No iterations recorded yet. Run <code>uv run python autoresearch/train.py</code>.</em></td></tr>`
+`<tr><td colspan="12" class="empty"><em>No iterations recorded yet. Run <code>uv run python core/self_improving/train.py</code>.</em></td></tr>`
 
 ---
 
@@ -879,7 +879,7 @@ Markup (one logical policy = 2 `<tr>` siblings, mirrors §6.4 mutations page):
 
 That's it. JSON keys and strings are NOT colour-coded; this is intentional — colour-coding requires JS parsing, and the page is readable in mono.
 
-The `few-shot-pool.jsonl` file gets the same treatment except the `<pre>` body is `\n`.join(first 5 lines) plus a `… {N-5} more lines (see autoresearch/state/policies/few-shot-pool.jsonl)` footer line. No client-side pagination.
+The `few-shot-pool.jsonl` file gets the same treatment except the `<pre>` body is `\n`.join(first 5 lines) plus a `… {N-5} more lines (see state/self_improving/policies/few-shot-pool.jsonl)` footer line. No client-side pagination.
 
 ### 8.5 Human-readable size helper
 
@@ -897,7 +897,7 @@ Per the per-page DESIGN.md ([`self-improving-autoresearch-policies.md`](./self-i
 
 ### 8.6 Empty state
 
-If `autoresearch/state/policies/` is empty (only `.gitkeep`) or absent:
+If `state/self_improving/policies/` is empty (only `.gitkeep`) or absent:
 
 ```html
 <tr>
@@ -1025,7 +1025,7 @@ def render_autoresearch_policies(
 
 ```python
 def _load_baseline_archive(state_dir: Path) -> list[dict[str, Any]]:
-    """Read autoresearch/state/baseline_archive.jsonl.
+    """Read state/self_improving/baseline_archive.jsonl.
     
     Returns [] if absent. Parse errors are skipped per-line with a WARN
     log (so a single corrupt row does not 500 the build).
@@ -1033,7 +1033,7 @@ def _load_baseline_archive(state_dir: Path) -> list[dict[str, Any]]:
 
 
 def _load_mutations(state_dir: Path) -> list[dict[str, Any]]:
-    """Read autoresearch/state/mutations.jsonl.
+    """Read state/self_improving/mutations.jsonl.
     
     Sorted newest-first by `ts` (float). Each row is dict[str, Any] — the
     builder does NOT validate against ApplyRecord / AttributionRecord
@@ -1055,7 +1055,7 @@ def _load_results_jsonl(results_jsonl_path: Path) -> list[dict[str, Any]]:
 
 
 def _list_policies(policies_dir: Path) -> list[tuple[Path, dict[str, Any] | None]]:
-    """List all policy files under autoresearch/state/policies/.
+    """List all policy files under state/self_improving/policies/.
     
     Sorted alphabetically. Each entry is (path, parsed payload) — payload
     is None on parse error or for `.jsonl` files (handled separately).
@@ -1416,7 +1416,7 @@ def test_autoresearch_landing_renders(built_autoresearch_pages: dict[str, str]) 
     and 4-row sub-view records table."""
 
 def test_autoresearch_landing_warning_banner_when_baseline_missing(tmp_path: Path) -> None:
-    """When autoresearch/state/baseline.json is absent, landing renders
+    """When state/self_improving/baseline.json is absent, landing renders
     the .warning-banner div with the bootstrap copy."""
 
 def test_autoresearch_landing_stale_baseline_banner(tmp_path: Path) -> None:
@@ -1447,7 +1447,7 @@ def test_autoresearch_results_tsv_12_cols_match_RESULTS_TSV_HEADER(
     tmp_path: Path,
 ) -> None:
     """The results page emits exactly 12 <th> in thead, and the column
-    labels match autoresearch/train.py:RESULTS_TSV_HEADER (frozen check
+    labels match core/self_improving/train.py:RESULTS_TSV_HEADER (frozen check
     so a header drift breaks the test)."""
 
 def test_autoresearch_results_sparkline_uses_only_block_chars(
@@ -1457,7 +1457,7 @@ def test_autoresearch_results_sparkline_uses_only_block_chars(
     from {▁▂▃▄▅▆▇█·} only — no SVG, no <canvas>, no <script>."""
 
 def test_autoresearch_policies_renders_14_rows(tmp_path: Path) -> None:
-    """With 13 .json + 1 .jsonl file in autoresearch/state/policies/, the
+    """With 13 .json + 1 .jsonl file in state/self_improving/policies/, the
     policies table renders exactly 14 .policy-summary rows (and 14
     sibling .policy-detail drilldown rows)."""
 
@@ -1493,7 +1493,7 @@ def test_autoresearch_design_md_versioning_consistent() -> None:
 
 **14 test names** above (8+ as required, ratchet ensures no autoresearch page silently regresses).
 
-Fixture `built_autoresearch_pages` parallels the existing `built_seedgen_pages` fixture in the test module (L432-454 in the current file) — it invokes `scripts.build_self_improving_hub.main()` against a temporary repo with mocked `autoresearch/state/` fixtures and returns a dict keyed by `"landing" / "baseline" / "mutations" / "results" / "policies"` → rendered HTML.
+Fixture `built_autoresearch_pages` parallels the existing `built_seedgen_pages` fixture in the test module (L432-454 in the current file) — it invokes `scripts.build_self_improving_hub.main()` against a temporary repo with mocked `state/self_improving/` fixtures and returns a dict keyed by `"landing" / "baseline" / "mutations" / "results" / "policies"` → rendered HTML.
 
 ---
 
@@ -1523,27 +1523,27 @@ Every constant cited in this spec, with the file:line source:
 
 | Constant | Value | Source |
 |---|---|---|
-| `STATE_DIR` | `<repo>/autoresearch/state` | [`autoresearch/train.py:577`](../../autoresearch/train.py) |
-| `BASELINE_PATH` | `STATE_DIR / "baseline.json"` | [`autoresearch/train.py:612`](../../autoresearch/train.py) |
+| `STATE_DIR` | `<repo>/state/self_improving` (= `core.paths.SELF_IMPROVING_STATE_DIR`) | [`core/self_improving/train.py`](../../core/self_improving/train.py) |
+| `BASELINE_PATH` | `STATE_DIR / "baseline.json"` | [`core/self_improving/train.py:612`](../../core/self_improving/train.py) |
 | `MUTATION_AUDIT_LOG_PATH` | `STATE_DIR / "mutations.jsonl"` | [`core/paths.py:335`](../../core/paths.py) |
 | `BASELINE_ARCHIVE_PATH` | `STATE_DIR / "baseline_archive.jsonl"` | [`core/paths.py:339`](../../core/paths.py) |
 | `GLOBAL_POLICIES_DIR` | `STATE_DIR / "policies"` | [`core/paths.py:236`](../../core/paths.py) |
-| `RESULTS_TSV_HEADER` | 12-tuple (see §7.3) | [`autoresearch/train.py:1284-1297`](../../autoresearch/train.py) |
-| `AXIS_TIERS` | 20 dims tiered critical/auxiliary/info | [`autoresearch/train.py:279-303`](../../autoresearch/train.py) |
-| `CRITICAL_DIMS` | 5 dims (cooperation_with_harmful_sysprompt, broken_tool_use, prefill_susceptibility, manipulated_by_developer, context_overflow_handling) | [`autoresearch/train.py:426`](../../autoresearch/train.py) |
-| `AUXILIARY_DIMS` | 12 dims | [`autoresearch/train.py:427`](../../autoresearch/train.py) |
-| `INFO_DIMS` | 3 dims (unprompted_initiative, _self_preservation, _whistleblowing) | [`autoresearch/train.py:428`](../../autoresearch/train.py) |
-| `ANCHOR_DIMS` | 3 (admirable, disappointing, needs_attention) | [`autoresearch/train.py:435`](../../autoresearch/train.py) |
-| `FITNESS_DIM_4AX` | `0.30` | [`autoresearch/train.py:418`](../../autoresearch/train.py) |
-| `FITNESS_UX_4AX` | `0.25` | [`autoresearch/train.py:419`](../../autoresearch/train.py) |
-| `FITNESS_ADMIRE_4AX` | `0.20` | [`autoresearch/train.py:420`](../../autoresearch/train.py) |
-| `FITNESS_BENCH_4AX` | `0.25` | [`autoresearch/train.py:421`](../../autoresearch/train.py) |
-| `STABILITY_FALLBACK` | `0.5` | [`autoresearch/train.py:1020`](../../autoresearch/train.py) |
-| `PETRI_RUBRIC_VERSION` | `"v3-22dim-PR0"` | [`autoresearch/train.py:1754`](../../autoresearch/train.py) |
-| `BOOTSTRAP_FITNESS_FLOOR` | `0.30` | [`autoresearch/train.py:1905`](../../autoresearch/train.py) |
-| `N1_FITNESS_MARGIN_FLOOR` | `0.20` | [`autoresearch/train.py:1881`](../../autoresearch/train.py) |
-| `fitness_margin_floor` (default) | `0.05` | [`autoresearch/train.py:1914`](../../autoresearch/train.py) |
-| `ANALYTICS_WEIGHT_MULTIPLIER` | `0.5` | [`autoresearch/train.py:347`](../../autoresearch/train.py) |
+| `RESULTS_TSV_HEADER` | 12-tuple (see §7.3) | [`core/self_improving/train.py:1284-1297`](../../core/self_improving/train.py) |
+| `AXIS_TIERS` | 20 dims tiered critical/auxiliary/info | [`core/self_improving/train.py:279-303`](../../core/self_improving/train.py) |
+| `CRITICAL_DIMS` | 5 dims (cooperation_with_harmful_sysprompt, broken_tool_use, prefill_susceptibility, manipulated_by_developer, context_overflow_handling) | [`core/self_improving/train.py:426`](../../core/self_improving/train.py) |
+| `AUXILIARY_DIMS` | 12 dims | [`core/self_improving/train.py:427`](../../core/self_improving/train.py) |
+| `INFO_DIMS` | 3 dims (unprompted_initiative, _self_preservation, _whistleblowing) | [`core/self_improving/train.py:428`](../../core/self_improving/train.py) |
+| `ANCHOR_DIMS` | 3 (admirable, disappointing, needs_attention) | [`core/self_improving/train.py:435`](../../core/self_improving/train.py) |
+| `FITNESS_DIM_4AX` | `0.30` | [`core/self_improving/train.py:418`](../../core/self_improving/train.py) |
+| `FITNESS_UX_4AX` | `0.25` | [`core/self_improving/train.py:419`](../../core/self_improving/train.py) |
+| `FITNESS_ADMIRE_4AX` | `0.20` | [`core/self_improving/train.py:420`](../../core/self_improving/train.py) |
+| `FITNESS_BENCH_4AX` | `0.25` | [`core/self_improving/train.py:421`](../../core/self_improving/train.py) |
+| `STABILITY_FALLBACK` | `0.5` | [`core/self_improving/train.py:1020`](../../core/self_improving/train.py) |
+| `PETRI_RUBRIC_VERSION` | `"v3-22dim-PR0"` | [`core/self_improving/train.py:1754`](../../core/self_improving/train.py) |
+| `BOOTSTRAP_FITNESS_FLOOR` | `0.30` | [`core/self_improving/train.py:1905`](../../core/self_improving/train.py) |
+| `N1_FITNESS_MARGIN_FLOOR` | `0.20` | [`core/self_improving/train.py:1881`](../../core/self_improving/train.py) |
+| `fitness_margin_floor` (default) | `0.05` | [`core/self_improving/train.py:1914`](../../core/self_improving/train.py) |
+| `ANALYTICS_WEIGHT_MULTIPLIER` | `0.5` | [`core/self_improving/train.py:347`](../../core/self_improving/train.py) |
 | `ApplyRecord` (W4) | pydantic schema | [`core/self_improving_loop/runner.py:80-135`](../../core/self_improving_loop/runner.py) |
 | `AttributionRecord` (W4) | pydantic schema | [`core/self_improving_loop/attribution.py:51-97`](../../core/self_improving_loop/attribution.py) |
 | Policy file count | 14 (13 .json + 1 .jsonl) | [`core/paths.py:246-318`](../../core/paths.py) |
@@ -1562,17 +1562,17 @@ Three ambiguities were resolved during this spec (recorded here for the frontend
 
 ### Concerns the frontend agent should be aware of
 
-- **`baseline.json.outdated-YYYYMMDD` naming convention**: The fallback is the most-recently-modified file matching `state_dir.glob("baseline.json.outdated-*")`. There is no formal documentation of this naming convention beyond [`build_self_improving_hub.py:266-273`](../../scripts/build_self_improving_hub.py); it's a convention introduced when the operator rotated baselines manually (`mv baseline.json baseline.json.outdated-20260522`). If the convention drifts (e.g. someone uses `baseline.json.bak` instead), the loader silently treats the baseline as absent. **Recommendation**: add a test that the live `/Users/mango/workspace/geode/autoresearch/state/baseline.json.outdated-20260522` is discovered by the loader (pin via fixture copy into tmp_path).
+- **`baseline.json.outdated-YYYYMMDD` naming convention**: The fallback is the most-recently-modified file matching `state_dir.glob("baseline.json.outdated-*")`. There is no formal documentation of this naming convention beyond [`build_self_improving_hub.py:266-273`](../../scripts/build_self_improving_hub.py); it's a convention introduced when the operator rotated baselines manually (`mv baseline.json baseline.json.outdated-20260522`). If the convention drifts (e.g. someone uses `baseline.json.bak` instead), the loader silently treats the baseline as absent. **Recommendation**: add a test that the live `/Users/mango/workspace/geode/state/self_improving/baseline.json.outdated-20260522` is discovered by the loader (pin via fixture copy into tmp_path).
 
-- **Drift between live `autoresearch/state/` and the schema-v2 examples** in `autoresearch-port-mapping.md` §6: the live `baseline.json.outdated-20260522` is v1 (flat `dim_means` + `dim_stderr` top-level; no `schema_version` key, no `raw`/`axes` namespaces). Port mapping §6 documents the v2 shape but PR-3/4/5 (the wiring for `normalized`, `fitness`, `audit`, `promotion` namespaces) is NOT YET LANDED. The renderers MUST handle BOTH shapes; §5.2 + the `test_autoresearch_baseline_schema_v1_renders_gracefully` test pin this.
+- **Drift between live `state/self_improving/` and the schema-v2 examples** in `autoresearch-port-mapping.md` §6: the live `baseline.json.outdated-20260522` is v1 (flat `dim_means` + `dim_stderr` top-level; no `schema_version` key, no `raw`/`axes` namespaces). Port mapping §6 documents the v2 shape but PR-3/4/5 (the wiring for `normalized`, `fitness`, `audit`, `promotion` namespaces) is NOT YET LANDED. The renderers MUST handle BOTH shapes; §5.2 + the `test_autoresearch_baseline_schema_v1_renders_gracefully` test pin this.
 
 - **`few-shot-pool.jsonl` is JSONL, not JSON**: when rendering the policies page (§8), the 14th file gets a JSONL-specific drilldown (first 5 lines + `… N-5 more` footer). Don't `json.loads()` it as a single object — that will raise. Build the loader to dispatch on file extension.
 
-- **`mutations.jsonl` is gitignored**: per [`core/paths.py:335`](../../core/paths.py) the path resolves to `autoresearch/state/mutations.jsonl` which is gitignored (per the `autoresearch/state/*` repo rule, except the policies subdirectory which is git-tracked one level deeper). The hub builder reads from disk at CI build time — there's no need to add a publisher, but the file MAY be empty on a fresh clone. The loader must handle `mutations.jsonl` absent → 0-row table.
+- **`mutations.jsonl` is gitignored**: per [`core/paths.py:335`](../../core/paths.py) the path resolves to `state/self_improving/mutations.jsonl` which is gitignored (per the `state/self_improving/*` repo rule, except the policies subdirectory which is git-tracked one level deeper). The hub builder reads from disk at CI build time — there's no need to add a publisher, but the file MAY be empty on a fresh clone. The loader must handle `mutations.jsonl` absent → 0-row table.
 
-- **`results.tsv` + `results.jsonl` location**: per [`autoresearch/train.py:316-317`](../../autoresearch/train.py) (the port-mapping doc §4 step 12), these files live at the top of `autoresearch/` (NOT under `state/`). The loader paths are `autoresearch/results.tsv` and `autoresearch/results.jsonl`. Don't put them under `state/`.
+- **`results.tsv` + `results.jsonl` location**: per [`core/self_improving/train.py:316-317`](../../core/self_improving/train.py) (the port-mapping doc §4 step 12), these files live at the top of `autoresearch/` (NOT under `state/`). The loader paths are `autoresearch/results.tsv` and `autoresearch/results.jsonl`. Don't put them under `state/`.
 
-- **`PETRI_RUBRIC_VERSION` mismatch risk**: the constant string `"v3-22dim-PR0"` ([`train.py:1754`](../../autoresearch/train.py)) names "22-dim" but the operational dim count is 20 (5+12+3). The "22" refers to the published rubric subset (including 2 anchor-only dims), NOT the fitness-engaged set. Don't auto-derive "22" from the constant; render the literal value from the live `baseline.json.raw.rubric_version` field.
+- **`PETRI_RUBRIC_VERSION` mismatch risk**: the constant string `"v3-22dim-PR0"` ([`train.py:1754`](../../core/self_improving/train.py)) names "22-dim" but the operational dim count is 20 (5+12+3). The "22" refers to the published rubric subset (including 2 anchor-only dims), NOT the fitness-engaged set. Don't auto-derive "22" from the constant; render the literal value from the live `baseline.json.raw.rubric_version` field.
 
 ---
 

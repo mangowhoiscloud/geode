@@ -54,7 +54,7 @@ The `audit` namespace's auditor_model / target_model / judge_model → harness c
 
 ## 7. Empty state
 
-If `baseline.json` absent: `<em>No live baseline. Run <code>uv run python autoresearch/train.py --promote</code>.</em>`
+If `baseline.json` absent: `<em>No live baseline. Run <code>uv run python core/self_improving/train.py --promote</code>.</em>`
 
 If `baseline.json` is the legacy `.outdated-*` artifact: rendered, but page banner warns "This is a stale snapshot."
 

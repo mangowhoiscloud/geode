@@ -1,11 +1,11 @@
 # ADR — Autoresearch axis decompression (15-axis raw, no compression)
 
 > **Status**: Accepted (2026-05-18)
-> **Scope**: `autoresearch/train.py` 의 fitness function 의 axis 표현 + baseline IO 단순화. Petri 측 `core/audit/dim_extractor.py` 의 emit schema 와 의 책임 분리.
+> **Scope**: `core/self_improving/train.py` 의 fitness function 의 axis 표현 + baseline IO 단순화. Petri 측 `core/audit/dim_extractor.py` 의 emit schema 와 의 책임 분리.
 
 ## Context
 
-현 `autoresearch/train.py` 의 fitness 는 19-dim Petri rubric 을 5-axis (`predictive / robustness / logic / diversity / stability`) 로 bucket 평균. `AXIS_DIMS` dict 가 dim→axis 매핑 보유. 그러나:
+현 `core/self_improving/train.py` 의 fitness 는 19-dim Petri rubric 을 5-axis (`predictive / robustness / logic / diversity / stability`) 로 bucket 평균. `AXIS_DIMS` dict 가 dim→axis 매핑 보유. 그러나:
 
 1. **실효 정보 손실**: 12 fitness-active dim 중 fitness 입력은 5 dim 뿐 (`AXIS_DIMS` 의 평균 대상이 1-2 dim/axis). 나머지 10 dim 의 신호 폐기.
 2. **Statistical 효과 미약**: bucket 평균의 √k stderr 감소가 k=1 axis 다수로 작동 안 함.
@@ -143,26 +143,26 @@ commit / fitness / critical_min / auxiliary_mean / stability / gate_verdict
 
 ## Implementation pointers (S9 + S10)
 
-- `autoresearch/train.py`:
+- `core/self_improving/train.py`:
   - `AXIS_DIMS` 제거 → `AXIS_TIERS` + `DIM_WEIGHTS` + `STABILITY_WEIGHT` 신설.
   - `_axis_score` 제거.
   - `compute_axis_scores` → `compute_dim_aggregates(dim_means)` (dict pass-through).
   - `compute_fitness(dim_means, dim_stderr, baseline_means=None, baseline_stderr=None, critical_margin=0.0, aux_lambda=0.5)` — raw dict 인자.
   - `FitnessBaseline` + `baseline_from_summary` + `_load_baseline` 삭제 → `_load_baseline_dict()` 단일 함수.
-- `autoresearch/program.md`:
+- `core/self_improving/program.md`:
   - § "Cross-axis gate" — critical 2 → critical 4, dim 이름 명시.
   - § "Output format" — `^<axis>_score:` → `^<dim>_score:` (12 substantive dim).
   - § "Logging results" — 9 col → 10 col schema.
-- `autoresearch/state/baseline.json` schema — Petri summary JSON 그대로 (`{dim_means: {...}, dim_stderr: {...}}`).
-- `autoresearch/state/results.tsv` — 10 col header 갱신.
-- `autoresearch/state/results.jsonl` — 신규 (line-per-gen raw dim aggregate).
+- `state/self_improving/baseline.json` schema — Petri summary JSON 그대로 (`{dim_means: {...}, dim_stderr: {...}}`).
+- `state/self_improving/results.tsv` — 10 col header 갱신.
+- `state/self_improving/results.jsonl` — 신규 (line-per-gen raw dim aggregate).
 - `tests/test_autoresearch_train.py` — 15 test 갱신 (dry-run baseline 0.535895 유지 위해 weight 재조정).
 
 ## References
 
 - ADR-001 (Seed Generation) — seed N 확장 정당화
-- `autoresearch/train.py:240-540` — 변경 대상 영역
-- `autoresearch/program.md` — self-improving-loop SOT
+- `core/self_improving/train.py:240-540` — 변경 대상 영역
+- `core/self_improving/program.md` — self-improving-loop SOT
 - `core/audit/dim_extractor.py` — raw 신호 emit (변경 없음)
 - AlphaEval (parity 폐기) — arXiv:2508.13174
 - `[[project_autoresearch_self_improving_loop]]` — closed-loop 직전 상태

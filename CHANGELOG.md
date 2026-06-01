@@ -45,6 +45,198 @@ functional change.
 
 ---
 
+## [0.99.116] - 2026-06-01
+
+### Added
+- **PR-METRIC-TARGETED-IRT (2026-06-01) — targeted per-dim promote gate + IRT
+  discrimination reshape + targeted-σ power, for the self-improving loop's
+  fitness.** `compute_fitness` is `0.70·mean(~24 dims) + 0.30·admire`; a Petri
+  scenario pressures only 2–4 dims while ~20 sit at the floor, so a real
+  target-dim improvement is DILUTED — a genuine 1.6-pt auxiliary-dim gain
+  (4.6→3.0) moves the 24-dim aggregate only `+0.0053`, which the promote gate
+  rejects at margin `0.0184`. This is the structural 0-approve cause. Three
+  OPT-IN, backward-callable mechanisms (all default to the v1 behaviour, so every
+  existing caller + the never/random control arms are byte-identical):
+  * **(1) Targeted per-dim gate.** `_should_promote` takes a `targeted_dims`
+    param; when supplied (the KEYS of the runner-propagated
+    `GEODE_SIL_EXPECTED_DIM`, resolved by `_resolve_targeted_dims`) the binding
+    comparison moves to the RESHAPED targeted SUB-FITNESS over only the targeted
+    surface. This REPLACES the plain-aggregate margin as the binding UPSIDE
+    decision — it deliberately promotes a real targeted-dim gain the aggregate
+    would have diluted-and-rejected (the whole point of the fix), which is why the
+    logic-version tags bump and a new baseline epoch opens. The critical
+    strict-reject (`gated == 0.0`) downside veto is RETAINED and still runs FIRST,
+    so the targeted gate can never bypass a critical-dim regression. ALL weighted
+    targeted dims must be present in both current+baseline, else the gate REJECTS
+    ("cannot verify targeted gain") — it does NOT fall through to the aggregate,
+    because `compute_fitness` scores a missing dim as best-case, so a fall-through
+    would still promote on the gap. This closes the "suppress the hard dim's
+    measurement → win" Goodhart vector in both the targeted and aggregate paths.
+    (A targeted set with no WEIGHTED dim — all info-only / disjoint — still falls
+    through to the aggregate gate; there is nothing weighted to verify.)
+  * **(3) IRT-discrimination reshape.** `compute_fitness(reshape=True)` applies
+    the monotone logistic ICC `σ(6·(score−0.5))` (`_icc_reshape`) to each per-dim
+    0–1 score before aggregating — peak sensitivity at mid-range, ~5× suppressed
+    at the floor. The validated 1.6-pt mid-range gain reshapes to `+0.2088`
+    (rescued from `+0.0053`); an equal-magnitude floor-dim move reshapes to
+    `~+0.003` (no false promote). Inspired by PSN-IRT (arXiv:2505.15055) for the
+    logistic ICC + per-item discrimination, and Ng/Harada/Russell 1999 (ICML'99)
+    for the monotone/policy-invariance constraint — NO policy/parameter update is
+    borrowed, only the curve SHAPE + the monotonicity requirement.
+  * **(6) Targeted-σ power.** The σ-margin is measured on the same reshaped
+    targeted surface (`_fitness_scale_stderr(reshape=True, targeted_dims=…)`); a
+    focused surface ⇒ lower σ ⇒ a lower MDE for a given N (per-dim stderr ∝
+    1/√N — no formula borrowed verbatim). A fixed realistic targeted gain that
+    FAILS the margin at low N PASSES at higher N.
+  * **Version tags + epoch.** `FITNESS_FORMULA_VERSION` / `MARGIN_LOGIC_VERSION`
+    bumped `1`→`2` so a v1 (plain-aggregate gate) and a v2 (targeted+reshape
+    gate) baseline hash to different `build_baseline_spec` epochs (no retroactive
+    recompute). `test_logic_version_guard` goldens recomputed (identical values —
+    the default path is byte-identical; only the gate's targeted decision opts in).
+  * Synthetic + dry-run verification only (NO live audit): the +0.2088 rescue,
+    the floor suppression, the retained critical veto, ICC strict-monotonicity on
+    [0,1], the power lever, and full backward-compat are pinned in
+    `tests/self_improving/test_metric_targeted_irt.py`.
+
+## [0.99.115] - 2026-06-01
+
+### Changed
+- **PR-STATE-AUTORESEARCH-RENAME (2026-06-01) — migrate the self-improving loop's
+  state to a single, snake_case, env-overridable root `state/autoresearch/`, and
+  remove the underscore/hyphen near-synonym twin.** The loop CODE was centralized
+  under `core/self_improving/`, but its DATA still lived under the vestigial
+  `autoresearch/state/` (empty package — only `__init__.py`). The interim
+  `state/self_improving/` collided with the existing `state/self-improving-loop/`
+  handoff dir (a hyphen/underscore twin), so the state root is `state/autoresearch/`
+  (the optimization engine's name) with the handoff NESTED below it.
+  * **Moved (git mv, history preserved):** `autoresearch/state/` →
+    `state/autoresearch/` (under `STATE_ROOT`, env-overridable via
+    `GEODE_STATE_ROOT`). Handoff nested: `state/self-improving-loop/` →
+    `state/autoresearch/handoff/` and `~/.geode/self-improving-loop/` →
+    `~/.geode/autoresearch/handoff/` (code expectation; live dir moved by the
+    operator command). `state/seed-generation/` → `state/seed_generation/`
+    (snake, matching `plugins/seed_generation/`). `autoresearch/program.md` →
+    `core/self_improving/program.md`; `autoresearch/README.md` →
+    `docs/self-improving/loop-overview.md`; `tests/autoresearch/` →
+    `tests/self_improving/`. Deleted `autoresearch/__init__.py` + the empty dir.
+  * **Single canonical constant — no dual SoT.**
+    `core.paths.AUTORESEARCH_STATE_DIR = STATE_ROOT / "autoresearch"`;
+    `AUTORESEARCH_HANDOFF_DIR` (nested), `GLOBAL_AUTORESEARCH_HANDOFF_DIR`,
+    `STATE_SEED_GENERATION_DIR` (snake). The three duplicate state-dir definitions
+    (`watch_campaign.py`, `train.py`, `campaign.py`) were deleted; all import the
+    canonical constant. The program-md reader (`runner.py:_load_program_md`)
+    resolves `core/self_improving/program.md`.
+  * **`.gitignore`** recreates the tracked-vs-ignored pattern under
+    `state/autoresearch/*` (negating the ledgers + policies; ignoring run.log,
+    campaign-progress.log, baseline.json, audit_logs/, _preval-snapshot/,
+    _archive/<be-NNN>/). Verified with `git check-ignore`.
+  * **Hub read-path alignment.** `scripts/build_self_improving_hub.py` reads from
+    `state/autoresearch`; served section dir + URLs
+    (`/geode/self-improving/autoresearch/…`) + Inspect-View `#/logs/<file>`
+    deep-links preserved (conservative — only the read path moved).
+  * **Naming rule** added to CLAUDE.md (CANNOT → Naming): state/runtime dirs use
+    snake_case; no hyphen/underscore near-synonym twins.
+
+### Added
+- **Results writer — fill a diagnosed wiring gap.** `format_results_tsv_row` /
+  `format_results_jsonl_row` output was PRINTED to stdout but NEVER written to
+  disk, so the self-improving hub's results section stayed empty while
+  `mutations.jsonl` + `baseline_archive.jsonl` were written directly. Added
+  `core.self_improving.train._append_results_row()`, called in the post-audit
+  persist section for every non-dry-run audit; it appends to
+  `state/autoresearch/results.tsv` (header on first write) + `.jsonl`. Both
+  files are git-tracked.
+
+### Architecture
+- **Baseline-epoch archive convention codified.**
+  `state/autoresearch/_archive/<be-NNN>/` is the epoch-boundary snapshot location
+  (content-addressed by the `be-NNN` label from
+  `core/self_improving/loop/baseline_epoch.py`). Documented in
+  `state/autoresearch/_archive/README.md`. Auto-snapshot-on-epoch-change is
+  **deferred** with a marked TODO (snapshot I/O inside the promote write path
+  would risk the promote itself).
+
+## [0.99.114] - 2026-06-01
+
+### Fixed
+- **PR-PILOT-PETRI-AUDIT-WIRING (2026-06-01) — the global `tool_policy` could
+  silently strip a sub-agent's toolkit-granted tool, disabling the
+  seed-generation pilot's `petri_audit` audit.** The seed_pilot sub-agent
+  resolves its `toolkit: seed_pilot` (→ `petri_audit` + `read_document`) into
+  `AgenticLoop.allowed_tool_names`, but `get_agentic_tools` applied the global
+  ADR-012 `tool_policy` SoT (`tool-policy.json`, a self-improving-loop *mutation
+  surface*) to the model-visible tool list **before** the toolkit filter ran. A
+  `tool-policy.json` whose `allowed_tools` whitelist omitted `petri_audit`
+  stripped it, so the pilot worker advertised only `read_document`, the model
+  reported "petri_audit isn't in my available tool set", skipped the audit, and
+  emitted all-zero `pilot.dim_means` — silently neutering the difficulty-selection
+  lever (PR #1950) and Elo-selecting survivors instead. The pilot is the agent
+  that *measures* the loop, so the loop's own mutation disabled its own
+  measurement. Fix: `get_agentic_tools(..., force_include=allowed_tool_names)`
+  keeps toolkit-granted tools authoritative over the global `tool_policy` (the
+  policy may reorder but not strip them); the same filter is re-applied on the
+  model-change / MCP-refresh rebuild path (`_response.refresh_tools`), which
+  previously dropped it. The CLI / serve path (no `force_include`) is unchanged.
+- **Pilot fails loudly instead of merging a silent zero-fill.** `Pilot._parse_pilot`
+  now drops a result whose `status` is `ok` / `low_engagement` but whose
+  `dim_means` is empty or all-zero (the "audit never ran" signature) as
+  `pilot_failed`, instead of merging a measurement of nothing into the Ranker.
+  A genuine `timeout` still legitimately zero-fills. The `petri_audit` tool
+  handler now returns `status="error"` (not `ok`) when a **live** audit aborts
+  before running (e.g. `inspect` / inspect_ai missing — the `[audit]` extra is
+  absent), with a message pointing at `uv tool install -e ".[audit]"`.
+- **pilot.md `dim_set` corrected** from the invalid bare filename
+  `"geode_judge_subset"` (resolves to a non-existent path) to the built-in key
+  `"subset"`.
+
+### Infrastructure
+- **CLAUDE.md §7 rebuild now requires the `[audit]` extra**
+  (`uv tool install -e ".[audit]"` + `uv sync --extra audit`) — inspect_ai is
+  needed by the pilot's `petri_audit` and the self-improving-loop audit
+  subprocess; omitting it was a confirmed runtime gap behind the all-zero
+  `dim_means`.
+
+## [0.99.113] - 2026-06-01
+
+### Removed
+- **PR-CLEANUP-EXPERIMENTAL-PATHS (2026-06-01) — drop the `experimental/`
+  parking lot.** Removed `experimental/` (the unvalidated memory prototypes:
+  `vector_store` / `raptor` / `embeddings` / `rag_router` + their tests) — it had
+  **0 production importers** (default-excluded from every gate) and had sat
+  un-promoted. Dropped its now-dangling `experimental` entries from the ruff
+  `extend-exclude` and deptry `extend_exclude` lists, the orphaned
+  `temperature_progressive_compression` Settings knob (its sole consumer was the
+  deleted `progressive_compression` module), and that knob's three references in
+  `tests/test_temperature_config_invariants.py` (incl. the ratchet site that read
+  the now-deleted file).
+
+### Fixed
+- **Cross-machine portability — removed hardcoded `/Users/mango` absolute paths.**
+  `core/llm/adapters/codex_cli.py` codex-binary hint `/Users/mango/.local/bin/codex`
+  → `os.path.expanduser("~/.local/bin/codex")` (PATH lookup stays first, so this is
+  the per-user fallback). `scripts/probes/probe_codex_oauth_*.py` hardcoded
+  `/Users/mango/workspace/geode` → `Path(__file__).resolve().parents[2]`-relative
+  repo root, so the probes run on any checkout.
+
+## [0.99.112] - 2026-06-01
+
+### Fixed
+- **PR-HUB-PAYLOAD-FULLWIDTH (2026-06-01) — self-improving hub mutations
+  payload drill-down no longer renders right-skewed.** On the autoresearch
+  mutations table, each row's expandable `payload` `<details>` was emitted
+  inside the narrow last (outcome) `<td>`, so the opened JSON inherited that
+  column's width and rendered squeezed into a thin right-hand strip. The
+  `<details>` now ships in its own full-width `<tr class="mutation-payload-row">`
+  `<td colspan>` row below each mutation (same pattern the policies/results
+  `.policy-json` drill-downs already use), wrapped in a neutral-hairline
+  `.mutation-payload` box. New `hub.css` rules drop the inner `.status-grid`
+  780px cap and keep the before/after `pre.msg` blocks wrapping to full width.
+  Fixed once in `scripts/build_self_improving_hub.py` + `hub.css`, so the
+  full-width layout propagates to every page depth on rebuild. Pinned by
+  `test_autoresearch_mutations_table_renders` (asserts the colspan row +
+  `.mutation-payload` wrapper). The policies/results JSON drill-downs already
+  used the full-width pattern and were unaffected.
+
 ## [0.99.111] - 2026-06-01
 
 ### Changed

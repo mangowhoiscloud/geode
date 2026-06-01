@@ -61,7 +61,7 @@ export default function Page() {
                 차원별로 채점합니다.
               </li>
               <li>
-                <strong>변형</strong>. <code>autoresearch/state/policies/</code>의
+                <strong>변형</strong>. <code>state/autoresearch/policies/</code>의
                 정책 파일 하나를 한 번에 한 군데만 바꿉니다.
               </li>
               <li>
@@ -73,7 +73,7 @@ export default function Page() {
               </li>
               <li>
                 <strong>승격 또는 되돌리기</strong>. 차원이 기준을 넘으면{" "}
-                <code>autoresearch/state/baseline.json</code>을 갱신하고, 아니면
+                <code>state/autoresearch/baseline.json</code>을 갱신하고, 아니면
                 정책을 변형 이전으로 되돌립니다.
               </li>
             </ol>
@@ -162,7 +162,7 @@ export default function Page() {
               </li>
               <li>
                 <strong>Mutate</strong>. Change one policy file under{" "}
-                <code>autoresearch/state/policies/</code>, one place at a time.
+                <code>state/autoresearch/policies/</code>, one place at a time.
               </li>
               <li>
                 <strong>Re-audit</strong>. Run the Petri audit again with the
@@ -174,7 +174,7 @@ export default function Page() {
               </li>
               <li>
                 <strong>Promote or revert</strong>. If the dimensions clear the
-                bar, update <code>autoresearch/state/baseline.json</code>;
+                bar, update <code>state/autoresearch/baseline.json</code>;
                 otherwise revert the policy to its pre-mutation state.
               </li>
             </ol>

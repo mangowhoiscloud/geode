@@ -26,13 +26,13 @@ Before starting a new experiment run, confirm with the user:
    the current `develop`.
 3. **Read the in-scope files end-to-end**. Only the four files below
    matter:
-   - `autoresearch/README.md` — driver overview + role split with petri.
+   - `docs/self-improving/loop-overview.md` — driver overview + role split with petri.
    - `core/self_improving/prepare.py` — seed pool + rubric sanity check. **Do
      not modify.**
    - `core/self_improving/train.py` — the single file the agent modifies.
      Holds the wrapper-prompt sections, the audit invocation, and the
      fitness output.
-   - `autoresearch/program.md` — this file. Read only.
+   - `core/self_improving/program.md` — this file. Read only.
 4. **Verify the seed pool**: `plugins/petri_audit/seeds/` is a
    hierarchical tree (`<tier>/<dim>/<NN>_<variant>.md`, post-PR-0).
    The judge rubric at
@@ -43,7 +43,7 @@ Before starting a new experiment run, confirm with the user:
    computed post-judge from transcript metadata rather than rated by
    the LLM judge directly. Report any missing file to the user.
 5. **Initialise `results.tsv`** — only the header row in
-   `autoresearch/state/results.tsv`; the baseline appears after the
+   `state/autoresearch/results.tsv`; the baseline appears after the
    first run.
 6. **Confirm config precedence**. Two TOML sections can name the same
    role from different angles — keep them in sync to avoid a silent
@@ -66,7 +66,7 @@ Before starting a new experiment run, confirm with the user:
 One experiment = one audit, wall-clock ~5 min. Real-mode invocation:
 
 ```bash
-uv run python -m core.self_improving.train > autoresearch/state/run.log 2>&1
+uv run python -m core.self_improving.train > state/autoresearch/run.log 2>&1
 ```
 
 To verify self-improving-loop plumbing without spending budget, use `--dry-run`
@@ -78,7 +78,7 @@ To verify self-improving-loop plumbing without spending budget, use `--dry-run`
   prompt sections are fair game for wording changes, additions,
   deletions, and reorderings.
 - Mutate any of the **7 behaviour policy SoT files** at
-  `autoresearch/state/policies/` (PR-MINIMAL-2 baseline + ADR-012
+  `state/autoresearch/policies/` (PR-MINIMAL-2 baseline + ADR-012
   M1/M2 + PR-TOOL-DESCRIPTIONS-MUTATE):
 
   | `target_kind`        | File                       | What it controls                                                |
@@ -118,7 +118,7 @@ To verify self-improving-loop plumbing without spending budget, use `--dry-run`
   REJECTED at `parse_mutation` + `apply_mutation`
   (`_reject_hyperparam_mutation`, fail-closed at two layers, with an
   explanatory error). The `hyperparam.json` SoT and its runtime readers
-  (`autoresearch.train._load_hyperparam_overrides`, consumed by
+  (`core.self_improving.train._load_hyperparam_overrides`, consumed by
   `_build_audit_command` + the AgenticLoop) are preserved — only the
   mutation surface is removed. The mapping in `policies.py:_KIND_TO_PATH`
   is kept for a future re-introduction.
@@ -168,7 +168,7 @@ modifying it; record the fitness.
 
 **Runtime hook**: Mutations to `WRAPPER_PROMPT_SECTIONS` propagate
 into the audit subprocess via the `GEODE_WRAPPER_OVERRIDE` env var.
-`train.py` writes the dict to `autoresearch/state/wrapper-override.json`
+`train.py` writes the dict to `state/autoresearch/wrapper-override.json`
 and exports the path; the GEODE runtime's `PromptAssembler` Phase 0
 reads it and replaces the wrapper base. Dict edits therefore land
 verbatim in the next audit's system prompt. `--dry-run` skips the
@@ -176,7 +176,7 @@ subprocess entirely (baseline emulation for plumbing tests).
 
 ## Cross-axis gate
 
-When `autoresearch/state/baseline.json` exists (written by a previous
+When `state/autoresearch/baseline.json` exists (written by a previous
 promote — see "The experiment loop" below), `compute_fitness` runs a
 two-tier monotone check:
 
@@ -267,18 +267,18 @@ Extract the key metrics with:
 
 ```bash
 # fitness + every per-dim score + per-dim mean in one pass
-grep "^fitness:\|^.*_score:\|^.*_mean:" autoresearch/state/run.log
+grep "^fitness:\|^.*_score:\|^.*_mean:" state/autoresearch/run.log
 
 # results.tsv / results.jsonl row, one each
-grep "^results_tsv:"   autoresearch/state/run.log
-grep "^results_jsonl:" autoresearch/state/run.log
+grep "^results_tsv:"   state/autoresearch/run.log
+grep "^results_jsonl:" state/autoresearch/run.log
 ```
 
 ## Logging results
 
-S10 (ADR-002) + P1a — `autoresearch/state/results.tsv` (12-column TSV)
-\+ `autoresearch/state/results.jsonl` (raw 20-dim JSONL per row). Both
-files are gitignored at the repo level (`autoresearch/state/*`).
+S10 (ADR-002) + P1a — `state/autoresearch/results.tsv` (12-column TSV)
+\+ `state/autoresearch/results.jsonl` (raw 20-dim JSONL per row). Both
+files are gitignored at the repo level (`state/autoresearch/*`).
 
 ### results.tsv (12 columns)
 
@@ -319,8 +319,8 @@ session_id	gen_tag	commit	fitness	critical_min	critical_mean	auxiliary_mean	stab
 stdout line so the operator can grep + append:
 
 ```bash
-grep "^results_tsv: " autoresearch/state/run.log | sed 's/^results_tsv: //' \
-  >> autoresearch/state/results.tsv
+grep "^results_tsv: " state/autoresearch/run.log | sed 's/^results_tsv: //' \
+  >> state/autoresearch/results.tsv
 ```
 
 ### results.jsonl (full 20-dim raw)
@@ -332,8 +332,8 @@ One JSON object per audit, single-line. Carries the full `dim_means`,
 (S8) to compute next-generation priors without re-running audits.
 
 ```bash
-grep "^results_jsonl: " autoresearch/state/run.log | sed 's/^results_jsonl: //' \
-  >> autoresearch/state/results.jsonl
+grep "^results_jsonl: " state/autoresearch/run.log | sed 's/^results_jsonl: //' \
+  >> state/autoresearch/results.jsonl
 ```
 
 ### Verdict / description through env vars
@@ -363,19 +363,19 @@ On the `autoresearch/<tag>` branch, **loop forever**:
    one hypothesis. Edit the code directly.
 3. Commit: `git commit -am "exp: <short description>"`.
 4. Run the audit:
-   `uv run python -m core.self_improving.train > autoresearch/state/run.log 2>&1`
+   `uv run python -m core.self_improving.train > state/autoresearch/run.log 2>&1`
    (redirect — never flood stdout). Append `--dry-run` for
    plumbing-only smoke. If `state/baseline.json` exists, the
    cross-axis gate fires automatically (see "Cross-axis gate" above).
 5. Extract the metrics:
-   `grep "^fitness:\|^.*_score:\|^.*_mean:" autoresearch/state/run.log`.
+   `grep "^fitness:\|^.*_score:\|^.*_mean:" state/autoresearch/run.log`.
    Empty result → crash; check `tail -n 50` of the log for the stack
    trace and apply a simple fix.
 6. Append `results.tsv` + `results.jsonl` — 12-column TSV + raw
    20-dim JSONL (S10 + P1a). `train.py` emits both as
    `results_tsv: …` / `results_jsonl: …` stdout lines that the
    operator strips with `sed` and appends. Both files are gitignored
-   (`autoresearch/state/*`).
+   (`state/autoresearch/*`).
 7. **Decide the verdict** (multi-axis monotone, not a simple fitness
    comparison). The auto-promote rule (P0a) handles this when the
    default flags are in effect; otherwise:
@@ -423,7 +423,7 @@ in the morning.
 
 ## SOT
 
-- This program: `autoresearch/program.md`
+- This program: `core/self_improving/program.md`
 - Petri gen-0 plan: `docs/audits/2026-05-15-autoresearch-gen0-plan.md`
 - Petri insights: `docs/audits/2026-05-15-petri-insights.md`
 - Self-improving-loop wiring sprint: `docs/plans/2026-05-19-self-improving-loop-wiring-sprint.md`

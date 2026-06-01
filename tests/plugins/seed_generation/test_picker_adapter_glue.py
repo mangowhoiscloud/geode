@@ -106,7 +106,7 @@ def test_config_toml_wins_over_legacy(tmp_path: Path, monkeypatch: pytest.Monkey
         ),
         encoding="utf-8",
     )
-    legacy = tmp_path / "seed-generation.toml"
+    legacy = tmp_path / "seed_generation.toml"
     legacy.write_text(
         textwrap.dedent(
             """
@@ -129,7 +129,7 @@ def test_config_toml_wins_over_legacy(tmp_path: Path, monkeypatch: pytest.Monkey
 def test_legacy_file_fallback_when_config_toml_lacks_section(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, caplog
 ) -> None:
-    """Falls back to legacy seed-generation.toml + logs a one-time warning."""
+    """Falls back to legacy seed_generation.toml + logs a one-time warning."""
     config = tmp_path / "config.toml"
     config.write_text(
         textwrap.dedent(
@@ -140,7 +140,7 @@ def test_legacy_file_fallback_when_config_toml_lacks_section(
         ),
         encoding="utf-8",
     )
-    legacy = tmp_path / "seed-generation.toml"
+    legacy = tmp_path / "seed_generation.toml"
     legacy.write_text(
         textwrap.dedent(
             """
@@ -162,7 +162,7 @@ def test_legacy_file_fallback_when_config_toml_lacks_section(
 def test_legacy_warning_only_once(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, caplog) -> None:
     config = tmp_path / "config.toml"
     config.write_text("# empty\n", encoding="utf-8")
-    legacy = tmp_path / "seed-generation.toml"
+    legacy = tmp_path / "seed_generation.toml"
     legacy.write_text('[generator]\nsource = "api_key"\n', encoding="utf-8")
     monkeypatch.setattr(picker_mod, "GLOBAL_CONFIG_TOML", config)
     monkeypatch.setattr(picker_mod, "GLOBAL_SEED_PIPELINE_TOML", legacy)

@@ -1,7 +1,7 @@
 """Rubric excerpts reader — ADR-012 M4.4.2 (in-context slot follow-up).
 
 Activates the ``rubric_excerpts`` slot declared in S5 (#1425). Reads
-``autoresearch/state/baseline.json`` (the fitness baseline that the
+``state/autoresearch/baseline.json`` (the fitness baseline that the
 self-improving loop most recently promoted), computes the worst-regressed
 dimension(s), and emits a compact ``<rubric-warning>`` block reminding
 the agent of the rubric directives for those dims.
@@ -16,7 +16,7 @@ the ball on these dims" — frontier harnesses (Claude Code's
 
 **Data path**:
 
-1. Read ``autoresearch/state/baseline.json`` via
+1. Read ``state/autoresearch/baseline.json`` via
    ``MUTATION_AUDIT_LOG_PATH.parent / "baseline.json"`` (the constant
    ``self_improving.py`` already uses for the slash status output).
 2. Pair ``dim_means`` (current) with ``baseline_means`` (last

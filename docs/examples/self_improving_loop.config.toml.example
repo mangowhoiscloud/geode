@@ -7,7 +7,7 @@
 # Precedence (Codex / OpenAI Agents pattern):
 #   1. Per-component env var (e.g. AUTORESEARCH_SEED_SELECT) — per-run override.
 #   2. `~/.geode/config.toml` `[self_improving_loop.*]` section — this file.
-#   3. Module-level constants in `autoresearch/train.py` etc. — last resort.
+#   3. Module-level constants in `core/self_improving/train.py` etc. — last resort.
 #
 # Schema reference: `core/config/self_improving_loop.py` (pydantic `SelfImprovingLoopConfig`).
 # Plan: `docs/plans/2026-05-19-self-improving-loop-config-consolidation.md`.
@@ -28,7 +28,7 @@ warn_threshold  = 0.5
 abort_threshold = 0.9
 
 # ---------------------------------------------------------------------------
-# autoresearch driver (autoresearch/train.py)
+# autoresearch driver (core/self_improving/train.py)
 # ---------------------------------------------------------------------------
 [self_improving_loop.autoresearch]
 # Inner-audit wall-clock budget (minutes). 1–60. Subprocess timeout is

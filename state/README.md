@@ -1,4 +1,4 @@
-# `state/` — seed-generation cross-run state (CSP-7, 2026-05-22)
+# `state/` — autoresearch + seed_generation cross-run state (CSP-7, 2026-05-22)
 
 Machine-portable replacement for the pre-CSP-7
 `~/.geode/self-improving-loop/` + `~/.geode/seed-generation/`
@@ -9,16 +9,30 @@ history.
 
 ## Layout
 
+PR-STATE-AUTORESEARCH-RENAME (2026-06-01, Scheme A) — the autoresearch
+optimization loop's state (ledgers + policies) lives under
+`state/autoresearch/`, with the cross-run handoff NESTED at
+`state/autoresearch/handoff/` (was the separate top-level
+`state/self-improving-loop/`, an underscore/hyphen near-synonym twin
+with the `state/self_improving/` ledger dir of #1955 — both folded into
+one root here). `seed-generation/` is renamed to `seed_generation/` to
+match the plugin package `plugins/seed_generation/`.
+
 ```
 state/
 ├── .gitkeep                          (directory marker)
 ├── README.md                         (this file)
-├── self-improving-loop/
-│   ├── latest_pointer.json           CSP-7 cross-run forward pointer
-│   │                                 (replaces latest_seed_pool +
-│   │                                  latest_meta_review.json symlinks)
-│   └── sessions.jsonl                run-level registry, append-only
-└── seed-generation/
+├── autoresearch/                     self-improving (autoresearch) loop state
+│   ├── mutations.jsonl               git-tracked mutation audit ledger
+│   ├── baseline_archive.jsonl        git-tracked baseline-history registry
+│   ├── baseline_epochs.json          epoch_hash → be-NNN label map
+│   ├── policies/                     git-tracked mutation-target SoT JSONs
+│   ├── _archive/README.md            epoch-boundary archive convention doc
+│   └── handoff/                      CSP-7 cross-run handoff (machine-local)
+│       ├── latest_pointer.json       forward pointer (replaces latest_seed_pool
+│       │                             + latest_meta_review.json symlinks)
+│       └── sessions.jsonl            run-level registry, append-only
+└── seed_generation/
     └── <run_id>/                     per-run artefacts
         ├── state.json                Pipeline.run() offload snapshot
         ├── candidates/*.md           Generator output
@@ -31,7 +45,7 @@ state/
         └── proximity_log.tsv         (when proximity phase ran)
 ```
 
-## Pointer file (`self-improving-loop/latest_pointer.json`)
+## Pointer file (`autoresearch/handoff/latest_pointer.json`)
 
 Stamped at the end of every `geode audit-seeds generate` run by
 `plugins.seed_generation.orchestrator.Pipeline._write_latest_pointer`.
@@ -50,8 +64,8 @@ Schema:
   "run_id": "gen2-broken_tool_use",
   "gen_tag": "gen2",
   "updated_at": "2026-05-22T01:00:00Z",
-  "seed_pool":   "seed-generation/gen2-broken_tool_use/survivors",
-  "meta_review": "seed-generation/gen2-broken_tool_use/meta_review.json"
+  "seed_pool":   "seed_generation/gen2-broken_tool_use/survivors",
+  "meta_review": "seed_generation/gen2-broken_tool_use/meta_review.json"
 }
 ```
 
@@ -80,4 +94,4 @@ are *machine-local execution traces*. Committing them would:
 The path *convention* lives in the repo (this README + `core.paths`
 constants); the *content* belongs to whichever machine ran the
 pipeline. Operators that want to archive a specific run still can —
-just `tar -czf` the `state/seed-generation/<run_id>/` directory.
+just `tar -czf` the `state/seed_generation/<run_id>/` directory.

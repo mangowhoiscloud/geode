@@ -925,6 +925,46 @@ pre.msg {
   max-height: 30rem;
   overflow-y: auto;
 }
+
+/* Mutations payload drill-down — emitted as its own full-width <tr> (colspan)   */
+/* below each mutation row, NOT inside the narrow outcome cell. Without this the */
+/* opened <details> inherited the last column's width and rendered right-skewed. */
+/* The colspan cell is already full table width; here we let the inner status-   */
+/* grid + before/after <pre class="msg"> blocks fill that width (drop the 780px   */
+/* status-grid cap) inside a neutral hairline box so the payload reads as a       */
+/* sub-row of its mutation. Placed after the base pre.msg rule so it only         */
+/* overrides margins, inheriting the base wrap behaviour. */
+tr.mutation-payload-row > td {
+  padding-top: 0;
+  padding-bottom: .5rem;
+}
+
+.mutation-payload {
+  margin: .35rem 0 0;
+  padding: .65rem .9rem;
+  background: var(--paper-tint);
+  border: 1px solid var(--rule);
+  border-radius: 3px;
+}
+
+.mutation-payload .status-grid {
+  max-width: none;
+  margin: 0 0 .25rem;
+}
+
+/* Long unbroken JSON / prompt text wraps to full width instead of overflowing. */
+.mutation-payload .status-grid dd {
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+.mutation-payload pre.msg {
+  margin: .15rem 0 .55rem;
+}
+
+.mutation-payload pre.msg:last-child {
+  margin-bottom: 0;
+}
 ul.event-list {
   margin: 0;
   padding-left: 1.2rem;

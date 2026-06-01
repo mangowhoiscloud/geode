@@ -37,7 +37,7 @@ Net: **co-scientist neither in paper nor reference impl provides a usable design
 | Outer | `~/.geode/self-improving-loop/sessions.jsonl` (P1a) | ✅ append | tail only | ❌ index only |
 | Outer | `~/.geode/self-improving-loop/<session>/journal.jsonl` (P1c) | ✅ append | tail only | ❌ event audit |
 | Seed-pipeline | `<run_dir>/state.json` (S8 `_persist_state`) | ✅ write_text (non-atomic) | ❌ **`_load_state()` 미구현** | ❌ |
-| Autoresearch | `autoresearch/state/baseline.json` (P0a) | ✅ atomic | ✅ `_load_baseline()` | partial (promote/run only) |
+| Autoresearch | `state/self_improving/baseline.json` (P0a) | ✅ atomic | ✅ `_load_baseline()` | partial (promote/run only) |
 | Primitive | `core/utils/atomic_io.py` | tmp + `os.replace` + `fsync` | — | ✅ |
 
 **Key insight**: GEODE already has `SessionCheckpoint` — a production-ready C3 checkpoint+resume layer with `atomic_write_json` + SQLite + `/resume` CLI. The self-improving-loop drivers (seed-generation + autoresearch) are NOT yet layered on top of it. The S8 `_persist_state` comment says *"S11 CLI `geode audit-seeds resume` will re-hydrate"* but the load path is not implemented.
@@ -177,7 +177,7 @@ Lives as Phase ζ in `docs/plans/2026-05-19-self-improving-loop-config-consolida
 
 - **PR-ζ1**: extend `SessionCheckpoint` schema for self-improving-loop fields (active_sources, completed_units, next_unit, fallback_to_payg, active_profile). Tests round-trip.
 - **PR-ζ2**: `_load_state()` companion for `plugins/seed_generation/orchestrator.py:PipelineState`. CLI flag `geode audit-seeds resume <run_id>`.
-- **PR-ζ3**: autoresearch `_load_pending_audit()` + `--resume <session_id>` flag in `autoresearch/train.py`.
+- **PR-ζ3**: autoresearch `_load_pending_audit()` + `--resume <session_id>` flag in `core/self_improving/train.py`.
 - **PR-ζ4**: idempotency-key embedding in LLM call metadata + local response cache lookup (`~/.geode/self-improving-loop/<session>/idempotency.db`).
 - **PR-ζ5**: credential-rollover detection — at resume, compare active sources to checkpoint; emit `credential_rolled_over_at` event into journal.
 - **PR-ζ5.5** (NEW): wire `ProfileRotator` into the self-improving-loop credential path. `resolve_self_improving_loop_binding(family) → (source, profile)` adds the profile dimension. `plugins/petri_audit/credential_source.py` routes failures through `ProfileRotator.mark_failure(profile)` instead of the in-process suppress set. autoresearch + seed-generation pass `profile.name` through LLM call metadata so cooldowns track per-account.

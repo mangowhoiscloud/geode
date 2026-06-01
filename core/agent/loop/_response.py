@@ -32,7 +32,20 @@ def refresh_tools(loop: AgenticLoop) -> int:
         return 0
     old_count = len(loop._tools)
     mcp_tool_list = loop._mcp_manager.get_all_tools()
-    loop._tools = get_agentic_tools(loop._tool_registry, mcp_tools=mcp_tool_list)
+    # PR-PILOT-PETRI-AUDIT-WIRING (2026-06-01) — re-apply the sub-agent
+    # toolkit allowlist on rebuild. Pre-fix this path dropped the
+    # ``allowed_tool_names`` filter that the ctor applied, so an MCP install
+    # mid-run re-exposed the full tool surface (and the global tool_policy
+    # strip) to a sub-agent that had a narrow toolkit. ``force_include``
+    # keeps toolkit-granted tools authoritative over the global tool_policy.
+    allowed = getattr(loop, "_allowed_tool_names", None)
+    loop._tools = get_agentic_tools(
+        loop._tool_registry,
+        mcp_tools=mcp_tool_list,
+        force_include=allowed,
+    )
+    if allowed is not None:
+        loop._tools = [t for t in loop._tools if t.get("name") in allowed]
     new_count = len(loop._tools)
     return max(0, new_count - old_count)
 

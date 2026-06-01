@@ -1,6 +1,6 @@
 """Backfill one ``kind="baseline"`` row into ``baseline_archive.jsonl``.
 
-The baseline registry (``autoresearch/state/baseline_archive.jsonl``) is written
+The baseline registry (``state/autoresearch/baseline_archive.jsonl``) is written
 forward by every ``--promote`` from PR-BASELINE-REGISTRY onward. Baselines
 promoted *before* the registry existed are not in it — this script backfills
 them from a saved baseline snapshot (a v2 ``baseline.json`` payload) so the hub

@@ -35,7 +35,7 @@ jobs:
               - 'plugins/**'
               - 'scripts/**'
               - 'tests/**'
-              - 'autoresearch/**'
+              - 'state/autoresearch/**'
               - 'pyproject.toml'
               - 'uv.lock'
               - '.github/workflows/**'
@@ -57,9 +57,9 @@ jobs:
       - if: needs.changes.outputs.code == 'true'
         run: uv sync
       - if: needs.changes.outputs.code == 'true'
-        run: uv run ruff check core/ tests/ plugins/ autoresearch/ scripts/
+        run: uv run ruff check core/ tests/ plugins/ scripts/
       - if: needs.changes.outputs.code == 'true'
-        run: uv run ruff format --check core/ tests/ plugins/ autoresearch/ scripts/
+        run: uv run ruff format --check core/ tests/ plugins/ scripts/
       - name: Dependency drift (deptry)
         if: needs.changes.outputs.code == 'true'
         run: uv run deptry .
@@ -98,7 +98,7 @@ jobs:
       - if: needs.changes.outputs.code == 'true'
         run: uv sync
       - if: needs.changes.outputs.code == 'true'
-        run: uv run mypy core/ plugins/ autoresearch/ scripts/
+        run: uv run mypy core/ plugins/ scripts/
       - name: Prompt integrity check
         if: needs.changes.outputs.code == 'true'
         run: uv run python -c "from core.llm.prompts import verify_prompt_integrity; verify_prompt_integrity(raise_on_drift=True)"

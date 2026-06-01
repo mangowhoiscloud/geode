@@ -4,7 +4,7 @@ Pins:
 - ``/self-improving history`` prints git log recipes (B1)
 - ``/self-improving rollback`` prints git revert recipes (B2)
 - ``/self-improving rollback <mutation_id>`` includes the grep form
-- ``_load_program_md`` actually reads ``autoresearch/program.md``
+- ``_load_program_md`` actually reads ``core/self_improving/program.md``
   from disk (H4 regression guard for incident PR-G5b #1350, codified
   in `CLAUDE.md` → Refactoring Deception Prevention →
   "CHANGELOG/PR-body parity")
@@ -35,8 +35,8 @@ def test_history_action_prints_git_log_recipes(
     # NOT deferred any more
     assert "reserved for" not in out
     # Recipes present
-    assert "git log -p autoresearch/state/mutations.jsonl" in out
-    assert "git log --stat autoresearch/state/policies/" in out
+    assert "git log -p state/autoresearch/mutations.jsonl" in out
+    assert "git log --stat state/autoresearch/policies/" in out
     # Cross-reference back to status for the quick path
     assert "/self-improving status" in out
     # Empty-state caveat for the not-yet-committed state
@@ -57,7 +57,7 @@ def test_rollback_action_prints_git_revert_recipes(
 
     cmd_self_improving("rollback")
     out = capsys.readouterr().out
-    assert "git log --oneline -p autoresearch/state/mutations.jsonl" in out
+    assert "git log --oneline -p state/autoresearch/mutations.jsonl" in out
     assert "git revert <sha>" in out
     # Hints the parametrized form
     assert "/self-improving rollback <mutation_id>" in out
@@ -75,7 +75,7 @@ def test_rollback_with_mutation_id_uses_grep_form(
     out = capsys.readouterr().out
     assert "'mut-abc12345'" in out
     assert "git log --all --grep=" in out
-    assert "autoresearch/state/mutations.jsonl" in out
+    assert "state/autoresearch/mutations.jsonl" in out
 
 
 # ---------------------------------------------------------------------------
@@ -120,14 +120,14 @@ def test_load_program_md_actually_reads_disk_file() -> None:
     ``_SYSTEM_PROMPT`` was a hardcoded f-string while the PR title
     claimed "program.md-driven". The G5b.fix1.b commit introduced
     ``_load_program_md`` which actually reads
-    ``autoresearch/program.md``. Pin that behavior so a future
+    ``core/self_improving/program.md``. Pin that behavior so a future
     refactor that regresses to hardcoded prompts surfaces here.
     """
     from core.self_improving.loop import runner as runner_mod
 
     content = runner_mod._load_program_md()
     assert content is not None, "program.md should be readable from disk"
-    # Content sanity — these phrases come from autoresearch/program.md
+    # Content sanity — these phrases come from core/self_improving/program.md
     # body (per the README + module docstring).
     assert "autoresearch" in content.lower()
     assert "self-improving" in content.lower() or "self improving" in content.lower()
@@ -154,7 +154,7 @@ def test_build_system_prompt_includes_program_md_content() -> None:
 def test_program_md_can_table_matches_target_kinds() -> None:
     """PR-PROGRAMMD-TARGET-KIND-SYNC (2026-05-28) drift invariant.
 
-    ``autoresearch/program.md`` lists the agent-authoritative
+    ``core/self_improving/program.md`` lists the agent-authoritative
     ``target_kind`` surface in a markdown table under "The agent CAN".
     The mutator LLM reads this table verbatim (program.md is spliced
     into the system prompt), so any row missing here equals a

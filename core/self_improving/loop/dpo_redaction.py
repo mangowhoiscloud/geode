@@ -1,6 +1,6 @@
 """DPO pack PII + secret redaction — ADR-012 M4.3.
 
-The M4.1 canonical pack (``~/.geode/self-improving-loop/dpo/pack.jsonl``)
+The M4.1 canonical pack (``~/.geode/autoresearch/handoff/dpo/pack.jsonl``)
 ships user prompts + assistant responses *verbatim*. Before that data
 crosses the operator-machine boundary (M4.2 publish to OpenAI / Bedrock
 / HuggingFace, or shared with teammates), it must be scrubbed of

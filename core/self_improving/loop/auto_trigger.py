@@ -6,7 +6,7 @@ without an operator at the keyboard.
 
 The wrapper does three things on top of ``SelfImprovingLoopRunner.run_once``:
 
-1. **Filesystem lock** (``~/.geode/self-improving-loop/auto_trigger.lock``
+1. **Filesystem lock** (``~/.geode/autoresearch/handoff/auto_trigger.lock``
    via :mod:`fcntl.flock` LOCK_EX | LOCK_NB) — prevents two cron-fires (or
    one cron fire + one manual ``geode self-improve mutate``) from racing
    on the same SoT files. If acquisition fails (another holder), the
@@ -40,7 +40,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from core.paths import GLOBAL_SELF_IMPROVING_LOOP_DIR
+from core.paths import GLOBAL_AUTORESEARCH_HANDOFF_DIR
 
 log = logging.getLogger(__name__)
 
@@ -66,18 +66,18 @@ AUTO_TRIGGER_TRIGGER_ID = "self_improving_loop_auto_trigger"
 """Single canonical trigger_id used by the scheduler so operators can
 identify the firing in ``/schedule list`` and the audit log."""
 
-AUTO_TRIGGER_LOCK_PATH: Path = GLOBAL_SELF_IMPROVING_LOOP_DIR / "auto_trigger.lock"
+AUTO_TRIGGER_LOCK_PATH: Path = GLOBAL_AUTORESEARCH_HANDOFF_DIR / "auto_trigger.lock"
 """Filesystem lockfile path. Lock is advisory (fcntl LOCK_EX | LOCK_NB)
 so a kernel-level crash releases it automatically — no stale-lock
 manual cleanup needed."""
 
-AUTO_TRIGGER_TIMESTAMP_PATH: Path = GLOBAL_SELF_IMPROVING_LOOP_DIR / "auto_trigger_last_run.txt"
+AUTO_TRIGGER_TIMESTAMP_PATH: Path = GLOBAL_AUTORESEARCH_HANDOFF_DIR / "auto_trigger_last_run.txt"
 """Plain-text Unix timestamp of the last *successful* firing. Failed
 firings (lock-blocked, interval-blocked, run_once raised) deliberately
 do NOT update this — only a successful mutation cycle counts so a
 flapping config doesn't lock the schedule out for hours."""
 
-AUTO_TRIGGER_HISTORY_PATH: Path = GLOBAL_SELF_IMPROVING_LOOP_DIR / "auto_trigger_history.jsonl"
+AUTO_TRIGGER_HISTORY_PATH: Path = GLOBAL_AUTORESEARCH_HANDOFF_DIR / "auto_trigger_history.jsonl"
 """Append-only JSONL audit log — one row per firing (terminal state).
 
 Schema: ``{"ts": float, "state": str, "detail": str, "trigger_id": str}``.
@@ -88,7 +88,7 @@ Unlike :data:`AUTO_TRIGGER_TIMESTAMP_PATH` which records only
 / ``disabled``) and errors. OL-A3 ``geode self-improve audit`` viewer
 consumes this file to render the auto-trigger timeline.
 
-Stored under ``~/.geode/self-improving-loop/`` (outside the repo) so
+Stored under ``~/.geode/autoresearch/handoff/`` (outside the repo) so
 the file is operator-private and not subject to the repo's
 ``.gitignore`` rules — no "claims to be git-tracked but isn't" risk."""
 

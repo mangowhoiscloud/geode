@@ -54,12 +54,13 @@ def _isolate_state_root(
 
     sandbox = tmp_path_factory.mktemp("state-isolation")
     monkeypatch.setattr(cp, "STATE_ROOT", sandbox)
-    monkeypatch.setattr(cp, "STATE_SELF_IMPROVING_LOOP_DIR", sandbox / "self-improving-loop")
-    monkeypatch.setattr(cp, "STATE_SEED_GENERATION_DIR", sandbox / "seed-generation")
+    monkeypatch.setattr(cp, "AUTORESEARCH_STATE_DIR", sandbox / "autoresearch")
+    monkeypatch.setattr(cp, "AUTORESEARCH_HANDOFF_DIR", sandbox / "autoresearch" / "handoff")
+    monkeypatch.setattr(cp, "STATE_SEED_GENERATION_DIR", sandbox / "seed_generation")
     monkeypatch.setattr(
         cp,
         "STATE_LATEST_POINTER_PATH",
-        sandbox / "self-improving-loop" / "latest_pointer.json",
+        sandbox / "autoresearch" / "handoff" / "latest_pointer.json",
     )
 
 

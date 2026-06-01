@@ -23,8 +23,8 @@
 | Karpathy 원본 | GEODE fork | Mutation? |
 |---|---|---|
 | `prepare.py` (data + tokenizer + eval, ~300 LOC) | `autoresearch/prepare.py` (seed pool + rubric sanity check) + `plugins/petri_audit/` (audit pipeline) | NO — read-only |
-| `train.py` (GPT model + optimizer, ~630 LOC) | `autoresearch/train.py` (`WRAPPER_PROMPT_SECTIONS` dict + audit invoke + fitness extraction, ~300 LOC) | **YES** — agent mutates |
-| `program.md` (human-authored instruction) | `autoresearch/program.md` | NO — human only |
+| `train.py` (GPT model + optimizer, ~630 LOC) | `core/self_improving/train.py` (`WRAPPER_PROMPT_SECTIONS` dict + audit invoke + fitness extraction, ~300 LOC) | **YES** — agent mutates |
+| `program.md` (human-authored instruction) | `core/self_improving/program.md` | NO — human only |
 | Loop (5 분 train run → grep metric → keep/reset) | Outer-loop agent (Claude Code / Codex) 가 `program.md` 의 instruction 으로 LOOP FOREVER 수행 — `git commit` / `git reset --hard` 로 ratchet | (agent-driven) |
 
 핵심 design pattern (Karpathy 5 원칙) 보존:
@@ -58,7 +58,7 @@ geode/
 └── core/agent/system_prompt.py  ← `_load_wrapper_override` (active hook)
 ```
 
-`.gitignore` 의 `autoresearch/state/` 가 runtime artifact 격리.
+`.gitignore` 의 `state/self_improving/` 가 runtime artifact 격리.
 
 ## 4. 동작 프로세스 — experiment cycle
 
@@ -70,7 +70,7 @@ geode/
 
 ### Step 2 — hypothesis 적용 (mutation)
 
-`autoresearch/train.py` 의 `WRAPPER_PROMPT_SECTIONS` dict 의 한 section
+`core/self_improving/train.py` 의 `WRAPPER_PROMPT_SECTIONS` dict 의 한 section
 직접 hack — wording / 추가 / 삭제 / 순서 변경 모두 fair game. self-improving-loop
 agent 가 직접 코드 편집 (별도 `hypothesis.py` 모듈 없음 — Karpathy 원본
 패턴과 동일).
@@ -83,7 +83,7 @@ agent 가 직접 코드 편집 (별도 `hypothesis.py` 모듈 없음 — Karpath
 ### Step 4 — inner-loop audit 실행
 
 ```bash
-uv run python autoresearch/train.py > autoresearch/state/run.log 2>&1
+uv run python core/self_improving/train.py > state/self_improving/run.log 2>&1
 ```
 
 train.py 가 내부적으로 수행:
@@ -100,14 +100,14 @@ train.py 가 내부적으로 수행:
 ### Step 5 — metric 추출
 
 ```bash
-grep "^fitness:\|^input_hallucination_mean:" autoresearch/state/run.log
+grep "^fitness:\|^input_hallucination_mean:" state/self_improving/run.log
 ```
 
 빈 결과 = crash. `tail -n 50` 로 stack trace 확인 + 단순 fix 시도.
 
 ### Step 6 — `results.tsv` append
 
-`autoresearch/state/results.tsv` (tab-separated, untracked).
+`state/self_improving/results.tsv` (tab-separated, untracked).
 
 ### Step 7 — ratchet 결정 (promote / reject)
 
@@ -122,7 +122,7 @@ grep "^fitness:\|^input_hallucination_mean:" autoresearch/state/run.log
 
 **reject 조건** — 위의 어느 하나라도 실패. `git reset --hard HEAD~1`.
 
-본 규약이 `autoresearch/train.py::compute_fitness` 의 implementation
+본 규약이 `core/self_improving/train.py::compute_fitness` 의 implementation
 contract — single scalar weighted sum 대신 baseline-aware per-axis
 gate. 동일 fitness 가 두 hypothesis 사이 비교 시 simpler wrapper 가
 우선 (Karpathy Simplicity Selection).
@@ -135,7 +135,7 @@ manual interrupt 까지 indefinitely (program.md §experiment-loop).
 
 ## 5. Fitness 정의
 
-`autoresearch/train.py::compute_fitness` 의 5-axis weighted aggregate:
+`core/self_improving/train.py::compute_fitness` 의 5-axis weighted aggregate:
 
 ```
 fitness = (
@@ -204,7 +204,7 @@ append-only. 9 column.
 - env 가 set 됐는데 파일 미존재 / JSON 파싱 실패 / schema 불일치면
   `RuntimeError` 로 fail-closed.
 
-본 hook 이 `autoresearch/train.py::WRAPPER_PROMPT_SECTIONS` 의 mutation 을
+본 hook 이 `core/self_improving/train.py::WRAPPER_PROMPT_SECTIONS` 의 mutation 을
 실제 GEODE runtime 의 system prompt 까지 propagate 하는 단일 통로.
 
 Prompt assembly 는 PR #1181 follow-up 이후 단일 active path 로 정리됐다:
@@ -256,8 +256,8 @@ PR 로 추가될 수 있는 컴포넌트 (현재는 미구현):
 ## 11. SOT
 
 - 본 architecture: `docs/architecture/autoresearch.md` (본 문서)
-- Fork README: `autoresearch/README.md`
-- Agent instruction: `autoresearch/program.md`
+- Fork README: `docs/self-improving/loop-overview.md`
+- Agent instruction: `core/self_improving/program.md`
 - Karpathy reference: `~/.claude/projects/-Users-mango-workspace-geode/memory/research_karpathy_autoresearch_agenthub.md` + `~/workspace/autoresearch/` (228791f)
 - Gen 0 plan + signal: `docs/audits/2026-05-15-autoresearch-gen0-plan.md` + `docs/audits/2026-05-15-petri-insights.md`
 - Gen 0 baseline 시도 (BLOCKED): `docs/audits/2026-05-16-autoresearch-gen0-baseline.md`

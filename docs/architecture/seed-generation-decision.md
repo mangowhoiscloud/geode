@@ -99,6 +99,6 @@ Parent `AgenticLoop` 가 central orchestrator. `depth=1` 한계 내에서 phase 
 - AlphaEval 5-axis (parity 폐기 — ADR-002 참조) — arXiv:2508.13174
 - GEODE SubAgentManager — `core/agent/sub_agent.py:1-114`
 - Petri inner-loop — `plugins/petri_audit/` (P1-A~G manifest pattern)
-- Outer-loop SOT — `autoresearch/program.md`
+- Outer-loop SOT — `core/self_improving/program.md`
 - Petri × autoresearch closed-loop — `[[project_autoresearch_self_improving_loop]]`
 - Plan A revised 누적 회의록 — 직전 4 보고서 (Plan A vs B, 인프라 평가, UI/UX 통합, 폴더 layout)

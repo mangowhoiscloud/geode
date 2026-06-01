@@ -19,11 +19,11 @@ claim about an unimplemented operator-local layer (Codex MCP catch on PR
      issue. **No fall-through** — env override is authoritative; operator
      gets a clear no-op signal rather than silent fallback to other layers.
 
-2. **Operator-local** ``~/.geode/self-improving-loop/<file>.json`` — per-
+2. **Operator-local** ``~/.geode/autoresearch/handoff/<file>.json`` — per-
    machine override (graceful). Useful when an operator wants policies that
    don't enter the in-repo ratchet (e.g. experimenting locally).
 
-3. **In-repo** ``autoresearch/state/policies/<file>.json`` — ratchet-
+3. **In-repo** ``state/autoresearch/policies/<file>.json`` — ratchet-
    tracked baseline (graceful). Default policy site populated by the
    mutator's ``write_policy()``.
 
@@ -65,8 +65,8 @@ def resolve_sot(
         env_var: Env var name pointing to a SoT file path. Must end in
             ``_OVERRIDE`` so the matching strict flag can be derived as
             ``<prefix>_STRICT``.
-        operator_local: ``~/.geode/self-improving-loop/<file>.json`` candidate.
-        in_repo: ``autoresearch/state/policies/<file>.json`` candidate.
+        operator_local: ``~/.geode/autoresearch/handoff/<file>.json`` candidate.
+        in_repo: ``state/autoresearch/policies/<file>.json`` candidate.
 
     Returns:
         ``SoTSelection(path, strict)`` for the highest-priority layer present,

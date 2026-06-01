@@ -13,7 +13,7 @@ parent: self-improving-hub-system.md
 
 ## 1. Page purpose
 
-Renders `results.tsv` (12-col header per `RESULTS_TSV_HEADER` in `autoresearch/train.py:1284`) and `results.jsonl` (full per-dim signal). One row per generation/iteration.
+Renders `results.tsv` (12-col header per `RESULTS_TSV_HEADER` in `core/self_improving/train.py:1284`) and `results.jsonl` (full per-dim signal). One row per generation/iteration.
 
 ## 2. Data sources
 

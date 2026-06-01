@@ -156,7 +156,7 @@ is no "Mode A history" vs "Mode B history".
 
 - Karpathy autoresearch upstream:
   https://github.com/karpathy/autoresearch (228791f, MIT 2026-03)
-- `autoresearch/README.md` — driver overview + role split with Petri
+- `docs/self-improving/loop-overview.md` — driver overview + role split with Petri
 - `autoresearch/program.md` — agent baseline instruction
   (5-kind table in § 63–78)
 - `docs/plans/2026-05-21-self-improving-loop-ux.md` — Mode A vs B

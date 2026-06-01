@@ -85,8 +85,8 @@ jobs:
 
       - name: Lint and hygiene
         run: |
-          uv run ruff check core plugins tests autoresearch scripts
-          uv run ruff format --check core plugins tests autoresearch scripts
+          uv run ruff check core plugins tests scripts
+          uv run ruff format --check core plugins tests scripts
           uv run deptry .
 
       - name: Type check

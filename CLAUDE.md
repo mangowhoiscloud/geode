@@ -8,7 +8,7 @@
 
 A general-purpose autonomous execution agent built on LangGraph. Autonomously performs research, analysis, automation, and scheduling.
 
-- **Version**: 0.99.111
+- **Version**: 0.99.116
 - **Python**: >= 3.12
 - **Package Manager**: uv
 - **Entry Point**: `geode.cli:app` (Typer)
@@ -303,9 +303,14 @@ After merging to main, rebuild CLI and serve to update the runtime to the latest
 # 1) Stop geode serve
 kill $(ps aux | grep "geode serve" | grep -v grep | awk '{print $2}')
 
-# 2) Reinstall CLI as editable + sync dependencies
-uv tool install -e . --force
-uv sync
+# 2) Reinstall CLI as editable + sync dependencies.
+#    The [audit] extra (inspect_ai) is REQUIRED — the seed-generation pilot's
+#    petri_audit tool and the self-improving loop's audit subprocess both need
+#    it. Omitting it makes the pilot fail loudly ("petri_audit aborted —
+#    install the [audit] extra") instead of measuring; pre-fix it silently
+#    emitted all-zero dim_means (PR-PILOT-PETRI-AUDIT-WIRING, 2026-06-01).
+uv tool install -e ".[audit]" --force
+uv sync --extra audit
 
 # 3) Verify version + restart serve
 geode version          # Confirm version match

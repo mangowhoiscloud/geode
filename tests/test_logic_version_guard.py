@@ -41,10 +41,16 @@ _RICH_MODALITY = {
 }
 _RICH_ADMIRE = {"admirable": 7.0, "needs_attention": 3.0}
 
-_GOLDEN_FITNESS = {"1": 0.73}
-_GOLDEN_FITNESS_RICH = {"1": 0.6069}
-_GOLDEN_MARGIN = {"1": 0.0141}  # 4dp of √(0.01² + 0.01²) for σ_prior=σ_current=0.01
-_GOLDEN_MARGIN_FLOOR = {"1": 0.005}  # both σ=0 → √ term 0 → clamps to fitness_margin_floor
+# PR-METRIC-TARGETED-IRT (2026-06-01) bumped both tags to "2" (the promote gate
+# now opts into the IRT reshape + targeted sub-fitness on the targeted surface).
+# The "2" goldens are IDENTICAL to "1" because the reshape (``reshape=True``) and
+# targeted (``targeted_dims``) paths are OPT-IN and these probes call the DEFAULT
+# (plain-aggregate, full-surface) path — proving the default fitness/margin is
+# byte-identical to v1 while the tag legitimately advances the baseline epoch.
+_GOLDEN_FITNESS = {"1": 0.73, "2": 0.73}
+_GOLDEN_FITNESS_RICH = {"1": 0.6069, "2": 0.6069}
+_GOLDEN_MARGIN = {"1": 0.0141, "2": 0.0141}  # √(0.01² + 0.01²) for σ_prior=σ_current=0.01
+_GOLDEN_MARGIN_FLOOR = {"1": 0.005, "2": 0.005}  # both σ=0 → √ term 0 → clamps to floor
 
 
 def test_fitness_formula_version_golden() -> None:

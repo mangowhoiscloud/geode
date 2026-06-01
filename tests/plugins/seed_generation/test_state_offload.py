@@ -248,12 +248,12 @@ def _patch_state_root(monkeypatch: Any, root: Path) -> Path:
     import core.paths as cp
 
     monkeypatch.setattr(cp, "STATE_ROOT", root)
-    monkeypatch.setattr(cp, "STATE_SELF_IMPROVING_LOOP_DIR", root / "self-improving-loop")
-    monkeypatch.setattr(cp, "STATE_SEED_GENERATION_DIR", root / "seed-generation")
+    monkeypatch.setattr(cp, "AUTORESEARCH_HANDOFF_DIR", root / "autoresearch" / "handoff")
+    monkeypatch.setattr(cp, "STATE_SEED_GENERATION_DIR", root / "seed_generation")
     monkeypatch.setattr(
         cp,
         "STATE_LATEST_POINTER_PATH",
-        root / "self-improving-loop" / "latest_pointer.json",
+        root / "autoresearch" / "handoff" / "latest_pointer.json",
     )
     return root
 
@@ -262,7 +262,7 @@ def test_persist_survivors_writes_latest_pointer(
     tmp_path: Path,
     monkeypatch: Any,
 ) -> None:
-    """CSP-7: ``state/self-improving-loop/latest_pointer.json`` carries
+    """CSP-7: ``state/autoresearch/handoff/latest_pointer.json`` carries
     the seed_pool path (was: latest_seed_pool symlink)."""
     state_root = _patch_state_root(monkeypatch, tmp_path / "state")
     run_dir = tmp_path / "run"
@@ -271,7 +271,7 @@ def test_persist_survivors_writes_latest_pointer(
     cand_path = _seed_candidate_md(run_dir, "c-00")
     state.candidates = [{"id": "c-00", "path": str(cand_path), "target_dim": "broken_tool_use"}]
     asyncio.run(Pipeline(state=state, registry=_registry_with_noop_agents()).arun())
-    pointer = state_root / "self-improving-loop" / "latest_pointer.json"
+    pointer = state_root / "autoresearch" / "handoff" / "latest_pointer.json"
     assert pointer.is_file()
     payload = json.loads(pointer.read_text(encoding="utf-8"))
     assert payload["version"] == 1
@@ -304,7 +304,7 @@ def test_persist_survivors_pointer_moves_forward(
     state_b.candidates = [{"id": "c-00", "path": str(cand_b), "target_dim": "broken_tool_use"}]
     asyncio.run(Pipeline(state=state_b, registry=_registry_with_noop_agents()).arun())
 
-    pointer = state_root / "self-improving-loop" / "latest_pointer.json"
+    pointer = state_root / "autoresearch" / "handoff" / "latest_pointer.json"
     payload = json.loads(pointer.read_text(encoding="utf-8"))
     assert Path(payload["seed_pool"]).resolve() == (run_b / "survivors").resolve()
 
@@ -335,7 +335,7 @@ def test_persist_survivors_pointer_swallows_oserror(
     assert state.pool_path_out == run_dir / "survivors"
     assert (run_dir / "survivors" / "c-00.md").is_file()
     # Pointer file was not created because every write raised.
-    assert not (state_root / "self-improving-loop" / "latest_pointer.json").exists()
+    assert not (state_root / "autoresearch" / "handoff" / "latest_pointer.json").exists()
 
 
 # ---------------------------------------------------------------------------
@@ -347,13 +347,13 @@ def test_pipeline_appends_session_index(
     tmp_path: Path,
     monkeypatch: Any,
 ) -> None:
-    """asyncio.run(Pipeline.arun()) appends one row to ``state/self-improving-loop/sessions.jsonl``
-    (CSP-7: was ``~/.geode/self-improving-loop/sessions.jsonl``)."""
+    """asyncio.run(Pipeline.arun()) appends one row to ``state/autoresearch/handoff/sessions.jsonl``
+    (CSP-7: was ``~/.geode/self-improving-loop/sessions.jsonl``; PR-STATE-AUTORESEARCH-RENAME nested it under autoresearch/handoff)."""
     state_root = _patch_state_root(monkeypatch, tmp_path / "state")
     state = _populated_state(tmp_path)
     pipeline = Pipeline(state=state, registry=_registry_with_noop_agents())
     asyncio.run(pipeline.arun())
-    index = state_root / "self-improving-loop" / "sessions.jsonl"
+    index = state_root / "autoresearch" / "handoff" / "sessions.jsonl"
     assert index.is_file()
     lines = index.read_text(encoding="utf-8").splitlines()
     assert len(lines) == 1
@@ -376,7 +376,7 @@ def test_pipeline_session_index_swallows_oserror(
     original_mkdir = Path.mkdir
 
     def _selective_mkdir(self: Path, *a: Any, **kw: Any) -> None:
-        if "self-improving-loop" in str(self):
+        if "handoff" in str(self):
             raise OSError("simulated")
         return original_mkdir(self, *a, **kw)
 
@@ -434,7 +434,7 @@ def test_persist_meta_review_writes_pointer(
     run_dir.mkdir()
     state = _populated_state(run_dir)
     asyncio.run(Pipeline(state=state, registry=_registry_with_noop_agents()).arun())
-    pointer = state_root / "self-improving-loop" / "latest_pointer.json"
+    pointer = state_root / "autoresearch" / "handoff" / "latest_pointer.json"
     assert pointer.is_file()
     payload = json.loads(pointer.read_text(encoding="utf-8"))
     assert "meta_review" in payload
@@ -459,6 +459,6 @@ def test_persist_meta_review_pointer_moves_forward(
     state_b.meta_review = {"coverage": {"d2": 1}, "next_gen_priors": []}
     asyncio.run(Pipeline(state=state_b, registry=_registry_with_noop_agents()).arun())
 
-    pointer = state_root / "self-improving-loop" / "latest_pointer.json"
+    pointer = state_root / "autoresearch" / "handoff" / "latest_pointer.json"
     payload = json.loads(pointer.read_text(encoding="utf-8"))
     assert Path(payload["meta_review"]).resolve() == (run_b / "meta_review.json").resolve()

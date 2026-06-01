@@ -18,7 +18,10 @@ import sys
 import time
 from pathlib import Path
 
-PROBE_DIR = Path("/Users/mango/workspace/geode/.audit/probes")
+# Repo root resolved from this file's location (scripts/probes/<file>.py) so the
+# probe runs on any machine, not just the original author's checkout.
+_REPO_ROOT = Path(__file__).resolve().parents[2]
+PROBE_DIR = _REPO_ROOT / ".audit" / "probes"
 PROBE_DIR.mkdir(parents=True, exist_ok=True)
 
 # Replicate a real voter prompt shape: HANDOFF + 2 candidate bodies +
@@ -77,7 +80,7 @@ VOTE_SCHEMA = {
 
 
 async def run_probe() -> None:
-    sys.path.insert(0, "/Users/mango/workspace/geode")
+    sys.path.insert(0, str(_REPO_ROOT))
 
     from core.llm.adapters.base import AdapterCallRequest, Message
     from core.llm.adapters.codex_oauth import CodexOAuthAdapter

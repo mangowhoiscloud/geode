@@ -21,9 +21,9 @@ The landing page for the entire Self-Improving Hub. Visitor lands here from `htt
 |---|---|
 | `docs/self-improving/petri-bundle/logs/listing.json` | Petri audit table — filter `task=inspect_petri/audit` |
 | `docs/self-improving/petri-bundle/seeds/listing.json` | Seed-gen runs section (count + run list) |
-| `autoresearch/state/baseline.json` | Autoresearch baseline status (live or stale flag) |
-| `autoresearch/state/baseline_archive.jsonl` | Generation index, last promote, fitness deltas |
-| `autoresearch/state/mutations.jsonl` | Recent mutation rows |
+| `state/self_improving/baseline.json` | Autoresearch baseline status (live or stale flag) |
+| `state/self_improving/baseline_archive.jsonl` | Generation index, last promote, fitness deltas |
+| `state/self_improving/mutations.jsonl` | Recent mutation rows |
 | `autoresearch/results.tsv` (if present) | Row count |
 | `~/.geode/diagnostics/<YYYY-MM>.log` | Optional last activity timestamp (skip if absent) |
 
@@ -135,7 +135,7 @@ GEODE
 
 - Petri table 0 rows → `<tr><td colspan="6"><em>No audits published yet. Run <code>geode audit --live</code>.</em></td></tr>`
 - Seed-gen 0 rows → `<tr><td colspan="7"><em>No seed-generation runs published yet.</em></td></tr>`
-- Autoresearch `baseline.json` absent → row reads "no baseline written yet — run <code>uv run python autoresearch/train.py --promote</code>"
+- Autoresearch `baseline.json` absent → row reads "no baseline written yet — run <code>uv run python core/self_improving/train.py --promote</code>"
 
 ## 8. Error states
 

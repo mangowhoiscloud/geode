@@ -489,7 +489,7 @@ def test_rollback_sot_prompt_kind_still_uses_legacy_writer(
 
 def test_global_policy_paths_under_policies_dir() -> None:
     """All SoT paths live under the same in-repo dir
-    (``autoresearch/state/policies/``) — operators expect them
+    (``state/autoresearch/policies/``) — operators expect them
     co-located, and the in-repo location is git-tracked so ``git diff``
     shows the current mutation state (PR-RATCHET-1, 2026-05-21).
     PR-HYPERPARAM-FOUNDATION (2026-05-28) adds the hyperparam SoT path

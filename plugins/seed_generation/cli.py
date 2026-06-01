@@ -87,7 +87,7 @@ audit_seeds_app = typer.Typer(
 # ``core/self_improving/loop/cli_subprocess.py:97`` both use
 # ``capture_output=True`` / ``stdout=PIPE``), so their raw output
 # never reaches the parent's terminal anyway — it lands in the
-# per-task ``state/seed-generation/<run>/sub_agents/<task>/`` records
+# per-task ``state/seed_generation/<run>/sub_agents/<task>/`` records
 # via the PIPE. What THIS log captures is exactly what the operator
 # sees on their own terminal: the parent process's cost preview
 # banner, ToS notice, phase status echoes, and any tracebacks the
@@ -228,7 +228,7 @@ def audit_seeds_config() -> None:
     Resolved by :func:`plugins.seed_generation.picker.pick_bindings`
     after merging in user overrides from ``~/.geode/config.toml``
     ``[seed_generation.role.<role>]`` (or the legacy
-    ``~/.geode/seed-generation.toml`` fallback).
+    ``~/.geode/seed_generation.toml`` fallback).
 
     Read-only — to change a role's source, edit
     ``~/.geode/config.toml`` directly:
@@ -273,7 +273,7 @@ def audit_seeds_generate(
         help=(
             "Target Petri dim for this generation (e.g. broken_tool_use). "
             "Omit / pass 'auto' to let G3 pick the worst-regressed dim from "
-            "``autoresearch/state/baseline.json``. Required only when no "
+            "``state/autoresearch/baseline.json``. Required only when no "
             "baseline exists yet."
         ),
     ),
@@ -385,7 +385,7 @@ def audit_seeds_resume(
         ...,
         help=(
             "Run id to resume — the ``<gen_tag>-<target_dim>`` directory "
-            "under ``state/seed-generation/``. The pipeline reads the "
+            "under ``state/seed_generation/``. The pipeline reads the "
             "latest ``checkpoints/<phase>.json`` for hydration and "
             "continues from the next pending phase."
         ),
@@ -397,7 +397,7 @@ def audit_seeds_resume(
     ``audit-seeds generate`` aborted mid-pipeline (e.g.
     ``plan.decompose_async`` timeout, claude-cli network hang, OS
     crash), the per-phase checkpoints under
-    ``state/seed-generation/<run_id>/checkpoints/`` let a follow-up
+    ``state/seed_generation/<run_id>/checkpoints/`` let a follow-up
     invocation skip the already-completed phases instead of paying for
     them again. Phases without a checkpoint are re-run from the
     rehydrated state.
@@ -544,7 +544,7 @@ def _resolve_target_dim(
     operator supplied an explicit dim — auto-pick stays opt-in).
 
     When ``target_dim`` is ``None`` / ``"auto"``:
-    1. Load ``autoresearch/state/baseline.json``.
+    1. Load ``state/autoresearch/baseline.json``.
     2. Pick the worst-regressed dim via
        :func:`plugins.seed_generation.baseline_reader.pick_regression_target_dim`.
     3. On no baseline / no operational dim → print actionable error and
@@ -571,7 +571,7 @@ def _resolve_target_dim(
     if snapshot is None:
         err.write(
             "seed-generation: --target-dim required (no autoresearch baseline "
-            "found at autoresearch/state/baseline.json yet; run an audit + "
+            "found at state/autoresearch/baseline.json yet; run an audit + "
             "promote first, or pass --target-dim <dim> explicitly).\n"
         )
         return None, None
@@ -660,11 +660,11 @@ def run_audit_seeds(
     run_id = f"{gen_tag}-{resolved_dim}"
     # PR-Q (2026-05-24) — run-dir-as-anchor consolidation. The pipeline
     # transcript lives inside the run directory (not the legacy
-    # ~/.geode/self-improving-loop/<run>/transcript.jsonl) so every
+    # ~/.geode/autoresearch/handoff/<run>/transcript.jsonl) so every
     # artifact for one cycle — state.json, candidates/, survivors/,
     # elo_log.tsv, sub_agents/, transcript.jsonl — is co-located under
-    # state/seed-generation/<run_id>/ and ``tar czf run.tgz state/
-    # seed-generation/<run_id>/`` recovers the entire cycle. The
+    # state/seed_generation/<run_id>/ and ``tar czf run.tgz state/
+    # seed_generation/<run_id>/`` recovers the entire cycle. The
     # cross-cutting hook journal / RunLog / monthly usage still live
     # under ~/.geode/ because they aren't run-scoped.
     run_dir = STATE_SEED_GENERATION_DIR / run_id
@@ -835,9 +835,9 @@ def _dispatch_pipeline(
     are emitted via :func:`core.self_improving.loop.run_transcript.current_run_transcript`.
     """
     # CSP-7 (2026-05-22) — per-run artefacts moved into the repo
-    # under ``state/seed-generation/`` (env-overridable via
+    # under ``state/seed_generation/`` (env-overridable via
     # ``GEODE_STATE_ROOT``). Pre-CSP-7 base was
-    # ``~/.geode/seed-generation/`` — machine-specific, broke
+    # ``~/.geode/seed-generation/`` (pre-CSP-7) — machine-specific, broke
     # cross-host reproducibility.
     from core.paths import STATE_SEED_GENERATION_DIR
     from core.self_improving.loop.run_transcript import current_run_transcript

@@ -253,7 +253,7 @@ class PipelineState:
 
     Mutated by each phase's :meth:`BaseSeedAgent.aexecute` return
     payload. Persisted at run end to
-    ``~/.geode/seed-generation/<run_id>/state.json`` (S8 wires the
+    ``state/seed_generation/<run_id>/state.json`` (S8 wires the
     offload via ``note_save``).
     """
 
@@ -316,7 +316,7 @@ class PipelineState:
     baseline_means: dict[str, float] | None = None
     baseline_stderr: dict[str, float] | None = None
     # G3 — full BaselineSnapshot (dim_means + dim_stderr + evidence) loaded
-    # from ``autoresearch/state/baseline.json`` when the CLI flow auto-picks
+    # from ``state/autoresearch/baseline.json`` when the CLI flow auto-picks
     # or the operator explicitly opts into baseline-grounded generation. The
     # generator / critic / evolver agents read ``snapshot.evidence[target_dim]``
     # via :func:`plugins.seed_generation.baseline_reader.format_evidence_block`.
@@ -677,7 +677,7 @@ class Pipeline:
         # ``plugins.petri_audit.bundle_sync.sync_eval_to_bundle``.
         # Failures are logged but don't break the run — the bundle is a
         # publish convenience; the canonical artefacts live in
-        # ``state/seed-generation/<run_id>/`` regardless.
+        # ``state/seed_generation/<run_id>/`` regardless.
         if self.state.run_dir is not None:
             try:
                 from plugins.seed_generation.bundle_sync import sync_run_to_bundle
@@ -769,7 +769,7 @@ class Pipeline:
         )
 
     def _append_session_index(self, *, started_at: float, ended_at: float) -> None:
-        """Append one row to ``~/.geode/self-improving-loop/sessions.jsonl``.
+        """Append one row to ``state/autoresearch/handoff/sessions.jsonl``.
 
         P1a — shared cross-loop registry. ``session_id`` defaults to
         ``state.run_id`` (already unique per ``audit-seeds generate``
@@ -777,14 +777,16 @@ class Pipeline:
         in-memory ``state`` stays authoritative.
         """
         # CSP-7 (2026-05-22) — cross-run state moved into the repo
-        # (``state/self-improving-loop/`` by default, env-overridable
-        # via ``GEODE_STATE_ROOT``). Pre-CSP-7 path was
-        # ``~/.geode/self-improving-loop/`` — machine-specific, broke
+        # (``state/autoresearch/handoff/`` by default, env-overridable
+        # via ``GEODE_STATE_ROOT``). PR-STATE-AUTORESEARCH-RENAME
+        # (2026-06-01, Scheme A) nested it under the autoresearch root
+        # (was ``state/self-improving-loop/``). Pre-CSP-7 path was
+        # ``~/.geode/autoresearch/handoff/`` — machine-specific, broke
         # reproducibility when the run was cloned to a different host.
-        from core.paths import STATE_SELF_IMPROVING_LOOP_DIR
+        from core.paths import AUTORESEARCH_HANDOFF_DIR
 
-        self_improving_loop_home = STATE_SELF_IMPROVING_LOOP_DIR
-        index_path = self_improving_loop_home / "sessions.jsonl"
+        handoff_home = AUTORESEARCH_HANDOFF_DIR
+        index_path = handoff_home / "sessions.jsonl"
         payload = {
             "session_id": self.state.run_id,
             "gen_tag": self.state.gen_tag,
@@ -798,7 +800,7 @@ class Pipeline:
             "pool_path_out": (str(self.state.pool_path_out) if self.state.pool_path_out else None),
         }
         try:
-            self_improving_loop_home.mkdir(parents=True, exist_ok=True)
+            handoff_home.mkdir(parents=True, exist_ok=True)
             with index_path.open("a", encoding="utf-8") as fh:
                 fh.write(json.dumps(payload, ensure_ascii=False) + "\n")
         except OSError as exc:
@@ -941,7 +943,7 @@ class Pipeline:
         """Update the cross-run forward pointer JSON.
 
         CSP-7 (2026-05-22) — replaces the pre-CSP-7
-        ``~/.geode/self-improving-loop/latest_seed_pool`` +
+        ``~/.geode/autoresearch/handoff/latest_seed_pool`` +
         ``latest_meta_review.json`` symlink pair with a single JSON
         file at :data:`core.paths.STATE_LATEST_POINTER_PATH`. The
         readers (autoresearch ``_resolve_seed_select`` +
@@ -981,7 +983,7 @@ class Pipeline:
            ``state.json``; the standalone copy lets a downstream tool
            (or the next CLI invocation's priors reader) load just the
            meta-review without re-parsing the entire state blob.
-        2. ``~/.geode/self-improving-loop/latest_meta_review.json``
+        2. ``~/.geode/autoresearch/handoff/latest_meta_review.json``
            symlink — atomic forward pointer to the most-recent run's
            ``meta_review.json``. The next ``geode audit-seeds generate``
            reads this symlink to seed the generator / critic prompts
@@ -1015,7 +1017,7 @@ class Pipeline:
             )
             return
         # CSP-7 (2026-05-22) — pointer file update (was: symlink to
-        # ``~/.geode/self-improving-loop/latest_meta_review.json``).
+        # ``~/.geode/autoresearch/handoff/latest_meta_review.json``).
         # The pointer also carries ``seed_pool`` from the prior
         # ``_persist_survivors`` call (same run) so a single read
         # gets both signals.

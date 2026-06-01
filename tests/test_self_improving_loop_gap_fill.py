@@ -11,7 +11,7 @@ component already used:
                                                 already config-wired
                                                 via PR-δ1, this file
                                                 pins the invariant)
-  G-C  autoresearch/program.md ↔ train.py    — example log block has
+  G-C  core/self_improving/program.md ↔ train.py    — example log block has
                                                 hardcoded model ids;
                                                 we pin that they agree
                                                 with the config default
@@ -213,7 +213,7 @@ def test_train_audit_command_omits_per_role_argv_pins() -> None:
 
 
 def test_program_md_example_log_present() -> None:
-    """Smoke-pin that ``autoresearch/program.md`` retains the example
+    """Smoke-pin that ``core/self_improving/program.md`` retains the example
     log block referencing ``target_model:`` / ``judge_model:``.
 
     Single-SoT (2026-05-22, PR-CSP-12) — the legacy module constants
@@ -225,7 +225,7 @@ def test_program_md_example_log_present() -> None:
     block. The drift-pin is now structural, not value-comparing.
     """
     repo_root = Path(__file__).resolve().parent.parent
-    program_md = repo_root / "autoresearch" / "program.md"
+    program_md = repo_root / "core" / "self_improving" / "program.md"
     text = program_md.read_text(encoding="utf-8")
     assert "target_model:" in text, "program.md missing target_model: example anchor"
     assert "judge_model:" in text, "program.md missing judge_model: example anchor"

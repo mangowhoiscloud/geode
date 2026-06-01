@@ -17,7 +17,7 @@ For ONE candidate seed, run a cheap Petri audit (1 seed × 2 model × 1 paraphra
    - `seeds = [<uuid>.md]`
    - `target_models = ["claude-opus-4-7", "gpt-5.5"]` (2 model, provider-cross top tier)
    - `paraphrases = 1` (single)
-   - `dim_set = "geode_judge_subset"`
+   - `dim_set = "subset"` (the built-in key for the 22-dim `geode_judge_subset.yaml` set; passing the bare filename `"geode_judge_subset"` is NOT a valid `dim_set` and resolves to a non-existent path)
 3. Read the `.eval` archive at `~/.geode/petri/logs/<run>.eval`.
 4. Pass through `core/audit/dim_extractor.extract_dim_aggregates`.
 5. Return JSON matching the **Output JSON (structured)** schema below.

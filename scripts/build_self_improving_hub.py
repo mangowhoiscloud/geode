@@ -5,12 +5,12 @@ Reads live data at build time and renders the static landing page:
 
 - `docs/self-improving/petri-bundle/logs/listing.json`     -> Petri audit table (top-10)
 - `docs/self-improving/petri-bundle/seeds/listing.json`    -> Seed-generation table
-- `autoresearch/state/baseline.json`        -> Autoresearch baseline row
+- `state/autoresearch/baseline.json`      -> Autoresearch baseline row
    (falls back to most recent `baseline.json.outdated-*` with a stale flag
    per design contract §10 of the master DESIGN.md)
-- `autoresearch/state/mutations.jsonl`      -> row count for autoresearch row
-- `autoresearch/results.tsv`                -> row count for autoresearch row
-- `autoresearch/state/policies/`            -> file count
+- `state/autoresearch/mutations.jsonl`    -> row count for autoresearch row
+- `state/autoresearch/results.tsv`        -> row count for autoresearch row
+- `state/autoresearch/policies/`          -> file count
 - `pyproject.toml`                          -> GEODE version stamp
 
 Page contract:   docs/design/self-improving-hub.md
@@ -19,8 +19,13 @@ Master tokens:   docs/design/self-improving-hub-system.md
 CLI:
     python scripts/build_self_improving_hub.py
         [--bundle-root docs/self-improving/petri-bundle]
-        [--autoresearch-root autoresearch]
+        [--state-dir state/autoresearch]
         [--out docs/self-improving/index.html]
+
+The served section dir + URLs stay `docs/self-improving/autoresearch/` +
+`/geode/self-improving/autoresearch/...` (the loop's lineage name) so deep
+links + the Inspect-View `#/logs/<file>` routes do not break. Only the
+READ path moved (PR-STATE-SELF-IMPROVING-RENAME 2026-06-01).
 
 NOTE: `--bundle-root` defaults to `docs/self-improving/petri-bundle/` (post-Phase 3)
 relocation the bundle moves to `docs/self-improving/petri-bundle/`; update the
@@ -48,7 +53,14 @@ LOG = logging.getLogger("build_self_improving_hub")
 REPO_ROOT = Path(__file__).resolve().parent.parent
 TEMPLATE_PATH = REPO_ROOT / "docs" / "self-improving" / "index.html.template"
 DEFAULT_BUNDLE_ROOT = REPO_ROOT / "docs" / "self-improving" / "petri-bundle"
-DEFAULT_AUTORESEARCH_ROOT = REPO_ROOT / "autoresearch"
+# PR-STATE-AUTORESEARCH-RENAME (2026-06-01, Scheme A) — the self-improving
+# state DATA dir is ``state/autoresearch`` (mirrors
+# ``core.paths.AUTORESEARCH_STATE_DIR``; this builder is intentionally
+# stdlib-only so it cannot import core, hence the literal). Renamed from
+# ``state/self_improving`` of #1955 to kill the underscore/hyphen twin. The
+# SERVED output dir + URLs below keep the hyphenated lineage name to preserve
+# deep links.
+DEFAULT_STATE_DIR = REPO_ROOT / "state" / "autoresearch"
 DEFAULT_OUT = REPO_ROOT / "docs" / "self-improving" / "index.html"
 DEFAULT_SEEDGEN_OUT_DIR = REPO_ROOT / "docs" / "self-improving" / "seed-generation"
 SEEDGEN_INDEX_TEMPLATE = (
@@ -385,8 +397,14 @@ class AutoresearchState:
     policies_mtime: str
 
 
-def load_autoresearch(autoresearch_root: Path) -> AutoresearchState:
-    state_dir = autoresearch_root / "state"
+def load_autoresearch(state_dir: Path) -> AutoresearchState:
+    """Load the self-improving loop's state surface from ``state_dir``.
+
+    ``state_dir`` is the canonical ``state/autoresearch`` directory
+    (``--state-dir``; PR-STATE-SELF-IMPROVING-RENAME 2026-06-01 — formerly
+    ``<autoresearch-root>/state``). ``results.tsv`` lives INSIDE ``state_dir``
+    (next to ``mutations.jsonl``), matching the train.py writer.
+    """
     live_baseline = state_dir / "baseline.json"
     baseline_path: Path | None = None
     baseline_stale = False
@@ -421,7 +439,7 @@ def load_autoresearch(autoresearch_root: Path) -> AutoresearchState:
             mutations_count = sum(1 for line in fh if line.strip())
     mutations_mtime = fmt_mtime(mutations_path)
 
-    results_path = autoresearch_root / "results.tsv"
+    results_path = state_dir / "results.tsv"
     results_count = 0
     if results_path.exists():
         with results_path.open("r", encoding="utf-8") as fh:
@@ -648,7 +666,7 @@ def render_stale_banner(state: AutoresearchState) -> str:
         '    <div class="warning" role="status">'
         "Autoresearch baseline is stale, rendering from "
         f"<code>{html_escape(state.baseline_path.name if state.baseline_path else '')}</code>. "
-        "No live <code>baseline.json</code> present in <code>autoresearch/state/</code>."
+        "No live <code>baseline.json</code> present in <code>state/autoresearch/</code>."
         "</div>"
     )
 
@@ -3618,8 +3636,8 @@ def _load_campaign_gen0_baseline(repo_root: Path) -> dict[str, Any] | None:
     """Read the campaign gen-0 K-mean snapshot baseline.json.
 
     Located at ``<repo>/state/campaign/gen-0-snapshot/baseline.json`` (a sibling of
-    the autoresearch root — NOT ``autoresearch/state/baseline.json``, which is the
-    top-level promoted SoT). Carries ``raw.dim_means`` (24 dims, Petri 1-10 scale,
+    the self-improving state dir — NOT ``state/autoresearch/baseline.json``, which
+    is the top-level promoted SoT). Carries ``raw.dim_means`` (24 dims, Petri 1-10 scale,
     LOWER-is-better) + ``raw.fitness_stderr`` — the per-dim floor the campaign's
     per-cycle held-out is compared against. Returns ``None`` (honest awaiting state)
     when the snapshot is absent or malformed.
@@ -3973,7 +3991,7 @@ def _render_warning_banner(baseline_path: Path | None, stale: bool) -> str:
         '    <div class="warning-banner" role="status">'
         "Autoresearch baseline read from <code>"
         f"{html_escape(baseline_path.name)}</code>, no live "
-        "<code>baseline.json</code> present in <code>autoresearch/state/</code>. "
+        "<code>baseline.json</code> present in <code>state/autoresearch/</code>. "
         "Run <code>uv run python -m core.self_improving.train --promote</code> to refresh."
         "</div>"
     )
@@ -4468,7 +4486,7 @@ def _is_pre_e1_mixed_scale(attr: dict[str, Any] | None) -> bool:
 
     E1 (2026-05-30) reconciled per-mutation ``fitness_before`` / ``fitness_delta``
     to the canonical 0-1 ``compute_fitness`` scale. The 8 rows already committed to
-    ``autoresearch/state/mutations.jsonl`` still carry the OLD dim-aggregate scale
+    ``state/autoresearch/mutations.jsonl`` still carry the OLD dim-aggregate scale
     (``fitness_before`` was the 1-10 ``dim_means`` mean, so it sits ≈ 1.73-2.29 and
     ``fitness_delta`` ≈ -1.1 to -1.76 — both meaningless against a 0-1 row). The
     git-tracked ledger is intentionally NOT rewritten (a one-shot historical
@@ -4776,7 +4794,14 @@ def _mutation_outcome(attr: dict[str, Any] | None) -> tuple[str, str]:
 
 
 def _render_mutation_payload(entry: dict[str, Any]) -> str:
-    """``<details>`` drill-down for one mutation — the full apply + attribution payload."""
+    """``<details>`` drill-down for one mutation — the full apply + attribution payload.
+
+    Emitted as its own full-width ``<tr><td colspan>`` row (see
+    :func:`_render_mutations_rows`), NOT inside the narrow outcome cell — so the
+    expanded ``status-grid`` + before/after ``pre`` blocks break out to the full
+    table width instead of being squeezed right. The wrapping ``div.mutation-payload``
+    is the full-width container the CSS targets.
+    """
     apply_row = entry["apply"] or {}
     attr_row = entry["attr"] or {}
     rows: list[str] = [f"<dt>mutation_id</dt><dd><code>{html_escape(entry['id'])}</code></dd>"]
@@ -4806,7 +4831,10 @@ def _render_mutation_payload(entry: dict[str, Any]) -> str:
             '<p class="muted">new</p>'
             f'<pre class="msg">{html_escape(str(new or "—"))}</pre>'
         )
-    return f'<details><summary class="muted">payload</summary>{grid}{diff}</details>'
+    return (
+        '<details><summary class="muted">payload</summary>'
+        f'<div class="mutation-payload">{grid}{diff}</div></details>'
+    )
 
 
 def _render_mutations_rows(joined: list[dict[str, Any]]) -> str:
@@ -4868,8 +4896,16 @@ def _render_mutations_rows(joined: list[dict[str, Any]]) -> str:
         )
 
         label, outcome_cls = _mutation_outcome(attr_row)
-        outcome_cell = (
-            f'<span class="{outcome_cls}">{label}</span> {_render_mutation_payload(entry)}'
+        outcome_cell = f'<span class="{outcome_cls}">{label}</span>'
+
+        # The expandable payload lives in its OWN full-width row (colspan), not in
+        # the narrow outcome cell — otherwise the opened <details> is squeezed into
+        # the last column and renders right-skewed. Same pattern as the policies /
+        # results JSON drill-downs (see _render_policies_rows).
+        payload_row = (
+            '\n        <tr class="mutation-payload-row">\n'
+            f'          <td colspan="{_MUTATIONS_COLSPAN}">{_render_mutation_payload(entry)}</td>\n'
+            "        </tr>"
         )
 
         out.append(
@@ -4881,7 +4917,7 @@ def _render_mutations_rows(joined: list[dict[str, Any]]) -> str:
             f"          <td>{fit_cell}</td>\n"
             f'          <td class="num">{attr_cell}</td>\n'
             f"          <td>{outcome_cell}</td>\n"
-            "        </tr>"
+            "        </tr>" + payload_row
         )
     return "\n".join(out)
 
@@ -6537,7 +6573,16 @@ def main(argv: list[str] | None = None) -> int:
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
     parser.add_argument("--bundle-root", type=Path, default=DEFAULT_BUNDLE_ROOT)
-    parser.add_argument("--autoresearch-root", type=Path, default=DEFAULT_AUTORESEARCH_ROOT)
+    parser.add_argument(
+        "--state-dir",
+        type=Path,
+        default=None,
+        help="self-improving state dir (default: state/autoresearch)",
+    )
+    # Back-compat (PR-STATE-SELF-IMPROVING-RENAME 2026-06-01): older invocations
+    # + the e2e fixtures pass the dir CONTAINING ``state/``. When given, the
+    # state dir resolves to ``<value>/state``. Prefer ``--state-dir``.
+    parser.add_argument("--autoresearch-root", type=Path, default=None)
     parser.add_argument("--out", type=Path, default=DEFAULT_OUT)
     parser.add_argument("--template", type=Path, default=TEMPLATE_PATH)
     parser.add_argument("--pyproject", type=Path, default=PYPROJECT)
@@ -6595,15 +6640,26 @@ def main(argv: list[str] | None = None) -> int:
     )
     args = parser.parse_args(argv)
 
+    # Resolve the canonical state dir from the two accepted spellings.
+    # ``--state-dir`` wins; ``--autoresearch-root`` is the legacy
+    # "dir containing state/" spelling → ``<root>/state``; default is
+    # the production ``state/autoresearch``.
+    if args.state_dir is not None:
+        state_dir = args.state_dir
+    elif args.autoresearch_root is not None:
+        state_dir = args.autoresearch_root / "state"
+    else:
+        state_dir = DEFAULT_STATE_DIR
+
     LOG.info("bundle-root=%s", args.bundle_root)
-    LOG.info("autoresearch-root=%s", args.autoresearch_root)
+    LOG.info("state-dir=%s", state_dir)
 
     version = read_pyproject_version(args.pyproject)
     LOG.info("geode version=%s", version)
 
     petri_rows = load_petri(args.bundle_root)
     seedgen_rows = load_seedgen(args.bundle_root)
-    autoresearch = load_autoresearch(args.autoresearch_root)
+    autoresearch = load_autoresearch(state_dir)
 
     LOG.info(
         "loaded petri=%d seedgen=%d mutations=%d results=%d policies=%d",
@@ -6733,7 +6789,7 @@ def main(argv: list[str] | None = None) -> int:
     # from the existing `autoresearch` AutoresearchState dataclass     #
     # already loaded above for the hub landing.                        #
     # ----------------------------------------------------------------- #
-    ar_state_dir = args.autoresearch_root / "state"
+    ar_state_dir = state_dir
     baseline_data, baseline_stale, baseline_source = _load_baseline(ar_state_dir)
     archive_rows = _load_baseline_archive(ar_state_dir)
     mutations_rows = _load_mutations(ar_state_dir)
@@ -6741,10 +6797,12 @@ def main(argv: list[str] | None = None) -> int:
     results_jsonl_rows = _load_results_jsonl(ar_state_dir)
     policies_entries = _list_policies(ar_state_dir / "policies")
     # PR-HUB-CAMPAIGN-VIZ — the live 3-arm campaign ledgers. The campaign-progress.log
-    # sits in the autoresearch state dir; the gen-0 snapshot + the eval-log MANIFEST
-    # live under the repo root (a sibling of the autoresearch root).
+    # sits in the self-improving state dir; the gen-0 snapshot + the eval-log MANIFEST
+    # live under the repo root. With the canonical layout the state dir is
+    # ``<repo>/state/autoresearch`` so the repo root is two levels up; with the
+    # legacy ``--autoresearch-root <X>`` spelling it is ``<X>/state`` → also two up.
     campaign_progress = _load_campaign_progress(ar_state_dir)
-    campaign_repo_root = args.autoresearch_root.parent
+    campaign_repo_root = state_dir.parent.parent
     campaign_gen0_baseline = _load_campaign_gen0_baseline(campaign_repo_root)
     audit_manifest = _load_audit_manifest(campaign_repo_root)
 

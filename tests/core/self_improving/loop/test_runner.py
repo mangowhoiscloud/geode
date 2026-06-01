@@ -314,7 +314,7 @@ def test_runner_run_once_end_to_end(tmp_path: Path, monkeypatch: pytest.MonkeyPa
     )
     # Prevent the sessions.jsonl side-effect from touching real ~/.geode.
     monkeypatch.setattr(
-        "core.self_improving.loop.runner.GLOBAL_SELF_IMPROVING_LOOP_DIR",
+        "core.self_improving.loop.runner.GLOBAL_AUTORESEARCH_HANDOFF_DIR",
         tmp_path / "sil_home",
     )
     mutation = runner.run_once()
@@ -410,7 +410,7 @@ def test_runner_uses_baseline_evidence_in_user_prompt(
         return json.dumps({"target_section": "role", "new_value": "v", "rationale": "r"})
 
     monkeypatch.setattr(
-        "core.self_improving.loop.runner.GLOBAL_SELF_IMPROVING_LOOP_DIR",
+        "core.self_improving.loop.runner.GLOBAL_AUTORESEARCH_HANDOFF_DIR",
         tmp_path / "sil_home",
     )
     SelfImprovingLoopRunner(
@@ -510,12 +510,12 @@ def test_system_prompt_falls_back_when_program_md_missing(
 
 
 def test_load_program_md_reads_real_file_in_repo() -> None:
-    """The real ``autoresearch/program.md`` file is reachable from the runner."""
+    """The real ``core/self_improving/program.md`` file is reachable from the runner."""
     from core.self_improving.loop.runner import _load_program_md
 
     program_md = _load_program_md()
     assert program_md is not None, (
-        "autoresearch/program.md was not reachable from the runner. "
+        "core/self_improving/program.md was not reachable from the runner. "
         "Check the path resolution in _load_program_md if the runner "
         "module moved."
     )
@@ -545,7 +545,7 @@ def test_run_once_uses_program_md_in_system_prompt(
         "_load_program_md",
         lambda: "## CUSTOM PROGRAM MD\n\nThe runner must surface this.",
     )
-    monkeypatch.setattr(runner, "GLOBAL_SELF_IMPROVING_LOOP_DIR", tmp_path / "sil_home")
+    monkeypatch.setattr(runner, "GLOBAL_AUTORESEARCH_HANDOFF_DIR", tmp_path / "sil_home")
 
     captured: dict[str, str] = {}
 
@@ -595,7 +595,7 @@ def test_runner_rolls_back_sot_when_audit_log_fails(
         raise OSError("simulated audit log write failure")
 
     monkeypatch.setattr(runner, "append_audit_log", _explode_audit_log)
-    monkeypatch.setattr(runner, "GLOBAL_SELF_IMPROVING_LOOP_DIR", tmp_path / "sil_home")
+    monkeypatch.setattr(runner, "GLOBAL_AUTORESEARCH_HANDOFF_DIR", tmp_path / "sil_home")
 
     instance = runner.SelfImprovingLoopRunner(
         llm_call=lambda _s, _u: json.dumps(
@@ -634,7 +634,7 @@ def test_runner_success_path_unchanged_by_rollback_logic(
         "plugins.seed_generation.baseline_reader.load_latest_meta_review",
         lambda: None,
     )
-    monkeypatch.setattr(runner, "GLOBAL_SELF_IMPROVING_LOOP_DIR", tmp_path / "sil_home")
+    monkeypatch.setattr(runner, "GLOBAL_AUTORESEARCH_HANDOFF_DIR", tmp_path / "sil_home")
 
     instance = runner.SelfImprovingLoopRunner(
         llm_call=lambda _s, _u: json.dumps(

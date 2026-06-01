@@ -48,12 +48,13 @@
         <li><a href="/geode/docs/petri/seeds">Seed runs (docs) &#x2197;</a></li>
       </ul>
 
-      <div class="nav-section">Autoresearch <span class="count">live</span></div>
+      <div class="nav-section">Autoresearch <span class="count">absent</span></div>
       <ul class="nav-list">
         <li><a href="/geode/self-improving/autoresearch/" class="active" aria-current="page">Overview</a></li>
         <li><a href="/geode/self-improving/autoresearch/baseline/">Baseline</a></li>
         <li><a href="/geode/self-improving/autoresearch/mutations/">Mutations</a></li>
         <li><a href="/geode/self-improving/autoresearch/results/">Results</a></li>
+        <li><a href="/geode/self-improving/autoresearch/evidence/">Evidence</a></li>
         <li><a href="/geode/self-improving/autoresearch/policies/">Policies</a></li>
       </ul>
 
@@ -79,13 +80,11 @@
 
     <h2 class="section"><span>Status &middot; current baseline</span></h2>
     <dl class="status-grid">
-      <dt>current baseline</dt><dd><code>—</code></dd>
-      <dt>fitness</dt><dd><span class="num">—</span></dd>
-      <dt>last promote</dt><dd><span class="muted">—</span></dd>
-      <dt>mutations.jsonl</dt><dd>12 rows &middot; <span class='muted'>2026-05-30 09:11</span></dd>
+      <dt>current baseline</dt><dd><em>no baseline yet</em></dd>
+      <dt>next action</dt><dd><code>uv run python -m core.self_improving.train --promote</code></dd>
+      <dt>mutations.jsonl</dt><dd>73 rows &middot; <span class='muted'>2026-06-01 11:43</span></dd>
       <dt>results.tsv</dt><dd>0 rows &middot; <span class='muted'>—</span></dd>
-      <dt>policies/</dt><dd>3 files &middot; <span class='muted'>2026-05-30 09:11</span></dd>
-      <dt>source</dt><dd><code>baseline.json</code></dd>
+      <dt>policies/</dt><dd>1 files &middot; <span class='muted'>2026-06-01 11:43</span></dd>
     </dl>
 
     <h2 class="section"><span>Generation timeline &middot; 1 row</span></h2>
@@ -107,8 +106,8 @@
     <h2 class="section"><span>Baseline registry &middot; grouped by epoch</span></h2>
     <p class="page-sub">Each promote appends a <code>kind="baseline"</code> row to <code>baseline_archive.jsonl</code>, partitioned into content-addressed <strong>epochs</strong> (be-NNN) keyed by a hash of the production+measurement spec (margin rule, fitness/margin logic version, the four roles' model+source, rubric, dim set, bench, seed-pool identity). Baselines from different epochs were produced under different logic and are <strong>not comparable</strong> — they are never merged into one table.</p>
     <div class="namespace-block">
-      <h3>pre-epoch (backfill pending) <span class="count">1 baseline</span></h3>
-      <p class="namespace-meta">Predates the content-addressed epoch schema — not yet partitioned. Re-backfilled with epoch fields once the canonical fitness is settled.</p>
+      <h3>be-001 <span class="count">1 baseline</span> <code class="muted">2c2eadac0a62</code></h3>
+      <p class="namespace-meta">margin <code>dim-stderr</code> &middot; policy <code>legacy</code> &middot; dim_set <code>subset</code> &middot; rubric <code>v3-22dim-PR0</code> &middot; bench off &middot; pool <code>sel-eed795e9a857</code><br>auditor <code>claude-opus-4-8</code>&middot;PAYG &middot; target <code>gpt-5.5</code>&middot;Subscription &middot; judge <code>claude-opus-4-8</code>&middot;PAYG &middot; mutator <code>gpt-5.5</code>&middot;Subscription</p>
       <table class="records">
         <thead><tr><th scope="col">baseline-id</th><th scope="col">ts</th><th scope="col">fitness</th><th scope="col">fitness_stderr</th><th scope="col">promoted by</th></tr></thead>
         <tbody>
@@ -123,7 +122,7 @@
       </table>
     </div>
 
-    <h2 class="section"><span>Sub-views &middot; 4 autoresearch sub-pages</span></h2>
+    <h2 class="section"><span>Sub-views &middot; 5 autoresearch sub-pages</span></h2>
     <table class="records">
       <thead>
         <tr>
@@ -137,13 +136,13 @@
         <tr>
           <td class="id"><a href="/geode/self-improving/autoresearch/baseline/">Baseline</a> <span class="bucket autoresearch">autoresearch</span></td>
           <td>1 (current promoted) &middot; <span class='muted'>archive: 1 rows</span></td>
-          <td class="muted">2026-05-30 09:11</td>
+          <td class="muted">—</td>
           <td class="id"><a href="/geode/self-improving/autoresearch/baseline/">open &rarr;</a></td>
         </tr>
         <tr>
           <td class="id"><a href="/geode/self-improving/autoresearch/mutations/">Mutations</a> <span class="bucket autoresearch">autoresearch</span></td>
-          <td>12 rows</td>
-          <td class="muted">2026-05-30 09:11</td>
+          <td>73 rows</td>
+          <td class="muted">2026-06-01 11:43</td>
           <td class="id"><a href="/geode/self-improving/autoresearch/mutations/">open &rarr;</a></td>
         </tr>
         <tr>
@@ -153,9 +152,15 @@
           <td class="id"><a href="/geode/self-improving/autoresearch/results/">open &rarr;</a></td>
         </tr>
         <tr>
+          <td class="id"><a href="/geode/self-improving/autoresearch/evidence/">Evidence</a> <span class="bucket autoresearch">autoresearch</span></td>
+          <td>32 held-out points</td>
+          <td class="muted">2026-06-01 11:43</td>
+          <td class="id"><a href="/geode/self-improving/autoresearch/evidence/">open &rarr;</a></td>
+        </tr>
+        <tr>
           <td class="id"><a href="/geode/self-improving/autoresearch/policies/">Policies</a> <span class="bucket autoresearch">autoresearch</span></td>
-          <td>3 files</td>
-          <td class="muted">2026-05-30 09:11</td>
+          <td>1 files</td>
+          <td class="muted">2026-06-01 11:43</td>
           <td class="id"><a href="/geode/self-improving/autoresearch/policies/">open &rarr;</a></td>
         </tr>
       </tbody>
@@ -172,7 +177,7 @@
         <span class="chip geode">GEODE</span>self-target wrapper.
       </p>
       <p class="version-stamp">
-        Rendered against GEODE <code>v0.99.92</code> &middot; DESIGN.md schema 1 &middot; built 2026-05-30 09:11.
+        Rendered against GEODE <code>v0.99.115</code> &middot; DESIGN.md schema 1 &middot; built 2026-06-01 11:47.
         Dim subset: 22 (geode_5axes). Pipeline phases: 8. Baseline schema: v2 (PR-2).
       </p>
     </div>

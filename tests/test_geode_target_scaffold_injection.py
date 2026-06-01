@@ -3,7 +3,7 @@
 PR-AUDIT-SCAFFOLD-WIRE (2026-05-31) — the Petri audit target is GEODE itself
 (``GeodeModelAPI`` → ``_default_geode_runner`` → ``AgenticLoop``). The loop's
 fitness signal is only causal if the MUTATED scaffold
-(``autoresearch/state/policies/wrapper-sections.json``, surfaced to the audit
+(``state/autoresearch/policies/wrapper-sections.json``, surfaced to the audit
 subprocess via the ``GEODE_WRAPPER_OVERRIDE`` env hook) is the BASE of the
 target's internal system prompt, with the auditor's seed scenario layered on
 top as ``system_suffix``.

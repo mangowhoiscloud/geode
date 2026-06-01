@@ -256,7 +256,7 @@ def test_path_constants_present() -> None:
     assert GLOBAL_FEW_SHOT_POOL_PATH.name == "few-shot-pool.jsonl"
     assert OPERATOR_LOCAL_FEW_SHOT_POOL_PATH.name == "few-shot-pool.jsonl"
     assert "policies" in str(GLOBAL_FEW_SHOT_POOL_PATH)
-    assert "self-improving-loop" in str(OPERATOR_LOCAL_FEW_SHOT_POOL_PATH)
+    assert "autoresearch/handoff" in str(OPERATOR_LOCAL_FEW_SHOT_POOL_PATH)
 
 
 def test_train_py_sets_few_shot_pool_env_pair() -> None:

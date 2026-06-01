@@ -75,10 +75,31 @@ def _build_audit_handlers() -> dict[str, Any]:
         except Exception as exc:
             return {"status": "error", "error": str(exc), "tool": "petri_audit"}
 
+        # PR-PILOT-PETRI-AUDIT-WIRING (2026-06-01) — fail LOUDLY when a LIVE
+        # audit aborted before running (e.g. ``inspect`` CLI / inspect_ai not
+        # installed — the [audit] extra is missing). The runner records that
+        # as ``aborted=True`` with a note but a blank ``returncode``; surfacing
+        # it as ``status="ok"`` let the seed_pilot sub-agent mistake a
+        # never-run audit for a finished one and emit all-zero ``dim_means``.
+        # dry-run never aborts, so the cost-preview path is unaffected.
+        audit = report.to_dict()
+        if not dry_run and report.aborted:
+            return {
+                "status": "error",
+                "tool": "petri_audit",
+                "error": (
+                    "petri_audit aborted before running — "
+                    + "; ".join(report.notes or ["unknown reason"])
+                    + ". If `inspect` is missing, install the [audit] extra: "
+                    '`uv tool install -e ".[audit]"` (or `uv sync --extra audit`).'
+                ),
+                "audit": audit,
+            }
+
         return {
             "status": "ok",
             "tool": "petri_audit",
-            "audit": report.to_dict(),
+            "audit": audit,
         }
 
     def handle_eval_inspect_viz(**kwargs: Any) -> dict[str, Any]:
