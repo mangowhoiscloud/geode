@@ -46,7 +46,7 @@ class MutatorContextView(BaseModel):
     agent_contract. 5 kind 각각 disk file 또는 fallback."""
 
     program_md: str = ""
-    """autoresearch/program.md content (raw). mutator 가 frontier
+    """core/self_improving/program.md content (raw). mutator 가 frontier
     convention reference 로 사용."""
 
     meta_review_snapshot: Any = None

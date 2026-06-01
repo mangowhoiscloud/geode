@@ -32,8 +32,8 @@ prompt 를 로드하지만 ``decomposition.json`` 과는 미연결 (PR-AUDIT-5SL
    - With ``GEODE_DECOMPOSITION_POLICY_STRICT=1`` (audit subprocess): strict.
    - Without strict flag (operator daily): graceful (no fall-through).
 
-2. ``~/.geode/self-improving-loop/decomposition.json`` — operator-local, graceful.
-3. ``autoresearch/state/policies/decomposition.json`` — in-repo, graceful.
+2. ``~/.geode/autoresearch/handoff/decomposition.json`` — operator-local, graceful.
+3. ``state/autoresearch/policies/decomposition.json`` — in-repo, graceful.
 4. ``None`` — no-op.
 """
 

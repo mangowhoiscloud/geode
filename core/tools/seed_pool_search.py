@@ -6,7 +6,7 @@ that hypotheses must respect" is the curated **Petri audit seed pool**
 itself — both the bundled tier directories
 (``plugins/petri_audit/seeds``, ``plugins/petri_audit/seeds_gen1``) and
 the runtime survivor pool symlinked at
-``~/.geode/self-improving-loop/latest_seed_pool``.
+``~/.geode/autoresearch/handoff/latest_seed_pool``.
 
 Why this exists
 ===============
@@ -110,7 +110,7 @@ def _default_seed_roots() -> tuple[Path, ...]:
 
     1. ``plugins/petri_audit/seeds`` — bundled tier (cwd-relative).
     2. ``plugins/petri_audit/seeds_gen1`` — bundled gen-1 batch.
-    3. ``~/.geode/self-improving-loop/latest_seed_pool`` — symlink to the
+    3. ``~/.geode/autoresearch/handoff/latest_seed_pool`` — symlink to the
        most recent ``seed-generation`` run's survivors (G1 closed-loop
        wiring). Empty / missing → silently skipped.
 
@@ -119,13 +119,13 @@ def _default_seed_roots() -> tuple[Path, ...]:
     exist on the current machine are dropped — the search returns an
     empty list rather than raising.
     """
-    from core.paths import GLOBAL_SELF_IMPROVING_LOOP_DIR
+    from core.paths import GLOBAL_AUTORESEARCH_HANDOFF_DIR
 
     cwd = Path.cwd()
     candidates = [
         cwd / "plugins" / "petri_audit" / "seeds",
         cwd / "plugins" / "petri_audit" / "seeds_gen1",
-        GLOBAL_SELF_IMPROVING_LOOP_DIR / "latest_seed_pool",
+        GLOBAL_AUTORESEARCH_HANDOFF_DIR / "latest_seed_pool",
     ]
     return tuple(p for p in candidates if p.is_dir())
 
@@ -148,7 +148,7 @@ class SeedPoolSearchTool:
             "Returns the top-N seeds with path + first 400 chars of body. "
             "Use this BEFORE proposing a new seed so you can ground the "
             "proposal in what already exists (and avoid duplication). "
-            "Sources: bundled seeds tiers + ~/.geode/self-improving-loop/"
+            "Sources: bundled seeds tiers + ~/.geode/autoresearch/handoff/"
             "latest_seed_pool/."
         )
 
@@ -180,7 +180,7 @@ class SeedPoolSearchTool:
                     "note": (
                         "no seed-pool roots resolved on this machine — "
                         "checked plugins/petri_audit/seeds, seeds_gen1, "
-                        "and ~/.geode/self-improving-loop/latest_seed_pool."
+                        "and ~/.geode/autoresearch/handoff/latest_seed_pool."
                     ),
                     "source": "geode_seed_pool",
                 }

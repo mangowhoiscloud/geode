@@ -16,10 +16,10 @@ export default function Page() {
           <>
             <h2>위치 + 진입점</h2>
             <ul>
-              <li><code>autoresearch/train.py</code>. 메인 루프</li>
-              <li><code>autoresearch/prepare.py</code>. 데이터/모델 준비</li>
-              <li><code>autoresearch/program.md</code>. 매 generation 마다 LLM 이 읽는 program 문서</li>
-              <li><code>autoresearch/state/</code>. 누적 결과 (results.tsv, failure_log)</li>
+              <li><code>core/self_improving/train.py</code>. 메인 루프</li>
+              <li><code>core/self_improving/prepare.py</code>. 데이터/모델 준비</li>
+              <li><code>core/self_improving/program.md</code>. 매 generation 마다 LLM 이 읽는 program 문서</li>
+              <li><code>state/self_improving/</code>. 누적 결과 (results.tsv, failure_log)</li>
             </ul>
 
             <h2>Closed-loop 안정성 게이트 (G1-G6)</h2>
@@ -34,28 +34,28 @@ G5: (예약)
 G6: 9-col tsv. eval_id, gen_id, seed_id, axis × 5 의 schema 강제`}</pre>
 
             <h2>실행</h2>
-            <pre>{`# generation 0 baseline 실행
-cd autoresearch && python train.py --gen 0
+            <pre>{`# 단일 audit 실험
+uv run python -m core.self_improving.train
 
 # state 확인
-cat autoresearch/state/results.tsv | tail -10`}</pre>
+cat state/self_improving/results.tsv | tail -10`}</pre>
 
             <h2>제약</h2>
             <p>
               real-mode generation 0 baseline 은 Anthropic credit 잔액 의존이며, 현재 BLOCKED. mock-mode 는 항상 동작.
             </p>
 
-            <p className="text-white/40 text-sm"><em>참조</em>: `autoresearch/program.md`, `autoresearch/state/`, `project_autoresearch_outer_loop` memory.</p>
+            <p className="text-white/40 text-sm"><em>참조</em>: `core/self_improving/program.md`, `state/self_improving/`, `project_autoresearch_outer_loop` memory.</p>
           </>
         }
         en={
           <>
             <h2>Where it lives</h2>
             <ul>
-              <li><code>autoresearch/train.py</code>. main loop</li>
-              <li><code>autoresearch/prepare.py</code>. data + model setup</li>
-              <li><code>autoresearch/program.md</code>. the program doc the LLM rereads each generation</li>
-              <li><code>autoresearch/state/</code>. cumulative state (results.tsv, failure_log)</li>
+              <li><code>core/self_improving/train.py</code>. main loop</li>
+              <li><code>core/self_improving/prepare.py</code>. data + model setup</li>
+              <li><code>core/self_improving/program.md</code>. the program doc the LLM rereads each generation</li>
+              <li><code>state/self_improving/</code>. cumulative state (results.tsv, failure_log)</li>
             </ul>
 
             <h2>Closed-loop stability gates (G1-G6)</h2>
@@ -70,18 +70,18 @@ G5: reserved
 G6: 9-col tsv schema. eval_id, gen_id, seed_id, axis x 5`}</pre>
 
             <h2>How to run</h2>
-            <pre>{`# generation-0 baseline
-cd autoresearch && python train.py --gen 0
+            <pre>{`# single audit experiment
+uv run python -m core.self_improving.train
 
 # inspect state
-cat autoresearch/state/results.tsv | tail -10`}</pre>
+cat state/self_improving/results.tsv | tail -10`}</pre>
 
             <h2>Caveats</h2>
             <p>
               The real-mode gen-0 baseline depends on Anthropic credit balance, currently BLOCKED. Mock mode always works.
             </p>
 
-            <p className="text-white/40 text-sm"><em>References</em>: `autoresearch/program.md`, `autoresearch/state/`, `project_autoresearch_outer_loop` memory.</p>
+            <p className="text-white/40 text-sm"><em>References</em>: `core/self_improving/program.md`, `state/self_improving/`, `project_autoresearch_outer_loop` memory.</p>
           </>
         }
       />

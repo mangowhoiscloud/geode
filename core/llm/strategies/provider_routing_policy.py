@@ -27,8 +27,8 @@ chain 그대로 사용). Unknown plan_id 는 정책에 있어도 `resolve_routin
 1. ``GEODE_PROVIDER_ROUTING_OVERRIDE`` env var — explicit override.
    - With ``GEODE_PROVIDER_ROUTING_STRICT=1`` (audit subprocess): strict.
    - Without strict flag (operator daily): graceful (no fall-through).
-2. ``~/.geode/self-improving-loop/provider-routing.json`` — operator-local, graceful.
-3. ``autoresearch/state/policies/provider-routing.json`` — in-repo, graceful.
+2. ``~/.geode/autoresearch/handoff/provider-routing.json`` — operator-local, graceful.
+3. ``state/autoresearch/policies/provider-routing.json`` — in-repo, graceful.
 4. ``None`` — no-op.
 
 **Frontier**: OpenRouter's explicit per-model plan ordering — same model,

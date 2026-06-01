@@ -204,7 +204,7 @@ def test_path_constants_present() -> None:
     assert GLOBAL_SKILL_CATALOG_PATH.name == "skill-catalog.json"
     assert OPERATOR_LOCAL_SKILL_CATALOG_PATH.name == "skill-catalog.json"
     assert "policies" in str(GLOBAL_SKILL_CATALOG_PATH)
-    assert "self-improving-loop" in str(OPERATOR_LOCAL_SKILL_CATALOG_PATH)
+    assert "autoresearch/handoff" in str(OPERATOR_LOCAL_SKILL_CATALOG_PATH)
 
 
 # Env wiring in train.py ------------------------------------------------------

@@ -26,8 +26,8 @@ Field 정의:
 1. ``GEODE_FEW_SHOT_POOL_OVERRIDE`` env var — explicit override.
    - With ``GEODE_FEW_SHOT_POOL_STRICT=1`` (audit subprocess): strict.
    - Without strict flag: graceful (no fall-through).
-2. ``~/.geode/self-improving-loop/few-shot-pool.jsonl`` — operator-local.
-3. ``autoresearch/state/policies/few-shot-pool.jsonl`` — in-repo.
+2. ``~/.geode/autoresearch/handoff/few-shot-pool.jsonl`` — operator-local.
+3. ``state/autoresearch/policies/few-shot-pool.jsonl`` — in-repo.
 4. ``None`` — no-op.
 
 **Frontier**: Anthropic prompt caching docs — 동일 prefix 의 multi-turn

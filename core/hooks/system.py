@@ -249,7 +249,7 @@ class HookEvent(Enum):
     SELF_IMPROVING_AUTO_TRIGGER_RUNNER_ERROR = "self_improving_auto_trigger_runner_error"
     SELF_IMPROVING_AUTO_TRIGGER_PARSE_ERROR = "self_improving_auto_trigger_parse_error"
     # PR-MAX-GEN (2026-05-26) — emitted when the auto-trigger hits the
-    # ``max_generation`` cap in ``~/.geode/self-improving-loop/auto_trigger_history.jsonl``.
+    # ``max_generation`` cap in ``~/.geode/autoresearch/handoff/auto_trigger_history.jsonl``.
     # Same ``{trigger_id, ts, detail}`` payload schema; ``detail`` carries
     # ``"current/max"`` (e.g. ``"100/100"``).
     SELF_IMPROVING_AUTO_TRIGGER_MAX_GENERATION_REACHED = (
@@ -289,7 +289,7 @@ class HookEvent(Enum):
     # (b) observability central SoT sprint PR-5 wildcard firehose +
     # PR-10 autoresearch indexer — the wildcard listener captures
     # every event into ``events`` SQLite, the autoresearch_indexer
-    # cross-references against ``autoresearch/state/mutations.jsonl``
+    # cross-references against ``state/autoresearch/mutations.jsonl``
     # by ``mutation_id``. Reserving the names + values up-front avoids
     # value drift once both sprints start emitting concurrently.
     #

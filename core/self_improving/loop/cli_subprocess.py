@@ -167,7 +167,7 @@ def invoke_codex_cli(*, system_prompt: str, user_prompt: str) -> str:
     Codex CLI doesn't have a ``--system`` flag equivalent.
     ``--skip-git-repo-check`` lets the mutator run outside a workspace
     tree (the self-improving-loop dispatches from
-    ``~/.geode/self-improving-loop/`` paths, not the repo root).
+    ``~/.geode/autoresearch/handoff/`` paths, not the repo root).
 
     Concurrency gate (PR-LQ-Phase3, 2026-05-22): the call is wrapped
     in :func:`core.orchestration.codex_cli_lane.acquire_codex_cli_lane`

@@ -12,7 +12,7 @@ runtime, factoring in:
    provider.
 4. The OAuth probe (``is_claude_oauth_available`` /
    ``is_codex_oauth_available``) when the source is ``auto``.
-5. The user override at ``~/.geode/seed-generation.toml`` (per-role
+5. The user override at ``~/.geode/seed_generation.toml`` (per-role
    ``source = "<concrete>"`` lines), which wins over the auto-resolve.
 
 The 4 paths spanned by the picker are:
@@ -204,7 +204,7 @@ def load_user_overrides(
        source = "subscription"
        model  = "claude-opus-4-7"
 
-    The legacy ``~/.geode/seed-generation.toml`` schema (per-role top-level
+    The legacy ``~/.geode/seed_generation.toml`` schema (per-role top-level
     table) is still read when ``[seed_generation.role.*]`` is absent from
     ``config.toml``. The first time the legacy fallback is used, a one-time
     warning is logged with the migration command. Removal target: v1.0.0.
@@ -224,7 +224,7 @@ def load_user_overrides(
     if canonical_overrides:
         return canonical_overrides
 
-    # 2. Legacy fallback: ~/.geode/seed-generation.toml
+    # 2. Legacy fallback: ~/.geode/seed_generation.toml
     legacy_overrides = _load_overrides_from_file(GLOBAL_SEED_PIPELINE_TOML)
     if legacy_overrides:
         global _LEGACY_OVERRIDE_WARNED
@@ -241,7 +241,7 @@ def load_user_overrides(
 
 
 def _load_overrides_from_file(target: Path) -> dict[str, dict[str, str]]:
-    """Parse a flat ``[<role>]`` override TOML — legacy seed-generation.toml shape."""
+    """Parse a flat ``[<role>]`` override TOML — legacy seed_generation.toml shape."""
     if not target.is_file():
         return {}
     try:
@@ -684,7 +684,7 @@ def print_tos_notice(
         "before running unattended.\n"
         "  - Anthropic: https://www.anthropic.com/legal/aup\n"
         "  - OpenAI:    https://openai.com/policies/usage-policies\n"
-        "Switch a role to PAYG via ~/.geode/seed-generation.toml\n"
+        "Switch a role to PAYG via ~/.geode/seed_generation.toml\n"
         "  e.g.  [ranker]\n"
         '        source = "api_key"\n'
         "──────────────────────────────────────────────────────────────────\n"
@@ -734,7 +734,7 @@ def validate_runtime_diversity(
             f"judge panel runtime path diversity violated — resolved voters "
             f"collapsed onto {sorted(path_set)} ({len(path_set)} of required "
             f"{required_voter_path_count}). Check user overrides at "
-            f"~/.geode/seed-generation.toml."
+            f"~/.geode/seed_generation.toml."
         )
 
 

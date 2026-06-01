@@ -477,18 +477,18 @@ def test_resolve_seed_select_treats_whitespace_as_unset(
 
 
 def _stage_pointer(monkeypatch: pytest.MonkeyPatch, tmp_path: Path, *, seed_pool: Path) -> None:
-    """Stamp ``state/self-improving-loop/latest_pointer.json`` for the test."""
+    """Stamp ``state/autoresearch/handoff/latest_pointer.json`` for the test."""
     import json
 
     import core.paths as cp
 
     state_root = tmp_path / "state"
     monkeypatch.setattr(cp, "STATE_ROOT", state_root)
-    monkeypatch.setattr(cp, "STATE_SELF_IMPROVING_LOOP_DIR", state_root / "self-improving-loop")
+    monkeypatch.setattr(cp, "AUTORESEARCH_HANDOFF_DIR", state_root / "autoresearch" / "handoff")
     monkeypatch.setattr(
         cp,
         "STATE_LATEST_POINTER_PATH",
-        state_root / "self-improving-loop" / "latest_pointer.json",
+        state_root / "autoresearch" / "handoff" / "latest_pointer.json",
     )
     cp.STATE_LATEST_POINTER_PATH.parent.mkdir(parents=True, exist_ok=True)
     cp.STATE_LATEST_POINTER_PATH.write_text(
@@ -1881,11 +1881,11 @@ def test_append_session_index_writes_jsonl_row(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """One row per call, newline-terminated, parseable as JSON."""
-    monkeypatch.setattr(auto_train, "SELF_IMPROVING_LOOP_HOME", tmp_path / "self-improving-loop")
+    monkeypatch.setattr(auto_train, "SELF_IMPROVING_LOOP_HOME", tmp_path / "autoresearch" / "handoff")
     monkeypatch.setattr(
         auto_train,
         "SESSIONS_INDEX_PATH",
-        tmp_path / "self-improving-loop" / "sessions.jsonl",
+        tmp_path / "autoresearch" / "handoff" / "sessions.jsonl",
     )
     _append_session_index(
         session_id="s-1",
@@ -1895,7 +1895,7 @@ def test_append_session_index_writes_jsonl_row(
         ended_at=1300.0,
         extra={"commit": "abc", "fitness": 0.5},
     )
-    path = tmp_path / "self-improving-loop" / "sessions.jsonl"
+    path = tmp_path / "autoresearch" / "handoff" / "sessions.jsonl"
     assert path.is_file()
     lines = path.read_text(encoding="utf-8").splitlines()
     assert len(lines) == 1
@@ -1914,11 +1914,11 @@ def test_append_session_index_appends_not_overwrites(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """Multiple calls append, preserving prior rows."""
-    monkeypatch.setattr(auto_train, "SELF_IMPROVING_LOOP_HOME", tmp_path / "self-improving-loop")
+    monkeypatch.setattr(auto_train, "SELF_IMPROVING_LOOP_HOME", tmp_path / "autoresearch" / "handoff")
     monkeypatch.setattr(
         auto_train,
         "SESSIONS_INDEX_PATH",
-        tmp_path / "self-improving-loop" / "sessions.jsonl",
+        tmp_path / "autoresearch" / "handoff" / "sessions.jsonl",
     )
     for i in range(3):
         _append_session_index(
@@ -1929,7 +1929,7 @@ def test_append_session_index_appends_not_overwrites(
             ended_at=float(i + 1),
             extra={},
         )
-    lines = (tmp_path / "self-improving-loop" / "sessions.jsonl").read_text().splitlines()
+    lines = (tmp_path / "autoresearch" / "handoff" / "sessions.jsonl").read_text().splitlines()
     assert len(lines) == 3
     ids = [json.loads(line)["session_id"] for line in lines]
     assert ids == ["s-0", "s-1", "s-2"]
@@ -1977,7 +1977,7 @@ _SESSIONS_JSONL_CANONICAL_FIELDS = frozenset(
 
 
 def _journal_path(tmp_path: Path, session_id: str) -> Path:
-    return tmp_path / "self-improving-loop" / session_id / "transcript.jsonl"
+    return tmp_path / "autoresearch" / "handoff" / session_id / "transcript.jsonl"
 
 
 def _redirect_journal(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -1985,8 +1985,8 @@ def _redirect_journal(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
 
     monkeypatch.setattr(
         core.paths,
-        "GLOBAL_SELF_IMPROVING_LOOP_DIR",
-        tmp_path / "self-improving-loop",
+        "GLOBAL_AUTORESEARCH_HANDOFF_DIR",
+        tmp_path / "autoresearch" / "handoff",
     )
 
 
@@ -2042,8 +2042,8 @@ def test_emit_journal_noops_on_empty_session_id(
     _redirect_journal(tmp_path, monkeypatch)
     _emit_journal("", "gen-x", "audit_started", payload={"dry_run": True})
     # No journal file should be created.
-    assert not (tmp_path / "self-improving-loop").exists() or not any(
-        (tmp_path / "self-improving-loop").rglob("transcript.jsonl")
+    assert not (tmp_path / "autoresearch" / "handoff").exists() or not any(
+        (tmp_path / "autoresearch" / "handoff").rglob("transcript.jsonl")
     )
 
 
@@ -2054,8 +2054,8 @@ def test_emit_journal_noops_on_empty_gen_tag(
     """No gen_tag → no emission. Same guard as the session_id case."""
     _redirect_journal(tmp_path, monkeypatch)
     _emit_journal("s-x", "", "audit_started", payload={"dry_run": True})
-    assert not (tmp_path / "self-improving-loop").exists() or not any(
-        (tmp_path / "self-improving-loop").rglob("transcript.jsonl")
+    assert not (tmp_path / "autoresearch" / "handoff").exists() or not any(
+        (tmp_path / "autoresearch" / "handoff").rglob("transcript.jsonl")
     )
 
 
@@ -2086,11 +2086,11 @@ def _drive_main_dry_run(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> tupl
     import core.paths
     import core.self_improving.train as auto_train
 
-    sip_home = tmp_path / "self-improving-loop"
-    monkeypatch.setattr(core.paths, "GLOBAL_SELF_IMPROVING_LOOP_DIR", sip_home)
+    sip_home = tmp_path / "autoresearch" / "handoff"
+    monkeypatch.setattr(core.paths, "GLOBAL_AUTORESEARCH_HANDOFF_DIR", sip_home)
     monkeypatch.setattr(auto_train, "SELF_IMPROVING_LOOP_HOME", sip_home)
     monkeypatch.setattr(auto_train, "SESSIONS_INDEX_PATH", sip_home / "sessions.jsonl")
-    # Redirect autoresearch/state writes so they don't pollute the repo.
+    # Redirect state/autoresearch writes so they don't pollute the repo.
     state_dir = tmp_path / "state"
     monkeypatch.setattr(auto_train, "STATE_DIR", state_dir)
     monkeypatch.setattr(auto_train, "RUN_LOG", state_dir / "run.log")
@@ -2356,3 +2356,65 @@ def test_write_wrapper_prompt_sections_rejects_non_string(
     with pytest.raises(ValueError, match="non-string"):
         auto_train.write_wrapper_prompt_sections({"role": 42})  # type: ignore[dict-item]
     assert not sot_path.exists()
+
+
+# ---------------------------------------------------------------------------
+# PR-STATE-SELF-IMPROVING-RENAME (2026-06-01) — results writer
+# ---------------------------------------------------------------------------
+#
+# ``format_results_{tsv,jsonl}_row`` output used to be printed only; the hub's
+# results section stayed empty. ``_append_results_row`` now persists both files
+# under ``state/autoresearch/`` (next to mutations.jsonl). Pin: it CREATES the
+# files (header on the first .tsv write) and APPENDS thereafter.
+
+
+def test_append_results_row_creates_files_with_header(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """First write creates both files; the .tsv gets the header line."""
+    monkeypatch.setattr(auto_train, "BASELINE_PATH", tmp_path / "baseline.json")
+    auto_train._append_results_row("s1\tg1\tHEAD\t0.5", '{"session_id": "s1"}')
+
+    tsv_path, jsonl_path = auto_train._results_paths()
+    assert tsv_path == tmp_path / "results.tsv"
+    assert jsonl_path == tmp_path / "results.jsonl"
+    assert tsv_path.is_file()
+    assert jsonl_path.is_file()
+
+    tsv_lines = tsv_path.read_text(encoding="utf-8").splitlines()
+    # Header (12 cols, matching RESULTS_TSV_HEADER) + one data row.
+    assert tsv_lines[0] == "\t".join(auto_train.RESULTS_TSV_HEADER)
+    assert tsv_lines[1] == "s1\tg1\tHEAD\t0.5"
+    assert json.loads(jsonl_path.read_text(encoding="utf-8").strip()) == {"session_id": "s1"}
+
+
+def test_append_results_row_appends_without_duplicate_header(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Subsequent writes append; the header is written exactly once."""
+    monkeypatch.setattr(auto_train, "BASELINE_PATH", tmp_path / "baseline.json")
+    auto_train._append_results_row("s1\tg1\tHEAD\t0.5", '{"session_id": "s1"}')
+    auto_train._append_results_row("s2\tg2\tHEAD\t0.6", '{"session_id": "s2"}')
+
+    tsv_path, jsonl_path = auto_train._results_paths()
+    tsv_lines = tsv_path.read_text(encoding="utf-8").splitlines()
+    # 1 header + 2 data rows, header NOT repeated.
+    assert len(tsv_lines) == 3
+    assert tsv_lines.count("\t".join(auto_train.RESULTS_TSV_HEADER)) == 1
+    assert tsv_lines[1] == "s1\tg1\tHEAD\t0.5"
+    assert tsv_lines[2] == "s2\tg2\tHEAD\t0.6"
+
+    jsonl_lines = jsonl_path.read_text(encoding="utf-8").splitlines()
+    assert len(jsonl_lines) == 2
+    assert [json.loads(ln)["session_id"] for ln in jsonl_lines] == ["s1", "s2"]
+
+
+def test_results_paths_follow_baseline_path_monkeypatch(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The results files are siblings of BASELINE_PATH (test-redirectable)."""
+    state_dir = tmp_path / "state" / "autoresearch"
+    monkeypatch.setattr(auto_train, "BASELINE_PATH", state_dir / "baseline.json")
+    tsv_path, jsonl_path = auto_train._results_paths()
+    assert tsv_path == state_dir / "results.tsv"
+    assert jsonl_path == state_dir / "results.jsonl"

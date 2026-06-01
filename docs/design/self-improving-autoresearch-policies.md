@@ -13,7 +13,7 @@ parent: self-improving-hub-system.md
 
 ## 1. Page purpose
 
-Renders the 14 policy SoT files under `autoresearch/state/policies/`. Each policy is a JSON file that the self-improving loop mutates. This page is the read-side reference: what the live policies *are*, what was last modified.
+Renders the 14 policy SoT files under `state/self_improving/policies/`. Each policy is a JSON file that the self-improving loop mutates. This page is the read-side reference: what the live policies *are*, what was last modified.
 
 ## 2. Data sources
 

@@ -12,7 +12,7 @@ out of sync over successive generations:
    ``elo_ratings`` / ``pilot_scores`` dicts).
 2. ``survivors.json`` — a metadata view ``{id, path, elo_rating, pilot}``
    whose ``path`` was historically written as an ABSOLUTE local path into
-   the gitignored ``state/seed-generation/`` scratch tree — broken on Pages.
+   the gitignored ``state/seed_generation/`` scratch tree — broken on Pages.
 3. ``survivors/`` — a directory of survivor ``<id>.md`` body copies that
    went stale relative to ``state.json["survivors"]`` (extra files, empty
    dir, or copies of bodies no longer in the survivor set).

@@ -2259,7 +2259,7 @@ def test_pr1_tournament_schema_complete() -> None:
 #
 # E1 (PR-MARGIN-FITNESS-SCALE) reconciled per-mutation fitness_before /
 # fitness_delta to the 0-1 compute_fitness scale, but the 8 rows already in
-# autoresearch/state/mutations.jsonl carry the OLD dim-aggregate scale
+# state/autoresearch/mutations.jsonl carry the OLD dim-aggregate scale
 # (fitness_before ≈ 1.73-2.29, delta ≈ -1.7). The ledger is intentionally not
 # rewritten, so the hub must drop those rows from the 0-1 mean-Δ aggregate and
 # tag them per-row. These tests pin that display-side heuristic.

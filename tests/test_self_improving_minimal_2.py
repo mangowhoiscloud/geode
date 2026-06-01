@@ -15,7 +15,7 @@ Pins:
 - B5 — MUTATION_AUDIT_LOG_PATH lives in core.paths; runner re-exports.
 - B8 — _FALLBACK_SYSTEM_PROMPT and program.md must share key section
   markers so a drift between the two paths surfaces here.
-- C5 — autoresearch/program.md mentions all 5 target_kinds in the
+- C5 — core/self_improving/program.md mentions all 5 target_kinds in the
   agent contract.
 """
 
@@ -268,7 +268,9 @@ def test_mutation_audit_log_path_canonical_in_core_paths() -> None:
     assert hasattr(paths, "MUTATION_AUDIT_LOG_PATH")
     assert paths.MUTATION_AUDIT_LOG_PATH.name == "mutations.jsonl"
     parts = paths.MUTATION_AUDIT_LOG_PATH.parts
-    assert parts[-2:] == ("state", "mutations.jsonl")
+    # PR-STATE-SELF-IMPROVING-RENAME (2026-06-01) — state moved from
+    # autoresearch/state (#1955) → state/autoresearch → state/autoresearch (Scheme A).
+    assert parts[-3:] == ("state", "autoresearch", "mutations.jsonl")
 
 
 def test_runner_reexports_mutation_audit_log_path() -> None:
@@ -287,7 +289,10 @@ def test_runner_reexports_mutation_audit_log_path() -> None:
     # canonical core.paths location.
     canonical = paths.MUTATION_AUDIT_LOG_PATH
     assert canonical.name == "mutations.jsonl"
-    assert canonical.parts[-2] == "state"
+    # PR-STATE-AUTORESEARCH-RENAME (2026-06-01, Scheme A) — parent dir is
+    # ``autoresearch`` (under ``state/``); renamed from ``self_improving``
+    # of #1955 to kill the underscore/hyphen twin.
+    assert canonical.parts[-2] == "autoresearch"
     # The runner export resolves to the same path. ``is`` would also
     # work in a fresh process; we use value equality so the test
     # tolerates other tests' monkeypatches that didn't reset.
@@ -310,7 +315,7 @@ def test_fallback_prompt_shares_setup_anchor_with_program_md() -> None:
     from core.self_improving.loop import runner
 
     repo_root = Path(__file__).resolve().parent.parent
-    program_md = (repo_root / "autoresearch" / "program.md").read_text(encoding="utf-8")
+    program_md = (repo_root / "core" / "self_improving" / "program.md").read_text(encoding="utf-8")
     # Both paths describe the same setup workflow; pick a stable
     # anchor from program.md that the fallback should also mention.
     # If either path drops "Setup" as a section concept the test
@@ -330,14 +335,14 @@ def test_fallback_prompt_shares_setup_anchor_with_program_md() -> None:
 
 
 def test_program_md_mentions_all_5_target_kinds() -> None:
-    """``autoresearch/program.md`` is the Mode A agent's baseline
+    """``core/self_improving/program.md`` is the Mode A agent's baseline
     instruction. The doc must mention all 5 mutation kinds so a
     Karpathy-idiom agent (external Claude/Codex session) knows it can
     edit tool_policy / decomposition / retrieval / reflection in
     addition to the legacy wrapper-prompt sections.
     """
     repo_root = Path(__file__).resolve().parent.parent
-    program_md = (repo_root / "autoresearch" / "program.md").read_text(encoding="utf-8")
+    program_md = (repo_root / "core" / "self_improving" / "program.md").read_text(encoding="utf-8")
     for kind in ("prompt", "tool_policy", "decomposition", "retrieval", "reflection"):
         assert f"`{kind}`" in program_md, (
             f"program.md must mention target_kind {kind!r} in the "

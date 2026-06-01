@@ -1,6 +1,6 @@
 """PR-L9 (2026-05-26) — invariant: ``audit_logs/`` dead-dir resurrection guard.
 
-`autoresearch/state/audit_logs/` had a writer-less ``mkdir(parents=True,
+`state/autoresearch/audit_logs/` had a writer-less ``mkdir(parents=True,
 exist_ok=True)`` at ``train.py:run_audit`` for an unclear historical
 reason. grep showed no caller actually wrote anything inside, so the
 constant + mkdir were removed (PR-L9). This invariant pins the cleanup
@@ -39,7 +39,7 @@ def test_train_py_does_not_reference_audit_logs_subdir() -> None:
     source = inspect.getsource(auto_train)
     for needle in ('"audit_logs"', "'audit_logs'", "audit_logs/"):
         assert needle not in source, (
-            f"Reference to autoresearch/state/audit_logs/ ({needle!r}) found "
+            f"Reference to state/autoresearch/audit_logs/ ({needle!r}) found "
             "in train.py. If this is intentional, add a writer that actually "
             "emits files into the directory + a reader that consumes them, "
             "and update this invariant accordingly."

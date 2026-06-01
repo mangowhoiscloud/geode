@@ -188,7 +188,7 @@ def test_path_constants_present() -> None:
     assert GLOBAL_PROVIDER_ROUTING_PATH.name == "provider-routing.json"
     assert OPERATOR_LOCAL_PROVIDER_ROUTING_PATH.name == "provider-routing.json"
     assert "policies" in str(GLOBAL_PROVIDER_ROUTING_PATH)
-    assert "self-improving-loop" in str(OPERATOR_LOCAL_PROVIDER_ROUTING_PATH)
+    assert "autoresearch/handoff" in str(OPERATOR_LOCAL_PROVIDER_ROUTING_PATH)
 
 
 # Env wiring in train.py ------------------------------------------------------

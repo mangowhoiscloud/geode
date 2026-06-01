@@ -73,7 +73,7 @@ def _load_wrapper_override() -> str | None:
        When set, the file MUST exist and parse; schema / load failures
        are fatal so real-mode autoresearch cannot silently spend
        quota on the default wrapper.
-    2. ``~/.geode/self-improving-loop/wrapper-sections.json`` — daily-run
+    2. ``~/.geode/autoresearch/handoff/wrapper-sections.json`` — daily-run
        SoT written by the G5b self-improving-loop runner. When the env
        var is unset and this file exists, daily ``geode`` invocations
        automatically pick up the evolved wrapper without any manual

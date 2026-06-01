@@ -124,7 +124,7 @@ def test_on_retry_emits_journal_event(monkeypatch: Any) -> None:
     from core.self_improving.loop.run_transcript import RunTranscript, run_transcript_scope
 
     # Redirect journal writes into a tmp dir without touching real
-    # ~/.geode/self-improving-loop/.
+    # ~/.geode/autoresearch/handoff/.
     tmp_root = Path("/tmp") / "p1a-journal-test"  # noqa: S108 - test scope only
     # NOTE: tmp_path fixture is unavailable in this function signature
     # (avoid renumbering the existing tests' imports). Use mkdtemp instead.
@@ -132,7 +132,7 @@ def test_on_retry_emits_journal_event(monkeypatch: Any) -> None:
     import tempfile
 
     real_tmp = Path(tempfile.mkdtemp(prefix="p1a-journal-"))
-    monkeypatch.setattr(core.paths, "GLOBAL_SELF_IMPROVING_LOOP_DIR", real_tmp)
+    monkeypatch.setattr(core.paths, "GLOBAL_AUTORESEARCH_HANDOFF_DIR", real_tmp)
     try:
         journal = RunTranscript(
             session_id="s-retry",
@@ -181,7 +181,7 @@ def test_on_retry_overloaded_emits_warn_level(monkeypatch: Any) -> None:
     from core.self_improving.loop.run_transcript import RunTranscript, run_transcript_scope
 
     real_tmp = Path(tempfile.mkdtemp(prefix="p1a-overloaded-"))
-    monkeypatch.setattr(core.paths, "GLOBAL_SELF_IMPROVING_LOOP_DIR", real_tmp)
+    monkeypatch.setattr(core.paths, "GLOBAL_AUTORESEARCH_HANDOFF_DIR", real_tmp)
     try:
         journal = RunTranscript(
             session_id="s-529",

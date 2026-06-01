@@ -35,8 +35,8 @@ dedicated fitness lever.
 1. ``GEODE_CACHE_POLICY_OVERRIDE`` env var — explicit override.
    - With ``GEODE_CACHE_POLICY_STRICT=1`` (audit subprocess): strict.
    - Without strict flag (operator daily): graceful (no fall-through).
-2. ``~/.geode/self-improving-loop/cache-policy.json`` — operator-local, graceful.
-3. ``autoresearch/state/policies/cache-policy.json`` — in-repo, graceful.
+2. ``~/.geode/autoresearch/handoff/cache-policy.json`` — operator-local, graceful.
+3. ``state/autoresearch/policies/cache-policy.json`` — in-repo, graceful.
 4. ``None`` — no-op.
 
 **Frontier**: Anthropic prompt caching docs — ``cache_control`` count is

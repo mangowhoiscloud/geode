@@ -27,8 +27,8 @@ schema → graceful drop (forward-compat).
 1. ``GEODE_HEURISTICS_OVERRIDE`` env var — explicit override.
    - With ``GEODE_HEURISTICS_STRICT=1`` (audit subprocess): strict.
    - Without strict flag (operator daily): graceful (no fall-through).
-2. ``~/.geode/self-improving-loop/heuristics.json`` — operator-local, graceful.
-3. ``autoresearch/state/policies/heuristics.json`` — in-repo, graceful.
+2. ``~/.geode/autoresearch/handoff/heuristics.json`` — operator-local, graceful.
+3. ``state/autoresearch/policies/heuristics.json`` — in-repo, graceful.
 4. ``None`` — no-op.
 
 **Frontier**: Promptbreeder (Fernando et al., 2023) — self-referential

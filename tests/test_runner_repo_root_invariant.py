@@ -12,9 +12,8 @@ the ``core`` package and the subprocess exits with a ``ModuleNotFoundError``
 before any audit work happens.
 
 Latent bug history: PR-G5b (2026-05-20) moved the audit log from
-``<repo>/state/mutations.jsonl`` to
-``<repo>/autoresearch/state/mutations.jsonl``. The ``parents[1]``
-arithmetic at the two call sites was not updated and the bug
+``<repo>/state/mutations.jsonl`` to ``<repo>/autoresearch/state/mutations.jsonl``.
+The ``parents[1]`` arithmetic at the two call sites was not updated and the bug
 slept because (a) tests mocked the subprocess and (b) live runs
 went through ``geode audit-seeds generate`` / ``train`` directly
 rather than the inner-loop runner. This test fails on a regression
@@ -22,8 +21,11 @@ by asserting the resolved repo root actually contains
 ``core/self_improving/train.py`` (the audit module's source file).
 PR-SELF-IMPROVING-UMBRELLA (2026-05-31) moved the audit runner from
 ``autoresearch/train.py`` to ``core/self_improving/train.py`` and the
-spawn from a relative path to ``-m core.self_improving.train`` — the
-repo-root invariant is unchanged because ``python -m`` still resolves
+spawn from a relative path to ``-m core.self_improving.train``.
+PR-STATE-SELF-IMPROVING-RENAME (2026-06-01) moved the audit log again to
+``<repo>/state/autoresearch/mutations.jsonl`` — the repo-root invariant is
+STILL ``parents[2]`` (mutations.jsonl → self_improving → state → repo) because
+the depth below repo root is unchanged (two dirs); ``python -m`` still resolves
 the package against the ``cwd``.
 """
 
@@ -46,7 +48,7 @@ def test_mutation_audit_log_lives_two_levels_below_repo_root(
     """``parents[2]`` of the audit log path is the repo root.
 
     Pin: ``MUTATION_AUDIT_LOG_PATH`` =
-    ``<repo>/autoresearch/state/mutations.jsonl`` → ``parents[2]``
+    ``<repo>/state/autoresearch/mutations.jsonl`` → ``parents[2]``
     is the repo root containing ``core/self_improving/train.py``.
     """
     repo_root = audit_log_path.resolve().parents[2]
@@ -59,12 +61,12 @@ def test_mutation_audit_log_lives_two_levels_below_repo_root(
 def test_parents_one_is_not_repo_root(
     audit_log_path: Path,
 ) -> None:
-    """``parents[1]`` points at ``autoresearch/`` not the repo root.
+    """``parents[1]`` points at ``state/`` not the repo root.
 
     Direct negative pin: if some future refactor flips back to
-    ``parents[1]``, the ``cwd`` becomes ``<repo>/autoresearch`` and the
+    ``parents[1]``, the ``cwd`` becomes ``<repo>/state`` and the
     ``-m core.self_improving.train`` spawn cannot find the ``core`` package
-    (which lives at the repo root, NOT under ``autoresearch/``). This test
+    (which lives at the repo root, NOT under ``state/``). This test
     asserts that ``parents[1]`` does NOT contain ``core/self_improving/train.py``
     so the wrong cwd cannot silently pass.
     """
@@ -83,7 +85,7 @@ def test_runner_apply_proposal_uses_correct_parents_offset() -> None:
     Source-level pin: greps the runner module so a regression to
     ``parents[1]`` on either call site fails before any subprocess
     spawn. Catches the off-by-one bug introduced after PR-G5b
-    moved the audit log under ``autoresearch/state/``.
+    moved the audit log under ``state/autoresearch/``.
     """
     from core.self_improving.loop import runner
 

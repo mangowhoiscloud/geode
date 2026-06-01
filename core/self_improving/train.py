@@ -285,9 +285,9 @@ def _resolve_seed_select() -> str:
 
     Precedence (Codex CLI pattern, CSP-7 4-tier):
     1. ``AUTORESEARCH_SEED_SELECT`` env var (per-run override).
-    2. ``state/self-improving-loop/latest_pointer.json`` — CSP-7
+    2. ``state/autoresearch/handoff/latest_pointer.json`` — CSP-7
        closed-loop fallback (was: pre-CSP-7
-       ``~/.geode/self-improving-loop/latest_seed_pool`` symlink).
+       ``~/.geode/autoresearch/handoff/latest_seed_pool`` symlink).
        Lets autoresearch auto-pick the freshest survivor pool without
        a manual env export. Skipped when the pointer file is missing
        (e.g. clean clone with no prior seed-generation run) or has no
@@ -784,7 +784,7 @@ def load_wrapper_prompt_sections() -> dict[str, str]:
 
     Resolution order:
 
-    1. ``~/.geode/self-improving-loop/wrapper-sections.json`` — the
+    1. ``~/.geode/autoresearch/handoff/wrapper-sections.json`` — the
        cross-process SoT the G5b runner writes after promoting a
        wrapper-prompt mutation. This is the file that ties the
        autoresearch loop, the daily ``geode`` invocation, and the
@@ -855,12 +855,20 @@ def write_wrapper_prompt_sections(sections: dict[str, str]) -> None:
 # Paths
 # ---------------------------------------------------------------------------
 
-# ``core/self_improving/train.py`` → ``parents[2]`` = repo root. The state
-# DATA dir stays at ``<repo>/autoresearch/state`` (unchanged across the
-# PR-SELF-IMPROVING-UMBRELLA code relocation) — the running campaign +
-# gitignore guards depend on this literal.
+# ``core/self_improving/train.py`` → ``parents[2]`` = repo root (still
+# needed as the audit subprocess ``cwd``). The state DATA dir is the
+# single canonical ``core.paths.AUTORESEARCH_STATE_DIR``
+# (``state/autoresearch`` under ``STATE_ROOT``, env-overridable via
+# ``GEODE_STATE_ROOT``) — PR-STATE-AUTORESEARCH-RENAME (2026-06-01, Scheme A)
+# renamed it from ``state/self_improving`` (#1955) to kill the
+# underscore/hyphen twin with ``self-improving-loop/``. The graceful
+# fallback below mirrors the same path so a degraded import (``core``
+# not installed) does not re-introduce the old location.
 REPO_ROOT = Path(__file__).resolve().parents[2]
-STATE_DIR = REPO_ROOT / "autoresearch" / "state"
+try:
+    from core.paths import AUTORESEARCH_STATE_DIR as STATE_DIR
+except ImportError:
+    STATE_DIR = REPO_ROOT / "state" / "autoresearch"
 RUN_LOG = STATE_DIR / "run.log"
 
 # G5a — file-backed SoT for the wrapper prompt sections, shared between
@@ -876,14 +884,14 @@ except ImportError:
     # isn't installed (legacy fixture path) — fall back to a literal so the
     # module still loads. Tests pin parity via ``test_sot_path_parity_with_autoresearch``.
     # PR-RATCHET-1 (2026-05-21) — fallback path follows the in-repo
-    # ``autoresearch/state/policies/`` location, not the pre-PR
-    # ``~/.geode/self-improving-loop/``, so a degraded import does not
-    # silently re-introduce the legacy out-of-repo location and bypass
-    # the git-as-optimiser invariant.
+    # ``state/autoresearch/policies/`` location (PR-STATE-AUTORESEARCH-RENAME
+    # 2026-06-01, Scheme A), not the pre-PR ``~/.geode/autoresearch/handoff/``,
+    # so a degraded import does not silently re-introduce the legacy out-of-repo
+    # location and bypass the git-as-optimiser invariant.
     _CORE_WRAPPER_SECTIONS_SOT = (
         Path(__file__).resolve().parents[2]
-        / "autoresearch"
         / "state"
+        / "autoresearch"
         / "policies"
         / "wrapper-sections.json"
     )
@@ -897,16 +905,19 @@ WRAPPER_SECTIONS_SOT_PATH = _CORE_WRAPPER_SECTIONS_SOT
 WRAPPER_PROMPT_SECTIONS: dict[str, str] = load_wrapper_prompt_sections()
 BASELINE_PATH = STATE_DIR / "baseline.json"
 
-# Sourced from ``core.paths.GLOBAL_SELF_IMPROVING_LOOP_DIR`` so the ``.geode``
+# Sourced from ``core.paths.GLOBAL_AUTORESEARCH_HANDOFF_DIR`` so the ``.geode``
 # literal lives in exactly one place (path-literal guard contract). PR-SELF-
 # IMPROVING-UMBRELLA (2026-05-31) moved this module into ``core/`` where the
 # guard applies; the fallback literal mirrors the SoT for the degraded-import
-# (test-stub) path.
+# (test-stub) path. PR-STATE-AUTORESEARCH-RENAME (2026-06-01, Scheme A) nested
+# the handoff under ``~/.geode/autoresearch/handoff/``.
 try:
-    from core.paths import GLOBAL_SELF_IMPROVING_LOOP_DIR as _SELF_IMPROVING_LOOP_HOME
+    from core.paths import GLOBAL_AUTORESEARCH_HANDOFF_DIR as _SELF_IMPROVING_LOOP_HOME
 except ImportError:
     # paths-literal-ok: core.paths SoT fallback for the degraded-import path.
-    _SELF_IMPROVING_LOOP_HOME = Path.home() / ".geode" / "self-improving-loop"  # paths-literal-ok
+    _SELF_IMPROVING_LOOP_HOME = (
+        Path.home() / ".geode" / "autoresearch" / "handoff"  # paths-literal-ok
+    )
 SELF_IMPROVING_LOOP_HOME = _SELF_IMPROVING_LOOP_HOME
 SESSIONS_INDEX_PATH = SELF_IMPROVING_LOOP_HOME / "sessions.jsonl"
 """P1a — shared self-improving-loop session registry. One JSON record per run
@@ -1013,7 +1024,7 @@ def _load_hyperparam_overrides() -> dict[str, str]:
     Resolution order matches the other policy SoTs:
       1. ``GEODE_HYPERPARAM_OVERRIDE`` env var (set by the audit subprocess)
       2. ``GLOBAL_HYPERPARAM_POLICY_PATH``
-         (``autoresearch/state/policies/hyperparam.json``)
+         (``state/autoresearch/policies/hyperparam.json``)
 
     Return value is a flat ``dict[str, str]`` — same shape as the SoT
     JSON. Caller is responsible for type-casting + bounds validation
@@ -1080,7 +1091,7 @@ def _build_audit_command() -> list[str]:
 
     PR-HYPERPARAM-WIRE (2026-05-28) — ``cfg.{seed_limit, dim_set,
     max_turns}`` are now overridable by the mutation SoT at
-    ``autoresearch/state/policies/hyperparam.json``. Resolution
+    ``state/autoresearch/policies/hyperparam.json``. Resolution
     precedence (highest wins): mutation SoT value → autoresearch
     config default. The mutator-proposed values went through
     ``parse_mutation`` 's bounds guard, so by the time they reach
@@ -1946,14 +1957,16 @@ def compute_fitness(
 #
 # S10 (ADR-002) replaces the pre-S9 9-col TSV (5-axis names) with a
 # 10-col TSV keyed on per-tier aggregates + a per-row JSONL line that
-# carries the full 20-dim raw signal. Operator appends both to
-# ``autoresearch/state/results.{tsv,jsonl}`` after each audit so the
-# self-improving-loop history is queryable without re-running the audit.
+# carries the full 20-dim raw signal. ``run_audit`` appends both to
+# ``state/autoresearch/results.{tsv,jsonl}`` after each (non-dry-run)
+# audit via :func:`_append_results_row`, so the self-improving-loop
+# history is queryable without re-running the audit.
 #
 # TSV is grep-friendly (one line per audit, fixed columns); JSONL is
 # the raw-truth artifact used by the meta-reviewer agent (S8) to
-# compute next-gen priors. Both files are gitignored (autoresearch/
-# state/* repo-level rule).
+# compute next-gen priors. Both files are git-tracked (``state/autoresearch/*``
+# gitignore negations) so the rolling history survives ``git clean`` —
+# same writer-destination invariant as the ledgers (PR-G5b #1350).
 
 RESULTS_TSV_HEADER: tuple[str, ...] = (
     "session_id",
@@ -2327,7 +2340,7 @@ def _append_session_index(
     ended_at: float,
     extra: dict[str, object],
 ) -> None:
-    """Append one row to ``~/.geode/self-improving-loop/sessions.jsonl``.
+    """Append one row to ``~/.geode/autoresearch/handoff/sessions.jsonl``.
 
     P1a — shared cross-loop session registry. Persistence failures log
     nothing (a stderr print here would pollute the grep-friendly
@@ -2778,6 +2791,16 @@ def _append_baseline_registry_row(
     epoch_label, _epoch_is_new = resolve_epoch_label(epoch_hash, label_map=_label_map)
     if _epoch_is_new:
         save_epoch_label_map(_label_map_path, _label_map)
+        # TODO(PR-STATE-SELF-IMPROVING-RENAME, deferred): epoch-boundary snapshot.
+        # When a NEW epoch opens (``_epoch_is_new``), the convention
+        # (state/autoresearch/_archive/README.md) is to freeze the PRIOR epoch's
+        # full production surface (policies/ + baseline.json + pool identity) under
+        # ``state/autoresearch/_archive/<prior-be-NNN>/``. NOT auto-wired here:
+        # adding snapshot I/O inside the promote write path risks the promote
+        # itself (a copy failure must not abort a gate-approved promote). Left as
+        # an explicit follow-up — snapshot via a separate, post-promote step
+        # (e.g. the campaign driver or an operator command) so the promote write
+        # stays single-responsibility. See _archive/README.md for the layout.
     # Intrinsic fitness on the same (dim + admire) scale the promote gate's
     # ``current_raw`` uses — bench is OFF (Path C) so it is not threaded here.
     # A historical backfill PRESERVES its measured fitness (it was scored under
@@ -2874,6 +2897,44 @@ def _append_baseline_registry_row(
     archive_path.parent.mkdir(parents=True, exist_ok=True)
     with archive_path.open("a", encoding="utf-8") as fh:
         fh.write(json.dumps(row, ensure_ascii=False, sort_keys=True) + "\n")
+
+
+def _results_paths() -> tuple[Path, Path]:
+    """Return ``(results.tsv, results.jsonl)`` — siblings of ``baseline.json``.
+
+    Derived from ``BASELINE_PATH`` (like :func:`_baseline_archive_path`) so a
+    test that monkeypatches ``BASELINE_PATH`` redirects the results files too;
+    equals ``AUTORESEARCH_STATE_DIR / "results.{tsv,jsonl}"`` in production.
+    """
+    state_dir = BASELINE_PATH.parent
+    return state_dir / "results.tsv", state_dir / "results.jsonl"
+
+
+def _append_results_row(tsv_row: str, jsonl_row: str) -> None:
+    """Append one audit's pre-formatted results rows to disk.
+
+    Fills the diagnosed wiring gap (PR-STATE-SELF-IMPROVING-RENAME 2026-06-01):
+    ``format_results_tsv_row`` / ``format_results_jsonl_row`` output was
+    PRINTED to stdout (``results_tsv:`` / ``results_jsonl:`` lines) but never
+    persisted, so the self-improving hub's results section stayed empty while
+    ``mutations.jsonl`` + ``baseline_archive.jsonl`` were written directly.
+
+    Both files live under ``AUTORESEARCH_STATE_DIR`` (``state/autoresearch/``);
+    the ``.tsv`` gets the ``RESULTS_TSV_HEADER`` line on first write only (so it
+    stays grep-friendly with stable columns), the ``.jsonl`` is header-less. Both
+    are git-tracked (gitignore negations) so the rolling history survives
+    ``git clean`` — same writer-destination-tracked invariant as the ledgers
+    (PR-G5b #1350 precedent). Append-only; one row per audit (promoted or not).
+    """
+    tsv_path, jsonl_path = _results_paths()
+    tsv_path.parent.mkdir(parents=True, exist_ok=True)
+    write_header = not tsv_path.exists()
+    with tsv_path.open("a", encoding="utf-8") as fh:
+        if write_header:
+            fh.write("\t".join(RESULTS_TSV_HEADER) + "\n")
+        fh.write(tsv_row.rstrip("\n") + "\n")
+    with jsonl_path.open("a", encoding="utf-8") as fh:
+        fh.write(jsonl_row.rstrip("\n") + "\n")
 
 
 def _write_baseline(
@@ -4312,56 +4373,59 @@ def main() -> int:
     )
 
     # S10 — emit results.{tsv,jsonl} lines on stdout so the self-improving-loop
-    # operator (or a follow-up script) can append them to the rolling
-    # autoresearch/state/results.{tsv,jsonl}. We don't write the files
-    # directly because the verdict / description are decided by the
-    # operator AFTER reading the print_summary; emitting at this stage
-    # would freeze in a default. Operators tee the line manually.
+    # operator (or a follow-up script) can read them, AND persist them to the
+    # rolling ``state/autoresearch/results.{tsv,jsonl}`` (PR-STATE-SELF-IMPROVING-
+    # RENAME 2026-06-01 — previously printed only, so the hub's results section
+    # stayed empty). ``verdict`` / ``description`` default to the env-supplied
+    # values (the campaign driver sets ``AUTORESEARCH_VERDICT`` once the gate has
+    # decided); absent those they fall back to ``pending`` / ``dry-run`` so the
+    # history row is never blank.
     description = os.environ.get("AUTORESEARCH_DESCRIPTION", "dry-run" if args.dry_run else "")
     verdict = os.environ.get("AUTORESEARCH_VERDICT", "pending")
+    results_tsv_row = format_results_tsv_row(
+        session_id=session_id,
+        gen_tag=gen_tag,
+        commit=commit,
+        fitness=fitness,
+        dim_scores=dim_scores,
+        dim_means=dim_means,
+        verdict=verdict,
+        description=description,
+    )
+    results_jsonl_row = format_results_jsonl_row(
+        session_id=session_id,
+        gen_tag=gen_tag,
+        commit=commit,
+        fitness=fitness,
+        dim_means=dim_means,
+        dim_stderr=dim_stderr,
+        dim_scores=dim_scores,
+        verdict=verdict,
+        description=description,
+        baseline_active=baseline_means is not None,
+        # PR-5 of petri-schema-v2 (2026-05-23) — thread the
+        # provenance from PR-1 (run_audit return) + PR-4
+        # (compute_missing_dims) into the JSONL row so cross-run
+        # analysis can disambiguate measurements without
+        # joining against baseline.json or the journal.
+        sample_count=sample_count,
+        measurement_modality=measurement_modality,
+        missing_dims=missing_dims,
+        eval_archive=_resolve_eval_archive_path(),
+        # PR-SIL-5THEME C2 (2026-05-23, ux-removed 2026-05-30) — multi-axis
+        # breakdown columns. admire 는 현재 collector 가 placeholder 라
+        # 미전달 (S2b 후속 PR), bench 는 BenchProvenance 전달.
+        bench_provenance=bench_provenance,
+    )
     print(f"session_id:               {session_id}")
     print(f"gen_tag:                  {gen_tag}")
-    print(
-        "results_tsv: "
-        + format_results_tsv_row(
-            session_id=session_id,
-            gen_tag=gen_tag,
-            commit=commit,
-            fitness=fitness,
-            dim_scores=dim_scores,
-            dim_means=dim_means,
-            verdict=verdict,
-            description=description,
-        )
-    )
-    print(
-        "results_jsonl: "
-        + format_results_jsonl_row(
-            session_id=session_id,
-            gen_tag=gen_tag,
-            commit=commit,
-            fitness=fitness,
-            dim_means=dim_means,
-            dim_stderr=dim_stderr,
-            dim_scores=dim_scores,
-            verdict=verdict,
-            description=description,
-            baseline_active=baseline_means is not None,
-            # PR-5 of petri-schema-v2 (2026-05-23) — thread the
-            # provenance from PR-1 (run_audit return) + PR-4
-            # (compute_missing_dims) into the JSONL row so cross-run
-            # analysis can disambiguate measurements without
-            # joining against baseline.json or the journal.
-            sample_count=sample_count,
-            measurement_modality=measurement_modality,
-            missing_dims=missing_dims,
-            eval_archive=_resolve_eval_archive_path(),
-            # PR-SIL-5THEME C2 (2026-05-23, ux-removed 2026-05-30) — multi-axis
-            # breakdown columns. admire 는 현재 collector 가 placeholder 라
-            # 미전달 (S2b 후속 PR), bench 는 BenchProvenance 전달.
-            bench_provenance=bench_provenance,
-        )
-    )
+    print("results_tsv: " + results_tsv_row)
+    print("results_jsonl: " + results_jsonl_row)
+    # Persist the rolling history (every audit, promoted or not). dry-run is
+    # synthetic data — recording it would pollute the cross-run history with
+    # placeholder rows, so the disk write is skipped (stdout still shows them).
+    if not args.dry_run:
+        _append_results_row(results_tsv_row, results_jsonl_row)
 
     # P0a — auto-promote + manual override.
     # dry-run emulates data; promoting that would freeze in a synthetic

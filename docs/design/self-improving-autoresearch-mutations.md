@@ -57,7 +57,7 @@ Cost:                    cost_judge_tokens + cost_target_tokens + cost_seconds
 
 ## 7. Empty state
 
-`<em>No mutations recorded. Run <code>uv run python autoresearch/train.py</code>.</em>`
+`<em>No mutations recorded. Run <code>uv run python core/self_improving/train.py</code>.</em>`
 
 ## 8. Verification checklist
 

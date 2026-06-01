@@ -12,7 +12,7 @@ The loop optimizes GEODE's **scaffold** — the system-prompt sections and polic
 artifacts that wrap the base model — NOT the base model's weights. One cycle:
 
 1. The mutator proposes a single-section change to one scaffold artifact.
-2. The change is applied to the in-repo SoT (`autoresearch/state/policies/*`).
+2. The change is applied to the in-repo SoT (`state/self_improving/policies/*`).
 3. A Petri audit runs with the audit target = **GEODE-as-a-system**
    (`geode/gpt-5.5` → `GeodeModelAPI` → `AgenticLoop`), i.e. gpt-5.5 running the
    *mutated* scaffold as the base of its system prompt, with the auditor's seed
@@ -31,7 +31,7 @@ spec hash — see `baseline-epoch-partition`).
 ## 2. The scaffold (what is mutated)
 
 The mutable scaffold is the set of policy artifacts under
-`autoresearch/state/policies/`, dispatched by `mutation.target_kind`
+`state/self_improving/policies/`, dispatched by `mutation.target_kind`
 (`core/self_improving/loop/policies.py::TARGET_KINDS`).
 
 ### 2.1 TARGET_KINDS (7 behaviour kinds)
@@ -173,9 +173,9 @@ JSONL stream by arm.
 
 | Artifact | Path | Content |
 |----------|------|---------|
-| Mutation ledger | `autoresearch/state/mutations.jsonl` | Every mutate / apply / audit / baseline / attribution row (git-tracked). |
-| Policy SoTs | `autoresearch/state/policies/*.json` | The current (best) scaffold — `git diff` shows mutation state. |
-| Baseline | `autoresearch/state/baseline.json` | The promoted baseline (advances only on a gate promote). |
+| Mutation ledger | `state/self_improving/mutations.jsonl` | Every mutate / apply / audit / baseline / attribution row (git-tracked). |
+| Policy SoTs | `state/self_improving/policies/*.json` | The current (best) scaffold — `git diff` shows mutation state. |
+| Baseline | `state/self_improving/baseline.json` | The promoted baseline (advances only on a gate promote). |
 | Baseline archive | `baseline_archive.jsonl` | One row per baseline epoch (`be-001` → …), content-addressed by spec hash. |
 | Eval archive | `~/.geode/petri/logs/*.eval` (+ `latest.eval`) | Per-cycle Petri `.eval` — the single SoT for per-dim evidence. |
 | Hub | self-improving hub pages | Serves baseline epochs (grouped) + the cross-generation evidence page, mirroring the seed-gen `gen-*` layout. |

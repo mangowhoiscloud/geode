@@ -506,7 +506,7 @@ class SchedulerConfig(BaseModel):
     ``[self_improving_loop.scheduler] enabled = true``.
 
     Concurrency is bounded by a filesystem lock
-    (``~/.geode/self-improving-loop/auto_trigger.lock`` via
+    (``~/.geode/autoresearch/handoff/auto_trigger.lock`` via
     :mod:`fcntl`), so even an over-eager cron and a manual invocation
     cannot race. The min-interval gate is the *complementary* knob: it
     prevents two cron-fires within ``min_interval_minutes`` of each
@@ -537,7 +537,7 @@ class SchedulerConfig(BaseModel):
 
     min_interval_minutes: Annotated[int, Field(ge=1, le=1440)] = 60
     """Floor between successive mutator firings (timestamp-based gate
-    on ``~/.geode/self-improving-loop/auto_trigger_last_run.txt``).
+    on ``~/.geode/autoresearch/handoff/auto_trigger_last_run.txt``).
     Cron firings closer together than this are silently skipped — the
     lockfile already prevents concurrent runs, this knob prevents
     *back-to-back* runs. Must satisfy ``min_interval_minutes <= cron
@@ -545,7 +545,7 @@ class SchedulerConfig(BaseModel):
 
     max_generation: Annotated[int, Field(ge=0, le=100_000)] = 0
     """PR-MAX-GEN (2026-05-26) — hard cap on total ``fired`` rows in
-    ``~/.geode/self-improving-loop/auto_trigger_history.jsonl``. When
+    ``~/.geode/autoresearch/handoff/auto_trigger_history.jsonl``. When
     the cap is reached the trigger returns ``max_generation_reached``
     without invoking the mutator runner. ``0`` (default) preserves
     legacy unbounded behaviour — recommended only for operators who

@@ -4,7 +4,7 @@ Pattern source: PR-MINIMAL-2 #1398 — `_FALLBACK_SYSTEM_PROMPT` ↔ `program.md
 shared-anchor invariant. Same dual-SoT shape risk applies here:
 
 - ``core/self_improving/train.py:_WRAPPER_PROMPT_SECTIONS_FALLBACK`` — bootstrap
-  default loaded when ``autoresearch/state/policies/wrapper-sections.json``
+  default loaded when ``state/autoresearch/policies/wrapper-sections.json``
   (canonical, mutator-written runtime SoT) is absent.
 - ``core/self_improving/train.py:write_wrapper_prompt_sections`` — validator the
   mutator goes through when promoting a wrapper-prompt mutation.
@@ -112,7 +112,7 @@ def test_load_returns_fallback_copy_when_canonical_sot_absent(
 ) -> None:
     """Loader must return the fallback (not None / not empty) when the
     canonical disk SoT is missing. Defends the loop against operator
-    accidentally deleting ``autoresearch/state/policies/wrapper-sections.json``
+    accidentally deleting ``state/autoresearch/policies/wrapper-sections.json``
     mid-cycle."""
     missing = tmp_path / "definitely-not-there.json"
     assert not missing.exists()

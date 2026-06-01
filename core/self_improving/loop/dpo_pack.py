@@ -24,7 +24,7 @@ rejected_response)`` → 16-hex signature. The writer skips any signature
 already present in the pack file, so re-running the builder over an
 expanded journal stream only appends new pairs.
 
-**Pack location** — ``GLOBAL_DPO_PACK_PATH`` (``~/.geode/self-improving-loop/dpo/pack.jsonl``).
+**Pack location** — ``GLOBAL_DPO_PACK_PATH`` (``~/.geode/autoresearch/handoff/dpo/pack.jsonl``).
 The parent directory is created lazily on first append. The pack is
 NOT git-tracked — preference data can be sensitive and is operator-local
 until an explicit publish step (M4.2) ships a redacted copy.
