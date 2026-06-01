@@ -2422,3 +2422,39 @@ def test_results_paths_follow_baseline_path_monkeypatch(
     tsv_path, jsonl_path = auto_train._results_paths()
     assert tsv_path == state_dir / "results.tsv"
     assert jsonl_path == state_dir / "results.jsonl"
+
+
+def test_load_global_env_populates_os_environ(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """PR-CAMPAIGN-LOAD-ENV: the campaign/audit entry loads ~/.geode/.env so the
+    PAYG ANTHROPIC_API_KEY reaches the spawned audit subprocess (the bug that made
+    every cycle audit error → degenerate baseline). ``override=False`` so an
+    already-exported shell key wins."""
+    import os
+
+    import core.paths as core_paths
+
+    env_file = tmp_path / ".env"
+    env_file.write_text("ANTHROPIC_API_KEY=sk-ant-from-env-file\n", encoding="utf-8")
+    monkeypatch.setattr(core_paths, "GLOBAL_ENV_FILE", env_file)
+    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+
+    assert auto_train._load_global_env() is True
+    assert os.environ["ANTHROPIC_API_KEY"] == "sk-ant-from-env-file"
+
+    # override=False — a key already in the shell env is NOT clobbered.
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-ant-from-shell")
+    auto_train._load_global_env()
+    assert os.environ["ANTHROPIC_API_KEY"] == "sk-ant-from-shell"
+
+
+def test_load_global_env_missing_file_is_false_noop(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """No ~/.geode/.env → returns False, no raise (a fresh box without the file
+    still runs; the key may come from the shell env instead)."""
+    import core.paths as core_paths
+
+    monkeypatch.setattr(core_paths, "GLOBAL_ENV_FILE", tmp_path / "nonexistent.env")
+    assert auto_train._load_global_env() is False
