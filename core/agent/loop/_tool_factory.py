@@ -57,6 +57,7 @@ def get_agentic_tools(
     registry: ToolRegistry | None = None,
     *,
     mcp_tools: list[dict[str, Any]] | None = None,
+    force_include: set[str] | None = None,
 ) -> list[dict[str, Any]]:
     """Return tool definitions with unified deferred loading for native + MCP tools.
 
@@ -67,6 +68,21 @@ def get_agentic_tools(
     Args:
         registry: Optional ToolRegistry with additional native tools.
         mcp_tools: Optional MCP tool definitions to include.
+        force_include: Tool names the caller's *explicit* allowlist (a
+            sub-agent toolkit grant — see ``AgenticLoop.allowed_tool_names``)
+            declared authoritative. The global ADR-012 ``tool_policy`` SoT
+            (``tool-policy.json``, a self-improving-loop mutation surface) may
+            *reorder* but MUST NOT *strip* these — otherwise a loop mutation
+            silently revokes a tool a named sub-agent depends on. *Incident:
+            PR-PILOT-PETRI-AUDIT-WIRING (2026-06-01) — a ``tool-policy.json``
+            ``allowed_tools`` whitelist that omitted ``petri_audit`` stripped
+            it from the seed_pilot worker's model-visible surface BEFORE the
+            toolkit ``allowed_tool_names`` filter ran, so the pilot reported
+            "petri_audit isn't in my available tool set", skipped the audit,
+            and emitted all-zero ``dim_means``. The pilot is the agent that
+            *measures* the loop, so the loop's own mutation disabled its own
+            measurement. Pinned by
+            ``tests/test_tool_policy_force_include_toolkit.py``.
     """
     tools = list(_BASE_TOOLS)
     existing_names = {t["name"] for t in tools}
@@ -92,4 +108,27 @@ def get_agentic_tools(
     # ADR-012 S0a — 5축의 ``tool_policy`` SoT 가 인퍼런스 경로에서
     # 실제로 적용되는 단일 지점. 정책이 부재하면 ``apply_tool_policy``
     # 는 no-op (현재 행동 보존).
-    return apply_tool_policy(tools, _load_tool_policy_override())
+    #
+    # PR-PILOT-PETRI-AUDIT-WIRING (2026-06-01) — ``force_include`` keeps
+    # toolkit-granted tools (the sub-agent's explicit, authoritative
+    # whitelist) out of the global tool_policy strip. Captured here *before*
+    # the policy runs so a definition dropped by ``allowed_tools`` /
+    # ``forbidden_tools`` can be reinstated afterwards. The policy still
+    # governs ordering (priority_order) and every non-forced tool.
+    preserved: list[dict[str, Any]] = []
+    if force_include:
+        seen: set[str] = set()
+        for tool in tools:
+            name = tool.get("name")
+            if isinstance(name, str) and name in force_include and name not in seen:
+                preserved.append(tool)
+                seen.add(name)
+    policed = apply_tool_policy(tools, _load_tool_policy_override())
+    if preserved:
+        policed_names = {t.get("name") for t in policed}
+        # Re-add only the forced tools the policy stripped, preserving the
+        # base merge order for the reinstated entries.
+        reinstated = [t for t in preserved if t.get("name") not in policed_names]
+        if reinstated:
+            policed = policed + reinstated
+    return policed

@@ -74,6 +74,27 @@ _REQUIRED_PILOT_FIELDS = (
 _VALID_PILOT_STATUSES = frozenset({"ok", "timeout", "low_engagement"})
 
 
+def _has_any_nonzero(dim_means: object) -> bool:
+    """True if ``dim_means`` carries at least one non-zero numeric value.
+
+    The pilot's silent-zero-fill failure mode (audit never ran) produces a
+    ``dim_means`` that is empty or all-zero. A real audit always lights up
+    several dims. Graceful at every cast — a non-numeric value (the LLM
+    emitting a string / null) counts as "not a real measurement", never
+    raises, so the boundary contract holds for the whole dict (CLAUDE.md
+    graceful-contract-boundary rule).
+    """
+    if not isinstance(dim_means, dict) or not dim_means:
+        return False
+    for value in dim_means.values():
+        try:
+            if float(value) != 0.0:
+                return True
+        except (TypeError, ValueError):
+            continue
+    return False
+
+
 class Pilot(BaseSeedAgent):
     """Spawn one sub-agent per surviving candidate; collect Petri pilot aggregates.
 
@@ -332,6 +353,27 @@ class Pilot(BaseSeedAgent):
                 "seed-generation pilot: candidate=%s invalid status=%r",
                 task.args.get("candidate_id"),
                 pilot.get("status"),
+            )
+            return None
+        # PR-PILOT-PETRI-AUDIT-WIRING (2026-06-01) — reject the silent
+        # zero-fill. When the pilot worker can't actually run ``petri_audit``
+        # (tool stripped from its surface, inspect_ai missing) the LLM tends
+        # to fabricate an all-zero ``dim_means`` and still claim
+        # ``status="ok"`` — which previously merged a measurement of nothing
+        # into the Ranker's difficulty-selection input, silently neutering
+        # the difficulty lever. A genuine ``timeout`` legitimately zero-fills
+        # (pilot.md status semantics), so the guard fires ONLY for the
+        # ``ok`` / ``low_engagement`` statuses that assert the audit ran.
+        # See ``tests/plugins/seed_generation/test_pilot.py``.
+        status = pilot.get("status")
+        if status in {"ok", "low_engagement"} and not _has_any_nonzero(pilot.get("dim_means")):
+            log.warning(
+                "seed-generation pilot: candidate=%s reported status=%r but "
+                "dim_means is all-zero — treating as audit_not_run (petri_audit "
+                "likely unavailable in the pilot worker's toolset). Dropping so "
+                "the all-zero score does not pollute Ranker difficulty selection.",
+                task.args.get("candidate_id"),
+                status,
             )
             return None
         # Pin candidate_id to the task's value — never trust the LLM to

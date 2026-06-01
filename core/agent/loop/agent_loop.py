@@ -346,9 +346,6 @@ class AgenticLoop:
         self._mcp_manager = mcp_manager
         self._skill_registry = skill_registry
         self._hooks = hooks
-        # Unified tool assembly: merge native + MCP tools together
-        mcp_tool_list = mcp_manager.get_all_tools() if mcp_manager is not None else None
-        self._tools = get_agentic_tools(tool_registry, mcp_tools=mcp_tool_list)
         # CSP-1 (2026-05-22) — when the caller (worker for sub-agents) has
         # already resolved a tool allowlist (via toolkit / legacy whitelist),
         # filter the model-visible tool schemas to match. Without this filter
@@ -358,6 +355,23 @@ class AgenticLoop:
         # tools and weakening the whitelist contract. None preserves the
         # pre-CSP-1 behaviour (full tool surface) for non-sub-agent callers
         # (CLI, serve daemon).
+        #
+        # PR-PILOT-PETRI-AUDIT-WIRING (2026-06-01) — store on self so the
+        # model-change / MCP-refresh rebuild (``_response.refresh_tools``)
+        # re-applies the same toolkit filter; pre-fix that rebuild dropped
+        # the filter and re-exposed the full surface mid-run.
+        self._allowed_tool_names = allowed_tool_names
+        # Unified tool assembly: merge native + MCP tools together. The
+        # toolkit allowlist is passed as ``force_include`` so the global
+        # ADR-012 tool_policy cannot strip a tool the sub-agent's toolkit
+        # explicitly granted (the toolkit whitelist is authoritative for a
+        # named sub-agent — see ``get_agentic_tools`` docstring).
+        mcp_tool_list = mcp_manager.get_all_tools() if mcp_manager is not None else None
+        self._tools = get_agentic_tools(
+            tool_registry,
+            mcp_tools=mcp_tool_list,
+            force_include=allowed_tool_names,
+        )
         if allowed_tool_names is not None:
             self._tools = [t for t in self._tools if t.get("name") in allowed_tool_names]
         self._last_llm_error: str | None = None  # last error type for user message

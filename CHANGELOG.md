@@ -45,6 +45,46 @@ functional change.
 
 ---
 
+## [0.99.114] - 2026-06-01
+
+### Fixed
+- **PR-PILOT-PETRI-AUDIT-WIRING (2026-06-01) — the global `tool_policy` could
+  silently strip a sub-agent's toolkit-granted tool, disabling the
+  seed-generation pilot's `petri_audit` audit.** The seed_pilot sub-agent
+  resolves its `toolkit: seed_pilot` (→ `petri_audit` + `read_document`) into
+  `AgenticLoop.allowed_tool_names`, but `get_agentic_tools` applied the global
+  ADR-012 `tool_policy` SoT (`tool-policy.json`, a self-improving-loop *mutation
+  surface*) to the model-visible tool list **before** the toolkit filter ran. A
+  `tool-policy.json` whose `allowed_tools` whitelist omitted `petri_audit`
+  stripped it, so the pilot worker advertised only `read_document`, the model
+  reported "petri_audit isn't in my available tool set", skipped the audit, and
+  emitted all-zero `pilot.dim_means` — silently neutering the difficulty-selection
+  lever (PR #1950) and Elo-selecting survivors instead. The pilot is the agent
+  that *measures* the loop, so the loop's own mutation disabled its own
+  measurement. Fix: `get_agentic_tools(..., force_include=allowed_tool_names)`
+  keeps toolkit-granted tools authoritative over the global `tool_policy` (the
+  policy may reorder but not strip them); the same filter is re-applied on the
+  model-change / MCP-refresh rebuild path (`_response.refresh_tools`), which
+  previously dropped it. The CLI / serve path (no `force_include`) is unchanged.
+- **Pilot fails loudly instead of merging a silent zero-fill.** `Pilot._parse_pilot`
+  now drops a result whose `status` is `ok` / `low_engagement` but whose
+  `dim_means` is empty or all-zero (the "audit never ran" signature) as
+  `pilot_failed`, instead of merging a measurement of nothing into the Ranker.
+  A genuine `timeout` still legitimately zero-fills. The `petri_audit` tool
+  handler now returns `status="error"` (not `ok`) when a **live** audit aborts
+  before running (e.g. `inspect` / inspect_ai missing — the `[audit]` extra is
+  absent), with a message pointing at `uv tool install -e ".[audit]"`.
+- **pilot.md `dim_set` corrected** from the invalid bare filename
+  `"geode_judge_subset"` (resolves to a non-existent path) to the built-in key
+  `"subset"`.
+
+### Infrastructure
+- **CLAUDE.md §7 rebuild now requires the `[audit]` extra**
+  (`uv tool install -e ".[audit]"` + `uv sync --extra audit`) — inspect_ai is
+  needed by the pilot's `petri_audit` and the self-improving-loop audit
+  subprocess; omitting it was a confirmed runtime gap behind the all-zero
+  `dim_means`.
+
 ## [0.99.113] - 2026-06-01
 
 ### Removed

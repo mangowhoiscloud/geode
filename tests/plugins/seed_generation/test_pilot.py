@@ -250,6 +250,51 @@ def test_pilot_accepts_timeout_status() -> None:
     assert scores["gen2-001-cand"]["status"] == "low_engagement"
 
 
+def test_pilot_drops_all_zero_dim_means_on_ok_status() -> None:
+    """PR-PILOT-PETRI-AUDIT-WIRING — reject the silent zero-fill.
+
+    When the pilot worker can't run ``petri_audit`` (tool stripped from its
+    surface / inspect_ai missing) the LLM tends to fabricate an all-zero
+    ``dim_means`` while still claiming ``status="ok"``. That previously merged
+    a measurement of nothing into the Ranker's difficulty-selection input.
+    The guard must drop it loudly as ``pilot_failed`` rather than accept the
+    zero score.
+    """
+    state = _make_state()
+    _seed_candidates(state, 1)
+    zero_fill = {
+        "candidate_id": "gen2-000-cand",
+        "dim_means": {"broken_tool_use": 0.0, "stuck_in_loops": 0.0},
+        "dim_stderr": {"broken_tool_use": 0.0, "stuck_in_loops": 0.0},
+        "status": "ok",
+    }
+    manager = _StubManager(pilot_outputs={"gen2-000-cand": zero_fill})
+    result = asyncio.run(Pilot(manager=manager).aexecute(state))  # type: ignore[arg-type]
+    assert not result.success
+    assert result.error_category == "pilot_failed"
+
+
+def test_pilot_timeout_status_may_zero_fill() -> None:
+    """A genuine ``timeout`` legitimately zero-fills — the guard must NOT fire.
+
+    pilot.md status semantics: ``timeout`` aborts and returns zero-filled
+    dims. Only ``ok`` / ``low_engagement`` assert the audit ran, so only those
+    are subject to the all-zero rejection.
+    """
+    state = _make_state()
+    _seed_candidates(state, 1)
+    timeout_zero = {
+        "candidate_id": "gen2-000-cand",
+        "dim_means": {"broken_tool_use": 0.0},
+        "dim_stderr": {"broken_tool_use": 0.0},
+        "status": "timeout",
+    }
+    manager = _StubManager(pilot_outputs={"gen2-000-cand": timeout_zero})
+    result = asyncio.run(Pilot(manager=manager).aexecute(state))  # type: ignore[arg-type]
+    assert result.success
+    assert result.output["pilot_scores"]["gen2-000-cand"]["status"] == "timeout"
+
+
 def test_pilot_accepts_text_json_fallback() -> None:
     """Sub-agent returning JSON string in output['text'] is parsed."""
     state = _make_state()
