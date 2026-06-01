@@ -174,15 +174,22 @@ class UsageStore:
 
     def has_eval_id(self, eval_id: str, year: int | None = None, month: int | None = None) -> bool:
         """Return True if a record with ``source='petri_eval'`` and the
-        given ``eval_id`` already exists in the month file. Used by
+        given ``eval_id`` already exists. Used by
         :mod:`core.audit.eval_to_jsonl` to skip duplicate extractions.
+
+        When ``year``/``month`` are both omitted, scan EVERY month file
+        rather than just the current calendar month: extraction stamps each
+        row with the eval's ``created`` ts (a past month for backfills or
+        month-boundary imports), so a today-only check would miss it and
+        re-import the eval. Pass both ``year`` and ``month`` to scope the
+        lookup to a single month.
         """
         if not eval_id:
             return False
-        today = date.today()
-        y = year or today.year
-        m = month or today.month
-        records = self._read_month(y, m)
+        if year is not None and month is not None:
+            records = self._read_month(year, month)
+        else:
+            records = self._read_all_months()
         return any(r.eval_id == eval_id and r.source == "petri_eval" for r in records)
 
     def get_monthly_summary(
@@ -325,6 +332,25 @@ class UsageStore:
         except OSError as e:
             log.warning("Failed to read usage file %s: %s", fpath, e)
 
+        return records
+
+    def _read_all_months(self) -> list[UsageRecord]:
+        """Read records across every ``YYYY-MM.jsonl`` file in the store.
+
+        Rows are partitioned by each record's own ``ts`` month (see
+        :meth:`_append`), so a row can live in any past month. Callers that
+        must find a record regardless of the calendar month it was written
+        in (e.g. :meth:`has_eval_id` skip-detection) scan all of them.
+        """
+        if not self._usage_dir.exists():
+            return []
+        records: list[UsageRecord] = []
+        for fpath in sorted(self._usage_dir.glob("[0-9][0-9][0-9][0-9]-[0-9][0-9].jsonl")):
+            try:
+                year, month = int(fpath.stem[:4]), int(fpath.stem[5:7])
+            except ValueError:
+                continue
+            records += self._read_month(year, month)
         return records
 
 
