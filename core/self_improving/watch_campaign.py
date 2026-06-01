@@ -6,11 +6,11 @@ PR-SELF-IMPROVING-UMBRELLA (2026-05-31). The companion to
 ``core.self_improving.campaign`` (CLI: ``python -m core.self_improving.watch_campaign``).
 Reads the same three SoTs and prints a compact, flushed digest:
 
-* ``autoresearch/state/campaign-progress.log`` — the per-cycle progress lines
+* ``state/autoresearch/campaign-progress.log`` — the per-cycle progress lines
   the driver tees (last N).
-* ``autoresearch/state/mutations.jsonl`` — the mutator-driven ``kind="attribution"``
+* ``state/autoresearch/mutations.jsonl`` — the mutator-driven ``kind="attribution"``
   rows (``source="mutator"``), grouped by ``promote_policy`` arm.
-* ``autoresearch/state/baseline_archive.jsonl`` — the ``kind="baseline"`` rows,
+* ``state/autoresearch/baseline_archive.jsonl`` — the ``kind="baseline"`` rows,
   grouped by baseline epoch (``epoch_label`` / ``be-NNN``).
 
 This is read-only; it never spawns an audit or mutates state. Run it any time
@@ -25,9 +25,10 @@ from collections import defaultdict
 from pathlib import Path
 from typing import Any
 
-# ``core/self_improving/watch_campaign.py`` → ``parents[2]`` = repo root.
-REPO_ROOT = Path(__file__).resolve().parents[2]
-AUTORESEARCH_STATE_DIR = REPO_ROOT / "autoresearch" / "state"
+from core.paths import AUTORESEARCH_STATE_DIR
+
+# Single canonical state-dir constant (``core.paths``), env-overridable via
+# ``GEODE_STATE_ROOT``. No local re-definition (no dual SoT — CLAUDE.md).
 PROGRESS_LOG = AUTORESEARCH_STATE_DIR / "campaign-progress.log"
 MUTATIONS_JSONL = AUTORESEARCH_STATE_DIR / "mutations.jsonl"
 BASELINE_ARCHIVE = AUTORESEARCH_STATE_DIR / "baseline_archive.jsonl"

@@ -26,8 +26,12 @@ from core.self_improving.loop.baseline_epoch import (
 )
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
-_ARCHIVE = REPO_ROOT / "autoresearch" / "state" / "baseline_archive.jsonl"
-_EPOCHS = REPO_ROOT / "autoresearch" / "state" / "baseline_epochs.json"
+# Canonical paths from core.paths (PR-STATE-SELF-IMPROVING-RENAME 2026-06-01 —
+# moved from autoresearch/state to state/autoresearch). _EPOCHS is the sibling
+# of the archive, exactly as train.py derives it.
+from core.paths import BASELINE_ARCHIVE_PATH as _ARCHIVE  # noqa: E402
+
+_EPOCHS = _ARCHIVE.parent / "baseline_epochs.json"
 
 _ROLE_PROV = {
     "auditor": {"model": "claude-opus-4-8", "source": "api_key"},

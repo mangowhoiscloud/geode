@@ -83,6 +83,8 @@ from datetime import UTC
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
+from core.paths import AUTORESEARCH_STATE_DIR
+
 if TYPE_CHECKING:
     from collections.abc import Sequence
 
@@ -97,11 +99,14 @@ log = logging.getLogger("self_improving.campaign")
 REPO_ROOT = Path(__file__).resolve().parents[2]
 """The git repo root. ``core/self_improving/campaign.py`` → ``parents[2]`` = repo root."""
 
-AUTORESEARCH_STATE_DIR = REPO_ROOT / "autoresearch" / "state"
-POLICIES_DIR = AUTORESEARCH_STATE_DIR / "policies"
-BASELINE_JSON = AUTORESEARCH_STATE_DIR / "baseline.json"
-MUTATIONS_JSONL = AUTORESEARCH_STATE_DIR / "mutations.jsonl"
-PROGRESS_LOG = AUTORESEARCH_STATE_DIR / "campaign-progress.log"
+# Single canonical state-dir constant (``core.paths.AUTORESEARCH_STATE_DIR``
+# = ``state/autoresearch`` under ``STATE_ROOT``, env-overridable via
+# ``GEODE_STATE_ROOT``). No local re-definition — no dual SoT (CLAUDE.md).
+STATE_DIR = AUTORESEARCH_STATE_DIR
+POLICIES_DIR = STATE_DIR / "policies"
+BASELINE_JSON = STATE_DIR / "baseline.json"
+MUTATIONS_JSONL = STATE_DIR / "mutations.jsonl"
+PROGRESS_LOG = STATE_DIR / "campaign-progress.log"
 
 #: gen-0 SoT snapshot destination (under the gitignored ``state/`` runtime tree
 #: so a matched-reset snapshot of a real campaign never enters git history).
@@ -232,7 +237,7 @@ def build_campaign_env(
 # SoT snapshot / restore (campaign-procedure.md §6 — matched gen-0 reset)
 # ---------------------------------------------------------------------------
 
-#: Glob patterns under ``autoresearch/state/`` that make up the full scaffold
+#: Glob patterns under ``state/autoresearch/`` that make up the full scaffold
 #: SoT a matched reset must round-trip (campaign-procedure.md §1, §2.1, §7).
 _SNAPSHOT_SOURCES: tuple[tuple[Path, str], ...] = (
     (POLICIES_DIR, "*.json"),
@@ -243,7 +248,7 @@ _SNAPSHOT_SOURCES: tuple[tuple[Path, str], ...] = (
 def snapshot_sot(dest_dir: Path) -> list[Path]:
     """Copy the full scaffold SoT into ``dest_dir`` for a matched reset.
 
-    Captures every ``autoresearch/state/policies/*.{json,jsonl}`` plus
+    Captures every ``state/autoresearch/policies/*.{json,jsonl}`` plus
     ``baseline.json``. Returns the list of destination paths written. The dest
     dir is wiped first so a re-snapshot is a clean overwrite (never a merge of a
     stale snapshot with a fresh one).
@@ -272,8 +277,8 @@ def restore_sot(snapshot_dir: Path) -> list[Path]:
     matched reset.
 
     Round-trips ``snapshot_sot`` exactly: the policy files are copied back into
-    ``autoresearch/state/policies/`` and ``baseline.json`` back into
-    ``autoresearch/state/``. Crucially this is a *mirror*, not an overlay: any
+    ``state/autoresearch/policies/`` and ``baseline.json`` back into
+    ``state/autoresearch/``. Crucially this is a *mirror*, not an overlay: any
     live ``policies/*.{json,jsonl}`` file that is NOT in the snapshot is DELETED,
     so an earlier arm that created a new policy file (e.g. the gate arm inserting
     ``wrapper-sections.json`` where gen-0 had only ``hyperparam.json``) cannot
@@ -301,7 +306,7 @@ def restore_sot(snapshot_dir: Path) -> list[Path]:
             restored.append(dst)
     baseline_src = snapshot_dir / "baseline.json"
     if baseline_src.exists():
-        AUTORESEARCH_STATE_DIR.mkdir(parents=True, exist_ok=True)
+        STATE_DIR.mkdir(parents=True, exist_ok=True)
         shutil.copy2(baseline_src, BASELINE_JSON)
         restored.append(BASELINE_JSON)
     return restored
@@ -994,7 +999,7 @@ def run_arm(
         # Dry-run is read-only w.r.t. the git-tracked policy SoT: the offline
         # runner writes nothing, so a matched reset would only re-copy identical
         # bytes. Skipping restore_sot keeps the smoke from touching
-        # ``autoresearch/state/policies/*`` at all (Codex MCP finding #5).
+        # ``state/autoresearch/policies/*`` at all (Codex MCP finding #5).
         progress.emit(f"arm '{arm}' (index {arm_index}): dry-run (gen-0 restore skipped)")
     else:
         progress.emit(f"arm '{arm}' (index {arm_index}): restoring gen-0 SoT snapshot")

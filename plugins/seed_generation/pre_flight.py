@@ -152,7 +152,7 @@ def _fix_for(provider: str, source: str) -> str:
             "zhipuai": "ZHIPUAI_API_KEY",
         }.get(provider, "<provider>_API_KEY")
         return f"Set {env_var} (or `geode login set-key {provider} <…>`)."
-    return f"Resolve the {provider}.{source} binding via ~/.geode/seed-generation.toml."
+    return f"Resolve the {provider}.{source} binding via ~/.geode/seed_generation.toml."
 
 
 def check_diversity(picker_result: PickerResult) -> list[PreFlightIssue]:
@@ -166,7 +166,7 @@ def check_diversity(picker_result: PickerResult) -> list[PreFlightIssue]:
                 code="diversity.collapsed",
                 message=str(exc),
                 fix=(
-                    "Edit ~/.geode/seed-generation.toml to spread the judge panel "
+                    "Edit ~/.geode/seed_generation.toml to spread the judge panel "
                     "across ≥ 2 (provider, source) pairs."
                 ),
             )

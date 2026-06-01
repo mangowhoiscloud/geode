@@ -45,6 +45,64 @@ functional change.
 
 ---
 
+## [0.99.115] - 2026-06-01
+
+### Changed
+- **PR-STATE-AUTORESEARCH-RENAME (2026-06-01) — migrate the self-improving loop's
+  state to a single, snake_case, env-overridable root `state/autoresearch/`, and
+  remove the underscore/hyphen near-synonym twin.** The loop CODE was centralized
+  under `core/self_improving/`, but its DATA still lived under the vestigial
+  `autoresearch/state/` (empty package — only `__init__.py`). The interim
+  `state/self_improving/` collided with the existing `state/self-improving-loop/`
+  handoff dir (a hyphen/underscore twin), so the state root is `state/autoresearch/`
+  (the optimization engine's name) with the handoff NESTED below it.
+  * **Moved (git mv, history preserved):** `autoresearch/state/` →
+    `state/autoresearch/` (under `STATE_ROOT`, env-overridable via
+    `GEODE_STATE_ROOT`). Handoff nested: `state/self-improving-loop/` →
+    `state/autoresearch/handoff/` and `~/.geode/self-improving-loop/` →
+    `~/.geode/autoresearch/handoff/` (code expectation; live dir moved by the
+    operator command). `state/seed-generation/` → `state/seed_generation/`
+    (snake, matching `plugins/seed_generation/`). `autoresearch/program.md` →
+    `core/self_improving/program.md`; `autoresearch/README.md` →
+    `docs/self-improving/loop-overview.md`; `tests/autoresearch/` →
+    `tests/self_improving/`. Deleted `autoresearch/__init__.py` + the empty dir.
+  * **Single canonical constant — no dual SoT.**
+    `core.paths.AUTORESEARCH_STATE_DIR = STATE_ROOT / "autoresearch"`;
+    `AUTORESEARCH_HANDOFF_DIR` (nested), `GLOBAL_AUTORESEARCH_HANDOFF_DIR`,
+    `STATE_SEED_GENERATION_DIR` (snake). The three duplicate state-dir definitions
+    (`watch_campaign.py`, `train.py`, `campaign.py`) were deleted; all import the
+    canonical constant. The program-md reader (`runner.py:_load_program_md`)
+    resolves `core/self_improving/program.md`.
+  * **`.gitignore`** recreates the tracked-vs-ignored pattern under
+    `state/autoresearch/*` (negating the ledgers + policies; ignoring run.log,
+    campaign-progress.log, baseline.json, audit_logs/, _preval-snapshot/,
+    _archive/<be-NNN>/). Verified with `git check-ignore`.
+  * **Hub read-path alignment.** `scripts/build_self_improving_hub.py` reads from
+    `state/autoresearch`; served section dir + URLs
+    (`/geode/self-improving/autoresearch/…`) + Inspect-View `#/logs/<file>`
+    deep-links preserved (conservative — only the read path moved).
+  * **Naming rule** added to CLAUDE.md (CANNOT → Naming): state/runtime dirs use
+    snake_case; no hyphen/underscore near-synonym twins.
+
+### Added
+- **Results writer — fill a diagnosed wiring gap.** `format_results_tsv_row` /
+  `format_results_jsonl_row` output was PRINTED to stdout but NEVER written to
+  disk, so the self-improving hub's results section stayed empty while
+  `mutations.jsonl` + `baseline_archive.jsonl` were written directly. Added
+  `core.self_improving.train._append_results_row()`, called in the post-audit
+  persist section for every non-dry-run audit; it appends to
+  `state/autoresearch/results.tsv` (header on first write) + `.jsonl`. Both
+  files are git-tracked.
+
+### Architecture
+- **Baseline-epoch archive convention codified.**
+  `state/autoresearch/_archive/<be-NNN>/` is the epoch-boundary snapshot location
+  (content-addressed by the `be-NNN` label from
+  `core/self_improving/loop/baseline_epoch.py`). Documented in
+  `state/autoresearch/_archive/README.md`. Auto-snapshot-on-epoch-change is
+  **deferred** with a marked TODO (snapshot I/O inside the promote write path
+  would risk the promote itself).
+
 ## [0.99.114] - 2026-06-01
 
 ### Fixed

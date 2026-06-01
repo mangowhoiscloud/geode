@@ -11,12 +11,12 @@ import core.paths as cp
 
 def _patch_state_root(monkeypatch: Any, root: Path) -> Path:
     monkeypatch.setattr(cp, "STATE_ROOT", root)
-    monkeypatch.setattr(cp, "STATE_SELF_IMPROVING_LOOP_DIR", root / "self-improving-loop")
-    monkeypatch.setattr(cp, "STATE_SEED_GENERATION_DIR", root / "seed-generation")
+    monkeypatch.setattr(cp, "AUTORESEARCH_HANDOFF_DIR", root / "autoresearch" / "handoff")
+    monkeypatch.setattr(cp, "STATE_SEED_GENERATION_DIR", root / "seed_generation")
     monkeypatch.setattr(
         cp,
         "STATE_LATEST_POINTER_PATH",
-        root / "self-improving-loop" / "latest_pointer.json",
+        root / "autoresearch" / "handoff" / "latest_pointer.json",
     )
     return root
 
@@ -28,8 +28,8 @@ class TestWriteLatestPointer:
         monkeypatch: Any,
     ) -> None:
         state_root = _patch_state_root(monkeypatch, tmp_path / "state")
-        seed_pool = state_root / "seed-generation" / "r1" / "survivors"
-        meta_review = state_root / "seed-generation" / "r1" / "meta_review.json"
+        seed_pool = state_root / "seed_generation" / "r1" / "survivors"
+        meta_review = state_root / "seed_generation" / "r1" / "meta_review.json"
         seed_pool.mkdir(parents=True)
         meta_review.parent.mkdir(parents=True, exist_ok=True)
         meta_review.write_text("{}", encoding="utf-8")
@@ -41,8 +41,8 @@ class TestWriteLatestPointer:
         )
         payload = json.loads(cp.STATE_LATEST_POINTER_PATH.read_text(encoding="utf-8"))
         # Paths stored as STATE_ROOT-relative for cross-machine portability.
-        assert payload["seed_pool"] == "seed-generation/r1/survivors"
-        assert payload["meta_review"] == "seed-generation/r1/meta_review.json"
+        assert payload["seed_pool"] == "seed_generation/r1/survivors"
+        assert payload["meta_review"] == "seed_generation/r1/meta_review.json"
         assert payload["run_id"] == "r1"
         assert payload["version"] == 1
 
@@ -70,7 +70,7 @@ class TestWriteLatestPointer:
     def test_optional_meta_review(self, tmp_path: Path, monkeypatch: Any) -> None:
         """seed_pool-only write (meta_review may not exist this run)."""
         state_root = _patch_state_root(monkeypatch, tmp_path / "state")
-        seed_pool = state_root / "seed-generation" / "r3" / "survivors"
+        seed_pool = state_root / "seed_generation" / "r3" / "survivors"
         seed_pool.mkdir(parents=True)
         cp.write_latest_pointer(
             run_id="r3",
@@ -101,8 +101,8 @@ class TestReadLatestPointer:
                     "version": 1,
                     "run_id": "r1",
                     "gen_tag": "gen1",
-                    "seed_pool": "seed-generation/r1/survivors",
-                    "meta_review": "seed-generation/r1/meta_review.json",
+                    "seed_pool": "seed_generation/r1/survivors",
+                    "meta_review": "seed_generation/r1/meta_review.json",
                 }
             ),
             encoding="utf-8",
@@ -110,10 +110,10 @@ class TestReadLatestPointer:
         out = cp.read_latest_pointer()
         assert out is not None
         # Relative inputs resolve under STATE_ROOT.
-        assert out["seed_pool"] == (state_root / "seed-generation" / "r1" / "survivors").resolve()
+        assert out["seed_pool"] == (state_root / "seed_generation" / "r1" / "survivors").resolve()
         assert (
             out["meta_review"]
-            == (state_root / "seed-generation" / "r1" / "meta_review.json").resolve()
+            == (state_root / "seed_generation" / "r1" / "meta_review.json").resolve()
         )
 
     def test_returns_none_on_malformed_json(

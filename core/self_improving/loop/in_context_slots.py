@@ -54,8 +54,8 @@ unknown slot 은 graceful drop (forward-compat).
 1. ``GEODE_IN_CONTEXT_SLOTS_OVERRIDE`` env var — explicit override.
    - With ``GEODE_IN_CONTEXT_SLOTS_STRICT=1``: strict-fail.
    - Without strict flag: graceful (no fall-through).
-2. ``~/.geode/self-improving-loop/in-context-slots.json`` — operator-local.
-3. ``autoresearch/state/policies/in-context-slots.json`` — in-repo.
+2. ``~/.geode/autoresearch/handoff/in-context-slots.json`` — operator-local.
+3. ``state/autoresearch/policies/in-context-slots.json`` — in-repo.
 4. ``None`` — no-op.
 
 **Frontier**: Frontier agent harnesses (Claude Code 의 system prompt,

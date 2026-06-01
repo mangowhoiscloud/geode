@@ -61,7 +61,7 @@ logs/
 # bundle_sync pattern as the audit logs above: ``plugins/seed_generation/
 # bundle_sync.py`` auto-copies finished run artefacts (state.json,
 # survivors.json, meta_review.json, candidates/*.md) from
-# ``state/seed-generation/<run_id>/`` here. Without this exception
+# ``state/seed_generation/<run_id>/`` here. Without this exception
 # the gitignored ``state/*`` rule below would silently drop the
 # synced files (same anti-pattern as PR-G5b #1350).
 !docs/petri-bundle/seeds/
@@ -199,38 +199,6 @@ site/tsconfig.tsbuildinfo
 !site/public/**/*.svg
 !site/public/**/*.ico
 
-# autoresearch outer-loop runtime artifact (results.tsv, failure_log)
-autoresearch/state/*
-!autoresearch/state/.gitkeep
-# G5b.fix1 (2026-05-20) — mutation audit ledger is the git-as-optimiser SoT;
-# every applied wrapper-prompt mutation is committed via _git_commit_audit_log.
-# The trailing negation lets `git add autoresearch/state/mutations.jsonl` succeed.
-!autoresearch/state/mutations.jsonl
-# PR-BASELINE-REGISTRY (2026-05-30) — baseline registry ledger (one
-# ``kind="baseline"`` row per promote, the hub's baseline index reads it).
-# Same git-tracked invariant as mutations.jsonl — silent-ignored writer 회피
-# (PR-G5b #1350 precedent). (Originally added for the dropped pareto archive;
-# now the lossless baseline-history registry — _append_baseline_registry_row.)
-!autoresearch/state/baseline_archive.jsonl
-# PR-BASELINE-EPOCH (2026-05-30) — epoch_hash → be-NNN label map (the hub groups
-# baselines by epoch via these labels). git-tracked alongside the registry so the
-# label assignment is stable + shared, not a silent-ignored local writer.
-!autoresearch/state/baseline_epochs.json
-# PR-VAR-ADAPTIVE (2026-05-27) — historical group-std samples for the
-# percentile-based variance gate. Same git-tracked invariant as
-# mutations.jsonl / baseline_archive.jsonl. Without this negation the
-# percentile threshold would silently lose history under the broad
-# ``autoresearch/state/*`` ignore — exactly the PR-G5b #1350 incident.
-!autoresearch/state/group_variance_history.jsonl
-# PR-RATCHET-1 (2026-05-21) — 5 mutation-target JSONs (wrapper-sections /
-# tool-policy / decomposition / retrieval / reflection) moved in-repo
-# from ~/.geode/self-improving-loop/ so `git diff` shows the current
-# mutation state and `git revert` discards a hypothesis. The directory
-# name matches the existing module/function/constant naming
-# (policies.py / load_policy / GLOBAL_*_POLICY_SOT). The trailing
-# negation re-includes the whole policies/ subtree under git tracking.
-!autoresearch/state/policies/
-!autoresearch/state/policies/**
 .claude/scratch/
 
 # CSP-7 (2026-05-22) — seed-generation cross-run state. The directory
@@ -241,3 +209,61 @@ autoresearch/state/*
 state/*
 !state/.gitkeep
 !state/README.md
+# PR-STATE-AUTORESEARCH-RENAME (2026-06-01, Scheme A) — the self-improving
+# loop's runtime DATA dir is ``state/autoresearch/`` (renamed from
+# ``state/self_improving/`` of #1955 to kill the underscore/hyphen near-synonym
+# twin with the handoff dir; the handoff is now ``state/autoresearch/handoff/``,
+# covered by the broad ``state/autoresearch/*`` ignore). The ``state/*`` line
+# above ignores the new dir; we re-include the dir, then BROADLY ignore its
+# contents (``state/autoresearch/*``) so runtime artefacts — handoff/ +
+# audit_logs/ + _preval-snapshot/ + _archive/<be-NNN>/ + run.log +
+# campaign-progress.log + baseline.json — stay out of git, then negate the
+# git-tracked ledgers + policies back IN. The negation order MUST stay AFTER
+# both broad ignores — same git-tracked-writer invariant as the seed-gen ledgers
+# (PR-G5b #1350: a silent-ignored writer loses history).
+!state/autoresearch/
+state/autoresearch/*
+!state/autoresearch/.gitkeep
+# G5b.fix1 (2026-05-20) — mutation audit ledger is the git-as-optimiser SoT;
+# every applied wrapper-prompt mutation is committed via _git_commit_audit_log.
+# The trailing negation lets `git add state/autoresearch/mutations.jsonl` succeed.
+!state/autoresearch/mutations.jsonl
+# PR-BASELINE-REGISTRY (2026-05-30) — baseline registry ledger (one
+# ``kind="baseline"`` row per promote, the hub's baseline index reads it).
+# Same git-tracked invariant as mutations.jsonl — silent-ignored writer 회피
+# (PR-G5b #1350 precedent). (Originally added for the dropped pareto archive;
+# now the lossless baseline-history registry — _append_baseline_registry_row.)
+!state/autoresearch/baseline_archive.jsonl
+# PR-BASELINE-EPOCH (2026-05-30) — epoch_hash → be-NNN label map (the hub groups
+# baselines by epoch via these labels). git-tracked alongside the registry so the
+# label assignment is stable + shared, not a silent-ignored local writer.
+!state/autoresearch/baseline_epochs.json
+# PR-VAR-ADAPTIVE (2026-05-27) — historical group-std samples for the
+# percentile-based variance gate. Same git-tracked invariant as
+# mutations.jsonl / baseline_archive.jsonl. Without this negation the
+# percentile threshold would silently lose history under the broad
+# ``state/*`` ignore — exactly the PR-G5b #1350 incident.
+!state/autoresearch/group_variance_history.jsonl
+# PR-STATE-SELF-IMPROVING-RENAME (2026-06-01, #1955) — the rolling results history
+# (12-col TSV + raw 20-dim JSONL, one row per audit). Previously printed to
+# stdout only (the hub's results section was empty); now written by
+# _append_results_row. git-tracked so the curve survives `git clean` — same
+# writer-destination invariant as mutations.jsonl / baseline_archive.jsonl.
+!state/autoresearch/results.tsv
+!state/autoresearch/results.jsonl
+# PR-RATCHET-1 (2026-05-21) — 5 mutation-target JSONs (wrapper-sections /
+# tool-policy / decomposition / retrieval / reflection) moved in-repo
+# from ~/.geode/autoresearch/handoff/ so `git diff` shows the current
+# mutation state and `git revert` discards a hypothesis. The directory
+# name matches the existing module/function/constant naming
+# (policies.py / load_policy / GLOBAL_*_POLICY_SOT). The trailing
+# negation re-includes the whole policies/ subtree under git tracking.
+!state/autoresearch/policies/
+!state/autoresearch/policies/**
+# PR-STATE-SELF-IMPROVING-RENAME (2026-06-01, #1955) — the _archive/ epoch-boundary
+# snapshot payloads stay ignored (machine-local records), but the CONVENTION
+# doc is git-tracked so a third party sees the archiving layout. Re-include the
+# dir, broadly re-ignore its contents (the be-NNN/ snapshots), negate the README.
+!state/autoresearch/_archive/
+state/autoresearch/_archive/*
+!state/autoresearch/_archive/README.md

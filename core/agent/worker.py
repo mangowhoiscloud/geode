@@ -458,7 +458,7 @@ def _run_agentic(request: WorkerRequest) -> WorkerResult:
         # ``termination_reason="unknown"``) but no seed markdown was
         # written; downstream ranker hit FileNotFoundError and the
         # PR-VOTER-PROMPT-ANTI-PHANTOM UNAVAILABLE sentinel kicked in.
-        # Evidence: ``state/seed-generation/gen1-redundant_tool_invocation/
+        # Evidence: ``state/seed_generation/gen1-redundant_tool_invocation/
         # sub_agents/gen-gen1-000-fe17d6c5/result.json`` — output is a
         # verbatim ``DecompositionResult`` JSON.
         enable_goal_decomposition=False,

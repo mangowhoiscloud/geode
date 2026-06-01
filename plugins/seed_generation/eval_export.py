@@ -2,7 +2,7 @@
 
 PR-SEEDS-EVAL-EXPORT (2026-05-25). The self-improving loop's
 seed-generation pipeline produces JSON artefacts under
-``state/seed-generation/<run_id>/`` and mirrors a publishable subset
+``state/seed_generation/<run_id>/`` and mirrors a publishable subset
 into ``docs/self-improving/petri-bundle/seeds/<run_id>/`` (handled by
 :mod:`plugins.seed_generation.bundle_sync`). An inspect_ai SPA viewer
 only recognises ``.eval`` log archives, so the JSON-only seed runs never
@@ -288,7 +288,7 @@ def export_run_to_evals(
 
     def candidate_md_text(candidate: dict[str, Any]) -> str:
         # Prefer the published bundle copy: ``candidate["path"]`` is an
-        # absolute LOCAL state path (state/seed-generation/...) that does not
+        # absolute LOCAL state path (state/seed_generation/...) that does not
         # exist in a fresh checkout / CI, which would silently empty the
         # generator MESSAGES tab. The bundle ships ``candidates/<cid>.md``
         # (+ evolved / survivors copies) under run_dir.

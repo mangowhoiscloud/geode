@@ -208,7 +208,7 @@ def test_path_constants_present() -> None:
     assert GLOBAL_STYLE_GUIDE_PATH.name == "style-guide.json"
     assert OPERATOR_LOCAL_STYLE_GUIDE_PATH.name == "style-guide.json"
     assert "policies" in str(GLOBAL_STYLE_GUIDE_PATH)
-    assert "self-improving-loop" in str(OPERATOR_LOCAL_STYLE_GUIDE_PATH)
+    assert "autoresearch/handoff" in str(OPERATOR_LOCAL_STYLE_GUIDE_PATH)
 
 
 # Env wiring in train.py ------------------------------------------------------

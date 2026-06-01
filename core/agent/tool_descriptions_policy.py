@@ -31,8 +31,8 @@ dim) 직접 영향.
    - With ``GEODE_TOOL_DESCRIPTIONS_STRICT=1`` (audit subprocess): strict.
    - Without strict flag (operator daily): graceful (no fall-through).
 
-2. ``~/.geode/self-improving-loop/tool-descriptions.json`` — operator-local, graceful.
-3. ``autoresearch/state/policies/tool-descriptions.json`` — in-repo, graceful.
+2. ``~/.geode/autoresearch/handoff/tool-descriptions.json`` — operator-local, graceful.
+3. ``state/autoresearch/policies/tool-descriptions.json`` — in-repo, graceful.
 4. ``None`` — no-op (default description 사용).
 
 **Frontier**: OpenAI function calling docs — "clearer descriptions yield

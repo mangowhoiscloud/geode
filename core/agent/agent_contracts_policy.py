@@ -28,8 +28,8 @@ Unknown agent name / 부적합 schema → graceful drop (forward-compat).
 1. ``GEODE_AGENT_CONTRACTS_OVERRIDE`` env var — explicit override.
    - With ``GEODE_AGENT_CONTRACTS_STRICT=1``: strict.
    - Without strict flag: graceful (no fall-through).
-2. ``~/.geode/self-improving-loop/agent-contracts.json`` — operator-local.
-3. ``autoresearch/state/policies/agent-contracts.json`` — in-repo.
+2. ``~/.geode/autoresearch/handoff/agent-contracts.json`` — operator-local.
+3. ``state/autoresearch/policies/agent-contracts.json`` — in-repo.
 4. ``None`` — no-op.
 
 **Frontier**: Claude Code 의 ``.claude/agents/*.md`` agent definitions

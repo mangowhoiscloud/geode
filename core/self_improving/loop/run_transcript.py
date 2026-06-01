@@ -21,7 +21,7 @@ binding on every call. The actual append goes through
 so the canonical Tier-1 schema (``{ts, session_id, gen_tag, component,
 level, event, payload}``) and writer is used.
 
-On disk: ``~/.geode/self-improving-loop/<id>/transcript.jsonl`` (the
+On disk: ``~/.geode/autoresearch/handoff/<id>/transcript.jsonl`` (the
 filename was renamed from ``journal.jsonl`` in PR-SESSION-METRICS;
 PR-CLEANUP-7 brings the class + module names into line with the
 filename).
@@ -86,9 +86,9 @@ class RunTranscript:
             # PR-SESSION-METRICS — file is ``transcript.jsonl`` (renamed
             # from the pre-2026-05-23 ``journal.jsonl`` to align with
             # the canonical Tier-1 naming). Per-run directory unchanged.
-            from core.paths import GLOBAL_SELF_IMPROVING_LOOP_DIR
+            from core.paths import GLOBAL_AUTORESEARCH_HANDOFF_DIR
 
-            path = GLOBAL_SELF_IMPROVING_LOOP_DIR / session_id / "transcript.jsonl"
+            path = GLOBAL_AUTORESEARCH_HANDOFF_DIR / session_id / "transcript.jsonl"
         self.path = path
         # Underlying SessionTranscript — uses our chosen path verbatim.
         # ``SessionTranscript.__init__(session_id, transcript_dir=...)``

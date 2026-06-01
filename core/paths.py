@@ -60,16 +60,38 @@ def _resolve_repo_root() -> Path:
 _REPO_ROOT = _resolve_repo_root()
 STATE_ROOT = Path(os.environ.get("GEODE_STATE_ROOT") or (_REPO_ROOT / "state"))
 
-# Cross-run handoff (latest_pointer.toml, sessions.jsonl). The
-# ``self-improving-loop`` SUFFIX is preserved from the pre-CSP-7
-# user-level dir name so the conceptual mapping
-# ``~/.geode/self-improving-loop/...`` ↔ ``state/self-improving-loop/...``
-# stays obvious in logs and ops docs.
-STATE_SELF_IMPROVING_LOOP_DIR = STATE_ROOT / "self-improving-loop"
+# PR-STATE-AUTORESEARCH-RENAME (2026-06-01, Scheme A) — the autoresearch
+# optimization loop's in-repo runtime DATA. "autoresearch" is the engine's
+# name (operator-approved); this was ``state/autoresearch/`` under
+# PR-STATE-SELF-IMPROVING-RENAME (#1955) which collided as a near-synonym
+# twin with the hyphenated cross-run handoff dir ``self-improving-loop/``.
+# Scheme A folds BOTH under a single ``state/autoresearch/`` root (the
+# handoff is now ``handoff/`` NESTED below — see AUTORESEARCH_HANDOFF_DIR)
+# so the twin is eliminated. Env-overridable via ``GEODE_STATE_ROOT`` +
+# clone-portable like the seed-generation state. This is the SINGLE
+# canonical definition — ``core.self_improving.train`` / ``.watch_campaign``
+# / ``.campaign`` / ``.prepare`` and ``scripts/build_self_improving_hub.py``
+# all import it (no dual SoT, per CLAUDE.md Registry/SoT rules). The CODE
+# package ``core/self_improving/`` keeps its name — only the STATE dir moves.
+AUTORESEARCH_STATE_DIR = STATE_ROOT / "autoresearch"
+
+# Cross-run handoff (latest_pointer.json, sessions.jsonl). PR-STATE-
+# AUTORESEARCH-RENAME (2026-06-01, Scheme A) — nested UNDER the
+# autoresearch state root so there is no ``self_improving`` (underscore)
+# vs ``self-improving-loop`` (hyphen) near-synonym twin. The handoff
+# pointer + run-level registry belong to the same autoresearch loop
+# whose ledgers live in ``AUTORESEARCH_STATE_DIR``; the only reason
+# they were a separate top-level dir was the pre-CSP-7 history.
+AUTORESEARCH_HANDOFF_DIR = AUTORESEARCH_STATE_DIR / "handoff"
 
 # Per-run artefacts (state.json, candidates/, survivors/, meta_review.json,
 # elo_log.tsv). Pre-CSP-7: ``~/.geode/seed-generation/<run_id>/``.
-STATE_SEED_GENERATION_DIR = STATE_ROOT / "seed-generation"
+# PR-STATE-AUTORESEARCH-RENAME (2026-06-01) — snake_case ``seed_generation``
+# to match the plugin package ``plugins/seed_generation/`` (no hyphen/
+# underscore twin). The Pages-served bundle dir
+# (``docs/self-improving/seed-generation/``) keeps its hyphen URL — only
+# the READ/state path goes snake.
+STATE_SEED_GENERATION_DIR = STATE_ROOT / "seed_generation"
 
 # Single forward-pointer JSON file the seed-generation orchestrator
 # writes at the end of every run (CSP-7). Replaces the pre-CSP-7
@@ -81,15 +103,15 @@ STATE_SEED_GENERATION_DIR = STATE_ROOT / "seed-generation"
 #       "run_id": "gen2-broken_tool_use",
 #       "gen_tag": "gen2",
 #       "updated_at": "2026-05-22T01:00:00Z",
-#       "seed_pool":   "seed-generation/gen2-broken_tool_use/survivors",
-#       "meta_review": "seed-generation/gen2-broken_tool_use/meta_review.json"
+#       "seed_pool":   "seed_generation/gen2-broken_tool_use/survivors",
+#       "meta_review": "seed_generation/gen2-broken_tool_use/meta_review.json"
 #     }
 #
 # Paths stored as STATE_ROOT-relative strings so a clone-on-fresh-box
 # can resolve them without honouring the writer's ``$HOME`` or
 # absolute layout. Readers MUST go through :func:`read_latest_pointer`
 # (validates schema + resolves to absolute via STATE_ROOT).
-STATE_LATEST_POINTER_PATH = STATE_SELF_IMPROVING_LOOP_DIR / "latest_pointer.json"
+STATE_LATEST_POINTER_PATH = AUTORESEARCH_HANDOFF_DIR / "latest_pointer.json"
 
 
 def write_latest_pointer(
@@ -216,10 +238,16 @@ GLOBAL_DIAGNOSTICS_DIR = GEODE_HOME / "diagnostics"
 # autoresearch/seed-generation run) + ``<session_id>/transcript.jsonl``
 # (P1c, event stream within a single run). See
 # ``docs/plans/2026-05-19-self-improving-loop-wiring-sprint.md``.
-GLOBAL_SELF_IMPROVING_LOOP_DIR = GEODE_HOME / "self-improving-loop"
+# PR-STATE-AUTORESEARCH-RENAME (2026-06-01, Scheme A) — the home handoff
+# dir moves from ``~/.geode/autoresearch/handoff/`` to
+# ``~/.geode/autoresearch/handoff/`` IN CODE so the home layout mirrors
+# the in-repo ``state/autoresearch/handoff/`` and the underscore/hyphen
+# twin is gone. (The live ``~/.geode`` dir is migrated by the operator
+# command, not by the constant.)
+GLOBAL_AUTORESEARCH_HANDOFF_DIR = GEODE_HOME / "autoresearch" / "handoff"
 # PR-RATCHET-1 (2026-05-21) — the 5 mutation-target files now live in
-# the in-repo ``autoresearch/state/policies/`` directory rather than
-# the operator's ``~/.geode/self-improving-loop/``. The rename converges
+# the in-repo ``state/autoresearch/policies/`` directory rather than
+# the operator's ``~/.geode/autoresearch/handoff/``. The rename converges
 # on upstream Karpathy's "branch tip = current best" principle: each
 # policy is git-tracked, so ``git diff`` shows the current mutation
 # state and ``git revert`` discards a hypothesis. The directory name
@@ -229,13 +257,13 @@ GLOBAL_SELF_IMPROVING_LOOP_DIR = GEODE_HOME / "self-improving-loop"
 # ``_SOT`` suffix (``GLOBAL_*_SOT`` → ``GLOBAL_*_PATH``) so the
 # names match the new directory's "policies" semantics rather than
 # the legacy "source of truth" label. Lazy migration of any legacy
-# ``~/.geode/self-improving-loop/<file>.json`` payload is handled
+# ``~/.geode/autoresearch/handoff/<file>.json`` payload is handled
 # by :mod:`core.self_improving.loop.policies`.
-_REPO_ROOT = Path(__file__).resolve().parents[1]
-_AUTORESEARCH_STATE_DIR = _REPO_ROOT / "autoresearch" / "state"
-GLOBAL_POLICIES_DIR = _AUTORESEARCH_STATE_DIR / "policies"
-LEGACY_SOT_DIR = GLOBAL_SELF_IMPROVING_LOOP_DIR
-"""Pre-RATCHET-1 policy dir under ``~/.geode/self-improving-loop/``.
+# The in-repo policy/ledger state dir is ``AUTORESEARCH_STATE_DIR``
+# (``state/autoresearch/``, defined at the top of this module).
+GLOBAL_POLICIES_DIR = AUTORESEARCH_STATE_DIR / "policies"
+LEGACY_SOT_DIR = GLOBAL_AUTORESEARCH_HANDOFF_DIR
+"""Pre-RATCHET-1 policy dir under ``~/.geode/autoresearch/handoff/``.
 Kept for the lazy migration path so an upgrade of an existing
 operator install copies their last-known wrapper/policy state into
 the new in-repo location on first read/write."""
@@ -276,15 +304,15 @@ GLOBAL_HYPERPARAM_POLICY_PATH = GLOBAL_POLICIES_DIR / "hyperparam.json"
 # tool_descriptions). Per-machine overrides without touching in-repo
 # ratchet-tracked files. Resolution order: env-override (strict/graceful)
 # → operator-local (graceful) → in-repo (graceful) → None.
-OPERATOR_LOCAL_TOOL_POLICY_PATH = GLOBAL_SELF_IMPROVING_LOOP_DIR / "tool-policy.json"
-OPERATOR_LOCAL_DECOMPOSITION_POLICY_PATH = GLOBAL_SELF_IMPROVING_LOOP_DIR / "decomposition.json"
-OPERATOR_LOCAL_REFLECTION_POLICY_PATH = GLOBAL_SELF_IMPROVING_LOOP_DIR / "reflection.json"
-OPERATOR_LOCAL_TOOL_DESCRIPTIONS_PATH = GLOBAL_SELF_IMPROVING_LOOP_DIR / "tool-descriptions.json"
+OPERATOR_LOCAL_TOOL_POLICY_PATH = GLOBAL_AUTORESEARCH_HANDOFF_DIR / "tool-policy.json"
+OPERATOR_LOCAL_DECOMPOSITION_POLICY_PATH = GLOBAL_AUTORESEARCH_HANDOFF_DIR / "decomposition.json"
+OPERATOR_LOCAL_REFLECTION_POLICY_PATH = GLOBAL_AUTORESEARCH_HANDOFF_DIR / "reflection.json"
+OPERATOR_LOCAL_TOOL_DESCRIPTIONS_PATH = GLOBAL_AUTORESEARCH_HANDOFF_DIR / "tool-descriptions.json"
 # ADR-013 T2 (2026-05-21) — Skill catalog mutation SoT. Mutator overrides
 # per-skill description text + user_invocable visibility for the LLM's
 # skill-routing context block.
 GLOBAL_SKILL_CATALOG_PATH = GLOBAL_POLICIES_DIR / "skill-catalog.json"
-OPERATOR_LOCAL_SKILL_CATALOG_PATH = GLOBAL_SELF_IMPROVING_LOOP_DIR / "skill-catalog.json"
+OPERATOR_LOCAL_SKILL_CATALOG_PATH = GLOBAL_AUTORESEARCH_HANDOFF_DIR / "skill-catalog.json"
 # ADR-013 T3 (2026-05-21) — Response style guide mutation SoT. Typed enum
 # schema (tone / verbosity_level / response_format / code_style) — mutator
 # picks from constrained alternatives. (ux_means fitness 축은
@@ -292,20 +320,20 @@ OPERATOR_LOCAL_SKILL_CATALOG_PATH = GLOBAL_SELF_IMPROVING_LOOP_DIR / "skill-cata
 # fitness 영향.) wrapper-sections.json (G5a/G5b) 의 free-form 텍스트
 # mutation 과 분리: T3 는 constrained typed 선택지.
 GLOBAL_STYLE_GUIDE_PATH = GLOBAL_POLICIES_DIR / "style-guide.json"
-OPERATOR_LOCAL_STYLE_GUIDE_PATH = GLOBAL_SELF_IMPROVING_LOOP_DIR / "style-guide.json"
+OPERATOR_LOCAL_STYLE_GUIDE_PATH = GLOBAL_AUTORESEARCH_HANDOFF_DIR / "style-guide.json"
 # ADR-013 T4 (2026-05-21) — Provider routing mutation SoT. Mutator picks
 # per-model preferred plan chain (plan_id ordered list). OpenRouter-style
 # explicit routing — per-call cost knob. (ux_means.token_cost_norm fitness
 # 축은 PR-MARGIN-FITNESS-SCALE 2026-05-30 에 제거.)
 GLOBAL_PROVIDER_ROUTING_PATH = GLOBAL_POLICIES_DIR / "provider-routing.json"
-OPERATOR_LOCAL_PROVIDER_ROUTING_PATH = GLOBAL_SELF_IMPROVING_LOOP_DIR / "provider-routing.json"
+OPERATOR_LOCAL_PROVIDER_ROUTING_PATH = GLOBAL_AUTORESEARCH_HANDOFF_DIR / "provider-routing.json"
 # ADR-013 T5 (2026-05-21) — Cache breakpoint policy mutation SoT. Mutator
 # picks how many trailing-message cache_control breakpoints to apply
 # (Anthropic의 4-breakpoint cap 중 messages 가 가져갈 수). 0-3 사이.
 # trade-off: ↑ → cache hit ↑ but per-call overhead ↑ (각 breakpoint 가
 # $0.10/MTok 오버헤드). ↓ → cache hit ↓ but per-call cost ↓.
 GLOBAL_CACHE_POLICY_PATH = GLOBAL_POLICIES_DIR / "cache-policy.json"
-OPERATOR_LOCAL_CACHE_POLICY_PATH = GLOBAL_SELF_IMPROVING_LOOP_DIR / "cache-policy.json"
+OPERATOR_LOCAL_CACHE_POLICY_PATH = GLOBAL_AUTORESEARCH_HANDOFF_DIR / "cache-policy.json"
 # ADR-013 T6 (2026-05-21) — Heuristic indicators mutation SoT. Mutator
 # evolves the keyword/phrase list that primes the LLM's task-triage
 # heuristics — complexity / risk / time-pressure markers injected into
@@ -314,26 +342,26 @@ OPERATOR_LOCAL_CACHE_POLICY_PATH = GLOBAL_SELF_IMPROVING_LOOP_DIR / "cache-polic
 # fitness 축은 PR-MARGIN-FITNESS-SCALE 2026-05-30 에 제거 — 이제 Petri dim
 # 경유로만 fitness 영향.)
 GLOBAL_HEURISTICS_PATH = GLOBAL_POLICIES_DIR / "heuristics.json"
-OPERATOR_LOCAL_HEURISTICS_PATH = GLOBAL_SELF_IMPROVING_LOOP_DIR / "heuristics.json"
+OPERATOR_LOCAL_HEURISTICS_PATH = GLOBAL_AUTORESEARCH_HANDOFF_DIR / "heuristics.json"
 # ADR-012 S5 (2026-05-21) — in-context slot configuration SoT. Declares
 # the 4 canonical slot categories (exemplars / memory_recall /
 # rubric_excerpts / tool_hints) and their per-slot top-K / rank_by /
 # injection_point. M4.4 후속 PR 이 이 schema 를 실제 inference path 에서
 # 소비하는 wiring 을 담당; 본 PR 은 schema + reader + validation 만.
 GLOBAL_IN_CONTEXT_SLOTS_PATH = GLOBAL_POLICIES_DIR / "in-context-slots.json"
-OPERATOR_LOCAL_IN_CONTEXT_SLOTS_PATH = GLOBAL_SELF_IMPROVING_LOOP_DIR / "in-context-slots.json"
+OPERATOR_LOCAL_IN_CONTEXT_SLOTS_PATH = GLOBAL_AUTORESEARCH_HANDOFF_DIR / "in-context-slots.json"
 # ADR-012 M2 (2026-05-21) — AgentDefinition contract mutation SoT.
 # Mutator overrides per-agent role / system_prompt / tools. ``model``
 # field 은 Tier 2 — 변경 시 안전성 invariants 가 단번에 무효화될 수
 # 있어 mutation surface 에서 제외.
 GLOBAL_AGENT_CONTRACTS_PATH = GLOBAL_POLICIES_DIR / "agent-contracts.json"
-OPERATOR_LOCAL_AGENT_CONTRACTS_PATH = GLOBAL_SELF_IMPROVING_LOOP_DIR / "agent-contracts.json"
+OPERATOR_LOCAL_AGENT_CONTRACTS_PATH = GLOBAL_AUTORESEARCH_HANDOFF_DIR / "agent-contracts.json"
 # ADR-012 M3 (2026-05-21) — Few-shot exemplar pool (JSONL append-only).
 # fitness gate 통과한 task-completion candidate 를 누적; runtime 에
 # top-K 선별해 system prompt 직후 in-context exemplar 로 적재. S5 의
 # ``exemplars`` slot 의 실제 *적재 메커니즘*.
 GLOBAL_FEW_SHOT_POOL_PATH = GLOBAL_POLICIES_DIR / "few-shot-pool.jsonl"
-OPERATOR_LOCAL_FEW_SHOT_POOL_PATH = GLOBAL_SELF_IMPROVING_LOOP_DIR / "few-shot-pool.jsonl"
+OPERATOR_LOCAL_FEW_SHOT_POOL_PATH = GLOBAL_AUTORESEARCH_HANDOFF_DIR / "few-shot-pool.jsonl"
 # ADR-012 M4.1 (2026-05-21) — DPO canonical preference-pack JSONL.
 # Consumes ``eval_response_recorded`` events (M4.0) and emits one row
 # per ``(prompt, chosen, rejected)`` tuple. Format-agnostic — M4.2
@@ -341,7 +369,7 @@ OPERATOR_LOCAL_FEW_SHOT_POOL_PATH = GLOBAL_SELF_IMPROVING_LOOP_DIR / "few-shot-p
 # DPO / HuggingFace TRL). Operator-local, NOT git-tracked: preference
 # data may include user-private prompts until an explicit redaction
 # step (M4.3) ships a sanitized copy.
-GLOBAL_DPO_PACK_PATH = GLOBAL_SELF_IMPROVING_LOOP_DIR / "dpo" / "pack.jsonl"
+GLOBAL_DPO_PACK_PATH = GLOBAL_AUTORESEARCH_HANDOFF_DIR / "dpo" / "pack.jsonl"
 # PR-MINIMAL-2 (2026-05-21) — git-tracked audit ledger of every
 # applied mutation. Lives in-repo alongside the 5 policy SoT JSONs
 # so the git-as-optimiser ledger and the current-state files are
@@ -349,12 +377,12 @@ GLOBAL_DPO_PACK_PATH = GLOBAL_SELF_IMPROVING_LOOP_DIR / "dpo" / "pack.jsonl"
 # ``core/self_improving/loop/runner.py``; moved here for consistency
 # with the other path constants. The runner re-exports the constant
 # for backwards compat with existing callers.
-MUTATION_AUDIT_LOG_PATH = _AUTORESEARCH_STATE_DIR / "mutations.jsonl"
+MUTATION_AUDIT_LOG_PATH = AUTORESEARCH_STATE_DIR / "mutations.jsonl"
 # git-tracked, append-only baseline history JSONL. (The Pareto-archive
 # writer that originally populated it was removed in PR-GROUP-REMOVAL;
 # the hub still reads any rows for the autoresearch timeline, and the
 # baseline-registry follow-up repurposes it as the promote-history SoT.)
-BASELINE_ARCHIVE_PATH = _AUTORESEARCH_STATE_DIR / "baseline_archive.jsonl"
+BASELINE_ARCHIVE_PATH = AUTORESEARCH_STATE_DIR / "baseline_archive.jsonl"
 GLOBAL_AUTH_TOML = GEODE_HOME / "auth.toml"
 # PR-4 C-3 (2026-05-21) — cross-session episodic action-outcome log
 # (~/.geode/memory/episodes.jsonl). Append-only JSONL: one row per
@@ -382,7 +410,11 @@ GLOBAL_ROUTING_TOML = GEODE_HOME / "routing.toml"
 # into the picker's per-role binding resolver. Distinct from
 # ``GLOBAL_PETRI_TOML`` because seed-generation owns its own 7-role × judge-
 # panel binding model (see ADR-003 §"override surface").
-GLOBAL_SEED_PIPELINE_TOML = GEODE_HOME / "seed-generation.toml"
+# PR-STATE-AUTORESEARCH-RENAME (2026-06-01) — snake_case ``seed_generation.toml``
+# to match the plugin package ``plugins/seed_generation/`` (was the hyphenated
+# ``seed-generation.toml`` twin). The live file is renamed by the operator
+# migration command, not by this constant.
+GLOBAL_SEED_PIPELINE_TOML = GEODE_HOME / "seed_generation.toml"
 # P3 (v0.95.x) — user-tier installed skills (priority 2 of 4-tier
 # resolution; see `core/llm/skill_registry.py`). Bundled skills live
 # inside the package source tree, not at `GEODE_HOME` — resolve via

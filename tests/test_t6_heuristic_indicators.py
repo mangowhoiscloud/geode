@@ -214,7 +214,7 @@ def test_path_constants_present() -> None:
     assert GLOBAL_HEURISTICS_PATH.name == "heuristics.json"
     assert OPERATOR_LOCAL_HEURISTICS_PATH.name == "heuristics.json"
     assert "policies" in str(GLOBAL_HEURISTICS_PATH)
-    assert "self-improving-loop" in str(OPERATOR_LOCAL_HEURISTICS_PATH)
+    assert "autoresearch/handoff" in str(OPERATOR_LOCAL_HEURISTICS_PATH)
 
 
 # Env wiring in train.py ------------------------------------------------------

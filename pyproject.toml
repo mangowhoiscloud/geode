@@ -1,6 +1,6 @@
 [project]
 name = "geode-agent"
-version = "0.99.114"
+version = "0.99.115"
 description = "GEODE — 범용 자율 실행 에이전트"
 license = "Apache-2.0"
 readme = "README.md"
@@ -300,7 +300,7 @@ ignore_imports = [
 [tool.ruff]
 target-version = "py312"
 line-length = 100
-src = ["core", "plugins", "tests", "autoresearch", "scripts"]
+src = ["core", "plugins", "tests", "scripts"]
 extend-exclude = [
     ".geode",        # runtime config + skill scripts (not part of codebase)
     ".claude",       # Claude Code session artifacts

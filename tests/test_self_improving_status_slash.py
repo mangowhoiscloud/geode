@@ -141,7 +141,7 @@ def test_status_with_no_baseline_and_no_mutations(
 ) -> None:
     """Fresh clone: neither baseline.json nor mutations.jsonl exists.
     Status must render empty-state hints, NOT raise."""
-    fake_audit = tmp_path / "autoresearch" / "state" / "mutations.jsonl"
+    fake_audit = tmp_path / "autoresearch" / "mutations.jsonl"
     fake_audit.parent.mkdir(parents=True)
     # don't create the file — empty-state path
     monkeypatch.setattr(
@@ -161,7 +161,7 @@ def test_status_renders_baseline_block(
     capsys: pytest.CaptureFixture[str],
     tmp_path: Path,
 ) -> None:
-    state_dir = tmp_path / "autoresearch" / "state"
+    state_dir = tmp_path / "autoresearch"
     state_dir.mkdir(parents=True)
     baseline_path = state_dir / "baseline.json"
     fake_audit = state_dir / "mutations.jsonl"
@@ -200,7 +200,7 @@ def test_status_renders_baseline_v2_block(
     "reason" line from ``session_id`` (since v2 stores the run id, not
     a free-form reason). Pre-fix the status block rendered ``?`` for
     both fields."""
-    state_dir = tmp_path / "autoresearch" / "state"
+    state_dir = tmp_path / "autoresearch"
     state_dir.mkdir(parents=True)
     baseline_path = state_dir / "baseline.json"
     fake_audit = state_dir / "mutations.jsonl"
@@ -245,7 +245,7 @@ def test_status_renders_rolled_back_row_with_muted_style(
     (applied/rejected/rolled_back) map to (success/warning/muted) Rich
     styles in ``_print_audit_row``; the muted path is the easiest to
     drop in a refactor, so pin it explicitly."""
-    state_dir = tmp_path / "autoresearch" / "state"
+    state_dir = tmp_path / "autoresearch"
     state_dir.mkdir(parents=True)
     fake_audit = state_dir / "mutations.jsonl"
     fake_audit.write_text(
@@ -286,7 +286,7 @@ def test_status_renders_recent_mutations(
     capsys: pytest.CaptureFixture[str],
     tmp_path: Path,
 ) -> None:
-    state_dir = tmp_path / "autoresearch" / "state"
+    state_dir = tmp_path / "autoresearch"
     state_dir.mkdir(parents=True)
     fake_audit = state_dir / "mutations.jsonl"
     rows = [
@@ -328,7 +328,7 @@ def test_status_tolerates_malformed_baseline(
     tmp_path: Path,
 ) -> None:
     """A truncated JSON write (mid-promote) must not crash status."""
-    state_dir = tmp_path / "autoresearch" / "state"
+    state_dir = tmp_path / "autoresearch"
     state_dir.mkdir(parents=True)
     baseline_path = state_dir / "baseline.json"
     fake_audit = state_dir / "mutations.jsonl"
@@ -352,7 +352,7 @@ def test_status_tolerates_partial_jsonl_row(
 ) -> None:
     """The audit ledger is append-only, so a partial final row during
     concurrent write must not crash status."""
-    state_dir = tmp_path / "autoresearch" / "state"
+    state_dir = tmp_path / "autoresearch"
     state_dir.mkdir(parents=True)
     fake_audit = state_dir / "mutations.jsonl"
     good_row: dict[str, Any] = {

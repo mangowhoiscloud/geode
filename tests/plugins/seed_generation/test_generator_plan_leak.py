@@ -26,7 +26,7 @@ This file pins two regression invariants:
    three planner keys with their canonical types).
 
 Evidence file:
-``state/seed-generation/gen1-redundant_tool_invocation/sub_agents/gen-gen1-000-fe17d6c5/result.json``
+``state/seed_generation/gen1-redundant_tool_invocation/sub_agents/gen-gen1-000-fe17d6c5/result.json``
 """
 
 from __future__ import annotations

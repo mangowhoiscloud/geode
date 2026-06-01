@@ -220,7 +220,7 @@ def test_load_user_overrides_missing_file_returns_empty(tmp_path: Path) -> None:
 
 
 def test_load_user_overrides_parses_role_tables(tmp_path: Path) -> None:
-    p = tmp_path / "seed-generation.toml"
+    p = tmp_path / "seed_generation.toml"
     p.write_text(
         '[generator]\nsource = "api_key"\n\n[pilot]\nmodel = "claude-haiku-4-5"\n',
         encoding="utf-8",
@@ -231,7 +231,7 @@ def test_load_user_overrides_parses_role_tables(tmp_path: Path) -> None:
 
 
 def test_load_user_overrides_skips_non_table_entries(tmp_path: Path) -> None:
-    p = tmp_path / "seed-generation.toml"
+    p = tmp_path / "seed_generation.toml"
     # Top-level scalar that isn't a table — must be ignored, not crash.
     p.write_text('debug = true\n\n[pilot]\nsource = "claude-cli"\n', encoding="utf-8")
     out = load_user_overrides(path=p)
@@ -240,7 +240,7 @@ def test_load_user_overrides_skips_non_table_entries(tmp_path: Path) -> None:
 
 
 def test_load_user_overrides_invalid_toml_returns_empty(tmp_path: Path) -> None:
-    p = tmp_path / "seed-generation.toml"
+    p = tmp_path / "seed_generation.toml"
     p.write_text("not = valid = toml = here", encoding="utf-8")
     out = load_user_overrides(path=p)
     assert out == {}

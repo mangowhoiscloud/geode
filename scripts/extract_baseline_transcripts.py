@@ -1,6 +1,6 @@
 """Extract the baseline audit's auditor↔target↔judge transcripts to JSON.
 
-The self-improving baseline (``autoresearch/state/baseline.json``) is produced
+The self-improving baseline (``state/autoresearch/baseline.json``) is produced
 by one Petri audit over the survivor seed pool. That audit's ``.eval`` log holds
 everything the baseline hub page needs to *show its work*: the seed scenario
 bodies, the auditor↔target conversation per seed, and the judge's 22-dim scores
@@ -29,7 +29,10 @@ from pathlib import Path
 from typing import Any
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
-DEFAULT_BASELINE = REPO_ROOT / "autoresearch" / "state" / "baseline.json"
+# READ path is state/autoresearch (PR-STATE-AUTORESEARCH-RENAME 2026-06-01,
+# Scheme A; renamed from state/self_improving of #1955); the served output
+# dir keeps the ``autoresearch`` lineage name.
+DEFAULT_BASELINE = REPO_ROOT / "state" / "autoresearch" / "baseline.json"
 DEFAULT_OUT = (
     REPO_ROOT / "docs" / "self-improving" / "autoresearch" / "baseline" / "transcripts.json"
 )

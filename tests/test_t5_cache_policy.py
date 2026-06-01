@@ -162,7 +162,7 @@ def test_path_constants_present() -> None:
     assert GLOBAL_CACHE_POLICY_PATH.name == "cache-policy.json"
     assert OPERATOR_LOCAL_CACHE_POLICY_PATH.name == "cache-policy.json"
     assert "policies" in str(GLOBAL_CACHE_POLICY_PATH)
-    assert "self-improving-loop" in str(OPERATOR_LOCAL_CACHE_POLICY_PATH)
+    assert "autoresearch/handoff" in str(OPERATOR_LOCAL_CACHE_POLICY_PATH)
 
 
 # Env wiring in train.py ------------------------------------------------------

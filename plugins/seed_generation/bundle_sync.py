@@ -3,7 +3,7 @@
 Mirrors the audit-side pattern in ``plugins/petri_audit/bundle_sync.py``
 (``sync_eval_to_bundle``). When a seed-generation run finishes, the
 orchestrator calls :func:`sync_run_to_bundle` which selectively copies
-the publishable subset of ``state/seed-generation/<run_id>/`` into the
+the publishable subset of ``state/seed_generation/<run_id>/`` into the
 Pages-tracked ``docs/self-improving/petri-bundle/seeds/<run_id>/``:
 
 - ``state.json``      — full pipeline snapshot (phase progress, costs)
@@ -12,9 +12,9 @@ Pages-tracked ``docs/self-improving/petri-bundle/seeds/<run_id>/``:
 - ``candidates/<survivor_id>.md`` — only the SURVIVING candidate bodies
   (full ``candidates/`` directory may be 15 + draft seeds; we don't
   publish the dropped ones — they're available locally in
-  ``state/seed-generation/`` for the operator)
+  ``state/seed_generation/`` for the operator)
 
-Why selective copy: the full ``state/seed-generation/<run_id>/`` can
+Why selective copy: the full ``state/seed_generation/<run_id>/`` can
 include ``candidates/<id>.debate.jsonl`` sidecars + debate transcripts +
 N drafts (15+). The Pages bundle is a publish surface, not an archive —
 operators get the final report (survivors + meta_review) for
@@ -122,7 +122,7 @@ def sync_run_to_bundle(run_dir: Path | str) -> Path | None:
     Idempotent — re-syncing the same run overwrites in place.
 
     Args:
-        run_dir: ``state/seed-generation/<run_id>/`` — the per-run
+        run_dir: ``state/seed_generation/<run_id>/`` — the per-run
             directory the orchestrator's ``_persist_state`` populates.
             Must contain at least ``state.json``; the other files
             (``survivors.json`` / ``meta_review.json``) are optional and

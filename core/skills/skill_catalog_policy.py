@@ -34,9 +34,9 @@ authoritative.
    - With ``GEODE_SKILL_CATALOG_STRICT=1`` (audit subprocess): strict.
    - Without strict flag (operator daily): graceful (no fall-through).
 
-2. ``~/.geode/self-improving-loop/skill-catalog.json`` — operator-local,
+2. ``~/.geode/autoresearch/handoff/skill-catalog.json`` — operator-local,
    graceful.
-3. ``autoresearch/state/policies/skill-catalog.json`` — in-repo, graceful.
+3. ``state/autoresearch/policies/skill-catalog.json`` — in-repo, graceful.
 4. ``None`` — no-op.
 
 **Frontier**: Voyager (Wang et al., 2023) curriculum loop — agent

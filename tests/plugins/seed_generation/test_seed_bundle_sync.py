@@ -35,8 +35,8 @@ def _make_repo(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
 
 
 def _make_run_dir(tmp_path: Path, run_id: str, *, state: dict[str, Any]) -> Path:
-    """Build a fake state/seed-generation/<run_id>/ directory tree."""
-    run_dir = tmp_path / "state" / "seed-generation" / run_id
+    """Build a fake state/seed_generation/<run_id>/ directory tree."""
+    run_dir = tmp_path / "state" / "seed_generation" / run_id
     (run_dir / "candidates").mkdir(parents=True)
     (run_dir / "state.json").write_text(json.dumps(state), encoding="utf-8")
     return run_dir
@@ -141,7 +141,7 @@ def test_sync_env_knob_disabled(tmp_path: Path, monkeypatch: pytest.MonkeyPatch)
 def test_sync_missing_state_json_skipped(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """Run dir without state.json → sync refuses (corrupt run signal)."""
     repo = _make_repo(tmp_path, monkeypatch)
-    run = repo / "state/seed-generation/r-006"
+    run = repo / "state/seed_generation/r-006"
     run.mkdir(parents=True)
     result = sync_run_to_bundle(run)
     assert result is None
@@ -150,7 +150,7 @@ def test_sync_missing_state_json_skipped(tmp_path: Path, monkeypatch: pytest.Mon
 def test_sync_missing_run_dir(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """Non-existent source dir → sync returns None gracefully."""
     repo = _make_repo(tmp_path, monkeypatch)
-    result = sync_run_to_bundle(repo / "state/seed-generation/never-existed")
+    result = sync_run_to_bundle(repo / "state/seed_generation/never-existed")
     assert result is None
 
 
@@ -161,7 +161,7 @@ def test_sync_malformed_state_json_recovers(
     on-disk MDs are copied via direct filesystem scan (no longer depends on
     parsing state.json for the survivor list)."""
     repo = _make_repo(tmp_path, monkeypatch)
-    run_dir = repo / "state/seed-generation/r-007"
+    run_dir = repo / "state/seed_generation/r-007"
     (run_dir / "candidates").mkdir(parents=True)
     (run_dir / "state.json").write_text("{not json", encoding="utf-8")
     (run_dir / "candidates" / "c-x.md").write_text("# c-x\n", encoding="utf-8")
@@ -218,7 +218,7 @@ def test_md_subdirs_synced_via_helper_directly(
     from plugins.seed_generation.bundle_sync import _sync_md_subdirs
 
     repo = _make_repo(tmp_path, monkeypatch)
-    src = repo / "state/seed-generation/r-100"
+    src = repo / "state/seed_generation/r-100"
     dst = repo / "docs/self-improving/petri-bundle/seeds/r-100"
     for sub in ("candidates", "candidates_evolved", "survivors"):
         (src / sub).mkdir(parents=True, exist_ok=True)

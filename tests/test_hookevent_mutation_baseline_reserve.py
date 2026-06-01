@@ -13,7 +13,7 @@ emitting:
 
 2. observability central SoT sprint PR-5 + PR-10 — wildcard firehose
    captures every event into ``events`` SQLite, autoresearch indexer
-   joins by ``mutation_id`` against ``autoresearch/state/mutations.jsonl``.
+   joins by ``mutation_id`` against ``state/autoresearch/mutations.jsonl``.
 
 This file pins the 5 enum members + their string values so a future
 rename / reorder breaks here, forcing a conscious cross-sprint update

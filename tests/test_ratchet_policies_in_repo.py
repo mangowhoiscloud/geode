@@ -1,9 +1,9 @@
 """PR-RATCHET-1 invariants — 5 mutation-target policy files moved in-repo.
 
 Pins:
-- 5 policy SoT constants now point under ``autoresearch/state/policies/``.
+- 5 policy SoT constants now point under ``state/autoresearch/policies/``.
 - ``.gitignore`` allows the new path (negation re-includes ``policies/**``).
-- ``LEGACY_SOT_DIR`` still references ``~/.geode/self-improving-loop/``
+- ``LEGACY_SOT_DIR`` still references ``~/.geode/autoresearch/handoff/``
   for the lazy migration path.
 - ``_maybe_migrate_legacy_sot`` copies the legacy file to the new
   location on first read/write, is idempotent, preserves the legacy
@@ -29,7 +29,7 @@ import pytest
 
 def test_policy_constants_under_in_repo_policies_dir() -> None:
     """Each of the 5 policy SoT constants must resolve under
-    ``<repo>/autoresearch/state/policies/`` — NOT ``~/.geode/...``.
+    ``<repo>/state/autoresearch/policies/`` — NOT ``~/.geode/...``.
     The in-repo location is the CI-ratchet alignment fix."""
     from core.paths import (
         GLOBAL_DECOMPOSITION_POLICY_PATH,
@@ -42,7 +42,7 @@ def test_policy_constants_under_in_repo_policies_dir() -> None:
 
     policies_dir_parts = GLOBAL_POLICIES_DIR.parts
     # The in-repo policies dir's last three components are fixed:
-    assert policies_dir_parts[-3:] == ("autoresearch", "state", "policies")
+    assert policies_dir_parts[-3:] == ("state", "autoresearch", "policies")
 
     paths_by_kind = {
         "wrapper-sections.json": GLOBAL_WRAPPER_SECTIONS_PATH,
@@ -59,10 +59,10 @@ def test_policy_constants_under_in_repo_policies_dir() -> None:
 def test_legacy_sot_dir_still_exported() -> None:
     """``LEGACY_SOT_DIR`` must remain importable so the migration
     helper can find old payloads. The constant points at the pre-
-    PR-RATCHET-1 location (``~/.geode/self-improving-loop/``)."""
+    PR-RATCHET-1 location (``~/.geode/autoresearch/handoff/``)."""
     from core.paths import GEODE_HOME, LEGACY_SOT_DIR
 
-    assert LEGACY_SOT_DIR == GEODE_HOME / "self-improving-loop"
+    assert LEGACY_SOT_DIR == GEODE_HOME / "autoresearch" / "handoff"
 
 
 # ---------------------------------------------------------------------------
@@ -83,9 +83,9 @@ def test_legacy_sot_dir_still_exported() -> None:
 )
 def test_policy_files_not_gitignored(filename: str) -> None:
     """``git check-ignore <path>`` must exit 1 (not ignored) for the
-    new in-repo policy files. Pre-PR-RATCHET-1, ``autoresearch/state/*``
+    new in-repo policy files. Pre-PR-RATCHET-1, ``state/autoresearch/*``
     swept everything under the rug; the negation
-    ``!autoresearch/state/policies/**`` re-includes them."""
+    ``!state/autoresearch/policies/**`` re-includes them."""
     from core.paths import GLOBAL_POLICIES_DIR
 
     git_bin = shutil.which("git")
@@ -255,7 +255,7 @@ def test_load_policy_triggers_migration(monkeypatch: pytest.MonkeyPatch, tmp_pat
 def test_train_module_fallback_path_points_in_repo() -> None:
     """Codex MCP catch (PR-RATCHET-1): ``core/self_improving/train.py`` has a
     fallback path used when ``core.paths`` cannot be imported. Pre-fix
-    the fallback hardcoded ``~/.geode/self-improving-loop/...`` —
+    the fallback hardcoded ``~/.geode/self-improving-loop/...`` (pre-fix) —
     silently re-introducing the out-of-repo location. Pin that the
     fallback now resolves under the in-repo policies dir so a
     degraded import does not bypass the git-as-optimiser invariant."""

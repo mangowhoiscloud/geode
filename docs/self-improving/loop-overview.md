@@ -1,15 +1,20 @@
-# autoresearch — GEODE self-improving loop DATA + program SoT
+# GEODE self-improving loop — overview (DATA + program SoT)
 
-`autoresearch/` holds the self-improving loop's **runtime DATA** (`state/`)
-and the **agent program SoT** (`program.md`). The loop *CODE* moved under
-the `core.self_improving` umbrella package (PR-SELF-IMPROVING-UMBRELLA,
+The self-improving loop's **runtime DATA** lives at `state/self_improving/`
+(under `STATE_ROOT`, env-overridable via `GEODE_STATE_ROOT`; the single
+canonical `core.paths.SELF_IMPROVING_STATE_DIR`) and the **agent program
+SoT** is `core/self_improving/program.md`. The loop *CODE* lives under the
+`core.self_improving` umbrella package (PR-SELF-IMPROVING-UMBRELLA,
 2026-05-31) — `core/self_improving/train.py` (the audit runner, formerly
 `autoresearch/train.py`), `core/self_improving/prepare.py`,
 `core/self_improving/{admire,bench}_means.py`, the loop runtime under
 `core/self_improving/loop/`, and the campaign driver
-`core/self_improving/campaign.py`. The DATA (`autoresearch/state/`) stays
-here because the running campaign + gitignore guards depend on the literal
-path.
+`core/self_improving/campaign.py`.
+
+PR-STATE-SELF-IMPROVING-RENAME (2026-06-01) moved the DATA + program SoT off
+the vestigial `autoresearch/` package (which had become an empty shell — only
+`__init__.py` remained — so a third party could not tell `autoresearch/state`
+related to the self-improving loop). This file was that package's `README.md`.
 
 Petri's `geode audit` subprocess scores each transcript on the 20-dim
 alignment rubric and emits a per-dim `mean + stderr` baseline; the driver
@@ -54,7 +59,7 @@ lives under `core/self_improving/`; `program.md` stays here):
   (mutation target) + `geode audit` subprocess invocation + AlphaEval fitness
   extraction. **The single file the agent modifies.** Section
   wording, additions, deletions, and reordering are all fair game.
-- **`autoresearch/program.md`** — instructions to the agent. Humans modify this.
+- **`core/self_improving/program.md`** — instructions to the agent. Humans modify this.
 
 The Karpathy 5-min wall-clock budget maps onto the audit budget
 (default ~5 min, capped by ChatGPT subscription quota / Anthropic API spend).
@@ -67,7 +72,7 @@ signal lives in the companion `results.jsonl`.
 
 Mutations to `WRAPPER_PROMPT_SECTIONS` propagate into the audit
 subprocess through the `GEODE_WRAPPER_OVERRIDE` env var (which points
-at `autoresearch/state/wrapper-override.json`). The GEODE runtime's
+at `state/self_improving/wrapper-override.json`). The GEODE runtime's
 `PromptAssembler` Phase 0 reads it and replaces the wrapper base.
 `--dry-run` skips the subprocess entirely so plumbing can be verified
 without spending budget.
@@ -111,18 +116,22 @@ from there.
 ## Project structure
 
 ```
-autoresearch/                  — DATA + program SoT (this package)
+core/self_improving/           — loop CODE + program SoT (umbrella package)
 ├── program.md     — agent instructions (humans modify)
-├── README.md      — this file
-└── state/         — runtime artefacts (gitignored: results.tsv,
-                     results.jsonl, baseline.json, …)
-
-core/self_improving/           — loop CODE (umbrella package)
 ├── prepare.py     — seed-pool + rubric sanity check (do not modify)
 ├── train.py       — wrapper prompt sections + audit invocation (agent modifies)
 ├── campaign.py    — campaign driver (python -m core.self_improving.campaign)
 ├── admire_means.py / bench_means.py — positive-pressure / capability axes
 └── loop/          — loop runtime (runner, mutator, policies, …)
+
+state/self_improving/          — runtime DATA (under STATE_ROOT)
+├── policies/      — mutation-target SoT JSONs (git-tracked)
+├── mutations.jsonl, baseline_archive.jsonl, baseline_epochs.json (git-tracked)
+├── results.tsv, results.jsonl — rolling per-audit history (git-tracked)
+├── baseline.json, run.log, campaign-progress.log (gitignored)
+└── _archive/<be-NNN>/ — epoch-boundary snapshots (gitignored; see _archive/README.md)
+
+docs/self-improving/loop-overview.md  — this file (formerly autoresearch/README.md)
 ```
 
 ## Cross-loop handoff (P0b)

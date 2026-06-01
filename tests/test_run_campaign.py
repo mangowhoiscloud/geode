@@ -42,7 +42,7 @@ _REPO_ROOT = Path(__file__).resolve().parents[1]
 @pytest.fixture
 def campaign_state(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> dict[str, Path]:
     """Redirect every SoT path the driver touches into ``tmp_path``."""
-    state_dir = tmp_path / "autoresearch" / "state"
+    state_dir = tmp_path / "autoresearch"
     policies_dir = state_dir / "policies"
     policies_dir.mkdir(parents=True)
     baseline = state_dir / "baseline.json"
@@ -52,7 +52,7 @@ def campaign_state(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> dict[str,
     petri_logs = tmp_path / "petri-logs"
     petri_logs.mkdir(parents=True)
 
-    monkeypatch.setattr(rc, "AUTORESEARCH_STATE_DIR", state_dir)
+    monkeypatch.setattr(rc, "STATE_DIR", state_dir)
     monkeypatch.setattr(rc, "POLICIES_DIR", policies_dir)
     monkeypatch.setattr(rc, "BASELINE_JSON", baseline)
     monkeypatch.setattr(rc, "MUTATIONS_JSONL", mutations)
@@ -1043,7 +1043,7 @@ def test_campaign_dry_run_via_real_subprocess_completes() -> None:
     ``campaign → -m core.self_improving.train`` spawn fails here, in the normal
     ``not live`` suite, with NO network / PAYG spend (``--dry-run`` synthesises
     every audit). The campaign writes only to the repo's real
-    ``autoresearch/state`` log files in append mode, which is the same
+    ``state/autoresearch`` log files in append mode, which is the same
     behaviour as the operator dry-run; it never promotes (dry-run skips the
     baseline rewrite + git commit).
     """

@@ -137,7 +137,7 @@ def test_run_transcript_scope_restores_on_exception(tmp_path: Path) -> None:
 
 
 def test_default_path_uses_geode_home(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
-    """Unset path falls back to ``GLOBAL_SELF_IMPROVING_LOOP_DIR`` / <session> / transcript.jsonl."""
+    """Unset path falls back to ``GLOBAL_AUTORESEARCH_HANDOFF_DIR`` / <session> / transcript.jsonl."""
     fake_home = tmp_path / "home"
     monkeypatch.setattr(Path, "home", classmethod(lambda _cls: fake_home))
     # Reload both core.paths and core.self_improving.loop.run_transcript so
@@ -154,7 +154,7 @@ def test_default_path_uses_geode_home(monkeypatch: pytest.MonkeyPatch, tmp_path:
         gen_tag="g",
         component="autoresearch",
     )
-    expected = fake_home / ".geode" / "self-improving-loop" / "s-default" / "transcript.jsonl"
+    expected = fake_home / ".geode" / "autoresearch" / "handoff" / "s-default" / "transcript.jsonl"
     assert journal.path == expected
     journal.append("event")
     assert expected.is_file()

@@ -15,7 +15,7 @@
 |---|---|---|
 | Three-file shape | `prepare.py` / `train.py` / `program.md` | identical names + roles |
 | Single-file mutation scope | agent edits `train.py` only | agent edits `train.py` only |
-| Fixed 5-min wall-clock budget per run | "Training runs for a fixed 5-minute time budget … regardless of the details of your compute." | `BUDGET_MINUTES = 5` in `autoresearch/train.py` |
+| Fixed 5-min wall-clock budget per run | "Training runs for a fixed 5-minute time budget … regardless of the details of your compute." | `BUDGET_MINUTES = 5` in `core/self_improving/train.py` |
 | Git-as-optimiser idiom | branch tip = best run; `git reset` = discard | identical — see `program.md` "The experiment loop" |
 | One-shot per invocation | `uv run python train.py` runs one experiment | identical entry point |
 | Read-only harness | `prepare.py` immutable | `prepare.py` immutable, only verifies harness (no fineweb / BPE) |
@@ -38,11 +38,11 @@
 
 | Addition | Where | Why it's new (no Karpathy original counterpart) |
 |---|---|---|
-| **Multi-objective tiered scoring** | `AXIS_TIERS` (5 critical / 12 auxiliary / 3 info) in `autoresearch/train.py` | val_bpb is scalar; alignment audit needs differentiated risk policy across dims |
+| **Multi-objective tiered scoring** | `AXIS_TIERS` (5 critical / 12 auxiliary / 3 info) in `core/self_improving/train.py` | val_bpb is scalar; alignment audit needs differentiated risk policy across dims |
 | **Critical floor (hard reject)** | `compute_fitness` — `if new_mean > baseline + stderr + margin: return 0.0` | safety dims must not be traded for efficiency gains |
 | **Auxiliary squared penalty** | `compute_fitness` — `λ × (Δ / 10)²` summed across 12 aux dims | soft regularization on non-safety axes |
 | **Stability axis** | `_stability_score = 1 / (1 + mean(dim_stderr))` | judge-LLM noise floor needs to enter fitness; rewards confident measurements |
-| **`baseline.json` snapshot** | `autoresearch/state/baseline.json` written on every promote | enables cross-run baseline regression detection |
+| **`baseline.json` snapshot** | `state/self_improving/baseline.json` written on every promote | enables cross-run baseline regression detection |
 | **Cross-run priors** | `meta_review.json` + `latest_meta_review.json` symlink (PR-G4) | "what did the last meta-reviewer flag" feedback that Karpathy original doesn't model |
 | **seed-generation pipeline** | `plugins/seed_generation/` (S0-S11; 7 specialist agents — generator / proximity / critic / pilot / ranker / evolver / meta_reviewer) | Karpathy original treats seeds as fixed; GEODE evolves them via a Co-Scientist-style sub-loop |
 | **Petri-side measurement layer** | `plugins/petri_audit/` + `core/audit/dim_extractor` | Karpathy original folds measurement into `train.py`; GEODE separates measurement (Petri) from selection (autoresearch) for SoT clarity |
@@ -105,7 +105,7 @@ rule, ratchet chart) is GEODE-specific.
 
 ## 6. Files & line references
 
-* GEODE autoresearch: `autoresearch/train.py`
+* GEODE autoresearch: `core/self_improving/train.py`
   - `_dim_score` (line 627)
   - `_stability_score` (line 635)
   - `compute_fitness` (line 672)
@@ -114,5 +114,5 @@ rule, ratchet chart) is GEODE-specific.
   - `AXIS_TIERS` 5+12+3 listing (line 196)
 * Karpathy autoresearch: https://github.com/karpathy/autoresearch
   (228791f) — local reference clone `~/workspace/autoresearch/`
-* GEODE README on this split: `autoresearch/README.md`
+* GEODE README on this split: `docs/self-improving/loop-overview.md`
   "Role split — petri vs autoresearch" table.

@@ -62,7 +62,7 @@ from core.paths import (
 log = logging.getLogger(__name__)
 
 # PR-RATCHET-1 (2026-05-21) — when the in-repo SoT path doesn't
-# exist yet, fall back to the pre-RATCHET-1 ``~/.geode/self-improving-loop/``
+# exist yet, fall back to the pre-RATCHET-1 ``~/.geode/autoresearch/handoff/``
 # location. Operators upgrading an existing install have their last
 # mutation state there; copying it forward on first read keeps the
 # loop continuous across the migration without a manual step. The
@@ -80,8 +80,8 @@ _LEGACY_FILE_NAMES: dict[str, str] = {
 # PR-TOOL-DESCRIPTIONS-MUTATE (2026-05-27), Codex MCP review fix-up.
 # The runtime reader at ``core/agent/tool_descriptions_policy.py`` (ADR-013 T1)
 # honours a 3-layer resolution: env → operator-local
-# (``~/.geode/self-improving-loop/tool-descriptions.json``) → in-repo
-# (``autoresearch/state/policies/tool-descriptions.json``). Pre-fix the
+# (``~/.geode/autoresearch/handoff/tool-descriptions.json``) → in-repo
+# (``state/autoresearch/policies/tool-descriptions.json``). Pre-fix the
 # mutator's ``load_policy("tool_descriptions")`` only saw the in-repo
 # layer, so an operator using the operator-local override would see
 # the runtime read from THERE while the mutator wrote to the in-repo
@@ -349,8 +349,8 @@ def load_policy(kind: str) -> dict[str, str]:
     robust to incomplete state.
 
     PR-RATCHET-1 (2026-05-21) — lazy migration from the pre-PR
-    ``~/.geode/self-improving-loop/`` location to the in-repo
-    ``autoresearch/state/policies/`` location runs before the read.
+    ``~/.geode/autoresearch/handoff/`` location to the in-repo
+    ``state/autoresearch/policies/`` location runs before the read.
 
     M1 (2026-05-21) — ``skill_catalog`` kind 는 disk 상 nested
     ``{skill_name: {description, user_invocable}}`` 이지만 mutation
@@ -419,7 +419,7 @@ def write_policy(kind: str, sections: dict[str, str]) -> Path:
 
     PR-RATCHET-1 (2026-05-21) — runs the lazy legacy-SoT migration
     before the write so a pre-PR-RATCHET-1 operator state at
-    ``~/.geode/self-improving-loop/`` is captured in the in-repo
+    ``~/.geode/autoresearch/handoff/`` is captured in the in-repo
     location as the *previous* value of this kind, rather than being
     overwritten on the first mutation after upgrade.
 

@@ -22,7 +22,7 @@ What the runner adds:
    JSON, validate against the SoT schema.
 5. **Apply + audit log** — call ``write_wrapper_prompt_sections`` and
    append the mutation to the git-tracked audit jsonl
-   (``autoresearch/state/mutations.jsonl``).
+   (``state/autoresearch/mutations.jsonl``).
 6. **Optional re-run** — when ``rerun=True`` (default ``False`` to
    keep dry-runs cheap), spawn ``core/self_improving/train.py`` so the next
    baseline reflects the new wrapper.
@@ -51,7 +51,7 @@ from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from core.paths import GLOBAL_SELF_IMPROVING_LOOP_DIR
+from core.paths import GLOBAL_AUTORESEARCH_HANDOFF_DIR
 from core.paths import (
     MUTATION_AUDIT_LOG_PATH as MUTATION_AUDIT_LOG_PATH,
 )
@@ -463,7 +463,7 @@ _FALLBACK_SYSTEM_PROMPT = (
     '  "target_dim": "<dim name the mutation aims at, or empty>"\n'
     "}\n"
 )
-"""Inline fallback prompt used when ``autoresearch/program.md`` is unreadable.
+"""Inline fallback prompt used when ``core/self_improving/program.md`` is unreadable.
 
 Kept as a complete, self-contained string so a `program.md` outage (missing
 file, OSError) doesn't take the runner offline. Tests that don't need the
@@ -571,7 +571,7 @@ contract to the JSON output the parser expects.
 
 
 def _load_program_md() -> str | None:
-    """Read ``autoresearch/program.md`` from disk; return ``None`` on failure.
+    """Read ``core/self_improving/program.md`` from disk; return ``None`` on failure.
 
     Resolves the path relative to the runner module so the lookup works in
     worktrees / installs where ``cwd`` doesn't match the repo root.
@@ -579,9 +579,11 @@ def _load_program_md() -> str | None:
     the runner can fall back to the inline prompt without breaking the loop.
     Tests monkeypatch this function to inject canned content.
     """
-    # core/self_improving/loop/runner.py → parents[3] = repo root; the
-    # program SoT stays at <repo>/autoresearch/program.md (data unchanged).
-    program_md_path = Path(__file__).resolve().parents[3] / "autoresearch" / "program.md"
+    # core/self_improving/loop/runner.py → parents[1] = core/self_improving;
+    # the program SoT moved here from <repo>/autoresearch/program.md
+    # (PR-STATE-SELF-IMPROVING-RENAME 2026-06-01) so it sits next to the
+    # train.py / campaign.py code that drives the mutator.
+    program_md_path = Path(__file__).resolve().parents[1] / "program.md"
     try:
         return program_md_path.read_text(encoding="utf-8")
     except OSError as exc:
@@ -900,7 +902,7 @@ def _default_llm_call(system_prompt: str, user_prompt: str) -> str:
 # moot — ALL hyperparam mutations are rejected — and is removed rather than
 # left as dead branches. A single clear rejection replaces it.
 #
-# PRESERVED: ``autoresearch/state/policies/hyperparam.json`` and its RUNTIME
+# PRESERVED: ``state/autoresearch/policies/hyperparam.json`` and its RUNTIME
 # readers (``core.self_improving.train._load_hyperparam_overrides`` →
 # seed_limit/max_turns/dim_set/reflection_depth consumed by the audit subprocess
 # + AgenticLoop). Only the MUTATION surface is gone.
@@ -1232,10 +1234,10 @@ def _git_commit_audit_log(
     """
     try:
         # parents[2] = repo root. ``log_path`` is
-        # ``<repo>/autoresearch/state/mutations.jsonl``; parents[1]
-        # resolves to ``<repo>/autoresearch`` which is *inside* the git
-        # tree but is not the repo root and would silently rebase git
-        # operations against a non-canonical cwd.
+        # ``<repo>/state/autoresearch/mutations.jsonl``; parents[1]
+        # resolves to ``<repo>/state`` which is *inside* the git tree but
+        # is not the repo root and would silently rebase git operations
+        # against a non-canonical cwd.
         repo_root = log_path.resolve().parents[2]
         subprocess.run(  # noqa: S603  # nosec B603 — argv = audit-log path
             ["git", "add", str(log_path)],  # noqa: S607  # nosec B607 — git in PATH
@@ -1523,10 +1525,10 @@ class SelfImprovingLoopRunner:
         if self.commit_enabled:
             _git_commit_audit_log(log_path, mutation=proposal.mutation)
         if self.rerun_enabled:
-            # MUTATION_AUDIT_LOG_PATH lives at <repo>/autoresearch/state/mutations.jsonl,
+            # MUTATION_AUDIT_LOG_PATH lives at <repo>/state/autoresearch/mutations.jsonl,
             # so parents[2] is the repo root. parents[1] would point at
-            # <repo>/autoresearch and spawn `uv run python -m core.self_improving.train`
-            # with cwd=autoresearch → ENOENT on autoresearch/core/self_improving/train.py.
+            # <repo>/state and spawn `uv run python -m core.self_improving.train`
+            # with cwd=state → ENOENT on state/core/self_improving/train.py.
             repo_root = log_path.resolve().parents[2]
             # PR-SOT-REVERT-ON-AUDIT-FAIL (2026-05-26) — forward
             # ``proposal.original_sections`` so _invoke_autoresearch can
@@ -1721,14 +1723,14 @@ class SelfImprovingLoopRunner:
     def _append_self_improving_loop_index(mutation: Mutation, previous_value: str) -> None:
         """Best-effort append to the shared session index.
 
-        Lets the existing ``~/.geode/self-improving-loop/sessions.jsonl``
+        Lets the existing ``~/.geode/autoresearch/handoff/sessions.jsonl``
         registry (P1a) carry one row per mutator invocation so external
         consumers can see the mutator alongside seed-generation /
         autoresearch runs.
         """
-        index_path = GLOBAL_SELF_IMPROVING_LOOP_DIR / "sessions.jsonl"
+        index_path = GLOBAL_AUTORESEARCH_HANDOFF_DIR / "sessions.jsonl"
         try:
-            GLOBAL_SELF_IMPROVING_LOOP_DIR.mkdir(parents=True, exist_ok=True)
+            GLOBAL_AUTORESEARCH_HANDOFF_DIR.mkdir(parents=True, exist_ok=True)
             row = {
                 "ts": time.time(),
                 "component": "self-improving-loop-mutator",
