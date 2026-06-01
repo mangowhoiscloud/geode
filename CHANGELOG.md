@@ -45,6 +45,23 @@ functional change.
 
 ---
 
+## [0.99.109] - 2026-06-01
+
+### Fixed
+- **PR-USAGE-EVALID-MONTH (2026-06-01) — `UsageStore.has_eval_id` now scans
+  every month file, not just the current calendar month.** Eval rows are
+  partitioned by the eval's `created` ts (a past month for backfills /
+  month-boundary imports), but the duplicate-detection check only read
+  `date.today()`'s month — so once the wall-clock month rolled past the eval's
+  month, `core.audit.eval_to_jsonl.extract_to_usage_store` re-imported an
+  already-recorded eval (non-idempotent). `has_eval_id` now reads all
+  `YYYY-MM.jsonl` files when `year`/`month` are omitted (new `_read_all_months`
+  helper); pass both to scope to a single month. The companion test helper
+  `tests/audit/test_eval_to_jsonl.py::_read_jsonl` was likewise made
+  date-independent (globs all month files instead of `date.today()`), fixing 4
+  pre-existing date-dependent test failures that surfaced on the develop→main
+  CI once the month rolled to June.
+
 ## [0.99.108] - 2026-06-01
 
 ### Added
