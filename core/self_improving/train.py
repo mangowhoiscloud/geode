@@ -205,6 +205,29 @@ Resolved by :func:`_resolve_target_effect_size`."""
 WRAPPER_OVERRIDE_HOOK_READY = _CORE_WRAPPER_OVERRIDE_READY
 
 
+def _load_global_env() -> bool:
+    """Load ``~/.geode/.env`` into ``os.environ`` (``override=False``).
+
+    PR-CAMPAIGN-LOAD-ENV (2026-06-02). The campaign/audit entry points run as
+    standalone subprocesses that never went through ``geode serve`` / the REPL
+    bootstrap (the only callers of ``setup_contextvars(load_env=True)``), so the
+    PAYG ``ANTHROPIC_API_KEY`` used by the api_key-sourced petri auditor/judge
+    was absent and inspect_ai's anthropic provider raised "Could not resolve
+    authentication method". Loading the global env file here gives the audit
+    subprocess the same credential the serve daemon already has.
+    ``override=False`` so a key already exported in the launching shell wins.
+    Returns whether the file was found (for the dry-run log line).
+    """
+    from core.paths import GLOBAL_ENV_FILE
+
+    if not GLOBAL_ENV_FILE.exists():
+        return False
+    from dotenv import load_dotenv
+
+    load_dotenv(str(GLOBAL_ENV_FILE), override=False)
+    return True
+
+
 def _get_autoresearch_config() -> Any:
     """Lazily load ``[self_improving_loop.autoresearch]`` from ``~/.geode/config.toml``.
 
@@ -4043,6 +4066,20 @@ def _revert_sot_after_reject(
 
 
 def main() -> int:
+    # PR-CAMPAIGN-LOAD-ENV (2026-06-02) — load ~/.geode/.env into os.environ at the
+    # campaign/audit entry point. Only ``geode serve`` + the REPL called
+    # ``setup_contextvars(load_env=True)``; the campaign chain
+    # (``campaign.py`` → ``train.py`` → ``geode audit`` → ``inspect eval``) never
+    # did, so the PAYG ``ANTHROPIC_API_KEY`` (config ``[self_improving_loop.petri.
+    # {auditor,judge}] source=api_key``) was absent in the spawned audit
+    # subprocess → inspect_ai's native anthropic provider raised "Could not
+    # resolve authentication method" → every cycle audit errored → degenerate
+    # baseline. The pilot path worked only because it runs INSIDE the serve
+    # daemon, whose os.environ already had the key. ``override=False`` so an
+    # already-exported shell key still wins; loading ``.env`` directly (not the
+    # full ``setup_contextvars``) avoids its unrelated memory/contextvar setup.
+    _load_global_env()
+
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
         "--dry-run",

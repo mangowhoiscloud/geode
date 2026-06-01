@@ -42,10 +42,14 @@ every boundary with mocks and NO live audit / network / PAYG spend. ``--dry-run`
 passes the flag through to ``train.py`` AND to the runner (``rerun_dry_run=True``)
 so the whole chain can be smoke-tested end-to-end with synthetic audits.
 
-ENV SETUP (operator handoff)
-----------------------------
-The operator's shell wrapper is responsible for exporting ``ANTHROPIC_API_KEY``
-(the driver cannot source ``~/.geode/.env`` from inside Python). The driver sets,
+ENV SETUP
+---------
+PR-CAMPAIGN-LOAD-ENV (2026-06-02): the driver now loads ``~/.geode/.env`` itself
+(``main`` → ``train._load_global_env``), so ``ANTHROPIC_API_KEY`` reaches the
+spawned audit subprocesses without the operator's shell having to export it.
+(Pre-fix this was the operator's responsibility; a forgotten export silently
+broke every cycle audit with an anthropic auth error → degenerate baseline.) An
+already-exported shell key still wins (``override=False``). The driver also sets,
 in the env it passes to each subprocess:
 
 * ``GEODE_CODEX_OAUTH_POLL_DISABLED=1`` — bypass GEODE's pre-emptive 5-hour
@@ -1282,6 +1286,15 @@ def _build_arg_parser() -> argparse.ArgumentParser:
 
 def main(argv: Sequence[str] | None = None) -> int:
     logging.basicConfig(level=logging.INFO, format="%(message)s")
+    # PR-CAMPAIGN-LOAD-ENV (2026-06-02) — load ~/.geode/.env so the spawned
+    # train.py audit subprocesses inherit the PAYG ANTHROPIC_API_KEY. train.py's
+    # own main() also loads it (defence in depth for direct ``python -m
+    # core.self_improving.train`` runs), but loading at the driver too means the
+    # key is present from the first gen-0 spawn without relying on the operator's
+    # shell having exported it.
+    from core.self_improving.train import _load_global_env
+
+    _load_global_env()
     parser = _build_arg_parser()
     args = parser.parse_args(argv)
     arms = tuple(a.strip() for a in args.arms.split(",") if a.strip())
