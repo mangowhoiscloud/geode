@@ -12,6 +12,7 @@ paperclip's ``adapter-codex-local`` package.
 from __future__ import annotations
 
 import logging
+import os
 import shutil
 from collections.abc import AsyncIterator
 from dataclasses import dataclass, field
@@ -36,8 +37,8 @@ log = logging.getLogger(__name__)
 # Honoured search paths for the codex binary (highest priority first).
 # Matches the discovery order used by the petri-audit codex_cli_provider.
 _CODEX_BINARY_HINTS: tuple[str, ...] = (
-    "codex",  # PATH lookup
-    "/Users/mango/.local/bin/codex",
+    "codex",  # PATH lookup (portable; resolves on any machine with codex on PATH)
+    os.path.expanduser("~/.local/bin/codex"),  # per-user install (was a hardcoded abs user path)
     "/Applications/cmux.app/Contents/Resources/codex/bin/codex",
 )
 

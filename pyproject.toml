@@ -304,7 +304,6 @@ src = ["core", "plugins", "tests", "autoresearch", "scripts"]
 extend-exclude = [
     ".geode",        # runtime config + skill scripts (not part of codebase)
     ".claude",       # Claude Code session artifacts
-    "experimental",  # opt-in prototypes — own pyproject testpaths
 ]
 
 [tool.ruff.lint]
@@ -377,7 +376,6 @@ skips = ["B101", "B105", "B110", "B311", "B404", "B603", "B607"]
 [tool.deptry]
 extend_exclude = [
     "tests",
-    "experimental",
     ".claude",
     ".geode",
     "scripts",

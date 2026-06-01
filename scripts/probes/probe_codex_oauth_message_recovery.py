@@ -15,9 +15,12 @@ import sys
 import time
 from pathlib import Path
 
+# Repo root from this file's location (scripts/probes/<file>.py) — machine-portable.
+_REPO_ROOT = Path(__file__).resolve().parents[2]
+
 
 async def main() -> None:
-    sys.path.insert(0, "/Users/mango/workspace/geode")
+    sys.path.insert(0, str(_REPO_ROOT))
     from core.llm.adapters._openai_common import build_async_codex_client
     from core.llm.codex_oauth_usage import read_codex_oauth_token
 
@@ -83,9 +86,8 @@ async def main() -> None:
             print(f"  [{i}] {item}")
 
     # Save full event log
-    out_path = (
-        Path("/Users/mango/workspace/geode/.audit/probes") / f"h6_minimal_{int(time.time())}.json"
-    )
+    out_path = _REPO_ROOT / ".audit" / "probes" / f"h6_minimal_{int(time.time())}.json"
+    out_path.parent.mkdir(parents=True, exist_ok=True)
     out_path.write_text(
         json.dumps(
             {
