@@ -160,10 +160,10 @@ PILOT_HANDOFF: Final[dict[str, Any]] = _additive(
             "type": "object",
             "properties": {
                 "max_wall_time_s": {"type": "number"},
-                "models": {"type": "integer"},
+                "targets": {"type": "integer"},
                 "paraphrases": {"type": "integer"},
             },
-            "required": ["max_wall_time_s", "models", "paraphrases"],
+            "required": ["max_wall_time_s", "targets", "paraphrases"],
         },
         # PR-SG-SELECTION-ALIGN (2026-05-25) — selection-layer signals.
         # Pilot writes anchor_means in its OUTPUT (dim_means already);
@@ -175,7 +175,7 @@ PILOT_HANDOFF: Final[dict[str, Any]] = _additive(
     required=["candidate_id", "candidate_path", "target_dim", "budget"],
 )
 """Pilot — Petri inner-loop audit per candidate. Budget block
-explicit so the LLM knows the wall-time + model count + paraphrase
+explicit so the LLM knows the wall-time + target count + paraphrase
 count it must respect.
 PR-SG-SELECTION-ALIGN — adds anchor_means + target_dims_attribution
 so the pilot frames its audit around the same triplet that

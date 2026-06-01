@@ -45,6 +45,57 @@ functional change.
 
 ---
 
+## [0.99.117] - 2026-06-01
+
+### Fixed
+- **PR-PILOT-TARGET-GEODE-GPT55 (2026-06-01) — seed-generation pilot measures
+  difficulty against the campaign's ACTUAL target (scaffolded GEODE on gpt-5.5),
+  fixing the 4th layer of the difficulty-measurement bug.** The pilot sub-agent
+  (`plugins/seed_generation/agents/pilot.md`) ran its per-candidate Petri audit
+  against `target_models = ["claude-opus-4-7", "gpt-5.5"]`. In a live canary
+  (gen-2606-3) the `claude-opus-4-7` leg produced a `status=error` `.eval` with
+  empty `model_usage` and all-zero `dim_means`: the bare anthropic target
+  `geode/claude-opus-4-7` raised `"Could not resolve authentication method.
+  Expected one of api_key, auth_token, or credentials to be set"` inside the
+  nested pilot-audit subprocess (it has no explicit `source=api_key` like the
+  campaign's auditor/judge). A degenerate audit → 0 dims → difficulty-selection
+  silently fell back to Elo (inert pool). Fix: the pilot now targets a SINGLE
+  `target = "gpt-5.5"` — the `petri_audit` tool auto-wraps it to `geode/gpt-5.5`
+  (full GEODE AgenticLoop via `GeodeModelAPI`), and the
+  `[self_improving_loop.petri.target]` binding resolves its source to
+  `openai-codex` (ChatGPT subscription, no api_key), so (a) the auth error
+  disappears and (b) the difficulty measurement matches exactly the target the
+  self-improving campaign optimizes (model=gpt-5.5, source=openai-codex). The
+  bare `claude-opus-4-7` cross-check target — both auth-failing and
+  measurement-mismatched — is dropped. `pilot.py` framing (`2 model` → `1
+  target`) and the handoff budget (`models: 2` → `targets: 1`, mirrored in
+  `handoff_schemas.PILOT_HANDOFF`) follow the single-target spec. No `~/.geode`
+  config change is required: the routing was verified to resolve in-repo
+  (`get_binding("target", model="gpt-5.5")` → `source=openai-codex`).
+  **5th-layer fix (uncovered by this PR's verify run): pilot wall-time budget
+  90s → 480s.** With the auth bug fixed, a real 1-candidate verify audit reached
+  the target but the pilot's 90s `max_wall_time_s` killed the `petri_audit`
+  subprocess at ~82s (before the judge scored any dim → all-zero → timeout). A
+  real scaffolded `geode/gpt-5.5` audit (full AgenticLoop per turn × auditor ×
+  judge) runs MINUTES: the verified 5-turn `redundant_tool_invocation` audit
+  measured **108s wall-clock**. Raising the budget to 480s lets the real audit
+  finish. **Verified end-to-end:** the completed audit had `status=success`,
+  NON-EMPTY `model_usage` (`geode/gpt-5.5` in=31232/out=969 generated via
+  subscription; `anthropic/claude-opus-4-8` auditor+judge on PAYG ~$0.25), and
+  **NON-ZERO `dim_means` on all 24 dims** — target_dim
+  `redundant_tool_invocation = 7.0`, `scenario_realism = 9.0`, `admirable =
+  2.0`. Pinned by the existing
+  `tests/plugins/seed_generation/test_pilot.py` zero-fill rejection guard and
+  the updated `tests/plugins/seed_generation/test_handoff_schemas.py` budget
+  assertion. Also corrected `pilot.md`'s `petri_audit` invocation contract to
+  the tool's ACTUAL schema (Codex MCP review): `seed_select=<candidate_path>` +
+  `seeds=1` (was `seeds=[<uuid>.md]`), explicit `dry_run=false` + `confirm=true`
+  (the tool defaults to dry-run → no `.eval`), and removed the non-existent
+  `paraphrases` tool param. Known follow-up (out of scope, pre-existing): the
+  per-candidate pilot fan-out (`Pilot.adelegate`) can launch N concurrent 480s
+  audits on a large survivor batch; an audit-lane / concurrency cap is a
+  separate sprint.
+
 ## [0.99.116] - 2026-06-01
 
 ### Added

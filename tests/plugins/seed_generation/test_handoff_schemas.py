@@ -136,7 +136,7 @@ class TestRoleHandoffDrift:
         for key in PILOT_HANDOFF["required"]:
             assert key in handoff, f"pilot handoff missing required key: {key}"
         assert handoff["candidate_id"] == "gen1-000-deadbeef"
-        assert handoff["budget"]["models"] == 2
+        assert handoff["budget"]["targets"] == 1
 
     def test_evolver_handoff_matches_schema(self) -> None:
         from unittest.mock import MagicMock
