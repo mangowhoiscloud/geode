@@ -76,7 +76,7 @@ log = logging.getLogger(__name__)
 __all__ = ["Ranker"]
 
 
-_DEFAULT_RANKER_MODEL = "claude-opus-4-7"
+_DEFAULT_RANKER_MODEL = "claude-opus-4-8"
 _TASK_TYPE = "seed-ranker-vote"
 _PARTIAL_CHECKPOINT_EVERY_MATCHES = 10
 _PARTIAL_CHECKPOINT_EVERY_SECONDS = 120.0

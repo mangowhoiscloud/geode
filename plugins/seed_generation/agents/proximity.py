@@ -67,7 +67,7 @@ __all__ = ["HIGH_SIMILARITY_DEGREE", "Proximity"]
 
 HIGH_SIMILARITY_DEGREE = "high"
 
-_DEFAULT_PROXIMITY_MODEL = "claude-opus-4-7"
+_DEFAULT_PROXIMITY_MODEL = "claude-opus-4-8"
 _PROXIMITY_AGENT_NAME = "seed_proximity"
 _TASK_TYPE = "seed-proximity"
 
