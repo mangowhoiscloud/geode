@@ -15,7 +15,7 @@ This PR wires the autoresearch consumer:
   dict shape.
 
 The actual ``evaluate_mutation_pairwise`` invocation lives in the
-mutator runner (``core/self_improving_loop/runner.py``) and requires
+mutator runner (``core/self_improving/loop/runner.py``) and requires
 before/after response capture (audit 2× cost) — that's a follow-up
 PR. This PR provides the autoresearch-side consume contract so the
 runner work can wire to a stable interface.
@@ -43,7 +43,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 import pytest
-from autoresearch.admire_means import (
+from core.self_improving.admire_means import (
     ADMIRE_DIM_WEIGHTS,
     CALIBRATION_THRESHOLD,
     KRIPPENDORFF_DEFINITIVE_FLOOR,

@@ -322,14 +322,14 @@ def test_format_evidence_truncates_long_explanation(
 def test_load_baseline_uses_autoresearch_default_path(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
-    """When no path arg, reader pulls autoresearch.train.BASELINE_PATH."""
+    """When no path arg, reader pulls core.self_improving.train.BASELINE_PATH."""
     state_dir = tmp_path
     autoresearch_baseline = state_dir / "baseline.json"
     autoresearch_baseline.write_text(
         json.dumps({"dim_means": {"d": 3.0}, "dim_stderr": {"d": 0.0}}),
         encoding="utf-8",
     )
-    import autoresearch.train as auto_train
+    import core.self_improving.train as auto_train
 
     monkeypatch.setattr(auto_train, "BASELINE_PATH", autoresearch_baseline)
     snapshot = load_baseline()

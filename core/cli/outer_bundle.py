@@ -52,7 +52,7 @@ from rich.console import Console
 from rich.table import Table
 
 from core.paths import GLOBAL_SELF_IMPROVING_LOOP_DIR
-from core.self_improving_loop.auto_trigger import AUTO_TRIGGER_HISTORY_PATH
+from core.self_improving.loop.auto_trigger import AUTO_TRIGGER_HISTORY_PATH
 
 log = logging.getLogger(__name__)
 console = Console()
@@ -164,7 +164,7 @@ def _load_mutation_events(*, limit: int) -> list[BundleEvent]:
     module doesn't drag the full runner deps at module load.
     """
     try:
-        from core.self_improving_loop.runner import MUTATION_AUDIT_LOG_PATH
+        from core.self_improving.loop.runner import MUTATION_AUDIT_LOG_PATH
     except ImportError as exc:
         log.debug("outer_bundle: mutation log path unavailable: %s", exc)
         return []
@@ -191,7 +191,7 @@ def _load_baseline_event() -> BundleEvent | None:
     this is the "last successful audit" marker in the timeline.
 
     Codex MCP catch (PR-OL-A3 fix-up): real `baseline.json` (written by
-    ``autoresearch/train.py:_persist_baseline``) carries only aggregate
+    ``core/self_improving/train.py:_persist_baseline``) carries only aggregate
     payload (``dim_means`` / ``dim_stderr`` + optional ``admire_means`` /
     ``bench_means``) — NO ``timestamp`` or
     ``fitness`` scalar fields. We therefore derive the event timestamp
@@ -201,7 +201,7 @@ def _load_baseline_event() -> BundleEvent | None:
     historical fixture data with the legacy schema keeps working.
     """
     try:
-        from core.self_improving_loop.runner import MUTATION_AUDIT_LOG_PATH
+        from core.self_improving.loop.runner import MUTATION_AUDIT_LOG_PATH
     except ImportError:
         return None
     baseline_path = Path(MUTATION_AUDIT_LOG_PATH).parent / "baseline.json"

@@ -1,7 +1,7 @@
 """PR-6 C-5 — policy mutation expansion invariants.
 
 Pins the new ``target_kind`` field on :class:`Mutation`, the
-``core.self_improving_loop.policies`` SoT helpers, and
+``core.self_improving.loop.policies`` SoT helpers, and
 ``apply_mutation``'s dispatcher routing to the right policy file.
 """
 
@@ -11,34 +11,34 @@ import json
 from pathlib import Path
 
 import pytest
-from core.self_improving_loop.policies import (
+from core.self_improving.loop.policies import (
     TARGET_KINDS,
     is_valid_target_kind,
     load_policy,
     policy_path,
     write_policy,
 )
-from core.self_improving_loop.runner import (
+from core.self_improving.loop.runner import (
     Mutation,
     apply_mutation,
     parse_mutation,
 )
 
-from core.self_improving_loop import policies as _policies_mod
+from core.self_improving.loop import policies as _policies_mod
 
 # ---------------------------------------------------------------------------
 # TARGET_KINDS + is_valid_target_kind
 # ---------------------------------------------------------------------------
 
 
-def test_target_kinds_contains_active_eight() -> None:
+def test_target_kinds_contains_seven_behaviour_kinds() -> None:
     """ADR-012 S0d — retrieval deprecated. M1 — skill_catalog 추가.
     M2 (2026-05-21) — agent_contract 추가.
     PR-TOOL-DESCRIPTIONS-MUTATE (2026-05-27) — tool_descriptions 추가.
-    PR-HYPERPARAM-FOUNDATION (2026-05-28) — hyperparam 추가 (numeric /
-    categorical surface for audit-subprocess command-line knobs +
-    AgenticLoop runtime config).
-    Post-graduation: 8 active mutation targets."""
+    PR-HYPERPARAM-FOUNDATION (2026-05-28) — hyperparam 추가, then
+    PR-DROP-HYPERPARAM-MUTATION (2026-05-31) — hyperparam REMOVED from the
+    mutable surface (reflection_depth axis exhausted; measurement params
+    fixed). The mutable surface is now exactly the 7 *behaviour* kinds."""
     assert set(TARGET_KINDS) == {
         "prompt",
         "tool_policy",
@@ -47,8 +47,11 @@ def test_target_kinds_contains_active_eight() -> None:
         "skill_catalog",
         "agent_contract",
         "tool_descriptions",
-        "hyperparam",
     }
+    assert len(TARGET_KINDS) == 7
+    # hyperparam is no longer a mutable kind.
+    assert "hyperparam" not in TARGET_KINDS
+    assert is_valid_target_kind("hyperparam") is False
 
 
 def test_is_valid_target_kind_accepts_registered_kinds() -> None:
@@ -68,11 +71,12 @@ def test_is_valid_target_kind_rejects_unknown() -> None:
 
 def test_policy_path_returns_distinct_paths() -> None:
     """Distinct SoT per kind so policies evolve independently.
-    PR-HYPERPARAM-FOUNDATION (2026-05-28) — 8 active kinds (prompt /
-    tool_policy / decomposition / reflection / skill_catalog /
-    agent_contract / tool_descriptions / hyperparam) + retrieval
-    (deprecated but path preserved) = 9 distinct paths."""
-    paths = {kind: policy_path(kind) for kind in (*TARGET_KINDS, "retrieval")}
+    PR-DROP-HYPERPARAM-MUTATION (2026-05-31) — 7 active *behaviour* kinds
+    (prompt / tool_policy / decomposition / reflection / skill_catalog /
+    agent_contract / tool_descriptions) + ``retrieval`` and ``hyperparam``
+    (both removed from TARGET_KINDS but path-mapping preserved for runtime
+    readers / future re-add) = 9 distinct paths."""
+    paths = {kind: policy_path(kind) for kind in (*TARGET_KINDS, "retrieval", "hyperparam")}
     assert len(set(paths.values())) == 9
 
 
@@ -283,7 +287,7 @@ def test_apply_mutation_retrieval_is_rejected_post_s0d() -> None:
     """ADR-012 S0d (2026-05-21) — retrieval 은 TARGET_KINDS 에서 deprecate.
     ``apply_mutation`` 호출 시 ``is_valid_target_kind("retrieval") == False``
     이므로 ``policy_path`` 가 ValueError 를 raise 한다."""
-    from core.self_improving_loop.policies import is_valid_target_kind, policy_path
+    from core.self_improving.loop.policies import is_valid_target_kind, policy_path
 
     assert is_valid_target_kind("retrieval") is False, (
         "S0d 후 retrieval 은 active target_kind 가 아님"
@@ -315,10 +319,10 @@ def test_apply_mutation_prompt_kind_uses_legacy_writer(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """The legacy ``prompt`` kind must still route through
-    ``autoresearch.train.write_wrapper_prompt_sections`` so the
+    ``core.self_improving.train.write_wrapper_prompt_sections`` so the
     schema enforcement (single paragraph / 600-char cap) survives
     the PR-6 dispatcher rewrite."""
-    from autoresearch import train as _train
+    from core.self_improving import train as _train
 
     written: list[dict[str, str]] = []
 
@@ -368,9 +372,9 @@ def test_run_once_loads_target_kind_policy_not_wrapper_sections(
     apply_mutation, which would write wrapper-prompt content into the
     wrong SoT for non-prompt target_kinds. Pin that run_once now
     loads the correct policy via ``load_policy(mutation.target_kind)``."""
-    from core.self_improving_loop.runner import SelfImprovingLoopRunner
+    from core.self_improving.loop.runner import SelfImprovingLoopRunner
 
-    from autoresearch import train as _train
+    from core.self_improving import train as _train
 
     # Redirect tool_policy SoT to a tmp path so the test never touches
     # ~/.geode/. Pre-populate with one entry to confirm load_policy is
@@ -394,9 +398,9 @@ def test_run_once_loads_target_kind_policy_not_wrapper_sections(
 
     # Stub build_runner_context so the test doesn't depend on a real
     # baseline / wrapper-sections file.
-    from core.self_improving_loop.runner import RunnerContext
+    from core.self_improving.loop.runner import RunnerContext
 
-    from core.self_improving_loop import runner as _runner_mod
+    from core.self_improving.loop import runner as _runner_mod
 
     monkeypatch.setattr(
         _runner_mod,
@@ -432,7 +436,7 @@ def test_rollback_sot_dispatches_on_target_kind(
     call write_wrapper_prompt_sections, which for non-prompt mutations
     would restore the wrong destination. Pin that rollback now
     dispatches by target_kind."""
-    from core.self_improving_loop.runner import SelfImprovingLoopRunner
+    from core.self_improving.loop.runner import SelfImprovingLoopRunner
 
     tool_path = tmp_path / "tool-policy.json"
     _redirect_kind(monkeypatch, "tool_policy", tool_path)
@@ -462,11 +466,11 @@ def test_rollback_sot_prompt_kind_still_uses_legacy_writer(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """Pin that the prompt branch still routes through
-    autoresearch.train.write_wrapper_prompt_sections — schema
+    core.self_improving.train.write_wrapper_prompt_sections — schema
     enforcement (single-paragraph 600-char cap) must survive PR-6."""
-    from core.self_improving_loop.runner import SelfImprovingLoopRunner
+    from core.self_improving.loop.runner import SelfImprovingLoopRunner
 
-    from autoresearch import train as _train
+    from core.self_improving import train as _train
 
     written: list[dict[str, str]] = []
     monkeypatch.setattr(_train, "write_wrapper_prompt_sections", lambda s: written.append(dict(s)))
@@ -512,205 +516,87 @@ def test_global_policy_paths_under_policies_dir() -> None:
 
 
 # ---------------------------------------------------------------------------
-# PR-HYPERPARAM-FOUNDATION (2026-05-28) — bounds validator invariants
+# PR-DROP-HYPERPARAM-MUTATION (2026-05-31) — hyperparam is no longer mutable
 # ---------------------------------------------------------------------------
 
 
-def test_hyperparam_bounds_accepts_valid_int() -> None:
-    """Valid integer-section + in-bounds value → no raise.
-
-    PR-AUDIT-SCAFFOLD-WIRE (2026-05-31) — ``reflection_depth`` is now the
-    ONLY mutable hyperparam knob; ``max_turns`` / ``seed_limit`` moved to the
-    fixed-measurement set (see ``test_hyperparam_*_fixed_measurement_*``).
-    """
-    from core.self_improving_loop.runner import _validate_hyperparam_bounds
-
-    _validate_hyperparam_bounds("reflection_depth", "1")
-    _validate_hyperparam_bounds("reflection_depth", "3")
-    _validate_hyperparam_bounds("reflection_depth", "5")
-
-
-def test_hyperparam_max_turns_seed_limit_dim_set_are_fixed_measurement_params() -> None:
-    """PR-AUDIT-SCAFFOLD-WIRE (2026-05-31, operator decision) — the three
-    audit-MEASUREMENT parameters are NOT mutable: a mutator that changes the
-    turn budget / sample count / dim set would confound the mutated-vs-baseline
-    fitness comparison. They are rejected at the bounds validator with an
-    explanatory error, distinct from the generic 'unknown key' message."""
-    from core.self_improving_loop.runner import _validate_hyperparam_bounds
-
-    for section, value in (("max_turns", "5"), ("seed_limit", "8"), ("dim_set", "subset")):
-        with pytest.raises(ValueError, match="FIXED audit-measurement parameter"):
-            _validate_hyperparam_bounds(section, value)
-
-
-def test_hyperparam_bounds_rejects_unknown_section() -> None:
-    """Section not in the allow-list → ValueError. Defends against
-    mutator inventing knobs the runtime doesn't read."""
-    from core.self_improving_loop.runner import _validate_hyperparam_bounds
-
-    with pytest.raises(ValueError, match="not in allowed set"):
-        _validate_hyperparam_bounds("unknown_section", "5")
-    with pytest.raises(ValueError, match="not in allowed set"):
-        _validate_hyperparam_bounds("BUDGET_MINUTES", "30")
-
-
-def test_hyperparam_bounds_rejects_out_of_range_int() -> None:
-    """Integer-section + value outside [lo, hi] → ValueError."""
-    from core.self_improving_loop.runner import _validate_hyperparam_bounds
-
-    with pytest.raises(ValueError, match="out of bounds"):
-        _validate_hyperparam_bounds("reflection_depth", "0")
-    with pytest.raises(ValueError, match="out of bounds"):
-        _validate_hyperparam_bounds("reflection_depth", "6")
-
-
-def test_hyperparam_bounds_rejects_non_integer_string() -> None:
-    """Integer-section + non-numeric value → ValueError. Defends against
-    mutator emitting ``"5.5"`` or ``"high"`` for an int knob."""
-    from core.self_improving_loop.runner import _validate_hyperparam_bounds
-
-    with pytest.raises(ValueError, match="integer-convertible"):
-        _validate_hyperparam_bounds("reflection_depth", "high")
-    with pytest.raises(ValueError, match="integer-convertible"):
-        _validate_hyperparam_bounds("reflection_depth", "3.5")
-
-
-def test_parse_mutation_hyperparam_kind_valid() -> None:
-    """End-to-end parse path for a valid hyperparam mutation."""
+def test_parse_mutation_rejects_hyperparam_kind_with_clear_message() -> None:
+    """PR-DROP-HYPERPARAM-MUTATION (2026-05-31, operator decision) — a
+    ``hyperparam`` mutation (ANY section, including the formerly-mutable
+    ``reflection_depth``) is REJECTED at parse with a specific explanation:
+    measurement params are fixed config and the reflection_depth axis is
+    exhausted. This is the operator-visible signal, distinct from the generic
+    not-in-TARGET_KINDS enumeration."""
     import json
 
-    from core.self_improving_loop.runner import parse_mutation
+    from core.self_improving.loop.runner import parse_mutation
 
-    payload = json.dumps(
-        {
-            "target_kind": "hyperparam",
-            "target_section": "reflection_depth",
-            "new_value": "3",
-            "rationale": "Try deeper reflection — cycle 1-12 had Δ=0 for redundant_tool_invocation under prompt mutation; an extra reflection pass lets the agent prune redundant tool calls before emitting.",
-            "target_dim": "redundant_tool_invocation",
-            "expected_dim": {"redundant_tool_invocation": -1.0},
-        }
-    )
-    m = parse_mutation(payload)
-    assert m.target_kind == "hyperparam"
-    assert m.target_section == "reflection_depth"
-    assert m.new_value == "3"
-
-
-def test_parse_mutation_hyperparam_kind_rejects_out_of_bounds() -> None:
-    """Mutator proposing ``reflection_depth=999`` is caught at parse, not at
-    audit subprocess invocation. Cycle protection."""
-    import json
-
-    from core.self_improving_loop.runner import parse_mutation
-
-    payload = json.dumps(
-        {
-            "target_kind": "hyperparam",
-            "target_section": "reflection_depth",
-            "new_value": "999",
-            "rationale": "more reflection",
-            "target_dim": "redundant_tool_invocation",
-            "expected_dim": {"redundant_tool_invocation": -0.5},
-        }
-    )
-    with pytest.raises(ValueError, match="out of bounds"):
-        parse_mutation(payload)
-
-
-def test_parse_mutation_hyperparam_rejects_fixed_measurement_sections() -> None:
-    """PR-AUDIT-SCAFFOLD-WIRE (2026-05-31) — a hyperparam mutation targeting a
-    fixed audit-measurement parameter is rejected at parse, before the audit
-    subprocess. Pins the operator decision that only reflection_depth is
-    mutator-tunable."""
-    import json
-
-    from core.self_improving_loop.runner import parse_mutation
-
-    for section, value in (("max_turns", "3"), ("seed_limit", "20"), ("dim_set", "full")):
+    for section in ("reflection_depth", "max_turns", "seed_limit", "dim_set", "anything"):
         payload = json.dumps(
             {
                 "target_kind": "hyperparam",
                 "target_section": section,
-                "new_value": value,
-                "rationale": "attempt to tune the audit measurement surface",
+                "new_value": "3",
+                "rationale": "attempt a hyperparam mutation",
                 "target_dim": "redundant_tool_invocation",
                 "expected_dim": {"redundant_tool_invocation": -0.5},
             }
         )
-        with pytest.raises(ValueError, match="FIXED audit-measurement parameter"):
+        with pytest.raises(ValueError, match="hyperparam is not a mutable kind"):
             parse_mutation(payload)
 
 
-def test_apply_mutation_hyperparam_kind_writes_sot(
+def test_parse_mutation_accepts_all_seven_behaviour_kinds() -> None:
+    """The 7 behaviour kinds remain mutator-dispatchable after the hyperparam
+    drop. Iterates ``TARGET_KINDS`` so the assertion tracks the canonical set;
+    nested-schema kinds use a dotted ``target_section``."""
+    import json
+
+    from core.self_improving.loop.policies import _NESTED_KINDS
+    from core.self_improving.loop.runner import parse_mutation
+
+    for kind in TARGET_KINDS:
+        section = "tool.description" if kind in _NESTED_KINDS else "some_section"
+        payload = json.dumps(
+            {
+                "target_kind": kind,
+                "target_section": section,
+                "new_value": "a new behaviour-policy value",
+                "rationale": "behaviour-kind mutation should parse cleanly",
+                "target_dim": "helpfulness",
+                "expected_dim": {"helpfulness": 0.1},
+            }
+        )
+        m = parse_mutation(payload)
+        assert m.target_kind == kind
+
+
+def test_reject_hyperparam_mutation_helper_always_raises() -> None:
+    """The dedicated rejection helper raises unconditionally with the
+    operator-facing message (pins the message text the contract promises)."""
+    from core.self_improving.loop.runner import _reject_hyperparam_mutation
+
+    with pytest.raises(ValueError, match="reflection_depth axis is exhausted"):
+        _reject_hyperparam_mutation()
+
+
+def test_apply_mutation_rejects_hyperparam_kind(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """apply_mutation routes hyperparam through the generic write_policy
-    path (flat dict[str, str]) — same machinery as the other simple
-    kinds, no special-case writer. Test isolation redirects the SoT
-    path to a tmp file so the canonical
-    ``autoresearch/state/policies/hyperparam.json`` is not mutated."""
-    from core.self_improving_loop.runner import Mutation, apply_mutation
+    """Second-layer defense: an externally-constructed ``hyperparam``
+    Mutation that bypassed parse_mutation is still rejected at apply, before
+    any write — the SoT path stays untouched."""
+    from core.self_improving.loop.runner import Mutation, apply_mutation
 
     target = tmp_path / "hyperparam.json"
     _redirect_kind(monkeypatch, "hyperparam", target)
-    # The fixed-measurement keys may still sit in the SoT as operator-set
-    # defaults; only reflection_depth is mutator-tunable (PR-AUDIT-SCAFFOLD-WIRE).
-    starting = {"max_turns": "5", "seed_limit": "8", "dim_set": "subset", "reflection_depth": "3"}
-    mutation = Mutation(
+    bad = Mutation(
         target_section="reflection_depth",
         new_value="4",
-        rationale="test apply path",
-        target_kind="hyperparam",
-    )
-    new_sections, previous_value = apply_mutation(mutation, current_sections=starting)
-    assert previous_value == "3"
-    assert new_sections["reflection_depth"] == "4"
-    # The fixed-measurement keys are left untouched by an apply.
-    assert new_sections["max_turns"] == "5"
-    assert new_sections["seed_limit"] == "8"
-    assert new_sections["dim_set"] == "subset"
-
-
-def test_apply_mutation_hyperparam_kind_rejects_out_of_bounds(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    """Second-layer defense: an externally-constructed Mutation that
-    bypassed parse_mutation cannot still write garbage to the SoT.
-    SoT path redirected for isolation; the raise should happen before
-    any write_policy call, so the tmp file stays untouched as well."""
-    from core.self_improving_loop.runner import Mutation, apply_mutation
-
-    target = tmp_path / "hyperparam.json"
-    _redirect_kind(monkeypatch, "hyperparam", target)
-    bad = Mutation(
-        target_section="reflection_depth",
-        new_value="999",
         rationale="bypass parse",
         target_kind="hyperparam",
     )
-    with pytest.raises(ValueError, match="out of bounds"):
+    with pytest.raises(ValueError, match="hyperparam is not a mutable kind"):
         apply_mutation(bad, current_sections={"reflection_depth": "3"})
-    # Bounds violation must precede the write.
-    assert not target.exists()
-
-
-def test_apply_mutation_hyperparam_rejects_fixed_measurement_section(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    """apply_mutation also rejects a fixed-measurement section (defense in
-    depth — an externally-constructed Mutation that bypassed parse_mutation
-    still cannot mutate the audit-measurement surface)."""
-    from core.self_improving_loop.runner import Mutation, apply_mutation
-
-    target = tmp_path / "hyperparam.json"
-    _redirect_kind(monkeypatch, "hyperparam", target)
-    bad = Mutation(
-        target_section="seed_limit",
-        new_value="20",
-        rationale="bypass parse",
-        target_kind="hyperparam",
-    )
-    with pytest.raises(ValueError, match="FIXED audit-measurement parameter"):
-        apply_mutation(bad, current_sections={"seed_limit": "8"})
+    # Rejection must precede the write.
     assert not target.exists()

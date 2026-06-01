@@ -106,7 +106,7 @@ def build_automation(
     # ~/.geode/config.toml. Default off → register_auto_trigger no-ops.
     try:
         from core.config.self_improving_loop import load_self_improving_loop_config
-        from core.self_improving_loop.auto_trigger import register_auto_trigger
+        from core.self_improving.loop.auto_trigger import register_auto_trigger
 
         sil_cfg = load_self_improving_loop_config()
         register_auto_trigger(

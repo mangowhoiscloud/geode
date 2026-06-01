@@ -6,20 +6,25 @@ autoresearch re-audit subprocess.
 The call site derives ``repo_root`` from
 ``MUTATION_AUDIT_LOG_PATH.resolve().parents[N]`` and then passes it as
 ``cwd`` to ``_run_autoresearch_subprocess``. The argv inside that
-subprocess is ``["uv", "run", "python", "autoresearch/train.py"]``,
-so the cwd MUST be the repo root — otherwise the relative path
-resolves to ``<wrong-root>/autoresearch/train.py`` and the
-subprocess exits with ``[Errno 2]`` before any audit work happens.
+subprocess is ``["uv", "run", "python", "-m", "core.self_improving.train"]``,
+so the cwd MUST be the repo root — otherwise ``python -m`` cannot resolve
+the ``core`` package and the subprocess exits with a ``ModuleNotFoundError``
+before any audit work happens.
 
 Latent bug history: PR-G5b (2026-05-20) moved the audit log from
 ``<repo>/state/mutations.jsonl`` to
 ``<repo>/autoresearch/state/mutations.jsonl``. The ``parents[1]``
 arithmetic at the two call sites was not updated and the bug
 slept because (a) tests mocked the subprocess and (b) live runs
-went through ``geode audit-seeds generate`` / ``train.py`` directly
+went through ``geode audit-seeds generate`` / ``train`` directly
 rather than the inner-loop runner. This test fails on a regression
 by asserting the resolved repo root actually contains
-``autoresearch/train.py``.
+``core/self_improving/train.py`` (the audit module's source file).
+PR-SELF-IMPROVING-UMBRELLA (2026-05-31) moved the audit runner from
+``autoresearch/train.py`` to ``core/self_improving/train.py`` and the
+spawn from a relative path to ``-m core.self_improving.train`` — the
+repo-root invariant is unchanged because ``python -m`` still resolves
+the package against the ``cwd``.
 """
 
 from __future__ import annotations
@@ -42,11 +47,11 @@ def test_mutation_audit_log_lives_two_levels_below_repo_root(
 
     Pin: ``MUTATION_AUDIT_LOG_PATH`` =
     ``<repo>/autoresearch/state/mutations.jsonl`` → ``parents[2]``
-    is the directory containing ``autoresearch/train.py``.
+    is the repo root containing ``core/self_improving/train.py``.
     """
     repo_root = audit_log_path.resolve().parents[2]
-    assert (repo_root / "autoresearch" / "train.py").is_file(), (
-        f"repo_root={repo_root!r} does not contain autoresearch/train.py — "
+    assert (repo_root / "core" / "self_improving" / "train.py").is_file(), (
+        f"repo_root={repo_root!r} does not contain core/self_improving/train.py — "
         f"the parents[2] offset is wrong or the audit log path moved again."
     )
 
@@ -57,13 +62,14 @@ def test_parents_one_is_not_repo_root(
     """``parents[1]`` points at ``autoresearch/`` not the repo root.
 
     Direct negative pin: if some future refactor flips back to
-    ``parents[1]``, the subprocess argv ``autoresearch/train.py``
-    against this cwd resolves to ``autoresearch/autoresearch/train.py``
-    which does not exist. This test asserts that exact non-existence
+    ``parents[1]``, the ``cwd`` becomes ``<repo>/autoresearch`` and the
+    ``-m core.self_improving.train`` spawn cannot find the ``core`` package
+    (which lives at the repo root, NOT under ``autoresearch/``). This test
+    asserts that ``parents[1]`` does NOT contain ``core/self_improving/train.py``
     so the wrong cwd cannot silently pass.
     """
     wrong_root = audit_log_path.resolve().parents[1]
-    wrong_path = wrong_root / "autoresearch" / "train.py"
+    wrong_path = wrong_root / "core" / "self_improving" / "train.py"
     assert not wrong_path.exists(), (
         f"Unexpected: {wrong_path!r} exists — runner.py's parents[2] arithmetic "
         f"was chosen against parents[1] precisely because parents[1] "
@@ -79,7 +85,7 @@ def test_runner_apply_proposal_uses_correct_parents_offset() -> None:
     spawn. Catches the off-by-one bug introduced after PR-G5b
     moved the audit log under ``autoresearch/state/``.
     """
-    from core.self_improving_loop import runner
+    from core.self_improving.loop import runner
 
     source = Path(runner.__file__).read_text(encoding="utf-8")
     # Both call sites should now read parents[2]; parents[1] must not

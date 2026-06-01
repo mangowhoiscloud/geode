@@ -1,0 +1,15 @@
+2026-05-22T05:00:00Z inspect cache purge: ran at real-campaign start (purged=True)
+2026-05-22T05:10:00Z gen-0 baseline repeat 1/3: held_out=0.610000 fitness=0.500000 source=manual dims_parsed=24
+2026-05-22T05:20:00Z gen-0 baseline repeat 2/3: held_out=0.620000 fitness=0.510000 source=manual dims_parsed=24
+2026-05-22T05:30:00Z gen-0 baseline repeat 3/3: held_out=0.600000 fitness=0.490000 source=manual dims_parsed=24
+2026-05-22T05:40:00Z gen-0 noise band: K=3 held_out_mean=0.6100 stderr=0.0058 values=[0.61, 0.62, 0.60]
+2026-05-22T05:45:00Z gen-0 K-mean baseline: collected 3/3 measures, 24 dims; baseline.json raw.dim_means←K-mean (written=True)
+2026-05-22T05:50:00Z arm 'gate' (index 0): restoring gen-0 SoT snapshot
+2026-05-22T05:50:00Z arm 'gate': GEODE_PROMOTE_POLICY=gate GEODE_PROMOTE_POLICY_SEED=None commit_enabled=True
+2026-05-22T06:00:00Z arm 'gate' cycle 1/3: fitness_after=0.512000 fitness_delta=-0.0010 held_out=0.605000 reject guard=ok (status=success samples=4 dims=22)
+2026-05-22T06:20:00Z arm 'gate' cycle 2/3: fitness_after=0.530000 fitness_delta=0.0200 held_out=0.601000 reject guard=ok (status=success samples=4 dims=22)
+2026-05-22T06:30:00Z arm 'gate' cycle 3/3: SKIP (propose-guard exhausted)
+2026-05-22T06:35:00Z arm 'gate' summary: cycles=2 skipped=1 promotes=0 halted=False
+2026-05-22T06:35:00Z arm 'never' (index 1): restoring gen-0 SoT snapshot
+2026-05-22T06:35:00Z arm 'never': GEODE_PROMOTE_POLICY=never GEODE_PROMOTE_POLICY_SEED=None commit_enabled=False
+2026-05-22T06:40:00Z arm 'never' cycle 1/3: fitness_after=0.505000 fitness_delta=-0.0050 held_out=0.612000 reject guard=ok (status=success samples=4 dims=22)

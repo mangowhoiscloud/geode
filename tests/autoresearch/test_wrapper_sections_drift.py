@@ -3,10 +3,10 @@
 Pattern source: PR-MINIMAL-2 #1398 — `_FALLBACK_SYSTEM_PROMPT` ↔ `program.md`
 shared-anchor invariant. Same dual-SoT shape risk applies here:
 
-- ``autoresearch/train.py:_WRAPPER_PROMPT_SECTIONS_FALLBACK`` — bootstrap
+- ``core/self_improving/train.py:_WRAPPER_PROMPT_SECTIONS_FALLBACK`` — bootstrap
   default loaded when ``autoresearch/state/policies/wrapper-sections.json``
   (canonical, mutator-written runtime SoT) is absent.
-- ``autoresearch/train.py:write_wrapper_prompt_sections`` — validator the
+- ``core/self_improving/train.py:write_wrapper_prompt_sections`` — validator the
   mutator goes through when promoting a wrapper-prompt mutation.
 
 A future PR could:
@@ -39,13 +39,13 @@ import json
 from pathlib import Path
 
 import pytest
-from autoresearch.train import (
+from core.self_improving.train import (
     _WRAPPER_PROMPT_SECTIONS_FALLBACK,
     load_wrapper_prompt_sections,
     write_wrapper_prompt_sections,
 )
 
-from autoresearch import train as auto_train
+from core.self_improving import train as auto_train
 
 # The 5 documented bootstrap section anchors. These are not "required by
 # every consumer" — `core/agent/system_prompt.py` only validates

@@ -45,6 +45,265 @@ functional change.
 
 ---
 
+## [0.99.109] - 2026-06-01
+
+### Fixed
+- **PR-USAGE-EVALID-MONTH (2026-06-01) — `UsageStore.has_eval_id` now scans
+  every month file, not just the current calendar month.** Eval rows are
+  partitioned by the eval's `created` ts (a past month for backfills /
+  month-boundary imports), but the duplicate-detection check only read
+  `date.today()`'s month — so once the wall-clock month rolled past the eval's
+  month, `core.audit.eval_to_jsonl.extract_to_usage_store` re-imported an
+  already-recorded eval (non-idempotent). `has_eval_id` now reads all
+  `YYYY-MM.jsonl` files when `year`/`month` are omitted (new `_read_all_months`
+  helper); pass both to scope to a single month. The companion test helper
+  `tests/audit/test_eval_to_jsonl.py::_read_jsonl` was likewise made
+  date-independent (globs all month files instead of `date.today()`), fixing 4
+  pre-existing date-dependent test failures that surfaced on the develop→main
+  CI once the month rolled to June.
+
+## [0.99.108] - 2026-06-01
+
+### Added
+- **PR-HUB-CAMPAIGN-VIZ (2026-06-01) — live 3-arm campaign drill-down on the
+  self-improving hub's evidence page.** `scripts/build_self_improving_hub.py` now
+  reads the running campaign's per-cycle ledger and renders a Datadog-style dense
+  faceted panel (new evidence section "3 · Live campaign", Power renumbered to 4):
+  the gen-0 K-mean **noise band** (`mean ± stderr`, the floor every arm is judged
+  against), the **promote-gate margin rule** (stated verbatim from
+  `core/self_improving/train.py::_should_promote` + the recorded gen-0
+  `fitness_stderr` — no fabricated per-cycle margin; the "gate decision so far" line
+  is COMPUTED from the recorded gate-arm `fitness_delta`s, not hard-coded), and a
+  **per-cycle table faceted by arm** (never / random / gate) surfacing selection vs
+  held-out fitness, their gen-0-anchored **divergence** (the winner's-curse signal,
+  dim-direction-aware coloring), Δ-held-out vs prior, the **verdict** (promote /
+  reject / SKIP from `campaign-progress.log`, the *latest* SoT — kept distinct from
+  the *promoted* `baseline_archive.jsonl` SoT), the held-out **seed pool**, and a
+  deep-linked **Petri eval** (`#/logs/<eval_filename>` route only — never `#/tasks/`)
+  with the per-audit dim-engagement count. New stdlib-only loaders read
+  `campaign-progress.log`, the gen-0 snapshot (`state/campaign/gen-0-snapshot/`), and
+  the eval-log `MANIFEST.jsonl`; the cycle→eval link is reconstructed by matching the
+  attribution-row `ts` to the MANIFEST `completed_at` within a 180s tolerance. Every
+  section degrades to an honest "awaiting" / "in progress" / "no eval recorded" state
+  while the campaign is mid-run — measured values only.
+- **Codex M2 — mixed-fitness-recipe guard on the mean-delta aggregate.** After
+  PR-GATE-RECIPE (#1947, v0.99.106) the attribution ledger's `fitness_after` /
+  `fitness_delta` switched from the PENALIZED `compute_fitness` to the gate's PLAIN
+  `current_raw` recipe. Rows written before that merge carry the old penalized
+  number, so the hub must not blend the two recipes into one mean. With no per-row
+  recipe marker yet, the hub tags rows whose `ts` is before the #1947 merge boundary
+  (commit `2aa3b9a0`, `2026-05-31T21:05:49Z` UTC, epoch `1780261549`) as
+  legacy-penalized and excludes them
+  from the plain-recipe mean-delta aggregate (surfacing the split count honestly). A
+  per-row `fitness_recipe` marker is the robust long-term replacement for this
+  ts-boundary heuristic.
+
+---
+
+## [0.99.107] - 2026-06-01
+
+### Changed
+- **PR-SELF-IMPROVING-UMBRELLA (2026-05-31) — consolidate the scattered
+  self-improving-loop CODE under one `core/self_improving/` umbrella package.**
+  The loop runtime moved `core/self_improving_loop/` → `core/self_improving/loop/`
+  (32 files); the audit runner + axis helpers moved `autoresearch/{train,prepare,
+  admire_means,bench_means}.py` → `core/self_improving/`; the campaign driver +
+  digest moved `scripts/{run_campaign,watch_campaign}.py` →
+  `core/self_improving/{campaign,watch_campaign}.py`. The loop is now invoked as
+  modules: `python -m core.self_improving.train` (audit) and
+  `python -m core.self_improving.campaign` (campaign), replacing the path-based
+  `python autoresearch/train.py` / `python scripts/run_campaign.py` spawns
+  (updated at both spawn sites — `core/self_improving/campaign.py` and
+  `core/self_improving/loop/runner.py`). The mutually-coupled lazy-import
+  structure is preserved (`train` lazy-imports `loop.*` in function bodies;
+  `loop.rollback_condition` module-imports `train.CRITICAL_DIMS`), so no
+  module-load circular import is introduced. All ~200 `import` / `from`
+  references across `core/`, `plugins/`, `tests/`, `scripts/`, `autoresearch/`
+  and docs were rewritten; the import-linter contracts gained an
+  `ignore_imports` entry for the now-visible lazy
+  `core.self_improving.train → core.cli.quota_banner` edge (was invisible while
+  `train` lived outside the `core` root_package).
+- **DATA stays put.** `autoresearch/state/` (baseline.json, mutations.jsonl,
+  policies/, seed-pools, campaign-progress.log) is UNCHANGED — `train` /
+  `campaign` keep resolving `REPO_ROOT/"autoresearch"/"state"` as a literal so
+  the running campaign + the `test_policy_files_not_gitignored` guard are
+  unaffected. `autoresearch/program.md` + `README.md` remain as the program SoT
+  and were updated to reflect the code relocation. The `__file__`-based
+  `parents[N]` repo-root arithmetic in every moved module was re-based for the
+  new depth.
+
+### Added
+- **Dry-run relocation regression test.**
+  `tests/test_run_campaign.py::test_campaign_dry_run_via_real_subprocess_completes`
+  runs `python -m core.self_improving.campaign --dry-run` as a real subprocess
+  end-to-end (offline synthetic, no network / PAYG) and asserts it reaches
+  `campaign complete`, so a future move that orphans an import or breaks the
+  `campaign → -m core.self_improving.train` spawn fails in the normal
+  `not live` suite.
+
+---
+
+## [0.99.106] - 2026-06-01
+
+### Fixed
+- **PR-GATE-RECIPE (2026-06-01) — the self-improving loop's attribution
+  `fitness_delta` now equals the promote gate's actual decision.** The gate
+  (`autoresearch/train.py::_should_promote`) compares `current_raw` vs
+  `prior_raw`, both the PLAIN `compute_fitness` (no `baseline_means`, so no
+  auxiliary-shortfall penalty / critical strict-reject) — but the attribution
+  ledger wrote `fitness_after` as the PENALIZED `compute_fitness` (with
+  `baseline_means`), while `fitness_before` was plain. The resulting
+  `fitness_delta` was a mixed `[penalized − plain]` number that did NOT reflect
+  the gate's `current_raw − prior_raw` gain, causing post-campaign analysis to
+  mis-read an all-reject run as "structurally unpromotable." `fitness_after`
+  (attribution ledger) and the OL-C2 few-shot/DPO exemplar `fitness_delta` now
+  use a new `fitness_plain` computed with the gate's exact `current_raw` recipe,
+  so both sit on the same plain scale as `fitness_before`. The penalized headline
+  `fitness` is preserved for the run-record sinks (results_tsv/jsonl). SCALE
+  NOTE: `mutations.jsonl` rows written before this PR carry the old penalized
+  `fitness_after`; the hub mean-delta aggregate
+  (`scripts/build_self_improving_hub.py`) must discriminate pre-/post-PR rows (by
+  merge-timestamp boundary or a recipe marker) before re-publishing, to avoid
+  mixing scales — tracked for the hub PR (Codex MCP M2).
+
+### Changed
+- **Trimmed gen-0 K-mean baseline** — `scripts/run_campaign.py::aggregate_dim_means`
+  now drops the single highest + single lowest per-dim repeat (when ≥ 4 present)
+  before averaging, reducing outlier / bimodal-dim skew on `prior_raw` and the
+  noise band; falls back to the plain mean below K = 4. `present_count` still
+  records the original (pre-trim) count so the partial-coverage warning is intact.
+
+---
+
+## [0.99.105] - 2026-05-31
+
+### Removed
+- **PR-DROP-HYPERPARAM-MUTATION (2026-05-31) — remove `hyperparam` from the
+  self-improving loop's mutation surface.** The mutator deterministically fixated
+  on `reflection_depth`: PR-AUDIT-SCAFFOLD-WIRE (#1938) had restricted the mutable
+  `hyperparam` kind to `reflection_depth` ONLY (`max_turns` / `seed_limit` /
+  `dim_set` rejected as audit-measurement params), but `reflection_depth` is an
+  exhausted axis — after ≥3 prior applies the axis-family dedup in
+  `core/self_improving_loop/mutator_feedback.py` (`_AXIS_REPEAT_LIMIT = 3`) rejects
+  every new `reflection_depth` proposal as repetitive (synthetic
+  `axis_family_exhausted_*`, similarity 1.000). With one mutable section left, a
+  live campaign exhausted all 8 propose-guard attempts every cycle → every cycle
+  SKIPped → zero data. `hyperparam` is now removed from
+  `core/self_improving_loop/policies.py::TARGET_KINDS` (the mutable surface is the
+  7 *behaviour* kinds: prompt, tool_policy, tool_descriptions, decomposition,
+  reflection, skill_catalog, agent_contract), so the mutator diversifies. A
+  mutation carrying `target_kind="hyperparam"` is rejected at `parse_mutation` /
+  `apply_mutation` (`runner.py::_reject_hyperparam_mutation`) with a clear message
+  ("hyperparam is not a mutable kind — measurement params are fixed config;
+  reflection_depth axis exhausted"); the PR-AUDIT-SCAFFOLD-WIRE per-section bounds
+  machinery (`_HYPERPARAM_INT_BOUNDS` / `_HYPERPARAM_FIXED_MEASUREMENT_KEYS` /
+  `_HYPERPARAM_CATEGORICAL` / `_validate_hyperparam_bounds`) is removed (no dead
+  branches). The mutator-feedback "Kind × Dim" attribution block is filtered to
+  active `TARGET_KINDS` so a historical `hyperparam` row no longer steers the
+  mutator into a parse-rejection SKIP. The
+  `autoresearch/state/policies/hyperparam.json` SoT and its runtime readers
+  (`autoresearch.train._load_hyperparam_overrides` →
+  seed_limit/max_turns/dim_set/reflection_depth consumed by the audit subprocess +
+  AgenticLoop) are preserved — only the mutation surface is gone; the
+  `_KIND_TO_PATH` mapping is kept (mirroring the deprecated `retrieval` slot) for
+  future re-add. Mutator system-prompt contract text + `autoresearch/program.md`
+  CAN-table updated to list only the 7 behaviour kinds. Docs:
+  `docs/self-improving/campaign-procedure.md` §2.1/§2.2.
+
+## [0.99.104] - 2026-05-31
+
+### Fixed
+- **PR-CAMPAIGN-GEN0-KMEAN (2026-05-31) — gen-0 baseline = K-mean dims, not the
+  single lucky-outlier bootstrap measure; purge the inspect_ai trajectory cache at
+  real-campaign start.** Two fixes to `scripts/run_campaign.py` (the self-improving
+  campaign driver):
+  - **K-mean baseline (the core fix).** The driver's gen-0 K-repeat left
+    `baseline.json`'s `raw.dim_means` pinned to the SINGLE bootstrap measurement (the
+    1st of K). The Petri audit is stochastic: 3 independent re-measures of the IDENTICAL
+    genesis scaffold gave fitness 0.807 / 0.663 / 0.662 (cache confirmed empty). With the
+    baseline pinned to the lucky-high 0.807, every ~0.66 cycle looked like a −0.14
+    regression, so the promote gate (`current_raw = compute_fitness(cycle_dims)` vs
+    `prior_raw = compute_fitness(baseline_dims)`, both intrinsic) was structurally
+    near-0-approve and the campaign could not test selection. The driver now parses each
+    gen-0 measure's RAW per-dim `dim_means` from `train.py`'s `FITNESS_RESULT:` stdout
+    sentinel, and after the K-repeat overwrites ONLY `baseline.json`'s `raw.dim_means`
+    (→ per-dim K-mean) and `raw.dim_stderr` (→ across-K per-dim sample stderr, the real
+    noise band), preserving the rest of the schema (`schema_version` / `session_id` /
+    `commit` / `ts_utc` / `axes` / `raw.{sample_count, measurement_modality,
+    eval_archive, fitness_stderr, rubric_version, …}`). A dim missing from some measures
+    is averaged over the present ones (partial-coverage logged). Skipped under
+    `--dry-run` (train.py's synthetic `FITNESS_RESULT` dims must not freeze a synthetic
+    baseline) — `write_kmean_baseline` / `aggregate_dim_means` / `parse_fitness_result_dims`.
+  - **inspect cache purge at real-campaign start.** A real (non-`--dry-run`) campaign now
+    calls `plugins.petri_audit.runner.purge_inspect_cache()` (guarded import) before the
+    K gen-0 measures so the identical-scaffold repeats + all cycle audits are INDEPENDENT
+    re-measures, not replays of a stale trajectory cached at
+    `~/Library/Caches/inspect_ai/generate/`. Skipped under `--dry-run`.
+  - **Tests** (`tests/test_run_campaign.py`, +10, all mocked — NO live audit): K-mean
+    baseline write asserts `raw.dim_means` = per-dim mean + `raw.dim_stderr` = across-K
+    stderr with the rest of the schema preserved; `FITNESS_RESULT` parse (incl.
+    non-numeric drop + absent → None); `aggregate_dim_means` mean/stderr + partial
+    coverage; cache purge runs on a real run and NOT on `--dry-run`. 37 tests pass.
+
+## [0.99.103] - 2026-05-31
+
+### Fixed
+- **PR-AUDIT-CONCURRENCY-KNOB (2026-05-31) — make the audit-concurrency env knobs
+  actually take effect.** `plugins/petri_audit/runner.py` `build_command()` hardcoded
+  `--max-connections 1` + `--max-samples 1` (the single-OAuth ~5 req/s safe pin from
+  PR-OL-AUDIT-BURST-FIX). PR-CAMPAIGN-DRIVER's `scripts/run_campaign.py` already exports
+  `GEODE_AUDIT_MAX_CONNECTIONS` / `GEODE_AUDIT_MAX_SAMPLES` (default 8/3) for a
+  higher-limit lane (PAYG `api_key` auditor/judge, or a multi-account pool), but those
+  reads were silently no-op'd in the runner, so parallel audits were impossible and
+  audit wall-clock stayed serial. `build_command()` now reads both caps from the
+  environment via a `_cap()` helper that defaults to 1, clamps to a minimum of 1, and
+  falls back to 1 on a missing or non-integer value (graceful boundary) — so the
+  single-OAuth path is byte-identical to the prior hardcoded behaviour. Pinned by four
+  new tests in `tests/test_ol_audit_burst_fix.py` (unset → 1/1, override → 8/3,
+  non-integer → 1/1, sub-1 → clamped to 1); the two pre-existing default-pin tests now
+  clear the env so an ambient export can't flake them.
+
+## [0.99.102] - 2026-05-31
+
+### Added
+- **PR-CAMPAIGN-DRIVER (2026-05-31) — committed, unit-tested self-improving campaign
+  driver (`scripts/run_campaign.py` + `scripts/watch_campaign.py`).** Implements
+  `docs/self-improving/campaign-procedure.md` as a real, importable module + CLI that
+  *sequences* the existing pieces (it decides no policy of its own):
+  - **gen-0 K-repeat baseline** (default K=5) — runs K manual measurements of the
+    genesis scaffold via `uv run python autoresearch/train.py` (real audit, no
+    mutation, `source="manual"`; the 1st bootstrap-establishes `baseline.json`),
+    reads each run's `held_out_fitness` + `fitness` from the new `kind="attribution"`
+    rows in `mutations.jsonl`, and computes the **noise band** (mean ± stderr of the K
+    held-out values). Then snapshots the full scaffold SoT
+    (`autoresearch/state/policies/*.{json,jsonl}` + `baseline.json`) to a gen-0 dir.
+  - **3-arm loop** (`never → random → gate`, gate LAST) — each arm restores the gen-0
+    snapshot (matched reset), sets `GEODE_PROMOTE_POLICY` (+ deterministic
+    `GEODE_PROMOTE_POLICY_SEED=424200+i` for `random`), runs N (default 10) cycles with
+    `commit_enabled=(arm=="gate")`.
+  - **propose-guard** — wraps `SelfImprovingLoopRunner.propose()` in a re-proposal loop
+    (up to M=8) that re-proposes on `RepetitiveMutationError` OR a measurement-hyperparam
+    `ValueError` (`seed_limit`/`max_turns`/`dim_set` now rejected), then skips the cycle
+    as a logged no-op rather than crashing the campaign.
+  - **degeneracy guard** — reads the newest `.eval` via `inspect_ai.log.read_eval_log`
+    and requires `status=success` + samples>0 + >0 scored dims (falls back to the
+    attribution row's `between_seed_stderr` ≥ floor when `inspect_ai` is absent); HALTs
+    the campaign on a degenerate audit.
+  - **flushed progress log** to `autoresearch/state/campaign-progress.log` (a gitignored
+    runtime artifact) tee'd to stdout — one line per cycle plus gen-0 noise-band +
+    per-arm summaries (long-task-watcher: flushed echo, not buffered).
+  - **env setup** — sets `GEODE_CODEX_OAUTH_POLL_DISABLED=1`, `AUTORESEARCH_SEED_SELECT`,
+    `GEODE_HELD_OUT_BENCH`, and `GEODE_AUDIT_MAX_SAMPLES`/`GEODE_AUDIT_MAX_CONNECTIONS`
+    (default 3/8 — a forward-looking knob; the single-OAuth `petri_audit/runner.py` lane
+    still pins `--max-samples 1 --max-connections 1`). `ANTHROPIC_API_KEY` is the
+    operator shell wrapper's responsibility.
+  - `--dry-run` passes through to `train.py` + the runner so the whole chain is
+    smoke-testable with synthetic audits (no PAYG/network). `scripts/watch_campaign.py`
+    gives an on-demand digest from the progress log + mutator attribution rows
+    (split by `promote_policy`) + baseline epochs.
+  - 23 unit tests in `tests/test_run_campaign.py` mock every boundary (propose,
+    train.py subprocess, `read_eval_log`, SoT files) — NO live audits.
+
 ## [0.99.101] - 2026-05-31
 
 ### Removed

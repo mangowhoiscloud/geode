@@ -123,7 +123,7 @@ def test_i3_pipeline_timeline_task_id_resolves_to_dialogue_path() -> None:
     ``activity_log.entityId`` FK joins to ``issue_comments.issueId``."""
     from core.observability.run_dir import run_dir_scope
     from core.observability.transcript import SessionTranscript
-    from core.self_improving_loop.run_transcript import RunTranscript, run_transcript_scope
+    from core.self_improving.loop.run_transcript import RunTranscript, run_transcript_scope
 
     task_id = "gen-gen1-001-bd2e3854"
     with tempfile.TemporaryDirectory() as tmp, run_dir_scope(tmp):
@@ -173,7 +173,7 @@ def test_i4_legacy_run_transcript_append_still_works() -> None:
     use ``journal.append("phase_started", payload={...})`` with no
     actor/action kwargs. After PR-U the same shape must keep working
     — the defaults auto-infer the orchestrator classification."""
-    from core.self_improving_loop.run_transcript import RunTranscript
+    from core.self_improving.loop.run_transcript import RunTranscript
 
     with tempfile.TemporaryDirectory() as tmp:
         journal = RunTranscript(
@@ -227,7 +227,7 @@ def test_i5_worker_subprocess_rebinds_run_transcript_from_env() -> None:
         worker_script = (
             "import os, sys; "
             "from core.observability.run_dir import RUN_DIR_ENV, set_active_run_dir; "
-            "from core.self_improving_loop.run_transcript import RunTranscript, set_current_run_transcript; "
+            "from core.self_improving.loop.run_transcript import RunTranscript, set_current_run_transcript; "
             "from core.observability.transcript import SessionTranscript; "
             "from pathlib import Path; "
             "inherited = os.environ.get(RUN_DIR_ENV, ''); "

@@ -891,7 +891,7 @@ def main() -> None:
         # kwargs which override the orchestrator defaults.
         from pathlib import Path
 
-        from core.self_improving_loop.run_transcript import (
+        from core.self_improving.loop.run_transcript import (
             RunTranscript,
             set_current_run_transcript,
         )

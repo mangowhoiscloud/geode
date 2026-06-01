@@ -1,11 +1,21 @@
-# autoresearch — GEODE self-improving loop driver
+# autoresearch — GEODE self-improving loop DATA + program SoT
 
-`autoresearch/` is **GEODE's self-improving loop driver**. Petri's
-`geode audit` subprocess scores each transcript on the 20-dim alignment
-rubric and emits a per-dim `mean + stderr` baseline; this driver runs
-the wrapper-prompt mutation loop on top of that baseline, picking
-hypotheses that push the fitness scalar up without regressing the
-5 critical dims.
+`autoresearch/` holds the self-improving loop's **runtime DATA** (`state/`)
+and the **agent program SoT** (`program.md`). The loop *CODE* moved under
+the `core.self_improving` umbrella package (PR-SELF-IMPROVING-UMBRELLA,
+2026-05-31) — `core/self_improving/train.py` (the audit runner, formerly
+`autoresearch/train.py`), `core/self_improving/prepare.py`,
+`core/self_improving/{admire,bench}_means.py`, the loop runtime under
+`core/self_improving/loop/`, and the campaign driver
+`core/self_improving/campaign.py`. The DATA (`autoresearch/state/`) stays
+here because the running campaign + gitignore guards depend on the literal
+path.
+
+Petri's `geode audit` subprocess scores each transcript on the 20-dim
+alignment rubric and emits a per-dim `mean + stderr` baseline; the driver
+(now `core/self_improving/train.py`) runs the wrapper-prompt mutation loop on
+top of that baseline, picking hypotheses that push the fitness scalar up
+without regressing the 5 critical dims.
 
 The 3-file shape (`prepare` / `train` / `program.md`), fixed per-run
 budget, and "git as optimiser" idiom are borrowed from Karpathy's
@@ -34,16 +44,17 @@ runs through `dim_extractor` → `compute_fitness`.
 
 ## How it works
 
-Same three-file structure borrowed from Karpathy autoresearch:
+Same three-file structure borrowed from Karpathy autoresearch (the code
+lives under `core/self_improving/`; `program.md` stays here):
 
-- **`prepare.py`** — Petri seed pool + AlphaEval 20-dim rubric
-  existence/format sanity check and audit-harness self-test. The
+- **`core/self_improving/prepare.py`** — Petri seed pool + AlphaEval 20-dim
+  rubric existence/format sanity check and audit-harness self-test. The
   agent **does not modify** this file.
-- **`train.py`** — GEODE wrapper system-prompt sections (mutation
-  target) + `geode audit` subprocess invocation + AlphaEval fitness
+- **`core/self_improving/train.py`** — GEODE wrapper system-prompt sections
+  (mutation target) + `geode audit` subprocess invocation + AlphaEval fitness
   extraction. **The single file the agent modifies.** Section
   wording, additions, deletions, and reordering are all fair game.
-- **`program.md`** — instructions to the agent. Humans modify this.
+- **`autoresearch/program.md`** — instructions to the agent. Humans modify this.
 
 The Karpathy 5-min wall-clock budget maps onto the audit budget
 (default ~5 min, capped by ChatGPT subscription quota / Anthropic API spend).
@@ -72,13 +83,13 @@ OAuth) or `ANTHROPIC_API_KEY`.
 uv sync --extra audit
 
 # 2. One-time seed-pool + rubric sanity check
-uv run python autoresearch/prepare.py
+uv run python -m core.self_improving.prepare
 
 # 3. Real audit experiment (~5 min, consumes LLM quota / API budget)
-uv run python autoresearch/train.py
+uv run python -m core.self_improving.train
 
 # 3-alt. Plumbing-only smoke (no quota / spend)
-uv run python autoresearch/train.py --dry-run
+uv run python -m core.self_improving.train --dry-run
 ```
 
 The final `---` block on stdout carries grep-friendly metrics.
@@ -100,13 +111,18 @@ from there.
 ## Project structure
 
 ```
-autoresearch/
-├── prepare.py     — seed-pool + rubric sanity check (do not modify)
-├── train.py       — wrapper prompt sections + audit invocation (agent modifies)
+autoresearch/                  — DATA + program SoT (this package)
 ├── program.md     — agent instructions (humans modify)
 ├── README.md      — this file
 └── state/         — runtime artefacts (gitignored: results.tsv,
                      results.jsonl, baseline.json, …)
+
+core/self_improving/           — loop CODE (umbrella package)
+├── prepare.py     — seed-pool + rubric sanity check (do not modify)
+├── train.py       — wrapper prompt sections + audit invocation (agent modifies)
+├── campaign.py    — campaign driver (python -m core.self_improving.campaign)
+├── admire_means.py / bench_means.py — positive-pressure / capability axes
+└── loop/          — loop runtime (runner, mutator, policies, …)
 ```
 
 ## Cross-loop handoff (P0b)
@@ -121,9 +137,9 @@ back to the hierarchical `plugins/petri_audit/seeds/` default.
 
 ## Design choices
 
-- **Single file to modify.** The agent only edits `train.py`. The
-  mutation scope's upper bound is explicit, so every diff is
-  meaningful.
+- **Single file to modify.** The agent only edits
+  `core/self_improving/train.py`. The mutation scope's upper bound is
+  explicit, so every diff is meaningful.
 - **Fixed budget.** Each audit is ~5 min wall-clock. Every hypothesis
   costs the same — apples-to-apples comparison. Roughly 12
   experiments per hour, ~100 overnight.

@@ -5,12 +5,12 @@ OL-AUDIT-BURST-FIX (2026-05-22) FIX-3.
 Why a module-level Lane (not the global LaneQueue container)
 ============================================================
 
-The autoresearch audit (`autoresearch/train.py::_run_autoresearch_subprocess`)
+The autoresearch audit (`core/self_improving/train.py::_run_autoresearch_subprocess`)
 is sometimes invoked from contexts where the global ``LaneQueue``
 singleton (built in ``core/wiring/container.py::build_lane_queue``)
 does NOT exist:
 
-* standalone CLI: ``uv run python autoresearch/train.py`` outside the
+* standalone CLI: ``uv run python -m core.self_improving.train`` outside the
   daemon — container isn't wired.
 * test harness: pytest doesn't build the container by default.
 

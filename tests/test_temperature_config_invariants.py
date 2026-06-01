@@ -98,7 +98,7 @@ _RATCHET_SITES = (
         "_settings.temperature_commentary",
     ),
     (
-        Path("core/self_improving_loop/runner.py"),
+        Path("core/self_improving/loop/runner.py"),
         "_settings.temperature_self_improving_mutation",
     ),
     (

@@ -27,9 +27,9 @@ Before starting a new experiment run, confirm with the user:
 3. **Read the in-scope files end-to-end**. Only the four files below
    matter:
    - `autoresearch/README.md` — driver overview + role split with petri.
-   - `autoresearch/prepare.py` — seed pool + rubric sanity check. **Do
+   - `core/self_improving/prepare.py` — seed pool + rubric sanity check. **Do
      not modify.**
-   - `autoresearch/train.py` — the single file the agent modifies.
+   - `core/self_improving/train.py` — the single file the agent modifies.
      Holds the wrapper-prompt sections, the audit invocation, and the
      fitness output.
    - `autoresearch/program.md` — this file. Read only.
@@ -66,7 +66,7 @@ Before starting a new experiment run, confirm with the user:
 One experiment = one audit, wall-clock ~5 min. Real-mode invocation:
 
 ```bash
-uv run python autoresearch/train.py > autoresearch/state/run.log 2>&1
+uv run python -m core.self_improving.train > autoresearch/state/run.log 2>&1
 ```
 
 To verify self-improving-loop plumbing without spending budget, use `--dry-run`
@@ -77,9 +77,9 @@ To verify self-improving-loop plumbing without spending budget, use `--dry-run`
 - Modify `train.py`'s `WRAPPER_PROMPT_SECTIONS` dict. The system
   prompt sections are fair game for wording changes, additions,
   deletions, and reorderings.
-- Mutate any of the **8 policy SoT files** at
+- Mutate any of the **7 behaviour policy SoT files** at
   `autoresearch/state/policies/` (PR-MINIMAL-2 baseline + ADR-012
-  M1/M2 + PR-TOOL-DESCRIPTIONS-MUTATE + PR-HYPERPARAM-FOUNDATION):
+  M1/M2 + PR-TOOL-DESCRIPTIONS-MUTATE):
 
   | `target_kind`        | File                       | What it controls                                                |
   |----------------------|----------------------------|-----------------------------------------------------------------|
@@ -90,7 +90,6 @@ To verify self-improving-loop plumbing without spending budget, use `--dry-run`
   | `skill_catalog`      | `skill-catalog.json`       | Skill descriptions + `user_invocable` flag (ADR-012 M1)         |
   | `agent_contract`     | `agent-contracts.json`     | Sub-agent role / system_prompt / tools (ADR-012 M2)             |
   | `tool_descriptions`  | `tool-descriptions.json`   | Per-tool `description` + `hints` list (PR-TOOL-DESCRIPTIONS-MUTATE) |
-  | `hyperparam`         | `hyperparam.json`          | Audit-subprocess hyperparameters (PR-HYPERPARAM-FOUNDATION)     |
 
   The four legacy kinds (`prompt` / `tool_policy` / `decomposition` /
   `reflection`) carry a `dict[str, str]` SoT. The three nested kinds
@@ -100,34 +99,29 @@ To verify self-improving-loop plumbing without spending budget, use `--dry-run`
   `<tool>.hints`, etc.); `load_policy` / `write_policy` handle the
   conversion. The Mode B runner (`SelfImprovingLoopRunner`) dispatches
   by `Mutation.target_kind` to the matching file; Mode A agents can
-  edit any of the 8 directly via `git`-tracked JSON.
+  edit any of the 7 directly via `git`-tracked JSON.
 
-  `hyperparam` (PR-HYPERPARAM-FOUNDATION, 2026-05-28) is structurally
-  the same `dict[str, str]` schema but semantically distinct: each
-  value is a **string-encoded numeric** that the AgenticLoop runtime
-  converts at consumption time. PR-AUDIT-SCAFFOLD-WIRE (2026-05-31,
-  operator decision) restricted the MUTABLE surface to one section:
-
-  | Section             | Type        | Bounds                  |
-  |---------------------|-------------|-------------------------|
-  | `reflection_depth`  | int         | [1, 5]                  |
-
-  `max_turns` / `seed_limit` / `dim_set` are NO LONGER mutable — they
-  are FIXED audit-MEASUREMENT parameters (turn budget, sample count,
-  judged dim set). Mutating them would change *how / what* the audit
-  measures, confounding the mutated-vs-baseline fitness comparison, so
-  `parse_mutation` + `apply_mutation` REJECT them (fail-closed at two
-  layers, with an explanatory error). They remain readable as
-  operator-set defaults in `hyperparam.json` (consumed by
-  `_build_audit_command`), just not mutator-changeable.
-
-  `parse_mutation` + `apply_mutation` also reject `reflection_depth`
-  values outside [1, 5]. Use a hyperparam (`reflection_depth`) mutation
-  when the regression dim's `measurement_modality` is `tool_log` or
-  `token_count` (programmatic / mechanism-level) and prompt mutations
-  have repeatedly produced `Δ ≈ 0` for the target dim — cycle 1-12
-  (2026-05-26 → 05-28) observed exactly this pattern for
-  `redundant_tool_invocation`, which is what motivates the slot.
+  `hyperparam` (`hyperparam.json`: `seed_limit` / `max_turns` /
+  `dim_set` / `reflection_depth`) is FIXED config, not mutated.
+  PR-HYPERPARAM-FOUNDATION (2026-05-28) opened it as a mutable slot and
+  PR-AUDIT-SCAFFOLD-WIRE (2026-05-31) restricted it to `reflection_depth`
+  only, but PR-DROP-HYPERPARAM-MUTATION (2026-05-31, operator decision)
+  removed the whole kind from `TARGET_KINDS`. Rationale:
+  `seed_limit` / `max_turns` / `dim_set` are audit-MEASUREMENT parameters
+  (sample count, turn budget, judged dim set) — mutating them changes
+  *how / what* the audit measures and confounds the mutated-vs-baseline
+  comparison; and `reflection_depth` is an EXHAUSTED axis — after ≥3
+  prior applies the axis-family dedup (`mutator_feedback.py`,
+  `_AXIS_REPEAT_LIMIT = 3`) rejects every new proposal as repetitive, so
+  a single-section hyperparam surface exhausts the propose-guard every
+  cycle (zero data). A mutation carrying `target_kind="hyperparam"` is
+  REJECTED at `parse_mutation` + `apply_mutation`
+  (`_reject_hyperparam_mutation`, fail-closed at two layers, with an
+  explanatory error). The `hyperparam.json` SoT and its runtime readers
+  (`autoresearch.train._load_hyperparam_overrides`, consumed by
+  `_build_audit_command` + the AgenticLoop) are preserved — only the
+  mutation surface is removed. The mapping in `policies.py:_KIND_TO_PATH`
+  is kept for a future re-introduction.
 
   `retrieval` was deprecated in ADR-012 S0d (2026-05-21) — the reader
   was never wired (PR-AUDIT-5SLOT). The slot is excluded from
@@ -369,7 +363,7 @@ On the `autoresearch/<tag>` branch, **loop forever**:
    one hypothesis. Edit the code directly.
 3. Commit: `git commit -am "exp: <short description>"`.
 4. Run the audit:
-   `uv run python autoresearch/train.py > autoresearch/state/run.log 2>&1`
+   `uv run python -m core.self_improving.train > autoresearch/state/run.log 2>&1`
    (redirect — never flood stdout). Append `--dry-run` for
    plumbing-only smoke. If `state/baseline.json` exists, the
    cross-axis gate fires automatically (see "Cross-axis gate" above).

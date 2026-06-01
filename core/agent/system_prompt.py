@@ -54,7 +54,7 @@ PROMPT_CACHE_BOUNDARY = "<dynamic_context>"
 
 
 _WRAPPER_SECTIONS_SOT_PATH = GLOBAL_WRAPPER_SECTIONS_PATH
-"""G5a — cross-process SoT path shared with :mod:`autoresearch.train`.
+"""G5a — cross-process SoT path shared with :mod:`core.self_improving.train`.
 
 Aliased from :data:`core.paths.GLOBAL_WRAPPER_SECTIONS_PATH` so the
 ``.geode`` literal lives in exactly one place (path-literal guard

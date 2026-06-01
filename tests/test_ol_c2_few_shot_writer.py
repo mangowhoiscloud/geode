@@ -5,7 +5,7 @@ Pins:
 - Idempotency: same ``(user_msg, assistant_msg)`` → no second write.
 - FIFO eviction: pool > ``max_size`` drops oldest entries.
 - Graceful: read/write OSError → False return, no raise.
-- autoresearch/train.py promote step calls ``append_exemplar`` with
+- core/self_improving/train.py promote step calls ``append_exemplar`` with
   ``source="autoresearch_audit_promote"`` only on PROMOTED audits.
 """
 
@@ -178,8 +178,8 @@ def test_append_preserves_unicode(pool_path: Path) -> None:
 
 
 def test_train_py_imports_append_exemplar() -> None:
-    """``autoresearch/train.py`` must contain the import + call after OL-C1."""
-    train_py = Path("autoresearch/train.py").read_text(encoding="utf-8")
+    """``core/self_improving/train.py`` must contain the import + call after OL-C1."""
+    train_py = Path("core/self_improving/train.py").read_text(encoding="utf-8")
     assert "from core.llm.few_shot_pool import append_exemplar" in train_py
     assert "append_exemplar(" in train_py
     assert 'source="autoresearch_audit_promote"' in train_py
@@ -188,7 +188,7 @@ def test_train_py_imports_append_exemplar() -> None:
 def test_train_py_writer_gated_on_promote() -> None:
     """The writer call must be guarded by ``promoted_line`` check
     (rejected audits stay out of the pool)."""
-    train_py = Path("autoresearch/train.py").read_text(encoding="utf-8")
+    train_py = Path("core/self_improving/train.py").read_text(encoding="utf-8")
     # Pin the gate shape — args.dry_run skip + promoted_line truthy
     assert "not args.dry_run" in train_py
     assert '"true" in promoted_line.lower()' in train_py
@@ -196,7 +196,7 @@ def test_train_py_writer_gated_on_promote() -> None:
 
 def test_train_py_writer_wrapped_in_try_except() -> None:
     """Writer must be wrapped in try/except so audit cycle never breaks."""
-    train_py = Path("autoresearch/train.py").read_text(encoding="utf-8")
+    train_py = Path("core/self_improving/train.py").read_text(encoding="utf-8")
     pos = train_py.find("append_exemplar(")
     assert pos > 0
     preceding = train_py[max(0, pos - 1500) : pos]
@@ -205,7 +205,7 @@ def test_train_py_writer_wrapped_in_try_except() -> None:
 
 def test_train_py_writer_after_ol_c1_emit() -> None:
     """OL-C2 writer must come AFTER OL-C1 emit (same scope, post-promote)."""
-    train_py = Path("autoresearch/train.py").read_text(encoding="utf-8")
+    train_py = Path("core/self_improving/train.py").read_text(encoding="utf-8")
     emit_pos = train_py.find("emit_eval_response_recorded(")
     append_pos = train_py.find("append_exemplar(")
     assert emit_pos > 0 and append_pos > 0

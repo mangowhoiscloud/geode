@@ -35,7 +35,7 @@ import time
 from pathlib import Path
 
 from core.observability.transcript import SessionTranscript
-from core.self_improving_loop.run_transcript import RunTranscript
+from core.self_improving.loop.run_transcript import RunTranscript
 
 
 class TestSeqMonotonic:

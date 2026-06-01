@@ -29,7 +29,7 @@ from __future__ import annotations
 from unittest.mock import patch
 
 import pytest
-from autoresearch.train import (
+from core.self_improving.train import (
     AXIS_TIERS,
     BOOTSTRAP_FITNESS_FLOOR,
     _should_promote,
@@ -116,7 +116,7 @@ def test_bootstrap_threshold_is_greater_than_or_equal() -> None:
     dim_stderr = dict.fromkeys(AXIS_TIERS, 0.0)
 
     with patch(
-        "autoresearch.train.compute_fitness",
+        "core.self_improving.train.compute_fitness",
         return_value=BOOTSTRAP_FITNESS_FLOOR,
     ):
         ok_at, reason_at = _should_promote(
@@ -132,7 +132,7 @@ def test_bootstrap_threshold_is_greater_than_or_equal() -> None:
     assert "bootstrap_promote" in reason_at
 
     with patch(
-        "autoresearch.train.compute_fitness",
+        "core.self_improving.train.compute_fitness",
         return_value=BOOTSTRAP_FITNESS_FLOOR - 1e-9,
     ):
         ok_below, reason_below = _should_promote(

@@ -2,7 +2,7 @@
 
 Pins:
 - 3 target adapters (``trl`` / ``openai`` / ``bedrock``) emit the
-  per-provider JSONL row shape claimed in :mod:`core.self_improving_loop.dpo_publisher`.
+  per-provider JSONL row shape claimed in :mod:`core.self_improving.loop.dpo_publisher`.
 - ``publish_pack(target, pack_path, out_path)`` overwrites ``out_path``
   with one transformed row per valid pack row, returning the count.
 - Unsupported target → ``ValueError``.
@@ -19,7 +19,7 @@ from collections.abc import Iterator
 from pathlib import Path
 
 import pytest
-from core.self_improving_loop.dpo_publisher import (
+from core.self_improving.loop.dpo_publisher import (
     SUPPORTED_TARGETS,
     publish_pack,
     to_bedrock_format,
@@ -223,7 +223,7 @@ def test_no_network_imports_in_module() -> None:
     import ast
     import inspect
 
-    import core.self_improving_loop.dpo_publisher as pub
+    import core.self_improving.loop.dpo_publisher as pub
 
     forbidden = {
         "openai",

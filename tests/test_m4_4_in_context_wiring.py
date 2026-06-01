@@ -18,7 +18,7 @@ from __future__ import annotations
 from typing import Any
 
 import pytest
-from core.self_improving_loop.in_context_wiring import apply_in_context_slots
+from core.self_improving.loop.in_context_wiring import apply_in_context_slots
 
 # No-op fast path ------------------------------------------------------------
 
@@ -26,7 +26,7 @@ from core.self_improving_loop.in_context_wiring import apply_in_context_slots
 def test_no_sot_configured_returns_identity(monkeypatch: pytest.MonkeyPatch) -> None:
     """No SoT → identical objects returned (zero allocation)."""
     monkeypatch.setattr(
-        "core.self_improving_loop.in_context_slots._load_in_context_slots_override",
+        "core.self_improving.loop.in_context_slots._load_in_context_slots_override",
         lambda: None,
     )
     msgs = [{"role": "user", "content": "hi"}]
@@ -38,7 +38,7 @@ def test_no_sot_configured_returns_identity(monkeypatch: pytest.MonkeyPatch) -> 
 def test_empty_dict_slots_returns_identity(monkeypatch: pytest.MonkeyPatch) -> None:
     """Empty dict from the reader → identity (truthiness check)."""
     monkeypatch.setattr(
-        "core.self_improving_loop.in_context_slots._load_in_context_slots_override",
+        "core.self_improving.loop.in_context_slots._load_in_context_slots_override",
         lambda: {},
     )
     msgs = [{"role": "user", "content": "hi"}]
@@ -55,7 +55,7 @@ def test_load_failure_returns_identity_and_swallows(
         raise RuntimeError("synthetic")
 
     monkeypatch.setattr(
-        "core.self_improving_loop.in_context_slots._load_in_context_slots_override",
+        "core.self_improving.loop.in_context_slots._load_in_context_slots_override",
         _boom,
     )
     msgs = [{"role": "user", "content": "hi"}]
@@ -70,10 +70,10 @@ def test_exemplars_slot_prepends_few_shot_pool(monkeypatch: pytest.MonkeyPatch) 
     """When exemplars slot active + pool has entries → ``(user, assistant)``
     pairs land at head of messages."""
     from core.llm.few_shot_pool import FewShotExemplar
-    from core.self_improving_loop.in_context_slots import SLOT_EXEMPLARS, InContextSlot
+    from core.self_improving.loop.in_context_slots import SLOT_EXEMPLARS, InContextSlot
 
     monkeypatch.setattr(
-        "core.self_improving_loop.in_context_slots._load_in_context_slots_override",
+        "core.self_improving.loop.in_context_slots._load_in_context_slots_override",
         lambda: {
             SLOT_EXEMPLARS: InContextSlot(
                 name=SLOT_EXEMPLARS,
@@ -113,10 +113,10 @@ def test_exemplars_slot_prepends_few_shot_pool(monkeypatch: pytest.MonkeyPatch) 
 
 def test_exemplars_slot_empty_pool_no_op(monkeypatch: pytest.MonkeyPatch) -> None:
     """exemplars slot configured but pool empty → messages unchanged."""
-    from core.self_improving_loop.in_context_slots import SLOT_EXEMPLARS, InContextSlot
+    from core.self_improving.loop.in_context_slots import SLOT_EXEMPLARS, InContextSlot
 
     monkeypatch.setattr(
-        "core.self_improving_loop.in_context_slots._load_in_context_slots_override",
+        "core.self_improving.loop.in_context_slots._load_in_context_slots_override",
         lambda: {
             SLOT_EXEMPLARS: InContextSlot(
                 name=SLOT_EXEMPLARS,
@@ -139,10 +139,10 @@ def test_exemplars_slot_pool_failure_logged_not_raised(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """exemplars reader exception → swallowed; other slots / call proceed."""
-    from core.self_improving_loop.in_context_slots import SLOT_EXEMPLARS, InContextSlot
+    from core.self_improving.loop.in_context_slots import SLOT_EXEMPLARS, InContextSlot
 
     monkeypatch.setattr(
-        "core.self_improving_loop.in_context_slots._load_in_context_slots_override",
+        "core.self_improving.loop.in_context_slots._load_in_context_slots_override",
         lambda: {
             SLOT_EXEMPLARS: InContextSlot(
                 name=SLOT_EXEMPLARS,
@@ -168,10 +168,10 @@ def test_exemplars_slot_pool_failure_logged_not_raised(
 def test_system_passthrough_when_no_slot_targets_it(monkeypatch: pytest.MonkeyPatch) -> None:
     """exemplars only mutates messages, never system."""
     from core.llm.few_shot_pool import FewShotExemplar
-    from core.self_improving_loop.in_context_slots import SLOT_EXEMPLARS, InContextSlot
+    from core.self_improving.loop.in_context_slots import SLOT_EXEMPLARS, InContextSlot
 
     monkeypatch.setattr(
-        "core.self_improving_loop.in_context_slots._load_in_context_slots_override",
+        "core.self_improving.loop.in_context_slots._load_in_context_slots_override",
         lambda: {
             SLOT_EXEMPLARS: InContextSlot(
                 name=SLOT_EXEMPLARS,
@@ -202,7 +202,7 @@ def test_anthropic_agentic_call_imports_orchestrator() -> None:
     from core.llm.providers import anthropic as _anth
 
     src = inspect.getsource(_anth.ClaudeAgenticAdapter.agentic_call)
-    assert "from core.self_improving_loop.in_context_wiring import apply_in_context_slots" in src
+    assert "from core.self_improving.loop.in_context_wiring import apply_in_context_slots" in src
     assert "apply_in_context_slots(messages, system=system)" in src
 
 
@@ -218,7 +218,7 @@ def test_anthropic_agentic_call_imports_orchestrator() -> None:
 
 def test_orchestrator_module_public_api() -> None:
     """Only ``apply_in_context_slots`` is exported (single entry point)."""
-    import core.self_improving_loop.in_context_wiring as wiring
+    import core.self_improving.loop.in_context_wiring as wiring
 
     assert wiring.__all__ == ["apply_in_context_slots"]
 
@@ -232,7 +232,7 @@ def test_stub_slots_do_not_break_when_configured(monkeypatch: pytest.MonkeyPatch
     Verifies the orchestrator's iteration over stub slots doesn't raise
     or mutate output; their readers land in follow-up PRs.
     """
-    from core.self_improving_loop.in_context_slots import (
+    from core.self_improving.loop.in_context_slots import (
         SLOT_MEMORY_RECALL,
         SLOT_RUBRIC_EXCERPTS,
         SLOT_TOOL_HINTS,
@@ -240,7 +240,7 @@ def test_stub_slots_do_not_break_when_configured(monkeypatch: pytest.MonkeyPatch
     )
 
     monkeypatch.setattr(
-        "core.self_improving_loop.in_context_slots._load_in_context_slots_override",
+        "core.self_improving.loop.in_context_slots._load_in_context_slots_override",
         lambda: {
             SLOT_MEMORY_RECALL: InContextSlot(
                 name=SLOT_MEMORY_RECALL,

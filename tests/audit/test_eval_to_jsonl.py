@@ -10,7 +10,6 @@ from __future__ import annotations
 
 import json
 from dataclasses import dataclass, field
-from datetime import date
 from pathlib import Path
 from typing import Any
 
@@ -66,11 +65,18 @@ def _patch_read(monkeypatch: pytest.MonkeyPatch, fake_log: FakeEvalLog) -> None:
 
 
 def _read_jsonl(tmp_path: Path) -> list[dict[str, Any]]:
-    today = date.today()
-    fpath = tmp_path / f"{today.year:04d}-{today.month:02d}.jsonl"
-    if not fpath.exists():
-        return []
-    return [json.loads(line) for line in fpath.read_text(encoding="utf-8").splitlines() if line]
+    # Usage rows are partitioned by the EVAL's ts month (the fixtures'
+    # ``created="2026-05-…"`` → 2026-05.jsonl), NOT today's month. Read every
+    # month file the store actually wrote so the assertions are independent of
+    # the calendar date the test runs on. (Was ``date.today()`` — it broke once
+    # the wall-clock month rolled past the fixture's May, reading an empty
+    # 2026-06.jsonl while the rows sat in 2026-05.jsonl.)
+    rows: list[dict[str, Any]] = []
+    for fpath in sorted(tmp_path.glob("*.jsonl")):
+        rows += [
+            json.loads(line) for line in fpath.read_text(encoding="utf-8").splitlines() if line
+        ]
+    return rows
 
 
 class TestParseEvalTs:

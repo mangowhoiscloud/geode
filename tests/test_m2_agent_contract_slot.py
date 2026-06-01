@@ -24,7 +24,7 @@ from core.agent.agent_contracts_policy import (
 )
 
 from core.agent import agent_contracts_policy
-from core.self_improving_loop import policies as pol
+from core.self_improving.loop import policies as pol
 
 
 @pytest.fixture
@@ -51,12 +51,12 @@ def test_target_kinds_includes_agent_contract() -> None:
     assert "agent_contract" in pol.TARGET_KINDS
 
 
-def test_target_kinds_count_is_8_post_hyperparam() -> None:
-    """PR-HYPERPARAM-FOUNDATION (2026-05-28) — graduated
-    ``hyperparam`` so the active mutation surface count is now 8
-    (was 7 post-tool_descriptions). Order matters because the
+def test_target_kinds_count_is_7_behaviour_kinds() -> None:
+    """PR-HYPERPARAM-FOUNDATION (2026-05-28) graduated ``hyperparam`` (count 8),
+    then PR-DROP-HYPERPARAM-MUTATION (2026-05-31) REMOVED it again — the mutable
+    surface is now exactly the 7 *behaviour* kinds. Order matters because the
     type-hint enum derives from the tuple."""
-    assert len(pol.TARGET_KINDS) == 8
+    assert len(pol.TARGET_KINDS) == 7
     assert pol.TARGET_KINDS == (
         "prompt",
         "tool_policy",
@@ -65,7 +65,6 @@ def test_target_kinds_count_is_8_post_hyperparam() -> None:
         "skill_catalog",
         "agent_contract",
         "tool_descriptions",
-        "hyperparam",
     )
 
 

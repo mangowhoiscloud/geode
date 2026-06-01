@@ -9,8 +9,8 @@ explicitly enables tracing.
 
 PR-CLEANUP-7 (2026-05-23): the per-self-improving-loop-run lifecycle
 writer (``SessionJournal`` re-exported from here, since renamed to
-:class:`~core.self_improving_loop.run_transcript.RunTranscript`)
-moved into :mod:`core.self_improving_loop.run_transcript`; this
+:class:`~core.self_improving.loop.run_transcript.RunTranscript`)
+moved into :mod:`core.self_improving.loop.run_transcript`; this
 package is back to OTel + per-session metrics only.
 
 See ``docs/plans/eval-petri-p3b-2-execution.md`` § Future tooling —

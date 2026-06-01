@@ -145,7 +145,7 @@ def test_status_with_no_baseline_and_no_mutations(
     fake_audit.parent.mkdir(parents=True)
     # don't create the file — empty-state path
     monkeypatch.setattr(
-        "core.self_improving_loop.runner.MUTATION_AUDIT_LOG_PATH",
+        "core.self_improving.loop.runner.MUTATION_AUDIT_LOG_PATH",
         fake_audit,
     )
     from core.cli.commands.self_improving import _cmd_status
@@ -177,7 +177,7 @@ def test_status_renders_baseline_block(
     )
     fake_audit.touch()
     monkeypatch.setattr(
-        "core.self_improving_loop.runner.MUTATION_AUDIT_LOG_PATH",
+        "core.self_improving.loop.runner.MUTATION_AUDIT_LOG_PATH",
         fake_audit,
     )
     from core.cli.commands.self_improving import _cmd_status
@@ -223,7 +223,7 @@ def test_status_renders_baseline_v2_block(
     )
     fake_audit.touch()
     monkeypatch.setattr(
-        "core.self_improving_loop.runner.MUTATION_AUDIT_LOG_PATH",
+        "core.self_improving.loop.runner.MUTATION_AUDIT_LOG_PATH",
         fake_audit,
     )
     from core.cli.commands.self_improving import _cmd_status
@@ -262,7 +262,7 @@ def test_status_renders_rolled_back_row_with_muted_style(
         encoding="utf-8",
     )
     monkeypatch.setattr(
-        "core.self_improving_loop.runner.MUTATION_AUDIT_LOG_PATH",
+        "core.self_improving.loop.runner.MUTATION_AUDIT_LOG_PATH",
         fake_audit,
     )
     from core.cli.commands.self_improving import _cmd_status
@@ -307,7 +307,7 @@ def test_status_renders_recent_mutations(
     ]
     fake_audit.write_text("\n".join(json.dumps(r) for r in rows) + "\n", encoding="utf-8")
     monkeypatch.setattr(
-        "core.self_improving_loop.runner.MUTATION_AUDIT_LOG_PATH",
+        "core.self_improving.loop.runner.MUTATION_AUDIT_LOG_PATH",
         fake_audit,
     )
     from core.cli.commands.self_improving import _cmd_status
@@ -335,7 +335,7 @@ def test_status_tolerates_malformed_baseline(
     baseline_path.write_text("{not valid json", encoding="utf-8")
     fake_audit.touch()
     monkeypatch.setattr(
-        "core.self_improving_loop.runner.MUTATION_AUDIT_LOG_PATH",
+        "core.self_improving.loop.runner.MUTATION_AUDIT_LOG_PATH",
         fake_audit,
     )
     from core.cli.commands.self_improving import _cmd_status
@@ -367,7 +367,7 @@ def test_status_tolerates_partial_jsonl_row(
         encoding="utf-8",
     )
     monkeypatch.setattr(
-        "core.self_improving_loop.runner.MUTATION_AUDIT_LOG_PATH",
+        "core.self_improving.loop.runner.MUTATION_AUDIT_LOG_PATH",
         fake_audit,
     )
     from core.cli.commands.self_improving import _cmd_status

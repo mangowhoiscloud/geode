@@ -101,7 +101,7 @@ def test_load_bundle_events_auto_trigger_only(
     # auto_trigger contributes.
     monkeypatch.setattr(ob, "AUTO_TRIGGER_HISTORY_PATH", hist)
     monkeypatch.setattr(
-        "core.self_improving_loop.runner.MUTATION_AUDIT_LOG_PATH",
+        "core.self_improving.loop.runner.MUTATION_AUDIT_LOG_PATH",
         tmp_path / "no_mutations.jsonl",
     )
     events = ob.load_bundle_events(limit=10)
@@ -134,7 +134,7 @@ def test_load_bundle_events_mutation_row(tmp_path: Path, monkeypatch: pytest.Mon
         },
     ]
     mut.write_text("\n".join(json.dumps(r) for r in rows) + "\n", encoding="utf-8")
-    monkeypatch.setattr("core.self_improving_loop.runner.MUTATION_AUDIT_LOG_PATH", mut)
+    monkeypatch.setattr("core.self_improving.loop.runner.MUTATION_AUDIT_LOG_PATH", mut)
     monkeypatch.setattr(ob, "AUTO_TRIGGER_HISTORY_PATH", tmp_path / "no_history.jsonl")
     events = ob.load_bundle_events(limit=10)
     assert len(events) == 2
@@ -162,7 +162,7 @@ def test_load_bundle_events_baseline_synthetic(
         ),
         encoding="utf-8",
     )
-    monkeypatch.setattr("core.self_improving_loop.runner.MUTATION_AUDIT_LOG_PATH", mut)
+    monkeypatch.setattr("core.self_improving.loop.runner.MUTATION_AUDIT_LOG_PATH", mut)
     monkeypatch.setattr(ob, "AUTO_TRIGGER_HISTORY_PATH", tmp_path / "no_history.jsonl")
     events = ob.load_bundle_events(limit=10)
     assert len(events) == 1
@@ -204,7 +204,7 @@ def test_load_bundle_events_sorts_ascending(
     )
 
     monkeypatch.setattr(ob, "AUTO_TRIGGER_HISTORY_PATH", hist)
-    monkeypatch.setattr("core.self_improving_loop.runner.MUTATION_AUDIT_LOG_PATH", mut)
+    monkeypatch.setattr("core.self_improving.loop.runner.MUTATION_AUDIT_LOG_PATH", mut)
     events = ob.load_bundle_events(limit=10)
     assert [ev.source for ev in events] == ["baseline", "auto_trigger", "mutation"]
     assert events[0].ts == 1200.0 < events[1].ts == 1500.0 < events[2].ts == 1700.0
@@ -218,7 +218,7 @@ def test_load_bundle_events_all_missing_returns_empty(
 
     monkeypatch.setattr(ob, "AUTO_TRIGGER_HISTORY_PATH", tmp_path / "no_hist.jsonl")
     monkeypatch.setattr(
-        "core.self_improving_loop.runner.MUTATION_AUDIT_LOG_PATH",
+        "core.self_improving.loop.runner.MUTATION_AUDIT_LOG_PATH",
         tmp_path / "no_state" / "no_mut.jsonl",
     )
     assert ob.load_bundle_events(limit=10) == []
@@ -241,7 +241,7 @@ def test_outer_bundle_command_callable_with_no_data(
 
     monkeypatch.setattr(ob, "AUTO_TRIGGER_HISTORY_PATH", tmp_path / "no_hist.jsonl")
     monkeypatch.setattr(
-        "core.self_improving_loop.runner.MUTATION_AUDIT_LOG_PATH",
+        "core.self_improving.loop.runner.MUTATION_AUDIT_LOG_PATH",
         tmp_path / "no_state" / "no_mut.jsonl",
     )
     # Call the function directly (bypass Typer arg parsing).
@@ -267,7 +267,7 @@ def test_outer_bundle_command_json_output(
     hist.write_text("\n".join(json.dumps(r) for r in rows) + "\n", encoding="utf-8")
     monkeypatch.setattr(ob, "AUTO_TRIGGER_HISTORY_PATH", hist)
     monkeypatch.setattr(
-        "core.self_improving_loop.runner.MUTATION_AUDIT_LOG_PATH",
+        "core.self_improving.loop.runner.MUTATION_AUDIT_LOG_PATH",
         tmp_path / "no_mut.jsonl",
     )
     ob.outer_bundle_command(limit=10, json_output=True)
@@ -285,7 +285,7 @@ def test_baseline_uses_file_mtime_when_no_timestamp_field(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """Codex MCP catch (PR-OL-A3 fix-up): the real `baseline.json` writer
-    (`autoresearch/train.py:_persist_baseline`) does NOT emit ``timestamp``
+    (`core/self_improving/train.py:_persist_baseline`) does NOT emit ``timestamp``
     or ``fitness`` fields — only ``dim_means`` / ``dim_stderr`` /
     optional axis-specific means. The viewer must fall back to file
     mtime + synthesise the detail from dim count.
@@ -311,7 +311,7 @@ def test_baseline_uses_file_mtime_when_no_timestamp_field(
     # Stamp a known mtime so the test is deterministic.
     fixed_mtime = time.time() - 3600  # 1 hour ago
     os.utime(baseline, (fixed_mtime, fixed_mtime))
-    monkeypatch.setattr("core.self_improving_loop.runner.MUTATION_AUDIT_LOG_PATH", mut)
+    monkeypatch.setattr("core.self_improving.loop.runner.MUTATION_AUDIT_LOG_PATH", mut)
     monkeypatch.setattr(ob, "AUTO_TRIGGER_HISTORY_PATH", tmp_path / "no_history.jsonl")
     events = ob.load_bundle_events(limit=10)
     assert len(events) == 1

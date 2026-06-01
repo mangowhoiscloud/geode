@@ -194,7 +194,7 @@ def _emit_orchestrator_event(
     swallowed so the pipeline contract is unchanged.
     """
     try:
-        from core.self_improving_loop.run_transcript import current_run_transcript
+        from core.self_improving.loop.run_transcript import current_run_transcript
 
         journal = current_run_transcript()
         if journal is None:

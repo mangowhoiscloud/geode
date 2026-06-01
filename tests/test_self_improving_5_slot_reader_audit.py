@@ -35,7 +35,7 @@ _READER_SEARCH_DIRS: tuple[str, ...] = (
     "core/orchestration",
     "core/skills",
     "core/llm",
-    "core/self_improving_loop",
+    "core/self_improving/loop",
     "plugins",
     "autoresearch",
 )
@@ -238,12 +238,14 @@ def test_active_slots_registered_as_mutation_targets() -> None:
     M2 (2026-05-21) — agent_contract 추가 → 6 active slot.
     PR-TOOL-DESCRIPTIONS-MUTATE (2026-05-27) — tool_descriptions 추가
     → 7 active slot.
-    PR-HYPERPARAM-FOUNDATION (2026-05-28) — hyperparam 추가 → 8 active slot.
-    retrieval 은 명시적 deprecate 유지; path constant + dict 매핑은
-    보존 (별도 ADR 로 RAG 인프라 신설 시 복원 가능)."""
+    PR-HYPERPARAM-FOUNDATION (2026-05-28) — hyperparam 추가 → 8 active slot,
+    PR-DROP-HYPERPARAM-MUTATION (2026-05-31) — hyperparam 제거 → 7 behaviour slot.
+    retrieval 과 hyperparam 모두 TARGET_KINDS 에서 제외; path constant +
+    dict 매핑은 보존 (retrieval=별도 ADR RAG 복원, hyperparam=runtime config
+    reader + 미래 재추가)."""
     import importlib
 
-    mod = importlib.import_module("core.self_improving_loop.policies")
+    mod = importlib.import_module("core.self_improving.loop.policies")
     target_kinds = set(getattr(mod, "TARGET_KINDS", ()))
     expected = {
         "prompt",
@@ -253,14 +255,20 @@ def test_active_slots_registered_as_mutation_targets() -> None:
         "skill_catalog",
         "agent_contract",
         "tool_descriptions",
-        "hyperparam",
     }
     assert target_kinds == expected, (
-        f"TARGET_KINDS 는 정확히 {expected} (post-hyperparam). got={target_kinds}"
+        f"TARGET_KINDS 는 정확히 {expected} (post-hyperparam-drop). got={target_kinds}"
     )
     assert "retrieval" not in target_kinds, "retrieval 은 S0d 이후 deprecate 유지"
-    # path constant 보존 — 미래 복원용
-    src = _read("core/self_improving_loop/policies.py")
+    assert "hyperparam" not in target_kinds, (
+        "hyperparam 은 PR-DROP-HYPERPARAM-MUTATION 이후 deprecate"
+    )
+    # path constant 보존 — 미래 복원용 + runtime config reader
+    src = _read("core/self_improving/loop/policies.py")
     assert '"retrieval": GLOBAL_RETRIEVAL_POLICY_PATH' in src, (
         "GLOBAL_RETRIEVAL_POLICY_PATH 매핑은 deprecate 후에도 보존 필요"
+    )
+    assert '"hyperparam": GLOBAL_HYPERPARAM_POLICY_PATH' in src, (
+        "GLOBAL_HYPERPARAM_POLICY_PATH 매핑은 mutation surface 제거 후에도 "
+        "보존 필요 (runtime config reader + 미래 재추가)"
     )

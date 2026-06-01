@@ -16,7 +16,7 @@ from __future__ import annotations
 
 import inspect
 
-from autoresearch import train as auto_train
+from core.self_improving import train as auto_train
 
 
 def test_audit_out_dir_constant_not_reintroduced() -> None:

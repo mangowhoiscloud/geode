@@ -30,11 +30,11 @@ Precedence (Codex / OpenAI Agents pattern)
    duplicate-SoT consolidation removed argv defaults, the
    ``TARGET_MODEL`` / ``JUDGE_MODEL`` module constants, and the legacy
    ``~/.geode/petri.toml`` writer).
-2. Picker defaults in ``autoresearch/train.py`` (``BUDGET_MINUTES``,
+2. Picker defaults in ``core/self_improving/train.py`` (``BUDGET_MINUTES``,
    ``SEED_LIMIT``, etc.) — fallback when the section is missing. Role
    models fall back to the manifest ``default_model`` in
    ``plugins/petri_audit/petri.plugin.toml`` via
-   ``autoresearch.train._petri_role_model``.
+   ``core.self_improving.train._petri_role_model``.
 3. Pydantic model default — last resort.
 
 Source: 2026-05-19 config consolidation plan (settled decision #1),
@@ -157,7 +157,7 @@ class PetriRoleConfig(BaseModel):
 
     **Precedence vs ``[self_improving_loop.autoresearch]``** — important
     operator surface to understand because two sections can name the
-    same role from different angles. ``autoresearch/train.py`` calls
+    same role from different angles. ``core/self_improving/train.py`` calls
     ``geode audit --target <X> --judge <Y>`` with the model ids from
     ``[self_improving_loop.autoresearch].{target_model,judge_model}``.
     Inside ``geode audit``, :func:`plugins.petri_audit.registry.get_binding`
@@ -189,7 +189,7 @@ class PetriRoleConfig(BaseModel):
 
 
 class AutoresearchConfig(BaseModel):
-    """autoresearch/train.py runtime knobs + per-role model bindings.
+    """core/self_improving/train.py runtime knobs + per-role model bindings.
 
     Step J-b.1 (2026-05-23) — **autoresearch is the control-layer SoT**
     for every model selection in the self-improving pipeline. Pipeline:
@@ -213,7 +213,7 @@ class AutoresearchConfig(BaseModel):
       these.
     - ``mutator`` — autoresearch's own in-process LLM (the engineer
       that proposes GEODE surface mutations). Consumed by
-      ``core/self_improving_loop/runner.py:_default_llm_call``.
+      ``core/self_improving/loop/runner.py:_default_llm_call``.
 
     Standalone ``geode audit`` (run outside the self-improving loop)
     still reads the same sections — same single SoT, just different
@@ -240,7 +240,7 @@ class AutoresearchConfig(BaseModel):
     """petri eval ``auditor`` role binding."""
     mutator: MutatorConfig = Field(default_factory=lambda: MutatorConfig())
     """In-process mutator runner binding. Consumed by
-    :func:`core.self_improving_loop.runner._default_llm_call`."""
+    :func:`core.self_improving.loop.runner._default_llm_call`."""
 
     mutator_feedback_window: Annotated[int, Field(ge=0, le=200)] = 20
     """PR-MUTATOR-HISTORY-FEEDBACK (2026-05-27) — number of most-recent
@@ -307,7 +307,7 @@ class AutoresearchConfig(BaseModel):
       fitness 계산에는 weight=0 (제외). PR-5 이전 동작 그대로.
     - ``True``: ``compute_anchor_confidence_multiplier`` helper 가
       ``0.7 + 0.3 × normalized_anchor`` range [0.7, 1.0] 의 multiplier
-      산출. caller (autoresearch/train.py compute_fitness — P3.1 후속 wiring)
+      산출. caller (core/self_improving/train.py compute_fitness — P3.1 후속 wiring)
       가 base_fitness × multiplier 적용.
 
     사용자 결정 D2 (2026-05-25): anchor 3 → self-improving loop baseline 의
@@ -356,7 +356,7 @@ class AutoresearchConfig(BaseModel):
 
     This pool *mutates across generations* — the seed-generation co-scientist
     grows / replaces adversarial seeds alongside the agent, and
-    :func:`autoresearch.train._resolve_seed_select` swaps in the freshest
+    :func:`core.self_improving.train._resolve_seed_select` swaps in the freshest
     survivor pool. Because the seed set moves every generation, the fitness it
     produces is a *moving ruler*: useful for ranking candidates WITHIN a
     generation (the (1+1) accept/revert decision), NOT for comparing fitness
@@ -380,7 +380,7 @@ class AutoresearchConfig(BaseModel):
     to activate the fixed-ruler measurement.
 
     Resolution precedence is mirrored from ``seed_select`` in
-    :func:`autoresearch.train._resolve_held_out_bench` (env
+    :func:`core.self_improving.train._resolve_held_out_bench` (env
     ``GEODE_HELD_OUT_BENCH`` / ``AUTORESEARCH_HELD_OUT_BENCH`` → this config field
     → ``None``)."""
     promote_policy: Literal["gate", "random", "never"] = "gate"
@@ -403,7 +403,7 @@ class AutoresearchConfig(BaseModel):
     different epochs — different production logic, correctly not averaged).
 
     Resolution precedence mirrors ``held_out_bench``:
-    :func:`autoresearch.train._resolve_promote_policy` (env
+    :func:`core.self_improving.train._resolve_promote_policy` (env
     ``GEODE_PROMOTE_POLICY`` / ``AUTORESEARCH_PROMOTE_POLICY`` → CLI
     ``--promote-policy`` → this config field → ``"gate"``)."""
     promote_policy_seed: int = 0
@@ -413,7 +413,7 @@ class AutoresearchConfig(BaseModel):
     so the entire random campaign is reproducible (no bare nondeterminism) and is
     RECORDED on the held-out + baseline rows. Ignored for the ``gate`` / ``never``
     arms. Resolution precedence mirrors ``promote_policy``
-    (:func:`autoresearch.train._resolve_promote_policy_seed`)."""
+    (:func:`core.self_improving.train._resolve_promote_policy_seed`)."""
     replicate: Annotated[int, Field(ge=1, le=20)] = 1
     """E4 (2026-05-30) — per-mutation REPLICATE count ``M``.
 
@@ -428,7 +428,7 @@ class AutoresearchConfig(BaseModel):
     target_effect_size: Annotated[float, Field(gt=0.0, le=1.0)] = 0.02
     """E4 (2026-05-30) — the fitness-scale effect size δ the power analysis targets.
 
-    Feeds :func:`core.self_improving_loop.statistical_power.required_samples` to
+    Feeds :func:`core.self_improving.loop.statistical_power.required_samples` to
     compute the required ``N_seed × M_replicate`` to DETECT δ at α=0.05 / 80% power.
     Default ~0.02 sits just above the promote gate's zero-noise floor — see the
     ``DEFAULT_TARGET_EFFECT_SIZE`` docstring for the full justification. Resolution
@@ -440,7 +440,7 @@ class AutoresearchConfig(BaseModel):
 
 
 class MutatorConfig(BaseModel):
-    """Mutator-role binding for ``core/self_improving_loop/runner.py``.
+    """Mutator-role binding for ``core/self_improving/loop/runner.py``.
 
     PR-1 G-A introduced this so the mutator was a first-class role
     alongside ``[seed_generation.role.<X>]`` and ``[petri.role.<X>]``.
@@ -692,7 +692,7 @@ def _emit_defaults_notice(reason: str, path: Path) -> None:
     bootstrap, petri user-overrides) stay unaffected.
     """
     try:
-        from core.self_improving_loop.run_transcript import current_run_transcript
+        from core.self_improving.loop.run_transcript import current_run_transcript
 
         journal = current_run_transcript()
         if journal is None:

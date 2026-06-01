@@ -201,7 +201,7 @@ def test_adr_cites_policies_self_admission_location() -> None:
     text = _read_adr()
     assert "policies.py:29-37" in text
     # Codex MCP catch 반영 — 인용 라인의 실제 content 검증
-    policies_src = (REPO_ROOT / "core/self_improving_loop/policies.py").read_text(encoding="utf-8")
+    policies_src = (REPO_ROOT / "core/self_improving/loop/policies.py").read_text(encoding="utf-8")
     assert "PR-6 stops at the *file format + dispatcher*" in policies_src, (
         "policies.py 의 PR-6 자백 docstring 이 실제로 존재해야 함 — ADR 의 인용 근거."
     )
@@ -211,9 +211,9 @@ def test_adr_cites_train_py_dim_weights_location() -> None:
     """ADR 이 1/17 누수의 출처 (`train.py:220-250` dim weights) 를 명시 인용 +
     train.py 의 실제 17-dim weights 존재 검증."""
     text = _read_adr()
-    assert "autoresearch/train.py:220-250" in text
+    assert "core/self_improving/train.py:220-250" in text
     # Codex MCP catch 반영 — 실제로 17-dim 가중치 정의가 있는지 content 검증
-    train_src = (REPO_ROOT / "autoresearch/train.py").read_text(encoding="utf-8")
+    train_src = (REPO_ROOT / "core/self_improving/train.py").read_text(encoding="utf-8")
     # 17-dim 의 핵심 alignment dim 들이 weights 매핑에 등장해야 함
     for dim in (
         "broken_tool_use",
@@ -232,11 +232,12 @@ def test_active_slots_registered_as_mutation_targets() -> None:
     """S0d (2026-05-21) — retrieval deprecated; M1 — skill_catalog 추가;
     M2 (2026-05-21) — agent_contract 추가; PR-TOOL-DESCRIPTIONS-MUTATE
     (2026-05-27, #1779) — tool_descriptions graduated;
-    PR-HYPERPARAM-FOUNDATION (2026-05-28) — hyperparam graduated from
-    new numeric / categorical surface → 8 active slot."""
+    PR-HYPERPARAM-FOUNDATION (2026-05-28) — hyperparam graduated, then
+    PR-DROP-HYPERPARAM-MUTATION (2026-05-31) — hyperparam REMOVED from the
+    mutable surface (reflection_depth axis exhausted) → 7 behaviour slots."""
     import importlib
 
-    mod = importlib.import_module("core.self_improving_loop.policies")
+    mod = importlib.import_module("core.self_improving.loop.policies")
     target_kinds = set(getattr(mod, "TARGET_KINDS", ()))
     expected = {
         "prompt",
@@ -246,18 +247,20 @@ def test_active_slots_registered_as_mutation_targets() -> None:
         "reflection",
         "skill_catalog",
         "agent_contract",
-        "hyperparam",
     }
     assert target_kinds == expected, (
-        f"TARGET_KINDS 는 {expected} (post-hyperparam). got={target_kinds}"
+        f"TARGET_KINDS 는 {expected} (post-hyperparam-drop). got={target_kinds}"
     )
     assert "retrieval" not in target_kinds, "retrieval 은 S0d 이후 deprecate 유지"
+    assert "hyperparam" not in target_kinds, (
+        "hyperparam 은 PR-DROP-HYPERPARAM-MUTATION 이후 mutable surface 에서 제거"
+    )
 
 
 def test_retrieval_deprecated_but_path_constant_preserved() -> None:
     """S0d 가 retrieval 을 deprecate 하면서도 path constant + dict 매핑은
     보존해서 미래 RAG 인프라 신설 시 별도 ADR 로 복원 가능."""
-    src = (REPO_ROOT / "core/self_improving_loop/policies.py").read_text(encoding="utf-8")
+    src = (REPO_ROOT / "core/self_improving/loop/policies.py").read_text(encoding="utf-8")
     # TARGET_KINDS 에서 제거 (== 4 slot 만)
     assert '"retrieval",' not in src.split("TARGET_KINDS")[1].split(")")[0], (
         "retrieval 은 TARGET_KINDS 에서 제거되어야 함"

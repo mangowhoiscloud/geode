@@ -54,7 +54,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from core.paths import GLOBAL_SKILL_CATALOG_PATH, OPERATOR_LOCAL_SKILL_CATALOG_PATH
-from core.self_improving_loop.sot_resolution import resolve_sot
+from core.self_improving.loop.sot_resolution import resolve_sot
 
 if TYPE_CHECKING:
     from core.skills.skills import SkillRegistry

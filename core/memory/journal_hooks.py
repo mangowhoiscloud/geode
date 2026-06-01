@@ -171,7 +171,7 @@ def _journal_to_session(
     so journal_hooks stays import-light when observability is unused.
     """
     try:
-        from core.self_improving_loop.run_transcript import current_run_transcript
+        from core.self_improving.loop.run_transcript import current_run_transcript
     except ImportError:
         return
     rt = current_run_transcript()

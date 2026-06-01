@@ -16,7 +16,7 @@ from collections.abc import Iterator
 from pathlib import Path
 
 import pytest
-from core.self_improving_loop.dpo_stats import pack_stats
+from core.self_improving.loop.dpo_stats import pack_stats
 
 
 @pytest.fixture

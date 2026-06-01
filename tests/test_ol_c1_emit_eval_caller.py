@@ -1,7 +1,7 @@
 """OL-C1 — autoresearch audit cycle emits eval_response_recorded.
 
 Pins:
-- ``autoresearch/train.py`` main() emits one ``eval_response_recorded``
+- ``core/self_improving/train.py`` main() emits one ``eval_response_recorded``
   event per audit cycle inside the active RunTranscript scope.
 - Payload schema matches PR-M4.0 contract: ``prompt`` / ``response``
   / ``fitness_score`` / ``axis_scores`` / ``source`` / ``rollback_flag``.
@@ -17,7 +17,7 @@ import json
 from pathlib import Path
 
 import pytest
-from core.self_improving_loop.run_transcript import (
+from core.self_improving.loop.run_transcript import (
     RunTranscript,
     run_transcript_scope,
 )
@@ -52,7 +52,7 @@ def _read_events(path: Path, name: str = "eval_response_recorded") -> list[dict]
 
 def test_autoresearch_emit_pattern_chosen_pile(tmp_path: Path) -> None:
     """fitness > 0 + verdict != reject → rollback_flag=False (chosen pile)."""
-    from core.self_improving_loop.eval_journaling import emit_eval_response_recorded
+    from core.self_improving.loop.eval_journaling import emit_eval_response_recorded
 
     journal = _journal_with_path(tmp_path)
     with run_transcript_scope(journal):
@@ -78,7 +78,7 @@ def test_autoresearch_emit_pattern_chosen_pile(tmp_path: Path) -> None:
 
 def test_autoresearch_emit_pattern_rejected_pile(tmp_path: Path) -> None:
     """fitness == 0.0 (critical regression) → rollback_flag=True (rejected pile)."""
-    from core.self_improving_loop.eval_journaling import emit_eval_response_recorded
+    from core.self_improving.loop.eval_journaling import emit_eval_response_recorded
 
     journal = _journal_with_path(tmp_path)
     with run_transcript_scope(journal):
@@ -100,7 +100,7 @@ def test_autoresearch_emit_pattern_rejected_pile(tmp_path: Path) -> None:
 
 def test_autoresearch_emit_pattern_no_journal_scope_is_noop() -> None:
     """No run_transcript_scope → emit returns False, no file written, no raise."""
-    from core.self_improving_loop.eval_journaling import emit_eval_response_recorded
+    from core.self_improving.loop.eval_journaling import emit_eval_response_recorded
 
     ok = emit_eval_response_recorded(
         prompt="audit prompt",
@@ -119,10 +119,10 @@ def test_autoresearch_emit_pattern_no_journal_scope_is_noop() -> None:
 
 
 def test_train_py_imports_emit_eval_response_recorded() -> None:
-    """``autoresearch/train.py`` must contain the import + call."""
-    train_py = Path("autoresearch/train.py").read_text(encoding="utf-8")
+    """``core/self_improving/train.py`` must contain the import + call."""
+    train_py = Path("core/self_improving/train.py").read_text(encoding="utf-8")
     assert (
-        "from core.self_improving_loop.eval_journaling import emit_eval_response_recorded"
+        "from core.self_improving.loop.eval_journaling import emit_eval_response_recorded"
         in train_py
     )
     assert "emit_eval_response_recorded(" in train_py
@@ -131,7 +131,7 @@ def test_train_py_imports_emit_eval_response_recorded() -> None:
 
 def test_train_py_emit_is_inside_main() -> None:
     """The emit call site must be inside main() (not module-level)."""
-    train_py = Path("autoresearch/train.py").read_text(encoding="utf-8")
+    train_py = Path("core/self_improving/train.py").read_text(encoding="utf-8")
     main_idx = train_py.find("def main() -> int:")
     emit_idx = train_py.find("emit_eval_response_recorded(")
     assert main_idx > 0
@@ -140,7 +140,7 @@ def test_train_py_emit_is_inside_main() -> None:
 
 def test_train_py_emit_uses_rollback_heuristic() -> None:
     """The call site computes rollback_flag from fitness + verdict."""
-    train_py = Path("autoresearch/train.py").read_text(encoding="utf-8")
+    train_py = Path("core/self_improving/train.py").read_text(encoding="utf-8")
     # Pin the heuristic shape so refactors are surfaced
     assert (
         "fitness == 0.0" in train_py and 'verdict.lower() in {"reject", "regression"}' in train_py
@@ -149,7 +149,7 @@ def test_train_py_emit_uses_rollback_heuristic() -> None:
 
 def test_train_py_emit_wrapped_in_try_except() -> None:
     """Eval-stream emit must never crash the audit — try/except guard."""
-    train_py = Path("autoresearch/train.py").read_text(encoding="utf-8")
+    train_py = Path("core/self_improving/train.py").read_text(encoding="utf-8")
     # The block should sit inside a `try:` ... `except` ... block
     emit_marker = "emit_eval_response_recorded("
     pos = train_py.find(emit_marker)

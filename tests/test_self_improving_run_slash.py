@@ -39,7 +39,7 @@ def _build_test_runner(
 ) -> Any:
     """Construct a SelfImprovingLoopRunner with a canned LLM response
     and a tmp_path-redirected audit log + SoT."""
-    from core.self_improving_loop import runner as runner_mod
+    from core.self_improving.loop import runner as runner_mod
 
     audit_path = tmp_path / "state" / "mutations.jsonl"
     audit_path.parent.mkdir(parents=True, exist_ok=True)
@@ -55,7 +55,7 @@ def _build_test_runner(
         )
 
     def _fake_context() -> Any:
-        from core.self_improving_loop.runner import RunnerContext
+        from core.self_improving.loop.runner import RunnerContext
 
         return RunnerContext(current_sections={"role.intro": "You are baseline."})
 
@@ -68,7 +68,7 @@ def _build_test_runner(
     def _fake_write(sections: dict[str, str]) -> None:
         sections_path.write_text(json.dumps(sections), encoding="utf-8")
 
-    monkeypatch.setattr("autoresearch.train.write_wrapper_prompt_sections", _fake_write)
+    monkeypatch.setattr("core.self_improving.train.write_wrapper_prompt_sections", _fake_write)
 
     return runner_mod.SelfImprovingLoopRunner(
         llm_call=_fake_llm,
@@ -148,7 +148,7 @@ def test_proposal_in_runner_all_exports() -> None:
     """``Proposal`` must be exported alongside ``Mutation`` /
     ``SelfImprovingLoopRunner`` so external callers can type-annotate
     against it."""
-    from core.self_improving_loop import runner
+    from core.self_improving.loop import runner
 
     assert "Proposal" in runner.__all__
 
@@ -247,7 +247,7 @@ def _stub_runner_with_proposal(
 ) -> tuple[Any, Any]:
     """Build a mock SelfImprovingLoopRunner that returns a canned
     proposal and tracks apply_proposal calls."""
-    from core.self_improving_loop.runner import Mutation, Proposal
+    from core.self_improving.loop.runner import Mutation, Proposal
 
     mutation = Mutation(
         target_section="role.intro",
@@ -353,7 +353,7 @@ def test_cmd_run_confirm_n_with_default_audit_path(
     runner.audit_log_path = None  # default value the real slash uses
     fake_default = tmp_path / "fallback_mutations.jsonl"
     monkeypatch.setattr(
-        "core.self_improving_loop.runner.MUTATION_AUDIT_LOG_PATH",
+        "core.self_improving.loop.runner.MUTATION_AUDIT_LOG_PATH",
         fake_default,
     )
     monkeypatch.setattr(self_improving, "_build_runner", lambda: runner)

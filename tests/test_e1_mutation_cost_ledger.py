@@ -16,8 +16,8 @@ from pathlib import Path
 from typing import Any
 from unittest.mock import MagicMock
 
-from core.self_improving_loop.attribution import compute_attribution
-from core.self_improving_loop.runner import (
+from core.self_improving.loop.attribution import compute_attribution
+from core.self_improving.loop.runner import (
     Mutation,
     _consume_last_llm_call_usage,
     _reset_last_llm_call_usage,
@@ -151,7 +151,7 @@ def _build_propose_runner(
     tmp_path: Path,
 ) -> Any:
     """propose() 호출 가능한 minimal runner — mock llm_call + minimal context."""
-    from core.self_improving_loop import runner as runner_mod
+    from core.self_improving.loop import runner as runner_mod
 
     # build_runner_context 가 baseline_reader 등 실제 SoT 를 읽으려 함 — mock.
     mock_ctx = MagicMock()
@@ -232,7 +232,7 @@ def test_propose_populates_cost_from_sidecar(
         )
         return response_json
 
-    from core.self_improving_loop import runner as runner_mod
+    from core.self_improving.loop import runner as runner_mod
 
     mock_ctx = MagicMock()
     mock_ctx.baseline_snapshot = None
@@ -280,7 +280,7 @@ def test_propose_clears_last_call_before_invocation(
         # mock 는 SessionMetrics accumulate 안 함 → reset 후 0 유지
         return response_json
 
-    from core.self_improving_loop import runner as runner_mod
+    from core.self_improving.loop import runner as runner_mod
 
     mock_ctx = MagicMock()
     mock_ctx.baseline_snapshot = None
