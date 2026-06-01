@@ -45,6 +45,26 @@ functional change.
 
 ---
 
+## [0.99.110] - 2026-06-01
+
+### Added
+- **PR-SEEDGEN-DIFFICULTY-SELECTION (2026-06-01) — difficulty-calibrated
+  survivor selection for the seed-generation pipeline.** The Ranker can now pick
+  survivors by their measured pilot `dim_means[target_dim]` (Petri 1-10,
+  higher = harder for the target = more headroom) instead of by Elo win-rate.
+  Elo does not prefer hard seeds (gen-2605-3: the elo-1084 seed elicits 4.2 on
+  the target dim while the elo-1094 seed elicits only 2.8), so the
+  tournament was systematically discarding the hard seeds the saturated
+  self-improving metric needs. New `tournament.select_survivors` /
+  `rank_by_difficulty` pure functions rank ALL rated candidates hardest-first
+  (tie-break: Elo descending, then candidate id) and truncate to K; a survivor
+  with no usable pilot signal sorts last and never crashes the path. The mode is
+  OPT-IN via `GEODE_SEED_SURVIVOR_SELECTION=difficulty` (resolved by
+  `resolve_survivor_selection` and wired through `_registry_builder` into the
+  production `Ranker`); the default stays `elo`, so existing runs are unchanged.
+  A misconfigured difficulty request (no `target_dim` / empty `pilot_means`)
+  degrades to Elo rather than returning an arbitrary order.
+
 ## [0.99.109] - 2026-06-01
 
 ### Fixed
