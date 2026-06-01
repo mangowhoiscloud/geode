@@ -3845,9 +3845,12 @@ def _should_promote(
                 f"(Δ{current_targeted - prior_targeted:+.4f}, "
                 f"targeted-σ margin {margin_t:.4f}{reason_suffix})",
             )
-        # Targeted set disjoint from / absent in the weighted measured dims (info-only
-        # dim, seed-gen-only dim, or a dim the audit dropped) — no trustworthy
-        # targeted signal, fall through to the full-aggregate gate.
+        # Reached only when the targeted set has NO weighted dim at all (every
+        # targeted dim is info-only / seed-gen-only / disjoint from DIM_WEIGHTS) —
+        # nothing weighted to verify, so fall through to the full-aggregate gate.
+        # (A weighted targeted dim that the audit DROPPED does not reach here: it
+        # is rejected above, since an aggregate fall-through would score the gap as
+        # best-case and promote it.)
 
     if current_raw <= prior_raw + margin:
         reason_suffix = ", N=1 critical" if n1_critical else ""

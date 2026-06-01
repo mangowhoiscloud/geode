@@ -67,9 +67,13 @@ functional change.
     logic-version tags bump and a new baseline epoch opens. The critical
     strict-reject (`gated == 0.0`) downside veto is RETAINED and still runs FIRST,
     so the targeted gate can never bypass a critical-dim regression. ALL weighted
-    targeted dims must be present in both current+baseline, else it falls through
-    to the aggregate gate (closes the "suppress the hard dim's measurement → win"
-    Goodhart vector).
+    targeted dims must be present in both current+baseline, else the gate REJECTS
+    ("cannot verify targeted gain") — it does NOT fall through to the aggregate,
+    because `compute_fitness` scores a missing dim as best-case, so a fall-through
+    would still promote on the gap. This closes the "suppress the hard dim's
+    measurement → win" Goodhart vector in both the targeted and aggregate paths.
+    (A targeted set with no WEIGHTED dim — all info-only / disjoint — still falls
+    through to the aggregate gate; there is nothing weighted to verify.)
   * **(3) IRT-discrimination reshape.** `compute_fitness(reshape=True)` applies
     the monotone logistic ICC `σ(6·(score−0.5))` (`_icc_reshape`) to each per-dim
     0–1 score before aggregating — peak sensitivity at mid-range, ~5× suppressed

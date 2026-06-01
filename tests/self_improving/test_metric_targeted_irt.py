@@ -343,8 +343,9 @@ def test_resolve_targeted_dims_graceful_on_missing_and_malformed(
 def test_targeted_dim_missing_from_current_does_not_false_promote() -> None:
     """Goodhart vector: a targeted dim DROPPED from the current audit scores
     best-case (``_dim_score(0.0)=1.0``) with ~0 σ — a free "win". The gate must
-    NOT take the targeted branch when a targeted dim is absent from either side;
-    it falls through to the full-aggregate gate (which keeps the critical veto)."""
+    NOT take the targeted branch when a targeted dim is absent from either side,
+    and (since the aggregate would also score the gap as best-case) must REJECT
+    rather than fall through — cannot verify the declared targeted gain."""
     base = _floor_universe()
     base[_TARGET_AUX] = 4.6
     cur = dict(base)
