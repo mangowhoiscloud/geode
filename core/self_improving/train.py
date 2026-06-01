@@ -92,6 +92,7 @@ from __future__ import annotations
 import argparse
 import json
 import logging
+import math
 import os
 import random
 import re
@@ -697,13 +698,30 @@ assert abs(FITNESS_DIM_3AX + FITNESS_ADMIRE_3AX + FITNESS_BENCH_3AX - 1.0) < 1e-
 # *meaning* of the fitness aggregate / promote margin changes, so baselines under
 # a different scoring/gate rule land in a different epoch. ``test_logic_version_guard``
 # pins a golden value per version → a silent logic change without a bump FAILs.
-FITNESS_FORMULA_VERSION = "1"
+FITNESS_FORMULA_VERSION = "2"
 """``compute_fitness`` semantics (ux-removed dim aggregate + stability + the
 admire/bench multi-axis branches + anchor multiplier). Bump on any change that
-moves the aggregate for a fixed input."""
-MARGIN_LOGIC_VERSION = "1"
+moves the aggregate for a fixed input.
+
+v2 (PR-METRIC-TARGETED-IRT, 2026-06-01) — added the OPT-IN IRT-discrimination
+reshape (``reshape=True``) + targeted sub-fitness path (``targeted_dims``). The
+reshape is a NEW path; every legacy plain-aggregate caller keeps ``reshape=
+False`` so the DEFAULT aggregate for a fixed input is byte-identical to v1. The
+tag is bumped because the *promote gate* (``_should_promote``) now opts into the
+reshape on the targeted surface, changing the gate decision's meaning — a v1
+baseline (plain-aggregate gate) and a v2 one (targeted+reshape gate) must hash to
+DIFFERENT baseline epochs (``build_baseline_spec``)."""
+MARGIN_LOGIC_VERSION = "2"
 """``_should_promote`` margin rule — fitness-scale gain-stderr √(σp²+σc²) floored
-(PR-MARGIN-FITNESS-SCALE). Bump when the margin formula / floors change."""
+(PR-MARGIN-FITNESS-SCALE). Bump when the margin formula / floors change.
+
+v2 (PR-METRIC-TARGETED-IRT, 2026-06-01) — when ``targeted_dims`` is supplied the
+gate ADDITIONALLY requires the RESHAPED targeted sub-fitness gain to clear a
+targeted-σ margin (``_MARGIN_GAIN_SIGMA · √(σp_t² + σc_t²)`` on the small targeted
+surface, not the 24-dim aggregate). The critical strict-reject + the aggregate
+margin are RETAINED as the symmetric downside, so the targeted gate only ever
+ADDS a requirement, never relaxes one. ``targeted_dims`` unset → byte-identical
+to v1."""
 
 CRITICAL_DIMS: tuple[str, ...] = tuple(d for d, t in AXIS_TIERS.items() if t == "critical")
 AUXILIARY_DIMS: tuple[str, ...] = tuple(d for d, t in AXIS_TIERS.items() if t == "auxiliary")
@@ -1722,6 +1740,40 @@ def _dim_score(mean: float) -> float:
     return max(0.0, 1.0 - mean / 10.0)
 
 
+# PR-METRIC-TARGETED-IRT (2026-06-01) — IRT-discrimination reshape.
+_ICC_DISCRIMINATION: float = 6.0
+"""Slope of the logistic Item-Characteristic-Curve used by :func:`_icc_reshape`.
+
+The reshape is an IRT-grounded discrimination transform (inspired by PSN-IRT,
+arXiv:2505.15055 — per-item discrimination + a logistic ICC; NO policy/parameter
+update is borrowed, only the monotone logistic ICC SHAPE). ``a = 6`` puts the
+peak sensitivity (steepest slope) at the mid-range score ≈ 0.5 and suppresses the
+floor (~5× flatter near score 0 / 1) so a real targeted-dim improvement around
+mid-range is no longer diluted by ~20 floor-pinned auxiliary dims, while a tiny
+wiggle on a floor-pinned dim barely moves the aggregate (no false promote)."""
+
+
+def _icc_reshape(score: float) -> float:
+    """Monotone logistic ICC reshape ``σ(a·(score−0.5))`` with ``a=6``.
+
+    ``score`` is the per-dim 0–1 normalised score (HIGHER-is-better, the
+    :func:`_dim_score` output). The transform is the logistic Item-Characteristic
+    Curve from IRT (inspired by PSN-IRT, arXiv:2505.15055 — per-item discrimination
+    + logistic ICC; NO policy/parameter update borrowed, only the curve shape).
+
+    Properties (pinned by ``test_metric_targeted_irt``):
+
+    - STRICTLY INCREASING on ``[0, 1]`` — a strictly-better dim profile NEVER
+      scores lower after the reshape (the Ng/Harada/Russell 1999 policy-invariance
+      constraint — a monotone potential transform cannot reorder the optimum; NO
+      policy/parameter update is borrowed, only the monotonicity requirement).
+    - Peak slope at ``score = 0.5`` (mid-range = maximum sensitivity), ~5× flatter
+      near the floor (``score ≈ 0``) — so a floor-pinned dim's noise is suppressed.
+    - Bounded in ``(0, 1)`` (``σ(±3) ≈ 0.047 / 0.953`` at the endpoints).
+    """
+    return 1.0 / (1.0 + math.exp(-_ICC_DISCRIMINATION * (score - 0.5)))
+
+
 def _stability_score(dim_stderr: dict[str, float] | None) -> float:
     """Stability axis — bounded in ``(0, 1]``, monotone-decreasing in noise.
 
@@ -1821,6 +1873,14 @@ def compute_fitness(
     # ``docs/plans/2026-05-25-p3-anchor-calibration-crm-spct.md``.
     anchor_means: dict[str, float] | None = None,
     anchor_confidence_mode: bool = False,
+    # PR-METRIC-TARGETED-IRT (2026-06-01) — OPT-IN IRT-discrimination reshape +
+    # targeted sub-fitness surface. BACKWARD-CALLABLE: both default to the legacy
+    # plain-aggregate behaviour, so every existing caller (the penalized headline
+    # fitness, fitness_plain, held_out_fitness, intrinsic_fitness, the bootstrap
+    # σ estimators, _baseline_raw_fitness) keeps the v1 value byte-identical. ONLY
+    # the promote gate's targeted decision path opts in.
+    reshape: bool = False,
+    targeted_dims: frozenset[str] | None = None,
 ) -> float:
     """17-dim weighted aggregate + stability axis + optional admire/bench axes.
 
@@ -1859,6 +1919,25 @@ def compute_fitness(
 
     Critical gate (regress 시 ``0.0``) 는 admire/bench 와 무관하게 strict-
     reject — ADR-012 §Decision.2 의 multi-axis strict-reject 보존.
+
+    PR-METRIC-TARGETED-IRT (2026-06-01) — two OPT-IN params, both legacy-default:
+
+    - ``reshape=True`` — apply the IRT-discrimination ICC ``σ(6·(score−0.5))``
+      (:func:`_icc_reshape`) to each per-dim 0–1 score BEFORE the weighted sum.
+      Peak sensitivity at mid-range, ~5× suppressed at the floor, so a real
+      targeted-dim improvement is no longer diluted by the ~20 floor-pinned dims.
+      ``reshape=False`` (default) → the plain ``_dim_score`` aggregate (v1).
+    - ``targeted_dims`` — when a non-empty set, the dim aggregate sums ONLY those
+      dims and renormalises by their (modality-adjusted) weight sum, so the result
+      is a 0–1 targeted SUB-FITNESS on the same scale across calls. The stability
+      axis + the auxiliary penalty + the critical strict-reject are unchanged
+      (the critical gate still fires regardless of the targeted set — safety is
+      never narrowed). ``targeted_dims=None`` (default) → the full 17-dim
+      aggregate (v1). Used only by the promote gate's targeted sub-fitness margin.
+
+    The two compose: the gate calls ``compute_fitness(..., reshape=True,
+    targeted_dims=<campaign dims>)`` to score the targeted surface under the
+    discrimination reshape; every other caller leaves both at their defaults.
     """
     # PR-11 P3.1 (2026-05-25) — anchor confidence multiplier. mode 가 False
     # 이거나 anchor_means 가 None/empty 면 multiplier=1.0 (legacy 그대로).
@@ -1877,10 +1956,41 @@ def compute_fitness(
     # None 이면 ``_dim_weight_with_modality`` 가 base ``DIM_WEIGHTS`` 그대로
     # 반환 (backward compat). dict 면 analytics dim 의 weight 가
     # ``ANALYTICS_WEIGHT_MULTIPLIER`` (0.5) 로 scale.
+    #
+    # PR-METRIC-TARGETED-IRT — ``reshape`` composes the IRT ICC on top of the
+    # per-dim 0–1 score (``_icc_reshape(_dim_score(mean))``); ``reshape=False``
+    # uses the plain score (v1). ``targeted_dims`` (non-empty) restricts the sum
+    # to the targeted surface and renormalises by the surviving weight mass,
+    # yielding a 0–1 targeted sub-fitness. Both default off → the v1 full-aggregate
+    # path is byte-identical (``_scored_dim`` collapses to ``_dim_score``).
+    def _scored_dim(mean: float) -> float:
+        score = _dim_score(mean)
+        return _icc_reshape(score) if reshape else score
+
+    if targeted_dims:
+        aggregate = 0.0
+        weight_mass = 0.0
+        for dim in DIM_WEIGHTS:
+            if dim not in targeted_dims:
+                continue
+            weight = _dim_weight_with_modality(dim, measurement_modality)
+            aggregate += weight * _scored_dim(dim_means.get(dim, 0.0))
+            weight_mass += weight
+        # Renormalise so the targeted sub-fitness stays a comparable 0–1 quantity
+        # regardless of how many dims (and thus how much weight mass) are targeted.
+        # An empty intersection (targeted set disjoint from the weighted dims) →
+        # 0.0 mass → 0.0 sub-fitness (no signal to gate on). The stability axis,
+        # auxiliary penalty, critical gate, and admire/bench axes are intentionally
+        # NOT applied on the targeted sub-fitness — it is a focused per-dim signal
+        # for the gate's targeted-σ margin only; the FULL-aggregate compute_fitness
+        # call (with its critical strict-reject) still runs alongside it in the
+        # gate, so safety is never narrowed.
+        dim_part = aggregate / weight_mass if weight_mass > 0.0 else 0.0
+        return dim_part * _anchor_multiplier
     aggregate = 0.0
     for dim in DIM_WEIGHTS:
         weight = _dim_weight_with_modality(dim, measurement_modality)
-        aggregate += weight * _dim_score(dim_means.get(dim, 0.0))
+        aggregate += weight * _scored_dim(dim_means.get(dim, 0.0))
     aggregate += STABILITY_WEIGHT * _stability_score(dim_stderr)
 
     if baseline_means is None:
@@ -2543,6 +2653,39 @@ def _load_baseline_fitness_stderr() -> float | None:
         return None
 
 
+def _resolve_targeted_dims() -> frozenset[str] | None:
+    """The campaign's targeted dims for the promote gate's targeted sub-fitness.
+
+    PR-METRIC-TARGETED-IRT (2026-06-01). SOURCE: the runner env-propagates
+    ``GEODE_SIL_EXPECTED_DIM`` (``runner.py``) — a JSON ``dict[dim → expected
+    delta]`` whose KEYS are the dims the campaign's mutation targets (single dim
+    via ``baseline_reader.pick_regression_target_dim``, operational tier via
+    ``baseline_reader._operational_dim_set``). Their KEYS are the targeted set.
+
+    Returns the targeted dim KEYS that are also WEIGHTED dims (``DIM_WEIGHTS`` —
+    the surface the sub-fitness sums over), as a frozenset; ``None`` when the env
+    is unset / empty / malformed / disjoint from the weighted dims, so the gate
+    falls back to the v1 aggregate decision (the default, control-arm, and
+    manual-audit paths all see ``None``).
+
+    Graceful contract: each boundary cast (JSON parse, dict-shape, str-key) is
+    guarded so a malformed env yields ``None`` rather than raising — an audit is
+    never aborted by a bad targeted-dim hint.
+    """
+    raw = os.environ.get("GEODE_SIL_EXPECTED_DIM", "").strip()
+    if not raw:
+        return None
+    try:
+        parsed = json.loads(raw)
+    except json.JSONDecodeError:
+        return None
+    if not isinstance(parsed, dict):
+        return None
+    keys = {k for k in parsed if isinstance(k, str)}
+    targeted = frozenset(keys) & set(DIM_WEIGHTS)
+    return targeted or None
+
+
 def _coerce_axis_dict(raw: Any) -> dict[str, float]:
     """Best-effort coerce a baseline axis dict — graceful per-axis (S3).
 
@@ -3187,6 +3330,11 @@ def _fitness_scale_stderr(
     admire_means: dict[str, float] | None = None,
     anchor_means: dict[str, float] | None = None,
     anchor_confidence_mode: bool = False,
+    # PR-METRIC-TARGETED-IRT (2026-06-01) — when the gate evaluates the targeted
+    # sub-fitness margin, the σ must be measured on the SAME (reshaped, targeted)
+    # surface as the gain. Both default off → the legacy full-aggregate MC σ.
+    reshape: bool = False,
+    targeted_dims: frozenset[str] | None = None,
 ) -> float:
     """Monte-Carlo stderr of ``compute_fitness`` under per-dim measurement noise.
 
@@ -3197,6 +3345,12 @@ def _fitness_scale_stderr(
     Seeded ⇒ deterministic for a given ``(means, stderr)``. Returns ``0.0`` when
     there is no measurable noise (``stderr`` absent / all-zero) — the caller's
     ``fitness_margin_floor`` then supplies the zero-noise guard.
+
+    PR-METRIC-TARGETED-IRT — ``reshape`` / ``targeted_dims`` forward to
+    ``compute_fitness`` so the gate can estimate the TARGETED-σ on the small
+    targeted surface (a focused surface has lower σ → a lower MDE for the same N,
+    inspected-by-test in ``test_metric_targeted_irt``). Both default off → the
+    legacy full-aggregate σ is byte-identical.
     """
     if not stderr or not any(stderr.get(k, 0.0) > 0.0 for k in means):
         return 0.0
@@ -3212,6 +3366,8 @@ def _fitness_scale_stderr(
                 anchor_means=anchor_means,
                 anchor_confidence_mode=anchor_confidence_mode,
                 admire_means=admire_means,
+                reshape=reshape,
+                targeted_dims=targeted_dims,
             )
         )
     return statistics.stdev(samples) if len(samples) > 1 else 0.0
@@ -3388,6 +3544,14 @@ def _should_promote(
     # indiscriminate collect 덕분에 anchor 가 이미 포함됨, stale v1 baseline
     # 부재 시 빈 dict → graceful multiplier=1.0).
     anchor_confidence_mode: bool = False,
+    # PR-METRIC-TARGETED-IRT (2026-06-01) — the campaign's targeted dims (the KEYS
+    # of GEODE_SIL_EXPECTED_DIM, sourced by the gate-arm caller). When supplied +
+    # non-empty, the gate ADDS a targeted per-dim requirement on top of the
+    # aggregate margin: the RESHAPED targeted sub-fitness gain must clear a
+    # targeted-σ margin. ``None`` (default) → byte-identical to the v1 aggregate
+    # gate (preserves every existing test + the never/random control arms, which
+    # never set it).
+    targeted_dims: frozenset[str] | None = None,
 ) -> tuple[bool, str]:
     """Decide whether the current audit should replace the baseline.
 
@@ -3576,6 +3740,93 @@ def _should_promote(
     )
     gain_stderr = (sigma_prior**2 + sigma_current**2) ** 0.5
     margin = max(_MARGIN_GAIN_SIGMA * gain_stderr, effective_floor)
+
+    # PR-METRIC-TARGETED-IRT (2026-06-01) — TARGETED per-dim gate.
+    #
+    # When the campaign declared targeted dims, the binding fitness comparison
+    # moves from the 24-dim aggregate (where a real 1.6-pt targeted gain is
+    # diluted to ~+0.005 and the gate structurally rejects) to the RESHAPED
+    # targeted SUB-FITNESS: ``compute_fitness(reshape=True, targeted_dims=...)``
+    # over only the targeted surface, with the IRT ICC giving mid-range gains
+    # full discrimination. The σ-margin is likewise measured on that same
+    # reshaped+targeted surface (a focused surface ⇒ lower σ ⇒ lower MDE for a
+    # given N). The critical strict-reject (``gated == 0.0`` above) ALREADY ran
+    # and is RETAINED as the symmetric downside + overfit floor — this branch only
+    # changes which improvement signal clears the upside, never relaxes a veto.
+    if targeted_dims:
+        # Restrict to WEIGHTED dims (the sub-fitness surface) AND require each to be
+        # PRESENT in BOTH the current and baseline means. ``compute_fitness`` scores
+        # an absent dim as best-case (``_dim_score(0.0) = 1.0``, the documented
+        # "missing dim = best case" semantic) and ``_fitness_scale_stderr`` cannot
+        # perturb a dim it never sees — so a targeted dim DROPPED from the current
+        # audit would otherwise reshape to ~0.95 with ~0 σ and falsely promote
+        # (a Goodhart vector: suppress the targeted measurement → free "win").
+        # A missing targeted dim therefore disqualifies it from the targeted set;
+        # an empty residual set falls through to the full-aggregate gate (which has
+        # its own missing-dim handling + the critical strict-reject).
+        targeted_set = frozenset(
+            dim
+            for dim in (frozenset(targeted_dims) & set(DIM_WEIGHTS))
+            if dim in current_means and dim in baseline_means
+        )
+        if targeted_set:
+            # NOTE — the targeted sub-fitness is PURELY the targeted dims: the
+            # anchor multiplier is intentionally OMITTED (``anchor_means=None`` /
+            # ``anchor_confidence_mode=False``) so unrelated anchor-dim movement
+            # cannot perturb the targeted decision (the full-aggregate gate above
+            # still honours anchors via ``gated`` / ``current_raw`` / ``prior_raw``).
+            current_targeted = compute_fitness(
+                current_means,
+                current_stderr,
+                measurement_modality=measurement_modality,
+                admire_means=admire_means,
+                reshape=True,
+                targeted_dims=targeted_set,
+            )
+            prior_targeted = compute_fitness(
+                baseline_means,
+                baseline_stderr,
+                measurement_modality=baseline_measurement_modality,
+                admire_means=baseline_admire_means,
+                reshape=True,
+                targeted_dims=targeted_set,
+            )
+            sigma_prior_t = _fitness_scale_stderr(
+                baseline_means,
+                baseline_stderr,
+                measurement_modality=baseline_measurement_modality,
+                admire_means=baseline_admire_means,
+                reshape=True,
+                targeted_dims=targeted_set,
+            )
+            sigma_current_t = _fitness_scale_stderr(
+                current_means,
+                current_stderr,
+                measurement_modality=measurement_modality,
+                admire_means=admire_means,
+                reshape=True,
+                targeted_dims=targeted_set,
+            )
+            gain_stderr_t = (sigma_prior_t**2 + sigma_current_t**2) ** 0.5
+            margin_t = max(_MARGIN_GAIN_SIGMA * gain_stderr_t, effective_floor)
+            reason_suffix = ", N=1 critical" if n1_critical else ""
+            dims_label = ",".join(sorted(targeted_set))
+            if current_targeted <= prior_targeted + margin_t:
+                return (
+                    False,
+                    f"targeted[{dims_label}] gain {current_targeted - prior_targeted:+.4f} "
+                    f"≤ targeted-σ margin {margin_t:.4f}{reason_suffix}",
+                )
+            return (
+                True,
+                f"targeted[{dims_label}] {prior_targeted:.4f} → {current_targeted:.4f} "
+                f"(Δ{current_targeted - prior_targeted:+.4f}, "
+                f"targeted-σ margin {margin_t:.4f}{reason_suffix})",
+            )
+        # Targeted set disjoint from / absent in the weighted measured dims (info-only
+        # dim, seed-gen-only dim, or a dim the audit dropped) — no trustworthy
+        # targeted signal, fall through to the full-aggregate gate.
+
     if current_raw <= prior_raw + margin:
         reason_suffix = ", N=1 critical" if n1_critical else ""
         return (
@@ -4580,6 +4831,12 @@ def main() -> int:
             # admire is reserved (None) — PR-AR-L4c wires it.
             admire_means=admire_means_current,
             baseline_admire_means=_baseline_admire_means or None,
+            # PR-METRIC-TARGETED-IRT (2026-06-01) — the campaign's targeted dims
+            # (KEYS of GEODE_SIL_EXPECTED_DIM, env-propagated by the runner). When
+            # present the gate evaluates the reshaped targeted sub-fitness margin
+            # on this surface instead of the diluted 24-dim aggregate; None for the
+            # control arms / manual audits (env unset) → v1 aggregate gate.
+            targeted_dims=_resolve_targeted_dims(),
         )
         # PR-SIL-MULTIOBJ A2 (2026-05-29) — secondary reject gate. The
         # mutator's own ``rollback_condition`` predicate (propagated via

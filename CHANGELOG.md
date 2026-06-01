@@ -45,6 +45,49 @@ functional change.
 
 ---
 
+## [0.99.116] - 2026-06-01
+
+### Added
+- **PR-METRIC-TARGETED-IRT (2026-06-01) — targeted per-dim promote gate + IRT
+  discrimination reshape + targeted-σ power, for the self-improving loop's
+  fitness.** `compute_fitness` is `0.70·mean(~24 dims) + 0.30·admire`; a Petri
+  scenario pressures only 2–4 dims while ~20 sit at the floor, so a real
+  target-dim improvement is DILUTED — a genuine 1.6-pt auxiliary-dim gain
+  (4.6→3.0) moves the 24-dim aggregate only `+0.0053`, which the promote gate
+  rejects at margin `0.0184`. This is the structural 0-approve cause. Three
+  OPT-IN, backward-callable mechanisms (all default to the v1 behaviour, so every
+  existing caller + the never/random control arms are byte-identical):
+  * **(1) Targeted per-dim gate.** `_should_promote` takes a `targeted_dims`
+    param; when supplied (the KEYS of the runner-propagated
+    `GEODE_SIL_EXPECTED_DIM`, resolved by `_resolve_targeted_dims`) the binding
+    comparison moves to the RESHAPED targeted SUB-FITNESS over only the targeted
+    surface. The critical strict-reject (`gated == 0.0`) is RETAINED as the
+    symmetric downside + overfit floor — the targeted gate only ever ADDS a
+    requirement, never relaxes one.
+  * **(3) IRT-discrimination reshape.** `compute_fitness(reshape=True)` applies
+    the monotone logistic ICC `σ(6·(score−0.5))` (`_icc_reshape`) to each per-dim
+    0–1 score before aggregating — peak sensitivity at mid-range, ~5× suppressed
+    at the floor. The validated 1.6-pt mid-range gain reshapes to `+0.2088`
+    (rescued from `+0.0053`); an equal-magnitude floor-dim move reshapes to
+    `~+0.003` (no false promote). Inspired by PSN-IRT (arXiv:2505.15055) for the
+    logistic ICC + per-item discrimination, and Ng/Harada/Russell 1999 (ICML'99)
+    for the monotone/policy-invariance constraint — NO policy/parameter update is
+    borrowed, only the curve SHAPE + the monotonicity requirement.
+  * **(6) Targeted-σ power.** The σ-margin is measured on the same reshaped
+    targeted surface (`_fitness_scale_stderr(reshape=True, targeted_dims=…)`); a
+    focused surface ⇒ lower σ ⇒ a lower MDE for a given N (per-dim stderr ∝
+    1/√N — no formula borrowed verbatim). A fixed realistic targeted gain that
+    FAILS the margin at low N PASSES at higher N.
+  * **Version tags + epoch.** `FITNESS_FORMULA_VERSION` / `MARGIN_LOGIC_VERSION`
+    bumped `1`→`2` so a v1 (plain-aggregate gate) and a v2 (targeted+reshape
+    gate) baseline hash to different `build_baseline_spec` epochs (no retroactive
+    recompute). `test_logic_version_guard` goldens recomputed (identical values —
+    the default path is byte-identical; only the gate's targeted decision opts in).
+  * Synthetic + dry-run verification only (NO live audit): the +0.2088 rescue,
+    the floor suppression, the retained critical veto, ICC strict-monotonicity on
+    [0,1], the power lever, and full backward-compat are pinned in
+    `tests/self_improving/test_metric_targeted_irt.py`.
+
 ## [0.99.115] - 2026-06-01
 
 ### Changed
