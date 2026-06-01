@@ -81,7 +81,7 @@ log = logging.getLogger(__name__)
 __all__ = ["Supervisor"]
 
 
-_DEFAULT_SUPERVISOR_MODEL = "claude-opus-4-7"
+_DEFAULT_SUPERVISOR_MODEL = "claude-opus-4-8"
 _SUPERVISOR_AGENT_NAME = "seed_supervisor"
 _TASK_TYPE = "seed-supervisor"
 

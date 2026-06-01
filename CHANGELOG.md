@@ -45,10 +45,27 @@ functional change.
 
 ---
 
+## [0.99.111] - 2026-06-01
+
+### Changed
+- **PR-SEEDGEN-OPUS-4-8 (2026-06-01) — seed-generation pipeline roles bumped
+  claude-opus-4-7 → claude-opus-4-8.** All nine `[seed_generation.role.*]`
+  `default_model` values and the Anthropic judge-panel voter in
+  `seed_generation.plugin.toml`, plus the mirroring per-agent
+  `_DEFAULT_*_MODEL` constructor constants, move to the current Anthropic
+  flagship. The local `claude` CLI (2.1.x) was probe-verified to serve
+  `--model claude-opus-4-8` before the bump, so the `claude-cli`-routed roles
+  resolve cleanly. opus-4-7 stays in every role's `allowed_models` as an
+  operator fallback. The campaign petri auditor/judge were already on
+  opus-4-8 via `[self_improving_loop.petri.*]`; this aligns the seed-generation
+  agents with that flagship tier.
+
 ## [0.99.110] - 2026-06-01
 
 ### Added
 - **PR-SEEDGEN-DIFFICULTY-SELECTION (2026-06-01) — difficulty-calibrated
+  survivor selection for the seed-generation pipeline.** The Ranker can now pick
+  survivors by their measured pilot `dim_means[target_dim]` (Petri 1-10,
   survivor selection for the seed-generation pipeline.** The Ranker can now pick
   survivors by their measured pilot `dim_means[target_dim]` (Petri 1-10,
   higher = harder for the target = more headroom) instead of by Elo win-rate.

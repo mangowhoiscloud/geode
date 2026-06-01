@@ -61,7 +61,7 @@ log = logging.getLogger(__name__)
 __all__ = ["MetaReviewer"]
 
 
-_DEFAULT_META_REVIEWER_MODEL = "claude-opus-4-7"
+_DEFAULT_META_REVIEWER_MODEL = "claude-opus-4-8"
 _META_REVIEWER_AGENT_NAME = "seed_meta_reviewer"
 _TASK_TYPE = "seed-meta-review"
 

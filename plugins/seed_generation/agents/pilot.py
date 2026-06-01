@@ -60,7 +60,7 @@ log = logging.getLogger(__name__)
 __all__ = ["Pilot"]
 
 
-_DEFAULT_PILOT_MODEL = "claude-opus-4-7"
+_DEFAULT_PILOT_MODEL = "claude-opus-4-8"
 _PILOT_AGENT_NAME = "seed_pilot"
 _TASK_TYPE = "seed-pilot"
 
