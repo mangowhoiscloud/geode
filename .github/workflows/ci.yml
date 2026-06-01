@@ -35,7 +35,7 @@ jobs:
               - 'plugins/**'
               - 'scripts/**'
               - 'tests/**'
-              - 'state/self_improving/**'
+              - 'state/autoresearch/**'
               - 'pyproject.toml'
               - 'uv.lock'
               - '.github/workflows/**'

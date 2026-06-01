@@ -37,5 +37,5 @@ named `<gen_tag>-<uuid>.md`, frontmatter declaring `target_dim`,
 selected via the Ranker top-K (`survivors_k=5`) AND optionally the
 Evolution agent's section-rewrite variants. After human ratification,
 the surviving seeds are promoted into `seeds_safe<N>/` and the
-`state/self_improving/baseline.json` is refreshed from the audit's
+`state/autoresearch/baseline.json` is refreshed from the audit's
 dim_means/dim_stderr.
