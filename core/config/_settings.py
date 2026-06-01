@@ -275,22 +275,6 @@ class Settings(BaseSettings):
             "call. Previously hardcoded to 0.3."
         ),
     )
-    temperature_progressive_compression: float = Field(
-        default=0.0,
-        ge=0.0,
-        le=2.0,
-        validation_alias=AliasChoices(
-            "temperature_progressive_compression",
-            "GEODE_TEMPERATURE_PROGRESSIVE_COMPRESSION",
-        ),
-        description=(
-            "Sampling temperature for budget-summarisation calls in "
-            "progressive context compression. Defaults to 0.0 so "
-            "summaries are reproducible across re-runs. Previously "
-            "hardcoded to 0.0."
-        ),
-    )
-
     verbose: bool = False
     checkpoint_db: str = "geode_checkpoints.db"
 
