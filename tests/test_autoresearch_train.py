@@ -1881,7 +1881,9 @@ def test_append_session_index_writes_jsonl_row(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """One row per call, newline-terminated, parseable as JSON."""
-    monkeypatch.setattr(auto_train, "SELF_IMPROVING_LOOP_HOME", tmp_path / "autoresearch" / "handoff")
+    monkeypatch.setattr(
+        auto_train, "SELF_IMPROVING_LOOP_HOME", tmp_path / "autoresearch" / "handoff"
+    )
     monkeypatch.setattr(
         auto_train,
         "SESSIONS_INDEX_PATH",
@@ -1914,7 +1916,9 @@ def test_append_session_index_appends_not_overwrites(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """Multiple calls append, preserving prior rows."""
-    monkeypatch.setattr(auto_train, "SELF_IMPROVING_LOOP_HOME", tmp_path / "autoresearch" / "handoff")
+    monkeypatch.setattr(
+        auto_train, "SELF_IMPROVING_LOOP_HOME", tmp_path / "autoresearch" / "handoff"
+    )
     monkeypatch.setattr(
         auto_train,
         "SESSIONS_INDEX_PATH",
