@@ -1166,6 +1166,20 @@ def test_autoresearch_mutations_table_renders(
         assert outcome in html, f"outcome label {outcome!r} missing"
     # before -> after change surfaces in the payload drill-down.
     assert "<details>" in html and "previous" in html, "payload drill-down (before/after) missing"
+    # Full-width regression (PR-HUB-PAYLOAD-FULLWIDTH): the payload <details> must be
+    # emitted in its OWN full-width <tr><td colspan> row (.mutation-payload-row), NOT
+    # crammed into the narrow outcome cell — otherwise the opened JSON renders
+    # right-skewed into the last column. The <details> must sit inside that full-width
+    # colspan cell. The regex is whitespace-tolerant so trivial formatter changes do
+    # not break it, but still pins the structural pairing.
+    assert re.search(
+        r'<tr class="mutation-payload-row">\s*<td colspan="\d+">\s*<details>',
+        html,
+    ), (
+        "payload <details> not in its own full-width colspan row (would inherit the "
+        "narrow outcome column and render right-skewed)"
+    )
+    assert 'class="mutation-payload"' in html, "full-width payload wrapper missing"
     # Codex M2 — the fixture carries one pre-#1947 (penalized-recipe) attribution row
     # (mut004penalized, ts before the boundary). The rendered page must surface it as
     # EXCLUDED and tag it per-row, and the mean-Δ must be the 3 plain rows only — not a
