@@ -366,13 +366,14 @@ def test_targeted_dim_missing_from_current_does_not_false_promote() -> None:
     assert ok is False
 
 
-def test_partial_targeted_set_missing_one_falls_through_not_subset_promote() -> None:
-    """Codex MCP review (strict all-or-fall-through): targeting ``{A, B}`` where B
-    is DROPPED from the current audit must NOT promote on the present subset A —
-    that is the same "suppress the hard dim's measurement → win" Goodhart vector as
-    a single missing dim, just partial. ALL weighted targeted dims must be present
-    in both current+baseline, else the WHOLE targeted decision is disqualified and
-    the gate falls through to the full-aggregate path."""
+def test_partial_targeted_set_missing_one_rejects_not_subset_promote() -> None:
+    """Codex MCP review: targeting ``{A, B}`` where B is DROPPED from the current
+    audit must NOT promote on the present subset A — the same "suppress the hard
+    dim's measurement → win" Goodhart vector as a single missing dim, just partial.
+    ALL weighted targeted dims must be present in both current+baseline, else the
+    WHOLE targeted decision is disqualified and the gate REJECTS (it does NOT fall
+    through to the aggregate, which would score the dropped B as best-case and
+    promote on the gap)."""
     base = _floor_universe()
     base[_TARGET_AUX] = 4.6  # A — present both sides, genuinely improved below
     base[_TARGET_CRIT] = 4.6  # B — a 2nd weighted targeted dim
