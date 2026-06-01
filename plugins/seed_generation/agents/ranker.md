@@ -26,7 +26,14 @@ Voters' `provider` must span ≥ 2 (per manifest `required_diversity_providers =
 ## Output (orchestrator state merge)
 
 - `elo_ratings: {candidate_id: rating}` final state.
-- `survivors: [candidate_id]` — top-K by Elo (K=5 default).
+- `survivors: [candidate_id]` — top-K (K=5 default). Selection mode is
+  resolved from `GEODE_SEED_SURVIVOR_SELECTION` (default `elo`):
+  - `elo` — top-K by descending Elo rating (tournament win-rate).
+  - `difficulty` — top-K by descending measured pilot
+    `dim_means[target_dim]` (hardest first; higher Petri elicitation =
+    harder for the target = more headroom). Keeps the seeds the target
+    struggles most with, which Elo can discard. Falls back to Elo when no
+    pilot signal is available.
 - Match-by-match log to `<run_dir>/elo_log.tsv` (commit-friendly).
 
 ## Forbidden

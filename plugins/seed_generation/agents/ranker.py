@@ -57,13 +57,15 @@ from plugins.seed_generation.orchestrator import PipelineState
 from plugins.seed_generation.picker import VoterBinding
 from plugins.seed_generation.tournament import (
     DEFAULT_K_FACTOR,
+    DEFAULT_SURVIVOR_SELECTION,
     DEFAULT_TOP_K,
     MatchOutcome,
     MatchPlan,
+    SurvivorSelection,
     apply_match,
     majority_winner,
     plan_matches,
-    top_k,
+    select_survivors,
 )
 
 if TYPE_CHECKING:
@@ -74,7 +76,7 @@ log = logging.getLogger(__name__)
 __all__ = ["Ranker"]
 
 
-_DEFAULT_RANKER_MODEL = "claude-opus-4-7"
+_DEFAULT_RANKER_MODEL = "claude-opus-4-8"
 _TASK_TYPE = "seed-ranker-vote"
 _PARTIAL_CHECKPOINT_EVERY_MATCHES = 10
 _PARTIAL_CHECKPOINT_EVERY_SECONDS = 120.0
@@ -183,6 +185,7 @@ class Ranker(BaseSeedAgent):
         manifest_role: dict[str, object] | None = None,
         k_factor: float = DEFAULT_K_FACTOR,
         survivors_k: int = DEFAULT_TOP_K,
+        selection: SurvivorSelection = DEFAULT_SURVIVOR_SELECTION,
         rng: random.Random | None = None,
     ) -> None:
         super().__init__(
@@ -199,6 +202,12 @@ class Ranker(BaseSeedAgent):
         self._voters = voters
         self._k_factor = k_factor
         self._survivors_k = survivors_k
+        # PR-SEEDGEN-DIFFICULTY-SELECTION (2026-06-01) — survivor selection
+        # mode. ``"elo"`` (default) is unchanged top-K-by-rating; ``"difficulty"``
+        # keeps the seeds the target struggles most with (highest pilot
+        # target_dim elicitation). The orchestrator wires this from
+        # ``resolve_survivor_selection()`` (env knob) so it is OPT-IN.
+        self._selection: SurvivorSelection = selection
         self._rng = rng
 
     async def aexecute(self, state: PipelineState) -> SeedAgentResult:
@@ -383,13 +392,28 @@ class Ranker(BaseSeedAgent):
                 )
                 match_details.append(detail)
 
-        survivors = top_k(ratings, k=self._survivors_k)
+        # PR-SEEDGEN-DIFFICULTY-SELECTION (2026-06-01) — survivor pick honours
+        # the resolved selection mode. ``"elo"`` is the historical top-K-by-rating
+        # path; ``"difficulty"`` re-ranks ALL rated candidates by their measured
+        # pilot ``dim_means[target_dim]`` (hardest first) so the pool keeps the
+        # seeds the target struggles most with — the high-elicitation seeds Elo
+        # would otherwise discard (gen-2605-3: elo 1084 / target_dim 4.2 ranked
+        # below elo 1094 / target_dim 2.8). Difficulty degrades to Elo when no
+        # pilot signal is available (``pilot_means`` carries it, keyed per cid).
+        survivors = select_survivors(
+            ratings,
+            k=self._survivors_k,
+            selection=self._selection,
+            pilot_means=pilot_means,
+            target_dim=state.target_dim,
+        )
         self._emit_elo_log(state, outcomes, ratings)
         self._persist_tournament_log(state, match_details)
         log.info(
-            "seed-generation ranker: %d/%d matches counted, survivors=%s",
+            "seed-generation ranker: %d/%d matches counted, selection=%s, survivors=%s",
             len(outcomes),
             len(match_plan),
+            self._selection,
             survivors[:3],
         )
 

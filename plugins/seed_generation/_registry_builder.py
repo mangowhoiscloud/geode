@@ -214,12 +214,20 @@ def populate_registry(
                     manifest_role_dict[field_name] = getattr(manifest_role, field_name)
 
         if role_name == "ranker":
+            # PR-SEEDGEN-DIFFICULTY-SELECTION (2026-06-01) — resolve the
+            # survivor-selection mode from the operator env knob
+            # (``GEODE_SEED_SURVIVOR_SELECTION``). Default "elo" keeps the
+            # production path unchanged; "difficulty" re-ranks survivors by
+            # measured pilot target_dim elicitation (hardest first).
+            from plugins.seed_generation.tournament import resolve_survivor_selection
+
             agent: BaseSeedAgent = Ranker(
                 manager,
                 list(picker_result.voters),
                 model=binding.model if binding else _DEFAULT_FALLBACK_MODEL,
                 source=binding.source if binding else "auto",
                 manifest_role=manifest_role_dict,
+                selection=resolve_survivor_selection(),
             )
         else:
             cls = _ROLE_TO_CLASS.get(role_name)

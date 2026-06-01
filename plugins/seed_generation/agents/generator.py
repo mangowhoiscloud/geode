@@ -70,7 +70,7 @@ log = logging.getLogger(__name__)
 __all__ = ["Generator"]
 
 
-_DEFAULT_GENERATOR_MODEL = "claude-opus-4-7"
+_DEFAULT_GENERATOR_MODEL = "claude-opus-4-8"
 _GENERATOR_AGENT_NAME = "seed_generator"
 _TASK_TYPE = "seed-generation"
 # CSP-13 (2026-05-23) — Loop 2 (debate-turn) sidecar suffix. The
