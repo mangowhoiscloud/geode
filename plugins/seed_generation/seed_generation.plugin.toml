@@ -112,13 +112,14 @@ role_contract = "plugins/seed_generation/agents/proximity.md"
 # tier is ``claude-opus-4-8`` (PR-UPGRADE-ROLES-TOP-TIER 2026-05-26 set
 # opus-4-7; PR-SEEDGEN-OPUS-4-8 2026-06-01 bumped it) under operator
 # directive that all role LLMs run on the Anthropic top tier — see
-# CHANGELOG. The 90s wall-time cap in
-# pilot.md is unchanged; operators tightening the per-candidate
-# budget can override the model via
+# CHANGELOG. The pilot's per-candidate wall-time budget is 480s
+# (PR-PILOT-TARGET-GEODE-GPT55 raised it from 90s — a real scaffolded
+# geode/gpt-5.5 audit runs minutes, ~108s measured); operators tightening
+# the per-candidate budget can override the model via
 # ``~/.geode/config.toml``'s ``[seed_generation.role.pilot] model``.
 default_model = "claude-opus-4-8"
 # Override paths: operators can pin a faster/cheaper model via the
-# allowlist below when the 90s wall-time becomes a bottleneck.
+# allowlist below when the 480s wall-time becomes a bottleneck.
 allowed_models = [
     "claude-opus-4-8",
     "claude-opus-4-7",
