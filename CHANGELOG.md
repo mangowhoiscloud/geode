@@ -53,7 +53,11 @@ functional change.
   `vector_store` / `raptor` / `embeddings` / `rag_router` + their tests) — it had
   **0 production importers** (default-excluded from every gate) and had sat
   un-promoted. Dropped its now-dangling `experimental` entries from the ruff
-  `extend-exclude` and deptry `extend_exclude` lists.
+  `extend-exclude` and deptry `extend_exclude` lists, the orphaned
+  `temperature_progressive_compression` Settings knob (its sole consumer was the
+  deleted `progressive_compression` module), and that knob's three references in
+  `tests/test_temperature_config_invariants.py` (incl. the ratchet site that read
+  the now-deleted file).
 
 ### Fixed
 - **Cross-machine portability — removed hardcoded `/Users/mango` absolute paths.**

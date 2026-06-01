@@ -33,7 +33,6 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
         ("temperature_verification", 0.0),
         ("temperature_commentary", 1.0),
         ("temperature_self_improving_mutation", 1.0),
-        ("temperature_progressive_compression", 0.0),
     ],
 )
 def test_temperature_setting_default(attr: str, expected_default: float) -> None:
@@ -68,7 +67,6 @@ def test_temperature_setting_range_validation() -> None:
         "temperature_verification",
         "temperature_commentary",
         "temperature_self_improving_mutation",
-        "temperature_progressive_compression",
     ):
         with pytest.raises(ValidationError):
             Settings(**{attr: -0.1})
@@ -100,10 +98,6 @@ _RATCHET_SITES = (
     (
         Path("core/self_improving/loop/runner.py"),
         "_settings.temperature_self_improving_mutation",
-    ),
-    (
-        Path("experimental/orchestration/progressive_compression.py"),
-        "_settings.temperature_progressive_compression",
     ),
 )
 
