@@ -1189,6 +1189,7 @@ def run_campaign(
         # SELECTION only warns (the optimizer wastes effort on a dead dim, but the
         # comparison ruler is still sound).
         from plugins.petri_audit.pool_validation import validate_pool_target_dims
+
         from core.self_improving.train import AXIS_TIERS
 
         _live_dims = frozenset(AXIS_TIERS)
