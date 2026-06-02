@@ -75,6 +75,7 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import contextlib
 import json
 import logging
 import math
@@ -893,11 +894,16 @@ def _spawn_train_subprocess(
 # The gen-0 K replicates and the NEVER + RANDOM control arms are
 # PATH-INDEPENDENT: every replicate / cycle measures the SAME frozen
 # baseline before any keep/revert, so there is no champion chain to
-# corrupt by running them out of order. With PAYG (``openai_source =
-# "api_key"``, no shared OAuth rate bucket) the subscription-safe
-# ``GEODE_AUDIT_MAX_CONCURRENT=1`` serialisation is no longer required, so
-# these path-independent measures fan out concurrently via
-# ``asyncio.gather`` — each worker an isolated ``train.py`` subprocess.
+# corrupt by running them out of order. They fan out concurrently via
+# ``asyncio.gather`` — each worker a SEPARATE ``train.py`` subprocess
+# (its own GEODE runtime, its own process-local audit lane, its own state
+# tree). The campaign's cross-worker concurrency is therefore purely
+# orchestrator-level (the ``gather``); it does NOT depend on any in-process
+# GEODE singleton (the audit lane stays the subscription-safe per-process
+# ``max_concurrent=1`` — each worker runs exactly one audit, so that cap
+# never gates the fan-out). Unbounded by design: with PAYG (``openai_source =
+# "api_key"``, no per-minute rate limit) there is no reason to throttle the
+# spawn count.
 #
 # State isolation mirrors the proven ``scripts/floor_sampler.sh`` pattern:
 # each worker runs with its OWN ``GEODE_STATE_ROOT`` (a per-worker temp
@@ -1225,8 +1231,9 @@ async def _spawn_train_subprocess_async(
     ``asyncio.create_subprocess_exec`` (so N workers run concurrently on one event
     loop), captures BOTH stdout+stderr, and applies the TIGHT ``per_audit_timeout``
     so a hung worker is killed within seconds of overrun rather than holding for
-    the operator-overridable budget (mirroring :func:`run_audit_async`'s timeout
-    discipline). On timeout the child is killed + reaped and a
+    the in-process budget the child ``train.py`` would otherwise wait out — this
+    subprocess-level kill is where the async-first harness enforces the hang
+    bound. On timeout the child is killed + reaped and a
     :class:`subprocess.CompletedProcess` with ``returncode=-1`` is returned (the
     aggregator filters it out as a dropped worker — a timed-out replicate must not
     crash the whole gather). ``sys.executable`` is the venv interpreter the parent
@@ -1250,7 +1257,11 @@ async def _spawn_train_subprocess_async(
         # ``asyncio.wait_for`` raises the builtin ``TimeoutError`` (aliased to
         # ``asyncio.TimeoutError`` since 3.11). Kill + reap the hung child so the
         # tight bound actually frees the worker instead of leaking a zombie.
-        proc.kill()
+        # ``proc.kill()`` raises ``ProcessLookupError`` if the child happened to
+        # exit between the timeout firing and the kill (a narrow race) — guard it
+        # so the reap path is bulletproof and still returns the dropped-worker row.
+        with contextlib.suppress(ProcessLookupError):
+            proc.kill()
         await proc.wait()
         return subprocess.CompletedProcess(
             args=argv,

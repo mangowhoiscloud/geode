@@ -20,10 +20,9 @@ def test_subprocess_failed_event_emitted_before_runtime_error() -> None:
     so a downstream consumer sees the typed event, not just the generic
     top-level ``audit_failed`` catch.
 
-    PR-ASYNC-FIRST S1 (2026-06-03) — this branch moved out of ``run_audit``
-    into the shared ``_finalize_audit_result`` helper that BOTH the sync
-    ``run_audit`` and the async ``run_audit_async`` call, so they cannot
-    drift. Grep the helper, not ``run_audit``.
+    PR-ASYNC-FIRST (2026-06-03) — this branch moved out of ``run_audit`` into
+    the focused ``_finalize_audit_result`` helper, so grep the helper, not
+    ``run_audit``.
     """
     from core.self_improving import train
 

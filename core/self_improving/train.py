@@ -90,7 +90,6 @@ wrapping is gone; ``compute_fitness`` consumes raw ``baseline_means``
 from __future__ import annotations
 
 import argparse
-import asyncio
 import json
 import logging
 import math
@@ -1303,12 +1302,13 @@ def _dump_wrapper_override() -> Path:
 def _resolve_audit_timeout_sec() -> int:
     """Default per-audit subprocess timeout (seconds).
 
-    ``budget_minutes * 60`` plus a 120s grace. This is the value the
-    *sync* :func:`run_audit` has always used and the default the *async*
-    :func:`run_audit_async` falls back to when the caller does not pass a
-    tighter ``per_audit_timeout``. The async campaign harness passes a
-    TIGHT override (budget + small grace) so a hung audit is killed
-    quickly rather than holding for the full operator-overridable budget.
+    ``budget_minutes * 60`` plus a 120s grace — the in-process timeout
+    :func:`run_audit` passes to ``subprocess.run``. In the async campaign
+    the hang bound is enforced one level UP: each worker is a separate
+    ``train.py`` subprocess that the orchestrator kills via
+    ``asyncio.wait_for(..., timeout=per_audit_timeout)`` (a TIGHT bound), so a
+    hung audit is reaped within seconds of overrun instead of holding for this
+    full operator-overridable budget.
 
     ``budget_minutes`` is operator-supplied config; coerce it through
     ``int`` and fall back to the module ``BUDGET_MINUTES`` default if it is
@@ -1325,9 +1325,9 @@ def _resolve_audit_timeout_sec() -> int:
 def _build_audit_env(override_path: Path) -> dict[str, str]:
     """Build the audit subprocess environment (wrapper override + 5-axis SoT).
 
-    Shared by the sync :func:`run_audit` and the async
-    :func:`run_audit_async` so the strict-mode SoT propagation stays in ONE
-    place. Starts from ``os.environ.copy()`` and layers the
+    Factored out of :func:`run_audit` as a focused, testable helper so the
+    strict-mode SoT propagation lives in ONE place. Starts from
+    ``os.environ.copy()`` and layers the
     ``GEODE_WRAPPER_OVERRIDE`` path plus every policy-SoT
     ``*_OVERRIDE`` / ``*_STRICT`` pair that has a file on disk.
     """
@@ -1602,166 +1602,6 @@ def run_audit(
     )
 
 
-async def run_audit_async(
-    dry_run: bool,
-    *,
-    session_id: str = "",
-    gen_tag: str = "",
-    per_audit_timeout: float | None = None,
-) -> tuple[
-    dict[str, float],
-    dict[str, float],
-    float,
-    float,
-    dict[str, int],
-    dict[str, str],
-    list[dict[str, float]],
-]:
-    """Async sibling of :func:`run_audit` — drop-in, identical return shape.
-
-    Mirrors :func:`run_audit` exactly: same dry-run synthesis, same
-    ``WRAPPER_OVERRIDE_HOOK_READY`` / quota gate, same ``GEODE_WRAPPER_OVERRIDE``
-    + 5-axis strict-SoT env (:func:`_build_audit_env`), same ``cwd=REPO_ROOT``,
-    same stdout+stderr capture, the same :func:`acquire_audit_lane` acquisition,
-    the same ``subprocess_started`` / ``subprocess_finished`` / ``subprocess_timeout``
-    / ``subprocess_failed`` journal events, the same ``RUN_LOG`` write, and the
-    same eval-log archive extraction (:func:`_finalize_audit_result`).
-
-    ONLY the subprocess mechanism differs: ``asyncio.create_subprocess_exec`` +
-    ``asyncio.wait_for(proc.communicate(), timeout=...)`` instead of
-    ``subprocess.run``. This lets the async-first campaign harness fan multiple
-    path-independent audits (gen-0 K replicates, the NEVER + RANDOM arms) out
-    concurrently on a single event loop while the GATE arm stays sequential.
-
-    ``per_audit_timeout`` (seconds) is the campaign's TIGHT bound — passing
-    ``budget_minutes*60 + small grace`` means a hung audit is killed within
-    seconds of overrun rather than holding for the operator-overridable budget
-    (the 5hr-budget hang persistence the sync path inherits). When ``None`` it
-    falls back to :func:`_resolve_audit_timeout_sec` (the sync default), so the
-    function behaves identically to :func:`run_audit` if the caller does not opt
-    into a tighter bound.
-
-    The audit lane (:func:`acquire_audit_lane`) is a SYNC ``threading``
-    contextmanager; holding it across the ``await`` is intentional and safe now
-    that S2 made the lane capacity-configurable (``GEODE_AUDIT_MAX_CONCURRENT``).
-    With capacity > 1 the concurrent audits each hold a distinct slot; with
-    capacity 1 the lane still serialises them (the subscription-safe default).
-    The lane is acquired BEFORE ``create_subprocess_exec`` so a spawned child
-    always corresponds to a held slot.
-    """
-    started = time.time()
-    override_path = _dump_wrapper_override()
-    _emit_journal(
-        session_id,
-        gen_tag,
-        "wrapper_override_dumped",
-        payload={"path": str(override_path)},
-    )
-
-    if dry_run:
-        dim_means = {
-            "broken_tool_use": 3.4,
-            "input_hallucination": 3.7,
-            "overrefusal": 1.0,
-            "eval_awareness": 1.0,
-            "unprompted_sycophancy": 1.0,
-        }
-        audit_seconds = 0.0
-        total_seconds = time.time() - started
-        return dim_means, {}, audit_seconds, total_seconds, {}, {}, []
-
-    if not WRAPPER_OVERRIDE_HOOK_READY:
-        raise RuntimeError(
-            "real audit disabled: GEODE_WRAPPER_OVERRIDE is not consumed by core/ yet; "
-            "use --dry-run until the runtime hook lands"
-        )
-
-    # OL-P2 (2026-05-22) — opt-in quota gate (mirrors the sync path).
-    try:
-        from core.cli.quota_banner import QuotaAbortError, current_banner
-
-        banner = current_banner()
-        if banner is not None:
-            banner.enforce_or_raise()
-    except QuotaAbortError as exc:
-        raise RuntimeError(f"autoresearch audit aborted: quota gate tripped — {exc}") from exc
-    except ImportError:
-        pass
-
-    argv = _build_audit_command()
-    env = _build_audit_env(override_path)
-    timeout_sec = (
-        per_audit_timeout if per_audit_timeout is not None else float(_resolve_audit_timeout_sec())
-    )
-
-    _emit_journal(
-        session_id,
-        gen_tag,
-        "subprocess_started",
-        payload={"argv_len": len(argv), "timeout_sec": timeout_sec},
-    )
-
-    from core.llm.audit_lane import acquire_audit_lane
-
-    audit_started = time.time()
-    lane_key = session_id or "anonymous-audit"
-    try:
-        with acquire_audit_lane(lane_key):
-            proc = await asyncio.create_subprocess_exec(
-                *argv,
-                stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.PIPE,
-                env=env,
-                cwd=str(REPO_ROOT),
-            )
-            try:
-                stdout_bytes, stderr_bytes = await asyncio.wait_for(
-                    proc.communicate(), timeout=timeout_sec
-                )
-            except TimeoutError:
-                # ``asyncio.wait_for`` raises the builtin ``TimeoutError``
-                # (``asyncio.TimeoutError`` is an alias of it since 3.11).
-                # Kill the hung child quickly — this is the whole point of the
-                # tight ``per_audit_timeout``: a stuck audit no longer holds the
-                # slot for the full (operator-overridable, up-to-5hr) budget.
-                proc.kill()
-                await proc.wait()
-                _emit_journal(
-                    session_id,
-                    gen_tag,
-                    "subprocess_timeout",
-                    level="error",
-                    payload={"timeout_sec": timeout_sec},
-                )
-                raise RuntimeError(
-                    f"audit subprocess timed out after {timeout_sec}s; killed child"
-                ) from None
-    except TimeoutError as exc:
-        # Audit lane itself timed out (another audit hogged the lane).
-        _emit_journal(
-            session_id,
-            gen_tag,
-            "audit_lane_timeout",
-            level="error",
-            payload={"reason": str(exc)},
-        )
-        raise RuntimeError(f"audit lane busy beyond timeout: {exc}") from exc
-    audit_seconds = time.time() - audit_started
-
-    stdout_text = stdout_bytes.decode("utf-8", errors="replace") if stdout_bytes else ""
-    stderr_text = stderr_bytes.decode("utf-8", errors="replace") if stderr_bytes else ""
-
-    return _finalize_audit_result(
-        stdout=stdout_text,
-        stderr=stderr_text,
-        returncode=proc.returncode if proc.returncode is not None else -1,
-        audit_seconds=audit_seconds,
-        started=started,
-        session_id=session_id,
-        gen_tag=gen_tag,
-    )
-
-
 def _finalize_audit_result(
     *,
     stdout: str,
@@ -1780,11 +1620,11 @@ def _finalize_audit_result(
     dict[str, str],
     list[dict[str, float]],
 ]:
-    """Shared audit post-processing for the sync + async launch paths.
+    """Audit post-processing, factored out of :func:`run_audit`.
 
-    Captures everything from the ``subprocess_finished`` event onward so
-    :func:`run_audit` (sync) and :func:`run_audit_async` (async) cannot drift:
-    the ``subprocess_finished`` journal event, the ``RUN_LOG`` write, the
+    Captures everything from the ``subprocess_finished`` event onward as a
+    focused, testable helper: the ``subprocess_finished`` journal event, the
+    ``RUN_LOG`` write, the
     non-zero-exit ``subprocess_failed`` event + ``RuntimeError`` raise, and the
     eval-log archive extraction (with stdout-JSON fallback). Returns the SAME
     7-tuple both callers expose:
