@@ -17,6 +17,7 @@ Pins:
 from __future__ import annotations
 
 import subprocess
+from collections.abc import Awaitable, Callable
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
@@ -264,9 +265,9 @@ def test_default_llm_call_normalizes_openai_codex_provider(
     monkeypatch.setattr("core.llm.adapters.resolve_for", _capture_resolve)
 
     async def _fake_failover(
-        models: list[str], do_call: object, **kwargs: object
+        models: list[str], do_call: Callable[[str], Awaitable[object]], **kwargs: object
     ) -> tuple[object, str]:
-        result_obj = await do_call(models[0])  # type: ignore[operator]
+        result_obj = await do_call(models[0])
         return (result_obj, models[0])
 
     monkeypatch.setattr("core.llm.router.call_with_failover", _fake_failover)
@@ -327,9 +328,9 @@ def test_default_llm_call_api_key_path_unchanged(monkeypatch: pytest.MonkeyPatch
     monkeypatch.setattr("core.llm.adapters.resolve_for", _capture_resolve)
 
     async def _fake_failover(
-        models: list[str], do_call: object, **kwargs: object
+        models: list[str], do_call: Callable[[str], Awaitable[object]], **kwargs: object
     ) -> tuple[object, str]:
-        result_obj = await do_call(models[0])  # type: ignore[operator]
+        result_obj = await do_call(models[0])
         return (result_obj, models[0])
 
     monkeypatch.setattr("core.llm.router.call_with_failover", _fake_failover)
@@ -525,9 +526,9 @@ def test_default_llm_call_explicit_api_key_routes_payg_not_inferred_subscription
     monkeypatch.setattr("core.llm.adapters.resolve_for", _capture_resolve)
 
     async def _fake_failover(
-        models: list[str], do_call: object, **kwargs: object
+        models: list[str], do_call: Callable[[str], Awaitable[object]], **kwargs: object
     ) -> tuple[object, str]:
-        result_obj = await do_call(models[0])  # type: ignore[operator]
+        result_obj = await do_call(models[0])
         return (result_obj, models[0])
 
     monkeypatch.setattr("core.llm.router.call_with_failover", _fake_failover)

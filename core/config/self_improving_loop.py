@@ -705,10 +705,12 @@ class SelfImprovingLoopConfig(BaseModel):
         sub-models are fully populated and their ``model_fields_set`` faithfully
         reflects what the operator pinned explicitly.
 
-        A sub-field that the operator set explicitly to a DIFFERENT value raises
-        (ambiguous — the operator should drop the per-role pin or align it). An
-        explicit pin equal to ``openai_source`` is allowed (redundant, harmless).
-        Anything left at its schema default is overwritten with ``openai_source``.
+        ``openai_source`` is authoritative: a sub-field the operator set explicitly
+        to a DIFFERENT value is overwritten and a ``UserWarning`` is emitted (visible,
+        but not a ``ValidationError`` that ``read_role_override`` would swallow — so
+        the resolved lane stays deterministic on that path). An explicit pin equal to
+        ``openai_source`` overwrites silently (no-op, no warning); anything left at its
+        schema default is overwritten with ``openai_source``.
         """
         if self.openai_source is None:
             return self
