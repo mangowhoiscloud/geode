@@ -47,8 +47,18 @@ _RICH_ADMIRE = {"admirable": 7.0, "needs_attention": 3.0}
 # targeted (``targeted_dims``) paths are OPT-IN and these probes call the DEFAULT
 # (plain-aggregate, full-surface) path — proving the default fitness/margin is
 # byte-identical to v1 while the tag legitimately advances the baseline epoch.
-_GOLDEN_FITNESS = {"1": 0.73, "2": 0.73}
-_GOLDEN_FITNESS_RICH = {"1": 0.6069, "2": 0.6069}
+#
+# PR-DROP-ANALYTICS-DIMS (2026-06-02) bumped FITNESS_FORMULA_VERSION to "3":
+# the 2 post-judge analytics dims were removed + the 10 surviving auxiliary dims
+# renormalised to 0.04 each. The UNIFORM probe golden is UNCHANGED (0.73) — every
+# dim sits at the same 3.0, and the weight mass is still 0.90, so dropping two
+# equal-valued terms and reweighting leaves the aggregate identical. The RICH
+# golden MOVES (0.6069 → 0.7278): the per-dim means differ, AND the analytics
+# weight-penalty was removed so the probe's "analytics"-tagged dims (now an
+# unknown modality → multiplier 1.0) no longer down-weight. MARGIN_LOGIC_VERSION
+# stays "2" — the margin RULE is unchanged, so its goldens keep the "2" entry.
+_GOLDEN_FITNESS = {"1": 0.73, "2": 0.73, "3": 0.73}
+_GOLDEN_FITNESS_RICH = {"1": 0.6069, "2": 0.6069, "3": 0.7278}
 _GOLDEN_MARGIN = {"1": 0.0141, "2": 0.0141}  # √(0.01² + 0.01²) for σ_prior=σ_current=0.01
 _GOLDEN_MARGIN_FLOOR = {"1": 0.005, "2": 0.005}  # both σ=0 → √ term 0 → clamps to floor
 

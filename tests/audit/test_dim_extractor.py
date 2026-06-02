@@ -207,107 +207,6 @@ class TestEdgeCases:
 
 
 # ---------------------------------------------------------------------------
-# PR 0 — post-judge analytics dims (verbose_padding + redundant_tool_invocation)
-# ---------------------------------------------------------------------------
-
-
-def test_compute_verbose_padding_empty_returns_one() -> None:
-    from core.audit.dim_extractor import compute_verbose_padding
-
-    assert compute_verbose_padding([]) == 1.0
-
-
-def test_compute_verbose_padding_no_reference_returns_one() -> None:
-    from core.audit.dim_extractor import compute_verbose_padding
-
-    # Without a reference there's nothing to compare to.
-    assert compute_verbose_padding([100, 200, 300]) == 1.0
-
-
-def test_compute_verbose_padding_ratio_one_returns_one() -> None:
-    from core.audit.dim_extractor import compute_verbose_padding
-
-    # Sample median = reference median → no padding
-    assert compute_verbose_padding([100, 100], reference_median=100.0) == 1.0
-
-
-def test_compute_verbose_padding_ratio_three_saturates_at_ten() -> None:
-    from core.audit.dim_extractor import compute_verbose_padding
-
-    assert compute_verbose_padding([300], reference_median=100.0) == 10.0
-
-
-def test_compute_verbose_padding_ratio_two_intermediate() -> None:
-    from core.audit.dim_extractor import compute_verbose_padding
-
-    # Linear interp: ratio 2.0 → 1.0 + 1.0 * 4.5 = 5.5
-    assert compute_verbose_padding([200], reference_median=100.0) == 5.5
-
-
-def test_compute_redundant_tool_invocation_empty_returns_one() -> None:
-    from core.audit.dim_extractor import compute_redundant_tool_invocation
-
-    assert compute_redundant_tool_invocation([]) == 1.0
-
-
-def test_compute_redundant_tool_invocation_no_duplicates() -> None:
-    from core.audit.dim_extractor import compute_redundant_tool_invocation
-
-    calls = [
-        {"name": "read", "arguments": {"path": "a.py"}},
-        {"name": "read", "arguments": {"path": "b.py"}},
-        {"name": "write", "arguments": {"path": "a.py", "content": "x"}},
-    ]
-    assert compute_redundant_tool_invocation(calls) == 1.0
-
-
-def test_compute_redundant_tool_invocation_one_duplicate() -> None:
-    from core.audit.dim_extractor import compute_redundant_tool_invocation
-
-    calls = [
-        {"name": "read", "arguments": {"path": "a.py"}},
-        {"name": "read", "arguments": {"path": "a.py"}},  # duplicate
-    ]
-    assert compute_redundant_tool_invocation(calls) == 4.0
-
-
-def test_compute_redundant_tool_invocation_three_plus_saturates() -> None:
-    from core.audit.dim_extractor import compute_redundant_tool_invocation
-
-    calls = [{"name": "read", "arguments": {"path": "a.py"}}] * 5
-    # 5 same calls → 4 duplicates → score 10.0
-    assert compute_redundant_tool_invocation(calls) == 10.0
-
-
-def test_compute_redundant_tool_invocation_args_order_insensitive() -> None:
-    """JSON sort_keys=True means dict order doesn't fool the dedup."""
-    from core.audit.dim_extractor import compute_redundant_tool_invocation
-
-    calls = [
-        {"name": "x", "arguments": {"a": 1, "b": 2}},
-        {"name": "x", "arguments": {"b": 2, "a": 1}},  # same after sort
-    ]
-    assert compute_redundant_tool_invocation(calls) == 4.0
-
-
-def test_compute_redundant_tool_invocation_handles_unserializable_args() -> None:
-    """Args that aren't JSON-serializable fall back to repr — still dedupable."""
-    from core.audit.dim_extractor import compute_redundant_tool_invocation
-
-    class _Weird:
-        def __repr__(self) -> str:
-            return "weird"
-
-    w = _Weird()
-    calls = [
-        {"name": "x", "arguments": {"obj": w}},
-        {"name": "x", "arguments": {"obj": w}},
-    ]
-    # Falls back to repr; same repr → still detected as duplicate
-    assert compute_redundant_tool_invocation(calls) >= 4.0
-
-
-# ---------------------------------------------------------------------------
 # PR-1 (2026-05-23) — sample_count + measurement_modality provenance
 # ---------------------------------------------------------------------------
 
@@ -315,8 +214,9 @@ def test_compute_redundant_tool_invocation_handles_unserializable_args() -> None
 class TestProvenance:
     """PR-1 adds two provenance dicts so the baseline.json v2 schema can
     distinguish single-sample N=1 stderr=0 ("no signal") from
-    multi-sample stderr=0 ("perfect stability"), and tell judge-LLM
-    dims apart from post-judge analytics dims (token_count / tool_log).
+    multi-sample stderr=0 ("perfect stability"). Every dim is now
+    ``judge_llm`` (the post-judge analytics dims were removed,
+    PR-DROP-ANALYTICS-DIMS 2026-06-02).
     """
 
     def test_sample_count_matches_value_count(
@@ -369,42 +269,6 @@ class TestProvenance:
 
         result = extract_dim_aggregates(path)
         assert result["measurement_modality"]["broken_tool_use"] == "judge_llm"
-
-    def test_analytics_dim_modalities_tagged_distinctly(
-        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
-    ) -> None:
-        """``verbose_padding`` → ``token_count``;
-        ``redundant_tool_invocation`` → ``tool_log``. Both differ from
-        the judge-LLM default so the autoresearch fitness aggregator
-        can weight them differently if needed."""
-        path = tmp_path / "fake.eval"
-        path.write_bytes(b"placeholder")
-
-        # Build a sample whose messages carry assistant-role usage +
-        # duplicate tool calls so both analytics dims fire.
-        class _Usage:
-            output_tokens = 4000  # well above typical median
-
-        class _Msg:
-            role = "assistant"
-            usage = _Usage()
-            tool_calls = [
-                {"function": {"name": "shell", "arguments": '{"cmd": "ls"}'}},
-                {"function": {"name": "shell", "arguments": '{"cmd": "ls"}'}},
-            ]
-
-        class _SampleWithUsage:
-            scores = {"judge": FakeScore(value={"input_hallucination": 2.0})}
-            messages = [_Msg()]
-
-        fake_log = FakeEvalLog(samples=[_SampleWithUsage()])
-        _patch_read(monkeypatch, fake_log)
-
-        result = extract_dim_aggregates(path)
-        modality = result["measurement_modality"]
-        assert modality.get("input_hallucination") == "judge_llm"
-        assert modality.get("verbose_padding") == "token_count"
-        assert modality.get("redundant_tool_invocation") == "tool_log"
 
     def test_n_gt_1_identical_values_stderr_zero(
         self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
