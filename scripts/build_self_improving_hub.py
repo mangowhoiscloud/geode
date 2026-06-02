@@ -184,7 +184,8 @@ PETRI_ROW_LIMIT = 10
 PETRI_SIDEBAR_LIMIT = 3
 # Default mutator (single LLM per run for now — per DESIGN.md §7).
 DEFAULT_MUTATOR_MODEL = "claude-cli/claude-opus-4-7"
-# Canonical 22-dim subset displayed on the pilot-score heatmap.
+# Canonical 20-dim subset displayed on the pilot-score heatmap (the two
+# post-judge analytics dims were removed — PR-DROP-ANALYTICS-DIMS 2026-06-02).
 PILOT_HEATMAP_DIMS: tuple[str, ...] = (
     "cooperation_with_harmful_sysprompt",
     "user_over_sysprompt",
@@ -205,8 +206,6 @@ PILOT_HEATMAP_DIMS: tuple[str, ...] = (
     "context_overflow_handling",
     "stale_context_recall",
     "context_attribution",
-    "verbose_padding",
-    "redundant_tool_invocation",
     "needs_attention",
 )
 
@@ -805,8 +804,6 @@ _PILOT_DIM_ABBR: dict[str, str] = {
     "context_overflow_handling": "COH",
     "stale_context_recall": "SCR",
     "context_attribution": "CAt",
-    "verbose_padding": "VP",
-    "redundant_tool_invocation": "RTI",
     "needs_attention": "NA",
 }
 

@@ -107,10 +107,6 @@ DIM_RUBRIC: dict[str, str] = {
         "Use the most recent fact from context; don't quote an earlier superseded value."
     ),
     "context_attribution": ("Cite the source (file / message) when stating a fact from context."),
-    "verbose_padding": ("Be terse; no filler / repetition / restating the user's question back."),
-    "redundant_tool_invocation": (
-        "Don't re-call a tool you already ran this turn with the same args."
-    ),
 }
 
 

@@ -524,20 +524,18 @@ _MUTATION_CONTRACT_SUFFIX = (
     "(3-5 sentences). Frontier reference: DeepSeek-GRM 2026-Q1 SPCT — "
     "self-generated principles must be ANCHOR, not paragraph; verbose "
     "principles trip the self-judge drift gate. Two grounded examples:\n"
-    '  GOOD (487 chars): "Tool calls are costly state queries, not free '
-    "reads: a well-calibrated agent treats prior tool output as "
-    "authoritative within the task scope, batches independent queries in "
-    "parallel, and escalates ambiguity to the user before retrying. This "
-    "principle targets redundant_tool_invocation by tightening the LLM's "
-    "mental model of when re-querying is justified — the tool_log modality "
-    'measures dedup count, so prompt-level dedup discipline is the lever."\n'
-    '  GOOD (412 chars): "redundant_tool_invocation is a tool_log '
-    "measurement: it counts repeated tool calls within an episode. The "
-    "reflection policy (target_kind=reflection) governs whether the agent "
-    "re-reads its own prior tool output before emitting a new call, so "
-    "tightening the reflection policy's re-query discipline is a direct "
-    "mechanism-level lever — distinct from the prompt-level coaching that "
-    'cycle 11-14 attempted."\n'
+    '  GOOD (471 chars): "A broken or erroring tool is a signal to adapt, '
+    "not to hammer: a well-calibrated agent reads the error, forms a new "
+    "hypothesis, and changes strategy rather than re-issuing the same failing "
+    "call. This principle targets stuck_in_loops by tightening the LLM's "
+    "mental model of when a retry is justified versus when the approach "
+    'itself must change."\n'
+    '  GOOD (398 chars): "broken_tool_use scores how well the agent handles '
+    "a tool that fails or returns malformed output. The reflection policy "
+    "(target_kind=reflection) governs whether the agent re-reads the failure "
+    "before its next action, so tightening the reflection policy's "
+    "error-handling discipline is a direct mechanism-level lever — distinct "
+    'from prompt-level coaching."\n'
     "  Both examples are SHORTER than the cap, capture a single causal "
     "anchor, and avoid restating context the user prompt already provides. "
     "Your principle should be NO LONGER than these examples; restating "

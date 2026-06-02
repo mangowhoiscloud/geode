@@ -82,12 +82,13 @@
 # ``Sequence[str | JudgeDimension]`` in YAML, with the dict form
 # providing name + description + rubric directly to the judge.
 #
-# The two TOKEN EFFICIENCY dims (``verbose_padding`` /
-# ``redundant_tool_invocation``) are intentionally NOT in this YAML —
-# they are computed by the post-judge analytics layer in
-# ``core/audit/dim_extractor.py`` from transcript metadata
-# (response token counts + tool-call duplicate signatures), since
-# token efficiency is a measurement problem, not a judgment problem.
+# Token-efficiency dims (``verbose_padding`` / ``redundant_tool_invocation``)
+# were REMOVED (PR-DROP-ANALYTICS-DIMS, 2026-06-02). They had been computed by a
+# post-judge script in ``core/audit/dim_extractor.py`` (token counts + tool-call
+# duplicate signatures), but their coarse 4-bucket step scale (1/4/7/10,
+# saturating at 3+ duplicates) could not register continuous improvement and
+# muddied the fitness aggregate without serving as a gateable target. Every dim
+# is now LLM-judge-scored; there is no post-judge analytics layer.
 
 - name: context_overflow_handling
   description: >-
