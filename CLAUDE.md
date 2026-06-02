@@ -170,7 +170,7 @@ git worktree add .claude/worktrees/<task-name> -b feature/<branch-name> develop
 echo "session=$(date -Iseconds) task_id=<task-name>" > .claude/worktrees/<task-name>/.owner
 ```
 
-Record on Progress Board then allocate Worktree. On completion: `git push` → `git worktree remove`
+Record on Progress Board then allocate Worktree. On completion (after the PR merges): tear down all three stale artifacts — remote branch, worktree, local branch — per [§6 Post-Merge Cleanup](#post-merge-cleanup-mandatory-after-every-merge).
 
 #### 1. GAP Audit
 
@@ -294,6 +294,50 @@ develop → main PRs may use abbreviated form (Summary + Verification only).
 | New tool | `definitions.json` + handlers + E2E |
 | Pipeline node | `graph.py` + E2E |
 | LLM adapter | `core/llm/router/` + `core/llm/providers/` + E2E |
+
+##### Post-Merge Cleanup (MANDATORY after every merge)
+
+A merged PR leaves three stale artifacts behind: the remote branch, the local
+worktree, and the local branch. Tear all three down — in this order, because
+the order is load-bearing:
+
+```bash
+# 1) Merge + delete the REMOTE branch in one option (never chain && git push --delete)
+gh pr merge <PR#> --merge --delete-branch        # cf. [[feedback_merge_then_delete]]
+
+# 2) Remove the WORKTREE first — `git branch -d` REFUSES to delete a branch a
+#    worktree still holds, so worktree-remove must precede branch-delete.
+git worktree remove .claude/worktrees/<task-name>   # add --force only if the tree has untracked build junk (.venv)
+
+# 3) Delete the LOCAL branch + prune the now-dangling remote-tracking ref
+git branch -d feature/<branch-name>              # -d (not -D): refuses if somehow unmerged
+git fetch origin --prune
+```
+
+> `gh pr merge --delete-branch` deletes the *remote* branch but leaves the
+> *local* branch + worktree — and it cannot delete the local branch while a
+> worktree still occupies it (you'll see `cannot delete branch '…' used by
+> worktree at …`). Always worktree-remove, then branch-delete.
+
+**Periodic bulk prune** (when merged branches have accumulated across sessions):
+delete every branch merged into `develop`, EXCLUDING `develop` / `main` /
+`release/*` and any branch a worktree still holds (those may belong to another
+live session — never delete another session's `.owner`-protected worktree or its
+branch). `git branch -d` / `--merged` make this safe — they refuse anything
+unmerged.
+
+```bash
+held=$(git worktree list --porcelain | awk '/^branch /{gsub("refs/heads/","",$2); print $2}')
+# local: merged into develop, not worktree-held, not develop/main
+git branch --merged develop --format='%(refname:short)' | grep -vE '^(develop|main)$' \
+  | while read b; do echo "$held" | grep -qxF "$b" || git branch -d "$b"; done
+# remote: same filter (+ skip release/*), batch the push --delete
+git branch -r --merged origin/develop --format='%(refname:short)' | sed 's#^origin/##' \
+  | grep -vE '^(develop|main|HEAD)$' | grep -vE '^release/' \
+  | while read b; do echo "$held" | grep -qxF "$b" || echo "$b"; done \
+  | xargs -n 40 git push origin --delete
+git fetch origin --prune
+```
 
 #### 7. Rebuild & Restart
 
