@@ -985,6 +985,26 @@ branch). Future PR-3/4/5 extend with ``normalized`` / ``fitness`` /
 # ---------------------------------------------------------------------------
 
 
+#: Env var (set by the async-first campaign harness, S6) that redirects this
+#: process's RunTranscript to an ISOLATED per-worker jsonl instead of the shared
+#: ``~/.geode/autoresearch/handoff/<session_id>/transcript.jsonl``. When the
+#: campaign fans K gen-0 replicates + the NEVER/RANDOM control cycles out
+#: concurrently (each its own ``train.py`` subprocess), every worker would
+#: otherwise append to the SAME home-dir jsonl keyed off ``session_id`` (POSIX
+#: append is not atomic above ``PIPE_BUF`` → interleaved/corrupt rows). Pointing
+#: each worker at its own path makes the concurrent writes race-free; the
+#: campaign MERGES the per-worker files afterward (``merge_worker_transcripts``).
+#: Absent for the sync standalone ``geode audit`` path + the sequential GATE arm
+#: → behaviour is unchanged (single writer → the home-dir transcript).
+RUN_TRANSCRIPT_PATH_ENV = "GEODE_RUN_TRANSCRIPT_PATH"
+
+#: Env var (S6) carrying THIS worker's id (e.g. ``gen0-w2`` / ``random-w3``).
+#: When set, :func:`_emit_journal` stamps ``worker_id`` into every event payload
+#: so the merged campaign replay is attributable per worker. Absent → no
+#: ``worker_id`` key (the sequential / standalone path needs no attribution).
+RUN_WORKER_ID_ENV = "GEODE_RUN_WORKER_ID"
+
+
 def _emit_journal(
     session_id: str,
     gen_tag: str,
@@ -1002,6 +1022,15 @@ def _emit_journal(
     when ``session_id`` / ``gen_tag`` are empty (run_audit called from
     tests without them) or when ``core.observability`` is unavailable
     in the import context.
+
+    S6 (async-first transcript isolation, 2026-06-03) — when this process is a
+    concurrent campaign worker, ``GEODE_RUN_TRANSCRIPT_PATH`` redirects the
+    RunTranscript to an ISOLATED per-worker jsonl (so N concurrent workers never
+    race-append the shared home-dir transcript) and ``GEODE_RUN_WORKER_ID``
+    stamps ``worker_id`` into every event payload (so the campaign's post-gather
+    merge is attributable). Both env vars are absent for the sync standalone
+    ``geode audit`` path + the sequential GATE arm — the default home-dir path is
+    used and no ``worker_id`` is added, so that behaviour is unchanged.
     """
     if not session_id or not gen_tag:
         return
@@ -1009,11 +1038,26 @@ def _emit_journal(
         from core.self_improving.loop.run_transcript import RunTranscript
     except ImportError:
         return
+    worker_id = os.environ.get(RUN_WORKER_ID_ENV, "").strip()
+    emit_payload = dict(payload or {})
+    if worker_id:
+        emit_payload["worker_id"] = worker_id
+    transcript_path: Path | None = None
+    raw_path = os.environ.get(RUN_TRANSCRIPT_PATH_ENV, "").strip()
+    if raw_path:
+        try:
+            transcript_path = Path(raw_path)
+        except (TypeError, ValueError):
+            # Graceful boundary: a malformed env value must NOT crash the audit —
+            # fall back to the default home-dir path (the worker simply loses its
+            # isolation rather than failing the whole concurrent fan-out).
+            transcript_path = None
     RunTranscript(
         session_id=session_id,
         gen_tag=gen_tag,
         component="autoresearch",
-    ).append(event, level=level, payload=payload or {})
+        path=transcript_path,
+    ).append(event, level=level, payload=emit_payload)
 
 
 def _hyperparam_int(overrides: dict[str, str], key: str, fallback: int) -> int:
@@ -1255,6 +1299,138 @@ def _dump_wrapper_override() -> Path:
     return override
 
 
+def _resolve_audit_timeout_sec() -> int:
+    """Default per-audit subprocess timeout (seconds).
+
+    ``budget_minutes * 60`` plus a 120s grace — the in-process timeout
+    :func:`run_audit` passes to ``subprocess.run``. In the async campaign
+    the hang bound is enforced one level UP: each worker is a separate
+    ``train.py`` subprocess that the orchestrator kills via
+    ``asyncio.wait_for(..., timeout=per_audit_timeout)`` (a TIGHT bound), so a
+    hung audit is reaped within seconds of overrun instead of holding for this
+    full operator-overridable budget.
+
+    ``budget_minutes`` is operator-supplied config; coerce it through
+    ``int`` and fall back to the module ``BUDGET_MINUTES`` default if it is
+    non-numeric (graceful boundary at the schema-typed cast).
+    """
+    raw_budget = _get_autoresearch_config().budget_minutes
+    try:
+        budget_minutes = int(raw_budget)
+    except (TypeError, ValueError):
+        budget_minutes = int(BUDGET_MINUTES)
+    return budget_minutes * 60 + 120
+
+
+def _build_audit_env(override_path: Path) -> dict[str, str]:
+    """Build the audit subprocess environment (wrapper override + 5-axis SoT).
+
+    Factored out of :func:`run_audit` as a focused, testable helper so the
+    strict-mode SoT propagation lives in ONE place. Starts from
+    ``os.environ.copy()`` and layers the
+    ``GEODE_WRAPPER_OVERRIDE`` path plus every policy-SoT
+    ``*_OVERRIDE`` / ``*_STRICT`` pair that has a file on disk.
+    """
+    env = os.environ.copy()
+    env["GEODE_WRAPPER_OVERRIDE"] = str(override_path)
+    # ADR-012 S0a/S0b (2026-05-21) — audit subprocess 가 mutation 적용된
+    # 5축 SoT 를 strict mode 로 읽도록 env 강제. SoT 파일이 존재할 때만
+    # env 를 set 해서 subprocess 가 strict mode 로 동작 (파일 부재 시
+    # RuntimeError); SoT 파일이 없으면 env 미설정으로 subprocess 가
+    # graceful no-op 경로 (현재 default behaviour 보존). 즉 strict-fail
+    # 은 "SoT 가 디스크에 있는데도 subprocess 가 못 읽는 경우" 만 발화 —
+    # mutation 이 진행 중인 audit 의 quota 절약 목적.
+    from core.paths import (
+        GLOBAL_AGENT_CONTRACTS_PATH,
+        GLOBAL_CACHE_POLICY_PATH,
+        GLOBAL_DECOMPOSITION_POLICY_PATH,
+        GLOBAL_FEW_SHOT_POOL_PATH,
+        GLOBAL_HEURISTICS_PATH,
+        GLOBAL_HYPERPARAM_POLICY_PATH,
+        GLOBAL_IN_CONTEXT_SLOTS_PATH,
+        GLOBAL_PROVIDER_ROUTING_PATH,
+        GLOBAL_REFLECTION_POLICY_PATH,
+        GLOBAL_SKILL_CATALOG_PATH,
+        GLOBAL_STYLE_GUIDE_PATH,
+        GLOBAL_TOOL_DESCRIPTIONS_PATH,
+        GLOBAL_TOOL_POLICY_PATH,
+    )
+
+    # PR-BACKFILL-SOT (2026-05-21) — audit subprocess sets both _OVERRIDE
+    # (path) and _STRICT=1 (fail-fast flag). With the 3-layer SoT chain
+    # (env → operator-local → in-repo), env path defaults to graceful for
+    # operator daily use; audit explicitly opts into strict for mutation
+    # cycle fidelity.
+    if GLOBAL_TOOL_POLICY_PATH.is_file():
+        env["GEODE_TOOL_POLICY_OVERRIDE"] = str(GLOBAL_TOOL_POLICY_PATH)
+        env["GEODE_TOOL_POLICY_STRICT"] = "1"
+    if GLOBAL_REFLECTION_POLICY_PATH.is_file():
+        env["GEODE_REFLECTION_POLICY_OVERRIDE"] = str(GLOBAL_REFLECTION_POLICY_PATH)
+        env["GEODE_REFLECTION_POLICY_STRICT"] = "1"
+    if GLOBAL_DECOMPOSITION_POLICY_PATH.is_file():
+        env["GEODE_DECOMPOSITION_POLICY_OVERRIDE"] = str(GLOBAL_DECOMPOSITION_POLICY_PATH)
+        env["GEODE_DECOMPOSITION_POLICY_STRICT"] = "1"
+    # PR-TOOL-DESCRIPTIONS-MUTATE (2026-05-27, Codex MCP review fix-up)
+    # — three resolution rules together close the dual-SoT drift:
+    # (1) honour any env override the caller already set (preserves
+    #     ``_run_autoresearch_subprocess`` or an operator already set),
+    # (2) when the operator-local file exists, use it (matches the
+    #     runtime reader's 3-layer resolution at
+    #     ``core/agent/tool_descriptions_policy.py``),
+    # (3) fall back to in-repo when neither is set.
+    # Matches ``core.self_improving.loop.policies:policy_path`` so
+    # mutator R/W + audit R + sibling audit all converge on the same
+    # file. Codex MCP review of PR-TOOL-DESCRIPTIONS-MUTATE caught
+    # rule (1) — without preserving the caller's env, group sampling's
+    # temp SoT would be silently replaced.
+    from core.paths import OPERATOR_LOCAL_TOOL_DESCRIPTIONS_PATH
+
+    if "GEODE_TOOL_DESCRIPTIONS_OVERRIDE" not in env:
+        if OPERATOR_LOCAL_TOOL_DESCRIPTIONS_PATH.is_file():
+            env["GEODE_TOOL_DESCRIPTIONS_OVERRIDE"] = str(OPERATOR_LOCAL_TOOL_DESCRIPTIONS_PATH)
+            env["GEODE_TOOL_DESCRIPTIONS_STRICT"] = "1"
+        elif GLOBAL_TOOL_DESCRIPTIONS_PATH.is_file():
+            env["GEODE_TOOL_DESCRIPTIONS_OVERRIDE"] = str(GLOBAL_TOOL_DESCRIPTIONS_PATH)
+            env["GEODE_TOOL_DESCRIPTIONS_STRICT"] = "1"
+    if GLOBAL_SKILL_CATALOG_PATH.is_file():
+        env["GEODE_SKILL_CATALOG_OVERRIDE"] = str(GLOBAL_SKILL_CATALOG_PATH)
+        env["GEODE_SKILL_CATALOG_STRICT"] = "1"
+    if GLOBAL_STYLE_GUIDE_PATH.is_file():
+        env["GEODE_STYLE_GUIDE_OVERRIDE"] = str(GLOBAL_STYLE_GUIDE_PATH)
+        env["GEODE_STYLE_GUIDE_STRICT"] = "1"
+    if GLOBAL_PROVIDER_ROUTING_PATH.is_file():
+        env["GEODE_PROVIDER_ROUTING_OVERRIDE"] = str(GLOBAL_PROVIDER_ROUTING_PATH)
+        env["GEODE_PROVIDER_ROUTING_STRICT"] = "1"
+    if GLOBAL_CACHE_POLICY_PATH.is_file():
+        env["GEODE_CACHE_POLICY_OVERRIDE"] = str(GLOBAL_CACHE_POLICY_PATH)
+        env["GEODE_CACHE_POLICY_STRICT"] = "1"
+    if GLOBAL_HEURISTICS_PATH.is_file():
+        env["GEODE_HEURISTICS_OVERRIDE"] = str(GLOBAL_HEURISTICS_PATH)
+        env["GEODE_HEURISTICS_STRICT"] = "1"
+    if GLOBAL_IN_CONTEXT_SLOTS_PATH.is_file():
+        env["GEODE_IN_CONTEXT_SLOTS_OVERRIDE"] = str(GLOBAL_IN_CONTEXT_SLOTS_PATH)
+        env["GEODE_IN_CONTEXT_SLOTS_STRICT"] = "1"
+    if GLOBAL_AGENT_CONTRACTS_PATH.is_file():
+        env["GEODE_AGENT_CONTRACTS_OVERRIDE"] = str(GLOBAL_AGENT_CONTRACTS_PATH)
+        env["GEODE_AGENT_CONTRACTS_STRICT"] = "1"
+    if GLOBAL_FEW_SHOT_POOL_PATH.is_file():
+        env["GEODE_FEW_SHOT_POOL_OVERRIDE"] = str(GLOBAL_FEW_SHOT_POOL_PATH)
+        env["GEODE_FEW_SHOT_POOL_STRICT"] = "1"
+    # PR-HYPERPARAM-FOUNDATION (2026-05-28) — hyperparam SoT path
+    # propagation. PR-2 lands the env literal so the sibling-SoT env-map
+    # invariant test passes against the 8-kind TARGET_KINDS. The actual
+    # consumption — ``plugins/petri_audit/runner.py:build_command``
+    # reading the SoT and translating each key to an inspect-petri
+    # ``-T`` flag — lands in PR-3 (PR-HYPERPARAM-WIRE). Until then the
+    # env var is set but no reader inside the audit subprocess loads it;
+    # this is a deliberate 2-PR seam (foundation → wire-through) to
+    # keep each PR's scope small.
+    if GLOBAL_HYPERPARAM_POLICY_PATH.is_file():
+        env["GEODE_HYPERPARAM_OVERRIDE"] = str(GLOBAL_HYPERPARAM_POLICY_PATH)
+        env["GEODE_HYPERPARAM_STRICT"] = "1"
+    return env
+
+
 def run_audit(
     dry_run: bool,
     *,
@@ -1362,104 +1538,8 @@ def run_audit(
         pass
 
     argv = _build_audit_command()
-    env = os.environ.copy()
-    env["GEODE_WRAPPER_OVERRIDE"] = str(override_path)
-    # ADR-012 S0a/S0b (2026-05-21) — audit subprocess 가 mutation 적용된
-    # 5축 SoT 를 strict mode 로 읽도록 env 강제. SoT 파일이 존재할 때만
-    # env 를 set 해서 subprocess 가 strict mode 로 동작 (파일 부재 시
-    # RuntimeError); SoT 파일이 없으면 env 미설정으로 subprocess 가
-    # graceful no-op 경로 (현재 default behaviour 보존). 즉 strict-fail
-    # 은 "SoT 가 디스크에 있는데도 subprocess 가 못 읽는 경우" 만 발화 —
-    # mutation 이 진행 중인 audit 의 quota 절약 목적.
-    from core.paths import (
-        GLOBAL_AGENT_CONTRACTS_PATH,
-        GLOBAL_CACHE_POLICY_PATH,
-        GLOBAL_DECOMPOSITION_POLICY_PATH,
-        GLOBAL_FEW_SHOT_POOL_PATH,
-        GLOBAL_HEURISTICS_PATH,
-        GLOBAL_HYPERPARAM_POLICY_PATH,
-        GLOBAL_IN_CONTEXT_SLOTS_PATH,
-        GLOBAL_PROVIDER_ROUTING_PATH,
-        GLOBAL_REFLECTION_POLICY_PATH,
-        GLOBAL_SKILL_CATALOG_PATH,
-        GLOBAL_STYLE_GUIDE_PATH,
-        GLOBAL_TOOL_DESCRIPTIONS_PATH,
-        GLOBAL_TOOL_POLICY_PATH,
-    )
-
-    # PR-BACKFILL-SOT (2026-05-21) — audit subprocess sets both _OVERRIDE
-    # (path) and _STRICT=1 (fail-fast flag). With the 3-layer SoT chain
-    # (env → operator-local → in-repo), env path defaults to graceful for
-    # operator daily use; audit explicitly opts into strict for mutation
-    # cycle fidelity.
-    if GLOBAL_TOOL_POLICY_PATH.is_file():
-        env["GEODE_TOOL_POLICY_OVERRIDE"] = str(GLOBAL_TOOL_POLICY_PATH)
-        env["GEODE_TOOL_POLICY_STRICT"] = "1"
-    if GLOBAL_REFLECTION_POLICY_PATH.is_file():
-        env["GEODE_REFLECTION_POLICY_OVERRIDE"] = str(GLOBAL_REFLECTION_POLICY_PATH)
-        env["GEODE_REFLECTION_POLICY_STRICT"] = "1"
-    if GLOBAL_DECOMPOSITION_POLICY_PATH.is_file():
-        env["GEODE_DECOMPOSITION_POLICY_OVERRIDE"] = str(GLOBAL_DECOMPOSITION_POLICY_PATH)
-        env["GEODE_DECOMPOSITION_POLICY_STRICT"] = "1"
-    # PR-TOOL-DESCRIPTIONS-MUTATE (2026-05-27, Codex MCP review fix-up)
-    # — three resolution rules together close the dual-SoT drift:
-    # (1) honour any env override the caller already set (preserves
-    #     ``_run_autoresearch_subprocess`` or an operator already set),
-    # (2) when the operator-local file exists, use it (matches the
-    #     runtime reader's 3-layer resolution at
-    #     ``core/agent/tool_descriptions_policy.py``),
-    # (3) fall back to in-repo when neither is set.
-    # Matches ``core.self_improving.loop.policies:policy_path`` so
-    # mutator R/W + audit R + sibling audit all converge on the same
-    # file. Codex MCP review of PR-TOOL-DESCRIPTIONS-MUTATE caught
-    # rule (1) — without preserving the caller's env, group sampling's
-    # temp SoT would be silently replaced.
-    from core.paths import OPERATOR_LOCAL_TOOL_DESCRIPTIONS_PATH
-
-    if "GEODE_TOOL_DESCRIPTIONS_OVERRIDE" not in env:
-        if OPERATOR_LOCAL_TOOL_DESCRIPTIONS_PATH.is_file():
-            env["GEODE_TOOL_DESCRIPTIONS_OVERRIDE"] = str(OPERATOR_LOCAL_TOOL_DESCRIPTIONS_PATH)
-            env["GEODE_TOOL_DESCRIPTIONS_STRICT"] = "1"
-        elif GLOBAL_TOOL_DESCRIPTIONS_PATH.is_file():
-            env["GEODE_TOOL_DESCRIPTIONS_OVERRIDE"] = str(GLOBAL_TOOL_DESCRIPTIONS_PATH)
-            env["GEODE_TOOL_DESCRIPTIONS_STRICT"] = "1"
-    if GLOBAL_SKILL_CATALOG_PATH.is_file():
-        env["GEODE_SKILL_CATALOG_OVERRIDE"] = str(GLOBAL_SKILL_CATALOG_PATH)
-        env["GEODE_SKILL_CATALOG_STRICT"] = "1"
-    if GLOBAL_STYLE_GUIDE_PATH.is_file():
-        env["GEODE_STYLE_GUIDE_OVERRIDE"] = str(GLOBAL_STYLE_GUIDE_PATH)
-        env["GEODE_STYLE_GUIDE_STRICT"] = "1"
-    if GLOBAL_PROVIDER_ROUTING_PATH.is_file():
-        env["GEODE_PROVIDER_ROUTING_OVERRIDE"] = str(GLOBAL_PROVIDER_ROUTING_PATH)
-        env["GEODE_PROVIDER_ROUTING_STRICT"] = "1"
-    if GLOBAL_CACHE_POLICY_PATH.is_file():
-        env["GEODE_CACHE_POLICY_OVERRIDE"] = str(GLOBAL_CACHE_POLICY_PATH)
-        env["GEODE_CACHE_POLICY_STRICT"] = "1"
-    if GLOBAL_HEURISTICS_PATH.is_file():
-        env["GEODE_HEURISTICS_OVERRIDE"] = str(GLOBAL_HEURISTICS_PATH)
-        env["GEODE_HEURISTICS_STRICT"] = "1"
-    if GLOBAL_IN_CONTEXT_SLOTS_PATH.is_file():
-        env["GEODE_IN_CONTEXT_SLOTS_OVERRIDE"] = str(GLOBAL_IN_CONTEXT_SLOTS_PATH)
-        env["GEODE_IN_CONTEXT_SLOTS_STRICT"] = "1"
-    if GLOBAL_AGENT_CONTRACTS_PATH.is_file():
-        env["GEODE_AGENT_CONTRACTS_OVERRIDE"] = str(GLOBAL_AGENT_CONTRACTS_PATH)
-        env["GEODE_AGENT_CONTRACTS_STRICT"] = "1"
-    if GLOBAL_FEW_SHOT_POOL_PATH.is_file():
-        env["GEODE_FEW_SHOT_POOL_OVERRIDE"] = str(GLOBAL_FEW_SHOT_POOL_PATH)
-        env["GEODE_FEW_SHOT_POOL_STRICT"] = "1"
-    # PR-HYPERPARAM-FOUNDATION (2026-05-28) — hyperparam SoT path
-    # propagation. PR-2 lands the env literal so the sibling-SoT env-map
-    # invariant test passes against the 8-kind TARGET_KINDS. The actual
-    # consumption — ``plugins/petri_audit/runner.py:build_command``
-    # reading the SoT and translating each key to an inspect-petri
-    # ``-T`` flag — lands in PR-3 (PR-HYPERPARAM-WIRE). Until then the
-    # env var is set but no reader inside the audit subprocess loads it;
-    # this is a deliberate 2-PR seam (foundation → wire-through) to
-    # keep each PR's scope small.
-    if GLOBAL_HYPERPARAM_POLICY_PATH.is_file():
-        env["GEODE_HYPERPARAM_OVERRIDE"] = str(GLOBAL_HYPERPARAM_POLICY_PATH)
-        env["GEODE_HYPERPARAM_STRICT"] = "1"
-    timeout_sec = _get_autoresearch_config().budget_minutes * 60 + 120
+    env = _build_audit_env(override_path)
+    timeout_sec = _resolve_audit_timeout_sec()
 
     _emit_journal(
         session_id,
@@ -1511,20 +1591,60 @@ def run_audit(
         raise RuntimeError(f"audit lane busy beyond timeout: {exc}") from exc
     audit_seconds = time.time() - audit_started
 
+    return _finalize_audit_result(
+        stdout=proc.stdout,
+        stderr=proc.stderr,
+        returncode=proc.returncode,
+        audit_seconds=audit_seconds,
+        started=started,
+        session_id=session_id,
+        gen_tag=gen_tag,
+    )
+
+
+def _finalize_audit_result(
+    *,
+    stdout: str,
+    stderr: str,
+    returncode: int,
+    audit_seconds: float,
+    started: float,
+    session_id: str,
+    gen_tag: str,
+) -> tuple[
+    dict[str, float],
+    dict[str, float],
+    float,
+    float,
+    dict[str, int],
+    dict[str, str],
+    list[dict[str, float]],
+]:
+    """Audit post-processing, factored out of :func:`run_audit`.
+
+    Captures everything from the ``subprocess_finished`` event onward as a
+    focused, testable helper: the ``subprocess_finished`` journal event, the
+    ``RUN_LOG`` write, the
+    non-zero-exit ``subprocess_failed`` event + ``RuntimeError`` raise, and the
+    eval-log archive extraction (with stdout-JSON fallback). Returns the SAME
+    7-tuple both callers expose:
+    ``(dim_means, dim_stderr, audit_seconds, total_seconds, sample_count,
+    measurement_modality, per_sample)``.
+    """
     _emit_journal(
         session_id,
         gen_tag,
         "subprocess_finished",
         payload={
-            "exit_code": proc.returncode,
+            "exit_code": returncode,
             "audit_seconds": round(audit_seconds, 3),
         },
     )
 
-    log_text = proc.stdout + "\n--- stderr ---\n" + proc.stderr
+    log_text = stdout + "\n--- stderr ---\n" + stderr
     RUN_LOG.write_text(log_text, encoding="utf-8")
 
-    if proc.returncode != 0:
+    if returncode != 0:
         # PR-MINIMAL-4 (2026-05-21) — non-zero subprocess exit emits an
         # explicit ``subprocess_failed`` event before raising. The
         # earlier ``subprocess_finished`` event carries ``exit_code``
@@ -1538,12 +1658,12 @@ def run_audit(
             "subprocess_failed",
             level="error",
             payload={
-                "exit_code": proc.returncode,
+                "exit_code": returncode,
                 "run_log": str(RUN_LOG),
-                "stderr_tail": proc.stderr.splitlines()[-5:] if proc.stderr else [],
+                "stderr_tail": stderr.splitlines()[-5:] if stderr else [],
             },
         )
-        raise RuntimeError(f"audit subprocess exit={proc.returncode}; see {RUN_LOG}")
+        raise RuntimeError(f"audit subprocess exit={returncode}; see {RUN_LOG}")
 
     # PR-TRAIN-EVAL-ARCHIVE-FALLBACK (2026-05-27) — primary path: read
     # ``dim_means`` / ``dim_stderr`` / provenance directly from the
@@ -1561,13 +1681,20 @@ def run_audit(
     # the extractor itself fails (defense in depth — preserves the
     # legacy code path for environments where the archive symlink
     # isn't wired, e.g. some test fixtures).
-    dim_means = {}
-    dim_stderr = {}
-    sample_count = {}
-    measurement_modality = {}
+    dim_means: dict[str, float] = {}
+    dim_stderr: dict[str, float] = {}
+    sample_count: dict[str, int] = {}
+    measurement_modality: dict[str, str] = {}
     per_sample: list[dict[str, float]] = []
 
-    archive_path_str = _resolve_eval_archive_path()
+    # Per-worker isolation (Codex MCP HIGH): prefer THIS audit's OWN eval, parsed
+    # from its stdout ``Log: <path>.eval`` line, over the global ``latest.eval``
+    # symlink. Concurrent async-campaign workers share that symlink (it is
+    # GEODE_HOME-keyed, NOT the per-worker ``GEODE_STATE_ROOT``), so a sibling audit
+    # finishing between this audit and this read would point it at the WRONG eval.
+    # The ``Log:`` filename is unique per audit, so it is unambiguously this one's;
+    # the global pointer is the fallback only when no ``Log:`` line was emitted.
+    archive_path_str = _eval_path_from_stdout(stdout, stderr) or _resolve_eval_archive_path()
     archive_extracted = False
     if archive_path_str:
         try:
@@ -1596,7 +1723,7 @@ def run_audit(
 
     if not archive_extracted:
         summary_line = next(
-            (line for line in reversed(proc.stdout.splitlines()) if line.strip().startswith("{")),
+            (line for line in reversed(stdout.splitlines()) if line.strip().startswith("{")),
             None,
         )
         if summary_line is None:
@@ -2751,6 +2878,36 @@ def _resolve_eval_archive_path() -> str | None:
             return str(LATEST_EVAL_SYMLINK)
     except OSError:
         return None
+    return None
+
+
+def _eval_path_from_stdout(stdout: str, stderr: str) -> str | None:
+    """This audit's OWN ``.eval`` path, parsed from its ``Log: <path>`` line.
+
+    inspect_ai prints exactly one ``Log: logs/<ISO>_audit_<id>.eval`` line per run
+    (on stdout, sometimes stderr). That filename is unique per audit, so it is
+    race-free across concurrent async-campaign workers — unlike the shared global
+    ``latest.eval`` symlink :func:`_resolve_eval_archive_path` reads. A relative
+    path is resolved against ``REPO_ROOT`` (the audit subprocess's ``cwd``). Returns
+    ``None`` when no ``Log:`` line is present (cancel / error before the writer
+    flushed) or the resolved file does not exist, so the caller falls back to the
+    legacy global pointer.
+
+    The regex is inlined (not imported from ``plugins.petri_audit.runner``) to keep
+    ``core`` free of a ``core → plugins`` import-contract violation.
+    """
+    pattern = re.compile(r"Log:\s+(\S+\.eval)\b")
+    for stream in (stdout, stderr):
+        if not stream:
+            continue
+        match = pattern.search(stream)
+        if not match:
+            continue
+        candidate = Path(match.group(1))
+        if not candidate.is_absolute():
+            candidate = REPO_ROOT / candidate
+        if candidate.exists():
+            return str(candidate)
     return None
 
 

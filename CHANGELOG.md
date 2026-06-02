@@ -45,6 +45,34 @@ functional change.
 
 ---
 
+## [0.99.123] - 2026-06-03
+
+### Added
+- **PR-ASYNC-FIRST (2026-06-03) — async-first self-improving campaign harness.** A real
+  campaign now fans the PATH-INDEPENDENT measures (the gen-0 K replicates + the NEVER and
+  RANDOM control arms) out CONCURRENTLY as separate, fully-isolated `train.py` subprocesses
+  (`run_gen0_baseline_async` / `run_control_arm_async` via `asyncio.gather`), while the
+  PATH-DEPENDENT GATE arm stays on the sequential `run_arm` (the champion chain cannot be
+  reordered). Each worker is its OWN GEODE process (own audit lane, own `GEODE_STATE_ROOT`
+  seeded from the frozen baseline snapshot, own transcript) — cross-worker concurrency is
+  purely orchestrator-level with ZERO dependency on any in-process GEODE singleton. The hang
+  bound moves from the up-to-5 hr in-process budget to a tight per-audit `asyncio.wait_for`
+  kill (`DEFAULT_PER_AUDIT_TIMEOUT_S` 2700s, `GEODE_PER_AUDIT_TIMEOUT_S` override), and the
+  kill reaps the whole process GROUP (`start_new_session` + `killpg`, guarded to never signal
+  the driver's own group) so a hung `inspect eval` grandchild can't be orphaned and keep
+  burning quota. Crash-resumable via a per-run `RunCheckpoint` (idempotent K-mean write); S6
+  merges the per-worker isolated transcripts into one ordered campaign replay. `async_first`
+  defaults True for a real campaign; dry-run / injected-runner callers keep the legacy
+  in-process sync path.
+
+### Fixed
+- **Per-worker eval-archive isolation.** `_finalize_audit_result` resolves THIS audit's `.eval`
+  from its own stdout `Log:` line before the global `~/.geode/petri/logs/latest.eval` symlink
+  (GEODE_HOME-keyed, shared across concurrent workers → a sibling audit could otherwise make a
+  worker read the WRONG eval). Worker bodies are wrapped in one broad guard so a single failure
+  (mkdir/seed/spawn/parse/attribution) never crashes the gather; a zero-exit worker with no
+  measurement is dropped (`ok=False`) instead of checkpointed as complete.
+
 ## [0.99.122] - 2026-06-03
 
 ### Added

@@ -74,14 +74,18 @@ the live campaign with real credentials.
 from __future__ import annotations
 
 import argparse
+import asyncio
+import contextlib
 import json
 import logging
 import math
 import os
 import shutil
+import signal
 import statistics
 import subprocess
 import sys
+import tempfile
 from dataclasses import dataclass, field
 from datetime import UTC
 from pathlib import Path
@@ -116,6 +120,13 @@ PROGRESS_LOG = STATE_DIR / "campaign-progress.log"
 #: so a matched-reset snapshot of a real campaign never enters git history).
 GEN0_SNAPSHOT_DIR = REPO_ROOT / "state" / "campaign" / "gen-0-snapshot"
 
+#: Per-run resume-checkpoint directory (same gitignored ``state/campaign/`` tree
+#: as the snapshot — a resume marker is a runtime artifact, not git history). A
+#: campaign run writes ``<this>/<run_id>.json`` recording which path-independent
+#: workers COMPLETED, so a re-run after a crash skips the finished ones and only
+#: re-runs the missing replicates / cycles, then aggregates the union (S4).
+CAMPAIGN_RUNS_DIR = REPO_ROOT / "state" / "campaign" / "runs"
+
 #: Seed-pool launch wiring (campaign-procedure.md §3, cycle-input-pool.md).
 CYCLE_INPUT_POOL = REPO_ROOT / "state" / "seed-pools" / "cycle-input"
 HELD_OUT_BENCH = REPO_ROOT / "state" / "seed-pools" / "held-out"
@@ -132,6 +143,16 @@ DEFAULT_MAX_PROPOSE_ATTEMPTS = 8
 """propose-guard re-proposal cap (M)."""
 DEFAULT_ARMS = ("never", "random", "gate")
 """Control arms, gate LAST (campaign-procedure.md §6)."""
+DEFAULT_PER_AUDIT_TIMEOUT_S = 2700.0
+"""Tight per-audit wall-clock bound (45 min) for the async-first subprocess workers.
+
+This is the hang fix: the in-process ``train.py`` budget is ``budget_minutes*60 + 120``
+and operators set ``budget_minutes`` as high as 300 (= a ~5 hr ceiling), so a hung
+audit used to hold its slot for hours. The orchestrator kills each worker subprocess
+(and its ``inspect eval`` grandchild) at this bound instead — generous for a real
+Petri audit (~20-30 min at ``seed_limit=10``) yet ~6.7× tighter than the 5 hr ceiling.
+Override with ``GEODE_PER_AUDIT_TIMEOUT_S`` (graceful: non-numeric → this default)."""
+PER_AUDIT_TIMEOUT_ENV = "GEODE_PER_AUDIT_TIMEOUT_S"
 DEFAULT_RANDOM_SEED_BASE = 424200
 """Deterministic ``GEODE_PROMOTE_POLICY_SEED`` base for the random arm; the
 per-arm seed is ``DEFAULT_RANDOM_SEED_BASE + arm_index``."""
@@ -878,6 +899,900 @@ def _spawn_train_subprocess(
 
 
 # ---------------------------------------------------------------------------
+# Async-first parallel orchestration with per-worker state isolation
+# (S3 parallel + S5 stateless — PR-ASYNC-FIRST, 2026-06-03)
+#
+# The gen-0 K replicates and the NEVER + RANDOM control arms are
+# PATH-INDEPENDENT: every replicate / cycle measures the SAME frozen
+# baseline before any keep/revert, so there is no champion chain to
+# corrupt by running them out of order. They fan out concurrently via
+# ``asyncio.gather`` — each worker a SEPARATE ``train.py`` subprocess
+# (its own GEODE runtime, its own process-local audit lane, its own state
+# tree). The campaign's cross-worker concurrency is therefore purely
+# orchestrator-level (the ``gather``); it does NOT depend on any in-process
+# GEODE singleton (the audit lane stays the subscription-safe per-process
+# ``max_concurrent=1`` — each worker runs exactly one audit, so that cap
+# never gates the fan-out). Unbounded by design: with PAYG (``openai_source =
+# "api_key"``, no per-minute rate limit) there is no reason to throttle the
+# spawn count.
+#
+# State isolation mirrors the proven ``scripts/floor_sampler.sh`` pattern:
+# each worker runs with its OWN ``GEODE_STATE_ROOT`` (a per-worker temp
+# dir), seeded from the frozen baseline snapshot, so concurrent workers
+# never race on the shared ``mutations.jsonl`` / ``baseline.json`` /
+# ``policies/*`` under the single production ``state/autoresearch/`` root.
+# Each worker resolves ``core.paths.*`` (which read ``GEODE_STATE_ROOT`` at
+# import time) under its isolated root, so its writes land in its own tree.
+#
+# The GATE arm is PATH-DEPENDENT (a promote mutates the champion + steers
+# the next propose) and MUST stay the sequential ``run_arm`` path — it is
+# never routed through this concurrent machinery.
+# ---------------------------------------------------------------------------
+
+
+@dataclass(frozen=True)
+class WorkerOutcome:
+    """One path-independent worker's result (gen-0 replicate or control cycle).
+
+    ``ok`` is the partial-failure flag the aggregators filter on: a worker that
+    crashed / timed out / exited non-zero contributes NO dims and NO signal, and
+    the aggregator logs it as a dropped worker (never silent truncation).
+
+    ``transcript_path`` (S6) is THIS worker's ISOLATED RunTranscript jsonl (the
+    one its ``train.py`` subprocess wrote to via ``GEODE_RUN_TRANSCRIPT_PATH`` so
+    concurrent workers never race-append a shared file). The aggregator MERGES
+    these per-worker files into the one campaign transcript after the gather.
+    ``None`` for a worker that never got a path assigned (e.g. a seed failure
+    before the env was built) or a resumed-from-checkpoint worker whose isolated
+    tempdir is already gone — merge simply skips a missing/None file (graceful).
+    """
+
+    index: int
+    ok: bool
+    returncode: int
+    dim_means: dict[str, float]
+    signal: CycleSignal | None
+    reason: str
+    transcript_path: Path | None = None
+
+
+# ---------------------------------------------------------------------------
+# Resume checkpoint (S4 — crash-resumable path-independent workers)
+#
+# A long PAYG campaign fans K gen-0 replicates + N never/random cycles out as
+# real Petri-audit subprocesses (minutes + spend each). If the campaign crashes
+# after some workers finished, a naive re-run would re-measure ALL of them — and,
+# worse, re-aggregate + re-overwrite ``baseline.json`` a second time. The
+# checkpoint records WHICH workers COMPLETED successfully (their index + dims +
+# floor signal) per worker GROUP (gen-0 / a control arm), keyed by ``run_id``, so
+# a re-run skips the finished workers, re-runs only the missing ones, and
+# aggregates the UNION. A ``kmean_written`` flag per gen-0 group makes the K-mean
+# baseline write IDEMPOTENT (a second run is a no-op — no double-aggregation).
+#
+# Only ``ok=True`` workers are persisted: a dropped worker (crash / timeout /
+# non-zero exit) is deliberately NOT checkpointed so a re-run RE-attempts it (it
+# may succeed the second time). The marker lives under the gitignored
+# ``state/campaign/runs/`` tree — a runtime resume artifact, never git history.
+# ---------------------------------------------------------------------------
+
+#: The checkpoint group key for the gen-0 K replicates (control arms key on their
+#: own arm name — ``"never"`` / ``"random"``).
+GEN0_CHECKPOINT_GROUP = "gen0"
+
+
+def _serialise_worker(outcome: WorkerOutcome) -> dict[str, Any]:
+    """Flatten a successful :class:`WorkerOutcome` to the JSON the checkpoint stores.
+
+    Persists only what the aggregators consume on resume: the worker ``index``,
+    its RAW ``dim_means``, and the floor signal's ``held_out_fitness`` + ``fitness``
+    (the only two :class:`CycleSignal` fields :func:`run_gen0_baseline_async` /
+    :func:`run_control_arm_async` read back). A reconstructed worker is marked
+    ``ok=True`` with ``returncode=0`` and ``reason="resumed from checkpoint"``.
+    """
+    signal = outcome.signal
+    return {
+        "index": outcome.index,
+        "dim_means": {dim: float(v) for dim, v in outcome.dim_means.items()},
+        "held_out_fitness": signal.held_out_fitness if signal is not None else None,
+        "fitness": signal.fitness if signal is not None else None,
+    }
+
+
+def _deserialise_worker(payload: dict[str, Any]) -> WorkerOutcome | None:
+    """Rebuild a :class:`WorkerOutcome` from a checkpointed worker record.
+
+    Returns ``None`` (the record is dropped, the worker RE-RUN) when the stored
+    ``index`` is not a usable int — a corrupt checkpoint must never silently
+    truncate the union or, worse, fabricate a phantom worker. ``dim_means`` /
+    floor values are passed through the same graceful-boundary casts the live read
+    path uses, so a malformed value becomes ``None`` rather than raising.
+    """
+    raw_index = payload.get("index")
+    if not isinstance(raw_index, int) or isinstance(raw_index, bool):
+        return None
+    raw_dims = payload.get("dim_means")
+    dim_means: dict[str, float] = {}
+    if isinstance(raw_dims, dict):
+        for dim, value in raw_dims.items():
+            num = _as_float(value)
+            if isinstance(dim, str) and num is not None:
+                dim_means[dim] = num
+    signal = CycleSignal(
+        held_out_fitness=_as_float(payload.get("held_out_fitness")),
+        fitness=_as_float(payload.get("fitness")),
+        fitness_delta=None,
+        promote_policy=None,
+        source=None,
+        between_seed_stderr=None,
+    )
+    return WorkerOutcome(
+        index=raw_index,
+        ok=True,
+        returncode=0,
+        dim_means=dim_means,
+        signal=signal,
+        reason="resumed from checkpoint",
+    )
+
+
+@dataclass
+class RunCheckpoint:
+    """A per-run resume marker: which path-independent workers COMPLETED.
+
+    Keyed by ``run_id`` and persisted to ``<runs_dir>/<run_id>.json``. Each worker
+    GROUP (``"gen0"`` or a control-arm name) holds the serialised successful
+    outcomes (keyed by worker index, so a re-completion overwrites rather than
+    duplicates) plus a ``kmean_written`` flag that makes the gen-0 K-mean baseline
+    write idempotent. ``run_id=None`` short-circuits every method to a no-op so the
+    pre-S4 callers / tests that pass no ``run_id`` keep the original behaviour
+    (checkpointing is strictly opt-in).
+    """
+
+    run_id: str | None
+    runs_dir: Path = field(default_factory=lambda: CAMPAIGN_RUNS_DIR)
+    #: ``{group: {"completed": {index: record}, "kmean_written": bool}}``.
+    groups: dict[str, dict[str, Any]] = field(default_factory=dict)
+
+    @property
+    def enabled(self) -> bool:
+        return self.run_id is not None
+
+    @property
+    def path(self) -> Path:
+        # Only meaningful when ``enabled``; guarded by every caller.
+        return self.runs_dir / f"{self.run_id}.json"
+
+    def load(self) -> RunCheckpoint:
+        """Populate ``groups`` from disk if a checkpoint for ``run_id`` exists.
+
+        A missing / unreadable / malformed file leaves ``groups`` empty (a fresh
+        run), never raises — a corrupt marker degrades to "re-run everything"
+        rather than crashing the campaign.
+        """
+        if not self.enabled or not self.path.exists():
+            return self
+        try:
+            payload = json.loads(self.path.read_text(encoding="utf-8"))
+        except (json.JSONDecodeError, OSError):
+            return self
+        if not isinstance(payload, dict):
+            return self
+        raw_groups = payload.get("groups")
+        if isinstance(raw_groups, dict):
+            for name, block in raw_groups.items():
+                if isinstance(name, str) and isinstance(block, dict):
+                    self.groups[name] = block
+        return self
+
+    def _group(self, group: str) -> dict[str, Any]:
+        block = self.groups.setdefault(group, {})
+        if not isinstance(block.get("completed"), dict):
+            block["completed"] = {}
+        if not isinstance(block.get("kmean_written"), bool):
+            block["kmean_written"] = False
+        return block
+
+    def completed_indices(self, group: str) -> set[int]:
+        """The worker indices already recorded complete for ``group`` (empty when
+        disabled — every worker is then run)."""
+        if not self.enabled:
+            return set()
+        completed = self._group(group).get("completed", {})
+        result: set[int] = set()
+        for key in completed:
+            try:
+                result.add(int(key))
+            except (TypeError, ValueError):
+                continue
+        return result
+
+    def resumed_outcomes(self, group: str) -> list[WorkerOutcome]:
+        """Reconstruct the already-completed workers of ``group`` as outcomes the
+        aggregator can union with the freshly-run ones (empty when disabled)."""
+        if not self.enabled:
+            return []
+        completed = self._group(group).get("completed", {})
+        outcomes: list[WorkerOutcome] = []
+        for record in completed.values():
+            if isinstance(record, dict):
+                outcome = _deserialise_worker(record)
+                if outcome is not None:
+                    outcomes.append(outcome)
+        return outcomes
+
+    def record_completed(self, group: str, outcomes: Sequence[WorkerOutcome]) -> None:
+        """Persist the freshly-completed (``ok=True``) workers of ``group`` + flush
+        to disk (a no-op when disabled)."""
+        if not self.enabled:
+            return
+        completed = self._group(group)["completed"]
+        for outcome in outcomes:
+            if outcome.ok:
+                completed[str(outcome.index)] = _serialise_worker(outcome)
+        self._flush()
+
+    def kmean_already_written(self, group: str) -> bool:
+        """Whether the K-mean baseline was already aggregated+written for ``group``
+        (always ``False`` when disabled — the write then always runs)."""
+        if not self.enabled:
+            return False
+        return bool(self._group(group).get("kmean_written"))
+
+    def mark_kmean_written(self, group: str) -> None:
+        """Flag ``group``'s K-mean baseline write as done + flush (no-op when
+        disabled), so a resume skips the re-aggregation/re-write (idempotent)."""
+        if not self.enabled:
+            return
+        self._group(group)["kmean_written"] = True
+        self._flush()
+
+    def _flush(self) -> None:
+        if not self.enabled:
+            return
+        self.path.parent.mkdir(parents=True, exist_ok=True)
+        self.path.write_text(
+            json.dumps({"run_id": self.run_id, "groups": self.groups}, ensure_ascii=False, indent=2)
+            + "\n",
+            encoding="utf-8",
+        )
+
+
+def _seed_isolated_state_root(worker_root: Path, snapshot_dir: Path) -> None:
+    """Seed a per-worker ``GEODE_STATE_ROOT`` tree from the frozen gen-0 snapshot.
+
+    Lays out ``<worker_root>/autoresearch/{policies/*, baseline.json}`` exactly as
+    :func:`restore_sot` would lay out the production root — a matched frozen-baseline
+    reset — but into the ISOLATED root so concurrent workers do not contend on the
+    shared production SoT. ``mutations.jsonl`` is deliberately NOT copied: each
+    worker starts with an empty attribution ledger so the row it appends is
+    unambiguously its own (no stale-row reuse across workers). Raises
+    ``FileNotFoundError`` when the snapshot dir is absent (a matched reset must be
+    exact, mirroring :func:`restore_sot`).
+    """
+    if not snapshot_dir.exists():
+        raise FileNotFoundError(
+            f"gen-0 snapshot dir {snapshot_dir} missing — cannot seed an isolated worker root"
+        )
+    worker_state_dir = worker_root / "autoresearch"
+    worker_policies = worker_state_dir / "policies"
+    worker_policies.mkdir(parents=True, exist_ok=True)
+    policies_src = snapshot_dir / "policies"
+    if policies_src.exists():
+        for src in sorted(policies_src.glob("*")):
+            shutil.copy2(src, worker_policies / src.name)
+    baseline_src = snapshot_dir / "baseline.json"
+    if baseline_src.exists():
+        shutil.copy2(baseline_src, worker_state_dir / "baseline.json")
+
+
+def _build_worker_env(
+    worker_root: Path,
+    *,
+    promote_policy: str | None,
+    promote_policy_seed: int | None,
+    audit_max_samples: int,
+    audit_max_connections: int,
+    transcript_path: Path | None = None,
+    worker_id: str | None = None,
+) -> dict[str, str]:
+    """Build a concurrent worker's subprocess env.
+
+    Layers the campaign-fixed env (:func:`build_campaign_env` — seed-pool +
+    held-out + PAYG knobs + the authoritative promote-policy / seed) and the
+    isolated ``GEODE_STATE_ROOT`` so the worker's ``train.py`` resolves every
+    ``core.paths.*`` constant under its OWN tree. ``VIRTUAL_ENV`` /
+    ``PATH`` are inherited from ``os.environ`` (the parent campaign process runs
+    inside the venv), so the child ``sys.executable -m core.self_improving.train``
+    resolves the venv's interpreter — never the system python — mirroring the
+    venv-activation step ``scripts/floor_sampler.sh`` performs to avoid the
+    ``ModuleNotFoundError: core`` a system-python child would hit.
+
+    S6 (transcript isolation): ``transcript_path`` redirects the worker's
+    RunTranscript to an ISOLATED per-worker jsonl (``GEODE_RUN_TRANSCRIPT_PATH``)
+    so concurrent workers never race-append the shared home-dir transcript, and
+    ``worker_id`` (``GEODE_RUN_WORKER_ID``) stamps every event payload so the
+    post-gather merge is attributable. The home-dir ``GLOBAL_AUTORESEARCH_HANDOFF_DIR``
+    is keyed off ``GEODE_HOME`` (``~/.geode``), NOT ``GEODE_STATE_ROOT``, so the
+    per-worker ``GEODE_STATE_ROOT`` alone does NOT isolate the transcript — this
+    explicit redirect is required.
+    """
+    env = build_campaign_env(
+        promote_policy=promote_policy,
+        promote_policy_seed=promote_policy_seed,
+        audit_max_samples=audit_max_samples,
+        audit_max_connections=audit_max_connections,
+    )
+    env["GEODE_STATE_ROOT"] = str(worker_root)
+    if transcript_path is not None:
+        env["GEODE_RUN_TRANSCRIPT_PATH"] = str(transcript_path)
+    if worker_id is not None:
+        env["GEODE_RUN_WORKER_ID"] = worker_id
+    return env
+
+
+async def _spawn_train_subprocess_async(
+    *,
+    env: dict[str, str],
+    dry_run: bool,
+    per_audit_timeout: float | None,
+) -> subprocess.CompletedProcess[str]:
+    """Async sibling of :func:`_spawn_train_subprocess` — drop-in shape.
+
+    Spawns ``<venv python> -m core.self_improving.train`` via
+    ``asyncio.create_subprocess_exec`` (so N workers run concurrently on one event
+    loop), captures BOTH stdout+stderr, and applies the TIGHT ``per_audit_timeout``
+    so a hung worker is killed within seconds of overrun rather than holding for
+    the in-process budget the child ``train.py`` would otherwise wait out — this
+    subprocess-level kill is where the async-first harness enforces the hang
+    bound. On timeout the child is killed + reaped and a
+    :class:`subprocess.CompletedProcess` with ``returncode=-1`` is returned (the
+    aggregator filters it out as a dropped worker — a timed-out replicate must not
+    crash the whole gather). ``sys.executable`` is the venv interpreter the parent
+    campaign runs under, so the child resolves the ``core`` package.
+    """
+    argv = [sys.executable, "-m", "core.self_improving.train"]
+    if dry_run:
+        argv.append("--dry-run")
+    proc = await asyncio.create_subprocess_exec(
+        *argv,
+        stdout=asyncio.subprocess.PIPE,
+        stderr=asyncio.subprocess.PIPE,
+        env=env,
+        cwd=str(REPO_ROOT),
+        # Own process group/session (POSIX): the worker ``train.py`` itself spawns
+        # ``geode audit`` → ``inspect eval`` (the PAID audit) as a grandchild via
+        # ``subprocess.run``, so a kill must reach the WHOLE tree, not just the
+        # direct child (Codex MCP HIGH — an orphaned ``inspect eval`` keeps burning
+        # quota). ``start_new_session`` makes ``proc.pid`` a group leader so a
+        # single ``killpg`` reaps the grandchild too.
+        start_new_session=True,
+    )
+    try:
+        stdout_bytes, stderr_bytes = await asyncio.wait_for(
+            proc.communicate(), timeout=per_audit_timeout
+        )
+    except TimeoutError:
+        # ``asyncio.wait_for`` raises the builtin ``TimeoutError`` (aliased to
+        # ``asyncio.TimeoutError`` since 3.11). Kill + reap the whole process GROUP
+        # so the hung audit (and its ``inspect eval`` grandchild) is fully reaped,
+        # not left orphaned. ``ProcessLookupError`` (child/group already gone in the
+        # narrow exit-at-timeout race) is suppressed so the reap path is bulletproof
+        # and still returns the dropped-worker row.
+        with contextlib.suppress(ProcessLookupError):
+            # NEVER signal our OWN process group: ``start_new_session=True`` gives the
+            # child a DISTINCT group in production, but a test mock or a platform
+            # without ``setsid`` would leave it in our group, where ``killpg`` would
+            # SIGKILL the campaign driver (or the test runner) itself. Only group-kill
+            # when the child's group is genuinely its own; otherwise kill just the child.
+            child_pgid = os.getpgid(proc.pid)
+            if child_pgid != os.getpgid(0):
+                os.killpg(child_pgid, signal.SIGKILL)
+            else:
+                proc.kill()
+        await proc.wait()
+        return subprocess.CompletedProcess(
+            args=argv,
+            returncode=-1,
+            stdout="",
+            stderr=f"worker timed out after {per_audit_timeout}s; killed child",
+        )
+    stdout_text = stdout_bytes.decode("utf-8", errors="replace") if stdout_bytes else ""
+    stderr_text = stderr_bytes.decode("utf-8", errors="replace") if stderr_bytes else ""
+    return subprocess.CompletedProcess(
+        args=argv,
+        returncode=proc.returncode if proc.returncode is not None else -1,
+        stdout=stdout_text,
+        stderr=stderr_text,
+    )
+
+
+async def _run_isolated_worker(
+    *,
+    index: int,
+    group: str,
+    workers_root: Path,
+    snapshot_dir: Path,
+    promote_policy: str | None,
+    promote_policy_seed: int | None,
+    audit_max_samples: int,
+    audit_max_connections: int,
+    dry_run: bool,
+    per_audit_timeout: float | None,
+    runner_fn: Any,
+) -> WorkerOutcome:
+    """Run ONE path-independent worker in an isolated ``GEODE_STATE_ROOT``.
+
+    Seeds ``<workers_root>/w{index}`` from the frozen gen-0 snapshot, spawns
+    ``train.py`` there (concurrently with its siblings), and reads back THIS
+    worker's signal: its RAW ``dim_means`` from the ``FITNESS_RESULT`` stdout
+    sentinel + its newest ``kind="attribution"`` row from its OWN isolated
+    ``mutations.jsonl``. A non-zero exit / timeout / crash yields an ``ok=False``
+    outcome the aggregator drops with a logged reason (partial-failure resilient).
+
+    ``group`` is the worker-id prefix (``"gen0"`` / ``"never"`` / ``"random"``);
+    the worker's ``worker_id`` is ``f"{group}-w{index}"`` and its ISOLATED
+    RunTranscript jsonl is ``<worker_root>/transcript.jsonl`` (S6). The worker's
+    ``train.py`` writes ALL its journal events to that file (via
+    ``GEODE_RUN_TRANSCRIPT_PATH``), stamped with ``worker_id`` (via
+    ``GEODE_RUN_WORKER_ID``), so concurrent workers never race-append a shared
+    transcript; the caller merges these files after the gather. The path rides on
+    the returned :class:`WorkerOutcome` so the merge finds it even for a worker
+    that exited non-zero (it may still have emitted ``subprocess_started`` first).
+
+    ``runner_fn`` is the injectable spawn seam (default
+    :func:`_spawn_train_subprocess_async`); tests pass a fake async runner so the
+    gather + aggregate + isolation are exercised with NO real audit.
+    """
+    worker_root = workers_root / f"w{index}"
+    worker_id = f"{group}-w{index}"
+    transcript_path = worker_root / "transcript.jsonl"
+    # ONE broad guard around the WHOLE worker body (Codex MCP HIGH): a failure in
+    # ``mkdir`` / ``_seed_isolated_state_root`` / ``_build_worker_env`` / the spawn /
+    # ``parse_fitness_result_dims`` / ``read_latest_attribution`` must NOT abort the
+    # sibling ``asyncio.gather`` (which has no ``return_exceptions=True``) — it drops
+    # this worker to ``ok=False`` and the aggregator skips it with a logged reason.
+    try:
+        worker_root.mkdir(parents=True, exist_ok=True)
+        _seed_isolated_state_root(worker_root, snapshot_dir)
+        env = _build_worker_env(
+            worker_root,
+            promote_policy=promote_policy,
+            promote_policy_seed=promote_policy_seed,
+            audit_max_samples=audit_max_samples,
+            audit_max_connections=audit_max_connections,
+            transcript_path=transcript_path,
+            worker_id=worker_id,
+        )
+        result = await runner_fn(env=env, dry_run=dry_run, per_audit_timeout=per_audit_timeout)
+        returncode = int(getattr(result, "returncode", -1) or 0)
+        if returncode != 0:
+            return WorkerOutcome(
+                index=index,
+                ok=False,
+                returncode=returncode,
+                dim_means={},
+                signal=None,
+                reason=f"train.py exited {returncode}",
+                transcript_path=transcript_path,
+            )
+        measure_dims = parse_fitness_result_dims(getattr(result, "stdout", None)) or {}
+        # Read THIS worker's signal from its OWN isolated mutations.jsonl (the worker
+        # root started with no attribution ledger, so the newest row is unambiguously
+        # this worker's). ``min_rows=0`` is correct here precisely because the ledger
+        # is per-worker — there is no sibling row to mistake for this one.
+        worker_mutations = worker_root / "autoresearch" / "mutations.jsonl"
+        signal = read_latest_attribution(worker_mutations)
+        if not measure_dims and signal is None:
+            # Zero exit but NO usable measurement: no ``FITNESS_RESULT`` dims AND no
+            # attribution row (Codex MCP MEDIUM). Marking this ``ok=True`` would
+            # checkpoint a FAILED measurement as complete + skip it on resume — drop
+            # it so a resume re-attempts it and the aggregate never counts a phantom.
+            return WorkerOutcome(
+                index=index,
+                ok=False,
+                returncode=0,
+                dim_means={},
+                signal=None,
+                reason="zero exit but no usable measurement (no dims, no attribution)",
+                transcript_path=transcript_path,
+            )
+        return WorkerOutcome(
+            index=index,
+            ok=True,
+            returncode=0,
+            dim_means=measure_dims,
+            signal=signal,
+            reason="ok",
+            transcript_path=transcript_path,
+        )
+    except Exception as exc:
+        return WorkerOutcome(
+            index=index,
+            ok=False,
+            returncode=-1,
+            dim_means={},
+            signal=None,
+            reason=f"worker error ({type(exc).__name__}): {exc}",
+            transcript_path=transcript_path,
+        )
+
+
+def _transcript_sort_key(row: dict[str, Any]) -> tuple[float, int]:
+    """Sort key for a merged transcript row — ``(ts, seq)``.
+
+    Both casts are graceful (CLAUDE.md boundary rule): a row missing / carrying a
+    malformed ``ts`` sorts to the front (``-inf``) rather than crashing the merge,
+    and a missing / malformed per-worker ``seq`` falls back to ``0`` so same-ts
+    rows keep a stable order. The merge must never lose an event to one bad row.
+    """
+    raw_ts = row.get("ts")
+    ts = _as_float(raw_ts)
+    raw_seq = row.get("seq")
+    try:
+        seq = int(raw_seq) if raw_seq is not None else 0
+    except (TypeError, ValueError):
+        seq = 0
+    return (ts if ts is not None else float("-inf"), seq)
+
+
+def merge_worker_transcripts(
+    worker_transcripts: Sequence[Path | None],
+    dest: Path,
+) -> int:
+    """Merge the per-worker ISOLATED transcripts into one campaign transcript (S6).
+
+    The concurrent gen-0 / control-arm workers each wrote to their OWN
+    ``transcript.jsonl`` (``GEODE_RUN_TRANSCRIPT_PATH``) so their journal events
+    never race-corrupted a shared file (POSIX append is not atomic above
+    ``PIPE_BUF``). This reads every worker's rows, sorts the UNION by ``(ts, seq)``
+    so the operator gets one coherent ordered replay, and APPENDS them to ``dest``
+    (the campaign transcript). Each row already carries ``worker_id`` (stamped by
+    ``_emit_journal`` from ``GEODE_RUN_WORKER_ID``) so the merged view stays
+    attributable per worker.
+
+    Graceful throughout: a ``None`` / missing worker path is skipped (a worker that
+    never emitted), a malformed JSONL line is skipped (one bad row never aborts the
+    merge), and the cross-worker ``ts``/``seq`` ordering tolerates absent keys. The
+    append (not overwrite) preserves any rows the campaign itself already wrote to
+    ``dest``. Returns the number of rows merged into ``dest``.
+
+    MUST be called BEFORE the per-worker tempdir is cleaned up — the worker files
+    live under the isolated ``GEODE_STATE_ROOT`` tree which the gather's
+    ``TemporaryDirectory`` context removes on exit.
+    """
+    rows: list[dict[str, Any]] = []
+    for path in worker_transcripts:
+        if path is None or not path.exists():
+            continue
+        try:
+            text = path.read_text(encoding="utf-8")
+        except OSError:
+            continue
+        for line in text.splitlines():
+            stripped = line.strip()
+            if not stripped:
+                continue
+            try:
+                parsed = json.loads(stripped)
+            except json.JSONDecodeError:
+                continue
+            if isinstance(parsed, dict):
+                rows.append(parsed)
+    if not rows:
+        return 0
+    rows.sort(key=_transcript_sort_key)
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    with dest.open("a", encoding="utf-8") as fh:
+        for row in rows:
+            fh.write(json.dumps(row, ensure_ascii=False) + "\n")
+    return len(rows)
+
+
+async def run_gen0_baseline_async(
+    *,
+    k: int,
+    dry_run: bool,
+    audit_max_samples: int,
+    audit_max_connections: int,
+    progress: ProgressLog,
+    snapshot_dir: Path = GEN0_SNAPSHOT_DIR,
+    per_audit_timeout: float | None = None,
+    workers_root: Path | None = None,
+    runner_fn: Any | None = None,
+    checkpoint: RunCheckpoint | None = None,
+    campaign_transcript: Path | None = None,
+) -> NoiseBand:
+    """Async parallel sibling of :func:`run_gen0_baseline`.
+
+    Runs the K gen-0 replicates CONCURRENTLY via ``asyncio.gather`` — each an
+    isolated ``GEODE_STATE_ROOT`` worker seeded from the frozen baseline snapshot
+    (path-independent: every replicate measures the SAME frozen baseline) — then
+    aggregates the K per-dim ``dim_means`` (:func:`aggregate_dim_means`) and
+    rewrites ``baseline.json``'s ``raw.dim_means`` / ``raw.dim_stderr`` to the
+    K-mean (:func:`write_kmean_baseline`), exactly as the sequential path does.
+
+    Aggregation FILTERS to the workers that succeeded (``ok=True``); dropped
+    workers (crash / timeout / non-zero exit / no parsed dims) are logged, never
+    silently truncated. The K-mean rewrite is SKIPPED under ``--dry-run`` (the
+    synthetic dims must not freeze a synthetic baseline) — identical to the sync
+    path. ``runner_fn`` (default :func:`_spawn_train_subprocess_async`) is the
+    injectable async spawn seam for tests.
+
+    ``checkpoint`` (S4) makes the fan-out crash-resumable: replicate indices the
+    marker already records complete are SKIPPED (only the missing ones re-run),
+    their outcomes are UNIONed with the freshly-run ones for aggregation, and the
+    K-mean baseline write is IDEMPOTENT (a re-run where the marker shows it was
+    already written skips re-aggregation entirely). ``checkpoint=None`` (or a
+    disabled one with ``run_id=None``) keeps the pre-S4 behaviour: every replicate
+    runs, the K-mean always (re)writes.
+
+    ``campaign_transcript`` (S6) is the destination the per-worker ISOLATED
+    transcripts are MERGED into after the gather (sorted by ``(ts, seq)``, each row
+    already ``worker_id``-stamped). ``None`` SKIPS the merge entirely — the
+    sequential / pre-S6 callers need no merge. The merge happens INSIDE the
+    tempdir context, before the per-worker files are cleaned up.
+    """
+    ckpt = checkpoint if checkpoint is not None else RunCheckpoint(run_id=None)
+    runner = runner_fn if runner_fn is not None else _spawn_train_subprocess_async
+    already_done = ckpt.completed_indices(GEN0_CHECKPOINT_GROUP)
+    pending = [i for i in range(1, k + 1) if i not in already_done]
+    if already_done:
+        progress.emit(
+            f"gen-0 baseline (async): RESUME — {len(already_done)} replicate(s) already "
+            f"complete {sorted(already_done)}; re-running {len(pending)} missing {pending}"
+        )
+    fresh: list[WorkerOutcome] = []
+    if pending:
+        with tempfile.TemporaryDirectory(prefix="geode-gen0-") as tmp:
+            roots_parent = workers_root if workers_root is not None else Path(tmp)
+            progress.emit(
+                f"gen-0 baseline (async): fanning {len(pending)} isolated workers concurrently "
+                f"(dry_run={dry_run}, per_audit_timeout={per_audit_timeout})"
+            )
+            fresh = list(
+                await asyncio.gather(
+                    *(
+                        _run_isolated_worker(
+                            index=i,
+                            group=GEN0_CHECKPOINT_GROUP,
+                            workers_root=roots_parent,
+                            snapshot_dir=snapshot_dir,
+                            promote_policy=None,  # gen-0 inherits NO arm (frozen baseline)
+                            promote_policy_seed=None,
+                            audit_max_samples=audit_max_samples,
+                            audit_max_connections=audit_max_connections,
+                            dry_run=dry_run,
+                            per_audit_timeout=per_audit_timeout,
+                            runner_fn=runner,
+                        )
+                        for i in pending
+                    )
+                )
+            )
+            # S6 — merge the per-worker isolated transcripts into the campaign
+            # transcript while the tempdir (the workers' isolated GEODE_STATE_ROOT
+            # tree, where each transcript.jsonl lives) is still alive.
+            if campaign_transcript is not None:
+                merged = merge_worker_transcripts(
+                    [o.transcript_path for o in fresh], campaign_transcript
+                )
+                progress.emit(
+                    f"gen-0 baseline (async): merged {merged} per-worker transcript event(s) "
+                    f"→ {campaign_transcript}"
+                )
+    fresh_ok = [o for o in fresh if o.ok]
+    dropped = [o for o in fresh if not o.ok]
+    # Capture the resumed (already-complete) workers BEFORE recording the fresh
+    # ones, so the union does not double-count a fresh worker that record_completed
+    # would have just merged into the same completed set.
+    resumed = ckpt.resumed_outcomes(GEN0_CHECKPOINT_GROUP)
+    # Persist the freshly-completed workers BEFORE aggregating, so a crash during
+    # the K-mean write does not lose the measures already paid for.
+    ckpt.record_completed(GEN0_CHECKPOINT_GROUP, fresh_ok)
+    for o in dropped:
+        progress.emit(f"gen-0 baseline (async): DROPPED worker w{o.index} — {o.reason}")
+    # Union the freshly-run ok workers with the ones resumed from the checkpoint.
+    successful = [*resumed, *fresh_ok]
+    held_out_values = [
+        o.signal.held_out_fitness
+        for o in successful
+        if o.signal is not None and o.signal.held_out_fitness is not None
+    ]
+    fitness_values = [
+        o.signal.fitness
+        for o in successful
+        if o.signal is not None and o.signal.fitness is not None
+    ]
+    per_measure_dim_means = [o.dim_means for o in successful if o.dim_means]
+    band = compute_noise_band(held_out_values, fitness_values, k=k)
+    progress.emit(
+        f"gen-0 baseline (async): {len(successful)}/{k} workers ok "
+        f"({len(already_done)} resumed + {len(fresh_ok)} fresh), "
+        f"{len(dropped)} dropped; " + band.summary()
+    )
+    if dry_run:
+        progress.emit(
+            f"gen-0 K-mean baseline (async): dry-run — skipped baseline.json rewrite "
+            f"(parsed {len(per_measure_dim_means)}/{k} synthetic FITNESS_RESULT measures)"
+        )
+    elif ckpt.kmean_already_written(GEN0_CHECKPOINT_GROUP):
+        # Idempotent: the K-mean was already aggregated + written for this run id —
+        # a resume must NOT re-aggregate / re-overwrite baseline.json a second time.
+        progress.emit(
+            "gen-0 K-mean baseline (async): RESUME — K-mean already written for this "
+            "run id; skipping re-aggregation (idempotent)"
+        )
+    elif per_measure_dim_means:
+        mean_dims, stderr_dims, present_count = aggregate_dim_means(per_measure_dim_means)
+        wrote = write_kmean_baseline(mean_dims, stderr_dims)
+        partial = sorted(d for d, c in present_count.items() if c < len(per_measure_dim_means))
+        if wrote:
+            ckpt.mark_kmean_written(GEN0_CHECKPOINT_GROUP)
+        progress.emit(
+            f"gen-0 K-mean baseline (async): collected {len(per_measure_dim_means)}/{k} "
+            f"measures, {len(mean_dims)} dims; baseline.json raw.dim_means←K-mean "
+            f"(written={wrote})" + (f"; partial-coverage dims={partial}" if partial else "")
+        )
+    else:
+        progress.emit(
+            f"gen-0 K-mean baseline (async): no FITNESS_RESULT dims parsed from {k} "
+            "workers (all dropped) — baseline.json raw.dim_means left as bootstrap"
+        )
+    return band
+
+
+@dataclass(frozen=True)
+class ControlArmFloor:
+    """The aggregated floor of one path-independent control arm (never / random).
+
+    Mirrors ``scripts/floor_aggregate.py``: the mean ± stderr of the per-cycle
+    held-out (and fitness) measures over the arm's N concurrent, frozen-baseline
+    cycles. ``cycles_ok`` / ``cycles_dropped`` make the partial-failure resilience
+    auditable (no silent truncation).
+    """
+
+    arm: str
+    cycles_ok: int
+    cycles_dropped: int
+    held_out_band: NoiseBand
+
+    def summary(self) -> str:
+        return (
+            f"control arm '{self.arm}' floor: cycles_ok={self.cycles_ok} "
+            f"cycles_dropped={self.cycles_dropped}; {self.held_out_band.summary()}"
+        )
+
+
+async def run_control_arm_async(
+    *,
+    arm: str,
+    arm_index: int,
+    n: int,
+    audit_max_samples: int,
+    audit_max_connections: int,
+    dry_run: bool,
+    progress: ProgressLog,
+    snapshot_dir: Path = GEN0_SNAPSHOT_DIR,
+    per_audit_timeout: float | None = None,
+    workers_root: Path | None = None,
+    runner_fn: Any | None = None,
+    checkpoint: RunCheckpoint | None = None,
+    campaign_transcript: Path | None = None,
+) -> ControlArmFloor:
+    """Run a PATH-INDEPENDENT control arm's N cycles concurrently.
+
+    For the ``never`` and ``random`` arms ONLY: each cycle measures the SAME
+    frozen baseline (no keep/revert chain), so the N cycles fan out via
+    ``asyncio.gather`` — each an isolated ``GEODE_STATE_ROOT`` worker seeded from
+    the frozen snapshot, with the arm's ``GEODE_PROMOTE_POLICY`` (+ per-cycle
+    deterministic ``GEODE_PROMOTE_POLICY_SEED`` for ``random``). Then aggregates
+    the per-cycle held-out / fitness floor (mirroring
+    ``scripts/floor_aggregate.py``), filtering to successful cycles and logging
+    drops.
+
+    NOT for the GATE arm — that is path-dependent (a promote mutates the champion
+    + steers the next propose) and MUST stay the sequential :func:`run_arm`. This
+    function raises ``ValueError`` if asked to run ``gate`` so the path-dependence
+    invariant cannot be violated by a mis-call.
+
+    ``checkpoint`` (S4) keys this arm's completed cycles under its OWN group (the
+    arm name), so a re-run after a crash skips the cycles already recorded complete
+    and re-runs only the missing ones, then aggregates the union. ``checkpoint=None``
+    keeps the pre-S4 behaviour (every cycle runs).
+
+    ``campaign_transcript`` (S6) is the destination the per-cycle ISOLATED
+    transcripts are MERGED into after the gather (sorted by ``(ts, seq)``, each
+    row ``worker_id``-stamped ``f"{arm}-w{cycle}"``). ``None`` SKIPS the merge.
+    """
+    if arm == "gate":
+        raise ValueError(
+            "run_control_arm_async refuses the GATE arm — it is path-dependent "
+            "(promote mutates the champion chain) and MUST stay sequential (run_arm)"
+        )
+    if arm not in {"never", "random"}:
+        raise ValueError(f"run_control_arm_async expects 'never' or 'random', got {arm!r}")
+    ckpt = checkpoint if checkpoint is not None else RunCheckpoint(run_id=None)
+    runner = runner_fn if runner_fn is not None else _spawn_train_subprocess_async
+    already_done = ckpt.completed_indices(arm)
+    pending = [cycle for cycle in range(1, n + 1) if cycle not in already_done]
+    if already_done:
+        progress.emit(
+            f"control arm '{arm}' (async): RESUME — {len(already_done)} cycle(s) already "
+            f"complete {sorted(already_done)}; re-running {len(pending)} missing {pending}"
+        )
+    fresh: list[WorkerOutcome] = []
+    if pending:
+        with tempfile.TemporaryDirectory(prefix=f"geode-{arm}-") as tmp:
+            roots_parent = workers_root if workers_root is not None else Path(tmp)
+            progress.emit(
+                f"control arm '{arm}' (index {arm_index}, async): fanning {len(pending)} isolated "
+                f"frozen-baseline cycles concurrently (dry_run={dry_run})"
+            )
+            fresh = list(
+                await asyncio.gather(
+                    *(
+                        _run_isolated_worker(
+                            index=cycle,
+                            group=arm,
+                            workers_root=roots_parent,
+                            snapshot_dir=snapshot_dir,
+                            promote_policy=arm,
+                            # random arm: deterministic per-(arm,cycle) seed so a
+                            # re-run reproduces the same random promote decisions.
+                            promote_policy_seed=(
+                                DEFAULT_RANDOM_SEED_BASE + arm_index * n + cycle
+                                if arm == "random"
+                                else None
+                            ),
+                            audit_max_samples=audit_max_samples,
+                            audit_max_connections=audit_max_connections,
+                            dry_run=dry_run,
+                            per_audit_timeout=per_audit_timeout,
+                            runner_fn=runner,
+                        )
+                        for cycle in pending
+                    )
+                )
+            )
+            # S6 — merge the per-cycle isolated transcripts into the campaign
+            # transcript while the tempdir is still alive.
+            if campaign_transcript is not None:
+                merged = merge_worker_transcripts(
+                    [o.transcript_path for o in fresh], campaign_transcript
+                )
+                progress.emit(
+                    f"control arm '{arm}' (async): merged {merged} per-cycle transcript "
+                    f"event(s) → {campaign_transcript}"
+                )
+    fresh_ok = [o for o in fresh if o.ok]
+    dropped = [o for o in fresh if not o.ok]
+    # Capture resumed cycles BEFORE recording the fresh ones (no double-count).
+    resumed = ckpt.resumed_outcomes(arm)
+    ckpt.record_completed(arm, fresh_ok)
+    for o in dropped:
+        progress.emit(f"control arm '{arm}' (async): DROPPED cycle {o.index} — {o.reason}")
+    successful = [*resumed, *fresh_ok]
+    held_out_values = [
+        o.signal.held_out_fitness
+        for o in successful
+        if o.signal is not None and o.signal.held_out_fitness is not None
+    ]
+    fitness_values = [
+        o.signal.fitness
+        for o in successful
+        if o.signal is not None and o.signal.fitness is not None
+    ]
+    floor = ControlArmFloor(
+        arm=arm,
+        cycles_ok=len(successful),
+        cycles_dropped=len(dropped),
+        held_out_band=compute_noise_band(held_out_values, fitness_values, k=n),
+    )
+    progress.emit(floor.summary())
+    return floor
+
+
+# ---------------------------------------------------------------------------
 # Arm loop (campaign-procedure.md §6)
 # ---------------------------------------------------------------------------
 
@@ -1150,6 +2065,23 @@ def _purge_inspect_cache_at_start(progress: ProgressLog) -> bool:
 # ---------------------------------------------------------------------------
 
 
+def _resolve_per_audit_timeout() -> float:
+    """Tight per-audit subprocess timeout (seconds) for the async workers.
+
+    ``GEODE_PER_AUDIT_TIMEOUT_S`` override → :data:`DEFAULT_PER_AUDIT_TIMEOUT_S`.
+    Graceful boundary on the cast: a non-numeric / non-positive env value falls back
+    to the default rather than crashing the campaign launch.
+    """
+    raw = os.environ.get(PER_AUDIT_TIMEOUT_ENV, "").strip()
+    if not raw:
+        return DEFAULT_PER_AUDIT_TIMEOUT_S
+    try:
+        value = float(raw)
+    except ValueError:
+        return DEFAULT_PER_AUDIT_TIMEOUT_S
+    return value if value > 0 else DEFAULT_PER_AUDIT_TIMEOUT_S
+
+
 def run_campaign(
     *,
     n: int = DEFAULT_N,
@@ -1164,6 +2096,7 @@ def run_campaign(
     train_runner: Any | None = None,
     runner_factory: Any | None = None,
     guard_fn: Any | None = None,
+    async_first: bool = True,
 ) -> dict[str, Any]:
     """Run the full campaign: gen-0 K-repeat baseline → snapshot → 3-arm loop.
 
@@ -1215,19 +2148,94 @@ def run_campaign(
         # the cache).
         if not dry_run:
             _purge_inspect_cache_at_start(progress)
-        band = run_gen0_baseline(
-            k=k,
-            dry_run=dry_run,
-            audit_max_samples=audit_max_samples,
-            audit_max_connections=audit_max_connections,
-            progress=progress,
-            train_runner=train_runner,
+
+        # PR-ASYNC-FIRST WIRING (Codex MCP BLOCKER) — a real production campaign
+        # (not dry-run, no injected sync runner) fans the PATH-INDEPENDENT measures
+        # (gen-0 K replicates + the NEVER/RANDOM control arms) out as concurrent,
+        # fully-isolated ``train.py`` SUBPROCESSES; the PATH-DEPENDENT GATE arm stays
+        # on the sequential ``run_arm`` (champion chain). Injected-runner / dry-run
+        # callers (the unit tests + the smoke path) keep the legacy in-process sync
+        # path, so this wiring changes ONLY the real-campaign behaviour.
+        use_async = async_first and not dry_run and train_runner is None and runner_factory is None
+        per_audit_timeout = _resolve_per_audit_timeout() if use_async else None
+        ckpt = RunCheckpoint(run_id=f"campaign-n{n}-k{k}-{'-'.join(arms)}") if use_async else None
+        campaign_transcript = (
+            (CAMPAIGN_RUNS_DIR / "campaign-transcript.jsonl") if use_async else None
         )
+
+        if use_async:
+            progress.emit(
+                f"async-first: concurrent subprocess fan-out — per_audit_timeout="
+                f"{per_audit_timeout}s run_id={ckpt.run_id if ckpt else None}; gen-0 K + "
+                "never/random parallel, gate sequential"
+            )
+            # gen-0 workers seed from a snapshot of the CURRENT frozen scaffold, so
+            # snapshot BEFORE the async gen-0 (the arms re-seed from the post-K-mean
+            # snapshot taken right after).
+            snapshot_sot(snapshot_dir)
+            band = asyncio.run(
+                run_gen0_baseline_async(
+                    k=k,
+                    dry_run=dry_run,
+                    audit_max_samples=audit_max_samples,
+                    audit_max_connections=audit_max_connections,
+                    progress=progress,
+                    snapshot_dir=snapshot_dir,
+                    per_audit_timeout=per_audit_timeout,
+                    checkpoint=ckpt,
+                    campaign_transcript=campaign_transcript,
+                )
+            )
+        else:
+            band = run_gen0_baseline(
+                k=k,
+                dry_run=dry_run,
+                audit_max_samples=audit_max_samples,
+                audit_max_connections=audit_max_connections,
+                progress=progress,
+                train_runner=train_runner,
+            )
+        # Snapshot the post-gen-0 state (the K-mean ``baseline.json`` the gate scores
+        # against) — this is the matched reset every arm restores from.
         snapshot_written = snapshot_sot(snapshot_dir)
         progress.emit(f"gen-0 SoT snapshot: {len(snapshot_written)} files → {snapshot_dir}")
         arm_summaries: list[ArmSummary] = []
+        control_floors: list[ControlArmFloor] = []
         halted = False
         for arm_index, arm in enumerate(arms):
+            if use_async and arm in ("never", "random"):
+                # PATH-INDEPENDENT control arm → concurrent isolated subprocesses.
+                floor = asyncio.run(
+                    run_control_arm_async(
+                        arm=arm,
+                        arm_index=arm_index,
+                        n=n,
+                        audit_max_samples=audit_max_samples,
+                        audit_max_connections=audit_max_connections,
+                        dry_run=dry_run,
+                        progress=progress,
+                        snapshot_dir=snapshot_dir,
+                        per_audit_timeout=per_audit_timeout,
+                        checkpoint=ckpt,
+                        campaign_transcript=campaign_transcript,
+                    )
+                )
+                control_floors.append(floor)
+                # Adapt the held-out FLOOR to the ArmSummary digest shape — a control
+                # arm never promotes (its evidence is ``held_out_band``, preserved in
+                # ``control_floors``); cycles_run/skipped map from ok/dropped.
+                arm_summaries.append(
+                    ArmSummary(
+                        arm=arm,
+                        cycles_run=floor.cycles_ok,
+                        cycles_skipped=floor.cycles_dropped,
+                        promotes=0,
+                        halted=False,
+                    )
+                )
+                progress.emit(floor.summary())
+                continue
+            # GATE (path-dependent champion chain) — or any arm on the sync path.
             summary = run_arm(
                 arm=arm,
                 arm_index=arm_index,
@@ -1253,6 +2261,7 @@ def run_campaign(
         return {
             "noise_band": band,
             "arm_summaries": arm_summaries,
+            "control_floors": control_floors,
             "halted": halted,
             "snapshot_files": [str(p) for p in snapshot_written],
         }
