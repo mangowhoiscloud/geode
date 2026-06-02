@@ -74,6 +74,7 @@ the live campaign with real credentials.
 from __future__ import annotations
 
 import argparse
+import asyncio
 import json
 import logging
 import math
@@ -82,6 +83,7 @@ import shutil
 import statistics
 import subprocess
 import sys
+import tempfile
 from dataclasses import dataclass, field
 from datetime import UTC
 from pathlib import Path
@@ -875,6 +877,455 @@ def _spawn_train_subprocess(
         text=True,
         check=False,
     )
+
+
+# ---------------------------------------------------------------------------
+# Async-first parallel orchestration with per-worker state isolation
+# (S3 parallel + S5 stateless — PR-ASYNC-FIRST, 2026-06-03)
+#
+# The gen-0 K replicates and the NEVER + RANDOM control arms are
+# PATH-INDEPENDENT: every replicate / cycle measures the SAME frozen
+# baseline before any keep/revert, so there is no champion chain to
+# corrupt by running them out of order. With PAYG (``openai_source =
+# "api_key"``, no shared OAuth rate bucket) the subscription-safe
+# ``GEODE_AUDIT_MAX_CONCURRENT=1`` serialisation is no longer required, so
+# these path-independent measures fan out concurrently via
+# ``asyncio.gather`` — each worker an isolated ``train.py`` subprocess.
+#
+# State isolation mirrors the proven ``scripts/floor_sampler.sh`` pattern:
+# each worker runs with its OWN ``GEODE_STATE_ROOT`` (a per-worker temp
+# dir), seeded from the frozen baseline snapshot, so concurrent workers
+# never race on the shared ``mutations.jsonl`` / ``baseline.json`` /
+# ``policies/*`` under the single production ``state/autoresearch/`` root.
+# Each worker resolves ``core.paths.*`` (which read ``GEODE_STATE_ROOT`` at
+# import time) under its isolated root, so its writes land in its own tree.
+#
+# The GATE arm is PATH-DEPENDENT (a promote mutates the champion + steers
+# the next propose) and MUST stay the sequential ``run_arm`` path — it is
+# never routed through this concurrent machinery.
+# ---------------------------------------------------------------------------
+
+
+@dataclass(frozen=True)
+class WorkerOutcome:
+    """One path-independent worker's result (gen-0 replicate or control cycle).
+
+    ``ok`` is the partial-failure flag the aggregators filter on: a worker that
+    crashed / timed out / exited non-zero contributes NO dims and NO signal, and
+    the aggregator logs it as a dropped worker (never silent truncation).
+    """
+
+    index: int
+    ok: bool
+    returncode: int
+    dim_means: dict[str, float]
+    signal: CycleSignal | None
+    reason: str
+
+
+def _seed_isolated_state_root(worker_root: Path, snapshot_dir: Path) -> None:
+    """Seed a per-worker ``GEODE_STATE_ROOT`` tree from the frozen gen-0 snapshot.
+
+    Lays out ``<worker_root>/autoresearch/{policies/*, baseline.json}`` exactly as
+    :func:`restore_sot` would lay out the production root — a matched frozen-baseline
+    reset — but into the ISOLATED root so concurrent workers do not contend on the
+    shared production SoT. ``mutations.jsonl`` is deliberately NOT copied: each
+    worker starts with an empty attribution ledger so the row it appends is
+    unambiguously its own (no stale-row reuse across workers). Raises
+    ``FileNotFoundError`` when the snapshot dir is absent (a matched reset must be
+    exact, mirroring :func:`restore_sot`).
+    """
+    if not snapshot_dir.exists():
+        raise FileNotFoundError(
+            f"gen-0 snapshot dir {snapshot_dir} missing — cannot seed an isolated worker root"
+        )
+    worker_state_dir = worker_root / "autoresearch"
+    worker_policies = worker_state_dir / "policies"
+    worker_policies.mkdir(parents=True, exist_ok=True)
+    policies_src = snapshot_dir / "policies"
+    if policies_src.exists():
+        for src in sorted(policies_src.glob("*")):
+            shutil.copy2(src, worker_policies / src.name)
+    baseline_src = snapshot_dir / "baseline.json"
+    if baseline_src.exists():
+        shutil.copy2(baseline_src, worker_state_dir / "baseline.json")
+
+
+def _build_worker_env(
+    worker_root: Path,
+    *,
+    promote_policy: str | None,
+    promote_policy_seed: int | None,
+    audit_max_samples: int,
+    audit_max_connections: int,
+) -> dict[str, str]:
+    """Build a concurrent worker's subprocess env.
+
+    Layers the campaign-fixed env (:func:`build_campaign_env` — seed-pool +
+    held-out + PAYG knobs + the authoritative promote-policy / seed) and the
+    isolated ``GEODE_STATE_ROOT`` so the worker's ``train.py`` resolves every
+    ``core.paths.*`` constant under its OWN tree. ``VIRTUAL_ENV`` /
+    ``PATH`` are inherited from ``os.environ`` (the parent campaign process runs
+    inside the venv), so the child ``sys.executable -m core.self_improving.train``
+    resolves the venv's interpreter — never the system python — mirroring the
+    venv-activation step ``scripts/floor_sampler.sh`` performs to avoid the
+    ``ModuleNotFoundError: core`` a system-python child would hit.
+    """
+    env = build_campaign_env(
+        promote_policy=promote_policy,
+        promote_policy_seed=promote_policy_seed,
+        audit_max_samples=audit_max_samples,
+        audit_max_connections=audit_max_connections,
+    )
+    env["GEODE_STATE_ROOT"] = str(worker_root)
+    return env
+
+
+async def _spawn_train_subprocess_async(
+    *,
+    env: dict[str, str],
+    dry_run: bool,
+    per_audit_timeout: float | None,
+) -> subprocess.CompletedProcess[str]:
+    """Async sibling of :func:`_spawn_train_subprocess` — drop-in shape.
+
+    Spawns ``<venv python> -m core.self_improving.train`` via
+    ``asyncio.create_subprocess_exec`` (so N workers run concurrently on one event
+    loop), captures BOTH stdout+stderr, and applies the TIGHT ``per_audit_timeout``
+    so a hung worker is killed within seconds of overrun rather than holding for
+    the operator-overridable budget (mirroring :func:`run_audit_async`'s timeout
+    discipline). On timeout the child is killed + reaped and a
+    :class:`subprocess.CompletedProcess` with ``returncode=-1`` is returned (the
+    aggregator filters it out as a dropped worker — a timed-out replicate must not
+    crash the whole gather). ``sys.executable`` is the venv interpreter the parent
+    campaign runs under, so the child resolves the ``core`` package.
+    """
+    argv = [sys.executable, "-m", "core.self_improving.train"]
+    if dry_run:
+        argv.append("--dry-run")
+    proc = await asyncio.create_subprocess_exec(
+        *argv,
+        stdout=asyncio.subprocess.PIPE,
+        stderr=asyncio.subprocess.PIPE,
+        env=env,
+        cwd=str(REPO_ROOT),
+    )
+    try:
+        stdout_bytes, stderr_bytes = await asyncio.wait_for(
+            proc.communicate(), timeout=per_audit_timeout
+        )
+    except TimeoutError:
+        # ``asyncio.wait_for`` raises the builtin ``TimeoutError`` (aliased to
+        # ``asyncio.TimeoutError`` since 3.11). Kill + reap the hung child so the
+        # tight bound actually frees the worker instead of leaking a zombie.
+        proc.kill()
+        await proc.wait()
+        return subprocess.CompletedProcess(
+            args=argv,
+            returncode=-1,
+            stdout="",
+            stderr=f"worker timed out after {per_audit_timeout}s; killed child",
+        )
+    stdout_text = stdout_bytes.decode("utf-8", errors="replace") if stdout_bytes else ""
+    stderr_text = stderr_bytes.decode("utf-8", errors="replace") if stderr_bytes else ""
+    return subprocess.CompletedProcess(
+        args=argv,
+        returncode=proc.returncode if proc.returncode is not None else -1,
+        stdout=stdout_text,
+        stderr=stderr_text,
+    )
+
+
+async def _run_isolated_worker(
+    *,
+    index: int,
+    workers_root: Path,
+    snapshot_dir: Path,
+    promote_policy: str | None,
+    promote_policy_seed: int | None,
+    audit_max_samples: int,
+    audit_max_connections: int,
+    dry_run: bool,
+    per_audit_timeout: float | None,
+    runner_fn: Any,
+) -> WorkerOutcome:
+    """Run ONE path-independent worker in an isolated ``GEODE_STATE_ROOT``.
+
+    Seeds ``<workers_root>/w{index}`` from the frozen gen-0 snapshot, spawns
+    ``train.py`` there (concurrently with its siblings), and reads back THIS
+    worker's signal: its RAW ``dim_means`` from the ``FITNESS_RESULT`` stdout
+    sentinel + its newest ``kind="attribution"`` row from its OWN isolated
+    ``mutations.jsonl``. A non-zero exit / timeout / crash yields an ``ok=False``
+    outcome the aggregator drops with a logged reason (partial-failure resilient).
+
+    ``runner_fn`` is the injectable spawn seam (default
+    :func:`_spawn_train_subprocess_async`); tests pass a fake async runner so the
+    gather + aggregate + isolation are exercised with NO real audit.
+    """
+    worker_root = workers_root / f"w{index}"
+    worker_root.mkdir(parents=True, exist_ok=True)
+    try:
+        _seed_isolated_state_root(worker_root, snapshot_dir)
+    except FileNotFoundError as exc:
+        return WorkerOutcome(
+            index=index,
+            ok=False,
+            returncode=-1,
+            dim_means={},
+            signal=None,
+            reason=f"seed failed: {exc}",
+        )
+    env = _build_worker_env(
+        worker_root,
+        promote_policy=promote_policy,
+        promote_policy_seed=promote_policy_seed,
+        audit_max_samples=audit_max_samples,
+        audit_max_connections=audit_max_connections,
+    )
+    try:
+        result = await runner_fn(env=env, dry_run=dry_run, per_audit_timeout=per_audit_timeout)
+    except Exception as exc:  # pragma: no cover — defensive (a worker crash must
+        # not abort the gather; the aggregator drops it with a logged reason)
+        return WorkerOutcome(
+            index=index,
+            ok=False,
+            returncode=-1,
+            dim_means={},
+            signal=None,
+            reason=f"worker raised: {exc}",
+        )
+    returncode = int(getattr(result, "returncode", -1) or 0)
+    if returncode != 0:
+        return WorkerOutcome(
+            index=index,
+            ok=False,
+            returncode=returncode,
+            dim_means={},
+            signal=None,
+            reason=f"train.py exited {returncode}",
+        )
+    measure_dims = parse_fitness_result_dims(getattr(result, "stdout", None)) or {}
+    # Read THIS worker's signal from its OWN isolated mutations.jsonl (the worker
+    # root started with no attribution ledger, so the newest row is unambiguously
+    # this worker's). ``min_rows=0`` is correct here precisely because the ledger
+    # is per-worker — there is no sibling row to mistake for this one.
+    worker_mutations = worker_root / "autoresearch" / "mutations.jsonl"
+    signal = read_latest_attribution(worker_mutations)
+    return WorkerOutcome(
+        index=index,
+        ok=True,
+        returncode=0,
+        dim_means=measure_dims,
+        signal=signal,
+        reason="ok",
+    )
+
+
+async def run_gen0_baseline_async(
+    *,
+    k: int,
+    dry_run: bool,
+    audit_max_samples: int,
+    audit_max_connections: int,
+    progress: ProgressLog,
+    snapshot_dir: Path = GEN0_SNAPSHOT_DIR,
+    per_audit_timeout: float | None = None,
+    workers_root: Path | None = None,
+    runner_fn: Any | None = None,
+) -> NoiseBand:
+    """Async parallel sibling of :func:`run_gen0_baseline`.
+
+    Runs the K gen-0 replicates CONCURRENTLY via ``asyncio.gather`` — each an
+    isolated ``GEODE_STATE_ROOT`` worker seeded from the frozen baseline snapshot
+    (path-independent: every replicate measures the SAME frozen baseline) — then
+    aggregates the K per-dim ``dim_means`` (:func:`aggregate_dim_means`) and
+    rewrites ``baseline.json``'s ``raw.dim_means`` / ``raw.dim_stderr`` to the
+    K-mean (:func:`write_kmean_baseline`), exactly as the sequential path does.
+
+    Aggregation FILTERS to the workers that succeeded (``ok=True``); dropped
+    workers (crash / timeout / non-zero exit / no parsed dims) are logged, never
+    silently truncated. The K-mean rewrite is SKIPPED under ``--dry-run`` (the
+    synthetic dims must not freeze a synthetic baseline) — identical to the sync
+    path. ``runner_fn`` (default :func:`_spawn_train_subprocess_async`) is the
+    injectable async spawn seam for tests.
+    """
+    runner = runner_fn if runner_fn is not None else _spawn_train_subprocess_async
+    with tempfile.TemporaryDirectory(prefix="geode-gen0-") as tmp:
+        roots_parent = workers_root if workers_root is not None else Path(tmp)
+        progress.emit(
+            f"gen-0 baseline (async): fanning {k} isolated workers concurrently "
+            f"(dry_run={dry_run}, per_audit_timeout={per_audit_timeout})"
+        )
+        outcomes: list[WorkerOutcome] = await asyncio.gather(
+            *(
+                _run_isolated_worker(
+                    index=i,
+                    workers_root=roots_parent,
+                    snapshot_dir=snapshot_dir,
+                    promote_policy=None,  # gen-0 inherits NO arm (frozen baseline)
+                    promote_policy_seed=None,
+                    audit_max_samples=audit_max_samples,
+                    audit_max_connections=audit_max_connections,
+                    dry_run=dry_run,
+                    per_audit_timeout=per_audit_timeout,
+                    runner_fn=runner,
+                )
+                for i in range(1, k + 1)
+            )
+        )
+    successful = [o for o in outcomes if o.ok]
+    dropped = [o for o in outcomes if not o.ok]
+    for o in dropped:
+        progress.emit(f"gen-0 baseline (async): DROPPED worker w{o.index} — {o.reason}")
+    held_out_values = [
+        o.signal.held_out_fitness
+        for o in successful
+        if o.signal is not None and o.signal.held_out_fitness is not None
+    ]
+    fitness_values = [
+        o.signal.fitness
+        for o in successful
+        if o.signal is not None and o.signal.fitness is not None
+    ]
+    per_measure_dim_means = [o.dim_means for o in successful if o.dim_means]
+    band = compute_noise_band(held_out_values, fitness_values, k=k)
+    progress.emit(
+        f"gen-0 baseline (async): {len(successful)}/{k} workers ok, "
+        f"{len(dropped)} dropped; " + band.summary()
+    )
+    if dry_run:
+        progress.emit(
+            f"gen-0 K-mean baseline (async): dry-run — skipped baseline.json rewrite "
+            f"(parsed {len(per_measure_dim_means)}/{k} synthetic FITNESS_RESULT measures)"
+        )
+    elif per_measure_dim_means:
+        mean_dims, stderr_dims, present_count = aggregate_dim_means(per_measure_dim_means)
+        wrote = write_kmean_baseline(mean_dims, stderr_dims)
+        partial = sorted(d for d, c in present_count.items() if c < len(per_measure_dim_means))
+        progress.emit(
+            f"gen-0 K-mean baseline (async): collected {len(per_measure_dim_means)}/{k} "
+            f"measures, {len(mean_dims)} dims; baseline.json raw.dim_means←K-mean "
+            f"(written={wrote})" + (f"; partial-coverage dims={partial}" if partial else "")
+        )
+    else:
+        progress.emit(
+            f"gen-0 K-mean baseline (async): no FITNESS_RESULT dims parsed from {k} "
+            "workers (all dropped) — baseline.json raw.dim_means left as bootstrap"
+        )
+    return band
+
+
+@dataclass(frozen=True)
+class ControlArmFloor:
+    """The aggregated floor of one path-independent control arm (never / random).
+
+    Mirrors ``scripts/floor_aggregate.py``: the mean ± stderr of the per-cycle
+    held-out (and fitness) measures over the arm's N concurrent, frozen-baseline
+    cycles. ``cycles_ok`` / ``cycles_dropped`` make the partial-failure resilience
+    auditable (no silent truncation).
+    """
+
+    arm: str
+    cycles_ok: int
+    cycles_dropped: int
+    held_out_band: NoiseBand
+
+    def summary(self) -> str:
+        return (
+            f"control arm '{self.arm}' floor: cycles_ok={self.cycles_ok} "
+            f"cycles_dropped={self.cycles_dropped}; {self.held_out_band.summary()}"
+        )
+
+
+async def run_control_arm_async(
+    *,
+    arm: str,
+    arm_index: int,
+    n: int,
+    audit_max_samples: int,
+    audit_max_connections: int,
+    dry_run: bool,
+    progress: ProgressLog,
+    snapshot_dir: Path = GEN0_SNAPSHOT_DIR,
+    per_audit_timeout: float | None = None,
+    workers_root: Path | None = None,
+    runner_fn: Any | None = None,
+) -> ControlArmFloor:
+    """Run a PATH-INDEPENDENT control arm's N cycles concurrently.
+
+    For the ``never`` and ``random`` arms ONLY: each cycle measures the SAME
+    frozen baseline (no keep/revert chain), so the N cycles fan out via
+    ``asyncio.gather`` — each an isolated ``GEODE_STATE_ROOT`` worker seeded from
+    the frozen snapshot, with the arm's ``GEODE_PROMOTE_POLICY`` (+ per-cycle
+    deterministic ``GEODE_PROMOTE_POLICY_SEED`` for ``random``). Then aggregates
+    the per-cycle held-out / fitness floor (mirroring
+    ``scripts/floor_aggregate.py``), filtering to successful cycles and logging
+    drops.
+
+    NOT for the GATE arm — that is path-dependent (a promote mutates the champion
+    + steers the next propose) and MUST stay the sequential :func:`run_arm`. This
+    function raises ``ValueError`` if asked to run ``gate`` so the path-dependence
+    invariant cannot be violated by a mis-call.
+    """
+    if arm == "gate":
+        raise ValueError(
+            "run_control_arm_async refuses the GATE arm — it is path-dependent "
+            "(promote mutates the champion chain) and MUST stay sequential (run_arm)"
+        )
+    if arm not in {"never", "random"}:
+        raise ValueError(f"run_control_arm_async expects 'never' or 'random', got {arm!r}")
+    runner = runner_fn if runner_fn is not None else _spawn_train_subprocess_async
+    with tempfile.TemporaryDirectory(prefix=f"geode-{arm}-") as tmp:
+        roots_parent = workers_root if workers_root is not None else Path(tmp)
+        progress.emit(
+            f"control arm '{arm}' (index {arm_index}, async): fanning {n} isolated "
+            f"frozen-baseline cycles concurrently (dry_run={dry_run})"
+        )
+        outcomes: list[WorkerOutcome] = await asyncio.gather(
+            *(
+                _run_isolated_worker(
+                    index=cycle,
+                    workers_root=roots_parent,
+                    snapshot_dir=snapshot_dir,
+                    promote_policy=arm,
+                    # random arm: deterministic per-(arm,cycle) seed so a re-run
+                    # reproduces the same random promote decisions.
+                    promote_policy_seed=(
+                        DEFAULT_RANDOM_SEED_BASE + arm_index * n + cycle
+                        if arm == "random"
+                        else None
+                    ),
+                    audit_max_samples=audit_max_samples,
+                    audit_max_connections=audit_max_connections,
+                    dry_run=dry_run,
+                    per_audit_timeout=per_audit_timeout,
+                    runner_fn=runner,
+                )
+                for cycle in range(1, n + 1)
+            )
+        )
+    successful = [o for o in outcomes if o.ok]
+    dropped = [o for o in outcomes if not o.ok]
+    for o in dropped:
+        progress.emit(f"control arm '{arm}' (async): DROPPED cycle {o.index} — {o.reason}")
+    held_out_values = [
+        o.signal.held_out_fitness
+        for o in successful
+        if o.signal is not None and o.signal.held_out_fitness is not None
+    ]
+    fitness_values = [
+        o.signal.fitness
+        for o in successful
+        if o.signal is not None and o.signal.fitness is not None
+    ]
+    floor = ControlArmFloor(
+        arm=arm,
+        cycles_ok=len(successful),
+        cycles_dropped=len(dropped),
+        held_out_band=compute_noise_band(held_out_values, fitness_values, k=n),
+    )
+    progress.emit(floor.summary())
+    return floor
 
 
 # ---------------------------------------------------------------------------

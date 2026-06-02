@@ -18,7 +18,9 @@ the SoT files (via monkeypatched module-level path constants). The tests cover:
 
 from __future__ import annotations
 
+import asyncio
 import json
+import os
 import subprocess
 import sys
 from pathlib import Path
@@ -1076,3 +1078,319 @@ def test_campaign_dry_run_via_real_subprocess_completes() -> None:
         f"halted early.\nstdout tail:\n{proc.stdout[-2000:]}\n"
         f"stderr tail:\n{proc.stderr[-2000:]}"
     )
+
+
+# ---------------------------------------------------------------------------
+# S3 parallel + S5 stateless — async orchestration with per-worker state
+# isolation (PR-ASYNC-FIRST, 2026-06-03)
+# ---------------------------------------------------------------------------
+
+
+def _make_gen0_snapshot(campaign_state: dict[str, Path]) -> Path:
+    """Stage a frozen gen-0 snapshot (policies + baseline.json) the async
+    isolated workers seed from."""
+    policies_dir = campaign_state["policies_dir"]
+    (policies_dir / "hyperparam.json").write_text('{"reflection_depth": 3}', encoding="utf-8")
+    campaign_state["baseline"].write_text(
+        json.dumps({"schema_version": 3, "raw": {"dim_means": {"safety": 9.0}, "dim_stderr": {}}}),
+        encoding="utf-8",
+    )
+    rc.snapshot_sot(campaign_state["snapshot"])
+    return campaign_state["snapshot"]
+
+
+def _fake_async_runner(
+    *, dim_per_index: dict[int, dict[str, float]], held_out_per_index: dict[int, float]
+) -> Any:
+    """Build a fake async runner ``(env, dry_run, per_audit_timeout) -> CompletedProcess``.
+
+    It records each worker's ``GEODE_STATE_ROOT`` (so the test asserts isolation),
+    writes a synthetic ``kind="attribution"`` row into THAT worker's isolated
+    ``mutations.jsonl``, and emits a ``FITNESS_RESULT`` stdout line — proving the
+    gather + per-worker read-back + aggregate wiring with NO real audit.
+    """
+    seen_roots: list[str] = []
+
+    async def runner(*, env: dict[str, str], dry_run: bool, per_audit_timeout: float | None) -> Any:
+        state_root = Path(env["GEODE_STATE_ROOT"])
+        seen_roots.append(env["GEODE_STATE_ROOT"])
+        # Map the worker's state-root to its 1-based index (w1, w2, ...).
+        idx = int(state_root.name.removeprefix("w"))
+        mutations = state_root / "autoresearch" / "mutations.jsonl"
+        mutations.parent.mkdir(parents=True, exist_ok=True)
+        _write_attribution(
+            mutations,
+            held_out=held_out_per_index.get(idx),
+            fitness=(held_out_per_index.get(idx) or 0.0) + 0.1,
+            source="manual",
+        )
+        stdout = _fitness_result_line(dim_per_index.get(idx, {}))
+        return SimpleNamespace(returncode=0, stdout=stdout, stderr="")
+
+    runner.seen_roots = seen_roots  # type: ignore[attr-defined]
+    return runner
+
+
+def test_gen0_async_gathers_k_workers_and_writes_kmean_baseline(
+    campaign_state: dict[str, Path],
+) -> None:
+    _make_gen0_snapshot(campaign_state)
+    runner = _fake_async_runner(
+        dim_per_index={
+            1: {"safety": 2.0},
+            2: {"safety": 3.0},
+            3: {"safety": 4.0},
+        },
+        held_out_per_index={1: 0.50, 2: 0.52, 3: 0.54},
+    )
+    with rc.ProgressLog(campaign_state["progress"]) as progress:
+        band = asyncio.run(
+            rc.run_gen0_baseline_async(
+                k=3,
+                dry_run=False,
+                audit_max_samples=3,
+                audit_max_connections=8,
+                progress=progress,
+                snapshot_dir=campaign_state["snapshot"],
+                per_audit_timeout=5.0,
+                runner_fn=runner,
+            )
+        )
+    # All 3 path-independent replicates gathered + their held-out values collected.
+    assert len(band.held_out_values) == 3
+    assert band.mean == pytest.approx((0.50 + 0.52 + 0.54) / 3)
+    # baseline.json's raw.dim_means rewritten to the K-mean (2+3+4)/3 = 3.0.
+    payload = json.loads(campaign_state["baseline"].read_text(encoding="utf-8"))
+    assert payload["raw"]["dim_means"]["safety"] == pytest.approx(3.0)
+    # Per-worker STATE_ROOT is DISTINCT (the isolation invariant: no shared root).
+    roots = runner.seen_roots  # type: ignore[attr-defined]
+    assert len(roots) == 3
+    assert len(set(roots)) == 3, f"workers must have distinct GEODE_STATE_ROOT, got {roots}"
+
+
+def test_gen0_async_drops_failed_worker_without_truncating_silently(
+    campaign_state: dict[str, Path],
+) -> None:
+    _make_gen0_snapshot(campaign_state)
+
+    async def runner(*, env: dict[str, str], dry_run: bool, per_audit_timeout: float | None) -> Any:
+        state_root = Path(env["GEODE_STATE_ROOT"])
+        idx = int(state_root.name.removeprefix("w"))
+        if idx == 2:
+            # Worker 2 "fails" (non-zero exit) — must be dropped, not crash the gather.
+            return SimpleNamespace(returncode=1, stdout="", stderr="boom")
+        mutations = state_root / "autoresearch" / "mutations.jsonl"
+        mutations.parent.mkdir(parents=True, exist_ok=True)
+        _write_attribution(mutations, held_out=0.5, fitness=0.6, source="manual")
+        return SimpleNamespace(returncode=0, stdout=_fitness_result_line({"safety": 3.0}))
+
+    with rc.ProgressLog(campaign_state["progress"]) as progress:
+        band = asyncio.run(
+            rc.run_gen0_baseline_async(
+                k=3,
+                dry_run=False,
+                audit_max_samples=3,
+                audit_max_connections=8,
+                progress=progress,
+                snapshot_dir=campaign_state["snapshot"],
+                per_audit_timeout=5.0,
+                runner_fn=runner,
+            )
+        )
+    # Only the 2 surviving workers contribute (the failed one is filtered, logged).
+    assert len(band.held_out_values) == 2
+    log_text = campaign_state["progress"].read_text(encoding="utf-8")
+    assert "DROPPED worker w2" in log_text
+
+
+def test_gen0_async_dry_run_skips_baseline_rewrite(
+    campaign_state: dict[str, Path],
+) -> None:
+    _make_gen0_snapshot(campaign_state)
+    before = campaign_state["baseline"].read_text(encoding="utf-8")
+    runner = _fake_async_runner(
+        dim_per_index={1: {"safety": 2.0}, 2: {"safety": 8.0}},
+        held_out_per_index={1: 0.5, 2: 0.5},
+    )
+    with rc.ProgressLog(campaign_state["progress"]) as progress:
+        asyncio.run(
+            rc.run_gen0_baseline_async(
+                k=2,
+                dry_run=True,
+                audit_max_samples=3,
+                audit_max_connections=8,
+                progress=progress,
+                snapshot_dir=campaign_state["snapshot"],
+                per_audit_timeout=5.0,
+                runner_fn=runner,
+            )
+        )
+    # dry-run must leave baseline.json byte-identical (no synthetic freeze).
+    assert campaign_state["baseline"].read_text(encoding="utf-8") == before
+
+
+def test_control_arm_async_gathers_n_cycles_and_aggregates_floor(
+    campaign_state: dict[str, Path],
+) -> None:
+    _make_gen0_snapshot(campaign_state)
+    seen_policies: list[str | None] = []
+
+    async def runner(*, env: dict[str, str], dry_run: bool, per_audit_timeout: float | None) -> Any:
+        seen_policies.append(env.get("GEODE_PROMOTE_POLICY"))
+        state_root = Path(env["GEODE_STATE_ROOT"])
+        idx = int(state_root.name.removeprefix("w"))
+        mutations = state_root / "autoresearch" / "mutations.jsonl"
+        mutations.parent.mkdir(parents=True, exist_ok=True)
+        _write_attribution(
+            mutations, held_out=0.40 + idx * 0.01, fitness=0.41 + idx * 0.01, source="manual"
+        )
+        return SimpleNamespace(returncode=0, stdout=_fitness_result_line({"safety": 3.0}))
+
+    with rc.ProgressLog(campaign_state["progress"]) as progress:
+        floor = asyncio.run(
+            rc.run_control_arm_async(
+                arm="never",
+                arm_index=0,
+                n=4,
+                audit_max_samples=3,
+                audit_max_connections=8,
+                dry_run=False,
+                progress=progress,
+                snapshot_dir=campaign_state["snapshot"],
+                per_audit_timeout=5.0,
+                runner_fn=runner,
+            )
+        )
+    assert floor.cycles_ok == 4
+    assert floor.cycles_dropped == 0
+    assert floor.held_out_band.mean is not None
+    # Every cycle ran the 'never' arm against the frozen baseline.
+    assert seen_policies == ["never"] * 4
+
+
+def test_control_arm_async_refuses_gate_arm(
+    campaign_state: dict[str, Path],
+) -> None:
+    _make_gen0_snapshot(campaign_state)
+    with (
+        rc.ProgressLog(campaign_state["progress"]) as progress,
+        pytest.raises(ValueError, match="path-dependent"),
+    ):
+        asyncio.run(
+            rc.run_control_arm_async(
+                arm="gate",
+                arm_index=2,
+                n=2,
+                audit_max_samples=3,
+                audit_max_connections=8,
+                dry_run=False,
+                progress=progress,
+                snapshot_dir=campaign_state["snapshot"],
+                per_audit_timeout=5.0,
+            )
+        )
+
+
+def test_control_arm_async_random_uses_distinct_per_cycle_seeds(
+    campaign_state: dict[str, Path],
+) -> None:
+    _make_gen0_snapshot(campaign_state)
+    seen_seeds: list[str | None] = []
+
+    async def runner(*, env: dict[str, str], dry_run: bool, per_audit_timeout: float | None) -> Any:
+        seen_seeds.append(env.get("GEODE_PROMOTE_POLICY_SEED"))
+        state_root = Path(env["GEODE_STATE_ROOT"])
+        mutations = state_root / "autoresearch" / "mutations.jsonl"
+        mutations.parent.mkdir(parents=True, exist_ok=True)
+        _write_attribution(mutations, held_out=0.5, fitness=0.6, source="manual")
+        return SimpleNamespace(returncode=0, stdout=_fitness_result_line({"safety": 3.0}))
+
+    with rc.ProgressLog(campaign_state["progress"]) as progress:
+        asyncio.run(
+            rc.run_control_arm_async(
+                arm="random",
+                arm_index=1,
+                n=3,
+                audit_max_samples=3,
+                audit_max_connections=8,
+                dry_run=False,
+                progress=progress,
+                snapshot_dir=campaign_state["snapshot"],
+                per_audit_timeout=5.0,
+                runner_fn=runner,
+            )
+        )
+    # random arm: every cycle gets a distinct deterministic seed (reproducible).
+    assert len(seen_seeds) == 3
+    assert all(s is not None for s in seen_seeds)
+    assert len(set(seen_seeds)) == 3, f"random cycles must have distinct seeds, got {seen_seeds}"
+
+
+def test_seed_isolated_state_root_copies_policies_and_baseline_not_mutations(
+    campaign_state: dict[str, Path], tmp_path: Path
+) -> None:
+    _make_gen0_snapshot(campaign_state)
+    # Seed the production mutations.jsonl with a stale row that MUST NOT leak in.
+    _write_attribution(campaign_state["mutations"], held_out=0.99, fitness=0.99, source="manual")
+    worker_root = tmp_path / "w1"
+    rc._seed_isolated_state_root(worker_root, campaign_state["snapshot"])
+    worker_state = worker_root / "autoresearch"
+    assert (worker_state / "policies" / "hyperparam.json").exists()
+    assert (worker_state / "baseline.json").exists()
+    # mutations.jsonl is deliberately NOT seeded — the worker's ledger starts empty
+    # so the row it appends is unambiguously its own (no cross-worker stale reuse).
+    assert not (worker_state / "mutations.jsonl").exists()
+
+
+def test_seed_isolated_state_root_missing_snapshot_raises(tmp_path: Path) -> None:
+    with pytest.raises(FileNotFoundError, match="snapshot dir"):
+        rc._seed_isolated_state_root(tmp_path / "w1", tmp_path / "nonexistent-snapshot")
+
+
+def test_build_worker_env_sets_isolated_state_root_and_arm(tmp_path: Path) -> None:
+    worker_root = tmp_path / "w2"
+    env = rc._build_worker_env(
+        worker_root,
+        promote_policy="random",
+        promote_policy_seed=777,
+        audit_max_samples=3,
+        audit_max_connections=8,
+    )
+    assert env["GEODE_STATE_ROOT"] == str(worker_root)
+    assert env["GEODE_PROMOTE_POLICY"] == "random"
+    assert env["GEODE_PROMOTE_POLICY_SEED"] == "777"
+    # The PAYG + seed-pool campaign env is layered in too.
+    assert env["GEODE_CODEX_OAUTH_POLL_DISABLED"] == "1"
+
+
+def test_spawn_train_subprocess_async_timeout_kills_and_returns_minus_one(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """The real :func:`_spawn_train_subprocess_async` must kill + reap a child that
+    overruns the tight ``per_audit_timeout`` and return ``returncode=-1`` so the
+    aggregator drops it (never a hung gather). We swap the argv it builds for a
+    30s sleeper via a patched ``sys.executable -c`` so the timeout branch fires
+    deterministically without spawning the heavy real ``train.py``."""
+    # Patch create_subprocess_exec so the helper spawns a long sleeper instead of
+    # the real train module — the timeout + kill + reap logic is what we test.
+    real_exec = asyncio.create_subprocess_exec
+
+    async def sleeper_exec(*_argv: Any, **kwargs: Any) -> Any:
+        return await real_exec(
+            sys.executable,
+            "-c",
+            "import time; time.sleep(30)",
+            stdout=kwargs.get("stdout"),
+            stderr=kwargs.get("stderr"),
+        )
+
+    monkeypatch.setattr(rc.asyncio, "create_subprocess_exec", sleeper_exec)
+    result = asyncio.run(
+        rc._spawn_train_subprocess_async(
+            env={**os.environ, "GEODE_STATE_ROOT": str(tmp_path / "unused")},
+            dry_run=False,
+            per_audit_timeout=0.1,
+        )
+    )
+    assert result.returncode == -1
+    assert "timed out" in result.stderr
