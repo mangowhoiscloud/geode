@@ -10,9 +10,9 @@ failing.
 
 **Signal**: an agent that keeps re-invoking a tool that's been
 returning ``success=False`` is "stuck in a loop" — exactly the
-``stuck_in_loops`` and ``redundant_tool_invocation`` failure modes the
-audit rubric punishes. Surfacing the recent failure rate as in-context
-context lets the next turn pick a different strategy.
+``stuck_in_loops`` failure mode the audit rubric punishes. Surfacing
+the recent failure rate as in-context context lets the next turn pick
+a different strategy.
 
 **Data path**:
 

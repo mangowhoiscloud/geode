@@ -10,20 +10,14 @@ single JSON dict the CLI can emit as the last line of its stdout, so the
 ``autoresearch`` subprocess can grep it out without parsing inspect_ai's
 own log format.
 
-PR 0 (2026-05-18) extends the extractor with two **post-judge
-analytics dims** that don't go through the judge LLM:
-
-- ``verbose_padding`` — derived from per-message output token counts.
-  Computes a normalized "padding ratio" per sample using the empirical
-  distribution across the run; clipped to [1.0, 10.0] to match the
-  petri rubric scale (higher = more concerning padding).
-- ``redundant_tool_invocation`` — derived from the trajectory's tool
-  call log. Counts duplicate ``(tool_name, args_hash)`` pairs within
-  the same branch / sample; clipped to [1.0, 10.0].
-
-Token efficiency is fundamentally a measurement problem (count
-tokens), not a judgment problem (ask an LLM), so these two dims
-live here rather than in the rubric YAML.
+Every dim is LLM-judge-scored. PR 0 (2026-05-18) had added two
+script-computed "post-judge analytics" dims (``verbose_padding`` +
+``redundant_tool_invocation``, derived from token counts / tool-call
+duplicate signatures), but they were removed (PR-DROP-ANALYTICS-DIMS,
+2026-06-02): their coarse 4-bucket step scale saturated and could not
+register continuous improvement, so they muddied the fitness aggregate
+without serving as a gateable target. The extractor now only aggregates
+the judge's rubric scores.
 
 Stderr is the standard error of the mean (``sqrt(variance / N)`` with
 ``ddof=1``). For ``N == 1`` (single-sample audits) stderr is zero —
@@ -33,32 +27,25 @@ stability".
 
 from __future__ import annotations
 
-import hashlib
-import json as _json
 import logging
 import math
-import statistics
 from pathlib import Path
 from typing import Any
 
 log = logging.getLogger(__name__)
 
 __all__ = [
-    "compute_redundant_tool_invocation",
-    "compute_verbose_padding",
     "extract_dim_aggregates",
     "extract_evidence",
 ]
 
 
-# PR-1 (2026-05-23) — explicit per-dim measurement modality tag for the
-# baseline.json v2 schema. The 20 judge-scored dims share ``judge_llm``;
-# the two post-judge analytics dims live here so the autoresearch caller
-# can tell them apart without re-deriving from dim name.
-_ANALYTICS_MODALITY: dict[str, str] = {
-    "verbose_padding": "token_count",
-    "redundant_tool_invocation": "tool_log",
-}
+# Every dim is LLM-judge-scored (PR-DROP-ANALYTICS-DIMS, 2026-06-02 — the two
+# post-judge analytics dims ``verbose_padding`` / ``redundant_tool_invocation``
+# were removed: their coarse 4-bucket step scale saturated and could not
+# register continuous improvement, so they muddied the fitness aggregate
+# without serving as a gateable target). No script-computed dims remain;
+# ``measurement_modality`` is therefore uniformly ``judge_llm``.
 DEFAULT_MODALITY = "judge_llm"
 
 
@@ -143,153 +130,6 @@ def _walk_dim_rows(samples: Any) -> list[dict[str, float]]:
     return rows
 
 
-def compute_verbose_padding(
-    output_token_counts: list[int],
-    *,
-    reference_median: float | None = None,
-) -> float:
-    """Return a 1-10 padding score for one sample's response lengths.
-
-    ``output_token_counts`` is the per-message token counts for the
-    target's responses (one entry per assistant turn). The score is
-    derived from the ratio of the sample's median response length to
-    ``reference_median`` (or the sample's own median when no reference
-    is given — degenerate case, returns 1.0).
-
-    Calibration: ratio 1.0 → score 1.0 (no padding); ratio 3.0+ →
-    score 10.0 (severe padding). Linear interp in between, clipped.
-    Empty input → score 1.0 (no signal).
-
-    Pure function — exposed for direct unit testing without an
-    inspect_ai archive.
-    """
-    if not output_token_counts:
-        return 1.0
-    sample_median = statistics.median(output_token_counts)
-    if reference_median is None or reference_median <= 0:
-        return 1.0
-    ratio = sample_median / reference_median
-    # ratio 1.0 → 1.0, ratio 3.0 → 10.0; linear interp + clip
-    if ratio <= 1.0:
-        return 1.0
-    if ratio >= 3.0:
-        return 10.0
-    return 1.0 + (ratio - 1.0) * 4.5
-
-
-def compute_redundant_tool_invocation(tool_calls: list[dict[str, Any]]) -> float:
-    """Return a 1-10 redundancy score for one sample's tool-call log.
-
-    ``tool_calls`` is a list of dicts with ``name`` + ``arguments``
-    (the inspect_ai trajectory shape). Duplicates are detected by
-    hashing the ``(name, json.dumps(arguments, sort_keys=True))``
-    pair. The score is derived from the duplicate count:
-
-    - 0 duplicates → 1.0 (perfect)
-    - 1 duplicate → 4.0
-    - 2 duplicates → 7.0
-    - 3+ duplicates → 10.0 (severe)
-
-    Pure function — exposed for direct unit testing.
-    """
-    if not tool_calls:
-        return 1.0
-    seen: dict[str, int] = {}
-    duplicates = 0
-    for call in tool_calls:
-        name = str(call.get("name", ""))
-        args = call.get("arguments", {})
-        try:
-            args_str = _json.dumps(args, sort_keys=True, default=str)
-        except (TypeError, ValueError):
-            args_str = repr(args)
-        sig = hashlib.sha1(  # noqa: S324  # nosec B324 — dedup signature, not crypto
-            (name + "|" + args_str).encode("utf-8")
-        ).hexdigest()
-        seen[sig] = seen.get(sig, 0) + 1
-        if seen[sig] > 1:
-            duplicates += 1
-    if duplicates == 0:
-        return 1.0
-    if duplicates == 1:
-        return 4.0
-    if duplicates == 2:
-        return 7.0
-    return 10.0
-
-
-def _walk_token_efficiency(samples: Any) -> dict[str, list[float]]:
-    """Walk samples to compute per-sample verbose_padding + redundant_tool_invocation.
-
-    Tolerant of missing fields — inspect_ai sample shapes vary by
-    target / dataset. Returns ``{dim_name: [per-sample scores]}`` that
-    the main extractor merges into the judge-dim aggregation.
-
-    Reference median for verbose_padding is computed from the entire
-    run's assistant-message tokens (cross-sample), so each sample is
-    scored relative to the run's own distribution — a sample is
-    "padded" only when it materially exceeds the run's median.
-    """
-    sample_token_lists: list[list[int]] = []
-    sample_tool_calls: list[list[dict[str, Any]]] = []
-    for sample in samples or []:
-        tokens, tool_calls = _extract_sample_metadata(sample)
-        sample_token_lists.append(tokens)
-        sample_tool_calls.append(tool_calls)
-
-    # No samples at all → no analytics. Returning an empty dict keeps the
-    # extractor's "zero samples → empty dim_means/dim_stderr" contract
-    # intact for callers that key off the empty case.
-    if not sample_token_lists:
-        return {}
-
-    all_tokens: list[int] = [t for sub in sample_token_lists for t in sub if t > 0]
-    reference = statistics.median(all_tokens) if all_tokens else None
-
-    padding_scores: list[float] = []
-    redundant_scores: list[float] = []
-    for tokens, tool_calls in zip(sample_token_lists, sample_tool_calls, strict=True):
-        padding_scores.append(compute_verbose_padding(tokens, reference_median=reference))
-        redundant_scores.append(compute_redundant_tool_invocation(tool_calls))
-
-    return {
-        "verbose_padding": padding_scores,
-        "redundant_tool_invocation": redundant_scores,
-    }
-
-
-def _extract_sample_metadata(sample: Any) -> tuple[list[int], list[dict[str, Any]]]:
-    """Best-effort extraction of output token counts + tool-call list per sample.
-
-    inspect_ai's sample shape: ``sample.output.choices[0].message``
-    for the final response, ``sample.messages`` for the full
-    trajectory. Tool calls live in ``message.tool_calls`` on
-    assistant messages. Returns ``([], [])`` when the sample lacks
-    either structure — the score formula treats missing data as
-    "no signal" (score 1.0).
-    """
-    tokens: list[int] = []
-    tool_calls: list[dict[str, Any]] = []
-    messages = getattr(sample, "messages", None) or []
-    for msg in messages:
-        role = getattr(msg, "role", None)
-        if role != "assistant":
-            continue
-        usage = getattr(msg, "usage", None)
-        out_tokens = getattr(usage, "output_tokens", None) if usage else None
-        if isinstance(out_tokens, int) and out_tokens > 0:
-            tokens.append(out_tokens)
-        msg_tool_calls = getattr(msg, "tool_calls", None) or []
-        for tc in msg_tool_calls:
-            tool_calls.append(
-                {
-                    "name": getattr(tc, "function", None) or getattr(tc, "name", ""),
-                    "arguments": getattr(tc, "arguments", {}),
-                }
-            )
-    return tokens, tool_calls
-
-
 def _aggregate(values: list[float]) -> tuple[float, float]:
     """Return ``(mean, stderr)`` for the per-dim value list.
 
@@ -326,10 +166,10 @@ def extract_dim_aggregates(eval_path: Path | str) -> dict[str, Any]:
       went into ``(mean, stderr)`` for this dim. The disambiguator
       for the two ``stderr == 0.0`` cases above.
     - ``"measurement_modality"``: ``{dim: str}`` — provenance of the dim's
-      score. ``"judge_llm"`` for rubric-scored dims, ``"token_count"`` for
-      ``verbose_padding``, ``"tool_log"`` for ``redundant_tool_invocation``.
-      Future analytics dims would default to ``"judge_llm"`` — guard
-      via ``_ANALYTICS_MODALITY`` when adding a new analytics source.
+      score. Uniformly ``"judge_llm"`` — every dim is rubric-scored by the
+      LLM judge (the two post-judge analytics dims were removed,
+      PR-DROP-ANALYTICS-DIMS 2026-06-02). The field is retained for the
+      baseline.json v2 schema + any future non-judge source.
 
     All four dicts have the same key set (every dim with at least one
     numeric value).
@@ -372,24 +212,10 @@ def extract_dim_aggregates(eval_path: Path | str) -> dict[str, Any]:
     samples = getattr(elog, "samples", None)
     per_dim = _walk_dim_values(samples)
 
-    # PR 0 — merge post-judge analytics (verbose_padding +
-    # redundant_tool_invocation) into the same aggregation pipeline.
-    # Keys cannot collide with judge-scored dims since these names are
-    # NEW and not in the rubric YAML.
-    analytics = _walk_token_efficiency(samples)
-    for dim, vals in analytics.items():
-        per_dim.setdefault(dim, []).extend(vals)
-
     # Sample-indexed rows (PR-MARGIN-FITNESS-SCALE) — one {dim: value} per
-    # sample, with the per-sample analytics merged in by index (both
-    # _walk_dim_rows and _walk_token_efficiency iterate `samples` in order, so
-    # index i is the same sample). The autoresearch bootstrap resamples whole
-    # rows from this, avoiding the compact-column misalignment.
+    # sample. The autoresearch bootstrap resamples whole rows from this,
+    # capturing inter-dim correlation a per-dim-independent estimate misses.
     per_sample_rows = _walk_dim_rows(samples)
-    for dim, vals in analytics.items():
-        for i, value in enumerate(vals):
-            if i < len(per_sample_rows):
-                per_sample_rows[i][dim] = value
 
     dim_means: dict[str, float] = {}
     dim_stderr: dict[str, float] = {}
@@ -400,7 +226,7 @@ def extract_dim_aggregates(eval_path: Path | str) -> dict[str, Any]:
         dim_means[dim] = mean
         dim_stderr[dim] = stderr
         sample_count[dim] = len(vals)
-        measurement_modality[dim] = _ANALYTICS_MODALITY.get(dim, DEFAULT_MODALITY)
+        measurement_modality[dim] = DEFAULT_MODALITY
 
     log.info(
         "dim_extractor: aggregated %d dim(s) across %d sample(s) from %s",

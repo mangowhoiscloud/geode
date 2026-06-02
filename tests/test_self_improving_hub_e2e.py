@@ -682,8 +682,9 @@ def test_seedgen_pilot_heatmap_renders(built_seedgen_pages: dict[str, str]) -> N
     thead_match = re.search(r"<thead>(.*?)</thead>", table_html, flags=re.DOTALL)
     assert thead_match is not None, "heatmap has no <thead>"
     th_count = len(re.findall(r"<th[\s>]", thead_match.group(1)))
-    # Per DESIGN.md §5.6: 22 dim columns. Plus one "id" left header == 23 total.
-    assert th_count == 23, f"expected 23 <th> (22 dims + id), got {th_count}"
+    # 20 dim columns (PR-DROP-ANALYTICS-DIMS removed verbose_padding +
+    # redundant_tool_invocation). Plus one "id" left header == 21 total.
+    assert th_count == 21, f"expected 21 <th> (20 dims + id), got {th_count}"
     # And at least one warm-bucket cell appears (fixture has score=6.0 + 8.0).
     assert "score-warn" in table_html, "no warm-bucket cell rendered despite >1 score"
 

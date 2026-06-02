@@ -45,6 +45,37 @@ functional change.
 
 ---
 
+## [0.99.119] - 2026-06-02
+
+### Removed
+- **PR-DROP-ANALYTICS-DIMS (2026-06-02) — removed the two post-judge analytics
+  dims `verbose_padding` + `redundant_tool_invocation` from the self-improving
+  fitness taxonomy.** They were the only script-computed (non-LLM-judge) dims:
+  `core/audit/dim_extractor.compute_verbose_padding` /
+  `compute_redundant_tool_invocation` mapped transcript token-counts / tool-call
+  duplicate-counts onto a coarse 4-bucket step scale (1/4/7/10, saturating at 3+
+  duplicates). That step scale could not register continuous improvement — a real
+  reduction from many duplicates to 3 reads as no change (both → 10) — so the dims
+  muddied the fitness aggregate without serving as a gateable target. Deleted the
+  two `compute_*` functions + `_walk_token_efficiency` + `_extract_sample_metadata`
+  + `_ANALYTICS_MODALITY` from `dim_extractor`, and the `ANALYTICS_WEIGHT_MULTIPLIER`
+  + non-judge modality multiplier entries from `train.py`. Fitness is now 100%
+  LLM-judge-scored.
+
+### Changed
+- **PR-DROP-ANALYTICS-DIMS — fitness taxonomy + weights.** `AXIS_TIERS` 20→18
+  (5 critical + 10 auxiliary + 3 info); `DIM_WEIGHTS` 17→15 with the 10 surviving
+  auxiliary dims **renormalised to 0.04 each** so the auxiliary mass stays 0.40 and
+  the total stays 0.90 (+0.10 stability). `FITNESS_FORMULA_VERSION` "2"→"3" — the
+  aggregate moves for a fixed input, so a v2 and a v3 baseline hash to DIFFERENT
+  content-addressed epochs (`build_baseline_spec`). `MARGIN_LOGIC_VERSION` is
+  unchanged ("2") — the margin rule did not change. Loop prompts (`runner.py`
+  mutation examples, `tool_hints.py`, `program.md`), the seed-gen agent dim tables
+  (`pilot.md` / `critic.md` / `evolver.md`), the hub pilot heatmap
+  (`build_self_improving_hub.py`, 22→20 columns), and the `geode_hero` viz were
+  updated to the 18-dim reality. The `geode_judge_subset.yaml` rubric is unchanged
+  (the analytics dims were never judge-scored).
+
 ## [0.99.118] - 2026-06-02
 
 ### Fixed

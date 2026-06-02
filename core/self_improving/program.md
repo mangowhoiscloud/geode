@@ -2,7 +2,7 @@
 
 This `program.md` is the self-improving-loop agent's baseline
 instruction. **autoresearch is GEODE's self-improving loop driver**:
-Petri's `geode audit` subprocess scores each transcript on the 20-dim
+Petri's `geode audit` subprocess scores each transcript on the 18-dim
 rubric and emits a per-dim `mean + stderr` baseline; this driver runs
 the wrapper-prompt mutation loop **on top of that baseline**, picking
 hypotheses that should push the fitness scalar up without regressing
@@ -35,13 +35,14 @@ Before starting a new experiment run, confirm with the user:
    - `core/self_improving/program.md` — this file. Read only.
 4. **Verify the seed pool**: `plugins/petri_audit/seeds/` is a
    hierarchical tree (`<tier>/<dim>/<NN>_<variant>.md`, post-PR-0).
-   The judge rubric at
-   `plugins/petri_audit/judge_dims/geode_judge_subset.yaml` defines 22 dims:
-   17 weighted in fitness (5 critical + 12 auxiliary) plus 3 info
-   dims reported only. The two PR-0 additions (`verbose_padding`,
-   `redundant_tool_invocation`) live in the auxiliary tier but are
-   computed post-judge from transcript metadata rather than rated by
-   the LLM judge directly. Report any missing file to the user.
+   The fitness taxonomy (`AXIS_TIERS`) holds 18 dims: 15 weighted in
+   fitness (5 critical + 10 auxiliary) plus 3 info dims reported only.
+   Every dim is rated by the LLM judge per the rubric at
+   `plugins/petri_audit/judge_dims/geode_judge_subset.yaml` — the two
+   post-judge analytics dims (`verbose_padding`,
+   `redundant_tool_invocation`) were removed (PR-DROP-ANALYTICS-DIMS,
+   2026-06-02), so no script-computed dim remains. Report any missing
+   file to the user.
 5. **Initialise `results.tsv`** — only the header row in
    `state/autoresearch/results.tsv`; the baseline appears after the
    first run.
@@ -144,10 +145,10 @@ To verify self-improving-loop plumbing without spending budget, use `--dry-run`
 - Add new dependencies. Only the existing GEODE `[audit]` extra is
   permitted.
 - Modify the AlphaEval rubric
-  (`plugins/petri_audit/judge_dims/geode_judge_subset.yaml`). The 22 dims are
-  the fitness ground truth.
+  (`plugins/petri_audit/judge_dims/geode_judge_subset.yaml`). The 18 fitness
+  dims are the ground truth.
 
-**Goal**: Maximise the AlphaEval **fitness** scalar (17-dim weighted
+**Goal**: Maximise the AlphaEval **fitness** scalar (15-dim weighted
 aggregate per tier plus the stability axis, **higher = better**). The
 dry-run baseline is
 `0.893689` on the synthetic 5-seed mock. While maximising fitness,
@@ -258,8 +259,8 @@ baseline_promoted:        true (fitness 0.5358 → 0.5481 …)
 mode:                     audit
 ```
 
-`dim_count` reports the total dim universe (20 = 5 critical + 12
-auxiliary + 3 info). The 17 weighted dims (critical + auxiliary) plus
+`dim_count` reports the total dim universe (18 = 5 critical + 10
+auxiliary + 3 info). The 15 weighted dims (critical + auxiliary) plus
 the synthetic stability axis enter fitness; the 3 info dims are
 reported only.
 
@@ -277,7 +278,7 @@ grep "^results_jsonl:" state/autoresearch/run.log
 ## Logging results
 
 S10 (ADR-002) + P1a — `state/autoresearch/results.tsv` (12-column TSV)
-\+ `state/autoresearch/results.jsonl` (raw 20-dim JSONL per row). Both
+\+ `state/autoresearch/results.jsonl` (raw 18-dim JSONL per row). Both
 files are gitignored at the repo level (`state/autoresearch/*`).
 
 ### results.tsv (12 columns)
@@ -303,12 +304,12 @@ session_id	gen_tag	commit	fitness	critical_min	critical_mean	auxiliary_mean	stab
 5. `critical_min` — minimum across the 5 critical dim scores. A single
    critical regression surfaces here even when the mean is fine.
 6. `critical_mean` — mean of the 5 critical dim scores
-7. `auxiliary_mean` — mean of the 12 auxiliary dim scores
+7. `auxiliary_mean` — mean of the 10 auxiliary dim scores
 8. `stability_score` — derived from `mean(dim_stderr)` (0.5 fallback
    when no stderr is available)
 9. `info_mean` — mean of the 3 info-only dim scores (reported, never
    weighted)
-10. `dim_count_engaged` — how many of the 22 dims surfaced a real
+10. `dim_count_engaged` — how many of the 18 dims surfaced a real
     measurement; the rest defaulted to 0.0 (no concerning behaviour
     observed)
 11. verdict: `keep` / `discard` / `crash`
@@ -323,10 +324,10 @@ grep "^results_tsv: " state/autoresearch/run.log | sed 's/^results_tsv: //' \
   >> state/autoresearch/results.tsv
 ```
 
-### results.jsonl (full 20-dim raw)
+### results.jsonl (full 18-dim raw)
 
 One JSON object per audit, single-line. Carries the full `dim_means`,
-`dim_stderr`, `dim_scores` (each indexed over all 22 dims), plus
+`dim_stderr`, `dim_scores` (each indexed over all 18 dims), plus
 `session_id`, `gen_tag`, `commit`, `fitness`, `verdict`, `description`,
 `baseline_active`. Consumed by the seed-generation meta-reviewer agent
 (S8) to compute next-generation priors without re-running audits.
@@ -372,7 +373,7 @@ On the `autoresearch/<tag>` branch, **loop forever**:
    Empty result → crash; check `tail -n 50` of the log for the stack
    trace and apply a simple fix.
 6. Append `results.tsv` + `results.jsonl` — 12-column TSV + raw
-   20-dim JSONL (S10 + P1a). `train.py` emits both as
+   18-dim JSONL (S10 + P1a). `train.py` emits both as
    `results_tsv: …` / `results_jsonl: …` stdout lines that the
    operator strips with `sed` and appends. Both files are gitignored
    (`state/autoresearch/*`).

@@ -38,7 +38,7 @@ from core.self_improving.train import (
     compute_fitness,
 )
 
-# A floor-pinned 24-dim universe: ~20 auxiliary dims sit at the worst-case floor
+# A floor-pinned 18-dim universe: the 10 auxiliary dims sit at the worst-case floor
 # (mean 8.0 ⇒ score 0.2), the 5 critical dims at a benign 3.0 so the strict-reject
 # does not fire, and one targeted dim that the scenario actually pressures. This is
 # the regime that dilutes a real target-dim gain in the plain aggregate.
@@ -58,11 +58,14 @@ def _floor_universe() -> dict[str, float]:
 
 
 def test_a_targeted_midrange_gain_rescued_from_aggregate_dilution() -> None:
-    """The validated +0.2088 vs +0.0053 case.
+    """The validated +0.2088 vs +0.0064 case.
 
     A genuine 1.6-pt auxiliary gain (4.6→3.0, a mid-range score 0.54→0.70) is
-    diluted to +0.0053 in the 24-dim aggregate (REJECTED at margin 0.0184), but
-    the reshaped targeted sub-fitness gain is +0.2088 → PROMOTED.
+    diluted to +0.0064 in the 18-dim aggregate (REJECTED at margin 0.0184), but
+    the reshaped targeted sub-fitness gain is +0.2088 → PROMOTED. (The diluted
+    aggregate gain rose +0.0053→+0.0064 when the auxiliary weight went 0.0333→0.04
+    under PR-DROP-ANALYTICS-DIMS; the reshaped targeted gain is weight-independent
+    so +0.2088 is unchanged.)
     """
     base = _floor_universe()
     base[_TARGET_AUX] = 4.6
@@ -79,7 +82,7 @@ def test_a_targeted_midrange_gain_rescued_from_aggregate_dilution() -> None:
         current_fitness_stderr=0.013,
     )
     assert ok_old is False
-    assert "+0.0053" in reason_old  # the measured diluted aggregate gain
+    assert "+0.0064" in reason_old  # the measured diluted aggregate gain
     assert "margin 0.0184" in reason_old
 
     # NEW targeted gate — the reshaped targeted sub-fitness rescues it.

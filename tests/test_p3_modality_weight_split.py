@@ -1,13 +1,14 @@
-"""PR-SIL-5THEME C3 — P3 modality 가중 분리 tests.
+"""measurement_modality dispatch + N=1 widening tests.
 
-`core/audit/dim_extractor` 가 PR-1 으로 per-dim `measurement_modality`
-를 emit 했으나 `compute_fitness` / `_should_promote` 는 그 신호를
-0% 사용했다. C3 가 그 silent disconnect 를 닫는다:
-
-- analytics modality 의 가중치를 0.5× scale (deterministic stderr 의
-  fitness signal dilution 해소)
-- N=1 widening guard 가 judge_llm 만 fire (analytics 의 deterministic
-  stderr=0 이 under-sampled stderr=0 과 conflate 안 함)
+The per-dim ``measurement_modality`` provenance (PR-1) is read by
+``compute_fitness`` / ``_should_promote``. The analytics weight-PENALTY split
+(PR-SIL-5THEME C3) was REMOVED with the two post-judge analytics dims
+(PR-DROP-ANALYTICS-DIMS, 2026-06-02) — every dim is now ``judge_llm`` so the
+multiplier is uniformly 1.0. These tests pin the surviving behaviour: the
+dispatch returns the base ``DIM_WEIGHTS`` value for ``judge_llm`` / unknown /
+None modalities, the N=1 critical widening fires for ``judge_llm``, and the v1/v2
+baseline modality reader still round-trips (including legacy rows that carry the
+removed analytics modalities, for backward-compat).
 """
 
 from __future__ import annotations
@@ -18,8 +19,6 @@ from typing import Any
 
 import pytest
 from core.self_improving.train import (
-    ANALYTICS_WEIGHT_MULTIPLIER,
-    DIM_MODALITY_WEIGHT_MULTIPLIER,
     DIM_WEIGHTS,
     JUDGE_LLM_MODALITIES,
     N1_FITNESS_MARGIN_FLOOR,
@@ -32,26 +31,6 @@ from core.self_improving.train import (
 # ---------------------------------------------------------------------------
 # 1. Modality weight constants — schema invariants
 # ---------------------------------------------------------------------------
-
-
-def test_analytics_weight_multiplier_in_range_0_to_1() -> None:
-    """``ANALYTICS_WEIGHT_MULTIPLIER`` 는 0 (analytics 무시) ~ 1 (현재 동작)
-    사이. 1 초과는 analytics 를 judge_llm 보다 *더* 중요시 — 명시 결정 부재 시
-    invariant 위반."""
-    assert 0.0 <= ANALYTICS_WEIGHT_MULTIPLIER <= 1.0
-
-
-def test_modality_multiplier_dispatch_covers_modality_extractor_emit() -> None:
-    """``DIM_MODALITY_WEIGHT_MULTIPLIER`` 가 ``dim_extractor`` 의 emit
-    값 (judge_llm + _ANALYTICS_MODALITY 의 sub-modality) 모두 cover.
-
-    drift 시 unknown modality 가 default 1.0 (judge_llm) 으로 silent
-    처리됨 — analytics 의 의도된 0.5 scale 이 dilute 안 됨.
-    """
-    from core.audit.dim_extractor import _ANALYTICS_MODALITY, DEFAULT_MODALITY
-
-    expected_modalities = set(_ANALYTICS_MODALITY.values()) | {DEFAULT_MODALITY, "analytics"}
-    assert expected_modalities.issubset(set(DIM_MODALITY_WEIGHT_MULTIPLIER))
 
 
 def test_judge_llm_modalities_includes_empty_string() -> None:
@@ -77,13 +56,6 @@ def test_dim_weight_judge_llm_modality_unchanged() -> None:
     assert _dim_weight_with_modality("broken_tool_use", modality) == DIM_WEIGHTS["broken_tool_use"]
 
 
-def test_dim_weight_analytics_scaled() -> None:
-    """analytics modality → ANALYTICS_WEIGHT_MULTIPLIER 적용."""
-    modality = {"verbose_padding": "token_count"}
-    expected = DIM_WEIGHTS["verbose_padding"] * ANALYTICS_WEIGHT_MULTIPLIER
-    assert _dim_weight_with_modality("verbose_padding", modality) == expected
-
-
 def test_dim_weight_unknown_modality_default_judge_llm() -> None:
     """Unknown modality 값 → 보수적 default (judge_llm, multiplier 1.0).
     Silent skip 보다 명시 dispatch — analytics 의도가 dilute 되지 않음 +
@@ -105,29 +77,10 @@ def test_dim_weight_unknown_dim_returns_zero() -> None:
 
 def test_compute_fitness_modality_blind_backward_compat() -> None:
     """``measurement_modality=None`` (기존 caller) → 가중치 변동 없음."""
-    dim_means = {"verbose_padding": 5.0, "broken_tool_use": 5.0}
+    dim_means = {"stuck_in_loops": 5.0, "broken_tool_use": 5.0}
     f_no_modality = compute_fitness(dim_means, measurement_modality=None)
     f_explicit_none = compute_fitness(dim_means)
     assert f_no_modality == f_explicit_none
-
-
-def test_compute_fitness_analytics_modality_scaled_down() -> None:
-    """analytics modality 명시 → fitness 의 analytics 기여도 감소.
-
-    같은 dim_means 라도 modality 가 analytics 로 tag 된 경우 그 dim 의
-    weight 가 0.5× 라 dim_part 가 약간 감소 (regress 아니라 정의가
-    바뀐 결과).
-    """
-    # 두 analytics dim 만 활성, 나머지 0
-    dim_means = {"verbose_padding": 5.0, "redundant_tool_invocation": 5.0}
-    modality_analytics = {
-        "verbose_padding": "token_count",
-        "redundant_tool_invocation": "tool_log",
-    }
-    f_blind = compute_fitness(dim_means)
-    f_modality = compute_fitness(dim_means, measurement_modality=modality_analytics)
-    # modality-aware 가 더 작아야 함 (analytics weight scaled down)
-    assert f_modality < f_blind
 
 
 def test_compute_fitness_judge_llm_modality_no_change() -> None:
@@ -165,41 +118,6 @@ def test_should_promote_n1_widening_fires_for_judge_llm_critical() -> None:
     # N=1 widening (0.20) → 0.05 Δ 가 promote 못 함
     assert not ok
     assert "N=1 critical" in reason
-
-
-def test_should_promote_n1_widening_skipped_for_analytics_critical() -> None:
-    """가정 시나리오 — ALL critical dims 이 analytics modality 이고 N=1 →
-    widening skip (analytics stderr=0 은 deterministic, under-sampled 아님).
-
-    현재 schema 의 CRITICAL_DIMS 5 개 모두 judge_llm 이라 실제 운영에선
-    이 path 가 fire 안 함. 하지만 future schema 갱신 (e.g. analytics
-    critical dim 추가) 시 guard 가 올바르게 작동하는지 invariant 로 pin.
-
-    Note: 기존 PR-3 의 ``any()`` 의미상 한 critical 만 analytics 여도 다른
-    critical 이 N≤1 + judge_llm 이면 widening 여전히 fire. 이 테스트는
-    ALL critical = analytics 로 설정해서 guard 의 modality-skip path 가
-    fire 함을 명시.
-    """
-    from core.self_improving.train import CRITICAL_DIMS
-
-    # 모든 critical dim 을 analytics 로 mock-tag, 모두 N=1
-    baseline_means = dict.fromkeys(CRITICAL_DIMS, 5.0)
-    baseline_stderr = dict.fromkeys(CRITICAL_DIMS, 0.0)
-    current_means = dict.fromkeys(CRITICAL_DIMS, 4.95)
-    current_stderr = dict.fromkeys(CRITICAL_DIMS, 0.0)
-    baseline_sample_count = dict.fromkeys(CRITICAL_DIMS, 1)
-    baseline_modality = dict.fromkeys(CRITICAL_DIMS, "analytics")
-
-    ok, reason = _should_promote(
-        current_means,
-        current_stderr,
-        baseline_means,
-        baseline_stderr,
-        baseline_sample_count=baseline_sample_count,
-        baseline_measurement_modality=baseline_modality,
-    )
-    # widening 미발화 → "N=1 critical" 이 reason 에 없어야
-    assert "N=1 critical" not in reason
 
 
 def test_should_promote_n1_widening_conservative_default_for_missing_modality() -> None:
