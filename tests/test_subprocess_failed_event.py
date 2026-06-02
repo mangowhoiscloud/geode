@@ -15,16 +15,21 @@ import inspect
 
 
 def test_subprocess_failed_event_emitted_before_runtime_error() -> None:
-    """Source-grep the run_audit body — the non-zero-exit branch must
-    emit ``subprocess_failed`` BEFORE the ``raise RuntimeError`` so a
-    downstream consumer sees the typed event, not just the generic
-    top-level ``audit_failed`` catch."""
+    """Source-grep the shared post-processing helper — the non-zero-exit
+    branch must emit ``subprocess_failed`` BEFORE the ``raise RuntimeError``
+    so a downstream consumer sees the typed event, not just the generic
+    top-level ``audit_failed`` catch.
+
+    PR-ASYNC-FIRST (2026-06-03) — this branch moved out of ``run_audit`` into
+    the focused ``_finalize_audit_result`` helper, so grep the helper, not
+    ``run_audit``.
+    """
     from core.self_improving import train
 
-    src = inspect.getsource(train.run_audit)
+    src = inspect.getsource(train._finalize_audit_result)
     # The event name appears in the source.
     assert '"subprocess_failed"' in src, (
-        "run_audit must emit subprocess_failed when proc.returncode != 0 "
+        "_finalize_audit_result must emit subprocess_failed when returncode != 0 "
         "so downstream consumers grouping by event name can alert on it."
     )
     # The event is emitted at error level.
@@ -46,9 +51,9 @@ def test_subprocess_failed_payload_includes_exit_code_and_run_log() -> None:
     having to grep the raw run.log."""
     from core.self_improving import train
 
-    src = inspect.getsource(train.run_audit)
+    src = inspect.getsource(train._finalize_audit_result)
     # exit_code must be present in the payload
-    assert '"exit_code": proc.returncode' in src
+    assert '"exit_code": returncode' in src
     # run_log path must be present in the payload
     assert '"run_log": str(RUN_LOG)' in src
     # stderr tail (best-effort, last 5 lines) for at-a-glance triage
@@ -58,10 +63,10 @@ def test_subprocess_failed_payload_includes_exit_code_and_run_log() -> None:
 def test_subprocess_finished_event_still_emitted() -> None:
     """Pin that the existing ``subprocess_finished`` event still fires
     on normal exit — PR-MINIMAL-4 ADDS a sibling event, doesn't
-    replace any existing one."""
+    replace any existing one. Post-S1 it lives in the shared helper."""
     from core.self_improving import train
 
-    src = inspect.getsource(train.run_audit)
+    src = inspect.getsource(train._finalize_audit_result)
     assert '"subprocess_finished"' in src
 
 
