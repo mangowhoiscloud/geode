@@ -17,6 +17,7 @@ Pins:
 from __future__ import annotations
 
 import subprocess
+from collections.abc import Awaitable, Callable
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
@@ -264,9 +265,9 @@ def test_default_llm_call_normalizes_openai_codex_provider(
     monkeypatch.setattr("core.llm.adapters.resolve_for", _capture_resolve)
 
     async def _fake_failover(
-        models: list[str], do_call: object, **kwargs: object
+        models: list[str], do_call: Callable[[str], Awaitable[object]], **kwargs: object
     ) -> tuple[object, str]:
-        result_obj = await do_call(models[0])  # type: ignore[operator]
+        result_obj = await do_call(models[0])
         return (result_obj, models[0])
 
     monkeypatch.setattr("core.llm.router.call_with_failover", _fake_failover)
@@ -327,9 +328,9 @@ def test_default_llm_call_api_key_path_unchanged(monkeypatch: pytest.MonkeyPatch
     monkeypatch.setattr("core.llm.adapters.resolve_for", _capture_resolve)
 
     async def _fake_failover(
-        models: list[str], do_call: object, **kwargs: object
+        models: list[str], do_call: Callable[[str], Awaitable[object]], **kwargs: object
     ) -> tuple[object, str]:
-        result_obj = await do_call(models[0])  # type: ignore[operator]
+        result_obj = await do_call(models[0])
         return (result_obj, models[0])
 
     monkeypatch.setattr("core.llm.router.call_with_failover", _fake_failover)
@@ -479,3 +480,60 @@ def test_persist_full_config_uses_plural_roles_path(
     cfg = load_self_improving_loop_config()
     assert "miner" in cfg.seed_generation.roles
     assert cfg.seed_generation.roles["miner"].source == "claude-cli"
+
+
+def test_default_llm_call_explicit_api_key_routes_payg_not_inferred_subscription(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """PR-OPENAI-SOURCE-SINGLE-ENTRY (2026-06-03) — an EXPLICIT ``api_key`` mutator
+    source must route to PAYG even when ``infer_source`` would re-derive subscription
+    from a present OAuth profile. Proves the ``[self_improving_loop] openai_source``
+    single entry point actually reaches the mutator (regression guard for the
+    half-honored knob: pre-fix the API branch discarded ``source`` and used
+    ``infer_source(provider)`` unconditionally)."""
+    from core.self_improving.loop import runner
+
+    cfg_mock = MagicMock()
+    cfg_mock.autoresearch.mutator.default_model = "gpt-5.5"
+    cfg_mock.autoresearch.mutator.source = "api_key"
+    cfg_mock.autoresearch.mutator.max_tokens = 1024
+    monkeypatch.setattr(
+        "core.config.self_improving_loop.load_self_improving_loop_config",
+        lambda: cfg_mock,
+    )
+    monkeypatch.setattr("core.config._resolve_provider", lambda m: "openai-codex")
+    # infer_source WOULD say subscription (OAuth profile present). The fix must NOT
+    # consult it for an explicit api_key — otherwise the operator's PAYG choice is
+    # silently reverted to the rate-limited subscription lane.
+    monkeypatch.setattr(
+        "core.llm.adapters._source_inference.infer_source", lambda _p: "openai-codex"
+    )
+
+    captured: dict[str, object] = {"provider": None, "source": None}
+
+    def _capture_resolve(provider: str, source: str) -> MagicMock:
+        captured["provider"] = provider
+        captured["source"] = source
+        stub = MagicMock()
+        stub.name = "openai-payg"
+
+        async def _acomplete(req: object) -> object:
+            return _stub_adapter_call_result("from openai-payg")
+
+        stub.acomplete = _acomplete
+        return stub
+
+    monkeypatch.setattr("core.llm.adapters.resolve_for", _capture_resolve)
+
+    async def _fake_failover(
+        models: list[str], do_call: Callable[[str], Awaitable[object]], **kwargs: object
+    ) -> tuple[object, str]:
+        result_obj = await do_call(models[0])
+        return (result_obj, models[0])
+
+    monkeypatch.setattr("core.llm.router.call_with_failover", _fake_failover)
+
+    result = runner._default_llm_call("SYS", "USR")
+    assert result == "from openai-payg"
+    # explicit api_key → SOURCE_PAYG ("payg"), NOT infer_source's "openai-codex"
+    assert captured == {"provider": "openai", "source": "payg"}

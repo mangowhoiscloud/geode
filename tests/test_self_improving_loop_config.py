@@ -633,3 +633,107 @@ def test_step_j_b1_clean_input_emits_no_deprecation() -> None:
         "Step J-b.1 regressed: clean (new-style) input should not emit any "
         "petri/mutator DeprecationWarning."
     )
+
+
+# ── openai_source single entry point (PR-OPENAI-SOURCE-SINGLE-ENTRY) ──────────
+
+
+def test_openai_source_none_leaves_per_role_defaults() -> None:
+    """Default (openai_source unset) → no propagation, full back-compat."""
+    cfg = SelfImprovingLoopConfig()
+    assert cfg.openai_source is None
+    # the three OpenAI-role sources keep their own schema defaults
+    assert cfg.autoresearch.source.value == "claude-cli"
+    assert cfg.autoresearch.target.source.value == "claude-cli"
+    assert cfg.autoresearch.mutator.source.value == "auto"
+
+
+def test_openai_source_fans_out_to_three_roles() -> None:
+    """openai_source fills audit-subprocess + target + mutator in one knob."""
+    cfg = SelfImprovingLoopConfig.model_validate({"openai_source": "api_key"})
+    assert cfg.autoresearch.source.value == "api_key"
+    assert cfg.autoresearch.target.source.value == "api_key"
+    assert cfg.autoresearch.mutator.source.value == "api_key"
+
+
+def test_openai_source_subscription_value_also_fans_out() -> None:
+    """The knob works both directions — subscription is equally a single flip."""
+    cfg = SelfImprovingLoopConfig.model_validate({"openai_source": "openai-codex"})
+    assert cfg.autoresearch.source.value == "openai-codex"
+    assert cfg.autoresearch.target.source.value == "openai-codex"
+    assert cfg.autoresearch.mutator.source.value == "openai-codex"
+
+
+def test_openai_source_does_not_touch_anthropic_roles() -> None:
+    """auditor / judge carry their own source and are never propagated to."""
+    cfg = SelfImprovingLoopConfig.model_validate(
+        {
+            "openai_source": "api_key",
+            "autoresearch": {
+                "auditor": {"source": "claude-cli"},
+                "judge": {"source": "claude-cli"},
+            },
+        }
+    )
+    assert cfg.autoresearch.auditor.source.value == "claude-cli"
+    assert cfg.autoresearch.judge.source.value == "claude-cli"
+    # OpenAI roles still moved
+    assert cfg.autoresearch.target.source.value == "api_key"
+
+
+def test_openai_source_explicit_matching_per_role_is_allowed() -> None:
+    """An explicit per-role source equal to openai_source is redundant, not an error."""
+    cfg = SelfImprovingLoopConfig.model_validate(
+        {"openai_source": "api_key", "autoresearch": {"target": {"source": "api_key"}}}
+    )
+    assert cfg.autoresearch.target.source.value == "api_key"
+
+
+def test_openai_source_supersedes_conflicting_per_role_with_warning() -> None:
+    """A different explicit per-role source is superseded (authoritative) + WARNS —
+    deterministically, not via a ValidationError that read_role_override would swallow."""
+    with pytest.warns(UserWarning, match=r"single entry point|supersedes"):
+        cfg = SelfImprovingLoopConfig.model_validate(
+            {"openai_source": "api_key", "autoresearch": {"source": "openai-codex"}}
+        )
+    # openai_source wins — the lane is deterministic
+    assert cfg.autoresearch.source.value == "api_key"
+
+
+def test_openai_source_supersedes_after_legacy_migration() -> None:
+    """Legacy [petri.target] is migrated into autoresearch BEFORE propagation, so a
+    legacy-layout pin that disagrees with openai_source is also superseded + warned."""
+    with pytest.warns((DeprecationWarning, UserWarning)):
+        cfg = SelfImprovingLoopConfig.model_validate(
+            {"openai_source": "api_key", "petri": {"target": {"source": "openai-codex"}}}
+        )
+    assert cfg.autoresearch.target.source.value == "api_key"
+
+
+def test_openai_source_rejects_non_openai_lane() -> None:
+    """The knob is an OpenAI-lane selector — auto / claude-cli are rejected so it can
+    never route an OpenAI role through Claude CLI or the manifest cascade."""
+    from pydantic import ValidationError
+
+    for bad in ("auto", "claude-cli"):
+        with pytest.raises(ValidationError, match=r"openai-codex.*api_key|OpenAI credential lane"):
+            SelfImprovingLoopConfig.model_validate({"openai_source": bad})
+
+
+def test_openai_source_reaches_petri_target_binding(tmp_path: Path, monkeypatch) -> None:
+    """Cross-module parity: the single openai_source knob is what
+    ``plugins.petri_audit.user_overrides.read_role_override`` surfaces for the
+    petri ``target`` role — proving the propagation is not a half-disconnected
+    config field but actually steers the audit target's credential lane."""
+    from plugins.petri_audit.user_overrides import read_role_override
+
+    path = tmp_path / "config.toml"
+    _write_toml(
+        path,
+        '[self_improving_loop]\nopenai_source = "api_key"\n',
+    )
+    monkeypatch.setenv("GEODE_CONFIG_TOML", str(path))
+    override = read_role_override("target")
+    # "api_key" is not a known-default, so it surfaces as the source override
+    # that get_binding feeds into resolve_credential_source → openai-payg.
+    assert str(override.get("source")) == "api_key" or override.get("source") == "api_key"
