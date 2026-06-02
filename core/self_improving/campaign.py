@@ -118,6 +118,13 @@ PROGRESS_LOG = STATE_DIR / "campaign-progress.log"
 #: so a matched-reset snapshot of a real campaign never enters git history).
 GEN0_SNAPSHOT_DIR = REPO_ROOT / "state" / "campaign" / "gen-0-snapshot"
 
+#: Per-run resume-checkpoint directory (same gitignored ``state/campaign/`` tree
+#: as the snapshot — a resume marker is a runtime artifact, not git history). A
+#: campaign run writes ``<this>/<run_id>.json`` recording which path-independent
+#: workers COMPLETED, so a re-run after a crash skips the finished ones and only
+#: re-runs the missing replicates / cycles, then aggregates the union (S4).
+CAMPAIGN_RUNS_DIR = REPO_ROOT / "state" / "campaign" / "runs"
+
 #: Seed-pool launch wiring (campaign-procedure.md §3, cycle-input-pool.md).
 CYCLE_INPUT_POOL = REPO_ROOT / "state" / "seed-pools" / "cycle-input"
 HELD_OUT_BENCH = REPO_ROOT / "state" / "seed-pools" / "held-out"
@@ -923,6 +930,207 @@ class WorkerOutcome:
     reason: str
 
 
+# ---------------------------------------------------------------------------
+# Resume checkpoint (S4 — crash-resumable path-independent workers)
+#
+# A long PAYG campaign fans K gen-0 replicates + N never/random cycles out as
+# real Petri-audit subprocesses (minutes + spend each). If the campaign crashes
+# after some workers finished, a naive re-run would re-measure ALL of them — and,
+# worse, re-aggregate + re-overwrite ``baseline.json`` a second time. The
+# checkpoint records WHICH workers COMPLETED successfully (their index + dims +
+# floor signal) per worker GROUP (gen-0 / a control arm), keyed by ``run_id``, so
+# a re-run skips the finished workers, re-runs only the missing ones, and
+# aggregates the UNION. A ``kmean_written`` flag per gen-0 group makes the K-mean
+# baseline write IDEMPOTENT (a second run is a no-op — no double-aggregation).
+#
+# Only ``ok=True`` workers are persisted: a dropped worker (crash / timeout /
+# non-zero exit) is deliberately NOT checkpointed so a re-run RE-attempts it (it
+# may succeed the second time). The marker lives under the gitignored
+# ``state/campaign/runs/`` tree — a runtime resume artifact, never git history.
+# ---------------------------------------------------------------------------
+
+#: The checkpoint group key for the gen-0 K replicates (control arms key on their
+#: own arm name — ``"never"`` / ``"random"``).
+GEN0_CHECKPOINT_GROUP = "gen0"
+
+
+def _serialise_worker(outcome: WorkerOutcome) -> dict[str, Any]:
+    """Flatten a successful :class:`WorkerOutcome` to the JSON the checkpoint stores.
+
+    Persists only what the aggregators consume on resume: the worker ``index``,
+    its RAW ``dim_means``, and the floor signal's ``held_out_fitness`` + ``fitness``
+    (the only two :class:`CycleSignal` fields :func:`run_gen0_baseline_async` /
+    :func:`run_control_arm_async` read back). A reconstructed worker is marked
+    ``ok=True`` with ``returncode=0`` and ``reason="resumed from checkpoint"``.
+    """
+    signal = outcome.signal
+    return {
+        "index": outcome.index,
+        "dim_means": {dim: float(v) for dim, v in outcome.dim_means.items()},
+        "held_out_fitness": signal.held_out_fitness if signal is not None else None,
+        "fitness": signal.fitness if signal is not None else None,
+    }
+
+
+def _deserialise_worker(payload: dict[str, Any]) -> WorkerOutcome | None:
+    """Rebuild a :class:`WorkerOutcome` from a checkpointed worker record.
+
+    Returns ``None`` (the record is dropped, the worker RE-RUN) when the stored
+    ``index`` is not a usable int — a corrupt checkpoint must never silently
+    truncate the union or, worse, fabricate a phantom worker. ``dim_means`` /
+    floor values are passed through the same graceful-boundary casts the live read
+    path uses, so a malformed value becomes ``None`` rather than raising.
+    """
+    raw_index = payload.get("index")
+    if not isinstance(raw_index, int) or isinstance(raw_index, bool):
+        return None
+    raw_dims = payload.get("dim_means")
+    dim_means: dict[str, float] = {}
+    if isinstance(raw_dims, dict):
+        for dim, value in raw_dims.items():
+            num = _as_float(value)
+            if isinstance(dim, str) and num is not None:
+                dim_means[dim] = num
+    signal = CycleSignal(
+        held_out_fitness=_as_float(payload.get("held_out_fitness")),
+        fitness=_as_float(payload.get("fitness")),
+        fitness_delta=None,
+        promote_policy=None,
+        source=None,
+        between_seed_stderr=None,
+    )
+    return WorkerOutcome(
+        index=raw_index,
+        ok=True,
+        returncode=0,
+        dim_means=dim_means,
+        signal=signal,
+        reason="resumed from checkpoint",
+    )
+
+
+@dataclass
+class RunCheckpoint:
+    """A per-run resume marker: which path-independent workers COMPLETED.
+
+    Keyed by ``run_id`` and persisted to ``<runs_dir>/<run_id>.json``. Each worker
+    GROUP (``"gen0"`` or a control-arm name) holds the serialised successful
+    outcomes (keyed by worker index, so a re-completion overwrites rather than
+    duplicates) plus a ``kmean_written`` flag that makes the gen-0 K-mean baseline
+    write idempotent. ``run_id=None`` short-circuits every method to a no-op so the
+    pre-S4 callers / tests that pass no ``run_id`` keep the original behaviour
+    (checkpointing is strictly opt-in).
+    """
+
+    run_id: str | None
+    runs_dir: Path = field(default_factory=lambda: CAMPAIGN_RUNS_DIR)
+    #: ``{group: {"completed": {index: record}, "kmean_written": bool}}``.
+    groups: dict[str, dict[str, Any]] = field(default_factory=dict)
+
+    @property
+    def enabled(self) -> bool:
+        return self.run_id is not None
+
+    @property
+    def path(self) -> Path:
+        # Only meaningful when ``enabled``; guarded by every caller.
+        return self.runs_dir / f"{self.run_id}.json"
+
+    def load(self) -> RunCheckpoint:
+        """Populate ``groups`` from disk if a checkpoint for ``run_id`` exists.
+
+        A missing / unreadable / malformed file leaves ``groups`` empty (a fresh
+        run), never raises — a corrupt marker degrades to "re-run everything"
+        rather than crashing the campaign.
+        """
+        if not self.enabled or not self.path.exists():
+            return self
+        try:
+            payload = json.loads(self.path.read_text(encoding="utf-8"))
+        except (json.JSONDecodeError, OSError):
+            return self
+        if not isinstance(payload, dict):
+            return self
+        raw_groups = payload.get("groups")
+        if isinstance(raw_groups, dict):
+            for name, block in raw_groups.items():
+                if isinstance(name, str) and isinstance(block, dict):
+                    self.groups[name] = block
+        return self
+
+    def _group(self, group: str) -> dict[str, Any]:
+        block = self.groups.setdefault(group, {})
+        if not isinstance(block.get("completed"), dict):
+            block["completed"] = {}
+        if not isinstance(block.get("kmean_written"), bool):
+            block["kmean_written"] = False
+        return block
+
+    def completed_indices(self, group: str) -> set[int]:
+        """The worker indices already recorded complete for ``group`` (empty when
+        disabled — every worker is then run)."""
+        if not self.enabled:
+            return set()
+        completed = self._group(group).get("completed", {})
+        result: set[int] = set()
+        for key in completed:
+            try:
+                result.add(int(key))
+            except (TypeError, ValueError):
+                continue
+        return result
+
+    def resumed_outcomes(self, group: str) -> list[WorkerOutcome]:
+        """Reconstruct the already-completed workers of ``group`` as outcomes the
+        aggregator can union with the freshly-run ones (empty when disabled)."""
+        if not self.enabled:
+            return []
+        completed = self._group(group).get("completed", {})
+        outcomes: list[WorkerOutcome] = []
+        for record in completed.values():
+            if isinstance(record, dict):
+                outcome = _deserialise_worker(record)
+                if outcome is not None:
+                    outcomes.append(outcome)
+        return outcomes
+
+    def record_completed(self, group: str, outcomes: Sequence[WorkerOutcome]) -> None:
+        """Persist the freshly-completed (``ok=True``) workers of ``group`` + flush
+        to disk (a no-op when disabled)."""
+        if not self.enabled:
+            return
+        completed = self._group(group)["completed"]
+        for outcome in outcomes:
+            if outcome.ok:
+                completed[str(outcome.index)] = _serialise_worker(outcome)
+        self._flush()
+
+    def kmean_already_written(self, group: str) -> bool:
+        """Whether the K-mean baseline was already aggregated+written for ``group``
+        (always ``False`` when disabled — the write then always runs)."""
+        if not self.enabled:
+            return False
+        return bool(self._group(group).get("kmean_written"))
+
+    def mark_kmean_written(self, group: str) -> None:
+        """Flag ``group``'s K-mean baseline write as done + flush (no-op when
+        disabled), so a resume skips the re-aggregation/re-write (idempotent)."""
+        if not self.enabled:
+            return
+        self._group(group)["kmean_written"] = True
+        self._flush()
+
+    def _flush(self) -> None:
+        if not self.enabled:
+            return
+        self.path.parent.mkdir(parents=True, exist_ok=True)
+        self.path.write_text(
+            json.dumps({"run_id": self.run_id, "groups": self.groups}, ensure_ascii=False, indent=2)
+            + "\n",
+            encoding="utf-8",
+        )
+
+
 def _seed_isolated_state_root(worker_root: Path, snapshot_dir: Path) -> None:
     """Seed a per-worker ``GEODE_STATE_ROOT`` tree from the frozen gen-0 snapshot.
 
@@ -1132,6 +1340,7 @@ async def run_gen0_baseline_async(
     per_audit_timeout: float | None = None,
     workers_root: Path | None = None,
     runner_fn: Any | None = None,
+    checkpoint: RunCheckpoint | None = None,
 ) -> NoiseBand:
     """Async parallel sibling of :func:`run_gen0_baseline`.
 
@@ -1148,35 +1357,64 @@ async def run_gen0_baseline_async(
     synthetic dims must not freeze a synthetic baseline) — identical to the sync
     path. ``runner_fn`` (default :func:`_spawn_train_subprocess_async`) is the
     injectable async spawn seam for tests.
+
+    ``checkpoint`` (S4) makes the fan-out crash-resumable: replicate indices the
+    marker already records complete are SKIPPED (only the missing ones re-run),
+    their outcomes are UNIONed with the freshly-run ones for aggregation, and the
+    K-mean baseline write is IDEMPOTENT (a re-run where the marker shows it was
+    already written skips re-aggregation entirely). ``checkpoint=None`` (or a
+    disabled one with ``run_id=None``) keeps the pre-S4 behaviour: every replicate
+    runs, the K-mean always (re)writes.
     """
+    ckpt = checkpoint if checkpoint is not None else RunCheckpoint(run_id=None)
     runner = runner_fn if runner_fn is not None else _spawn_train_subprocess_async
-    with tempfile.TemporaryDirectory(prefix="geode-gen0-") as tmp:
-        roots_parent = workers_root if workers_root is not None else Path(tmp)
+    already_done = ckpt.completed_indices(GEN0_CHECKPOINT_GROUP)
+    pending = [i for i in range(1, k + 1) if i not in already_done]
+    if already_done:
         progress.emit(
-            f"gen-0 baseline (async): fanning {k} isolated workers concurrently "
-            f"(dry_run={dry_run}, per_audit_timeout={per_audit_timeout})"
+            f"gen-0 baseline (async): RESUME — {len(already_done)} replicate(s) already "
+            f"complete {sorted(already_done)}; re-running {len(pending)} missing {pending}"
         )
-        outcomes: list[WorkerOutcome] = await asyncio.gather(
-            *(
-                _run_isolated_worker(
-                    index=i,
-                    workers_root=roots_parent,
-                    snapshot_dir=snapshot_dir,
-                    promote_policy=None,  # gen-0 inherits NO arm (frozen baseline)
-                    promote_policy_seed=None,
-                    audit_max_samples=audit_max_samples,
-                    audit_max_connections=audit_max_connections,
-                    dry_run=dry_run,
-                    per_audit_timeout=per_audit_timeout,
-                    runner_fn=runner,
-                )
-                for i in range(1, k + 1)
+    fresh: list[WorkerOutcome] = []
+    if pending:
+        with tempfile.TemporaryDirectory(prefix="geode-gen0-") as tmp:
+            roots_parent = workers_root if workers_root is not None else Path(tmp)
+            progress.emit(
+                f"gen-0 baseline (async): fanning {len(pending)} isolated workers concurrently "
+                f"(dry_run={dry_run}, per_audit_timeout={per_audit_timeout})"
             )
-        )
-    successful = [o for o in outcomes if o.ok]
-    dropped = [o for o in outcomes if not o.ok]
+            fresh = list(
+                await asyncio.gather(
+                    *(
+                        _run_isolated_worker(
+                            index=i,
+                            workers_root=roots_parent,
+                            snapshot_dir=snapshot_dir,
+                            promote_policy=None,  # gen-0 inherits NO arm (frozen baseline)
+                            promote_policy_seed=None,
+                            audit_max_samples=audit_max_samples,
+                            audit_max_connections=audit_max_connections,
+                            dry_run=dry_run,
+                            per_audit_timeout=per_audit_timeout,
+                            runner_fn=runner,
+                        )
+                        for i in pending
+                    )
+                )
+            )
+    fresh_ok = [o for o in fresh if o.ok]
+    dropped = [o for o in fresh if not o.ok]
+    # Capture the resumed (already-complete) workers BEFORE recording the fresh
+    # ones, so the union does not double-count a fresh worker that record_completed
+    # would have just merged into the same completed set.
+    resumed = ckpt.resumed_outcomes(GEN0_CHECKPOINT_GROUP)
+    # Persist the freshly-completed workers BEFORE aggregating, so a crash during
+    # the K-mean write does not lose the measures already paid for.
+    ckpt.record_completed(GEN0_CHECKPOINT_GROUP, fresh_ok)
     for o in dropped:
         progress.emit(f"gen-0 baseline (async): DROPPED worker w{o.index} — {o.reason}")
+    # Union the freshly-run ok workers with the ones resumed from the checkpoint.
+    successful = [*resumed, *fresh_ok]
     held_out_values = [
         o.signal.held_out_fitness
         for o in successful
@@ -1190,7 +1428,8 @@ async def run_gen0_baseline_async(
     per_measure_dim_means = [o.dim_means for o in successful if o.dim_means]
     band = compute_noise_band(held_out_values, fitness_values, k=k)
     progress.emit(
-        f"gen-0 baseline (async): {len(successful)}/{k} workers ok, "
+        f"gen-0 baseline (async): {len(successful)}/{k} workers ok "
+        f"({len(already_done)} resumed + {len(fresh_ok)} fresh), "
         f"{len(dropped)} dropped; " + band.summary()
     )
     if dry_run:
@@ -1198,10 +1437,19 @@ async def run_gen0_baseline_async(
             f"gen-0 K-mean baseline (async): dry-run — skipped baseline.json rewrite "
             f"(parsed {len(per_measure_dim_means)}/{k} synthetic FITNESS_RESULT measures)"
         )
+    elif ckpt.kmean_already_written(GEN0_CHECKPOINT_GROUP):
+        # Idempotent: the K-mean was already aggregated + written for this run id —
+        # a resume must NOT re-aggregate / re-overwrite baseline.json a second time.
+        progress.emit(
+            "gen-0 K-mean baseline (async): RESUME — K-mean already written for this "
+            "run id; skipping re-aggregation (idempotent)"
+        )
     elif per_measure_dim_means:
         mean_dims, stderr_dims, present_count = aggregate_dim_means(per_measure_dim_means)
         wrote = write_kmean_baseline(mean_dims, stderr_dims)
         partial = sorted(d for d, c in present_count.items() if c < len(per_measure_dim_means))
+        if wrote:
+            ckpt.mark_kmean_written(GEN0_CHECKPOINT_GROUP)
         progress.emit(
             f"gen-0 K-mean baseline (async): collected {len(per_measure_dim_means)}/{k} "
             f"measures, {len(mean_dims)} dims; baseline.json raw.dim_means←K-mean "
@@ -1250,6 +1498,7 @@ async def run_control_arm_async(
     per_audit_timeout: float | None = None,
     workers_root: Path | None = None,
     runner_fn: Any | None = None,
+    checkpoint: RunCheckpoint | None = None,
 ) -> ControlArmFloor:
     """Run a PATH-INDEPENDENT control arm's N cycles concurrently.
 
@@ -1266,6 +1515,11 @@ async def run_control_arm_async(
     + steers the next propose) and MUST stay the sequential :func:`run_arm`. This
     function raises ``ValueError`` if asked to run ``gate`` so the path-dependence
     invariant cannot be violated by a mis-call.
+
+    ``checkpoint`` (S4) keys this arm's completed cycles under its OWN group (the
+    arm name), so a re-run after a crash skips the cycles already recorded complete
+    and re-runs only the missing ones, then aggregates the union. ``checkpoint=None``
+    keeps the pre-S4 behaviour (every cycle runs).
     """
     if arm == "gate":
         raise ValueError(
@@ -1274,40 +1528,56 @@ async def run_control_arm_async(
         )
     if arm not in {"never", "random"}:
         raise ValueError(f"run_control_arm_async expects 'never' or 'random', got {arm!r}")
+    ckpt = checkpoint if checkpoint is not None else RunCheckpoint(run_id=None)
     runner = runner_fn if runner_fn is not None else _spawn_train_subprocess_async
-    with tempfile.TemporaryDirectory(prefix=f"geode-{arm}-") as tmp:
-        roots_parent = workers_root if workers_root is not None else Path(tmp)
+    already_done = ckpt.completed_indices(arm)
+    pending = [cycle for cycle in range(1, n + 1) if cycle not in already_done]
+    if already_done:
         progress.emit(
-            f"control arm '{arm}' (index {arm_index}, async): fanning {n} isolated "
-            f"frozen-baseline cycles concurrently (dry_run={dry_run})"
+            f"control arm '{arm}' (async): RESUME — {len(already_done)} cycle(s) already "
+            f"complete {sorted(already_done)}; re-running {len(pending)} missing {pending}"
         )
-        outcomes: list[WorkerOutcome] = await asyncio.gather(
-            *(
-                _run_isolated_worker(
-                    index=cycle,
-                    workers_root=roots_parent,
-                    snapshot_dir=snapshot_dir,
-                    promote_policy=arm,
-                    # random arm: deterministic per-(arm,cycle) seed so a re-run
-                    # reproduces the same random promote decisions.
-                    promote_policy_seed=(
-                        DEFAULT_RANDOM_SEED_BASE + arm_index * n + cycle
-                        if arm == "random"
-                        else None
-                    ),
-                    audit_max_samples=audit_max_samples,
-                    audit_max_connections=audit_max_connections,
-                    dry_run=dry_run,
-                    per_audit_timeout=per_audit_timeout,
-                    runner_fn=runner,
-                )
-                for cycle in range(1, n + 1)
+    fresh: list[WorkerOutcome] = []
+    if pending:
+        with tempfile.TemporaryDirectory(prefix=f"geode-{arm}-") as tmp:
+            roots_parent = workers_root if workers_root is not None else Path(tmp)
+            progress.emit(
+                f"control arm '{arm}' (index {arm_index}, async): fanning {len(pending)} isolated "
+                f"frozen-baseline cycles concurrently (dry_run={dry_run})"
             )
-        )
-    successful = [o for o in outcomes if o.ok]
-    dropped = [o for o in outcomes if not o.ok]
+            fresh = list(
+                await asyncio.gather(
+                    *(
+                        _run_isolated_worker(
+                            index=cycle,
+                            workers_root=roots_parent,
+                            snapshot_dir=snapshot_dir,
+                            promote_policy=arm,
+                            # random arm: deterministic per-(arm,cycle) seed so a
+                            # re-run reproduces the same random promote decisions.
+                            promote_policy_seed=(
+                                DEFAULT_RANDOM_SEED_BASE + arm_index * n + cycle
+                                if arm == "random"
+                                else None
+                            ),
+                            audit_max_samples=audit_max_samples,
+                            audit_max_connections=audit_max_connections,
+                            dry_run=dry_run,
+                            per_audit_timeout=per_audit_timeout,
+                            runner_fn=runner,
+                        )
+                        for cycle in pending
+                    )
+                )
+            )
+    fresh_ok = [o for o in fresh if o.ok]
+    dropped = [o for o in fresh if not o.ok]
+    # Capture resumed cycles BEFORE recording the fresh ones (no double-count).
+    resumed = ckpt.resumed_outcomes(arm)
+    ckpt.record_completed(arm, fresh_ok)
     for o in dropped:
         progress.emit(f"control arm '{arm}' (async): DROPPED cycle {o.index} — {o.reason}")
+    successful = [*resumed, *fresh_ok]
     held_out_values = [
         o.signal.held_out_fitness
         for o in successful

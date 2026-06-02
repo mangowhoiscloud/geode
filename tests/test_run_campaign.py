@@ -1394,3 +1394,320 @@ def test_spawn_train_subprocess_async_timeout_kills_and_returns_minus_one(
     )
     assert result.returncode == -1
     assert "timed out" in result.stderr
+
+
+# ---------------------------------------------------------------------------
+# S4 — resume checkpoint (crash-resumable path-independent workers,
+# idempotent K-mean baseline write). PR-ASYNC-FIRST, 2026-06-03.
+# ---------------------------------------------------------------------------
+
+
+def _counting_async_runner(*, ran: list[int], fail_indices: set[int] | None = None) -> Any:
+    """A fake async runner that RECORDS which worker indices it actually ran.
+
+    Lets a resume test assert that the second run re-ran ONLY the missing workers
+    (``ran`` holds exactly the pending indices), writes a synthetic attribution row
+    + FITNESS_RESULT for the run workers, and optionally fails a chosen index.
+    """
+    fails = fail_indices or set()
+
+    async def runner(*, env: dict[str, str], dry_run: bool, per_audit_timeout: float | None) -> Any:
+        state_root = Path(env["GEODE_STATE_ROOT"])
+        idx = int(state_root.name.removeprefix("w"))
+        ran.append(idx)
+        if idx in fails:
+            return SimpleNamespace(returncode=1, stdout="", stderr="boom")
+        mutations = state_root / "autoresearch" / "mutations.jsonl"
+        mutations.parent.mkdir(parents=True, exist_ok=True)
+        _write_attribution(mutations, held_out=0.50 + idx * 0.01, fitness=0.6, source="manual")
+        return SimpleNamespace(returncode=0, stdout=_fitness_result_line({"safety": float(idx)}))
+
+    return runner
+
+
+def test_run_checkpoint_disabled_is_a_no_op(tmp_path: Path) -> None:
+    """A ``run_id=None`` checkpoint short-circuits every method — no file, no
+    completed set, never idempotent (the pre-S4 behaviour is preserved)."""
+    ckpt = rc.RunCheckpoint(run_id=None, runs_dir=tmp_path)
+    assert not ckpt.enabled
+    assert ckpt.completed_indices(rc.GEN0_CHECKPOINT_GROUP) == set()
+    assert ckpt.resumed_outcomes(rc.GEN0_CHECKPOINT_GROUP) == []
+    assert ckpt.kmean_already_written(rc.GEN0_CHECKPOINT_GROUP) is False
+    outcome = rc.WorkerOutcome(
+        index=1, ok=True, returncode=0, dim_means={"safety": 3.0}, signal=None, reason="ok"
+    )
+    ckpt.record_completed(rc.GEN0_CHECKPOINT_GROUP, [outcome])
+    ckpt.mark_kmean_written(rc.GEN0_CHECKPOINT_GROUP)
+    # Nothing was persisted — a disabled checkpoint never writes a marker file.
+    assert list(tmp_path.glob("*.json")) == []
+
+
+def test_run_checkpoint_round_trips_completed_workers(tmp_path: Path) -> None:
+    """``record_completed`` persists ok workers; a fresh ``load`` recovers them as
+    the same indices + dims + floor signal, and DROPS the failed ones."""
+    ckpt = rc.RunCheckpoint(run_id="run-xyz", runs_dir=tmp_path)
+    ok = rc.WorkerOutcome(
+        index=2,
+        ok=True,
+        returncode=0,
+        dim_means={"safety": 4.0},
+        signal=rc.CycleSignal(
+            held_out_fitness=0.55,
+            fitness=0.6,
+            fitness_delta=None,
+            promote_policy=None,
+            source=None,
+            between_seed_stderr=None,
+        ),
+        reason="ok",
+    )
+    failed = rc.WorkerOutcome(
+        index=3, ok=False, returncode=1, dim_means={}, signal=None, reason="train.py exited 1"
+    )
+    ckpt.record_completed(rc.GEN0_CHECKPOINT_GROUP, [ok, failed])
+    # A FRESH instance reads the same marker file from disk.
+    reloaded = rc.RunCheckpoint(run_id="run-xyz", runs_dir=tmp_path).load()
+    assert reloaded.completed_indices(rc.GEN0_CHECKPOINT_GROUP) == {2}
+    recovered = reloaded.resumed_outcomes(rc.GEN0_CHECKPOINT_GROUP)
+    assert len(recovered) == 1
+    assert recovered[0].index == 2
+    assert recovered[0].dim_means == {"safety": 4.0}
+    assert recovered[0].signal is not None
+    assert recovered[0].signal.held_out_fitness == pytest.approx(0.55)
+
+
+def test_run_checkpoint_load_corrupt_file_degrades_to_empty(tmp_path: Path) -> None:
+    """A malformed marker file leaves ``groups`` empty (re-run everything) rather
+    than raising — a corrupt checkpoint must never crash the campaign."""
+    marker = tmp_path / "run-bad.json"
+    marker.write_text("{not json", encoding="utf-8")
+    ckpt = rc.RunCheckpoint(run_id="run-bad", runs_dir=tmp_path).load()
+    assert ckpt.completed_indices(rc.GEN0_CHECKPOINT_GROUP) == set()
+
+
+def test_gen0_async_resume_skips_completed_reruns_only_missing(
+    campaign_state: dict[str, Path], tmp_path: Path
+) -> None:
+    """A re-run with a checkpoint that already records replicates 1+2 complete
+    re-runs ONLY replicate 3, then aggregates the UNION of all three."""
+    _make_gen0_snapshot(campaign_state)
+    ckpt = rc.RunCheckpoint(run_id="gen0-resume", runs_dir=tmp_path)
+    # Pre-seed the marker as if a prior run finished replicates 1 + 2.
+    for idx in (1, 2):
+        ckpt.record_completed(
+            rc.GEN0_CHECKPOINT_GROUP,
+            [
+                rc.WorkerOutcome(
+                    index=idx,
+                    ok=True,
+                    returncode=0,
+                    dim_means={"safety": float(idx)},
+                    signal=rc.CycleSignal(
+                        held_out_fitness=0.50 + idx * 0.01,
+                        fitness=0.6,
+                        fitness_delta=None,
+                        promote_policy=None,
+                        source=None,
+                        between_seed_stderr=None,
+                    ),
+                    reason="ok",
+                )
+            ],
+        )
+    ran: list[int] = []
+    runner = _counting_async_runner(ran=ran)
+    with rc.ProgressLog(campaign_state["progress"]) as progress:
+        band = asyncio.run(
+            rc.run_gen0_baseline_async(
+                k=3,
+                dry_run=False,
+                audit_max_samples=3,
+                audit_max_connections=8,
+                progress=progress,
+                snapshot_dir=campaign_state["snapshot"],
+                per_audit_timeout=5.0,
+                runner_fn=runner,
+                checkpoint=ckpt,
+            )
+        )
+    # ONLY the missing replicate (3) was actually re-run.
+    assert ran == [3]
+    # The union of all 3 contributes to the band (2 resumed + 1 fresh held-out).
+    assert len(band.held_out_values) == 3
+    # baseline.json's raw.dim_means is the K-mean over the UNION (1+2+3)/3 = 2.0.
+    payload = json.loads(campaign_state["baseline"].read_text(encoding="utf-8"))
+    assert payload["raw"]["dim_means"]["safety"] == pytest.approx(2.0)
+
+
+def test_gen0_async_idempotent_kmean_write_second_run_is_noop(
+    campaign_state: dict[str, Path], tmp_path: Path
+) -> None:
+    """A second run with the SAME run id (marker shows the K-mean already written)
+    must NOT re-aggregate or re-overwrite baseline.json (idempotent)."""
+    _make_gen0_snapshot(campaign_state)
+    runner1 = _fake_async_runner(
+        dim_per_index={1: {"safety": 2.0}, 2: {"safety": 4.0}},
+        held_out_per_index={1: 0.50, 2: 0.52},
+    )
+    with rc.ProgressLog(campaign_state["progress"]) as progress:
+        asyncio.run(
+            rc.run_gen0_baseline_async(
+                k=2,
+                dry_run=False,
+                audit_max_samples=3,
+                audit_max_connections=8,
+                progress=progress,
+                snapshot_dir=campaign_state["snapshot"],
+                per_audit_timeout=5.0,
+                runner_fn=runner1,
+                checkpoint=rc.RunCheckpoint(run_id="idem", runs_dir=tmp_path),
+            )
+        )
+    after_first = campaign_state["baseline"].read_text(encoding="utf-8")
+    assert json.loads(after_first)["raw"]["dim_means"]["safety"] == pytest.approx(3.0)
+
+    # A second run reloading the SAME marker: the K-mean is flagged written, and a
+    # runner that would aggregate to a DIFFERENT value must NOT touch baseline.json.
+    runner2 = _fake_async_runner(
+        dim_per_index={1: {"safety": 99.0}, 2: {"safety": 99.0}},
+        held_out_per_index={1: 0.9, 2: 0.9},
+    )
+    ran2: list[str] = []
+
+    async def tracking_runner(
+        *, env: dict[str, str], dry_run: bool, per_audit_timeout: float | None
+    ) -> Any:
+        ran2.append(env["GEODE_STATE_ROOT"])
+        return await runner2(env=env, dry_run=dry_run, per_audit_timeout=per_audit_timeout)
+
+    reloaded = rc.RunCheckpoint(run_id="idem", runs_dir=tmp_path).load()
+    with rc.ProgressLog(campaign_state["progress"]) as progress:
+        asyncio.run(
+            rc.run_gen0_baseline_async(
+                k=2,
+                dry_run=False,
+                audit_max_samples=3,
+                audit_max_connections=8,
+                progress=progress,
+                snapshot_dir=campaign_state["snapshot"],
+                per_audit_timeout=5.0,
+                runner_fn=tracking_runner,
+                checkpoint=reloaded,
+            )
+        )
+    # No worker re-ran (both replicates were already complete in the marker)…
+    assert ran2 == []
+    # …and baseline.json is byte-identical — the K-mean write was a no-op.
+    assert campaign_state["baseline"].read_text(encoding="utf-8") == after_first
+
+
+def test_gen0_async_does_not_checkpoint_dropped_worker(
+    campaign_state: dict[str, Path], tmp_path: Path
+) -> None:
+    """A dropped (failed) worker is NOT recorded complete, so a resume RE-RUNS it
+    (it may succeed the second time)."""
+    _make_gen0_snapshot(campaign_state)
+    ckpt = rc.RunCheckpoint(run_id="drop-resume", runs_dir=tmp_path)
+    ran_first: list[int] = []
+    with rc.ProgressLog(campaign_state["progress"]) as progress:
+        asyncio.run(
+            rc.run_gen0_baseline_async(
+                k=2,
+                dry_run=False,
+                audit_max_samples=3,
+                audit_max_connections=8,
+                progress=progress,
+                snapshot_dir=campaign_state["snapshot"],
+                per_audit_timeout=5.0,
+                runner_fn=_counting_async_runner(ran=ran_first, fail_indices={2}),
+                checkpoint=ckpt,
+            )
+        )
+    assert sorted(ran_first) == [1, 2]
+    # Worker 1 ok → checkpointed; worker 2 failed → NOT checkpointed.
+    reloaded = rc.RunCheckpoint(run_id="drop-resume", runs_dir=tmp_path).load()
+    assert reloaded.completed_indices(rc.GEN0_CHECKPOINT_GROUP) == {1}
+    # Resume: worker 2 (the previously-dropped one) is re-attempted, worker 1 is not.
+    ran_second: list[int] = []
+    with rc.ProgressLog(campaign_state["progress"]) as progress:
+        asyncio.run(
+            rc.run_gen0_baseline_async(
+                k=2,
+                dry_run=False,
+                audit_max_samples=3,
+                audit_max_connections=8,
+                progress=progress,
+                snapshot_dir=campaign_state["snapshot"],
+                per_audit_timeout=5.0,
+                runner_fn=_counting_async_runner(ran=ran_second),
+                checkpoint=reloaded,
+            )
+        )
+    assert ran_second == [2]
+
+
+def test_control_arm_async_resume_skips_completed_cycles(
+    campaign_state: dict[str, Path], tmp_path: Path
+) -> None:
+    """A control arm keys its cycles under its OWN group (the arm name) — a resume
+    re-runs only the missing cycles and aggregates the union floor."""
+    _make_gen0_snapshot(campaign_state)
+    ckpt = rc.RunCheckpoint(run_id="arm-resume", runs_dir=tmp_path)
+    # Pre-seed cycles 1 + 3 of the 'never' arm as already complete.
+    for idx in (1, 3):
+        ckpt.record_completed(
+            "never",
+            [
+                rc.WorkerOutcome(
+                    index=idx,
+                    ok=True,
+                    returncode=0,
+                    dim_means={"safety": float(idx)},
+                    signal=rc.CycleSignal(
+                        held_out_fitness=0.40 + idx * 0.01,
+                        fitness=0.5,
+                        fitness_delta=None,
+                        promote_policy=None,
+                        source=None,
+                        between_seed_stderr=None,
+                    ),
+                    reason="ok",
+                )
+            ],
+        )
+    ran: list[int] = []
+    with rc.ProgressLog(campaign_state["progress"]) as progress:
+        floor = asyncio.run(
+            rc.run_control_arm_async(
+                arm="never",
+                arm_index=0,
+                n=4,
+                audit_max_samples=3,
+                audit_max_connections=8,
+                dry_run=False,
+                progress=progress,
+                snapshot_dir=campaign_state["snapshot"],
+                per_audit_timeout=5.0,
+                runner_fn=_counting_async_runner(ran=ran),
+                checkpoint=ckpt,
+            )
+        )
+    # Only the 2 missing cycles (2, 4) re-ran; the union of all 4 is aggregated.
+    assert sorted(ran) == [2, 4]
+    assert floor.cycles_ok == 4
+    assert floor.cycles_dropped == 0
+
+
+def test_control_arm_resume_group_isolated_from_gen0(
+    campaign_state: dict[str, Path], tmp_path: Path
+) -> None:
+    """gen-0 and each arm checkpoint under DISTINCT groups, so a completed gen-0
+    replicate index never masks the same-numbered control cycle."""
+    ckpt = rc.RunCheckpoint(run_id="grouped", runs_dir=tmp_path)
+    ckpt.record_completed(
+        rc.GEN0_CHECKPOINT_GROUP,
+        [rc.WorkerOutcome(1, True, 0, {"safety": 1.0}, None, "ok")],
+    )
+    # The gen-0 group has index 1; the 'random' group does NOT (distinct namespace).
+    assert ckpt.completed_indices(rc.GEN0_CHECKPOINT_GROUP) == {1}
+    assert ckpt.completed_indices("random") == set()
