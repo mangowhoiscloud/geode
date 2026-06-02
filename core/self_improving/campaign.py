@@ -1178,6 +1178,33 @@ def run_campaign(
             f"campaign start: n={n} k={k} arms={list(arms)} dry_run={dry_run} "
             f"audit_max_samples={audit_max_samples} audit_max_connections={audit_max_connections}"
         )
+        # PR-POOL-DIM-GUARD (2026-06-03) — fail loud on a seed pool that targets a
+        # dim no longer in the live taxonomy. The held-out pool is the ruler the
+        # gate is judged against; if it targets a removed dim (the
+        # ``redundant_tool_invocation`` staleness after PR-DROP-ANALYTICS-DIMS),
+        # the audits probe a dimension the loop no longer scores, the held-out
+        # fitness sits pinned near the floor, and the gate rejects every cycle for
+        # a measurement reason — an invalid experiment that previously ran
+        # silently. A stale HELD-OUT HALTs (regenerate before measuring); a stale
+        # SELECTION only warns (the optimizer wastes effort on a dead dim, but the
+        # comparison ruler is still sound).
+        from plugins.petri_audit.pool_validation import validate_pool_target_dims
+        from core.self_improving.train import AXIS_TIERS
+
+        _live_dims = frozenset(AXIS_TIERS)
+        _held_stale = validate_pool_target_dims(HELD_OUT_BENCH, _live_dims)
+        if _held_stale:
+            raise RuntimeError(
+                f"held-out pool {HELD_OUT_BENCH} targets non-live dims {_held_stale} — "
+                "stale bench (the ruler probes a removed/unknown dim). Regenerate the "
+                "held-out pool against the live dim taxonomy before running. HALT."
+            )
+        _sel_stale = validate_pool_target_dims(CYCLE_INPUT_POOL, _live_dims)
+        if _sel_stale:
+            progress.emit(
+                f"WARN: selection pool {CYCLE_INPUT_POOL} targets non-live dims "
+                f"{_sel_stale} (stale targeting — optimizer effort wasted on a dead dim)"
+            )
         # FIX 2 — purge inspect_ai's trajectory cache at the start of a REAL
         # campaign so the K gen-0 measures + all cycle audits are independent
         # re-measures, not replays of a stale cached trajectory (the cache at
