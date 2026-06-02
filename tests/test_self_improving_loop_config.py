@@ -689,24 +689,35 @@ def test_openai_source_explicit_matching_per_role_is_allowed() -> None:
     assert cfg.autoresearch.target.source.value == "api_key"
 
 
-def test_openai_source_conflicting_per_role_raises() -> None:
-    """A different explicit per-role source is ambiguous → fail loud, not silent."""
-    with pytest.raises(ValueError, match=r"single entry point|conflicts"):
-        SelfImprovingLoopConfig.model_validate(
+def test_openai_source_supersedes_conflicting_per_role_with_warning() -> None:
+    """A different explicit per-role source is superseded (authoritative) + WARNS —
+    deterministically, not via a ValidationError that read_role_override would swallow."""
+    with pytest.warns(UserWarning, match=r"single entry point|supersedes"):
+        cfg = SelfImprovingLoopConfig.model_validate(
             {"openai_source": "api_key", "autoresearch": {"source": "openai-codex"}}
         )
+    # openai_source wins — the lane is deterministic
+    assert cfg.autoresearch.source.value == "api_key"
 
 
-def test_openai_source_conflict_detected_after_legacy_migration() -> None:
-    """Legacy [petri.target] is migrated into autoresearch BEFORE the conflict check,
-    so a legacy-layout pin that disagrees with openai_source still fails loud."""
-    with (
-        pytest.warns(DeprecationWarning),
-        pytest.raises(ValueError, match=r"single entry point|conflicts"),
-    ):
-        SelfImprovingLoopConfig.model_validate(
+def test_openai_source_supersedes_after_legacy_migration() -> None:
+    """Legacy [petri.target] is migrated into autoresearch BEFORE propagation, so a
+    legacy-layout pin that disagrees with openai_source is also superseded + warned."""
+    with pytest.warns((DeprecationWarning, UserWarning)):
+        cfg = SelfImprovingLoopConfig.model_validate(
             {"openai_source": "api_key", "petri": {"target": {"source": "openai-codex"}}}
         )
+    assert cfg.autoresearch.target.source.value == "api_key"
+
+
+def test_openai_source_rejects_non_openai_lane() -> None:
+    """The knob is an OpenAI-lane selector — auto / claude-cli are rejected so it can
+    never route an OpenAI role through Claude CLI or the manifest cascade."""
+    from pydantic import ValidationError
+
+    for bad in ("auto", "claude-cli"):
+        with pytest.raises(ValidationError, match=r"openai-codex.*api_key|OpenAI credential lane"):
+            SelfImprovingLoopConfig.model_validate({"openai_source": bad})
 
 
 def test_openai_source_reaches_petri_target_binding(tmp_path: Path, monkeypatch) -> None:
