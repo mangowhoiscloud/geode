@@ -143,6 +143,16 @@ DEFAULT_MAX_PROPOSE_ATTEMPTS = 8
 """propose-guard re-proposal cap (M)."""
 DEFAULT_ARMS = ("never", "random", "gate")
 """Control arms, gate LAST (campaign-procedure.md §6)."""
+DEFAULT_PER_AUDIT_TIMEOUT_S = 2700.0
+"""Tight per-audit wall-clock bound (45 min) for the async-first subprocess workers.
+
+This is the hang fix: the in-process ``train.py`` budget is ``budget_minutes*60 + 120``
+and operators set ``budget_minutes`` as high as 300 (= a ~5 hr ceiling), so a hung
+audit used to hold its slot for hours. The orchestrator kills each worker subprocess
+(and its ``inspect eval`` grandchild) at this bound instead — generous for a real
+Petri audit (~20-30 min at ``seed_limit=10``) yet ~6.7× tighter than the 5 hr ceiling.
+Override with ``GEODE_PER_AUDIT_TIMEOUT_S`` (graceful: non-numeric → this default)."""
+PER_AUDIT_TIMEOUT_ENV = "GEODE_PER_AUDIT_TIMEOUT_S"
 DEFAULT_RANDOM_SEED_BASE = 424200
 """Deterministic ``GEODE_PROMOTE_POLICY_SEED`` base for the random arm; the
 per-arm seed is ``DEFAULT_RANDOM_SEED_BASE + arm_index``."""
@@ -2055,6 +2065,23 @@ def _purge_inspect_cache_at_start(progress: ProgressLog) -> bool:
 # ---------------------------------------------------------------------------
 
 
+def _resolve_per_audit_timeout() -> float:
+    """Tight per-audit subprocess timeout (seconds) for the async workers.
+
+    ``GEODE_PER_AUDIT_TIMEOUT_S`` override → :data:`DEFAULT_PER_AUDIT_TIMEOUT_S`.
+    Graceful boundary on the cast: a non-numeric / non-positive env value falls back
+    to the default rather than crashing the campaign launch.
+    """
+    raw = os.environ.get(PER_AUDIT_TIMEOUT_ENV, "").strip()
+    if not raw:
+        return DEFAULT_PER_AUDIT_TIMEOUT_S
+    try:
+        value = float(raw)
+    except ValueError:
+        return DEFAULT_PER_AUDIT_TIMEOUT_S
+    return value if value > 0 else DEFAULT_PER_AUDIT_TIMEOUT_S
+
+
 def run_campaign(
     *,
     n: int = DEFAULT_N,
@@ -2069,6 +2096,7 @@ def run_campaign(
     train_runner: Any | None = None,
     runner_factory: Any | None = None,
     guard_fn: Any | None = None,
+    async_first: bool = True,
 ) -> dict[str, Any]:
     """Run the full campaign: gen-0 K-repeat baseline → snapshot → 3-arm loop.
 
@@ -2120,19 +2148,94 @@ def run_campaign(
         # the cache).
         if not dry_run:
             _purge_inspect_cache_at_start(progress)
-        band = run_gen0_baseline(
-            k=k,
-            dry_run=dry_run,
-            audit_max_samples=audit_max_samples,
-            audit_max_connections=audit_max_connections,
-            progress=progress,
-            train_runner=train_runner,
+
+        # PR-ASYNC-FIRST WIRING (Codex MCP BLOCKER) — a real production campaign
+        # (not dry-run, no injected sync runner) fans the PATH-INDEPENDENT measures
+        # (gen-0 K replicates + the NEVER/RANDOM control arms) out as concurrent,
+        # fully-isolated ``train.py`` SUBPROCESSES; the PATH-DEPENDENT GATE arm stays
+        # on the sequential ``run_arm`` (champion chain). Injected-runner / dry-run
+        # callers (the unit tests + the smoke path) keep the legacy in-process sync
+        # path, so this wiring changes ONLY the real-campaign behaviour.
+        use_async = async_first and not dry_run and train_runner is None and runner_factory is None
+        per_audit_timeout = _resolve_per_audit_timeout() if use_async else None
+        ckpt = RunCheckpoint(run_id=f"campaign-n{n}-k{k}-{'-'.join(arms)}") if use_async else None
+        campaign_transcript = (
+            (CAMPAIGN_RUNS_DIR / "campaign-transcript.jsonl") if use_async else None
         )
+
+        if use_async:
+            progress.emit(
+                f"async-first: concurrent subprocess fan-out — per_audit_timeout="
+                f"{per_audit_timeout}s run_id={ckpt.run_id if ckpt else None}; gen-0 K + "
+                "never/random parallel, gate sequential"
+            )
+            # gen-0 workers seed from a snapshot of the CURRENT frozen scaffold, so
+            # snapshot BEFORE the async gen-0 (the arms re-seed from the post-K-mean
+            # snapshot taken right after).
+            snapshot_sot(snapshot_dir)
+            band = asyncio.run(
+                run_gen0_baseline_async(
+                    k=k,
+                    dry_run=dry_run,
+                    audit_max_samples=audit_max_samples,
+                    audit_max_connections=audit_max_connections,
+                    progress=progress,
+                    snapshot_dir=snapshot_dir,
+                    per_audit_timeout=per_audit_timeout,
+                    checkpoint=ckpt,
+                    campaign_transcript=campaign_transcript,
+                )
+            )
+        else:
+            band = run_gen0_baseline(
+                k=k,
+                dry_run=dry_run,
+                audit_max_samples=audit_max_samples,
+                audit_max_connections=audit_max_connections,
+                progress=progress,
+                train_runner=train_runner,
+            )
+        # Snapshot the post-gen-0 state (the K-mean ``baseline.json`` the gate scores
+        # against) — this is the matched reset every arm restores from.
         snapshot_written = snapshot_sot(snapshot_dir)
         progress.emit(f"gen-0 SoT snapshot: {len(snapshot_written)} files → {snapshot_dir}")
         arm_summaries: list[ArmSummary] = []
+        control_floors: list[ControlArmFloor] = []
         halted = False
         for arm_index, arm in enumerate(arms):
+            if use_async and arm in ("never", "random"):
+                # PATH-INDEPENDENT control arm → concurrent isolated subprocesses.
+                floor = asyncio.run(
+                    run_control_arm_async(
+                        arm=arm,
+                        arm_index=arm_index,
+                        n=n,
+                        audit_max_samples=audit_max_samples,
+                        audit_max_connections=audit_max_connections,
+                        dry_run=dry_run,
+                        progress=progress,
+                        snapshot_dir=snapshot_dir,
+                        per_audit_timeout=per_audit_timeout,
+                        checkpoint=ckpt,
+                        campaign_transcript=campaign_transcript,
+                    )
+                )
+                control_floors.append(floor)
+                # Adapt the held-out FLOOR to the ArmSummary digest shape — a control
+                # arm never promotes (its evidence is ``held_out_band``, preserved in
+                # ``control_floors``); cycles_run/skipped map from ok/dropped.
+                arm_summaries.append(
+                    ArmSummary(
+                        arm=arm,
+                        cycles_run=floor.cycles_ok,
+                        cycles_skipped=floor.cycles_dropped,
+                        promotes=0,
+                        halted=False,
+                    )
+                )
+                progress.emit(floor.summary())
+                continue
+            # GATE (path-dependent champion chain) — or any arm on the sync path.
             summary = run_arm(
                 arm=arm,
                 arm_index=arm_index,
@@ -2158,6 +2261,7 @@ def run_campaign(
         return {
             "noise_band": band,
             "arm_summaries": arm_summaries,
+            "control_floors": control_floors,
             "halted": halted,
             "snapshot_files": [str(p) for p in snapshot_written],
         }

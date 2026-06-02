@@ -2012,3 +2012,101 @@ def test_control_arm_async_merges_per_cycle_transcripts(
         json.loads(line) for line in campaign_transcript.read_text(encoding="utf-8").splitlines()
     ]
     assert {r["payload"]["worker_id"] for r in rows} == {"random-w1", "random-w2"}
+
+
+# ---------------------------------------------------------------------------
+# PR-ASYNC-FIRST WIRING (Codex MCP BLOCKER) — run_campaign must route the
+# path-independent measures through the async subprocess harness in a real
+# campaign, and keep the gate (+ all arms on the sync/test path) on run_arm.
+# ---------------------------------------------------------------------------
+
+
+def test_run_campaign_async_first_routes_path_independent_to_async(
+    campaign_state: dict[str, Path], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A REAL campaign (dry_run=False, no injected runner) with async_first routes
+    gen-0 + never/random through the ASYNC subprocess harness and the GATE through
+    the sequential run_arm — proving the harness is WIRED into production, not the
+    dead test-only code Codex MCP flagged."""
+    import plugins.petri_audit.runner as petri_runner
+
+    monkeypatch.setattr(petri_runner, "purge_inspect_cache", lambda: True)
+    (campaign_state["policies_dir"] / "hyperparam.json").write_text("{}", encoding="utf-8")
+
+    band = rc.NoiseBand(
+        k=2, held_out_values=(0.85,), fitness_values=(0.89,), mean=0.85, stderr=0.01
+    )
+    calls: dict[str, Any] = {"gen0": 0, "control": [], "gate": []}
+
+    async def fake_gen0_async(**_kw: Any) -> Any:
+        calls["gen0"] += 1
+        return band
+
+    async def fake_control_async(*, arm: str, n: int, **_kw: Any) -> Any:
+        calls["control"].append(arm)
+        return rc.ControlArmFloor(arm=arm, cycles_ok=n, cycles_dropped=0, held_out_band=band)
+
+    def fake_run_arm(*, arm: str, n: int, **_kw: Any) -> Any:
+        calls["gate"].append(arm)
+        return rc.ArmSummary(arm=arm, cycles_run=n, cycles_skipped=0, promotes=1, halted=False)
+
+    monkeypatch.setattr(rc, "run_gen0_baseline_async", fake_gen0_async)
+    monkeypatch.setattr(rc, "run_control_arm_async", fake_control_async)
+    monkeypatch.setattr(rc, "run_arm", fake_run_arm)
+
+    result = rc.run_campaign(
+        n=2,
+        k=2,
+        arms=("never", "random", "gate"),
+        dry_run=False,
+        async_first=True,
+        progress_path=campaign_state["progress"],
+        snapshot_dir=campaign_state["snapshot"],
+    )
+    assert calls["gen0"] == 1
+    assert calls["control"] == ["never", "random"]
+    assert calls["gate"] == ["gate"]  # ONLY the path-dependent gate is sequential
+    assert len(result["control_floors"]) == 2
+
+
+def test_run_campaign_async_first_false_keeps_every_arm_on_sync(
+    campaign_state: dict[str, Path], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """async_first=False keeps every arm — incl. never/random — on the legacy
+    sequential run_arm and never touches the async harness (the unit-test + smoke
+    path is preserved)."""
+    import plugins.petri_audit.runner as petri_runner
+
+    monkeypatch.setattr(petri_runner, "purge_inspect_cache", lambda: True)
+    (campaign_state["policies_dir"] / "hyperparam.json").write_text("{}", encoding="utf-8")
+
+    async def boom_async(**_kw: Any) -> Any:
+        raise AssertionError("async harness must NOT run when async_first=False")
+
+    arms_seen: list[str] = []
+
+    def fake_run_arm(*, arm: str, n: int, **_kw: Any) -> Any:
+        arms_seen.append(arm)
+        return rc.ArmSummary(arm=arm, cycles_run=n, cycles_skipped=0, promotes=0, halted=False)
+
+    monkeypatch.setattr(rc, "run_gen0_baseline_async", boom_async)
+    monkeypatch.setattr(rc, "run_control_arm_async", boom_async)
+    monkeypatch.setattr(rc, "run_arm", fake_run_arm)
+    monkeypatch.setattr(
+        rc,
+        "run_gen0_baseline",
+        lambda **_kw: rc.NoiseBand(
+            k=0, held_out_values=(), fitness_values=(), mean=None, stderr=None
+        ),
+    )
+
+    rc.run_campaign(
+        n=1,
+        k=0,
+        arms=("never", "random", "gate"),
+        dry_run=False,
+        async_first=False,
+        progress_path=campaign_state["progress"],
+        snapshot_dir=campaign_state["snapshot"],
+    )
+    assert arms_seen == ["never", "random", "gate"]
