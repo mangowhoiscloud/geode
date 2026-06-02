@@ -17,7 +17,9 @@ For ONE candidate seed, run a cheap Petri audit (1 seed × 1 target × 1 paraphr
    ACTUAL schema — pass them exactly, not a renamed/list variant):
    - `seed_select = "<absolute candidate_path>"` — the single candidate `.md`
      path (NOT `seeds=[...]`; the tool's `seeds` is the integer sample count).
-   - `seeds = 1` — sample count (one rollout for this one candidate).
+   - `seeds = 3` — sample count (THREE rollouts for this one candidate, so the
+     reported `dim_means` is a 3-sample mean, not a single high-variance draw;
+     `rank_by_difficulty` must rank by the central estimate, not a lucky tail).
    - `target = "gpt-5.5"` — the SAME target the self-improving campaign
      optimizes: scaffolded GEODE on gpt-5.5. The `petri_audit` tool
      auto-wraps it as `geode/gpt-5.5`, routing the full GEODE AgenticLoop
