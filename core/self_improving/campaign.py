@@ -81,6 +81,7 @@ import logging
 import math
 import os
 import shutil
+import signal
 import statistics
 import subprocess
 import sys
@@ -1248,6 +1249,13 @@ async def _spawn_train_subprocess_async(
         stderr=asyncio.subprocess.PIPE,
         env=env,
         cwd=str(REPO_ROOT),
+        # Own process group/session (POSIX): the worker ``train.py`` itself spawns
+        # ``geode audit`` → ``inspect eval`` (the PAID audit) as a grandchild via
+        # ``subprocess.run``, so a kill must reach the WHOLE tree, not just the
+        # direct child (Codex MCP HIGH — an orphaned ``inspect eval`` keeps burning
+        # quota). ``start_new_session`` makes ``proc.pid`` a group leader so a
+        # single ``killpg`` reaps the grandchild too.
+        start_new_session=True,
     )
     try:
         stdout_bytes, stderr_bytes = await asyncio.wait_for(
@@ -1255,13 +1263,22 @@ async def _spawn_train_subprocess_async(
         )
     except TimeoutError:
         # ``asyncio.wait_for`` raises the builtin ``TimeoutError`` (aliased to
-        # ``asyncio.TimeoutError`` since 3.11). Kill + reap the hung child so the
-        # tight bound actually frees the worker instead of leaking a zombie.
-        # ``proc.kill()`` raises ``ProcessLookupError`` if the child happened to
-        # exit between the timeout firing and the kill (a narrow race) — guard it
-        # so the reap path is bulletproof and still returns the dropped-worker row.
+        # ``asyncio.TimeoutError`` since 3.11). Kill + reap the whole process GROUP
+        # so the hung audit (and its ``inspect eval`` grandchild) is fully reaped,
+        # not left orphaned. ``ProcessLookupError`` (child/group already gone in the
+        # narrow exit-at-timeout race) is suppressed so the reap path is bulletproof
+        # and still returns the dropped-worker row.
         with contextlib.suppress(ProcessLookupError):
-            proc.kill()
+            # NEVER signal our OWN process group: ``start_new_session=True`` gives the
+            # child a DISTINCT group in production, but a test mock or a platform
+            # without ``setsid`` would leave it in our group, where ``killpg`` would
+            # SIGKILL the campaign driver (or the test runner) itself. Only group-kill
+            # when the child's group is genuinely its own; otherwise kill just the child.
+            child_pgid = os.getpgid(proc.pid)
+            if child_pgid != os.getpgid(0):
+                os.killpg(child_pgid, signal.SIGKILL)
+            else:
+                proc.kill()
         await proc.wait()
         return subprocess.CompletedProcess(
             args=argv,
@@ -1317,70 +1334,77 @@ async def _run_isolated_worker(
     gather + aggregate + isolation are exercised with NO real audit.
     """
     worker_root = workers_root / f"w{index}"
-    worker_root.mkdir(parents=True, exist_ok=True)
     worker_id = f"{group}-w{index}"
     transcript_path = worker_root / "transcript.jsonl"
+    # ONE broad guard around the WHOLE worker body (Codex MCP HIGH): a failure in
+    # ``mkdir`` / ``_seed_isolated_state_root`` / ``_build_worker_env`` / the spawn /
+    # ``parse_fitness_result_dims`` / ``read_latest_attribution`` must NOT abort the
+    # sibling ``asyncio.gather`` (which has no ``return_exceptions=True``) — it drops
+    # this worker to ``ok=False`` and the aggregator skips it with a logged reason.
     try:
+        worker_root.mkdir(parents=True, exist_ok=True)
         _seed_isolated_state_root(worker_root, snapshot_dir)
-    except FileNotFoundError as exc:
-        return WorkerOutcome(
-            index=index,
-            ok=False,
-            returncode=-1,
-            dim_means={},
-            signal=None,
-            reason=f"seed failed: {exc}",
+        env = _build_worker_env(
+            worker_root,
+            promote_policy=promote_policy,
+            promote_policy_seed=promote_policy_seed,
+            audit_max_samples=audit_max_samples,
+            audit_max_connections=audit_max_connections,
             transcript_path=transcript_path,
+            worker_id=worker_id,
         )
-    env = _build_worker_env(
-        worker_root,
-        promote_policy=promote_policy,
-        promote_policy_seed=promote_policy_seed,
-        audit_max_samples=audit_max_samples,
-        audit_max_connections=audit_max_connections,
-        transcript_path=transcript_path,
-        worker_id=worker_id,
-    )
-    try:
         result = await runner_fn(env=env, dry_run=dry_run, per_audit_timeout=per_audit_timeout)
-    except Exception as exc:  # pragma: no cover — defensive (a worker crash must
-        # not abort the gather; the aggregator drops it with a logged reason)
+        returncode = int(getattr(result, "returncode", -1) or 0)
+        if returncode != 0:
+            return WorkerOutcome(
+                index=index,
+                ok=False,
+                returncode=returncode,
+                dim_means={},
+                signal=None,
+                reason=f"train.py exited {returncode}",
+                transcript_path=transcript_path,
+            )
+        measure_dims = parse_fitness_result_dims(getattr(result, "stdout", None)) or {}
+        # Read THIS worker's signal from its OWN isolated mutations.jsonl (the worker
+        # root started with no attribution ledger, so the newest row is unambiguously
+        # this worker's). ``min_rows=0`` is correct here precisely because the ledger
+        # is per-worker — there is no sibling row to mistake for this one.
+        worker_mutations = worker_root / "autoresearch" / "mutations.jsonl"
+        signal = read_latest_attribution(worker_mutations)
+        if not measure_dims and signal is None:
+            # Zero exit but NO usable measurement: no ``FITNESS_RESULT`` dims AND no
+            # attribution row (Codex MCP MEDIUM). Marking this ``ok=True`` would
+            # checkpoint a FAILED measurement as complete + skip it on resume — drop
+            # it so a resume re-attempts it and the aggregate never counts a phantom.
+            return WorkerOutcome(
+                index=index,
+                ok=False,
+                returncode=0,
+                dim_means={},
+                signal=None,
+                reason="zero exit but no usable measurement (no dims, no attribution)",
+                transcript_path=transcript_path,
+            )
+        return WorkerOutcome(
+            index=index,
+            ok=True,
+            returncode=0,
+            dim_means=measure_dims,
+            signal=signal,
+            reason="ok",
+            transcript_path=transcript_path,
+        )
+    except Exception as exc:
         return WorkerOutcome(
             index=index,
             ok=False,
             returncode=-1,
             dim_means={},
             signal=None,
-            reason=f"worker raised: {exc}",
+            reason=f"worker error ({type(exc).__name__}): {exc}",
             transcript_path=transcript_path,
         )
-    returncode = int(getattr(result, "returncode", -1) or 0)
-    if returncode != 0:
-        return WorkerOutcome(
-            index=index,
-            ok=False,
-            returncode=returncode,
-            dim_means={},
-            signal=None,
-            reason=f"train.py exited {returncode}",
-            transcript_path=transcript_path,
-        )
-    measure_dims = parse_fitness_result_dims(getattr(result, "stdout", None)) or {}
-    # Read THIS worker's signal from its OWN isolated mutations.jsonl (the worker
-    # root started with no attribution ledger, so the newest row is unambiguously
-    # this worker's). ``min_rows=0`` is correct here precisely because the ledger
-    # is per-worker — there is no sibling row to mistake for this one.
-    worker_mutations = worker_root / "autoresearch" / "mutations.jsonl"
-    signal = read_latest_attribution(worker_mutations)
-    return WorkerOutcome(
-        index=index,
-        ok=True,
-        returncode=0,
-        dim_means=measure_dims,
-        signal=signal,
-        reason="ok",
-        transcript_path=transcript_path,
-    )
 
 
 def _transcript_sort_key(row: dict[str, Any]) -> tuple[float, int]:

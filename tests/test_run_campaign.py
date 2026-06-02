@@ -1398,12 +1398,16 @@ def test_spawn_train_subprocess_async_timeout_kills_and_returns_minus_one(
     real_exec = asyncio.create_subprocess_exec
 
     async def sleeper_exec(*_argv: Any, **kwargs: Any) -> Any:
+        # Forward ``start_new_session`` so the sleeper is its OWN process-group leader
+        # exactly like production — otherwise it would share the pytest group and the
+        # timeout-branch ``killpg`` would SIGKILL the test runner itself.
         return await real_exec(
             sys.executable,
             "-c",
             "import time; time.sleep(30)",
             stdout=kwargs.get("stdout"),
             stderr=kwargs.get("stderr"),
+            start_new_session=kwargs.get("start_new_session", False),
         )
 
     monkeypatch.setattr(rc.asyncio, "create_subprocess_exec", sleeper_exec)

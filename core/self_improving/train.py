@@ -1687,7 +1687,14 @@ def _finalize_audit_result(
     measurement_modality: dict[str, str] = {}
     per_sample: list[dict[str, float]] = []
 
-    archive_path_str = _resolve_eval_archive_path()
+    # Per-worker isolation (Codex MCP HIGH): prefer THIS audit's OWN eval, parsed
+    # from its stdout ``Log: <path>.eval`` line, over the global ``latest.eval``
+    # symlink. Concurrent async-campaign workers share that symlink (it is
+    # GEODE_HOME-keyed, NOT the per-worker ``GEODE_STATE_ROOT``), so a sibling audit
+    # finishing between this audit and this read would point it at the WRONG eval.
+    # The ``Log:`` filename is unique per audit, so it is unambiguously this one's;
+    # the global pointer is the fallback only when no ``Log:`` line was emitted.
+    archive_path_str = _eval_path_from_stdout(stdout, stderr) or _resolve_eval_archive_path()
     archive_extracted = False
     if archive_path_str:
         try:
@@ -2871,6 +2878,36 @@ def _resolve_eval_archive_path() -> str | None:
             return str(LATEST_EVAL_SYMLINK)
     except OSError:
         return None
+    return None
+
+
+def _eval_path_from_stdout(stdout: str, stderr: str) -> str | None:
+    """This audit's OWN ``.eval`` path, parsed from its ``Log: <path>`` line.
+
+    inspect_ai prints exactly one ``Log: logs/<ISO>_audit_<id>.eval`` line per run
+    (on stdout, sometimes stderr). That filename is unique per audit, so it is
+    race-free across concurrent async-campaign workers — unlike the shared global
+    ``latest.eval`` symlink :func:`_resolve_eval_archive_path` reads. A relative
+    path is resolved against ``REPO_ROOT`` (the audit subprocess's ``cwd``). Returns
+    ``None`` when no ``Log:`` line is present (cancel / error before the writer
+    flushed) or the resolved file does not exist, so the caller falls back to the
+    legacy global pointer.
+
+    The regex is inlined (not imported from ``plugins.petri_audit.runner``) to keep
+    ``core`` free of a ``core → plugins`` import-contract violation.
+    """
+    pattern = re.compile(r"Log:\s+(\S+\.eval)\b")
+    for stream in (stdout, stderr):
+        if not stream:
+            continue
+        match = pattern.search(stream)
+        if not match:
+            continue
+        candidate = Path(match.group(1))
+        if not candidate.is_absolute():
+            candidate = REPO_ROOT / candidate
+        if candidate.exists():
+            return str(candidate)
     return None
 
 
