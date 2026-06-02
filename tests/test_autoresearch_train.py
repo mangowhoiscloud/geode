@@ -26,6 +26,8 @@ from core.self_improving.train import (
     CRITICAL_DIMS,
     DIM_WEIGHTS,
     INFO_DIMS,
+    RUN_TRANSCRIPT_PATH_ENV,
+    RUN_WORKER_ID_ENV,
     STABILITY_FALLBACK,
     STABILITY_WEIGHT,
     WRAPPER_OVERRIDE_HOOK_READY,
@@ -2063,6 +2065,72 @@ def test_emit_journal_noops_on_empty_gen_tag(
     assert not (tmp_path / "autoresearch" / "handoff").exists() or not any(
         (tmp_path / "autoresearch" / "handoff").rglob("transcript.jsonl")
     )
+
+
+def test_emit_journal_redirects_to_isolated_path_env(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """S6 — ``GEODE_RUN_TRANSCRIPT_PATH`` redirects the worker's RunTranscript to
+    its OWN isolated jsonl (NOT the shared home-dir transcript), so concurrent
+    campaign workers never race-append the same file."""
+    _redirect_journal(tmp_path, monkeypatch)
+    isolated = tmp_path / "w1" / "transcript.jsonl"
+    monkeypatch.setenv(RUN_TRANSCRIPT_PATH_ENV, str(isolated))
+    _emit_journal("s-iso", "gen-iso", "subprocess_started", payload={"argv_len": 3})
+    # The event landed in the isolated path, NOT the shared home-dir transcript.
+    assert isolated.is_file()
+    record = json.loads(isolated.read_text(encoding="utf-8").splitlines()[0])
+    assert record["event"] == "subprocess_started"
+    assert record["session_id"] == "s-iso"
+    # The home-dir transcript for this session must NOT have been written.
+    assert not _journal_path(tmp_path, "s-iso").exists()
+
+
+def test_emit_journal_stamps_worker_id_from_env(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """S6 — ``GEODE_RUN_WORKER_ID`` stamps ``worker_id`` into every event payload
+    so the merged campaign replay is attributable, without clobbering the
+    caller's own payload keys."""
+    _redirect_journal(tmp_path, monkeypatch)
+    monkeypatch.setenv(RUN_WORKER_ID_ENV, "random-w3")
+    _emit_journal("s-wid", "gen-wid", "subprocess_finished", payload={"exit_code": 0})
+    record = json.loads(_journal_path(tmp_path, "s-wid").read_text().splitlines()[0])
+    assert record["payload"]["worker_id"] == "random-w3"
+    # Caller payload preserved alongside the stamped worker_id.
+    assert record["payload"]["exit_code"] == 0
+
+
+def test_emit_journal_no_worker_id_key_when_env_absent(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """S6 no-regression — with neither env var set (sequential / standalone path),
+    the payload carries NO ``worker_id`` and the event writes to the home-dir
+    transcript exactly as before."""
+    _redirect_journal(tmp_path, monkeypatch)
+    monkeypatch.delenv(RUN_WORKER_ID_ENV, raising=False)
+    monkeypatch.delenv(RUN_TRANSCRIPT_PATH_ENV, raising=False)
+    _emit_journal("s-plain", "gen-plain", "audit_started", payload={"dry_run": True})
+    record = json.loads(_journal_path(tmp_path, "s-plain").read_text().splitlines()[0])
+    assert "worker_id" not in record["payload"]
+    assert record["payload"] == {"dry_run": True}
+
+
+def test_emit_journal_malformed_transcript_path_falls_back_to_home(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """S6 graceful boundary — an empty/blank ``GEODE_RUN_TRANSCRIPT_PATH`` must NOT
+    crash the audit; the event falls back to the home-dir transcript (the worker
+    loses isolation rather than the whole fan-out failing)."""
+    _redirect_journal(tmp_path, monkeypatch)
+    monkeypatch.setenv(RUN_TRANSCRIPT_PATH_ENV, "   ")
+    _emit_journal("s-blank", "gen-blank", "audit_started", payload={"dry_run": True})
+    # Blank path is treated as absent → home-dir transcript written, no crash.
+    assert _journal_path(tmp_path, "s-blank").is_file()
 
 
 def test_run_audit_dry_run_emits_p0b_events(

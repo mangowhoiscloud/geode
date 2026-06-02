@@ -1361,6 +1361,28 @@ def test_build_worker_env_sets_isolated_state_root_and_arm(tmp_path: Path) -> No
     assert env["GEODE_PROMOTE_POLICY_SEED"] == "777"
     # The PAYG + seed-pool campaign env is layered in too.
     assert env["GEODE_CODEX_OAUTH_POLL_DISABLED"] == "1"
+    # S6 — when no transcript path / worker id is supplied, the isolation env vars
+    # are ABSENT (the worker writes the home-dir transcript — sequential default).
+    assert "GEODE_RUN_TRANSCRIPT_PATH" not in env
+    assert "GEODE_RUN_WORKER_ID" not in env
+
+
+def test_build_worker_env_sets_isolated_transcript_path_and_worker_id(tmp_path: Path) -> None:
+    """S6 — supplying ``transcript_path`` / ``worker_id`` exports the two env vars
+    the worker's ``_emit_journal`` reads to isolate + attribute its transcript."""
+    worker_root = tmp_path / "w3"
+    transcript = worker_root / "transcript.jsonl"
+    env = rc._build_worker_env(
+        worker_root,
+        promote_policy="never",
+        promote_policy_seed=None,
+        audit_max_samples=3,
+        audit_max_connections=8,
+        transcript_path=transcript,
+        worker_id="never-w3",
+    )
+    assert env["GEODE_RUN_TRANSCRIPT_PATH"] == str(transcript)
+    assert env["GEODE_RUN_WORKER_ID"] == "never-w3"
 
 
 def test_spawn_train_subprocess_async_timeout_kills_and_returns_minus_one(
@@ -1711,3 +1733,278 @@ def test_control_arm_resume_group_isolated_from_gen0(
     # The gen-0 group has index 1; the 'random' group does NOT (distinct namespace).
     assert ckpt.completed_indices(rc.GEN0_CHECKPOINT_GROUP) == {1}
     assert ckpt.completed_indices("random") == set()
+
+
+# ---------------------------------------------------------------------------
+# S6 — transcript isolation + merge (concurrent workers write OWN jsonls; the
+# campaign merges them into one ordered, attributable replay). PR-ASYNC-FIRST.
+# ---------------------------------------------------------------------------
+
+
+def _write_transcript_rows(path: Path, rows: list[dict[str, Any]]) -> None:
+    """Write JSONL transcript rows to ``path`` (mirrors the per-worker file each
+    ``train.py`` worker subprocess produces via its isolated RunTranscript)."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.open("a", encoding="utf-8") as fh:
+        for row in rows:
+            fh.write(json.dumps(row) + "\n")
+
+
+def test_merge_worker_transcripts_orders_by_ts_and_attributes(tmp_path: Path) -> None:
+    """The merged campaign transcript is one coherent replay ordered by ``(ts,
+    seq)`` across workers, and every row keeps its ``worker_id`` (attributable)."""
+    w1 = tmp_path / "w1" / "transcript.jsonl"
+    w2 = tmp_path / "w2" / "transcript.jsonl"
+    # Worker timelines INTERLEAVE in wall-clock time (w1@1.0, w2@1.5, w1@2.0, w2@2.5).
+    _write_transcript_rows(
+        w1,
+        [
+            {
+                "ts": 1.0,
+                "seq": 1,
+                "event": "subprocess_started",
+                "payload": {"worker_id": "gen0-w1"},
+            },
+            {
+                "ts": 2.0,
+                "seq": 2,
+                "event": "subprocess_finished",
+                "payload": {"worker_id": "gen0-w1"},
+            },
+        ],
+    )
+    _write_transcript_rows(
+        w2,
+        [
+            {
+                "ts": 1.5,
+                "seq": 1,
+                "event": "subprocess_started",
+                "payload": {"worker_id": "gen0-w2"},
+            },
+            {
+                "ts": 2.5,
+                "seq": 2,
+                "event": "subprocess_finished",
+                "payload": {"worker_id": "gen0-w2"},
+            },
+        ],
+    )
+    dest = tmp_path / "campaign" / "transcript.jsonl"
+    count = rc.merge_worker_transcripts([w1, w2], dest)
+    assert count == 4
+    rows = [json.loads(line) for line in dest.read_text(encoding="utf-8").splitlines()]
+    # Ordered by ts across BOTH workers (not grouped by worker).
+    assert [r["ts"] for r in rows] == [1.0, 1.5, 2.0, 2.5]
+    # Each row stays attributable to its origin worker.
+    assert [r["payload"]["worker_id"] for r in rows] == [
+        "gen0-w1",
+        "gen0-w2",
+        "gen0-w1",
+        "gen0-w2",
+    ]
+
+
+def test_merge_worker_transcripts_two_workers_dont_interleave_corrupt(tmp_path: Path) -> None:
+    """The whole point of isolation: each worker wrote its OWN file, so merging
+    yields EXACTLY the union with NO lost / garbled rows — the corruption a shared
+    concurrent-append jsonl would have produced is structurally impossible."""
+    w1 = tmp_path / "w1" / "transcript.jsonl"
+    w2 = tmp_path / "w2" / "transcript.jsonl"
+    rows1 = [
+        {"ts": float(i), "seq": i, "event": f"e{i}", "payload": {"worker_id": "never-w1"}}
+        for i in range(1, 21)
+    ]
+    rows2 = [
+        {"ts": float(i) + 0.5, "seq": i, "event": f"e{i}", "payload": {"worker_id": "never-w2"}}
+        for i in range(1, 21)
+    ]
+    _write_transcript_rows(w1, rows1)
+    _write_transcript_rows(w2, rows2)
+    dest = tmp_path / "campaign" / "transcript.jsonl"
+    count = rc.merge_worker_transcripts([w1, w2], dest)
+    assert count == 40
+    merged = [json.loads(line) for line in dest.read_text(encoding="utf-8").splitlines()]
+    # No row lost; each worker contributes its full 20 events, intact.
+    w1_rows = [r for r in merged if r["payload"]["worker_id"] == "never-w1"]
+    w2_rows = [r for r in merged if r["payload"]["worker_id"] == "never-w2"]
+    assert len(w1_rows) == 20
+    assert len(w2_rows) == 20
+    # Globally ts-monotonic (the operator sees one ordered replay).
+    timestamps = [r["ts"] for r in merged]
+    assert timestamps == sorted(timestamps)
+
+
+def test_merge_worker_transcripts_skips_missing_and_malformed(tmp_path: Path) -> None:
+    """Graceful — a ``None`` path, a missing file, and a malformed JSONL line are
+    each skipped; the clean rows still merge (one bad row never aborts the merge)."""
+    good = tmp_path / "w1" / "transcript.jsonl"
+    good.parent.mkdir(parents=True, exist_ok=True)
+    # One valid row, then a corrupt half-line (the kind a shared race would create).
+    good.write_text(
+        json.dumps({"ts": 1.0, "seq": 1, "event": "ok", "payload": {"worker_id": "w1"}})
+        + "\n"
+        + '{"ts": 2.0, "seq": 2, "event": "trunc'
+        + "\n",
+        encoding="utf-8",
+    )
+    missing = tmp_path / "w2" / "transcript.jsonl"  # never created
+    dest = tmp_path / "campaign" / "transcript.jsonl"
+    count = rc.merge_worker_transcripts([None, good, missing], dest)
+    assert count == 1
+    rows = [json.loads(line) for line in dest.read_text(encoding="utf-8").splitlines()]
+    assert rows[0]["event"] == "ok"
+
+
+def test_merge_worker_transcripts_empty_returns_zero_and_no_dest(tmp_path: Path) -> None:
+    """No worker rows → returns 0 and does NOT create the dest file (no empty
+    artifact)."""
+    dest = tmp_path / "campaign" / "transcript.jsonl"
+    count = rc.merge_worker_transcripts([None, tmp_path / "nope" / "transcript.jsonl"], dest)
+    assert count == 0
+    assert not dest.exists()
+
+
+def test_merge_worker_transcripts_appends_preserving_existing(tmp_path: Path) -> None:
+    """Merge APPENDS (never overwrites), so rows the campaign already wrote to the
+    dest transcript survive the merge."""
+    dest = tmp_path / "campaign" / "transcript.jsonl"
+    _write_transcript_rows(dest, [{"ts": 0.1, "seq": 1, "event": "campaign_start", "payload": {}}])
+    w1 = tmp_path / "w1" / "transcript.jsonl"
+    _write_transcript_rows(
+        w1, [{"ts": 1.0, "seq": 1, "event": "subprocess_started", "payload": {"worker_id": "w1"}}]
+    )
+    rc.merge_worker_transcripts([w1], dest)
+    events = [json.loads(line)["event"] for line in dest.read_text(encoding="utf-8").splitlines()]
+    assert events == ["campaign_start", "subprocess_started"]
+
+
+def _transcript_writing_async_runner(*, group: str) -> Any:
+    """A fake async runner that WRITES to the worker's ``GEODE_RUN_TRANSCRIPT_PATH``
+    (simulating what the real ``train.py`` worker subprocess does via _emit_journal),
+    then emits the usual attribution row + FITNESS_RESULT so the gather succeeds."""
+
+    async def runner(*, env: dict[str, str], dry_run: bool, per_audit_timeout: float | None) -> Any:
+        state_root = Path(env["GEODE_STATE_ROOT"])
+        idx = int(state_root.name.removeprefix("w"))
+        worker_id = env["GEODE_RUN_WORKER_ID"]
+        assert worker_id == f"{group}-w{idx}"
+        transcript = Path(env["GEODE_RUN_TRANSCRIPT_PATH"])
+        # Two events per worker, ts offset by index so workers interleave globally.
+        _write_transcript_rows(
+            transcript,
+            [
+                {
+                    "ts": 10.0 + idx,
+                    "seq": 1,
+                    "event": "subprocess_started",
+                    "payload": {"worker_id": worker_id},
+                },
+                {
+                    "ts": 20.0 + idx,
+                    "seq": 2,
+                    "event": "subprocess_finished",
+                    "payload": {"worker_id": worker_id},
+                },
+            ],
+        )
+        mutations = state_root / "autoresearch" / "mutations.jsonl"
+        mutations.parent.mkdir(parents=True, exist_ok=True)
+        _write_attribution(mutations, held_out=0.5, fitness=0.6, source="manual")
+        return SimpleNamespace(
+            returncode=0, stdout=_fitness_result_line({"safety": 3.0}), stderr=""
+        )
+
+    return runner
+
+
+def test_gen0_async_merges_per_worker_transcripts_into_campaign_transcript(
+    campaign_state: dict[str, Path], tmp_path: Path
+) -> None:
+    """End-to-end S6: the K concurrent gen-0 workers each write their OWN isolated
+    transcript; after the gather the campaign transcript holds the MERGED, ordered,
+    per-worker-attributed replay."""
+    _make_gen0_snapshot(campaign_state)
+    campaign_transcript = tmp_path / "campaign" / "transcript.jsonl"
+    with rc.ProgressLog(campaign_state["progress"]) as progress:
+        asyncio.run(
+            rc.run_gen0_baseline_async(
+                k=3,
+                dry_run=False,
+                audit_max_samples=3,
+                audit_max_connections=8,
+                progress=progress,
+                snapshot_dir=campaign_state["snapshot"],
+                per_audit_timeout=5.0,
+                runner_fn=_transcript_writing_async_runner(group="gen0"),
+                campaign_transcript=campaign_transcript,
+            )
+        )
+    assert campaign_transcript.is_file()
+    rows = [
+        json.loads(line) for line in campaign_transcript.read_text(encoding="utf-8").splitlines()
+    ]
+    # 3 workers × 2 events each, merged.
+    assert len(rows) == 6
+    # All 3 workers attributable in the merged replay.
+    assert {r["payload"]["worker_id"] for r in rows} == {"gen0-w1", "gen0-w2", "gen0-w3"}
+    # The merged stream is ts-ordered across workers (started events before finished).
+    timestamps = [r["ts"] for r in rows]
+    assert timestamps == sorted(timestamps)
+
+
+def test_gen0_async_no_merge_when_campaign_transcript_none(
+    campaign_state: dict[str, Path],
+) -> None:
+    """S6 no-regression: ``campaign_transcript=None`` (the default) SKIPS the merge
+    entirely — the gen-0 fan-out behaves exactly as the pre-S6 path."""
+    _make_gen0_snapshot(campaign_state)
+    runner = _fake_async_runner(
+        dim_per_index={1: {"safety": 2.0}, 2: {"safety": 4.0}},
+        held_out_per_index={1: 0.5, 2: 0.5},
+    )
+    with rc.ProgressLog(campaign_state["progress"]) as progress:
+        band = asyncio.run(
+            rc.run_gen0_baseline_async(
+                k=2,
+                dry_run=False,
+                audit_max_samples=3,
+                audit_max_connections=8,
+                progress=progress,
+                snapshot_dir=campaign_state["snapshot"],
+                per_audit_timeout=5.0,
+                runner_fn=runner,
+            )
+        )
+    # No merge crash, normal aggregation still happens.
+    assert len(band.held_out_values) == 2
+
+
+def test_control_arm_async_merges_per_cycle_transcripts(
+    campaign_state: dict[str, Path], tmp_path: Path
+) -> None:
+    """End-to-end S6 on a control arm: the N concurrent cycles' isolated
+    transcripts merge into the campaign transcript, attributed ``random-w*``."""
+    _make_gen0_snapshot(campaign_state)
+    campaign_transcript = tmp_path / "campaign" / "transcript.jsonl"
+    with rc.ProgressLog(campaign_state["progress"]) as progress:
+        floor = asyncio.run(
+            rc.run_control_arm_async(
+                arm="random",
+                arm_index=1,
+                n=2,
+                audit_max_samples=3,
+                audit_max_connections=8,
+                dry_run=False,
+                progress=progress,
+                snapshot_dir=campaign_state["snapshot"],
+                per_audit_timeout=5.0,
+                runner_fn=_transcript_writing_async_runner(group="random"),
+                campaign_transcript=campaign_transcript,
+            )
+        )
+    assert floor.cycles_ok == 2
+    rows = [
+        json.loads(line) for line in campaign_transcript.read_text(encoding="utf-8").splitlines()
+    ]
+    assert {r["payload"]["worker_id"] for r in rows} == {"random-w1", "random-w2"}

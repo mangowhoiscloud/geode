@@ -920,6 +920,14 @@ class WorkerOutcome:
     ``ok`` is the partial-failure flag the aggregators filter on: a worker that
     crashed / timed out / exited non-zero contributes NO dims and NO signal, and
     the aggregator logs it as a dropped worker (never silent truncation).
+
+    ``transcript_path`` (S6) is THIS worker's ISOLATED RunTranscript jsonl (the
+    one its ``train.py`` subprocess wrote to via ``GEODE_RUN_TRANSCRIPT_PATH`` so
+    concurrent workers never race-append a shared file). The aggregator MERGES
+    these per-worker files into the one campaign transcript after the gather.
+    ``None`` for a worker that never got a path assigned (e.g. a seed failure
+    before the env was built) or a resumed-from-checkpoint worker whose isolated
+    tempdir is already gone — merge simply skips a missing/None file (graceful).
     """
 
     index: int
@@ -928,6 +936,7 @@ class WorkerOutcome:
     dim_means: dict[str, float]
     signal: CycleSignal | None
     reason: str
+    transcript_path: Path | None = None
 
 
 # ---------------------------------------------------------------------------
@@ -1166,6 +1175,8 @@ def _build_worker_env(
     promote_policy_seed: int | None,
     audit_max_samples: int,
     audit_max_connections: int,
+    transcript_path: Path | None = None,
+    worker_id: str | None = None,
 ) -> dict[str, str]:
     """Build a concurrent worker's subprocess env.
 
@@ -1178,6 +1189,15 @@ def _build_worker_env(
     resolves the venv's interpreter — never the system python — mirroring the
     venv-activation step ``scripts/floor_sampler.sh`` performs to avoid the
     ``ModuleNotFoundError: core`` a system-python child would hit.
+
+    S6 (transcript isolation): ``transcript_path`` redirects the worker's
+    RunTranscript to an ISOLATED per-worker jsonl (``GEODE_RUN_TRANSCRIPT_PATH``)
+    so concurrent workers never race-append the shared home-dir transcript, and
+    ``worker_id`` (``GEODE_RUN_WORKER_ID``) stamps every event payload so the
+    post-gather merge is attributable. The home-dir ``GLOBAL_AUTORESEARCH_HANDOFF_DIR``
+    is keyed off ``GEODE_HOME`` (``~/.geode``), NOT ``GEODE_STATE_ROOT``, so the
+    per-worker ``GEODE_STATE_ROOT`` alone does NOT isolate the transcript — this
+    explicit redirect is required.
     """
     env = build_campaign_env(
         promote_policy=promote_policy,
@@ -1186,6 +1206,10 @@ def _build_worker_env(
         audit_max_connections=audit_max_connections,
     )
     env["GEODE_STATE_ROOT"] = str(worker_root)
+    if transcript_path is not None:
+        env["GEODE_RUN_TRANSCRIPT_PATH"] = str(transcript_path)
+    if worker_id is not None:
+        env["GEODE_RUN_WORKER_ID"] = worker_id
     return env
 
 
@@ -1247,6 +1271,7 @@ async def _spawn_train_subprocess_async(
 async def _run_isolated_worker(
     *,
     index: int,
+    group: str,
     workers_root: Path,
     snapshot_dir: Path,
     promote_policy: str | None,
@@ -1266,12 +1291,24 @@ async def _run_isolated_worker(
     ``mutations.jsonl``. A non-zero exit / timeout / crash yields an ``ok=False``
     outcome the aggregator drops with a logged reason (partial-failure resilient).
 
+    ``group`` is the worker-id prefix (``"gen0"`` / ``"never"`` / ``"random"``);
+    the worker's ``worker_id`` is ``f"{group}-w{index}"`` and its ISOLATED
+    RunTranscript jsonl is ``<worker_root>/transcript.jsonl`` (S6). The worker's
+    ``train.py`` writes ALL its journal events to that file (via
+    ``GEODE_RUN_TRANSCRIPT_PATH``), stamped with ``worker_id`` (via
+    ``GEODE_RUN_WORKER_ID``), so concurrent workers never race-append a shared
+    transcript; the caller merges these files after the gather. The path rides on
+    the returned :class:`WorkerOutcome` so the merge finds it even for a worker
+    that exited non-zero (it may still have emitted ``subprocess_started`` first).
+
     ``runner_fn`` is the injectable spawn seam (default
     :func:`_spawn_train_subprocess_async`); tests pass a fake async runner so the
     gather + aggregate + isolation are exercised with NO real audit.
     """
     worker_root = workers_root / f"w{index}"
     worker_root.mkdir(parents=True, exist_ok=True)
+    worker_id = f"{group}-w{index}"
+    transcript_path = worker_root / "transcript.jsonl"
     try:
         _seed_isolated_state_root(worker_root, snapshot_dir)
     except FileNotFoundError as exc:
@@ -1282,6 +1319,7 @@ async def _run_isolated_worker(
             dim_means={},
             signal=None,
             reason=f"seed failed: {exc}",
+            transcript_path=transcript_path,
         )
     env = _build_worker_env(
         worker_root,
@@ -1289,6 +1327,8 @@ async def _run_isolated_worker(
         promote_policy_seed=promote_policy_seed,
         audit_max_samples=audit_max_samples,
         audit_max_connections=audit_max_connections,
+        transcript_path=transcript_path,
+        worker_id=worker_id,
     )
     try:
         result = await runner_fn(env=env, dry_run=dry_run, per_audit_timeout=per_audit_timeout)
@@ -1301,6 +1341,7 @@ async def _run_isolated_worker(
             dim_means={},
             signal=None,
             reason=f"worker raised: {exc}",
+            transcript_path=transcript_path,
         )
     returncode = int(getattr(result, "returncode", -1) or 0)
     if returncode != 0:
@@ -1311,6 +1352,7 @@ async def _run_isolated_worker(
             dim_means={},
             signal=None,
             reason=f"train.py exited {returncode}",
+            transcript_path=transcript_path,
         )
     measure_dims = parse_fitness_result_dims(getattr(result, "stdout", None)) or {}
     # Read THIS worker's signal from its OWN isolated mutations.jsonl (the worker
@@ -1326,7 +1368,79 @@ async def _run_isolated_worker(
         dim_means=measure_dims,
         signal=signal,
         reason="ok",
+        transcript_path=transcript_path,
     )
+
+
+def _transcript_sort_key(row: dict[str, Any]) -> tuple[float, int]:
+    """Sort key for a merged transcript row — ``(ts, seq)``.
+
+    Both casts are graceful (CLAUDE.md boundary rule): a row missing / carrying a
+    malformed ``ts`` sorts to the front (``-inf``) rather than crashing the merge,
+    and a missing / malformed per-worker ``seq`` falls back to ``0`` so same-ts
+    rows keep a stable order. The merge must never lose an event to one bad row.
+    """
+    raw_ts = row.get("ts")
+    ts = _as_float(raw_ts)
+    raw_seq = row.get("seq")
+    try:
+        seq = int(raw_seq) if raw_seq is not None else 0
+    except (TypeError, ValueError):
+        seq = 0
+    return (ts if ts is not None else float("-inf"), seq)
+
+
+def merge_worker_transcripts(
+    worker_transcripts: Sequence[Path | None],
+    dest: Path,
+) -> int:
+    """Merge the per-worker ISOLATED transcripts into one campaign transcript (S6).
+
+    The concurrent gen-0 / control-arm workers each wrote to their OWN
+    ``transcript.jsonl`` (``GEODE_RUN_TRANSCRIPT_PATH``) so their journal events
+    never race-corrupted a shared file (POSIX append is not atomic above
+    ``PIPE_BUF``). This reads every worker's rows, sorts the UNION by ``(ts, seq)``
+    so the operator gets one coherent ordered replay, and APPENDS them to ``dest``
+    (the campaign transcript). Each row already carries ``worker_id`` (stamped by
+    ``_emit_journal`` from ``GEODE_RUN_WORKER_ID``) so the merged view stays
+    attributable per worker.
+
+    Graceful throughout: a ``None`` / missing worker path is skipped (a worker that
+    never emitted), a malformed JSONL line is skipped (one bad row never aborts the
+    merge), and the cross-worker ``ts``/``seq`` ordering tolerates absent keys. The
+    append (not overwrite) preserves any rows the campaign itself already wrote to
+    ``dest``. Returns the number of rows merged into ``dest``.
+
+    MUST be called BEFORE the per-worker tempdir is cleaned up — the worker files
+    live under the isolated ``GEODE_STATE_ROOT`` tree which the gather's
+    ``TemporaryDirectory`` context removes on exit.
+    """
+    rows: list[dict[str, Any]] = []
+    for path in worker_transcripts:
+        if path is None or not path.exists():
+            continue
+        try:
+            text = path.read_text(encoding="utf-8")
+        except OSError:
+            continue
+        for line in text.splitlines():
+            stripped = line.strip()
+            if not stripped:
+                continue
+            try:
+                parsed = json.loads(stripped)
+            except json.JSONDecodeError:
+                continue
+            if isinstance(parsed, dict):
+                rows.append(parsed)
+    if not rows:
+        return 0
+    rows.sort(key=_transcript_sort_key)
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    with dest.open("a", encoding="utf-8") as fh:
+        for row in rows:
+            fh.write(json.dumps(row, ensure_ascii=False) + "\n")
+    return len(rows)
 
 
 async def run_gen0_baseline_async(
@@ -1341,6 +1455,7 @@ async def run_gen0_baseline_async(
     workers_root: Path | None = None,
     runner_fn: Any | None = None,
     checkpoint: RunCheckpoint | None = None,
+    campaign_transcript: Path | None = None,
 ) -> NoiseBand:
     """Async parallel sibling of :func:`run_gen0_baseline`.
 
@@ -1365,6 +1480,12 @@ async def run_gen0_baseline_async(
     already written skips re-aggregation entirely). ``checkpoint=None`` (or a
     disabled one with ``run_id=None``) keeps the pre-S4 behaviour: every replicate
     runs, the K-mean always (re)writes.
+
+    ``campaign_transcript`` (S6) is the destination the per-worker ISOLATED
+    transcripts are MERGED into after the gather (sorted by ``(ts, seq)``, each row
+    already ``worker_id``-stamped). ``None`` SKIPS the merge entirely — the
+    sequential / pre-S6 callers need no merge. The merge happens INSIDE the
+    tempdir context, before the per-worker files are cleaned up.
     """
     ckpt = checkpoint if checkpoint is not None else RunCheckpoint(run_id=None)
     runner = runner_fn if runner_fn is not None else _spawn_train_subprocess_async
@@ -1388,6 +1509,7 @@ async def run_gen0_baseline_async(
                     *(
                         _run_isolated_worker(
                             index=i,
+                            group=GEN0_CHECKPOINT_GROUP,
                             workers_root=roots_parent,
                             snapshot_dir=snapshot_dir,
                             promote_policy=None,  # gen-0 inherits NO arm (frozen baseline)
@@ -1402,6 +1524,17 @@ async def run_gen0_baseline_async(
                     )
                 )
             )
+            # S6 — merge the per-worker isolated transcripts into the campaign
+            # transcript while the tempdir (the workers' isolated GEODE_STATE_ROOT
+            # tree, where each transcript.jsonl lives) is still alive.
+            if campaign_transcript is not None:
+                merged = merge_worker_transcripts(
+                    [o.transcript_path for o in fresh], campaign_transcript
+                )
+                progress.emit(
+                    f"gen-0 baseline (async): merged {merged} per-worker transcript event(s) "
+                    f"→ {campaign_transcript}"
+                )
     fresh_ok = [o for o in fresh if o.ok]
     dropped = [o for o in fresh if not o.ok]
     # Capture the resumed (already-complete) workers BEFORE recording the fresh
@@ -1499,6 +1632,7 @@ async def run_control_arm_async(
     workers_root: Path | None = None,
     runner_fn: Any | None = None,
     checkpoint: RunCheckpoint | None = None,
+    campaign_transcript: Path | None = None,
 ) -> ControlArmFloor:
     """Run a PATH-INDEPENDENT control arm's N cycles concurrently.
 
@@ -1520,6 +1654,10 @@ async def run_control_arm_async(
     arm name), so a re-run after a crash skips the cycles already recorded complete
     and re-runs only the missing ones, then aggregates the union. ``checkpoint=None``
     keeps the pre-S4 behaviour (every cycle runs).
+
+    ``campaign_transcript`` (S6) is the destination the per-cycle ISOLATED
+    transcripts are MERGED into after the gather (sorted by ``(ts, seq)``, each
+    row ``worker_id``-stamped ``f"{arm}-w{cycle}"``). ``None`` SKIPS the merge.
     """
     if arm == "gate":
         raise ValueError(
@@ -1550,6 +1688,7 @@ async def run_control_arm_async(
                     *(
                         _run_isolated_worker(
                             index=cycle,
+                            group=arm,
                             workers_root=roots_parent,
                             snapshot_dir=snapshot_dir,
                             promote_policy=arm,
@@ -1570,6 +1709,16 @@ async def run_control_arm_async(
                     )
                 )
             )
+            # S6 — merge the per-cycle isolated transcripts into the campaign
+            # transcript while the tempdir is still alive.
+            if campaign_transcript is not None:
+                merged = merge_worker_transcripts(
+                    [o.transcript_path for o in fresh], campaign_transcript
+                )
+                progress.emit(
+                    f"control arm '{arm}' (async): merged {merged} per-cycle transcript "
+                    f"event(s) → {campaign_transcript}"
+                )
     fresh_ok = [o for o in fresh if o.ok]
     dropped = [o for o in fresh if not o.ok]
     # Capture resumed cycles BEFORE recording the fresh ones (no double-count).

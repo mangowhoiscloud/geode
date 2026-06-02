@@ -986,6 +986,26 @@ branch). Future PR-3/4/5 extend with ``normalized`` / ``fitness`` /
 # ---------------------------------------------------------------------------
 
 
+#: Env var (set by the async-first campaign harness, S6) that redirects this
+#: process's RunTranscript to an ISOLATED per-worker jsonl instead of the shared
+#: ``~/.geode/autoresearch/handoff/<session_id>/transcript.jsonl``. When the
+#: campaign fans K gen-0 replicates + the NEVER/RANDOM control cycles out
+#: concurrently (each its own ``train.py`` subprocess), every worker would
+#: otherwise append to the SAME home-dir jsonl keyed off ``session_id`` (POSIX
+#: append is not atomic above ``PIPE_BUF`` → interleaved/corrupt rows). Pointing
+#: each worker at its own path makes the concurrent writes race-free; the
+#: campaign MERGES the per-worker files afterward (``merge_worker_transcripts``).
+#: Absent for the sync standalone ``geode audit`` path + the sequential GATE arm
+#: → behaviour is unchanged (single writer → the home-dir transcript).
+RUN_TRANSCRIPT_PATH_ENV = "GEODE_RUN_TRANSCRIPT_PATH"
+
+#: Env var (S6) carrying THIS worker's id (e.g. ``gen0-w2`` / ``random-w3``).
+#: When set, :func:`_emit_journal` stamps ``worker_id`` into every event payload
+#: so the merged campaign replay is attributable per worker. Absent → no
+#: ``worker_id`` key (the sequential / standalone path needs no attribution).
+RUN_WORKER_ID_ENV = "GEODE_RUN_WORKER_ID"
+
+
 def _emit_journal(
     session_id: str,
     gen_tag: str,
@@ -1003,6 +1023,15 @@ def _emit_journal(
     when ``session_id`` / ``gen_tag`` are empty (run_audit called from
     tests without them) or when ``core.observability`` is unavailable
     in the import context.
+
+    S6 (async-first transcript isolation, 2026-06-03) — when this process is a
+    concurrent campaign worker, ``GEODE_RUN_TRANSCRIPT_PATH`` redirects the
+    RunTranscript to an ISOLATED per-worker jsonl (so N concurrent workers never
+    race-append the shared home-dir transcript) and ``GEODE_RUN_WORKER_ID``
+    stamps ``worker_id`` into every event payload (so the campaign's post-gather
+    merge is attributable). Both env vars are absent for the sync standalone
+    ``geode audit`` path + the sequential GATE arm — the default home-dir path is
+    used and no ``worker_id`` is added, so that behaviour is unchanged.
     """
     if not session_id or not gen_tag:
         return
@@ -1010,11 +1039,26 @@ def _emit_journal(
         from core.self_improving.loop.run_transcript import RunTranscript
     except ImportError:
         return
+    worker_id = os.environ.get(RUN_WORKER_ID_ENV, "").strip()
+    emit_payload = dict(payload or {})
+    if worker_id:
+        emit_payload["worker_id"] = worker_id
+    transcript_path: Path | None = None
+    raw_path = os.environ.get(RUN_TRANSCRIPT_PATH_ENV, "").strip()
+    if raw_path:
+        try:
+            transcript_path = Path(raw_path)
+        except (TypeError, ValueError):
+            # Graceful boundary: a malformed env value must NOT crash the audit —
+            # fall back to the default home-dir path (the worker simply loses its
+            # isolation rather than failing the whole concurrent fan-out).
+            transcript_path = None
     RunTranscript(
         session_id=session_id,
         gen_tag=gen_tag,
         component="autoresearch",
-    ).append(event, level=level, payload=payload or {})
+        path=transcript_path,
+    ).append(event, level=level, payload=emit_payload)
 
 
 def _hyperparam_int(overrides: dict[str, str], key: str, fallback: int) -> int:
