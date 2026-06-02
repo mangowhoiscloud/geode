@@ -51,17 +51,23 @@ moves.
 
 from __future__ import annotations
 
+import logging
+import os
 import threading
 from collections.abc import Iterator
 from contextlib import contextmanager
 
 from core.orchestration.lane_queue import Lane
 
+log = logging.getLogger(__name__)
+
 __all__ = [
+    "AUDIT_LANE_MAX_CONCURRENT_ENV",
     "AUDIT_LANE_NAME",
     "AUDIT_LANE_TIMEOUT_S",
     "acquire_audit_lane",
     "get_audit_lane",
+    "resolve_audit_max_concurrent",
 ]
 
 
@@ -75,6 +81,27 @@ to finish before timing out the queued caller, but not so long that a
 truly-stuck audit hides the problem from operators."""
 
 
+AUDIT_LANE_MAX_CONCURRENT_ENV = "GEODE_AUDIT_MAX_CONCURRENT"
+"""Operator knob for the audit lane capacity (PR-ASYNC-FIRST, 2026-06-03).
+
+Default (unset) → ``1`` (subscription-safe serialisation: the host Claude Code
+session shares the Anthropic OAuth rate bucket, so two concurrent audits on the
+OAuth lane self-conflict — the ``max_concurrent=1`` rationale this module was
+built around). When the audit roles route through a SEPARATE rate bucket — PAYG
+``api_key`` for both the opus-4-8 auditor/judge and the gpt-5.5 target, i.e.
+``[self_improving_loop] openai_source = "api_key"`` — the bucket-contention reason
+is gone, so the async-first campaign harness sets this knob to fan audits out
+concurrently. This is exactly the "Multi-account future ... ``max_concurrent`` can
+be raised ... the Lane becomes a hint" path the module docstring anticipates.
+
+Value semantics: a positive int sets the capacity; ``0`` → effectively unbounded
+(``no CAP``, operator's standing PAYG directive). Read once at lazy lane init, so
+set it in the process environment before the first audit."""
+
+_UNBOUNDED_AUDIT_CONCURRENCY = 100_000
+"""Semaphore size standing in for "unbounded" — far above any realistic audit
+fan-out, so the lane never blocks while staying a real (resettable) Semaphore."""
+
 _AUDIT_LANE: Lane | None = None
 _AUDIT_LANE_INIT_LOCK = threading.Lock()
 """Codex MCP catch (PR-OL-AUDIT-BURST-FIX fix-up): double-checked
@@ -83,12 +110,41 @@ observe ``_AUDIT_LANE is None`` and create distinct ``Lane``
 instances — defeating the very serialisation this module exists for."""
 
 
+def resolve_audit_max_concurrent() -> int:
+    """Resolve the audit lane capacity from :data:`AUDIT_LANE_MAX_CONCURRENT_ENV`.
+
+    Defaults to ``1`` (subscription-safe). A non-numeric or negative value falls
+    back to ``1`` with a warning rather than crashing the audit (graceful boundary
+    — the env is operator-supplied). ``0`` maps to the unbounded sentinel.
+    """
+    raw = os.environ.get(AUDIT_LANE_MAX_CONCURRENT_ENV, "").strip()
+    if not raw:
+        return 1
+    try:
+        value = int(raw)
+    except ValueError:
+        log.warning(
+            "%s=%r is not an integer; falling back to max_concurrent=1",
+            AUDIT_LANE_MAX_CONCURRENT_ENV,
+            raw,
+        )
+        return 1
+    if value < 0:
+        log.warning(
+            "%s=%d is negative; falling back to max_concurrent=1",
+            AUDIT_LANE_MAX_CONCURRENT_ENV,
+            value,
+        )
+        return 1
+    return _UNBOUNDED_AUDIT_CONCURRENCY if value == 0 else value
+
+
 def get_audit_lane() -> Lane:
     """Return the singleton audit lane, lazily initialised.
 
-    Thread-safe via double-checked locking (see
-    :data:`_AUDIT_LANE_INIT_LOCK`). Exposed for tests that need to
-    inspect ``lane.stats`` or ``lane.get_active()`` after a series of
+    Capacity comes from :func:`resolve_audit_max_concurrent` (default 1). Thread-safe
+    via double-checked locking (see :data:`_AUDIT_LANE_INIT_LOCK`). Exposed for tests
+    that need to inspect ``lane.stats`` or ``lane.get_active()`` after a series of
     acquires.
     """
     global _AUDIT_LANE
@@ -97,7 +153,7 @@ def get_audit_lane() -> Lane:
             if _AUDIT_LANE is None:  # re-check inside lock
                 _AUDIT_LANE = Lane(
                     name=AUDIT_LANE_NAME,
-                    max_concurrent=1,
+                    max_concurrent=resolve_audit_max_concurrent(),
                     timeout_s=AUDIT_LANE_TIMEOUT_S,
                 )
     return _AUDIT_LANE
