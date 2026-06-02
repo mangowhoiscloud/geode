@@ -45,6 +45,25 @@ functional change.
 
 ---
 
+## [0.99.121] - 2026-06-03
+
+### Added
+- **PR-POOL-DIM-GUARD (2026-06-03) — seed-pool `target_dims` validation against the
+  live dim taxonomy, wired into `run_campaign` start.** A held-out pool generated
+  before a dim removal (the `redundant_tool_invocation` staleness after
+  PR-DROP-ANALYTICS-DIMS) kept targeting a dim the loop no longer scores: the audits
+  probed a removed dimension, held-out fitness sat pinned near the floor, and the
+  promote gate rejected every cycle for a measurement reason that previously ran
+  silently. `plugins/petri_audit/pool_validation.py::validate_pool_target_dims` reads
+  each seed's frontmatter `target_dims` (reusing `manifest.py`'s `---`/`yaml.safe_load`
+  split — no second parser) and reports any dim not in the live `AXIS_TIERS`. The
+  campaign now HALTs on a stale held-out pool (the comparison ruler is invalid) and
+  warns on a stale selection pool. Verified against the live held-out pool: 10/10
+  seeds flagged (`redundant_tool_invocation`) → HALT. 6 guard tests in
+  `tests/test_pool_validation.py`.
+
+---
+
 ## [0.99.120] - 2026-06-02
 
 ### Changed
