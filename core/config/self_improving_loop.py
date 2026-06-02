@@ -50,7 +50,7 @@ import warnings
 from pathlib import Path
 from typing import Annotated, Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from core.config.credential_source import CredentialSource
 from core.paths import GLOBAL_CONFIG_TOML
@@ -577,6 +577,38 @@ class SelfImprovingLoopConfig(BaseModel):
     default) aborts with an actionable error. Codex CLI's
     ``forced_login_method`` pattern."""
 
+    openai_source: Source | None = None
+    """Single entry point for the OpenAI credential lane of the **autoresearch
+    audit subprocess, target, and mutator** roles.
+
+    That OpenAI surface is split across three sub-fields that each drive a
+    distinct consumer: ``autoresearch.source`` (the ``geode audit`` subprocess's
+    ``--use-oauth`` flag, ``core/self_improving/train.py``), ``autoresearch.target.source``
+    (the petri ``target`` adapter via ``plugins.petri_audit.registry.get_binding``),
+    and ``autoresearch.mutator.source`` (the in-process mutator LLM via
+    ``core/self_improving/loop/runner.py:_default_llm_call``). Keeping them in
+    sync by hand is the kind of three-place edit that silently drifts, so this
+    field is the ONE knob an operator flips to move those three between
+    subscription and PAYG:
+
+    - ``"openai-codex"`` → ChatGPT subscription OAuth (per-minute rate-limited)
+    - ``"api_key"``      → OpenAI PAYG (api.openai.com, no per-minute cap)
+
+    Only those two values are accepted (``_openai_source_is_openai_lane``); it is
+    an OpenAI-lane knob, not a general source default. **Scope** — it does NOT
+    reach the Anthropic ``auditor`` / ``judge`` roles (they carry their own
+    ``source``) nor the ``[self_improving_loop.seed_generation]`` voters (those
+    pin their own source in the seed-generation manifest); those are separate
+    surfaces by design.
+
+    When set, ``_propagate_openai_source`` fills the three sub-fields and is
+    **authoritative** — a per-role ``source`` that was *explicitly* set to a
+    different value is superseded with a ``UserWarning`` (visible, but not a
+    swallowed ``ValidationError`` — so the chosen lane is deterministic even on
+    the petri-CLI ``read_role_override`` path that gracefully degrades on
+    validation errors). ``None`` (default) → no propagation; each role keeps its
+    own ``source`` (full back-compat)."""
+
     warn_threshold: Annotated[float, Field(ge=0.0, le=1.0)] = 0.5
     """Quota usage ratio above which the FE banner turns yellow."""
 
@@ -663,6 +695,78 @@ class SelfImprovingLoopConfig(BaseModel):
                 f"warn_threshold ({self.warn_threshold})"
             )
         return self
+
+    @model_validator(mode="after")
+    def _propagate_openai_source(self) -> SelfImprovingLoopConfig:
+        """Fan the single ``openai_source`` knob out to the three OpenAI-role sources.
+
+        Runs after the legacy-namespace migration (``mode="before"``) has already
+        grafted ``[petri.*]`` / ``[mutator]`` into ``autoresearch``, so the three
+        sub-models are fully populated and their ``model_fields_set`` faithfully
+        reflects what the operator pinned explicitly.
+
+        ``openai_source`` is authoritative: a sub-field the operator set explicitly
+        to a DIFFERENT value is overwritten and a ``UserWarning`` is emitted (visible,
+        but not a ``ValidationError`` that ``read_role_override`` would swallow — so
+        the resolved lane stays deterministic on that path). An explicit pin equal to
+        ``openai_source`` overwrites silently (no-op, no warning); anything left at its
+        schema default is overwritten with ``openai_source``.
+        """
+        if self.openai_source is None:
+            return self
+        lane = self.openai_source
+        ar = self.autoresearch
+
+        def _apply(current: Source, explicit: bool, path: str) -> Source:
+            # Authoritative: openai_source supersedes an explicit per-role pin, but
+            # WARNS (not raises) so the resolved lane is deterministic even on the
+            # ``read_role_override`` path that swallows ValidationError for graceful
+            # petri-CLI degradation. A swallowed conflict-raise there would let the
+            # target silently fall back to the manifest cascade — the warn+overwrite
+            # avoids that entirely.
+            if explicit and current != lane:
+                warnings.warn(
+                    f"[self_improving_loop] openai_source={lane.value!r} supersedes the "
+                    f"explicit {path}={current.value!r} (openai_source is the single entry "
+                    f"point for the OpenAI credential lane). Remove the per-role source pin "
+                    f"to silence this.",
+                    UserWarning,
+                    stacklevel=2,
+                )
+            return lane
+
+        # Direct per-field assignment (not a heterogeneous loop) so each owner is
+        # concretely typed and carries its own ``source`` attribute.
+        ar.source = _apply(ar.source, "source" in ar.model_fields_set, "autoresearch.source")
+        ar.target.source = _apply(
+            ar.target.source, "source" in ar.target.model_fields_set, "autoresearch.target.source"
+        )
+        ar.mutator.source = _apply(
+            ar.mutator.source,
+            "source" in ar.mutator.model_fields_set,
+            "autoresearch.mutator.source",
+        )
+        return self
+
+    @field_validator("openai_source")
+    @classmethod
+    def _openai_source_is_openai_lane(cls, value: Source | None) -> Source | None:
+        """Restrict the knob to the two OpenAI credential lanes.
+
+        ``openai_source`` is an OpenAI-lane selector, not a general source default —
+        ``auto`` / ``claude-cli`` would propagate to the OpenAI roles (e.g. route the
+        mutator through Claude CLI), which is never what an OpenAI-lane knob should do.
+        """
+        if value is not None and value not in (
+            CredentialSource.OPENAI_CODEX,
+            CredentialSource.API_KEY,
+        ):
+            raise ValueError(
+                f"openai_source must be 'openai-codex' (subscription) or 'api_key' (PAYG), "
+                f"got {value.value!r}. It selects only the OpenAI credential lane; Anthropic "
+                f"roles carry their own source."
+            )
+        return value
 
 
 def _resolve_config_path(path: Path | str | None) -> Path:

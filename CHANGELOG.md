@@ -45,6 +45,36 @@ functional change.
 
 ---
 
+## [0.99.122] - 2026-06-03
+
+### Added
+- **PR-OPENAI-SOURCE-SINGLE-ENTRY (2026-06-03) — single `[self_improving_loop] openai_source`
+  knob for the OpenAI credential lane.** Moving the self-improving loop's OpenAI roles between
+  the ChatGPT subscription (per-minute rate-limited) and OpenAI PAYG (api.openai.com, no
+  per-minute cap) used to mean editing three scattered `source` fields that each feed a
+  different consumer — `autoresearch.source` (the `geode audit` subprocess's `--use-oauth`
+  flag, `core/self_improving/train.py`), `autoresearch.target.source` (the petri `target`
+  adapter via `plugins.petri_audit.registry.get_binding`), and `autoresearch.mutator.source`
+  (the in-process mutator LLM, `core/self_improving/loop/runner.py`). `SelfImprovingLoopConfig.openai_source`
+  fans one value out to all three at config-load time (`_propagate_openai_source`); accepted
+  values are restricted to `"openai-codex"` / `"api_key"` (`_openai_source_is_openai_lane`).
+  It is **authoritative** — an explicit per-role `source` set to a different value is
+  superseded with a `UserWarning` (not a swallowed `ValidationError`), so the resolved lane is
+  deterministic even on the `read_role_override` path that gracefully degrades on validation
+  errors. **Scope**: the three autoresearch roles only — Anthropic `auditor` / `judge` carry
+  their own source, and the `[self_improving_loop.seed_generation]` voters pin theirs in the
+  seed-generation manifest (separate surfaces by design).
+
+### Fixed
+- **Mutator dispatch now honours an explicit `api_key` source.** `core/self_improving/loop/runner.py:_default_llm_call`'s
+  API path called `infer_source(provider)` unconditionally (PR-SOURCE-ROUTING, 2026-05-28), so
+  an explicit `api_key` mutator source was silently re-derived back to the subscription lane
+  whenever an OpenAI OAuth profile was present — half-defeating the `openai_source` knob for the
+  mutator. An explicit `api_key` now maps to `SOURCE_PAYG` directly; `auto` still defers to
+  `infer_source`. 9 tests incl. a cross-module parity test driving `read_role_override("target")`
+  and a mutator-dispatch regression test (`infer_source` returning subscription while the
+  explicit `api_key` still routes PAYG).
+
 ## [0.99.121] - 2026-06-03
 
 ### Added

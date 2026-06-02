@@ -809,14 +809,19 @@ def _default_llm_call(system_prompt: str, user_prompt: str) -> str:
     from core.config import settings as _settings
     from core.llm.adapters import resolve_for
     from core.llm.adapters._source_inference import infer_source
-    from core.llm.adapters.base import AdapterCallRequest, Message
+    from core.llm.adapters.base import SOURCE_PAYG, AdapterCallRequest, Message
     from core.llm.router import call_with_failover
 
-    # PR-SOURCE-ROUTING (2026-05-28) — mutator dispatch used to hard-code
-    # ``"payg"`` so subscription-only Pattern B sent every mutator turn
-    # to the depleted PAYG endpoint. ``infer_source`` mirrors the
-    # AgenticLoop main-path resolution.
-    adapter = resolve_for(_normalize_provider_for_registry(provider), infer_source(provider))
+    # PR-SOURCE-ROUTING (2026-05-28) — for the unpinned ``auto`` source, mirror the
+    # AgenticLoop main-path resolution via ``infer_source`` (subscription-first when
+    # an OAuth profile is present) instead of the old hard-coded ``"payg"`` that sent
+    # every mutator turn to the depleted PAYG endpoint.
+    # PR-OPENAI-SOURCE-SINGLE-ENTRY (2026-06-03) — but an EXPLICIT ``api_key`` (e.g.
+    # set via the ``[self_improving_loop] openai_source`` single entry point) must
+    # route to PAYG; ``infer_source`` would otherwise re-derive subscription from a
+    # present OAuth profile and silently ignore the operator's explicit lane choice.
+    resolved_source = SOURCE_PAYG if source == "api_key" else infer_source(provider)
+    adapter = resolve_for(_normalize_provider_for_registry(provider), resolved_source)
     mutator_temperature = _settings.temperature_self_improving_mutation
 
     async def _do_call(m: str) -> object:
