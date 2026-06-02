@@ -577,6 +577,30 @@ class SelfImprovingLoopConfig(BaseModel):
     default) aborts with an actionable error. Codex CLI's
     ``forced_login_method`` pattern."""
 
+    openai_source: Source | None = None
+    """Single entry point for the credential lane of every OpenAI-provider
+    self-improving role.
+
+    The OpenAI lane is split across three sub-fields that each drive a distinct
+    consumer: ``autoresearch.source`` (the ``geode audit`` subprocess's
+    ``--use-oauth`` flag, ``core/self_improving/train.py``), ``autoresearch.target.source``
+    (the petri ``target`` adapter via ``plugins.petri_audit.registry.get_binding``),
+    and ``autoresearch.mutator.source`` (the in-process mutator LLM via
+    ``core/self_improving/loop/runner.py:_default_llm_call``). Keeping them in
+    sync by hand is the kind of three-place edit that silently drifts, so this
+    field is the ONE knob an operator flips to move the whole OpenAI surface
+    between subscription and PAYG:
+
+    - ``"openai-codex"`` → ChatGPT subscription OAuth (per-minute rate-limited)
+    - ``"api_key"``      → OpenAI PAYG (api.openai.com, no per-minute cap)
+
+    When set, ``_propagate_openai_source`` fills the three sub-fields. Anthropic
+    roles (``auditor`` / ``judge``) carry their own ``source`` and are never
+    touched. ``None`` (default) → no propagation; each role keeps its own
+    ``source`` (full back-compat). A per-role ``source`` that is *explicitly* set
+    to a value different from ``openai_source`` raises (ambiguous config — fail
+    loud, not silent-divergence)."""
+
     warn_threshold: Annotated[float, Field(ge=0.0, le=1.0)] = 0.5
     """Quota usage ratio above which the FE banner turns yellow."""
 
@@ -662,6 +686,47 @@ class SelfImprovingLoopConfig(BaseModel):
                 f"abort_threshold ({self.abort_threshold}) must be greater than "
                 f"warn_threshold ({self.warn_threshold})"
             )
+        return self
+
+    @model_validator(mode="after")
+    def _propagate_openai_source(self) -> SelfImprovingLoopConfig:
+        """Fan the single ``openai_source`` knob out to the three OpenAI-role sources.
+
+        Runs after the legacy-namespace migration (``mode="before"``) has already
+        grafted ``[petri.*]`` / ``[mutator]`` into ``autoresearch``, so the three
+        sub-models are fully populated and their ``model_fields_set`` faithfully
+        reflects what the operator pinned explicitly.
+
+        A sub-field that the operator set explicitly to a DIFFERENT value raises
+        (ambiguous — the operator should drop the per-role pin or align it). An
+        explicit pin equal to ``openai_source`` is allowed (redundant, harmless).
+        Anything left at its schema default is overwritten with ``openai_source``.
+        """
+        if self.openai_source is None:
+            return self
+        lane = self.openai_source
+        ar = self.autoresearch
+
+        def _resolve(current: Source, explicit: bool, path: str) -> Source:
+            if explicit and current != lane:
+                raise ValueError(
+                    f"[self_improving_loop] openai_source={lane.value!r} conflicts with an "
+                    f"explicit {path}={current.value!r}. Remove the per-role source pin "
+                    f"(openai_source is the single entry point) or set it to the same value."
+                )
+            return lane
+
+        # Direct per-field assignment (not a heterogeneous loop) so each owner is
+        # concretely typed and carries its own ``source`` attribute.
+        ar.source = _resolve(ar.source, "source" in ar.model_fields_set, "autoresearch.source")
+        ar.target.source = _resolve(
+            ar.target.source, "source" in ar.target.model_fields_set, "autoresearch.target.source"
+        )
+        ar.mutator.source = _resolve(
+            ar.mutator.source,
+            "source" in ar.mutator.model_fields_set,
+            "autoresearch.mutator.source",
+        )
         return self
 
 
