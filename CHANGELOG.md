@@ -45,6 +45,18 @@ functional change.
 
 ---
 
+## [0.99.120] - 2026-06-02
+
+### Changed
+- **PR-PILOT-MULTISAMPLE (2026-06-02) — the seed-generation difficulty pilot now
+  measures `seeds = 3` (3 rollouts per candidate) instead of 1.** `rank_by_difficulty`
+  was ranking candidates by a single-sample draw, so it selected high-VARIANCE seeds
+  (lucky tails) rather than high-MEAN ones — gen-2606-i1-012 read 7 on its one pilot
+  sample but averaged 2.4±0.98 over a 5-sample re-measure. Ranking by a 3-sample mean
+  selects genuinely-hard scenarios. The pilot wall-time budget (`pilot.py`
+  `max_wall_time_s`) is raised 480→960s to fit the 3 sequential rollouts
+  (~3×108s + judge) at `max_connections=1`.
+
 ## [0.99.119] - 2026-06-02
 
 ### Removed

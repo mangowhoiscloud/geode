@@ -299,10 +299,18 @@ class Pilot(BaseSeedAgent):
                 # old 90s cap killed every real audit at ~82s before the judge
                 # scored any dim → all-zero dim_means → timeout (the 5th layer
                 # of the difficulty-measurement bug, surfaced by the verify run
-                # for this PR). 480s (8 min) clears the observed 108s with
-                # margin for slower turns while staying cheap relative to the
-                # campaign's 300-min 10-seed batch budget.
-                "max_wall_time_s": 480,
+                # for this PR).
+                #
+                # PR-PILOT-MULTISAMPLE (2026-06-02) — raised 480 → 960. The
+                # pilot now measures ``seeds = 3`` (pilot.md) so
+                # ``rank_by_difficulty`` ranks candidates by a 3-sample MEAN
+                # rather than a single-sample draw — a single N=1 pilot ranked
+                # by a lucky high-variance tail (gen-2606-i1-012 read 7 on its
+                # one sample but averaged 2.4±0.98 over 5). At max_connections=1
+                # the 3 samples run sequentially (~3 × 108s ≈ 324s + judge), so
+                # the cap is tripled-with-margin to 960s (16 min); still cheap
+                # vs the campaign's 300-min batch budget.
+                "max_wall_time_s": 960,
                 "targets": 1,
                 "paraphrases": 1,
             },
