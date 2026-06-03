@@ -454,3 +454,37 @@ def test_pick_bindings_enforce_diversity_off_allows_collapsed_panel() -> None:
         manifest=manifest, overrides={}, auto_probe=False, enforce_diversity=False
     )
     assert result.diversity_providers == 1
+
+
+def test_default_judge_panel_voters_are_payg_api_key() -> None:
+    """PR-VOTER-PAYG-PARALLEL (2026-06-03) — the manifest default judge panel rides
+    PAYG ``api_key`` HTTP-API paths (not subscription CLI: openai-codex / claude-cli)
+    so the ranker's 59×3=177 voter calls fan out concurrently on the env-tunable
+    ``openai_api_lane`` / ``anthropic_api_lane`` instead of a per-process CLI lane.
+    Diversity is preserved: 2 providers + 2 distinct (provider, source) pairs."""
+    from plugins.seed_generation.manifest import load_manifest
+
+    voters = load_manifest().judge_panel.voters
+    assert [v.source for v in voters] == ["api_key", "api_key", "api_key"]
+    assert {v.provider for v in voters} == {"openai", "anthropic"}
+    pairs = {(v.provider, v.source) for v in voters}
+    assert pairs == {("openai", "api_key"), ("anthropic", "api_key")}
+
+
+def test_config_voter_override_wins_over_manifest_default(tmp_path: Path) -> None:
+    """The ``[[seed_generation.judge_panel.voters]]`` config override IS wired
+    (picker.pick_bindings reads it over the manifest default) — a subscription-path
+    deploy can flip back via config without touching the plugin manifest."""
+    from plugins.seed_generation import picker as pk
+
+    cfg = tmp_path / "config.toml"
+    cfg.write_text(
+        "[[seed_generation.judge_panel.voters]]\n"
+        'model = "gpt-5.5"\nprovider = "openai"\nsource = "openai-codex"\n\n'
+        "[[seed_generation.judge_panel.voters]]\n"
+        'model = "claude-opus-4-8"\nprovider = "anthropic"\nsource = "claude-cli"\n',
+        encoding="utf-8",
+    )
+    overridden = pk._load_config_toml_voter_overrides(cfg)
+    assert overridden is not None
+    assert [v.source for v in overridden] == ["openai-codex", "claude-cli"]
