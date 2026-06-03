@@ -92,7 +92,17 @@ def extract_summary(eval_path: Path) -> dict[str, Any]:
              },
              ...
           ],
+          "contract_results": [
+             {"contract_id": str, "status": str, "hard": bool,
+              "failed_samples": [str, ...], "detail": str},
+             ...
+          ],
         }
+
+    The ``contract_results`` key holds the deterministic tool-call contract
+    ledger (``core.audit.contracts.extract_contract_results``) — a discrete
+    PASS / FAIL ledger (NOT averaged into a dim) that the promote gate vetoes
+    on. ``[]`` when the archive carries no contract signal.
 
     Requires ``[audit]`` extra (inspect_ai). Raises ``ImportError`` with
     install hint when the extra is missing.
@@ -194,6 +204,14 @@ def extract_summary(eval_path: Path) -> dict[str, Any]:
             sample_entry["seed_id"] = seed_id
         samples_summary.append(sample_entry)
     summary["samples_summary"] = samples_summary
+
+    # Deterministic tool-call contract ledger (plugins → core is the allowed
+    # dependency direction; sibling ``runner.py`` already imports
+    # ``core.audit.manifest``). Graceful ``[]`` on any read failure — the
+    # contract extractor never raises (mirrors ``dim_extractor``).
+    from core.audit.contracts import extract_contract_results
+
+    summary["contract_results"] = extract_contract_results(eval_path)
     return summary
 
 

@@ -153,6 +153,16 @@ class AttributionRecord(BaseModel):
     make NO backend-determinism claim (the backend may not replay bit-identically —
     ``unverified``, see :mod:`core.self_improving.loop.run_provenance`). Each field is
     ``None``-omitting at the writer, so legacy / no-pin rows keep their exact shape."""
+    contract_results: list[dict[str, Any]] | None = None
+    """PR-CONTRACT-EVAL (2026-06-03) — the deterministic tool-call contract
+    ledger (``core.audit.contracts.extract_contract_results``) measured for
+    THIS cycle's audit: a discrete PASS / FAIL ledger (``required_tool_path`` /
+    ``args_shape_valid`` / ``claim_grounded``), recorded VERBATIM (never
+    averaged). This is the per-cycle ``mutations.jsonl`` home of the ledger (the
+    apply row is written before the audit exists, so the post-audit attribution
+    row carries it). A ``hard`` contract whose ``status == "fail"`` also vetoed
+    the promote gate this cycle. ``None`` on legacy rows / dry-run /
+    archive-missing (the field is omitted at the writer)."""
     audit_run_id: str | None = None
     source: str | None = None
     """PR-AR-L6 (2026-05-26) — distinguishes mutator-driven cycle rows
@@ -311,6 +321,7 @@ def compute_attribution(
     gain_ci_excludes_zero: bool | None = None,
     gain_verdict: str | None = None,
     run_provenance: RunProvenanceFields | None = None,
+    contract_results: list[dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
     """Compute the attribution payload for one applied mutation.
 
@@ -360,6 +371,12 @@ def compute_attribution(
     # legacy on-disk rows that omit the field validate as ``None`` via
     # the schema default.
     payload["source"] = source
+    # PR-CONTRACT-EVAL (2026-06-03) — the per-cycle tool-call contract ledger,
+    # recorded VERBATIM. This is the live ``mutations.jsonl`` home of the ledger
+    # (the apply row predates the audit). Omitted when empty / None so dry-run /
+    # archive-missing / legacy rows keep their exact shape.
+    if contract_results:
+        payload["contract_results"] = list(contract_results)
     # PR-SIL-5THEME C4 (2026-05-23) — E1 mutation cost ledger 의 fitness Δ.
     # ``baseline_before.fitness`` / ``baseline_after.fitness`` 는 dataclass 에
     # 없으므로 caller 가 명시 fitness_before / fitness_after 전달. 둘 다
@@ -491,6 +508,7 @@ def write_attribution(
     gain_ci_excludes_zero: bool | None = None,
     gain_verdict: str | None = None,
     run_provenance: RunProvenanceFields | None = None,
+    contract_results: list[dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
     """Compute + append attribution in one call.
 
@@ -529,6 +547,7 @@ def write_attribution(
         gain_ci_excludes_zero=gain_ci_excludes_zero,
         gain_verdict=gain_verdict,
         run_provenance=run_provenance,
+        contract_results=contract_results,
     )
     append_attribution_log(payload, log_path=log_path)
     return payload

@@ -1444,11 +1444,19 @@ def run_audit(
     dict[str, int],
     dict[str, str],
     list[dict[str, float]],
+    list[dict[str, Any]],
 ]:
     """Invoke a single audit.
 
     Returns ``(dim_means, dim_stderr, audit_seconds, total_seconds,
-    sample_count, measurement_modality, per_sample)``.
+    sample_count, measurement_modality, per_sample, contract_results)``.
+
+    PR-CONTRACT-EVAL (2026-06-03) — the 8th element ``contract_results`` is the
+    deterministic tool-call contract ledger
+    (``core.audit.contracts.extract_contract_results``) read from this audit's
+    ``.eval`` archive. The caller threads it into the per-cycle ``mutations.jsonl``
+    attribution row (and, in the follow-up gate commit, the promote-gate veto).
+    Empty list on dry-run / archive-missing / no-inspect_ai.
 
     PR-MARGIN-FITNESS-SCALE (2026-05-30) — the 7th element ``per_sample``
     is the sample-indexed dim-value rows (``list[{dim: value}]``) emitted
@@ -1511,7 +1519,9 @@ def run_audit(
         # ``sample_count`` and ``measurement_modality`` are empty for the
         # same reason: synthesised numbers have no provenance. ``per_sample``
         # is empty — dry-run has no real per-sample rows to bootstrap from.
-        return dim_means, {}, audit_seconds, total_seconds, {}, {}, []
+        # ``contract_results`` is empty — no real ``.eval`` is produced, so
+        # there are no tool-call contracts to evaluate (PR-CONTRACT-EVAL).
+        return dim_means, {}, audit_seconds, total_seconds, {}, {}, [], []
 
     if not WRAPPER_OVERRIDE_HOOK_READY:
         raise RuntimeError(
@@ -1619,6 +1629,7 @@ def _finalize_audit_result(
     dict[str, int],
     dict[str, str],
     list[dict[str, float]],
+    list[dict[str, Any]],
 ]:
     """Audit post-processing, factored out of :func:`run_audit`.
 
@@ -1627,9 +1638,15 @@ def _finalize_audit_result(
     ``RUN_LOG`` write, the
     non-zero-exit ``subprocess_failed`` event + ``RuntimeError`` raise, and the
     eval-log archive extraction (with stdout-JSON fallback). Returns the SAME
-    7-tuple both callers expose:
+    8-tuple both callers expose:
     ``(dim_means, dim_stderr, audit_seconds, total_seconds, sample_count,
-    measurement_modality, per_sample)``.
+    measurement_modality, per_sample, contract_results)``.
+
+    PR-CONTRACT-EVAL (2026-06-03) — the 8th element ``contract_results`` is the
+    deterministic tool-call contract ledger
+    (``core.audit.contracts.extract_contract_results``), read from the SAME
+    ``.eval`` archive the dim aggregates come from. ``[]`` on dry-run /
+    archive-missing / no-inspect_ai (graceful no-op).
     """
     _emit_journal(
         session_id,
@@ -1686,6 +1703,11 @@ def _finalize_audit_result(
     sample_count: dict[str, int] = {}
     measurement_modality: dict[str, str] = {}
     per_sample: list[dict[str, float]] = []
+    # PR-CONTRACT-EVAL (2026-06-03) — deterministic tool-call contract ledger,
+    # read from the SAME archive as the dim aggregates. Graceful ``[]`` when the
+    # archive is absent / unreadable / inspect_ai missing (the extractor never
+    # raises). A NON-empty ledger feeds the promote-gate veto downstream.
+    contract_results: list[dict[str, Any]] = []
 
     # Per-worker isolation (Codex MCP HIGH): prefer THIS audit's OWN eval, parsed
     # from its stdout ``Log: <path>.eval`` line, over the global ``latest.eval``
@@ -1716,6 +1738,21 @@ def _finalize_audit_result(
         except Exception as exc:
             log.warning(
                 "eval archive extract failed at %s (%s); falling back to stdout JSON",
+                archive_path_str,
+                exc,
+                exc_info=True,
+            )
+        # PR-CONTRACT-EVAL (2026-06-03) — read the contract ledger from the same
+        # archive. Independent of the dim-aggregate try-block above so a
+        # dim-extract failure does not suppress the contract verdict (and vice
+        # versa); the extractor is itself graceful (returns ``[]``, never raises).
+        try:
+            from core.audit.contracts import extract_contract_results
+
+            contract_results = extract_contract_results(Path(archive_path_str))
+        except Exception as exc:
+            log.warning(
+                "contract extract failed at %s (%s); contract ledger empty",
                 archive_path_str,
                 exc,
                 exc_info=True,
@@ -1753,6 +1790,7 @@ def _finalize_audit_result(
         sample_count,
         measurement_modality,
         per_sample,
+        contract_results,
     )
 
 
@@ -1827,6 +1865,7 @@ def score_held_out_bench(
             _sample_count,
             held_out_modality,
             _per_sample,
+            _contract_results,
         ) = run_audit(dry_run, session_id=session_id, gen_tag=gen_tag)
     finally:
         if _prior_override is None:
@@ -4386,6 +4425,10 @@ def main() -> int:
     sample_count: dict[str, int] = {}
     measurement_modality: dict[str, str] = {}
     per_sample: list[dict[str, float]] = []
+    # PR-CONTRACT-EVAL (2026-06-03) — the LAST replicate's contract ledger feeds
+    # the promote-gate veto (same "last replicate wins" convention as dim_means
+    # above). Empty list on dry-run / archive-missing → no veto (graceful).
+    contract_results: list[dict[str, Any]] = []
     try:
         for _replicate_idx in range(audit_replicate):
             (
@@ -4396,6 +4439,7 @@ def main() -> int:
                 sample_count,
                 measurement_modality,
                 per_sample,
+                contract_results,
             ) = run_audit(
                 dry_run=args.dry_run,
                 session_id=session_id,
@@ -5212,6 +5256,12 @@ def main() -> int:
                 # row (prompt_hash + applied_diff + sampling_params + rng_seed). The
                 # bundle is None-omitting so a no-pin cycle keeps the legacy shape.
                 run_provenance=_e5_run_provenance,
+                # PR-CONTRACT-EVAL (2026-06-03) — this cycle's tool-call contract
+                # ledger (the LAST replicate's ``contract_results``). The
+                # attribution row is the per-cycle ``mutations.jsonl`` home of the
+                # ledger (the apply row predates the audit). Omitted when empty
+                # (dry-run / archive-missing) → legacy row shape preserved.
+                contract_results=contract_results,
             )
         except Exception:  # pragma: no cover — defensive
             log.warning(
