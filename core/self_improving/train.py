@@ -1454,8 +1454,8 @@ def run_audit(
     PR-CONTRACT-EVAL (2026-06-03) — the 8th element ``contract_results`` is the
     deterministic tool-call contract ledger
     (``core.audit.contracts.extract_contract_results``) read from this audit's
-    ``.eval`` archive. The caller threads it into the per-cycle ``mutations.jsonl``
-    attribution row (and, in the follow-up gate commit, the promote-gate veto).
+    ``.eval`` archive. The caller threads it into the promote-gate veto
+    (``_hard_contract_violations`` → ``_should_promote(contract_veto=…)``).
     Empty list on dry-run / archive-missing / no-inspect_ai.
 
     PR-MARGIN-FITNESS-SCALE (2026-05-30) — the 7th element ``per_sample``
@@ -3704,6 +3704,23 @@ def _apply_rollback_condition_gate(
     return ok, reason
 
 
+def _hard_contract_violations(results: list[dict[str, Any]]) -> tuple[str, ...]:
+    """The ``contract_id``s of the HARD contracts that FAILed this audit.
+
+    PR-CONTRACT-EVAL (2026-06-03) — the promote-gate veto key. Selects rows
+    that are BOTH ``hard`` (veto-eligible) AND ``status == "fail"`` from the
+    contract ledger (``core.audit.contracts.extract_contract_results`` output).
+    ``claim_grounded`` is hard=False so it never appears here; ``skipped`` /
+    ``indeterminate`` / ``not_evaluated`` rows are never vetoes. Empty tuple
+    (no hard failure) → ``_should_promote`` runs unchanged.
+    """
+    return tuple(
+        str(row["contract_id"])
+        for row in results
+        if row.get("hard") and row.get("status") == "fail"
+    )
+
+
 def _should_promote(
     current_means: dict[str, float],
     current_stderr: dict[str, float],
@@ -3760,11 +3777,25 @@ def _should_promote(
     # aggregate gate (preserves every existing test + the never/random control
     # arms, which never set it).
     targeted_dims: frozenset[str] | None = None,
+    # PR-CONTRACT-EVAL (2026-06-03) — the hard tool-call contracts that FAILed
+    # this audit (``core.audit.contracts`` → ``_hard_contract_violations``). A
+    # non-empty tuple is a BINARY VETO: the audit is rejected regardless of the
+    # fitness gain. It runs FIRST — before BOTH the bootstrap (no-baseline) branch
+    # AND the critical-axis ``gated == 0.0`` strict-reject — so a hard-contract
+    # failure also blocks a fresh first audit from becoming the baseline. ``None``
+    # / empty (default, and every control arm / manual audit) → no veto,
+    # byte-identical to the prior gate. ``claim_grounded`` is hard=False so it
+    # never appears here.
+    contract_veto: tuple[str, ...] | None = None,
 ) -> tuple[bool, str]:
     """Decide whether the current audit should replace the baseline.
 
     Rules (plan settled decision #8 + PR-3 of petri-schema-v2):
 
+    0. Hard tool-call contract VETO (PR-CONTRACT-EVAL, 2026-06-03) — a failed
+       hard contract (``contract_veto`` non-empty) is a binary reject, checked
+       FIRST so it also blocks a fresh first audit (rule 1's bootstrap path)
+       and never reaches the margin math (rule 3).
     1. No prior baseline → always promote (bootstrap first valid run).
     2. Critical-axis regression (gated fitness collapses to 0.0) →
        reject. This re-uses the strict-reject gate inside
@@ -3799,6 +3830,14 @@ def _should_promote(
 
     Returns ``(should_promote, reason)`` for caller logging.
     """
+    # PR-CONTRACT-EVAL (2026-06-03) — hard tool-call contract VETO, checked
+    # FIRST. A failed hard contract (``required_tool_path`` / ``args_shape_valid``)
+    # is a discrete behavioural failure that no continuous-dim improvement should
+    # average away — and it must also block a fresh first audit (no baseline yet)
+    # from becoming the permanent baseline, so it runs BEFORE the bootstrap branch
+    # below, not just before the critical-axis ``gated == 0.0`` gate.
+    if contract_veto:
+        return False, f"hard-contract violation ({','.join(contract_veto)})"
     if baseline_means is None or baseline_stderr is None:
         # PR-L8 (2026-05-26) — bootstrap gate. Fresh-start auto-promote
         # was too permissive: a broken first audit (truncated subprocess
@@ -5086,6 +5125,12 @@ def main() -> int:
             # on this surface instead of the diluted 24-dim aggregate; None for the
             # control arms / manual audits (env unset) → v1 aggregate gate.
             targeted_dims=_resolve_targeted_dims(),
+            # PR-CONTRACT-EVAL (2026-06-03) — hard tool-call contract veto from
+            # THIS audit's ledger (``contract_results``, last replicate). A
+            # failed hard contract rejects regardless of the fitness gain.
+            # Empty tuple (no hard failure / dry-run / archive-missing) → no
+            # veto, unchanged gate.
+            contract_veto=_hard_contract_violations(contract_results),
         )
         # PR-SIL-MULTIOBJ A2 (2026-05-29) — secondary reject gate. The
         # mutator's own ``rollback_condition`` predicate (propagated via
