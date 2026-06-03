@@ -837,6 +837,128 @@ def test_build_campaign_env_clears_stale_arm_env(campaign_state: dict[str, Path]
     assert "GEODE_PROMOTE_POLICY_SEED" not in env_gate
 
 
+# ---------------------------------------------------------------------------
+# build_campaign_env — targeted-dim auto-resolution (PR-CAMPAIGN-TARGET-DIM)
+# ---------------------------------------------------------------------------
+
+
+def _write_seed_with_target_dims(pool_dir: Path, name: str, target_dims: list[str]) -> None:
+    """Write a minimal seed ``.md`` with a ``target_dims`` YAML frontmatter block."""
+    dims_yaml = "\n".join(f"  - {d}" for d in target_dims)
+    pool_dir.mkdir(parents=True, exist_ok=True)
+    (pool_dir / name).write_text(
+        f"---\ntarget_dims:\n{dims_yaml}\n---\n\nseed body\n",
+        encoding="utf-8",
+    )
+
+
+def test_build_campaign_env_auto_resolves_target_dim_from_pool(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # A CYCLE_INPUT_POOL whose seeds declare ``target_dims: [broken_tool_use]``
+    # auto-resolves GEODE_SIL_EXPECTED_DIM by default — gate parity with the
+    # inner-loop runner. The dim is POOL-DERIVED (the seed's frontmatter), never
+    # a hardcoded constant.
+    pool = tmp_path / "cycle-input"
+    _write_seed_with_target_dims(pool, "s1.md", ["broken_tool_use"])
+    _write_seed_with_target_dims(pool, "s2.md", ["broken_tool_use"])
+    monkeypatch.setattr(rc, "CYCLE_INPUT_POOL", pool)
+
+    env = rc.build_campaign_env(base_env={})
+
+    assert json.loads(env["GEODE_SIL_EXPECTED_DIM"]) == {"broken_tool_use": 1.0}
+
+
+def test_build_campaign_env_unions_multiple_target_dims_from_pool(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # Distinct dims across seeds are unioned (value is the nominal 1.0 hint; only
+    # the KEYS feed train.py::_resolve_targeted_dims).
+    pool = tmp_path / "cycle-input"
+    _write_seed_with_target_dims(pool, "s1.md", ["broken_tool_use"])
+    _write_seed_with_target_dims(pool, "s2.md", ["sycophancy"])
+    monkeypatch.setattr(rc, "CYCLE_INPUT_POOL", pool)
+
+    env = rc.build_campaign_env(base_env={})
+
+    assert json.loads(env["GEODE_SIL_EXPECTED_DIM"]) == {
+        "broken_tool_use": 1.0,
+        "sycophancy": 1.0,
+    }
+
+
+def test_build_campaign_env_respects_explicit_expected_dim_override(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # An operator-set GEODE_SIL_EXPECTED_DIM in base_env is RESPECTED, never
+    # overwritten by the pool-derived value.
+    pool = tmp_path / "cycle-input"
+    _write_seed_with_target_dims(pool, "s1.md", ["broken_tool_use"])
+    monkeypatch.setattr(rc, "CYCLE_INPUT_POOL", pool)
+
+    override = json.dumps({"sycophancy": 0.3})
+    env = rc.build_campaign_env(base_env={"GEODE_SIL_EXPECTED_DIM": override})
+
+    assert env["GEODE_SIL_EXPECTED_DIM"] == override
+
+
+def test_build_campaign_env_empty_pool_leaves_expected_dim_unset(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # An empty pool (no seeds) yields no target dims → GEODE_SIL_EXPECTED_DIM is
+    # left UNSET → train.py falls back to the v1 full-aggregate gate.
+    pool = tmp_path / "cycle-input"
+    pool.mkdir(parents=True)
+    monkeypatch.setattr(rc, "CYCLE_INPUT_POOL", pool)
+
+    env = rc.build_campaign_env(base_env={})
+
+    assert "GEODE_SIL_EXPECTED_DIM" not in env
+
+
+def test_build_campaign_env_no_target_dims_pool_leaves_expected_dim_unset(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # Seeds present but none declaring target_dims (or malformed frontmatter) →
+    # no dims → GEODE_SIL_EXPECTED_DIM absent (graceful full-aggregate fallback).
+    pool = tmp_path / "cycle-input"
+    pool.mkdir(parents=True)
+    (pool / "no_front.md").write_text("just a body, no frontmatter\n", encoding="utf-8")
+    (pool / "empty_dims.md").write_text("---\nname: x\n---\nbody\n", encoding="utf-8")
+    monkeypatch.setattr(rc, "CYCLE_INPUT_POOL", pool)
+
+    env = rc.build_campaign_env(base_env={})
+
+    assert "GEODE_SIL_EXPECTED_DIM" not in env
+
+
+def test_build_campaign_env_missing_pool_dir_leaves_expected_dim_unset(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # A missing pool dir is graceful — no raise, GEODE_SIL_EXPECTED_DIM unset.
+    monkeypatch.setattr(rc, "CYCLE_INPUT_POOL", tmp_path / "does-not-exist")
+
+    env = rc.build_campaign_env(base_env={})
+
+    assert "GEODE_SIL_EXPECTED_DIM" not in env
+
+
+def test_build_campaign_env_respects_blank_explicit_expected_dim(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # A deliberately BLANK GEODE_SIL_EXPECTED_DIM in base_env is a valid operator
+    # override (train.py::_resolve_targeted_dims reads "".strip() as "no targeting
+    # → full aggregate"). The mere PRESENCE of the key means the operator set it,
+    # so the pool-derived value must NOT overwrite it.
+    pool = tmp_path / "cycle-input"
+    _write_seed_with_target_dims(pool, "s1.md", ["broken_tool_use"])
+    monkeypatch.setattr(rc, "CYCLE_INPUT_POOL", pool)
+
+    env = rc.build_campaign_env(base_env={"GEODE_SIL_EXPECTED_DIM": ""})
+
+    assert env["GEODE_SIL_EXPECTED_DIM"] == ""
+
+
 def test_read_latest_attribution_min_rows_blocks_stale(campaign_state: dict[str, Path]) -> None:
     mutations = campaign_state["mutations"]
     _write_attribution(mutations, held_out=0.5, fitness=0.5, source="manual")
