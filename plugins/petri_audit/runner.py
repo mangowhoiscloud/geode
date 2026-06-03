@@ -573,6 +573,55 @@ def confirm_or_abort(cost_label: str, *, yes: bool) -> bool:
     return response in ("y", "yes")
 
 
+def _resolve_anthropic_api_key() -> str | None:
+    """Resolve ``ANTHROPIC_API_KEY`` for the audit subprocess (api_key only).
+
+    A sub-agent worker that calls ``run_audit`` does not load ``~/.geode/.env``,
+    so both ``os.environ`` and GEODE ``settings`` may be empty there. Try
+    settings first (covers the gateway / loaded-env case), then read
+    ``~/.geode/.env`` directly (the reliable source for a worker). Returns
+    ``None`` when neither yields a key — never raises (graceful boundary).
+    """
+    try:
+        from core.config import settings
+
+        key = _api_key_or_none(getattr(settings, "anthropic_api_key", None))
+        if key:
+            return key
+    except Exception:
+        log.debug("run_audit: settings.anthropic_api_key unavailable", exc_info=True)
+    try:
+        from core.paths import GEODE_HOME
+        from dotenv import dotenv_values
+
+        key = _api_key_or_none(dotenv_values(GEODE_HOME / ".env").get("ANTHROPIC_API_KEY"))
+        if key:
+            return key
+    except Exception:
+        log.debug("run_audit: ~/.geode/.env ANTHROPIC_API_KEY read failed", exc_info=True)
+    return None
+
+
+def _api_key_or_none(value: object) -> str | None:
+    """Return ``value`` as a string IFF it is a real Anthropic API key.
+
+    Rejects Claude OAuth access tokens (``sk-ant-oat…`` — see
+    ``plugins/petri_audit/claude_code_provider.py``): the audit policy injects
+    api_key only, never an OAuth token (Anthropic TOS forbids programmatic /
+    batch use of OAuth tokens). A non-string or OAuth-shaped value → ``None``,
+    so a mis-stored OAuth token under ``ANTHROPIC_API_KEY`` is never injected.
+    """
+    if not isinstance(value, str) or not value:
+        return None
+    if value.startswith("sk-ant-oat"):
+        log.warning(
+            "run_audit: ANTHROPIC_API_KEY holds an OAuth-shaped token (sk-ant-oat…); "
+            "refusing to inject it (api_key path only per Anthropic TOS)."
+        )
+        return None
+    return value
+
+
 def run_audit(
     *,
     judge: str | None = None,
@@ -672,6 +721,19 @@ def run_audit(
             else:
                 target = resolved
     assert auditor is not None and judge is not None and target is not None  # narrowed
+    # PR-PETRI-AUDIT-DEFAULT-OPUS-CREDS (2026-06-03) — an anthropic auditor/judge
+    # with no per-role source override DEFAULTS to api_key (PAYG) instead of the
+    # OAuth cascade (operator: "default를 PAYG로 둬"). The anthropic OAuth route is
+    # claude-cli, which runs the model as Claude Code and REFUSES the adversarial
+    # auditor role (treats the injected sysprompt as data → 0 send_message →
+    # degenerate all-zero audit). api_key is the verified alignment-audit path
+    # (+ ANTHROPIC_API_KEY is injected into the subprocess below). openai/codex
+    # roles keep their OAuth cascade (gpt-5.5 via codex subscription, $0). An
+    # explicit operator source override always wins (resolved above).
+    if auditor_source is None and auditor.startswith("claude"):
+        auditor_source = "api_key"
+    if judge_source is None and judge.startswith("claude"):
+        judge_source = "api_key"
     inspect_auditor = to_inspect_model(auditor, use_oauth=use_oauth, source=auditor_source)
     inspect_judge = to_inspect_model(judge, use_oauth=use_oauth, source=judge_source)
     inspect_target = to_inspect_target(target)
@@ -768,6 +830,24 @@ def run_audit(
     # ``docs/audits/2026-05-14-petri-oauth-constraints.md``.
     # 실 검증 (live audit 의 valid baseline 측정) 은 2026-05-25 이후
     # 의 후속 cycle 의 operator credential 결정 의 의존.
+    # PR-PETRI-AUDIT-DEFAULT-OPUS-CREDS (2026-06-03) — the inspect subprocess
+    # needs ``ANTHROPIC_API_KEY`` for the anthropic auditor/judge (api_key
+    # path; OAuth tokens stay out per the policy above). When run_audit is
+    # invoked from a sub-agent WORKER (the seed-gen pilot's petri_audit tool
+    # call), that worker process does NOT load ``~/.geode/.env``, so neither it
+    # nor this inherited-env subprocess has the key — inspect aborts in ~2s with
+    # "Could not resolve authentication method. Expected one of api_key …" and
+    # every dim zero-fills (status=low_engagement). Inject the key from the
+    # GEODE credential source when absent. The codex target uses
+    # ``~/.codex/auth.json`` (file-based) so needs no env injection.
+    audit_env = dict(os.environ)
+    if not audit_env.get("ANTHROPIC_API_KEY"):
+        resolved_key = _resolve_anthropic_api_key()
+        if resolved_key:
+            audit_env["ANTHROPIC_API_KEY"] = resolved_key
+            notes.append("injected ANTHROPIC_API_KEY from GEODE credential source")
+        else:
+            notes.append("ANTHROPIC_API_KEY unresolved — anthropic auditor/judge may fail auth")
     log.info("Petri audit subprocess: %s", " ".join(cmd))
     # ``cmd`` is built solely from validated model ids + numeric flags by
     # build_command — no shell metacharacters or untrusted user strings.
@@ -776,6 +856,7 @@ def run_audit(
         text=True,
         capture_output=True,
         check=False,
+        env=audit_env,
     )
     archived_raw, archived_summary = _maybe_auto_archive(
         proc.stdout, proc.stderr, auto_archive=auto_archive, notes=notes

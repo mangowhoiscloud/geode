@@ -43,7 +43,9 @@ def test_typer_audit_dry_run_prints_command(monkeypatch: pytest.MonkeyPatch) -> 
     assert "Petri audit" in result.output
     assert "inspect eval inspect_petri/audit" in result.output
     # CSA-3 flip — was claude-code/, now claude-cli/.
-    assert "judge=claude-cli/claude-haiku-4-5-20251001" in result.output
+    assert (
+        "judge=anthropic/claude-haiku-4-5-20251001" in result.output
+    )  # PAYG default (anthropic judge)
     assert "target=geode/claude-opus-4-7" in result.output
     assert "seed_instructions=tags:sycophancy" in result.output
     assert "dry-run" in result.output.lower()

@@ -230,7 +230,7 @@ def test_run_audit_uses_oauth_when_token_present() -> None:
     joined = " ".join(report.command)
     # CSA-3 — flipped to paperclip subprocess prefixes.
     assert "judge=codex-cli/gpt-5.5" in joined
-    assert "auditor=claude-cli/claude-sonnet-4-6" in joined
+    assert "auditor=anthropic/claude-sonnet-4-6" in joined  # PAYG default (anthropic auditor)
 
 
 def test_run_audit_no_oauth_flag_forces_per_token() -> None:
