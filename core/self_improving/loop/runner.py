@@ -129,6 +129,15 @@ class ApplyRecord(BaseModel):
     without parsing the ``.eval``. Shared SoT with ``baseline_archive.jsonl``
     (:mod:`core.self_improving.loop.role_provenance`). ``None`` on legacy rows /
     when the config could not be resolved at append time."""
+    contract_results: list[dict[str, Any]] | None = None
+    """PR-CONTRACT-EVAL (2026-06-03) — the deterministic tool-call contract
+    ledger (``core.audit.contracts.extract_contract_results``): a discrete
+    PASS / FAIL ledger (``required_tool_path`` / ``args_shape_valid`` /
+    ``claim_grounded``), NOT a continuous dim. Written verbatim (never
+    averaged); a ``hard`` contract whose ``status == "fail"`` vetoes the
+    promote gate. ``None`` on legacy rows / when the apply-time row predates
+    the audit (the contract verdict is produced by the audit subprocess in
+    ``core/self_improving/train.py``, downstream of this apply-time write)."""
 
 
 @dataclass(frozen=True)
@@ -1150,6 +1159,7 @@ def append_audit_log(
     log_path: Path | None = None,
     audit_run_id: str = "",
     kind: str = "applied",
+    contract_results: list[dict[str, Any]] | None = None,
 ) -> Path:
     """Append one mutation row to the git-tracked audit jsonl.
 
@@ -1159,6 +1169,14 @@ def append_audit_log(
     W3 (2026-05-25 attribution wiring) — ``audit_run_id`` forwarded to
     ``Mutation.to_audit_row`` so the apply row carries the cross-ref
     key to the matching attribution row.
+
+    PR-CONTRACT-EVAL (2026-06-03) — ``contract_results`` stamps the
+    deterministic tool-call contract ledger
+    (``core.audit.contracts.extract_contract_results``) onto the row when
+    provided. ``None`` (the default, and the live apply-time call shape) omits
+    the key — the contract verdict is produced by the audit subprocess
+    downstream of this apply-time write, so the live row carries it only once a
+    caller threads the post-audit result back through.
     """
     target = log_path if log_path is not None else MUTATION_AUDIT_LOG_PATH
     target.parent.mkdir(parents=True, exist_ok=True)
@@ -1182,6 +1200,12 @@ def append_audit_log(
         )
     except Exception:  # pragma: no cover — observability best-effort
         log.debug("role_provenance collect failed for apply row", exc_info=True)
+    # PR-CONTRACT-EVAL (2026-06-03) — stamp the deterministic contract ledger
+    # when the caller threaded the post-audit verdict back. ``ApplyRecord``
+    # carries a typed ``contract_results`` field; ``None`` simply omits the key
+    # (legacy + apply-time-only rows).
+    if contract_results is not None:
+        row["contract_results"] = contract_results
     # W4 (2026-05-25) — Pydantic schema validation. drift 가 발생하면
     # ValidationError 가 fail-fast 로 raise → 잘못된 row 가 git-tracked
     # ledger 에 들어가지 않음. backward-compat 은 ApplyRecord 의
