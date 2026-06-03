@@ -281,9 +281,13 @@ def build_command(
         # PR 0 — when seed_select is a hierarchical tree (tier/dim/...),
         # flatten to a content-addressed symlink stage so inspect-petri's
         # flat ``directory.glob("*.md")`` loader sees every seed.
+        # PR-PETRI-SINGLE-SEED-STAGING (2026-06-03) — a single candidate ``.md``
+        # is staged as ``seeds`` distinct-named copies (passed via ``samples``)
+        # so it delivers ``seeds`` real rollouts instead of being splitlines-
+        # shredded into empty seeds (project_seedgen_pilot_seed_delivery_bug).
         from plugins.petri_audit.seed_tree import flatten_for_inspect_petri
 
-        resolved_seed_path = flatten_for_inspect_petri(seed_select)
+        resolved_seed_path = flatten_for_inspect_petri(seed_select, samples=seeds)
         cmd.extend(["-T", f"seed_instructions={resolved_seed_path}"])
     elif tags:
         cmd.extend(["-T", f"seed_instructions=tags:{tags}"])

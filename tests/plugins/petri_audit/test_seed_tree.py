@@ -103,3 +103,55 @@ def test_flatten_for_inspect_petri_symlink_content_preserved(
         out = flatten_for_inspect_petri(tree)
     target = out / "critical__broken_tool_use__01_base.md"
     assert target.read_text(encoding="utf-8") == seed_body
+
+
+# ── single .md staging (project_seedgen_pilot_seed_delivery_bug) ──────────────
+
+
+def test_flatten_single_md_stages_n_copies(tmp_path: Path, monkeypatch: object) -> None:
+    """A lone candidate .md is staged into a directory of `samples` distinct
+    copies (so inspect-petri's directory loader reads it as N real seeds,
+    instead of splitlines-shredding the lone file into empty seeds)."""
+    cand = tmp_path / "cand.md"
+    cand.write_text("---\nname: c\n---\nscenario body", encoding="utf-8")
+    stage_root = tmp_path / "stage_root"
+    with patch("plugins.petri_audit.seed_tree.GEODE_HOME", stage_root):
+        out = flatten_for_inspect_petri(cand, samples=3)
+    assert isinstance(out, Path) and out.is_dir()
+    mds = sorted(p.name for p in out.glob("*.md"))
+    assert mds == ["cand__s1.md", "cand__s2.md", "cand__s3.md"]
+    # Every copy preserves the candidate body verbatim.
+    for p in out.glob("*.md"):
+        assert p.read_text(encoding="utf-8") == "---\nname: c\n---\nscenario body"
+
+
+def test_flatten_single_md_default_one_copy(tmp_path: Path, monkeypatch: object) -> None:
+    cand = tmp_path / "cand.md"
+    cand.write_text("body", encoding="utf-8")
+    stage_root = tmp_path / "stage_root"
+    with patch("plugins.petri_audit.seed_tree.GEODE_HOME", stage_root):
+        out = flatten_for_inspect_petri(cand)  # samples defaults to 1
+    assert isinstance(out, Path) and out.is_dir()
+    assert [p.name for p in out.glob("*.md")] == ["cand__s1.md"]
+
+
+def test_flatten_single_md_idempotent(tmp_path: Path, monkeypatch: object) -> None:
+    cand = tmp_path / "cand.md"
+    cand.write_text("body", encoding="utf-8")
+    stage_root = tmp_path / "stage_root"
+    with patch("plugins.petri_audit.seed_tree.GEODE_HOME", stage_root):
+        out1 = flatten_for_inspect_petri(cand, samples=2)
+        out2 = flatten_for_inspect_petri(cand, samples=2)
+    assert out1 == out2  # content-addressed → same stage reused
+
+
+def test_flatten_single_md_distinct_stage_per_sample_count(
+    tmp_path: Path, monkeypatch: object
+) -> None:
+    cand = tmp_path / "cand.md"
+    cand.write_text("body", encoding="utf-8")
+    stage_root = tmp_path / "stage_root"
+    with patch("plugins.petri_audit.seed_tree.GEODE_HOME", stage_root):
+        out2 = flatten_for_inspect_petri(cand, samples=2)
+        out3 = flatten_for_inspect_petri(cand, samples=3)
+    assert out2 != out3  # the copy count is part of the content address
