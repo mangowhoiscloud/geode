@@ -30,11 +30,22 @@ def test_petri_audit_handler_dry_run_returns_dict() -> None:
 
 
 def test_petri_audit_handler_defaults() -> None:
-    """Handler accepts an empty kwargs dict and falls back to safe defaults."""
+    """Handler accepts an empty kwargs dict and falls back to safe defaults.
+
+    Auditor + judge default to claude-opus-4-8 (PR-PETRI-AUDIT-DEFAULT-OPUS-CREDS)
+    — the campaign auditor tier — not the old haiku/sonnet."""
     handlers = _build_audit_handlers()
     result = handlers["petri_audit"]()
     assert result["status"] == "ok"
     assert result["audit"]["dry_run"] is True
+    cmd = result["audit"]["command"]
+    assert "auditor=anthropic/claude-opus-4-8" in cmd
+    assert "judge=anthropic/claude-opus-4-8" in cmd
+    # The OLD auditor/judge defaults must not appear in those roles (the target
+    # role legitimately carries whatever GEODE's active model is, so assert on
+    # the role-qualified strings, not bare model substrings).
+    assert "auditor=anthropic/claude-sonnet-4-6" not in cmd
+    assert "judge=anthropic/claude-haiku-4-5-20251001" not in cmd
 
 
 def test_petri_audit_handler_unknown_model_returns_error() -> None:
