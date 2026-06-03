@@ -56,6 +56,8 @@ from plugins.seed_generation.json_schemas import VOTE_SCHEMA
 from plugins.seed_generation.orchestrator import PipelineState
 from plugins.seed_generation.picker import VoterBinding
 from plugins.seed_generation.tournament import (
+    DEFAULT_DIFFICULTY_WEIGHT,
+    DEFAULT_ELO_WEIGHT,
     DEFAULT_K_FACTOR,
     DEFAULT_SURVIVOR_SELECTION,
     DEFAULT_TOP_K,
@@ -186,6 +188,7 @@ class Ranker(BaseSeedAgent):
         k_factor: float = DEFAULT_K_FACTOR,
         survivors_k: int = DEFAULT_TOP_K,
         selection: SurvivorSelection = DEFAULT_SURVIVOR_SELECTION,
+        blend_weights: tuple[float, float] = (DEFAULT_ELO_WEIGHT, DEFAULT_DIFFICULTY_WEIGHT),
         rng: random.Random | None = None,
     ) -> None:
         super().__init__(
@@ -207,7 +210,11 @@ class Ranker(BaseSeedAgent):
         # keeps the seeds the target struggles most with (highest pilot
         # target_dim elicitation). The orchestrator wires this from
         # ``resolve_survivor_selection()`` (env knob) so it is OPT-IN.
+        # PR-SEEDGEN-ELO-DIFFICULTY-BLEND (2026-06-03) — ``"blend"`` is the
+        # new default; ``blend_weights`` = (α on z(elo), β on z(difficulty)),
+        # wired from ``resolve_blend_weights()`` env knobs by the orchestrator.
         self._selection: SurvivorSelection = selection
+        self._blend_elo_weight, self._blend_diff_weight = blend_weights
         self._rng = rng
 
     async def aexecute(self, state: PipelineState) -> SeedAgentResult:
@@ -239,12 +246,22 @@ class Ranker(BaseSeedAgent):
         # voter-task builder can surface the empirical signal to each
         # judge per plugins/seed_generation/agents/ranker.md contract. Absent
         # pilot_scores → empty dict (judges fall back to seed bodies).
+        # PR-SEEDGEN-ELO-DIFFICULTY-BLEND (2026-06-03) — also snapshot
+        # dim_stderr so the ``blend`` survivor selection can confidence-weight
+        # the objective difficulty term (a noisy pilot pulls selection less
+        # than a tight one). The ``isinstance(entry, dict)`` guards keep a
+        # malformed / resumed ``pilot_scores`` entry (None / list / str) from
+        # crashing selection — it degrades to "no pilot signal" instead.
         pilot_means: dict[str, dict[str, Any]] = {}
+        pilot_stderr: dict[str, dict[str, Any]] = {}
         for cid in candidate_ids:
             entry = state.pilot_scores.get(cid, {})
             means = entry.get("dim_means", {}) if isinstance(entry, dict) else {}
             if isinstance(means, dict):
                 pilot_means[cid] = means
+            stderr = entry.get("dim_stderr", {}) if isinstance(entry, dict) else {}
+            if isinstance(stderr, dict):
+                pilot_stderr[cid] = stderr
         # PR-VOTER-PROMPT-ANTI-PHANTOM (2026-05-26) — pre-fix the
         # voter handoff sent a *literal* relative path string
         # ``"run_dir/candidates/<cid>.md"`` and instructed the model
@@ -392,20 +409,24 @@ class Ranker(BaseSeedAgent):
                 )
                 match_details.append(detail)
 
-        # PR-SEEDGEN-DIFFICULTY-SELECTION (2026-06-01) — survivor pick honours
-        # the resolved selection mode. ``"elo"`` is the historical top-K-by-rating
-        # path; ``"difficulty"`` re-ranks ALL rated candidates by their measured
-        # pilot ``dim_means[target_dim]`` (hardest first) so the pool keeps the
-        # seeds the target struggles most with — the high-elicitation seeds Elo
-        # would otherwise discard (gen-2605-3: elo 1084 / target_dim 4.2 ranked
-        # below elo 1094 / target_dim 2.8). Difficulty degrades to Elo when no
-        # pilot signal is available (``pilot_means`` carries it, keyed per cid).
+        # PR-SEEDGEN-DIFFICULTY-SELECTION (2026-06-01) / PR-SEEDGEN-ELO-
+        # DIFFICULTY-BLEND (2026-06-03) — survivor pick honours the resolved
+        # selection mode. ``"blend"`` (default) scalarises ``α·z(elo) +
+        # β·confidence·z(difficulty)`` so the panel's realism signal (Elo)
+        # and the objective pilot difficulty BOTH count, degrading per
+        # candidate to Elo as the pilot weakens. ``"difficulty"`` is the
+        # binary hardest-first mode; ``"elo"`` the historical top-K-by-rating.
+        # gen-2605-3 motive: elo 1084 / target_dim 4.2 ranked below elo 1094 /
+        # target_dim 2.8 under pure Elo — the harder seed the blend keeps.
         survivors = select_survivors(
             ratings,
             k=self._survivors_k,
             selection=self._selection,
             pilot_means=pilot_means,
+            pilot_stderr=pilot_stderr,
             target_dim=state.target_dim,
+            elo_weight=self._blend_elo_weight,
+            diff_weight=self._blend_diff_weight,
         )
         self._emit_elo_log(state, outcomes, ratings)
         self._persist_tournament_log(state, match_details)
