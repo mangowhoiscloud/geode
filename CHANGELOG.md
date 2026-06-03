@@ -45,6 +45,22 @@ functional change.
 
 ---
 
+## [0.99.129] - 2026-06-03
+
+### Fixed
+- **Petri audit stages a single candidate `.md` `seed_select` as a directory of N copies** (was
+  splitlines-shredded into empty seeds). When the seed-gen pilot calls `petri_audit` with a lone
+  `.md` path + `seeds=N`, inspect-petri's `seeds_dataset` treated the path as newline-delimited
+  seed instructions — `resource(path).splitlines()` turned front-matter lines into garbage one-line
+  "seeds", so the actual scenario was never delivered, the target never engaged, and every dim
+  scored 0 (`status="low_engagement"` → `malformed_pilot`). This surfaced once the pilot started
+  calling the controlled `petri_audit` tool (v0.99.128); the prior improvised `geode audit` path
+  had hand-staged copies to avoid it. `seed_tree.flatten_for_inspect_petri(seed_select, samples=N)`
+  now stages a lone `.md` into `<GEODE_HOME>/petri-audit/single-seed-stage/<stem>-<hash>-x<N>/` with
+  N distinct-named copies (content-addressed, idempotent) so `read_seed_directory` delivers the real
+  candidate as N independent rollouts; `runner.build_command` passes `samples=seeds`.
+  (`project_seedgen_pilot_seed_delivery_bug`.)
+
 ## [0.99.128] - 2026-06-03
 
 ### Fixed

@@ -124,7 +124,36 @@ def _populate_stage(tree_root: Path, stage: Path) -> None:
             link_path.write_bytes(md_path.read_bytes())
 
 
-def flatten_for_inspect_petri(seed_select: str | Path) -> str | Path:
+def _stage_single_seed(md_path: Path, samples: int) -> Path:
+    """Stage a single candidate ``.md`` as a directory of ``samples`` copies.
+
+    Returns ``<GEODE_HOME>/petri-audit/single-seed-stage/<stem>-<hash>-x<n>/``
+    containing ``samples`` distinct-named copies of the candidate. Content-
+    addressed (sha256 of the body + n) so re-runs reuse the stage; idempotent.
+
+    Why copies, not a lone file: inspect-petri's ``seeds_dataset`` treats a
+    lone ``.md`` *path* as newline-delimited seed instructions
+    (``resource(path).splitlines()``), shredding the candidate into garbage
+    one-line "seeds". A *directory* is read by ``read_seed_directory`` as one
+    Sample per ``*.md`` file, so ``samples`` distinct-named copies yield
+    ``samples`` independent rollouts of the real candidate
+    (``project_seedgen_pilot_seed_delivery_bug``).
+    """
+    n = max(1, samples)
+    body = md_path.read_bytes()
+    digest = hashlib.sha256(body + str(n).encode()).hexdigest()[:16]
+    stage = GEODE_HOME / "petri-audit" / "single-seed-stage" / f"{md_path.stem}-{digest}-x{n}"
+    stage.mkdir(parents=True, exist_ok=True)
+    for i in range(n):
+        # Distinct stems → distinct Sample ids → independent rollouts.
+        dest = stage / f"{md_path.stem}__s{i + 1}.md"
+        if not dest.exists():
+            dest.write_bytes(body)
+    log.info("seed_tree: staged single seed %s → %s (%d copies)", md_path, stage, n)
+    return stage
+
+
+def flatten_for_inspect_petri(seed_select: str | Path, *, samples: int = 1) -> str | Path:
     """Return a value inspect-petri can resolve to seeds.
 
     When ``seed_select`` is a hierarchical seed tree, populate (or
@@ -133,6 +162,14 @@ def flatten_for_inspect_petri(seed_select: str | Path) -> str | Path:
     not a hierarchical tree, return the input unchanged so
     inspect-petri's native handling kicks in.
 
+    When ``seed_select`` is a single ``.md`` file (the seed-generation
+    pilot's per-candidate audit), stage it as a directory of ``samples``
+    copies via :func:`_stage_single_seed` — a lone ``.md`` path is otherwise
+    splitlines-shredded into empty/garbage seeds by inspect-petri's
+    ``seeds_dataset``, so the target never engages and every dim scores 0
+    (``status="low_engagement"``). This is ``project_seedgen_pilot_seed_delivery_bug``;
+    the remediation the pilot used to apply by hand now applies for any caller.
+
     Strings stay strings; paths stay paths — the caller renders the
     final value via f-string for the inspect eval CLI.
     """
@@ -140,6 +177,8 @@ def flatten_for_inspect_petri(seed_select: str | Path) -> str | Path:
     if isinstance(seed_select, str) and seed_select.startswith(("id:", "tags:")):
         return seed_select
     path = Path(seed_select).expanduser()
+    if path.is_file() and path.suffix == ".md":
+        return _stage_single_seed(path.resolve(), samples)
     if not path.exists() or not is_hierarchical_seed_tree(path):
         # Pass through unchanged — non-existent paths fail at
         # inspect-petri's boundary with a clearer error message.
