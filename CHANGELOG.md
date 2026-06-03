@@ -45,6 +45,25 @@ functional change.
 
 ---
 
+## [0.99.132] - 2026-06-03
+
+### Fixed
+- **Hero viz: detail-paragraph word-break drift in the shared `_make_text` render path.**
+  Small-font EN labels and wrapped detail paragraphs (rubric dim lists at `font_size=11`,
+  the dict-literal boxes at `10`, the glossary at `12/14`, and every `*_detail` paragraph the
+  in-flight reframe adds via `_wrap` → `_make_text`) showed mid-word splits with spurious
+  internal spaces — "champio n-chain", "do minating", "g eneratio n", "discrimi nating". Root
+  cause is a Helvetica Neue + Pango macOS sub-pixel artifact: at small `font_size` Pango rounds
+  the per-glyph advances to the pixel grid in a way that accumulates into visible gaps. The drift
+  is font-size-dependent and non-monotonic (worst ~15-18, clean at 13 / 20+) and does NOT affect
+  KO Pretendard. Fixed once at the shared entry point: `_make_text` now shapes EN text below
+  `_KERN_SUPERSAMPLE_BELOW=24` at the drift-free `_KERN_SUPERSAMPLE_PX=48` and scales the vector
+  mobject down to the requested visual size — visual height is preserved exactly and glyph advances
+  come out at their correct (non-drifted) spacing, so every word (including hyphenated ones like
+  `champion-chain`) stays intact. Large titles (`font_size >= 24`) and all KO text are already
+  drift-free and render at their nominal size. Layout-ratchet baseline (`layout_baseline.json`) and
+  the 8 affected frame-ratchet baselines re-recorded; HarfBuzz glyph-cluster fingerprints unchanged
+  (the fix is purely at the Manim render layer). (`scripts/visualizations/geode_hero.py`)
 ## [0.99.131] - 2026-06-03
 
 ### Added
