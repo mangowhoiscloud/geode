@@ -230,8 +230,10 @@ def test_score_held_out_bench_uses_same_fitness_formula_path(
         dict[str, int],
         dict[str, str],
         list[dict[str, float]],
+        list[dict[str, object]],
     ]:
-        return dict(held_dims), {}, 0.0, 0.0, {}, {}, []
+        # PR-CONTRACT-EVAL (2026-06-03) — 8th element is the contract ledger.
+        return dict(held_dims), {}, 0.0, 0.0, {}, {}, [], []
 
     monkeypatch.setattr(auto_train, "run_audit", _fake_audit)
 

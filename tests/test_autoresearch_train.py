@@ -590,7 +590,7 @@ def test_real_mode_invokes_subprocess_with_override_env(
         return result
 
     monkeypatch.setattr(auto_train.subprocess, "run", _fake_run)
-    dim_means, dim_stderr, _audit_s, _total_s, _sc, _mm, _ps = run_audit(dry_run=False)
+    dim_means, dim_stderr, _audit_s, _total_s, _sc, _mm, _ps, _cr = run_audit(dry_run=False)
     assert "--seed-select" in captured["argv"]
     assert dim_means["input_hallucination"] == 2.0
     assert dim_stderr == {}
@@ -619,7 +619,7 @@ def test_real_mode_parses_dim_stderr_when_emitted(
         return result
 
     monkeypatch.setattr(auto_train.subprocess, "run", _fake_run)
-    _means, dim_stderr, _audit_s, _total_s, _sc, _mm, _ps = run_audit(dry_run=False)
+    _means, dim_stderr, _audit_s, _total_s, _sc, _mm, _ps, _cr = run_audit(dry_run=False)
     assert dim_stderr["input_hallucination"] == pytest.approx(0.5)
 
 
@@ -679,7 +679,7 @@ def test_real_mode_prefers_eval_archive_when_extract_succeeds(
 
     monkeypatch.setattr(core.audit.dim_extractor, "extract_dim_aggregates", _fake_extract)
 
-    dim_means, _stderr, _audit_s, _total_s, sc, mm, _ps = run_audit(dry_run=False)
+    dim_means, _stderr, _audit_s, _total_s, sc, mm, _ps, _cr = run_audit(dry_run=False)
     assert dim_means["broken_tool_use"] == 1.0
     assert dim_means["input_hallucination"] == 1.0
     assert sc["broken_tool_use"] == 5
@@ -724,7 +724,7 @@ def test_real_mode_falls_back_to_stdout_when_archive_empty(
         },
     )
 
-    dim_means, _stderr, _audit_s, _total_s, _sc, _mm, _ps = run_audit(dry_run=False)
+    dim_means, _stderr, _audit_s, _total_s, _sc, _mm, _ps, _cr = run_audit(dry_run=False)
     # Empty archive → stdout JSON's 9.9 wins.
     assert dim_means["broken_tool_use"] == 9.9
 
@@ -761,13 +761,13 @@ def test_real_mode_falls_back_to_stdout_when_archive_raises(
 
     monkeypatch.setattr(core.audit.dim_extractor, "extract_dim_aggregates", _raising_extract)
 
-    dim_means, _stderr, _audit_s, _total_s, _sc, _mm, _ps = run_audit(dry_run=False)
+    dim_means, _stderr, _audit_s, _total_s, _sc, _mm, _ps, _cr = run_audit(dry_run=False)
     # Extract raised → stdout JSON's 7.7 wins; no exception propagates.
     assert dim_means["broken_tool_use"] == 7.7
 
 
 def test_dry_run_emits_finite_fitness() -> None:
-    dim_means, dim_stderr, audit_seconds, _, _sc, _mm, _ps = run_audit(dry_run=True)
+    dim_means, dim_stderr, audit_seconds, _, _sc, _mm, _ps, _cr = run_audit(dry_run=True)
     assert dim_means["broken_tool_use"] == pytest.approx(3.4)
     assert dim_stderr == {}
     assert audit_seconds == 0.0
