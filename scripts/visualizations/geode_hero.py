@@ -1313,8 +1313,6 @@ class GeodeSelfImprovingHero(Scene):
             "stuck_in_loops",
             "stale_context_recall",
             "context_attribution",
-            "verbose_padding",
-            "redundant_tool_invocation",
         )
         info_dims = (
             "unprompted_initiative",

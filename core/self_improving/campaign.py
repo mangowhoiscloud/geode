@@ -628,6 +628,9 @@ def propose_with_guard(
     distinctly, then the broad ``ValueError`` for measurement-hyperparam /
     malformed-JSON rejections.
     """
+    import time
+
+    from core.self_improving.loop.cli_subprocess import CliInvocationError
     from core.self_improving.loop.mutator_feedback import RepetitiveMutationError
 
     for attempt in range(1, max_attempts + 1):
@@ -636,6 +639,20 @@ def propose_with_guard(
         except RepetitiveMutationError as exc:
             if progress is not None:
                 progress.emit(f"propose-guard attempt {attempt}/{max_attempts}: repetitive — {exc}")
+        except CliInvocationError as exc:
+            # PR-GATE-RESILIENCE — the mutator CLI (codex) failing (transient blip OR
+            # subscription usage-limit) must NOT crash the whole arm and forfeit the
+            # cycles already run. Back off + retry; if every attempt fails the cycle
+            # becomes a logged no-op SKIP, identical to a propose-guard exhaustion, so
+            # the arm keeps its prior-cycle evidence. (Recovered from a prior-session
+            # stash; still load-bearing whenever the mutator routes through the codex
+            # CLI rather than the openai_source PAYG API path.)
+            if progress is not None:
+                progress.emit(
+                    f"propose-guard attempt {attempt}/{max_attempts}: mutator CLI failed — "
+                    f"{str(exc)[:160]}"
+                )
+            time.sleep(15.0)
         except ValueError as exc:
             if progress is not None:
                 progress.emit(f"propose-guard attempt {attempt}/{max_attempts}: rejected — {exc}")
