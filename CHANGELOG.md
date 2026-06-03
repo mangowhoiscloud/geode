@@ -45,6 +45,21 @@ functional change.
 
 ---
 
+## [0.99.128] - 2026-06-03
+
+### Fixed
+- **Seed-generation pilot now binds a tool-capable adapter so it can call `petri_audit`.**
+  The pilot resolved to the `claude-cli` source → `ClaudeCliAdapter`, which declares
+  `supports_tools=False` (`core/llm/adapters/claude_cli.py:327`) and drops `req.tools` — so the
+  pilot's `petri_audit` grant never reached the model. `picker.pick_bindings` now reroutes a
+  tool-requiring role (`_TOOL_REQUIRING_ROLES = {"pilot"}`) off a tool-incapable source
+  (`_TOOL_INCAPABLE_SOURCES = {"claude-cli", "adapter"}` — both spell ClaudeCliAdapter; `openai-codex`
+  → CodexOAuthAdapter is tool-capable) to the provider's PAYG source (`anthropic` → `api_key` →
+  `AnthropicPaygAdapter`, `supports_tools=True`, which translates `req.tools` to the Anthropic
+  Messages API and parses `tool_use` — `core/llm/adapters/_anthropic_common.py:105-109,159-164`).
+  Fires for both the auto-default and an explicit `claude-cli`/`adapter` override (a
+  misconfiguration for the pilot), with a loud WARNING.
+
 ## [0.99.127] - 2026-06-03
 
 ### Changed

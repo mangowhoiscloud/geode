@@ -112,6 +112,27 @@ _PROVIDER_DEFAULT_PAYG: dict[str, str] = {
     "zhipuai": "api_key",
 }
 
+# PR-SEEDGEN-PILOT-TOOL-CAPABLE-SOURCE (2026-06-03) — picker source-specs whose
+# adapter ignores ``req.tools`` (``supports_tools=False``). Both spell the
+# ClaudeCliAdapter (``core/llm/adapters/claude_cli.py:327``): the legacy
+# ``"claude-cli"`` name and its new-naming alias ``"adapter"`` (see
+# ``binding_to_adapter_source`` — ``claude-cli`` → ``adapter``; the glue test
+# ``test_picker_adapter_glue`` pins ``source="adapter"`` → ClaudeCliAdapter).
+# That adapter runs the model as Claude Code and never serialises the tool
+# schemas, so a tool the model should call simply isn't there. (``openai-codex``
+# → CodexOAuthAdapter is tool-capable; ``codex-cli`` is not a picker source.)
+# Verified by adapter resolution, not assumed.
+_TOOL_INCAPABLE_SOURCES: frozenset[str] = frozenset({"claude-cli", "adapter"})
+
+# Roles that MUST call a GEODE tool: the pilot invokes ``petri_audit`` to run
+# the inner-loop audit. On a tool-incapable source the model never receives
+# ``petri_audit`` and silently degrades to native-CLI Bash improvisation
+# (``geode audit`` shellout) — uncontrolled, contention-prone, and often
+# unparseable. Such roles are rerouted to the provider's tool-capable PAYG
+# source. (Other roles read/emit via native CLI tools, so they tolerate the
+# subprocess adapter.)
+_TOOL_REQUIRING_ROLES: frozenset[str] = frozenset({"pilot"})
+
 
 # Module-level flag so :func:`print_tos_notice` is idempotent across
 # repeated picker calls in the same process (e.g. CLI smoke + CLI run).
@@ -523,6 +544,24 @@ def pick_bindings(
             role_name, override.get("source"), provider, petri_sources
         )
         source = _resolve_source(provider, hint=source_hint, auto_probe=auto_probe)
+        # PR-SEEDGEN-PILOT-TOOL-CAPABLE-SOURCE (2026-06-03) — a tool-requiring
+        # role resolved to a tool-incapable (subprocess) source would never
+        # receive its GEODE tool and would improvise via the native CLI.
+        # Reroute to the provider's tool-capable PAYG source. Fires for both an
+        # auto-resolved and an explicit operator override of ``claude-cli`` on
+        # such a role (the override is a misconfiguration — claude-cli cannot
+        # deliver petri_audit).
+        if role_name in _TOOL_REQUIRING_ROLES and source in _TOOL_INCAPABLE_SOURCES:
+            tool_capable = _PROVIDER_DEFAULT_PAYG.get(provider, "api_key")
+            log.warning(
+                "seed-generation picker: role %r calls a GEODE tool (petri_audit) but "
+                "resolved to tool-incapable source %r (subprocess adapter drops "
+                "req.tools) — rerouting to %r so the model actually receives the tool.",
+                role_name,
+                source,
+                tool_capable,
+            )
+            source = tool_capable
         bindings[role_name] = RoleBinding(
             role=role_name,
             model=model,
