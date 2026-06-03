@@ -45,6 +45,43 @@ functional change.
 
 ---
 
+## [0.99.127] - 2026-06-03
+
+### Changed
+- **Seed-generation survivor selection blends Elo with confidence-weighted pilot difficulty
+  (new default `blend`).** Difficulty selection was a binary mode (`GEODE_SEED_SURVIVOR_SELECTION=difficulty`)
+  that fully replaced the Elo tournament and silently fell back to it whenever the pilot signal
+  was absent — and a difficulty canary surfaced that the fallback was firing (`0 pilot rows → elo`),
+  so the difficulty lever was inert. `tournament.py` now adds a third mode, `blend` (the new
+  default per `DEFAULT_SURVIVOR_SELECTION`), that scalarises
+  `final = α·z(elo) + β·confidence·z(difficulty)`:
+  - both signals are z-scored across the rated candidates (`_zscores`) so they share a
+    unit-variance scale; weights α/β default to 1.0/1.0, tunable via
+    `GEODE_SEED_BLEND_ELO_WEIGHT` / `GEODE_SEED_BLEND_DIFFICULTY_WEIGHT` (`resolve_blend_weights`).
+  - the difficulty term is scaled per candidate by `difficulty_confidence(stderr)` from the pilot
+    `dim_stderr[target_dim]` (1.0 at stderr 0, 0.5 at one Petri point, 0.2 at two) — the standard
+    error already encodes the sample size (`sd/√n`), so a noisy pilot pulls selection less without
+    a separate sample-count gate. The operator-chosen "both signals + confidence weighting".
+  - degradation is now per-candidate: a candidate without a usable pilot signal is scored on Elo
+    alone, and when NO candidate has a signal every score reduces to `α·z(elo)` — identical to the
+    historical Elo ranking, so a broken pilot can never make `blend` worse than `elo`.
+  Elo already carries the panel's realism + voter-estimated difficulty (`ranker.md`), so `blend`
+  combines that robust signal with the objective pilot measurement. `ranker.py` now threads the
+  pilot `dim_stderr` + `sample_count` (not just `dim_means`) into `select_survivors`.
+
+### Fixed
+- **Pinned the `seed_pilot` → `petri_audit` toolkit wiring as a static regression guard.** The
+  pilot measures candidate difficulty by calling `petri_audit`; that grant has silently degraded
+  to the broad `_default` toolset (no `petri_audit`) twice — a tool_policy mutation stripped it
+  (3d6511310) and the 2026-06-03 canary saw the pilot improvise a narrative because the tool
+  "wasn't in its toolset", each time fabricating output and losing the difficulty signal.
+  `tests/plugins/seed_generation/test_pilot_toolkit_wiring.py` now pins the invariant (toolkit
+  declares `petri_audit`; a `seed_pilot` SubTask resolves to `WorkerRequest.toolkit="seed_pilot"`
+  + propagates the PILOT_SCHEMA `response_schema`; the worker's `filter_handlers` keeps
+  `petri_audit`), and `_registry_builder._warn_if_pilot_toolkit_unresolvable` upgrades the
+  previously-silent `agent_registry` failure path to a loud WARNING so the degradation is visible
+  before a full run measures nothing.
+
 ## [0.99.126] - 2026-06-03
 
 ### Changed
