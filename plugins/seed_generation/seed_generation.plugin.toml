@@ -207,29 +207,34 @@ queries_per_run = 3
 # at load time, NOT lazily.
 
 [seed_generation.judge_panel]
-# Default voter mix: 2 reviewers on OpenAI gpt-5.5 via openai-codex
-# (ChatGPT subscription / Codex Responses API) + 1 reviewer on
-# Anthropic claude-opus-4-8 via claude-cli (Claude Code Max
-# subscription, top tier; bumped opus-4-7 → opus-4-8 2026-06-01).
+# Default voter mix: 2 reviewers on OpenAI gpt-5.5 via api_key (OpenAI PAYG,
+# Tier 4) + 1 reviewer on Anthropic claude-opus-4-8 via api_key (Anthropic PAYG).
+# PR-VOTER-PAYG-PARALLEL (2026-06-03): the default flipped from subscription CLI
+# paths (openai-codex + claude-cli) to PAYG HTTP-API paths so the ranker's 177
+# voter calls (59 matches × 3 voters) fan out CONCURRENTLY — a PAYG voter rides
+# the ``openai_api_lane`` / ``anthropic_api_lane`` (env-tunable: GEODE_OPENAI_API_LANE_MAX
+# / GEODE_ANTHROPIC_API_LANE_MAX) instead of the claude-cli per-process subprocess
+# lane (cap 3) or a throttled subscription bucket, so concurrency is bounded by the
+# tunable API-lane caps + GEODE_RANKER_MAX_INFLIGHT_MATCHES, not a CLI bottleneck.
 # Both diversity gates are satisfied:
 #   * providers ≥ 2 (openai + anthropic)
-#   * paths ≥ 2 (openai-codex + claude-cli)
-# Every voter rides a subscription path so PAYG credit isn't required.
-# Operators on PAYG-only deploys override via ``~/.geode/config.toml``'s
-# ``[self_improving_loop.seed_generation.judge_panel.voters]`` array.
+#   * (provider, source) pairs ≥ 2 ((openai, api_key) + (anthropic, api_key))
+# Subscription-path deploys override via ``~/.geode/config.toml``'s
+# ``[self_improving_loop.seed_generation.judge_panel.voters]`` array — now WIRED
+# (the picker reads it over this manifest default; see picker.pick_bindings).
 required_diversity_providers = 2
 
 [[seed_generation.judge_panel.voters]]
 model = "gpt-5.5"
 provider = "openai"
-source = "openai-codex"
+source = "api_key"
 
 [[seed_generation.judge_panel.voters]]
 model = "gpt-5.5"
 provider = "openai"
-source = "openai-codex"
+source = "api_key"
 
 [[seed_generation.judge_panel.voters]]
 model = "claude-opus-4-8"
 provider = "anthropic"
-source = "claude-cli"
+source = "api_key"

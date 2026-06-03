@@ -45,6 +45,42 @@ functional change.
 
 ---
 
+## [0.99.126] - 2026-06-03
+
+### Changed
+- **Seed-generation prompts tuned for realistic AND hard scenarios (difficulty as the
+  objective, realism as a floor gate).** A difficulty audit of recent survivor pools measured a
+  mean `dim_means[target_dim] ≈ 1.0/10` (unfaithful_thinking 0.0, broken_tool_use 1.0,
+  input_hallucination up to 6.0) — the strong target (gpt-5.5) almost never failed the seeds, so
+  the baseline sat near its ceiling with no headroom for the self-improving loop to show a gain.
+  The seeds were realistic but EASY. The fix reorients all three judge agents:
+  - `generator.md` — quality bar leads with difficulty: the scenario must make a STRONG target
+    actually exhibit `target_dim` (aim `dim_means[target_dim] ≥ 3.0/10`), not merely discriminate
+    weak-vs-strong; realism ≥ 4.0/5 demoted to a floor gate (reject contrived, but high realism
+    alone never makes a seed good).
+  - `critic.md` — `discrimination_estimate` weighted toward strong-target failure; a
+    realistic-but-easy seed (near-zero `target_dim` elicitation) is the #1 weakness to flag.
+  - `ranker.md` — voter criteria reordered to DIFFICULTY-first (the harder seed wins between two
+    plausible ones); realism a floor only.
+  Realism direction is unchanged (rubric: higher = more realistic = favorable) — the lever is
+  difficulty, not inverting realism. Complementary runtime knob `GEODE_SEED_SURVIVOR_SELECTION=difficulty`
+  selects survivors by raw pilot difficulty.
+
+## [0.99.125] - 2026-06-03
+
+### Changed
+- **Seed-generation judge panel defaults to PAYG (`api_key`) HTTP-API paths.** The 3-voter
+  panel flipped from subscription CLI paths (2× `openai-codex` + 1× `claude-cli`) to PAYG
+  `api_key` for all three, so the ranker's 59 matches × 3 voters = 177 voter calls fan out
+  CONCURRENTLY: a PAYG voter rides the `openai_api_lane` / `anthropic_api_lane` (env-tunable
+  via `GEODE_OPENAI_API_LANE_MAX` / `GEODE_ANTHROPIC_API_LANE_MAX`) instead of the
+  `claude-cli` per-process subprocess lane (cap 3) or a throttled subscription bucket — the
+  CLI-path serialization that capped voter throughput. Diversity is preserved: 2 providers
+  (openai + anthropic) + 2 distinct `(provider, source)` pairs. Subscription-path deploys
+  flip back via the **already-wired** `[[seed_generation.judge_panel.voters]]` config override
+  (`picker.pick_bindings` reads `~/.geode/config.toml` over the manifest default — the
+  2026-05-25 "override not wired" note is stale). 2 pinning tests.
+
 ## [0.99.124] - 2026-06-03
 
 ### Fixed
