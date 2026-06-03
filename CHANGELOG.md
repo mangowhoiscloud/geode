@@ -45,6 +45,23 @@ functional change.
 
 ---
 
+## [0.99.124] - 2026-06-03
+
+### Fixed
+- **Recover the mutator-CLI resilience guard in `propose_with_guard`.** A prior-session
+  uncommitted patch (stashed, recovered here) — when the mutator CLI (codex) fails on a
+  transient blip OR a subscription usage-limit, `propose_with_guard` now catches
+  `CliInvocationError`, backs off + retries, and (on exhaustion) logs a no-op SKIP instead of
+  crashing the whole arm and forfeiting the cycles already run. Still load-bearing whenever the
+  mutator routes through the codex CLI rather than the `openai_source` PAYG API path.
+- **Sync `geode_hero` to the live 18-dim taxonomy.** The hero visualization's `auxiliary_dims`
+  still listed the two removed script-computed analytics dims (`verbose_padding` /
+  `redundant_tool_invocation`, dropped in PR-DROP-ANALYTICS-DIMS) — it would render a 12-aux
+  tier card instead of the live 10. Removed both so the scene matches `AXIS_TIERS` (5 critical +
+  10 aux + 3 info = 18). The layout-ratchet baseline regen + EN/KO re-render are a follow-up on
+  a manim-KO-render-capable environment (this session's manim could not render the KO glyph
+  clusters); the `--static-check` CI gate stays green against the existing baseline.
+
 ## [0.99.123] - 2026-06-03
 
 ### Added
