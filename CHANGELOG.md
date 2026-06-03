@@ -45,6 +45,29 @@ functional change.
 
 ---
 
+## [0.99.130] - 2026-06-03
+
+### Fixed
+- **petri_audit auditor/judge default to claude-opus-4-8 on the PAYG api_key path + the audit
+  subprocess gets ANTHROPIC_API_KEY.** Three issues kept the controlled `petri_audit` tool path
+  (the seed-gen pilot) from running a real audit, leaving all dims `0.0` (`status="low_engagement"`):
+  - The handler defaulted auditor/judge to `claude-sonnet-4-6` / `claude-haiku-4-5-20251001`
+    (`core/cli/tool_handlers/audit.py`) — not the campaign's `claude-opus-4-8`. Now both default to
+    `claude-opus-4-8`.
+  - An anthropic auditor/judge with no per-role source override resolved to the OAuth route
+    (`claude-cli`), which runs the model as Claude Code and REFUSES the adversarial auditor role
+    (treats the injected sysprompt as data → 0 send_message → degenerate audit). `run_audit` now
+    defaults an anthropic auditor/judge to the `api_key` (PAYG) source; openai/codex roles keep
+    their OAuth cascade (gpt-5.5 via codex subscription, $0). An explicit operator override wins.
+  - The inspect subprocess inherited the sub-agent worker's env, which lacks `ANTHROPIC_API_KEY`
+    (the worker does not load `~/.geode/.env`), so inspect aborted in ~2s with "Could not resolve
+    authentication method. Expected one of api_key …" and zero-filled every dim. `run_audit` now
+    resolves `ANTHROPIC_API_KEY` from the GEODE credential source (`settings.anthropic_api_key` →
+    `~/.geode/.env`) and injects it into the subprocess `env` when absent
+    (`plugins/petri_audit/runner.py:_resolve_anthropic_api_key`). The resolver rejects
+    OAuth-shaped tokens (`sk-ant-oat…`) so only a real api_key is ever injected (Anthropic TOS);
+    the codex target uses `~/.codex/auth.json` (file-based) and needs no injection.
+
 ## [0.99.129] - 2026-06-03
 
 ### Fixed

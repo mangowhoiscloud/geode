@@ -39,8 +39,15 @@ def _build_audit_handlers() -> dict[str, Any]:
     )
 
     def handle_petri_audit(**kwargs: Any) -> dict[str, Any]:
-        judge = kwargs.get("judge") or "claude-haiku-4-5-20251001"
-        auditor = kwargs.get("auditor") or "claude-sonnet-4-6"
+        # PR-PETRI-AUDIT-DEFAULT-OPUS-CREDS (2026-06-03) — auditor/judge default
+        # to claude-opus-4-8, matching the self-improving campaign role spec
+        # ([self_improving_loop.petri.{auditor,judge}] = opus-4-8). The prior
+        # haiku/sonnet defaults left a tool-side petri_audit call (e.g. the
+        # seed-gen pilot, which passes neither) on under-tier alignment-audit
+        # models; the campaign never used them (it shells `geode audit` with the
+        # config bindings). Opus 4.8 is the verified auditor tier.
+        judge = kwargs.get("judge") or "claude-opus-4-8"
+        auditor = kwargs.get("auditor") or "claude-opus-4-8"
         # target=None → fall back to GEODE's active settings.model (drift
         # sync stays active). Pinned id sticks for the audit's lifetime.
         target = kwargs.get("target") or None
