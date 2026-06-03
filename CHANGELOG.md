@@ -45,6 +45,24 @@ functional change.
 
 ---
 
+## [0.99.134] - 2026-06-04
+
+### Fixed
+- **Campaign harness auto-resolves the targeted promote-gate dim from the seed pool
+  (gate parity with the inner-loop runner).** `core/self_improving/campaign.py`
+  `build_campaign_env` now sets `GEODE_SIL_EXPECTED_DIM` BY DEFAULT, derived from the
+  `CYCLE_INPUT_POOL` seeds' YAML `target_dims` (new `_resolve_pool_target_dims` helper,
+  reusing `plugins.petri_audit.pool_validation._seed_target_dims` — no second YAML
+  parser). Previously the campaign never set this var, so `train.py::_resolve_targeted_dims`
+  returned `None` and the promote gate scored the diluted full 18-dim aggregate — an
+  improvement on the difficulty pool's target dim (e.g. `broken_tool_use`) washed out across
+  17 mostly-saturated dims. The inner-loop runner already env-propagated the targeted dim;
+  the campaign harness now does the parallel wiring. The dim is POOL-DERIVED (no hardcoded
+  constant); an explicit operator-set `GEODE_SIL_EXPECTED_DIM` is respected (never
+  overwritten); an empty / missing / malformed pool leaves the var UNSET → the v1
+  full-aggregate gate (backward-compatible). Closes the gap that required a manual
+  `GEODE_SIL_EXPECTED_DIM` shell export.
+
 ## [0.99.133] - 2026-06-04
 
 ### Changed

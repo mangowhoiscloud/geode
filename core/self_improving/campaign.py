@@ -214,6 +214,42 @@ def _utc_now_iso() -> str:
 # ---------------------------------------------------------------------------
 
 
+def _resolve_pool_target_dims(pool_dir: Path) -> dict[str, float]:
+    """Union the ``target_dims`` declared by a seed pool's seeds.
+
+    PR-CAMPAIGN-TARGET-DIM (2026-06-04). The CYCLE_INPUT_POOL's seeds are
+    difficulty-calibrated to probe a specific judge dim (e.g. ``broken_tool_use``);
+    each seed carries that dim in its YAML front-matter ``target_dims``. This walks
+    every ``*.md`` seed in ``pool_dir``, unions their parsed ``target_dims`` (reusing
+    ``plugins.petri_audit.pool_validation._seed_target_dims`` — the SAME frontmatter
+    parser the pool-dim guard uses, no second YAML reader), and returns
+    ``{dim: 1.0 for dim in sorted(dims)}``.
+
+    The value is a NOMINAL hint only — ``train.py::_resolve_targeted_dims`` reads
+    just the KEYS of ``GEODE_SIL_EXPECTED_DIM`` (intersected with ``DIM_WEIGHTS``)
+    to pick the promote gate's targeted sub-fitness surface; the magnitude is never
+    consulted. The dim set is therefore POOL-DERIVED, never a hardcoded constant.
+
+    Graceful: an empty pool, a missing dir, seeds with no ``target_dims``, or
+    malformed front-matter all yield ``{}`` (``_seed_target_dims`` already swallows
+    a bad seed to ``[]``) — and the import itself is guarded, so a packaged distro
+    without ``plugins.petri_audit`` degrades to ``{}``. Never raises.
+    """
+    try:
+        from plugins.petri_audit.pool_validation import _seed_target_dims
+    except ImportError:
+        return {}
+    if not pool_dir.is_dir():
+        return {}
+    dims: set[str] = set()
+    # ``rglob`` (not ``glob``) — the seed-select contract supports a hierarchical
+    # seed tree, so a nested seed must not hide its target dim (mirrors
+    # ``validate_pool_target_dims``).
+    for seed_md in sorted(pool_dir.rglob("*.md")):
+        dims.update(_seed_target_dims(seed_md))
+    return dict.fromkeys(sorted(dims), 1.0)
+
+
 def build_campaign_env(
     *,
     promote_policy: str | None = None,
@@ -236,6 +272,16 @@ def build_campaign_env(
     ``gate`` / ``never`` arms must inherit NO seed (else `_resolve_promote_policy`
     / `_resolve_promote_policy_seed` would pick up the stale env, which is
     highest-precedence, and the ledger would record a wrong arm / seed).
+
+    ``GEODE_SIL_EXPECTED_DIM`` (PR-CAMPAIGN-TARGET-DIM, 2026-06-04) is auto-resolved
+    BY DEFAULT from the CYCLE_INPUT_POOL's seed ``target_dims`` — gate parity with
+    the inner-loop runner, which already env-propagates the targeted dim so the
+    promote gate scores the TARGETED sub-fitness (``train.py::_resolve_targeted_dims``)
+    on the dim the difficulty pool actually probes, instead of the diluted full
+    18-dim aggregate (near-saturation washout). An EXPLICIT operator-set
+    ``GEODE_SIL_EXPECTED_DIM`` in ``base_env`` is RESPECTED (never overwritten). When
+    the pool yields no target dims (empty / missing / malformed) the var is left
+    UNSET → ``train.py`` falls back to the v1 full-aggregate gate (backward-compatible).
     """
     env = dict(base_env if base_env is not None else os.environ)
     env["GEODE_CODEX_OAUTH_POLL_DISABLED"] = "1"
@@ -255,6 +301,19 @@ def build_campaign_env(
     else:
         env.pop("GEODE_PROMOTE_POLICY_SEED", None)
         env.pop("AUTORESEARCH_PROMOTE_POLICY_SEED", None)
+    # Auto-resolve the targeted dims from the selection pool — gate parity with the
+    # inner-loop runner (``runner.py`` env-propagates ``GEODE_SIL_EXPECTED_DIM``).
+    # Respect an explicit operator override: the mere PRESENCE of the key in
+    # ``base_env`` means the operator set it — never overwrite it, regardless of
+    # value. A deliberately BLANK value is a valid override too (``train.py::
+    # _resolve_targeted_dims`` reads ``"".strip()`` as "no targeting → full
+    # aggregate"), so we must not second-guess it as stale. When the key is absent
+    # we set it from the pool; when the pool yields no dims we leave it UNSET
+    # (graceful full-aggregate fallback).
+    if "GEODE_SIL_EXPECTED_DIM" not in env:
+        target_dims = _resolve_pool_target_dims(CYCLE_INPUT_POOL)
+        if target_dims:
+            env["GEODE_SIL_EXPECTED_DIM"] = json.dumps(target_dims, ensure_ascii=False)
     return env
 
 
