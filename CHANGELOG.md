@@ -45,7 +45,26 @@ functional change.
 
 ---
 
-## [0.99.134] - 2026-06-04
+## [0.99.135] - 2026-06-04
+
+### Changed
+- **Path-independent control arms (`never` + `random`) run CONCURRENTLY by default.**
+  `core/self_improving/campaign.py` `run_campaign` now fans every `never` cycle and
+  every `random` cycle out in ONE `asyncio.gather` (new `run_control_arms_async`
+  orchestrator) instead of looping the arms sequentially (`never`'s N cycles, THEN
+  `random`'s N cycles). Both arms are PATH-INDEPENDENT (every cycle measures the SAME
+  frozen baseline before any keep/revert), so they OVERLAP — with PAYG's unbounded
+  fan-out this ~halves the control-arm wall-clock. The PATH-DEPENDENT `gate` arm still
+  runs LAST and sequentially on the `run_arm` champion-chain path (a promote mutates
+  the champion + steers the next propose), never routed through the fan-out. Invariants
+  preserved: per-arm attribution (each worker is tagged with its arm; the gather result
+  is partitioned back per arm), per-arm promote policy (`GEODE_PROMOTE_POLICY` +
+  random's per-cycle seed built per arm), resume checkpoint (cycles key per-arm group),
+  random reproducibility (the per-cycle seed `DEFAULT_RANDOM_SEED_BASE + arm_index*n +
+  cycle` is keyed on `(arm_index, n, cycle)`, byte-identical to the legacy formula —
+  not wall-clock order), and per-arm worker-root / transcript isolation (`never`-w1 and
+  `random`-w1 live under distinct roots). The legacy dry-run / injected-runner path keeps
+  the original sequential `never → random → gate` order. Default behavior, not a flag.
 
 ### Fixed
 - **Campaign harness auto-resolves the targeted promote-gate dim from the seed pool

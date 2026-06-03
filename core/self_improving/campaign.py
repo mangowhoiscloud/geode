@@ -24,9 +24,14 @@ importable module with a CLI front end. The driver does NOT decide policy — it
   ``RepetitiveMutationError`` or a measurement-hyperparam ``ValueError`` does not
   burn the cycle.
 * ``GEODE_PROMOTE_POLICY`` (+ ``GEODE_PROMOTE_POLICY_SEED``) — the control-arm
-  knob (``core/self_improving/train.py::_resolve_promote_policy``). The driver runs the
-  3 arms in the order **never → random → gate** (gate LAST), each from a matched
-  gen-0 SoT reset.
+  knob (``core/self_improving/train.py::_resolve_promote_policy``). Each arm runs
+  from a matched gen-0 SoT reset. The two PATH-INDEPENDENT control arms
+  (**never + random**) fan out CONCURRENTLY in ONE ``asyncio.gather`` by default
+  (PR-CAMPAIGN-CONCURRENT-CONTROL-ARMS, 2026-06-04 — every cycle measures the same
+  frozen baseline, so they overlap instead of running arm-by-arm); the
+  PATH-DEPENDENT **gate** arm runs LAST and sequentially (a promote mutates the
+  champion chain). The legacy dry-run / injected-runner path keeps the original
+  sequential **never → random → gate** order.
 
 At the start of a REAL (non-``--dry-run``) campaign the driver purges
 ``inspect_ai``'s trajectory cache (``plugins.petri_audit.runner.purge_inspect_cache``,
@@ -984,7 +989,10 @@ def _spawn_train_subprocess(
 # corrupt by running them out of order. They fan out concurrently via
 # ``asyncio.gather`` — each worker a SEPARATE ``train.py`` subprocess
 # (its own GEODE runtime, its own process-local audit lane, its own state
-# tree). The campaign's cross-worker concurrency is therefore purely
+# tree). Since PR-CAMPAIGN-CONCURRENT-CONTROL-ARMS (2026-06-04) the NEVER +
+# RANDOM cycles fan out in ONE shared ``gather`` (``run_control_arms_async``),
+# so the two control arms OVERLAP instead of running arm-by-arm — by default.
+# The campaign's cross-worker concurrency is therefore purely
 # orchestrator-level (the ``gather``); it does NOT depend on any in-process
 # GEODE singleton (the audit lane stays the subscription-safe per-process
 # ``max_concurrent=1`` — each worker runs exactly one audit, so that cap
@@ -1755,16 +1763,14 @@ async def run_control_arm_async(
     checkpoint: RunCheckpoint | None = None,
     campaign_transcript: Path | None = None,
 ) -> ControlArmFloor:
-    """Run a PATH-INDEPENDENT control arm's N cycles concurrently.
+    """Run ONE PATH-INDEPENDENT control arm's N cycles concurrently.
 
-    For the ``never`` and ``random`` arms ONLY: each cycle measures the SAME
-    frozen baseline (no keep/revert chain), so the N cycles fan out via
-    ``asyncio.gather`` — each an isolated ``GEODE_STATE_ROOT`` worker seeded from
-    the frozen snapshot, with the arm's ``GEODE_PROMOTE_POLICY`` (+ per-cycle
-    deterministic ``GEODE_PROMOTE_POLICY_SEED`` for ``random``). Then aggregates
-    the per-cycle held-out / fitness floor (mirroring
-    ``scripts/floor_aggregate.py``), filtering to successful cycles and logging
-    drops.
+    Thin single-arm wrapper over :func:`run_control_arms_async` (the multi-arm
+    orchestrator that, since PR-CAMPAIGN-CONCURRENT-CONTROL-ARMS, is the DEFAULT
+    control-arm path — it fans never+random out in ONE gather). Kept for the
+    single-arm caller / tests: it runs just this one arm's cycles, with the arm's
+    ``GEODE_PROMOTE_POLICY`` (+ per-cycle deterministic ``GEODE_PROMOTE_POLICY_SEED``
+    for ``random``), then aggregates the per-cycle held-out / fitness floor.
 
     NOT for the GATE arm — that is path-dependent (a promote mutates the champion
     + steers the next propose) and MUST stay the sequential :func:`run_arm`. This
@@ -1787,59 +1793,58 @@ async def run_control_arm_async(
         )
     if arm not in {"never", "random"}:
         raise ValueError(f"run_control_arm_async expects 'never' or 'random', got {arm!r}")
-    ckpt = checkpoint if checkpoint is not None else RunCheckpoint(run_id=None)
-    runner = runner_fn if runner_fn is not None else _spawn_train_subprocess_async
-    already_done = ckpt.completed_indices(arm)
-    pending = [cycle for cycle in range(1, n + 1) if cycle not in already_done]
-    if already_done:
-        progress.emit(
-            f"control arm '{arm}' (async): RESUME — {len(already_done)} cycle(s) already "
-            f"complete {sorted(already_done)}; re-running {len(pending)} missing {pending}"
-        )
-    fresh: list[WorkerOutcome] = []
-    if pending:
-        with tempfile.TemporaryDirectory(prefix=f"geode-{arm}-") as tmp:
-            roots_parent = workers_root if workers_root is not None else Path(tmp)
-            progress.emit(
-                f"control arm '{arm}' (index {arm_index}, async): fanning {len(pending)} isolated "
-                f"frozen-baseline cycles concurrently (dry_run={dry_run})"
-            )
-            fresh = list(
-                await asyncio.gather(
-                    *(
-                        _run_isolated_worker(
-                            index=cycle,
-                            group=arm,
-                            workers_root=roots_parent,
-                            snapshot_dir=snapshot_dir,
-                            promote_policy=arm,
-                            # random arm: deterministic per-(arm,cycle) seed so a
-                            # re-run reproduces the same random promote decisions.
-                            promote_policy_seed=(
-                                DEFAULT_RANDOM_SEED_BASE + arm_index * n + cycle
-                                if arm == "random"
-                                else None
-                            ),
-                            audit_max_samples=audit_max_samples,
-                            audit_max_connections=audit_max_connections,
-                            dry_run=dry_run,
-                            per_audit_timeout=per_audit_timeout,
-                            runner_fn=runner,
-                        )
-                        for cycle in pending
-                    )
-                )
-            )
-            # S6 — merge the per-cycle isolated transcripts into the campaign
-            # transcript while the tempdir is still alive.
-            if campaign_transcript is not None:
-                merged = merge_worker_transcripts(
-                    [o.transcript_path for o in fresh], campaign_transcript
-                )
-                progress.emit(
-                    f"control arm '{arm}' (async): merged {merged} per-cycle transcript "
-                    f"event(s) → {campaign_transcript}"
-                )
+    floors = await run_control_arms_async(
+        control_arms=[(arm, arm_index)],
+        n=n,
+        audit_max_samples=audit_max_samples,
+        audit_max_connections=audit_max_connections,
+        dry_run=dry_run,
+        progress=progress,
+        snapshot_dir=snapshot_dir,
+        per_audit_timeout=per_audit_timeout,
+        workers_root=workers_root,
+        runner_fn=runner_fn,
+        checkpoint=checkpoint,
+        campaign_transcript=campaign_transcript,
+    )
+    return floors[arm]
+
+
+def _control_cycle_seed(arm: str, arm_index: int, n: int, cycle: int) -> int | None:
+    """The deterministic ``GEODE_PROMOTE_POLICY_SEED`` for one control-arm cycle.
+
+    Reproducibility invariant (task #4): the random arm's per-cycle coin flip is
+    keyed on ``(arm_index, n, cycle)`` ONLY — never on wall-clock / dispatch order
+    — so a cycle's seed is byte-identical whether the never+random fan-out runs
+    the arms sequentially (legacy) or interleaved in one concurrent gather (the
+    new default). ``arm_index`` is the arm's position in the ORIGINAL ``arms``
+    sequence (``random`` → index 1 by default), so the formula matches the legacy
+    per-arm path exactly. Only the ``random`` arm seeds; ``never`` is unseeded.
+    """
+    if arm != "random":
+        return None
+    return DEFAULT_RANDOM_SEED_BASE + arm_index * n + cycle
+
+
+def _aggregate_control_floor(
+    *,
+    arm: str,
+    n: int,
+    fresh: Sequence[WorkerOutcome],
+    ckpt: RunCheckpoint,
+    progress: ProgressLog,
+) -> ControlArmFloor:
+    """Aggregate ONE control arm's per-cycle outcomes into its :class:`ControlArmFloor`.
+
+    The post-gather per-arm aggregation, factored out so the single-arm
+    (:func:`run_control_arm_async`) and the concurrent multi-arm
+    (:func:`run_control_arms_async`) paths compute the floor IDENTICALLY. ``fresh``
+    is only THIS arm's freshly-run outcomes (the multi-arm orchestrator partitions
+    the single gather's results by arm BEFORE calling this, so a ``never`` cycle is
+    never mixed into the ``random`` floor — attribution invariant #1). Records the
+    arm's ``ok`` cycles to its OWN checkpoint group, unions them with the cycles
+    resumed from a prior run (invariant #3), and bands the held-out / fitness floor.
+    """
     fresh_ok = [o for o in fresh if o.ok]
     dropped = [o for o in fresh if not o.ok]
     # Capture resumed cycles BEFORE recording the fresh ones (no double-count).
@@ -1866,6 +1871,153 @@ async def run_control_arm_async(
     )
     progress.emit(floor.summary())
     return floor
+
+
+async def run_control_arms_async(
+    *,
+    control_arms: Sequence[tuple[str, int]],
+    n: int,
+    audit_max_samples: int,
+    audit_max_connections: int,
+    dry_run: bool,
+    progress: ProgressLog,
+    snapshot_dir: Path = GEN0_SNAPSHOT_DIR,
+    per_audit_timeout: float | None = None,
+    workers_root: Path | None = None,
+    runner_fn: Any | None = None,
+    checkpoint: RunCheckpoint | None = None,
+    campaign_transcript: Path | None = None,
+) -> dict[str, ControlArmFloor]:
+    """Fan EVERY path-independent control arm's cycles out in ONE concurrent gather.
+
+    The DEFAULT control-arm orchestration (PR-CAMPAIGN-CONCURRENT-CONTROL-ARMS,
+    2026-06-04). ``control_arms`` is the list of ``(arm, arm_index)`` to run — the
+    ``never`` and ``random`` arms ONLY (``arm_index`` is each arm's position in the
+    original ``arms`` sequence, preserved so the random seed formula is unchanged —
+    invariant #4). Both arms are PATH-INDEPENDENT (every cycle measures the SAME
+    frozen baseline, no keep/revert chain), so ALL their pending cycles fan out
+    together via a SINGLE ``asyncio.gather`` — the two arms OVERLAP instead of
+    running arm-by-arm. With PAYG's unbounded fan-out this ~halves the control-arm
+    wall-clock (the two arms' cycles run concurrently, not back-to-back).
+
+    The GATE arm is PATH-DEPENDENT (a promote mutates the champion + steers the
+    next propose) and is NEVER routed here — it stays the sequential :func:`run_arm`.
+    This function raises ``ValueError`` if asked to run ``gate`` so the invariant
+    cannot be violated by a mis-call.
+
+    INVARIANTS (each verified by ``tests/test_run_campaign.py``):
+
+    * Attribution (#1): each cycle task is tagged with its arm; the gather's flat
+      result list is PARTITIONED back by arm before aggregation, so a ``never``
+      cycle never lands in the ``random`` floor (and vice-versa).
+    * Promote policy (#2): each task's env carries ITS arm's
+      ``GEODE_PROMOTE_POLICY`` + (random only) the per-cycle seed — built per task
+      via :func:`_build_worker_env`, so the interleaved fan-out sets each worker's
+      policy by its OWN arm.
+    * Resume (#3): pending cycles are filtered per arm against ITS checkpoint group
+      (``ckpt.completed_indices(arm)``); aggregation records + resumes per arm. A
+      resumed run re-runs only the missing cycles of each arm, never cross-attributed.
+    * Reproducibility (#4): the random seed is :func:`_control_cycle_seed` —
+      ``(arm_index, n, cycle)``-keyed, order-independent.
+    * Transcript isolation (#5): each arm's cycle workers live under their OWN
+      subtree (``<roots_parent>/<arm>/w{cycle}``) so a ``never`` cycle and a
+      ``random`` cycle with the SAME index never collide on a worker root /
+      transcript file. The per-worker transcripts are merged into the one campaign
+      transcript after the gather.
+
+    Returns ``{arm: ControlArmFloor}`` for every arm in ``control_arms``.
+    """
+    arm_names = [arm for arm, _ in control_arms]
+    bad = [arm for arm in arm_names if arm == "gate"]
+    if bad:
+        raise ValueError(
+            "run_control_arms_async refuses the GATE arm — it is path-dependent "
+            "(promote mutates the champion chain) and MUST stay sequential (run_arm)"
+        )
+    unknown = [arm for arm in arm_names if arm not in {"never", "random"}]
+    if unknown:
+        raise ValueError(
+            f"run_control_arms_async expects 'never'/'random' arms, got unknown {unknown}"
+        )
+    ckpt = checkpoint if checkpoint is not None else RunCheckpoint(run_id=None)
+    runner = runner_fn if runner_fn is not None else _spawn_train_subprocess_async
+
+    # Per arm: the cycles still pending after subtracting the checkpoint's completed
+    # set (invariant #3 — a resume re-runs only the missing cycles of EACH arm).
+    pending_by_arm: dict[str, list[int]] = {}
+    for arm, _arm_index in control_arms:
+        already_done = ckpt.completed_indices(arm)
+        pending = [cycle for cycle in range(1, n + 1) if cycle not in already_done]
+        pending_by_arm[arm] = pending
+        if already_done:
+            progress.emit(
+                f"control arm '{arm}' (async): RESUME — {len(already_done)} cycle(s) already "
+                f"complete {sorted(already_done)}; re-running {len(pending)} missing {pending}"
+            )
+
+    # One flat task list across ALL control arms, each task paired with its arm so
+    # the gather's flat result can be partitioned back (attribution invariant #1).
+    fresh_by_arm: dict[str, list[WorkerOutcome]] = {arm: [] for arm, _ in control_arms}
+    total_pending = sum(len(p) for p in pending_by_arm.values())
+    if total_pending:
+        with tempfile.TemporaryDirectory(prefix="geode-control-") as tmp:
+            roots_parent = workers_root if workers_root is not None else Path(tmp)
+            progress.emit(
+                "control arms (async): SINGLE concurrent fan-out over "
+                f"{[(arm, len(pending_by_arm[arm])) for arm, _ in control_arms]} "
+                f"({total_pending} isolated frozen-baseline cycles, dry_run={dry_run})"
+            )
+            # ``arm_of_task[i]`` records which arm task ``i`` belongs to — the gather
+            # preserves input order, so this list re-attributes each flat result.
+            arm_of_task: list[str] = []
+            coros = []
+            for arm, arm_index in control_arms:
+                # Each arm's cycle workers get their OWN subtree so a never-cycle and
+                # a random-cycle with the SAME index never collide (invariant #5).
+                arm_root = roots_parent / arm
+                for cycle in pending_by_arm[arm]:
+                    arm_of_task.append(arm)
+                    coros.append(
+                        _run_isolated_worker(
+                            index=cycle,
+                            group=arm,
+                            workers_root=arm_root,
+                            snapshot_dir=snapshot_dir,
+                            promote_policy=arm,
+                            promote_policy_seed=_control_cycle_seed(arm, arm_index, n, cycle),
+                            audit_max_samples=audit_max_samples,
+                            audit_max_connections=audit_max_connections,
+                            dry_run=dry_run,
+                            per_audit_timeout=per_audit_timeout,
+                            runner_fn=runner,
+                        )
+                    )
+            outcomes = list(await asyncio.gather(*coros))
+            # Partition the flat result back by arm (attribution invariant #1).
+            for task_arm, outcome in zip(arm_of_task, outcomes, strict=True):
+                fresh_by_arm[task_arm].append(outcome)
+            # S6 — merge ALL arms' per-cycle isolated transcripts into the campaign
+            # transcript while the tempdir is still alive (one merge for the gather).
+            if campaign_transcript is not None:
+                merged = merge_worker_transcripts(
+                    [o.transcript_path for outcomes in fresh_by_arm.values() for o in outcomes],
+                    campaign_transcript,
+                )
+                progress.emit(
+                    f"control arms (async): merged {merged} per-cycle transcript "
+                    f"event(s) → {campaign_transcript}"
+                )
+
+    return {
+        arm: _aggregate_control_floor(
+            arm=arm,
+            n=n,
+            fresh=fresh_by_arm[arm],
+            ckpt=ckpt,
+            progress=progress,
+        )
+        for arm, _ in control_arms
+    }
 
 
 # ---------------------------------------------------------------------------
@@ -2177,9 +2329,15 @@ def run_campaign(
     """Run the full campaign: gen-0 K-repeat baseline → snapshot → 3-arm loop.
 
     Returns a dict with the noise band + per-arm summaries (for tests + an
-    end-of-run digest). Arms run in the order given (``never → random → gate`` by
-    default, gate LAST). The injected ``train_runner`` / ``runner_factory`` /
-    ``guard_fn`` keep the whole thing unit-testable with NO live audit.
+    end-of-run digest). On the real async-first path the PATH-INDEPENDENT control
+    arms (``never`` + ``random``) run CONCURRENTLY in ONE fan-out by default
+    (PR-CAMPAIGN-CONCURRENT-CONTROL-ARMS, 2026-06-04) — they overlap instead of
+    running arm-by-arm — and the PATH-DEPENDENT ``gate`` arm runs LAST and
+    sequentially. The legacy dry-run / injected-runner path keeps the original
+    sequential ``never → random → gate`` order. Either way the returned
+    ``arm_summaries`` are emitted in the ORIGINAL ``arms`` order. The injected
+    ``train_runner`` / ``runner_factory`` / ``guard_fn`` keep the whole thing
+    unit-testable with NO live audit.
     """
     _validate_arms(arms)
     with ProgressLog(progress_path) as progress:
@@ -2234,7 +2392,16 @@ def run_campaign(
         # path, so this wiring changes ONLY the real-campaign behaviour.
         use_async = async_first and not dry_run and train_runner is None and runner_factory is None
         per_audit_timeout = _resolve_per_audit_timeout() if use_async else None
-        ckpt = RunCheckpoint(run_id=f"campaign-n{n}-k{k}-{'-'.join(arms)}") if use_async else None
+        # ``.load()`` the persisted marker (Codex MCP HIGH): a resumed campaign
+        # process must REHYDRATE which gen-0 / never / random cycles already
+        # completed, else ``completed_indices`` is empty for every group and the
+        # whole fan-out re-runs (re-paying for already-measured cycles). A missing /
+        # corrupt marker loads to an empty (fresh-run) checkpoint, never raises.
+        ckpt = (
+            RunCheckpoint(run_id=f"campaign-n{n}-k{k}-{'-'.join(arms)}").load()
+            if use_async
+            else None
+        )
         campaign_transcript = (
             (CAMPAIGN_RUNS_DIR / "campaign-transcript.jsonl") if use_async else None
         )
@@ -2242,8 +2409,8 @@ def run_campaign(
         if use_async:
             progress.emit(
                 f"async-first: concurrent subprocess fan-out — per_audit_timeout="
-                f"{per_audit_timeout}s run_id={ckpt.run_id if ckpt else None}; gen-0 K + "
-                "never/random parallel, gate sequential"
+                f"{per_audit_timeout}s run_id={ckpt.run_id if ckpt else None}; gen-0 K "
+                "parallel, then never+random in ONE shared concurrent gather, gate sequential"
             )
             # gen-0 workers seed from a snapshot of the CURRENT frozen scaffold, so
             # snapshot BEFORE the async gen-0 (the arms re-seed from the post-K-mean
@@ -2275,16 +2442,29 @@ def run_campaign(
         # against) — this is the matched reset every arm restores from.
         snapshot_written = snapshot_sot(snapshot_dir)
         progress.emit(f"gen-0 SoT snapshot: {len(snapshot_written)} files → {snapshot_dir}")
-        arm_summaries: list[ArmSummary] = []
+        # Per-arm summaries keyed by arm so the control fan-out + the sequential gate
+        # write into the SAME map regardless of dispatch order; emitted at the end in
+        # the ORIGINAL ``arms`` order (digest stability).
+        summary_by_arm: dict[str, ArmSummary] = {}
         control_floors: list[ControlArmFloor] = []
         halted = False
-        for arm_index, arm in enumerate(arms):
-            if use_async and arm in ("never", "random"):
-                # PATH-INDEPENDENT control arm → concurrent isolated subprocesses.
-                floor = asyncio.run(
-                    run_control_arm_async(
-                        arm=arm,
-                        arm_index=arm_index,
+        # PR-CAMPAIGN-CONCURRENT-CONTROL-ARMS (2026-06-04) — the PATH-INDEPENDENT
+        # control arms (``never`` + ``random``) now fan out in ONE concurrent
+        # ``asyncio.gather`` BY DEFAULT: every ``never`` cycle and every ``random``
+        # cycle measure the SAME frozen baseline, so they OVERLAP instead of running
+        # arm-by-arm (with PAYG's unbounded fan-out this ~halves the control-arm
+        # wall-clock). Each arm keeps its ORIGINAL ``arm_index`` (its position in
+        # ``arms``) so the random seed formula is byte-identical (invariant #4). The
+        # GATE arm is PATH-DEPENDENT (a promote mutates the champion chain) and stays
+        # on the sequential ``run_arm`` path below — never routed through the fan-out.
+        if use_async:
+            control_arms = [
+                (arm, arm_index) for arm_index, arm in enumerate(arms) if arm in ("never", "random")
+            ]
+            if control_arms:
+                floors_by_arm = asyncio.run(
+                    run_control_arms_async(
+                        control_arms=control_arms,
                         n=n,
                         audit_max_samples=audit_max_samples,
                         audit_max_connections=audit_max_connections,
@@ -2296,22 +2476,26 @@ def run_campaign(
                         campaign_transcript=campaign_transcript,
                     )
                 )
-                control_floors.append(floor)
-                # Adapt the held-out FLOOR to the ArmSummary digest shape — a control
-                # arm never promotes (its evidence is ``held_out_band``, preserved in
-                # ``control_floors``); cycles_run/skipped map from ok/dropped.
-                arm_summaries.append(
-                    ArmSummary(
+                for arm, _arm_index in control_arms:
+                    floor = floors_by_arm[arm]
+                    control_floors.append(floor)
+                    # Adapt the held-out FLOOR to the ArmSummary digest shape — a
+                    # control arm never promotes (its evidence is ``held_out_band``,
+                    # preserved in ``control_floors``); cycles_run/skipped map from
+                    # ok/dropped.
+                    summary_by_arm[arm] = ArmSummary(
                         arm=arm,
                         cycles_run=floor.cycles_ok,
                         cycles_skipped=floor.cycles_dropped,
                         promotes=0,
                         halted=False,
                     )
-                )
-                progress.emit(floor.summary())
+        for arm_index, arm in enumerate(arms):
+            # Control arms already ran in the concurrent fan-out above (async path).
+            if use_async and arm in ("never", "random"):
                 continue
-            # GATE (path-dependent champion chain) — or any arm on the sync path.
+            # GATE (path-dependent champion chain) — or any arm on the sync path
+            # (dry-run smoke / injected runner: never + random + gate all sequential).
             summary = run_arm(
                 arm=arm,
                 arm_index=arm_index,
@@ -2325,7 +2509,7 @@ def run_campaign(
                 runner_factory=runner_factory,
                 guard_fn=guard_fn,
             )
-            arm_summaries.append(summary)
+            summary_by_arm[arm] = summary
             if summary.halted:
                 # A degenerate audit signals a broken setup — stop the WHOLE
                 # campaign (not just this arm) so a broken setup never burns the
@@ -2333,6 +2517,11 @@ def run_campaign(
                 progress.emit(f"campaign HALT: arm '{arm}' degenerate — stopping remaining arms")
                 halted = True
                 break
+        # Emit summaries in the ORIGINAL ``arms`` order (an arm absent because the
+        # sequential path HALTed before reaching it is simply omitted).
+        arm_summaries: list[ArmSummary] = [
+            summary_by_arm[arm] for arm in arms if arm in summary_by_arm
+        ]
         progress.emit("campaign complete" if not halted else "campaign halted")
         return {
             "noise_band": band,
