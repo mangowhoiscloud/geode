@@ -628,18 +628,68 @@ def _t_glossary_terms() -> tuple[tuple[str, str], ...]:
     return val  # type: ignore[return-value]
 
 
+# Below this nominal ``font_size`` (in Manim font-size units) the EN
+# Helvetica Neue render is shaped at the kern-safe supersample size below
+# and scaled down. See ``_make_text``.
+_KERN_SUPERSAMPLE_BELOW = 24
+# Nominal font_size Pango shapes Helvetica Neue at when supersampling. At
+# this size the per-glyph advance rounding that produces the mid-word drift
+# is amortised away; the mobject is then scaled back to the requested
+# visual size. Empirically drift-free for the words in the noise audit
+# catalogue ("champion-chain", "discriminating", "generation", …).
+_KERN_SUPERSAMPLE_PX = 48
+
+
 def _make_text(text: str, **kw) -> Text:
     """Construct a Text mobject with consistent font + weight so kerning
     stays uniform across every label in the video (no Petri-zone visual
     drift). Pango picks the ``Regular`` face of the requested family
     when no other weight is in scope; we lock that explicitly via
     ``weight=NORMAL`` so a stray heavier metric doesn't slip in.
+
+    Sub-pixel kerning drift (the "champio n-chain" / "g eneratio n" /
+    "do minating" word-break drift catalogued as category 3 in
+    [[viz-frame-audit]]) is a Helvetica Neue + Pango macOS artifact: at the
+    small ``font_size`` the labels and the wrapped ``*_detail`` paragraphs
+    use, Pango rounds the per-glyph advances to the pixel grid in a way
+    that accumulates into visible mid-word gaps. The drift is
+    font-size-dependent and non-monotonic (worst around 15-18, clean at
+    13 / 20+) and does NOT affect KO Pretendard.
+
+    Fix the SHARED render path once: for EN below
+    ``_KERN_SUPERSAMPLE_BELOW``, shape the glyphs at the drift-free
+    ``_KERN_SUPERSAMPLE_PX`` and scale the resulting vector mobject down to
+    the requested visual size. Visual height is preserved exactly and the
+    glyph advances come out at their correct (non-drifted) spacing, so
+    every word — including hyphenated ones like ``champion-chain`` — stays
+    intact. Large EN titles (font_size >= ``_KERN_SUPERSAMPLE_BELOW``) and
+    all KO text are already drift-free and render at their nominal size.
     """
     font = kw.pop("font", None)
     if font is None:
         font = KOR_FONT if LANG == "ko" else EN_FONT
     kw.setdefault("color", COLOR_TEXT)
     kw.setdefault("weight", NORMAL)
+
+    font_size = kw.pop("font_size", None)
+    is_en = font == EN_FONT
+    # ``width`` / ``height`` ask Manim to rescale the mobject to an explicit
+    # size after construction, so the nominal ``font_size`` no longer governs
+    # the rendered glyph size (and the supersample-then-scale would compound
+    # on top of that explicit rescale). Such callers control geometry
+    # directly, so leave them on the plain path.
+    explicit_size = "width" in kw or "height" in kw
+    if (
+        is_en
+        and font_size is not None
+        and font_size < _KERN_SUPERSAMPLE_BELOW
+        and not explicit_size
+    ):
+        mobj = Text(text, font=font, font_size=_KERN_SUPERSAMPLE_PX, **kw)
+        mobj.scale(font_size / _KERN_SUPERSAMPLE_PX)
+        return mobj
+    if font_size is not None:
+        kw["font_size"] = font_size
     return Text(text, font=font, **kw)
 
 

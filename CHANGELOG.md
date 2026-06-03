@@ -45,6 +45,68 @@ functional change.
 
 ---
 
+## [0.99.132] - 2026-06-03
+
+### Fixed
+- **Hero viz: detail-paragraph word-break drift in the shared `_make_text` render path.**
+  Small-font EN labels and wrapped detail paragraphs (rubric dim lists at `font_size=11`,
+  the dict-literal boxes at `10`, the glossary at `12/14`, and every `*_detail` paragraph the
+  in-flight reframe adds via `_wrap` → `_make_text`) showed mid-word splits with spurious
+  internal spaces — "champio n-chain", "do minating", "g eneratio n", "discrimi nating". Root
+  cause is a Helvetica Neue + Pango macOS sub-pixel artifact: at small `font_size` Pango rounds
+  the per-glyph advances to the pixel grid in a way that accumulates into visible gaps. The drift
+  is font-size-dependent and non-monotonic (worst ~15-18, clean at 13 / 20+) and does NOT affect
+  KO Pretendard. Fixed once at the shared entry point: `_make_text` now shapes EN text below
+  `_KERN_SUPERSAMPLE_BELOW=24` at the drift-free `_KERN_SUPERSAMPLE_PX=48` and scales the vector
+  mobject down to the requested visual size — visual height is preserved exactly and glyph advances
+  come out at their correct (non-drifted) spacing, so every word (including hyphenated ones like
+  `champion-chain`) stays intact. Large titles (`font_size >= 24`) and all KO text are already
+  drift-free and render at their nominal size. Layout-ratchet baseline (`layout_baseline.json`) and
+  the 8 affected frame-ratchet baselines re-recorded; HarfBuzz glyph-cluster fingerprints unchanged
+  (the fix is purely at the Manim render layer). (`scripts/visualizations/geode_hero.py`)
+## [0.99.131] - 2026-06-03
+
+### Added
+- **Contract-based eval layer — deterministic tool-call contracts + promote-gate veto.** A discrete
+  PASS / FAIL ledger that sits OUTSIDE the LLM-judge fitness aggregate (so a binary behavioural
+  failure cannot be averaged away by strong dims — the saturation lesson from the removed
+  `verbose_padding` / `redundant_tool_invocation` analytics dims). Three contracts ship in the new
+  `core/audit/contracts.py` (`core` layer, alongside `dim_extractor.py`; `lint-imports`-clean — no
+  `core → plugins` edge):
+  - `required_tool_path` (hard) — the seed's `contract.required_tool_path` tools must ALL be invoked
+    by the target; `skipped` when the seed declares no contract block (every existing seed keeps
+    passing).
+  - `args_shape_valid` (hard) — each target tool call must carry the `create_tool` schema's top-level
+    `required` keys and match declared scalar `type`s; un-parseable args → `indeterminate` (never a
+    false `fail`). SCOPE is deliberately narrow (top-level required-presence + scalar type drift only,
+    no jsonschema dep).
+  - `claim_grounded` (soft, hard=False) — forward-stable STUB this release (`status="not_evaluated"`);
+    the full structured-judge implementation + seed-generation emission of the `contract` block are a
+    follow-up PR.
+  - Parser honours the verified empirical finding: the target emits tool calls as TEXT
+    (`TOOL_CALL: name(args)` in `message.content`), never structured; tool SCHEMAS come from the
+    auditor's `create_tool` ToolEvents (resolving the `attachment://<sha>` indirection); auditor /
+    judge structured calls are excluded by `role == "target"`. `extract_contract_results` is a
+    graceful no-op (`[]`) on missing `inspect_ai` / missing / unreadable archive (mirrors
+    `dim_extractor`).
+- **Contract ledger persistence.** The verdict is written verbatim (NOT averaged) to two homes: the
+  committable summary YAML (`plugins/petri_audit/eval_archive.py:extract_summary` → `contract_results`
+  key), and the per-cycle `mutations.jsonl` attribution row
+  (`core/self_improving/loop/attribution.py:AttributionRecord.contract_results`, threaded through
+  `compute_attribution` / `write_attribution`; the attribution row is the post-audit home because the
+  apply row is written before the audit exists). `core/self_improving/train.py:run_audit` threads the
+  ledger out of its return tuple (now 8-tuple) alongside the dim aggregates, read from the same
+  `.eval` archive, and passes it to `write_attribution`. `ApplyRecord` also carries a forward-stable
+  typed `contract_results` field + `append_audit_log(contract_results=…)` param for any caller that
+  has the verdict at apply time.
+- **Promote-gate hard-contract veto.** `core/self_improving/train.py:_should_promote` takes a new
+  `contract_veto` arg; a non-empty tuple is a BINARY REJECT regardless of the fitness gain, checked
+  FIRST — before BOTH the bootstrap (no-baseline) branch and the critical-axis `gated == 0.0` gate —
+  so a hard-contract failure also blocks a fresh first audit from becoming the baseline. The gate arm
+  wires `contract_veto=_hard_contract_violations(contract_results)`, which selects the `hard` +
+  `status == "fail"` rows (`claim_grounded` is hard=False → never vetoes). `None` (the default, and
+  every control arm / manual audit) is byte-identical to the prior gate.
+
 ## [0.99.130] - 2026-06-03
 
 ### Fixed

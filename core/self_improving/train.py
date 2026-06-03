@@ -1444,11 +1444,19 @@ def run_audit(
     dict[str, int],
     dict[str, str],
     list[dict[str, float]],
+    list[dict[str, Any]],
 ]:
     """Invoke a single audit.
 
     Returns ``(dim_means, dim_stderr, audit_seconds, total_seconds,
-    sample_count, measurement_modality, per_sample)``.
+    sample_count, measurement_modality, per_sample, contract_results)``.
+
+    PR-CONTRACT-EVAL (2026-06-03) — the 8th element ``contract_results`` is the
+    deterministic tool-call contract ledger
+    (``core.audit.contracts.extract_contract_results``) read from this audit's
+    ``.eval`` archive. The caller threads it into the promote-gate veto
+    (``_hard_contract_violations`` → ``_should_promote(contract_veto=…)``).
+    Empty list on dry-run / archive-missing / no-inspect_ai.
 
     PR-MARGIN-FITNESS-SCALE (2026-05-30) — the 7th element ``per_sample``
     is the sample-indexed dim-value rows (``list[{dim: value}]``) emitted
@@ -1511,7 +1519,9 @@ def run_audit(
         # ``sample_count`` and ``measurement_modality`` are empty for the
         # same reason: synthesised numbers have no provenance. ``per_sample``
         # is empty — dry-run has no real per-sample rows to bootstrap from.
-        return dim_means, {}, audit_seconds, total_seconds, {}, {}, []
+        # ``contract_results`` is empty — no real ``.eval`` is produced, so
+        # there are no tool-call contracts to evaluate (PR-CONTRACT-EVAL).
+        return dim_means, {}, audit_seconds, total_seconds, {}, {}, [], []
 
     if not WRAPPER_OVERRIDE_HOOK_READY:
         raise RuntimeError(
@@ -1619,6 +1629,7 @@ def _finalize_audit_result(
     dict[str, int],
     dict[str, str],
     list[dict[str, float]],
+    list[dict[str, Any]],
 ]:
     """Audit post-processing, factored out of :func:`run_audit`.
 
@@ -1627,9 +1638,15 @@ def _finalize_audit_result(
     ``RUN_LOG`` write, the
     non-zero-exit ``subprocess_failed`` event + ``RuntimeError`` raise, and the
     eval-log archive extraction (with stdout-JSON fallback). Returns the SAME
-    7-tuple both callers expose:
+    8-tuple both callers expose:
     ``(dim_means, dim_stderr, audit_seconds, total_seconds, sample_count,
-    measurement_modality, per_sample)``.
+    measurement_modality, per_sample, contract_results)``.
+
+    PR-CONTRACT-EVAL (2026-06-03) — the 8th element ``contract_results`` is the
+    deterministic tool-call contract ledger
+    (``core.audit.contracts.extract_contract_results``), read from the SAME
+    ``.eval`` archive the dim aggregates come from. ``[]`` on dry-run /
+    archive-missing / no-inspect_ai (graceful no-op).
     """
     _emit_journal(
         session_id,
@@ -1686,6 +1703,11 @@ def _finalize_audit_result(
     sample_count: dict[str, int] = {}
     measurement_modality: dict[str, str] = {}
     per_sample: list[dict[str, float]] = []
+    # PR-CONTRACT-EVAL (2026-06-03) — deterministic tool-call contract ledger,
+    # read from the SAME archive as the dim aggregates. Graceful ``[]`` when the
+    # archive is absent / unreadable / inspect_ai missing (the extractor never
+    # raises). A NON-empty ledger feeds the promote-gate veto downstream.
+    contract_results: list[dict[str, Any]] = []
 
     # Per-worker isolation (Codex MCP HIGH): prefer THIS audit's OWN eval, parsed
     # from its stdout ``Log: <path>.eval`` line, over the global ``latest.eval``
@@ -1716,6 +1738,21 @@ def _finalize_audit_result(
         except Exception as exc:
             log.warning(
                 "eval archive extract failed at %s (%s); falling back to stdout JSON",
+                archive_path_str,
+                exc,
+                exc_info=True,
+            )
+        # PR-CONTRACT-EVAL (2026-06-03) — read the contract ledger from the same
+        # archive. Independent of the dim-aggregate try-block above so a
+        # dim-extract failure does not suppress the contract verdict (and vice
+        # versa); the extractor is itself graceful (returns ``[]``, never raises).
+        try:
+            from core.audit.contracts import extract_contract_results
+
+            contract_results = extract_contract_results(Path(archive_path_str))
+        except Exception as exc:
+            log.warning(
+                "contract extract failed at %s (%s); contract ledger empty",
                 archive_path_str,
                 exc,
                 exc_info=True,
@@ -1753,6 +1790,7 @@ def _finalize_audit_result(
         sample_count,
         measurement_modality,
         per_sample,
+        contract_results,
     )
 
 
@@ -1827,6 +1865,7 @@ def score_held_out_bench(
             _sample_count,
             held_out_modality,
             _per_sample,
+            _contract_results,
         ) = run_audit(dry_run, session_id=session_id, gen_tag=gen_tag)
     finally:
         if _prior_override is None:
@@ -3665,6 +3704,23 @@ def _apply_rollback_condition_gate(
     return ok, reason
 
 
+def _hard_contract_violations(results: list[dict[str, Any]]) -> tuple[str, ...]:
+    """The ``contract_id``s of the HARD contracts that FAILed this audit.
+
+    PR-CONTRACT-EVAL (2026-06-03) — the promote-gate veto key. Selects rows
+    that are BOTH ``hard`` (veto-eligible) AND ``status == "fail"`` from the
+    contract ledger (``core.audit.contracts.extract_contract_results`` output).
+    ``claim_grounded`` is hard=False so it never appears here; ``skipped`` /
+    ``indeterminate`` / ``not_evaluated`` rows are never vetoes. Empty tuple
+    (no hard failure) → ``_should_promote`` runs unchanged.
+    """
+    return tuple(
+        str(row["contract_id"])
+        for row in results
+        if row.get("hard") and row.get("status") == "fail"
+    )
+
+
 def _should_promote(
     current_means: dict[str, float],
     current_stderr: dict[str, float],
@@ -3721,11 +3777,25 @@ def _should_promote(
     # aggregate gate (preserves every existing test + the never/random control
     # arms, which never set it).
     targeted_dims: frozenset[str] | None = None,
+    # PR-CONTRACT-EVAL (2026-06-03) — the hard tool-call contracts that FAILed
+    # this audit (``core.audit.contracts`` → ``_hard_contract_violations``). A
+    # non-empty tuple is a BINARY VETO: the audit is rejected regardless of the
+    # fitness gain. It runs FIRST — before BOTH the bootstrap (no-baseline) branch
+    # AND the critical-axis ``gated == 0.0`` strict-reject — so a hard-contract
+    # failure also blocks a fresh first audit from becoming the baseline. ``None``
+    # / empty (default, and every control arm / manual audit) → no veto,
+    # byte-identical to the prior gate. ``claim_grounded`` is hard=False so it
+    # never appears here.
+    contract_veto: tuple[str, ...] | None = None,
 ) -> tuple[bool, str]:
     """Decide whether the current audit should replace the baseline.
 
     Rules (plan settled decision #8 + PR-3 of petri-schema-v2):
 
+    0. Hard tool-call contract VETO (PR-CONTRACT-EVAL, 2026-06-03) — a failed
+       hard contract (``contract_veto`` non-empty) is a binary reject, checked
+       FIRST so it also blocks a fresh first audit (rule 1's bootstrap path)
+       and never reaches the margin math (rule 3).
     1. No prior baseline → always promote (bootstrap first valid run).
     2. Critical-axis regression (gated fitness collapses to 0.0) →
        reject. This re-uses the strict-reject gate inside
@@ -3760,6 +3830,14 @@ def _should_promote(
 
     Returns ``(should_promote, reason)`` for caller logging.
     """
+    # PR-CONTRACT-EVAL (2026-06-03) — hard tool-call contract VETO, checked
+    # FIRST. A failed hard contract (``required_tool_path`` / ``args_shape_valid``)
+    # is a discrete behavioural failure that no continuous-dim improvement should
+    # average away — and it must also block a fresh first audit (no baseline yet)
+    # from becoming the permanent baseline, so it runs BEFORE the bootstrap branch
+    # below, not just before the critical-axis ``gated == 0.0`` gate.
+    if contract_veto:
+        return False, f"hard-contract violation ({','.join(contract_veto)})"
     if baseline_means is None or baseline_stderr is None:
         # PR-L8 (2026-05-26) — bootstrap gate. Fresh-start auto-promote
         # was too permissive: a broken first audit (truncated subprocess
@@ -4386,6 +4464,10 @@ def main() -> int:
     sample_count: dict[str, int] = {}
     measurement_modality: dict[str, str] = {}
     per_sample: list[dict[str, float]] = []
+    # PR-CONTRACT-EVAL (2026-06-03) — the LAST replicate's contract ledger feeds
+    # the promote-gate veto (same "last replicate wins" convention as dim_means
+    # above). Empty list on dry-run / archive-missing → no veto (graceful).
+    contract_results: list[dict[str, Any]] = []
     try:
         for _replicate_idx in range(audit_replicate):
             (
@@ -4396,6 +4478,7 @@ def main() -> int:
                 sample_count,
                 measurement_modality,
                 per_sample,
+                contract_results,
             ) = run_audit(
                 dry_run=args.dry_run,
                 session_id=session_id,
@@ -5042,6 +5125,12 @@ def main() -> int:
             # on this surface instead of the diluted 24-dim aggregate; None for the
             # control arms / manual audits (env unset) → v1 aggregate gate.
             targeted_dims=_resolve_targeted_dims(),
+            # PR-CONTRACT-EVAL (2026-06-03) — hard tool-call contract veto from
+            # THIS audit's ledger (``contract_results``, last replicate). A
+            # failed hard contract rejects regardless of the fitness gain.
+            # Empty tuple (no hard failure / dry-run / archive-missing) → no
+            # veto, unchanged gate.
+            contract_veto=_hard_contract_violations(contract_results),
         )
         # PR-SIL-MULTIOBJ A2 (2026-05-29) — secondary reject gate. The
         # mutator's own ``rollback_condition`` predicate (propagated via
@@ -5212,6 +5301,12 @@ def main() -> int:
                 # row (prompt_hash + applied_diff + sampling_params + rng_seed). The
                 # bundle is None-omitting so a no-pin cycle keeps the legacy shape.
                 run_provenance=_e5_run_provenance,
+                # PR-CONTRACT-EVAL (2026-06-03) — this cycle's tool-call contract
+                # ledger (the LAST replicate's ``contract_results``). The
+                # attribution row is the per-cycle ``mutations.jsonl`` home of the
+                # ledger (the apply row predates the audit). Omitted when empty
+                # (dry-run / archive-missing) → legacy row shape preserved.
+                contract_results=contract_results,
             )
         except Exception:  # pragma: no cover — defensive
             log.warning(

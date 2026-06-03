@@ -8009,8 +8009,8 @@
       ],
       "height": 0.141,
       "ratio_h": 0.282,
-      "ratio_w": 0.3728,
-      "width": 0.3914
+      "ratio_w": 0.3787,
+      "width": 0.3976
     },
     "agent_evolver": {
       "glyph_clusters": [
@@ -8045,8 +8045,8 @@
       ],
       "height": 0.141,
       "ratio_h": 0.282,
-      "ratio_w": 0.5789,
-      "width": 0.6078
+      "ratio_w": 0.5967,
+      "width": 0.6265
     },
     "agent_generator": {
       "glyph_clusters": [
@@ -8089,8 +8089,8 @@
       ],
       "height": 0.1713,
       "ratio_h": 0.3426,
-      "ratio_w": 0.7217,
-      "width": 0.7578
+      "ratio_w": 0.7772,
+      "width": 0.8161
     },
     "agent_meta_reviewer": {
       "glyph_clusters": [
@@ -8149,8 +8149,8 @@
       ],
       "height": 0.1629,
       "ratio_h": 0.3258,
-      "ratio_w": 0.8588,
-      "width": 1.2023
+      "ratio_w": 0.8811,
+      "width": 1.2336
     },
     "agent_pilot": {
       "glyph_clusters": [
@@ -8176,9 +8176,9 @@
         ]
       ],
       "height": 0.1771,
-      "ratio_h": 0.3543,
-      "ratio_w": 0.3261,
-      "width": 0.3424
+      "ratio_h": 0.3542,
+      "ratio_w": 0.3459,
+      "width": 0.3632
     },
     "agent_proximity": {
       "glyph_clusters": [
@@ -8221,8 +8221,8 @@
       ],
       "height": 0.1791,
       "ratio_h": 0.3582,
-      "ratio_w": 0.6977,
-      "width": 0.7326
+      "ratio_w": 0.7453,
+      "width": 0.7826
     },
     "agent_ranker": {
       "glyph_clusters": [
@@ -8253,8 +8253,8 @@
       ],
       "height": 0.141,
       "ratio_h": 0.282,
-      "ratio_w": 0.479,
-      "width": 0.5029
+      "ratio_w": 0.4948,
+      "width": 0.5196
     },
     "baseline_json": {
       "glyph_clusters": [
@@ -8312,9 +8312,9 @@
         ]
       ],
       "height": 0.1771,
-      "ratio_h": 0.3543,
-      "ratio_w": 0.4511,
-      "width": 1.0826
+      "ratio_h": 0.3542,
+      "ratio_w": 0.4658,
+      "width": 1.118
     },
     "coldopen_brand": {
       "glyph_clusters": [
@@ -9196,9 +9196,9 @@
         ]
       ],
       "height": 0.1289,
-      "ratio_h": 0.2865,
-      "ratio_w": 0.7308,
-      "width": 2.4846
+      "ratio_h": 0.2864,
+      "ratio_w": 0.7026,
+      "width": 2.3888
     },
     "dim_stderr_dict": {
       "glyph_clusters": [
@@ -9352,9 +9352,9 @@
         ]
       ],
       "height": 0.1289,
-      "ratio_h": 0.2865,
-      "ratio_w": 0.7308,
-      "width": 2.4846
+      "ratio_h": 0.2864,
+      "ratio_w": 0.6873,
+      "width": 2.3367
     },
     "fitness_formula": {
       "glyph_clusters": [
@@ -9579,10 +9579,10 @@
           416
         ]
       ],
-      "height": 0.1938,
-      "ratio_h": 0.3875,
-      "ratio_w": 0.7395,
-      "width": 4.4367
+      "height": 0.1937,
+      "ratio_h": 0.3874,
+      "ratio_w": 0.7186,
+      "width": 4.3116
     },
     "fork_attribution_label": {
       "glyph_clusters": [
@@ -10401,8 +10401,8 @@
       ],
       "height": 0.2277,
       "ratio_h": 0.2277,
-      "ratio_w": 0.3702,
-      "width": 1.1105
+      "ratio_w": 0.3431,
+      "width": 1.0292
     }
   },
   "ko": {
@@ -18487,8 +18487,8 @@
       ],
       "height": 0.141,
       "ratio_h": 0.282,
-      "ratio_w": 0.3728,
-      "width": 0.3914
+      "ratio_w": 0.3787,
+      "width": 0.3976
     },
     "agent_evolver": {
       "glyph_clusters": [
@@ -18523,8 +18523,8 @@
       ],
       "height": 0.141,
       "ratio_h": 0.282,
-      "ratio_w": 0.5789,
-      "width": 0.6078
+      "ratio_w": 0.5967,
+      "width": 0.6265
     },
     "agent_generator": {
       "glyph_clusters": [
@@ -18567,8 +18567,8 @@
       ],
       "height": 0.1713,
       "ratio_h": 0.3426,
-      "ratio_w": 0.7217,
-      "width": 0.7578
+      "ratio_w": 0.7772,
+      "width": 0.8161
     },
     "agent_meta_reviewer": {
       "glyph_clusters": [
@@ -18627,8 +18627,8 @@
       ],
       "height": 0.1629,
       "ratio_h": 0.3258,
-      "ratio_w": 0.8588,
-      "width": 1.2023
+      "ratio_w": 0.8811,
+      "width": 1.2336
     },
     "agent_pilot": {
       "glyph_clusters": [
@@ -18654,9 +18654,9 @@
         ]
       ],
       "height": 0.1771,
-      "ratio_h": 0.3543,
-      "ratio_w": 0.3261,
-      "width": 0.3424
+      "ratio_h": 0.3542,
+      "ratio_w": 0.3459,
+      "width": 0.3632
     },
     "agent_proximity": {
       "glyph_clusters": [
@@ -18699,8 +18699,8 @@
       ],
       "height": 0.1791,
       "ratio_h": 0.3582,
-      "ratio_w": 0.6977,
-      "width": 0.7326
+      "ratio_w": 0.7453,
+      "width": 0.7826
     },
     "agent_ranker": {
       "glyph_clusters": [
@@ -18731,8 +18731,8 @@
       ],
       "height": 0.141,
       "ratio_h": 0.282,
-      "ratio_w": 0.479,
-      "width": 0.5029
+      "ratio_w": 0.4948,
+      "width": 0.5196
     },
     "baseline_json": {
       "glyph_clusters": [
@@ -18790,9 +18790,9 @@
         ]
       ],
       "height": 0.1771,
-      "ratio_h": 0.3543,
-      "ratio_w": 0.4511,
-      "width": 1.0826
+      "ratio_h": 0.3542,
+      "ratio_w": 0.4658,
+      "width": 1.118
     },
     "coldopen_brand": {
       "glyph_clusters": [
@@ -19674,9 +19674,9 @@
         ]
       ],
       "height": 0.1289,
-      "ratio_h": 0.2865,
-      "ratio_w": 0.7308,
-      "width": 2.4846
+      "ratio_h": 0.2864,
+      "ratio_w": 0.7026,
+      "width": 2.3888
     },
     "dim_stderr_dict": {
       "glyph_clusters": [
@@ -19830,9 +19830,9 @@
         ]
       ],
       "height": 0.1289,
-      "ratio_h": 0.2865,
-      "ratio_w": 0.7308,
-      "width": 2.4846
+      "ratio_h": 0.2864,
+      "ratio_w": 0.6873,
+      "width": 2.3367
     },
     "fitness_formula": {
       "glyph_clusters": [
@@ -20061,10 +20061,10 @@
           440
         ]
       ],
-      "height": 0.1938,
-      "ratio_h": 0.3875,
-      "ratio_w": 0.7395,
-      "width": 4.4367
+      "height": 0.1937,
+      "ratio_h": 0.3874,
+      "ratio_w": 0.7186,
+      "width": 4.3116
     },
     "fork_attribution_label": {
       "glyph_clusters": [
@@ -20887,8 +20887,8 @@
       ],
       "height": 0.2277,
       "ratio_h": 0.2277,
-      "ratio_w": 0.3702,
-      "width": 1.1105
+      "ratio_w": 0.3431,
+      "width": 1.0292
     }
   }
 }
