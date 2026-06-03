@@ -147,10 +147,10 @@
           265
         ]
       ],
-      "height": 0.2086,
-      "ratio_h": 0.4172,
-      "ratio_w": 0.3993,
-      "width": 3.1943
+      "height": 0.2085,
+      "ratio_h": 0.4169,
+      "ratio_w": 0.4201,
+      "width": 3.3611
     },
     "act1_ceiling_label": {
       "glyph_clusters": [
@@ -307,10 +307,10 @@
           569
         ]
       ],
-      "height": 0.209,
-      "ratio_h": 0.418,
-      "ratio_w": 0.3702,
-      "width": 2.9615
+      "height": 0.2089,
+      "ratio_h": 0.4177,
+      "ratio_w": 0.4285,
+      "width": 3.4282
     },
     "act1_confidence_formula": {
       "glyph_clusters": [
@@ -463,10 +463,10 @@
           232
         ]
       ],
-      "height": 0.1805,
-      "ratio_h": 0.3609,
-      "ratio_w": 0.3418,
-      "width": 2.7342
+      "height": 0.1804,
+      "ratio_h": 0.3608,
+      "ratio_w": 0.3689,
+      "width": 2.9509
     },
     "act1_fix": {
       "glyph_clusters": [
@@ -647,10 +647,10 @@
           783
         ]
       ],
-      "height": 0.2838,
-      "ratio_h": 0.473,
-      "ratio_w": 0.4126,
-      "width": 5.7766
+      "height": 0.2839,
+      "ratio_h": 0.4731,
+      "ratio_w": 0.4232,
+      "width": 5.9244
     },
     "act1_problem": {
       "glyph_clusters": [
@@ -843,10 +843,10 @@
           808
         ]
       ],
-      "height": 0.2871,
-      "ratio_h": 0.4785,
-      "ratio_w": 0.4639,
-      "width": 6.4945
+      "height": 0.2872,
+      "ratio_h": 0.4786,
+      "ratio_w": 0.4736,
+      "width": 6.63
     },
     "act1_title": {
       "glyph_clusters": [
@@ -1667,10 +1667,10 @@
           427
         ]
       ],
-      "height": 0.1537,
-      "ratio_h": 0.3074,
-      "ratio_w": 0.2699,
-      "width": 3.7789
+      "height": 0.1538,
+      "ratio_h": 0.3076,
+      "ratio_w": 0.2556,
+      "width": 3.579
     },
     "act1_tradeoff_survive_label": {
       "glyph_clusters": [
@@ -2283,10 +2283,10 @@
           249
         ]
       ],
-      "height": 0.1959,
-      "ratio_h": 0.3918,
-      "ratio_w": 0.4296,
-      "width": 3.4367
+      "height": 0.1958,
+      "ratio_h": 0.3916,
+      "ratio_w": 0.4851,
+      "width": 3.8804
     },
     "act2_dimcount_label": {
       "glyph_clusters": [
@@ -2441,8 +2441,8 @@
       ],
       "height": 0.2051,
       "ratio_h": 0.4102,
-      "ratio_w": 0.4,
-      "width": 3.1996
+      "ratio_w": 0.4583,
+      "width": 3.6662
     },
     "act2_fix": {
       "glyph_clusters": [
@@ -2669,8 +2669,8 @@
       ],
       "height": 0.2844,
       "ratio_h": 0.474,
-      "ratio_w": 0.5193,
-      "width": 7.2697
+      "ratio_w": 0.5225,
+      "width": 7.3156
     },
     "act2_invariant": {
       "glyph_clusters": [
@@ -2889,8 +2889,8 @@
       ],
       "height": 0.2068,
       "ratio_h": 0.4137,
-      "ratio_w": 0.3182,
-      "width": 4.4553
+      "ratio_w": 0.367,
+      "width": 5.1387
     },
     "act2_problem": {
       "glyph_clusters": [
@@ -3131,10 +3131,10 @@
           469
         ]
       ],
-      "height": 0.2871,
-      "ratio_h": 0.4785,
-      "ratio_w": 0.5564,
-      "width": 7.7902
+      "height": 0.2872,
+      "ratio_h": 0.4786,
+      "ratio_w": 0.5663,
+      "width": 7.9276
     },
     "act2_target_label": {
       "glyph_clusters": [
@@ -3268,9 +3268,9 @@
         ]
       ],
       "height": 0.1939,
-      "ratio_h": 0.3879,
-      "ratio_w": 0.3682,
-      "width": 2.9459
+      "ratio_h": 0.3878,
+      "ratio_w": 0.4046,
+      "width": 3.2366
     },
     "act2_title": {
       "glyph_clusters": [
@@ -3801,8 +3801,8 @@
       ],
       "height": 0.2814,
       "ratio_h": 0.4691,
-      "ratio_w": 0.5162,
-      "width": 7.2266
+      "ratio_w": 0.5181,
+      "width": 7.2536
     },
     "act3_gatefloor_label": {
       "glyph_clusters": [
@@ -3871,10 +3871,10 @@
           320
         ]
       ],
-      "height": 0.1924,
-      "ratio_h": 0.3848,
-      "ratio_w": 0.1765,
-      "width": 1.4119
+      "height": 0.1923,
+      "ratio_h": 0.3845,
+      "ratio_w": 0.1894,
+      "width": 1.515
     },
     "act3_pathdep_label": {
       "glyph_clusters": [
@@ -4031,10 +4031,10 @@
           199
         ]
       ],
-      "height": 0.1795,
-      "ratio_h": 0.359,
-      "ratio_w": 0.3966,
-      "width": 3.1729
+      "height": 0.1794,
+      "ratio_h": 0.3589,
+      "ratio_w": 0.4167,
+      "width": 3.3334
     },
     "act3_pathindep_label": {
       "glyph_clusters": [
@@ -4223,10 +4223,10 @@
           232
         ]
       ],
-      "height": 0.1828,
-      "ratio_h": 0.3656,
-      "ratio_w": 0.4723,
-      "width": 3.7781
+      "height": 0.1827,
+      "ratio_h": 0.3655,
+      "ratio_w": 0.4994,
+      "width": 3.9949
     },
     "act3_problem": {
       "glyph_clusters": [
@@ -4357,8 +4357,8 @@
       ],
       "height": 0.2844,
       "ratio_h": 0.474,
-      "ratio_w": 0.3032,
-      "width": 4.2453
+      "ratio_w": 0.3099,
+      "width": 4.3391
     },
     "act3_title": {
       "glyph_clusters": [
@@ -4779,10 +4779,10 @@
           320
         ]
       ],
-      "height": 0.1512,
-      "ratio_h": 0.3023,
-      "ratio_w": 0.2064,
-      "width": 1.6512
+      "height": 0.1511,
+      "ratio_h": 0.3021,
+      "ratio_w": 0.2291,
+      "width": 1.8325
     },
     "act3_wallclock_provenance_label": {
       "glyph_clusters": [
@@ -4963,10 +4963,10 @@
           427
         ]
       ],
-      "height": 0.1537,
-      "ratio_h": 0.3074,
-      "ratio_w": 0.2736,
-      "width": 3.8305
+      "height": 0.1538,
+      "ratio_h": 0.3076,
+      "ratio_w": 0.2522,
+      "width": 3.5305
     },
     "act3_worker_baseline": {
       "glyph_clusters": [
@@ -5003,10 +5003,10 @@
           412
         ]
       ],
-      "height": 0.1207,
-      "ratio_h": 0.2874,
-      "ratio_w": 0.4497,
-      "width": 0.6746
+      "height": 0.1208,
+      "ratio_h": 0.2877,
+      "ratio_w": 0.3997,
+      "width": 0.5996
     },
     "act3_worker_never": {
       "glyph_clusters": [
@@ -5031,10 +5031,10 @@
           256
         ]
       ],
-      "height": 0.09,
-      "ratio_h": 0.2144,
-      "ratio_w": 0.2965,
-      "width": 0.4447
+      "height": 0.0902,
+      "ratio_h": 0.2148,
+      "ratio_w": 0.2632,
+      "width": 0.3949
     },
     "act3_worker_random": {
       "glyph_clusters": [
@@ -5063,10 +5063,10 @@
           655
         ]
       ],
-      "height": 0.1207,
-      "ratio_h": 0.2874,
-      "ratio_w": 0.3809,
-      "width": 0.5713
+      "height": 0.1208,
+      "ratio_h": 0.2877,
+      "ratio_w": 0.3642,
+      "width": 0.5463
     },
     "act4_contract1_label": {
       "glyph_clusters": [
@@ -6128,9 +6128,9 @@
         ]
       ],
       "height": 0.282,
-      "ratio_h": 0.4701,
-      "ratio_w": 0.5805,
-      "width": 8.1266
+      "ratio_h": 0.47,
+      "ratio_w": 0.5918,
+      "width": 8.2848
     },
     "act4_framing_label": {
       "glyph_clusters": [
@@ -6313,8 +6313,8 @@
       ],
       "height": 0.2051,
       "ratio_h": 0.4102,
-      "ratio_w": 0.2648,
-      "width": 3.7074
+      "ratio_w": 0.2958,
+      "width": 4.1406
     },
     "act4_problem": {
       "glyph_clusters": [
@@ -6512,9 +6512,9 @@
         ]
       ],
       "height": 0.282,
-      "ratio_h": 0.4701,
-      "ratio_w": 0.4602,
-      "width": 6.443
+      "ratio_h": 0.47,
+      "ratio_w": 0.4653,
+      "width": 6.5138
     },
     "act4_problem_obs1_label": {
       "glyph_clusters": [
@@ -7351,10 +7351,10 @@
           427
         ]
       ],
-      "height": 0.1434,
-      "ratio_h": 0.2867,
-      "ratio_w": 0.2092,
-      "width": 2.9289
+      "height": 0.1433,
+      "ratio_h": 0.2866,
+      "ratio_w": 0.1949,
+      "width": 2.729
     },
     "act4_record_label": {
       "glyph_clusters": [
@@ -7583,10 +7583,10 @@
           481
         ]
       ],
-      "height": 0.1811,
-      "ratio_h": 0.3621,
-      "ratio_w": 0.3316,
-      "width": 4.643
+      "height": 0.181,
+      "ratio_h": 0.362,
+      "ratio_w": 0.3535,
+      "width": 4.9493
     },
     "act4_title": {
       "glyph_clusters": [
@@ -8843,10 +8843,10 @@
           481
         ]
       ],
-      "height": 0.1807,
+      "height": 0.1806,
       "ratio_h": 0.3613,
-      "ratio_w": 0.1241,
-      "width": 1.7381
+      "ratio_w": 0.1303,
+      "width": 1.8236
     },
     "coldopen_subtitle": {
       "glyph_clusters": [
@@ -9043,10 +9043,10 @@
           551
         ]
       ],
-      "height": 0.1557,
+      "height": 0.1556,
       "ratio_h": 0.3113,
-      "ratio_w": 0.2074,
-      "width": 2.9031
+      "ratio_w": 0.2027,
+      "width": 2.8375
     },
     "dim_means_dict": {
       "glyph_clusters": [
@@ -9711,10 +9711,10 @@
           282
         ]
       ],
-      "height": 0.1787,
-      "ratio_h": 0.3574,
-      "ratio_w": 0.1645,
-      "width": 2.3031
+      "height": 0.1786,
+      "ratio_h": 0.3573,
+      "ratio_w": 0.1778,
+      "width": 2.4885
     },
     "fork_contract_branch_label": {
       "glyph_clusters": [
@@ -10307,10 +10307,10 @@
           416
         ]
       ],
-      "height": 0.1676,
-      "ratio_h": 0.3352,
-      "ratio_w": 0.0983,
-      "width": 1.3768
+      "height": 0.1677,
+      "ratio_h": 0.3355,
+      "ratio_w": 0.0964,
+      "width": 1.3496
     },
     "fork_transcript_label": {
       "glyph_clusters": [
@@ -10356,9 +10356,9 @@
         ]
       ],
       "height": 0.1771,
-      "ratio_h": 0.3221,
-      "ratio_w": 0.4434,
-      "width": 0.7537
+      "ratio_h": 0.322,
+      "ratio_w": 0.4691,
+      "width": 0.7974
     },
     "petri_box": {
       "glyph_clusters": [
@@ -10565,10 +10565,10 @@
           349
         ]
       ],
-      "height": 0.2086,
-      "ratio_h": 0.4172,
-      "ratio_w": 0.3993,
-      "width": 3.1943
+      "height": 0.2085,
+      "ratio_h": 0.4169,
+      "ratio_w": 0.4201,
+      "width": 3.3611
     },
     "act1_ceiling_label": {
       "glyph_clusters": [
@@ -10729,10 +10729,10 @@
           610
         ]
       ],
-      "height": 0.209,
-      "ratio_h": 0.418,
-      "ratio_w": 0.3702,
-      "width": 2.9615
+      "height": 0.2089,
+      "ratio_h": 0.4177,
+      "ratio_w": 0.4285,
+      "width": 3.4282
     },
     "act1_confidence_formula": {
       "glyph_clusters": [
@@ -10889,10 +10889,10 @@
           305
         ]
       ],
-      "height": 0.1805,
-      "ratio_h": 0.3609,
-      "ratio_w": 0.3418,
-      "width": 2.7342
+      "height": 0.1804,
+      "ratio_h": 0.3608,
+      "ratio_w": 0.3689,
+      "width": 2.9509
     },
     "act1_fix": {
       "glyph_clusters": [
@@ -11081,10 +11081,10 @@
           784
         ]
       ],
-      "height": 0.2838,
-      "ratio_h": 0.473,
-      "ratio_w": 0.4126,
-      "width": 5.7766
+      "height": 0.2839,
+      "ratio_h": 0.4731,
+      "ratio_w": 0.4232,
+      "width": 5.9244
     },
     "act1_problem": {
       "glyph_clusters": [
@@ -11281,10 +11281,10 @@
           815
         ]
       ],
-      "height": 0.2871,
-      "ratio_h": 0.4785,
-      "ratio_w": 0.4639,
-      "width": 6.4945
+      "height": 0.2872,
+      "ratio_h": 0.4786,
+      "ratio_w": 0.4736,
+      "width": 6.63
     },
     "act1_title": {
       "glyph_clusters": [
@@ -12113,10 +12113,10 @@
           474
         ]
       ],
-      "height": 0.1537,
-      "ratio_h": 0.3074,
-      "ratio_w": 0.2699,
-      "width": 3.7789
+      "height": 0.1538,
+      "ratio_h": 0.3076,
+      "ratio_w": 0.2556,
+      "width": 3.579
     },
     "act1_tradeoff_survive_label": {
       "glyph_clusters": [
@@ -12729,10 +12729,10 @@
           327
         ]
       ],
-      "height": 0.1959,
-      "ratio_h": 0.3918,
-      "ratio_w": 0.4296,
-      "width": 3.4367
+      "height": 0.1958,
+      "ratio_h": 0.3916,
+      "ratio_w": 0.4851,
+      "width": 3.8804
     },
     "act2_dimcount_label": {
       "glyph_clusters": [
@@ -12887,8 +12887,8 @@
       ],
       "height": 0.2051,
       "ratio_h": 0.4102,
-      "ratio_w": 0.4,
-      "width": 3.1996
+      "ratio_w": 0.4583,
+      "width": 3.6662
     },
     "act2_fix": {
       "glyph_clusters": [
@@ -13119,8 +13119,8 @@
       ],
       "height": 0.2844,
       "ratio_h": 0.474,
-      "ratio_w": 0.5193,
-      "width": 7.2697
+      "ratio_w": 0.5225,
+      "width": 7.3156
     },
     "act2_invariant": {
       "glyph_clusters": [
@@ -13339,8 +13339,8 @@
       ],
       "height": 0.2068,
       "ratio_h": 0.4137,
-      "ratio_w": 0.3182,
-      "width": 4.4553
+      "ratio_w": 0.367,
+      "width": 5.1387
     },
     "act2_problem": {
       "glyph_clusters": [
@@ -13581,10 +13581,10 @@
           492
         ]
       ],
-      "height": 0.2871,
-      "ratio_h": 0.4785,
-      "ratio_w": 0.5564,
-      "width": 7.7902
+      "height": 0.2872,
+      "ratio_h": 0.4786,
+      "ratio_w": 0.5663,
+      "width": 7.9276
     },
     "act2_target_label": {
       "glyph_clusters": [
@@ -13722,9 +13722,9 @@
         ]
       ],
       "height": 0.1939,
-      "ratio_h": 0.3879,
-      "ratio_w": 0.3682,
-      "width": 2.9459
+      "ratio_h": 0.3878,
+      "ratio_w": 0.4046,
+      "width": 3.2366
     },
     "act2_title": {
       "glyph_clusters": [
@@ -14259,8 +14259,8 @@
       ],
       "height": 0.2814,
       "ratio_h": 0.4691,
-      "ratio_w": 0.5162,
-      "width": 7.2266
+      "ratio_w": 0.5181,
+      "width": 7.2536
     },
     "act3_gatefloor_label": {
       "glyph_clusters": [
@@ -14329,10 +14329,10 @@
           336
         ]
       ],
-      "height": 0.1924,
-      "ratio_h": 0.3848,
-      "ratio_w": 0.1765,
-      "width": 1.4119
+      "height": 0.1923,
+      "ratio_h": 0.3845,
+      "ratio_w": 0.1894,
+      "width": 1.515
     },
     "act3_pathdep_label": {
       "glyph_clusters": [
@@ -14489,10 +14489,10 @@
           195
         ]
       ],
-      "height": 0.1795,
-      "ratio_h": 0.359,
-      "ratio_w": 0.3966,
-      "width": 3.1729
+      "height": 0.1794,
+      "ratio_h": 0.3589,
+      "ratio_w": 0.4167,
+      "width": 3.3334
     },
     "act3_pathindep_label": {
       "glyph_clusters": [
@@ -14681,10 +14681,10 @@
           305
         ]
       ],
-      "height": 0.1828,
-      "ratio_h": 0.3656,
-      "ratio_w": 0.4723,
-      "width": 3.7781
+      "height": 0.1827,
+      "ratio_h": 0.3655,
+      "ratio_w": 0.4994,
+      "width": 3.9949
     },
     "act3_problem": {
       "glyph_clusters": [
@@ -14815,8 +14815,8 @@
       ],
       "height": 0.2844,
       "ratio_h": 0.474,
-      "ratio_w": 0.3032,
-      "width": 4.2453
+      "ratio_w": 0.3099,
+      "width": 4.3391
     },
     "act3_title": {
       "glyph_clusters": [
@@ -15245,10 +15245,10 @@
           336
         ]
       ],
-      "height": 0.1512,
-      "ratio_h": 0.3023,
-      "ratio_w": 0.2064,
-      "width": 1.6512
+      "height": 0.1511,
+      "ratio_h": 0.3021,
+      "ratio_w": 0.2291,
+      "width": 1.8325
     },
     "act3_wallclock_provenance_label": {
       "glyph_clusters": [
@@ -15429,10 +15429,10 @@
           471
         ]
       ],
-      "height": 0.1537,
-      "ratio_h": 0.3074,
-      "ratio_w": 0.2736,
-      "width": 3.8305
+      "height": 0.1538,
+      "ratio_h": 0.3076,
+      "ratio_w": 0.2522,
+      "width": 3.5305
     },
     "act3_worker_baseline": {
       "glyph_clusters": [
@@ -15469,10 +15469,10 @@
           425
         ]
       ],
-      "height": 0.1207,
-      "ratio_h": 0.2874,
-      "ratio_w": 0.4497,
-      "width": 0.6746
+      "height": 0.1208,
+      "ratio_h": 0.2877,
+      "ratio_w": 0.3997,
+      "width": 0.5996
     },
     "act3_worker_never": {
       "glyph_clusters": [
@@ -15497,10 +15497,10 @@
           269
         ]
       ],
-      "height": 0.09,
-      "ratio_h": 0.2144,
-      "ratio_w": 0.2965,
-      "width": 0.4447
+      "height": 0.0902,
+      "ratio_h": 0.2148,
+      "ratio_w": 0.2632,
+      "width": 0.3949
     },
     "act3_worker_random": {
       "glyph_clusters": [
@@ -15529,10 +15529,10 @@
           641
         ]
       ],
-      "height": 0.1207,
-      "ratio_h": 0.2874,
-      "ratio_w": 0.3809,
-      "width": 0.5713
+      "height": 0.1208,
+      "ratio_h": 0.2877,
+      "ratio_w": 0.3642,
+      "width": 0.5463
     },
     "act4_contract1_label": {
       "glyph_clusters": [
@@ -16594,9 +16594,9 @@
         ]
       ],
       "height": 0.282,
-      "ratio_h": 0.4701,
-      "ratio_w": 0.5805,
-      "width": 8.1266
+      "ratio_h": 0.47,
+      "ratio_w": 0.5918,
+      "width": 8.2848
     },
     "act4_framing_label": {
       "glyph_clusters": [
@@ -16779,8 +16779,8 @@
       ],
       "height": 0.2051,
       "ratio_h": 0.4102,
-      "ratio_w": 0.2648,
-      "width": 3.7074
+      "ratio_w": 0.2958,
+      "width": 4.1406
     },
     "act4_problem": {
       "glyph_clusters": [
@@ -16978,9 +16978,9 @@
         ]
       ],
       "height": 0.282,
-      "ratio_h": 0.4701,
-      "ratio_w": 0.4602,
-      "width": 6.443
+      "ratio_h": 0.47,
+      "ratio_w": 0.4653,
+      "width": 6.5138
     },
     "act4_problem_obs1_label": {
       "glyph_clusters": [
@@ -17817,10 +17817,10 @@
           474
         ]
       ],
-      "height": 0.1434,
-      "ratio_h": 0.2867,
-      "ratio_w": 0.2092,
-      "width": 2.9289
+      "height": 0.1433,
+      "ratio_h": 0.2866,
+      "ratio_w": 0.1949,
+      "width": 2.729
     },
     "act4_record_label": {
       "glyph_clusters": [
@@ -18053,10 +18053,10 @@
           495
         ]
       ],
-      "height": 0.1811,
-      "ratio_h": 0.3621,
-      "ratio_w": 0.3316,
-      "width": 4.643
+      "height": 0.181,
+      "ratio_h": 0.362,
+      "ratio_w": 0.3535,
+      "width": 4.9493
     },
     "act4_title": {
       "glyph_clusters": [
@@ -19321,10 +19321,10 @@
           495
         ]
       ],
-      "height": 0.1807,
+      "height": 0.1806,
       "ratio_h": 0.3613,
-      "ratio_w": 0.1241,
-      "width": 1.7381
+      "ratio_w": 0.1303,
+      "width": 1.8236
     },
     "coldopen_subtitle": {
       "glyph_clusters": [
@@ -19521,10 +19521,10 @@
           587
         ]
       ],
-      "height": 0.1557,
+      "height": 0.1556,
       "ratio_h": 0.3113,
-      "ratio_w": 0.2074,
-      "width": 2.9031
+      "ratio_w": 0.2027,
+      "width": 2.8375
     },
     "dim_means_dict": {
       "glyph_clusters": [
@@ -20193,10 +20193,10 @@
           305
         ]
       ],
-      "height": 0.1787,
-      "ratio_h": 0.3574,
-      "ratio_w": 0.1645,
-      "width": 2.3031
+      "height": 0.1786,
+      "ratio_h": 0.3573,
+      "ratio_w": 0.1778,
+      "width": 2.4885
     },
     "fork_contract_branch_label": {
       "glyph_clusters": [
@@ -20793,10 +20793,10 @@
           440
         ]
       ],
-      "height": 0.1676,
-      "ratio_h": 0.3352,
-      "ratio_w": 0.0983,
-      "width": 1.3768
+      "height": 0.1677,
+      "ratio_h": 0.3355,
+      "ratio_w": 0.0964,
+      "width": 1.3496
     },
     "fork_transcript_label": {
       "glyph_clusters": [
@@ -20842,9 +20842,9 @@
         ]
       ],
       "height": 0.1771,
-      "ratio_h": 0.3221,
-      "ratio_w": 0.4434,
-      "width": 0.7537
+      "ratio_h": 0.322,
+      "ratio_w": 0.4691,
+      "width": 0.7974
     },
     "petri_box": {
       "glyph_clusters": [

@@ -1197,9 +1197,15 @@ class GeodeSelfImprovingHero(Scene):
             _wrap(_t(detail_key), 58), font_size=16, color=COLOR_TEXT_ACCENT, line_spacing=0.8
         )
         body = VGroup(head, detail).arrange(DOWN, buff=0.55).move_to(DOWN * 0.4)
+        # Thin separator under the problem statement. Sit it at the midpoint
+        # of the head↔detail gap (computed from the laid-out edges, not from
+        # a coordinate-delta guess) so a 3-line wrapped ``detail`` never has
+        # the rule slicing through its lower lines — the Act 2 PROBLEM beat
+        # regression: "number can't tell you which." was crossed by the rule.
+        rule_y = (head.get_bottom()[1] + detail.get_top()[1]) / 2
         rule = Line(
-            body.get_left() + LEFT * 0.4 + UP * (head.get_bottom()[1] - body.get_top()[1] - 0.2),
-            body.get_right() + RIGHT * 0.4 + UP * (head.get_bottom()[1] - body.get_top()[1] - 0.2),
+            np.array([body.get_left()[0] - 0.4, rule_y, 0.0]),
+            np.array([body.get_right()[0] + 0.4, rule_y, 0.0]),
             color=COLOR_ARROW,
             stroke_width=1.0,
         )

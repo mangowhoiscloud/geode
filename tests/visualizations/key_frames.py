@@ -48,22 +48,30 @@ class KeyFrame:
 _TOL_STATIC = 800
 _TOL_ANIMATED = 2500
 
+# Timestamps target the middle of each beat's wait phase in the 4-Act
+# reframe (v0.99.133): cold-open title → Act 1 tournament grid → audit-beat
+# transcript contract fork → Act 3 concurrency split → Act 4 designed
+# contracts → glossary outro. The scene class renders to
+# ``GeodeSelfImprovingHero-{EN,KO}.mp4`` (matching the ``-o`` flag in the
+# standard render command), so the ratchet's ``video_path`` keys on that
+# name — the pre-reframe manifest pointed at a stale ``GeodeHero-*.mp4``
+# that the render never produced, so the ratchet silently skipped.
 KEY_FRAMES: tuple[KeyFrame, ...] = tuple(
     KeyFrame(
         scene="hero",
         bit=bit,
         lang=lang,
-        video_path=f"media/videos/geode_hero/1080p60/GeodeHero-{lang.upper()}.mp4",
+        video_path=f"media/videos/geode_hero/1080p60/GeodeSelfImprovingHero-{lang.upper()}.mp4",
         timestamp_s=ts,
         tolerance_px=tol,
     )
     for bit, ts, tol in (
-        ("bit_2_agent_grid", 9.0, _TOL_STATIC),
-        ("bit_5_petri", 17.0, _TOL_ANIMATED),
-        ("bit_9_fitness_formula", 25.0, _TOL_ANIMATED),
-        ("outro_ratchet", 33.0, _TOL_STATIC),
-        ("rubric_detail", 41.0, _TOL_STATIC),
-        ("glossary", 49.0, _TOL_STATIC),
+        ("cold_open", 3.0, _TOL_STATIC),
+        ("act1_agent_grid", 22.0, _TOL_STATIC),
+        ("audit_contract_fork", 46.0, _TOL_ANIMATED),
+        ("act3_concurrency", 75.0, _TOL_STATIC),
+        ("act4_designed_contracts", 90.0, _TOL_STATIC),
+        ("glossary", 118.0, _TOL_STATIC),
     )
     for lang in ("en", "ko")
 )

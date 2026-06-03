@@ -45,6 +45,37 @@ functional change.
 
 ---
 
+## [0.99.133] - 2026-06-04
+
+### Changed
+- **Hero viz reframe: flat 12-bit mechanism tour → problem-centered 4-Act narrative.**
+  `scripts/visualizations/geode_hero.py` (`GeodeSelfImprovingHero`) now runs each Act as
+  **Problem → 대처 방안 (countermeasure) → 트레이드오프 (tradeoff)**:
+  - **Act 1** — the metric can't see the difference; countermeasure is the seed-generation
+    tournament + blend survivor selection (Elo + confidence·difficulty), tradeoff named.
+  - **Act 2** — the 3-arm campaign (never / random / gate) against the gpt-5.5 target.
+  - **Act 3** — the async-first concurrency split (path-independent audits parallel, gate
+    sequential).
+  - **Act 4** — the LLM judge rewards fluency, so a binary behavioural failure averages away;
+    the countermeasure names three structural contracts (`required_tool_path`,
+    `args_shape_valid`, `claim_grounded`) with `judge = quality · contract = correctness`
+    framing, and `contract_results` recorded per-contract for targeted-fixable attribution.
+    Act 4's countermeasure carries a `DESIGNED — LANDING NEXT` honesty role-label (design-stage,
+    not yet shipped at full depth). The earlier mechanism beats (Petri rubric / dim_extractor /
+    fitness / critical floor / auto-promote / wrapper-prompt mutation) are not deleted — they are
+    absorbed into each Act's countermeasure beat.
+- **Cold-open title beat** added — opens on the wrapper-section kinds line
+  (`skill_catalog · agent_contract · tool_descriptions`) before Act 1.
+- **Audit-beat transcript contract fork** (`bit_7`) added — the transcript forks into a
+  judge-score → 0-10 branch (annotated "pulled by fluency") and a `DESIGNED`-marked
+  contract-check branch (`required_tool_path PASS` / `args_shape_valid FAIL ◀ sample 3` /
+  `claim_grounded PASS`) with per-contract failure attribution.
+- Storyboard plan-of-record rewritten to the 4-Act shape
+  (`docs/visualizations/geode-hero-storyboard.md`); `verify_hero_layout.py` SITES + EN/KO
+  `layout_baseline.json` re-recorded for the new beats. The new detail paragraphs render
+  through the shared `_make_text` → `_wrap` path, so they inherit the v0.99.132 EN kerning
+  supersample fix (no word-break drift).
+
 ## [0.99.132] - 2026-06-03
 
 ### Fixed
@@ -64,6 +95,7 @@ functional change.
   drift-free and render at their nominal size. Layout-ratchet baseline (`layout_baseline.json`) and
   the 8 affected frame-ratchet baselines re-recorded; HarfBuzz glyph-cluster fingerprints unchanged
   (the fix is purely at the Manim render layer). (`scripts/visualizations/geode_hero.py`)
+
 ## [0.99.131] - 2026-06-03
 
 ### Added
