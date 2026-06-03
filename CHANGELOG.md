@@ -45,6 +45,21 @@ functional change.
 
 ---
 
+## [0.99.125] - 2026-06-03
+
+### Changed
+- **Seed-generation judge panel defaults to PAYG (`api_key`) HTTP-API paths.** The 3-voter
+  panel flipped from subscription CLI paths (2× `openai-codex` + 1× `claude-cli`) to PAYG
+  `api_key` for all three, so the ranker's 59 matches × 3 voters = 177 voter calls fan out
+  CONCURRENTLY: a PAYG voter rides the `openai_api_lane` / `anthropic_api_lane` (env-tunable
+  via `GEODE_OPENAI_API_LANE_MAX` / `GEODE_ANTHROPIC_API_LANE_MAX`) instead of the
+  `claude-cli` per-process subprocess lane (cap 3) or a throttled subscription bucket — the
+  CLI-path serialization that capped voter throughput. Diversity is preserved: 2 providers
+  (openai + anthropic) + 2 distinct `(provider, source)` pairs. Subscription-path deploys
+  flip back via the **already-wired** `[[seed_generation.judge_panel.voters]]` config override
+  (`picker.pick_bindings` reads `~/.geode/config.toml` over the manifest default — the
+  2026-05-25 "override not wired" note is stale). 2 pinning tests.
+
 ## [0.99.124] - 2026-06-03
 
 ### Fixed
