@@ -32,10 +32,10 @@ Render
 ======
 ::
 
-    uv run manim -qh -o GeodeHero-EN scripts/visualizations/geode_hero.py GeodeSelfImprovingHero
-    GEODE_HERO_LANG=ko uv run manim -qh -o GeodeHero-KO scripts/visualizations/geode_hero.py GeodeSelfImprovingHero
+    uv run manim -qh -o GeodeSelfImprovingHero-EN scripts/visualizations/geode_hero.py GeodeSelfImprovingHero
+    GEODE_HERO_LANG=ko uv run manim -qh -o GeodeSelfImprovingHero-KO scripts/visualizations/geode_hero.py GeodeSelfImprovingHero
 
-Outputs to ``media/videos/geode_hero/1080p60/GeodeHero-{EN,KO}.mp4``.
+Outputs to ``media/videos/geode_hero/1080p60/GeodeSelfImprovingHero-{EN,KO}.mp4``.
 """
 
 from __future__ import annotations
