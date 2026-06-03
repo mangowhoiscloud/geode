@@ -131,10 +131,16 @@ def test_pick_bindings_resolves_all_roles_with_oauth() -> None:
     ):
         result = pick_bindings(manifest=manifest, overrides={})
     assert set(result.bindings) == set(manifest.enabled_roles)
-    # All Claude-* roles resolve to claude-cli when OAuth is available.
-    for role in ("generator", "critic", "pilot", "ranker", "evolver", "meta_reviewer"):
+    # Non-tool Claude-* roles resolve to claude-cli when OAuth is available.
+    # The pilot is EXCLUDED — it calls petri_audit, which the claude-cli
+    # subprocess adapter cannot deliver, so it reroutes to api_key
+    # (PR-SEEDGEN-PILOT-TOOL-CAPABLE-SOURCE).
+    for role in ("generator", "critic", "ranker", "evolver", "meta_reviewer"):
         assert result.bindings[role].provider == "anthropic"
         assert result.bindings[role].source == "claude-cli"
+    # Pilot reroutes to the tool-capable PAYG source even with OAuth available.
+    assert result.bindings["pilot"].provider == "anthropic"
+    assert result.bindings["pilot"].source == "api_key"
     # Proximity now runs claude-sonnet completion (CSP-8 LLM-clustering
     # revert, paper §3); CSP-10 dropped the embedding kind plumbing.
     assert result.bindings["proximity"].provider == "anthropic"
@@ -158,13 +164,36 @@ def test_pick_bindings_no_probe_uses_payg() -> None:
 
 def test_pick_bindings_user_override_source() -> None:
     manifest = _make_manifest()
-    overrides = {"generator": {"source": "api_key"}, "pilot": {"source": "claude-cli"}}
+    # A claude-cli override on a NON-tool role (critic) is honored; the same
+    # override on the pilot is rerouted to api_key (claude-cli cannot deliver
+    # petri_audit — PR-SEEDGEN-PILOT-TOOL-CAPABLE-SOURCE).
+    overrides = {"generator": {"source": "api_key"}, "critic": {"source": "claude-cli"}}
     with patch("plugins.seed_generation.picker._probe_oauth", return_value=True):
         result = pick_bindings(manifest=manifest, overrides=overrides)
     assert result.bindings["generator"].source == "api_key"
-    assert result.bindings["pilot"].source == "claude-cli"
-    # Critic was NOT overridden → still claude-cli (OAuth probe = True).
     assert result.bindings["critic"].source == "claude-cli"
+
+
+def test_pick_bindings_pilot_reroutes_off_tool_incapable_source() -> None:
+    """The pilot calls petri_audit, so it must never bind a tool-incapable
+    (claude-cli subprocess) source — even when explicitly overridden to it or
+    when OAuth would otherwise default it there. It reroutes to api_key."""
+    manifest = _make_manifest()
+    with patch("plugins.seed_generation.picker._probe_oauth", return_value=True):
+        # (a) explicit claude-cli override on the pilot → rerouted.
+        forced = pick_bindings(manifest=manifest, overrides={"pilot": {"source": "claude-cli"}})
+        assert forced.bindings["pilot"].source == "api_key"
+        # (b) auto-default (OAuth available) would pick claude-cli → rerouted.
+        auto = pick_bindings(manifest=manifest, overrides={})
+        assert auto.bindings["pilot"].source == "api_key"
+        # (c) the new-naming alias "adapter" also maps to ClaudeCliAdapter
+        # (tool-incapable) → rerouted.
+        aliased = pick_bindings(manifest=manifest, overrides={"pilot": {"source": "adapter"}})
+        assert aliased.bindings["pilot"].source == "api_key"
+    # A tool-capable explicit source on the pilot is left untouched.
+    with patch("plugins.seed_generation.picker._probe_oauth", return_value=True):
+        explicit = pick_bindings(manifest=manifest, overrides={"pilot": {"source": "api_key"}})
+        assert explicit.bindings["pilot"].source == "api_key"
 
 
 def test_pick_bindings_user_override_model() -> None:
