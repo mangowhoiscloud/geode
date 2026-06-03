@@ -46,7 +46,11 @@ def test_real_archive_produces_concrete_args_shape_result() -> None:
     # emits well-formed calls (e.g. order_sync_status(batch_id=4488)), so the
     # expected verdict is a non-failing concrete status.
     args = by_id["args_shape_valid"]
-    assert args["status"] in {"pass", "skipped", "indeterminate"}, (
+    # "skipped" is EXCLUDED: this archive has real target tool calls, so a
+    # "skipped" result would mean the parser found nothing — a regression the
+    # test must FAIL on, not pass vacuously. (The known-good archive yields
+    # "pass"; "indeterminate" stays allowed for un-parseable-arg drift.)
+    assert args["status"] in {"pass", "indeterminate"}, (
         f"unexpected args_shape_valid status on real data: {args}"
     )
     assert args["hard"] is True

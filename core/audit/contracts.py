@@ -238,7 +238,30 @@ def check_contracts(samples: list[Any]) -> list[ContractResult]:
             detail=args_first_failure or "tool-call args violated the create_tool schema",
             hard=True,
         )
-    elif args_validated == 0 and args_indeterminate == 0:
+    elif args_indeterminate > 0:
+        # ANY un-parseable arg (no hard failure) → the contract was NOT fully
+        # verified. Honest status is "indeterminate" — covers both the
+        # all-unparseable case (validated == 0) and the MIXED case
+        # (validated > 0 AND indeterminate > 0). "pass" here would be a false
+        # "validated" signal. This never vetoes (only "fail" does); it only
+        # keeps the recorded ledger honest.
+        args_result = ContractResult(
+            contract_id="args_shape_valid",
+            status="indeterminate",
+            failed_samples=[],
+            detail=f"{args_validated} call(s) validated, "
+            f"{args_indeterminate} un-parseable (not failed)",
+            hard=True,
+        )
+    elif args_validated > 0:
+        args_result = ContractResult(
+            contract_id="args_shape_valid",
+            status="pass",
+            failed_samples=[],
+            detail=f"{args_validated} call(s) validated",
+            hard=True,
+        )
+    else:
         # No target tool calls anywhere → nothing to validate. Not a failure;
         # the audit simply exercised no schema-bound calls.
         args_result = ContractResult(
@@ -246,25 +269,6 @@ def check_contracts(samples: list[Any]) -> list[ContractResult]:
             status="skipped",
             failed_samples=[],
             detail="no target tool calls to validate",
-            hard=True,
-        )
-    elif args_validated == 0 and args_indeterminate > 0:
-        args_result = ContractResult(
-            contract_id="args_shape_valid",
-            status="indeterminate",
-            failed_samples=[],
-            detail=f"{args_indeterminate} call(s) had un-parseable args (not failed)",
-            hard=True,
-        )
-    else:
-        detail = f"{args_validated} call(s) validated"
-        if args_indeterminate:
-            detail += f", {args_indeterminate} indeterminate (un-parseable args, not failed)"
-        args_result = ContractResult(
-            contract_id="args_shape_valid",
-            status="pass",
-            failed_samples=[],
-            detail=detail,
             hard=True,
         )
 

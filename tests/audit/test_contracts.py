@@ -213,6 +213,33 @@ def test_args_shape_indeterminate_on_unparseable_args_not_false_fail() -> None:
     assert res.failed_samples == []
 
 
+def test_args_shape_mixed_validated_and_unparseable_is_indeterminate_not_pass() -> None:
+    """MIXED case (Codex 2nd-pass): ONE well-formed call that validates against
+    its ``create_tool`` schema AND ONE call whose args are un-parseable (no hard
+    schema violation). Because some call's args could NOT be parsed, the contract
+    was NOT fully verified → status is INDETERMINATE, never a false ``"pass"``.
+    The detail must surface BOTH the validated and the un-parseable counts."""
+    schema = (
+        '{"type":"object","properties":{"batch_id":{"type":"integer"}},"required":["batch_id"]}'
+    )
+    sample = FakeSample(
+        id="seedMixed__s1",
+        events=[
+            _create_tool("order_sync_status", schema),
+            # well-formed call → validates
+            _target_text_turn("TOOL_CALL: order_sync_status(batch_id=4488)"),
+            # un-parseable args (free-form prose, not k=v) → indeterminate, not a fail
+            _target_text_turn("TOOL_CALL: order_sync_status(some free-form text without kv)"),
+        ],
+    )
+    res = _by_id(check_contracts([sample]))["args_shape_valid"]
+    assert res.status == "indeterminate", res.detail
+    assert res.failed_samples == []
+    # detail mentions both the validated count and the un-parseable count
+    assert "1 call(s) validated" in res.detail
+    assert "1 un-parseable" in res.detail
+
+
 # ---------------------------------------------------------------------------
 # 6. structured tool_calls preferred; auditor/judge structured calls excluded
 # ---------------------------------------------------------------------------
