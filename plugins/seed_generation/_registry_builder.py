@@ -64,6 +64,7 @@ def build_subagent_manager() -> Any:
     mcp_manager = None
     skill_registry = None
     agent_registry = _try_build_agent_registry()
+    _warn_if_pilot_toolkit_unresolvable(agent_registry)
     # ``get_lane_queue`` is not a public surface in this worktree's wiring;
     # the SubAgentManager constructs its own IsolatedRunner with the bare
     # ``hooks=None / lane=None`` path which the runner tolerates (slot wait
@@ -152,6 +153,42 @@ def _try_build_agent_registry() -> Any:
         return None
 
 
+def _warn_if_pilot_toolkit_unresolvable(agent_registry: Any) -> None:
+    """Loudly surface the regression class where the ``seed_pilot`` agent fails
+    to resolve to its ``{petri_audit, read_document}`` toolkit.
+
+    When that happens the pilot worker silently degrades to the broad
+    ``_default`` toolset (no ``petri_audit``); the pilot can't run a real
+    audit, fabricates a narrative / all-zero ``dim_means``, and the difficulty
+    signal the Ranker's blend depends on is lost. Twice-seen (3d6511310
+    tool_policy strip; the 2026-06-03 difficulty canary). A WARNING — not the
+    silent ``log.debug`` the build path uses — lets an operator catch the
+    degradation before a full run measures nothing. Best-effort: never raises
+    (the manager still dispatches; this is observability, not a gate).
+    """
+    if agent_registry is None:
+        log.warning(
+            "seed-generation: AgentRegistry unavailable — the seed_pilot "
+            "toolkit (petri_audit) degrades to the broad default; pilot "
+            "difficulty measurement will be unreliable. Check that "
+            ".claude/agents + plugins/*/agents are discoverable."
+        )
+        return
+    try:
+        definition = agent_registry.get("seed_pilot")
+    except Exception:
+        definition = None
+    toolkit = getattr(definition, "toolkit", None) if definition is not None else None
+    if toolkit != "seed_pilot":
+        log.warning(
+            "seed-generation: seed_pilot agent did not resolve to its "
+            "'seed_pilot' toolkit (got toolkit=%r) — petri_audit may be "
+            "stripped from the pilot worker; difficulty measurement will be "
+            "unreliable.",
+            toolkit,
+        )
+
+
 def populate_registry(
     registry: PipelineRegistry,
     *,
@@ -214,12 +251,16 @@ def populate_registry(
                     manifest_role_dict[field_name] = getattr(manifest_role, field_name)
 
         if role_name == "ranker":
-            # PR-SEEDGEN-DIFFICULTY-SELECTION (2026-06-01) — resolve the
-            # survivor-selection mode from the operator env knob
-            # (``GEODE_SEED_SURVIVOR_SELECTION``). Default "elo" keeps the
-            # production path unchanged; "difficulty" re-ranks survivors by
-            # measured pilot target_dim elicitation (hardest first).
-            from plugins.seed_generation.tournament import resolve_survivor_selection
+            # PR-SEEDGEN-DIFFICULTY-SELECTION (2026-06-01) / PR-SEEDGEN-ELO-
+            # DIFFICULTY-BLEND (2026-06-03) — resolve the survivor-selection
+            # mode + blend weights from operator env knobs. Default "blend"
+            # scalarises Elo + confidence-weighted pilot difficulty;
+            # "difficulty" / "elo" remain available via
+            # ``GEODE_SEED_SURVIVOR_SELECTION``.
+            from plugins.seed_generation.tournament import (
+                resolve_blend_weights,
+                resolve_survivor_selection,
+            )
 
             agent: BaseSeedAgent = Ranker(
                 manager,
@@ -228,6 +269,7 @@ def populate_registry(
                 source=binding.source if binding else "auto",
                 manifest_role=manifest_role_dict,
                 selection=resolve_survivor_selection(),
+                blend_weights=resolve_blend_weights(),
             )
         else:
             cls = _ROLE_TO_CLASS.get(role_name)

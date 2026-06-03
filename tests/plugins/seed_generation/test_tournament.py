@@ -6,6 +6,10 @@ import random
 
 import pytest
 from plugins.seed_generation.tournament import (
+    BLEND_DIFFICULTY_WEIGHT_ENV,
+    BLEND_ELO_WEIGHT_ENV,
+    DEFAULT_DIFFICULTY_WEIGHT,
+    DEFAULT_ELO_WEIGHT,
     DEFAULT_K_FACTOR,
     DEFAULT_SURVIVOR_SELECTION,
     INITIAL_RATING,
@@ -13,12 +17,15 @@ from plugins.seed_generation.tournament import (
     MatchOutcome,
     MatchPlan,
     apply_match,
+    blend_scores,
+    difficulty_confidence,
     expected_score,
     initial_ratings,
     majority_winner,
     outcome_score,
     plan_matches,
     rank_by_difficulty,
+    resolve_blend_weights,
     resolve_survivor_selection,
     select_survivors,
     top_k,
@@ -237,14 +244,15 @@ def test_default_k_factor_pinned() -> None:
 # ── PR-SEEDGEN-DIFFICULTY-SELECTION — difficulty-calibrated survivor pick ──
 
 
-def test_default_survivor_selection_is_elo() -> None:
-    """Default must stay Elo so existing runs are unchanged unless opted in."""
-    assert DEFAULT_SURVIVOR_SELECTION == "elo"
+def test_default_survivor_selection_is_blend() -> None:
+    """Default is blend — difficulty influences selection whenever the pilot
+    measures it, degrading per-candidate to Elo when it does not."""
+    assert DEFAULT_SURVIVOR_SELECTION == "blend"
 
 
 def test_resolve_selection_default_when_env_unset(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.delenv(SURVIVOR_SELECTION_ENV, raising=False)
-    assert resolve_survivor_selection() == "elo"
+    assert resolve_survivor_selection() == "blend"
 
 
 def test_resolve_selection_difficulty(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -264,7 +272,7 @@ def test_resolve_selection_typo_falls_back_to_default(
 ) -> None:
     """A typo must never harden the knob into an invalid mode."""
     monkeypatch.setenv(SURVIVOR_SELECTION_ENV, "difculty")
-    assert resolve_survivor_selection() == "elo"
+    assert resolve_survivor_selection() == "blend"
 
 
 def test_rank_by_difficulty_hardest_first() -> None:
@@ -390,3 +398,163 @@ def test_select_survivors_difficulty_without_pilot_means_falls_back_to_elo() -> 
 def test_select_survivors_empty_ratings() -> None:
     assert select_survivors({}, k=5, selection="elo") == []
     assert select_survivors({}, k=5, selection="difficulty", pilot_means={}, target_dim="d") == []
+    assert select_survivors({}, k=5, selection="blend", pilot_means={}, target_dim="d") == []
+
+
+# ── blend selection (PR-SEEDGEN-ELO-DIFFICULTY-BLEND) ──────────────────────
+
+
+def test_resolve_selection_blend(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv(SURVIVOR_SELECTION_ENV, "  Blend  ")
+    assert resolve_survivor_selection() == "blend"
+
+
+def test_difficulty_confidence_shape() -> None:
+    """Confidence is 1 at stderr 0, 0.5 at one Petri point, 0.2 at two — and
+    stays graceful (never raises) for every malformed stderr."""
+    assert difficulty_confidence(0.0) == 1.0
+    assert difficulty_confidence(1.0) == pytest.approx(0.5)
+    assert difficulty_confidence(2.0) == pytest.approx(0.2)
+    # Missing / non-finite / negative / non-numeric / bool → moderate fallback.
+    assert difficulty_confidence(None) == 0.5
+    assert difficulty_confidence(float("nan")) == 0.5
+    assert difficulty_confidence(float("inf")) == 0.5
+    assert difficulty_confidence(-1.0) == 0.5
+    assert difficulty_confidence("0.1") == 0.5  # type: ignore[arg-type]
+    assert difficulty_confidence(True) == 0.5  # type: ignore[arg-type]
+
+
+def test_blend_picks_hard_and_decent_over_top_elo() -> None:
+    """The mid-Elo HARDEST seed wins the blend over the top-Elo easier seed —
+    multi-objective: ``realistic AND hard``, not hardest-but-worst."""
+    ratings = {"A_topelo": 1100.0, "B_hardest": 1050.0, "C_easy": 1000.0}
+    means = {
+        "A_topelo": {"d": 5.0},
+        "B_hardest": {"d": 9.0},
+        "C_easy": {"d": 2.0},
+    }
+    stderr = {cid: {"d": 0.2} for cid in ratings}
+    # Pure Elo keeps A; pure difficulty keeps B; blend keeps B (difficulty
+    # influences the pick) but would never keep a hard-yet-Elo-bottom seed.
+    assert select_survivors(ratings, k=1, selection="elo") == ["A_topelo"]
+    assert select_survivors(
+        ratings, k=1, selection="difficulty", pilot_means=means, target_dim="d"
+    ) == ["B_hardest"]
+    assert select_survivors(
+        ratings,
+        k=1,
+        selection="blend",
+        pilot_means=means,
+        pilot_stderr=stderr,
+        target_dim="d",
+    ) == ["B_hardest"]
+
+
+def test_blend_degrades_to_elo_without_pilot_signal() -> None:
+    """No usable difficulty signal → every score is α·z(elo) → Elo order,
+    so a broken pilot can never make blend worse than pure Elo."""
+    ratings = {"hi": 1100.0, "mid": 1050.0, "lo": 1000.0}
+    assert select_survivors(ratings, k=3, selection="blend", pilot_means={}, target_dim="d") == [
+        "hi",
+        "mid",
+        "lo",
+    ]
+    # target_dim blank → same degradation.
+    assert select_survivors(
+        ratings, k=3, selection="blend", pilot_means={"hi": {"d": 9.0}}, target_dim=""
+    ) == ["hi", "mid", "lo"]
+
+
+def test_blend_partial_pilot_signal_per_candidate_degradation() -> None:
+    """A candidate WITHOUT a pilot signal gets no difficulty term (scored on
+    Elo alone); the measured candidates still get their difficulty bonus."""
+    ratings = {"measured_hard": 1000.0, "unmeasured_hi_elo": 1010.0}
+    means = {"measured_hard": {"d": 9.0}}  # unmeasured has no entry
+    stderr = {"measured_hard": {"d": 0.1}}
+    # measured_hard z(diff)=+1 (only one in the diff population → sd 0 → 0.0
+    # actually; with one signal the z-population is a single value → 0).
+    # So with a lone measured candidate the difficulty term is 0 (no spread to
+    # standardise) and selection falls to Elo: the higher-Elo unmeasured wins.
+    picked = select_survivors(
+        ratings,
+        k=1,
+        selection="blend",
+        pilot_means=means,
+        pilot_stderr=stderr,
+        target_dim="d",
+    )
+    assert picked == ["unmeasured_hi_elo"]
+
+
+def test_blend_confidence_downweights_noisy_difficulty() -> None:
+    """A noisy pilot difficulty contributes LESS to the blend score than a
+    tight one — directly exercising the confidence weight. Elo is tied so the
+    difficulty term is the only thing that moves the hard seed's score."""
+    ratings = dict.fromkeys(["hard", "easy", "mid"], 1000.0)
+    means = {"hard": {"d": 9.0}, "easy": {"d": 1.0}, "mid": {"d": 5.0}}
+    tight = {cid: {"d": 0.1} for cid in ratings}
+    # Only the hard seed's measurement is noisy.
+    noisy = {"hard": {"d": 5.0}, "easy": {"d": 0.1}, "mid": {"d": 0.1}}
+    s_tight = blend_scores(ratings, means, tight, "d")
+    s_noisy = blend_scores(ratings, means, noisy, "d")
+    # 'hard' carries a positive difficulty z-score; discounting its confidence
+    # shrinks its blend score (its difficulty bonus is trusted less).
+    assert s_noisy["hard"] < s_tight["hard"]
+    # With Elo tied + tight confidence, the hardest seed still wins the pick.
+    assert select_survivors(
+        ratings,
+        k=1,
+        selection="blend",
+        pilot_means=means,
+        pilot_stderr=tight,
+        target_dim="d",
+    ) == ["hard"]
+
+
+def test_blend_scores_deterministic_tie_break() -> None:
+    """Equal blend scores break ties by descending Elo then candidate id."""
+    ratings = {"b": 1000.0, "a": 1000.0, "c": 1000.0}
+    # No difficulty signal → all scores 0 → tie-break by -elo (all equal), id.
+    picked = select_survivors(ratings, k=3, selection="blend", pilot_means={}, target_dim="d")
+    assert picked == ["a", "b", "c"]
+
+
+def test_blend_weights_zero_difficulty_recovers_elo() -> None:
+    """β=0 makes blend identical to Elo even with a strong difficulty signal."""
+    ratings = {"hi": 1100.0, "lo": 1000.0}
+    means = {"hi": {"d": 1.0}, "lo": {"d": 9.0}}  # lo is much harder
+    stderr = {cid: {"d": 0.1} for cid in ratings}
+    picked = select_survivors(
+        ratings,
+        k=1,
+        selection="blend",
+        pilot_means=means,
+        pilot_stderr=stderr,
+        target_dim="d",
+        elo_weight=1.0,
+        diff_weight=0.0,
+    )
+    assert picked == ["hi"]  # difficulty ignored → top Elo
+
+
+def test_resolve_blend_weights_default_and_env(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.delenv(BLEND_ELO_WEIGHT_ENV, raising=False)
+    monkeypatch.delenv(BLEND_DIFFICULTY_WEIGHT_ENV, raising=False)
+    assert resolve_blend_weights() == (DEFAULT_ELO_WEIGHT, DEFAULT_DIFFICULTY_WEIGHT)
+    monkeypatch.setenv(BLEND_ELO_WEIGHT_ENV, "0.5")
+    monkeypatch.setenv(BLEND_DIFFICULTY_WEIGHT_ENV, "2.0")
+    assert resolve_blend_weights() == (0.5, 2.0)
+    # Garbage / negative / non-finite weights fall back to the defaults.
+    monkeypatch.setenv(BLEND_ELO_WEIGHT_ENV, "not-a-number")
+    monkeypatch.setenv(BLEND_DIFFICULTY_WEIGHT_ENV, "-3")
+    assert resolve_blend_weights() == (DEFAULT_ELO_WEIGHT, DEFAULT_DIFFICULTY_WEIGHT)
+
+
+def test_blend_scores_returns_score_per_candidate() -> None:
+    """``blend_scores`` exposes the raw scalarised score for observability."""
+    ratings = {"x": 1100.0, "y": 1000.0}
+    means = {"x": {"d": 2.0}, "y": {"d": 8.0}}
+    stderr = {cid: {"d": 0.2} for cid in ratings}
+    scores = blend_scores(ratings, means, stderr, "d")
+    assert set(scores) == {"x", "y"}
+    assert all(isinstance(v, float) for v in scores.values())

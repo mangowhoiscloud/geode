@@ -37,6 +37,10 @@ from dataclasses import dataclass
 from typing import Literal
 
 __all__ = [
+    "BLEND_DIFFICULTY_WEIGHT_ENV",
+    "BLEND_ELO_WEIGHT_ENV",
+    "DEFAULT_DIFFICULTY_WEIGHT",
+    "DEFAULT_ELO_WEIGHT",
     "DEFAULT_K_FACTOR",
     "DEFAULT_SURVIVOR_SELECTION",
     "DEFAULT_TOP_K",
@@ -46,11 +50,14 @@ __all__ = [
     "MatchPlan",
     "SurvivorSelection",
     "apply_match",
+    "blend_scores",
+    "difficulty_confidence",
     "expected_score",
     "initial_ratings",
     "outcome_score",
     "plan_matches",
     "rank_by_difficulty",
+    "resolve_blend_weights",
     "resolve_survivor_selection",
     "select_survivors",
     "top_k",
@@ -62,28 +69,58 @@ DEFAULT_K_FACTOR: float = 32.0
 DEFAULT_TOP_K: int = 5
 
 
-SurvivorSelection = Literal["elo", "difficulty"]
+SurvivorSelection = Literal["elo", "difficulty", "blend"]
 """How the Ranker picks survivors from the rated candidate set.
 
-- ``"elo"`` (default, unchanged behaviour) — top-K by descending Elo
-  rating (tournament win-rate via the 3-judge panel).
+- ``"elo"`` — top-K by descending Elo rating (tournament win-rate via
+  the 3-judge panel). The panel already weighs realism + voter-estimated
+  difficulty per ``ranker.md``, so Elo is a *robust* (always-present)
+  quality+difficulty signal.
 - ``"difficulty"`` — top-K by descending measured pilot
   ``dim_means[target_dim]`` (Petri 1-10, HIGHER = more misbehaviour
   elicited = HARDER for the target = LOWER target fitness = MORE
-  headroom for a mutation to improve). Selects the seeds the target
-  struggles most with, instead of the ones the panel rated "best".
+  headroom for a mutation to improve). A *binary* mode that fully
+  replaces Elo and silently falls back to it when the pilot signal is
+  absent — the fragility that motivated ``"blend"``.
+- ``"blend"`` (default) — scalarised multi-objective selection:
+  ``final = elo_weight·z(elo) + diff_weight·confidence·z(difficulty)``
+  where ``z`` is the population z-score across the rated candidates and
+  ``confidence`` down-weights a noisy / low-sample pilot difficulty (see
+  :func:`blend_scores`). Combines BOTH the robust voter-estimated
+  difficulty already inside Elo AND the objective pilot measurement,
+  degrading *gracefully* to pure Elo (per candidate, not all-or-nothing)
+  as the pilot signal weakens — the operator-chosen "둘 다 + confidence"
+  design. Elo is z-scored so its order is preserved, hence a blend with
+  no usable difficulty signal == the historical Elo ranking.
 """
 
-DEFAULT_SURVIVOR_SELECTION: SurvivorSelection = "elo"
-"""Default survivor selection mode — Elo, so existing runs are unchanged
-unless the operator opts in to difficulty-calibrated selection."""
+DEFAULT_SURVIVOR_SELECTION: SurvivorSelection = "blend"
+"""Default survivor selection mode — :data:`blend <SurvivorSelection>`,
+so difficulty influences selection whenever the pilot measures it, but a
+missing / unreliable pilot can never make selection worse than Elo."""
 
 SURVIVOR_SELECTION_ENV = "GEODE_SEED_SURVIVOR_SELECTION"
-"""Operator override — set to ``difficulty`` to pick the hardest seeds
-(highest pilot target_dim elicitation) instead of the top-Elo seeds.
+"""Operator override — set to ``elo`` / ``difficulty`` / ``blend``.
 Any unrecognised / empty value falls back to
 :data:`DEFAULT_SURVIVOR_SELECTION` (the knob must never harden into an
 invalid mode from a typo)."""
+
+DEFAULT_ELO_WEIGHT: float = 1.0
+DEFAULT_DIFFICULTY_WEIGHT: float = 1.0
+"""Default ``blend`` scalarisation weights (α on z-scored Elo, β on the
+confidence-weighted z-scored pilot difficulty). Both signals are z-scored
+to the same unit-variance scale, so equal weights give them equal pull;
+the operator tunes the ratio via :data:`BLEND_ELO_WEIGHT_ENV` /
+:data:`BLEND_DIFFICULTY_WEIGHT_ENV`."""
+
+BLEND_ELO_WEIGHT_ENV = "GEODE_SEED_BLEND_ELO_WEIGHT"
+BLEND_DIFFICULTY_WEIGHT_ENV = "GEODE_SEED_BLEND_DIFFICULTY_WEIGHT"
+
+# Difficulty-confidence shaping (see :func:`difficulty_confidence`). The
+# stderr scale is one Petri point: a target_dim mean of 7.0 ± 1.0 carries
+# confidence 0.5, ± 0 carries 1.0, ± 2 carries 0.2.
+_DIFFICULTY_STDERR_SCALE: float = 1.0
+_DIFFICULTY_NO_STDERR_CONFIDENCE: float = 0.5
 
 
 WinnerLabel = Literal["A", "B", "tie"]
@@ -237,17 +274,55 @@ def resolve_survivor_selection() -> SurvivorSelection:
     """Resolve the effective survivor-selection mode from the environment.
 
     Reads :data:`SURVIVOR_SELECTION_ENV`. Recognises ``"elo"`` /
-    ``"difficulty"`` (case-insensitive, surrounding whitespace stripped);
-    any other value — including an empty string or a typo — falls back to
-    :data:`DEFAULT_SURVIVOR_SELECTION` so the knob can never harden into an
-    invalid mode mid-run.
+    ``"difficulty"`` / ``"blend"`` (case-insensitive, surrounding
+    whitespace stripped); any other value — including an empty string or a
+    typo — falls back to :data:`DEFAULT_SURVIVOR_SELECTION` so the knob can
+    never harden into an invalid mode mid-run.
     """
     raw = os.environ.get(SURVIVOR_SELECTION_ENV, "").strip().lower()
     if raw == "difficulty":
         return "difficulty"
     if raw == "elo":
         return "elo"
+    if raw == "blend":
+        return "blend"
     return DEFAULT_SURVIVOR_SELECTION
+
+
+def _resolve_weight_env(name: str, default: float) -> float:
+    """Read a non-negative float weight from ``name``, else ``default``.
+
+    Graceful at the cast boundary (CLAUDE.md): an unset, blank,
+    non-numeric, negative, or non-finite value falls back to ``default``
+    so a typo'd weight knob can never invert or zero out selection
+    silently.
+    """
+    raw = os.environ.get(name, "").strip()
+    if not raw:
+        return default
+    try:
+        value = float(raw)
+    except ValueError:
+        return default
+    if not math.isfinite(value) or value < 0.0:
+        return default
+    return value
+
+
+def resolve_blend_weights() -> tuple[float, float]:
+    """Resolve the ``blend`` scalarisation weights ``(elo, difficulty)``.
+
+    Reads :data:`BLEND_ELO_WEIGHT_ENV` / :data:`BLEND_DIFFICULTY_WEIGHT_ENV`,
+    each defaulting to :data:`DEFAULT_ELO_WEIGHT` /
+    :data:`DEFAULT_DIFFICULTY_WEIGHT`. Env reading lives here (next to
+    :func:`resolve_survivor_selection`) so the pure :func:`blend_scores`
+    math stays I/O-free and the orchestrator threads the resolved weights
+    in explicitly.
+    """
+    return (
+        _resolve_weight_env(BLEND_ELO_WEIGHT_ENV, DEFAULT_ELO_WEIGHT),
+        _resolve_weight_env(BLEND_DIFFICULTY_WEIGHT_ENV, DEFAULT_DIFFICULTY_WEIGHT),
+    )
 
 
 def _difficulty_signal(
@@ -319,18 +394,135 @@ def rank_by_difficulty(
     return sorted(ratings.keys(), key=_sort_key)
 
 
+def difficulty_confidence(stderr: float | None) -> float:
+    """Reliability of a pilot difficulty measurement, in ``[0.0, 1.0]``.
+
+    Scales the ``blend`` difficulty term so a noisy pilot pulls selection
+    less than a tight one — the operator's "confidence 가중". Confidence is
+    driven by the standard error of the target-dim mean, which already
+    encodes the sample size (``stderr = sd / √n``): a low-sample or
+    high-variance pilot carries a larger stderr and is down-weighted, so no
+    separate sample-count gate is needed (and the pilot's PILOT_SCHEMA does
+    not carry a count anyway).
+
+    Graceful at the cast boundary (CLAUDE.md): a missing / non-numeric /
+    non-finite / negative stderr — ``bool`` rejected explicitly so a stray
+    ``True`` cannot read as ``1.0`` — resolves to
+    :data:`_DIFFICULTY_NO_STDERR_CONFIDENCE` rather than raising (a
+    present-but-unquantified measurement keeps moderate weight, never 0 or
+    1). Otherwise ``1 / (1 + (stderr / scale)²)`` — 1.0 at stderr 0,
+    decaying smoothly as the Petri-point stderr grows.
+    """
+    if isinstance(stderr, bool) or not isinstance(stderr, (int, float)):
+        return _DIFFICULTY_NO_STDERR_CONFIDENCE
+    value = float(stderr)
+    if not math.isfinite(value) or value < 0.0:
+        return _DIFFICULTY_NO_STDERR_CONFIDENCE
+    return 1.0 / (1.0 + (value / _DIFFICULTY_STDERR_SCALE) ** 2)
+
+
+def _zscores(values: Mapping[str, float]) -> dict[str, float]:
+    """Population z-score of ``values`` (mean 0, unit variance).
+
+    Empty input → empty dict. A degenerate all-equal population (variance
+    0) → every entry ``0.0`` (neutral) instead of a divide-by-zero, so the
+    blend leans entirely on the *other* axis when one signal is flat. The
+    transform is strictly monotonic in the input, so ranking by a single
+    z-scored axis is identical to ranking by that axis raw.
+    """
+    if not values:
+        return {}
+    xs = list(values.values())
+    mean = sum(xs) / len(xs)
+    variance = sum((x - mean) ** 2 for x in xs) / len(xs)
+    sd = math.sqrt(variance)
+    if sd == 0.0:
+        return dict.fromkeys(values, 0.0)
+    return {key: (value - mean) / sd for key, value in values.items()}
+
+
+def blend_scores(
+    ratings: Mapping[str, float],
+    pilot_means: Mapping[str, Mapping[str, object]] | None,
+    pilot_stderr: Mapping[str, Mapping[str, object]] | None,
+    target_dim: str | None,
+    *,
+    elo_weight: float = DEFAULT_ELO_WEIGHT,
+    diff_weight: float = DEFAULT_DIFFICULTY_WEIGHT,
+) -> dict[str, float]:
+    """Scalarised blend score per candidate: ``α·z(elo) + β·conf·z(diff)``.
+
+    The objective for "realistic AND hard" selection. Elo (the panel's
+    realism + voter-estimated-difficulty signal) and the pilot's objective
+    ``dim_means[target_dim]`` are each z-scored across the rated candidates
+    so they share a unit-variance scale, then summed with weights ``α``
+    (``elo_weight``) and ``β`` (``diff_weight``). The difficulty term is
+    further scaled per candidate by :func:`difficulty_confidence` (from the
+    pilot ``dim_stderr[target_dim]``), so a noisy pilot contributes less.
+
+    **Graceful, per-candidate degradation** — the difficulty z-score is
+    computed ONLY over candidates carrying a usable pilot signal; a
+    candidate without one gets no difficulty term at all (its score is
+    ``α·z(elo)``). When NO candidate has a usable signal (pilot fully
+    failed, ``target_dim`` blank, or ``pilot_means`` empty) the difficulty
+    z-score is empty and every score reduces to ``α·z(elo)`` — and because
+    z-scoring preserves order, that is exactly the historical Elo ranking.
+    So a broken pilot can never make ``blend`` selection *worse* than
+    ``"elo"``; it just removes the difficulty contribution.
+    """
+    means = pilot_means or {}
+    stderrs = pilot_stderr or {}
+
+    z_elo = _zscores({cid: ratings.get(cid, INITIAL_RATING) for cid in ratings})
+
+    # ``dim`` is non-empty whenever z_difficulty is non-empty (raw_difficulty
+    # only fills under a truthy target_dim); the ``or ""`` narrows the type for
+    # the stderr reader below without changing behaviour (an empty-string dim
+    # is only ever looked up when z_difficulty is empty, so never reached).
+    dim = target_dim or ""
+    raw_difficulty: dict[str, float] = {}
+    if dim:
+        for cid in ratings:
+            signal = _difficulty_signal(means, cid, dim)
+            if signal is not None:
+                raw_difficulty[cid] = signal
+    z_difficulty = _zscores(raw_difficulty)
+
+    scores: dict[str, float] = {}
+    for cid in ratings:
+        score = elo_weight * z_elo.get(cid, 0.0)
+        if cid in z_difficulty:
+            # ``_difficulty_signal`` is a generic nested finite-float reader,
+            # reused for the parallel-shaped dim_stderr map.
+            stderr = _difficulty_signal(stderrs, cid, dim)
+            confidence = difficulty_confidence(stderr)
+            score += diff_weight * confidence * z_difficulty[cid]
+        scores[cid] = score
+    return scores
+
+
 def select_survivors(
     ratings: Mapping[str, float],
     *,
     k: int = DEFAULT_TOP_K,
     selection: SurvivorSelection = DEFAULT_SURVIVOR_SELECTION,
     pilot_means: Mapping[str, Mapping[str, object]] | None = None,
+    pilot_stderr: Mapping[str, Mapping[str, object]] | None = None,
     target_dim: str | None = None,
+    elo_weight: float = DEFAULT_ELO_WEIGHT,
+    diff_weight: float = DEFAULT_DIFFICULTY_WEIGHT,
 ) -> list[str]:
     """Pick the top-``k`` survivors under the chosen selection mode.
 
-    - ``selection="elo"`` (default) — delegates to :func:`top_k`; identical
-      to the historical behaviour (top-K by descending Elo).
+    - ``selection="blend"`` (default) — ranks by the scalarised
+      :func:`blend_scores` (``α·z(elo) + β·confidence·z(difficulty)``),
+      breaking ties by descending Elo then candidate id. Combines the
+      panel's realism signal (Elo) with the objective pilot difficulty,
+      degrading per-candidate to Elo as the pilot signal weakens (see
+      :func:`blend_scores`). ``pilot_stderr`` feeds the confidence weight;
+      absent → the difficulty term still applies at moderate confidence.
+    - ``selection="elo"`` — delegates to :func:`top_k`; identical to the
+      historical behaviour (top-K by descending Elo).
     - ``selection="difficulty"`` — ranks ALL rated candidates by measured
       pilot ``dim_means[target_dim]`` (hardest first via
       :func:`rank_by_difficulty`), then truncates to ``k``. This keeps the
@@ -341,6 +533,24 @@ def select_survivors(
       difficulty request degrades to the safe default rather than
       returning an arbitrary order.
     """
+    if selection == "blend":
+        scores = blend_scores(
+            ratings,
+            pilot_means,
+            pilot_stderr,
+            target_dim,
+            elo_weight=elo_weight,
+            diff_weight=diff_weight,
+        )
+        ranked = sorted(
+            ratings.keys(),
+            key=lambda cid: (
+                -scores.get(cid, 0.0),
+                -ratings.get(cid, INITIAL_RATING),
+                cid,
+            ),
+        )
+        return ranked[:k]
     if selection != "difficulty":
         return top_k(dict(ratings), k=k)
     if not target_dim or not pilot_means:
