@@ -160,12 +160,43 @@ class Site:
     # (e.g. ``dim_means: {broken_tool_use: 2.5, …}``).
     text_string_en: str | None = None
     text_string_ko: str | None = None
+    # Optional explicit font family override — used by the cold-open
+    # scaffold-kind rows, which render in the monospace ``Menlo`` family
+    # (code identifiers) instead of the EN/KO Helvetica Neue / Pretendard
+    # pair. When set, both the Cairo width measurement and the HarfBuzz
+    # glyph-cluster shaping use this family for both languages.
+    font_family: str | None = None
 
 
 # Layout sites — keyed by site_id; covers every "text inside box" pair
 # in scripts/visualizations/geode_hero.py. When the scene adds a new
 # box, append a Site here and run with --update-baseline.
 SITES: tuple[Site, ...] = (
+    # ── Cold-open title card (beat 0) ──
+    # Full-canvas free text (no rectangle); container width is the canvas
+    # safe interior (x ∈ [−7, 7] = 14.0 wide). The ratchet's job here is the
+    # edge-overflow guard + glyph-cluster drift gate. The brand wordmark is
+    # large (64); the 7-kind rows render in monospace (Menlo) and pin their
+    # font via ``font_family`` so the glyph-cluster shaping matches the scene.
+    Site("coldopen_brand", "coldopen_brand", 64, 14.0, 1.2),
+    Site("coldopen_subtitle", "coldopen_subtitle", 24, 14.0, 0.6),
+    Site("coldopen_reinforce_label", "coldopen_reinforce_label", 14, 14.0, 0.5),
+    Site(
+        "coldopen_kinds_line1",
+        "coldopen_kinds_line1",
+        16,
+        14.0,
+        0.5,
+        font_family="Menlo",
+    ),
+    Site(
+        "coldopen_kinds_line2",
+        "coldopen_kinds_line2",
+        16,
+        14.0,
+        0.5,
+        font_family="Menlo",
+    ),
     Site("agent_generator", "agent_generator", 14, 1.05, 0.5),
     Site("agent_proximity", "agent_proximity", 14, 1.05, 0.5),
     Site("agent_critic", "agent_critic", 14, 1.05, 0.5),
@@ -201,6 +232,225 @@ SITES: tuple[Site, ...] = (
         0.5,
         text_string_en="fitness = Σᵢ wᵢ · score(dim_meansᵢ) + w_stab · stability",
         text_string_ko="fitness = Σᵢ wᵢ · score(dim_meansᵢ) + w_stab · stability",
+    ),
+    # ── 3-Act narrative scaffolding (Problem → 대처 → 트레이드오프) ──
+    # Act-title + one-line problem/fix/tradeoff strings. These are free
+    # text on the interlude canvas (no rectangle), so the container width
+    # is the canvas safe interior (x ∈ [−7, 7] = 14.0 wide); the ratchet's
+    # job here is the glyph-cluster drift gate + the edge-overflow guard.
+    Site("act1_title", "act1_title", 30, 14.0, 0.7),
+    Site("act1_problem", "act1_problem", 22, 14.0, 0.6),
+    Site("act1_fix", "act1_fix", 22, 14.0, 0.6),
+    Site("act1_tradeoff", "act1_tradeoff", 24, 14.0, 0.6),
+    Site("act2_title", "act2_title", 30, 14.0, 0.7),
+    Site("act2_problem", "act2_problem", 22, 14.0, 0.6),
+    Site("act2_fix", "act2_fix", 22, 14.0, 0.6),
+    Site("act2_tradeoff", "act2_tradeoff", 24, 14.0, 0.6),
+    Site("act2_invariant", "act2_invariant", 16, 14.0, 0.5),
+    Site("act3_title", "act3_title", 30, 14.0, 0.7),
+    Site("act3_problem", "act3_problem", 22, 14.0, 0.6),
+    Site("act3_fix", "act3_fix", 22, 14.0, 0.6),
+    Site("act3_tradeoff", "act3_tradeoff", 24, 14.0, 0.6),
+    # Act 4 — judge rewards fluency; name the contracts instead. The Act 4
+    # countermeasure is DESIGN-STAGE (see geode_hero.py); the on-screen
+    # ``designed_role`` label is the honesty marker. Act-title + one-line
+    # problem/fix/tradeoff are free text on the interlude canvas (14.0 wide).
+    Site("act4_title", "act4_title", 30, 14.0, 0.7),
+    Site("act4_problem", "act4_problem", 22, 14.0, 0.6),
+    Site("act4_fix", "act4_fix", 22, 14.0, 0.6),
+    Site("act4_tradeoff", "act4_tradeoff", 24, 14.0, 0.6),
+    Site("designed_role", "designed_role", 15, 14.0, 0.5),
+    # On-screen literal evidence cards (scene-private literals).
+    Site("act1_ceiling_label", "act1_ceiling_label", 16, 8.0, 0.5),
+    Site("act1_blend_formula", "act1_blend_formula", 16, 8.0, 0.5),
+    Site("act1_confidence_formula", "act1_confidence_formula", 14, 8.0, 0.5),
+    # Act 1 tradeoff on-screen evidence — measured gen-2606-blend3 N=12 run.
+    # Rendered in monospace (Menlo) as data rows on the tradeoff interlude;
+    # container width is the canvas safe interior (14.0 wide).
+    Site(
+        "act1_tradeoff_dist_label",
+        "act1_tradeoff_dist_label",
+        15,
+        14.0,
+        0.5,
+        font_family="Menlo",
+    ),
+    Site(
+        "act1_tradeoff_variance_label",
+        "act1_tradeoff_variance_label",
+        15,
+        14.0,
+        0.5,
+        font_family="Menlo",
+    ),
+    Site(
+        "act1_tradeoff_survive_label",
+        "act1_tradeoff_survive_label",
+        15,
+        14.0,
+        0.5,
+        font_family="Menlo",
+    ),
+    Site(
+        "act1_tradeoff_provenance_label",
+        "act1_tradeoff_provenance_label",
+        12,
+        14.0,
+        0.5,
+    ),
+    Site("act2_dimcount_label", "act2_dimcount_label", 16, 8.0, 0.5),
+    Site("act2_arms_label", "act2_arms_label", 15, 8.0, 0.5),
+    Site("act2_target_label", "act2_target_label", 15, 8.0, 0.5),
+    Site("act3_wallclock_label", "act3_wallclock_label", 15, 8.0, 0.5),
+    Site("act3_gatefloor_label", "act3_gatefloor_label", 15, 8.0, 0.5),
+    # Provenance label covering ALL Act 3 wall-clock numbers (observed
+    # campaign runs) — free text on the canvas (14.0 wide), font 12,
+    # mirroring act1_tradeoff_provenance_label.
+    Site(
+        "act3_wallclock_provenance_label",
+        "act3_wallclock_provenance_label",
+        12,
+        14.0,
+        0.5,
+    ),
+    Site("act3_pathindep_label", "act3_pathindep_label", 14, 8.0, 0.5),
+    Site("act3_pathdep_label", "act3_pathdep_label", 14, 8.0, 0.5),
+    # Act 4 problem evidence — three observed facts about the CURRENT eval.
+    # The code-identifier-bearing rows render in monospace (Menlo) on the
+    # interlude canvas (14.0 wide), so they pin ``font_family``.
+    Site(
+        "act4_problem_obs1_label",
+        "act4_problem_obs1_label",
+        15,
+        14.0,
+        0.5,
+        font_family="Menlo",
+    ),
+    Site(
+        "act4_problem_obs2_label",
+        "act4_problem_obs2_label",
+        15,
+        14.0,
+        0.5,
+        font_family="Menlo",
+    ),
+    Site(
+        "act4_problem_obs3_label",
+        "act4_problem_obs3_label",
+        15,
+        14.0,
+        0.5,
+        font_family="Menlo",
+    ),
+    Site(
+        "act4_problem_provenance_label",
+        "act4_problem_provenance_label",
+        12,
+        14.0,
+        0.5,
+    ),
+    # Act 4 countermeasure (DESIGN-STAGE) — the three named contracts in
+    # monospace (exact snake_case) + the framing + the per-contract record.
+    Site(
+        "act4_contract1_label",
+        "act4_contract1_label",
+        15,
+        14.0,
+        0.5,
+        font_family="Menlo",
+    ),
+    Site(
+        "act4_contract2_label",
+        "act4_contract2_label",
+        15,
+        14.0,
+        0.5,
+        font_family="Menlo",
+    ),
+    Site(
+        "act4_contract3_label",
+        "act4_contract3_label",
+        15,
+        14.0,
+        0.5,
+        font_family="Menlo",
+    ),
+    Site("act4_framing_label", "act4_framing_label", 16, 14.0, 0.5),
+    Site("act4_record_label", "act4_record_label", 14, 14.0, 0.5),
+    # bit_7 transcript fork — the judge-score path (current) vs the
+    # DESIGN-STAGE contract-check path. The transcript node label sits inside
+    # a 1.7×0.55 box; the branch labels + contract rows are free text on the
+    # center canvas (14.0 wide). The three contract rows + the two branch
+    # headers render in the Menlo monospace family (code identifiers + the
+    # schematic PASS/FAIL worked example), so they pin ``font_family``.
+    Site(
+        "fork_transcript_label",
+        "fork_transcript_label",
+        14,
+        1.7,
+        0.55,
+    ),
+    Site(
+        "fork_judge_branch_label",
+        "fork_judge_branch_label",
+        15,
+        14.0,
+        0.5,
+        font_family="Menlo",
+    ),
+    Site("fork_judge_branch_note", "fork_judge_branch_note", 13, 14.0, 0.5),
+    Site(
+        "fork_contract_branch_label",
+        "fork_contract_branch_label",
+        15,
+        14.0,
+        0.5,
+        font_family="Menlo",
+    ),
+    Site(
+        "fork_contract_row1",
+        "fork_contract_row1",
+        14,
+        14.0,
+        0.5,
+        font_family="Menlo",
+    ),
+    Site(
+        "fork_contract_row2",
+        "fork_contract_row2",
+        14,
+        14.0,
+        0.5,
+        font_family="Menlo",
+    ),
+    Site(
+        "fork_contract_row3",
+        "fork_contract_row3",
+        14,
+        14.0,
+        0.5,
+        font_family="Menlo",
+    ),
+    Site("fork_attribution_label", "fork_attribution_label", 14, 14.0, 0.5),
+    # Act 3 concurrency-split worker pills (text inside a 1.5×0.42 box).
+    Site(
+        "act3_worker_baseline",
+        "",
+        12,
+        1.5,
+        0.42,
+        text_string_en="baseline",
+        text_string_ko="baseline",
+    ),
+    Site("act3_worker_never", "", 12, 1.5, 0.42, text_string_en="never", text_string_ko="never"),
+    Site(
+        "act3_worker_random",
+        "",
+        12,
+        1.5,
+        0.42,
+        text_string_en="random",
+        text_string_ko="random",
     ),
 )
 
@@ -256,7 +506,10 @@ def _measure_site(site: Site, lang: str) -> tuple[float, float]:
     text = _resolve_text_for_site(site, lang)
     if not text:
         return 0.0, 0.0
-    mobj = _make_text(text, font_size=site.font_size)
+    if site.font_family is not None:
+        mobj = _make_text(text, font=site.font_family, font_size=site.font_size)
+    else:
+        mobj = _make_text(text, font_size=site.font_size)
     return float(mobj.width), float(mobj.height)
 
 
@@ -273,7 +526,12 @@ def _glyph_clusters_for_site(site: Site, lang: str) -> list[list[int]]:
         return []
     # Step 2 typography drift gate — EN uses Helvetica Neue, KO Pretendard.
     # The families must match the scene's ``_make_text`` font selection.
-    family = "Helvetica Neue" if lang == "en" else "Pretendard"
+    # A Site may pin an explicit ``font_family`` (the cold-open monospace
+    # scaffold-kind rows render in Menlo, not the EN/KO pair).
+    if site.font_family is not None:
+        family = site.font_family
+    else:
+        family = "Helvetica Neue" if lang == "en" else "Pretendard"
     return _shape_glyph_clusters(family, site.font_size, text)
 
 

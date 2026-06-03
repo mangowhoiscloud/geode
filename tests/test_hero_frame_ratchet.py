@@ -27,8 +27,8 @@ Updating baselines after an intentional layout change
 ::
 
     # 1) Re-render the changed scene(s)
-    uv run manim -qh -o GeodeHero-EN scripts/visualizations/geode_hero.py GeodeHero
-    GEODE_HERO_LANG=ko uv run manim -qh -o GeodeHero-KO scripts/visualizations/geode_hero.py GeodeHero
+    uv run manim -qh -o GeodeSelfImprovingHero-EN scripts/visualizations/geode_hero.py GeodeSelfImprovingHero
+    GEODE_HERO_LANG=ko uv run manim -qh -o GeodeSelfImprovingHero-KO scripts/visualizations/geode_hero.py GeodeSelfImprovingHero
 
     # 2) Re-extract baselines
     uv run python scripts/visualizations/update_frame_baselines.py
