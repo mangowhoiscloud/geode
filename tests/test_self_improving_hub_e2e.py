@@ -2036,6 +2036,60 @@ def test_policy_file_map_matches_core() -> None:
     )
 
 
+def test_results_jsonl_drilldown_strips_absolute_eval_archive_path() -> None:
+    """``results.jsonl`` rows carry ``eval_archive`` as an ABSOLUTE local path
+    (``/Users/<name>/.geode/petri/logs/…_audit_<id>.eval``) written by
+    ``core/self_improving/train.py``. The results drill-down dumps each row
+    verbatim into the published static site, so the raw path would leak the
+    operator's home directory onto a public page. The builder must reduce it to
+    the basename (no-hardcoded-user-paths rule). Guards the
+    PR-HUB-RESULTS-PATH-LEAK fix.
+    """
+    import importlib.util
+
+    spec = importlib.util.spec_from_file_location("_hub_builder_pathleak", BUILDER)
+    assert spec is not None and spec.loader is not None
+    builder = importlib.util.module_from_spec(spec)
+    sys.modules[spec.name] = builder
+    spec.loader.exec_module(builder)
+
+    abs_path = "/Users/somebody/.geode/petri/logs/2026-06-01T20-24-43-00-00_audit_AbCdEf123.eval"
+    basename = "2026-06-01T20-24-43-00-00_audit_AbCdEf123.eval"
+
+    # Unit: the sanitizer reduces eval_archive to its basename and leaves the
+    # source row untouched (shallow copy).
+    src_row = {"session_id": "s1", "eval_archive": abs_path, "fitness": 0.5}
+    sanitized = builder._sanitize_results_jsonl_row(src_row)
+    assert sanitized["eval_archive"] == basename
+    assert src_row["eval_archive"] == abs_path, "source row mutated"
+    # Already-basename / missing field → untouched.
+    assert builder._sanitize_results_jsonl_row({"eval_archive": basename}) == {
+        "eval_archive": basename
+    }
+    assert builder._sanitize_results_jsonl_row({"session_id": "s2"}) == {"session_id": "s2"}
+
+    # Integration: the rendered drill-down HTML must not contain the absolute
+    # prefix, but must retain the portable basename identifier.
+    tsv_rows = [dict.fromkeys(builder.AUTORESEARCH_RESULTS_TSV_HEADER, "")]
+    tsv_rows[0]["session_id"] = "s1"
+    tsv_rows[0]["fitness"] = "0.5000"
+    rendered = builder._render_results_rows(tsv_rows, [src_row])
+    assert "/Users/somebody" not in rendered
+    assert "/.geode/petri/logs" not in rendered
+    assert basename in rendered
+
+    # Same defect class on the baseline page: the schema-v2 ``raw`` namespace
+    # carries ``raw.eval_archive`` as an absolute path. The baseline kv-row
+    # renderer must basename it too.
+    baseline_row = builder._render_baseline_kv_row("raw", "eval_archive", abs_path)
+    assert "/Users/somebody" not in baseline_row
+    assert "/.geode/petri/logs" not in baseline_row
+    assert basename in baseline_row
+    # Non-eval_archive keys are untouched (no over-eager basenaming).
+    other = builder._render_baseline_kv_row("metadata", "seed_pool", "pool-abc123")
+    assert "pool-abc123" in other
+
+
 def test_autoresearch_pages_url_basepath_safety(
     built_autoresearch_pages: dict[str, str],
 ) -> None:

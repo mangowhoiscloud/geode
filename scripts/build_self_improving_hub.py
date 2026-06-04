@@ -43,7 +43,7 @@ import math
 import re
 import sys
 from dataclasses import dataclass
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 from statistics import NormalDist
 from typing import Any
 from urllib.parse import quote
@@ -3996,6 +3996,11 @@ def _render_baseline_namespace(name: str, data: Any, *, stale: bool) -> str:
 
 def _render_baseline_kv_row(ns: str, key: str, value: Any) -> str:
     """Render a single key/value row. Models in `audit` ns get chips."""
+    # ``raw.eval_archive`` is an ABSOLUTE local path written by train.py — emit
+    # only the basename so the published page never leaks the home dir (same
+    # rule as the results drill-down; see _eval_archive_basename).
+    if key == "eval_archive":
+        value = _eval_archive_basename(value)
     is_model_field = ns == "audit" and key in {"auditor_model", "target_model", "judge_model"}
     if is_model_field and isinstance(value, str) and value:
         value_html = harness_chip(value)
@@ -6125,6 +6130,36 @@ def _render_evidence_power(mutations: list[dict[str, Any]]) -> str:
     )
 
 
+def _eval_archive_basename(archive: Any) -> Any:
+    """Reduce an ``eval_archive`` value to its basename if it is a path string.
+
+    ``core/self_improving/train.py`` writes ``eval_archive`` as an ABSOLUTE
+    local path (``/Users/<name>/.geode/petri/logs/…_audit_<id>.eval``). Anything
+    that embeds it verbatim into the published static site would leak the
+    operator's home directory (no-hardcoded-user-paths rule). The
+    ``…_audit_<id>.eval`` filename is the portable, useful identifier; the
+    directory prefix is not. Non-string / empty values pass through unchanged.
+    """
+    if not isinstance(archive, str) or not archive:
+        return archive
+    return PurePosixPath(archive.replace("\\", "/")).name
+
+
+def _sanitize_results_jsonl_row(row: dict[str, Any]) -> dict[str, Any]:
+    """Strip machine-specific absolute paths out of a results.jsonl row.
+
+    The results drill-down ``<details>`` dumps the row verbatim, so the
+    absolute ``eval_archive`` path would leak the operator's home directory.
+    Returns a shallow copy (source row left untouched for any other reader).
+    """
+    basename = _eval_archive_basename(row.get("eval_archive"))
+    if basename == row.get("eval_archive"):
+        return row
+    sanitized = dict(row)
+    sanitized["eval_archive"] = basename
+    return sanitized
+
+
 def _render_results_header_cells() -> str:
     """Render the 12 <th> cells for the results table header."""
     out: list[str] = []
@@ -6189,10 +6224,17 @@ def _render_results_rows(
             else:  # description, etc.
                 cells.append(f'          <td class="muted">{html_escape(value)}</td>')
         # Drill-down: per-row <details> with the jsonl payload, if matched.
+        # ``eval_archive`` is an ABSOLUTE local path on the operator's machine
+        # (``/Users/<name>/.geode/petri/logs/…_audit_<id>.eval``). Dumping it
+        # verbatim into the published static site would leak the home dir and
+        # violate the no-hardcoded-user-paths rule — so reduce it to its
+        # basename (the ``…_audit_<id>.eval`` filename is the useful, portable
+        # identifier; the machine-specific prefix is not).
         details = ""
         if idx < len(jsonl_rows):
+            payload_row = _sanitize_results_jsonl_row(jsonl_rows[idx])
             try:
-                payload = json.dumps(jsonl_rows[idx], ensure_ascii=False, indent=2, sort_keys=True)
+                payload = json.dumps(payload_row, ensure_ascii=False, indent=2, sort_keys=True)
             except (TypeError, ValueError):
                 payload = ""
             if payload:

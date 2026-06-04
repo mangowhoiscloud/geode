@@ -45,6 +45,29 @@ functional change.
 
 ---
 
+## [0.99.140] - 2026-06-04
+
+### Fixed
+- **Self-improving hub `Autoresearch > Results` page no longer leaks the operator's
+  home directory into the published site, and now renders from the regenerated HTML.**
+  The page (`docs/self-improving/autoresearch/results/index.html`) had two issues. (1) Its
+  per-iteration drill-down `<details>` dumped each `results.jsonl` row verbatim, including
+  the `eval_archive` field which `core/self_improving/train.py` writes as an ABSOLUTE local
+  path (`/Users/<name>/.geode/petri/logs/…_audit_<id>.eval`) — so a public static page would
+  have leaked the operator's home directory (no-hardcoded-user-paths rule). The builder now
+  reduces `eval_archive` to its basename via `_eval_archive_basename` /
+  `_sanitize_results_jsonl_row` before embedding the JSON; the portable `…_audit_<id>.eval`
+  filename is retained, the machine-specific prefix dropped. The same `eval_archive` basename
+  guard is applied to the baseline page's schema-v2 `raw` namespace
+  (`_render_baseline_kv_row`), which carries the same absolute path. (2) The committed HTML
+  was a stale empty-state ("No iterations recorded
+  yet") because prior PR-time regenerations ran against checkouts where the untracked
+  `state/autoresearch/results.tsv` was absent — the page is now regenerated with the
+  measured 23-iteration ledger (fitness sparkline + per-row table). Note `pages.yml` copies
+  `docs/self-improving/**` as-is without running the builder, so the regenerated HTML must
+  be committed for the live page to update. Guarded by
+  `tests/test_self_improving_hub_e2e.py::test_results_jsonl_drilldown_strips_absolute_eval_archive_path`.
+
 ## [0.99.139] - 2026-06-04
 
 ### Changed
