@@ -286,6 +286,27 @@ geode serve [-p 3.0]                   # Headless daemon
 
 ---
 
+## Self-improving loop
+
+The self-improving loop runs a Petri audit over GEODE's own scaffold, measures the result, and gates each candidate change behind that measurement. It does not promise improvement: it measures and either promotes or rejects.
+
+Before running a campaign, three prerequisites are BLOCKING:
+
+1. **Audit extra**: `uv sync --extra audit`. This pulls in `inspect_ai` + `petri` (putting the `inspect` CLI on PATH), which the audit subprocess and the seed-generation pilot both require. Without it the audit aborts loudly: `plugins/petri_audit/runner.py` checks `shutil.which("inspect")` and returns an aborted report with `` `inspect` CLI not found on PATH — install the [audit] extra: `uv sync --extra audit`. ``, and the loop returns failure for that cycle.
+2. **Model accounts**:
+   - An **auditor + judge model** (Anthropic): the auditor drives the Petri scenario and the judge scores each rollout. Configured via the `[self_improving_loop.autoresearch.auditor]` / `[self_improving_loop.autoresearch.judge]` sections (`model` + `source`).
+   - A **target model**: defaults to the manifest `claude-haiku-4-5`; override to `geode/gpt-5.5` via ChatGPT / Codex OAuth with `[self_improving_loop.autoresearch.target]` (`model = "geode/gpt-5.5"`, `source = "openai-codex"`) in config.
+3. **Config**: copy `docs/examples/self_improving_loop.config.toml.example` to `~/.geode/config.toml` (or merge the `[self_improving_loop.*]` sections into an existing one). Absent sections fall back to documented defaults.
+
+```bash
+uv sync --extra audit
+cp docs/examples/self_improving_loop.config.toml.example ~/.geode/config.toml
+```
+
+To run a campaign, start with the quick-start runbook: [docs/self-improving/campaign-quick-start.md](self-improving/campaign-quick-start.md). For the full procedure (difficulty seeding, baseline re-measurement, the 3-arm comparison, the bench axis), see [docs/self-improving/campaign-procedure.md](self-improving/campaign-procedure.md).
+
+---
+
 ## Testing
 
 ```bash

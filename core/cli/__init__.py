@@ -349,6 +349,84 @@ from core.cli.commands.reindex import reindex  # noqa: E402
 app.command(name="reindex")(reindex)
 
 
+# PR-CAMPAIGN-CLI: discoverable front end for the 3-arm self-improving campaign.
+# This is a THIN forwarder: it collects the same options the argparse driver in
+# ``core/self_improving/campaign.py`` exposes (``--n`` / ``--k`` / ``--arms`` +
+# the pass-through flags) and rebuilds them as an argv list handed straight to
+# ``campaign.main``. No campaign logic is reimplemented here, so ``geode
+# campaign`` and ``python core/self_improving/campaign.py`` stay byte-identical
+# in behaviour. The import is local to the command body so loading the CLI
+# package never eagerly pulls the self-improving runtime (and its heavy deps).
+def campaign(
+    n: int = typer.Option(
+        10,
+        "--n",
+        help="Cycles per arm (campaign-procedure.md section 6). Default 10.",
+    ),
+    k: int = typer.Option(
+        5,
+        "--k",
+        help="gen-0 baseline repeats, the noise-band K-mean. Default 5.",
+    ),
+    arms: str = typer.Option(
+        "never,random,gate",
+        "--arms",
+        help="Comma-separated arm order, gate LAST. Default 'never,random,gate'.",
+    ),
+    mc: int = typer.Option(
+        8,
+        "--mc",
+        help="Max propose-guard re-proposal attempts M. Default 8.",
+    ),
+    audit_max_samples: int = typer.Option(
+        3,
+        "--audit-max-samples",
+        help="GEODE_AUDIT_MAX_SAMPLES export passed to each audit. Default 3.",
+    ),
+    audit_max_connections: int = typer.Option(
+        8,
+        "--audit-max-connections",
+        help="GEODE_AUDIT_MAX_CONNECTIONS export passed to each audit. Default 8.",
+    ),
+    dry_run: bool = typer.Option(
+        False,
+        "--dry-run",
+        help="Synthetic audits, no PAYG/network. Passed through to train.py + the runner.",
+    ),
+) -> None:
+    """Run the 3-arm self-improving campaign (gen-0 baseline, then never/random/gate).
+
+    Thin wrapper over ``core/self_improving/campaign.py``: forwards the flags
+    unchanged, so behaviour matches ``python core/self_improving/campaign.py``.
+    A real (non --dry-run) campaign spawns audit subprocesses and spends PAYG
+    budget, so launch it deliberately.
+    """
+    from core.self_improving.campaign import main as _campaign_main
+
+    argv: list[str] = [
+        "--n",
+        str(n),
+        "--k",
+        str(k),
+        "--arms",
+        arms,
+        "--mc",
+        str(mc),
+        "--audit-max-samples",
+        str(audit_max_samples),
+        "--audit-max-connections",
+        str(audit_max_connections),
+    ]
+    if dry_run:
+        argv.append("--dry-run")
+    exit_code = _campaign_main(argv)
+    if exit_code != 0:
+        raise typer.Exit(code=exit_code)
+
+
+app.command()(campaign)
+
+
 def _version_option(value: bool) -> None:
     if value:
         console.print(f"GEODE v{__version__}")
