@@ -3,8 +3,8 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Results &middot; Autoresearch &middot; GEODE Self-Improving Hub</title>
-<meta name="description" content="Autoresearch per-iteration results — 12-col results.tsv + per-row results.jsonl drill-down. Fitness sparkline shows trend.">
+<title>Runs &middot; Autoresearch &middot; GEODE Self-Improving Hub</title>
+<meta name="description" content="Self-improving campaign run reports — one synthesis per concluded run (question, setup, decision flow, per-arm datasets, findings, conclusion), rendered from the run-*.md source of truth.">
 <link rel="stylesheet" href="/geode/self-improving/assets/hub.css">
 </head>
 <body>
@@ -46,9 +46,9 @@
         <li><a href="/geode/self-improving/autoresearch/">Overview</a></li>
         <li><a href="/geode/self-improving/autoresearch/baseline/">Baseline</a></li>
         <li><a href="/geode/self-improving/autoresearch/mutations/">Mutations</a></li>
-        <li><a href="/geode/self-improving/autoresearch/results/" class="active" aria-current="page">Results</a></li>
+        <li><a href="/geode/self-improving/autoresearch/results/">Results</a></li>
         <li><a href="/geode/self-improving/autoresearch/evidence/">Evidence</a></li>
-        <li><a href="/geode/self-improving/autoresearch/runs/">Runs</a></li>
+        <li><a href="/geode/self-improving/autoresearch/runs/" class="active" aria-current="page">Runs</a></li>
         <li><a href="/geode/self-improving/autoresearch/policies/">Policies</a></li>
       </ul>
 
@@ -67,31 +67,14 @@
   </aside>
 
   <main class="content">
-    <h1 class="page-title">Results <span class="bucket autoresearch">autoresearch</span></h1>
-    <p class="page-sub">Per-iteration ledger from <code>results.tsv</code> (12 columns, <code>RESULTS_TSV_HEADER</code> in <code>autoresearch/train.py:1284</code>). Each row pairs with one <code>results.jsonl</code> line for the full per-dim breakdown. Fitness trend rendered inline as a Unicode block sparkline.</p>
+    <h1 class="page-title">Runs <span class="bucket autoresearch">autoresearch</span></h1>
+    <p class="page-sub">Per-run synthesis of each concluded self-improving campaign — the question it tested, the verified setup, the decision flow, the per-arm datasets, the mechanism-level findings, and the conclusion. Each report renders from a <code>docs/self-improving/run-*.md</code> source of truth (single SoT, shared with the campaign video). For the live per-cycle drill-down of the most recent campaign, see <a href="/geode/self-improving/autoresearch/evidence/">Evidence</a>.</p>
 
-    <h2 class="section"><span>Trend &middot; fitness sparkline</span></h2>
-    <p class="page-sub" style="margin-top: -0.5rem;">
-      <span class="role-label">fitness</span>
-      <span class="fitness-sparkline" aria-label="{{ sparkline_aria }}">{{ sparkline }}</span>
-      &nbsp;
-      <span class="muted">{{ sparkline_legend }}</span>
-    </p>
-
-    <h2 class="section"><span>Results &middot; {{ results_section_label }}</span></h2>
-    <table class="records">
-      <thead>
-        <tr>
-{{ results_header_cells }}
-        </tr>
-      </thead>
-      <tbody>
-{{ results_rows }}
-      </tbody>
-    </table>
+    <h2 class="section"><span>Run reports &middot; {{ runs_section_label }}</span></h2>
+{{ runs_list }}
 
     <div class="build-info">
-      <p>Source: <code>autoresearch/state/results.tsv</code> + <code>autoresearch/state/results.jsonl</code> (12-col header per <code>RESULTS_TSV_HEADER</code>, train.py:1284).</p>
+      <p>Source: <code>docs/self-improving/run-*.md</code> (one synthesis markdown per concluded campaign, rendered client-side via Marked.js).</p>
       <p>Published by <code>.github/workflows/pages.yml</code> on every <code>main</code> push.</p>
       <p>Repo: <a href="https://github.com/mangowhoiscloud/geode" rel="noopener">github.com/mangowhoiscloud/geode</a></p>
       <p>Harness chip legend:
@@ -102,7 +85,6 @@
       </p>
       <p class="version-stamp">
         Rendered against GEODE <code>v{{ geode_version }}</code> &middot; DESIGN.md schema {{ design_schema_version }} &middot; built {{ build_date }}.
-        Dim subset: 22 (geode_5axes). Pipeline phases: 8. Baseline schema: v2 (PR-2).
       </p>
     </div>
   </main>
