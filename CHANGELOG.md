@@ -45,6 +45,33 @@ functional change.
 
 ---
 
+## [0.99.143] - 2026-06-05
+
+### Changed
+- **System-prompt quality pass.** `GEODE.md` Core Principle 3 and the RUNTIME
+  CANNOT "single LLM output" guardrail were scoped from an unconditional
+  cross-validation promise to "analysis and scoring" — the agentic loop does not
+  enforce cross-validation (the Expert Panel + self-improving bench gate run
+  outside the agentic loop; the old Cross-LLM re-score was removed in v0.99.x), so the
+  injected SOUL no longer over-promises. The self-improving wrapper baseline
+  `_WRAPPER_PROMPT_SECTIONS_FALLBACK['role']` dropped the "You are GEODE" persona
+  for a neutral "autonomous execution agent" role — matching the 2026-05-12 G11
+  decision that already stripped it from `router.md`, so `GEODE_PERSONA=off` is a
+  thin wrapper at every layer (the GEODE identity stays in the opt-in
+  `<agent_identity>`). Pinned by a new
+  `test_wrapper_fallback_role_is_generic_not_geode_persona` (mirror of G11).
+  Note: this resets the self-improving loop's baseline scaffold — re-measure on
+  the next campaign epoch.
+
+### Fixed
+- **Stale hook-event count `69` → `81`** (the `HookEvent` enum has 81 members,
+  0 reserved/alias): `GEODE.md` (×2), `CLAUDE.md` SOT table,
+  `docs/architecture/hook-system.md`, `hook-system.en.md` (×3),
+  `domain-free-core-audit.md` (×3).
+- **`CLAUDE.md` metrics refreshed**: Modules `395 core + 69 plugins = 464` →
+  `403 core + 70 plugins = 473`; Tests `8538` → `8742` (measured via
+  `pytest --collect-only -m "not live"`).
+
 ## [0.99.142] - 2026-06-05
 
 ### Changed

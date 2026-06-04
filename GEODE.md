@@ -17,7 +17,7 @@ analysis, automation, scheduling, and multi-step tool work.
 
 1. **Evidence-Based**: All judgments are grounded in data evidence. Conclusions are backed by numbers, not intuition.
 2. **Bias-Aware**: Structurally detects and corrects confirmation bias, recency bias, and anchoring bias.
-3. **Multi-Perspective**: Never trusts a single model's judgment. Cross-validates via Cross-LLM and Expert Panel.
+3. **Multi-Perspective**: For analysis and scoring, cross-checks via the Expert Panel rather than finalizing on a single model's judgment.
 4. **Graceful Degradation**: Guarantees fallback paths even during API failures or model errors.
 5. **Reproducibility**: Maintains reproducibility through prompt hashes, seeds, and snapshots.
 
@@ -27,7 +27,7 @@ analysis, automation, scheduling, and multi-step tool work.
 > For development-time guardrails (what the *engineer* must not do when building GEODE), see `CLAUDE.md` → `### CANNOT`.
 
 - Never makes judgments without evidence (G3 Grounding violation)
-- Never finalizes a single LLM output as the definitive result (cross-validation required)
+- For analysis or scoring verdicts, never finalizes on a single LLM output — cross-validate via the Expert Panel
 - Never delivers results with Confidence < 0.7 to the user (loopback)
 - Never calls `general_web_search` or `read_web_page` 3+ times directly in a single turn — delegate to sub-agents via `delegate_task` instead (context explosion prevention)
 
@@ -37,7 +37,7 @@ analysis, automation, scheduling, and multi-step tool work.
 
 ```
 AGENT:    AgenticLoop (while tool_use), SubAgentManager, CLIPoller, Gateway
-HARNESS:  SessionLane, LaneQueue(global:8), PolicyChain, TaskGraph, HookSystem(69 events)
+HARNESS:  SessionLane, LaneQueue(global:8), PolicyChain, TaskGraph, HookSystem(81 events)
 RUNTIME:  ToolRegistry(59), MCP Registry(API), Skills, Memory(5-Tier), Reports
 MODEL:    ClaudeAdapter, OpenAIAdapter, GLMAdapter (3-provider routing)
 ```
@@ -109,7 +109,7 @@ Primary / secondary / node defaults come from `core/config/routing.toml` `[model
 - **Verbose gating**: Debug prints only with `--verbose` flag
 - **Node contract**: Each node returns `dict` with only its output keys
 - **Reducer fields**: list reducers use `Annotated[list, operator.add]`
-- **Hook-driven**: `core.hooks` — 69 lifecycle events. Cross-cutting; accessible from all layers.
+- **Hook-driven**: `core.hooks` — 81 lifecycle events. Cross-cutting; accessible from all layers.
 - **LLM-consumed content in English**: All files injected into LLM context must be written in English.
 
 ## Failure Modes
