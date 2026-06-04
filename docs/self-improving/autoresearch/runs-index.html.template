@@ -68,13 +68,13 @@
 
   <main class="content">
     <h1 class="page-title">Runs <span class="bucket autoresearch">autoresearch</span></h1>
-    <p class="page-sub">Per-run synthesis of each concluded self-improving campaign — the question it tested, the verified setup, the decision flow, the per-arm datasets, the mechanism-level findings, and the conclusion. Each report renders from a <code>docs/self-improving/run-*.md</code> source of truth (single SoT, shared with the campaign video). For the live per-cycle drill-down of the most recent campaign, see <a href="/geode/self-improving/autoresearch/evidence/">Evidence</a>.</p>
+    <p class="page-sub">Per-run synthesis of each concluded self-improving campaign — the question it tested, the verified setup, the decision flow, the per-arm datasets, the mechanism-level findings, and the conclusion. Each report renders at build time from a <code>docs/self-improving/run-*.md</code> source of truth (single SoT, shared with the campaign video). For the live per-cycle drill-down of the most recent campaign, see <a href="/geode/self-improving/autoresearch/evidence/">Evidence</a>.</p>
 
     <h2 class="section"><span>Run reports &middot; {{ runs_section_label }}</span></h2>
 {{ runs_list }}
 
     <div class="build-info">
-      <p>Source: <code>docs/self-improving/run-*.md</code> (one synthesis markdown per concluded campaign, rendered client-side via Marked.js).</p>
+      <p>Source: <code>docs/self-improving/run-*.md</code> (one synthesis markdown per concluded campaign, each rendered to HTML at build time via markdown-it-py).</p>
       <p>Published by <code>.github/workflows/pages.yml</code> on every <code>main</code> push.</p>
       <p>Repo: <a href="https://github.com/mangowhoiscloud/geode" rel="noopener">github.com/mangowhoiscloud/geode</a></p>
       <p>Harness chip legend:

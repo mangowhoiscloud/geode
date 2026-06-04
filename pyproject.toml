@@ -1,6 +1,6 @@
 [project]
 name = "geode-agent"
-version = "0.99.136"
+version = "0.99.137"
 description = "GEODE — 범용 자율 실행 에이전트"
 license = "Apache-2.0"
 readme = "README.md"
@@ -13,6 +13,12 @@ dependencies = [
     # Pure-Python, no transitive deps — ~30 KB.
     "defusedxml>=0.7.1",
     "markdownify>=0.14.1",
+    # markdown-it-py renders the self-improving hub's run-report markdown SoT
+    # (``docs/self-improving/run-*.md``) to HTML at BUILD TIME in
+    # ``scripts/build_self_improving_hub.py`` — no CDN / client-side JS, so the
+    # page always renders. Was a transitive of markdownify; declared explicitly
+    # so the build never relies on a dep that could vanish.
+    "markdown-it-py>=3.0",
     "httpx>=0.27.0",
     "langgraph>=1.1.0",
     "langgraph-checkpoint>=4.0.1",
@@ -413,6 +419,12 @@ DEP002 = [
     # must declare it so `uv sync --extra obs` installs the
     # instrumentation alongside traceloop-sdk.
     "opentelemetry-instrumentation-anthropic",
+    # `markdown-it-py` is imported only by `scripts/build_self_improving_hub.py`
+    # (renders the self-improving hub run-report markdown SoT to HTML at build
+    # time). `scripts` is in deptry's `extend_exclude`, so the static scan never
+    # sees the import — but the dependency is real and must stay declared so the
+    # hub build does not rely on a transitive of `markdownify` that could vanish.
+    "markdown-it-py",
 ]
 
 # DEP004 — module imported but the package is declared as a dev-group

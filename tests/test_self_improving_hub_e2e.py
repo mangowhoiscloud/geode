@@ -1445,10 +1445,12 @@ def test_evidence_page_in_nav_and_subview(
 # PR-HUB-RUN-REPORT (2026-06-04): serve a self-improving campaign synthesis as a
 # data-driven per-run page. The builder globs ``docs/self-improving/run-*.md``
 # (the source-doc dir, NOT the out dir) and renders, for each, an index entry +
-# a ``runs/<slug>/`` page that EMBEDS the .md via the shared Marked.js loader
-# (single SoT, never duplicated into the HTML). slug = stem minus leading
-# ``run-``. The fixture builds against the live docs dir so the run-2606 report
-# (committed in this PR) renders.
+# a ``runs/<slug>/`` page. PR-HUB-RUN-REPORT-SSR (2026-06-04) renders the .md to
+# HTML at BUILD TIME via markdown-it-py and injects it directly into
+# ``<article class="markdown-body">`` (no CDN / client-side JS — the prior
+# Marked.js embed showed a BLANK body when the CDN was blocked / JS was off).
+# slug = stem minus leading ``run-``. The fixture builds against the live docs
+# dir so the run-2606 report (committed in this PR) renders.
 
 _RUN_2606_SLUG = "2606-broken-tool-use"
 
@@ -1513,21 +1515,31 @@ def test_runs_index_and_run_page_build(built_run_report_pages: dict[str, str]) -
     assert "broken_tool_use" in run, "run page missing the title"
 
 
-def test_run_page_embeds_markdown_via_marked(built_run_report_pages: dict[str, str]) -> None:
-    """(b) The run page contains a markdown-body article + the Marked.js loader,
-    and embeds the .md body in a text/markdown script block (single SoT — the
-    content is NOT duplicated into rendered HTML)."""
+def test_run_page_renders_markdown_server_side(built_run_report_pages: dict[str, str]) -> None:
+    """(b) PR-HUB-RUN-REPORT-SSR — the run page renders the .md to HTML at BUILD
+    TIME (markdown-it-py) and injects it directly into the markdown-body article:
+    real ``<h1>`` / ``<table>`` / ``<strong>`` are present, NOT an empty article +
+    a ``text/markdown`` script, and there is NO Marked.js CDN loader on the page
+    (so the body renders with JS off / a CDN blocked). The run-2606 synthesis is
+    table-heavy with headers + bold, so all three element kinds must appear."""
     run = built_run_report_pages[_RUN_2606_SLUG]
-    assert 'class="markdown-body" data-md-target="run-body"' in run, (
-        "run page missing the markdown-body article target"
+    # The body container stays for styling — but it is now FILLED with rendered HTML.
+    assert 'class="markdown-body"' in run, "run page missing the markdown-body article"
+    # Server-rendered elements present directly in the page body.
+    assert "<h1" in run, "run page missing a server-rendered <h1> heading"
+    assert "<table" in run, "run page missing a server-rendered <table> (synthesis is table-heavy)"
+    assert "<strong>" in run, "run page missing server-rendered <strong> bold"
+    # The OLD client-side embed must be gone for THIS page: no empty target +
+    # text/markdown source, and no Marked.js CDN loader.
+    assert 'data-md-target="run-body"' not in run, "run page still has the empty md-target article"
+    assert '<script type="text/markdown"' not in run, (
+        "run page still embeds the raw markdown in a text/markdown script block"
     )
-    assert '<script type="text/markdown" data-md-source="run-body">' in run, (
-        "run page missing the text/markdown source script block"
+    assert "marked@13/marked.min.js" not in run, (
+        "run page still loads the Marked.js CDN — should render server-side now"
     )
-    assert "marked@13/marked.min.js" in run, "run page missing the Marked.js CDN loader"
-    # The raw markdown table syntax (pipes) survives html-escaped inside the
-    # script block — proof the body is embedded, not pre-rendered server-side.
-    assert "lower=better" in run, "run page did not embed the .md body verbatim"
+    # The synthesis prose survives into rendered text (proof the body rendered).
+    assert "lower=better" in run, "run page did not render the .md body content"
 
 
 def test_runs_sidebar_has_runs_link(built_run_report_pages: dict[str, str]) -> None:
@@ -1590,19 +1602,21 @@ def _run_report_ctx() -> Any:
     )
 
 
-def test_run_report_escapes_script_breakout(tmp_path: Path) -> None:
-    """Codex finding #5 — the embedded markdown must be html-escaped so a body
-    containing ``</script>`` (or ``<`` / ``&``) cannot break out of the
-    ``<script type="text/markdown">`` block and inject live DOM. The single-SoT
-    guarantee depends on the body staying inert inside the script tag."""
+def test_run_report_escapes_text_node_specials(tmp_path: Path) -> None:
+    """PR-HUB-RUN-REPORT-SSR — markdown-it escapes text-node specials itself
+    (``&`` -> ``&amp;``, a literal ``<x`` -> ``&lt;``), so the body is NOT
+    pre-escaped via html_escape: double-escaping was the bug that rendered the
+    intro blockquote's ``>``/``&`` as literal ``&gt;``/``&amp;``. A markdown
+    blockquote + an inline ``&`` must render to a real ``<blockquote>`` and a
+    single (not double) ``&amp;`` — never a literal ``&amp;amp;``."""
     from scripts.build_self_improving_hub import (
         AUTORESEARCH_RUN_REPORT_TEMPLATE,
         render_autoresearch_run_report,
     )
 
-    md = tmp_path / "run-breakout-probe.md"
+    md = tmp_path / "run-escape-probe.md"
     md.write_text(
-        '# Breakout probe\n\nbody </script><a href="/evil">x</a> & <b>bold</b>\n',
+        "# Escape probe\n\n> intro note with R&D and a < b comparison\n",
         encoding="utf-8",
     )
     out_dir = tmp_path / "out"
@@ -1611,13 +1625,14 @@ def test_run_report_escapes_script_breakout(tmp_path: Path) -> None:
         md, out_dir, template=template, ctx=_run_report_ctx(), repo_root=tmp_path
     )
     html = page.read_text(encoding="utf-8")
-    # The raw closing-script sequence must NOT survive verbatim — it is escaped.
-    assert "</script><a" not in html, "markdown body broke out of the script block"
-    assert "&lt;/script&gt;&lt;a" in html, "expected escaped </script><a inside the body"
-    # The injected anchor must not become a real static <a> the link-collector sees.
-    assert '/evil"' not in html, "injected href leaked as a live anchor attribute"
-    # Exactly one markdown source script block + one render target.
-    assert html.count('<script type="text/markdown" data-md-source="run-body">') == 1
+    # The blockquote rendered to real HTML (not literal ``&gt; intro``).
+    assert "<blockquote>" in html, "markdown blockquote did not render server-side"
+    assert "&gt; intro" not in html, "blockquote marker leaked as literal &gt; (double-escape bug)"
+    # ``&`` is escaped exactly once — no double-escaped ``&amp;amp;``.
+    assert "R&amp;D" in html, "inline & should render to a single &amp;"
+    assert "&amp;amp;" not in html, "double-escaped & (the original bug) reappeared"
+    # No client-side embed leaked into the page.
+    assert '<script type="text/markdown"' not in html, "stale text/markdown script block present"
 
 
 def test_run_report_allows_template_marker_in_markdown(tmp_path: Path) -> None:
@@ -1631,18 +1646,23 @@ def test_run_report_allows_template_marker_in_markdown(tmp_path: Path) -> None:
 
     md = tmp_path / "run-marker-probe.md"
     md.write_text(
-        "# Marker probe\n\nThe template uses `{{ run_body }}` and `{{ geode_version }}`.\n",
+        "# Marker probe\n\nThe template uses `{{ run_body_html }}` and `{{ geode_version }}`.\n",
         encoding="utf-8",
     )
     out_dir = tmp_path / "out"
     template = AUTORESEARCH_RUN_REPORT_TEMPLATE.read_text(encoding="utf-8")
-    # Must not raise RuntimeError("unresolved markers ...").
+    # Must not raise RuntimeError("unresolved markers ...") — the chrome marker
+    # scan runs BEFORE the rendered body is injected, so the body's own
+    # ``{{ run_body_html }}`` token is never mistaken for an unresolved marker.
     page = render_autoresearch_run_report(
         md, out_dir, template=template, ctx=_run_report_ctx(), repo_root=tmp_path
     )
     html = page.read_text(encoding="utf-8")
-    assert "&#123;&#123;" in html or "{{ run_body }}" in html, (
-        "the {{ }} token from the markdown body should survive (escaped) into the page"
+    # markdown-it renders the inline-code token to <code>{{ run_body_html }}</code>
+    # — the {{ }} survives verbatim as inert text (no template substitution of a
+    # body-authored token).
+    assert "{{ run_body_html }}" in html, (
+        "the {{ }} token from the markdown body should survive into the page as inert text"
     )
 
 
