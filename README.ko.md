@@ -25,7 +25,7 @@
   <a href="README.md">English</a>
 </p>
 
-# GEODE v0.99.140 — A Self-improving Autonomous Execution Agent
+# GEODE v0.99.141 — A Self-improving Autonomous Execution Agent
 
 자기 자신이 올라탄 scaffold 를 스스로 고쳐쓰는 범용 자율 에이전트. 자연어로 물으면 GEODE 가 계획을 세우고, 도구를 호출해, 결과를 보고합니다. 1회성 프롬프트도, 장시간 세션도 동일하게. 그 아래에서는 outer loop 가 작업을 수행하는 시스템 자체를 계속 다듬습니다.
 
@@ -279,6 +279,8 @@ autoresearch / seed-generation / petri audit 드라이버의 model / dim set / b
 geode config migrate-petri-toml          # dry-run 미리보기
 geode config migrate-petri-toml --yes    # [self_improving_loop.petri.*] 를 config.toml 에 append
 ```
+
+캠페인을 돌리려면 quick-start 부터 시작하세요: [docs/self-improving/campaign-quick-start.md](docs/self-improving/campaign-quick-start.md).
 
 ---
 

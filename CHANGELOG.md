@@ -45,6 +45,49 @@ functional change.
 
 ---
 
+## [0.99.141] - 2026-06-04
+
+### Added
+- **`geode campaign` CLI command + self-improving onboarding docs.** The 3-arm
+  self-improving campaign was previously launchable only via the raw script
+  `python core/self_improving/campaign.py`; a discoverable `geode campaign` Typer
+  command now forwards `--n` / `--k` / `--arms` / `--mc` / `--audit-max-samples` /
+  `--audit-max-connections` / `--dry-run` to the existing
+  `core/self_improving/campaign.py::main(argv)` (behaviour identical; the runtime
+  import is lazy so loading the CLI does not eagerly pull the self-improving
+  runtime). Registered in `core/cli/__init__.py`; covered by
+  `tests/test_cli_campaign.py` (5 tests).
+- **`docs/self-improving/campaign-quick-start.md`** — a start-here runbook for the
+  loop: a prerequisites checklist (`uv sync --extra audit`, the auditor/judge/target
+  model accounts, copying `docs/examples/self_improving_loop.config.toml.example`
+  to `~/.geode/config.toml`), a 5-step first campaign (both `geode campaign` and the
+  script form), and a common-failures table. Linked from `docs/setup.md` and both
+  READMEs.
+- **`docs/setup.md` "Self-improving loop" section** — surfaces the blocking
+  prerequisites (the `[audit]` extra, the required model accounts, the config copy)
+  that were previously implicit in config comments only.
+
+### Fixed
+- **Stale `state/self_improving/` paths corrected to `state/autoresearch/`** in the
+  onboarding-path docs (`campaign-procedure.md`, `loop-overview.md`,
+  `baseline-schema-history.md`, `held-out-bench.md`) — the real path per
+  `core/paths.py::AUTORESEARCH_STATE_DIR` (PR-STATE-AUTORESEARCH-RENAME Scheme A).
+  The stale path pointed newcomers at a directory that does not exist; the code
+  package `core/self_improving/` is unchanged (only the state dir was renamed). The
+  same stale path still appears in 11 internal design/ADR docs (out of this PR's
+  onboarding scope) and is tracked as a follow-up.
+- **Onboarding config docs corrected to the active shape.** The config example
+  (`docs/examples/self_improving_loop.config.toml.example`), `campaign-quick-start.md`,
+  and the `setup.md` section now document per-role model bindings as
+  `[self_improving_loop.autoresearch.<role>]` (`model` + `source`) — the active shape
+  per `core/config/self_improving_loop.py` — instead of the deprecated no-op flat
+  `target_model`/`judge_model` slots and the legacy `[self_improving_loop.petri.*]`
+  tables (now demoted to a "deprecated, auto-migrated" note). Role default models are
+  shown as the actual `petri.plugin.toml` manifest defaults (auditor `claude-opus-4-7`,
+  target `claude-haiku-4-5`, judge `claude-sonnet-4-6`). The missing-`[audit]`-extra
+  failure mode is documented as a loud abort ("`inspect` CLI not found … install the
+  [audit] extra"), matching `plugins/petri_audit/runner.py`, not a silent zero-fill.
+
 ## [0.99.140] - 2026-06-04
 
 ### Fixed
