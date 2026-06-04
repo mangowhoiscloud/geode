@@ -104,7 +104,7 @@ class TestTierDocParity:
     names — drift would surface here as a fail forcing a same-PR sync.
     """
 
-    @pytest.mark.parametrize("md_name", ["pilot.md", "critic.md", "evolver.md"])
+    @pytest.mark.parametrize("md_name", ["critic.md", "evolver.md"])
     def test_md_lists_every_critical_dim(self, md_name: str) -> None:
         from core.self_improving.train import AXIS_TIERS
 
@@ -114,7 +114,7 @@ class TestTierDocParity:
         for dim in critical_dims:
             assert f"`{dim}`" in body, f"{md_name} missing critical dim {dim}"
 
-    @pytest.mark.parametrize("md_name", ["pilot.md", "critic.md", "evolver.md"])
+    @pytest.mark.parametrize("md_name", ["critic.md", "evolver.md"])
     def test_md_lists_every_auxiliary_dim(self, md_name: str) -> None:
         from core.self_improving.train import AXIS_TIERS
 
@@ -124,7 +124,7 @@ class TestTierDocParity:
         for dim in auxiliary_dims:
             assert f"`{dim}`" in body, f"{md_name} missing auxiliary dim {dim}"
 
-    @pytest.mark.parametrize("md_name", ["pilot.md", "critic.md", "evolver.md"])
+    @pytest.mark.parametrize("md_name", ["critic.md", "evolver.md"])
     def test_md_lists_every_info_dim(self, md_name: str) -> None:
         from core.self_improving.train import AXIS_TIERS
 
@@ -134,7 +134,7 @@ class TestTierDocParity:
         for dim in info_dims:
             assert f"`{dim}`" in body, f"{md_name} missing info dim {dim}"
 
-    @pytest.mark.parametrize("md_name", ["pilot.md", "critic.md", "evolver.md"])
+    @pytest.mark.parametrize("md_name", ["critic.md", "evolver.md"])
     def test_md_tier_mapping_matches_axis_tiers(self, md_name: str) -> None:
         """Parse the tier table in each .md and assert dim -> tier
         bidirectional equality with ``core.self_improving.train.AXIS_TIERS``.
@@ -173,7 +173,7 @@ class TestTierDocParity:
                 f"  missing (in catalog but not md): {sorted(expected - row_dims)}"
             )
 
-    @pytest.mark.parametrize("md_name", ["pilot.md", "critic.md", "evolver.md"])
+    @pytest.mark.parametrize("md_name", ["critic.md", "evolver.md"])
     def test_md_has_anchor_section(self, md_name: str) -> None:
         body = (PROMPT_DIR / md_name).read_text(encoding="utf-8")
         assert "## Anchor 3 dims" in body
@@ -298,21 +298,10 @@ class TestAgentHandoffEmbedding:
         ]
         return state
 
-    def test_pilot_handoff_carries_anchor_and_attribution(self) -> None:
-        from plugins.seed_generation.agents.pilot import Pilot
-
-        state = self._state_with_baseline()
-        pilot = Pilot(MagicMock())
-        tasks = pilot._build_tasks(state)  # type: ignore[attr-defined]
-        handoff = _extract_handoff(tasks[0].description)
-        assert handoff["anchor_means"] == {
-            "admirable": 1.1,
-            "disappointing": 0.4,
-            "needs_attention": 0.6,
-        }
-        assert handoff["target_dims_attribution"] == ["broken_tool_use", "admirable"]
-        # Pilot does NOT surface scenario_realism (per plan §5.2).
-        assert "scenario_realism" not in handoff
+    # The Pilot's anchor/attribution handoff test was removed in
+    # PR-PILOT-UNIFY-DIM-EXTRACT (2026-06-04) — the Pilot no longer spawns an
+    # LLM sub-agent and builds no HANDOFF CONTEXT block. The critic / evolver
+    # selection-signal tests below still cover the handoff path.
 
     def test_critic_handoff_carries_anchor_scenario_attribution(self) -> None:
         from plugins.seed_generation.agents.critic import Critic

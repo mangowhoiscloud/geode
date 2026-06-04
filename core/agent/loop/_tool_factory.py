@@ -75,14 +75,15 @@ def get_agentic_tools(
             *reorder* but MUST NOT *strip* these — otherwise a loop mutation
             silently revokes a tool a named sub-agent depends on. *Incident:
             PR-PILOT-PETRI-AUDIT-WIRING (2026-06-01) — a ``tool-policy.json``
-            ``allowed_tools`` whitelist that omitted ``petri_audit`` stripped
-            it from the seed_pilot worker's model-visible surface BEFORE the
-            toolkit ``allowed_tool_names`` filter ran, so the pilot reported
-            "petri_audit isn't in my available tool set", skipped the audit,
-            and emitted all-zero ``dim_means``. The pilot is the agent that
-            *measures* the loop, so the loop's own mutation disabled its own
-            measurement. Pinned by
-            ``tests/test_tool_policy_force_include_toolkit.py``.
+            ``allowed_tools`` whitelist that omitted a toolkit-granted tool
+            stripped it from a worker's model-visible surface BEFORE the
+            toolkit ``allowed_tool_names`` filter ran, so the worker reported
+            the tool "isn't in my available tool set" and skipped the work.
+            (The originating case was the seed_pilot worker losing
+            ``petri_audit``; PR-PILOT-UNIFY-DIM-EXTRACT 2026-06-04 later
+            removed that worker — the Pilot now audits directly — but the
+            guard still protects every other toolkit-granted sub-agent.)
+            Pinned by ``tests/test_tool_policy_force_include_toolkit.py``.
     """
     tools = list(_BASE_TOOLS)
     existing_names = {t["name"] for t in tools}

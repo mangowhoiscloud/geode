@@ -188,7 +188,11 @@ class TestFilterHandlersFailClosed:
 
 
 class TestSeedAgentDefBackwardsContract:
-    """Smoke test — the 7 seed_*.md AgentDefs all declare a real toolkit."""
+    """Smoke test — the seed_*.md AgentDefs all declare a real toolkit.
+
+    (``seed_pilot`` was removed in PR-PILOT-UNIFY-DIM-EXTRACT, 2026-06-04 —
+    the Pilot runs the audit directly instead of spawning a sub-agent.)
+    """
 
     def test_seed_toolkits_resolve(self) -> None:
         from core.tools.toolkit_registry import load_default_registry
@@ -197,7 +201,6 @@ class TestSeedAgentDefBackwardsContract:
         kits = [
             "seed_generation",
             "seed_critique",
-            "seed_pilot",
             "seed_ranker",
             "seed_evolver",
             "seed_meta_review",

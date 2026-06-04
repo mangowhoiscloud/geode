@@ -1,59 +1,72 @@
 """Pilot agent — Phase D of the seed generation.
 
 Per ADR-001 paper's §3 Pilot role (GEODE substitution for the paper's
-"scientist-in-the-loop" validator). For ONE surviving candidate, the
-sub-agent runs a cheap Petri inner-loop audit (1 seed × 1 target × 1
-paraphrase) via the ``petri_audit`` tool and returns the 15-dim
-``{dim_means, dim_stderr}`` aggregate. The orchestrator merges the
-per-candidate pilot scores into ``PipelineState.pilot_scores`` keyed
-by candidate id.
+"scientist-in-the-loop" validator). For each surviving candidate, the
+Pilot runs ONE cheap Petri inner-loop audit (1 candidate seed × 1 target
+× N samples) and reports the per-dim ``{dim_means, dim_stderr}``
+aggregate. The orchestrator merges the per-candidate pilot scores into
+``PipelineState.pilot_scores`` keyed by candidate id.
 
-Per-candidate sub-agent contract (``plugins/seed_generation/agents/pilot.md``):
+Unified extraction path (PR-PILOT-UNIFY-DIM-EXTRACT, 2026-06-04)
+================================================================
 
-.. code-block:: json
+The Pilot calls :func:`plugins.petri_audit.runner.run_audit` directly —
+the SAME runner the ``petri_audit`` tool, ``geode audit``, and ``/audit``
+all funnel through — then reads the run's archived ``.eval`` with
+:func:`core.audit.dim_extractor.extract_dim_aggregates`. This is the
+identical converter (and identical raw-Petri scale, baseline = 1.0) the
+``broken_tool_use`` self-improving CAMPAIGN
+(``core/self_improving/train.py:run_audit``) uses, so seed-gen difficulty
+scores and campaign fitness scores now live on ONE scale.
 
-   {
-     "candidate_id": "<uuid>",
-     "dim_means":  {"dim_01": 0.71, "dim_02": 0.55, ...},
-     "dim_stderr": {"dim_01": 0.12, "dim_02": 0.18, ...},
-     "status": "ok"  // or "timeout" | "low_engagement"
-   }
+There is no LLM in the dim_means loop. Before this PR the Pilot spawned a
+``seed_pilot`` sub-agent that ran ``petri_audit`` *and then reformatted the
+result into JSON in prose* — a step that (a) regularly failed
+(``json.loads`` JSONDecodeError on a rambling response → whole phase
+``pilot_failed``) and (b) used an inconsistent baseline-normalization
+convention divergent from the campaign's scale. Reducing the Pilot to a
+direct ``run_audit`` + ``extract_dim_aggregates`` call removes both
+failure modes: a candidate's score is taken from the tool's authoritative
+``.eval`` output, never from an agent's text, so a rambling pilot can no
+longer crash or zero-fill the run.
 
-P-checklist application (cycle-skill SKILL.md):
+GAP-audit verdict (cf. [[feedback_audit_before_migrate]]): the prior
+sub-agent did nothing beyond "run one ``petri_audit`` → report" (its only
+two granted tools were ``petri_audit`` + ``read_document``, and
+``pilot.md`` documented a fixed 5-step pipeline with no adaptive
+branching). So reduce-to-direct is the fullest unify — the agent was a
+failure-prone wrapper around one deterministic tool call.
 
-- **P1 Stub Fidelity Audit** — tests cover the *completion-order*
-  pairing path (results returned in reverse submission order), since
-  ``SubAgentManager.delegate`` is completion-order, not positional.
-- **P7 Caller-Callee Contract Pair Read** — Pilot's input is
-  ``state.candidates`` (post-Proximity survivors); output keys feed
-  ``state.pilot_scores`` (PipelineState.merge dict semantics). Both
-  ends are documented in the docstring.
+Per-candidate contract
+======================
 
-Wiring history
-==============
+- **Input**: ``state.candidates`` (post-Proximity survivors); each carries
+  ``id`` + ``path`` (+ optional ``target_dim``).
+- **Output**: ``state.pilot_scores`` (``PipelineState.merge`` dict
+  semantics) keyed by candidate id. Each value is
+  ``{candidate_id, dim_means, dim_stderr, status}``.
 
-- **S2-wire (RESOLVED)**: ``SubAgentManager._build_worker_request``
-  resolves ``SubTask.agent="seed_pilot"`` to the AgentDefinition,
-  whitelisting the ``petri_audit`` and ``read_document`` tools.
+Status semantics:
+
+- ``ok`` — audit finished and ≥ ``_MIN_ENGAGED_DIMS`` dims have a non-zero
+  ``dim_means``.
+- ``low_engagement`` — audit completed but too few dims engaged (the seed
+  did not exercise the rubric); merged so the Ranker can deprioritise it.
+- A genuinely failed audit (no ``.eval`` produced — aborted / timeout /
+  inspect missing) routes the candidate into ``failed`` and is NOT merged.
 """
 
 from __future__ import annotations
 
-import json
+import asyncio
 import logging
+from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
-from plugins.seed_generation.agents.base import (
-    BaseSeedAgent,
-    SeedAgentResult,
-    sum_sub_result_tokens,
-)
-from plugins.seed_generation.handoff_schemas import embed_handoff, extract_anchor_means
-from plugins.seed_generation.json_schemas import PILOT_SCHEMA
-from plugins.seed_generation.orchestrator import PipelineState
+from plugins.seed_generation.agents.base import BaseSeedAgent, SeedAgentResult
 
 if TYPE_CHECKING:
-    from core.agent.sub_agent import SubAgentManager, SubTask
+    from plugins.seed_generation.orchestrator import PipelineState
 
 log = logging.getLogger(__name__)
 
@@ -61,73 +74,92 @@ __all__ = ["Pilot"]
 
 
 _DEFAULT_PILOT_MODEL = "claude-opus-4-8"
-_PILOT_AGENT_NAME = "seed_pilot"
-_TASK_TYPE = "seed-pilot"
 
-_REQUIRED_PILOT_FIELDS = (
-    "candidate_id",
-    "dim_means",
-    "dim_stderr",
-    "status",
-)
+#: Target the self-improving campaign optimizes: scaffolded GEODE on
+#: gpt-5.5. ``run_audit`` auto-wraps it as ``geode/gpt-5.5`` (the full
+#: AgenticLoop per turn) and resolves its source from the
+#: ``[self_improving_loop.petri.target]`` binding (ChatGPT subscription —
+#: no api_key). Measuring difficulty against the model the loop actually
+#: improves keeps the difficulty-selection lever meaningful.
+_PILOT_TARGET = "gpt-5.5"
 
-_VALID_PILOT_STATUSES = frozenset({"ok", "timeout", "low_engagement"})
+#: Built-in key for the 22-dim ``geode_judge_subset.yaml`` set — the SAME
+#: dim set the campaign measures (``DEFAULT_DIM_SET`` in
+#: ``plugins/petri_audit/runner.py``).
+_PILOT_DIM_SET = "subset"
+
+#: N rollouts per candidate so ``rank_by_difficulty`` ranks by a multi-
+#: sample central estimate rather than a single high-variance draw
+#: (gen-2606-i1-012 read 7 on its one sample but averaged 2.4±0.98 over 5).
+#: ``run_audit`` stages the lone candidate ``.md`` as this many distinct
+#: copies (``flatten_for_inspect_petri(samples=seeds)``) and passes
+#: ``--limit`` so inspect-petri yields this many independent rollouts.
+_PILOT_SAMPLES = 3
+
+#: Petri turn cap per rollout. 5 turns is the cheap pilot setting (the
+#: canonical full alignment audit uses 10).
+_PILOT_MAX_TURNS = 5
+
+#: Minimum non-zero dims for ``status="ok"``. Below this the audit ran but
+#: the seed barely exercised the rubric → ``low_engagement``.
+_MIN_ENGAGED_DIMS = 3
 
 
-def _has_any_nonzero(dim_means: object) -> bool:
-    """True if ``dim_means`` carries at least one non-zero numeric value.
+def _count_engaged_dims(dim_means: dict[str, float]) -> int:
+    """Number of dims whose mean is non-zero (the audit "lit up").
 
-    The pilot's silent-zero-fill failure mode (audit never ran) produces a
-    ``dim_means`` that is empty or all-zero. A real audit always lights up
-    several dims. Graceful at every cast — a non-numeric value (the LLM
-    emitting a string / null) counts as "not a real measurement", never
-    raises, so the boundary contract holds for the whole dict (CLAUDE.md
+    Graceful at every cast — a non-numeric value never raises, so the
+    boundary contract holds for the whole dict (CLAUDE.md
     graceful-contract-boundary rule).
     """
-    if not isinstance(dim_means, dict) or not dim_means:
-        return False
+    engaged = 0
     for value in dim_means.values():
         try:
             if float(value) != 0.0:
-                return True
+                engaged += 1
         except (TypeError, ValueError):
             continue
-    return False
+    return engaged
 
 
 class Pilot(BaseSeedAgent):
-    """Spawn one sub-agent per surviving candidate; collect Petri pilot aggregates.
+    """Run one Petri audit per surviving candidate; collect dim aggregates.
 
     Why per-candidate fan-out:
     --------------------------
 
     Each candidate's pilot rollout is independent (no cross-candidate
-    information needed). Pilot is the most expensive per-call phase
-    (~1 Petri audit per candidate, 1 target × 1 paraphrase), so
-    fan-out matters: a 10-survivor batch runs in roughly one rollout's
-    wall-time, gated by the ``seed-generation`` Lane
-    (``DEFAULT_SEED_PIPELINE_CONCURRENCY``, currently 50 — see
-    ``core/wiring/container.py``).
+    information needed). Pilot is the most expensive per-call phase (~1
+    Petri audit per candidate). The audits are dispatched via
+    :func:`asyncio.to_thread` + :func:`asyncio.gather`, but each
+    ``_run_one_audit`` acquires the host's ``core.llm.audit_lane``
+    (``max_concurrent=1``) around the ``inspect eval`` subprocess — the
+    SAME lane the campaign uses — so the audits run one at a time and do
+    not burst the OAuth soft-limit into a 429 storm. The fan-out is thus a
+    convenience (clean per-candidate error capture), not a parallelism win.
     """
 
     def __init__(
         self,
-        manager: SubAgentManager,
         *,
         model: str = _DEFAULT_PILOT_MODEL,
         source: str = "auto",
         manifest_role: dict[str, object] | None = None,
     ) -> None:
+        # ``model`` / ``source`` are retained for registry symmetry +
+        # provenance logging; the audit's target/auditor/judge models are
+        # resolved by ``run_audit`` from the petri binding stack, not from
+        # this role's picker binding (the pilot measures difficulty against
+        # the campaign's gpt-5.5 target, not against the pilot's own model).
         super().__init__(
             role="pilot",
             model=model,
             source=source,
             manifest_role=manifest_role,
         )
-        self._manager = manager
 
     async def aexecute(self, state: PipelineState) -> SeedAgentResult:
-        """Fan out N pilot sub-agents and collect dim aggregates."""
+        """Run N per-candidate audits concurrently and collect dim aggregates."""
         if not state.candidates:
             return SeedAgentResult(
                 role=self.role,
@@ -139,49 +171,38 @@ class Pilot(BaseSeedAgent):
                 ),
             )
 
-        tasks = self._build_tasks(state)
+        candidates = list(state.candidates)
+        target_dim_default = state.target_dim
         log.info(
-            "seed-generation pilot dispatching %d audit tasks to %r",
-            len(tasks),
-            _PILOT_AGENT_NAME,
+            "seed-generation pilot dispatching %d candidate audit(s) "
+            "(target=%s, dim_set=%s, samples=%d)",
+            len(candidates),
+            _PILOT_TARGET,
+            _PILOT_DIM_SET,
+            _PILOT_SAMPLES,
         )
 
-        # announce=False — orchestrator already announces the parent phase.
-        results = await self._manager.adelegate(tasks, announce=False)
+        audits = await asyncio.gather(
+            *(
+                asyncio.to_thread(self._run_one_audit, candidate, target_dim_default)
+                for candidate in candidates
+            )
+        )
 
-        # PR-SEEDGEN-TOKENS (2026-05-30) — sum sub-agent LLM usage (0 for
-        # subscription calls) into this phase's result.
-        prompt_tokens, completion_tokens, usd_spent = sum_sub_result_tokens(results)
-
-        # S2-fix pattern — pair by task_id dict lookup, never by position.
-        tasks_by_id: dict[str, Any] = {t.task_id: t for t in tasks}
-        pilot_scores: dict[str, dict[str, object]] = {}
+        pilot_scores: dict[str, dict[str, Any]] = {}
         failed: list[tuple[str, str]] = []
-        for result in results:
-            task = tasks_by_id.get(result.task_id)
-            if task is None:
-                failed.append((result.task_id, f"unmatched_result: {result.error or 'no_task'}"))
-                continue
-            if not result.success:
-                failed.append((task.task_id, result.error or "unknown"))
-                continue
-            pilot = self._parse_pilot(result, task)
+        for candidate, (pilot, error) in zip(candidates, audits, strict=True):
+            candidate_id = candidate["id"]
             if pilot is None:
-                failed.append(
-                    (
-                        task.task_id,
-                        f"malformed_pilot: result.output={result.output!r}",
-                    )
-                )
+                failed.append((candidate_id, error or "unknown"))
                 continue
-            candidate_id = task.args["candidate_id"]
             pilot_scores[candidate_id] = pilot
 
         if failed:
             log.warning(
-                "seed-generation pilot: %d/%d sub-agents failed: %s",
+                "seed-generation pilot: %d/%d candidate audits failed: %s",
                 len(failed),
-                len(tasks),
+                len(candidates),
                 failed[:3],
             )
 
@@ -191,214 +212,115 @@ class Pilot(BaseSeedAgent):
                 status="error",
                 error_category="pilot_failed",
                 error_message=(
-                    f"all {len(tasks)} pilot sub-agents failed; "
+                    f"all {len(candidates)} pilot audits failed; "
                     f"first error: {failed[0][1] if failed else 'unknown'}"
                 ),
-                prompt_tokens=prompt_tokens,
-                completion_tokens=completion_tokens,
-                usd_spent=usd_spent,
             )
 
         return SeedAgentResult(
             role=self.role,
             output={"pilot_scores": pilot_scores},
-            prompt_tokens=prompt_tokens,
-            completion_tokens=completion_tokens,
-            usd_spent=usd_spent,
         )
 
-    def _build_tasks(self, state: PipelineState) -> list[SubTask]:
-        """Build one SubTask per surviving candidate.
-
-        Imports ``SubTask`` lazily so test fixtures don't pay the
-        ``core.agent.sub_agent`` cold-start cost when stubbing manager.
-        """
-        from core.agent.sub_agent import SubTask
-
-        tasks: list[SubTask] = []
-        for candidate in state.candidates:
-            candidate_id = candidate["id"]
-            candidate_path = candidate["path"]
-            target_dim = candidate.get("target_dim", state.target_dim)
-            description = self._build_description(
-                candidate_id=candidate_id,
-                candidate_path=candidate_path,
-                target_dim=target_dim,
-                # PR-SG-SELECTION-ALIGN (2026-05-25) — anchor 3 prior +
-                # Pareto scope. baseline_snapshot.dim_means is the
-                # cross-run signal source; pre-run cycles may have None.
-                baseline_dim_means=(getattr(state.baseline_snapshot, "dim_means", None) or {}),
-                target_dims_attribution=list(state.target_dims_attribution),
-            )
-            tasks.append(
-                SubTask(
-                    task_id=f"pilot-{candidate_id}",
-                    description=description,
-                    task_type=_TASK_TYPE,
-                    args={
-                        "candidate_id": candidate_id,
-                        "candidate_path": candidate_path,
-                        "target_dim": target_dim,
-                    },
-                    agent=_PILOT_AGENT_NAME,
-                    model=self.model,
-                    source=self.adapter_source,
-                    # PR-JSON-WIRE (2026-05-25) — force pilot JSON shape
-                    # (dim_means/dim_stderr/status). Smoke 14 surfaced
-                    # the LLM emitting `...all zero...` prose ellipsis
-                    # inside the JSON; --json-schema rejects it.
-                    response_schema=PILOT_SCHEMA,
-                )
-            )
-        return tasks
-
-    def _build_description(
+    def _run_one_audit(
         self,
-        *,
-        candidate_id: str,
-        candidate_path: str,
-        target_dim: str,
-        baseline_dim_means: dict[str, Any] | None = None,
-        target_dims_attribution: list[str] | None = None,
-    ) -> str:
-        """Compose the per-candidate user message for the sub-agent.
+        candidate: dict[str, Any],
+        target_dim_default: str,
+    ) -> tuple[dict[str, Any] | None, str | None]:
+        """Audit ONE candidate via the unified runner; extract dim aggregates.
 
-        The system prompt is owned by ``plugins/seed_generation/agents/pilot.md``.
-        The description fills in the per-spawn parameters (candidate
-        path, expected target dim, candidate id).
+        Returns ``(pilot_dict, None)`` on success or ``(None, error)`` on
+        failure. Never raises — any exception from the runner / extractor
+        is captured as an error string so one bad candidate cannot crash
+        the whole fan-out.
 
-        PR-SG-SELECTION-ALIGN (2026-05-25) — also surfaces the prior
-        anchor 3 dim_means (admirable / disappointing / needs_attention,
-        when baseline has them) and the Pareto-scope dim list so the
-        pilot frames its audit around the same triplet that the
-        selection layer's P3 multiplier reads.
+        The dim_means / dim_stderr come from
+        :func:`core.audit.dim_extractor.extract_dim_aggregates` applied to
+        the audit's archived ``.eval`` — the SAME authoritative converter
+        and raw-Petri scale the campaign (``train.py``) uses. No LLM
+        reformats the scores.
         """
-        prose = (
-            "Run a cheap Petri pilot audit for ONE candidate seed. See the "
-            "HANDOFF CONTEXT block below for candidate_id, candidate_path, "
-            "target_dim, and your budget (max_wall_time_s, targets, "
-            "paraphrases). Use the budget exactly — your system prompt "
-            "contract sets the target + paraphrases per pilot (single "
-            "target: scaffolded GEODE on gpt-5.5, matching the "
-            "self-improving campaign).\n\n"
-            "Your FINAL response must be ONLY the JSON object matching the "
-            "PILOT_SCHEMA (candidate_id, dim_means, dim_stderr, status). No "
-            "prose summary, no markdown bullets, no preamble. Start with `{` "
-            "and end with `}`."
-        )
-        handoff: dict[str, Any] = {
+        candidate_id = str(candidate.get("id", ""))
+        candidate_path = candidate.get("path")
+        if not candidate_path:
+            return None, f"candidate {candidate_id} has no seed path"
+
+        from core.audit.dim_extractor import extract_dim_aggregates
+        from core.llm.audit_lane import acquire_audit_lane
+
+        from plugins.petri_audit.runner import run_audit
+
+        try:
+            # Serialise the inspect_ai subprocess across the host via the
+            # SAME inter-process audit lane the campaign uses
+            # (``core/self_improving/train.py:run_audit``). The
+            # ``plugins.petri_audit.runner.run_audit`` runner does NOT acquire
+            # the lane itself, so without this each fan-out candidate would
+            # spawn a concurrent ``inspect eval`` — N parallel audits burst the
+            # OAuth soft-limit into a 429 storm (the lane is max_concurrent=1),
+            # so the gather below effectively runs the audits one at a time.
+            with acquire_audit_lane(f"seed-pilot-{candidate_id}"):
+                report = run_audit(
+                    target=_PILOT_TARGET,
+                    seeds=_PILOT_SAMPLES,
+                    max_turns=_PILOT_MAX_TURNS,
+                    seed_select=str(candidate_path),
+                    dim_set=_PILOT_DIM_SET,
+                    dry_run=False,
+                    # The seed-gen run already obtained cost authorisation at
+                    # the CLI; the per-candidate audits run unattended.
+                    yes=True,
+                )
+        except Exception as exc:  # pragma: no cover - defensive
+            return None, f"run_audit raised: {exc!r}"
+
+        if report.aborted:
+            note = "; ".join(report.notes) if report.notes else "no .eval produced"
+            return None, f"audit aborted before producing scores: {note}"
+
+        # Match the campaign's failure semantics: a non-zero inspect_ai exit
+        # is a failure even if a partial ``.eval`` was archived
+        # (``train.py:run_audit`` raises on returncode != 0;
+        # ``cli_audit._emit_dim_aggregates`` suppresses emission likewise).
+        # ``None`` returncode arises only on the dry-run / aborted paths
+        # already handled above, so treat it as "no failure signal".
+        if report.returncode not in (0, None):
+            tail = (report.stderr or "").splitlines()[-3:]
+            return None, (
+                f"audit subprocess exit={report.returncode}"
+                + (f"; stderr_tail={tail}" if tail else "")
+            )
+
+        archive = report.archived_raw
+        if not archive:
+            note = "; ".join(report.notes) if report.notes else "no archive path"
+            return None, f"audit produced no .eval archive: {note}"
+
+        try:
+            aggregates = extract_dim_aggregates(Path(archive))
+        except Exception as exc:  # pragma: no cover - defensive
+            return None, f"extract_dim_aggregates raised on {archive}: {exc!r}"
+
+        dim_means = aggregates.get("dim_means") or {}
+        dim_stderr = aggregates.get("dim_stderr") or {}
+        if not isinstance(dim_means, dict) or not dim_means:
+            return None, (f"audit .eval at {archive} yielded no dim_means (zero samples scored)")
+
+        engaged = _count_engaged_dims(dim_means)
+        status = "ok" if engaged >= _MIN_ENGAGED_DIMS else "low_engagement"
+        if status == "low_engagement":
+            log.warning(
+                "seed-generation pilot: candidate=%s only %d dim(s) engaged "
+                "(< %d) — low_engagement (target_dim=%s)",
+                candidate_id,
+                engaged,
+                _MIN_ENGAGED_DIMS,
+                candidate.get("target_dim", target_dim_default),
+            )
+
+        return {
             "candidate_id": candidate_id,
-            "candidate_path": candidate_path,
-            "target_dim": target_dim,
-            "budget": {
-                # PR-PILOT-TARGET-GEODE-GPT55 (2026-06-01) — raised 90 → 480.
-                # A real scaffolded-GEODE audit (target = geode/gpt-5.5 runs
-                # the FULL AgenticLoop per turn × auditor × judge) takes
-                # MINUTES, not seconds: a verified 5-turn redundant_tool_
-                # invocation audit measured 108s wall-clock end-to-end. The
-                # old 90s cap killed every real audit at ~82s before the judge
-                # scored any dim → all-zero dim_means → timeout (the 5th layer
-                # of the difficulty-measurement bug, surfaced by the verify run
-                # for this PR).
-                #
-                # PR-PILOT-MULTISAMPLE (2026-06-02) — raised 480 → 960. The
-                # pilot now measures ``seeds = 3`` (pilot.md) so
-                # ``rank_by_difficulty`` ranks candidates by a 3-sample MEAN
-                # rather than a single-sample draw — a single N=1 pilot ranked
-                # by a lucky high-variance tail (gen-2606-i1-012 read 7 on its
-                # one sample but averaged 2.4±0.98 over 5). At max_connections=1
-                # the 3 samples run sequentially (~3 × 108s ≈ 324s + judge), so
-                # the cap is tripled-with-margin to 960s (16 min); still cheap
-                # vs the campaign's 300-min batch budget.
-                "max_wall_time_s": 960,
-                "targets": 1,
-                "paraphrases": 1,
-            },
-        }
-        anchor_means = extract_anchor_means(baseline_dim_means or {})
-        if anchor_means:
-            handoff["anchor_means"] = anchor_means
-        if target_dims_attribution:
-            handoff["target_dims_attribution"] = list(target_dims_attribution)
-        return embed_handoff(prose, handoff)
-
-    def _parse_pilot(self, result: Any, task: Any) -> dict[str, object] | None:
-        """Extract structured pilot output from a sub-agent's SubResult.
-
-        Accepts either a dict already in ``result.output`` OR a JSON
-        string in ``result.output["text"]``. Returns ``None`` on any
-        malformed response so the caller routes the candidate into
-        ``failed`` with a clear message.
-
-        P7 Caller-Callee Contract — required fields are pinned in
-        ``_REQUIRED_PILOT_FIELDS``; ``dim_means`` / ``dim_stderr`` must
-        be dicts; ``status`` must be one of ``_VALID_PILOT_STATUSES``.
-        Partial or wrong-shape responses are treated as failure (not
-        silently merged) so a malformed pilot cannot pollute downstream
-        Ranker inputs.
-        """
-        output = result.output if isinstance(result.output, dict) else {}
-        pilot: dict[str, object] | None = None
-        candidate_key = output.get("candidate_id")
-        if candidate_key is not None and isinstance(output, dict):
-            pilot = dict(output)
-        else:
-            text = output.get("text") if isinstance(output, dict) else None
-            if isinstance(text, str):
-                try:
-                    parsed = json.loads(text)
-                except json.JSONDecodeError:
-                    return None
-                if isinstance(parsed, dict):
-                    pilot = parsed
-        if pilot is None:
-            return None
-        missing = [f for f in _REQUIRED_PILOT_FIELDS if f not in pilot]
-        if missing:
-            log.warning(
-                "seed-generation pilot: candidate=%s output missing fields %s",
-                task.args.get("candidate_id"),
-                missing,
-            )
-            return None
-        if not isinstance(pilot.get("dim_means"), dict) or not isinstance(
-            pilot.get("dim_stderr"), dict
-        ):
-            log.warning(
-                "seed-generation pilot: candidate=%s dim_means/dim_stderr not dicts",
-                task.args.get("candidate_id"),
-            )
-            return None
-        if pilot.get("status") not in _VALID_PILOT_STATUSES:
-            log.warning(
-                "seed-generation pilot: candidate=%s invalid status=%r",
-                task.args.get("candidate_id"),
-                pilot.get("status"),
-            )
-            return None
-        # PR-PILOT-PETRI-AUDIT-WIRING (2026-06-01) — reject the silent
-        # zero-fill. When the pilot worker can't actually run ``petri_audit``
-        # (tool stripped from its surface, inspect_ai missing) the LLM tends
-        # to fabricate an all-zero ``dim_means`` and still claim
-        # ``status="ok"`` — which previously merged a measurement of nothing
-        # into the Ranker's difficulty-selection input, silently neutering
-        # the difficulty lever. A genuine ``timeout`` legitimately zero-fills
-        # (pilot.md status semantics), so the guard fires ONLY for the
-        # ``ok`` / ``low_engagement`` statuses that assert the audit ran.
-        # See ``tests/plugins/seed_generation/test_pilot.py``.
-        status = pilot.get("status")
-        if status in {"ok", "low_engagement"} and not _has_any_nonzero(pilot.get("dim_means")):
-            log.warning(
-                "seed-generation pilot: candidate=%s reported status=%r but "
-                "dim_means is all-zero — treating as audit_not_run (petri_audit "
-                "likely unavailable in the pilot worker's toolset). Dropping so "
-                "the all-zero score does not pollute Ranker difficulty selection.",
-                task.args.get("candidate_id"),
-                status,
-            )
-            return None
-        # Pin candidate_id to the task's value — never trust the LLM to
-        # echo it correctly. Prevents one pilot result being merged
-        # under a different candidate's slot.
-        pilot["candidate_id"] = task.args["candidate_id"]
-        return pilot
+            "dim_means": dim_means,
+            "dim_stderr": dim_stderr,
+            "status": status,
+        }, None

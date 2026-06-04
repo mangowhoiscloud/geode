@@ -86,9 +86,12 @@ def _build_audit_handlers() -> dict[str, Any]:
         # audit aborted before running (e.g. ``inspect`` CLI / inspect_ai not
         # installed — the [audit] extra is missing). The runner records that
         # as ``aborted=True`` with a note but a blank ``returncode``; surfacing
-        # it as ``status="ok"`` let the seed_pilot sub-agent mistake a
-        # never-run audit for a finished one and emit all-zero ``dim_means``.
-        # dry-run never aborts, so the cost-preview path is unaffected.
+        # it as ``status="ok"`` would let a tool caller mistake a never-run
+        # audit for a finished one. (The seed-gen Pilot no longer routes
+        # through this tool — PR-PILOT-UNIFY-DIM-EXTRACT 2026-06-04 — but the
+        # loud-fail still helps the REPL ``petri_audit`` caller see a missing
+        # [audit] extra instead of an empty result.) dry-run never aborts, so
+        # the cost-preview path is unaffected.
         audit = report.to_dict()
         if not dry_run and report.aborted:
             return {

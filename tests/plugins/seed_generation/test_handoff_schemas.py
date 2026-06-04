@@ -36,7 +36,6 @@ from plugins.seed_generation.handoff_schemas import (
     GENERATOR_HANDOFF,
     LITERATURE_REVIEW_HANDOFF,
     META_REVIEW_HANDOFF,
-    PILOT_HANDOFF,
     PROXIMITY_HANDOFF,
     VOTE_HANDOFF,
     embed_handoff,
@@ -59,7 +58,6 @@ class TestSchemaShape:
             GENERATOR_HANDOFF,
             LITERATURE_REVIEW_HANDOFF,
             META_REVIEW_HANDOFF,
-            PILOT_HANDOFF,
             PROXIMITY_HANDOFF,
             VOTE_HANDOFF,
         ],
@@ -120,23 +118,6 @@ class TestRoleHandoffDrift:
         start = description.index(marker) + len(marker)
         end = description.rindex("```")
         return json.loads(description[start:end].strip())
-
-    def test_pilot_handoff_matches_schema(self, tmp_path: Path) -> None:
-        from unittest.mock import MagicMock
-
-        from plugins.seed_generation.agents.pilot import Pilot
-
-        agent = Pilot(MagicMock())
-        desc = agent._build_description(
-            candidate_id="gen1-000-deadbeef",
-            candidate_path="/tmp/seed.md",  # noqa: S108
-            target_dim="redundant_tool_invocation",
-        )
-        handoff = self._extract_handoff(desc)
-        for key in PILOT_HANDOFF["required"]:
-            assert key in handoff, f"pilot handoff missing required key: {key}"
-        assert handoff["candidate_id"] == "gen1-000-deadbeef"
-        assert handoff["budget"]["targets"] == 1
 
     def test_evolver_handoff_matches_schema(self) -> None:
         from unittest.mock import MagicMock
@@ -208,17 +189,18 @@ class TestRoleHandoffDrift:
 
 
 class TestPromptOutputSection:
-    """pilot.md / evolver.md / ranker.md must contain a strong
-    'FINAL response only JSON' directive plus a concrete skeleton.
+    """evolver.md / ranker.md must contain a strong 'FINAL response only
+    JSON' directive plus a concrete skeleton.
 
-    Smoke 15 evidence: critic.md (which has this section) passed;
-    pilot.md / evolver.md (which lacked it) emitted prose summaries.
+    Smoke 15 evidence: critic.md (which has this section) passed; the
+    LLM roles that lacked it emitted prose summaries. (pilot.md was
+    removed in PR-PILOT-UNIFY-DIM-EXTRACT, 2026-06-04 — the Pilot no
+    longer spawns an LLM sub-agent, so there is no prompt to skeleton.)
     """
 
     @pytest.mark.parametrize(
         ("md_name", "must_contain"),
         [
-            ("pilot.md", ["## Output JSON (structured)", "dim_means", "dim_stderr", '"status"']),
             (
                 "evolver.md",
                 ["## Output JSON (structured)", '"verdict"', "evolved_path", "parent_id"],
@@ -230,7 +212,7 @@ class TestPromptOutputSection:
         for token in must_contain:
             assert token in body, f"{md_name} missing required token: {token}"
 
-    @pytest.mark.parametrize("md_name", ["pilot.md", "evolver.md"])
+    @pytest.mark.parametrize("md_name", ["evolver.md"])
     def test_prompt_demands_pure_json_final(self, md_name: str) -> None:
         body = (ROLE_PROMPTS / md_name).read_text(encoding="utf-8")
         # Strong JSON-only directive (allows minor wording variation).

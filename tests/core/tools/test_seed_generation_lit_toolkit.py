@@ -40,11 +40,15 @@ class TestSeedGenerationToolkitLitWired:
 
 
 class TestUnchangedToolkits:
-    """The other 5 seed toolkits must not silently inherit lit tools."""
+    """The other seed toolkits must not silently inherit lit tools.
+
+    (``seed_pilot`` was removed in PR-PILOT-UNIFY-DIM-EXTRACT, 2026-06-04 —
+    the Pilot runs the audit directly instead of spawning a sub-agent.)
+    """
 
     @pytest.mark.parametrize(
         "kit_name",
-        ["seed_proximity", "seed_pilot", "seed_ranker", "seed_evolver", "seed_meta_review"],
+        ["seed_proximity", "seed_ranker", "seed_evolver", "seed_meta_review"],
     )
     def test_kit_does_not_have_lit_tools(self, kit_name: str) -> None:
         reg = load_default_registry(force_reload=True)
@@ -89,13 +93,14 @@ class TestAgentPromptContract:
 
 
 class TestPromptsColocationCSP9:
-    """CSP-9 — pin that the 8 seed-generation prompts live in the plugin
+    """CSP-9 — pin that the seed-generation prompts live in the plugin
     folder and that ``SubagentLoader`` discovers them under default config.
 
     Without this pin, a future refactor could move the .md files back to
     ``.claude/agents/`` (cwd-relative, not shipped with the package) and
     fresh clones would silently regress to "no registered agent" at
-    runtime.
+    runtime. (``pilot.md`` was removed in PR-PILOT-UNIFY-DIM-EXTRACT,
+    2026-06-04 — the Pilot runs the audit directly with no LLM sub-agent.)
     """
 
     _ROLES = (
@@ -103,19 +108,18 @@ class TestPromptsColocationCSP9:
         "evolver",
         "generator",
         "meta_reviewer",
-        "pilot",
         "proximity",
         "ranker",
         "supervisor",
     )
 
-    def test_all_8_prompts_in_plugin_folder(self) -> None:
+    def test_all_prompts_in_plugin_folder(self) -> None:
         agents_dir = Path("plugins/seed_generation/agents")
         for role in self._ROLES:
             prompt = agents_dir / f"{role}.md"
             assert prompt.is_file(), f"missing prompt: {prompt}"
 
-    def test_subagent_loader_discovers_all_8_prompts(self) -> None:
+    def test_subagent_loader_discovers_all_prompts(self) -> None:
         from core.skills.agents import SubagentLoader
 
         loader = SubagentLoader()
