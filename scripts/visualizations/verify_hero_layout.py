@@ -452,6 +452,32 @@ SITES: tuple[Site, ...] = (
         text_string_en="random",
         text_string_ko="random",
     ),
+    # ── Resolution — the honest result (measured run-2606 SoT) ──
+    # The title + provenance are single-line free text on the closing canvas.
+    # The two data columns (per-arm table + the 18-dim headroom-vs-noise
+    # ranking) are monospace (Menlo) single-line rows; each column is laid out
+    # in a single VGroup so the per-row width is what the ratchet measures. The
+    # two columns sit side by side (RIGHT buff 0.9), so each column's safe width
+    # is ~6.5; the rows are tracked at that width. The flowing ``resolution_lede``
+    # / ``resolution_arm_note`` / ``resolution_finding`` paragraphs are
+    # ``_wrap``-ped at render time into multiple lines, so — like the Act
+    # ``*_detail`` paragraphs — they are NOT tracked here (the ratchet measures
+    # the unwrapped single-line width, which would false-overflow a wrapped
+    # paragraph). The ``_wrap`` budgets keep them inside the safe interior.
+    Site("resolution_title", "resolution_title", 30, 14.0, 0.7),
+    Site("resolution_arms_header", "resolution_arms_header", 14, 6.5, 0.5),
+    Site("resolution_arm_row1", "resolution_arm_row1", 13, 6.5, 0.5, font_family="Menlo"),
+    Site("resolution_arm_row2", "resolution_arm_row2", 13, 6.5, 0.5, font_family="Menlo"),
+    Site("resolution_arm_row3", "resolution_arm_row3", 13, 6.5, 0.5, font_family="Menlo"),
+    Site("resolution_arm_row4", "resolution_arm_row4", 13, 6.5, 0.5, font_family="Menlo"),
+    Site("resolution_arm_row5", "resolution_arm_row5", 13, 6.5, 0.5, font_family="Menlo"),
+    Site("resolution_noise_header", "resolution_noise_header", 14, 6.5, 0.5),
+    Site("resolution_noise_row1", "resolution_noise_row1", 13, 6.5, 0.5, font_family="Menlo"),
+    Site("resolution_noise_row2", "resolution_noise_row2", 13, 6.5, 0.5, font_family="Menlo"),
+    Site("resolution_noise_row3", "resolution_noise_row3", 13, 6.5, 0.5, font_family="Menlo"),
+    Site("resolution_noise_row4", "resolution_noise_row4", 13, 6.5, 0.5, font_family="Menlo"),
+    Site("resolution_noise_row5", "resolution_noise_row5", 13, 6.5, 0.5, font_family="Menlo"),
+    Site("resolution_provenance", "resolution_provenance", 12, 14.0, 0.5),
 )
 
 

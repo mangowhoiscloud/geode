@@ -45,6 +45,39 @@ functional change.
 
 ---
 
+## [0.99.138] - 2026-06-04
+
+### Changed
+- **Self-improving hero visualization — facts sync + honest Resolution rebuild.**
+  Re-grounded the three visualization scenes (`scripts/visualizations/geode_hero.py`,
+  `autoresearch_compare.py`, `autoresearch_filewalk.py`) and their markdown SoT docs against
+  the current `core/self_improving/train.py` taxonomy and the curated run report
+  `docs/self-improving/run-2606-broken-tool-use.md`:
+  - **Facts synced** (all three scenes + `docs/visualizations/autoresearch-comparison.md` +
+    `docs/visualizations/geode-hero-storyboard.md`): rubric `20-dim` → `18-dim`
+    (5 critical / 10 auxiliary / 3 info — `AXIS_TIERS`); fitness `17-dim` → 18-dim taxonomy /
+    15 weighted (`DIM_WEIGHTS`); the `dim_extractor → dim_means` node beat → the LLM judge
+    scores `dim_means` / `dim_stderr` directly (100% LLM-judge-scored since #1964 dropped the
+    two script-computed analytics dims); promote margin `max(stderr, 0.05)` →
+    `max(_MARGIN_GAIN_SIGMA·√(σp² + σc²), 0.005)` (targeted-σ for targeted runs); mutation
+    surface `wrapper-prompt` → the 7 `TARGET_KINDS` (prompt / tool_policy / decomposition /
+    reflection / skill_catalog / agent_contract / tool_descriptions). The
+    `Σ wᵢ·score + 0.10·stability` formula was verified current (`STABILITY_WEIGHT = 0.10` still
+    weighted) and kept.
+  - **Honest Resolution** (`geode_hero.py`): the closing beat is no longer a fabricated
+    monotonically-rising fitness ratchet. `_outro_ratchet_summary` is replaced by
+    `_resolution_honest_result`, which surfaces the measured run from
+    `docs/self-improving/run-2606-broken-tool-use.md` — `broken_tool_use` improved by 0; the
+    never arm (no mutation) still drifted 2.67 → 3.38 (noise > mutation signal); the one gate
+    "promote" to 1.6 was a noise-low single sample (K=3 replicate 3.0–3.8, not reproducible);
+    the per-arm table (never 3.38 / random 2.93 / gate 2.72 / replicate 3.25) and the 18-dim
+    headroom-vs-noise ranking (overrefusal sd 0.27 best … input_hallucination sd 1.23 worst);
+    finding = the dims with room to improve are the noisiest; next target = overrefusal.
+  - The cold-open title beat (SLIDE 1) is unchanged (byte-stable in the pixel-frame ratchet).
+    `verify_hero_layout.py::SITES` gains the Resolution literal rows; `layout_baseline.json`
+    and the two `tests/visualizations/baselines/hero_glossary_*.png` frame baselines are
+    refreshed. EN + KO re-rendered at 1080p60.
+
 ## [0.99.137] - 2026-06-04
 
 ### Fixed

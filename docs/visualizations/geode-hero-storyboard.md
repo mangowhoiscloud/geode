@@ -7,9 +7,9 @@
 > (tradeoff)**. Acts 1-3 are measured / shipped results; **Act 4's
 > countermeasure is design-stage** (see its honesty marker). The mechanism
 > beats the old version walked through
-> (seed-generation tournament, Petri rubric / dim_extractor / fitness /
-> critical floor / auto-promote, wrapper-prompt mutation cycle) are not
-> deleted — they are absorbed into each Act's countermeasure beat, where
+> (seed-generation tournament, Petri rubric / judge-scored dim_means / fitness /
+> critical floor / auto-promote, scaffold mutation cycle over the 7 TARGET_KINDS)
+> are not deleted — they are absorbed into each Act's countermeasure beat, where
 > they explain *how* GEODE addresses that Act's problem.
 >
 > Reference aesthetic: Google AI Co-Scientist hero video (agent grid +
@@ -232,9 +232,11 @@ Three measures, layered:
    4-bucket step scale saturated and could not register continuous
    improvement (`core/self_improving/train.py:626-637`). The dim count
    goes **20 → 18** (`AXIS_TIERS`) and the weighted count **17 → 15**
-   (`DIM_WEIGHTS`); fitness is now 100% LLM-judge-scored. This beat
-   absorbs the old dim_extractor / compute_fitness mechanism. The
-   binding promote margin is
+   (`DIM_WEIGHTS`); fitness is now 100% LLM-judge-scored — the judge
+   writes `dim_means` / `dim_stderr` directly, with no separate
+   `dim_extractor` node since #1964. This beat absorbs the old
+   judge-scored-dim / compute_fitness mechanism. The binding promote
+   margin is
    `margin = max(_MARGIN_GAIN_SIGMA · √(σp² + σc²), 0.005)` with
    `_MARGIN_GAIN_SIGMA = 1.0` (`train.py:722-743, 3911`).
 3. **A targeted sub-fitness.** `target_dim` concentrates the mutation
@@ -282,7 +284,7 @@ transcript ─┬─▶ judge-score      → 0-10  (pulled by fluency)
   failure record cannot give you.
 
 The grid + per-cell scores fade out here (the transition from abstract
-rubric scores to the scoring mechanism), so `bit_8` (`_bit_8_dim_extractor`)
+rubric scores to the scoring mechanism), so `bit_8` (`_bit_8_judge_scores`)
 opens on a clean STAGE-2 center band; the petri box + survivors anchor dim
 to a trail so the fork is the visual focus.
 
@@ -457,18 +459,31 @@ The design tension is real (not a measured cost):
 
 ---
 
-## Outro — the ratchet across generations
+## Resolution — the honest result (noise, not capability)
 
-After the three Acts, the canvas clears to the fitness-over-generations
-ratchet chart: promoted fitness climbing monotonically across generations
-beside a git-commit chain of promoted commits. This is the payoff the
-three fixes enable — a metric that can see the difference, a gate that
-proves the signal, and a campaign fast enough to iterate.
+After the four Acts, the canvas clears to the **honest measured result** —
+deliberately NOT a rising fitness ratchet, because there was none. All four
+fixes landed and the loop ran end to end (the infrastructure works), yet
+`broken_tool_use` improved by **0**: the **never arm** — no mutation at all —
+still drifted **2.67 → 3.38**, i.e. the measurement noise is larger than any
+mutation signal. The one gate "promote" to 1.6 was a noise-low single sample
+(replicate K=3 re-measured it at 3.0–3.8, not reproducible).
 
-- **EN**: "Self-improving over generations"
-- **KO**: "세대를 거듭한 자기 개선"
+The Resolution surfaces the measured data from
+`docs/self-improving/run-2606-broken-tool-use.md` (the data SoT):
 
-A rubric-detail slide and a glossary follow the outro (held for reading).
+- **Per-arm `broken_tool_use`** (lower = better): gen-0 K=5 baseline 2.64–2.67;
+  never (no mutation) n=10 mean 3.38, 0 promote; random n=9 mean 2.93, 0 promote;
+  gate single-audit n=10 mean 2.72, 1 = noise-low; replicate K=3 mean 3.25,
+  0 promote (regression).
+- **18-dim headroom vs noise** (gen-0 n=5): overrefusal sd 0.27 (best) ·
+  disappointing sd 0.54 · needs_attention sd 0.53 · broken_tool_use sd 0.60 ·
+  input_hallucination sd 1.23 (worst).
+- **Finding**: the dims with room to improve ARE the noisiest ones — the wall
+  is measurement noise, not capability. **Next**: pick by headroom-over-noise →
+  **overrefusal** (sd 0.27).
+
+A rubric-detail slide and a glossary follow the Resolution (held for reading).
 
 ## Data provenance note
 
@@ -527,6 +542,7 @@ Everything else is code-grounded:
 | per-audit `wait_for` 45-min bound + process-group kill | `campaign.py:147` (`DEFAULT_PER_AUDIT_TIMEOUT_S = 2700.0`) |
 | Act 4 problem: all 18 dims `judge_llm` on transcript text, no deterministic dim | `train.py:715-721` (v3 PR-DROP-ANALYTICS-DIMS) |
 | Act 4 contracts (`required_tool_path`/`args_shape_valid`/`claim_grounded`/`contract_results`) DESIGN-STAGE — absent from code | verified absent in `core/` + `plugins/`, 2026-06-03 (no metric attached) |
+| Resolution: `broken_tool_use` improved by 0; never-arm drift 2.67 → 3.38; gate promote 1.6 was noise-low (K=3 replicate 3.0–3.8); arm table (never 3.38 / random 2.93 / gate 2.72 / replicate 3.25); 18-dim headroom-vs-noise (overrefusal sd 0.27 best … input_hallucination sd 1.23 worst); next = overrefusal | `docs/self-improving/run-2606-broken-tool-use.md` (measured run SoT, 2026-06-03 ~ 06-04) |
 
 ## EN / KO Act-title + tradeoff key lookup
 
@@ -584,5 +600,7 @@ Output: `media/videos/geode_hero/1080p60/GeodeSelfImprovingHero-{EN,KO}.mp4`.
 ## Future iterations (post-MVP, separate PRs)
 
 1. **TTS narration** — voice-over for EN/KO, muxed with `ffmpeg`.
-2. **Real run data** — feed an actual session history into the ratchet chart.
+2. **Re-measure on the next target dim** — once an `overrefusal` (or higher
+   headroom-to-noise) campaign records a robust result, refresh the Resolution
+   arm table + headroom-vs-noise ranking from the new run report SoT.
 3. **Interactive web version** — port to a browser-native player.
