@@ -45,6 +45,31 @@ functional change.
 
 ---
 
+## [0.99.142] - 2026-06-05
+
+### Changed
+- **Runtime Anthropic primary bumped `claude-opus-4-7` → `claude-opus-4-8`.** The
+  agent's default Anthropic model — `routing.toml [model.defaults] anthropic`
+  (which drives `ANTHROPIC_PRIMARY`), its mirror `Settings.model`, the pipeline
+  node defaults (`analyst` / `evaluator` / `scoring` / `synthesizer`), and
+  `Settings.router_model` — now resolves to Opus 4.8. Opus 4.8 compatibility
+  (pricing, adapter frozensets, effort picker, plugin allowlists) had already
+  landed in v0.99.82; this flips the runtime default. Operators on a different
+  model still override via `/model` or `~/.geode/routing.toml`. Historical
+  post-mortem comments that cite `claude-opus-4-7` as the then-default are left
+  intact (they record past incidents accurately).
+
+### Fixed
+- **`GEODE.md` LLM Models section synced to code.** The table had drifted to
+  `claude-opus-4-6` / `gpt-5.4`+`gpt-5.2`+`gpt-4.1` / `glm-5`; it now lists the
+  role-bound defaults actually read from `core/config/routing.toml` +
+  `core/llm/model_pricing.toml` (`claude-opus-4-8`, `gpt-5.5` + `gpt-5.4`,
+  `glm-5.1`, `glm-4.7-flash`) with measured context windows. The three
+  "Fallback chain" lines — which contradicted the v0.99.19 opt-in/empty
+  `[model.fallbacks]` shipped default — were replaced with an opt-in note. Tool
+  count corrected `57` → `59` (matches `core/tools/definitions.json`);
+  "3-provider fallback" → "3-provider routing".
+
 ## [0.99.141] - 2026-06-04
 
 ### Added
