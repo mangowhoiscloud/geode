@@ -243,7 +243,7 @@ def test_codex_kwargs_text_format_strict_false_when_typed_additional_properties(
     """``additionalProperties: {"type": "number"}`` (typed extra) is NOT
     the same as ``false`` — strict mode rejects typed extras.
 
-    PILOT_SCHEMA / META_REVIEW_SCHEMA use this shape for sparse dim
+    META_REVIEW_SCHEMA uses this shape for sparse per-dim coverage
     dictionaries — auto-detect must catch and fall back to non-strict.
     """
     typed_extra = {

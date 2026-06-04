@@ -402,8 +402,8 @@ def difficulty_confidence(stderr: float | None) -> float:
     driven by the standard error of the target-dim mean, which already
     encodes the sample size (``stderr = sd / √n``): a low-sample or
     high-variance pilot carries a larger stderr and is down-weighted, so no
-    separate sample-count gate is needed (and the pilot's PILOT_SCHEMA does
-    not carry a count anyway).
+    separate sample-count gate is needed (the pilot's ``dim_stderr`` already
+    encodes ``n`` via ``stderr = sd / √n``).
 
     Graceful at the cast boundary (CLAUDE.md): a missing / non-numeric /
     non-finite / negative stderr — ``bool`` rejected explicitly so a stray

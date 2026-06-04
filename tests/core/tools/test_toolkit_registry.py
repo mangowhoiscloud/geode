@@ -153,11 +153,12 @@ class TestDefaultRegistry:
         """The bundled ``core/tools/toolkits.toml`` must load + parse cleanly."""
         reg = load_default_registry(force_reload=True)
         assert reg.has(DEFAULT_TOOLKIT), "missing _default in bundled manifest"
-        # Spot-check seed_* kits used by plugins/seed_generation/agents/*.md
+        # Spot-check seed_* kits used by plugins/seed_generation/agents/*.md.
+        # ``seed_pilot`` was removed in PR-PILOT-UNIFY-DIM-EXTRACT (2026-06-04)
+        # — the Pilot runs the audit directly instead of spawning a sub-agent.
         for name in (
             "seed_generation",
             "seed_critique",
-            "seed_pilot",
             "seed_ranker",
             "seed_evolver",
             "seed_meta_review",

@@ -34,14 +34,19 @@ turn 1: cost $0.0358, 0 assistant_message).
 
 The ``_strict_additive()`` helper enforces both invariants. Schemas
 whose shape allows it (no typed ``additionalProperties``, no truly
-optional fields) are converted; the three exceptions (PILOT,
-META_REVIEW, LITERATURE_REVIEW) all use ``additionalProperties:
-{"type": "number"}`` / ``true`` / ``{"type": "string"}`` to carry
-per-Petri-dim numeric maps or per-arxiv-id snapshot path maps whose
-key set is determined at runtime — enumerating those would couple
-the schema to a catalog this module shouldn't import, and the actual
-failure mode for those roles is ``no field at all`` (caught by
-required-gate) not key drift.
+optional fields) are converted; the two exceptions (META_REVIEW,
+LITERATURE_REVIEW) use ``additionalProperties: {"type": "number"}`` /
+``true`` / ``{"type": "string"}`` to carry per-dim numeric maps or
+per-arxiv-id snapshot path maps whose key set is determined at runtime
+— enumerating those would couple the schema to a catalog this module
+shouldn't import, and the actual failure mode for those roles is
+``no field at all`` (caught by required-gate) not key drift.
+
+The Pilot role no longer has a schema here: PR-PILOT-UNIFY-DIM-EXTRACT
+(2026-06-04) reduced the Pilot to a direct ``run_audit`` +
+``extract_dim_aggregates`` call (no LLM sub-agent), so there is no LLM
+response to constrain — its ``dim_means`` come straight from the
+audit's ``.eval`` archive on the campaign's raw-Petri scale.
 """
 
 from __future__ import annotations
@@ -164,44 +169,6 @@ CRITIQUE_SCHEMA: Final[dict[str, Any]] = _strict_additive(
     },
 )
 """Critic agent — per-candidate critique (strict-compatible)."""
-
-
-PILOT_SCHEMA: Final[dict[str, Any]] = _additive(
-    properties={
-        "candidate_id": {"type": "string"},
-        "dim_means": {
-            "type": "object",
-            # Petri 24 substantive dims — additionalProperties allows the
-            # full set without listing each (the LLM has the dim catalog
-            # via the system prompt; this schema gates "no dim_means
-            # field at all" + "values are wrong type", which is the
-            # actual failure mode smoke 14 hit). Typed-additional means
-            # this schema CANNOT use ``_strict_additive`` — enumerating
-            # all 24 dims here would couple json_schemas.py to the
-            # autoresearch dim catalog this module shouldn't import.
-            "additionalProperties": {"type": "number"},
-        },
-        "dim_stderr": {
-            "type": "object",
-            "additionalProperties": {"type": "number"},
-        },
-        "status": {
-            "type": "string",
-            "enum": ["ok", "timeout", "low_engagement"],
-        },
-    },
-    required=["candidate_id", "dim_means", "dim_stderr", "status"],
-)
-"""Pilot agent — Petri inner-loop audit per candidate.
-
-NOT strict-compatible — ``dim_means`` / ``dim_stderr`` use typed
-``additionalProperties`` to accept the Petri 24-dim catalog without
-enumerating it; OpenAI strict mode rejects typed-additional. Caller
-codex backend falls through to ``strict: False`` for this schema
-(server hint, not constraint). Acceptable trade-off: pilot's actual
-failure mode is ``no field at all`` (caught by required gate), not
-key drift inside dim_means.
-"""
 
 
 VOTE_SCHEMA: Final[dict[str, Any]] = _strict_additive(
@@ -370,7 +337,6 @@ __all__ = [
     "EVOLVE_SCHEMA",
     "LITERATURE_REVIEW_SCHEMA",
     "META_REVIEW_SCHEMA",
-    "PILOT_SCHEMA",
     "PROXIMITY_SCHEMA",
     "SUPERVISOR_SCHEMA",
     "VOTE_SCHEMA",

@@ -108,18 +108,14 @@ allowed_models = [
 role_contract = "plugins/seed_generation/agents/proximity.md"
 
 [seed_generation.role.pilot]
-# Pilot orchestrates a Petri inner-loop audit per candidate. Default
-# tier is ``claude-opus-4-8`` (PR-UPGRADE-ROLES-TOP-TIER 2026-05-26 set
-# opus-4-7; PR-SEEDGEN-OPUS-4-8 2026-06-01 bumped it) under operator
-# directive that all role LLMs run on the Anthropic top tier — see
-# CHANGELOG. The pilot's per-candidate wall-time budget is 480s
-# (PR-PILOT-TARGET-GEODE-GPT55 raised it from 90s — a real scaffolded
-# geode/gpt-5.5 audit runs minutes, ~108s measured); operators tightening
-# the per-candidate budget can override the model via
-# ``~/.geode/config.toml``'s ``[seed_generation.role.pilot] model``.
+# PR-PILOT-UNIFY-DIM-EXTRACT (2026-06-04) — the Pilot runs the Petri audit
+# directly (``plugins.petri_audit.runner.run_audit`` +
+# ``core.audit.dim_extractor.extract_dim_aggregates``); it spawns NO LLM
+# sub-agent, so there is no ``role_contract`` prompt. The audit's
+# target/auditor/judge models come from the petri binding stack, NOT this
+# role's binding — ``default_model`` / ``allowed_models`` are retained only
+# for picker-provenance symmetry with the other roles.
 default_model = "claude-opus-4-8"
-# Override paths: operators can pin a faster/cheaper model via the
-# allowlist below when the 480s wall-time becomes a bottleneck.
 allowed_models = [
     "claude-opus-4-8",
     "claude-opus-4-7",
@@ -127,7 +123,6 @@ allowed_models = [
     "gpt-5.4-mini",
     "gpt-5.3-codex",
 ]
-role_contract = "plugins/seed_generation/agents/pilot.md"
 
 [seed_generation.role.ranker]
 # 3-judge panel orchestrator. Its own default_model is a placeholder —

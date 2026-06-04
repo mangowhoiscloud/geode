@@ -151,35 +151,9 @@ target_dims_attribution so the critic 's strengths/weaknesses verdict
 incorporates the same signals autoresearch fitness uses."""
 
 
-PILOT_HANDOFF: Final[dict[str, Any]] = _additive(
-    properties={
-        "candidate_id": {"type": "string"},
-        "candidate_path": {"type": "string"},
-        "target_dim": {"type": "string"},
-        "budget": {
-            "type": "object",
-            "properties": {
-                "max_wall_time_s": {"type": "number"},
-                "targets": {"type": "integer"},
-                "paraphrases": {"type": "integer"},
-            },
-            "required": ["max_wall_time_s", "targets", "paraphrases"],
-        },
-        # PR-SG-SELECTION-ALIGN (2026-05-25) — selection-layer signals.
-        # Pilot writes anchor_means in its OUTPUT (dim_means already);
-        # here we expose the prior anchor baseline as INPUT context so
-        # the LLM can frame the audit around the same triplet.
-        "target_dims_attribution": {"type": "array", "items": {"type": "string"}},
-        "anchor_means": ANCHOR_MEANS_FIELD,
-    },
-    required=["candidate_id", "candidate_path", "target_dim", "budget"],
-)
-"""Pilot — Petri inner-loop audit per candidate. Budget block
-explicit so the LLM knows the wall-time + target count + paraphrase
-count it must respect.
-PR-SG-SELECTION-ALIGN — adds anchor_means + target_dims_attribution
-so the pilot frames its audit around the same triplet that
-autoresearch P3 multiplier reads."""
+# PILOT_HANDOFF was removed in PR-PILOT-UNIFY-DIM-EXTRACT (2026-06-04) — the
+# Pilot no longer spawns an LLM sub-agent (and so builds no HANDOFF CONTEXT
+# block); it runs the Petri audit directly and reads the ``.eval`` archive.
 
 
 VOTE_HANDOFF: Final[dict[str, Any]] = _additive(
@@ -340,7 +314,6 @@ __all__ = [
     "GENERATOR_HANDOFF",
     "LITERATURE_REVIEW_HANDOFF",
     "META_REVIEW_HANDOFF",
-    "PILOT_HANDOFF",
     "PROXIMITY_HANDOFF",
     "VOTE_HANDOFF",
     "embed_handoff",

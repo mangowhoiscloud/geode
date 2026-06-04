@@ -462,10 +462,12 @@ def test_all_role_subtask_spawns_carry_model_for_role_binding() -> None:
     """
     from pathlib import Path as _Path
 
+    # ``pilot`` is excluded: PR-PILOT-UNIFY-DIM-EXTRACT (2026-06-04) reduced
+    # the Pilot to a direct ``run_audit`` call — it spawns no SubTask, so it
+    # forwards no per-role binding through one.
     role_files = {
         "generator": "generator.py",
         "critic": "critic.py",
-        "pilot": "pilot.py",
         "proximity": "proximity.py",
         "evolver": "evolver.py",
         "meta_reviewer": "meta_reviewer.py",
@@ -571,7 +573,6 @@ def test_all_json_based_role_prompts_carry_final_response_enforcement() -> None:
     from plugins.seed_generation.agents.evolver import Evolver
     from plugins.seed_generation.agents.literature_review import LiteratureReview
     from plugins.seed_generation.agents.meta_reviewer import MetaReviewer
-    from plugins.seed_generation.agents.pilot import Pilot
     from plugins.seed_generation.agents.proximity import Proximity
     from plugins.seed_generation.agents.ranker import Ranker
     from plugins.seed_generation.agents.supervisor import Supervisor
@@ -620,14 +621,6 @@ def test_all_json_based_role_prompts_carry_final_response_enforcement() -> None:
         }
         return agent._build_description(state, snapshot)
 
-    def _pilot_prompt() -> str:
-        agent = Pilot(manager=_NoOp())  # type: ignore[arg-type]
-        return agent._build_description(
-            candidate_id="c-0",
-            candidate_path="/dev/null",
-            target_dim="broken_tool_use",
-        )
-
     def _proximity_prompt() -> str:
         agent = Proximity(manager=_NoOp())  # type: ignore[arg-type]
         state_with_cands = PipelineState(
@@ -664,7 +657,6 @@ def test_all_json_based_role_prompts_carry_final_response_enforcement() -> None:
         ("evolver", _evolver_prompt),
         ("literature_review", _literature_review_prompt),
         ("meta_reviewer", _meta_reviewer_prompt),
-        ("pilot", _pilot_prompt),
         ("proximity", _proximity_prompt),
         ("ranker", _ranker_prompt),
         ("supervisor", _supervisor_prompt),
