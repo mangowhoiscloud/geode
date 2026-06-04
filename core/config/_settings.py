@@ -39,10 +39,10 @@ class Settings(BaseSettings):
         default="",
         validation_alias=AliasChoices("zai_api_key", "ZAI_API_KEY"),
     )
-    # PR-1 G-E (2026-05-21) — bumped from claude-opus-4-6 to match
-    # routing.toml [model.defaults] anthropic. ANTHROPIC_PRIMARY constant
-    # is the source of truth; this default mirrors it.
-    model: str = "claude-opus-4-7"
+    # PR-1 G-E (2026-05-21) bumped 4-6 → 4-7; PR-RUNTIME-OPUS-4-8 (2026-06-05)
+    # bumped 4-7 → 4-8 to match routing.toml [model.defaults] anthropic.
+    # ANTHROPIC_PRIMARY constant is the source of truth; this default mirrors it.
+    model: str = "claude-opus-4-8"
     learning_extract_model: str = Field(
         default="glm-4.7-flash",
         validation_alias=AliasChoices("learning_extract_model", "GEODE_LEARNING_EXTRACT_MODEL"),
@@ -100,7 +100,7 @@ class Settings(BaseSettings):
         description=(
             "Model used by the planning step (goal decomposition before "
             "the main loop). Empty string falls back to ``settings.model``. "
-            "Set to ``claude-opus-4-7`` for higher-quality plans, "
+            "Set to ``claude-opus-4-8`` for higher-quality plans, "
             "``claude-haiku-4-5-20251001`` for cheaper. PR-CL-A6."
         ),
     )
@@ -334,8 +334,8 @@ class Settings(BaseSettings):
     interrupt_nodes: str = ""  # comma-separated node names, e.g. "verification,scoring"
 
     # LLM — Router & Verification
-    # PR-1 G-E — same bump as ``model`` field above.
-    router_model: str = "claude-opus-4-7"
+    # PR-1 G-E + PR-RUNTIME-OPUS-4-8 — same bump as ``model`` field above.
+    router_model: str = "claude-opus-4-8"
     default_secondary_model: str = "gpt-5.4"  # see OPENAI_PRIMARY
     agreement_threshold: float = 0.67
 

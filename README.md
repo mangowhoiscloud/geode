@@ -10,7 +10,7 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/Anthropic-Opus_4.7-cc785c?style=flat-square&logo=anthropic&logoColor=white" alt="Anthropic Opus 4.7">
+  <img src="https://img.shields.io/badge/Anthropic-Opus_4.8-cc785c?style=flat-square&logo=anthropic&logoColor=white" alt="Anthropic Opus 4.8">
   <img src="https://img.shields.io/badge/OpenAI-GPT--5.5-412991?style=flat-square&logo=openai&logoColor=white" alt="OpenAI GPT-5.5">
   <img src="https://img.shields.io/badge/ZhipuAI-GLM--5.1-1a73e8?style=flat-square" alt="ZhipuAI GLM-5.1">
 </p>
@@ -25,7 +25,7 @@
   <a href="README.ko.md">한국어</a>
 </p>
 
-# GEODE v0.99.141 — A Self-improving Autonomous Execution Agent
+# GEODE v0.99.142 — A Self-improving Autonomous Execution Agent
 
 A general-purpose autonomous agent that also rewrites the scaffolding it runs on. You ask in plain language; GEODE plans, calls tools, and reports, for one prompt or a long-running session. Underneath, an outer loop keeps tuning the system that runs your tasks.
 
@@ -182,11 +182,11 @@ You should see something like:
   ✓ web_fetch → ok (1.1s)
 
   Today's top AI stories:
-  • Anthropic released Claude Opus 4.7 with 1M-token context...
+  • Anthropic released Claude Opus 4.8 with 1M-token context...
   • OpenAI's GPT-5.5 system card published; pricing matches 4.6...
   • LangGraph 0.6 ships native streaming for tool calls...
 
-  ✢ Worked for 8s · claude-opus-4-7 · ↓2.1k ↑412 · $0.018
+  ✢ Worked for 8s · claude-opus-4-8 · ↓2.1k ↑412 · $0.018
 ```
 
 If you see this, you're done. If you see an error, run `geode doctor` for a diagnosis or jump to [Troubleshooting](#troubleshooting).
@@ -322,7 +322,7 @@ Check `cat ~/.geode/.env` and confirm the key starts with `sk-ant-` (Anthropic),
 <details>
 <summary><strong>The model doesn't seem to use my tools / runs in circles.</strong></summary>
 
-Check `geode model` — some models are better at tool use than others. Default is `claude-opus-4-7` (best). If you're on `gpt-5.5`, set `effort: "high"` in `.geode/config.toml`. Run `tail -f ~/.geode/logs/serve.log` to see what the model is actually doing.
+Check `geode model` — some models are better at tool use than others. Default is `claude-opus-4-8` (best). If you're on `gpt-5.5`, set `effort: "high"` in `.geode/config.toml`. Run `tail -f ~/.geode/logs/serve.log` to see what the model is actually doing.
 </details>
 
 <details>

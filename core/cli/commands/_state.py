@@ -17,7 +17,6 @@ from typing import Any as _Any
 from core.auth.profiles import ProfileStore
 from core.config import (
     ANTHROPIC_BUDGET,
-    ANTHROPIC_PRIMARY,
     ANTHROPIC_SECONDARY,
     GLM_PRIMARY,
     OPENAI_PRIMARY,
@@ -52,7 +51,7 @@ class ModelProfile:
 # otherwise to `openai` PAYG. Both paths visible via /login dashboard.
 MODEL_PROFILES: list[ModelProfile] = [
     ModelProfile("claude-opus-4-8", "anthropic", "Opus 4.8", "$$$"),
-    ModelProfile(ANTHROPIC_PRIMARY, "anthropic", "Opus 4.7", "$$$"),
+    ModelProfile("claude-opus-4-7", "anthropic", "Opus 4.7", "$$$"),
     ModelProfile("claude-opus-4-6", "anthropic", "Opus 4.6", "$$$"),
     ModelProfile(ANTHROPIC_SECONDARY, "anthropic", "Sonnet 4.6", "$$"),
     ModelProfile(ANTHROPIC_BUDGET, "anthropic", "Haiku 4.5", "$"),
