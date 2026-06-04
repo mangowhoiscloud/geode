@@ -7,7 +7,7 @@
 ## Identity
 
 GEODE is a general-purpose autonomous execution agent built on a `while(tool_use)` loop.
-It understands user requests in natural language, selects and invokes the appropriate tool from 57 available,
+It understands user requests in natural language, selects and invokes the appropriate tool from 59 available,
 observes the result, and decides the next action. This loop continues until the task is complete.
 
 It specializes in exploratory tasks: research, web investigation, document
@@ -38,8 +38,8 @@ analysis, automation, scheduling, and multi-step tool work.
 ```
 AGENT:    AgenticLoop (while tool_use), SubAgentManager, CLIPoller, Gateway
 HARNESS:  SessionLane, LaneQueue(global:8), PolicyChain, TaskGraph, HookSystem(69 events)
-RUNTIME:  ToolRegistry(57), MCP Registry(API), Skills, Memory(5-Tier), Reports
-MODEL:    ClaudeAdapter, OpenAIAdapter, GLMAdapter (3-provider fallback)
+RUNTIME:  ToolRegistry(59), MCP Registry(API), Skills, Memory(5-Tier), Reports
+MODEL:    ClaudeAdapter, OpenAIAdapter, GLMAdapter (3-provider routing)
 ```
 
 ### Sub-Agent System
@@ -77,7 +77,7 @@ handler entry to re-inject readiness, memory, and profile context.
 
 ## Tool Routing
 
-All free-text input goes directly to AgenticLoop. 57 tool definitions + autonomous selection via tool_use.
+All free-text input goes directly to AgenticLoop. 59 tool definitions + autonomous selection via tool_use.
 
 **Tool Permission Levels** (spanning PolicyChain 6 layers):
 - **STANDARD**: Read/analysis tools — eligible for Sub-Agent auto_approve
@@ -86,21 +86,20 @@ All free-text input goes directly to AgenticLoop. 57 tool definitions + autonomo
 
 ## LLM Models
 
-| Provider | Model | Context | Purpose |
-|----------|-------|---------|---------|
-| **Anthropic** | `claude-opus-4-6` | 1M | Primary (Pipeline + Agentic) |
-| Anthropic | `claude-sonnet-4-6` | 1M | Fallback |
-| Anthropic | `claude-haiku-4-5-20251001` | 200K | Budget |
-| **OpenAI** | `gpt-5.4` | 1M | Cross-LLM Secondary |
-| OpenAI | `gpt-5.2` | 128K | Fallback 1 |
-| OpenAI | `gpt-4.1` | 1M | Fallback 2 |
-| **ZhipuAI** | `glm-5` | 200K | GLM Primary |
-| ZhipuAI | `glm-5-turbo` | 200K | GLM Agent |
-| ZhipuAI | `glm-4.7-flash` | 200K | GLM Budget |
+Primary / secondary / node defaults come from `core/config/routing.toml` `[model.defaults]`; the budget, reflection, and learning-extract bindings from `Settings` fields in `core/config/_settings.py` (`cognitive_reflection_model`, `learning_extract_model`). Context windows are from `core/llm/model_pricing.toml` `[context_windows]`. The table lists role-bound models only — `gpt-5.4-mini`, `glm-5`, `glm-5-turbo` are priced in `model_pricing.toml` but carry no default binding.
 
-- **Fallback chain** (Anthropic): `claude-opus-4-6` → `claude-sonnet-4-6`
-- **Fallback chain** (OpenAI): `gpt-5.4` → `gpt-5.2` → `gpt-4.1`
-- **Fallback chain** (GLM): `glm-5` → `glm-5-turbo` → `glm-4.7-flash`
+| Provider | Model | Context | Role |
+|----------|-------|---------|------|
+| **Anthropic** | `claude-opus-4-8` | 1M | Primary (Pipeline + Agentic + Router) |
+| Anthropic | `claude-sonnet-4-6` | 1M | Secondary (opt-in fallback target) |
+| Anthropic | `claude-haiku-4-5-20251001` | 200K | Budget / reflection node |
+| **OpenAI** | `gpt-5.5` | 1.05M | Cross-LLM primary + Codex (OAuth-only) |
+| OpenAI | `gpt-5.4` | 1.05M | Cross-LLM secondary |
+| **ZhipuAI** | `glm-5.1` | 203K | GLM primary |
+| ZhipuAI | `glm-4.7-flash` | 203K | GLM budget (learning extract) |
+
+- **Fallback chains are opt-in** (v0.99.19+). `[model.fallbacks]` ships **empty**: a primary failure raises `BillingError` (quota path) or the last exception (transient path), and the user picks the next model via `/model`. Cross-provider auto-swap was removed in v0.53.0; the same-provider chain followed in v0.99.19.
+- To opt in, add a chain to `~/.geode/routing.toml`, e.g. `[model.fallbacks]` → `anthropic = ["claude-opus-4-8", "claude-sonnet-4-6"]`.
 
 ## Conventions
 

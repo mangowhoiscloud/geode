@@ -12,9 +12,9 @@ PR-1 G-B/G-D/G-E (2026-05-21) closed three config drift surfaces:
   ``plugins.petri_audit.registry.get_binding``.
 - **G-D**: ``core/hooks/llm_extract_learning.py`` 의 ``"glm-4.7-flash"``
   literal → ``settings.learning_extract_model`` config-overridable.
-- **G-E**: ``settings.model`` (was ``claude-opus-4-6``) vs
-  ``routing.toml`` (was ``claude-opus-4-7``) drift → aligned to
-  ``claude-opus-4-7``.
+- **G-E**: ``settings.model`` vs ``routing.toml`` anthropic default must
+  match. PR-1 G-E aligned 4-6/4-7 → ``claude-opus-4-7``;
+  PR-RUNTIME-OPUS-4-8 bumped both → ``claude-opus-4-8``.
 
 The drift fixes are already in develop. This test module **pins** them
 so a future refactor cannot silently re-introduce the drift. Each test
@@ -165,11 +165,12 @@ def test_g_e_settings_model_default_matches_routing_toml_anthropic() -> None:
     )
 
 
-def test_g_e_settings_model_default_uses_current_4_7_family() -> None:
-    """Belt-and-suspenders: pin the *generation* (claude-opus-4-7) of the
-    field default so a future routing.toml edit that silently rolls to
-    claude-opus-4-8 also updates ``_settings.py``. If we ever do an
-    intentional bump, this test changes alongside the model literal.
+def test_g_e_settings_model_default_uses_current_4_8_family() -> None:
+    """Belt-and-suspenders: pin the *generation* (claude-opus-4-8) of the
+    field default so a future routing.toml edit that silently rolls the
+    runtime primary forward also updates ``_settings.py``. If we ever do an
+    intentional bump, this test changes alongside the model literal
+    (PR-RUNTIME-OPUS-4-8 bumped 4-7 → 4-8).
 
     Compares the class-level default (env-immune) — see sibling test for
     the routing.toml↔Settings parity assertion.
@@ -177,8 +178,8 @@ def test_g_e_settings_model_default_uses_current_4_7_family() -> None:
     from core.config._settings import Settings
 
     settings_default = Settings.model_fields["model"].default
-    assert settings_default.startswith("claude-opus-4-7"), (
+    assert settings_default.startswith("claude-opus-4-8"), (
         f"G-E watcher: Settings.model default is {settings_default!r} — "
-        "expected claude-opus-4-7 family. If this is an intentional bump, "
+        "expected claude-opus-4-8 family. If this is an intentional bump, "
         "update this test together with routing.toml + _settings.py."
     )

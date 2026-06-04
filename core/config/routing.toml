@@ -20,7 +20,7 @@
 # ── Model defaults ──────────────────────────────────────────────────────────
 
 [model.defaults]
-anthropic = "claude-opus-4-7"
+anthropic = "claude-opus-4-8"
 anthropic_secondary = "claude-sonnet-4-6"
 anthropic_budget = "claude-haiku-4-5-20251001"
 openai = "gpt-5.5"
@@ -39,7 +39,7 @@ glm = "glm-5.1"
 # transient-error coverage can opt in by editing ``~/.geode/routing.toml``:
 #
 #   [model.fallbacks]
-#   anthropic = ["claude-opus-4-7", "claude-sonnet-4-6"]
+#   anthropic = ["claude-opus-4-8", "claude-sonnet-4-6"]
 #
 # By default, primary failure raises ``BillingError`` (quota path) or
 # the last exception (transient path) and the user picks the next model
@@ -87,10 +87,10 @@ fallback_provider = "openai"
 # ── Pipeline node defaults ─────────────────────────────────────────────────
 
 [nodes]
-analyst = "claude-opus-4-7"
-evaluator = "claude-opus-4-7"
-scoring = "claude-opus-4-7"
-synthesizer = "claude-opus-4-7"
+analyst = "claude-opus-4-8"
+evaluator = "claude-opus-4-8"
+scoring = "claude-opus-4-8"
+synthesizer = "claude-opus-4-8"
 
 # ── Credential patterns ────────────────────────────────────────────────────
 #
