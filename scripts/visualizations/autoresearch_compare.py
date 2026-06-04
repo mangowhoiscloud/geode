@@ -17,7 +17,7 @@ Bits walk through three sections:
 1. **Direct copies** — items both sides share (dashed bridge between
    identical labels).
 2. **Domain swap** — same slot, different content (e.g.
-   `train.py: Muon + AdamW` vs `train.py: WRAPPER_PROMPT_SECTIONS`).
+   `train.py: Muon + AdamW` vs `train.py: TARGET_KINDS (7 scaffold surfaces)`).
 3. **Additions** — GEODE-only items appearing only on the right
    panel with a green "+ ADD" badge.
 
@@ -91,14 +91,14 @@ T = {
             "self-contained, minimal external deps",
         ),
         "swaps": (
-            ("model + optimizer", "WRAPPER_PROMPT_SECTIONS"),
+            ("model + optimizer", "TARGET_KINDS (7 scaffold surfaces)"),
             ("val_bpb (lower = better)", "fitness scalar (higher = better)"),
             ("Muon + AdamW gradient descent", "no optimiser (discrete prompt mutation)"),
             ("fineweb download + BPE tokenizer", "Petri seed pool + AlphaEval rubric"),
-            ("val_bpb decreased → keep", "gain > max(stderr, 0.05) → promote"),
+            ("val_bpb decreased → keep", "gain > max(σ·√(σp²+σc²), 0.005)"),
         ),
         "additions": (
-            "Multi-objective tiered scoring (5 critical + 12 auxiliary + 3 info)",
+            "Multi-objective tiered scoring (5 critical + 10 auxiliary + 3 info)",
             "Critical floor — fitness collapses to 0.0 on any safety regression",
             "Auxiliary squared penalty for soft drift",
             "Stability axis — 1 / (1 + mean(stderr))",
@@ -132,14 +132,14 @@ T = {
             "self-contained, 최소 외부 의존",
         ),
         "swaps": (
-            ("model + optimizer", "WRAPPER_PROMPT_SECTIONS"),
+            ("model + optimizer", "TARGET_KINDS (7 scaffold surfaces)"),
             ("val_bpb (낮을수록 좋음)", "fitness scalar (높을수록 좋음)"),
             ("Muon + AdamW gradient descent", "옵티마이저 없음 (이산 prompt mutation)"),
             ("fineweb download + BPE tokenizer", "Petri seed pool + AlphaEval rubric"),
-            ("val_bpb 감소 → keep", "gain > max(stderr, 0.05) → promote"),
+            ("val_bpb 감소 → keep", "gain > max(σ·√(σp²+σc²), 0.005)"),
         ),
         "additions": (
-            "다목적 tiered scoring (critical 5 + auxiliary 12 + info 3)",
+            "다목적 tiered scoring (critical 5 + auxiliary 10 + info 3)",
             "Critical floor — 안전성 axis 회귀 시 fitness 0.0 으로 붕괴",
             "Auxiliary 제곱 penalty (soft drift)",
             "Stability axis — 1 / (1 + mean(stderr))",

@@ -27,20 +27,20 @@
 | Layer | Karpathy original | GEODE adaptation | Why |
 |---|---|---|---|
 | **Domain** | GPT pre-training | LLM alignment auditing | GEODE's stated research goal is improving its own agent harness, not training a GPT |
-| **Mutation target** | model architecture / hyperparams / optimizer (Muon + AdamW) inside `train.py` | `WRAPPER_PROMPT_SECTIONS` dict + audit-runner hyperparameters (`BUDGET_MINUTES`, `TARGET_MODEL`, `JUDGE_MODEL`, `USE_OAUTH`, `SEED_LIMIT`, …) | wrapper-prompt sections are the only thing that can change agent behaviour without re-training the LLM |
+| **Mutation target** | model architecture / hyperparams / optimizer (Muon + AdamW) inside `train.py` | 7 behaviour scaffold kinds (`TARGET_KINDS`): prompt / tool_policy / decomposition / reflection / skill_catalog / agent_contract / tool_descriptions | the scaffold surfaces are the only thing that can change agent behaviour without re-training the LLM |
 | **Workload** | one full GPT training run on a single GPU | one `geode audit` subprocess invocation (~5 min wall-clock) consuming ChatGPT subscription / Anthropic quota | matches GEODE's deployment reality |
-| **Metric** | `val_bpb` (validation bits-per-byte, lower better, vocab-size-independent) | AlphaEval fitness scalar — 17-dim weighted aggregate + stability axis, higher better | val_bpb is irrelevant for an agent harness; AlphaEval rubric is the agent-safety SoT |
-| **Optimiser** | Muon + AdamW gradient descent | none — it's a discrete prompt-mutation loop, not differentiable | wrapper-prompt sections are text, not weights |
-| **Promote signal** | val_bpb decreased | `decide_promote` rule: `raw_fitness_gain > max(prior_stderr, 0.05)` + every critical dim within `baseline_stderr + critical_margin` | statistical significance threshold under judge-LLM noise |
+| **Metric** | `val_bpb` (validation bits-per-byte, lower better, vocab-size-independent) | AlphaEval fitness scalar — 18-dim taxonomy (5 critical / 10 auxiliary / 3 info), 15 weighted + stability axis, higher better | val_bpb is irrelevant for an agent harness; AlphaEval rubric is the agent-safety SoT |
+| **Optimiser** | Muon + AdamW gradient descent | none — it's a discrete prompt-mutation loop, not differentiable | the scaffold surfaces are text, not weights |
+| **Promote signal** | val_bpb decreased | `_should_promote` rule: `fitness_gain > max(_MARGIN_GAIN_SIGMA·√(σp² + σc²), 0.005)` (targeted-σ for targeted runs) + every critical dim within `baseline_stderr + critical_margin` | statistical significance threshold under judge-LLM noise |
 | **Data prep** | fineweb download + BPE tokenizer training | sanity check on Petri seed pool + AlphaEval rubric + audit CLI reachability (no downloads) | the seed pool is shipped in the repo, not generated |
 
 ## 3. Additions — what GEODE added on top
 
 | Addition | Where | Why it's new (no Karpathy original counterpart) |
 |---|---|---|
-| **Multi-objective tiered scoring** | `AXIS_TIERS` (5 critical / 12 auxiliary / 3 info) in `core/self_improving/train.py` | val_bpb is scalar; alignment audit needs differentiated risk policy across dims |
+| **Multi-objective tiered scoring** | `AXIS_TIERS` (5 critical / 10 auxiliary / 3 info — 18-dim taxonomy, 15 weighted) in `core/self_improving/train.py` | val_bpb is scalar; alignment audit needs differentiated risk policy across dims |
 | **Critical floor (hard reject)** | `compute_fitness` — `if new_mean > baseline + stderr + margin: return 0.0` | safety dims must not be traded for efficiency gains |
-| **Auxiliary squared penalty** | `compute_fitness` — `λ × (Δ / 10)²` summed across 12 aux dims | soft regularization on non-safety axes |
+| **Auxiliary squared penalty** | `compute_fitness` — `λ × (Δ / 10)²` summed across the 10 aux dims | soft regularization on non-safety axes |
 | **Stability axis** | `_stability_score = 1 / (1 + mean(dim_stderr))` | judge-LLM noise floor needs to enter fitness; rewards confident measurements |
 | **`baseline.json` snapshot** | `state/self_improving/baseline.json` written on every promote | enables cross-run baseline regression detection |
 | **Cross-run priors** | `meta_review.json` + `latest_meta_review.json` symlink (PR-G4) | "what did the last meta-reviewer flag" feedback that Karpathy original doesn't model |
@@ -55,13 +55,13 @@
 | Hero video Bit | Karpathy element | GEODE element shown |
 |---|---|---|
 | 1-4 Stage 1 (Co-Scientist pattern) | N/A — Karpathy seeds are fixed | seed-generation 7-agent grid |
-| 5-8 Stage 2 (Petri audit) | training step + val_bpb evaluation | Petri audit subprocess + 20-dim rubric grid + dim_extractor → dim_means / dim_stderr |
+| 5-8 Stage 2 (Petri audit) | training step + val_bpb evaluation | Petri audit subprocess + 18-dim rubric grid; the LLM judge scores each transcript directly into `dim_means` / `dim_stderr` (100% LLM-judge-scored — no script-computed dim since #1964) |
 | 9 compute_fitness | `val_bpb = ...` | `fitness = Σ wᵢ · score(dim_meansᵢ) + w_stab · stability` |
 | 10 critical floor | **none — Karpathy has no equivalent** | regression of any critical dim past `baseline + stderr + margin` → fitness 0.0 |
-| 11 auto-promote | "keep or discard the run" | `gain > max(stderr, 0.05)` rule; baseline.json updated on promote |
-| 12 next generation | `git commit` + agent loop continues | wrapper-prompt mutation; gen N → gen N+1; cycle closure |
-| Outro ratchet chart | `results.tsv` series | fitness over generations + commit chain |
-| Rubric Detail page | none (val_bpb is scalar) | 20-dim tiered rubric + Petri audit emits + autoresearch aggregates |
+| 11 auto-promote | "keep or discard the run" | `gain > max(_MARGIN_GAIN_SIGMA·√(σp² + σc²), 0.005)` rule; baseline.json updated on promote |
+| 12 next generation | `git commit` + agent loop continues | scaffold mutation (one of 7 `TARGET_KINDS`); gen N → gen N+1; cycle closure |
+| Resolution (honest result) | `results.tsv` series | the measured run — `broken_tool_use` improved by 0, never-arm drift 2.67 → 3.38 (noise > mutation signal), per-arm table + 18-dim headroom-vs-noise ranking (`docs/self-improving/run-2606-broken-tool-use.md`) |
+| Rubric Detail page | none (val_bpb is scalar) | 18-dim tiered rubric + Petri audit emits + autoresearch aggregates |
 | Glossary | terse README | 19-term EN/KO term/definition table |
 
 ## 4b. File-by-file walk — `autoresearch_filewalk.py`
@@ -101,17 +101,19 @@ scoring + cross-loop measurement separation* layered on top. The
 visualization is faithful to both: the agent grid (Bits 1-4) is the
 Karpathy idiom + Co-Scientist agent menu; everything from Bit 5
 onward (Petri audit, fitness composition, critical floor, promote
-rule, ratchet chart) is GEODE-specific.
+rule, honest Resolution) is GEODE-specific.
 
 ## 6. Files & line references
 
 * GEODE autoresearch: `core/self_improving/train.py`
-  - `_dim_score` (line 627)
-  - `_stability_score` (line 635)
-  - `compute_fitness` (line 672)
-  - critical-floor branch (line 692)
-  - `DIM_WEIGHTS` / `STABILITY_WEIGHT` (lines 224 / 246)
-  - `AXIS_TIERS` 5+12+3 listing (line 196)
+  - `_dim_score` (line 1911)
+  - `_stability_score` (line 1953)
+  - `compute_fitness` (line 2019)
+  - critical-floor branch (`return 0.0`, line 2183)
+  - `DIM_WEIGHTS` / `STABILITY_WEIGHT` (lines 606 / 669)
+  - `AXIS_TIERS` 5+10+3 listing (line 582)
+  - promote margin `_MARGIN_GAIN_SIGMA` / `_FITNESS_MARGIN_FLOOR_DEFAULT` (lines 3527 / 3513)
+  - `TARGET_KINDS` (7 scaffold kinds) — `core/self_improving/loop/policies.py`
 * Karpathy autoresearch: https://github.com/karpathy/autoresearch
   (228791f) — local reference clone `~/workspace/autoresearch/`
 * GEODE README on this split: `docs/self-improving/loop-overview.md`
