@@ -88,6 +88,19 @@ AUTORESEARCH_POLICIES_TEMPLATE = (
 AUTORESEARCH_EVIDENCE_TEMPLATE = (
     REPO_ROOT / "docs" / "self-improving" / "autoresearch" / "evidence.html.template"
 )
+AUTORESEARCH_RUNS_INDEX_TEMPLATE = (
+    REPO_ROOT / "docs" / "self-improving" / "autoresearch" / "runs-index.html.template"
+)
+AUTORESEARCH_RUN_REPORT_TEMPLATE = (
+    REPO_ROOT / "docs" / "self-improving" / "autoresearch" / "run-report.html.template"
+)
+# PR-HUB-RUN-REPORT (2026-06-04) — per-run campaign synthesis markdown SoT.
+# Each ``docs/self-improving/run-*.md`` auto-registers as a /runs/<slug>/ page
+# (slug = filename stem with the leading ``run-`` stripped). The page RENDERS
+# the .md client-side via the shared Marked.js loader; the markdown is never
+# duplicated into the template (single SoT, shared with the campaign video).
+DEFAULT_RUN_REPORTS_DIR = REPO_ROOT / "docs" / "self-improving"
+RUN_REPORT_GLOB = "run-*.md"
 PYPROJECT = REPO_ROOT / "pyproject.toml"
 
 # E6 (2026-05-30) — the three control arms of the matched held-out comparison.
@@ -6549,6 +6562,156 @@ def render_autoresearch_evidence(
 
 
 # --------------------------------------------------------------------------- #
+# Run reports (per-campaign synthesis .md → /runs/ pages)                     #
+# --------------------------------------------------------------------------- #
+_RUN_SLUG_RE = re.compile(r"^[a-z0-9]+(?:-[a-z0-9]+)*$")
+
+
+def _run_slug(md_path: Path) -> str:
+    """Slug for a run report page: filename stem with leading ``run-`` stripped.
+
+    ``run-2606-broken-tool-use.md`` -> ``2606-broken-tool-use`` -> served at
+    ``autoresearch/runs/2606-broken-tool-use/``.
+
+    The slug becomes a filesystem path segment AND a URL segment, so it is
+    validated against ``^[a-z0-9]+(?:-[a-z0-9]+)*$``. An empty / ``.`` / ``..`` /
+    otherwise-unsafe slug (e.g. ``run-.md`` -> ``""``, ``run-..md`` -> ``..``)
+    raises so the caller's best-effort ``_safe`` wrapper skips it rather than
+    overwriting ``runs/index.html`` or escaping the runs dir.
+    """
+    stem = md_path.stem
+    slug = stem[len("run-") :] if stem.startswith("run-") else stem
+    if not _RUN_SLUG_RE.match(slug):
+        raise ValueError(
+            f"unsafe run-report slug {slug!r} from {md_path.name!r}; "
+            "expected lowercase alphanumeric segments joined by '-'"
+        )
+    return slug
+
+
+def _run_title(md_body: str, fallback: str) -> str:
+    """Title from the markdown's first ``# `` heading; ``fallback`` if none."""
+    for line in md_body.splitlines():
+        stripped = line.strip()
+        if stripped.startswith("# "):
+            return stripped[2:].strip()
+    return fallback
+
+
+def render_autoresearch_runs_index(
+    md_files: list[Path],
+    out_dir: Path,
+    *,
+    template: str,
+    ctx: _AutoresearchRenderCtx,
+) -> Path:
+    """Render the runs catalog at ``autoresearch/runs/index.html``.
+
+    Dense list — one link per discovered ``run-*.md`` (title from the md's first
+    ``# `` heading, link to ``runs/<slug>/``). Degrades to an honest empty state
+    when no run report has been authored yet.
+    """
+    out_dir.mkdir(parents=True, exist_ok=True)
+    sorted_files = sorted((p for p in md_files if p.is_file()), key=lambda p: p.name)
+    items: list[str] = []
+    seen_slugs: set[str] = set()
+    for md_path in sorted_files:
+        try:
+            slug = _run_slug(md_path)
+        except ValueError:
+            LOG.warning("skipping run report with unsafe slug: %s", md_path.name)
+            continue
+        if slug in seen_slugs:
+            LOG.warning("skipping run report with duplicate slug %r: %s", slug, md_path.name)
+            continue
+        seen_slugs.add(slug)
+        title = _run_title(md_path.read_text(encoding="utf-8"), slug)
+        link = f"/geode/self-improving/autoresearch/runs/{html_escape(slug)}/"
+        items.append(
+            f'        <li><a href="{link}">{html_escape(title)}</a> '
+            f"<code>{html_escape(slug)}</code></li>"
+        )
+    if not items:
+        runs_list = '<p class="page-sub">No run reports yet.</p>'
+    else:
+        runs_list = '    <ul class="nav-list run-report-list">\n' + "\n".join(items) + "\n    </ul>"
+    mapping = _autoresearch_base_mapping(ctx)
+    mapping.update(
+        {
+            "runs_section_label": (f"{len(items)} report" + ("s" if len(items) != 1 else "")),
+            "runs_list": runs_list,
+        }
+    )
+    rendered = substitute(template, mapping)
+    leftover = re.findall(r"\{\{\s*([a-zA-Z_]+)\s*\}\}", rendered)
+    if leftover:
+        raise RuntimeError(f"autoresearch runs index unresolved markers: {sorted(set(leftover))}")
+    out_path = out_dir / "runs" / "index.html"
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    out_path.write_text(rendered, encoding="utf-8")
+    return out_path
+
+
+def render_autoresearch_run_report(
+    md_path: Path,
+    out_dir: Path,
+    *,
+    template: str,
+    ctx: _AutoresearchRenderCtx,
+    repo_root: Path,
+) -> Path:
+    """Render one run report at ``autoresearch/runs/<slug>/index.html``.
+
+    Embeds ``md_path.read_text()`` via the shared Marked.js pattern (the body is
+    html-escaped into a ``<script type="text/markdown">`` block + an empty
+    ``<article class="markdown-body">`` target — never duplicated into the HTML).
+    """
+    md_body = md_path.read_text(encoding="utf-8")
+    slug = _run_slug(md_path)
+    title = _run_title(md_body, slug)
+    try:
+        source_rel = md_path.resolve().relative_to(repo_root.resolve()).as_posix()
+    except ValueError:
+        source_rel = md_path.name
+    # The body is operator-authored prose rendered CLIENT-SIDE by Marked.js, so
+    # its links never reach the static href-safety scan. Warn (don't fail — this
+    # is content, not chrome) on a root-absolute markdown link that misses the
+    # ``/geode/`` basePath, the one form that 404s on the live Pages site.
+    for href in re.findall(r"\]\((/[^)\s]*)\)", md_body):
+        if not href.startswith("/geode/"):
+            LOG.warning(
+                "run report %s has a root-absolute link missing the /geode/ basePath: %s",
+                md_path.name,
+                href,
+            )
+    # Fill the chrome markers FIRST and validate that none are left UNRESOLVED —
+    # but do the marker scan BEFORE injecting the (operator-authored) markdown
+    # body. A run report whose prose / code block legitimately contains a
+    # ``{{ ... }}`` token would otherwise be misread as an unresolved template
+    # marker and fail the build. The body is substituted last, so the only
+    # ``{{ }}`` the validator sees come from the template, never the content.
+    mapping = _autoresearch_base_mapping(ctx)
+    mapping.update(
+        {
+            "run_title": html_escape(title),
+            "run_source_path": html_escape(source_rel),
+            "marked_js_loader": _marked_js_loader_html(),
+        }
+    )
+    chrome = substitute(template, mapping)
+    leftover = re.findall(r"\{\{\s*([a-zA-Z_]+)\s*\}\}", chrome)
+    # ``run_body`` is the one marker still expected at this point.
+    leftover = [m for m in leftover if m != "run_body"]
+    if leftover:
+        raise RuntimeError(f"autoresearch run report unresolved markers: {sorted(set(leftover))}")
+    rendered = substitute(chrome, {"run_body": html_escape(md_body)})
+    out_path = out_dir / "runs" / slug / "index.html"
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    out_path.write_text(rendered, encoding="utf-8")
+    return out_path
+
+
+# --------------------------------------------------------------------------- #
 # Substitution + write                                                        #
 # --------------------------------------------------------------------------- #
 def substitute(template: str, mapping: dict[str, str]) -> str:
@@ -6634,6 +6797,25 @@ def main(argv: list[str] | None = None) -> int:
         "--autoresearch-evidence-template",
         type=Path,
         default=AUTORESEARCH_EVIDENCE_TEMPLATE,
+    )
+    parser.add_argument(
+        "--autoresearch-runs-index-template",
+        type=Path,
+        default=AUTORESEARCH_RUNS_INDEX_TEMPLATE,
+    )
+    parser.add_argument(
+        "--autoresearch-run-report-template",
+        type=Path,
+        default=AUTORESEARCH_RUN_REPORT_TEMPLATE,
+    )
+    parser.add_argument(
+        "--run-reports-dir",
+        type=Path,
+        default=DEFAULT_RUN_REPORTS_DIR,
+        help=(
+            "Dir scanned for run-*.md synthesis files (default: docs/self-improving). "
+            "Each becomes an autoresearch/runs/<slug>/ page."
+        ),
     )
     args = parser.parse_args(argv)
 
@@ -6919,6 +7101,39 @@ def main(argv: list[str] | None = None) -> int:
             repo_root=campaign_repo_root,
         ),
     )
+
+    # ----------------------------------------------------------------- #
+    # Run reports (PR-HUB-RUN-REPORT) — autoresearch/runs/ index +      #
+    # one /runs/<slug>/ page per docs/self-improving/run-*.md synthesis #
+    # file, rendered client-side via the shared Marked.js loader        #
+    # (single SoT, never duplicated into the HTML). Globbed from the    #
+    # source-doc dir (NOT the out dir) so authoring a new run-*.md      #
+    # auto-registers it.                                                #
+    # ----------------------------------------------------------------- #
+    run_report_files = sorted(p for p in args.run_reports_dir.glob(RUN_REPORT_GLOB) if p.is_file())
+    LOG.info("run reports discovered=%d under %s", len(run_report_files), args.run_reports_dir)
+    runs_index_template = args.autoresearch_runs_index_template.read_text(encoding="utf-8")
+    run_report_template = args.autoresearch_run_report_template.read_text(encoding="utf-8")
+    _safe(
+        "runs-index",
+        lambda: render_autoresearch_runs_index(
+            run_report_files,
+            args.autoresearch_out_dir,
+            template=runs_index_template,
+            ctx=ar_ctx,
+        ),
+    )
+    for md_path in run_report_files:
+        _safe(
+            f"run-report:{md_path.name}",
+            lambda md_path=md_path: render_autoresearch_run_report(
+                md_path,
+                args.autoresearch_out_dir,
+                template=run_report_template,
+                ctx=ar_ctx,
+                repo_root=campaign_repo_root,
+            ),
+        )
 
     return 0
 

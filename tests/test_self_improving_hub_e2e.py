@@ -1438,6 +1438,252 @@ def test_evidence_page_in_nav_and_subview(
     assert "Evidence" in landing, "Evidence sub-view row missing from landing"
 
 
+# ---------------------------------------------------------------------------
+# 12b. Run reports (autoresearch/runs/ index + per-run markdown render)
+# ---------------------------------------------------------------------------
+#
+# PR-HUB-RUN-REPORT (2026-06-04): serve a self-improving campaign synthesis as a
+# data-driven per-run page. The builder globs ``docs/self-improving/run-*.md``
+# (the source-doc dir, NOT the out dir) and renders, for each, an index entry +
+# a ``runs/<slug>/`` page that EMBEDS the .md via the shared Marked.js loader
+# (single SoT, never duplicated into the HTML). slug = stem minus leading
+# ``run-``. The fixture builds against the live docs dir so the run-2606 report
+# (committed in this PR) renders.
+
+_RUN_2606_SLUG = "2606-broken-tool-use"
+
+
+@pytest.fixture(scope="module")
+def built_run_report_pages(tmp_path_factory: pytest.TempPathFactory) -> dict[str, str]:
+    """Build the runs index + each run-*.md page once per session.
+
+    Returns ``{"index": html, _RUN_2606_SLUG: html}`` — the autoresearch out dir
+    is redirected to tmp but ``--run-reports-dir`` keeps its default (the live
+    ``docs/self-improving`` dir) so the committed run-2606 synthesis renders.
+    """
+    out = tmp_path_factory.mktemp("run-report-out")
+    hub_out = out / "hub"
+    seedgen_out = out / "seedgen"
+    autoresearch_out = out / "autoresearch"
+    result = subprocess.run(  # noqa: S603 — fixture invocation
+        [
+            sys.executable,
+            str(BUILDER),
+            "--out",
+            str(hub_out / "index.html"),
+            "--bundle-root",
+            str(FIXTURE_ROOT / "petri-bundle"),
+            "--autoresearch-root",
+            str(FIXTURE_ROOT / "autoresearch"),
+            "--seedgen-out-dir",
+            str(seedgen_out),
+            "--autoresearch-out-dir",
+            str(autoresearch_out),
+        ],
+        check=False,
+        capture_output=True,
+        text=True,
+        cwd=str(REPO_ROOT),
+    )
+    assert result.returncode == 0, (
+        f"run-report builder failed: stdout={result.stdout!r} stderr={result.stderr!r}"
+    )
+    index_path = autoresearch_out / "runs" / "index.html"
+    run_path = autoresearch_out / "runs" / _RUN_2606_SLUG / "index.html"
+    assert index_path.is_file(), f"runs index missing at {index_path}"
+    assert run_path.is_file(), f"run-2606 page missing at {run_path}"
+    return {
+        "index": index_path.read_text(encoding="utf-8"),
+        _RUN_2606_SLUG: run_path.read_text(encoding="utf-8"),
+    }
+
+
+def test_runs_index_and_run_page_build(built_run_report_pages: dict[str, str]) -> None:
+    """(a) The runs index + the run-2606 page build and exist (fixture asserts
+    the files; here we assert their identity-bearing content rendered)."""
+    index = built_run_report_pages["index"]
+    run = built_run_report_pages[_RUN_2606_SLUG]
+    # The index lists the run by its discovered slug + the .md's first heading.
+    assert _RUN_2606_SLUG in index, "runs index does not list the run-2606 slug"
+    assert "broken_tool_use" in index, "runs index missing the run title from the .md heading"
+    assert f'href="/geode/self-improving/autoresearch/runs/{_RUN_2606_SLUG}/"' in index, (
+        "runs index missing the absolute /geode link to the run page"
+    )
+    # The run page carries the run title in <title> + the campaign question text.
+    assert "broken_tool_use" in run, "run page missing the title"
+
+
+def test_run_page_embeds_markdown_via_marked(built_run_report_pages: dict[str, str]) -> None:
+    """(b) The run page contains a markdown-body article + the Marked.js loader,
+    and embeds the .md body in a text/markdown script block (single SoT — the
+    content is NOT duplicated into rendered HTML)."""
+    run = built_run_report_pages[_RUN_2606_SLUG]
+    assert 'class="markdown-body" data-md-target="run-body"' in run, (
+        "run page missing the markdown-body article target"
+    )
+    assert '<script type="text/markdown" data-md-source="run-body">' in run, (
+        "run page missing the text/markdown source script block"
+    )
+    assert "marked@13/marked.min.js" in run, "run page missing the Marked.js CDN loader"
+    # The raw markdown table syntax (pipes) survives html-escaped inside the
+    # script block — proof the body is embedded, not pre-rendered server-side.
+    assert "lower=better" in run, "run page did not embed the .md body verbatim"
+
+
+def test_runs_sidebar_has_runs_link(built_run_report_pages: dict[str, str]) -> None:
+    """(c) Every run-report page sidebar exposes the Runs nav link, and the
+    active item is marked aria-current on the runs index + run page."""
+    for name, html in built_run_report_pages.items():
+        assert "/geode/self-improving/autoresearch/runs/" in html, (
+            f"run-report {name} sidebar missing the Runs nav link"
+        )
+        assert 'aria-current="page"' in html, (
+            f"run-report {name} missing aria-current on the active Runs link"
+        )
+
+
+def test_run_pages_every_href_is_basepath_safe(
+    built_run_report_pages: dict[str, str],
+) -> None:
+    """(d) Every <a href> on the runs index + run page starts with /geode/ or is
+    external (mirrors test_every_href_is_basepath_safe for the new pages)."""
+    for name, html in built_run_report_pages.items():
+        hrefs = _collect_hrefs(html)
+        assert hrefs, f"run-report {name} has no anchors — template broken"
+        for href in hrefs:
+            if href.startswith(("#", "https://", "http://", "mailto:")):
+                continue
+            assert href.startswith("/geode/"), (
+                f"run-report {name} href {href!r} missing /geode/ basePath prefix"
+            )
+
+
+def test_run_pages_no_emoji(built_run_report_pages: dict[str, str]) -> None:
+    """(e) No emoji in rendered HTML — including the ✓/❌ dingbats (U+2713 /
+    U+274C) that the .md's deslop pass replaced with plain best/worst words so
+    the embedded markdown stays clean under _find_emoji's 0x2700-0x27BF range."""
+    for name, html in built_run_report_pages.items():
+        found = _find_emoji(html)
+        assert not found, f"emoji in run-report {name}: {found!r}"
+
+
+def test_main_hub_index_has_runs_nav_link(built_html: str) -> None:
+    """The main hub landing (built_html) also exposes the Runs link under the
+    Autoresearch nav-section, keeping every autoresearch surface consistent."""
+    assert "/geode/self-improving/autoresearch/runs/" in built_html, (
+        "main hub index sidebar missing the Runs nav link"
+    )
+
+
+def _run_report_ctx() -> Any:
+    """A minimal _AutoresearchRenderCtx for the direct-call run-report tests."""
+    from scripts.build_self_improving_hub import _AutoresearchRenderCtx
+
+    return _AutoresearchRenderCtx(
+        sidebar_petri_recent="",
+        sidebar_seedgen_runs="",
+        petri_count=0,
+        seedgen_count_label="0 runs",
+        autoresearch_status_label="live",
+        geode_version="9.9.9",
+        build_date="2026-06-04 00:00",
+    )
+
+
+def test_run_report_escapes_script_breakout(tmp_path: Path) -> None:
+    """Codex finding #5 — the embedded markdown must be html-escaped so a body
+    containing ``</script>`` (or ``<`` / ``&``) cannot break out of the
+    ``<script type="text/markdown">`` block and inject live DOM. The single-SoT
+    guarantee depends on the body staying inert inside the script tag."""
+    from scripts.build_self_improving_hub import (
+        AUTORESEARCH_RUN_REPORT_TEMPLATE,
+        render_autoresearch_run_report,
+    )
+
+    md = tmp_path / "run-breakout-probe.md"
+    md.write_text(
+        '# Breakout probe\n\nbody </script><a href="/evil">x</a> & <b>bold</b>\n',
+        encoding="utf-8",
+    )
+    out_dir = tmp_path / "out"
+    template = AUTORESEARCH_RUN_REPORT_TEMPLATE.read_text(encoding="utf-8")
+    page = render_autoresearch_run_report(
+        md, out_dir, template=template, ctx=_run_report_ctx(), repo_root=tmp_path
+    )
+    html = page.read_text(encoding="utf-8")
+    # The raw closing-script sequence must NOT survive verbatim — it is escaped.
+    assert "</script><a" not in html, "markdown body broke out of the script block"
+    assert "&lt;/script&gt;&lt;a" in html, "expected escaped </script><a inside the body"
+    # The injected anchor must not become a real static <a> the link-collector sees.
+    assert '/evil"' not in html, "injected href leaked as a live anchor attribute"
+    # Exactly one markdown source script block + one render target.
+    assert html.count('<script type="text/markdown" data-md-source="run-body">') == 1
+
+
+def test_run_report_allows_template_marker_in_markdown(tmp_path: Path) -> None:
+    """Codex finding #3 — a run report whose prose legitimately contains a
+    ``{{ ... }}`` token must NOT be misread as an unresolved template marker.
+    The chrome markers are validated BEFORE the body is injected."""
+    from scripts.build_self_improving_hub import (
+        AUTORESEARCH_RUN_REPORT_TEMPLATE,
+        render_autoresearch_run_report,
+    )
+
+    md = tmp_path / "run-marker-probe.md"
+    md.write_text(
+        "# Marker probe\n\nThe template uses `{{ run_body }}` and `{{ geode_version }}`.\n",
+        encoding="utf-8",
+    )
+    out_dir = tmp_path / "out"
+    template = AUTORESEARCH_RUN_REPORT_TEMPLATE.read_text(encoding="utf-8")
+    # Must not raise RuntimeError("unresolved markers ...").
+    page = render_autoresearch_run_report(
+        md, out_dir, template=template, ctx=_run_report_ctx(), repo_root=tmp_path
+    )
+    html = page.read_text(encoding="utf-8")
+    assert "&#123;&#123;" in html or "{{ run_body }}" in html, (
+        "the {{ }} token from the markdown body should survive (escaped) into the page"
+    )
+
+
+def test_run_slug_rejects_unsafe_names(tmp_path: Path) -> None:
+    """Codex finding #1 — slugs that are empty / ``.`` / ``..`` / non-url-safe
+    raise, so the per-page _safe wrapper skips them instead of overwriting
+    runs/index.html or escaping the runs dir."""
+    from scripts.build_self_improving_hub import _run_slug
+
+    assert _run_slug(tmp_path / "run-2606-broken-tool-use.md") == "2606-broken-tool-use"
+    for bad in ("run-.md", "run-..md", "run-Bad_Slug.md", "run- space.md"):
+        with pytest.raises(ValueError):
+            _run_slug(tmp_path / bad)
+
+
+def test_runs_index_skips_unsafe_and_dedups(tmp_path: Path) -> None:
+    """The runs index degrades gracefully: an unsafe-slug file is skipped (logged,
+    not fatal) and the count reflects only the rendered reports."""
+    from scripts.build_self_improving_hub import (
+        AUTORESEARCH_RUNS_INDEX_TEMPLATE,
+        render_autoresearch_runs_index,
+    )
+
+    good = tmp_path / "run-good-report.md"
+    good.write_text("# Good report\n", encoding="utf-8")
+    bad = tmp_path / "run-.md"  # -> empty slug, must be skipped
+    bad.write_text("# Bad\n", encoding="utf-8")
+    out_dir = tmp_path / "out"
+    template = AUTORESEARCH_RUNS_INDEX_TEMPLATE.read_text(encoding="utf-8")
+    # The list deliberately carries `good` twice (a duplicate slug) + one
+    # unsafe-slug file: the renderer must skip the unsafe one AND dedup the
+    # repeat, leaving exactly one rendered report.
+    page = render_autoresearch_runs_index(
+        [good, good, bad], out_dir, template=template, ctx=_run_report_ctx()
+    )
+    html = page.read_text(encoding="utf-8")
+    assert "good-report" in html, "good report missing from index"
+    assert html.count("good-report</code>") == 1, "duplicate slug should be deduped to one row"
+    assert "1 report" in html, "index count should reflect only one unique safe report"
+
+
 def test_evidence_results_populated_per_arm_curve() -> None:
     """E6 RESULTS (populated path): with multi-arm held-out + gain rows, the renderer
     splits the per-cycle held-out curve PER ARM, computes a 3-arm comparison on the

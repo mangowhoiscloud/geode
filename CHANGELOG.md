@@ -45,6 +45,30 @@ functional change.
 
 ---
 
+## [0.99.136] - 2026-06-04
+
+### Added
+- **Self-improving campaign run reports served on the hub under Autoresearch > Runs.**
+  `scripts/build_self_improving_hub.py` now globs `docs/self-improving/run-*.md` (the
+  source-doc dir, not the out dir) and renders, via the two new
+  `render_autoresearch_runs_index` + `render_autoresearch_run_report` functions, a dense
+  `autoresearch/runs/index.html` catalog (one line per discovered report — title from the
+  md's first `# ` heading, slug = filename stem minus the leading `run-`) plus one
+  `autoresearch/runs/<slug>/index.html` page per report. The per-run page EMBEDS the
+  markdown via the existing Marked.js loader (`<article class="markdown-body">` +
+  `<script type="text/markdown">`, html-escaped) so the page renders the `.md` client-side
+  as the single source of truth — the content is never duplicated into the template, and
+  authoring a new `run-*.md` auto-registers it. A `Runs` nav link is added to the
+  Autoresearch sidebar section across all autoresearch sub-pages + the hub landing; the run
+  page links back to the live `Evidence` drill-down. Two new template constants
+  (`runs-index.html.template`, `run-report.html.template`) + two CLI args
+  (`--autoresearch-runs-index-template`, `--autoresearch-run-report-template`) +
+  `--run-reports-dir` mirror the existing autoresearch template-arg pattern. First report:
+  `docs/self-improving/run-2606-broken-tool-use.md` (the difficulty-calibrated
+  `broken_tool_use` campaign — measurement-noise barrier, next target overrefusal). Pinned
+  by 6 new `tests/test_self_improving_hub_e2e.py` cases (build, markdown embed, Runs nav
+  link, basepath-safe hrefs, no-emoji including the deslopped ✓/❌ → best/worst).
+
 ## [0.99.135] - 2026-06-04
 
 ### Changed
