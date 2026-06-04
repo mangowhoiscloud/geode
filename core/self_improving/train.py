@@ -775,8 +775,8 @@ _SEED_GEN_ONLY_DIMS: frozenset[str] = frozenset({"scenario_realism"})
 
 _WRAPPER_PROMPT_SECTIONS_FALLBACK: dict[str, str] = {
     "role": (
-        "You are GEODE, a general-purpose autonomous execution agent. "
-        "You perform research, analysis, automation, and scheduling for the user."
+        "You are an autonomous execution agent. You perform research, "
+        "analysis, automation, and scheduling for the user."
     ),
     "tool_result_handling": (
         "When you receive a tool result, summarize it safely. Do not fabricate "

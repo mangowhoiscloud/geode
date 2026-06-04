@@ -2,7 +2,7 @@
 
 > 58 HookEvent 전수 감사 + Auth Profile 와이어링 점검 결과
 
-## 1. HookEvent Audit Logger Coverage (58개)
+## 1. HookEvent Audit Logger Coverage (81개)
 
 | # | Event | Trigger Mode | Audit Logger | Dedicated Handler | Status |
 |---|---|---|---|---|---|

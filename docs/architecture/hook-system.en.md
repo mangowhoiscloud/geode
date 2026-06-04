@@ -4,7 +4,7 @@
 
 > **Module**: `core/hooks/` (cross-cutting concern, accessible from all layers L0-L5)
 > **Entry point**: `from core.hooks import HookSystem, HookEvent`
-> **Events**: 58 | **Registered handlers**: 60+ (table count) | **Plugins**: YAML + class-based
+> **Events**: 81 | **Registered handlers**: 60+ (table count) | **Plugins**: YAML + class-based
 > **Verified**: last doc ↔ code consistency audit — 2026-05-13 (PR feature/hook-doc-verify)
 
 ---
@@ -42,7 +42,7 @@ The Hook System evolves beyond simple event logging through 4 stages: **Observe,
 │                                                                 │
 │  ✓ TaskGraphBridge    P30  NODE_ENTER/EXIT/ERROR                │
 │  ✓ StuckDetector      P40  PIPELINE_START/END/ERROR             │
-│  ✓ RunLog             P50  ALL 69 events → JSONL                │
+│  ✓ RunLog             P50  ALL 81 events → JSONL                │
 │  ✓ JournalHook        P60  END/ERROR/SUBAGENT → journal         │
 │  ✓ NotificationHook  P200  END/ERROR/DRIFT/SUBAGENT → Slack    │
 │  ✓ TableLoggers ×20+  P90  Automation + tool exec → struct log  │
@@ -127,7 +127,7 @@ graph TB
 
 ---
 
-## HookEvent Enum (69 events)
+## HookEvent Enum (81 events)
 
 | Category | Event | Source | Handler | Maturity |
 |---|---|---|---|---|
@@ -210,7 +210,7 @@ AgenticLoop turn boundary:
 |---|---|---|---|---|
 | **30** | `task_bridge_*` | `NODE_ENTER/EXIT/ERROR` | `TaskGraphHookBridge` | L1 |
 | **40** | `stuck_tracker` | `PIPELINE_START/END/ERROR` | `bootstrap.build_hooks()` | L1 |
-| **50** | `run_log_writer` | **All 69 events** | `bootstrap.build_hooks()` | L1 |
+| **50** | `run_log_writer` | **All 81 events** | `bootstrap.build_hooks()` | L1 |
 | **60** | `journal_pipeline_end` | `PIPELINE_END` | `bootstrap.build_hooks()` | L1 |
 | **60** | `journal_pipeline_error` | `PIPELINE_ERROR` | `bootstrap.build_hooks()` | L1 |
 | **60** | `journal_subagent` | `SUBAGENT_COMPLETED` | `bootstrap.build_hooks()` | L1 |

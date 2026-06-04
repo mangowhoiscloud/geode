@@ -111,6 +111,22 @@ def test_g10_router_md_no_geode_name_in_baseline() -> None:
     assert "autonomous execution agent" in ROUTER_SYSTEM
 
 
+def test_wrapper_fallback_role_is_generic_not_geode_persona() -> None:
+    """Mirror of G11 for the self-improving wrapper baseline.
+
+    The always-on ``_WRAPPER_PROMPT_SECTIONS_FALLBACK['role']`` must read
+    neutrally, not leak the 'You are GEODE' persona — that identity belongs
+    only to the opt-in ``<agent_identity>`` layer (GEODE_PERSONA-gated). The
+    mutator may still *propose* a GEODE-named role; this pins only the
+    shipped baseline so GEODE_PERSONA=off stays a thin wrapper.
+    """
+    from core.self_improving.train import _WRAPPER_PROMPT_SECTIONS_FALLBACK
+
+    role = _WRAPPER_PROMPT_SECTIONS_FALLBACK["role"]
+    assert "You are GEODE" not in role
+    assert "autonomous execution agent" in role
+
+
 def test_sandwich_system_reminder_uses_xml_tags() -> None:
     messages = [{"role": "user", "content": "hello"}]
     out = prepend_system_reminder(messages, round_idx=1)
