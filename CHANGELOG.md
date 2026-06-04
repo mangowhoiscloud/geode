@@ -45,6 +45,29 @@ functional change.
 
 ---
 
+## [0.99.137] - 2026-06-04
+
+### Fixed
+- **Self-improving hub run-report page renders its body server-side (was blank without a CDN).**
+  The per-run page (`autoresearch/runs/<slug>/`) previously left an EMPTY
+  `<article class="markdown-body">` and injected the body only after the browser loaded
+  Marked.js from the jsdelivr CDN — so the body was BLANK whenever the CDN was blocked
+  (ad-blocker / privacy extension / network) or JS was off, and the html-escaped markdown
+  inside the `<script type="text/markdown">` block surfaced literal `&gt;`/`&amp;` in the
+  intro blockquote (double-escape). `scripts/build_self_improving_hub.py` now renders the
+  `run-*.md` to HTML at BUILD TIME via the new `render_markdown_to_html` helper
+  (`markdown-it-py`, CommonMark + `table` plugin) and injects the rendered `<h1>`/`<table>`/
+  `<strong>` directly into `<article class="markdown-body">{{ run_body_html }}</article>` —
+  no CDN dependency, renders with JS off, no double-escape. The `<script type="text/markdown">`
+  block + the Marked.js loader are dropped for this page (the other markdown-embed pages —
+  generator preview, cycle-1 viz, evolver diff — keep the client-side loader unchanged).
+  `markdown-it-py>=3.0` is now a declared dependency in `pyproject.toml` (was a transitive of
+  `markdownify`). `.github/workflows/pages.yml` copies `docs/self-improving/` as-is (it does not
+  run the builder), so the committed `docs/self-improving/autoresearch/runs/2606-broken-tool-use/
+  index.html` + `runs/index.html` are rebuilt server-side in this PR. The two adapted
+  `tests/test_self_improving_hub_e2e.py` cases assert the page now contains server-rendered
+  `<h1`/`<table`/`<strong>` and NOT the `text/markdown` script or `marked@13` CDN loader.
+
 ## [0.99.136] - 2026-06-04
 
 ### Added
