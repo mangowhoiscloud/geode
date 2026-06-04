@@ -99,7 +99,7 @@ absolute token guard.
 
 ### `core/hooks/`
 
-69 lifecycle events across 14 categories.
+81 lifecycle events across 14 categories.
 
 - `system.py:28` — `HookEvent` enum.
 - `system.py:200` — `HookSystem` class. Three trigger modes:
