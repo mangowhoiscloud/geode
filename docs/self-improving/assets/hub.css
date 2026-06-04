@@ -1301,3 +1301,28 @@ pre.msg.cand-body {
 @media (max-width: 720px) {
   .pipe-row li:not(:last-child)::after { display: none; }
 }
+
+/* PR-HUB-RUN-REPORT (2026-06-04) — the /runs/ catalog is a dense list, one
+   line per run report (title link + slug code). No box-cards, no accent bars
+   (slop signals per CLAUDE.md); a hairline separator + a faint slug tag. */
+.run-report-list {
+  list-style: none;
+  margin: .4rem 0 1.5rem;
+  padding: 0;
+}
+.run-report-list li {
+  padding: .45rem 0;
+  border-bottom: 1px solid var(--rule-soft);
+}
+.run-report-list a {
+  color: var(--accent);
+  text-decoration: none;
+}
+.run-report-list a:hover {
+  text-decoration: underline;
+}
+.run-report-list code {
+  color: var(--ink-faint);
+  font-size: .82em;
+  margin-left: .4rem;
+}

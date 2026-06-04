@@ -48,6 +48,7 @@
         <li><a href="/geode/self-improving/autoresearch/mutations/">Mutations</a></li>
         <li><a href="/geode/self-improving/autoresearch/results/">Results</a></li>
         <li><a href="/geode/self-improving/autoresearch/evidence/">Evidence</a></li>
+        <li><a href="/geode/self-improving/autoresearch/runs/">Runs</a></li>
         <li><a href="/geode/self-improving/autoresearch/policies/" class="active" aria-current="page">Policies</a></li>
       </ul>
 
