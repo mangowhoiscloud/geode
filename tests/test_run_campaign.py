@@ -2149,7 +2149,11 @@ def test_run_campaign_async_first_routes_path_independent_to_async(
     """A REAL campaign (dry_run=False, no injected runner) with async_first routes
     gen-0 + never/random through the ASYNC subprocess harness and the GATE through
     the sequential run_arm — proving the harness is WIRED into production, not the
-    dead test-only code Codex MCP flagged."""
+    dead test-only code Codex MCP flagged.
+
+    PR-CAMPAIGN-CONCURRENT-CONTROL-ARMS (2026-06-04): never+random now go through
+    ONE ``run_control_arms_async`` gather (a SINGLE call carrying BOTH control
+    arms), NOT one sequential ``run_control_arm_async`` per arm."""
     import plugins.petri_audit.runner as petri_runner
 
     monkeypatch.setattr(petri_runner, "purge_inspect_cache", lambda: True)
@@ -2158,22 +2162,28 @@ def test_run_campaign_async_first_routes_path_independent_to_async(
     band = rc.NoiseBand(
         k=2, held_out_values=(0.85,), fitness_values=(0.89,), mean=0.85, stderr=0.01
     )
-    calls: dict[str, Any] = {"gen0": 0, "control": [], "gate": []}
+    calls: dict[str, Any] = {"gen0": 0, "control_calls": [], "gate": []}
 
     async def fake_gen0_async(**_kw: Any) -> Any:
         calls["gen0"] += 1
         return band
 
-    async def fake_control_async(*, arm: str, n: int, **_kw: Any) -> Any:
-        calls["control"].append(arm)
-        return rc.ControlArmFloor(arm=arm, cycles_ok=n, cycles_dropped=0, held_out_band=band)
+    async def fake_control_arms_async(*, control_arms: Any, n: int, **_kw: Any) -> dict[str, Any]:
+        # ONE call carrying BOTH path-independent arms — record the arm list so the
+        # test proves never+random are dispatched together, not arm-by-arm.
+        arms_in_call = [arm for arm, _idx in control_arms]
+        calls["control_calls"].append(arms_in_call)
+        return {
+            arm: rc.ControlArmFloor(arm=arm, cycles_ok=n, cycles_dropped=0, held_out_band=band)
+            for arm in arms_in_call
+        }
 
     def fake_run_arm(*, arm: str, n: int, **_kw: Any) -> Any:
         calls["gate"].append(arm)
         return rc.ArmSummary(arm=arm, cycles_run=n, cycles_skipped=0, promotes=1, halted=False)
 
     monkeypatch.setattr(rc, "run_gen0_baseline_async", fake_gen0_async)
-    monkeypatch.setattr(rc, "run_control_arm_async", fake_control_async)
+    monkeypatch.setattr(rc, "run_control_arms_async", fake_control_arms_async)
     monkeypatch.setattr(rc, "run_arm", fake_run_arm)
 
     result = rc.run_campaign(
@@ -2186,9 +2196,81 @@ def test_run_campaign_async_first_routes_path_independent_to_async(
         snapshot_dir=campaign_state["snapshot"],
     )
     assert calls["gen0"] == 1
-    assert calls["control"] == ["never", "random"]
+    # ONE concurrent fan-out carrying BOTH control arms (never+random overlap),
+    # NOT two sequential per-arm calls.
+    assert calls["control_calls"] == [["never", "random"]]
     assert calls["gate"] == ["gate"]  # ONLY the path-dependent gate is sequential
     assert len(result["control_floors"]) == 2
+    # Summaries preserved in the ORIGINAL arms order (digest stability).
+    assert [s.arm for s in result["arm_summaries"]] == ["never", "random", "gate"]
+
+
+def test_run_campaign_loads_persisted_checkpoint_for_resume(
+    campaign_state: dict[str, Path], monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """A REAL campaign REHYDRATES a pre-existing checkpoint file (Codex MCP HIGH):
+    ``run_campaign`` must ``.load()`` the marker so a resumed process skips the
+    already-completed cycles instead of re-running (re-paying for) every one."""
+    import plugins.petri_audit.runner as petri_runner
+
+    monkeypatch.setattr(petri_runner, "purge_inspect_cache", lambda: True)
+    (campaign_state["policies_dir"] / "hyperparam.json").write_text("{}", encoding="utf-8")
+    # Point the campaign's checkpoint dir at tmp + pre-seed a marker showing some
+    # never+random cycles already complete (the run_id matches run_campaign's).
+    runs_dir = tmp_path / "runs"
+    runs_dir.mkdir()
+    monkeypatch.setattr(rc, "CAMPAIGN_RUNS_DIR", runs_dir)
+    run_id = "campaign-n2-k2-never-random-gate"
+    pre_seed = rc.RunCheckpoint(run_id=run_id, runs_dir=runs_dir)
+    pre_seed.record_completed(
+        "never",
+        [rc.WorkerOutcome(1, True, 0, {"safety": 1.0}, None, "ok")],
+    )
+    pre_seed.record_completed(
+        "random",
+        [rc.WorkerOutcome(2, True, 0, {"safety": 2.0}, None, "ok")],
+    )
+
+    band = rc.NoiseBand(
+        k=2, held_out_values=(0.85,), fitness_values=(0.89,), mean=0.85, stderr=0.01
+    )
+    seen_checkpoint: dict[str, Any] = {}
+
+    async def fake_gen0_async(*, checkpoint: Any, **_kw: Any) -> Any:
+        return band
+
+    async def fake_control_arms_async(
+        *, control_arms: Any, n: int, checkpoint: Any, **_kw: Any
+    ) -> dict[str, Any]:
+        # Record what the loaded checkpoint says is already complete PER ARM — proof
+        # that run_campaign rehydrated the persisted marker (not a fresh empty one).
+        seen_checkpoint["never"] = checkpoint.completed_indices("never")
+        seen_checkpoint["random"] = checkpoint.completed_indices("random")
+        return {
+            arm: rc.ControlArmFloor(arm=arm, cycles_ok=n, cycles_dropped=0, held_out_band=band)
+            for arm, _idx in control_arms
+        }
+
+    def fake_run_arm(*, arm: str, n: int, **_kw: Any) -> Any:
+        return rc.ArmSummary(arm=arm, cycles_run=n, cycles_skipped=0, promotes=0, halted=False)
+
+    monkeypatch.setattr(rc, "run_gen0_baseline_async", fake_gen0_async)
+    monkeypatch.setattr(rc, "run_control_arms_async", fake_control_arms_async)
+    monkeypatch.setattr(rc, "run_arm", fake_run_arm)
+
+    rc.run_campaign(
+        n=2,
+        k=2,
+        arms=("never", "random", "gate"),
+        dry_run=False,
+        async_first=True,
+        progress_path=campaign_state["progress"],
+        snapshot_dir=campaign_state["snapshot"],
+    )
+    # The checkpoint passed into the control fan-out carries the PERSISTED completed
+    # cycles, attributed to the right arm — a fresh (unloaded) marker would be empty.
+    assert seen_checkpoint["never"] == {1}
+    assert seen_checkpoint["random"] == {2}
 
 
 def test_run_campaign_async_first_false_keeps_every_arm_on_sync(
@@ -2212,7 +2294,7 @@ def test_run_campaign_async_first_false_keeps_every_arm_on_sync(
         return rc.ArmSummary(arm=arm, cycles_run=n, cycles_skipped=0, promotes=0, halted=False)
 
     monkeypatch.setattr(rc, "run_gen0_baseline_async", boom_async)
-    monkeypatch.setattr(rc, "run_control_arm_async", boom_async)
+    monkeypatch.setattr(rc, "run_control_arms_async", boom_async)
     monkeypatch.setattr(rc, "run_arm", fake_run_arm)
     monkeypatch.setattr(
         rc,
@@ -2232,3 +2314,321 @@ def test_run_campaign_async_first_false_keeps_every_arm_on_sync(
         snapshot_dir=campaign_state["snapshot"],
     )
     assert arms_seen == ["never", "random", "gate"]
+
+
+# ---------------------------------------------------------------------------
+# PR-CAMPAIGN-CONCURRENT-CONTROL-ARMS (2026-06-04) — the PATH-INDEPENDENT
+# control arms (never + random) fan out in ONE shared concurrent gather by
+# default. These pin the 5 invariants: attribution, promote policy, resume,
+# random reproducibility, and per-arm worker-root / transcript isolation.
+# ---------------------------------------------------------------------------
+
+
+def _arm_recording_async_runner(*, observed: list[tuple[str, int]]) -> Any:
+    """A fake async runner that records each worker's ``(arm, cycle_index)``.
+
+    The arm is the worker root's PARENT dir name (``<root>/<arm>/w{idx}``) and the
+    index is parsed from the leaf (``w{idx}``), so a concurrent never+random
+    fan-out is fully attributable per worker. Writes a synthetic attribution row +
+    ``FITNESS_RESULT`` keyed off the index so the floor aggregation has values."""
+
+    async def runner(*, env: dict[str, str], dry_run: bool, per_audit_timeout: float | None) -> Any:
+        state_root = Path(env["GEODE_STATE_ROOT"])
+        idx = int(state_root.name.removeprefix("w"))
+        arm = state_root.parent.name
+        observed.append((arm, idx))
+        mutations = state_root / "autoresearch" / "mutations.jsonl"
+        mutations.parent.mkdir(parents=True, exist_ok=True)
+        _write_attribution(
+            mutations, held_out=0.40 + idx * 0.01, fitness=0.5, promote_policy=arm, source="manual"
+        )
+        return SimpleNamespace(returncode=0, stdout=_fitness_result_line({"safety": float(idx)}))
+
+    return runner
+
+
+def test_control_arms_async_single_gather_dispatches_both_arms_concurrently(
+    campaign_state: dict[str, Path],
+) -> None:
+    """never+random fan out in ONE gather: every cycle of BOTH arms is dispatched
+    in a single concurrent fan-out (n per arm = 2n total worker dispatches), not
+    two sequential per-arm gathers."""
+    _make_gen0_snapshot(campaign_state)
+    observed: list[tuple[str, int]] = []
+    with rc.ProgressLog(campaign_state["progress"]) as progress:
+        floors = asyncio.run(
+            rc.run_control_arms_async(
+                control_arms=[("never", 0), ("random", 1)],
+                n=3,
+                audit_max_samples=3,
+                audit_max_connections=8,
+                dry_run=False,
+                progress=progress,
+                snapshot_dir=campaign_state["snapshot"],
+                per_audit_timeout=5.0,
+                runner_fn=_arm_recording_async_runner(observed=observed),
+            )
+        )
+    # 3 never + 3 random = 6 worker dispatches, all in the single fan-out.
+    assert sorted(observed) == [
+        ("never", 1),
+        ("never", 2),
+        ("never", 3),
+        ("random", 1),
+        ("random", 2),
+        ("random", 3),
+    ]
+    # A floor per arm, each aggregating ONLY its own 3 cycles (attribution #1).
+    assert set(floors) == {"never", "random"}
+    assert floors["never"].arm == "never"
+    assert floors["never"].cycles_ok == 3
+    assert floors["random"].arm == "random"
+    assert floors["random"].cycles_ok == 3
+
+
+def test_control_arms_async_per_arm_attribution_not_mixed(
+    campaign_state: dict[str, Path],
+) -> None:
+    """The single gather's results are partitioned back PER ARM: a never worker's
+    promote policy is 'never', a random worker's is 'random' — never crossed."""
+    _make_gen0_snapshot(campaign_state)
+    policy_by_root: dict[str, str] = {}
+
+    async def runner(*, env: dict[str, str], dry_run: bool, per_audit_timeout: float | None) -> Any:
+        state_root = Path(env["GEODE_STATE_ROOT"])
+        policy_by_root[str(state_root)] = env["GEODE_PROMOTE_POLICY"]
+        mutations = state_root / "autoresearch" / "mutations.jsonl"
+        mutations.parent.mkdir(parents=True, exist_ok=True)
+        _write_attribution(mutations, held_out=0.5, fitness=0.6, source="manual")
+        return SimpleNamespace(returncode=0, stdout=_fitness_result_line({"safety": 3.0}))
+
+    with rc.ProgressLog(campaign_state["progress"]) as progress:
+        asyncio.run(
+            rc.run_control_arms_async(
+                control_arms=[("never", 0), ("random", 1)],
+                n=2,
+                audit_max_samples=3,
+                audit_max_connections=8,
+                dry_run=False,
+                progress=progress,
+                snapshot_dir=campaign_state["snapshot"],
+                per_audit_timeout=5.0,
+                runner_fn=runner,
+            )
+        )
+    # Each worker's GEODE_PROMOTE_POLICY matches the ARM segment of its isolated
+    # root (invariant #2): a never-root never carries 'random' and vice-versa.
+    for root, policy in policy_by_root.items():
+        assert Path(root).parent.name == policy, f"{root} policy {policy} crossed arms"
+    assert sorted(policy_by_root.values()) == ["never", "never", "random", "random"]
+
+
+def test_control_arms_async_random_seed_matches_legacy_per_arm_formula(
+    campaign_state: dict[str, Path],
+) -> None:
+    """Reproducibility (#4): the random arm's per-cycle seed in the concurrent
+    fan-out equals the legacy ``DEFAULT_RANDOM_SEED_BASE + arm_index*n + cycle`` —
+    keyed on (arm_index, n, cycle), NOT wall-clock / dispatch order. never is unseeded."""
+    _make_gen0_snapshot(campaign_state)
+    seed_by_arm_idx: dict[tuple[str, int], str | None] = {}
+
+    async def runner(*, env: dict[str, str], dry_run: bool, per_audit_timeout: float | None) -> Any:
+        state_root = Path(env["GEODE_STATE_ROOT"])
+        idx = int(state_root.name.removeprefix("w"))
+        arm = state_root.parent.name
+        seed_by_arm_idx[(arm, idx)] = env.get("GEODE_PROMOTE_POLICY_SEED")
+        mutations = state_root / "autoresearch" / "mutations.jsonl"
+        mutations.parent.mkdir(parents=True, exist_ok=True)
+        _write_attribution(mutations, held_out=0.5, fitness=0.6, source="manual")
+        return SimpleNamespace(returncode=0, stdout=_fitness_result_line({"safety": 3.0}))
+
+    n = 3
+    with rc.ProgressLog(campaign_state["progress"]) as progress:
+        asyncio.run(
+            rc.run_control_arms_async(
+                control_arms=[("never", 0), ("random", 1)],
+                n=n,
+                audit_max_samples=3,
+                audit_max_connections=8,
+                dry_run=False,
+                progress=progress,
+                snapshot_dir=campaign_state["snapshot"],
+                per_audit_timeout=5.0,
+                runner_fn=runner,
+            )
+        )
+    # random (arm_index 1): each cycle's seed == base + 1*n + cycle (byte-identical
+    # to the legacy per-arm path, regardless of concurrent interleaving).
+    for cycle in range(1, n + 1):
+        expected = str(rc.DEFAULT_RANDOM_SEED_BASE + 1 * n + cycle)
+        assert seed_by_arm_idx[("random", cycle)] == expected
+    # never: every cycle UNSEEDED.
+    for cycle in range(1, n + 1):
+        assert seed_by_arm_idx[("never", cycle)] is None
+    # The helper :func:`_control_cycle_seed` is the single source of the formula.
+    assert rc._control_cycle_seed("random", 1, n, 2) == rc.DEFAULT_RANDOM_SEED_BASE + 1 * n + 2
+    assert rc._control_cycle_seed("never", 0, n, 2) is None
+
+
+def test_control_arms_async_resume_skips_completed_per_arm(
+    campaign_state: dict[str, Path], tmp_path: Path
+) -> None:
+    """Resume (#3): a checkpoint with SOME never + SOME random cycles done resumes
+    ONLY the remaining ones, correctly per-arm (never's done set never masks
+    random's, and vice-versa)."""
+    _make_gen0_snapshot(campaign_state)
+    ckpt = rc.RunCheckpoint(run_id="multi-arm-resume", runs_dir=tmp_path)
+
+    def _done(idx: int) -> rc.WorkerOutcome:
+        return rc.WorkerOutcome(
+            index=idx,
+            ok=True,
+            returncode=0,
+            dim_means={"safety": float(idx)},
+            signal=rc.CycleSignal(
+                held_out_fitness=0.40 + idx * 0.01,
+                fitness=0.5,
+                fitness_delta=None,
+                promote_policy=None,
+                source=None,
+                between_seed_stderr=None,
+            ),
+            reason="ok",
+        )
+
+    # never: cycles 1+2 done (missing 3+4). random: cycle 1 done (missing 2+3+4).
+    ckpt.record_completed("never", [_done(1), _done(2)])
+    ckpt.record_completed("random", [_done(1)])
+
+    observed: list[tuple[str, int]] = []
+    with rc.ProgressLog(campaign_state["progress"]) as progress:
+        floors = asyncio.run(
+            rc.run_control_arms_async(
+                control_arms=[("never", 0), ("random", 1)],
+                n=4,
+                audit_max_samples=3,
+                audit_max_connections=8,
+                dry_run=False,
+                progress=progress,
+                snapshot_dir=campaign_state["snapshot"],
+                per_audit_timeout=5.0,
+                runner_fn=_arm_recording_async_runner(observed=observed),
+                checkpoint=ckpt,
+            )
+        )
+    # Only the missing cycles re-ran, attributed to the RIGHT arm.
+    assert sorted(observed) == [
+        ("never", 3),
+        ("never", 4),
+        ("random", 2),
+        ("random", 3),
+        ("random", 4),
+    ]
+    # Each arm's floor unions the resumed + freshly-run cycles to the full N=4.
+    assert floors["never"].cycles_ok == 4
+    assert floors["random"].cycles_ok == 4
+
+
+def test_control_arms_async_worker_roots_isolated_per_arm(
+    campaign_state: dict[str, Path], tmp_path: Path
+) -> None:
+    """Isolation (#5): a never-cycle and a random-cycle with the SAME index live
+    under DISTINCT worker roots (``<root>/never/w1`` vs ``<root>/random/w1``), so
+    the same-numbered cycles never collide on a state tree / transcript file."""
+    _make_gen0_snapshot(campaign_state)
+    roots: list[str] = []
+
+    async def runner(*, env: dict[str, str], dry_run: bool, per_audit_timeout: float | None) -> Any:
+        state_root = Path(env["GEODE_STATE_ROOT"])
+        roots.append(str(state_root))
+        mutations = state_root / "autoresearch" / "mutations.jsonl"
+        mutations.parent.mkdir(parents=True, exist_ok=True)
+        _write_attribution(mutations, held_out=0.5, fitness=0.6, source="manual")
+        return SimpleNamespace(returncode=0, stdout=_fitness_result_line({"safety": 3.0}))
+
+    workers_root = tmp_path / "workers"
+    with rc.ProgressLog(campaign_state["progress"]) as progress:
+        asyncio.run(
+            rc.run_control_arms_async(
+                control_arms=[("never", 0), ("random", 1)],
+                n=1,
+                audit_max_samples=3,
+                audit_max_connections=8,
+                dry_run=False,
+                progress=progress,
+                snapshot_dir=campaign_state["snapshot"],
+                per_audit_timeout=5.0,
+                workers_root=workers_root,
+                runner_fn=runner,
+            )
+        )
+    # Both arms used cycle index 1 but DISTINCT roots — no collision.
+    assert len(set(roots)) == 2
+    assert str(workers_root / "never" / "w1") in roots
+    assert str(workers_root / "random" / "w1") in roots
+
+
+def test_control_arms_async_merges_both_arms_transcripts_no_collision(
+    campaign_state: dict[str, Path], tmp_path: Path
+) -> None:
+    """The single gather merges BOTH arms' per-cycle transcripts into the one
+    campaign transcript, attributed ``never-w*`` + ``random-w*`` (same index, no
+    collision)."""
+    _make_gen0_snapshot(campaign_state)
+    campaign_transcript = tmp_path / "campaign" / "transcript.jsonl"
+
+    async def runner(*, env: dict[str, str], dry_run: bool, per_audit_timeout: float | None) -> Any:
+        transcript = Path(env["GEODE_RUN_TRANSCRIPT_PATH"])
+        worker_id = env["GEODE_RUN_WORKER_ID"]
+        transcript.parent.mkdir(parents=True, exist_ok=True)
+        transcript.write_text(
+            json.dumps({"ts": 1.0, "seq": 0, "payload": {"worker_id": worker_id}}) + "\n",
+            encoding="utf-8",
+        )
+        state_root = Path(env["GEODE_STATE_ROOT"])
+        mutations = state_root / "autoresearch" / "mutations.jsonl"
+        mutations.parent.mkdir(parents=True, exist_ok=True)
+        _write_attribution(mutations, held_out=0.5, fitness=0.6, source="manual")
+        return SimpleNamespace(returncode=0, stdout=_fitness_result_line({"safety": 3.0}))
+
+    with rc.ProgressLog(campaign_state["progress"]) as progress:
+        asyncio.run(
+            rc.run_control_arms_async(
+                control_arms=[("never", 0), ("random", 1)],
+                n=1,
+                audit_max_samples=3,
+                audit_max_connections=8,
+                dry_run=False,
+                progress=progress,
+                snapshot_dir=campaign_state["snapshot"],
+                per_audit_timeout=5.0,
+                runner_fn=runner,
+                campaign_transcript=campaign_transcript,
+            )
+        )
+    rows = [
+        json.loads(line) for line in campaign_transcript.read_text(encoding="utf-8").splitlines()
+    ]
+    assert {r["payload"]["worker_id"] for r in rows} == {"never-w1", "random-w1"}
+
+
+def test_control_arms_async_refuses_gate_arm(campaign_state: dict[str, Path]) -> None:
+    """The gate arm is path-dependent and MUST never be routed through the
+    concurrent control fan-out."""
+    _make_gen0_snapshot(campaign_state)
+    with (
+        rc.ProgressLog(campaign_state["progress"]) as progress,
+        pytest.raises(ValueError, match="path-dependent"),
+    ):
+        asyncio.run(
+            rc.run_control_arms_async(
+                control_arms=[("never", 0), ("gate", 2)],
+                n=2,
+                audit_max_samples=3,
+                audit_max_connections=8,
+                dry_run=False,
+                progress=progress,
+                snapshot_dir=campaign_state["snapshot"],
+                per_audit_timeout=5.0,
+            )
+        )
