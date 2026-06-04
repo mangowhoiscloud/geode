@@ -419,6 +419,12 @@ DEP002 = [
     # must declare it so `uv sync --extra obs` installs the
     # instrumentation alongside traceloop-sdk.
     "opentelemetry-instrumentation-anthropic",
+    # `markdown-it-py` is imported only by `scripts/build_self_improving_hub.py`
+    # (renders the self-improving hub run-report markdown SoT to HTML at build
+    # time). `scripts` is in deptry's `extend_exclude`, so the static scan never
+    # sees the import — but the dependency is real and must stay declared so the
+    # hub build does not rely on a transitive of `markdownify` that could vanish.
+    "markdown-it-py",
 ]
 
 # DEP004 — module imported but the package is declared as a dev-group
