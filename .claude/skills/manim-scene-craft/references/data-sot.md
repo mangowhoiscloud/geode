@@ -6,7 +6,7 @@ with the SoT — never the other direction.
 
 | Scene | SoT document(s) |
 |-------|-----------------|
-| `geode_hero.py` | `docs/visualizations/geode-hero-storyboard.md` (12-bit composition), `docs/visualizations/text-overflow-map.md` (overflow site catalogue) |
+| `geode_hero.py` | `docs/visualizations/geode-hero-storyboard.md` (cold-open + 4-Act + honest Resolution composition), `docs/self-improving/run-2606-broken-tool-use.md` (the Resolution's measured arm table + 18-dim headroom-vs-noise ranking — the curated run report served on the hub), `docs/visualizations/text-overflow-map.md` (overflow site catalogue) |
 | `autoresearch_compare.py` + `autoresearch_filewalk.py` | `docs/visualizations/autoresearch-comparison.md` (3-section: 8 verbatim / 7 swap / 11 add, 6-file LoC) |
 | `critical_floor.py` | `autoresearch/train.py` — `compute_fitness` (line 692), `_dim_score` (line 627), `_stability_score` (line 635) |
 

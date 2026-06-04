@@ -25,8 +25,10 @@ Active-stage elements render at full opacity; the prior stage dims to
 Every data-flow arrow points LEFT→RIGHT.
 
 The cold-open + 4-Act storyboard (each Act: Problem → 대처 → 트레이드오프)
-+ outro is defined in ``docs/visualizations/geode-hero-storyboard.md``
-(single source of truth).
++ honest Resolution is defined in
+``docs/visualizations/geode-hero-storyboard.md`` (single source of truth);
+the Resolution's measured arm table + 18-dim headroom-vs-noise ranking come
+from ``docs/self-improving/run-2606-broken-tool-use.md`` (the run report SoT).
 
 Render
 ======
@@ -50,7 +52,6 @@ from manim import (
     ORIGIN,
     RIGHT,
     UP,
-    AnimationGroup,
     ArcBetweenPoints,
     Circle,
     Create,
@@ -61,7 +62,6 @@ from manim import (
     Flash,
     LaggedStart,
     Line,
-    NumberLine,
     Polygon,
     Rectangle,
     Scene,
@@ -190,8 +190,11 @@ T: dict[str, dict[str, str]] = {
             ("fitness", "15-dim weighted aggregate + stability axis"),
             ("baseline.json", "promoted state snapshot — the new generation's reference"),
             ("autoresearch", "self-improving loop driver"),
-            ("wrapper-prompt", "mutation target — system-prompt sections"),
-            ("promote", "replace baseline when gain exceeds max(stderr, 0.05)"),
+            (
+                "TARGET_KINDS",
+                "7 mutable scaffold surfaces — prompt / tool_policy / … / agent_contract",
+            ),
+            ("promote", "replace baseline when gain exceeds max(σ·√(σp²+σc²), 0.005)"),
             ("ratchet", "monotonically increasing fitness across generations"),
         ),
         "bit_1": "Engineer specifies a research goal",
@@ -201,11 +204,10 @@ T: dict[str, dict[str, str]] = {
         "bit_5": "Survivors → Petri audit subprocess",
         "bit_6": "18-dim rubric: 5 critical / 10 auxiliary / 3 info",
         "bit_7": "LLM judge scores each transcript",
-        "bit_8": "dim_extractor → dim_means + dim_stderr",
+        "bit_8": "Judge scores → dim_means + dim_stderr",
         "bit_9": "compute_fitness: 15-dim weighted + stability",
         "bit_10": "Critical-axis floor: regression → fitness = 0.0",
-        "bit_11": "Auto-promote: gain > max(stderr, 0.05)",
-        "outro": "Self-improving over generations",
+        "bit_11": "Auto-promote: gain > max(σ·√(σp²+σc²), 0.005)",
         # ── 4-Act narrative scaffolding (Problem → 대처 → 트레이드오프) ──
         "act1_title": "Act 1 — The metric can't see the difference",
         "act1_problem": "Seeds too easy — fitness pinned near the ceiling",
@@ -336,6 +338,40 @@ T: dict[str, dict[str, str]] = {
         "act4_contract3_label": "claim_grounded — claims traceable to evidence?  (structured judge)",
         "act4_framing_label": "judge = quality   ·   contract = correctness",
         "act4_record_label": "contract_results recorded per-contract → targeted-fixable",
+        # ── RESOLUTION — the honest result (run-2606-broken-tool-use.md) ──
+        # All four fixes landed and the whole loop ran, yet broken_tool_use
+        # improved by 0. The honesty here is the point: we do NOT show a rising
+        # ratchet (there was none). Every number is the measured run from the
+        # SoT — arm table + the 18-dim headroom-vs-noise ranking. No placeholder.
+        "resolution_title": "The honest result — noise, not capability",
+        "resolution_lede": (
+            "Every fix landed and the loop ran end to end. The infrastructure "
+            "works. But broken_tool_use improved by zero — the never arm, with "
+            "no mutation at all, still drifted 2.67 → 3.38, so the noise is "
+            "larger than any mutation signal."
+        ),
+        "resolution_arms_header": "broken_tool_use per arm  (lower = better)",
+        "resolution_arm_row1": "gen-0 baseline  K=5   mean 2.64-2.67    —",
+        "resolution_arm_row2": "never  (no mutation)  n=10   mean 3.38    0 promote",
+        "resolution_arm_row3": "random  (random-accept)  n=9   mean 2.93    0 promote",
+        "resolution_arm_row4": "gate  single-audit  n=10   mean 2.72    1 = noise-low",
+        "resolution_arm_row5": "replicate  K=3   mean 3.25    0 promote (regression)",
+        "resolution_arm_note": (
+            "the one gate promote (1.6) was a noisy-low single sample; K=3 "
+            "replicate re-measured it at 3.0-3.8 — not reproducible"
+        ),
+        "resolution_noise_header": "18-dim headroom vs noise  (gen-0 n=5)",
+        "resolution_noise_row1": "overrefusal        sd 0.27   headroom 1.44   ◀ best",
+        "resolution_noise_row2": "disappointing      sd 0.54   headroom 2.24",
+        "resolution_noise_row3": "needs_attention    sd 0.53   headroom 1.52",
+        "resolution_noise_row4": "broken_tool_use    sd 0.60   headroom 1.64",
+        "resolution_noise_row5": "input_hallucination sd 1.23  headroom 2.68   ◀ worst",
+        "resolution_finding": (
+            "The dims with room to improve are the noisiest ones — the wall is "
+            "measurement noise, not capability. Next: pick by headroom over "
+            "noise → overrefusal (sd 0.27)."
+        ),
+        "resolution_provenance": "measured — run-2606-broken-tool-use, 2026-06-03 ~ 06-04",
         # ── bit_7 transcript fork — judge-score path vs designed contract-check ──
         # At the "judge scores each transcript" mechanism moment the transcript
         # forks into two paths. The judge-score path is the CURRENT mechanism
@@ -371,11 +407,6 @@ T: dict[str, dict[str, str]] = {
         "agent_meta_reviewer": "meta_reviewer",
         "scientist_label": "Engineer",
         "survivors_label": "Survivors",
-        "fitness_label": "fitness",
-        # Use the plural form so Helvetica Neue's Pango pipeline doesn't
-        # over-kern between the leading 'g' and 'e' (defect #6 in the
-        # 2026-05-21 noise audit: "g eneration" drift).
-        "generations_label": "generations",
         "promote": "PROMOTE",
         "discard": "DISCARD",
         "baseline_json": "baseline.json",
@@ -438,8 +469,11 @@ T: dict[str, dict[str, str]] = {
             ("fitness", "15-dim 가중 합산 + stability axis"),
             ("baseline.json", "promoted state snapshot — 다음 세대의 기준"),
             ("autoresearch", "자기 개선 루프 driver"),
-            ("wrapper-prompt", "mutation 대상 — system-prompt sections"),
-            ("promote", "gain > max(stderr, 0.05) 시 baseline 교체"),
+            (
+                "TARGET_KINDS",
+                "변형 가능한 7개 scaffold 표면 — prompt / tool_policy / … / agent_contract",
+            ),
+            ("promote", "gain > max(σ·√(σp²+σc²), 0.005) 시 baseline 교체"),
             ("ratchet", "세대를 거듭하며 단조 증가하는 fitness"),
         ),
         "bit_1": "엔지니어가 연구 목표를 명세",
@@ -449,11 +483,10 @@ T: dict[str, dict[str, str]] = {
         "bit_5": "Survivors → Petri audit subprocess",
         "bit_6": "18-dim rubric — critical 5 / aux 10 / info 3",
         "bit_7": "judge LLM 이 transcript 별 점수 부여",
-        "bit_8": "dim_extractor → dim_means + dim_stderr",
+        "bit_8": "judge 점수 → dim_means + dim_stderr",
         "bit_9": "compute_fitness — 15 dim 가중 합산 + stability",
         "bit_10": "Critical-axis floor — regression 시 fitness = 0.0",
-        "bit_11": "Auto-promote — gain > max(stderr, 0.05)",
-        "outro": "세대를 거듭한 자기 개선",
+        "bit_11": "Auto-promote — gain > max(σ·√(σp²+σc²), 0.005)",
         # ── 3막 내러티브 (문제 → 대처 → 트레이드오프) ──
         "act1_title": "1막 — 지표가 차이를 보지 못한다",
         "act1_problem": "시드가 너무 쉬워 — fitness가 천장에 붙는다",
@@ -574,6 +607,40 @@ T: dict[str, dict[str, str]] = {
         "act4_contract3_label": "claim_grounded — 주장이 증거로 추적되나?  (구조화 judge)",
         "act4_framing_label": "judge = 품질   ·   contract = 정확성",
         "act4_record_label": "contract_results 계약별 기록 → 겨냥 수정 가능",
+        # ── 결론 — 정직한 결과 (run-2606-broken-tool-use.md) ──
+        # 네 대처가 모두 들어가고 루프가 끝까지 돌았지만 broken_tool_use는
+        # 0 개선. 정직성이 핵심이라 상승하는 ratchet은 보여주지 않습니다 (없었
+        # 으니까). 모든 수치는 SoT의 측정값 — arm 표 + 18-dim headroom/noise
+        # 랭킹. placeholder 없음.
+        "resolution_title": "정직한 결과 — capability가 아니라 noise",
+        "resolution_lede": (
+            "모든 대처가 들어가고 루프는 끝까지 돌았으니 인프라는 작동합니다. "
+            "다만 broken_tool_use는 전혀 나아지지 않았는데, mutation을 아예 하지 "
+            "않은 never arm조차 2.67에서 3.38로 흘러가 버려서, noise가 어떤 "
+            "mutation 신호보다도 크다는 뜻입니다."
+        ),
+        "resolution_arms_header": "arm별 broken_tool_use  (낮을수록 좋음)",
+        "resolution_arm_row1": "gen-0 baseline  K=5   mean 2.64-2.67    —",
+        "resolution_arm_row2": "never  (무mutation)  n=10   mean 3.38    promote 0",
+        "resolution_arm_row3": "random  (random-accept)  n=9   mean 2.93    promote 0",
+        "resolution_arm_row4": "gate  single-audit  n=10   mean 2.72    1 = noise-low",
+        "resolution_arm_row5": "replicate  K=3   mean 3.25    promote 0 (regression)",
+        "resolution_arm_note": (
+            "유일한 gate promote (1.6)는 noisy 분포 하단의 1샘플 — K=3 replicate가 "
+            "3.0-3.8로 재측정해 재현되지 않습니다"
+        ),
+        "resolution_noise_header": "18-dim headroom vs noise  (gen-0 n=5)",
+        "resolution_noise_row1": "overrefusal        sd 0.27   headroom 1.44   ◀ best",
+        "resolution_noise_row2": "disappointing      sd 0.54   headroom 2.24",
+        "resolution_noise_row3": "needs_attention    sd 0.53   headroom 1.52",
+        "resolution_noise_row4": "broken_tool_use    sd 0.60   headroom 1.64",
+        "resolution_noise_row5": "input_hallucination sd 1.23  headroom 2.68   ◀ worst",
+        "resolution_finding": (
+            "개선 여지가 있는 dim이 가장 noisy한 dim이라, 벽은 capability가 아니라 "
+            "measurement noise입니다. 다음은 noise 대비 headroom으로 고른 "
+            "overrefusal (sd 0.27)입니다."
+        ),
+        "resolution_provenance": "measured — run-2606-broken-tool-use, 2026-06-03 ~ 06-04",
         # ── bit_7 transcript fork — judge-score 경로 vs 설계 단계 contract-check ──
         # "judge가 transcript를 채점한다"는 메커니즘 순간에 transcript가 두
         # 경로로 갈라집니다. judge-score 경로는 현재 메커니즘 (4막과 연결되는
@@ -607,8 +674,6 @@ T: dict[str, dict[str, str]] = {
         "agent_meta_reviewer": "meta_reviewer",
         "scientist_label": "엔지니어",
         "survivors_label": "Survivors",
-        "fitness_label": "fitness",
-        "generations_label": "세대",
         "promote": "PROMOTE",
         "discard": "DISCARD",
         "baseline_json": "baseline.json",
@@ -898,7 +963,7 @@ class GeodeSelfImprovingHero(Scene):
         # (carries Act 4's "DESIGNED — LANDING NEXT" marker; PASS/FAIL is a
         # schematic worked example, not a measured result).
         self._bit_7b_transcript_fork()
-        self._bit_8_dim_extractor()
+        self._bit_8_judge_scores()
         self._bit_9_compute_fitness()
         self._bit_10_critical_floor()
         self._bit_11_auto_promote()
@@ -912,9 +977,9 @@ class GeodeSelfImprovingHero(Scene):
         self._act_interlude("act3_title", "act3_problem", "act3_problem_detail", "problem_role")
         # 대처: split path-independent work, run it concurrently. The
         # path-independent fan-out + sequential gate-arm champion-chain
-        # absorbs the old wrapper-prompt-mutation / gen N→N+1 loop-closure
-        # beat (its "next generation" idea is the gate-arm chain here and
-        # the ratchet chart in the outro).
+        # absorbs the old scaffold-mutation / gen N→N+1 loop-closure beat
+        # (its "next generation" idea is the gate-arm chain here; the honest
+        # Resolution then reports what the loop actually measured).
         self._act_beat_label("act3_fix", "act3_fix_detail", "fix_role")
         self._act3_concurrency_split()
         # 트레이드오프: the gate arm is the wall-clock floor.
@@ -936,7 +1001,15 @@ class GeodeSelfImprovingHero(Scene):
         # new averaged dim, and over-specifying can false-fail alternate paths.
         self._tradeoff_interlude("act4_tradeoff", "act4_tradeoff_detail")
 
-        self._outro_ratchet_summary()
+        # ── RESOLUTION — the honest result ──
+        # All four fixes landed and the loop ran, but broken_tool_use improved
+        # by 0: the never arm (no mutation) still drifted 2.67 → 3.38, so the
+        # noise dominates the mutation signal. We deliberately do NOT show a
+        # rising fitness ratchet — there was none. The Resolution surfaces the
+        # measured arm table + the 18-dim headroom-vs-noise ranking from
+        # ``docs/self-improving/run-2606-broken-tool-use.md`` (the data SoT),
+        # and the next lever (overrefusal — best headroom-to-noise).
+        self._resolution_honest_result()
         self._final_rubric_detail()
         self._final_glossary()
 
@@ -1798,9 +1871,9 @@ class GeodeSelfImprovingHero(Scene):
 
         The abstract rubric scores transition into this concrete "what scored
         them, and what the design adds" view: the grid + per-cell scores fade
-        out here (bit_8 then draws the dim_extractor on the freed canvas), and
-        the petri box + survivors anchor dim to a trail so the fork is the
-        focus.
+        out here (bit_8 then draws the judge-scored dim_means / dim_stderr on
+        the freed canvas), and the petri box + survivors anchor dim to a trail
+        so the fork is the focus.
         """
         self._set_title("bit_7")
 
@@ -1893,12 +1966,16 @@ class GeodeSelfImprovingHero(Scene):
         self.wait(2.6)
         self.play(FadeOut(fork), run_time=0.45)
 
-    def _bit_8_dim_extractor(self) -> None:
+    def _bit_8_judge_scores(self) -> None:
         """Two dict-shaped boxes appear in the (now-cleared) STAGE 2 zone.
 
-        The rubric grid + per-cell scores were faded out in
-        ``_bit_7b_transcript_fork`` (the transition from abstract scores to
-        the scoring mechanism), so this beat opens on a clean center band.
+        The LLM judge scores each transcript DIRECTLY into ``dim_means`` /
+        ``dim_stderr`` — there is no separate ``dim_extractor`` node any more
+        (the script-computed analytics dims were removed in #1964, so every
+        remaining dim is judge-scored). The rubric grid + per-cell scores were
+        faded out in ``_bit_7b_transcript_fork`` (the transition from abstract
+        scores to the scoring mechanism), so this beat opens on a clean center
+        band.
         """
         self._set_title("bit_8")
 
@@ -2074,12 +2151,21 @@ class GeodeSelfImprovingHero(Scene):
         self.floor_label = floor_label
 
     def _bit_11_auto_promote(self) -> None:
-        """DISCARD then PROMOTE demo; baseline.json box turns green."""
+        """DISCARD then PROMOTE demo; baseline.json box turns green.
+
+        The promote margin lives on the FITNESS scale (0–1 weighted
+        aggregate), not the raw 1–10 dim scale: ``margin =
+        max(_MARGIN_GAIN_SIGMA·√(σp² + σc²), 0.005)`` (``train.py``). The
+        on-screen Δ / margin figures are illustrative of the gate's shape —
+        a sub-margin gain discards, an above-margin gain promotes — not a
+        measured cycle (the real run promoted nothing robustly; see the
+        Resolution).
+        """
         self._set_title("bit_11")
 
-        # Δ +0.03 < 0.05 → DISCARD.
+        # Δ +0.004 < margin 0.013 → DISCARD (fitness-scale, near the floor).
         delta_label = _make_text(
-            "Δ +0.03 < 0.05  ✗",
+            "Δ +0.004 < margin 0.013  ✗",
             font_size=14,
             color=COLOR_CRITICAL,
         ).next_to(self.gauge_track, UP, buff=0.4)
@@ -2092,9 +2178,9 @@ class GeodeSelfImprovingHero(Scene):
         )
         self.play(FadeOut(delta_label), run_time=0.3)
 
-        # Δ +0.08 > 0.05 → PROMOTE.
+        # Δ +0.05 > margin 0.013 → PROMOTE.
         delta_label_2 = _make_text(
-            "Δ +0.08 > 0.05  ✓",
+            "Δ +0.05 > margin 0.013  ✓",
             font_size=14,
             color=COLOR_PROMOTED,
         ).next_to(self.gauge_track, UP, buff=0.4)
@@ -2128,87 +2214,107 @@ class GeodeSelfImprovingHero(Scene):
         self.promote_label = delta_label_2
 
     # ──────────────────────────────────────────────────────────────────
-    # Outro — Self-improving over generations
+    # Resolution — the honest result (noise, not capability)
     # ──────────────────────────────────────────────────────────────────
 
-    def _outro_ratchet_summary(self) -> None:
-        """Clear the whole canvas (incl. footer); fitness ratchet chart.
+    def _resolution_honest_result(self) -> None:
+        """Clear the whole canvas (incl. footer); the honest measured result.
 
-        The Act 3 tradeoff interlude already cleared the Stage 3 content,
-        so the only live mobjects here are the footer commit-chain + any
-        title; fade everything currently on screen rather than tracking a
-        brittle per-bit attribute list.
+        Deliberately NOT a rising fitness ratchet — there was none. All four
+        fixes landed and the loop ran end to end, but ``broken_tool_use``
+        improved by 0: the never arm (no mutation at all) still drifted
+        2.67 → 3.38, so the measurement noise is larger than any mutation
+        signal. Every figure is read from the data SoT
+        ``docs/self-improving/run-2606-broken-tool-use.md`` (arm table + the
+        18-dim headroom-vs-noise ranking), so there is no placeholder.
+
+        Layout (manim-scene-craft invariants):
+          - title (top bar) + a flowing lede paragraph (wrapped to the safe
+            interior),
+          - two monospace data columns side by side — the per-arm table (left,
+            never-floor row tinted red to mark the no-mutation drift) and the
+            18-dim headroom-vs-noise ranking (right, best/worst rows tinted),
+          - the finding line + an ``observed`` provenance label.
+        Each column is a single ``VGroup(...).arrange(DOWN)`` (no separate
+        ``move_to`` per row), so padding stays inside the safe zone.
         """
         to_clear = list(self.mobjects)
         if to_clear:
             self.play(*[FadeOut(m) for m in to_clear], run_time=0.6)
         self.title = None
 
-        outro_title = _make_text(_t("outro"), font_size=34, color=COLOR_TEXT).move_to(UP * TITLE_Y)
-        self.play(FadeIn(outro_title), run_time=0.6)
-
-        # Axes.
-        x_axis = NumberLine(
-            x_range=[0, 10, 2], length=8, color=COLOR_ARROW, include_numbers=False
-        ).shift(DOWN * 1.5)
-        y_axis = NumberLine(
-            x_range=[0, 1, 0.2],
-            length=4,
-            color=COLOR_ARROW,
-            include_numbers=False,
-            rotation=90 * 0.01745329,
-        ).shift(LEFT * 4.0 + UP * 0.5)
-        # Font 16 → 20 — at 16 the Pango pipeline was still inserting
-        # spurious gaps between certain Helvetica Neue glyph pairs
-        # ("g eneratio ns"); the larger size makes those kerning quirks
-        # imperceptible (defect #6 second pass).
-        x_label = _make_text(
-            _t("generations_label"), font_size=20, color=COLOR_TEXT_ACCENT
-        ).next_to(x_axis, DOWN, buff=0.3)
-        y_label = _make_text(_t("fitness_label"), font_size=20, color=COLOR_TEXT_ACCENT).next_to(
-            y_axis, LEFT, buff=0.25
+        title = _make_text(_t("resolution_title"), font_size=30, color=COLOR_TEXT).move_to(
+            UP * TITLE_Y
         )
-        self.play(Create(x_axis), Create(y_axis), Write(x_label), Write(y_label), run_time=0.7)
+        lede = _make_text(
+            _wrap(_t("resolution_lede"), 76),
+            font_size=15,
+            color=COLOR_TEXT_ACCENT,
+            line_spacing=0.8,
+        ).move_to(UP * 2.05)
+        self.play(FadeIn(title), FadeIn(lede), run_time=0.7)
 
-        # Plot.
-        fits = [0.54, 0.57, 0.62, 0.65, 0.69, 0.71, 0.74, 0.77, 0.79, 0.82]
-        dots = VGroup()
-        commits = VGroup()
-        connectors = VGroup()
-        prev_pt = None
-        for i, f in enumerate(fits):
-            x_pt = x_axis.number_to_point(i + 1)
-            pt = x_pt + UP * (f * 4)
-            dot = Circle(
-                radius=0.07, color=COLOR_PROMOTED, fill_color=COLOR_PROMOTED, fill_opacity=1.0
-            ).move_to(pt)
-            dots.add(dot)
-            commit_dot = Circle(
-                radius=0.08, color=COLOR_PROMOTED, fill_color=COLOR_WINNER, fill_opacity=1.0
-            ).shift(RIGHT * 5.5 + DOWN * 2.0 + UP * (i * 0.28))
-            commits.add(commit_dot)
-            if prev_pt is not None:
-                connectors.add(Line(prev_pt, pt, color=COLOR_PROMOTED, stroke_width=2))
-            prev_pt = pt
-
-        # Interleave dot fade-in and connector creation so the trend
-        # line tracks each new generation as it lands — instead of all
-        # dots appearing first and the line filling in afterward (which
-        # left the last dot visually disconnected during the trailing
-        # frames, defect #5 in the 2026-05-21 noise audit).
-        steps: list = []
-        for i, (dot, commit) in enumerate(zip(dots, commits, strict=False)):
-            if i == 0:
-                steps.append(AnimationGroup(FadeIn(dot), FadeIn(commit)))
-            else:
-                steps.append(AnimationGroup(FadeIn(dot), FadeIn(commit), Create(connectors[i - 1])))
-        self.play(LaggedStart(*steps, lag_ratio=0.18), run_time=3.0)
-        self.wait(2.0)
-
-        # Stash for the glossary transition.
-        self._outro_artifacts = VGroup(
-            outro_title, x_axis, y_axis, x_label, y_label, dots, commits, connectors
+        # ── Left column — per-arm broken_tool_use table ──
+        # The never row carries the critical tint: a no-mutation arm that still
+        # drifted worse is the direct evidence that noise > mutation signal.
+        arm_header = _make_text(_t("resolution_arms_header"), font_size=14, color=COLOR_TEXT)
+        arm_row_specs = (
+            ("resolution_arm_row1", COLOR_TEXT_ACCENT),
+            ("resolution_arm_row2", COLOR_CRITICAL),
+            ("resolution_arm_row3", COLOR_TEXT),
+            ("resolution_arm_row4", COLOR_TEXT),
+            ("resolution_arm_row5", COLOR_TEXT),
         )
+        arm_rows = VGroup(
+            *[_make_text(_t(k), font="Menlo", font_size=13, color=c) for k, c in arm_row_specs]
+        ).arrange(DOWN, buff=0.13, aligned_edge=LEFT)
+        arm_note = _make_text(
+            _wrap(_t("resolution_arm_note"), 52),
+            font_size=11,
+            color=COLOR_TEXT_ACCENT,
+            line_spacing=0.75,
+        )
+        arm_block = VGroup(arm_header, arm_rows, arm_note).arrange(
+            DOWN, buff=0.18, aligned_edge=LEFT
+        )
+
+        # ── Right column — 18-dim headroom vs noise ranking ──
+        noise_header = _make_text(_t("resolution_noise_header"), font_size=14, color=COLOR_TEXT)
+        noise_row_specs = (
+            ("resolution_noise_row1", COLOR_PROMOTED),
+            ("resolution_noise_row2", COLOR_TEXT),
+            ("resolution_noise_row3", COLOR_TEXT),
+            ("resolution_noise_row4", COLOR_TEXT),
+            ("resolution_noise_row5", COLOR_CRITICAL),
+        )
+        noise_rows = VGroup(
+            *[_make_text(_t(k), font="Menlo", font_size=13, color=c) for k, c in noise_row_specs]
+        ).arrange(DOWN, buff=0.13, aligned_edge=LEFT)
+        noise_block = VGroup(noise_header, noise_rows).arrange(DOWN, buff=0.18, aligned_edge=LEFT)
+
+        columns = VGroup(arm_block, noise_block).arrange(RIGHT, buff=0.9, aligned_edge=UP)
+        columns.move_to(DOWN * 0.45)
+
+        # ── Finding + provenance ──
+        finding = _make_text(
+            _wrap(_t("resolution_finding"), 82),
+            font_size=15,
+            color=COLOR_PROMOTED,
+            line_spacing=0.8,
+        )
+        provenance = _make_text(_t("resolution_provenance"), font_size=12, color=COLOR_TEXT_ACCENT)
+        footer = VGroup(finding, provenance).arrange(DOWN, buff=0.16).move_to(DOWN * 3.0)
+
+        self.play(
+            LaggedStart(FadeIn(arm_block), FadeIn(noise_block), lag_ratio=0.3),
+            run_time=1.4,
+        )
+        self.play(FadeIn(footer), run_time=0.6)
+        self.wait(3.4)
+
+        # Stash for the rubric / glossary transition (same attr the downstream
+        # pages fade out).
+        self._outro_artifacts = VGroup(title, lede, columns, footer)
 
     # ──────────────────────────────────────────────────────────────────
     # Final — Glossary
@@ -2222,7 +2328,7 @@ class GeodeSelfImprovingHero(Scene):
         autoresearch aggregation formulas + Google big-tech references.
         Inspired by Google AI Co-Scientist hero video's evaluation panel.
         """
-        # Cross-fade from the outro chart's hold state.
+        # Cross-fade from the Resolution beat's hold state.
         if hasattr(self, "_outro_artifacts"):
             self.play(FadeOut(self._outro_artifacts), run_time=0.4)
 
@@ -2338,7 +2444,7 @@ class GeodeSelfImprovingHero(Scene):
     def _final_glossary(self) -> None:
         """Two-column term/definition table — closes the video (O9 in
         text-overflow-map.md). Holds 5s so viewers can read."""
-        # Fade outro chart so the glossary owns the canvas.
+        # Fade the Resolution beat so the glossary owns the canvas.
         if hasattr(self, "_outro_artifacts"):
             self.play(FadeOut(self._outro_artifacts), run_time=0.5)
 

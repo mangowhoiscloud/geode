@@ -19,11 +19,20 @@ Source data (verified 2026-05-21):
 * GEODE autoresearch (this repo) —
   - ``prepare.py``  203 LoC   (seed pool + rubric sanity check + audit
     CLI dry-run reachability)
-  - ``train.py``    1308 LoC  (WRAPPER_PROMPT_SECTIONS + run_audit +
-    compute_dim_scores + _stability_score + compute_fitness + critical
-    floor branch + auto-promote rule + 24 def/class total)
+  - ``train.py``    1308 LoC  (WRAPPER_PROMPT_SECTIONS — the prompt kind's
+    SoT, 1 of the 7 ``TARGET_KINDS`` mutation surfaces in
+    ``loop/policies.py`` — + run_audit + compute_dim_scores +
+    _stability_score + compute_fitness + critical floor branch +
+    auto-promote rule + 24 def/class total)
   - ``program.md``  360 LoC   (agent loop + role split with petri +
-    3-stage cycle + 20-dim rubric + auto-promote rule)
+    3-stage cycle + 18-dim rubric + auto-promote rule)
+
+Fact-sync note (2026-06-04): the rubric is 18-dim (5 critical / 10
+auxiliary / 3 info), 15 weighted, after PR-DROP-ANALYTICS-DIMS (#1964)
+removed the two script-computed analytics dims; the promote margin is
+``max(_MARGIN_GAIN_SIGMA·√(σp²+σc²), 0.005)``. LoC figures are the
+2026-05-21 snapshot and are intentionally left as the bar-chart's
+recorded provenance.
 
 Render
 ======
@@ -120,20 +129,20 @@ OUTLINE_GEODE = {
         "→ sanity-report.txt",
     ),
     "train.py": (
-        "WRAPPER_PROMPT_SECTIONS dict",
-        "AXIS_TIERS (5/12/3)",
+        "WRAPPER_PROMPT_SECTIONS (1 of 7 TARGET_KINDS)",
+        "AXIS_TIERS (5/10/3)",
         "DIM_WEIGHTS + STABILITY_WEIGHT",
         "run_audit() — geode audit subproc",
         "_dim_score() / _stability_score()",
         "compute_fitness() + critical floor",
-        "decide_promote() — gain > stderr",
+        "_should_promote() — gain > margin",
     ),
     "program.md": (
         "Setup — branch from develop",
         "Role split: petri ↔ autoresearch",
         "3-stage cycle (generate / eval / improve)",
-        "20-dim rubric + critical floor",
-        "Auto-promote: gain > max(stderr, 0.05)",
+        "18-dim rubric + critical floor",
+        "Auto-promote: gain > max(σ·√(σp²+σc²), 0.005)",
         "Loop forever — raise fitness",
     ),
 }
@@ -159,7 +168,7 @@ T = {
         "geode_label": "GEODE autoresearch",
         "loc_label": "LoC",
         "outro_main": "Same scaffold. Different objective. Bigger safety perimeter.",
-        "outro_sub": "prepare.py shrank (data → sanity); train.py grew (1 metric → 17 dims + floor); program.md grew (1 goal → 3-stage cycle).",
+        "outro_sub": "prepare.py shrank (data → sanity); train.py grew (1 metric → 18-dim taxonomy / 15 weighted + floor); program.md grew (1 goal → 3-stage cycle).",
         "heatmap_col_a": "verbatim",
         "heatmap_col_b": "swapped",
         "heatmap_col_c": "added",
@@ -176,7 +185,7 @@ T = {
         "geode_label": "GEODE autoresearch",
         "loc_label": "LoC",
         "outro_main": "같은 scaffold. 다른 목적. 더 두꺼운 safety perimeter.",
-        "outro_sub": "prepare.py 는 줄고 (data → sanity); train.py 는 커지고 (1 metric → 17 dim + floor); program.md 는 커짐 (1 goal → 3-stage cycle).",
+        "outro_sub": "prepare.py 는 줄고 (data → sanity); train.py 는 커지고 (1 metric → 18-dim taxonomy / 15 weighted + floor); program.md 는 커짐 (1 goal → 3-stage cycle).",
         "heatmap_col_a": "verbatim",
         "heatmap_col_b": "swapped",
         "heatmap_col_c": "added",
