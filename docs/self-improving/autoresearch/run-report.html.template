@@ -72,13 +72,11 @@
     </section>
 
     <section class="page-sub">
-      <article class="markdown-body" data-md-target="run-body"></article>
-      <script type="text/markdown" data-md-source="run-body">{{ run_body }}</script>
+      <article class="markdown-body">{{ run_body_html }}</article>
     </section>
-{{ marked_js_loader }}
 
     <div class="build-info">
-      <p>Source: <code>{{ run_source_path }}</code> (rendered client-side via Marked.js — single source of truth, shared with the campaign video).</p>
+      <p>Source: <code>{{ run_source_path }}</code> (rendered to HTML at build time via markdown-it-py — single source of truth, shared with the campaign video).</p>
       <p>Published by <code>.github/workflows/pages.yml</code> on every <code>main</code> push.</p>
       <p>Repo: <a href="https://github.com/mangowhoiscloud/geode" rel="noopener">github.com/mangowhoiscloud/geode</a></p>
       <p class="version-stamp">

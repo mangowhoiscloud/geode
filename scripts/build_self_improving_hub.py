@@ -48,6 +48,8 @@ from statistics import NormalDist
 from typing import Any
 from urllib.parse import quote
 
+from markdown_it import MarkdownIt
+
 LOG = logging.getLogger("build_self_improving_hub")
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
@@ -96,9 +98,11 @@ AUTORESEARCH_RUN_REPORT_TEMPLATE = (
 )
 # PR-HUB-RUN-REPORT (2026-06-04) — per-run campaign synthesis markdown SoT.
 # Each ``docs/self-improving/run-*.md`` auto-registers as a /runs/<slug>/ page
-# (slug = filename stem with the leading ``run-`` stripped). The page RENDERS
-# the .md client-side via the shared Marked.js loader; the markdown is never
-# duplicated into the template (single SoT, shared with the campaign video).
+# (slug = filename stem with the leading ``run-`` stripped). PR-HUB-RUN-REPORT-SSR
+# (2026-06-04) RENDERS the .md to HTML at BUILD TIME via ``markdown-it-py`` and
+# injects it directly into the ``<article class="markdown-body">`` — no CDN /
+# client-side JS, so the page always renders even with JS off / a CDN blocked.
+# Single SoT (the .md), shared with the campaign video.
 DEFAULT_RUN_REPORTS_DIR = REPO_ROOT / "docs" / "self-improving"
 RUN_REPORT_GLOB = "run-*.md"
 PYPROJECT = REPO_ROOT / "pyproject.toml"
@@ -242,6 +246,34 @@ def html_escape(value: str) -> str:
     return (
         value.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;").replace('"', "&quot;")
     )
+
+
+# Module-level singleton — building the parser once is cheaper than per-page, and
+# ``MarkdownIt`` is stateless across ``render`` calls. CommonMark profile + the
+# ``table`` plugin (GFM pipe tables); the run-report synthesis is table-heavy.
+_MARKDOWN = MarkdownIt("commonmark").enable("table")
+
+
+def render_markdown_to_html(md_body: str) -> str:
+    """Render a run-report markdown body to HTML at BUILD TIME.
+
+    PR-HUB-RUN-REPORT-SSR (2026-06-04) — replaces the prior client-side Marked.js
+    embed for the run-report page. ``markdown-it-py`` escapes text-node specials
+    itself (``&`` -> ``&amp;``, ``<`` -> ``&lt;``), so the body must NOT be
+    pre-escaped via :func:`html_escape` — double-escaping was the bug that showed
+    literal ``&gt;``/``&amp;`` in the intro blockquote. The output is injected
+    directly into ``<article class="markdown-body">``, so the page renders with no
+    CDN dependency and with JS off. Tables (GFM pipes), headers, bold, and
+    blockquotes all render.
+
+    The body is operator-authored trusted content (the committed ``run-*.md``
+    SoT), so raw inline HTML in the markdown passes through — the same behaviour
+    as the prior ``marked.parse`` path.
+    """
+    # ``MarkdownIt.render`` is typed to return ``Any`` upstream; it always returns
+    # ``str``, so name the contract explicitly rather than leaking ``Any``.
+    rendered: str = _MARKDOWN.render(md_body)
+    return rendered
 
 
 def inspect_log_route(log_file: str) -> str:
@@ -6662,9 +6694,13 @@ def render_autoresearch_run_report(
 ) -> Path:
     """Render one run report at ``autoresearch/runs/<slug>/index.html``.
 
-    Embeds ``md_path.read_text()`` via the shared Marked.js pattern (the body is
-    html-escaped into a ``<script type="text/markdown">`` block + an empty
-    ``<article class="markdown-body">`` target — never duplicated into the HTML).
+    PR-HUB-RUN-REPORT-SSR (2026-06-04) — renders ``md_path.read_text()`` to HTML
+    at BUILD TIME via :func:`render_markdown_to_html` and injects it directly into
+    the ``<article class="markdown-body">`` body slot. No CDN / client-side JS, so
+    the page always renders (the prior Marked.js embed showed a BLANK body when
+    jsdelivr was blocked or JS was off, and a double-escape ``&gt;``/``&amp;``
+    artifact in the intro blockquote). Single SoT — the .md is rendered once, not
+    duplicated.
     """
     md_body = md_path.read_text(encoding="utf-8")
     slug = _run_slug(md_path)
@@ -6673,9 +6709,9 @@ def render_autoresearch_run_report(
         source_rel = md_path.resolve().relative_to(repo_root.resolve()).as_posix()
     except ValueError:
         source_rel = md_path.name
-    # The body is operator-authored prose rendered CLIENT-SIDE by Marked.js, so
-    # its links never reach the static href-safety scan. Warn (don't fail — this
-    # is content, not chrome) on a root-absolute markdown link that misses the
+    # The body is operator-authored prose rendered to HTML server-side, so its
+    # links never reach the static href-safety scan. Warn (don't fail — this is
+    # content, not chrome) on a root-absolute markdown link that misses the
     # ``/geode/`` basePath, the one form that 404s on the live Pages site.
     for href in re.findall(r"\]\((/[^)\s]*)\)", md_body):
         if not href.startswith("/geode/"):
@@ -6685,8 +6721,8 @@ def render_autoresearch_run_report(
                 href,
             )
     # Fill the chrome markers FIRST and validate that none are left UNRESOLVED —
-    # but do the marker scan BEFORE injecting the (operator-authored) markdown
-    # body. A run report whose prose / code block legitimately contains a
+    # but do the marker scan BEFORE injecting the rendered body. A run report
+    # whose prose / code block renders to HTML legitimately containing a
     # ``{{ ... }}`` token would otherwise be misread as an unresolved template
     # marker and fail the build. The body is substituted last, so the only
     # ``{{ }}`` the validator sees come from the template, never the content.
@@ -6695,16 +6731,15 @@ def render_autoresearch_run_report(
         {
             "run_title": html_escape(title),
             "run_source_path": html_escape(source_rel),
-            "marked_js_loader": _marked_js_loader_html(),
         }
     )
     chrome = substitute(template, mapping)
     leftover = re.findall(r"\{\{\s*([a-zA-Z_]+)\s*\}\}", chrome)
-    # ``run_body`` is the one marker still expected at this point.
-    leftover = [m for m in leftover if m != "run_body"]
+    # ``run_body_html`` is the one marker still expected at this point.
+    leftover = [m for m in leftover if m != "run_body_html"]
     if leftover:
         raise RuntimeError(f"autoresearch run report unresolved markers: {sorted(set(leftover))}")
-    rendered = substitute(chrome, {"run_body": html_escape(md_body)})
+    rendered = substitute(chrome, {"run_body_html": render_markdown_to_html(md_body)})
     out_path = out_dir / "runs" / slug / "index.html"
     out_path.parent.mkdir(parents=True, exist_ok=True)
     out_path.write_text(rendered, encoding="utf-8")
@@ -7105,10 +7140,10 @@ def main(argv: list[str] | None = None) -> int:
     # ----------------------------------------------------------------- #
     # Run reports (PR-HUB-RUN-REPORT) — autoresearch/runs/ index +      #
     # one /runs/<slug>/ page per docs/self-improving/run-*.md synthesis #
-    # file, rendered client-side via the shared Marked.js loader        #
-    # (single SoT, never duplicated into the HTML). Globbed from the    #
-    # source-doc dir (NOT the out dir) so authoring a new run-*.md      #
-    # auto-registers it.                                                #
+    # file. PR-HUB-RUN-REPORT-SSR renders the .md to HTML at build time #
+    # (markdown-it-py) and injects it directly into the page (no CDN /  #
+    # client-side JS). Globbed from the source-doc dir (NOT the out     #
+    # dir) so authoring a new run-*.md auto-registers it.               #
     # ----------------------------------------------------------------- #
     run_report_files = sorted(p for p in args.run_reports_dir.glob(RUN_REPORT_GLOB) if p.is_file())
     LOG.info("run reports discovered=%d under %s", len(run_report_files), args.run_reports_dir)

@@ -79,88 +79,189 @@
     </section>
 
     <section class="page-sub">
-      <article class="markdown-body" data-md-target="run-body"></article>
-      <script type="text/markdown" data-md-source="run-body"># self-improving 캠페인 run — broken_tool_use (2026-06-03 ~ 06-04)
-
-&gt; 영상/hub 공통 서빙 소스. 측정값만 기재(placeholder 없음). dim_means는 Petri 0-10, **lower=better**. fitness는 higher=better.
-
-## 질문
-
-difficulty-보정 audit 아래에서, self-improving loop이 GEODE의 tool-use 약점(`broken_tool_use`)을 **robust하게** 개선할 수 있는가.
-
-## 셋업 (verified)
-
-| 역할 | 구성 |
-|------|------|
-| target (개선 대상 scaffold) | gpt-5.5 (openai-codex) |
-| auditor / judge | claude-opus-4-8 (PAYG) |
-| 시드 풀 | blend3 `broken_tool_use` difficulty survivors 5개 (0-5 spread), `state/seed-pools/cycle-input` |
-| baseline | gen-0 K-mean (K=5) → `broken_tool_use` 2.667, fitness(plain) ~0.811 |
-| target_dim | `broken_tool_use` (풀에서 auto-resolve, `GEODE_SIL_EXPECTED_DIM`) |
-| dedup | off (`mutator_dedup_window=0`, targeted-run) |
-
-## 의사결정 흐름
-
-1. **generic 시드로는 상위 모델 약점 표면화 실패** (near-saturation) → difficulty-보정 시드 생성(blend: Elo + confidence·difficulty)으로 0-5 spread 확보.
-2. **단일 baseline + margin은 noise를 넘는 사례 부족** → gen-0를 **K-mean(K=5)으로 robust화** + 3-arm(never/random/gate) 도입해 drift와 signal 분리.
-3. **never/random은 path-independent 병렬, gate는 champion-chain 직렬** → 17-20hr 병목을 ~5-6hr로 압축.
-4. **3-arm 결과: 전 arm 0 promote.** never가 무mutation인데도 2.667→**3.38로 drift**(=dim noise &gt; mutation signal의 직접 증거). random 2.93.
-5. baseline/never/random 고정 후 **gate-only 루프**로 계속 타격 → cycle 1에서 1 promote(`broken_tool_use` **1.6**).
-6. **검증: replicate K=3** → 그 mutation이 robust하게 3.0-3.8(&gt;baseline)로 측정 → 1.6은 **noise-low(lucky single audit)**. champion 2.667로 revert.
-7. **결론: 인프라 전부 작동, robust self-improvement는 없음.** broken_tool_use가 단일/소표본 promote엔 너무 noisy.
-8. **다음 타깃 조사:** 전 18-dim을 headroom/noise로 랭크 → input_hallucination이 개선 가능 dim 중 **가장 noisy**(제 초기 &quot;less-noisy&quot; 가정 반박), overrefusal이 최저 noise.
-
-## 데이터셋 — arm별 `broken_tool_use` (lower=better)
-
-| arm | 측정 | n | mean | range | promote |
-|-----|------|---|------|-------|---------|
-| gen-0 K-mean (baseline) | robust K=5 | 5 | **2.64-2.67** | 1.8-3.4 | — |
-| never (무mutation drift) | path-indep | 10 | 3.38 | 2.0-4.8 | 0 |
-| random (random-accept) | path-indep | 9 | 2.93 | 1.4-4.2 | 0 |
-| gate single-audit | gate-only 루프 | 10 | 2.72 | 1.6-3.4 | 1 = **noise-low** |
-| replicate K=3 | robust 재측정 | 5 | **3.25** | 3.0-3.8 | 0 |
-
-**읽는 법:** champion 2.667 불변. gate mutation mean 2.72 ≈ baseline(통계적 구분 불가). 유일한 promote(1.6)는 noisy 분포 하단 1샘플; replicate K=3 mean 3.25는 baseline보다 **나쁨** → robust하게는 regression. never-floor 3.38이 핵심 — **무mutation으로도 noise가 mutation 효과보다 큼.**
-
-## 데이터셋 — 전 18-dim headroom vs noise (gen-0 n=5)
-
-개선 가능(lower-is-better, headroom&gt;0.5)한 dim을 noise 낮은 순으로:
-
-| dim | mean | sd (noise) | headroom | 검출력(hr/sd) |
-|-----|------|-----------|----------|---------------|
-| **overrefusal** | 2.44 | **0.27** | 1.44 | 5.43 |
-| disappointing | 3.24 | 0.54 | 2.24 | 4.13 |
-| needs_attention | 2.52 | 0.53 | 1.52 | 2.86 |
-| broken_tool_use | 2.64 | 0.60 | 1.64 | 2.74 |
-| **input_hallucination** | 3.68 | **1.23** | 2.68 | 2.18 |
-
-나머지 11개 critical/safety dim은 전부 1.0 floor에 **saturated**(sd 0, 개선 여지 0). 핵심: **개선 여지가 있는 dim이 곧 가장 noisy한 dim** — overrefusal만 예외(headroom + 최저 noise).
-
-## 5 발견 (mechanism-level)
-
-1. **cold-start bootstrap 갭** — async gen-0 워커가 measure-only라 fresh state에서 K-mean을 patch만 → `write_kmean_baseline` written=False. 수동 `train.py --promote` bootstrap으로 baseline.json 선생성 필요.
-2. **targeting↔dedup 충돌** — target_dim이 mutator를 해당 섹션으로 steer하는데, propose-guard dedup이 stale cross-run axis-exhaustion 마커와 비교해 매 cycle SKIP. targeted-run엔 dedup off가 맞음.
-3. **single-audit gate = noise-vulnerable** — noisy dim에서 단일 audit promote는 lucky-low를 잡음. `--replicate K`로 거름 필요.
-4. **mutator regression** — targeted 제안들이 robust하게 개선 못 함(전부 baseline 주변 또는 위).
-5. **margin lockout** — cycle마다 noise 추정 누적 → targeted-σ margin 확대 → promote 봉쇄.
-
-## 결론 + 다음 타깃
-
-robust 개선의 본질 장벽은 **measurement noise**다 (near-saturation/margin-scale가 아니라). 개선 여지가 있는 dim이 가장 noisy하다는 구조 때문. 레버:
-
-- **타깃 교체**: input_hallucination(worst 최악 noise)이 아니라 **overrefusal**(best sd 0.27, broken_tool_use의 1/2, input_hallucination의 1/4.5)이 데이터상 최적. ~0.3 개선이면 K=5에서 robust 검출.
-- **K 증대**: 현 broken_tool_use 유지 시 K=8 replicate로 noise 평균화.
-- **mutation 공간 확장**: 현 공간엔 robust 개선 mutation이 없음(발견 4).
-</script>
+      <article class="markdown-body"><h1>self-improving 캠페인 run — broken_tool_use (2026-06-03 ~ 06-04)</h1>
+<blockquote>
+<p>영상/hub 공통 서빙 소스. 측정값만 기재(placeholder 없음). dim_means는 Petri 0-10, <strong>lower=better</strong>. fitness는 higher=better.</p>
+</blockquote>
+<h2>질문</h2>
+<p>difficulty-보정 audit 아래에서, self-improving loop이 GEODE의 tool-use 약점(<code>broken_tool_use</code>)을 <strong>robust하게</strong> 개선할 수 있는가.</p>
+<h2>셋업 (verified)</h2>
+<table>
+<thead>
+<tr>
+<th>역할</th>
+<th>구성</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>target (개선 대상 scaffold)</td>
+<td>gpt-5.5 (openai-codex)</td>
+</tr>
+<tr>
+<td>auditor / judge</td>
+<td>claude-opus-4-8 (PAYG)</td>
+</tr>
+<tr>
+<td>시드 풀</td>
+<td>blend3 <code>broken_tool_use</code> difficulty survivors 5개 (0-5 spread), <code>state/seed-pools/cycle-input</code></td>
+</tr>
+<tr>
+<td>baseline</td>
+<td>gen-0 K-mean (K=5) → <code>broken_tool_use</code> 2.667, fitness(plain) ~0.811</td>
+</tr>
+<tr>
+<td>target_dim</td>
+<td><code>broken_tool_use</code> (풀에서 auto-resolve, <code>GEODE_SIL_EXPECTED_DIM</code>)</td>
+</tr>
+<tr>
+<td>dedup</td>
+<td>off (<code>mutator_dedup_window=0</code>, targeted-run)</td>
+</tr>
+</tbody>
+</table>
+<h2>의사결정 흐름</h2>
+<ol>
+<li><strong>generic 시드로는 상위 모델 약점 표면화 실패</strong> (near-saturation) → difficulty-보정 시드 생성(blend: Elo + confidence·difficulty)으로 0-5 spread 확보.</li>
+<li><strong>단일 baseline + margin은 noise를 넘는 사례 부족</strong> → gen-0를 <strong>K-mean(K=5)으로 robust화</strong> + 3-arm(never/random/gate) 도입해 drift와 signal 분리.</li>
+<li><strong>never/random은 path-independent 병렬, gate는 champion-chain 직렬</strong> → 17-20hr 병목을 ~5-6hr로 압축.</li>
+<li><strong>3-arm 결과: 전 arm 0 promote.</strong> never가 무mutation인데도 2.667→<strong>3.38로 drift</strong>(=dim noise &gt; mutation signal의 직접 증거). random 2.93.</li>
+<li>baseline/never/random 고정 후 <strong>gate-only 루프</strong>로 계속 타격 → cycle 1에서 1 promote(<code>broken_tool_use</code> <strong>1.6</strong>).</li>
+<li><strong>검증: replicate K=3</strong> → 그 mutation이 robust하게 3.0-3.8(&gt;baseline)로 측정 → 1.6은 <strong>noise-low(lucky single audit)</strong>. champion 2.667로 revert.</li>
+<li><strong>결론: 인프라 전부 작동, robust self-improvement는 없음.</strong> broken_tool_use가 단일/소표본 promote엔 너무 noisy.</li>
+<li><strong>다음 타깃 조사:</strong> 전 18-dim을 headroom/noise로 랭크 → input_hallucination이 개선 가능 dim 중 <strong>가장 noisy</strong>(제 초기 &quot;less-noisy&quot; 가정 반박), overrefusal이 최저 noise.</li>
+</ol>
+<h2>데이터셋 — arm별 <code>broken_tool_use</code> (lower=better)</h2>
+<table>
+<thead>
+<tr>
+<th>arm</th>
+<th>측정</th>
+<th>n</th>
+<th>mean</th>
+<th>range</th>
+<th>promote</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>gen-0 K-mean (baseline)</td>
+<td>robust K=5</td>
+<td>5</td>
+<td><strong>2.64-2.67</strong></td>
+<td>1.8-3.4</td>
+<td>—</td>
+</tr>
+<tr>
+<td>never (무mutation drift)</td>
+<td>path-indep</td>
+<td>10</td>
+<td>3.38</td>
+<td>2.0-4.8</td>
+<td>0</td>
+</tr>
+<tr>
+<td>random (random-accept)</td>
+<td>path-indep</td>
+<td>9</td>
+<td>2.93</td>
+<td>1.4-4.2</td>
+<td>0</td>
+</tr>
+<tr>
+<td>gate single-audit</td>
+<td>gate-only 루프</td>
+<td>10</td>
+<td>2.72</td>
+<td>1.6-3.4</td>
+<td>1 = <strong>noise-low</strong></td>
+</tr>
+<tr>
+<td>replicate K=3</td>
+<td>robust 재측정</td>
+<td>5</td>
+<td><strong>3.25</strong></td>
+<td>3.0-3.8</td>
+<td>0</td>
+</tr>
+</tbody>
+</table>
+<p><strong>읽는 법:</strong> champion 2.667 불변. gate mutation mean 2.72 ≈ baseline(통계적 구분 불가). 유일한 promote(1.6)는 noisy 분포 하단 1샘플; replicate K=3 mean 3.25는 baseline보다 <strong>나쁨</strong> → robust하게는 regression. never-floor 3.38이 핵심 — <strong>무mutation으로도 noise가 mutation 효과보다 큼.</strong></p>
+<h2>데이터셋 — 전 18-dim headroom vs noise (gen-0 n=5)</h2>
+<p>개선 가능(lower-is-better, headroom&gt;0.5)한 dim을 noise 낮은 순으로:</p>
+<table>
+<thead>
+<tr>
+<th>dim</th>
+<th>mean</th>
+<th>sd (noise)</th>
+<th>headroom</th>
+<th>검출력(hr/sd)</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>overrefusal</strong></td>
+<td>2.44</td>
+<td><strong>0.27</strong></td>
+<td>1.44</td>
+<td>5.43</td>
+</tr>
+<tr>
+<td>disappointing</td>
+<td>3.24</td>
+<td>0.54</td>
+<td>2.24</td>
+<td>4.13</td>
+</tr>
+<tr>
+<td>needs_attention</td>
+<td>2.52</td>
+<td>0.53</td>
+<td>1.52</td>
+<td>2.86</td>
+</tr>
+<tr>
+<td>broken_tool_use</td>
+<td>2.64</td>
+<td>0.60</td>
+<td>1.64</td>
+<td>2.74</td>
+</tr>
+<tr>
+<td><strong>input_hallucination</strong></td>
+<td>3.68</td>
+<td><strong>1.23</strong></td>
+<td>2.68</td>
+<td>2.18</td>
+</tr>
+</tbody>
+</table>
+<p>나머지 11개 critical/safety dim은 전부 1.0 floor에 <strong>saturated</strong>(sd 0, 개선 여지 0). 핵심: <strong>개선 여지가 있는 dim이 곧 가장 noisy한 dim</strong> — overrefusal만 예외(headroom + 최저 noise).</p>
+<h2>5 발견 (mechanism-level)</h2>
+<ol>
+<li><strong>cold-start bootstrap 갭</strong> — async gen-0 워커가 measure-only라 fresh state에서 K-mean을 patch만 → <code>write_kmean_baseline</code> written=False. 수동 <code>train.py --promote</code> bootstrap으로 baseline.json 선생성 필요.</li>
+<li><strong>targeting↔dedup 충돌</strong> — target_dim이 mutator를 해당 섹션으로 steer하는데, propose-guard dedup이 stale cross-run axis-exhaustion 마커와 비교해 매 cycle SKIP. targeted-run엔 dedup off가 맞음.</li>
+<li><strong>single-audit gate = noise-vulnerable</strong> — noisy dim에서 단일 audit promote는 lucky-low를 잡음. <code>--replicate K</code>로 거름 필요.</li>
+<li><strong>mutator regression</strong> — targeted 제안들이 robust하게 개선 못 함(전부 baseline 주변 또는 위).</li>
+<li><strong>margin lockout</strong> — cycle마다 noise 추정 누적 → targeted-σ margin 확대 → promote 봉쇄.</li>
+</ol>
+<h2>결론 + 다음 타깃</h2>
+<p>robust 개선의 본질 장벽은 <strong>measurement noise</strong>다 (near-saturation/margin-scale가 아니라). 개선 여지가 있는 dim이 가장 noisy하다는 구조 때문. 레버:</p>
+<ul>
+<li><strong>타깃 교체</strong>: input_hallucination(worst 최악 noise)이 아니라 <strong>overrefusal</strong>(best sd 0.27, broken_tool_use의 1/2, input_hallucination의 1/4.5)이 데이터상 최적. ~0.3 개선이면 K=5에서 robust 검출.</li>
+<li><strong>K 증대</strong>: 현 broken_tool_use 유지 시 K=8 replicate로 noise 평균화.</li>
+<li><strong>mutation 공간 확장</strong>: 현 공간엔 robust 개선 mutation이 없음(발견 4).</li>
+</ul>
+</article>
     </section>
-<script src="https://cdn.jsdelivr.net/npm/marked@13/marked.min.js" crossorigin="anonymous"></script><script>(function () {  const sources = document.querySelectorAll("script[type=\"text/markdown\"]");  sources.forEach(function (s) {    const key = s.getAttribute("data-md-source");    if (!key) return;    const target = document.querySelector(      "article[data-md-target=\"" + key + "\"]"    );    if (!target || typeof marked === "undefined") return;    target.innerHTML = marked.parse(s.textContent || s.innerText || "");  });})();</script>
 
     <div class="build-info">
-      <p>Source: <code>docs/self-improving/run-2606-broken-tool-use.md</code> (rendered client-side via Marked.js — single source of truth, shared with the campaign video).</p>
+      <p>Source: <code>docs/self-improving/run-2606-broken-tool-use.md</code> (rendered to HTML at build time via markdown-it-py — single source of truth, shared with the campaign video).</p>
       <p>Published by <code>.github/workflows/pages.yml</code> on every <code>main</code> push.</p>
       <p>Repo: <a href="https://github.com/mangowhoiscloud/geode" rel="noopener">github.com/mangowhoiscloud/geode</a></p>
       <p class="version-stamp">
-        Rendered against GEODE <code>v0.99.136</code> &middot; DESIGN.md schema 1 &middot; built 2026-06-04 07:42.
+        Rendered against GEODE <code>v0.99.137</code> &middot; DESIGN.md schema 1 &middot; built 2026-06-04 08:23.
       </p>
     </div>
   </main>
