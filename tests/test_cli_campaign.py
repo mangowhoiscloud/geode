@@ -29,14 +29,22 @@ def test_campaign_command_is_registered() -> None:
 
 
 def test_campaign_help_lists_core_flags() -> None:
-    result = CliRunner().invoke(app, ["campaign", "--help"])
+    # Assert the flags on the command's declared params, NOT by substring-matching
+    # the rendered ``--help`` text: Typer renders help through Rich, whose box
+    # wrapping + ANSI styling vary by terminal width / TTY (a narrow, no-TTY CI
+    # runner wraps the options panel so a literal "--n" is not a clean substring).
+    # The help is generated FROM these params, so introspecting them tests the
+    # same intent deterministically.
+    click_app = typer.main.get_command(app)
+    assert isinstance(click_app, click.Group)
+    campaign_cmd = click_app.commands["campaign"]
+    opt_names = {opt for param in campaign_cmd.params for opt in param.opts}
+    for flag in ("--n", "--k", "--arms", "--dry-run"):
+        assert flag in opt_names, f"{flag} missing from campaign command params"
 
+    # Smoke: ``--help`` still renders and exits cleanly (format-agnostic).
+    result = CliRunner().invoke(app, ["campaign", "--help"])
     assert result.exit_code == 0
-    out = result.output
-    assert "--n" in out
-    assert "--k" in out
-    assert "--arms" in out
-    assert "--dry-run" in out
 
 
 def test_campaign_forwards_options_to_campaign_main() -> None:
