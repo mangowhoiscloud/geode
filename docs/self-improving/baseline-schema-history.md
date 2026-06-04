@@ -4,8 +4,8 @@ Lossless record of every baseline-related schema GEODE's self-improving loop
 has used, so a baseline measured under an older schema is never silently
 mis-read and the design provenance of the current schema is preserved.
 
-The **active anchor** is `state/self_improving/baseline.json` (the most recently
-promoted baseline). The **registry** is `state/self_improving/baseline_archive.jsonl`
+The **active anchor** is `state/autoresearch/baseline.json` (the most recently
+promoted baseline). The **registry** is `state/autoresearch/baseline_archive.jsonl`
 (one append-only `kind="baseline"` row per promotion — the hub's baseline index
 reads it). The two are separate SoTs: the anchor answers "what does the loop
 compare against right now"; the registry answers "what baselines have existed,

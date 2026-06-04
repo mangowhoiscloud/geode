@@ -135,11 +135,11 @@ ls "$GEODE_HELD_OUT_BENCH"/manifest.json
 When a bench is configured, EVERY cycle (not just promotes) runs a second audit
 on the frozen bench and records the result:
 
-- **`state/self_improving/mutations.jsonl`** — the per-cycle `kind="attribution"`
+- **`state/autoresearch/mutations.jsonl`** — the per-cycle `kind="attribution"`
   row gains `held_out_fitness` (canonical 0-1 `compute_fitness`, HIGHER-is-better)
   and `held_out_bench_id`. Ordered by `ts`, these rows ARE the cross-generation
   curve. This is the curve SoT the hub renders.
-- **`state/self_improving/baseline_archive.jsonl`** — on a promote, the
+- **`state/autoresearch/baseline_archive.jsonl`** — on a promote, the
   `kind="baseline"` row also carries `held_out_fitness` + `held_out_bench_id` so
   the promoted baseline records its fixed-ruler fitness.
 

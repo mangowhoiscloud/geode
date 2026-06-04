@@ -1,8 +1,8 @@
 # GEODE self-improving loop — overview (DATA + program SoT)
 
-The self-improving loop's **runtime DATA** lives at `state/self_improving/`
+The self-improving loop's **runtime DATA** lives at `state/autoresearch/`
 (under `STATE_ROOT`, env-overridable via `GEODE_STATE_ROOT`; the single
-canonical `core.paths.SELF_IMPROVING_STATE_DIR`) and the **agent program
+canonical `core.paths.AUTORESEARCH_STATE_DIR`) and the **agent program
 SoT** is `core/self_improving/program.md`. The loop *CODE* lives under the
 `core.self_improving` umbrella package (PR-SELF-IMPROVING-UMBRELLA,
 2026-05-31) — `core/self_improving/train.py` (the audit runner, formerly
@@ -72,7 +72,7 @@ signal lives in the companion `results.jsonl`.
 
 Mutations to `WRAPPER_PROMPT_SECTIONS` propagate into the audit
 subprocess through the `GEODE_WRAPPER_OVERRIDE` env var (which points
-at `state/self_improving/wrapper-override.json`). The GEODE runtime's
+at `state/autoresearch/wrapper-override.json`). The GEODE runtime's
 `PromptAssembler` Phase 0 reads it and replaces the wrapper base.
 `--dry-run` skips the subprocess entirely so plumbing can be verified
 without spending budget.
@@ -124,7 +124,7 @@ core/self_improving/           — loop CODE + program SoT (umbrella package)
 ├── admire_means.py / bench_means.py — positive-pressure / capability axes
 └── loop/          — loop runtime (runner, mutator, policies, …)
 
-state/self_improving/          — runtime DATA (under STATE_ROOT)
+state/autoresearch/            — runtime DATA (under STATE_ROOT)
 ├── policies/      — mutation-target SoT JSONs (git-tracked)
 ├── mutations.jsonl, baseline_archive.jsonl, baseline_epochs.json (git-tracked)
 ├── results.tsv, results.jsonl — rolling per-audit history (git-tracked)

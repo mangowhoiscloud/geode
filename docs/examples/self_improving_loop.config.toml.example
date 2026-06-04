@@ -34,12 +34,6 @@ abort_threshold = 0.9
 # Inner-audit wall-clock budget (minutes). 1–60. Subprocess timeout is
 # `budget_minutes * 60 + 120`. Default 5.
 budget_minutes = 5
-# Model that the inner Petri audit sends prompts to (the *target*).
-target_model = "geode/gpt-5.5"
-# Model that scores each rollout via inspect_petri's judge contract.
-# Default keeps judge ≠ target provider for the M1 cross-provider guard
-# (`plugins/petri_audit/optimize.py`).
-judge_model = "claude-code/opus"
 # Use Claude Code / Codex OAuth for the audit subprocess when available.
 # Falls through to PAYG only when `fallback_to_payg = true` above.
 use_oauth = true
@@ -54,6 +48,34 @@ dim_set  = "5axes"
 max_turns = 10
 # Optional override of the global flag for autoresearch only.
 # fallback_to_payg = true
+
+# ---------------------------------------------------------------------------
+# ACTIVE per-role model bindings (the control-layer SoT)
+# ---------------------------------------------------------------------------
+# This is the shape the runtime reads: one nested table per role under
+# `[self_improving_loop.autoresearch.<role>]`, each with `model` + `source`.
+# Each role table is optional; an absent role falls back to the manifest
+# defaults in `plugins/petri_audit/petri.plugin.toml`
+# (auditor: claude-opus-4-7, target: claude-haiku-4-5, judge: claude-sonnet-4-6).
+# `source` selects the credential lane: `claude-cli` (Claude Code Max OAuth,
+# the default), `openai-codex` (ChatGPT subscription OAuth), or `auto`
+# (manifest cascade). Schema: `core.config.self_improving_loop.PetriRoleConfig`.
+
+# Auditor: the LLM that conducts the Petri audit (flagship recommended).
+[self_improving_loop.autoresearch.auditor]
+model  = "claude-opus-4-7"
+source = "claude-cli"
+
+# Target: the model the audit sends prompts to (the model under test).
+[self_improving_loop.autoresearch.target]
+model  = "geode/gpt-5.5"
+source = "openai-codex"
+
+# Judge: the model that scores each rollout via the judge contract. Keep
+# judge ≠ target provider for the cross-provider guard.
+[self_improving_loop.autoresearch.judge]
+model  = "claude-sonnet-4-6"
+source = "claude-cli"
 
 # ---------------------------------------------------------------------------
 # seed-generation driver (plugins/seed_generation/)
@@ -74,22 +96,16 @@ default_gen_tag = "gen1"
 # source   = "openai-codex"
 
 # ---------------------------------------------------------------------------
-# petri audit role overrides (replaces legacy ~/.geode/petri.toml)
+# Deprecated (auto-migrated, do not use for new configs)
 # ---------------------------------------------------------------------------
-# Per-role override of the model + credential source used during
-# `geode audit` runs. Each entry is optional — absent role → manifest
-# defaults from `plugins/petri_audit/petri.plugin.toml`. Migrate
+# The legacy `[self_improving_loop.petri.<role>]` tables and the flat
+# `target_model` / `judge_model` slots under `[self_improving_loop.autoresearch]`
+# are deprecated. The config loader still accepts them for back-compat: the
+# `[petri.<role>]` tables are auto-migrated to
+# `[self_improving_loop.autoresearch.<role>]` (a DeprecationWarning fires per
+# load, see `core/config/self_improving_loop.py:664`), and the flat
+# `target_model` / `judge_model` slots are no-op back-compat fields that the
+# runtime never consults (`core/config/self_improving_loop.py:317,322`).
+# New configs should use the ACTIVE per-role tables above. Migrate any
 # existing `~/.geode/petri.toml` entries via
 # `geode config migrate-petri-toml --yes`.
-
-[self_improving_loop.petri.auditor]
-model  = "claude-sonnet-4-6"
-source = "claude-cli"
-
-[self_improving_loop.petri.target]
-model  = "geode/gpt-5.5"
-source = "openai-codex"
-
-[self_improving_loop.petri.judge]
-model  = "claude-opus-4-7"
-source = "claude-cli"
