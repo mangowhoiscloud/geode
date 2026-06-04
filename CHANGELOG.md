@@ -45,6 +45,41 @@ functional change.
 
 ---
 
+## [0.99.139] - 2026-06-04
+
+### Changed
+- **Seed-generation Pilot unified onto the campaign's authoritative audit→dim_means path.**
+  The seed-gen Pilot (`plugins/seed_generation/agents/pilot.py`) previously spawned a
+  `seed_pilot` LLM sub-agent that ran the `petri_audit` tool and *then reformatted the
+  scores into JSON in prose*. That reformat step was the failure point —
+  `geode audit-seeds generate -d <dim>` failed when the sub-agent returned PROSE (it got
+  tangled reconciling conflicting dim counts) so the orchestrator's `json.loads` raised a
+  JSONDecodeError and the whole pilot phase failed — and it used a baseline-normalization
+  convention divergent from the campaign's scale. The Pilot now calls
+  `plugins.petri_audit.runner.run_audit` directly per candidate (the SAME runner the
+  `petri_audit` tool / `geode audit` / `/audit` all funnel through) and reads each audit's
+  archived `.eval` with `core.audit.dim_extractor.extract_dim_aggregates` — the identical
+  converter and raw-Petri scale `core/self_improving/train.py` (the `broken_tool_use`
+  campaign) uses. No LLM sits in the dim_means loop, so a rambling pilot can no longer crash
+  or zero-fill the run, and seed-gen difficulty scores + campaign fitness scores now share
+  ONE scale. Each per-candidate audit acquires the host's `core.llm.audit_lane`
+  (`max_concurrent=1`) around the `inspect eval` subprocess — the same lane the campaign uses
+  — so the fan-out runs one audit at a time rather than bursting the OAuth soft-limit, and a
+  failed audit (no `.eval`, aborted, or a non-zero inspect_ai exit — matching the campaign's
+  `returncode != 0` failure semantics) drops that candidate gracefully instead of raising or
+  merging partial scores.
+
+### Removed
+- **Dead `seed_pilot` LLM sub-agent surface exposed by the Pilot unification.** Removed the
+  `seed_pilot` agent prompt (`plugins/seed_generation/agents/pilot.md`), the `seed_pilot`
+  toolkit (`core/tools/toolkits.toml`), `PILOT_SCHEMA` (`plugins/seed_generation/json_schemas.py`)
+  + `PILOT_HANDOFF` (`plugins/seed_generation/handoff_schemas.py`), and the now-orphaned
+  `_warn_if_pilot_toolkit_unresolvable` helper. The conflicting "Petri 24 dims" comment that
+  confused the LLM is gone with `PILOT_SCHEMA`; the surviving dim catalog references derive
+  from the single `train.py` taxonomy (18 fitness dims; the `subset` set Petri measures = 22).
+  The generic `force_include` tool-policy guard (`core/agent/loop/_tool_factory.py`) stays —
+  it still protects every other toolkit-granted sub-agent.
+
 ## [0.99.138] - 2026-06-04
 
 ### Changed

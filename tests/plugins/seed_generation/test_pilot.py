@@ -1,380 +1,334 @@
-"""Tests for ``plugins.seed_generation.agents.pilot``.
+"""Tests for ``plugins.seed_generation.agents.pilot`` (direct-audit Pilot).
 
-P-checklist application (cycle-skill SKILL.md):
+PR-PILOT-UNIFY-DIM-EXTRACT (2026-06-04) — the Pilot no longer spawns an LLM
+sub-agent that reformats audit scores into JSON. It calls
+``plugins.petri_audit.runner.run_audit`` directly per candidate and reads the
+archived ``.eval`` with ``core.audit.dim_extractor.extract_dim_aggregates`` —
+the SAME authoritative converter + raw-Petri scale the campaign
+(``core/self_improving/train.py``) uses.
 
-- **P1 Stub Fidelity Audit** — ``_ReverseOrderManager`` returns results
-  in reverse submission order to simulate variable LLM latency. Proves
-  candidate-to-pilot mapping is by task_id, not position.
-- **P7 Caller-Callee Contract Pair Read** — ``_REQUIRED_PILOT_FIELDS``
-  + dim-dict + status-whitelist validation tested.
+These tests pin the unification invariants:
+
+- a real ``.eval`` → correct ``dim_means`` straight from
+  ``extract_dim_aggregates`` (no LLM in the loop, no zero-fill, no raise);
+- a failed audit (no ``.eval`` / aborted) → candidate dropped gracefully;
+- scale-parity: the pilot's ``dim_means`` for a candidate IS exactly what
+  ``extract_dim_aggregates`` returns on the same ``.eval`` (proves seed-gen
+  and campaign share one scale).
+
+``run_audit`` + ``extract_dim_aggregates`` are monkeypatched (the real ones
+spawn an ``inspect eval`` subprocess + need the ``[audit]`` extra). The Pilot
+imports them lazily inside ``_run_one_audit``, so the patches target the
+source modules.
 """
 
 from __future__ import annotations
 
 import asyncio
-import json
+from pathlib import Path
 from typing import Any
 
-from core.agent.sub_agent import SubResult, SubTask
+import plugins.petri_audit.runner as petri_runner
+import pytest
+from core.audit import dim_extractor
 from plugins.seed_generation.agents.pilot import Pilot
 from plugins.seed_generation.orchestrator import PipelineState
 
 
-def _good_pilot(candidate_id: str = "c-1") -> dict[str, Any]:
-    return {
-        "candidate_id": candidate_id,
-        "dim_means": {"dim_01": 0.71, "dim_02": 0.55, "dim_03": 0.42},
-        "dim_stderr": {"dim_01": 0.12, "dim_02": 0.18, "dim_03": 0.09},
-        "status": "ok",
-    }
-
-
-class _StubManager:
-    """Return one canned SubResult per task, in submission order."""
+class _FakeReport:
+    """Minimal stand-in for ``plugins.petri_audit.runner.AuditReport``."""
 
     def __init__(
         self,
         *,
-        pilot_outputs: dict[str, dict[str, Any]] | None = None,
-        force_failures: int = 0,
-        force_unparseable: bool = False,
+        archived_raw: str | None,
+        aborted: bool = False,
+        notes: list[str] | None = None,
+        returncode: int | None = 0,
+        stderr: str = "",
     ) -> None:
-        self.received_tasks: list[SubTask] = []
-        self.received_announce: bool | None = None
-        self._pilots = pilot_outputs or {}
-        self._force_failures = force_failures
-        self._force_unparseable = force_unparseable
-
-    async def adelegate(self, tasks, *, announce: bool = True) -> list:
-        """Async sibling for Phase-C tests."""
-        return self.delegate(tasks, announce=announce)
-
-    def delegate(self, tasks: list[SubTask], *, announce: bool = True) -> list[SubResult]:
-        self.received_tasks = list(tasks)
-        self.received_announce = announce
-        results: list[SubResult] = []
-        for i, t in enumerate(tasks):
-            candidate_id = t.args["candidate_id"]
-            failed = i < self._force_failures
-            if failed:
-                results.append(
-                    SubResult(
-                        task_id=t.task_id,
-                        description=t.description,
-                        success=False,
-                        error="forced",
-                        duration_ms=10.0,
-                    )
-                )
-                continue
-            if self._force_unparseable:
-                output: Any = {"text": "not-valid-json"}
-            else:
-                pilot = self._pilots.get(candidate_id, _good_pilot(candidate_id))
-                output = dict(pilot)
-            results.append(
-                SubResult(
-                    task_id=t.task_id,
-                    description=t.description,
-                    success=True,
-                    output=output,
-                    duration_ms=42.0,
-                )
-            )
-        return results
+        self.archived_raw = archived_raw
+        self.aborted = aborted
+        self.notes = notes or []
+        self.returncode = returncode
+        self.stderr = stderr
 
 
-class _ReverseOrderManager(_StubManager):
-    """Returns SubResults in REVERSE submission order (worst-case latency)."""
+def _patch_audit(
+    monkeypatch: pytest.MonkeyPatch,
+    *,
+    report_by_path: dict[str, _FakeReport] | None = None,
+    default_report: _FakeReport | None = None,
+    aggregates_by_archive: dict[str, dict[str, Any]] | None = None,
+    record_calls: list[dict[str, Any]] | None = None,
+) -> None:
+    """Wire fake ``run_audit`` + ``extract_dim_aggregates`` into the Pilot.
 
-    async def adelegate(self, tasks, *, announce: bool = True) -> list:
-        """Async sibling for Phase-C tests."""
-        return self.delegate(tasks, announce=announce)
+    ``report_by_path`` keys on the candidate's ``seed_select`` path; missing
+    paths fall back to ``default_report``. ``aggregates_by_archive`` keys on
+    the report's ``archived_raw`` path.
+    """
+    reports = report_by_path or {}
+    aggregates = aggregates_by_archive or {}
 
-    def delegate(self, tasks: list[SubTask], *, announce: bool = True) -> list[SubResult]:
-        results = super().delegate(tasks, announce=announce)
-        return list(reversed(results))
+    def fake_run_audit(**kwargs: Any) -> _FakeReport:
+        if record_calls is not None:
+            record_calls.append(dict(kwargs))
+        seed_select = str(kwargs.get("seed_select"))
+        report = reports.get(seed_select, default_report)
+        assert report is not None, f"no fake report for {seed_select!r}"
+        return report
+
+    def fake_extract(eval_path: Any) -> dict[str, Any]:
+        # The Pilot calls ``extract_dim_aggregates(Path(archive))``; match on
+        # the same ``str(Path(...))`` normalisation so the fake's keys line up
+        # whether the test passes a raw string or a Path-normalised one.
+        key = str(Path(str(eval_path)))
+        for archive, agg in aggregates.items():
+            if str(Path(archive)) == key:
+                return agg
+        return {"dim_means": {}, "dim_stderr": {}}
+
+    monkeypatch.setattr(petri_runner, "run_audit", fake_run_audit)
+    monkeypatch.setattr(dim_extractor, "extract_dim_aggregates", fake_extract)
 
 
 def _make_state(n: int = 3) -> PipelineState:
-    return PipelineState(
+    state = PipelineState(
         run_id="t-pilot",
         target_dim="broken_tool_use",
         gen_tag="gen2",
         candidates_requested=n,
     )
-
-
-def _seed_candidates(state: PipelineState, n: int) -> None:
     state.candidates = [
         {
             "id": f"gen2-{i:03d}-cand",
-            "path": f"fake-run/candidates/gen2-{i:03d}-cand.md",
+            "path": f"/fake-run/candidates/gen2-{i:03d}-cand.md",
             "target_dim": "broken_tool_use",
-            "gen_tag": "gen2",
-            "task_id": f"gen-gen2-{i:03d}-cand",
-            "duration_ms": 1000.0,
         }
         for i in range(n)
     ]
-
-
-def test_pilot_builds_one_task_per_candidate() -> None:
-    state = _make_state()
-    _seed_candidates(state, 4)
-    manager = _StubManager()
-    asyncio.run(Pilot(manager=manager).aexecute(state))  # type: ignore[arg-type]
-    assert len(manager.received_tasks) == 4
-    for task in manager.received_tasks:
-        assert task.agent == "seed_pilot"
-        assert task.task_type == "seed-pilot"
-        assert "candidate_id" in task.args
-        assert "candidate_path" in task.args
-
-
-def test_pilot_returns_scores_keyed_by_candidate_id() -> None:
-    state = _make_state()
-    _seed_candidates(state, 3)
-    manager = _StubManager()
-    result = asyncio.run(Pilot(manager=manager).aexecute(state))  # type: ignore[arg-type]
-    assert result.success
-    pilot_scores = result.output["pilot_scores"]
-    assert isinstance(pilot_scores, dict)
-    assert len(pilot_scores) == 3
-    for candidate_id, pilot in pilot_scores.items():
-        assert pilot["candidate_id"] == candidate_id
-        assert "dim_means" in pilot
-        assert "dim_stderr" in pilot
-        assert pilot["status"] == "ok"
-
-
-def test_pilot_pairs_by_task_id_under_reverse_order() -> None:
-    """P1 — reverse-order completion must still pair correctly."""
-    state = _make_state()
-    _seed_candidates(state, 5)
-    manager = _ReverseOrderManager()
-    result = asyncio.run(Pilot(manager=manager).aexecute(state))  # type: ignore[arg-type]
-    assert result.success
-    pilot_scores = result.output["pilot_scores"]
-    for candidate in state.candidates:
-        cid = candidate["id"]
-        assert cid in pilot_scores
-        assert pilot_scores[cid]["candidate_id"] == cid
-
-
-def test_pilot_drops_failed_sub_agents() -> None:
-    state = _make_state()
-    _seed_candidates(state, 5)
-    manager = _StubManager(force_failures=2)
-    result = asyncio.run(Pilot(manager=manager).aexecute(state))  # type: ignore[arg-type]
-    assert result.success
-    assert len(result.output["pilot_scores"]) == 3
-
-
-def test_pilot_drops_unparseable_responses() -> None:
-    """P7 — non-JSON output must be dropped, not silently merged."""
-    state = _make_state()
-    _seed_candidates(state, 3)
-    manager = _StubManager(force_unparseable=True)
-    result = asyncio.run(Pilot(manager=manager).aexecute(state))  # type: ignore[arg-type]
-    assert not result.success
-    assert result.error_category == "pilot_failed"
-
-
-def test_pilot_drops_malformed_partial_output() -> None:
-    """P7 — pilot missing required fields must be dropped."""
-    state = _make_state()
-    _seed_candidates(state, 1)
-    partial = {"candidate_id": "gen2-000-cand", "status": "ok"}
-    manager = _StubManager(pilot_outputs={"gen2-000-cand": partial})
-    result = asyncio.run(Pilot(manager=manager).aexecute(state))  # type: ignore[arg-type]
-    assert not result.success
-    assert result.error_category == "pilot_failed"
-
-
-def test_pilot_drops_non_dict_dim_means() -> None:
-    """P7 — dim_means/dim_stderr must be dicts."""
-    state = _make_state()
-    _seed_candidates(state, 1)
-    bad = {
-        "candidate_id": "gen2-000-cand",
-        "dim_means": [0.5, 0.6],  # wrong type
-        "dim_stderr": {"dim_01": 0.1},
-        "status": "ok",
-    }
-    manager = _StubManager(pilot_outputs={"gen2-000-cand": bad})
-    result = asyncio.run(Pilot(manager=manager).aexecute(state))  # type: ignore[arg-type]
-    assert not result.success
-    assert result.error_category == "pilot_failed"
-
-
-def test_pilot_drops_invalid_status() -> None:
-    """P7 — status must be one of the whitelisted values."""
-    state = _make_state()
-    _seed_candidates(state, 1)
-    bad_status = {
-        "candidate_id": "gen2-000-cand",
-        "dim_means": {"dim_01": 0.7},
-        "dim_stderr": {"dim_01": 0.1},
-        "status": "broken",
-    }
-    manager = _StubManager(pilot_outputs={"gen2-000-cand": bad_status})
-    result = asyncio.run(Pilot(manager=manager).aexecute(state))  # type: ignore[arg-type]
-    assert not result.success
-    assert result.error_category == "pilot_failed"
-
-
-def test_pilot_accepts_timeout_status() -> None:
-    """timeout and low_engagement are valid pilot statuses."""
-    state = _make_state()
-    _seed_candidates(state, 2)
-    pilots = {
-        "gen2-000-cand": {
-            "candidate_id": "gen2-000-cand",
-            "dim_means": {"dim_01": 0.0},
-            "dim_stderr": {"dim_01": 0.0},
-            "status": "timeout",
-        },
-        "gen2-001-cand": {
-            "candidate_id": "gen2-001-cand",
-            "dim_means": {"dim_01": 0.1},
-            "dim_stderr": {"dim_01": 0.02},
-            "status": "low_engagement",
-        },
-    }
-    manager = _StubManager(pilot_outputs=pilots)
-    result = asyncio.run(Pilot(manager=manager).aexecute(state))  # type: ignore[arg-type]
-    assert result.success
-    scores = result.output["pilot_scores"]
-    assert scores["gen2-000-cand"]["status"] == "timeout"
-    assert scores["gen2-001-cand"]["status"] == "low_engagement"
-
-
-def test_pilot_drops_all_zero_dim_means_on_ok_status() -> None:
-    """PR-PILOT-PETRI-AUDIT-WIRING — reject the silent zero-fill.
-
-    When the pilot worker can't run ``petri_audit`` (tool stripped from its
-    surface / inspect_ai missing) the LLM tends to fabricate an all-zero
-    ``dim_means`` while still claiming ``status="ok"``. That previously merged
-    a measurement of nothing into the Ranker's difficulty-selection input.
-    The guard must drop it loudly as ``pilot_failed`` rather than accept the
-    zero score.
-    """
-    state = _make_state()
-    _seed_candidates(state, 1)
-    zero_fill = {
-        "candidate_id": "gen2-000-cand",
-        "dim_means": {"broken_tool_use": 0.0, "stuck_in_loops": 0.0},
-        "dim_stderr": {"broken_tool_use": 0.0, "stuck_in_loops": 0.0},
-        "status": "ok",
-    }
-    manager = _StubManager(pilot_outputs={"gen2-000-cand": zero_fill})
-    result = asyncio.run(Pilot(manager=manager).aexecute(state))  # type: ignore[arg-type]
-    assert not result.success
-    assert result.error_category == "pilot_failed"
-
-
-def test_pilot_timeout_status_may_zero_fill() -> None:
-    """A genuine ``timeout`` legitimately zero-fills — the guard must NOT fire.
-
-    pilot.md status semantics: ``timeout`` aborts and returns zero-filled
-    dims. Only ``ok`` / ``low_engagement`` assert the audit ran, so only those
-    are subject to the all-zero rejection.
-    """
-    state = _make_state()
-    _seed_candidates(state, 1)
-    timeout_zero = {
-        "candidate_id": "gen2-000-cand",
-        "dim_means": {"broken_tool_use": 0.0},
-        "dim_stderr": {"broken_tool_use": 0.0},
-        "status": "timeout",
-    }
-    manager = _StubManager(pilot_outputs={"gen2-000-cand": timeout_zero})
-    result = asyncio.run(Pilot(manager=manager).aexecute(state))  # type: ignore[arg-type]
-    assert result.success
-    assert result.output["pilot_scores"]["gen2-000-cand"]["status"] == "timeout"
-
-
-def test_pilot_accepts_text_json_fallback() -> None:
-    """Sub-agent returning JSON string in output['text'] is parsed."""
-    state = _make_state()
-    _seed_candidates(state, 1)
-    pilot_text = json.dumps(_good_pilot("gen2-000-cand"))
-
-    class _TextJsonManager:
-        async def adelegate(self, tasks, *, announce: bool = True) -> list:
-            """Async sibling for Phase-C tests."""
-            return self.delegate(tasks, announce=announce)
-
-        def delegate(self, tasks: list[SubTask], *, announce: bool = True) -> list[SubResult]:
-            return [
-                SubResult(
-                    task_id=tasks[0].task_id,
-                    description=tasks[0].description,
-                    success=True,
-                    output={"text": pilot_text},
-                    duration_ms=10.0,
-                )
-            ]
-
-    result = asyncio.run(Pilot(manager=_TextJsonManager()).aexecute(state))  # type: ignore[arg-type]
-    assert result.success
-    assert "gen2-000-cand" in result.output["pilot_scores"]
+    return state
 
 
 def test_pilot_validates_empty_candidates() -> None:
-    state = _make_state()
-    manager = _StubManager()
-    result = asyncio.run(Pilot(manager=manager).aexecute(state))  # type: ignore[arg-type]
+    state = PipelineState(run_id="t", target_dim="broken_tool_use", gen_tag="g")
+    result = asyncio.run(Pilot().aexecute(state))
     assert not result.success
     assert result.error_category == "validation"
 
 
-def test_pilot_announce_false() -> None:
-    state = _make_state()
-    _seed_candidates(state, 2)
-    manager = _StubManager()
-    asyncio.run(Pilot(manager=manager).aexecute(state))  # type: ignore[arg-type]
-    assert manager.received_announce is False
-
-
-def test_pilot_pins_candidate_id_from_task() -> None:
-    """Even if LLM echoes a wrong candidate_id, the task's id wins."""
-    state = _make_state()
-    _seed_candidates(state, 1)
-    wrong_id_pilot = _good_pilot("WRONG-id-from-llm")
-    manager = _StubManager(pilot_outputs={"gen2-000-cand": wrong_id_pilot})
-    result = asyncio.run(Pilot(manager=manager).aexecute(state))  # type: ignore[arg-type]
+def test_pilot_dim_means_come_from_extract_dim_aggregates(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A real ``.eval`` → dim_means straight from the canonical extractor."""
+    state = _make_state(1)
+    path = state.candidates[0]["path"]
+    archive = "archive://run-000.eval"
+    real_means = {"broken_tool_use": 3.4, "input_hallucination": 2.1, "overrefusal": 1.0}
+    _patch_audit(
+        monkeypatch,
+        report_by_path={path: _FakeReport(archived_raw=archive)},
+        aggregates_by_archive={
+            archive: {
+                "dim_means": real_means,
+                "dim_stderr": {"broken_tool_use": 0.2, "input_hallucination": 0.18},
+            }
+        },
+    )
+    result = asyncio.run(Pilot().aexecute(state))
     assert result.success
-    pilot_scores = result.output["pilot_scores"]
-    assert "gen2-000-cand" in pilot_scores
-    assert pilot_scores["gen2-000-cand"]["candidate_id"] == "gen2-000-cand"
-    assert "WRONG-id-from-llm" not in pilot_scores
+    pilot = result.output["pilot_scores"]["gen2-000-cand"]
+    # Exactly the extractor's output — no LLM reformat, no rescaling.
+    assert pilot["dim_means"] == real_means
+    assert pilot["status"] == "ok"
+    assert pilot["candidate_id"] == "gen2-000-cand"
 
 
-def test_pilot_drops_non_dict_outputs() -> None:
-    """_parse_pilot returns None for list/None/scalar output shapes."""
-    state = _make_state()
-    _seed_candidates(state, 3)
+def test_pilot_scale_parity_with_extractor(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Scale-parity: pilot dim_means == extract_dim_aggregates on the SAME .eval.
 
-    class _NonDictManager:
-        async def adelegate(self, tasks, *, announce: bool = True) -> list:
-            """Async sibling for Phase-C tests."""
-            return self.delegate(tasks, announce=announce)
+    This is the unification proof — the seed-gen pilot reports the identical
+    numbers the campaign's ``run_audit`` → ``extract_dim_aggregates`` would.
+    """
+    state = _make_state(1)
+    path = state.candidates[0]["path"]
+    archive = "archive://parity.eval"
+    extractor_output = {
+        "dim_means": {"broken_tool_use": 5.0, "stuck_in_loops": 2.5, "overrefusal": 1.0},
+        "dim_stderr": {"broken_tool_use": 0.3},
+        "sample_count": {"broken_tool_use": 3},
+    }
+    _patch_audit(
+        monkeypatch,
+        report_by_path={path: _FakeReport(archived_raw=archive)},
+        aggregates_by_archive={archive: extractor_output},
+    )
+    result = asyncio.run(Pilot().aexecute(state))
+    pilot = result.output["pilot_scores"]["gen2-000-cand"]
+    # Byte-for-byte the extractor's dim_means (the campaign's scale).
+    assert pilot["dim_means"] == extractor_output["dim_means"]
+    assert pilot["dim_stderr"] == extractor_output["dim_stderr"]
 
-        def delegate(self, tasks: list[SubTask], *, announce: bool = True) -> list[SubResult]:
-            shapes: list[Any] = [None, ["not", "a", "dict"], 42]
-            return [
-                SubResult(
-                    task_id=t.task_id,
-                    description=t.description,
-                    success=True,
-                    output=shape,
-                    duration_ms=10.0,
-                )
-                for t, shape in zip(tasks, shapes, strict=True)
-            ]
 
-    result = asyncio.run(Pilot(manager=_NonDictManager()).aexecute(state))  # type: ignore[arg-type]
+def test_pilot_drops_candidate_when_audit_aborted(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Audit aborted (no .eval — e.g. [audit] extra missing) → drop gracefully."""
+    state = _make_state(1)
+    path = state.candidates[0]["path"]
+    _patch_audit(
+        monkeypatch,
+        report_by_path={
+            path: _FakeReport(archived_raw=None, aborted=True, notes=["inspect not found"])
+        },
+    )
+    result = asyncio.run(Pilot().aexecute(state))
+    assert not result.success
+    assert result.error_category == "pilot_failed"
+    assert "inspect not found" in (result.error_message or "")
+
+
+def test_pilot_drops_candidate_when_no_archive(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Audit ran but produced no .eval archive → drop gracefully (no raise)."""
+    state = _make_state(1)
+    path = state.candidates[0]["path"]
+    _patch_audit(
+        monkeypatch,
+        report_by_path={path: _FakeReport(archived_raw=None, aborted=False)},
+    )
+    result = asyncio.run(Pilot().aexecute(state))
+    assert not result.success
+    assert result.error_category == "pilot_failed"
+
+
+def test_pilot_drops_candidate_on_nonzero_returncode(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A non-zero inspect_ai exit is a failure even if a partial .eval archived.
+
+    Matches the campaign's semantics (``train.py:run_audit`` raises on
+    returncode != 0; ``cli_audit`` suppresses emission). Without this check a
+    partial / failed audit could merge as ``ok``.
+    """
+    state = _make_state(1)
+    path = state.candidates[0]["path"]
+    archive = "archive://partial.eval"
+    _patch_audit(
+        monkeypatch,
+        report_by_path={
+            path: _FakeReport(archived_raw=archive, returncode=1, stderr="boom\ntraceback")
+        },
+        # Even though the extractor WOULD return scores, the returncode gate
+        # fires first → the candidate is dropped before extraction matters.
+        aggregates_by_archive={archive: {"dim_means": {"broken_tool_use": 3.0}, "dim_stderr": {}}},
+    )
+    result = asyncio.run(Pilot().aexecute(state))
+    assert not result.success
+    assert result.error_category == "pilot_failed"
+    assert "exit=1" in (result.error_message or "")
+
+
+def test_pilot_drops_candidate_when_extractor_empty(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A .eval that yields zero scored samples → empty dim_means → drop.
+
+    No zero-fill: an empty measurement must not be merged into the Ranker's
+    difficulty-selection input.
+    """
+    state = _make_state(1)
+    path = state.candidates[0]["path"]
+    archive = "archive://empty.eval"
+    _patch_audit(
+        monkeypatch,
+        report_by_path={path: _FakeReport(archived_raw=archive)},
+        aggregates_by_archive={archive: {"dim_means": {}, "dim_stderr": {}}},
+    )
+    result = asyncio.run(Pilot().aexecute(state))
+    assert not result.success
+    assert result.error_category == "pilot_failed"
+
+
+def test_pilot_low_engagement_when_few_dims(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Audit ran but < _MIN_ENGAGED_DIMS non-zero → low_engagement, still merged."""
+    state = _make_state(1)
+    path = state.candidates[0]["path"]
+    archive = "archive://sparse.eval"
+    _patch_audit(
+        monkeypatch,
+        report_by_path={path: _FakeReport(archived_raw=archive)},
+        aggregates_by_archive={
+            archive: {
+                # only ONE non-zero dim (the rest scored 0) → below the bar.
+                "dim_means": {"broken_tool_use": 4.0, "overrefusal": 0.0, "stuck_in_loops": 0.0},
+                "dim_stderr": {"broken_tool_use": 0.1},
+            }
+        },
+    )
+    result = asyncio.run(Pilot().aexecute(state))
+    assert result.success
+    pilot = result.output["pilot_scores"]["gen2-000-cand"]
+    assert pilot["status"] == "low_engagement"
+    # low_engagement still carries the real measurement (Ranker deprioritises).
+    assert pilot["dim_means"]["broken_tool_use"] == 4.0
+
+
+def test_pilot_partial_failure_keeps_good_candidates(monkeypatch: pytest.MonkeyPatch) -> None:
+    """One candidate's audit fails; the others' real scores still come through."""
+    state = _make_state(3)
+    paths = [c["path"] for c in state.candidates]
+    _patch_audit(
+        monkeypatch,
+        report_by_path={
+            paths[0]: _FakeReport(archived_raw="archive://a.eval"),
+            paths[1]: _FakeReport(archived_raw=None, aborted=True, notes=["boom"]),
+            paths[2]: _FakeReport(archived_raw="archive://c.eval"),
+        },
+        aggregates_by_archive={
+            "archive://a.eval": {
+                "dim_means": {"broken_tool_use": 2.0, "overrefusal": 1.0, "stuck_in_loops": 1.5},
+                "dim_stderr": {},
+            },
+            "archive://c.eval": {
+                "dim_means": {"broken_tool_use": 3.0, "overrefusal": 2.0, "stuck_in_loops": 1.0},
+                "dim_stderr": {},
+            },
+        },
+    )
+    result = asyncio.run(Pilot().aexecute(state))
+    assert result.success
+    scores = result.output["pilot_scores"]
+    assert set(scores) == {"gen2-000-cand", "gen2-002-cand"}
+    assert "gen2-001-cand" not in scores
+
+
+def test_pilot_passes_campaign_target_and_dim_set(monkeypatch: pytest.MonkeyPatch) -> None:
+    """run_audit is called with the campaign's gpt-5.5 target + 'subset' dims."""
+    state = _make_state(1)
+    path = state.candidates[0]["path"]
+    calls: list[dict[str, Any]] = []
+    _patch_audit(
+        monkeypatch,
+        report_by_path={path: _FakeReport(archived_raw="archive://x.eval")},
+        aggregates_by_archive={
+            "archive://x.eval": {
+                "dim_means": {"broken_tool_use": 2.0, "overrefusal": 1.0, "stuck_in_loops": 1.0},
+                "dim_stderr": {},
+            }
+        },
+        record_calls=calls,
+    )
+    asyncio.run(Pilot().aexecute(state))
+    assert len(calls) == 1
+    call = calls[0]
+    assert call["target"] == "gpt-5.5"
+    assert call["dim_set"] == "subset"
+    assert call["dry_run"] is False
+    assert call["seed_select"] == path
+    # multisample so rank_by_difficulty uses a central estimate, not one draw.
+    assert call["seeds"] >= 2
+
+
+def test_pilot_drops_candidate_without_path(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A candidate dict missing ``path`` is dropped, not crashed."""
+    state = _make_state(1)
+    state.candidates[0].pop("path")
+    _patch_audit(monkeypatch, default_report=_FakeReport(archived_raw="archive://never.eval"))
+    result = asyncio.run(Pilot().aexecute(state))
     assert not result.success
     assert result.error_category == "pilot_failed"

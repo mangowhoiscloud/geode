@@ -4,16 +4,18 @@ PR-PILOT-PETRI-AUDIT-WIRING (2026-06-01).
 
 Root cause: ``get_agentic_tools`` applies the global ADR-012 ``tool_policy``
 SoT (``tool-policy.json``) — a *self-improving-loop mutation surface* — to
-the model-visible tool list. The seed_pilot sub-agent resolves its toolkit
-(``seed_pilot`` → ``petri_audit`` + ``read_document``) into
-``AgenticLoop.allowed_tool_names``. The toolkit filter ran *after*
+the model-visible tool list. A named sub-agent resolves its toolkit grant
+into ``AgenticLoop.allowed_tool_names``. The toolkit filter ran *after*
 ``get_agentic_tools``, so a ``tool-policy.json`` whose ``allowed_tools``
-whitelist omitted ``petri_audit`` stripped it BEFORE the toolkit filter could
-honour it. The pilot worker then advertised only ``read_document`` to the
-model, the model reported "petri_audit isn't in my available tool set",
-skipped the audit, and emitted all-zero ``dim_means`` — silently neutering
-the difficulty-selection lever. The pilot is the agent that *measures* the
-loop, so the loop's own mutation disabled its own measurement.
+whitelist omitted a granted tool stripped it BEFORE the toolkit filter could
+honour it. The worker then advertised a narrower toolset to the model, the
+model reported the tool "isn't in my available tool set", and skipped the
+work — silently. (The originating case was the seed_pilot worker losing
+``petri_audit``; PR-PILOT-UNIFY-DIM-EXTRACT 2026-06-04 later removed that
+worker — the Pilot now audits directly — but the guard still protects every
+other toolkit-granted sub-agent, so this pin stays. ``petri_audit`` remains
+a real tool: the REPL's ``petri_audit`` tool still funnels through
+``get_agentic_tools``.)
 
 Fix: ``get_agentic_tools(..., force_include=...)`` keeps toolkit-granted
 tools authoritative over the global tool_policy (policy may reorder but not
@@ -70,7 +72,9 @@ def hostile_policy(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Iterator[
     yield policy_path
 
 
-_PILOT_TOOLKIT = {"petri_audit", "read_document"}
+# A representative toolkit grant: one expensive tool the hostile policy
+# strips (``petri_audit``) + one already in the whitelist (``read_document``).
+_GRANTED_TOOLKIT = {"petri_audit", "read_document"}
 
 
 def test_hostile_policy_strips_petri_audit_without_force_include(hostile_policy: Path) -> None:
@@ -89,7 +93,7 @@ def test_force_include_keeps_toolkit_grant_against_hostile_policy(
     hostile_policy: Path,
 ) -> None:
     """The fix: a toolkit-granted tool survives the hostile policy."""
-    names = {t.get("name") for t in get_agentic_tools(None, force_include=_PILOT_TOOLKIT)}
+    names = {t.get("name") for t in get_agentic_tools(None, force_include=_GRANTED_TOOLKIT)}
     assert "petri_audit" in names, (
         "petri_audit was stripped by the global tool_policy despite being a "
         "force_include (toolkit) grant — the regression is back"
@@ -100,25 +104,25 @@ def test_force_include_keeps_toolkit_grant_against_hostile_policy(
 
 def test_force_include_does_not_resurrect_non_toolkit_tools(hostile_policy: Path) -> None:
     """force_include only protects the named tools — others stay policy-governed."""
-    names = {t.get("name") for t in get_agentic_tools(None, force_include=_PILOT_TOOLKIT)}
+    names = {t.get("name") for t in get_agentic_tools(None, force_include=_GRANTED_TOOLKIT)}
     # memory_save is neither in the whitelist nor force_include → stays stripped.
     assert "memory_save" not in names
 
 
-def test_pilot_worker_effective_toolset_contains_petri_audit(hostile_policy: Path) -> None:
-    """End-to-end: the seed_pilot worker's model-visible toolset has petri_audit.
+def test_granted_worker_effective_toolset_keeps_granted_tool(hostile_policy: Path) -> None:
+    """End-to-end: a toolkit-granted worker's model-visible toolset keeps its tool.
 
     Reproduces the worker's two-stage resolution:
-      1. ``filter_handlers`` resolves the ``seed_pilot`` toolkit →
+      1. ``filter_handlers`` resolves the granted toolkit →
          ``allowed_tool_names`` (executor side).
       2. ``get_agentic_tools(force_include=allowed_tool_names)`` then the
          ``allowed_tool_names`` membership filter (model-advertising side).
-    Both ends must contain ``petri_audit`` for the pilot to actually audit.
+    Both ends must keep the granted tool for the worker to actually use it.
     """
     registry = ToolkitRegistry.from_dict(
         {
             "_default": {"tools": ["read_document"]},
-            "seed_pilot": {"tools": ["petri_audit", "read_document"]},
+            "granted_kit": {"tools": ["petri_audit", "read_document"]},
         }
     )
     handlers = {name: object() for name in ("petri_audit", "read_document", "write_file")}
@@ -126,7 +130,7 @@ def test_pilot_worker_effective_toolset_contains_petri_audit(hostile_policy: Pat
         handlers=handlers,
         denied_tools=["delegate_task"],
         agent_allowed_tools=[],
-        toolkit="seed_pilot",
+        toolkit="granted_kit",
         toolkit_registry=registry,
     )
     allowed_tool_names = set(filtered_handlers)
@@ -137,6 +141,6 @@ def test_pilot_worker_effective_toolset_contains_petri_audit(hostile_policy: Pat
     tools = get_agentic_tools(None, force_include=allowed_tool_names)
     advertised = {t.get("name") for t in tools if t.get("name") in allowed_tool_names}
     assert advertised == {"petri_audit", "read_document"}, (
-        f"pilot model-visible toolset {advertised} is missing petri_audit — "
-        "the pilot would skip the audit and emit all-zero dim_means"
+        f"granted worker model-visible toolset {advertised} is missing "
+        "petri_audit — the global tool_policy stripped a toolkit grant"
     )

@@ -92,10 +92,6 @@ description = "Proximity dedup — read-only; embedding API is invoked outside t
 includes = ["common_read"]
 tools = []
 
-[toolkits.seed_pilot]
-description = "Petri inner-loop pilot audit for one candidate."
-tools = ["petri_audit", "read_document"]
-
 [toolkits.seed_ranker]
 description = "Elo tournament voter — reads two candidates and casts a vote."
 tools = ["read_document"]

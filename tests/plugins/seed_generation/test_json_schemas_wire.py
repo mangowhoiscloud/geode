@@ -25,7 +25,6 @@ from plugins.seed_generation.json_schemas import (
     EVOLVE_SCHEMA,
     LITERATURE_REVIEW_SCHEMA,
     META_REVIEW_SCHEMA,
-    PILOT_SCHEMA,
     PROXIMITY_SCHEMA,
     SUPERVISOR_SCHEMA,
     VOTE_SCHEMA,
@@ -53,12 +52,6 @@ def test_critique_schema_required_matches_parser_required() -> None:
     # silently dead for the one field most likely to be dropped. Both
     # SoTs must now agree.
     assert set(CRITIQUE_SCHEMA["required"]) == set(_REQUIRED_CRITIQUE_FIELDS)
-
-
-def test_pilot_schema_required_matches_parser_required() -> None:
-    from plugins.seed_generation.agents.pilot import _REQUIRED_PILOT_FIELDS
-
-    assert set(PILOT_SCHEMA["required"]) == set(_REQUIRED_PILOT_FIELDS)
 
 
 def test_vote_schema_required_matches_parser_required() -> None:
@@ -148,17 +141,6 @@ def test_critic_build_tasks_carries_schema() -> None:
     assert tasks
     for t in tasks:
         assert t.response_schema is CRITIQUE_SCHEMA
-
-
-def test_pilot_build_tasks_carries_schema() -> None:
-    from plugins.seed_generation.agents.pilot import Pilot
-
-    state = _pipeline_state_with_candidate()
-    agent = Pilot(MagicMock())
-    tasks = agent._build_tasks(state)  # type: ignore[attr-defined]
-    assert tasks
-    for t in tasks:
-        assert t.response_schema is PILOT_SCHEMA
 
 
 def test_supervisor_build_task_carries_schema() -> None:
@@ -292,10 +274,11 @@ def test_subagent_manager_threads_schema_to_worker_request() -> None:
 #
 # The schemas listed in _STRICT_ROLES below were converted to
 # ``_strict_additive`` (additionalProperties:false + every property
-# in required). The remaining two (PILOT, META_REVIEW,
-# LITERATURE_REVIEW) cannot be strict because they use
-# typed-additional maps (Petri dim catalog / arxiv-id keyed
-# snapshots) the schema can't enumerate at compile time.
+# in required). The remaining two (META_REVIEW, LITERATURE_REVIEW)
+# cannot be strict because they use typed-additional maps (per-dim
+# coverage / arxiv-id keyed snapshots) the schema can't enumerate at
+# compile time. (The Pilot role lost its schema in
+# PR-PILOT-UNIFY-DIM-EXTRACT 2026-06-04 — it no longer spawns an LLM.)
 
 
 _STRICT_ROLES = {
@@ -307,7 +290,6 @@ _STRICT_ROLES = {
 }
 
 _NON_STRICT_ROLES = {
-    "PILOT_SCHEMA": PILOT_SCHEMA,
     "META_REVIEW_SCHEMA": META_REVIEW_SCHEMA,
     "LITERATURE_REVIEW_SCHEMA": LITERATURE_REVIEW_SCHEMA,
 }
@@ -419,12 +401,6 @@ _EXPECTED_TYPES: dict[str, dict[str, str | tuple[str, ...]]] = {
         "discrimination_estimate": "number",
         "rewrite_section": ("string", "null"),
     },
-    "PILOT": {
-        "candidate_id": "string",
-        "dim_means": "object",
-        "dim_stderr": "object",
-        "status": "string",
-    },
     "VOTE": {
         "match_id": "string",
         "winner": "string",
@@ -467,7 +443,6 @@ _EXPECTED_TYPES: dict[str, dict[str, str | tuple[str, ...]]] = {
 _SCHEMA_BY_ROLE: dict[str, dict] = {
     "PROXIMITY": PROXIMITY_SCHEMA,
     "CRITIQUE": CRITIQUE_SCHEMA,
-    "PILOT": PILOT_SCHEMA,
     "VOTE": VOTE_SCHEMA,
     "EVOLVE": EVOLVE_SCHEMA,
     "META_REVIEW": META_REVIEW_SCHEMA,
