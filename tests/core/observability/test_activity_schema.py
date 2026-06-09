@@ -4,11 +4,11 @@ Pins invariants from
 ``docs/plans/2026-05-24-hookevent-activity-schema.md`` §5.2.
 
 * I1: Tier 1 envelope (``ActivityRowBase``) + 11 group base classes.
-* I2: 32 lifecycle concrete classes have correct ``action`` /
+* I2: 21 lifecycle concrete classes have correct ``action`` /
   ``entity_type`` literals.
 * I3: ``TypedActivityRow`` discriminated union dispatches by ``action``.
 * I4: ``GenericActivityRow`` accepts any ``action`` (escape hatch).
-* I5: All 74 HookEvent values produce a row via ``map_hook_to_activity``
+* I5: All HookEvent values produce a row via ``map_hook_to_activity``
   (typed → concrete subclass; non-lifecycle → generic).
 """
 
@@ -24,7 +24,7 @@ from core.observability.activity import (
     LifecycleStartedDetails,
     LLMCallFailedRow,
     LLMCallRetriedRow,
-    PipelineStartedRow,
+    SessionStartedRow,
     SubAgentCompletedRow,
     SubAgentStartedRow,
     TypedActivityRow,
@@ -75,17 +75,17 @@ def test_i1_envelope_actor_type_literal_enforced() -> None:
 # ---------------------------------------------------------------------------
 
 
-def test_i2_pipeline_started_has_dotted_action() -> None:
-    row = PipelineStartedRow(
+def test_i2_session_started_has_dotted_action() -> None:
+    row = SessionStartedRow(
         ts=1.0,
         run_id="r1",
         actor_type="orchestrator",
-        actor_id="pipeline",
-        entity_id="gen1-X",
-        details=LifecycleStartedDetails(identifier="gen1-X"),
+        actor_id="session",
+        entity_id="sess-1",
+        details=LifecycleStartedDetails(identifier="sess-1"),
     )
-    assert row.action == "pipeline.started"
-    assert row.entity_type == "pipeline"
+    assert row.action == "session.started"
+    assert row.entity_type == "session"
 
 
 def test_i2_subagent_started_has_task_entity() -> None:
@@ -202,12 +202,12 @@ def test_i4_generic_accepts_arbitrary_action() -> None:
 # ---------------------------------------------------------------------------
 
 
-def test_i5_all_74_hookevents_produce_a_row() -> None:
+def test_i5_all_hookevents_produce_a_row() -> None:
     """No HookEvent should silently break the union channel. Every
     enum value either has a typed builder entry or falls through to
     ``GenericActivityRow`` — never raises."""
     all_events = list(HookEvent)
-    assert len(all_events) >= 74, f"expected at least 74 HookEvents, got {len(all_events)}"
+    assert len(all_events) >= 67, f"expected at least 67 HookEvents, got {len(all_events)}"
 
     typed_count = 0
     for event in all_events:
@@ -219,8 +219,9 @@ def test_i5_all_74_hookevents_produce_a_row() -> None:
                 f"{event.value} has a registry entry but mapped to GenericActivityRow"
             )
 
-    # 32 lifecycle events typed in S2 scope (A=9, B=13, C=9, D=1).
-    assert typed_count == 32, f"expected 32 typed lifecycle events, got {typed_count}"
+    # 21 lifecycle events typed (A=6, B=9, C=5, D=1) — PR-DEAD-PIPELINE
+    # removed the 11 pipeline/node/analysis rows.
+    assert typed_count == 21, f"expected 21 typed lifecycle events, got {typed_count}"
 
 
 def test_i5_registry_action_matches_concrete_action_literal() -> None:

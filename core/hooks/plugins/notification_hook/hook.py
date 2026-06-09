@@ -1,12 +1,9 @@
-"""Notification Hook Plugin — routes pipeline events to external messaging.
+"""Notification Hook Plugin — routes lifecycle events to external messaging.
 
 Registers hook handlers for key lifecycle events and sends notifications
 via the NotificationPort adapter (Slack, Discord, Telegram).
 
 Event → Notification mapping:
-  PIPELINE_END      → info     "Pipeline completed: {subject_id}"
-  PIPELINE_ERROR    → critical "Pipeline error: {subject_id} — {error}"
-  DRIFT_DETECTED    → warning  "Drift detected: {metric}"
   SUBAGENT_FAILED   → warning  "Sub-agent failed: {task_id}"
 """
 
@@ -21,31 +18,12 @@ log = logging.getLogger(__name__)
 
 # Event → severity mapping
 _SEVERITY_MAP: dict[HookEvent, str] = {
-    HookEvent.PIPELINE_ENDED: "info",
-    HookEvent.PIPELINE_ERROR: "critical",
-    HookEvent.DRIFT_DETECTED: "warning",
     HookEvent.SUBAGENT_FAILED: "warning",
 }
 
 
 def _format_message(event: HookEvent, data: dict[str, Any]) -> str:
     """Format a notification message from hook event data."""
-    subject_id = data.get("subject_id", "unknown")
-
-    if event == HookEvent.PIPELINE_ENDED:
-        score = data.get("final_score", data.get("score"))
-        if isinstance(score, int | float):
-            return f"Pipeline completed: {subject_id} ({score:.1f})"
-        return f"Pipeline completed: {subject_id}"
-
-    if event == HookEvent.PIPELINE_ERROR:
-        error = data.get("error", data.get("message", "unknown error"))
-        return f"Pipeline error: {subject_id} — {error}"
-
-    if event == HookEvent.DRIFT_DETECTED:
-        metric = data.get("metric", data.get("field", "unknown"))
-        return f"Drift detected: {metric}"
-
     if event == HookEvent.SUBAGENT_FAILED:
         task_id = data.get("task_id", "unknown")
         error = data.get("error", "")

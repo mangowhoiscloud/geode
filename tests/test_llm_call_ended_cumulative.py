@@ -57,12 +57,7 @@ class TestHookHandlerCumulativeAccumulation:
 
         from core.hooks import HookEvent
 
-        hooks, _, _, _ = build_hooks(
-            session_key="t",
-            run_id="r-1",
-            log_dir=tmp_path,
-            stuck_timeout_s=60.0,
-        )
+        hooks, _, _ = build_hooks(session_key="t", run_id="r-1", log_dir=tmp_path)
 
         hooks.trigger(
             HookEvent.LLM_CALL_ENDED,
@@ -95,12 +90,7 @@ class TestHookHandlerCumulativeAccumulation:
 
         from core.hooks import HookEvent
 
-        hooks, _, _, _ = build_hooks(
-            session_key="t",
-            run_id="r-1",
-            log_dir=tmp_path,
-            stuck_timeout_s=60.0,
-        )
+        hooks, _, _ = build_hooks(session_key="t", run_id="r-1", log_dir=tmp_path)
 
         for in_tok, out_tok, cost in [(100, 50, 0.005), (200, 100, 0.010), (300, 150, 0.015)]:
             hooks.trigger(
@@ -139,9 +129,7 @@ class TestZeroPayloadIgnored:
 
         from core.hooks import HookEvent
 
-        hooks, _, _, _ = build_hooks(
-            session_key="t", run_id="r-1", log_dir=tmp_path, stuck_timeout_s=60.0
-        )
+        hooks, _, _ = build_hooks(session_key="t", run_id="r-1", log_dir=tmp_path)
         # Legacy router/calls/* payload — no session_id, no usage.
         hooks.trigger(
             HookEvent.LLM_CALL_ENDED,
@@ -165,9 +153,7 @@ class TestZeroPayloadIgnored:
 
         from core.hooks import HookEvent
 
-        hooks, _, _, _ = build_hooks(
-            session_key="t", run_id="r-1", log_dir=tmp_path, stuck_timeout_s=60.0
-        )
+        hooks, _, _ = build_hooks(session_key="t", run_id="r-1", log_dir=tmp_path)
         hooks.trigger(
             HookEvent.LLM_CALL_ENDED,
             {
@@ -187,9 +173,7 @@ class TestMissingSessionIdIgnored:
 
         from core.hooks import HookEvent
 
-        hooks, _, _, _ = build_hooks(
-            session_key="t", run_id="r-1", log_dir=tmp_path, stuck_timeout_s=60.0
-        )
+        hooks, _, _ = build_hooks(session_key="t", run_id="r-1", log_dir=tmp_path)
         hooks.trigger(
             HookEvent.LLM_CALL_ENDED,
             {

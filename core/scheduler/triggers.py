@@ -19,7 +19,6 @@ from enum import Enum
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
-    from core.automation.snapshot import SnapshotManager
     from core.hooks import HookSystem
 
 log = logging.getLogger(__name__)
@@ -183,7 +182,6 @@ class TriggerManager:
         self,
         scheduler_interval_s: float = 60.0,
         hooks: HookSystem | None = None,
-        snapshot_manager: SnapshotManager | None = None,
     ) -> None:
         self._triggers: dict[str, TriggerConfig] = {}
         self._results: list[TriggerResult] = []
@@ -193,7 +191,6 @@ class TriggerManager:
         self._lock = threading.Lock()
         self._stats = _TriggerStats()
         self._hooks = hooks
-        self._snapshot_manager = snapshot_manager
 
     @property
     def stats(self) -> _TriggerStats:
@@ -309,20 +306,9 @@ class TriggerManager:
             f"auto_{int(time.time())}",
         )
 
-        # 1. Snapshot capture
         snapshot_id = ""
-        if self._snapshot_manager:
-            snap = self._snapshot_manager.capture(
-                session_id,
-                context={
-                    "trigger_type": trigger_type.value,
-                    "automation_id": automation_id or "",
-                    "payload_keys": list(payload.keys()),
-                },
-            )
-            snapshot_id = snap.snapshot_id
 
-        # 2. Resolve trigger config
+        # Resolve trigger config
         config: TriggerConfig | None = None
         if automation_id:
             config = self._triggers.get(automation_id)

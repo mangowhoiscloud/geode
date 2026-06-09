@@ -9,8 +9,6 @@ from core.memory.session import InMemorySessionStore
 from core.orchestration.hot_reload import ConfigWatcher
 from core.orchestration.lane_queue import LaneQueue
 from core.orchestration.run_log import RunLog
-from core.orchestration.stuck_detection import StuckDetector
-from core.orchestration.task_bridge import TaskGraphHookBridge
 from core.orchestration.task_system import TaskGraph
 from core.runtime import (
     GeodeRuntime,
@@ -52,14 +50,14 @@ class TestRuntimeHooksRunLog:
     def test_hooks_write_to_run_log(self, tmp_path: Path):
         runtime = GeodeRuntime.create("Project Atlas", log_dir=tmp_path)
 
-        # Trigger a pipeline event
+        # Trigger lifecycle events
         runtime.hooks.trigger(
-            HookEvent.NODE_ENTERED,
-            {"node": "router", "subject_id": "demo"},
+            HookEvent.TOOL_EXEC_STARTED,
+            {"node": "router", "tool_name": "web_search"},
         )
         runtime.hooks.trigger(
-            HookEvent.NODE_EXITED,
-            {"node": "router", "subject_id": "demo", "duration_ms": 42.0},
+            HookEvent.TOOL_EXEC_ENDED,
+            {"node": "router", "tool_name": "web_search", "duration_ms": 42.0},
         )
 
         # Verify our events exist in the run log
@@ -68,9 +66,9 @@ class TestRuntimeHooksRunLog:
         assert len(entries) >= 2
         node_events = [e for e in entries if e.node == "router"]
         assert len(node_events) == 2
-        exit_entry = next(e for e in node_events if e.event == "node_exit")
+        exit_entry = next(e for e in node_events if e.event == "tool_exec_end")
         assert exit_entry.duration_ms == 42.0
-        enter_entry = next(e for e in node_events if e.event == "node_enter")
+        enter_entry = next(e for e in node_events if e.event == "tool_exec_start")
         assert enter_entry.node == "router"
 
     def test_all_hook_events_logged(self, tmp_path: Path):
@@ -81,20 +79,20 @@ class TestRuntimeHooksRunLog:
             runtime.hooks.trigger(event, {"node": "test"})
 
         entries = runtime.run_log.read(limit=100)
-        # All direct events + cascading hooks (e.g. SNAPSHOT_CAPTURED from drift→auto-snapshot)
+        # All direct events + any cascading hook entries
         assert len(entries) >= len(HookEvent)
 
     def test_error_events_logged_with_error_status(self, tmp_path: Path):
         runtime = GeodeRuntime.create("Project Atlas", log_dir=tmp_path)
 
         runtime.hooks.trigger(
-            HookEvent.NODE_ERROR,
+            HookEvent.TOOL_EXEC_FAILED,
             {"node": "router", "error": "connection timeout"},
         )
 
-        # Find the node_error entry (cascading hooks may add others)
+        # Find the tool_exec_failed entry (cascading hooks may add others)
         entries = runtime.run_log.read(limit=10)
-        error_entries = [e for e in entries if e.event == "node_error"]
+        error_entries = [e for e in entries if e.event == "tool_exec_failed"]
         assert len(error_entries) >= 1
         assert error_entries[0].status == "error"
         assert error_entries[0].node == "router"
@@ -193,10 +191,10 @@ class TestDefaultBuilders:
         name, handler = _make_run_log_handler(run_log, "test_session", "run-001")
         assert name == "run_log_writer"
 
-        handler(HookEvent.PIPELINE_STARTED, {"node": "router"})
+        handler(HookEvent.SESSION_STARTED, {"node": "router"})
         entries = run_log.read(limit=1)
         assert len(entries) == 1
-        assert entries[0].event == "pipeline_start"
+        assert entries[0].event == "session_start"
 
     def test_default_lanes(self):
         queue = _build_default_lanes()
@@ -223,32 +221,11 @@ class TestRuntimeNewComponents:
         runtime = GeodeRuntime.create("Project Atlas", log_dir=tmp_path)
         assert isinstance(runtime.config_watcher, ConfigWatcher)
 
-    def test_stuck_detector_wired(self, tmp_path: Path):
-        runtime = GeodeRuntime.create("Project Atlas", log_dir=tmp_path)
-        assert isinstance(runtime.stuck_detector, StuckDetector)
-
     def test_lane_queue_wired(self, tmp_path: Path):
         runtime = GeodeRuntime.create("Project Atlas", log_dir=tmp_path)
         assert isinstance(runtime.lane_queue, LaneQueue)
         assert "session" in runtime.lane_queue.list_lanes()
         assert "global" in runtime.lane_queue.list_lanes()
-
-    def test_stuck_detector_hooks_wired(self, tmp_path: Path):
-        runtime = GeodeRuntime.create("Project Atlas", log_dir=tmp_path)
-
-        # Trigger PIPELINE_START → should mark running
-        runtime.hooks.trigger(
-            HookEvent.PIPELINE_STARTED,
-            {"node": "router", "subject_id": "Project Atlas"},
-        )
-        assert runtime.stuck_detector.running_count == 1
-
-        # Trigger PIPELINE_END → should mark completed
-        runtime.hooks.trigger(
-            HookEvent.PIPELINE_ENDED,
-            {"node": "synthesizer", "subject_id": "Project Atlas"},
-        )
-        assert runtime.stuck_detector.running_count == 0
 
     def test_shutdown(self, tmp_path: Path):
         runtime = GeodeRuntime.create("Project Atlas", log_dir=tmp_path)
@@ -260,60 +237,15 @@ class TestGetHealth:
         runtime = GeodeRuntime.create("demo", log_dir=tmp_path)
         health = runtime.get_health()
         assert health["subject_id"] == "demo"
-        assert "drift" in health
-        assert "model_registry" in health
-        assert "expert_panel" in health
-        assert "correlation" in health
-        assert "outcome_tracker" in health
         assert "triggers" in health
-        assert "feedback_loop" in health
-        assert "stuck_tasks" in health
         assert "scheduler_running" in health
+        assert "lanes" in health
 
     def test_get_health_stats_types(self, tmp_path: Path):
         runtime = GeodeRuntime.create("Project Atlas", log_dir=tmp_path)
         health = runtime.get_health()
-        assert isinstance(health["drift"], dict)
-        assert isinstance(health["model_registry"], dict)
-        assert isinstance(health["stuck_tasks"], int)
-
-
-class TestReactiveChains:
-    def test_drift_triggers_snapshot(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
-        # Isolate SnapshotManager storage to tmp_path so stale .geode/snapshots/
-        # files from previous runs don't pollute snapshot counts.
-        monkeypatch.setattr(
-            "core.config.settings.snapshot_dir",
-            str(tmp_path / "snapshots"),
-        )
-        runtime = GeodeRuntime.create("Project Atlas", log_dir=tmp_path)
-        initial_snaps = runtime.snapshot_manager.list_snapshots()
-
-        runtime.hooks.trigger(
-            HookEvent.DRIFT_DETECTED,
-            {"metric": "spearman_rho", "severity": "warning"},
-        )
-
-        after_snaps = runtime.snapshot_manager.list_snapshots()
-        assert len(after_snaps) == len(initial_snaps) + 1
-
-    def test_pipeline_end_triggers_snapshot(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
-        # Isolate SnapshotManager storage to tmp_path so stale .geode/snapshots/
-        # files from previous runs don't pollute snapshot counts.
-        monkeypatch.setattr(
-            "core.config.settings.snapshot_dir",
-            str(tmp_path / "snapshots"),
-        )
-        runtime = GeodeRuntime.create("Project Atlas", log_dir=tmp_path)
-        initial_snaps = runtime.snapshot_manager.list_snapshots()
-
-        runtime.hooks.trigger(
-            HookEvent.PIPELINE_ENDED,
-            {"node": "synthesizer", "subject_id": "Project Atlas"},
-        )
-
-        after_snaps = runtime.snapshot_manager.list_snapshots()
-        assert len(after_snaps) == len(initial_snaps) + 1
+        assert isinstance(health["triggers"], dict)
+        assert isinstance(health["lanes"], list)
 
 
 class TestRuntimeTaskGraph:
@@ -322,11 +254,6 @@ class TestRuntimeTaskGraph:
         assert runtime.task_graph is not None
         assert isinstance(runtime.task_graph, TaskGraph)
         assert runtime.task_graph.task_count == 0
-
-    def test_task_bridge_created(self, tmp_path: Path):
-        runtime = GeodeRuntime.create("Project Atlas", log_dir=tmp_path)
-        assert runtime._task_bridge is not None
-        assert isinstance(runtime._task_bridge, TaskGraphHookBridge)
 
     def test_get_health_includes_task_graph(self, tmp_path: Path):
         runtime = GeodeRuntime.create("Project Atlas", log_dir=tmp_path)
@@ -357,10 +284,4 @@ class TestRuntimeTaskGraph:
 
         runtime.reset_task_graph()
         assert runtime.task_graph is not old_graph
-        assert runtime.task_graph.task_count == 0
-
-    def test_hook_events_update_task_graph(self, tmp_path: Path):
-        runtime = GeodeRuntime.create("Project Atlas", log_dir=tmp_path)
-        runtime.hooks.trigger(HookEvent.NODE_ENTERED, {"node": "router", "subject_id": "demo"})
-        runtime.hooks.trigger(HookEvent.NODE_EXITED, {"node": "router", "subject_id": "demo"})
         assert runtime.task_graph.task_count == 0

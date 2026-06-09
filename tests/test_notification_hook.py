@@ -1,6 +1,8 @@
 """Tests for Notification Hook Plugin.
 
-Phase 3 validation: event → notification routing.
+Event → notification routing. PR-DEAD-PIPELINE (2026-06-10) — the dead
+pipeline event family was removed; SUBAGENT_FAILED is the remaining
+notification-worthy event.
 """
 
 from __future__ import annotations
@@ -22,31 +24,6 @@ from core.hooks import HookEvent, HookSystem
 
 
 class TestFormatMessage:
-    def test_pipeline_end(self):
-        msg = _format_message(
-            HookEvent.PIPELINE_ENDED,
-            {"subject_id": "demo-subject", "final_score": 81.3},
-        )
-        assert "Pipeline completed" in msg
-        assert "demo-subject" in msg
-        assert "81.3" in msg
-
-    def test_pipeline_error(self):
-        msg = _format_message(
-            HookEvent.PIPELINE_ERROR,
-            {"subject_id": "demo-subject", "error": "timeout"},
-        )
-        assert "Pipeline error" in msg
-        assert "timeout" in msg
-
-    def test_drift_detected(self):
-        msg = _format_message(
-            HookEvent.DRIFT_DETECTED,
-            {"metric": "scoring_score"},
-        )
-        assert "Drift detected" in msg
-        assert "scoring_score" in msg
-
     def test_subagent_failed(self):
         msg = _format_message(
             HookEvent.SUBAGENT_FAILED,
@@ -64,6 +41,13 @@ class TestFormatMessage:
         assert "Sub-agent failed" in msg
         assert "depth exceeded" not in msg
 
+    def test_unmapped_event_falls_through(self):
+        msg = _format_message(
+            HookEvent.SESSION_ENDED,
+            {"session_id": "s1"},
+        )
+        assert "session_end" in msg
+
 
 # ---------------------------------------------------------------------------
 # Hook registration
@@ -76,9 +60,6 @@ class TestNotificationHookRegistration:
         register_notification_hooks(hooks, channel="slack", recipient="#test")
 
         registered = hooks.list_hooks()
-        assert "pipeline_end" in registered
-        assert "pipeline_error" in registered
-        assert "drift_detected" in registered
         assert "subagent_failed" in registered
 
     def test_hooks_trigger_notification(self):
@@ -93,11 +74,10 @@ class TestNotificationHookRegistration:
         hooks = HookSystem()
         register_notification_hooks(hooks, channel="slack", recipient="#alerts")
 
-        # Trigger PIPELINE_END
         asyncio.run(
             hooks.trigger_async(
-                HookEvent.PIPELINE_ENDED,
-                {"subject_id": "demo-subject", "final_score": 81.3},
+                HookEvent.SUBAGENT_FAILED,
+                {"task_id": "task_123", "error": "depth exceeded"},
             )
         )
 
@@ -105,7 +85,7 @@ class TestNotificationHookRegistration:
         call_args = mock_adapter.asend_message.call_args
         assert call_args[0][0] == "slack"
         assert call_args[0][1] == "#alerts"
-        assert "Pipeline completed" in call_args[0][2]
+        assert "Sub-agent failed" in call_args[0][2]
 
         set_notification(None)
 
@@ -119,8 +99,8 @@ class TestNotificationHookRegistration:
         # Should not raise
         results = asyncio.run(
             hooks.trigger_async(
-                HookEvent.PIPELINE_ENDED,
-                {"subject_id": "demo-subject", "final_score": 65.0},
+                HookEvent.SUBAGENT_FAILED,
+                {"task_id": "task_123"},
             )
         )
         assert all(r.success for r in results)
@@ -140,8 +120,8 @@ class TestNotificationHookRegistration:
         # Should not raise even though send fails
         results = asyncio.run(
             hooks.trigger_async(
-                HookEvent.PIPELINE_ERROR,
-                {"subject_id": "demo-subject", "error": "critical failure"},
+                HookEvent.SUBAGENT_FAILED,
+                {"task_id": "task_123", "error": "critical failure"},
             )
         )
         assert all(r.success for r in results)
@@ -160,7 +140,7 @@ class TestNotificationHookRegistration:
         hooks = HookSystem()
         register_notification_hooks(hooks, channel="discord", recipient="123456")
 
-        asyncio.run(hooks.trigger_async(HookEvent.DRIFT_DETECTED, {"metric": "scoring_score"}))
+        asyncio.run(hooks.trigger_async(HookEvent.SUBAGENT_FAILED, {"task_id": "task_789"}))
 
         call_args = mock_adapter.asend_message.call_args
         assert call_args[0][0] == "discord"

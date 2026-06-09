@@ -6,17 +6,15 @@ Centralizes creation and lifecycle of all infrastructure singletons:
 - PolicyChain with default policies
 - ToolRegistry with analysis tools
 - ConfigWatcher for hot reload
-- StuckDetector for long-running task detection
 - LaneQueue for concurrency control
 - Session key utilities
-- L4.5 Automation: Drift, ModelRegistry, ExpertPanel, Correlation,
-  OutcomeTracker, SnapshotManager, TriggerManager, FeedbackLoop
+- Scheduling: TriggerManager + SchedulerService
 - L2 Memory: OrganizationMemory, HybridSessionStore, ContextAssembler
 
 Implementation details are decomposed into `core.wiring`:
     bootstrap  — hooks, memory, session, config_watcher, task, plugin_registry
     infra      — policies, tools, LLM, auth, lanes
-    automation — L4.5 9 components + hook wiring
+    scheduling — TriggerManager + SchedulerService + auto-trigger
     adapters   — MCP signal/notification/calendar/gateway
 """
 
@@ -35,23 +33,15 @@ if TYPE_CHECKING:
     # type annotations to strings, so the classes referenced only in
     # field / variable annotations below do not need to be imported at
     # runtime.  Pushing them into ``TYPE_CHECKING`` removes their entire
-    # module trees (numpy via ``correlation``, the L4.5 automation graph,
-    # the L2 memory graph, scheduler.triggers, langgraph hot-reload,
-    # task system) from the cold-start path.  Each tree is loaded lazily
-    # by the wiring builders (``core.wiring.{bootstrap,automation}``)
-    # only when the matching component actually fires.
-    from core.automation.correlation import CorrelationAnalyzer
-    from core.automation.drift import CUSUMDetector
-    from core.automation.expert_panel import ExpertPanel
-    from core.automation.feedback_loop import FeedbackLoop
-    from core.automation.model_registry import ModelRegistry
-    from core.automation.outcome_tracking import OutcomeTracker
-    from core.automation.snapshot import SnapshotManager
+    # module trees (the L2 memory graph, scheduler.triggers, langgraph
+    # hot-reload, task system) from the cold-start path.  Each tree is
+    # loaded lazily by the wiring builders
+    # (``core.wiring.{bootstrap,scheduling}``) only when the matching
+    # component actually fires.
     from core.memory.context import ContextAssembler
     from core.memory.organization import MonoLakeOrganizationMemory
     from core.memory.project import ProjectMemory
     from core.orchestration.hot_reload import ConfigWatcher
-    from core.orchestration.task_bridge import TaskGraphHookBridge
     from core.orchestration.task_system import TaskGraph
     from core.scheduler.triggers import TriggerManager
 
@@ -63,7 +53,6 @@ from core.memory.port import SessionStorePort
 from core.memory.session_key import build_session_key, build_thread_config
 from core.orchestration.lane_queue import LaneQueue
 from core.orchestration.run_log import RunLog
-from core.orchestration.stuck_detection import StuckDetector
 from core.paths import GLOBAL_RUNS_DIR
 from core.tools.policy import PolicyChain
 from core.tools.registry import ToolRegistry
@@ -87,7 +76,6 @@ log = logging.getLogger(__name__)
 
 DEFAULT_SESSION_TTL = 3600.0  # 1 hour
 DEFAULT_LOG_DIR = GLOBAL_RUNS_DIR  # P2 (v0.95.x) — was literal `Path.home() / ".geode" / "runs"`
-DEFAULT_STUCK_TIMEOUT_S = 7200.0  # 2 hours
 
 
 # ---------------------------------------------------------------------------
@@ -105,7 +93,6 @@ class RuntimeCoreConfig:
     tool_registry: ToolRegistry
     run_log: RunLog
     config_watcher: ConfigWatcher
-    stuck_detector: StuckDetector
     lane_queue: LaneQueue
     project_memory: ProjectMemory
     session_key: str
@@ -120,18 +107,11 @@ class RuntimeCoreConfig:
 
 
 @dataclass
-class RuntimeAutomationConfig:
-    """L4.5 Automation components (all optional)."""
+class RuntimeSchedulingConfig:
+    """Scheduler components (all optional)."""
 
-    drift_detector: CUSUMDetector | None = None
-    model_registry: ModelRegistry | None = None
-    expert_panel: ExpertPanel | None = None
-    correlation_analyzer: CorrelationAnalyzer | None = None
-    outcome_tracker: OutcomeTracker | None = None
-    snapshot_manager: SnapshotManager | None = None
     trigger_manager: TriggerManager | None = None
     scheduler_service: Any | None = None
-    feedback_loop: FeedbackLoop | None = None
 
 
 @dataclass
@@ -160,7 +140,7 @@ class GeodeRuntime:
     def __init__(
         self,
         core: RuntimeCoreConfig,
-        automation: RuntimeAutomationConfig | None = None,
+        scheduling: RuntimeSchedulingConfig | None = None,
         memory: RuntimeMemoryConfig | None = None,
     ) -> None:
         # Unpack core (flat attributes for backward compat)
@@ -173,7 +153,6 @@ class GeodeRuntime:
         self.profile_rotator = core.profile_rotator
         self.cooldown_tracker = core.cooldown_tracker or CooldownTracker()
         self.config_watcher = core.config_watcher
-        self.stuck_detector = core.stuck_detector
         self.lane_queue = core.lane_queue
         self.project_memory = core.project_memory
         self.session_key = core.session_key
@@ -185,24 +164,16 @@ class GeodeRuntime:
         self.skill_registry = core.skill_registry
         self.readiness = core.readiness
         self._compiled_graph: CompiledStateGraph[Any, None, Any, Any] | None = None
-        # Unpack automation (L4.5)
-        auto = automation or RuntimeAutomationConfig()
-        self.drift_detector = auto.drift_detector
-        self.model_registry = auto.model_registry
-        self.expert_panel = auto.expert_panel
-        self.correlation_analyzer = auto.correlation_analyzer
-        self.outcome_tracker = auto.outcome_tracker
-        self.snapshot_manager = auto.snapshot_manager
-        self.trigger_manager = auto.trigger_manager
-        self.scheduler_service = auto.scheduler_service
-        self.feedback_loop = auto.feedback_loop
+        # Unpack scheduling
+        sched = scheduling or RuntimeSchedulingConfig()
+        self.trigger_manager = sched.trigger_manager
+        self.scheduler_service = sched.scheduler_service
         # Unpack memory (L2)
         mem = memory or RuntimeMemoryConfig()
         self.organization_memory = mem.organization_memory
         self.context_assembler = mem.context_assembler
         # L4 Task tracking
         self.task_graph: TaskGraph | None = None
-        self._task_bridge: TaskGraphHookBridge | None = None
 
     # ------------------------------------------------------------------
     # Factory method
@@ -217,14 +188,13 @@ class GeodeRuntime:
         enable_checkpoint: bool = True,
         log_dir: Path | str | None = None,
         session_ttl: float = DEFAULT_SESSION_TTL,
-        stuck_timeout_s: float = DEFAULT_STUCK_TIMEOUT_S,
     ) -> GeodeRuntime:
         """Factory method — create a fully wired runtime for a GEODE session.
 
         Staged initialization (Claude Code entrypoints/init.ts pattern):
         1. _build_core: sessions, hooks, config, auth, LLM, lanes
         2. _build_tools: MCP, skills, readiness, plugins, tool offload
-        3. _build_memory: project/org memory, context assembler, automation
+        3. _build_memory: project/org memory, context assembler, scheduling
         4. Assembly: pack configs, create instance, attach optional components
         """
         from core.wiring import bootstrap
@@ -242,14 +212,13 @@ class GeodeRuntime:
             run_id=run_id,
             log_dir=log_dir,
             session_ttl=session_ttl,
-            stuck_timeout_s=stuck_timeout_s,
         )
 
         # Stage 2: Tools, MCP, Skills
         tools = cls._build_tools(bootstrap, core["hooks"], session_key=session_key)
 
-        # Stage 3: Memory + Automation
-        memory, automation = cls._build_memory_and_automation(
+        # Stage 3: Memory + Scheduling
+        memory, scheduling = cls._build_memory_and_scheduling(
             bootstrap,
             core["hooks"],
             core["session_store"],
@@ -273,7 +242,6 @@ class GeodeRuntime:
             tool_registry=core["tool_registry"],
             run_log=core["run_log"],
             config_watcher=core["config_watcher"],
-            stuck_detector=core["stuck_detector"],
             lane_queue=core["lane_queue"],
             project_memory=memory["project_memory"],
             session_key=session_key,
@@ -285,15 +253,14 @@ class GeodeRuntime:
             skill_registry=tools["skill_registry"],
             readiness=tools["readiness"],
         )
-        automation_config = RuntimeAutomationConfig(**automation)
+        scheduling_config = RuntimeSchedulingConfig(**scheduling)
         memory_config = RuntimeMemoryConfig(
             organization_memory=memory["organization_memory"],
             context_assembler=memory["context_assembler"],
         )
-        instance = cls(core_config, automation_config, memory_config)
+        instance = cls(core_config, scheduling_config, memory_config)
         instance.run_id = run_id
         instance.task_graph = memory["task_graph"]
-        instance._task_bridge = memory["task_bridge"]
         return instance
 
     @staticmethod
@@ -305,14 +272,12 @@ class GeodeRuntime:
         run_id: str,
         log_dir: Path | str | None,
         session_ttl: float,
-        stuck_timeout_s: float,
     ) -> dict[str, Any]:
         """Stage 1: Build core infrastructure (hooks, auth, LLM, lanes)."""
-        hooks, run_log, stuck_detector, _session_metrics = bootstrap.build_hooks(
+        hooks, run_log, _session_metrics = bootstrap.build_hooks(
             session_key=session_key,
             run_id=run_id,
             log_dir=log_dir,
-            stuck_timeout_s=stuck_timeout_s,
         )
         session_store = bootstrap.build_session_store(session_ttl=session_ttl)
         policy_chain = infra.build_default_policies()
@@ -331,7 +296,6 @@ class GeodeRuntime:
         return {
             "hooks": hooks,
             "run_log": run_log,
-            "stuck_detector": stuck_detector,
             "session_store": session_store,
             "policy_chain": policy_chain,
             "tool_registry": tool_registry,
@@ -367,7 +331,7 @@ class GeodeRuntime:
         }
 
     @staticmethod
-    def _build_memory_and_automation(
+    def _build_memory_and_scheduling(
         bootstrap: Any,
         hooks: Any,
         session_store: Any,
@@ -375,8 +339,8 @@ class GeodeRuntime:
         session_key: str,
         subject_id: str,
     ) -> tuple[dict[str, Any], dict[str, Any]]:
-        """Stage 3: Build memory, automation, and optional components."""
-        from core.wiring import automation as automation_wiring
+        """Stage 3: Build memory, scheduling, and optional components."""
+        from core.wiring import scheduling as scheduling_wiring
 
         (
             project_memory,
@@ -385,26 +349,17 @@ class GeodeRuntime:
             _user_profile,
         ) = bootstrap.build_memory(session_store=session_store, hooks=hooks)
 
-        automation = automation_wiring.build_automation(
-            hooks=hooks,
-            session_key=session_key,
-            subject_id=subject_id,
-            project_memory=project_memory,
-        )
+        scheduling = scheduling_wiring.build_scheduling(hooks=hooks)
 
-        task_graph, task_bridge = bootstrap.build_task_graph(
-            hooks=hooks,
-            subject_id=subject_id,
-        )
+        task_graph = bootstrap.build_task_graph()
 
         memory = {
             "project_memory": project_memory,
             "organization_memory": organization_memory,
             "context_assembler": context_assembler,
             "task_graph": task_graph,
-            "task_bridge": task_bridge,
         }
-        return memory, automation
+        return memory, scheduling
 
     # ------------------------------------------------------------------
     # Properties
@@ -484,14 +439,10 @@ class GeodeRuntime:
         return self.task_graph.execution_summary()
 
     def reset_task_graph(self) -> None:
-        """Reset task graph for REPL reuse (re-creates graph + bridge)."""
+        """Reset task graph for REPL reuse."""
         from core.wiring.bootstrap import build_task_graph
 
-        if self._task_bridge is not None:
-            self._task_bridge.unregister()
-        graph, bridge = build_task_graph(hooks=self.hooks, subject_id=self.subject_id)
-        self.task_graph = graph
-        self._task_bridge = bridge
+        self.task_graph = build_task_graph()
 
     def get_available_tools(self, *, mode: str = "full_pipeline") -> list[str]:
         """Get tools available under the given pipeline mode."""
@@ -539,16 +490,6 @@ class GeodeRuntime:
         """
         health: dict[str, Any] = {"subject_id": self.subject_id, "session_key": self.session_key}
 
-        if self.drift_detector:
-            health["drift"] = self.drift_detector.stats.to_dict()
-        if self.model_registry:
-            health["model_registry"] = self.model_registry.stats.to_dict()
-        if self.expert_panel:
-            health["expert_panel"] = self.expert_panel.stats.to_dict()
-        if self.correlation_analyzer:
-            health["correlation"] = self.correlation_analyzer.stats.to_dict()
-        if self.outcome_tracker:
-            health["outcome_tracker"] = self.outcome_tracker.stats.to_dict()
         if self.trigger_manager:
             health["triggers"] = self.trigger_manager.stats.to_dict()
             health["scheduler_running"] = self.trigger_manager.is_scheduler_running
@@ -557,10 +498,7 @@ class GeodeRuntime:
                 "running": self.scheduler_service.is_running,
                 "job_count": len(self.scheduler_service.list_jobs(include_disabled=True)),
             }
-        if self.feedback_loop:
-            health["feedback_loop"] = self.feedback_loop.stats.to_dict()
 
-        health["stuck_tasks"] = len(self.stuck_detector.check_stuck())
         health["lanes"] = self.lane_queue.list_lanes()
 
         if self.task_graph is not None:
@@ -575,11 +513,8 @@ class GeodeRuntime:
     def shutdown(self) -> None:
         """Clean shutdown of background components."""
         self.config_watcher.stop()
-        self.stuck_detector.stop_monitor()
         if self.scheduler_service:
             self.scheduler_service.save()
             self.scheduler_service.stop()
         if self.trigger_manager:
             self.trigger_manager.stop_scheduler()
-        if self._task_bridge:
-            self._task_bridge.unregister()

@@ -89,7 +89,7 @@ class SessionTranscript:
 
     ``last_touched_at()`` + ``is_stale(threshold_s)`` expose the file
     mtime so external watchdogs can detect hung runs that stopped
-    appending events without firing PIPELINE_TIMEOUT / PIPELINE_ERROR.
+    appending events without firing any hook event.
 
     Usage::
 
@@ -466,7 +466,7 @@ class SessionTranscript:
         External watchdogs (operator daemons, stuck-run detectors) use
         this to spot transcripts that have stopped receiving events —
         evidence that the run hung or crashed without firing
-        ``PIPELINE_TIMEOUT`` / ``PIPELINE_ERROR``.
+        any hook event.
         """
         try:
             return self.file_path.stat().st_mtime
