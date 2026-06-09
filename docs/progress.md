@@ -16,7 +16,8 @@
 
 <!-- Move items here when work begins. -->
 <!-- 3-Checkpoint: (1) alloc → (2) merge (CI 5/5) → (3) verify -->
-- [ ] Codebase audit follow-ups — reports delivered (slop top-10 + design-flaw top-10); bundles A(fake-success/contract hotfix)/B(reserve-without-emit)/C(dead pipeline decision)/D(cleanup sprint)/E(drift anchors) await operator pick
+- [ ] Audit bundle C: dead pipeline family DELETE (operator picked option a) — 8 pipeline HookEvents + listeners (StuckDetector/TaskGraphHookBridge/journal rows/notification_hook) + L4.5 automation chain teardown; worktree dead-pipeline-removal
+- [ ] Audit bundles A(fake-success/contract hotfix)/B(reserve-without-emit)/D(cleanup sprint)/E(drift anchors) — reports delivered, awaiting pick
 
 ## In Review
 
