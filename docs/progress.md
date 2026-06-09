@@ -16,7 +16,7 @@
 
 <!-- Move items here when work begins. -->
 <!-- 3-Checkpoint: (1) alloc → (2) merge (CI 5/5) → (3) verify -->
-- [ ] Codebase audit follow-ups — reports delivered (slop top-10 + design-flaw top-10); bundles A(fake-success/contract hotfix)/B(reserve-without-emit)/C(dead pipeline decision)/D(cleanup sprint)/E(drift anchors) await operator pick
+- [ ] Audit bundles A(fake-success/contract hotfix)/B(reserve-without-emit)/D(cleanup sprint)/E(drift anchors) — reports delivered, awaiting pick
 
 ## In Review
 
@@ -26,6 +26,7 @@
 
 <!-- Completed items. Keep recent 10, archive older ones. -->
 <!-- - [x] #issue-number — Short description (PR #N) -->
+- [x] Audit bundle C: dead pipeline family deleted — 15 HookEvents (82→67), core/automation/ + StuckDetector + TaskGraphHookBridge + NodeBootstrapper removed, live scheduler → wiring/scheduling.py, -6,654 LoC (PR #2032 → #2033, v0.99.149)
 - [x] Prompt-cache: system reminder append-only — messages[0] per-round rewrite was invalidating the whole history prefix cache every agentic round; reminder now appended last on a per-request copy, pinned by TestCacheContract (PR #2026 → #2028, v0.99.148)
 - [x] Ops: auto-backmerge unblocked — repo Actions workflow permissions `read`→`write` + allow PR create/approve; rerun of failed run 27224199909 green (no PR/version)
 - [x] Ops: stale worktree prune — baseline-registry (superseded by #1913 v2) / release-v0.99.72 / release-v0.99.83 / runtime-main + local branches deleted (no PR/version)
