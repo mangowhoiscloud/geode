@@ -2,8 +2,11 @@
 
 Covers:
   1. build_system_reminder: content assembly, budget enforcement
-  2. prepend_system_reminder: injection, idempotency, empty-case
-  3. _is_system_reminder: tag detection
+  2. append_system_reminder: end-adjacent injection, input immutability,
+     legacy-prefix strip
+  3. TestCacheContract: prompt-cache prefix stability guard
+     (PR-CACHE-REMINDER, 2026-06-10)
+  4. _is_system_reminder: tag detection
 """
 
 from __future__ import annotations
@@ -15,8 +18,8 @@ from core.agent.system_injection import (
     _MAX_REMINDER_CHARS,
     _REMINDER_TAG,
     _is_system_reminder,
+    append_system_reminder,
     build_system_reminder,
-    prepend_system_reminder,
 )
 
 # ---------------------------------------------------------------------------
@@ -68,58 +71,98 @@ class TestBuildSystemReminder:
 
 
 # ---------------------------------------------------------------------------
-# prepend_system_reminder
+# append_system_reminder
 # ---------------------------------------------------------------------------
 
 
-class TestPrependSystemReminder:
-    """Tests for prepend_system_reminder()."""
+class TestAppendSystemReminder:
+    """Tests for append_system_reminder()."""
 
-    def test_prepends_to_empty_messages(self) -> None:
+    def test_appends_to_empty_messages(self) -> None:
         """Injection into empty messages list."""
         messages: list[dict[str, Any]] = []
-        result = prepend_system_reminder(messages)
+        result = append_system_reminder(messages)
         assert len(result) == 1
         assert result[0]["role"] == "user"
         assert f"<{_REMINDER_TAG}>" in result[0]["content"]
         assert f"</{_REMINDER_TAG}>" in result[0]["content"]
 
-    def test_prepends_before_user_message(self) -> None:
-        """Reminder appears before the first user message."""
+    def test_appends_after_latest_user_message(self) -> None:
+        """Reminder is the LAST message, after all history."""
         messages = [{"role": "user", "content": "Hello"}]
-        result = prepend_system_reminder(messages)
+        result = append_system_reminder(messages)
         assert len(result) == 2
-        assert _is_system_reminder(result[0])
-        assert result[1]["content"] == "Hello"
-
-    def test_idempotent_no_stacking(self) -> None:
-        """Calling twice replaces rather than stacking reminders."""
-        messages = [{"role": "user", "content": "Hello"}]
-        prepend_system_reminder(messages, round_idx=0)
-        assert len(messages) == 2
-
-        prepend_system_reminder(messages, round_idx=1)
-        assert len(messages) == 2  # replaced, not stacked
-        assert "Current round: 2" in messages[0]["content"]
-
-    def test_modifies_in_place(self) -> None:
-        """Messages list modified in-place (returns same reference)."""
-        messages = [{"role": "user", "content": "test"}]
-        result = prepend_system_reminder(messages)
-        assert result is messages
+        assert result[0]["content"] == "Hello"
+        assert _is_system_reminder(result[1])
 
     def test_preserves_existing_messages(self) -> None:
-        """Original messages preserved after injection."""
+        """Full history preserved in order, reminder appended last."""
         messages = [
             {"role": "user", "content": "first"},
             {"role": "assistant", "content": "reply"},
             {"role": "user", "content": "second"},
         ]
-        prepend_system_reminder(messages)
-        assert len(messages) == 4
-        assert messages[1]["content"] == "first"
-        assert messages[2]["content"] == "reply"
-        assert messages[3]["content"] == "second"
+        result = append_system_reminder(messages)
+        assert len(result) == 4
+        assert [m["content"] for m in result[:3]] == ["first", "reply", "second"]
+        assert _is_system_reminder(result[3])
+
+    def test_strips_legacy_position0_reminder(self) -> None:
+        """A reminder persisted at [0] by the old prepend design is dropped."""
+        legacy = f"<{_REMINDER_TAG}>\nCurrent date: stale\n</{_REMINDER_TAG}>"
+        messages = [
+            {"role": "user", "content": legacy},
+            {"role": "user", "content": "Hello"},
+        ]
+        result = append_system_reminder(messages)
+        assert len(result) == 2
+        assert result[0]["content"] == "Hello"
+        assert _is_system_reminder(result[1])
+        assert "stale" not in result[1]["content"]
+
+
+# ---------------------------------------------------------------------------
+# Cache contract — prefix stability (PR-CACHE-REMINDER, 2026-06-10)
+# ---------------------------------------------------------------------------
+
+
+class TestCacheContract:
+    """Prompt-cache guards: history prefix must stay byte-stable across rounds.
+
+    The pre-2026-06-10 design inserted the reminder at messages[0] and
+    rewrote it per round, invalidating the entire message-prefix cache on
+    every agentic round. These tests pin the append-only contract.
+    """
+
+    def test_input_list_not_mutated(self) -> None:
+        """The caller's history list is never modified."""
+        messages = [{"role": "user", "content": "Hello"}]
+        snapshot = [dict(m) for m in messages]
+        result = append_system_reminder(messages, round_idx=2)
+        assert messages == snapshot
+        assert result is not messages
+
+    def test_history_prefix_stable_across_rounds(self) -> None:
+        """Round-varying reminder bytes land ONLY in the final message.
+
+        result[:-1] must be identical across rounds — that is the cacheable
+        prefix. Only the appended reminder may differ.
+        """
+        history = [
+            {"role": "user", "content": "task"},
+            {"role": "assistant", "content": "working"},
+        ]
+        round1 = append_system_reminder(history, round_idx=1)
+        round2 = append_system_reminder(history, round_idx=2)
+        assert round1[:-1] == round2[:-1] == history
+        assert round1[-1] != round2[-1]  # round counter differs, as intended
+
+    def test_reminder_never_first_message(self) -> None:
+        """With non-empty history the reminder must not occupy messages[0]."""
+        messages = [{"role": "user", "content": "Hello"}]
+        result = append_system_reminder(messages, round_idx=1)
+        assert not _is_system_reminder(result[0])
+        assert _is_system_reminder(result[-1])
 
 
 # ---------------------------------------------------------------------------
@@ -149,7 +192,7 @@ class TestIsSystemReminder:
 
 
 # ---------------------------------------------------------------------------
-# Integration: AgenticLoop wiring (mock-based)
+# Integration: AgenticLoop wiring (source-based)
 # ---------------------------------------------------------------------------
 
 
@@ -158,15 +201,23 @@ class TestAgenticLoopIntegration:
 
     def test_import_succeeds(self) -> None:
         """Module imports cleanly from the agentic loop's call site."""
-        from core.agent.system_injection import prepend_system_reminder
+        from core.agent.system_injection import append_system_reminder
 
-        assert callable(prepend_system_reminder)
+        assert callable(append_system_reminder)
 
     def test_injection_in_call_path(self) -> None:
-        """Verify _call_llm source references system_injection."""
+        """_call_llm appends the reminder and does so AFTER the overflow check.
+
+        Order is load-bearing: the overflow check must see (and prune) the
+        shared history list; the per-request reminder copy is made afterwards.
+        """
         import inspect
 
         from core.agent.loop import AgenticLoop
 
         source = inspect.getsource(AgenticLoop._call_llm)
-        assert "prepend_system_reminder" in source
+        assert "append_system_reminder" in source
+        assert "prepend_system_reminder" not in source
+        assert source.index("_check_context_overflow") < source.index(
+            "append_system_reminder(messages"
+        )
