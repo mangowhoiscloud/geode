@@ -45,6 +45,25 @@ functional change.
 
 ---
 
+## [0.99.146] - 2026-06-09
+
+### Fixed
+- **CLI: removed the cold-start "white line" under the prompt.** The REPL quota
+  banner (`bottom_toolbar`) is drawn by prompt_toolkit with a default `reverse`
+  style in an always-reserved 1-row window, and bar visibility is keyed on the
+  `bottom_toolbar` *attribute* being non-None — not on what the render callable
+  returns — so an empty banner still painted a blank reverse (white) row. The
+  banner is empty because its writer (the Anthropic response hook) fires in the
+  serve daemon while the setter is registered only in the thin-CLI process: a
+  cross-process disconnect that never feeds the banner. The REPL now toggles the
+  attribute per prompt (`_apply_toolbar_visibility`) — the render callable when
+  the banner has content, `None` (bar hidden) when empty. Matches the banner's
+  original "empty on cold start (no flash)" intent and preserves the `reverse`
+  highlight for real quota/abort warnings (no blanket color override). E2E-verified
+  with the real banner: empty → hidden, populated → shown.
+
+---
+
 ## [0.99.145] - 2026-06-09
 
 ### Fixed
