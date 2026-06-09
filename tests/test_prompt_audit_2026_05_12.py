@@ -14,7 +14,7 @@ Each test pins a specific behaviour discovered or established by the audit:
 from __future__ import annotations
 
 import pytest
-from core.agent.system_injection import prepend_system_reminder
+from core.agent.system_injection import append_system_reminder
 from core.agent.system_prompt import (
     _audit_mode_active,
     _persona_on,
@@ -127,12 +127,12 @@ def test_wrapper_fallback_role_is_generic_not_geode_persona() -> None:
     assert "autonomous execution agent" in role
 
 
-def test_sandwich_system_reminder_uses_xml_tags() -> None:
+def test_system_reminder_uses_xml_tags() -> None:
     messages = [{"role": "user", "content": "hello"}]
-    out = prepend_system_reminder(messages, round_idx=1)
-    assert out[0]["content"].startswith("<system-reminder>")
-    assert out[0]["content"].endswith("</system-reminder>")
-    assert "[system-reminder]" not in out[0]["content"]
+    out = append_system_reminder(messages, round_idx=1)
+    assert out[-1]["content"].startswith("<system-reminder>")
+    assert out[-1]["content"].endswith("</system-reminder>")
+    assert "[system-reminder]" not in out[-1]["content"]
 
 
 def test_math_formatting_instruction_reaches_agentic_system_prompt(

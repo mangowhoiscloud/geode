@@ -45,6 +45,13 @@ functional change.
 
 ---
 
+## [0.99.148] - 2026-06-10
+
+### Fixed
+- **Prompt cache: system reminder no longer re-keys the history prefix every round.** `_call_llm` previously inserted the `<system-reminder>` (current date + `Current round: N`) at `messages[0]` and rewrote it in place each round. Prompt caching is a prefix match and messages render after the system blocks, so the entire conversation history was invalidated on every agentic round — the rolling message cache breakpoints (ADR-013 T5, `core/llm/providers/anthropic.py`) could never hit, and the same applied to OpenAI/Codex automatic prefix caching. `prepend_system_reminder` is replaced by `append_system_reminder` (`core/agent/system_injection.py`): the reminder is appended as the **last** message on a per-request copy, the shared history list is never mutated (so the reminder never persists into `ConversationContext`), and a legacy reminder stored at position 0 by the old design is stripped once. The overflow check stays ahead of the copy so emergency prune still mutates the shared list. Pinned by `tests/test_system_injection.py::TestCacheContract` (prefix byte-stability across rounds).
+
+---
+
 ## [0.99.147] - 2026-06-09
 
 ### Changed

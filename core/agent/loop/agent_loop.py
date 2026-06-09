@@ -2275,13 +2275,21 @@ class AgenticLoop:
         hard-fails on missing registration).
         """
         effective_model = model or self.model
-        # Sandwich injection: prepend system reminder to messages (Claude Code pattern)
-        from core.agent.system_injection import prepend_system_reminder
-
-        prepend_system_reminder(messages, model=effective_model, round_idx=round_idx)
-
-        # Context overflow detection (Karpathy P6 Context Budget)
+        # Context overflow detection (Karpathy P6 Context Budget).
+        # MUST run on the SHARED history list before the reminder copy is
+        # made: emergency prune/compaction mutates ``messages`` in place and
+        # that mutation has to persist via _sync_messages_to_context — on a
+        # per-request copy it would evaporate and re-trigger every round.
         await self._check_context_overflow(system, messages)
+
+        # System reminder appended LAST, on a per-request copy — never at
+        # messages[0] and never into the shared history list. Position and
+        # immutability are load-bearing for prompt caching: the history
+        # prefix must stay byte-stable across rounds or the rolling message
+        # cache breakpoints never hit (see core/agent/system_injection.py).
+        from core.agent.system_injection import append_system_reminder
+
+        messages = append_system_reminder(messages, model=effective_model, round_idx=round_idx)
 
         # WRAP_UP: force text-only when approaching limits
         force_text = False
