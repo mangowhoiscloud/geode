@@ -111,6 +111,14 @@ def _build_prompt_session() -> Any:
     # the self-improving-loop config so prompt_session stays importable when
     # ``core.config.self_improving_loop`` is unavailable (test contexts).
     bottom_toolbar = _make_bottom_toolbar()
+    # Stash the render callable so _apply_toolbar_visibility (run before
+    # each prompt) can show/hide the bar by reassigning the session's
+    # ``bottom_toolbar`` attribute. prompt_toolkit keys bar visibility on
+    # that attribute being non-None — NOT on what the render callable
+    # returns — so an empty render still leaves a 1-row reverse-styled
+    # window (the cold-start "white line"). See _apply_toolbar_visibility.
+    global _toolbar_render
+    _toolbar_render = bottom_toolbar
 
     return PromptSession(
         history=FileHistory(str(history_path)),
@@ -166,7 +174,13 @@ def _make_bottom_toolbar() -> Any:
     def _render() -> Any:
         text = banner.render()
         if not text:
-            return ""
+            # None (not "") signals "no banner content" to
+            # _apply_toolbar_visibility, which then hides the whole bar.
+            # An empty string would still leave a 1-row reverse-styled
+            # window — only un-setting the bottom_toolbar attribute drops
+            # the row. Matches the banner's "empty on cold start (no
+            # flash)" intent (PR-γ1).
+            return None
         return _HTML(text)
 
     return _render
@@ -204,6 +218,36 @@ def _force_select_event_loop() -> None:
 
 # Module-level lazy singleton
 _prompt_session: Any = None
+
+# The bottom_toolbar render callable, stashed by _build_prompt_session so
+# _apply_toolbar_visibility can toggle the bar on/off per prompt.
+_toolbar_render: Any = None
+
+
+def _apply_toolbar_visibility(session: Any) -> None:
+    """Show the quota bar only when the banner has content.
+
+    prompt_toolkit decides bar visibility from whether the
+    ``bottom_toolbar`` *attribute* is non-None (``shortcuts/prompt.py``
+    ConditionalContainer filter), not from what the render callable
+    returns — so an empty render still leaves a 1-row ``reverse``-styled
+    window (the cold-start "white line"). We therefore toggle the
+    attribute itself: the render callable when the banner has content,
+    ``None`` when empty. This hides the empty bar (matching the banner's
+    "no flash" intent) while preserving the reverse highlight for real
+    quota / abort warnings. Note the banner is currently never fed in the
+    thin-CLI process — its writer (the Anthropic response hook) fires in
+    the serve daemon — so in practice the bar stays hidden until that
+    cross-process feed is wired; this keeps the surface honest meanwhile.
+    """
+    render = _toolbar_render
+    if render is None:
+        return
+    try:
+        has_content = render() is not None
+    except Exception:  # pragma: no cover - defensive
+        has_content = False
+    session.bottom_toolbar = render if has_content else None
 
 
 def _get_prompt_session() -> Any:
@@ -244,6 +288,9 @@ def _read_multiline_input(prompt: str) -> str:
             # Restore default SIGINT so prompt_toolkit can handle Ctrl-C internally.
             # Our custom handler interferes with prompt_toolkit's input loop.
             signal.signal(signal.SIGINT, _original_sigint)
+            # Hide the bottom bar when the quota banner has nothing to show
+            # (no empty reverse "white line" on cold start).
+            _apply_toolbar_visibility(session)
             raw: str = str(session.prompt()).strip()
             # Join pasted multi-line text into a single line.
             # Intentional newlines (Esc+Enter) are preserved by the caller
