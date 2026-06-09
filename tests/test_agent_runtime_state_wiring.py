@@ -218,9 +218,7 @@ class TestBootstrapHandlerWiring:
 
         from core.hooks import HookEvent
 
-        hooks, _, _, _ = build_hooks(
-            session_key="t", run_id="r-1", log_dir=tmp_db.parent, stuck_timeout_s=60.0
-        )
+        hooks, _, _ = build_hooks(session_key="t", run_id="r-1", log_dir=tmp_db.parent)
 
         # Simulate the augmented payload that _final_hook_payloads now
         # produces. (Direct lifecycle invocation would require a real
@@ -255,9 +253,7 @@ class TestBootstrapHandlerWiring:
 
         from core.hooks import HookEvent
 
-        hooks, _, _, _ = build_hooks(
-            session_key="t", run_id="r-1", log_dir=tmp_db.parent, stuck_timeout_s=60.0
-        )
+        hooks, _, _ = build_hooks(session_key="t", run_id="r-1", log_dir=tmp_db.parent)
 
         hooks.trigger(
             HookEvent.SUBAGENT_COMPLETED,
@@ -287,9 +283,7 @@ class TestBootstrapHandlerWiring:
 
         from core.hooks import HookEvent
 
-        hooks, _, _, _ = build_hooks(
-            session_key="t", run_id="r-1", log_dir=tmp_db.parent, stuck_timeout_s=60.0
-        )
+        hooks, _, _ = build_hooks(session_key="t", run_id="r-1", log_dir=tmp_db.parent)
 
         # SUBAGENT_FAILED uses the same handler — confirm error
         # propagates. (The handler is registered to SUBAGENT_COMPLETED;
@@ -319,9 +313,7 @@ class TestBootstrapHandlerWiring:
 
         from core.hooks import HookEvent
 
-        hooks, _, _, _ = build_hooks(
-            session_key="t", run_id="r-1", log_dir=tmp_db.parent, stuck_timeout_s=60.0
-        )
+        hooks, _, _ = build_hooks(session_key="t", run_id="r-1", log_dir=tmp_db.parent)
         hooks.trigger(HookEvent.SESSION_ENDED, {"agent_kind": "repl"})
         hooks.trigger(HookEvent.SUBAGENT_COMPLETED, {"task_type": "x"})
 

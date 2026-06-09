@@ -117,60 +117,14 @@ class TestProjectJournal:
 
 
 class TestJournalHooks:
-    def test_pipeline_end_records_run(self, tmp_path):
+    def test_handler_set_is_subagent_lifecycle_only(self, tmp_path):
         from core.memory.journal_hooks import make_journal_handlers
-
-        from core.hooks import HookEvent
 
         journal = ProjectJournal(tmp_path / "journal")
         handlers = make_journal_handlers(journal)
-        # P1c — STARTED + FAILED handlers added (5 = pipeline_end +
-        # pipeline_error + subagent_completed + subagent_started +
-        # subagent_failed).
-        assert len(handlers) == 5
-
-        # Simulate PIPELINE_END
-        end_handler = next(fn for name, fn in handlers if name == "journal_pipeline_end")
-        end_handler(
-            HookEvent.PIPELINE_ENDED,
-            {
-                "subject_id": "demo-subject",
-                "score": 81.3,
-                "cause": "conversion_failure",
-                "session_id": "test-s1",
-            },
-        )
-
-        runs = journal.get_recent_runs(5)
-        assert len(runs) == 1
-        assert "demo-subject" in runs[0].summary
-        assert "score=81.3" in runs[0].summary
-
-        # Should also add learned pattern
-        patterns = journal.get_learned_patterns()
-        assert any("demo-subject" in p for p in patterns)
-
-    def test_pipeline_error_records(self, tmp_path):
-        from core.memory.journal_hooks import make_journal_handlers
-
-        from core.hooks import HookEvent
-
-        journal = ProjectJournal(tmp_path / "journal")
-        handlers = make_journal_handlers(journal)
-
-        error_handler = next(fn for name, fn in handlers if name == "journal_pipeline_error")
-        error_handler(
-            HookEvent.PIPELINE_ERROR,
-            {
-                "subject_id": "demo-subject",
-                "error": "API timeout",
-                "session_id": "test-s2",
-            },
-        )
-
-        runs = journal.get_recent_runs(5)
-        assert len(runs) == 1
-        assert runs[0].status == "error"
+        # PR-DEAD-PIPELINE — subagent lifecycle only (3 = subagent_completed
+        # + subagent_started + subagent_failed).
+        assert len(handlers) == 3
 
     def test_wrong_event_ignored(self, tmp_path):
         from core.memory.journal_hooks import make_journal_handlers
@@ -180,9 +134,9 @@ class TestJournalHooks:
         journal = ProjectJournal(tmp_path / "journal")
         handlers = make_journal_handlers(journal)
 
-        end_handler = next(fn for name, fn in handlers if name == "journal_pipeline_end")
+        sub_handler = next(fn for name, fn in handlers if name == "journal_subagent")
         # Send wrong event type
-        end_handler(HookEvent.NODE_ENTERED, {"subject_id": "demo-subject"})
+        sub_handler(HookEvent.SESSION_STARTED, {"task_id": "demo-task"})
         assert journal.get_recent_runs(5) == []
 
 

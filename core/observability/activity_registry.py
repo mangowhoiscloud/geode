@@ -22,8 +22,6 @@ from pydantic import ValidationError
 from core.hooks.system import HookEvent
 from core.observability.activity import (
     ActivityRowBase,
-    AnalystCompletedRow,
-    EvaluatorCompletedRow,
     GenericActivityRow,
     HandoffCompletedRow,
     HandoffFailedRow,
@@ -40,15 +38,6 @@ from core.observability.activity import (
     LLMCallFailedRow,
     LLMCallRetriedRow,
     LLMCallStartedRow,
-    NodeBootstrapRow,
-    NodeEnteredRow,
-    NodeErrorRow,
-    NodeExitedRow,
-    PipelineEndedRow,
-    PipelineErrorRow,
-    PipelineStartedRow,
-    PipelineTimeoutRow,
-    ScoringCompletedRow,
     SessionEndedRow,
     SessionStartedRow,
     SubAgentCompletedRow,
@@ -193,21 +182,12 @@ def _infer_actor_type(default: str) -> str:
 
 
 # ---------------------------------------------------------------------------
-# 32 lifecycle event → builder mapping
+# 21 lifecycle event → builder mapping
 # ---------------------------------------------------------------------------
 
 
 HOOK_EVENT_TO_ROW_BUILDER: dict[HookEvent, Callable[[dict[str, Any], str], ActivityRowBase]] = {
-    # A — lifecycle started (9)
-    HookEvent.PIPELINE_STARTED: _lifecycle_started(
-        PipelineStartedRow, actor_type_default="orchestrator", actor_key="pipeline_id"
-    ),
-    HookEvent.NODE_BOOTSTRAP: _lifecycle_started(
-        NodeBootstrapRow, actor_type_default="orchestrator", actor_key="node"
-    ),
-    HookEvent.NODE_ENTERED: _lifecycle_started(
-        NodeEnteredRow, actor_type_default="orchestrator", actor_key="node"
-    ),
+    # A — lifecycle started (6)
     HookEvent.SESSION_STARTED: _lifecycle_started(
         SessionStartedRow, actor_type_default="orchestrator", identifier_key="session_id"
     ),
@@ -224,13 +204,7 @@ HOOK_EVENT_TO_ROW_BUILDER: dict[HookEvent, Callable[[dict[str, Any], str], Activ
     HookEvent.TOOL_RECOVERY_ATTEMPTED: _lifecycle_started(
         ToolRecoveryAttemptedRow, actor_type_default="agent", identifier_key="tool_call_id"
     ),
-    # B — lifecycle completed (13)
-    HookEvent.PIPELINE_ENDED: _lifecycle_completed(
-        PipelineEndedRow, actor_type_default="orchestrator", actor_key="pipeline_id"
-    ),
-    HookEvent.NODE_EXITED: _lifecycle_completed(
-        NodeExitedRow, actor_type_default="orchestrator", actor_key="node"
-    ),
+    # B — lifecycle completed (9)
     HookEvent.SESSION_ENDED: _lifecycle_completed(
         SessionEndedRow, actor_type_default="orchestrator", identifier_key="session_id"
     ),
@@ -255,25 +229,7 @@ HOOK_EVENT_TO_ROW_BUILDER: dict[HookEvent, Callable[[dict[str, Any], str], Activ
     HookEvent.TURN_VERIFY_PASSED: _lifecycle_completed(
         TurnVerifyPassedRow, actor_type_default="agent", identifier_key="turn_id"
     ),
-    HookEvent.ANALYST_COMPLETED: _lifecycle_completed(
-        AnalystCompletedRow, actor_type_default="agent", identifier_key="analyst_id"
-    ),
-    HookEvent.EVALUATOR_COMPLETED: _lifecycle_completed(
-        EvaluatorCompletedRow, actor_type_default="agent", identifier_key="evaluator_id"
-    ),
-    HookEvent.SCORING_COMPLETED: _lifecycle_completed(
-        ScoringCompletedRow, actor_type_default="agent", identifier_key="scoring_id"
-    ),
-    # C — lifecycle failed (9)
-    HookEvent.PIPELINE_ERROR: _lifecycle_failed(
-        PipelineErrorRow, actor_type_default="orchestrator", actor_key="pipeline_id"
-    ),
-    HookEvent.PIPELINE_TIMEOUT: _lifecycle_failed(
-        PipelineTimeoutRow, actor_type_default="orchestrator", actor_key="pipeline_id"
-    ),
-    HookEvent.NODE_ERROR: _lifecycle_failed(
-        NodeErrorRow, actor_type_default="orchestrator", actor_key="node"
-    ),
+    # C — lifecycle failed (5)
     HookEvent.SUBAGENT_FAILED: _lifecycle_failed(SubAgentFailedRow, actor_type_default="agent"),
     HookEvent.LLM_CALL_FAILED: _lifecycle_failed(
         LLMCallFailedRow, actor_type_default="agent", identifier_key="call_id"
@@ -384,7 +340,7 @@ def _infer_actor_type_from_event(event: HookEvent) -> str:
     concrete class is the path to strict validation.
     """
     name = event.name
-    if name.startswith(("PIPELINE_", "NODE_", "SESSION_")):
+    if name.startswith("SESSION_"):
         return "orchestrator"
     if name.startswith(
         ("SUBAGENT_", "TURN_", "LLM_", "TOOL_", "COGNITIVE_", "MEMORY_", "RULE_", "PROMPT_")

@@ -76,9 +76,9 @@ def test_baseline_promoted_string_value_explicit() -> None:
 
 def test_reserved_values_distinct_from_existing_pipeline_events() -> None:
     """The new 5 must not collide with the 4 existing
-    ``PIPELINE_*`` / ``NODE_*`` / ``MODEL_PROMOTED`` event values.
+    pre-existing event values.
     Pre-PR-HOOKEVENT-RESERVE the autoresearch sprint considered
-    naming ``BASELINE_PROMOTED`` as ``MODEL_PROMOTED``, but that
+    naming ``BASELINE_PROMOTED`` after an unrelated event, but that
     name is already taken (line 80) for the pipeline-level retrain
     promotion. Pinning the distinction avoids the rename collision."""
     from core.hooks.system import HookEvent
@@ -91,9 +91,9 @@ def test_reserved_values_distinct_from_existing_pipeline_events() -> None:
         HookEvent.BASELINE_PROMOTED.value,
     }
     existing_values = {
-        HookEvent.PIPELINE_STARTED.value,
-        HookEvent.PIPELINE_ENDED.value,
-        HookEvent.MODEL_PROMOTED.value,
+        HookEvent.SESSION_STARTED.value,
+        HookEvent.SESSION_ENDED.value,
+        HookEvent.TRIGGER_FIRED.value,
     }
     assert new_values.isdisjoint(existing_values), (
         f"Reserved mutation/baseline values collide with existing: {new_values & existing_values}"

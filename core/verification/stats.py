@@ -8,7 +8,7 @@ from __future__ import annotations
 # v0.88.1 — numpy (~31 ms cold-start) deferred to the single function
 # that uses it.  Top-level ``import numpy as np`` was forcing the
 # eager load through every importer of this module
-# (e.g. ``core.automation.expert_panel`` at CLI bootstrap).
+# at CLI bootstrap.
 
 
 def calculate_krippendorff_alpha(

@@ -45,6 +45,19 @@ functional change.
 
 ---
 
+## [0.99.149] - 2026-06-10
+
+### Removed
+- **Dead analysis-pipeline event family + L4.5 automation chain (PR-DEAD-PIPELINE).** The LangGraph analysis pipeline that emitted `PIPELINE_*` / `NODE_*` / `ANALYST|EVALUATOR|SCORING_COMPLETED` left core in the identity pivot, but every listener stayed registered — StuckDetector never detected anything (`health["stuck_tasks"]` structurally 0), journal pipeline rows never wrote, the notification plugin never fired for them, and the entire L4.5 automation chain (CUSUMDetector / ModelRegistry / ExpertPanel / CorrelationAnalyzer / OutcomeTracker / SnapshotManager / FeedbackLoop) was built on every boot to feed events with no writer. Removed (operator decision, option a — delete outright):
+  - **15 HookEvents** (82 → 67): the 10-event pipeline family + `PIPELINE_TIMEOUT`, `NODE_BOOTSTRAP`, and the cascade-orphaned `DRIFT_DETECTED` / `OUTCOME_COLLECTED` / `MODEL_PROMOTED` / `SNAPSHOT_CAPTURED` (emitted only by the deleted components).
+  - **11 modules**: `core/automation/` (8 files), `core/orchestration/{stuck_detection,task_bridge,bootstrap}.py` (NodeBootstrapper had zero callers).
+  - **Inert listeners**: stuck tracker + journal pipeline handlers + dead notification events + 11 dead ActivityRow classes/mappings + TriggerManager snapshot integration (was always None in production).
+  - **Dead settings**: `drift_*` (3), `outcome_tracking_enabled`, `snapshot_*` (3), `model_registry_dir` + their hot-reload lines; orphaned `resolve_{snapshots,models}_dir` paths helpers.
+- `core/wiring/automation.py` → `core/wiring/scheduling.py`: the live scheduler stack (TriggerManager + SchedulerService + self-improving auto-trigger) is extracted unchanged; `build_automation` → `build_scheduling`, `RuntimeAutomationConfig` → `RuntimeSchedulingConfig`, `build_hooks` returns 3-tuple (StuckDetector dropped), `build_task_graph()` returns the graph only (bridge deleted). TaskGraph itself stays (live: sub-agents, CLI tasks).
+- Docs: `docs/architecture/hook-system.md` (+ `.en.md`) re-audited against the surviving registration sites; GEODE.md/CLAUDE.md counts synced (events 67, modules 392 core, tests 8740).
+
+---
+
 ## [0.99.148] - 2026-06-10
 
 ### Fixed

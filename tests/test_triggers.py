@@ -302,22 +302,6 @@ class TestDispatch:
         )
         assert result.data["_follow_up"] is False
 
-    def test_dispatch_with_snapshot_manager(self):
-        from core.automation.snapshot import SnapshotManager
-
-        snap_mgr = SnapshotManager()
-        mgr = TriggerManager(snapshot_manager=snap_mgr)
-        result = mgr.dispatch(
-            TriggerType.MANUAL,
-            {"session_id": "test-session"},
-        )
-        assert result.success is True
-        assert result.data["_dispatch"]["snapshot_id"].startswith("snap-")
-        # Verify snapshot was captured
-        snaps = snap_mgr.list_snapshots("test-session")
-        assert len(snaps) == 1
-        assert snaps[0].context["trigger_type"] == "manual"
-
     def test_dispatch_callback_error(self):
         mgr = TriggerManager()
         mgr.register(
