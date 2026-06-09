@@ -63,7 +63,7 @@ Four frontier autonomous-agent harnesses were surveyed for "how do they cut doma
 
 ### 2.1 Closest analogue for GEODE: **Claude Code**
 
-GEODE is already a multi-component Python package with a closed-style core (LangGraph runtime, scoring, verification, hooks) and an emerging extension surface (`.claude/skills/`, ToolRegistry, HookSystem 81 events). Claude Code's "stable closed kernel + filesystem-discovered domain extensions with frontmatter contracts" maps almost 1:1 to where GEODE wants to land.
+GEODE is already a multi-component Python package with a closed-style core (LangGraph runtime, scoring, verification, hooks) and an emerging extension surface (`.claude/skills/`, ToolRegistry, HookSystem 82 events). Claude Code's "stable closed kernel + filesystem-discovered domain extensions with frontmatter contracts" maps almost 1:1 to where GEODE wants to land.
 
 Codex CLI's crate-per-concern decomposition is the right reference for cleaning up `core/` internally, but GEODE is one Python package, not a Cargo workspace, so the Codex pattern translates to module/subpackage boundaries rather than literal crates.
 
@@ -85,7 +85,7 @@ OpenClaw's full hot-reload-everything model is overkill for GEODE's pipeline-ori
 
 ### 2.4 Open question for the team
 
-Where does `HookSystem` (81 events) live? Claude Code hooks live inside a plugin (`hooks/` dir alongside `skills/`); OpenClaw hooks register through `register(api).on(...)` and can be cross-plugin; autoresearch has no hooks. If `plugins/migration/` wants to fire `on_analyst_complete` to inject migration-specific verification, does that handler live in `core/hooks/` or `plugins/migration/hooks/`? **The answer determines whether HookSystem is closed-kernel event bus (Claude Code style) or open extension surface (OpenClaw style).** Decide before the second non-game-IP vertical lands; retrofitting hook ownership is one of the harder cuts to reverse.
+Where does `HookSystem` (82 events) live? Claude Code hooks live inside a plugin (`hooks/` dir alongside `skills/`); OpenClaw hooks register through `register(api).on(...)` and can be cross-plugin; autoresearch has no hooks. If `plugins/migration/` wants to fire `on_analyst_complete` to inject migration-specific verification, does that handler live in `core/hooks/` or `plugins/migration/hooks/`? **The answer determines whether HookSystem is closed-kernel event bus (Claude Code style) or open extension surface (OpenClaw style).** Decide before the second non-game-IP vertical lands; retrofitting hook ownership is one of the harder cuts to reverse.
 
 ---
 
@@ -269,7 +269,7 @@ If `core/` still imports from `plugins/` after step 8, the cut is fake. This is 
 
 ## 8. Open questions
 
-1. **Hook ownership**: HookSystem (81 events) stays as closed-kernel event bus (Claude Code style), or becomes domain-extensible (OpenClaw style)? Decide before second non-game-IP vertical lands.
+1. **Hook ownership**: HookSystem (82 events) stays as closed-kernel event bus (Claude Code style), or becomes domain-extensible (OpenClaw style)? Decide before second non-game-IP vertical lands.
 2. **DomainPort v2 surface**: Some methods like `get_cause_values`, `get_tier_thresholds`, `get_cause_to_action` assume an evaluation-shaped domain. A REODE migration agent (ASSESS → PLAN → TRANSFORM) doesn't have causes/tiers. Does v2 mark these `Optional[…]`, or does it split into `EvaluationDomainPort(DomainPort)` and `TaskDomainPort(DomainPort)`?
 3. **Step ordering**: Steps 1-6 are sequenced low-risk → medium-risk and unblock step 7-8. But step 7 is single-PR-large (~1,800 LOC + tests). Should step 7 split into 7a (state.py + reports.py + panels.py) and 7b (calibration.py + event_renderer.py)? Trade-off: more PRs (more review overhead) vs. one giant PR (atomic but reviewer-fatigue).
 4. **Migration discipline**: Do we add the Codex truth gate (`mv plugins plugins.bak && pytest`) to CI as a permanent ratchet? Once `core/` is plugin-free, the cheapest way to keep it that way is automated.

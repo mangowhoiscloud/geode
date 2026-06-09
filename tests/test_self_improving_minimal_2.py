@@ -303,30 +303,12 @@ def test_runner_reexports_mutation_audit_log_path() -> None:
 
 
 # ---------------------------------------------------------------------------
-# B8 — FALLBACK_SYSTEM_PROMPT vs program.md drift guard
+# B8 — REMOVED (PR-FALLBACK-HOOK-CONTROL, 2026-06-09). The
+# ``_FALLBACK_SYSTEM_PROMPT`` ↔ program.md drift guard is obsolete: the dual
+# SoT was deleted and a missing program.md now routes through the
+# PROGRAM_MD_UNREADABLE hook + fail-loud (see
+# tests/core/self_improving/loop/test_runner.py).
 # ---------------------------------------------------------------------------
-
-
-def test_fallback_prompt_shares_setup_anchor_with_program_md() -> None:
-    """If the fallback prompt drifts from program.md (e.g. operator
-    edits one without the other), the mutator LLM sees a different
-    contract depending on whether the disk read succeeds. Pin a
-    stable section header (``Setup``) so a drift surfaces here."""
-    from core.self_improving.loop import runner
-
-    repo_root = Path(__file__).resolve().parent.parent
-    program_md = (repo_root / "core" / "self_improving" / "program.md").read_text(encoding="utf-8")
-    # Both paths describe the same setup workflow; pick a stable
-    # anchor from program.md that the fallback should also mention.
-    # If either path drops "Setup" as a section concept the test
-    # fails — and the operator is forced to reconcile.
-    assert "## Setup" in program_md
-    # The fallback prompt's mutation-contract section should at least
-    # reference the same mutation_id / target_kind / target_section
-    # schema so an LLM run on either path uses the same JSON shape.
-    fallback = runner._FALLBACK_SYSTEM_PROMPT
-    for required_field in ("target_section", "new_value", "rationale"):
-        assert required_field in fallback
 
 
 # ---------------------------------------------------------------------------

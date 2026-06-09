@@ -22,7 +22,7 @@ class TestHookEvent:
         # baseline lifecycle) + 1 PR-MAX-GEN
         # (SELF_IMPROVING_AUTO_TRIGGER_MAX_GENERATION_REACHED) +
         # 1 PR-NO-FALLBACK (ADAPTER_DISPATCH_ATTEMPT).
-        assert len(HookEvent) == 81
+        assert len(HookEvent) == 82
 
     def test_event_values(self):
         assert HookEvent.PIPELINE_STARTED.value == "pipeline_start"
