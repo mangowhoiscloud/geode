@@ -1,17 +1,31 @@
 """System injection — XML-tagged context reinforcement for multi-turn conversations.
 
-Inspired by Claude Code's ``prependUserContext()`` pattern (utils/api.ts:449-474),
-this module builds a system reminder that is prepended to the messages array
-before each LLM call. This creates a reminder layer near the active user
-message while keeping the injected content explicitly XML-delimited.
+Inspired by Claude Code's ``<system-reminder>`` pattern: a reminder block is
+attached adjacent to the **latest** user message (appended as the final
+message) before each LLM call, keeping the injected content explicitly
+XML-delimited.
 
 Why: In long multi-turn conversations, instructions in the system prompt drift
 out of the model's attention window. The system reminder reinforces critical
 context (date, active rules, key constraints) at a position closer to the
 latest user message, improving instruction following.
 
-The reminder is injected into a deep-copied messages list (never into the
-stored ConversationContext), so it is ephemeral and regenerated each round.
+Cache contract (PR-CACHE-REMINDER, 2026-06-10): prompt caching is a prefix
+match and messages render after the system blocks. The previous design
+inserted the reminder at ``messages[0]`` and rewrote it per round
+("Current round: N"), which re-keyed the entire history prefix on every
+round — none of the rolling message cache breakpoints
+(core/llm/providers/anthropic.py, ADR-013 T5) could ever hit. The reminder
+therefore MUST stay append-only and MUST stay out of the stored
+ConversationContext:
+
+  - ``append_system_reminder`` returns a NEW list; the caller's history list
+    is never modified, so ``_sync_messages_to_context`` cannot persist the
+    reminder into history as stale mid-prefix bytes.
+  - Per-round variance (round index, date) lands after the last stable
+    history block, so only the reminder itself is uncached each round.
+
+Guard: ``tests/test_system_injection.py::TestCacheContract``.
 """
 
 from __future__ import annotations
@@ -34,7 +48,7 @@ def build_system_reminder(
     round_idx: int = 0,
     extra_context: dict[str, str] | None = None,
 ) -> str:
-    """Build a system reminder string for sandwich injection.
+    """Build a system reminder string for end-adjacent injection.
 
     Assembles a concise context block containing:
       - Current date/time (prevents year hallucination in tool calls)
@@ -80,32 +94,37 @@ def build_system_reminder(
     return body
 
 
-def prepend_system_reminder(
+def append_system_reminder(
     messages: list[dict[str, Any]],
     *,
     model: str = "",
     round_idx: int = 0,
     extra_context: dict[str, str] | None = None,
 ) -> list[dict[str, Any]]:
-    """Prepend a system reminder to the messages list.
+    """Return a new messages list with a system reminder appended last.
 
-    Creates a user message with the system reminder and inserts it at
-    position 0 of the messages list. The messages list is modified
-    **in-place** (caller should pass a deep copy from ``get_messages()``).
+    The input list is NOT modified — the reminder exists only in the
+    per-request copy, never in the stored conversation history (see module
+    docstring for the prompt-cache contract this protects).
 
-    If the first message is already a system-reminder from a previous
-    injection (e.g., stale from a retry), it is replaced rather than
-    stacked.
+    A legacy reminder persisted at position 0 by the pre-2026-06-10 prepend
+    design is stripped, so long-lived sessions converge to a stable prefix
+    after one call.
 
     Args:
-        messages: Deep-copied message list (will be modified in-place).
+        messages: Conversation history (left untouched).
         model: Current model name (for context).
         round_idx: Current round index in the agentic loop.
         extra_context: Additional key-value pairs to include.
 
     Returns:
-        The same messages list (for chaining convenience).
+        A new list ``[*history, reminder]`` — or the input list unchanged
+        when there is nothing to inject.
     """
+    base = messages
+    if base and _is_system_reminder(base[0]):
+        base = base[1:]
+
     reminder = build_system_reminder(
         model=model,
         round_idx=round_idx,
@@ -113,24 +132,18 @@ def prepend_system_reminder(
     )
 
     if not reminder:
-        return messages
+        return base
 
     reminder_message: dict[str, Any] = {
         "role": "user",
         "content": f"<{_REMINDER_TAG}>\n{reminder}\n</{_REMINDER_TAG}>",
     }
 
-    # Replace stale reminder if present (idempotent injection)
-    if messages and _is_system_reminder(messages[0]):
-        messages[0] = reminder_message
-    else:
-        messages.insert(0, reminder_message)
-
-    return messages
+    return [*base, reminder_message]
 
 
 def _is_system_reminder(message: dict[str, Any]) -> bool:
-    """Check if a message is a system reminder (for dedup)."""
+    """Check if a message is a system reminder (for legacy-prefix strip)."""
     if message.get("role") != "user":
         return False
     content = message.get("content", "")
