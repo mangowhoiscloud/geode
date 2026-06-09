@@ -47,17 +47,13 @@ def test_project_dotenv_model_beats_project_toml(
     assert _resolved_model(tmp_path, monkeypatch) == "gpt-5.4"
 
 
-def test_project_toml_wins_when_no_env(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_project_toml_wins_when_no_env(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """With no env/.env override, the project TOML drives the model."""
     _project(tmp_path, env_model=None, toml_model="claude-opus-4-8")
     assert _resolved_model(tmp_path, monkeypatch) == "claude-opus-4-8"
 
 
-def test_reload_honours_dotenv_over_toml(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_reload_honours_dotenv_over_toml(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """``reload_settings_from_disk`` (daemon session boundary) must keep the
     same precedence — the pre-fix reload copied fresh *values* but checked the
     stale singleton's ``model_fields_set``, so the overlay used the wrong set."""
