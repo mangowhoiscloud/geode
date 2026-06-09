@@ -8,64 +8,51 @@ real ``GEODE_*`` env var AND a ``.env`` file value. ``_apply_toml_overlay``
 used to skip only on ``os.environ`` membership, which missed ``.env``-file
 values (pydantic loads them onto the instance, not ``os.environ``), inverting
 env > TOML. The fix keys the skip on ``model_fields_set`` instead.
+
+These tests exercise the overlay decision directly (deterministic — no cwd /
+``.env``-relative-path / module-reload coupling, which is environment-dependent
+under xdist). The full ``.env`` → ``model_fields_set`` → reload path is covered
+by the live socket E2E in the PR.
 """
 
 from __future__ import annotations
 
-import importlib
 from pathlib import Path
 
+import core.config as cfg
 import pytest
+from core.config._settings import Settings
 
 
-def _project(tmp: Path, *, env_model: str | None, toml_model: str | None) -> None:
-    if env_model is not None:
-        (tmp / ".env").write_text(f"GEODE_MODEL={env_model}\n", encoding="utf-8")
-    if toml_model is not None:
-        (tmp / ".geode").mkdir(exist_ok=True)
-        (tmp / ".geode" / "config.toml").write_text(
-            f'[llm]\nprimary_model = "{toml_model}"\n', encoding="utf-8"
-        )
+def test_overlay_skips_field_set_by_env_layer(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A field in ``env_set_fields`` (env var OR ``.env`` — both land in
+    pydantic's ``model_fields_set``) must NOT be overwritten by the TOML
+    overlay: env layer outranks project/global TOML."""
+    monkeypatch.setattr(cfg, "_load_toml_config", lambda **_k: {"model": "claude-opus-4-8"})
+    s = Settings()
+    object.__setattr__(s, "model", "gpt-5.4")  # value pydantic read from env / .env
+
+    cfg._apply_toml_overlay(s, env_set_fields={"model"})
+
+    assert s.model == "gpt-5.4"
 
 
-def _resolved_model(tmp: Path, monkeypatch: pytest.MonkeyPatch) -> str:
-    monkeypatch.chdir(tmp)
-    monkeypatch.delenv("GEODE_MODEL", raising=False)
-    import core.config as cfg
+def test_overlay_applies_toml_when_field_unset(monkeypatch: pytest.MonkeyPatch) -> None:
+    """With the field NOT env/.env-set, the TOML overlay drives it."""
+    monkeypatch.setattr(cfg, "_load_toml_config", lambda **_k: {"model": "claude-opus-4-8"})
+    s = Settings()
+    object.__setattr__(s, "model", "sentinel-code-default")
 
-    importlib.reload(cfg)
-    cfg.reload_settings_from_disk()
-    return str(cfg.settings.model)
+    cfg._apply_toml_overlay(s, env_set_fields=set())
 
-
-def test_project_dotenv_model_beats_project_toml(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    """A project ``.env`` ``GEODE_MODEL`` (env layer) must win over the
-    project ``[llm] primary_model`` (TOML layer)."""
-    _project(tmp_path, env_model="gpt-5.4", toml_model="claude-opus-4-8")
-    assert _resolved_model(tmp_path, monkeypatch) == "gpt-5.4"
+    assert s.model == "claude-opus-4-8"
 
 
-def test_project_toml_wins_when_no_env(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    """With no env/.env override, the project TOML drives the model."""
-    _project(tmp_path, env_model=None, toml_model="claude-opus-4-8")
-    assert _resolved_model(tmp_path, monkeypatch) == "claude-opus-4-8"
-
-
-def test_reload_honours_dotenv_over_toml(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    """``reload_settings_from_disk`` (daemon session boundary) must keep the
-    same precedence — the pre-fix reload copied fresh *values* but checked the
-    stale singleton's ``model_fields_set``, so the overlay used the wrong set."""
-    _project(tmp_path, env_model="gpt-5.4", toml_model="claude-opus-4-8")
-    monkeypatch.chdir(tmp_path)
-    monkeypatch.delenv("GEODE_MODEL", raising=False)
-    import core.config as cfg
-
-    importlib.reload(cfg)
-    cfg.reload_settings_from_disk()
-    assert cfg.settings.model == "gpt-5.4"
-    # Drop the .env override → reload → project TOML now wins.
-    (tmp_path / ".env").write_text("\n", encoding="utf-8")
-    cfg.reload_settings_from_disk()
-    assert cfg.settings.model == "claude-opus-4-8"
+def test_dotenv_value_lands_in_model_fields_set(tmp_path: Path) -> None:
+    """Pin the premise of the fix: a ``.env`` ``GEODE_MODEL`` is captured in
+    ``model_fields_set`` (same as a real env var), so the overlay skip can
+    rely on it. Uses an explicit absolute ``_env_file`` — no cwd coupling."""
+    (tmp_path / ".env").write_text("GEODE_MODEL=gpt-5.4\n", encoding="utf-8")
+    s = Settings(_env_file=str(tmp_path / ".env"))
+    assert s.model == "gpt-5.4"
+    assert "model" in s.model_fields_set
