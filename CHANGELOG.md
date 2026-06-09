@@ -45,6 +45,32 @@ functional change.
 
 ---
 
+## [0.99.145] - 2026-06-09
+
+### Fixed
+- **Daemon now uses each session's project model, not its own launch-cwd.** The
+  thin CLI is transport-only and never sent its project context, so `geode serve`
+  resolved every session's model from the *daemon's* launch cwd (`settings.model`)
+  — the caller's `./.geode/config.toml` was ignored and the executed model
+  diverged from the banner (e.g. banner `claude-opus-4-8`, calls routed to a
+  stale `gpt-5.5`). The thin CLI now ships its project-resolved model in the
+  `client_capability` message and the daemon adopts it via `update_model_async`
+  before the first prompt. E2E-verified: a session from a `claude-haiku-4-5`
+  project executes on haiku while the daemon default stays opus. Old clients
+  (no `model` field) keep the daemon default.
+- **`.env` model override now correctly outranks `config.toml`.**
+  `_apply_toml_overlay` skipped the TOML overlay only when `GEODE_<FIELD>` was in
+  `os.environ`, which missed `.env`-file values (pydantic loads them onto the
+  instance, not `os.environ`) — so a project `.env` `GEODE_MODEL` was wrongly
+  overwritten by `[llm] primary_model`, inverting the documented env > TOML
+  precedence. The skip now keys on pydantic's `model_fields_set` (captures env
+  var AND `.env`); `reload_settings_from_disk` passes the fresh instance's set.
+
+### Docs
+- `docs/setup.md` — added a **Model resolution** precedence note (CLI > env/.env >
+  project config > global config > routing), documented `/model global`, and
+  fixed the stale `GEODE_MODEL` default (`claude-opus-4-6` → `claude-opus-4-8`).
+
 ## [0.99.144] - 2026-06-09
 
 ### Fixed

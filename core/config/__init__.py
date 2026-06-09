@@ -149,18 +149,32 @@ def _load_toml_config(
     return merged
 
 
-def _apply_toml_overlay(s: Settings) -> None:
-    """Overlay TOML values onto Settings for fields not set by env vars."""
+def _apply_toml_overlay(s: Settings, *, env_set_fields: set[str] | None = None) -> None:
+    """Overlay TOML values onto Settings for fields NOT already set by env / .env.
+
+    Precedence (documented): CLI > env > project ``.geode/config.toml`` > global
+    ``~/.geode/config.toml`` > routing default. The env layer includes BOTH real
+    ``GEODE_*`` environment variables AND values pydantic read from a ``.env``
+    file — pydantic marks all of them in ``model_fields_set`` (verified: an env
+    var and a ``.env`` ``GEODE_MODEL`` both land there). The pre-fix check used
+    ``GEODE_<FIELD> in os.environ``, which MISSED ``.env``-file values (pydantic
+    loads them into the instance, not ``os.environ``), so a project ``.env``
+    ``GEODE_MODEL`` was wrongly overwritten by ``[llm] primary_model`` — inverting
+    env > TOML. ``model_fields_set`` closes that gap.
+
+    ``env_set_fields`` overrides which fields count as env/.env-set. Needed by
+    :func:`reload_settings_from_disk`, which copies a fresh instance's *values*
+    onto the singleton via ``object.__setattr__`` (that bypasses
+    ``model_fields_set``), so the caller passes the fresh instance's set.
+    """
     toml_values = _load_toml_config()
     if not toml_values:
         return
 
+    env_set = env_set_fields if env_set_fields is not None else s.model_fields_set
     for field_name, toml_value in toml_values.items():
-        # Skip fields that were explicitly set via environment variable.
-        # Pydantic Settings loads from GEODE_<FIELD> and .env automatically.
-        # We only overlay TOML for fields still at their code default.
-        env_key = f"GEODE_{field_name.upper()}"
-        if env_key in os.environ:
+        # Env layer (real env var OR .env file) outranks TOML — don't overlay.
+        if field_name in env_set:
             continue
         # Also check special alias env vars for API keys
         if field_name in ("anthropic_api_key", "openai_api_key", "zai_api_key"):
@@ -234,7 +248,11 @@ def reload_settings_from_disk() -> None:
         with contextlib.suppress(Exception):
             new_value = getattr(fresh, field_name)
             object.__setattr__(current, field_name, new_value)
-    _apply_toml_overlay(current)
+    # ``object.__setattr__`` above copied fresh *values* but not its
+    # ``model_fields_set``, so pass the fresh instance's set explicitly — the
+    # overlay must skip fields the fresh ``.env`` / env actually set, not what
+    # the stale singleton recorded at boot.
+    _apply_toml_overlay(current, env_set_fields=set(fresh.model_fields_set))
     log.info(
         "reload_settings_from_disk applied: model=%r (pid=%d)",
         getattr(current, "model", "?"),
