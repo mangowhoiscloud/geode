@@ -7,6 +7,10 @@
 
 <!-- Add items here when identified. Format: -->
 <!-- - [ ] #issue-number — Short description (@assignee) -->
+- [ ] CLI white-line — operator TTY visual confirm at idle prompt (post-rebuild v0.99.147)
+- [ ] 10-cycle self-improving campaign — runtime resync (A+B merged) + operator launch
+- [ ] viz-sync — geode_hero / critical_floor / autoresearch_compare → 18-dim
+- [ ] Target re-selection — broken/input floor on opus-4-8 (operator decision)
 
 ## In Progress
 
@@ -21,3 +25,9 @@
 
 <!-- Completed items. Keep recent 10, archive older ones. -->
 <!-- - [x] #issue-number — Short description (PR #N) -->
+- [x] CLI: program.md fallback hook-controlled — drop `_FALLBACK_SYSTEM_PROMPT` literal, `HookEvent.PROGRAM_MD_UNREADABLE` + fail-loud, hook 81→82 (PR #2022, v0.99.147)
+- [x] Scaffold §7: serve-kill `pkill -f` — fix `ps aux | grep` truncation footgun that left stale daemons fighting over the socket (PR #2020)
+- [x] CLI: remove cold-start "white line" — hide empty quota bar per prompt (PR #2018, v0.99.146)
+- [x] Session model resolution: daemon adopts each session's project model + `.env` outranks `config.toml` (PR #2014 / #2016, v0.99.145)
+- [x] System-prompt quality pass — hook count 69→81, SOUL over-promise scope, wrapper persona (PR #2012)
+- [x] Runtime Anthropic primary opus-4-7 → opus-4-8 + GEODE.md Models sync (PR #2010)
