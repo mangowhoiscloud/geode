@@ -161,6 +161,7 @@ class IPCClient:
         ``width`` (terminal columns, falling back to 120). The daemon
         ignores unknown fields, so old daemons stay compatible.
         """
+        import os
         import shutil
         import sys
 
@@ -174,11 +175,24 @@ class IPCClient:
             width = 120
         if width <= 0:
             width = 120
+        # The thin CLI resolves the model at ITS cwd (the user's project). The
+        # daemon otherwise resolves from its own launch cwd, so without this the
+        # session's project model is ignored and the call diverges from the
+        # banner. ``cwd`` is sent for diagnostics / future per-project routing.
+        # Old daemons ignore unknown fields (back-compat).
+        try:
+            from core.config import settings as _settings
+
+            model = _settings.model
+        except Exception:
+            model = ""
         self._send(
             {
                 "type": "client_capability",
                 "is_tty": is_tty,
                 "width": width,
+                "model": model,
+                "cwd": os.getcwd(),
             }
         )
 

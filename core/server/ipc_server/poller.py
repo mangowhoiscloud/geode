@@ -578,6 +578,29 @@ class CLIPoller:
                 width = 120
             if isinstance(endpoint, _AsyncClientEndpoint):
                 endpoint.set_capability(is_tty=is_tty, width=width)
+            # Adopt the thin CLI's project-resolved model. The daemon creates the
+            # session with its OWN launch-cwd default (``settings.model``); the
+            # thin CLI resolves the model at the *caller's* project cwd. Without
+            # this the session's project config is ignored and the executed model
+            # diverges from the banner. Sent once at session start, before any
+            # prompt, so the swap is safe (no in-flight LLM call).
+            cli_model = str(msg.get("model", "")).strip()
+            if cli_model and cli_model != getattr(loop, "model", ""):
+                try:
+                    from core.config import _resolve_provider
+
+                    await loop.update_model_async(
+                        cli_model, _resolve_provider(cli_model), reason="cli_session_cwd"
+                    )
+                    log.info(
+                        "client_capability: adopted CLI project model %s (session=%s)",
+                        cli_model,
+                        session_id,
+                    )
+                except Exception:
+                    log.warning(
+                        "client_capability: failed to adopt CLI model %s", cli_model, exc_info=True
+                    )
             log.debug("client_capability: is_tty=%s width=%d", is_tty, width if width > 0 else 120)
             return {"type": "ack"}
 
