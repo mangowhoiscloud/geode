@@ -496,17 +496,42 @@ def test_system_prompt_loads_program_md_when_present(
     assert "target_section" in prompt
 
 
-def test_system_prompt_falls_back_when_program_md_missing(
+def test_system_prompt_fails_loud_when_program_md_missing_and_no_hook(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """When _load_program_md returns None (missing/OSError), use fallback."""
+    """program.md unreadable + no PROGRAM_MD_UNREADABLE handler → fail loud.
+
+    Replaces the former ``_FALLBACK_SYSTEM_PROMPT`` literal: a missing
+    program.md is a packaging bug, not a routine fallback, so the runner
+    raises rather than silently substituting a drift-prone literal.
+    """
     from core.self_improving.loop import runner
 
     monkeypatch.setattr(runner, "_load_program_md", lambda: None)
+    monkeypatch.setattr(
+        "core.self_improving.loop._hooks._fire_hook_with_result",
+        lambda event, data: None,
+    )
+    with pytest.raises(RuntimeError, match=r"program\.md unreadable"):
+        runner._build_system_prompt()
+
+
+def test_system_prompt_uses_hook_override_when_program_md_missing(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A PROGRAM_MD_UNREADABLE handler may return {'program_md': ...} to override."""
+    from core.self_improving.loop import runner
+
+    monkeypatch.setattr(runner, "_load_program_md", lambda: None)
+    monkeypatch.setattr(
+        "core.self_improving.loop._hooks._fire_hook_with_result",
+        lambda event, data: {"program_md": "## HOOK OVERRIDE BODY"},
+    )
     prompt = runner._build_system_prompt()
-    # Fallback content (the pre-G5b.fix2 inline prompt) is returned verbatim.
-    assert prompt == runner._FALLBACK_SYSTEM_PROMPT
+    assert "## HOOK OVERRIDE BODY" in prompt
+    # The mutation-contract suffix is still appended to the override body.
     assert "Response schema:" in prompt
+    assert "target_section" in prompt
 
 
 def test_load_program_md_reads_real_file_in_repo() -> None:

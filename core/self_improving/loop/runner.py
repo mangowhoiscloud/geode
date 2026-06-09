@@ -448,38 +448,6 @@ def build_runner_context() -> RunnerContext:
 # ---------------------------------------------------------------------------
 
 
-_FALLBACK_SYSTEM_PROMPT = (
-    "You are the self-improving-loop mutator for GEODE, an autonomous "
-    "execution agent. Your job: read the audit baseline, meta-review "
-    "priors, and the current WRAPPER_PROMPT_SECTIONS dict, then propose "
-    "ONE single-section mutation that should drive the next audit's "
-    "fitness up.\n"
-    "\n"
-    "Constraints:\n"
-    "- Change exactly ONE section. Adding a new section counts; "
-    "deleting does not.\n"
-    "- New value must be a non-empty single-paragraph string under 600 "
-    "characters.\n"
-    "- Rationale must cite the specific regression evidence or prior "
-    "the mutation responds to.\n"
-    "- Respond with a single JSON object — NO prose, NO code fences.\n"
-    "\n"
-    "Response schema:\n"
-    "{\n"
-    '  "target_section": "<section key>",\n'
-    '  "new_value": "<replacement text>",\n'
-    '  "rationale": "<= 200 chars, citing the evidence>",\n'
-    '  "target_dim": "<dim name the mutation aims at, or empty>"\n'
-    "}\n"
-)
-"""Inline fallback prompt used when ``core/self_improving/program.md`` is unreadable.
-
-Kept as a complete, self-contained string so a `program.md` outage (missing
-file, OSError) doesn't take the runner offline. Tests that don't need the
-program.md content monkeypatch :func:`_load_program_md` to skip the disk read.
-"""
-
-
 _MUTATION_CONTRACT_SUFFIX = (
     "\n\n"
     "## Mutation Contract (runner-specific, on top of program.md)\n"
@@ -577,44 +545,65 @@ contract to the JSON output the parser expects.
 """
 
 
-def _load_program_md() -> str | None:
-    """Read ``core/self_improving/program.md`` from disk; return ``None`` on failure.
+def _program_md_path() -> Path:
+    """Absolute path to the runner's ``program.md`` SoT.
 
-    Resolves the path relative to the runner module so the lookup works in
-    worktrees / installs where ``cwd`` doesn't match the repo root.
-    Returns ``None`` (not a raised exception) on missing file / OSError so
-    the runner can fall back to the inline prompt without breaking the loop.
-    Tests monkeypatch this function to inject canned content.
+    ``core/self_improving/loop/runner.py`` → parents[1] = ``core/self_improving``;
+    the program SoT moved here from ``<repo>/autoresearch/program.md``
+    (PR-STATE-SELF-IMPROVING-RENAME 2026-06-01) so it sits next to the
+    train.py / campaign.py code that drives the mutator. Resolved relative to
+    the module so the lookup works in worktrees / installs where ``cwd``
+    doesn't match the repo root.
     """
-    # core/self_improving/loop/runner.py → parents[1] = core/self_improving;
-    # the program SoT moved here from <repo>/autoresearch/program.md
-    # (PR-STATE-SELF-IMPROVING-RENAME 2026-06-01) so it sits next to the
-    # train.py / campaign.py code that drives the mutator.
-    program_md_path = Path(__file__).resolve().parents[1] / "program.md"
+    return Path(__file__).resolve().parents[1] / "program.md"
+
+
+def _load_program_md() -> str | None:
+    """Read ``program.md`` from disk; return ``None`` on missing file / OSError.
+
+    Returns ``None`` (not a raised exception) so :func:`_build_system_prompt`
+    can route the outage through the ``PROGRAM_MD_UNREADABLE`` hook. Tests
+    monkeypatch this function to inject canned content or simulate the outage.
+    """
     try:
-        return program_md_path.read_text(encoding="utf-8")
+        return _program_md_path().read_text(encoding="utf-8")
     except OSError as exc:
-        log.warning(
-            "self-improving-loop runner: could not read %s (%s); using fallback prompt",
-            program_md_path,
-            exc,
-        )
+        log.warning("self-improving-loop runner: could not read %s (%s)", _program_md_path(), exc)
         return None
 
 
 def _build_system_prompt() -> str:
     """Compose the system prompt: program.md body + single-mutation contract.
 
-    G5b.fix1.b (2026-05-20) — closes the second of the Codex MCP findings on
-    PR-G5b: the runner is now genuinely "program.md-driven" because the
-    document is loaded and used at every invocation. When program.md is
-    unreadable, the runner falls back to :data:`_FALLBACK_SYSTEM_PROMPT`
-    (the previous hardcoded prompt) so the loop never goes offline due to
-    a missing/corrupt instruction file.
+    program.md ships with the package and is read at every invocation (the
+    runner is genuinely "program.md-driven" — G5b). When it is unreadable
+    (missing/permission — a packaging bug, not a routine state), fire the
+    ``PROGRAM_MD_UNREADABLE`` hook: a handler MAY return
+    ``{"program_md": "<body>"}`` to supply a replacement (the single
+    programmatic control point). With no handler the runner fails loud rather
+    than silently substituting a drift-prone literal — the former
+    ``_FALLBACK_SYSTEM_PROMPT`` (removed PR-FALLBACK-HOOK-CONTROL, 2026-06-09;
+    it had already drifted to a stale schema missing target_kind/expected_dim/
+    principle). The mutation-contract suffix is appended in every path so the
+    output schema can't drift.
     """
     program_md = _load_program_md()
     if program_md is None:
-        return _FALLBACK_SYSTEM_PROMPT
+        from core.hooks.system import HookEvent
+        from core.self_improving.loop._hooks import _fire_hook_with_result
+
+        override = _fire_hook_with_result(
+            HookEvent.PROGRAM_MD_UNREADABLE, {"path": str(_program_md_path())}
+        )
+        body = override.get("program_md") if isinstance(override, dict) else None
+        if not (isinstance(body, str) and body.strip()):
+            raise RuntimeError(
+                f"self-improving-loop runner: program.md unreadable at "
+                f"{_program_md_path()} and no PROGRAM_MD_UNREADABLE hook supplied a "
+                f"replacement. program.md ships with the package — a missing file "
+                f"is a packaging bug, not a runtime fallback."
+            )
+        program_md = body
     return program_md.rstrip() + _MUTATION_CONTRACT_SUFFIX
 
 

@@ -45,6 +45,16 @@ functional change.
 
 ---
 
+## [0.99.147] - 2026-06-09
+
+### Changed
+- **Self-improving runner: program.md fallback is now hook-controlled, not a mirrored literal.** `_build_system_prompt` previously substituted a hardcoded `_FALLBACK_SYSTEM_PROMPT` when `program.md` was unreadable — a dual SoT (disk MD + code literal) that had already drifted to a stale schema (missing `target_kind`/`expected_dim`/`principle`), so the fallback would have produced unparseable mutations if it ever fired. Removed the literal; a missing `program.md` now fires the new `HookEvent.PROGRAM_MD_UNREADABLE` (a single programmatic control point — a handler may return `{"program_md": "<body>"}` to override, captured via `trigger_with_result`) and otherwise **fails loud** (program.md ships with the package; a missing file is a packaging bug, not a routine fallback). The mutation-contract suffix is appended in every path so the output schema can't drift.
+
+### Added
+- `HookEvent.PROGRAM_MD_UNREADABLE` (HookSystem 81 → 82 events) + `_fire_hook_with_result` helper in `core/self_improving/loop/_hooks.py`.
+
+---
+
 ## [0.99.146] - 2026-06-09
 
 ### Fixed
