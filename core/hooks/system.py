@@ -306,6 +306,20 @@ class HookEvent(Enum):
     MUTATION_REVERTED = "mutation_reverted"
     BASELINE_PROMOTED = "baseline_promoted"
 
+    # Self-improving runner system-prompt source (PR-FALLBACK-HOOK-CONTROL,
+    # 2026-06-09). Fired by
+    # ``core.self_improving.loop.runner._build_system_prompt`` when
+    # ``program.md`` is unreadable. Replaces the former inline
+    # ``_FALLBACK_SYSTEM_PROMPT`` literal (a drift-prone dual SoT — the
+    # literal had already drifted to a stale schema missing
+    # target_kind/expected_dim/principle) with one programmatic control
+    # point: a handler MAY return ``{"program_md": "<replacement body>"}``
+    # (captured via ``trigger_with_result``) to override; with no handler
+    # the runner fails loud, because program.md ships with the package and a
+    # missing file is a packaging bug, not a routine fallback.
+    # Payload: ``{"path": str}``.
+    PROGRAM_MD_UNREADABLE = "program_md_unreadable"
+
 
 @dataclass
 class HookResult:
