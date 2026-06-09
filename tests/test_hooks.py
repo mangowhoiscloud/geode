@@ -22,18 +22,16 @@ class TestHookEvent:
         # baseline lifecycle) + 1 PR-MAX-GEN
         # (SELF_IMPROVING_AUTO_TRIGGER_MAX_GENERATION_REACHED) +
         # 1 PR-NO-FALLBACK (ADAPTER_DISPATCH_ATTEMPT).
-        assert len(HookEvent) == 82
+        assert len(HookEvent) == 67
 
     def test_event_values(self):
-        assert HookEvent.PIPELINE_STARTED.value == "pipeline_start"
-        assert HookEvent.PIPELINE_ENDED.value == "pipeline_end"
-        assert HookEvent.PIPELINE_ERROR.value == "pipeline_error"
-        assert HookEvent.NODE_ENTERED.value == "node_enter"
-        assert HookEvent.NODE_EXITED.value == "node_exit"
-        assert HookEvent.NODE_ERROR.value == "node_error"
-        assert HookEvent.ANALYST_COMPLETED.value == "analyst_complete"
-        assert HookEvent.EVALUATOR_COMPLETED.value == "evaluator_complete"
-        assert HookEvent.SCORING_COMPLETED.value == "scoring_complete"
+        assert HookEvent.SESSION_STARTED.value == "session_start"
+        assert HookEvent.SESSION_ENDED.value == "session_end"
+        assert HookEvent.SUBAGENT_STARTED.value == "subagent_started"
+        assert HookEvent.SUBAGENT_COMPLETED.value == "subagent_completed"
+        assert HookEvent.SUBAGENT_FAILED.value == "subagent_failed"
+        assert HookEvent.TURN_COMPLETED.value == "turn_complete"
+        assert HookEvent.TRIGGER_FIRED.value == "trigger_fired"
         assert HookEvent.VERIFICATION_PASS.value == "verification_pass"
         assert HookEvent.VERIFICATION_FAIL.value == "verification_fail"
 
@@ -65,15 +63,13 @@ class TestAuditLoggers:
 
         with (
             patch("core.wiring.bootstrap.RunLog"),
-            patch("core.wiring.bootstrap.StuckDetector"),
         ):
             from core.wiring.bootstrap import build_hooks
 
-            hooks, _, _, _ = build_hooks(
+            hooks, _, _ = build_hooks(
                 session_key="test",
                 run_id="test-run",
                 log_dir=None,
-                stuck_timeout_s=60,
             )
 
         # Check a representative sample of audit loggers
@@ -89,15 +85,13 @@ class TestAuditLoggers:
 
         with (
             patch("core.wiring.bootstrap.RunLog"),
-            patch("core.wiring.bootstrap.StuckDetector"),
         ):
             from core.wiring.bootstrap import build_hooks
 
-            hooks, _, _, _ = build_hooks(
+            hooks, _, _ = build_hooks(
                 session_key="test",
                 run_id="test-run",
                 log_dir=None,
-                stuck_timeout_s=60,
             )
 
         all_hooks = hooks.list_hooks()
@@ -139,14 +133,14 @@ class TestMemoryToolHooks:
 
 class TestHookResult:
     def test_success_result(self):
-        r = HookResult(success=True, event=HookEvent.PIPELINE_STARTED, handler_name="my_hook")
+        r = HookResult(success=True, event=HookEvent.SESSION_STARTED, handler_name="my_hook")
         assert r.success is True
         assert r.error is None
 
     def test_failure_result(self):
         r = HookResult(
             success=False,
-            event=HookEvent.NODE_ERROR,
+            event=HookEvent.TOOL_EXEC_FAILED,
             handler_name="bad_hook",
             error="something broke",
         )
@@ -175,8 +169,8 @@ class TestHookSystem:
         def on_start(event, data):
             calls.append({"event": event, "data": data})
 
-        hooks.register(HookEvent.PIPELINE_STARTED, on_start)
-        results = hooks.trigger(HookEvent.PIPELINE_STARTED, {"subject": "Project Atlas"})
+        hooks.register(HookEvent.SESSION_STARTED, on_start)
+        results = hooks.trigger(HookEvent.SESSION_STARTED, {"subject": "Project Atlas"})
 
         assert len(results) == 1
         assert results[0].success is True
@@ -193,20 +187,20 @@ class TestHookSystem:
         def high_priority(event, data):
             order.append("high")
 
-        hooks.register(HookEvent.NODE_ENTERED, low_priority, priority=200)
-        hooks.register(HookEvent.NODE_ENTERED, high_priority, priority=10)
+        hooks.register(HookEvent.TOOL_EXEC_STARTED, low_priority, priority=200)
+        hooks.register(HookEvent.TOOL_EXEC_STARTED, high_priority, priority=10)
 
-        hooks.trigger(HookEvent.NODE_ENTERED)
+        hooks.trigger(HookEvent.TOOL_EXEC_STARTED)
         assert order == ["high", "low"]
 
     def test_multiple_handlers_same_event(self):
         hooks = HookSystem()
         calls: list[str] = []
 
-        hooks.register(HookEvent.PIPELINE_ENDED, lambda e, d: calls.append("a"), name="a")
-        hooks.register(HookEvent.PIPELINE_ENDED, lambda e, d: calls.append("b"), name="b")
+        hooks.register(HookEvent.SESSION_ENDED, lambda e, d: calls.append("a"), name="a")
+        hooks.register(HookEvent.SESSION_ENDED, lambda e, d: calls.append("b"), name="b")
 
-        results = hooks.trigger(HookEvent.PIPELINE_ENDED)
+        results = hooks.trigger(HookEvent.SESSION_ENDED)
         assert len(results) == 2
         assert len(calls) == 2
 
@@ -220,10 +214,10 @@ class TestHookSystem:
         def good_hook(event, data):
             calls.append("ok")
 
-        hooks.register(HookEvent.NODE_EXITED, bad_hook, name="bad", priority=1)
-        hooks.register(HookEvent.NODE_EXITED, good_hook, name="good", priority=2)
+        hooks.register(HookEvent.TOOL_EXEC_ENDED, bad_hook, name="bad", priority=1)
+        hooks.register(HookEvent.TOOL_EXEC_ENDED, good_hook, name="good", priority=2)
 
-        results = hooks.trigger(HookEvent.NODE_EXITED)
+        results = hooks.trigger(HookEvent.TOOL_EXEC_ENDED)
         assert len(results) == 2
         assert results[0].success is False
         assert results[0].error == "boom"
@@ -232,45 +226,45 @@ class TestHookSystem:
 
     def test_trigger_no_handlers(self):
         hooks = HookSystem()
-        results = hooks.trigger(HookEvent.SCORING_COMPLETED)
+        results = hooks.trigger(HookEvent.TURN_COMPLETED)
         assert results == []
 
     def test_unregister(self):
         hooks = HookSystem()
-        hooks.register(HookEvent.PIPELINE_STARTED, lambda e, d: None, name="tmp")
-        assert hooks.unregister(HookEvent.PIPELINE_STARTED, "tmp") is True
-        assert hooks.trigger(HookEvent.PIPELINE_STARTED) == []
+        hooks.register(HookEvent.SESSION_STARTED, lambda e, d: None, name="tmp")
+        assert hooks.unregister(HookEvent.SESSION_STARTED, "tmp") is True
+        assert hooks.trigger(HookEvent.SESSION_STARTED) == []
 
     def test_unregister_nonexistent(self):
         hooks = HookSystem()
-        assert hooks.unregister(HookEvent.PIPELINE_STARTED, "nope") is False
+        assert hooks.unregister(HookEvent.SESSION_STARTED, "nope") is False
 
     def test_list_hooks(self):
         hooks = HookSystem()
-        hooks.register(HookEvent.NODE_ENTERED, lambda e, d: None, name="h1")
-        hooks.register(HookEvent.NODE_EXITED, lambda e, d: None, name="h2")
+        hooks.register(HookEvent.TOOL_EXEC_STARTED, lambda e, d: None, name="h1")
+        hooks.register(HookEvent.TOOL_EXEC_ENDED, lambda e, d: None, name="h2")
 
         all_hooks = hooks.list_hooks()
-        assert "node_enter" in all_hooks
-        assert "h1" in all_hooks["node_enter"]
+        assert "tool_exec_start" in all_hooks
+        assert "h1" in all_hooks["tool_exec_start"]
 
-        filtered = hooks.list_hooks(HookEvent.NODE_EXITED)
-        assert "node_exit" in filtered
-        assert "h2" in filtered["node_exit"]
+        filtered = hooks.list_hooks(HookEvent.TOOL_EXEC_ENDED)
+        assert "tool_exec_end" in filtered
+        assert "h2" in filtered["tool_exec_end"]
 
     def test_clear_specific_event(self):
         hooks = HookSystem()
-        hooks.register(HookEvent.NODE_ENTERED, lambda e, d: None, name="a")
-        hooks.register(HookEvent.NODE_EXITED, lambda e, d: None, name="b")
+        hooks.register(HookEvent.TOOL_EXEC_STARTED, lambda e, d: None, name="a")
+        hooks.register(HookEvent.TOOL_EXEC_ENDED, lambda e, d: None, name="b")
 
-        hooks.clear(HookEvent.NODE_ENTERED)
-        assert hooks.list_hooks(HookEvent.NODE_ENTERED) == {"node_enter": []}
-        assert "b" in hooks.list_hooks(HookEvent.NODE_EXITED)["node_exit"]
+        hooks.clear(HookEvent.TOOL_EXEC_STARTED)
+        assert hooks.list_hooks(HookEvent.TOOL_EXEC_STARTED) == {"tool_exec_start": []}
+        assert "b" in hooks.list_hooks(HookEvent.TOOL_EXEC_ENDED)["tool_exec_end"]
 
     def test_clear_all(self):
         hooks = HookSystem()
-        hooks.register(HookEvent.NODE_ENTERED, lambda e, d: None, name="a")
-        hooks.register(HookEvent.NODE_EXITED, lambda e, d: None, name="b")
+        hooks.register(HookEvent.TOOL_EXEC_STARTED, lambda e, d: None, name="a")
+        hooks.register(HookEvent.TOOL_EXEC_ENDED, lambda e, d: None, name="b")
 
         hooks.clear()
         assert hooks.list_hooks() == {}
@@ -281,9 +275,9 @@ class TestHookSystem:
         def my_handler(event, data):
             pass
 
-        hooks.register(HookEvent.PIPELINE_STARTED, my_handler)
+        hooks.register(HookEvent.SESSION_STARTED, my_handler)
         all_hooks = hooks.list_hooks()
-        assert "my_handler" in all_hooks["pipeline_start"]
+        assert "my_handler" in all_hooks["session_start"]
 
     def test_trigger_with_none_data(self):
         hooks = HookSystem()
@@ -292,8 +286,8 @@ class TestHookSystem:
         def handler(event, data):
             received.append(data)
 
-        hooks.register(HookEvent.PIPELINE_STARTED, handler)
-        hooks.trigger(HookEvent.PIPELINE_STARTED)  # No data arg
+        hooks.register(HookEvent.SESSION_STARTED, handler)
+        hooks.trigger(HookEvent.SESSION_STARTED)  # No data arg
         assert received == [{}]
 
 
@@ -317,22 +311,22 @@ class TestRegisterPrefix:
         hooks.register_prefix("*", universal)
 
         for event in (
-            HookEvent.PIPELINE_STARTED,
-            HookEvent.NODE_ENTERED,
+            HookEvent.SESSION_STARTED,
+            HookEvent.TOOL_EXEC_STARTED,
             HookEvent.SUBAGENT_FAILED,
             HookEvent.LLM_CALL_ENDED,
         ):
             hooks.trigger(event)
 
         assert seen == [
-            HookEvent.PIPELINE_STARTED,
-            HookEvent.NODE_ENTERED,
+            HookEvent.SESSION_STARTED,
+            HookEvent.TOOL_EXEC_STARTED,
             HookEvent.SUBAGENT_FAILED,
             HookEvent.LLM_CALL_ENDED,
         ]
 
     def test_prefix_match_segment_boundary(self):
-        """``"NODE"`` matches ``NODE_ENTERED`` but not ``NODELESS_*``
+        """``"SESSION"`` matches ``SESSION_STARTED`` but not ``SESSIONLESS_*``
         (none such today — the test guards against a future regression
         where someone replaces the ``+ "_"`` boundary with a bare
         ``startswith``)."""
@@ -342,13 +336,13 @@ class TestRegisterPrefix:
         def node_handler(event, _data):
             seen.append(event)
 
-        hooks.register_prefix("NODE", node_handler)
+        hooks.register_prefix("TOOL_EXEC", node_handler)
 
-        hooks.trigger(HookEvent.NODE_ENTERED)
-        hooks.trigger(HookEvent.NODE_EXITED)
-        hooks.trigger(HookEvent.PIPELINE_STARTED)  # must NOT fire
+        hooks.trigger(HookEvent.TOOL_EXEC_STARTED)
+        hooks.trigger(HookEvent.TOOL_EXEC_ENDED)
+        hooks.trigger(HookEvent.SESSION_STARTED)  # must NOT fire
 
-        assert seen == [HookEvent.NODE_ENTERED, HookEvent.NODE_EXITED]
+        assert seen == [HookEvent.TOOL_EXEC_STARTED, HookEvent.TOOL_EXEC_ENDED]
 
     def test_exact_event_name_matches_prefix(self):
         """``prefix == event.name`` matches the exact event (not just
@@ -361,12 +355,12 @@ class TestRegisterPrefix:
         def handler(event, _data):
             seen.append(event)
 
-        hooks.register_prefix("PIPELINE_TIMEOUT", handler)
+        hooks.register_prefix("TURN_COMPLETED", handler)
 
-        hooks.trigger(HookEvent.PIPELINE_TIMEOUT)
-        hooks.trigger(HookEvent.PIPELINE_STARTED)  # different event
+        hooks.trigger(HookEvent.TURN_COMPLETED)
+        hooks.trigger(HookEvent.SESSION_STARTED)  # different event
 
-        assert seen == [HookEvent.PIPELINE_TIMEOUT]
+        assert seen == [HookEvent.TURN_COMPLETED]
 
     def test_dedup_across_exact_and_prefix(self):
         """When the same handler name is registered as both exact and
@@ -378,10 +372,10 @@ class TestRegisterPrefix:
         def shared_handler(_event, _data):
             call_count[0] += 1
 
-        hooks.register(HookEvent.PIPELINE_STARTED, shared_handler, name="dup_handler")
-        hooks.register_prefix("PIPELINE", shared_handler, name="dup_handler")
+        hooks.register(HookEvent.SESSION_STARTED, shared_handler, name="dup_handler")
+        hooks.register_prefix("SESSION", shared_handler, name="dup_handler")
 
-        hooks.trigger(HookEvent.PIPELINE_STARTED)
+        hooks.trigger(HookEvent.SESSION_STARTED)
 
         assert call_count[0] == 1
 
@@ -398,10 +392,10 @@ class TestRegisterPrefix:
         def high_prefix(_event, _data):
             order.append("high_prefix")
 
-        hooks.register(HookEvent.PIPELINE_STARTED, low_exact, priority=200)
-        hooks.register_prefix("PIPELINE", high_prefix, priority=10)
+        hooks.register(HookEvent.SESSION_STARTED, low_exact, priority=200)
+        hooks.register_prefix("SESSION", high_prefix, priority=10)
 
-        hooks.trigger(HookEvent.PIPELINE_STARTED)
+        hooks.trigger(HookEvent.SESSION_STARTED)
 
         assert order == ["high_prefix", "low_exact"]
 
@@ -413,18 +407,18 @@ class TestRegisterPrefix:
             fired[0] += 1
 
         hooks.register_prefix("*", handler, name="watchall")
-        hooks.trigger(HookEvent.PIPELINE_STARTED)
+        hooks.trigger(HookEvent.SESSION_STARTED)
         assert fired[0] == 1
 
         removed = hooks.unregister_prefix("*", "watchall")
         assert removed is True
 
-        hooks.trigger(HookEvent.PIPELINE_STARTED)
+        hooks.trigger(HookEvent.SESSION_STARTED)
         assert fired[0] == 1  # no change after unregister
 
     def test_unregister_prefix_returns_false_when_missing(self):
         hooks = HookSystem()
-        assert hooks.unregister_prefix("PIPELINE", "ghost") is False
+        assert hooks.unregister_prefix("SESSION", "ghost") is False
 
     def test_dedup_within_same_prefix_replaces_handler(self):
         """Re-registering with the same name under the same prefix
@@ -438,10 +432,10 @@ class TestRegisterPrefix:
         def v2(_e, _d):
             seen.append("v2")
 
-        hooks.register_prefix("PIPELINE", v1, name="versioned")
-        hooks.register_prefix("PIPELINE", v2, name="versioned")
+        hooks.register_prefix("SESSION", v1, name="versioned")
+        hooks.register_prefix("SESSION", v2, name="versioned")
 
-        hooks.trigger(HookEvent.PIPELINE_STARTED)
+        hooks.trigger(HookEvent.SESSION_STARTED)
 
         assert seen == ["v2"]
 
@@ -458,8 +452,8 @@ class TestRegisterPrefix:
             seen.append(event)
 
         hooks.register_prefix("*", handler)
-        asyncio.run(hooks.trigger_async(HookEvent.PIPELINE_ENDED))
-        assert seen == [HookEvent.PIPELINE_ENDED]
+        asyncio.run(hooks.trigger_async(HookEvent.SESSION_ENDED))
+        assert seen == [HookEvent.SESSION_ENDED]
 
     def test_prefix_handler_fires_on_interceptor_trigger(self):
         """Same coverage invariant for the interceptor channel."""
@@ -502,11 +496,11 @@ class TestRegisterPrefix:
         def wild(_e, _d):
             pass
 
-        hooks.register(HookEvent.NODE_ENTERED, exact, name="exact_h")
-        hooks.register_prefix("NODE", wild, name="wild_h")
+        hooks.register(HookEvent.TOOL_EXEC_STARTED, exact, name="exact_h")
+        hooks.register_prefix("TOOL_EXEC", wild, name="wild_h")
 
-        listing = hooks.list_hooks(HookEvent.NODE_ENTERED)
-        names = listing[HookEvent.NODE_ENTERED.value]
+        listing = hooks.list_hooks(HookEvent.TOOL_EXEC_STARTED)
+        names = listing[HookEvent.TOOL_EXEC_STARTED.value]
         assert "exact_h" in names
         assert "wild_h" in names
 
@@ -523,7 +517,7 @@ class TestRegisterPrefix:
         hooks.register_prefix("*", watcher)
         hooks.clear()
 
-        hooks.trigger(HookEvent.PIPELINE_STARTED)
+        hooks.trigger(HookEvent.SESSION_STARTED)
         assert fired[0] == 0
 
     def test_clear_specific_event_keeps_wildcards(self):
@@ -537,10 +531,10 @@ class TestRegisterPrefix:
             fired[0] += 1
 
         hooks.register_prefix("*", watcher)
-        hooks.register(HookEvent.PIPELINE_STARTED, lambda *_: None, name="exact_only")
-        hooks.clear(HookEvent.PIPELINE_STARTED)
+        hooks.register(HookEvent.SESSION_STARTED, lambda *_: None, name="exact_only")
+        hooks.clear(HookEvent.SESSION_STARTED)
 
-        hooks.trigger(HookEvent.PIPELINE_STARTED)
+        hooks.trigger(HookEvent.SESSION_STARTED)
         assert fired[0] == 1  # wildcard survived
 
     def test_replaces_bootstrap_for_event_loop(self):
@@ -572,9 +566,9 @@ class TestAsyncHookSystem:
             await asyncio.sleep(0)
             calls.append(data["subject"])
 
-        hooks.register(HookEvent.PIPELINE_STARTED, async_handler, name="async_handler")
+        hooks.register(HookEvent.SESSION_STARTED, async_handler, name="async_handler")
 
-        results = asyncio.run(hooks.trigger_async(HookEvent.PIPELINE_STARTED, {"subject": "GEODE"}))
+        results = asyncio.run(hooks.trigger_async(HookEvent.SESSION_STARTED, {"subject": "GEODE"}))
 
         assert [r.success for r in results] == [True]
         assert calls == ["GEODE"]
@@ -993,18 +987,18 @@ class TestMatcher:
         assert calls == ["any_tool", "other_tool"]
 
     def test_matcher_ignored_for_non_tool_events(self):
-        """Matcher is ignored for non-tool events (e.g., PIPELINE_START)."""
+        """Matcher is ignored for non-tool events (e.g., SESSION_STARTED)."""
         hooks = HookSystem()
         calls: list[str] = []
 
         hooks.register(
-            HookEvent.PIPELINE_STARTED,
+            HookEvent.SESSION_STARTED,
             lambda e, d: calls.append("fired"),
             name="with_matcher",
             matcher="run_bash",
         )
 
-        hooks.trigger(HookEvent.PIPELINE_STARTED, {"tool_name": "something_else"})
+        hooks.trigger(HookEvent.SESSION_STARTED, {"tool_name": "something_else"})
         assert calls == ["fired"]  # matcher not applied
 
     def test_matcher_on_interceptor(self):
@@ -1206,15 +1200,13 @@ class TestNewAuditLoggers:
 
         with (
             patch("core.wiring.bootstrap.RunLog"),
-            patch("core.wiring.bootstrap.StuckDetector"),
         ):
             from core.wiring.bootstrap import build_hooks
 
-            hooks, _, _, _ = build_hooks(
+            hooks, _, _ = build_hooks(
                 session_key="test",
                 run_id="test-run",
                 log_dir=None,
-                stuck_timeout_s=60,
             )
 
         all_hooks = hooks.list_hooks()

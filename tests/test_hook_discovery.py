@@ -38,7 +38,7 @@ def _make_yaml_plugin(
     plugin_dir.mkdir(parents=True, exist_ok=True)
 
     if events is None:
-        events = ["node_exit"]
+        events = ["tool_exec_end"]
 
     events_str = ", ".join(f'"{e}"' for e in events)
     yaml_content = (
@@ -78,7 +78,7 @@ def _make_class_plugin(
     plugin_dir.mkdir(parents=True, exist_ok=True)
 
     if events is None:
-        events = ["HookEvent.NODE_ENTERED"]
+        events = ["HookEvent.SESSION_STARTED"]
     events_list = ", ".join(events)
 
     if class_body is None:
@@ -118,18 +118,18 @@ def _make_class_plugin(
 
 class TestYAMLDiscovery:
     def test_discover_yaml_plugin(self, hooks_dir: Path) -> None:
-        _make_yaml_plugin(hooks_dir, "my-yaml-hook", events=["node_exit", "node_error"])
+        _make_yaml_plugin(hooks_dir, "my-yaml-hook", events=["tool_exec_end", "tool_exec_failed"])
 
         found = discover_hooks([hooks_dir])
         assert len(found) == 1
         meta = found[0]
         assert meta.name == "my-yaml-hook"
-        assert HookEvent.NODE_EXITED in meta.events
-        assert HookEvent.NODE_ERROR in meta.events
+        assert HookEvent.TOOL_EXEC_ENDED in meta.events
+        assert HookEvent.TOOL_EXEC_FAILED in meta.events
         assert meta.priority == 50
 
     def test_discover_yaml_with_handler_fires(self, hooks_dir: Path) -> None:
-        _make_yaml_plugin(hooks_dir, "fire-test", events=["pipeline_start"])
+        _make_yaml_plugin(hooks_dir, "fire-test", events=["session_start"])
 
         loader = HookPluginLoader()
         plugins = loader.load_from_dirs([hooks_dir])
@@ -138,7 +138,7 @@ class TestYAMLDiscovery:
         hooks = HookSystem()
         loader.register_all(hooks)
 
-        results = hooks.trigger(HookEvent.PIPELINE_STARTED, {"subject": "test"})
+        results = hooks.trigger(HookEvent.SESSION_STARTED, {"subject": "test"})
         assert len(results) == 1
         assert results[0].success is True
         assert results[0].handler_name == "fire-test"
@@ -151,16 +151,16 @@ class TestYAMLDiscovery:
 
 class TestClassDiscovery:
     def test_discover_class_plugin(self, hooks_dir: Path) -> None:
-        _make_class_plugin(hooks_dir, "my-class-hook", events=["HookEvent.NODE_ENTERED"])
+        _make_class_plugin(hooks_dir, "my-class-hook", events=["HookEvent.SESSION_STARTED"])
 
         found = discover_hooks([hooks_dir])
         assert len(found) == 1
         meta = found[0]
         assert meta.name == "my-class-hook"
-        assert HookEvent.NODE_ENTERED in meta.events
+        assert HookEvent.SESSION_STARTED in meta.events
 
     def test_class_plugin_fires(self, hooks_dir: Path) -> None:
-        _make_class_plugin(hooks_dir, "class-fire", events=["HookEvent.NODE_EXITED"])
+        _make_class_plugin(hooks_dir, "class-fire", events=["HookEvent.SESSION_ENDED"])
 
         loader = HookPluginLoader()
         plugins = loader.load_from_dirs([hooks_dir])
@@ -169,7 +169,7 @@ class TestClassDiscovery:
         hooks = HookSystem()
         loader.register_all(hooks)
 
-        results = hooks.trigger(HookEvent.NODE_EXITED, {"node": "analyst"})
+        results = hooks.trigger(HookEvent.SESSION_ENDED, {"node": "analyst"})
         assert len(results) == 1
         assert results[0].success is True
         assert results[0].handler_name == "class-fire"
@@ -182,8 +182,10 @@ class TestClassDiscovery:
 
 class TestRegistration:
     def test_register_discovered_hooks_into_hook_system(self, hooks_dir: Path) -> None:
-        _make_yaml_plugin(hooks_dir, "hook-a", events=["node_enter", "node_exit"], priority=40)
-        _make_yaml_plugin(hooks_dir, "hook-b", events=["pipeline_start"], priority=60)
+        _make_yaml_plugin(
+            hooks_dir, "hook-a", events=["tool_exec_start", "tool_exec_end"], priority=40
+        )
+        _make_yaml_plugin(hooks_dir, "hook-b", events=["session_start"], priority=60)
 
         loader = HookPluginLoader()
         loader.load_from_dirs([hooks_dir])
@@ -192,9 +194,9 @@ class TestRegistration:
         loader.register_all(hooks)
 
         all_hooks = hooks.list_hooks()
-        assert "hook-a" in all_hooks.get("node_enter", [])
-        assert "hook-a" in all_hooks.get("node_exit", [])
-        assert "hook-b" in all_hooks.get("pipeline_start", [])
+        assert "hook-a" in all_hooks.get("tool_exec_start", [])
+        assert "hook-a" in all_hooks.get("tool_exec_end", [])
+        assert "hook-b" in all_hooks.get("session_start", [])
 
     def test_priority_ordering_respected(self, hooks_dir: Path) -> None:
         """Plugins with lower priority number should run first."""
@@ -216,14 +218,14 @@ class TestRegistration:
         _make_yaml_plugin(
             hooks_dir,
             "high-prio",
-            events=["node_exit"],
+            events=["tool_exec_end"],
             priority=10,
             handler_body=handler_high,
         )
         _make_yaml_plugin(
             hooks_dir,
             "low-prio",
-            events=["node_exit"],
+            events=["tool_exec_end"],
             priority=90,
             handler_body=handler_low,
         )
@@ -234,13 +236,13 @@ class TestRegistration:
         hooks = HookSystem()
         loader.register_all(hooks)
 
-        results = hooks.trigger(HookEvent.NODE_EXITED, {"order": order})
+        results = hooks.trigger(HookEvent.TOOL_EXEC_ENDED, {"order": order})
         assert len(results) == 2
         assert all(r.success for r in results)
         assert order == ["high", "low"]
 
     def test_unregister_all_removes_discovered_hooks(self, hooks_dir: Path) -> None:
-        _make_yaml_plugin(hooks_dir, "removable", events=["node_enter", "node_exit"])
+        _make_yaml_plugin(hooks_dir, "removable", events=["tool_exec_start", "tool_exec_end"])
 
         loader = HookPluginLoader()
         loader.load_from_dirs([hooks_dir])
@@ -286,7 +288,7 @@ class TestEdgeCases:
         _make_class_plugin(
             hooks_dir,
             "disabled-class",
-            events=["HookEvent.NODE_ENTERED"],
+            events=["HookEvent.SESSION_STARTED"],
             enabled=False,
         )
 
@@ -308,7 +310,7 @@ class TestEdgeCases:
         plugin_dir = hooks_dir / "missing-handler"
         plugin_dir.mkdir()
         (plugin_dir / "hook.yaml").write_text(
-            'name: missing-handler\nevents: ["node_exit"]\nhandler: nonexistent.py\nenabled: true\n'
+            'name: missing-handler\nevents: ["tool_exec_end"]\nhandler: nonexistent.py\nenabled: true\n'
         )
 
         loader = HookPluginLoader()
@@ -341,15 +343,15 @@ class TestEdgeCases:
         dir_b = tmp_path / "hooks_b"
         dir_b.mkdir()
 
-        _make_yaml_plugin(dir_a, "plugin-a", events=["node_enter"])
-        _make_yaml_plugin(dir_b, "plugin-b", events=["node_exit"])
+        _make_yaml_plugin(dir_a, "plugin-a", events=["tool_exec_start"])
+        _make_yaml_plugin(dir_b, "plugin-b", events=["tool_exec_end"])
 
         found = discover_hooks([dir_a, dir_b])
         names = {m.name for m in found}
         assert names == {"plugin-a", "plugin-b"}
 
     def test_loaded_plugins_property(self, hooks_dir: Path) -> None:
-        _make_yaml_plugin(hooks_dir, "prop-test", events=["pipeline_start"])
+        _make_yaml_plugin(hooks_dir, "prop-test", events=["session_start"])
 
         loader = HookPluginLoader()
         assert loader.loaded_plugins == []
@@ -363,7 +365,7 @@ class TestEdgeCases:
         _make_yaml_plugin(
             hooks_dir,
             "with-deps",
-            events=["node_exit"],
+            events=["tool_exec_end"],
             extra_yaml=extra,
         )
 

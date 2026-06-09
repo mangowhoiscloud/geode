@@ -362,18 +362,15 @@ def build_shared_services(
     (per-thread, no shared mutable ref).  If *hook_system* is None, a default
     HookSystem is built via ``build_hooks()``.
     """
-    from core.config import settings as _settings
-
     # Build hooks if not provided
     if hook_system is None:
         from core.paths import GLOBAL_RUNS_DIR
         from core.wiring.bootstrap import build_hooks
 
-        hook_system, _run_log, _stuck, _metrics = build_hooks(
+        hook_system, _run_log, _metrics = build_hooks(
             session_key=f"geode-{uuid.uuid4().hex[:8]}",
             run_id=uuid.uuid4().hex[:12],
             log_dir=GLOBAL_RUNS_DIR,  # P2 — was `Path.home() / ".geode" / "runs"`
-            stuck_timeout_s=getattr(_settings, "stuck_timeout_s", 600.0),
         )
 
     # P0: Tool result offloading

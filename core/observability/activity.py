@@ -32,11 +32,9 @@ from pydantic import BaseModel, ConfigDict, Field
 __all__ = [
     "ActivityRow",
     "ActivityRowBase",
-    "AnalystCompletedRow",
     "AutoTriggerRow",
     "CognitiveStepRow",
     "CostBudgetRow",
-    "EvaluatorCompletedRow",
     "GenericActivityRow",
     "HandoffCompletedRow",
     "HandoffFailedRow",
@@ -55,15 +53,6 @@ __all__ = [
     "LifecycleStartedRow",
     "McpServerRow",
     "MemoryMutationRow",
-    "NodeBootstrapRow",
-    "NodeEnteredRow",
-    "NodeErrorRow",
-    "NodeExitedRow",
-    "PipelineEndedRow",
-    "PipelineErrorRow",
-    "PipelineStartedRow",
-    "PipelineTimeoutRow",
-    "ScoringCompletedRow",
     "SessionEndedRow",
     "SessionStartedRow",
     "StateChangeRow",
@@ -153,7 +142,7 @@ class LifecycleFailedDetails(BaseModel):
     """Group C — every ``*_ERROR`` / ``*_FAILED`` / ``*_TIMEOUT`` event
     carries an error classification + message. ``duration_ms`` is
     optional because some failures fire before the lifecycle pair's
-    start event (e.g. ``PIPELINE_TIMEOUT`` from a watchdog)."""
+    start event (e.g. a watchdog-fired failure)."""
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 
@@ -232,7 +221,7 @@ class McpServerRow(ActivityRowBase):
 class GenericActivityRow(ActivityRowBase):
     """Group K — fall-through for the 18+ non-lifecycle events that
     don't have a concrete subclass yet (PROMPT_ASSEMBLED /
-    SNAPSHOT_CAPTURED / TRIGGER_FIRED / etc.). The ``details`` dict is
+    TRIGGER_FIRED / etc.). The ``details`` dict is
     free-form — subsequent PRs will tighten high-volume events.
 
     Also serves as the ValidationError fall-through path so a typed
@@ -242,25 +231,10 @@ class GenericActivityRow(ActivityRowBase):
 
 
 # ---------------------------------------------------------------------------
-# Tier 3 — 32 lifecycle concrete classes (A + B + C + D groups, S2 scope)
+# Tier 3 — 21 lifecycle concrete classes (A + B + C + D groups, S2 scope)
 # ---------------------------------------------------------------------------
 
-# A — Lifecycle started (9)
-
-
-class PipelineStartedRow(LifecycleStartedRow):
-    action: Literal["pipeline.started"] = "pipeline.started"
-    entity_type: Literal["pipeline"] = "pipeline"
-
-
-class NodeBootstrapRow(LifecycleStartedRow):
-    action: Literal["node.bootstrap"] = "node.bootstrap"
-    entity_type: Literal["node"] = "node"
-
-
-class NodeEnteredRow(LifecycleStartedRow):
-    action: Literal["node.entered"] = "node.entered"
-    entity_type: Literal["node"] = "node"
+# A — Lifecycle started (6)
 
 
 class SessionStartedRow(LifecycleStartedRow):
@@ -293,17 +267,7 @@ class ToolRecoveryAttemptedRow(LifecycleStartedRow):
     entity_type: Literal["tool_call"] = "tool_call"
 
 
-# B — Lifecycle completed (13)
-
-
-class PipelineEndedRow(LifecycleCompletedRow):
-    action: Literal["pipeline.ended"] = "pipeline.ended"
-    entity_type: Literal["pipeline"] = "pipeline"
-
-
-class NodeExitedRow(LifecycleCompletedRow):
-    action: Literal["node.exited"] = "node.exited"
-    entity_type: Literal["node"] = "node"
+# B — Lifecycle completed (9)
 
 
 class SessionEndedRow(LifecycleCompletedRow):
@@ -346,37 +310,7 @@ class TurnVerifyPassedRow(LifecycleCompletedRow):
     entity_type: Literal["turn_verify"] = "turn_verify"
 
 
-class AnalystCompletedRow(LifecycleCompletedRow):
-    action: Literal["analyst.completed"] = "analyst.completed"
-    entity_type: Literal["analyst"] = "analyst"
-
-
-class EvaluatorCompletedRow(LifecycleCompletedRow):
-    action: Literal["evaluator.completed"] = "evaluator.completed"
-    entity_type: Literal["evaluator"] = "evaluator"
-
-
-class ScoringCompletedRow(LifecycleCompletedRow):
-    action: Literal["scoring.completed"] = "scoring.completed"
-    entity_type: Literal["scoring"] = "scoring"
-
-
-# C — Lifecycle failed (9)
-
-
-class PipelineErrorRow(LifecycleFailedRow):
-    action: Literal["pipeline.error"] = "pipeline.error"
-    entity_type: Literal["pipeline"] = "pipeline"
-
-
-class PipelineTimeoutRow(LifecycleFailedRow):
-    action: Literal["pipeline.timeout"] = "pipeline.timeout"
-    entity_type: Literal["pipeline"] = "pipeline"
-
-
-class NodeErrorRow(LifecycleFailedRow):
-    action: Literal["node.error"] = "node.error"
-    entity_type: Literal["node"] = "node"
+# C — Lifecycle failed (5)
 
 
 class SubAgentFailedRow(LifecycleFailedRow):
@@ -425,9 +359,6 @@ class LLMCallRetriedRow(LifecycleRetriedRow):
 TypedActivityRow = Annotated[
     Union[  # noqa: UP007 — Annotated discriminator needs Union, not | syntax
         # A
-        PipelineStartedRow,
-        NodeBootstrapRow,
-        NodeEnteredRow,
         SessionStartedRow,
         SubAgentStartedRow,
         LLMCallStartedRow,
@@ -435,8 +366,6 @@ TypedActivityRow = Annotated[
         HandoffTriggeredRow,
         ToolRecoveryAttemptedRow,
         # B
-        PipelineEndedRow,
-        NodeExitedRow,
         SessionEndedRow,
         SubAgentCompletedRow,
         LLMCallEndedRow,
@@ -445,13 +374,7 @@ TypedActivityRow = Annotated[
         ToolRecoverySucceededRow,
         TurnCompletedRow,
         TurnVerifyPassedRow,
-        AnalystCompletedRow,
-        EvaluatorCompletedRow,
-        ScoringCompletedRow,
         # C
-        PipelineErrorRow,
-        PipelineTimeoutRow,
-        NodeErrorRow,
         SubAgentFailedRow,
         LLMCallFailedRow,
         ToolExecFailedRow,

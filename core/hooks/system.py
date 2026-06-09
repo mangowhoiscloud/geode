@@ -82,34 +82,21 @@ def _mirror_hook_to_active_transcript(event: HookEvent, data: dict[str, Any]) ->
 
 
 class HookEvent(Enum):
-    """Pipeline lifecycle events."""
+    """Runtime lifecycle events.
 
-    # Pipeline level (lifecycle fires on success + error; ERROR is a distinct
-    # variant rather than a sub-state of ENDED, matching SUBAGENT_FAILED)
-    PIPELINE_STARTED = "pipeline_start"
-    PIPELINE_ENDED = "pipeline_end"
-    PIPELINE_ERROR = "pipeline_error"
-
-    # Node level
-    NODE_BOOTSTRAP = "node_bootstrap"
-    NODE_ENTERED = "node_enter"
-    NODE_EXITED = "node_exit"
-    NODE_ERROR = "node_error"
-
-    # Analysis level (milestone — fires only on successful stage completion)
-    ANALYST_COMPLETED = "analyst_complete"
-    EVALUATOR_COMPLETED = "evaluator_complete"
-    SCORING_COMPLETED = "scoring_complete"
+    PR-DEAD-PIPELINE (2026-06-10) — the legacy analysis-pipeline event
+    family (PIPELINE_*, NODE_*, ANALYST/EVALUATOR/SCORING_COMPLETED) and
+    its cascade (DRIFT_DETECTED, OUTCOME_COLLECTED, MODEL_PROMOTED,
+    SNAPSHOT_CAPTURED) were removed: the emitting LangGraph pipeline left
+    core in the identity pivot, so the events had no writer and every
+    listener was inert.
+    """
 
     # Verification level
     VERIFICATION_PASS = "verification_pass"  # noqa: S105 — hook event name, not a password
     VERIFICATION_FAIL = "verification_fail"
 
-    # L4.5 Automation level
-    DRIFT_DETECTED = "drift_detected"
-    OUTCOME_COLLECTED = "outcome_collected"
-    MODEL_PROMOTED = "model_promoted"
-    SNAPSHOT_CAPTURED = "snapshot_captured"
+    # Scheduler trigger level
     TRIGGER_FIRED = "trigger_fired"
     POST_ANALYSIS = "post_analysis"
 
@@ -174,9 +161,6 @@ class HookEvent(Enum):
     # error_msg. Lets operators trace exactly which adapter handled a
     # web_search / complete_text call without having to parse serve logs.
     ADAPTER_DISPATCH_ATTEMPT = "adapter_dispatch_attempt"
-
-    # Pipeline timeout (B3)
-    PIPELINE_TIMEOUT = "pipeline_timeout"
 
     # Serve lifecycle
     SHUTDOWN_STARTED = "shutdown_started"
@@ -369,7 +353,7 @@ class _RegisteredHook:
 
 
 class HookSystem:
-    """Register and trigger hooks on pipeline events.
+    """Register and trigger hooks on runtime events.
 
     Hooks execute in priority order (lower number = higher priority).
 
@@ -377,10 +361,10 @@ class HookSystem:
         hooks = HookSystem()
 
         def on_start(event, data):
-            print(f"Pipeline started for {data.get('subject_id')}")
+            print(f"Session started: {data.get('session_id')}")
 
-        hooks.register(HookEvent.PIPELINE_STARTED, on_start, priority=10)
-        results = hooks.trigger(HookEvent.PIPELINE_STARTED, {"subject_id": "demo"})
+        hooks.register(HookEvent.SESSION_STARTED, on_start, priority=10)
+        results = hooks.trigger(HookEvent.SESSION_STARTED, {"session_id": "demo"})
     """
 
     # Events that support matcher-based tool_name filtering.
@@ -391,9 +375,9 @@ class HookSystem:
         # PR-COMM-2 (2026-05-24) — prefix-keyed wildcard subscriptions.
         # ``"*"`` is the all-events sentinel; other keys match by
         # ``HookEvent.name == prefix`` or ``name.startswith(prefix + "_")``
-        # so e.g. ``"PIPELINE"`` covers ``PIPELINE_STARTED`` / ``PIPELINE_ENDED``
-        # / ``PIPELINE_ERROR`` / ``PIPELINE_TIMEOUT`` without matching
-        # ``PIPELINE_RUNNERV2`` if such a value is ever added.
+        # so e.g. ``"SUBAGENT"`` covers ``SUBAGENT_STARTED`` / ``SUBAGENT_COMPLETED``
+        # / ``SUBAGENT_FAILED`` without matching ``SUBAGENT_RUNNERV2`` if such
+        # a value is ever added.
         self._prefix_hooks: dict[str, list[_RegisteredHook]] = {}
         self._lock = threading.Lock()
 

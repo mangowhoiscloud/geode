@@ -21,8 +21,6 @@ if TYPE_CHECKING:
     from core.memory.user_profile import FileBasedUserProfile
     from core.orchestration.hot_reload import ConfigWatcher
     from core.orchestration.run_log import RunLog
-    from core.orchestration.stuck_detection import StuckDetector
-    from core.orchestration.task_bridge import TaskGraphHookBridge
     from core.orchestration.task_system import TaskGraph
 
 from core.hooks import HookEvent, HookSystem
@@ -40,10 +38,6 @@ def __getattr__(name: str) -> Any:
         from core.orchestration.run_log import RunLog as _RunLog
 
         return _RunLog
-    if name == "StuckDetector":
-        from core.orchestration.stuck_detection import StuckDetector as _StuckDetector
-
-        return _StuckDetector
     if name == "RunLogEntry":
         from core.orchestration.run_log import RunLogEntry as _RunLogEntry
 
@@ -85,26 +79,6 @@ def _make_run_log_handler(
         run_log.append(entry)
 
     return "run_log_writer", _log_event
-
-
-# ---------------------------------------------------------------------------
-# Stuck detection hook handler
-# ---------------------------------------------------------------------------
-
-
-def _make_stuck_hook_handler(
-    detector: StuckDetector,
-) -> tuple[str, Any]:
-    """Create hook handlers for stuck detection lifecycle."""
-
-    def _track_lifecycle(event: HookEvent, data: dict[str, Any]) -> None:
-        session_key = data.get("subject_id", "")
-        if event == HookEvent.PIPELINE_STARTED:
-            detector.mark_running(session_key, metadata=data)
-        elif event in (HookEvent.PIPELINE_ENDED, HookEvent.PIPELINE_ERROR):
-            detector.mark_completed(session_key)
-
-    return "stuck_tracker", _track_lifecycle
 
 
 # ---------------------------------------------------------------------------
@@ -154,11 +128,9 @@ def build_hooks(
     session_key: str,
     run_id: str,
     log_dir: Path | str | None,
-    stuck_timeout_s: float,
-) -> tuple[HookSystem, RunLog, StuckDetector, Any]:
-    """Build HookSystem with RunLog, StuckDetector, and SessionMetrics."""
+) -> tuple[HookSystem, RunLog, Any]:
+    """Build HookSystem with RunLog and SessionMetrics."""
     from core.orchestration.run_log import RunLog
-    from core.orchestration.stuck_detection import StuckDetector
 
     hooks: HookSystem = HookSystem()
 
@@ -276,12 +248,6 @@ def build_hooks(
 
     _register_plugin("agent_runtime_state", _reg_agent_runtime_state)
 
-    # Stuck detector + hook handler
-    stuck_detector = StuckDetector(timeout_s=stuck_timeout_s)
-    stuck_name, stuck_fn = _make_stuck_hook_handler(stuck_detector)
-    for event in (HookEvent.PIPELINE_STARTED, HookEvent.PIPELINE_ENDED, HookEvent.PIPELINE_ERROR):
-        hooks.register(event, stuck_fn, name=stuck_name, priority=40)
-
     # Context overflow action handler (CONTEXT_OVERFLOW_ACTION -> strategy recommendation)
     def _reg_context_action() -> None:
         from core.hooks.context_action import make_context_action_handler
@@ -311,7 +277,7 @@ def build_hooks(
 
     _register_plugin("notification_hook", _reg_notification)
 
-    # C2: Journal auto-record hooks (PIPELINE_END -> runs.jsonl, errors.jsonl)
+    # C2: Journal auto-record hooks (subagent lifecycle -> runs.jsonl)
     def _reg_journal() -> None:
         from core.memory.journal_hooks import make_journal_handlers
         from core.memory.project_journal import get_project_journal
@@ -319,8 +285,6 @@ def build_hooks(
         journal = get_project_journal()
         for handler_name, handler_fn in make_journal_handlers(journal):
             target_events = {
-                "journal_pipeline_end": [HookEvent.PIPELINE_ENDED],
-                "journal_pipeline_error": [HookEvent.PIPELINE_ERROR],
                 "journal_subagent": [HookEvent.SUBAGENT_COMPLETED],
                 # P1c — close defect #18 (STARTED + FAILED had no consumer).
                 "journal_subagent_started": [HookEvent.SUBAGENT_STARTED],
@@ -650,7 +614,6 @@ def build_hooks(
             "Cross-provider fallback: %s → %s",
             ["from_model", "to_model"],
         ),
-        (_E.PIPELINE_TIMEOUT, "pipe_timeout", "Pipeline timeout: %ss", ["timeout_s"]),
         (_E.POST_ANALYSIS, "post_analysis", "Post-analysis: %s", ["trigger_type"]),
         (_E.SHUTDOWN_STARTED, "shutdown", "Shutdown: %s active sessions", ["active_sessions"]),
         (_E.CONFIG_RELOADED, "config_reload", "Config reloaded: %s", ["config_path"]),
@@ -735,7 +698,7 @@ def build_hooks(
 
     _register_plugin("session_metrics", _reg_metrics)
 
-    return hooks, run_log, stuck_detector, session_metrics
+    return hooks, run_log, session_metrics
 
 
 def build_memory(
@@ -849,12 +812,6 @@ def build_config_watcher(*, hooks: HookSystem | None = None) -> ConfigWatcher:
         new_settings = Settings()
 
         # Validate constraints before applying
-        if new_settings.drift_warning_threshold <= 0:
-            log.warning("Invalid drift_warning_threshold; skipping reload")
-            return
-        if new_settings.drift_critical_threshold <= new_settings.drift_warning_threshold:
-            log.warning("drift_critical_threshold must exceed warning; skipping")
-            return
         if new_settings.session_ttl_hours <= 0:
             log.warning("Invalid session_ttl_hours; skipping reload")
             return
@@ -868,27 +825,16 @@ def build_config_watcher(*, hooks: HookSystem | None = None) -> ConfigWatcher:
         # and switch_model tool. Hot-reloading it from .env would revert
         # user's in-session model choice (os.environ stale vs .env fresh).
         settings.verbose = new_settings.verbose
-        # L4.5 Drift Detection
-        settings.drift_scan_cron = new_settings.drift_scan_cron
-        settings.drift_warning_threshold = new_settings.drift_warning_threshold
-        settings.drift_critical_threshold = new_settings.drift_critical_threshold
-        # L4.5 Outcome Tracking
-        settings.outcome_tracking_enabled = new_settings.outcome_tracking_enabled
-        # L4.5 Snapshot Manager
-        settings.snapshot_dir = new_settings.snapshot_dir
-        settings.snapshot_max_recent = new_settings.snapshot_max_recent
-        # L4.5 Trigger Manager
+        # Trigger Manager
         settings.trigger_scheduler_interval_s = new_settings.trigger_scheduler_interval_s
-        # L4.5 Model Registry
-        settings.model_registry_dir = new_settings.model_registry_dir
         # L2 Memory
         settings.session_ttl_hours = new_settings.session_ttl_hours
-        log.info("Settings hot-reload complete (11 fields updated)")
+        log.info("Settings hot-reload complete (3 fields updated)")
         if hooks is not None:
             try:
                 hooks.trigger(
                     HookEvent.CONFIG_RELOADED,
-                    {"config_path": str(path), "fields_updated": 11},
+                    {"config_path": str(path), "fields_updated": 3},
                 )
             except Exception:
                 log.debug("CONFIG_RELOADED hook failed", exc_info=True)
@@ -898,21 +844,11 @@ def build_config_watcher(*, hooks: HookSystem | None = None) -> ConfigWatcher:
     return config_watcher
 
 
-def build_task_graph(
-    *,
-    hooks: HookSystem,
-    subject_id: str,
-) -> tuple[TaskGraph, TaskGraphHookBridge]:
-    """Build an empty TaskGraph and wire the hook bridge for status tracking."""
-    from core.orchestration.task_bridge import TaskGraphHookBridge
+def build_task_graph() -> TaskGraph:
+    """Build an empty TaskGraph for L4 task tracking."""
     from core.orchestration.task_system import TaskGraph
 
-    prefix = subject_id.lower().replace(" ", "_")
-    graph = TaskGraph()
-
-    bridge = TaskGraphHookBridge(graph, subject_prefix=prefix)
-    bridge.register(hooks)
-    return graph, bridge
+    return TaskGraph()
 
 
 # ---------------------------------------------------------------------------

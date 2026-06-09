@@ -34,18 +34,13 @@ The Hook System evolves beyond simple event logging through 4 stages: **Observe,
 │  L2 REACT      Automatic reaction to events                     │
 │                                                                 │
 │  ✓ turn_auto_memory        P85  TURN_COMPLETE → save insights   │
-│  ✓ drift_auto_snapshot     P80  DRIFT → state capture           │
-│  ✓ pipeline_end_snapshot   P80  PIPELINE_END → snapshot          │
-│  ✓ drift_pipeline_trigger  P70  DRIFT → re-analysis pipeline    │
 ├─────────────────────────────────────────────────────────────────┤
 │  L1 OBSERVE    Record only, no state changes                    │
 │                                                                 │
-│  ✓ TaskGraphBridge    P30  NODE_ENTER/EXIT/ERROR                │
-│  ✓ StuckDetector      P40  PIPELINE_START/END/ERROR             │
-│  ✓ RunLog             P50  ALL 82 events → JSONL                │
+│  ✓ RunLog             P50  ALL 67 events → JSONL                │
 │  ✓ JournalHook        P60  END/ERROR/SUBAGENT → journal         │
-│  ✓ NotificationHook  P200  END/ERROR/DRIFT/SUBAGENT → Slack    │
-│  ✓ TableLoggers ×20+  P90  Automation + tool exec → struct log  │
+│  ✓ NotificationHook  P200  SUBAGENT_FAILED → Slack             │
+│  ✓ TableLoggers ×20+  P90  tool exec / llm / cost → struct log  │
 │  ✓ hook-llm-lifecycle  P55 LLM_CALL_END latency/cost aggregation│
 └─────────────────────────────────────────────────────────────────┘
 
@@ -67,14 +62,8 @@ The same event triggers L1 (Observe) + L2 (React) handlers simultaneously.
 They execute in priority order, so observation comes first, reaction after.
 
 ```
-PIPELINE_END ─┬─ P50 RunLog          ─── L1 OBSERVE  (record)
-              ├─ P60 JournalHook     ─── L1 OBSERVE  (runs.jsonl)
-              ├─ P80 SnapshotCapture ─── L2 REACT    (auto snapshot)
-              └─ P85 MemoryWriteBack ─── L2 REACT    (MEMORY.md)
-
-DRIFT_DETECTED ─┬─ P70 DriftTrigger  ─── L2 REACT   (re-analysis trigger)
-                ├─ P80 DriftSnapshot  ─── L2 REACT   (debug capture)
-                └─ P90 DriftLogger   ─── L1 OBSERVE  (structured log)
+SUBAGENT_COMPLETED ─┬─ P50 RunLog      ─── L1 OBSERVE  (record)
+                    └─ P60 JournalHook ─── L1 OBSERVE  (runs.jsonl)
 
 TURN_COMPLETE ─┬─ P50 RunLog         ─── L1 OBSERVE  (event record)
                └─ P85 TurnAutoMemory ─── L2 REACT    (save insights)
@@ -92,10 +81,9 @@ CONTEXT_CRITICAL ─┬─ P50 RunLog      ─── L1 OBSERVE  (event record)
 ```mermaid
 graph TB
     subgraph "Event Sources"
-        SG["StateGraph Execution<br/>(_make_hooked_node)"]
         AL["AgenticLoop<br/>(TURN_COMPLETE)"]
         PA["PromptAssembler<br/>(PROMPT_ASSEMBLED)"]
-        L45["L4.5 Automation<br/>(DRIFT/OUTCOME/MODEL/<br/>SNAPSHOT/TRIGGER)"]
+        SCH["Scheduler<br/>(TRIGGER_FIRED/POST_ANALYSIS)"]
         SA["SubAgent<br/>(SUBAGENT_*)"]
         GW["Gateway<br/>(GATEWAY_*)"]
     end
@@ -106,8 +94,6 @@ graph TB
     end
 
     subgraph "Handler Chain (priority order)"
-        P30["P30: TaskGraphBridge"]
-        P40["P40: StuckDetector"]
         P50["P50: RunLog (ALL)"]
         P60["P60: JournalHook"]
         P70["P70: TriggerManager"]
@@ -116,37 +102,22 @@ graph TB
         P90["P90: TableLoggers ×20+"]
     end
 
-    SG --> HS
     AL --> HS
     PA --> HS
-    L45 --> HS
+    SCH --> HS
     SA --> HS
     GW --> HS
-    HS --> P30 --> P40 --> P50 --> P60 --> P70 --> P80 --> P85 --> P90
+    HS --> P50 --> P60 --> P70 --> P80 --> P85 --> P90
 ```
 
 ---
 
-## HookEvent Enum (82 events)
+## HookEvent Enum (67 events)
 
 | Category | Event | Source | Handler | Maturity |
 |---|---|---|---|---|
-| **Pipeline** | `PIPELINE_START` | `_make_hooked_node` | StuckDetector, RunLog | L1 |
-| | `PIPELINE_END` | `_make_hooked_node` | RunLog, Journal, Snapshot, Memory | L1+L2 |
-| | `PIPELINE_ERROR` | `_make_hooked_node` | StuckDetector, Journal, RunLog | L1 |
-| **Node** | `NODE_BOOTSTRAP` | `BootstrapManager` | RunLog | L1 |
-| | `NODE_ENTER` | `_make_hooked_node` | TaskBridge, RunLog | L1 |
-| | `NODE_EXIT` | `_make_hooked_node` | TaskBridge, RunLog | L1 |
-| | `NODE_ERROR` | `_make_hooked_node` | TaskBridge, RunLog | L1 |
-| **Analysis** | `ANALYST_COMPLETE` | Node completion mapping | RunLog | L1 |
-| | `EVALUATOR_COMPLETE` | Node completion mapping | RunLog | L1 |
-| | `SCORING_COMPLETE` | Node completion mapping | RunLog | L1 |
 | **Verification** | `VERIFICATION_PASS` | Guardrails pass | RunLog | L1 |
 | | `VERIFICATION_FAIL` | Guardrails fail | RunLog | L1 |
-| **Automation** | `DRIFT_DETECTED` | CUSUMDetector | Trigger, Snapshot, Logger | L1+L2 |
-| | `OUTCOME_COLLECTED` | OutcomeTracker | Logger | L1 |
-| | `MODEL_PROMOTED` | ModelRegistry | Logger | L1 |
-| | `SNAPSHOT_CAPTURED` | SnapshotManager | Logger | L1 |
 | | `TRIGGER_FIRED` | TriggerManager | Logger | L1 |
 | | `POST_ANALYSIS` | (reserved) | — | — |
 | **Memory** | `MEMORY_SAVED` | (planned) | — | — |
@@ -177,22 +148,6 @@ graph TB
 
 ## Event Firing Order
 
-Inside the `_make_hooked_node()` wrapper:
-
-```
-1. NODE_BOOTSTRAP        (if bootstrap_mgr exists)
-2. PromptAssembler injection   (state["_prompt_assembler"])
-3. NODE_ENTER
-4. PIPELINE_START         (router node only)
-5. node_fn(state) execution
-6-a. NODE_EXIT            (success)
-6-b. {ANALYST|EVALUATOR|SCORING}_COMPLETE  (matching node)
-6-c. VERIFICATION_PASS/FAIL  (verification node)
-6-d. PIPELINE_END         (synthesizer)
---- or ---
-6-e. NODE_ERROR + PIPELINE_ERROR  (exception — both trigger)
-```
-
 AgenticLoop turn boundary:
 
 ```
@@ -208,23 +163,12 @@ AgenticLoop turn boundary:
 
 | P | Handler Name | Subscribed Events | Registration Location | Maturity |
 |---|---|---|---|---|
-| **30** | `task_bridge_*` | `NODE_ENTER/EXIT/ERROR` | `TaskGraphHookBridge` | L1 |
-| **40** | `stuck_tracker` | `PIPELINE_START/END/ERROR` | `bootstrap.build_hooks()` | L1 |
-| **50** | `run_log_writer` | **All 82 events** | `bootstrap.build_hooks()` | L1 |
-| **60** | `journal_pipeline_end` | `PIPELINE_END` | `bootstrap.build_hooks()` | L1 |
-| **60** | `journal_pipeline_error` | `PIPELINE_ERROR` | `bootstrap.build_hooks()` | L1 |
+| **50** | `run_log_writer` | **All 67 events** | `bootstrap.build_hooks()` | L1 |
 | **60** | `journal_subagent` | `SUBAGENT_COMPLETED` | `bootstrap.build_hooks()` | L1 |
-| **70** | `drift_pipeline_trigger` | `DRIFT_DETECTED` | `automation.wire_hooks()` | L2 |
-| **80** | `drift_auto_snapshot` | `DRIFT_DETECTED` | `automation.wire_hooks()` | L2 |
-| **80** | `pipeline_end_snapshot` | `PIPELINE_END` | `automation.wire_hooks()` | L2 |
 | **85** | `turn_auto_memory` | `TURN_COMPLETE` | `bootstrap.build_hooks()` | L2 |
-| **90** | `drift_logger` | `DRIFT_DETECTED` | `automation.wire_hooks()` | L1 |
-| **90** | `snapshot_logger` | `SNAPSHOT_CAPTURED` | `automation.wire_hooks()` | L1 |
-| **90** | `trigger_logger` | `TRIGGER_FIRED` | `automation.wire_hooks()` | L1 |
-| **90** | `outcome_logger` | `OUTCOME_COLLECTED` | `automation.wire_hooks()` | L1 |
-| **90** | `model_promotion_logger` | `MODEL_PROMOTED` | `automation.wire_hooks()` | L1 |
+| **90** | `trigger_logger` | `TRIGGER_FIRED` | `scheduling.build_scheduling()` | L1 |
 | **90** | `model_switch_logger` | `MODEL_SWITCHED` | `bootstrap.build_hooks()` | L1 |
-| **200** | `notification_*` (4) | `PIPELINE_END/ERROR, DRIFT_DETECTED, SUBAGENT_FAILED` | `notification_hook plugin` (`register_notification_hooks`) | L1 |
+| **200** | `notification_*` (1) | `SUBAGENT_FAILED` | `notification_hook plugin` (`register_notification_hooks`) | L1 |
 
 > **Verification note (2026-05-13)**: This table reflects actual `hooks.register(...)` sites grepped from `core/wiring/bootstrap.py:build_hooks()`, `core/wiring/automation.py:wire_automation_hooks()`, `core/hooks/plugins/notification_hook/hook.py:register_notification_hooks()`, and `core/orchestration/{task_bridge,stuck_detection}.py`. Key references:
 > - RunLog wildcard registration: `bootstrap.py:169-170` (`for event in HookEvent: hooks.register(event, ..., priority=50)`)
@@ -251,7 +195,7 @@ class MyHook:
     def metadata(self) -> HookPluginMetadata:
         return HookPluginMetadata(
             name="my_hook",
-            events=[HookEvent.PIPELINE_END],
+            events=[HookEvent.SESSION_END],
             priority=75,
         )
 
@@ -265,7 +209,7 @@ class MyHook:
 ```yaml
 # .geode/hooks/my_hook/hook.yaml
 name: my_hook
-events: [pipeline_end, pipeline_error]
+events: [session_end, subagent_failed]
 priority: 75
 handler: my_hook.handler  # Python module path
 ```
@@ -291,8 +235,6 @@ handler: my_hook.handler  # Python module path
 | Event Group | L1 OBSERVE | L2 REACT | L3 DECIDE | L4 AUTONOMY |
 |---|:---:|:---:|:---:|:---:|
 | Pipeline (3) | ✓ 5 handlers | ✓ 2 handlers | — | — |
-| Node (4) | ✓ 2 handlers | — | — | — |
-| Analysis (3) | ✓ RunLog | — | — | — |
 | Verification (2) | ✓ RunLog | — | — | — |
 | Automation (5) | ✓ 6 handlers | ✓ 2 handlers | — | — |
 | Turn (1) | ✓ RunLog | ✓ AutoMemory | — | — |

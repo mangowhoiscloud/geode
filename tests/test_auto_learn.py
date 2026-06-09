@@ -250,15 +250,13 @@ class TestHookRegistration:
 
         with (
             patch("core.wiring.bootstrap.RunLog"),
-            patch("core.wiring.bootstrap.StuckDetector"),
         ):
             from core.wiring.bootstrap import build_hooks
 
-            hooks, _, _, _ = build_hooks(
+            hooks, _, _ = build_hooks(
                 session_key="test",
                 run_id="test-run",
                 log_dir=None,
-                stuck_timeout_s=60,
             )
 
         all_hooks = hooks.list_hooks()

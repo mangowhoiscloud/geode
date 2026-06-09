@@ -8,7 +8,7 @@ Pins two coupled invariants:
    (sub-second clock drift / NTP reset).
 2. ``SessionTranscript.last_touched_at`` + ``is_stale`` expose the
    transcript file's mtime so external watchdogs can spot runs that
-   hung without firing PIPELINE_TIMEOUT / PIPELINE_ERROR.
+   hung without firing any hook event.
 
 ``RunTranscript`` (self_improving_loop) gets the same liveness
 passthrough so seed-generation operators can poll

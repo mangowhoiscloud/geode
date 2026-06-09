@@ -1,9 +1,8 @@
 """Tests for context management improvements.
 
 Covers:
-1. Snapshot auto-GC (threshold-based pruning)
-2. Session file persistence (survive restart)
-3. Multi-subject LRU result cache
+1. Session file persistence (survive restart)
+2. Multi-subject LRU result cache
 """
 
 from __future__ import annotations
@@ -12,74 +11,10 @@ import json
 from pathlib import Path
 
 import pytest
-from core.automation.snapshot import SnapshotManager
 from core.memory.session import InMemorySessionStore
 
 # ---------------------------------------------------------------------------
-# 1. Snapshot auto-GC
-# ---------------------------------------------------------------------------
-
-
-class TestSnapshotAutoGC:
-    def test_auto_gc_on_capture(self, tmp_path: Path):
-        """Snapshot count is pruned when it exceeds auto_gc_threshold."""
-        mgr = SnapshotManager(
-            storage_dir=tmp_path,
-            max_recent=5,
-            auto_gc_threshold=10,
-        )
-        # Capture 12 snapshots → should trigger GC after threshold
-        for i in range(12):
-            mgr.capture(f"sess-{i}", pipeline_state={"i": i})
-
-        # After GC, count should be <= max_recent (5) + weekly keepers
-        remaining = len(mgr.list_snapshots())
-        assert remaining <= 10, f"Expected <= 10 after GC, got {remaining}"
-
-    def test_no_gc_under_threshold(self, tmp_path: Path):
-        """No pruning when count stays under threshold."""
-        mgr = SnapshotManager(
-            storage_dir=tmp_path,
-            max_recent=5,
-            auto_gc_threshold=20,
-        )
-        for i in range(10):
-            mgr.capture(f"sess-{i}", pipeline_state={"i": i})
-
-        assert len(mgr.list_snapshots()) == 10
-
-    def test_gc_disabled_when_zero(self, tmp_path: Path):
-        """auto_gc_threshold=0 disables auto-GC."""
-        mgr = SnapshotManager(
-            storage_dir=tmp_path,
-            max_recent=3,
-            auto_gc_threshold=0,
-        )
-        for i in range(10):
-            mgr.capture(f"sess-{i}", pipeline_state={"i": i})
-
-        # No auto-GC, all 10 should remain
-        assert len(mgr.list_snapshots()) == 10
-
-    def test_startup_gc(self, tmp_path: Path):
-        """GC runs on startup if existing files exceed threshold."""
-        # Create initial manager with many snapshots
-        mgr1 = SnapshotManager(storage_dir=tmp_path, max_recent=5, auto_gc_threshold=0)
-        for i in range(15):
-            mgr1.capture(f"sess-{i}", pipeline_state={"i": i})
-
-        # New manager with threshold should GC on load
-        mgr2 = SnapshotManager(
-            storage_dir=tmp_path,
-            max_recent=5,
-            auto_gc_threshold=10,
-        )
-        remaining = len(mgr2.list_snapshots())
-        assert remaining <= 10
-
-
-# ---------------------------------------------------------------------------
-# 2. Session file persistence
+# 1. Session file persistence
 # ---------------------------------------------------------------------------
 
 
@@ -151,7 +86,7 @@ class TestSessionFilePersistence:
 
 
 # ---------------------------------------------------------------------------
-# 3. Multi-subject LRU result cache
+# 2. Multi-subject LRU result cache
 # ---------------------------------------------------------------------------
 
 

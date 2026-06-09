@@ -278,20 +278,7 @@ class Settings(BaseSettings):
     verbose: bool = False
     checkpoint_db: str = "geode_checkpoints.db"
 
-    # L4.5 Automation — Drift Detection
-    drift_scan_cron: str = "0 */6 * * *"  # Every 6 hours
-    drift_warning_threshold: float = 2.5
-    drift_critical_threshold: float = 4.0
-
-    # L4.5 Automation — Outcome Tracking
-    outcome_tracking_enabled: bool = True
-
-    # L4.5 Automation — Snapshot Manager
-    snapshot_dir: str = ""  # empty = auto-resolve via paths.resolve_snapshots_dir()
-    snapshot_max_recent: int = 30
-    snapshot_gc_threshold: int = 60  # auto-prune when count exceeds this
-
-    # L4.5 Automation — Trigger Manager
+    # Trigger Manager
     trigger_scheduler_interval_s: float = 60.0
 
     # L4.5 Automation — Advanced Scheduler
@@ -313,9 +300,6 @@ class Settings(BaseSettings):
 
     # Tier 0.5 — User Profile
     user_profile_dir: str = ""  # global dir override (default: ~/.geode/user_profile)
-
-    # L4.5 Automation — Model Registry
-    model_registry_dir: str = ""  # empty = auto-resolve via paths.resolve_models_dir()
 
     # MCP Server URLs
     steam_mcp_url: str = ""

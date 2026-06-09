@@ -3,7 +3,7 @@
 Modules:
     bootstrap  — hooks, memory, session, config_watcher, task, prompt, plugin_registry
     infra      — policies, tools, LLM, auth, lanes
-    automation — L4.5 9 components + hook wiring
+    scheduling — TriggerManager + SchedulerService + auto-trigger
     adapters   — MCP signal/notification/calendar/gateway
 """
 

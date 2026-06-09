@@ -597,12 +597,6 @@ def resolve_sessions_dir(workspace_path: str | Path | None = None) -> Path:
     return _resolve_with_fallback(new, _OLD_SESSION_DIR)
 
 
-def resolve_snapshots_dir(workspace_path: str | Path | None = None) -> Path:
-    """Resolve snapshots directory with backward-compat fallback."""
-    new = get_project_snapshots_dir(workspace_path)
-    return _resolve_with_fallback(new, _OLD_SNAPSHOT_DIR)
-
-
 def resolve_result_cache_dir(workspace_path: str | Path | None = None) -> Path:
     """Resolve result cache directory with backward-compat fallback."""
     new = get_project_data_dir(workspace_path) / "result_cache"
@@ -612,11 +606,6 @@ def resolve_result_cache_dir(workspace_path: str | Path | None = None) -> Path:
 def resolve_vault_dir() -> Path:
     """Resolve vault directory with backward-compat fallback."""
     return _resolve_with_fallback(GLOBAL_VAULT_DIR, _OLD_VAULT_DIR)
-
-
-def resolve_models_dir() -> Path:
-    """Resolve models directory with backward-compat fallback."""
-    return _resolve_with_fallback(GLOBAL_MODELS_DIR, _OLD_MODELS_DIR)
 
 
 def _resolve_with_fallback(new_path: Path, old_path: Path) -> Path:

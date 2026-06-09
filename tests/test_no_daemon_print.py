@@ -23,7 +23,6 @@ from pathlib import Path
 DAEMON_DIRS = [
     "core/agent",
     "core/auth",
-    "core/automation",  # 잔여: drift, expert_panel, feedback_loop 등 자율 학습
     "core/integrations/messaging",  # phase 4 — gateway 분해 결과
     "core/hooks",
     "core/lifecycle",
