@@ -344,8 +344,16 @@ git fetch origin --prune
 After merging to main, rebuild CLI and serve to update the runtime to the latest code.
 
 ```bash
-# 1) Stop geode serve
-kill $(ps aux | grep "geode serve" | grep -v grep | awk '{print $2}')
+# 1) Stop any running geode serve daemon(s). Use `pgrep -f`, NOT
+#    `ps aux | grep "geode serve"` — ps aux truncates the long python path
+#    before "geode serve", so the grep silently matches nothing, the kill is a
+#    no-op, and stale daemons survive a "rebuild" and then fight over
+#    ~/.geode/cli.sock (the multi-serve pathology behind the 2026-06-09
+#    model-resolution bug: banner shows one daemon's model, calls route through
+#    another). `geode serve stop` / `geode doctor` already use pgrep -f
+#    internally (core/cli/cmd_lifecycle.py, core/cli/doctor.py); this manual
+#    line should match.
+pkill -f "geode serve" || true   # no-op if none running; verify: pgrep -f "geode serve"
 
 # 2) Reinstall CLI as editable + sync dependencies.
 #    The [audit] extra (inspect_ai) is REQUIRED — the seed-generation pilot's
