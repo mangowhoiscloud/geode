@@ -83,7 +83,11 @@ def _read_toml_value(section: str, key: str) -> str:
 
 
 def _apply_model(
-    selected: ModelProfile, *, effort: str | None = None, role: str = "primary"
+    selected: ModelProfile,
+    *,
+    effort: str | None = None,
+    role: str = "primary",
+    scope: str = "project",
 ) -> None:
     """Apply a model selection — update settings + .env + config.toml.
 
@@ -96,13 +100,21 @@ def _apply_model(
     leave the existing setting untouched.
 
     PR-A (2026-05-21) — ``role`` selects which agent's model knob is
-    updated. ``"primary"`` (default) preserves the legacy behaviour
-    (writes ``settings.model`` + ``GEODE_MODEL`` env + ``[llm]
-    primary_model``). ``"reflection"`` writes the PR-3 C-2 knob
-    (``settings.cognitive_reflection_model`` + the corresponding env
-    var + ``[cognitive] reflection_model``). Effort is *only* applied
-    when the role declares ``has_effort=True`` — the reflection node
-    has no effort axis.
+    updated. ``"primary"`` (default) writes ``settings.model`` + ``[llm]
+    primary_model``; ``"reflection"`` writes the PR-3 C-2 knob
+    (``settings.cognitive_reflection_model`` + ``[cognitive]
+    reflection_model``). Effort is *only* applied when the role declares
+    ``has_effort=True`` — the reflection node has no effort axis.
+
+    ``scope`` picks the durable config target (precedence: CLI > env >
+    project ``.geode/config.toml`` > global ``~/.geode/config.toml`` >
+    routing default). ``"project"`` (default) persists the *primary*
+    switch to the session's project config **only** — the global
+    ``GEODE_MODEL`` env is intentionally NOT written, since env outranks
+    the project TOML and would leak a per-workspace choice to every
+    project + shadow the project ``primary_model`` on reload. ``"global"``
+    writes ``~/.geode/config.toml`` + ``GEODE_MODEL`` env. Non-primary
+    roles (reflection / mutator) are daemon-global and always write env.
 
     Includes context window guard: blocks downgrade when current context
     exceeds 80% of the target model's window (primary role only —
@@ -179,15 +191,25 @@ def _apply_model(
                     role_def.settings_field,
                     exc_info=True,
                 )
-        _pkg._upsert_env(role_def.env_var, selected.id)
-        upsert_config_toml(role_def.toml_section, role_def.toml_key, selected.id)
+        # Durable persistence honours the requested scope. The global
+        # ``~/.geode/.env`` (GEODE_MODEL) write is skipped for a *primary*
+        # **project** switch: writing it leaked the choice to every project
+        # (env outranks the project TOML in the precedence chain) and made
+        # ``_apply_toml_overlay`` skip the project ``primary_model`` on the
+        # next session reload. Non-primary roles (reflection / mutator) are
+        # daemon-global knobs, so they keep their env write; global scope
+        # writes env for every role.
+        if scope == "global" or role_def.name != "primary":
+            _pkg._upsert_env(role_def.env_var, selected.id)
+        upsert_config_toml(role_def.toml_section, role_def.toml_key, selected.id, scope=scope)
     if role_def.has_effort and effort is not None and effort != old_effort:
         try:
             object.__setattr__(settings, "agentic_effort", effort)
         except Exception:
             log.debug("Could not persist agentic_effort to settings", exc_info=True)
-        _pkg._upsert_env("GEODE_AGENTIC_EFFORT", effort)
-        upsert_config_toml("agentic", "effort", effort)
+        if scope == "global":
+            _pkg._upsert_env("GEODE_AGENTIC_EFFORT", effort)
+        upsert_config_toml("agentic", "effort", effort, scope=scope)
 
     # Model hot-swap is deferred: AgenticLoop._sync_model_from_settings_async()
     # checks settings.model at the start of each round and applies
@@ -197,20 +219,28 @@ def _apply_model(
     # hot-swap plumbing is needed there.
 
     role_tag = "" if role_def.name == "primary" else f"  [muted]({role_def.label})[/muted]"
+    scope_path = "~/.geode/config.toml" if scope == "global" else "./.geode/config.toml"
+    scope_tag = f"  [muted]· {scope} ({scope_path})[/muted]"
     if not same_model and role_def.has_effort and effort is not None:
         _pkg.console.print(
             f"  [success]Model[/success]  {old} → [bold]{selected.label}[/bold]"
-            f"  [muted]({selected.id} · effort={effort})[/muted]{role_tag}"
+            f"  [muted]({selected.id} · effort={effort})[/muted]{role_tag}{scope_tag}"
         )
     elif not same_model:
         _pkg.console.print(
             f"  [success]Model[/success]  {old} → [bold]{selected.label}[/bold]"
-            f"  [muted]({selected.id})[/muted]{role_tag}"
+            f"  [muted]({selected.id})[/muted]{role_tag}{scope_tag}"
         )
     elif role_def.has_effort and effort is not None:
         _pkg.console.print(
             f"  [success]Effort[/success]  {old_effort} → [bold]{effort}[/bold]"
             f"  [muted](model unchanged: {selected.label})[/muted]"
+        )
+    if not same_model:
+        where = "this project" if scope == "project" else "all projects"
+        _pkg.console.print(
+            f"  [muted]Scope: {where}. Applies to new sessions — "
+            "restart `geode` to pick it up.[/muted]"
         )
     _pkg.console.print()
 
@@ -325,17 +355,38 @@ def _interactive_model_picker_for_role(role_def: AgentRole) -> None:
 def cmd_model(args: str) -> None:
     """Handle /model command (OpenClaw Auth Profile Rotation pattern).
 
-    /model                       → interactive arrow-key picker
-                                   (Tab cycles roles: primary / reflection)
-    /model 2                     → select by number (applies to primary)
-    /model gpt-5.4               → select by name (applies to primary)
+    /model                       → interactive picker (this project)
+    /model 2                     → select by number (this project)
+    /model gpt-5.4               → select by name (this project)
+    /model global gpt-5.4        → switch the user-global default (all projects)
     /model reflection            → interactive picker for reflection role
     /model reflection haiku-4.5  → set reflection model by name
     /model reflection 4          → set reflection model by number
+
+    Scope (config precedence: CLI > env > project ``.geode/config.toml`` >
+    global ``~/.geode/config.toml`` > routing default):
+      * default (no ``global`` token) → writes the *project* config, so the
+        switch is scoped to the current workspace.
+      * ``/model global <name>`` → writes ``~/.geode/config.toml``, inherited
+        by every project without its own override.
+    Either way the change applies to *new* sessions (restart ``geode``).
     """
     from core.cli import commands as _pkg
 
     arg = args.strip()
+
+    # ``/model global <…>`` — switch the user-global default instead of the
+    # session's project config. Parsed before the role token (order:
+    # ``/model global <role> <name>``). Default scope is "project" so a bare
+    # ``/model <name>`` no longer leaks the choice to every workspace via the
+    # global env (the pre-fix behaviour that made project switches stick
+    # globally and shadowed the project TOML).
+    scope = "project"
+    if arg:
+        first, _, rest = arg.partition(" ")
+        if first == "global":
+            scope = "global"
+            arg = rest.strip()
 
     # PR-A — explicit role prefix: ``/model <role>`` or
     # ``/model <role> <picker-arg>``. The role token must match a
@@ -348,6 +399,14 @@ def cmd_model(args: str) -> None:
             role_name = first
             arg = rest.strip()
     role_def = role_by_name(role_name)
+
+    # ``/model global`` with no model — the interactive picker applies to the
+    # project scope, so global needs an explicit model id/number.
+    if scope == "global" and not arg:
+        _pkg.console.print("  [warning]Global scope needs an explicit model.[/warning]")
+        _pkg.console.print("  [muted]Usage: /model global <number> | /model global <name>[/muted]")
+        _pkg.console.print()
+        return
 
     # /model (no args, primary role) → interactive picker (requires tty)
     # /model reflection → interactive picker focused on reflection tab
@@ -438,4 +497,4 @@ def cmd_model(args: str) -> None:
         _pkg.console.print()
         return
 
-    _apply_model(selected, role=role_def.name)
+    _apply_model(selected, role=role_def.name, scope=scope)

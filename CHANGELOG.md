@@ -45,6 +45,28 @@ functional change.
 
 ---
 
+## [0.99.144] - 2026-06-09
+
+### Fixed
+- **`/model` switch no longer leaks a per-project choice to every workspace.**
+  A bare `/model <name>` (project scope) wrote `GEODE_MODEL` to the global
+  `~/.geode/.env` in addition to the project config. Because env outranks the
+  project TOML in the precedence chain (CLI > env > project > global > routing),
+  the choice (a) stuck across every project and (b) shadowed the project
+  `[llm] primary_model` on the next session reload (`_apply_toml_overlay` skips
+  TOML fields that have a `GEODE_*` env). Project scope now persists to the
+  session's `.geode/config.toml` alone. Non-primary roles (reflection / mutator)
+  are daemon-global and keep their env write.
+
+### Added
+- **`/model global <name>` — user-global model switch.** Writes
+  `~/.geode/config.toml` (+ `GEODE_MODEL` env) so every project without its own
+  override inherits it. A bare `/model <name>` is now explicitly project-scoped;
+  the confirmation line prints the scope + target config path and notes the
+  change applies to new sessions. `upsert_config_toml(..., scope=)` selects the
+  project vs global config target. Pinned by
+  `tests/test_model_role_tab.py` (project-no-env / global-env / `global`-token).
+
 ## [0.99.143] - 2026-06-05
 
 ### Changed

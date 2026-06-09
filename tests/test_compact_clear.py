@@ -253,12 +253,14 @@ class TestModelSwitchGuard:
 
         mock_env.assert_not_called()
 
+    @patch("core.utils.env_io.upsert_config_toml")
     @patch("core.cli.commands._upsert_env")
     @patch("core.cli.commands._check_provider_key")
     def test_downgrade_allowed_when_fits(
         self,
         mock_key: MagicMock,
         mock_env: MagicMock,
+        mock_toml: MagicMock,
     ):
         from core.cli.commands import (
             _apply_model,
@@ -274,14 +276,20 @@ class TestModelSwitchGuard:
             profile = self._make_profile("glm-5", "GLM-5")
             _apply_model(profile)
 
-        mock_env.assert_called_once()
+        # Default scope is project — the switch persists to the project config
+        # (proves it was allowed, not blocked by the context guard) and no
+        # longer writes the global GEODE_MODEL env (the pre-fix leak).
+        mock_toml.assert_called()
+        mock_env.assert_not_called()
 
+    @patch("core.utils.env_io.upsert_config_toml")
     @patch("core.cli.commands._upsert_env")
     @patch("core.cli.commands._check_provider_key")
     def test_upgrade_always_allowed(
         self,
         mock_key: MagicMock,
         mock_env: MagicMock,
+        mock_toml: MagicMock,
     ):
         from core.cli.commands import (
             _apply_model,
@@ -297,7 +305,8 @@ class TestModelSwitchGuard:
             profile = self._make_profile("claude-opus-4-6", "Opus 4.6")
             _apply_model(profile)
 
-        mock_env.assert_called_once()
+        mock_toml.assert_called()
+        mock_env.assert_not_called()
 
     @patch("core.cli.commands._upsert_env")
     @patch("core.cli.commands._check_provider_key")

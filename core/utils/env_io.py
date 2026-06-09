@@ -46,8 +46,8 @@ def upsert_env(var_name: str, value: str) -> None:
     os.environ[var_name] = value
 
 
-def upsert_config_toml(section: str, key: str, value: str) -> None:
-    """Insert or update ``[section] key = "value"`` in ``.geode/config.toml``.
+def upsert_config_toml(section: str, key: str, value: str, *, scope: str = "project") -> None:
+    """Insert or update ``[section] key = "value"`` in a ``config.toml``.
 
     Creates the file (and ``[section]`` heading) if absent. Mirrors the
     write semantics of ``upsert_env``: durable layer for picker choices
@@ -57,12 +57,22 @@ def upsert_config_toml(section: str, key: str, value: str) -> None:
     Code project + global config) — chosen settings persist to the
     config layer, not just the env layer.
 
+    ``scope`` picks the durable target, matching the config precedence
+    (CLI > env > project ``.geode/config.toml`` > global
+    ``~/.geode/config.toml`` > routing default):
+
+    * ``"project"`` (default) — the *session's* project config,
+      ``PROJECT_CONFIG_TOML`` (``.geode/config.toml`` relative to the
+      thin-CLI cwd). Scoped to the current workspace only.
+    * ``"global"`` — the user-global ``~/.geode/config.toml``, inherited
+      by every project that has no project-level override.
+
     Section headings use ``[section.subsection]`` notation per TOML.
     """
-    from core.paths import PROJECT_CONFIG_TOML
+    from core.paths import GLOBAL_CONFIG_TOML, PROJECT_CONFIG_TOML
 
     # P2 (v0.95.x) — was literal `Path(".geode") / "config.toml"`
-    config_path = PROJECT_CONFIG_TOML
+    config_path = GLOBAL_CONFIG_TOML if scope == "global" else PROJECT_CONFIG_TOML
     config_path.parent.mkdir(parents=True, exist_ok=True)
 
     target_line = f'{key} = "{value}"'

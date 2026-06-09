@@ -137,7 +137,9 @@ def test_apply_model_dispatches_to_reflection_field(
     monkeypatch.setattr(
         _env_io,
         "upsert_config_toml",
-        lambda section, key, value: upsert_toml_calls.append((section, key, value)),
+        lambda section, key, value, *, scope="project": upsert_toml_calls.append(
+            (section, key, value)
+        ),
     )
 
     # Snapshot the current reflection model so we can restore + verify.
@@ -162,6 +164,99 @@ def test_apply_model_dispatches_to_reflection_field(
 
     # Restore
     object.__setattr__(settings, "cognitive_reflection_model", old_reflection)
+
+
+def _capture_apply_io(monkeypatch: pytest.MonkeyPatch):
+    """Shared stub: capture _upsert_env + upsert_config_toml(scope=…) calls."""
+    from core.cli import commands as _pkg
+    from core.utils import env_io as _env_io
+
+    monkeypatch.setattr(_pkg, "_check_provider_key", lambda _p: None)
+    monkeypatch.setattr(_pkg, "get_conversation_context", lambda: None)
+    env_calls: list[tuple[str, str]] = []
+    monkeypatch.setattr(_pkg, "_upsert_env", lambda k, v: env_calls.append((k, v)))
+    toml_calls: list[tuple[str, str, str, str]] = []
+    monkeypatch.setattr(
+        _env_io,
+        "upsert_config_toml",
+        lambda section, key, value, *, scope="project": toml_calls.append(
+            (section, key, value, scope)
+        ),
+    )
+    return env_calls, toml_calls
+
+
+def test_apply_model_primary_project_scope_skips_global_env(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Primary + project scope persists to the project config only — never
+    the global GEODE_MODEL env, the pre-fix leak that made a project switch
+    stick across every workspace and shadow the project TOML on reload."""
+    from core.cli.commands._state import ModelProfile
+    from core.config import settings
+
+    from core.cli.commands import model as _model_mod
+
+    env_calls, toml_calls = _capture_apply_io(monkeypatch)
+    old = settings.model
+    object.__setattr__(settings, "model", "claude-opus-4-7")
+    try:
+        target = ModelProfile(
+            id="claude-opus-4-8", provider="anthropic", label="Opus 4.8", cost="$$$"
+        )
+        _model_mod._apply_model(target, role="primary", scope="project")
+    finally:
+        object.__setattr__(settings, "model", old)
+
+    assert not any(k == "GEODE_MODEL" for k, _v in env_calls)
+    assert ("llm", "primary_model", "claude-opus-4-8", "project") in toml_calls
+
+
+def test_apply_model_primary_global_scope_writes_env_and_global(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Primary + global scope writes the global config + GEODE_MODEL env so
+    every project without its own override inherits the choice."""
+    from core.cli.commands._state import ModelProfile
+    from core.config import settings
+
+    from core.cli.commands import model as _model_mod
+
+    env_calls, toml_calls = _capture_apply_io(monkeypatch)
+    old = settings.model
+    object.__setattr__(settings, "model", "claude-opus-4-7")
+    try:
+        target = ModelProfile(
+            id="claude-opus-4-8", provider="anthropic", label="Opus 4.8", cost="$$$"
+        )
+        _model_mod._apply_model(target, role="primary", scope="global")
+    finally:
+        object.__setattr__(settings, "model", old)
+
+    assert ("GEODE_MODEL", "claude-opus-4-8") in env_calls
+    assert ("llm", "primary_model", "claude-opus-4-8", "global") in toml_calls
+
+
+def test_cmd_model_global_token_routes_to_global_scope(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """``/model global <name>`` dispatches with scope='global'; a bare
+    ``/model <name>`` stays project-scoped."""
+    from core.cli.commands import model as _model_mod
+
+    monkeypatch.setattr(_model_mod, "model_available", lambda _id: True)
+    captured: list[tuple[str, str]] = []
+    monkeypatch.setattr(
+        _model_mod,
+        "_apply_model",
+        lambda selected, *, role="primary", scope="project", effort=None: captured.append(
+            (selected.id, scope)
+        ),
+    )
+    _model_mod.cmd_model("global claude-opus-4-8")
+    _model_mod.cmd_model("claude-opus-4-8")
+    assert ("claude-opus-4-8", "global") in captured
+    assert ("claude-opus-4-8", "project") in captured
 
 
 def test_apply_model_primary_skips_effort_for_reflection_role(
