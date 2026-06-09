@@ -16,8 +16,7 @@
 
 <!-- Move items here when work begins. -->
 <!-- 3-Checkpoint: (1) alloc → (2) merge (CI 5/5) → (3) verify -->
-- [ ] Prompt-cache: system reminder append-only (history prefix re-key fix) — PR #2026 open, CI pending (v0.99.148)
-- [ ] Codebase audit (LLM slop + design flaws) — agents running; slop report received, design-flaw report pending
+- [ ] Codebase audit follow-ups — reports delivered (slop top-10 + design-flaw top-10); bundles A(fake-success/contract hotfix)/B(reserve-without-emit)/C(dead pipeline decision)/D(cleanup sprint)/E(drift anchors) await operator pick
 
 ## In Review
 
@@ -27,6 +26,7 @@
 
 <!-- Completed items. Keep recent 10, archive older ones. -->
 <!-- - [x] #issue-number — Short description (PR #N) -->
+- [x] Prompt-cache: system reminder append-only — messages[0] per-round rewrite was invalidating the whole history prefix cache every agentic round; reminder now appended last on a per-request copy, pinned by TestCacheContract (PR #2026 → #2028, v0.99.148)
 - [x] Ops: auto-backmerge unblocked — repo Actions workflow permissions `read`→`write` + allow PR create/approve; rerun of failed run 27224199909 green (no PR/version)
 - [x] Ops: stale worktree prune — baseline-registry (superseded by #1913 v2) / release-v0.99.72 / release-v0.99.83 / runtime-main + local branches deleted (no PR/version)
 - [x] CLI: program.md fallback hook-controlled — drop `_FALLBACK_SYSTEM_PROMPT` literal, `HookEvent.PROGRAM_MD_UNREADABLE` + fail-loud, hook 81→82 (PR #2022, v0.99.147)
