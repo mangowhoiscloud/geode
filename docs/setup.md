@@ -230,7 +230,8 @@ grep "Slack poller seeded" ~/.geode/logs/serve.log
 |---------|-------|-------------|
 | `/help` | | Show all commands |
 | `/status` | | System status (model, API keys, MCP, mode) |
-| `/model [N\|name]` | | Show / switch LLM model |
+| `/model [N\|name]` | | Show / switch LLM model (project-scoped: writes `./.geode/config.toml`) |
+| `/model global [N\|name]` | | Switch the user-global default model (`~/.geode/config.toml`) |
 | `/key [provider] [value]` | | Show / set API key |
 | `/cost` | | LLM cost dashboard (session + monthly) |
 | `/verbose` | | Toggle verbose output |
@@ -243,6 +244,14 @@ grep "Slack poller seeded" ~/.geode/logs/serve.log
 | `/clear` | | Clear conversation |
 | `/compact` | | Compact context |
 | `/quit` | `/q` | Exit |
+
+**Model resolution** (precedence, highest first): CLI flag → env var / `.env`
+(`GEODE_MODEL`) → project `./.geode/config.toml` `[llm] primary_model` → global
+`~/.geode/config.toml` → routing default (`claude-opus-4-8`). Each session uses
+**its own project's** model — the thin CLI resolves the model at your working
+directory and the daemon adopts it, so the displayed model matches the executed
+model. A leftover `GEODE_MODEL` in a project `.env` (env layer) overrides the
+config files; clear it if a `/model` switch seems "stuck".
 
 ---
 
@@ -272,7 +281,7 @@ geode serve [-p 3.0]                   # Headless daemon
 | `ANTHROPIC_API_KEY` | | Claude API key |
 | `OPENAI_API_KEY` | | GPT API key (Cross-LLM) |
 | `ZAI_API_KEY` | | ZhipuAI GLM key |
-| `GEODE_MODEL` | `claude-opus-4-6` | Default LLM model |
+| `GEODE_MODEL` | `claude-opus-4-8` | Model override (env layer — outranks config files; see Model resolution) |
 | `GEODE_ENSEMBLE_MODE` | `single` | Ensemble mode (`single` / `cross`) |
 | **Gateway** | | |
 | `GEODE_GATEWAY_ENABLED` | `false` | Enable Slack/Discord gateway |
