@@ -16,6 +16,8 @@
 
 <!-- Move items here when work begins. -->
 <!-- 3-Checkpoint: (1) alloc → (2) merge (CI 5/5) → (3) verify -->
+- [ ] Prompt-cache: system reminder append-only (history prefix re-key fix) — PR #2026 open, CI pending (v0.99.148)
+- [ ] Codebase audit (LLM slop + design flaws) — agents running; slop report received, design-flaw report pending
 
 ## In Review
 
