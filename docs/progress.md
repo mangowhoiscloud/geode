@@ -16,7 +16,7 @@
 
 <!-- Move items here when work begins. -->
 <!-- 3-Checkpoint: (1) alloc → (2) merge (CI 5/5) → (3) verify -->
-- [ ] Docs sprint — 전 페이지 재생성/재설계 진행 중: Phase 0 캐논(v0.99.168)·Phase 1 팩트시트 4종(~/.geode/diagnostics/docs-sprint/)·Phase 2 Axolotl Rose 재스킨(v0.99.173)·**Phase 3a 랜딩+Overview+Start+탐색/llms.txt 페이지(PR #2130→#2131) 완료**. 잔여: 3b Concepts+Self-Improving(에이전트 진행 중), 3c Operate/Guides/Reference/Develop(+run/schedule 원샷 예시 수정), 3d Config(C-4 머지됨, 착수 가능), 08b 섹션 삭제, Phase 4 최종 검증(Codex MCP). 브리프=memory project_docs_sprint_brief_2026_06_11 + project_docs_redesign_decisions_2026_06_11
+- [ ] Docs sprint — 전 페이지 재생성/재설계 진행 중: Phase 0 캐논(v0.99.168)·Phase 1 팩트시트 4종(~/.geode/diagnostics/docs-sprint/)·Phase 2 Axolotl Rose 재스킨(v0.99.173)·**3a(PR #2130→#2131) + 3b Concepts+Self-Improving 21페이지+문체 검수(PR #2135→#2134) 완료**. 잔여: 3c Operate/Guides/Reference/Develop+08b 삭제(워크트리 docs-3c, 에이전트 진행 중), 3d Config, Phase 4 최종 검증(Codex MCP). 브리프=memory project_docs_sprint_brief_2026_06_11 + project_docs_redesign_decisions_2026_06_11
 - [ ] H11-tail — routing 상수 모듈레벨 by-value 별칭 해동(core/llm/providers/{anthropic,openai,codex,glm}.py DEFAULT_*/FALLBACK_MODELS + core/skills/agents.py dataclass 기본값) — reload 후에도 boot-frozen, 호출자 스윕 필요. + H1(데몬 client-cwd 세션 해석)은 별도 결정
 
 ## In Review
