@@ -45,6 +45,14 @@ functional change.
 
 ---
 
+## [0.99.165] - 2026-06-11
+
+### Changed
+- **`.env` is the secrets-only layer (config-unification C-2).** Behavior settings persist to `config.toml` exclusively:
+  - `/model` no longer writes `GEODE_MODEL` / role env vars / `GEODE_AGENTIC_EFFORT` into `.env` — the write landed in the CWD `.env` (not the documented `~/.geode/.env`, hazard H4) and, since the env layer outranks every toml layer, one switch permanently masked all future toml edits (H3); the mutator-role env var additionally had zero readers (H6). Stale lines from earlier releases are auto-cleaned by the picker (`remove_env`: `.env` line + `os.environ`, with a notice).
+  - `/login source` is toml-only, and its `[llm] *_credential_source` rows are now READ (`_TOML_TO_SETTINGS` registration) — hazard H7's dead write closed; the choice survives a `.env` wipe.
+  - API-key writes (onboarding, `/login`) legitimately remain on the `.env` layer; the contract is documented on `upsert_env`. Guards in `tests/core/config/test_c2_env_secrets_only.py`; three old env-write contract pins updated to the new contract.
+
 ## [0.99.164] - 2026-06-11
 
 ### Added

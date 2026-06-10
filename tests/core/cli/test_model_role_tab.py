@@ -153,11 +153,10 @@ def test_apply_model_dispatches_to_reflection_field(
 
     # settings field flipped
     assert settings.cognitive_reflection_model == "claude-haiku-4-5-20251001"
-    # env_io wrote the reflection env + toml keys, NOT GEODE_MODEL /
-    # [llm] primary_model
-    assert ("GEODE_COGNITIVE_REFLECTION_MODEL", "claude-haiku-4-5-20251001") in upsert_env_calls
+    # C-2 (2026-06-11): the toml key is the only durable write — env writes
+    # are gone for every role (hazards H3/H4/H6).
+    assert upsert_env_calls == []
     assert ("cognitive", "reflection_model", "claude-haiku-4-5-20251001") in upsert_toml_calls
-    assert not any(k == "GEODE_MODEL" for k, _v in upsert_env_calls)
     assert not any(s == "llm" for s, _k, _v in upsert_toml_calls)
 
     # Restore
@@ -209,11 +208,12 @@ def test_apply_model_primary_project_scope_skips_global_env(
     assert ("llm", "primary_model", "claude-opus-4-8", "project") in toml_calls
 
 
-def test_apply_model_primary_global_scope_writes_env_and_global(
+def test_apply_model_primary_global_scope_writes_global_toml_only(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Primary + global scope writes the global config + GEODE_MODEL env so
-    every project without its own override inherits the choice."""
+    """C-2 (2026-06-11): primary + global scope writes the GLOBAL config.toml
+    and nothing else — the env write is gone (it landed in the CWD .env and
+    permanently masked every toml edit; hazards H3/H4)."""
     from core.cli.commands import model as _model_mod
     from core.cli.commands._state import ModelProfile
     from core.config import settings
@@ -229,7 +229,7 @@ def test_apply_model_primary_global_scope_writes_env_and_global(
     finally:
         object.__setattr__(settings, "model", old)
 
-    assert ("GEODE_MODEL", "claude-opus-4-8") in env_calls
+    assert not any(k == "GEODE_MODEL" for k, _v in env_calls)
     assert ("llm", "primary_model", "claude-opus-4-8", "global") in toml_calls
 
 

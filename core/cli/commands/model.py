@@ -191,25 +191,27 @@ def _apply_model(
                     role_def.settings_field,
                     exc_info=True,
                 )
-        # Durable persistence honours the requested scope. The global
-        # ``~/.geode/.env`` (GEODE_MODEL) write is skipped for a *primary*
-        # **project** switch: writing it leaked the choice to every project
-        # (env outranks the project TOML in the precedence chain) and made
-        # ``_apply_toml_overlay`` skip the project ``primary_model`` on the
-        # next session reload. Non-primary roles (reflection / mutator) are
-        # daemon-global knobs, so they keep their env write; global scope
-        # writes env for every role.
-        if scope == "global" or role_def.name != "primary":
-            _pkg._upsert_env(role_def.env_var, selected.id)
+        # C-2 (2026-06-11) — config.toml is the ONLY durable layer for model
+        # picks; the env write is gone entirely. It used to land in the CWD
+        # ``.env`` (NOT the documented ``~/.geode/.env`` — hazard H4) and,
+        # because the env layer outranks every toml layer, one switch left a
+        # permanent mask over all future toml edits (H3). The mutator-role
+        # env var additionally had zero readers (H6). Stale lines written by
+        # earlier releases are cleaned up below so old masks die too.
         upsert_config_toml(role_def.toml_section, role_def.toml_key, selected.id, scope=scope)
+        if _pkg.remove_env(role_def.env_var):
+            _pkg.console.print(
+                f"  [muted]removed stale {role_def.env_var} from .env — "
+                "config.toml is the durable layer now[/muted]"
+            )
     if role_def.has_effort and effort is not None and effort != old_effort:
         try:
             object.__setattr__(settings, "agentic_effort", effort)
         except Exception:
             log.debug("Could not persist agentic_effort to settings", exc_info=True)
-        if scope == "global":
-            _pkg._upsert_env("GEODE_AGENTIC_EFFORT", effort)
         upsert_config_toml("agentic", "effort", effort, scope=scope)
+        if _pkg.remove_env("GEODE_AGENTIC_EFFORT"):
+            _pkg.console.print("  [muted]removed stale GEODE_AGENTIC_EFFORT from .env[/muted]")
 
     # Model hot-swap is deferred: AgenticLoop._sync_model_from_settings_async()
     # checks settings.model at the start of each round and applies

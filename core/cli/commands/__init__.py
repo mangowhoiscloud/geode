@@ -46,6 +46,7 @@ from core.cli.commands.schedule import cmd_schedule as cmd_schedule
 # the submodules consume through the deferred ``_pkg.X`` lookup.
 from core.config.env_io import is_glm_key as _is_glm_key
 from core.config.env_io import mask_key as _mask_key
+from core.config.env_io import remove_env as remove_env
 from core.config.env_io import upsert_env as _upsert_env
 from core.ui.console import console as console
 
