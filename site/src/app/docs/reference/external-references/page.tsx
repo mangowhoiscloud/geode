@@ -52,7 +52,7 @@ export default function Page() {
                 (<a href="https://github.com/openclaw/openclaw/blob/main/AGENTS.md">repo root</a>) — 코드 모듈별 scoped guide. (GEODE 적용은 다음 sprint.)
               </li>
               <li>
-                <strong>Hermes llms.txt + llms-full.txt</strong> — LLM-친화 평문 인덱스 듀얼. (GEODE 적용은 다음 sprint.)
+                <strong>Hermes llms.txt + llms-full.txt</strong> — LLM-친화 평문 인덱스 듀얼. GEODE도 같은 듀얼을 발행하고 리서치 휴리스틱으로 씁니다. <a href="/geode/docs/runtime/research">리서치·탐색과 llms.txt</a> 참고.
               </li>
               <li>
                 <strong>Google Stitch DESIGN.md 9-section spec</strong> — site/DESIGN.md의 포맷 가이드.
@@ -156,7 +156,7 @@ export default function Page() {
                 (<a href="https://github.com/openclaw/openclaw/blob/main/AGENTS.md">repo root</a>) — code-module scoped guides. GEODE adoption deferred to a later sprint.
               </li>
               <li>
-                <strong>Hermes llms.txt and llms-full.txt</strong> — dual LLM-friendly flat index. GEODE adoption deferred.
+                <strong>Hermes llms.txt and llms-full.txt</strong> — dual LLM-friendly flat index. GEODE now publishes the same pair and uses the convention as a research heuristic; see <a href="/geode/docs/runtime/research">Research, search, and llms.txt</a>.
               </li>
               <li>
                 <strong>Google Stitch DESIGN.md 9-section spec</strong> — the format guide behind site/DESIGN.md.

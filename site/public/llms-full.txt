@@ -20,10 +20,10 @@ URL: https://mangowhoiscloud.github.io/geode/docs/overview/how-it-runs
 EN: One request, traced end to end. The same core serves a CLI task, a gateway message, and a scheduled self-improving run.
 KO: 요청 하나가 처음부터 끝까지 어떻게 흐르는지 따라갑니다. CLI 작업, 게이트웨이 메시지, 예약된 자기개선 실행이 모두 같은 코어를 지납니다.
 
-### The 4-layer stack (4-계층 스택)
+### The 5-layer stack (5-계층 스택)
 URL: https://mangowhoiscloud.github.io/geode/docs/architecture/overview
-EN: Model, Runtime, Harness, Agent. What each layer owns, and where its responsibility ends.
-KO: Model, Runtime, Harness, Agent. 각 계층이 무엇을 맡고, 책임이 어디서 끝나는지 설명합니다.
+EN: Model, Runtime, Harness, Agent, Self-Improving. What each layer owns, and where its responsibility ends.
+KO: Model, Runtime, Harness, Agent, Self-Improving. 각 계층이 무엇을 맡고, 책임이 어디서 끝나는지 설명합니다.
 
 
 ## Getting Started . 시작하기
@@ -290,6 +290,11 @@ KO: GEODE가 인용하는 frontier 에이전트 시스템, 디자인 표준, 선
 URL: https://mangowhoiscloud.github.io/geode/docs/harness/cli
 EN: The thin gateway and IPC, and the slash commands it accepts.
 KO: thin 게이트웨이와 IPC, 그리고 받는 슬래시 명령들입니다.
+
+### Research, search, and llms.txt (리서치·탐색과 llms.txt)
+URL: https://mangowhoiscloud.github.io/geode/docs/runtime/research
+EN: How GEODE explores: llms.txt-first documentation research, web search delegation, local FTS search, and the llms.txt this site publishes.
+KO: GEODE의 탐색 방법입니다. llms.txt 우선 문서 리서치, 웹 검색 위임, 로컬 FTS 검색, 그리고 이 사이트가 발행하는 llms.txt를 다룹니다.
 
 ### Automation sidecar (자동화 사이드카)
 URL: https://mangowhoiscloud.github.io/geode/docs/runtime/automation
