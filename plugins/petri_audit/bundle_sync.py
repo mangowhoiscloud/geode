@@ -33,6 +33,8 @@ import zipfile
 from pathlib import Path
 from typing import Any
 
+from core.paths import PETRI_LOGS_DIR
+
 log = logging.getLogger(__name__)
 
 __all__ = [
@@ -42,7 +44,7 @@ __all__ = [
 ]
 
 #: Agent context layer — per-machine runtime accumulation.
-RUNTIME_LOGS_DIR: Path = Path.home() / ".geode" / "petri" / "logs"
+RUNTIME_LOGS_DIR: Path = PETRI_LOGS_DIR  # PR-CLEANUP-D2 anchor alias
 
 #: Repo-tracked bundle — committable, Pages-served.
 #: Resolved relative to this module's path so it works from any cwd.

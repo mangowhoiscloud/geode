@@ -60,6 +60,17 @@ def _resolve_repo_root() -> Path:
 _REPO_ROOT = _resolve_repo_root()
 STATE_ROOT = Path(os.environ.get("GEODE_STATE_ROOT") or (_REPO_ROOT / "state"))
 
+# Seed pools — single SoT for the directory the campaign reads and the
+# assemble script writes (PR-CLEANUP-D2, 2026-06-10). Deliberately
+# REPO-pinned (not STATE_ROOT): the cycle-input pool is a git-tracked
+# campaign input, and the 2026-06-03 incident (assemble to a custom
+# --out → every worker dropped with "train.py exited 1") came from the
+# writer and reader resolving this path independently. Whether the pool
+# should honor GEODE_STATE_ROOT is a separate D-3 semantic decision.
+SEED_POOLS_DIR = _REPO_ROOT / "state" / "seed-pools"
+CYCLE_INPUT_POOL = SEED_POOLS_DIR / "cycle-input"
+HELD_OUT_BENCH_POOL = SEED_POOLS_DIR / "held-out"
+
 # PR-STATE-AUTORESEARCH-RENAME (2026-06-01, Scheme A) — the autoresearch
 # optimization loop's in-repo runtime DATA. "autoresearch" is the engine's
 # name (operator-approved); this was ``state/autoresearch/`` under
@@ -213,6 +224,16 @@ GEODE_HOME = Path.home() / ".geode"
 # Global config & credentials
 GLOBAL_CONFIG_TOML = GEODE_HOME / "config.toml"
 GLOBAL_ENV_FILE = GEODE_HOME / ".env"
+
+# Petri audit runtime logs — single SoT (PR-CLEANUP-D2, 2026-06-10).
+# Writer: plugins/petri_audit/cli_audit.py maintains the latest.eval
+# symlink; readers: train.py evidence extraction, seed_generation
+# baseline_reader, campaign glob, eval_archive, bundle_sync. Six
+# independent literal copies of this path existed before the anchor —
+# every reader has a graceful-None contract, so a writer-side move
+# would have broken fitness evidence + baselines with zero errors.
+PETRI_LOGS_DIR = GEODE_HOME / "petri" / "logs"
+LATEST_PETRI_EVAL = PETRI_LOGS_DIR / "latest.eval"
 
 # User identity & profile
 GLOBAL_IDENTITY_DIR = GEODE_HOME / "identity"

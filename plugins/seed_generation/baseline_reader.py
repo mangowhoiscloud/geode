@@ -47,6 +47,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
+from core.paths import LATEST_PETRI_EVAL
+
 log = logging.getLogger(__name__)
 
 __all__ = [
@@ -422,7 +424,8 @@ def pick_regression_target(
     raise ValueError(f"unknown seed-generation cohort {cohort!r}; expected one of {SEED_COHORTS}")
 
 
-LATEST_PETRI_EVAL_PATH = Path.home() / ".geode" / "petri" / "logs" / "latest.eval"
+LATEST_PETRI_EVAL_PATH = LATEST_PETRI_EVAL  # PR-CLEANUP-D2 anchor alias
+
 """G2.fix (2026-05-20) — petri's `.eval` archive is the single SoT for
 per-dim evidence. ``plugins.petri_audit.cli_audit`` updates this symlink
 after every audit (rejected or promoted); :func:`format_evidence_block`

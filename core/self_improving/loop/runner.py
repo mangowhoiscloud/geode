@@ -1295,7 +1295,9 @@ def _run_autoresearch_subprocess(
     so train.py's promote decision can auto-evaluate it as a *secondary*
     reject gate (empty string ⇒ env unset ⇒ train.py skips the check).
     """
-    argv = ["uv", "run", "python", "-m", "core.self_improving.train"]
+    from core.self_improving.campaign import TRAIN_MODULE  # PR-CLEANUP-D2 anchor
+
+    argv = ["uv", "run", "python", "-m", TRAIN_MODULE]
     if dry_run:
         argv.append("--dry-run")
     env = os.environ.copy()

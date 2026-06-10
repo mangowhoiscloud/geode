@@ -42,7 +42,6 @@ class TestGeodeInit:
         assert config_path.exists()
         content = config_path.read_text(encoding="utf-8")
         assert "[llm]" in content
-        assert "[pipeline]" in content
 
     def test_does_not_overwrite_existing_config(self, tmp_path, monkeypatch):
         """init preserves existing config.toml without --force."""

@@ -66,7 +66,9 @@ def _check_geode_on_path() -> CheckResult:
 
 
 def _check_env_file() -> CheckResult:
-    env_path = Path("~/.geode/.env").expanduser()
+    from core.paths import GLOBAL_ENV_FILE  # PR-CLEANUP-D2 anchor
+
+    env_path = GLOBAL_ENV_FILE
     ok = env_path.exists()
     return CheckResult(
         name="~/.geode/.env",
@@ -149,7 +151,9 @@ def _check_profile_store() -> CheckResult:
 
 def _check_serve_socket() -> CheckResult:
     """Check whether geode serve is listening on its IPC socket."""
-    sock_path = Path("~/.geode/cli.sock").expanduser()
+    from core.paths import CLI_SOCKET_PATH  # PR-CLEANUP-D2 anchor
+
+    sock_path = CLI_SOCKET_PATH
     if not sock_path.exists():
         return CheckResult(
             name="geode serve",

@@ -248,7 +248,11 @@ def _dict_or_none(value: Any) -> dict[str, float] | None:
 
 def _deserialize_ranker_outcomes(payloads: list[dict[str, Any]]) -> list[MatchOutcome]:
     outcomes: list[MatchOutcome] = []
-    valid_winners = {"A", "B", "tie"}
+    # PR-CLEANUP-D2 — vocabulary anchored in ranker (the writer);
+    # drift here silently dropped resumed vote rows.
+    from plugins.seed_generation.agents.ranker import _VALID_WINNER_LABELS
+
+    valid_winners = _VALID_WINNER_LABELS
     for payload in payloads:
         winner = payload.get("winner")
         if winner not in valid_winners:

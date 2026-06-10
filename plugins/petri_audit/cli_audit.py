@@ -140,7 +140,9 @@ def _update_latest_petri_eval_symlink(archive_path: str) -> None:
     from G1).
     """
     target = Path(archive_path).resolve()
-    latest = Path.home() / ".geode" / "petri" / "logs" / "latest.eval"
+    from core.paths import LATEST_PETRI_EVAL
+
+    latest = LATEST_PETRI_EVAL
     try:
         latest.parent.mkdir(parents=True, exist_ok=True)
         if latest.is_symlink() or latest.exists():

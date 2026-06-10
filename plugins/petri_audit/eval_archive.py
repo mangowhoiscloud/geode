@@ -45,7 +45,7 @@ __all__ = [
 ]
 
 #: Worktree-independent raw archive. Out of git on purpose (PII / size).
-DEFAULT_RAW_ARCHIVE_DIR: Path = Path("~/.geode/petri/logs").expanduser()
+from core.paths import PETRI_LOGS_DIR as DEFAULT_RAW_ARCHIVE_DIR  # PR-CLEANUP-D2 anchor
 
 #: Committed summary directory under repo root.
 DEFAULT_SUMMARY_DIR: Path = Path("docs/audits/eval-logs")

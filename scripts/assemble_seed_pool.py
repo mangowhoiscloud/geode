@@ -93,7 +93,9 @@ _MALFORMED_SORT_KEY: tuple[int, ...] = ()
 DEFAULT_SEEDS_ROOT = Path("docs/self-improving/petri-bundle/seeds")
 #: Default pool destination — under the repo ``state/`` tree (GEODE convention
 #: for runtime artefacts), never ``/tmp``.
-DEFAULT_OUT = Path("state/seed-pools/cycle-input")
+# PR-CLEANUP-D2 (2026-06-10) — the default output IS the campaign's input
+# pool, anchored in core.paths (was a cwd-relative third copy of the path).
+from core.paths import CYCLE_INPUT_POOL as DEFAULT_OUT
 DEFAULT_RUNS = 2
 
 

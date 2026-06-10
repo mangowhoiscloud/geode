@@ -51,13 +51,14 @@ class TestCheckEnvFile:
     def test_present(self, tmp_path):
         env_path = tmp_path / ".env"
         env_path.write_text("ANTHROPIC_API_KEY=sk-ant-test")
-        with patch("pathlib.Path.expanduser", return_value=env_path):
+        with patch("core.paths.GLOBAL_ENV_FILE", env_path):
             result = _check_env_file()
         assert result.ok is True
 
     def test_absent(self, tmp_path):
+        # PR-CLEANUP-D2 — patch the core.paths anchor, not Path.expanduser.
         env_path = tmp_path / "missing" / ".env"
-        with patch("pathlib.Path.expanduser", return_value=env_path):
+        with patch("core.paths.GLOBAL_ENV_FILE", env_path):
             result = _check_env_file()
         assert result.ok is False
         assert "geode setup" in result.fix
@@ -126,8 +127,10 @@ class TestCheckProfileStore:
 
 class TestCheckServeSocket:
     def test_socket_absent(self, tmp_path):
+        # PR-CLEANUP-D2 — the socket path is the core.paths anchor now;
+        # patch the anchor, not Path.expanduser.
         sock_path = tmp_path / "missing.sock"
-        with patch("pathlib.Path.expanduser", return_value=sock_path):
+        with patch("core.paths.CLI_SOCKET_PATH", sock_path):
             result = _check_serve_socket()
         assert result.ok is False
         assert "geode serve" in result.fix
