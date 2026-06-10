@@ -16,7 +16,7 @@
 
 <!-- Move items here when work begins. -->
 <!-- 3-Checkpoint: (1) alloc → (2) merge (CI 5/5) → (3) verify -->
-- [ ] Structure cleanup sprint — S-1 DONE; next S-2 tests convention → S-3 CLI dual-home/scripts → S-4 core/utils+integrations+seed-tools move → S-5 loop/train split (campaign-timing gate)
+- [ ] Structure cleanup sprint — S-1/S-2 DONE; next S-3 CLI dual-home/scripts promotion → S-4 core/utils+integrations+seed-tools+run_log-callers → S-5 loop/train split (campaign-timing gate)
 
 ## In Review
 
@@ -26,6 +26,7 @@
 
 <!-- Completed items. Keep recent 10, archive older ones. -->
 <!-- - [x] #issue-number — Short description (PR #N) -->
+- [x] Struct S-2: test tree → source-mirror convention — 350 git mv (flat 323 + self_improving/audit/observability root folds), 55 repo-root anchors bumped, 26 literal-path sweeps (release.yml mypy targets incl.), ruff src 'tests' root removed (mirror dirs were a second core.* package, isort flip) (PR #2079 → #2080, v0.99.160)
 - [x] Struct S-1: misplaced-module moves (bash_tool/audit_lane/config.self_improving/fts_query, 32-importer rename) + hardcoding anchors (CONTEXT_BLOCK_MAX_CHARS ×4, DEFAULT_AGENT_MODEL ×10, pages/repo URLs, registry pagination) (PR #2072 → #2073, v0.99.158)
 - [x] S-6 observability: sessions.jsonl now carries run metrics (to_session_row had 0 callers — HIGH), run_log ×2 fold → observability JsonlAppendLog, LatencyMetrics rename, configure_logging(mode) switchboard (mcp/worker/campaign file logs), dead langgraph-checkpoint pins dropped; state/checkpoints verified healthy (PR #2075 → #2076, v0.99.159)
 - [x] Slop cleanup sprint: 5 Game-IP-era skills + 4 orphan prompt templates + axes.py husk deleted (hash pins 15→4), router.md dedupe + (CRITICAL) 4→2, program.md verdict-label fix, CLAUDE.md skills-table/entry-point sync; LinkedIn/playwriter audit claims rejected as MCP false positives (PR #2068 → #2069, v0.99.157)
