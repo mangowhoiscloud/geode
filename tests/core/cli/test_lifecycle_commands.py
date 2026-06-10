@@ -1,4 +1,4 @@
-"""Tests for core.cli.cmd_lifecycle — stop, status, clean, uninstall."""
+"""Tests for core.cli.commands.lifecycle — stop, status, clean, uninstall."""
 
 from __future__ import annotations
 
@@ -7,7 +7,7 @@ from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import pytest
-from core.cli.cmd_lifecycle import (
+from core.cli.commands.lifecycle import (
     _clean_stale_artifacts,
     _find_serve_pid,
     _format_size,
@@ -109,16 +109,16 @@ class TestIsSocketOrphan:
 
 
 class TestStop:
-    @patch("core.cli.cmd_lifecycle._find_serve_pid", return_value=None)
+    @patch("core.cli.commands.lifecycle._find_serve_pid", return_value=None)
     @patch("core.cli.ipc_client.is_serve_running", return_value=False)
     def test_not_running(self, mock_running: MagicMock, mock_pid: MagicMock) -> None:
         """No error when serve is not running."""
         stop_serve(force=False, timeout=5)
 
-    @patch("core.cli.cmd_lifecycle._clean_stale_artifacts")
-    @patch("core.cli.cmd_lifecycle._find_child_pids", return_value=[])
+    @patch("core.cli.commands.lifecycle._clean_stale_artifacts")
+    @patch("core.cli.commands.lifecycle._find_child_pids", return_value=[])
     @patch("os.kill")
-    @patch("core.cli.cmd_lifecycle._find_serve_pid", return_value=12345)
+    @patch("core.cli.commands.lifecycle._find_serve_pid", return_value=12345)
     @patch("core.cli.ipc_client.is_serve_running", return_value=True)
     def test_graceful_stop(
         self,
@@ -135,7 +135,7 @@ class TestStop:
         mock_kill.assert_any_call(12345, signal.SIGTERM)
         mock_clean.assert_called_once()
 
-    @patch("core.cli.cmd_lifecycle._find_serve_pid", return_value=12345)
+    @patch("core.cli.commands.lifecycle._find_serve_pid", return_value=12345)
     @patch("core.cli.ipc_client.is_serve_running", return_value=True)
     def test_pid_already_gone(self, mock_running: MagicMock, mock_pid: MagicMock) -> None:
         """Handles process gone between find and kill."""
@@ -148,9 +148,9 @@ class TestCleanStaleArtifacts:
         sock = tmp_path / "cli.sock"
         sock.write_text("")
         with (
-            patch("core.cli.cmd_lifecycle.CLI_SOCKET_PATH", sock),
-            patch("core.cli.cmd_lifecycle.CLI_STARTUP_LOCK", tmp_path / "nolock"),
-            patch("core.cli.cmd_lifecycle._is_socket_orphan", return_value=True),
+            patch("core.cli.commands.lifecycle.CLI_SOCKET_PATH", sock),
+            patch("core.cli.commands.lifecycle.CLI_STARTUP_LOCK", tmp_path / "nolock"),
+            patch("core.cli.commands.lifecycle._is_socket_orphan", return_value=True),
         ):
             _clean_stale_artifacts()
         assert not sock.exists()
@@ -162,13 +162,13 @@ class TestCleanStaleArtifacts:
 
 
 class TestStatus:
-    @patch("core.cli.cmd_lifecycle._find_serve_pid", return_value=None)
+    @patch("core.cli.commands.lifecycle._find_serve_pid", return_value=None)
     @patch("core.cli.ipc_client.is_serve_running", return_value=False)
     def test_text_output(self, mock_running: MagicMock, mock_pid: MagicMock) -> None:
         """Runs without error in text mode."""
         show_status(json_output=False)
 
-    @patch("core.cli.cmd_lifecycle._find_serve_pid", return_value=None)
+    @patch("core.cli.commands.lifecycle._find_serve_pid", return_value=None)
     @patch("core.cli.ipc_client.is_serve_running", return_value=False)
     def test_json_output(
         self,
@@ -193,7 +193,7 @@ class TestClean:
         offload.mkdir()
         (offload / "result.json").write_text("payload")
 
-        with patch("core.cli.cmd_lifecycle.PROJECT_TOOL_OFFLOAD", offload):
+        with patch("core.cli.commands.lifecycle.PROJECT_TOOL_OFFLOAD", offload):
             do_clean(scope="project", dry_run=True, force=True)
 
         assert offload.exists()
@@ -209,11 +209,11 @@ class TestClean:
         (result_cache / "cached.json").write_text("{}")
 
         with (
-            patch("core.cli.cmd_lifecycle.PROJECT_TOOL_OFFLOAD", offload),
-            patch("core.cli.cmd_lifecycle.PROJECT_RESULT_CACHE_DIR", result_cache),
-            patch("core.cli.cmd_lifecycle.MCP_REGISTRY_CACHE", tmp_path / "no3"),
-            patch("core.cli.cmd_lifecycle.CLI_SOCKET_PATH", tmp_path / "no4"),
-            patch("core.cli.cmd_lifecycle.CLI_STARTUP_LOCK", tmp_path / "no5"),
+            patch("core.cli.commands.lifecycle.PROJECT_TOOL_OFFLOAD", offload),
+            patch("core.cli.commands.lifecycle.PROJECT_RESULT_CACHE_DIR", result_cache),
+            patch("core.cli.commands.lifecycle.MCP_REGISTRY_CACHE", tmp_path / "no3"),
+            patch("core.cli.commands.lifecycle.CLI_SOCKET_PATH", tmp_path / "no4"),
+            patch("core.cli.commands.lifecycle.CLI_STARTUP_LOCK", tmp_path / "no5"),
         ):
             do_clean(scope="project", force=True)
 
@@ -223,11 +223,11 @@ class TestClean:
     def test_nothing_to_clean(self, tmp_path: Path) -> None:
         """No error when nothing exists."""
         with (
-            patch("core.cli.cmd_lifecycle.PROJECT_TOOL_OFFLOAD", tmp_path / "no2"),
-            patch("core.cli.cmd_lifecycle.PROJECT_RESULT_CACHE_DIR", tmp_path / "no3"),
-            patch("core.cli.cmd_lifecycle.MCP_REGISTRY_CACHE", tmp_path / "no5"),
-            patch("core.cli.cmd_lifecycle.CLI_SOCKET_PATH", tmp_path / "no6"),
-            patch("core.cli.cmd_lifecycle.CLI_STARTUP_LOCK", tmp_path / "no7"),
+            patch("core.cli.commands.lifecycle.PROJECT_TOOL_OFFLOAD", tmp_path / "no2"),
+            patch("core.cli.commands.lifecycle.PROJECT_RESULT_CACHE_DIR", tmp_path / "no3"),
+            patch("core.cli.commands.lifecycle.MCP_REGISTRY_CACHE", tmp_path / "no5"),
+            patch("core.cli.commands.lifecycle.CLI_SOCKET_PATH", tmp_path / "no6"),
+            patch("core.cli.commands.lifecycle.CLI_STARTUP_LOCK", tmp_path / "no7"),
         ):
             do_clean(scope="project", force=True)
 
@@ -248,12 +248,12 @@ class TestClean:
 
 
 class TestUpdate:
-    @patch("core.cli.cmd_lifecycle._start_serve_background")
-    @patch("core.cli.cmd_lifecycle.stop_serve")
-    @patch("core.cli.cmd_lifecycle._run_update_step", return_value=True)
+    @patch("core.cli.commands.lifecycle._start_serve_background")
+    @patch("core.cli.commands.lifecycle.stop_serve")
+    @patch("core.cli.commands.lifecycle._run_update_step", return_value=True)
     @patch("core.cli.ipc_client.is_serve_running", return_value=False)
-    @patch("core.cli.cmd_lifecycle._has_dirty_worktree", return_value=False)
-    @patch("core.cli.cmd_lifecycle._resolve_git_root")
+    @patch("core.cli.commands.lifecycle._has_dirty_worktree", return_value=False)
+    @patch("core.cli.commands.lifecycle._resolve_git_root")
     def test_runs_expected_steps(
         self,
         mock_root: MagicMock,
@@ -278,9 +278,9 @@ class TestUpdate:
         mock_stop.assert_not_called()
         mock_start.assert_not_called()
 
-    @patch("core.cli.cmd_lifecycle._run_update_step")
-    @patch("core.cli.cmd_lifecycle._has_dirty_worktree", return_value=True)
-    @patch("core.cli.cmd_lifecycle._resolve_git_root")
+    @patch("core.cli.commands.lifecycle._run_update_step")
+    @patch("core.cli.commands.lifecycle._has_dirty_worktree", return_value=True)
+    @patch("core.cli.commands.lifecycle._resolve_git_root")
     def test_dirty_checkout_requires_force(
         self,
         mock_root: MagicMock,
@@ -293,12 +293,12 @@ class TestUpdate:
         assert not do_update(force=False)
         mock_step.assert_not_called()
 
-    @patch("core.cli.cmd_lifecycle._start_serve_background", return_value=True)
-    @patch("core.cli.cmd_lifecycle.stop_serve")
-    @patch("core.cli.cmd_lifecycle._run_update_step", return_value=True)
+    @patch("core.cli.commands.lifecycle._start_serve_background", return_value=True)
+    @patch("core.cli.commands.lifecycle.stop_serve")
+    @patch("core.cli.commands.lifecycle._run_update_step", return_value=True)
     @patch("core.cli.ipc_client.is_serve_running", return_value=True)
-    @patch("core.cli.cmd_lifecycle._has_dirty_worktree", return_value=False)
-    @patch("core.cli.cmd_lifecycle._resolve_git_root")
+    @patch("core.cli.commands.lifecycle._has_dirty_worktree", return_value=False)
+    @patch("core.cli.commands.lifecycle._resolve_git_root")
     def test_restarts_serve_when_it_was_running(
         self,
         mock_root: MagicMock,
@@ -329,8 +329,8 @@ class TestUninstall:
         (geode_dir / "config.toml").write_text("[test]")
 
         with (
-            patch("core.cli.cmd_lifecycle.PROJECT_GEODE_DIR", geode_dir),
-            patch("core.cli.cmd_lifecycle.GEODE_HOME", tmp_path / "home_geode"),
+            patch("core.cli.commands.lifecycle.PROJECT_GEODE_DIR", geode_dir),
+            patch("core.cli.commands.lifecycle.GEODE_HOME", tmp_path / "home_geode"),
             patch("shutil.which", return_value=None),
             patch("pathlib.Path.cwd", return_value=tmp_path),
         ):
@@ -344,9 +344,9 @@ class TestUninstall:
         (geode_dir / "config.toml").write_text("[test]")
 
         with (
-            patch("core.cli.cmd_lifecycle.PROJECT_GEODE_DIR", geode_dir),
-            patch("core.cli.cmd_lifecycle.GEODE_HOME", tmp_path / "home_geode"),
-            patch("core.cli.cmd_lifecycle.stop_serve"),
+            patch("core.cli.commands.lifecycle.PROJECT_GEODE_DIR", geode_dir),
+            patch("core.cli.commands.lifecycle.GEODE_HOME", tmp_path / "home_geode"),
+            patch("core.cli.commands.lifecycle.stop_serve"),
             patch("shutil.which", return_value=None),
             patch("pathlib.Path.cwd", return_value=tmp_path),
         ):
@@ -362,9 +362,9 @@ class TestUninstall:
         (home / "runs").mkdir()
 
         with (
-            patch("core.cli.cmd_lifecycle.PROJECT_GEODE_DIR", tmp_path / "nope"),
-            patch("core.cli.cmd_lifecycle.GEODE_HOME", home),
-            patch("core.cli.cmd_lifecycle.stop_serve"),
+            patch("core.cli.commands.lifecycle.PROJECT_GEODE_DIR", tmp_path / "nope"),
+            patch("core.cli.commands.lifecycle.GEODE_HOME", home),
+            patch("core.cli.commands.lifecycle.stop_serve"),
             patch("shutil.which", return_value=None),
             patch("pathlib.Path.cwd", return_value=tmp_path),
         ):
@@ -376,8 +376,8 @@ class TestUninstall:
 
     def test_nothing_to_uninstall(self, tmp_path: Path) -> None:
         with (
-            patch("core.cli.cmd_lifecycle.PROJECT_GEODE_DIR", tmp_path / "nope"),
-            patch("core.cli.cmd_lifecycle.GEODE_HOME", tmp_path / "nope2"),
+            patch("core.cli.commands.lifecycle.PROJECT_GEODE_DIR", tmp_path / "nope"),
+            patch("core.cli.commands.lifecycle.GEODE_HOME", tmp_path / "nope2"),
             patch("shutil.which", return_value=None),
             patch("pathlib.Path.cwd", return_value=tmp_path),
         ):
@@ -389,10 +389,10 @@ class TestUninstall:
         geode_bin.write_text("#!/bin/sh\n", encoding="utf-8")
 
         with (
-            patch("core.cli.cmd_lifecycle.PROJECT_GEODE_DIR", tmp_path / "nope"),
-            patch("core.cli.cmd_lifecycle.GEODE_HOME", tmp_path / "nope2"),
-            patch("core.cli.cmd_lifecycle.stop_serve"),
-            patch("core.cli.cmd_lifecycle.subprocess.run") as mock_run,
+            patch("core.cli.commands.lifecycle.PROJECT_GEODE_DIR", tmp_path / "nope"),
+            patch("core.cli.commands.lifecycle.GEODE_HOME", tmp_path / "nope2"),
+            patch("core.cli.commands.lifecycle.stop_serve"),
+            patch("core.cli.commands.lifecycle.subprocess.run") as mock_run,
             patch("shutil.which", return_value=str(geode_bin)),
             patch("pathlib.Path.cwd", return_value=tmp_path),
         ):
