@@ -1,4 +1,8 @@
 {
   "query_memory": "Search GEODE memory across tiers (session, project, organization).",
-  "get_health": "Get GEODE pipeline health status and component stats."
+  "get_health": "Get GEODE pipeline health status and component stats.",
+  "run_agent": "Run one GEODE agentic one-shot: plan/act/observe rounds with GEODE's tool set until the prompt is answered or time_budget_s expires. Returns the final text, round count, and termination reason.",
+  "self_improving_status": "Read-only self-improving loop status: the promoted baseline (fitness, timestamp) and the most recent mutation ledger rows (applied / rejected / rolled_back).",
+  "self_improving_propose": "Propose ONE scaffold mutation via the self-improving mutator LLM. Nothing is written — review the returned diff (previous_value vs new_value, rationale), then confirm with self_improving_apply.",
+  "self_improving_apply": "Apply a mutation previously returned by self_improving_propose, identified by mutation_id. This writes the scaffold SoT and appends to the mutation ledger. Proposals are held only for the current server session."
 }

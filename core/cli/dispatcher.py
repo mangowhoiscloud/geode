@@ -163,6 +163,10 @@ def _handle_command(
         from core.cli.commands.self_improving import cmd_self_improving
 
         cmd_self_improving(args)
+    elif action == "recall":
+        from core.cli.commands.recall import cmd_recall
+
+        cmd_recall(args)
     elif action == "stop":
         # v0.63.0 — Hermes-style daemon shutdown (`hermes stop`).
         # Args: ``/stop --force`` for SIGKILL, optional ``--timeout=N``.

@@ -187,11 +187,19 @@ def bootstrap_geode(
     )
 
 
-def _build_agentic_stack_minimal(prompt: str, *, quiet: bool = True) -> Any:
-    """Build a minimal isolated AgenticLoop and run a prompt (for context:fork skills).
+def run_agentic_oneshot(
+    prompt: str,
+    *,
+    quiet: bool = True,
+    time_budget_s: float = 60.0,
+) -> Any:
+    """Build a minimal isolated AgenticLoop and run a prompt one-shot.
 
     Returns AgenticResult.  Inline construction — no SharedServices overhead.
-    Fork is a lightweight one-shot execution, not a session mode.
+    One-shot execution, not a session mode. Callers: context:fork skill
+    execution (``cmd_skill_invoke``) and the ``geode-mcp`` ``run_agent``
+    tool (D-3 ④, 2026-06-10 — promoted from the private
+    ``_build_agentic_stack_minimal`` so both surfaces share one stack).
     """
     from core.agent.conversation import ConversationContext
     from core.agent.loop import AgenticLoop
@@ -209,7 +217,7 @@ def _build_agentic_stack_minimal(prompt: str, *, quiet: bool = True) -> Any:
         model=_stk_settings.model,
         provider=_resolve_provider(_stk_settings.model),
         quiet=quiet,
-        time_budget_s=60.0,
+        time_budget_s=time_budget_s,
         max_rounds=0,
     )
     return run_process_coroutine(loop.arun(prompt))
