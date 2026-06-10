@@ -16,7 +16,7 @@ export default function Page() {
           <>
             <h2>구성</h2>
             <p>
-              `plugins/seed_pipeline/` 가 자가 ML 실험 루프 (autoresearch) 의 상위 generation 마다 새로운 Petri seed 묶음을 생성합니다. 입력은 직전 generation 의 transcript + audit 결과. 출력은 다음 generation 의 시드 파일.
+              `plugins/seed_pipeline/` 가 자기개선 루프 (autoresearch) 의 상위 generation 마다 새로운 Petri seed 묶음을 생성합니다. 입력은 직전 generation 의 transcript + audit 결과. 출력은 다음 generation 의 시드 파일.
             </p>
             <pre>{`plugins/seed_pipeline/
 ├── picker.py          # auditor 가 다음 raise 할 시나리오 선택

@@ -16,7 +16,7 @@ export default function Page() {
           <>
             <h2>왜 outer-loop 설정이 분리되어 있나</h2>
             <p>
-              `core/config/outer_loop.py` 는 inner-loop (AgenticLoop, model selection) 와 분리된 outer-loop 의 설정 root 입니다. autoresearch (자가 ML 실험 루프) + seed-pipeline (재귀적 seed 생성) + petri (alignment audit) 세 시스템이 공유하는 임계값을 한 곳에 둠으로써 8 군데에 흩어져 있던 설정(모듈 상수 2 + TOML 2 + env vars + manifest + auth.toml + codex auth.json) 을 단일 SOT 로 통합합니다.
+              `core/config/outer_loop.py` 는 inner-loop (AgenticLoop, model selection) 와 분리된 outer-loop 의 설정 root 입니다. autoresearch (자기개선 루프 드라이버, 변이와 감사 기반 선택) + seed-pipeline (재귀적 seed 생성) + petri (alignment audit) 세 시스템이 공유하는 임계값을 한 곳에 둠으로써 8 군데에 흩어져 있던 설정(모듈 상수 2 + TOML 2 + env vars + manifest + auth.toml + codex auth.json) 을 단일 SOT 로 통합합니다.
             </p>
 
             <h2>스키마</h2>
@@ -59,7 +59,7 @@ credential_source = "oauth"   # OAuth subscription 만 사용
           <>
             <h2>Why the outer loop has its own config</h2>
             <p>
-              `core/config/outer_loop.py` is the config root for the outer loop, separate from the inner AgenticLoop. autoresearch (self-driving ML loop), seed-pipeline (recursive seed generation), and petri (alignment audit) share the same thresholds. Before PR-α1 (#1308) those settings lived in eight surfaces. They now collapse into one TOML file.
+              `core/config/outer_loop.py` is the config root for the outer loop, separate from the inner AgenticLoop. autoresearch (the self-improving loop driver: mutate, audit, select), seed-pipeline (recursive seed generation), and petri (alignment audit) share the same thresholds. Before PR-α1 (#1308) those settings lived in eight surfaces. They now collapse into one TOML file.
             </p>
 
             <h2>Schema</h2>
