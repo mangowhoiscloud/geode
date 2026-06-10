@@ -16,7 +16,6 @@
 
 <!-- Move items here when work begins. -->
 <!-- 3-Checkpoint: (1) alloc → (2) merge (CI 5/5) → (3) verify -->
-- [ ] llms.txt sprint — site llms.txt spec-conformance + refresh (sync-stats writer) + runtime consumption guidance (router.md heuristic + web_fetch description, frontier-converged: instruction-level, no silent probe); worktree llms-txt
 - [ ] Folder-structure audit follow-ups — report delivered (F1/F2 stale, already shipped in D-1); standing: loop/ 32-module split + train.py 5,510L, tests/ triple convention (330 flat vs 190 nested + dup self_improving roots), cli cmd_*/commands/ dual home, misplaced modules (bash_tool/run_log ×2/audit_lane/seed tools), scripts→CLI promotion, integrations→messaging flatten, husk sweep, layer map 11/21
 
 ## In Review
@@ -27,6 +26,7 @@
 
 <!-- Completed items. Keep recent 10, archive older ones. -->
 <!-- - [x] #issue-number — Short description (PR #N) -->
+- [x] llms.txt sprint: router.md llms.txt-first research heuristic + web_fetch description (instruction-level per frontier convergence) + site llms.txt llmstxt.org spec shape + sitemap section-parser regression fix (lost groupings since docs redesign) (PR #2063 → #2064, v0.99.156)
 - [x] Audit bundle D-3a: G1-G4 guardrail subgraph + M4.x DPO chain deleted (operator decisions ①②), AUTORESEARCH_VERDICT derived from gate outcome (⑥), CYCLE_INPUT_POOL repo-pinned semantics recorded (⑤) (PR #2056 → #2057, v0.99.154)
 - [x] Audit bundle D-3b: /recall slash surface (save/list/show, reader-parser parity) + geode-mcp first-class entry point (run_agent / self_improving_status / propose+apply two-step gate), run_agentic_oneshot shared stack (PR #2059 → #2060, v0.99.155)
 - [x] Audit bundle D-1: safe-delete batch — 10 zombie modules + 9 dedicated tests, 16 dead Settings fields, v0.88 router compat surface, orphaned instructor/textgrad deps (PR #2047 → #2048, v0.99.152)
