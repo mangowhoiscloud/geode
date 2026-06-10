@@ -115,6 +115,29 @@ def adapter_health(name: str) -> EnvironmentReport:
     return get_adapter(name).test_environment()
 
 
+# PR-DRIFT-ANCHORS (2026-06-10) — single SoT for the legacy→registry
+# provider-key translation. ``core.config._resolve_provider`` returns the
+# broader vocabulary (``openai-codex`` for gpt-5.x, ``zhipuai`` for GLM);
+# this registry keys adapters on the narrower ``openai`` / ``glm`` (the
+# Codex distinction rides the ``source`` axis as ``subscription``).
+# Previously FOUR independent copies of this map existed
+# (agent_loop.__init__, _model_switching._resolve_path_b_adapter,
+# runner._normalize_provider_for_registry,
+# _reflection._normalize_provider_for_registry — the last two only
+# carried the openai half), with a comment admitting they were not
+# sync'd. Add new aliases HERE only.
+PROVIDER_REGISTRY_NORMALIZATION: dict[str, str] = {
+    "openai-codex": "openai",
+    "zhipuai": "glm",
+}
+
+
+def normalize_registry_provider(provider: str) -> str:
+    """Translate a legacy ``_resolve_provider`` key to this registry's
+    provider vocabulary (identity for already-narrow keys)."""
+    return PROVIDER_REGISTRY_NORMALIZATION.get(provider, provider)
+
+
 def resolve_for(provider: str, source: str) -> LLMAdapter:
     """Find the unique adapter matching ``(provider, source)``.
 

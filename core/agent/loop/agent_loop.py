@@ -429,19 +429,13 @@ class AgenticLoop:
         self._response_schema: dict[str, Any] | None = response_schema
         from core.llm.adapters import resolve_for
 
-        # The Path-B registry uses a narrower provider vocabulary than
-        # ``_resolve_provider``: gpt-5.x models map to ``openai-codex``
-        # in the legacy provider key but collapse to ``openai`` in the
-        # registry (the Codex source is encoded on the ``source`` axis
-        # as ``subscription``).
-        # Related copies in ``runner.py:_normalize_provider_for_registry``
-        # and ``_reflection.py:_normalize_provider_for_registry`` — those
-        # only map ``openai-codex → openai``; this site additionally maps
-        # ``zhipuai → glm``. The three are NOT fully sync'd; align them
-        # if a caller ever surfaces ``zhipuai`` on the reflection /
-        # mutator paths.
-        _PROVIDER_NORMALIZATION = {"openai-codex": "openai", "zhipuai": "glm"}
-        registry_provider = _PROVIDER_NORMALIZATION.get(self._provider, self._provider)
+        # PR-DRIFT-ANCHORS (2026-06-10) — the legacy→registry provider
+        # translation lives in ONE place now
+        # (``core.llm.adapters.registry.PROVIDER_REGISTRY_NORMALIZATION``);
+        # this used to be one of four unsynchronized literal copies.
+        from core.llm.adapters.registry import normalize_registry_provider
+
+        registry_provider = normalize_registry_provider(self._provider)
         # Adapter resolution: direct registry-name lookup first
         # (``codex-oauth`` / ``claude-cli`` / ``openai-payg`` / ...),
         # falling back to the legacy category-axis path for

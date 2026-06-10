@@ -25,6 +25,11 @@ from __future__ import annotations
 import sys
 from dataclasses import dataclass
 
+from core.llm.model_capabilities import (
+    ANTHROPIC_ADAPTIVE_MODELS,
+    ANTHROPIC_XHIGH_MODELS,
+)
+
 # ---------------------------------------------------------------------------
 # Per-provider effort enum table
 # ---------------------------------------------------------------------------
@@ -33,17 +38,12 @@ _ANTHROPIC_ADAPTIVE_EFFORTS = ("low", "medium", "high", "max", "xhigh")
 _OPENAI_REASONING_EFFORTS = ("none", "minimal", "low", "medium", "high", "xhigh")
 _GLM_HYBRID_EFFORTS = ("disabled", "enabled")
 
-# Keep these in sync with the adapter capability gates
-# (``core/llm/providers/anthropic.py`` ``_ADAPTIVE_MODELS`` /
-# ``_XHIGH_EFFORT_MODELS``) — the picker only surfaces an effort knob the
-# API will actually accept. Opus 4.8 (claude-opus-4-8) joins 4.7 in both
-# sets: confirmed live by the running harness (Claude Code's /model selector
-# configures claude-opus-4-8 with "xhigh effort"); ctx7 platform docs index
-# only up to the 4.6/4.7 family pages.
-_ANTHROPIC_ADAPTIVE_MODELS = frozenset(
-    {"claude-opus-4-8", "claude-opus-4-7", "claude-opus-4-6", "claude-sonnet-4-6"}
-)
-_ANTHROPIC_XHIGH_MODELS = frozenset({"claude-opus-4-8", "claude-opus-4-7"})
+# PR-DRIFT-ANCHORS (2026-06-10) — the capability sets live in the single
+# SoT ``core/llm/model_capabilities.py`` (the former "Keep these in sync"
+# comment is retired along with the literal copies): the picker surfaces
+# exactly the knobs the adapter request-shaping accepts, by construction.
+_ANTHROPIC_ADAPTIVE_MODELS = ANTHROPIC_ADAPTIVE_MODELS
+_ANTHROPIC_XHIGH_MODELS = ANTHROPIC_XHIGH_MODELS
 
 _OPENAI_RESPONSES_MODELS_PREFIX = ("gpt-5",)
 
