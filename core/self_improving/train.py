@@ -121,6 +121,7 @@ if TYPE_CHECKING:
 # (compute_bench_aggregate, ...)`` 의 local import 는 compute_fitness 내부
 # 에서만 호출되는 lazy import 라 보존. (``BenchProvenance`` 는
 # ``format_results_jsonl_row`` 시그너처에도 사용되므로 module-top import.)
+from core.paths import LATEST_PETRI_EVAL
 from core.self_improving.bench_means import BenchProvenance, collect_bench_means_from_inspect_ai
 
 log = logging.getLogger(__name__)
@@ -2918,7 +2919,7 @@ PETRI_RUBRIC_VERSION = "v3-22dim-PR0"
 # the SoT for this symlink; petri-owned, no core.paths constant exists for it.
 # Surfaced to the path-literal guard only by PR-SELF-IMPROVING-UMBRELLA moving
 # this module into core/.
-LATEST_EVAL_SYMLINK = Path.home() / ".geode" / "petri" / "logs" / "latest.eval"  # paths-literal-ok
+LATEST_EVAL_SYMLINK = LATEST_PETRI_EVAL  # PR-CLEANUP-D2 anchor alias
 
 
 def _resolve_eval_archive_path() -> str | None:

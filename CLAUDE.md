@@ -8,11 +8,11 @@
 
 A general-purpose autonomous execution agent built on LangGraph. Autonomously performs research, analysis, automation, and scheduling.
 
-- **Version**: 0.99.152
+- **Version**: 0.99.153
 - **Python**: >= 3.12
 - **Package Manager**: uv
 - **Entry Point**: `geode.cli:app` (Typer)
-- **Modules**: 386 core + 67 plugins = 453
+- **Modules**: 386 core + 68 plugins = 454
 - **Tests**: 8646 (+5 live)
 - **CHANGELOG**: `CHANGELOG.md` (Keep a Changelog + SemVer)
 
@@ -377,10 +377,17 @@ Update project tracking from main. Backlog → In Progress → Done.
 
 | Gate | Command | Criteria |
 |------|---------|----------|
-| Lint | `uv run ruff check core/ tests/ plugins/` | 0 errors |
+| Lint | `uv run ruff check core/ tests/ plugins/ scripts/` | 0 errors — `scripts/` 포함 (CI ci.yml:60과 동일 범위; PR-CLEANUP-D2에서 로컬 게이트가 scripts/를 빼먹어 CI에서 2회 반려된 사건) |
+| Format | `uv run ruff format --check core/ tests/ plugins/ scripts/` | 0 reformats |
 | Type | `uv run mypy core/ plugins/` | 0 errors |
+| Imports | `uv run lint-imports` | contracts kept |
 | Test | `uv run pytest tests/ -m "not live"` | 3900+ pass |
 | CLI smoke | `uv run geode version` | version prints |
+
+> 게이트 명령을 파이프로 감싸지 말 것 — `ruff check … \| tail -1` 은 zsh 기본
+> pipefail off라 ruff의 exit 1을 삼켜 `&&` 체인이 실패를 통과시킨다. heredoc
+> 수정 스크립트는 실패가 후속 명령을 막도록 같은 `&&` 체인에 묶고, push 직전
+> 게이트를 풀 출력으로 한 번 더 단언한다 (PR-CLEANUP-D2 no-op 커밋 사건).
 
 ## Custom Skills (Scaffold)
 

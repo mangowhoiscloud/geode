@@ -69,6 +69,19 @@ from core.cli.welcome import _welcome_screen as _welcome_screen
 from core.hooks import HookEvent, HookSystem
 from core.hooks.dispatch import fire_hook
 from core.llm.commentary import generate_commentary
+
+# PR-CLEANUP-D2 (2026-06-10) — campaign CLI defaults come from the campaign
+# module (they were re-hardcoded literals here, with help text asserting the
+# old values whenever campaign.py changed them).
+from core.self_improving.campaign import (
+    DEFAULT_AUDIT_MAX_CONNECTIONS as _CAMPAIGN_DEFAULT_AUDIT_MAX_CONNECTIONS,
+)
+from core.self_improving.campaign import (
+    DEFAULT_AUDIT_MAX_SAMPLES as _CAMPAIGN_DEFAULT_AUDIT_MAX_SAMPLES,
+)
+from core.self_improving.campaign import (
+    DEFAULT_MAX_PROPOSE_ATTEMPTS as _CAMPAIGN_DEFAULT_MAX_PROPOSE_ATTEMPTS,
+)
 from core.ui.console import console
 from core.ui.status import GeodeStatus
 
@@ -374,19 +387,19 @@ def campaign(
         help="Comma-separated arm order, gate LAST. Default 'never,random,gate'.",
     ),
     mc: int = typer.Option(
-        8,
+        _CAMPAIGN_DEFAULT_MAX_PROPOSE_ATTEMPTS,
         "--mc",
-        help="Max propose-guard re-proposal attempts M. Default 8.",
+        help="Max propose-guard re-proposal attempts M (campaign.py default).",
     ),
     audit_max_samples: int = typer.Option(
-        3,
+        _CAMPAIGN_DEFAULT_AUDIT_MAX_SAMPLES,
         "--audit-max-samples",
-        help="GEODE_AUDIT_MAX_SAMPLES export passed to each audit. Default 3.",
+        help="GEODE_AUDIT_MAX_SAMPLES export passed to each audit (campaign.py default).",
     ),
     audit_max_connections: int = typer.Option(
-        8,
+        _CAMPAIGN_DEFAULT_AUDIT_MAX_CONNECTIONS,
         "--audit-max-connections",
-        help="GEODE_AUDIT_MAX_CONNECTIONS export passed to each audit. Default 8.",
+        help="GEODE_AUDIT_MAX_CONNECTIONS export passed to each audit (campaign.py default).",
     ),
     dry_run: bool = typer.Option(
         False,

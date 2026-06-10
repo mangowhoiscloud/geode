@@ -97,6 +97,9 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from core.paths import AUTORESEARCH_STATE_DIR
+from core.paths import CYCLE_INPUT_POOL as _CYCLE_INPUT_POOL  # PR-CLEANUP-D2
+from core.paths import HELD_OUT_BENCH_POOL as _HELD_OUT_BENCH_POOL  # PR-CLEANUP-D2
+from core.paths import PETRI_LOGS_DIR as _PETRI_LOGS_DIR  # PR-CLEANUP-D2
 
 if TYPE_CHECKING:
     from collections.abc import Sequence
@@ -132,13 +135,19 @@ GEN0_SNAPSHOT_DIR = REPO_ROOT / "state" / "campaign" / "gen-0-snapshot"
 #: re-runs the missing replicates / cycles, then aggregates the union (S4).
 CAMPAIGN_RUNS_DIR = REPO_ROOT / "state" / "campaign" / "runs"
 
-#: Seed-pool launch wiring (campaign-procedure.md §3, cycle-input-pool.md).
-CYCLE_INPUT_POOL = REPO_ROOT / "state" / "seed-pools" / "cycle-input"
-HELD_OUT_BENCH = REPO_ROOT / "state" / "seed-pools" / "held-out"
+#: Seed-pool launch wiring (campaign-procedure.md §3, cycle-input-pool.md) —
+#: paths anchored in core.paths (PR-CLEANUP-D2).
+CYCLE_INPUT_POOL = _CYCLE_INPUT_POOL
+HELD_OUT_BENCH = _HELD_OUT_BENCH_POOL
+
+# PR-CLEANUP-D2 — train's module path, shared with loop/runner.py (the module
+# already moved once, scripts/ → core/self_improving/; a missed argv edit
+# yields "train.py exited 1"-class worker drops).
+TRAIN_MODULE = "core.self_improving.train"
 
 #: Petri eval archive (campaign-procedure.md §7) — the degeneracy guard reads
-#: the newest ``.eval`` here.
-PETRI_LOGS_DIR = Path("~/.geode/petri/logs").expanduser()
+#: the newest ``.eval`` here (anchored in core.paths).
+PETRI_LOGS_DIR = _PETRI_LOGS_DIR
 
 DEFAULT_N = 10
 """Cycles per arm (campaign-procedure.md §6)."""
@@ -966,7 +975,7 @@ def _spawn_train_subprocess(
     *, env: dict[str, str], dry_run: bool
 ) -> subprocess.CompletedProcess[str]:
     """Spawn ``uv run python -m core.self_improving.train`` (real audit, no mutation)."""
-    argv = ["uv", "run", "python", "-m", "core.self_improving.train"]
+    argv = ["uv", "run", "python", "-m", TRAIN_MODULE]
     if dry_run:
         argv.append("--dry-run")
     return subprocess.run(  # noqa: S603 — argv built from constants
@@ -1334,7 +1343,7 @@ async def _spawn_train_subprocess_async(
     crash the whole gather). ``sys.executable`` is the venv interpreter the parent
     campaign runs under, so the child resolves the ``core`` package.
     """
-    argv = [sys.executable, "-m", "core.self_improving.train"]
+    argv = [sys.executable, "-m", TRAIN_MODULE]
     if dry_run:
         argv.append("--dry-run")
     proc = await asyncio.create_subprocess_exec(
@@ -2533,7 +2542,11 @@ def run_campaign(
 
 
 def _validate_arms(arms: Sequence[str]) -> None:
-    valid = {"gate", "random", "never"}
+    # PR-CLEANUP-D2 — single SoT: an arm added in train.py must not be
+    # silently rejected by this pre-validation (former literal copy).
+    from core.self_improving.train import _VALID_PROMOTE_POLICIES
+
+    valid = _VALID_PROMOTE_POLICIES
     bad = [a for a in arms if a not in valid]
     if bad:
         raise ValueError(

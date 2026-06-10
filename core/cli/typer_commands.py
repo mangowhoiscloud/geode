@@ -9,8 +9,6 @@ here so that the import edge stays acyclic.
 
 from __future__ import annotations
 
-from pathlib import Path
-
 import typer
 
 from core import __version__
@@ -72,7 +70,9 @@ def about() -> None:
     )
 
     # Daemon socket
-    sock_path = Path("~/.geode/cli.sock").expanduser()
+    from core.paths import CLI_SOCKET_PATH  # PR-CLEANUP-D2 anchor
+
+    sock_path = CLI_SOCKET_PATH
     if sock_path.exists():
         console.print(
             f"  [bold]Daemon[/bold]     [success]running[/success]  [muted]({sock_path})[/muted]"
@@ -109,7 +109,9 @@ def setup(
     from core.wiring.startup import _has_any_llm_key, detect_subscription_oauth
 
     if reset:
-        env_path = Path("~/.geode/.env").expanduser()
+        from core.paths import GLOBAL_ENV_FILE  # PR-CLEANUP-D2 anchor
+
+        env_path = GLOBAL_ENV_FILE
         if env_path.exists():
             env_path.unlink()
             console.print(f"  [muted]Removed {env_path}[/muted]")

@@ -202,23 +202,13 @@ def generate_config_toml(info: ProjectInfo) -> str:
 
     Extends the default TOML template with [project], [commands], [directories].
     """
+    # PR-CLEANUP-D2 (2026-06-10) — extend the single template SoT instead
+    # of re-typing it: the two copies had already drifted (priority-comment
+    # wording + stale claude-opus-4-6 / removed [pipeline] knobs).
+    from core.config import DEFAULT_CONFIG_TOML
+
     lines = [
-        "# GEODE config.toml",
-        "# Priority: CLI > env > .geode/config.toml > ~/.geode/config.toml > defaults",
-        "#",
-        "# Uncomment and edit values to override defaults.",
-        "",
-        "[llm]",
-        '# primary_model = "claude-opus-4-6"',
-        '# secondary_model = "gpt-5.4"',
-        '# router_model = "claude-opus-4-6"',
-        "",
-        "[output]",
-        "# verbose = false",
-        "",
-        "[pipeline]",
-        "# confidence_threshold = 0.7",
-        "# max_iterations = 5",
+        DEFAULT_CONFIG_TOML.rstrip(),
         "",
         "[project]",
         f'type = "{info.project_type}"',
