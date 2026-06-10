@@ -23,7 +23,16 @@ def mask_key(key: str) -> str:
 
 
 def upsert_env(var_name: str, value: str) -> None:
-    """Insert or update a variable in .env file. Creates .env if absent."""
+    """Insert or update a variable in the CWD ``.env``. Creates it if absent.
+
+    C-2 contract (config-unification, 2026-06-11): the ``.env`` layer is
+    **secrets-only** — API keys and credentials. Behavior settings (model
+    picks, effort, credential_source) persist to ``config.toml``; tools
+    MUST NOT write them here, because the env layer outranks every toml
+    layer and one written line silently masks all future toml edits
+    (hazards H3/H4). Manual ``GEODE_*`` exports remain a power-user
+    session override — by hand only.
+    """
     env_path = Path(".env")
     lines: list[str] = []
     found = False
@@ -131,3 +140,27 @@ def is_glm_key(value: str) -> bool:
         return False
     # Each segment must be alphanumeric with at least one digit (machine-generated)
     return all(p.isalnum() and any(c.isdigit() for c in p) for p in parts)
+
+
+def remove_env(var_name: str) -> bool:
+    """Remove ``var_name`` from the CWD ``.env`` (and ``os.environ``).
+
+    C-2 stale-mask cleanup: earlier releases' ``/model`` wrote model picks
+    into ``.env``; those lines outrank every toml edit forever. The picker
+    now calls this after its toml write so a tool-created mask is removed
+    by the tool. Returns True when a line was removed.
+    """
+    env_path = Path(".env")
+    removed = False
+    if env_path.exists():
+        kept: list[str] = []
+        for line in env_path.read_text(encoding="utf-8").splitlines():
+            if re.match(rf"^{re.escape(var_name)}\s*=", line):
+                removed = True
+                continue
+            kept.append(line)
+        if removed:
+            env_path.write_text("\n".join(kept) + ("\n" if kept else ""), encoding="utf-8")
+    if os.environ.pop(var_name, None) is not None:
+        removed = True
+    return removed

@@ -744,8 +744,15 @@ def _persist_credential_source(provider: str, source: str) -> None:
         object.__setattr__(settings, field, source)
     except Exception:
         log.debug("login: settings.%s setattr failed", field, exc_info=True)
-    _pkg._upsert_env(env_var, source)
+    # C-2 (2026-06-11) — credential_source is a behavior setting, not a
+    # secret: toml-only (the toml row is now READ — registered in
+    # _TOML_TO_SETTINGS, closing hazard H7's dead write). Stale env lines
+    # from earlier releases are cleaned so they stop masking the toml.
     upsert_config_toml("llm", field, source)
+    if _pkg.remove_env(env_var):
+        _pkg.console.print(
+            f"  [muted]removed stale {env_var} from .env — config.toml is the durable layer[/muted]"
+        )
 
 
 def _login_source(args: str) -> None:
