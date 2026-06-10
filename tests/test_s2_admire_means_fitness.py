@@ -13,7 +13,6 @@ from core.self_improving.admire_means import (
     ADMIRE_DIM_WEIGHTS,
     CALIBRATION_THRESHOLD,
     compute_admire_aggregate,
-    validate_admire_schema,
 )
 from core.self_improving.train import (
     FITNESS_ADMIRE_WEIGHT,
@@ -130,35 +129,6 @@ def test_aggregate_missing_field_defaults_neutral() -> None:
 def test_aggregate_clamps_out_of_range() -> None:
     bad = {"pairwise_win_rate": 2.0, "human_calibration_corr": 1.5}
     assert abs(compute_admire_aggregate(bad) - 1.0) < 1e-9
-
-
-# ---------------------------------------------------------------------------
-# 3. validate_admire_schema
-# ---------------------------------------------------------------------------
-
-
-def test_validate_none() -> None:
-    assert validate_admire_schema(None) is True
-
-
-def test_validate_valid_dict() -> None:
-    assert validate_admire_schema({"pairwise_win_rate": 0.6}) is True
-
-
-def test_validate_rejects_unknown_field() -> None:
-    assert validate_admire_schema({"unknown": 0.5}) is False
-
-
-def test_validate_rejects_out_of_range() -> None:
-    assert validate_admire_schema({"pairwise_win_rate": 1.5}) is False
-
-
-def test_validate_rejects_non_numeric() -> None:
-    assert validate_admire_schema({"pairwise_win_rate": "high"}) is False
-
-
-def test_validate_rejects_non_dict() -> None:
-    assert validate_admire_schema([0.6, 0.8]) is False
 
 
 # ---------------------------------------------------------------------------

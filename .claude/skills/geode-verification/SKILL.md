@@ -5,7 +5,17 @@ description: GEODE verification system guide. Guardrails G1-G4 (Schema, Range, G
 
 # GEODE Verification System
 
-## Guardrails G1-G4
+## Guardrails G1-G4 (DELETED — historical reference)
+
+> PR-CLEANUP-D3A (2026-06-10, operator decision): `core/state.py` +
+> `core/verification/` were removed — the G1-G4 implementation targeted the
+> deleted Game-IP analysis pipeline's GeodeState and had zero production
+> callers. Live verification surfaces are **turn-verify** (TURN_VERIFY_*
+> events) and **contract-eval** (contract_results gate). The tables below
+> are retained as design reference only; restore from git history if a
+> pipeline-shaped verifier returns.
+
+## Guardrails G1-G4 (design reference)
 
 | Guard | Name | Check |
 |-------|------|-------|

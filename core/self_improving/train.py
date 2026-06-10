@@ -4966,63 +4966,6 @@ def main() -> int:
         baseline_active=baseline_means is not None,
     )
 
-    # S10 — emit results.{tsv,jsonl} lines on stdout so the self-improving-loop
-    # operator (or a follow-up script) can read them, AND persist them to the
-    # rolling ``state/autoresearch/results.{tsv,jsonl}`` (PR-STATE-SELF-IMPROVING-
-    # RENAME 2026-06-01 — previously printed only, so the hub's results section
-    # stayed empty). ``verdict`` / ``description`` read the AUTORESEARCH_* env
-    # hooks — NOTE (PR-CLEANUP-D1 2026-06-10): no production writer sets either
-    # env var today (the campaign driver does NOT set AUTORESEARCH_VERDICT,
-    # contrary to what this comment used to claim), so every row currently
-    # records ``pending`` / ``dry-run``. Wiring the campaign gate verdict into
-    # AUTORESEARCH_VERDICT is a D-3 decision item.
-    description = os.environ.get("AUTORESEARCH_DESCRIPTION", "dry-run" if args.dry_run else "")
-    verdict = os.environ.get("AUTORESEARCH_VERDICT", "pending")
-    results_tsv_row = format_results_tsv_row(
-        session_id=session_id,
-        gen_tag=gen_tag,
-        commit=commit,
-        fitness=fitness,
-        dim_scores=dim_scores,
-        dim_means=dim_means,
-        verdict=verdict,
-        description=description,
-    )
-    results_jsonl_row = format_results_jsonl_row(
-        session_id=session_id,
-        gen_tag=gen_tag,
-        commit=commit,
-        fitness=fitness,
-        dim_means=dim_means,
-        dim_stderr=dim_stderr,
-        dim_scores=dim_scores,
-        verdict=verdict,
-        description=description,
-        baseline_active=baseline_means is not None,
-        # PR-5 of petri-schema-v2 (2026-05-23) — thread the
-        # provenance from PR-1 (run_audit return) + PR-4
-        # (compute_missing_dims) into the JSONL row so cross-run
-        # analysis can disambiguate measurements without
-        # joining against baseline.json or the journal.
-        sample_count=sample_count,
-        measurement_modality=measurement_modality,
-        missing_dims=missing_dims,
-        eval_archive=_resolve_eval_archive_path(),
-        # PR-SIL-5THEME C2 (2026-05-23, ux-removed 2026-05-30) — multi-axis
-        # breakdown columns. admire 는 현재 collector 가 placeholder 라
-        # 미전달 (S2b 후속 PR), bench 는 BenchProvenance 전달.
-        bench_provenance=bench_provenance,
-    )
-    print(f"session_id:               {session_id}")
-    print(f"gen_tag:                  {gen_tag}")
-    print("results_tsv: " + results_tsv_row)
-    print("results_jsonl: " + results_jsonl_row)
-    # Persist the rolling history (every audit, promoted or not). dry-run is
-    # synthetic data — recording it would pollute the cross-run history with
-    # placeholder rows, so the disk write is skipped (stdout still shows them).
-    if not args.dry_run:
-        _append_results_row(results_tsv_row, results_jsonl_row)
-
     # P0a — auto-promote + manual override.
     # dry-run emulates data; promoting that would freeze in a synthetic
     # baseline, so the gate is short-circuited.
@@ -5204,6 +5147,64 @@ def main() -> int:
             reason = _reject_and_revert(reason, rejected_by="gate")
         promoted_line = f"{str(ok).lower()} ({reason})"
     print(f"baseline_promoted:        {promoted_line}")
+
+    # S10 — emit results.{tsv,jsonl} lines on stdout so the self-improving-loop
+    # operator (or a follow-up script) can read them, AND persist them to the
+    # rolling ``state/autoresearch/results.{tsv,jsonl}``.
+    # PR-CLEANUP-D3A (2026-06-10, operator decision "pending 해소") — the row
+    # is now emitted AFTER the promote gate so ``verdict`` records the gate's
+    # actual outcome (promote/reject) instead of a permanent ``pending``.
+    # ``AUTORESEARCH_VERDICT`` env stays as an explicit override hook.
+    description = os.environ.get("AUTORESEARCH_DESCRIPTION", "dry-run" if args.dry_run else "")
+    if args.dry_run:
+        _derived_verdict = "dry-run"
+    else:
+        _derived_verdict = "promote" if promoted_line.startswith("true") else "reject"
+    verdict = os.environ.get("AUTORESEARCH_VERDICT", _derived_verdict)
+    results_tsv_row = format_results_tsv_row(
+        session_id=session_id,
+        gen_tag=gen_tag,
+        commit=commit,
+        fitness=fitness,
+        dim_scores=dim_scores,
+        dim_means=dim_means,
+        verdict=verdict,
+        description=description,
+    )
+    results_jsonl_row = format_results_jsonl_row(
+        session_id=session_id,
+        gen_tag=gen_tag,
+        commit=commit,
+        fitness=fitness,
+        dim_means=dim_means,
+        dim_stderr=dim_stderr,
+        dim_scores=dim_scores,
+        verdict=verdict,
+        description=description,
+        baseline_active=baseline_means is not None,
+        # PR-5 of petri-schema-v2 (2026-05-23) — thread the
+        # provenance from PR-1 (run_audit return) + PR-4
+        # (compute_missing_dims) into the JSONL row so cross-run
+        # analysis can disambiguate measurements without
+        # joining against baseline.json or the journal.
+        sample_count=sample_count,
+        measurement_modality=measurement_modality,
+        missing_dims=missing_dims,
+        eval_archive=_resolve_eval_archive_path(),
+        # PR-SIL-5THEME C2 (2026-05-23, ux-removed 2026-05-30) — multi-axis
+        # breakdown columns. admire 는 현재 collector 가 placeholder 라
+        # 미전달 (S2b 후속 PR), bench 는 BenchProvenance 전달.
+        bench_provenance=bench_provenance,
+    )
+    print(f"session_id:               {session_id}")
+    print(f"gen_tag:                  {gen_tag}")
+    print("results_tsv: " + results_tsv_row)
+    print("results_jsonl: " + results_jsonl_row)
+    # Persist the rolling history (every audit, promoted or not). dry-run is
+    # synthetic data — recording it would pollute the cross-run history with
+    # placeholder rows, so the disk write is skipped (stdout still shows them).
+    if not args.dry_run:
+        _append_results_row(results_tsv_row, results_jsonl_row)
 
     # W2 (2026-05-25) + PR-AR-L6 (2026-05-26) — closed loop attribution.
     # Two paths:
@@ -5387,7 +5388,7 @@ def main() -> int:
     # audit cycle is the closest meaningful (prompt, response) tuple at
     # this layer: prompt = "audit cycle on <commit> for <seed_select>",
     # response = "verdict=<v> fitness=<f> dim_means=<...>". The pair
-    # feeds M4.1's DPO pack writer (build_dpo_pack groups by prompt;
+    # was designed to feed the M4.1 DPO pack writer (chain deleted PR-CLEANUP-D3A 2026-06-10;
     # different commits produce different prompts → mostly unpaired
     # initially, but once mutator iterates on the same baseline twice
     # the chosen vs rejected pairing surfaces).

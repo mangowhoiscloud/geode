@@ -65,8 +65,9 @@ STATE_ROOT = Path(os.environ.get("GEODE_STATE_ROOT") or (_REPO_ROOT / "state"))
 # REPO-pinned (not STATE_ROOT): the cycle-input pool is a git-tracked
 # campaign input, and the 2026-06-03 incident (assemble to a custom
 # --out → every worker dropped with "train.py exited 1") came from the
-# writer and reader resolving this path independently. Whether the pool
-# should honor GEODE_STATE_ROOT is a separate D-3 semantic decision.
+# writer and reader resolving this path independently. REPO-pinned is
+# the OPERATOR-DECIDED semantic (D-3, 2026-06-10) — do not make this
+# honor GEODE_STATE_ROOT without a new operator decision.
 SEED_POOLS_DIR = _REPO_ROOT / "state" / "seed-pools"
 CYCLE_INPUT_POOL = SEED_POOLS_DIR / "cycle-input"
 HELD_OUT_BENCH_POOL = SEED_POOLS_DIR / "held-out"
@@ -383,14 +384,6 @@ OPERATOR_LOCAL_AGENT_CONTRACTS_PATH = GLOBAL_AUTORESEARCH_HANDOFF_DIR / "agent-c
 # ``exemplars`` slot 의 실제 *적재 메커니즘*.
 GLOBAL_FEW_SHOT_POOL_PATH = GLOBAL_POLICIES_DIR / "few-shot-pool.jsonl"
 OPERATOR_LOCAL_FEW_SHOT_POOL_PATH = GLOBAL_AUTORESEARCH_HANDOFF_DIR / "few-shot-pool.jsonl"
-# ADR-012 M4.1 (2026-05-21) — DPO canonical preference-pack JSONL.
-# Consumes ``eval_response_recorded`` events (M4.0) and emits one row
-# per ``(prompt, chosen, rejected)`` tuple. Format-agnostic — M4.2
-# adapts this to per-provider publishers (OpenAI fine-tuning / Bedrock
-# DPO / HuggingFace TRL). Operator-local, NOT git-tracked: preference
-# data may include user-private prompts until an explicit redaction
-# step (M4.3) ships a sanitized copy.
-GLOBAL_DPO_PACK_PATH = GLOBAL_AUTORESEARCH_HANDOFF_DIR / "dpo" / "pack.jsonl"
 # PR-MINIMAL-2 (2026-05-21) — git-tracked audit ledger of every
 # applied mutation. Lives in-repo alongside the 5 policy SoT JSONs
 # so the git-as-optimiser ledger and the current-state files are
