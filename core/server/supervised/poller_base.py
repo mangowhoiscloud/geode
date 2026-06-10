@@ -10,9 +10,9 @@ from abc import ABC, abstractmethod
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
-    from core.integrations.messaging.binding import ChannelManager
     from core.mcp.manager import MCPServerManager
     from core.mcp.notification_port import NotificationPort
+    from core.messaging.binding import ChannelManager
 
 log = logging.getLogger(__name__)
 

@@ -21,9 +21,9 @@ import logging
 import re
 from typing import Any
 
+from core.config.env_io import mask_key as _mask_key
+from core.config.env_io import upsert_env as _upsert_env
 from core.ui.console import console
-from core.utils.env_io import mask_key as _mask_key
-from core.utils.env_io import upsert_env as _upsert_env
 from core.wiring.startup import ReadinessReport, _has_any_llm_key, detect_subscription_oauth
 
 log = logging.getLogger(__name__)
@@ -203,7 +203,7 @@ def detect_api_key(text: str) -> tuple[str, str, str] | None:
     Returns (provider, env_var, key_value) if detected, else None.
     Only matches single-token inputs (no spaces except leading/trailing).
     """
-    from core.utils.env_io import is_glm_key
+    from core.config.env_io import is_glm_key
 
     stripped = text.strip()
     if " " in stripped or "\n" in stripped:

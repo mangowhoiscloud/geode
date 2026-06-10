@@ -62,7 +62,7 @@ def _resolve_repo_root() -> Path:
     """Find repo root by walking up from cwd until ``pyproject.toml``.
 
     Honours ``GEODE_REPO_ROOT`` env override for test fixtures (matches
-    the convention from ``core.tools.literature_snapshot``).
+    the convention from ``plugins.seed_generation.tools.literature_snapshot``).
     """
     env_root = os.environ.get("GEODE_REPO_ROOT", "").strip()
     if env_root:

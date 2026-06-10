@@ -6,15 +6,15 @@ import logging
 import time
 from typing import TYPE_CHECKING, Any
 
-from core.integrations.messaging.models import InboundMessage
+from core.messaging.models import InboundMessage
 from core.server.supervised.poller_base import BasePoller
 
 log = logging.getLogger(__name__)
 
 if TYPE_CHECKING:
-    from core.integrations.messaging.binding import ChannelManager
     from core.mcp.manager import MCPServerManager
     from core.mcp.notification_port import NotificationPort
+    from core.messaging.binding import ChannelManager
 
 
 class TelegramPoller(BasePoller):

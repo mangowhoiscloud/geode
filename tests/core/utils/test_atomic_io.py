@@ -17,7 +17,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 import pytest
-from core.utils.atomic_io import atomic_write_json, atomic_write_text
+from core.memory.atomic_write import atomic_write_json, atomic_write_text
 
 
 class TestAtomicWriteText:
@@ -37,7 +37,7 @@ class TestAtomicWriteText:
         target.write_text("original", encoding="utf-8")
 
         with (
-            patch("core.utils.atomic_io.os.fdopen", side_effect=OSError("disk full")),
+            patch("core.memory.atomic_write.os.fdopen", side_effect=OSError("disk full")),
             pytest.raises(OSError, match="disk full"),
         ):
             atomic_write_text(target, "bad data")
@@ -48,7 +48,7 @@ class TestAtomicWriteText:
         target = tmp_path / "clean.txt"
 
         with (
-            patch("core.utils.atomic_io.os.replace", side_effect=OSError("rename failed")),
+            patch("core.memory.atomic_write.os.replace", side_effect=OSError("rename failed")),
             pytest.raises(OSError, match="rename failed"),
         ):
             atomic_write_text(target, "data")
@@ -105,7 +105,7 @@ class TestAtomicWriteJson:
         target.write_text('{"old": true}', encoding="utf-8")
 
         with (
-            patch("core.utils.atomic_io.os.replace", side_effect=OSError("fail")),
+            patch("core.memory.atomic_write.os.replace", side_effect=OSError("fail")),
             pytest.raises(OSError),
         ):
             atomic_write_json(target, {"new": True})

@@ -5,7 +5,7 @@ Pattern extracted from ``core/memory/session.py:_persist()``.
 
 Usage::
 
-    from core.utils.atomic_io import atomic_write_text, atomic_write_json
+    from core.memory.atomic_write import atomic_write_text, atomic_write_json
 
     atomic_write_text(path, content)
     atomic_write_json(path, data, indent=2)

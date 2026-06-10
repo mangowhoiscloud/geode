@@ -106,7 +106,7 @@ synthesizer = "claude-opus-4-8"
 
 # Provider → env var the API key is stored under. Onboarding upserts into
 # the env when a pattern matches. GLM keys are sniffed by a dedicated
-# helper (``core.utils.env_io.is_glm_key``) — the GLM mapping here is
+# helper (``core.config.env_io.is_glm_key``) — the GLM mapping here is
 # the destination env var for that hit.
 
 [credentials.env_vars]

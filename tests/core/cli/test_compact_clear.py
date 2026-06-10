@@ -253,7 +253,7 @@ class TestModelSwitchGuard:
 
         mock_env.assert_not_called()
 
-    @patch("core.utils.env_io.upsert_config_toml")
+    @patch("core.config.env_io.upsert_config_toml")
     @patch("core.cli.commands._upsert_env")
     @patch("core.cli.commands._check_provider_key")
     def test_downgrade_allowed_when_fits(
@@ -282,7 +282,7 @@ class TestModelSwitchGuard:
         mock_toml.assert_called()
         mock_env.assert_not_called()
 
-    @patch("core.utils.env_io.upsert_config_toml")
+    @patch("core.config.env_io.upsert_config_toml")
     @patch("core.cli.commands._upsert_env")
     @patch("core.cli.commands._check_provider_key")
     def test_upgrade_always_allowed(

@@ -135,8 +135,8 @@ def build_gateway() -> None:
     telegram) when the config key is absent.
     """
     from core.config import settings
-    from core.integrations.messaging.binding import ChannelManager, set_gateway
     from core.mcp.notification_port import get_notification
+    from core.messaging.binding import ChannelManager, set_gateway
 
     if not settings.gateway_enabled:
         log.debug("Gateway disabled (GEODE_GATEWAY_ENABLED=false)")
