@@ -16,7 +16,8 @@
 
 <!-- Move items here when work begins. -->
 <!-- 3-Checkpoint: (1) alloc → (2) merge (CI 5/5) → (3) verify -->
-- [ ] Audit bundle D (expanded by dup/dead-code audit) — D-1 safe-delete batch (Settings 17 fields, 9 zombie modules + their tests, paths orphan constants) / D-2 path anchors (petri logs ×6, seed-pool ×3, paths.py bypasses, config template fork, CLI defaults) / D-3 operator decisions (G1-G4 guardrails, M4.x DPO chain, recall_writer, mcp_server) — awaiting pick
+- [ ] Audit bundle D-3 — operator decision menu delivered (G1-G4 guardrails / M4.x DPO chain / recall_writer / mcp_server / seed-pool STATE_ROOT semantics / AUTORESEARCH_VERDICT writer); awaiting picks
+- [ ] Folder-structure audit follow-ups — report delivered (F1/F2 stale, already shipped in D-1); standing: loop/ 32-module split + train.py 5,510L, tests/ triple convention (330 flat vs 190 nested + dup self_improving roots), cli cmd_*/commands/ dual home, misplaced modules (bash_tool/run_log ×2/audit_lane/seed tools), scripts→CLI promotion, integrations→messaging flatten, husk sweep, layer map 11/21
 
 ## In Review
 
@@ -26,6 +27,8 @@
 
 <!-- Completed items. Keep recent 10, archive older ones. -->
 <!-- - [x] #issue-number — Short description (PR #N) -->
+- [x] Audit bundle D-1: safe-delete batch — 10 zombie modules + 9 dedicated tests, 16 dead Settings fields, v0.88 router compat surface, orphaned instructor/textgrad deps (PR #2047 → #2048, v0.99.152)
+- [x] Audit bundle D-2: path/config anchors — petri logs ×6, seed-pool ×3, CLI bootstrap paths, config template fork, campaign defaults, shared CLI serializer + Quality Gates table now mirrors CI incl. scripts/ (PR #2050 → #2051, v0.99.153)
 - [x] Audit bundle E: drift anchors — PROVIDER_REGISTRY_NORMALIZATION (4 copies unified) + core/llm/model_capabilities.py (5 mirror sets), identity-pinned by test_drift_anchors.py (PR #2042 → #2043, v0.99.151)
 - [x] Dup/dead-code follow-up audit — report delivered: 10 literal mirrors (petri logs ×6, config template fork w/ stale model, seed-pool ×3) + 15+ test-only zombie modules, D bundle expanded
 - [x] Audit bundles A+B: session-store fake-success wired + _load_baseline graceful guard + TLS/cost fallback visibility + MUTATION_REJECTED emits (5 sites) + VERIFICATION_*/FALLBACK_CROSS_PROVIDER deleted (HookEvent 64) (PR #2037 → #2038, v0.99.150)
