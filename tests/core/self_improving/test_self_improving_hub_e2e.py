@@ -1886,7 +1886,7 @@ def test_evidence_arm_map_matches_core() -> None:
     builder is stdlib-only)."""
     from scripts.build_self_improving_hub import _EVIDENCE_ARMS
 
-    train_src = (REPO_ROOT / "core" / "self_improving" / "train.py").read_text(encoding="utf-8")
+    train_src = (REPO_ROOT / "core" / "self_improving" / "gate.py").read_text(encoding="utf-8")
     m = re.search(r"_VALID_PROMOTE_POLICIES\s*=\s*frozenset\(\{([^}]*)\}\)", train_src)
     assert m is not None, "could not locate _VALID_PROMOTE_POLICIES in train.py"
     core_arms = set(re.findall(r'"([a-z_]+)"', m.group(1)))

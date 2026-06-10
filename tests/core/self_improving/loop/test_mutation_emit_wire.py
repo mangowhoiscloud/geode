@@ -23,6 +23,7 @@ from typing import Any
 
 import pytest
 from core.hooks.system import HookEvent, HookSystem
+from core.self_improving import gate, ledger
 from core.self_improving.loop._hooks import (
     _fire_hook,
     set_self_improving_loop_hooks,
@@ -127,7 +128,6 @@ def test_write_baseline_emits_baseline_promoted(
     schema (``baseline_path``, ``prior_baseline_path``, ``ts``,
     ``run_id``, ``reason``). The reason flips to ``operator_force``
     when ``manual_promote=True``, ``gate_approved`` otherwise."""
-    from core.self_improving import train
 
     hooks = HookSystem()
     captured: list[dict[str, Any]] = []
@@ -139,10 +139,10 @@ def test_write_baseline_emits_baseline_promoted(
     set_self_improving_loop_hooks(hooks)
 
     fake_baseline_path = tmp_path / "baseline.json"
-    monkeypatch.setattr(train, "BASELINE_PATH", fake_baseline_path)
+    monkeypatch.setattr(ledger, "BASELINE_PATH", fake_baseline_path)
 
     # Fresh promote — no prior file.
-    train._write_baseline(
+    ledger._write_baseline(
         dim_means={"axis_a": 0.5},
         dim_stderr={"axis_a": 0.1},
         session_id="session-001",
@@ -159,7 +159,7 @@ def test_write_baseline_emits_baseline_promoted(
     assert isinstance(payload["ts"], float)
 
     # Overwrite — prior path populated.
-    train._write_baseline(
+    ledger._write_baseline(
         dim_means={"axis_a": 0.6},
         dim_stderr={"axis_a": 0.1},
         session_id="session-002",
@@ -227,7 +227,7 @@ def test_revert_sot_after_reject_emits_mutation_reverted(
     )
     set_self_improving_loop_hooks(hooks)
 
-    success, detail = train._revert_sot_after_reject("revert-test-mid", audit_log_path=audit_log)
+    success, detail = gate._revert_sot_after_reject("revert-test-mid", audit_log_path=audit_log)
     assert success
     assert detail == "prompt.evolver.system"
     # SoT write happened (prior-value restored)
@@ -468,7 +468,6 @@ def test_reject_and_revert_emits_mutation_rejected(monkeypatch: pytest.MonkeyPat
     """PR-AUDIT-AB — the gate/policy reject path fires MUTATION_REJECTED
     (the loop's dominant outcome finally has telemetry) BEFORE the SoT
     revert, with the documented payload schema."""
-    from core.self_improving import train as auto_train
 
     captured: list[tuple[HookEvent, dict[str, Any]]] = []
     hooks = HookSystem()
@@ -481,9 +480,9 @@ def test_reject_and_revert_emits_mutation_rejected(monkeypatch: pytest.MonkeyPat
 
     monkeypatch.setenv("GEODE_SIL_MUTATION_ID", "mut-reject-1")
     monkeypatch.setenv("GEODE_SIL_AUDIT_RUN_ID", "run-77")
-    monkeypatch.setattr(auto_train, "_revert_sot_after_reject", lambda mid: (True, "reverted-ok"))
+    monkeypatch.setattr(gate, "_revert_sot_after_reject", lambda mid: (True, "reverted-ok"))
 
-    reason = auto_train._reject_and_revert("margin below floor", rejected_by="gate")
+    reason = gate._reject_and_revert("margin below floor", rejected_by="gate")
 
     assert reason == "margin below floor; SoT reverted (reverted-ok)"
     assert len(captured) == 1
@@ -499,7 +498,6 @@ def test_reject_and_revert_no_emit_without_mutation_id(
 ) -> None:
     """Manual audits (no GEODE_SIL_MUTATION_ID) have no mutation to
     reject — no emit, reason unchanged."""
-    from core.self_improving import train as auto_train
 
     captured: list[Any] = []
     hooks = HookSystem()
@@ -511,7 +509,7 @@ def test_reject_and_revert_no_emit_without_mutation_id(
     set_self_improving_loop_hooks(hooks)
 
     monkeypatch.delenv("GEODE_SIL_MUTATION_ID", raising=False)
-    reason = auto_train._reject_and_revert("manual reject", rejected_by="gate")
+    reason = gate._reject_and_revert("manual reject", rejected_by="gate")
 
     assert reason == "manual reject"
     assert captured == []

@@ -29,6 +29,8 @@ from __future__ import annotations
 import inspect
 from pathlib import Path
 
+from core.self_improving import measure
+
 # ---------------------------------------------------------------------------
 # G-A — MutatorConfig manifest + runner.py uses call_with_failover, not anthropic SDK
 # ---------------------------------------------------------------------------
@@ -193,9 +195,8 @@ def test_train_audit_command_omits_per_role_argv_pins() -> None:
     carry seed / dim / turns / source flags; role model selection
     flows through the registry inside ``geode audit``.
     """
-    from core.self_improving import train
 
-    src = inspect.getsource(train._build_audit_command)
+    src = inspect.getsource(measure._build_audit_command)
     assert "cfg.target_model" not in src, (
         "G-B regressed: _build_audit_command re-reads deprecated cfg.target_model"
     )

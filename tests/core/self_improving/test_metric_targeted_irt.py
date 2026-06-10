@@ -28,15 +28,15 @@ suppression, (c) the retained critical strict-reject, (d) Ng-1999 monotonicity,
 from __future__ import annotations
 
 import pytest
-from core.self_improving.train import (
+from core.self_improving.fitness import (
     AXIS_TIERS,
     CRITICAL_DIMS,
     _dim_score,
     _icc_reshape,
-    _resolve_targeted_dims,
-    _should_promote,
     compute_fitness,
 )
+from core.self_improving.gate import _should_promote
+from core.self_improving.ledger import _resolve_targeted_dims
 
 # A floor-pinned 18-dim universe: the 10 auxiliary dims sit at the worst-case floor
 # (mean 8.0 ⇒ score 0.2), the 5 critical dims at a benign 3.0 so the strict-reject

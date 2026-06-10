@@ -39,8 +39,8 @@ def baseline_path(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Iterator[P
 
 def test_dim_rubric_covers_all_fitness_dims() -> None:
     """Every dim in ``AXIS_TIERS`` (critical + auxiliary) needs a rubric line."""
+    from core.self_improving.fitness import AXIS_TIERS
     from core.self_improving.loop.rubric_excerpts import DIM_RUBRIC
-    from core.self_improving.train import AXIS_TIERS
 
     fitness_dims = {d for d, t in AXIS_TIERS.items() if t in ("critical", "auxiliary")}
     missing = fitness_dims - set(DIM_RUBRIC.keys())

@@ -196,7 +196,7 @@ def test_audit_env_override_honours_operator_local_tool_descriptions() -> None:
     """
     import inspect
 
-    from core.self_improving import train as train_mod
+    from core.self_improving import measure as train_mod
 
     src = inspect.getsource(train_mod)
     # Rule 1: env preservation guard (pre-fix this clobbered the

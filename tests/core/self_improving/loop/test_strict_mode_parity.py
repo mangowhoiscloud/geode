@@ -49,9 +49,10 @@ _NON_MUTATION_SURFACE_OVERRIDES: frozenset[str] = frozenset({"WRAPPER"})
 
 
 def _read_train_py_env_block() -> str:
-    from core.self_improving import train
+    # S-5 (2026-06-11) — the audit env block moved to measure.py.
+    from core.self_improving import measure
 
-    return inspect.getsource(train)
+    return inspect.getsource(measure)
 
 
 def test_train_py_overrides_paired_with_strict() -> None:

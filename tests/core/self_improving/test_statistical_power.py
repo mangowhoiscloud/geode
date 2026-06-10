@@ -123,7 +123,7 @@ def test_verdict_reconciles_with_promote_gate_margin() -> None:
     DEFAULT_GAIN_CI_Z=1.0 the CI excludes 0 IFF ``gain > _MARGIN_GAIN_SIGMA *
     gain_stderr`` (the gate's binding condition, ignoring the zero-noise floor).
     No contradiction where the gate rejects but the verdict says 'significant'."""
-    from core.self_improving.train import _MARGIN_GAIN_SIGMA
+    from core.self_improving.gate import _MARGIN_GAIN_SIGMA
 
     assert sp.DEFAULT_GAIN_CI_Z == _MARGIN_GAIN_SIGMA == 1.0
     gain_stderr = 0.02

@@ -9,8 +9,8 @@ Convention (Codex MCP WARN #5 fix):
 
 from __future__ import annotations
 
+from core.self_improving.fitness import CRITICAL_DIMS
 from core.self_improving.loop.rollback_condition import evaluate_rollback_condition
-from core.self_improving.train import CRITICAL_DIMS
 
 # ---------------------------------------------------------------------------
 # 1. Pattern 1 — any dim regresses by more than X (lower-is-better)
@@ -353,7 +353,7 @@ def test_works_with_mutation_rollback_condition_field() -> None:
 
 def test_rollback_gate_flips_promote_to_reject_when_predicate_fires() -> None:
     """A firing per-dim predicate vetoes a promote (True → False)."""
-    from core.self_improving.train import _apply_rollback_condition_gate
+    from core.self_improving.gate import _apply_rollback_condition_gate
 
     ok, reason = _apply_rollback_condition_gate(
         ok=True,
@@ -368,7 +368,7 @@ def test_rollback_gate_flips_promote_to_reject_when_predicate_fires() -> None:
 
 def test_rollback_gate_noop_when_predicate_does_not_fire() -> None:
     """A promote survives when the predicate does not trigger."""
-    from core.self_improving.train import _apply_rollback_condition_gate
+    from core.self_improving.gate import _apply_rollback_condition_gate
 
     ok, reason = _apply_rollback_condition_gate(
         ok=True,
@@ -383,7 +383,7 @@ def test_rollback_gate_noop_when_predicate_does_not_fire() -> None:
 
 def test_rollback_gate_never_resurrects_a_reject() -> None:
     """ok=False stays False — the gate only adds rejects, never promotes."""
-    from core.self_improving.train import _apply_rollback_condition_gate
+    from core.self_improving.gate import _apply_rollback_condition_gate
 
     ok, reason = _apply_rollback_condition_gate(
         ok=False,
@@ -398,7 +398,7 @@ def test_rollback_gate_never_resurrects_a_reject() -> None:
 
 def test_rollback_gate_noop_on_free_text_or_no_baseline() -> None:
     """Unparseable free-text predicate or absent baseline ⇒ no-op (legacy)."""
-    from core.self_improving.train import _apply_rollback_condition_gate
+    from core.self_improving.gate import _apply_rollback_condition_gate
 
     # Free-text (mutator prose that matches none of the 4 patterns)
     ok, _reason = _apply_rollback_condition_gate(

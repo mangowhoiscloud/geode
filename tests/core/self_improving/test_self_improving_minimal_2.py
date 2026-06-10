@@ -24,6 +24,8 @@ from __future__ import annotations
 import inspect
 from pathlib import Path
 
+from core.self_improving import measure
+
 # ---------------------------------------------------------------------------
 # G1a — None defaults inherit Settings.model
 # ---------------------------------------------------------------------------
@@ -75,9 +77,8 @@ def test_build_audit_command_never_pins_role_models_on_argv() -> None:
     Both paths created a duplicate-SoT race with ``[petri.<role>]``.
     Pin the no-argv contract so a future refactor doesn't silently
     re-introduce the bypass."""
-    from core.self_improving import train
 
-    src = inspect.getsource(train._build_audit_command)
+    src = inspect.getsource(measure._build_audit_command)
     # No ``--target`` / ``--judge`` / ``--auditor`` argv emission
     assert '"--target"' not in src
     assert '"--judge"' not in src
@@ -174,9 +175,8 @@ def test_build_audit_command_maps_source_to_use_oauth_flag() -> None:
     """The argv translator must add ``--use-oauth`` for any source
     EXCEPT ``api_key`` (auto / claude-cli / openai-codex all use
     subscription credentials)."""
-    from core.self_improving import train
 
-    src = inspect.getsource(train._build_audit_command)
+    src = inspect.getsource(measure._build_audit_command)
     assert 'getattr(cfg, "source", "auto") != "api_key"' in src or "cfg.source" in src
     assert "--use-oauth" in src
 

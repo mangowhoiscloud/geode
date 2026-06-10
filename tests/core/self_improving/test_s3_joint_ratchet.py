@@ -17,16 +17,16 @@ import json
 from pathlib import Path
 
 import pytest
+from core.self_improving import ledger
 
 
 @pytest.fixture
 def isolated_baseline(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     """Redirect ``BASELINE_PATH`` to ``tmp_path`` so the test never touches
     the operator's real baseline."""
-    from core.self_improving import train
 
     target = tmp_path / "baseline.json"
-    monkeypatch.setattr(train, "BASELINE_PATH", target)
+    monkeypatch.setattr(ledger, "BASELINE_PATH", target)
     return target
 
 
@@ -36,7 +36,7 @@ def isolated_baseline(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
 def test_load_returns_tuple_of_four(isolated_baseline: Path) -> None:
     """S3 schema (ux-removed): ``_load_baseline`` returns 4-tuple
     (dim_means, dim_stderr, admire_means, bench_means)."""
-    from core.self_improving.train import _load_baseline
+    from core.self_improving.ledger import _load_baseline
 
     result = _load_baseline()
     assert isinstance(result, tuple)
@@ -44,7 +44,7 @@ def test_load_returns_tuple_of_four(isolated_baseline: Path) -> None:
 
 
 def test_load_missing_file_returns_none_and_empty_axes(isolated_baseline: Path) -> None:
-    from core.self_improving.train import _load_baseline
+    from core.self_improving.ledger import _load_baseline
 
     dim_means, dim_stderr, admire, bench = _load_baseline()
     assert dim_means is None
@@ -65,7 +65,7 @@ def test_load_pre_s3_baseline_is_backward_compatible(isolated_baseline: Path) ->
         ),
         encoding="utf-8",
     )
-    from core.self_improving.train import _load_baseline
+    from core.self_improving.ledger import _load_baseline
 
     dim_means, dim_stderr, admire, bench = _load_baseline()
     assert dim_means == {"role_realism": 7.5}
@@ -87,7 +87,7 @@ def test_load_full_s3_baseline_returns_all_axes(isolated_baseline: Path) -> None
         ),
         encoding="utf-8",
     )
-    from core.self_improving.train import _load_baseline
+    from core.self_improving.ledger import _load_baseline
 
     dim_means, _, admire, bench = _load_baseline()
     assert dim_means == {"role_realism": 7.5}
@@ -109,7 +109,7 @@ def test_load_corrupted_admire_axis_isolated_from_dim(isolated_baseline: Path) -
         ),
         encoding="utf-8",
     )
-    from core.self_improving.train import _load_baseline
+    from core.self_improving.ledger import _load_baseline
 
     dim_means, _, admire, bench = _load_baseline()
     assert dim_means == {"role_realism": 7.5}
@@ -124,7 +124,7 @@ def test_load_missing_dim_means_returns_none(isolated_baseline: Path) -> None:
         json.dumps({"admire_means": {"pairwise_win_rate": 0.6}}),
         encoding="utf-8",
     )
-    from core.self_improving.train import _load_baseline
+    from core.self_improving.ledger import _load_baseline
 
     dim_means, dim_stderr, *_ = _load_baseline()
     assert dim_means is None
@@ -140,7 +140,7 @@ def test_write_default_uses_v2_namespace_layout(isolated_baseline: Path) -> None
     still get a valid schema_version=2 payload; ``axes`` slots are
     explicit ``null`` (not omitted) so the read side can detect
     "axis absent" without dict-key gymnastics."""
-    from core.self_improving.train import _write_baseline
+    from core.self_improving.ledger import _write_baseline
 
     _write_baseline({"role_realism": 7.5}, {"role_realism": 0.2})
     payload = json.loads(isolated_baseline.read_text(encoding="utf-8"))
@@ -159,7 +159,7 @@ def test_write_default_uses_v2_namespace_layout(isolated_baseline: Path) -> None
 
 
 def test_write_full_3axis_serializes_all(isolated_baseline: Path) -> None:
-    from core.self_improving.train import _write_baseline
+    from core.self_improving.ledger import _write_baseline
 
     _write_baseline(
         {"role_realism": 7.5},
@@ -179,7 +179,7 @@ def test_write_full_3axis_serializes_all(isolated_baseline: Path) -> None:
 def test_write_empty_axis_dict_is_omitted(isolated_baseline: Path) -> None:
     """``admire_means={}`` is treated as 'no signal' (same as None) — the
     v2 ``axes.admire_means`` slot is explicit null."""
-    from core.self_improving.train import _write_baseline
+    from core.self_improving.ledger import _write_baseline
 
     _write_baseline(
         {"role_realism": 7.5},
@@ -196,7 +196,7 @@ def test_write_empty_axis_dict_is_omitted(isolated_baseline: Path) -> None:
 
 
 def test_write_then_load_roundtrips_3_axes(isolated_baseline: Path) -> None:
-    from core.self_improving.train import _load_baseline, _write_baseline
+    from core.self_improving.ledger import _load_baseline, _write_baseline
 
     _write_baseline(
         {"role_realism": 7.5},

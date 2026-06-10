@@ -1,3 +1,5 @@
+from core.self_improving import measure
+
 """OL-AUDIT-BURST-FIX — audit burst serialisation invariants.
 
 Three fixes ship together (all addressing the same defect: 429 storm
@@ -160,9 +162,8 @@ def test_geode_audit_argv_does_not_pass_inspect_flags() -> None:
     """`geode audit` (Typer wrapper) does NOT accept --max-connections;
     the burst flags must stay out of the outer argv. Codex MCP catch.
     """
-    from core.self_improving import train
 
-    argv = train._build_audit_command()
+    argv = measure._build_audit_command()
     assert "--max-connections" not in argv, (
         "OL-AUDIT-BURST-FIX regressed: outer `geode audit` argv MUST NOT "
         "carry --max-connections — Typer wrapper rejects unknown options."

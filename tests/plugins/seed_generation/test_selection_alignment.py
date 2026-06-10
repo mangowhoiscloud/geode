@@ -106,7 +106,7 @@ class TestTierDocParity:
 
     @pytest.mark.parametrize("md_name", ["critic.md", "evolver.md"])
     def test_md_lists_every_critical_dim(self, md_name: str) -> None:
-        from core.self_improving.train import AXIS_TIERS
+        from core.self_improving.fitness import AXIS_TIERS
 
         body = (PROMPT_DIR / md_name).read_text(encoding="utf-8")
         critical_dims = [d for d, tier in AXIS_TIERS.items() if tier == "critical"]
@@ -116,7 +116,7 @@ class TestTierDocParity:
 
     @pytest.mark.parametrize("md_name", ["critic.md", "evolver.md"])
     def test_md_lists_every_auxiliary_dim(self, md_name: str) -> None:
-        from core.self_improving.train import AXIS_TIERS
+        from core.self_improving.fitness import AXIS_TIERS
 
         body = (PROMPT_DIR / md_name).read_text(encoding="utf-8")
         auxiliary_dims = [d for d, tier in AXIS_TIERS.items() if tier == "auxiliary"]
@@ -126,7 +126,7 @@ class TestTierDocParity:
 
     @pytest.mark.parametrize("md_name", ["critic.md", "evolver.md"])
     def test_md_lists_every_info_dim(self, md_name: str) -> None:
-        from core.self_improving.train import AXIS_TIERS
+        from core.self_improving.fitness import AXIS_TIERS
 
         body = (PROMPT_DIR / md_name).read_text(encoding="utf-8")
         info_dims = [d for d, tier in AXIS_TIERS.items() if tier == "info"]
@@ -153,7 +153,7 @@ class TestTierDocParity:
         """
         import re
 
-        from core.self_improving.train import AXIS_TIERS
+        from core.self_improving.fitness import AXIS_TIERS
 
         body = (PROMPT_DIR / md_name).read_text(encoding="utf-8")
         for tier in ("critical", "auxiliary", "info"):

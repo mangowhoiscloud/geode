@@ -2366,7 +2366,7 @@ def run_campaign(
         # comparison ruler is still sound).
         from plugins.petri_audit.pool_validation import validate_pool_target_dims
 
-        from core.self_improving.train import AXIS_TIERS
+        from core.self_improving.fitness import AXIS_TIERS
 
         _live_dims = frozenset(AXIS_TIERS)
         _held_stale = validate_pool_target_dims(HELD_OUT_BENCH, _live_dims)
@@ -2544,7 +2544,7 @@ def run_campaign(
 def _validate_arms(arms: Sequence[str]) -> None:
     # PR-CLEANUP-D2 — single SoT: an arm added in train.py must not be
     # silently rejected by this pre-validation (former literal copy).
-    from core.self_improving.train import _VALID_PROMOTE_POLICIES
+    from core.self_improving.gate import _VALID_PROMOTE_POLICIES
 
     valid = _VALID_PROMOTE_POLICIES
     bad = [a for a in arms if a not in valid]
