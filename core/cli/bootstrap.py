@@ -242,6 +242,14 @@ def run_agentic_oneshot(
     from core.async_runtime import run_process_coroutine
     from core.config import _resolve_provider
     from core.config import settings as _stk_settings
+    from core.llm.adapters.registry import bootstrap_builtins
+
+    # geode-mcp (and any caller that never went through GeodeRuntime.create)
+    # has an EMPTY adapter registry — the first live run_agent over MCP
+    # failed with AdapterNotFoundError "Known pairs: []" (2026-06-11).
+    # Same pattern as core/agent/worker.py:858. Idempotent: already-
+    # registered adapters are skipped.
+    bootstrap_builtins()
 
     conversation = ConversationContext()
     handlers = _build_tool_handlers_for_fork()
