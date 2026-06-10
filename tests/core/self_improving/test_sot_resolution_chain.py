@@ -9,7 +9,7 @@ from __future__ import annotations
 from pathlib import Path
 
 import pytest
-from core.self_improving.loop.sot_resolution import SoTSelection, resolve_sot
+from core.self_improving.loop.mutate.sot_resolution import SoTSelection, resolve_sot
 
 _ENV = "GEODE_FAKE_POLICY_OVERRIDE"
 _STRICT_ENV = "GEODE_FAKE_POLICY_STRICT"

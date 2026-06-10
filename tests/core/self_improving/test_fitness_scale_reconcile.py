@@ -30,7 +30,7 @@ from __future__ import annotations
 
 from core.self_improving.fitness import ANCHOR_DIMS, AUXILIARY_DIMS, AXIS_TIERS, compute_fitness
 from core.self_improving.gate import _baseline_raw_fitness
-from core.self_improving.loop.attribution import compute_attribution
+from core.self_improving.loop.observe.attribution import compute_attribution
 from plugins.seed_generation.baseline_reader import BaselineSnapshot
 
 # A complete dim_means over every AXIS_TIERS dim so the "missing dim = best

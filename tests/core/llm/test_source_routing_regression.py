@@ -13,7 +13,7 @@ the very next ``gpt-5.5`` turn surfaced
    ``provider="openai-codex"`` call to ``resolve_for("openai", "payg")``
    → ``openai-payg`` adapter → ``api.openai.com``.
 2. ``core/agent/loop/_reflection.py:292`` and
-   ``core/self_improving/loop/runner.py:830`` hard-coded ``"payg"`` so
+   ``core/self_improving/loop/mutate/runner.py:830`` hard-coded ``"payg"`` so
    subscription-only Pattern B reflected / mutated through the depleted
    PAYG endpoint while the main loop sat on the subscription endpoint.
 3. ``core/llm/errors.py:_classify_openai_error`` treated

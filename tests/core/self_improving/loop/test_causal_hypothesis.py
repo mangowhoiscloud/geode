@@ -14,7 +14,7 @@ from __future__ import annotations
 import json
 
 import pytest
-from core.self_improving.loop.runner import (
+from core.self_improving.loop.mutate.runner import (
     ApplyRecord,
     Mutation,
     parse_mutation,

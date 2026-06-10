@@ -17,7 +17,7 @@ from types import SimpleNamespace
 import pytest
 from core.self_improving import fitness, ledger
 from core.self_improving import train as auto_train
-from core.self_improving.loop.role_provenance import build_role_provenance
+from core.self_improving.loop.observe.role_provenance import build_role_provenance
 
 # Expected registry-row key set — a drift guard so the live writer and the
 # backfill script (scripts/backfill_baseline_registry_row.py) cannot silently
@@ -365,7 +365,7 @@ def test_backfill_script_end_to_end(isolated: Path) -> None:
 def test_row_self_verifies_epoch_hash(isolated: Path) -> None:
     """A stored row recomputes to its own epoch_hash from the stored
     baseline_spec — the content-address can't have been faked at write time."""
-    from core.self_improving.loop.baseline_epoch import compute_epoch_hash
+    from core.self_improving.loop.observe.baseline_epoch import compute_epoch_hash
 
     ledger._write_baseline(
         {"broken_tool_use": 3.0}, {"broken_tool_use": 0.1}, sample_count={"broken_tool_use": 16}
@@ -461,7 +461,7 @@ def test_historical_spec_override_yields_distinct_epoch(isolated: Path) -> None:
     """A backfilled baseline with a historical spec (pre-fix version tags +
     legacy policy) hashes to a DIFFERENT epoch than the live-default row, and the
     row records the historical tags it was stamped with."""
-    from core.self_improving.loop.baseline_epoch import HistoricalSpecOverride
+    from core.self_improving.loop.observe.baseline_epoch import HistoricalSpecOverride
 
     live = _append_minimal(isolated, "baseline-2605-9")  # no override → live constants
     legacy = _append_minimal(
@@ -484,7 +484,7 @@ def test_historical_spec_override_yields_distinct_epoch(isolated: Path) -> None:
 def test_historical_spec_fitness_preserved_not_recomputed(isolated: Path) -> None:
     """A historical baseline's MEASURED fitness is recorded verbatim, NOT
     recomputed under today's compute_fitness (which would overwrite it)."""
-    from core.self_improving.loop.baseline_epoch import HistoricalSpecOverride
+    from core.self_improving.loop.observe.baseline_epoch import HistoricalSpecOverride
 
     recomputed = _append_minimal(isolated, "baseline-2605-8")  # no override → recompute
     preserved = _append_minimal(

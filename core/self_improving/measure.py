@@ -79,7 +79,7 @@ def _emit_journal(
     if not session_id or not gen_tag:
         return
     try:
-        from core.self_improving.loop.run_transcript import RunTranscript
+        from core.self_improving.loop.observe.run_transcript import RunTranscript
     except ImportError:
         return
     worker_id = os.environ.get(RUN_WORKER_ID_ENV, "").strip()
@@ -265,12 +265,12 @@ def _audit_sampling_params_as_sent() -> dict[str, Any]:
     The per-token sampling knobs (``temperature`` / ``top_p`` / ``max_tokens``) are
     NOT pinned by GEODE — they fall to the inspect_ai + provider (claude-cli /
     codex-cli OAuth) defaults — so they are recorded as
-    :data:`~core.self_improving.loop.run_provenance.SAMPLING_UNPINNED` rather than a
+    :data:`~core.self_improving.loop.observe.run_provenance.SAMPLING_UNPINNED` rather than a
     fabricated value. This is the honest "GEODE did not set this" record; a future
     PR that pins these knobs (and a ctx7-verified backend-determinism live test)
     would write the real numbers here.
     """
-    from core.self_improving.loop.run_provenance import SAMPLING_UNPINNED
+    from core.self_improving.loop.observe.run_provenance import SAMPLING_UNPINNED
 
     cfg = _train()._get_autoresearch_config()
     overrides = _load_hyperparam_overrides()
@@ -307,7 +307,7 @@ def _applied_diff_for_mutation(mutation_id: str) -> tuple[str | None, str | None
     if not mutation_id:
         return None, None, None
     try:
-        from core.self_improving.loop.mutations_reader import read_recent_applies
+        from core.self_improving.loop.observe.mutations_reader import read_recent_applies
 
         for record in reversed(read_recent_applies(n=200)):
             if record.mutation_id == mutation_id:
@@ -422,7 +422,7 @@ def _build_audit_env(override_path: Path) -> dict[str, str]:
     #     runtime reader's 3-layer resolution at
     #     ``core/agent/tool_descriptions_policy.py``),
     # (3) fall back to in-repo when neither is set.
-    # Matches ``core.self_improving.loop.policies:policy_path`` so
+    # Matches ``core.self_improving.loop.mutate.policies:policy_path`` so
     # mutator R/W + audit R + sibling audit all converge on the same
     # file. Codex MCP review of PR-TOOL-DESCRIPTIONS-MUTATE caught
     # rule (1) — without preserving the caller's env, group sampling's
@@ -948,7 +948,7 @@ def score_held_out_bench(
     attribution row (``mutations.jsonl`` — the curve SoT) AND, on a promote, the
     baseline registry row.
     """
-    from core.self_improving.loop.baseline_epoch import seed_pool_content_hash
+    from core.self_improving.loop.observe.baseline_epoch import seed_pool_content_hash
 
     held_out_bench_id = seed_pool_content_hash(bench_path)
     _prior_override = os.environ.get("AUTORESEARCH_SEED_SELECT")

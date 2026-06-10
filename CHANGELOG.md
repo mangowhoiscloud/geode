@@ -45,6 +45,15 @@ functional change.
 
 ---
 
+## [0.99.163] - 2026-06-11
+
+### Changed
+- **Structure sprint S-5 — autoresearch-원형 restore + loop domain split (PR-STRUCT-S5).** Operator decision: option (b) inverse-split.
+  - `train.py` 5,542 -> ~1,656 lines: the measurement gear moved verbatim to four sibling modules — `measure.py` (audit subprocess command/env/run/normalise), `fitness.py` (dim weights/tiers + fitness math + bootstrap stderr), `gate.py` (margin rule + promote/reject + SoT revert), `ledger.py` (baseline/registry/epoch/results/sessions I/O). train.py keeps what the autoresearch idiom owns: the mutation surface (`WRAPPER_PROMPT_SECTIONS`), the tunables (BUDGET_MINUTES/SEED_LIMIT/...), and the fixed-budget `main` loop. Behavior 0-diff — dry-run fitness output verified identical (0.71406, all dim fields) before/after.
+  - Namespace discipline: gear reads train tunables via a lazy `_train()` accessor (module-level mutual import = partially-initialized trap; lazy preserves `monkeypatch.setattr(train, ...)`), train + gear reference each other module-qualified (`gate._should_promote`, `fitness_spec.compute_fitness` — `fitness` bare is the domain's float), eliminating the dual-namespace patch hazard.
+  - `loop/` 24 modules -> 3 domains: `mutate/` (runner/policies/mutator_feedback/cli_subprocess/sot_resolution), `observe/` (attribution/statistical_power/baseline_epoch/provenance/readers/rollback), `inject/` (in_context wiring+slots/memory_recall/rubric_excerpts/tool_hints/signal_polarity); `auto_trigger` + `_hooks` stay at the loop root. Mirror tests moved alongside; 131 importer files swept.
+  - `program.md` contract updated: "train.py = the single file the agent modifies" is now literally true; the four gear modules are declared agent-read-only. `GEODE.md` layer diagram extended to the explicit 5-layer stack (Self-Improving formalised). Guards in `tests/core/self_improving/test_s5_structure.py` (slim-train ratchet + domain pins).
+
 ## [0.99.162] - 2026-06-11
 
 ### Changed

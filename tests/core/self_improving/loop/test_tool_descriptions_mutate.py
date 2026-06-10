@@ -21,20 +21,20 @@ import pytest
 
 
 def test_tool_descriptions_is_target_kind() -> None:
-    from core.self_improving.loop.policies import TARGET_KINDS
+    from core.self_improving.loop.mutate.policies import TARGET_KINDS
 
     assert "tool_descriptions" in TARGET_KINDS
 
 
 def test_tool_descriptions_removed_from_reader_only() -> None:
-    from core.self_improving.loop.policies import _READER_ONLY_KINDS
+    from core.self_improving.loop.mutate.policies import _READER_ONLY_KINDS
 
     assert "tool_descriptions" not in _READER_ONLY_KINDS
 
 
 def test_policy_path_routes_to_tool_descriptions_constant() -> None:
     from core.paths import GLOBAL_TOOL_DESCRIPTIONS_PATH
-    from core.self_improving.loop.policies import policy_path
+    from core.self_improving.loop.mutate.policies import policy_path
 
     assert policy_path("tool_descriptions") == GLOBAL_TOOL_DESCRIPTIONS_PATH
 
@@ -42,7 +42,7 @@ def test_policy_path_routes_to_tool_descriptions_constant() -> None:
 def test_nested_load_flattens_description_and_hints(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    from core.self_improving.loop import policies as policies_mod
+    from core.self_improving.loop.mutate import policies as policies_mod
 
     sot = tmp_path / "tool-descriptions.json"
     payload: dict[str, dict[str, Any]] = {
@@ -65,7 +65,7 @@ def test_nested_load_flattens_description_and_hints(
 def test_round_trip_preserves_hints_list_on_write(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    from core.self_improving.loop import policies as policies_mod
+    from core.self_improving.loop.mutate import policies as policies_mod
 
     sot = tmp_path / "tool-descriptions.json"
     monkeypatch.setitem(policies_mod._KIND_TO_PATH, "tool_descriptions", sot)
@@ -85,7 +85,7 @@ def test_round_trip_preserves_hints_list_on_write(
 
 
 def test_parse_mutation_accepts_tool_descriptions_target_kind() -> None:
-    from core.self_improving.loop.runner import parse_mutation
+    from core.self_improving.loop.mutate.runner import parse_mutation
 
     raw = json.dumps(
         {
@@ -111,7 +111,7 @@ def test_policy_path_resolves_to_operator_local_when_present(
     READ/WRITE parity rule — both halves now land on the same file
     that the runtime actually reads, eliminating the dual-SoT drift
     Codex flagged on the first review."""
-    from core.self_improving.loop import policies as policies_mod
+    from core.self_improving.loop.mutate import policies as policies_mod
 
     in_repo = tmp_path / "in-repo.json"
     operator_local = tmp_path / "operator-local.json"
@@ -131,7 +131,7 @@ def test_policy_path_falls_back_to_in_repo_when_operator_local_absent(
 ) -> None:
     """No operator-local file present ⇒ the in-repo default wins
     (legacy / fresh-repo behaviour)."""
-    from core.self_improving.loop import policies as policies_mod
+    from core.self_improving.loop.mutate import policies as policies_mod
 
     in_repo = tmp_path / "in-repo.json"
     operator_local = tmp_path / "operator-local.json"
@@ -151,7 +151,7 @@ def test_load_policy_reads_operator_local_when_it_exists(
 ) -> None:
     """When operator-local exists, ``load_policy`` reads from it (so
     the mutator sees what the runtime sees)."""
-    from core.self_improving.loop import policies as policies_mod
+    from core.self_improving.loop.mutate import policies as policies_mod
 
     in_repo = tmp_path / "in-repo.json"
     operator_local = tmp_path / "operator-local.json"
@@ -225,7 +225,7 @@ def test_write_policy_writes_to_operator_local_when_it_exists(
     up the mutator's change. Without this the mutator would write to
     in-repo while the runtime continued reading operator-local —
     closed-loop break."""
-    from core.self_improving.loop import policies as policies_mod
+    from core.self_improving.loop.mutate import policies as policies_mod
 
     in_repo = tmp_path / "in-repo.json"
     operator_local = tmp_path / "operator-local.json"

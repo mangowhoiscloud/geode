@@ -215,7 +215,7 @@ def test_path_constants_present() -> None:
 
 def test_train_py_sets_style_guide_env_pair() -> None:
     repo_root = Path(__file__).resolve().parents[3]
-    src = (repo_root / "core/self_improving/train.py").read_text(encoding="utf-8")
+    src = (repo_root / "core/self_improving/measure.py").read_text(encoding="utf-8")
     assert "GEODE_STYLE_GUIDE_OVERRIDE" in src
     assert "GEODE_STYLE_GUIDE_STRICT" in src
     assert "GLOBAL_STYLE_GUIDE_PATH" in src

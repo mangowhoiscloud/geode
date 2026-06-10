@@ -32,7 +32,7 @@ import re
 from pathlib import Path
 
 import pytest
-from core.self_improving.loop.attribution import (
+from core.self_improving.loop.observe.attribution import (
     AttributionRecord,
     compute_attribution,
     write_attribution,

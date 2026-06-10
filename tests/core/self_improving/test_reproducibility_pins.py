@@ -28,7 +28,7 @@ from types import SimpleNamespace
 import pytest
 from core.self_improving import ledger, measure
 from core.self_improving import train as auto_train
-from core.self_improving.loop.run_provenance import (
+from core.self_improving.loop.observe.run_provenance import (
     SAMPLING_UNPINNED,
     RunProvenanceFields,
     build_run_provenance,
@@ -160,7 +160,7 @@ def test_as_record_kwargs_includes_only_present_pins() -> None:
 
 
 def test_attribution_carries_e5_pins() -> None:
-    from core.self_improving.loop.attribution import compute_attribution
+    from core.self_improving.loop.observe.attribution import compute_attribution
 
     payload = compute_attribution(
         mutation_id="m1",
@@ -187,7 +187,7 @@ def test_attribution_carries_e5_pins() -> None:
 
 def test_attribution_prompt_hash_changes_when_prompt_changes() -> None:
     """The recorded prompt_hash is sensitive to the actual prompt sent."""
-    from core.self_improving.loop.attribution import compute_attribution
+    from core.self_improving.loop.observe.attribution import compute_attribution
 
     def _hash_in_row(prompt: str) -> str:
         return compute_attribution(
@@ -205,7 +205,7 @@ def test_attribution_prompt_hash_changes_when_prompt_changes() -> None:
 def test_attribution_legacy_omits_all_e5_pins() -> None:
     """A pre-E5 caller (no run_provenance) omits every E5 pin → exact legacy shape,
     and the schema validates the bare payload (pins default to None)."""
-    from core.self_improving.loop.attribution import AttributionRecord, compute_attribution
+    from core.self_improving.loop.observe.attribution import AttributionRecord, compute_attribution
 
     payload = compute_attribution(
         mutation_id="m1",
@@ -232,7 +232,7 @@ def test_attribution_legacy_omits_all_e5_pins() -> None:
 def test_attribution_none_baseline_still_records_pins() -> None:
     """Graceful: pins are spliced BEFORE the None-baseline early return, so a cycle
     with no baseline snapshots still records its reproducibility pins."""
-    from core.self_improving.loop.attribution import compute_attribution
+    from core.self_improving.loop.observe.attribution import compute_attribution
 
     payload = compute_attribution(
         mutation_id="m1",
@@ -353,7 +353,7 @@ def test_applied_diff_lookup_reads_apply_row(
 ) -> None:
     """The applied-diff pin reads the EXACT content the apply step committed (the
     ``kind="applied"`` row), not a re-derived guess."""
-    from core.self_improving.loop import mutations_reader
+    from core.self_improving.loop.observe import mutations_reader
 
     ledger = tmp_path / "mutations.jsonl"
     ledger.write_text(
@@ -386,7 +386,7 @@ def test_applied_diff_lookup_reads_apply_row(
 def test_applied_diff_lookup_unknown_id_is_none(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    from core.self_improving.loop import mutations_reader
+    from core.self_improving.loop.observe import mutations_reader
 
     ledger = tmp_path / "mutations.jsonl"
     ledger.write_text("", encoding="utf-8")

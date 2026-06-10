@@ -19,7 +19,7 @@ from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
-from core.self_improving.loop.attribution import (
+from core.self_improving.loop.observe.attribution import (
     _confidence_stability,
     compute_attribution,
     confidence_trajectory_from_episodes,
@@ -239,7 +239,7 @@ def test_write_attribution_forwards_trajectory(tmp_path: Path) -> None:
 def test_helper_exported_in_all() -> None:
     """PR-6 policy-mutation aggregator will import this helper —
     pin the public surface."""
-    from core.self_improving.loop import attribution
+    from core.self_improving.loop.observe import attribution
 
     assert "confidence_trajectory_from_episodes" in attribution.__all__
 

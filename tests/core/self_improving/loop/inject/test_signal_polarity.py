@@ -8,7 +8,7 @@ a polarity-normalised ``signed_improvement`` alongside ``observed_dim``.
 
 from __future__ import annotations
 
-from core.self_improving.loop.signal_polarity import (
+from core.self_improving.loop.inject.signal_polarity import (
     metric_polarity,
     to_signed_improvement,
 )
@@ -55,7 +55,7 @@ def test_higher_is_better_set_derived_from_canonical_weights() -> None:
 def test_compute_attribution_emits_signed_improvement() -> None:
     """Integration — the attribution payload carries a polarity-normalised
     ``signed_improvement`` mirroring ``observed_dim``."""
-    from core.self_improving.loop.attribution import AttributionRecord, compute_attribution
+    from core.self_improving.loop.observe.attribution import AttributionRecord, compute_attribution
     from plugins.seed_generation.baseline_reader import BaselineSnapshot
 
     before = BaselineSnapshot(
@@ -83,7 +83,7 @@ def test_compute_attribution_emits_signed_improvement() -> None:
 
 def test_signed_improvement_empty_without_baseline() -> None:
     """No baseline → no observed_dim → signed_improvement stays {} (legacy)."""
-    from core.self_improving.loop.attribution import compute_attribution
+    from core.self_improving.loop.observe.attribution import compute_attribution
 
     payload = compute_attribution(
         mutation_id="mut-1",

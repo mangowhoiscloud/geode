@@ -463,7 +463,7 @@ def test_subscription_only_banner_trip_safe_when_no_banner_installed():
 
 def _emit_test_journal(tmp_path):
     """Build a RunTranscript under tmp_path. Caller activates with run_transcript_scope."""
-    from core.self_improving.loop.run_transcript import RunTranscript
+    from core.self_improving.loop.observe.run_transcript import RunTranscript
 
     sip_home = tmp_path / "self-improving-loop"
 
@@ -484,7 +484,7 @@ def test_subscription_only_credential_error_emits_journal(tmp_path, monkeypatch)
     credential_subscription_abort event with provider + allowed payload."""
     import json
 
-    from core.self_improving.loop.run_transcript import run_transcript_scope
+    from core.self_improving.loop.observe.run_transcript import run_transcript_scope
 
     journal, _ = _emit_test_journal(tmp_path)
     with run_transcript_scope(journal), pytest.raises(cs.CredentialResolutionError):
@@ -506,7 +506,7 @@ def test_self_improving_loop_fallback_policy_emits_journal_on_config_success(tmp
     source='config' so the operator sees which path the resolver took."""
     import json
 
-    from core.self_improving.loop.run_transcript import run_transcript_scope
+    from core.self_improving.loop.observe.run_transcript import run_transcript_scope
 
     journal, _ = _emit_test_journal(tmp_path)
 
@@ -532,7 +532,7 @@ def test_self_improving_loop_fallback_policy_emits_journal_on_load_error(tmp_pat
     silent fallback is auditable."""
     import json
 
-    from core.self_improving.loop.run_transcript import run_transcript_scope
+    from core.self_improving.loop.observe.run_transcript import run_transcript_scope
 
     journal, _ = _emit_test_journal(tmp_path)
 

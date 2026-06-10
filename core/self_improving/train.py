@@ -831,7 +831,7 @@ def main() -> int:
     #   (2) explicit "ci excludes 0" gain verdict — an HONEST NULL ("no evidence
     #       yet") layered ON TOP of the promote gate, reconciled with its margin.
     #   (3) per-campaign power line — required N_seed × M_replicate to detect δ.
-    from core.self_improving.loop.statistical_power import (
+    from core.self_improving.loop.observe.statistical_power import (
         PowerRecordFields,
         decompose_variance,
         format_power_line,
@@ -1009,7 +1009,7 @@ def main() -> int:
     # record, distinct from E3's ``promote_policy_seed``). The bundle is None-omitting
     # so a manual / no-mutation / dry-run cycle still produces only the pins it has.
     # Records WHAT WAS SENT (auditability) — no backend-determinism claim.
-    from core.self_improving.loop.run_provenance import build_run_provenance
+    from core.self_improving.loop.observe.run_provenance import build_run_provenance
 
     _e5_applied_target, _e5_applied_value, _e5_applied_kind = measure._applied_diff_for_mutation(
         os.environ.get("GEODE_SIL_MUTATION_ID", "").strip()
@@ -1365,7 +1365,7 @@ def main() -> int:
 
             from plugins.seed_generation.baseline_reader import BaselineSnapshot
 
-            from core.self_improving.loop.attribution import write_attribution
+            from core.self_improving.loop.observe.attribution import write_attribution
 
             if _attribution_is_manual:
                 # Synthetic ids — commit prefix (visible in ledger) +
@@ -1544,7 +1544,7 @@ def main() -> int:
     # Per-Petri-turn emit (finer granularity) lands in OL-C1.2 follow-up
     # once we have a stable API to walk the .eval log per scenario.
     try:
-        from core.self_improving.loop.eval_journaling import emit_eval_response_recorded
+        from core.self_improving.loop.observe.eval_journaling import emit_eval_response_recorded
 
         prompt_label = (
             f"autoresearch audit cycle on commit {commit} "

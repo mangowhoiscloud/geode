@@ -300,7 +300,7 @@ def _apply_rollback_condition_gate(
     """PR-SIL-MULTIOBJ A2 (2026-05-29) — secondary per-dim reject gate.
 
     Auto-evaluates the mutator's own ``rollback_condition`` predicate
-    (``core.self_improving.loop.rollback_condition.evaluate_rollback_condition``)
+    (``core.self_improving.loop.observe.rollback_condition.evaluate_rollback_condition``)
     as a guard *in addition to* the primary ``_should_promote`` scalar
     gate. Returns a possibly-flipped ``(ok, reason)``.
 
@@ -322,7 +322,7 @@ def _apply_rollback_condition_gate(
     """
     if not ok or not condition.strip() or baseline_dim is None:
         return ok, reason
-    from core.self_improving.loop.rollback_condition import evaluate_rollback_condition
+    from core.self_improving.loop.observe.rollback_condition import evaluate_rollback_condition
 
     if evaluate_rollback_condition(
         condition.strip(),
@@ -851,9 +851,9 @@ def _revert_sot_after_reject(
     """
     from typing import cast
 
-    from core.self_improving.loop.mutations_reader import iter_mutations
-    from core.self_improving.loop.policies import load_policy, write_policy
-    from core.self_improving.loop.runner import ApplyRecord
+    from core.self_improving.loop.mutate.policies import load_policy, write_policy
+    from core.self_improving.loop.mutate.runner import ApplyRecord
+    from core.self_improving.loop.observe.mutations_reader import iter_mutations
 
     # Note on type narrowing: ``iter_mutations(kinds={"applied"})``
     # filters at the reader's discriminator (mutations_reader._parse_row)

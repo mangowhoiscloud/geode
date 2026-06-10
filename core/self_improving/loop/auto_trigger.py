@@ -535,7 +535,7 @@ def _resolve_runner(factory: Callable[[], Any] | None) -> Any:
     (cold-start budget — runner pulls anthropic adapter etc.)."""
     if factory is not None:
         return factory()
-    from core.self_improving.loop.runner import SelfImprovingLoopRunner
+    from core.self_improving.loop.mutate.runner import SelfImprovingLoopRunner
 
     return SelfImprovingLoopRunner()
 

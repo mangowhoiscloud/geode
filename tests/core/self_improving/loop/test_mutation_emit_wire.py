@@ -4,7 +4,7 @@ emit at the three lifecycle points the reserve docstring documents.
 PR-HOOKEVENT-RESERVE (2026-05-26) added the enum members; this PR is
 the writer-side wiring. These tests pin:
 
-- :func:`core.self_improving.loop.runner.append_audit_log` fires
+- :func:`core.self_improving.loop.mutate.runner.append_audit_log` fires
   ``HookEvent.MUTATION_APPLIED`` with the documented payload schema
   after the row write succeeds.
 - :func:`core.self_improving.train._revert_sot_after_reject` fires
@@ -75,7 +75,7 @@ def test_append_audit_log_emits_mutation_applied(tmp_path: Path) -> None:
     """``append_audit_log`` fires ``HookEvent.MUTATION_APPLIED`` with the
     documented payload schema (mutation_id, target_kind, target_path,
     ts, run_id, kind) after the row write completes."""
-    from core.self_improving.loop.runner import Mutation, append_audit_log
+    from core.self_improving.loop.mutate.runner import Mutation, append_audit_log
 
     hooks = HookSystem()
     captured: list[dict[str, Any]] = []
@@ -181,7 +181,7 @@ def test_revert_sot_after_reject_emits_mutation_reverted(
     succeeds. ``run_id`` carries ``GEODE_SIL_AUDIT_RUN_ID`` (the
     audit correlation key), NOT the mutation_id."""
     from core.self_improving import train
-    from core.self_improving.loop.runner import Mutation, append_audit_log
+    from core.self_improving.loop.mutate.runner import Mutation, append_audit_log
 
     # Seed a mutations.jsonl row that the revert function can look up.
     audit_log = tmp_path / "mutations.jsonl"
@@ -251,7 +251,7 @@ def test_rollback_sot_emits_mutation_reverted(monkeypatch: pytest.MonkeyPatch) -
     ``reason`` (``audit_log_write_fail`` / ``audit_subprocess_crash`` /
     ``audit_subprocess_nonzero``) so observability readers can
     distinguish the trigger from the promote-gate reject path."""
-    from core.self_improving.loop.runner import Mutation, SelfImprovingLoopRunner
+    from core.self_improving.loop.mutate.runner import Mutation, SelfImprovingLoopRunner
 
     hooks = HookSystem()
     captured: list[dict[str, Any]] = []
@@ -325,7 +325,7 @@ def test_rollback_sot_policy_kind_emits_mutation_reverted(
     (``write_policy``). The original ``test_rollback_sot_emits_mutation_reverted``
     only stubbed ``write_wrapper_prompt_sections`` so the
     ``write_policy`` half of the dispatch was uncovered."""
-    from core.self_improving.loop.runner import Mutation, SelfImprovingLoopRunner
+    from core.self_improving.loop.mutate.runner import Mutation, SelfImprovingLoopRunner
 
     hooks = HookSystem()
     captured: list[dict[str, Any]] = []
@@ -338,7 +338,7 @@ def test_rollback_sot_policy_kind_emits_mutation_reverted(
 
     written: list[tuple[str, dict[str, str]]] = []
     monkeypatch.setattr(
-        "core.self_improving.loop.policies.write_policy",
+        "core.self_improving.loop.mutate.policies.write_policy",
         lambda kind, sections: written.append((kind, dict(sections))),
     )
 
@@ -372,7 +372,7 @@ def test_propose_emits_mutation_proposed(monkeypatch: pytest.MonkeyPatch) -> Non
     audit_run_id is minted later in apply_proposal."""
     import json
 
-    from core.self_improving.loop.runner import SelfImprovingLoopRunner
+    from core.self_improving.loop.mutate.runner import SelfImprovingLoopRunner
 
     hooks = HookSystem()
     captured: list[dict[str, Any]] = []
@@ -399,7 +399,7 @@ def test_propose_emits_mutation_proposed(monkeypatch: pytest.MonkeyPatch) -> Non
     def _stub_llm(system: str, user: str) -> str:
         return canned_response
 
-    from core.self_improving.loop import runner as runner_mod
+    from core.self_improving.loop.mutate import runner as runner_mod
 
     stub_ctx = runner_mod.RunnerContext(
         current_sections={"evolver.system": "old prompt"},
@@ -427,7 +427,7 @@ def test_rollback_sot_no_emit_when_rollback_write_fails(
     rollback-write failure (rare: disk full while writing the rollback
     itself) short-circuits BEFORE emit. Otherwise listeners would see
     a 'reverted' signal when the SoT is actually divergent."""
-    from core.self_improving.loop.runner import Mutation, SelfImprovingLoopRunner
+    from core.self_improving.loop.mutate.runner import Mutation, SelfImprovingLoopRunner
 
     hooks = HookSystem()
     captured: list[dict[str, Any]] = []

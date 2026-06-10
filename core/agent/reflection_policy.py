@@ -23,7 +23,7 @@
 유지 (`hypotheses` / `confidence` / `next_action_hint`).
 
 **Resolution order** (PR-BACKFILL-SOT 2026-05-21, shared
-:mod:`core.self_improving.loop.sot_resolution`):
+:mod:`core.self_improving.loop.mutate.sot_resolution`):
 
 1. ``GEODE_REFLECTION_POLICY_OVERRIDE`` env var — explicit override.
 
@@ -49,7 +49,7 @@ from pathlib import Path
 from typing import Any
 
 from core.paths import GLOBAL_REFLECTION_POLICY_PATH, OPERATOR_LOCAL_REFLECTION_POLICY_PATH
-from core.self_improving.loop.sot_resolution import resolve_sot
+from core.self_improving.loop.mutate.sot_resolution import resolve_sot
 
 log = logging.getLogger(__name__)
 

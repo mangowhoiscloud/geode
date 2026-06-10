@@ -155,7 +155,7 @@ _CAMPAIGN_NOISE_RE = re.compile(
 _CAMPAIGN_TS_RE = re.compile(r"^(?P<ts>\d{4}-\d\d-\d\dT\d\d:\d\d:\d\dZ)")
 
 # E6 (2026-05-30) — the standard two-sample mean-difference power constants,
-# MIRRORING the SoT in ``core/self_improving/loop/statistical_power.py`` (this
+# MIRRORING the SoT in ``core/self_improving/loop/observe/statistical_power.py`` (this
 # builder is intentionally stdlib-only so it cannot import core). The defaults
 # below are the same δ / α / power the writer powers for; the formula
 # (``n ≈ 2(z_{α/2}+z_β)²σ²/δ²``) is reproduced in ``_required_n_seed`` so the page
@@ -5176,7 +5176,7 @@ def _required_n_seed(sigma: float | None) -> int | None:
     """Required N_seed per arm to detect ``_POWER_DEFAULT_TARGET_EFFECT_SIZE`` at
     ``_POWER_DEFAULT_POWER`` given the RECORDED combined fitness-stderr ``sigma``.
 
-    Mirrors ``core.self_improving.loop.statistical_power.required_samples`` (the
+    Mirrors ``core.self_improving.loop.observe.statistical_power.required_samples`` (the
     stdlib-only builder cannot import core): the textbook two-sample mean-difference
     sample size ``n ≈ 2·(z_{α/2}+z_β)²·σ²/δ²`` per arm, rounded UP. Computed from the
     σ actually recorded on the E4 rows — NOT a fabricated number — so the page never
@@ -6256,7 +6256,7 @@ def _render_results_rows(
 
 
 # target_kind -> mirrored policy filename. Local copy of the SoT in
-# core/self_improving/loop/policies.py::_KIND_TO_PATH (the docs builder is
+# core/self_improving/loop/mutate/policies.py::_KIND_TO_PATH (the docs builder is
 # intentionally stdlib-only, so it cannot import core). Kept in lockstep by
 # test_policy_file_map_matches_core (dual-SoT drift guard).
 _TARGET_KIND_TO_POLICY_FILE: dict[str, str] = {

@@ -10,7 +10,7 @@ Convention (Codex MCP WARN #5 fix):
 from __future__ import annotations
 
 from core.self_improving.fitness import CRITICAL_DIMS
-from core.self_improving.loop.rollback_condition import evaluate_rollback_condition
+from core.self_improving.loop.observe.rollback_condition import evaluate_rollback_condition
 
 # ---------------------------------------------------------------------------
 # 1. Pattern 1 — any dim regresses by more than X (lower-is-better)
@@ -316,7 +316,7 @@ def test_first_pattern_wins_no_false_signal_from_later_clause() -> None:
 def test_critical_dims_set_matches_canonical() -> None:
     """`_CRITICAL_DIMS` 는 ``core.self_improving.train.CRITICAL_DIMS`` 의 frozenset
     view. drift 발생 시 본 invariant 가 fail-fast."""
-    from core.self_improving.loop.rollback_condition import _CRITICAL_DIMS
+    from core.self_improving.loop.observe.rollback_condition import _CRITICAL_DIMS
 
     assert frozenset(CRITICAL_DIMS) == _CRITICAL_DIMS
     assert len(_CRITICAL_DIMS) == 5  # ADR-012 5-critical-dim contract
@@ -329,7 +329,7 @@ def test_critical_dims_set_matches_canonical() -> None:
 
 def test_works_with_mutation_rollback_condition_field() -> None:
     """Mutation 의 rollback_condition free-text 가 그대로 evaluator 진입 가능."""
-    from core.self_improving.loop.runner import Mutation
+    from core.self_improving.loop.mutate.runner import Mutation
 
     mutation = Mutation(
         target_section="role",

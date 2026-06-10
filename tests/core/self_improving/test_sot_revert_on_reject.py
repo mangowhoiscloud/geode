@@ -151,8 +151,8 @@ def test_revert_restores_policy_kind_via_policies_helpers(tmp_path: Path) -> Non
         return tmp_path / f"{kind}.json"
 
     with (
-        patch("core.self_improving.loop.policies.load_policy", fake_load),
-        patch("core.self_improving.loop.policies.write_policy", fake_write),
+        patch("core.self_improving.loop.mutate.policies.load_policy", fake_load),
+        patch("core.self_improving.loop.mutate.policies.write_policy", fake_write),
     ):
         ok, detail = _revert_sot_after_reject("mut-tool-policy-1", audit_log_path=log_path)
 
@@ -346,8 +346,8 @@ def test_revert_deletes_inserted_policy_kind_section(tmp_path: Path) -> None:
         return tmp_path / f"{kind}.json"
 
     with (
-        patch("core.self_improving.loop.policies.load_policy", fake_load),
-        patch("core.self_improving.loop.policies.write_policy", fake_write),
+        patch("core.self_improving.loop.mutate.policies.load_policy", fake_load),
+        patch("core.self_improving.loop.mutate.policies.write_policy", fake_write),
     ):
         ok, _ = _revert_sot_after_reject("mut-insert-policy", audit_log_path=log_path)
 

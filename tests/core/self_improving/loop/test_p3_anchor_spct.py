@@ -16,19 +16,19 @@ from __future__ import annotations
 import json
 
 import pytest
-from core.self_improving.loop.anchor_confidence import (
+from core.self_improving.loop.mutate.runner import (
+    _MUTATION_CONTRACT_SUFFIX,
+    ApplyRecord,
+    Mutation,
+    parse_mutation,
+)
+from core.self_improving.loop.observe.anchor_confidence import (
     ANCHOR_DIMS_NEGATIVE,
     ANCHOR_DIMS_POSITIVE,
     MULTIPLIER_MAX,
     MULTIPLIER_MIN,
     _normalize_anchor_score,
     compute_anchor_confidence_multiplier,
-)
-from core.self_improving.loop.runner import (
-    _MUTATION_CONTRACT_SUFFIX,
-    ApplyRecord,
-    Mutation,
-    parse_mutation,
 )
 
 # ---------------------------------------------------------------------------

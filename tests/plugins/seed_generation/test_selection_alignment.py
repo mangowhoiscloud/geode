@@ -58,7 +58,7 @@ class TestAnchorMeansSurface:
 
     def test_anchor_means_matches_anchor_confidence_module(self) -> None:
         """Drift guard: extract_anchor_means keys ↔ anchor_confidence module."""
-        from core.self_improving.loop.anchor_confidence import (
+        from core.self_improving.loop.observe.anchor_confidence import (
             ANCHOR_DIMS_NEGATIVE,
             ANCHOR_DIMS_POSITIVE,
         )

@@ -98,7 +98,7 @@ def test_train_py_strict_count_at_least_12_kinds() -> None:
 def test_sot_resolution_strict_derivation_pattern() -> None:
     """sot_resolution 의 derivation 이 ``<X>_OVERRIDE → <X>_STRICT`` 패턴
     유지 — train.py 의 env naming 과 일치."""
-    from core.self_improving.loop import sot_resolution
+    from core.self_improving.loop.mutate import sot_resolution
 
     source = inspect.getsource(sot_resolution)
     assert "_OVERRIDE_SUFFIX" in source
@@ -108,7 +108,7 @@ def test_sot_resolution_strict_derivation_pattern() -> None:
 
 def test_resolve_sot_returns_strict_true_with_env_strict(tmp_path, monkeypatch) -> None:
     """End-to-end — env override + STRICT=1 → SoTSelection(strict=True)."""
-    from core.self_improving.loop.sot_resolution import resolve_sot
+    from core.self_improving.loop.mutate.sot_resolution import resolve_sot
 
     fake_sot = tmp_path / "fake_policy.json"
     fake_sot.write_text("{}", encoding="utf-8")
@@ -126,7 +126,7 @@ def test_resolve_sot_returns_strict_true_with_env_strict(tmp_path, monkeypatch) 
 
 def test_resolve_sot_returns_strict_false_without_env_strict(tmp_path, monkeypatch) -> None:
     """env override 만 set + STRICT 없음 → strict=False (operator override)."""
-    from core.self_improving.loop.sot_resolution import resolve_sot
+    from core.self_improving.loop.mutate.sot_resolution import resolve_sot
 
     fake_sot = tmp_path / "fake_policy.json"
     fake_sot.write_text("{}", encoding="utf-8")
@@ -143,7 +143,7 @@ def test_resolve_sot_returns_strict_false_without_env_strict(tmp_path, monkeypat
 
 def test_resolve_sot_returns_none_when_no_layer_present(tmp_path, monkeypatch) -> None:
     """env 미set / operator_local 부재 / in_repo 부재 → None."""
-    from core.self_improving.loop.sot_resolution import resolve_sot
+    from core.self_improving.loop.mutate.sot_resolution import resolve_sot
 
     monkeypatch.delenv("GEODE_UNUSED_KIND_OVERRIDE", raising=False)
     selection = resolve_sot(
@@ -156,7 +156,7 @@ def test_resolve_sot_returns_none_when_no_layer_present(tmp_path, monkeypatch) -
 
 def test_resolve_sot_operator_local_strict_false(tmp_path, monkeypatch) -> None:
     """env 미set + operator_local 존재 → strict=False (daily-use graceful)."""
-    from core.self_improving.loop.sot_resolution import resolve_sot
+    from core.self_improving.loop.mutate.sot_resolution import resolve_sot
 
     monkeypatch.delenv("GEODE_UNUSED_KIND_OVERRIDE", raising=False)
     operator = tmp_path / "operator.json"
@@ -173,7 +173,7 @@ def test_resolve_sot_operator_local_strict_false(tmp_path, monkeypatch) -> None:
 
 def test_resolve_sot_in_repo_strict_false(tmp_path, monkeypatch) -> None:
     """env 미set + operator 부재 + in_repo 존재 → in_repo, strict=False."""
-    from core.self_improving.loop.sot_resolution import resolve_sot
+    from core.self_improving.loop.mutate.sot_resolution import resolve_sot
 
     monkeypatch.delenv("GEODE_UNUSED_KIND_OVERRIDE", raising=False)
     in_repo = tmp_path / "repo.json"

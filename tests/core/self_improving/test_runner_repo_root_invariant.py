@@ -87,7 +87,7 @@ def test_runner_apply_proposal_uses_correct_parents_offset() -> None:
     spawn. Catches the off-by-one bug introduced after PR-G5b
     moved the audit log under ``state/autoresearch/``.
     """
-    from core.self_improving.loop import runner
+    from core.self_improving.loop.mutate import runner
 
     source = Path(runner.__file__).read_text(encoding="utf-8")
     # Both call sites should now read parents[2]; parents[3] must not

@@ -315,7 +315,7 @@ def test_row_records_random_arm_with_seed(isolated: Path) -> None:
 
 def test_row_self_verifies_under_schema_2(isolated: Path) -> None:
     """The stored row recomputes to its own epoch_hash under schema 2."""
-    from core.self_improving.loop.baseline_epoch import compute_epoch_hash
+    from core.self_improving.loop.observe.baseline_epoch import compute_epoch_hash
 
     ledger._write_baseline({"broken_tool_use": 3.0}, {"broken_tool_use": 0.2})
     row = _rows(isolated / "baseline_archive.jsonl")[0]
@@ -329,7 +329,10 @@ def test_row_self_verifies_under_schema_2(isolated: Path) -> None:
 def test_gate_random_never_are_distinct_epochs() -> None:
     """A gate spec, a random spec, and a never spec hash to THREE different epochs
     (different production logic, correctly NOT averaged into one comparison)."""
-    from core.self_improving.loop.baseline_epoch import build_baseline_spec, compute_epoch_hash
+    from core.self_improving.loop.observe.baseline_epoch import (
+        build_baseline_spec,
+        compute_epoch_hash,
+    )
 
     role_prov = {
         "auditor": {"model": "m", "source": "s"},
@@ -358,7 +361,7 @@ def test_promote_policy_seed_not_in_epoch_spec() -> None:
     two random campaigns with different seeds are the SAME logic (random-accept), so
     they must share an epoch. The seed is recorded on the ROW + held-out record, not
     folded into the epoch hash (else every random seed would fragment the epoch)."""
-    from core.self_improving.loop.baseline_epoch import build_baseline_spec
+    from core.self_improving.loop.observe.baseline_epoch import build_baseline_spec
 
     spec = build_baseline_spec(
         margin_rule="fitness-stderr",
@@ -383,7 +386,7 @@ def test_promote_policy_seed_not_in_epoch_spec() -> None:
 def test_attribution_records_policy_tag() -> None:
     """The per-cycle held-out attribution row carries the control-arm tag so the
     three arms' fixed-ruler curves are splittable + comparable."""
-    from core.self_improving.loop.attribution import compute_attribution
+    from core.self_improving.loop.observe.attribution import compute_attribution
 
     payload = compute_attribution(
         mutation_id="m1",
@@ -399,7 +402,7 @@ def test_attribution_records_policy_tag() -> None:
 
 def test_attribution_omits_policy_when_none() -> None:
     """Legacy / unspecified rows omit the policy fields (backward-compatible shape)."""
-    from core.self_improving.loop.attribution import compute_attribution
+    from core.self_improving.loop.observe.attribution import compute_attribution
 
     payload = compute_attribution(
         mutation_id="m1",

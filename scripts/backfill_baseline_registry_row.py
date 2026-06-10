@@ -121,8 +121,8 @@ def main(argv: list[str] | None = None) -> int:
         _baseline_archive_path,
         _next_baseline_id,
     )
-    from core.self_improving.loop.baseline_epoch import HistoricalSpecOverride
-    from core.self_improving.loop.role_provenance import build_role_provenance
+    from core.self_improving.loop.observe.baseline_epoch import HistoricalSpecOverride
+    from core.self_improving.loop.observe.role_provenance import build_role_provenance
 
     payload = _load_snapshot(args.snapshot)
     raw = payload.get("raw") or {}

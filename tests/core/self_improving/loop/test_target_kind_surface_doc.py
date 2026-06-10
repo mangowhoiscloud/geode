@@ -38,7 +38,7 @@ def test_target_kinds_and_reader_only_are_disjoint() -> None:
     """A kind can be EITHER mutator-dispatchable (in TARGET_KINDS) OR
     reader-only (in _READER_ONLY_KINDS), never both. Catches a future
     PR that accidentally double-lists a kind during a graduation."""
-    from core.self_improving.loop.policies import _READER_ONLY_KINDS, TARGET_KINDS
+    from core.self_improving.loop.mutate.policies import _READER_ONLY_KINDS, TARGET_KINDS
 
     overlap = set(TARGET_KINDS) & _READER_ONLY_KINDS
     assert not overlap, (
@@ -54,8 +54,8 @@ def test_reader_only_kind_emit_fails_fast_at_parse_mutation() -> None:
     target_kind raises ValueError at ``parse_mutation``, not silently
     succeeds. Iterates every entry in ``_READER_ONLY_KINDS`` so adding
     a new entry automatically gains test coverage."""
-    from core.self_improving.loop.policies import _READER_ONLY_KINDS
-    from core.self_improving.loop.runner import parse_mutation
+    from core.self_improving.loop.mutate.policies import _READER_ONLY_KINDS
+    from core.self_improving.loop.mutate.runner import parse_mutation
 
     for kind in _READER_ONLY_KINDS:
         payload = json.dumps(
@@ -85,7 +85,7 @@ def test_reader_only_kinds_match_env_override_block() -> None:
     import inspect
 
     from core.self_improving import measure as train_mod
-    from core.self_improving.loop.policies import _READER_ONLY_KINDS
+    from core.self_improving.loop.mutate.policies import _READER_ONLY_KINDS
 
     src = inspect.getsource(train_mod)
     # Each kind in _READER_ONLY_KINDS must have its env var present.
@@ -109,7 +109,7 @@ def test_reader_only_set_size_matches_audit_finding() -> None:
     If a future PR graduates another the size should drop; if a new
     surface lands the size should grow. Either way the explicit count
     makes the change impossible to miss in code review."""
-    from core.self_improving.loop.policies import _READER_ONLY_KINDS
+    from core.self_improving.loop.mutate.policies import _READER_ONLY_KINDS
 
     assert len(_READER_ONLY_KINDS) == 6, (
         f"_READER_ONLY_KINDS has {len(_READER_ONLY_KINDS)} entries; the "

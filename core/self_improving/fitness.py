@@ -378,7 +378,7 @@ def compute_fitness(
     # critical gate 의 ``return 0.0`` 는 multiplier 곱 안 받음 (의도 — strict
     # reject 는 anchor 신호와 무관). mode True 일 때만 helper 호출.
     if anchor_confidence_mode and anchor_means:
-        from core.self_improving.loop.anchor_confidence import (
+        from core.self_improving.loop.observe.anchor_confidence import (
             compute_anchor_confidence_multiplier,
         )
 

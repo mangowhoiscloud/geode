@@ -121,7 +121,7 @@ def test_on_retry_emits_journal_event(monkeypatch: Any) -> None:
 
     import core.paths
     from core.llm.providers.anthropic import _on_retry_journal_emit
-    from core.self_improving.loop.run_transcript import RunTranscript, run_transcript_scope
+    from core.self_improving.loop.observe.run_transcript import RunTranscript, run_transcript_scope
 
     # Redirect journal writes into a tmp dir without touching real
     # ~/.geode/autoresearch/handoff/.
@@ -178,7 +178,7 @@ def test_on_retry_overloaded_emits_warn_level(monkeypatch: Any) -> None:
 
     import core.paths
     from core.llm.providers.anthropic import _on_retry_journal_emit
-    from core.self_improving.loop.run_transcript import RunTranscript, run_transcript_scope
+    from core.self_improving.loop.observe.run_transcript import RunTranscript, run_transcript_scope
 
     real_tmp = Path(tempfile.mkdtemp(prefix="p1a-overloaded-"))
     monkeypatch.setattr(core.paths, "GLOBAL_AUTORESEARCH_HANDOFF_DIR", real_tmp)

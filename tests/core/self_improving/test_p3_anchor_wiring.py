@@ -33,7 +33,7 @@ from core.self_improving.fitness import (
 
 def test_anchor_dims_constant_matches_helper() -> None:
     """ANCHOR_DIMS 가 anchor_confidence helper 의 dim set 과 일치."""
-    from core.self_improving.loop.anchor_confidence import (
+    from core.self_improving.loop.observe.anchor_confidence import (
         ANCHOR_DIMS_NEGATIVE,
         ANCHOR_DIMS_POSITIVE,
     )

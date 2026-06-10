@@ -5,7 +5,7 @@ write paths verbatim:
 
 (a) the summary YAML written by ``plugins.petri_audit.eval_archive.archive_eval``
     (the committable ``docs/audits/eval-logs/*.summary.yaml``), and
-(b) ``core.self_improving.loop.runner.ApplyRecord.model_validate`` — the
+(b) ``core.self_improving.loop.mutate.runner.ApplyRecord.model_validate`` — the
     ``mutations.jsonl`` writer's Pydantic schema (``extra="allow"``), which must
     accept the ledger as a typed field without a ValidationError.
 
@@ -168,7 +168,7 @@ def test_ledger_validates_into_apply_record(
     ledger = extract_contract_results(eval_path)
     assert ledger, "extractor should produce a non-empty ledger for this sample"
 
-    from core.self_improving.loop.runner import ApplyRecord
+    from core.self_improving.loop.mutate.runner import ApplyRecord
 
     row = {
         "ts": 1.0,
@@ -209,7 +209,7 @@ def test_ledger_lands_in_live_attribution_row(
     ledger = extract_contract_results(eval_path)
     assert ledger
 
-    from core.self_improving.loop.attribution import AttributionRecord, write_attribution
+    from core.self_improving.loop.observe.attribution import AttributionRecord, write_attribution
 
     log_path = tmp_path / "mutations.jsonl"
     payload = write_attribution(
@@ -232,7 +232,7 @@ def test_attribution_row_omits_empty_ledger(
 ) -> None:
     """A dry-run / archive-missing cycle (empty ledger) omits the key — the
     legacy row shape is preserved."""
-    from core.self_improving.loop.attribution import write_attribution
+    from core.self_improving.loop.observe.attribution import write_attribution
 
     log_path = tmp_path / "mutations.jsonl"
     payload = write_attribution(

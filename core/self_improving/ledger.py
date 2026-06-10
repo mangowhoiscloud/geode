@@ -26,9 +26,9 @@ from core.self_improving import gate, measure
 
 if TYPE_CHECKING:
     from core.self_improving.bench_means import BenchProvenance
-    from core.self_improving.loop.baseline_epoch import HistoricalSpecOverride
-    from core.self_improving.loop.run_provenance import RunProvenanceFields
-    from core.self_improving.loop.statistical_power import PowerRecordFields
+    from core.self_improving.loop.observe.baseline_epoch import HistoricalSpecOverride
+    from core.self_improving.loop.observe.run_provenance import RunProvenanceFields
+    from core.self_improving.loop.observe.statistical_power import PowerRecordFields
 
 from core.paths import AUTORESEARCH_STATE_DIR as STATE_DIR
 from core.paths import GLOBAL_AUTORESEARCH_HANDOFF_DIR as _SELF_IMPROVING_LOOP_HOME
@@ -809,7 +809,7 @@ def _append_baseline_registry_row(
     the ``bench`` axis flag, and the aggregate ``dim_means``.
 
     ``role_provenance`` is the ``{role: {model, source, lane}}`` block (see
-    :mod:`core.self_improving.loop.role_provenance`) for auditor / target /
+    :mod:`core.self_improving.loop.observe.role_provenance`) for auditor / target /
     judge / mutator. The credential *lane* (PAYG / Subscription / CLI) is
     load-bearing — the same model behaves differently per lane — so the registry
     records model + source + lane, not just the model. ``None`` → the live
@@ -848,7 +848,7 @@ def _append_baseline_registry_row(
             "the registry's vanilla↔fixed discriminator must be a known value"
         )
     if role_provenance is None:
-        from core.self_improving.loop.role_provenance import collect_role_provenance
+        from core.self_improving.loop.observe.role_provenance import collect_role_provenance
 
         role_provenance = collect_role_provenance(_train()._get_autoresearch_config())
     # PR-BASELINE-EPOCH (2026-05-30) — content-addressed epoch discriminator.
@@ -856,7 +856,7 @@ def _append_baseline_registry_row(
     # role model/source + rubric/dim-set + bench + seed-pool identity) → epoch.
     # Spec change ⇒ new epoch; the row self-verifies (stored spec re-hashes to
     # epoch_hash). See .claude/skills/baseline-epoch-partition/SKILL.md.
-    from core.self_improving.loop.baseline_epoch import (
+    from core.self_improving.loop.observe.baseline_epoch import (
         SPEC_SCHEMA_VERSION,
         build_baseline_spec,
         compute_epoch_hash,
@@ -962,7 +962,7 @@ def _append_baseline_registry_row(
         "baseline_spec": baseline_spec,
         "spec_schema_version": SPEC_SCHEMA_VERSION,
         # per-role {model, source, lane} — shared SoT with the mutations.jsonl
-        # cycle ledger (core.self_improving.loop.role_provenance) so the two
+        # cycle ledger (core.self_improving.loop.observe.role_provenance) so the two
         # git-tracked ledgers never drift on the credential lane.
         "role_provenance": role_provenance,
         # basename only — baseline_archive.jsonl is git-tracked, so an absolute

@@ -18,7 +18,7 @@ importable module with a CLI front end. The driver does NOT decide policy — it
   compute_fitness(mean_dims)`` is a robust central estimate of the stochastic
   Petri audit — not the single (possibly lucky-outlier) bootstrap measure that
   would otherwise pin the gate to a structurally near-0-approve state.
-* ``core.self_improving.loop.runner.SelfImprovingLoopRunner`` — one
+* ``core.self_improving.loop.mutate.runner.SelfImprovingLoopRunner`` — one
   ``propose()`` + guard + ``apply_proposal()`` per cycle. The driver wraps
   ``propose()`` in a re-proposal loop (the *propose-guard*) so a
   ``RepetitiveMutationError`` or a measurement-hyperparam ``ValueError`` does not
@@ -104,7 +104,7 @@ from core.paths import PETRI_LOGS_DIR as _PETRI_LOGS_DIR  # PR-CLEANUP-D2
 if TYPE_CHECKING:
     from collections.abc import Sequence
 
-    from core.self_improving.loop.runner import Proposal, SelfImprovingLoopRunner
+    from core.self_improving.loop.mutate.runner import Proposal, SelfImprovingLoopRunner
 
 log = logging.getLogger("self_improving.campaign")
 
@@ -703,8 +703,8 @@ def propose_with_guard(
     """
     import time
 
-    from core.self_improving.loop.cli_subprocess import CliInvocationError
-    from core.self_improving.loop.mutator_feedback import RepetitiveMutationError
+    from core.self_improving.loop.mutate.cli_subprocess import CliInvocationError
+    from core.self_improving.loop.mutate.mutator_feedback import RepetitiveMutationError
 
     for attempt in range(1, max_attempts + 1):
         try:
@@ -2064,7 +2064,7 @@ def _make_runner(*, arm: str, env: dict[str, str], dry_run: bool) -> SelfImprovi
     (synthetic audit, no PAYG); the live campaign runs ``dry_run=False`` for a
     real Petri audit.
     """
-    from core.self_improving.loop.runner import SelfImprovingLoopRunner
+    from core.self_improving.loop.mutate.runner import SelfImprovingLoopRunner
 
     return SelfImprovingLoopRunner(
         commit_enabled=(arm == "gate"),
@@ -2076,7 +2076,7 @@ def _make_runner(*, arm: str, env: dict[str, str], dry_run: bool) -> SelfImprovi
 class _OfflineSmokeRunner:
     """A fully synthetic runner for the ``--dry-run`` smoke path.
 
-    The real :class:`~core.self_improving.loop.runner.SelfImprovingLoopRunner`
+    The real :class:`~core.self_improving.loop.mutate.runner.SelfImprovingLoopRunner`
     dispatches a live mutator LLM call in ``propose()`` and writes the real
     in-repo SoT (``wrapper-sections.json`` + ``mutations.jsonl``) in
     ``apply_proposal()``. Neither is appropriate for a no-PAYG smoke that must
@@ -2091,7 +2091,7 @@ class _OfflineSmokeRunner:
         self.applied: list[Proposal] = []
 
     def propose(self) -> Proposal:
-        from core.self_improving.loop.runner import Mutation, Proposal
+        from core.self_improving.loop.mutate.runner import Mutation, Proposal
 
         mutation = Mutation(
             target_section="campaign_dry_run_smoke",

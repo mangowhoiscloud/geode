@@ -33,7 +33,7 @@ from typing import Any
 from unittest.mock import patch
 
 import pytest
-from core.self_improving.loop.runner import Mutation, SelfImprovingLoopRunner
+from core.self_improving.loop.mutate.runner import Mutation, SelfImprovingLoopRunner
 
 
 def _make_runner(tmp_path: Path) -> SelfImprovingLoopRunner:
@@ -83,7 +83,7 @@ def test_audit_subprocess_returncode_zero_does_not_rollback(tmp_path: Path) -> N
 
     with (
         patch(
-            "core.self_improving.loop.runner._run_autoresearch_subprocess",
+            "core.self_improving.loop.mutate.runner._run_autoresearch_subprocess",
             fake_subprocess,
         ),
         patch.object(
@@ -117,7 +117,7 @@ def test_audit_subprocess_nonzero_returncode_triggers_rollback(tmp_path: Path) -
 
     with (
         patch(
-            "core.self_improving.loop.runner._run_autoresearch_subprocess",
+            "core.self_improving.loop.mutate.runner._run_autoresearch_subprocess",
             fake_subprocess,
         ),
         patch.object(
@@ -157,7 +157,7 @@ def test_audit_subprocess_exception_triggers_rollback(tmp_path: Path) -> None:
 
     with (
         patch(
-            "core.self_improving.loop.runner._run_autoresearch_subprocess",
+            "core.self_improving.loop.mutate.runner._run_autoresearch_subprocess",
             fake_subprocess,
         ),
         patch.object(
@@ -194,7 +194,7 @@ def test_rollback_skipped_when_original_sections_not_forwarded(tmp_path: Path) -
 
     with (
         patch(
-            "core.self_improving.loop.runner._run_autoresearch_subprocess",
+            "core.self_improving.loop.mutate.runner._run_autoresearch_subprocess",
             fake_subprocess,
         ),
         patch.object(
@@ -227,7 +227,7 @@ def test_rollback_skipped_when_mutation_is_none(tmp_path: Path) -> None:
 
     with (
         patch(
-            "core.self_improving.loop.runner._run_autoresearch_subprocess",
+            "core.self_improving.loop.mutate.runner._run_autoresearch_subprocess",
             fake_subprocess,
         ),
         patch.object(
@@ -285,7 +285,7 @@ def test_apply_proposal_forwards_original_sections_and_rolls_back_on_nonzero(
     tests above patch ``_rollback_sot`` so they don't prove the
     actual restoration. This test patches the *writers* instead so
     the rollback path's actual SoT write is observed."""
-    from core.self_improving.loop.runner import Proposal
+    from core.self_improving.loop.mutate.runner import Proposal
 
     runner = _make_runner(tmp_path)
     mutation = _make_mutation()
@@ -314,13 +314,13 @@ def test_apply_proposal_forwards_original_sections_and_rolls_back_on_nonzero(
         patch("core.self_improving.train.load_wrapper_prompt_sections", fake_load_wrapper),
         patch("core.self_improving.train.write_wrapper_prompt_sections", fake_write_wrapper),
         patch(
-            "core.self_improving.loop.runner._run_autoresearch_subprocess",
+            "core.self_improving.loop.mutate.runner._run_autoresearch_subprocess",
             failing_subprocess,
         ),
         # Skip the git commit step (commit_enabled=False already, but
         # be explicit about not invoking git in test).
         patch(
-            "core.self_improving.loop.runner._git_commit_audit_log",
+            "core.self_improving.loop.mutate.runner._git_commit_audit_log",
             lambda *a, **kw: None,
         ),
     ):
@@ -352,7 +352,7 @@ def test_rollback_triggers_across_failure_returncodes(tmp_path: Path, returncode
 
     with (
         patch(
-            "core.self_improving.loop.runner._run_autoresearch_subprocess",
+            "core.self_improving.loop.mutate.runner._run_autoresearch_subprocess",
             fake_subprocess,
         ),
         patch.object(

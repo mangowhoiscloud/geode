@@ -21,7 +21,7 @@ Pins (matching the E4 deliverables + the operator's flagged knobs):
 from __future__ import annotations
 
 import pytest
-from core.self_improving.loop import statistical_power as sp
+from core.self_improving.loop.observe import statistical_power as sp
 
 # --- deliverable 1: variance decomposition (within vs between) ----------------
 

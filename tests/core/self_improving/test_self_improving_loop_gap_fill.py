@@ -4,7 +4,7 @@ Pre-PR-1 the self-improving loop had five hardcoded selection points
 that fell outside the paperclip-style abstraction every other GEODE
 component already used:
 
-  G-A  core/self_improving/loop/runner.py    — anthropic.Anthropic()
+  G-A  core/self_improving/loop/mutate/runner.py    — anthropic.Anthropic()
                                                 + model="claude-opus-4-7"
   G-B  core/self_improving/train.py                 — TARGET_MODEL/JUDGE_MODEL
                                                 module constants (now
@@ -75,7 +75,7 @@ def test_runner_default_llm_call_routes_through_call_with_failover() -> None:
     """Anti-deception — the runner must not instantiate the anthropic SDK
     directly; it must dispatch through the router so the credential /
     provider rotator applies."""
-    from core.self_improving.loop import runner
+    from core.self_improving.loop.mutate import runner
 
     src = inspect.getsource(runner._default_llm_call)
     # Strip docstring (between first triple-quote pair) so we only grep
@@ -104,7 +104,7 @@ def test_runner_default_llm_call_import_resolves() -> None:
     default path would have crashed at import time. Pin the contract:
     every symbol the runner imports must resolve."""
     from core.llm.router import call_with_failover  # noqa: F401
-    from core.self_improving.loop.runner import _default_llm_call
+    from core.self_improving.loop.mutate.runner import _default_llm_call
 
     assert callable(_default_llm_call)
 
@@ -115,7 +115,7 @@ def test_runner_default_llm_call_consumes_source() -> None:
     was removed in A1 (was logged only, never injected into the LLM
     prompt — silent knob). The dispatch telemetry log keeps the
     source for downstream observers."""
-    from core.self_improving.loop import runner
+    from core.self_improving.loop.mutate import runner
 
     src = inspect.getsource(runner._default_llm_call)
     assert "cfg.autoresearch.mutator.source" in src, (
@@ -140,7 +140,7 @@ def test_mutator_default_model_inherits_settings() -> None:
     operator's ``/model`` choice flows through automatically."""
     import inspect as _inspect
 
-    from core.self_improving.loop import runner
+    from core.self_improving.loop.mutate import runner
 
     src = _inspect.getsource(runner._default_llm_call)
     # Inherit path: when cfg.autoresearch.mutator.default_model is None, use Settings.model
@@ -155,7 +155,7 @@ def test_runner_default_llm_call_guards_empty_text() -> None:
     blocks was silently returning an empty string and letting
     ``parse_mutation`` raise a confusing JSON error. Pin the explicit
     guard."""
-    from core.self_improving.loop import runner
+    from core.self_improving.loop.mutate import runner
 
     src = inspect.getsource(runner._default_llm_call)
     assert "returned empty text" in src, (
@@ -174,7 +174,7 @@ def test_config_toml_maps_learning_extract_model() -> None:
 
 
 def test_runner_reads_default_model_from_config() -> None:
-    from core.self_improving.loop import runner
+    from core.self_improving.loop.mutate import runner
 
     src = inspect.getsource(runner._default_llm_call)
     assert "load_self_improving_loop_config" in src

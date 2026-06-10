@@ -123,7 +123,7 @@ class TestSessionTranscript:
         import json
 
         from core.observability.run_dir import run_dir_scope
-        from core.self_improving.loop.run_transcript import (
+        from core.self_improving.loop.observe.run_transcript import (
             RunTranscript,
             run_transcript_scope,
         )
