@@ -508,7 +508,7 @@
   },
   {
     "name": "web_fetch",
-    "description": "Fetches text content from a URL (returns plain text, NOT a visual browser). Use when the user provides a URL and wants to read its content. To visually open a URL in a browser, use playwright MCP (browser_navigate) instead. To search the web, use general_web_search instead.",
+    "description": "Fetches text content from a URL (returns plain text, NOT a visual browser). Use when the user provides a URL and wants to read its content. To visually open a URL in a browser, use playwright MCP (browser_navigate) instead. To search the web, use general_web_search instead. For documentation sites, fetch the site's /llms.txt first when available - a curated LLM-readable index of all docs pages (llmstxt.org convention); then fetch only the relevant linked pages. llms-full.txt, when present, holds the entire docs in one file (large).",
     "category": "external",
     "cost_tier": "cheap",
     "input_schema": {

@@ -156,12 +156,22 @@ function parseSitemap() {
   const pages = [];
   const lines = src.split("\n");
   let currentSection = null;
+  let pendingSectionTitle = null;
   for (const line of lines) {
-    const sectMatch = line.match(/title:\s*"([^"]+)",\s*titleKo:\s*"([^"]+)"/);
-    if (sectMatch && !line.includes("slug:")) {
-      // Heuristic: section header has title + titleKo on same line without slug.
-      currentSection = { title: sectMatch[1], titleKo: sectMatch[2] };
-      continue;
+    // Section header: post-redesign sitemap puts title / titleKo on their own
+    // lines inside the section object (pages carry slug on the same line).
+    if (!line.includes("slug:")) {
+      const titleOnly = line.match(/^\s*title:\s*"([^"]+)",\s*$/);
+      if (titleOnly) {
+        pendingSectionTitle = titleOnly[1];
+        continue;
+      }
+      const titleKoOnly = line.match(/^\s*titleKo:\s*"([^"]+)",\s*$/);
+      if (titleKoOnly && pendingSectionTitle) {
+        currentSection = { title: pendingSectionTitle, titleKo: titleKoOnly[1] };
+        pendingSectionTitle = null;
+        continue;
+      }
     }
     // Page entry. Inline object with slug.
     const pm = line.match(/{\s*slug:\s*"([^"]*)"/);
@@ -184,11 +194,13 @@ function parseSitemap() {
 }
 
 /**
- * llms.txt — flat LLM-friendly index of every public page.
+ * llms.txt — spec-conformant (llmstxt.org) index of every public page.
  *
- * Pattern adopted from Hermes Agent (NousResearch). Plain text, one line per
- * page, structured: title (slug) URL — summary. LLMs can grep this without
- * parsing HTML.
+ * Shape: H1 name → blockquote summary → detail line → one H2 file-list
+ * section per docs section, each item `- [name](url): notes` → `## Optional`
+ * for the bulk/auxiliary links agents can skip on a short context budget.
+ * Consumed by LLM agents that fetch /llms.txt before exploring the site
+ * (the convention GEODE's own router prompt follows for external docs).
  */
 function writeLlmsTxt(pages, version) {
   const base = "https://mangowhoiscloud.github.io/geode";
@@ -197,46 +209,56 @@ function writeLlmsTxt(pages, version) {
   const lines = [];
   lines.push("# GEODE");
   lines.push("");
-  lines.push(`GEODE v${version}. A self-evolving autonomous execution agent.`);
+  lines.push(
+    "> GEODE is a self-evolving autonomous execution agent: an inner agentic loop runs tasks" +
+      " (research, analysis, automation, scheduling) and an outer self-improving loop" +
+      " (Petri audit -> fitness gate) tunes the system that runs them.",
+  );
   lines.push("");
-  lines.push(`Last sync: ${today}`);
+  lines.push(`Version v${version}. Last sync ${today}. Every link below is a rendered docs page.`);
   lines.push("");
-  lines.push("## Top-level pages");
+  lines.push("## Start here");
   lines.push("");
-  lines.push(`- Portfolio  ${base}/portfolio`);
-  lines.push(`- Docs       ${base}/docs`);
-  lines.push(`- About      ${base}/about`);
-  lines.push(`- Source     https://github.com/mangowhoiscloud/geode`);
-  lines.push("");
-  lines.push("## Documentation");
-  lines.push("");
+  lines.push(`- [Docs](${base}/docs): documentation root, what GEODE is and where to go next`);
+  lines.push(`- [Portfolio](${base}/portfolio): capability overview with demos`);
+  lines.push(`- [About](${base}/about): project background`);
+  lines.push(`- [Source](https://github.com/mangowhoiscloud/geode): GitHub repository`);
 
   let currentSection = null;
   for (const p of pages) {
     if (p.section && p.section.title !== currentSection) {
       currentSection = p.section.title;
       lines.push("");
-      lines.push(`### ${p.section.title} (${p.section.titleKo})`);
+      lines.push(`## ${p.section.title}`);
       lines.push("");
     }
     const url = p.slug ? `${base}/docs/${p.slug}` : `${base}/docs`;
-    const title = p.title || "(index)";
+    const title = p.title || "Docs index";
     const summary = p.summary || "";
-    lines.push(`- ${title}  ${url}${summary ? "  — " + summary : ""}`);
+    lines.push(`- [${title}](${url})${summary ? ": " + summary : ""}`);
   }
   lines.push("");
-  lines.push("## Authoritative sources");
+  lines.push("## Optional");
   lines.push("");
-  lines.push(`- CHANGELOG  https://github.com/mangowhoiscloud/geode/blob/main/CHANGELOG.md`);
-  lines.push(`- CLAUDE.md  https://github.com/mangowhoiscloud/geode/blob/main/CLAUDE.md`);
-  lines.push(`- AGENTS.md  https://github.com/mangowhoiscloud/geode/blob/main/AGENTS.md`);
-  lines.push(`- llms-full  ${base}/llms-full.txt`);
+  lines.push(
+    `- [llms-full.txt](${base}/llms-full.txt): extended index with bilingual per-page summaries`,
+  );
+  lines.push(
+    `- [CHANGELOG](https://github.com/mangowhoiscloud/geode/blob/main/CHANGELOG.md): full release history`,
+  );
+  lines.push(
+    `- [CLAUDE.md](https://github.com/mangowhoiscloud/geode/blob/main/CLAUDE.md): development scaffold and quality gates`,
+  );
+  lines.push(
+    `- [AGENTS.md](https://github.com/mangowhoiscloud/geode/blob/main/AGENTS.md): agent-facing repo guide`,
+  );
 
   writeFileSync(LLMS_TXT_FILE, lines.join("\n") + "\n");
 }
 
 /**
- * llms-full.txt — the same index plus per-page summaries in both languages.
+ * llms-full.txt — extended index: per-page bilingual summaries (EN/KO).
+ * NOT full page bodies (docs pages are JSX-rendered, no markdown twins yet).
  * Reasonable plain-text scan target. Stays well under 1MB.
  */
 function writeLlmsFullTxt(pages, version) {

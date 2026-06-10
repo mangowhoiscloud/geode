@@ -45,6 +45,14 @@ functional change.
 
 ---
 
+## [0.99.156] - 2026-06-10
+
+### Added
+- **llms.txt-first docs research (PR-LLMS-TXT)** — GEODE's agentic loop now exploits the llms.txt convention when researching external documentation sites: a `Documentation-site research (llms.txt-first)` heuristic in the router agentic suffix (fetch `/llms.txt` index first, then only the relevant linked pages; `llms-full.txt` only for broad coverage; `general_web_search` fallback on 404) plus an advertising line on the `web_fetch` tool description. Instruction-level by frontier convergence (Claude Code WebFetch does not auto-probe; LangChain mcpdoc pairs an explicit tool with a prompt rule; Codex CLI uses AGENTS.md) — no silent fetch-tool probing. `AGENTIC_SUFFIX` hash re-pinned; guarded by `tests/test_llms_txt_discovery.py`.
+
+### Fixed
+- **Site llms.txt spec conformance + lost sections** — `site/scripts/sync-stats.mjs` now emits the llmstxt.org shape (H1 → blockquote summary → H2 link-list sections with `- [name](url): notes` → `## Optional`), replacing the plain-text line format; and the sitemap section parser is fixed for the post-redesign layout (title/titleKo on separate lines) — since PR-DOCS-REDESIGN (2026-05-29) every page had silently lost its section grouping in both llms.txt and llms-full.txt. Regenerated `site/public/llms{,-full}.txt`; deploy-time regeneration in pages.yml picks the new shape up on merge.
+
 ## [0.99.155] - 2026-06-10
 
 ### Added
