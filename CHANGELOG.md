@@ -45,6 +45,25 @@ functional change.
 
 ---
 
+## [0.99.173] - 2026-06-11
+
+### Changed
+- **Docs site re-skinned to the Axolotl Rose identity** (operator-selected
+  direction A). Palette extracted from the GEODE character (rose axolotl,
+  gold headlamp, aqua magnifier): cool near-black substrate (`#0B0A10`),
+  signature rose `#F49BC4` with Hermes-style low-opacity tint discipline on
+  every hairline/table header/active state, lamp gold `#FFD66B` for action,
+  aqua `#7FD8E8` for links/inline code. Petri-blue demoted to a scoped accent
+  (`--acc-si`, 04-self-improving section + petri-bundle bridge only).
+  Mechanics: token values swapped in `site/src/app/globals.css` (names kept,
+  55+ usages re-skin automatically), docs surface fully de-hardcoded
+  (docs.css, docs-shell.tsx, docs index/changelog/seeds pages, layout.tsx
+  body), unused legacy `--sea-*`/`--glow-*`/`--text-*` tokens deleted,
+  Diataxis chips remapped (tutorial=gold, how-to=aqua, reference=rose),
+  display headings tightened to -0.02em, `.rose-grid` dot texture added, and
+  the character (`geode-idle.png`) now sits beside the landing hero.
+  `site/DESIGN.md` §1/§2 rewritten as the palette SoT. Portfolio
+  `versions/v*` snapshots intentionally untouched (frozen archives).
 ## [0.99.172] - 2026-06-11
 
 ### Fixed

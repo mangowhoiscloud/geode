@@ -45,7 +45,7 @@ export default function Page() {
               13 PR 남음 (S2.5–S12 + S6.5-wire). 자세한 상태는 `project_session63_handoff` memory entry + cycle skill 의 trigger keywords.
             </p>
 
-            <p className="text-white/40 text-sm"><em>참조</em>: `plugins/seed_pipeline/`, `.claude/skills/seed-pipeline-cycle/`, Session 63 PR #1272–#1277.</p>
+            <p className="text-[var(--ink-3)] text-sm"><em>참조</em>: `plugins/seed_pipeline/`, `.claude/skills/seed-pipeline-cycle/`, Session 63 PR #1272–#1277.</p>
           </>
         }
         en={
@@ -81,7 +81,7 @@ export default function Page() {
               Thirteen PRs remain (S2.5 through S12 plus S6.5-wire). Status lives in the `project_session63_handoff` memory entry and the cycle skill trigger keywords.
             </p>
 
-            <p className="text-white/40 text-sm"><em>References</em>: `plugins/seed_pipeline/`, `.claude/skills/seed-pipeline-cycle/`, Session 63 PRs #1272-#1277.</p>
+            <p className="text-[var(--ink-3)] text-sm"><em>References</em>: `plugins/seed_pipeline/`, `.claude/skills/seed-pipeline-cycle/`, Session 63 PRs #1272-#1277.</p>
           </>
         }
       />

@@ -37,7 +37,7 @@ export default function Page() {
               <li>운영체제 구조와 1대1 대응이라는 점에서 4가 자연스러움.</li>
             </ul>
 
-            <p className="text-white/40 text-sm"><em>참조:</em> portfolio §2 Primitives Mapping, wiki/concepts/geode-architecture.md</p>
+            <p className="text-[var(--ink-3)] text-sm"><em>참조:</em> portfolio §2 Primitives Mapping, wiki/concepts/geode-architecture.md</p>
           </>
         }
         en={
@@ -65,7 +65,7 @@ export default function Page() {
               <li>Four matches the OS analogy 1:1, which is the natural decomposition.</li>
             </ul>
 
-            <p className="text-white/40 text-sm"><em>See:</em> portfolio §2 Primitives Mapping, wiki/concepts/geode-architecture.md.</p>
+            <p className="text-[var(--ink-3)] text-sm"><em>See:</em> portfolio §2 Primitives Mapping, wiki/concepts/geode-architecture.md.</p>
           </>
         }
       />

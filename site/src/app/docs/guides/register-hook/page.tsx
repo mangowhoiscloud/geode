@@ -104,7 +104,7 @@ print(hooks.list_hooks(HookEvent.TOOL_EXEC_FAILED))
 results = hooks.trigger(HookEvent.TOOL_EXEC_FAILED, {"tool_name": "web_fetch", "error": "timeout"})
 print([r.success for r in results])  # [True]`}</pre>
 
-            <p className="text-white/40 text-sm">
+            <p className="text-[var(--ink-3)] text-sm">
               <em>참조:</em>{" "}
               <a href="/geode/docs/harness/hooks">Hook system</a>,{" "}
               <a href="/geode/docs/architecture/agentic-loop">Agentic loop</a>.
@@ -205,7 +205,7 @@ print(hooks.list_hooks(HookEvent.TOOL_EXEC_FAILED))
 results = hooks.trigger(HookEvent.TOOL_EXEC_FAILED, {"tool_name": "web_fetch", "error": "timeout"})
 print([r.success for r in results])  # [True]`}</pre>
 
-            <p className="text-white/40 text-sm">
+            <p className="text-[var(--ink-3)] text-sm">
               <em>See:</em>{" "}
               <a href="/geode/docs/harness/hooks">Hook system</a>,{" "}
               <a href="/geode/docs/architecture/agentic-loop">Agentic loop</a>.

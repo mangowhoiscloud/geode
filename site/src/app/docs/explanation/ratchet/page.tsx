@@ -34,7 +34,7 @@ export default function Page() {
             <h2>왜 두 layer 모두 필요한가</h2>
             <p>출력 측 ratchet (프롬프트 해시)만 있으면 빌드 라인 측 회귀를 막을 수 없습니다. 빌드 측 ratchet (CI)만 있으면 LLM의 silent 회귀 (같은 코드 + 다른 프롬프트)를 막을 수 없습니다. 둘이 동시에 있어야 자기일치가 보장됩니다.</p>
 
-            <p className="text-white/40 text-sm"><em>참조:</em> skills/karpathy-patterns, wiki/concepts/geode-prompt-hashing.md</p>
+            <p className="text-[var(--ink-3)] text-sm"><em>참조:</em> skills/karpathy-patterns, wiki/concepts/geode-prompt-hashing.md</p>
           </>
         }
         en={
@@ -59,7 +59,7 @@ export default function Page() {
             <h2>Why both layers are needed</h2>
             <p>Output-side ratchet alone (prompt hash) cannot catch build-line regressions. Build-side ratchet alone (CI) cannot catch silent LLM regressions (same code, different prompt). Both together guarantee self-consistency.</p>
 
-            <p className="text-white/40 text-sm"><em>See:</em> skills/karpathy-patterns, wiki/concepts/geode-prompt-hashing.md.</p>
+            <p className="text-[var(--ink-3)] text-sm"><em>See:</em> skills/karpathy-patterns, wiki/concepts/geode-prompt-hashing.md.</p>
           </>
         }
       />

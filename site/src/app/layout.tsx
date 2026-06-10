@@ -39,7 +39,7 @@ export default function RootLayout({
   return (
     <html lang="ko">
       <body
-        className={`${inter.variable} ${outfit.variable} ${firaCode.variable} antialiased bg-[#0B1628] text-[#F0F0FF]`}
+        className={`${inter.variable} ${outfit.variable} ${firaCode.variable} antialiased bg-[var(--paper)] text-[var(--ink)]`}
       >
         {children}
       </body>

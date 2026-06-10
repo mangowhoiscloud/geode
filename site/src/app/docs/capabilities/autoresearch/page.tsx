@@ -45,7 +45,7 @@ cat state/autoresearch/results.tsv | tail -10`}</pre>
               real-mode generation 0 baseline 은 Anthropic credit 잔액 의존이며, 현재 BLOCKED. mock-mode 는 항상 동작.
             </p>
 
-            <p className="text-white/40 text-sm"><em>참조</em>: `core/self_improving/program.md`, `state/autoresearch/`, `project_autoresearch_outer_loop` memory.</p>
+            <p className="text-[var(--ink-3)] text-sm"><em>참조</em>: `core/self_improving/program.md`, `state/autoresearch/`, `project_autoresearch_outer_loop` memory.</p>
           </>
         }
         en={
@@ -81,7 +81,7 @@ cat state/autoresearch/results.tsv | tail -10`}</pre>
               The real-mode gen-0 baseline depends on Anthropic credit balance, currently BLOCKED. Mock mode always works.
             </p>
 
-            <p className="text-white/40 text-sm"><em>References</em>: `core/self_improving/program.md`, `state/autoresearch/`, `project_autoresearch_outer_loop` memory.</p>
+            <p className="text-[var(--ink-3)] text-sm"><em>References</em>: `core/self_improving/program.md`, `state/autoresearch/`, `project_autoresearch_outer_loop` memory.</p>
           </>
         }
       />

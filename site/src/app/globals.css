@@ -12,71 +12,58 @@
 /* Display font for headings — kept; new pages override at the section level */
 h1, h2 {
   font-family: var(--font-display), var(--font-sans), system-ui, sans-serif;
+  letter-spacing: -0.02em;
 }
 
 :root {
-  /* GEODE Editorial — geode mineral palette
-     Identity: petri-blue (artifact accent) + citrine (line accent),
-     the two minerals most often found inside an actual geode cavity.
-     Deliberately distinct from Anthropic terracotta and from the
-     cyan/pink/indigo/gold/green/purple/coral palette already in use
-     by the DAG SVGs of inner sections. */
+  /* GEODE Axolotl Rose — palette drawn from the GEODE character
+     (site/public/images/geode-*.png): a rose axolotl explorer with a
+     gold headlamp and an aqua magnifier lens. One signature accent
+     (rose) carried as low-opacity tints across hairlines and surfaces;
+     gold for action, aqua for information. The substrate is a cool
+     near-black with a violet undertone, never brown, never navy. */
 
-  --paper:        #181816;   /* warm dark stone surface */
-  --paper-2:      #23211F;   /* elevated card, more visible than before */
-  --paper-deep:   #0E0E0C;   /* deepest code block */
+  --paper:        #0B0A10;   /* app background, cool near-black */
+  --paper-2:      #14121B;   /* elevated card, sidebar, hover surface */
+  --paper-deep:   #06050A;   /* inset code block */
 
-  --ink:          #EDE7DA;   /* primary text — bumped for legibility */
-  --ink-1:        #DDD3BE;   /* headings */
-  --ink-2:        #B5AC97;   /* body — brighter so prose does not fade */
-  --ink-3:        #807665;   /* captions, metadata */
+  --ink:          #F2EEF5;   /* primary text */
+  --ink-1:        #E5DFEC;   /* headings */
+  --ink-2:        #ABA4BC;   /* body secondary */
+  --ink-3:        #6E6880;   /* captions, metadata */
 
-  --rule:         #3A342D;   /* hairline, slightly more visible */
-  --rule-soft:    #2A2520;
+  --rule:         rgba(244, 155, 196, 0.12);  /* rose-tinted hairline */
+  --rule-soft:    rgba(244, 155, 196, 0.06);  /* softer divider */
 
-  --acc-artifact: #4D9BFF;   /* PETRI-BLUE — primary accent. The self-improving hub's signature (#0d6efd, Bootstrap blue) lightened for AA on the dark substrate. OS / artifact / runtime / the live system. (PR-PALETTE-REGROUND 2026-05-30: re-grounded from amethyst #A573E8 to unify the site with the hub + petri-bundle identity.) */
-  --acc-line:     #D5B27A;   /* CITRINE — secondary. scaffold / line / process / CI. Warm complement to the petri-blue primary. */
-  --acc-soft:     #7FB5FF;   /* petri-blue hover */
-  --acc-si:       #4D9BFF;   /* SELF-IMPROVING signature — now UNIFIED with the primary accent: the whole site carries the hub's petri-blue identity, so the docs Self-Improving section no longer reads as a separate hue. */
+  --acc-artifact: #F49BC4;   /* AXOLOTL ROSE — signature accent. Identity, logo, active nav, selection. The character's body color. */
+  --acc-line:     #FFD66B;   /* LAMP GOLD — action accent. CTA, emphasis, the explorer's headlamp. */
+  --acc-soft:     #F7B3D2;   /* rose hover, elevated state */
+  --acc-aqua:     #7FD8E8;   /* AQUA — information accent. Links, inline code, the magnifier lens. */
+  --acc-si:       #4D9BFF;   /* PETRI-BLUE — scoped to the 04 self-improving docs section and the petri-bundle bridge only (the vendored hub viewer keeps its Bootstrap-blue identity). Not for general use. */
   --acc-si-soft:  #7FB5FF;   /* self-improving hover */
 
-  --code-bg:      #0E0E0C;
-  --code-text:    #DDD3BE;
-  --code-string:  #D5B27A;   /* citrine for strings, kindred to line accent */
-
-  /* Legacy Deep Sea palette — retained for inner sections not yet migrated.
-     New work targets the GEODE Editorial tokens above. */
-  --sea-abyss: #040810;
-  --sea-deep: #0B1628;
-  --sea-mid: #0F1F3A;
-  --sea-upper: #122448;
-  --sea-surface: #142D52;
-
-  --glow-indigo: #818CF8;
-  --glow-teal: #4ECDC4;
-  --glow-pink: #F4B8C8;
-  --glow-gold: #F5C542;
-  --glow-green: #34D399;
-  --glow-purple: #C084FC;
-  --glow-coral: #E87080;
-  --glow-blue: #60A5FA;
-
-  --text-primary: #F0F0FF;
-  --text-secondary: #8B9CC0;
-  --text-muted: #5A6A8A;
+  --code-bg:      #06050A;
+  --code-text:    #E5DFEC;
+  --code-string:  #FFD66B;   /* lamp gold for string literals */
 }
 
 /* Selection */
 ::selection {
-  background: rgba(129, 140, 248, 0.3);
-  color: #F0F0FF;
+  background: rgba(244, 155, 196, 0.30);
+  color: #F2EEF5;
 }
 
 /* Scrollbar */
 ::-webkit-scrollbar { width: 6px; }
 ::-webkit-scrollbar-track { background: transparent; }
-::-webkit-scrollbar-thumb { background: rgba(129, 140, 248, 0.15); border-radius: 3px; }
-::-webkit-scrollbar-thumb:hover { background: rgba(129, 140, 248, 0.3); }
+::-webkit-scrollbar-thumb { background: rgba(244, 155, 196, 0.15); border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: rgba(244, 155, 196, 0.30); }
+
+/* Rose dot grid — barely-there texture for hero/landing surfaces */
+.rose-grid {
+  background-image: radial-gradient(rgba(244, 155, 196, 0.05) 1px, transparent 1px);
+  background-size: 28px 28px;
+}
 
 /* Smooth scroll */
 html { scroll-behavior: smooth; }

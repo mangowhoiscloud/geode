@@ -40,7 +40,7 @@ export default function Page() {
               BiasBuster 의 anchoring 차단은 Clean Context anchoring prevention 과 연계됩니다. 각 evaluator 는 직전 단계의 verdict 를 직접 보지 못하고, evidence pool 만 받습니다. 자세한 패턴은 `.claude/skills/geode-analysis`.
             </p>
 
-            <p className="text-white/40 text-sm"><em>참조</em>: `core/verification/cross_llm.py`, `core/verification/stats.py`, `.claude/skills/geode-verification`.</p>
+            <p className="text-[var(--ink-3)] text-sm"><em>참조</em>: `core/verification/cross_llm.py`, `core/verification/stats.py`, `.claude/skills/geode-verification`.</p>
           </>
         }
         en={
@@ -71,7 +71,7 @@ export default function Page() {
               The anchoring branch couples directly to Clean Context anchoring prevention. Each evaluator sees the evidence pool but not the previous step's verdict. The pattern is documented in `.claude/skills/geode-analysis`.
             </p>
 
-            <p className="text-white/40 text-sm"><em>References</em>: `core/verification/cross_llm.py`, `core/verification/stats.py`, `.claude/skills/geode-verification`.</p>
+            <p className="text-[var(--ink-3)] text-sm"><em>References</em>: `core/verification/cross_llm.py`, `core/verification/stats.py`, `.claude/skills/geode-verification`.</p>
           </>
         }
       />

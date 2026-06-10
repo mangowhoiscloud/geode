@@ -69,7 +69,7 @@ export default function Page() {
                 <tr><td><strong>meta</strong></td><td>refusal_after_compliance, partial_compliance, 등</td></tr>
               </tbody>
             </table>
-            <p className="text-white/40 text-sm">
+            <p className="text-[var(--ink-3)] text-sm">
               <em>주의:</em> 카테고리 라벨은 inspect_petri 버전마다 달라집니다. 위 표는 v3 기준이며,
               실제 분포는 <code>python -c &quot;import inspect_petri._seeds._markdown as m; print(list(m.read_seed_directory()))&quot;</code>로 확인.
             </p>

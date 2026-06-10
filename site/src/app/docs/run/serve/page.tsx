@@ -44,7 +44,7 @@ geode serve &`}</pre>
 geode /model      # 현재 활성 모델
 geode /clean      # 캐시 비우기`}</pre>
 
-            <p className="text-white/40 text-sm"><em>참조:</em> <a href="/geode/docs/harness/lifecycle">Lifecycle reference</a>, wiki/concepts/geode-lifecycle-commands.md</p>
+            <p className="text-[var(--ink-3)] text-sm"><em>참조:</em> <a href="/geode/docs/harness/lifecycle">Lifecycle reference</a>, wiki/concepts/geode-lifecycle-commands.md</p>
           </>
         }
         en={
@@ -79,7 +79,7 @@ geode serve &`}</pre>
 geode /model      # current active model
 geode /clean      # clear caches`}</pre>
 
-            <p className="text-white/40 text-sm"><em>See:</em> <a href="/geode/docs/harness/lifecycle">Lifecycle reference</a>, wiki/concepts/geode-lifecycle-commands.md.</p>
+            <p className="text-[var(--ink-3)] text-sm"><em>See:</em> <a href="/geode/docs/harness/lifecycle">Lifecycle reference</a>, wiki/concepts/geode-lifecycle-commands.md.</p>
           </>
         }
       />

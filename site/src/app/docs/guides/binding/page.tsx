@@ -106,7 +106,7 @@ for b in m.list_bindings():
               참고하세요.
             </p>
 
-            <p className="text-white/40 text-sm">
+            <p className="text-[var(--ink-3)] text-sm">
               <em>참조:</em>{" "}
               <a href="/geode/docs/harness/serve-gateway">Serve gateway</a>,{" "}
               <a href="/geode/docs/run/messaging">Messaging</a>.
@@ -205,7 +205,7 @@ for b in m.list_bindings():
               page.
             </p>
 
-            <p className="text-white/40 text-sm">
+            <p className="text-[var(--ink-3)] text-sm">
               <em>See:</em>{" "}
               <a href="/geode/docs/harness/serve-gateway">Serve gateway</a>,{" "}
               <a href="/geode/docs/run/messaging">Messaging</a>.

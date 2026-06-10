@@ -196,7 +196,7 @@ function RacingTrack({
                 </circle>
               )}
               {/* Solid background circle — blocks agents passing behind */}
-              <circle cx={x} cy={NODE_Y} r={20} fill="#0B1628" />
+              <circle cx={x} cy={NODE_Y} r={20} fill="var(--paper)" />
               <circle
                 cx={x} cy={NODE_Y} r={18}
                 fill="#0A0F1A" stroke={s.color}

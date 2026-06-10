@@ -38,7 +38,7 @@ GEODE_LATEX_DEBUG=1 geode "...$x^2$..."`}</pre>
               `tests/test_ui_latex.py` + `tests/test_cli_latex_uiux.py` + `tests/test_interactive_loop_latex.py` 가 multi-line collapse, delimiter-less heuristic, path-context, digit-base 케이스를 지킵니다.
             </p>
 
-            <p className="text-white/40 text-sm"><em>참조</em>: `core/ui/latex.py`, CHANGELOG v0.95.1–v0.96.0, Session 60-61 handoff.</p>
+            <p className="text-[var(--ink-3)] text-sm"><em>참조</em>: `core/ui/latex.py`, CHANGELOG v0.95.1–v0.96.0, Session 60-61 handoff.</p>
           </>
         }
         en={
@@ -67,7 +67,7 @@ GEODE_LATEX_DEBUG=1 geode "...$x^2$..."`}</pre>
               `tests/test_ui_latex.py`, `tests/test_cli_latex_uiux.py`, and `tests/test_interactive_loop_latex.py` pin multi-line collapse, the delimiter-less heuristic, path context, and digit-base.
             </p>
 
-            <p className="text-white/40 text-sm"><em>References</em>: `core/ui/latex.py`, CHANGELOG v0.95.1-v0.96.0, Session 60-61 handoff.</p>
+            <p className="text-[var(--ink-3)] text-sm"><em>References</em>: `core/ui/latex.py`, CHANGELOG v0.95.1-v0.96.0, Session 60-61 handoff.</p>
           </>
         }
       />

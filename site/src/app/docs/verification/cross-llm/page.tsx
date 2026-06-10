@@ -39,7 +39,7 @@ export default function Page() {
               cross-LLM 은 호출 비용을 2 배로 만듭니다. 중요 의사결정 (Tier upgrade, downgrade) 에만 사용. 단순 score 산출에는 G1-G4 + BiasBuster 만으로 충분.
             </p>
 
-            <p className="text-white/40 text-sm"><em>참조</em>: `core/verification/cross_llm.py`, `.claude/skills/geode-verification`, `.claude/skills/codex-mcp-verify`.</p>
+            <p className="text-[var(--ink-3)] text-sm"><em>참조</em>: `core/verification/cross_llm.py`, `.claude/skills/geode-verification`, `.claude/skills/codex-mcp-verify`.</p>
           </>
         }
         en={
@@ -69,7 +69,7 @@ export default function Page() {
               Cross-LLM doubles call cost. Reserve it for material decisions (Tier upgrade or downgrade). Simple scoring is fine with G1-G4 + BiasBuster alone.
             </p>
 
-            <p className="text-white/40 text-sm"><em>References</em>: `core/verification/cross_llm.py`, `.claude/skills/geode-verification`, `.claude/skills/codex-mcp-verify`.</p>
+            <p className="text-[var(--ink-3)] text-sm"><em>References</em>: `core/verification/cross_llm.py`, `.claude/skills/geode-verification`, `.claude/skills/codex-mcp-verify`.</p>
           </>
         }
       />

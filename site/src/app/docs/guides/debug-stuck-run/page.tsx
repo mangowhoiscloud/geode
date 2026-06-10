@@ -112,7 +112,7 @@ print(d.check_stuck())   # released keys past timeout
             </p>
             <pre>{`tail -n 3 ~/.geode/runs/<session_key>.jsonl   # last events, expect pipeline_end ok`}</pre>
 
-            <p className="text-white/40 text-sm">
+            <p className="text-[var(--ink-3)] text-sm">
               <em>참조:</em>{" "}
               <a href="/geode/docs/ops/long-running">Long-running runs</a>,{" "}
               <a href="/geode/docs/verification/observability">Observability</a>.
@@ -216,7 +216,7 @@ print(d.check_stuck())   # released keys past timeout
             </p>
             <pre>{`tail -n 3 ~/.geode/runs/<session_key>.jsonl   # last events, expect pipeline_end ok`}</pre>
 
-            <p className="text-white/40 text-sm">
+            <p className="text-[var(--ink-3)] text-sm">
               <em>See:</em>{" "}
               <a href="/geode/docs/ops/long-running">Long-running runs</a>,{" "}
               <a href="/geode/docs/verification/observability">Observability</a>.
