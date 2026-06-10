@@ -16,8 +16,6 @@
 </p>
 
 <p align="center">
-  <a href="https://mangowhoiscloud.github.io/geode/">사이트</a>
-  ·
   <a href="https://mangowhoiscloud.github.io/geode/docs">문서</a>
   ·
   <a href="https://mangowhoiscloud.github.io/geode/self-improving/">Self-improving 허브</a>

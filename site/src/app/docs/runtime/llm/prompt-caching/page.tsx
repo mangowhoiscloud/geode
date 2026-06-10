@@ -1,282 +1,230 @@
 import { DocsShell, Bi } from "@/components/geode-docs/docs-shell";
 
-export const metadata = { title: "Prompt Caching — GEODE Docs" };
+export const metadata = { title: "Prompt caching — GEODE Docs" };
 
 export default function Page() {
   return (
     <DocsShell
       slug="runtime/llm/prompt-caching"
-      title="Prompt Caching"
+      title="Prompt caching"
       titleKo="프롬프트 캐싱"
-      summary="Anthropic ephemeral caching with a STATIC/DYNAMIC boundary, applied at two call sites: the agentic adapter and the router's non-agentic helpers."
-      summaryKo="STATIC/DYNAMIC 경계로 구분되는 Anthropic ephemeral 캐싱. agentic 어댑터와 router의 non-agentic 헬퍼, 두 호출 지점에 적용됩니다."
+      summary="The static/dynamic boundary, rolling message breakpoints, and the append-only system reminder that keeps the prefix cacheable."
+      summaryKo="static/dynamic 경계, 롤링 메시지 breakpoint, 그리고 prefix를 캐시 가능하게 유지하는 append 전용 system reminder를 다룹니다."
     >
       <Bi
         ko={
           <>
-            <h2>경계 마커</h2>
             <p>
-              <code>core/agent/system_prompt.py:35</code>에 정의되어 있습니다. v0.93부터 9개 prompt 파일의 16개 marker가 XML 래퍼로 전환됩니다.
-              경계 자체는 동일 sentinel 문자열이지만, marker가 노출되는 영역은 <code>&lt;dynamic_context&gt;</code> XML 안으로 캡슐화됩니다.
+              프롬프트 캐싱은 prefix 매치입니다. 요청 앞부분이 직전 호출과
+              바이트 단위로 같아야 적중합니다. GEODE의 캐싱 설계는 이 한
+              문장에서 다 나옵니다. 변하지 않는 것을 앞에, 변하는 것을 뒤에
+              두고, 턴마다 바뀌는 조각이 prefix를 다시 키잉하지 못하게
+              막습니다.
             </p>
-            <pre>{`PROMPT_CACHE_BOUNDARY = "__GEODE_PROMPT_CACHE_BOUNDARY__"
 
-# v0.93+ XML 래퍼 (system prompt 안에서)
-... STATIC 영역 ...
-__GEODE_PROMPT_CACHE_BOUNDARY__
-<dynamic_context>
-... DYNAMIC 영역 ...
-</dynamic_context>`}</pre>
+            <h2>static/dynamic 경계</h2>
             <p>
-              <code>build_system_prompt()</code>이 이 marker를 두 섹션 사이에 삽입합니다.
-              audit-mode는 dynamic 블록을 strip합니다 (<a href="/geode/docs/runtime/llm/system-prompt-modes">System Prompt Modes</a> 참조).
+              시스템 프롬프트는 <code>core/agent/system_prompt.py</code>의
+              <code>PROMPT_CACHE_BOUNDARY</code>
+              마커(<code>&lt;dynamic_context&gt;</code> 여는 태그)로 두 쪽이
+              납니다. 마커 앞은 턴 사이 불변(베이스 스캐폴드, 스타일 가이드,
+              옵트인 identity), 마커 뒤는 턴마다 변합니다(model card, 날짜,
+              메모리 레이어, 사용자 컨텍스트).
+            </p>
+            <p>
+              Anthropic 어댑터(<code>core/llm/providers/anthropic.py</code>)가
+              이 마커에서 시스템 문자열을 갈라 static 블록에
+              <code>{`cache_control: {"type": "ephemeral"}`}</code>을 붙입니다.
+              dynamic 쪽은 캐시 없이 나갑니다. static이 비어 있으면(audit
+              모드에서 레이어를 벗긴 경우) 빈 텍스트 블록에 cache_control을
+              붙이는 400 오류를 피해 dynamic 쪽을 단일 캐시 블록으로
+              승격합니다.
+            </p>
+
+            <h2>롤링 메시지 breakpoint</h2>
+            <p>
+              Anthropic은 요청당 cache_control breakpoint를 4개까지
+              허용합니다. 시스템 블록이 1-2개를 쓰고, 나머지는
+              <code>apply_messages_cache_control</code>이 대화 이력의 마지막
+              메시지들에 붙입니다. 몇 개를 붙일지(0-3)는 cache-policy
+              SoT(<code>core/llm/cache_policy.py</code>)가 정하고 기본값은
+              3입니다. breakpoint가 많을수록 긴 멀티턴 루프의 적중률이
+              오르지만, 캐시된 블록마다 적중 여부와 무관하게 쓰기 오버헤드가
+              붙습니다. 짧은 작업이라면 낮추는 쪽이 맞습니다.
+            </p>
+            <p>
+              비용 산식은 단가표 기준으로 cache write가 input의 1.25배, cache
+              read가 input의 0.1배입니다
+              (<code>core/llm/pricing_loader.py</code>).
+            </p>
+
+            <h2>system reminder는 append 전용</h2>
+            <p>
+              멀티턴 강화용 <code>&lt;system-reminder&gt;</code> 블록
+              (<code>core/agent/system_injection.py</code>)에는 캐시 계약이
+              걸려 있습니다. 이전 설계는 reminder를 <code>messages[0]</code>에
+              넣고 라운드마다 다시 썼습니다. 메시지는 시스템 블록 뒤에
+              렌더되므로 이력 prefix 전체가 매 라운드 다시 키잉되고, 롤링
+              breakpoint는 한 번도 적중하지 못했습니다. 현재 계약은
+              두 가지입니다.
             </p>
             <ul>
               <li>
-                <strong>STATIC</strong> (마커 이전). router 템플릿,{" "}
-                <code>GEODE.md</code> 의 아이덴티티. 턴 간 안정적.
+                <code>append_system_reminder</code>는 새 리스트를 반환합니다.
+                호출자의 이력 리스트는 그대로이므로 reminder가 저장된
+                대화 컨텍스트에 stale한 중간 prefix 바이트로 남지 않습니다.
               </li>
               <li>
-                <strong>DYNAMIC</strong> (마커 이후). 현재 날짜, 모델 카드,
-                프로젝트 메모리 (G2-G4), 사용자 컨텍스트. 매 턴 변경됨.
+                라운드 인덱스와 날짜 같은 턴별 변량은 마지막 안정 이력 블록
+                뒤에 붙습니다. 매 라운드 캐시에서 빠지는 것은 reminder
+                자신뿐입니다.
               </li>
             </ul>
-
-            <h2>어댑터의 분할 방식</h2>
             <p>
-              <code>core/llm/providers/anthropic.py:476-495</code>의 agentic
-              어댑터.
-            </p>
-            <pre>{`from core.agent.system_prompt import PROMPT_CACHE_BOUNDARY
-
-if PROMPT_CACHE_BOUNDARY in system:
-    static_part, dynamic_part = system.split(PROMPT_CACHE_BOUNDARY, 1)
-    sys_blocks = [
-        {"type": "text", "text": static_part.rstrip(),
-         "cache_control": {"type": "ephemeral"}},
-        {"type": "text", "text": dynamic_part.lstrip()},
-    ]
-else:
-    sys_blocks = [
-        {"type": "text", "text": system,
-         "cache_control": {"type": "ephemeral"}},
-    ]`}</pre>
-            <p>
-              STATIC 블록은 캐시 마커를 받지만 DYNAMIC 블록은 받지 않습니다.
-              Anthropic은 STATIC 프리픽스를 서버 측에서 캐싱하며, 5분 TTL 안의
-              후속 턴은 DYNAMIC 접미부와 새 user 메시지에 대해서만 과금됩니다.
+              가드 테스트는
+              <code>tests/core/agent/test_system_injection.py</code>의
+              TestCacheContract입니다.
             </p>
 
-            <h2>Non-agentic 호출 지점</h2>
-            <p>
-              <code>core/llm/router.py</code>의 네 호출 지점 (라인 481, 582, 749,
-              901)은 더 단순한 헬퍼 <code>system_with_cache(system)</code>를 써서
-              system prompt 전체를 단일 ephemeral 블록으로 감쌉니다. 이들은
-              STATIC/DYNAMIC 구조화 system prompt를 조립하지 않는 non-agentic LLM
-              호출 (단발 prompt, 평가 호출) 입니다.
-            </p>
-
-            <h2>캐시되는 것, 캐시되지 않는 것</h2>
+            <h2>실패 모드</h2>
             <table>
               <thead>
-                <tr><th>대상</th><th>캐시 여부</th></tr>
+                <tr><th>증상</th><th>원인</th><th>해법</th></tr>
               </thead>
               <tbody>
                 <tr>
-                  <td>Anthropic system prompt . STATIC 섹션</td>
-                  <td>Yes (ephemeral)</td>
+                  <td>cache_read가 늘 0</td>
+                  <td>prefix가 매 호출 변함. static 영역에 턴별 값이 새어 들어간 경우</td>
+                  <td>턴마다 변하는 값은 경계 마커 뒤로 옮깁니다.</td>
                 </tr>
                 <tr>
-                  <td>Anthropic system prompt . DYNAMIC 섹션</td>
-                  <td>No (매 턴 변경)</td>
+                  <td>짧은 작업의 비용 증가</td>
+                  <td>breakpoint 쓰기 오버헤드가 적중 이득을 초과</td>
+                  <td>cache-policy SoT에서 <code>messages_breakpoints</code>를 낮춥니다.</td>
                 </tr>
                 <tr>
-                  <td>Anthropic non-agentic system prompt (전체)</td>
-                  <td>Yes (단일 ephemeral 블록)</td>
-                </tr>
-                <tr>
-                  <td>Anthropic <code>messages</code> 배열</td>
-                  <td>Yes. 최근 3개 non-system 메시지 (PR #864, 헬퍼 <code>anthropic.py:175</code>, 호출 <code>:501</code>)</td>
-                </tr>
-                <tr>
-                  <td>OpenAI / Codex system prompt</td>
-                  <td>GEODE 측 명시 wiring 없음 (OpenAI가 서버 측에서 자동 캐싱)</td>
-                </tr>
-                <tr>
-                  <td>GLM system prompt</td>
-                  <td>프로바이더 관리</td>
+                  <td>400: empty text block에 cache_control</td>
+                  <td>빈 static에 breakpoint를 붙이려는 시도</td>
+                  <td>어댑터가 dynamic 승격으로 처리합니다. 직접 어댑터를 다룰 때만 해당합니다.</td>
                 </tr>
               </tbody>
             </table>
 
-            <h2>messages history 캐싱 (PR #864)</h2>
-            <p>
-              Anthropic은 요청당 최대 4개의 캐시 breakpoint를 허용합니다. 어댑터는{" "}
-              <code>messages.create</code> 직전에{" "}
-              <code>apply_messages_cache_control(messages)</code>를 적용해 최근 3개
-              non-system 메시지의 마지막 content 블록에{" "}
-              <code>cache_control: ephemeral</code>을 붙입니다. 위의 system 블록과
-              합치면 4개 슬롯을 모두 채워 롤링 히스토리가 캐시됩니다.
-            </p>
-            <pre>{`# core/llm/providers/anthropic.py:175 (helper) and :501 (call site)
-cached_messages = apply_messages_cache_control(messages)
-create_kwargs = {
-    "system": sys_blocks,
-    "messages": cached_messages,
-    ...
-}`}</pre>
-            <p>
-              헬퍼는 비-변형 (얕은 복사된 새 리스트 반환) 이며,{" "}
-              <code>str</code>과 <code>list[block]</code> content를 모두 처리하고
-              빈 리스트 content는 조용히 건너뜁니다. 19개 케이스가{" "}
-              <code>tests/test_anthropic_messages_cache.py</code>에서 검증됩니다.
-            </p>
-
-            <h2>캐시 무효화</h2>
-            <p>
-              캐시 키는 캐시된 블록의 바이트 단위 콘텐츠와 모델 ID입니다. STATIC
-              섹션의 어떤 변경 (예. 업데이트된 <code>GEODE.md</code> 아이덴티티,
-              새 도메인 예제 목록, router 템플릿 수정) 도 캐시를 무효화하며, 후속 턴이
-              다시 캐시에 적중하기 전에 한 번의 전체 요청 비용을 지불해야 합니다.
-            </p>
-            <p>
-              이것이 prompt drift 감지 (
-              <a href="/geode/docs/runtime/llm/prompt-hashing">Prompt Hashing</a>) 와
-              prompt 캐싱이 설계상 긴밀하게 결합된 이유입니다. 조용한 prompt 변경은
-              조용한 캐시 무효화로 이어지며, 해시 잠금장치는 그런 변경을 의식적인
-              단계로 강제합니다.
-            </p>
+            <h2>다음</h2>
+            <ul>
+              <li><a href="/geode/docs/runtime/llm/system-prompt-modes">시스템 프롬프트 모드</a>. static 영역에 무엇이 실리는지.</li>
+              <li><a href="/geode/docs/runtime/llm/prompt-hashing">프롬프트 해싱</a>. static 템플릿의 drift 가드.</li>
+              <li><a href="/geode/docs/ops/cost">비용 모니터링</a>. 캐시 적중이 보이는 곳.</li>
+            </ul>
           </>
         }
         en={
           <>
-            <h2>The boundary marker</h2>
             <p>
-              <code>core/agent/system_prompt.py:35</code> defines:
+              Prompt caching is a prefix match: the head of the request must
+              be byte-identical to the previous call to hit. All of
+              GEODE&apos;s caching design follows from that one sentence. Put
+              what does not change first, what changes last, and stop
+              per-turn fragments from re-keying the prefix.
             </p>
-            <pre>{`PROMPT_CACHE_BOUNDARY = "__GEODE_PROMPT_CACHE_BOUNDARY__"`}</pre>
+
+            <h2>The static/dynamic boundary</h2>
             <p>
-              <code>build_system_prompt()</code> inserts this marker between two
-              sections:
+              The system prompt splits at the
+              <code>PROMPT_CACHE_BOUNDARY</code> marker (the opening
+              <code>&lt;dynamic_context&gt;</code> tag) defined in
+              <code>core/agent/system_prompt.py</code>. Everything before the
+              marker is stable across turns (base scaffold, style guide,
+              opt-in identity); everything after changes per turn (model
+              card, date, memory layers, user context).
+            </p>
+            <p>
+              The Anthropic adapter
+              (<code>core/llm/providers/anthropic.py</code>) splits the
+              system string at the marker and attaches
+              <code>{`cache_control: {"type": "ephemeral"}`}</code> to the
+              static block; the dynamic side ships uncached. When the static
+              side is empty (audit mode with layers stripped), the dynamic
+              side is promoted to the single cacheable block to avoid the
+              400 for cache_control on an empty text block.
+            </p>
+
+            <h2>Rolling message breakpoints</h2>
+            <p>
+              Anthropic allows up to 4 cache_control breakpoints per request.
+              The system blocks spend 1-2; the rest go on the trailing
+              conversation messages via
+              <code>apply_messages_cache_control</code>. How many (0-3) comes
+              from the cache-policy SoT
+              (<code>core/llm/cache_policy.py</code>), default 3. More
+              breakpoints raise the hit rate on long multi-turn loops, but
+              each cached block carries a write overhead whether the call
+              hits or misses; for short tasks, fewer is the right call.
+            </p>
+            <p>
+              On the pricing table, a cache write costs 1.25 times input and
+              a cache read 0.1 times input
+              (<code>core/llm/pricing_loader.py</code>).
+            </p>
+
+            <h2>The system reminder is append-only</h2>
+            <p>
+              The multi-turn <code>&lt;system-reminder&gt;</code> block
+              (<code>core/agent/system_injection.py</code>) carries an
+              explicit cache contract. The previous design inserted the
+              reminder at <code>messages[0]</code> and rewrote it per round;
+              since messages render after the system blocks, that re-keyed
+              the entire history prefix every round and the rolling
+              breakpoints could never hit. The current contract:
             </p>
             <ul>
               <li>
-                <strong>STATIC</strong> (before the marker): router template,
-                identity from <code>GEODE.md</code>. Stable across turns.
+                <code>append_system_reminder</code> returns a new list. The
+                caller&apos;s history list is never modified, so the reminder
+                cannot persist into the stored conversation context as stale
+                mid-prefix bytes.
               </li>
               <li>
-                <strong>DYNAMIC</strong> (after the marker): current date, model
-                card, project memory (G2-G4), user context. Changes per turn.
+                Per-round variance (round index, date) lands after the last
+                stable history block. Only the reminder itself is uncached
+                each round.
               </li>
             </ul>
-
-            <h2>How the adapter splits</h2>
             <p>
-              <code>core/llm/providers/anthropic.py:476-495</code> in the agentic
-              adapter:
-            </p>
-            <pre>{`from core.agent.system_prompt import PROMPT_CACHE_BOUNDARY
-
-if PROMPT_CACHE_BOUNDARY in system:
-    static_part, dynamic_part = system.split(PROMPT_CACHE_BOUNDARY, 1)
-    sys_blocks = [
-        {"type": "text", "text": static_part.rstrip(),
-         "cache_control": {"type": "ephemeral"}},
-        {"type": "text", "text": dynamic_part.lstrip()},
-    ]
-else:
-    sys_blocks = [
-        {"type": "text", "text": system,
-         "cache_control": {"type": "ephemeral"}},
-    ]`}</pre>
-            <p>
-              The static block gets the cache marker; the dynamic block does not.
-              Anthropic then caches the static prefix server-side, and subsequent
-              turns within the 5-minute TTL pay only for the dynamic suffix and
-              the new user message.
+              The guard is TestCacheContract in
+              <code>tests/core/agent/test_system_injection.py</code>.
             </p>
 
-            <h2>Non-agentic call sites</h2>
-            <p>
-              Four call sites in <code>core/llm/router.py</code> (lines 481, 582,
-              749, 901) use the simpler helper{" "}
-              <code>system_with_cache(system)</code> that wraps the entire system
-              prompt as a single ephemeral block. These are the {" "}
-              non-agentic LLM calls (single-shot prompts, evaluation calls) that
-              do not assemble a STATIC/DYNAMIC structured system prompt.
-            </p>
-
-            <h2>What is cached, what is not</h2>
+            <h2>Failure modes</h2>
             <table>
               <thead>
-                <tr><th>Surface</th><th>Cached</th></tr>
+                <tr><th>Symptom</th><th>Cause</th><th>Fix</th></tr>
               </thead>
               <tbody>
                 <tr>
-                  <td>Anthropic system prompt — STATIC section</td>
-                  <td>Yes (ephemeral)</td>
+                  <td>cache_read stays at zero</td>
+                  <td>The prefix changes per call: a per-turn value leaked into the static region</td>
+                  <td>Move anything that varies per turn behind the boundary marker.</td>
                 </tr>
                 <tr>
-                  <td>Anthropic system prompt — DYNAMIC section</td>
-                  <td>No (changes per turn)</td>
+                  <td>Costs go up on short tasks</td>
+                  <td>Breakpoint write overhead exceeds the hit savings</td>
+                  <td>Lower <code>messages_breakpoints</code> in the cache-policy SoT.</td>
                 </tr>
                 <tr>
-                  <td>Anthropic non-agentic system prompt (full)</td>
-                  <td>Yes (single ephemeral block)</td>
-                </tr>
-                <tr>
-                  <td>Anthropic <code>messages</code> array</td>
-                  <td>Yes — last 3 non-system messages (PR #864, helper at <code>anthropic.py:175</code>, call at <code>:501</code>)</td>
-                </tr>
-                <tr>
-                  <td>OpenAI / Codex system prompt</td>
-                  <td>No explicit GEODE wiring (OpenAI auto-caches server-side)</td>
-                </tr>
-                <tr>
-                  <td>GLM system prompt</td>
-                  <td>Provider-managed</td>
+                  <td>400: cache_control on an empty text block</td>
+                  <td>Attaching a breakpoint to an empty static block</td>
+                  <td>The adapter handles this via dynamic promotion; relevant only when driving the adapter directly.</td>
                 </tr>
               </tbody>
             </table>
 
-            <h2>Messages history caching (PR #864)</h2>
-            <p>
-              Anthropic allows up to four cache breakpoints per request. The
-              adapter applies <code>apply_messages_cache_control(messages)</code>{" "}
-              right before <code>messages.create</code>, attaching{" "}
-              <code>cache_control: ephemeral</code> to the last three non-system
-              messages&apos; final content block. Combined with the system block
-              above, that fills all four slots and caches the rolling history.
-            </p>
-            <pre>{`# core/llm/providers/anthropic.py:175 (helper) and :501 (call site)
-cached_messages = apply_messages_cache_control(messages)
-create_kwargs = {
-    "system": sys_blocks,
-    "messages": cached_messages,
-    ...
-}`}</pre>
-            <p>
-              Helper is non-mutating (returns a new list with shallow copies),
-              handles <code>str</code> and <code>list[block]</code> content, and
-              skips empty-list content silently. Tested in{" "}
-              <code>tests/test_anthropic_messages_cache.py</code> (19 cases).
-            </p>
-
-            <h2>Cache invalidation</h2>
-            <p>
-              The cache key is the byte-for-byte content of the cached block plus
-              the model ID. Any change to the static section — e.g. an updated{" "}
-              <code>GEODE.md</code> identity, a router
-              template revision — invalidates the cache and pays one full request
-              before subsequent turns hit again.
-            </p>
-            <p>
-              This is why prompt drift detection (
-              <a href="/geode/docs/runtime/llm/prompt-hashing">Prompt Hashing</a>)
-              and prompt caching are tightly coupled in the design: a silent prompt
-              change would silently invalidate the cache, and the hash ratchet
-              forces such changes to be conscious.
-            </p>
+            <h2>Next</h2>
+            <ul>
+              <li><a href="/geode/docs/runtime/llm/system-prompt-modes">System prompt modes</a>. What rides in the static region.</li>
+              <li><a href="/geode/docs/runtime/llm/prompt-hashing">Prompt hashing</a>. The drift guard on the static templates.</li>
+              <li><a href="/geode/docs/ops/cost">Cost monitoring</a>. Where cache hits become visible.</li>
+            </ul>
           </>
         }
       />
