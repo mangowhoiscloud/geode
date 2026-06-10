@@ -67,6 +67,12 @@ from collections.abc import Iterable
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
+# PR-CLEANUP-D2 — shared CLI-provider serialisation (single SoT;
+# re-exported so existing call sites and tests stay stable).
+from plugins.petri_audit.prompt_serialisation import (
+    serialise_messages_to_prompt as serialise_messages_to_prompt,
+)
+
 log = logging.getLogger(__name__)
 
 __all__ = [
@@ -230,38 +236,6 @@ def build_codex_cli_argv(
 # ---------------------------------------------------------------------------
 # Message serialisation
 # ---------------------------------------------------------------------------
-
-
-_ROLE_HEADERS = {
-    "system": "<<<SYSTEM>>>",
-    "user": "<<<USER>>>",
-    "assistant": "<<<ASSISTANT>>>",
-    "tool": "<<<TOOL_RESULT>>>",
-}
-
-
-def serialise_messages_to_prompt(messages: list[Any]) -> str:
-    """Flatten ``inspect_ai.ChatMessage[]`` into a single stdin prompt.
-
-    Identical strategy to CSA-1's claude provider — role-tagged
-    sentinels preserve multi-turn context in a single prompt blob.
-    codex exec accepts arbitrary prompt text via stdin.
-    """
-    parts: list[str] = []
-    for msg in messages:
-        role = getattr(msg, "role", "user")
-        header = _ROLE_HEADERS.get(role, f"<<<{role.upper()}>>>")
-        content = getattr(msg, "content", "")
-        text_chunks: list[str] = []
-        if isinstance(content, str):
-            text_chunks.append(content)
-        elif isinstance(content, list):
-            for block in content:
-                block_text = getattr(block, "text", None)
-                if isinstance(block_text, str):
-                    text_chunks.append(block_text)
-        parts.append(f"{header}\n{''.join(text_chunks).rstrip()}")
-    return "\n\n".join(parts) + "\n"
 
 
 # ---------------------------------------------------------------------------

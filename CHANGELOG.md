@@ -45,6 +45,18 @@ functional change.
 
 ---
 
+## [0.99.153] - 2026-06-10
+
+### Changed
+- **D-2 path/config anchors (PR-CLEANUP-D2)** — the remaining literal-mirror families from the 2026-06-10 duplication audit collapsed to single SoTs:
+  - `core/paths.py` gains `PETRI_LOGS_DIR` / `LATEST_PETRI_EVAL` (six independent copies spanned the symlink WRITER in petri_audit and five graceful-None READERS — train evidence extraction, seed-gen baseline reader, campaign glob, eval_archive, bundle_sync; a writer-side move would have broken fitness evidence with zero errors) and `SEED_POOLS_DIR` / `CYCLE_INPUT_POOL` / `HELD_OUT_BENCH_POOL` (the 2026-06-03 worker-drop incident's code shape: campaign, assemble script, and a cwd-relative default resolved the same directory three ways — deliberately REPO-pinned, GEODE_STATE_ROOT semantics stay a D-3 decision).
+  - CLI bootstrap modules (`typer_commands` / `doctor_bootstrap` / `typer_init`) stop re-deriving `~/.geode/cli.sock`, `~/.geode/.env`, `~/.geode`, `.geode/model-policy.toml`, `~/.geode/identity` inline (the v0.99.145 daemon-path-split pathology family) and import the existing `core.paths` anchors; their generated templates' stale `claude-opus-4-6` examples become `claude-opus-4-8`.
+  - `generate_config_toml` extends `DEFAULT_CONFIG_TOML` instead of re-typing it (the fork had already drifted in wording and shipped stale model defaults).
+  - `geode self-improving campaign` typer defaults import the campaign module's `DEFAULT_*` constants (were re-hardcoded literals with help text asserting old values); the campaign's arm pre-validation imports train's `_VALID_PROMOTE_POLICIES`; the `core.self_improving.train` subprocess argv module path is the shared `TRAIN_MODULE` constant (campaign + loop runner).
+  - `plugins/petri_audit/prompt_serialisation.py` (new) — the role-header sentinels + `serialise_messages_to_prompt` byte-near-identical copies in the two subscription-CLI providers become one module (a sentinel change would have forked the transcript wire format); seed-gen `resume` imports the ranker's voter vocabulary instead of restating `{"A","B","tie"}`.
+
+---
+
 ## [0.99.152] - 2026-06-10
 
 ### Removed

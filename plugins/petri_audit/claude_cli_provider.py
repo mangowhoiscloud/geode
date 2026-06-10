@@ -81,6 +81,12 @@ from collections.abc import Iterable
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
+# PR-CLEANUP-D2 — shared CLI-provider serialisation (single SoT;
+# re-exported so existing call sites and tests stay stable).
+from plugins.petri_audit.prompt_serialisation import (
+    serialise_messages_to_prompt as serialise_messages_to_prompt,
+)
+
 log = logging.getLogger(__name__)
 
 __all__ = [
@@ -558,50 +564,6 @@ def extract_session_id_from_events(events: list[StreamJsonEvent]) -> str:
 # ---------------------------------------------------------------------------
 # Message serialisation
 # ---------------------------------------------------------------------------
-
-
-_ROLE_HEADERS = {
-    "system": "<<<SYSTEM>>>",
-    "user": "<<<USER>>>",
-    "assistant": "<<<ASSISTANT>>>",
-    "tool": "<<<TOOL_RESULT>>>",
-}
-
-
-def serialise_messages_to_prompt(messages: list[Any]) -> str:
-    """Flatten ``inspect_ai.ChatMessage[]`` into a single stdin prompt.
-
-    The ``claude --print`` CLI accepts one prompt over stdin and
-    handles its own system-message setup internally. We preserve
-    multi-turn context by joining role-tagged blocks with sentinels.
-
-    The role-header sentinels (``<<<USER>>>`` etc.) are intentionally
-    visible — the LLM treats them as conversational scaffolding. For
-    inspect_petri's auditor that orchestrates multi-turn dialogues,
-    this matches the existing transcript style.
-
-    Accepts duck-typed messages with ``role`` + ``content`` attrs
-    (pydantic BaseModel) so tests can pass plain SimpleNamespace
-    without importing the inspect_ai ChatMessage classes.
-    """
-    parts: list[str] = []
-    for msg in messages:
-        role = getattr(msg, "role", "user")
-        header = _ROLE_HEADERS.get(role, f"<<<{role.upper()}>>>")
-        content = getattr(msg, "content", "")
-        # Normalise content shape — inspect_ai uses str OR list[Content]
-        # where Content has ``.text`` (text blocks). Tool blocks are
-        # ignored in CSA-1 (CSA-2 handles them).
-        text_chunks: list[str] = []
-        if isinstance(content, str):
-            text_chunks.append(content)
-        elif isinstance(content, list):
-            for block in content:
-                block_text = getattr(block, "text", None)
-                if isinstance(block_text, str):
-                    text_chunks.append(block_text)
-        parts.append(f"{header}\n{''.join(text_chunks).rstrip()}")
-    return "\n\n".join(parts) + "\n"
 
 
 # ---------------------------------------------------------------------------

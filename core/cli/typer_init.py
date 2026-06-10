@@ -60,7 +60,9 @@ def init(
     user_profile = FileBasedUserProfile()
 
     # 0. Global ~/.geode/ directory + .env (API key storage)
-    global_geode = Path.home() / ".geode"
+    from core.paths import GEODE_HOME  # PR-CLEANUP-D2 anchor
+
+    global_geode = GEODE_HOME
     global_geode.mkdir(parents=True, exist_ok=True)
     global_env = global_geode / ".env"
     if not global_env.exists():
@@ -138,19 +140,21 @@ def init(
             "# Node-level LLM model routing\n"
             "# Uncomment to override default model per pipeline node.\n\n"
             "[nodes]\n"
-            '# analyst = "claude-opus-4-6"\n'
+            '# analyst = "claude-opus-4-8"\n'
             '# evaluator = "claude-sonnet-4-6"\n'
             '# scoring = "claude-haiku-4-5-20251001"\n'
-            '# synthesizer = "claude-opus-4-6"\n\n'
+            '# synthesizer = "claude-opus-4-8"\n\n'
             "[agentic]\n"
-            '# default = "claude-opus-4-6"\n'
+            '# default = "claude-opus-4-8"\n'
             '# sub_agent = "claude-sonnet-4-6"\n',
             encoding="utf-8",
         )
         console.print("  Created .geode/routing.toml (template)")
 
     # 4c. model-policy.toml template
-    policy_path = Path(".geode/model-policy.toml")
+    from core.paths import PROJECT_MODEL_POLICY  # PR-CLEANUP-D2 anchor
+
+    policy_path = PROJECT_MODEL_POLICY
     if not policy_path.exists():
         policy_path.write_text(
             "# Model governance — allowlist/denylist\n"
@@ -158,7 +162,7 @@ def init(
             "# If only denylist is set, listed models are blocked.\n\n"
             "[policy]\n"
             "# allowlist = "
-            '["claude-opus-4-6", "claude-sonnet-4-6", "gpt-5.4"]\n'
+            '["claude-opus-4-8", "claude-sonnet-4-6", "gpt-5.4"]\n'
             "# denylist = "
             '["claude-haiku-4-5-20251001"]\n'
             '# default_model = "claude-sonnet-4-6"\n',
@@ -225,7 +229,9 @@ def init(
         log.debug("Profile seeding skipped: %s", e)
 
     # 7b. ~/.geode/identity/career.toml template
-    identity_dir = Path.home() / ".geode" / "identity"
+    from core.paths import GLOBAL_IDENTITY_DIR  # PR-CLEANUP-D2 anchor
+
+    identity_dir = GLOBAL_IDENTITY_DIR
     career_toml = identity_dir / "career.toml"
     if not career_toml.exists():
         identity_dir.mkdir(parents=True, exist_ok=True)
