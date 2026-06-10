@@ -25,7 +25,7 @@
   <a href="README.ko.md">한국어</a>
 </p>
 
-# GEODE v0.99.170 — A Self-improving Autonomous Execution Agent
+# GEODE v0.99.171 — A Self-improving Autonomous Execution Agent
 
 A general-purpose autonomous agent that also rewrites the scaffolding it runs on. You ask in plain language; GEODE plans, calls tools, and reports, for one prompt or a long-running session. Underneath, an outer loop keeps tuning the system that runs your tasks.
 
@@ -371,6 +371,8 @@ Verified 2026-06-11 against the live runtime (initialize handshake, `tools/list`
 | Server version in handshake | was the mcp SDK's "1.26.0" — now reports GEODE's version (the SDK's `FastMCP.__init__` exposes no `version` kwarg; pinned by `tests/core/test_mcp_server_tools.py`) |
 | `get_health` credential honesty | `*_configured` only meant "API key present" and read false on OAuth/CLI-lane setups — now also reports `*_credential_source` |
 | `run_agent`, `self_improving_propose`/`apply` | not exercised in the automated check (token cost / mutation side effects); `apply` is gated behind a 2-step proposal confirm |
+
+**Remote access (v0.99.171):** `geode-mcp --http [--host H] [--port P]` serves the same tools over the MCP streamable-HTTP transport. Auth is a bearer token from `GEODE_MCP_TOKEN` (a secret — put it in `~/.geode/.env`); clients pass `Authorization: Bearer <token>`. A non-loopback bind without a token is refused at startup — `run_agent` reaches GEODE's full tool surface, so an open bind is a remote-execution surface. For personal cross-device use, SSH needs no setup at all: `claude mcp add geode -- ssh <host> geode-mcp`.
 
 ---
 

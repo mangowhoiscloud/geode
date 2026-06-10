@@ -23,8 +23,11 @@ Register in an MCP host (example, Claude Code):
 from __future__ import annotations
 
 import json
+import logging
 from pathlib import Path
 from typing import Any
+
+log = logging.getLogger(__name__)
 
 # Load core-generic MCP tool descriptions from centralized JSON.
 # Plugin-specific descriptions live alongside their plugin module.
@@ -92,7 +95,35 @@ def _self_improving_status_payload() -> dict[str, Any]:
     return {"baseline": baseline, "recent_mutations": recent}
 
 
-def create_mcp_server() -> Any:
+class _StaticTokenVerifier:
+    """Constant-time bearer-token check for the HTTP transport.
+
+    The MCP SDK's auth stack is OAuth-shaped; for a single-operator remote
+    setup a static shared secret is the honest fit. ``verify_token`` is the
+    SDK's :class:`~mcp.server.auth.provider.TokenVerifier` protocol
+    (verified against the installed mcp 1.26 source — Protocol with one
+    async method returning ``AccessToken | None``).
+    """
+
+    def __init__(self, expected_token: str) -> None:
+        self._expected = expected_token
+
+    async def verify_token(self, token: str) -> Any | None:
+        import hmac
+
+        from mcp.server.auth.provider import AccessToken
+
+        if not hmac.compare_digest(token, self._expected):
+            return None
+        return AccessToken(token=token, client_id="geode-mcp-static", scopes=[], expires_at=None)
+
+
+def create_mcp_server(
+    *,
+    host: str | None = None,
+    port: int | None = None,
+    auth_token: str | None = None,
+) -> Any:
     """Create and configure the GEODE MCP server.
 
     Returns a FastMCP Server instance with the agentic, self-improving,
@@ -107,7 +138,28 @@ def create_mcp_server() -> Any:
             "MCP server requires the 'mcp' package. Install with: uv add mcp"
         ) from None
 
-    mcp = FastMCP("geode")
+    server_kwargs: dict[str, Any] = {}
+    if host is not None:
+        server_kwargs["host"] = host
+    if port is not None:
+        server_kwargs["port"] = port
+    if auth_token:
+        # SDK contract (verified in the installed mcp 1.26 source): passing
+        # ``token_verifier`` WITHOUT ``auth=AuthSettings(...)`` silently
+        # skips the auth middleware — ``streamable_http_app`` gates the
+        # BearerAuthBackend on ``self.settings.auth``. Both must be set or
+        # the server is open despite the token.
+        from mcp.server.auth.settings import AuthSettings
+
+        base_url = f"http://{host or '127.0.0.1'}:{port or 8765}"
+        server_kwargs["token_verifier"] = _StaticTokenVerifier(auth_token)
+        server_kwargs["auth"] = AuthSettings(
+            issuer_url=base_url,
+            resource_server_url=f"{base_url}/mcp",
+            required_scopes=[],
+        )
+
+    mcp = FastMCP("geode", **server_kwargs)
     # Report GEODE's own version in the initialize handshake. The installed
     # mcp SDK's FastMCP.__init__ (1.26.x) exposes no ``version`` kwarg even
     # though the wrapped lowlevel ``Server(name, version, ...)`` accepts one,
@@ -223,13 +275,78 @@ def create_mcp_server() -> Any:
     return mcp
 
 
+def _is_loopback(host: str) -> bool:
+    return host in ("127.0.0.1", "::1", "localhost")
+
+
 def main() -> None:
-    """Entry point for running the MCP server (``geode-mcp`` console script)."""
+    """Entry point for running the MCP server (``geode-mcp`` console script).
+
+    Default transport is stdio (the MCP client spawns this process — local
+    only). ``--http`` switches to the SDK's streamable-http transport for
+    remote access; the bearer token comes from ``GEODE_MCP_TOKEN`` (a
+    secret, so it lives in ``~/.geode/.env`` per the C-2 contract — the
+    shared :func:`core.config.env_io.load_env_files` promotion runs first
+    so a token written there is found).
+
+    Fail-loud guard: binding to a NON-loopback host without a token is
+    refused — ``run_agent`` reaches GEODE's full tool surface (bash, file
+    ops) and ``self_improving_apply`` mutates the scaffold, so an open
+    network bind is a remote-execution surface, not a convenience.
+    Loopback HTTP without a token is allowed (same trust boundary as
+    stdio) but logged as a warning.
+    """
+    import argparse
+    import os
+    import sys
+
     from core.observability.logging_config import configure_logging
 
+    parser = argparse.ArgumentParser(prog="geode-mcp")
+    parser.add_argument(
+        "--http",
+        action="store_true",
+        help="serve over streamable HTTP instead of stdio (remote access)",
+    )
+    parser.add_argument("--host", default="127.0.0.1", help="HTTP bind host")
+    parser.add_argument("--port", type=int, default=8765, help="HTTP bind port")
+    args = parser.parse_args()
+
     configure_logging("mcp")
-    server = create_mcp_server()
-    server.run()
+
+    if not args.http:
+        server = create_mcp_server()
+        server.run()
+        return
+
+    from core.config.env_io import load_env_files
+
+    load_env_files()
+    auth_token = (os.environ.get("GEODE_MCP_TOKEN") or "").strip()
+
+    if not auth_token and not _is_loopback(args.host):
+        print(
+            f"geode-mcp: refusing to bind {args.host}:{args.port} without "
+            "GEODE_MCP_TOKEN — a tokenless non-loopback bind exposes "
+            "run_agent (full tool surface) to the network. Set "
+            "GEODE_MCP_TOKEN in ~/.geode/.env or the environment.",
+            file=sys.stderr,
+        )
+        raise SystemExit(2)
+    if not auth_token:
+        log.warning(
+            "geode-mcp: HTTP on loopback without GEODE_MCP_TOKEN — local "
+            "processes can call all tools (same trust as stdio)."
+        )
+
+    server = create_mcp_server(host=args.host, port=args.port, auth_token=auth_token or None)
+    log.info(
+        "geode-mcp: streamable HTTP on %s:%d (auth=%s)",
+        args.host,
+        args.port,
+        "bearer-token" if auth_token else "none/loopback",
+    )
+    server.run(transport="streamable-http")
 
 
 if __name__ == "__main__":
