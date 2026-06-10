@@ -38,6 +38,7 @@ enabled_roles = ["auditor", "target", "judge"]
 [petri.role.auditor]
 default_model = "claude-opus-4-7"
 allowed_models = [
+    "claude-fable-5",
     "claude-opus-4-8",
     "claude-opus-4-7",
     "claude-sonnet-4-6",
@@ -53,6 +54,7 @@ role_contract = "roles/auditor.md"
 # LLM GEODE uses internally.
 default_model = "claude-haiku-4-5"
 allowed_models = [
+    "claude-fable-5",
     "claude-opus-4-8",
     "claude-opus-4-7",
     "claude-sonnet-4-6",
@@ -67,6 +69,7 @@ role_contract = "roles/target.md"
 [petri.role.judge]
 default_model = "claude-sonnet-4-6"
 allowed_models = [
+    "claude-fable-5",
     "claude-opus-4-8",
     "claude-opus-4-7",
     "claude-sonnet-4-6",

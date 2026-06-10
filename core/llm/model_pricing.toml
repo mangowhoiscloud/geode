@@ -23,6 +23,12 @@
 # platform docs index only up to the 4.6/4.7 pages; refresh against the
 # pricing source above on the next quarterly pass if Anthropic publishes a
 # distinct 4.8 rate.
+# Fable 5 — $10/$50 per MTok, 1M ctx, 128k out (GA 2026-06-09).
+# ref: https://platform.claude.com/docs/en/about-claude/models/overview
+[pricing.anthropic."claude-fable-5"]
+input_per_mtok = 10.00
+output_per_mtok = 50.00
+
 [pricing.anthropic."claude-opus-4-8"]
 input_per_mtok = 5.00
 output_per_mtok = 25.00
@@ -135,6 +141,7 @@ output_per_mtok = 0.00  # free tier (limited-time)
 # margin).
 
 [context_windows]
+"claude-fable-5"             = 1000000
 "claude-opus-4-8"            = 1000000
 "claude-opus-4-7"            = 1000000
 "claude-opus-4-6"            = 1000000

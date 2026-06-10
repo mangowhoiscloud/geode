@@ -59,6 +59,7 @@ enabled_roles = [
 [seed_generation.role.generator]
 default_model = "claude-opus-4-8"
 allowed_models = [
+    "claude-fable-5",
     "claude-opus-4-8",
     "claude-opus-4-7",
     "claude-sonnet-4-6",
@@ -80,6 +81,7 @@ default_model = "claude-opus-4-8"
 # subscription can route critic on the strongest available reasoning
 # model when running through ``source = "claude-cli"``.
 allowed_models = [
+    "claude-fable-5",
     "claude-opus-4-8",
     "claude-opus-4-7",
     "claude-sonnet-4-6",
@@ -98,6 +100,7 @@ default_model = "claude-opus-4-8"
 # ``claude-opus-4-7`` accepted for the same Claude Code Max routing
 # reason as critic — proximity is also a reasoning-heavy role.
 allowed_models = [
+    "claude-fable-5",
     "claude-opus-4-8",
     "claude-opus-4-7",
     "claude-sonnet-4-6",
@@ -117,6 +120,7 @@ role_contract = "plugins/seed_generation/agents/proximity.md"
 # for picker-provenance symmetry with the other roles.
 default_model = "claude-opus-4-8"
 allowed_models = [
+    "claude-fable-5",
     "claude-opus-4-8",
     "claude-opus-4-7",
     "claude-haiku-4-5",
@@ -129,6 +133,7 @@ allowed_models = [
 # the panel's voter binding (below) drives actual LLM calls.
 default_model = "claude-opus-4-8"
 allowed_models = [
+    "claude-fable-5",
     "claude-opus-4-8",
     "claude-opus-4-7",
     "claude-sonnet-4-6",
@@ -139,6 +144,7 @@ role_contract = "plugins/seed_generation/agents/ranker.md"
 [seed_generation.role.evolver]
 default_model = "claude-opus-4-8"
 allowed_models = [
+    "claude-fable-5",
     "claude-opus-4-8",
     "claude-opus-4-7",
     "claude-sonnet-4-6",
@@ -149,6 +155,7 @@ role_contract = "plugins/seed_generation/agents/evolver.md"
 [seed_generation.role.meta_reviewer]
 default_model = "claude-opus-4-8"
 allowed_models = [
+    "claude-fable-5",
     "claude-opus-4-8",
     "claude-opus-4-7",
     "claude-sonnet-4-6",
@@ -166,6 +173,7 @@ role_contract = "plugins/seed_generation/agents/meta_reviewer.md"
 [seed_generation.role.supervisor]
 default_model = "claude-opus-4-8"
 allowed_models = [
+    "claude-fable-5",
     "claude-opus-4-8",
     "claude-opus-4-7",
     "claude-sonnet-4-6",
@@ -183,6 +191,7 @@ role_contract = "plugins/seed_generation/agents/supervisor.md"
 [seed_generation.role.literature_review]
 default_model = "claude-opus-4-8"
 allowed_models = [
+    "claude-fable-5",
     "claude-opus-4-8",
     "claude-opus-4-7",
     "claude-sonnet-4-6",

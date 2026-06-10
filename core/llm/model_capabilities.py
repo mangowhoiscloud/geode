@@ -27,6 +27,11 @@ from __future__ import annotations
 # context_overflow. Only 1M-context models are known to support it.
 ANTHROPIC_CONTEXT_MGMT_MODELS: frozenset[str] = frozenset(
     {
+        # Fable 5 (2026-06-09 GA): 1M ctx + compaction supported; adaptive
+        # thinking always-on (thinking:{type:"disabled"} errors — omit or send
+        # adaptive); sampling params 400; effort incl. xhigh supported.
+        # ref: https://platform.claude.com/docs/en/about-claude/models/introducing-claude-fable-5-and-claude-mythos-5
+        "claude-fable-5",
         "claude-opus-4-8",
         "claude-opus-4-7",
         "claude-opus-4-6",
@@ -42,6 +47,11 @@ ANTHROPIC_CONTEXT_MGMT_MODELS: frozenset[str] = frozenset(
 # The effort knob (incl. xhigh) only exists for adaptive models.
 ANTHROPIC_ADAPTIVE_MODELS: frozenset[str] = frozenset(
     {
+        # Fable 5 (2026-06-09 GA): 1M ctx + compaction supported; adaptive
+        # thinking always-on (thinking:{type:"disabled"} errors — omit or send
+        # adaptive); sampling params 400; effort incl. xhigh supported.
+        # ref: https://platform.claude.com/docs/en/about-claude/models/introducing-claude-fable-5-and-claude-mythos-5
+        "claude-fable-5",
         "claude-opus-4-8",
         "claude-opus-4-7",
         "claude-opus-4-6",
@@ -53,6 +63,11 @@ ANTHROPIC_ADAPTIVE_MODELS: frozenset[str] = frozenset(
 # high). 4.6 / Sonnet 4.6 reject it with 400.
 ANTHROPIC_XHIGH_MODELS: frozenset[str] = frozenset(
     {
+        # Fable 5 (2026-06-09 GA): 1M ctx + compaction supported; adaptive
+        # thinking always-on (thinking:{type:"disabled"} errors — omit or send
+        # adaptive); sampling params 400; effort incl. xhigh supported.
+        # ref: https://platform.claude.com/docs/en/about-claude/models/introducing-claude-fable-5-and-claude-mythos-5
+        "claude-fable-5",
         "claude-opus-4-8",
         "claude-opus-4-7",
     }
