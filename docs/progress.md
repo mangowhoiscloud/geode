@@ -16,7 +16,8 @@
 
 <!-- Move items here when work begins. -->
 <!-- 3-Checkpoint: (1) alloc → (2) merge (CI 5/5) → (3) verify -->
-- [ ] Audit bundles A(fake-success/contract hotfix)/B(reserve-without-emit)/D(cleanup sprint)/E(drift anchors) — reports delivered, awaiting pick
+- [ ] Audit bundles A+B in progress (operator picked) — A: session-store fake-success wire + _load_baseline float guard + TLS/cost silent-fallback visibility; B: MUTATION_REJECTED + HANDOFF_COMPLETED/FAILED emits, VERIFICATION_PASS/FAIL + FALLBACK_CROSS_PROVIDER disposition; worktree audit-bundle-ab
+- [ ] Audit bundles D(cleanup sprint)/E(drift anchors) — awaiting pick
 
 ## In Review
 
