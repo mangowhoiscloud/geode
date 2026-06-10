@@ -70,13 +70,13 @@ def test_env_file_masks_toml_and_warning_fires(isolated_layers) -> None:
     assert "GEODE_MODEL" in warning and "masking" in warning
 
 
-def test_global_env_beats_project_env_matching_pydantic_order(isolated_layers) -> None:
-    """pydantic-settings: later env_file wins → global .env beats project .env."""
+def test_project_env_beats_global_env_matching_pydantic_order(isolated_layers) -> None:
+    """C-3: env_file=(global, project), later wins → project .env beats global."""
     isolated_layers["global_env"].write_text("GEODE_MODEL=global-pick\n")
     isolated_layers["project_env"].write_text("GEODE_MODEL=project-pick\n")
     report = explain_field("model")
-    assert report.winner.layer == "global .env"
-    assert report.winner.value == "global-pick"
+    assert report.winner.layer == "project .env"
+    assert report.winner.value == "project-pick"
 
 
 def test_os_environ_tops_everything(isolated_layers, monkeypatch: pytest.MonkeyPatch) -> None:

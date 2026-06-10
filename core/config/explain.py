@@ -11,12 +11,13 @@ the SAME precedence the real resolution applies:
     os.environ  >  dotenv layer  >  project config.toml  >  global
     config.toml  >  code default
 
-Dotenv-layer honesty note: pydantic-settings merges ``env_file=(".env",
-"~/.geode/.env")`` with the LATER file winning, so within the dotenv
-layer the GLOBAL file beats the project file for a plain ``Settings()``
-construction. (The serve daemon's bootstrap loads them in the opposite
-direction — hazard H5; this explainer reports the plain-Settings order
-and flags the key when both files define it.)
+Dotenv-layer order (C-3, 2026-06-11): one direction everywhere —
+project ``.env`` beats global ``~/.geode/.env``. pydantic-settings
+merges ``env_file=(global, ".env")`` with the LATER file winning, and
+the serve daemon's bootstrap promotion follows the same order, so the
+per-process inversion (hazard H5) is gone. Behavior(model-pick) keys
+additionally never survive into the daemon's os.environ (hazard H2,
+``core.config.env_io.BEHAVIOR_ENV_KEYS``).
 """
 
 from __future__ import annotations
@@ -36,8 +37,8 @@ PROJECT_ENV_FILE = Path(".env")
 #: Layer identifiers in precedence order (index 0 = strongest).
 LAYERS: tuple[str, ...] = (
     "os.environ",
-    "global .env",
     "project .env",
+    "global .env",
     "project config.toml",
     "global config.toml",
     "code default",
@@ -88,15 +89,15 @@ def explain_field(field_name: str) -> FieldReport:
 
     candidates.append(LayerValue("os.environ", "process env", os.environ.get(env_var)))
 
-    # Dotenv layer — pydantic's later-file-wins means GLOBAL beats project
-    # for plain Settings(); report both files separately so a duplicate key
-    # is visible.
+    # Dotenv layer — env_file=(global, project) with later-file-wins, so
+    # the PROJECT file beats global (C-3); report both files separately so
+    # a duplicate key is visible.
     global_env = dotenv_values(GLOBAL_ENV_FILE) if GLOBAL_ENV_FILE.exists() else {}
     project_env = dotenv_values(PROJECT_ENV_FILE) if PROJECT_ENV_FILE.exists() else {}
-    candidates.append(LayerValue("global .env", str(GLOBAL_ENV_FILE), global_env.get(env_var)))
     candidates.append(
         LayerValue("project .env", str(PROJECT_ENV_FILE.resolve()), project_env.get(env_var))
     )
+    candidates.append(LayerValue("global .env", str(GLOBAL_ENV_FILE), global_env.get(env_var)))
 
     def _toml_value(path: Path) -> Any | None:
         if toml_key is None or not path.exists():
@@ -155,7 +156,7 @@ def model_mask_warning() -> str | None:
     """
     report = explain_field("model")
     winner = report.winner
-    if winner is None or winner.layer not in ("os.environ", "global .env", "project .env"):
+    if winner is None or winner.layer not in ("os.environ", "project .env", "global .env"):
         return None
     masked_toml = [entry for entry in report.masked_layers if entry.layer.endswith("config.toml")]
     if not masked_toml:
