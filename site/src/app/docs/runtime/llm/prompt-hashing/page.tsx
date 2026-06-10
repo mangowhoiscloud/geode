@@ -1,246 +1,205 @@
 import { DocsShell, Bi } from "@/components/geode-docs/docs-shell";
 
-export const metadata = { title: "Prompt Hashing — GEODE Docs" };
+export const metadata = { title: "Prompt hashing — GEODE Docs" };
 
 export default function Page() {
   return (
     <DocsShell
       slug="runtime/llm/prompt-hashing"
-      title="Prompt Hashing"
+      title="Prompt hashing"
       titleKo="프롬프트 해싱"
-      summary="A SHA-256 hash ratchet (Karpathy P4) that breaks CI on unintended prompt drift. Core templates pinned, re-pin workflow documented."
-      summaryKo="의도치 않은 prompt drift 발생 시 CI를 중단시키는 SHA-256 해시 잠금장치 (Karpathy P4). 핵심 템플릿이 핀으로 고정되고, 재핀(re-pin) 절차가 문서화되어 있습니다."
+      summary="Four pinned prompt hashes that break the build on unintended drift, and the deliberate re-pin workflow."
+      summaryKo="의도하지 않은 drift에 빌드를 깨뜨리는 4개의 프롬프트 해시 핀과, 의도된 변경의 re-pin 절차를 다룹니다."
     >
       <Bi
         ko={
           <>
-            <h2>두 개의 함수</h2>
-            <pre>{`# core/llm/prompts/__init__.py
-def _hash_prompt(text: str) -> str:
-    return hashlib.sha256(text.encode()).hexdigest()[:12]
-
-# core/llm/prompts/axes.py
-def _hash_axes(data) -> str:
-    return hashlib.sha256(
-        json.dumps(data, sort_keys=True).encode()
-    ).hexdigest()[:12]`}</pre>
             <p>
-              12자리 hex = 48비트. 닫힌 prompt 집합에서 충돌 확률은
-              무시할 수 있습니다. 목표는 탐지이지 암호학적 보안이 아닙니다.
-            </p>
-            <p>
-              axes 해시는 YAML 파서 버전과 Python dict 순서에 걸쳐 JSON 직렬화가
-              결정적이도록 <code>sort_keys=True</code>를 사용합니다.
+              핵심 프롬프트 템플릿은 해시로 핀됩니다. 템플릿이 한 글자라도
+              바뀌면 계산된 해시가 핀과 어긋나고 CI가 깨집니다. 프롬프트
+              변경을 막으려는 것이 아니라, 변경이 항상 의도된 diff로
+              드러나게 하려는 래칫입니다.
             </p>
 
-            <h2>고정 엔트리</h2>
-            <pre>{`PROMPT_VERSIONS / _PINNED_HASHES (sorted)
-
-  AGENTIC_SUFFIX             5630f3a61683
-  ANALYST_SPECIFIC           44136fa355b3
-  ANALYST_SYSTEM             b800a57a4599
-  ANALYST_TOOLS_SUFFIX       36055d5618f4
-  ANALYST_USER               63711de6c099
-  COMMENTARY_SYSTEM          488d8916d958
-  COMMENTARY_USER            2024ac4eba69
-  CROSS_LLM_DUAL_VERIFY      602669128ae2
-  CROSS_LLM_RESCORE          163b08e97d66
-  CROSS_LLM_SYSTEM           bf303f600fce
-  EVALUATOR_AXES             44136fa355b3
-  EVALUATOR_SYSTEM           93ecabb14a72
-  EVALUATOR_USER             ad832adfadf0
-  PROSPECT_EVALUATOR_AXES    44136fa355b3
-  ROUTER_SYSTEM              c4220baeb6c0
-  SYNTHESIZER_SYSTEM         1cbe199613a1
-  SYNTHESIZER_TOOLS_SUFFIX   1fd89d3ece5a
-  SYNTHESIZER_USER           e0bb4afab940`}</pre>
+            <h2>네 개의 핀</h2>
             <p>
-              두 dict 모두 동일한 key set을 가집니다.
+              <code>core/llm/prompts/__init__.py</code>가 .md 템플릿
+              (<code>router.md</code>, <code>commentary.md</code>)을 로드해
+              SHA-256 앞 12자를 <code>PROMPT_VERSIONS</code>로 계산하고,
+              하드코딩된 <code>_PINNED_HASHES</code>와 비교합니다.
+            </p>
+            <table>
+              <thead>
+                <tr><th>핀</th><th>출처</th><th>역할</th></tr>
+              </thead>
+              <tbody>
+                <tr><td><code>ROUTER_SYSTEM</code></td><td><code>core/llm/prompts/router.md</code></td><td>AgenticLoop 시스템 프롬프트의 베이스 템플릿.</td></tr>
+                <tr><td><code>AGENTIC_SUFFIX</code></td><td><code>core/llm/prompts/router.md</code></td><td>agentic 모드에서 덧붙는 suffix 절.</td></tr>
+                <tr><td><code>COMMENTARY_SYSTEM</code></td><td><code>core/llm/prompts/commentary.md</code></td><td>커멘터리 시스템 프롬프트.</td></tr>
+                <tr><td><code>COMMENTARY_USER</code></td><td><code>core/llm/prompts/commentary.md</code></td><td>커멘터리 사용자 템플릿.</td></tr>
+              </tbody>
+            </table>
+            <p>
+              비교 함수는 <code>verify_prompt_integrity</code>입니다. 어긋난
+              핀의 목록을 반환하고, <code>raise_on_drift=True</code>면 첫
+              불일치에서 RuntimeError를 던집니다. CI 테스트가 이 검증을
+              게이트로 겁니다.
             </p>
 
-            <h2>verify_prompt_integrity</h2>
-            <pre>{`def verify_prompt_integrity(*, raise_on_drift: bool = False) -> list[str]:
-    drifted = []
-    for name, pinned in _PINNED_HASHES.items():
-        if computed[name] != pinned:
-            drifted.append(f"Prompt drift: {name} pin={pinned} now={computed[name]}")
-    if drifted and raise_on_drift:
-        raise RuntimeError(...)
-    return drifted`}</pre>
+            <h2>왜 빌드를 깨는가</h2>
             <p>
-              이 함수는{" "}
-              <code>tests/test_karpathy_prompt_hardening.py::TestPromptDriftDetection</code>에서{" "}
-              <code>raise_on_drift=False</code> (리스트 반환, 비어 있어야 함) 와{" "}
-              <code>raise_on_drift=True</code> (예외가 발생하지 않아야 함) 양쪽
-              모드로 호출됩니다.
+              시스템 프롬프트는 동작을 정의하는 코드입니다. 그런데 일반
+              코드와 달리 타입 체커도 테스트도 문구 변화를 잡지 못합니다.
+              머지 충돌 해소, 포매터, 선의의 한 줄 수정이 프롬프트를 조용히
+              바꾸면 에이전트 동작이 원인 불명으로 흔들립니다. 해시 핀은 그
+              모든 경로를 컴파일 오류와 같은 등급으로 끌어올립니다. 자기개선
+              루프가 wrapper 스캐폴드를 변이시키는 시스템에서는 더
+              중요합니다. 의도된 변이는 SoT 파일로, 의도되지 않은 drift는
+              빌드 실패로, 두 경로가 섞이지 않습니다.
             </p>
 
-            <h2>재핀(re-pin) 절차</h2>
-            <p>의도적으로 prompt를 변경했을 때.</p>
-            <ol>
-              <li><code>.md</code> 파일을 편집합니다 (예. <code>analyst.md</code>).</li>
-              <li>
-                새 해시를 계산합니다.
-                <pre>{`uv run python -c "
-from core.llm.prompts import PROMPT_VERSIONS as V
-import json
-print(json.dumps(dict(sorted(V.items())), indent=2))
-"`}</pre>
-              </li>
-              <li><code>_PINNED_HASHES</code>의 해당 엔트리를 업데이트합니다.</li>
-              <li><code>uv run pytest tests/test_karpathy_prompt_hardening.py</code>를 실행합니다.</li>
-              <li>prompt 변경과 핀 업데이트를 <strong>한 커밋</strong>으로 함께 묶어 커밋합니다.</li>
-            </ol>
+            <h2>의도된 변경: re-pin 절차</h2>
             <p>
-              prompt 변경과 핀 업데이트를 두 커밋으로 나누면{" "}
-              <code>git history</code>에 CI 실패 상태의 커밋이 남게 됩니다.
-              bisect 친화적인 커밋이라면 핀과 prompt가 같은 보폭으로 움직입니다.
+              템플릿을 일부러 고쳤다면 새 해시를 계산해 핀을 갱신하고, 같은
+              커밋에 템플릿 diff와 핀 diff가 나란히 실리게 합니다.
+            </p>
+            <pre>{`python -c "from core.llm.prompts import PROMPT_VERSIONS as V; \\
+  print(dict(sorted(V.items())))"
+# 출력을 _PINNED_HASHES에 반영`}</pre>
+            <p>
+              리뷰어는 핀 diff를 보고 &quot;프롬프트가 의도적으로
+              바뀌었다&quot;는 사실을 한 줄로 확인합니다.
             </p>
 
-            <h2>왜 잠금장치인가</h2>
+            <h2>경계</h2>
             <p>
-              해시 잠금장치는 Karpathy의 P4 원칙을 GEODE 식으로 표현한 것입니다.
-              한 번 통과한 품질 게이트는 조용히 후퇴해서는 안 된다는 원칙. prompt
-              변경은 우연히도 쉽게 일어납니다. 병합 충돌 해결, 자동 포매터, IDE
-              rename 등. 그리고 그 변경이 모델 동작에 미치는 영향을 미리 예측하기는
-              어렵습니다. 잠금장치는 모든 prompt 변경을 의식적인 단계를 거치도록
-              강제합니다.
+              핀 대상은 정적 템플릿이지 렌더된 프롬프트가 아닙니다. 메모리
+              레이어, 날짜, wrapper override처럼 런타임에 합성되는 부분은
+              해시 범위 밖입니다. 렌더 결과의 재현성 감사가 필요하면
+              <code>hash_rendered_prompt</code>가 같은 12자 해시를 렌더된
+              문자열에 적용합니다.
             </p>
 
-            <h2>잠금장치가 다루지 않는 것</h2>
+            <h2>실패 모드</h2>
+            <table>
+              <thead>
+                <tr><th>증상</th><th>원인</th><th>해법</th></tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>CI에서 &quot;Prompt drift&quot; 실패</td>
+                  <td>템플릿 변경이 핀 갱신 없이 들어옴</td>
+                  <td>변경이 의도라면 re-pin 절차를 따릅니다. 아니라면 diff를 되돌립니다.</td>
+                </tr>
+                <tr>
+                  <td>핀만 바뀌고 템플릿은 그대로인 PR</td>
+                  <td>이전 drift를 핀 갱신으로 덮으려는 시도</td>
+                  <td>템플릿 diff 없는 핀 diff는 리뷰에서 거부합니다.</td>
+                </tr>
+              </tbody>
+            </table>
+
+            <h2>다음</h2>
             <ul>
-              <li>
-                <code>.geode/skills/</code> 의 <strong>skill 본문</strong>은{" "}
-                <code>PROMPT_ASSEMBLED</code> 훅 페이로드로 관찰되지만 핀으로
-                고정되지는 않습니다. prompt 주입된 skill 변경은 CI 실패가
-                아닙니다.
-              </li>
-              <li>
-                <strong>렌더링된 prompt</strong> (<code>.format()</code> 변수 치환
-                이후) 는 해싱되지 않습니다. <code>hash_rendered_prompt()</code>는
-                존재하지만 호출자가 없습니다.{" "}
-                <em>geode-prompt-evolution P2 #3</em> 참조.
-              </li>
-              <li>
-                <strong>디스크 무결성</strong>은 런타임에 재검증되지 않습니다.
-                해싱은 패키지 import 시점에만 일어납니다.
-              </li>
+              <li><a href="/geode/docs/explanation/ratchet">왜 ratchet 규율인가</a>. 이 가드의 설계 철학.</li>
+              <li><a href="/geode/docs/runtime/llm/prompt-system">프롬프트 조립</a>. 핀된 템플릿이 소비되는 곳.</li>
             </ul>
           </>
         }
         en={
           <>
-            <h2>The two functions</h2>
-            <pre>{`# core/llm/prompts/__init__.py
-def _hash_prompt(text: str) -> str:
-    return hashlib.sha256(text.encode()).hexdigest()[:12]
-
-# core/llm/prompts/axes.py
-def _hash_axes(data) -> str:
-    return hashlib.sha256(
-        json.dumps(data, sort_keys=True).encode()
-    ).hexdigest()[:12]`}</pre>
             <p>
-              Twelve hex characters = 48 bits. Collision probability is negligible
-              for the closed set of prompts; the goal is detection, not
-              cryptographic security.
-            </p>
-            <p>
-              The axes hash uses <code>sort_keys=True</code> to make the JSON
-              serialization deterministic across YAML parser versions and Python
-              dict orderings.
+              The core prompt templates are pinned by hash. Change a single
+              character and the computed hash diverges from the pin; CI
+              breaks. The point is not to forbid prompt changes but to make
+              every change show up as a deliberate diff. A ratchet.
             </p>
 
-            <h2>The pinned entries</h2>
-            <pre>{`PROMPT_VERSIONS / _PINNED_HASHES (sorted)
-
-  AGENTIC_SUFFIX             5630f3a61683
-  ANALYST_SPECIFIC           44136fa355b3
-  ANALYST_SYSTEM             b800a57a4599
-  ANALYST_TOOLS_SUFFIX       36055d5618f4
-  ANALYST_USER               63711de6c099
-  COMMENTARY_SYSTEM          488d8916d958
-  COMMENTARY_USER            2024ac4eba69
-  CROSS_LLM_DUAL_VERIFY      602669128ae2
-  CROSS_LLM_RESCORE          163b08e97d66
-  CROSS_LLM_SYSTEM           bf303f600fce
-  EVALUATOR_AXES             44136fa355b3
-  EVALUATOR_SYSTEM           93ecabb14a72
-  EVALUATOR_USER             ad832adfadf0
-  PROSPECT_EVALUATOR_AXES    44136fa355b3
-  ROUTER_SYSTEM              c4220baeb6c0
-  SYNTHESIZER_SYSTEM         1cbe199613a1
-  SYNTHESIZER_TOOLS_SUFFIX   1fd89d3ece5a
-  SYNTHESIZER_USER           e0bb4afab940`}</pre>
+            <h2>The four pins</h2>
             <p>
-              Both dictionaries share an identical key set.
+              <code>core/llm/prompts/__init__.py</code> loads the .md
+              templates (<code>router.md</code>, <code>commentary.md</code>),
+              computes the first 12 hex chars of SHA-256 into
+              <code>PROMPT_VERSIONS</code>, and compares them against the
+              hardcoded <code>_PINNED_HASHES</code>.
+            </p>
+            <table>
+              <thead>
+                <tr><th>Pin</th><th>Source</th><th>Role</th></tr>
+              </thead>
+              <tbody>
+                <tr><td><code>ROUTER_SYSTEM</code></td><td><code>core/llm/prompts/router.md</code></td><td>Base template of the AgenticLoop system prompt.</td></tr>
+                <tr><td><code>AGENTIC_SUFFIX</code></td><td><code>core/llm/prompts/router.md</code></td><td>Suffix section appended in agentic mode.</td></tr>
+                <tr><td><code>COMMENTARY_SYSTEM</code></td><td><code>core/llm/prompts/commentary.md</code></td><td>Commentary system prompt.</td></tr>
+                <tr><td><code>COMMENTARY_USER</code></td><td><code>core/llm/prompts/commentary.md</code></td><td>Commentary user template.</td></tr>
+              </tbody>
+            </table>
+            <p>
+              The comparator is <code>verify_prompt_integrity</code>: it
+              returns the list of drifted pins, and with
+              <code>raise_on_drift=True</code> raises RuntimeError on the
+              first mismatch. A CI test gates on this verification.
             </p>
 
-            <h2>verify_prompt_integrity</h2>
-            <pre>{`def verify_prompt_integrity(*, raise_on_drift: bool = False) -> list[str]:
-    drifted = []
-    for name, pinned in _PINNED_HASHES.items():
-        if computed[name] != pinned:
-            drifted.append(f"Prompt drift: {name} pin={pinned} now={computed[name]}")
-    if drifted and raise_on_drift:
-        raise RuntimeError(...)
-    return drifted`}</pre>
+            <h2>Why break the build</h2>
             <p>
-              The function is invoked by{" "}
-              <code>tests/test_karpathy_prompt_hardening.py::TestPromptDriftDetection</code>{" "}
-              with both <code>raise_on_drift=False</code> (returns a list, asserted
-              empty) and <code>raise_on_drift=True</code> (asserts no exception).
+              A system prompt is behavior-defining code, yet neither the type
+              checker nor the test suite catches a wording change. A merge
+              conflict resolution, a formatter, or a well-meant one-line edit
+              can silently alter the prompt and shift agent behavior with no
+              traceable cause. The hash pin promotes all of those paths to
+              the severity of a compile error. In a system whose
+              self-improving loop mutates the wrapper scaffold this matters
+              even more: intended mutation flows through the SoT file,
+              unintended drift fails the build, and the two paths never mix.
             </p>
 
-            <h2>Re-pin workflow</h2>
-            <p>When a prompt is intentionally changed:</p>
-            <ol>
-              <li>Edit the <code>.md</code> file (e.g. <code>analyst.md</code>).</li>
-              <li>
-                Compute new hashes:
-                <pre>{`uv run python -c "
-from core.llm.prompts import PROMPT_VERSIONS as V
-import json
-print(json.dumps(dict(sorted(V.items())), indent=2))
-"`}</pre>
-              </li>
-              <li>Update the corresponding entry in <code>_PINNED_HASHES</code>.</li>
-              <li>Run <code>uv run pytest tests/test_karpathy_prompt_hardening.py</code>.</li>
-              <li>Commit prompt change and pin update <strong>together</strong> in one commit.</li>
-            </ol>
+            <h2>Deliberate change: the re-pin workflow</h2>
             <p>
-              Splitting the prompt change and the pin update across two commits
-              leaves a CI-broken commit in <code>git history</code>. Bisect-friendly
-              commits keep the pin and the prompt in lockstep.
+              After an intentional template edit, recompute the hashes,
+              update the pins, and land the template diff and the pin diff in
+              the same commit.
+            </p>
+            <pre>{`python -c "from core.llm.prompts import PROMPT_VERSIONS as V; \\
+  print(dict(sorted(V.items())))"
+# copy the output into _PINNED_HASHES`}</pre>
+            <p>
+              The reviewer reads the pin diff as a one-line attestation that
+              the prompt changed on purpose.
             </p>
 
-            <h2>Why ratchet</h2>
+            <h2>Scope</h2>
             <p>
-              The hash ratchet is the GEODE expression of Karpathy&apos;s P4
-              principle: once a quality gate is passed, it should never silently
-              regress. Prompt changes are easy to make accidentally — a
-              merge-conflict resolution, an autoformatter, an IDE rename — and
-              their downstream effects on model behaviour are hard to foresee. The
-              ratchet forces every prompt change through a conscious step.
+              The pins cover the static templates, not the rendered prompt.
+              Memory layers, the date, and the wrapper override are composed
+              at runtime and sit outside the hash. For reproducibility audits
+              of rendered output, <code>hash_rendered_prompt</code> applies
+              the same 12-char hash to a rendered string.
             </p>
 
-            <h2>What the ratchet does not cover</h2>
+            <h2>Failure modes</h2>
+            <table>
+              <thead>
+                <tr><th>Symptom</th><th>Cause</th><th>Fix</th></tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>CI fails with &quot;Prompt drift&quot;</td>
+                  <td>A template change landed without a pin update</td>
+                  <td>If the change is intended, follow the re-pin workflow. Otherwise revert the diff.</td>
+                </tr>
+                <tr>
+                  <td>A PR changes pins but not templates</td>
+                  <td>An attempt to paper over earlier drift via the pins</td>
+                  <td>Reject pin diffs that come without a template diff.</td>
+                </tr>
+              </tbody>
+            </table>
+
+            <h2>Next</h2>
             <ul>
-              <li>
-                <strong>Skill bodies</strong> in <code>.geode/skills/</code> are
-                observed via the <code>PROMPT_ASSEMBLED</code> hook payload but not
-                pinned. A prompt-injected skill change is not a CI failure.
-              </li>
-              <li>
-                <strong>Rendered prompts</strong> (after <code>.format()</code>{" "}
-                variable substitution) are not hashed. <code>hash_rendered_prompt()</code>{" "}
-                exists but has no callers — see{" "}
-                <em>geode-prompt-evolution P2 #3</em>.
-              </li>
-              <li>
-                <strong>Disk integrity</strong> is not re-verified at runtime; the
-                hash only fires at import time of the package.
-              </li>
+              <li><a href="/geode/docs/explanation/ratchet">Why ratchet discipline</a>. The design philosophy behind this guard.</li>
+              <li><a href="/geode/docs/runtime/llm/prompt-system">Prompt assembly</a>. Where the pinned templates are consumed.</li>
             </ul>
           </>
         }
