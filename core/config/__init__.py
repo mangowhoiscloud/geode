@@ -123,7 +123,15 @@ def _load_toml_config(
     Returns a dict mapping Settings field names to their values.
     Only keys present in _TOML_TO_SETTINGS are returned.
     """
-    gp = global_path or GLOBAL_CONFIG_PATH
+    # H9 (C-4, 2026-06-11) — ``GEODE_CONFIG_TOML`` redirects the GLOBAL
+    # config.toml for the MAIN settings loader too. Pre-fix only the
+    # self-improving loop loader honored it
+    # (core/config/self_improving.py:_resolve_config_path), so an operator
+    # pointing the env var at an alternate file changed loop behavior while
+    # the runtime kept reading ~/.geode/config.toml — two meanings for one
+    # variable. The project overlay still applies on top.
+    env_toml = os.environ.get("GEODE_CONFIG_TOML", "").strip()
+    gp = global_path or (Path(env_toml).expanduser() if env_toml else GLOBAL_CONFIG_PATH)
     pp = project_path or PROJECT_CONFIG_PATH
     merged: dict[str, Any] = {}
 
@@ -227,26 +235,33 @@ def reload_settings_from_disk() -> None:
     just re-reads the same disk). Cheap: ~ms-scale (pydantic_settings re-init
     + TOML re-parse).
     """
-    import contextlib
-
     from core.config._settings import Settings as _Settings
 
     current = _get_settings()
     fresh = _Settings()  # re-reads .env + GEODE_* env vars
     # Pydantic V2.11 deprecated instance-level ``.model_fields`` access; read
-    # the field map off the class. Both branches of the assignment / setattr
-    # below are isolated with ``contextlib.suppress`` because a pydantic
-    # validator may refuse certain reassignments (e.g. computed fields) and
-    # we'd rather keep the existing value than crash the session start.
+    # the field map off the class. Per-field failures are tolerated (a
+    # pydantic validator may refuse certain reassignments, e.g. computed
+    # fields) but no longer SILENT (H13, C-4 2026-06-11): pre-fix a field
+    # that failed to copy kept its stale value with zero trace, so a reload
+    # could half-apply and the operator had no way to tell which half.
     for field_name in type(fresh).model_fields:
-        with contextlib.suppress(Exception):
+        try:
             new_value = getattr(fresh, field_name)
             object.__setattr__(current, field_name, new_value)
+        except Exception:
+            log.warning(
+                "reload_settings_from_disk: field %r kept its previous value "
+                "(refresh raised; stale until restart)",
+                field_name,
+                exc_info=True,
+            )
     # ``object.__setattr__`` above copied fresh *values* but not its
     # ``model_fields_set``, so pass the fresh instance's set explicitly — the
     # overlay must skip fields the fresh ``.env`` / env actually set, not what
     # the stale singleton recorded at boot.
     _apply_toml_overlay(current, env_set_fields=set(fresh.model_fields_set))
+    reload_routing_constants()
     log.info(
         "reload_settings_from_disk applied: model=%r (pid=%d)",
         getattr(current, "model", "?"),
@@ -313,6 +328,41 @@ GLM_FALLBACK_CHAIN: list[str] = list(_routing.fallbacks.glm)
 # quota and incurs metered billing instead.
 GLM_BASE_URL = "https://api.z.ai/api/coding/paas/v4"
 GLM_PAYG_BASE_URL = "https://api.z.ai/api/paas/v4"
+
+
+def reload_routing_constants() -> None:
+    """Re-read routing.toml and rebind this module's routing constants (H11).
+
+    C-4 (2026-06-11). ``_routing`` froze at import, so an edit to
+    ``~/.geode/routing.toml`` needed a process restart even though
+    :func:`reload_settings_from_disk` claimed to bring the daemon back in
+    sync with disk. Called from ``reload_settings_from_disk``; clears the
+    manifest lru_cache then rebinds the module globals, so manifest readers
+    (``resolve_provider``) and every FUNCTION-LOCAL ``from core.config
+    import X`` (which re-resolves the module attribute at call time) see
+    fresh values.
+
+    Honest limit: MODULE-LEVEL by-value importers still hold their
+    boot-time copies — ``core/llm/providers/{anthropic,openai,codex,glm}.py``
+    module aliases (``DEFAULT_*_MODEL`` / ``*_FALLBACK_MODELS``) and
+    ``core/skills/agents.py`` dataclass defaults. Defreezing those is a
+    separate caller sweep (kanban: H11-tail).
+    """
+    from core.config import routing_manifest as _rm
+
+    _rm.clear_routing_manifest_cache()
+    fresh = _rm.load_routing_manifest()
+    module_globals = globals()
+    module_globals["ANTHROPIC_PRIMARY"] = fresh.defaults.anthropic
+    module_globals["ANTHROPIC_SECONDARY"] = fresh.defaults.anthropic_secondary or ""
+    module_globals["ANTHROPIC_BUDGET"] = fresh.defaults.anthropic_budget or ""
+    module_globals["ANTHROPIC_FALLBACK_CHAIN"] = list(fresh.fallbacks.anthropic)
+    module_globals["OPENAI_PRIMARY"] = fresh.defaults.openai
+    module_globals["OPENAI_FALLBACK_CHAIN"] = list(fresh.fallbacks.openai)
+    module_globals["CODEX_PRIMARY"] = fresh.defaults.codex
+    module_globals["CODEX_FALLBACK_CHAIN"] = list(fresh.fallbacks.codex)
+    module_globals["GLM_PRIMARY"] = fresh.defaults.glm
+    module_globals["GLM_FALLBACK_CHAIN"] = list(fresh.fallbacks.glm)
 
 
 def _resolve_provider(model: str) -> str:

@@ -76,30 +76,43 @@ class GeodeBootstrap:
 
 
 def load_daemon_env() -> None:
-    """Serve-daemon env load (C-3, 2026-06-11).
+    """Serve-daemon env load (C-3/C-4, 2026-06-11).
 
-    Order: manual exports > project .env > global ~/.geode/.env — the same
-    direction as the pydantic ``env_file`` cascade (core/config/_settings.py),
-    so there is exactly one dotenv precedence in the codebase (hazard H5).
+    Delegates promotion to :func:`core.config.env_io.load_env_files` — the
+    ONE dotenv precedence (manual exports > project .env > global
+    ~/.geode/.env, hazard H5) shared with the standalone train/campaign
+    entrypoints.
 
     Behavior(model-pick) keys (``core.config.env_io.BEHAVIOR_ENV_KEYS``) are
     dropped from the inherited environment and skipped during promotion:
     anything in the daemon's os.environ outlives every per-session settings
     reload, so a stray GEODE_MODEL would mask /model switches for the
     daemon's whole lifetime (hazard H2). ``GEODE_SERVE_KEEP_MODEL_ENV=1``
-    keeps them for operators who intentionally pin the daemon's model.
-    Secrets still promote — MCP ``${VAR}`` expansion and spawned
-    subprocesses read os.environ.
+    keeps them for operators who intentionally pin the daemon's model —
+    honored from the process env OR from either .env file (C-4: pre-fix a
+    flag written into .env was read only AFTER the drop had already
+    happened, so it silently did nothing). Secrets still promote — MCP
+    ``${VAR}`` expansion and spawned subprocesses read os.environ.
     """
     import os
     from pathlib import Path
 
     from dotenv import dotenv_values
 
-    from core.config.env_io import BEHAVIOR_ENV_KEYS
+    from core.config.env_io import BEHAVIOR_ENV_KEYS, load_env_files
     from core.paths import GLOBAL_ENV_FILE
 
     keep_model_env = os.environ.get("GEODE_SERVE_KEEP_MODEL_ENV") == "1"
+    if not keep_model_env:
+        # The escape hatch may live in a .env file rather than the spawning
+        # shell — check both files BEFORE dropping anything.
+        for env_file in (GLOBAL_ENV_FILE, Path(".env")):
+            if env_file.exists() and dotenv_values(str(env_file)).get(
+                "GEODE_SERVE_KEEP_MODEL_ENV"
+            ) == "1":
+                keep_model_env = True
+                break
+
     if not keep_model_env:
         for behavior_key in BEHAVIOR_ENV_KEYS:
             if behavior_key in os.environ:
@@ -111,17 +124,7 @@ def load_daemon_env() -> None:
                 )
                 os.environ.pop(behavior_key)
 
-    inherited = frozenset(os.environ)
-    for env_file in (GLOBAL_ENV_FILE, Path(".env")):
-        if not env_file.exists():
-            continue
-        for key, val in dotenv_values(str(env_file)).items():
-            # Empty values (e.g. ANTHROPIC_API_KEY=) must NOT clobber
-            if not val or key in inherited:
-                continue
-            if key in BEHAVIOR_ENV_KEYS and not keep_model_env:
-                continue
-            os.environ[key] = val
+    load_env_files(skip_behavior_keys=not keep_model_env)
 
 
 def setup_contextvars(*, load_env: bool = False) -> None:
