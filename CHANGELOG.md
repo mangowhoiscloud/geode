@@ -45,6 +45,11 @@ functional change.
 
 ---
 
+## [0.99.175] - 2026-06-11
+
+### Fixed
+- **`/model` switch ignored inside a live session — thin-CLI ↔ daemon model gap** (operator-reported, recurring): a `/model` issued mid-session relays to the daemon, where `cmd_model` updates `settings.model`/`agentic_effort` + config.toml but never the AgenticLoop the active session runs on (its docstring: "applies to *new* sessions"). The per-turn drift sync that used to re-point the loop was cut to a no-op (PR-DRIFT-CUT, 2026-05-24) because *inferring* drift caused an auto-revert smoke incident — leaving `/model` as the sole explicit entry point, but one that never reached the live loop. `CLIPoller._handle_command_on_server` now calls `_sync_live_loop_to_settings(loop)` after a `/model` command lands: model + provider + identity breadcrumb + context-window adapt + effort axis, using the same synchronous swap helpers `update_model_async` uses (minus the async-only telemetry hook). Fires ONLY on an explicit `/model` command, so it carries operator intent without reintroducing speculative drift. Verify the effective model with `geode about`, not config.toml (`geode config explain model` shows the winning layer). Guards: `tests/core/server/test_model_switch_live_session.py` (5).
+
 ## [0.99.174] - 2026-06-11
 
 ### Fixed
