@@ -16,7 +16,9 @@
 
 <!-- Move items here when work begins. -->
 <!-- 3-Checkpoint: (1) alloc → (2) merge (CI 5/5) → (3) verify -->
-- [ ] Audit bundle D (expanded by dup/dead-code audit) — D-1 safe-delete batch (Settings 17 fields, 9 zombie modules + their tests, paths orphan constants) / D-2 path anchors (petri logs ×6, seed-pool ×3, paths.py bypasses, config template fork, CLI defaults) / D-3 operator decisions (G1-G4 guardrails, M4.x DPO chain, recall_writer, mcp_server) — awaiting pick
+- [ ] Audit bundle D-1 in progress — safe-delete batch (Settings 17 fields, zombie modules + tests, shims); worktree cleanup-d1
+- [ ] Audit bundle D-2 queued — path/config anchors (petri logs ×6, seed-pool default, paths.py bypasses, config template fork, CLI defaults)
+- [ ] Audit bundle D-3 deferred until D-1/D-2 land — operator decisions (G1-G4 guardrails, M4.x DPO chain, recall_writer, mcp_server)
 
 ## In Review
 
