@@ -1362,7 +1362,6 @@ dependencies = [
     { name = "latex2sympy2" },
     { name = "markdown-it-py" },
     { name = "markdownify" },
-    { name = "numpy" },
     { name = "openai" },
     { name = "openai-agents" },
     { name = "prompt-toolkit" },
@@ -1425,6 +1424,7 @@ dev = [
 ]
 viz = [
     { name = "manim" },
+    { name = "numpy" },
     { name = "pixelmatch" },
     { name = "uharfbuzz" },
 ]
@@ -1449,7 +1449,6 @@ requires-dist = [
     { name = "matplotlib", marker = "extra == 'viz'", specifier = ">=3.8.0" },
     { name = "mcp", marker = "extra == 'audit'", specifier = ">=1.0.0" },
     { name = "mcp", marker = "extra == 'mcp'", specifier = ">=1.0.0" },
-    { name = "numpy", specifier = ">=2.2.0" },
     { name = "openai", specifier = ">=2.26.0" },
     { name = "openai-agents", specifier = ">=0.13.0" },
     { name = "opentelemetry-api", marker = "extra == 'obs'", specifier = ">=1.27.0" },
@@ -1491,6 +1490,7 @@ dev = [
 ]
 viz = [
     { name = "manim", specifier = ">=0.20.1" },
+    { name = "numpy", specifier = ">=2.2.0" },
     { name = "pixelmatch", specifier = ">=0.4.0" },
     { name = "uharfbuzz", specifier = ">=0.54.1" },
 ]
