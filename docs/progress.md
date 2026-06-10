@@ -16,6 +16,7 @@
 
 <!-- Move items here when work begins. -->
 <!-- 3-Checkpoint: (1) alloc → (2) merge (CI 5/5) → (3) verify -->
+- [ ] Docs sprint — v0.99.154~166 출하분 문서 반영 (별도 세션; 브리프=memory project_docs_sprint_brief_2026_06_11: 모듈 경로 이동 전수 점검 + geode-mcp/seeds/hub/config explain 신규 표면 + 5-layer 다이어그램 + .env 역할 재정의 + Fable 5)
 - [ ] Config system unification C-1..C-4 — env/config 14 override hazards mapped (daemon cwd split H1, env snapshot H2, .env mask H3, /model global wrong-file write H4, inverted dotenv precedence H5...); C-1 geode config explain first; worktree TBD
 
 ## In Review
