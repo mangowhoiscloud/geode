@@ -118,6 +118,8 @@ def test_apply_model_for_mutator_skips_settings_write(
     # The guard must check role_def.settings_field truthy before the
     # __setattr__ call. Anti-deception pin.
     assert "if role_def.settings_field:" in src
-    # And the env + toml writes happen unconditionally afterwards.
-    assert "_upsert_env(role_def.env_var" in src
+    # C-2 (2026-06-11) — the durable write is toml-only now; the env write
+    # was removed (hazards H3/H4/H6) and stale lines are cleaned up.
+    assert "upsert_config_toml(role_def.toml_section" in src
+    assert "remove_env(role_def.env_var)" in src
     assert "upsert_config_toml(role_def.toml_section, role_def.toml_key" in src

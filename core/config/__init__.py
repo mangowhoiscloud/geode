@@ -57,6 +57,10 @@ _TOML_TO_SETTINGS: dict[str, str] = {
     "llm.plan_model": "plan_model",
     "llm.act_model": "act_model",
     "llm.judge_model": "judge_model",
+    # C-2 (2026-06-11) — H7 fix: /login source was writing these toml rows
+    # but nothing read them back (dead write); now they are part of the cascade.
+    "llm.anthropic_credential_source": "anthropic_credential_source",
+    "llm.openai_credential_source": "openai_credential_source",
     # PR-CL-A1 (2026-05-23) — Dynamic Replan knobs.
     "replan.enabled": "replan_enabled",
     "replan.interval": "replan_interval",
