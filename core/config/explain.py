@@ -34,6 +34,12 @@ from core.paths import GLOBAL_ENV_FILE
 
 PROJECT_ENV_FILE = Path(".env")
 
+
+def _global_toml_path() -> Path:
+    env_toml = os.environ.get("GEODE_CONFIG_TOML", "").strip()
+    return Path(env_toml).expanduser() if env_toml else GLOBAL_CONFIG_PATH
+
+
 #: Layer identifiers in precedence order (index 0 = strongest).
 LAYERS: tuple[str, ...] = (
     "os.environ",
@@ -119,7 +125,9 @@ def explain_field(field_name: str) -> FieldReport:
         )
     )
     candidates.append(
-        LayerValue("global config.toml", str(GLOBAL_CONFIG_PATH), _toml_value(GLOBAL_CONFIG_PATH))
+        # H9 (C-4): GEODE_CONFIG_TOML redirects the global file for the main
+        # loader too — report the path actually read.
+        LayerValue("global config.toml", str(_global_toml_path()), _toml_value(_global_toml_path()))
     )
 
     default = (
