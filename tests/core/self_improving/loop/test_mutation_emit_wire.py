@@ -463,3 +463,56 @@ def test_rollback_sot_no_emit_when_rollback_write_fails(
         reason="audit_log_write_fail",
     )
     assert captured == []
+
+
+def test_reject_and_revert_emits_mutation_rejected(monkeypatch: pytest.MonkeyPatch) -> None:
+    """PR-AUDIT-AB — the gate/policy reject path fires MUTATION_REJECTED
+    (the loop's dominant outcome finally has telemetry) BEFORE the SoT
+    revert, with the documented payload schema."""
+    from core.self_improving import train as auto_train
+
+    captured: list[tuple[HookEvent, dict[str, Any]]] = []
+    hooks = HookSystem()
+    hooks.register(
+        HookEvent.MUTATION_REJECTED,
+        lambda event, data: captured.append((event, data)),
+        name="rejected_probe",
+    )
+    set_self_improving_loop_hooks(hooks)
+
+    monkeypatch.setenv("GEODE_SIL_MUTATION_ID", "mut-reject-1")
+    monkeypatch.setenv("GEODE_SIL_AUDIT_RUN_ID", "run-77")
+    monkeypatch.setattr(auto_train, "_revert_sot_after_reject", lambda mid: (True, "reverted-ok"))
+
+    reason = auto_train._reject_and_revert("margin below floor", rejected_by="gate")
+
+    assert reason == "margin below floor; SoT reverted (reverted-ok)"
+    assert len(captured) == 1
+    _event, payload = captured[0]
+    assert payload["mutation_id"] == "mut-reject-1"
+    assert payload["run_id"] == "run-77"
+    assert payload["reason"] == "margin below floor"
+    assert payload["rejected_by"] == "gate"
+
+
+def test_reject_and_revert_no_emit_without_mutation_id(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Manual audits (no GEODE_SIL_MUTATION_ID) have no mutation to
+    reject — no emit, reason unchanged."""
+    from core.self_improving import train as auto_train
+
+    captured: list[Any] = []
+    hooks = HookSystem()
+    hooks.register(
+        HookEvent.MUTATION_REJECTED,
+        lambda event, data: captured.append(data),
+        name="rejected_probe",
+    )
+    set_self_improving_loop_hooks(hooks)
+
+    monkeypatch.delenv("GEODE_SIL_MUTATION_ID", raising=False)
+    reason = auto_train._reject_and_revert("manual reject", rejected_by="gate")
+
+    assert reason == "manual reject"
+    assert captured == []

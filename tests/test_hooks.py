@@ -22,7 +22,7 @@ class TestHookEvent:
         # baseline lifecycle) + 1 PR-MAX-GEN
         # (SELF_IMPROVING_AUTO_TRIGGER_MAX_GENERATION_REACHED) +
         # 1 PR-NO-FALLBACK (ADAPTER_DISPATCH_ATTEMPT).
-        assert len(HookEvent) == 67
+        assert len(HookEvent) == 64
 
     def test_event_values(self):
         assert HookEvent.SESSION_STARTED.value == "session_start"
@@ -32,8 +32,6 @@ class TestHookEvent:
         assert HookEvent.SUBAGENT_FAILED.value == "subagent_failed"
         assert HookEvent.TURN_COMPLETED.value == "turn_complete"
         assert HookEvent.TRIGGER_FIRED.value == "trigger_fired"
-        assert HookEvent.VERIFICATION_PASS.value == "verification_pass"
-        assert HookEvent.VERIFICATION_FAIL.value == "verification_fail"
 
     def test_new_audit_events(self):
         """v0.42.0 audit: 4 new lifecycle events."""

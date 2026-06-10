@@ -2528,3 +2528,56 @@ def test_load_global_env_missing_file_is_false_noop(
 
     monkeypatch.setattr(core_paths, "GLOBAL_ENV_FILE", tmp_path / "nonexistent.env")
     assert auto_train._load_global_env() is False
+
+
+def test_load_baseline_non_numeric_dim_value_returns_none_v1(tmp_path: Path) -> None:
+    """PR-AUDIT-AB — graceful contract covers per-value float() casts.
+
+    One non-numeric dim value (schema drift / partial write) must degrade
+    to baseline-absent, not raise ValueError through the promote gate
+    (PR-G3 #1347 incident class).
+    """
+    saved = auto_train.BASELINE_PATH
+    try:
+        baseline_path = tmp_path / "baseline.json"
+        baseline_path.write_text(
+            json.dumps(
+                {
+                    "dim_means": {"broken_tool_use": "not-a-number"},
+                    "dim_stderr": {"broken_tool_use": 0.4},
+                }
+            ),
+            encoding="utf-8",
+        )
+        auto_train.BASELINE_PATH = baseline_path
+        means, stderr, *_ = auto_train._load_baseline()
+        assert means is None
+        assert stderr is None
+    finally:
+        auto_train.BASELINE_PATH = saved
+
+
+def test_load_baseline_non_numeric_dim_value_returns_none_v2(tmp_path: Path) -> None:
+    """Same contract guard on the schema_version=2 (raw/axes) path."""
+    saved = auto_train.BASELINE_PATH
+    try:
+        baseline_path = tmp_path / "baseline.json"
+        baseline_path.write_text(
+            json.dumps(
+                {
+                    "schema_version": 2,
+                    "raw": {
+                        "dim_means": {"broken_tool_use": None},
+                        "dim_stderr": {"broken_tool_use": 0.4},
+                    },
+                    "axes": {},
+                }
+            ),
+            encoding="utf-8",
+        )
+        auto_train.BASELINE_PATH = baseline_path
+        means, stderr, *_ = auto_train._load_baseline()
+        assert means is None
+        assert stderr is None
+    finally:
+        auto_train.BASELINE_PATH = saved

@@ -68,17 +68,25 @@ def _fire_hook(event: HookEvent, data: dict[str, Any]) -> None:
     fire_hook(_hooks_ctx.get(), event, data)
 
 
-def _get_session_store(store: SessionStorePort | None = None) -> SessionStorePort:
-    """Get the session store to use, falling back to default."""
+def _get_session_store(store: SessionStorePort | None = None) -> tuple[SessionStorePort, bool]:
+    """Resolve the session store; second element is True when ephemeral.
+
+    PR-AUDIT-AB (2026-06-10) — the ephemeral fallback creates a FRESH
+    InMemorySessionStore per call, so anything written to it is gone by
+    the next tool call. Callers must surface that (``ephemeral: true`` in
+    the tool result) instead of reporting a clean success; bootstrap wires
+    ``set_default_session_store`` so production never takes this branch.
+    """
     if store is not None:
-        return store
+        return store, False
     default = _default_session_store_ctx.get()
     if default is not None:
-        return default
+        return default, False
     log.warning(
-        "SessionStore ContextVar not initialized; falling back to ephemeral InMemorySessionStore"
+        "SessionStore ContextVar not initialized; falling back to ephemeral "
+        "InMemorySessionStore — data will NOT survive this call"
     )
-    return InMemorySessionStore()
+    return InMemorySessionStore(), True
 
 
 class _AsyncExecuteMixin:
@@ -139,7 +147,7 @@ class MemorySearchTool(_AsyncExecuteMixin):
         tier: str = kwargs.get("tier", "all")
         limit: int = kwargs.get("limit", 10)
 
-        store = _get_session_store(self._store)
+        store, ephemeral = _get_session_store(self._store)
         matches: list[dict[str, Any]] = []
         query_lower = query.lower()
 
@@ -219,6 +227,7 @@ class MemorySearchTool(_AsyncExecuteMixin):
                 "tier_searched": tier,
                 "matches": matches,
                 "total_found": len(matches),
+                "ephemeral": ephemeral,
             }
         }
 
@@ -253,7 +262,7 @@ class MemoryGetTool(_AsyncExecuteMixin):
     def _execute_sync(self, **kwargs: Any) -> dict[str, Any]:
         session_id: str = kwargs["session_id"]
 
-        store = _get_session_store(self._store)
+        store, ephemeral = _get_session_store(self._store)
         data = store.get(session_id)
 
         if data is None:
@@ -261,6 +270,7 @@ class MemoryGetTool(_AsyncExecuteMixin):
                 "result": {
                     "session_id": session_id,
                     "found": False,
+                    "ephemeral": ephemeral,
                     "data": None,
                 }
             }
@@ -270,6 +280,7 @@ class MemoryGetTool(_AsyncExecuteMixin):
                 "session_id": session_id,
                 "found": True,
                 "data": data,
+                "ephemeral": ephemeral,
             }
         }
 
@@ -327,7 +338,7 @@ class MemorySaveTool(_AsyncExecuteMixin):
         merge: bool = kwargs.get("merge", True)
         persistent: bool = kwargs.get("persistent", False)
 
-        store = _get_session_store(self._store)
+        store, ephemeral = _get_session_store(self._store)
 
         if merge:
             existing = store.get(session_id) or {}
@@ -351,7 +362,10 @@ class MemorySaveTool(_AsyncExecuteMixin):
         return {
             "result": {
                 "session_id": session_id,
-                "saved": True,
+                # ephemeral=True means the write went to a per-call throwaway
+                # store and will NOT be readable by the next tool call.
+                "saved": not ephemeral,
+                "ephemeral": ephemeral,
                 "merged": merge,
                 "persistent": persistent,
                 "keys_stored": list(data.keys()),

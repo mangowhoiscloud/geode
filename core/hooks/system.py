@@ -92,10 +92,6 @@ class HookEvent(Enum):
     listener was inert.
     """
 
-    # Verification level
-    VERIFICATION_PASS = "verification_pass"  # noqa: S105 — hook event name, not a password
-    VERIFICATION_FAIL = "verification_fail"
-
     # Scheduler trigger level
     TRIGGER_FIRED = "trigger_fired"
     POST_ANALYSIS = "post_analysis"
@@ -147,12 +143,6 @@ class HookEvent(Enum):
     TOOL_APPROVAL_REQUESTED = "tool_approval_requested"
     TOOL_APPROVAL_GRANTED = "tool_approval_granted"
     TOOL_APPROVAL_DENIED = "tool_approval_denied"
-
-    # Cross-provider fallback (LLM resilience)
-    # PR-NO-FALLBACK (2026-05-28) — cross-provider fallback removed;
-    # the enum value is retained for back-compat (plugins may still
-    # subscribe) but no production emit-site fires it any more.
-    FALLBACK_CROSS_PROVIDER = "fallback_cross_provider"
 
     # Per-adapter dispatch attempt — fired by
     # ``core.llm.adapters.dispatch._fire_attempt`` for every single-adapter
@@ -247,8 +237,12 @@ class HookEvent(Enum):
     #    "budget_total_s": float, "ts": float}
     # ``HANDOFF_TRIGGERED`` fires once per session — at the threshold
     # crossing — even if the round loop re-enters the budget check.
-    # ``HANDOFF_COMPLETED`` fires when the graceful exit has persisted
-    # transcript + DB state; ``HANDOFF_FAILED`` fires on watcher error.
+    # ``HANDOFF_COMPLETED`` / ``HANDOFF_FAILED`` are RESERVED for the
+    # handoff watcher, which is not built yet — ``complete_handoff`` /
+    # ``fail_handoff`` (core/agent/handoff.py) have no production caller,
+    # so today nothing fires these two events. Wire the emits when the
+    # watcher lands (PR-AUDIT-AB 2026-06-10 made this honest instead of
+    # promising emits that did not exist).
     HANDOFF_TRIGGERED = "handoff_triggered"
     HANDOFF_COMPLETED = "handoff_completed"
     HANDOFF_FAILED = "handoff_failed"

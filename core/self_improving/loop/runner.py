@@ -1444,6 +1444,26 @@ class SelfImprovingLoopRunner:
                     finding.matched_mutation_id,
                     finding.matched_target_section,
                 )
+                # PR-AUDIT-AB (2026-06-10) — dedup rejection is a mutation
+                # rejection; fire the lifecycle event before raising.
+                from core.hooks.system import HookEvent
+                from core.self_improving.loop._hooks import _fire_hook
+
+                _fire_hook(
+                    HookEvent.MUTATION_REJECTED,
+                    {
+                        "mutation_id": mutation.mutation_id,
+                        "target_kind": mutation.target_kind,
+                        "target_path": f"{mutation.target_kind}.{mutation.target_section}",
+                        "ts": time.time(),
+                        "run_id": "",
+                        "reason": (
+                            f"repetitive (similarity={finding.max_similarity:.3f} "
+                            f"vs {finding.matched_mutation_id})"
+                        ),
+                        "rejected_by": "dedup",
+                    },
+                )
                 raise RepetitiveMutationError(finding, threshold)
         # PR-6 C-5 (Codex MCP catch) — apply_mutation dispatches by
         # target_kind, but ctx.current_sections is *always* the wrapper-

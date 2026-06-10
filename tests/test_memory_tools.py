@@ -258,3 +258,69 @@ class TestRuleDeleteTool:
             assert result["result"]["deleted"] is False
         finally:
             set_project_memory(None)
+
+
+class TestSessionStoreContract:
+    """PR-AUDIT-AB — fake-success guards for the session-store wiring.
+
+    Before the fix, ``set_default_session_store`` had zero callers: every
+    persistent=False save went to a fresh throwaway InMemorySessionStore
+    and still reported ``saved: True``.
+    """
+
+    def test_save_then_get_roundtrip_via_default_store(self):
+        from core.tools.memory_tools import (
+            _default_session_store_ctx,
+            set_default_session_store,
+        )
+
+        store = InMemorySessionStore(ttl=3600)
+        token = _default_session_store_ctx.set(None)
+        try:
+            set_default_session_store(store)
+            save = asyncio.run(MemorySaveTool().aexecute(session_id="rt-1", data={"k": "v"}))
+            assert save["result"]["saved"] is True
+            assert save["result"]["ephemeral"] is False
+
+            got = asyncio.run(MemoryGetTool().aexecute(session_id="rt-1"))
+            assert got["result"]["found"] is True
+            assert got["result"]["data"] == {"k": "v"}
+        finally:
+            _default_session_store_ctx.reset(token)
+
+    def test_unwired_store_reports_ephemeral_not_saved(self):
+        """No injected store + no ContextVar → the save must NOT claim
+        success: ``saved`` is False and ``ephemeral`` is True."""
+        from core.tools.memory_tools import _default_session_store_ctx
+
+        token = _default_session_store_ctx.set(None)
+        try:
+            save = asyncio.run(MemorySaveTool().aexecute(session_id="eph-1", data={"k": "v"}))
+            assert save["result"]["ephemeral"] is True
+            assert save["result"]["saved"] is False
+
+            got = asyncio.run(MemoryGetTool().aexecute(session_id="eph-1"))
+            assert got["result"]["found"] is False
+            assert got["result"]["ephemeral"] is True
+        finally:
+            _default_session_store_ctx.reset(token)
+
+    def test_bootstrap_build_memory_wires_default_store(self, tmp_path: Path):
+        """build_memory must call set_default_session_store with the SAME
+        store instance it hands to ContextAssembler."""
+        from unittest.mock import patch
+
+        from core.tools.memory_tools import _default_session_store_ctx, _get_session_store
+
+        store = InMemorySessionStore(ttl=3600)
+        token = _default_session_store_ctx.set(None)
+        try:
+            with patch("core.paths.ensure_directories"):
+                from core.wiring.bootstrap import build_memory
+
+                build_memory(session_store=store, hooks=None)
+            resolved, ephemeral = _get_session_store()
+            assert resolved is store
+            assert ephemeral is False
+        finally:
+            _default_session_store_ctx.reset(token)
