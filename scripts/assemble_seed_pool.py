@@ -81,6 +81,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+from core.paths import CYCLE_INPUT_POOL
 from core.self_improving.loop.baseline_epoch import seed_pool_content_hash
 
 _LOGGER = logging.getLogger("assemble_seed_pool")
@@ -91,11 +92,9 @@ _LOGGER = logging.getLogger("assemble_seed_pool")
 _MALFORMED_SORT_KEY: tuple[int, ...] = ()
 
 DEFAULT_SEEDS_ROOT = Path("docs/self-improving/petri-bundle/seeds")
-#: Default pool destination — under the repo ``state/`` tree (GEODE convention
-#: for runtime artefacts), never ``/tmp``.
-# PR-CLEANUP-D2 (2026-06-10) — the default output IS the campaign's input
-# pool, anchored in core.paths (was a cwd-relative third copy of the path).
-from core.paths import CYCLE_INPUT_POOL as DEFAULT_OUT
+#: Default pool destination — the campaign's input pool, anchored in
+#: core.paths (PR-CLEANUP-D2; was a cwd-relative third copy of the path).
+DEFAULT_OUT = CYCLE_INPUT_POOL
 
 DEFAULT_RUNS = 2
 
