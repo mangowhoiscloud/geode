@@ -45,6 +45,11 @@ functional change.
 
 ---
 
+## [0.99.176] - 2026-06-11
+
+### Fixed
+- **`/model` picker reported "Cancelled" for every switch — thin-CLI profile not hydrated** (operator-reported, the real cause behind "fable 5로 바꿔도 안 먹힘"): the interactive picker runs in the thin CLI process (relayed locally so the terminal keeps stdin), which — unlike the serve daemon — never runs the wiring bootstrap. So `get_profile_store()` was empty and `model_available()` → `resolve_routing()` returned None for EVERY model; the picker treats Enter on an unavailable entry as a blocked-Enter and reports `Cancelled`, so no switch ever landed even though the daemon was authenticated and the current model ran fine. `_interactive_model_picker` / `_interactive_model_picker_for_role` now call `_ensure_profiles_hydrated()` (idempotent `ensure_profile_store()` from `~/.geode/auth.toml`) before evaluating availability. Distinct from and upstream of the v0.99.175 live-session fix — that handled a switch that *landed*; this lets the switch land at all. Guards: `tests/core/cli/test_picker_profile_hydrate.py` (4).
+
 ## [0.99.175] - 2026-06-11
 
 ### Fixed

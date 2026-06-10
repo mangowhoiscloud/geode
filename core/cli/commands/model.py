@@ -249,6 +249,30 @@ def _apply_model(
     _pkg.console.print()
 
 
+def _ensure_profiles_hydrated() -> None:
+    """Load auth profiles before the thin CLI evaluates ``model_available``.
+
+    The interactive ``/model`` picker runs in the THIN CLI process
+    (``core/cli/__init__.py`` relays it locally so the terminal keeps
+    stdin), which — unlike the serve daemon — never runs the wiring
+    bootstrap. So ``get_profile_store()`` is empty and
+    ``model_available()`` → ``resolve_routing()`` returns None for EVERY
+    model. The picker then treats an Enter on any (apparently
+    unavailable) entry as a blocked-Enter and reports ``Cancelled`` — so
+    no model switch ever lands, even though the daemon is authenticated
+    and the current model runs fine. Operator-reported "fable 5로
+    전환됐지만 Cancelled" (2026-06-11). ``ensure_profile_store`` hydrates
+    from ``~/.geode/auth.toml`` and is idempotent (no-op once built), so
+    availability reflects the real credential state.
+    """
+    import contextlib
+
+    from core.wiring.container import ensure_profile_store
+
+    with contextlib.suppress(Exception):
+        ensure_profile_store()
+
+
 def _interactive_model_picker() -> None:
     """Two-axis interactive picker — model (↑↓) + effort level (←→).
 
@@ -268,6 +292,7 @@ def _interactive_model_picker() -> None:
     from core.cli.effort_picker import pick_model_and_effort
     from core.config import settings
 
+    _ensure_profiles_hydrated()
     profiles = [
         (
             p.id,
@@ -323,6 +348,7 @@ def _interactive_model_picker_for_role(role_def: AgentRole) -> None:
     from core.cli.effort_picker import pick_model_and_effort
     from core.config import settings
 
+    _ensure_profiles_hydrated()
     profiles = [
         (
             p.id,
