@@ -45,6 +45,14 @@ functional change.
 
 ---
 
+## [0.99.164] - 2026-06-11
+
+### Added
+- **`geode config explain [key]` (config-unification C-1).** Shows every config layer's candidate for a Settings key — os.environ / global `.env` / project `.env` / project `config.toml` / global `config.toml` / code default — with the WINNER and every masked layer, file paths included. Mirrors the real precedence (including pydantic-settings' later-env-file-wins order: global `.env` beats project `.env` for plain `Settings()`). `geode about` now prints a one-line warning when an env-layer model masks a toml pick (the "/model로 바꿨는데 안 바뀜" hazard class). Guards in `tests/core/config/test_config_explain.py`.
+
+### Changed
+- `geode config` is now an explicit subcommand group — the petri-toml migration moved from the flattened form to `geode config migrate-petri-toml` (typer single-command flattening ended when `explain` joined the group).
+
 ## [0.99.163] - 2026-06-11
 
 ### Changed
