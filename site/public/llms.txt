@@ -1,91 +1,118 @@
 # GEODE
 
-GEODE v0.99.87. A self-evolving autonomous execution agent.
+> GEODE is a self-evolving autonomous execution agent: an inner agentic loop runs tasks (research, analysis, automation, scheduling) and an outer self-improving loop (Petri audit -> fitness gate) tunes the system that runs them.
 
-Last sync: 2026-05-29
+Version v0.99.156. Last sync 2026-06-10. Every link below is a rendered docs page.
 
-## Top-level pages
+## Start here
 
-- Portfolio  https://mangowhoiscloud.github.io/geode/portfolio
-- Docs       https://mangowhoiscloud.github.io/geode/docs
-- About      https://mangowhoiscloud.github.io/geode/about
-- Source     https://github.com/mangowhoiscloud/geode
+- [Docs](https://mangowhoiscloud.github.io/geode/docs): documentation root, what GEODE is and where to go next
+- [Portfolio](https://mangowhoiscloud.github.io/geode/portfolio): capability overview with demos
+- [About](https://mangowhoiscloud.github.io/geode/about): project background
+- [Source](https://github.com/mangowhoiscloud/geode): GitHub repository
 
-## Documentation
+## Overview
 
-- What GEODE is  https://mangowhoiscloud.github.io/geode/docs  — An autonomous execution agent that runs an inner agentic loop and improves itself through an outer loop. What it does, who it is for, where to go next.
-- How GEODE runs a task  https://mangowhoiscloud.github.io/geode/docs/overview/how-it-runs  — One request, traced end to end. The same core serves a CLI task, a gateway message, and a scheduled self-improving run.
-- The 4-layer stack  https://mangowhoiscloud.github.io/geode/docs/architecture/overview  — Model, Runtime, Harness, Agent. What each layer owns, and where its responsibility ends.
-- Quick Start  https://mangowhoiscloud.github.io/geode/docs/quick-start  — Install GEODE and run your first task in a few minutes.
-- Pick a path  https://mangowhoiscloud.github.io/geode/docs/run/pick-path  — Subscription, API key, or free path. How to choose for your situation.
-- Configure providers  https://mangowhoiscloud.github.io/geode/docs/run/providers  — Anthropic, OpenAI, Codex, GLM. Where keys go, and what fallback chain you get.
-- Run as a daemon  https://mangowhoiscloud.github.io/geode/docs/run/serve  — Start, restart, and stop serve. A thin CLI talks to an IPC-served runtime.
-- The two loops  https://mangowhoiscloud.github.io/geode/docs/concepts/two-loops  — The mental model the rest of the docs build on. An inner agentic loop runs a task; an outer loop tunes the system that runs tasks.
-- The inner agentic loop  https://mangowhoiscloud.github.io/geode/docs/architecture/agentic-loop  — The while(tool_use) primitive. How a turn runs, and the paths that end it.
-- Context assembly  https://mangowhoiscloud.github.io/geode/docs/runtime/context  — Every LLM call's context is built here. Memory tiers plus prompt layers, under a token budget.
-- Memory tiers  https://mangowhoiscloud.github.io/geode/docs/runtime/memory/5-tier  — From a raw session log to a single LLM-ready summary. Hierarchical override, budget-aware compression.
-- Prompt assembly  https://mangowhoiscloud.github.io/geode/docs/runtime/llm/prompt-system  — How the system prompt is layered and assembled before each call.
-- Tools and toolsets  https://mangowhoiscloud.github.io/geode/docs/runtime/tools/protocol  — The tool registry and deferred loading. A few tools load up front, the rest are fetched on demand.
-- Hooks and observability  https://mangowhoiscloud.github.io/geode/docs/harness/hooks  — Lifecycle events that handlers subscribe to. How observe, react, decide, and act stack on one event.
-- LLM routing  https://mangowhoiscloud.github.io/geode/docs/runtime/llm/providers  — Provider selection and fallback. Circuit breakers when a provider is unhealthy.
-- Sub-agent orchestration  https://mangowhoiscloud.github.io/geode/docs/runtime/orchestration  — Spawning isolated sub-agents in parallel lanes, with snapshotted memory and merge on completion.
-- Skills  https://mangowhoiscloud.github.io/geode/docs/runtime/skills  — User-invocable skills, distinct from tools. Discovery, lifecycle, override.
-- The closed loop  https://mangowhoiscloud.github.io/geode/docs/capabilities/autoresearch  — The outer loop end to end. Mutate a policy, audit with Petri, attribute the result, then promote or revert.
-- Co-scientist seed generation  https://mangowhoiscloud.github.io/geode/docs/capabilities/co-scientist  — A multi-role agent loop that grows the evaluation seed corpus. Supervisor, generator, critic, pilot, ranker, evolver, meta-reviewer.
-- Seed pipeline  https://mangowhoiscloud.github.io/geode/docs/capabilities/seed-pipeline  — The plugin that regenerates the seed corpus each generation. Picker, orchestrator, manifest, cost preview.
-- Outer-loop configuration  https://mangowhoiscloud.github.io/geode/docs/capabilities/outer-loop  — The shared schema and loader for autoresearch, seed pipeline, and Petri thresholds. Strict by default.
-- Petri × GEODE  https://mangowhoiscloud.github.io/geode/docs/petri/overview  — Anthropic Alignment Science's evaluation framework, wrapped over the GEODE agent as the loop's measurement.
-- Scenarios  https://mangowhoiscloud.github.io/geode/docs/petri/scenarios  — The Petri seed corpus plus GEODE-specific seeds, grouped into critical, auxiliary, and info dimension buckets.
-- Run an audit  https://mangowhoiscloud.github.io/geode/docs/petri/run  — geode audit, or inspect eval for the raw path. Choose model roles, dimension set, seeds, and turn budget.
-- Judge dimensions  https://mangowhoiscloud.github.io/geode/docs/petri/judge-dimensions  — What each dimension scores, and how to read the heatmap. Critical floors versus auxiliary drift.
-- Seed-generation runs  https://mangowhoiscloud.github.io/geode/docs/petri/seeds  — The per-generation dashboard. Survivors, tokens, meta-review, and next-generation priors per run.
-- Lineage and positioning  https://mangowhoiscloud.github.io/geode/docs/capabilities/lineage  — Where this loop sits in the self-evolving agents literature. An honest recombination of known parts, not a new primitive.
-- Bundle viewer  https://mangowhoiscloud.github.io/geode/docs/petri/bundle  — The live inspect_ai transcript viewer for the latest audit run.
-- Serve and gateway  https://mangowhoiscloud.github.io/geode/docs/harness/serve-gateway  — Operating the serve daemon's messaging gateway. Pollers, binding routing, lane queue.
-- Messaging integrations  https://mangowhoiscloud.github.io/geode/docs/run/messaging  — Connect GEODE to Slack, Discord, or Telegram through gateway adapters.
-- Schedule tasks  https://mangowhoiscloud.github.io/geode/docs/run/schedule  — Natural language and cron, with jitter. A daily report as a single command.
-- Scheduler internals  https://mangowhoiscloud.github.io/geode/docs/runtime/scheduler  — How scheduled jobs are parsed, persisted, and fired.
-- Lifecycle  https://mangowhoiscloud.github.io/geode/docs/harness/lifecycle  — Bootstrap, serve, shutdown. The injection order, and the cold-start lazy arc.
-- Long-running safety  https://mangowhoiscloud.github.io/geode/docs/ops/long-running  — Token guards, context overflow, and a sliding window. How a long run drains gracefully.
-- Cost monitoring  https://mangowhoiscloud.github.io/geode/docs/ops/cost  — Per-session and per-day budgets. The usage ledger, and when to switch models.
-- Troubleshooting  https://mangowhoiscloud.github.io/geode/docs/run/troubleshooting  — Common failure modes and where to look. Logs, hooks, runlog.
-- Write a tool  https://mangowhoiscloud.github.io/geode/docs/guides/custom-tool  — Define a tool, register it, and gate it with a permission policy.
-- Register a hook  https://mangowhoiscloud.github.io/geode/docs/guides/register-hook  — Subscribe a handler to a lifecycle event and wire it in bootstrap.
-- Add an LLM adapter  https://mangowhoiscloud.github.io/geode/docs/guides/llm-adapter  — Add a provider to the router and adapter layer, with a fallback entry.
-- Configure a binding  https://mangowhoiscloud.github.io/geode/docs/guides/binding  — Route a messaging channel to a session lane with its own model and policy.
-- Debug a stuck run  https://mangowhoiscloud.github.io/geode/docs/guides/debug-stuck-run  — Read the transcript and runlog, find where a run stalled, and recover.
-- Configuration basics  https://mangowhoiscloud.github.io/geode/docs/config/basics  — Where configuration lives, how it loads, and how overrides resolve.
-- config.toml reference  https://mangowhoiscloud.github.io/geode/docs/config/reference  — Every configuration key, grouped by area, marked stable or experimental.
-- Auth and OAuth  https://mangowhoiscloud.github.io/geode/docs/runtime/auth  — Profile rotation, the Anthropic ToS path, and the Codex flow.
-- OAuth token rotation  https://mangowhoiscloud.github.io/geode/docs/ops/oauth  — Refresh policy and cooldown across providers.
-- System prompt modes  https://mangowhoiscloud.github.io/geode/docs/runtime/llm/system-prompt-modes  — The persona opt-in and the audit-mode strip. The two ways the system prompt is reshaped.
-- Prompt caching  https://mangowhoiscloud.github.io/geode/docs/runtime/llm/prompt-caching  — The static and dynamic boundary, and ephemeral cache control.
-- Prompt hashing  https://mangowhoiscloud.github.io/geode/docs/runtime/llm/prompt-hashing  — Pinned prompt hashes that break the build on unintended drift.
-- MCP servers  https://mangowhoiscloud.github.io/geode/docs/runtime/tools/mcp  — Connecting MCP servers, the result-size guard, and the HTML to Markdown fallback.
-- CLI and slash commands  https://mangowhoiscloud.github.io/geode/docs/harness/cli  — The thin gateway and IPC, and the slash commands it accepts.
-- Guardrails G1-G4  https://mangowhoiscloud.github.io/geode/docs/verification/guardrails  — Schema, range, grounding, consistency. A fail-fast ladder over LLM output.
-- BiasBuster  https://mangowhoiscloud.github.io/geode/docs/verification/biasbuster  — Confirmation, recency, and anchoring detection on top of the guardrails.
-- Cross-LLM verification  https://mangowhoiscloud.github.io/geode/docs/verification/cross-llm  — An independent second opinion. A different provider re-scores the verdict.
-- Cause decision tree  https://mangowhoiscloud.github.io/geode/docs/verification/cause-decision-tree  — Map a failure cause to a recovery action, instead of blindly retrying.
-- Observability  https://mangowhoiscloud.github.io/geode/docs/verification/observability  — The lenses on a run. Hooks, runlog, audit diagnostics, Petri.
-- Automation sidecar  https://mangowhoiscloud.github.io/geode/docs/runtime/automation  — The feedback loop and model promotion, with drift detection between agent and runtime.
-- Computer use  https://mangowhoiscloud.github.io/geode/docs/runtime/computer-use  — Provider-agnostic desktop automation, Anthropic and OpenAI unified.
-- CLI LaTeX rendering  https://mangowhoiscloud.github.io/geode/docs/runtime/ui/cli-latex  — Rendering math in the terminal. Detection, Unicode flatten, pretty print, image fallback.
-- External references  https://mangowhoiscloud.github.io/geode/docs/reference/external-references  — Frontier agent systems, design standards, and prior work GEODE cites.
-- Frontier comparison  https://mangowhoiscloud.github.io/geode/docs/reference/frontier-comparison  — Where GEODE sits next to Claude Code, Codex CLI, OpenClaw, and Hermes.
-- CHANGELOG  https://mangowhoiscloud.github.io/geode/docs/reference/changelog  — Full version history, synced from CHANGELOG.md on every main push.
-- Petri bundle isolation  https://mangowhoiscloud.github.io/geode/docs/reference/petri-bundle-isolation  — Operator reference for the publish workflow, validator, and hygiene ratchet.
-- Architecture deep-dive  https://mangowhoiscloud.github.io/geode/docs/develop/architecture  — The subsystem map and a recommended reading order, retold as data-flow traces.
-- System index  https://mangowhoiscloud.github.io/geode/docs/architecture/system-index  — Every subsystem with its file path. The flat catalog.
-- Why four layers  https://mangowhoiscloud.github.io/geode/docs/explanation/4-layer  — Model, Runtime, Harness, Agent. Why the boundaries fall where they do.
-- Why a self-hosting harness  https://mangowhoiscloud.github.io/geode/docs/explanation/self-hosting  — The runtime and the build line share primitives. Why that mattered.
-- Why ratchet discipline  https://mangowhoiscloud.github.io/geode/docs/explanation/ratchet  — Pinned prompt hashes and a staged CI. The shape that prevents drift.
-- Release and PyPI lifecycle  https://mangowhoiscloud.github.io/geode/docs/ops/release-pypi-lifecycle  — The version-bump locations, the release workflow, and the rebuild cadence.
-- Backlog disposal  https://mangowhoiscloud.github.io/geode/docs/ops/backlog-dispose  — Retire an idea with a paper trail instead of a silent delete.
+- [What GEODE is](https://mangowhoiscloud.github.io/geode/docs): An autonomous execution agent that runs an inner agentic loop and improves itself through an outer loop. What it does, who it is for, where to go next.
+- [How GEODE runs a task](https://mangowhoiscloud.github.io/geode/docs/overview/how-it-runs): One request, traced end to end. The same core serves a CLI task, a gateway message, and a scheduled self-improving run.
+- [The 4-layer stack](https://mangowhoiscloud.github.io/geode/docs/architecture/overview): Model, Runtime, Harness, Agent. What each layer owns, and where its responsibility ends.
 
-## Authoritative sources
+## Getting Started
 
-- CHANGELOG  https://github.com/mangowhoiscloud/geode/blob/main/CHANGELOG.md
-- CLAUDE.md  https://github.com/mangowhoiscloud/geode/blob/main/CLAUDE.md
-- AGENTS.md  https://github.com/mangowhoiscloud/geode/blob/main/AGENTS.md
-- llms-full  https://mangowhoiscloud.github.io/geode/llms-full.txt
+- [Quick Start](https://mangowhoiscloud.github.io/geode/docs/quick-start): Install GEODE and run your first task in a few minutes.
+- [Pick a path](https://mangowhoiscloud.github.io/geode/docs/run/pick-path): Subscription, API key, or free path. How to choose for your situation.
+- [Configure providers](https://mangowhoiscloud.github.io/geode/docs/run/providers): Anthropic, OpenAI, Codex, GLM. Where keys go, and what fallback chain you get.
+- [Run as a daemon](https://mangowhoiscloud.github.io/geode/docs/run/serve): Start, restart, and stop serve. A thin CLI talks to an IPC-served runtime.
+
+## Core Concepts
+
+- [The two loops](https://mangowhoiscloud.github.io/geode/docs/concepts/two-loops): The mental model the rest of the docs build on. An inner agentic loop runs a task; an outer loop tunes the system that runs tasks.
+- [The inner agentic loop](https://mangowhoiscloud.github.io/geode/docs/architecture/agentic-loop): The while(tool_use) primitive. How a turn runs, and the paths that end it.
+- [Context assembly](https://mangowhoiscloud.github.io/geode/docs/runtime/context): Every LLM call's context is built here. Memory tiers plus prompt layers, under a token budget.
+- [Memory tiers](https://mangowhoiscloud.github.io/geode/docs/runtime/memory/5-tier): From a raw session log to a single LLM-ready summary. Hierarchical override, budget-aware compression.
+- [Prompt assembly](https://mangowhoiscloud.github.io/geode/docs/runtime/llm/prompt-system): How the system prompt is layered and assembled before each call.
+- [Tools and toolsets](https://mangowhoiscloud.github.io/geode/docs/runtime/tools/protocol): The tool registry and deferred loading. A few tools load up front, the rest are fetched on demand.
+- [Hooks and observability](https://mangowhoiscloud.github.io/geode/docs/harness/hooks): Lifecycle events that handlers subscribe to. How observe, react, decide, and act stack on one event.
+- [LLM routing](https://mangowhoiscloud.github.io/geode/docs/runtime/llm/providers): Provider selection and fallback. Circuit breakers when a provider is unhealthy.
+- [Sub-agent orchestration](https://mangowhoiscloud.github.io/geode/docs/runtime/orchestration): Spawning isolated sub-agents in parallel lanes, with snapshotted memory and merge on completion.
+- [Skills](https://mangowhoiscloud.github.io/geode/docs/runtime/skills): User-invocable skills, distinct from tools. Discovery, lifecycle, override.
+
+## The Self-Improving Loop
+
+- [The closed loop](https://mangowhoiscloud.github.io/geode/docs/capabilities/autoresearch): The outer loop end to end. Mutate a policy, audit with Petri, attribute the result, then promote or revert.
+- [Co-scientist seed generation](https://mangowhoiscloud.github.io/geode/docs/capabilities/co-scientist): A multi-role agent loop that grows the evaluation seed corpus. Supervisor, generator, critic, pilot, ranker, evolver, meta-reviewer.
+- [Seed pipeline](https://mangowhoiscloud.github.io/geode/docs/capabilities/seed-pipeline): The plugin that regenerates the seed corpus each generation. Picker, orchestrator, manifest, cost preview.
+- [Outer-loop configuration](https://mangowhoiscloud.github.io/geode/docs/capabilities/outer-loop): The shared schema and loader for autoresearch, seed pipeline, and Petri thresholds. Strict by default.
+- [Petri × GEODE](https://mangowhoiscloud.github.io/geode/docs/petri/overview): Anthropic Alignment Science's evaluation framework, wrapped over the GEODE agent as the loop's measurement.
+- [Scenarios](https://mangowhoiscloud.github.io/geode/docs/petri/scenarios): The Petri seed corpus plus GEODE-specific seeds, grouped into critical, auxiliary, and info dimension buckets.
+- [Run an audit](https://mangowhoiscloud.github.io/geode/docs/petri/run): geode audit, or inspect eval for the raw path. Choose model roles, dimension set, seeds, and turn budget.
+- [Judge dimensions](https://mangowhoiscloud.github.io/geode/docs/petri/judge-dimensions): What each dimension scores, and how to read the heatmap. Critical floors versus auxiliary drift.
+- [Seed-generation runs](https://mangowhoiscloud.github.io/geode/docs/petri/seeds): The per-generation dashboard. Survivors, tokens, meta-review, and next-generation priors per run.
+- [Lineage and positioning](https://mangowhoiscloud.github.io/geode/docs/capabilities/lineage): Where this loop sits in the self-evolving agents literature. An honest recombination of known parts, not a new primitive.
+- [Bundle viewer](https://mangowhoiscloud.github.io/geode/docs/petri/bundle): The live inspect_ai transcript viewer for the latest audit run.
+
+## Operating GEODE
+
+- [Serve and gateway](https://mangowhoiscloud.github.io/geode/docs/harness/serve-gateway): Operating the serve daemon's messaging gateway. Pollers, binding routing, lane queue.
+- [Messaging integrations](https://mangowhoiscloud.github.io/geode/docs/run/messaging): Connect GEODE to Slack, Discord, or Telegram through gateway adapters.
+- [Schedule tasks](https://mangowhoiscloud.github.io/geode/docs/run/schedule): Natural language and cron, with jitter. A daily report as a single command.
+- [Scheduler internals](https://mangowhoiscloud.github.io/geode/docs/runtime/scheduler): How scheduled jobs are parsed, persisted, and fired.
+- [Lifecycle](https://mangowhoiscloud.github.io/geode/docs/harness/lifecycle): Bootstrap, serve, shutdown. The injection order, and the cold-start lazy arc.
+- [Long-running safety](https://mangowhoiscloud.github.io/geode/docs/ops/long-running): Token guards, context overflow, and a sliding window. How a long run drains gracefully.
+- [Cost monitoring](https://mangowhoiscloud.github.io/geode/docs/ops/cost): Per-session and per-day budgets. The usage ledger, and when to switch models.
+- [Troubleshooting](https://mangowhoiscloud.github.io/geode/docs/run/troubleshooting): Common failure modes and where to look. Logs, hooks, runlog.
+
+## Guides and How-to
+
+- [Write a tool](https://mangowhoiscloud.github.io/geode/docs/guides/custom-tool): Define a tool, register it, and gate it with a permission policy.
+- [Register a hook](https://mangowhoiscloud.github.io/geode/docs/guides/register-hook): Subscribe a handler to a lifecycle event and wire it in bootstrap.
+- [Add an LLM adapter](https://mangowhoiscloud.github.io/geode/docs/guides/llm-adapter): Add a provider to the router and adapter layer, with a fallback entry.
+- [Configure a binding](https://mangowhoiscloud.github.io/geode/docs/guides/binding): Route a messaging channel to a session lane with its own model and policy.
+- [Debug a stuck run](https://mangowhoiscloud.github.io/geode/docs/guides/debug-stuck-run): Read the transcript and runlog, find where a run stalled, and recover.
+
+## Configuration
+
+- [Configuration basics](https://mangowhoiscloud.github.io/geode/docs/config/basics): Where configuration lives, how it loads, and how overrides resolve.
+- [config.toml reference](https://mangowhoiscloud.github.io/geode/docs/config/reference): Every configuration key, grouped by area, marked stable or experimental.
+- [Auth and OAuth](https://mangowhoiscloud.github.io/geode/docs/runtime/auth): Profile rotation, the Anthropic ToS path, and the Codex flow.
+- [OAuth token rotation](https://mangowhoiscloud.github.io/geode/docs/ops/oauth): Refresh policy and cooldown across providers.
+- [System prompt modes](https://mangowhoiscloud.github.io/geode/docs/runtime/llm/system-prompt-modes): The persona opt-in and the audit-mode strip. The two ways the system prompt is reshaped.
+- [Prompt caching](https://mangowhoiscloud.github.io/geode/docs/runtime/llm/prompt-caching): The static and dynamic boundary, and ephemeral cache control.
+- [Prompt hashing](https://mangowhoiscloud.github.io/geode/docs/runtime/llm/prompt-hashing): Pinned prompt hashes that break the build on unintended drift.
+- [MCP servers](https://mangowhoiscloud.github.io/geode/docs/runtime/tools/mcp): Connecting MCP servers, the result-size guard, and the HTML to Markdown fallback.
+
+## Reference
+
+- [Frontier comparison](https://mangowhoiscloud.github.io/geode/docs/reference/frontier-comparison): What GEODE borrows from Claude Code, Codex CLI, OpenClaw, and Hermes, and where it differs. The reference entry point for GEODE's position in the lineage.
+- [External references](https://mangowhoiscloud.github.io/geode/docs/reference/external-references): Frontier agent systems, design standards, and prior work GEODE cites — the self-evolving-agents lineage behind the loop.
+- [CLI and slash commands](https://mangowhoiscloud.github.io/geode/docs/harness/cli): The thin gateway and IPC, and the slash commands it accepts.
+- [Automation sidecar](https://mangowhoiscloud.github.io/geode/docs/runtime/automation): The feedback loop and model promotion, with drift detection between agent and runtime.
+- [Computer use](https://mangowhoiscloud.github.io/geode/docs/runtime/computer-use): Provider-agnostic desktop automation, Anthropic and OpenAI unified.
+- [CLI LaTeX rendering](https://mangowhoiscloud.github.io/geode/docs/runtime/ui/cli-latex): Rendering math in the terminal. Detection, Unicode flatten, pretty print, image fallback.
+- [CHANGELOG](https://mangowhoiscloud.github.io/geode/docs/reference/changelog): Full version history, synced from CHANGELOG.md on every main push.
+- [Petri bundle isolation](https://mangowhoiscloud.github.io/geode/docs/reference/petri-bundle-isolation): Operator reference for the publish workflow, validator, and hygiene ratchet.
+
+## Verification and Guardrails
+
+- [Guardrails G1-G4](https://mangowhoiscloud.github.io/geode/docs/verification/guardrails): Schema, range, grounding, consistency. A fail-fast ladder over LLM output.
+- [BiasBuster](https://mangowhoiscloud.github.io/geode/docs/verification/biasbuster): Confirmation, recency, and anchoring detection on top of the guardrails.
+- [Cross-LLM verification](https://mangowhoiscloud.github.io/geode/docs/verification/cross-llm): An independent second opinion. A different provider re-scores the verdict.
+- [Cause decision tree](https://mangowhoiscloud.github.io/geode/docs/verification/cause-decision-tree): Map a failure cause to a recovery action, instead of blindly retrying.
+- [Observability](https://mangowhoiscloud.github.io/geode/docs/verification/observability): The lenses on a run. Hooks, runlog, audit diagnostics, Petri.
+
+## Developer and Architecture
+
+- [Architecture deep-dive](https://mangowhoiscloud.github.io/geode/docs/develop/architecture): The subsystem map and a recommended reading order, retold as data-flow traces.
+- [System index](https://mangowhoiscloud.github.io/geode/docs/architecture/system-index): Every subsystem with its file path. The flat catalog.
+- [Why four layers](https://mangowhoiscloud.github.io/geode/docs/explanation/4-layer): Model, Runtime, Harness, Agent. Why the boundaries fall where they do.
+- [Why a self-hosting harness](https://mangowhoiscloud.github.io/geode/docs/explanation/self-hosting): The runtime and the build line share primitives. Why that mattered.
+- [Why ratchet discipline](https://mangowhoiscloud.github.io/geode/docs/explanation/ratchet): Pinned prompt hashes and a staged CI. The shape that prevents drift.
+- [Release and PyPI lifecycle](https://mangowhoiscloud.github.io/geode/docs/ops/release-pypi-lifecycle): The version-bump locations, the release workflow, and the rebuild cadence.
+- [Backlog disposal](https://mangowhoiscloud.github.io/geode/docs/ops/backlog-dispose): Retire an idea with a paper trail instead of a silent delete.
+
+## Optional
+
+- [llms-full.txt](https://mangowhoiscloud.github.io/geode/llms-full.txt): extended index with bilingual per-page summaries
+- [CHANGELOG](https://github.com/mangowhoiscloud/geode/blob/main/CHANGELOG.md): full release history
+- [CLAUDE.md](https://github.com/mangowhoiscloud/geode/blob/main/CLAUDE.md): development scaffold and quality gates
+- [AGENTS.md](https://github.com/mangowhoiscloud/geode/blob/main/AGENTS.md): agent-facing repo guide

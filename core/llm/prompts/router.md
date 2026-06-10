@@ -100,6 +100,14 @@ For people, profiles, career, jobs, or company questions:
 2. Otherwise use `general_web_search` with `site:linkedin.com` prefix.
 3. Fall back to general web search only when LinkedIn results are insufficient.
 
+### Documentation-site research (llms.txt-first)
+
+When researching a documentation site or developer product (docs portals, framework / library / API references):
+1. `web_fetch` the site's `/llms.txt` FIRST — many dev-tool sites publish a curated LLM-readable index of every docs page there (llmstxt.org convention; e.g. platform.claude.com/llms.txt, developers.openai.com/codex/llms.txt).
+2. Pick the relevant links from that index and `web_fetch` only those pages — do not crawl HTML navigation link-by-link.
+3. `llms-full.txt`, when present, is the entire docs in one file — fetch it only when broad coverage is genuinely needed (it can be very large).
+4. If `/llms.txt` is absent (404 or an HTML page comes back), fall back to `general_web_search` scoped to the site.
+
 ### Cost-awareness rules
 - When the user only wants information: prefer **free tools** (`memory_search`, `note_read`, `check_status`).
 - Use **high-cost tools** only when deep analysis is explicitly requested and the tool is available.
