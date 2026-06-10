@@ -74,7 +74,7 @@ def test_migrate_dry_run_prints_preview_and_does_not_write(
         monkeypatch,
         {"auditor": {"model": "claude-opus-4-7", "source": "claude-cli"}},
     )
-    result = runner.invoke(app, [])
+    result = runner.invoke(app, ["migrate-petri-toml"])
     assert result.exit_code == 0, result.output
     assert "Re-run with --yes" in result.output
     assert "[self_improving_loop.autoresearch.auditor]" in result.output
@@ -95,7 +95,7 @@ def test_migrate_yes_appends_to_config_when_destination_absent(
             "judge": {"model": "claude-sonnet-4-6"},
         },
     )
-    result = runner.invoke(app, ["--yes"])
+    result = runner.invoke(app, ["migrate-petri-toml", "--yes"])
     assert result.exit_code == 0, result.output
     assert "Appended 2 role(s)" in result.output
     assert target.is_file()
@@ -117,7 +117,7 @@ def test_migrate_yes_preserves_existing_unrelated_sections(
         monkeypatch,
         {"target": {"model": "geode/gpt-5.5", "source": "openai-codex"}},
     )
-    result = runner.invoke(app, ["--yes"])
+    result = runner.invoke(app, ["migrate-petri-toml", "--yes"])
     assert result.exit_code == 0, result.output
     content = target.read_text(encoding="utf-8")
     # Existing content stays intact + new section appended.
@@ -140,7 +140,7 @@ def test_migrate_yes_refuses_when_destination_already_has_overlapping_section(
         monkeypatch,
         {"auditor": {"model": "claude-opus-4-7"}},
     )
-    result = runner.invoke(app, ["--yes"])
+    result = runner.invoke(app, ["migrate-petri-toml", "--yes"])
     assert result.exit_code == 1, result.output
     assert "auditor" in result.output
     # Rich may wrap "Refusing to append" across a soft newline at narrow
@@ -162,7 +162,7 @@ def test_migrate_yes_refuses_when_destination_has_broken_toml(
     target.write_text("[broken_toml = unclosed", encoding="utf-8")
     monkeypatch.setattr(core.paths, "GLOBAL_CONFIG_TOML", target)
     _stub_plan(monkeypatch, {"auditor": {"model": "x"}})
-    result = runner.invoke(app, ["--yes"])
+    result = runner.invoke(app, ["migrate-petri-toml", "--yes"])
     assert result.exit_code == 2, result.output
     assert "not valid TOML" in result.output
 
@@ -173,7 +173,7 @@ def test_migrate_empty_plan_exits_silently(tmp_path: Path, monkeypatch: pytest.M
     target = tmp_path / "config.toml"
     monkeypatch.setattr(core.paths, "GLOBAL_CONFIG_TOML", target)
     _stub_plan(monkeypatch, {})
-    result = runner.invoke(app, [])
+    result = runner.invoke(app, ["migrate-petri-toml"])
     assert result.exit_code == 0, result.output
     assert "nothing to migrate" in result.output.lower()
     assert not target.exists()
@@ -228,7 +228,7 @@ def test_yes_migration_with_embedded_quotes_writes_valid_toml(
         monkeypatch,
         {"target": {"model": 'gpt-5.5 "tactical"', "source": "openai-codex"}},
     )
-    result = runner.invoke(app, ["--yes"])
+    result = runner.invoke(app, ["migrate-petri-toml", "--yes"])
     assert result.exit_code == 0, result.output
     parsed = tomllib.loads(target.read_text(encoding="utf-8"))
     assert parsed["self_improving_loop"]["autoresearch"]["target"]["model"] == 'gpt-5.5 "tactical"'
@@ -256,7 +256,7 @@ def test_yes_atomic_write_rollback_preserves_existing_config_on_failure(
         raise OSError("simulated disk full")
 
     monkeypatch.setattr(cmd_config, "atomic_write_text", _raise)
-    result = runner.invoke(app, ["--yes"])
+    result = runner.invoke(app, ["migrate-petri-toml", "--yes"])
     assert result.exit_code != 0
     assert target.read_text(encoding="utf-8") == original
 
@@ -274,7 +274,7 @@ def test_yes_accepts_source_only_legacy_entry(
     target = tmp_path / "config.toml"
     monkeypatch.setattr(core.paths, "GLOBAL_CONFIG_TOML", target)
     _stub_plan(monkeypatch, {"judge": {"source": "claude-cli"}})
-    result = runner.invoke(app, ["--yes"])
+    result = runner.invoke(app, ["migrate-petri-toml", "--yes"])
     assert result.exit_code == 0, result.output
     parsed = tomllib.loads(target.read_text(encoding="utf-8"))
     assert parsed["self_improving_loop"]["autoresearch"]["judge"]["source"] == "claude-cli"
@@ -301,7 +301,7 @@ def test_yes_schema_validation_blocks_invalid_source(
         monkeypatch,
         {"auditor": {"model": "claude-opus-4-7", "source": "bogus"}},
     )
-    result = runner.invoke(app, ["--yes"])
+    result = runner.invoke(app, ["migrate-petri-toml", "--yes"])
     assert result.exit_code == 3, result.output
     assert "schema validation" in result.output
     # Destination untouched.
@@ -327,7 +327,7 @@ def test_yes_post_render_validation_blocks_corrupt_combined_toml(
         "_render_petri_sections",
         lambda plan: "[self_improving_loop.autoresearch.target]\nmodel = unbalanced\n",
     )
-    result = runner.invoke(app, ["--yes"])
+    result = runner.invoke(app, ["migrate-petri-toml", "--yes"])
     assert result.exit_code == 3, result.output
     assert "refusing to write" in result.output
     assert target.read_text(encoding="utf-8") == original

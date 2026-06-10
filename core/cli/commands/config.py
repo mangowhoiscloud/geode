@@ -250,3 +250,47 @@ def migrate_petri_toml(
         "[muted]Legacy ~/.geode/petri.toml is unchanged — verify the new path "
         "via `geode audit` smoke, then delete the legacy file manually.[/muted]"
     )
+
+
+@app.command(name="explain")
+def explain(
+    key: str = typer.Argument("model", help="Settings field to explain (default: model)"),
+) -> None:
+    """Show every config layer's candidate for KEY and which one wins.
+
+    C-1 of the config-unification sprint — the answer to "I changed the
+    config but the model didn't move": the winning layer and everything
+    it masks, with file paths.
+    """
+    from core.config.explain import explain_field
+
+    try:
+        report = explain_field(key)
+    except Exception as exc:
+        typer.echo(f"explain failed for {key!r}: {exc}", err=True)
+        raise typer.Exit(code=1) from exc
+
+    typer.echo("")
+    typer.echo(
+        f"  {report.field_name}  (env var {report.env_var}"
+        + (f", toml key {report.toml_key}" if report.toml_key else "")
+        + ")"
+    )
+    typer.echo(f"  effective: {report.effective!r}")
+    typer.echo("")
+    typer.echo(f"  {'layer':22} {'value':28} source")
+    for entry in report.layers:
+        marker = "  WINNER" if entry.is_winner else ("  masked" if entry.is_masked else "")
+        value = "-" if entry.value is None else repr(entry.value)
+        typer.echo(f"  {entry.layer:22} {value:28} {entry.source}{marker}")
+    masked = report.masked_layers
+    typer.echo("")
+    if masked:
+        winner_layer = report.winner.layer if report.winner else "?"
+        typer.echo(
+            f"  {len(masked)} layer(s) masked by {winner_layer}."
+            " Edit the WINNER layer (or remove its line) to change the effective value."
+        )
+    else:
+        typer.echo("  no masking - single layer set.")
+    typer.echo("")
