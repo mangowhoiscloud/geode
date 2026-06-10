@@ -39,6 +39,16 @@ def about() -> None:
     provider = _resolve_provider(model)
     console.print(f"  [bold]Model[/bold]      [value]{model}[/value]  [muted]({provider})[/muted]")
 
+    # C-1 (2026-06-11) — surface the env-masks-toml hazard inline (H3/H4 class).
+    import contextlib
+
+    with contextlib.suppress(Exception):  # about must never fail on diagnostics
+        from core.config.explain import model_mask_warning
+
+        _mask_note = model_mask_warning()
+        if _mask_note:
+            console.print(f"  [warning]{_mask_note}[/warning]")
+
     # Auth profiles (mask all keys)
     try:
         from core.wiring.container import ensure_profile_store
