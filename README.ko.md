@@ -25,7 +25,7 @@
   <a href="README.md">English</a>
 </p>
 
-# GEODE v0.99.168 — A Self-improving Autonomous Execution Agent
+# GEODE v0.99.170 — A Self-improving Autonomous Execution Agent
 
 자기 자신이 올라탄 scaffold 를 스스로 고쳐쓰는 범용 자율 에이전트. 자연어로 물으면 GEODE 가 계획을 세우고, 도구를 호출해, 결과를 보고합니다. 1회성 프롬프트도, 장시간 세션도 동일하게. 그 아래에서는 outer loop 가 작업을 수행하는 시스템 자체를 계속 다듬습니다.
 
@@ -351,9 +351,25 @@ geode update                  # 소스 체크아웃
 | **3-프로바이더 페일오버** | Anthropic + OpenAI + ZhipuAI. 구독 OAuth (Codex) 자동 감지; 사용량 과금 API 키도 사용 가능; 페일오버는 동일 프로바이더 내에서만 (예상치 못한 vendor 횡단 과금 없음, v0.53.0 거버넌스) |
 | **5-tier 메모리** | SOUL (0) → User Profile (0.5) → Organization (1) → Project (2) → Session (3). 영속화, 데몬 재시작 후에도 유지 |
 | **Plan-mode + audit trail** | `create_plan` + `approve_plan` + `list_plans` 로 다단계 작업 관리. 디스크 영구화 (`.geode/plans.json`), 재시작 후에도 유지 |
+| **MCP 서버 (`geode-mcp`)** | GEODE 자체를 MCP 서버(stdio)로 노출: `run_agent`, `self_improving_status`, `self_improving_propose`/`apply`(2-step 확인 게이트), `query_memory`, `get_health`. repo의 `.mcp.json`으로 Claude Code에 자동 등록 |
 | **장시간 데몬** | `geode serve` 가 백그라운드로 상주. Slack / Discord / Telegram 폴러 + 스케줄러 tick + thin CLI 용 IPC |
 | **서브에이전트** | 부모 권한 완전 상속, depth/cost 가드, Lane 격리 |
 | **코어 검증** | Guardrails G1-G4 (structural) + Cross-LLM (inter-model, Krippendorff α ≥ 0.67) + Rights Risk (legal). 전문 편향 / 캘리브레이션 계층은 외부 패키지가 추가 |
+
+
+### GEODE를 MCP 서버로 쓰기
+
+`geode-mcp`(CLI와 함께 설치)는 stdio로 MCP를 말하므로 Claude Code, Claude Desktop, Cursor 등 어떤 MCP 클라이언트든 GEODE를 도구로 부릴 수 있습니다. 이 repo는 `.mcp.json`을 포함하므로 이 프로젝트에서 연 Claude Code 세션은 서버를 자동 인식합니다. 다른 곳에서는 `claude mcp add geode -- geode-mcp`로 등록합니다.
+
+2026-06-11 라이브 런타임 검증(initialize 핸드셰이크, `tools/list`, 도구 호출):
+
+| 점검 | 결과 |
+|------|------|
+| 핸드셰이크 + 도구 6종 노출 | 통과 |
+| `self_improving_status` / `get_health` / `query_memory` | 통과 (라이브 데이터) |
+| 핸드셰이크의 서버 버전 | mcp SDK 버전("1.26.0")으로 오보고되던 것을 GEODE 버전으로 정정 (SDK `FastMCP.__init__`에 `version` kwarg 부재; `tests/core/test_mcp_server_tools.py`로 핀) |
+| `get_health` 자격증명 정직성 | `*_configured`가 API 키 유무만 봐서 OAuth/CLI-lane 환경에서 false로 오보고 — `*_credential_source` 병기로 정정 |
+| `run_agent`, `self_improving_propose`/`apply` | 자동 점검에서 미실행(토큰 비용/변이 부작용); `apply`는 2-step 확인 게이트 뒤 |
 
 ---
 

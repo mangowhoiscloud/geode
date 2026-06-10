@@ -1,0 +1,10 @@
+{
+  "mcpServers": {
+    "geode": {
+      "type": "stdio",
+      "command": "geode-mcp",
+      "args": [],
+      "env": {}
+    }
+  }
+}

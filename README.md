@@ -25,7 +25,7 @@
   <a href="README.ko.md">한국어</a>
 </p>
 
-# GEODE v0.99.168 — A Self-improving Autonomous Execution Agent
+# GEODE v0.99.170 — A Self-improving Autonomous Execution Agent
 
 A general-purpose autonomous agent that also rewrites the scaffolding it runs on. You ask in plain language; GEODE plans, calls tools, and reports, for one prompt or a long-running session. Underneath, an outer loop keeps tuning the system that runs your tasks.
 
@@ -352,9 +352,25 @@ geode update                  # source checkout
 | **3-provider failover** | Anthropic + OpenAI + ZhipuAI. Subscription OAuth (Codex) auto-detected; pay-as-you-go API keys also work; failover is in-provider only (no surprise cross-vendor charges, v0.53.0 governance) |
 | **5-tier memory** | SOUL (0) → User Profile (0.5) → Organization (1) → Project (2) → Session (3). Persistent, survives daemon restarts |
 | **Plan-mode + audit trail** | `create_plan` + `approve_plan` + `list_plans` for multi-step work. Disk-persistent (`.geode/plans.json`), survives restarts |
+| **MCP server (`geode-mcp`)** | Exposes GEODE itself as an MCP server (stdio): `run_agent`, `self_improving_status`, `self_improving_propose`/`apply` (2-step confirm gate), `query_memory`, `get_health`. Registered for Claude Code via the repo-shipped `.mcp.json` |
 | **Long-running daemon** | `geode serve` runs as background daemon. Slack / Discord / Telegram pollers + scheduler tick + IPC for the thin CLI |
 | **Sub-agents** | Full inheritance of parent capability, depth/cost guards, isolation by Lane |
 | **Core verification** | Guardrails G1-G4 (structural) + Cross-LLM (inter-model, Krippendorff α ≥ 0.67) + Rights Risk (legal). External packages can add specialized bias / calibration layers |
+
+
+### Using GEODE as an MCP server
+
+`geode-mcp` (installed with the CLI) speaks MCP over stdio, so any MCP client — Claude Code, Claude Desktop, Cursor — can drive GEODE as a tool. This repo ships `.mcp.json`, so Claude Code sessions opened in this project pick the server up automatically; elsewhere register it with `claude mcp add geode -- geode-mcp`.
+
+Verified 2026-06-11 against the live runtime (initialize handshake, `tools/list`, tool calls):
+
+| Check | Result |
+|-------|--------|
+| Handshake + 6 tools listed | pass |
+| `self_improving_status` / `get_health` / `query_memory` | pass (live data) |
+| Server version in handshake | was the mcp SDK's "1.26.0" — now reports GEODE's version (the SDK's `FastMCP.__init__` exposes no `version` kwarg; pinned by `tests/core/test_mcp_server_tools.py`) |
+| `get_health` credential honesty | `*_configured` only meant "API key present" and read false on OAuth/CLI-lane setups — now also reports `*_credential_source` |
+| `run_agent`, `self_improving_propose`/`apply` | not exercised in the automated check (token cost / mutation side effects); `apply` is gated behind a 2-step proposal confirm |
 
 ---
 

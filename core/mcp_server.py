@@ -108,6 +108,15 @@ def create_mcp_server() -> Any:
         ) from None
 
     mcp = FastMCP("geode")
+    # Report GEODE's own version in the initialize handshake. The installed
+    # mcp SDK's FastMCP.__init__ (1.26.x) exposes no ``version`` kwarg even
+    # though the wrapped lowlevel ``Server(name, version, ...)`` accepts one,
+    # so without this the handshake advertises the SDK's package version
+    # ("1.26.0") instead of GEODE's. Verified against the installed SDK:
+    # mcp.server.fastmcp.FastMCP -> self._mcp_server.version (None by default).
+    from core import __version__ as _geode_version
+
+    mcp._mcp_server.version = _geode_version
 
     # Shared ProjectMemory instance (created once per server lifetime)
     _project_memory: Any = None
@@ -183,13 +192,23 @@ def create_mcp_server() -> Any:
     @mcp.tool(description=_TOOL_DESCRIPTIONS["get_health"])
     def get_health() -> dict[str, Any]:
         """Get pipeline health status."""
+        from core import __version__
         from core.config import settings
 
+        # ``*_configured`` historically meant "API key present", which
+        # under-reports health for OAuth/CLI-lane setups (the common case:
+        # both read false while the agent runs fine on subscription auth).
+        # Keep the legacy keys but scope them honestly as api_key bits, and
+        # add the effective credential-source picks so a client can tell
+        # "no API key" apart from "not authenticated at all".
         return {
+            "version": __version__,
             "model": settings.model,
             "ensemble_mode": settings.ensemble_mode,
             "anthropic_configured": bool(settings.anthropic_api_key),
             "openai_configured": bool(settings.openai_api_key),
+            "anthropic_credential_source": settings.anthropic_credential_source,
+            "openai_credential_source": settings.openai_credential_source,
         }
 
     @mcp.resource("geode://soul")

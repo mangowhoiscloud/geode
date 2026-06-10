@@ -45,6 +45,27 @@ functional change.
 
 ---
 
+## [0.99.170] - 2026-06-11
+
+### Changed
+- **C-4 config-unification tail** (closes the loading-hazard audit, follows C-1/C-2/C-3):
+  - H9: `GEODE_CONFIG_TOML` now redirects the GLOBAL config.toml for the MAIN settings loader (`_load_toml_config`) too — pre-fix only the self-improving loop loader honored it, giving one env var two meanings. Project overlay still applies; `geode config explain` reports the path actually read.
+  - H11: `reload_settings_from_disk` now re-reads routing.toml — `reload_routing_constants()` clears the manifest lru_cache and rebinds `core.config` routing constants, so manifest readers and function-local importers see fresh values after a session reload. Honest limit (documented in the docstring): module-level by-value importers (`core/llm/providers/*` aliases, `core/skills/agents.py` dataclass defaults) still hold boot-time copies — follow-up H11-tail.
+  - H13: a per-field copy failure during settings reload now logs a warning naming the field (pre-fix `contextlib.suppress` made half-applied reloads untraceable).
+  - C-3 follow-up (Codex review): standalone train/campaign env load delegates to the new shared `core.config.env_io.load_env_files` (manual exports > project .env > global .env) — pre-fix it promoted ONLY the global file, inverting the documented direction; the serve daemon's `load_daemon_env` delegates to the same loader.
+  - C-3 follow-up: `GEODE_SERVE_KEEP_MODEL_ENV=1` is now honored when written in a .env file — pre-fix the flag was read only from the process env AFTER the behavior-key drop had already happened.
+  - Guards: `tests/core/config/test_c4_config_tail.py` (7).
+
+## [0.99.169] - 2026-06-11
+
+### Fixed
+- **geode-mcp identity + health honesty** (operator-requested MCP exposure audit, live-verified via stdio handshake):
+  - Initialize handshake advertised the mcp SDK's package version ("1.26.0") instead of GEODE's — `create_mcp_server` now sets the wrapped lowlevel server's `version` (the installed SDK's `FastMCP.__init__` exposes no `version` kwarg). Pinned by `test_handshake_advertises_geode_version_not_sdk_version`.
+  - `get_health` `*_configured` only meant "API key present" and read false on OAuth/CLI-lane setups; now also reports `version` + `anthropic_credential_source`/`openai_credential_source`.
+
+### Added
+- Repo-shipped `.mcp.json` registering `geode-mcp` (stdio) for Claude Code sessions opened in this project; README/README.ko gain an "Using GEODE as an MCP server" section with the live verification table (run_agent / propose / apply intentionally not auto-exercised — token cost / mutation side effects).
+
 ## [0.99.168] - 2026-06-11
 
 ### Added

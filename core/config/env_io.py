@@ -38,6 +38,38 @@ def mask_key(key: str) -> str:
     return key[:10] + "..." + key[-4:]
 
 
+def load_env_files(*, skip_behavior_keys: bool = False) -> None:
+    """Promote .env values into ``os.environ`` — the ONE promotion order.
+
+    C-4 (2026-06-11). Order: manual exports > project ``.env`` > global
+    ``~/.geode/.env`` — the same direction as the pydantic ``env_file``
+    cascade (core/config/_settings.py). Files never clobber pre-existing
+    process env; empty values never clobber. Callers: the serve daemon
+    (via ``core.cli.bootstrap.load_daemon_env``, with
+    ``skip_behavior_keys=True`` unless the operator pins) and the
+    standalone self-improving train/campaign entrypoints (pre-fix they
+    promoted ONLY the global file, so a global key beat the project
+    ``.env`` — the inverse of every other layer).
+    """
+    import os
+
+    from dotenv import dotenv_values
+
+    from core.paths import GLOBAL_ENV_FILE
+
+    inherited = frozenset(os.environ)
+    for env_file in (GLOBAL_ENV_FILE, Path(".env")):
+        if not env_file.exists():
+            continue
+        for key, val in dotenv_values(str(env_file)).items():
+            # Empty values (e.g. ANTHROPIC_API_KEY=) must NOT clobber
+            if not val or key in inherited:
+                continue
+            if skip_behavior_keys and key in BEHAVIOR_ENV_KEYS:
+                continue
+            os.environ[key] = val
+
+
 def upsert_env(var_name: str, value: str) -> None:
     """Insert or update a variable in the CWD ``.env``. Creates it if absent.
 

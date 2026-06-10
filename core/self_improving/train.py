@@ -148,26 +148,26 @@ WRAPPER_OVERRIDE_HOOK_READY = _CORE_WRAPPER_OVERRIDE_READY
 
 
 def _load_global_env() -> bool:
-    """Load ``~/.geode/.env`` into ``os.environ`` (``override=False``).
+    """Promote .env files into ``os.environ`` via the shared loader.
 
-    PR-CAMPAIGN-LOAD-ENV (2026-06-02). The campaign/audit entry points run as
-    standalone subprocesses that never went through ``geode serve`` / the REPL
-    bootstrap (the only callers of ``setup_contextvars(load_env=True)``), so the
-    PAYG ``ANTHROPIC_API_KEY`` used by the api_key-sourced petri auditor/judge
-    was absent and inspect_ai's anthropic provider raised "Could not resolve
-    authentication method". Loading the global env file here gives the audit
-    subprocess the same credential the serve daemon already has.
-    ``override=False`` so a key already exported in the launching shell wins.
-    Returns whether the file was found (for the dry-run log line).
+    PR-CAMPAIGN-LOAD-ENV (2026-06-02), C-4 (2026-06-11). The campaign/audit
+    entry points run as standalone subprocesses that never went through
+    ``geode serve`` / the REPL bootstrap, so the PAYG ``ANTHROPIC_API_KEY``
+    used by the api_key-sourced petri auditor/judge was absent and
+    inspect_ai's anthropic provider raised "Could not resolve authentication
+    method". C-4 swapped the global-file-only ``load_dotenv`` for
+    :func:`core.config.env_io.load_env_files` so this path follows the SAME
+    precedence as every other process (manual exports > project .env >
+    global ~/.geode/.env) — pre-fix a global key beat the project ``.env``
+    here, the inverse of the documented direction. Returns whether the
+    global file was found (for the dry-run log line).
     """
+    from core.config.env_io import load_env_files
     from core.paths import GLOBAL_ENV_FILE
 
-    if not GLOBAL_ENV_FILE.exists():
-        return False
-    from dotenv import load_dotenv
-
-    load_dotenv(str(GLOBAL_ENV_FILE), override=False)
-    return True
+    found = GLOBAL_ENV_FILE.exists()
+    load_env_files()
+    return found
 
 
 def _get_autoresearch_config() -> Any:
