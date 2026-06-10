@@ -7,9 +7,9 @@ import { useLocale, t } from "@/components/geode/locale-context";
 export default function DocsIndex() {
   const locale = useLocale();
   const summaryEn =
-    "A self-evolving autonomous agent. An inner loop runs a task; an outer loop rewrites the system that runs tasks, kept honest by an adversarial safety audit.";
+    "A general-purpose autonomous execution agent for research, analysis, automation, and scheduling. Its signature: an outer loop that improves the system itself, kept honest by an adversarial safety audit.";
   const summaryKo =
-    "스스로 진화하는 자율 에이전트. 안쪽 루프가 작업을 처리하고, 바깥쪽 루프가 작업을 처리하는 시스템 자체를 고쳐 씁니다. 그 과정을 적대적 안전 감사가 검증합니다.";
+    "리서치, 분석, 자동화, 스케줄 작업을 수행하는 범용 자율 실행 에이전트. 시그니처는 시스템 자체를 개선하는 바깥쪽 루프이고, 그 과정을 적대적 안전 감사가 검증합니다.";
   return (
     <DocsShell
       slug=""
@@ -21,20 +21,26 @@ export default function DocsIndex() {
       <Bi
         ko={
           <>
-            <h2>GEODE 는 무엇인가</h2>
+            <h2>GEODE는 무엇인가</h2>
             <p>
-              GEODE 는 <strong>비-파라메트릭 계열의 자기 진화 에이전트</strong>
-              입니다. 모델 가중치는 절대 건드리지 않습니다. 대신 자기 자신을
-              둘러싼 스캐폴드, 즉 시스템 프롬프트, 도구 정책, 작업 분해, 반성
-              루프, 스킬 카탈로그, 에이전트 계약, 도구 설명, 하이퍼파라미터를
-              직접 바꿔 나아집니다.
+              GEODE는 <strong>범용 자율 실행 에이전트</strong>입니다. 리서치,
+              분석, 자동화, 스케줄 작업을 CLI와 메신저(Slack, Discord,
+              Telegram)에서 수행하고, <code>geode-mcp</code> 서버로 다른
+              에이전트에 도구로 붙습니다. 진입점은 <code>geode</code>와{" "}
+              <code>geode-mcp</code> 둘이며, 어느 쪽으로 들어와도 같은{" "}
+              <a href="/geode/docs/architecture/overview">5-계층 스택</a>
+              (Model, Runtime, Harness, Agent, Self-Improving)을 지납니다.
             </p>
             <p>
-              변화의 적합도는 능력 벤치마크가 아니라 <strong>적대적 안전
-              감사</strong>로 측정합니다. Petri 급의 다차원 감사이며, 핵심 안전
-              차원에는 하한선이 있어 그 선을 넘어 후퇴하는 변화는 거부합니다.
-              평가에 쓰는 seed 도 고정돼 있지 않습니다. co-scientist 파이프라인이
-              에이전트와 나란히 적대적 seed 분포를 키웁니다.
+              그 본체 위의 시그니처가 <strong>자기개선 루프</strong>입니다. 모델
+              가중치와 파라미터는 절대 건드리지 않습니다. 갱신 대상은 모델을
+              감싼 스캐폴드, 곧 시스템 프롬프트 섹션과 behaviour kinds이고,
+              메커니즘은 변이와 선택입니다. 변화의 적합도는 능력 벤치마크가
+              아니라 <strong>적대적 안전 감사</strong>(Petri 급의 다차원
+              감사)로 측정하며, 핵심 안전 차원에는 하한선이 있어 그 선을 넘어
+              후퇴하는 변화는 거부합니다. 평가에 쓰는 seed도 고정돼 있지
+              않습니다. co-scientist 파이프라인이 에이전트와 나란히 적대적 seed
+              분포를 키웁니다.
             </p>
             <h2>두 개의 루프</h2>
             <p>
@@ -65,19 +71,28 @@ export default function DocsIndex() {
           <>
             <h2>What GEODE is</h2>
             <p>
-              GEODE is a <strong>self-evolving agent on the non-parametric
-              branch</strong>. It never updates model weights. Instead it improves
-              by mutating the scaffolding around itself: its system prompt, tool
-              policy, task decomposition, reflection loop, skill catalog, agent
-              contracts, tool descriptions, and hyperparameters.
+              GEODE is a <strong>general-purpose autonomous execution
+              agent</strong>. It runs research, analysis, automation, and
+              scheduled work from the CLI and from messengers (Slack, Discord,
+              Telegram), and it attaches to other agents as a tool through the{" "}
+              <code>geode-mcp</code> server. There are two entry points,{" "}
+              <code>geode</code> and <code>geode-mcp</code>, and both pass
+              through the same{" "}
+              <a href="/geode/docs/architecture/overview">5-layer stack</a>{" "}
+              (Model, Runtime, Harness, Agent, Self-Improving).
             </p>
             <p>
-              Its fitness signal is an <strong>adversarial safety audit</strong>,
-              not a capability benchmark. The audit is Petri-grade and
-              multi-dimensional, and critical safety dimensions sit behind a hard
-              floor: a change that regresses them is rejected. The evaluation
-              seeds are not fixed either. A co-scientist pipeline grows an
-              adversarial seed distribution alongside the agent.
+              On top of that body sits its signature: the{" "}
+              <strong>self-improving loop</strong>. It never updates model
+              weights or parameters. What changes is the scaffold around the
+              model, the system-prompt sections and behaviour kinds, and the
+              mechanism is mutation and selection. Its fitness signal is an{" "}
+              <strong>adversarial safety audit</strong> (Petri-grade,
+              multi-dimensional), not a capability benchmark, and critical
+              safety dimensions sit behind a hard floor: a change that
+              regresses them is rejected. The evaluation seeds are not fixed
+              either. A co-scientist pipeline grows an adversarial seed
+              distribution alongside the agent.
             </p>
             <h2>Two loops</h2>
             <p>The defining idea is <strong>two loops</strong>:</p>
@@ -132,12 +147,6 @@ export default function DocsIndex() {
                 인용하는 frontier 시스템과 선행 작업.
               </li>
             </ul>
-            <p className="text-[var(--ink-2)] text-sm">
-              검증과 가드레일(G1-G4, BiasBuster, Cross-LLM, 원인 분류 트리, 관측성)은
-              이제 별도 섹션{" "}
-              <a href="/geode/docs/verification/guardrails">검증과 가드레일</a>로
-              묶였습니다.
-            </p>
           </>
         }
         en={
@@ -167,11 +176,6 @@ export default function DocsIndex() {
                 The frontier systems and prior work GEODE cites.
               </li>
             </ul>
-            <p className="text-[var(--ink-2)] text-sm">
-              Verification and guardrails (G1-G4, BiasBuster, Cross-LLM, the cause
-              decision tree, observability) now live in their own section,{" "}
-              <a href="/geode/docs/verification/guardrails">Verification and Guardrails</a>.
-            </p>
           </>
         }
       />

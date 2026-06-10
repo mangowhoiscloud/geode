@@ -8,193 +8,304 @@ export default function Page() {
       slug="overview/how-it-runs"
       title="How GEODE runs a task"
       titleKo="GEODE가 작업을 처리하는 흐름"
-      summary="One request, traced end to end, three times. A CLI task, a gateway message, and a scheduled self-improving run all reach the same core."
-      summaryKo="요청 하나가 처음부터 끝까지 어떻게 흐르는지, 세 번 따라갑니다. CLI 작업, 게이트웨이 메시지, 예약된 자기개선 실행이 모두 같은 코어에 닿습니다."
+      summary="One request, traced end to end. The same core serves a CLI task, a gateway message, a scheduled run, and a geode-mcp call."
+      summaryKo="요청 하나가 처음부터 끝까지 어떻게 흐르는지 따라갑니다. CLI 작업, 게이트웨이 메시지, 예약 실행, geode-mcp 호출이 모두 같은 코어를 지납니다."
     >
       <Bi
         ko={
           <>
+            <h2>요청 하나를 끝까지 따라가기</h2>
+            <p>
+              모듈 목록을 외우는 것보다 요청 하나가 흐르는 길을 한 번 따라가는
+              쪽이 구조를 빨리 익힙니다. 이 페이지는 터미널에 입력한 자유 텍스트
+              한 줄이 답이 되어 돌아오기까지의 전 구간을 추적합니다. 입구가
+              달라져도(메신저, 스케줄러, MCP) 코어는 같으므로, 이 추적 하나면
+              나머지 입구도 읽힙니다.
+            </p>
+
+            <h2>thin CLI에서 데몬까지</h2>
+            <p>
+              <code>geode</code>를 실행하면 thin CLI가 뜹니다. CLI 프로세스는
+              모델을 직접 호출하지 않습니다. 대신 Unix 도메인 소켓{" "}
+              <code>~/.geode/cli.sock</code>(경로 상수는 <code>core/paths.py</code>)
+              으로 serve 데몬에 요청을 넘깁니다. 프로토콜은 줄 단위 JSON입니다.
+              데몬이 떠 있지 않으면 <code>core/cli/ipc_client.py</code>의
+              자동 시작 로직이 백그라운드에서 데몬을 띄운 뒤 연결합니다.
+            </p>
+            <p>
+              왜 두 프로세스로 나누었을까요. MCP 서버 연결, 스킬 레지스트리, 훅,
+              메모리 같은 무거운 상태를 데몬 한 곳에 두면 매 호출마다 새로 켤
+              필요가 없기 때문입니다. CLI는 입력과 렌더링만 맡는 얇은 클라이언트로
+              남습니다. 자유 텍스트는 이 대화형 화면 안에서만 받습니다.{" "}
+              <code>geode &quot;요청&quot;</code> 형태의 셸 원샷은 지원하지
+              않습니다.
+            </p>
+
+            <h2>데몬 안에서 일어나는 일</h2>
+            <pre>{`geode (thin CLI, REPL)
+  |  free text
+  v
+~/.geode/cli.sock          Unix socket, line-delimited JSON
+  |
+  v
+serve daemon
+  CLIPoller                core/server/ipc_server/poller.py
+  -> lanes ["session", "global"]
+  |
+  v
+AgenticLoop                core/agent/loop/agent_loop.py
+  while stop_reason == "tool_use":
+    round guards -> LLM call -> tool execution
+       |
+       +-> tools (ToolRegistry) / MCP servers / skills
+  |
+  v
+events streamed back over the same socket
+  -> client renders them   core/ui/event_renderer.py`}</pre>
+            <p>
+              소켓 건너편에서 요청을 받는 것은{" "}
+              <code>core/server/ipc_server/poller.py</code>의 CLIPoller입니다.
+              CLIPoller는 요청마다 세션 레인과 글로벌 레인을 차례로 획득합니다.
+              같은 세션의 요청은 직렬로, 다른 세션은 병렬로 흐르게 만드는
+              동시성 제어입니다(<code>core/orchestration/lane_queue.py</code>).
+              레인을 잡으면 요청은 AgenticLoop
+              (<code>core/agent/loop/agent_loop.py</code>)에 들어갑니다.
+            </p>
+            <p>
+              AgenticLoop는 <code>while stop_reason == &quot;tool_use&quot;</code>{" "}
+              루프입니다. 매 라운드마다 라운드 상한, 시간 예산, 비용 예산 같은
+              가드를 먼저 확인하고, 컨텍스트 오버플로를 점검한 뒤
+              (<code>core/agent/context_manager.py</code>), 모델을 호출합니다.
+              모델이 도구를 요청하면 도구를 실행하고 결과를 대화에 붙여 다음
+              라운드로 갑니다. 도구는 네이티브 도구
+              (<code>core/tools/registry.py</code>), 연결된 MCP 서버의 도구
+              (<code>core/mcp/manager.py</code>), 스킬이 한 호출 표면에서
+              섞입니다. 도구 수가 많으면 일부만 미리 싣고 나머지는 검색해서
+              가져오는 지연 로딩이 동작합니다(
+              <a href="/geode/docs/runtime/tools/protocol">도구와 툴셋</a>).
+            </p>
+            <p>
+              실행 중 생기는 이벤트(도구 시작, 토큰 스트림, 라운드 전환)는 같은
+              소켓으로 즉시 돌려보내고, thin CLI가{" "}
+              <code>core/ui/event_renderer.py</code>로 화면에 그립니다. 답이
+              완성되기 전에도 진행 상황이 보이는 이유입니다.
+            </p>
+
+            <h2>루프가 끝나는 길</h2>
+            <p>
+              루프는 한 가지 방식으로만 끝나지 않습니다. 종료 사유는{" "}
+              <code>AgenticResult.termination_reason</code>
+              (<code>core/agent/loop/models.py</code>)에 기록됩니다. 대표적인
+              경로는 다음과 같습니다.
+            </p>
+            <table>
+              <thead>
+                <tr><th>종료 사유</th><th>의미</th></tr>
+              </thead>
+              <tbody>
+                <tr><td><code>natural</code></td><td>모델이 도구 요청 없이 텍스트로 답을 마쳤습니다.</td></tr>
+                <tr><td><code>max_rounds</code></td><td>라운드 상한에 닿았습니다. 마지막 라운드는 텍스트 마무리를 강제합니다.</td></tr>
+                <tr><td><code>time_budget_expired</code></td><td>벽시계 시간 예산이 소진됐습니다.</td></tr>
+                <tr><td><code>cost_budget_exceeded</code></td><td>세션 비용이 예산에 닿았습니다. 80% 지점에서 한 번 경고합니다.</td></tr>
+                <tr><td><code>context_exhausted</code></td><td>압축과 정리 후에도 컨텍스트가 임계 상태입니다.</td></tr>
+                <tr><td><code>model_refusal</code></td><td>모델 안전 분류기가 응답을 거절했습니다. HTTP 200으로 오는 <code>stop_reason: &quot;refusal&quot;</code>을 잡아 거절 사유 카테고리를 포함한 정직한 메시지로 종료합니다.</td></tr>
+                <tr><td><code>user_clarification_needed</code></td><td>도구 없이 긴 출력만 반복되는 과사고를 감지하면 멈추고 사용자에게 묻습니다.</td></tr>
+                <tr><td><code>llm_error</code></td><td>재시도로 회복하지 못한 모델 호출 오류입니다.</td></tr>
+              </tbody>
+            </table>
+            <p>
+              어느 경로로 끝나든 결과는 종료 사유와 함께 소켓으로 돌아갑니다.
+              조용한 실패 대신 이유가 남는 설계입니다.
+            </p>
+
             <h2>같은 코어, 다른 입구</h2>
             <p>
-              GEODE를 부르는 길은 여럿입니다. 터미널에서 명령으로, Slack 메시지로,
-              예약된 시각에 스스로. 세 길은 입구만 다릅니다. 안으로 들어오면 모두
-              같은 코어를 지납니다. 그 코어가{" "}
-              <a href="/geode/docs/concepts/two-loops">안쪽 agentic 루프</a>입니다.
+              위 추적에서 입구만 바꾸면 GEODE의 나머지 호출 경로가 됩니다.
+              네 입구 모두 같은 AgenticLoop, 같은 메모리, 훅, LLM 라우터를
+              지납니다.
             </p>
-            <p>
-              모듈 목록을 나열하는 대신, 요청 하나가 흐르는 길을 끝까지 따라가며
-              구조를 익히겠습니다. 같은 일을 세 입구로 들어가서 세 번 봅니다.
-            </p>
+            <table>
+              <thead>
+                <tr><th>입구</th><th>코어까지의 길</th></tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>CLI 자유 텍스트</td>
+                  <td>thin CLI, <code>cli.sock</code>, CLIPoller. 이 페이지의 추적 그대로입니다.</td>
+                </tr>
+                <tr>
+                  <td>메신저 메시지</td>
+                  <td>Slack, Discord, Telegram poller(<code>core/server/supervised/</code>)가 메시지를 받고, binding(<code>core/messaging/binding.py</code>)이 세션으로 라우팅한 뒤 같은 레인과 루프를 지납니다.</td>
+                </tr>
+                <tr>
+                  <td>예약 실행</td>
+                  <td>데몬 안의 스케줄러(<code>core/scheduler/service.py</code>)가 예약 시각에 같은 코어로 작업을 트리거합니다.</td>
+                </tr>
+                <tr>
+                  <td>geode-mcp <code>run_agent</code></td>
+                  <td>다른 에이전트(예: Claude Code)가 MCP 도구로 GEODE를 부릅니다. <code>core/mcp_server.py</code>가 <code>run_agentic_oneshot</code>(<code>core/cli/bootstrap.py</code>)으로 한 번의 agentic 실행을 돌리고 텍스트, 라운드 수, 종료 사유를 돌려줍니다.</td>
+                </tr>
+              </tbody>
+            </table>
 
-            <h2>1. CLI 작업</h2>
-            <p>
-              <code>geode &quot;...&quot;</code>를 실행하면 thin CLI가 먼저 뜹니다.
-              CLI 자체는 모델을 호출하지 않습니다. 대신 Unix 도메인 소켓으로 serve
-              데몬에 작업을 넘깁니다. 데몬이 떠 있지 않으면 백그라운드에서 띄운 뒤
-              연결합니다(<code>core/cli/ipc_client.py</code>). 데몬은 작업을
-              AgenticLoop에 넘기고, 루프가 도구를 돌려 답을 만든 뒤, 같은 소켓으로
-              결과를 돌려보냅니다.
-            </p>
-            <pre>{`geode "..."  ->  thin CLI
-                   |  (Unix socket, line-delimited JSON)
-                   v
-              serve daemon  ->  AgenticLoop  ->  tools
-                   ^                               |
-                   +-------- answer ---------------+`}</pre>
-            <p>
-              데몬을 한 번 띄워 두면 MCP 서버, 스킬, 메모리, 훅을 매번 새로 켤
-              필요가 없습니다. CLI는 얇게 유지되고, 무거운 상태는 데몬에 머뭅니다.
-            </p>
-
-            <h2>2. 게이트웨이 메시지</h2>
-            <p>
-              Slack이나 Discord 채널에 올라온 메시지는 다른 입구로 들어옵니다.
-              poller(<code>core/server/supervised/</code>)가 채널을 지켜보다가
-              새 메시지를 받습니다. binding(<code>core/integrations/messaging/binding.py</code>)이
-              그 메시지를 어떤 세션으로 보낼지 라우팅하고, lane queue가 같은 세션의
-              요청을 직렬화해 동시성을 제어합니다. 그 안에서 AgenticLoop가 같은
-              방식으로 돕니다. 답이 나오면 채널로 회신하고, 필요하면 알림을 보냅니다.
-            </p>
-            <pre>{`Slack / Discord message
-       |
-       v
-  poller  ->  binding (route)  ->  session lane  ->  AgenticLoop  ->  tools
-                                                          |
-                                          reply to channel + notification`}</pre>
-            <p>
-              입구는 CLI와 다르지만, <code>binding.py</code>가 메시지를 넘기는
-              곳은 같은 AgenticLoop입니다. serve 데몬과 게이트웨이 운영은{" "}
-              <a href="/geode/docs/harness/serve-gateway">Serve와 게이트웨이</a>에서
-              다룹니다.
-            </p>
-
-            <h2>3. 예약된 자기개선 실행</h2>
-            <p>
-              세 번째 입구는 사람이 아니라 스케줄러입니다. 예약된 시각이 되면
-              스케줄러(<code>core/scheduler/service.py</code>)가 실행을 트리거합니다.
-              이번에는 사용자 작업이 아니라 바깥쪽 루프가 돕니다.{" "}
-              <code>autoresearch/train.py</code>가 호출당 감사 한 번을 돌립니다.
-              정책 파일 하나를 변형하고, Petri 감사로 측정하고, 점수 변화를 귀속한
-              뒤, 기준을 넘으면 baseline을 갱신하고 아니면 정책을 되돌립니다.
-            </p>
-            <pre>{`scheduled time
-       |
-       v
-  scheduler  ->  autoresearch/train.py
-                     |
-                     mutate policy -> Petri audit -> attribute -> promote / revert`}</pre>
-            <p>
-              여기서 측정 대상이 되는 트랜스크립트는 결국 같은 AgenticLoop가 만든
-              것입니다. 바깥쪽 루프 전체는{" "}
-              <a href="/geode/docs/capabilities/autoresearch">폐루프</a>에서 다룹니다.
-            </p>
-
-            <h2>세 흐름이 만나는 곳</h2>
-            <p>
-              세 입구는 서로 다른 코드로 시작합니다. CLI는 IPC 클라이언트로,
-              게이트웨이는 poller와 binding으로, 자기개선 실행은 스케줄러로
-              시작합니다. 그러나 셋 다 같은 AgenticLoop와 같은 메모리, 훅, LLM
-              라우터, 서브에이전트 오케스트레이션을 지납니다. 입구를 바꿔도 코어는
-              하나입니다. 계층이 어떻게 나뉘는지는{" "}
-              <a href="/geode/docs/architecture/overview">4-계층 스택</a>에서
-              이어집니다.
-            </p>
+            <h2>다음 단계</h2>
+            <ul>
+              <li><a href="/geode/docs/architecture/overview">5-계층 스택</a>. 이 흐름이 지나는 계층들의 책임 경계입니다.</li>
+              <li><a href="/geode/docs/architecture/agentic-loop">안쪽 agentic 루프</a>. 한 라운드의 정확한 의미론입니다.</li>
+              <li><a href="/geode/docs/harness/serve-gateway">Serve와 게이트웨이</a>. 메신저 입구의 운영 가이드입니다.</li>
+              <li><a href="/geode/docs/concepts/two-loops">두 개의 루프</a>. 이 코어를 바깥에서 개선하는 루프와의 관계입니다.</li>
+            </ul>
           </>
         }
         en={
           <>
-            <h2>Same core, different entrances</h2>
+            <h2>One request, traced to the end</h2>
             <p>
-              There are several ways to call GEODE. From a terminal as a command,
-              from a Slack message, or on its own at a scheduled time. The three
-              paths differ only at the entrance. Once inside, they all pass through
-              the same core: the{" "}
-              <a href="/geode/docs/concepts/two-loops">inner agentic loop</a>.
-            </p>
-            <p>
-              Instead of listing modules, this page learns the architecture by
-              following one request to the end. The same work, entered three ways,
-              traced three times.
+              Following one request all the way through teaches the architecture
+              faster than memorizing a module list. This page traces a single
+              line of free text from the terminal until the answer comes back.
+              The entrances vary (messenger, scheduler, MCP), but the core is
+              the same, so this one trace reads for every entrance.
             </p>
 
-            <h2>1. A CLI task</h2>
+            <h2>From the thin CLI to the daemon</h2>
             <p>
-              Running <code>geode &quot;...&quot;</code> starts the thin CLI first.
-              The CLI itself does not call the model. It hands the task to the
-              serve daemon over a Unix domain socket. If the daemon is not running,
-              the CLI starts it in the background, then connects
-              (<code>core/cli/ipc_client.py</code>). The daemon passes the task to
-              AgenticLoop, the loop runs tools to produce an answer, and the result
-              comes back over the same socket.
+              Running <code>geode</code> starts the thin CLI. The CLI process
+              never calls the model itself. It hands the request to the serve
+              daemon over a Unix domain socket at{" "}
+              <code>~/.geode/cli.sock</code> (the path constant lives in{" "}
+              <code>core/paths.py</code>). The protocol is line-delimited JSON.
+              If no daemon is running, the auto-start logic in{" "}
+              <code>core/cli/ipc_client.py</code> launches one in the
+              background, then connects.
             </p>
-            <pre>{`geode "..."  ->  thin CLI
-                   |  (Unix socket, line-delimited JSON)
-                   v
-              serve daemon  ->  AgenticLoop  ->  tools
-                   ^                               |
-                   +-------- answer ---------------+`}</pre>
             <p>
-              Keeping the daemon up means MCP servers, skills, memory, and hooks
-              do not have to start fresh each time. The CLI stays thin; the heavy
-              state lives in the daemon.
+              Why two processes? Heavy state, MCP server connections, the skill
+              registry, hooks, and memory, lives in one daemon so it never has
+              to start fresh per call. The CLI stays a thin client that only
+              handles input and rendering. Free text is accepted only inside
+              this interactive screen. A shell one-shot like{" "}
+              <code>geode &quot;prompt&quot;</code> is not supported.
             </p>
 
-            <h2>2. A gateway message</h2>
-            <p>
-              A message posted to a Slack or Discord channel enters through a
-              different door. A poller (<code>core/server/supervised/</code>)
-              watches the channel and picks up new messages. The binding
-              (<code>core/integrations/messaging/binding.py</code>) routes that
-              message to a session, and a lane queue serializes requests for the
-              same session to control concurrency. Inside that lane, AgenticLoop
-              runs the same way. When an answer is ready, it replies to the channel
-              and, where needed, sends a notification.
-            </p>
-            <pre>{`Slack / Discord message
+            <h2>Inside the daemon</h2>
+            <pre>{`geode (thin CLI, REPL)
+  |  free text
+  v
+~/.geode/cli.sock          Unix socket, line-delimited JSON
+  |
+  v
+serve daemon
+  CLIPoller                core/server/ipc_server/poller.py
+  -> lanes ["session", "global"]
+  |
+  v
+AgenticLoop                core/agent/loop/agent_loop.py
+  while stop_reason == "tool_use":
+    round guards -> LLM call -> tool execution
        |
-       v
-  poller  ->  binding (route)  ->  session lane  ->  AgenticLoop  ->  tools
-                                                          |
-                                          reply to channel + notification`}</pre>
+       +-> tools (ToolRegistry) / MCP servers / skills
+  |
+  v
+events streamed back over the same socket
+  -> client renders them   core/ui/event_renderer.py`}</pre>
             <p>
-              The entrance differs from the CLI, but the place{" "}
-              <code>binding.py</code> hands the message to is the same AgenticLoop.
-              For operating the serve daemon and its gateway, see{" "}
-              <a href="/geode/docs/harness/serve-gateway">Serve and gateway</a>.
+              On the far side of the socket, the CLIPoller in{" "}
+              <code>core/server/ipc_server/poller.py</code> receives the
+              request. For each request it acquires the session lane and then
+              the global lane: requests in the same session run serially,
+              different sessions run in parallel
+              (<code>core/orchestration/lane_queue.py</code>). With the lanes
+              held, the request enters AgenticLoop
+              (<code>core/agent/loop/agent_loop.py</code>).
+            </p>
+            <p>
+              AgenticLoop is a{" "}
+              <code>while stop_reason == &quot;tool_use&quot;</code> loop. Each
+              round first checks its guards, the round cap, the time budget,
+              the cost budget, then checks for context overflow
+              (<code>core/agent/context_manager.py</code>), then calls the
+              model. When the model asks for tools, the loop executes them,
+              appends the results to the conversation, and starts the next
+              round. Tools blend three sources behind one call surface: native
+              tools (<code>core/tools/registry.py</code>), tools from connected
+              MCP servers (<code>core/mcp/manager.py</code>), and skills. With
+              many tools available, deferred loading keeps a small set eager
+              and fetches the rest on demand (
+              <a href="/geode/docs/runtime/tools/protocol">Tools and toolsets</a>).
+            </p>
+            <p>
+              Events produced along the way (tool start, token stream, round
+              transitions) stream back over the same socket immediately, and
+              the thin CLI renders them with{" "}
+              <code>core/ui/event_renderer.py</code>. That is why progress is
+              visible before the answer completes.
             </p>
 
-            <h2>3. A scheduled self-improving run</h2>
+            <h2>How the loop ends</h2>
             <p>
-              The third entrance is not a person but the scheduler. At a scheduled
-              time the scheduler (<code>core/scheduler/service.py</code>) triggers
-              a run. This time it is not a user task but the outer loop that runs.{" "}
-              <code>autoresearch/train.py</code> runs one audit per invocation. It
-              mutates one policy file, measures with a Petri audit, attributes the
-              score change, then updates the baseline if the bar is cleared or
-              reverts the policy if not.
+              The loop has more than one exit. The reason is recorded on{" "}
+              <code>AgenticResult.termination_reason</code>{" "}
+              (<code>core/agent/loop/models.py</code>). The main paths:
             </p>
-            <pre>{`scheduled time
-       |
-       v
-  scheduler  ->  autoresearch/train.py
-                     |
-                     mutate policy -> Petri audit -> attribute -> promote / revert`}</pre>
+            <table>
+              <thead>
+                <tr><th>Termination reason</th><th>Meaning</th></tr>
+              </thead>
+              <tbody>
+                <tr><td><code>natural</code></td><td>The model finished with text and no tool request.</td></tr>
+                <tr><td><code>max_rounds</code></td><td>The round cap was reached. The final round forces a text wrap-up.</td></tr>
+                <tr><td><code>time_budget_expired</code></td><td>The wall-clock budget ran out.</td></tr>
+                <tr><td><code>cost_budget_exceeded</code></td><td>Session cost reached the budget. A single warning fires at 80%.</td></tr>
+                <tr><td><code>context_exhausted</code></td><td>The context stayed critical even after compaction and pruning.</td></tr>
+                <tr><td><code>model_refusal</code></td><td>The model&apos;s safety classifiers declined. The loop captures <code>stop_reason: &quot;refusal&quot;</code> arriving as HTTP 200 and ends with an honest message that includes the refusal category.</td></tr>
+                <tr><td><code>user_clarification_needed</code></td><td>Overthinking detection: repeated long text-only rounds stop the loop and ask the user instead of spinning.</td></tr>
+                <tr><td><code>llm_error</code></td><td>A model-call error that retries could not recover.</td></tr>
+              </tbody>
+            </table>
             <p>
-              The transcripts measured here are, in the end, produced by the same
-              AgenticLoop. For the outer loop end to end, see{" "}
-              <a href="/geode/docs/capabilities/autoresearch">The closed loop</a>.
+              Whichever path ends the run, the result returns over the socket
+              with its reason attached. A reason on record, instead of a silent
+              failure.
             </p>
 
-            <h2>Where the three meet</h2>
+            <h2>Same core, other entrances</h2>
             <p>
-              The three entrances start in different code. The CLI starts in the
-              IPC client, the gateway in a poller and a binding, the self-improving
-              run in the scheduler. Yet all three pass through the same AgenticLoop
-              and the same memory, hooks, LLM router, and sub-agent orchestration.
-              Change the entrance and the core stays one. For how the layers
-              divide, continue to{" "}
-              <a href="/geode/docs/architecture/overview">The 4-layer stack</a>.
+              Swap the entrance in the trace above and you get the rest of
+              GEODE&apos;s call paths. All four pass through the same
+              AgenticLoop, the same memory, hooks, and LLM router.
             </p>
+            <table>
+              <thead>
+                <tr><th>Entrance</th><th>Path to the core</th></tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>CLI free text</td>
+                  <td>Thin CLI, <code>cli.sock</code>, CLIPoller. Exactly the trace on this page.</td>
+                </tr>
+                <tr>
+                  <td>Messenger message</td>
+                  <td>A Slack, Discord, or Telegram poller (<code>core/server/supervised/</code>) picks up the message, the binding (<code>core/messaging/binding.py</code>) routes it to a session, and it flows through the same lanes and loop.</td>
+                </tr>
+                <tr>
+                  <td>Scheduled run</td>
+                  <td>The scheduler inside the daemon (<code>core/scheduler/service.py</code>) triggers work into the same core at the scheduled time.</td>
+                </tr>
+                <tr>
+                  <td>geode-mcp <code>run_agent</code></td>
+                  <td>Another agent (Claude Code, for example) calls GEODE as an MCP tool. <code>core/mcp_server.py</code> runs one agentic one-shot via <code>run_agentic_oneshot</code> (<code>core/cli/bootstrap.py</code>) and returns the text, round count, and termination reason.</td>
+                </tr>
+              </tbody>
+            </table>
+
+            <h2>Next</h2>
+            <ul>
+              <li><a href="/geode/docs/architecture/overview">The 5-layer stack</a>. The responsibility boundaries this flow passes through.</li>
+              <li><a href="/geode/docs/architecture/agentic-loop">The inner agentic loop</a>. The exact semantics of one round.</li>
+              <li><a href="/geode/docs/harness/serve-gateway">Serve and gateway</a>. The operating guide for the messenger entrance.</li>
+              <li><a href="/geode/docs/concepts/two-loops">The two loops</a>. How an outer loop improves this core from outside.</li>
+            </ul>
           </>
         }
       />
