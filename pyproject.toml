@@ -1,6 +1,6 @@
 [project]
 name = "geode-agent"
-version = "0.99.153"
+version = "0.99.154"
 description = "GEODE — 범용 자율 실행 에이전트"
 license = "Apache-2.0"
 readme = "README.md"
@@ -23,7 +23,6 @@ dependencies = [
     "langgraph>=1.1.0",
     "langgraph-checkpoint>=4.0.1",
     "langgraph-checkpoint-sqlite>=3.0.0",
-    "numpy>=2.2.0",
     "openai>=2.26.0",
     "openai-agents>=0.13.0",
     "prompt-toolkit>=3.0.52",
@@ -196,6 +195,10 @@ dev = [
 # the main CI gates fast. Tests using these deps (test_hero_frame_ratchet,
 # test_verify_hero_layout) auto-skip when the deps are missing.
 viz = [
+    # PR-CLEANUP-D3A (2026-06-10) — numpy moved here from main deps: its last
+    # core consumer (verification/stats Krippendorff) was deleted; remaining
+    # importers are viz scripts (manim pulls numpy transitively regardless).
+    "numpy>=2.2.0",
     "manim>=0.20.1",
     # Step 2 typography drift gate — `verify_hero_layout.py` shapes every
     # ratchet site's text via HarfBuzz and stores the glyph cluster
@@ -530,6 +533,9 @@ module = [
     "inspect_viz.*",
     # Hero visualization extras (manim + harfbuzz + pixelmatch). Only
     # installed via ``uv sync --group viz``; CI default sync skips them.
+    # PR-CLEANUP-D3A — numpy moved to the [viz] dev extra; CI's mypy env
+    # (no viz extra) must not fail on scripts' lazy numpy imports.
+    "numpy.*",
     "manim.*",
     "manim_voiceover.*",
     "uharfbuzz",

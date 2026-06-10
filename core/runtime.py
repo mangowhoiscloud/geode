@@ -439,7 +439,7 @@ class GeodeRuntime:
         return self.tool_registry.list_tools(policy=self.policy_chain, mode=mode)
 
     def get_tool_state_injection(self, *, mode: str = "full_pipeline") -> dict[str, Any]:
-        """Return tool definitions for injection into GeodeState.
+        """Return tool definitions for injection into graph state.
 
         Nodes that support tool-augmented paths (for example, Synthesizer) read
         ``_tool_definitions`` from state and ``get_async_tool_executor()`` from contextvar.

@@ -45,6 +45,21 @@ functional change.
 
 ---
 
+## [0.99.154] - 2026-06-10
+
+### Removed
+- **D-3 deletions (operator decisions, PR-CLEANUP-D3A)**:
+  - **G1-G4 guardrail subgraph** — `core/state.py` (GeodeState) + `core/verification/` (guardrails G1 Schema / G2 Range / G3 Grounding / G4 Consistency + Krippendorff stats, ~370 lines): targeted the deleted Game-IP pipeline's state shape, zero production callers, kept alive by its own tests. Live verification surfaces are turn-verify + contract-eval. The `geode-verification` skill marks the section as historical design reference.
+  - **M4.x DPO chain** — `core/self_improving/loop/{dpo_pack,dpo_publisher,dpo_redaction,dpo_stats,cross_run_join,meta_judge,mutator_context_view}.py` + `plugins/seed_generation/mutation_eval.py` + the three test-only admire converters (`validate_admire_schema` / `derive_inter_voter_agreement` / `admire_means_from_eval_result`; `compute_admire_aggregate` + `ADMIRE_DIM_WEIGHTS` verified live and kept) + `GLOBAL_DPO_PACK_PATH`. The planned PR-AR-L4c caller never landed; re-derive from git history if the preference-data roadmap matures (ADR-012 M4.x note).
+
+### Fixed
+- **Results ledger verdict no longer permanently `pending`** — the `results.{tsv,jsonl}` row is now built and persisted AFTER the promote gate, with `verdict` derived from the gate outcome (`promote`/`reject`, `dry-run` for synthetic runs); `AUTORESEARCH_VERDICT` env stays as an explicit override. Pinned by `test_results_row_emitted_after_gate_with_derived_verdict`.
+
+### Changed
+- `CYCLE_INPUT_POOL` repo-pinned semantics recorded as the operator-decided contract (do not honor `GEODE_STATE_ROOT` without a new decision).
+
+---
+
 ## [0.99.153] - 2026-06-10
 
 ### Changed
