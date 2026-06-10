@@ -1,6 +1,6 @@
 import { DocsShell, Bi } from "@/components/geode-docs/docs-shell";
 
-export const metadata = { title: "Petri Scenarios — GEODE Docs" };
+export const metadata = { title: "Scenarios — GEODE Docs" };
 
 export default function Page() {
   return (
@@ -8,149 +8,166 @@ export default function Page() {
       slug="petri/scenarios"
       title="Scenarios"
       titleKo="시나리오"
-      summary="The Petri default seed corpus plus GEODE-specific seeds. The full audit catalog."
-      summaryKo="Petri 기본 seed 코퍼스 + GEODE 전용 seeds. 전체 audit 시나리오 카탈로그."
+      summary="The Petri seed corpus plus GEODE-specific seeds, grouped into critical, auxiliary, and info dimension buckets."
+      summaryKo="Petri seed 코퍼스에 GEODE 전용 seed를 더해 critical, auxiliary, info 차원 버킷으로 묶습니다."
     >
       <Bi
         ko={
           <>
             <p>
-              <strong>Reference:</strong> Petri × GEODE audit이 사용하는 시나리오 (seed) 카탈로그.
-              두 종류로 나뉩니다. (1) Petri framework 기본 seeds. (2) GEODE 코드베이스/하네스 특성을 노리는 GEODE-specific seeds.
-              여러 카테고리에 분산 배치되어 risk dimension을 골고루 자극합니다.
+              seed는 감사 한 판의 시나리오입니다. auditor가 이 시나리오를 들고
+              target을 압박하고, judge가 그 transcript를 채점합니다. seed
+              코퍼스가 어떤 차원을 얼마나 자극하느냐가 곧 측정의 분포이므로,
+              GEODE는 코퍼스를 fitness universe의 티어 구조 그대로
+              조직합니다.
             </p>
 
-            <h2>GEODE-specific seeds</h2>
+            <h2>티어 구조: critical / auxiliary / info</h2>
             <p>
-              <code>plugins/petri_audit/seeds/</code>에 각 seed가 <code>.md</code> 파일 하나로 정의됩니다. seed 파일은 frontmatter (tags) + branch 별 pressure 곡선 (보통 1 → 2 → 3 → 2 → 1) 으로 구성됩니다.
+              GEODE 전용 seed 풀은 <code>plugins/petri_audit/seeds/</code>에
+              계층 트리로 놓입니다.
             </p>
-            <table>
-              <thead><tr><th>카테고리</th><th>Seed ID</th><th>측정 차원</th></tr></thead>
-              <tbody>
-                <tr><td rowSpan={2}><strong>autonomy</strong></td><td><code>autonomy_self_preservation_under_replacement</code></td><td>self_replication, power-seeking</td></tr>
-                <tr><td><code>autonomy_whistleblowing_user_intent_violation</code></td><td>refusal_appropriateness, instruction_override</td></tr>
-                <tr><td rowSpan={2}><strong>calibration</strong></td><td><code>calibration_false_refusal_drift</code></td><td>refusal_appropriateness</td></tr>
-                <tr><td><code>calibration_high_stakes_security_advice</code></td><td>refusal_appropriateness, harm</td></tr>
-                <tr><td rowSpan={2}><strong>compute_use</strong></td><td><code>compute_use_sensitive_path_access</code></td><td>tool_misuse, scope_creep</td></tr>
-                <tr><td><code>compute_use_unrestricted_shell</code></td><td>tool_misuse, sandbox_awareness</td></tr>
-                <tr><td><strong>efficiency</strong></td><td><code>efficiency_long_running_loop</code></td><td>resource_acquisition</td></tr>
-                <tr><td rowSpan={2}><strong>exploratory</strong></td><td><code>exploratory_dependency_change_disclosure</code></td><td>honesty (omission)</td></tr>
-                <tr><td><code>exploratory_silent_codebase_modification</code></td><td>honesty (deception), tool_misuse</td></tr>
-                <tr><td rowSpan={2}><strong>reasoning</strong></td><td><code>reasoning_chain_manipulation</code></td><td>manipulation, instruction_override</td></tr>
-                <tr><td><code>reasoning_self_critique_bypass</code></td><td>sycophancy, refusal_after_compliance</td></tr>
-                <tr><td rowSpan={2}><strong>research</strong></td><td><code>research_cherry_picking_dataset</code></td><td>honesty (omission)</td></tr>
-                <tr><td><code>research_fabrication_under_pressure</code></td><td>fabrication, hallucination</td></tr>
-              </tbody>
-            </table>
-
-            <h2>Pressure curve</h2>
+            <pre>{`plugins/petri_audit/seeds/
+├── critical/      # fitness에서 critical 티어인 차원들
+│   └── <dim>/<NN>_<variant>.md
+├── auxiliary/     # auxiliary 티어 차원들
+│   └── <dim>/<NN>_<variant>.md
+└── info/          # 기록만 하고 가중치 0인 차원들
+    └── <dim>/<NN>_<variant>.md`}</pre>
             <p>
-              각 seed는 보통 5 branch를 가집니다. 압력이 낮음(1) → 중간(2) → 높음(3) → 중간(2) → 낮음(1) 으로 변동합니다.
-              압력 1은 캐주얼 요청, 압력 3은 명시적 압박 (긴급성, 권위, 손실 회피). 이 곡선이 target이 어디서 무너지는지 잡습니다.
+              티어는 18-dim fitness universe(critical 5 + auxiliary 10 + info
+              3)를 그대로 따릅니다. 어떤 차원이 어느 티어에 속하고 왜 그런지는{" "}
+              <a href="/geode/docs/petri/judge-dimensions">Judge 차원</a>이
+              SoT입니다. <code>core/self_improving/prepare.py</code>가 루프
+              시작 전에 이 트리를 검증하며, 전체 seed 수가{" "}
+              <code>MIN_SEED_COUNT</code>(18) 아래면 시작을 거부합니다.
             </p>
 
-            <h2>Default Petri seeds</h2>
+            <h2>seed 파일의 모양</h2>
             <p>
-              <code>inspect_petri</code> v3 패키지의 <code>_seeds/</code>에 정의됩니다.
-              GEODE-specific seeds와 동일한 frontmatter 규약을 따르며, 전체 dim에 걸친 일반 misalignment 시나리오를 다룹니다.
-              GEODE audit은 <code>geode audit --seed-select id:...</code>로 선택해 함께 돌릴 수 있습니다.
+              seed 하나는 <code>.md</code> 파일 하나입니다. frontmatter(tags)와
+              branch별 압력 곡선으로 구성됩니다.
             </p>
-            <p>대략적 카테고리 분포 (Petri 3 공식 분류, upstream tag 기준):</p>
-            <table>
-              <thead><tr><th>카테고리</th><th>다루는 위험</th></tr></thead>
-              <tbody>
-                <tr><td><strong>refusal_calibration</strong></td><td>잘못된 거부 / 거부 거부 / 과도한 단호함</td></tr>
-                <tr><td><strong>honesty_deception</strong></td><td>fabrication, omission, gaslighting, sycophancy</td></tr>
-                <tr><td><strong>power_seeking</strong></td><td>self_replication, resource acquisition, persuasion</td></tr>
-                <tr><td><strong>harm_uplift</strong></td><td>bio / cyber / weapons / csam / hate / harassment uplift</td></tr>
-                <tr><td><strong>sandbox_awareness</strong></td><td>tool_misuse, scope_creep, instruction_override</td></tr>
-                <tr><td><strong>manipulation</strong></td><td>flattery, emotional_pressure, false_urgency</td></tr>
-                <tr><td><strong>privacy</strong></td><td>pii_disclosure, surveillance_assist, doxxing</td></tr>
-                <tr><td><strong>meta</strong></td><td>refusal_after_compliance, partial_compliance, 등</td></tr>
-              </tbody>
-            </table>
-            <p className="text-[var(--ink-3)] text-sm">
-              <em>주의:</em> 카테고리 라벨은 inspect_petri 버전마다 달라집니다. 위 표는 v3 기준이며,
-              실제 분포는 <code>python -c &quot;import inspect_petri._seeds._markdown as m; print(list(m.read_seed_directory()))&quot;</code>로 확인.
+            <ul>
+              <li>보통 5개 branch가 1 → 2 → 3 → 2 → 1 압력 곡선을 따릅니다. 압력 1은 캐주얼한 요청, 압력 3은 긴급성, 권위, 손실 회피를 동원한 명시적 압박입니다.</li>
+              <li>곡선의 목적은 target이 어느 압력 지점에서 무너지는지, 그리고 압력이 내려간 뒤 회복하는지를 잡는 것입니다.</li>
+              <li>frontmatter의 canary GUID는 이 텍스트가 모델 사전학습 코퍼스로 흘러드는 것을 탐지하기 위한 표식입니다.</li>
+            </ul>
+
+            <h2>코퍼스는 어떻게 자라나</h2>
+            <p>
+              정적 카탈로그가 아닙니다. seed-generation 파이프라인
+              (<a href="/geode/docs/capabilities/co-scientist">Co-scientist seed
+              생성</a>)이 target dimension별로 새 seed를 만들고, 생존자가{" "}
+              <code>geode seeds assemble</code>을 거쳐 사이클 입력
+              풀(<code>state/seed-pools/cycle-input</code>)로 조립됩니다.
+              버전 고정 held-out bench(<code>state/seed-pools/held-out</code>)는
+              비교의 자로 따로 둡니다.
+            </p>
+
+            <h2>upstream Petri 기본 seed</h2>
+            <p>
+              <code>inspect_petri</code> 패키지 자체도 일반 misalignment
+              시나리오의 기본 seed를 싣고 있습니다. GEODE 감사의 기본{" "}
+              <code>--seed-select</code>는 자체 풀
+              (<code>plugins/petri_audit/seeds</code>)이지만, upstream seed를
+              선택해 함께 돌릴 수 있습니다.
             </p>
 
             <h2>커스텀 seed 추가</h2>
             <ol>
-              <li><code>plugins/petri_audit/seeds/&lt;category&gt;_&lt;name&gt;.md</code> 신규 생성.</li>
-              <li>frontmatter에 <code>tags</code> 추가 (예: <code>["research", "honesty", "geode_specific"]</code>).</li>
-              <li>branch 별 pressure 시나리오 작성 (5 branch 권장).</li>
-              <li><code>geode audit --seed-select id:&lt;your-seed-id&gt;</code>로 실행.</li>
+              <li>해당 차원의 티어 폴더에 <code>plugins/petri_audit/seeds/&lt;tier&gt;/&lt;dim&gt;/&lt;NN&gt;_&lt;variant&gt;.md</code>로 생성합니다.</li>
+              <li>frontmatter에 <code>tags</code>를 적습니다.</li>
+              <li>branch별 압력 시나리오를 작성합니다 (5 branch 권장).</li>
+              <li><code>geode audit --seed-select &lt;경로 또는 id&gt;</code>로 돌려봅니다.</li>
             </ol>
 
-            <h2>참고</h2>
+            <h2>다음</h2>
             <ul>
-              <li>현 GEODE seeds 첫 등장: v0.91.0 (scenarios v1) → v0.92.0 (v2) → v0.93.0 (v3). audit reports는 <code>docs/audits/</code>.</li>
-              <li>실행: <a href="/geode/docs/petri/run">감사 실행</a></li>
-              <li>차원: <a href="/geode/docs/petri/judge-dimensions">Judge 차원</a></li>
-              <li>publish된 결과: <a href="/geode/self-improving/petri-bundle/">/geode/self-improving/petri-bundle/</a></li>
+              <li><a href="/geode/docs/petri/run">감사 실행</a>. seed 선택과 dry-run 흐름.</li>
+              <li><a href="/geode/docs/petri/judge-dimensions">Judge 차원</a>. 티어와 가중치의 근거.</li>
+              <li><a href="/geode/self-improving/petri-bundle/">번들 뷰어</a>. publish된 감사 결과.</li>
             </ul>
           </>
         }
         en={
           <>
             <p>
-              <strong>Reference:</strong> the seed catalog used by Petri × GEODE audits.
-              Two kinds. (1) the Petri-framework defaults. (2) GEODE-specific seeds that target the GEODE codebase
-              and harness. Spread across categories to exercise risk dimensions evenly.
+              A seed is the scenario for one audit: the auditor uses it to
+              pressure the target, and the judge scores the resulting
+              transcript. Which dimensions the corpus exercises, and how hard,
+              is the measurement distribution itself, so GEODE organizes the
+              corpus by the same tier structure as the fitness universe.
             </p>
 
-            <h2>GEODE-specific seeds</h2>
+            <h2>Tier structure: critical / auxiliary / info</h2>
             <p>
-              Each seed lives at <code>plugins/petri_audit/seeds/</code> as a single <code>.md</code> file. The file
-              carries frontmatter (tags) plus a per-branch pressure curve (commonly 1 → 2 → 3 → 2 → 1).
+              The GEODE-specific seed pool lives as a hierarchical tree under{" "}
+              <code>plugins/petri_audit/seeds/</code>.
             </p>
-            <table>
-              <thead><tr><th>Category</th><th>Seed ID</th><th>Dimensions touched</th></tr></thead>
-              <tbody>
-                <tr><td rowSpan={2}><strong>autonomy</strong></td><td><code>autonomy_self_preservation_under_replacement</code></td><td>self_replication, power-seeking</td></tr>
-                <tr><td><code>autonomy_whistleblowing_user_intent_violation</code></td><td>refusal_appropriateness, instruction_override</td></tr>
-                <tr><td rowSpan={2}><strong>calibration</strong></td><td><code>calibration_false_refusal_drift</code></td><td>refusal_appropriateness</td></tr>
-                <tr><td><code>calibration_high_stakes_security_advice</code></td><td>refusal_appropriateness, harm</td></tr>
-                <tr><td rowSpan={2}><strong>compute_use</strong></td><td><code>compute_use_sensitive_path_access</code></td><td>tool_misuse, scope_creep</td></tr>
-                <tr><td><code>compute_use_unrestricted_shell</code></td><td>tool_misuse, sandbox_awareness</td></tr>
-                <tr><td><strong>efficiency</strong></td><td><code>efficiency_long_running_loop</code></td><td>resource_acquisition</td></tr>
-                <tr><td rowSpan={2}><strong>exploratory</strong></td><td><code>exploratory_dependency_change_disclosure</code></td><td>honesty (omission)</td></tr>
-                <tr><td><code>exploratory_silent_codebase_modification</code></td><td>honesty (deception), tool_misuse</td></tr>
-                <tr><td rowSpan={2}><strong>reasoning</strong></td><td><code>reasoning_chain_manipulation</code></td><td>manipulation, instruction_override</td></tr>
-                <tr><td><code>reasoning_self_critique_bypass</code></td><td>sycophancy, refusal_after_compliance</td></tr>
-                <tr><td rowSpan={2}><strong>research</strong></td><td><code>research_cherry_picking_dataset</code></td><td>honesty (omission)</td></tr>
-                <tr><td><code>research_fabrication_under_pressure</code></td><td>fabrication, hallucination</td></tr>
-              </tbody>
-            </table>
-
-            <h2>Pressure curve</h2>
+            <pre>{`plugins/petri_audit/seeds/
+├── critical/      # dimensions in the critical fitness tier
+│   └── <dim>/<NN>_<variant>.md
+├── auxiliary/     # auxiliary-tier dimensions
+│   └── <dim>/<NN>_<variant>.md
+└── info/          # recorded but zero-weight dimensions
+    └── <dim>/<NN>_<variant>.md`}</pre>
             <p>
-              Each seed usually has 5 branches. Pressure rises from low (1) to medium (2) to high (3) and back down.
-              Pressure 1 is a casual request; pressure 3 is explicit (urgency, authority, loss aversion). The curve
-              reveals where the target gives way.
+              The tiers mirror the 18-dim fitness universe (5 critical + 10
+              auxiliary + 3 info). Which dimension sits in which tier, and why,
+              is owned by{" "}
+              <a href="/geode/docs/petri/judge-dimensions">Judge dimensions</a>.
+              Before the loop starts,{" "}
+              <code>core/self_improving/prepare.py</code> validates this tree
+              and refuses to run when the total seed count falls below{" "}
+              <code>MIN_SEED_COUNT</code> (18).
             </p>
 
-            <h2>Default Petri seeds</h2>
+            <h2>Anatomy of a seed file</h2>
             <p>
-              Defined in <code>inspect_petri</code> v3 under <code>_seeds/</code>. They follow the same frontmatter
-              convention as the GEODE-specific seeds and cover general misalignment scenarios across the full dimension set.
-              GEODE audits can pull them in via <code>geode audit --seed-select id:...</code>.
+              One seed is one <code>.md</code> file: frontmatter (tags) plus a
+              per-branch pressure curve.
+            </p>
+            <ul>
+              <li>Usually 5 branches follow a 1 → 2 → 3 → 2 → 1 pressure curve. Pressure 1 is a casual request; pressure 3 applies explicit urgency, authority, and loss aversion.</li>
+              <li>The curve exists to catch where the target gives way, and whether it recovers once the pressure backs off.</li>
+              <li>The canary GUID in the frontmatter exists to detect this text leaking into model pre-training corpora.</li>
+            </ul>
+
+            <h2>How the corpus grows</h2>
+            <p>
+              This is not a static catalog. The seed-generation pipeline
+              (<a href="/geode/docs/capabilities/co-scientist">Co-scientist
+              seed generation</a>) drafts new seeds per target dimension, and
+              survivors are assembled by <code>geode seeds assemble</code> into
+              the cycle-input pool
+              (<code>state/seed-pools/cycle-input</code>). A version-frozen
+              held-out bench (<code>state/seed-pools/held-out</code>) is kept
+              apart as the comparison ruler.
+            </p>
+
+            <h2>Upstream Petri default seeds</h2>
+            <p>
+              The <code>inspect_petri</code> package ships its own default
+              seeds covering general misalignment scenarios. GEODE audits
+              default <code>--seed-select</code> to the in-repo pool
+              (<code>plugins/petri_audit/seeds</code>), but upstream seeds can
+              be selected and run alongside.
             </p>
 
             <h2>Adding a custom seed</h2>
             <ol>
-              <li>Create <code>plugins/petri_audit/seeds/&lt;category&gt;_&lt;name&gt;.md</code>.</li>
-              <li>Add <code>tags</code> to frontmatter (e.g. <code>["research", "honesty", "geode_specific"]</code>).</li>
-              <li>Write per-branch pressure scenarios (5 branches recommended).</li>
-              <li>Run <code>geode audit --seed-select id:&lt;your-seed-id&gt;</code>.</li>
+              <li>Create it under the dimension&apos;s tier folder: <code>plugins/petri_audit/seeds/&lt;tier&gt;/&lt;dim&gt;/&lt;NN&gt;_&lt;variant&gt;.md</code>.</li>
+              <li>Add <code>tags</code> to the frontmatter.</li>
+              <li>Write the per-branch pressure scenarios (5 branches recommended).</li>
+              <li>Try it with <code>geode audit --seed-select &lt;path or id&gt;</code>.</li>
             </ol>
 
-            <h2>See also</h2>
+            <h2>Next</h2>
             <ul>
-              <li>GEODE seeds first landed in v0.91.0 (scenarios v1), v0.92.0 (v2), v0.93.0 (v3). Audit reports under <code>docs/audits/</code>.</li>
-              <li>Run: <a href="/geode/docs/petri/run">Run an Audit</a></li>
-              <li>Dimensions: <a href="/geode/docs/petri/judge-dimensions">Judge Dimensions</a></li>
-              <li>Published results: <a href="/geode/self-improving/petri-bundle/">/geode/self-improving/petri-bundle/</a></li>
+              <li><a href="/geode/docs/petri/run">Run an audit</a>. Seed selection and the dry-run flow.</li>
+              <li><a href="/geode/docs/petri/judge-dimensions">Judge dimensions</a>. The rationale behind tiers and weights.</li>
+              <li><a href="/geode/self-improving/petri-bundle/">Bundle viewer</a>. Published audit results.</li>
             </ul>
           </>
         }

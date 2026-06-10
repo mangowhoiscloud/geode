@@ -342,8 +342,8 @@ export default function Page() {
   return (
     <DocsShell
       slug="petri/seeds"
-      title="Seed Generation Runs"
-      titleKo="Seed 생성 Run"
+      title="Seed-generation runs"
+      titleKo="Seed 생성 런"
       summary={`${totalRuns} runs · ${totalCandidates} candidates drafted · ${totalSurvivors} survived.`}
       summaryKo={`${totalRuns}개 run · ${totalCandidates}개 후보 생성 · ${totalSurvivors}개 생존.`}
     >
@@ -351,40 +351,46 @@ export default function Page() {
         ko={
           <>
             <p>
-              <strong>Reference:</strong> self-improving loop 의 seed-generation 파이프라인이 매 generation 마다 산출한 결과를
-              <code>docs/self-improving/petri-bundle/seeds/</code> 에 git-tracked snapshot 으로 publish 합니다. 본 페이지는 build time 에
-              <code>listing.json</code> + per-run <code>state.json</code> / <code>survivors.json</code> / <code>meta_review.json</code>
-              을 읽어 dashboard 로 렌더링합니다.
+              자기개선 루프의 seed-generation 파이프라인은 세대마다 산출한
+              결과를 <code>docs/self-improving/petri-bundle/seeds/</code>에
+              git-tracked 스냅샷으로 publish합니다. 이 페이지는 빌드 시점에{" "}
+              <code>listing.json</code>과 run별 <code>state.json</code> /{" "}
+              <code>survivors.json</code> / <code>meta_review.json</code>을 읽어
+              대시보드로 렌더링합니다.
             </p>
             <p>
-              raw 파일을 직접 보려면 <a href={RAW_BUNDLE_URL}><code>{RAW_BUNDLE_URL}</code></a> 의 정적 viewer 또는
-              per-run <code>state.json</code> / <code>survivors.json</code> 파일 (디렉토리 listing 은 Pages 에서 제공 X).
-              inspect_ai <code>.eval</code> 아카이브 viewer 는 <a href="/geode/self-improving/petri-bundle/">/geode/self-improving/petri-bundle/</a> 에 별도.
+              raw 파일은 <a href={RAW_BUNDLE_URL}><code>{RAW_BUNDLE_URL}</code></a>의
+              정적 viewer에서 보거나, run별 <code>state.json</code> /{" "}
+              <code>survivors.json</code>을 직접 엽니다. Pages는 디렉토리
+              listing을 제공하지 않습니다. inspect_ai <code>.eval</code> 아카이브
+              viewer는{" "}
+              <a href="/geode/self-improving/petri-bundle/">/geode/self-improving/petri-bundle/</a>에
+              따로 있습니다.
             </p>
 
             <h2>전체 Run</h2>
             <RunsTable runs={runs} locale="ko" />
 
-            <h2>Run 별 상세</h2>
-            <p>각 row 를 펼치면 survivors / 비용 / meta-review / next-gen prior / Elo 분포가 표시됩니다.</p>
+            <h2>Run별 상세</h2>
+            <p>각 row를 펼치면 survivors, 비용, meta-review, next-gen prior, Elo 분포가 보입니다.</p>
             {runs.length === 0 ? (
-              <p><em>아직 published 된 run 이 없습니다. <code>docs/self-improving/petri-bundle/seeds/listing.json</code> 을 확인하세요.</em></p>
+              <p><em>아직 publish된 run이 없습니다. <code>docs/self-improving/petri-bundle/seeds/listing.json</code>을 확인하세요.</em></p>
             ) : (
               runs.map((r) => <RunDetailBlock key={r.run.run_id} detail={r} locale="ko" />)
             )}
 
-            <h2>SoT 와 파이프라인</h2>
+            <h2>SoT와 파이프라인</h2>
             <ul>
-              <li>seed-generation 소스: <code>plugins/seed_generation/orchestrator.py</code> (8-phase: supervisor → generator → proximity → critic → pilot → ranker → evolver → meta_reviewer)</li>
-              <li>bundle 동기화: <code>plugins/seed_generation/bundle_sync.py</code> 가 run 종료 시 결과를 <code>docs/self-improving/petri-bundle/seeds/&lt;run_id&gt;/</code> 로 mirror</li>
-              <li>관련 plan: <a href="/geode/docs/capabilities/seed-pipeline">Seed Pipeline</a> · <a href="/geode/docs/petri/scenarios">Petri Scenarios</a></li>
+              <li>seed-generation 소스: <code>plugins/seed_generation/orchestrator.py</code> (9-역할: supervisor → literature_review → generator → proximity → critic → pilot → ranker → evolver → meta_reviewer. 상세는 <a href="/geode/docs/capabilities/co-scientist">Co-scientist seed 생성</a>)</li>
+              <li>bundle 동기화: <code>plugins/seed_generation/bundle_sync.py</code>가 run 종료 시 결과를 <code>docs/self-improving/petri-bundle/seeds/&lt;run_id&gt;/</code>로 mirror합니다</li>
+              <li>관련 문서: <a href="/geode/docs/capabilities/seed-pipeline">Seed Pipeline</a> · <a href="/geode/docs/petri/scenarios">Petri Scenarios</a></li>
             </ul>
           </>
         }
         en={
           <>
             <p>
-              <strong>Reference:</strong> the self-improving loop&apos;s seed-generation pipeline publishes per-generation results
+              The self-improving loop&apos;s seed-generation pipeline publishes per-generation results
               as git-tracked snapshots under <code>docs/self-improving/petri-bundle/seeds/</code>. This page reads
               <code>listing.json</code> + per-run <code>state.json</code> / <code>survivors.json</code> / <code>meta_review.json</code>
               at build time and renders them as a dashboard.
@@ -408,7 +414,7 @@ export default function Page() {
 
             <h2>Source &amp; pipeline</h2>
             <ul>
-              <li>seed-generation source: <code>plugins/seed_generation/orchestrator.py</code> (8-phase: supervisor → generator → proximity → critic → pilot → ranker → evolver → meta_reviewer)</li>
+              <li>seed-generation source: <code>plugins/seed_generation/orchestrator.py</code> (nine roles: supervisor → literature_review → generator → proximity → critic → pilot → ranker → evolver → meta_reviewer; details in <a href="/geode/docs/capabilities/co-scientist">Co-scientist seed generation</a>)</li>
               <li>bundle sync: <code>plugins/seed_generation/bundle_sync.py</code> mirrors completed runs into <code>docs/self-improving/petri-bundle/seeds/&lt;run_id&gt;/</code></li>
               <li>related: <a href="/geode/docs/capabilities/seed-pipeline">Seed Pipeline</a> · <a href="/geode/docs/petri/scenarios">Petri Scenarios</a></li>
             </ul>

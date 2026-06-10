@@ -1,26 +1,26 @@
 import { DocsShell, Bi } from "@/components/geode-docs/docs-shell";
 
-export const metadata = { title: "Audit Bundle Viewer — GEODE Docs" };
+export const metadata = { title: "Bundle viewer — GEODE Docs" };
 
-const BUNDLE_URL = "/self-improving/petri-bundle/";
-const LANDING_URL = "/self-improving/petri-bundle/landing.html";
-const SEEDS_URL = "/self-improving/petri-bundle/seeds/";
+const BUNDLE_URL = "/geode/self-improving/petri-bundle/";
+const SEEDS_URL = "/geode/self-improving/petri-bundle/seeds/";
 
 export default function Page() {
   return (
     <DocsShell
       slug="petri/bundle"
-      title="Audit Bundle Viewer"
-      titleKo="감사 Bundle 뷰어"
-      summary="Live inspect_ai transcript viewer for the latest GEODE audit run."
-      summaryKo="최신 GEODE 감사 run의 라이브 inspect_ai 트랜스크립트 뷰어."
+      title="Bundle viewer"
+      titleKo="번들 뷰어"
+      summary="The live inspect_ai transcript viewer for the latest audit run."
+      summaryKo="가장 최근 감사 런의 라이브 inspect_ai 트랜스크립트 뷰어입니다."
     >
       <Bi
         ko={
           <>
             <p>
-              <strong>Reference:</strong> 가장 최근 published Petri × GEODE audit의 라이브 transcript 뷰어 링크입니다.
-              GitHub Pages의 같은 도메인 다른 path에 publish됩니다.
+              가장 최근 publish된 Petri × GEODE 감사의 transcript를 vendored
+              Inspect View로 직접 볼 수 있습니다. 같은 GitHub Pages 도메인의
+              별도 경로에 배포됩니다.
             </p>
 
             <table>
@@ -29,59 +29,57 @@ export default function Page() {
               </thead>
               <tbody>
                 <tr>
-                  <td><a href={LANDING_URL}>Bundle 허브</a></td>
-                  <td><code>/petri-bundle/landing.html</code></td>
-                  <td>viewer / seeds / docs 로 분기하는 정적 hub</td>
-                </tr>
-                <tr>
-                  <td><a href={BUNDLE_URL} target="_blank" rel="noreferrer">Eval 로그 viewer</a></td>
-                  <td><code>/petri-bundle/</code></td>
-                  <td>inspect_ai transcript 뷰어. <code>#/tasks/&lt;eval&gt;/samples/scoring</code> 형식의 deep link 안정.</td>
+                  <td><a href={BUNDLE_URL} target="_blank" rel="noreferrer">Eval 로그 뷰어</a></td>
+                  <td><code>/geode/self-improving/petri-bundle/</code></td>
+                  <td>inspect_ai transcript 뷰어. 런 목록은 <code>logs/listing.json</code>이 SoT.</td>
                 </tr>
                 <tr>
                   <td><a href={SEEDS_URL} target="_blank" rel="noreferrer">Seed 번들</a></td>
-                  <td><code>/petri-bundle/seeds/</code></td>
-                  <td>self-improving-loop run 번들. <code>listing.json</code> + per-run JSON.</td>
+                  <td><code>.../petri-bundle/seeds/</code></td>
+                  <td>seed-generation 런 번들. <code>listing.json</code> + 런별 JSON.</td>
                 </tr>
                 <tr>
-                  <td><a href="/geode/docs/petri/seeds">Seed 페이지 (docs)</a></td>
-                  <td><code>/docs/petri/seeds/</code></td>
-                  <td>candidate 클릭 시 마크다운 렌더 detail. critic / pilot / evolver 자식 cross-link.</td>
+                  <td><a href="/geode/docs/petri/seeds">Seed 생성 런 (docs)</a></td>
+                  <td><code>/geode/docs/petri/seeds</code></td>
+                  <td>같은 데이터를 docs 대시보드로 렌더. 후보 클릭 시 상세.</td>
                 </tr>
               </tbody>
             </table>
 
-            <h2>Bundle에 들어 있는 것</h2>
-            <ul>
-              <li>전체 transcript JSONL (auditor·target·judge 발화 + tool call 트레이스)</li>
-              <li>Judge 점수표 (seeds × dims 격자)</li>
-              <li>실행 메타: 사용 모델, seed list, max-turns, 총 비용</li>
-              <li>matplotlib heatmap + summary stats</li>
-            </ul>
-
-            <h2>Bundle을 새로 만들려면</h2>
+            <h2>딥링크 규약</h2>
             <p>
-              <a href="/geode/docs/petri/run">감사 실행</a> 가이드에 따라 audit를 돌린 뒤 결과 디렉토리를
-              <code>site/public/petri-bundle/</code>에 publish 합니다. Pages workflow가 path-filter <code>site/**</code>를
-              잡고 자동 deploy합니다.
+              뷰어의 유효한 딥링크는{" "}
+              <code>#/logs/&lt;encodeURIComponent(eval_filename)&gt;</code>{" "}
+              형식 하나뿐입니다. <code>#/tasks/&lt;id&gt;</code> 라우트는
+              존재하지 않으며, 그 형식의 링크는 조용히 런 목록으로
+              떨어집니다. 링크 키는 <code>logs/listing.json</code>의 파일명을
+              씁니다.
             </p>
 
-            <h2>점수 해석</h2>
+            <h2>publish 경로</h2>
             <p>
-              차원별 의미와 0-3 점수 스케일은 <a href="/geode/docs/petri/judge-dimensions">Judge 차원</a> 페이지를 참조하세요.
+              번들의 SoT는 리포지토리의{" "}
+              <code>docs/self-improving/petri-bundle/</code>이고,{" "}
+              <code>geode hub build</code>가 허브 정적 페이지를 갱신합니다.
+              Pages 워크플로우가 빌드 시 이 트리를 사이트로 복사합니다. 새
+              감사를 publish하려면 <a href="/geode/docs/petri/run">감사
+              실행</a> 후 <code>geode petri-archive</code>로 아카이브와 요약을
+              남기고 번들을 동기화합니다.
             </p>
 
             <p className="text-[var(--ink-3)] text-sm">
-              <em>참고:</em> 뷰어가 404로 나오면 아직 publish되지 않았다는 뜻입니다. CHANGELOG에서 가장 최근
-              Petri 항목 (PR #1024+, v0.92.0 이후)을 확인하세요.
+              점수 스케일(1~10, lower-is-better)과 차원 의미는{" "}
+              <a href="/geode/docs/petri/judge-dimensions">Judge 차원</a>을
+              보세요.
             </p>
           </>
         }
         en={
           <>
             <p>
-              <strong>Reference:</strong> live transcript viewer link for the most recently published Petri × GEODE
-              audit. Hosted on the same GitHub Pages domain, different path.
+              The most recently published Petri × GEODE audit transcripts are
+              browsable in a vendored Inspect View, deployed on the same
+              GitHub Pages domain at a separate path.
             </p>
 
             <table>
@@ -90,51 +88,48 @@ export default function Page() {
               </thead>
               <tbody>
                 <tr>
-                  <td><a href={LANDING_URL}>Bundle hub</a></td>
-                  <td><code>/petri-bundle/landing.html</code></td>
-                  <td>Static hub routing to viewer / seeds / docs.</td>
-                </tr>
-                <tr>
                   <td><a href={BUNDLE_URL} target="_blank" rel="noreferrer">Eval log viewer</a></td>
-                  <td><code>/petri-bundle/</code></td>
-                  <td>inspect_ai transcript viewer. Deep links of the form <code>#/tasks/&lt;eval&gt;/samples/scoring</code> are stable.</td>
+                  <td><code>/geode/self-improving/petri-bundle/</code></td>
+                  <td>inspect_ai transcript viewer. The run list&apos;s SoT is <code>logs/listing.json</code>.</td>
                 </tr>
                 <tr>
                   <td><a href={SEEDS_URL} target="_blank" rel="noreferrer">Seed bundle</a></td>
-                  <td><code>/petri-bundle/seeds/</code></td>
-                  <td>Self-improving-loop run bundle. <code>listing.json</code> + per-run JSON.</td>
+                  <td><code>.../petri-bundle/seeds/</code></td>
+                  <td>Seed-generation run bundle: <code>listing.json</code> plus per-run JSON.</td>
                 </tr>
                 <tr>
-                  <td><a href="/geode/docs/petri/seeds">Seed page (docs)</a></td>
-                  <td><code>/docs/petri/seeds/</code></td>
-                  <td>Click a candidate to open markdown-rendered detail. critic / pilot / evolver cross-links.</td>
+                  <td><a href="/geode/docs/petri/seeds">Seed-generation runs (docs)</a></td>
+                  <td><code>/geode/docs/petri/seeds</code></td>
+                  <td>The same data rendered as a docs dashboard, with per-candidate detail.</td>
                 </tr>
               </tbody>
             </table>
 
-            <h2>What the bundle contains</h2>
-            <ul>
-              <li>Full transcript JSONL (auditor, target, judge utterances plus tool-call traces)</li>
-              <li>Judge score grid (seeds by dimensions)</li>
-              <li>Run metadata: models used, seed list, max-turns, total cost</li>
-              <li>matplotlib heatmap and summary statistics</li>
-            </ul>
-
-            <h2>Publishing a new bundle</h2>
+            <h2>Deep-link convention</h2>
             <p>
-              Follow the <a href="/geode/docs/petri/run">Run an Audit</a> guide, then drop the result directory at
-              <code>site/public/petri-bundle/</code>. The Pages workflow path-filter <code>site/**</code>
-              will deploy automatically.
+              The viewer&apos;s only valid deep-link form is{" "}
+              <code>#/logs/&lt;encodeURIComponent(eval_filename)&gt;</code>.
+              There is no <code>#/tasks/&lt;id&gt;</code> route; links of that
+              shape fall back silently to the run list. Key deep links on the
+              filenames in <code>logs/listing.json</code>.
             </p>
 
-            <h2>Score interpretation</h2>
+            <h2>Publish path</h2>
             <p>
-              For dimension meanings and the 0-3 score scale, see <a href="/geode/docs/petri/judge-dimensions">Judge Dimensions</a>.
+              The bundle&apos;s SoT is{" "}
+              <code>docs/self-improving/petri-bundle/</code> in the repository,
+              and <code>geode hub build</code> regenerates the hub&apos;s
+              static pages. The Pages workflow copies that tree into the
+              deployed site at build time. To publish a new audit, follow{" "}
+              <a href="/geode/docs/petri/run">Run an audit</a>, then{" "}
+              <code>geode petri-archive</code> to preserve the archive and
+              summary before syncing the bundle.
             </p>
 
             <p className="text-[var(--ink-3)] text-sm">
-              <em>Note:</em> if the viewer 404s, the bundle has not been published yet. Check CHANGELOG for the most
-              recent Petri entry (PR #1024+, v0.92.0 onward).
+              For the score scale (1-10, lower-is-better) and dimension
+              meanings, see{" "}
+              <a href="/geode/docs/petri/judge-dimensions">Judge dimensions</a>.
             </p>
           </>
         }
