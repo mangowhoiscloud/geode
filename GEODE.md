@@ -37,7 +37,7 @@ analysis, automation, scheduling, and multi-step tool work.
 
 ```
 AGENT:    AgenticLoop (while tool_use), SubAgentManager, CLIPoller, Gateway
-HARNESS:  SessionLane, LaneQueue(global:8), PolicyChain, TaskGraph, HookSystem(67 events)
+HARNESS:  SessionLane, LaneQueue(global:8), PolicyChain, TaskGraph, HookSystem(64 events)
 RUNTIME:  ToolRegistry(59), MCP Registry(API), Skills, Memory(5-Tier), Reports
 MODEL:    ClaudeAdapter, OpenAIAdapter, GLMAdapter (3-provider routing)
 ```

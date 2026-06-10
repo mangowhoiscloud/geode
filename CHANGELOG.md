@@ -45,6 +45,21 @@ functional change.
 
 ---
 
+## [0.99.150] - 2026-06-10
+
+### Fixed
+- **Session-memory tools no longer fake success (PR-AUDIT-AB).** `set_default_session_store` had zero callers, so every `memory_save` (default `persistent=False`) wrote into a fresh per-call `InMemorySessionStore` and still returned `saved: True`; a `memory_save` → `memory_get` round-trip silently returned nothing. `build_memory` now wires the bootstrap session store into the memory-tools ContextVar (the one sibling setter that was missing), `_get_session_store` reports whether the ephemeral fallback was taken, and tool results carry `ephemeral` — an unwired save now answers `saved: false, ephemeral: true` instead of lying. Pinned by `tests/test_memory_tools.py::TestSessionStoreContract` (round-trip + bootstrap-wiring + honest-fallback).
+- **`_load_baseline` graceful contract now covers the per-value casts.** One non-numeric `dim_means` value (schema drift / partial write) raised `ValueError` straight through the promote gate because the `float()` casts sat outside the try — the PR-G3 #1347 incident class recurring inside the gate's own baseline reader. Both v1 and v2 paths now degrade to baseline-absent with a warning.
+- **Silent fallbacks made observable**: `fetch_url`'s ConnectError → `verify=False` retry now warns and tags results with `tls_verified` (ConnectError covers DNS/refused, not just cert issues — the downgrade was invisible); `_call_llm`'s `calculate_cost` failure now logs before zero-filling `cost_usd` (an unpriced new model was silently FREE to the cost limiter).
+
+### Added
+- **`MUTATION_REJECTED` finally emits** — the self-improving loop's dominant outcome (recent campaigns ~100% rejects) was the one lifecycle event reserved without a writer. Three emit sites: the promote-gate / `promote_policy` reject branches in `train.py` (unified into `_reject_and_revert`, fired before the SoT revert with the gate verdict as `reason` + `rejected_by` ∈ gate/policy_never/policy_random), the operator decline in `/self-improving run` (`rejected_by="operator"`), and the repetitive-mutation dedup guard in the runner (`rejected_by="dedup"`).
+
+### Removed
+- **`VERIFICATION_PASS` / `VERIFICATION_FAIL` / `FALLBACK_CROSS_PROVIDER` HookEvents (67 → 64)** — pipeline-era reserves with no emit prospect (`VERIFICATION_PASS` had zero references; `FALLBACK_CROSS_PROVIDER`'s own docstring admitted no emit site since PR-NO-FALLBACK, ~12 releases past the compat grace) plus their dead audit-logger registrations. `HANDOFF_COMPLETED/FAILED` stay reserved but the enum docstring now states honestly that the watcher (`complete_handoff`/`fail_handoff` callers) is not built yet, instead of promising emits that did not exist.
+
+---
+
 ## [0.99.149] - 2026-06-10
 
 ### Removed

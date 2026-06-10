@@ -207,7 +207,7 @@ def test_i5_all_hookevents_produce_a_row() -> None:
     enum value either has a typed builder entry or falls through to
     ``GenericActivityRow`` — never raises."""
     all_events = list(HookEvent)
-    assert len(all_events) >= 67, f"expected at least 67 HookEvents, got {len(all_events)}"
+    assert len(all_events) >= 64, f"expected at least 64 HookEvents, got {len(all_events)}"
 
     typed_count = 0
     for event in all_events:

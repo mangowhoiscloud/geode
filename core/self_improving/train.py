@@ -2705,8 +2705,20 @@ def _load_baseline() -> tuple[
         raw_stderr = raw_block.get("dim_stderr") or {}
         if not raw_means:
             return None, None, {}, {}
-        baseline_means = {k: float(v) for k, v in raw_means.items()}
-        baseline_stderr = {k: float(v) for k, v in raw_stderr.items()}
+        # PR-AUDIT-AB (2026-06-10) — the graceful contract must cover the
+        # per-value float() casts, not just the outer file/JSON boundary:
+        # one non-numeric dim value (schema drift, partial write) raised
+        # ValueError straight through the promote gate. Same incident
+        # class as PR-G3 #1347 (CANNOT table row).
+        try:
+            baseline_means = {k: float(v) for k, v in raw_means.items()}
+            baseline_stderr = {k: float(v) for k, v in raw_stderr.items()}
+        except (TypeError, ValueError):
+            log.warning(
+                "baseline.json (v2) has non-numeric dim values — "
+                "treating baseline as absent per graceful contract"
+            )
+            return None, None, {}, {}
         admire_means = _coerce_axis_dict(axes_block.get("admire_means"))
         bench_means = _coerce_axis_dict(axes_block.get("bench_means"))
         return baseline_means, baseline_stderr, admire_means, bench_means
@@ -2716,8 +2728,15 @@ def _load_baseline() -> tuple[
     raw_stderr = baseline_payload.get("dim_stderr") or {}
     if not raw_means:
         return None, None, {}, {}
-    baseline_means = {k: float(v) for k, v in raw_means.items()}
-    baseline_stderr = {k: float(v) for k, v in raw_stderr.items()}
+    try:
+        baseline_means = {k: float(v) for k, v in raw_means.items()}
+        baseline_stderr = {k: float(v) for k, v in raw_stderr.items()}
+    except (TypeError, ValueError):
+        log.warning(
+            "baseline.json (v1) has non-numeric dim values — "
+            "treating baseline as absent per graceful contract"
+        )
+        return None, None, {}, {}
     # S3 (2026-05-21) — axes are optional + graceful: pre-S3 baselines
     # don't have them, and a corrupted field on a single axis must not
     # discard the whole baseline (dim part stays load-bearing).
@@ -4151,6 +4170,41 @@ def _baseline_raw_fitness(
     )
 
 
+def _reject_and_revert(reason: str, *, rejected_by: str) -> str:
+    """Shared reject idiom for the three no-promote branches.
+
+    PR-AUDIT-AB (2026-06-10) — emits ``MUTATION_REJECTED`` (the one
+    mutation-lifecycle event reserved without an emit site, despite
+    rejects being the loop's dominant outcome) and then reverts the SoT
+    for mutator-driven cycles. Returns the updated ``reason`` string
+    with the revert outcome appended. No-mutation (manual audit, env
+    unset) → unchanged reason, no emit: there is no mutation to reject.
+    """
+    mutation_id = os.environ.get("GEODE_SIL_MUTATION_ID", "").strip()
+    if not mutation_id:
+        return reason
+
+    from core.hooks.system import HookEvent
+    from core.self_improving.loop._hooks import _fire_hook
+
+    _fire_hook(
+        HookEvent.MUTATION_REJECTED,
+        {
+            "mutation_id": mutation_id,
+            "ts": time.time(),
+            "run_id": os.environ.get("GEODE_SIL_AUDIT_RUN_ID", "").strip(),
+            "reason": reason,
+            "rejected_by": rejected_by,
+        },
+    )
+    revert_ok, revert_detail = _revert_sot_after_reject(mutation_id)
+    return (
+        f"{reason}; SoT reverted ({revert_detail})"
+        if revert_ok
+        else f"{reason}; SoT revert FAILED ({revert_detail})"
+    )
+
+
 def _revert_sot_after_reject(
     mutation_id: str,
     *,
@@ -5042,14 +5096,7 @@ def main() -> int:
         # reverts the SoT (same as a gate reject) so the rejected mutation does
         # not accumulate and the next cycle starts from the frozen baseline.
         ok, reason = False, "promote_policy=never (no-mutation floor)"
-        _sil_mid_for_revert = os.environ.get("GEODE_SIL_MUTATION_ID", "").strip()
-        if _sil_mid_for_revert:
-            revert_ok, revert_detail = _revert_sot_after_reject(_sil_mid_for_revert)
-            reason = (
-                f"{reason}; SoT reverted ({revert_detail})"
-                if revert_ok
-                else f"{reason}; SoT revert FAILED ({revert_detail})"
-            )
+        reason = _reject_and_revert(reason, rejected_by="policy_never")
         promoted_line = f"false ({reason})"
     elif promote_policy == "random":
         # E3 (2026-05-30) — random-accept control: the mutation is applied +
@@ -5065,15 +5112,8 @@ def main() -> int:
         if ok:
             _write_baseline(dim_means, dim_stderr, **_baseline_provenance)
         else:
-            # Same revert semantics as a gate reject (mutator-driven only).
-            _sil_mid_for_revert = os.environ.get("GEODE_SIL_MUTATION_ID", "").strip()
-            if _sil_mid_for_revert:
-                revert_ok, revert_detail = _revert_sot_after_reject(_sil_mid_for_revert)
-                reason = (
-                    f"{reason}; SoT reverted ({revert_detail})"
-                    if revert_ok
-                    else f"{reason}; SoT revert FAILED ({revert_detail})"
-                )
+            # Same reject semantics as a gate reject (mutator-driven only).
+            reason = _reject_and_revert(reason, rejected_by="policy_random")
         promoted_line = f"{str(ok).lower()} ({reason})"
     else:
         # promote_policy == "gate" — the SELECTION arm (today's behaviour,
@@ -5158,14 +5198,7 @@ def main() -> int:
             # command). The detail string is appended to ``reason`` so
             # the audit's printed ``baseline_promoted:`` line surfaces
             # whether the leak prevention fired and the outcome.
-            _sil_mid_for_revert = os.environ.get("GEODE_SIL_MUTATION_ID", "").strip()
-            if _sil_mid_for_revert:
-                revert_ok, revert_detail = _revert_sot_after_reject(_sil_mid_for_revert)
-                reason = (
-                    f"{reason}; SoT reverted ({revert_detail})"
-                    if revert_ok
-                    else f"{reason}; SoT revert FAILED ({revert_detail})"
-                )
+            reason = _reject_and_revert(reason, rejected_by="gate")
         promoted_line = f"{str(ok).lower()} ({reason})"
     print(f"baseline_promoted:        {promoted_line}")
 
