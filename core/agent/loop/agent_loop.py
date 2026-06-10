@@ -952,7 +952,7 @@ class AgenticLoop:
             # silently drop the plan hint (parallels the reflexion_hint
             # fix in PR-CL-A3 Codex MCP MEDIUM #6). ``getattr`` guard
             # tolerates stub loops in unit tests (see
-            # ``tests/test_arun_model_drift_sync.py::_StubLoop``).
+            # ``tests/core/agent/test_arun_model_drift_sync.py::_StubLoop``).
             _plan_consume = getattr(self, "_consume_plan_hint", None)
             plan_hint = _plan_consume() if callable(_plan_consume) else ""
             if isinstance(plan_hint, str) and plan_hint:
@@ -1019,7 +1019,7 @@ class AgenticLoop:
         # so the caller drains gracefully. ``expired`` is the hard stop
         # if the loop somehow runs past zero. ``getattr`` tolerates stub
         # loops in unit tests that bind ``_check_round_guards`` to a
-        # minimal object (see tests/test_arun_round_guards.py::_StubLoop).
+        # minimal object (see tests/core/agent/test_arun_round_guards.py::_StubLoop).
         handoff_check = getattr(self, "_check_session_budget_and_maybe_handoff", None)
         if handoff_check is not None:
             handoff_reason: str | None = handoff_check()

@@ -1,0 +1,377 @@
+"""Tests for scheduler integration in geode serve.
+
+Verifies that the _drain_scheduler_queue() helper works correctly for both
+serve mode (force_isolated=True) and REPL mode (force_isolated=False), and
+that the SchedulerService lifecycle (init/load/save/stop) is correct.
+
+PR-Async-Phase-C step 4a (2026-05-22) — drain is async-native; tests wrap
+each call in ``asyncio.run`` and verify dispatch via the ``on_dispatch``
+callback instead of the removed ``IsolatedRunner.run_async`` indirection.
+"""
+
+from __future__ import annotations
+
+import asyncio
+import queue
+from pathlib import Path
+from unittest.mock import AsyncMock, MagicMock
+
+import pytest
+from core.cli import _drain_scheduler_queue
+from core.orchestration.lane_queue import Lane, SessionLane
+
+# ---------------------------------------------------------------------------
+# Fixtures
+# ---------------------------------------------------------------------------
+
+
+@pytest.fixture()
+def action_queue() -> queue.Queue:
+    return queue.Queue()
+
+
+@pytest.fixture()
+def mock_services() -> MagicMock:
+    svc = MagicMock()
+    mock_loop = MagicMock()
+    mock_loop.arun = AsyncMock(return_value=MagicMock(text="result"))
+    svc.create_session.return_value = (MagicMock(), mock_loop)
+    return svc
+
+
+@pytest.fixture()
+def session_lane() -> SessionLane:
+    return SessionLane(max_sessions=10)
+
+
+@pytest.fixture()
+def global_lane() -> Lane:
+    return Lane("global", max_concurrent=8, timeout_s=30.0)
+
+
+# ---------------------------------------------------------------------------
+# _drain_scheduler_queue tests
+# ---------------------------------------------------------------------------
+
+
+class TestDrainSchedulerQueue:
+    """Verify the shared drain helper for REPL and serve modes."""
+
+    def test_empty_queue_returns_zero(
+        self,
+        action_queue: queue.Queue,
+        mock_services: MagicMock,
+        session_lane: SessionLane,
+        global_lane: Lane,
+    ) -> None:
+        """Empty queue should drain nothing and return 0."""
+        count = asyncio.run(
+            _drain_scheduler_queue(
+                action_queue=action_queue,
+                services=mock_services,
+                session_lane=session_lane,
+                global_lane=global_lane,
+                force_isolated=True,
+            )
+        )
+        assert count == 0
+
+    def test_isolated_job_dispatched(
+        self,
+        action_queue: queue.Queue,
+        mock_services: MagicMock,
+        session_lane: SessionLane,
+        global_lane: Lane,
+    ) -> None:
+        """Isolated job should be dispatched via asyncio.create_task (fire-and-forget)."""
+        action_queue.put(("job-1", "do something", True))
+        dispatched: list[str] = []
+
+        count = asyncio.run(
+            _drain_scheduler_queue(
+                action_queue=action_queue,
+                services=mock_services,
+                session_lane=session_lane,
+                global_lane=global_lane,
+                force_isolated=False,
+                on_dispatch=lambda jid: dispatched.append(jid),
+            )
+        )
+
+        assert count == 1
+        assert dispatched == ["job-1"]
+
+    def test_force_isolated_overrides_flag(
+        self,
+        action_queue: queue.Queue,
+        mock_services: MagicMock,
+        session_lane: SessionLane,
+        global_lane: Lane,
+    ) -> None:
+        """In serve mode (force_isolated=True), non-isolated jobs run isolated."""
+        action_queue.put(("job-2", "run report", False))  # isolated=False
+        dispatched: list[str] = []
+
+        count = asyncio.run(
+            _drain_scheduler_queue(
+                action_queue=action_queue,
+                services=mock_services,
+                session_lane=session_lane,
+                global_lane=global_lane,
+                force_isolated=True,  # serve mode
+                on_dispatch=lambda jid: dispatched.append(jid),
+            )
+        )
+
+        assert count == 1
+        # Should still dispatch via the isolated path (not main_loop)
+        assert dispatched == ["job-2"]
+
+    def test_non_isolated_uses_main_loop_arun(
+        self,
+        action_queue: queue.Queue,
+        mock_services: MagicMock,
+        session_lane: SessionLane,
+        global_lane: Lane,
+    ) -> None:
+        """Non-isolated job in REPL mode should use main_loop.arun()."""
+        action_queue.put(("job-3", "check status", False))
+        main_loop = MagicMock()
+        main_loop.arun = AsyncMock(return_value=MagicMock(text="result"))
+        main_runs: list[str] = []
+
+        count = asyncio.run(
+            _drain_scheduler_queue(
+                action_queue=action_queue,
+                services=mock_services,
+                session_lane=session_lane,
+                global_lane=global_lane,
+                force_isolated=False,
+                main_loop=main_loop,
+                on_main_run=lambda jid: main_runs.append(jid),
+            )
+        )
+
+        assert count == 1
+        main_loop.arun.assert_awaited_once()
+        assert "[scheduled-job:job-3]" in main_loop.arun.call_args[0][0]
+        assert main_runs == ["job-3"]
+
+    def test_global_full_skips_job(
+        self,
+        action_queue: queue.Queue,
+        mock_services: MagicMock,
+        session_lane: SessionLane,
+    ) -> None:
+        """Jobs should be skipped when global lane is full."""
+        full_global = Lane("global", max_concurrent=0)  # zero capacity
+        action_queue.put(("job-4", "important task", True))
+        skipped: list[str] = []
+        dispatched: list[str] = []
+
+        count = asyncio.run(
+            _drain_scheduler_queue(
+                action_queue=action_queue,
+                services=mock_services,
+                session_lane=session_lane,
+                global_lane=full_global,
+                force_isolated=True,
+                on_skip=lambda jid: skipped.append(jid),
+                on_dispatch=lambda jid: dispatched.append(jid),
+            )
+        )
+
+        assert count == 1
+        assert dispatched == []
+        assert skipped == ["job-4"]
+
+    def test_empty_action_skipped(
+        self,
+        action_queue: queue.Queue,
+        mock_services: MagicMock,
+        session_lane: SessionLane,
+        global_lane: Lane,
+    ) -> None:
+        """Jobs with empty fired_action should be silently skipped."""
+        action_queue.put(("job-5", "", True))
+        dispatched: list[str] = []
+
+        count = asyncio.run(
+            _drain_scheduler_queue(
+                action_queue=action_queue,
+                services=mock_services,
+                session_lane=session_lane,
+                global_lane=global_lane,
+                force_isolated=True,
+                on_dispatch=lambda jid: dispatched.append(jid),
+            )
+        )
+
+        assert count == 0  # empty action does not count
+        assert dispatched == []
+
+    def test_multiple_jobs_drained(
+        self,
+        action_queue: queue.Queue,
+        mock_services: MagicMock,
+        session_lane: SessionLane,
+    ) -> None:
+        """Multiple queued jobs should all be drained in one call."""
+        action_queue.put(("j1", "task one", True))
+        action_queue.put(("j2", "task two", True))
+        action_queue.put(("j3", "task three", True))
+        big_global = Lane("global", max_concurrent=8, timeout_s=30.0)
+        dispatched: list[str] = []
+
+        count = asyncio.run(
+            _drain_scheduler_queue(
+                action_queue=action_queue,
+                services=mock_services,
+                session_lane=session_lane,
+                global_lane=big_global,
+                force_isolated=True,
+                on_dispatch=lambda jid: dispatched.append(jid),
+            )
+        )
+
+        assert count == 3
+        assert dispatched == ["j1", "j2", "j3"]
+        assert action_queue.empty()
+
+
+# ---------------------------------------------------------------------------
+# Error path tests (Beck P1: exception safety)
+# ---------------------------------------------------------------------------
+
+
+class TestDrainErrorPaths:
+    """Verify exception safety in drain loop."""
+
+    def test_create_session_failure_releases_lanes(
+        self,
+        action_queue: queue.Queue,
+        session_lane: SessionLane,
+        global_lane: Lane,
+    ) -> None:
+        """Both lanes must be released if create_session() raises."""
+        failing_services = MagicMock()
+        failing_services.create_session.side_effect = RuntimeError("MCP down")
+        action_queue.put(("job-err", "fail task", True))
+        dispatched: list[str] = []
+
+        count = asyncio.run(
+            _drain_scheduler_queue(
+                action_queue=action_queue,
+                services=failing_services,
+                session_lane=session_lane,
+                global_lane=global_lane,
+                force_isolated=True,
+                on_dispatch=lambda jid: dispatched.append(jid),
+            )
+        )
+
+        assert count == 1
+        assert dispatched == []
+        # Lanes should NOT be leaked
+        assert session_lane.active_count == 0
+        assert global_lane.active_count == 0
+
+    def test_main_loop_arun_exception_continues_drain(
+        self,
+        action_queue: queue.Queue,
+        mock_services: MagicMock,
+        session_lane: SessionLane,
+        global_lane: Lane,
+    ) -> None:
+        """main_loop.arun() exception should not kill the drain loop."""
+        failing_loop = MagicMock()
+        failing_loop.arun = AsyncMock(side_effect=RuntimeError("loop crashed"))
+        action_queue.put(("j1", "first", False))
+        action_queue.put(("j2", "second", False))
+
+        count = asyncio.run(
+            _drain_scheduler_queue(
+                action_queue=action_queue,
+                services=mock_services,
+                session_lane=session_lane,
+                global_lane=global_lane,
+                force_isolated=False,
+                main_loop=failing_loop,
+            )
+        )
+
+        assert count == 2
+        assert failing_loop.arun.await_count == 2
+
+
+# ---------------------------------------------------------------------------
+# SchedulerService lifecycle
+# ---------------------------------------------------------------------------
+
+
+class TestSchedulerServiceLifecycle:
+    """Verify scheduler init/load/save/stop for serve mode."""
+
+    def test_job_count_property(self) -> None:
+        """job_count should reflect number of registered jobs."""
+        from core.scheduler import Schedule, ScheduledJob, ScheduleKind, SchedulerService
+
+        svc = SchedulerService(enable_jitter=False)
+        assert svc.job_count == 0
+
+        job = ScheduledJob(
+            job_id="test-1",
+            name="Test Job",
+            schedule=Schedule(kind=ScheduleKind.EVERY, every_ms=60000),
+            action="do something",
+        )
+        svc.add_job(job)
+        assert svc.job_count == 1
+
+    def test_save_and_load_roundtrip(self, tmp_path: Path) -> None:
+        """Jobs should persist across save/load cycle."""
+        from core.scheduler import Schedule, ScheduledJob, ScheduleKind, SchedulerService
+
+        store = tmp_path / "jobs.json"
+        svc = SchedulerService(store_path=store, enable_jitter=False)
+
+        job = ScheduledJob(
+            job_id="persist-1",
+            name="Persist Job",
+            schedule=Schedule(kind=ScheduleKind.EVERY, every_ms=300000),
+            action="persist action",
+        )
+        svc.add_job(job)
+        svc.save()
+
+        svc2 = SchedulerService(store_path=store, enable_jitter=False)
+        svc2.load()
+        assert svc2.job_count == 1
+
+    def test_start_stop(self) -> None:
+        """start()/stop() should manage the background thread."""
+        from core.scheduler import SchedulerService
+
+        svc = SchedulerService(enable_jitter=False)
+        assert not svc.is_running
+
+        svc.start(interval_s=999)  # long interval to avoid tick during test
+        assert svc.is_running
+
+        svc.stop()
+        assert not svc.is_running
+
+    def test_graceful_shutdown_saves(self, tmp_path: Path) -> None:
+        """Graceful shutdown pattern: save() then stop()."""
+        from core.scheduler import SchedulerService
+
+        store = tmp_path / "jobs.json"
+        svc = SchedulerService(store_path=store, enable_jitter=False)
+        svc.start(interval_s=999)
+
+        # Simulate serve shutdown
+        svc.save()
+        svc.stop()
+
+        assert not svc.is_running
+        assert store.exists()

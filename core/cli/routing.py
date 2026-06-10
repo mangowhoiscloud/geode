@@ -16,7 +16,7 @@ Bug class B2 / B3 / B8 — pre-v0.52 commands were dispatched implicitly:
 paths with different IPC writer availability, so OAuth device-code
 prompts were swallowed by ``capture_output()`` on the daemon side.
 ``COMMAND_REGISTRY`` makes the location explicit, and
-``tests/test_command_registry.py`` enforces:
+``tests/core/cli/test_command_registry.py`` enforces:
 
   1. Every registered command has exactly one RunLocation
   2. THIN commands do not depend on ``_ipc_writer_local`` (no IPC events)

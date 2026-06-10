@@ -3,7 +3,7 @@
 Extracted from ``core/cli/__init__.py`` (Tier 3 God Object split).
 
 Note: ``_thin_interactive_loop`` lives in ``core/cli/__init__.py`` rather
-than here because ``tests/test_signal_reload.py`` enforces a source-level
+than here because ``tests/core/llm/test_signal_reload.py`` enforces a source-level
 contract on the package ``__init__`` (the THIN ``/login refresh`` relay).
 Keeping the loop body in ``__init__`` is the cheapest way to honor that
 contract without weakening the test.

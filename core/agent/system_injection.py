@@ -25,7 +25,7 @@ ConversationContext:
   - Per-round variance (round index, date) lands after the last stable
     history block, so only the reminder itself is uncached each round.
 
-Guard: ``tests/test_system_injection.py::TestCacheContract``.
+Guard: ``tests/core/agent/test_system_injection.py::TestCacheContract``.
 """
 
 from __future__ import annotations

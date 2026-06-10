@@ -320,7 +320,7 @@ def _resolve_provider(model: str) -> str:
     The manifest's ``[routing.prefixes]`` table, ``codex_only_models``
     list, and ``codex_suffixes`` list together produce identical output
     for every documented branch (parity verified in
-    ``tests/test_routing_manifest.py::test_resolve_provider_legacy_parity``).
+    ``tests/core/config/test_routing_manifest.py::test_resolve_provider_legacy_parity``).
     Users now adjust provider routing by editing
     ``core/config/routing.toml`` (or ``~/.geode/routing.toml``) instead
     of patching code.

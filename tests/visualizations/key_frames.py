@@ -1,7 +1,7 @@
 """Key-frame manifest for the Step 3 pixel ratchet.
 
 Shared by:
-- ``tests/test_hero_frame_ratchet.py`` — diffs each frame against its
+- ``tests/visualizations/test_hero_frame_ratchet.py`` — diffs each frame against its
   baseline PNG using ``pixelmatch``.
 - ``scripts/visualizations/update_frame_baselines.py`` — re-extracts
   the same frames from the rendered videos when a layout change is

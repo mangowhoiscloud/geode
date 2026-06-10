@@ -3,14 +3,6 @@
 from __future__ import annotations
 
 import pytest
-from core.llm.adapters.base import (
-    CONCRETE_SOURCES,
-    SOURCE_AUTO,
-    SOURCE_PAYG,
-    SOURCE_SUBSCRIPTION,
-)
-from core.llm.adapters.registry import _reset_for_test
-
 from core.llm.adapters import (
     AdapterAlreadyRegisteredError,
     AdapterBillingType,
@@ -23,6 +15,13 @@ from core.llm.adapters import (
     resolve_for,
     unregister_adapter,
 )
+from core.llm.adapters.base import (
+    CONCRETE_SOURCES,
+    SOURCE_AUTO,
+    SOURCE_PAYG,
+    SOURCE_SUBSCRIPTION,
+)
+from core.llm.adapters.registry import _reset_for_test
 
 
 class _Stub:

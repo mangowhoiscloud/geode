@@ -6,6 +6,7 @@ from collections.abc import Iterator
 from pathlib import Path
 
 import pytest
+from plugins.petri_audit import credential_source as cs
 from plugins.petri_audit.manifest import clear_manifest_cache
 from plugins.petri_audit.registry import (
     FamilyInferenceError,
@@ -13,8 +14,6 @@ from plugins.petri_audit.registry import (
     get_binding,
     infer_provider,
 )
-
-from plugins.petri_audit import credential_source as cs
 
 
 @pytest.fixture(autouse=True)

@@ -23,9 +23,8 @@ import pytest
 from core.agent.conversation import ConversationContext
 from core.agent.loop import AgenticLoop
 from core.agent.tool_executor import ToolExecutor
-from core.llm.adapters.registry import _reset_for_test, bootstrap_builtins
-
 from core.llm.adapters import AdapterNotFoundError
+from core.llm.adapters.registry import _reset_for_test, bootstrap_builtins
 
 
 @pytest.fixture(autouse=True)

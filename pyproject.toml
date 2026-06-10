@@ -1,6 +1,6 @@
 [project]
 name = "geode-agent"
-version = "0.99.159"
+version = "0.99.160"
 description = "GEODE — 범용 자율 실행 에이전트"
 license = "Apache-2.0"
 readme = "README.md"
@@ -306,7 +306,11 @@ ignore_imports = [
 [tool.ruff]
 target-version = "py312"
 line-length = 100
-src = ["core", "plugins", "tests", "scripts"]
+# S-2 (2026-06-11) — "tests" removed from src roots: with the test tree on
+# the source-mirror convention, tests/core/<pkg>/ made ruff's first-party
+# resolver see a second `core.*` package under the tests root and silently
+# flipped isort grouping for function-body import blocks.
+src = ["core", "plugins", "scripts"]
 extend-exclude = [
     ".geode",        # runtime config + skill scripts (not part of codebase)
     ".claude",       # Claude Code session artifacts

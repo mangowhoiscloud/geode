@@ -92,8 +92,8 @@ jobs:
       - name: Type check
         run: >
           uv run mypy core plugins scripts
-          tests/test_prepare_hf_release_bundle.py
-          tests/test_check_official_docs.py
+          tests/integration/test_prepare_hf_release_bundle.py
+          tests/integration/test_check_official_docs.py
 
       - name: Prompt integrity
         run: |

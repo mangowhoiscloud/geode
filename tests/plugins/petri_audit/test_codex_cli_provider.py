@@ -549,7 +549,6 @@ def test_generate_with_tools_dispatches_to_tools_path(tmp_path: Any) -> None:
 
 def test_generate_text_only_round_trip(tmp_path: Any) -> None:
     from inspect_ai.model._model_output import ModelOutput
-
     from plugins.petri_audit import codex_cli_provider as p
 
     fake = tmp_path / "fake-codex"

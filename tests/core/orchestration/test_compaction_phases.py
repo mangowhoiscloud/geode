@@ -19,14 +19,13 @@ import asyncio
 from typing import Any
 
 import pytest
+from core.orchestration import compaction
 from core.orchestration.compaction import (
     COMPACTION_MARKER,
     compact_conversation,
     find_safe_boundary,
     strip_orphan_tool_results,
 )
-
-from core.orchestration import compaction
 
 
 def _make_tool_use_msg(tool_id: str, name: str = "bash") -> dict[str, Any]:

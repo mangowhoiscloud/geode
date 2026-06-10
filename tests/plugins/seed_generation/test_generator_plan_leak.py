@@ -86,7 +86,7 @@ def test_real_generator_description_trips_compound_indicators() -> None:
 
 class TestWorkerDisablesGoalDecomposition:
     """Pin the kwarg the worker passes to ``AgenticLoop``. Mirrors the
-    ``TestSubAgentReasoningWiring`` pattern in ``tests/test_worker.py``
+    ``TestSubAgentReasoningWiring`` pattern in ``tests/core/agent/test_worker.py``
     (capture kwargs via a side_effect stub).
     """
 
