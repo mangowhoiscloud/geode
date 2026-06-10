@@ -386,7 +386,7 @@ On the `autoresearch/<tag>` branch, **loop forever**:
      critical regression) → `verdict=discard`,
      `git reset --hard HEAD~1`, description should name the offending
      axis (`critical regress: <axis>`).
-   - **soft penalty kept**: `fitness > 0.0` but below baseline →
+   - **soft penalty, commit discarded**: `fitness > 0.0` but below baseline →
      `verdict=discard`, reset, description names the auxiliary axis.
    - **promote**: fitness gain exceeds `max(prior_stderr, 0.05)`
      **and** every critical dim is within `baseline_stderr + margin` →

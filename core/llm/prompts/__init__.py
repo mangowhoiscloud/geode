@@ -1,16 +1,19 @@
 """Prompt template management — .md templates + Python loader.
 
 Prompts are stored as Markdown files with XML-shaped section tags
-(``<system>`` / ``<user>`` / ``<agentic_suffix>`` / ``<rescore>`` /
-``<dual_verify>`` / ``<analyst_tools>`` / ``<synthesizer_tools>``).
-The 2026-05-12 prompt audit (G1+G4) converted the prior
-``=== SYSTEM ===`` / ``=== USER ===`` delimiters to XML so every
-fragment Claude sees uses the same tag-delimited shape — matching the
-Anthropic prompt-engineering recommendation, Petri auditor's
-``<thinking>``/``<seed_instructions>``, and Claude Code's
-``<system-reminder>``/``<workingDir>`` tags.
+(``<system>`` / ``<user>`` / ``<agentic_suffix>``). The 2026-05-12
+prompt audit (G1+G4) converted the prior ``=== SYSTEM ===`` /
+``=== USER ===`` delimiters to XML so every fragment Claude sees uses
+the same tag-delimited shape — matching the Anthropic prompt-engineering
+recommendation, Petri auditor's ``<thinking>``/``<seed_instructions>``,
+and Claude Code's ``<system-reminder>``/``<workingDir>`` tags.
 
-Structured scoring data (axes, rubrics) lives in ``axes.py``.
+Slop-cleanup (2026-06-11): the analyst / evaluator / synthesizer /
+tool_augmented templates and the empty-husk ``axes.py`` were deleted —
+they served the Game-IP analysis pipeline removed in v0.99.149 and had
+zero production callers since. Live templates: ``router`` (AgenticLoop
+system + agentic suffix), ``commentary``, ``decomposer`` (loaded via
+``load_prompt`` at call sites).
 """
 
 from __future__ import annotations
@@ -20,13 +23,6 @@ import logging
 import re
 from pathlib import Path
 from typing import Any
-
-from core.llm.prompts.axes import (
-    ANALYST_SPECIFIC,
-    AXES_VERSIONS,
-    EVALUATOR_AXES,
-    PROSPECT_EVALUATOR_AXES,
-)
 
 _log = logging.getLogger(__name__)
 _PROMPTS_DIR = Path(__file__).parent
@@ -61,8 +57,8 @@ def _load_template(name: str) -> dict[str, str]:
 def load_prompt(name: str, section: str = "system") -> str:
     """Public API — load a prompt section by template name.
 
-    >>> system = load_prompt("analyst", "system")
-    >>> user = load_prompt("analyst", "user")
+    >>> system = load_prompt("decomposer", "system")
+    >>> commentary = load_prompt("commentary", "user")
     """
     sections = _load_template(name)
     key = section.lower()
@@ -89,20 +85,8 @@ def hash_rendered_prompt(template: str, **kwargs: Any) -> str:
 
 
 # ---------------------------------------------------------------------------
-# Backward-compatible constants (loaded from .md templates)
+# Module-level constants (loaded from .md templates)
 # ---------------------------------------------------------------------------
-
-_analyst = _load_template("analyst")
-ANALYST_SYSTEM: str = _analyst["system"]
-ANALYST_USER: str = _analyst["user"]
-
-_evaluator = _load_template("evaluator")
-EVALUATOR_SYSTEM: str = _evaluator["system"]
-EVALUATOR_USER: str = _evaluator["user"]
-
-_synthesizer = _load_template("synthesizer")
-SYNTHESIZER_SYSTEM: str = _synthesizer["system"]
-SYNTHESIZER_USER: str = _synthesizer["user"]
 
 _commentary = _load_template("commentary")
 COMMENTARY_SYSTEM: str = _commentary["system"]
@@ -112,32 +96,16 @@ _router = _load_template("router")
 ROUTER_SYSTEM: str = _router["system"]
 AGENTIC_SUFFIX: str = _router["agentic_suffix"]
 
-_tool_augmented = _load_template("tool_augmented")
-ANALYST_TOOLS_SUFFIX: str = _tool_augmented["analyst_tools"]
-SYNTHESIZER_TOOLS_SUFFIX: str = _tool_augmented["synthesizer_tools"]
-
 # ---------------------------------------------------------------------------
 # Prompt version hashes
 # ---------------------------------------------------------------------------
 
 PROMPT_VERSIONS: dict[str, str] = {
-    # Base templates (6)
-    "ANALYST_SYSTEM": _hash_prompt(ANALYST_SYSTEM),
-    "ANALYST_USER": _hash_prompt(ANALYST_USER),
-    "EVALUATOR_SYSTEM": _hash_prompt(EVALUATOR_SYSTEM),
-    "EVALUATOR_USER": _hash_prompt(EVALUATOR_USER),
-    "SYNTHESIZER_SYSTEM": _hash_prompt(SYNTHESIZER_SYSTEM),
-    "SYNTHESIZER_USER": _hash_prompt(SYNTHESIZER_USER),
-    # Extended templates (9)
     "ROUTER_SYSTEM": _hash_prompt(ROUTER_SYSTEM),
     "AGENTIC_SUFFIX": _hash_prompt(AGENTIC_SUFFIX),
     "COMMENTARY_SYSTEM": _hash_prompt(COMMENTARY_SYSTEM),
     "COMMENTARY_USER": _hash_prompt(COMMENTARY_USER),
-    "ANALYST_TOOLS_SUFFIX": _hash_prompt(ANALYST_TOOLS_SUFFIX),
-    "SYNTHESIZER_TOOLS_SUFFIX": _hash_prompt(SYNTHESIZER_TOOLS_SUFFIX),
 }
-# Merge axes version hashes (3)
-PROMPT_VERSIONS.update(AXES_VERSIONS)
 
 _log.debug("Prompt versions loaded (%d): %s", len(PROMPT_VERSIONS), PROMPT_VERSIONS)
 
@@ -151,21 +119,10 @@ _log.debug("Prompt versions loaded (%d): %s", len(PROMPT_VERSIONS), PROMPT_VERSI
 #   python -c "from core.llm.prompts import PROMPT_VERSIONS as V; \
 #     print(dict(sorted(V.items())))"
 _PINNED_HASHES: dict[str, str] = {
-    "AGENTIC_SUFFIX": "d88bf46f887a",
-    "ANALYST_SPECIFIC": "44136fa355b3",
-    "ANALYST_SYSTEM": "b800a57a4599",
-    "ANALYST_TOOLS_SUFFIX": "7fd06b7c8389",
-    "ANALYST_USER": "5fb494ca5cc8",
+    "AGENTIC_SUFFIX": "424e00fc8ad5",
     "COMMENTARY_SYSTEM": "488d8916d958",
     "COMMENTARY_USER": "2024ac4eba69",
-    "EVALUATOR_AXES": "44136fa355b3",
-    "EVALUATOR_SYSTEM": "6f6cb9030222",
-    "EVALUATOR_USER": "ad832adfadf0",
-    "PROSPECT_EVALUATOR_AXES": "44136fa355b3",
     "ROUTER_SYSTEM": "696cf5743225",
-    "SYNTHESIZER_SYSTEM": "1cbe199613a1",
-    "SYNTHESIZER_TOOLS_SUFFIX": "36a753f258ad",
-    "SYNTHESIZER_USER": "f419cc172722",
 }
 
 
@@ -175,29 +132,9 @@ def verify_prompt_integrity(*, raise_on_drift: bool = False) -> list[str]:
     Returns list of drift descriptions (empty = all OK).
     If ``raise_on_drift=True``, raises ``RuntimeError`` on first mismatch.
     """
-    from core.llm.prompts.axes import AXES_VERSIONS as LIVE_AXES
-
     drifted: list[str] = []
-    current: dict[str, str] = {
-        # Base templates (6)
-        "ANALYST_SYSTEM": _hash_prompt(ANALYST_SYSTEM),
-        "ANALYST_USER": _hash_prompt(ANALYST_USER),
-        "EVALUATOR_SYSTEM": _hash_prompt(EVALUATOR_SYSTEM),
-        "EVALUATOR_USER": _hash_prompt(EVALUATOR_USER),
-        "SYNTHESIZER_SYSTEM": _hash_prompt(SYNTHESIZER_SYSTEM),
-        "SYNTHESIZER_USER": _hash_prompt(SYNTHESIZER_USER),
-        # Extended templates (9)
-        "ROUTER_SYSTEM": _hash_prompt(ROUTER_SYSTEM),
-        "AGENTIC_SUFFIX": _hash_prompt(AGENTIC_SUFFIX),
-        "COMMENTARY_SYSTEM": _hash_prompt(COMMENTARY_SYSTEM),
-        "COMMENTARY_USER": _hash_prompt(COMMENTARY_USER),
-        "ANALYST_TOOLS_SUFFIX": _hash_prompt(ANALYST_TOOLS_SUFFIX),
-        "SYNTHESIZER_TOOLS_SUFFIX": _hash_prompt(SYNTHESIZER_TOOLS_SUFFIX),
-        # Axes hashes (3)
-        **LIVE_AXES,
-    }
     for name, pinned_hash in _PINNED_HASHES.items():
-        computed = current.get(name)
+        computed = PROMPT_VERSIONS.get(name)
         if computed != pinned_hash:
             msg = f"Prompt drift: {name} pin={pinned_hash} now={computed}"
             drifted.append(msg)
@@ -213,22 +150,10 @@ def verify_prompt_integrity(*, raise_on_drift: bool = False) -> list[str]:
 
 __all__ = [
     "AGENTIC_SUFFIX",
-    "ANALYST_SPECIFIC",
-    "ANALYST_SYSTEM",
-    "ANALYST_TOOLS_SUFFIX",
-    "ANALYST_USER",
-    "AXES_VERSIONS",
     "COMMENTARY_SYSTEM",
     "COMMENTARY_USER",
-    "EVALUATOR_AXES",
-    "EVALUATOR_SYSTEM",
-    "EVALUATOR_USER",
     "PROMPT_VERSIONS",
-    "PROSPECT_EVALUATOR_AXES",
     "ROUTER_SYSTEM",
-    "SYNTHESIZER_SYSTEM",
-    "SYNTHESIZER_TOOLS_SUFFIX",
-    "SYNTHESIZER_USER",
     "_hash_prompt",
     "hash_rendered_prompt",
     "load_prompt",

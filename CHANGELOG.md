@@ -45,6 +45,20 @@ functional change.
 
 ---
 
+## [0.99.157] - 2026-06-11
+
+### Removed
+- **Slop cleanup — Game-IP-era scaffold + prompt residue (PR-SLOP-CLEANUP).** Scope priority: codebase-wide -> system -> file.
+  - 5 scaffold skills deleted: `geode-analysis`, `geode-pipeline`, `geode-scoring`, `geode-e2e`, `geode-verification` — all document the Game-IP analysis pipeline removed in v0.99.149 (G1-G4 guardrails deleted v0.99.154); zero current callers, recoverable from git history.
+  - 4 orphan prompt templates + 1 husk deleted: `core/llm/prompts/{analyst,evaluator,synthesizer,tool_augmented}.md` + `axes.py` (empty-dict compat shim) — exported, hashed, pinned, but zero production callers since v0.99.149. `prompts/__init__.py` now ships router + commentary only (decomposer stays `load_prompt`-loaded); `_PINNED_HASHES` 15 -> 4 entries.
+
+### Changed
+- **router.md de-slop**: duplicate `show_help`/`dry_run` rules removed from the agentic suffix (canon stays in Tool usage rules), `(CRITICAL)` inflation 4 -> 2 (kept on Clarification + Grounding), `AGENTIC_SUFFIX` re-pinned. LinkedIn routing and `playwriter` KEPT — both are configured MCP servers (`.claude/mcp_servers.json`), audit false positives.
+- `core/agent/system_prompt.py` `_generic_static_prefix` drops the Game-IP relic `ip_count`/`ip_examples` format kwargs (template has no such placeholders; kwarg-free `.format()` kept for `{{skill_context}}` collapse).
+- `core/self_improving/program.md` verdict-label contradiction fixed (`soft penalty kept` -> `soft penalty, commit discarded` — body always said `verdict=discard`).
+- `CLAUDE.md` scaffold sync: Entry Points corrected (`core.cli:app` + `geode-mcp`), skills table rebuilt (7 stale/ghost rows out incl. 2 rows pointing at skills that exist nowhere; 2 tracked-but-unlisted rows in; honesty note that `.claude/skills/` is gitignored and local-only skills are not listed).
+- `plugins/petri_audit/roles/{auditor,judge}.md` `inline_skills` metadata no longer references deleted skills.
+
 ## [0.99.156] - 2026-06-10
 
 ### Added
