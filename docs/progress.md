@@ -17,7 +17,7 @@
 <!-- Move items here when work begins. -->
 <!-- 3-Checkpoint: (1) alloc → (2) merge (CI 5/5) → (3) verify -->
 - [ ] Docs sprint — v0.99.154~166 출하분 문서 반영 (별도 세션; 브리프=memory project_docs_sprint_brief_2026_06_11: 모듈 경로 이동 전수 점검 + geode-mcp/seeds/hub/config explain 신규 표면 + 5-layer 다이어그램 + .env 역할 재정의 + Fable 5)
-- [ ] Config system unification C-1..C-4 — env/config 14 override hazards mapped (daemon cwd split H1, env snapshot H2, .env mask H3, /model global wrong-file write H4, inverted dotenv precedence H5...); C-1 geode config explain first; worktree TBD
+- [ ] Config unification — C-1/C-2 DONE; C-3 next (dotenv 단일화 H5 + 데몬 모델성 env 드롭 H2 + client-cwd 정렬 H1; frontier 레퍼런스 조사 완료: 4사 모두 .env에 동작설정 안 씀, Hermes 키-타입 라우팅+hot-reload 계약, Claude Code 승자-레이어 배너) → C-4 (캐시 무효화+GEODE_CONFIG_TOML 통일)
 
 ## In Review
 
@@ -27,6 +27,9 @@
 
 <!-- Completed items. Keep recent 10, archive older ones. -->
 <!-- - [x] #issue-number — Short description (PR #N) -->
+- [x] C-1 geode config explain + about mask warning (PR #2094 → #2095, v0.99.164)
+- [x] C-2 .env=secrets-only — /model·effort·login-source toml-only + stale-mask auto-cleanup, credential_source cascade read-back (PR #2097 → #2098, v0.99.165)
+- [x] Fable 5 support — /model 픽커+capability 앵커+refusal stop_reason(termination model_refusal), 공식문서 3종 검증·인용, 전환 E2E PASS (PR #2100 → #2102, v0.99.166)
 - [x] Struct S-5: autoresearch-원형 restore (option b) — train.py 5,542→1,656L, gear → measure/fitness/gate/ledger (dry-run equivalence pinned, regression-vs-main 0), loop/ → mutate/observe/inject domains, program.md single-file contract restored + GEODE.md 5-layer formalised (PR #2090 → #2091, v0.99.163) — STRUCTURE SPRINT S-1..S-5 COMPLETE
 - [x] Struct S-3: CLI single home (cmd_*.py ×5 → commands/) + geode seeds assemble / geode hub build promotion (repo-only fail-loud wrappers) (PR #2083 → #2084, v0.99.161)
 - [x] Struct S-4: core/utils dissolved (atomic_write→memory, env_io+project_detect→config, redaction→observability, similarity→seedgen; census corrected 2 blueprint guesses) + seed tools → plugins/seed_generation/tools/ + integrations→messaging flatten (PR #2086 → #2087, v0.99.162)
