@@ -45,6 +45,16 @@ functional change.
 
 ---
 
+## [0.99.166] - 2026-06-11
+
+### Added
+- **Claude Fable 5 support (`claude-fable-5`).** Official-docs-verified (refs cited in every touched module: models overview / introducing page / migration guide):
+  - `/model` picker offers Fable 5 (anthropic, $10/$50 per MTok, 1M ctx, 128k out)
+  - Capability anchors: `ANTHROPIC_ADAPTIVE_MODELS` (adaptive-only thinking — `thinking:{type:"disabled"}` errors, sampling params 400; the existing adaptive request shape applies verbatim), `ANTHROPIC_XHIGH_MODELS`, `ANTHROPIC_CONTEXT_MGMT_MODELS` (compaction)
+  - Pricing + context-window rows; petri (3-role) + seed_generation (9-role) plugin allowlists
+  - **`refusal` stop_reason handling (new)** — Fable 5's safety classifiers decline via `stop_reason:"refusal"` as HTTP 200 (often empty content); the agentic loop previously rendered that as a silent empty turn. `normalize_anthropic` now captures `stop_details`, and the loop maps refusals to `termination_reason="model_refusal"` with an honest message including `stop_details.category` (also benefits Opus 4.7/4.8 where the surface already existed).
+  - Switch-path E2E verified end-to-end in an isolated project: stale `.env` mask removed, toml written, next-session reload + `config explain` winner = project toml, effective model = claude-fable-5.
+
 ## [0.99.165] - 2026-06-11
 
 ### Changed

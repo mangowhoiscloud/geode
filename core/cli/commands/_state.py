@@ -50,6 +50,10 @@ class ModelProfile:
 # scan when Codex subscription OAuth is registered (v0.52.4 routing policy);
 # otherwise to `openai` PAYG. Both paths visible via /login dashboard.
 MODEL_PROFILES: list[ModelProfile] = [
+    # Fable 5 — Anthropic's most capable widely released model ($10/$50,
+    # 1M ctx, adaptive-only thinking, refusal stop_reason). GA 2026-06-09.
+    # ref: https://platform.claude.com/docs/en/about-claude/models/overview
+    ModelProfile("claude-fable-5", "anthropic", "Fable 5", "$$$$"),
     ModelProfile("claude-opus-4-8", "anthropic", "Opus 4.8", "$$$"),
     ModelProfile("claude-opus-4-7", "anthropic", "Opus 4.7", "$$$"),
     ModelProfile("claude-opus-4-6", "anthropic", "Opus 4.6", "$$$"),

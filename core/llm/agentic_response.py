@@ -88,7 +88,12 @@ class AgenticResponse:
     """
 
     content: list[TextBlock | ToolUseBlock] = field(default_factory=list)
-    stop_reason: str = "end_turn"  # "end_turn" or "tool_use"
+    stop_reason: str = "end_turn"  # "end_turn" / "tool_use" / "refusal" (Fable 5, Opus 4.7+)
+    # PR-FABLE5 (2026-06-11) — refusal metadata. Fable 5's safety
+    # classifiers return stop_reason="refusal" as HTTP 200 with a
+    # stop_details.category ("cyber"/"bio"/"reasoning_extraction"/null).
+    # ref: https://platform.claude.com/docs/en/about-claude/models/migration-guide
+    stop_details: dict[str, Any] | None = None
     usage: ResponseUsage = field(default_factory=ResponseUsage)
     codex_reasoning_items: list[dict[str, Any]] | None = None
     # v0.57.0 R6 — reasoning summaries for the "live thinking..." UI
@@ -203,11 +208,17 @@ def normalize_anthropic(response: Any) -> AgenticResponse:
             cache_read_tokens=cache_read,
         )
 
+    raw_stop_details = getattr(response, "stop_details", None)
+    if raw_stop_details is not None and not isinstance(raw_stop_details, dict):
+        dump = getattr(raw_stop_details, "model_dump", None)
+        raw_stop_details = dump() if callable(dump) else {"raw": str(raw_stop_details)}
+
     return AgenticResponse(
         content=blocks,
         stop_reason=response.stop_reason,
         usage=usage,
         reasoning_summaries=reasoning_summaries or None,
+        stop_details=raw_stop_details,
     )
 
 
