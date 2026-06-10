@@ -1995,6 +1995,28 @@ class AgenticLoop:
             else:
                 self._consecutive_text_only_rounds = 0
 
+            if response.stop_reason == "refusal":
+                # PR-FABLE5 (2026-06-11) — Fable 5 safety classifiers decline
+                # via stop_reason="refusal" (HTTP 200, often empty content).
+                # Surface it honestly instead of returning a silent empty turn.
+                # ref: https://platform.claude.com/docs/en/about-claude/models/migration-guide
+                self._op_logger.finalize()
+                self._sync_messages_to_context(messages)
+                stop_details = getattr(response, "stop_details", None)
+                category = stop_details.get("category") if isinstance(stop_details, dict) else None
+                refusal_text = self._extract_text(response).strip() or (
+                    "The model declined this request"
+                    + (f" (safety classifier category: {category})" if category else "")
+                    + ". Rephrase the request or retry on another model via /model."
+                )
+                result = AgenticResult(
+                    text=refusal_text,
+                    tool_calls=self._tool_processor.tool_log,
+                    rounds=round_idx + 1,
+                    termination_reason="model_refusal",
+                )
+                return await self._afinalize_and_return(result, user_input, round_idx + 1)
+
             if response.stop_reason != "tool_use":
                 # end_turn or max_tokens → extract text, done
                 self._op_logger.finalize()

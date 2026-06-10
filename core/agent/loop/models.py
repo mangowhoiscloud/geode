@@ -109,6 +109,8 @@ class AgenticResult:
     # | "llm_error" | "context_exhausted" | "cost_budget_exceeded"
     # | "model_action_required" — LLM error retried up to cap; user must
     #   switch model/provider via /model and re-run. Diagnostic in ``text``.
+    # | "model_refusal" — Fable 5 safety classifier declined (stop_reason
+    #   "refusal", HTTP 200); text carries the category when reported.
     # | "user_clarification_needed" — overthinking detected (consecutive
     #   high-token text-only rounds with no tool use). Loop stops and asks
     #   the user to narrow the request.
