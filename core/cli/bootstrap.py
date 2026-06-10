@@ -75,6 +75,55 @@ class GeodeBootstrap:
             log.debug("User profile propagation skipped", exc_info=True)
 
 
+def load_daemon_env() -> None:
+    """Serve-daemon env load (C-3, 2026-06-11).
+
+    Order: manual exports > project .env > global ~/.geode/.env — the same
+    direction as the pydantic ``env_file`` cascade (core/config/_settings.py),
+    so there is exactly one dotenv precedence in the codebase (hazard H5).
+
+    Behavior(model-pick) keys (``core.config.env_io.BEHAVIOR_ENV_KEYS``) are
+    dropped from the inherited environment and skipped during promotion:
+    anything in the daemon's os.environ outlives every per-session settings
+    reload, so a stray GEODE_MODEL would mask /model switches for the
+    daemon's whole lifetime (hazard H2). ``GEODE_SERVE_KEEP_MODEL_ENV=1``
+    keeps them for operators who intentionally pin the daemon's model.
+    Secrets still promote — MCP ``${VAR}`` expansion and spawned
+    subprocesses read os.environ.
+    """
+    import os
+    from pathlib import Path
+
+    from dotenv import dotenv_values
+
+    from core.config.env_io import BEHAVIOR_ENV_KEYS
+    from core.paths import GLOBAL_ENV_FILE
+
+    keep_model_env = os.environ.get("GEODE_SERVE_KEEP_MODEL_ENV") == "1"
+    if not keep_model_env:
+        for behavior_key in BEHAVIOR_ENV_KEYS:
+            if behavior_key in os.environ:
+                log.info(
+                    "serve: dropping inherited %s from daemon env "
+                    "(session reloads must win; set "
+                    "GEODE_SERVE_KEEP_MODEL_ENV=1 to keep)",
+                    behavior_key,
+                )
+                os.environ.pop(behavior_key)
+
+    inherited = frozenset(os.environ)
+    for env_file in (GLOBAL_ENV_FILE, Path(".env")):
+        if not env_file.exists():
+            continue
+        for key, val in dotenv_values(str(env_file)).items():
+            # Empty values (e.g. ANTHROPIC_API_KEY=) must NOT clobber
+            if not val or key in inherited:
+                continue
+            if key in BEHAVIOR_ENV_KEYS and not keep_model_env:
+                continue
+            os.environ[key] = val
+
+
 def setup_contextvars(*, load_env: bool = False) -> None:
     """Initialize ContextVars only (memory, profile, env).
 
@@ -82,25 +131,7 @@ def setup_contextvars(*, load_env: bool = False) -> None:
     memory ContextVars are available to all layers.
     """
     if load_env:
-        import os
-        from pathlib import Path
-
-        from dotenv import dotenv_values, load_dotenv
-
-        # 1) Global ~/.geode/.env — baseline for all projects
-        from core.paths import GLOBAL_ENV_FILE
-
-        global_env = GLOBAL_ENV_FILE
-        if global_env.exists():
-            load_dotenv(str(global_env), override=False)
-
-        # 2) Local .env — override only with non-empty values
-        #    Empty values (e.g. ANTHROPIC_API_KEY=) must NOT clobber global keys
-        local_env = Path(".env")
-        if local_env.exists():
-            for key, val in dotenv_values(str(local_env)).items():
-                if val:  # non-empty only
-                    os.environ[key] = val
+        load_daemon_env()
 
     # 1. Memory contextvars
     try:

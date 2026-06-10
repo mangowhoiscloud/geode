@@ -45,7 +45,7 @@ functional change.
 
 ---
 
-## [0.99.167] - 2026-06-11
+## [0.99.168] - 2026-06-11
 
 ### Added
 - **Docs content canon + banned-term CI gate.** `site/CONTENT-CANON.md` fixes the
@@ -68,6 +68,16 @@ functional change.
   rephrased to the selection vocabulary (no weights touched). Karpathy-project
   references in `explanation/ratchet` keep the term with explicit waivers since
   his autoresearch genuinely is an ML experiment loop.
+
+## [0.99.167] - 2026-06-11
+
+### Changed
+- **C-3 config loading unification — one dotenv precedence, daemon never masked** (config-unification sprint, follows C-1 explain / C-2 secrets-only):
+  - pydantic `env_file` order flipped to `(global ~/.geode/.env, project .env)` so the LATER (project) file wins — pre-fix the order was inverted vs. every other layer's project>global direction (hazard H5, per-process precedence inversion between thin CLI and serve daemon).
+  - Serve daemon `load_daemon_env` (hoisted from the inline `setup_contextvars` block, `core/cli/bootstrap.py`) now **drops behavior(model-pick) env keys** — `GEODE_MODEL`, per-role models, `GEODE_AGENTIC_EFFORT`, credential sources (`core.config.env_io.BEHAVIOR_ENV_KEYS`) — from its inherited environment and skips them during .env promotion, so per-session settings reloads always win (hazard H2: anything promoted into the daemon's `os.environ` outlived every `/model` switch). Escape hatch: `GEODE_SERVE_KEEP_MODEL_ENV=1`.
+  - Promotion precedence normalized: manual exports > project .env > global .env — pre-fix the two files used opposite clobber rules (global never overrode process env, project always did). Secrets still promote (MCP `${VAR}` expansion, subprocess inheritance); empty values still never clobber.
+  - `core/config/explain.py` ladder + `geode config explain` updated to the new order (project .env above global .env).
+  - Guards: `tests/core/config/test_c3_env_loading.py` (8) + flipped `test_project_env_beats_global_env_matching_pydantic_order`.
 
 ## [0.99.166] - 2026-06-11
 

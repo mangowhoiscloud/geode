@@ -14,6 +14,22 @@ import os
 import re
 from pathlib import Path
 
+# C-3 (2026-06-11) — behavior(model-pick) env keys. These are SESSION-scoped
+# manual overrides only: tools never write them (C-2), the serve daemon drops
+# them from its inherited os.environ at startup (so per-session disk reloads
+# always win — hazard H2), and the bootstrap .env promotion skips them.
+BEHAVIOR_ENV_KEYS: tuple[str, ...] = (
+    "GEODE_MODEL",
+    "GEODE_PLAN_MODEL",
+    "GEODE_ACT_MODEL",
+    "GEODE_JUDGE_MODEL",
+    "GEODE_COGNITIVE_REFLECTION_MODEL",
+    "GEODE_LEARNING_EXTRACT_MODEL",
+    "GEODE_AGENTIC_EFFORT",
+    "GEODE_ANTHROPIC_CREDENTIAL_SOURCE",
+    "GEODE_OPENAI_CREDENTIAL_SOURCE",
+)
+
 
 def mask_key(key: str) -> str:
     """Mask an API key for display: show first 10 + last 4 chars."""
