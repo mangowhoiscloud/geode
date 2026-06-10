@@ -122,16 +122,12 @@ obs = [
 viz = [
     "matplotlib>=3.8.0",
 ]
-# P4 D 단계 — Reasoning engineering automation. DSPy compiler-style
-# prompt optimization + Instructor reliable JSON + TextGrad textual
-# gradient. M1+M2+M4 진입 잠금은 plugins/petri_audit/{optimize,
-# judge_schema, textgrad_wrapper}.py 가 enforce. lazy import — default
-# `uv sync` cold-start 영향 0. 도입 위험은 docs/plans/eval-petri-p3b-2-
-# execution.md § "D 단계 도입 전 위험 카탈로그" R1..R5 / M1..M10 참조.
+# P4 D 단계 — DSPy compiler-style prompt optimization
+# (plugins/petri_audit/optimize.py). PR-CLEANUP-D1 (2026-06-10) dropped
+# instructor + textgrad with their dead consumers (judge_schema /
+# textgrad_wrapper). lazy import — default `uv sync` cold-start 영향 0.
 reason = [
     "dspy>=3.1.2",
-    "instructor>=1.6.0",
-    "textgrad>=0.1.6",
 ]
 
 [build-system]
@@ -538,10 +534,8 @@ module = [
     "manim_voiceover.*",
     "uharfbuzz",
     "pixelmatch.*",
-    # P4 D 단계 — [reason] optional extra (DSPy + TextGrad + Instructor).
+    # P4 D 단계 — [reason] optional extra (DSPy).
     "dspy.*",
-    "textgrad.*",
-    "instructor.*",
 ]
 ignore_missing_imports = true
 
