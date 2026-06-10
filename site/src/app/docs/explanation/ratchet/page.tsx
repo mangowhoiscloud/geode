@@ -29,7 +29,7 @@ export default function Page() {
             </table>
 
             <h2>출처 인용</h2>
-            <p>Andrej Karpathy의 <em>autoresearch</em> 프로젝트에서 정의된 ratchet discipline 패턴을 그대로 가져왔습니다. 자율 ML 실험 루프에서 모델이 자기 코드를 망가뜨리지 않도록 하는 핵심 메커니즘입니다.</p>
+            <p>Andrej Karpathy의 <em>autoresearch</em> 프로젝트에서 정의된 ratchet discipline 패턴을 그대로 가져왔습니다. 자율 ML 실험 루프에서 모델이 자기 코드를 망가뜨리지 않도록 하는 핵심 메커니즘입니다.{/* canon-ok: Karpathy autoresearch 자체가 ML 실험 루프 */}</p>
 
             <h2>왜 두 layer 모두 필요한가</h2>
             <p>출력 측 ratchet (프롬프트 해시)만 있으면 빌드 라인 측 회귀를 막을 수 없습니다. 빌드 측 ratchet (CI)만 있으면 LLM의 silent 회귀 (같은 코드 + 다른 프롬프트)를 막을 수 없습니다. 둘이 동시에 있어야 자기일치가 보장됩니다.</p>
@@ -54,7 +54,7 @@ export default function Page() {
             </table>
 
             <h2>Source</h2>
-            <p>The ratchet discipline pattern is taken directly from Andrej Karpathy's <em>autoresearch</em> project, where it keeps the autonomous ML experiment loop from breaking its own code.</p>
+            <p>The ratchet discipline pattern is taken directly from Andrej Karpathy's <em>autoresearch</em> project, where it keeps the autonomous ML experiment loop from breaking its own code.{/* canon-ok: describes Karpathy's project, which is an ML experiment loop */}</p>
 
             <h2>Why both layers are needed</h2>
             <p>Output-side ratchet alone (prompt hash) cannot catch build-line regressions. Build-side ratchet alone (CI) cannot catch silent LLM regressions (same code, different prompt). Both together guarantee self-consistency.</p>
