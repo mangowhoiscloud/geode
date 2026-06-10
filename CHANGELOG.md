@@ -45,6 +45,16 @@ functional change.
 
 ---
 
+## [0.99.169] - 2026-06-11
+
+### Fixed
+- **geode-mcp identity + health honesty** (operator-requested MCP exposure audit, live-verified via stdio handshake):
+  - Initialize handshake advertised the mcp SDK's package version ("1.26.0") instead of GEODE's — `create_mcp_server` now sets the wrapped lowlevel server's `version` (the installed SDK's `FastMCP.__init__` exposes no `version` kwarg). Pinned by `test_handshake_advertises_geode_version_not_sdk_version`.
+  - `get_health` `*_configured` only meant "API key present" and read false on OAuth/CLI-lane setups; now also reports `version` + `anthropic_credential_source`/`openai_credential_source`.
+
+### Added
+- Repo-shipped `.mcp.json` registering `geode-mcp` (stdio) for Claude Code sessions opened in this project; README/README.ko gain an "Using GEODE as an MCP server" section with the live verification table (run_agent / propose / apply intentionally not auto-exercised — token cost / mutation side effects).
+
 ## [0.99.168] - 2026-06-11
 
 ### Added
