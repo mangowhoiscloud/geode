@@ -45,6 +45,18 @@ functional change.
 
 ---
 
+## [0.99.162] - 2026-06-11
+
+### Changed
+- **Structure sprint S-4 — `core/utils/` dissolved + domain moves (PR-STRUCT-S4).** The last abstract-noun package is gone; each module moved to its dominant-caller domain (measured, two blueprint guesses corrected by the census):
+  - `atomic_io.py` -> `core/memory/atomic_write.py` (memory stores are 5 of 9 callers — blueprint had guessed config)
+  - `env_io.py` -> `core/config/env_io.py` · `redaction.py` -> `core/observability/redaction.py`
+  - `project_detect.py` -> `core/config/project_detect.py` (362 lines of project-TYPE detection + config.toml/hook generation — NOT path anchoring; blueprint's paths.py fold rejected)
+  - `similarity.py` -> `plugins/seed_generation/similarity.py` (single production caller: evolver)
+  - Seed tools out of core: `core/tools/{literature_snapshot,seed_pool_search,seed_debate}.py` -> `plugins/seed_generation/tools/` (tool names in `definitions.json` unchanged); their mirror tests moved alongside
+  - `core/integrations/messaging/` -> `core/messaging/` (single-child parent flattened; import-linter contract sources updated)
+  - 46+ importer files migrated (dotted paths + module-object import forms + contract TOML)
+
 ## [0.99.161] - 2026-06-11
 
 ### Changed

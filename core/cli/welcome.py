@@ -30,7 +30,7 @@ def _render_welcome_brand() -> None:
 
     # Show detected project environment
     try:
-        from core.utils.project_detect import detect_project_type, get_harness_summary
+        from core.config.project_detect import detect_project_type, get_harness_summary
 
         info = detect_project_type(Path.cwd())
         parts: list[str] = []

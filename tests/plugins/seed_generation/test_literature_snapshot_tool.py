@@ -1,4 +1,4 @@
-"""Tests for ``core.tools.literature_snapshot.FreezePaperSnapshotTool`` (CSP-14).
+"""Tests for ``plugins.seed_generation.tools.literature_snapshot.FreezePaperSnapshotTool`` (CSP-14).
 
 Covers:
 - arxiv_id pattern validation
@@ -17,7 +17,7 @@ from pathlib import Path
 from typing import Any
 
 import pytest
-from core.tools.literature_snapshot import (
+from plugins.seed_generation.tools.literature_snapshot import (
     FreezePaperSnapshotTool,
     compute_content_hash,
 )

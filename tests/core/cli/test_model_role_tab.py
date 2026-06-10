@@ -129,7 +129,7 @@ def test_apply_model_dispatches_to_reflection_field(
     upsert_env_calls: list[tuple[str, str]] = []
     monkeypatch.setattr(_pkg, "_upsert_env", lambda k, v: upsert_env_calls.append((k, v)))
 
-    from core.utils import env_io as _env_io
+    from core.config import env_io as _env_io
 
     upsert_toml_calls: list[tuple[str, str, str]] = []
     monkeypatch.setattr(
@@ -167,7 +167,7 @@ def test_apply_model_dispatches_to_reflection_field(
 def _capture_apply_io(monkeypatch: pytest.MonkeyPatch):
     """Shared stub: capture _upsert_env + upsert_config_toml(scope=…) calls."""
     from core.cli import commands as _pkg
-    from core.utils import env_io as _env_io
+    from core.config import env_io as _env_io
 
     monkeypatch.setattr(_pkg, "_check_provider_key", lambda _p: None)
     monkeypatch.setattr(_pkg, "get_conversation_context", lambda: None)
@@ -270,7 +270,7 @@ def test_apply_model_primary_skips_effort_for_reflection_role(
     monkeypatch.setattr(_pkg, "get_conversation_context", lambda: None)
     upsert_env_calls: list[tuple[str, str]] = []
     monkeypatch.setattr(_pkg, "_upsert_env", lambda k, v: upsert_env_calls.append((k, v)))
-    from core.utils import env_io as _env_io
+    from core.config import env_io as _env_io
 
     monkeypatch.setattr(_env_io, "upsert_config_toml", lambda *_a, **_kw: None)
 

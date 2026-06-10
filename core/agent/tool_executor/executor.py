@@ -404,7 +404,7 @@ class ToolExecutor:
             dict(result_raw) if isinstance(result_raw, dict) else {"result": result_raw}
         )
 
-        from core.utils.redaction import redact_secrets
+        from core.observability.redaction import redact_secrets
 
         for key in ("stdout", "stderr", "output", "content", "text", "result"):
             if key in result and isinstance(result[key], str):

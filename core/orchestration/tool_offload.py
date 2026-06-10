@@ -18,7 +18,7 @@ from contextvars import ContextVar
 from pathlib import Path
 from typing import Any
 
-from core.utils.atomic_io import atomic_write_json
+from core.memory.atomic_write import atomic_write_json
 
 log = logging.getLogger(__name__)
 

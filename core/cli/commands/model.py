@@ -123,7 +123,7 @@ def _apply_model(
     """
     from core.cli import commands as _pkg
     from core.config import settings
-    from core.utils.env_io import upsert_config_toml
+    from core.config.env_io import upsert_config_toml
 
     role_def = role_by_name(role)
     old = _current_model_for_role(role_def)

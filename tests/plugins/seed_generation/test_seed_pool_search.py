@@ -1,11 +1,11 @@
-"""Tests for core.tools.seed_pool_search — pure scoring logic + tool surface."""
+"""Tests for plugins.seed_generation.tools.seed_pool_search — pure scoring logic + tool surface."""
 
 from __future__ import annotations
 
 import textwrap
 from pathlib import Path
 
-from core.tools.seed_pool_search import (
+from plugins.seed_generation.tools.seed_pool_search import (
     SeedPoolSearchTool,
     _score_text,
     _split_frontmatter,
@@ -157,7 +157,7 @@ class TestToolSurface:
     def test_execute_with_no_roots(self, monkeypatch) -> None:
         """When no seed-pool roots exist on the machine, the tool returns
         an empty list with an explanatory note rather than raising."""
-        from core.tools import seed_pool_search as mod
+        from plugins.seed_generation.tools import seed_pool_search as mod
 
         monkeypatch.setattr(mod, "_default_seed_roots", lambda: ())
         result = SeedPoolSearchTool()._execute_sync(query="alignment")
@@ -173,7 +173,7 @@ class TestWorkerHandlerPath:
 
     def test_aexecute_is_callable(self) -> None:
         from core.tools.arxiv import ArxivFetchTool, ArxivSearchTool
-        from core.tools.seed_pool_search import SeedPoolSearchTool
+        from plugins.seed_generation.tools.seed_pool_search import SeedPoolSearchTool
 
         for cls in (ArxivSearchTool, ArxivFetchTool, SeedPoolSearchTool):
             tool = cls()
@@ -186,8 +186,8 @@ class TestWorkerHandlerPath:
         """The shared ``_safe_delegate`` helper must run aexecute, not
         the sync method. Smoke via the seed_pool tool (no network)."""
         from core.cli.tool_handlers.clarification import _safe_delegate
-        from core.tools import seed_pool_search as mod
-        from core.tools.seed_pool_search import SeedPoolSearchTool
+        from plugins.seed_generation.tools import seed_pool_search as mod
+        from plugins.seed_generation.tools.seed_pool_search import SeedPoolSearchTool
 
         monkeypatch.setattr(mod, "_default_seed_roots", lambda: ())
         result = _safe_delegate(SeedPoolSearchTool, {"query": "alignment"})
@@ -262,7 +262,7 @@ class TestMaxResultsClamping:
             )
         # Redirect the tool's auto-discovery to the tmp fixture so the
         # clamp test exercises the production ``_execute_sync`` path.
-        from core.tools import seed_pool_search as mod
+        from plugins.seed_generation.tools import seed_pool_search as mod
 
         monkeypatch.setattr(mod, "_default_seed_roots", lambda: (tmp_path,))
         result = SeedPoolSearchTool()._execute_sync(query="alignment", max_results=-5)

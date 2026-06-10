@@ -510,7 +510,7 @@ class Evolver(BaseSeedAgent):
         score + comparison target. Threshold raised 0.70 → 0.90 to
         match the prompt's single-section ±20% rewrite contract.
         """
-        from core.utils.similarity import jaccard_similarity, shingles
+        from plugins.seed_generation.similarity import jaccard_similarity, shingles
 
         evolved_path = parsed.get("evolved_path")
         parent_id = parsed.get("parent_id")

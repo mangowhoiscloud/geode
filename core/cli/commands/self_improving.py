@@ -1103,12 +1103,12 @@ def _persist_section_updates(section: str, updates: dict[str, str]) -> None:
 
     If the section is missing it's appended; if a key exists in the
     section it's replaced in place; otherwise the key is inserted at the
-    end of the section block. Atomic write via ``core.utils.atomic_io``.
+    end of the section block. Atomic write via ``core.memory.atomic_write``.
     """
     if not updates:
         return
     from core.config.self_improving import _resolve_config_path
-    from core.utils.atomic_io import atomic_write_text
+    from core.memory.atomic_write import atomic_write_text
 
     path = _resolve_config_path(None)
     path.parent.mkdir(parents=True, exist_ok=True)

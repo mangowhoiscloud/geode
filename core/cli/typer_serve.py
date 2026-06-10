@@ -71,7 +71,7 @@ def serve(
 
     # Wire AgenticLoop as gateway processor
     from core.agent.conversation import ConversationContext
-    from core.integrations.messaging.binding import get_gateway
+    from core.messaging.binding import get_gateway
 
     gateway = get_gateway()
     if gateway is None:

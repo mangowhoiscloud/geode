@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from core.utils.project_detect import (
+from core.config.project_detect import (
     KNOWN_HARNESSES,
     ProjectInfo,
     detect_project_type,

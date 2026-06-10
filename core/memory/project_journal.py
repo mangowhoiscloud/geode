@@ -226,7 +226,7 @@ class ProjectJournal:
             # Rotation: keep most recent MAX entries
             if len(existing_lines) > MAX_LEARNED_PATTERNS:
                 existing_lines = existing_lines[-MAX_LEARNED_PATTERNS:]
-            from core.utils.atomic_io import atomic_write_text
+            from core.memory.atomic_write import atomic_write_text
 
             atomic_write_text(learned_path, "\n".join(existing_lines) + "\n")
 
