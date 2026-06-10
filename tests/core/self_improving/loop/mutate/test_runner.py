@@ -1,4 +1,4 @@
-"""Tests for ``core.self_improving.loop.runner`` — PR-G5b (2026-05-20)."""
+"""Tests for ``core.self_improving.loop.mutate.runner`` — PR-G5b (2026-05-20)."""
 
 from __future__ import annotations
 
@@ -8,7 +8,7 @@ from types import SimpleNamespace
 from typing import Any
 
 import pytest
-from core.self_improving.loop.runner import (
+from core.self_improving.loop.mutate.runner import (
     Mutation,
     RunnerContext,
     SelfImprovingLoopRunner,
@@ -313,7 +313,7 @@ def test_runner_run_once_end_to_end(tmp_path: Path, monkeypatch: pytest.MonkeyPa
     )
     # Prevent the sessions.jsonl side-effect from touching real ~/.geode.
     monkeypatch.setattr(
-        "core.self_improving.loop.runner.GLOBAL_AUTORESEARCH_HANDOFF_DIR",
+        "core.self_improving.loop.mutate.runner.GLOBAL_AUTORESEARCH_HANDOFF_DIR",
         tmp_path / "sil_home",
     )
     mutation = runner.run_once()
@@ -408,7 +408,7 @@ def test_runner_uses_baseline_evidence_in_user_prompt(
         return json.dumps({"target_section": "role", "new_value": "v", "rationale": "r"})
 
     monkeypatch.setattr(
-        "core.self_improving.loop.runner.GLOBAL_AUTORESEARCH_HANDOFF_DIR",
+        "core.self_improving.loop.mutate.runner.GLOBAL_AUTORESEARCH_HANDOFF_DIR",
         tmp_path / "sil_home",
     )
     SelfImprovingLoopRunner(
@@ -478,7 +478,7 @@ def test_system_prompt_loads_program_md_when_present(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """When program.md is readable, _build_system_prompt prepends its body."""
-    from core.self_improving.loop import runner
+    from core.self_improving.loop.mutate import runner
 
     monkeypatch.setattr(
         runner,
@@ -503,7 +503,7 @@ def test_system_prompt_fails_loud_when_program_md_missing_and_no_hook(
     program.md is a packaging bug, not a routine fallback, so the runner
     raises rather than silently substituting a drift-prone literal.
     """
-    from core.self_improving.loop import runner
+    from core.self_improving.loop.mutate import runner
 
     monkeypatch.setattr(runner, "_load_program_md", lambda: None)
     monkeypatch.setattr(
@@ -518,7 +518,7 @@ def test_system_prompt_uses_hook_override_when_program_md_missing(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """A PROGRAM_MD_UNREADABLE handler may return {'program_md': ...} to override."""
-    from core.self_improving.loop import runner
+    from core.self_improving.loop.mutate import runner
 
     monkeypatch.setattr(runner, "_load_program_md", lambda: None)
     monkeypatch.setattr(
@@ -534,7 +534,7 @@ def test_system_prompt_uses_hook_override_when_program_md_missing(
 
 def test_load_program_md_reads_real_file_in_repo() -> None:
     """The real ``core/self_improving/program.md`` file is reachable from the runner."""
-    from core.self_improving.loop.runner import _load_program_md
+    from core.self_improving.loop.mutate.runner import _load_program_md
 
     program_md = _load_program_md()
     assert program_md is not None, (
@@ -550,7 +550,7 @@ def test_run_once_uses_program_md_in_system_prompt(
 ) -> None:
     """End-to-end: SelfImprovingLoopRunner.run_once passes program.md body to LLM."""
     from core.self_improving import train as auto_train
-    from core.self_improving.loop import runner
+    from core.self_improving.loop.mutate import runner
 
     sot_path = tmp_path / "wrapper-sections.json"
     sot_path.write_text(json.dumps({"role": "old"}), encoding="utf-8")
@@ -599,7 +599,7 @@ def test_runner_rolls_back_sot_when_audit_log_fails(
     """If append_audit_log raises OSError after SoT mutation, the SoT must
     revert to the pre-mutation state so the next iteration sees consistency."""
     from core.self_improving import train as auto_train
-    from core.self_improving.loop import runner
+    from core.self_improving.loop.mutate import runner
 
     sot_path = tmp_path / "wrapper-sections.json"
     original = {"role": "ORIGINAL_ROLE", "tools": "ORIGINAL_TOOLS"}
@@ -644,7 +644,7 @@ def test_runner_success_path_unchanged_by_rollback_logic(
 ) -> None:
     """When audit-log write succeeds, SoT carries the mutation forward."""
     from core.self_improving import train as auto_train
-    from core.self_improving.loop import runner
+    from core.self_improving.loop.mutate import runner
 
     sot_path = tmp_path / "wrapper-sections.json"
     sot_path.write_text(json.dumps({"role": "old"}), encoding="utf-8")

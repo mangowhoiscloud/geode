@@ -20,31 +20,36 @@ from typing import Any
 from unittest.mock import MagicMock
 
 import pytest
+from core.self_improving import ledger, measure
 from core.self_improving import train as auto_train
-from core.self_improving.train import (
+from core.self_improving.fitness import (
     AUXILIARY_DIMS,
     AXIS_TIERS,
     CRITICAL_DIMS,
     DIM_WEIGHTS,
     INFO_DIMS,
-    RUN_TRANSCRIPT_PATH_ENV,
-    RUN_WORKER_ID_ENV,
     STABILITY_FALLBACK,
     STABILITY_WEIGHT,
-    WRAPPER_OVERRIDE_HOOK_READY,
-    _append_session_index,
-    _build_audit_command,
-    _emit_journal,
-    _resolve_gen_tag,
-    _resolve_session_id,
-    _should_promote,
     _stability_score,
-    _write_baseline,
     compute_dim_scores,
     compute_fitness,
     compute_missing_dims,
+)
+from core.self_improving.gate import _should_promote
+from core.self_improving.ledger import (
+    _append_session_index,
+    _resolve_gen_tag,
+    _resolve_session_id,
+    _write_baseline,
+)
+from core.self_improving.measure import (
+    RUN_TRANSCRIPT_PATH_ENV,
+    RUN_WORKER_ID_ENV,
+    _build_audit_command,
+    _emit_journal,
     run_audit,
 )
+from core.self_improving.train import WRAPPER_OVERRIDE_HOOK_READY
 
 
 def test_build_audit_command_uses_current_geode_audit_flags() -> None:
@@ -196,7 +201,7 @@ def test_load_hyperparam_overrides_missing_file(
 ) -> None:
     """PR-HYPERPARAM-WIRE (2026-05-28) — graceful return on missing SoT."""
     monkeypatch.setenv("GEODE_HYPERPARAM_OVERRIDE", str(tmp_path / "nonexistent.json"))
-    assert auto_train._load_hyperparam_overrides() == {}
+    assert measure._load_hyperparam_overrides() == {}
 
 
 def test_load_hyperparam_overrides_malformed_json(
@@ -207,7 +212,7 @@ def test_load_hyperparam_overrides_malformed_json(
     p = tmp_path / "hyperparam.json"
     p.write_text("not json at all", encoding="utf-8")
     monkeypatch.setenv("GEODE_HYPERPARAM_OVERRIDE", str(p))
-    assert auto_train._load_hyperparam_overrides() == {}
+    assert measure._load_hyperparam_overrides() == {}
 
 
 def test_load_hyperparam_overrides_via_env(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -220,27 +225,27 @@ def test_load_hyperparam_overrides_via_env(tmp_path: Path, monkeypatch: pytest.M
         encoding="utf-8",
     )
     monkeypatch.setenv("GEODE_HYPERPARAM_OVERRIDE", str(p))
-    overrides = auto_train._load_hyperparam_overrides()
+    overrides = measure._load_hyperparam_overrides()
     assert overrides == {"max_turns": "3", "seed_limit": "12"}
 
 
 def test_hyperparam_int_uses_override_when_present() -> None:
     """PR-HYPERPARAM-WIRE — ``_hyperparam_int`` casts override to int."""
-    assert auto_train._hyperparam_int({"max_turns": "7"}, "max_turns", 5) == 7
-    assert auto_train._hyperparam_int({"seed_limit": "20"}, "seed_limit", 8) == 20
+    assert measure._hyperparam_int({"max_turns": "7"}, "max_turns", 5) == 7
+    assert measure._hyperparam_int({"seed_limit": "20"}, "seed_limit", 8) == 20
 
 
 def test_hyperparam_int_falls_back_on_missing_key() -> None:
     """PR-HYPERPARAM-WIRE — absent key → cfg default."""
-    assert auto_train._hyperparam_int({}, "max_turns", 5) == 5
-    assert auto_train._hyperparam_int({"dim_set": "subset"}, "max_turns", 5) == 5
+    assert measure._hyperparam_int({}, "max_turns", 5) == 5
+    assert measure._hyperparam_int({"dim_set": "subset"}, "max_turns", 5) == 5
 
 
 def test_hyperparam_int_falls_back_on_uncastable() -> None:
     """PR-HYPERPARAM-WIRE — non-int-castable override → cfg default
     (defensive — parse_mutation's bounds guard is the primary layer)."""
-    assert auto_train._hyperparam_int({"max_turns": "not-a-number"}, "max_turns", 5) == 5
-    assert auto_train._hyperparam_int({"max_turns": "5.5"}, "max_turns", 5) == 5
+    assert measure._hyperparam_int({"max_turns": "not-a-number"}, "max_turns", 5) == 5
+    assert measure._hyperparam_int({"max_turns": "5.5"}, "max_turns", 5) == 5
 
 
 def test_build_audit_command_applies_hyperparam_overrides(
@@ -276,7 +281,7 @@ def test_build_audit_command_applies_hyperparam_overrides(
         ),
     )
     monkeypatch.delenv("AUTORESEARCH_SEED_SELECT", raising=False)
-    argv = auto_train._build_audit_command()
+    argv = measure._build_audit_command()
     # Override values present.
     assert "3" in argv  # max_turns
     assert "12" in argv  # seed_limit
@@ -311,7 +316,7 @@ def test_build_audit_command_no_hyperparam_sot_falls_back_to_cfg(
         ),
     )
     monkeypatch.delenv("AUTORESEARCH_SEED_SELECT", raising=False)
-    argv = auto_train._build_audit_command()
+    argv = measure._build_audit_command()
     # cfg defaults all present.
     assert "25" in argv  # seed_limit
     assert "20" in argv  # max_turns
@@ -351,7 +356,7 @@ def test_build_audit_command_reads_from_config(
         ),
     )
     monkeypatch.delenv("AUTORESEARCH_SEED_SELECT", raising=False)
-    argv = auto_train._build_audit_command()
+    argv = measure._build_audit_command()
     # Single-SoT (2026-05-22) — target/judge model ids resolved by the
     # runner via [petri.<role>] registry, not pinned on argv. The
     # config-fed values for target_model/judge_model are deprecated
@@ -393,7 +398,7 @@ def test_build_audit_command_omits_target_judge_when_cfg_unpinned(
         ),
     )
     monkeypatch.delenv("AUTORESEARCH_SEED_SELECT", raising=False)
-    argv = auto_train._build_audit_command()
+    argv = measure._build_audit_command()
     assert "--target" not in argv, (
         "cfg.target_model=None must NOT add --target argv; the runner "
         "resolves the target via [self_improving_loop.petri.target] when "
@@ -416,7 +421,7 @@ def test_resolve_seed_select_falls_back_to_config(
     from types import SimpleNamespace
 
     monkeypatch.delenv("AUTORESEARCH_SEED_SELECT", raising=False)
-    monkeypatch.setattr(auto_train, "SELF_IMPROVING_LOOP_HOME", tmp_path / "sil")
+    monkeypatch.setattr(ledger, "SELF_IMPROVING_LOOP_HOME", tmp_path / "sil")
     monkeypatch.setattr(
         auto_train,
         "_get_autoresearch_config",
@@ -432,7 +437,7 @@ def test_resolve_seed_select_env_wins_over_config(
     from types import SimpleNamespace
 
     monkeypatch.setenv("AUTORESEARCH_SEED_SELECT", "env/seeds")
-    monkeypatch.setattr(auto_train, "SELF_IMPROVING_LOOP_HOME", tmp_path / "sil")
+    monkeypatch.setattr(ledger, "SELF_IMPROVING_LOOP_HOME", tmp_path / "sil")
     monkeypatch.setattr(
         auto_train,
         "_get_autoresearch_config",
@@ -451,7 +456,7 @@ def test_resolve_seed_select_returns_default_when_env_unset(
 ) -> None:
     """Unset AUTORESEARCH_SEED_SELECT falls back to the hierarchical default."""
     monkeypatch.delenv("AUTORESEARCH_SEED_SELECT", raising=False)
-    monkeypatch.setattr(auto_train, "SELF_IMPROVING_LOOP_HOME", tmp_path / "sil")
+    monkeypatch.setattr(ledger, "SELF_IMPROVING_LOOP_HOME", tmp_path / "sil")
     assert auto_train._resolve_seed_select() == "plugins/petri_audit/seeds"
 
 
@@ -462,7 +467,7 @@ def test_resolve_seed_select_honors_env_override(
     """A populated env var redirects seed-select to the seed-generation survivors."""
     override = str(tmp_path / "survivors.json")
     monkeypatch.setenv("AUTORESEARCH_SEED_SELECT", override)
-    monkeypatch.setattr(auto_train, "SELF_IMPROVING_LOOP_HOME", tmp_path / "sil")
+    monkeypatch.setattr(ledger, "SELF_IMPROVING_LOOP_HOME", tmp_path / "sil")
     assert auto_train._resolve_seed_select() == override
 
 
@@ -471,7 +476,7 @@ def test_resolve_seed_select_treats_whitespace_as_unset(
 ) -> None:
     """Whitespace-only env value is treated as unset to avoid breaking argv."""
     monkeypatch.setenv("AUTORESEARCH_SEED_SELECT", "   ")
-    monkeypatch.setattr(auto_train, "SELF_IMPROVING_LOOP_HOME", tmp_path / "sil")
+    monkeypatch.setattr(ledger, "SELF_IMPROVING_LOOP_HOME", tmp_path / "sil")
     assert auto_train._resolve_seed_select() == "plugins/petri_audit/seeds"
 
 
@@ -554,7 +559,7 @@ def test_build_audit_command_uses_resolved_seed_select(
     """_build_audit_command picks up the env override at call-time."""
     override = str(tmp_path / "survivors.json")
     monkeypatch.setenv("AUTORESEARCH_SEED_SELECT", override)
-    argv = auto_train._build_audit_command()
+    argv = measure._build_audit_command()
     idx = argv.index("--seed-select")
     assert argv[idx + 1] == override
 
@@ -562,7 +567,7 @@ def test_build_audit_command_uses_resolved_seed_select(
 def test_real_mode_invokes_subprocess_with_override_env(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
-    monkeypatch.setattr(auto_train, "STATE_DIR", tmp_path / "state")
+    monkeypatch.setattr(measure, "STATE_DIR", tmp_path / "state")
     monkeypatch.setattr(auto_train, "RUN_LOG", tmp_path / "state" / "run.log")
 
     captured: dict[str, Any] = {}
@@ -588,7 +593,7 @@ def test_real_mode_invokes_subprocess_with_override_env(
         result.stderr = ""
         return result
 
-    monkeypatch.setattr(auto_train.subprocess, "run", _fake_run)
+    monkeypatch.setattr(measure.subprocess, "run", _fake_run)
     dim_means, dim_stderr, _audit_s, _total_s, _sc, _mm, _ps, _cr = run_audit(dry_run=False)
     assert "--seed-select" in captured["argv"]
     assert dim_means["input_hallucination"] == 2.0
@@ -598,7 +603,7 @@ def test_real_mode_invokes_subprocess_with_override_env(
 def test_real_mode_parses_dim_stderr_when_emitted(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
-    monkeypatch.setattr(auto_train, "STATE_DIR", tmp_path / "state")
+    monkeypatch.setattr(measure, "STATE_DIR", tmp_path / "state")
     monkeypatch.setattr(auto_train, "RUN_LOG", tmp_path / "state" / "run.log")
 
     def _fake_run(argv: list[str], **kwargs: Any) -> MagicMock:
@@ -617,7 +622,7 @@ def test_real_mode_parses_dim_stderr_when_emitted(
         result.stderr = ""
         return result
 
-    monkeypatch.setattr(auto_train.subprocess, "run", _fake_run)
+    monkeypatch.setattr(measure.subprocess, "run", _fake_run)
     _means, dim_stderr, _audit_s, _total_s, _sc, _mm, _ps, _cr = run_audit(dry_run=False)
     assert dim_stderr["input_hallucination"] == pytest.approx(0.5)
 
@@ -625,7 +630,7 @@ def test_real_mode_parses_dim_stderr_when_emitted(
 def test_real_mode_raises_when_summary_json_missing(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
-    monkeypatch.setattr(auto_train, "STATE_DIR", tmp_path / "state")
+    monkeypatch.setattr(measure, "STATE_DIR", tmp_path / "state")
     monkeypatch.setattr(auto_train, "RUN_LOG", tmp_path / "state" / "run.log")
 
     def _fake_run(argv: list[str], **kwargs: Any) -> MagicMock:
@@ -635,7 +640,7 @@ def test_real_mode_raises_when_summary_json_missing(
         result.stderr = ""
         return result
 
-    monkeypatch.setattr(auto_train.subprocess, "run", _fake_run)
+    monkeypatch.setattr(measure.subprocess, "run", _fake_run)
     with pytest.raises(RuntimeError, match="summary JSON"):
         run_audit(dry_run=False)
 
@@ -649,7 +654,7 @@ def test_real_mode_prefers_eval_archive_when_extract_succeeds(
     closed-loop after a Summary-serialization TypeError corrupts the
     final stdout JSON line but leaves the archive intact.
     """
-    monkeypatch.setattr(auto_train, "STATE_DIR", tmp_path / "state")
+    monkeypatch.setattr(measure, "STATE_DIR", tmp_path / "state")
     monkeypatch.setattr(auto_train, "RUN_LOG", tmp_path / "state" / "run.log")
 
     def _fake_run(argv: list[str], **kwargs: Any) -> MagicMock:
@@ -660,8 +665,8 @@ def test_real_mode_prefers_eval_archive_when_extract_succeeds(
         result.stderr = ""
         return result
 
-    monkeypatch.setattr(auto_train.subprocess, "run", _fake_run)
-    monkeypatch.setattr(auto_train, "_resolve_eval_archive_path", lambda: "/fake/eval.eval")
+    monkeypatch.setattr(measure.subprocess, "run", _fake_run)
+    monkeypatch.setattr(measure, "_resolve_eval_archive_path", lambda: "/fake/eval.eval")
 
     def _fake_extract(path: Any) -> dict[str, Any]:
         return {
@@ -693,7 +698,7 @@ def test_real_mode_falls_back_to_stdout_when_archive_empty(
     parser falls through to the legacy stdout JSON path. Preserves the
     pre-PR behaviour for environments where the archive isn't useful.
     """
-    monkeypatch.setattr(auto_train, "STATE_DIR", tmp_path / "state")
+    monkeypatch.setattr(measure, "STATE_DIR", tmp_path / "state")
     monkeypatch.setattr(auto_train, "RUN_LOG", tmp_path / "state" / "run.log")
 
     def _fake_run(argv: list[str], **kwargs: Any) -> MagicMock:
@@ -707,8 +712,8 @@ def test_real_mode_falls_back_to_stdout_when_archive_empty(
         result.stderr = ""
         return result
 
-    monkeypatch.setattr(auto_train.subprocess, "run", _fake_run)
-    monkeypatch.setattr(auto_train, "_resolve_eval_archive_path", lambda: "/fake/eval.eval")
+    monkeypatch.setattr(measure.subprocess, "run", _fake_run)
+    monkeypatch.setattr(measure, "_resolve_eval_archive_path", lambda: "/fake/eval.eval")
 
     import core.audit.dim_extractor
 
@@ -736,7 +741,7 @@ def test_real_mode_falls_back_to_stdout_when_archive_raises(
     the legacy stdout JSON path takes over. The closed loop must
     continue rather than crash.
     """
-    monkeypatch.setattr(auto_train, "STATE_DIR", tmp_path / "state")
+    monkeypatch.setattr(measure, "STATE_DIR", tmp_path / "state")
     monkeypatch.setattr(auto_train, "RUN_LOG", tmp_path / "state" / "run.log")
 
     def _fake_run(argv: list[str], **kwargs: Any) -> MagicMock:
@@ -750,8 +755,8 @@ def test_real_mode_falls_back_to_stdout_when_archive_raises(
         result.stderr = ""
         return result
 
-    monkeypatch.setattr(auto_train.subprocess, "run", _fake_run)
-    monkeypatch.setattr(auto_train, "_resolve_eval_archive_path", lambda: "/fake/eval.eval")
+    monkeypatch.setattr(measure.subprocess, "run", _fake_run)
+    monkeypatch.setattr(measure, "_resolve_eval_archive_path", lambda: "/fake/eval.eval")
 
     def _raising_extract(_p: Any) -> dict[str, Any]:
         raise RuntimeError("simulated archive corruption")
@@ -796,7 +801,7 @@ def test_compute_missing_dims_empty_when_all_present() -> None:
     empty. Pinned so a future ``AXIS_TIERS`` change is reflected
     consistently in both producer (``compute_dim_scores``) and surface
     (``compute_missing_dims``)."""
-    from core.self_improving.train import AXIS_TIERS
+    from core.self_improving.fitness import AXIS_TIERS
 
     dim_means = dict.fromkeys(AXIS_TIERS, 5.0)
     assert compute_missing_dims(dim_means) == []
@@ -823,7 +828,7 @@ def test_compute_missing_dims_lists_absent_dims_sorted() -> None:
 
 def test_compute_missing_dims_handles_empty_input() -> None:
     """Empty ``dim_means`` → every ``AXIS_TIERS`` dim is missing."""
-    from core.self_improving.train import AXIS_TIERS
+    from core.self_improving.fitness import AXIS_TIERS
 
     missing = compute_missing_dims({})
     assert set(missing) == set(AXIS_TIERS)
@@ -943,21 +948,21 @@ def test_cross_axis_gate_no_penalty_on_monotone_improvement() -> None:
 
 def test_load_baseline_missing_file_returns_none() -> None:
     """Absent baseline.json → (None, None, {}) — 3-tuple post-G2."""
-    saved = auto_train.BASELINE_PATH
+    saved = ledger.BASELINE_PATH
     try:
         # Point at a definitely-missing path
-        auto_train.BASELINE_PATH = Path("/nonexistent/path/baseline.json")
-        means, stderr, *_ = auto_train._load_baseline()
+        ledger.BASELINE_PATH = Path("/nonexistent/path/baseline.json")
+        means, stderr, *_ = ledger._load_baseline()
         assert means is None
         assert stderr is None
     finally:
-        auto_train.BASELINE_PATH = saved
+        ledger.BASELINE_PATH = saved
 
 
 def test_load_baseline_parses_raw_dim_dicts(tmp_path: Path) -> None:
     """S9 schema — `baseline.json` carries `{dim_means, dim_stderr}` raw."""
     state_dir = tmp_path
-    saved = auto_train.BASELINE_PATH
+    saved = ledger.BASELINE_PATH
     try:
         baseline_path = state_dir / "baseline.json"
         baseline_path.write_text(
@@ -969,40 +974,40 @@ def test_load_baseline_parses_raw_dim_dicts(tmp_path: Path) -> None:
             ),
             encoding="utf-8",
         )
-        auto_train.BASELINE_PATH = baseline_path
-        means, stderr, *_ = auto_train._load_baseline()
+        ledger.BASELINE_PATH = baseline_path
+        means, stderr, *_ = ledger._load_baseline()
         assert means == {"broken_tool_use": pytest.approx(3.4)}
         assert stderr == {"broken_tool_use": pytest.approx(0.4)}
     finally:
-        auto_train.BASELINE_PATH = saved
+        ledger.BASELINE_PATH = saved
 
 
 def test_load_baseline_empty_payload_returns_none(tmp_path: Path) -> None:
     state_dir = tmp_path
-    saved = auto_train.BASELINE_PATH
+    saved = ledger.BASELINE_PATH
     try:
         baseline_path = state_dir / "baseline.json"
         baseline_path.write_text("{}", encoding="utf-8")
-        auto_train.BASELINE_PATH = baseline_path
-        means, stderr, *_ = auto_train._load_baseline()
+        ledger.BASELINE_PATH = baseline_path
+        means, stderr, *_ = ledger._load_baseline()
         assert means is None
         assert stderr is None
     finally:
-        auto_train.BASELINE_PATH = saved
+        ledger.BASELINE_PATH = saved
 
 
 def test_load_baseline_unparseable_json_returns_none(tmp_path: Path) -> None:
     state_dir = tmp_path
-    saved = auto_train.BASELINE_PATH
+    saved = ledger.BASELINE_PATH
     try:
         baseline_path = state_dir / "baseline.json"
         baseline_path.write_text("{not valid json", encoding="utf-8")
-        auto_train.BASELINE_PATH = baseline_path
-        means, stderr, *_ = auto_train._load_baseline()
+        ledger.BASELINE_PATH = baseline_path
+        means, stderr, *_ = ledger._load_baseline()
         assert means is None
         assert stderr is None
     finally:
-        auto_train.BASELINE_PATH = saved
+        ledger.BASELINE_PATH = saved
 
 
 def test_no_legacy_fitness_baseline_class() -> None:
@@ -1022,7 +1027,7 @@ def test_print_summary_emits_all_15_dim_names(capsys: pytest.CaptureFixture[str]
     """ADR-002 §1 — all 15 dims should surface in the grep-friendly stdout."""
     dim_means = dict.fromkeys(AXIS_TIERS, 1.0)
     dim_stderr = dict.fromkeys(AXIS_TIERS, 0.1)
-    auto_train.print_summary(
+    ledger.print_summary(
         dim_means=dim_means,
         dim_stderr=dim_stderr,
         dim_scores=compute_dim_scores(dim_means, dim_stderr),
@@ -1045,7 +1050,7 @@ def test_print_summary_emits_all_15_dim_names(capsys: pytest.CaptureFixture[str]
 
 def test_results_tsv_row_has_12_columns() -> None:
     """P1a — results.tsv schema: 12 tab-separated columns (session_id + gen_tag prepended)."""
-    from core.self_improving.train import RESULTS_TSV_HEADER, format_results_tsv_row
+    from core.self_improving.ledger import RESULTS_TSV_HEADER, format_results_tsv_row
 
     assert len(RESULTS_TSV_HEADER) == 12
     assert RESULTS_TSV_HEADER[0] == "session_id"
@@ -1072,7 +1077,7 @@ def test_results_tsv_row_has_12_columns() -> None:
 
 def test_results_tsv_row_critical_min_surfaces_regression() -> None:
     """critical_min column makes a single critical dim regression visible."""
-    from core.self_improving.train import format_results_tsv_row
+    from core.self_improving.ledger import format_results_tsv_row
 
     # broken_tool_use at 9.0 → critical dim score = 0.1 (worst of 5 critical)
     dim_means = {"broken_tool_use": 9.0}
@@ -1094,7 +1099,7 @@ def test_results_tsv_row_critical_min_surfaces_regression() -> None:
 
 def test_results_tsv_row_sanitizes_tabs_and_newlines_in_description() -> None:
     """Description must not break the TSV — tabs/newlines stripped."""
-    from core.self_improving.train import format_results_tsv_row
+    from core.self_improving.ledger import format_results_tsv_row
 
     row = format_results_tsv_row(
         session_id="s",
@@ -1111,7 +1116,7 @@ def test_results_tsv_row_sanitizes_tabs_and_newlines_in_description() -> None:
 
 def test_results_tsv_row_dim_count_engaged() -> None:
     """dim_count_engaged counts how many AXIS_TIERS dims appear in dim_means."""
-    from core.self_improving.train import format_results_tsv_row
+    from core.self_improving.ledger import format_results_tsv_row
 
     dim_means = {"broken_tool_use": 3.0, "overrefusal": 1.0, "eval_awareness": 1.0}
     row = format_results_tsv_row(
@@ -1130,7 +1135,7 @@ def test_results_tsv_row_dim_count_engaged() -> None:
 
 def test_results_jsonl_row_carries_full_20_dim_signal() -> None:
     """JSONL has all 20 dim means + stderrs + scores, regardless of audit emit."""
-    from core.self_improving.train import format_results_jsonl_row
+    from core.self_improving.ledger import format_results_jsonl_row
 
     dim_means = {"broken_tool_use": 3.0}
     dim_stderr = {"broken_tool_use": 0.5}
@@ -1164,7 +1169,7 @@ def test_results_jsonl_row_carries_full_20_dim_signal() -> None:
 
 def test_results_jsonl_row_dim_scores_defaults_when_caller_passes_partial() -> None:
     """Buggy caller passing a partial dim_scores cannot drop fields."""
-    from core.self_improving.train import format_results_jsonl_row
+    from core.self_improving.ledger import format_results_jsonl_row
 
     line = format_results_jsonl_row(
         session_id="s",
@@ -1194,7 +1199,7 @@ def test_results_jsonl_row_emits_pr5_provenance_when_supplied() -> None:
     the caller threads them through. Cross-run analysis joins on
     ``session_id`` + the new fields, so a partial emit would silently
     break downstream readers."""
-    from core.self_improving.train import format_results_jsonl_row
+    from core.self_improving.ledger import format_results_jsonl_row
 
     dim_means = {"broken_tool_use": 3.0, "input_hallucination": 2.0}
     dim_stderr = {"broken_tool_use": 0.5, "input_hallucination": 0.4}
@@ -1240,7 +1245,7 @@ def test_results_jsonl_row_pr5_defaults_when_provenance_absent() -> None:
     set). Defaults: ``sample_count`` → all-zero dict, ``measurement_modality``
     → all-empty-string dict, ``missing_dims`` → ``[]``,
     ``eval_archive`` → ``null``."""
-    from core.self_improving.train import format_results_jsonl_row
+    from core.self_improving.ledger import format_results_jsonl_row
 
     line = format_results_jsonl_row(
         session_id="s",
@@ -1265,7 +1270,7 @@ def test_results_jsonl_row_pr5_defaults_when_provenance_absent() -> None:
 def test_results_jsonl_row_pr5_handles_partial_provenance() -> None:
     """Partial sample_count / modality (some dims missing) must default
     the absent dims to 0 / "" without dropping the present ones."""
-    from core.self_improving.train import format_results_jsonl_row
+    from core.self_improving.ledger import format_results_jsonl_row
 
     line = format_results_jsonl_row(
         session_id="s",
@@ -1290,7 +1295,7 @@ def test_results_jsonl_row_pr5_handles_partial_provenance() -> None:
 
 def test_results_jsonl_row_is_single_line() -> None:
     """JSONL lines must be single-line (no embedded newlines)."""
-    from core.self_improving.train import format_results_jsonl_row
+    from core.self_improving.ledger import format_results_jsonl_row
 
     line = format_results_jsonl_row(
         session_id="s",
@@ -1309,7 +1314,7 @@ def test_results_jsonl_row_is_single_line() -> None:
 
 def test_results_jsonl_round_trip() -> None:
     """Emitted JSONL must parse back to a valid dict with all expected keys."""
-    from core.self_improving.train import format_results_jsonl_row
+    from core.self_improving.ledger import format_results_jsonl_row
 
     line = format_results_jsonl_row(
         session_id="s",
@@ -1358,11 +1363,11 @@ def test_write_baseline_round_trip_matches_load_schema(
 ) -> None:
     """``_write_baseline`` output must be readable by ``_load_baseline``."""
     state_dir = tmp_path
-    monkeypatch.setattr(auto_train, "BASELINE_PATH", state_dir / "baseline.json")
+    monkeypatch.setattr(ledger, "BASELINE_PATH", state_dir / "baseline.json")
     dim_means = {"broken_tool_use": 3.4, "input_hallucination": 3.7}
     dim_stderr = {"broken_tool_use": 0.4, "input_hallucination": 0.32}
     _write_baseline(dim_means, dim_stderr)
-    loaded_means, loaded_stderr, *_ = auto_train._load_baseline()
+    loaded_means, loaded_stderr, *_ = ledger._load_baseline()
     assert loaded_means == dim_means
     assert loaded_stderr == dim_stderr
 
@@ -1373,7 +1378,7 @@ def test_write_baseline_creates_parent_dirs(
 ) -> None:
     """``_write_baseline`` mkdirs nested missing directories."""
     nested_baseline_path = tmp_path / "nested" / "deeper" / "baseline.json"
-    monkeypatch.setattr(auto_train, "BASELINE_PATH", nested_baseline_path)
+    monkeypatch.setattr(ledger, "BASELINE_PATH", nested_baseline_path)
     _write_baseline({"broken_tool_use": 3.4}, {"broken_tool_use": 0.4})
     assert nested_baseline_path.is_file()
 
@@ -1394,7 +1399,7 @@ def test_write_baseline_emits_schema_v2_layout(
     + ``axes`` namespace (admire/bench; ux removed 2026-05-30).
     """
     state_dir = tmp_path
-    monkeypatch.setattr(auto_train, "BASELINE_PATH", state_dir / "baseline.json")
+    monkeypatch.setattr(ledger, "BASELINE_PATH", state_dir / "baseline.json")
     _write_baseline(
         {"broken_tool_use": 3.4, "verbose_padding": 2.0},
         {"broken_tool_use": 0.4, "verbose_padding": 0.0},
@@ -1418,7 +1423,7 @@ def test_write_baseline_emits_schema_v2_layout(
     assert raw["sample_count"]["broken_tool_use"] == 5
     assert raw["measurement_modality"]["verbose_padding"] == "token_count"
     assert raw["eval_archive"] == "/var/folders/fake.eval"
-    assert raw["rubric_version"] == auto_train.PETRI_RUBRIC_VERSION
+    assert raw["rubric_version"] == measure.PETRI_RUBRIC_VERSION
     axes = payload["axes"]
     assert axes["admire_means"] == {"pairwise_win_rate": 0.9}
     # ux removed (PR-MARGIN-FITNESS-SCALE); bench None when not supplied
@@ -1436,7 +1441,7 @@ def test_load_baseline_reads_schema_v2(
     (``_should_promote`` etc.). A stale ``axes.ux_means`` on disk is
     ignored (ux removed 2026-05-30)."""
     baseline_path = tmp_path / "baseline.json"
-    monkeypatch.setattr(auto_train, "BASELINE_PATH", baseline_path)
+    monkeypatch.setattr(ledger, "BASELINE_PATH", baseline_path)
     baseline_path.write_text(
         json.dumps(
             {
@@ -1461,7 +1466,7 @@ def test_load_baseline_reads_schema_v2(
         ),
         encoding="utf-8",
     )
-    means, stderr, admire, bench = auto_train._load_baseline()
+    means, stderr, admire, bench = ledger._load_baseline()
     assert means == {"broken_tool_use": 3.4}
     assert stderr == {"broken_tool_use": 0.4}
     assert admire == {"pairwise_win_rate": 0.6}
@@ -1477,7 +1482,7 @@ def test_load_baseline_still_reads_v1_flat_payload(
     files in the wild stay valid until the next promotion overwrites
     them in v2 shape. A stale flat ``ux_means`` is ignored."""
     baseline_path = tmp_path / "baseline.json"
-    monkeypatch.setattr(auto_train, "BASELINE_PATH", baseline_path)
+    monkeypatch.setattr(ledger, "BASELINE_PATH", baseline_path)
     baseline_path.write_text(
         json.dumps(
             {
@@ -1489,7 +1494,7 @@ def test_load_baseline_still_reads_v1_flat_payload(
         ),
         encoding="utf-8",
     )
-    means, stderr, admire, bench = auto_train._load_baseline()
+    means, stderr, admire, bench = ledger._load_baseline()
     assert means == {"broken_tool_use": 3.4}
     assert stderr == {"broken_tool_use": 0.4}
     assert admire == {"pairwise_win_rate": 0.6}
@@ -1503,7 +1508,7 @@ def test_write_then_load_round_trip_v2(
     """Write a v2 baseline then load it back. The 4-tuple return signature
     of ``_load_baseline`` must hold for downstream callers (ux removed)."""
     baseline_path = tmp_path / "baseline.json"
-    monkeypatch.setattr(auto_train, "BASELINE_PATH", baseline_path)
+    monkeypatch.setattr(ledger, "BASELINE_PATH", baseline_path)
     dim_means = {"broken_tool_use": 3.4, "input_hallucination": 3.7}
     dim_stderr = {"broken_tool_use": 0.4, "input_hallucination": 0.32}
     _write_baseline(
@@ -1518,7 +1523,7 @@ def test_write_then_load_round_trip_v2(
         session_id="sess-rt",
         commit="cafef00d",
     )
-    loaded_means, loaded_stderr, admire, bench = auto_train._load_baseline()
+    loaded_means, loaded_stderr, admire, bench = ledger._load_baseline()
     assert loaded_means == dim_means
     assert loaded_stderr == dim_stderr
     assert admire == {"pairwise_win_rate": 0.9}
@@ -1531,8 +1536,8 @@ def test_resolve_eval_archive_path_returns_none_when_symlink_missing(
     """``_resolve_eval_archive_path`` is best-effort — returns ``None``
     when ``~/.geode/petri/logs/latest.eval`` does not exist (dry-run /
     fresh install). No exception."""
-    monkeypatch.setattr(auto_train, "LATEST_EVAL_SYMLINK", tmp_path / "nope.eval")
-    assert auto_train._resolve_eval_archive_path() is None
+    monkeypatch.setattr(measure, "LATEST_EVAL_SYMLINK", tmp_path / "nope.eval")
+    assert measure._resolve_eval_archive_path() is None
 
 
 def test_resolve_eval_archive_path_reads_symlink_target(
@@ -1544,8 +1549,8 @@ def test_resolve_eval_archive_path_reads_symlink_target(
     target.write_bytes(b"placeholder")
     symlink = tmp_path / "latest.eval"
     symlink.symlink_to(target)
-    monkeypatch.setattr(auto_train, "LATEST_EVAL_SYMLINK", symlink)
-    resolved = auto_train._resolve_eval_archive_path()
+    monkeypatch.setattr(measure, "LATEST_EVAL_SYMLINK", symlink)
+    resolved = measure._resolve_eval_archive_path()
     assert resolved is not None
     assert resolved.endswith(target.name)
 
@@ -1777,7 +1782,7 @@ def test_load_baseline_sample_count_reads_v2_raw_block(
     """``_load_baseline_sample_count`` reads ``raw.sample_count`` from a
     schema_version=2 baseline."""
     baseline_path = tmp_path / "baseline.json"
-    monkeypatch.setattr(auto_train, "BASELINE_PATH", baseline_path)
+    monkeypatch.setattr(ledger, "BASELINE_PATH", baseline_path)
     baseline_path.write_text(
         json.dumps(
             {
@@ -1791,7 +1796,7 @@ def test_load_baseline_sample_count_reads_v2_raw_block(
         ),
         encoding="utf-8",
     )
-    assert auto_train._load_baseline_sample_count() == {"broken_tool_use": 5}
+    assert ledger._load_baseline_sample_count() == {"broken_tool_use": 5}
 
 
 def test_load_baseline_sample_count_returns_empty_for_v1_baseline(
@@ -1801,7 +1806,7 @@ def test_load_baseline_sample_count_returns_empty_for_v1_baseline(
     """v1 legacy baseline files carry no sample_count — return empty
     dict so the N=1 detector stays dormant for pre-PR-1 data."""
     baseline_path = tmp_path / "baseline.json"
-    monkeypatch.setattr(auto_train, "BASELINE_PATH", baseline_path)
+    monkeypatch.setattr(ledger, "BASELINE_PATH", baseline_path)
     baseline_path.write_text(
         json.dumps(
             {
@@ -1811,15 +1816,15 @@ def test_load_baseline_sample_count_returns_empty_for_v1_baseline(
         ),
         encoding="utf-8",
     )
-    assert auto_train._load_baseline_sample_count() == {}
+    assert ledger._load_baseline_sample_count() == {}
 
 
 def test_load_baseline_sample_count_returns_empty_on_missing_file(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setattr(auto_train, "BASELINE_PATH", tmp_path / "absent.json")
-    assert auto_train._load_baseline_sample_count() == {}
+    monkeypatch.setattr(ledger, "BASELINE_PATH", tmp_path / "absent.json")
+    assert ledger._load_baseline_sample_count() == {}
 
 
 # ---------------------------------------------------------------------------
@@ -1859,10 +1864,9 @@ def test_resolve_gen_tag_default_includes_commit(
     PR-GEN-COUNTER (2026-05-26) — the resolver now appends a monotonic
     ``-gen{N}`` counter derived from sessions.jsonl history. With no
     history, the first emission is ``gen1``."""
-    from core.self_improving import train as train_mod
 
     monkeypatch.delenv("AUTORESEARCH_GEN_TAG", raising=False)
-    monkeypatch.setattr(train_mod, "SESSIONS_INDEX_PATH", tmp_path / "missing.jsonl")
+    monkeypatch.setattr(ledger, "SESSIONS_INDEX_PATH", tmp_path / "missing.jsonl")
     assert _resolve_gen_tag("a1b2c3d") == "autoresearch-a1b2c3d-gen1"
 
 
@@ -1872,10 +1876,9 @@ def test_resolve_gen_tag_treats_whitespace_as_unset(
     """Whitespace-only env value is treated as unset, so the resolver
     falls back to ``autoresearch-<commit>-gen<N>`` (post PR-GEN-COUNTER
     shape, gen1 for fresh history)."""
-    from core.self_improving import train as train_mod
 
     monkeypatch.setenv("AUTORESEARCH_GEN_TAG", "   ")
-    monkeypatch.setattr(train_mod, "SESSIONS_INDEX_PATH", tmp_path / "missing.jsonl")
+    monkeypatch.setattr(ledger, "SESSIONS_INDEX_PATH", tmp_path / "missing.jsonl")
     assert _resolve_gen_tag("xyz") == "autoresearch-xyz-gen1"
 
 
@@ -1884,11 +1887,9 @@ def test_append_session_index_writes_jsonl_row(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """One row per call, newline-terminated, parseable as JSON."""
+    monkeypatch.setattr(ledger, "SELF_IMPROVING_LOOP_HOME", tmp_path / "autoresearch" / "handoff")
     monkeypatch.setattr(
-        auto_train, "SELF_IMPROVING_LOOP_HOME", tmp_path / "autoresearch" / "handoff"
-    )
-    monkeypatch.setattr(
-        auto_train,
+        ledger,
         "SESSIONS_INDEX_PATH",
         tmp_path / "autoresearch" / "handoff" / "sessions.jsonl",
     )
@@ -1919,11 +1920,9 @@ def test_append_session_index_appends_not_overwrites(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """Multiple calls append, preserving prior rows."""
+    monkeypatch.setattr(ledger, "SELF_IMPROVING_LOOP_HOME", tmp_path / "autoresearch" / "handoff")
     monkeypatch.setattr(
-        auto_train, "SELF_IMPROVING_LOOP_HOME", tmp_path / "autoresearch" / "handoff"
-    )
-    monkeypatch.setattr(
-        auto_train,
+        ledger,
         "SESSIONS_INDEX_PATH",
         tmp_path / "autoresearch" / "handoff" / "sessions.jsonl",
     )
@@ -2161,13 +2160,13 @@ def _drive_main_dry_run(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> tupl
 
     sip_home = tmp_path / "autoresearch" / "handoff"
     monkeypatch.setattr(core.paths, "GLOBAL_AUTORESEARCH_HANDOFF_DIR", sip_home)
-    monkeypatch.setattr(auto_train, "SELF_IMPROVING_LOOP_HOME", sip_home)
-    monkeypatch.setattr(auto_train, "SESSIONS_INDEX_PATH", sip_home / "sessions.jsonl")
+    monkeypatch.setattr(ledger, "SELF_IMPROVING_LOOP_HOME", sip_home)
+    monkeypatch.setattr(ledger, "SESSIONS_INDEX_PATH", sip_home / "sessions.jsonl")
     # Redirect state/autoresearch writes so they don't pollute the repo.
     state_dir = tmp_path / "state"
-    monkeypatch.setattr(auto_train, "STATE_DIR", state_dir)
+    monkeypatch.setattr(measure, "STATE_DIR", state_dir)
     monkeypatch.setattr(auto_train, "RUN_LOG", state_dir / "run.log")
-    monkeypatch.setattr(auto_train, "BASELINE_PATH", state_dir / "baseline.json")
+    monkeypatch.setattr(ledger, "BASELINE_PATH", state_dir / "baseline.json")
     # No baseline file → baseline_decision payload reflects the empty case.
     monkeypatch.setenv("AUTORESEARCH_VERDICT", "pending")
     monkeypatch.setenv("AUTORESEARCH_DESCRIPTION", "test-dry-run")
@@ -2244,7 +2243,7 @@ def test_main_dry_run_emits_full_p0b_event_sequence(
     # PR-4 Codex catch — pin actual content, not just key presence.
     # ``_drive_main_dry_run`` produces 5 dims (the dry-run synthesizer);
     # the missing list should hold all other ``AXIS_TIERS`` dims.
-    from core.self_improving.train import AXIS_TIERS
+    from core.self_improving.fitness import AXIS_TIERS
 
     emitted_missing = by_event["per_dim_scores"]["missing_dims"]
     expected_missing = sorted(
@@ -2314,12 +2313,12 @@ def test_run_audit_subprocess_timeout_emits_event(
     monkeypatch.setattr(auto_train, "WRAPPER_OVERRIDE_HOOK_READY", True)
     # State-dir redirects so wrapper_override write doesn't touch the repo.
     state_dir = tmp_path / "state"
-    monkeypatch.setattr(auto_train, "STATE_DIR", state_dir)
+    monkeypatch.setattr(measure, "STATE_DIR", state_dir)
 
     def _raise_timeout(*_args: object, **kwargs: object) -> object:
         raise subprocess.TimeoutExpired(cmd=["geode", "audit"], timeout=420)
 
-    monkeypatch.setattr(auto_train.subprocess, "run", _raise_timeout)
+    monkeypatch.setattr(measure.subprocess, "run", _raise_timeout)
     with pytest.raises(subprocess.TimeoutExpired):
         run_audit(dry_run=False, session_id="s-to", gen_tag="gen-to")
 
@@ -2445,10 +2444,10 @@ def test_append_results_row_creates_files_with_header(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """First write creates both files; the .tsv gets the header line."""
-    monkeypatch.setattr(auto_train, "BASELINE_PATH", tmp_path / "baseline.json")
-    auto_train._append_results_row("s1\tg1\tHEAD\t0.5", '{"session_id": "s1"}')
+    monkeypatch.setattr(ledger, "BASELINE_PATH", tmp_path / "baseline.json")
+    ledger._append_results_row("s1\tg1\tHEAD\t0.5", '{"session_id": "s1"}')
 
-    tsv_path, jsonl_path = auto_train._results_paths()
+    tsv_path, jsonl_path = ledger._results_paths()
     assert tsv_path == tmp_path / "results.tsv"
     assert jsonl_path == tmp_path / "results.jsonl"
     assert tsv_path.is_file()
@@ -2456,7 +2455,7 @@ def test_append_results_row_creates_files_with_header(
 
     tsv_lines = tsv_path.read_text(encoding="utf-8").splitlines()
     # Header (12 cols, matching RESULTS_TSV_HEADER) + one data row.
-    assert tsv_lines[0] == "\t".join(auto_train.RESULTS_TSV_HEADER)
+    assert tsv_lines[0] == "\t".join(ledger.RESULTS_TSV_HEADER)
     assert tsv_lines[1] == "s1\tg1\tHEAD\t0.5"
     assert json.loads(jsonl_path.read_text(encoding="utf-8").strip()) == {"session_id": "s1"}
 
@@ -2465,15 +2464,15 @@ def test_append_results_row_appends_without_duplicate_header(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """Subsequent writes append; the header is written exactly once."""
-    monkeypatch.setattr(auto_train, "BASELINE_PATH", tmp_path / "baseline.json")
-    auto_train._append_results_row("s1\tg1\tHEAD\t0.5", '{"session_id": "s1"}')
-    auto_train._append_results_row("s2\tg2\tHEAD\t0.6", '{"session_id": "s2"}')
+    monkeypatch.setattr(ledger, "BASELINE_PATH", tmp_path / "baseline.json")
+    ledger._append_results_row("s1\tg1\tHEAD\t0.5", '{"session_id": "s1"}')
+    ledger._append_results_row("s2\tg2\tHEAD\t0.6", '{"session_id": "s2"}')
 
-    tsv_path, jsonl_path = auto_train._results_paths()
+    tsv_path, jsonl_path = ledger._results_paths()
     tsv_lines = tsv_path.read_text(encoding="utf-8").splitlines()
     # 1 header + 2 data rows, header NOT repeated.
     assert len(tsv_lines) == 3
-    assert tsv_lines.count("\t".join(auto_train.RESULTS_TSV_HEADER)) == 1
+    assert tsv_lines.count("\t".join(ledger.RESULTS_TSV_HEADER)) == 1
     assert tsv_lines[1] == "s1\tg1\tHEAD\t0.5"
     assert tsv_lines[2] == "s2\tg2\tHEAD\t0.6"
 
@@ -2487,8 +2486,8 @@ def test_results_paths_follow_baseline_path_monkeypatch(
 ) -> None:
     """The results files are siblings of BASELINE_PATH (test-redirectable)."""
     state_dir = tmp_path / "state" / "autoresearch"
-    monkeypatch.setattr(auto_train, "BASELINE_PATH", state_dir / "baseline.json")
-    tsv_path, jsonl_path = auto_train._results_paths()
+    monkeypatch.setattr(ledger, "BASELINE_PATH", state_dir / "baseline.json")
+    tsv_path, jsonl_path = ledger._results_paths()
     assert tsv_path == state_dir / "results.tsv"
     assert jsonl_path == state_dir / "results.jsonl"
 
@@ -2536,7 +2535,7 @@ def test_load_baseline_non_numeric_dim_value_returns_none_v1(tmp_path: Path) -> 
     to baseline-absent, not raise ValueError through the promote gate
     (PR-G3 #1347 incident class).
     """
-    saved = auto_train.BASELINE_PATH
+    saved = ledger.BASELINE_PATH
     try:
         baseline_path = tmp_path / "baseline.json"
         baseline_path.write_text(
@@ -2548,17 +2547,17 @@ def test_load_baseline_non_numeric_dim_value_returns_none_v1(tmp_path: Path) -> 
             ),
             encoding="utf-8",
         )
-        auto_train.BASELINE_PATH = baseline_path
-        means, stderr, *_ = auto_train._load_baseline()
+        ledger.BASELINE_PATH = baseline_path
+        means, stderr, *_ = ledger._load_baseline()
         assert means is None
         assert stderr is None
     finally:
-        auto_train.BASELINE_PATH = saved
+        ledger.BASELINE_PATH = saved
 
 
 def test_load_baseline_non_numeric_dim_value_returns_none_v2(tmp_path: Path) -> None:
     """Same contract guard on the schema_version=2 (raw/axes) path."""
-    saved = auto_train.BASELINE_PATH
+    saved = ledger.BASELINE_PATH
     try:
         baseline_path = tmp_path / "baseline.json"
         baseline_path.write_text(
@@ -2574,12 +2573,12 @@ def test_load_baseline_non_numeric_dim_value_returns_none_v2(tmp_path: Path) -> 
             ),
             encoding="utf-8",
         )
-        auto_train.BASELINE_PATH = baseline_path
-        means, stderr, *_ = auto_train._load_baseline()
+        ledger.BASELINE_PATH = baseline_path
+        means, stderr, *_ = ledger._load_baseline()
         assert means is None
         assert stderr is None
     finally:
-        auto_train.BASELINE_PATH = saved
+        ledger.BASELINE_PATH = saved
 
 
 def test_results_row_emitted_after_gate_with_derived_verdict() -> None:
@@ -2591,7 +2590,7 @@ def test_results_row_emitted_after_gate_with_derived_verdict() -> None:
 
     src = inspect.getsource(auto_train.main)
     gate_pos = src.index('print(f"baseline_promoted:')
-    row_pos = src.index("results_tsv_row = format_results_tsv_row(")
+    row_pos = src.index("results_tsv_row = ledger.format_results_tsv_row(")
     assert gate_pos < row_pos, "results row must be emitted after the gate verdict"
     assert '_derived_verdict = "promote" if promoted_line.startswith("true") else "reject"' in src
     assert 'os.environ.get("AUTORESEARCH_VERDICT", _derived_verdict)' in src

@@ -42,13 +42,13 @@ from typing import TYPE_CHECKING, Any
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from core.self_improving.loop.run_provenance import RunProvenanceFields
-from core.self_improving.loop.signal_polarity import to_signed_improvement
+from core.self_improving.loop.inject.signal_polarity import to_signed_improvement
+from core.self_improving.loop.observe.run_provenance import RunProvenanceFields
 
 if TYPE_CHECKING:
     from plugins.seed_generation.baseline_reader import BaselineSnapshot
 
-from core.self_improving.loop.runner import MUTATION_AUDIT_LOG_PATH
+from core.self_improving.loop.mutate.runner import MUTATION_AUDIT_LOG_PATH
 
 
 class AttributionRecord(BaseModel):
@@ -151,7 +151,7 @@ class AttributionRecord(BaseModel):
     is the audit/generation seed as SENT (``None`` when none was sent — distinct from
     E3's ``promote_policy_seed``). These record WHAT WAS SENT for AUDITABILITY; they
     make NO backend-determinism claim (the backend may not replay bit-identically —
-    ``unverified``, see :mod:`core.self_improving.loop.run_provenance`). Each field is
+    ``unverified``, see :mod:`core.self_improving.loop.observe.run_provenance`). Each field is
     ``None``-omitting at the writer, so legacy / no-pin rows keep their exact shape."""
     contract_results: list[dict[str, Any]] | None = None
     """PR-CONTRACT-EVAL (2026-06-03) — the deterministic tool-call contract

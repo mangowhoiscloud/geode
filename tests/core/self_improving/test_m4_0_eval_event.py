@@ -17,11 +17,11 @@ from collections.abc import Iterator
 from pathlib import Path
 
 import pytest
-from core.self_improving.loop.eval_journaling import (
+from core.self_improving.loop.observe.eval_journaling import (
     EVENT_NAME,
     emit_eval_response_recorded,
 )
-from core.self_improving.loop.run_transcript import (
+from core.self_improving.loop.observe.run_transcript import (
     RunTranscript,
     run_transcript_scope,
 )

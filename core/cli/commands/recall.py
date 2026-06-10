@@ -4,7 +4,7 @@ D-3 decision ③ (2026-06-10) — OL-C3 shipped the *writer*
 (``core/memory/recall_writer.write_recall_entry``) as a pure utility whose
 docstring promised "operator calls ``write_recall_entry(...)`` via CLI /
 REPL slash", but no slash existed. The M4.4.1 *reader*
-(``core/self_improving/loop/memory_recall.py``, injected through
+(``core/self_improving/loop/inject/memory_recall.py``, injected through
 ``in_context_wiring``) has been live the whole time, so the pool's only
 write path was hand-editing ``~/.geode/memory/recall/*.md``. This module
 closes that loop.
@@ -64,7 +64,7 @@ def cmd_recall(args: str) -> None:
 def _cmd_list() -> None:
     """Render the recall pool as a dense table (reader's parser = one schema)."""
     from core.memory.recall_writer import resolve_recall_dir
-    from core.self_improving.loop.memory_recall import load_memory_entries
+    from core.self_improving.loop.inject.memory_recall import load_memory_entries
 
     entries = load_memory_entries()
     console.print()

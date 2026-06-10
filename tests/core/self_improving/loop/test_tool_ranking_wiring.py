@@ -13,8 +13,8 @@ from dataclasses import dataclass
 from pathlib import Path
 
 import pytest
-from core.self_improving.loop import in_context_slots, in_context_wiring
-from core.self_improving.loop.in_context_slots import (
+from core.self_improving.loop.inject import in_context_slots, in_context_wiring
+from core.self_improving.loop.inject.in_context_slots import (
     CANONICAL_SLOTS,
     SLOT_TOOL_HINTS,
     SLOT_TOOL_RANKING,
@@ -108,7 +108,7 @@ def test_wiring_emits_ranking_block_when_episodes_qualify(
         return [_FakeEpisode("read", True) for _ in range(50)]
 
     monkeypatch.setattr(
-        "core.self_improving.loop.tool_hints.load_recent_episodes",
+        "core.self_improving.loop.inject.tool_hints.load_recent_episodes",
         _fake_loader,
     )
 
@@ -158,7 +158,7 @@ def test_wiring_emits_both_blocks_under_dual_slot_config(
         ]
 
     monkeypatch.setattr(
-        "core.self_improving.loop.tool_hints.load_recent_episodes",
+        "core.self_improving.loop.inject.tool_hints.load_recent_episodes",
         _fake_loader,
     )
 
@@ -206,7 +206,7 @@ def test_wiring_graceful_when_ledger_read_fails(monkeypatch: pytest.MonkeyPatch,
         raise RuntimeError("disk on fire")
 
     monkeypatch.setattr(
-        "core.self_improving.loop.tool_hints.load_recent_episodes",
+        "core.self_improving.loop.inject.tool_hints.load_recent_episodes",
         _exploding_loader,
     )
 

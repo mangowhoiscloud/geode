@@ -542,7 +542,7 @@ def test_default_runner_factory_imports_runner_lazily() -> None:
     import sys
 
     # Drop the runner if cached, so we can detect a lazy import
-    mod_name = "core.self_improving.loop.runner"
+    mod_name = "core.self_improving.loop.mutate.runner"
     original_runner = sys.modules.pop(mod_name, None)
     try:
         # Importing auto_trigger should NOT trigger the runner import

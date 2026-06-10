@@ -23,7 +23,7 @@ from core.agent.agent_contracts_policy import (
     _load_agent_contracts_override,
     apply_agent_contracts_policy,
 )
-from core.self_improving.loop import policies as pol
+from core.self_improving.loop.mutate import policies as pol
 
 
 @pytest.fixture

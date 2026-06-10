@@ -201,7 +201,7 @@ def test_path_constant_in_core_paths() -> None:
 
 def test_train_py_sets_descriptions_override_env() -> None:
     repo_root = Path(__file__).resolve().parents[3]
-    src = (repo_root / "core/self_improving/train.py").read_text(encoding="utf-8")
+    src = (repo_root / "core/self_improving/measure.py").read_text(encoding="utf-8")
     assert "GEODE_TOOL_DESCRIPTIONS_OVERRIDE" in src
     assert "GLOBAL_TOOL_DESCRIPTIONS_PATH" in src
 

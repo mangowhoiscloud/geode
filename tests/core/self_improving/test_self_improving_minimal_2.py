@@ -24,6 +24,8 @@ from __future__ import annotations
 import inspect
 from pathlib import Path
 
+from core.self_improving import measure
+
 # ---------------------------------------------------------------------------
 # G1a — None defaults inherit Settings.model
 # ---------------------------------------------------------------------------
@@ -50,7 +52,7 @@ def test_autoresearch_target_and_judge_default_none() -> None:
 def test_runner_default_llm_call_inherits_settings_model() -> None:
     """Pin the inherit path in source — runner body must reference
     settings.model when MutatorConfig.default_model is None."""
-    from core.self_improving.loop import runner
+    from core.self_improving.loop.mutate import runner
 
     src = inspect.getsource(runner._default_llm_call)
     assert "settings.model" in src
@@ -75,9 +77,8 @@ def test_build_audit_command_never_pins_role_models_on_argv() -> None:
     Both paths created a duplicate-SoT race with ``[petri.<role>]``.
     Pin the no-argv contract so a future refactor doesn't silently
     re-introduce the bypass."""
-    from core.self_improving import train
 
-    src = inspect.getsource(train._build_audit_command)
+    src = inspect.getsource(measure._build_audit_command)
     # No ``--target`` / ``--judge`` / ``--auditor`` argv emission
     assert '"--target"' not in src
     assert '"--judge"' not in src
@@ -174,9 +175,8 @@ def test_build_audit_command_maps_source_to_use_oauth_flag() -> None:
     """The argv translator must add ``--use-oauth`` for any source
     EXCEPT ``api_key`` (auto / claude-cli / openai-codex all use
     subscription credentials)."""
-    from core.self_improving import train
 
-    src = inspect.getsource(train._build_audit_command)
+    src = inspect.getsource(measure._build_audit_command)
     assert 'getattr(cfg, "source", "auto") != "api_key"' in src or "cfg.source" in src
     assert "--use-oauth" in src
 
@@ -188,7 +188,7 @@ def test_build_audit_command_maps_source_to_use_oauth_flag() -> None:
 
 def test_runner_context_has_current_policies_field() -> None:
     """RunnerContext now carries all 5 policy SoTs via current_policies."""
-    from core.self_improving.loop.runner import RunnerContext
+    from core.self_improving.loop.mutate.runner import RunnerContext
 
     ctx = RunnerContext()
     assert hasattr(ctx, "current_policies")
@@ -203,8 +203,8 @@ def test_build_runner_context_loads_all_5_policies(
 ) -> None:
     """build_runner_context must populate current_policies with all
     5 target_kinds so the mutator LLM sees the full policy surface."""
-    from core.self_improving.loop import runner as runner_mod
-    from core.self_improving.loop.policies import TARGET_KINDS
+    from core.self_improving.loop.mutate import runner as runner_mod
+    from core.self_improving.loop.mutate.policies import TARGET_KINDS
 
     # Stub out the external loaders so we don't touch disk or LLMs.
     monkeypatch.setattr(
@@ -220,7 +220,7 @@ def test_build_runner_context_loads_all_5_policies(
         lambda: None,
     )
     monkeypatch.setattr(
-        "core.self_improving.loop.policies.load_policy",
+        "core.self_improving.loop.mutate.policies.load_policy",
         lambda kind: {f"{kind}_section": "stub"},
     )
 
@@ -234,8 +234,8 @@ def test_build_runner_context_loads_all_5_policies(
 def test_build_user_prompt_surfaces_all_policies() -> None:
     """The user prompt must include the 5-kind header so the LLM
     sees the full policy surface, not just the wrapper sections."""
-    from core.self_improving.loop import runner as runner_mod
-    from core.self_improving.loop.runner import RunnerContext
+    from core.self_improving.loop.mutate import runner as runner_mod
+    from core.self_improving.loop.mutate.runner import RunnerContext
 
     ctx = RunnerContext(
         current_policies={
@@ -281,7 +281,7 @@ def test_runner_reexports_mutation_audit_log_path() -> None:
     object identity which would force test isolation we don't need.
     """
     from core import paths
-    from core.self_improving.loop import runner
+    from core.self_improving.loop.mutate import runner
 
     # The default value (before any monkeypatch) must point at the
     # canonical core.paths location.
@@ -386,7 +386,7 @@ def test_migrate_action_invokes_helper_for_every_target_kind(
     leave kinds silently un-migrated; we pin per-kind invocation
     so a refactor that breaks the loop surfaces here."""
     from core.cli.commands import self_improving as si_mod
-    from core.self_improving.loop import policies as policies_mod
+    from core.self_improving.loop.mutate import policies as policies_mod
 
     legacy_dir = tmp_path / "legacy"
     legacy_dir.mkdir()

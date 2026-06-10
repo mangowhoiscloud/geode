@@ -28,7 +28,7 @@ REPO_ROOT = Path(__file__).resolve().parents[3]
 TIER_2_FILES: tuple[tuple[str, str], ...] = (
     ("core/runtime.py", "Bootstrap"),
     ("core/agent/loop", "Bootstrap — agent loop"),
-    ("core/self_improving/loop/runner.py", "Self-improving runner (mutator caller)"),
+    ("core/self_improving/loop/mutate/runner.py", "Self-improving runner (mutator caller)"),
     ("core/self_improving/train.py", "Fitness gate (compute_fitness)"),
     ("tests/core/self_improving/test_ratchet_policies_in_repo.py", "CI ratchet"),
     ("core/hooks/system.py", "HookSystem (policy chain)"),
@@ -48,11 +48,11 @@ def _read(path: str) -> str:
 
 
 def _self_improving_loop_target_kinds() -> set[str]:
-    """``core/self_improving/loop/policies.py`` 의 ``TARGET_KINDS`` 를 import 해서
+    """``core/self_improving/loop/mutate/policies.py`` 의 ``TARGET_KINDS`` 를 import 해서
     실제 mutation target 목록을 가져온다."""
     import importlib
 
-    mod = importlib.import_module("core.self_improving.loop.policies")
+    mod = importlib.import_module("core.self_improving.loop.mutate.policies")
     return set(getattr(mod, "TARGET_KINDS", ()))
 
 
@@ -60,7 +60,7 @@ def _target_kind_to_sot_file() -> dict[str, str]:
     """``TARGET_KIND_TO_SOT_FILE`` (또는 동등 mapping) 의 실제 매핑을 가져온다."""
     import importlib
 
-    mod = importlib.import_module("core.self_improving.loop.policies")
+    mod = importlib.import_module("core.self_improving.loop.mutate.policies")
     # PR-6 시점의 이름은 ``TARGET_KIND_TO_SOT_FILE`` — fallback 으로 path mapping 도 시도
     raw = (
         getattr(mod, "TARGET_KIND_TO_SOT_FILE", None)

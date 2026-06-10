@@ -13,13 +13,8 @@ When you intentionally change the logic: bump the version constant in
 
 from __future__ import annotations
 
-from core.self_improving.train import (
-    AXIS_TIERS,
-    FITNESS_FORMULA_VERSION,
-    MARGIN_LOGIC_VERSION,
-    _should_promote,
-    compute_fitness,
-)
+from core.self_improving.fitness import AXIS_TIERS, FITNESS_FORMULA_VERSION, compute_fitness
+from core.self_improving.gate import MARGIN_LOGIC_VERSION, _should_promote
 
 # --- Probe A: simple uniform — every dim at 3.0, zero stderr (plain weighted sum
 # + stability=1/(1+0)). The minimal tripwire on the core dim aggregate.

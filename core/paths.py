@@ -280,7 +280,7 @@ GLOBAL_AUTORESEARCH_HANDOFF_DIR = GEODE_HOME / "autoresearch" / "handoff"
 # names match the new directory's "policies" semantics rather than
 # the legacy "source of truth" label. Lazy migration of any legacy
 # ``~/.geode/autoresearch/handoff/<file>.json`` payload is handled
-# by :mod:`core.self_improving.loop.policies`.
+# by :mod:`core.self_improving.loop.mutate.policies`.
 # The in-repo policy/ledger state dir is ``AUTORESEARCH_STATE_DIR``
 # (``state/autoresearch/``, defined at the top of this module).
 GLOBAL_POLICIES_DIR = AUTORESEARCH_STATE_DIR / "policies"
@@ -300,7 +300,7 @@ GLOBAL_WRAPPER_SECTIONS_PATH = GLOBAL_POLICIES_DIR / "wrapper-sections.json"
 # ``wrapper-sections.json``. ``prompt`` keeps the legacy wrapper-
 # sections name so older mutation rows replay correctly; the others
 # land in fresh files because they evolve independently. Read /
-# written by :mod:`core.self_improving.loop.policies`.
+# written by :mod:`core.self_improving.loop.mutate.policies`.
 GLOBAL_TOOL_POLICY_PATH = GLOBAL_POLICIES_DIR / "tool-policy.json"
 GLOBAL_DECOMPOSITION_POLICY_PATH = GLOBAL_POLICIES_DIR / "decomposition.json"
 GLOBAL_RETRIEVAL_POLICY_PATH = GLOBAL_POLICIES_DIR / "retrieval.json"
@@ -388,7 +388,7 @@ OPERATOR_LOCAL_FEW_SHOT_POOL_PATH = GLOBAL_AUTORESEARCH_HANDOFF_DIR / "few-shot-
 # applied mutation. Lives in-repo alongside the 5 policy SoT JSONs
 # so the git-as-optimiser ledger and the current-state files are
 # co-located. Previously declared in
-# ``core/self_improving/loop/runner.py``; moved here for consistency
+# ``core/self_improving/loop/mutate/runner.py``; moved here for consistency
 # with the other path constants. The runner re-exports the constant
 # for backwards compat with existing callers.
 MUTATION_AUDIT_LOG_PATH = AUTORESEARCH_STATE_DIR / "mutations.jsonl"

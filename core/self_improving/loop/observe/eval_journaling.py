@@ -72,7 +72,7 @@ def emit_eval_response_recorded(
             response. Signals "rejected" for DPO pack labeling.
     """
     # Lazy import — keep this module cheap when no journal is bound.
-    from core.self_improving.loop.run_transcript import current_run_transcript
+    from core.self_improving.loop.observe.run_transcript import current_run_transcript
 
     journal = current_run_transcript()
     if journal is None:

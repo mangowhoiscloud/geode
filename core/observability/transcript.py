@@ -8,7 +8,7 @@ Captures: user messages, assistant responses, tool calls/results,
 vault saves, costs, errors, **lifecycle events** (audit_started /
 config_snapshot / per_dim_scores 등 — pre-PR-SESSION-METRICS 의
 ``SessionJournal`` 에서 흡수, 이후 PR-CLEANUP-7 에서
-:class:`~core.self_improving.loop.run_transcript.RunTranscript` 로
+:class:`~core.self_improving.loop.observe.run_transcript.RunTranscript` 로
 이름·위치 정리) — everything needed to reconstruct "what exactly
 happened in this session."
 
@@ -290,7 +290,7 @@ class SessionTranscript:
         pipeline transcript SoT does not exist, so the mirror has
         nowhere to go.
         """
-        from core.self_improving.loop.run_transcript import current_run_transcript
+        from core.self_improving.loop.observe.run_transcript import current_run_transcript
 
         run_transcript = current_run_transcript()
         if run_transcript is None:
@@ -383,7 +383,7 @@ class SessionTranscript:
     ) -> None:
         """Record a free-form lifecycle event — replaces the legacy
         ``SessionJournal.append(event, payload=...)`` path (renamed to
-        :meth:`~core.self_improving.loop.run_transcript.RunTranscript.append`
+        :meth:`~core.self_improving.loop.observe.run_transcript.RunTranscript.append`
         in PR-CLEANUP-7).
 
         PR-SESSION-METRICS (2026-05-23) — folded ``SessionJournal`` into the
@@ -394,7 +394,7 @@ class SessionTranscript:
 
         ``file_path`` overrides the default ``<dir>/<session_id>.jsonl``
         layout — used by
-        :class:`~core.self_improving.loop.run_transcript.RunTranscript`
+        :class:`~core.self_improving.loop.observe.run_transcript.RunTranscript`
         (the post-PR-CLEANUP-7 name for the per-run binding that was
         ``SessionJournal``) to write to
         ``<self-improving-loop-dir>/<session_id>/transcript.jsonl``

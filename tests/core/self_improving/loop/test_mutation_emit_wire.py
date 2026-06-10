@@ -4,7 +4,7 @@ emit at the three lifecycle points the reserve docstring documents.
 PR-HOOKEVENT-RESERVE (2026-05-26) added the enum members; this PR is
 the writer-side wiring. These tests pin:
 
-- :func:`core.self_improving.loop.runner.append_audit_log` fires
+- :func:`core.self_improving.loop.mutate.runner.append_audit_log` fires
   ``HookEvent.MUTATION_APPLIED`` with the documented payload schema
   after the row write succeeds.
 - :func:`core.self_improving.train._revert_sot_after_reject` fires
@@ -23,6 +23,7 @@ from typing import Any
 
 import pytest
 from core.hooks.system import HookEvent, HookSystem
+from core.self_improving import gate, ledger
 from core.self_improving.loop._hooks import (
     _fire_hook,
     set_self_improving_loop_hooks,
@@ -74,7 +75,7 @@ def test_append_audit_log_emits_mutation_applied(tmp_path: Path) -> None:
     """``append_audit_log`` fires ``HookEvent.MUTATION_APPLIED`` with the
     documented payload schema (mutation_id, target_kind, target_path,
     ts, run_id, kind) after the row write completes."""
-    from core.self_improving.loop.runner import Mutation, append_audit_log
+    from core.self_improving.loop.mutate.runner import Mutation, append_audit_log
 
     hooks = HookSystem()
     captured: list[dict[str, Any]] = []
@@ -127,7 +128,6 @@ def test_write_baseline_emits_baseline_promoted(
     schema (``baseline_path``, ``prior_baseline_path``, ``ts``,
     ``run_id``, ``reason``). The reason flips to ``operator_force``
     when ``manual_promote=True``, ``gate_approved`` otherwise."""
-    from core.self_improving import train
 
     hooks = HookSystem()
     captured: list[dict[str, Any]] = []
@@ -139,10 +139,10 @@ def test_write_baseline_emits_baseline_promoted(
     set_self_improving_loop_hooks(hooks)
 
     fake_baseline_path = tmp_path / "baseline.json"
-    monkeypatch.setattr(train, "BASELINE_PATH", fake_baseline_path)
+    monkeypatch.setattr(ledger, "BASELINE_PATH", fake_baseline_path)
 
     # Fresh promote — no prior file.
-    train._write_baseline(
+    ledger._write_baseline(
         dim_means={"axis_a": 0.5},
         dim_stderr={"axis_a": 0.1},
         session_id="session-001",
@@ -159,7 +159,7 @@ def test_write_baseline_emits_baseline_promoted(
     assert isinstance(payload["ts"], float)
 
     # Overwrite — prior path populated.
-    train._write_baseline(
+    ledger._write_baseline(
         dim_means={"axis_a": 0.6},
         dim_stderr={"axis_a": 0.1},
         session_id="session-002",
@@ -181,7 +181,7 @@ def test_revert_sot_after_reject_emits_mutation_reverted(
     succeeds. ``run_id`` carries ``GEODE_SIL_AUDIT_RUN_ID`` (the
     audit correlation key), NOT the mutation_id."""
     from core.self_improving import train
-    from core.self_improving.loop.runner import Mutation, append_audit_log
+    from core.self_improving.loop.mutate.runner import Mutation, append_audit_log
 
     # Seed a mutations.jsonl row that the revert function can look up.
     audit_log = tmp_path / "mutations.jsonl"
@@ -227,7 +227,7 @@ def test_revert_sot_after_reject_emits_mutation_reverted(
     )
     set_self_improving_loop_hooks(hooks)
 
-    success, detail = train._revert_sot_after_reject("revert-test-mid", audit_log_path=audit_log)
+    success, detail = gate._revert_sot_after_reject("revert-test-mid", audit_log_path=audit_log)
     assert success
     assert detail == "prompt.evolver.system"
     # SoT write happened (prior-value restored)
@@ -251,7 +251,7 @@ def test_rollback_sot_emits_mutation_reverted(monkeypatch: pytest.MonkeyPatch) -
     ``reason`` (``audit_log_write_fail`` / ``audit_subprocess_crash`` /
     ``audit_subprocess_nonzero``) so observability readers can
     distinguish the trigger from the promote-gate reject path."""
-    from core.self_improving.loop.runner import Mutation, SelfImprovingLoopRunner
+    from core.self_improving.loop.mutate.runner import Mutation, SelfImprovingLoopRunner
 
     hooks = HookSystem()
     captured: list[dict[str, Any]] = []
@@ -325,7 +325,7 @@ def test_rollback_sot_policy_kind_emits_mutation_reverted(
     (``write_policy``). The original ``test_rollback_sot_emits_mutation_reverted``
     only stubbed ``write_wrapper_prompt_sections`` so the
     ``write_policy`` half of the dispatch was uncovered."""
-    from core.self_improving.loop.runner import Mutation, SelfImprovingLoopRunner
+    from core.self_improving.loop.mutate.runner import Mutation, SelfImprovingLoopRunner
 
     hooks = HookSystem()
     captured: list[dict[str, Any]] = []
@@ -338,7 +338,7 @@ def test_rollback_sot_policy_kind_emits_mutation_reverted(
 
     written: list[tuple[str, dict[str, str]]] = []
     monkeypatch.setattr(
-        "core.self_improving.loop.policies.write_policy",
+        "core.self_improving.loop.mutate.policies.write_policy",
         lambda kind, sections: written.append((kind, dict(sections))),
     )
 
@@ -372,7 +372,7 @@ def test_propose_emits_mutation_proposed(monkeypatch: pytest.MonkeyPatch) -> Non
     audit_run_id is minted later in apply_proposal."""
     import json
 
-    from core.self_improving.loop.runner import SelfImprovingLoopRunner
+    from core.self_improving.loop.mutate.runner import SelfImprovingLoopRunner
 
     hooks = HookSystem()
     captured: list[dict[str, Any]] = []
@@ -399,7 +399,7 @@ def test_propose_emits_mutation_proposed(monkeypatch: pytest.MonkeyPatch) -> Non
     def _stub_llm(system: str, user: str) -> str:
         return canned_response
 
-    from core.self_improving.loop import runner as runner_mod
+    from core.self_improving.loop.mutate import runner as runner_mod
 
     stub_ctx = runner_mod.RunnerContext(
         current_sections={"evolver.system": "old prompt"},
@@ -427,7 +427,7 @@ def test_rollback_sot_no_emit_when_rollback_write_fails(
     rollback-write failure (rare: disk full while writing the rollback
     itself) short-circuits BEFORE emit. Otherwise listeners would see
     a 'reverted' signal when the SoT is actually divergent."""
-    from core.self_improving.loop.runner import Mutation, SelfImprovingLoopRunner
+    from core.self_improving.loop.mutate.runner import Mutation, SelfImprovingLoopRunner
 
     hooks = HookSystem()
     captured: list[dict[str, Any]] = []
@@ -468,7 +468,6 @@ def test_reject_and_revert_emits_mutation_rejected(monkeypatch: pytest.MonkeyPat
     """PR-AUDIT-AB — the gate/policy reject path fires MUTATION_REJECTED
     (the loop's dominant outcome finally has telemetry) BEFORE the SoT
     revert, with the documented payload schema."""
-    from core.self_improving import train as auto_train
 
     captured: list[tuple[HookEvent, dict[str, Any]]] = []
     hooks = HookSystem()
@@ -481,9 +480,9 @@ def test_reject_and_revert_emits_mutation_rejected(monkeypatch: pytest.MonkeyPat
 
     monkeypatch.setenv("GEODE_SIL_MUTATION_ID", "mut-reject-1")
     monkeypatch.setenv("GEODE_SIL_AUDIT_RUN_ID", "run-77")
-    monkeypatch.setattr(auto_train, "_revert_sot_after_reject", lambda mid: (True, "reverted-ok"))
+    monkeypatch.setattr(gate, "_revert_sot_after_reject", lambda mid: (True, "reverted-ok"))
 
-    reason = auto_train._reject_and_revert("margin below floor", rejected_by="gate")
+    reason = gate._reject_and_revert("margin below floor", rejected_by="gate")
 
     assert reason == "margin below floor; SoT reverted (reverted-ok)"
     assert len(captured) == 1
@@ -499,7 +498,6 @@ def test_reject_and_revert_no_emit_without_mutation_id(
 ) -> None:
     """Manual audits (no GEODE_SIL_MUTATION_ID) have no mutation to
     reject — no emit, reason unchanged."""
-    from core.self_improving import train as auto_train
 
     captured: list[Any] = []
     hooks = HookSystem()
@@ -511,7 +509,7 @@ def test_reject_and_revert_no_emit_without_mutation_id(
     set_self_improving_loop_hooks(hooks)
 
     monkeypatch.delenv("GEODE_SIL_MUTATION_ID", raising=False)
-    reason = auto_train._reject_and_revert("manual reject", rejected_by="gate")
+    reason = gate._reject_and_revert("manual reject", rejected_by="gate")
 
     assert reason == "manual reject"
     assert captured == []

@@ -15,7 +15,7 @@ from core.self_improving.bench_means import (
     detect_cross_validation_conflict,
     validate_bench_schema,
 )
-from core.self_improving.train import (
+from core.self_improving.fitness import (
     FITNESS_ADMIRE_3AX,
     FITNESS_ADMIRE_WEIGHT,
     FITNESS_BENCH_3AX,

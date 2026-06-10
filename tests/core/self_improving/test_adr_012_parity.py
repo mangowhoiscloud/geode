@@ -17,11 +17,7 @@ import re
 from pathlib import Path
 
 from core.self_improving.bench_means import BENCH_DIM_WEIGHTS
-from core.self_improving.train import (
-    FITNESS_ADMIRE_3AX,
-    FITNESS_BENCH_3AX,
-    FITNESS_DIM_3AX,
-)
+from core.self_improving.fitness import FITNESS_ADMIRE_3AX, FITNESS_BENCH_3AX, FITNESS_DIM_3AX
 
 ADR_PATH = (
     Path(__file__).resolve().parents[3]

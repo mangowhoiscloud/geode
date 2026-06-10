@@ -54,7 +54,7 @@ dir of survivor bodies IS a valid pool — the audit's ``flatten_for_inspect_pet
 passes a flat dir through unchanged). A ``manifest.json`` records the selected
 run ids, per-run survivor ids, total count, content hash, and a caller-supplied
 generation timestamp. The pool's content identity is computed by REUSING
-:func:`core.self_improving.loop.baseline_epoch.seed_pool_content_hash` (gives
+:func:`core.self_improving.loop.observe.baseline_epoch.seed_pool_content_hash` (gives
 ``pool-<hash>``).
 
 Run, e.g.::
@@ -82,7 +82,7 @@ from pathlib import Path
 from typing import Any
 
 from core.paths import CYCLE_INPUT_POOL
-from core.self_improving.loop.baseline_epoch import seed_pool_content_hash
+from core.self_improving.loop.observe.baseline_epoch import seed_pool_content_hash
 
 _LOGGER = logging.getLogger("assemble_seed_pool")
 

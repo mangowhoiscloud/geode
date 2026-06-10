@@ -76,7 +76,7 @@ from core.paths import (
     GLOBAL_IN_CONTEXT_SLOTS_PATH,
     OPERATOR_LOCAL_IN_CONTEXT_SLOTS_PATH,
 )
-from core.self_improving.loop.sot_resolution import resolve_sot
+from core.self_improving.loop.mutate.sot_resolution import resolve_sot
 
 log = logging.getLogger(__name__)
 

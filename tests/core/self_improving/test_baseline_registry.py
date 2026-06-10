@@ -15,8 +15,9 @@ from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
+from core.self_improving import fitness, ledger
 from core.self_improving import train as auto_train
-from core.self_improving.loop.role_provenance import build_role_provenance
+from core.self_improving.loop.observe.role_provenance import build_role_provenance
 
 # Expected registry-row key set — a drift guard so the live writer and the
 # backfill script (scripts/backfill_baseline_registry_row.py) cannot silently
@@ -50,7 +51,7 @@ _EXPECTED_ROW_KEYS = {
 def isolated(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     """Redirect ``BASELINE_PATH`` to tmp + stub the config so the registry
     writer resolves role models / seed_select without ``~/.geode/config.toml``."""
-    monkeypatch.setattr(auto_train, "BASELINE_PATH", tmp_path / "baseline.json")
+    monkeypatch.setattr(ledger, "BASELINE_PATH", tmp_path / "baseline.json")
     fake_cfg = SimpleNamespace(
         auditor=SimpleNamespace(model="aud-m", source="api_key"),  # → PAYG
         target=SimpleNamespace(model="tgt-m", source="openai-codex"),  # → Subscription
@@ -70,13 +71,13 @@ def _rows(archive: Path) -> list[dict]:
 
 
 def test_archive_path_follows_baseline_path(isolated: Path) -> None:
-    assert auto_train._baseline_archive_path() == isolated / "baseline_archive.jsonl"
+    assert ledger._baseline_archive_path() == isolated / "baseline_archive.jsonl"
 
 
 def test_next_id_starts_at_one_on_empty(isolated: Path) -> None:
     from datetime import UTC, datetime
 
-    assert auto_train._next_baseline_id(datetime(2026, 6, 1, tzinfo=UTC)) == "baseline-2606-1"
+    assert ledger._next_baseline_id(datetime(2026, 6, 1, tzinfo=UTC)) == "baseline-2606-1"
 
 
 def test_next_id_counts_only_baseline_rows(isolated: Path) -> None:
@@ -90,14 +91,14 @@ def test_next_id_counts_only_baseline_rows(isolated: Path) -> None:
         '{"kind": "baseline", "id": "baseline-2606-2"}\n',
         encoding="utf-8",
     )
-    assert auto_train._next_baseline_id(datetime(2026, 6, 1, tzinfo=UTC)) == "baseline-2606-3"
+    assert ledger._next_baseline_id(datetime(2026, 6, 1, tzinfo=UTC)) == "baseline-2606-3"
 
 
 # --- write_baseline appends a row --------------------------------------------
 
 
 def test_write_baseline_appends_registry_row(isolated: Path) -> None:
-    auto_train._write_baseline(
+    ledger._write_baseline(
         {"broken_tool_use": 3.0},
         {"broken_tool_use": 0.2},
         sample_count={"broken_tool_use": 16},
@@ -129,7 +130,7 @@ def test_write_baseline_appends_registry_row(isolated: Path) -> None:
 
 
 def test_write_baseline_stamps_id_into_anchor(isolated: Path) -> None:
-    auto_train._write_baseline({"broken_tool_use": 3.0}, {"broken_tool_use": 0.2})
+    ledger._write_baseline({"broken_tool_use": 3.0}, {"broken_tool_use": 0.2})
     anchor = json.loads((isolated / "baseline.json").read_text(encoding="utf-8"))
     rows = _rows(isolated / "baseline_archive.jsonl")
     # the anchor's baseline_id must equal the registry row's id (links them)
@@ -137,21 +138,19 @@ def test_write_baseline_stamps_id_into_anchor(isolated: Path) -> None:
 
 
 def test_manual_promote_marks_operator(isolated: Path) -> None:
-    auto_train._write_baseline(
-        {"broken_tool_use": 3.0}, {"broken_tool_use": 0.2}, manual_promote=True
-    )
+    ledger._write_baseline({"broken_tool_use": 3.0}, {"broken_tool_use": 0.2}, manual_promote=True)
     assert _rows(isolated / "baseline_archive.jsonl")[0]["promoted_by"] == "operator"
 
 
 def test_ids_monotonic_across_promotes(isolated: Path) -> None:
     for _ in range(3):
-        auto_train._write_baseline({"broken_tool_use": 3.0}, {"broken_tool_use": 0.2})
+        ledger._write_baseline({"broken_tool_use": 3.0}, {"broken_tool_use": 0.2})
     ids = [r["id"] for r in _rows(isolated / "baseline_archive.jsonl")]
     assert [i.rsplit("-", 1)[1] for i in ids] == ["1", "2", "3"]
 
 
 def test_fitness_stderr_null_when_absent(isolated: Path) -> None:
-    auto_train._write_baseline({"broken_tool_use": 3.0}, {"broken_tool_use": 0.2})
+    ledger._write_baseline({"broken_tool_use": 3.0}, {"broken_tool_use": 0.2})
     assert _rows(isolated / "baseline_archive.jsonl")[0]["fitness_stderr"] is None
 
 
@@ -162,7 +161,7 @@ def test_models_override_used_for_backfill(isolated: Path) -> None:
     """The backfill path passes models explicitly (a historical baseline's
     config has changed) — they must win over the live config + stamp the
     dim-stderr cohort."""
-    auto_train._append_baseline_registry_row(
+    ledger._append_baseline_registry_row(
         "baseline-2605-1",
         dim_means={"broken_tool_use": 3.25},
         dim_stderr={"broken_tool_use": 0.3},
@@ -200,7 +199,7 @@ def test_models_override_used_for_backfill(isolated: Path) -> None:
 def test_vanilla_and_fixed_rows_coexist_differentiated(isolated: Path) -> None:
     """The deliverable: a dim-stderr (vanilla) row and a fitness-stderr row
     sit in the registry, distinguishable by margin_rule."""
-    auto_train._append_baseline_registry_row(
+    ledger._append_baseline_registry_row(
         "baseline-2605-1",
         dim_means={"broken_tool_use": 3.25},
         dim_stderr={"broken_tool_use": 0.3},
@@ -224,7 +223,7 @@ def test_vanilla_and_fixed_rows_coexist_differentiated(isolated: Path) -> None:
             }
         ),
     )
-    auto_train._write_baseline(
+    ledger._write_baseline(
         {"broken_tool_use": 2.5}, {"broken_tool_use": 0.1}, sample_count={"broken_tool_use": 16}
     )
     rows = _rows(isolated / "baseline_archive.jsonl")
@@ -237,7 +236,7 @@ def test_invalid_margin_rule_rejected(isolated: Path) -> None:
     """The shared writer guards the discriminator — a typo must not silently
     land an un-queryable margin_rule."""
     with pytest.raises(ValueError, match="margin_rule"):
-        auto_train._append_baseline_registry_row(
+        ledger._append_baseline_registry_row(
             "baseline-2606-1",
             dim_means={"broken_tool_use": 3.0},
             dim_stderr={},
@@ -266,7 +265,7 @@ def test_invalid_margin_rule_rejected(isolated: Path) -> None:
 def test_seed_select_override_freezes_historical_pool(isolated: Path) -> None:
     """Backfill freezes the measured pool; the live ``_resolve_seed_select``
     (here stubbed to ``petri_17dim``) must not overwrite it."""
-    auto_train._append_baseline_registry_row(
+    ledger._append_baseline_registry_row(
         "baseline-2605-1",
         dim_means={"broken_tool_use": 3.0},
         dim_stderr={},
@@ -366,9 +365,9 @@ def test_backfill_script_end_to_end(isolated: Path) -> None:
 def test_row_self_verifies_epoch_hash(isolated: Path) -> None:
     """A stored row recomputes to its own epoch_hash from the stored
     baseline_spec — the content-address can't have been faked at write time."""
-    from core.self_improving.loop.baseline_epoch import compute_epoch_hash
+    from core.self_improving.loop.observe.baseline_epoch import compute_epoch_hash
 
-    auto_train._write_baseline(
+    ledger._write_baseline(
         {"broken_tool_use": 3.0}, {"broken_tool_use": 0.1}, sample_count={"broken_tool_use": 16}
     )
     row = _rows(isolated / "baseline_archive.jsonl")[0]
@@ -381,7 +380,7 @@ def test_distinct_margin_rules_fall_into_distinct_epochs(isolated: Path) -> None
     """margin_rule is part of the hashed spec, so the vanilla (dim-stderr) and
     fixed (fitness-stderr) baselines land in DIFFERENT epochs with DIFFERENT
     labels — they must never be averaged into one comparison."""
-    auto_train._append_baseline_registry_row(
+    ledger._append_baseline_registry_row(
         "baseline-2605-1",
         dim_means={"broken_tool_use": 3.25},
         dim_stderr={"broken_tool_use": 0.3},
@@ -406,7 +405,7 @@ def test_distinct_margin_rules_fall_into_distinct_epochs(isolated: Path) -> None
         ),
         seed_select="petri_17dim",  # same pool as the live fixture → only margin_rule differs
     )
-    auto_train._write_baseline(  # live path stamps fitness-stderr + the fixture's roles/pool
+    ledger._write_baseline(  # live path stamps fitness-stderr + the fixture's roles/pool
         {"broken_tool_use": 3.25},
         {"broken_tool_use": 0.3},
         sample_count={"broken_tool_use": 8},
@@ -424,7 +423,7 @@ def test_epoch_label_map_persisted_git_tracked(isolated: Path) -> None:
     in-memory accident."""
     import json as _json
 
-    auto_train._write_baseline({"broken_tool_use": 3.0}, {"broken_tool_use": 0.1})
+    ledger._write_baseline({"broken_tool_use": 3.0}, {"broken_tool_use": 0.1})
     label_map = isolated / "baseline_epochs.json"
     assert label_map.is_file()
     row = _rows(isolated / "baseline_archive.jsonl")[0]
@@ -438,7 +437,7 @@ def test_epoch_label_map_persisted_git_tracked(isolated: Path) -> None:
 
 def _append_minimal(isolated: Path, baseline_id: str, **kw: object) -> dict:
     """Append one row via the low-level writer + return it (extra kw forwarded)."""
-    auto_train._append_baseline_registry_row(
+    ledger._append_baseline_registry_row(
         baseline_id,
         dim_means={"broken_tool_use": 3.0},
         dim_stderr={"broken_tool_use": 0.2},
@@ -462,7 +461,7 @@ def test_historical_spec_override_yields_distinct_epoch(isolated: Path) -> None:
     """A backfilled baseline with a historical spec (pre-fix version tags +
     legacy policy) hashes to a DIFFERENT epoch than the live-default row, and the
     row records the historical tags it was stamped with."""
-    from core.self_improving.loop.baseline_epoch import HistoricalSpecOverride
+    from core.self_improving.loop.observe.baseline_epoch import HistoricalSpecOverride
 
     live = _append_minimal(isolated, "baseline-2605-9")  # no override → live constants
     legacy = _append_minimal(
@@ -478,14 +477,14 @@ def test_historical_spec_override_yields_distinct_epoch(isolated: Path) -> None:
     assert legacy["baseline_spec"]["promote_policy"] == "legacy"
     assert legacy["epoch_hash"] != live["epoch_hash"]
     # the live row used the live constants (NOT "0") — byte-identical-live path
-    assert live["baseline_spec"]["fitness_formula_version"] == auto_train.FITNESS_FORMULA_VERSION
+    assert live["baseline_spec"]["fitness_formula_version"] == fitness.FITNESS_FORMULA_VERSION
     assert live["baseline_spec"]["promote_policy"] == "gate"
 
 
 def test_historical_spec_fitness_preserved_not_recomputed(isolated: Path) -> None:
     """A historical baseline's MEASURED fitness is recorded verbatim, NOT
     recomputed under today's compute_fitness (which would overwrite it)."""
-    from core.self_improving.loop.baseline_epoch import HistoricalSpecOverride
+    from core.self_improving.loop.observe.baseline_epoch import HistoricalSpecOverride
 
     recomputed = _append_minimal(isolated, "baseline-2605-8")  # no override → recompute
     preserved = _append_minimal(

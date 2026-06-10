@@ -6,6 +6,7 @@ import json
 from pathlib import Path
 
 import pytest
+from core.self_improving import ledger
 from plugins.seed_generation.baseline_reader import (
     BaselineSnapshot,
     format_evidence_block,
@@ -329,9 +330,8 @@ def test_load_baseline_uses_autoresearch_default_path(
         json.dumps({"dim_means": {"d": 3.0}, "dim_stderr": {"d": 0.0}}),
         encoding="utf-8",
     )
-    import core.self_improving.train as auto_train
 
-    monkeypatch.setattr(auto_train, "BASELINE_PATH", autoresearch_baseline)
+    monkeypatch.setattr(ledger, "BASELINE_PATH", autoresearch_baseline)
     snapshot = load_baseline()
     assert snapshot is not None
     assert snapshot.dim_means == {"d": 3.0}

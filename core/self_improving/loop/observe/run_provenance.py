@@ -7,7 +7,7 @@ reconstruct exactly what produced an audit result, so a row is not just a number
 but a recipe.
 
 Per-role model/lane/source is already recorded
-(:mod:`core.self_improving.loop.role_provenance`); E3 records the
+(:mod:`core.self_improving.loop.observe.role_provenance`); E3 records the
 ``promote_policy`` (+ its RNG seed); E4 records replicate / power. E5 adds the
 remaining pins to BOTH per-cycle sinks — the ``mutations.jsonl`` attribution row
 and the ``baseline_archive.jsonl`` registry row — additively (``None`` / absent

@@ -23,6 +23,7 @@ from __future__ import annotations
 from typing import Any
 
 import pytest
+from core.self_improving import measure
 
 # ---------------------------------------------------------------------------
 # Auto-trip on threshold breach
@@ -165,7 +166,7 @@ def test_autoresearch_train_calls_enforce_or_raise(
     """
     from pathlib import Path
 
-    from core.self_improving import train
+    from core.self_improving import measure as train
 
     source = Path(train.__file__).read_text(encoding="utf-8")
     # The gate call must be in the file
@@ -192,8 +193,6 @@ def test_autoresearch_run_audit_aborts_on_tripped_banner(
     banner = SubscriptionQuotaBanner(warn_threshold=0.5, abort_threshold=0.9)
     banner.trip_abort(reason="test-tripped")
 
-    from core.self_improving import train
-
     monkeypatch.setattr("core.cli.quota_banner.current_banner", lambda: banner)
     subprocess_calls: list[Any] = []
 
@@ -201,12 +200,12 @@ def test_autoresearch_run_audit_aborts_on_tripped_banner(
         subprocess_calls.append((args, kwargs))
         raise AssertionError("subprocess.run must not be reached when banner is tripped")
 
-    monkeypatch.setattr(train.subprocess, "run", _fake_run)
+    monkeypatch.setattr(measure.subprocess, "run", _fake_run)
     # `run_audit(dry_run=False)` is the audit entry point. The gate
     # lives inside the `if not dry_run:` branch just before
     # `_build_audit_command()`.
     with pytest.raises(RuntimeError, match="quota gate tripped"):
-        train.run_audit(dry_run=False)
+        measure.run_audit(dry_run=False)
     assert subprocess_calls == [], (
         "OL-P2 regressed: subprocess.run was called despite tripped banner"
     )

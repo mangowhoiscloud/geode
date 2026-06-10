@@ -22,17 +22,17 @@ import logging
 from pathlib import Path
 
 import pytest
-from core.self_improving.loop.attribution import (
-    AttributionRecord,
-    append_attribution_log,
-)
-from core.self_improving.loop.runner import (
+from core.self_improving.loop.mutate.runner import (
     _MUTATION_CONTRACT_SUFFIX,
     ApplyRecord,
     Mutation,
     _run_autoresearch_subprocess,
     append_audit_log,
     parse_mutation,
+)
+from core.self_improving.loop.observe.attribution import (
+    AttributionRecord,
+    append_attribution_log,
 )
 from pydantic import ValidationError
 
@@ -72,7 +72,7 @@ class TestW1ExpectedDimPromptAndParse:
                 # expected_dim intentionally omitted
             }
         )
-        with caplog.at_level(logging.WARNING, logger="core.self_improving.loop.runner"):
+        with caplog.at_level(logging.WARNING, logger="core.self_improving.loop.mutate.runner"):
             mutation = parse_mutation(raw)
         assert mutation.expected_dim == {}
         assert any("empty expected_dim" in record.getMessage() for record in caplog.records)
@@ -90,7 +90,7 @@ class TestW1ExpectedDimPromptAndParse:
                 "expected_dim": {"helpfulness": 0.1},
             }
         )
-        with caplog.at_level(logging.WARNING, logger="core.self_improving.loop.runner"):
+        with caplog.at_level(logging.WARNING, logger="core.self_improving.loop.mutate.runner"):
             mutation = parse_mutation(raw)
         assert mutation.expected_dim == {"helpfulness": 0.1}
         assert not any("empty expected_dim" in record.getMessage() for record in caplog.records)
@@ -125,7 +125,7 @@ class TestW2SubprocessEnvPropagation:
             return _Fake()
 
         monkeypatch.setattr(
-            "core.self_improving.loop.runner.subprocess.run",
+            "core.self_improving.loop.mutate.runner.subprocess.run",
             fake_run,
         )
         _run_autoresearch_subprocess(
@@ -162,7 +162,7 @@ class TestW2SubprocessEnvPropagation:
             return _Fake()
 
         monkeypatch.setattr(
-            "core.self_improving.loop.runner.subprocess.run",
+            "core.self_improving.loop.mutate.runner.subprocess.run",
             fake_run,
         )
         _run_autoresearch_subprocess(repo_root=tmp_path, dry_run=True)
@@ -190,7 +190,7 @@ class TestW2SubprocessEnvPropagation:
 
             return _Fake()
 
-        monkeypatch.setattr("core.self_improving.loop.runner.subprocess.run", fake_run)
+        monkeypatch.setattr("core.self_improving.loop.mutate.runner.subprocess.run", fake_run)
         _run_autoresearch_subprocess(
             repo_root=tmp_path,
             dry_run=True,
@@ -217,7 +217,7 @@ class TestW2SubprocessEnvPropagation:
 
             return _Fake()
 
-        monkeypatch.setattr("core.self_improving.loop.runner.subprocess.run", fake_run)
+        monkeypatch.setattr("core.self_improving.loop.mutate.runner.subprocess.run", fake_run)
         _run_autoresearch_subprocess(repo_root=tmp_path, dry_run=True, rollback_condition="")
         assert "GEODE_SIL_ROLLBACK_CONDITION" not in captured
 

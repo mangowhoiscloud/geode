@@ -28,8 +28,8 @@ from collections.abc import Iterable
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from core.self_improving.loop.attribution import AttributionRecord
-    from core.self_improving.loop.runner import ApplyRecord
+    from core.self_improving.loop.mutate.runner import ApplyRecord
+    from core.self_improving.loop.observe.attribution import AttributionRecord
 
 
 def compute_kind_dim_matrix(

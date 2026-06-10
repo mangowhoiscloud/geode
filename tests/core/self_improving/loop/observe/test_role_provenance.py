@@ -10,7 +10,7 @@ from types import SimpleNamespace
 
 import pytest
 from core.config.credential_source import CredentialSource
-from core.self_improving.loop.role_provenance import (
+from core.self_improving.loop.observe.role_provenance import (
     ROLES,
     build_role_provenance,
     collect_role_provenance,

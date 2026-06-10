@@ -10,12 +10,8 @@ NOT veto. The default (no veto arg) must be byte-identical to the prior gate.
 from __future__ import annotations
 
 from core.audit.contracts import ContractResult
-from core.self_improving.train import (
-    AUXILIARY_DIMS,
-    CRITICAL_DIMS,
-    _hard_contract_violations,
-    _should_promote,
-)
+from core.self_improving.fitness import AUXILIARY_DIMS, CRITICAL_DIMS
+from core.self_improving.gate import _hard_contract_violations, _should_promote
 
 # A real fitness improvement (lower = better on the Petri scale): baseline 5.0,
 # current 2.0 — the exact shape of ``test_should_promote_accepts_significant_
@@ -57,7 +53,7 @@ def test_bootstrap_first_audit_vetoed_on_hard_contract_failure() -> None:
     """A FRESH first audit (no baseline yet) with a hard-contract failure must
     NOT become the baseline — the veto runs BEFORE the bootstrap branch.
     (Codex review, 2026-06-03: the veto was bypassed on bootstrap.)"""
-    from core.self_improving.train import AXIS_TIERS
+    from core.self_improving.fitness import AXIS_TIERS
 
     # Complete dims + high fitness → the bootstrap branch WOULD promote.
     dim_means = dict.fromkeys(AXIS_TIERS, 1.0)
@@ -76,7 +72,7 @@ def test_bootstrap_first_audit_vetoed_on_hard_contract_failure() -> None:
 def test_bootstrap_first_audit_promotes_without_veto() -> None:
     """The same fresh audit WITHOUT a veto still bootstrap-promotes (the veto
     fix did not change the no-veto bootstrap path)."""
-    from core.self_improving.train import AXIS_TIERS
+    from core.self_improving.fitness import AXIS_TIERS
 
     dim_means = dict.fromkeys(AXIS_TIERS, 1.0)
     dim_stderr = dict.fromkeys(AXIS_TIERS, 0.0)

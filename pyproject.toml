@@ -1,6 +1,6 @@
 [project]
 name = "geode-agent"
-version = "0.99.162"
+version = "0.99.163"
 description = "GEODE — 범용 자율 실행 에이전트"
 license = "Apache-2.0"
 readme = "README.md"
@@ -262,7 +262,7 @@ ignore_imports = [
     # so a packaged distro without ``core.cli`` degrades gracefully. It is the
     # same "selected-CLI-utility from a non-CLI module" exception the entries
     # above document, not a module-load coupling.
-    "core.self_improving.train -> core.cli.quota_banner",
+    "core.self_improving.measure -> core.cli.quota_banner",
 ]
 
 [[tool.importlinter.contracts]]
@@ -288,7 +288,7 @@ ignore_imports = [
     # PR-SELF-IMPROVING-UMBRELLA (2026-05-31) — see the matching note on the
     # "Agent stays pure" contract above. Lazy, ImportError-guarded read of the
     # quota banner from the relocated audit runner.
-    "core.self_improving.train -> core.cli.quota_banner",
+    "core.self_improving.measure -> core.cli.quota_banner",
 ]
 
 [[tool.importlinter.contracts]]

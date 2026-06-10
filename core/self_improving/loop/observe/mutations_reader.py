@@ -31,8 +31,8 @@ from typing import TYPE_CHECKING
 from pydantic import ValidationError
 
 from core.paths import MUTATION_AUDIT_LOG_PATH
-from core.self_improving.loop.attribution import AttributionRecord
-from core.self_improving.loop.runner import ApplyRecord
+from core.self_improving.loop.mutate.runner import ApplyRecord
+from core.self_improving.loop.observe.attribution import AttributionRecord
 
 if TYPE_CHECKING:
     from collections.abc import Iterable

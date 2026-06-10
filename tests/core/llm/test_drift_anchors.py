@@ -47,7 +47,7 @@ class TestProviderNormalizationAnchor:
         import core.agent.loop._model_switching as model_switching
         import core.agent.loop._reflection as reflection
         from core.agent.loop.agent_loop import AgenticLoop
-        from core.self_improving.loop import runner
+        from core.self_improving.loop.mutate import runner
 
         for src in (
             inspect.getsource(AgenticLoop.__init__),

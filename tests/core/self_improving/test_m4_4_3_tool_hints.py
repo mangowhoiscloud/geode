@@ -35,7 +35,7 @@ class _StubEpisode:
 
 def test_load_recent_returns_empty_on_store_failure(monkeypatch: pytest.MonkeyPatch) -> None:
     """``EpisodicStore`` raise → graceful ``[]``."""
-    from core.self_improving.loop import tool_hints as th
+    from core.self_improving.loop.inject import tool_hints as th
 
     class _BoomStore:
         def __init__(self) -> None:
@@ -46,7 +46,7 @@ def test_load_recent_returns_empty_on_store_failure(monkeypatch: pytest.MonkeyPa
 
 
 def test_load_recent_returns_list_from_store(monkeypatch: pytest.MonkeyPatch) -> None:
-    from core.self_improving.loop import tool_hints as th
+    from core.self_improving.loop.inject import tool_hints as th
 
     class _StubStore:
         def __init__(self) -> None:
@@ -64,14 +64,14 @@ def test_load_recent_returns_list_from_store(monkeypatch: pytest.MonkeyPatch) ->
 
 
 def test_find_returns_empty_for_top_k_zero() -> None:
-    from core.self_improving.loop.tool_hints import find_failing_tools
+    from core.self_improving.loop.inject.tool_hints import find_failing_tools
 
     assert find_failing_tools([_StubEpisode("X", False, "e")] * 5, top_k=0) == []
 
 
 def test_find_filters_below_min_invocations() -> None:
     """Tool with only 1-2 calls is below default ``MIN_INVOCATIONS=3``."""
-    from core.self_improving.loop.tool_hints import find_failing_tools
+    from core.self_improving.loop.inject.tool_hints import find_failing_tools
 
     episodes = [_StubEpisode("X", False, "err")] * 2  # only 2 calls
     assert find_failing_tools(episodes, top_k=5) == []
@@ -79,7 +79,7 @@ def test_find_filters_below_min_invocations() -> None:
 
 def test_find_filters_below_fail_rate_threshold() -> None:
     """5 success + 1 fail = 1/6 = 0.166 < 0.34 threshold."""
-    from core.self_improving.loop.tool_hints import find_failing_tools
+    from core.self_improving.loop.inject.tool_hints import find_failing_tools
 
     episodes = [
         _StubEpisode("X", True),
@@ -94,7 +94,7 @@ def test_find_filters_below_fail_rate_threshold() -> None:
 
 def test_find_surfaces_failing_tools() -> None:
     """3 calls, 2 failures = 2/3 = 0.667 ≥ threshold → emit."""
-    from core.self_improving.loop.tool_hints import find_failing_tools
+    from core.self_improving.loop.inject.tool_hints import find_failing_tools
 
     episodes = [
         _StubEpisode("Bash", False, "command not found"),
@@ -110,7 +110,7 @@ def test_find_surfaces_failing_tools() -> None:
 
 def test_find_uses_most_recent_error_per_tool() -> None:
     """Episodes are newest-first; the first non-empty error wins."""
-    from core.self_improving.loop.tool_hints import find_failing_tools
+    from core.self_improving.loop.inject.tool_hints import find_failing_tools
 
     # Newest first: failing with "RECENT", then earlier failure with "OLD"
     episodes = [
@@ -124,7 +124,7 @@ def test_find_uses_most_recent_error_per_tool() -> None:
 
 def test_find_sorts_by_fail_rate_desc_then_total() -> None:
     """Higher fail_rate ranks first; tie on rate → higher total wins."""
-    from core.self_improving.loop.tool_hints import find_failing_tools
+    from core.self_improving.loop.inject.tool_hints import find_failing_tools
 
     episodes = [
         # Tool A: 4/4 = 1.0 fail rate, 4 calls
@@ -149,7 +149,7 @@ def test_find_sorts_by_fail_rate_desc_then_total() -> None:
 
 
 def test_find_top_k_caps_results() -> None:
-    from core.self_improving.loop.tool_hints import find_failing_tools
+    from core.self_improving.loop.inject.tool_hints import find_failing_tools
 
     episodes = []
     for tool in "ABCDE":
@@ -160,7 +160,7 @@ def test_find_top_k_caps_results() -> None:
 
 def test_find_skips_non_string_tool_names() -> None:
     """Defensive: malformed episode with non-str tool_name → skipped."""
-    from core.self_improving.loop.tool_hints import find_failing_tools
+    from core.self_improving.loop.inject.tool_hints import find_failing_tools
 
     @dataclass
     class _BadEpisode:
@@ -176,7 +176,7 @@ def test_find_skips_non_string_tool_names() -> None:
 
 def test_find_truncates_long_error_strings() -> None:
     """Recent error trimmed to 80 chars + ellipsis."""
-    from core.self_improving.loop.tool_hints import find_failing_tools
+    from core.self_improving.loop.inject.tool_hints import find_failing_tools
 
     long_err = "x" * 500
     episodes = [_StubEpisode("X", False, long_err)] * 3
@@ -187,7 +187,7 @@ def test_find_truncates_long_error_strings() -> None:
 
 def test_find_error_trim_preserves_first_79_chars() -> None:
     """Trim shape is exactly first 79 chars + ellipsis (Codex FLAG #3 pin)."""
-    from core.self_improving.loop.tool_hints import find_failing_tools
+    from core.self_improving.loop.inject.tool_hints import find_failing_tools
 
     error = "abc" * 50  # 150 chars
     episodes = [_StubEpisode("X", False, error)] * 3
@@ -199,7 +199,7 @@ def test_find_error_trim_preserves_first_79_chars() -> None:
 def test_find_skips_non_bool_success() -> None:
     """Defensive: episode with non-bool ``success`` field → skipped
     (Codex FLAG #4 pin). Mirrors the non-str tool_name guard."""
-    from core.self_improving.loop.tool_hints import find_failing_tools
+    from core.self_improving.loop.inject.tool_hints import find_failing_tools
 
     @dataclass
     class _BadEpisode:
@@ -217,13 +217,13 @@ def test_find_skips_non_bool_success() -> None:
 
 
 def test_format_empty_returns_empty_string() -> None:
-    from core.self_improving.loop.tool_hints import format_tool_hints_block
+    from core.self_improving.loop.inject.tool_hints import format_tool_hints_block
 
     assert format_tool_hints_block([]) == ""
 
 
 def test_format_renders_block_with_error() -> None:
-    from core.self_improving.loop.tool_hints import ToolHint, format_tool_hints_block
+    from core.self_improving.loop.inject.tool_hints import ToolHint, format_tool_hints_block
 
     hints = [
         ToolHint(
@@ -243,7 +243,7 @@ def test_format_renders_block_with_error() -> None:
 
 def test_format_renders_block_without_error() -> None:
     """Tool with empty recent_error → shorter line (no 'recent error:' part)."""
-    from core.self_improving.loop.tool_hints import ToolHint, format_tool_hints_block
+    from core.self_improving.loop.inject.tool_hints import ToolHint, format_tool_hints_block
 
     hints = [
         ToolHint(
@@ -264,11 +264,11 @@ def test_format_renders_block_without_error() -> None:
 
 def test_orchestrator_prepends_tool_hints_block(monkeypatch: pytest.MonkeyPatch) -> None:
     """tool_hints slot active + failing tool in episodic ledger → block in system."""
-    from core.self_improving.loop.in_context_slots import SLOT_TOOL_HINTS, InContextSlot
-    from core.self_improving.loop.in_context_wiring import apply_in_context_slots
+    from core.self_improving.loop.inject.in_context_slots import SLOT_TOOL_HINTS, InContextSlot
+    from core.self_improving.loop.inject.in_context_wiring import apply_in_context_slots
 
     monkeypatch.setattr(
-        "core.self_improving.loop.in_context_slots._load_in_context_slots_override",
+        "core.self_improving.loop.inject.in_context_slots._load_in_context_slots_override",
         lambda: {
             SLOT_TOOL_HINTS: InContextSlot(
                 name=SLOT_TOOL_HINTS,
@@ -279,7 +279,7 @@ def test_orchestrator_prepends_tool_hints_block(monkeypatch: pytest.MonkeyPatch)
         },
     )
     monkeypatch.setattr(
-        "core.self_improving.loop.tool_hints.load_recent_episodes",
+        "core.self_improving.loop.inject.tool_hints.load_recent_episodes",
         lambda limit=200: [
             _StubEpisode("Bash", False, "cmd not found"),
             _StubEpisode("Bash", False, "cmd not found"),
@@ -294,11 +294,11 @@ def test_orchestrator_prepends_tool_hints_block(monkeypatch: pytest.MonkeyPatch)
 
 def test_orchestrator_no_op_when_no_failing_tools(monkeypatch: pytest.MonkeyPatch) -> None:
     """tool_hints slot active but no tool meets threshold → system unchanged."""
-    from core.self_improving.loop.in_context_slots import SLOT_TOOL_HINTS, InContextSlot
-    from core.self_improving.loop.in_context_wiring import apply_in_context_slots
+    from core.self_improving.loop.inject.in_context_slots import SLOT_TOOL_HINTS, InContextSlot
+    from core.self_improving.loop.inject.in_context_wiring import apply_in_context_slots
 
     monkeypatch.setattr(
-        "core.self_improving.loop.in_context_slots._load_in_context_slots_override",
+        "core.self_improving.loop.inject.in_context_slots._load_in_context_slots_override",
         lambda: {
             SLOT_TOOL_HINTS: InContextSlot(
                 name=SLOT_TOOL_HINTS,
@@ -309,7 +309,7 @@ def test_orchestrator_no_op_when_no_failing_tools(monkeypatch: pytest.MonkeyPatc
         },
     )
     monkeypatch.setattr(
-        "core.self_improving.loop.tool_hints.load_recent_episodes",
+        "core.self_improving.loop.inject.tool_hints.load_recent_episodes",
         lambda limit=200: [_StubEpisode("X", True)] * 5,  # all success
     )
     _, new_sys = apply_in_context_slots([{"role": "user", "content": "go"}], system="SYS")
