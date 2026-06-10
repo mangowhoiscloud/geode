@@ -22,8 +22,13 @@ from core.paths import GLOBAL_ENV_FILE
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(
         env_prefix="GEODE_",
-        # P2 (v0.95.x) — was literal `str(Path.home() / ".geode" / ".env")`
-        env_file=(".env", str(GLOBAL_ENV_FILE)),
+        # C-3 (2026-06-11) — pydantic merges env_file with the LATER file
+        # winning. Pre-fix the order was (".env", global) = GLOBAL beat the
+        # project file, the exact inverse of the project>global convention
+        # every other layer follows (and of the serve daemon's promotion
+        # order — hazard H5, per-process precedence inversion). Order is now
+        # (global, project): one direction everywhere.
+        env_file=(str(GLOBAL_ENV_FILE), ".env"),
         extra="ignore",
     )
 
