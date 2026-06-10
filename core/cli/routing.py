@@ -109,6 +109,12 @@ COMMAND_REGISTRY: dict[str, CommandSpec] = {
         description="Self-improving loop status (PR-OPS-1 — run/history/rollback deferred)",
         handler_path="core.cli.commands.self_improving:cmd_self_improving",
     ),
+    "/recall": CommandSpec(
+        name="/recall",
+        location=RunLocation.THIN,
+        description="Memory-recall pool — list/show/save persistent memory entries",
+        handler_path="core.cli.commands.recall:cmd_recall",
+    ),
     # ────────── DAEMON_RPC — short read-only daemon queries ──────────
     # Phase 4에서 core/server/handlers/ 로 이동 후 handler_path 갱신.
     # 현재는 cli/__init__.py:_handle_command 가 IPC RPC로 위임 (호환).

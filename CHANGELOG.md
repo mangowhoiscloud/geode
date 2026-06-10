@@ -45,6 +45,15 @@ functional change.
 
 ---
 
+## [0.99.155] - 2026-06-10
+
+### Added
+- **`/recall` slash command (D-3 (3), PR-D3B)** — operator surface for the memory-recall pool that the OL-C3 writer promised but never shipped: `save` (writes a frontmatter MD via `core/memory/recall_writer.write_recall_entry`, interactive prompts for missing fields on a TTY, fail-loud without one), `list` (dense table rendered through the M4.4.1 reader's own parser — one schema, one parser), `show` (verbatim entry). Registered across `COMMAND_REGISTRY` (THIN) / `COMMAND_MAP` / dispatcher / help.
+- **`geode-mcp` first-class entry point (D-3 (4), PR-D3B)** — `core/mcp_server.py` promoted from a 2-tool analysis shell to GEODE's MCP surface (console script `geode-mcp`, FastMCP server renamed `geode-analysis` → `geode`): `run_agent` (agentic one-shot via the shared minimal stack), `self_improving_status` (promoted baseline + mutation-ledger tail), and `self_improving_propose` / `self_improving_apply` (two-step contract — the MCP client is the confirmation gate, mirroring the slash's y/N prompt; apply refuses unknown `mutation_id`).
+
+### Changed
+- `core.cli.bootstrap._build_agentic_stack_minimal` promoted to public `run_agentic_oneshot(prompt, *, quiet, time_budget_s)` — context:fork skill execution and the `geode-mcp` `run_agent` tool share one stack (callers migrated in the same PR).
+
 ## [0.99.154] - 2026-06-10
 
 ### Removed
