@@ -22,7 +22,7 @@ from pathlib import Path
 import typer
 from rich.console import Console
 
-from core.utils.atomic_io import atomic_write_text
+from core.memory.atomic_write import atomic_write_text
 
 
 def _toml_escape_basic_string(value: str) -> str:

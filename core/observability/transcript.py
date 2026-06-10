@@ -565,7 +565,7 @@ class SessionTranscript:
 
         import contextlib
 
-        from core.utils.atomic_io import atomic_write_json
+        from core.memory.atomic_write import atomic_write_json
 
         with contextlib.suppress(OSError):
             atomic_write_json(index_path, index, indent=2)

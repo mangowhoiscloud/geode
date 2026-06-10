@@ -732,7 +732,7 @@ def _persist_credential_source(provider: str, source: str) -> None:
     """
     from core.cli import commands as _pkg
     from core.config import settings
-    from core.utils.env_io import upsert_config_toml
+    from core.config.env_io import upsert_config_toml
 
     field = "anthropic_credential_source" if provider == "anthropic" else "openai_credential_source"
     env_var = (

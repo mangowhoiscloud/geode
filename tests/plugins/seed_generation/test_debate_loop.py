@@ -2,7 +2,7 @@
 
 Covers the two surfaces introduced by PR-CSP-13:
 
-1. ``core.tools.seed_debate.SeedDebateTurnTool`` — bounds, sidecar
+1. ``plugins.seed_generation.tools.seed_debate.SeedDebateTurnTool`` — bounds, sidecar
    shape, next_action signaling, defensive arg validation.
 2. ``plugins.seed_generation.agents.generator.Generator`` — backwards
    compatibility for ``num_turns=0`` (single-shot path unchanged),
@@ -21,9 +21,9 @@ from pathlib import Path
 from typing import Any
 
 import pytest
-from core.tools.seed_debate import SeedDebateTurnTool
 from plugins.seed_generation.agents.generator import Generator, _read_debate_sidecars
 from plugins.seed_generation.orchestrator import PipelineState
+from plugins.seed_generation.tools.seed_debate import SeedDebateTurnTool
 
 # ── SeedDebateTurnTool ────────────────────────────────────────────────────
 

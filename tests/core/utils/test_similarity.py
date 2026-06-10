@@ -1,9 +1,9 @@
-"""Tests for ``core.utils.similarity`` — Jaccard / shingles primitives."""
+"""Tests for ``plugins.seed_generation.similarity`` — Jaccard / shingles primitives."""
 
 from __future__ import annotations
 
 import pytest
-from core.utils.similarity import (
+from plugins.seed_generation.similarity import (
     DEFAULT_NGRAM_SIZE,
     jaccard_similarity,
     shingles,
@@ -78,5 +78,5 @@ class TestTextJaccard:
 # LLM-clustering pattern and dropped the shims entirely (no more
 # token-overlap math in proximity), so the reexport contract no
 # longer exists to test. The Evolver's anti-convergence guard (CSP-6)
-# still uses ``core.utils.similarity`` directly — the other test
+# still uses ``plugins.seed_generation.similarity`` directly — the other test
 # classes above keep that surface pinned.
