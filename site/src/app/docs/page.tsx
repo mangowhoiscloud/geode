@@ -132,7 +132,7 @@ export default function DocsIndex() {
                 인용하는 frontier 시스템과 선행 작업.
               </li>
             </ul>
-            <p className="text-white/55 text-sm">
+            <p className="text-[var(--ink-2)] text-sm">
               검증과 가드레일(G1-G4, BiasBuster, Cross-LLM, 원인 분류 트리, 관측성)은
               이제 별도 섹션{" "}
               <a href="/geode/docs/verification/guardrails">검증과 가드레일</a>로
@@ -167,7 +167,7 @@ export default function DocsIndex() {
                 The frontier systems and prior work GEODE cites.
               </li>
             </ul>
-            <p className="text-white/55 text-sm">
+            <p className="text-[var(--ink-2)] text-sm">
               Verification and guardrails (G1-G4, BiasBuster, Cross-LLM, the cause
               decision tree, observability) now live in their own section,{" "}
               <a href="/geode/docs/verification/guardrails">Verification and Guardrails</a>.
@@ -184,13 +184,13 @@ export default function DocsIndex() {
             href={`/geode/docs/${section.pages[0]?.slug ?? ""}`}
             className="flex flex-col gap-0.5 border-b border-[var(--rule)] py-3 group"
           >
-            <span className="font-display font-semibold text-[#F0F0FF] group-hover:text-white">
-              <span className="mr-2 text-[10px] uppercase tracking-[0.18em] text-white/40">
+            <span className="font-display font-semibold text-[var(--ink)] group-hover:text-[var(--acc-soft)]">
+              <span className="mr-2 text-[10px] uppercase tracking-[0.18em] text-[var(--ink-3)]">
                 {section.id}
               </span>
               {t(locale, section.titleKo, section.title)}
             </span>
-            <span className="text-sm text-white/55">
+            <span className="text-sm text-[var(--ink-2)]">
               {section.pages.slice(0, 4).map((p, i) => (
                 <span key={p.slug}>
                   {i > 0 && ", "}

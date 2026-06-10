@@ -151,7 +151,7 @@ function splitBodyByLanguage(body: string): {
 
 function MonolingualChip({ lang }: { lang: "ko" | "en" }) {
   return (
-    <span className="text-[9px] font-mono uppercase tracking-wider text-white/30 border border-white/[0.10] rounded px-1.5 py-0">
+    <span className="text-[9px] font-mono uppercase tracking-wider text-[var(--ink-3)] border border-[var(--rule)] rounded px-1.5 py-0">
       {lang === "ko" ? "KR only" : "EN only"}
     </span>
   );
@@ -172,14 +172,14 @@ function EntryCard({ entry }: { entry: ChangelogEntry }) {
   return (
     <article
       id={versionAnchor(entry.version)}
-      className="rounded-lg border border-white/[0.06] p-5 scroll-mt-24"
+      className="rounded-lg border border-[var(--rule-soft)] p-5 scroll-mt-24"
     >
-      <header className="flex flex-wrap items-baseline gap-x-3 gap-y-1 mb-4 pb-3 border-b border-white/[0.04]">
-        <span className="font-display font-bold text-lg text-[#F0F0FF]">
+      <header className="flex flex-wrap items-baseline gap-x-3 gap-y-1 mb-4 pb-3 border-b border-[var(--rule-soft)]">
+        <span className="font-display font-bold text-lg text-[var(--ink)]">
           v{entry.version}
         </span>
         {entry.date && (
-          <span className="text-white/40 text-xs font-mono">{entry.date}</span>
+          <span className="text-[var(--ink-3)] text-xs font-mono">{entry.date}</span>
         )}
         {monoLang && (
           <span className="ml-auto">
@@ -229,7 +229,7 @@ export default function Page() {
 
       {/* Single prominent top toggle. Replaces the previous sticky bar. */}
       <div className="not-prose flex justify-center my-8">
-        <div className="inline-flex items-center rounded-md border border-white/[0.12] overflow-hidden text-sm">
+        <div className="inline-flex items-center rounded-md border border-[var(--rule)] overflow-hidden text-sm">
           <button
             type="button"
             onClick={() => setLocale("ko")}
@@ -237,20 +237,20 @@ export default function Page() {
               "px-4 py-1.5 transition-colors " +
               (locale === "ko"
                 ? "bg-[var(--acc-artifact)]/20 text-[var(--acc-artifact)] font-medium"
-                : "text-white/55 hover:text-white")
+                : "text-[var(--ink-2)] hover:text-[var(--ink)]")
             }
           >
             한국어
           </button>
-          <span className="w-px h-5 bg-white/[0.12]" />
+          <span className="w-px h-5 bg-[var(--rule)]" />
           <button
             type="button"
             onClick={() => setLocale("en")}
             className={
               "px-4 py-1.5 transition-colors " +
               (locale === "en"
-                ? "bg-white/[0.15] text-[#F0F0FF] font-medium"
-                : "text-white/55 hover:text-white")
+                ? "bg-[var(--paper-2)] text-[var(--ink)] font-medium"
+                : "text-[var(--ink-2)] hover:text-[var(--ink)]")
             }
           >
             English

@@ -1,7 +1,10 @@
-/* Docs prose styles — applied via .docs-prose class on the article wrapper. */
+/* Docs prose styles — applied via .docs-prose class on the article wrapper.
+   All colors come from the Axolotl Rose tokens in globals.css. Roles:
+   rose = identity (headings carry ink, accents stay rose-tinted),
+   gold = action and string literals, aqua = links and inline code. */
 
 .docs-prose {
-  color: #E8E8FF;
+  color: var(--ink-2);
   font-size: 15px;
   line-height: 1.75;
 }
@@ -12,8 +15,8 @@
   font-weight: 700;
   margin-top: 3rem;
   margin-bottom: 1rem;
-  color: #F0F0FF;
-  letter-spacing: -0.01em;
+  color: var(--ink);
+  letter-spacing: -0.02em;
 }
 
 .docs-prose h3 {
@@ -22,7 +25,7 @@
   font-weight: 700;
   margin-top: 2.25rem;
   margin-bottom: 0.75rem;
-  color: #F0F0FF;
+  color: var(--ink);
 }
 
 .docs-prose h4 {
@@ -30,7 +33,7 @@
   font-weight: 600;
   margin-top: 1.5rem;
   margin-bottom: 0.5rem;
-  color: #F0F0FF;
+  color: var(--ink);
 }
 
 .docs-prose p {
@@ -56,29 +59,29 @@
 }
 
 .docs-prose a {
-  color: #7BD2FF;
+  color: var(--acc-aqua);
   text-decoration: underline;
   text-underline-offset: 3px;
   text-decoration-thickness: 1px;
 }
 
 .docs-prose a:hover {
-  color: #B0E5FF;
+  color: var(--ink);
 }
 
 .docs-prose code {
   font-family: var(--font-fira-code);
   font-size: 13px;
-  background: rgba(255, 255, 255, 0.06);
+  background: var(--rule-soft);
   padding: 0.1rem 0.4rem;
   border-radius: 3px;
-  color: #FFD8A8;
+  color: var(--acc-aqua);
 }
 
 .docs-prose pre {
   font-family: var(--font-fira-code);
-  background: #060D1B;
-  border: 1px solid rgba(255, 255, 255, 0.06);
+  background: var(--code-bg);
+  border: 1px solid var(--rule);
   border-radius: 8px;
   padding: 1rem 1.25rem;
   overflow-x: auto;
@@ -90,7 +93,7 @@
 .docs-prose pre code {
   background: transparent;
   padding: 0;
-  color: #C8D8F0;
+  color: var(--code-text);
   font-size: inherit;
 }
 
@@ -103,34 +106,34 @@
 
 .docs-prose th,
 .docs-prose td {
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  border: 1px solid var(--rule);
   padding: 0.6rem 0.85rem;
   text-align: left;
   vertical-align: top;
 }
 
 .docs-prose th {
-  background: rgba(255, 255, 255, 0.04);
+  background: var(--rule-soft);
   font-weight: 600;
-  color: #F0F0FF;
+  color: var(--ink);
 }
 
 .docs-prose blockquote {
-  border-left: 3px solid rgba(123, 210, 255, 0.5);
+  border-left: 3px solid color-mix(in srgb, var(--acc-artifact) 50%, transparent);
   padding-left: 1rem;
   margin: 1.25rem 0;
-  color: rgba(232, 232, 255, 0.7);
+  color: var(--ink-2);
   font-style: italic;
 }
 
 .docs-prose hr {
   border: none;
-  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  border-top: 1px solid var(--rule);
   margin: 2rem 0;
 }
 
 .docs-prose strong {
-  color: #F0F0FF;
+  color: var(--ink);
   font-weight: 600;
 }
 
@@ -138,8 +141,9 @@
    The hub (docs/self-improving/) owns a petri Bootstrap-blue signature
    (#0d6efd). It is propagated here as the section-identity accent for the
    04-self-improving docs section so the two surfaces read as one system.
-   Scoped via [data-doc-section] on the shell root (set in docs-shell.tsx), so
-   every other section keeps the default docs accent. See DESIGN.md §11.1. */
+   This is the ONLY place petri-blue appears on the docs surface; the rest
+   of the site carries the Axolotl Rose identity. Scoped via
+   [data-doc-section] on the shell root (set in docs-shell.tsx). */
 [data-doc-section="04-self-improving"] .docs-prose a {
   color: var(--acc-si);
 }
@@ -153,7 +157,7 @@
   border-bottom: 2px solid var(--acc-si);
 }
 [data-doc-section="04-self-improving"] .docs-prose pre {
-  border-color: color-mix(in srgb, var(--acc-si) 32%, rgba(255, 255, 255, 0.06));
+  border-color: color-mix(in srgb, var(--acc-si) 32%, transparent);
 }
 [data-doc-section="04-self-improving"] .docs-prose :not(pre) > code {
   color: var(--acc-si);

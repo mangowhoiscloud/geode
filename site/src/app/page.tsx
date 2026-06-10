@@ -1,4 +1,5 @@
 import Link from "next/link";
+import Image from "next/image";
 
 /**
  * GEODE site landing — /geode/
@@ -40,14 +41,22 @@ const secondary = [
 
 export default function Home() {
   return (
-    <main className="min-h-screen bg-[var(--paper)] text-[var(--ink)] px-6 py-24">
+    <main className="min-h-screen bg-[var(--paper)] text-[var(--ink)] px-6 py-24 rose-grid">
       <div className="max-w-3xl mx-auto">
         {/* Header */}
-        <header className="mb-16">
+        <header className="mb-16 relative">
+          <Image
+            src="/geode/images/geode-idle.png"
+            alt="GEODE의 아홀로틀 탐사꾼 캐릭터, 헤드램프와 돋보기를 들고 있다"
+            width={132}
+            height={132}
+            priority
+            className="hidden sm:block absolute right-0 top-0 select-none"
+          />
           <span className="font-mono text-[11px] tracking-[0.18em] uppercase text-[var(--ink-3)]">
             GEODE
           </span>
-          <h1 className="mt-6 font-display tracking-tight text-[clamp(3rem,8vw,5rem)] leading-[1.02] font-semibold text-[var(--ink)]">
+          <h1 className="mt-6 font-display tracking-tight text-[clamp(3rem,8vw,5rem)] leading-[1.02] font-semibold text-[var(--acc-artifact)]">
             GEODE
           </h1>
           <p className="mt-4 font-display text-[clamp(1.1rem,2vw,1.4rem)] text-[var(--ink-1)] leading-snug">

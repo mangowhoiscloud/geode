@@ -37,7 +37,7 @@ function Sidebar() {
     <nav className="text-sm">
       <Link
         href={DOCS_BASE}
-        className="block px-3 py-2 text-[#F0F0FF] font-display font-bold tracking-wide"
+        className="block px-3 py-2 text-[var(--acc-artifact)] font-display font-bold tracking-wide"
       >
         {t(locale, "GEODE Docs", "GEODE Docs")}
       </Link>
@@ -50,7 +50,7 @@ function Sidebar() {
           return (
           <div key={section.id}>
             <div
-              className="px-3 text-[10px] uppercase tracking-[0.18em] text-white/40 font-semibold mb-2"
+              className="px-3 text-[10px] uppercase tracking-[0.18em] text-[var(--ink-3)] font-semibold mb-2"
               style={sectionAccent ? { color: sectionAccent } : undefined}
             >
               {t(locale, section.titleKo, section.title)}
@@ -67,8 +67,8 @@ function Sidebar() {
                       className={
                         "flex items-center gap-2 px-3 py-1.5 rounded text-[13px] transition-colors " +
                         (active
-                          ? "bg-white/[0.06] text-[#F0F0FF]"
-                          : "text-white/60 hover:text-[#F0F0FF] hover:bg-white/[0.03]")
+                          ? "bg-[var(--paper-2)] text-[var(--ink)]"
+                          : "text-[var(--ink-2)] hover:text-[var(--ink)] hover:bg-[var(--paper-2)]")
                       }
                       style={active && sectionAccent ? { color: sectionAccent } : undefined}
                     >
@@ -79,7 +79,7 @@ function Sidebar() {
                       />
                       <span className="flex-1 truncate">{t(locale, page.titleKo, page.title)}</span>
                       {page.externalUrl && (
-                        <span className="text-[9px] text-white/30">↗</span>
+                        <span className="text-[9px] text-[var(--ink-3)]">↗</span>
                       )}
                     </Link>
                   </li>
@@ -99,17 +99,17 @@ function PrevNext({ slug }: { slug: string }) {
   const locale = useLocale();
   if (!prev && !next) return null;
   return (
-    <div className="mt-16 grid grid-cols-2 gap-4 border-t border-white/[0.06] pt-8">
+    <div className="mt-16 grid grid-cols-2 gap-4 border-t border-[var(--rule-soft)] pt-8">
       <div>
         {prev && (
           <Link
             href={pageHref(prev.slug)}
-            className="docs-card block group rounded-lg border border-white/[0.06] p-4 hover:border-white/[0.12] transition-colors"
+            className="docs-card block group rounded-lg border border-[var(--rule-soft)] p-4 hover:border-[var(--rule)] transition-colors"
           >
-            <div className="text-[10px] uppercase tracking-wider text-white/40 mb-1">
+            <div className="text-[10px] uppercase tracking-wider text-[var(--ink-3)] mb-1">
               {t(locale, "이전", "Previous")}
             </div>
-            <div className="text-[#F0F0FF] font-medium group-hover:text-white">
+            <div className="text-[var(--ink)] font-medium group-hover:text-[var(--acc-soft)]">
               ← {t(locale, prev.titleKo, prev.title)}
             </div>
           </Link>
@@ -119,12 +119,12 @@ function PrevNext({ slug }: { slug: string }) {
         {next && (
           <Link
             href={pageHref(next.slug)}
-            className="docs-card block group rounded-lg border border-white/[0.06] p-4 hover:border-white/[0.12] transition-colors"
+            className="docs-card block group rounded-lg border border-[var(--rule-soft)] p-4 hover:border-[var(--rule)] transition-colors"
           >
-            <div className="text-[10px] uppercase tracking-wider text-white/40 mb-1">
+            <div className="text-[10px] uppercase tracking-wider text-[var(--ink-3)] mb-1">
               {t(locale, "다음", "Next")}
             </div>
-            <div className="text-[#F0F0FF] font-medium group-hover:text-white">
+            <div className="text-[var(--ink)] font-medium group-hover:text-[var(--acc-soft)]">
               {t(locale, next.titleKo, next.title)} →
             </div>
           </Link>
@@ -138,15 +138,15 @@ function LocaleToggle() {
   const locale = useLocale();
   const setLocale = useSetLocale();
   return (
-    <div className="flex items-center gap-1 rounded-md border border-white/[0.08] p-0.5 text-[11px]">
+    <div className="flex items-center gap-1 rounded-md border border-[var(--rule)] p-0.5 text-[11px]">
       <button
         type="button"
         onClick={() => setLocale("ko")}
         className={
           "px-2 py-1 rounded transition-colors " +
           (locale === "ko"
-            ? "bg-white/[0.10] text-[#F0F0FF]"
-            : "text-white/50 hover:text-white")
+            ? "bg-[var(--paper-2)] text-[var(--ink)]"
+            : "text-[var(--ink-3)] hover:text-[var(--ink)]")
         }
       >
         KO
@@ -157,8 +157,8 @@ function LocaleToggle() {
         className={
           "px-2 py-1 rounded transition-colors " +
           (locale === "en"
-            ? "bg-white/[0.10] text-[#F0F0FF]"
-            : "text-white/50 hover:text-white")
+            ? "bg-[var(--paper-2)] text-[var(--ink)]"
+            : "text-[var(--ink-3)] hover:text-[var(--ink)]")
         }
       >
         EN
@@ -200,14 +200,14 @@ export function DocsShell({
       : "var(--acc-artifact)";
   return (
     <div
-      className="min-h-screen bg-[#0B1628] text-[#F0F0FF]"
+      className="min-h-screen bg-[var(--paper)] text-[var(--ink)]"
       data-doc-section={currentSection?.id}
       style={{ ["--section-accent"]: sectionAccent } as CSSProperties}
     >
-      <header className="sticky top-0 z-30 border-b border-white/[0.06] bg-[#0B1628]/85 backdrop-blur">
+      <header className="sticky top-0 z-30 border-b border-[var(--rule-soft)] bg-[color-mix(in_srgb,var(--paper)_85%,transparent)] backdrop-blur">
         <div className="max-w-7xl mx-auto flex items-center justify-between px-6 py-4">
           <div className="flex items-center gap-6">
-            <Link href="/portfolio" className="text-sm text-white/60 hover:text-white">
+            <Link href="/portfolio" className="text-sm text-[var(--ink-2)] hover:text-[var(--ink)]">
               ← /geode/portfolio
             </Link>
             <span className="text-sm font-display font-bold tracking-wide">
@@ -218,7 +218,7 @@ export function DocsShell({
             <LocaleToggle />
             <a
               href="https://github.com/mangowhoiscloud/geode"
-              className="text-xs text-white/50 hover:text-white"
+              className="text-xs text-[var(--ink-3)] hover:text-[var(--ink)]"
               target="_blank"
               rel="noreferrer"
             >
@@ -252,7 +252,7 @@ export function DocsShell({
               {displayTitle}
             </h1>
             {displaySummary && (
-              <p className="mt-2 text-white/60 text-base leading-relaxed">{displaySummary}</p>
+              <p className="mt-2 text-[var(--ink-2)] text-base leading-relaxed">{displaySummary}</p>
             )}
           </div>
           <article className="docs-prose">{children}</article>
@@ -260,8 +260,8 @@ export function DocsShell({
         </main>
       </div>
 
-      <footer className="border-t border-white/[0.06] mt-20">
-        <div className="max-w-7xl mx-auto px-6 py-6 text-xs text-white/40 flex justify-between flex-wrap gap-2">
+      <footer className="border-t border-[var(--rule-soft)] mt-20">
+        <div className="max-w-7xl mx-auto px-6 py-6 text-xs text-[var(--ink-3)] flex justify-between flex-wrap gap-2">
           <span>
             {t(
               locale,

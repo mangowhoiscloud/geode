@@ -49,7 +49,7 @@ geode serve &`}</pre>
               <li><code>.claude/skills/geode-changelog</code>. version 결정 + entry 작성 룰</li>
             </ul>
 
-            <p className="text-white/40 text-sm"><em>참조</em>: `CHANGELOG.md`, `.claude/skills/geode-changelog`, `.github/workflows/release.yml`.</p>
+            <p className="text-[var(--ink-3)] text-sm"><em>참조</em>: `CHANGELOG.md`, `.claude/skills/geode-changelog`, `.github/workflows/release.yml`.</p>
           </>
         }
         en={
@@ -90,7 +90,7 @@ geode serve &`}</pre>
               <li><code>.claude/skills/geode-changelog</code>. how to decide the bump and write the entry</li>
             </ul>
 
-            <p className="text-white/40 text-sm"><em>References</em>: `CHANGELOG.md`, `.claude/skills/geode-changelog`, `.github/workflows/release.yml`.</p>
+            <p className="text-[var(--ink-3)] text-sm"><em>References</em>: `CHANGELOG.md`, `.claude/skills/geode-changelog`, `.github/workflows/release.yml`.</p>
           </>
         }
       />

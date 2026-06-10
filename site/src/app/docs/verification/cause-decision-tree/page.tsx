@@ -49,7 +49,7 @@ A5 fail-fast          전체 cycle abort, 운영자 알림`}</pre>
               실패를 분류하지 않은 채 'retry' 한 줄로 처리하면 같은 실패가 무한 반복되거나, 비용 시도만 늘어납니다. cause 분류는 어디서 멈춰야 하는지 + 어디로 escalate 해야 하는지를 명시.
             </p>
 
-            <p className="text-white/40 text-sm"><em>참조</em>: `.claude/skills/geode-verification` (Decision Tree 섹션), `core/verification/`.</p>
+            <p className="text-[var(--ink-3)] text-sm"><em>참조</em>: `.claude/skills/geode-verification` (Decision Tree 섹션), `core/verification/`.</p>
           </>
         }
         en={
@@ -89,7 +89,7 @@ A5 fail-fast          abort the cycle, page the operator`}</pre>
               Classifying failures forces an explicit decision about where to stop and where to escalate. A single 'retry' line lets the same failure burn budget forever or hide a real bias.
             </p>
 
-            <p className="text-white/40 text-sm"><em>References</em>: `.claude/skills/geode-verification` (Decision Tree section), `core/verification/`.</p>
+            <p className="text-[var(--ink-3)] text-sm"><em>References</em>: `.claude/skills/geode-verification` (Decision Tree section), `core/verification/`.</p>
           </>
         }
       />

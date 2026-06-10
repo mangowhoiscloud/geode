@@ -3,54 +3,71 @@
 > Google Stitch DESIGN.md format — 9 sections. AI agents read this before writing UI for this codebase.
 > Audience: developers, recruiters reviewing engineering work, technical reviewers.
 > Surface: Next.js 16 + Tailwind 4 + React 19, static export at GH Pages.
-> Aesthetic: GEODE Editorial — **warm dark mode**. Anthropic's editorial restraint, inverted to dark.
-> Last verified against code: 2026-05-02.
+> Aesthetic: GEODE Axolotl Rose — **cool near-black + one signature accent**, drawn from the GEODE character.
+> Last verified against code: 2026-06-11 (PR-DOCS-REDESIGN-TOKENS).
 
 ---
 
 ## 1. Visual Theme & Atmosphere
 
-**Mood**: Anthropic-inspired dark mode. Warm near-black substrate (not blue-black, not pure black), cream-on-warm-dark prose, amber accent. Reads like an editorial dossier on a leather desk at night — composed, dense, calm.
+**Mood**: a modern dark developer surface keyed to the GEODE character — a rose axolotl explorer with a gold headlamp and an aqua magnifier (`public/images/geode-*.png`). Cool near-black substrate with a violet undertone, one saturated signature accent (rose) carried everywhere as low-opacity tints, gold reserved for action, aqua for information. Reads like a well-lit terminal, not a leather desk.
 
-**Adjectives**: warm dark, editorial, restrained, ink-on-warm-dark, amber-accented, single-substrate.
+**Adjectives**: cool dark, signature-tinted, character-grounded, restrained, single-substrate.
 
-**What it is not**: blue-night gradient, neon, mascot-heavy, multi-accent rainbow, motion-decorated. Pure-black surfaces (`#000`) and pure-white text (`#fff`) are forbidden — both are too cold for this aesthetic.
+**What it is not**: brown-warm stone, navy deep-sea, neon, multi-accent rainbow, motion-decorated. Pure-black surfaces (`#000`) and pure-white text (`#fff`) are forbidden.
 
-**Inspiration touchstones**: Anthropic docs (typographic restraint), Cursor (developer-first dark), Are.na (warm dark editorial), Tufte books inverted to dark, terminal `urxvt` with the `Tomorrow Night` palette.
+**Inspiration touchstones**: Hermes docs (one bold accent + tinted hairlines + dot-grid texture on near-black), Anthropic docs (typographic restraint), Cursor (developer-first dark).
 
 ## 2. Color Palette & Roles
 
 | Role | Hex | Usage |
 |---|---|---|
-| `--paper` | `#181816` | App background. Warm dark stone surface. |
-| `--paper-2` | `#23211F` | Card / elevated surface (sidebar, callout, hover). |
-| `--paper-deep` | `#0E0E0C` | Code block (deepest). |
-| `--ink` | `#EDE7DA` | Primary text. Warm cream, bumped for legibility. |
-| `--ink-1` | `#DDD3BE` | Headings. |
-| `--ink-2` | `#B5AC97` | Body — bright enough to keep prose from fading. |
-| `--ink-3` | `#807665` | Captions, metadata. |
-| `--rule` | `#3A342D` | Hairline borders. Slightly more visible than substrate. |
-| `--rule-soft` | `#2A2520` | Softer divider, between sections. |
-| `--acc-artifact` | `#4D9BFF` | **PETRI-BLUE** — primary accent. The self-improving hub's signature (`#0d6efd`, Bootstrap blue) lightened for AA on the dark substrate. OS / artifact / runtime / the live system. |
-| `--acc-line` | `#D5B27A` | **CITRINE** — secondary. scaffold / line / process / CI. Warm complement to the petri-blue primary. |
-| `--acc-soft` | `#7FB5FF` | Hover / elevated state for the petri-blue accent. |
-| `--acc-si` | `#4D9BFF` | Self-Improving identity, now **unified with the primary** accent so the whole site (portfolio + docs + hub) reads as one petri-blue identity. |
-| `--acc-si-soft` | `#7FB5FF` | Hover state for the self-improving accent. |
-| `--code-bg` | `#0E0E0C` | Code block background. |
-| `--code-text` | `#DDD3BE` | Code block text. Same as `--ink-1`. |
-| `--code-string` | `#D5B27A` | Code strings (citrine, kindred to line accent). |
+| `--paper` | `#0B0A10` | App background. Cool near-black, violet undertone. |
+| `--paper-2` | `#14121B` | Card / elevated surface (sidebar, callout, hover). |
+| `--paper-deep` | `#06050A` | Code block (inset). |
+| `--ink` | `#F2EEF5` | Primary text. |
+| `--ink-1` | `#E5DFEC` | Headings. |
+| `--ink-2` | `#ABA4BC` | Body secondary. |
+| `--ink-3` | `#6E6880` | Captions, metadata. |
+| `--rule` | `rgba(244,155,196,.12)` | Hairline borders. **Rose-tinted**, never neutral gray. |
+| `--rule-soft` | `rgba(244,155,196,.06)` | Softer divider, table header background. |
+| `--acc-artifact` | `#F49BC4` | **AXOLOTL ROSE** — the signature. Logo, wordmark, active nav, selection, reference chip. The character's body color. |
+| `--acc-line` | `#FFD66B` | **LAMP GOLD** — action. CTA, emphasis, string literals, tutorial chip. The explorer's headlamp. |
+| `--acc-soft` | `#F7B3D2` | Rose hover / elevated state. |
+| `--acc-aqua` | `#7FD8E8` | **AQUA** — information. Links, inline code, how-to chip. The magnifier lens. |
+| `--acc-si` | `#4D9BFF` | **PETRI-BLUE** — scoped. Only the 04-self-improving docs section + petri-bundle bridge (the vendored hub viewer keeps Bootstrap blue). Never a general accent. |
+| `--acc-si-soft` | `#7FB5FF` | Self-improving hover. |
+| `--code-bg` | `#06050A` | Code block background. |
+| `--code-text` | `#E5DFEC` | Code block text. |
+| `--code-string` | `#FFD66B` | Code strings (lamp gold). |
 
-**Identity rationale.** The primary accent is **petri-blue** (`#4D9BFF`), the
-self-improving hub's signature (`#0d6efd`) adapted for the dark substrate, so
-the portfolio, the docs, and the hub all read as one system. PR-PALETTE-REGROUND
-(2026-05-30) re-grounded it from amethyst to this hub identity. Citrine
-(`#D5B27A`) is the secondary, kept for the scaffold / line / process axis as a
-warm complement. The two-mode discipline holds: artifact / runtime / the live
-system gets petri-blue, the scaffold that builds it gets citrine.
+**Identity rationale.** The palette is extracted from the GEODE character, so
+the mascot, the site, and the brand read as one thing. Rose is deliberately
+contrarian for a developer tool (Hermes owns gold, Anthropic terracotta,
+petri-bundle Bootstrap blue) — it is distinctive and it is literally the
+product's face. The Hermes lesson applied here is not its color but its
+**tint discipline**: the signature accent appears at 6–15% opacity in every
+hairline, table header, callout background, and active state, which is what
+makes a dark surface read as designed rather than default.
 
-**Single substrate.** Every page is dark by design. There is no light mode. There is no dark-panel-on-light-page pattern. Mascot PNGs and SVG diagrams that were authored for dark mediums sit naturally on this substrate.
+**Color semantics — fixed, never improvised**:
+rose = identity (who), gold = action (do), aqua = information (read).
+A screen should never have all three competing; rose tints carry the surface,
+gold and aqua appear only where their meaning applies.
 
-**Two accents, now one unified identity.** Petri-blue (artifact / OS / the live system, primary) and citrine (scaffold / line / process, secondary) are the two global accents. As of PR-PALETTE-REGROUND the petri-blue primary IS the hub signature, so `--acc-si` equals `--acc-artifact`: the Self-Improving Loop docs section no longer needs a distinct hue, and portfolio + docs + hub share one petri-blue. The `data-doc-section` + `--section-accent` mechanism remains in place (it resolves to `--acc-artifact` everywhere now), so re-introducing a scoped section hue later is a one-line change.
+**Single substrate.** Every page is dark by design. No light mode, no
+dark-panel-on-light-page. Character PNGs were authored on transparent
+backgrounds and sit naturally on this substrate.
+
+**Petri-blue is scoped, not dead.** `--acc-si` keeps the hub's Bootstrap-blue
+identity on exactly two surfaces: the 04-self-improving docs section
+(`data-doc-section` + `--section-accent` mechanism in docs-shell.tsx /
+docs.css) and the petri-bundle bridge pages. The vendored Inspect viewer
+cannot be re-skinned, so the section accent preserves continuity into it.
+
+**Texture.** `.rose-grid` (globals.css) is a 1px rose dot grid at 5% opacity,
+28px pitch — for the landing/hero surfaces only. It is a pattern, not a color
+gradient; the no-gradient rule below stays intact.
 
 ## 3. Typography Rules
 
@@ -60,7 +77,7 @@ system gets petri-blue, the scaffold that builds it gets citrine.
 | `--font-display` | Outfit | 600, 700, 800 | Page titles (h1), section labels |
 | `--font-fira-code` | Fira Code | 400, 500 | Code blocks, file paths, version chips |
 
-**Body is sans (Inter), not serif.** Editorial restraint comes from spacing, line-height, and color discipline — not from a serif body. Warm dark mode and serif body together would feel funereal; Inter on warm dark reads as a professional dossier.
+**Body is sans (Inter), not serif.** Editorial restraint comes from spacing, line-height, and color discipline — not from a serif body. A dark substrate and serif body together would feel funereal; Inter on near-black reads as a professional dossier.
 
 **Korean (KO mode)**: same families. Korean glyph rendering falls back through `Apple SD Gothic Neo`, `Noto Sans KR`, `Malgun Gothic`. No additional Korean web font.
 
@@ -115,7 +132,7 @@ system gets petri-blue, the scaffold that builds it gets citrine.
 - Subhead in display font, `--ink-1` color.
 - Two narrative paragraphs, body sans, `--ink-2`.
 - A single mono code block (or none).
-- Nav links as small bordered chips, hairline border, hover swaps to amber.
+- Nav links as small bordered chips, hairline border, hover swaps to rose.
 
 ### Tables
 
@@ -130,7 +147,7 @@ system gets petri-blue, the scaffold that builds it gets citrine.
 
 ### Mascot
 
-- Geodi PNG sits naturally on `--paper` (warm dark) — no inset wrapper needed; the PNG was authored for dark mediums and matches the substrate.
+- Geodi PNG sits naturally on `--paper` (cool near-black) — no inset wrapper needed; the PNG was authored for dark mediums and matches the substrate. Placement budget: landing hero, quickstart finish, 404/empty states. Never inside docs prose.
 - 36×40px in hero, 32px in footer. Always static, never animated.
 
 ### Blockquotes
@@ -147,7 +164,7 @@ system gets petri-blue, the scaffold that builds it gets citrine.
 
 ## 6. Depth & Elevation
 
-- **Borders, not shadows.** Hairline `--rule` (warm dark, ~10% lighter than `--paper`) demarcates cards and sticky surfaces. The single substrate already does the contrast work.
+- **Borders, not shadows.** Hairline `--rule` (rose tint at 12% opacity) demarcates cards and sticky surfaces. The single substrate already does the contrast work.
 - **Tone shifts.** Elevation comes from `--paper` → `--paper-2` (~6% lighter), not from luminance bumps. Code blocks go the other direction: `--paper-deep` (~8% darker) for inset code.
 - The only blur is sticky-header `backdrop-blur` over the page background.
 - No glow, no neon, no emboss.
@@ -169,7 +186,7 @@ system gets petri-blue, the scaffold that builds it gets citrine.
 - Don't introduce gradients (text or background).
 - Don't add motion beyond `transition-colors`. No spring, no slide, no fade-in beyond the once-per-page-load 0.4s opacity fade.
 - Don't add emojis to UI chrome (titles, headings, labels).
-- Don't introduce new accent colors. Two accents. Petri-blue for artifact, citrine for line, and that is it.
+- Don't introduce new accent colors. Rose for identity, gold for action, aqua for information, scoped petri-blue for the self-improving bridge, and that is it.
 - Don't use `dark-panel` or `mascot-inset` utilities — they were transitional and are removed in the dark-mode reset.
 - Don't add larger corner radii than `rounded-lg` (8px).
 
@@ -188,7 +205,7 @@ When asked to build or modify UI in this portfolio repo:
 1. **Read this DESIGN.md first.** Tokens are defined here; do not introduce new ones.
 2. **Use `var(--*)` tokens, not hex literals.** New components reference `var(--paper)`, `var(--ink-1)`, etc. Hex literals are only acceptable in legacy components scheduled for migration.
 3. **Single substrate.** Every page wraps in `bg-[var(--paper)] text-[var(--ink)]`. Section-level dark or light overrides are forbidden.
-4. **Mascot images sit naturally on the substrate** — do not wrap in inset containers. Geodi was authored for warm dark mediums.
+4. **Mascot images sit naturally on the substrate** — do not wrap in inset containers. Geodi was authored for dark mediums.
 5. **Two-mode accents.** When emitting an artifact (OS, runtime, prompt, hash) reference, use `--acc-artifact`. When emitting a line (scaffold, ratchet, CI, kanban) reference, use `--acc-line`. Mixing them within a single section is acceptable only when comparing the two modes (recursion table).
 6. **Korean default.** `<html lang="ko">` from `src/app/layout.tsx`. Bilingual content uses `<Bi ko={...} en={...} />` for the docs site or the `t(locale, ko, en)` helper for components.
 7. **Verification**: after edits, run `node ./node_modules/typescript/bin/tsc --noEmit -p tsconfig.json` and `next build`. Both must exit 0.
@@ -318,16 +335,16 @@ The viewer (`index.html`) uses Bootstrap's default dark palette. The GEODE-autho
 
 | Role | Bridge hex | Docs-site equivalent |
 |---|---|---|
-| Substrate | `#212529` (Bootstrap `--bs-dark`) | `--paper` (`#181816`) |
+| Substrate | `#212529` (Bootstrap `--bs-dark`) | `--paper` (`#0B0A10`) |
 | Elevated | `#2b3035` | `--paper-2` (`#23211F`) |
 | Rule | `#3a3f44` | `--rule` (`#3A342D`) |
 | Body ink | `#dee2e6` | `--ink` (`#EDE7DA`) |
 | Muted | `#adb5bd` | `--ink-2` (`#B5AC97`) |
-| Accent | `#0d6efd` (Bootstrap blue) | `--acc-artifact` (`#4D9BFF`), the site-wide petri-blue primary (the bundle blue lightened for AA on dark) |
+| Accent | `#0d6efd` (Bootstrap blue) | `--acc-si` (`#4D9BFF`), the scoped self-improving accent (the bundle blue lightened for AA on dark) |
 
 This bridge palette (substrate / elevated / rule / ink) appears **only** in `docs/petri-bundle/landing.html` and any future static HTML co-located under `docs/petri-bundle/`. Next.js docs pages continue to use the §2 substrate/ink tokens, with no exception.
 
-**Accent continuity is now automatic.** The self-improving hub's signature is the petri Bootstrap-blue `#0d6efd`, the identity color of the whole self-improving surface (hub + petri bundle). As of PR-PALETTE-REGROUND that color IS the site-wide primary `--acc-artifact` (`#4D9BFF`, lightened for AA on dark), so the bundle, the docs, and the portfolio share one petri-blue with no scoping needed. The `data-doc-section="04-self-improving"` + `--section-accent` mechanism in `docs-shell.tsx` remains (it resolves to `--acc-artifact` everywhere now), so re-introducing a distinct scoped hue later is a one-line change.
+**Accent continuity is scoped.** The self-improving hub's signature is the petri Bootstrap-blue `#0d6efd`, the identity color of the whole self-improving surface (hub + petri bundle). On the docs site that color lives in `--acc-si` and applies only through the `data-doc-section="04-self-improving"` + `--section-accent` mechanism in `docs-shell.tsx` / `docs.css`, so the bridge into the vendored viewer keeps its hue while the rest of the site carries Axolotl Rose.
 
 The hub's own token source of truth is `docs/design/self-improving-hub-system.md §3` (the light signature palette: white paper, `#0d6efd` accent, 3 surface buckets). The hub stays light (its native identity); docs stay dark — the shared thread is the signature accent, not the light/dark mode.
 

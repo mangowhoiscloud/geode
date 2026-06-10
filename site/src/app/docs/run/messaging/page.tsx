@@ -34,7 +34,7 @@ channels = ["#geode"]`}</pre>
             <h2>커스텀 어댑터</h2>
             <p>새 메신저를 붙이려면 <code>core/gateway/</code>의 base adapter를 구현하세요. 자세한 절차는 <a href="/geode/docs/runtime/tools/protocol">도구 추가하기</a>를 참조.</p>
 
-            <p className="text-white/40 text-sm"><em>참조:</em> wiki/concepts/geode-gateway.md, geode-serve skill</p>
+            <p className="text-[var(--ink-3)] text-sm"><em>참조:</em> wiki/concepts/geode-gateway.md, geode-serve skill</p>
           </>
         }
         en={
@@ -59,7 +59,7 @@ channels = ["#geode"]`}</pre>
             <h2>Custom adapter</h2>
             <p>To support a new messenger, implement the base adapter under <code>core/gateway/</code>. See <a href="/geode/docs/runtime/tools/protocol">Add a Tool</a> for the general pattern.</p>
 
-            <p className="text-white/40 text-sm"><em>See:</em> wiki/concepts/geode-gateway.md, geode-serve skill.</p>
+            <p className="text-[var(--ink-3)] text-sm"><em>See:</em> wiki/concepts/geode-gateway.md, geode-serve skill.</p>
           </>
         }
       />

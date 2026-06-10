@@ -84,7 +84,7 @@ jq -s 'group_by(.model) | map({model: .[0].model, total: (map(.input_tokens + .o
 # 캐시 hit 호출만
 jq -c 'select(.cache_read_tokens > 0)' ~/.geode/usage/$(date +%F).jsonl`}</pre>
 
-            <p className="text-white/40 text-sm"><em>참조:</em> <a href="/geode/docs/verification/observability">Observability</a>, <a href="/geode/docs/runtime/context">Context System (200K guard)</a>, wiki/concepts/geode-context-guard.md.</p>
+            <p className="text-[var(--ink-3)] text-sm"><em>참조:</em> <a href="/geode/docs/verification/observability">Observability</a>, <a href="/geode/docs/runtime/context">Context System (200K guard)</a>, wiki/concepts/geode-context-guard.md.</p>
           </>
         }
         en={
@@ -161,7 +161,7 @@ jq -s 'group_by(.model) | map({model: .[0].model, total: (map(.input_tokens + .o
 # Cache-hit calls only
 jq -c 'select(.cache_read_tokens > 0)' ~/.geode/usage/$(date +%F).jsonl`}</pre>
 
-            <p className="text-white/40 text-sm"><em>See:</em> <a href="/geode/docs/verification/observability">Observability</a>, <a href="/geode/docs/runtime/context">Context System (200K guard)</a>, wiki/concepts/geode-context-guard.md.</p>
+            <p className="text-[var(--ink-3)] text-sm"><em>See:</em> <a href="/geode/docs/verification/observability">Observability</a>, <a href="/geode/docs/runtime/context">Context System (200K guard)</a>, wiki/concepts/geode-context-guard.md.</p>
           </>
         }
       />

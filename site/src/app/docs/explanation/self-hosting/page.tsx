@@ -42,7 +42,7 @@ export default function Page() {
               <li>GEODE: 자기 자신을 빌드하는 첫 LLM 에이전트 하네스 (확인된 범위 내).</li>
             </ul>
 
-            <p className="text-white/40 text-sm"><em>참조:</em> portfolio §3 Recursion + wiki/concepts/geode-scaffold-production.md</p>
+            <p className="text-[var(--ink-3)] text-sm"><em>참조:</em> portfolio §3 Recursion + wiki/concepts/geode-scaffold-production.md</p>
           </>
         }
         en={
@@ -75,7 +75,7 @@ export default function Page() {
               <li>GEODE: the first LLM agent harness that builds itself (within the scope checked).</li>
             </ul>
 
-            <p className="text-white/40 text-sm"><em>See:</em> portfolio §3 Recursion plus wiki/concepts/geode-scaffold-production.md.</p>
+            <p className="text-[var(--ink-3)] text-sm"><em>See:</em> portfolio §3 Recursion plus wiki/concepts/geode-scaffold-production.md.</p>
           </>
         }
       />

@@ -54,7 +54,7 @@ export GEODE_PERSONA=on
               <li>v0.92.0 — Petri audit 도입과 함께 audit-mode 분기 신설.</li>
             </ul>
 
-            <p className="text-white/40 text-sm">
+            <p className="text-[var(--ink-3)] text-sm">
               <em>참조:</em> <a href="/geode/docs/runtime/llm/prompt-system">Prompt System</a>, <a href="/geode/docs/petri/overview">Petri × GEODE</a>, CHANGELOG v0.92~0.93.
             </p>
           </>
@@ -102,7 +102,7 @@ export GEODE_PERSONA=on
               <li>v0.92.0: audit-mode branch added together with Petri audit integration.</li>
             </ul>
 
-            <p className="text-white/40 text-sm">
+            <p className="text-[var(--ink-3)] text-sm">
               <em>See:</em> <a href="/geode/docs/runtime/llm/prompt-system">Prompt System</a>, <a href="/geode/docs/petri/overview">Petri × GEODE</a>, CHANGELOG v0.92-0.93.
             </p>
           </>

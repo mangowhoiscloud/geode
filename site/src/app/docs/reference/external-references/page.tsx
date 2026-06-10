@@ -110,7 +110,7 @@ export default function Page() {
               <li><strong>Simplicity criterion</strong>. "removing code with equal-or-better metric = great outcome". → GEODE Runtime 1476→517 라인 분해 (v0.30), Registry 257 라인 제거 (v0.44).</li>
             </ol>
 
-            <p className="text-white/40 text-sm">
+            <p className="text-[var(--ink-3)] text-sm">
               <em>출처:</em> resume/common/narratives/autoresearch-ratchet-reference.md, wiki/.../bagelcode-autoresearch-karpathy-2026.md.
             </p>
           </>
@@ -223,7 +223,7 @@ export default function Page() {
               <li><strong>Simplicity criterion</strong>. "Removing code with equal-or-better metric = great outcome." GEODE Runtime 1476 → 517 lines (v0.30) and Registry minus 257 lines (v0.44) follow the same rule.</li>
             </ol>
 
-            <p className="text-white/40 text-sm">
+            <p className="text-[var(--ink-3)] text-sm">
               <em>Source:</em> resume/common/narratives/autoresearch-ratchet-reference.md, wiki/.../bagelcode-autoresearch-karpathy-2026.md.
             </p>
           </>

@@ -138,7 +138,7 @@ print(a.test_environment().ok)
               보고합니다.
             </p>
 
-            <p className="text-white/40 text-sm">
+            <p className="text-[var(--ink-3)] text-sm">
               <em>참조:</em>{" "}
               <a href="/geode/docs/runtime/llm/providers">Providers</a>,{" "}
               <a href="/geode/docs/run/pick-path">Pick a path</a>.
@@ -273,7 +273,7 @@ print(a.test_environment().ok)
               honestly.
             </p>
 
-            <p className="text-white/40 text-sm">
+            <p className="text-[var(--ink-3)] text-sm">
               <em>See:</em>{" "}
               <a href="/geode/docs/runtime/llm/providers">Providers</a>,{" "}
               <a href="/geode/docs/run/pick-path">Pick a path</a>.

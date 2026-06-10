@@ -56,7 +56,7 @@ meta_reviewer       coverage / gap 분석 → next_gen_priors`}</pre>
               "how Elo is computed" 참고.
             </p>
 
-            <p className="text-white/40 text-sm"><em>참조</em>: <code>plugins/seed_generation/orchestrator.py</code> (<code>_PHASE_ORDER</code> / <code>_ITERATION_PHASE_ORDER</code>), <code>plugins/seed_generation/agents/ranker.py</code>, <code>plugins/seed_generation/tournament.py</code>. 개발 워크플로우(worktree → PR → merge)를 다루던 이전 cycle-skill 문서와는 별개입니다.</p>
+            <p className="text-[var(--ink-3)] text-sm"><em>참조</em>: <code>plugins/seed_generation/orchestrator.py</code> (<code>_PHASE_ORDER</code> / <code>_ITERATION_PHASE_ORDER</code>), <code>plugins/seed_generation/agents/ranker.py</code>, <code>plugins/seed_generation/tournament.py</code>. 개발 워크플로우(worktree → PR → merge)를 다루던 이전 cycle-skill 문서와는 별개입니다.</p>
           </>
         }
         en={
@@ -106,7 +106,7 @@ meta_reviewer       coverage / gap analysis -> next_gen_priors`}</pre>
               and the tournament page's "how Elo is computed" block.
             </p>
 
-            <p className="text-white/40 text-sm"><em>References</em>: <code>plugins/seed_generation/orchestrator.py</code> (<code>_PHASE_ORDER</code> / <code>_ITERATION_PHASE_ORDER</code>), <code>plugins/seed_generation/agents/ranker.py</code>, <code>plugins/seed_generation/tournament.py</code>. This is separate from the development-workflow cycle skill (worktree → PR → merge) the previous page described.</p>
+            <p className="text-[var(--ink-3)] text-sm"><em>References</em>: <code>plugins/seed_generation/orchestrator.py</code> (<code>_PHASE_ORDER</code> / <code>_ITERATION_PHASE_ORDER</code>), <code>plugins/seed_generation/agents/ranker.py</code>, <code>plugins/seed_generation/tournament.py</code>. This is separate from the development-workflow cycle skill (worktree → PR → merge) the previous page described.</p>
           </>
         }
       />
