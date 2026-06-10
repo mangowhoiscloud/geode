@@ -36,6 +36,41 @@ def test_server_identity_and_tool_surface() -> None:
     assert names >= EXPECTED_TOOLS
 
 
+def test_handshake_advertises_geode_version_not_sdk_version() -> None:
+    """The initialize handshake must carry GEODE's version. The installed
+    mcp SDK's FastMCP exposes no ``version`` kwarg, so create_mcp_server
+    sets it on the wrapped lowlevel server — without that, clients see the
+    SDK package version (e.g. "1.26.0")."""
+    from core import __version__
+
+    server = create_mcp_server()
+    assert server._mcp_server.version == __version__
+    init_options = server._mcp_server.create_initialization_options()
+    assert init_options.server_version == __version__
+
+
+def test_get_health_reports_credential_sources() -> None:
+    """``*_configured`` alone under-reports OAuth/CLI-lane setups; health
+    must also expose the effective credential-source picks + version."""
+    server = create_mcp_server()
+
+    async def _call() -> dict:
+        result = await server.call_tool("get_health", {})
+        return result[1] if isinstance(result, tuple) else result
+
+    payload = asyncio.run(_call())
+    if isinstance(payload, dict) and "result" in payload:
+        payload = payload["result"]
+    for key in (
+        "version",
+        "anthropic_credential_source",
+        "openai_credential_source",
+        "anthropic_configured",
+        "openai_configured",
+    ):
+        assert key in payload, key
+
+
 def test_tool_descriptions_sourced_from_json() -> None:
     """Every registered core tool keeps its description in mcp_tools.json."""
     descriptions_path = Path("core/tools/mcp_tools.json")
