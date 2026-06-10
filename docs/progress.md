@@ -16,7 +16,7 @@
 
 <!-- Move items here when work begins. -->
 <!-- 3-Checkpoint: (1) alloc → (2) merge (CI 5/5) → (3) verify -->
-- [ ] Docs sprint — 전 페이지 재생성/재설계 진행 중: Phase 0 캐논(v0.99.168)·Phase 1 팩트시트 4종(~/.geode/diagnostics/docs-sprint/)·Phase 2 Axolotl Rose 재스킨(v0.99.173)·**Phase 3a 랜딩+Overview+Start+탐색/llms.txt 페이지(PR #2130→#2131) 완료**. 잔여: 3b Concepts+Self-Improving(에이전트 진행 중), 3c Operate/Guides/Reference/Develop(+run/schedule 원샷 예시 수정), 3d Config(C-4 머지됨, 착수 가능), 08b 섹션 삭제, Phase 4 최종 검증(Codex MCP). 브리프=memory project_docs_sprint_brief_2026_06_11 + project_docs_redesign_decisions_2026_06_11
+- [ ] Docs sprint — 전 페이지 재생성/재설계 진행 중: Phase 0 캐논(v0.99.168)·Phase 1 팩트시트 4종(~/.geode/diagnostics/docs-sprint/)·Phase 2 Axolotl Rose 재스킨(v0.99.173)·**3a(PR #2130→#2131) + 3b Concepts+Self-Improving 21페이지+문체 검수(PR #2135→#2134) 완료**. 잔여: 3c Operate/Guides/Reference/Develop+08b 삭제(워크트리 docs-3c, 에이전트 진행 중), 3d Config, Phase 4 최종 검증(Codex MCP). 브리프=memory project_docs_sprint_brief_2026_06_11 + project_docs_redesign_decisions_2026_06_11
 - [ ] H11-tail — routing 상수 모듈레벨 by-value 별칭 해동(core/llm/providers/{anthropic,openai,codex,glm}.py DEFAULT_*/FALLBACK_MODELS + core/skills/agents.py dataclass 기본값) — reload 후에도 boot-frozen, 호출자 스윕 필요. + H1(데몬 client-cwd 세션 해석)은 별도 결정
 
 ## In Review
@@ -29,6 +29,7 @@
 <!-- - [x] #issue-number — Short description (PR #N) -->
 - [x] Docs 디자인 재설정(Axolotl Rose, docs-sprint Phase 2) — 캐릭터 추출 팔레트(로즈 시그니처+골드+아쿠아), Hermes 틴트 규율, petri-blue 04 스코프 강등, docs 표면 하드코딩 hex/white-유틸 전수 토큰화(잔존 0), 랜딩 캐릭터 배치, DESIGN.md §1-2 재작성, 헤드리스 크롬 3면 시각 검수 (PR #2120 → #2126, v0.99.173)
 - [x] Docs content canon + banned-term CI gate — site/CONTENT-CANON.md(정체성: 자기개선 루프=선택, ML 아님 + 5-layer + 시각화 스펙) + scripts/check_docs_canon.py pages.yml blocking 배선, ML 오기술 4페이지 정정(autoresearch 제목 "자가 ML 실험 루프" 등) (PR #2107 → #2110, v0.99.168)
+- [x] geode-mcp run_agent 라이브 핫픽스 — 원격 테스트가 노출한 잠복 결함 2건: adapter registry 미부트스트랩(.172) + 이벤트루프 충돌(async 코어 분리, .174, 동시 docs 세션이 .173 선점해 리넘버). HTTP run_agent E2E PASS('REMOTE-AGENT-OK', rounds=1, natural) (PR #2123/#2127, v0.99.172/174)
 - [x] geode-mcp 원격 접근 — `--http` streamable-HTTP 전송 + GEODE_MCP_TOKEN bearer 인증(SDK auth=AuthSettings 동반 필수 함정 핀), 무토큰 비-루프백 바인드 거부, 라이브 왕복 가드 9종 + 프로덕션 스모크 (PR #2118 → #2119, v0.99.171)
 - [x] geode-mcp 노출 점검 — Claude Code 등록(.mcp.json repo-ship)+stdio 라이브 검증, 핸드셰이크 버전 오보고(1.26.0→GEODE 버전)·get_health OAuth 오보고(credential_source 병기) 수정, README/README.ko 검증표 기록 (PR #2113, v0.99.169)
 - [x] C-4 config tail — H9 GEODE_CONFIG_TOML 메인로더 통일 + H11 reload시 routing 재바인드(모듈레벨 별칭 잔존=H11-tail) + H13 reload 필드별 경고 + 공유 env loader(train/campaign 순서 정렬)+keep-flag .env 인식 (PR #2114 → #2115, v0.99.170)
