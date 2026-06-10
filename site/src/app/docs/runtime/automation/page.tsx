@@ -1,133 +1,198 @@
 import { DocsShell, Bi } from "@/components/geode-docs/docs-shell";
 
-export const metadata = { title: "Automation — GEODE Docs" };
+export const metadata = { title: "Auto-trigger sidecar — GEODE Docs" };
 
 export default function Page() {
   return (
     <DocsShell
       slug="runtime/automation"
-      title="Automation Sidecar"
-      titleKo="자동화 사이드카"
-      summary="Drift detection, model promotion, expert panel voting. The sidecar between agent and runtime that keeps the system improving over time."
-      summaryKo="drift 감지, 모델 프로모션, 전문가 패널 투표. 시간이 지나면서 시스템이 계속 개선되도록 에이전트(L4)와 런타임(L2) 사이에 자리한 사이드카."
+      title="Auto-trigger sidecar"
+      titleKo="자동 트리거 사이드카"
+      summary="The cron-scheduled sidecar that fires the self-improving loop without an operator: lock, interval gate, hook telemetry, and the outer-bundle viewer."
+      summaryKo="운영자 없이 자기개선 루프를 cron으로 발화하는 사이드카입니다. 락, 인터벌 게이트, 훅 텔레메트리, outer-bundle 뷰어를 다룹니다."
     >
       <Bi
         ko={
           <>
-            <h2>왜 사이드카인가</h2>
             <p>
-              에이전트(L4)는 실행합니다. 런타임(L2)은 인프라를 제공합니다. Automation은
-              두 계층 사이에서 결과를 관찰하고 그 아래 런타임을 회전시키는 사이드카입니다.
-              더 나은 모델을 승격시키고, drift된 모델을 deprecate하고, 전문가 피드백을
-              수집합니다. 4-계층 스택 자체에는 포함되지 않습니다.
+              자동 트리거는 자기개선 루프의 변이 러너
+              (<code>SelfImprovingLoopRunner.run_once</code>)를 스케줄러에 연결해,
+              키보드 앞에 운영자가 없어도 루프가 cron 주기로 도는 사이드카입니다.
+              구현은 <code>core/self_improving/loop/auto_trigger.py</code>,
+              배선은 <code>core/wiring/scheduling.py</code>의{" "}
+              <code>build_scheduling</code>입니다.
+            </p>
+            <p>
+              한때 이 자리에 있던 별도 자동화 파이프라인(drift 감지, 모델
+              프로모션, 전문가 패널이 있던 <code>core/automation/</code>)은
+              v0.99.149에서 삭제되었습니다. 그 체인의 모든 진입점이 emitter가
+              사라진 파이프라인 이벤트였고, 부팅마다 만들어지되 일을 하지 않는
+              구성물이었기 때문입니다. 지금 남아 있는 자동화는 이 페이지의
+              사이드카와 <a href="/geode/docs/runtime/scheduler">스케줄러</a>가
+              전부입니다.
             </p>
 
-            <h2>파일</h2>
-            <ul>
-              <li><code>core/automation/model_registry.py:36</code>. <code>class PromotionStage</code> (development, staging, production).</li>
-              <li><code>core/automation/feedback_loop.py</code>. phase FSM.</li>
-              <li><code>core/automation/drift_detector.py</code>. correlation 및 severity 분석.</li>
-              <li><code>core/automation/expert_panel.py</code>. junior/senior/principal 투표 티어.</li>
-              <li><code>core/automation/outcome_tracking.py</code>. 모델 출력 결과의 long-tail 결과 추적.</li>
-              <li><code>core/automation/correlation.py</code>. 결과 vs 메트릭 상관관계 분석.</li>
-              <li><code>core/automation/snapshot.py</code>. 모델 stage별 스냅샷 (rollback 용).</li>
-            </ul>
+            <h2>동작 방식</h2>
+            <pre>{`[self_improving_loop.scheduler] enabled=true   (~/.geode/config.toml, 기본 off)
+        │ cron 발화 (trigger_id: self_improving_loop_auto_trigger)
+        ▼
+1. fcntl flock  ~/.geode/autoresearch/handoff/auto_trigger.lock
+        │ 다른 보유자가 있으면 no-op (INFO 로그)
+        ▼
+2. 최소 간격 게이트  auto_trigger_last_run.txt
+        │ 직전 성공 발화가 min_interval_minutes 안이면 skip
+        ▼
+3. SelfImprovingLoopRunner.run_once  (mutate → audit → gate)
+        │ 소스 디스패치는 [self_improving_loop.mutator].source 상속
+        ▼
+status dict 반환 (절대 raise하지 않음) + 히스토리 append`}</pre>
+            <p>
+              세 가지 방어선이 핵심입니다. 락은 cron 발화 둘 또는 cron과 수동
+              실행이 같은 SoT 파일을 두고 경합하는 것을 막습니다. fcntl advisory
+              lock이라 프로세스가 죽으면 커널이 자동 해제합니다. 인터벌 게이트는
+              재시작이나 클록 스큐로 cron이 과발화해도 바닥 주기를 지킵니다.
+              타임스탬프는 성공한 발화만 갱신하므로, 설정이 망가져 실패가
+              반복되어도 스케줄이 몇 시간씩 잠기지 않습니다. 마지막으로 모든
+              결과는 status dict로 돌아옵니다. 한 번의 발화 실패가 스케줄러
+              루프를 죽이지 못합니다.
+            </p>
 
-            <h2>7 모듈 구성</h2>
+            <h2>설정</h2>
             <table>
-              <thead><tr><th>모듈</th><th>책임</th><th>핵심 클래스 / 함수</th></tr></thead>
+              <thead>
+                <tr><th>키 (<code>[self_improving_loop.scheduler]</code>)</th><th>의미</th></tr>
+              </thead>
               <tbody>
-                <tr><td><code>model_registry.py</code></td><td>모델 stage 관리</td><td><code>PromotionStage</code> enum</td></tr>
-                <tr><td><code>feedback_loop.py</code></td><td>피드백 phase FSM</td><td><code>FeedbackPhase</code> 4 상태</td></tr>
-                <tr><td><code>drift.py</code></td><td>drift 감지</td><td>severity 4-tier 분류</td></tr>
-                <tr><td><code>correlation.py</code></td><td>출력↔메트릭 상관</td><td>p-value gate</td></tr>
-                <tr><td><code>expert_panel.py</code></td><td>가중 투표</td><td>3-tier (junior/senior/principal)</td></tr>
-                <tr><td><code>outcome_tracking.py</code></td><td>장기 결과 기록</td><td>append-only ledger</td></tr>
-                <tr><td><code>snapshot.py</code></td><td>rollback 스냅샷</td><td>per-stage immutable copy</td></tr>
+                <tr><td><code>enabled</code></td><td>opt-in 스위치. 기본 false면 <code>register_auto_trigger</code>가 no-op입니다</td></tr>
+                <tr><td><code>cron</code></td><td>발화 주기 cron 표현식</td></tr>
+                <tr><td><code>min_interval_minutes</code></td><td>성공 발화 간 최소 간격</td></tr>
+                <tr><td><code>max_generation</code></td><td>누적 발화 세대 상한. 0이면 무제한</td></tr>
               </tbody>
             </table>
 
-            <h2>프로모션 단계</h2>
-            <pre>{`development → staging → production
-   ↑              ↑              │
-   │              │              ▼
-   └──────────────┴──── drift detected → rollback`}</pre>
+            <h2>관측</h2>
+            <table>
+              <thead>
+                <tr><th>표면</th><th>내용</th></tr>
+              </thead>
+              <tbody>
+                <tr><td><code>HookEvent.SELF_IMPROVING_AUTO_TRIGGER_*</code></td><td>발화 결과별 이벤트. <code>FIRED</code>, <code>LOCK_BUSY</code>, <code>INTERVAL_BLOCKED</code>, <code>RUNNER_ERROR</code>, <code>PARSE_ERROR</code>, <code>MAX_GENERATION_REACHED</code> (<code>core/hooks/system.py</code>)</td></tr>
+                <tr><td><code>auto_trigger_history.jsonl</code></td><td>발화 기록 append-only 로그 (<code>~/.geode/autoresearch/handoff/</code>)</td></tr>
+                <tr><td><code>geode outer-bundle</code></td><td>발화 기록을 <code>mutations.jsonl</code>, <code>baseline.json</code>과 교차해 하나의 타임라인으로 보여 주는 뷰어 (<code>core/cli/outer_bundle.py</code>)</td></tr>
+                <tr><td><code>/schedule</code></td><td>등록된 트리거 목록에서 <code>self_improving_loop_auto_trigger</code>로 식별</td></tr>
+              </tbody>
+            </table>
 
-            <h2>drift 감지</h2>
-            <p>
-              drift 심각도는 <code>low</code> /{" "}
-              <code>medium</code> / <code>high</code> / <code>critical</code>로
-              등급화됩니다. production 모델의 critical drift는 즉시 이전 staging
-              스냅샷으로 롤백을 트리거합니다. 더 낮은 심각도는 메트릭으로
-              기록되고 전문가 패널을 기다립니다.
-            </p>
+            <h2>실패 모드</h2>
+            <table>
+              <thead>
+                <tr><th>증상</th><th>원인</th><th>해법</th></tr>
+              </thead>
+              <tbody>
+                <tr><td>cron 시각에 아무 일도 없음</td><td><code>enabled=false</code>(기본)</td><td><code>~/.geode/config.toml</code>의 <code>[self_improving_loop.scheduler]</code>에서 켭니다.</td></tr>
+                <tr><td><code>LOCK_BUSY</code>가 반복</td><td>수동 실행이나 캠페인이 락을 보유</td><td>정상 동작입니다. 동시 발화는 의도적으로 no-op입니다.</td></tr>
+                <tr><td>발화는 되는데 변이가 없음</td><td><code>MAX_GENERATION_REACHED</code></td><td><code>max_generation</code>을 올리거나 0으로 되돌립니다.</td></tr>
+              </tbody>
+            </table>
 
-            <h2>전문가 패널 투표</h2>
-            <p>
-              모델 출력에 이의가 제기되면 가상 전문가 패널 (junior, senior,
-              principal 티어)이 출력 수용 여부에 투표합니다. 표는 티어로 가중치가
-              매겨지고 결과는 모델 레지스트리로 피드백됩니다.
-            </p>
-
-            <h2>발화되는 훅 이벤트</h2>
+            <h2>다음</h2>
             <ul>
-              <li><code>DRIFT_DETECTED</code></li>
-              <li><code>MODEL_PROMOTED</code></li>
-              <li><code>OUTCOME_COLLECTED</code></li>
-              <li><code>EXPERT_VOTE_CAST</code></li>
-              <li><code>FEEDBACK_PHASE_CHANGED</code></li>
+              <li><a href="/geode/docs/capabilities/outer-loop">아우터 루프</a>. 발화된 run_once가 실제로 하는 일.</li>
+              <li><a href="/geode/docs/runtime/scheduler">스케줄러</a>. cron 트리거가 사는 곳.</li>
+              <li><a href="/geode/docs/harness/cli">CLI 레퍼런스</a>. <code>geode outer-bundle</code>과 <code>/self-improving</code>.</li>
             </ul>
           </>
         }
         en={
           <>
-            <h2>Why a sidecar</h2>
             <p>
-              The agent (L4) executes. The runtime (L2) provides infrastructure.
-              Automation is the sidecar that sits between them, watching outcomes
-              and rotating the underlying runtime: promoting better models,
-              deprecating drifted ones, and collecting expert feedback. It is
-              not part of the 4-layer stack itself.
+              The auto-trigger is the sidecar that connects the self-improving
+              loop&apos;s mutation runner
+              (<code>SelfImprovingLoopRunner.run_once</code>) to the scheduler,
+              so the loop fires on a cron cadence without an operator at the
+              keyboard. The implementation is{" "}
+              <code>core/self_improving/loop/auto_trigger.py</code>; the wiring
+              is <code>build_scheduling</code> in{" "}
+              <code>core/wiring/scheduling.py</code>.
+            </p>
+            <p>
+              The separate automation pipeline that once lived here (the{" "}
+              <code>core/automation/</code> package with drift detection, model
+              promotion, and an expert panel) was deleted in v0.99.149: every
+              entry point into that chain was a pipeline event with no remaining
+              emitter, so its components were built on every boot and never did
+              any work. What remains of automation is this sidecar plus the{" "}
+              <a href="/geode/docs/runtime/scheduler">scheduler</a>.
             </p>
 
-            <h2>Files</h2>
+            <h2>How a firing runs</h2>
+            <pre>{`[self_improving_loop.scheduler] enabled=true   (~/.geode/config.toml, default off)
+        │ cron fires (trigger_id: self_improving_loop_auto_trigger)
+        ▼
+1. fcntl flock  ~/.geode/autoresearch/handoff/auto_trigger.lock
+        │ another holder → no-op (logged at INFO)
+        ▼
+2. min-interval gate  auto_trigger_last_run.txt
+        │ last successful firing within min_interval_minutes → skip
+        ▼
+3. SelfImprovingLoopRunner.run_once  (mutate → audit → gate)
+        │ source dispatch inherited from [self_improving_loop.mutator].source
+        ▼
+returns a status dict (never raises) + appends history`}</pre>
+            <p>
+              Three defenses matter. The lock keeps two cron firings, or a cron
+              firing plus a manual run, from racing on the same SoT files; it is
+              an advisory fcntl lock, so a crashed process releases it
+              automatically. The interval gate holds a floor cadence even when
+              restarts or clock skew make cron over-fire; only successful
+              firings update the timestamp, so a flapping config cannot lock the
+              schedule out for hours. And every outcome comes back as a status
+              dict: one failed firing cannot crash the scheduler loop.
+            </p>
+
+            <h2>Configuration</h2>
+            <table>
+              <thead>
+                <tr><th>Key (<code>[self_improving_loop.scheduler]</code>)</th><th>Meaning</th></tr>
+              </thead>
+              <tbody>
+                <tr><td><code>enabled</code></td><td>The opt-in switch. Default false makes <code>register_auto_trigger</code> a no-op</td></tr>
+                <tr><td><code>cron</code></td><td>Cron expression for the firing cadence</td></tr>
+                <tr><td><code>min_interval_minutes</code></td><td>Minimum gap between successful firings</td></tr>
+                <tr><td><code>max_generation</code></td><td>Cap on accumulated fired generations; 0 means unbounded</td></tr>
+              </tbody>
+            </table>
+
+            <h2>Observing it</h2>
+            <table>
+              <thead>
+                <tr><th>Surface</th><th>What it shows</th></tr>
+              </thead>
+              <tbody>
+                <tr><td><code>HookEvent.SELF_IMPROVING_AUTO_TRIGGER_*</code></td><td>One event per outcome: <code>FIRED</code>, <code>LOCK_BUSY</code>, <code>INTERVAL_BLOCKED</code>, <code>RUNNER_ERROR</code>, <code>PARSE_ERROR</code>, <code>MAX_GENERATION_REACHED</code> (<code>core/hooks/system.py</code>)</td></tr>
+                <tr><td><code>auto_trigger_history.jsonl</code></td><td>Append-only firing log under <code>~/.geode/autoresearch/handoff/</code></td></tr>
+                <tr><td><code>geode outer-bundle</code></td><td>Crosswalks the firing log with <code>mutations.jsonl</code> and <code>baseline.json</code> into one timeline (<code>core/cli/outer_bundle.py</code>)</td></tr>
+                <tr><td><code>/schedule</code></td><td>The trigger appears as <code>self_improving_loop_auto_trigger</code> in the registered list</td></tr>
+              </tbody>
+            </table>
+
+            <h2>Failure modes</h2>
+            <table>
+              <thead>
+                <tr><th>Symptom</th><th>Cause</th><th>Fix</th></tr>
+              </thead>
+              <tbody>
+                <tr><td>Nothing happens at the cron time</td><td><code>enabled=false</code> (the default)</td><td>Turn it on under <code>[self_improving_loop.scheduler]</code> in <code>~/.geode/config.toml</code>.</td></tr>
+                <tr><td>Repeated <code>LOCK_BUSY</code></td><td>A manual run or campaign holds the lock</td><td>Working as intended: concurrent firings are deliberate no-ops.</td></tr>
+                <tr><td>Firings happen but never mutate</td><td><code>MAX_GENERATION_REACHED</code></td><td>Raise <code>max_generation</code> or set it back to 0.</td></tr>
+              </tbody>
+            </table>
+
+            <h2>Next</h2>
             <ul>
-              <li><code>core/automation/model_registry.py:36</code> — <code>class PromotionStage</code> (development, staging, production)</li>
-              <li><code>core/automation/feedback_loop.py</code> — phase FSM</li>
-              <li><code>core/automation/drift_detector.py</code> — correlation + severity analysis</li>
-              <li><code>core/automation/expert_panel.py</code> — junior/senior/principal voting tiers</li>
-            </ul>
-
-            <h2>Promotion stages</h2>
-            <pre>{`development → staging → production
-   ↑              ↑              │
-   │              │              ▼
-   └──────────────┴──── drift detected → rollback`}</pre>
-
-            <h2>Drift detection</h2>
-            <p>
-              Drift severity is graded <code>low</code> /{" "}
-              <code>medium</code> / <code>high</code> / <code>critical</code>.
-              Critical drift on a production model triggers immediate rollback to
-              the previous staging snapshot. Lower severity records a metric and
-              waits for the expert panel.
-            </p>
-
-            <h2>Expert panel voting</h2>
-            <p>
-              When a model output is contested, a virtual expert panel (junior,
-              senior, principal tiers) votes on whether the output should be
-              accepted. Votes are weighted by tier and the result feeds back to
-              the model registry.
-            </p>
-
-            <h2>Hook events fired</h2>
-            <ul>
-              <li><code>DRIFT_DETECTED</code></li>
-              <li><code>MODEL_PROMOTED</code></li>
-              <li><code>OUTCOME_COLLECTED</code></li>
-              <li><code>EXPERT_VOTE_CAST</code></li>
-              <li><code>FEEDBACK_PHASE_CHANGED</code></li>
+              <li><a href="/geode/docs/capabilities/outer-loop">The outer loop</a>. What the fired run_once actually does.</li>
+              <li><a href="/geode/docs/runtime/scheduler">Scheduler</a>. Where cron triggers live.</li>
+              <li><a href="/geode/docs/harness/cli">CLI reference</a>. <code>geode outer-bundle</code> and <code>/self-improving</code>.</li>
             </ul>
           </>
         }

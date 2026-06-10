@@ -206,23 +206,25 @@ export default function Page() {
       title="CHANGELOG"
       titleKo="CHANGELOG"
       summary={`Full history auto-synced from CHANGELOG.md. ${CHANGELOG.length} entries, last synced ${CHANGELOG_SYNCED_AT}.`}
-      summaryKo={`CHANGELOG.md에서 자동 sync된 전체 이력. ${CHANGELOG.length} entries, ${CHANGELOG_SYNCED_AT} 최신.`}
+      summaryKo={`CHANGELOG.md에서 자동 sync된 전체 이력. ${CHANGELOG.length} entries, 마지막 sync ${CHANGELOG_SYNCED_AT}.`}
     >
       <Bi
         ko={
           <p>
-            전체 <strong>{CHANGELOG.length}</strong>개 entry를 CHANGELOG.md에서 자동 추출.
-            상단 토글로 한국어 / 영어 전환. 한쪽만 작성된 entry는 표시 옆에 작은
-            <code className="mx-1">KR only</code>/<code>EN only</code> 라벨이 붙고, 현재 locale에 콘텐츠가
-            없는 경우 자동으로 다른 언어 fallback. 정본은 repo의 <code>CHANGELOG.md</code>.
+            모든 entry를 CHANGELOG.md에서 자동 추출합니다. 상단 토글로 한국어와
+            영어를 전환합니다. 한쪽 언어로만 작성된 entry에는
+            <code className="mx-1">KR only</code>/<code>EN only</code> 라벨이 붙고,
+            현재 언어에 콘텐츠가 없으면 다른 언어로 자동 폴백합니다. 정본은
+            repo의 <code>CHANGELOG.md</code>입니다.
           </p>
         }
         en={
           <p>
-            All <strong>{CHANGELOG.length}</strong> entries auto-extracted from CHANGELOG.md.
-            Switch language with the toggle above. Entries authored in only one language carry a small
-            <code className="mx-1">KR only</code>/<code>EN only</code> chip; missing content falls back
-            automatically. The repo&apos;s <code>CHANGELOG.md</code> is the source of truth.
+            Every entry is auto-extracted from CHANGELOG.md. Switch language
+            with the toggle above. Entries authored in only one language carry a
+            small <code className="mx-1">KR only</code>/<code>EN only</code>{" "}
+            chip; missing content falls back automatically. The repo&apos;s{" "}
+            <code>CHANGELOG.md</code> is the source of truth.
           </p>
         }
       />
@@ -270,8 +272,8 @@ export default function Page() {
           <>
             <h2>정본 출처</h2>
             <p>
-              <code>github.com/mangowhoiscloud/geode/blob/main/CHANGELOG.md</code>가 진리원입니다.
-              이 페이지는 <code>site/scripts/sync-stats.mjs</code>가 그 파일을 자동 파싱한 결과.
+              <code>github.com/mangowhoiscloud/geode/blob/main/CHANGELOG.md</code>가 정본입니다.
+              이 페이지는 <code>site/scripts/sync-stats.mjs</code>가 그 파일을 자동 파싱한 결과입니다.
             </p>
             <p>
               {t(locale, "마지막 sync: ", "Last sync: ")}
