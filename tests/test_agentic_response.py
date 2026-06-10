@@ -5,7 +5,7 @@ from __future__ import annotations
 from unittest.mock import MagicMock
 
 from core.agent.tool_executor import _write_denial_with_fallback
-from core.cli.agentic_response import (
+from core.llm.agentic_response import (
     AgenticResponse,
     TextBlock,
     ToolUseBlock,

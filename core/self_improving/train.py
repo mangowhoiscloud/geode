@@ -4969,10 +4969,12 @@ def main() -> int:
     # operator (or a follow-up script) can read them, AND persist them to the
     # rolling ``state/autoresearch/results.{tsv,jsonl}`` (PR-STATE-SELF-IMPROVING-
     # RENAME 2026-06-01 — previously printed only, so the hub's results section
-    # stayed empty). ``verdict`` / ``description`` default to the env-supplied
-    # values (the campaign driver sets ``AUTORESEARCH_VERDICT`` once the gate has
-    # decided); absent those they fall back to ``pending`` / ``dry-run`` so the
-    # history row is never blank.
+    # stayed empty). ``verdict`` / ``description`` read the AUTORESEARCH_* env
+    # hooks — NOTE (PR-CLEANUP-D1 2026-06-10): no production writer sets either
+    # env var today (the campaign driver does NOT set AUTORESEARCH_VERDICT,
+    # contrary to what this comment used to claim), so every row currently
+    # records ``pending`` / ``dry-run``. Wiring the campaign gate verdict into
+    # AUTORESEARCH_VERDICT is a D-3 decision item.
     description = os.environ.get("AUTORESEARCH_DESCRIPTION", "dry-run" if args.dry_run else "")
     verdict = os.environ.get("AUTORESEARCH_VERDICT", "pending")
     results_tsv_row = format_results_tsv_row(

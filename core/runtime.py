@@ -56,17 +56,7 @@ from core.orchestration.run_log import RunLog
 from core.paths import GLOBAL_RUNS_DIR
 from core.tools.policy import PolicyChain
 from core.tools.registry import ToolRegistry
-from core.wiring.bootstrap import (  # noqa: F401  — backward compat
-    _make_run_log_handler,
-    get_plugin_status,
-)
-from core.wiring.container import build_default_lanes as _build_default_lanes  # noqa: F401
-from core.wiring.container import (
-    build_default_policies as _build_default_policies,  # noqa: F401
-)
-from core.wiring.container import (
-    build_default_registry as _build_default_registry,  # noqa: F401
-)
+from core.wiring.bootstrap import get_plugin_status as get_plugin_status
 
 log = logging.getLogger(__name__)
 

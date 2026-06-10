@@ -288,8 +288,6 @@ geode serve [-p 3.0]                   # Headless daemon
 | `SLACK_BOT_TOKEN` | | Slack bot token |
 | `SLACK_TEAM_ID` | | Slack workspace ID |
 | **Pipeline** | | |
-| `GEODE_CONFIDENCE_THRESHOLD` | `0.7` | Confidence gate |
-| `GEODE_MAX_ITERATIONS` | `5` | Max re-analysis iterations |
 | **Observability** | | |
 | _(no env vars — built-in hook + RunLog)_ | | LLM_CALL_START/END events flow into `~/.geode/runs/<session>.jsonl` automatically |
 

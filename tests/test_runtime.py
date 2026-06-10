@@ -10,15 +10,19 @@ from core.orchestration.hot_reload import ConfigWatcher
 from core.orchestration.lane_queue import LaneQueue
 from core.orchestration.run_log import RunLog
 from core.orchestration.task_system import TaskGraph
-from core.runtime import (
-    GeodeRuntime,
-    _build_default_lanes,
-    _build_default_policies,
-    _build_default_registry,
-    _make_run_log_handler,
-)
+from core.runtime import GeodeRuntime
 from core.tools.policy import PolicyChain
 from core.tools.registry import ToolRegistry
+from core.wiring.bootstrap import _make_run_log_handler
+from core.wiring.container import (
+    build_default_lanes as _build_default_lanes,
+)
+from core.wiring.container import (
+    build_default_policies as _build_default_policies,
+)
+from core.wiring.container import (
+    build_default_registry as _build_default_registry,
+)
 
 from core.hooks import HookEvent, HookSystem
 

@@ -13,7 +13,7 @@ tools into the GEODE ToolExecutor:
   via :func:`plugins.petri_audit.optimize.optimize_prompt`. M1 (judge ≠
   generator provider) + M2 (PR-only auto-edit) + M3 (budget cap) + M10
   (compile_id) gates enforced inside the runner; M4 (TextGrad depth=1)
-  enforced by :mod:`plugins.petri_audit.textgrad_wrapper` when the
+  enforced by the audit invariants when the
   caller follows up with a textual-gradient step. EXPENSIVE_TOOLS-gated;
   default ``dry_run=True``.
 """

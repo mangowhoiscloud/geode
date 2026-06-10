@@ -1348,23 +1348,8 @@ http = [
 ]
 
 [[package]]
-name = "gdown"
-version = "6.0.0"
-source = { registry = "https://pypi.org/simple" }
-dependencies = [
-    { name = "beautifulsoup4" },
-    { name = "filelock" },
-    { name = "requests", extra = ["socks"] },
-    { name = "tqdm" },
-]
-sdist = { url = "https://files.pythonhosted.org/packages/72/01/9e0280ba321f73295374765dc3c0b1e03058188a592a48a321376f9eb092/gdown-6.0.0.tar.gz", hash = "sha256:1f1f735a174ef3599fca95786aafac1219b9d85d4c729ccb95e674996c47fd44", size = 262729, upload-time = "2026-04-12T06:37:40.182Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/91/fd/a382bb6684b1fdbe5cd19aa980a04a67f6c91efd0e1e627f93614fe2d24e/gdown-6.0.0-py3-none-any.whl", hash = "sha256:c82d39a6b09ed7778012515c2fa4ab4dc36d7789300cd0b16b87d3a3e4a09955", size = 18243, upload-time = "2026-04-12T06:37:38.209Z" },
-]
-
-[[package]]
 name = "geode-agent"
-version = "0.99.151"
+version = "0.99.152"
 source = { editable = "." }
 dependencies = [
     { name = "anthropic" },
@@ -1414,8 +1399,6 @@ obs = [
 ]
 reason = [
     { name = "dspy" },
-    { name = "instructor" },
-    { name = "textgrad" },
 ]
 viz = [
     { name = "matplotlib" },
@@ -1457,7 +1440,6 @@ requires-dist = [
     { name = "inspect-evals", marker = "extra == 'audit'", specifier = ">=0.13.0" },
     { name = "inspect-harbor", marker = "extra == 'audit'", specifier = ">=0.4.5" },
     { name = "inspect-petri", marker = "extra == 'audit'", git = "https://github.com/meridianlabs-ai/inspect_petri?rev=6d9b9e1dbc19bcc06544aca982427cfb37357ffc" },
-    { name = "instructor", marker = "extra == 'reason'", specifier = ">=1.6.0" },
     { name = "langgraph", specifier = ">=1.1.0" },
     { name = "langgraph-checkpoint", specifier = ">=4.0.1" },
     { name = "langgraph-checkpoint-sqlite", specifier = ">=3.0.0" },
@@ -1483,7 +1465,6 @@ requires-dist = [
     { name = "rich", specifier = ">=14.0.0" },
     { name = "simple-term-menu", specifier = ">=1.6.0" },
     { name = "sympy", specifier = ">=1.12" },
-    { name = "textgrad", marker = "extra == 'reason'", specifier = ">=0.1.6" },
     { name = "traceloop-sdk", marker = "extra == 'obs'", specifier = ">=0.34.0" },
     { name = "typer", specifier = ">=0.15.0" },
 ]
@@ -1557,15 +1538,6 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/b5/c8/f439cffde755cffa462bfbb156278fa6f9d09119719af9814b858fd4f81f/googleapis_common_protos-1.75.0.tar.gz", hash = "sha256:53a062ff3c32552fbd62c11fe23768b78e4ddf0494d5e5fd97d3f4689c75fbbd", size = 151035, upload-time = "2026-05-07T08:04:49.423Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/e7/c8/e2645aa8ed02fd4c7a2f59d68783b65b1f3cbdfe39a6308e156509d1fee8/googleapis_common_protos-1.75.0-py3-none-any.whl", hash = "sha256:961ed60399c457ceb0ee8f285a84c870aabc9c6a832b9d37bb281b5bebde43ed", size = 300631, upload-time = "2026-05-07T08:03:30.345Z" },
-]
-
-[[package]]
-name = "graphviz"
-version = "0.21"
-source = { registry = "https://pypi.org/simple" }
-sdist = { url = "https://files.pythonhosted.org/packages/f8/b3/3ac91e9be6b761a4b30d66ff165e54439dcd48b83f4e20d644867215f6ca/graphviz-0.21.tar.gz", hash = "sha256:20743e7183be82aaaa8ad6c93f8893c923bd6658a04c32ee115edb3c8a835f78", size = 200434, upload-time = "2025-06-15T09:35:05.824Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/91/4c/e0ce1ef95d4000ebc1c11801f9b944fa5910ecc15b5e351865763d8657f8/graphviz-0.21-py3-none-any.whl", hash = "sha256:54f33de9f4f911d7e84e4191749cac8cc5653f815b06738c54db9a15ab8b1e42", size = 47300, upload-time = "2025-06-15T09:35:04.433Z" },
 ]
 
 [[package]]
@@ -2152,28 +2124,6 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/cf/65/d036b5d00e473483fdcb4193b1c8a29c4146b4e90ffe89de8eeb09b80895/inspect_swe-0.2.52.tar.gz", hash = "sha256:94564f8488a9a9a8f5fbd5b6bf3f2e4abb070935f6d77d99d17c9a5777596e70", size = 73740, upload-time = "2026-05-09T14:01:19.937Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/cb/69/5e03470de314c4b1baf60ff8166adeec3fdfb0bb6747a9ddbd52f9639c02/inspect_swe-0.2.52-py3-none-any.whl", hash = "sha256:f24a9cf70aba34eb4a06fb9bd21137c7fa38b479be24fe3a5eef17881e3d8441", size = 103736, upload-time = "2026-05-09T14:01:18.349Z" },
-]
-
-[[package]]
-name = "instructor"
-version = "1.15.1"
-source = { registry = "https://pypi.org/simple" }
-dependencies = [
-    { name = "aiohttp" },
-    { name = "docstring-parser" },
-    { name = "jinja2" },
-    { name = "jiter" },
-    { name = "openai" },
-    { name = "pydantic" },
-    { name = "pydantic-core" },
-    { name = "requests" },
-    { name = "rich" },
-    { name = "tenacity" },
-    { name = "typer" },
-]
-sdist = { url = "https://files.pythonhosted.org/packages/dc/a4/832cfb15420360e26d2d85bd9d5fe1e4b839d52587574d389bc31284bf6f/instructor-1.15.1.tar.gz", hash = "sha256:c72406469d9025b742e83cf0c13e914b317db2089d08d889944e74fcd659ef94", size = 69948370, upload-time = "2026-04-03T01:51:30.107Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/d8/c8/36c5d9b80aaf40ba9a7084a8fc18c967db6bf248a4cc8d0f0816b14284be/instructor-1.15.1-py3-none-any.whl", hash = "sha256:be81d17ba2b154a04ab4720808f24f9d6b598f80992f82eaf9cc79006099cf6c", size = 178156, upload-time = "2026-04-03T01:51:23.098Z" },
 ]
 
 [[package]]
@@ -5276,15 +5226,6 @@ source = { registry = "https://pypi.org/simple" }
 sdist = { url = "https://files.pythonhosted.org/packages/ee/f0/cb456ac4f1a73723d5b866933b7986f02bacea27516629c00f8e7da94c2d/pyscreeze-1.0.1.tar.gz", hash = "sha256:cf1662710f1b46aa5ff229ee23f367da9e20af4a78e6e365bee973cad0ead4be", size = 27826, upload-time = "2024-08-20T23:03:07.291Z" }
 
 [[package]]
-name = "pysocks"
-version = "1.7.1"
-source = { registry = "https://pypi.org/simple" }
-sdist = { url = "https://files.pythonhosted.org/packages/bd/11/293dd436aea955d45fc4e8a35b6ae7270f5b8e00b53cf6c024c83b657a11/PySocks-1.7.1.tar.gz", hash = "sha256:3f8804571ebe159c380ac6de37643bb4685970655d3bba243530d6558b799aa0", size = 284429, upload-time = "2019-09-20T02:07:35.714Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/8d/59/b4572118e098ac8e46e399a1dd0f2d85403ce8bbaad9ec79373ed6badaf9/PySocks-1.7.1-py3-none-any.whl", hash = "sha256:2725bd0a9925919b9b51739eea5f9e2bae91e83288108a9ad338b2e3a4435ee5", size = 16725, upload-time = "2019-09-20T02:06:22.938Z" },
-]
-
-[[package]]
 name = "pytest"
 version = "9.0.2"
 source = { registry = "https://pypi.org/simple" }
@@ -5629,11 +5570,6 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/c9/74/b3ff8e6c8446842c3f5c837e9c3dfcfe2018ea6ecef224c710c85ef728f4/requests-2.32.5.tar.gz", hash = "sha256:dbba0bac56e100853db0ea71b82b4dfd5fe2bf6d3754a8893c3af500cec7d7cf", size = 134517, upload-time = "2025-08-18T20:46:02.573Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/1e/db/4254e3eabe8020b458f1a747140d32277ec7a271daf1d235b70dc0b4e6e3/requests-2.32.5-py3-none-any.whl", hash = "sha256:2462f94637a34fd532264295e186976db0f5d453d1cdd31473c85a6a161affb6", size = 64738, upload-time = "2025-08-18T20:46:00.542Z" },
-]
-
-[package.optional-dependencies]
-socks = [
-    { name = "pysocks" },
 ]
 
 [[package]]
@@ -6192,29 +6128,6 @@ source = { registry = "https://pypi.org/simple" }
 sdist = { url = "https://files.pythonhosted.org/packages/47/c6/ee486fd809e357697ee8a44d3d69222b344920433d3b6666ccd9b374630c/tenacity-9.1.4.tar.gz", hash = "sha256:adb31d4c263f2bd041081ab33b498309a57c77f9acf2db65aadf0898179cf93a", size = 49413, upload-time = "2026-02-07T10:45:33.841Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/d7/c1/eb8f9debc45d3b7918a32ab756658a0904732f75e555402972246b0b8e71/tenacity-9.1.4-py3-none-any.whl", hash = "sha256:6095a360c919085f28c6527de529e76a06ad89b23659fa881ae0649b867a9d55", size = 28926, upload-time = "2026-02-07T10:45:32.24Z" },
-]
-
-[[package]]
-name = "textgrad"
-version = "0.1.8"
-source = { registry = "https://pypi.org/simple" }
-dependencies = [
-    { name = "datasets" },
-    { name = "diskcache" },
-    { name = "gdown" },
-    { name = "graphviz" },
-    { name = "httpx" },
-    { name = "litellm" },
-    { name = "openai" },
-    { name = "pandas" },
-    { name = "pillow" },
-    { name = "platformdirs" },
-    { name = "python-dotenv" },
-    { name = "tenacity" },
-]
-sdist = { url = "https://files.pythonhosted.org/packages/3c/05/2978c1feae998d8d25b2deabdd09f5aa42bed3db22ef860ccf55319b85b8/textgrad-0.1.8.tar.gz", hash = "sha256:96b32ab9f737a81152479fa7b8fc6bef98433f472d28ecd942ee3d9d190f6175", size = 72246, upload-time = "2025-03-26T17:08:11.029Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/0f/96/7c2e8b9b8c06f0566ca09e38e936105a550f8fb22924ff6aa2f967742060/textgrad-0.1.8-py3-none-any.whl", hash = "sha256:f252572bd25cd7cbdc4528024f70895b3e92328932e37e576691d20eead0a63a", size = 79578, upload-time = "2025-03-26T17:08:09.849Z" },
 ]
 
 [[package]]
