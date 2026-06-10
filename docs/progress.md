@@ -16,7 +16,9 @@
 
 <!-- Move items here when work begins. -->
 <!-- 3-Checkpoint: (1) alloc → (2) merge (CI 5/5) → (3) verify -->
-- [ ] Audit bundles D(cleanup sprint)/E(drift anchors) — awaiting pick
+- [ ] Audit bundle E in progress (operator picked) — _PROVIDER_NORMALIZATION anchor + Anthropic model-capability shared SoT + parity guards; worktree drift-anchors
+- [ ] Duplication/dead-code follow-up audit — agent running
+- [ ] Audit bundle D(cleanup sprint) — awaiting pick
 
 ## In Review
 
