@@ -222,24 +222,23 @@ def bootstrap_geode(
     )
 
 
-def run_agentic_oneshot(
+async def arun_agentic_oneshot(
     prompt: str,
     *,
     quiet: bool = True,
     time_budget_s: float = 60.0,
 ) -> Any:
-    """Build a minimal isolated AgenticLoop and run a prompt one-shot.
+    """Async core of :func:`run_agentic_oneshot` — await inside a running loop.
 
-    Returns AgenticResult.  Inline construction — no SharedServices overhead.
-    One-shot execution, not a session mode. Callers: context:fork skill
-    execution (``cmd_skill_invoke``) and the ``geode-mcp`` ``run_agent``
-    tool (D-3 ④, 2026-06-10 — promoted from the private
-    ``_build_agentic_stack_minimal`` so both surfaces share one stack).
+    geode-mcp executes tools INSIDE the server's event loop, where the sync
+    wrapper's ``run_process_coroutine`` raises ("cannot be called from an
+    active event loop" — first live HTTP ``run_agent``, 2026-06-11). MCP
+    tool handlers await this directly; sync callers (fork skill) keep the
+    wrapper below.
     """
     from core.agent.conversation import ConversationContext
     from core.agent.loop import AgenticLoop
     from core.agent.tool_executor import ToolExecutor
-    from core.async_runtime import run_process_coroutine
     from core.config import _resolve_provider
     from core.config import settings as _stk_settings
     from core.llm.adapters.registry import bootstrap_builtins
@@ -263,7 +262,27 @@ def run_agentic_oneshot(
         time_budget_s=time_budget_s,
         max_rounds=0,
     )
-    return run_process_coroutine(loop.arun(prompt))
+    return await loop.arun(prompt)
+
+
+def run_agentic_oneshot(
+    prompt: str,
+    *,
+    quiet: bool = True,
+    time_budget_s: float = 60.0,
+) -> Any:
+    """Build a minimal isolated AgenticLoop and run a prompt one-shot.
+
+    Returns AgenticResult.  Inline construction — no SharedServices overhead.
+    One-shot execution, not a session mode. Callers: context:fork skill
+    execution (``cmd_skill_invoke``); the ``geode-mcp`` ``run_agent`` tool
+    awaits :func:`arun_agentic_oneshot` directly (running-loop context).
+    """
+    from core.async_runtime import run_process_coroutine
+
+    return run_process_coroutine(
+        arun_agentic_oneshot(prompt, quiet=quiet, time_budget_s=time_budget_s)
+    )
 
 
 def _build_tool_handlers_for_fork() -> dict[str, Any]:

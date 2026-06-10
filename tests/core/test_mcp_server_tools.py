@@ -153,7 +153,31 @@ def test_run_agentic_oneshot_bootstraps_adapters() -> None:
     failed with AdapterNotFoundError "Known pairs: []" (2026-06-11)."""
     import inspect
 
-    from core.cli.bootstrap import run_agentic_oneshot
+    from core.cli.bootstrap import arun_agentic_oneshot
 
-    source = inspect.getsource(run_agentic_oneshot)
+    source = inspect.getsource(arun_agentic_oneshot)
     assert "bootstrap_builtins()" in source
+
+
+def test_run_agent_tool_is_async_and_awaits_async_core() -> None:
+    """FastMCP executes tools inside the server's event loop — a sync tool
+    calling run_process_coroutine raises "cannot be called from an active
+    event loop" (second live HTTP run_agent failure, 2026-06-11). The tool
+    must be async and await arun_agentic_oneshot."""
+    import inspect
+
+    import core.mcp_server as mod
+
+    source = inspect.getsource(mod.create_mcp_server)
+    assert "async def run_agent(" in source
+    assert "await arun_agentic_oneshot(" in source
+
+
+def test_sync_oneshot_wrapper_delegates_to_async_core() -> None:
+    import inspect
+
+    from core.cli.bootstrap import arun_agentic_oneshot, run_agentic_oneshot
+
+    assert inspect.iscoroutinefunction(arun_agentic_oneshot)
+    source = inspect.getsource(run_agentic_oneshot)
+    assert "arun_agentic_oneshot(" in source

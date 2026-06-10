@@ -177,11 +177,11 @@ def create_mcp_server(
     _pending_proposals: dict[str, tuple[Any, Any]] = {}
 
     @mcp.tool(description=_TOOL_DESCRIPTIONS["run_agent"])
-    def run_agent(prompt: str, time_budget_s: float = 120.0) -> dict[str, Any]:
+    async def run_agent(prompt: str, time_budget_s: float = 120.0) -> dict[str, Any]:
         """Run one GEODE agentic one-shot and return the result."""
-        from core.cli.bootstrap import run_agentic_oneshot
+        from core.cli.bootstrap import arun_agentic_oneshot
 
-        result = run_agentic_oneshot(prompt, quiet=True, time_budget_s=time_budget_s)
+        result = await arun_agentic_oneshot(prompt, quiet=True, time_budget_s=time_budget_s)
         return {
             "text": getattr(result, "text", ""),
             "rounds": getattr(result, "rounds", 0),

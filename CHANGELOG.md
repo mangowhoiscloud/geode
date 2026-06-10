@@ -45,6 +45,11 @@ functional change.
 
 ---
 
+## [0.99.174] - 2026-06-11
+
+### Fixed
+- **geode-mcp `run_agent` event-loop conflict** — second live HTTP defect: FastMCP executes tool handlers inside the server's event loop, where the sync `run_agentic_oneshot` wrapper's `run_process_coroutine` raises "cannot be called from an active event loop". `run_agentic_oneshot` split into async core `arun_agentic_oneshot` (carrying the adapter bootstrap from v0.99.172) + thin sync wrapper; the MCP `run_agent` tool is now `async def` awaiting the core directly. Fork-skill caller keeps the sync wrapper. Guards: `test_run_agent_tool_is_async_and_awaits_async_core`, `test_sync_oneshot_wrapper_delegates_to_async_core`.
+
 ## [0.99.173] - 2026-06-11
 
 ### Changed
