@@ -30,10 +30,6 @@ from pathlib import Path
 
 import pytest
 import yaml
-from plugins.petri_audit.runner import (
-    DEFAULT_TOKEN_ASSUMPTIONS,
-    SPLIT_TOKEN_ASSUMPTIONS,
-)
 
 DIMS_DIR = Path(__file__).resolve().parents[3] / "plugins" / "petri_audit" / "judge_dims"
 

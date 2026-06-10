@@ -6,9 +6,9 @@ from unittest.mock import MagicMock, patch
 
 import anthropic
 import pytest
-from core.llm.providers.anthropic import retry_with_backoff as _retry_with_backoff
 from core.llm.fallback import MAX_RETRIES
 from core.llm.providers.anthropic import FALLBACK_MODELS
+from core.llm.providers.anthropic import retry_with_backoff as _retry_with_backoff
 from core.llm.router import call_llm, call_llm_json
 
 
