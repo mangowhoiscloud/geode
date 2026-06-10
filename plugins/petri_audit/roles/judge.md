@@ -9,7 +9,6 @@ description: >-
 default_model: claude-sonnet-4-6
 default_source: auto
 inline_skills:
-  - geode-verification
   - karpathy-patterns
 ---
 
