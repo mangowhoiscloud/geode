@@ -322,7 +322,7 @@ def test_get_seed_generation_config_returns_loader_value() -> None:
 
     fake = SimpleNamespace(candidates_default=42, default_gen_tag="genQ")
     with patch(
-        "core.config.self_improving_loop.load_self_improving_loop_config",
+        "core.config.self_improving.load_self_improving_loop_config",
         return_value=SimpleNamespace(seed_generation=fake),
     ):
         cfg = cli_mod._get_seed_generation_config()
@@ -337,7 +337,7 @@ def test_get_seed_generation_config_falls_back_when_loader_raises() -> None:
     def _boom() -> object:
         raise RuntimeError("simulated load failure")
 
-    with patch("core.config.self_improving_loop.load_self_improving_loop_config", _boom):
+    with patch("core.config.self_improving.load_self_improving_loop_config", _boom):
         cfg = cli_mod._get_seed_generation_config()
     assert cfg.candidates_default == 15
     assert cfg.default_gen_tag == "gen1"
@@ -362,9 +362,7 @@ def test_audit_seeds_generate_uses_config_defaults() -> None:
         seed_generation=SimpleNamespace(candidates_default=8, default_gen_tag="gen7"),
     )
     with (
-        patch(
-            "core.config.self_improving_loop.load_self_improving_loop_config", return_value=fake_cfg
-        ),
+        patch("core.config.self_improving.load_self_improving_loop_config", return_value=fake_cfg),
         patch("plugins.seed_generation.cli.run_audit_seeds", _capture_run),
     ):
         result = CliRunner().invoke(
@@ -621,9 +619,7 @@ def test_audit_seeds_generate_cli_overrides_win_over_config() -> None:
         seed_generation=SimpleNamespace(candidates_default=8, default_gen_tag="gen7"),
     )
     with (
-        patch(
-            "core.config.self_improving_loop.load_self_improving_loop_config", return_value=fake_cfg
-        ),
+        patch("core.config.self_improving.load_self_improving_loop_config", return_value=fake_cfg),
         patch("plugins.seed_generation.cli.run_audit_seeds", _capture_run),
     ):
         result = CliRunner().invoke(

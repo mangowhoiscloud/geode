@@ -23,6 +23,7 @@ from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any
 
+from core.config import CONTEXT_BLOCK_MAX_CHARS
 from core.hooks import HookEvent, HookSystem
 
 log = logging.getLogger(__name__)
@@ -43,7 +44,7 @@ class IsolationConfig:
     timeout_s: float = 300.0  # Max execution time (5 min default)
     post_to_main: bool = True  # Whether to post result back
     post_mode: PostToMainMode = PostToMainMode.SUMMARY
-    max_chars: int = 8000  # Max chars for full mode
+    max_chars: int = CONTEXT_BLOCK_MAX_CHARS  # Max chars for full mode
     prefix: str = "Isolated"  # Prefix for posted messages
     metadata: dict[str, Any] = field(default_factory=dict)
 

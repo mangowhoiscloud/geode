@@ -53,6 +53,11 @@ from typing import Any, Literal
 
 log = logging.getLogger(__name__)
 
+# Single anchor for every agent role's default model (hardcoding sweep,
+# 2026-06-11) — was independently hardcoded in 10 agent modules. Per-role
+# overrides still flow through [self_improving_loop.seed_generation.roles.*].
+DEFAULT_AGENT_MODEL = "claude-opus-4-8"
+
 __all__ = [
     "BaseSeedAgent",
     "SeedAgentResult",

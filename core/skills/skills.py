@@ -18,6 +18,7 @@ from typing import Any
 
 from pydantic import BaseModel, Field
 
+from core.config import CONTEXT_BLOCK_MAX_CHARS
 from core.skills._frontmatter import parse_yaml_frontmatter
 
 log = logging.getLogger(__name__)
@@ -158,7 +159,7 @@ class SkillRegistry:
                     break
         return matches
 
-    def get_context_block(self, max_chars: int = 8000) -> str:
+    def get_context_block(self, max_chars: int = CONTEXT_BLOCK_MAX_CHARS) -> str:
         """Tier 1: Format skill metadata for system prompt as XML.
 
         Only name + description (not body). Progressive Disclosure:

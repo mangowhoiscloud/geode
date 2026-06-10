@@ -212,7 +212,7 @@ def _get_seed_generation_config() -> Any:
     usable when ``core.config`` is unavailable in test contexts.
     """
     try:
-        from core.config.self_improving_loop import load_self_improving_loop_config
+        from core.config.self_improving import load_self_improving_loop_config
 
         return load_self_improving_loop_config().seed_generation
     except Exception:

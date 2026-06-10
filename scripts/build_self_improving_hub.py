@@ -48,6 +48,7 @@ from statistics import NormalDist
 from typing import Any
 from urllib.parse import quote
 
+from core.paths import GEODE_REPO_URL
 from markdown_it import MarkdownIt
 
 LOG = logging.getLogger("build_self_improving_hub")
@@ -1856,7 +1857,7 @@ def _render_hub_sidebar(
       <div class="nav-section">Meta</div>
       <ul class="nav-list">
         <li>\
-<a href="https://github.com/mangowhoiscloud/geode" rel="noopener">GitHub &#x2197;</a></li>
+<a href="{GEODE_REPO_URL}" rel="noopener">GitHub &#x2197;</a></li>
       </ul>
     </nav>
   </aside>"""

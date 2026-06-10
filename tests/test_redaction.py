@@ -77,7 +77,7 @@ class TestRedactionIntegration:
     """Test redaction wired into BashTool.to_tool_result."""
 
     def test_bash_tool_result_redacts_stdout(self) -> None:
-        from core.agent.bash_tool import BashResult, BashTool
+        from core.tools.bash_tool import BashResult, BashTool
 
         bash = BashTool()
         result = BashResult(
@@ -90,7 +90,7 @@ class TestRedactionIntegration:
         assert "[REDACTED]" in tool_result["stdout"]
 
     def test_bash_tool_result_redacts_stderr(self) -> None:
-        from core.agent.bash_tool import BashResult, BashTool
+        from core.tools.bash_tool import BashResult, BashTool
 
         bash = BashTool()
         result = BashResult(
@@ -103,7 +103,7 @@ class TestRedactionIntegration:
         assert "[REDACTED]" in tool_result["stderr"]
 
     def test_bash_tool_result_no_secrets_unchanged(self) -> None:
-        from core.agent.bash_tool import BashResult, BashTool
+        from core.tools.bash_tool import BashResult, BashTool
 
         bash = BashTool()
         result = BashResult(

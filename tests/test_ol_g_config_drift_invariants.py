@@ -48,7 +48,7 @@ def test_g_b_autoresearch_petri_role_is_canonical_sot() -> None:
     consult them, but they accept any string round-trip so an even
     older config.toml doesn't break parse.
     """
-    from core.config.self_improving_loop import (
+    from core.config.self_improving import (
         AutoresearchConfig,
         PetriRoleConfig,
         SelfImprovingLoopConfig,

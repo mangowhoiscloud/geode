@@ -56,6 +56,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from plugins.seed_generation.agents.base import (
+    DEFAULT_AGENT_MODEL,
     BaseSeedAgent,
     SeedAgentResult,
     sum_sub_result_tokens,
@@ -70,7 +71,7 @@ log = logging.getLogger(__name__)
 __all__ = ["Generator"]
 
 
-_DEFAULT_GENERATOR_MODEL = "claude-opus-4-8"
+_DEFAULT_GENERATOR_MODEL = DEFAULT_AGENT_MODEL
 _GENERATOR_AGENT_NAME = "seed_generator"
 _TASK_TYPE = "seed-generation"
 # CSP-13 (2026-05-23) — Loop 2 (debate-turn) sidecar suffix. The

@@ -159,7 +159,7 @@ def test_append_audit_log_records_role_provenance(
     """PR-ROLE-PROVENANCE — every cycle's apply row carries per-role
     {model, source, lane} so the credential lane is observable on a REJECT
     (no baseline_archive row), not just on promote."""
-    import core.config.self_improving_loop as cfg_mod
+    import core.config.self_improving as cfg_mod
 
     fake = SimpleNamespace(
         autoresearch=SimpleNamespace(

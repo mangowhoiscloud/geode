@@ -454,7 +454,7 @@ def test_repetitive_mutation_error_subclasses_value_error() -> None:
 def test_dedup_threshold_default_matches_difflib_grounding() -> None:
     """Default ``mutator_dedup_threshold`` (0.85) sits well above
     ``difflib.get_close_matches`` cutoff (0.6 "close match" band)."""
-    from core.config.self_improving_loop import AutoresearchConfig
+    from core.config.self_improving import AutoresearchConfig
 
     cfg = AutoresearchConfig()
     assert cfg.mutator_dedup_threshold == 0.85
@@ -464,7 +464,7 @@ def test_feedback_window_default_matches_wire_default_last() -> None:
     """Default ``mutator_feedback_window`` (20) matches the operator
     dashboard convention so the mutator sees the same recent slice."""
     from core.cli.commands.self_improving import _WIRE_DEFAULT_LAST
-    from core.config.self_improving_loop import AutoresearchConfig
+    from core.config.self_improving import AutoresearchConfig
 
     cfg = AutoresearchConfig()
     assert cfg.mutator_feedback_window == _WIRE_DEFAULT_LAST

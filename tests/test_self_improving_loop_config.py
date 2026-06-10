@@ -1,4 +1,4 @@
-"""Tests for ``core/config/self_improving_loop.py`` — single SoT loader for the
+"""Tests for ``core/config/self_improving.py`` — single SoT loader for the
 ``~/.geode/config.toml`` ``[self_improving_loop.*]`` section.
 
 Covers schema defaults, sub-config defaults, missing-file fallback,
@@ -12,7 +12,7 @@ from __future__ import annotations
 from pathlib import Path
 
 import pytest
-from core.config.self_improving_loop import (
+from core.config.self_improving import (
     AutoresearchConfig,
     PetriRoleConfig,
     SeedGenerationConfig,
@@ -182,11 +182,11 @@ seed_limit = 2
 """,
     )
     import core.self_improving.train as auto_train
-    from core.config import self_improving_loop as sil_config
+    from core.config import self_improving as sil_config
 
     # Capture the unpatched loader, then monkeypatch the import target
     # to force the tmp_path. ``_get_autoresearch_config`` imports the
-    # loader from ``core.config.self_improving_loop`` so the patch
+    # loader from ``core.config.self_improving`` so the patch
     # needs to land on that module attribute.
     original_loader = sil_config.load_self_improving_loop_config
 
@@ -396,7 +396,7 @@ def test_default_path_resolves_to_global_config_toml(
 ) -> None:
     """Without explicit path or env override, the loader resolves to
     ``core.paths.GLOBAL_CONFIG_TOML``."""
-    import core.config.self_improving_loop as mod
+    import core.config.self_improving as mod
 
     monkeypatch.delenv("GEODE_CONFIG_TOML", raising=False)
     fake = tmp_path / "global.toml"

@@ -172,7 +172,7 @@ def test_default_llm_call_dispatches_to_claude_cli(monkeypatch: pytest.MonkeyPat
     cfg_mock.autoresearch.mutator.source = "claude-cli"
     cfg_mock.autoresearch.mutator.max_tokens = 1024
     monkeypatch.setattr(
-        "core.config.self_improving_loop.load_self_improving_loop_config",
+        "core.config.self_improving.load_self_improving_loop_config",
         lambda: cfg_mock,
     )
     monkeypatch.setattr("core.config._resolve_provider", lambda m: "anthropic")
@@ -205,7 +205,7 @@ def test_default_llm_call_dispatches_to_codex_cli(monkeypatch: pytest.MonkeyPatc
     cfg_mock.autoresearch.mutator.source = "openai-codex"
     cfg_mock.autoresearch.mutator.max_tokens = 1024
     monkeypatch.setattr(
-        "core.config.self_improving_loop.load_self_improving_loop_config",
+        "core.config.self_improving.load_self_improving_loop_config",
         lambda: cfg_mock,
     )
     monkeypatch.setattr("core.config._resolve_provider", lambda m: "openai-codex")
@@ -236,7 +236,7 @@ def test_default_llm_call_normalizes_openai_codex_provider(
     cfg_mock.autoresearch.mutator.source = "api_key"
     cfg_mock.autoresearch.mutator.max_tokens = 1024
     monkeypatch.setattr(
-        "core.config.self_improving_loop.load_self_improving_loop_config",
+        "core.config.self_improving.load_self_improving_loop_config",
         lambda: cfg_mock,
     )
     monkeypatch.setattr("core.config._resolve_provider", lambda m: "openai-codex")
@@ -307,7 +307,7 @@ def test_default_llm_call_api_key_path_unchanged(monkeypatch: pytest.MonkeyPatch
     cfg_mock.autoresearch.mutator.source = "api_key"
     cfg_mock.autoresearch.mutator.max_tokens = 1024
     monkeypatch.setattr(
-        "core.config.self_improving_loop.load_self_improving_loop_config",
+        "core.config.self_improving.load_self_improving_loop_config",
         lambda: cfg_mock,
     )
     monkeypatch.setattr("core.config._resolve_provider", lambda m: "anthropic")
@@ -416,10 +416,10 @@ def test_cmd_source_set_rejects_invalid_source(
     fake_toml = tmp_path / "config.toml"
     monkeypatch.setattr("core.paths.GLOBAL_CONFIG_TOML", fake_toml)
     # Single-SoT (2026-05-22) — writer now resolves through
-    # ``core.config.self_improving_loop._resolve_config_path`` which
+    # ``core.config.self_improving._resolve_config_path`` which
     # reads the module-local import; patch that symbol too so the test
     # honors fake_toml regardless of which side calls in first.
-    monkeypatch.setattr("core.config.self_improving_loop.GLOBAL_CONFIG_TOML", fake_toml)
+    monkeypatch.setattr("core.config.self_improving.GLOBAL_CONFIG_TOML", fake_toml)
     with patch.object(self_improving, "console") as cmock:
         self_improving._cmd_source_set(["source=bogus"])
     assert not fake_toml.exists()
@@ -437,7 +437,7 @@ def test_cmd_source_set_persists_valid_source(
     fake_toml = tmp_path / "config.toml"
     monkeypatch.setattr("core.paths.GLOBAL_CONFIG_TOML", fake_toml)
     # See sibling test for rationale on patching both symbols.
-    monkeypatch.setattr("core.config.self_improving_loop.GLOBAL_CONFIG_TOML", fake_toml)
+    monkeypatch.setattr("core.config.self_improving.GLOBAL_CONFIG_TOML", fake_toml)
     self_improving._cmd_source_set(["source=claude-cli"])
     text = fake_toml.read_text(encoding="utf-8")
     # Step J-b.1 — writer target moved to autoresearch.mutator.
@@ -462,13 +462,13 @@ def test_persist_full_config_uses_plural_roles_path(
     next config load raises ``ValidationError``. Codex MCP catch on
     PR-PAPERCLIP.
     """
-    from core.config.self_improving_loop import load_self_improving_loop_config
+    from core.config.self_improving import load_self_improving_loop_config
 
     from core.cli.commands import self_improving
 
     fake_toml = tmp_path / "config.toml"
     monkeypatch.setattr("core.paths.GLOBAL_CONFIG_TOML", fake_toml)
-    monkeypatch.setattr("core.config.self_improving_loop.GLOBAL_CONFIG_TOML", fake_toml)
+    monkeypatch.setattr("core.config.self_improving.GLOBAL_CONFIG_TOML", fake_toml)
     self_improving._persist_full_config(
         mutator={},
         petri={},
@@ -499,7 +499,7 @@ def test_default_llm_call_explicit_api_key_routes_payg_not_inferred_subscription
     cfg_mock.autoresearch.mutator.source = "api_key"
     cfg_mock.autoresearch.mutator.max_tokens = 1024
     monkeypatch.setattr(
-        "core.config.self_improving_loop.load_self_improving_loop_config",
+        "core.config.self_improving.load_self_improving_loop_config",
         lambda: cfg_mock,
     )
     monkeypatch.setattr("core.config._resolve_provider", lambda m: "openai-codex")

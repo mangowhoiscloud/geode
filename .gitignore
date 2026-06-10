@@ -138,6 +138,8 @@ geode_checkpoints.db-wal
 
 # Temporary artifacts
 tmp/
+pilot_stderr.log
+/node_modules/
 reports/
 # Allow the source package at core/skills/reports/ (split from reports.py in v0.71.0).
 # Only un-ignore source files + templates — let __pycache__/*.pyc stay ignored

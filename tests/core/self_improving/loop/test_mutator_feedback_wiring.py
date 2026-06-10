@@ -131,7 +131,7 @@ def _patch_config(
     """Force the loader to return a config with specific windows.
 
     Avoids touching ``~/.geode/config.toml``."""
-    from core.config.self_improving_loop import (
+    from core.config.self_improving import (
         AutoresearchConfig,
         SelfImprovingLoopConfig,
     )
@@ -146,7 +146,7 @@ def _patch_config(
         return cfg
 
     monkeypatch.setattr(
-        "core.config.self_improving_loop.load_self_improving_loop_config",
+        "core.config.self_improving.load_self_improving_loop_config",
         _fake_loader,
     )
 

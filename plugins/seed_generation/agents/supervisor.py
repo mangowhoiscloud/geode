@@ -65,6 +65,7 @@ import logging
 from typing import TYPE_CHECKING, Any
 
 from plugins.seed_generation.agents.base import (
+    DEFAULT_AGENT_MODEL,
     BaseSeedAgent,
     SeedAgentResult,
     parse_structured_output,
@@ -81,7 +82,7 @@ log = logging.getLogger(__name__)
 __all__ = ["Supervisor"]
 
 
-_DEFAULT_SUPERVISOR_MODEL = "claude-opus-4-8"
+_DEFAULT_SUPERVISOR_MODEL = DEFAULT_AGENT_MODEL
 _SUPERVISOR_AGENT_NAME = "seed_supervisor"
 _TASK_TYPE = "seed-supervisor"
 

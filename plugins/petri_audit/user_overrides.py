@@ -165,7 +165,7 @@ def _read_role_from_self_improving_loop(role: str) -> RoleOverride:
     ``core.config``).
 
     Strict-mode validation errors (``ValueError`` raised by
-    :func:`core.config.self_improving_loop.load_self_improving_loop_config`) are
+    :func:`core.config.self_improving.load_self_improving_loop_config`) are
     intentionally *not* caught — they propagate so an operator who
     typos a key sees the failure rather than silently keeps reading
     the legacy ``petri.toml``. ``ImportError`` is the only exception
@@ -173,7 +173,7 @@ def _read_role_from_self_improving_loop(role: str) -> RoleOverride:
     stub out ``core.config``.
     """
     try:
-        from core.config.self_improving_loop import load_self_improving_loop_config
+        from core.config.self_improving import load_self_improving_loop_config
     except ImportError:
         # P1b — emit so the operator can see that the run silently fell
         # back to the legacy petri.toml instead of consulting the new

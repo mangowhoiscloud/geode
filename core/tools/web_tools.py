@@ -12,6 +12,8 @@ import logging
 from datetime import date
 from typing import Any
 
+from core.config import CONTEXT_BLOCK_MAX_CHARS
+
 log = logging.getLogger(__name__)
 
 
@@ -28,7 +30,7 @@ class WebFetchTool:
 
     def _execute_sync(self, **kwargs: Any) -> dict[str, Any]:
         url: str = kwargs["url"]
-        max_chars: int = min(kwargs.get("max_chars", 8000), 10000)
+        max_chars: int = min(kwargs.get("max_chars", CONTEXT_BLOCK_MAX_CHARS), 10000)
 
         try:
             import httpx

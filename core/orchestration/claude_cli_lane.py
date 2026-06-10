@@ -64,7 +64,7 @@ Why module-level (not LaneQueue-registered)
 ===========================================
 
 Same rationale as
-:mod:`core.llm.audit_lane`:
+:mod:`core.orchestration.audit_lane`:
 
 * The self-improving-loop mutator runs from contexts where the global
   ``LaneQueue`` singleton (built in
@@ -170,7 +170,7 @@ problem from operators."""
 _CLAUDE_CLI_LANE: Lane | None = None
 _CLAUDE_CLI_LANE_INIT_LOCK = threading.Lock()
 """Double-checked locking around lazy init (same pattern as
-``core/llm/audit_lane.py``). Two concurrent first-callers could
+``core/orchestration/audit_lane.py``). Two concurrent first-callers could
 otherwise observe ``_CLAUDE_CLI_LANE is None`` and construct distinct
 :class:`Lane` instances, defeating the per-bucket cap this module
 exists to enforce."""

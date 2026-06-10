@@ -32,7 +32,7 @@ from pathlib import Path
 def test_mutator_default_model_is_none() -> None:
     """MutatorConfig.default_model defaults to None so the runner
     inherits Settings.model. Explicit override still wins."""
-    from core.config.self_improving_loop import MutatorConfig
+    from core.config.self_improving import MutatorConfig
 
     assert MutatorConfig().default_model is None
 
@@ -40,7 +40,7 @@ def test_mutator_default_model_is_none() -> None:
 def test_autoresearch_target_and_judge_default_none() -> None:
     """AutoresearchConfig.target_model + judge_model default to None
     so audit argv builder falls back to Settings.model."""
-    from core.config.self_improving_loop import AutoresearchConfig
+    from core.config.self_improving import AutoresearchConfig
 
     cfg = AutoresearchConfig()
     assert cfg.target_model is None
@@ -95,7 +95,7 @@ def test_build_audit_command_never_pins_role_models_on_argv() -> None:
 
 
 def test_mutator_config_has_no_allow_list() -> None:
-    from core.config.self_improving_loop import MutatorConfig
+    from core.config.self_improving import MutatorConfig
 
     cfg = MutatorConfig()
     assert not hasattr(cfg, "allowed_models"), (
@@ -112,7 +112,7 @@ def test_mutator_config_has_no_allow_list() -> None:
 def test_global_fallback_to_payg_kept() -> None:
     """Only the global flag at ``[self_improving_loop] fallback_to_payg``
     survives. Per-component overrides removed."""
-    from core.config.self_improving_loop import SelfImprovingLoopConfig
+    from core.config.self_improving import SelfImprovingLoopConfig
 
     cfg = SelfImprovingLoopConfig()
     assert hasattr(cfg, "fallback_to_payg")
@@ -122,7 +122,7 @@ def test_global_fallback_to_payg_kept() -> None:
 def test_per_component_fallback_to_payg_removed() -> None:
     """All per-component classes lost their ``fallback_to_payg``
     override (which had no downstream reader)."""
-    from core.config.self_improving_loop import (
+    from core.config.self_improving import (
         AutoresearchConfig,
         MutatorConfig,
         PetriRoleConfig,
@@ -148,7 +148,7 @@ def test_per_component_fallback_to_payg_removed() -> None:
 def test_mutator_config_has_no_role_contract() -> None:
     """MutatorConfig.role_contract was a silent knob (logged only,
     never injected into the LLM prompt). Removed in PR-MINIMAL-2."""
-    from core.config.self_improving_loop import MutatorConfig
+    from core.config.self_improving import MutatorConfig
 
     assert not hasattr(MutatorConfig(), "role_contract")
 
@@ -162,7 +162,7 @@ def test_autoresearch_config_has_source_not_use_oauth() -> None:
     """``AutoresearchConfig.use_oauth: bool`` replaced by
     ``source: Source`` (4-enum) so the credential vocabulary is
     one shape across the loop."""
-    from core.config.self_improving_loop import AutoresearchConfig
+    from core.config.self_improving import AutoresearchConfig
 
     cfg = AutoresearchConfig()
     assert hasattr(cfg, "source")
