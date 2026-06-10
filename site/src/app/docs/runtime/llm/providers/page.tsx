@@ -1,171 +1,265 @@
 import { DocsShell, Bi } from "@/components/geode-docs/docs-shell";
 
-export const metadata = { title: "Providers — GEODE Docs" };
+export const metadata = { title: "LLM routing — GEODE Docs" };
 
 export default function Page() {
   return (
     <DocsShell
       slug="runtime/llm/providers"
-      title="Providers"
-      titleKo="프로바이더"
-      summary="Provider fallback chains across adapters. Provider-agnostic LLM router with explicit chain ordering. v0.94+ guards: HTML data-URL, tool_choice normalization, prompt_cache_key, GLM thinking gate, agentic_call streaming."
-      summaryKo="어댑터별 프로바이더 폴백 체인. 명시적 체인 순서를 갖는 프로바이더 독립 LLM router. v0.94+ 가드: HTML data-URL, tool_choice 정규화, prompt_cache_key, GLM thinking 게이트, agentic_call 스트리밍."
+      title="LLM routing"
+      titleKo="LLM 라우팅"
+      summary="Provider selection and model resolution. Fallback chains ship empty by default; fatal errors fast-fail instead of retrying."
+      summaryKo="프로바이더 선택과 모델 해석입니다. 폴백 체인은 기본 비활성으로 출하되고, 치명 오류는 재시도 없이 빠르게 실패합니다."
     >
       <Bi
         ko={
           <>
-            <h2>어댑터</h2>
+            <p>
+              GEODE는 세 프로바이더를 라우팅합니다. Anthropic, OpenAI(+Codex),
+              GLM입니다. 이 페이지는 모델이 어떻게 결정되고, 호출이 어느
+              어댑터로 가며, 실패했을 때 무엇이 일어나는지 정리합니다.
+            </p>
+
+            <h2>구성 요소</h2>
             <table>
-              <thead><tr><th>파일</th><th>프로바이더</th><th>체인 내 모델</th></tr></thead>
+              <thead>
+                <tr><th>구성</th><th>코드</th></tr>
+              </thead>
               <tbody>
-                <tr><td><code>core/llm/providers/anthropic.py</code></td><td>Anthropic</td><td>Opus 4.7 → Opus 4.6 → Sonnet 4.6 → Haiku 4.5</td></tr>
-                <tr><td><code>core/llm/providers/openai.py</code></td><td>OpenAI Responses</td><td>gpt-5.5 → gpt-5.4 → gpt-5.4-mini → gpt-5-mini</td></tr>
-                <tr><td><code>core/llm/providers/codex.py</code></td><td>Codex Plus (구독)</td><td>Codex 라우팅을 통한 OpenAI 모델</td></tr>
-                <tr><td><code>core/llm/providers/glm.py</code></td><td>Zhipu GLM</td><td>GLM-5.1 → GLM-5 → GLM-5-turbo → GLM-4.7 → GLM-4.7-flash. context 202_752 토큰.</td></tr>
+                <tr><td>프로바이더 구현</td><td><code>core/llm/providers/anthropic.py</code>, <code>openai.py</code>, <code>codex.py</code>, <code>glm.py</code></td></tr>
+                <tr><td>라우터</td><td><code>core/llm/router/</code> (text / json / parsed / streaming / tools 호출 표면)</td></tr>
+                <tr><td>어댑터 레지스트리</td><td><code>core/llm/adapters/registry.py</code>의 <code>bootstrap_builtins()</code>. PAYG, 구독 OAuth, CLI 레인을 어댑터로 등록</td></tr>
+                <tr><td>라우팅 매니페스트</td><td><code>core/config/routing.toml</code> (+ <code>~/.geode/routing.toml</code> 사용자 오버라이드). 모델 id prefix로 프로바이더 결정</td></tr>
+              </tbody>
+            </table>
+            <p>
+              서브프로세스 워커는 부모의 wiring 컨테이너를 거치지 않으므로{" "}
+              <code>bootstrap_builtins()</code>를 명시적으로 호출해야 합니다.
+              빈 레지스트리는 <code>AdapterNotFoundError</code>로 끝납니다.
+            </p>
+
+            <h2>모델 해석 우선순위</h2>
+            <p>강한 쪽이 이깁니다.</p>
+            <pre>{`CLI 인자
+  > env (os.environ + .env)
+    > 프로젝트 .geode/config.toml
+      > 글로벌 ~/.geode/config.toml
+        > routing.toml 기본값`}</pre>
+            <p>
+              어느 레이어가 이기는지는 <code>geode config explain model</code>이
+              레이어별 후보와 함께 보여줍니다. 실효 모델 확인은 항상{" "}
+              <code>geode about</code>입니다. config.toml만 보고 판단하면 상위
+              env 레이어에 가려진 값을 놓칩니다.
+            </p>
+
+            <h2>폴백 체인은 비어서 출하됩니다</h2>
+            <p>
+              <code>[model.fallbacks]</code>는 기본값이 전부 빈 목록입니다.
+              primary 모델이 실패하면 GEODE는 다른 모델로 몰래 갈아타지
+              않습니다. 쿼터 소진이면 <code>BillingError</code>를, 일시 오류면
+              마지막 예외를 그대로 올리고, 다음 모델은 사용자가{" "}
+              <code>/model</code>로 직접 고릅니다. 자동 폴백을 원하면{" "}
+              <code>~/.geode/routing.toml</code>의 체인을 채워 옵트인합니다.
+              체인 실행기는 <code>core/llm/router/calls/_failover.py</code>의{" "}
+              <code>call_with_failover</code>입니다.
+            </p>
+            <p>
+              조용한 cross-provider 자동 전환은 의도적으로 삭제된 기능입니다.
+              관측 불가능한 폴백은 어느 모델이 답했는지에 대한 신뢰를
+              무너뜨립니다.
+            </p>
+
+            <h2>재시도와 fast-fail</h2>
+            <p>
+              재시도는 <code>core/llm/fallback.py</code>의{" "}
+              <code>retry_with_backoff_generic</code>이 담당합니다. 상태를 가진
+              CircuitBreaker 클래스는 없습니다. 대신{" "}
+              <code>core/llm/errors.py</code>의 두 판정 함수가 재시도를
+              단락(short-circuit)시킵니다.
+            </p>
+            <table>
+              <thead>
+                <tr><th>판정</th><th>대상</th><th>효과</th></tr>
+              </thead>
+              <tbody>
+                <tr><td><code>is_billing_fatal</code></td><td>결제, 쿼터 소진</td><td>재시도 없이 즉시 실패</td></tr>
+                <tr><td><code>is_request_fatal</code></td><td>400류 요청 오류</td><td>같은 요청을 다시 보내봤자 같은 결과이므로 즉시 실패</td></tr>
               </tbody>
             </table>
 
-            <h2>폴백 체인</h2>
+            <h2>모델별 동작 차이</h2>
             <p>
-              <code>core/config.py</code>에 정의되어 있습니다.
-            </p>
-            <pre>{`ANTHROPIC_FALLBACK_CHAIN = ["claude-opus-4-7", "claude-opus-4-6",
-                            "claude-sonnet-4-6", "claude-haiku-4-5"]
-OPENAI_FALLBACK_CHAIN    = ["gpt-5.5", "gpt-5.4",
-                            "gpt-5.4-mini", "gpt-5-mini"]
-GLM_FALLBACK_CHAIN       = ["glm-5.1", "glm-5", "glm-5-turbo",
-                            "glm-4.7", "glm-4.7-flash"]`}</pre>
-            <p>
-              각 어댑터의 <code>retry_with_backoff()</code>는 재시도 가능한 오류 (rate
-              limit, 서버 오류) 에 대해 체인을 따라 내려갑니다. 재시도 불가능한 오류
-              (인증 실패, 결제) 는 <code>BillingError</code> 또는{" "}
-              <code>AuthError</code>로 즉시 전파됩니다.
+              모델 패밀리별 능력 앵커는{" "}
+              <code>core/llm/model_capabilities.py</code>에 있습니다. 한 가지가
+              운영에서 특히 중요합니다. Fable 5는 안전 거절을 HTTP 200의{" "}
+              <code>stop_reason: &quot;refusal&quot;</code>로 보내며, Anthropic
+              프로바이더의 <code>normalize_anthropic</code>이{" "}
+              <code>stop_details</code>를 보존하고 루프가{" "}
+              <code>model_refusal</code> 종료로 매핑합니다. 자세한 동작은{" "}
+              <a href="/geode/docs/architecture/agentic-loop">안쪽 agentic 루프</a>의
+              종료 경로 절을 참고합니다.
             </p>
 
-            <h2>적응형 사고 깊이</h2>
-            <p>
-              <code>effort</code> 파라미터 (5단계.{" "}
-              <code>low</code>, <code>medium</code>, <code>high</code>,{" "}
-              <code>max</code>, <code>xhigh</code>) 는 프로바이더별로 다르지만
-              균일하게 노출됩니다.
-            </p>
+            <h2>실패 모드</h2>
+            <table>
+              <thead>
+                <tr><th>증상</th><th>원인</th><th>해법</th></tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>모델을 바꿨는데 효과가 없음</td>
+                  <td>상위 레이어(env)가 가리는 중</td>
+                  <td><code>geode config explain model</code>로 이기는 레이어를 찾고 <code>geode about</code>으로 실효값을 확인합니다</td>
+                </tr>
+                <tr>
+                  <td>primary 실패 시 다른 모델로 안 넘어감</td>
+                  <td>폴백 체인이 기본값(빈 목록)</td>
+                  <td>의도된 동작입니다. <code>/model</code>로 전환하거나 <code>~/.geode/routing.toml</code>에서 옵트인합니다</td>
+                </tr>
+                <tr>
+                  <td>서브프로세스에서 <code>AdapterNotFoundError</code></td>
+                  <td><code>bootstrap_builtins()</code> 미호출</td>
+                  <td>워커 진입점에서 명시적으로 호출합니다</td>
+                </tr>
+                <tr>
+                  <td>400 오류가 재시도 없이 바로 실패</td>
+                  <td><code>is_request_fatal</code> fast-fail</td>
+                  <td>의도된 동작입니다. 요청 자체(스키마, 크기)를 고칩니다</td>
+                </tr>
+              </tbody>
+            </table>
+
+            <h2>다음</h2>
             <ul>
-              <li><strong>Anthropic</strong>. Opus 4.7에 대해 <code>output_config.effort=&quot;xhigh&quot;</code> (Opus 4.6 / Sonnet 4.6은 xhigh를 거부하고 <code>max</code>로 다운그레이드)</li>
-              <li><strong>OpenAI Responses</strong>. gpt-5.x의 <code>reasoning.effort</code> 필드</li>
-              <li><strong>Codex</strong>. <code>codex_reasoning_items</code> 사이드카 (턴 간 암호화된 reasoning 재생)</li>
-              <li><strong>GLM</strong>. <code>extra_body={"{thinking: {type: enabled, clear_thinking: false}}"}</code></li>
+              <li><a href="/geode/docs/run/providers">프로바이더 설정 가이드</a>. 자격과 경로 선택.</li>
+              <li><a href="/geode/docs/runtime/auth">인증</a>. OAuth, API 키, CLI 레인.</li>
+              <li><a href="/geode/docs/guides/llm-adapter">어댑터 추가 가이드</a>. 새 모델, 새 레인 붙이기.</li>
             </ul>
-
-            <h2>캐싱</h2>
-            <ul>
-              <li><strong>Anthropic</strong>. system 블록에 `cache_control: ephemeral` (<code>__GEODE_PROMPT_CACHE_BOUNDARY__</code>를 통한 STATIC/DYNAMIC 분할) 과 최근 3개 non-system 메시지에 대한 <code>apply_messages_cache_control()</code> (PR #864). <a href="/geode/docs/runtime/llm/prompt-caching">Prompt Caching</a> 참조.</li>
-              <li><strong>OpenAI</strong>. 서버 측 자동 prompt 캐싱 (GEODE wiring 불필요).</li>
-              <li><strong>GLM / Codex</strong>. 프로바이더 관리.</li>
-            </ul>
-
-            <h2>회로 차단기</h2>
-            <p>
-              각 어댑터는 모듈 수준의 <code>CircuitBreaker</code> 인스턴스를 보유합니다
-              (<code>core/llm/fallback.py</code>). 반복적인 실패가 발생하면 차단기가
-              열리고 체인이 회전합니다. 실패하는 프로바이더를 두드리는 대신 다음
-              프로바이더에게 기회가 가는 셈입니다. 성공한 호출에서{" "}
-              <code>record_success()</code>가 차단기를 재설정합니다.
-            </p>
-
-            <h2>v0.94+ 추가된 가드</h2>
-            <ul>
-              <li><strong>OpenAI HTML data-URL 가드</strong> (v0.94). OpenAI/Codex가 HTML을 <code>data:text/html;base64,...</code> 단일 URL로 emit하는 패턴 차단. <code>core/llm/postprocess/html_output.py</code>로 raw <code>&lt;!DOCTYPE html&gt;</code> 강제.</li>
-              <li><strong>Cross-provider <code>tool_choice</code> 정규화</strong> (v0.94). 4 프로바이더가 각자 다른 형식의 tool_choice를 받는 문제를 통일된 GEODE 측 schema로 변환.</li>
-              <li><strong>OpenAI <code>prompt_cache_key</code> derivation</strong> (v0.94). 프로젝트 식별자 기반 prompt 캐시 키 자동 도출.</li>
-              <li><strong>GLM thinking 게이트</strong> (v0.94). <code>thinking.type=&quot;off&quot;|&quot;none&quot;</code>로 thinking 비활성 가능. cost 절감용.</li>
-              <li><strong>Anthropic <code>agentic_call</code> streaming</strong> (v0.95). <code>messages.stream()</code> async 컨텍스트로 변환. 토큰 트래커는 동일.</li>
-              <li><strong>GLM context window 정정</strong> (v0.95). 200_000 flat → 정확값 202_752. <code>tests/test_glm_context_window.py</code> 회귀 방지.</li>
-            </ul>
-
-            <h2>OAuth (Anthropic 비활성, OpenAI Codex 활성)</h2>
-            <p>
-              Anthropic ToS에 따라 Anthropic OAuth 로그인은 비활성 상태입니다. API
-              키만 사용합니다. OpenAI Codex Plus 구독 인증은 사용 가능합니다.{" "}
-              <em>Operations · OAuth</em> 가 채워지면 그곳을 참조하세요.
-            </p>
           </>
         }
         en={
           <>
-            <h2>The adapters</h2>
+            <p>
+              GEODE routes across three providers: Anthropic, OpenAI (+Codex),
+              and GLM. This page covers how the model gets resolved, which
+              adapter a call lands on, and what happens on failure.
+            </p>
+
+            <h2>The pieces</h2>
             <table>
-              <thead><tr><th>File</th><th>Provider</th><th>Models in chain</th></tr></thead>
+              <thead>
+                <tr><th>Piece</th><th>Code</th></tr>
+              </thead>
               <tbody>
-                <tr><td><code>core/llm/providers/anthropic.py</code></td><td>Anthropic</td><td>Opus 4.7 → Opus 4.6 → Sonnet 4.6 → Haiku 4.5</td></tr>
-                <tr><td><code>core/llm/providers/openai.py</code></td><td>OpenAI Responses</td><td>gpt-5.5 → gpt-5.4 → gpt-5.4-mini → gpt-5-mini</td></tr>
-                <tr><td><code>core/llm/providers/codex.py</code></td><td>Codex Plus (subscription)</td><td>OpenAI models via Codex routing</td></tr>
-                <tr><td><code>core/llm/providers/glm.py</code></td><td>Zhipu GLM</td><td>GLM-5.1 → GLM-5 → GLM-5-turbo → GLM-4.7 → GLM-4.7-flash. context 202_752 tokens.</td></tr>
+                <tr><td>Provider implementations</td><td><code>core/llm/providers/anthropic.py</code>, <code>openai.py</code>, <code>codex.py</code>, <code>glm.py</code></td></tr>
+                <tr><td>Router</td><td><code>core/llm/router/</code> (text / json / parsed / streaming / tools call surfaces)</td></tr>
+                <tr><td>Adapter registry</td><td><code>bootstrap_builtins()</code> in <code>core/llm/adapters/registry.py</code>; registers PAYG, subscription OAuth, and CLI lanes as adapters</td></tr>
+                <tr><td>Routing manifest</td><td><code>core/config/routing.toml</code> (+ user override <code>~/.geode/routing.toml</code>); provider resolved by model-id prefix</td></tr>
+              </tbody>
+            </table>
+            <p>
+              Subprocess workers do not pass through the parent&apos;s wiring
+              container, so they must call <code>bootstrap_builtins()</code>{" "}
+              explicitly. An empty registry ends in{" "}
+              <code>AdapterNotFoundError</code>.
+            </p>
+
+            <h2>Model resolution precedence</h2>
+            <p>The stronger layer wins.</p>
+            <pre>{`CLI argument
+  > env (os.environ + .env)
+    > project .geode/config.toml
+      > global ~/.geode/config.toml
+        > routing.toml default`}</pre>
+            <p>
+              <code>geode config explain model</code> shows every layer&apos;s
+              candidate and which one wins. The effective model is always
+              verified with <code>geode about</code>; reading config.toml alone
+              misses values masked by a higher env layer.
+            </p>
+
+            <h2>Fallback chains ship empty</h2>
+            <p>
+              <code>[model.fallbacks]</code> defaults to empty lists everywhere.
+              When the primary model fails, GEODE does not silently swap models.
+              Quota exhaustion raises <code>BillingError</code>; transient
+              failures re-raise the last exception; the user picks the next
+              model with <code>/model</code>. To opt in to automatic fallback,
+              fill the chains in <code>~/.geode/routing.toml</code>. The chain
+              executor is <code>call_with_failover</code> in{" "}
+              <code>core/llm/router/calls/_failover.py</code>.
+            </p>
+            <p>
+              Silent cross-provider auto-swap was deliberately removed. An
+              unobservable fallback destroys trust in which model actually
+              answered.
+            </p>
+
+            <h2>Retry and fast-fail</h2>
+            <p>
+              Retries run through <code>retry_with_backoff_generic</code> in{" "}
+              <code>core/llm/fallback.py</code>. There is no stateful
+              CircuitBreaker class. Instead, two predicates in{" "}
+              <code>core/llm/errors.py</code> short-circuit the retry loop.
+            </p>
+            <table>
+              <thead>
+                <tr><th>Predicate</th><th>Covers</th><th>Effect</th></tr>
+              </thead>
+              <tbody>
+                <tr><td><code>is_billing_fatal</code></td><td>Billing, quota exhaustion</td><td>Fail immediately, no retry</td></tr>
+                <tr><td><code>is_request_fatal</code></td><td>400-class request errors</td><td>Resending the same request yields the same result, so fail immediately</td></tr>
               </tbody>
             </table>
 
-            <h2>Fallback chains</h2>
+            <h2>Per-model behaviour</h2>
             <p>
-              Defined in <code>core/config.py</code>:
-            </p>
-            <pre>{`ANTHROPIC_FALLBACK_CHAIN = ["claude-opus-4-7", "claude-opus-4-6",
-                            "claude-sonnet-4-6", "claude-haiku-4-5"]
-OPENAI_FALLBACK_CHAIN    = ["gpt-5.5", "gpt-5.4",
-                            "gpt-5.4-mini", "gpt-5-mini"]
-GLM_FALLBACK_CHAIN       = ["glm-5.1", "glm-5", "glm-5-turbo",
-                            "glm-4.7", "glm-4.7-flash"]`}</pre>
-            <p>
-              Each adapter&apos;s <code>retry_with_backoff()</code> walks the chain
-              on retryable errors (rate limit, server error). Non-retryable errors
-              (auth failure, billing) propagate immediately as{" "}
-              <code>BillingError</code> or <code>AuthError</code>.
+              Model-family capability anchors live in{" "}
+              <code>core/llm/model_capabilities.py</code>. One matters most in
+              operation: Fable 5 delivers safety refusals as HTTP 200 with{" "}
+              <code>stop_reason: &quot;refusal&quot;</code>;{" "}
+              <code>normalize_anthropic</code> in the Anthropic provider
+              preserves <code>stop_details</code>, and the loop maps it to a{" "}
+              <code>model_refusal</code> termination. See the termination-path
+              section of{" "}
+              <a href="/geode/docs/architecture/agentic-loop">The inner agentic loop</a>.
             </p>
 
-            <h2>Adaptive thinking depth</h2>
-            <p>
-              The <code>effort</code> parameter (5 levels:{" "}
-              <code>low</code>, <code>medium</code>, <code>high</code>,{" "}
-              <code>max</code>, <code>xhigh</code>) is provider-specific but exposed
-              uniformly:
-            </p>
+            <h2>Failure modes</h2>
+            <table>
+              <thead>
+                <tr><th>Symptom</th><th>Cause</th><th>Fix</th></tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>Switching models has no effect</td>
+                  <td>A higher (env) layer masks the change</td>
+                  <td>Find the winning layer with <code>geode config explain model</code>; verify with <code>geode about</code></td>
+                </tr>
+                <tr>
+                  <td>No automatic switch when the primary fails</td>
+                  <td>Fallback chains default to empty</td>
+                  <td>Intended; switch with <code>/model</code> or opt in via <code>~/.geode/routing.toml</code></td>
+                </tr>
+                <tr>
+                  <td><code>AdapterNotFoundError</code> in a subprocess</td>
+                  <td><code>bootstrap_builtins()</code> was never called</td>
+                  <td>Call it explicitly at the worker entry point</td>
+                </tr>
+                <tr>
+                  <td>A 400 error fails immediately without retries</td>
+                  <td>The <code>is_request_fatal</code> fast-fail</td>
+                  <td>Intended; fix the request itself (schema, size)</td>
+                </tr>
+              </tbody>
+            </table>
+
+            <h2>Next</h2>
             <ul>
-              <li><strong>Anthropic</strong> — <code>output_config.effort=&quot;xhigh&quot;</code> for Opus 4.7 (Opus 4.6 / Sonnet 4.6 reject xhigh, downgrade to <code>max</code>)</li>
-              <li><strong>OpenAI Responses</strong> — <code>reasoning.effort</code> field on gpt-5.x</li>
-              <li><strong>Codex</strong> — <code>codex_reasoning_items</code> sidecar (encrypted reasoning replay across turns)</li>
-              <li><strong>GLM</strong> — <code>extra_body={"{thinking: {type: enabled, clear_thinking: false}}"}</code></li>
+              <li><a href="/geode/docs/run/providers">Provider setup guide</a>. Credentials and path selection.</li>
+              <li><a href="/geode/docs/runtime/auth">Authentication</a>. OAuth, API keys, CLI lanes.</li>
+              <li><a href="/geode/docs/guides/llm-adapter">Add an LLM adapter</a>. Attaching a new model or lane.</li>
             </ul>
-
-            <h2>Caching</h2>
-            <ul>
-              <li><strong>Anthropic</strong> — `cache_control: ephemeral` on system block (STATIC/DYNAMIC split via <code>__GEODE_PROMPT_CACHE_BOUNDARY__</code>) plus <code>apply_messages_cache_control()</code> on the last 3 non-system messages (PR #864). See <a href="/geode/docs/runtime/llm/prompt-caching">Prompt Caching</a>.</li>
-              <li><strong>OpenAI</strong> — server-side automatic prompt caching (no GEODE wiring required).</li>
-              <li><strong>GLM / Codex</strong> — provider-managed.</li>
-            </ul>
-
-            <h2>Circuit breakers</h2>
-            <p>
-              Each adapter owns a module-level <code>CircuitBreaker</code> instance
-              (<code>core/llm/fallback.py</code>). After repeated failures the
-              breaker opens and the chain rotates, giving the next provider a
-              chance instead of hammering the failing one. <code>record_success()</code>{" "}
-              on a successful call resets the breaker.
-            </p>
-
-            <h2>v0.94+ guards</h2>
-            <ul>
-              <li><strong>OpenAI HTML data-URL guard</strong> (v0.94). Blocks the pattern where OpenAI/Codex emits HTML as a single <code>data:text/html;base64,...</code> URL. <code>core/llm/postprocess/html_output.py</code> forces raw <code>&lt;!DOCTYPE html&gt;</code>.</li>
-              <li><strong>Cross-provider <code>tool_choice</code> normalization</strong> (v0.94). Four providers each accept a different tool_choice shape; GEODE normalizes to one schema.</li>
-              <li><strong>OpenAI <code>prompt_cache_key</code> derivation</strong> (v0.94). Project-identifier based cache key auto-derived.</li>
-              <li><strong>GLM thinking gate</strong> (v0.94). <code>thinking.type=&quot;off&quot;|&quot;none&quot;</code> disables thinking; cost saver.</li>
-              <li><strong>Anthropic <code>agentic_call</code> streaming</strong> (v0.95). Switched to <code>messages.stream()</code> async context; token tracker unchanged.</li>
-              <li><strong>GLM context window correction</strong> (v0.95). Flat 200_000 to the exact 202_752; <code>tests/test_glm_context_window.py</code> guards regression.</li>
-            </ul>
-
-            <h2>OAuth (Anthropic disabled, OpenAI Codex active)</h2>
-            <p>
-              Per Anthropic ToS, OAuth login on Anthropic is disabled — use API
-              keys only. OpenAI Codex Plus subscription auth is available; see{" "}
-              <em>Operations · OAuth</em> when filled.
-            </p>
           </>
         }
       />

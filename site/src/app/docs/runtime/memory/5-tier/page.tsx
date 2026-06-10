@@ -1,158 +1,285 @@
 import { DocsShell, Bi } from "@/components/geode-docs/docs-shell";
 
-export const metadata = { title: "5-Tier Context — GEODE Docs" };
+export const metadata = { title: "Memory tiers — GEODE Docs" };
 
 export default function Page() {
   return (
     <DocsShell
       slug="runtime/memory/5-tier"
-      title="5-Tier Context"
-      titleKo="5계층 컨텍스트"
-      summary="From raw session log to a single LLM-ready summary. Five tiers, hierarchical override, budget-aware compression."
-      summaryKo="raw 세션 로그에서 LLM에 즉시 투입 가능한 단일 요약까지. 5계층, 계층 override, 예산 인식 압축."
+      title="Memory tiers"
+      titleKo="메모리 계층"
+      summary="From a raw session log to a single LLM-ready summary. Hierarchical override, budget-aware compression."
+      summaryKo="raw 세션 로그에서 LLM에 바로 넣을 수 있는 요약까지. 계층 override와 예산 인식 압축을 다룹니다."
     >
       <Bi
         ko={
           <>
-            <h2>다섯 개의 계층</h2>
-            <pre>{`Tier 0    GEODE.md         — agent identity + constraints (G1)
-Tier 0.5  User Profile     — role, expertise, learned patterns
-Tier 1    Organization     — cross-project shared data
-Tier 2    Project          — .geode/memory/PROJECT.md (50 insights, LRU)
-Tier 3    Session          — in-memory conversation`}</pre>
             <p>
-              같은 key가 양쪽에 나타나면 아래 계층이 위 계층을 override 합니다.{" "}
-              <code>ContextAssembler</code>가 가정하는 예산 분할은 대략 다음과 같습니다.
-            </p>
-            <ul>
-              <li>SOUL (Tier 0). 10%</li>
-              <li>Organization (Tier 1). 25%</li>
-              <li>Project (Tier 2). 25%</li>
-              <li>Session (Tier 3). 40%</li>
-            </ul>
-
-            <h2>어셈블러</h2>
-            <p>
-              <code>core/memory/context.py:46 class ContextAssembler</code>가
-              원본 멀티 티어 상태를 가져와 단일 <code>_llm_summary</code> 문자열을
-              만들고, prompt 어셈블러가 이를 어셈블리 파이프라인의 Phase 3에서{" "}
-              <em>Memory Context</em>로 주입합니다.{" "}
-              <a href="/geode/docs/runtime/llm/prompt-system">Prompt System</a> 참조.
+              GEODE의 기억은 다섯 계층으로 나뉩니다. 위로 갈수록 안정적이고
+              아래로 갈수록 구체적입니다. 매 호출 전에{" "}
+              <code>core/memory/context.py</code>의 <code>ContextAssembler</code>가
+              다섯 계층을 병합해 LLM에 넣을 단일 요약을 만듭니다.
             </p>
 
-            <h2>각 계층의 위치</h2>
+            <h2>다섯 계층</h2>
             <table>
-              <thead><tr><th>티어</th><th>경로</th><th>라이프사이클</th></tr></thead>
+              <thead>
+                <tr><th>Tier</th><th>이름</th><th>소스</th></tr>
+              </thead>
               <tbody>
-                <tr><td>0 GEODE.md</td><td>repo 루트</td><td>세션 시작 시 읽음</td></tr>
-                <tr><td>0.5 User Profile</td><td><code>~/.geode/user_profile/</code></td><td>auto-learn 훅으로 갱신</td></tr>
-                <tr><td>1 Organization</td><td><code>~/.geode/organization/</code></td><td>프로젝트 간 공유, 수동 큐레이션</td></tr>
-                <tr><td>2 Project</td><td><code>.geode/memory/PROJECT.md</code></td><td>LRU 50 insight, 영속</td></tr>
-                <tr><td>3 Session</td><td>인-프로세스</td><td>세션 종료 시 소실 (<code>/resume</code>으로 영속화 가능)</td></tr>
+                <tr><td>0</td><td>Identity</td><td><code>SOUL.md</code></td></tr>
+                <tr><td>0.5</td><td>User Profile</td><td><code>core/memory/user_profile.py</code> (FileBasedUserProfile)</td></tr>
+                <tr><td>1</td><td>Organization</td><td><code>core/memory/organization.py</code> (MonoLakeOrganizationMemory)</td></tr>
+                <tr><td>2</td><td>Project</td><td><code>core/memory/project.py</code> (ProjectMemory)</td></tr>
+                <tr><td>3</td><td>Session</td><td>SessionStorePort (<code>core/memory/port.py</code>)</td></tr>
+              </tbody>
+            </table>
+            <p>
+              병합 순서가 곧 override 규칙입니다. 같은 내용이 충돌하면 아래
+              계층(더 구체적인 쪽)이 위 계층을 덮습니다. 프로젝트 기억이 조직
+              기억을, 세션 기억이 프로젝트 기억을 이깁니다.
+            </p>
+
+            <h2>예산 인식 압축</h2>
+            <p>
+              요약은 <code>max_chars</code> 예산 아래로 맞춰집니다. 계층별 비례
+              배분은 SOUL 10%, Organization 25%, Project 25%이고 Session이
+              나머지를 가져갑니다. 세션 내용은 최신 항목부터 남은 예산에 채워
+              넣으므로, 예산이 모자라면 가장 오래된 대화부터 떨어져 나갑니다.
+            </p>
+
+            <h2>/recall: 저장 기억 풀</h2>
+            <p>
+              계층 병합과 별도로, 이름 붙여 저장하는 영속 기억 풀이 있습니다.
+              슬래시 명령 <code>/recall</code>(핸들러{" "}
+              <code>core/cli/commands/recall.py</code>)로 목록, 조회, 저장을
+              합니다.
+            </p>
+            <table>
+              <thead>
+                <tr><th>구성요소</th><th>동작</th></tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>Writer</td>
+                  <td><code>core/memory/recall_writer.py</code>의 <code>write_recall_entry</code>가 frontmatter 달린 마크다운을 <code>~/.geode/memory/recall/</code>에 씁니다 (<code>GEODE_MEMORY_RECALL_DIR</code> env로 위치 변경 가능)</td>
+                </tr>
+                <tr>
+                  <td>Reader</td>
+                  <td>로더가 <code>~/.geode/memory/recall/*.md</code>를 키워드 겹침과 최근성으로 랭킹해 <code>&lt;memory-recall&gt;</code> 블록으로 시스템 프롬프트 앞에 붙입니다</td>
+                </tr>
+                <tr>
+                  <td>비자동</td>
+                  <td>세션 종료 시 자동 저장하지 않습니다. 노이즈와 비용을 막기 위한 의도적 결정으로, 저장은 항상 명시적입니다</td>
+                </tr>
               </tbody>
             </table>
 
-            <h2>양방향 학습 (G3 슬롯)</h2>
+            <h2>세션 저장소</h2>
+            <table>
+              <thead>
+                <tr><th>구현</th><th>코드</th><th>용도</th></tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>InMemorySessionStore</td>
+                  <td><code>core/memory/session.py</code></td>
+                  <td>dict + TTL, 선택적 파일 영속화</td>
+                </tr>
+                <tr>
+                  <td>SessionManager (SQLite)</td>
+                  <td><code>core/memory/session_manager.py</code></td>
+                  <td>프로젝트별 <code>sessions.db</code> (<code>~/.geode/projects/</code> 아래)</td>
+                </tr>
+                <tr>
+                  <td>Redis / PostgreSQL / Hybrid</td>
+                  <td><code>core/memory/hybrid_session.py</code></td>
+                  <td>외부 스토어 옵션</td>
+                </tr>
+                <tr>
+                  <td>Episodic</td>
+                  <td><code>core/memory/episodic.py</code></td>
+                  <td>append-only <code>~/.geode/memory/episodes.jsonl</code></td>
+                </tr>
+              </tbody>
+            </table>
+
+            <h2>sessions.jsonl: 런 메트릭</h2>
             <p>
-              <strong>교정</strong> ("X를 하지 마") 과 <strong>검증</strong>
-              ("그래, X가 맞았어") 가 모두 기록됩니다.{" "}
-              <code>~/.geode/user_profile/learned.md</code>가 단일 출처입니다.
-              auto-learn 훅이 사용자 피드백을 감시하고 Claude Code 메모리 시스템과
-              동일한 형식으로 append 합니다.
+              자기개선 루프의 매 런은 토큰, 비용, 재시도, 검증 카운터를 행
+              하나로 남깁니다. <code>core/observability/session_metrics.py</code>의{" "}
+              <code>SessionMetrics.to_session_row()</code>가 행을 만들고,{" "}
+              <code>core/self_improving/train.py</code>가 런 단위로 메트릭을
+              시드해 세션 인덱스에 합칩니다. 파일 위치는{" "}
+              <code>core/self_improving/ledger.py</code>의{" "}
+              <code>SESSIONS_INDEX_PATH</code>가 SoT입니다.
             </p>
 
-            <h2>Vault. 에이전트 산출물</h2>
-            <p>
-              세션 동안 에이전트가 생산한 리포트, 리서치 노트, 지원서 초안은
-              메모리 티어가 아니라 <em>vault</em>로 들어갑니다.{" "}
-              <code>classify_artifact()</code>가 용도에 따라 라우팅합니다.
-            </p>
+            <h2>실패 모드</h2>
+            <table>
+              <thead>
+                <tr><th>증상</th><th>원인</th><th>해법</th></tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>저장했다고 생각한 기억이 다음 세션에 없음</td>
+                  <td>세션 계층은 휘발성이고 recall 풀은 자동 저장되지 않음</td>
+                  <td><code>/recall save &lt;name&gt;</code>으로 명시적으로 저장합니다</td>
+                </tr>
+                <tr>
+                  <td>오래된 대화 내용이 요약에서 사라짐</td>
+                  <td>세션 예산을 최신 항목부터 채우는 압축 규칙</td>
+                  <td>정상 동작입니다. 중요한 결론은 recall 풀이나 프로젝트 기억으로 승격합니다</td>
+                </tr>
+                <tr>
+                  <td>조직 규칙과 프로젝트 규칙이 충돌</td>
+                  <td>계층 override가 의도된 동작</td>
+                  <td>아래 계층이 이깁니다. 전역으로 강제할 내용은 위 계층에만 둡니다</td>
+                </tr>
+              </tbody>
+            </table>
+
+            <h2>다음</h2>
             <ul>
-              <li><code>profile/</code>. 사용자에 관한 것</li>
-              <li><code>research/</code>. 생산된 리서치</li>
-              <li><code>applications/</code>. 초안 (이력서, 자기소개서)</li>
-              <li><code>general/</code>. 그 외 모든 것</li>
+              <li><a href="/geode/docs/runtime/context">컨텍스트 조립</a>. 이 요약이 실제 호출에 합쳐지는 곳.</li>
+              <li><a href="/geode/docs/runtime/research">리서치와 탐색</a>. <code>/recall</code>과 검색 표면들.</li>
             </ul>
-
-            <h2>열린 질문</h2>
-            <p>
-              200줄짜리 PROJECT.md 대비 RAG가 필요한 시점은 언제인가? 오늘 프로젝트
-              티어는 in-context에 충분히 작게 들어옵니다. 임계점은 500-1000 insight
-              어딘가이며, 그 지점에서 LRU 절단이 유용한 상태를 잃기 시작하고
-              벡터 스토어가 복잡도 비용을 정당화할 수 있게 됩니다.
-            </p>
           </>
         }
         en={
           <>
+            <p>
+              GEODE&apos;s memory splits into five tiers: more stable toward the
+              top, more specific toward the bottom. Before each call,{" "}
+              <code>ContextAssembler</code> in <code>core/memory/context.py</code>{" "}
+              merges the five tiers into the single summary the LLM receives.
+            </p>
+
             <h2>The five tiers</h2>
-            <pre>{`Tier 0    GEODE.md         — agent identity + constraints (G1)
-Tier 0.5  User Profile     — role, expertise, learned patterns
-Tier 1    Organization     — cross-project shared data
-Tier 2    Project          — .geode/memory/PROJECT.md (50 insights, LRU)
-Tier 3    Session          — in-memory conversation`}</pre>
-            <p>
-              Lower tiers override higher when the same key appears in both. The
-              budget split assumed by <code>ContextAssembler</code> is approximately:
-            </p>
-            <ul>
-              <li>SOUL (Tier 0): 10%</li>
-              <li>Organization (Tier 1): 25%</li>
-              <li>Project (Tier 2): 25%</li>
-              <li>Session (Tier 3): 40%</li>
-            </ul>
-
-            <h2>The assembler</h2>
-            <p>
-              <code>core/memory/context.py:46 class ContextAssembler</code> takes
-              the raw multi-tier state and produces a single{" "}
-              <code>_llm_summary</code> string that the prompt assembler injects
-              as <em>Memory Context</em> in Phase 3 of the assembly pipeline. See{" "}
-              <a href="/geode/docs/runtime/llm/prompt-system">Prompt System</a>.
-            </p>
-
-            <h2>Where each tier lives</h2>
             <table>
-              <thead><tr><th>Tier</th><th>Path</th><th>Lifecycle</th></tr></thead>
+              <thead>
+                <tr><th>Tier</th><th>Name</th><th>Source</th></tr>
+              </thead>
               <tbody>
-                <tr><td>0 GEODE.md</td><td>Repo root</td><td>Read at session start</td></tr>
-                <tr><td>0.5 User Profile</td><td><code>~/.geode/user_profile/</code></td><td>Updated by auto-learn hook</td></tr>
-                <tr><td>1 Organization</td><td><code>~/.geode/organization/</code></td><td>Cross-project, manually curated</td></tr>
-                <tr><td>2 Project</td><td><code>.geode/memory/PROJECT.md</code></td><td>LRU 50 insights, persisted</td></tr>
-                <tr><td>3 Session</td><td>In-process</td><td>Lost on session end (or persisted via <code>/resume</code>)</td></tr>
+                <tr><td>0</td><td>Identity</td><td><code>SOUL.md</code></td></tr>
+                <tr><td>0.5</td><td>User Profile</td><td><code>core/memory/user_profile.py</code> (FileBasedUserProfile)</td></tr>
+                <tr><td>1</td><td>Organization</td><td><code>core/memory/organization.py</code> (MonoLakeOrganizationMemory)</td></tr>
+                <tr><td>2</td><td>Project</td><td><code>core/memory/project.py</code> (ProjectMemory)</td></tr>
+                <tr><td>3</td><td>Session</td><td>SessionStorePort (<code>core/memory/port.py</code>)</td></tr>
+              </tbody>
+            </table>
+            <p>
+              The merge order is the override rule. When content conflicts, the
+              lower (more specific) tier overrides the higher one: project memory
+              beats organization memory, session memory beats project memory.
+            </p>
+
+            <h2>Budget-aware compression</h2>
+            <p>
+              The summary is fitted under a <code>max_chars</code> budget with
+              proportional shares: SOUL 10%, Organization 25%, Project 25%, and
+              Session takes the remainder. Session content is filled
+              most-recent-first into the remaining budget, so when the budget is
+              tight, the oldest conversation falls off first.
+            </p>
+
+            <h2>/recall: the saved-memory pool</h2>
+            <p>
+              Separate from tier merging, there is a persistent pool of named
+              memories. The <code>/recall</code> slash command (handler{" "}
+              <code>core/cli/commands/recall.py</code>) lists, shows, and saves
+              entries.
+            </p>
+            <table>
+              <thead>
+                <tr><th>Component</th><th>Behaviour</th></tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>Writer</td>
+                  <td><code>write_recall_entry</code> in <code>core/memory/recall_writer.py</code> writes frontmattered markdown to <code>~/.geode/memory/recall/</code> (relocatable via the <code>GEODE_MEMORY_RECALL_DIR</code> env)</td>
+                </tr>
+                <tr>
+                  <td>Reader</td>
+                  <td>A loader walks <code>~/.geode/memory/recall/*.md</code>, ranks by keyword overlap and recency, and prepends a <code>&lt;memory-recall&gt;</code> block to the system prompt</td>
+                </tr>
+                <tr>
+                  <td>Not automatic</td>
+                  <td>Nothing is auto-saved on session end. A deliberate decision against noise and cost; saving is always explicit</td>
+                </tr>
               </tbody>
             </table>
 
-            <h2>Bidirectional learning (G3 slot)</h2>
+            <h2>Session stores</h2>
+            <table>
+              <thead>
+                <tr><th>Implementation</th><th>Code</th><th>Use</th></tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>InMemorySessionStore</td>
+                  <td><code>core/memory/session.py</code></td>
+                  <td>Dict plus TTL, optional file-backed persistence</td>
+                </tr>
+                <tr>
+                  <td>SessionManager (SQLite)</td>
+                  <td><code>core/memory/session_manager.py</code></td>
+                  <td>Per-project <code>sessions.db</code> under <code>~/.geode/projects/</code></td>
+                </tr>
+                <tr>
+                  <td>Redis / PostgreSQL / Hybrid</td>
+                  <td><code>core/memory/hybrid_session.py</code></td>
+                  <td>External-store options</td>
+                </tr>
+                <tr>
+                  <td>Episodic</td>
+                  <td><code>core/memory/episodic.py</code></td>
+                  <td>Append-only <code>~/.geode/memory/episodes.jsonl</code></td>
+                </tr>
+              </tbody>
+            </table>
+
+            <h2>sessions.jsonl: run metrics</h2>
             <p>
-              Both <strong>corrections</strong> ("don&apos;t do X") and{" "}
-              <strong>validations</strong> ("yes, X was right") are recorded.{" "}
-              <code>~/.geode/user_profile/learned.md</code> is the single source.
-              Auto-learn hooks watch user feedback and append in the same format
-              used by Claude Code&apos;s memory system.
+              Every run of the self-improving loop leaves one row of token, cost,
+              retry, and verification counters.{" "}
+              <code>SessionMetrics.to_session_row()</code> in{" "}
+              <code>core/observability/session_metrics.py</code> builds the row,
+              and <code>core/self_improving/train.py</code> seeds run-scoped
+              metrics and spreads them into the session index. The file location
+              is pinned by <code>SESSIONS_INDEX_PATH</code> in{" "}
+              <code>core/self_improving/ledger.py</code>.
             </p>
 
-            <h2>Vault — agent artifacts</h2>
-            <p>
-              Reports, research notes, application drafts the agent produces
-              during a session land in the <em>vault</em>, not in the memory
-              tiers. <code>classify_artifact()</code> routes by purpose:
-            </p>
+            <h2>Failure modes</h2>
+            <table>
+              <thead>
+                <tr><th>Symptom</th><th>Cause</th><th>Fix</th></tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>A memory you thought was saved is gone next session</td>
+                  <td>The session tier is volatile and the recall pool never auto-saves</td>
+                  <td>Save explicitly with <code>/recall save &lt;name&gt;</code></td>
+                </tr>
+                <tr>
+                  <td>Older conversation content drops out of the summary</td>
+                  <td>The session budget fills most-recent-first</td>
+                  <td>Working as intended; promote important conclusions to the recall pool or project memory</td>
+                </tr>
+                <tr>
+                  <td>Organization and project rules conflict</td>
+                  <td>Tier override is the intended behaviour</td>
+                  <td>The lower tier wins; keep globally-enforced content only in higher tiers</td>
+                </tr>
+              </tbody>
+            </table>
+
+            <h2>Next</h2>
             <ul>
-              <li><code>profile/</code> — about the user</li>
-              <li><code>research/</code> — produced research</li>
-              <li><code>applications/</code> — drafts (resumes, cover letters)</li>
-              <li><code>general/</code> — anything else</li>
+              <li><a href="/geode/docs/runtime/context">Context assembly</a>. Where this summary joins the actual call.</li>
+              <li><a href="/geode/docs/runtime/research">Research and search</a>. <code>/recall</code> and the search surfaces.</li>
             </ul>
-
-            <h2>Open question</h2>
-            <p>
-              When does RAG become necessary versus a 200-line PROJECT.md? Today
-              the project tier is small enough to fit in-context. The threshold
-              is somewhere around 500-1000 insights, at which point the LRU
-              truncation starts losing useful state and a vector store becomes
-              worth the complexity.
-            </p>
           </>
         }
       />
