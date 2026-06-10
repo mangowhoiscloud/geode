@@ -16,7 +16,7 @@
 
 <!-- Move items here when work begins. -->
 <!-- 3-Checkpoint: (1) alloc → (2) merge (CI 5/5) → (3) verify -->
-- [ ] Structure cleanup sprint — S-1..S-4 DONE; S-5 scope decision pending (operator: train.py은 autoresearch 이식이라 분해 애매 → option (b) 역분해/(a) 보존/(c) loop만 제시됨)
+- [ ] Config system unification C-1..C-4 — env/config 14 override hazards mapped (daemon cwd split H1, env snapshot H2, .env mask H3, /model global wrong-file write H4, inverted dotenv precedence H5...); C-1 geode config explain first; worktree TBD
 
 ## In Review
 
@@ -26,6 +26,7 @@
 
 <!-- Completed items. Keep recent 10, archive older ones. -->
 <!-- - [x] #issue-number — Short description (PR #N) -->
+- [x] Struct S-5: autoresearch-원형 restore (option b) — train.py 5,542→1,656L, gear → measure/fitness/gate/ledger (dry-run equivalence pinned, regression-vs-main 0), loop/ → mutate/observe/inject domains, program.md single-file contract restored + GEODE.md 5-layer formalised (PR #2090 → #2091, v0.99.163) — STRUCTURE SPRINT S-1..S-5 COMPLETE
 - [x] Struct S-3: CLI single home (cmd_*.py ×5 → commands/) + geode seeds assemble / geode hub build promotion (repo-only fail-loud wrappers) (PR #2083 → #2084, v0.99.161)
 - [x] Struct S-4: core/utils dissolved (atomic_write→memory, env_io+project_detect→config, redaction→observability, similarity→seedgen; census corrected 2 blueprint guesses) + seed tools → plugins/seed_generation/tools/ + integrations→messaging flatten (PR #2086 → #2087, v0.99.162)
 - [x] Struct S-2: test tree → source-mirror convention — 350 git mv (flat 323 + self_improving/audit/observability root folds), 55 repo-root anchors bumped, 26 literal-path sweeps (release.yml mypy targets incl.), ruff src 'tests' root removed (mirror dirs were a second core.* package, isort flip) (PR #2079 → #2080, v0.99.160)
