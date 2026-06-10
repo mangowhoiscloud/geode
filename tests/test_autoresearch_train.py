@@ -2581,3 +2581,18 @@ def test_load_baseline_non_numeric_dim_value_returns_none_v2(tmp_path: Path) -> 
         assert stderr is None
     finally:
         auto_train.BASELINE_PATH = saved
+
+
+def test_results_row_emitted_after_gate_with_derived_verdict() -> None:
+    """PR-CLEANUP-D3A — the results row must be built AFTER the promote
+    gate so ``verdict`` records the actual outcome (promote/reject)
+    instead of a permanent ``pending``; AUTORESEARCH_VERDICT env stays
+    an explicit override."""
+    import inspect
+
+    src = inspect.getsource(auto_train.main)
+    gate_pos = src.index('print(f"baseline_promoted:')
+    row_pos = src.index("results_tsv_row = format_results_tsv_row(")
+    assert gate_pos < row_pos, "results row must be emitted after the gate verdict"
+    assert '_derived_verdict = "promote" if promoted_line.startswith("true") else "reject"' in src
+    assert 'os.environ.get("AUTORESEARCH_VERDICT", _derived_verdict)' in src

@@ -4,7 +4,7 @@
 Pin the operator escape-hatch: ``[[seed_generation.judge_panel.voters]]
 effort = "low"`` in ``~/.geode/config.toml`` flips one voter's effort
 without redeploy. Empty (the manifest default) preserves the Sprint G
-``"none"`` floor that ranker / mutation_eval already pin.
+``"none"`` floor that ranker already pins.
 
 Tests:
   1. ``VoterSpec`` accepts optional ``effort`` (default "").
@@ -13,7 +13,6 @@ Tests:
      ``VoterBinding.effort``.
   4. Ranker ``_build_voter_tasks`` uses ``voter.effort`` when set,
      falls back to ``"none"`` when empty.
-  5. mutation_eval voter dispatch same.
 """
 
 from __future__ import annotations
@@ -112,56 +111,6 @@ def test_ranker_voter_subtask_uses_voter_effort_when_set() -> None:
     assert tasks[1].effort == "none", (
         f"empty voter.effort must fall back to 'none'; got {tasks[1].effort!r}"
     )
-
-
-def test_mutation_eval_voter_uses_voter_effort_when_set() -> None:
-    """Mirror invariant on ``evaluate_mutation_pairwise`` voter dispatch."""
-    import asyncio
-
-    from plugins.seed_generation.mutation_eval import evaluate_mutation_pairwise
-
-    voters = [
-        VoterBinding(model="gpt-5.5", provider="openai", source="openai-codex", effort="medium"),
-        VoterBinding(model="gpt-5.5", provider="openai", source="openai-codex"),
-        VoterBinding(model="claude-opus-4-7", provider="anthropic", source="claude-cli"),
-    ]
-    dispatched: list = []
-
-    class StubManager:
-        async def adelegate(self, tasks, *, announce: bool = True):
-            dispatched.extend(tasks)
-            from core.agent.sub_agent import SubResult
-
-            return [
-                SubResult(
-                    task_id=t.task_id,
-                    description="stub",
-                    success=False,
-                    output={},
-                    error="stub",
-                    duration_ms=0.0,
-                )
-                for t in tasks
-            ]
-
-    asyncio.run(
-        evaluate_mutation_pairwise(
-            before_response="before",
-            after_response="after",
-            scenario_seed="seed",
-            voters=voters,
-            manager=StubManager(),  # type: ignore[arg-type]
-            match_id="m-override-pin",
-        )
-    )
-
-    assert len(dispatched) == 3
-    # voters[0] has effort="medium" override
-    assert dispatched[0].effort == "medium"
-    # voters[1] empty → "none"
-    assert dispatched[1].effort == "none"
-    # voters[2] empty → "none"
-    assert dispatched[2].effort == "none"
 
 
 def test_voter_spec_invalid_source_still_rejected_after_effort_addition() -> None:
