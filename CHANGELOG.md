@@ -45,6 +45,11 @@ functional change.
 
 ---
 
+## [0.99.172] - 2026-06-11
+
+### Fixed
+- **geode-mcp `run_agent` adapter bootstrap** — the first live `run_agent` call over the new HTTP transport failed with `AdapterNotFoundError "Known pairs: []"`: `run_agentic_oneshot` assumed the adapter registry was populated by `GeodeRuntime.create`, which geode-mcp (and any standalone caller) never runs. Now self-bootstraps via `bootstrap_builtins()` (idempotent; same pattern as `core/agent/worker.py`). Latent since v0.99.155 — the stdio-era audit intentionally skipped exercising `run_agent` (token cost), so the defect surfaced only on the operator's live remote test. Guard: `test_run_agentic_oneshot_bootstraps_adapters`.
+
 ## [0.99.171] - 2026-06-11
 
 ### Added
