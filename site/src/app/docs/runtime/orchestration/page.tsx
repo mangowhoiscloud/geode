@@ -8,8 +8,8 @@ export default function Page() {
       slug="runtime/orchestration"
       title="Sub-agent orchestration"
       titleKo="서브에이전트 오케스트레이션"
-      summary="Spawning isolated sub-agents in parallel lanes, with snapshotted memory and merge on completion."
-      summaryKo="격리된 서브에이전트를 병렬 레인에서 띄웁니다. 메모리를 스냅샷으로 넘기고 완료 시 병합합니다."
+      summary="Spawning sub-agents as isolated worker processes in parallel lanes. The parent gets back a summary; write access is governed by toolkit composition."
+      summaryKo="서브에이전트를 격리된 워커 프로세스로 병렬 레인에서 띄웁니다. 부모는 요약만 받고, 쓰기 권한은 툴킷 구성으로 통제합니다."
     >
       <Bi
         ko={
@@ -82,23 +82,31 @@ export default function Page() {
               SessionLane은 세션 키 256개까지 유지하고 유휴 키를 정리합니다.
             </p>
 
-            <h2>메모리 격리 규칙</h2>
-            <ol>
-              <li>부모 메모리는 읽기 전용 스냅샷으로 상속됩니다.</li>
-              <li>서브에이전트의 쓰기는 task_id 범위 버퍼로 갑니다. 공유 메모리를 직접 수정하지 않습니다.</li>
-              <li>완료 후 부모는 요약만 병합합니다.</li>
-            </ol>
+            <h2>격리의 실제 경계</h2>
             <p>
-              결과적으로 두 에이전트가 공유 메모리에 동시에 쓰는 일이
-              구조적으로 불가능합니다.
+              격리는 프로세스와 산출물 수준에서 일어납니다. 서브에이전트는
+              별도 워커 프로세스로 돌고, 산출물은{" "}
+              <code>&lt;run_dir&gt;/sub_agents/&lt;task_id&gt;/</code> 아래에
+              쌓이며, 부모는 반환된 요약만 받습니다
+              (<code>core/orchestration/isolated_execution.py</code>).
+            </p>
+            <p>
+              메모리 쓰기 격리는 별도 버퍼가 아니라 툴킷 구성으로 통제합니다.
+              기본 <code>_default</code> 툴킷은 읽기 전용이라 서브에이전트는
+              공유 메모리에 쓸 수 없습니다. 단, <code>memory_save</code>가
+              포함된 툴킷(예: <code>general_purpose</code>)을 명시하면 공유{" "}
+              <code>ProjectMemory</code>에 직접 기록됩니다. 동시 쓰기를 피하려면
+              쓰기 도구가 없는 툴킷을 주는 것이 통제 수단입니다.
             </p>
 
             <h2>도구와 능력의 상속</h2>
             <p>
-              서브에이전트는 부모와 같은 도구, MCP, 스킬, 메모리 스냅샷을
-              받되, 도구 표면은 선언된 툴킷으로 좁혀집니다. frontmatter의{" "}
-              <code>toolkit:</code> 이름이 먼저, 레거시 <code>tools:</code>{" "}
-              목록이 다음, 둘 다 없으면 읽기 전용 <code>_default</code>입니다.
+              서브에이전트가 받는 것은 선언된 툴킷으로 해석된 네이티브 도구
+              핸들러입니다. frontmatter의 <code>toolkit:</code> 이름이 먼저,
+              레거시 <code>tools:</code> 목록이 다음, 둘 다 없으면 읽기 전용{" "}
+              <code>_default</code>입니다. 부모의 MCP 연결과 스킬 레지스트리는
+              워커 프로세스로 전달되지 않습니다
+              (<code>core/agent/worker.py</code>는 네이티브 핸들러만 구성).
               자세한 해석 규칙은{" "}
               <a href="/geode/docs/runtime/tools/protocol">도구와 툴셋</a>을
               참고합니다.
@@ -216,25 +224,35 @@ export default function Page() {
               The SessionLane holds up to 256 session keys and evicts idle ones.
             </p>
 
-            <h2>Memory isolation rules</h2>
-            <ol>
-              <li>Parent memory is inherited as a read-only snapshot.</li>
-              <li>Sub-agent writes go to a task_id-scoped buffer; shared memory is never modified directly.</li>
-              <li>After completion, the parent merges only the summary.</li>
-            </ol>
+            <h2>Where isolation actually lives</h2>
             <p>
-              As a result, two agents writing shared memory at the same time is
-              structurally impossible.
+              Isolation happens at the process and artifact level. A sub-agent
+              runs as a separate worker process, its outputs land under{" "}
+              <code>&lt;run_dir&gt;/sub_agents/&lt;task_id&gt;/</code>, and the
+              parent receives only the returned summary
+              (<code>core/orchestration/isolated_execution.py</code>).
+            </p>
+            <p>
+              Memory-write isolation is enforced by toolkit composition, not a
+              separate buffer. The default <code>_default</code> toolkit is
+              read-only, so a sub-agent cannot write shared memory. Grant a
+              toolkit that includes <code>memory_save</code> (such as{" "}
+              <code>general_purpose</code>) and it writes the shared{" "}
+              <code>ProjectMemory</code> directly. The control for concurrent
+              writes is a toolkit without write tools.
             </p>
 
             <h2>What sub-agents inherit</h2>
             <p>
-              A sub-agent receives the parent&apos;s tools, MCP connections,
-              skills, and memory snapshot, with the tool surface narrowed to its
-              declared toolkit: the frontmatter <code>toolkit:</code> name first,
-              a legacy <code>tools:</code> list second, and the read-only{" "}
-              <code>_default</code> when neither exists. Resolution details are
-              in <a href="/geode/docs/runtime/tools/protocol">Tools and toolsets</a>.
+              What a sub-agent receives is the set of native tool handlers
+              resolved from its declared toolkit: the frontmatter{" "}
+              <code>toolkit:</code> name first, a legacy <code>tools:</code>{" "}
+              list second, and the read-only <code>_default</code> when neither
+              exists. The parent&apos;s MCP connections and skill registry are
+              not passed to the worker process
+              (<code>core/agent/worker.py</code> builds native handlers only).
+              Resolution details are in{" "}
+              <a href="/geode/docs/runtime/tools/protocol">Tools and toolsets</a>.
             </p>
 
             <h2>Results and error taxonomy</h2>
