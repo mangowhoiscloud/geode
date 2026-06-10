@@ -36,7 +36,7 @@ from core.paths import GLOBAL_AUTORESEARCH_HANDOFF_DIR as _SELF_IMPROVING_LOOP_H
 log = logging.getLogger(__name__)
 
 
-def _train():
+def _train() -> Any:
     """Lazy accessor for the train module's tunables/mutation surface.
 
     Module-level mutual import would hit the partially-initialized-module
@@ -285,9 +285,8 @@ def print_summary(
     """
     print("---")
     print(f"fitness:                  {fitness:.6f}")
-    print(
-        f"stability_score:          {dim_scores.get('stability', fitness_spec.STABILITY_FALLBACK):.4f}"
-    )
+    _stability = dim_scores.get("stability", fitness_spec.STABILITY_FALLBACK)
+    print(f"stability_score:          {_stability:.4f}")
     for dim in (*fitness_spec.CRITICAL_DIMS, *fitness_spec.AUXILIARY_DIMS, *fitness_spec.INFO_DIMS):
         if dim in dim_scores:
             print(f"{dim}_score: {dim_scores[dim]:.4f}")

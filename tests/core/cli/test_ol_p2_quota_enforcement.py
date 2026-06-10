@@ -1,5 +1,3 @@
-from core.self_improving import measure
-
 """OL-P2 — Petri quota actual enforcement invariants.
 
 Pre-OL-P2 the `SubscriptionQuotaBanner.abort_threshold` was display-only
@@ -25,6 +23,7 @@ from __future__ import annotations
 from typing import Any
 
 import pytest
+from core.self_improving import measure
 
 # ---------------------------------------------------------------------------
 # Auto-trip on threshold breach
@@ -167,7 +166,7 @@ def test_autoresearch_train_calls_enforce_or_raise(
     """
     from pathlib import Path
 
-    from core.self_improving import train
+    from core.self_improving import measure as train
 
     source = Path(train.__file__).read_text(encoding="utf-8")
     # The gate call must be in the file

@@ -15,7 +15,7 @@ import logging
 import math
 import random
 import statistics
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     pass
@@ -26,7 +26,7 @@ _FITNESS_MARGIN_MC_SAMPLES = 1000
 _FITNESS_MARGIN_MC_SEED = 1729
 
 
-def _train():
+def _train() -> Any:
     """Lazy accessor for the train module's tunables/mutation surface.
 
     Module-level mutual import would hit the partially-initialized-module

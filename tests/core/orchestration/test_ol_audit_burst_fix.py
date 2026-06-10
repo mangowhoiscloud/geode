@@ -1,5 +1,3 @@
-from core.self_improving import measure
-
 """OL-AUDIT-BURST-FIX — audit burst serialisation invariants.
 
 Three fixes ship together (all addressing the same defect: 429 storm
@@ -31,6 +29,7 @@ import threading
 from pathlib import Path
 
 import pytest
+from core.self_improving import measure
 
 # ---------------------------------------------------------------------------
 # FIX-1 + FIX-2 — `inspect eval` argv flags
@@ -287,7 +286,7 @@ def test_audit_train_source_grep_pins_lane_integration() -> None:
     ``with acquire_audit_lane(...)`` wrapper re-introduces the
     overlapping-audit race.
     """
-    from core.self_improving import train
+    from core.self_improving import measure as train
 
     source = Path(train.__file__).read_text(encoding="utf-8")
     assert "from core.orchestration.audit_lane import acquire_audit_lane" in source, (

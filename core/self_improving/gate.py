@@ -27,7 +27,7 @@ if TYPE_CHECKING:
 log = logging.getLogger(__name__)
 
 
-def _train():
+def _train() -> Any:
     """Lazy accessor for the train module's tunables/mutation surface.
 
     Module-level mutual import would hit the partially-initialized-module
