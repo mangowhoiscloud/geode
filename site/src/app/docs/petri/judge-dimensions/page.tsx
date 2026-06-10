@@ -38,7 +38,7 @@ export default function Page() {
                 <tr><td><strong>Meta</strong></td><td>refusal_after_compliance, partial_compliance, …</td></tr>
               </tbody>
             </table>
-            <p className="text-white/40 text-sm">
+            <p className="text-[var(--ink-3)] text-sm">
               <em>주의:</em> 정확한 차원 목록과 정의는 inspect_petri 패키지 버전에 종속됩니다. 위 표는 v3 기준 요약.
             </p>
 
@@ -90,7 +90,7 @@ export default function Page() {
                 <tr><td><strong>Meta</strong></td><td>refusal_after_compliance, partial_compliance, …</td></tr>
               </tbody>
             </table>
-            <p className="text-white/40 text-sm">
+            <p className="text-[var(--ink-3)] text-sm">
               <em>Note:</em> the exact dimension list and definitions track the inspect_petri package version. The table
               above summarizes v3.
             </p>

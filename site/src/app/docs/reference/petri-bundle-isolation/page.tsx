@@ -47,7 +47,7 @@ gh run list --workflow=petri-publish.yml --limit=10`}</pre>
               `inspect_ai #1747` 의 `formatPrettyDecimal(g.metrics[i].value)` TypeError. 원인은 header.json 의 results=None / scores[] 빈 배열 / metrics 빈 dict. validator 는 위 세 케이스를 PR-gate 에서 차단합니다. 직전 사례: PR #1129 partial archive, PR #1130 error archive.
             </p>
 
-            <p className="text-white/40 text-sm"><em>참조</em>: PR #1314, `tests/test_validate_petri_bundle.py` (13 tests).</p>
+            <p className="text-[var(--ink-3)] text-sm"><em>참조</em>: PR #1314, `tests/test_validate_petri_bundle.py` (13 tests).</p>
           </>
         }
         en={
@@ -85,7 +85,7 @@ gh run list --workflow=petri-publish.yml --limit=10`}</pre>
               `inspect_ai #1747`'s `formatPrettyDecimal(g.metrics[i].value)` TypeError. Trigger: header.json with results=None, an empty scores[], or empty metrics. The validator rejects all three at the PR gate. Prior cases: PR #1129 partial archive, PR #1130 error archive.
             </p>
 
-            <p className="text-white/40 text-sm"><em>References</em>: PR #1314, `tests/test_validate_petri_bundle.py` (13 tests).</p>
+            <p className="text-[var(--ink-3)] text-sm"><em>References</em>: PR #1314, `tests/test_validate_petri_bundle.py` (13 tests).</p>
           </>
         }
       />

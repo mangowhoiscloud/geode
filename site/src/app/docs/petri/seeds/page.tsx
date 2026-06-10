@@ -168,21 +168,21 @@ function RunDetailBlock({ detail, locale }: { detail: RunDetail; locale: "ko" | 
   const headerKo = `${run.gen_tag} · target_dim=${run.target_dim}`;
 
   return (
-    <details id={`run-${run.run_id}`} className="my-4 border border-white/10 rounded-md">
-      <summary className="cursor-pointer px-4 py-3 hover:bg-white/[0.03] select-none">
+    <details id={`run-${run.run_id}`} className="my-4 border border-[var(--rule)] rounded-md">
+      <summary className="cursor-pointer px-4 py-3 hover:bg-[var(--paper-2)] select-none">
         <code className="text-[var(--acc-artifact)]">{run.run_id}</code>
-        <span className="ml-3 text-white/50 text-sm">{headerKo}</span>
+        <span className="ml-3 text-[var(--ink-3)] text-sm">{headerKo}</span>
         {/* GitHub Pages does not serve directory listings, so we link a
             concrete served file (state.json) inside the per-run directory
             instead of `<run_id>/`. PR-SEEDS-PER-RUN-LINK (2026-05-25). */}
         <a
           href={`${RAW_BUNDLE_URL}${run.run_id}/state.json`}
-          className="ml-3 text-white/40 text-xs hover:text-[var(--acc-artifact)]"
+          className="ml-3 text-[var(--ink-3)] text-xs hover:text-[var(--acc-artifact)]"
         >
           [{rawLinkLabel} ↗]
         </a>
       </summary>
-      <div className="px-4 py-3 border-t border-white/10">
+      <div className="px-4 py-3 border-t border-[var(--rule-soft)]">
         {survivorsList.length > 0 && (
           <>
             <h3>{heading}</h3>
@@ -228,7 +228,7 @@ function RunDetailBlock({ detail, locale }: { detail: RunDetail; locale: "ko" | 
                           <code>{filename || "."}</code>
                         )}
                         {evolved.length > 0 && (
-                          <span className="ml-2 text-white/40 text-xs">
+                          <span className="ml-2 text-[var(--ink-3)] text-xs">
                             → {evolved.map((e) => {
                               const eHref = `/docs/petri/seeds/${run.run_id}/${e}`;
                               return (

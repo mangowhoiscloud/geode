@@ -32,7 +32,7 @@ export default function Page() {
               <li>비용 가드는 <a href="/geode/docs/ops/cost">비용 모니터링</a>에서.</li>
             </ul>
 
-            <p className="text-white/40 text-sm"><em>출처:</em> 본 repo README §Path A/B + wiki/concepts/geode-llm-models.md</p>
+            <p className="text-[var(--ink-3)] text-sm"><em>출처:</em> 본 repo README §Path A/B + wiki/concepts/geode-llm-models.md</p>
           </>
         }
         en={
@@ -55,7 +55,7 @@ export default function Page() {
               <li>Cost guards live in <a href="/geode/docs/ops/cost">Cost Monitoring</a>.</li>
             </ul>
 
-            <p className="text-white/40 text-sm"><em>Source:</em> repo README §Path A/B and wiki/concepts/geode-llm-models.md.</p>
+            <p className="text-[var(--ink-3)] text-sm"><em>Source:</em> repo README §Path A/B and wiki/concepts/geode-llm-models.md.</p>
           </>
         }
       />

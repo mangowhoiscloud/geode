@@ -38,7 +38,7 @@ max_turns = 200`}</pre>
               <li>Runlog에 사용량 시계열 기록</li>
             </ul>
 
-            <p className="text-white/40 text-sm"><em>참조:</em> wiki/concepts/geode-long-running-safety.md, wiki/concepts/geode-context-overflow-prevention.md, wiki/concepts/geode-context-guard.md</p>
+            <p className="text-[var(--ink-3)] text-sm"><em>참조:</em> wiki/concepts/geode-long-running-safety.md, wiki/concepts/geode-context-overflow-prevention.md, wiki/concepts/geode-context-guard.md</p>
           </>
         }
         en={
@@ -67,7 +67,7 @@ max_turns = 200`}</pre>
               <li>Usage time series lands in runlog.</li>
             </ul>
 
-            <p className="text-white/40 text-sm"><em>See:</em> wiki/concepts/geode-long-running-safety.md, wiki/concepts/geode-context-overflow-prevention.md, wiki/concepts/geode-context-guard.md.</p>
+            <p className="text-[var(--ink-3)] text-sm"><em>See:</em> wiki/concepts/geode-long-running-safety.md, wiki/concepts/geode-context-overflow-prevention.md, wiki/concepts/geode-context-guard.md.</p>
           </>
         }
       />

@@ -43,7 +43,7 @@ export default function Page() {
               <li>`.claude/skills/codebase-audit` — dead code + dispose 결정 보조</li>
             </ul>
 
-            <p className="text-white/40 text-sm"><em>참조</em>: PR #1270, `docs/audits/_disposed/` (있는 경우).</p>
+            <p className="text-[var(--ink-3)] text-sm"><em>참조</em>: PR #1270, `docs/audits/_disposed/` (있는 경우).</p>
           </>
         }
         en={
@@ -77,7 +77,7 @@ export default function Page() {
               <li>`.claude/skills/codebase-audit` covers dead-code + dispose decisions</li>
             </ul>
 
-            <p className="text-white/40 text-sm"><em>References</em>: PR #1270, `docs/audits/_disposed/` (when present).</p>
+            <p className="text-[var(--ink-3)] text-sm"><em>References</em>: PR #1270, `docs/audits/_disposed/` (when present).</p>
           </>
         }
       />

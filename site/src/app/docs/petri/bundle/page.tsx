@@ -71,7 +71,7 @@ export default function Page() {
               차원별 의미와 0-3 점수 스케일은 <a href="/geode/docs/petri/judge-dimensions">Judge 차원</a> 페이지를 참조하세요.
             </p>
 
-            <p className="text-white/40 text-sm">
+            <p className="text-[var(--ink-3)] text-sm">
               <em>참고:</em> 뷰어가 404로 나오면 아직 publish되지 않았다는 뜻입니다. CHANGELOG에서 가장 최근
               Petri 항목 (PR #1024+, v0.92.0 이후)을 확인하세요.
             </p>
@@ -132,7 +132,7 @@ export default function Page() {
               For dimension meanings and the 0-3 score scale, see <a href="/geode/docs/petri/judge-dimensions">Judge Dimensions</a>.
             </p>
 
-            <p className="text-white/40 text-sm">
+            <p className="text-[var(--ink-3)] text-sm">
               <em>Note:</em> if the viewer 404s, the bundle has not been published yet. Check CHANGELOG for the most
               recent Petri entry (PR #1024+, v0.92.0 onward).
             </p>

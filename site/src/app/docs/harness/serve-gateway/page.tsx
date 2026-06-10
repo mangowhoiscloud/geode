@@ -51,7 +51,7 @@ GEODE_POLLER_DEBUG=1 geode serve`}</pre>
               운영 디테일 (반응 동작, 폴러 상태, OAuth 갱신) 은 `.claude/skills/geode-serve` 스킬 에서 다룹니다. 자세한 binding pattern + failover 는 `.claude/skills/openclaw-patterns`.
             </p>
 
-            <p className="text-white/40 text-sm"><em>참조</em>: `core/server/supervised/*.py`, `.claude/skills/geode-serve`.</p>
+            <p className="text-[var(--ink-3)] text-sm"><em>참조</em>: `core/server/supervised/*.py`, `.claude/skills/geode-serve`.</p>
           </>
         }
         en={
@@ -93,7 +93,7 @@ GEODE_POLLER_DEBUG=1 geode serve`}</pre>
               Day-to-day operational concerns (reaction behaviour, poller health, OAuth refresh) live in the `.claude/skills/geode-serve` skill. Binding patterns and failover live in `.claude/skills/openclaw-patterns`.
             </p>
 
-            <p className="text-white/40 text-sm"><em>References</em>: `core/server/supervised/*.py`, `.claude/skills/geode-serve`.</p>
+            <p className="text-[var(--ink-3)] text-sm"><em>References</em>: `core/server/supervised/*.py`, `.claude/skills/geode-serve`.</p>
           </>
         }
       />

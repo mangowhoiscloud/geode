@@ -142,7 +142,7 @@ r = build_default_registry(); print('weather_lookup' in r)"`}</pre>
             </p>
             <pre>{`uv run geode "what's the weather in Seoul"`}</pre>
 
-            <p className="text-white/40 text-sm">
+            <p className="text-[var(--ink-3)] text-sm">
               <em>참조:</em>{" "}
               <a href="/geode/docs/runtime/tools/protocol">Tool protocol</a>,{" "}
               <a href="/geode/docs/runtime/tools/mcp">MCP tools</a>.
@@ -279,7 +279,7 @@ r = build_default_registry(); print('weather_lookup' in r)"`}</pre>
             </p>
             <pre>{`uv run geode "what's the weather in Seoul"`}</pre>
 
-            <p className="text-white/40 text-sm">
+            <p className="text-[var(--ink-3)] text-sm">
               <em>See:</em>{" "}
               <a href="/geode/docs/runtime/tools/protocol">Tool protocol</a>,{" "}
               <a href="/geode/docs/runtime/tools/mcp">MCP tools</a>.

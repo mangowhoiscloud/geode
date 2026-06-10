@@ -228,8 +228,10 @@ export function adjacentPages(slug: string): { prev?: DocPage; next?: DocPage } 
 
 /** Quadrant display metadata. */
 export const QUADRANT_META: Record<DocQuadrant, { label: string; labelKo: string; color: string }> = {
-  tutorial: { label: "Tutorial", labelKo: "튜토리얼", color: "#E89B57" },
-  "how-to": { label: "How-to", labelKo: "How-to", color: "#7BB97B" },
-  reference: { label: "Reference", labelKo: "레퍼런스", color: "#7895C2" },
-  explanation: { label: "Explanation", labelKo: "Explanation", color: "#A573E8" },
+  // Axolotl Rose mapping: gold = act (tutorial), aqua = inform (how-to),
+  // rose = look up (reference), muted ink = understand (explanation).
+  tutorial: { label: "Tutorial", labelKo: "튜토리얼", color: "#FFD66B" },
+  "how-to": { label: "How-to", labelKo: "How-to", color: "#7FD8E8" },
+  reference: { label: "Reference", labelKo: "레퍼런스", color: "#F49BC4" },
+  explanation: { label: "Explanation", labelKo: "Explanation", color: "#9A93AC" },
 };
