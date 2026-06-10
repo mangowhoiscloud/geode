@@ -18,8 +18,8 @@ export default function Page() {
               바인딩은 들어오는 메신저 메시지를 GEODE 처리로 보내는 정적 규칙입니다.
               라우팅에 LLM을 쓰지 않습니다. 채널과 채널 ID가 정확히 일치하는
               메시지만 실행으로 흘러가고, 바인딩 없는 채널의 메시지는 무시됩니다.
-              그래서 바인딩은 "어느 채널이 GEODE를 깨울 수 있는가"의 화이트리스트
-              역할을 합니다.
+              바인딩이 곧 &quot;어느 채널이 GEODE를 깨울 수 있는가&quot;의
+              화이트리스트입니다.
             </p>
 
             <h2>1. config.toml에 바인딩을 선언합니다</h2>
@@ -27,7 +27,7 @@ export default function Page() {
               바인딩은 프로젝트의 <code>.geode/config.toml</code>{" "}
               <code>[gateway]</code> 섹션에서 선언합니다.{" "}
               <code>ChannelManager.load_bindings_from_config</code>(
-              <code>core/integrations/messaging/binding.py</code>)이 이 형식을
+              <code>core/messaging/binding.py</code>)이 이 형식을
               읽습니다. 각 규칙은 <code>channel</code>과 <code>channel_id</code>가
               필수입니다. <code>channel_id</code>가 비어 있으면 그 규칙은
               건너뜁니다. 빈 ID는 모든 채널에 응답하는 위험한 catch-all이 되기
@@ -53,7 +53,7 @@ time_budget_s = 90`}</pre>
               <code>time_budget_s</code>는 메시지당 wall-clock 예산을 지정합니다.
               규칙에 없으면 gateway 레벨 기본값으로 떨어집니다. 이 필드들은{" "}
               <code>ChannelBinding</code>(
-              <code>core/integrations/messaging/models.py</code>)의 dataclass
+              <code>core/messaging/models.py</code>)의 dataclass
               필드와 일대일로 대응합니다.
             </p>
 
@@ -66,7 +66,7 @@ time_budget_s = 90`}</pre>
               메시지는 같은 키로 묶여 컨텍스트가 격리됩니다. 실행은 SessionLane →
               gateway Lane → global Lane 순서로 레인 큐를 거치므로, 같은 세션의
               메시지는 직렬화되고 동시성은 워크로드별 상한으로 제어됩니다.{" "}
-              <code>allowed_tools</code>가 설정돼 있으면 그 힌트가 컨텐츠 앞에
+              <code>allowed_tools</code>가 설정돼 있으면 그 힌트가 콘텐츠 앞에
               붙어 AgenticLoop로 전달됩니다.
             </p>
 
@@ -89,7 +89,7 @@ time_budget_s = 90`}</pre>
             <pre>{`uv run python -c "
 import tomllib
 from pathlib import Path
-from core.integrations.messaging.binding import ChannelManager
+from core.messaging.binding import ChannelManager
 
 cfg = tomllib.loads(Path('.geode/config.toml').read_text())
 m = ChannelManager()
@@ -116,7 +116,7 @@ for b in m.list_bindings():
         en={
           <>
             <p>
-              A binding is a static rule that routes an inbound messaging message
+              A binding is a static rule that routes an inbound messenger message
               into GEODE processing. No LLM is used for routing. Only messages whose
               channel and channel ID match exactly flow through to execution;
               messages from unbound channels are ignored. A binding therefore acts
@@ -126,9 +126,9 @@ for b in m.list_bindings():
             <h2>1. Declare the binding in config.toml</h2>
             <p>
               Bindings are declared in the <code>[gateway]</code> section of the
-              project's <code>.geode/config.toml</code>.{" "}
+              project&apos;s <code>.geode/config.toml</code>.{" "}
               <code>ChannelManager.load_bindings_from_config</code> in{" "}
-              <code>core/integrations/messaging/binding.py</code> reads this format.
+              <code>core/messaging/binding.py</code> reads this format.
               Each rule requires <code>channel</code> and <code>channel_id</code>.
               A rule with an empty <code>channel_id</code> is skipped, because an
               empty ID would create an unsafe catch-all that responds in every
@@ -155,7 +155,7 @@ time_budget_s = 90`}</pre>
               falling back to the gateway-level default when omitted. These fields
               map one-to-one to the dataclass fields on{" "}
               <code>ChannelBinding</code> in{" "}
-              <code>core/integrations/messaging/models.py</code>.
+              <code>core/messaging/models.py</code>.
             </p>
 
             <h2>2. It routes to a session lane</h2>
@@ -188,7 +188,7 @@ time_budget_s = 90`}</pre>
             <pre>{`uv run python -c "
 import tomllib
 from pathlib import Path
-from core.integrations.messaging.binding import ChannelManager
+from core.messaging.binding import ChannelManager
 
 cfg = tomllib.loads(Path('.geode/config.toml').read_text())
 m = ChannelManager()
@@ -198,7 +198,7 @@ for b in m.list_bindings():
     print(b)
 "`}</pre>
             <p>
-              When the loaded count and each rule's <code>channel</code> /{" "}
+              When the loaded count and each rule&apos;s <code>channel</code> /{" "}
               <code>channel_id</code> / <code>auto_respond</code> /{" "}
               <code>time_budget_s</code> print, routing can recognize that channel.
               For live message routing and poller operations, see the serve gateway

@@ -8,304 +8,364 @@ export default function Page() {
       slug="verification/observability"
       title="Observability"
       titleKo="관측성"
-      summary="Four native lenses: hooks, RunLog, audit diagnostics, Petri. Vendor-free since v0.89.0."
-      summaryKo="자체 4-lens 스택: 훅, RunLog, audit diagnostics, Petri. v0.89.0 이후 vendor-free 관측성."
+      summary="The lenses on a run. Hooks, run logs, transcripts, session metrics, and the logging switchboard."
+      summaryKo="실행을 들여다보는 렌즈들입니다. 훅, run log, 트랜스크립트, 세션 메트릭, 로깅 스위치보드를 다룹니다."
     >
       <Bi
         ko={
           <>
             <p>
-              <strong>Reference:</strong> GEODE는 v0.89.0에서 외부 SaaS tracing 의존을 제거하고 4개의 자체 관측 렌즈로 전환했습니다.
-              각 렌즈는 다른 시간 단위와 grain을 가지며, 서로 보완합니다. 한 호출의 lifecycle 전체가 4 렌즈에 모두 기록되도록 설계.
+              GEODE는 외부 tracing SaaS 없이 스스로를 관측합니다. 훅 이벤트가
+              1차 신호이고, 자체 렌즈들이 같은 실행을 다른 단위로 봅니다. 전부
+              디스크의 JSONL이라 jq로 바로 열립니다.
             </p>
 
-            <h2>4-Lens 구조</h2>
+            <h2>렌즈 한눈에</h2>
             <table>
-              <thead><tr><th>렌즈</th><th>관측 단위</th><th>grain</th><th>위치</th><th>도입</th></tr></thead>
+              <thead>
+                <tr><th>렌즈</th><th>단위</th><th>위치</th><th>코드</th></tr>
+              </thead>
               <tbody>
-                <tr><td><strong>Hooks</strong></td><td>이벤트</td><td>micro (μs to ms)</td><td><code>core/hooks/system.py</code></td><td>core</td></tr>
-                <tr><td><strong>RunLog</strong></td><td>run (LLM 호출 1회)</td><td>medium (s)</td><td><code>~/.geode/runlog/</code> JSONL</td><td>core</td></tr>
-                <tr><td><strong>Audit diagnostics</strong></td><td>call (input/output/cost)</td><td>per-call (assertion-grade)</td><td><code>core.audit.diagnostics</code></td><td>v0.92.0</td></tr>
-                <tr><td><strong>Petri Audit</strong></td><td>scenario (seeds × turns 격자)</td><td>session (min to hour)</td><td><a href="/geode/docs/petri/overview">Petri × GEODE</a></td><td>v0.92.0+</td></tr>
+                <tr>
+                  <td>Hooks</td>
+                  <td>라이프사이클 이벤트</td>
+                  <td>(인메모리, 아래 렌즈들의 소스)</td>
+                  <td><code>core/hooks/system.py</code></td>
+                </tr>
+                <tr>
+                  <td>RunLog</td>
+                  <td>세션당 훅 이벤트 시계열</td>
+                  <td><code>~/.geode/runs/&lt;session_key&gt;.jsonl</code></td>
+                  <td><code>core/observability/run_log.py</code></td>
+                </tr>
+                <tr>
+                  <td>SessionTranscript</td>
+                  <td>턴 단위 대화와 도구 호출</td>
+                  <td><code>~/.geode/transcripts/&lt;slug&gt;/</code></td>
+                  <td><code>core/observability/transcript.py</code></td>
+                </tr>
+                <tr>
+                  <td>SessionMetrics</td>
+                  <td>세션 누적 집계 한 행</td>
+                  <td>자기개선 루프 홈의 <code>sessions.jsonl</code></td>
+                  <td><code>core/observability/session_metrics.py</code></td>
+                </tr>
+                <tr>
+                  <td>Usage ledger</td>
+                  <td>LLM 호출당 토큰과 비용</td>
+                  <td><code>~/.geode/usage/YYYY-MM.jsonl</code></td>
+                  <td><code>core/llm/usage_store.py</code></td>
+                </tr>
+                <tr>
+                  <td>프로세스 로그</td>
+                  <td>프로세스별 로테이팅 파일</td>
+                  <td><code>~/.geode/logs/</code></td>
+                  <td><code>core/observability/logging_config.py</code></td>
+                </tr>
               </tbody>
             </table>
 
-            <h2>렌즈 1. Hook 시스템</h2>
+            <h2>훅이 렌즈가 되는 방식</h2>
             <p>
-              가장 빠른 grain. 모든 lifecycle 이벤트가 발화되고, 카테고리로 그룹화됩니다.
-              listener는 <code>trigger</code> (fire-and-forget) / <code>trigger_with_result</code> (결과 수집) / <code>trigger_interceptor</code> (intercept 가능) 셋 중 하나로 등록.
-            </p>
-            <table>
-              <thead><tr><th>카테고리</th><th>대표 이벤트</th></tr></thead>
-              <tbody>
-                <tr><td>pipeline</td><td>PIPELINE_START, PIPELINE_END, PIPELINE_ERROR</td></tr>
-                <tr><td>node</td><td>NODE_ENTER, NODE_EXIT, NODE_ERROR, NODE_RETRY</td></tr>
-                <tr><td>analysis</td><td>ANALYST_START, ANALYST_COMPLETE, ANALYST_FAILED</td></tr>
-                <tr><td>verification</td><td>VERIFICATION_PASS, VERIFICATION_FAIL</td></tr>
-                <tr><td>automation</td><td>DRIFT_DETECTED, MODEL_PROMOTED, OUTCOME_COLLECTED, EXPERT_VOTE_CAST, FEEDBACK_PHASE_CHANGED</td></tr>
-                <tr><td>memory</td><td>MEMORY_SAVED, RULE_CREATED, RULE_UPDATED, RULE_DELETED</td></tr>
-                <tr><td>tool</td><td>TOOL_EXEC_START/END/FAILED, TOOL_RECOVERY_START/END, TOOL_APPROVAL_REQUEST/GRANTED/DENIED</td></tr>
-                <tr><td>session</td><td>SESSION_START, SESSION_END</td></tr>
-                <tr><td>model</td><td>MODEL_SWITCHED</td></tr>
-                <tr><td>llm</td><td>LLM_CALL_START, LLM_CALL_END, LLM_CALL_FAILED, LLM_CALL_RETRY</td></tr>
-                <tr><td>approval</td><td>APPROVAL_REQUEST, APPROVAL_GRANTED</td></tr>
-                <tr><td>context</td><td>CONTEXT_OVERFLOW, CONTEXT_RESET</td></tr>
-                <tr><td>prompt</td><td>PROMPT_ASSEMBLED</td></tr>
-                <tr><td>(reserved)</td><td>plugin-specific, 도메인 어댑터가 추가</td></tr>
-              </tbody>
-            </table>
-            <p>
-              자세히: <a href="/geode/docs/harness/hooks">Hook System</a>.
-            </p>
-
-            <h2>렌즈 2. RunLog</h2>
-            <p>
-              한 LLM 호출 (run) 단위로 input/output/tool call/reasoning을 시계열로 보관합니다. JSONL 한 파일이 한 run.
-            </p>
-            <pre>{`# 위치
-~/.geode/runlog/<YYYY-MM-DD>/<run-id>.jsonl
-
-# 한 줄 record
-{"ts": "...", "kind": "llm_call_start", "model": "claude-opus-4-7", "input_tokens": 1284, ...}
-{"ts": "...", "kind": "tool_exec_start", "name": "search_subjects", ...}
-{"ts": "...", "kind": "tool_exec_end", "name": "search_subjects", "duration_ms": 312, ...}
-{"ts": "...", "kind": "llm_call_end", "output_tokens": 482, "cache_read_tokens": 28000, ...}
-{"ts": "...", "kind": "run_end", "total_cost_usd": 0.0127, ...}`}</pre>
-            <p>
-              <code>inspect view ~/.geode/runlog/...</code>로 transcript viewer에서 재생 가능.
-              <code>kind</code> 종류는 hook 이벤트와 1대1 대응.
-            </p>
-
-            <h2>렌즈 3. Audit Diagnostics (v0.92.0+)</h2>
-            <p>
-              Petri audit가 require하는 per-call assertion 데이터. cache_read/cache_write 메타 + input/output hash + provider response 원본 + cost decomposition.
-              한 호출의 모든 결정 가능 데이터를 재현 가능한 형태로 저장.
-            </p>
-            <pre>{`# core/audit/diagnostics.py
-@dataclass
-class CallDiagnostic:
-    run_id: str
-    call_seq: int                       # run 안에서 N번째 호출
-    provider: str                       # anthropic / openai / glm / codex
-    model: str                          # claude-opus-4-7 등
-    input_hash: str                     # SHA-256[:12] of input
-    output_hash: str
-    input_tokens: int
-    output_tokens: int
-    cache_read_tokens: int              # 캐시 hit
-    cache_write_tokens: int             # 캐시 write
-    reasoning_tokens: int | None        # extended thinking
-    cost_usd: float
-    cost_breakdown: dict                # {input, output, cache_read, cache_write, reasoning}
-    latency_ms: int
-    audit_mode: bool                    # Petri audit 여부`}</pre>
-            <p>
-              v0.92.0 도입. v0.93+ Petri audit-mode가 이 데이터를 1차 사료로 활용해 시나리오의 재현성을 보장합니다.
-            </p>
-
-            <h2>렌즈 4. Petri Audit</h2>
-            <p>
-              세션 단위 grain. seeds × turns 격자로 misalignment risk를 측정. Auditor(적대) · Target(GEODE) · Judge 3-role 구성.
+              발화 지점의 SoT는 <code>HookEvent</code> enum 64종입니다. LLM 호출,
+              도구 실행, 세션 경계, 컨텍스트 오버플로, 모델 전환, 변이
+              라이프사이클까지 의미 있는 경계마다 이벤트가 발화합니다. 관측은 이
+              위에 와일드카드 구독 두 개로 얹혀 있습니다.
             </p>
             <ul>
-              <li>전체 통합: <a href="/geode/docs/petri/overview">Petri × GEODE Integration</a></li>
-              <li>시나리오: <a href="/geode/docs/petri/scenarios">Petri Scenarios</a> (Petri 기본 + GEODE 전용)</li>
-              <li>실행: <a href="/geode/docs/petri/run">Petri Run</a></li>
-              <li>차원: <a href="/geode/docs/petri/judge-dimensions">Judge 차원</a></li>
+              <li>
+                run log writer. bootstrap이 <code>register_prefix(&quot;*&quot;, ...)</code>로
+                모든 이벤트를 구독해 세션별 <code>RunLogEntry</code>로 적습니다
+                (<code>core/wiring/bootstrap.py</code>). 새 HookEvent를 추가하면
+                자동으로 run log에 잡힙니다.
+              </li>
+              <li>
+                transcript 미러. 활성 RunTranscript가 있으면 모든 훅 발화가
+                activity 행으로 미러됩니다 (<code>core/hooks/system.py</code>,{" "}
+                <code>core/observability/activity_registry.py</code>).
+              </li>
             </ul>
-
-            <h2>Usage Ledger (v0.66+)</h2>
             <p>
-              비용 추적 전용 append-only ledger. <code>~/.geode/usage/&lt;date&gt;.jsonl</code>에 LLM 호출 단위로 token 분해와 cost가 기록됩니다.
-              v0.90.0에서 token tracker dual-record 버그를 수정해 codex/glm의 50-64% duplicate 카운팅이 해소되었습니다.
+              한때 문서에 있던 PIPELINE_*, NODE_* 류의 자동화 파이프라인
+              이벤트는 존재하지 않습니다. enum에 없는 이벤트를 구독하는 코드는
+              발화하지 않는 죽은 코드입니다.
             </p>
-            <pre>{`$ geode history --last 24h
-$ jq '.cost_usd | add' ~/.geode/usage/2026-05-12.jsonl  # 합계
-$ jq -c 'select(.cache_read_tokens > 0)' ~/.geode/usage/2026-05-12.jsonl  # 캐시 hit만`}</pre>
 
-            <h2>어떤 렌즈를 언제 쓰나</h2>
+            <h2>RunLog와 JobRunLog: 하나의 JSONL 규율</h2>
+            <p>
+              세션 run log와 스케줄러 job run log는 같은 패턴(잠금 append,
+              newest-first 읽기, 크기 초과 시 원자적 prune)을 쓰므로 v0.99.159에서
+              공통 베이스 <code>JsonlAppendLog</code>로 접혔습니다. 파일은 2MB를
+              넘으면 최신 2000줄로 잘립니다.
+            </p>
+            <pre>{`# ~/.geode/runs/<session_key>.jsonl 한 줄
+{"session_key": "...", "event": "llm_call_ended",
+ "node": "", "status": "ok", "duration_ms": 4218.0,
+ "metadata": {...}, "timestamp": 1780000000.0, "run_id": "..."}`}</pre>
+            <p>
+              이 파일은 <code>geode adapters stats</code>의 데이터 소스이기도
+              합니다. <code>ADAPTER_DISPATCH_ATTEMPT</code> 이벤트를 집계해
+              어댑터별 성공률과 p50/p95 지연을 보여줍니다
+              (<code>core/cli/commands/adapters.py</code>).
+            </p>
+
+            <h2>sessions.jsonl: 실행 한 번이 한 행</h2>
+            <p>
+              <code>SessionMetrics</code>는 토큰, 비용, 재시도, 검증 카운터를
+              세션 단위로 누적하는 Tier 2 집계입니다.{" "}
+              <code>to_session_row()</code>가 한 행으로 만들어, 자기개선 루프의
+              실행마다 루프 홈(<code>~/.geode/autoresearch/handoff/</code>)의{" "}
+              <code>sessions.jsonl</code>에 추가됩니다. v0.99.159 전까지 이
+              writer는 production caller가 없었고, S-6에서{" "}
+              <code>core/self_improving/train.py</code>가 배선했습니다. 가드는{" "}
+              <code>tests/test_s6_observability.py</code>입니다.
+            </p>
+
+            <h2>configure_logging: 프로세스 로그 스위치보드</h2>
+            <p>
+              어느 프로세스든 진입점에서 <code>configure_logging(mode)</code>를
+              한 번 부르면 같은 포맷과 stderr 스트림, 모드별 로테이팅 파일을
+              받습니다. 알 수 없는 모드는 조용히 무시되지 않고 ValueError로
+              실패합니다.
+            </p>
             <table>
-              <thead><tr><th>질문</th><th>1차 렌즈</th><th>보조</th></tr></thead>
+              <thead>
+                <tr><th>mode</th><th>파일</th></tr>
+              </thead>
               <tbody>
-                <tr><td>왜 이 도구가 호출됐지?</td><td>RunLog (run 단위 trace)</td><td>Hook <code>TOOL_EXEC_*</code></td></tr>
-                <tr><td>비용이 어디로 갔지?</td><td>Usage ledger</td><td>Hook <code>LLM_CALL_END</code> 집계</td></tr>
-                <tr><td>이 호출이 캐시를 어떻게 썼지?</td><td>Audit diagnostics (cache_read/write)</td><td>RunLog</td></tr>
-                <tr><td>같은 입력이 재현되나?</td><td>Audit diagnostics (input_hash)</td><td>RunLog 비교</td></tr>
-                <tr><td>이 에이전트가 안전한가?</td><td>Petri audit (시나리오)</td><td>Hook <code>VERIFICATION_FAIL</code></td></tr>
-                <tr><td>긴 세션에서 어디서 막혔지?</td><td>Hook <code>CONTEXT_OVERFLOW</code></td><td>RunLog timeline</td></tr>
+                <tr><td><code>serve</code></td><td><code>~/.geode/logs/serve.log</code> (10MB × 5)</td></tr>
+                <tr><td><code>mcp</code></td><td><code>~/.geode/logs/mcp.log</code></td></tr>
+                <tr><td><code>worker</code></td><td><code>~/.geode/logs/worker.log</code></td></tr>
+                <tr><td><code>campaign</code></td><td><code>~/.geode/logs/campaign.log</code></td></tr>
+                <tr><td><code>cli</code></td><td>파일 없음, 콘솔만</td></tr>
               </tbody>
             </table>
 
-            <h2>외부 어댑터</h2>
-            <p>
-              자체 stack이 1차지만, 외부 dashboard로 export 필요시 두 가지 경로가 있습니다.
-            </p>
-            <ul>
-              <li><strong>OpenTelemetry</strong>. Hook listener를 OTel exporter로 wrapping해 Tempo/Jaeger/Grafana로 흘림.</li>
-              <li><strong>inspect viewer</strong>. RunLog JSONL을 그대로 inspect 명령에 입력해 transcript UI로 본다 (Petri 결과와 동일 viewer).</li>
-            </ul>
+            <h2>어떤 질문에 어떤 렌즈</h2>
+            <table>
+              <thead>
+                <tr><th>질문</th><th>렌즈</th></tr>
+              </thead>
+              <tbody>
+                <tr><td>이 세션에서 무슨 일이 있었나</td><td>SessionTranscript</td></tr>
+                <tr><td>실행이 어디서 멈췄나</td><td>RunLog 마지막 줄들 + transcript. 절차는 <a href="/geode/docs/guides/debug-stuck-run">멈춘 실행 디버깅</a></td></tr>
+                <tr><td>비용이 어디로 갔나</td><td>Usage ledger, <code>/cost</code>, <code>geode history</code></td></tr>
+                <tr><td>어댑터가 얼마나 자주 실패하나</td><td><code>geode adapters stats</code></td></tr>
+                <tr><td>루프 실행들의 토큰·검증 추세</td><td>sessions.jsonl</td></tr>
+                <tr><td>이 에이전트가 안전하게 행동하나</td><td>Petri 감사. <a href="/geode/docs/petri/overview">Petri × GEODE</a></td></tr>
+              </tbody>
+            </table>
 
-            <h2>왜 자체 스택인가</h2>
+            <h2>실패 모드</h2>
+            <table>
+              <thead>
+                <tr><th>증상</th><th>원인</th><th>해법</th></tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>run log에 이벤트가 안 쌓임</td>
+                  <td>훅 핸들러가 bootstrap에 미등록</td>
+                  <td>핸들러 존재와 발화는 다릅니다. <code>core/wiring/bootstrap.py</code> 등록을 확인합니다.</td>
+                </tr>
+                <tr>
+                  <td>옛 로그가 사라짐</td>
+                  <td>크기 게이트 prune (2MB 초과 시 최신 2000줄 유지)</td>
+                  <td>의도된 동작입니다. 장기 보존이 필요하면 파일을 복사해 둡니다.</td>
+                </tr>
+                <tr>
+                  <td>sessions.jsonl이 비어 있음</td>
+                  <td>자기개선 루프를 아직 실행하지 않음</td>
+                  <td>이 파일은 루프 실행이 writer입니다. 일반 REPL 세션은 transcript와 run log로 봅니다.</td>
+                </tr>
+              </tbody>
+            </table>
+
+            <h2>다음</h2>
             <ul>
-              <li>외부 SaaS lock-in 제거.</li>
-              <li>관측 데이터를 GEODE 내부에서 직접 소유 (RunLog).</li>
-              <li>외부 tracing SDK의 import-time cost가 cold-start lazy loading arc (v0.85-89)와 충돌.</li>
+              <li><a href="/geode/docs/harness/hooks">훅과 관측성</a>. 이벤트와 트리거 모드의 구조.</li>
+              <li><a href="/geode/docs/ops/cost">비용 모니터링</a>. ledger 렌즈의 깊은 쪽.</li>
+              <li><a href="/geode/docs/petri/run">감사 실행</a>. 행동 측정 렌즈.</li>
             </ul>
-            <p>
-              v0.89.0에서 외부 tracing 의존성 + 별도 tracing 모듈을 제거했습니다. 이 페이지 4 렌즈가 정식 관측 경로입니다.
-            </p>
           </>
         }
         en={
           <>
             <p>
-              <strong>Reference:</strong> in v0.89.0 GEODE removed its external SaaS tracing dependency and switched to four native
-              observability lenses. Each lens has a different time grain and is complementary; the full lifecycle of a
-              single call is captured across all four.
+              GEODE observes itself without an external tracing SaaS: hook
+              events are the primary signal, and a set of native lenses view the
+              same run at different grains. Everything is JSONL on disk, one jq
+              away.
             </p>
 
-            <h2>The 4-lens structure</h2>
+            <h2>The lenses at a glance</h2>
             <table>
-              <thead><tr><th>Lens</th><th>Unit</th><th>Grain</th><th>Where</th><th>Since</th></tr></thead>
+              <thead>
+                <tr><th>Lens</th><th>Unit</th><th>Where</th><th>Code</th></tr>
+              </thead>
               <tbody>
-                <tr><td><strong>Hooks</strong></td><td>events</td><td>micro (μs to ms)</td><td><code>core/hooks/system.py</code></td><td>core</td></tr>
-                <tr><td><strong>RunLog</strong></td><td>run (one LLM call)</td><td>medium (seconds)</td><td><code>~/.geode/runlog/</code> JSONL</td><td>core</td></tr>
-                <tr><td><strong>Audit diagnostics</strong></td><td>call (input/output/cost)</td><td>per-call assertion-grade</td><td><code>core.audit.diagnostics</code></td><td>v0.92.0</td></tr>
-                <tr><td><strong>Petri Audit</strong></td><td>scenario (seeds × turns grid)</td><td>session (minutes to hours)</td><td><a href="/geode/docs/petri/overview">Petri × GEODE</a></td><td>v0.92.0+</td></tr>
+                <tr>
+                  <td>Hooks</td>
+                  <td>Lifecycle events</td>
+                  <td>(in memory; the source feeding the rest)</td>
+                  <td><code>core/hooks/system.py</code></td>
+                </tr>
+                <tr>
+                  <td>RunLog</td>
+                  <td>Per-session hook-event time series</td>
+                  <td><code>~/.geode/runs/&lt;session_key&gt;.jsonl</code></td>
+                  <td><code>core/observability/run_log.py</code></td>
+                </tr>
+                <tr>
+                  <td>SessionTranscript</td>
+                  <td>Per-turn dialogue and tool calls</td>
+                  <td><code>~/.geode/transcripts/&lt;slug&gt;/</code></td>
+                  <td><code>core/observability/transcript.py</code></td>
+                </tr>
+                <tr>
+                  <td>SessionMetrics</td>
+                  <td>One cumulative row per session</td>
+                  <td><code>sessions.jsonl</code> in the self-improving loop home</td>
+                  <td><code>core/observability/session_metrics.py</code></td>
+                </tr>
+                <tr>
+                  <td>Usage ledger</td>
+                  <td>Tokens and cost per LLM call</td>
+                  <td><code>~/.geode/usage/YYYY-MM.jsonl</code></td>
+                  <td><code>core/llm/usage_store.py</code></td>
+                </tr>
+                <tr>
+                  <td>Process logs</td>
+                  <td>Rotating file per process</td>
+                  <td><code>~/.geode/logs/</code></td>
+                  <td><code>core/observability/logging_config.py</code></td>
+                </tr>
               </tbody>
             </table>
 
-            <h2>Lens 1. Hook system</h2>
+            <h2>How hooks become lenses</h2>
             <p>
-              The fastest grain. Every lifecycle event fires; events are grouped into categories.
-              Listeners register via one of three trigger modes: <code>trigger</code> (fire-and-forget),
-              <code>trigger_with_result</code> (collect handler return values), or <code>trigger_interceptor</code> (can block or modify the event).
-            </p>
-            <table>
-              <thead><tr><th>Category</th><th>Examples</th></tr></thead>
-              <tbody>
-                <tr><td>pipeline</td><td>PIPELINE_START, PIPELINE_END, PIPELINE_ERROR</td></tr>
-                <tr><td>node</td><td>NODE_ENTER, NODE_EXIT, NODE_ERROR, NODE_RETRY</td></tr>
-                <tr><td>analysis</td><td>ANALYST_START, ANALYST_COMPLETE, ANALYST_FAILED</td></tr>
-                <tr><td>verification</td><td>VERIFICATION_PASS, VERIFICATION_FAIL</td></tr>
-                <tr><td>automation</td><td>DRIFT_DETECTED, MODEL_PROMOTED, OUTCOME_COLLECTED, EXPERT_VOTE_CAST, FEEDBACK_PHASE_CHANGED</td></tr>
-                <tr><td>memory</td><td>MEMORY_SAVED, RULE_CREATED, RULE_UPDATED, RULE_DELETED</td></tr>
-                <tr><td>tool</td><td>TOOL_EXEC_START/END/FAILED, TOOL_RECOVERY_START/END, TOOL_APPROVAL_REQUEST/GRANTED/DENIED</td></tr>
-                <tr><td>session</td><td>SESSION_START, SESSION_END</td></tr>
-                <tr><td>model</td><td>MODEL_SWITCHED</td></tr>
-                <tr><td>llm</td><td>LLM_CALL_START, LLM_CALL_END, LLM_CALL_FAILED, LLM_CALL_RETRY</td></tr>
-                <tr><td>approval</td><td>APPROVAL_REQUEST, APPROVAL_GRANTED</td></tr>
-                <tr><td>context</td><td>CONTEXT_OVERFLOW, CONTEXT_RESET</td></tr>
-                <tr><td>prompt</td><td>PROMPT_ASSEMBLED</td></tr>
-                <tr><td>(reserved)</td><td>plugin-specific, added by external packages</td></tr>
-              </tbody>
-            </table>
-            <p>
-              Details: <a href="/geode/docs/harness/hooks">Hook System</a>.
-            </p>
-
-            <h2>Lens 2. RunLog</h2>
-            <p>
-              Per LLM call (one run), captures input, output, tool calls, and reasoning as a time series.
-              One JSONL file per run.
-            </p>
-            <pre>{`# Location
-~/.geode/runlog/<YYYY-MM-DD>/<run-id>.jsonl
-
-# A single record
-{"ts": "...", "kind": "llm_call_start", "model": "claude-opus-4-7", "input_tokens": 1284, ...}
-{"ts": "...", "kind": "tool_exec_start", "name": "search_subjects", ...}
-{"ts": "...", "kind": "tool_exec_end", "name": "search_subjects", "duration_ms": 312, ...}
-{"ts": "...", "kind": "llm_call_end", "output_tokens": 482, "cache_read_tokens": 28000, ...}
-{"ts": "...", "kind": "run_end", "total_cost_usd": 0.0127, ...}`}</pre>
-            <p>
-              Replay through the transcript viewer with <code>inspect view ~/.geode/runlog/...</code>.
-              The <code>kind</code> values map 1-to-1 to hook events.
-            </p>
-
-            <h2>Lens 3. Audit Diagnostics (since v0.92.0)</h2>
-            <p>
-              The per-call assertion data Petri audits require. Cache read/write meta, input/output hash, original
-              provider response, and cost decomposition. Every decision-relevant data point for a single call is stored
-              in a reproducible form.
-            </p>
-            <pre>{`# core/audit/diagnostics.py
-@dataclass
-class CallDiagnostic:
-    run_id: str
-    call_seq: int                       # N-th call within the run
-    provider: str                       # anthropic / openai / glm / codex
-    model: str                          # e.g. claude-opus-4-7
-    input_hash: str                     # SHA-256[:12] of input
-    output_hash: str
-    input_tokens: int
-    output_tokens: int
-    cache_read_tokens: int              # cache hit
-    cache_write_tokens: int             # cache write
-    reasoning_tokens: int | None        # extended thinking
-    cost_usd: float
-    cost_breakdown: dict                # {input, output, cache_read, cache_write, reasoning}
-    latency_ms: int
-    audit_mode: bool                    # whether Petri audit is active`}</pre>
-            <p>
-              Introduced in v0.92.0. From v0.93 the Petri audit-mode uses this as the primary source to keep scenarios
-              reproducible.
-            </p>
-
-            <h2>Lens 4. Petri Audit</h2>
-            <p>
-              Session-level grain. A seeds by turns grid measures misalignment risk. Three roles: Auditor
-              (adversarial), Target (GEODE), Judge.
+              The source of truth for emit sites is the 64-member{" "}
+              <code>HookEvent</code> enum: LLM call lifecycle, tool execution,
+              session boundaries, context overflow, model switches, mutation
+              lifecycle. Observation sits on top as two wildcard subscriptions.
             </p>
             <ul>
-              <li>Integration: <a href="/geode/docs/petri/overview">Petri × GEODE Integration</a></li>
-              <li>Scenarios: <a href="/geode/docs/petri/scenarios">Petri Scenarios</a> (Petri defaults plus GEODE-specific)</li>
-              <li>Run: <a href="/geode/docs/petri/run">Petri Run</a></li>
-              <li>Dimensions: <a href="/geode/docs/petri/judge-dimensions">Judge Dimensions</a></li>
+              <li>
+                The run-log writer. Bootstrap subscribes to every event with{" "}
+                <code>register_prefix(&quot;*&quot;, ...)</code> and appends a
+                per-session <code>RunLogEntry</code>
+                (<code>core/wiring/bootstrap.py</code>). A new HookEvent lands
+                in the run log automatically.
+              </li>
+              <li>
+                The transcript mirror. When a RunTranscript is active, every
+                hook trigger is mirrored as an activity row
+                (<code>core/hooks/system.py</code>,{" "}
+                <code>core/observability/activity_registry.py</code>).
+              </li>
             </ul>
-
-            <h2>Usage Ledger (since v0.66)</h2>
             <p>
-              The append-only ledger dedicated to cost tracking. Per LLM call, tokens are broken out and cost is
-              recorded at <code>~/.geode/usage/&lt;date&gt;.jsonl</code>.
-              v0.90.0 fixed a token-tracker dual-record bug that had inflated codex/glm by 50-64 percent.
+              The PIPELINE_* and NODE_* automation events that older docs
+              described do not exist. Code subscribing to an event missing from
+              the enum is dead code that never fires.
             </p>
-            <pre>{`$ geode history --last 24h
-$ jq '.cost_usd | add' ~/.geode/usage/2026-05-12.jsonl  # total
-$ jq -c 'select(.cache_read_tokens > 0)' ~/.geode/usage/2026-05-12.jsonl  # cache hits only`}</pre>
+
+            <h2>RunLog and JobRunLog: one JSONL discipline</h2>
+            <p>
+              The session run log and the scheduler&apos;s job run log used the
+              same pattern (locked append, newest-first reads, size-gated atomic
+              prune), so v0.99.159 folded both onto a shared{" "}
+              <code>JsonlAppendLog</code> base. A file past 2MB is trimmed to
+              its newest 2000 lines.
+            </p>
+            <pre>{`# one line of ~/.geode/runs/<session_key>.jsonl
+{"session_key": "...", "event": "llm_call_ended",
+ "node": "", "status": "ok", "duration_ms": 4218.0,
+ "metadata": {...}, "timestamp": 1780000000.0, "run_id": "..."}`}</pre>
+            <p>
+              The same files feed <code>geode adapters stats</code>, which
+              aggregates <code>ADAPTER_DISPATCH_ATTEMPT</code> events into
+              per-adapter outcome counts and p50/p95 latency
+              (<code>core/cli/commands/adapters.py</code>).
+            </p>
+
+            <h2>sessions.jsonl: one row per run</h2>
+            <p>
+              <code>SessionMetrics</code> is the Tier 2 aggregate: tokens, cost,
+              retry, and verify counters accumulated over a session.{" "}
+              <code>to_session_row()</code> flattens it into one row, appended
+              to <code>sessions.jsonl</code> in the self-improving loop home
+              (<code>~/.geode/autoresearch/handoff/</code>) for every loop run.
+              The writer had zero production callers until v0.99.159; S-6 wired
+              it from <code>core/self_improving/train.py</code>, pinned by{" "}
+              <code>tests/test_s6_observability.py</code>.
+            </p>
+
+            <h2>configure_logging: the process log switchboard</h2>
+            <p>
+              Every process calls <code>configure_logging(mode)</code> once at
+              its entry point and receives the same formatter, the stderr
+              stream, and a per-mode rotating file. An unknown mode fails with a
+              ValueError instead of passing silently.
+            </p>
+            <table>
+              <thead>
+                <tr><th>mode</th><th>File</th></tr>
+              </thead>
+              <tbody>
+                <tr><td><code>serve</code></td><td><code>~/.geode/logs/serve.log</code> (10MB times 5)</td></tr>
+                <tr><td><code>mcp</code></td><td><code>~/.geode/logs/mcp.log</code></td></tr>
+                <tr><td><code>worker</code></td><td><code>~/.geode/logs/worker.log</code></td></tr>
+                <tr><td><code>campaign</code></td><td><code>~/.geode/logs/campaign.log</code></td></tr>
+                <tr><td><code>cli</code></td><td>no file, console only</td></tr>
+              </tbody>
+            </table>
 
             <h2>Which lens for which question</h2>
             <table>
-              <thead><tr><th>Question</th><th>Primary lens</th><th>Backup</th></tr></thead>
+              <thead>
+                <tr><th>Question</th><th>Lens</th></tr>
+              </thead>
               <tbody>
-                <tr><td>Why was this tool called?</td><td>RunLog (run-level trace)</td><td>Hooks <code>TOOL_EXEC_*</code></td></tr>
-                <tr><td>Where did the cost go?</td><td>Usage ledger</td><td>Hook <code>LLM_CALL_END</code> aggregate</td></tr>
-                <tr><td>How did this call use the cache?</td><td>Audit diagnostics (cache_read/write)</td><td>RunLog</td></tr>
-                <tr><td>Is this input reproducible?</td><td>Audit diagnostics (input_hash)</td><td>RunLog comparison</td></tr>
-                <tr><td>Is this agent safe?</td><td>Petri audit (scenarios)</td><td>Hook <code>VERIFICATION_FAIL</code></td></tr>
-                <tr><td>Where did a long session stall?</td><td>Hook <code>CONTEXT_OVERFLOW</code></td><td>RunLog timeline</td></tr>
+                <tr><td>What happened in this session?</td><td>SessionTranscript</td></tr>
+                <tr><td>Where did the run stall?</td><td>The last RunLog lines plus the transcript; procedure in <a href="/geode/docs/guides/debug-stuck-run">Debug a stuck run</a></td></tr>
+                <tr><td>Where did the money go?</td><td>Usage ledger, <code>/cost</code>, <code>geode history</code></td></tr>
+                <tr><td>How often does an adapter fail?</td><td><code>geode adapters stats</code></td></tr>
+                <tr><td>Token and verify trends across loop runs?</td><td>sessions.jsonl</td></tr>
+                <tr><td>Does the agent behave safely?</td><td>The Petri audit; see <a href="/geode/docs/petri/overview">Petri × GEODE</a></td></tr>
               </tbody>
             </table>
 
-            <h2>External adapters</h2>
-            <p>
-              The native stack is primary, but two export paths exist when an external dashboard is needed.
-            </p>
-            <ul>
-              <li><strong>OpenTelemetry</strong>. Wrap a hook listener in an OTel exporter to push to Tempo, Jaeger, or Grafana.</li>
-              <li><strong>inspect viewer</strong>. Feed RunLog JSONL straight into <code>inspect</code> to see the transcript UI (same viewer as Petri).</li>
-            </ul>
+            <h2>Failure modes</h2>
+            <table>
+              <thead>
+                <tr><th>Symptom</th><th>Cause</th><th>Fix</th></tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>No events accumulate in the run log</td>
+                  <td>A hook handler exists but is not registered in bootstrap</td>
+                  <td>Existing is not firing. Check the registration in <code>core/wiring/bootstrap.py</code>.</td>
+                </tr>
+                <tr>
+                  <td>Old log lines disappear</td>
+                  <td>The size-gated prune (past 2MB, keep the newest 2000 lines)</td>
+                  <td>Intended. Copy files aside for long-term retention.</td>
+                </tr>
+                <tr>
+                  <td>sessions.jsonl is empty</td>
+                  <td>The self-improving loop has not run yet</td>
+                  <td>Loop runs are the writer. For plain REPL sessions, read the transcript and run log instead.</td>
+                </tr>
+              </tbody>
+            </table>
 
-            <h2>Why native observability</h2>
+            <h2>Next</h2>
             <ul>
-              <li>Drop external SaaS lock-in.</li>
-              <li>Keep observability data inside GEODE itself (RunLog).</li>
-              <li>External tracing SDK import-time cost conflicted with the cold-start lazy-loading arc across v0.85 to v0.89.</li>
+              <li><a href="/geode/docs/harness/hooks">Hooks and observability</a>. Events and trigger modes.</li>
+              <li><a href="/geode/docs/ops/cost">Cost monitoring</a>. The deep end of the ledger lens.</li>
+              <li><a href="/geode/docs/petri/run">Run an audit</a>. The behavioral measurement lens.</li>
             </ul>
-            <p>
-              In v0.89.0 the external tracing dependency and tracing module were removed. The four lenses on this page
-              are the official observability path.
-            </p>
           </>
         }
       />

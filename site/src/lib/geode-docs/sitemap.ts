@@ -20,16 +20,16 @@
  * numbers) are removed from every title and summary; the system is described
  * by what it does, not by how much of it there is.
  *
- * PR-DOCS-REFERENCE-LINEAGE (2026-05-30) — the Reference section used to open
- * with the verification/* cluster (guardrails, biasbuster, cross-llm, cause
- * tree, observability), which read as an awkward "reference" entry point. The
- * section now leads with GEODE's positioning references — frontier comparison
- * (what GEODE borrows vs. how it differs) and external references — so the
- * reference entry point foregrounds the self-improving-loop lineage rather than
- * validation. The verification/* cluster moved into its own section,
- * "Verification and Guardrails" (id 08b), so it is no longer the face of
- * Reference. Lineage and Co-scientist stay in The Self-Improving Loop section
- * (their home); the docs landing reference grouping cross-links to them.
+ * PR-DOCS-REFERENCE-LINEAGE (2026-05-30) — the Reference section leads with
+ * GEODE's positioning references (frontier comparison, external references)
+ * so the entry point foregrounds the self-improving-loop lineage.
+ *
+ * PR-DOCS-3C (2026-06-11) — the former 08b "Verification and Guardrails"
+ * section was deleted: guardrails G1-G4, BiasBuster, cross-LLM re-score, and
+ * the cause decision tree were removed from the codebase in v0.99.154 (D-3a),
+ * so their pages documented dead features. Only verification/observability
+ * survives, regrouped under 05-operate (section moves are sitemap-only; the
+ * page folder stays at its slug path).
  */
 
 export type DocQuadrant = "tutorial" | "how-to" | "reference" | "explanation";
@@ -119,8 +119,9 @@ export const DOCS_SITEMAP: DocSection[] = [
       { slug: "run/schedule", title: "Schedule tasks", titleKo: "작업 예약", summary: "Natural language and cron, with jitter. A daily report as a single command.", summaryKo: "자연어와 cron을 jitter와 함께 씁니다. 일일 리포트를 명령 한 줄로 예약합니다.", quadrant: "how-to" },
       { slug: "runtime/scheduler", title: "Scheduler internals", titleKo: "스케줄러 내부", summary: "How scheduled jobs are parsed, persisted, and fired.", summaryKo: "예약된 작업이 어떻게 파싱되고 저장되고 실행되는지 설명합니다.", quadrant: "reference" },
       { slug: "harness/lifecycle", title: "Lifecycle", titleKo: "라이프사이클", summary: "Bootstrap, serve, shutdown. The injection order, and the cold-start lazy arc.", summaryKo: "Bootstrap, serve, shutdown. 주입 순서와 cold-start lazy arc를 다룹니다.", quadrant: "reference" },
-      { slug: "ops/long-running", title: "Long-running safety", titleKo: "장기 실행 안전", summary: "Token guards, context overflow, and a sliding window. How a long run drains gracefully.", summaryKo: "토큰 가드, 컨텍스트 오버플로, 슬라이딩 윈도입니다. 긴 실행이 어떻게 안전하게 마무리되는지 다룹니다.", quadrant: "how-to" },
-      { slug: "ops/cost", title: "Cost monitoring", titleKo: "비용 모니터링", summary: "Per-session and per-day budgets. The usage ledger, and when to switch models.", summaryKo: "세션별, 일별 예산입니다. 사용량 ledger와 모델을 바꿀 시점을 다룹니다.", quadrant: "how-to" },
+      { slug: "ops/long-running", title: "Long-running safety", titleKo: "장기 실행 안전", summary: "Round, time, and cost guards plus the context overflow ladder. How a long run ends honestly.", summaryKo: "라운드, 시간, 비용 가드와 컨텍스트 오버플로 사다리입니다. 긴 실행이 어떻게 정직하게 끝나는지 다룹니다.", quadrant: "how-to" },
+      { slug: "ops/cost", title: "Cost monitoring", titleKo: "비용 모니터링", summary: "Session and monthly budgets. The usage ledger, geode history, and /cost.", summaryKo: "세션과 월간 예산입니다. 사용량 ledger, geode history, /cost를 다룹니다.", quadrant: "how-to" },
+      { slug: "verification/observability", title: "Observability", titleKo: "관측성", summary: "The lenses on a run. Hooks, run logs, transcripts, session metrics, and the logging switchboard.", summaryKo: "실행을 들여다보는 렌즈들입니다. 훅, run log, 트랜스크립트, 세션 메트릭, 로깅 스위치보드를 다룹니다.", quadrant: "reference" },
       { slug: "run/troubleshooting", title: "Troubleshooting", titleKo: "문제 해결", summary: "Common failure modes and where to look. Logs, hooks, runlog.", summaryKo: "흔한 실패 모드와 살펴볼 곳입니다. 로그, 훅, runlog를 봅니다.", quadrant: "how-to" },
     ],
   },
@@ -131,7 +132,7 @@ export const DOCS_SITEMAP: DocSection[] = [
     pages: [
       { slug: "guides/custom-tool", title: "Write a tool", titleKo: "도구 작성", summary: "Define a tool, register it, and gate it with a permission policy.", summaryKo: "도구를 정의하고 등록한 뒤 권한 정책으로 게이트를 거는 방법입니다.", quadrant: "how-to" },
       { slug: "guides/register-hook", title: "Register a hook", titleKo: "훅 등록", summary: "Subscribe a handler to a lifecycle event and wire it in bootstrap.", summaryKo: "라이프사이클 이벤트에 핸들러를 구독하고 bootstrap에 연결하는 방법입니다.", quadrant: "how-to" },
-      { slug: "guides/llm-adapter", title: "Add an LLM adapter", titleKo: "LLM 어댑터 추가", summary: "Add a provider to the router and adapter layer, with a fallback entry.", summaryKo: "라우터와 어댑터 레이어에 프로바이더를 추가하고 폴백 항목을 거는 방법입니다.", quadrant: "how-to" },
+      { slug: "guides/llm-adapter", title: "Add an LLM adapter", titleKo: "LLM 어댑터 추가", summary: "Implement the adapter protocol, register it, and route models to it.", summaryKo: "어댑터 프로토콜을 구현해 레지스트리에 등록하고 모델을 라우팅하는 방법입니다.", quadrant: "how-to" },
       { slug: "guides/binding", title: "Configure a binding", titleKo: "바인딩 설정", summary: "Route a messaging channel to a session lane with its own model and policy.", summaryKo: "메신저 채널을 자체 모델과 정책을 가진 세션 레인으로 라우팅하는 방법입니다.", quadrant: "how-to" },
       { slug: "guides/debug-stuck-run", title: "Debug a stuck run", titleKo: "멈춘 실행 디버깅", summary: "Read the transcript and runlog, find where a run stalled, and recover.", summaryKo: "트랜스크립트와 runlog를 읽어 실행이 멈춘 지점을 찾고 복구하는 방법입니다.", quadrant: "how-to" },
     ],
@@ -158,25 +159,13 @@ export const DOCS_SITEMAP: DocSection[] = [
     pages: [
       { slug: "reference/frontier-comparison", title: "Frontier comparison", titleKo: "프론티어 비교", summary: "What GEODE borrows from Claude Code, Codex CLI, OpenClaw, and Hermes, and where it differs. The reference entry point for GEODE's position in the lineage.", summaryKo: "GEODE가 Claude Code, Codex CLI, OpenClaw, Hermes에서 무엇을 빌려오고, 어디서 갈라지는지 정리합니다. 계보 속 GEODE의 좌표를 짚는 레퍼런스 진입점입니다.", quadrant: "reference" },
       { slug: "reference/external-references", title: "External references", titleKo: "외부 참고", summary: "Frontier agent systems, design standards, and prior work GEODE cites — the self-evolving-agents lineage behind the loop.", summaryKo: "GEODE가 인용하는 frontier 에이전트 시스템, 디자인 표준, 선행 작업입니다. 루프 뒤에 있는 self-evolving agents 계보입니다.", quadrant: "reference" },
-      { slug: "harness/cli", title: "CLI and slash commands", titleKo: "CLI와 슬래시 명령", summary: "The thin gateway and IPC, and the slash commands it accepts.", summaryKo: "thin 게이트웨이와 IPC, 그리고 받는 슬래시 명령들입니다.", quadrant: "reference" },
+      { slug: "harness/cli", title: "CLI and slash commands", titleKo: "CLI와 슬래시 명령", summary: "The exhaustive reference: every geode command, every slash command with its thin-vs-daemon routing, and the geode-mcp surface.", summaryKo: "전체 레퍼런스입니다. 모든 geode 명령, thin/daemon 라우팅이 붙은 슬래시 명령, geode-mcp 표면까지 다룹니다.", quadrant: "reference" },
       { slug: "runtime/research", title: "Research, search, and llms.txt", titleKo: "리서치·탐색과 llms.txt", summary: "How GEODE explores: llms.txt-first documentation research, web search delegation, local FTS search, and the llms.txt this site publishes.", summaryKo: "GEODE의 탐색 방법입니다. llms.txt 우선 문서 리서치, 웹 검색 위임, 로컬 FTS 검색, 그리고 이 사이트가 발행하는 llms.txt를 다룹니다.", quadrant: "reference" },
-      { slug: "runtime/automation", title: "Automation sidecar", titleKo: "자동화 사이드카", summary: "The feedback loop and model promotion, with drift detection between agent and runtime.", summaryKo: "피드백 루프와 모델 프로모션입니다. 에이전트와 런타임 사이에서 drift를 감지합니다.", quadrant: "reference" },
-      { slug: "runtime/computer-use", title: "Computer use", titleKo: "컴퓨터 사용", summary: "Provider-agnostic desktop automation, Anthropic and OpenAI unified.", summaryKo: "프로바이더 독립 데스크탑 자동화입니다. Anthropic과 OpenAI를 통합합니다.", quadrant: "reference" },
-      { slug: "runtime/ui/cli-latex", title: "CLI LaTeX rendering", titleKo: "CLI LaTeX 렌더링", summary: "Rendering math in the terminal. Detection, Unicode flatten, pretty print, image fallback.", summaryKo: "터미널에서 수식을 렌더링합니다. 감지, Unicode flatten, pretty print, 이미지 폴백을 거칩니다.", quadrant: "reference" },
+      { slug: "runtime/automation", title: "Auto-trigger sidecar", titleKo: "자동 트리거 사이드카", summary: "The cron-scheduled sidecar that fires the self-improving loop: lock, interval gate, and hook telemetry.", summaryKo: "자기개선 루프를 cron으로 발화하는 사이드카입니다. 락, 인터벌 게이트, 훅 텔레메트리를 다룹니다.", quadrant: "reference" },
+      { slug: "runtime/computer-use", title: "Computer use", titleKo: "컴퓨터 사용", summary: "Local desktop automation behind one tool: a pyautogui harness with an always-HITL safety classification.", summaryKo: "도구 하나 뒤의 로컬 데스크탑 자동화입니다. pyautogui 하네스와 항상 HITL인 안전 분류를 다룹니다.", quadrant: "reference" },
+      { slug: "runtime/ui/cli-latex", title: "CLI LaTeX rendering", titleKo: "CLI LaTeX 렌더링", summary: "Rendering math in the terminal: detection, Unicode flatten, and 2D pretty print with a raw-text fallback.", summaryKo: "터미널에서 수식을 렌더링합니다. 감지, Unicode 평탄화, 2D pretty print와 원문 폴백을 다룹니다.", quadrant: "reference" },
       { slug: "reference/changelog", title: "CHANGELOG", titleKo: "CHANGELOG", summary: "Full version history, synced from CHANGELOG.md on every main push.", summaryKo: "main push마다 CHANGELOG.md에서 동기화되는 전체 버전 이력입니다.", quadrant: "reference" },
       { slug: "reference/petri-bundle-isolation", title: "Petri bundle isolation", titleKo: "Petri 번들 격리", summary: "Operator reference for the publish workflow, validator, and hygiene ratchet.", summaryKo: "publish 워크플로우, validator, hygiene ratchet의 운영자 레퍼런스입니다.", quadrant: "reference" },
-    ],
-  },
-  {
-    id: "08b-verification",
-    title: "Verification and Guardrails",
-    titleKo: "검증과 가드레일",
-    pages: [
-      { slug: "verification/guardrails", title: "Guardrails G1-G4", titleKo: "가드레일 G1-G4", summary: "Schema, range, grounding, consistency. A fail-fast ladder over LLM output.", summaryKo: "Schema, range, grounding, consistency입니다. LLM 출력 위의 fail-fast 사다리입니다.", quadrant: "reference" },
-      { slug: "verification/biasbuster", title: "BiasBuster", titleKo: "BiasBuster", summary: "Confirmation, recency, and anchoring detection on top of the guardrails.", summaryKo: "가드레일 위에 얹는 confirmation, recency, anchoring 편향 탐지입니다.", quadrant: "reference" },
-      { slug: "verification/cross-llm", title: "Cross-LLM verification", titleKo: "Cross-LLM 검증", summary: "An independent second opinion. A different provider re-scores the verdict.", summaryKo: "독립적인 second opinion입니다. 다른 프로바이더가 판정을 다시 채점합니다.", quadrant: "reference" },
-      { slug: "verification/cause-decision-tree", title: "Cause decision tree", titleKo: "원인 분류 트리", summary: "Map a failure cause to a recovery action, instead of blindly retrying.", summaryKo: "무작정 재시도하는 대신, 실패 원인을 복구 행동에 매핑합니다.", quadrant: "reference" },
-      { slug: "verification/observability", title: "Observability", titleKo: "관측성", summary: "The lenses on a run. Hooks, runlog, audit diagnostics, Petri.", summaryKo: "실행을 들여다보는 렌즈들입니다. 훅, runlog, audit diagnostics, Petri입니다.", quadrant: "reference" },
     ],
   },
   {
@@ -186,7 +175,7 @@ export const DOCS_SITEMAP: DocSection[] = [
     pages: [
       { slug: "develop/architecture", title: "Architecture deep-dive", titleKo: "아키텍처 심화", summary: "The subsystem map and a recommended reading order, retold as data-flow traces.", summaryKo: "서브시스템 지도와 추천 읽기 순서를 데이터 흐름 추적으로 풀어냅니다.", quadrant: "reference" },
       { slug: "architecture/system-index", title: "System index", titleKo: "시스템 색인", summary: "Every subsystem with its file path. The flat catalog.", summaryKo: "모든 서브시스템과 파일 경로입니다. 평면 카탈로그입니다.", quadrant: "reference" },
-      { slug: "explanation/4-layer", title: "Why four layers", titleKo: "왜 4-계층인가", summary: "Model, Runtime, Harness, Agent. Why the boundaries fall where they do.", summaryKo: "Model, Runtime, Harness, Agent. 경계가 왜 그 자리에 있는지 설명합니다.", quadrant: "explanation" },
+      { slug: "explanation/4-layer", title: "Why five layers", titleKo: "왜 5계층인가", summary: "Model, Runtime, Harness, Agent, Self-Improving. Why the boundaries fall where they do.", summaryKo: "Model, Runtime, Harness, Agent, Self-Improving. 경계가 왜 그 자리에 있는지 설명합니다.", quadrant: "explanation" },
       { slug: "explanation/self-hosting", title: "Why a self-hosting harness", titleKo: "왜 self-hosting 하네스인가", summary: "The runtime and the build line share primitives. Why that mattered.", summaryKo: "런타임과 빌드 라인이 같은 기본 단위를 공유합니다. 그게 왜 중요했는지 설명합니다.", quadrant: "explanation" },
       { slug: "explanation/ratchet", title: "Why ratchet discipline", titleKo: "왜 ratchet 규율인가", summary: "Pinned prompt hashes and a staged CI. The shape that prevents drift.", summaryKo: "프롬프트 해시 핀과 단계별 CI입니다. drift를 막는 형태를 설명합니다.", quadrant: "explanation" },
       { slug: "ops/release-pypi-lifecycle", title: "Release and PyPI lifecycle", titleKo: "릴리스와 PyPI 라이프사이클", summary: "The version-bump locations, the release workflow, and the rebuild cadence.", summaryKo: "버전 bump 위치, 릴리스 워크플로우, rebuild 주기를 다룹니다.", quadrant: "how-to" },

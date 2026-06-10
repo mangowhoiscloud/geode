@@ -15,10 +15,10 @@ export default function Page() {
         ko={
           <>
             <p>
-              실행이 멈추는 양상은 두 가지입니다. 같은 도구를 같은 인자로 무한히
-              도는 경우와, 이벤트 발화가 끊긴 채 매달려 있는 경우입니다. 둘 다
-              디스크에 남는 두 개의 append-only JSONL이 증거를 줍니다. 턴 단위
-              대화는 transcript, 파이프라인 이벤트는 runlog입니다. 멈춘 실행
+              실행이 멈추는 양상은 두 가지입니다. 진전 없이 도는 경우와, 이벤트
+              발화가 끊긴 채 매달려 있는 경우입니다. 증거는 디스크의 append-only
+              JSONL 두 개에 남습니다. 턴 단위 대화는 transcript, 훅
+              이벤트는 runlog입니다. 멈춘 실행
               디버깅은 이 둘을 찾아 마지막 이벤트를 읽고, 원인을 분류해 복구하는
               순서로 진행합니다.
             </p>
@@ -31,10 +31,11 @@ export default function Page() {
               또는 run_dir에 묶인 경우 <code>dialogue.jsonl</code>에 기록합니다.
               user/assistant 메시지, 도구 호출과 결과, 비용, 오류, 라이프사이클
               이벤트가 한 줄씩 들어갑니다. runlog는 <code>RunLog</code>(
-              <code>core/orchestration/run_log.py</code>)가{" "}
+              <code>core/observability/run_log.py</code>)가{" "}
               <code>~/.geode/runs/&lt;session_key&gt;.jsonl</code>에 기록하며, 각
               줄은 <code>event</code>, <code>node</code>, <code>status</code>,{" "}
               <code>duration_ms</code>를 가진 <code>RunLogEntry</code>입니다.
+              이벤트 이름은 훅 이벤트 값과 같습니다.
             </p>
             <pre>{`ls -t ~/.geode/transcripts/*/            # most recent session jsonl
 ls -t ~/.geode/runs/                     # most recent run_key jsonl`}</pre>
@@ -62,55 +63,52 @@ for e in tx.read_events(limit=10):
 
             <h2>3. 원인을 분류합니다</h2>
             <p>
-              두 가지 정지 양상을 구분합니다.
+              먼저 실행이 끝났는지부터 봅니다. 정상이든 비정상이든 끝난 실행은{" "}
+              <code>AgenticResult.termination_reason</code>에 이유를 남깁니다
+              (<code>core/agent/loop/models.py</code>). <code>llm_error</code>,{" "}
+              <code>context_exhausted</code>, <code>time_budget_expired</code>,{" "}
+              <code>cost_budget_exceeded</code>, <code>model_refusal</code>,{" "}
+              <code>convergence_detected</code> 같은 값이 보이면 멈춘 것이 아니라
+              가드가 끊은 것이고, 해당 가드의 문서(
+              <a href="/geode/docs/ops/long-running">장기 실행 안전</a>)를
+              따라갑니다. 이유 없이 이벤트만 끊겼다면 매달림입니다.
             </p>
             <ul>
               <li>
                 <strong>매달림(이벤트 끊김).</strong>{" "}
                 <code>SessionTranscript.is_stale(threshold_s)</code>는 파일
-                mtime을 보고 일정 시간 이벤트가 안 붙었는지 알려줍니다.{" "}
-                <code>last_touched_at()</code>가 한참 전이면{" "}
-                <code>PIPELINE_TIMEOUT</code> / <code>PIPELINE_ERROR</code>를
-                발화하지 못한 채 멈춘 것입니다.
+                mtime으로 일정 시간 이벤트가 안 붙었는지 알려줍니다. 이때는
+                데몬 쪽 로그 <code>~/.geode/logs/serve.log</code>에서 같은
+                시각의 traceback이나 외부 호출 대기를 찾습니다.
               </li>
               <li>
-                <strong>노드 stuck.</strong>{" "}
-                <code>StuckDetector</code>(
-                <code>core/orchestration/stuck_detection.py</code>)가{" "}
-                <code>NODE_ENTERED</code> / <code>NODE_EXITED</code> /{" "}
-                <code>NODE_ERROR</code> 훅으로 실행 중인 노드를 추적합니다.{" "}
-                <code>get_running()</code>은 현재 실행 중인 세션 키와 경과
-                시간을 돌려주고, 타임아웃(<code>timeout_s</code>, 기본 2시간)을
-                넘으면 <code>check_stuck()</code>이 그 작업을 자동 release하고{" "}
-                <code>PIPELINE_ERROR</code>를 발화합니다.
+                <strong>진전 없는 루프.</strong> 루프 자체 방어가 먼저
+                작동합니다. <code>ConvergenceDetector</code>
+                (<code>core/agent/convergence.py</code>)가 도구 오류만 반복되는
+                라운드를 추적해 <code>convergence_detected</code>로 끊고,
+                도구 호출 없는 고출력 라운드 연속은{" "}
+                <code>user_clarification_needed</code>로 멈춰 사용자에게
+                묻습니다.
               </li>
             </ul>
-            <pre>{`uv run python -c "
-from core.orchestration.stuck_detection import StuckDetector
-d = StuckDetector()
-print(d.get_running())   # {session_key: elapsed_seconds}
-print(d.check_stuck())   # released keys past timeout
-"`}</pre>
 
             <h2>4. 복구합니다</h2>
             <p>
-              루프가 진전 없이 도는 경우는 <code>ConvergenceDetector</code>가
-              동일 도구·동일 인자 반복을 감지해 끊습니다. 매달림이 확인되면{" "}
-              <code>StuckDetector.check_stuck()</code>이 작업을 release하고{" "}
-              <code>PIPELINE_ERROR</code>를 발화해 세션을 정리합니다. transcript와
-              runlog가 가리키는 마지막 도구·노드를 보고 근본 원인(외부 호출
-              타임아웃, 자격증명 오류, 입력 오류)을 고친 뒤 다시 실행합니다.
-              transcript와 runlog는 30일 자동 정리되므로 진단 근거가 사라지기
-              전에 보존하세요.
+              transcript와 runlog가 가리키는 마지막 도구를 보고 근본 원인(외부
+              호출 타임아웃, 자격증명 오류, 입력 오류)을 고친 뒤 다시
+              실행합니다. 데몬 자체가 응답하지 않으면{" "}
+              <code>pkill -f &quot;geode serve&quot;</code>로 내리고 재진입합니다.
+              세션은 <code>geode --continue</code> 또는 <code>/resume</code>으로
+              이어집니다. run log는 크기 게이트로 prune되므로 진단 근거가
+              사라지기 전에 보존하세요.
             </p>
 
             <h2>확인</h2>
             <p>
-              복구 후 새 실행의 transcript가 <code>session_end</code>까지
-              도달하는지, runlog의 마지막 이벤트가{" "}
-              <code>pipeline_end</code>(<code>status: ok</code>)인지 확인합니다.
+              복구 후 새 실행의 runlog 마지막 줄들이 <code>status: ok</code>로
+              이어지고 <code>session_ended</code>까지 도달하는지 확인합니다.
             </p>
-            <pre>{`tail -n 3 ~/.geode/runs/<session_key>.jsonl   # last events, expect pipeline_end ok`}</pre>
+            <pre>{`tail -n 3 ~/.geode/runs/<session_key>.jsonl   # 마지막 이벤트, status ok 기대`}</pre>
 
             <p className="text-[var(--ink-3)] text-sm">
               <em>참조:</em>{" "}
@@ -122,12 +120,12 @@ print(d.check_stuck())   # released keys past timeout
         en={
           <>
             <p>
-              A run stalls in two ways: it spins on the same tool with the same
-              args, or it hangs with no further events firing. Both leave evidence
-              in two append-only JSONL files on disk. the per-turn dialogue in the
-              transcript, the pipeline events in the runlog. Debugging a stuck run
-              is locating those two, reading the last events, classifying the cause,
-              and recovering.
+              A run stalls in two ways: it spins without progress, or it hangs
+              with no further events firing. Both leave evidence in two
+              append-only JSONL files on disk: the per-turn dialogue in the
+              transcript, and the hook events in the runlog. Debugging a stuck
+              run is locating those two, reading the last events, classifying
+              the cause, and recovering.
             </p>
 
             <h2>1. Locate the transcript and runlog</h2>
@@ -138,18 +136,18 @@ print(d.check_stuck())   # released keys past timeout
               or to <code>dialogue.jsonl</code> when bound to a run_dir. It holds
               one line per user and assistant message, tool call and result, cost,
               error, and lifecycle event. The runlog is written by{" "}
-              <code>RunLog</code> in <code>core/orchestration/run_log.py</code> to{" "}
+              <code>RunLog</code> in <code>core/observability/run_log.py</code> to{" "}
               <code>~/.geode/runs/&lt;session_key&gt;.jsonl</code>, where each line
               is a <code>RunLogEntry</code> with <code>event</code>,{" "}
               <code>node</code>, <code>status</code>, and{" "}
-              <code>duration_ms</code>.
+              <code>duration_ms</code>. Event names match the hook event values.
             </p>
             <pre>{`ls -t ~/.geode/transcripts/*/            # most recent session jsonl
 ls -t ~/.geode/runs/                     # most recent run_key jsonl`}</pre>
 
             <h2>2. Read the last events</h2>
             <p>
-              The last lines tell you where it stalled. Read the transcript's
+              The last lines tell you where it stalled. Read the transcript&apos;s
               recent events with <code>read_events(limit=N)</code>, and the runlog
               newest-first with <code>read(limit=N, ...)</code>, which you can
               narrow with <code>event_filter</code> / <code>node_filter</code> /{" "}
@@ -169,52 +167,56 @@ for e in tx.read_events(limit=10):
             </p>
 
             <h2>3. Classify the cause</h2>
-            <p>Distinguish the two stall shapes.</p>
+            <p>
+              First check whether the run actually ended. A finished run, clean
+              or not, names its reason in{" "}
+              <code>AgenticResult.termination_reason</code>
+              (<code>core/agent/loop/models.py</code>). Values like{" "}
+              <code>llm_error</code>, <code>context_exhausted</code>,{" "}
+              <code>time_budget_expired</code>,{" "}
+              <code>cost_budget_exceeded</code>, <code>model_refusal</code>, and{" "}
+              <code>convergence_detected</code> mean a guard ended it, not a
+              stall; follow the guard&apos;s page
+              (<a href="/geode/docs/ops/long-running">Long-running safety</a>).
+              Events stopping with no reason recorded means a hang.
+            </p>
             <ul>
               <li>
                 <strong>Hang (events stopped).</strong>{" "}
-                <code>SessionTranscript.is_stale(threshold_s)</code> reads the file
-                mtime to report whether no event has been appended for a while. When{" "}
-                <code>last_touched_at()</code> is long ago, the run stopped without
-                firing <code>PIPELINE_TIMEOUT</code> / <code>PIPELINE_ERROR</code>.
+                <code>SessionTranscript.is_stale(threshold_s)</code> reads the
+                file mtime to report that nothing has been appended for a
+                while. Then look in the daemon log,{" "}
+                <code>~/.geode/logs/serve.log</code>, for a traceback or a
+                blocked external call around the same time.
               </li>
               <li>
-                <strong>Stuck node.</strong> <code>StuckDetector</code> in{" "}
-                <code>core/orchestration/stuck_detection.py</code> tracks running
-                nodes via the <code>NODE_ENTERED</code> / <code>NODE_EXITED</code> /{" "}
-                <code>NODE_ERROR</code> hooks. <code>get_running()</code> returns the
-                running session keys with elapsed time, and once a node passes the
-                timeout (<code>timeout_s</code>, default 2 hours),{" "}
-                <code>check_stuck()</code> auto-releases the job and fires{" "}
-                <code>PIPELINE_ERROR</code>.
+                <strong>Loop with no progress.</strong> The loop&apos;s own
+                defenses fire first. <code>ConvergenceDetector</code>
+                (<code>core/agent/convergence.py</code>) tracks rounds where
+                every tool call errors and ends the run as{" "}
+                <code>convergence_detected</code>; consecutive high-output
+                rounds with no tool calls stop as{" "}
+                <code>user_clarification_needed</code> and ask the user.
               </li>
             </ul>
-            <pre>{`uv run python -c "
-from core.orchestration.stuck_detection import StuckDetector
-d = StuckDetector()
-print(d.get_running())   # {session_key: elapsed_seconds}
-print(d.check_stuck())   # released keys past timeout
-"`}</pre>
 
             <h2>4. Recover</h2>
             <p>
-              For a loop with no progress, the <code>ConvergenceDetector</code>{" "}
-              detects same-tool same-args repetition and interrupts it. For a
-              confirmed hang, <code>StuckDetector.check_stuck()</code> releases the
-              job and fires <code>PIPELINE_ERROR</code> to clear the session. Look
-              at the last tool or node the transcript and runlog point to, fix the
-              root cause (external-call timeout, credential error, bad input), and
-              re-run. The transcript and runlog auto-prune after 30 days, so
-              preserve the evidence before it disappears.
+              Look at the last tool the transcript and runlog point to, fix the
+              root cause (external-call timeout, credential error, bad input),
+              and re-run. If the daemon itself is unresponsive, take it down
+              with <code>pkill -f &quot;geode serve&quot;</code> and re-enter;
+              resume the session with <code>geode --continue</code> or{" "}
+              <code>/resume</code>. Run logs prune on a size gate, so preserve
+              the evidence before it disappears.
             </p>
 
             <h2>Verify</h2>
             <p>
-              After recovery, confirm the new run's transcript reaches{" "}
-              <code>session_end</code> and the runlog's last event is{" "}
-              <code>pipeline_end</code> with <code>status: ok</code>.
+              After recovery, confirm the new run&apos;s last runlog lines carry{" "}
+              <code>status: ok</code> and reach <code>session_ended</code>.
             </p>
-            <pre>{`tail -n 3 ~/.geode/runs/<session_key>.jsonl   # last events, expect pipeline_end ok`}</pre>
+            <pre>{`tail -n 3 ~/.geode/runs/<session_key>.jsonl   # last events, expect status ok`}</pre>
 
             <p className="text-[var(--ink-3)] text-sm">
               <em>See:</em>{" "}

@@ -146,29 +146,6 @@ const tabs: Tab[] = [
     linkKo: "5계층 메모리",
     linkEn: "5-tier memory",
   },
-  {
-    id: "verification",
-    labelKo: "검증",
-    labelEn: "Verification",
-    prompt: {
-      ko: "이 답변을 그대로 내보내도 될까",
-      en: "is this answer safe to ship",
-    },
-    actions: [
-      { ko: "출력을 G1-G4 기준으로 채점합니다", en: "Scoring output against G1-G4" },
-      { ko: "교차 LLM으로 다시 확인합니다", en: "Cross-LLM re-check" },
-      { ko: "플래그된 답변은 다시 프롬프트합니다", en: "Re-prompting on a flagged answer" },
-    ],
-    result: {
-      ko: "가드레일에 걸린 부분을 잡아 다음 행동을 정해 돌려줍니다.",
-      en: "Catches what the guardrails flag and settles the next action.",
-    },
-    captionKo: "LLM 출력 위에 놓이는 가드레일입니다.",
-    captionEn: "Guardrails over LLM output.",
-    href: "/geode/docs/verification/guardrails",
-    linkKo: "가드레일",
-    linkEn: "Guardrails",
-  },
 ];
 
 function TabSession({ tab, locale }: { tab: Tab; locale: Locale }) {

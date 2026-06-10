@@ -58,9 +58,9 @@ def on_tool_failed(event: HookEvent, data: dict) -> None:
               <code>build_hooks()</code>가 <code>HookSystem</code>을 만들고 모든
               핵심 핸들러를 붙이는 곳입니다. 거기서{" "}
               <code>hooks.register(event, handler, name=..., priority=...)</code>를
-              호출합니다. <code>name</code>은 고유해야 하며, 같은 이름으로 재등록하면
-              기존 핸들러를 덮어써서 명시 등록과 파일시스템 디스커버리가 겹쳐도
-              이중 등록이 안 생깁니다.
+              호출합니다. <code>name</code>은 고유해야 합니다. 같은 이름으로
+              재등록하면 기존 핸들러를 덮어쓰므로, 명시 등록과 파일시스템
+              디스커버리가 겹쳐도 이중 등록이 생기지 않습니다.
             </p>
             <pre>{`# core/wiring/bootstrap.py — build_hooks()
 hooks.register(
@@ -71,8 +71,8 @@ hooks.register(
 )`}</pre>
             <p>
               한 핸들러를 여러 이벤트(또는 모든 이벤트)에 한 번에 붙이려면{" "}
-              <code>register_prefix("*", handler, ...)</code>를 씁니다. run log
-              writer가 바로 이 방식으로 <code>"*"</code> 와일드카드를 구독해서, 새
+              <code>register_prefix(&quot;*&quot;, handler, ...)</code>를 씁니다. run log
+              writer가 바로 이 방식으로 <code>&quot;*&quot;</code> 와일드카드를 구독해서, 새
               <code>HookEvent</code>를 추가해도 자동으로 로그에 잡힙니다.
             </p>
 
@@ -81,7 +81,7 @@ hooks.register(
               <code>priority</code>는 낮을수록 먼저 실행됩니다(기본 100).
               데이터를 보강하는 인터셉터는 낮게, 단순 관측자는 높게 둡니다. 기존
               bootstrap의 등급을 기준으로 삼으면 됩니다. run log writer는 50,
-              agent_runtime_state 기록은 55, stuck detector는 90입니다.
+              agent_runtime_state 기록은 55, 세션 라이프사이클 로거는 90입니다.
               <code>trigger_interceptor()</code> 경로의 핸들러는{" "}
               <code>{`{"block": True}`}</code> 또는{" "}
               <code>{`{"modify": {...}}`}</code>를 돌려줘 체인을 막거나 데이터를
@@ -115,8 +115,9 @@ print([r.success for r in results])  # [True]`}</pre>
           <>
             <p>
               A hook attaches a handler to an event the loop fires at a meaningful
-              boundary. Use it to add cross-cutting concerns. observability, cost
-              accounting, audit logging. without touching loop code. The most
+              boundary. Use it to add cross-cutting concerns such as
+              observability, cost accounting, and audit logging without touching
+              loop code. The most
               common trap is writing a handler and never registering it in
               bootstrap. A handler that exists does not fire.
             </p>
@@ -171,8 +172,8 @@ hooks.register(
 )`}</pre>
             <p>
               To attach one handler to many events (or all events) at once, use{" "}
-              <code>register_prefix("*", handler, ...)</code>. The run log writer
-              subscribes exactly this way with the <code>"*"</code> wildcard, so
+              <code>register_prefix(&quot;*&quot;, handler, ...)</code>. The run log writer
+              subscribes exactly this way with the <code>&quot;*&quot;</code> wildcard, so
               adding a new <code>HookEvent</code> extends log coverage
               automatically.
             </p>
@@ -182,7 +183,7 @@ hooks.register(
               Lower <code>priority</code> runs first (default 100). Put interceptors
               that enrich data low and plain observers high. Anchor to the existing
               bootstrap tiers: the run log writer is 50, the agent_runtime_state
-              recorders are 55, the stuck detector is 90. Handlers on the{" "}
+              recorders are 55, the session lifecycle loggers are 90. Handlers on the{" "}
               <code>trigger_interceptor()</code> path can return{" "}
               <code>{`{"block": True}`}</code> or{" "}
               <code>{`{"modify": {...}}`}</code> to stop the chain or edit the
