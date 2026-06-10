@@ -533,6 +533,9 @@ module = [
     "inspect_viz.*",
     # Hero visualization extras (manim + harfbuzz + pixelmatch). Only
     # installed via ``uv sync --group viz``; CI default sync skips them.
+    # PR-CLEANUP-D3A — numpy moved to the [viz] dev extra; CI's mypy env
+    # (no viz extra) must not fail on scripts' lazy numpy imports.
+    "numpy.*",
     "manim.*",
     "manim_voiceover.*",
     "uharfbuzz",
