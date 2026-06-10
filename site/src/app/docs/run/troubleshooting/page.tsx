@@ -9,61 +9,199 @@ export default function Page() {
       title="Troubleshooting"
       titleKo="문제 해결"
       summary="Common failure modes and where to look. Logs, hooks, runlog."
-      summaryKo="흔한 실패 모드와 살펴볼 곳. 로그, 훅, runlog."
+      summaryKo="흔한 실패 모드와 살펴볼 곳입니다. 로그, 훅, runlog를 봅니다."
     >
       <Bi
         ko={
           <>
-            <p>이 가이드는 GEODE를 돌릴 때 자주 만나는 5가지 실패 모드와 1차 진단 위치를 정리합니다.</p>
+            <p>
+              진단은 세 단 사다리입니다. <code>geode doctor</code>가 환경을
+              점검하고, <code>geode about</code>이 실효 상태를 보여주고,{" "}
+              <code>geode config explain</code>이 설정이 어느 레이어에서
+              가려졌는지 밝힙니다. 대부분의 문제는 이 사다리를 위에서 아래로
+              내려가면 잡힙니다.
+            </p>
 
-            <h2>흔한 실패</h2>
+            <h2>진단 사다리</h2>
+            <pre>{`1. geode doctor               # Python, PATH, 자격, 데몬 상태
+2. geode about                # EFFECTIVE 모델, 경로, 소켓, 마스킹 경고
+3. geode config explain model # 레이어별 후보와 WINNER
+4. pkill -f "geode serve"     # 오래된 데몬 정리 후 재진입
+5. geode setup -r             # 그래도 안 되면 설정을 처음부터`}</pre>
+            <p>
+              <code>geode config explain</code>은 한 설정 키에 대해 os.environ,
+              프로젝트 .env, 전역 .env, 프로젝트 config.toml, 전역 config.toml,
+              코드 기본값 순서로 후보를 표로 보여주고 어느 레이어가 이기는지
+              표시합니다 (<code>core/config/explain.py</code>). 검증은 항상
+              실효값 기준입니다. config.toml의 내용이 아니라{" "}
+              <code>geode about</code>이 답입니다.
+            </p>
+
+            <h2>증상, 원인, 해법</h2>
             <table>
-              <thead><tr><th>증상</th><th>1차 확인</th></tr></thead>
+              <thead>
+                <tr><th>증상</th><th>원인</th><th>해법</th></tr>
+              </thead>
               <tbody>
-                <tr><td>"키가 없어요" 에러</td><td><code>echo $ANTHROPIC_API_KEY</code>와 <code>~/.geode/config.toml</code></td></tr>
-                <tr><td>"context overflow" 종료</td><td><a href="/geode/docs/ops/long-running">장기 실행 안전</a> 가이드</td></tr>
-                <tr><td>"MCP server timeout"</td><td><code>geode /status</code>로 MCP 헬스 확인</td></tr>
-                <tr><td>토큰 비용 초과</td><td><a href="/geode/docs/ops/cost">비용 모니터링</a> + <code>geode /model</code>로 다운그레이드</td></tr>
-                <tr><td>OAuth 토큰 만료</td><td><a href="/geode/docs/ops/oauth">OAuth 토큰 회전</a></td></tr>
+                <tr>
+                  <td>모델을 바꿨는데 그대로</td>
+                  <td>상위 레이어(.env 잔존 줄, 셸 export)가 toml을 가림</td>
+                  <td><code>geode config explain model</code>로 WINNER 레이어를 찾아 그 줄을 지웁니다.</td>
+                </tr>
+                <tr>
+                  <td>배너 모델과 응답 모델이 다름</td>
+                  <td>데몬이 둘 이상 떠서 소켓 경합</td>
+                  <td><code>pkill -f &quot;geode serve&quot;</code> 후 <code>pgrep -f &quot;geode serve&quot;</code>로 비었는지 확인하고 재진입합니다. <code>ps aux | grep</code>은 긴 경로가 잘려 빈 결과를 줍니다.</td>
+                </tr>
+                <tr>
+                  <td>응답이 비거나 인증 오류</td>
+                  <td>자격 만료 또는 무효</td>
+                  <td><code>geode doctor</code>가 키와 OAuth 유효성을 점검합니다. <code>/login</code>으로 갱신합니다.</td>
+                </tr>
+                <tr>
+                  <td>응답이 비고 종료 이유가 <code>model_refusal</code></td>
+                  <td>모델 안전 분류기가 거절 (HTTP 200, <code>stop_reason: refusal</code>)</td>
+                  <td>요청을 바꿔 다시 묻거나 <code>/model</code>로 다른 모델을 씁니다. 카테고리가 메시지에 표시됩니다.</td>
+                </tr>
+                <tr>
+                  <td><code>context_exhausted</code>로 종료</td>
+                  <td>prune 후에도 컨텍스트 critical</td>
+                  <td><code>/compact</code> 또는 <code>/clear</code> 후 작업을 쪼갭니다. <a href="/geode/docs/ops/long-running">장기 실행 안전</a> 참고.</td>
+                </tr>
+                <tr>
+                  <td>MCP 도구가 안 보임</td>
+                  <td>MCP 서버 연결 실패</td>
+                  <td><code>/mcp</code>로 서버 상태와 도구 목록을 확인합니다. <code>/status</code>에도 MCP 블록이 있습니다.</td>
+                </tr>
+                <tr>
+                  <td>메신저 무반응</td>
+                  <td>게이트웨이 또는 binding 문제</td>
+                  <td><code>geode doctor slack</code>과 <a href="/geode/docs/run/messaging">메신저 연동</a>의 실패 표를 따릅니다.</td>
+                </tr>
               </tbody>
             </table>
 
             <h2>로그 위치</h2>
-            <ul>
-              <li>Runlog: <code>~/.geode/runlog/</code> (run 단위 trace)</li>
-              <li>Hooks: <a href="/geode/docs/harness/hooks">Hook System</a> events</li>
-              <li>Serve: <code>~/.geode/serve.log</code></li>
-            </ul>
+            <table>
+              <thead>
+                <tr><th>무엇</th><th>어디</th></tr>
+              </thead>
+              <tbody>
+                <tr><td>serve 데몬 로그 (10MB × 5 로테이션)</td><td><code>~/.geode/logs/serve.log</code></td></tr>
+                <tr><td>geode-mcp, 워커, 캠페인 로그</td><td><code>~/.geode/logs/</code></td></tr>
+                <tr><td>세션별 run log (훅 이벤트 JSONL)</td><td><code>~/.geode/runs/&lt;session_key&gt;.jsonl</code></td></tr>
+                <tr><td>세션 transcript (턴 단위 대화)</td><td><code>~/.geode/transcripts/&lt;project-slug&gt;/</code></td></tr>
+                <tr><td>비용 ledger</td><td><code>~/.geode/usage/YYYY-MM.jsonl</code></td></tr>
+              </tbody>
+            </table>
+            <p>
+              로그 채널 구성은{" "}
+              <code>core/observability/logging_config.py</code>의{" "}
+              <code>configure_logging(mode)</code>가 SoT입니다.
+            </p>
 
-            <h2>지원</h2>
-            <p>해결이 안 되면 GitHub Issues에 runlog 일부와 함께 등록: <code>github.com/mangowhoiscloud/geode/issues</code></p>
+            <h2>다음</h2>
+            <ul>
+              <li><a href="/geode/docs/guides/debug-stuck-run">멈춘 실행 디버깅</a>. transcript와 run log를 읽는 절차.</li>
+              <li><a href="/geode/docs/verification/observability">관측성</a>. 어떤 질문에 어떤 렌즈를 쓰는지.</li>
+              <li><a href="/geode/docs/config/basics">설정 기초</a>. 레이어와 우선순위의 전체 그림.</li>
+            </ul>
           </>
         }
         en={
           <>
-            <p>This guide lists five common failure modes and where to start diagnosing each.</p>
+            <p>
+              Diagnosis is a three-rung ladder: <code>geode doctor</code> checks
+              the environment, <code>geode about</code> shows the effective
+              state, and <code>geode config explain</code> reveals which layer
+              masks a setting. Most problems yield to walking the ladder top to
+              bottom.
+            </p>
 
-            <h2>Common failures</h2>
+            <h2>The diagnostic ladder</h2>
+            <pre>{`1. geode doctor               # Python, PATH, credentials, daemon
+2. geode about                # EFFECTIVE model, paths, socket, mask warning
+3. geode config explain model # per-layer candidates and the WINNER
+4. pkill -f "geode serve"     # clear stale daemons, then re-enter
+5. geode setup -r             # last resort: redo setup`}</pre>
+            <p>
+              <code>geode config explain</code> prints, for one settings key,
+              the candidates from os.environ, project .env, global .env, project
+              config.toml, global config.toml, and the code default, marking
+              exactly one WINNER (<code>core/config/explain.py</code>). Always
+              verify against the effective value: <code>geode about</code> is
+              the answer, not the contents of config.toml.
+            </p>
+
+            <h2>Symptom, cause, fix</h2>
             <table>
-              <thead><tr><th>Symptom</th><th>First look</th></tr></thead>
+              <thead>
+                <tr><th>Symptom</th><th>Cause</th><th>Fix</th></tr>
+              </thead>
               <tbody>
-                <tr><td>"missing key" error</td><td><code>echo $ANTHROPIC_API_KEY</code> and <code>~/.geode/config.toml</code></td></tr>
-                <tr><td>"context overflow" termination</td><td><a href="/geode/docs/ops/long-running">Long-running Safety</a></td></tr>
-                <tr><td>"MCP server timeout"</td><td><code>geode /status</code> for MCP health</td></tr>
-                <tr><td>Token cost overrun</td><td><a href="/geode/docs/ops/cost">Cost Monitoring</a> + <code>geode /model</code> to downgrade</td></tr>
-                <tr><td>OAuth token expired</td><td><a href="/geode/docs/ops/oauth">OAuth Token Rotation</a></td></tr>
+                <tr>
+                  <td>Switched models, nothing changed</td>
+                  <td>A higher layer (a stale .env line, a shell export) masks the toml</td>
+                  <td>Find the WINNER with <code>geode config explain model</code> and remove its line.</td>
+                </tr>
+                <tr>
+                  <td>Banner model differs from the answering model</td>
+                  <td>Multiple daemons fighting over the socket</td>
+                  <td><code>pkill -f &quot;geode serve&quot;</code>, confirm empty with <code>pgrep -f &quot;geode serve&quot;</code>, re-enter. <code>ps aux | grep</code> truncates the long path and matches nothing.</td>
+                </tr>
+                <tr>
+                  <td>Empty replies or auth errors</td>
+                  <td>Expired or invalid credentials</td>
+                  <td><code>geode doctor</code> validates keys and OAuth; refresh with <code>/login</code>.</td>
+                </tr>
+                <tr>
+                  <td>Empty reply ending in <code>model_refusal</code></td>
+                  <td>The model&apos;s safety classifier declined (HTTP 200, <code>stop_reason: refusal</code>)</td>
+                  <td>Rephrase, or switch with <code>/model</code>. The category appears in the message.</td>
+                </tr>
+                <tr>
+                  <td>Run ends as <code>context_exhausted</code></td>
+                  <td>Context still critical after pruning</td>
+                  <td><code>/compact</code> or <code>/clear</code>, then split the task. See <a href="/geode/docs/ops/long-running">Long-running safety</a>.</td>
+                </tr>
+                <tr>
+                  <td>MCP tools missing</td>
+                  <td>An MCP server failed to connect</td>
+                  <td><code>/mcp</code> shows server state and tools; <code>/status</code> carries an MCP block too.</td>
+                </tr>
+                <tr>
+                  <td>Messenger silence</td>
+                  <td>Gateway or binding trouble</td>
+                  <td>Run <code>geode doctor slack</code> and follow the failure table in <a href="/geode/docs/run/messaging">Messaging integrations</a>.</td>
+                </tr>
               </tbody>
             </table>
 
             <h2>Where logs live</h2>
-            <ul>
-              <li>Runlog: <code>~/.geode/runlog/</code> (per-run traces)</li>
-              <li>Hooks: <a href="/geode/docs/harness/hooks">Hook System</a> events</li>
-              <li>Serve: <code>~/.geode/serve.log</code></li>
-            </ul>
+            <table>
+              <thead>
+                <tr><th>What</th><th>Where</th></tr>
+              </thead>
+              <tbody>
+                <tr><td>Serve daemon log (10MB times 5 rotation)</td><td><code>~/.geode/logs/serve.log</code></td></tr>
+                <tr><td>geode-mcp, worker, campaign logs</td><td><code>~/.geode/logs/</code></td></tr>
+                <tr><td>Per-session run log (hook events, JSONL)</td><td><code>~/.geode/runs/&lt;session_key&gt;.jsonl</code></td></tr>
+                <tr><td>Session transcripts (per-turn dialogue)</td><td><code>~/.geode/transcripts/&lt;project-slug&gt;/</code></td></tr>
+                <tr><td>Cost ledger</td><td><code>~/.geode/usage/YYYY-MM.jsonl</code></td></tr>
+              </tbody>
+            </table>
+            <p>
+              The log channel layout is owned by{" "}
+              <code>configure_logging(mode)</code> in{" "}
+              <code>core/observability/logging_config.py</code>.
+            </p>
 
-            <h2>Support</h2>
-            <p>If you're stuck, file an issue with a runlog excerpt: <code>github.com/mangowhoiscloud/geode/issues</code>.</p>
+            <h2>Next</h2>
+            <ul>
+              <li><a href="/geode/docs/guides/debug-stuck-run">Debug a stuck run</a>. Reading the transcript and run log.</li>
+              <li><a href="/geode/docs/verification/observability">Observability</a>. Which lens answers which question.</li>
+              <li><a href="/geode/docs/config/basics">Configuration basics</a>. The full layer picture.</li>
+            </ul>
           </>
         }
       />

@@ -91,24 +91,40 @@ class WeatherLookupTool:
         # ... fetch and shape ...
         return {"result": {"city": city, "summary": "..."}}`}</pre>
 
-            <h2>3. 레지스트리에 등록합니다</h2>
+            <h2>3. 핸들러 맵에 등록합니다</h2>
             <p>
-              핸들러가 존재한다고 자동으로 호출 대상이 되지는 않습니다.{" "}
-              <code>core/wiring/container.py</code>의{" "}
-              <code>build_default_registry()</code>에서{" "}
-              <code>registry.register(WeatherLookupTool())</code>를 추가해야
-              합니다. 같은 이름이 이미 있으면 <code>ToolRegistry.register</code>가{" "}
-              <code>ValueError</code>를 던지므로 이름 충돌이 즉시 드러납니다.
+              핸들러가 존재한다고 자동으로 호출 대상이 되지는 않습니다.
+              실행은 <code>ToolExecutor</code>가 이름과 핸들러 함수의 dict에서
+              찾아 일어나고, 그 dict은{" "}
+              <code>core/cli/tool_handlers/</code>의{" "}
+              <code>_build_tool_handlers()</code>가 그룹별 빌더를 합쳐
+              만듭니다. 기존 단일 도구들과 같은 모양으로, 클래스를 인스턴스화해{" "}
+              <code>aexecute</code>를 감싼 클로저를 돌려주는 빌더를 추가하고
+              병합 목록에 넣습니다
+              (<code>core/cli/tool_handlers/single_tool.py</code>의 패턴).
             </p>
-            <pre>{`# core/wiring/container.py — build_default_registry()
-from core.tools.weather_tools import WeatherLookupTool
+            <pre>{`# core/cli/tool_handlers/single_tool.py 패턴
+def _build_weather_handlers() -> dict[str, Any]:
+    from core.tools.weather_tools import WeatherLookupTool
+    tool = WeatherLookupTool()
 
-registry.register(WeatherLookupTool())`}</pre>
+    async def handle_weather_lookup(**kwargs: Any) -> dict[str, Any]:
+        return await tool.aexecute(**kwargs)
+
+    return {"weather_lookup": handle_weather_lookup}
+
+# core/cli/tool_handlers/__init__.py — _build_tool_handlers()
+handlers.update(_build_weather_handlers())`}</pre>
+            <p>
+              definitions.json의 <code>name</code>과 dict 키가 정확히 같아야
+              합니다. 스키마만 있고 핸들러가 없으면 LLM이 도구를 부를 때
+              &quot;No handler for tool&quot; 경고와 함께 실패합니다.
+            </p>
 
             <h2>4. 권한 등급을 정합니다</h2>
             <p>
               권한 분류는 <code>core/agent/safety.py</code>의 frozenset에서
-              결정됩니다. 도구가 읽기 전용이면 <code>SAFE_TOOLS</code>에 두면
+              결정됩니다. 읽기 전용 도구는 <code>SAFE_TOOLS</code>에 둡니다.
               승인 없이 실행됩니다. 영속 상태(메모리, 파일, 자격증명)를
               바꾸면 <code>WRITE_TOOLS</code>에 넣어 사용자 확인을 받게 하고,
               시스템 접근이면 <code>DANGEROUS_TOOLS</code>에 넣습니다. 비용이 큰
@@ -131,16 +147,21 @@ SAFE_TOOLS = frozenset({
 
             <h2>확인</h2>
             <p>
-              레지스트리에 실제로 들어갔는지 확인합니다.
+              스키마와 핸들러 양쪽이 실제로 연결됐는지 확인합니다.
             </p>
-            <pre>{`uv run python -c "from core.wiring.container import build_default_registry; \\
-r = build_default_registry(); print('weather_lookup' in r)"`}</pre>
+            <pre>{`uv run python -c "
+from core.tools.base import load_tool_definition
+from core.cli.tool_handlers import _build_tool_handlers
+print(load_tool_definition('weather_lookup')['name'])
+print('weather_lookup' in _build_tool_handlers())
+"`}</pre>
             <p>
-              <code>True</code>가 출력되면 도구가 레지스트리에 등록되어{" "}
-              <code>to_anthropic_tools()</code>를 통해 LLM에 노출됩니다. 그 다음
-              CLI 스모크로 한 번 불러봅니다.
+              둘 다 통과하면 LLM에 스키마가 노출되고 호출이 실행됩니다. 마지막으로
+              대화형 세션에서 한 번 불러봅니다. 셸 원샷은 지원하지 않습니다.
             </p>
-            <pre>{`uv run geode "what's the weather in Seoul"`}</pre>
+            <pre>{`geode
+
+> 서울 날씨 알려줘`}</pre>
 
             <p className="text-[var(--ink-3)] text-sm">
               <em>참조:</em>{" "}
@@ -229,19 +250,35 @@ class WeatherLookupTool:
         # ... fetch and shape ...
         return {"result": {"city": city, "summary": "..."}}`}</pre>
 
-            <h2>3. Register it in the registry</h2>
+            <h2>3. Register it in the handler map</h2>
             <p>
-              A handler that exists is not yet callable. Add{" "}
-              <code>registry.register(WeatherLookupTool())</code> in{" "}
-              <code>build_default_registry()</code> in{" "}
-              <code>core/wiring/container.py</code>.{" "}
-              <code>ToolRegistry.register</code> raises <code>ValueError</code> if
-              the name is already taken, so name collisions surface immediately.
+              A handler that exists is not yet callable. Execution happens when{" "}
+              <code>ToolExecutor</code> looks the name up in a dict of handler
+              functions, and that dict is assembled by{" "}
+              <code>_build_tool_handlers()</code> in{" "}
+              <code>core/cli/tool_handlers/</code> from per-group builders. Add
+              a builder in the same shape as the existing single-tool wrappers
+              (instantiate the class, wrap <code>aexecute</code> in a closure)
+              and merge it in
+              (the pattern in <code>core/cli/tool_handlers/single_tool.py</code>).
             </p>
-            <pre>{`# core/wiring/container.py — build_default_registry()
-from core.tools.weather_tools import WeatherLookupTool
+            <pre>{`# the core/cli/tool_handlers/single_tool.py pattern
+def _build_weather_handlers() -> dict[str, Any]:
+    from core.tools.weather_tools import WeatherLookupTool
+    tool = WeatherLookupTool()
 
-registry.register(WeatherLookupTool())`}</pre>
+    async def handle_weather_lookup(**kwargs: Any) -> dict[str, Any]:
+        return await tool.aexecute(**kwargs)
+
+    return {"weather_lookup": handle_weather_lookup}
+
+# core/cli/tool_handlers/__init__.py — _build_tool_handlers()
+handlers.update(_build_weather_handlers())`}</pre>
+            <p>
+              The dict key must match the <code>name</code> in definitions.json
+              exactly. A schema without a handler fails at call time with a
+              &quot;No handler for tool&quot; warning.
+            </p>
 
             <h2>4. Set the permission tier</h2>
             <p>
@@ -269,15 +306,21 @@ SAFE_TOOLS = frozenset({
             </p>
 
             <h2>Verify</h2>
-            <p>Confirm the tool actually landed in the registry.</p>
-            <pre>{`uv run python -c "from core.wiring.container import build_default_registry; \\
-r = build_default_registry(); print('weather_lookup' in r)"`}</pre>
+            <p>Confirm both ends, the schema and the handler, are wired.</p>
+            <pre>{`uv run python -c "
+from core.tools.base import load_tool_definition
+from core.cli.tool_handlers import _build_tool_handlers
+print(load_tool_definition('weather_lookup')['name'])
+print('weather_lookup' in _build_tool_handlers())
+"`}</pre>
             <p>
-              When it prints <code>True</code>, the tool is registered and exposed
-              to the LLM through <code>to_anthropic_tools()</code>. Then smoke it
-              once from the CLI.
+              When both pass, the LLM sees the schema and calls execute. Finally
+              smoke it inside an interactive session; a shell one-shot is not
+              supported.
             </p>
-            <pre>{`uv run geode "what's the weather in Seoul"`}</pre>
+            <pre>{`geode
+
+> what's the weather in Seoul`}</pre>
 
             <p className="text-[var(--ink-3)] text-sm">
               <em>See:</em>{" "}

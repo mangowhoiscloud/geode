@@ -31,7 +31,7 @@ export default function Page() {
               메서드 <code>acomplete()</code>입니다. <code>source</code>는{" "}
               <code>CONCRETE_SOURCES</code>(<code>payg</code> /{" "}
               <code>subscription</code> / <code>adapter</code>) 중 하나여야 하고,{" "}
-              <code>"auto"</code>는 picker 전용 sentinel이라 어댑터에 박을 수
+              <code>&quot;auto&quot;</code>는 picker 전용 sentinel이라 어댑터에 박을 수
               없습니다. 요청·응답 셰이핑은 프로토콜이 정의한 provider-agnostic
               타입(<code>AdapterCallRequest</code>,{" "}
               <code>AdapterCallResult</code>)을 어댑터 내부에서 SDK 페이로드로
@@ -88,7 +88,7 @@ class AcmePaygAdapter:
               직접 호출합니다. <code>resolve_for(provider, source)</code>는{" "}
               <code>(provider, source)</code> 쌍이 정확히 하나의 어댑터에
               매칭되도록 강제하므로, 같은 쌍을 둘 등록하면 invariant 위반으로
-              loud하게 실패합니다.
+              곧바로 실패합니다.
             </p>
             <pre>{`# core/llm/adapters/registry.py — bootstrap_builtins()
 from core.llm.adapters.acme_payg import AcmePaygAdapter
@@ -110,14 +110,20 @@ for adapter_cls in (..., AcmePaygAdapter):
               <code>_route_provider(model)</code>이 모델 이름을 프로바이더로
               해석합니다. 등록된 Plan이 있으면 그것을 따르고, 없으면{" "}
               <code>core.config</code>의 정적 <code>_resolve_provider</code>로
-              떨어집니다. 새 프로바이더가 모델 이름으로 해석되도록 그 매핑을
-              확인하세요. 다중 모델 폴백은{" "}
+              떨어집니다. 모델 접두사와 프로바이더의 매핑은{" "}
+              <code>core/config/routing.toml</code>의{" "}
+              <code>[routing.prefixes]</code>가 SoT이고, 사용자 override는{" "}
+              <code>~/.geode/routing.toml</code>입니다. 새 프로바이더의 모델
+              접두사를 여기에 추가합니다. 다중 모델 폴백은{" "}
               <code>core/llm/router/calls/_failover.py</code>의{" "}
               <code>call_with_failover(models, call_fn)</code>이 처리합니다.
               모델 체인을 순서대로 시도하며, 재시도 가능한 오류(rate-limit,
               timeout, connection, server)는 백오프 후 다음 모델로 넘어가고,
-              인증 오류 같은 비재시도 오류는 즉시 전파됩니다. 새 어댑터의 모델을
-              체인에 넣으면 다른 모델이 소진됐을 때 폴백 후보가 됩니다.
+              인증 오류 같은 비재시도 오류는 즉시 전파됩니다. 단, 폴백 체인은
+              기본 출하값이 전부 빈 리스트입니다(<code>[model.fallbacks]</code>).
+              조용한 모델 교체 대신 실패를 드러내는 설계이므로, 새 어댑터의
+              모델을 폴백 후보로 쓰려면 <code>~/.geode/routing.toml</code>에서
+              직접 체인을 켜야 합니다.
             </p>
 
             <h2>확인</h2>
@@ -164,9 +170,9 @@ print(a.test_environment().ok)
               method <code>acomplete()</code>. The <code>source</code> must be one
               of <code>CONCRETE_SOURCES</code> (<code>payg</code> /{" "}
               <code>subscription</code> / <code>adapter</code>);{" "}
-              <code>"auto"</code> is a picker-only sentinel and cannot be pinned on
+              <code>&quot;auto&quot;</code> is a picker-only sentinel and cannot be pinned on
               an adapter. Request and response shaping is the work of translating
-              the protocol's provider-agnostic types (<code>AdapterCallRequest</code>,{" "}
+              the protocol&apos;s provider-agnostic types (<code>AdapterCallRequest</code>,{" "}
               <code>AdapterCallResult</code>) to SDK payloads inside the adapter.{" "}
               <code>AnthropicPaygAdapter</code> in{" "}
               <code>core/llm/adapters/anthropic_payg.py</code> is the reference for
@@ -216,7 +222,7 @@ class AcmePaygAdapter:
               Adapters are looked up through the process-global registry in{" "}
               <code>core/llm/adapters/registry.py</code>. Built-in adapters
               register in <code>bootstrap_builtins()</code>, so for a new built-in,
-              add the class to that function's tuple. For an external plugin, call{" "}
+              add the class to that function&apos;s tuple. For an external plugin, call{" "}
               <code>register_adapter(AcmePaygAdapter())</code> from your entry
               point. <code>resolve_for(provider, source)</code> enforces that a{" "}
               <code>(provider, source)</code> pair matches exactly one adapter, so
@@ -244,15 +250,20 @@ for adapter_cls in (..., AcmePaygAdapter):
               <code>core/llm/router/calls/_route.py</code> resolves a model name to
               a provider. It honors a registered Plan if present, otherwise falls
               back to the static <code>_resolve_provider</code> in{" "}
-              <code>core.config</code>. Confirm your new provider resolves from the
-              model name in that mapping. Multi-model fallback is handled by{" "}
+              <code>core.config</code>. The model-prefix-to-provider mapping is
+              owned by <code>[routing.prefixes]</code> in{" "}
+              <code>core/config/routing.toml</code>, with the user override at{" "}
+              <code>~/.geode/routing.toml</code>; add your provider&apos;s model
+              prefix there. Multi-model fallback is handled by{" "}
               <code>call_with_failover(models, call_fn)</code> in{" "}
               <code>core/llm/router/calls/_failover.py</code>. It tries the model
               chain in order; retryable errors (rate-limit, timeout, connection,
               server) back off and move to the next model, while non-retryable
-              errors like authentication propagate immediately. Add your adapter's
-              model to the chain so it becomes a fallback candidate when other
-              models exhaust.
+              errors like authentication propagate immediately. Note that
+              fallback chains ship empty (<code>[model.fallbacks]</code>): the
+              design surfaces failure instead of silently swapping models, so to
+              use your adapter&apos;s model as a fallback candidate you opt in
+              by editing the chain in <code>~/.geode/routing.toml</code>.
             </p>
 
             <h2>Verify</h2>
