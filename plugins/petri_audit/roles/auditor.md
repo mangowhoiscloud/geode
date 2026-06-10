@@ -7,10 +7,7 @@ description: >-
   *audit run* (meta-evaluation of auditor + target interaction).
 default_model: claude-opus-4-7
 default_source: auto
-inline_skills:
-  - geode-pipeline
-  - geode-scoring
-  - geode-verification
+inline_skills: []
 ---
 
 # Auditor

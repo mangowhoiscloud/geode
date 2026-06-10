@@ -200,8 +200,13 @@ def _persona_on() -> bool:
 
 
 def _generic_static_prefix() -> str:
-    """Render the domain-neutral router prefix."""
-    return _SYSTEM_PROMPT_TEMPLATE.format(ip_count=0, ip_examples="none loaded")
+    """Render the domain-neutral router prefix.
+
+    ``.format()`` stays kwarg-free — the template's only placeholder is the
+    escaped ``{{skill_context}}``, which this call collapses to
+    ``{skill_context}`` for the later injection in ``loop/_context.py``.
+    """
+    return _SYSTEM_PROMPT_TEMPLATE.format()
 
 
 def build_system_prompt(model: str = "") -> str:

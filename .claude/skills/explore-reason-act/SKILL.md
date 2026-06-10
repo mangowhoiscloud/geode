@@ -67,6 +67,6 @@ Every fix attempt must include:
 
 | Scenario | Explore | Reason | Act |
 |----------|---------|--------|-----|
-| Pipeline node modification | Read `graph.py` + node file + state.py entirely | Reducer conflict hypothesis | Modify only 1 node, stream test |
+| Hook handler modification | Read `core/hooks/system.py` + bootstrap registration entirely | Handler-exists-but-unregistered hypothesis | Wire one handler, fire-path test |
 | Tool addition | Read `definitions.json` + `tool_handlers.py` + `tool_executor.py` | Analyze existing tool patterns | Implement following the pattern, unit test |
 | Memory change | Read `context.py` + session/project/org hierarchy | Verify 4-tier assembly order | Modify only the relevant tier, assembly test |

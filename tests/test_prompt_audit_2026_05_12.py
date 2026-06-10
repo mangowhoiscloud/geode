@@ -157,13 +157,9 @@ def test_math_formatting_instruction_reaches_agentic_system_prompt(
 @pytest.mark.parametrize(
     "name,expected_keys",
     [
-        ("analyst", {"system", "user"}),
         ("commentary", {"system", "user"}),
         ("decomposer", {"system"}),
-        ("evaluator", {"system", "user"}),
         ("router", {"system", "agentic_suffix"}),
-        ("synthesizer", {"system", "user"}),
-        ("tool_augmented", {"analyst_tools", "synthesizer_tools"}),
     ],
 )
 def test_g1_xml_template_parses(name: str, expected_keys: set[str]) -> None:
