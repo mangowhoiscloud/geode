@@ -145,3 +145,15 @@ def test_status_payload_reads_baseline_and_ledger_tail(
     assert len(recent) == 5  # tail only
     assert recent[-1]["mutation_id"] == "m7"
     assert recent[0]["mutation_id"] == "m3"
+
+
+def test_run_agentic_oneshot_bootstraps_adapters() -> None:
+    """geode-mcp's run_agent path must self-bootstrap the adapter registry —
+    it never goes through GeodeRuntime.create. First live MCP run_agent
+    failed with AdapterNotFoundError "Known pairs: []" (2026-06-11)."""
+    import inspect
+
+    from core.cli.bootstrap import run_agentic_oneshot
+
+    source = inspect.getsource(run_agentic_oneshot)
+    assert "bootstrap_builtins()" in source

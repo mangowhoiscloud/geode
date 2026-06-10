@@ -17,9 +17,19 @@ export type ChangelogEntry = {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
-    "version": "0.99.171",
+    "version": "0.99.173",
     "date": "2026-06-11",
     "body": "### Changed\n- **Docs site re-skinned to the Axolotl Rose identity** (operator-selected\n  direction A). Palette extracted from the GEODE character (rose axolotl,\n  gold headlamp, aqua magnifier): cool near-black substrate (`#0B0A10`),\n  signature rose `#F49BC4` with Hermes-style low-opacity tint discipline on\n  every hairline/table header/active state, lamp gold `#FFD66B` for action,\n  aqua `#7FD8E8` for links/inline code. Petri-blue demoted to a scoped accent\n  (`--acc-si`, 04-self-improving section + petri-bundle bridge only).\n  Mechanics: token values swapped in `site/src/app/globals.css` (names kept,\n  55+ usages re-skin automatically), docs surface fully de-hardcoded\n  (docs.css, docs-shell.tsx, docs index/changelog/seeds pages, layout.tsx\n  body), unused legacy `--sea-*`/`--glow-*`/`--text-*` tokens deleted,\n  Diataxis chips remapped (tutorial=gold, how-to=aqua, reference=rose),\n  display headings tightened to -0.02em, `.rose-grid` dot texture added, and\n  the character (`geode-idle.png`) now sits beside the landing hero.\n  `site/DESIGN.md` §1/§2 rewritten as the palette SoT. Portfolio\n  `versions/v*` snapshots intentionally untouched (frozen archives)."
+  },
+  {
+    "version": "0.99.172",
+    "date": "2026-06-11",
+    "body": "### Fixed\n- **geode-mcp `run_agent` adapter bootstrap** — the first live `run_agent` call over the new HTTP transport failed with `AdapterNotFoundError \"Known pairs: []\"`: `run_agentic_oneshot` assumed the adapter registry was populated by `GeodeRuntime.create`, which geode-mcp (and any standalone caller) never runs. Now self-bootstraps via `bootstrap_builtins()` (idempotent; same pattern as `core/agent/worker.py`). Latent since v0.99.155 — the stdio-era audit intentionally skipped exercising `run_agent` (token cost), so the defect surfaced only on the operator's live remote test. Guard: `test_run_agentic_oneshot_bootstraps_adapters`."
+  },
+  {
+    "version": "0.99.171",
+    "date": "2026-06-11",
+    "body": "### Added\n- **geode-mcp remote access — streamable-HTTP transport with bearer-token auth** (operator request): `geode-mcp --http [--host] [--port]` serves the existing 6 tools over the MCP streamable-HTTP transport (default stays stdio). Auth = static bearer token from `GEODE_MCP_TOKEN` (secret → `~/.geode/.env`, read via the shared `load_env_files`), wired as `token_verifier` + `auth=AuthSettings` — both are required because the SDK silently skips the auth middleware when `auth` is None (verified in the installed mcp 1.26 source). Fail-loud guard: non-loopback bind without a token exits 2 (`run_agent` is a remote-execution surface); loopback without a token warns. Guards: `tests/core/test_mcp_http_transport.py` (9, incl. live HTTP round-trip — correct token passes initialize+tools/list, wrong/missing token rejected)."
   },
   {
     "version": "0.99.170",

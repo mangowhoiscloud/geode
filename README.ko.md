@@ -25,7 +25,7 @@
   <a href="README.md">English</a>
 </p>
 
-# GEODE v0.99.171 — A Self-improving Autonomous Execution Agent
+# GEODE v0.99.173 — A Self-improving Autonomous Execution Agent
 
 자기 자신이 올라탄 scaffold 를 스스로 고쳐쓰는 범용 자율 에이전트. 자연어로 물으면 GEODE 가 계획을 세우고, 도구를 호출해, 결과를 보고합니다. 1회성 프롬프트도, 장시간 세션도 동일하게. 그 아래에서는 outer loop 가 작업을 수행하는 시스템 자체를 계속 다듬습니다.
 
@@ -370,6 +370,8 @@ geode update                  # 소스 체크아웃
 | 핸드셰이크의 서버 버전 | mcp SDK 버전("1.26.0")으로 오보고되던 것을 GEODE 버전으로 정정 (SDK `FastMCP.__init__`에 `version` kwarg 부재; `tests/core/test_mcp_server_tools.py`로 핀) |
 | `get_health` 자격증명 정직성 | `*_configured`가 API 키 유무만 봐서 OAuth/CLI-lane 환경에서 false로 오보고 — `*_credential_source` 병기로 정정 |
 | `run_agent`, `self_improving_propose`/`apply` | 자동 점검에서 미실행(토큰 비용/변이 부작용); `apply`는 2-step 확인 게이트 뒤 |
+
+**원격 접근 (v0.99.171):** `geode-mcp --http [--host H] [--port P]`가 같은 도구를 MCP streamable-HTTP 전송으로 서빙합니다. 인증은 `GEODE_MCP_TOKEN` bearer 토큰(시크릿 — `~/.geode/.env`에 기재), 클라이언트는 `Authorization: Bearer <token>` 헤더를 보냅니다. 토큰 없이 비-루프백 바인드는 시작 시 거부됩니다 — `run_agent`가 GEODE 전체 도구면에 닿으므로 무인증 개방은 원격 실행 표면입니다. 개인 기기 간 사용이면 SSH가 무설정 대안입니다: `claude mcp add geode -- ssh <host> geode-mcp`.
 
 ---
 
