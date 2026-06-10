@@ -178,7 +178,7 @@ def update(
     ),
 ) -> None:
     """Update a source checkout and refresh the installed CLI."""
-    from core.cli.cmd_lifecycle import do_update
+    from core.cli.commands.lifecycle import do_update
 
     if not do_update(dry_run=dry_run, force=force, restart=restart):
         raise typer.Exit(1)
@@ -208,7 +208,7 @@ def uninstall(
     ),
 ) -> None:
     """Remove GEODE runtime data and the installed CLI."""
-    from core.cli.cmd_lifecycle import do_uninstall
+    from core.cli.commands.lifecycle import do_uninstall
 
     do_uninstall(
         dry_run=dry_run,

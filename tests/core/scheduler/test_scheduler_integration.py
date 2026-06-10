@@ -156,7 +156,7 @@ class TestCmdScheduleEnhanced:
     """Test enhanced /schedule command with create/delete/status."""
 
     def test_list_shows_predefined(self, svc: SchedulerService) -> None:
-        with patch("core.cli.cmd_schedule.console") as mock_console:
+        with patch("core.cli.commands.schedule.console") as mock_console:
             cmd_schedule("", scheduler_service=svc)
             output = " ".join(str(c) for c in mock_console.print.call_args_list)
             assert "Templates" in output
@@ -170,7 +170,7 @@ class TestCmdScheduleEnhanced:
             action="check status",
         )
         svc.add_job(job)
-        with patch("core.cli.cmd_schedule.console") as mock_console:
+        with patch("core.cli.commands.schedule.console") as mock_console:
             cmd_schedule("list", scheduler_service=svc)
             output = " ".join(str(c) for c in mock_console.print.call_args_list)
             assert "Scheduled Jobs" in output
@@ -178,7 +178,7 @@ class TestCmdScheduleEnhanced:
 
     def test_create_with_nl_expression(self, svc: SchedulerService) -> None:
         initial_count = len(svc.list_jobs(include_disabled=True))
-        with patch("core.cli.cmd_schedule.console"):
+        with patch("core.cli.commands.schedule.console"):
             cmd_schedule(
                 'create "every 5 minutes" "check system health"',
                 scheduler_service=svc,
@@ -186,13 +186,13 @@ class TestCmdScheduleEnhanced:
         assert len(svc.list_jobs(include_disabled=True)) == initial_count + 1
 
     def test_create_invalid_expression(self, svc: SchedulerService) -> None:
-        with patch("core.cli.cmd_schedule.console") as mock_console:
+        with patch("core.cli.commands.schedule.console") as mock_console:
             cmd_schedule("create", scheduler_service=svc)
             output = " ".join(str(c) for c in mock_console.print.call_args_list)
             assert "Usage" in output
 
     def test_create_without_scheduler(self) -> None:
-        with patch("core.cli.cmd_schedule.console") as mock_console:
+        with patch("core.cli.commands.schedule.console") as mock_console:
             cmd_schedule("create every 5 minutes", scheduler_service=None)
             output = " ".join(str(c) for c in mock_console.print.call_args_list)
             assert "not available" in output
@@ -205,20 +205,20 @@ class TestCmdScheduleEnhanced:
             action="test action",
         )
         svc.add_job(job)
-        with patch("core.cli.cmd_schedule.console") as mock_console:
+        with patch("core.cli.commands.schedule.console") as mock_console:
             cmd_schedule("delete del-me", scheduler_service=svc)
             output = " ".join(str(c) for c in mock_console.print.call_args_list)
             assert "Deleted" in output
         assert svc.get_job("del-me") is None
 
     def test_delete_unknown_job(self, svc: SchedulerService) -> None:
-        with patch("core.cli.cmd_schedule.console") as mock_console:
+        with patch("core.cli.commands.schedule.console") as mock_console:
             cmd_schedule("delete nonexistent", scheduler_service=svc)
             output = " ".join(str(c) for c in mock_console.print.call_args_list)
             assert "not found" in output
 
     def test_status_unknown_template(self, svc: SchedulerService) -> None:
-        with patch("core.cli.cmd_schedule.console") as mock_console:
+        with patch("core.cli.commands.schedule.console") as mock_console:
             cmd_schedule("status missing-template", scheduler_service=svc)
             output = " ".join(str(c) for c in mock_console.print.call_args_list)
             assert "Not found" in output
@@ -233,14 +233,14 @@ class TestCmdScheduleEnhanced:
             last_duration_ms=42.5,
         )
         svc.add_job(job)
-        with patch("core.cli.cmd_schedule.console") as mock_console:
+        with patch("core.cli.commands.schedule.console") as mock_console:
             cmd_schedule("status status-job", scheduler_service=svc)
             output = " ".join(str(c) for c in mock_console.print.call_args_list)
             assert "Status Test" in output
             assert "every" in output
 
     def test_status_not_found(self, svc: SchedulerService) -> None:
-        with patch("core.cli.cmd_schedule.console") as mock_console:
+        with patch("core.cli.commands.schedule.console") as mock_console:
             cmd_schedule("status ghost", scheduler_service=svc)
             output = " ".join(str(c) for c in mock_console.print.call_args_list)
             assert "Not found" in output
@@ -254,7 +254,7 @@ class TestCmdScheduleEnhanced:
             enabled=False,
         )
         svc.add_job(job)
-        with patch("core.cli.cmd_schedule.console"):
+        with patch("core.cli.commands.schedule.console"):
             cmd_schedule("enable toggle-me", scheduler_service=svc)
         got = svc.get_job("toggle-me")
         assert got is not None
@@ -269,7 +269,7 @@ class TestCmdScheduleEnhanced:
             enabled=True,
         )
         svc.add_job(job)
-        with patch("core.cli.cmd_schedule.console"):
+        with patch("core.cli.commands.schedule.console"):
             cmd_schedule("disable toggle-me2", scheduler_service=svc)
         got = svc.get_job("toggle-me2")
         assert got is not None
@@ -288,7 +288,7 @@ class TestCmdScheduleEnhanced:
             callback=cb,
         )
         svc.add_job(job)
-        with patch("core.cli.cmd_schedule.console") as mock_console:
+        with patch("core.cli.commands.schedule.console") as mock_console:
             cmd_schedule("run run-me", scheduler_service=svc)
             output = " ".join(str(c) for c in mock_console.print.call_args_list)
             assert "Executed" in output

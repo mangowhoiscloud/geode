@@ -241,7 +241,7 @@ def test_adapters_stats_parses_dispatch_attempts_from_jsonl(tmp_path: Path) -> N
     invoke the CLI command, parse the table from stdout."""
     import time
 
-    from core.cli.cmd_adapters import app
+    from core.cli.commands.adapters import app
     from typer.testing import CliRunner
 
     runs_dir = tmp_path / "runs"
@@ -302,7 +302,7 @@ def test_adapters_stats_parses_dispatch_attempts_from_jsonl(tmp_path: Path) -> N
 
 
 def test_adapters_stats_rejects_malformed_since() -> None:
-    from core.cli.cmd_adapters import app
+    from core.cli.commands.adapters import app
     from typer.testing import CliRunner
 
     runner = CliRunner()
@@ -314,7 +314,7 @@ def test_adapters_stats_rejects_malformed_since() -> None:
 def test_adapters_stats_empty_window_message(tmp_path: Path) -> None:
     """When the window has zero events, the CLI prints a no-match message
     + the number of rows it scanned."""
-    from core.cli.cmd_adapters import app
+    from core.cli.commands.adapters import app
     from typer.testing import CliRunner
 
     runs_dir = tmp_path / "runs"

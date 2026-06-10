@@ -45,6 +45,13 @@ functional change.
 
 ---
 
+## [0.99.161] - 2026-06-11
+
+### Changed
+- **Structure sprint S-3 — CLI single home + scripts→CLI promotion (PR-STRUCT-S3).**
+  - The five `core/cli/cmd_*.py` typer modules moved into `core/cli/commands/` (`adapters` / `config` / `lifecycle` / `schedule` / `skill`) — slash handlers and typer commands now share one home; 11 importer files migrated (including the `from core.cli import cmd_config` module-object form).
+  - New `geode seeds assemble` + `geode hub build` subcommands — thin pass-through wrappers (`core/cli/commands/seed_pool.py`) over `scripts/assemble_seed_pool.py` / `scripts/build_self_improving_hub.py`, making the `geode` CLI the single operator entry point for the campaign-entry procedure steps. Repo-only: the wheel ships core+plugins, so the wrappers fail loudly with a repo-checkout message outside a checkout. Guarded by `tests/core/cli/test_s3_cli_home.py`.
+
 ## [0.99.160] - 2026-06-11
 
 ### Changed
