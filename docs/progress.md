@@ -16,7 +16,7 @@
 
 <!-- Move items here when work begins. -->
 <!-- 3-Checkpoint: (1) alloc → (2) merge (CI 5/5) → (3) verify -->
-- [ ] Folder-structure audit follow-ups — report delivered (F1/F2 stale, already shipped in D-1); standing: loop/ 32-module split + train.py 5,510L, tests/ triple convention (330 flat vs 190 nested + dup self_improving roots), cli cmd_*/commands/ dual home, misplaced modules (bash_tool/run_log ×2/audit_lane/seed tools), scripts→CLI promotion, integrations→messaging flatten, husk sweep, layer map 11/21
+- [ ] Structure cleanup sprint — S-1 DONE; next S-2 tests convention → S-3 CLI dual-home/scripts → S-4 core/utils+integrations+seed-tools move → S-5 loop/train split (campaign-timing gate)
 
 ## In Review
 
@@ -26,6 +26,8 @@
 
 <!-- Completed items. Keep recent 10, archive older ones. -->
 <!-- - [x] #issue-number — Short description (PR #N) -->
+- [x] Struct S-1: misplaced-module moves (bash_tool/audit_lane/config.self_improving/fts_query, 32-importer rename) + hardcoding anchors (CONTEXT_BLOCK_MAX_CHARS ×4, DEFAULT_AGENT_MODEL ×10, pages/repo URLs, registry pagination) (PR #2072 → #2073, v0.99.158)
+- [x] S-6 observability: sessions.jsonl now carries run metrics (to_session_row had 0 callers — HIGH), run_log ×2 fold → observability JsonlAppendLog, LatencyMetrics rename, configure_logging(mode) switchboard (mcp/worker/campaign file logs), dead langgraph-checkpoint pins dropped; state/checkpoints verified healthy (PR #2075 → #2076, v0.99.159)
 - [x] Slop cleanup sprint: 5 Game-IP-era skills + 4 orphan prompt templates + axes.py husk deleted (hash pins 15→4), router.md dedupe + (CRITICAL) 4→2, program.md verdict-label fix, CLAUDE.md skills-table/entry-point sync; LinkedIn/playwriter audit claims rejected as MCP false positives (PR #2068 → #2069, v0.99.157)
 - [x] llms.txt sprint: router.md llms.txt-first research heuristic + web_fetch description (instruction-level per frontier convergence) + site llms.txt llmstxt.org spec shape + sitemap section-parser regression fix (lost groupings since docs redesign) (PR #2063 → #2064, v0.99.156)
 - [x] Audit bundle D-3a: G1-G4 guardrail subgraph + M4.x DPO chain deleted (operator decisions ①②), AUTORESEARCH_VERDICT derived from gate outcome (⑥), CYCLE_INPUT_POOL repo-pinned semantics recorded (⑤) (PR #2056 → #2057, v0.99.154)
