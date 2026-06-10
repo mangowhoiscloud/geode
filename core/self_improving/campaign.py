@@ -2600,7 +2600,11 @@ def _build_arg_parser() -> argparse.ArgumentParser:
 
 
 def main(argv: Sequence[str] | None = None) -> int:
-    logging.basicConfig(level=logging.INFO, format="%(message)s")
+    # S-6 (2026-06-11) — unified switchboard: keeps the bare %(message)s
+    # console (operator-facing phase digest) + adds ~/.geode/logs/campaign.log.
+    from core.observability.logging_config import configure_logging
+
+    configure_logging("campaign")
     # PR-CAMPAIGN-LOAD-ENV (2026-06-02) — load ~/.geode/.env so the spawned
     # train.py audit subprocesses inherit the PAYG ANTHROPIC_API_KEY. train.py's
     # own main() also loads it (defence in depth for direct ``python -m

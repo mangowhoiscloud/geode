@@ -33,6 +33,7 @@ Supports:
 
 from __future__ import annotations
 
+from core.observability.run_log import JobRunLog
 from core.scheduler.factory import create_scheduler
 from core.scheduler.jitter import _compute_jitter_frac, _jittered_next_run
 from core.scheduler.lock import SchedulerLock, _is_pid_alive
@@ -49,7 +50,6 @@ from core.scheduler.models import (
     ScheduledJob,
     ScheduleKind,
 )
-from core.scheduler.run_log import JobRunLog
 from core.scheduler.serialization import _job_from_dict, _job_to_dict
 from core.scheduler.service import SchedulerService
 from core.scheduler.timezone import _cron_tuple_for_tz, _now_minutes, _parse_hhmm
