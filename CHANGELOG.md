@@ -45,6 +45,11 @@ functional change.
 
 ---
 
+## [0.99.171] - 2026-06-11
+
+### Added
+- **geode-mcp remote access — streamable-HTTP transport with bearer-token auth** (operator request): `geode-mcp --http [--host] [--port]` serves the existing 6 tools over the MCP streamable-HTTP transport (default stays stdio). Auth = static bearer token from `GEODE_MCP_TOKEN` (secret → `~/.geode/.env`, read via the shared `load_env_files`), wired as `token_verifier` + `auth=AuthSettings` — both are required because the SDK silently skips the auth middleware when `auth` is None (verified in the installed mcp 1.26 source). Fail-loud guard: non-loopback bind without a token exits 2 (`run_agent` is a remote-execution surface); loopback without a token warns. Guards: `tests/core/test_mcp_http_transport.py` (9, incl. live HTTP round-trip — correct token passes initialize+tools/list, wrong/missing token rejected).
+
 ## [0.99.170] - 2026-06-11
 
 ### Changed
