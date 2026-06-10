@@ -558,6 +558,24 @@ def _record_rejection(runner: Any, proposal: Any) -> None:
     from core.self_improving.loop.runner import MUTATION_AUDIT_LOG_PATH
 
     log = logging.getLogger(__name__)
+
+    # PR-AUDIT-AB (2026-06-10) — operator decline is a mutation rejection
+    # too; fire the lifecycle event alongside the audit row.
+    from core.hooks.system import HookEvent
+    from core.self_improving.loop._hooks import _fire_hook
+
+    _fire_hook(
+        HookEvent.MUTATION_REJECTED,
+        {
+            "mutation_id": proposal.mutation.mutation_id,
+            "target_kind": proposal.mutation.target_kind,
+            "target_path": f"{proposal.mutation.target_kind}.{proposal.mutation.target_section}",
+            "ts": time.time(),
+            "run_id": "",
+            "reason": "operator declined at confirmation prompt",
+            "rejected_by": "operator",
+        },
+    )
     raw_path = runner.audit_log_path or MUTATION_AUDIT_LOG_PATH
     audit_path = Path(raw_path)
     audit_path.parent.mkdir(parents=True, exist_ok=True)

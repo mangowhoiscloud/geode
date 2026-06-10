@@ -2456,6 +2456,17 @@ class AgenticLoop:
                         )
                     )
                 except Exception:
+                    # PR-AUDIT-AB (2026-06-10) — a silent 0.0 makes every
+                    # call of an unpriced model FREE to the cost limiter
+                    # (COST_WARNING / COST_LIMIT_EXCEEDED under-count),
+                    # exactly when a new model is most likely missing from
+                    # the pricing table. Keep the graceful 0.0 but log it.
+                    log.warning(
+                        "calculate_cost failed for model=%s — recording cost_usd=0.0 "
+                        "(cost limiter will under-count this call)",
+                        effective_model,
+                        exc_info=True,
+                    )
                     cost_usd = 0.0
                 try:
                     await self._hooks.trigger_async(

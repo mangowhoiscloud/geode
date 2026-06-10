@@ -43,10 +43,18 @@ class WebFetchTool:
             )
 
         try:
+            tls_verified = True
             try:
                 resp = httpx.get(url, timeout=10.0, follow_redirects=True)
             except httpx.ConnectError:
-                # SSL cert fallback (Python 3.14 + macOS certifi issue)
+                # SSL cert fallback (Python 3.14 + macOS certifi issue).
+                # PR-AUDIT-AB (2026-06-10) — ConnectError also covers DNS
+                # failure / connection-refused, so this retry can silently
+                # drop TLS verification for reasons that have nothing to do
+                # with certificates. Keep the fallback (the certifi issue is
+                # real) but make it observable: warn + tag the result.
+                log.warning("fetch_url retrying %s with TLS verification DISABLED", url)
+                tls_verified = False
                 resp = httpx.get(url, timeout=10.0, follow_redirects=True, verify=False)  # noqa: S501  # nosec B501
             resp.raise_for_status()
             content_type = resp.headers.get("content-type", "")
@@ -61,6 +69,7 @@ class WebFetchTool:
                     "truncated": len(text) > max_chars,
                     "content_type": content_type,
                     "status_code": resp.status_code,
+                    "tls_verified": tls_verified,
                 }
             }
         except httpx.HTTPStatusError as exc:

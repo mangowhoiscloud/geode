@@ -580,15 +580,8 @@ def build_hooks(
         ),
         (_E.SUBAGENT_STARTED, "sa_started", "SubAgent started: %s (%s)", ["task_id", "task_type"]),
         (_E.LLM_CALL_STARTED, "llm_start", "LLM call: %s (%s)", ["model", "function"]),
-        (
-            _E.VERIFICATION_FAIL,
-            "verif_fail",
-            "Verification failed: %s — %s",
-            ["node", "subject_id"],
-        ),
-        # PR-CL-A3 (2026-05-23) — per-turn verify telemetry. Mirrors the
-        # ``VERIFICATION_FAIL`` audit handler pattern so the journal /
-        # downstream subscriber gets a structured row per turn outcome.
+        # PR-CL-A3 (2026-05-23) — per-turn verify telemetry: structured
+        # row per turn outcome for the journal / downstream subscriber.
         (
             _E.TURN_VERIFY_FAILED,
             "turn_verify_fail",
@@ -607,12 +600,6 @@ def build_hooks(
             "recovery_fail",
             "Tool recovery failed: %s — %s",
             ["tool_name", "error"],
-        ),
-        (
-            _E.FALLBACK_CROSS_PROVIDER,
-            "xprovider_fb",
-            "Cross-provider fallback: %s → %s",
-            ["from_model", "to_model"],
         ),
         (_E.POST_ANALYSIS, "post_analysis", "Post-analysis: %s", ["trigger_type"]),
         (_E.SHUTDOWN_STARTED, "shutdown", "Shutdown: %s active sessions", ["active_sessions"]),
@@ -755,9 +742,20 @@ def build_memory(
         project_root=Path("."),
     )
 
-    # Wire memory into memory tools via contextvars (P1 memory autonomy)
-    from core.tools.memory_tools import set_memory_hooks, set_org_memory, set_project_memory
+    # Wire memory into memory tools via contextvars (P1 memory autonomy).
+    # PR-AUDIT-AB (2026-06-10) — set_default_session_store was the one
+    # sibling setter never called here: every memory_save with
+    # persistent=False wrote into a fresh throwaway InMemorySessionStore
+    # and still returned saved=True (fake success). The session_store
+    # built at bootstrap is the same instance ContextAssembler reads.
+    from core.tools.memory_tools import (
+        set_default_session_store,
+        set_memory_hooks,
+        set_org_memory,
+        set_project_memory,
+    )
 
+    set_default_session_store(session_store)
     set_project_memory(project_memory)
     set_org_memory(organization_memory)
     set_memory_hooks(hooks)

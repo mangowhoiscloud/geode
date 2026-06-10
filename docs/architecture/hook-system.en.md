@@ -37,7 +37,7 @@ The Hook System evolves beyond simple event logging through 4 stages: **Observe,
 ├─────────────────────────────────────────────────────────────────┤
 │  L1 OBSERVE    Record only, no state changes                    │
 │                                                                 │
-│  ✓ RunLog             P50  ALL 67 events → JSONL                │
+│  ✓ RunLog             P50  ALL 64 events → JSONL                │
 │  ✓ JournalHook        P60  END/ERROR/SUBAGENT → journal         │
 │  ✓ NotificationHook  P200  SUBAGENT_FAILED → Slack             │
 │  ✓ TableLoggers ×20+  P90  tool exec / llm / cost → struct log  │
@@ -112,12 +112,10 @@ graph TB
 
 ---
 
-## HookEvent Enum (67 events)
+## HookEvent Enum (64 events)
 
 | Category | Event | Source | Handler | Maturity |
 |---|---|---|---|---|
-| **Verification** | `VERIFICATION_PASS` | Guardrails pass | RunLog | L1 |
-| | `VERIFICATION_FAIL` | Guardrails fail | RunLog | L1 |
 | | `TRIGGER_FIRED` | TriggerManager | Logger | L1 |
 | | `POST_ANALYSIS` | (reserved) | — | — |
 | **Memory** | `MEMORY_SAVED` | (planned) | — | — |
@@ -163,7 +161,7 @@ AgenticLoop turn boundary:
 
 | P | Handler Name | Subscribed Events | Registration Location | Maturity |
 |---|---|---|---|---|
-| **50** | `run_log_writer` | **All 67 events** | `bootstrap.build_hooks()` | L1 |
+| **50** | `run_log_writer` | **All 64 events** | `bootstrap.build_hooks()` | L1 |
 | **60** | `journal_subagent` | `SUBAGENT_COMPLETED` | `bootstrap.build_hooks()` | L1 |
 | **85** | `turn_auto_memory` | `TURN_COMPLETE` | `bootstrap.build_hooks()` | L2 |
 | **90** | `trigger_logger` | `TRIGGER_FIRED` | `scheduling.build_scheduling()` | L1 |
@@ -235,7 +233,6 @@ handler: my_hook.handler  # Python module path
 | Event Group | L1 OBSERVE | L2 REACT | L3 DECIDE | L4 AUTONOMY |
 |---|:---:|:---:|:---:|:---:|
 | Pipeline (3) | ✓ 5 handlers | ✓ 2 handlers | — | — |
-| Verification (2) | ✓ RunLog | — | — | — |
 | Automation (5) | ✓ 6 handlers | ✓ 2 handlers | — | — |
 | Turn (1) | ✓ RunLog | ✓ AutoMemory | — | — |
 | SubAgent (3) | ✓ 2 handlers | — | — | — |
