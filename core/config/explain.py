@@ -39,6 +39,7 @@ def _global_toml_path() -> Path:
     env_toml = os.environ.get("GEODE_CONFIG_TOML", "").strip()
     return Path(env_toml).expanduser() if env_toml else GLOBAL_CONFIG_PATH
 
+
 #: Layer identifiers in precedence order (index 0 = strongest).
 LAYERS: tuple[str, ...] = (
     "os.environ",

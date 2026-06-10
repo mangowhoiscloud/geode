@@ -107,9 +107,10 @@ def load_daemon_env() -> None:
         # The escape hatch may live in a .env file rather than the spawning
         # shell — check both files BEFORE dropping anything.
         for env_file in (GLOBAL_ENV_FILE, Path(".env")):
-            if env_file.exists() and dotenv_values(str(env_file)).get(
-                "GEODE_SERVE_KEEP_MODEL_ENV"
-            ) == "1":
+            if (
+                env_file.exists()
+                and dotenv_values(str(env_file)).get("GEODE_SERVE_KEEP_MODEL_ENV") == "1"
+            ):
                 keep_model_env = True
                 break
 

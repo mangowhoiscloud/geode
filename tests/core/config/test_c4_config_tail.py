@@ -21,8 +21,6 @@ import inspect
 import logging
 from pathlib import Path
 
-import pytest
-
 
 def test_main_loader_honors_geode_config_toml(tmp_path: Path, monkeypatch) -> None:
     from core.config import _load_toml_config
@@ -69,7 +67,7 @@ def test_reload_rebinds_routing_constants(tmp_path: Path, monkeypatch) -> None:
     finally:
         routing_manifest.clear_routing_manifest_cache()
         cfg.reload_routing_constants()
-        assert cfg.ANTHROPIC_PRIMARY == before
+        assert before == cfg.ANTHROPIC_PRIMARY
 
 
 def test_reload_settings_calls_routing_reload(monkeypatch) -> None:
@@ -101,9 +99,7 @@ def test_reload_field_failure_warns_not_silent(monkeypatch, caplog) -> None:
         return real_getattr(obj, name, *default)
 
     monkeypatch.setattr(cfg, "_get_settings", lambda: Settings())
-    monkeypatch.setattr(
-        "core.config._settings.Settings", lambda: fresh, raising=False
-    )
+    monkeypatch.setattr("core.config._settings.Settings", lambda: fresh, raising=False)
     # Patch the module-level reference reload uses
     import core.config._settings as settings_mod
 
@@ -114,9 +110,7 @@ def test_reload_field_failure_warns_not_silent(monkeypatch, caplog) -> None:
             cfg.reload_settings_from_disk()
     finally:
         monkeypatch.undo()
-    assert any(
-        "kept its previous value" in record.message for record in caplog.records
-    )
+    assert any("kept its previous value" in record.message for record in caplog.records)
 
 
 def test_train_env_load_uses_shared_loader() -> None:
