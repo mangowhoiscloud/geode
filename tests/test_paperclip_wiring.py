@@ -281,15 +281,16 @@ def test_default_llm_call_normalizes_openai_codex_provider(
 
 
 def test_normalize_provider_for_registry_passes_through_known_keys() -> None:
-    """Non-codex provider keys pass through ``_normalize_provider_for_registry``
-    unchanged so the helper is conservative."""
-    from core.self_improving.loop.runner import _normalize_provider_for_registry
+    """Non-codex provider keys pass through ``normalize_registry_provider``
+    unchanged so the helper is conservative. PR-DRIFT-ANCHORS — the
+    runner's local copy was replaced by the shared anchor."""
+    from core.llm.adapters.registry import normalize_registry_provider
 
-    assert _normalize_provider_for_registry("anthropic") == "anthropic"
-    assert _normalize_provider_for_registry("openai") == "openai"
-    assert _normalize_provider_for_registry("glm") == "glm"
+    assert normalize_registry_provider("anthropic") == "anthropic"
+    assert normalize_registry_provider("openai") == "openai"
+    assert normalize_registry_provider("glm") == "glm"
     # Legacy Codex provider key collapses to the Path-B registry key.
-    assert _normalize_provider_for_registry("openai-codex") == "openai"
+    assert normalize_registry_provider("openai-codex") == "openai"
 
 
 def test_default_llm_call_api_key_path_unchanged(monkeypatch: pytest.MonkeyPatch) -> None:

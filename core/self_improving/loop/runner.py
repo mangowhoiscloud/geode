@@ -704,27 +704,6 @@ def _consume_last_llm_call_usage() -> dict[str, Any]:
     return snapshot
 
 
-def _normalize_provider_for_registry(provider: str) -> str:
-    """Translate :func:`core.config._resolve_provider` output to the
-    Path-B registry's provider key vocabulary.
-
-    Step J-b.2 (2026-05-23, Codex MCP HIGH fix-up) —
-    :func:`_resolve_provider` returns the broader provider keys
-    (``anthropic`` / ``openai`` / ``openai-codex`` / ``glm``). The
-    Path-B :func:`~core.llm.adapters.registry.resolve_for` registry uses
-    a narrower set: ``anthropic`` / ``openai`` / ``glm``. The Codex
-    distinction is encoded on the ``source`` axis instead (``CodexOAuthAdapter``
-    lives at ``provider="openai"`` ``source="subscription"``).
-
-    For a gpt-5.x model the legacy resolver returns ``"openai-codex"``;
-    the Path-B mutator collapses that to ``"openai"`` and lets the
-    source axis pick between ``payg`` / ``subscription`` / ``adapter``.
-    """
-    if provider == "openai-codex":
-        return "openai"
-    return provider
-
-
 def _default_llm_call(system_prompt: str, user_prompt: str) -> str:
     """Mutator LLM call.
 
@@ -808,6 +787,7 @@ def _default_llm_call(system_prompt: str, user_prompt: str) -> str:
     from core.llm.adapters import resolve_for
     from core.llm.adapters._source_inference import infer_source
     from core.llm.adapters.base import SOURCE_PAYG, AdapterCallRequest, Message
+    from core.llm.adapters.registry import normalize_registry_provider
     from core.llm.router import call_with_failover
 
     # PR-SOURCE-ROUTING (2026-05-28) — for the unpinned ``auto`` source, mirror the
@@ -819,7 +799,7 @@ def _default_llm_call(system_prompt: str, user_prompt: str) -> str:
     # route to PAYG; ``infer_source`` would otherwise re-derive subscription from a
     # present OAuth profile and silently ignore the operator's explicit lane choice.
     resolved_source = SOURCE_PAYG if source == "api_key" else infer_source(provider)
-    adapter = resolve_for(_normalize_provider_for_registry(provider), resolved_source)
+    adapter = resolve_for(normalize_registry_provider(provider), resolved_source)
     mutator_temperature = _settings.temperature_self_improving_mutation
 
     async def _do_call(m: str) -> object:

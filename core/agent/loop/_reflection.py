@@ -58,25 +58,8 @@ from core.agent.cognitive_state import CognitiveState
 from core.config import _resolve_provider
 from core.llm.adapters import resolve_for
 from core.llm.adapters.base import AdapterCallRequest, Message, ToolSpec
+from core.llm.adapters.registry import normalize_registry_provider
 from core.llm.router import call_with_failover
-
-
-def _normalize_provider_for_registry(provider: str) -> str:
-    """Translate :func:`core.config._resolve_provider` output to the
-    Path-B :func:`~core.llm.adapters.registry.resolve_for` registry's
-    provider-key vocabulary.
-
-    Step J-b.3 (2026-05-23) — duplicates the same translation used by
-    :func:`core.self_improving.loop.runner._normalize_provider_for_registry`.
-    The legacy resolver returns ``"openai-codex"`` for gpt-5.x; the
-    Path-B registry collapses that to ``"openai"`` and lets the
-    ``source`` axis pick between ``payg`` / ``subscription`` /
-    ``adapter``.
-    """
-    if provider == "openai-codex":
-        return "openai"
-    return provider
-
 
 log = logging.getLogger(__name__)
 
@@ -293,7 +276,7 @@ async def reflect_async(
         # credential source as the parent.
         from core.llm.adapters._source_inference import infer_source
 
-        adapter = resolve_for(_normalize_provider_for_registry(provider), infer_source(provider))
+        adapter = resolve_for(normalize_registry_provider(provider), infer_source(provider))
         tool_summary = _summarise_tool_results(tool_results)
         user_prompt = _build_user_prompt(state, tool_summary)
 

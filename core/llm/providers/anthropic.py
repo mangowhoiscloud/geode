@@ -16,6 +16,11 @@ from core.llm.fallback import (
     retry_with_backoff_generic,
     retry_with_backoff_generic_async,
 )
+from core.llm.model_capabilities import (
+    ANTHROPIC_ADAPTIVE_MODELS,
+    ANTHROPIC_CONTEXT_MGMT_MODELS,
+    ANTHROPIC_XHIGH_MODELS,
+)
 from core.llm.token_tracker import MODEL_CONTEXT_WINDOW
 
 if TYPE_CHECKING:
@@ -593,16 +598,10 @@ _API_ALLOWED_KEYS = frozenset(
 # context_overflow.  Only 1M-context models are known to support it.
 # Opus 4.8 (claude-opus-4-8) ships with a 1M context window and Claude Code
 # runs it under server-side compaction, so it inherits the same contract.
-_CONTEXT_MGMT_MODELS: frozenset[str] = frozenset(
-    {
-        "claude-opus-4-8",
-        "claude-opus-4-7",
-        "claude-opus-4-6",
-        "claude-opus-4-5",
-        "claude-sonnet-4-6",
-        "claude-sonnet-4-5",
-    }
-)
+# PR-DRIFT-ANCHORS (2026-06-10) — set contents live in the single SoT
+# ``core/llm/model_capabilities.py``; this alias keeps the local name the
+# rest of this module (and its tests) read.
+_CONTEXT_MGMT_MODELS: frozenset[str] = ANTHROPIC_CONTEXT_MGMT_MODELS
 
 # Adaptive thinking models (Opus 4.6+).  Sampling parameters
 # (temperature/top_p/top_k) are rejected with 400 starting from Opus 4.7
@@ -612,14 +611,7 @@ _CONTEXT_MGMT_MODELS: frozenset[str] = frozenset(
 # Opus 4.8 continues the 4.6+ adaptive-thinking contract (the effort knob —
 # incl. ``xhigh`` — only exists for adaptive models, and this session runs
 # claude-opus-4-8 under adaptive thinking; see _XHIGH_EFFORT_MODELS note).
-_ADAPTIVE_MODELS: frozenset[str] = frozenset(
-    {
-        "claude-opus-4-8",
-        "claude-opus-4-7",
-        "claude-opus-4-6",
-        "claude-sonnet-4-6",
-    }
-)
+_ADAPTIVE_MODELS: frozenset[str] = ANTHROPIC_ADAPTIVE_MODELS
 
 # v0.56.0 R4-mini — Opus 4.7 supports the new ``xhigh`` effort level (one
 # step above ``high``); 4.6 / Sonnet 4.6 reject it with 400. Mirrors
@@ -633,7 +625,7 @@ _ADAPTIVE_MODELS: frozenset[str] = frozenset(
 # emits it). ctx7 platform docs only index up to the 4.6/4.7 family pages, so
 # the 4.8-specific acceptance is grounded by the running harness rather than a
 # doc page.
-_XHIGH_EFFORT_MODELS: frozenset[str] = frozenset({"claude-opus-4-8", "claude-opus-4-7"})
+_XHIGH_EFFORT_MODELS: frozenset[str] = ANTHROPIC_XHIGH_MODELS
 
 
 def _supports_xhigh_effort(model: str) -> bool:

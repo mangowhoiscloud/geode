@@ -42,15 +42,11 @@ def _resolve_path_b_adapter(provider: str, source: str):  # type: ignore[no-unty
     adapter factory used by ``/model`` switching.
     """
     from core.llm.adapters import CONCRETE_SOURCES, resolve_for
+    from core.llm.adapters.registry import normalize_registry_provider
 
     if source not in CONCRETE_SOURCES:
         return None
-    # Legacy ``_resolve_provider`` returns ``openai-codex`` for gpt-5.x
-    # and ``zhipuai`` for GLM models; the Path-B registry uses the
-    # narrower vocabulary (``openai`` / ``glm``).
-    _PROVIDER_NORMALIZATION = {"openai-codex": "openai", "zhipuai": "glm"}
-    registry_provider = _PROVIDER_NORMALIZATION.get(provider, provider)
-    return resolve_for(registry_provider, source)
+    return resolve_for(normalize_registry_provider(provider), source)
 
 
 def _settings_model_target(loop: AgenticLoop) -> str | None:

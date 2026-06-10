@@ -45,6 +45,15 @@ functional change.
 
 ---
 
+## [0.99.151] - 2026-06-10
+
+### Changed
+- **Drift anchors (PR-DRIFT-ANCHORS): two literal-mirror families collapsed to single SoTs.**
+  - `PROVIDER_REGISTRY_NORMALIZATION` + `normalize_registry_provider()` (`core/llm/adapters/registry.py`) replace FOUR independent copies of the legacy→registry provider map (`agent_loop.__init__` + `_model_switching` carried the full dict; `runner._normalize_provider_for_registry` + `_reflection._normalize_provider_for_registry` carried only the openai half, with a comment admitting they were not sync'd). Adding a provider alias is now one edit; the two partial copies gain the `zhipuai → glm` mapping as a side effect (no-op on paths that never see zhipuai).
+  - `core/llm/model_capabilities.py` (new) anchors the Anthropic capability sets (`ANTHROPIC_CONTEXT_MGMT_MODELS` / `ANTHROPIC_ADAPTIVE_MODELS` / `ANTHROPIC_XHIGH_MODELS`); `core/llm/providers/anthropic.py` (request shaping) and `core/cli/effort_picker.py` (knob surfacing) alias the anchor objects instead of maintaining "Keep these in sync" literal copies — the 2026-05-29 opus-4-8 onboarding miss class. `tests/test_drift_anchors.py` pins identity (not equality — a re-introduced copy would be equal today and drift tomorrow), the xhigh ⊆ adaptive ⊆ context-mgmt subset invariants, the absence of literal copies at the four former sites, and the picker↔adapter xhigh agreement.
+
+---
+
 ## [0.99.150] - 2026-06-10
 
 ### Fixed
