@@ -132,9 +132,8 @@ class TestDefaultLanesDashboardMirror:
     ) -> None:
         """The container's dashboard mirror exposes the lane with the
         same cap as the module-level singleton resolver."""
-        from core.wiring.container import build_default_lanes
-
         from core import config as _config
+        from core.wiring.container import build_default_lanes
 
         class _StubSettings:
             gateway_max_concurrent = 0

@@ -70,9 +70,8 @@ class TestDefaultLanesDashboardMirror:
     def test_build_default_lanes_registers_codex_lane(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        from core.wiring.container import build_default_lanes
-
         from core import config as _config
+        from core.wiring.container import build_default_lanes
 
         class _StubSettings:
             gateway_max_concurrent = 0

@@ -84,9 +84,8 @@ def test_reader_only_kinds_match_env_override_block() -> None:
     """
     import inspect
 
-    from core.self_improving.loop.policies import _READER_ONLY_KINDS
-
     from core.self_improving import train as train_mod
+    from core.self_improving.loop.policies import _READER_ONLY_KINDS
 
     src = inspect.getsource(train_mod)
     # Each kind in _READER_ONLY_KINDS must have its env var present.

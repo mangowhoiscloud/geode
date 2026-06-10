@@ -730,7 +730,6 @@ def test_generate_with_tools_dispatches_to_bridge_path(tmp_path: Any) -> None:
 def test_generate_text_only_round_trip(tmp_path: Any) -> None:
     """End-to-end: fake claude binary → provider → ModelOutput."""
     from inspect_ai.model._model_output import ModelOutput
-
     from plugins.petri_audit import claude_cli_provider as p
 
     fake = tmp_path / "fake-claude"
@@ -846,7 +845,6 @@ def test_generate_with_tools_round_trip_returns_tool_calls(tmp_path: Any) -> Non
     """End-to-end CSA-2: fake claude binary emits tool_use stream-json →
     provider parses → ChatMessageAssistant.tool_calls populated."""
     from inspect_ai.model._model_output import ModelOutput
-
     from plugins.petri_audit import claude_cli_provider as p
 
     fake = tmp_path / "fake-claude"

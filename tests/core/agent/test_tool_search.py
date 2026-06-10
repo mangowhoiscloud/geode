@@ -12,6 +12,7 @@ import math
 from dataclasses import dataclass
 
 import pytest
+from core.agent import tool_search
 from core.agent.tool_search import (
     MIN_INVOCATIONS,
     WILSON_THRESHOLD,
@@ -20,8 +21,6 @@ from core.agent.tool_search import (
     format_tool_ranking_block,
     wilson_lower_bound,
 )
-
-from core.agent import tool_search
 
 
 @dataclass

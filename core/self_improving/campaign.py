@@ -42,7 +42,7 @@ never touch the cache).
 
 The campaign is split into pure, testable units (snapshot/restore, the
 propose-guard, the degeneracy guard, the gen-0 noise-band collection + K-mean
-baseline write) so the unit suite in ``tests/test_run_campaign.py`` can exercise
+baseline write) so the unit suite in ``tests/core/self_improving/test_run_campaign.py`` can exercise
 every boundary with mocks and NO live audit / network / PAYG spend. ``--dry-run``
 passes the flag through to ``train.py`` AND to the runner (``rerun_dry_run=True``)
 so the whole chain can be smoke-tested end-to-end with synthetic audits.
@@ -1914,7 +1914,7 @@ async def run_control_arms_async(
     This function raises ``ValueError`` if asked to run ``gate`` so the invariant
     cannot be violated by a mis-call.
 
-    INVARIANTS (each verified by ``tests/test_run_campaign.py``):
+    INVARIANTS (each verified by ``tests/core/self_improving/test_run_campaign.py``):
 
     * Attribution (#1): each cycle task is tagged with its arm; the gather's flat
       result list is PARTITIONED back by arm before aggregation, so a ``never``

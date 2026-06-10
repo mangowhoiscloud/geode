@@ -31,7 +31,7 @@ Plus shared clarification helpers in :mod:`clarification`
 The disk-persistent ``PlanStore`` singleton (``_PLAN_STORE`` /
 ``_get_plan_store``) lives at this package level so test fixtures can
 ``monkeypatch.setattr(th, "_PLAN_STORE", ...)`` without reaching into a
-sub-module — see ``tests/test_plan_mode.py`` for the fixture pattern.
+sub-module — see ``tests/core/orchestration/test_plan_mode.py`` for the fixture pattern.
 """
 
 from __future__ import annotations

@@ -28,7 +28,6 @@ def isolate_sessions_db(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path
     duration of each test + reset the ``agent_runtime_state`` module's
     cached connection so it picks up the override."""
     from core.memory.session_manager import SessionManager
-
     from core.observability import agent_runtime_state as ars
 
     db = tmp_path / "sessions.db"

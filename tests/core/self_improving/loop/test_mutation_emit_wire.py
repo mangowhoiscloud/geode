@@ -180,9 +180,8 @@ def test_revert_sot_after_reject_emits_mutation_reverted(
     with ``reason="promote_gate_reject"`` after the SoT roll-back
     succeeds. ``run_id`` carries ``GEODE_SIL_AUDIT_RUN_ID`` (the
     audit correlation key), NOT the mutation_id."""
-    from core.self_improving.loop.runner import Mutation, append_audit_log
-
     from core.self_improving import train
+    from core.self_improving.loop.runner import Mutation, append_audit_log
 
     # Seed a mutations.jsonl row that the revert function can look up.
     audit_log = tmp_path / "mutations.jsonl"

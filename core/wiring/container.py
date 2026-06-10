@@ -39,7 +39,7 @@ DEFAULT_GATEWAY_CONCURRENCY = 4
 # a false signal — leaf sub-agent calls still funnel through the global lane
 # and blocked at 8. The lane cap is now the same load shape the global
 # semaphore can actually deliver, and an explicit invariant test in
-# ``tests/test_lane_queue.py`` guards future drift. Re-raising the cap is
+# ``tests/core/orchestration/test_lane_queue.py`` guards future drift. Re-raising the cap is
 # fine once the global lane grows OR a Claude-CLI-specific sub-agent lane
 # isolates that path (see [[project_lanequeue_handoff_2026_05_22]] Phase 2).
 DEFAULT_SEED_PIPELINE_CONCURRENCY = 50
@@ -182,7 +182,7 @@ def build_default_lanes() -> LaneQueue:
     Hierarchy invariant (PR-LQ-Phase1, 2026-05-22): every workload lane's
     ``max_concurrent`` MUST be <= the ``global`` lane's cap. A workload
     cap larger than global is a false signal — the leaf semaphore still
-    blocks at the global cap. ``tests/test_lane_queue.py`` pins the
+    blocks at the global cap. ``tests/core/orchestration/test_lane_queue.py`` pins the
     invariant.
     """
     from core.orchestration.lane_queue import SessionLane

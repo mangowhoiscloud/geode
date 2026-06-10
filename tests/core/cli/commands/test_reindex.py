@@ -11,9 +11,8 @@ import sqlite3
 from pathlib import Path
 
 import pytest
-from typer.testing import CliRunner
-
 from core.cli import app
+from typer.testing import CliRunner
 
 _MESSAGES_SCHEMA_SQL = """
 CREATE TABLE messages (

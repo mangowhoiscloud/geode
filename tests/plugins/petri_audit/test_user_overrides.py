@@ -5,7 +5,6 @@ from __future__ import annotations
 from pathlib import Path
 
 import pytest
-
 from plugins.petri_audit import user_overrides as uo
 
 

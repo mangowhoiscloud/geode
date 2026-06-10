@@ -48,7 +48,6 @@ def test_payg_and_oauth_anthropic_get_distinct_clients(
     """
     import core.llm.adapters.anthropic_oauth as oauth_mod
     import core.llm.adapters.anthropic_payg as payg_mod
-
     from core.llm.adapters import _anthropic_common
 
     # Stub the SDK boundary so we don't hit anthropic.AsyncAnthropic.

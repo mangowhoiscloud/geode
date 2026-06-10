@@ -7,6 +7,7 @@ shape, and the graceful no-op for unrecognised models.
 from __future__ import annotations
 
 import pytest
+from core.llm import model_guidance
 from core.llm.model_guidance import (
     FAMILY_ANTHROPIC,
     FAMILY_GLM,
@@ -18,8 +19,6 @@ from core.llm.model_guidance import (
     render_model_guidance,
     resolve_family,
 )
-
-from core.llm import model_guidance
 
 
 def test_five_canonical_families_covered():

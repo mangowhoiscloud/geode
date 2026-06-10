@@ -8,13 +8,12 @@ from pathlib import Path
 from typing import Any
 
 import pytest
+from plugins.petri_audit import bundle_sync
 from plugins.petri_audit.bundle_sync import (
     _extract_listing_entry,
     _merge_listing,
     sync_eval_to_bundle,
 )
-
-from plugins.petri_audit import bundle_sync
 
 
 def _make_eval(path: Path, header: dict[str, Any]) -> Path:

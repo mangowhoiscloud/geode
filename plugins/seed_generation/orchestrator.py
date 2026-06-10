@@ -50,6 +50,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from core.hooks import HookEvent, HookSystem
+
 from plugins.seed_generation.agents.base import BaseSeedAgent, SeedAgentResult
 
 if TYPE_CHECKING:

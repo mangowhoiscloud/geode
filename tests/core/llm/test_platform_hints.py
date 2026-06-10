@@ -10,6 +10,7 @@ from __future__ import annotations
 import contextvars
 
 import pytest
+from core.llm import platform_hints
 from core.llm.platform_hints import (
     GEODE_SURFACE_TYPE_ENV,
     PLATFORM_HINTS,
@@ -24,8 +25,6 @@ from core.llm.platform_hints import (
     render_platform_hint,
     set_current_surface,
 )
-
-from core.llm import platform_hints
 
 
 @pytest.fixture(autouse=True)
