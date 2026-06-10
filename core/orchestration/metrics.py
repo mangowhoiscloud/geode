@@ -4,7 +4,7 @@ Consumes HookSystem events (LLM_CALL_END, TOOL_RECOVERY_*, SESSION_END)
 and produces structured metrics for observability and ML evaluation.
 
 Usage:
-    metrics = SessionMetrics()
+    metrics = LatencyMetrics()
     metrics.record_llm_call(model="claude-opus-4-6", latency_ms=1200, error=None)
     summary = metrics.summary()
     # → {"llm": {"total_calls": 5, "p50_ms": 1200, "p95_ms": 3400, ...}, ...}
@@ -22,8 +22,13 @@ log = logging.getLogger(__name__)
 
 
 @dataclass
-class SessionMetrics:
-    """Accumulates structured metrics for a single session."""
+class LatencyMetrics:
+    """Accumulates latency/recovery aggregates for a single session.
+
+    Renamed from ``SessionMetrics`` (S-6, 2026-06-11) — it collided with
+    ``core.observability.session_metrics.SessionMetrics`` (the hermes-parity
+    cost/token tracker). This class is the hook-fed percentile aggregator.
+    """
 
     _llm_latencies: list[float] = field(default_factory=list)
     _llm_errors: int = 0
@@ -123,9 +128,9 @@ def _percentile(sorted_data: list[float], pct: int) -> float:
 
 
 def make_metrics_hook_handler(
-    metrics: SessionMetrics,
+    metrics: LatencyMetrics,
 ) -> list[tuple[str, str, Any]]:
-    """Create hook handlers that feed events into SessionMetrics.
+    """Create hook handlers that feed events into LatencyMetrics.
 
     Returns list of (event_name, handler_name, handler_fn) tuples
     for registration in HookSystem.

@@ -8,12 +8,12 @@
 
 A general-purpose autonomous execution agent built on LangGraph. Autonomously performs research, analysis, automation, and scheduling.
 
-- **Version**: 0.99.158
+- **Version**: 0.99.159
 - **Python**: >= 3.12
 - **Package Manager**: uv
 - **Entry Points**: `geode` (`core.cli:app`, Typer) / `geode-mcp` (`core.mcp_server:main`)
 - **Modules**: 375 core + 67 plugins = 442
-- **Tests**: 8519 (+1 live)
+- **Tests**: 8528 (+1 live)
 - **CHANGELOG**: `CHANGELOG.md` (Keep a Changelog + SemVer)
 
 ## Quick Start

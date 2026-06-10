@@ -843,11 +843,13 @@ def _resolve_worker_outcome(
 
 def main() -> None:
     """Worker entry point. Reads request from stdin, writes result to stdout."""
-    logging.basicConfig(
-        level=logging.WARNING,
-        format="%(levelname)s %(name)s: %(message)s",
-        stream=sys.stderr,  # Logs go to stderr; stdout reserved for result JSON
-    )
+    # S-6 (2026-06-11) — unified switchboard. WARNING level keeps stderr
+    # quiet (stdout is reserved for the result JSON); warnings/errors now
+    # also persist to ~/.geode/logs/worker.log instead of dying with the
+    # subprocess.
+    from core.observability.logging_config import configure_logging
+
+    configure_logging("worker", level=logging.WARNING)
 
     # Post-MAINPATH-1 (#1572) the AgenticLoop's main body resolves the LLM
     # call site through Path-B ``core.llm.adapters.registry.resolve_for``.

@@ -45,6 +45,19 @@ functional change.
 
 ---
 
+## [0.99.159] - 2026-06-11
+
+### Fixed
+- **sessions.jsonl rows now carry run metrics (S-6 observability audit, HIGH).** `SessionMetrics.to_session_row()` was fully implemented and tested but had ZERO production callers — every run's tokens / cost / retry / verify counters were accumulated in memory and dropped. `train.py` now seeds the run-scoped `SessionMetrics` with its identity (session_id / gen_tag / component) at main() start and spreads the metrics row into the `_append_session_index` extra payload (identity keys stripped; explicit kwargs stay authoritative). Pinned by `tests/test_s6_observability.py`.
+
+### Changed
+- **Run-log fold** — `core/orchestration/run_log.py` (RunLog) and `core/scheduler/run_log.py` (JobRunLog) implemented the same JSONL + lock + atomic-prune pattern twice; both now live in `core/observability/run_log.py` on a shared `JsonlAppendLog` base (APIs unchanged, callers migrated, scheduler resolves its own default dir at the call site). The pre-fold contract that prune honors post-construction `MAX_BYTES`/`MAX_LINES` mutation is preserved and pinned.
+- **SessionMetrics namespace collision resolved** — `core/orchestration/metrics.py`'s 6-field hook-fed percentile aggregator renamed `LatencyMetrics` (it collided with the hermes-parity cost/token `core/observability/session_metrics.SessionMetrics`).
+- **Unified entry-point logging switchboard** — new `core/observability/logging_config.configure_logging(mode)`: serve keeps `serve.log` (path + 10MB x5 rotation contract), and `geode-mcp` / worker / campaign gain rotating file logs under `~/.geode/logs/` instead of stderr-only diagnostics that died with the process (campaign keeps its bare console format; worker keeps WARNING console with stdout reserved for result JSON).
+
+### Removed
+- Dead checkpoint deps: explicit `langgraph-checkpoint` pin (transitive via `langgraph` anyway) and `langgraph-checkpoint-sqlite` (+`sqlite-vec`) — zero imports in core/plugins (the only references were warning-suppression logger names and a docstring).
+
 ## [0.99.158] - 2026-06-11
 
 ### Changed

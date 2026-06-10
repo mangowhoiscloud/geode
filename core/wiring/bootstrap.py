@@ -19,8 +19,8 @@ if TYPE_CHECKING:
     from core.memory.port import SessionStorePort
     from core.memory.project import ProjectMemory
     from core.memory.user_profile import FileBasedUserProfile
+    from core.observability.run_log import RunLog
     from core.orchestration.hot_reload import ConfigWatcher
-    from core.orchestration.run_log import RunLog
     from core.orchestration.task_system import TaskGraph
 
 from core.hooks import HookEvent, HookSystem
@@ -35,11 +35,11 @@ log = logging.getLogger(__name__)
 # never pays for the orchestration / memory / hot-reload trees.
 def __getattr__(name: str) -> Any:
     if name == "RunLog":
-        from core.orchestration.run_log import RunLog as _RunLog
+        from core.observability.run_log import RunLog as _RunLog
 
         return _RunLog
     if name == "RunLogEntry":
-        from core.orchestration.run_log import RunLogEntry as _RunLogEntry
+        from core.observability.run_log import RunLogEntry as _RunLogEntry
 
         return _RunLogEntry
     raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
@@ -64,7 +64,7 @@ def _make_run_log_handler(
     run_id: str,
 ) -> tuple[str, Any]:
     """Create a hook handler that writes events to RunLog."""
-    from core.orchestration.run_log import RunLogEntry
+    from core.observability.run_log import RunLogEntry
 
     def _log_event(event: HookEvent, data: dict[str, Any]) -> None:
         entry = RunLogEntry(
@@ -129,8 +129,8 @@ def build_hooks(
     run_id: str,
     log_dir: Path | str | None,
 ) -> tuple[HookSystem, RunLog, Any]:
-    """Build HookSystem with RunLog and SessionMetrics."""
-    from core.orchestration.run_log import RunLog
+    """Build HookSystem with RunLog and LatencyMetrics."""
+    from core.observability.run_log import RunLog
 
     hooks: HookSystem = HookSystem()
 
@@ -675,9 +675,9 @@ def build_hooks(
     _register_plugin("audit_loggers", _reg_audit_loggers)
 
     # C10: Structured metrics — p50/p95 latency, success rates
-    from core.orchestration.metrics import SessionMetrics, make_metrics_hook_handler
+    from core.orchestration.metrics import LatencyMetrics, make_metrics_hook_handler
 
-    session_metrics = SessionMetrics()
+    session_metrics = LatencyMetrics()
 
     def _reg_metrics() -> None:
         for event_name, handler_name, handler_fn in make_metrics_hook_handler(session_metrics):

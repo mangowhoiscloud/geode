@@ -6,7 +6,7 @@ import json
 from pathlib import Path
 
 import pytest
-from core.orchestration.run_log import RunLog, RunLogEntry
+from core.observability.run_log import RunLog, RunLogEntry
 
 
 @pytest.fixture
