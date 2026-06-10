@@ -51,7 +51,8 @@ def poller(monkeypatch) -> CLIPoller:
 def test_sync_repoints_live_loop_model(poller: CLIPoller, monkeypatch) -> None:
     monkeypatch.setattr("core.config.settings", _FakeSettings(), raising=False)
     loop = _FakeLoop()
-    poller._sync_live_loop_to_settings(loop)
+    # primary moved: model_before is the old value, settings.model is the new
+    poller._sync_live_loop_to_settings(loop, "claude-opus-4-8", "high")
     assert loop.model == "claude-fable-5"
     assert loop._provider == "anthropic"
     assert loop.adapted_to == "claude-fable-5"
@@ -60,8 +61,25 @@ def test_sync_repoints_live_loop_model(poller: CLIPoller, monkeypatch) -> None:
 def test_sync_repoints_effort(poller: CLIPoller, monkeypatch) -> None:
     monkeypatch.setattr("core.config.settings", _FakeSettings(), raising=False)
     loop = _FakeLoop()
-    poller._sync_live_loop_to_settings(loop)
+    poller._sync_live_loop_to_settings(loop, "claude-opus-4-8", "high")
     assert loop._effort == "xhigh"
+
+
+def test_sync_noop_when_primary_unchanged(poller: CLIPoller, monkeypatch) -> None:
+    """A /model command that did NOT move settings.model (role switch, unknown
+    model, list) must not touch the live loop — even if loop.model already
+    differs from settings.model (client_capability adopted a project model).
+    This is the Codex-flagged role-clobber regression."""
+    monkeypatch.setattr("core.config.settings", _FakeSettings(), raising=False)
+    loop = _FakeLoop()
+    # loop adopted fable-5 at session start via client_capability; settings.model
+    # is the daemon's stale opus-4-8. A `/model reflection X` leaves
+    # settings.model == model_before (= "claude-fable-5" here as the captured
+    # pre-command value), so nothing should move.
+    loop.model = "claude-fable-5"
+    poller._sync_live_loop_to_settings(loop, model_before="claude-fable-5", effort_before="xhigh")
+    assert loop.model == "claude-fable-5"  # NOT clobbered back to settings.model
+    assert loop.adapted_to is None
 
 
 def test_sync_noop_when_already_current(poller: CLIPoller, monkeypatch) -> None:
@@ -71,8 +89,8 @@ def test_sync_noop_when_already_current(poller: CLIPoller, monkeypatch) -> None:
 
     monkeypatch.setattr("core.config.settings", _SameSettings(), raising=False)
     loop = _FakeLoop()
-    poller._sync_live_loop_to_settings(loop)
-    # unchanged model → no context re-adapt fired
+    # primary "changed" to the value the loop already holds → no re-adapt
+    poller._sync_live_loop_to_settings(loop, "claude-haiku-4-5", "high")
     assert loop.adapted_to is None
     assert loop.model == "claude-opus-4-8"
 
@@ -82,7 +100,9 @@ def test_handle_command_on_server_syncs_after_model(poller: CLIPoller, monkeypat
     must not."""
     source = inspect.getsource(CLIPoller._handle_command_on_server)
     assert 'cmd == "/model"' in source
-    assert "_sync_live_loop_to_settings(loop)" in source
+    assert "_sync_live_loop_to_settings(loop, model_before, effort_before)" in source
+    # gated on the pre-command primary value, not loop.model
+    assert "model_before" in source
 
 
 def test_sync_survives_apply_failure(poller: CLIPoller, monkeypatch) -> None:
@@ -94,5 +114,5 @@ def test_sync_survives_apply_failure(poller: CLIPoller, monkeypatch) -> None:
     monkeypatch.setattr("core.config.settings", _FakeSettings(), raising=False)
     monkeypatch.setattr("core.agent.loop._model_switching._apply_model_update", _boom)
     loop = _FakeLoop()
-    poller._sync_live_loop_to_settings(loop)  # must not raise
+    poller._sync_live_loop_to_settings(loop, "claude-opus-4-8", "high")  # must not raise
     assert loop._effort == "xhigh"  # effort axis still applied

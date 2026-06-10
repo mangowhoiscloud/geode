@@ -882,6 +882,22 @@ class CLIPoller:
         """
         cmd = msg.get("cmd", "")
         args = msg.get("args", "")
+        # Capture the primary model + effort BEFORE the command so the live-loop
+        # sync below fires only when THIS /model actually changed the primary
+        # axis. A role-specific switch (``/model reflection X`` writes
+        # ``cognitive_reflection_model``), an unknown/login-blocked/list/
+        # already-current ``/model``, or ``/model`` with no primary change must
+        # NOT touch the live loop — otherwise it would clobber the model the
+        # client_capability path adopted at session start (which moves
+        # ``loop.model`` WITHOUT moving ``settings.model``). See Codex review,
+        # 2026-06-11.
+        model_before = ""
+        effort_before = ""
+        if cmd == "/model" and loop is not None:
+            from core.config import settings as _pre_settings
+
+            model_before = (getattr(_pre_settings, "model", "") or "").strip()
+            effort_before = (getattr(_pre_settings, "agentic_effort", "") or "").strip()
         try:
             from core.cli import _handle_command
             from core.ui.console import capture_output
@@ -904,7 +920,7 @@ class CLIPoller:
             # (2026-06-11) — the thin-CLI ↔ daemon model gap. Sync the live
             # loop here so the switch lands in the SAME session.
             if cmd == "/model" and loop is not None:
-                self._sync_live_loop_to_settings(loop)
+                self._sync_live_loop_to_settings(loop, model_before, effort_before)
             return {
                 "type": "command_result",
                 "cmd": cmd,
@@ -921,8 +937,8 @@ class CLIPoller:
                 "message": str(exc),
             }
 
-    def _sync_live_loop_to_settings(self, loop: Any) -> None:
-        """Re-point the live session loop at the daemon's current settings.
+    def _sync_live_loop_to_settings(self, loop: Any, model_before: str, effort_before: str) -> None:
+        """Re-point the live session loop after a ``/model`` changed the primary.
 
         Called right after a ``/model`` command lands on the daemon. The
         command updated ``settings.model`` (+ ``settings.agentic_effort``)
@@ -935,6 +951,17 @@ class CLIPoller:
         re-pointed directly, matching ``services.create_session``'s
         constructor bridge.
 
+        Gated on ``settings.model != model_before`` (the value captured before
+        the command ran), NOT on ``settings.model != loop.model``. Only a
+        command that *actually moved the primary axis* should touch the live
+        loop: a role-specific ``/model reflection X`` moves
+        ``cognitive_reflection_model`` and leaves ``settings.model`` untouched,
+        and an unknown/blocked/list ``/model`` moves nothing — in both cases
+        ``loop.model`` may legitimately differ from ``settings.model`` because
+        the ``client_capability`` path adopted the thin CLI's project model
+        without moving the singleton. Gating on the singleton delta keeps those
+        cases from clobbering the live loop. (Codex review, 2026-06-11.)
+
         Why an explicit sync rather than the old per-turn drift sync:
         ``_model_switching.sync_model_from_settings_async`` was cut to a
         no-op (PR-DRIFT-CUT, 2026-05-24) because *inferring* drift from
@@ -942,14 +969,16 @@ class CLIPoller:
         incident. The cut left ``/model`` as the operator's sole explicit
         entry point — so the switch must be pushed at the command boundary,
         not inferred. This is that push: it fires ONLY on an explicit
-        ``/model`` command, so it carries the operator's intent without
-        reintroducing speculative drift.
+        ``/model`` command that moved the primary axis, so it carries the
+        operator's intent without reintroducing speculative drift.
         """
         from core.agent.loop import _model_switching
         from core.config import _resolve_provider, settings
 
         target = (settings.model or "").strip()
-        if target and target != getattr(loop, "model", ""):
+        # Only sync when this command moved the primary axis AND the live loop
+        # hasn't already caught up.
+        if target and target != model_before and target != getattr(loop, "model", ""):
             try:
                 old_model, changed = _model_switching._apply_model_update(
                     loop, target, _resolve_provider(target)
@@ -962,7 +991,11 @@ class CLIPoller:
                 log.warning("model command: live loop model sync failed", exc_info=True)
 
         new_effort = (getattr(settings, "agentic_effort", "") or "").strip()
-        if new_effort and getattr(loop, "_effort", None) != new_effort:
+        if (
+            new_effort
+            and new_effort != effort_before
+            and getattr(loop, "_effort", None) != new_effort
+        ):
             loop._effort = new_effort
             log.info("model command: live session effort synced to %s", new_effort)
 
