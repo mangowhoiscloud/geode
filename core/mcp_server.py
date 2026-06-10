@@ -23,7 +23,6 @@ Register in an MCP host (example, Claude Code):
 from __future__ import annotations
 
 import json
-import logging
 from pathlib import Path
 from typing import Any
 
@@ -207,9 +206,9 @@ def create_mcp_server() -> Any:
 
 def main() -> None:
     """Entry point for running the MCP server (``geode-mcp`` console script)."""
-    import sys
+    from core.observability.logging_config import configure_logging
 
-    logging.basicConfig(level=logging.INFO, stream=sys.stderr)
+    configure_logging("mcp")
     server = create_mcp_server()
     server.run()
 

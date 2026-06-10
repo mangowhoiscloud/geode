@@ -4445,6 +4445,22 @@ def main() -> int:
     commit = os.environ.get("GIT_COMMIT", "HEAD")[:7]
     gen_tag = _resolve_gen_tag(commit)
 
+    # S-6 (2026-06-11) — seed the run-scoped SessionMetrics with its identity
+    # up-front so every accumulate_llm_call() (mutator dispatch, agent loop)
+    # folds into a row that already knows session_id/gen_tag. Pre-fix the
+    # ContextVar lazy-init created an anonymous instance and the identity
+    # fields stayed empty ("declared but unscoped" audit finding).
+    from core.observability import SessionMetrics, set_current_session_metrics
+
+    set_current_session_metrics(
+        SessionMetrics(
+            session_id=session_id,
+            gen_tag=gen_tag,
+            component="autoresearch",
+            started_at=started_at,
+        )
+    )
+
     # E3 (2026-05-30) — resolve the control-arm promote policy + seed once,
     # up-front (env → CLI → config → default), so the SAME values tag both the
     # per-cycle held-out record AND the baseline registry row, and drive the
@@ -5354,6 +5370,17 @@ def main() -> int:
             )
 
     # P1a — append to the shared cross-loop session registry.
+    # S-6 (2026-06-11) — merge the run's SessionMetrics row (hermes parity:
+    # tokens / cost / retries / verify counters). ``to_session_row()`` was
+    # fully implemented and tested but had ZERO production callers, so
+    # sessions.jsonl rows silently carried no metrics. Identity keys are
+    # dropped from the metrics row — the explicit kwargs below stay the
+    # authoritative source for session_id / gen_tag / component / started_at.
+    from core.observability import current_session_metrics
+
+    _metrics_row = current_session_metrics().to_session_row()
+    for _identity_key in ("session_id", "gen_tag", "component", "started_at"):
+        _metrics_row.pop(_identity_key, None)
     _append_session_index(
         session_id=session_id,
         gen_tag=gen_tag,
@@ -5366,6 +5393,7 @@ def main() -> int:
             "verdict": verdict,
             "promoted": promoted_line,
             "dry_run": args.dry_run,
+            **_metrics_row,
         },
     )
 

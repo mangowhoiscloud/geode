@@ -225,7 +225,7 @@ class ContextAssembler:
             return
 
         try:
-            from core.orchestration.run_log import RunLog
+            from core.observability.run_log import RunLog
 
             # Scan all JSONL files in run_log_dir for pipeline_end events
             if not self._run_log_dir.exists():

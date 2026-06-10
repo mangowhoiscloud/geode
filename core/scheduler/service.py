@@ -16,6 +16,7 @@ import time
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
+from core.observability.run_log import JobRunLog
 from core.scheduler.jitter import _jittered_next_run
 from core.scheduler.lock import SchedulerLock
 from core.scheduler.models import (
@@ -30,7 +31,6 @@ from core.scheduler.models import (
     ScheduledJob,
     ScheduleKind,
 )
-from core.scheduler.run_log import JobRunLog
 from core.scheduler.serialization import _job_from_dict, _job_to_dict
 from core.scheduler.timezone import _cron_tuple_for_tz, _now_minutes, _parse_hhmm
 from core.scheduler.triggers import CronParser, TriggerManager
@@ -70,7 +70,7 @@ class SchedulerService:
         self._store_path = store_path if store_path is not None else DEFAULT_STORE_PATH
         self._store_path_explicit = store_path is not None
         self._session_id = session_id or f"pid-{os.getpid()}"
-        self._run_log = JobRunLog(log_dir=log_dir)
+        self._run_log = JobRunLog(log_dir=log_dir if log_dir is not None else DEFAULT_LOG_DIR)
         self._jobs: dict[str, ScheduledJob] = {}
         self._lock = threading.Lock()
         self._thread: threading.Thread | None = None

@@ -6,9 +6,9 @@ from pathlib import Path
 
 import pytest
 from core.memory.session import InMemorySessionStore
+from core.observability.run_log import RunLog
 from core.orchestration.hot_reload import ConfigWatcher
 from core.orchestration.lane_queue import LaneQueue
-from core.orchestration.run_log import RunLog
 from core.orchestration.task_system import TaskGraph
 from core.runtime import GeodeRuntime
 from core.tools.policy import PolicyChain
