@@ -17,7 +17,7 @@
 <!-- Move items here when work begins. -->
 <!-- 3-Checkpoint: (1) alloc → (2) merge (CI 5/5) → (3) verify -->
 - [ ] Audit bundle D-3 — operator decision menu delivered (G1-G4 guardrails / M4.x DPO chain / recall_writer / mcp_server / seed-pool STATE_ROOT semantics / AUTORESEARCH_VERDICT writer); awaiting picks
-- [ ] Folder-structure audit — agent running (slop + inefficiency sweep)
+- [ ] Folder-structure audit follow-ups — report delivered (F1/F2 stale, already shipped in D-1); standing: loop/ 32-module split + train.py 5,510L, tests/ triple convention (330 flat vs 190 nested + dup self_improving roots), cli cmd_*/commands/ dual home, misplaced modules (bash_tool/run_log ×2/audit_lane/seed tools), scripts→CLI promotion, integrations→messaging flatten, husk sweep, layer map 11/21
 
 ## In Review
 
