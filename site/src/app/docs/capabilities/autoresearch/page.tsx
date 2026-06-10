@@ -6,10 +6,10 @@ export default function Page() {
   return (
     <DocsShell
       slug="capabilities/autoresearch"
-      title="Autoresearch"
-      titleKo="자가 ML 실험 루프"
-      summary="Karpathy autoresearch fork wired into GEODE. Closed-loop generation runner with G1-G6 stability gates and a 9-column tsv results stream."
-      summaryKo="Karpathy autoresearch fork 를 GEODE 안 에 통합. G1-G6 안정성 게이트 + 9-col tsv 결과 스트림으로 동작하는 closed-loop generation runner."
+      title="The closed loop"
+      titleKo="폐루프"
+      summary="The outer loop end to end. Mutate the scaffold, audit with Petri, attribute the result, then promote or revert. No weight or parameter ever changes."
+      summaryKo="바깥쪽 루프의 전체 흐름입니다. 스캐폴드를 변이하고, Petri로 감사하고, 결과를 귀속해 승격하거나 되돌립니다. 모델 가중치는 바꾸지 않습니다."
     >
       <Bi
         ko={

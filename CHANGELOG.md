@@ -45,6 +45,30 @@ functional change.
 
 ---
 
+## [0.99.168] - 2026-06-11
+
+### Added
+- **Docs content canon + banned-term CI gate.** `site/CONTENT-CANON.md` fixes the
+  docs-wide identity contract: GEODE's self-improving loop is selection over a
+  scaffold (mutate, audit with Petri, gate, promote/revert via git champion
+  chain), never ML — no weight, parameter, or policy update. The canon also pins
+  the 5-layer architecture wording, grounding rules (code paths without line
+  numbers), the bilingual style contract, and the 3-tier visualization spec
+  (ASCII default, build-time Mermaid SVG, hand-authored signature SVG).
+  `scripts/check_docs_canon.py` enforces the vocabulary on the docs surface
+  (pages, landing, docs chrome, sitemap) with inline `canon-ok` waivers and a
+  file-scoped waiver registry for comparison pages; wired into `pages.yml` as a
+  blocking step next to the link audit.
+
+### Fixed
+- **Docs mischaracterized the self-improving loop as an ML loop.** The
+  `capabilities/autoresearch` page title said "자가 ML 실험 루프" and its summary
+  advertised deleted G1-G6 gates; `capabilities/outer-loop` called autoresearch a
+  "self-driving ML loop"; `capabilities/seed-pipeline` repeated the phrase. All
+  rephrased to the selection vocabulary (no weights touched). Karpathy-project
+  references in `explanation/ratchet` keep the term with explicit waivers since
+  his autoresearch genuinely is an ML experiment loop.
+
 ## [0.99.167] - 2026-06-11
 
 ### Changed

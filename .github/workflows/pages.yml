@@ -192,6 +192,13 @@ jobs:
         working-directory: ${{ github.workspace }}
         run: uv run python scripts/check_docs_links.py
 
+      # Content-canon gate: the self-improving loop is selection over a
+      # scaffold, not ML (site/CONTENT-CANON.md §2). Blocks banned vocabulary
+      # ("ML loop", "RL", "fine-tuning", ...) on the docs surface.
+      - name: Docs canon audit (banned terms)
+        working-directory: ${{ github.workspace }}
+        run: uv run python scripts/check_docs_canon.py
+
       # Resolve the /geode basePath for the external checker: the built files
       # live in site/out but ship under /geode/..., so symlink _lc/geode ->
       # site/out and point lychee's --root-dir at _lc. The symlink lives outside
