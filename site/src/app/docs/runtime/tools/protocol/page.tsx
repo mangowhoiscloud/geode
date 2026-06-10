@@ -1,162 +1,259 @@
 import { DocsShell, Bi } from "@/components/geode-docs/docs-shell";
 
-export const metadata = { title: "Tool Protocol — GEODE Docs" };
+export const metadata = { title: "Tools and toolsets — GEODE Docs" };
 
 export default function Page() {
   return (
     <DocsShell
       slug="runtime/tools/protocol"
-      title="Tool Protocol"
-      titleKo="도구 프로토콜"
-      summary="Tool protocol, registry, deferred loading. A tool registry with always-loaded and deferred tiers, single JSON SOT at core/tools/definitions.json."
-      summaryKo="도구 프로토콜, 레지스트리, 지연 로딩. 상시 로드 티어와 지연 로드 티어로 나뉜 도구 레지스트리, 단일 JSON SOT가 core/tools/definitions.json에 있습니다."
+      title="Tools and toolsets"
+      titleKo="도구와 툴셋"
+      summary="The tool registry and deferred loading. A few tools load up front, the rest are fetched on demand."
+      summaryKo="도구 레지스트리와 지연 로딩입니다. 일부 도구는 미리 로드하고, 나머지는 필요할 때 가져옵니다."
     >
       <Bi
         ko={
           <>
-            <h2>프로토콜</h2>
             <p>
-              <code>core/tools/base.py:35</code>가 <code>Tool</code>을 Protocol
-              클래스로 정의합니다. 네이티브, MCP, 플러그인을 막론하고 모든 도구가
-              아래를 구현합니다.
+              도구 시스템은 세 가지 질문에 답합니다. 도구는 어디 정의되는가
+              (레지스트리), 매 호출에 어떤 도구를 싣는가 (지연 로딩),
+              서브에이전트에게 어떤 도구를 주는가 (툴킷)입니다.
             </p>
-            <pre>{`class Tool(Protocol):
-    name: str
-    description: str
-    input_schema: dict[str, Any]
-    async def execute(self, **kwargs) -> Any: ...`}</pre>
 
-            <h2>단일 진실의 출처</h2>
+            <h2>레지스트리</h2>
             <p>
-              <code>core/tools/definitions.json</code>이 도구 메타데이터 (이름,
-              설명, 스키마, 상시 로드 플래그) 를 중앙 집중화합니다. 핸들러는 카테고리
-              모듈 (<code>core/tools/file_tools.py</code>,{" "}
-              <code>core/tools/memory_tools.py</code> 등) 에 있고, 이름으로 레지스트리에
-              연결됩니다.
+              <code>core/tools/registry.py</code>의 <code>ToolRegistry</code>가
+              네이티브 도구를 관리합니다. 정의의 SoT는{" "}
+              <code>core/tools/definitions.json</code> 하나입니다. 이름, 설명,
+              입력 스키마가 모두 여기 모이고, 핸들러는 카테고리 모듈에서
+              이름으로 연결됩니다. MCP 클라이언트(<code>core/mcp/</code>)가
+              발견한 외부 도구는 호출 시점에 네이티브 도구와 병합됩니다.{" "}
+              <a href="/geode/docs/runtime/tools/mcp">MCP 서버</a> 참고.
             </p>
 
             <h2>지연 로딩</h2>
             <p>
-              모든 LLM 호출마다 도구 정의 전체를 보내면 턴당 input 토큰을 크게
-              태우게 됩니다. GEODE는 카탈로그를 분할합니다.
+              모든 도구 스키마를 모든 호출에 실으면 턴마다 input 토큰을 크게
+              태웁니다. <code>ToolRegistry.to_anthropic_tools_with_defer</code>가
+              카탈로그를 나눕니다.
             </p>
             <table>
-              <thead><tr><th>티어</th><th>동작</th></tr></thead>
+              <thead>
+                <tr><th>조건</th><th>동작</th></tr>
+              </thead>
               <tbody>
-                <tr><td>상시 로드</td><td>모든 LLM 호출에서 전송. <code>memory_search</code>, <code>memory_get</code>, <code>memory_save</code>, <code>web_search</code>, <code>wanted_jobs_search</code>.</td></tr>
-                <tr><td>지연 로드</td><td><code>tool_search</code>로 발견 가능, 요청 시 로드. 전체 도구 수가 <code>defer_threshold</code> (기본 10) 를 넘으면 활성화됩니다.</td></tr>
+                <tr>
+                  <td>네이티브 + MCP 합계가 <code>defer_threshold</code>(기본 10) 이하</td>
+                  <td>전부 즉시 로드</td>
+                </tr>
+                <tr>
+                  <td>임계값 초과</td>
+                  <td><code>tool_search</code> 메타 도구를 추가하고, 상시 로드 5종만 즉시 싣고, 나머지는 <code>defer_loading=True</code>로 표시해 검색 후 로드</td>
+                </tr>
               </tbody>
             </table>
             <p>
-              상시 로드 도구의 frozenset은{" "}
-              <code>core/tools/registry.py:215-223</code>에{" "}
-              <code>ALWAYS_LOADED_TOOLS</code>로 정의됩니다.
-            </p>
-            <p>
-              이 패턴은 Claude Code의 도구 지연 로딩 설계에서 빌려온 것입니다.
+              상시 로드 도구는 <code>ALWAYS_LOADED_TOOLS</code>에 고정된
+              다섯입니다. <code>memory_search</code>, <code>memory_get</code>,{" "}
+              <code>memory_save</code>, <code>web_search</code>,{" "}
+              <code>wanted_jobs_search</code>. 나머지는 에이전트가{" "}
+              <code>tool_search</code>로 찾아 그때 가져옵니다.
             </p>
 
-            <h2>도구 실행 라이프사이클 (Hook 이벤트)</h2>
-            <ul>
-              <li><code>TOOL_EXEC_START</code>. <code>execute()</code> 이전</li>
-              <li><code>TOOL_EXEC_END</code>. 성공 이후</li>
-              <li><code>TOOL_EXEC_FAILED</code>. 예외 경로</li>
-              <li><code>TOOL_RECOVERY_START</code> / <code>TOOL_RECOVERY_END</code>. 재시도 경로</li>
-              <li><code>TOOL_APPROVAL_REQUEST</code> / <code>GRANTED</code> / <code>DENIED</code>. HITL 게이트</li>
-            </ul>
-
-            <h2>4-티어 안전성</h2>
+            <h2>툴킷: 서브에이전트 도구 번들</h2>
             <p>
-              도구는 <code>definitions.json</code>에서 안전 티어로 태깅됩니다.
+              서브에이전트는 도구 전체가 아니라 선언된 번들만 받습니다. 매니페스트는{" "}
+              <code>core/tools/toolkits.toml</code>, 해석기는{" "}
+              <code>core/tools/toolkit_registry.py</code>입니다.
             </p>
             <ol>
-              <li><strong>읽기 전용</strong>. Read, Grep, Glob, Search → 승인 없음</li>
-              <li><strong>로컬 변경</strong>. Edit, Write → CWD 내 allow-list</li>
-              <li><strong>부수 효과</strong>. Bash, 메시지 전송 → HITL 승인</li>
-              <li><strong>파괴적</strong>. rm -rf, force push → 확인 필요</li>
+              <li>에이전트 frontmatter의 <code>toolkit:</code> 이름이 있으면 그 툴킷을 사용합니다. <code>includes:</code>는 재귀적으로 펼쳐집니다.</li>
+              <li>레거시 <code>tools:</code> 목록이 있으면 그대로 사용합니다.</li>
+              <li>둘 다 없거나 이름이 틀리면 읽기 전용 <code>_default</code>(<code>read_document</code>, <code>grep_files</code>)로 폴백합니다.</li>
             </ol>
+            <p>
+              조합용 leaf는 <code>common_read</code>와 <code>common_write</code>,
+              선언용 킷은 <code>web_research</code>, <code>data_analysis</code>,{" "}
+              <code>general_purpose</code> 등입니다. 존재하지 않는 도구 이름은
+              스폰 시점에 경고를 내고 그 도구 없이 실행됩니다
+              (<code>core/agent/worker.py</code>).
+            </p>
 
-            <h2>카테고리</h2>
+            <h2>대형 결과: 오프로드와 recall</h2>
+            <p>
+              도구 결과가 5000 토큰 임계값을 넘으면{" "}
+              <code>core/orchestration/tool_offload.py</code>의{" "}
+              <code>ToolResultOffloadStore</code>가 본문을 세션별 디렉터리
+              (<code>.geode/tool-offload/</code> 아래)에 내려쓰고, 컨텍스트에는
+              요약과 <code>ref_id</code>만 남깁니다. 모델이 원본이 필요하면{" "}
+              <code>recall(ref_id)</code>로 다시 가져옵니다. 오프로드마다{" "}
+              <code>TOOL_RESULT_OFFLOADED</code> 훅이 발화합니다.
+            </p>
+
+            <h2>접근 제어</h2>
+            <p>
+              어떤 도구를 누가 쓸 수 있는지는{" "}
+              <code>core/tools/policy.py</code>의 <code>PolicyChain</code>이
+              6단계로 해석합니다. Profile, Organization, Mode, Agent 레벨,
+              Node-scope allowlist, 서브에이전트 자동 승인 위임 순서입니다.
+              권한 등급은 STANDARD(서브에이전트 자동 승인 가능),
+              WRITE(승인 필요), DANGEROUS(항상 HITL. <code>run_bash</code>,{" "}
+              <code>delegate_task</code>)입니다.
+            </p>
+
+            <h2>실패 모드</h2>
+            <table>
+              <thead>
+                <tr><th>증상</th><th>원인</th><th>해법</th></tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>모델이 분명히 있는 도구를 못 찾음</td>
+                  <td>지연 로딩으로 스키마가 아직 적재되지 않음</td>
+                  <td>정상 경로입니다. 모델이 <code>tool_search</code>로 찾으면 로드됩니다</td>
+                </tr>
+                <tr>
+                  <td>서브에이전트가 도구 없이 동작</td>
+                  <td>frontmatter의 toolkit 이름 오타</td>
+                  <td>스폰 로그의 경고를 확인하고 <code>toolkits.toml</code>의 이름과 맞춥니다</td>
+                </tr>
+                <tr>
+                  <td>도구 결과가 잘려 보임</td>
+                  <td>5000 토큰 초과로 오프로드됨</td>
+                  <td><code>recall(ref_id)</code>로 원본을 조회합니다</td>
+                </tr>
+              </tbody>
+            </table>
+
+            <h2>다음</h2>
             <ul>
-              <li><strong>FileTools</strong>. Read, Write, Edit, Glob, Grep</li>
-              <li><strong>MemoryTools</strong>. memory_search, memory_get, memory_save</li>
-              <li><strong>DataTools</strong>. Cortex Analyst/Search 기반 데이터 조회</li>
-              <li><strong>ComputerUse</strong>. 프로바이더 독립 데스크탑 자동화 (PyAutoGUI)</li>
-              <li><strong>MCP</strong>. <code>core/mcp/</code> 서비스를 통해 노출 (25K 결과 가드)</li>
+              <li><a href="/geode/docs/runtime/tools/mcp">MCP 서버</a>. 외부 도구가 합류하는 클라이언트 측.</li>
+              <li><a href="/geode/docs/runtime/orchestration">서브에이전트 오케스트레이션</a>. 툴킷이 적용되는 실행 주체.</li>
+              <li><a href="/geode/docs/guides/custom-tool">커스텀 도구 만들기</a>. definitions.json에 도구를 추가하는 절차.</li>
             </ul>
           </>
         }
         en={
           <>
-            <h2>The protocol</h2>
             <p>
-              <code>core/tools/base.py:35</code> defines <code>Tool</code> as a
-              Protocol class. Every tool — native, MCP, plugin — implements:
+              The tool system answers three questions: where tools are defined
+              (the registry), which tools ship with each call (deferred loading),
+              and which tools a sub-agent receives (toolkits).
             </p>
-            <pre>{`class Tool(Protocol):
-    name: str
-    description: str
-    input_schema: dict[str, Any]
-    async def execute(self, **kwargs) -> Any: ...`}</pre>
 
-            <h2>Single source of truth</h2>
+            <h2>The registry</h2>
             <p>
-              <code>core/tools/definitions.json</code> centralizes tool metadata
-              (name, description, schema, always-on flag). Handlers live in
-              category modules (<code>core/tools/file_tools.py</code>,{" "}
-              <code>core/tools/memory_tools.py</code>, etc.) and are wired into
-              the registry by name.
+              <code>ToolRegistry</code> in <code>core/tools/registry.py</code>{" "}
+              manages native tools. The single source of truth for definitions is{" "}
+              <code>core/tools/definitions.json</code>: name, description, and
+              input schema all live there, with handlers wired by name from
+              category modules. External tools discovered by the MCP client
+              (<code>core/mcp/</code>) are merged with native tools at call time.
+              See <a href="/geode/docs/runtime/tools/mcp">MCP servers</a>.
             </p>
 
             <h2>Deferred loading</h2>
             <p>
-              Sending all tool definitions on every LLM call would burn a large
-              chunk of input tokens per turn. GEODE splits the catalog:
+              Shipping every tool schema on every call burns a large chunk of
+              input tokens per turn.{" "}
+              <code>ToolRegistry.to_anthropic_tools_with_defer</code> splits the
+              catalog.
             </p>
             <table>
-              <thead><tr><th>Tier</th><th>Behaviour</th></tr></thead>
+              <thead>
+                <tr><th>Condition</th><th>Behaviour</th></tr>
+              </thead>
               <tbody>
-                <tr><td>Always-loaded</td><td>Sent on every LLM call: <code>memory_search</code>, <code>memory_get</code>, <code>memory_save</code>, <code>web_search</code>, <code>wanted_jobs_search</code>.</td></tr>
-                <tr><td>Deferred</td><td>Discoverable via <code>tool_search</code>, loaded on demand. Activates when total tools exceed <code>defer_threshold</code> (default 10).</td></tr>
+                <tr>
+                  <td>Native + MCP combined count at or below <code>defer_threshold</code> (default 10)</td>
+                  <td>Everything loads eagerly</td>
+                </tr>
+                <tr>
+                  <td>Above the threshold</td>
+                  <td>Adds a <code>tool_search</code> meta-tool, keeps the five always-loaded tools eager, marks the rest <code>defer_loading=True</code> to be loaded after a search</td>
+                </tr>
               </tbody>
             </table>
             <p>
-              The frozenset of always-loaded tools lives at{" "}
-              <code>core/tools/registry.py:215-223</code> as{" "}
-              <code>ALWAYS_LOADED_TOOLS</code>.
-            </p>
-            <p>
-              The pattern is borrowed from Claude Code&apos;s tool deferred-loading
-              design.
+              The always-loaded set is the five tools pinned in{" "}
+              <code>ALWAYS_LOADED_TOOLS</code>: <code>memory_search</code>,{" "}
+              <code>memory_get</code>, <code>memory_save</code>,{" "}
+              <code>web_search</code>, <code>wanted_jobs_search</code>. The
+              agent discovers everything else through <code>tool_search</code>{" "}
+              and loads it on demand.
             </p>
 
-            <h2>Tool execution lifecycle (Hook events)</h2>
-            <ul>
-              <li><code>TOOL_EXEC_START</code> — before <code>execute()</code></li>
-              <li><code>TOOL_EXEC_END</code> — after success</li>
-              <li><code>TOOL_EXEC_FAILED</code> — exception path</li>
-              <li><code>TOOL_RECOVERY_START</code> / <code>TOOL_RECOVERY_END</code> — retry path</li>
-              <li><code>TOOL_APPROVAL_REQUEST</code> / <code>GRANTED</code> / <code>DENIED</code> — HITL gate</li>
-            </ul>
-
-            <h2>4-tier safety</h2>
+            <h2>Toolkits: sub-agent tool bundles</h2>
             <p>
-              Tools are tagged with a safety tier in <code>definitions.json</code>:
+              A sub-agent receives a declared bundle, not the whole catalog. The
+              manifest is <code>core/tools/toolkits.toml</code>; the resolver is{" "}
+              <code>core/tools/toolkit_registry.py</code>.
             </p>
             <ol>
-              <li><strong>Read-only</strong> — Read, Grep, Glob, Search → no approval</li>
-              <li><strong>Local mutation</strong> — Edit, Write → in-CWD allow-listed</li>
-              <li><strong>Side-effect</strong> — Bash, message-send → HITL approval</li>
-              <li><strong>Destructive</strong> — rm -rf, force push → confirmation required</li>
+              <li>If the agent&apos;s frontmatter declares <code>toolkit:</code>, that toolkit is used, with <code>includes:</code> expanded recursively.</li>
+              <li>A legacy <code>tools:</code> list is used verbatim.</li>
+              <li>With neither (or a missing toolkit name), it falls back to the read-only <code>_default</code> (<code>read_document</code>, <code>grep_files</code>).</li>
             </ol>
+            <p>
+              Composition leaves are <code>common_read</code> and{" "}
+              <code>common_write</code>; declared kits include{" "}
+              <code>web_research</code>, <code>data_analysis</code>, and{" "}
+              <code>general_purpose</code>. A misspelled tool name warns at spawn
+              time and the agent runs without that tool
+              (<code>core/agent/worker.py</code>).
+            </p>
 
-            <h2>Categories</h2>
+            <h2>Large results: offload and recall</h2>
+            <p>
+              When a tool result exceeds the 5000-token threshold,{" "}
+              <code>ToolResultOffloadStore</code> in{" "}
+              <code>core/orchestration/tool_offload.py</code> persists the body
+              to a per-session directory under <code>.geode/tool-offload/</code>{" "}
+              and leaves a summary plus a <code>ref_id</code> in context. The
+              model re-fetches the original with <code>recall(ref_id)</code>.
+              Each offload fires the <code>TOOL_RESULT_OFFLOADED</code> hook.
+            </p>
+
+            <h2>Access control</h2>
+            <p>
+              Who may use which tool is resolved by the six-layer{" "}
+              <code>PolicyChain</code> in <code>core/tools/policy.py</code>:
+              Profile, Organization, Mode, Agent level, Node-scope allowlists,
+              then sub-agent auto-approval delegation. Permission levels are
+              STANDARD (eligible for sub-agent auto-approval), WRITE (approval
+              required), and DANGEROUS (always human-in-the-loop:{" "}
+              <code>run_bash</code>, <code>delegate_task</code>).
+            </p>
+
+            <h2>Failure modes</h2>
+            <table>
+              <thead>
+                <tr><th>Symptom</th><th>Cause</th><th>Fix</th></tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>The model cannot find a tool that clearly exists</td>
+                  <td>Deferred loading; the schema is not loaded yet</td>
+                  <td>The normal path: the model finds it via <code>tool_search</code> and it loads</td>
+                </tr>
+                <tr>
+                  <td>A sub-agent runs without its tools</td>
+                  <td>A typo in the frontmatter toolkit name</td>
+                  <td>Check the spawn-time warning and match a name in <code>toolkits.toml</code></td>
+                </tr>
+                <tr>
+                  <td>A tool result looks truncated</td>
+                  <td>It crossed 5000 tokens and was offloaded</td>
+                  <td>Fetch the original with <code>recall(ref_id)</code></td>
+                </tr>
+              </tbody>
+            </table>
+
+            <h2>Next</h2>
             <ul>
-              <li><strong>FileTools</strong> — Read, Write, Edit, Glob, Grep</li>
-              <li><strong>MemoryTools</strong> — memory_search, memory_get, memory_save</li>
-              <li><strong>DataTools</strong> — Cortex Analyst/Search data retrieval</li>
-              <li><strong>ComputerUse</strong> — provider-agnostic desktop automation (PyAutoGUI)</li>
-              <li><strong>MCP</strong>. exposed via <code>core/mcp/</code> service (25K result guard)</li>
+              <li><a href="/geode/docs/runtime/tools/mcp">MCP servers</a>. The client side where external tools join.</li>
+              <li><a href="/geode/docs/runtime/orchestration">Sub-agent orchestration</a>. The executor toolkits apply to.</li>
+              <li><a href="/geode/docs/guides/custom-tool">Build a custom tool</a>. Adding a tool to definitions.json.</li>
             </ul>
           </>
         }

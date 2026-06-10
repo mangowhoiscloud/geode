@@ -24,10 +24,10 @@ export default function Page() {
             </p>
             <p>
               두 루프의 구조 자체가 처음이라면{" "}
-              <a href="/geode/docs/concepts/two-loops">두 개의 루프</a>를, 바깥쪽
-              루프의 전체 흐름은{" "}
-              <a href="/geode/docs/capabilities/autoresearch">폐루프</a>를 먼저
-              읽으면 이 페이지가 더 잘 들어옵니다.
+              <a href="/geode/docs/concepts/two-loops">두 개의 루프</a>를 먼저
+              읽으세요. 바깥쪽 루프의 전체 흐름은{" "}
+              <a href="/geode/docs/capabilities/autoresearch">폐루프</a>에
+              있습니다.
             </p>
 
             <h2>계보는 이미 잘 정립되어 있다</h2>
@@ -143,9 +143,9 @@ scaffolding   DGM, ADAS, STOP,        <- 거의 비어 있음
             </ol>
             <p>
               그리고 한 가지 더. GEODE는 non-parametric입니다. scaffolding만
-              바꿉니다. 프롬프트 섹션, 도구 정책, 분해 방식, reflection, skill
-              카탈로그, 에이전트 contract, 도구 설명, 하이퍼파라미터를 건드리고,
-              가중치는 절대 건드리지 않습니다.
+              바꿉니다. 변이 표면은 7개 behaviour kinds, 곧 프롬프트 섹션, 도구
+              정책, 분해 방식, reflection, skill 카탈로그, 에이전트 contract,
+              도구 설명이며, 가중치는 절대 건드리지 않습니다.
             </p>
             <p>
               이 치환들이 코드에서 어떻게 도는지는{" "}
@@ -198,9 +198,9 @@ scaffolding   DGM, ADAS, STOP,        <- 거의 비어 있음
                 <strong>GEODE는 frontier의 수렴 방향에서 일부러 벗어났습니다.</strong>{" "}
                 GEPA, DGM, SICA, ADAS는 Pareto frontier나 open-ended 아카이브로
                 수렴합니다. 이들이 다양한 frontier를 유지하는 이유는 비용 때문입니다.
-                값싼 task 지표 위에서, 노이즈가 섞인 단일 평가 신호에 견디려고
+                값싼 task 지표 위에서, 노이즈가 섞인 단일 평가 신호를 견디려고
                 frontier를 넓게 둡니다. GEODE는 값비싸고 노이즈가 큰 안전 감사
-                위에서 돌기 때문에 frugal한 (1+1)을 택했습니다. 이건 공짜로 얻는
+                위에서 돌기 때문에 frugal한 (1+1)을 택했습니다. 공짜로 얻는
                 이득이 아니라 실제 trade-off입니다. 아카이브 유지는 앞으로 열어
                 둘 설계 방향입니다.
               </p>
@@ -362,9 +362,9 @@ weight update  (RLHF family)             Constitutional AI, MART, Self-MOA`}</pr
             </ol>
             <p>
               And one more thing. GEODE is non-parametric. It mutates scaffolding
-              only: prompt sections, tool policy, decomposition, reflection, the
-              skill catalog, agent contracts, tool descriptions, hyperparameters.
-              Never weights.
+              only, across seven behaviour kinds: prompt sections, tool policy,
+              decomposition, reflection, the skill catalog, agent contracts, and
+              tool descriptions. Never weights.
             </p>
             <p>
               For how these substitutions run in code, see{" "}

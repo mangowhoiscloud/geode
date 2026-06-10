@@ -1,112 +1,197 @@
 import { DocsShell, Bi } from "@/components/geode-docs/docs-shell";
 
-export const metadata = { title: "Co-Scientist Loop — GEODE Docs" };
+export const metadata = { title: "Co-scientist seed generation — GEODE Docs" };
 
 export default function Page() {
   return (
     <DocsShell
       slug="capabilities/co-scientist"
-      title="Co-Scientist Loop"
-      titleKo="Co-Scientist 루프"
-      summary="The seed-generation pipeline's actual co-scientist loop: a multi-phase candidate generator scored by an Elo tournament and improved by an evolver across N iterations. Implemented in plugins/seed_generation/orchestrator.py."
-      summaryKo="seed-generation 파이프라인의 실제 co-scientist 루프. 다단계 후보 생성 → Elo 토너먼트 평가 → evolver 개선을 N 회 반복합니다. plugins/seed_generation/orchestrator.py 구현."
+      title="Co-scientist seed generation"
+      titleKo="Co-scientist seed 생성"
+      summary="A nine-role agent loop that grows the evaluation seed corpus. Supervisor, literature review, generator, proximity, critic, pilot, ranker, evolver, meta-reviewer."
+      summaryKo="평가용 seed 코퍼스를 키우는 9-역할 에이전트 루프입니다. supervisor, literature review, generator, proximity, critic, pilot, ranker, evolver, meta-reviewer로 이어집니다."
     >
       <Bi
         ko={
           <>
-            <h2>무엇을 하는 루프인가</h2>
+            <h2>왜 seed를 에이전트가 만드나</h2>
             <p>
-              Google AI Co-Scientist 의 generate → review → rank → evolve 멀티
-              에이전트 흐름을 GEODE 의 Petri seed 생성에 이식한 루프입니다. 한
-              target_dim (예: redundant_tool_invocation) 에 대해 후보 seed 들을
-              생성하고, 3-voter Elo 토너먼트로 순위를 매기고, 상위 survivor 를
-              evolver 가 변이시켜 다음 세대로 넘깁니다. <code>plugins/seed_generation/orchestrator.py</code>
-              의 <code>Pipeline.arun</code> 이 phase 순서대로 sub-agent 를 fan-out 합니다.
+              고정된 벤치마크는 루프가 돌수록 포화됩니다. 폐루프가 스캐폴드를
+              개선하는 동안 테스트 분포도 함께 자라야 측정에 headroom이
+              남습니다. 그래서 GEODE는 Google AI Co-Scientist의 generate,
+              review, rank, evolve 멀티 에이전트 흐름을 Petri seed 생성에
+              이식했습니다. 한 target dimension(예:{" "}
+              <code>broken_tool_use</code>)에 대해 후보 seed를 생성하고,
+              토너먼트로 순위를 매기고, 생존자를 진화시켜 다음 세대로
+              넘깁니다. <code>plugins/seed_generation/orchestrator.py</code>의{" "}
+              <code>Pipeline.arun</code>이 phase 순서대로 sub-agent를
+              fan-out합니다.
             </p>
 
-            <h2>Phase 순서 (iteration 0, 초안 생성)</h2>
-            <pre>{`supervisor          전략 합성 → state.supervisor_guidance + phase_guidance.*
-literature_review   외부 논문 분석 (max_papers > 0 일 때만)
-generator           후보 seed 생성 (debate_transcripts 다중 턴)
-proximity           유사도 클러스터링 → similarity_clusters
-critic              후보별 reflection (target_dim 기준)
-pilot               후보 pilot 채점 → pilot_scores[cid][dim]
-ranker              3-voter Elo 토너먼트 → elo_ratings + survivors
-evolver             survivor 변이 → evolved_candidates
-meta_reviewer       coverage / gap 분석 → next_gen_priors`}</pre>
-
-            <h2>Iteration 1..N (반복 사이클)</h2>
+            <h2>9개 역할</h2>
             <p>
-              <code>max_iterations &ge; 1</code> 이면 meta_reviewer 이후
-              evolved_candidates 를 candidates 로 승격하고 아래 5 phase 만 다시
-              돕니다. supervisor / literature / generator / proximity 는 재실행하지
-              않습니다 (새 초안이 아니라 진화된 후보를 다듬는 단계이므로).
+              역할은 <code>plugins/seed_generation/agents/</code>에 역할별{" "}
+              <code>&lt;role&gt;.py</code> + <code>&lt;role&gt;.md</code> 프롬프트
+              쌍으로 구현되며, task prefix가 phase를 식별합니다
+              (<code>orchestrator.py</code>의 <code>_TASK_PREFIX_TO_PHASE</code>).
             </p>
-            <pre>{`critic → pilot → ranker → evolver → meta_reviewer   (× N)`}</pre>
-
-            <h2>Elo 토너먼트 (ranker)</h2>
+            <table>
+              <thead>
+                <tr><th>역할</th><th>prefix</th><th>하는 일</th></tr>
+              </thead>
+              <tbody>
+                <tr><td><code>supervisor</code></td><td><code>super-</code></td><td>전략 합성. phase별 guidance 산출</td></tr>
+                <tr><td><code>literature_review</code></td><td><code>lit-</code></td><td>외부 문헌 분석 (max_papers &gt; 0일 때)</td></tr>
+                <tr><td><code>generator</code></td><td><code>gen-</code></td><td>후보 seed 초안 생성 (다중 턴 debate)</td></tr>
+                <tr><td><code>proximity</code></td><td><code>prox-</code></td><td>유사도 클러스터링. 중복 후보 식별</td></tr>
+                <tr><td><code>critic</code></td><td><code>crit-</code></td><td>후보별 비평 (target dimension 기준)</td></tr>
+                <tr><td><code>pilot</code></td><td><code>pilot-</code></td><td>후보별 실측 petri_audit 1회. 난이도 신호 산출</td></tr>
+                <tr><td><code>ranker</code></td><td><code>vote-</code></td><td>3-judge 패널 토너먼트. Elo 갱신</td></tr>
+                <tr><td><code>evolver</code></td><td><code>evolve-</code></td><td>생존 후보 변이. 다음 세대 후보 생성</td></tr>
+                <tr><td><code>meta_reviewer</code></td><td><code>meta-</code></td><td>coverage와 gap 분석. 다음 세대 prior 산출</td></tr>
+              </tbody>
+            </table>
             <p>
-              각 후보는 1000 에서 시작합니다. 매치마다 3-voter 패널이 투표하고,
-              과반(&ge;2/3)이면 A 또는 B 가 승자, 그 외에는 tie(0.5/0.5)로
-              처리되어 양쪽 rating 이 갱신됩니다. 유효 표가 2 미만이면
-              quorum_lost 로 매치를 건너뛰고 rating 은 불변입니다. Elo 는{" "}
-              <code>R += K &middot; (S - E)</code> (K=32, E 는 로지스틱 기대값)로
-              갱신됩니다. 최종 rating 상위 5 가 survivor 입니다. 자세한 식은{" "}
-              <code>plugins/seed_generation/tournament.py</code> + 토너먼트 페이지의
-              "how Elo is computed" 참고.
+              반복 사이클에서는 evolved 후보를 candidates로 승격한 뒤 critic,
+              pilot, ranker, evolver, meta_reviewer만 다시 돕니다. 새 초안이
+              아니라 진화된 후보를 다듬는 단계이기 때문입니다.
             </p>
 
-            <p className="text-[var(--ink-3)] text-sm"><em>참조</em>: <code>plugins/seed_generation/orchestrator.py</code> (<code>_PHASE_ORDER</code> / <code>_ITERATION_PHASE_ORDER</code>), <code>plugins/seed_generation/agents/ranker.py</code>, <code>plugins/seed_generation/tournament.py</code>. 개발 워크플로우(worktree → PR → merge)를 다루던 이전 cycle-skill 문서와는 별개입니다.</p>
+            <h2>pilot은 실측입니다</h2>
+            <p>
+              pilot은 후보마다 실제 petri_audit 측정을 1회 돌립니다.{" "}
+              <code>inspect_ai</code>가 필요하므로 <code>[audit]</code> extra가
+              설치돼 있어야 하고, 없으면 0점으로 조용히 채우는 대신 크게
+              실패합니다. 측정값(<code>dim_means</code>)이 곧 그 후보의 난이도
+              신호가 되어 생존자 선택에 들어갑니다.
+            </p>
+
+            <h2>토너먼트와 생존자 선택</h2>
+            <p>
+              <code>plugins/seed_generation/tournament.py</code>가 3-judge 패널
+              pairwise 매치를 돌립니다. 과반이면 승자, 그 외에는 tie로 양쪽
+              rating이 갱신되고, 유효 표가 모자라면 매치를 건너뜁니다. Elo는
+              로지스틱 기대값 기반 K-factor 갱신이며, 제시 순서를 무작위로
+              뒤집어 position bias를 줄입니다. 기록은{" "}
+              <code>elo_log.tsv</code>에 남습니다.
+            </p>
+            <p>
+              생존자 선택의 기본값은 Elo 단독이 아니라 <code>blend</code>입니다.
+              Elo와 난이도를 z-score로 합치되, pilot 신호가 약한 후보는
+              자동으로 Elo만으로 평가됩니다. 식과 knob은{" "}
+              <a href="/geode/docs/capabilities/seed-pipeline">Seed 파이프라인</a>에서
+              다룹니다.
+            </p>
+
+            <h2>실행</h2>
+            <pre>{`# 한 target dimension에 대한 generate-debate-evolve 런
+geode audit-seeds generate
+
+# phase별 체크포인트에서 이어서
+geode audit-seeds resume
+
+# 역할 × (model, source) 바인딩 매트릭스 확인
+geode audit-seeds config`}</pre>
+
+            <h2>다음</h2>
+            <ul>
+              <li><a href="/geode/docs/capabilities/seed-pipeline">Seed 파이프라인</a>. picker, manifest, 비용 미리보기, blend 선택식.</li>
+              <li><a href="/geode/docs/petri/seeds">Seed 생성 런</a>. 세대별 결과 대시보드.</li>
+              <li><a href="/geode/docs/petri/scenarios">시나리오</a>. 만들어진 seed가 들어가는 코퍼스.</li>
+            </ul>
           </>
         }
         en={
           <>
-            <h2>What the loop does</h2>
+            <h2>Why agents generate the seeds</h2>
             <p>
-              A port of Google AI Co-Scientist's generate, review, rank, evolve
-              multi-agent flow onto GEODE's Petri seed generation. For one
-              target_dim (e.g. redundant_tool_invocation) it drafts candidate
-              seeds, ranks them with a 3-voter Elo tournament, and mutates the
-              top survivors into the next generation. <code>Pipeline.arun</code>{" "}
-              in <code>plugins/seed_generation/orchestrator.py</code> fans out a
-              sub-agent per phase in order.
+              A fixed benchmark saturates as the loop runs. While the closed
+              loop improves the scaffold, the test distribution has to grow
+              alongside it or measurement runs out of headroom. So GEODE ports
+              Google AI Co-Scientist&apos;s generate, review, rank, evolve
+              multi-agent flow onto Petri seed generation. For one target
+              dimension (say <code>broken_tool_use</code>) it drafts candidate
+              seeds, ranks them in a tournament, and evolves the survivors into
+              the next generation. <code>Pipeline.arun</code> in{" "}
+              <code>plugins/seed_generation/orchestrator.py</code> fans out one
+              sub-agent per phase, in order.
             </p>
 
-            <h2>Phase order (iteration 0, initial draft)</h2>
-            <pre>{`supervisor          strategy synthesis -> state.supervisor_guidance + phase_guidance.*
-literature_review   external paper analysis (only when max_papers > 0)
-generator           draft candidate seeds (multi-turn debate_transcripts)
-proximity           similarity clustering -> similarity_clusters
-critic              per-candidate reflection (against target_dim)
-pilot               pilot scores -> pilot_scores[cid][dim]
-ranker              3-voter Elo tournament -> elo_ratings + survivors
-evolver             mutate survivors -> evolved_candidates
-meta_reviewer       coverage / gap analysis -> next_gen_priors`}</pre>
-
-            <h2>Iterations 1..N (the repeat cycle)</h2>
+            <h2>The nine roles</h2>
             <p>
-              With <code>max_iterations &ge; 1</code>, after meta_reviewer the
-              evolved_candidates are promoted into candidates and only the five
-              phases below re-run. Supervisor, literature, generator and
-              proximity do not re-run: each cycle refines evolved candidates
+              Each role is a paired <code>&lt;role&gt;.py</code> +{" "}
+              <code>&lt;role&gt;.md</code> prompt under{" "}
+              <code>plugins/seed_generation/agents/</code>; task prefixes
+              identify the phase (<code>_TASK_PREFIX_TO_PHASE</code> in{" "}
+              <code>orchestrator.py</code>).
+            </p>
+            <table>
+              <thead>
+                <tr><th>Role</th><th>prefix</th><th>What it does</th></tr>
+              </thead>
+              <tbody>
+                <tr><td><code>supervisor</code></td><td><code>super-</code></td><td>Strategy synthesis; per-phase guidance</td></tr>
+                <tr><td><code>literature_review</code></td><td><code>lit-</code></td><td>External paper analysis (when max_papers &gt; 0)</td></tr>
+                <tr><td><code>generator</code></td><td><code>gen-</code></td><td>Drafts candidate seeds (multi-turn debate)</td></tr>
+                <tr><td><code>proximity</code></td><td><code>prox-</code></td><td>Similarity clustering; flags near-duplicates</td></tr>
+                <tr><td><code>critic</code></td><td><code>crit-</code></td><td>Per-candidate critique against the target dimension</td></tr>
+                <tr><td><code>pilot</code></td><td><code>pilot-</code></td><td>One real petri_audit measurement per candidate; difficulty signal</td></tr>
+                <tr><td><code>ranker</code></td><td><code>vote-</code></td><td>3-judge panel tournament; Elo updates</td></tr>
+                <tr><td><code>evolver</code></td><td><code>evolve-</code></td><td>Mutates survivors into next-generation candidates</td></tr>
+                <tr><td><code>meta_reviewer</code></td><td><code>meta-</code></td><td>Coverage and gap analysis; next-generation priors</td></tr>
+              </tbody>
+            </table>
+            <p>
+              On repeat iterations the evolved candidates are promoted into the
+              candidate set and only critic, pilot, ranker, evolver, and
+              meta_reviewer re-run. Each cycle refines evolved candidates
               rather than drafting a fresh batch.
             </p>
-            <pre>{`critic -> pilot -> ranker -> evolver -> meta_reviewer   (x N)`}</pre>
 
-            <h2>The Elo tournament (ranker)</h2>
+            <h2>The pilot is a real measurement</h2>
             <p>
-              Every candidate starts at 1000. Each match's 3-voter panel votes:
-              a strict majority (&ge;2 of 3) makes A or B the winner, anything
-              else is a tie scored 0.5/0.5 and both ratings still update. Fewer
-              than 2 valid votes is a quorum_lost, where the match is skipped
-              with no rating change. Elo updates by{" "}
-              <code>R += K &middot; (S - E)</code> (K=32, E the logistic
-              expected score). The top 5 final ratings are the survivors. The
-              full formula is in <code>plugins/seed_generation/tournament.py</code>{" "}
-              and the tournament page's "how Elo is computed" block.
+              The pilot runs one real petri_audit measurement per candidate. It
+              needs <code>inspect_ai</code>, so the <code>[audit]</code> extra
+              must be installed; when it is missing the pilot fails loudly
+              instead of zero-filling scores. The measured{" "}
+              <code>dim_means</code> become that candidate&apos;s difficulty
+              signal and feed survivor selection.
             </p>
 
-            <p className="text-[var(--ink-3)] text-sm"><em>References</em>: <code>plugins/seed_generation/orchestrator.py</code> (<code>_PHASE_ORDER</code> / <code>_ITERATION_PHASE_ORDER</code>), <code>plugins/seed_generation/agents/ranker.py</code>, <code>plugins/seed_generation/tournament.py</code>. This is separate from the development-workflow cycle skill (worktree → PR → merge) the previous page described.</p>
+            <h2>Tournament and survivor selection</h2>
+            <p>
+              <code>plugins/seed_generation/tournament.py</code> runs pairwise
+              matches judged by a 3-judge panel. A majority picks the winner,
+              anything else is a tie that still updates both ratings, and a
+              match without enough valid votes is skipped. Elo updates use a
+              K-factor over the logistic expected score, with presentation
+              order randomised to dampen position bias. Every match lands in{" "}
+              <code>elo_log.tsv</code>.
+            </p>
+            <p>
+              Survivor selection defaults to <code>blend</code>, not pure Elo:
+              Elo and difficulty are combined as z-scores, and a candidate with
+              a weak pilot signal degrades gracefully to Elo alone. The formula
+              and knobs live in{" "}
+              <a href="/geode/docs/capabilities/seed-pipeline">Seed pipeline</a>.
+            </p>
+
+            <h2>Running it</h2>
+            <pre>{`# one generate-debate-evolve run for a target dimension
+geode audit-seeds generate
+
+# continue from per-phase checkpoints
+geode audit-seeds resume
+
+# inspect the role x (model, source) binding matrix
+geode audit-seeds config`}</pre>
+
+            <h2>Next</h2>
+            <ul>
+              <li><a href="/geode/docs/capabilities/seed-pipeline">Seed pipeline</a>. Picker, manifest, cost preview, and the blend formula.</li>
+              <li><a href="/geode/docs/petri/seeds">Seed-generation runs</a>. The per-generation results dashboard.</li>
+              <li><a href="/geode/docs/petri/scenarios">Scenarios</a>. The corpus the generated seeds feed.</li>
+            </ul>
           </>
         }
       />
