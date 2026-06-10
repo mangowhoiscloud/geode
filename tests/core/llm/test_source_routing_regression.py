@@ -227,7 +227,7 @@ def test_reflection_node_no_longer_hardcodes_payg() -> None:
 def test_self_improving_runner_no_longer_hardcodes_payg() -> None:
     """Source-level pin: self-improving mutator uses ``infer_source(provider)``."""
     runner_source = (
-        Path(__file__).resolve().parents[3] / "core" / "self_improving" / "loop" / "runner.py"
+        Path(__file__).resolve().parents[3] / "core" / "self_improving" / "loop" / "mutate" / "runner.py"
     ).read_text(encoding="utf-8")
     assert 'resolve_for(_normalize_provider_for_registry(provider), "payg")' not in runner_source, (
         "runner.py still hard-codes the payg source on the mutator path."
