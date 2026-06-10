@@ -231,7 +231,7 @@ source = "api_key"
     from types import SimpleNamespace
 
     monkeypatch.setattr(
-        "core.config.self_improving_loop.load_self_improving_loop_config",
+        "core.config.self_improving.load_self_improving_loop_config",
         lambda: SimpleNamespace(
             autoresearch=SimpleNamespace(
                 auditor=SimpleNamespace(
@@ -268,7 +268,7 @@ source = "claude-cli"
     from types import SimpleNamespace
 
     monkeypatch.setattr(
-        "core.config.self_improving_loop.load_self_improving_loop_config",
+        "core.config.self_improving.load_self_improving_loop_config",
         lambda: SimpleNamespace(
             autoresearch=SimpleNamespace(
                 auditor=None,
@@ -297,7 +297,7 @@ model = "snapshot-model"
     from types import SimpleNamespace
 
     monkeypatch.setattr(
-        "core.config.self_improving_loop.load_self_improving_loop_config",
+        "core.config.self_improving.load_self_improving_loop_config",
         lambda: SimpleNamespace(
             autoresearch=SimpleNamespace(
                 auditor=SimpleNamespace(
@@ -322,7 +322,7 @@ def test_read_role_override_auto_source_dropped(
     from types import SimpleNamespace
 
     monkeypatch.setattr(
-        "core.config.self_improving_loop.load_self_improving_loop_config",
+        "core.config.self_improving.load_self_improving_loop_config",
         lambda: SimpleNamespace(
             autoresearch=SimpleNamespace(
                 auditor=SimpleNamespace(
@@ -361,7 +361,7 @@ model = "geode/gpt-5.5"
     def _boom() -> object:
         raise ValueError("unknown field 'shoulb_be_should_be'")
 
-    monkeypatch.setattr("core.config.self_improving_loop.load_self_improving_loop_config", _boom)
+    monkeypatch.setattr("core.config.self_improving.load_self_improving_loop_config", _boom)
     with pytest.raises(ValueError, match="unknown field"):
         uo.read_role_override("target")
 
@@ -369,7 +369,7 @@ model = "geode/gpt-5.5"
 def test_read_role_override_falls_through_on_import_error(
     petri_toml: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """ImportError on ``core.config.self_improving_loop`` still falls through to
+    """ImportError on ``core.config.self_improving`` still falls through to
     the legacy file — the module must stay importable in stubbed
     environments."""
     petri_toml.write_text(
@@ -384,7 +384,7 @@ model = "geode/gpt-5.5"
     real_import = builtins.__import__
 
     def _raising(name: str, *args: object, **kwargs: object) -> object:
-        if name == "core.config.self_improving_loop":
+        if name == "core.config.self_improving":
             raise ImportError("simulated")
         return real_import(name, *args, **kwargs)
 
@@ -423,7 +423,7 @@ def test_migration_plan_empty_when_no_legacy_file(petri_toml: Path) -> None:
 def test_read_role_emits_journal_when_self_improving_loop_unavailable(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """When ``core.config.self_improving_loop`` cannot be imported, the
+    """When ``core.config.self_improving`` cannot be imported, the
     role reader silently falls back to the legacy petri.toml. P1b makes
     that silent fallback observable via a ``petri_role_legacy_fallback``
     event so post-mortem can see when the new SoT was bypassed."""
@@ -441,7 +441,7 @@ def test_read_role_emits_journal_when_self_improving_loop_unavailable(
 
     # Force the lazy import inside _read_role_from_self_improving_loop to fail
     # by inserting None into sys.modules — the `from … import …` then raises.
-    monkeypatch.setitem(sys.modules, "core.config.self_improving_loop", None)
+    monkeypatch.setitem(sys.modules, "core.config.self_improving", None)
 
     with run_transcript_scope(journal):
         result = uo._read_role_from_self_improving_loop("auditor")

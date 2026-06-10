@@ -5,7 +5,7 @@ PR-γ1 of the 2026-05-19 self-improving-loop config consolidation plan. Renders 
 plumbs into the REPL frame. The banner colour reflects current
 subscription quota usage against the
 ``[self_improving_loop] warn_threshold`` / ``abort_threshold`` from
-:mod:`core.config.self_improving_loop`:
+:mod:`core.config.self_improving`:
 
 - **green**  — usage < warn_threshold (subscription healthy)
 - **yellow** — warn ≤ usage < abort (approaching limit)

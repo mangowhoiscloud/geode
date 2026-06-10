@@ -63,7 +63,7 @@ import logging
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
-from plugins.seed_generation.agents.base import BaseSeedAgent, SeedAgentResult
+from plugins.seed_generation.agents.base import DEFAULT_AGENT_MODEL, BaseSeedAgent, SeedAgentResult
 
 if TYPE_CHECKING:
     from plugins.seed_generation.orchestrator import PipelineState
@@ -73,7 +73,7 @@ log = logging.getLogger(__name__)
 __all__ = ["Pilot"]
 
 
-_DEFAULT_PILOT_MODEL = "claude-opus-4-8"
+_DEFAULT_PILOT_MODEL = DEFAULT_AGENT_MODEL
 
 #: Target the self-improving campaign optimizes: scaffolded GEODE on
 #: gpt-5.5. ``run_audit`` auto-wraps it as ``geode/gpt-5.5`` (the full
@@ -132,7 +132,7 @@ class Pilot(BaseSeedAgent):
     information needed). Pilot is the most expensive per-call phase (~1
     Petri audit per candidate). The audits are dispatched via
     :func:`asyncio.to_thread` + :func:`asyncio.gather`, but each
-    ``_run_one_audit`` acquires the host's ``core.llm.audit_lane``
+    ``_run_one_audit`` acquires the host's ``core.orchestration.audit_lane``
     (``max_concurrent=1``) around the ``inspect eval`` subprocess — the
     SAME lane the campaign uses — so the audits run one at a time and do
     not burst the OAuth soft-limit into a 429 storm. The fan-out is thus a
@@ -246,7 +246,7 @@ class Pilot(BaseSeedAgent):
             return None, f"candidate {candidate_id} has no seed path"
 
         from core.audit.dim_extractor import extract_dim_aggregates
-        from core.llm.audit_lane import acquire_audit_lane
+        from core.orchestration.audit_lane import acquire_audit_lane
 
         from plugins.petri_audit.runner import run_audit
 

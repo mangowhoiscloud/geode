@@ -34,7 +34,7 @@ def test_canonical_membership_is_stable() -> None:
 def test_self_improving_loop_source_alias_is_canonical() -> None:
     """``self_improving_loop.Source`` is a re-export of the canonical enum,
     not a second Literal."""
-    from core.config.self_improving_loop import Source
+    from core.config.self_improving import Source
 
     assert Source is CredentialSource
 
@@ -42,7 +42,7 @@ def test_self_improving_loop_source_alias_is_canonical() -> None:
 def test_config_source_fields_use_canonical_enum() -> None:
     """Every ``source`` field on the loop config models is typed as the
     canonical enum (previously: two different Literals)."""
-    from core.config.self_improving_loop import (
+    from core.config.self_improving import (
         AutoresearchConfig,
         MutatorConfig,
         PetriRoleConfig,

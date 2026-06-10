@@ -1,6 +1,6 @@
 # GEODE
 
-GEODE v0.99.156. A self-evolving autonomous execution agent.
+GEODE v0.99.158. A self-evolving autonomous execution agent.
 스스로 진화하는 자율 실행 에이전트.
 
 Last sync: 2026-06-10

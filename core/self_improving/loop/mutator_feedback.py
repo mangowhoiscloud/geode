@@ -167,7 +167,7 @@ def check_repetitive_mutation(
 
     ``threshold`` is the configured ``mutator_dedup_threshold`` (default
     ``0.85`` — see ``AutoresearchConfig.mutator_dedup_threshold`` in
-    ``core.config.self_improving_loop`` for the grounding rationale).
+    ``core.config.self_improving`` for the grounding rationale).
     A ratio of exactly the threshold counts as repetitive — strictly
     less is fresh enough.
 

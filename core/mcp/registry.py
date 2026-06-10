@@ -16,10 +16,9 @@ from typing import Any
 
 log = logging.getLogger(__name__)
 
-_REGISTRY_API = (
-    "https://api.anthropic.com/mcp-registry/v0/servers"
-    "?version=latest&visibility=commercial&limit=200"
-)
+_REGISTRY_BASE = "https://api.anthropic.com/mcp-registry/v0/servers"
+_REGISTRY_QUERY = "?version=latest&visibility=commercial&limit=200"
+_REGISTRY_API = _REGISTRY_BASE + _REGISTRY_QUERY
 _CACHE_TTL_S = 86400  # 24 hours
 # v0.95.x layout migration v1 — moved under ~/.geode/mcp/ to group with
 # other MCP state (trace-runs/, etc.). Legacy ``~/.geode/mcp-registry-cache.json``
@@ -129,14 +128,7 @@ def _fetch_from_api() -> list[RegistryEntry] | None:
             all_servers.extend(servers)
 
             cursor = data.get("metadata", {}).get("nextCursor")
-            if cursor:
-                url = (
-                    "https://api.anthropic.com/mcp-registry/v0/servers"
-                    f"?version=latest&visibility=commercial&limit=200"
-                    f"&cursor={cursor}"
-                )
-            else:
-                url = ""
+            url = f"{_REGISTRY_API}&cursor={cursor}" if cursor else ""
         client.close()
     except Exception:
         log.debug("Registry API fetch failed", exc_info=True)

@@ -234,7 +234,7 @@ class TestComputeAnchorConfidenceMultiplier:
 class TestAnchorConfidenceConfigKnob:
     def test_default_disabled(self) -> None:
         """C7-9: AutoresearchConfig.anchor_confidence_mode default = False."""
-        from core.config.self_improving_loop import AutoresearchConfig
+        from core.config.self_improving import AutoresearchConfig
 
         cfg = AutoresearchConfig()
         assert cfg.anchor_confidence_mode is False

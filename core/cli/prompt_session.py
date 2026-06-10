@@ -109,7 +109,7 @@ def _build_prompt_session() -> Any:
 
     # PR-γ1 — install + bind the subscription quota banner. Lazy-load
     # the self-improving-loop config so prompt_session stays importable when
-    # ``core.config.self_improving_loop`` is unavailable (test contexts).
+    # ``core.config.self_improving`` is unavailable (test contexts).
     bottom_toolbar = _make_bottom_toolbar()
     # Stash the render callable so _apply_toolbar_visibility (run before
     # each prompt) can show/hide the bar by reassigning the session's
@@ -144,7 +144,7 @@ def _make_bottom_toolbar() -> Any:
     from core.cli.quota_banner import SubscriptionQuotaBanner, install_banner
 
     try:
-        from core.config.self_improving_loop import load_self_improving_loop_config
+        from core.config.self_improving import load_self_improving_loop_config
 
         cfg = load_self_improving_loop_config()
         warn = cfg.warn_threshold

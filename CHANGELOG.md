@@ -45,6 +45,22 @@ functional change.
 
 ---
 
+## [0.99.158] - 2026-06-11
+
+### Changed
+- **Structure sprint S-1 — misplaced-module moves + filename de-slop (PR-STRUCT-S1).** Behavior unchanged; placement corrected with all callers migrated in the same PR:
+  - `core/agent/bash_tool.py` -> `core/tools/bash_tool.py` (a tool lived in the agent package)
+  - `core/llm/audit_lane.py` -> `core/orchestration/audit_lane.py` (lane scheduling is orchestration, not LLM adapters)
+  - `core/config/self_improving_loop.py` -> `core/config/self_improving.py` (module rename only; the `[self_improving_loop.*]` TOML schema is the operator contract and is untouched) — 32 importer files migrated
+  - `core/memory/fts_helpers.py` -> `core/memory/fts_query.py` (`_helpers` catch-all suffix -> actual responsibility: FTS5 query sanitisation + capability detection)
+- **Hardcoding sweep (same PR):**
+  - `CONTEXT_BLOCK_MAX_CHARS = 8000` anchored in `core/config` — the cap was independently hardcoded at 4 sites (isolated_execution / skills context block / skill_catalog_policy / web_tools)
+  - `DEFAULT_AGENT_MODEL` anchored in `plugins/seed_generation/agents/base.py` — was hardcoded in 10 agent modules (per-role TOML overrides unchanged)
+  - `GEODE_PAGES_BASE_URL` + `GEODE_REPO_URL` anchored in `core/paths.py`; hub builder footer + `site/scripts/sync-stats.mjs` (file-level consts) migrated
+  - `core/mcp/registry.py` pagination URL derived from the existing `_REGISTRY_API` constant instead of a second literal
+  - `core/cli/commands/model.py` scope display paths use `GLOBAL_CONFIG_TOML`/`PROJECT_CONFIG_TOML` anchors
+- `.gitignore`: `pilot_stderr.log` + root `/node_modules/`.
+
 ## [0.99.157] - 2026-06-11
 
 ### Removed

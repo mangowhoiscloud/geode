@@ -36,7 +36,7 @@ def trigger_paths(tmp_path: Path) -> Iterator[tuple[Path, Path]]:
 
 
 def test_scheduler_config_defaults_match_spec() -> None:
-    from core.config.self_improving_loop import SchedulerConfig
+    from core.config.self_improving import SchedulerConfig
 
     cfg = SchedulerConfig()
     assert cfg.enabled is False
@@ -46,7 +46,7 @@ def test_scheduler_config_defaults_match_spec() -> None:
 
 def test_scheduler_config_validates_min_interval_range() -> None:
     """``min_interval_minutes`` is Annotated[int, ge=1, le=1440]."""
-    from core.config.self_improving_loop import SchedulerConfig
+    from core.config.self_improving import SchedulerConfig
     from pydantic import ValidationError
 
     with pytest.raises(ValidationError):
@@ -59,7 +59,7 @@ def test_scheduler_config_validates_min_interval_range() -> None:
 
 def test_scheduler_config_forbid_extras() -> None:
     """extra='forbid' — unknown key raises so typos surface."""
-    from core.config.self_improving_loop import SchedulerConfig
+    from core.config.self_improving import SchedulerConfig
     from pydantic import ValidationError
 
     with pytest.raises(ValidationError):
@@ -67,7 +67,7 @@ def test_scheduler_config_forbid_extras() -> None:
 
 
 def test_top_level_self_improving_loop_config_carries_scheduler() -> None:
-    from core.config.self_improving_loop import (
+    from core.config.self_improving import (
         SchedulerConfig,
         SelfImprovingLoopConfig,
     )

@@ -463,3 +463,10 @@ def reset_routing_cache() -> None:
     """Clear the routing config cache (for testing)."""
     global _routing_config_cache
     _routing_config_cache = None
+
+
+# Context-block char budget (hardcoding sweep, 2026-06-11) — the 8000-char
+# cap was independently hardcoded at 4 sites (isolated_execution, skills
+# context block, skill_catalog_policy, web_tools); one drift-prone policy,
+# one anchor.
+CONTEXT_BLOCK_MAX_CHARS = 8000

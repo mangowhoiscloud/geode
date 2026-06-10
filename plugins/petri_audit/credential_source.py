@@ -256,13 +256,13 @@ def self_improving_loop_fallback_policy() -> bool:
     Petri call sites (``registry.get_binding`` / ``models.to_inspect_model``)
     invoke this helper to thread the flag into
     :func:`resolve_credential_source` without each call site needing
-    to import ``core.config.self_improving_loop`` directly.
+    to import ``core.config.self_improving`` directly.
 
     Lazy import so this module stays usable in test contexts that
     stub ``core.config``.
     """
     try:
-        from core.config.self_improving_loop import load_self_improving_loop_config
+        from core.config.self_improving import load_self_improving_loop_config
     except ImportError:
         # P1b — record the silent default so the operator can see
         # whether the run actually consulted the user's config or fell

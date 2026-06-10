@@ -13,6 +13,7 @@
 from __future__ import annotations
 
 from plugins.seed_generation.agents.base import (
+    DEFAULT_AGENT_MODEL,
     BaseSeedAgent,
     SeedAgentResult,
     parse_structured_output,
@@ -26,6 +27,7 @@ from plugins.seed_generation.agents.proximity import Proximity
 from plugins.seed_generation.agents.ranker import Ranker
 
 __all__ = [
+    "DEFAULT_AGENT_MODEL",
     "BaseSeedAgent",
     "Critic",
     "Evolver",

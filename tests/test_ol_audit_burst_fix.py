@@ -12,7 +12,7 @@ FIX-2 — same argv pins ``--max-samples 1`` by default (serialises
         inspect_ai's per-sample parallelism on top of per-connection);
         lifted via GEODE_AUDIT_MAX_SAMPLES.
 
-FIX-3 — ``core/llm/audit_lane.py`` module-level Lane (max_concurrent=1,
+FIX-3 — ``core/orchestration/audit_lane.py`` module-level Lane (max_concurrent=1,
         15-min timeout) wraps the ``subprocess.run`` call so cron +
         manual audit invocations can't overlap on the host.
 
@@ -179,7 +179,7 @@ def test_audit_lane_singleton_default_capacity() -> None:
     """Lane singleton initialises with ``max_concurrent=1`` and the
     canonical name surface (matches Paperclip's 1-agent-at-a-time
     pattern)."""
-    from core.llm.audit_lane import AUDIT_LANE_NAME, AUDIT_LANE_TIMEOUT_S, get_audit_lane
+    from core.orchestration.audit_lane import AUDIT_LANE_NAME, AUDIT_LANE_TIMEOUT_S, get_audit_lane
 
     lane = get_audit_lane()
     assert lane.name == AUDIT_LANE_NAME == "autoresearch-audit"
@@ -190,7 +190,7 @@ def test_audit_lane_singleton_default_capacity() -> None:
 def test_audit_lane_singleton_is_stable() -> None:
     """Repeat calls to ``get_audit_lane`` return the same instance —
     not a new Lane per call (would defeat serialisation)."""
-    from core.llm.audit_lane import get_audit_lane
+    from core.orchestration.audit_lane import get_audit_lane
 
     assert get_audit_lane() is get_audit_lane()
 
@@ -198,7 +198,7 @@ def test_audit_lane_singleton_is_stable() -> None:
 def test_acquire_audit_lane_serialises_sequential_holders() -> None:
     """Two sequential acquires both succeed; the second waits for the
     first to release."""
-    from core.llm.audit_lane import acquire_audit_lane, get_audit_lane
+    from core.orchestration.audit_lane import acquire_audit_lane, get_audit_lane
 
     lane = get_audit_lane()
     with acquire_audit_lane("session-1"):
@@ -214,7 +214,7 @@ def test_acquire_audit_lane_blocks_concurrent_holder() -> None:
     that records timestamps."""
     import time
 
-    from core.llm.audit_lane import acquire_audit_lane
+    from core.orchestration.audit_lane import acquire_audit_lane
 
     hold_seconds = 0.3
     release_times: list[float] = []
@@ -253,7 +253,7 @@ def test_audit_lane_lazy_init_is_thread_safe() -> None:
     the first ``get_audit_lane()`` call, and assert they all received
     the identical instance.
     """
-    from core.llm import audit_lane
+    from core.orchestration import audit_lane
 
     # Reset the singleton so each thread races the first init.
     audit_lane._AUDIT_LANE = None  # type: ignore[attr-defined]
@@ -289,7 +289,7 @@ def test_audit_train_source_grep_pins_lane_integration() -> None:
     from core.self_improving import train
 
     source = Path(train.__file__).read_text(encoding="utf-8")
-    assert "from core.llm.audit_lane import acquire_audit_lane" in source, (
+    assert "from core.orchestration.audit_lane import acquire_audit_lane" in source, (
         "FIX-3 regressed: core/self_improving/train.py no longer imports the audit lane."
     )
     assert "with acquire_audit_lane(" in source, (
