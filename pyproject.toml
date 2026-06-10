@@ -1,6 +1,6 @@
 [project]
 name = "geode-agent"
-version = "0.99.154"
+version = "0.99.155"
 description = "GEODE — 범용 자율 실행 에이전트"
 license = "Apache-2.0"
 readme = "README.md"
@@ -46,6 +46,9 @@ dependencies = [
 
 [project.scripts]
 geode = "core.cli:app"
+# D-3 (4) 2026-06-10 — first-class MCP entry point: agentic one-shot +
+# self-improving propose/apply + memory tools over stdio.
+geode-mcp = "core.mcp_server:main"
 
 # inspect_ai discovers third-party model providers via the `inspect_ai`
 # entry-point group (importlib.metadata). When the [audit] extra is

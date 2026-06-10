@@ -223,6 +223,7 @@ COMMAND_MAP: dict[str, str] = {
     "/petri": "petri",
     "/self-improving": "self-improving",
     "/sil": "self-improving",
+    "/recall": "recall",
 }
 
 
@@ -252,6 +253,7 @@ def show_help() -> None:
     console.print("  [label]/context[/label]            — Show assembled context tiers")
     console.print("  [label]/apply[/label]              — Manage job applications")
     console.print("  [label]/tasks[/label]              — Show task list")
+    console.print("  [label]/recall[/label]             — Memory-recall pool (list/show/save)")
     console.print("  [label]/compact[/label]            — Compact conversation context")
     console.print("  [label]/clear[/label]              — Clear conversation history")
     console.print("  [label]/help[/label]               — Show this help")

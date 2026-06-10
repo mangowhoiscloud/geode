@@ -430,15 +430,15 @@ class TestAgenticLoop:
     def test_internal_sync_entrypoints_bridge_to_arun_not_run(self) -> None:
         """Production entrypoints should not route through AgenticLoop.run()."""
         from core.agent.worker import _run_agentic
-        from core.cli.bootstrap import _build_agentic_stack_minimal
+        from core.cli.bootstrap import run_agentic_oneshot
         from core.cli.commands.skills import cmd_skill_invoke
         from core.cli.scheduler_drain import drain_scheduler_queue
         from core.cli.typer_serve import serve
         from core.server.ipc_server.poller import CLIPoller
 
         forbidden = {
-            "_build_agentic_stack_minimal": (
-                inspect.getsource(_build_agentic_stack_minimal),
+            "run_agentic_oneshot": (
+                inspect.getsource(run_agentic_oneshot),
                 ["return loop.run("],
             ),
             "drain_scheduler_queue": (
