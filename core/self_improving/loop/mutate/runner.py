@@ -127,7 +127,7 @@ class ApplyRecord(BaseModel):
     auditor / target / judge / mutator, recorded on EVERY cycle (promote or
     reject) so the credential lane (PAYG / Subscription / CLI) is observable
     without parsing the ``.eval``. Shared SoT with ``baseline_archive.jsonl``
-    (:mod:`core.self_improving.loop.role_provenance`). ``None`` on legacy rows /
+    (:mod:`core.self_improving.loop.observe.role_provenance`). ``None`` on legacy rows /
     when the config could not be resolved at append time."""
     contract_results: list[dict[str, Any]] | None = None
     """PR-CONTRACT-EVAL (2026-06-03) — the deterministic tool-call contract
@@ -330,7 +330,7 @@ class RunnerContext:
     """PR-MUTATOR-HISTORY-FEEDBACK (2026-05-27) — compact textual summary
     of recent apply + attribution history (per-dim credit + kind×dim
     matrix), rendered by
-    :func:`core.self_improving.loop.mutator_feedback.format_mutator_feedback_block`.
+    :func:`core.self_improving.loop.mutate.mutator_feedback.format_mutator_feedback_block`.
     Empty string when the feedback window is 0 or the history is empty;
     the user-prompt builder drops the block silently in that case."""
     recent_applies_for_dedup: tuple[ApplyRecord, ...] = ()
@@ -389,12 +389,12 @@ def build_runner_context() -> RunnerContext:
     )
 
     from core.config.self_improving import load_self_improving_loop_config
-    from core.self_improving.loop.mutations_reader import (
+    from core.self_improving.loop.mutate.mutator_feedback import format_mutator_feedback_block
+    from core.self_improving.loop.mutate.policies import TARGET_KINDS, load_policy
+    from core.self_improving.loop.observe.mutations_reader import (
         read_recent_applies,
         read_recent_attributions,
     )
-    from core.self_improving.loop.mutator_feedback import format_mutator_feedback_block
-    from core.self_improving.loop.policies import TARGET_KINDS, load_policy
     from core.self_improving.train import load_wrapper_prompt_sections
 
     baseline_snapshot = load_baseline()
@@ -548,14 +548,15 @@ contract to the JSON output the parser expects.
 def _program_md_path() -> Path:
     """Absolute path to the runner's ``program.md`` SoT.
 
-    ``core/self_improving/loop/runner.py`` → parents[1] = ``core/self_improving``;
+    ``core/self_improving/loop/mutate/runner.py`` → parents[1] = ``core/self_improving``;
     the program SoT moved here from ``<repo>/autoresearch/program.md``
     (PR-STATE-SELF-IMPROVING-RENAME 2026-06-01) so it sits next to the
     train.py / campaign.py code that drives the mutator. Resolved relative to
     the module so the lookup works in worktrees / installs where ``cwd``
     doesn't match the repo root.
     """
-    return Path(__file__).resolve().parents[1] / "program.md"
+    # S-5 (2026-06-11) — runner moved one level deeper (loop/ -> loop/mutate/).
+    return Path(__file__).resolve().parents[2] / "program.md"
 
 
 def _load_program_md() -> str | None:
@@ -716,7 +717,7 @@ def _default_llm_call(system_prompt: str, user_prompt: str) -> str:
 
     **CLI-subscription paths (``claude-cli`` / ``openai-codex``)
     deliberately stay on the dedicated ``invoke_claude_cli`` /
-    ``invoke_codex_cli`` helpers** in :mod:`core.self_improving.loop.cli_subprocess`
+    ``invoke_codex_cli`` helpers** in :mod:`core.self_improving.loop.mutate.cli_subprocess`
     rather than going through the Path-B ``ClaudeCliAdapter`` /
     ``CodexCliAdapter`` built-ins. The built-in adapters were designed
     for the agentic-loop's streaming JSON event protocol
@@ -760,7 +761,7 @@ def _default_llm_call(system_prompt: str, user_prompt: str) -> str:
 
     provider = _resolve_provider(model)
 
-    _logging.getLogger("core.self_improving.loop.runner").info(
+    _logging.getLogger("core.self_improving.loop.mutate.runner").info(
         "mutator dispatch: model=%s provider=%s source=%s max_tokens=%d",
         model,
         provider,
@@ -774,11 +775,11 @@ def _default_llm_call(system_prompt: str, user_prompt: str) -> str:
     # the Path-B CLI adapters). The API path (``api_key`` / ``auto``)
     # falls through to the LLMAdapter Protocol.
     if source == "claude-cli":
-        from core.self_improving.loop.cli_subprocess import invoke_claude_cli
+        from core.self_improving.loop.mutate.cli_subprocess import invoke_claude_cli
 
         return invoke_claude_cli(system_prompt=system_prompt, user_prompt=user_prompt)
     if source == "openai-codex":
-        from core.self_improving.loop.cli_subprocess import invoke_codex_cli
+        from core.self_improving.loop.mutate.cli_subprocess import invoke_codex_cli
 
         return invoke_codex_cli(system_prompt=system_prompt, user_prompt=user_prompt)
 
@@ -1011,7 +1012,7 @@ def parse_mutation(raw: str) -> Mutation:
     # ``prompt`` keeps the legacy wrapper-sections behaviour so older
     # mutation rows replay unchanged. Unknown kinds raise ValueError so
     # the loop fails closed (caught and logged by SelfImprovingLoopRunner).
-    from core.self_improving.loop.policies import TARGET_KINDS
+    from core.self_improving.loop.mutate.policies import TARGET_KINDS
 
     kind_raw = payload.get("target_kind", "prompt")
     if not isinstance(kind_raw, str):
@@ -1076,10 +1077,10 @@ def apply_mutation(
     ``core.self_improving.train.write_wrapper_prompt_sections`` writer so
     schema enforcement (single-paragraph 600-char cap) is preserved.
     The other four kinds go through
-    :func:`core.self_improving.loop.policies.write_policy` which is
+    :func:`core.self_improving.loop.mutate.policies.write_policy` which is
     a generic ``dict[str, str]`` writer with atomic temp-file rewrite.
     """
-    from core.self_improving.loop.policies import load_policy, write_policy
+    from core.self_improving.loop.mutate.policies import load_policy, write_policy
     from core.self_improving.train import (
         load_wrapper_prompt_sections,
         write_wrapper_prompt_sections,
@@ -1162,7 +1163,7 @@ def append_audit_log(
     # never block the ledger write (observability is not a correctness boundary).
     try:
         from core.config.self_improving import load_self_improving_loop_config
-        from core.self_improving.loop.role_provenance import collect_role_provenance
+        from core.self_improving.loop.observe.role_provenance import collect_role_provenance
 
         row["role_provenance"] = collect_role_provenance(
             load_self_improving_loop_config().autoresearch
@@ -1410,7 +1411,7 @@ class SelfImprovingLoopRunner:
         # path lazy (mock-llm tests don't pay it).
         if ctx.recent_applies_for_dedup:
             from core.config.self_improving import load_self_improving_loop_config
-            from core.self_improving.loop.mutator_feedback import (
+            from core.self_improving.loop.mutate.mutator_feedback import (
                 RepetitiveMutationError,
                 check_repetitive_mutation,
             )
@@ -1455,7 +1456,7 @@ class SelfImprovingLoopRunner:
         # based on the parsed mutation's kind so the dispatcher writes
         # the right destination. ``original_sections`` is captured AFTER
         # the kind-aware load so rollback restores the matching SoT.
-        from core.self_improving.loop.policies import load_policy
+        from core.self_improving.loop.mutate.policies import load_policy
 
         if mutation.target_kind == "prompt":
             target_sections = dict(ctx.current_sections)
@@ -1626,7 +1627,7 @@ class SelfImprovingLoopRunner:
 
                 write_wrapper_prompt_sections(original_sections)
             else:
-                from core.self_improving.loop.policies import write_policy
+                from core.self_improving.loop.mutate.policies import write_policy
 
                 write_policy(mutation.target_kind, original_sections)
             log.error(

@@ -41,7 +41,7 @@ from __future__ import annotations
 
 import re
 
-from core.self_improving.train import CRITICAL_DIMS
+from core.self_improving.fitness import CRITICAL_DIMS
 
 # Codex MCP review WARN #2 — dual-SoT 회피. CRITICAL_DIMS 는
 # ``core/self_improving/train.py`` 의 single source from ``AXIS_TIERS`` (5 critical

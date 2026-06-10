@@ -39,8 +39,8 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from core.self_improving.loop.attribution import AttributionRecord
-    from core.self_improving.loop.runner import ApplyRecord, Mutation
+    from core.self_improving.loop.mutate.runner import ApplyRecord, Mutation
+    from core.self_improving.loop.observe.attribution import AttributionRecord
 
 log = logging.getLogger(__name__)
 
@@ -91,7 +91,7 @@ def format_mutator_feedback_block(
     attribution_records
         Iterable of recent :class:`AttributionRecord` rows. Consumed once.
     """
-    from core.self_improving.loop.kind_dim_matrix import (
+    from core.self_improving.loop.observe.kind_dim_matrix import (
         compute_kind_dim_matrix,
         rank_dims_by_kind,
     )
@@ -121,7 +121,7 @@ def format_mutator_feedback_block(
     # — would steer the mutator straight into a ``parse_mutation`` rejection
     # and a wasted SKIP. Filter to ``TARGET_KINDS`` so the feedback only
     # recommends kinds the mutator can actually dispatch to.
-    from core.self_improving.loop.policies import TARGET_KINDS
+    from core.self_improving.loop.mutate.policies import TARGET_KINDS
 
     if matrix:
         lines.append("Kind x Dim (top dims by absolute attribution per kind):")

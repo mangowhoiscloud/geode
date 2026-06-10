@@ -1,6 +1,6 @@
 """In-context slot wiring orchestrator — ADR-012 M4.4.
 
-Connects the S5 in-context slot schema (`core/self_improving/loop/in_context_slots.py`)
+Connects the S5 in-context slot schema (`core/self_improving/loop/inject/in_context_slots.py`)
 to the actual LLM inference path. For every active LLM call, this
 orchestrator consults the 4-slot SoT and applies the configured
 transforms to the outgoing ``messages`` + ``system`` text before they
@@ -82,7 +82,7 @@ def apply_in_context_slots(
     # No-op fast path — done first so the common "no SoT configured"
     # case adds zero overhead on every LLM call.
     try:
-        from core.self_improving.loop.in_context_slots import (
+        from core.self_improving.loop.inject.in_context_slots import (
             SLOT_EXEMPLARS,
             SLOT_MEMORY_RECALL,
             SLOT_RUBRIC_EXCERPTS,
@@ -126,7 +126,7 @@ def apply_in_context_slots(
     memory_cfg = slots.get(SLOT_MEMORY_RECALL)
     if memory_cfg is not None:
         try:
-            from core.self_improving.loop.memory_recall import (
+            from core.self_improving.loop.inject.memory_recall import (
                 format_memory_block,
                 load_memory_entries,
                 rank_memory_entries,
@@ -148,7 +148,7 @@ def apply_in_context_slots(
     rubric_cfg = slots.get(SLOT_RUBRIC_EXCERPTS)
     if rubric_cfg is not None:
         try:
-            from core.self_improving.loop.rubric_excerpts import (
+            from core.self_improving.loop.inject.rubric_excerpts import (
                 find_worst_regressions,
                 format_rubric_block,
                 load_baseline,
@@ -175,7 +175,7 @@ def apply_in_context_slots(
     tool_ranking_cfg = slots.get(SLOT_TOOL_RANKING)
     if tool_hints_cfg is not None or tool_ranking_cfg is not None:
         try:
-            from core.self_improving.loop.tool_hints import load_recent_episodes
+            from core.self_improving.loop.inject.tool_hints import load_recent_episodes
 
             episodes = load_recent_episodes()
         except Exception as exc:
@@ -187,7 +187,7 @@ def apply_in_context_slots(
         # ``<tool-hints>`` block for tools failing above the threshold.
         if tool_hints_cfg is not None:
             try:
-                from core.self_improving.loop.tool_hints import (
+                from core.self_improving.loop.inject.tool_hints import (
                     find_failing_tools,
                     format_tool_hints_block,
                 )

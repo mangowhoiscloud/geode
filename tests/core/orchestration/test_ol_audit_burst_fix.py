@@ -29,6 +29,7 @@ import threading
 from pathlib import Path
 
 import pytest
+from core.self_improving import measure
 
 # ---------------------------------------------------------------------------
 # FIX-1 + FIX-2 — `inspect eval` argv flags
@@ -160,9 +161,8 @@ def test_geode_audit_argv_does_not_pass_inspect_flags() -> None:
     """`geode audit` (Typer wrapper) does NOT accept --max-connections;
     the burst flags must stay out of the outer argv. Codex MCP catch.
     """
-    from core.self_improving import train
 
-    argv = train._build_audit_command()
+    argv = measure._build_audit_command()
     assert "--max-connections" not in argv, (
         "OL-AUDIT-BURST-FIX regressed: outer `geode audit` argv MUST NOT "
         "carry --max-connections — Typer wrapper rejects unknown options."
@@ -286,7 +286,7 @@ def test_audit_train_source_grep_pins_lane_integration() -> None:
     ``with acquire_audit_lane(...)`` wrapper re-introduces the
     overlapping-audit race.
     """
-    from core.self_improving import train
+    from core.self_improving import measure as train
 
     source = Path(train.__file__).read_text(encoding="utf-8")
     assert "from core.orchestration.audit_lane import acquire_audit_lane" in source, (

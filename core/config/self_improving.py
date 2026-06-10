@@ -213,7 +213,7 @@ class AutoresearchConfig(BaseModel):
       these.
     - ``mutator`` — autoresearch's own in-process LLM (the engineer
       that proposes GEODE surface mutations). Consumed by
-      ``core/self_improving/loop/runner.py:_default_llm_call``.
+      ``core/self_improving/loop/mutate/runner.py:_default_llm_call``.
 
     Standalone ``geode audit`` (run outside the self-improving loop)
     still reads the same sections — same single SoT, just different
@@ -240,7 +240,7 @@ class AutoresearchConfig(BaseModel):
     """petri eval ``auditor`` role binding."""
     mutator: MutatorConfig = Field(default_factory=lambda: MutatorConfig())
     """In-process mutator runner binding. Consumed by
-    :func:`core.self_improving.loop.runner._default_llm_call`."""
+    :func:`core.self_improving.loop.mutate.runner._default_llm_call`."""
 
     mutator_feedback_window: Annotated[int, Field(ge=0, le=200)] = 20
     """PR-MUTATOR-HISTORY-FEEDBACK (2026-05-27) — number of most-recent
@@ -428,7 +428,7 @@ class AutoresearchConfig(BaseModel):
     target_effect_size: Annotated[float, Field(gt=0.0, le=1.0)] = 0.02
     """E4 (2026-05-30) — the fitness-scale effect size δ the power analysis targets.
 
-    Feeds :func:`core.self_improving.loop.statistical_power.required_samples` to
+    Feeds :func:`core.self_improving.loop.observe.statistical_power.required_samples` to
     compute the required ``N_seed × M_replicate`` to DETECT δ at α=0.05 / 80% power.
     Default ~0.02 sits just above the promote gate's zero-noise floor — see the
     ``DEFAULT_TARGET_EFFECT_SIZE`` docstring for the full justification. Resolution
@@ -440,7 +440,7 @@ class AutoresearchConfig(BaseModel):
 
 
 class MutatorConfig(BaseModel):
-    """Mutator-role binding for ``core/self_improving/loop/runner.py``.
+    """Mutator-role binding for ``core/self_improving/loop/mutate/runner.py``.
 
     PR-1 G-A introduced this so the mutator was a first-class role
     alongside ``[seed_generation.role.<X>]`` and ``[petri.role.<X>]``.
@@ -586,7 +586,7 @@ class SelfImprovingLoopConfig(BaseModel):
     ``--use-oauth`` flag, ``core/self_improving/train.py``), ``autoresearch.target.source``
     (the petri ``target`` adapter via ``plugins.petri_audit.registry.get_binding``),
     and ``autoresearch.mutator.source`` (the in-process mutator LLM via
-    ``core/self_improving/loop/runner.py:_default_llm_call``). Keeping them in
+    ``core/self_improving/loop/mutate/runner.py:_default_llm_call``). Keeping them in
     sync by hand is the kind of three-place edit that silently drifts, so this
     field is the ONE knob an operator flips to move those three between
     subscription and PAYG:
@@ -796,7 +796,7 @@ def _emit_defaults_notice(reason: str, path: Path) -> None:
     bootstrap, petri user-overrides) stay unaffected.
     """
     try:
-        from core.self_improving.loop.run_transcript import current_run_transcript
+        from core.self_improving.loop.observe.run_transcript import current_run_transcript
 
         journal = current_run_transcript()
         if journal is None:

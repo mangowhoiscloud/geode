@@ -136,7 +136,7 @@ def create_mcp_server() -> Any:
     @mcp.tool(description=_TOOL_DESCRIPTIONS["self_improving_propose"])
     def self_improving_propose() -> dict[str, Any]:
         """Propose one scaffold mutation — nothing is written yet."""
-        from core.self_improving.loop.runner import SelfImprovingLoopRunner
+        from core.self_improving.loop.mutate.runner import SelfImprovingLoopRunner
 
         runner = SelfImprovingLoopRunner(rerun_enabled=False, commit_enabled=True)
         proposal = runner.propose()

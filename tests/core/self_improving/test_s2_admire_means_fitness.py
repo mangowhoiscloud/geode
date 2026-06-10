@@ -14,7 +14,7 @@ from core.self_improving.admire_means import (
     CALIBRATION_THRESHOLD,
     compute_admire_aggregate,
 )
-from core.self_improving.train import (
+from core.self_improving.fitness import (
     FITNESS_ADMIRE_WEIGHT,
     FITNESS_DIM_3AX,
     FITNESS_DIM_WEIGHT,

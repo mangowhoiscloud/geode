@@ -3,7 +3,7 @@
 5-element 패턴 (schema-only, no inference wiring yet — M4.4 deferred):
 - SoT: in-context-slots.json
 - Path: GLOBAL_IN_CONTEXT_SLOTS_PATH + OPERATOR_LOCAL_IN_CONTEXT_SLOTS_PATH
-- Reader: core/self_improving/loop/in_context_slots.py
+- Reader: core/self_improving/loop/inject/in_context_slots.py
 - Entry: deferred (M4.4 후속 PR)
 - Env: GEODE_IN_CONTEXT_SLOTS_OVERRIDE + _STRICT=1 (train.py audit)
 """
@@ -16,8 +16,8 @@ from pathlib import Path
 from typing import Any
 
 import pytest
-from core.self_improving.loop import in_context_slots
-from core.self_improving.loop.in_context_slots import (
+from core.self_improving.loop.inject import in_context_slots
+from core.self_improving.loop.inject.in_context_slots import (
     CANONICAL_SLOTS,
     INJECTION_SYSTEM_PROMPT,
     INJECTION_TOOL_DESCRIPTIONS,
@@ -63,7 +63,7 @@ def test_canonical_slots_has_exactly_5_entries() -> None:
 
 
 def test_slot_identifier_constants_match_canonical() -> None:
-    from core.self_improving.loop.in_context_slots import SLOT_TOOL_RANKING
+    from core.self_improving.loop.inject.in_context_slots import SLOT_TOOL_RANKING
 
     assert SLOT_EXEMPLARS == "exemplars"
     assert SLOT_MEMORY_RECALL == "memory_recall"
@@ -300,8 +300,10 @@ def test_path_constants_present() -> None:
 
 
 def test_train_py_sets_in_context_slots_env_pair() -> None:
+    # S-5 (2026-06-11) — the audit-env assembly moved to measure.py
+    # (train.py is restored to the autoresearch-원형 mutation surface).
     repo_root = Path(__file__).resolve().parents[3]
-    src = (repo_root / "core/self_improving/train.py").read_text(encoding="utf-8")
+    src = (repo_root / "core/self_improving/measure.py").read_text(encoding="utf-8")
     assert "GEODE_IN_CONTEXT_SLOTS_OVERRIDE" in src
     assert "GEODE_IN_CONTEXT_SLOTS_STRICT" in src
     assert "GLOBAL_IN_CONTEXT_SLOTS_PATH" in src

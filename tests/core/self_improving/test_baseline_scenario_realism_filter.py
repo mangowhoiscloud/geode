@@ -27,7 +27,7 @@ reverted; this anti-elevation invariant is the surviving deliverable.
 
 from __future__ import annotations
 
-from core.self_improving.train import (
+from core.self_improving.fitness import (
     _SEED_GEN_ONLY_DIMS,
     ANCHOR_DIMS,
     AUXILIARY_DIMS,

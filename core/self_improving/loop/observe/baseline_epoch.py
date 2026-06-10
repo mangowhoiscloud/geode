@@ -88,7 +88,7 @@ def build_baseline_spec(
     """Assemble the canonical baseline spec (the surface that is hashed).
 
     ``role_provenance`` is the ``{role: {model, source, lane}}`` block from
-    :mod:`core.self_improving.loop.role_provenance`; only ``model`` + ``source``
+    :mod:`core.self_improving.loop.observe.role_provenance`; only ``model`` + ``source``
     enter the spec (``lane`` is derived from ``source``, so hashing it would be
     redundant). ``seed_pool_id`` is the seed pool's *identity* (content hash),
     not its bodies — ``None``/`""` when no pool is pinned (the pool axis then

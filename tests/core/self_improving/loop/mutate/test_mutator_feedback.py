@@ -17,7 +17,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
-from core.self_improving.loop.mutator_feedback import (
+from core.self_improving.loop.mutate.mutator_feedback import (
     RepetitionFinding,
     RepetitiveMutationError,
     check_repetitive_mutation,

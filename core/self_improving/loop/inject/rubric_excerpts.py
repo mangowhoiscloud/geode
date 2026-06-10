@@ -127,7 +127,7 @@ def resolve_baseline_path() -> Path:
     Single source of truth — same path the ``/self-improving status``
     slash uses (``MUTATION_AUDIT_LOG_PATH.parent / "baseline.json"``).
     """
-    from core.self_improving.loop.runner import MUTATION_AUDIT_LOG_PATH
+    from core.self_improving.loop.mutate.runner import MUTATION_AUDIT_LOG_PATH
 
     return Path(MUTATION_AUDIT_LOG_PATH).parent / "baseline.json"
 

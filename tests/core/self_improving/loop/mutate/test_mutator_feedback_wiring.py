@@ -30,9 +30,9 @@ def isolated_mutator_state(
     wrapper_path.write_text(json.dumps({"role": "Be concise."}), encoding="utf-8")
 
     # Force the runner's audit log location.
-    monkeypatch.setattr("core.self_improving.loop.runner.MUTATION_AUDIT_LOG_PATH", audit_log)
+    monkeypatch.setattr("core.self_improving.loop.mutate.runner.MUTATION_AUDIT_LOG_PATH", audit_log)
     monkeypatch.setattr(
-        "core.self_improving.loop.mutations_reader.MUTATION_AUDIT_LOG_PATH",
+        "core.self_improving.loop.observe.mutations_reader.MUTATION_AUDIT_LOG_PATH",
         audit_log,
     )
 
@@ -58,7 +58,7 @@ def isolated_mutator_state(
     # Neutralise non-prompt policy reads — return empty so the test
     # focuses on history feedback / dedup, not policy surface size.
     monkeypatch.setattr(
-        "core.self_improving.loop.policies.load_policy",
+        "core.self_improving.loop.mutate.policies.load_policy",
         lambda kind: {} if kind != "prompt" else {"role": "Be concise."},
     )
 
@@ -156,7 +156,7 @@ def test_build_runner_context_disables_feedback_when_window_zero(
 ) -> None:
     """With ``mutator_feedback_window=0`` the context's
     ``mutator_feedback_block`` is empty and the user prompt drops it."""
-    from core.self_improving.loop.runner import (
+    from core.self_improving.loop.mutate.runner import (
         _build_user_prompt,
         build_runner_context,
     )
@@ -180,7 +180,7 @@ def test_build_runner_context_populates_feedback_block_when_enabled(
     """With ``mutator_feedback_window>0`` and a matched apply +
     attribution pair, the user prompt surfaces the kind × dim feedback
     block."""
-    from core.self_improving.loop.runner import (
+    from core.self_improving.loop.mutate.runner import (
         _build_user_prompt,
         build_runner_context,
     )
@@ -210,7 +210,7 @@ def test_build_runner_context_populates_dedup_window_independent_of_feedback(
     dedup is on. Pins the conditional-read parity that Codex MCP
     flagged: the runner must populate ``recent_applies_for_dedup``
     even when ``feedback_window=0``."""
-    from core.self_improving.loop.runner import build_runner_context
+    from core.self_improving.loop.mutate.runner import build_runner_context
 
     _patch_config(monkeypatch, feedback_window=0, dedup_window=5)
     _write_apply_row(isolated_mutator_state["audit_log"], mutation_id="m1")
@@ -228,8 +228,8 @@ def test_propose_raises_repetitive_mutation_error_without_sot_write(
     raises ``RepetitiveMutationError`` and the wrapper SoT is left
     untouched (no SoT write happened — only ``apply_proposal`` would
     persist)."""
-    from core.self_improving.loop.mutator_feedback import RepetitiveMutationError
-    from core.self_improving.loop.runner import SelfImprovingLoopRunner
+    from core.self_improving.loop.mutate.mutator_feedback import RepetitiveMutationError
+    from core.self_improving.loop.mutate.runner import SelfImprovingLoopRunner
 
     _patch_config(monkeypatch, feedback_window=0, dedup_window=10, dedup_threshold=0.85)
     audit_log = isolated_mutator_state["audit_log"]

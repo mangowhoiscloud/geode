@@ -131,7 +131,7 @@ def _default_baseline_path() -> Path | None:
     supplied ``--target-dim``.
     """
     try:
-        from core.self_improving.train import BASELINE_PATH
+        from core.self_improving.ledger import BASELINE_PATH
 
         return Path(BASELINE_PATH)
     except Exception:  # pragma: no cover — defensive
@@ -257,7 +257,7 @@ def _operational_dim_set() -> frozenset[str]:
     everything than silently exclude a dim).
     """
     try:
-        from core.self_improving.train import AUXILIARY_DIMS, CRITICAL_DIMS
+        from core.self_improving.fitness import AUXILIARY_DIMS, CRITICAL_DIMS
 
         return frozenset(CRITICAL_DIMS) | frozenset(AUXILIARY_DIMS)
     except Exception:  # pragma: no cover
@@ -303,7 +303,7 @@ def pick_regression_target_dim(
 
     def _critical_dims() -> frozenset[str]:
         try:
-            from core.self_improving.train import CRITICAL_DIMS
+            from core.self_improving.fitness import CRITICAL_DIMS
 
             return frozenset(CRITICAL_DIMS)
         except Exception:  # pragma: no cover
@@ -363,7 +363,7 @@ def pick_regression_target_dims(
 
     def _critical_dims_local() -> frozenset[str]:
         try:
-            from core.self_improving.train import CRITICAL_DIMS
+            from core.self_improving.fitness import CRITICAL_DIMS
 
             return frozenset(CRITICAL_DIMS)
         except Exception:  # pragma: no cover

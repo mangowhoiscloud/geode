@@ -11,7 +11,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 
 import pytest
-from core.self_improving.loop.kind_dim_matrix import (
+from core.self_improving.loop.observe.kind_dim_matrix import (
     compute_kind_dim_matrix,
     rank_dims_by_kind,
 )
@@ -158,8 +158,8 @@ def test_rank_dims_with_limit() -> None:
 
 def test_works_with_real_records() -> None:
     """End-to-end with real Pydantic models."""
-    from core.self_improving.loop.attribution import AttributionRecord
-    from core.self_improving.loop.runner import ApplyRecord
+    from core.self_improving.loop.mutate.runner import ApplyRecord
+    from core.self_improving.loop.observe.attribution import AttributionRecord
 
     applies = [
         ApplyRecord(

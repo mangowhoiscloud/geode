@@ -402,13 +402,13 @@ def test_run_audit_seeds_emits_cost_preview_into_session_journal(tmp_path: Any) 
     # IS the module being patched, so importing ``RunTranscript`` from
     # inside the patch context yields ``MockJournal`` and causes
     # ``side_effect = lambda: RealJournal(...)`` to recurse.
-    from core.self_improving.loop.run_transcript import RunTranscript as RealJournal
+    from core.self_improving.loop.observe.run_transcript import RunTranscript as RealJournal
 
     with (
         patch("plugins.seed_generation.cli.pick_bindings", return_value=_good_picker()),
         patch("plugins.seed_generation.cli.run_pre_flight", return_value=PreFlightReport()),
         patch("plugins.seed_generation.cli._dispatch_pipeline"),
-        patch("core.self_improving.loop.run_transcript.RunTranscript") as MockJournal,
+        patch("core.self_improving.loop.observe.run_transcript.RunTranscript") as MockJournal,
     ):
         MockJournal.side_effect = lambda **kwargs: RealJournal(
             session_id=kwargs["session_id"],
@@ -435,7 +435,7 @@ def test_run_audit_seeds_emits_cost_preview_into_session_journal(tmp_path: Any) 
 
 def test_run_audit_seeds_emits_preflight_passed_when_clean(tmp_path: Any) -> None:
     journal_path = tmp_path / "transcript.jsonl"
-    from core.self_improving.loop.run_transcript import RunTranscript as RealJournal
+    from core.self_improving.loop.observe.run_transcript import RunTranscript as RealJournal
 
     def _bind(**kwargs: Any) -> Any:
         return RealJournal(
@@ -450,7 +450,7 @@ def test_run_audit_seeds_emits_preflight_passed_when_clean(tmp_path: Any) -> Non
         patch("plugins.seed_generation.cli.pick_bindings", return_value=_good_picker()),
         patch("plugins.seed_generation.cli.run_pre_flight", return_value=PreFlightReport()),
         patch("plugins.seed_generation.cli._dispatch_pipeline"),
-        patch("core.self_improving.loop.run_transcript.RunTranscript", side_effect=_bind),
+        patch("core.self_improving.loop.observe.run_transcript.RunTranscript", side_effect=_bind),
     ):
         run_audit_seeds(target_dim="broken_tool_use", yes=True, stdout=out, stderr=err)
 
@@ -483,7 +483,7 @@ def test_run_audit_seeds_emits_preflight_failed_with_issue_list(tmp_path: Any) -
         ]
     )
 
-    from core.self_improving.loop.run_transcript import RunTranscript as RealJournal
+    from core.self_improving.loop.observe.run_transcript import RunTranscript as RealJournal
 
     def _bind(**kwargs: Any) -> Any:
         return RealJournal(
@@ -498,7 +498,7 @@ def test_run_audit_seeds_emits_preflight_failed_with_issue_list(tmp_path: Any) -
         patch("plugins.seed_generation.cli.pick_bindings", return_value=_good_picker()),
         patch("plugins.seed_generation.cli.run_pre_flight", return_value=bad_report),
         patch("plugins.seed_generation.cli._dispatch_pipeline") as mock_dispatch,
-        patch("core.self_improving.loop.run_transcript.RunTranscript", side_effect=_bind),
+        patch("core.self_improving.loop.observe.run_transcript.RunTranscript", side_effect=_bind),
     ):
         code = run_audit_seeds(
             target_dim="broken_tool_use",
@@ -521,7 +521,7 @@ def test_run_audit_seeds_emits_preflight_failed_with_issue_list(tmp_path: Any) -
 
 def test_run_audit_seeds_emits_user_aborted_on_decline(tmp_path: Any) -> None:
     journal_path = tmp_path / "transcript.jsonl"
-    from core.self_improving.loop.run_transcript import RunTranscript as RealJournal
+    from core.self_improving.loop.observe.run_transcript import RunTranscript as RealJournal
 
     def _bind(**kwargs: Any) -> Any:
         return RealJournal(
@@ -536,7 +536,7 @@ def test_run_audit_seeds_emits_user_aborted_on_decline(tmp_path: Any) -> None:
         patch("plugins.seed_generation.cli.pick_bindings", return_value=_good_picker()),
         patch("plugins.seed_generation.cli.run_pre_flight", return_value=PreFlightReport()),
         patch("plugins.seed_generation.cli._dispatch_pipeline"),
-        patch("core.self_improving.loop.run_transcript.RunTranscript", side_effect=_bind),
+        patch("core.self_improving.loop.observe.run_transcript.RunTranscript", side_effect=_bind),
     ):
         code = run_audit_seeds(
             target_dim="broken_tool_use",
@@ -555,7 +555,7 @@ def test_run_audit_seeds_emits_user_aborted_on_decline(tmp_path: Any) -> None:
 
 def test_emit_cost_divergence_info_when_within_threshold(tmp_path: Any) -> None:
     """Predicted vs actual within ±50 % stays at ``info`` level."""
-    from core.self_improving.loop.run_transcript import RunTranscript
+    from core.self_improving.loop.observe.run_transcript import RunTranscript
     from plugins.seed_generation.cli import _emit_cost_divergence
 
     journal = RunTranscript(
@@ -574,7 +574,7 @@ def test_emit_cost_divergence_info_when_within_threshold(tmp_path: Any) -> None:
 
 def test_emit_cost_divergence_warn_when_overspend(tmp_path: Any) -> None:
     """Actual > 1.5 × predicted → ``warn`` level so a dashboard can highlight."""
-    from core.self_improving.loop.run_transcript import RunTranscript
+    from core.self_improving.loop.observe.run_transcript import RunTranscript
     from plugins.seed_generation.cli import _emit_cost_divergence
 
     journal = RunTranscript(
@@ -589,7 +589,7 @@ def test_emit_cost_divergence_warn_when_overspend(tmp_path: Any) -> None:
 def test_emit_cost_divergence_ratio_none_when_predicted_zero(tmp_path: Any) -> None:
     """Subscription-only run with $0 predicted PAYG → ratio is ``None``,
     level stays ``info`` (we can't compute a meaningful overshoot %)."""
-    from core.self_improving.loop.run_transcript import RunTranscript
+    from core.self_improving.loop.observe.run_transcript import RunTranscript
     from plugins.seed_generation.cli import _emit_cost_divergence
 
     journal = RunTranscript(

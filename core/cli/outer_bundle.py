@@ -164,7 +164,7 @@ def _load_mutation_events(*, limit: int) -> list[BundleEvent]:
     module doesn't drag the full runner deps at module load.
     """
     try:
-        from core.self_improving.loop.runner import MUTATION_AUDIT_LOG_PATH
+        from core.self_improving.loop.mutate.runner import MUTATION_AUDIT_LOG_PATH
     except ImportError as exc:
         log.debug("outer_bundle: mutation log path unavailable: %s", exc)
         return []
@@ -201,7 +201,7 @@ def _load_baseline_event() -> BundleEvent | None:
     historical fixture data with the legacy schema keeps working.
     """
     try:
-        from core.self_improving.loop.runner import MUTATION_AUDIT_LOG_PATH
+        from core.self_improving.loop.mutate.runner import MUTATION_AUDIT_LOG_PATH
     except ImportError:
         return None
     baseline_path = Path(MUTATION_AUDIT_LOG_PATH).parent / "baseline.json"

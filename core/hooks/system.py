@@ -45,7 +45,7 @@ def _mirror_hook_to_active_transcript(event: HookEvent, data: dict[str, Any]) ->
     """
     try:
         from core.observability.activity_registry import map_hook_to_activity
-        from core.self_improving.loop.run_transcript import current_run_transcript
+        from core.self_improving.loop.observe.run_transcript import current_run_transcript
 
         run_transcript = current_run_transcript()
         if run_transcript is None:
@@ -286,7 +286,7 @@ class HookEvent(Enum):
 
     # Self-improving runner system-prompt source (PR-FALLBACK-HOOK-CONTROL,
     # 2026-06-09). Fired by
-    # ``core.self_improving.loop.runner._build_system_prompt`` when
+    # ``core.self_improving.loop.mutate.runner._build_system_prompt`` when
     # ``program.md`` is unreadable. Replaces the former inline
     # ``_FALLBACK_SYSTEM_PROMPT`` literal (a drift-prone dual SoT — the
     # literal had already drifted to a stale schema missing

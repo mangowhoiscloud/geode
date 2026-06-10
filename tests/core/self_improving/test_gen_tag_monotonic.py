@@ -32,6 +32,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 import pytest
+from core.self_improving import ledger
 
 
 def _write_session(
@@ -54,7 +55,7 @@ def _write_session(
 
 def test_fresh_history_returns_gen1(tmp_path: Path) -> None:
     """No sessions.jsonl yet → first gen_tag emission is gen1."""
-    from core.self_improving.train import _next_gen_counter_for_commit
+    from core.self_improving.ledger import _next_gen_counter_for_commit
 
     n = _next_gen_counter_for_commit("abc1234", sessions_path=tmp_path / "missing.jsonl")
     assert n == 1
@@ -62,7 +63,7 @@ def test_fresh_history_returns_gen1(tmp_path: Path) -> None:
 
 def test_history_with_existing_gen_n_increments(tmp_path: Path) -> None:
     """history has gen1 + gen3 for this commit → next is gen4."""
-    from core.self_improving.train import _next_gen_counter_for_commit
+    from core.self_improving.ledger import _next_gen_counter_for_commit
 
     sessions = tmp_path / "sessions.jsonl"
     _write_session(sessions, gen_tag="autoresearch-abc1234-gen1")
@@ -75,7 +76,7 @@ def test_history_with_existing_gen_n_increments(tmp_path: Path) -> None:
 def test_legacy_no_suffix_treated_as_gen0_so_next_is_gen1(tmp_path: Path) -> None:
     """Pre-PR rows had ``autoresearch-{commit}`` with no ``-gen{N}``
     suffix — those count as gen0; next emission is gen1."""
-    from core.self_improving.train import _next_gen_counter_for_commit
+    from core.self_improving.ledger import _next_gen_counter_for_commit
 
     sessions = tmp_path / "sessions.jsonl"
     _write_session(sessions, gen_tag="autoresearch-abc1234")  # legacy
@@ -88,7 +89,7 @@ def test_legacy_no_suffix_treated_as_gen0_so_next_is_gen1(tmp_path: Path) -> Non
 def test_legacy_mixed_with_gen_n(tmp_path: Path) -> None:
     """Mix of legacy (no suffix) + ``-gen{N}`` rows → max(N) + 1
     ignores the legacy ones."""
-    from core.self_improving.train import _next_gen_counter_for_commit
+    from core.self_improving.ledger import _next_gen_counter_for_commit
 
     sessions = tmp_path / "sessions.jsonl"
     _write_session(sessions, gen_tag="autoresearch-abc1234")  # legacy → gen0
@@ -102,7 +103,7 @@ def test_legacy_mixed_with_gen_n(tmp_path: Path) -> None:
 def test_other_commit_does_not_bleed(tmp_path: Path) -> None:
     """sessions.jsonl has gen5 for *other* commit → our commit's
     counter stays at gen1 (per-commit isolation)."""
-    from core.self_improving.train import _next_gen_counter_for_commit
+    from core.self_improving.ledger import _next_gen_counter_for_commit
 
     sessions = tmp_path / "sessions.jsonl"
     _write_session(sessions, gen_tag="autoresearch-other7890-gen5")
@@ -114,7 +115,7 @@ def test_other_commit_does_not_bleed(tmp_path: Path) -> None:
 def test_operator_override_wins(monkeypatch: pytest.MonkeyPatch) -> None:
     """AUTORESEARCH_GEN_TAG env override skips the counter entirely —
     operator pins the tag for cross-process consistency."""
-    from core.self_improving.train import _resolve_gen_tag
+    from core.self_improving.ledger import _resolve_gen_tag
 
     monkeypatch.setenv("AUTORESEARCH_GEN_TAG", "custom-pinned-tag-v3")
 
@@ -126,12 +127,11 @@ def test_resolve_emits_gen_n_format_by_default(
 ) -> None:
     """Without override and with empty history → emits
     ``autoresearch-{commit}-gen1`` (post-PR shape)."""
-    from core.self_improving import train as train_mod
 
     monkeypatch.delenv("AUTORESEARCH_GEN_TAG", raising=False)
-    monkeypatch.setattr(train_mod, "SESSIONS_INDEX_PATH", tmp_path / "missing.jsonl")
+    monkeypatch.setattr(ledger, "SESSIONS_INDEX_PATH", tmp_path / "missing.jsonl")
 
-    tag = train_mod._resolve_gen_tag("abc1234")
+    tag = ledger._resolve_gen_tag("abc1234")
     assert tag == "autoresearch-abc1234-gen1"
 
 
@@ -141,14 +141,13 @@ def test_resolve_increments_with_real_history(
     """End-to-end pin: writing one gen1 row + calling _resolve_gen_tag
     returns gen2 — the SESSIONS_INDEX_PATH lookup actually wires the
     counter into the resolver, not just into the private helper."""
-    from core.self_improving import train as train_mod
 
     monkeypatch.delenv("AUTORESEARCH_GEN_TAG", raising=False)
     sessions = tmp_path / "sessions.jsonl"
     _write_session(sessions, gen_tag="autoresearch-abc1234-gen1")
-    monkeypatch.setattr(train_mod, "SESSIONS_INDEX_PATH", sessions)
+    monkeypatch.setattr(ledger, "SESSIONS_INDEX_PATH", sessions)
 
-    tag = train_mod._resolve_gen_tag("abc1234")
+    tag = ledger._resolve_gen_tag("abc1234")
     assert tag == "autoresearch-abc1234-gen2"
 
 
@@ -156,7 +155,7 @@ def test_malformed_json_row_skipped_gracefully(tmp_path: Path) -> None:
     """One malformed JSON line in the middle of sessions.jsonl must
     not abort the scan — the good rows around it should still be
     parsed."""
-    from core.self_improving.train import _next_gen_counter_for_commit
+    from core.self_improving.ledger import _next_gen_counter_for_commit
 
     sessions = tmp_path / "sessions.jsonl"
     _write_session(sessions, gen_tag="autoresearch-abc1234-gen1")
@@ -172,7 +171,7 @@ def test_malformed_json_row_skipped_gracefully(tmp_path: Path) -> None:
 def test_non_dict_row_skipped(tmp_path: Path) -> None:
     """JSON arrays / scalars in sessions.jsonl (shouldn't happen, but
     defensive) are skipped without aborting."""
-    from core.self_improving.train import _next_gen_counter_for_commit
+    from core.self_improving.ledger import _next_gen_counter_for_commit
 
     sessions = tmp_path / "sessions.jsonl"
     sessions.write_text('[1, 2, 3]\n"just a string"\n', encoding="utf-8")
@@ -186,7 +185,7 @@ def test_oserror_during_read_returns_gen1(tmp_path: Path) -> None:
     """Permission error / IO failure during read → fall through to
     gen1 (best-effort). The audit cycle should never crash because
     sessions.jsonl is unreadable."""
-    from core.self_improving.train import _next_gen_counter_for_commit
+    from core.self_improving.ledger import _next_gen_counter_for_commit
 
     sessions = tmp_path / "sessions.jsonl"
     sessions.write_text("dummy\n", encoding="utf-8")

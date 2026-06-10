@@ -24,6 +24,7 @@ from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
+from core.self_improving import gate, ledger
 from core.self_improving import train as auto_train
 
 # --- resolver precedence -----------------------------------------------------
@@ -56,26 +57,26 @@ def test_replicate_default_is_one(monkeypatch: pytest.MonkeyPatch) -> None:
     """No env, no CLI, config M=1 → 1 (today's zero-cost default)."""
     _clear_env(monkeypatch)
     _stub_config(monkeypatch, replicate=1)
-    assert auto_train._resolve_audit_replicate(None) == 1
+    assert gate._resolve_audit_replicate(None) == 1
 
 
 def test_replicate_reads_config(monkeypatch: pytest.MonkeyPatch) -> None:
     _clear_env(monkeypatch)
     _stub_config(monkeypatch, replicate=3)
-    assert auto_train._resolve_audit_replicate(None) == 3
+    assert gate._resolve_audit_replicate(None) == 3
 
 
 def test_replicate_cli_wins_over_config(monkeypatch: pytest.MonkeyPatch) -> None:
     _clear_env(monkeypatch)
     _stub_config(monkeypatch, replicate=1)
-    assert auto_train._resolve_audit_replicate(5) == 5
+    assert gate._resolve_audit_replicate(5) == 5
 
 
 def test_replicate_env_wins(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("GEODE_AUDIT_REPLICATE", "4")
     monkeypatch.delenv("AUTORESEARCH_REPLICATE", raising=False)
     _stub_config(monkeypatch, replicate=1)
-    assert auto_train._resolve_audit_replicate(2) == 4
+    assert gate._resolve_audit_replicate(2) == 4
 
 
 def test_replicate_malformed_env_falls_back(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -84,34 +85,34 @@ def test_replicate_malformed_env_falls_back(monkeypatch: pytest.MonkeyPatch) -> 
     monkeypatch.setenv("GEODE_AUDIT_REPLICATE", "not-an-int")
     monkeypatch.delenv("AUTORESEARCH_REPLICATE", raising=False)
     _stub_config(monkeypatch, replicate=2)
-    assert auto_train._resolve_audit_replicate(None) == 2
+    assert gate._resolve_audit_replicate(None) == 2
     monkeypatch.setenv("GEODE_AUDIT_REPLICATE", "0")
-    assert auto_train._resolve_audit_replicate(None) == 2
+    assert gate._resolve_audit_replicate(None) == 2
 
 
 def test_target_effect_size_default(monkeypatch: pytest.MonkeyPatch) -> None:
     _clear_env(monkeypatch)
     _stub_config(monkeypatch, target_effect_size=0.02)
-    assert auto_train._resolve_target_effect_size(None) == pytest.approx(0.02)
+    assert gate._resolve_target_effect_size(None) == pytest.approx(0.02)
 
 
 def test_target_effect_size_cli_wins(monkeypatch: pytest.MonkeyPatch) -> None:
     _clear_env(monkeypatch)
     _stub_config(monkeypatch, target_effect_size=0.02)
-    assert auto_train._resolve_target_effect_size(0.05) == pytest.approx(0.05)
+    assert gate._resolve_target_effect_size(0.05) == pytest.approx(0.05)
 
 
 def test_target_effect_size_malformed_env_falls_back(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("GEODE_TARGET_EFFECT_SIZE", "nope")
     monkeypatch.delenv("AUTORESEARCH_TARGET_EFFECT_SIZE", raising=False)
     _stub_config(monkeypatch, target_effect_size=0.03)
-    assert auto_train._resolve_target_effect_size(None) == pytest.approx(0.03)
+    assert gate._resolve_target_effect_size(None) == pytest.approx(0.03)
     # non-positive env likewise skipped (ill-posed for the power formula)
     monkeypatch.setenv("GEODE_TARGET_EFFECT_SIZE", "0")
-    assert auto_train._resolve_target_effect_size(None) == pytest.approx(0.03)
+    assert gate._resolve_target_effect_size(None) == pytest.approx(0.03)
     # non-finite env (nan/inf) likewise skipped (would crash the power formula)
     monkeypatch.setenv("GEODE_TARGET_EFFECT_SIZE", "nan")
-    assert auto_train._resolve_target_effect_size(None) == pytest.approx(0.03)
+    assert gate._resolve_target_effect_size(None) == pytest.approx(0.03)
 
 
 def test_resolver_cli_overrides_graceful_on_nonfinite(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -121,11 +122,11 @@ def test_resolver_cli_overrides_graceful_on_nonfinite(monkeypatch: pytest.Monkey
     _clear_env(monkeypatch)
     _stub_config(monkeypatch, replicate=2, target_effect_size=0.03)
     # nan/inf δ from the CLI must not propagate into the power formula
-    assert auto_train._resolve_target_effect_size(float("nan")) == pytest.approx(0.03)
-    assert auto_train._resolve_target_effect_size(float("inf")) == pytest.approx(0.03)
-    assert auto_train._resolve_target_effect_size(-1.0) == pytest.approx(0.03)
+    assert gate._resolve_target_effect_size(float("nan")) == pytest.approx(0.03)
+    assert gate._resolve_target_effect_size(float("inf")) == pytest.approx(0.03)
+    assert gate._resolve_target_effect_size(-1.0) == pytest.approx(0.03)
     # int(float("inf")) raises OverflowError — the replicate resolver must catch it
-    assert auto_train._resolve_audit_replicate(float("inf")) == 2  # falls back to config
+    assert gate._resolve_audit_replicate(float("inf")) == 2  # falls back to config
 
 
 # --- main() static wiring guards (E2 / E3 convention) ------------------------
@@ -133,8 +134,10 @@ def test_resolver_cli_overrides_graceful_on_nonfinite(monkeypatch: pytest.Monkey
 
 def test_main_resolves_replicate_and_effect_size() -> None:
     source = inspect.getsource(auto_train.main)
-    assert "audit_replicate = _resolve_audit_replicate(args.replicate)" in source
-    assert "target_effect_size = _resolve_target_effect_size(args.target_effect_size)" in source
+    assert "audit_replicate = gate._resolve_audit_replicate(args.replicate)" in source
+    assert (
+        "target_effect_size = gate._resolve_target_effect_size(args.target_effect_size)" in source
+    )
 
 
 def test_main_runs_audit_in_replicate_loop() -> None:
@@ -146,7 +149,7 @@ def test_main_runs_audit_in_replicate_loop() -> None:
     # the run_audit call lives inside that loop body (after the for, before the gain block)
     loop_at = source.index("for _replicate_idx in range(audit_replicate):")
     decomp_at = source.index("variance_decomposition = decompose_variance(")
-    run_at = source.index("run_audit(", loop_at)
+    run_at = source.index("measure.run_audit(", loop_at)
     assert loop_at < run_at < decomp_at
 
 
@@ -180,8 +183,8 @@ def test_main_verdict_uses_gate_sigma_and_floor() -> None:
     assert "_sigma_current = current_fitness_stderr" in source
     # σ fallback mirrors the gate's MC fallback when the bootstrap / persisted
     # stderr is absent (so a v1/summary baseline's verdict σ is not falsely 0)
-    assert "_sigma_current = _fitness_scale_stderr(" in source
-    assert "_sigma_baseline = _fitness_scale_stderr(" in source
+    assert "_sigma_current = fitness_spec._fitness_scale_stderr(" in source
+    assert "_sigma_baseline = fitness_spec._fitness_scale_stderr(" in source
     # the verdict passes the gate's effective floor
     assert "floor=_gate_effective_floor" in source
     # the floor reproduces the gate's N=1 widening
@@ -196,11 +199,8 @@ def test_fitness_margin_floor_default_is_single_sot() -> None:
     the SAME constant (no dual-SoT drift) — both read _FITNESS_MARGIN_FLOOR_DEFAULT."""
     import inspect as _inspect
 
-    gate_sig = _inspect.signature(auto_train._should_promote)
-    assert (
-        gate_sig.parameters["fitness_margin_floor"].default
-        == auto_train._FITNESS_MARGIN_FLOOR_DEFAULT
-    )
+    gate_sig = _inspect.signature(gate._should_promote)
+    assert gate_sig.parameters["fitness_margin_floor"].default == gate._FITNESS_MARGIN_FLOOR_DEFAULT
 
 
 def test_main_threads_e4_fields_into_both_sinks() -> None:
@@ -221,7 +221,7 @@ def test_main_threads_e4_fields_into_both_sinks() -> None:
 def test_attribution_carries_e4_fields() -> None:
     """When supplied, the per-cycle attribution row records the decomposition +
     gain-evidence verdict."""
-    from core.self_improving.loop.attribution import compute_attribution
+    from core.self_improving.loop.observe.attribution import compute_attribution
 
     payload = compute_attribution(
         mutation_id="m1",
@@ -244,7 +244,7 @@ def test_attribution_carries_e4_fields() -> None:
 def test_attribution_m1_omits_within_keeps_between() -> None:
     """M=1: within is unestimated (None) → omitted from the row, but the
     between-seed stderr + the verdict are still present (the row stays useful)."""
-    from core.self_improving.loop.attribution import compute_attribution
+    from core.self_improving.loop.observe.attribution import compute_attribution
 
     payload = compute_attribution(
         mutation_id="m1",
@@ -266,7 +266,7 @@ def test_attribution_m1_omits_within_keeps_between() -> None:
 def test_attribution_legacy_omits_all_e4_fields() -> None:
     """A pre-E4 / no-power caller omits every E4 field → the row shape is exactly
     the legacy shape (no new required key breaks a reader)."""
-    from core.self_improving.loop.attribution import AttributionRecord, compute_attribution
+    from core.self_improving.loop.observe.attribution import AttributionRecord, compute_attribution
 
     payload = compute_attribution(
         mutation_id="m1",
@@ -294,7 +294,7 @@ def test_attribution_legacy_omits_all_e4_fields() -> None:
 
 @pytest.fixture
 def isolated(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
-    monkeypatch.setattr(auto_train, "BASELINE_PATH", tmp_path / "baseline.json")
+    monkeypatch.setattr(ledger, "BASELINE_PATH", tmp_path / "baseline.json")
     fake_cfg = SimpleNamespace(
         auditor=SimpleNamespace(model="aud-m", source="claude-cli"),
         target=SimpleNamespace(model="tgt-m", source="openai-codex"),
@@ -316,9 +316,9 @@ def _rows(archive: Path) -> list[dict]:
 
 
 def test_registry_row_records_e4_fields_when_present(isolated: Path) -> None:
-    from core.self_improving.loop.statistical_power import PowerRecordFields
+    from core.self_improving.loop.observe.statistical_power import PowerRecordFields
 
-    auto_train._write_baseline(
+    ledger._write_baseline(
         {"broken_tool_use": 3.0},
         {"broken_tool_use": 0.2},
         power_stats=PowerRecordFields(
@@ -340,7 +340,7 @@ def test_registry_row_records_e4_fields_when_present(isolated: Path) -> None:
 def test_registry_row_m1_default_omits_e4_block(isolated: Path) -> None:
     """The default ``_write_baseline`` (no E4 args — the M=1 / pre-E4 path) writes a
     row with NO E4 keys: backward-compatible shape, no new required key."""
-    auto_train._write_baseline({"broken_tool_use": 3.0}, {"broken_tool_use": 0.2})
+    ledger._write_baseline({"broken_tool_use": 3.0}, {"broken_tool_use": 0.2})
     row = _rows(isolated / "baseline_archive.jsonl")[0]
     for key in (
         "within_mutation_stderr",
@@ -357,9 +357,9 @@ def test_baseline_raw_payload_carries_decomposition(isolated: Path) -> None:
     """The promoted ``baseline.json`` ``raw`` namespace carries the within/between
     decomposition (alongside ``fitness_stderr``) when present — so the next cycle's
     reader sees the noise split, not just the combined stderr."""
-    from core.self_improving.loop.statistical_power import PowerRecordFields
+    from core.self_improving.loop.observe.statistical_power import PowerRecordFields
 
-    auto_train._write_baseline(
+    ledger._write_baseline(
         {"broken_tool_use": 3.0},
         {"broken_tool_use": 0.2},
         power_stats=PowerRecordFields(within_mutation_stderr=0.011, between_seed_stderr=0.013),
@@ -370,9 +370,9 @@ def test_baseline_raw_payload_carries_decomposition(isolated: Path) -> None:
 
 
 def test_baseline_raw_payload_m1_omits_within(isolated: Path) -> None:
-    from core.self_improving.loop.statistical_power import PowerRecordFields
+    from core.self_improving.loop.observe.statistical_power import PowerRecordFields
 
-    auto_train._write_baseline(
+    ledger._write_baseline(
         {"broken_tool_use": 3.0},
         {"broken_tool_use": 0.2},
         power_stats=PowerRecordFields(within_mutation_stderr=None, between_seed_stderr=0.013),

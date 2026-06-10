@@ -17,7 +17,7 @@ import json
 from pathlib import Path
 
 import pytest
-from core.self_improving.loop.run_transcript import (
+from core.self_improving.loop.observe.run_transcript import (
     RunTranscript,
     run_transcript_scope,
 )
@@ -52,7 +52,7 @@ def _read_events(path: Path, name: str = "eval_response_recorded") -> list[dict]
 
 def test_autoresearch_emit_pattern_chosen_pile(tmp_path: Path) -> None:
     """fitness > 0 + verdict != reject → rollback_flag=False (chosen pile)."""
-    from core.self_improving.loop.eval_journaling import emit_eval_response_recorded
+    from core.self_improving.loop.observe.eval_journaling import emit_eval_response_recorded
 
     journal = _journal_with_path(tmp_path)
     with run_transcript_scope(journal):
@@ -78,7 +78,7 @@ def test_autoresearch_emit_pattern_chosen_pile(tmp_path: Path) -> None:
 
 def test_autoresearch_emit_pattern_rejected_pile(tmp_path: Path) -> None:
     """fitness == 0.0 (critical regression) → rollback_flag=True (rejected pile)."""
-    from core.self_improving.loop.eval_journaling import emit_eval_response_recorded
+    from core.self_improving.loop.observe.eval_journaling import emit_eval_response_recorded
 
     journal = _journal_with_path(tmp_path)
     with run_transcript_scope(journal):
@@ -100,7 +100,7 @@ def test_autoresearch_emit_pattern_rejected_pile(tmp_path: Path) -> None:
 
 def test_autoresearch_emit_pattern_no_journal_scope_is_noop() -> None:
     """No run_transcript_scope → emit returns False, no file written, no raise."""
-    from core.self_improving.loop.eval_journaling import emit_eval_response_recorded
+    from core.self_improving.loop.observe.eval_journaling import emit_eval_response_recorded
 
     ok = emit_eval_response_recorded(
         prompt="audit prompt",
@@ -122,7 +122,7 @@ def test_train_py_imports_emit_eval_response_recorded() -> None:
     """``core/self_improving/train.py`` must contain the import + call."""
     train_py = Path("core/self_improving/train.py").read_text(encoding="utf-8")
     assert (
-        "from core.self_improving.loop.eval_journaling import emit_eval_response_recorded"
+        "from core.self_improving.loop.observe.eval_journaling import emit_eval_response_recorded"
         in train_py
     )
     assert "emit_eval_response_recorded(" in train_py

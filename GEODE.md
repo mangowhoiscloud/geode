@@ -33,14 +33,19 @@ analysis, automation, scheduling, and multi-step tool work.
 
 ## Architecture
 
-4-Layer Stack (Model → Runtime → Harness → Agent).
+5-Layer Stack (Model → Runtime → Harness → Agent → Self-Improving).
 
 ```
+SELF-IMPROVING: train.py(원형: mutation surface+loop) ← measure/fitness/gate/ledger(장비)
+                ← loop/{mutate, observe, inject} (Mode B runtime)
 AGENT:    AgenticLoop (while tool_use), SubAgentManager, CLIPoller, Gateway
 HARNESS:  SessionLane, LaneQueue(global:8), PolicyChain, TaskGraph, HookSystem(64 events)
 RUNTIME:  ToolRegistry(59), MCP Registry(API), Skills, Memory(5-Tier), Reports
 MODEL:    ClaudeAdapter, OpenAIAdapter, GLMAdapter (3-provider routing)
 ```
+
+The self-improving layer was previously undocumented (11/21 modules mapped
+to the 4-layer diagram); S-5 (2026-06-11) made it explicit.
 
 ### Sub-Agent System
 

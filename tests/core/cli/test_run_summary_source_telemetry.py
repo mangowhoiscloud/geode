@@ -17,7 +17,7 @@ import pytest
 
 
 def _stub_runner_proposal() -> tuple[MagicMock, MagicMock]:
-    from core.self_improving.loop.runner import Mutation, Proposal
+    from core.self_improving.loop.mutate.runner import Mutation, Proposal
 
     mutation = Mutation(
         target_section="role.intro",

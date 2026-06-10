@@ -30,8 +30,14 @@ Before starting a new experiment run, confirm with the user:
    - `core/self_improving/prepare.py` — seed pool + rubric sanity check. **Do
      not modify.**
    - `core/self_improving/train.py` — the single file the agent modifies.
-     Holds the wrapper-prompt sections, the audit invocation, and the
-     fitness output.
+     Holds the wrapper-prompt sections, the tunable hyperparameters, and
+     the fixed-budget loop. S-5 (2026-06-11) restored the autoresearch-원형:
+     the measurement gear was extracted to four sibling modules —
+     `measure.py` (audit subprocess), `fitness.py` (dim weights + fitness
+     math), `gate.py` (promote/reject + revert), `ledger.py` (baseline /
+     results / registry I/O). **The agent MUST NOT modify those four** —
+     they are the measurement apparatus; changing them changes what is
+     being measured, not the system under test. Read freely.
    - `core/self_improving/program.md` — this file. Read only.
 4. **Verify the seed pool**: `plugins/petri_audit/seeds/` is a
    hierarchical tree (`<tier>/<dim>/<NN>_<variant>.md`, post-PR-0).

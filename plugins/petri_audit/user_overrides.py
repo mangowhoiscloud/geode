@@ -56,7 +56,7 @@ def _emit_user_overrides_event(
     override resolver — exception swallowed.
     """
     try:
-        from core.self_improving.loop.run_transcript import current_run_transcript
+        from core.self_improving.loop.observe.run_transcript import current_run_transcript
 
         journal = current_run_transcript()
         if journal is None:

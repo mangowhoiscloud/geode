@@ -169,7 +169,7 @@ def test_path_constants_present() -> None:
 
 def test_train_py_sets_cache_policy_env_pair() -> None:
     repo_root = Path(__file__).resolve().parents[3]
-    src = (repo_root / "core/self_improving/train.py").read_text(encoding="utf-8")
+    src = (repo_root / "core/self_improving/measure.py").read_text(encoding="utf-8")
     assert "GEODE_CACHE_POLICY_OVERRIDE" in src
     assert "GEODE_CACHE_POLICY_STRICT" in src
     assert "GLOBAL_CACHE_POLICY_PATH" in src

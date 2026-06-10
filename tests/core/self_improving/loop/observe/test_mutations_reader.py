@@ -16,13 +16,13 @@ import time
 from pathlib import Path
 
 import pytest
-from core.self_improving.loop.attribution import AttributionRecord
-from core.self_improving.loop.mutations_reader import (
+from core.self_improving.loop.mutate.runner import ApplyRecord
+from core.self_improving.loop.observe.attribution import AttributionRecord
+from core.self_improving.loop.observe.mutations_reader import (
     iter_mutations,
     read_recent_applies,
     read_recent_attributions,
 )
-from core.self_improving.loop.runner import ApplyRecord
 
 
 def _write_jsonl(path: Path, rows: list[dict]) -> None:

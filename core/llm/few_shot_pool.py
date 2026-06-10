@@ -47,7 +47,7 @@ from core.paths import (
     GLOBAL_FEW_SHOT_POOL_PATH,
     OPERATOR_LOCAL_FEW_SHOT_POOL_PATH,
 )
-from core.self_improving.loop.sot_resolution import resolve_sot
+from core.self_improving.loop.mutate.sot_resolution import resolve_sot
 
 log = logging.getLogger(__name__)
 

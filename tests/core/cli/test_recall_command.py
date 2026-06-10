@@ -39,7 +39,7 @@ def test_save_writes_reader_parseable_entry(
     assert "saved" in capsys.readouterr().out
 
     # Read-write parity — the M4.4.1 reader must parse what save wrote.
-    from core.self_improving.loop.memory_recall import load_memory_entries
+    from core.self_improving.loop.inject.memory_recall import load_memory_entries
 
     entries = load_memory_entries()
     assert [e.name for e in entries] == ["quota-pref"]

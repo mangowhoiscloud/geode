@@ -29,6 +29,7 @@ from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
+from core.self_improving import fitness, ledger, measure
 from core.self_improving import train as auto_train
 
 # --- _resolve_held_out_bench precedence --------------------------------------
@@ -140,7 +141,7 @@ def test_score_held_out_bench_returns_fitness_dims_and_stable_id(
     (bench / "seed_a.md").write_text("id: a\n", encoding="utf-8")
     (bench / "seed_b.md").write_text("id: b\n", encoding="utf-8")
 
-    fitness, dim_means, bench_id = auto_train.score_held_out_bench(str(bench), dry_run=True)
+    fitness, dim_means, bench_id = measure.score_held_out_bench(str(bench), dry_run=True)
 
     assert isinstance(fitness, float)
     # 0-1 compute_fitness scale (E1 reconciled ledger) — the gate's ruler.
@@ -150,7 +151,7 @@ def test_score_held_out_bench_returns_fitness_dims_and_stable_id(
     # content-addressed id of the frozen dir
     assert bench_id.startswith("pool-")
     # same content → same id (the frozen ruler keeps its fingerprint)
-    _f2, _d2, bench_id_again = auto_train.score_held_out_bench(str(bench), dry_run=True)
+    _f2, _d2, bench_id_again = measure.score_held_out_bench(str(bench), dry_run=True)
     assert bench_id_again == bench_id
 
 
@@ -162,9 +163,9 @@ def test_score_held_out_bench_id_changes_when_frozen_set_edited(
     bench = tmp_path / "frozen_bench"
     bench.mkdir()
     (bench / "seed_a.md").write_text("id: a\n", encoding="utf-8")
-    _f, _d, id_before = auto_train.score_held_out_bench(str(bench), dry_run=True)
+    _f, _d, id_before = measure.score_held_out_bench(str(bench), dry_run=True)
     (bench / "seed_a.md").write_text("id: a-EDITED\n", encoding="utf-8")
-    _f2, _d2, id_after = auto_train.score_held_out_bench(str(bench), dry_run=True)
+    _f2, _d2, id_after = measure.score_held_out_bench(str(bench), dry_run=True)
     assert id_before != id_after
 
 
@@ -179,14 +180,14 @@ def test_score_held_out_bench_restores_seed_select_env(
 
     # Case 1: a prior co-evolving override is restored exactly.
     monkeypatch.setenv("AUTORESEARCH_SEED_SELECT", "co-evolving/survivors")
-    auto_train.score_held_out_bench(str(bench), dry_run=True)
+    measure.score_held_out_bench(str(bench), dry_run=True)
     import os
 
     assert os.environ["AUTORESEARCH_SEED_SELECT"] == "co-evolving/survivors"
 
     # Case 2: an unset var stays unset after the call.
     monkeypatch.delenv("AUTORESEARCH_SEED_SELECT", raising=False)
-    auto_train.score_held_out_bench(str(bench), dry_run=True)
+    measure.score_held_out_bench(str(bench), dry_run=True)
     assert "AUTORESEARCH_SEED_SELECT" not in os.environ
 
 
@@ -234,7 +235,7 @@ def test_score_held_out_bench_uses_same_fitness_formula_path(
         # PR-CONTRACT-EVAL (2026-06-03) — 8th element is the contract ledger.
         return dict(held_dims), {}, 0.0, 0.0, {}, {}, [], []
 
-    monkeypatch.setattr(auto_train, "run_audit", _fake_audit)
+    monkeypatch.setattr(measure, "run_audit", _fake_audit)
 
     captured: dict[str, object] = {}
 
@@ -248,11 +249,11 @@ def test_score_held_out_bench_uses_same_fitness_formula_path(
         captured.update(kwargs)
         return 0.5
 
-    monkeypatch.setattr(auto_train, "compute_fitness", _spy)
+    monkeypatch.setattr(fitness, "compute_fitness", _spy)
 
     # mode ON must be threaded through verbatim, WITH a real anchor subset so the
     # multiplier actually applies (not a silent no-op).
-    auto_train.score_held_out_bench(str(bench), dry_run=True, anchor_confidence_mode=True)
+    measure.score_held_out_bench(str(bench), dry_run=True, anchor_confidence_mode=True)
     assert captured["anchor_confidence_mode"] is True
     assert captured["baseline_means"] is None
     assert captured["admire_means"] is None
@@ -260,18 +261,18 @@ def test_score_held_out_bench_uses_same_fitness_formula_path(
     assert isinstance(anchor_means, dict) and anchor_means
     # the anchor subset is exactly the held-out dims restricted to ANCHOR_DIMS —
     # the SAME extraction the gate's current_raw does on its current dims.
-    assert anchor_means == {dim: held_dims[dim] for dim in auto_train.ANCHOR_DIMS}
+    assert anchor_means == {dim: held_dims[dim] for dim in fitness.ANCHOR_DIMS}
 
     captured.clear()
     # mode OFF (default) is likewise honoured — the curve does not silently flip on.
-    auto_train.score_held_out_bench(str(bench), dry_run=True)
+    measure.score_held_out_bench(str(bench), dry_run=True)
     assert captured["anchor_confidence_mode"] is False
 
 
 def test_score_held_out_bench_signature_has_anchor_flag() -> None:
     """The scorer exposes the ``anchor_confidence_mode`` keyword so the live
     dispatch can thread the gate's flag (formula-parity wiring)."""
-    sig = inspect.signature(auto_train.score_held_out_bench)
+    sig = inspect.signature(measure.score_held_out_bench)
     assert "anchor_confidence_mode" in sig.parameters
 
 
@@ -293,7 +294,7 @@ def test_main_threads_anchor_confidence_mode_into_held_out() -> None:
 def isolated(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     """Redirect BASELINE_PATH to tmp + stub the config so the registry writer
     resolves role models / seed_select without ~/.geode/config.toml."""
-    monkeypatch.setattr(auto_train, "BASELINE_PATH", tmp_path / "baseline.json")
+    monkeypatch.setattr(ledger, "BASELINE_PATH", tmp_path / "baseline.json")
     fake_cfg = SimpleNamespace(
         auditor=SimpleNamespace(model="aud-m", source="claude-cli"),
         target=SimpleNamespace(model="tgt-m", source="openai-codex"),
@@ -314,7 +315,7 @@ def test_row_omits_held_out_keys_when_no_bench(isolated: Path) -> None:
     """Backward-compatible: a promote without a held-out bench produces the
     same row shape as before — no held-out keys, so existing readers are
     unaffected (additive, never a new required key)."""
-    auto_train._write_baseline({"broken_tool_use": 3.0}, {"broken_tool_use": 0.2})
+    ledger._write_baseline({"broken_tool_use": 3.0}, {"broken_tool_use": 0.2})
     row = _rows(isolated / "baseline_archive.jsonl")[0]
     assert "held_out_fitness" not in row
     assert "held_out_bench_id" not in row
@@ -324,7 +325,7 @@ def test_row_records_held_out_fields_when_scored(isolated: Path) -> None:
     """When a held-out bench is scored, the row gains exactly the two additive
     keys: ``held_out_fitness`` (the fixed-ruler evidence) + ``held_out_bench_id``
     (the ruler's content-address)."""
-    auto_train._write_baseline(
+    ledger._write_baseline(
         {"broken_tool_use": 3.0},
         {"broken_tool_use": 0.2},
         held_out_fitness=0.7321,
@@ -339,7 +340,7 @@ def test_row_omits_held_out_when_only_one_field_present(isolated: Path) -> None:
     """Both held-out fields must be present together or omitted together — a lone
     fitness without its bench id (or vice versa) would be an ambiguous half-row,
     so the writer drops both rather than recording an un-attributable value."""
-    auto_train._append_baseline_registry_row(
+    ledger._append_baseline_registry_row(
         "baseline-2606-1",
         dim_means={"broken_tool_use": 3.0},
         dim_stderr={},

@@ -130,7 +130,7 @@ def _update_latest_petri_eval_symlink(archive_path: str) -> None:
 
     G2.fix companion (2026-05-20): downstream readers
     (``plugins.seed_generation.baseline_reader.format_evidence_block``,
-    ``core.self_improving.loop.runner``) call ``extract_evidence`` on
+    ``core.self_improving.loop.mutate.runner``) call ``extract_evidence`` on
     this symlink so the evidence they consume is *always* the most
     recent audit's, not whichever audit happened to be promoted last.
 

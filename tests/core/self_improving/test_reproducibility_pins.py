@@ -26,8 +26,9 @@ from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
+from core.self_improving import ledger, measure
 from core.self_improving import train as auto_train
-from core.self_improving.loop.run_provenance import (
+from core.self_improving.loop.observe.run_provenance import (
     SAMPLING_UNPINNED,
     RunProvenanceFields,
     build_run_provenance,
@@ -159,7 +160,7 @@ def test_as_record_kwargs_includes_only_present_pins() -> None:
 
 
 def test_attribution_carries_e5_pins() -> None:
-    from core.self_improving.loop.attribution import compute_attribution
+    from core.self_improving.loop.observe.attribution import compute_attribution
 
     payload = compute_attribution(
         mutation_id="m1",
@@ -186,7 +187,7 @@ def test_attribution_carries_e5_pins() -> None:
 
 def test_attribution_prompt_hash_changes_when_prompt_changes() -> None:
     """The recorded prompt_hash is sensitive to the actual prompt sent."""
-    from core.self_improving.loop.attribution import compute_attribution
+    from core.self_improving.loop.observe.attribution import compute_attribution
 
     def _hash_in_row(prompt: str) -> str:
         return compute_attribution(
@@ -204,7 +205,7 @@ def test_attribution_prompt_hash_changes_when_prompt_changes() -> None:
 def test_attribution_legacy_omits_all_e5_pins() -> None:
     """A pre-E5 caller (no run_provenance) omits every E5 pin → exact legacy shape,
     and the schema validates the bare payload (pins default to None)."""
-    from core.self_improving.loop.attribution import AttributionRecord, compute_attribution
+    from core.self_improving.loop.observe.attribution import AttributionRecord, compute_attribution
 
     payload = compute_attribution(
         mutation_id="m1",
@@ -231,7 +232,7 @@ def test_attribution_legacy_omits_all_e5_pins() -> None:
 def test_attribution_none_baseline_still_records_pins() -> None:
     """Graceful: pins are spliced BEFORE the None-baseline early return, so a cycle
     with no baseline snapshots still records its reproducibility pins."""
-    from core.self_improving.loop.attribution import compute_attribution
+    from core.self_improving.loop.observe.attribution import compute_attribution
 
     payload = compute_attribution(
         mutation_id="m1",
@@ -248,7 +249,7 @@ def test_attribution_none_baseline_still_records_pins() -> None:
 
 @pytest.fixture
 def isolated(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
-    monkeypatch.setattr(auto_train, "BASELINE_PATH", tmp_path / "baseline.json")
+    monkeypatch.setattr(ledger, "BASELINE_PATH", tmp_path / "baseline.json")
     fake_cfg = SimpleNamespace(
         auditor=SimpleNamespace(model="aud-m", source="claude-cli"),
         target=SimpleNamespace(model="tgt-m", source="openai-codex"),
@@ -270,7 +271,7 @@ def _rows(archive: Path) -> list[dict]:
 
 
 def test_registry_row_records_e5_pins_when_present(isolated: Path) -> None:
-    auto_train._write_baseline(
+    ledger._write_baseline(
         {"broken_tool_use": 3.0},
         {"broken_tool_use": 0.2},
         run_provenance=RunProvenanceFields(
@@ -294,7 +295,7 @@ def test_registry_row_records_e5_pins_when_present(isolated: Path) -> None:
 def test_registry_row_default_omits_e5_block(isolated: Path) -> None:
     """The default ``_write_baseline`` (no run_provenance — the pre-E5 path) writes a
     row with NO E5 keys: backward-compatible shape, no new required key."""
-    auto_train._write_baseline({"broken_tool_use": 3.0}, {"broken_tool_use": 0.2})
+    ledger._write_baseline({"broken_tool_use": 3.0}, {"broken_tool_use": 0.2})
     row = _rows(isolated / "baseline_archive.jsonl")[0]
     for key in (
         "prompt_hash",
@@ -315,8 +316,8 @@ def test_main_builds_run_provenance_bundle() -> None:
     assert "_e5_run_provenance = build_run_provenance(" in source
     # captured from the ACTUAL composed prompt + the applied diff + the sent params
     assert "wrapper_sections=WRAPPER_PROMPT_SECTIONS" in source
-    assert "_applied_diff_for_mutation(" in source
-    assert "sampling_params=_audit_sampling_params_as_sent()" in source
+    assert "measure._applied_diff_for_mutation(" in source
+    assert "sampling_params=measure._audit_sampling_params_as_sent()" in source
     # rng_seed recorded as sent (None today) — NO determinism claim / fabricated seed
     assert "rng_seed=None" in source
 
@@ -332,7 +333,7 @@ def test_main_threads_run_provenance_into_both_sinks() -> None:
 def test_sampling_params_as_sent_marks_unpinned_knobs() -> None:
     """The per-token knobs GEODE does NOT pin are recorded as the explicit unpinned
     marker (NOT a fabricated value) — the honest 'GEODE did not set this' record."""
-    params = auto_train._audit_sampling_params_as_sent()
+    params = measure._audit_sampling_params_as_sent()
     assert params["temperature"] == SAMPLING_UNPINNED
     assert params["top_p"] == SAMPLING_UNPINNED
     assert params["max_tokens"] == SAMPLING_UNPINNED
@@ -344,7 +345,7 @@ def test_sampling_params_as_sent_marks_unpinned_knobs() -> None:
 
 def test_applied_diff_lookup_empty_mutation_id_is_none() -> None:
     """No mutation applied (empty id) → all-None graceful return (no crash)."""
-    assert auto_train._applied_diff_for_mutation("") == (None, None, None)
+    assert measure._applied_diff_for_mutation("") == (None, None, None)
 
 
 def test_applied_diff_lookup_reads_apply_row(
@@ -352,7 +353,7 @@ def test_applied_diff_lookup_reads_apply_row(
 ) -> None:
     """The applied-diff pin reads the EXACT content the apply step committed (the
     ``kind="applied"`` row), not a re-derived guess."""
-    from core.self_improving.loop import mutations_reader
+    from core.self_improving.loop.observe import mutations_reader
 
     ledger = tmp_path / "mutations.jsonl"
     ledger.write_text(
@@ -372,7 +373,7 @@ def test_applied_diff_lookup_reads_apply_row(
         encoding="utf-8",
     )
     monkeypatch.setattr(mutations_reader, "MUTATION_AUDIT_LOG_PATH", ledger)
-    target, value, kind = auto_train._applied_diff_for_mutation("mut-xyz")
+    target, value, kind = measure._applied_diff_for_mutation("mut-xyz")
     assert target == "tool.web_search.description"
     assert value == "the applied content"
     assert kind == "tool_policy"
@@ -385,9 +386,9 @@ def test_applied_diff_lookup_reads_apply_row(
 def test_applied_diff_lookup_unknown_id_is_none(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    from core.self_improving.loop import mutations_reader
+    from core.self_improving.loop.observe import mutations_reader
 
     ledger = tmp_path / "mutations.jsonl"
     ledger.write_text("", encoding="utf-8")
     monkeypatch.setattr(mutations_reader, "MUTATION_AUDIT_LOG_PATH", ledger)
-    assert auto_train._applied_diff_for_mutation("nonexistent") == (None, None, None)
+    assert measure._applied_diff_for_mutation("nonexistent") == (None, None, None)

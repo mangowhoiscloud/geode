@@ -29,8 +29,11 @@ from typing import Any
 
 import core.self_improving.campaign as rc
 import pytest
-from core.self_improving.loop.mutator_feedback import RepetitionFinding, RepetitiveMutationError
-from core.self_improving.loop.runner import Mutation, Proposal
+from core.self_improving.loop.mutate.mutator_feedback import (
+    RepetitionFinding,
+    RepetitiveMutationError,
+)
+from core.self_improving.loop.mutate.runner import Mutation, Proposal
 
 # tests/core/self_improving/test_run_campaign.py → parents[3] = repo root (where ``core/`` is importable
 # so ``python -m core.self_improving.campaign`` / ``…train`` resolve their package).

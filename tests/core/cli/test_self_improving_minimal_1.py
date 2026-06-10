@@ -123,7 +123,7 @@ def test_load_program_md_actually_reads_disk_file() -> None:
     ``core/self_improving/program.md``. Pin that behavior so a future
     refactor that regresses to hardcoded prompts surfaces here.
     """
-    from core.self_improving.loop import runner as runner_mod
+    from core.self_improving.loop.mutate import runner as runner_mod
 
     content = runner_mod._load_program_md()
     assert content is not None, "program.md should be readable from disk"
@@ -137,7 +137,7 @@ def test_build_system_prompt_includes_program_md_content() -> None:
     """The system prompt the mutator LLM actually sees must include
     the ``program.md`` body — otherwise the "program.md-driven" claim
     is fiction. Picks a phrase grep-provable from program.md."""
-    from core.self_improving.loop import runner as runner_mod
+    from core.self_improving.loop.mutate import runner as runner_mod
 
     program_md = runner_mod._load_program_md()
     assert program_md is not None
@@ -173,8 +173,8 @@ def test_program_md_can_table_matches_target_kinds() -> None:
     """
     import re
 
-    from core.self_improving.loop import runner as runner_mod
-    from core.self_improving.loop.policies import TARGET_KINDS
+    from core.self_improving.loop.mutate import runner as runner_mod
+    from core.self_improving.loop.mutate.policies import TARGET_KINDS
 
     program_md = runner_mod._load_program_md()
     assert program_md is not None

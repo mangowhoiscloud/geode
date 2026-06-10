@@ -138,7 +138,7 @@ def _cmd_status() -> None:
     line rather than raising so an operator can call ``status`` on a
     fresh clone before any run.
     """
-    from core.self_improving.loop.runner import MUTATION_AUDIT_LOG_PATH
+    from core.self_improving.loop.mutate.runner import MUTATION_AUDIT_LOG_PATH
 
     console.print()
     console.print("  [header]Self-improving loop — status[/header]")
@@ -183,7 +183,7 @@ def _baseline_path() -> Path:
     """Resolve ``state/autoresearch/baseline.json`` relative to the
     project root. The audit ledger lives in the same dir, so we lean
     on its constant rather than reinventing root-detection here."""
-    from core.self_improving.loop.runner import MUTATION_AUDIT_LOG_PATH
+    from core.self_improving.loop.mutate.runner import MUTATION_AUDIT_LOG_PATH
 
     return Path(MUTATION_AUDIT_LOG_PATH).parent / "baseline.json"
 
@@ -411,7 +411,7 @@ def _parse_run_opts(opts: list[str]) -> dict[str, Any] | None:
         return None
     # ADR-012 S0d (2026-05-21) — TARGET_KINDS 가 4축으로 축소 후 (retrieval
     # deprecated). policies.TARGET_KINDS 를 직접 import 해서 single source.
-    from core.self_improving.loop.policies import TARGET_KINDS
+    from core.self_improving.loop.mutate.policies import TARGET_KINDS
 
     if target_kind and target_kind not in TARGET_KINDS:
         valid_kinds = "|".join(TARGET_KINDS)
@@ -433,7 +433,7 @@ def _build_runner() -> Any | None:
     run autoresearch separately for a measurement.
     """
     try:
-        from core.self_improving.loop.runner import SelfImprovingLoopRunner
+        from core.self_improving.loop.mutate.runner import SelfImprovingLoopRunner
 
         return SelfImprovingLoopRunner(
             rerun_enabled=False,
@@ -555,7 +555,7 @@ def _record_rejection(runner: Any, proposal: Any) -> None:
     import logging
     import time
 
-    from core.self_improving.loop.runner import MUTATION_AUDIT_LOG_PATH
+    from core.self_improving.loop.mutate.runner import MUTATION_AUDIT_LOG_PATH
 
     log = logging.getLogger(__name__)
 
@@ -732,7 +732,7 @@ def _cmd_migrate() -> None:
     minor release.
     """
     from core.paths import LEGACY_SOT_DIR
-    from core.self_improving.loop.policies import (
+    from core.self_improving.loop.mutate.policies import (
         _LEGACY_FILE_NAMES,
         TARGET_KINDS,
         _maybe_migrate_legacy_sot,
@@ -1237,7 +1237,7 @@ def _parse_last_n(opts: list[str], default: int = _WIRE_DEFAULT_LAST) -> int:
 def _cmd_matrix(opts: list[str]) -> None:
     """Render ``compute_kind_dim_matrix`` as a target_kind × dim grid.
 
-    Wires the previously orphan ``core.self_improving.loop.kind_dim_matrix``
+    Wires the previously orphan ``core.self_improving.loop.observe.kind_dim_matrix``
     helpers. Inner-joins apply rows and attribution rows on
     ``mutation_id``. Each cell is ``attribution_score × observed_dim[d]``
     accumulated across the matched rows — signed contribution preserved.
@@ -1246,11 +1246,11 @@ def _cmd_matrix(opts: list[str]) -> None:
     overview) plus a one-line summary "X kinds × Y dims tracked".
     """
     from core.paths import MUTATION_AUDIT_LOG_PATH
-    from core.self_improving.loop.kind_dim_matrix import (
+    from core.self_improving.loop.observe.kind_dim_matrix import (
         compute_kind_dim_matrix,
         rank_dims_by_kind,
     )
-    from core.self_improving.loop.mutations_reader import (
+    from core.self_improving.loop.observe.mutations_reader import (
         read_recent_applies,
         read_recent_attributions,
     )
@@ -1301,7 +1301,7 @@ def _cmd_rollback_check(opts: list[str]) -> None:
     """Render ``evaluate_rollback_condition`` over recent apply rows.
 
     Wires the previously orphan
-    ``core.self_improving.loop.rollback_condition.evaluate_rollback_condition``.
+    ``core.self_improving.loop.observe.rollback_condition.evaluate_rollback_condition``.
     For each of the last N apply rows that has a non-empty
     ``rollback_condition`` predicate, evaluates the predicate against
     the current baseline.json (baseline_dim + baseline_fitness) and the
@@ -1312,11 +1312,11 @@ def _cmd_rollback_check(opts: list[str]) -> None:
     firing against current state — manual rollback candidates.
     """
     from core.paths import MUTATION_AUDIT_LOG_PATH
-    from core.self_improving.loop.mutations_reader import (
+    from core.self_improving.loop.observe.mutations_reader import (
         read_recent_applies,
         read_recent_attributions,
     )
-    from core.self_improving.loop.rollback_condition import evaluate_rollback_condition
+    from core.self_improving.loop.observe.rollback_condition import evaluate_rollback_condition
 
     last_n = _parse_last_n(opts)
     apply_rows = read_recent_applies(n=last_n, path=MUTATION_AUDIT_LOG_PATH)

@@ -18,7 +18,7 @@ import json
 from pathlib import Path
 
 import pytest
-from core.self_improving.loop.baseline_epoch import seed_pool_content_hash
+from core.self_improving.loop.observe.baseline_epoch import seed_pool_content_hash
 from scripts.assemble_seed_pool import (
     _assert_safe_dest_basename,
     _split_run_ids,

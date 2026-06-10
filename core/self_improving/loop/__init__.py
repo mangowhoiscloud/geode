@@ -33,7 +33,7 @@ binding.
 
 from __future__ import annotations
 
-from core.self_improving.loop.runner import (
+from core.self_improving.loop.mutate.runner import (
     Mutation,
     RunnerContext,
     SelfImprovingLoopRunner,
