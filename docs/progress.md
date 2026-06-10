@@ -16,8 +16,8 @@
 
 <!-- Move items here when work begins. -->
 <!-- 3-Checkpoint: (1) alloc → (2) merge (CI 5/5) → (3) verify -->
-- [ ] Docs sprint — v0.99.154~166 출하분 문서 반영 (별도 세션; 브리프=memory project_docs_sprint_brief_2026_06_11: 모듈 경로 이동 전수 점검 + geode-mcp/seeds/hub/config explain 신규 표면 + 5-layer 다이어그램 + .env 역할 재정의 + Fable 5)
-- [ ] Config unification — C-1/C-2/C-3 DONE; 잔여 C-4(라우팅 manifest 캐시 무효화 H11 + GEODE_CONFIG_TOML 의미 통일 H9 + reload 필드별 경고 H13) + H1(데몬 client-cwd 세션 해석)은 별도 결정
+- [ ] Docs sprint — v0.99.154~166 출하분 문서 반영 + 전 페이지 재생성/재설계 (별도 세션; 브리프=memory project_docs_sprint_brief_2026_06_11 + 재설계 결정=memory project_docs_redesign_decisions_2026_06_11: Axolotl Rose 팔레트, IA 재편 08b 삭제, 시각화 3단 스펙, 4-Phase 플랜. 캐논/게이트는 v0.99.168로 선출하 완료 — site/CONTENT-CANON.md + scripts/check_docs_canon.py. config 페이지 배치는 C-4 이후)
+- [ ] H11-tail — routing 상수 모듈레벨 by-value 별칭 해동(core/llm/providers/{anthropic,openai,codex,glm}.py DEFAULT_*/FALLBACK_MODELS + core/skills/agents.py dataclass 기본값) — reload 후에도 boot-frozen, 호출자 스윕 필요. + H1(데몬 client-cwd 세션 해석)은 별도 결정
 
 ## In Review
 
@@ -27,6 +27,9 @@
 
 <!-- Completed items. Keep recent 10, archive older ones. -->
 <!-- - [x] #issue-number — Short description (PR #N) -->
+- [x] Docs content canon + banned-term CI gate — site/CONTENT-CANON.md(정체성: 자기개선 루프=선택, ML 아님 + 5-layer + 시각화 스펙) + scripts/check_docs_canon.py pages.yml blocking 배선, ML 오기술 4페이지 정정(autoresearch 제목 "자가 ML 실험 루프" 등) (PR #2107 → #2110, v0.99.168)
+- [x] geode-mcp 노출 점검 — Claude Code 등록(.mcp.json repo-ship)+stdio 라이브 검증, 핸드셰이크 버전 오보고(1.26.0→GEODE 버전)·get_health OAuth 오보고(credential_source 병기) 수정, README/README.ko 검증표 기록 (PR #2113, v0.99.169)
+- [x] C-4 config tail — H9 GEODE_CONFIG_TOML 메인로더 통일 + H11 reload시 routing 재바인드(모듈레벨 별칭 잔존=H11-tail) + H13 reload 필드별 경고 + 공유 env loader(train/campaign 순서 정렬)+keep-flag .env 인식 (PR #2114 → #2115, v0.99.170)
 - [x] C-3 config loading 통일 — dotenv 단일 순서(project .env 승, H5) + serve 데몬 BEHAVIOR_ENV_KEYS 드롭(세션 reload 항상 승, H2, 탈출구 GEODE_SERVE_KEEP_MODEL_ENV=1) (PR #2105 → #2106, v0.99.167)
 - [x] C-1 geode config explain + about mask warning (PR #2094 → #2095, v0.99.164)
 - [x] C-2 .env=secrets-only — /model·effort·login-source toml-only + stale-mask auto-cleanup, credential_source cascade read-back (PR #2097 → #2098, v0.99.165)
