@@ -17,7 +17,7 @@
 <!-- Move items here when work begins. -->
 <!-- 3-Checkpoint: (1) alloc → (2) merge (CI 5/5) → (3) verify -->
 - [ ] Docs sprint — v0.99.154~166 출하분 문서 반영 (별도 세션; 브리프=memory project_docs_sprint_brief_2026_06_11: 모듈 경로 이동 전수 점검 + geode-mcp/seeds/hub/config explain 신규 표면 + 5-layer 다이어그램 + .env 역할 재정의 + Fable 5)
-- [ ] Config unification — C-1/C-2 DONE; C-3 next (dotenv 단일화 H5 + 데몬 모델성 env 드롭 H2 + client-cwd 정렬 H1; frontier 레퍼런스 조사 완료: 4사 모두 .env에 동작설정 안 씀, Hermes 키-타입 라우팅+hot-reload 계약, Claude Code 승자-레이어 배너) → C-4 (캐시 무효화+GEODE_CONFIG_TOML 통일)
+- [ ] Config unification — C-1/C-2/C-3 DONE; 잔여 C-4(라우팅 manifest 캐시 무효화 H11 + GEODE_CONFIG_TOML 의미 통일 H9 + reload 필드별 경고 H13) + H1(데몬 client-cwd 세션 해석)은 별도 결정
 
 ## In Review
 
@@ -27,6 +27,7 @@
 
 <!-- Completed items. Keep recent 10, archive older ones. -->
 <!-- - [x] #issue-number — Short description (PR #N) -->
+- [x] C-3 config loading 통일 — dotenv 단일 순서(project .env 승, H5) + serve 데몬 BEHAVIOR_ENV_KEYS 드롭(세션 reload 항상 승, H2, 탈출구 GEODE_SERVE_KEEP_MODEL_ENV=1) (PR #2105 → #2106, v0.99.167)
 - [x] C-1 geode config explain + about mask warning (PR #2094 → #2095, v0.99.164)
 - [x] C-2 .env=secrets-only — /model·effort·login-source toml-only + stale-mask auto-cleanup, credential_source cascade read-back (PR #2097 → #2098, v0.99.165)
 - [x] Fable 5 support — /model 픽커+capability 앵커+refusal stop_reason(termination model_refusal), 공식문서 3종 검증·인용, 전환 E2E PASS (PR #2100 → #2102, v0.99.166)
