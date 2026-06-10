@@ -217,9 +217,8 @@ def test_build_runner_context_with_baseline_and_priors(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """All 3 lookups feed the RunnerContext + target_dim auto-picked."""
-    from plugins.seed_generation.baseline_reader import BaselineSnapshot, MetaReviewSnapshot
-
     from core.self_improving import train as auto_train
+    from plugins.seed_generation.baseline_reader import BaselineSnapshot, MetaReviewSnapshot
 
     sot_path = tmp_path / "wrapper-sections.json"
     sot_path.write_text(json.dumps({"role": "r"}), encoding="utf-8")
@@ -374,9 +373,8 @@ def test_runner_uses_baseline_evidence_in_user_prompt(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """When baseline has evidence for target_dim, the user prompt embeds it."""
-    from plugins.seed_generation.baseline_reader import BaselineSnapshot
-
     from core.self_improving import train as auto_train
+    from plugins.seed_generation.baseline_reader import BaselineSnapshot
 
     sot_path = tmp_path / "wrapper-sections.json"
     monkeypatch.setattr(auto_train, "WRAPPER_SECTIONS_SOT_PATH", sot_path)

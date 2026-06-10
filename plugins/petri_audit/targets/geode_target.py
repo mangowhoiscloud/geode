@@ -202,9 +202,9 @@ async def _default_geode_runner(
     from core.agent.loop import AgenticLoop
     from core.agent.tool_executor import ToolExecutor
     from core.audit.diagnostics import diag
+    from core.cli import _build_tool_handlers, _set_readiness
     from core.wiring.startup import check_readiness
 
-    from core.cli import _build_tool_handlers, _set_readiness
     from plugins.petri_audit.audit_mode import (
         apply_to_profile_policy,
         apply_to_readiness,
@@ -293,9 +293,8 @@ async def _default_geode_runner(
     # ``core/agent/worker.py:817-823`` pattern for the sub-agent worker
     # subprocess, which has the identical wiring gap. Idempotent — safe to
     # re-call when the parent already populated the registry.
-    from core.llm.adapters.registry import bootstrap_builtins
-
     from core.llm.adapters import infer_provider_from_model
+    from core.llm.adapters.registry import bootstrap_builtins
 
     bootstrap_builtins()
 

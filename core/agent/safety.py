@@ -160,7 +160,7 @@ def is_bash_command_read_only(command: str) -> bool:
 
     Pure function — no instance state. Used by both
     :meth:`ApprovalController.is_bash_auto_approved` and the test mirror in
-    ``tests/test_bash_safe_prefix.py`` so the two cannot drift.
+    ``tests/core/agent/test_bash_safe_prefix.py`` so the two cannot drift.
     """
     _UNSAFE_CHARS = frozenset(">;&`")
     if any(c in command for c in _UNSAFE_CHARS):

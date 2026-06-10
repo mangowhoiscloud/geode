@@ -11,11 +11,10 @@ from __future__ import annotations
 from pathlib import Path
 
 import pytest
-from plugins.petri_audit.cli import cmd_petri
-from plugins.petri_audit.manifest import clear_manifest_cache
-
 from plugins.petri_audit import credential_source as cs
 from plugins.petri_audit import user_overrides as uo
+from plugins.petri_audit.cli import cmd_petri
+from plugins.petri_audit.manifest import clear_manifest_cache
 
 
 @pytest.fixture(autouse=True)

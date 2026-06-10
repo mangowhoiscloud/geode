@@ -13,14 +13,13 @@ from dataclasses import dataclass
 from pathlib import Path
 
 import pytest
+from core.self_improving.loop import in_context_slots, in_context_wiring
 from core.self_improving.loop.in_context_slots import (
     CANONICAL_SLOTS,
     SLOT_TOOL_HINTS,
     SLOT_TOOL_RANKING,
     InContextSlot,
 )
-
-from core.self_improving.loop import in_context_slots, in_context_wiring
 
 
 @dataclass

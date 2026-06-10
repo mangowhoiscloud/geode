@@ -186,9 +186,8 @@ class TestWorkerHandlerPath:
         """The shared ``_safe_delegate`` helper must run aexecute, not
         the sync method. Smoke via the seed_pool tool (no network)."""
         from core.cli.tool_handlers.clarification import _safe_delegate
-        from core.tools.seed_pool_search import SeedPoolSearchTool
-
         from core.tools import seed_pool_search as mod
+        from core.tools.seed_pool_search import SeedPoolSearchTool
 
         monkeypatch.setattr(mod, "_default_seed_roots", lambda: ())
         result = _safe_delegate(SeedPoolSearchTool, {"query": "alignment"})

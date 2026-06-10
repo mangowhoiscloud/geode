@@ -9,12 +9,11 @@ either block (Petri scenarios must not see GEODE-side surface hints).
 from __future__ import annotations
 
 import pytest
+from core.agent import system_prompt
 from core.llm.platform_hints import (
     GEODE_SURFACE_TYPE_ENV,
     SURFACE_SLACK,
 )
-
-from core.agent import system_prompt
 
 
 @pytest.fixture(autouse=True)

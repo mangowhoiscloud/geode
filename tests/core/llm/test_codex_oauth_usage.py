@@ -28,6 +28,7 @@ from typing import Any
 from unittest.mock import patch
 
 import pytest
+from core.llm import codex_oauth_usage
 from core.llm.codex_oauth_usage import (
     CODEX_OAUTH_POLL_DISABLED_ENV,
     CODEX_OAUTH_POLL_REQUIRED_ENV,
@@ -43,8 +44,6 @@ from core.llm.codex_oauth_usage import (
     read_codex_oauth_token,
     should_block_codex_lane_acquisition,
 )
-
-from core.llm import codex_oauth_usage
 
 
 @pytest.fixture(autouse=True)

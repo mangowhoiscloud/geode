@@ -115,7 +115,7 @@ jobs:
         if: needs.changes.outputs.code == 'true'
       - uses: astral-sh/setup-uv@v5
         if: needs.changes.outputs.code == 'true'
-      # [audit] extra installs inspect_ai so tests/audit/ runs (otherwise
+      # [audit] extra installs inspect_ai so tests/core/audit/ runs (otherwise
       # ``pytest.importorskip("inspect_ai.log")`` skips those modules
       # and the petri-bookkeeping code in core/audit/ shows up as 0%
       # covered — pushing total coverage below the 75% ratchet).

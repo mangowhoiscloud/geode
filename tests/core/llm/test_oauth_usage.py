@@ -25,6 +25,7 @@ from typing import Any
 from unittest.mock import patch
 
 import pytest
+from core.llm import oauth_usage
 from core.llm.oauth_usage import (
     DEFAULT_BLOCK_THRESHOLD,
     OAUTH_POLL_DISABLED_ENV,
@@ -38,8 +39,6 @@ from core.llm.oauth_usage import (
     read_anthropic_oauth_token,
     should_block_lane_acquisition,
 )
-
-from core.llm import oauth_usage
 
 
 @pytest.fixture(autouse=True)

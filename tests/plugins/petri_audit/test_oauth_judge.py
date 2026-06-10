@@ -297,9 +297,8 @@ def test_run_audit_user_pinned_raw_openai_not_rewritten() -> None:
 def test_openai_codex_provider_registered_with_inspect_ai() -> None:
     """``openai-codex`` is in inspect_ai's modelapi registry after
     ``import plugins.petri_audit`` runs ``register()``."""
-    from inspect_ai._util.registry import registry_find
-
     import plugins.petri_audit  # noqa: F401 — triggers register()
+    from inspect_ai._util.registry import registry_find
 
     # Find by registry tag — provider names come through ``registry_
     # unqualified_name`` and may carry a package prefix. Match on the
@@ -357,10 +356,9 @@ def test_openai_codex_constructor_sets_codex_headers() -> None:
     import base64
     import json
 
+    import plugins.petri_audit  # noqa: F401 — register()
     from inspect_ai.model import get_model
     from inspect_ai.model._model import _models
-
-    import plugins.petri_audit  # noqa: F401 — register()
 
     payload = {"https://api.openai.com/auth": {"chatgpt_account_id": "fake-acc-id"}}
     payload_b64 = base64.urlsafe_b64encode(json.dumps(payload).encode()).decode().rstrip("=")
@@ -421,10 +419,9 @@ def test_count_tokens_uses_tiktoken_not_responses_api() -> None:
     import base64
     import json as _json
 
+    import plugins.petri_audit  # noqa: F401 — register()
     from inspect_ai.model import get_model
     from inspect_ai.model._model import _models
-
-    import plugins.petri_audit  # noqa: F401 — register()
 
     payload = {"https://api.openai.com/auth": {"chatgpt_account_id": "fake-acc-id"}}
     payload_b64 = base64.urlsafe_b64encode(_json.dumps(payload).encode()).decode().rstrip("=")

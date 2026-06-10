@@ -83,7 +83,7 @@ def get_agentic_tools(
             ``petri_audit``; PR-PILOT-UNIFY-DIM-EXTRACT 2026-06-04 later
             removed that worker — the Pilot now audits directly — but the
             guard still protects every other toolkit-granted sub-agent.)
-            Pinned by ``tests/test_tool_policy_force_include_toolkit.py``.
+            Pinned by ``tests/core/agent/test_tool_policy_force_include_toolkit.py``.
     """
     tools = list(_BASE_TOOLS)
     existing_names = {t["name"] for t in tools}

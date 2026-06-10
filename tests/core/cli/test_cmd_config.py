@@ -244,7 +244,6 @@ def test_yes_atomic_write_rollback_preserves_existing_config_on_failure(
     keep its original contents — atomic_io's tmp+rename pattern means we
     never see a partial file even on simulated disk-full."""
     import core.paths
-
     from core.cli import cmd_config
 
     target = tmp_path / "config.toml"
@@ -316,7 +315,6 @@ def test_yes_post_render_validation_blocks_corrupt_combined_toml(
     destination must NOT be written. Force the case by stubbing the
     renderer to return a known-bad snippet."""
     import core.paths
-
     from core.cli import cmd_config
 
     target = tmp_path / "config.toml"

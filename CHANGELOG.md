@@ -45,6 +45,14 @@ functional change.
 
 ---
 
+## [0.99.160] - 2026-06-11
+
+### Changed
+- **Structure sprint S-2 — test tree on the source-mirror convention (PR-STRUCT-S2).** 350 files moved (`git mv`, filenames unchanged): 323 flat `tests/*.py` + `tests/self_improving/` (18, merged into `tests/core/self_improving/`) + the pre-existing dual roots `tests/audit/` (7 -> `tests/core/audit/`) and `tests/observability/` (2 -> `tests/core/observability/`). Layout is now `tests/{core/<pkg>,plugins/<plugin>,integration,visualizations}` mirroring the source tree; cross-cutting/static-guard tests live in `tests/integration/`. Stale empty roots removed.
+  - 55 moved files' repo-root anchors (`parents[1]` / `parent.parent`) bumped to the new depth.
+  - 26 files' literal old-path references swept via the move mapping — including `release.yml`'s mypy targets (functional breakage, not just docstrings).
+  - **ruff `src` fix**: `"tests"` removed from src roots — with the mirror convention, `tests/core/<pkg>/` registered as a second `core.*` package in ruff's first-party resolver and silently flipped isort grouping for function-body import blocks (worktree/CI-divergent lint). 159 test-file import blocks normalized under the corrected classification.
+
 ## [0.99.159] - 2026-06-11
 
 ### Fixed
