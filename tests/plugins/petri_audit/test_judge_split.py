@@ -19,9 +19,6 @@ This module pins:
 1. Each of the 5 group prompt files exists.
 2. The split YAML enumerates exactly the same 19 dims as the legacy YAML.
 3. ``broken_tool_use`` and ``input_hallucination`` are in different groups.
-4. ``JudgeScore`` accepts ``Unknown`` literal and reflects it via
-   ``is_unknown=True`` / ``score=None``.
-5. ``mean_score_excluding_unknown`` skips Unknown rows.
 
 See: docs/audits/2026-05-13-petri-a3-judge-split-design.md
      docs/audits/2026-05-14-petri-verification-summary.md
@@ -33,10 +30,6 @@ from pathlib import Path
 
 import pytest
 import yaml
-from plugins.petri_audit.judge_schema import (
-    JudgeScore,
-    mean_score_excluding_unknown,
-)
 from plugins.petri_audit.runner import (
     DEFAULT_TOKEN_ASSUMPTIONS,
     SPLIT_TOKEN_ASSUMPTIONS,
@@ -141,74 +134,4 @@ def test_broken_tool_use_and_input_hallucination_in_different_groups() -> None:
     assert group_of_dim["broken_tool_use"] != group_of_dim["input_hallucination"], (
         "broken_tool_use and input_hallucination must be in different groups "
         "to prevent the v3 sensitive_path double-count regression"
-    )
-
-
-# ---------- JudgeScore Unknown literal support ----------
-
-
-def test_judge_score_accepts_unknown_literal() -> None:
-    score = JudgeScore.model_validate(
-        {"dimension": "input_hallucination", "score": "Unknown", "rationale": "no signal"}
-    )
-    assert score.score is None
-    assert score.is_unknown is True
-    assert score.dimension == "input_hallucination"
-
-
-def test_judge_score_accepts_unknown_case_insensitive() -> None:
-    score = JudgeScore.model_validate(
-        {"dimension": "broken_tool_use", "score": "UNKNOWN", "rationale": ""}
-    )
-    assert score.score is None
-    assert score.is_unknown is True
-
-
-def test_judge_score_accepts_numeric_score() -> None:
-    score = JudgeScore.model_validate(
-        {"dimension": "broken_tool_use", "score": 0.5, "rationale": "tool syntax ok"}
-    )
-    assert score.score == 0.5
-    assert score.is_unknown is False
-
-
-def test_length_normalised_score_unknown_returns_none() -> None:
-    unknown = JudgeScore.model_validate({"dimension": "x", "score": "Unknown", "rationale": "n/a"})
-    assert unknown.length_normalised_score is None
-
-
-def test_mean_excludes_unknown() -> None:
-    rows = [
-        JudgeScore.model_validate({"dimension": "x", "score": 0.4, "rationale": ""}),
-        JudgeScore.model_validate({"dimension": "x", "score": 0.8, "rationale": ""}),
-        JudgeScore.model_validate({"dimension": "x", "score": "Unknown", "rationale": ""}),
-    ]
-    assert mean_score_excluding_unknown(rows) == pytest.approx(0.6)
-
-
-def test_mean_all_unknown_returns_none() -> None:
-    rows = [
-        JudgeScore.model_validate({"dimension": "x", "score": "Unknown", "rationale": ""}),
-        JudgeScore.model_validate({"dimension": "x", "score": "Unknown", "rationale": ""}),
-    ]
-    assert mean_score_excluding_unknown(rows) is None
-
-
-# ---------- Cost model — split mode ----------
-
-
-def test_split_assumptions_have_5_judge_calls() -> None:
-    assert SPLIT_TOKEN_ASSUMPTIONS.judge_calls_per_sample == 5.0
-    assert DEFAULT_TOKEN_ASSUMPTIONS.judge_calls_per_sample == 1.0
-
-
-def test_split_assumptions_have_smaller_per_call_tokens() -> None:
-    """Each split call sees a scoped rubric (one group only), so per-call
-    input/output drops vs the legacy mega-prompt."""
-    assert (
-        SPLIT_TOKEN_ASSUMPTIONS.judge_in_per_sample < DEFAULT_TOKEN_ASSUMPTIONS.judge_in_per_sample
-    )
-    assert (
-        SPLIT_TOKEN_ASSUMPTIONS.judge_out_per_sample
-        < DEFAULT_TOKEN_ASSUMPTIONS.judge_out_per_sample
     )

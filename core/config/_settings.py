@@ -301,27 +301,8 @@ class Settings(BaseSettings):
     # Tier 0.5 — User Profile
     user_profile_dir: str = ""  # global dir override (default: ~/.geode/user_profile)
 
-    # MCP Server URLs
-    steam_mcp_url: str = ""
-    brave_mcp_url: str = ""
-    brave_api_key: str = ""
-    kg_memory_mcp_url: str = ""
-
     # Ensemble — Multi-LLM mode
     ensemble_mode: str = "single"  # single | cross
-    secondary_analysts: str = "player_experience,discovery"
-    primary_analysts: str = "game_mechanics,growth_potential"
-
-    # Graph — Feedback Loop
-    confidence_threshold: float = 0.7
-    max_iterations: int = 5
-    interrupt_nodes: str = ""  # comma-separated node names, e.g. "verification,scoring"
-
-    # LLM — Router & Verification
-    # PR-1 G-E + PR-RUNTIME-OPUS-4-8 — same bump as ``model`` field above.
-    router_model: str = "claude-opus-4-8"
-    default_secondary_model: str = "gpt-5.4"  # see OPENAI_PRIMARY
-    agreement_threshold: float = 0.67
 
     # Sub-Agent Orchestration (P2)
     max_subagent_depth: int = 1  # 최대 재귀 깊이 (depth=1 강제, Claude Code 패턴)
@@ -392,9 +373,6 @@ class Settings(BaseSettings):
     # Notification — external messaging
     notification_channel: str = "slack"  # default notification channel
     notification_recipient: str = "#geode-alerts"  # default recipient
-    notification_on_pipeline_end: bool = True
-    notification_on_pipeline_error: bool = True
-    notification_on_drift: bool = True
 
     # Gateway — inbound messaging
     gateway_enabled: bool = False  # GEODE_GATEWAY_ENABLED=true to enable
@@ -403,9 +381,6 @@ class Settings(BaseSettings):
     # L4 Gateway Hooks — external webhook endpoint
     webhook_enabled: bool = False  # GEODE_WEBHOOK_ENABLED=true to enable
     webhook_port: int = 8765
-
-    # Calendar — external calendar sync
-    calendar_sync_on_trigger: bool = False  # auto-sync on TRIGGER_FIRED
 
     # Sandbox — file tool path validation (Claude Code parity)
     sandbox_max_file_size_bytes: int = 262_144  # 256KB pre-read guard
@@ -446,9 +421,6 @@ class Settings(BaseSettings):
 
     # LLM — Fallback cost ratio control (C2: 0 = unlimited)
     llm_max_fallback_cost_ratio: float = 0.0
-
-    # Pipeline — timeout in seconds (B3: 0 = no timeout)
-    pipeline_timeout_s: float = 600.0
 
     # Concurrency — workload lane limits
     gateway_max_concurrent: int = 4  # max simultaneous Gateway messages

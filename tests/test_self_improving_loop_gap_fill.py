@@ -279,6 +279,5 @@ def test_settings_model_default_matches_routing_anthropic_default() -> None:
         f"anthropic). Currently: settings.model default = "
         f"{fields['model'].default!r}, ANTHROPIC_PRIMARY = {ANTHROPIC_PRIMARY!r}."
     )
-    assert fields["router_model"].default == ANTHROPIC_PRIMARY, (
-        "PR-1 G-E — settings.router_model default must match ANTHROPIC_PRIMARY for the same reason."
-    )
+    # PR-CLEANUP-D1 (2026-06-10) — router_model was a dead Settings field
+    # (zero readers) and was deleted; only settings.model carries the pin.

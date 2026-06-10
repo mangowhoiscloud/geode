@@ -45,6 +45,17 @@ functional change.
 
 ---
 
+## [0.99.152] - 2026-06-10
+
+### Removed
+- **D-1 safe-delete batch (PR-CLEANUP-D1)** — zero-production-caller code identified by the 2026-06-10 duplication/dead-code audit, every claim re-verified at both ends (multiline-import-aware grep) before deletion:
+  - **10 zombie modules** kept alive only by their own tests: `core/auth/claude_code_oauth.py` (superseded by claude_code_provider + claude_cli adapter), `core/cli/result_cache.py` (duplicate of the live `session_state._ResultCache` — one-registry rule), `core/cli/agentic_response.py` (re-export shim past compat grace), `core/mcp/signal_fallback.py` (speculative extraction, zero tests too), `core/memory/agent_memory.py`, `core/ui/latex_graphics.py` (NotImplementedError scaffold + its dead env knobs), `core/llm/skill_registry.py` (the Registry-CANNOT incident's losing half), `plugins/petri_audit/{judge_schema,textgrad_wrapper}.py` (P3-b invalid-arc leftovers), `plugins/seed_generation/literature_snapshot.py` (unimported twin of core/tools') — plus their 9 dedicated test files; shared test files repointed to live modules.
+  - **16 dead `Settings` fields**: 12 zero-reference (brave/steam/kg MCP urls + key, analyst pair, feedback-loop trio, interrupt_nodes, notification_on_* trio, calendar_sync_on_trigger, pipeline_timeout_s, agreement_threshold) + write-only TOML knobs (`router_model`, `default_secondary_model`, `confidence_threshold`, `max_iterations`) with their `_TOML_TO_SETTINGS` rows; the `[pipeline]` section left `DEFAULT_CONFIG_TOML` and the template's stale `claude-opus-4-6` example became `claude-opus-4-8`. (`ensemble_mode` verified live and kept.)
+  - **v0.88.0 router compat surface**: LLM*Error lazy re-exports + `__getattr__` machinery, `_resolve_provider` monkeypatch alias, provider_dispatch/anthropic-client/fallback-constant re-exports — its own comment recorded zero importers since 2026-05-08. The live public surface (call_llm family, usage accumulator group, hooks, models) is untouched; `tests/test_failover.py` migrated to leaf imports.
+  - `core/runtime.py` noqa back-compat re-imports (tests migrated to `core.wiring` leaf imports), 3 orphan `core/paths.py` constants, stale docstring/comment pointers, and an honest rewrite of the false "campaign driver sets AUTORESEARCH_VERDICT" comment (no writer exists — wiring it is a D-3 item).
+
+---
+
 ## [0.99.151] - 2026-06-10
 
 ### Changed

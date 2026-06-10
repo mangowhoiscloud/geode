@@ -140,11 +140,11 @@ class TestResultCache:
 
     def test_disk_persistence(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
         """Cache persists to and loads from disk."""
-        import core.cli.result_cache as _rc_mod
+        import core.cli.session_state as _rc_mod
 
         monkeypatch.setattr(_rc_mod, "_RESULT_CACHE_DIR", tmp_path)
 
-        cache1 = _rc_mod.ResultCache(max_size=5)
+        cache1 = _rc_mod._ResultCache(max_size=5)
         cache1._cache.clear()
         cache1.put({"subject_id": "TestSubject", "score": 99})
 
@@ -153,7 +153,7 @@ class TestResultCache:
         assert len(files) >= 1
 
         # New cache loads from disk
-        cache2 = _rc_mod.ResultCache(max_size=5)
+        cache2 = _rc_mod._ResultCache(max_size=5)
         result = cache2.get("testsubject")
         assert result is not None
         assert result["score"] == 99

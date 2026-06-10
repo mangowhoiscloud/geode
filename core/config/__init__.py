@@ -51,8 +51,6 @@ PROJECT_CONFIG_PATH = PROJECT_CONFIG_TOML
 # Only mapped keys are applied; unknown TOML keys are silently ignored.
 _TOML_TO_SETTINGS: dict[str, str] = {
     "llm.primary_model": "model",
-    "llm.secondary_model": "default_secondary_model",
-    "llm.router_model": "router_model",
     "llm.learning_extract_model": "learning_extract_model",
     # PR-CL-A6 (2026-05-23) — Plan / Action / Judge model knobs. Empty
     # string falls back to ``llm.primary_model``.
@@ -68,8 +66,6 @@ _TOML_TO_SETTINGS: dict[str, str] = {
     "cognitive.reflection_max_tokens": "cognitive_reflection_max_tokens",
     "cognitive.reflection_interval": "cognitive_reflection_interval",
     "output.verbose": "verbose",
-    "pipeline.confidence_threshold": "confidence_threshold",
-    "pipeline.max_iterations": "max_iterations",
     "agentic.time_budget": "agentic_loop_time_budget",
     "agentic.thinking_budget": "agentic_thinking_budget",
     "agentic.effort": "agentic_effort",
@@ -87,16 +83,10 @@ DEFAULT_CONFIG_TOML = """\
 # Uncomment and edit values to override defaults.
 
 [llm]
-# primary_model = "claude-opus-4-6"
-# secondary_model = "gpt-5.4"
-# router_model = "claude-opus-4-6"
+# primary_model = "claude-opus-4-8"
 
 [output]
 # verbose = false
-
-[pipeline]
-# confidence_threshold = 0.7
-# max_iterations = 5
 """
 
 
