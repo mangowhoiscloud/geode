@@ -894,6 +894,17 @@ class CLIPoller:
                     skill_registry=self._services.skill_registry,
                     mcp_manager=self._services.mcp_manager,
                 )
+            # /model writes config.toml + the daemon's Settings singleton but
+            # cmd_model does NOT touch the live session's AgenticLoop — its
+            # docstring even says "applies to *new* sessions". So a /model
+            # switch inside an interactive REPL was silently ignored until the
+            # session ended: the thin CLI relays /model here, the singleton
+            # flips, but the loop the next prompt runs on keeps its boot-time
+            # model. Operator-reported "fable 5로 바꿔도 opus-4-8로 동작"
+            # (2026-06-11) — the thin-CLI ↔ daemon model gap. Sync the live
+            # loop here so the switch lands in the SAME session.
+            if cmd == "/model" and loop is not None:
+                self._sync_live_loop_to_settings(loop)
             return {
                 "type": "command_result",
                 "cmd": cmd,
@@ -909,6 +920,51 @@ class CLIPoller:
                 "status": "error",
                 "message": str(exc),
             }
+
+    def _sync_live_loop_to_settings(self, loop: Any) -> None:
+        """Re-point the live session loop at the daemon's current settings.
+
+        Called right after a ``/model`` command lands on the daemon. The
+        command updated ``settings.model`` (+ ``settings.agentic_effort``)
+        but not the AgenticLoop the active session runs on. This mirrors the
+        ``client_capability`` adoption path (which only fires once at session
+        start) for the mid-session case, using the same synchronous swap
+        helpers ``update_model_async`` uses internally — model + provider +
+        identity breadcrumb + context-window adapt — minus the async-only
+        ``MODEL_SWITCHED`` hook (telemetry, not behaviour). The effort axis is
+        re-pointed directly, matching ``services.create_session``'s
+        constructor bridge.
+
+        Why an explicit sync rather than the old per-turn drift sync:
+        ``_model_switching.sync_model_from_settings_async`` was cut to a
+        no-op (PR-DRIFT-CUT, 2026-05-24) because *inferring* drift from
+        ``settings.model`` between rounds caused an auto-revert smoke
+        incident. The cut left ``/model`` as the operator's sole explicit
+        entry point — so the switch must be pushed at the command boundary,
+        not inferred. This is that push: it fires ONLY on an explicit
+        ``/model`` command, so it carries the operator's intent without
+        reintroducing speculative drift.
+        """
+        from core.agent.loop import _model_switching
+        from core.config import _resolve_provider, settings
+
+        target = (settings.model or "").strip()
+        if target and target != getattr(loop, "model", ""):
+            try:
+                old_model, changed = _model_switching._apply_model_update(
+                    loop, target, _resolve_provider(target)
+                )
+                if changed:
+                    _model_switching._inject_model_switch_breadcrumb(loop, old_model, target)
+                    loop._adapt_context_for_model(target)
+                    log.info("model command: live session loop synced to %s", target)
+            except Exception:
+                log.warning("model command: live loop model sync failed", exc_info=True)
+
+        new_effort = (getattr(settings, "agentic_effort", "") or "").strip()
+        if new_effort and getattr(loop, "_effort", None) != new_effort:
+            loop._effort = new_effort
+            log.info("model command: live session effort synced to %s", new_effort)
 
     def _handle_resume(
         self,
