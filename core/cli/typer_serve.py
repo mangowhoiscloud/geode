@@ -33,8 +33,8 @@ def serve(
     import time as _time
 
     # PR-DISPATCH-OBS-EXT (2026-05-28) / S-6 (2026-06-11) — serve.log file
-    # handler via the unified entry-point switchboard. ``cmd_lifecycle``
-    # status depends on SERVE_LOG_PATH existing (``cmd_lifecycle.py:319``);
+    # handler via the unified entry-point switchboard. The lifecycle
+    # status command depends on SERVE_LOG_PATH existing (``commands/lifecycle.py``);
     # configure_logging("serve") preserves that path + 10MB x5 rotation.
     from core.observability.logging_config import configure_logging
 

@@ -37,8 +37,8 @@ mirroring the pattern used by ``core/ui/agentic_ui``.
 
 from __future__ import annotations
 
-# Bridge module for /schedule (a separate file at core/cli/cmd_schedule.py)
-from core.cli.cmd_schedule import cmd_schedule as cmd_schedule
+# Bridge module for /schedule (a separate file at core/cli/commands/schedule.py)
+from core.cli.commands.schedule import cmd_schedule as cmd_schedule
 from core.ui.console import console as console
 
 # Helpers + Rich console must be addressable at the package level so

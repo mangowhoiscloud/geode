@@ -1,4 +1,4 @@
-"""Unit tests for ``core.cli.cmd_config`` (PR-ε1).
+"""Unit tests for ``core.cli.commands.config`` (PR-ε1).
 
 Covers the ``geode config migrate-petri-toml`` Typer subcommand:
 - dry-run path renders the [self_improving_loop.petri.*] snippets to
@@ -17,7 +17,7 @@ from __future__ import annotations
 from pathlib import Path
 
 import pytest
-from core.cli.cmd_config import _render_petri_sections, app
+from core.cli.commands.config import _render_petri_sections, app
 from typer.testing import CliRunner
 
 runner = CliRunner()
@@ -244,7 +244,7 @@ def test_yes_atomic_write_rollback_preserves_existing_config_on_failure(
     keep its original contents — atomic_io's tmp+rename pattern means we
     never see a partial file even on simulated disk-full."""
     import core.paths
-    from core.cli import cmd_config
+    from core.cli.commands import config as cmd_config
 
     target = tmp_path / "config.toml"
     original = '[mcp.servers.calendar]\ncommand = "npx"\n'
@@ -315,7 +315,7 @@ def test_yes_post_render_validation_blocks_corrupt_combined_toml(
     destination must NOT be written. Force the case by stubbing the
     renderer to return a known-bad snippet."""
     import core.paths
-    from core.cli import cmd_config
+    from core.cli.commands import config as cmd_config
 
     target = tmp_path / "config.toml"
     original = '[mcp.servers.calendar]\ncommand = "npx"\n'

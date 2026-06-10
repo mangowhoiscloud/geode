@@ -110,11 +110,11 @@ def _handle_command(
         # v0.63.0 — daemon + disk usage block (lifecycle parity with Hermes
         # ``cmd_status``). Skipped silently if json_output requested.
         if "--json" in args.split():
-            from core.cli.cmd_lifecycle import show_status
+            from core.cli.commands.lifecycle import show_status
 
             show_status(json_output=True)
         else:
-            from core.cli.cmd_lifecycle import show_status
+            from core.cli.commands.lifecycle import show_status
 
             show_status()
     elif action == "mcp":
@@ -170,14 +170,14 @@ def _handle_command(
     elif action == "stop":
         # v0.63.0 — Hermes-style daemon shutdown (`hermes stop`).
         # Args: ``/stop --force`` for SIGKILL, optional ``--timeout=N``.
-        from core.cli.cmd_lifecycle import stop_serve
+        from core.cli.commands.lifecycle import stop_serve
 
         force = "--force" in args.split()
         stop_serve(force=force)
     elif action == "clean":
         # v0.63.0 — selective cache cleanup. Args: ``--scope=all|project|global|build``
         # ``--all-data`` ``--force`` ``--dry-run``.
-        from core.cli.cmd_lifecycle import do_clean
+        from core.cli.commands.lifecycle import do_clean
 
         opts = args.split()
         scope = next(
@@ -194,7 +194,7 @@ def _handle_command(
         # v0.63.0 — full system removal (Hermes ``cmd_uninstall`` parity).
         # Args: ``--force`` to skip confirmation, ``--dry-run`` to preview,
         # ``--keep-config`` ``--keep-data`` for partial uninstall.
-        from core.cli.cmd_lifecycle import do_uninstall
+        from core.cli.commands.lifecycle import do_uninstall
 
         opts = args.split()
         do_uninstall(

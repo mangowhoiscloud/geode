@@ -48,7 +48,7 @@ def _build_execution_handlers() -> dict[str, Any]:
                 job.action = action_text
                 svc.add_job(job)
                 svc.save()
-                from core.cli.cmd_schedule import _format_schedule_desc
+                from core.cli.commands.schedule import _format_schedule_desc
 
                 console.print(f"  [success]Created: {job.job_id}[/success]")
                 console.print(f"  Schedule: {_format_schedule_desc(job)}")

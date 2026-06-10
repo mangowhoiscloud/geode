@@ -1030,7 +1030,7 @@ def _prompt_component(
 # ---------------------------------------------------------------------------
 #
 # We avoid pulling in a TOML writer dep (tomli_w / tomlkit) by following
-# the existing ``core/cli/cmd_config.py`` pattern: read the file as
+# the existing ``core/cli/commands/config.py`` pattern: read the file as
 # string, splice in the requested key=value pairs under the right
 # section header, write atomically. Limited to the subset of TOML the
 # self-improving-loop section uses (basic strings + ints + bools +

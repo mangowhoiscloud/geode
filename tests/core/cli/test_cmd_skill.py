@@ -1,10 +1,10 @@
-"""Tests for geode skill CLI (core/cli/cmd_skill.py)."""
+"""Tests for geode skill CLI (core/cli/commands/skill.py)."""
 
 from __future__ import annotations
 
 from pathlib import Path
 
-from core.cli.cmd_skill import app
+from core.cli.commands.skill import app
 from typer.testing import CliRunner
 
 runner = CliRunner()
@@ -36,7 +36,7 @@ class TestSkillCreate:
     def test_create_private(self, tmp_path: Path, monkeypatch):
         monkeypatch.chdir(tmp_path)
         personal = tmp_path / "personal_skills"
-        monkeypatch.setattr("core.cli.cmd_skill._PERSONAL_SKILLS", personal)
+        monkeypatch.setattr("core.cli.commands.skill._PERSONAL_SKILLS", personal)
         result = runner.invoke(app, ["create", "secret-skill", "--private", "--desc", "Private"])
         assert result.exit_code == 0
         assert "private" in result.output
