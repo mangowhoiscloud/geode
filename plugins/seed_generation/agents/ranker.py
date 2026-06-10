@@ -47,6 +47,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from plugins.seed_generation.agents.base import (
+    DEFAULT_AGENT_MODEL,
     BaseSeedAgent,
     SeedAgentResult,
     parse_structured_output,
@@ -78,7 +79,7 @@ log = logging.getLogger(__name__)
 __all__ = ["Ranker"]
 
 
-_DEFAULT_RANKER_MODEL = "claude-opus-4-8"
+_DEFAULT_RANKER_MODEL = DEFAULT_AGENT_MODEL
 _TASK_TYPE = "seed-ranker-vote"
 _PARTIAL_CHECKPOINT_EVERY_MATCHES = 10
 _PARTIAL_CHECKPOINT_EVERY_SECONDS = 120.0

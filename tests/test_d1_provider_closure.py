@@ -24,7 +24,7 @@ from __future__ import annotations
 
 import pytest
 from core.config.credential_source import CredentialSource
-from core.config.self_improving_loop import (
+from core.config.self_improving import (
     AutoresearchConfig,
     PetriRoleConfig,
 )

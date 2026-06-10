@@ -729,3 +729,13 @@ def _ensure_geode_gitignore() -> None:
         gitignore.write_text(content, encoding="utf-8")
     except OSError:
         pass  # read-only filesystem, CI, etc.
+
+
+# ---------------------------------------------------------------------------
+# Published-surface URL anchors (hardcoding sweep, 2026-06-11). The docs
+# site + repo URLs appeared as scattered literals (hub builder, docs-link
+# checker, sync-stats.mjs); python consumers import these two, the JS side
+# mirrors them as file-level consts in site/scripts/sync-stats.mjs.
+# ---------------------------------------------------------------------------
+GEODE_PAGES_BASE_URL = "https://mangowhoiscloud.github.io/geode"
+GEODE_REPO_URL = "https://github.com/mangowhoiscloud/geode"

@@ -531,7 +531,7 @@ class SessionManager:
         # skipped on SQLite builds that don't ship it; ``self._has_trigram``
         # records the outcome so ``search_messages`` can skip the trigram
         # branch instead of crashing.
-        from core.memory.fts_helpers import has_trigram_support
+        from core.memory.fts_query import has_trigram_support
 
         self._conn.executescript(_CREATE_MESSAGES_FTS_UNICODE_SQL)
         self._conn.executescript(_FTS_TRIGGERS_UNICODE_SQL)
@@ -853,7 +853,7 @@ class SessionManager:
 
         Args:
             query: Raw operator query string. Sanitised via
-                :func:`core.memory.fts_helpers.sanitize_fts5_query` so
+                :func:`core.memory.fts_query.sanitize_fts5_query` so
                 hyphens / dots / quotes don't blow up FTS5's grammar.
             session_id: Optional scope filter — restrict to messages from
                 a single session.
@@ -870,7 +870,7 @@ class SessionManager:
             is FTS5's highlighted context window. Empty list when the
             sanitised query is empty.
         """
-        from core.memory.fts_helpers import sanitize_fts5_query
+        from core.memory.fts_query import sanitize_fts5_query
 
         clean = sanitize_fts5_query(query)
         if not clean:

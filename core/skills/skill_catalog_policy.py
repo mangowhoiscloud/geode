@@ -53,6 +53,7 @@ from html import escape
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
+from core.config import CONTEXT_BLOCK_MAX_CHARS
 from core.paths import GLOBAL_SKILL_CATALOG_PATH, OPERATOR_LOCAL_SKILL_CATALOG_PATH
 from core.self_improving.loop.sot_resolution import resolve_sot
 
@@ -162,7 +163,7 @@ def apply_skill_catalog_policy(
     registry: SkillRegistry,
     policy: dict[str, dict[str, Any]] | None,
     *,
-    max_chars: int = 8000,
+    max_chars: int = CONTEXT_BLOCK_MAX_CHARS,
 ) -> str:
     """Render the skill catalog context block with per-skill overrides applied.
 

@@ -41,7 +41,7 @@ def test_mutator_config_exists_with_default_model() -> None:
     - ``role_contract`` field removed (A1)
     - ``fallback_to_payg`` per-component override removed (C2)
     """
-    from core.config.self_improving_loop import MutatorConfig
+    from core.config.self_improving import MutatorConfig
 
     cfg = MutatorConfig()
     assert cfg.default_model is None  # G1a inherit
@@ -56,7 +56,7 @@ def test_mutator_config_exists_with_default_model() -> None:
 def test_self_improving_loop_config_carries_mutator_section() -> None:
     """PR-MINIMAL-2 — MutatorConfig section still present, but its
     ``default_model`` now inherits ``Settings.model`` when ``None``."""
-    from core.config.self_improving_loop import (
+    from core.config.self_improving import (
         MutatorConfig,
         SelfImprovingLoopConfig,
     )

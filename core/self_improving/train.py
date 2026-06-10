@@ -256,7 +256,7 @@ def _get_autoresearch_config() -> Any:
     # TOML parse errors and other loader-raised exceptions bubble too;
     # missing/unreadable-file fallback stays inside the loader.
     try:
-        from core.config.self_improving_loop import load_self_improving_loop_config
+        from core.config.self_improving import load_self_improving_loop_config
     except ImportError:
         from types import SimpleNamespace
 
@@ -1565,7 +1565,7 @@ def run_audit(
     # etc.). Lane=1 also matches Anthropic Max OAuth's "interactive
     # coding" rate budget when the operator is also using their host
     # Claude Code session.
-    from core.llm.audit_lane import acquire_audit_lane
+    from core.orchestration.audit_lane import acquire_audit_lane
 
     audit_started = time.time()
     lane_key = session_id or "anonymous-audit"

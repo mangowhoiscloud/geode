@@ -157,7 +157,7 @@ def test_get_autoresearch_config_defaults_match_module_constants(
     remain as module constants for the SimpleNamespace fallback when
     ``core.config`` is unimportable.
     """
-    from core.config.self_improving_loop import AutoresearchConfig
+    from core.config.self_improving import AutoresearchConfig
     from core.self_improving.train import (
         BUDGET_MINUTES,
         DIM_SET_NAME,

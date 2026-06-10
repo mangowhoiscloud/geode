@@ -30,6 +30,10 @@ function detectGeodeRepo() {
 }
 
 const GEODE_REPO = detectGeodeRepo();
+// Published-site + repo URL anchors — single definition per surface
+// (python-side anchor: core/paths.py GEODE_PAGES_BASE_URL).
+const PAGES_BASE_URL = "https://mangowhoiscloud.github.io/geode";
+const REPO_URL = "https://github.com/mangowhoiscloud/geode";
 const SOT_FILE = resolve(SITE_ROOT, "src/data/geode/sot.ts");
 const CHANGELOG_FILE = resolve(SITE_ROOT, "src/data/geode/changelog.ts");
 const LLMS_TXT_FILE = resolve(SITE_ROOT, "public/llms.txt");
@@ -203,7 +207,7 @@ function parseSitemap() {
  * (the convention GEODE's own router prompt follows for external docs).
  */
 function writeLlmsTxt(pages, version) {
-  const base = "https://mangowhoiscloud.github.io/geode";
+  const base = PAGES_BASE_URL;
   const today = new Date().toISOString().slice(0, 10);
 
   const lines = [];
@@ -222,7 +226,7 @@ function writeLlmsTxt(pages, version) {
   lines.push(`- [Docs](${base}/docs): documentation root, what GEODE is and where to go next`);
   lines.push(`- [Portfolio](${base}/portfolio): capability overview with demos`);
   lines.push(`- [About](${base}/about): project background`);
-  lines.push(`- [Source](https://github.com/mangowhoiscloud/geode): GitHub repository`);
+  lines.push(`- [Source](${REPO_URL}): GitHub repository`);
 
   let currentSection = null;
   for (const p of pages) {
@@ -244,13 +248,13 @@ function writeLlmsTxt(pages, version) {
     `- [llms-full.txt](${base}/llms-full.txt): extended index with bilingual per-page summaries`,
   );
   lines.push(
-    `- [CHANGELOG](https://github.com/mangowhoiscloud/geode/blob/main/CHANGELOG.md): full release history`,
+    `- [CHANGELOG](${REPO_URL}/blob/main/CHANGELOG.md): full release history`,
   );
   lines.push(
-    `- [CLAUDE.md](https://github.com/mangowhoiscloud/geode/blob/main/CLAUDE.md): development scaffold and quality gates`,
+    `- [CLAUDE.md](${REPO_URL}/blob/main/CLAUDE.md): development scaffold and quality gates`,
   );
   lines.push(
-    `- [AGENTS.md](https://github.com/mangowhoiscloud/geode/blob/main/AGENTS.md): agent-facing repo guide`,
+    `- [AGENTS.md](${REPO_URL}/blob/main/AGENTS.md): agent-facing repo guide`,
   );
 
   writeFileSync(LLMS_TXT_FILE, lines.join("\n") + "\n");
@@ -262,7 +266,7 @@ function writeLlmsTxt(pages, version) {
  * Reasonable plain-text scan target. Stays well under 1MB.
  */
 function writeLlmsFullTxt(pages, version) {
-  const base = "https://mangowhoiscloud.github.io/geode";
+  const base = PAGES_BASE_URL;
   const today = new Date().toISOString().slice(0, 10);
 
   const lines = [];

@@ -85,7 +85,7 @@ def test_resolve_telemetry_inherits_settings_model_when_default_is_none(
         model = "claude-opus-4-7"
 
     monkeypatch.setattr(
-        "core.config.self_improving_loop.load_self_improving_loop_config",
+        "core.config.self_improving.load_self_improving_loop_config",
         lambda: _StubCfg(),
     )
     monkeypatch.setattr("core.config.settings", _StubSettings())
@@ -111,7 +111,7 @@ def test_resolve_telemetry_uses_explicit_default_model(
         autoresearch = _StubAutoresearch()
 
     monkeypatch.setattr(
-        "core.config.self_improving_loop.load_self_improving_loop_config",
+        "core.config.self_improving.load_self_improving_loop_config",
         lambda: _StubCfg(),
     )
     model, source = self_improving._resolve_run_summary_telemetry()
@@ -130,7 +130,7 @@ def test_resolve_telemetry_returns_placeholders_on_config_failure(
         raise ImportError("simulated config layer missing")
 
     monkeypatch.setattr(
-        "core.config.self_improving_loop.load_self_improving_loop_config",
+        "core.config.self_improving.load_self_improving_loop_config",
         _broken_loader,
     )
     model, source = self_improving._resolve_run_summary_telemetry()

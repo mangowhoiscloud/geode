@@ -49,6 +49,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from plugins.seed_generation.agents.base import (
+    DEFAULT_AGENT_MODEL,
     BaseSeedAgent,
     SeedAgentResult,
     parse_structured_output,
@@ -67,7 +68,7 @@ __all__ = ["HIGH_SIMILARITY_DEGREE", "Proximity"]
 
 HIGH_SIMILARITY_DEGREE = "high"
 
-_DEFAULT_PROXIMITY_MODEL = "claude-opus-4-8"
+_DEFAULT_PROXIMITY_MODEL = DEFAULT_AGENT_MODEL
 _PROXIMITY_AGENT_NAME = "seed_proximity"
 _TASK_TYPE = "seed-proximity"
 

@@ -350,7 +350,7 @@ def _resolve_run_summary_telemetry() -> tuple[str, str]:
     """
     try:
         from core.config import settings
-        from core.config.self_improving_loop import load_self_improving_loop_config
+        from core.config.self_improving import load_self_improving_loop_config
 
         cfg = load_self_improving_loop_config()
         model = cfg.autoresearch.mutator.default_model or settings.model
@@ -457,7 +457,7 @@ def _render_preflight(flags: dict[str, Any]) -> None:
     mutator_source: str = "?"
     try:
         from core.config import settings
-        from core.config.self_improving_loop import load_self_improving_loop_config
+        from core.config.self_improving import load_self_improving_loop_config
 
         cfg = load_self_improving_loop_config()
         # PR-MINIMAL-2 (2026-05-21) — G1a inherit: when
@@ -820,7 +820,7 @@ def _render_source_table() -> None:
     """Render the current paperclip-source state for every component."""
     try:
         from core.config import settings
-        from core.config.self_improving_loop import load_self_improving_loop_config
+        from core.config.self_improving import load_self_improving_loop_config
 
         cfg = load_self_improving_loop_config()
     except Exception as exc:
@@ -907,7 +907,7 @@ def _cmd_config() -> None:
     """
     try:
         from core.config import settings
-        from core.config.self_improving_loop import load_self_improving_loop_config
+        from core.config.self_improving import load_self_improving_loop_config
 
         cfg = load_self_improving_loop_config()
     except Exception as exc:
@@ -1092,7 +1092,7 @@ def _persist_section_updates(section: str, updates: dict[str, str]) -> None:
     """Splice ``updates`` into ``[<section>]`` of the active config TOML.
 
     Resolves the write path through
-    :func:`core.config.self_improving_loop._resolve_config_path` — same
+    :func:`core.config.self_improving._resolve_config_path` — same
     helper the loader uses for reads — so a ``GEODE_CONFIG_TOML`` env
     override (test fixtures, isolated session runs) reads and writes
     the same file. Without that resolution the read/write parity broke:
@@ -1107,7 +1107,7 @@ def _persist_section_updates(section: str, updates: dict[str, str]) -> None:
     """
     if not updates:
         return
-    from core.config.self_improving_loop import _resolve_config_path
+    from core.config.self_improving import _resolve_config_path
     from core.utils.atomic_io import atomic_write_text
 
     path = _resolve_config_path(None)

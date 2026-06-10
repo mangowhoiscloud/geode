@@ -219,7 +219,9 @@ def _apply_model(
     # hot-swap plumbing is needed there.
 
     role_tag = "" if role_def.name == "primary" else f"  [muted]({role_def.label})[/muted]"
-    scope_path = "~/.geode/config.toml" if scope == "global" else "./.geode/config.toml"
+    from core.paths import GLOBAL_CONFIG_TOML, PROJECT_CONFIG_TOML
+
+    scope_path = str(GLOBAL_CONFIG_TOML) if scope == "global" else str(PROJECT_CONFIG_TOML)
     scope_tag = f"  [muted]· {scope} ({scope_path})[/muted]"
     if not same_model and role_def.has_effort and effort is not None:
         _pkg.console.print(

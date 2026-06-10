@@ -24,7 +24,7 @@ Public API:
 The LLM call is injected as a callable so tests can supply a mock
 without touching real provider quota. The default callable reads
 ``[self_improving_loop.mutator]`` from ``~/.geode/config.toml``
-(:class:`core.config.self_improving_loop.MutatorConfig`) and
+(:class:`core.config.self_improving.MutatorConfig`) and
 dispatches through ``core.llm.router.call_with_failover`` so the
 mutator shares the same credential rotator + retry path the rest of
 GEODE's agentic callers use; see :func:`_default_llm_call` for the

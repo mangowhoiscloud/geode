@@ -352,7 +352,7 @@ class SearchIndex:
         week") where chronological order beats relevance ranking.
         Callers that need relevance order can re-sort by ``score``.
         """
-        from core.memory.fts_helpers import sanitize_fts5_query
+        from core.memory.fts_query import sanitize_fts5_query
 
         clean = sanitize_fts5_query(query)
         if not clean:

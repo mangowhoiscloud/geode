@@ -10,7 +10,6 @@ from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
-from core.agent.bash_tool import BashResult, BashTool
 from core.agent.conversation import ConversationContext
 from core.agent.loop import AGENTIC_TOOLS, AgenticLoop, AgenticResult, get_agentic_tools
 from core.agent.sub_agent import SubAgentManager, SubTask
@@ -23,6 +22,7 @@ from core.agent.tool_executor import (
 )
 from core.orchestration.isolated_execution import IsolatedRunner
 from core.tools.base import ToolContext
+from core.tools.bash_tool import BashResult, BashTool
 
 from core.hooks import HookEvent, HookSystem
 

@@ -3,7 +3,7 @@
 PR-CRED-SOURCE-CENTRALIZE (2026-05-29). The LLM credential-source value set
 was previously defined four different ways, with *inconsistent membership*:
 
-- ``core.config.self_improving_loop.Source`` — ``{claude-cli, openai-codex, auto}``
+- ``core.config.self_improving.Source`` — ``{claude-cli, openai-codex, auto}``
   (no ``api_key``)
 - the mutator-config ``source`` Literal — ``{auto, api_key, claude-cli, openai-codex}``
   (with ``api_key``)

@@ -155,7 +155,7 @@ def test_malformed_config_seed_fails_loudly_at_load(monkeypatch: pytest.MonkeyPa
     resolver's config-tier ``int()`` guard only defends the test-stub
     ``SimpleNamespace`` path. This pins the loud-at-load behaviour so it is not
     mistaken for a bug."""
-    from core.config.self_improving_loop import SelfImprovingLoopConfig
+    from core.config.self_improving import SelfImprovingLoopConfig
     from pydantic import ValidationError
 
     with pytest.raises(ValidationError):

@@ -309,7 +309,7 @@ def test_seed_debate_turn_rejects_mismatched_output_sidecar_pair(
 
 def test_self_improving_loop_bindings_num_turns_validator() -> None:
     """Operator-config slot enforces same {0} ∪ [2,6] window as manifest (Codex MEDIUM)."""
-    from core.config.self_improving_loop import SelfImprovingLoopBindings
+    from core.config.self_improving import SelfImprovingLoopBindings
 
     SelfImprovingLoopBindings(model="x", source="auto", num_turns=0)
     SelfImprovingLoopBindings(model="x", source="auto", num_turns=2)

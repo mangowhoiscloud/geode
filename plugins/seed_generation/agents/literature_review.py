@@ -48,6 +48,7 @@ import logging
 from typing import TYPE_CHECKING
 
 from plugins.seed_generation.agents.base import (
+    DEFAULT_AGENT_MODEL,
     BaseSeedAgent,
     SeedAgentResult,
     parse_structured_output,
@@ -64,7 +65,7 @@ log = logging.getLogger(__name__)
 __all__ = ["LiteratureReview"]
 
 
-_DEFAULT_LITERATURE_REVIEW_MODEL = "claude-opus-4-8"
+_DEFAULT_LITERATURE_REVIEW_MODEL = DEFAULT_AGENT_MODEL
 _LITERATURE_REVIEW_AGENT_NAME = "seed_literature_review"
 _TASK_TYPE = "seed-literature-review"
 

@@ -388,7 +388,7 @@ def build_runner_context() -> RunnerContext:
         pick_regression_target_dim,
     )
 
-    from core.config.self_improving_loop import load_self_improving_loop_config
+    from core.config.self_improving import load_self_improving_loop_config
     from core.self_improving.loop.mutations_reader import (
         read_recent_applies,
         read_recent_attributions,
@@ -743,7 +743,7 @@ def _default_llm_call(system_prompt: str, user_prompt: str) -> str:
     import logging as _logging
 
     from core.config import _resolve_provider
-    from core.config.self_improving_loop import load_self_improving_loop_config
+    from core.config.self_improving import load_self_improving_loop_config
 
     cfg = load_self_improving_loop_config()
     # PR-MINIMAL-2 (2026-05-21) — G1a inherit: MutatorConfig.default_model
@@ -1161,7 +1161,7 @@ def append_audit_log(
     # SoT with baseline_archive.jsonl. Best-effort: a config-load failure must
     # never block the ledger write (observability is not a correctness boundary).
     try:
-        from core.config.self_improving_loop import load_self_improving_loop_config
+        from core.config.self_improving import load_self_improving_loop_config
         from core.self_improving.loop.role_provenance import collect_role_provenance
 
         row["role_provenance"] = collect_role_provenance(
@@ -1311,7 +1311,7 @@ def _run_autoresearch_subprocess(
     # default 가 False 라 set 안 된 sibling/legacy 동작 영향 0. True 일
     # 때만 train.py 의 caller 가 ``compute_fitness`` 에 multiplier 인자를
     # 적용하는 게 wiring (PR-11 의 다른 절반).
-    from core.config.self_improving_loop import load_self_improving_loop_config
+    from core.config.self_improving import load_self_improving_loop_config
 
     if load_self_improving_loop_config().autoresearch.anchor_confidence_mode:
         env["GEODE_SIL_ANCHOR_CONFIDENCE_MODE"] = "1"
@@ -1409,7 +1409,7 @@ class SelfImprovingLoopRunner:
         # operator config; loading inside ``propose`` keeps the cost
         # path lazy (mock-llm tests don't pay it).
         if ctx.recent_applies_for_dedup:
-            from core.config.self_improving_loop import load_self_improving_loop_config
+            from core.config.self_improving import load_self_improving_loop_config
             from core.self_improving.loop.mutator_feedback import (
                 RepetitiveMutationError,
                 check_repetitive_mutation,

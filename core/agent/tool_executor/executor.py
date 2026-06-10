@@ -14,9 +14,9 @@ if TYPE_CHECKING:
     from core.hooks import HookSystem
     from core.tools.base import ToolContext
 
-from core.agent.bash_tool import BashTool
 from core.agent.safety import DANGEROUS_TOOLS
 from core.hooks.system import HookEvent
+from core.tools.bash_tool import BashTool
 
 log = logging.getLogger(__name__)
 
