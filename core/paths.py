@@ -416,7 +416,7 @@ GLOBAL_ROUTING_TOML = GEODE_HOME / "routing.toml"
 # migration command, not by this constant.
 GLOBAL_SEED_PIPELINE_TOML = GEODE_HOME / "seed_generation.toml"
 # P3 (v0.95.x) — user-tier installed skills (priority 2 of 4-tier
-# resolution; see `core/llm/skill_registry.py`). Bundled skills live
+# resolution; see `core/skills/skills.py`). Bundled skills live
 # inside the package source tree, not at `GEODE_HOME` — resolve via
 # `__file__` in skill_registry, do NOT add a constant for them here.
 GLOBAL_SKILLS_DIR = GEODE_HOME / "skills"
@@ -475,11 +475,6 @@ PROJECT_SCHEDULER_FILE = PROJECT_GEODE_DIR / "scheduled_tasks.json"
 PROJECT_SCHEDULER_LOCK = PROJECT_GEODE_DIR / "scheduled_tasks.lock"
 PROJECT_SCHEDULER_LOG_DIR = PROJECT_GEODE_DIR / "scheduler_logs"
 PROJECT_PLANS_FILE = PROJECT_GEODE_DIR / "plans.json"
-PROJECT_LEARNING_FILE = PROJECT_GEODE_DIR / "LEARNING.md"
-PROJECT_MEMORY_INDEX = PROJECT_GEODE_DIR / "MEMORY.md"
-# P4 (v0.95.x) — added during the lint-guardrail rollout. project-local
-# user_profile override (read by `core.cli.bootstrap` + `core.wiring.bootstrap`)
-# and project-local hooks dir (read by `core.wiring.bootstrap` plugin loader).
 PROJECT_USER_PROFILE_DIR = PROJECT_GEODE_DIR / "user_profile"
 PROJECT_HOOKS_DIR = PROJECT_GEODE_DIR / "hooks"
 
@@ -496,7 +491,6 @@ PROJECT_TOOL_OFFLOAD = PROJECT_GEODE_DIR / "tool-offload"
 # P3 (v0.95.x) — project-level state files. Surfaced here so writers stop
 # hardcoding `Path(".geode/<file>")` literals (frontier parity — Hermes
 # `hermes_constants.py:14-68` keeps every path on a single SoT module).
-PROJECT_AGENT_MEMORY_DIR = PROJECT_GEODE_DIR / "agent-memory"
 PROJECT_MODEL_POLICY = PROJECT_GEODE_DIR / "model-policy.toml"
 PROJECT_ROUTING_CONFIG = PROJECT_GEODE_DIR / "routing.toml"
 

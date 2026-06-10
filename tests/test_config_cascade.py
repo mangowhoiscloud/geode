@@ -129,16 +129,16 @@ class TestApplyTomlOverlay:
         toml_file = tmp_path / "config.toml"
         toml_file.write_text(
             textwrap.dedent("""\
-                [pipeline]
-                confidence_threshold = 0.85
+                [sandbox]
+                max_read_tokens = 31337
             """),
             encoding="utf-8",
         )
         # Ensure env var is NOT set
-        monkeypatch.delenv("GEODE_CONFIDENCE_THRESHOLD", raising=False)
+        monkeypatch.delenv("GEODE_SANDBOX_MAX_READ_TOKENS", raising=False)
 
         s = Settings()
-        assert s.confidence_threshold == 0.7  # code default
+        assert s.sandbox_max_read_tokens == 25_000  # code default
 
         # Patch _load_toml_config to use our temp file
         monkeypatch.setattr(
@@ -149,20 +149,20 @@ class TestApplyTomlOverlay:
             ),
         )
         _apply_toml_overlay(s)
-        assert s.confidence_threshold == 0.85
+        assert s.sandbox_max_read_tokens == 31337
 
     def test_env_overrides_toml(self, tmp_path, monkeypatch):
         """Environment variable takes precedence over TOML."""
         toml_file = tmp_path / "config.toml"
         toml_file.write_text(
             textwrap.dedent("""\
-                [pipeline]
-                max_iterations = 99
+                [sandbox]
+                max_read_tokens = 99
             """),
             encoding="utf-8",
         )
         # Set env var (should take precedence)
-        monkeypatch.setenv("GEODE_MAX_ITERATIONS", "10")
+        monkeypatch.setenv("GEODE_SANDBOX_MAX_READ_TOKENS", "10")
 
         s = Settings()
         monkeypatch.setattr(
@@ -173,8 +173,8 @@ class TestApplyTomlOverlay:
             ),
         )
         _apply_toml_overlay(s)
-        # env wins: max_iterations stays at env value, not TOML's 99
-        assert s.max_iterations != 99
+        # env wins: the field stays at the env value, not TOML's 99
+        assert s.sandbox_max_read_tokens != 99
 
     def test_no_toml_no_change(self, tmp_path, monkeypatch):
         """Without TOML files, Settings stays at defaults."""
@@ -200,7 +200,6 @@ class TestDefaultConfigToml:
         """Template contains expected commented sections."""
         assert "[llm]" in DEFAULT_CONFIG_TOML
         assert "[output]" in DEFAULT_CONFIG_TOML
-        assert "[pipeline]" in DEFAULT_CONFIG_TOML
 
 
 class TestFullCascade:

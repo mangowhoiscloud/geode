@@ -2,8 +2,8 @@
 
 Replaces the monolithic client.py. Routes to the correct provider SDK
 
-Data types (ToolCallRecord, ToolUseResult) and re-exports from
-token_tracker are kept here for backward compatibility.
+Data types (ToolCallRecord, ToolUseResult) and the live token_tracker
+re-exports are kept here as the package's public surface.
 
 This package was split from a single 1,046-line ``router.py`` into focused
 sub-modules. The public surface is preserved via re-exports below; production
@@ -14,95 +14,25 @@ internals that one call function uses to dispatch to another.
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any
-
-if TYPE_CHECKING:
-    # v0.88.0 — re-exports preserved through the lazy ``__getattr__`` at the
-    # end of this module.  ``from core.llm.router import LLMRateLimitError``
-    # keeps working without paying the 248 ms anthropic load at module
-    # import — only IDE / mypy use this branch.
-    from core.llm.errors import (
-        LLMAPIStatusError as LLMAPIStatusError,
-    )
-    from core.llm.errors import (
-        LLMAuthenticationError as LLMAuthenticationError,
-    )
-    from core.llm.errors import (
-        LLMBadRequestError as LLMBadRequestError,
-    )
-    from core.llm.errors import (
-        LLMConnectionError as LLMConnectionError,
-    )
-    from core.llm.errors import (
-        LLMInternalServerError as LLMInternalServerError,
-    )
-    from core.llm.errors import (
-        LLMRateLimitError as LLMRateLimitError,
-    )
-    from core.llm.errors import (
-        LLMTimeoutError as LLMTimeoutError,
-    )
-
-# Re-export the resolver fallback for backwards compatibility — legacy uses of
-# ``monkeypatch.setattr("core.llm.router._resolve_provider", ...)`` still find a
-# name on the package. ``calls._route_provider`` calls the leaf binding from
-# ``core.config`` directly, so the supported test path is the leaf module.
-from core.config import _resolve_provider as _resolve_provider
-
-# v0.88.0 — LLM*Error re-exports (LLMAPIStatusError, LLMAuthenticationError,
-# LLMBadRequestError, LLMConnectionError, LLMInternalServerError,
-# LLMRateLimitError, LLMTimeoutError) used to live here as eager
-# ``from core.llm.errors import X as X`` lines.  Each one ran
-# ``core.llm.errors.__getattr__`` at module load and pulled the 248 ms
-# anthropic SDK graph into the cold-start path, even though nothing in
-# the codebase imports these names from ``core.llm.router`` (verified
-# 2026-05-08 grep — only ``LLMUsageAccumulator`` is pulled from this
-# package post-LLMCLIENTPORT-COLLAPSE).  Public API preserved via the
-# module-level ``__getattr__`` hook below: any future
-# ``from core.llm.router import LLMRateLimitError`` still resolves on
-# demand, deferring the SDK load until first access.
-from core.llm.fallback import retry_with_backoff_generic as retry_with_backoff_generic
-from core.llm.provider_dispatch import _get_fallback_chain as _get_fallback_chain
-from core.llm.provider_dispatch import _get_provider_client as _get_provider_client
-from core.llm.provider_dispatch import _retry_provider_aware as _retry_provider_aware
-from core.llm.providers.anthropic import (
-    FALLBACK_MODELS as FALLBACK_MODELS,
-)
-from core.llm.providers.anthropic import (
-    _build_httpx_limits as _build_httpx_limits,
-)
-from core.llm.providers.anthropic import (
-    _build_httpx_timeout as _build_httpx_timeout,
-)
-from core.llm.providers.anthropic import (
-    get_anthropic_client as get_anthropic_client,
-)
-from core.llm.providers.anthropic import (
-    get_async_anthropic_client as get_async_anthropic_client,
-)
+# PR-CLEANUP-D1 (2026-06-10) — the v0.88.0 backward-compat surface
+# (LLM*Error lazy re-exports, ``_resolve_provider`` monkeypatch alias,
+# provider_dispatch/anthropic-client/fallback-constant re-exports) is
+# deleted: its own comment recorded zero importers since 2026-05-08,
+# twelve-plus releases past the Compat 1-release grace. What remains
+# below is the LIVE public surface (verified by import grep).
 from core.llm.token_tracker import MODEL_PRICING as MODEL_PRICING
 from core.llm.token_tracker import LLMUsage as LLMUsage
 from core.llm.token_tracker import LLMUsageAccumulator as LLMUsageAccumulator
 from core.llm.token_tracker import calculate_cost as calculate_cost
 from core.llm.token_tracker import get_usage_accumulator as get_usage_accumulator
 from core.llm.token_tracker import reset_usage_accumulator as reset_usage_accumulator
-from core.llm.token_tracker import track_token_usage as track_token_usage
 
 # Local sub-module re-exports
 from ._hooks import (
     _fire_hook as _fire_hook,
 )
 from ._hooks import (
-    _hooks_ctx as _hooks_ctx,
-)
-from ._hooks import (
     set_router_hooks as set_router_hooks,
-)
-from ._usage import (
-    _record_openai_usage as _record_openai_usage,
-)
-from ._usage import (
-    _record_response_usage as _record_response_usage,
 )
 from .calls import (
     _route_provider as _route_provider,
@@ -131,40 +61,3 @@ from .models import (
 from .models import (
     ToolUseResult as ToolUseResult,
 )
-
-# v0.88.0 — module-level ``__getattr__`` for lazy LLM*Error re-exports.
-# Placed after all eager imports so ruff E402 stays happy.  The
-# ``_LAZY_ERROR_NAMES`` set is the runtime mirror of the TYPE_CHECKING
-# block at the top of the file.
-_LAZY_ERROR_NAMES = frozenset(
-    {
-        "LLMAPIStatusError",
-        "LLMAuthenticationError",
-        "LLMBadRequestError",
-        "LLMConnectionError",
-        "LLMInternalServerError",
-        "LLMRateLimitError",
-        "LLMTimeoutError",
-    }
-)
-# Backward-compat retry constants — preserved here so existing tests and
-# legacy callers (``from core.llm.router import MAX_RETRIES``) keep working
-# while module load avoids the pydantic_settings tree.  Each access pays a
-# single attribute lookup against ``core.llm.fallback``, which itself
-# resolves the value lazily from ``core.config.settings``.
-_LAZY_FALLBACK_CONSTANTS = frozenset({"MAX_RETRIES", "RETRY_BASE_DELAY", "RETRY_MAX_DELAY"})
-
-
-def __getattr__(name: str) -> Any:
-    """PEP 562 hook — resolve lazy LLM*Error re-exports + fallback constants."""
-    if name in _LAZY_ERROR_NAMES:
-        from core.llm import errors
-
-        cls = getattr(errors, name)
-        globals()[name] = cls
-        return cls
-    if name in _LAZY_FALLBACK_CONSTANTS:
-        from core.llm import fallback
-
-        return getattr(fallback, name)
-    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")

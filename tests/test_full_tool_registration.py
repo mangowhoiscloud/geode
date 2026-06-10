@@ -4,7 +4,13 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from core.runtime import GeodeRuntime, _build_default_policies, _build_default_registry
+from core.runtime import GeodeRuntime
+from core.wiring.container import (
+    build_default_policies as _build_default_policies,
+)
+from core.wiring.container import (
+    build_default_registry as _build_default_registry,
+)
 
 ALL_TOOL_NAMES = {
     # Data (3)
