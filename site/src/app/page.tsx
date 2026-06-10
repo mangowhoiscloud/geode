@@ -60,19 +60,47 @@ export default function Home() {
             GEODE
           </h1>
           <p className="mt-4 font-display text-[clamp(1.1rem,2vw,1.4rem)] text-[var(--ink-1)] leading-snug">
-            스스로를 고쳐 쓰는 자율 에이전트 하네스.
+            일을 맡기면 끝까지 실행하고, 스스로를 고쳐 쓰는 자율 에이전트.
           </p>
           <p className="mt-6 max-w-2xl text-[14px] leading-[1.7] text-[var(--ink-2)]">
-            GEODE는 모델 가중치를 건드리지 않습니다. 자기 자신을 둘러싼 스캐폴드,
-            즉 시스템 프롬프트와 도구 정책, 작업 분해와 반성 루프를 직접 바꿔
-            나아집니다. 그 변화의 적합도는 능력 벤치마크가 아니라 적대적 안전
-            감사로 측정합니다.
+            GEODE는 리서치, 분석, 자동화, 스케줄 작업을 CLI와 메신저에서
+            수행하는 범용 자율 실행 에이전트입니다. 도구와 MCP, 스킬을 엮어
+            요청을 끝까지 실행하고, 데몬으로 상주하며 Slack과 예약 작업을
+            받습니다.
+          </p>
+          <p className="mt-2 max-w-2xl text-[14px] leading-[1.7] text-[var(--ink-2)]">
+            그리고 스스로 나아집니다. 모델 가중치는 건드리지 않고, 자신을 둘러싼
+            스캐폴드(시스템 프롬프트, 도구 정책, 작업 분해, 반성 루프)를 변이시켜
+            적대적 안전 감사를 통과한 변화만 남깁니다.
           </p>
           <p className="mt-2 max-w-2xl text-[14px] leading-[1.7] text-[var(--ink-3)]">
-            A self-rewriting agent harness. It never updates model weights; it
-            mutates the scaffolding around itself and keeps a change only when an
-            adversarial safety audit confirms a real gain.
+            A general-purpose autonomous execution agent for research, analysis,
+            automation, and scheduling, on the CLI and in your messengers. It
+            never updates model weights; it mutates the scaffolding around
+            itself and keeps a change only when an adversarial safety audit
+            confirms a real gain.
           </p>
+          <pre className="mt-8 max-w-2xl rounded-lg border border-[var(--rule)] bg-[var(--code-bg)] p-4 font-mono text-[12.5px] leading-[1.7] text-[var(--code-text)] overflow-x-auto">
+{`$ uv tool install geode-agent
+$ geode
+> 오늘 AI 리서치 트렌드를 요약해줘
+> /schedule 매일 아침 9시에 스탠드업 리마인더
+> /model`}
+          </pre>
+          <ul className="mt-8 max-w-2xl divide-y divide-[var(--rule-soft)] text-[13px]">
+            {[
+              ["Agentic loop", "도구 호출이 끝날 때까지 도는 실행 루프. 서브에이전트 병렬 분기."],
+              ["3-provider routing", "Claude, OpenAI(Codex OAuth), GLM. 구독과 API 키 모두 지원."],
+              ["Messaging gateway", "Slack, Discord, Telegram을 데몬 하나로. 자연어와 cron 스케줄러 내장."],
+              ["MCP both ways", "MCP 클라이언트이자 서버. geode-mcp로 Claude Code 같은 호스트에 도구를 제공."],
+              ["Self-improving loop", "스캐폴드 변이를 Petri 적대 감사로 선별. 가중치 갱신 없음."], // canon-ok: correct negation
+            ].map(([feature_name, feature_desc]) => (
+              <li key={feature_name} className="flex items-baseline gap-4 py-2">
+                <span className="font-mono text-[12px] text-[var(--acc-artifact)] w-44 shrink-0">{feature_name}</span>
+                <span className="text-[var(--ink-2)] leading-relaxed">{feature_desc}</span>
+              </li>
+            ))}
+          </ul>
         </header>
 
         {/* Primary cards: Portfolio + Docs */}

@@ -15,7 +15,7 @@ Version v0.99.173. Last sync 2026-06-10. Every link below is a rendered docs pag
 
 - [What GEODE is](https://mangowhoiscloud.github.io/geode/docs): An autonomous execution agent that runs an inner agentic loop and improves itself through an outer loop. What it does, who it is for, where to go next.
 - [How GEODE runs a task](https://mangowhoiscloud.github.io/geode/docs/overview/how-it-runs): One request, traced end to end. The same core serves a CLI task, a gateway message, and a scheduled self-improving run.
-- [The 4-layer stack](https://mangowhoiscloud.github.io/geode/docs/architecture/overview): Model, Runtime, Harness, Agent. What each layer owns, and where its responsibility ends.
+- [The 5-layer stack](https://mangowhoiscloud.github.io/geode/docs/architecture/overview): Model, Runtime, Harness, Agent, Self-Improving. What each layer owns, and where its responsibility ends.
 
 ## Getting Started
 
@@ -86,6 +86,7 @@ Version v0.99.173. Last sync 2026-06-10. Every link below is a rendered docs pag
 - [Frontier comparison](https://mangowhoiscloud.github.io/geode/docs/reference/frontier-comparison): What GEODE borrows from Claude Code, Codex CLI, OpenClaw, and Hermes, and where it differs. The reference entry point for GEODE's position in the lineage.
 - [External references](https://mangowhoiscloud.github.io/geode/docs/reference/external-references): Frontier agent systems, design standards, and prior work GEODE cites — the self-evolving-agents lineage behind the loop.
 - [CLI and slash commands](https://mangowhoiscloud.github.io/geode/docs/harness/cli): The thin gateway and IPC, and the slash commands it accepts.
+- [Research, search, and llms.txt](https://mangowhoiscloud.github.io/geode/docs/runtime/research): How GEODE explores: llms.txt-first documentation research, web search delegation, local FTS search, and the llms.txt this site publishes.
 - [Automation sidecar](https://mangowhoiscloud.github.io/geode/docs/runtime/automation): The feedback loop and model promotion, with drift detection between agent and runtime.
 - [Computer use](https://mangowhoiscloud.github.io/geode/docs/runtime/computer-use): Provider-agnostic desktop automation, Anthropic and OpenAI unified.
 - [CLI LaTeX rendering](https://mangowhoiscloud.github.io/geode/docs/runtime/ui/cli-latex): Rendering math in the terminal. Detection, Unicode flatten, pretty print, image fallback.
