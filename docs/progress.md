@@ -27,6 +27,8 @@
 
 <!-- Completed items. Keep recent 10, archive older ones. -->
 <!-- - [x] #issue-number — Short description (PR #N) -->
+- [x] web_search 타이밍 정합 + 프론티어 브리지 수렴 — fable-5 검색 58~60s가 60s 클라이언트 타임아웃·120s deadline과 경계 충돌(건강한 재시도 119.9s 사살). 타임아웃 100s/deadline 240s + 부등식 가드. 웹훅 일회용 루프→메인 루프 run_coroutine_threadsafe(hermes/openclaw 수렴), verify ThreadPool 브리지 제거. 가드레일 25테스트 (PR #2201 → #2202, v0.99.185)
+- [x] 이벤트 루프 오염 수정 — sync 델리게이트 잔재(도구 호출마다 asyncio.Runner 루프) × 전역 SDK 클라이언트 공유 = web_search 즉사/행(sample로 좀비 루프 2개 물증). async-native 핸들러 21개 + LoopAffineClientCache(adapter 6+provider 3) + 도구/MCP wall-clock deadline + web_search 모델 capability 선택 + 가드레일 21테스트 + run_process_coroutine 카나리아. Codex 4건 반영 (PR #2192 → #2194, v0.99.183)
 - [x] stale-dim 할루시네이션 가드 — 시드/풀이 live taxonomy(AXIS_TIERS) 밖 dim 참조 시 assemble 시점 fail-closed(런타임 HALT보다 앞). 운영자 지시(캠페인 HALT 후). 인시던트=held-out redundant_tool_invocation stale. 가드 4종+CLAUDE.md CANNOT (PR #2185 → #2186, v0.99.181)
 - [x] dispatch transient-retry + 가드레일 — 장수 데몬의 오염된 pooled connection이 web_search/complete_text를 2-4ms 즉사시키던 건. 같은 adapter 1회 재시도(연결류 한정, PR-NO-FALLBACK 보존, billing 재시도 금지) + cause-chain 로깅 + 15-테스트 가드레일(병렬배치 회복·registry parity ratchet). Codex 3건 반영 (PR #2181 → #2182, v0.99.180)
 - [x] 시나리오 품질 P0 — frontier survivor selection(~50% R-Zero band) + saturation 신호 generator wire. self-improving 포화(critical 전부 1.0) 탈출 1차. Codex 검증(orphan 1건 수정). 효과측정=캠페인 variant 분산 (PR #2177 → #2178, v0.99.179)
