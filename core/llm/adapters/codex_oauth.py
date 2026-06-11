@@ -44,6 +44,7 @@ from core.llm.adapters.base import (
     TextCompletionResult,
     WebSearchResult,
 )
+from core.llm.loop_affinity import LoopAffineClientCache
 from core.orchestration.openai_api_lane import acquire_openai_api_lane_async
 
 log = logging.getLogger(__name__)
@@ -86,11 +87,13 @@ class CodexOAuthAdapter:
     supports_web_search: bool = True
     supports_text_completion: bool = True
     _last_error: Exception | None = field(default=None, init=False, repr=False)
-    _client: Any = field(default=None, init=False, repr=False)
+    # PR-LOOP-POLLUTION-FIX (2026-06-12) — one client per owning event loop
+    # (see core/llm/loop_affinity.py).
+    _clients: LoopAffineClientCache = field(
+        default_factory=lambda: LoopAffineClientCache("codex-oauth"), init=False, repr=False
+    )
 
     def _get_client(self) -> Any:
-        if self._client is not None:
-            return self._client
         from core.llm.providers.codex import _resolve_codex_token
 
         token = _resolve_codex_token()
@@ -102,8 +105,7 @@ class CodexOAuthAdapter:
                 "Codex CLI to provision credentials, or use the openai-payg / "
                 "codex-cli adapter."
             )
-        self._client = build_async_codex_client(token)
-        return self._client
+        return self._clients.get(lambda: build_async_codex_client(token))
 
     async def acomplete(self, req: AdapterCallRequest) -> AdapterCallResult:
         """Single Codex Responses API call (streamed; final aggregated).
@@ -223,9 +225,16 @@ class CodexOAuthAdapter:
             max_tokens=max_tokens,
         )
 
-    async def aweb_search(self, query: str, *, max_results: int = 5) -> WebSearchResult:
+    async def aweb_search(
+        self, query: str, *, max_results: int = 5, model: str = ""
+    ) -> WebSearchResult:
         """Codex-subscription web_search via Responses API ``web_search``
         hosted tool.
+
+        ``model`` hint intentionally unused — the Codex backend's
+        per-model web_search support matrix is unverified
+        (doc-before-behaviour, CLAUDE.md §4d); CODEX_PRIMARY stays the
+        search model.
 
         Codex backend requires ``store=False`` (same constraint as
         :meth:`acomplete` — backend reject 400 without it) and uses the
@@ -242,6 +251,7 @@ class CodexOAuthAdapter:
         (because :func:`is_billing_fatal` doesn't match shape errors)
         even though the real issue is the call shape mismatch.
         """
+        del model
         from core.config import CODEX_PRIMARY
 
         client = self._get_client()

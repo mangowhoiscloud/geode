@@ -36,6 +36,7 @@ from core.llm.adapters.base import (
     TextCompletionResult,
     WebSearchResult,
 )
+from core.llm.loop_affinity import LoopAffineClientCache
 
 log = logging.getLogger(__name__)
 
@@ -63,23 +64,32 @@ class GlmPaygAdapter:
     supports_web_search: bool = True
     supports_text_completion: bool = True
     _last_error: Exception | None = field(default=None, init=False, repr=False)
-    _client: Any = field(default=None, init=False, repr=False)
+    # PR-LOOP-POLLUTION-FIX (2026-06-12) — one client per owning event loop
+    # (see core/llm/loop_affinity.py).
+    _clients: LoopAffineClientCache = field(
+        default_factory=lambda: LoopAffineClientCache("glm-payg"), init=False, repr=False
+    )
 
     def _get_client(self) -> Any:
-        if self._client is not None:
-            return self._client
         from core.config import GLM_PAYG_BASE_URL, settings
 
-        if not settings.zai_api_key:
+        api_key = settings.zai_api_key
+        if not api_key:
             raise RuntimeError(
                 "GlmPaygAdapter: ZAI_API_KEY not set. PAYG path requires "
                 "an explicit API key — set ``zai_api_key`` in settings or use "
                 "the glm-coding-plan adapter (subscription endpoint) instead."
             )
-        self._client = build_async_openai_client(settings.zai_api_key, base_url=GLM_PAYG_BASE_URL)
-        return self._client
+        return self._clients.get(
+            lambda: build_async_openai_client(api_key, base_url=GLM_PAYG_BASE_URL)
+        )
 
-    async def aweb_search(self, query: str, *, max_results: int = 5) -> WebSearchResult:
+    async def aweb_search(
+        self, query: str, *, max_results: int = 5, model: str = ""
+    ) -> WebSearchResult:
+        # ``model`` hint intentionally unused — z.ai's per-model web_search
+        # support matrix is unverified (doc-before-behaviour, CLAUDE.md §4d).
+        del model
         from core.config import GLM_PRIMARY
         from core.llm.adapters._capability_impls import glm_web_search
 

@@ -39,6 +39,7 @@ from core.llm.adapters.base import (
     TextCompletionResult,
     WebSearchResult,
 )
+from core.llm.loop_affinity import LoopAffineClientCache
 from core.orchestration.openai_api_lane import acquire_openai_api_lane_async
 
 log = logging.getLogger(__name__)
@@ -58,21 +59,23 @@ class OpenAIPaygAdapter:
     supports_web_search: bool = True
     supports_text_completion: bool = True
     _last_error: Exception | None = field(default=None, init=False, repr=False)
-    _client: Any = field(default=None, init=False, repr=False)
+    # PR-LOOP-POLLUTION-FIX (2026-06-12) — one client per owning event loop
+    # (see core/llm/loop_affinity.py).
+    _clients: LoopAffineClientCache = field(
+        default_factory=lambda: LoopAffineClientCache("openai-payg"), init=False, repr=False
+    )
 
     def _get_client(self) -> Any:
-        if self._client is not None:
-            return self._client
         from core.config import settings
 
-        if not settings.openai_api_key:
+        api_key = settings.openai_api_key
+        if not api_key:
             raise RuntimeError(
                 "OpenAIPaygAdapter: OPENAI_API_KEY not set. PAYG path requires "
                 "an explicit API key — set ``openai_api_key`` in settings or use "
                 "the codex-oauth / codex-cli adapter instead."
             )
-        self._client = build_async_openai_client(settings.openai_api_key)
-        return self._client
+        return self._clients.get(lambda: build_async_openai_client(api_key))
 
     def _build_kwargs(self, req: AdapterCallRequest, *, stream: bool) -> dict[str, Any]:
         """Compose Chat Completions kwargs honouring per-model spec quirks.
@@ -115,7 +118,13 @@ class OpenAIPaygAdapter:
             kwargs["stop"] = list(req.stop_sequences)
         return kwargs
 
-    async def aweb_search(self, query: str, *, max_results: int = 5) -> WebSearchResult:
+    async def aweb_search(
+        self, query: str, *, max_results: int = 5, model: str = ""
+    ) -> WebSearchResult:
+        # ``model`` hint intentionally unused — OpenAI's per-model hosted
+        # web_search support matrix is unverified (doc-before-behaviour,
+        # CLAUDE.md §4d); OPENAI_PRIMARY stays the search model.
+        del model
         from core.config import OPENAI_PRIMARY
         from core.llm.adapters._capability_impls import openai_web_search
 

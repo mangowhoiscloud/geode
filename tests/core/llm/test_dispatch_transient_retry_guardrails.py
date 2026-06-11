@@ -92,7 +92,9 @@ class _FlakyWebSearchAdapter:
         exc.__cause__ = httpx.ReadError("peer closed connection")
         return exc
 
-    async def aweb_search(self, query: str, *, max_results: int = 5) -> WebSearchResult:
+    async def aweb_search(
+        self, query: str, *, max_results: int = 5, model: str = ""
+    ) -> WebSearchResult:
         self.calls += 1
         if self.calls <= self._fail_first_n:
             raise self._error_factory()
@@ -132,7 +134,9 @@ class _CountingBillingAdapter:
         self.source = "payg"
         self.calls = 0
 
-    async def aweb_search(self, query: str, *, max_results: int = 5) -> WebSearchResult:
+    async def aweb_search(
+        self, query: str, *, max_results: int = 5, model: str = ""
+    ) -> WebSearchResult:
         self.calls += 1
         raise BillingError("stub billing", provider=self.provider, plan_display_name=self.name)
 
@@ -146,7 +150,9 @@ class _HealthySiblingAdapter:
         self.source = "payg"
         self.calls = 0
 
-    async def aweb_search(self, query: str, *, max_results: int = 5) -> WebSearchResult:
+    async def aweb_search(
+        self, query: str, *, max_results: int = 5, model: str = ""
+    ) -> WebSearchResult:
         self.calls += 1
         return WebSearchResult(query=query, text="sibling", adapter_name=self.name)
 

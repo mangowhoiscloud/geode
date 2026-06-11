@@ -42,6 +42,7 @@ from core.llm.adapters.base import (
     TextCompletionResult,
     WebSearchResult,
 )
+from core.llm.loop_affinity import LoopAffineClientCache
 
 log = logging.getLogger(__name__)
 
@@ -69,11 +70,13 @@ class GlmCodingPlanAdapter:
     supports_web_search: bool = True
     supports_text_completion: bool = True
     _last_error: Exception | None = field(default=None, init=False, repr=False)
-    _client: Any = field(default=None, init=False, repr=False)
+    # PR-LOOP-POLLUTION-FIX (2026-06-12) — one client per owning event loop
+    # (see core/llm/loop_affinity.py).
+    _clients: LoopAffineClientCache = field(
+        default_factory=lambda: LoopAffineClientCache("glm-coding-plan"), init=False, repr=False
+    )
 
     def _get_client(self) -> Any:
-        if self._client is not None:
-            return self._client
         api_key, base_url = _resolve_coding_plan_endpoint()
         if not api_key:
             raise RuntimeError(
@@ -81,8 +84,7 @@ class GlmCodingPlanAdapter:
                 "Run ``/login glm-coding-pro`` (or the matching Plan slug) inside "
                 "GEODE, or use the glm-payg adapter for the metered PAYG path."
             )
-        self._client = build_async_openai_client(api_key, base_url=base_url)
-        return self._client
+        return self._clients.get(lambda: build_async_openai_client(api_key, base_url=base_url))
 
     async def acomplete(self, req: AdapterCallRequest) -> AdapterCallResult:
         client = self._get_client()
@@ -116,7 +118,12 @@ class GlmCodingPlanAdapter:
             raise
         return translate_chat_response(response)
 
-    async def aweb_search(self, query: str, *, max_results: int = 5) -> WebSearchResult:
+    async def aweb_search(
+        self, query: str, *, max_results: int = 5, model: str = ""
+    ) -> WebSearchResult:
+        # ``model`` hint intentionally unused — z.ai's per-model web_search
+        # support matrix is unverified (doc-before-behaviour, CLAUDE.md §4d).
+        del model
         from core.config import GLM_PRIMARY
         from core.llm.adapters._capability_impls import glm_web_search
 

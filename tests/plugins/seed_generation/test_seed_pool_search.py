@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import textwrap
 from pathlib import Path
 
@@ -190,7 +191,8 @@ class TestWorkerHandlerPath:
         from plugins.seed_generation.tools.seed_pool_search import SeedPoolSearchTool
 
         monkeypatch.setattr(mod, "_default_seed_roots", lambda: ())
-        result = _safe_delegate(SeedPoolSearchTool, {"query": "alignment"})
+        # PR-LOOP-POLLUTION-FIX (2026-06-12) -- _safe_delegate is a coroutine.
+        result = asyncio.run(_safe_delegate(SeedPoolSearchTool, {"query": "alignment"}))
         # If the handler raised "must implement aexecute()" it would
         # come back as a clarification; success means aexecute ran.
         assert "result" in result, f"delegated handler did not invoke aexecute: {result}"

@@ -22,6 +22,40 @@ log = logging.getLogger(__name__)
 
 ToolHandler = Callable[..., dict[str, Any] | Awaitable[dict[str, Any]] | Any]
 
+# ---------------------------------------------------------------------------
+# Tool wall-clock deadline — PR-LOOP-POLLUTION-FIX (2026-06-12)
+# ---------------------------------------------------------------------------
+#
+# Hard upper bound on a single handler call, enforced with
+# ``asyncio.wait_for`` at the harness layer. Per-phase HTTP timeouts are
+# NOT wall-clock guarantees (httpx timeouts are per-operation, and a
+# coroutine awaiting a foreign-loop primitive bypasses them entirely —
+# the 2026-06-12 00:08 incident left two web_search calls hanging for
+# 50+ minutes with the operator staring at a spinner). The deadline
+# converts ANY hang into a structured timeout error the loop can report.
+#
+# Anthropic's server-side web_search runs an agentic search loop
+# (25-50s observed envelope) — 120s default leaves ample headroom.
+# Long-running tools override via _TOOL_DEADLINE_OVERRIDES_S; bash /
+# delegate_task / MCP own their budgets on separate dispatch paths.
+#
+# Caveat: a SYNC handler bridged through ``asyncio.to_thread`` cannot be
+# force-killed — wait_for abandons the await (the turn proceeds, spinner
+# resolves) while the worker thread runs to completion in the background.
+_TOOL_DEADLINE_DEFAULT_S = 120.0
+# Keys MUST match REGISTERED handler names (pinned by
+# test_deadline_override_keys_match_registered_handler_names — Codex MCP
+# review 2026-06-12 caught "computer_use" vs the actual "computer").
+_TOOL_DEADLINE_OVERRIDES_S: dict[str, float] = {
+    "petri_audit": 900.0,  # inspect_ai audit subprocess (own 600s wall clock)
+    "eval_dspy_optimize": 900.0,  # optimizer loop
+    "computer": 600.0,  # multi-step UI automation (_build_computer_use_handler)
+}
+
+
+def _tool_deadline_s(tool_name: str) -> float:
+    return _TOOL_DEADLINE_OVERRIDES_S.get(tool_name, _TOOL_DEADLINE_DEFAULT_S)
+
 
 def _tool_spinner(label: str) -> Any:
     """Lookup ``_tool_spinner`` via the package namespace.
@@ -150,17 +184,63 @@ class ToolExecutor:
             if self._mcp_manager is not None:
                 server = await asyncio.to_thread(self._mcp_manager.find_server_for_tool, tool_name)
                 if server is not None:
-                    return await self._execute_mcp_async(server, tool_name, tool_input)
+                    # MCP dispatch gets the same wall-clock guarantee as
+                    # handler dispatch — an async MCP adapter awaiting a
+                    # never-set event would otherwise hang the spinner
+                    # forever (Codex MCP review 2026-06-12).
+                    mcp_deadline_s = _tool_deadline_s(tool_name)
+                    try:
+                        return await asyncio.wait_for(
+                            self._execute_mcp_async(server, tool_name, tool_input),
+                            timeout=mcp_deadline_s,
+                        )
+                    except TimeoutError:
+                        log.error(
+                            "MCP tool %s/%s exceeded its %.0fs wall-clock deadline",
+                            server,
+                            tool_name,
+                            mcp_deadline_s,
+                        )
+                        return {
+                            "error": (
+                                f"{server}/{tool_name} exceeded its "
+                                f"{mcp_deadline_s:.0f}s wall-clock deadline and was "
+                                "aborted by the harness."
+                            ),
+                            "timeout": True,
+                        }
             log.warning("No handler for tool: %s", tool_name)
             return {"error": f"Unknown tool: '{tool_name}'. Use 'show_help' for available tools."}
 
+        deadline_s = _tool_deadline_s(tool_name)
         try:
             if approved_via_hitl:
                 with _tool_spinner(f"Executing {tool_name}..."):
-                    raw = await self._call_handler_async(handler, tool_input, context=context)
+                    raw = await asyncio.wait_for(
+                        self._call_handler_async(handler, tool_input, context=context),
+                        timeout=deadline_s,
+                    )
             else:
-                raw = await self._call_handler_async(handler, tool_input, context=context)
+                raw = await asyncio.wait_for(
+                    self._call_handler_async(handler, tool_input, context=context),
+                    timeout=deadline_s,
+                )
             return self._normalize_raw_result(tool_name, raw)
+        except TimeoutError:
+            log.error(
+                "Tool %s exceeded its %.0fs wall-clock deadline — aborting the call "
+                "(harness deadline, not an HTTP timeout; see PR-LOOP-POLLUTION-FIX)",
+                tool_name,
+                deadline_s,
+            )
+            return {
+                "error": (
+                    f"{tool_name} exceeded its {deadline_s:.0f}s wall-clock deadline "
+                    "and was aborted by the harness. The operation may still be "
+                    "running server-side; retry or narrow the request."
+                ),
+                "timeout": True,
+            }
         except Exception as exc:
             return self._classify_execution_exception(tool_name, exc)
 

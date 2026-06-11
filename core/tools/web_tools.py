@@ -171,6 +171,10 @@ class GeneralWebSearchTool:
         ctx = kwargs.get("_tool_context")
         prefer_provider = getattr(ctx, "provider", "") or None
         prefer_source = getattr(ctx, "source", "") or None
+        # PR-WEB-SEARCH-MODEL-HINT (2026-06-12) — forward the session's
+        # resolved model so a capable session model runs its own search
+        # instead of always escalating to the provider primary.
+        session_model = getattr(ctx, "model", "") or ""
         from core.llm.adapters.dispatch import (
             AdapterDispatchError,
             AdapterUnavailableError,
@@ -185,6 +189,7 @@ class GeneralWebSearchTool:
                 max_results=max_results,
                 prefer_provider=prefer_provider,
                 prefer_source=prefer_source,
+                model=session_model,
             )
         except BillingError as exc:
             # PR-NO-FALLBACK (2026-05-28) — surface the dispatch error

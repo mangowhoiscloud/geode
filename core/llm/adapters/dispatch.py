@@ -424,6 +424,41 @@ def _error_with_cause(exc: BaseException) -> str:
     return " <- ".join(f"{type(link).__name__}: {link}" for link in _cause_chain(exc))
 
 
+async def _call_aweb_search(
+    adapter: Any, query: str, *, max_results: int, model: str
+) -> WebSearchResult:
+    """Invoke ``adapter.aweb_search`` forwarding the ``model`` hint only
+    when the adapter's signature accepts it.
+
+    The registry is open to external plugin adapters (Codex MCP review
+    2026-06-12) — an out-of-tree adapter still on the pre-hint signature
+    (``aweb_search(self, query, *, max_results=5)``) must keep working
+    instead of dying with ``TypeError: unexpected keyword argument
+    'model'``. Builtin adapters all accept the hint (pinned by
+    ``test_every_web_search_capable_adapter_accepts_model_hint``).
+    """
+    import inspect
+
+    try:
+        params = inspect.signature(adapter.aweb_search).parameters
+        accepts_model = "model" in params or any(
+            p.kind is inspect.Parameter.VAR_KEYWORD for p in params.values()
+        )
+    except (TypeError, ValueError):
+        accepts_model = False
+    if accepts_model:
+        result: WebSearchResult = await adapter.aweb_search(
+            query, max_results=max_results, model=model
+        )
+        return result
+    log.debug(
+        "web_search: adapter %s predates the model-hint signature — calling without it",
+        getattr(adapter, "name", repr(adapter)),
+    )
+    legacy_result: WebSearchResult = await adapter.aweb_search(query, max_results=max_results)
+    return legacy_result
+
+
 # ---------------------------------------------------------------------------
 # web_search — strict single-adapter dispatch
 # ---------------------------------------------------------------------------
@@ -435,6 +470,7 @@ async def web_search_via_adapters(
     max_results: int = 5,
     prefer_provider: str | None = None,
     prefer_source: str | None = None,
+    model: str = "",
 ) -> WebSearchResult:
     """Route a web-search request through the adapter registry, strictly
     using one adapter (no fallback chain).
@@ -443,6 +479,12 @@ async def web_search_via_adapters(
     ``prefer_provider`` / ``prefer_source`` flow from the AgenticLoop via
     :class:`core.tools.base.ToolContext` (PR-TOOL-EXEC-CONTEXT) — when
     set, the exact (provider, source) match is required.
+
+    ``model`` is the session's resolved model, forwarded to the adapter
+    as a routing HINT (PR-WEB-SEARCH-MODEL-HINT, 2026-06-12): Anthropic
+    adapters honour it when the model is in the documented
+    ``web_search_20260209`` support set and escalate to ANTHROPIC_PRIMARY
+    otherwise; other providers keep their provider primary.
     """
     capability = "supports_web_search"
     adapter = _select_adapter(
@@ -465,7 +507,9 @@ async def web_search_via_adapters(
     for try_no in range(_CONNECTION_TRANSIENT_RETRIES + 1):
         t0 = time.monotonic()
         try:
-            result: WebSearchResult = await adapter.aweb_search(query, max_results=max_results)
+            result: WebSearchResult = await _call_aweb_search(
+                adapter, query, max_results=max_results, model=model
+            )
         except BillingError as exc:
             elapsed_ms = (time.monotonic() - t0) * 1000
             attempt = AdapterAttempt(
