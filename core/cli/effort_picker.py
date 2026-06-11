@@ -22,6 +22,7 @@ focused model's valid effort range, Enter confirms, q/ESC cancels.
 
 from __future__ import annotations
 
+import re
 import sys
 from dataclasses import dataclass
 
@@ -246,6 +247,42 @@ def _read_key() -> str:
         termios.tcsetattr(fd, termios.TCSADRAIN, old_settings)
 
 
+_ANSI_RE = re.compile(r"\x1b\[[0-9;]*m")
+
+
+def _fit_to_width(line: str, width: int | None = None) -> str:
+    """Truncate ``line`` so its VISIBLE length fits one terminal row.
+
+    PR-PICKER-NO-WRAP (2026-06-12) — ``_clear_lines`` rewinds exactly the
+    number of logical lines ``_render`` counted; a line that soft-wraps
+    occupies more physical rows than counted, so each repaint cleared too
+    few rows and the picker scrolled upward over prior output. ANSI SGR
+    sequences are zero-width; a truncated line gets a reset appended so
+    an open color never bleeds into the next row.
+    """
+    if width is None:
+        import shutil
+
+        width = shutil.get_terminal_size(fallback=(120, 24)).columns
+    budget = max(width - 1, 10)
+    visible = 0
+    out_chars: list[str] = []
+    i = 0
+    while i < len(line):
+        match = _ANSI_RE.match(line, i)
+        if match:
+            out_chars.append(match.group(0))
+            i = match.end()
+            continue
+        if visible >= budget:
+            out_chars.append("\033[0m")
+            break
+        out_chars.append(line[i])
+        visible += 1
+        i += 1
+    return "".join(out_chars)
+
+
 def _render(
     profiles: list[tuple[str, str, str, str, bool, str | None]],
     cursor: int,
@@ -279,8 +316,11 @@ def _render(
 
     out.write("\n  \033[1mSelect model\033[0m\n")
     out.write(
-        "  \033[2mSwitch between LLM models. Applies to this session and future sessions. "
-        "Models with effort knobs let you tune reasoning depth with ←→ arrows.\033[0m\n\n"
+        _fit_to_width(
+            "  \033[2mSwitch between LLM models. Applies to this session and future sessions. "
+            "Models with effort knobs let you tune reasoning depth with ←→ arrows.\033[0m"
+        )
+        + "\n\n"
     )
     lines += 4
 
@@ -294,9 +334,11 @@ def _render(
                 tab_parts.append(f"\033[1;36m[ {role_label} ]\033[0m")
             else:
                 tab_parts.append(f"\033[2m[ {role_label} ]\033[0m")
-        out.write("  " + " ".join(tab_parts) + "  \033[2m(Tab to cycle)\033[0m\n")
+        out.write(
+            _fit_to_width("  " + " ".join(tab_parts) + "  \033[2m(Tab to cycle)\033[0m") + "\n"
+        )
         if 0 <= role_cursor < len(roles):
-            out.write(f"  \033[2m{roles[role_cursor][2]}\033[0m\n")
+            out.write(_fit_to_width(f"  \033[2m{roles[role_cursor][2]}\033[0m") + "\n")
         out.write("\n")
         lines += 3
 
@@ -314,18 +356,24 @@ def _render(
         suffixes = f"{avail_suffix}{forced_suffix}"
         if i == cursor:
             highlight = "1;36" if available else "0;36"
-            out.write(
+            row = (
                 f"  \033[{highlight}m{cursor_marker} {index} {label:<{label_width}}"
                 f"{default_check}\033[0m"
-                f"  \033[2m{desc}\033[0m{suffixes}\n"
+                f"  \033[2m{desc}\033[0m{suffixes}"
             )
         else:
             row_open = "\033[2m" if not available else ""
             row_close = "\033[0m" if not available else ""
-            out.write(
+            row = (
                 f"  {row_open}{cursor_marker} {index} {label:<{label_width}}{default_check}"
-                f"{row_close}  \033[2m{desc}\033[0m{suffixes}\n"
+                f"{row_close}  \033[2m{desc}\033[0m{suffixes}"
             )
+        # PR-PICKER-NO-WRAP (2026-06-12) — clamp each row to the terminal
+        # width. A row that WRAPS occupies 2+ physical lines while the
+        # repaint accounting counts 1, so every ↑↓ repaint cleared too few
+        # lines and the picker crept upward over previous output
+        # (operator: "화살표로 이동하면 위로 출력이 쏠려").
+        out.write(_fit_to_width(row) + "\n")
         lines += 1
 
     # Effort line for the focused model. PR-A fix-up #1 — when the
@@ -355,7 +403,7 @@ def _render(
     if not show_effort:
         out.write("  \033[2m· No effort knob for this role · ←→ disabled\033[0m\n")
         lines += 1
-        out.write(f"\n  \033[2m{confirm_hint}\033[0m\n")
+        out.write(_fit_to_width(f"\n  \033[2m{confirm_hint}\033[0m") + "\n")
         lines += 2
         out.flush()
         return lines
@@ -370,12 +418,15 @@ def _render(
         name = effort_label(current or default or "")
         suffix = " (default)" if current == default else ""
         out.write(
-            f"  \033[1;36m{sym}\033[0m {name} effort\033[2m{suffix}\033[0m"
-            f"  \033[2m← → to adjust\033[0m\n"
+            _fit_to_width(
+                f"  \033[1;36m{sym}\033[0m {name} effort\033[2m{suffix}\033[0m"
+                f"  \033[2m← → to adjust\033[0m"
+            )
+            + "\n"
         )
     lines += 1
 
-    out.write(f"\n  \033[2m{confirm_hint}\033[0m\n")
+    out.write(_fit_to_width(f"\n  \033[2m{confirm_hint}\033[0m") + "\n")
     lines += 2
     out.flush()
     return lines

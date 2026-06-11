@@ -127,6 +127,17 @@ def _apply_model(
     from core.config.env_io import upsert_config_toml
 
     role_def = role_by_name(role)
+    # PR-PICKER-ROLE-SCOPE (2026-06-12) — non-primary roles are
+    # daemon-global: their READERS consult the GLOBAL config only
+    # (`_read_toml_value` → GLOBAL_CONFIG_TOML; the self-improving
+    # runner's `load_self_improving_loop_config` → GEODE_CONFIG_TOML or
+    # GLOBAL_CONFIG_TOML). The previous default scope="project" wrote a
+    # mutator/reflection pick into the PROJECT toml where neither reader
+    # ever looked — the pick appeared to vanish (picker re-rendered
+    # "(inherits Settings.model)" and the runner kept the old model).
+    # Write-read parity: non-primary always persists to global.
+    if role_def.name != "primary":
+        scope = "global"
     old = _current_model_for_role(role_def)
     old_effort = getattr(settings, "agentic_effort", "high")
     same_model = selected.id == old

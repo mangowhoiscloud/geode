@@ -544,3 +544,88 @@ def test_apply_picker_result_applies_staged_then_final(monkeypatch) -> None:
         (known[1], None, "mutator"),
         (known[0], "high", "primary"),
     ]
+
+
+# ---------------------------------------------------------------------------
+# PR-PICKER-NO-WRAP + PR-PICKER-ROLE-SCOPE (2026-06-12)
+# ---------------------------------------------------------------------------
+
+
+def test_fit_to_width_keeps_one_physical_line() -> None:
+    """Drift guard — a rendered line whose VISIBLE length exceeds the
+    terminal width soft-wraps, breaking _clear_lines accounting (every
+    arrow repaint scrolled the picker upward over prior output)."""
+    from core.cli import effort_picker
+
+    long_line = "  \033[1;36m❯ 1. " + "x" * 500 + "\033[0m"
+    fitted = effort_picker._fit_to_width(long_line, width=80)
+    visible = effort_picker._ANSI_RE.sub("", fitted)
+    assert len(visible) <= 79
+    assert fitted.endswith("\033[0m"), "truncation must reset open ANSI color"
+
+    short_line = "  ok"
+    assert effort_picker._fit_to_width(short_line, width=80) == short_line
+
+
+def test_render_rows_never_exceed_terminal_width(monkeypatch, capsys) -> None:
+    """Every physical line _render writes must fit the terminal width so
+    line accounting equals physical rows (no upward creep)."""
+    import shutil
+
+    from core.cli import effort_picker
+
+    monkeypatch.setattr(
+        shutil,
+        "get_terminal_size",
+        lambda fallback=(80, 24): __import__("os").terminal_size((60, 24)),
+    )
+    profiles = [
+        ("claude-fable-5", "anthropic", "Fable 5 with an extremely long label", "", True, None),
+        ("claude-haiku-4-5-20251001", "anthropic", "Haiku 4.5", "", False, "apikey"),
+    ]
+    effort_picker._render(
+        profiles,
+        0,
+        {},
+        "claude-fable-5",
+        roles=[
+            ("primary", "Primary", "main loop with a very very long description text here"),
+            ("mutator", "Mutator", "loop mutator"),
+        ],
+        role_cursor=0,
+        role_initials={},
+        show_effort=True,
+    )
+    rendered = capsys.readouterr().out
+    for raw_line in rendered.splitlines():
+        visible = effort_picker._ANSI_RE.sub("", raw_line)
+        assert len(visible) <= 60, f"line wraps ({len(visible)} > 60): {visible[:60]}..."
+
+
+def test_non_primary_apply_persists_to_global_scope(monkeypatch) -> None:
+    """Write-read parity — mutator/reflection readers consult the GLOBAL
+    config only, so _apply_model must force scope=global for non-primary
+    roles (a project-scoped write silently vanished from the picker's
+    read-back AND the self-improving runner)."""
+    from core.cli.commands import model as model_cmd
+
+    captured: list[tuple[str, str, str, str]] = []
+    monkeypatch.setattr(
+        "core.config.env_io.upsert_config_toml",
+        lambda section, key, value, *, scope="project": captured.append(
+            (section, key, value, scope)
+        ),
+    )
+    monkeypatch.setattr(model_cmd, "_current_model_for_role", lambda role_def: "old-model")
+    import core.cli.commands as _pkg
+
+    monkeypatch.setattr(_pkg, "_check_provider_key", lambda profile: None, raising=False)
+    monkeypatch.setattr(_pkg, "remove_env", lambda var: False, raising=False)
+
+    profile = model_cmd.MODEL_PROFILES[0]
+    model_cmd._apply_model(profile, effort=None, role="mutator", scope="project")
+
+    assert captured, "mutator pick must persist to config.toml"
+    assert all(scope == "global" for *_rest, scope in captured), (
+        f"non-primary picks must write GLOBAL scope (readers are global-only): {captured}"
+    )
