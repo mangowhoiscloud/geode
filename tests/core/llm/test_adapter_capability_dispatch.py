@@ -14,7 +14,10 @@ These tests pin:
 2. ``web_search_via_adapters`` selects exactly one adapter and:
    - returns its :class:`WebSearchResult` on success
    - raises :class:`BillingError` with adapter context on billing-fatal
-   - raises :class:`AdapterDispatchError` on transient (no retry)
+   - raises :class:`AdapterDispatchError` on non-connection transient
+     (no retry); connection-class transients get ONE bounded SAME-adapter
+     retry — PR-DISPATCH-TRANSIENT-RETRY (2026-06-11), pinned in
+     ``test_dispatch_transient_retry_guardrails.py``
    - raises :class:`AdapterUnavailableError` when no adapter matches
 3. ``complete_text_via_adapters`` mirrors the same semantics.
 4. Adapter selection honours the operator's ``infer_source`` resolution
@@ -220,9 +223,13 @@ def test_web_search_via_adapters_returns_selected_adapter_result(
 def test_web_search_via_adapters_raises_dispatch_error_on_transient_no_fallback(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """PR-NO-FALLBACK — transient failure on the selected adapter raises
-    :class:`AdapterDispatchError` immediately. No silent retry to another
-    provider; the operator must switch source explicitly via ``/login``."""
+    """PR-NO-FALLBACK — a NON-connection transient (the stub raises a bare
+    ``RuntimeError``) on the selected adapter raises
+    :class:`AdapterDispatchError` immediately, with no retry of any kind.
+    No silent fallback to another provider either; the operator must switch
+    source explicitly via ``/login``. Connection-class transients get one
+    bounded same-adapter retry — see
+    ``test_dispatch_transient_retry_guardrails.py``."""
     _force_payg_first(monkeypatch)
     _install_stubs(
         monkeypatch,
