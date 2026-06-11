@@ -14,7 +14,6 @@ from typing import Any
 
 import typer
 
-from core.async_runtime import run_process_coroutine
 from core.cli.session_state import _scheduler_service_ctx, _set_readiness
 from core.ui.console import console
 from core.wiring.startup import check_readiness
@@ -193,9 +192,35 @@ def serve(
 
     gateway.set_async_processor(_gateway_processor)
 
+    # PR-GATEWAY-BRIDGE-FRONTIER (2026-06-12) — set by ``_serve_loop`` on
+    # startup so thread-side bridges can marshal coroutines into the
+    # long-lived main loop instead of spawning a throwaway loop per call.
+    _main_loop: asyncio.AbstractEventLoop | None = None
+
     def _gateway_processor_sync(content: str, metadata: dict[str, Any]) -> str:
-        """Process-edge bridge for the stdlib HTTP webhook server."""
-        return run_process_coroutine(_gateway_processor(content, metadata))
+        """Thread → main-loop bridge for the stdlib HTTP webhook server.
+
+        PR-GATEWAY-BRIDGE-FRONTIER (2026-06-12) — frontier convergence
+        (hermes ``gateway/run.py`` cron ticker, openclaw single-loop lane
+        dispatch): a worker thread submits the coroutine to the daemon's
+        ONE long-lived serve loop via ``run_coroutine_threadsafe`` and
+        blocks on the future. The previous ``run_process_coroutine`` shape
+        built a throwaway ``asyncio.Runner`` loop per webhook request —
+        the same loop-per-call residue PR-LOOP-POLLUTION-FIX removed from
+        the tool path (clients are loop-affine now, so it was safe but
+        still one disposable loop per request).
+        """
+        loop = _main_loop
+        if loop is None or loop.is_closed():
+            log.warning("Webhook received before the serve loop is up — rejecting")
+            return "Error: serve loop not running yet; retry shortly"
+        future = asyncio.run_coroutine_threadsafe(_gateway_processor(content, metadata), loop)
+        try:
+            return future.result(timeout=float(_gw_time_budget) + 30.0)
+        except TimeoutError:
+            future.cancel()
+            log.error("Webhook gateway turn exceeded %.0fs — cancelled", _gw_time_budget + 30.0)
+            return "Error: gateway turn timed out"
 
     # L4 Gateway Hooks: optional webhook endpoint
     _webhook_server = None
@@ -251,6 +276,10 @@ def serve(
         survive past the drain call.
         """
         from core.cli.interactive_loop import _drain_scheduler_queue
+
+        # Expose this loop to thread-side bridges (webhook handler).
+        nonlocal _main_loop
+        _main_loop = asyncio.get_running_loop()
 
         while not stop:
             await _drain_scheduler_queue(
