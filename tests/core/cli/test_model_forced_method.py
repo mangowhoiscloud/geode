@@ -104,8 +104,20 @@ def test_forced_login_method_for_unknown_value_passes_through() -> None:
 # ---------------------------------------------------------------------------
 
 
-def test_picker_render_includes_forced_badge(capsys: pytest.CaptureFixture[str]) -> None:
+def test_picker_render_includes_forced_badge(
+    capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import os
+    import shutil
+
     from core.cli import effort_picker
+
+    # PR-PICKER-NO-WRAP (2026-06-12) -- _render clamps every line to the
+    # terminal width; CI's 80-column default truncated the badge mid-word.
+    # Pin a wide terminal: this test asserts badge CONTENT, not wrapping.
+    monkeypatch.setattr(
+        shutil, "get_terminal_size", lambda fallback=(80, 24): os.terminal_size((200, 24))
+    )
 
     profiles: list[tuple[str, str, str, str, bool, str | None]] = [
         ("claude-opus-4-7", "anthropic", "Opus 4.7", "$$$", True, None),

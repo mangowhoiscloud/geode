@@ -409,10 +409,19 @@ def test_enter_confirms_selection_on_role_tab(monkeypatch) -> None:
     assert result.model_id == "claude-haiku-4-5-20251001"
 
 
-def test_render_confirm_hint_names_focused_role(capsys) -> None:
+def test_render_confirm_hint_names_focused_role(capsys, monkeypatch) -> None:
     """The footer must say WHICH role Enter confirms when a non-primary
     tab is focused — the generic hint read as 'no confirm key exists'."""
+    import os
+    import shutil
+
     from core.cli import effort_picker
+
+    # Wide terminal pin — this test asserts hint CONTENT; the width clamp
+    # (PR-PICKER-NO-WRAP) would truncate the tail on CI's 80 columns.
+    monkeypatch.setattr(
+        shutil, "get_terminal_size", lambda fallback=(80, 24): os.terminal_size((200, 24))
+    )
 
     profiles = [("claude-haiku-4-5-20251001", "anthropic", "Haiku 4.5", "", True, None)]
     effort_picker._render(
