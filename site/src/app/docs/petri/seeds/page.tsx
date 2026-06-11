@@ -8,7 +8,15 @@ export const metadata = { title: "Seed Generation Runs · GEODE Docs" };
 // Seeds live one level up under docs/self-improving/petri-bundle/seeds/ in the repo root.
 const REPO_ROOT = path.join(process.cwd(), "..");
 const SEEDS_DIR = path.join(REPO_ROOT, "docs", "self-improving", "petri-bundle", "seeds");
-const RAW_BUNDLE_URL = "/self-improving/petri-bundle/seeds/";
+const RAW_BUNDLE_URL = "/geode/self-improving/petri-bundle/seeds/";
+
+function candidateFileExists(runId: string, candidateId: string): boolean {
+  for (const dir of ["candidates", "candidates_evolved"]) {
+    if (fs.existsSync(path.join(SEEDS_DIR, runId, dir, `${candidateId}.md`))) return true;
+  }
+  return false;
+}
+
 
 type ListingRun = {
   run_id: string;
@@ -213,11 +221,21 @@ function RunDetailBlock({ detail, locale }: { detail: RunDetail; locale: "ko" | 
                     : undefined;
                   const evolved = evolvedByParent.get(sid) ?? [];
                   // next.config.ts has `trailingSlash: false` so links must NOT end in `/`.
-                  const detailHref = `/docs/petri/seeds/${run.run_id}/${sid}`;
+                  // Link only when the candidate .md exists in the bundle, in
+                  // parity with [candidate_id]/generateStaticParams. gen1 runs
+                  // list survivors whose files never shipped (bundle sync gap);
+                  // a forced link 404s on the deployed site.
+                  const detailHref = candidateFileExists(run.run_id, sid)
+                    ? `/geode/docs/petri/seeds/${run.run_id}/${sid}`
+                    : undefined;
                   return (
                     <tr key={sid}>
                       <td>
-                        <a href={detailHref}><code>{sid}</code></a>
+                        {detailHref ? (
+                          <a href={detailHref}><code>{sid}</code></a>
+                        ) : (
+                          <code>{sid}</code>
+                        )}
                       </td>
                       <td>{Math.round(elo)}</td>
                       <td>{pilotStatus}</td>
@@ -230,7 +248,10 @@ function RunDetailBlock({ detail, locale }: { detail: RunDetail; locale: "ko" | 
                         {evolved.length > 0 && (
                           <span className="ml-2 text-[var(--ink-3)] text-xs">
                             → {evolved.map((e) => {
-                              const eHref = `/docs/petri/seeds/${run.run_id}/${e}`;
+                              if (!candidateFileExists(run.run_id, e)) {
+                                return <code key={e} className="mr-1">{e}</code>;
+                              }
+                              const eHref = `/geode/docs/petri/seeds/${run.run_id}/${e}`;
                               return (
                                 <a key={e} href={eHref} className="mr-1"><code>{e}</code></a>
                               );
