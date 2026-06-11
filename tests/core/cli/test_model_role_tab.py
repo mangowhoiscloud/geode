@@ -370,3 +370,74 @@ def test_picker_render_show_effort_false_emits_no_knob_hint() -> None:
     assert "No effort knob for this role" in out
     # And it does NOT render the disc + ←→ adjuster
     assert "← → to adjust" not in out
+
+
+# ---------------------------------------------------------------------------
+# PR-PICKER-ROLE-CONFIRM (2026-06-12) — role tabs have an explicit,
+# visible confirm contract (operator: "Reflection/Mutator에서 변경할 때
+# 확정짓는 키가 없어")
+# ---------------------------------------------------------------------------
+
+
+def test_enter_confirms_selection_on_role_tab(monkeypatch) -> None:
+    """Behavioral pin — TAB to a non-primary role then ENTER returns a
+    non-cancelled result tagged with that role (Enter IS the confirm key)."""
+    from core.cli import effort_picker
+
+    keys = iter([effort_picker._KEY_TAB, effort_picker._KEY_DOWN, effort_picker._KEY_ENTER])
+    monkeypatch.setattr(effort_picker, "_read_key", lambda: next(keys))
+    monkeypatch.setattr(effort_picker, "_clear_lines", lambda n: None)
+
+    profiles = [
+        ("claude-fable-5", "anthropic", "Fable 5", "", True, None),
+        ("claude-haiku-4-5-20251001", "anthropic", "Haiku 4.5", "", True, None),
+    ]
+    result = effort_picker.pick_model_and_effort(
+        profiles,
+        "claude-fable-5",
+        "high",
+        roles=[
+            ("primary", "Primary", "main loop"),
+            ("mutator", "Mutator", "loop mutator"),
+        ],
+        initial_role="primary",
+        role_initial_models={"primary": "claude-fable-5", "mutator": "claude-fable-5"},
+        role_has_effort={"primary": True, "mutator": False},
+    )
+    assert result.cancelled is False
+    assert result.role == "mutator"
+    assert result.model_id == "claude-haiku-4-5-20251001"
+
+
+def test_render_confirm_hint_names_focused_role(capsys) -> None:
+    """The footer must say WHICH role Enter confirms when a non-primary
+    tab is focused — the generic hint read as 'no confirm key exists'."""
+    from core.cli import effort_picker
+
+    profiles = [("claude-haiku-4-5-20251001", "anthropic", "Haiku 4.5", "", True, None)]
+    effort_picker._render(
+        profiles,
+        0,
+        {},
+        "claude-haiku-4-5-20251001",
+        roles=[
+            ("primary", "Primary", "main loop"),
+            ("mutator", "Mutator", "loop mutator"),
+        ],
+        role_cursor=1,
+        role_initials={},
+        show_effort=False,
+    )
+    rendered = capsys.readouterr().out
+    assert "Enter to set Mutator model" in rendered
+
+
+def test_apply_model_prints_feedback_for_unchanged_role_pick() -> None:
+    """Source pin — an unchanged pick must not close silently; the
+    else-branch feedback line exists."""
+    import inspect
+
+    from core.cli.commands import model as model_cmd
+
+    src = inspect.getsource(model_cmd._apply_model)
+    assert "Model unchanged:" in src

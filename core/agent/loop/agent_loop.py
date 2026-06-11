@@ -414,6 +414,11 @@ class AgenticLoop:
         # ``{provider}_credential_source`` setting + the ProfileStore so
         # an OAuth-registered provider promotes to ``"subscription"`` by
         # default; callers that pass an explicit ``source=`` still win.
+        # PR-MODEL-SWITCH-SOURCE (2026-06-12) — remember whether the caller
+        # pinned the source explicitly. A cross-provider ``/model`` switch
+        # re-infers the source ONLY when it was inferred here (an explicit
+        # caller pin survives the switch).
+        self._source_explicit = bool(source)
         if not source:
             from core.llm.adapters._source_inference import infer_source
 

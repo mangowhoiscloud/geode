@@ -323,10 +323,24 @@ def _render(
     # ← → adjuster, which the dispatcher would silently ignore.
     out.write("\n")
     lines += 1
+    # PR-PICKER-ROLE-CONFIRM (2026-06-12) — name the focused role in the
+    # confirm hint. Operators on the Reflection / Mutator tabs reported
+    # "no key confirms the change": Enter always confirmed, but the hint
+    # said only "Enter to confirm" (and an unchanged pick closed with no
+    # output at all — fixed in commands/model.py). The role-named hint
+    # makes the confirm target explicit.
+    focused_role_label = ""
+    if roles and len(roles) > 1 and 0 <= role_cursor < len(roles):
+        focused_role_label = roles[role_cursor][1]
+    confirm_hint = (
+        f"Enter to set {focused_role_label} model · Esc to exit"
+        if focused_role_label and focused_role_label.lower() != "primary"
+        else "Enter to confirm · Esc to exit"
+    )
     if not show_effort:
         out.write("  \033[2m· No effort knob for this role · ←→ disabled\033[0m\n")
         lines += 1
-        out.write("\n  \033[2mEnter to confirm · Esc to exit\033[0m\n")
+        out.write(f"\n  \033[2m{confirm_hint}\033[0m\n")
         lines += 2
         out.flush()
         return lines
@@ -346,7 +360,7 @@ def _render(
         )
     lines += 1
 
-    out.write("\n  \033[2mEnter to confirm · Esc to exit\033[0m\n")
+    out.write(f"\n  \033[2m{confirm_hint}\033[0m\n")
     lines += 2
     out.flush()
     return lines

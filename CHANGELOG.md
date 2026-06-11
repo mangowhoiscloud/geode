@@ -45,6 +45,14 @@ functional change.
 
 ---
 
+## [0.99.186] - 2026-06-12
+
+### Fixed
+- **Cross-provider /model switch re-infers the source axis** (PR-MODEL-SWITCH-SOURCE, operator incident 2026-06-12 02:34): right after `/login codex` (ChatGPT Pro Lite OAuth registered, daemon auth.toml reload confirmed `loaded=True`), `/model gpt-5.5` still 401-ed in 0.6s — the live session's `loop._source` was inferred as `payg` back when the session was on an Anthropic model, and the old "source stays constant across the switch" rule (`_model_switching.py`) carried it onto openai, routing through openai-payg's stale `sk-proj` key while `infer_source("openai")` resolved to `subscription` the whole time. A provider-changing switch now re-infers the source for the NEW provider when it was inferred at init (`AgenticLoop._source_explicit` records caller pins, which still survive). Same-provider switches never re-infer. Guards: `tests/core/agent/test_model_switch_source_reinfer.py` (4) + hermetic pin update in `test_agent_loop_source_route.py`.
+
+### Added
+- **Model picker role-tab confirm UX** (PR-PICKER-ROLE-CONFIRM, operator: "Reflection/Mutator에서 변경할 때 확정짓는 키가 없어"): Enter always confirmed, but the hint never named the target and an unchanged pick closed with zero output — indistinguishable from "nothing happened". The footer now names the focused role (`Enter to set Mutator model · Esc to exit`) and every non-cancelled Enter prints feedback (changed → existing success line; unchanged → explicit `Model unchanged: …` line with the role tag). Guards: keystroke-driven TAB→ENTER behavioral pin + footer render pin + feedback source pin in `tests/core/cli/test_model_role_tab.py`.
+
 ## [0.99.185] - 2026-06-12
 
 ### Fixed

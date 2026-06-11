@@ -240,6 +240,15 @@ def _apply_model(
             f"  [success]Effort[/success]  {old_effort} → [bold]{effort}[/bold]"
             f"  [muted](model unchanged: {selected.label})[/muted]"
         )
+    else:
+        # PR-PICKER-ROLE-CONFIRM (2026-06-12) — an unchanged pick used to
+        # close with NO output, which on the Reflection/Mutator tabs read
+        # as "Enter does not confirm". Every non-cancelled Enter now gets
+        # explicit feedback.
+        _pkg.console.print(
+            f"  [muted]Model unchanged: [/muted][bold]{selected.label}[/bold]"
+            f"  [muted]({selected.id})[/muted]{role_tag}"
+        )
     if not same_model:
         where = "this project" if scope == "project" else "all projects"
         _pkg.console.print(
