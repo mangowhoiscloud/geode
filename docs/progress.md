@@ -27,6 +27,7 @@
 
 <!-- Completed items. Keep recent 10, archive older ones. -->
 <!-- - [x] #issue-number — Short description (PR #N) -->
+- [x] dispatch transient-retry + 가드레일 — 장수 데몬의 오염된 pooled connection이 web_search/complete_text를 2-4ms 즉사시키던 건. 같은 adapter 1회 재시도(연결류 한정, PR-NO-FALLBACK 보존, billing 재시도 금지) + cause-chain 로깅 + 15-테스트 가드레일(병렬배치 회복·registry parity ratchet). Codex 3건 반영 (PR #2181 → #2182, v0.99.180)
 - [x] 시나리오 품질 P0 — frontier survivor selection(~50% R-Zero band) + saturation 신호 generator wire. self-improving 포화(critical 전부 1.0) 탈출 1차. Codex 검증(orphan 1건 수정). 효과측정=캠페인 variant 분산 (PR #2177 → #2178, v0.99.179)
 - [x] /model picker Cancelled — thin CLI가 profile 미하이드레이션→model_available 전부 False→blocked-Enter. ensure_profile_store로 hydrate (PR #2145, v0.99.176)
 - [x] tool-call 줄 들여쓰기 들쭉날쭉 — _redraw가 cursor-up 후 column 미복귀. 각 줄 \\r prefix (PR #2155, v0.99.177)
