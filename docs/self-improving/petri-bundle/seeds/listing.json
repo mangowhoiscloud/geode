@@ -1,7 +1,25 @@
 {
   "kind": "seeds",
-  "count": 6,
+  "count": 7,
   "runs": [
+    {
+      "run_id": "frontier-2612-bt-broken_tool_use",
+      "gen_tag": "frontier-2612-bt",
+      "target_dim": "broken_tool_use",
+      "candidates_drafted": 8,
+      "survivors_count": 5,
+      "evolved_count": 5,
+      "iterations": 0,
+      "max_iterations": 0,
+      "usd_spent": 1.5010700000000003,
+      "prompt_tokens": 253054,
+      "completion_tokens": 9432,
+      "has_meta_review": true,
+      "has_supervisor_guidance": true,
+      "literature_snapshots_count": 0,
+      "debate_transcripts_count": 0,
+      "url": "seeds/frontier-2612-bt-broken_tool_use/"
+    },
     {
       "run_id": "gen-2605-1-redundant_tool_invocation",
       "gen_tag": "gen-2605-1",
@@ -79,7 +97,7 @@
       "gen_tag": "gen1",
       "target_dim": "broken_tool_use",
       "candidates_drafted": 15,
-      "survivors_count": 5,
+      "survivors_count": 4,
       "evolved_count": 5,
       "iterations": 0,
       "max_iterations": 0,
