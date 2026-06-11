@@ -461,13 +461,22 @@ def _verify_llm_judge(result: AgenticResult, *, loop: Any | None = None) -> Veri
 
     PR-CL-A6 (2026-05-23) — sync wrapper for callers that aren't inside an
     asyncio event loop (CLI smoke tests, pure-sync verify dispatch). The
-    async caller path (``_run_turn_verify_async`` from
-    ``finalize_and_return_async``) uses :func:`_verify_llm_judge_async`
-    directly to avoid the cross-loop thread-pool hop (Codex MCP HIGH #2
-    fix). When invoked from a sync context with no running event loop,
-    we use ``asyncio.run`` with the same :data:`_JUDGE_CALL_TIMEOUT_S`
-    timeout. When invoked from inside a running loop, the only safe sync
-    option is a thread pool — we keep it but with the explicit timeout.
+    production path (``_run_turn_verify_async`` from
+    ``finalize_and_return_async``) awaits :func:`_verify_llm_judge_async`
+    directly.
+
+    PR-GATEWAY-BRIDGE-FRONTIER (2026-06-12) — the previous "sync caller
+    inside a running loop" branch bridged via ThreadPoolExecutor +
+    ``asyncio.run`` (a throwaway loop per call — the loop-pollution
+    residue class; its comment even claimed the new loop *protected*
+    clients, which was exactly backwards pre-loop-affinity). Frontier
+    convergence (hermes ``model_tools._run_async``: never a disposable
+    loop at runtime) and GEODE's own production reality (every running-
+    loop caller has the async path available) make that branch dead
+    weight: a sync call from inside a running loop is a misuse and now
+    downgrades honestly to the rule-based fallback with a WARNING,
+    instead of hiding the misuse behind a thread bridge. The no-loop
+    case keeps ``asyncio.run`` — that IS the process-edge contract.
 
     Failures NEVER raise — observability mustn't break the run it observes.
     """
@@ -479,23 +488,14 @@ def _verify_llm_judge(result: AgenticResult, *, loop: Any | None = None) -> Veri
 
         try:
             asyncio.get_running_loop()
-            running = True
         except RuntimeError:
-            running = False
-        if running:
-            # Sync caller inside an active loop is a misuse — schedule the
-            # async path on a worker thread. ``asyncio.run`` inside that
-            # thread builds its own loop so adapter clients are not shared
-            # across loops. ``asyncio.wait_for`` inside ``_verify_llm_judge_async``
-            # bounds the actual LLM call; the thread join here trusts that.
-            import concurrent.futures
-
-            def _run_in_thread() -> VerifyResult:
-                return asyncio.run(_verify_llm_judge_async(result, loop=loop))
-
-            with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
-                return pool.submit(_run_in_thread).result(timeout=_JUDGE_CALL_TIMEOUT_S + 5.0)
-        return asyncio.run(_verify_llm_judge_async(result, loop=loop))
+            return asyncio.run(_verify_llm_judge_async(result, loop=loop))
+        log.warning(
+            "LLM judge: sync verify_turn called from inside a running event "
+            "loop — use verify_turn_async; downgrading to rule_based "
+            "(PR-GATEWAY-BRIDGE-FRONTIER)"
+        )
+        return _llm_judge_fallback(result)
     except Exception:
         log.warning("LLM judge call failed; falling back to rule_based", exc_info=True)
         return _llm_judge_fallback(result)

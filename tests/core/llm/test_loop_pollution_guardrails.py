@@ -326,7 +326,7 @@ def test_deadline_overrides_cover_long_running_tools() -> None:
         _tool_deadline_s,
     )
 
-    assert _tool_deadline_s("general_web_search") == _TOOL_DEADLINE_DEFAULT_S
+    assert _tool_deadline_s("glob_files") == _TOOL_DEADLINE_DEFAULT_S
     assert _TOOL_DEADLINE_DEFAULT_S >= 60.0, (
         "Anthropic server-side web_search legitimately takes 25-50s — a "
         "tighter default would kill healthy calls"
@@ -456,3 +456,77 @@ def test_ipc_client_handler_catches_connection_reset() -> None:
     )[0]
     assert "ConnectionResetError" in handler_src
     assert "BrokenPipeError" in handler_src
+
+
+# ---------------------------------------------------------------------------
+# PR-GATEWAY-BRIDGE-FRONTIER — remaining disposable-loop residue removed
+# ---------------------------------------------------------------------------
+
+
+def test_webhook_bridge_marshals_into_main_loop_not_a_throwaway_loop() -> None:
+    """Source pin — frontier convergence (hermes cron-ticker
+    ``run_coroutine_threadsafe`` into the one long-lived gateway loop;
+    openclaw single-loop lane dispatch): the stdlib webhook server's
+    thread-side bridge must submit to the main serve loop, never build a
+    disposable ``asyncio.Runner`` loop per request."""
+    src = (REPO_ROOT / "core" / "cli" / "typer_serve.py").read_text(encoding="utf-8")
+    assert "run_coroutine_threadsafe" in src
+    assert "run_process_coroutine(_gateway_processor" not in src, (
+        "webhook bridge reverted to a throwaway event loop per request"
+    )
+
+
+def test_sync_llm_judge_inside_running_loop_downgrades_to_rule_based(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Behavioral pin — the sync judge wrapper called from INSIDE a running
+    loop must downgrade to the rule-based fallback (effective_mode marks
+    the downgrade) instead of bridging through ThreadPoolExecutor +
+    ``asyncio.run`` (a disposable loop per call, removed
+    PR-GATEWAY-BRIDGE-FRONTIER)."""
+    from core.agent.loop.agent_loop import AgenticResult
+    from core.agent.verify import VerifyMode, _verify_llm_judge
+
+    monkeypatch.setenv("GEODE_VERIFY_MODE", "llm_judge")
+    result = AgenticResult(text="OK", tool_calls=[], rounds=1, termination_reason="natural")
+
+    async def _call_from_inside_loop() -> Any:
+        return _verify_llm_judge(result, loop=object())
+
+    verdict = asyncio.run(_call_from_inside_loop())
+    assert verdict.mode is VerifyMode.LLM_JUDGE
+    assert verdict.effective_mode is VerifyMode.RULE_BASED, (
+        "sync judge inside a running loop must downgrade, not thread-bridge"
+    )
+
+
+def test_verify_judge_has_no_thread_pool_loop_bridge() -> None:
+    """Source pin — no ThreadPoolExecutor + asyncio.run bridge in the sync
+    judge wrapper (the comment on the old branch claimed per-call loops
+    protected shared clients — exactly backwards pre-loop-affinity)."""
+    src = (REPO_ROOT / "core" / "agent" / "verify.py").read_text(encoding="utf-8")
+    # Match the executable pattern, not the docstring documenting its removal.
+    assert "ThreadPoolExecutor(" not in src
+    assert "import concurrent.futures" not in src
+
+
+def test_web_search_deadline_covers_client_timeout_with_retry() -> None:
+    """Coherence pin — the operator watched a healthy web_search retry get
+    killed at 119.9s (2026-06-12 02:0x): per-attempt client timeout 60s ×
+    (1 try + 1 dispatch retry) stacked exactly onto the 120s harness
+    deadline. The three knobs must stay ordered:
+
+        client timeout × (retries + 1) + slack <= tool deadline
+    """
+    from core.agent.tool_executor.executor import _tool_deadline_s
+    from core.llm.adapters._capability_impls import ANTHROPIC_WEB_SEARCH_TIMEOUT_S
+    from core.llm.adapters.dispatch import _CONNECTION_TRANSIENT_RETRIES
+
+    attempts = _CONNECTION_TRANSIENT_RETRIES + 1
+    slack_s = 10.0
+    assert _tool_deadline_s("general_web_search") >= (
+        ANTHROPIC_WEB_SEARCH_TIMEOUT_S * attempts + slack_s
+    ), (
+        "general_web_search: deadline no longer covers client-timeout x retry "
+        "— healthy retries will be killed at the boundary again"
+    )

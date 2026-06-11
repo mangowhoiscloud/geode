@@ -45,6 +45,13 @@ functional change.
 
 ---
 
+## [0.99.185] - 2026-06-12
+
+### Fixed
+- **Web_search timing coherence** (operator-observed: one search ok at 58.1s, its sibling killed at 119.9s by the 120s wall-clock deadline). With the session-model hint live, claude-fable-5 server-side search+synthesis runs 58-60s — colliding with the per-attempt client timeout of exactly 60s (`anthropic_web_search`), so healthy calls were cut at the wire (`APITimeoutError <- ReadTimeout`), re-run by the dispatch retry, and the 2×60s stack then hit the 120s tool deadline at the boundary. Three knobs now ordered and pinned: per-attempt client timeout 60→100s (`ANTHROPIC_WEB_SEARCH_TIMEOUT_S`), `general_web_search` deadline override 240s (covers timeout × (1+retry) + slack), coherence guard `test_web_search_deadline_covers_client_timeout_with_retry`.
+- **Gateway webhook bridge — last disposable-loop residue removed** (PR-GATEWAY-BRIDGE-FRONTIER, frontier convergence: hermes `gateway/run.py` cron ticker `run_coroutine_threadsafe` into the one long-lived loop; openclaw single-loop lane dispatch). The stdlib webhook server's thread-side bridge built a throwaway `asyncio.Runner` loop per request via `run_process_coroutine`; it now marshals the coroutine into the daemon's main serve loop (`_serve_loop` exposes its loop handle) and blocks on the future with the gateway time budget + 30s, rejecting honestly when the loop is not up yet.
+- **verify.py sync judge — thread-bridge removed**: the "sync caller inside a running loop" branch bridged via `ThreadPoolExecutor` + `asyncio.run` (a disposable loop per call; its comment claimed the fresh loop *protected* shared clients — exactly backwards pre-loop-affinity). Production only uses the async path; the sync wrapper now downgrades honestly to the rule-based fallback with a WARNING when called from inside a running loop, and keeps `asyncio.run` only for the true no-loop process edge. Guardrails: webhook bridge source pin, behavioral downgrade pin, `ThreadPoolExecutor(` source ban in verify.py, and the deadline-coherence pin (loop-pollution suite 21→25 tests).
+
 ## [0.99.184] - 2026-06-12
 
 ### Fixed

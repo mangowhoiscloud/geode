@@ -50,6 +50,13 @@ _TOOL_DEADLINE_OVERRIDES_S: dict[str, float] = {
     "petri_audit": 900.0,  # inspect_ai audit subprocess (own 600s wall clock)
     "eval_dspy_optimize": 900.0,  # optimizer loop
     "computer": 600.0,  # multi-step UI automation (_build_computer_use_handler)
+    # web_search: must cover per-attempt client timeout (100s,
+    # _capability_impls.ANTHROPIC_WEB_SEARCH_TIMEOUT_S) × the dispatch
+    # retry (1 original + 1 same-adapter retry) + backoff. The 120s
+    # default collided with exactly that stack — the operator watched a
+    # healthy retry get killed at 119.9s (2026-06-12 02:0x). Coherence
+    # pinned by test_web_search_deadline_covers_client_timeout_with_retry.
+    "general_web_search": 240.0,
 }
 
 
