@@ -49,14 +49,14 @@ to the 4-layer diagram); S-5 (2026-06-11) made it explicit.
 
 ### Sub-Agent System
 
-Sub-agents inherit parent tools/MCP/skills/memory and execute in parallel within independent contexts.
-`SubAgentManager` → `TaskGraph`(DAG) → `IsolatedRunner`(gated by Lane("global", max=8)).
-Controls: max_depth=1 (explicit depth guard + denied_tools), max_total=15, timeout=120s, auto_approve=True(STANDARD only), max_rounds=0 (unlimited), max_tokens=32768, time_budget_s=0 (same as parent, time-based control).
+Sub-agents execute as isolated worker processes in parallel.
+`SubAgentManager` → `TaskGraph`(DAG) → `IsolatedRunner`(gated by Lane("global", max=50 — `core/wiring/container.py` DEFAULT_GLOBAL_CONCURRENCY)).
+Controls: max_depth=1 (explicit depth guard + denied_tools), max_total=15, timeout=600s (`GEODE_SUBAGENT_TIMEOUT_S`, clamped 10..3600), auto_approve=True(STANDARD only), max_rounds=0 (unlimited), max_tokens=32768, time_budget_s=0 (same as parent, time-based control).
 
-**Memory Isolation Rules:**
-- Sub-agents inherit parent memory snapshots as read-only
-- Sub-agent writes go to a task_id-scoped buffer (direct modification of shared memory is prohibited)
-- Parent merges only the summary after task completion — two agents never write to shared memory simultaneously
+**Isolation boundary (honest contract, 2026-06-11 Codex audit):**
+- Isolation is at the process + artifact level: outputs land under `<run_dir>/sub_agents/<task_id>/`; the parent receives only the returned summary (`core/orchestration/isolated_execution.py`).
+- What a subprocess worker receives is the native tool handlers resolved from its declared toolkit (`core/agent/worker.py`). The parent's MCP connections and skill registry are NOT serialized to the worker; `SubAgentManager` holds `mcp_manager`/`skill_registry` references for in-process use only.
+- Memory-write isolation is governed by toolkit composition, not a task_id buffer: the read-only `_default` toolkit cannot write; a toolkit that includes `memory_save` (e.g. `general_purpose`) writes shared `ProjectMemory` directly. To prevent concurrent shared-memory writes, grant write-free toolkits.
 
 ### Gateway Runtime (Thin-Only Architecture)
 

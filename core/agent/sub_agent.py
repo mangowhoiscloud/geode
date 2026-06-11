@@ -407,8 +407,12 @@ class SubAgentManager:
     - **HookSystem**: Emits SUBAGENT_STARTED/COMPLETED/FAILED events.
     - **Dedup**: Filters duplicate task_id submissions via seen-set.
     - **AgentRegistry**: Resolves agent definitions for context injection.
-    - **Full AgenticLoop inheritance** (P2-B): sub-agents get the same tools,
-      MCP, skills, memory as the parent.  Controlled by ``depth`` / ``max_depth``.
+    - **Toolkit-scoped capability** (P2-B revised, 2026-06-11 Codex audit):
+      subprocess workers receive native tool handlers resolved from the
+      declared toolkit (``core/agent/worker.py``). The ``mcp_manager`` /
+      ``skill_registry`` references held here are for in-process use only
+      and are NOT serialized to workers. Controlled by ``depth`` /
+      ``max_depth``.
     """
 
     def __init__(
