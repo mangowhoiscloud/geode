@@ -13,7 +13,7 @@ export function GeodeFooter() {
           <Image src="/geode/images/geode-idle.png" alt="Geodi" width={32} height={32} className="opacity-40" />
           <div>
             <div className="text-sm font-semibold text-white/50">GEODE</div>
-            <div className="text-xs text-[#9BB0CC]">An agentic OS, built by its own scaffold.</div>
+            <div className="text-xs text-[var(--ink-2)]">An agentic OS, built by its own scaffold.</div>
           </div>
         </div>
 
@@ -21,26 +21,26 @@ export function GeodeFooter() {
           <Link
             href="https://github.com/mangowhoiscloud/geode"
             target="_blank"
-            className="text-xs font-mono text-[#9BB0CC] hover:text-[#A0B4D4] transition-colors"
+            className="text-xs font-mono text-[var(--ink-2)] hover:text-[var(--ink)] transition-colors"
           >
             GitHub
           </Link>
           <Link
             href="https://rooftopsnow.tistory.com/category/Harness"
             target="_blank"
-            className="text-xs font-mono text-[#9BB0CC] hover:text-[#A0B4D4] transition-colors"
+            className="text-xs font-mono text-[var(--ink-2)] hover:text-[var(--ink)] transition-colors"
           >
             Dev Blog
           </Link>
           <Link
             href="/"
-            className="text-xs font-mono text-[#9BB0CC] hover:text-[#A0B4D4] transition-colors"
+            className="text-xs font-mono text-[var(--ink-2)] hover:text-[var(--ink)] transition-colors"
           >
             {locale === "en" ? "Portfolio" : "포트폴리오"}
           </Link>
         </div>
 
-        <div className="text-[10px] text-[#9BB0CC]/50 font-mono">
+        <div className="text-[10px] text-[var(--ink-3)] font-mono">
           © 2025-2026 Jihwan Ryu
         </div>
       </div>
