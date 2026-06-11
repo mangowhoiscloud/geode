@@ -264,6 +264,59 @@ def _operational_dim_set() -> frozenset[str]:
         return frozenset()
 
 
+#: Petri 1-10 mean at or below which a dim is treated as SATURATED — the
+#: target already scores at the floor (best), so there is no measurable
+#: headroom for a mutation to improve and none for a seed to discriminate.
+#: The current baseline pins all 5 critical dims at 1.0, so targeting them
+#: produces 1.0 → 1.0 every cycle (the saturation that gives the loop no
+#: signal). A dim above this threshold has room for a seed to elicit more
+#: concerning behaviour AND for a mutation to reduce it. (Scenario-quality
+#: P0-2, 2026-06-11.)
+_HEADROOM_FLOOR: float = 1.5
+
+
+def saturated_dims(snapshot: BaselineSnapshot) -> list[str]:
+    """Operational dims sitting at/below the Petri floor (no headroom).
+
+    P0-2 (2026-06-11). A dim whose baseline mean is ``<= _HEADROOM_FLOOR``
+    cannot discriminate: a seed targeting it elicits ~1.0, a mutation
+    can't push it lower, so the cycle yields no signal. Surfaced as a
+    *signal* (not a pick filter — the worst-mean picker already prefers
+    higher, i.e. less-saturated, dims, so a headroom filter on the pick
+    would never change the result) for the generator to consume: when the
+    target dim is saturated, the generator must produce HARDER, subtler
+    seeds (the frontier-selection lever) rather than expecting a
+    floor-pinned dim to move. Returns the saturated operational dims,
+    worst-first, for an explanatory prompt.
+    """
+    if not snapshot.dim_means:
+        return []
+    operational = _operational_dim_set()
+    candidates = {
+        d: v
+        for d, v in snapshot.dim_means.items()
+        if (not operational or d in operational) and v <= _HEADROOM_FLOOR
+    }
+    return sorted(candidates, key=lambda d: (-candidates[d], d))
+
+
+def has_measurable_headroom(snapshot: BaselineSnapshot) -> bool:
+    """True when at least one operational dim is above the saturation floor.
+
+    P0-2. When this is False the whole baseline is saturated — no dim
+    choice can produce a discriminating cycle, so the loop must lean on
+    harder seeds (frontier survivor selection) instead of dim targeting.
+    """
+    if not snapshot.dim_means:
+        return False
+    operational = _operational_dim_set()
+    return any(
+        v > _HEADROOM_FLOOR
+        for d, v in snapshot.dim_means.items()
+        if not operational or d in operational
+    )
+
+
 def pick_regression_target_dim(
     snapshot: BaselineSnapshot,
     *,
@@ -277,6 +330,13 @@ def pick_regression_target_dim(
     largest mean is the one the next round of seed-generation should
     attack hardest. Ties on value break alphabetically for stable
     selection across reruns.
+
+    Because the picker already prefers the *highest* mean — i.e. the
+    least-saturated dim — a headroom filter on the pick is a no-op (a
+    floor dim can only be the max when every dim is at the floor). The
+    saturation signal therefore lives in :func:`saturated_dims` /
+    :func:`has_measurable_headroom` for the generator to act on, not in
+    this picker. (P0-2, 2026-06-11.)
 
     ``prefer_critical=True`` (default) prioritises a critical-tier dim
     when one exists with a mean above the highest auxiliary mean,
