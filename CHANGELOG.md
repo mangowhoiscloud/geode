@@ -45,6 +45,11 @@ functional change.
 
 ---
 
+## [0.99.177] - 2026-06-11
+
+### Fixed
+- **Tool-call lines rendered with ragged indentation** (operator-reported: some `✓ tool` lines indented ~16 columns, others 2). `ToolCallTracker._redraw` moved the cursor up with `\033[{n}A` (preserves the column) and cleared each line with `\033[2K` (does not move the cursor), so when a prior writer — the activity spinner, the thinking region, or an interleaved stream — left the cursor mid-line, the `  ✓ name` text printed at that stale column. Every rendered tool line now starts with `\r` to paint from column 0 (matching what `suspend()` already did). Guards: `tests/core/ui/test_tool_tracker_indent.py` (2).
+
 ## [0.99.176] - 2026-06-11
 
 ### Fixed
