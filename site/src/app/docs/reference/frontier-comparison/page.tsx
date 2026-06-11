@@ -73,8 +73,8 @@ export default function Page() {
                 </tr>
                 <tr>
                   <td>메모리</td>
-                  <td>bash 세션 + <code>~/.claude</code></td>
-                  <td>없음</td>
+                  <td>CLAUDE.md 계층 + auto memory (<code>~/.claude</code>)</td>
+                  <td>AGENTS.md 계층 + memories 파이프라인</td>
                   <td>채널별 저장소</td>
                   <td>persistent + skill 카탈로그</td>
                   <td><code>program.md</code></td>
@@ -91,8 +91,8 @@ export default function Page() {
                 </tr>
                 <tr>
                   <td>자동화 트리거</td>
-                  <td>훅 (수동)</td>
-                  <td>없음</td>
+                  <td>훅 + scheduled cloud agents</td>
+                  <td>lifecycle 훅 (cron 없음)</td>
                   <td>cron + standing order</td>
                   <td>skill auto-generate</td>
                   <td>overnight 루프</td>
@@ -100,9 +100,9 @@ export default function Page() {
                 </tr>
                 <tr>
                   <td>멀티 LLM</td>
-                  <td>Anthropic only</td>
-                  <td>OpenAI only</td>
-                  <td>8+ providers</td>
+                  <td>Anthropic 모델 전용 (API/Bedrock/Vertex 백엔드)</td>
+                  <td>OpenAI 중심 + <code>model_providers</code> 확장 (Bedrock 포함)</td>
+                  <td>9개 model API 계열</td>
                   <td>Anthropic-centric</td>
                   <td>(single)</td>
                   <td>3-프로바이더 라우팅 (Anthropic / OpenAI+Codex / GLM), PAYG·OAuth·CLI 어댑터 레인</td>
@@ -110,15 +110,15 @@ export default function Page() {
                 <tr>
                   <td>서브에이전트</td>
                   <td>Task tool</td>
-                  <td>없음</td>
-                  <td>plugin</td>
+                  <td>thread fork (<code>spawn_subagent</code>)</td>
                   <td>spawn + announce</td>
+                  <td>delegate 병렬 spawn</td>
                   <td>없음</td>
                   <td>차용. Task tool + OpenClaw Spawn+Announce (<code>core/agent/sub_agent.py</code>)</td>
                 </tr>
                 <tr>
                   <td>샌드박스</td>
-                  <td>없음</td>
+                  <td>bash 샌드박스 (opt-in)</td>
                   <td>OS 수준</td>
                   <td>gateway 격리</td>
                   <td>없음</td>
@@ -141,8 +141,10 @@ export default function Page() {
                 <strong>MCP 양방향</strong>. <code>core/mcp/</code>가 외부 MCP
                 서버를 붙이는 클라이언트이고, <code>geode-mcp</code>
                 (<code>core/mcp_server.py</code>)가 GEODE 자체를 외부 호스트의
-                도구로 노출하는 1급 서버입니다. 비교 대상 중 같은 런타임이 양
-                방향을 모두 출하하는 시스템은 없습니다.
+                도구로 노출하는 1급 서버입니다. Codex CLI도 양방향을
+                출하합니다(mcp-server + mcp_servers). 차이는 GEODE가
+                자기개선 루프 상태(<code>self_improving_*</code>)까지 도구로
+                노출한다는 점입니다.
               </li>
               <li>
                 <strong>폴백 없는 기본값</strong>. <code>[model.fallbacks]</code>의
@@ -163,10 +165,10 @@ export default function Page() {
             <table>
               <thead><tr><th>축</th><th>GEODE</th><th>Hermes</th><th>OpenClaw</th><th>Claude Code</th></tr></thead>
               <tbody>
-                <tr><td>소스 위치</td><td><code>core/llm/prompts/*.md</code> (외부 markdown)</td><td><code>agent/prompt_builder.py</code> (Python const)</td><td><code>src/agents/system-prompt.ts</code> (TS const)</td><td><code>constants/prompts.ts</code> (TS const)</td></tr>
+                <tr><td>소스 위치</td><td><code>core/llm/prompts/*.md</code> (외부 markdown)</td><td><code>agent/prompt_builder.py</code> (Python const)</td><td><code>src/agents/system-prompt.ts</code> (TS const)</td><td><code>src/core/system-prompt.ts</code> (TS 조립)</td></tr>
                 <tr><td>빌드 시점</td><td>모듈 임포트 시 해시, 턴마다 조립</td><td>세션 시작 (캐시)</td><td>호출별 모듈식</td><td>턴별 동적</td></tr>
-                <tr><td>사용자 메모리</td><td>5-tier <code>~/.geode/memory/</code></td><td>Frozen JSON 스냅샷</td><td>Workspace HEARTBEAT.md</td><td>CLAUDE.md (4계층)</td></tr>
-                <tr><td>스킬 포맷</td><td>Markdown 블록 (<code>{`{skill_context}`}</code>, <code>core/agent/loop/_context.py</code>)</td><td>XML <code>&lt;available_skills&gt;</code></td><td>XML <code>&lt;available_skills&gt;</code></td><td>XML 레지스트리</td></tr>
+                <tr><td>사용자 메모리</td><td>5-tier <code>~/.geode/memory/</code></td><td>Frozen JSON 스냅샷</td><td>Workspace HEARTBEAT.md</td><td>CLAUDE.md 4계층 + auto MEMORY.md</td></tr>
+                <tr><td>스킬 포맷</td><td>Markdown 블록 (<code>{`{skill_context}`}</code>, <code>core/agent/loop/_context.py</code>)</td><td>XML <code>&lt;available_skills&gt;</code></td><td>XML <code>&lt;available_skills&gt;</code></td><td>SKILL.md markdown + JSON manifest</td></tr>
               </tbody>
             </table>
 
@@ -174,9 +176,9 @@ export default function Page() {
             <table>
               <thead><tr><th>축</th><th>GEODE</th><th>Hermes</th><th>OpenClaw</th><th>Claude Code</th></tr></thead>
               <tbody>
-                <tr><td>알고리즘</td><td>SHA-256[:12]</td><td>없음</td><td>SHA-256 (전체)</td><td>SHA-256[:3]</td></tr>
-                <tr><td>핀 / CI 게이트</td><td><strong>예</strong>. <code>_PINNED_HASHES</code> + <code>verify_prompt_integrity</code> (<code>core/llm/prompts/__init__.py</code>)</td><td>없음</td><td>탐지만</td><td>없음 (attribution만)</td></tr>
-                <tr><td>정규화</td><td>UTF-8 / json sort_keys</td><td>mtime + size manifest</td><td>CRLF strip + sort + lowercase</td><td>(model, toolNames, sysLen) tuple</td></tr>
+                <tr><td>알고리즘</td><td>SHA-256[:12]</td><td>없음</td><td>SHA-256 (전체)</td><td>없음 (소스에서 미확인)</td></tr>
+                <tr><td>핀 / CI 게이트</td><td><strong>예</strong>. <code>_PINNED_HASHES</code> + <code>verify_prompt_integrity</code> (<code>core/llm/prompts/__init__.py</code>)</td><td>없음</td><td>탐지만</td><td>없음</td></tr>
+                <tr><td>정규화</td><td>UTF-8 / json sort_keys</td><td>mtime + size manifest</td><td>CRLF strip + sort + lowercase</td><td>해당 없음</td></tr>
               </tbody>
             </table>
 
@@ -184,8 +186,8 @@ export default function Page() {
             <table>
               <thead><tr><th>축</th><th>GEODE</th><th>Hermes</th><th>OpenClaw</th><th>Claude Code</th></tr></thead>
               <tbody>
-                <tr><td>Anthropic ephemeral</td><td>예. static/dynamic 경계 분할</td><td>예. system_and_3</td><td>예. 경계 마커</td><td>예. global/org scope</td></tr>
-                <tr><td>경계 마커</td><td><code>PROMPT_CACHE_BOUNDARY</code> = <code>&lt;dynamic_context&gt;</code> (<code>core/agent/system_prompt.py</code>)</td><td>없음</td><td><code>&lt;!-- OPENCLAW_CACHE_BOUNDARY --&gt;</code></td><td><code>__SYSTEM_PROMPT_DYNAMIC_BOUNDARY__</code></td></tr>
+                <tr><td>Anthropic ephemeral</td><td>예. static/dynamic 경계 분할</td><td>예. system_and_3</td><td>예. 경계 마커</td><td>예</td></tr>
+                <tr><td>경계 마커</td><td><code>PROMPT_CACHE_BOUNDARY</code> = <code>&lt;dynamic_context&gt;</code> (<code>core/agent/system_prompt.py</code>)</td><td>없음</td><td><code>&lt;!-- OPENCLAW_CACHE_BOUNDARY --&gt;</code></td><td><code>SYSTEM_PROMPT_DYNAMIC_BOUNDARY</code></td></tr>
                 <tr><td>메시지 히스토리 캐시</td><td>예. 최근 user 메시지 rolling breakpoint (<code>apply_messages_cache_control</code>, <code>core/llm/providers/anthropic.py</code>)</td><td>예. 직전 3</td><td>예. 직전 user 메시지</td><td>예. 직전 user 블록</td></tr>
               </tbody>
             </table>
@@ -200,8 +202,8 @@ export default function Page() {
             <table>
               <thead><tr><th>축</th><th>GEODE</th><th>Hermes</th><th>OpenClaw</th><th>Claude Code</th></tr></thead>
               <tbody>
-                <tr><td>주 채널</td><td><code>PROMPT_ASSEMBLED</code> 훅 payload (<code>core/agent/loop/agent_loop.py</code>)</td><td>60자 preview 로그</td><td><code>cache-trace.ts</code> JSONL</td><td><code>logEvent(&apos;tengu_*&apos;)</code> 텔레메트리</td></tr>
-                <tr><td>외부 트레이싱</td><td>OTLP optional (<code>core/observability/otel_export.py</code>)</td><td>없음</td><td>자체 JSONL</td><td>자체 텔레메트리</td></tr>
+                <tr><td>주 채널</td><td><code>PROMPT_ASSEMBLED</code> 훅 payload (<code>core/agent/loop/agent_loop.py</code>)</td><td>툴 라인 preview 로그 (가변 길이)</td><td><code>cache-trace.ts</code> JSONL</td><td><code>logEvent(&apos;tengu_*&apos;)</code> 텔레메트리</td></tr>
+                <tr><td>외부 트레이싱</td><td>OTLP optional (<code>core/observability/otel_export.py</code>)</td><td>Langfuse 플러그인</td><td>자체 JSONL</td><td>자체 텔레메트리</td></tr>
               </tbody>
             </table>
 
@@ -209,7 +211,7 @@ export default function Page() {
             <table>
               <thead><tr><th>축</th><th>GEODE</th><th>Hermes</th><th>OpenClaw</th><th>Claude Code</th></tr></thead>
               <tbody>
-                <tr><td>프롬프트 인젝션 스캔</td><td>없음 (열린 GAP)</td><td><strong>11 패턴</strong> + invisible Unicode</td><td>경로 / URL 정화</td><td>사용자 의도 신뢰</td></tr>
+                <tr><td>프롬프트 인젝션 스캔</td><td>없음 (열린 GAP)</td><td>10 패턴 + invisible Unicode 10종</td><td>경로 / URL 정화</td><td>사용자 의도 신뢰</td></tr>
                 <tr><td>오버라이드 정책</td><td>append-only (호출자 <code>system_suffix</code>)</td><td>append-only</td><td>append-only</td><td>우선순위 체인</td></tr>
               </tbody>
             </table>
@@ -293,8 +295,8 @@ export default function Page() {
                 </tr>
                 <tr>
                   <td>Memory</td>
-                  <td>bash session + <code>~/.claude</code></td>
-                  <td>none</td>
+                  <td>CLAUDE.md hierarchy + auto memory (<code>~/.claude</code>)</td>
+                  <td>hierarchical AGENTS.md + memories pipeline</td>
                   <td>per-channel store</td>
                   <td>persistent + skill catalog</td>
                   <td><code>program.md</code></td>
@@ -311,8 +313,8 @@ export default function Page() {
                 </tr>
                 <tr>
                   <td>Automation trigger</td>
-                  <td>hooks (manual)</td>
-                  <td>none</td>
+                  <td>hooks + scheduled cloud agents</td>
+                  <td>lifecycle hooks (no cron)</td>
                   <td>cron + standing orders</td>
                   <td>skill auto-generate</td>
                   <td>overnight loop</td>
@@ -320,9 +322,9 @@ export default function Page() {
                 </tr>
                 <tr>
                   <td>Multi-LLM</td>
-                  <td>Anthropic only</td>
-                  <td>OpenAI only</td>
-                  <td>8+ providers</td>
+                  <td>Anthropic models only (API/Bedrock/Vertex backends)</td>
+                  <td>OpenAI-first + <code>model_providers</code> extension (incl. Bedrock)</td>
+                  <td>9 model API families</td>
                   <td>Anthropic-centric</td>
                   <td>(single)</td>
                   <td>3-provider routing (Anthropic / OpenAI+Codex / GLM) with PAYG, OAuth, and CLI adapter lanes</td>
@@ -330,15 +332,15 @@ export default function Page() {
                 <tr>
                   <td>Sub-agent</td>
                   <td>Task tool</td>
-                  <td>none</td>
-                  <td>plugin</td>
+                  <td>thread fork (<code>spawn_subagent</code>)</td>
                   <td>spawn + announce</td>
+                  <td>parallel delegate spawn</td>
                   <td>none</td>
                   <td>Borrowed: Task tool + OpenClaw Spawn+Announce (<code>core/agent/sub_agent.py</code>)</td>
                 </tr>
                 <tr>
                   <td>Sandbox</td>
-                  <td>none</td>
+                  <td>bash sandbox (opt-in)</td>
                   <td>OS-level</td>
                   <td>gateway isolation</td>
                   <td>none</td>
@@ -363,8 +365,10 @@ export default function Page() {
                 is the client that attaches external MCP servers, and{" "}
                 <code>geode-mcp</code> (<code>core/mcp_server.py</code>) is the
                 first-class server that exposes GEODE itself as a tool to
-                external hosts. None of the compared systems ships both
-                directions from one runtime.
+                external hosts. Codex CLI also ships both directions
+                (mcp-server plus mcp_servers); the difference is that GEODE
+                additionally exposes self-improving loop state
+                (<code>self_improving_*</code>) as tools.
               </li>
               <li>
                 <strong>No-fallback default</strong>.{" "}
@@ -387,10 +391,10 @@ export default function Page() {
             <table>
               <thead><tr><th>Axis</th><th>GEODE</th><th>Hermes</th><th>OpenClaw</th><th>Claude Code</th></tr></thead>
               <tbody>
-                <tr><td>Source location</td><td><code>core/llm/prompts/*.md</code> (external markdown)</td><td><code>agent/prompt_builder.py</code> (Python const)</td><td><code>src/agents/system-prompt.ts</code> (TS const)</td><td><code>constants/prompts.ts</code> (TS const)</td></tr>
+                <tr><td>Source location</td><td><code>core/llm/prompts/*.md</code> (external markdown)</td><td><code>agent/prompt_builder.py</code> (Python const)</td><td><code>src/agents/system-prompt.ts</code> (TS const)</td><td><code>src/core/system-prompt.ts</code> (TS assembly)</td></tr>
                 <tr><td>Build time</td><td>Hashed at module import, assembled per turn</td><td>Session start (cached)</td><td>Per-call modular</td><td>Per-turn dynamic</td></tr>
-                <tr><td>User memory</td><td>5-tier <code>~/.geode/memory/</code></td><td>Frozen JSON snapshot</td><td>Workspace HEARTBEAT.md</td><td>CLAUDE.md (4-tier)</td></tr>
-                <tr><td>Skill format</td><td>Markdown block (<code>{`{skill_context}`}</code> in <code>core/agent/loop/_context.py</code>)</td><td>XML <code>&lt;available_skills&gt;</code></td><td>XML <code>&lt;available_skills&gt;</code></td><td>XML registry</td></tr>
+                <tr><td>User memory</td><td>5-tier <code>~/.geode/memory/</code></td><td>Frozen JSON snapshot</td><td>Workspace HEARTBEAT.md</td><td>CLAUDE.md 4-tier + auto MEMORY.md</td></tr>
+                <tr><td>Skill format</td><td>Markdown block (<code>{`{skill_context}`}</code> in <code>core/agent/loop/_context.py</code>)</td><td>XML <code>&lt;available_skills&gt;</code></td><td>XML <code>&lt;available_skills&gt;</code></td><td>SKILL.md markdown + JSON manifest</td></tr>
               </tbody>
             </table>
 
@@ -398,9 +402,9 @@ export default function Page() {
             <table>
               <thead><tr><th>Axis</th><th>GEODE</th><th>Hermes</th><th>OpenClaw</th><th>Claude Code</th></tr></thead>
               <tbody>
-                <tr><td>Algorithm</td><td>SHA-256[:12]</td><td>None</td><td>SHA-256 (full)</td><td>SHA-256[:3]</td></tr>
-                <tr><td>Pin / CI gate</td><td><strong>Yes</strong>: <code>_PINNED_HASHES</code> + <code>verify_prompt_integrity</code> (<code>core/llm/prompts/__init__.py</code>)</td><td>None</td><td>Detection only</td><td>None (attribution only)</td></tr>
-                <tr><td>Normalization</td><td>UTF-8 / json sort_keys</td><td>mtime + size manifest</td><td>CRLF strip + sort + lowercase</td><td>(model, toolNames, sysLen) tuple</td></tr>
+                <tr><td>Algorithm</td><td>SHA-256[:12]</td><td>None</td><td>SHA-256 (full)</td><td>None (not found in source)</td></tr>
+                <tr><td>Pin / CI gate</td><td><strong>Yes</strong>: <code>_PINNED_HASHES</code> + <code>verify_prompt_integrity</code> (<code>core/llm/prompts/__init__.py</code>)</td><td>None</td><td>Detection only</td><td>None</td></tr>
+                <tr><td>Normalization</td><td>UTF-8 / json sort_keys</td><td>mtime + size manifest</td><td>CRLF strip + sort + lowercase</td><td>n/a</td></tr>
               </tbody>
             </table>
 
@@ -408,8 +412,8 @@ export default function Page() {
             <table>
               <thead><tr><th>Axis</th><th>GEODE</th><th>Hermes</th><th>OpenClaw</th><th>Claude Code</th></tr></thead>
               <tbody>
-                <tr><td>Anthropic ephemeral</td><td>Yes: static/dynamic boundary split</td><td>Yes: system_and_3</td><td>Yes: boundary marker</td><td>Yes: global/org scope</td></tr>
-                <tr><td>Boundary marker</td><td><code>PROMPT_CACHE_BOUNDARY</code> = <code>&lt;dynamic_context&gt;</code> (<code>core/agent/system_prompt.py</code>)</td><td>None</td><td><code>&lt;!-- OPENCLAW_CACHE_BOUNDARY --&gt;</code></td><td><code>__SYSTEM_PROMPT_DYNAMIC_BOUNDARY__</code></td></tr>
+                <tr><td>Anthropic ephemeral</td><td>Yes: static/dynamic boundary split</td><td>Yes: system_and_3</td><td>Yes: boundary marker</td><td>Yes</td></tr>
+                <tr><td>Boundary marker</td><td><code>PROMPT_CACHE_BOUNDARY</code> = <code>&lt;dynamic_context&gt;</code> (<code>core/agent/system_prompt.py</code>)</td><td>None</td><td><code>&lt;!-- OPENCLAW_CACHE_BOUNDARY --&gt;</code></td><td><code>SYSTEM_PROMPT_DYNAMIC_BOUNDARY</code></td></tr>
                 <tr><td>Messages history cache</td><td>Yes: rolling breakpoints on recent user messages (<code>apply_messages_cache_control</code>, <code>core/llm/providers/anthropic.py</code>)</td><td>Yes: last 3</td><td>Yes: last user message</td><td>Yes: last user blocks</td></tr>
               </tbody>
             </table>
@@ -424,8 +428,8 @@ export default function Page() {
             <table>
               <thead><tr><th>Axis</th><th>GEODE</th><th>Hermes</th><th>OpenClaw</th><th>Claude Code</th></tr></thead>
               <tbody>
-                <tr><td>Primary channel</td><td><code>PROMPT_ASSEMBLED</code> hook payload (<code>core/agent/loop/agent_loop.py</code>)</td><td>60-char preview log</td><td><code>cache-trace.ts</code> JSONL</td><td><code>logEvent(&apos;tengu_*&apos;)</code> telemetry</td></tr>
-                <tr><td>External tracing</td><td>Optional OTLP (<code>core/observability/otel_export.py</code>)</td><td>None</td><td>Self JSONL</td><td>Self telemetry</td></tr>
+                <tr><td>Primary channel</td><td><code>PROMPT_ASSEMBLED</code> hook payload (<code>core/agent/loop/agent_loop.py</code>)</td><td>per-tool preview log (variable length)</td><td><code>cache-trace.ts</code> JSONL</td><td><code>logEvent(&apos;tengu_*&apos;)</code> telemetry</td></tr>
+                <tr><td>External tracing</td><td>Optional OTLP (<code>core/observability/otel_export.py</code>)</td><td>Langfuse plugin</td><td>Self JSONL</td><td>Self telemetry</td></tr>
               </tbody>
             </table>
 
@@ -433,7 +437,7 @@ export default function Page() {
             <table>
               <thead><tr><th>Axis</th><th>GEODE</th><th>Hermes</th><th>OpenClaw</th><th>Claude Code</th></tr></thead>
               <tbody>
-                <tr><td>Prompt-injection scan</td><td>None (open GAP)</td><td><strong>11 patterns</strong> + invisible Unicode</td><td>Path/URL sanitization</td><td>Trusts user intent</td></tr>
+                <tr><td>Prompt-injection scan</td><td>None (open GAP)</td><td>10 patterns + 10 invisible Unicode chars</td><td>Path/URL sanitization</td><td>Trusts user intent</td></tr>
                 <tr><td>Override policy</td><td>Append-only (caller <code>system_suffix</code>)</td><td>Append-only</td><td>Append-only</td><td>Priority chain</td></tr>
               </tbody>
             </table>
