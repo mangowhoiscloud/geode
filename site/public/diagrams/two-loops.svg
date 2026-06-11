@@ -1,0 +1,91 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 412" role="img" aria-label="The two loops: the outer selection loop (mutate, audit, fitness, margin gate) beside the inner agentic loop (call LLM, run tools, observe), connected by the scaffold and the transcript">
+  <!-- Hand-authored signature SVG. Tokens: site/DESIGN.md section 2 (Axolotl Rose).
+       Rose #F49BC4 = outer selection loop, aqua #7FD8E8 = inner agentic loop,
+       gold #FFD66B = the promote edge only. Canon vocabulary (CONTENT-CANON.md section 2). -->
+  <style>
+    text { font-family: "Fira Code", ui-monospace, SFMono-Regular, Menlo, monospace; }
+    .node { fill: #14121B; stroke: rgba(244,155,196,0.45); stroke-width: 1.2; }
+    .name { font-size: 17px; fill: #F2EEF5; }
+    .sub { font-size: 15px; fill: #ABA4BC; }
+    .edge-rose { stroke: #F49BC4; stroke-width: 1.6; fill: none; }
+    .edge-gold { stroke: #FFD66B; stroke-width: 1.8; fill: none; }
+    .edge-aqua { stroke: #7FD8E8; stroke-width: 1.6; fill: none; }
+    .edge-data { stroke: #ABA4BC; stroke-width: 1.4; fill: none; stroke-dasharray: 5 4; }
+    .lbl { font-size: 15px; fill: #ABA4BC; }
+    .lbl-gold { font-size: 15px; fill: #FFD66B; }
+    .lbl-rose { font-size: 15px; fill: #F49BC4; }
+    .lbl-aqua { font-size: 15px; fill: #7FD8E8; }
+    .inner-node { fill: #0B0A10; stroke: rgba(127,216,232,0.55); stroke-width: 1.2; }
+  </style>
+  <defs>
+    <marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#F49BC4"/>
+    </marker>
+    <marker id="ag" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#FFD66B"/>
+    </marker>
+    <marker id="aa" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#7FD8E8"/>
+    </marker>
+    <marker id="ad" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#ABA4BC"/>
+    </marker>
+  </defs>
+
+  <!-- outer selection loop (rose), ring of four nodes on the left -->
+  <text class="lbl-rose" x="30" y="24">outer selection loop · occasional, operator-run</text>
+
+  <rect class="node" x="30" y="40" width="200" height="52" rx="6"/>
+  <text class="name" x="130" y="62" text-anchor="middle">mutate</text>
+  <text class="sub" x="130" y="82" text-anchor="middle">one scaffold section</text>
+
+  <rect class="node" x="260" y="40" width="190" height="52" rx="6"/>
+  <text class="name" x="355" y="62" text-anchor="middle">Petri audit</text>
+  <text class="sub" x="355" y="82" text-anchor="middle">22-dim judge</text>
+
+  <rect class="node" x="260" y="150" width="190" height="52" rx="6"/>
+  <text class="name" x="355" y="172" text-anchor="middle">fitness scalar</text>
+  <text class="sub" x="355" y="192" text-anchor="middle">18-dim universe</text>
+
+  <rect class="node" x="30" y="150" width="200" height="52" rx="6"/>
+  <text class="name" x="130" y="172" text-anchor="middle">margin gate</text>
+  <text class="sub" x="130" y="192" text-anchor="middle">gain vs uncertainty</text>
+
+  <!-- ring edges: mutate -> audit -> fitness -> gate -> (promote | revert) -> mutate -->
+  <path class="edge-rose" d="M230,66 L256,66" marker-end="url(#ar)"/>
+  <path class="edge-rose" d="M355,92 L355,146" marker-end="url(#ar)"/>
+  <path class="edge-rose" d="M260,176 L234,176" marker-end="url(#ar)"/>
+  <path class="edge-gold" d="M110,150 L110,96" marker-end="url(#ag)"/>
+  <text class="lbl-gold" x="100" y="128" text-anchor="end">promote</text>
+  <path class="edge-rose" d="M150,150 L150,96" marker-end="url(#ar)"/>
+  <text class="lbl" x="158" y="128">revert</text>
+
+  <!-- champion chain strip, fed by the gate -->
+  <path class="edge-rose" d="M130,202 L130,248" marker-end="url(#ar)"/>
+  <rect class="node" x="30" y="252" width="420" height="46" rx="6"/>
+  <text class="sub" x="240" y="281" text-anchor="middle">git champion chain · promoted scaffolds only</text>
+
+  <!-- inner agentic loop (aqua) on the right -->
+  <rect x="500" y="130" width="360" height="250" rx="8" fill="#14121B" stroke="#7FD8E8" stroke-width="1.4"/>
+  <text class="lbl-aqua" x="520" y="160">inner agentic loop · every request</text>
+
+  <rect class="inner-node" x="530" y="190" width="130" height="44" rx="5"/>
+  <text class="name" x="595" y="217" text-anchor="middle">call LLM</text>
+
+  <rect class="inner-node" x="700" y="190" width="130" height="44" rx="5"/>
+  <text class="name" x="765" y="217" text-anchor="middle">run tools</text>
+
+  <rect class="inner-node" x="615" y="300" width="130" height="44" rx="5"/>
+  <text class="name" x="680" y="327" text-anchor="middle">observe</text>
+
+  <path class="edge-aqua" d="M660,212 L696,212" marker-end="url(#aa)"/>
+  <path class="edge-aqua" d="M765,234 L765,322 L749,322" marker-end="url(#aa)"/>
+  <path class="edge-aqua" d="M615,322 L595,322 L595,238" marker-end="url(#aa)"/>
+
+  <!-- data hand-offs between the loops (neutral, dashed) -->
+  <path class="edge-data" d="M240,298 L240,332 L496,332" marker-end="url(#ad)"/>
+  <text class="lbl" x="365" y="324" text-anchor="middle">scaffold</text>
+
+  <path class="edge-data" d="M500,166 L460,166 L460,66 L454,66" marker-end="url(#ad)"/>
+  <text class="lbl" x="468" y="118">transcript</text>
+</svg>

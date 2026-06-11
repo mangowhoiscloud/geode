@@ -97,19 +97,13 @@ export default function Page() {
               만들고, 바깥쪽 루프는 그것을 감사로 읽어 스캐폴드를 바꿉니다.
               바뀐 스캐폴드는 다음 번 안쪽 루프가 행동하는 방식을 바꿉니다.
             </p>
-            <pre>{`outer loop  (occasional, operator-run)
-  mutate scaffold -> Petri audit -> fitness -> margin gate
-        -> promote / revert  (lineage: git champion chain)
-     ^                |
-     |                v  (new scaffold)
-  +-------------------------------------------+
-  |  inner loop  (every request)              |
-  |    call LLM -> run tools -> observe -> ...|
-  |    produces: answer + transcript          |
-  +-------------------------------------------+
-     |                                    ^
-     +-- transcript ----------------------+
-         (read by the outer loop's audit)`}</pre>
+            <figure>
+              <img
+                src="/geode/diagrams/two-loops.svg"
+                alt="The outer selection loop (mutate, Petri audit, fitness, margin gate, champion chain) beside the inner agentic loop (call LLM, run tools, observe); the scaffold flows into the inner loop and transcripts flow back to the audit"
+              />
+              <figcaption>두 루프는 호출이 아니라 데이터로 맞물립니다. 스캐폴드는 안쪽으로, 트랜스크립트는 바깥쪽 감사로 흐릅니다.</figcaption>
+            </figure>
             <p>
               그래서 스캐폴드를 바꾸면 코드를 바꾸지 않아도 안쪽 루프의 행동이
               달라집니다. 스캐폴드는 안쪽 루프가 입는 옷이고, 바깥쪽 루프는 그
@@ -206,19 +200,13 @@ export default function Page() {
               changes the scaffold. The changed scaffold changes how the inner
               loop behaves next time.
             </p>
-            <pre>{`outer loop  (occasional, operator-run)
-  mutate scaffold -> Petri audit -> fitness -> margin gate
-        -> promote / revert  (lineage: git champion chain)
-     ^                |
-     |                v  (new scaffold)
-  +-------------------------------------------+
-  |  inner loop  (every request)              |
-  |    call LLM -> run tools -> observe -> ...|
-  |    produces: answer + transcript          |
-  +-------------------------------------------+
-     |                                    ^
-     +-- transcript ----------------------+
-         (read by the outer loop's audit)`}</pre>
+            <figure>
+              <img
+                src="/geode/diagrams/two-loops.svg"
+                alt="The outer selection loop (mutate, Petri audit, fitness, margin gate, champion chain) beside the inner agentic loop (call LLM, run tools, observe); the scaffold flows into the inner loop and transcripts flow back to the audit"
+              />
+              <figcaption>The loops interlock through data, not calls: the scaffold flows inward, transcripts flow back to the audit.</figcaption>
+            </figure>
             <p>
               That is why changing the scaffold changes the inner loop&apos;s
               behaviour without changing any code. The scaffold is what the inner

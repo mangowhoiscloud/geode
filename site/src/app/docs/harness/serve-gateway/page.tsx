@@ -22,16 +22,13 @@ export default function Page() {
             </p>
 
             <h2>동작 구조</h2>
-            <pre>{`Slack / Discord / Telegram
-        │  (poller가 주기적으로 끌어옴)
-        ▼
-ChannelManager (core/messaging/binding.py)
-        │  binding 일치? 아니면 무시
-        ▼
-LaneQueue: SessionLane → global lane
-        │  같은 세션은 직렬, 다른 세션은 병렬
-        ▼
-AgenticLoop (DAEMON 모드, run_bash / delegate_task 차단)`}</pre>
+            <figure>
+              <img
+                src="/geode/diagrams/gateway-routing.svg"
+                alt="Gateway routing: Slack, Discord, and Telegram pollers feed the ChannelManager binding match; unmatched messages are ignored, matched ones pass the LaneQueue into AgenticLoop in DAEMON mode"
+              />
+              <figcaption>binding에 일치한 메시지만 레인을 거쳐 루프에 닿습니다. 불일치는 무시됩니다.</figcaption>
+            </figure>
             <table>
               <thead>
                 <tr><th>구성 요소</th><th>역할</th><th>코드</th></tr>
@@ -158,16 +155,13 @@ require_mention = true`}</pre>
             </p>
 
             <h2>How it works</h2>
-            <pre>{`Slack / Discord / Telegram
-        │  (pollers pull on an interval)
-        ▼
-ChannelManager (core/messaging/binding.py)
-        │  binding match? otherwise ignored
-        ▼
-LaneQueue: SessionLane → global lane
-        │  same session serial, different sessions parallel
-        ▼
-AgenticLoop (DAEMON mode, run_bash / delegate_task denied)`}</pre>
+            <figure>
+              <img
+                src="/geode/diagrams/gateway-routing.svg"
+                alt="Gateway routing: Slack, Discord, and Telegram pollers feed the ChannelManager binding match; unmatched messages are ignored, matched ones pass the LaneQueue into AgenticLoop in DAEMON mode"
+              />
+              <figcaption>Only a message that matches a binding passes the lanes into the loop; the rest are ignored.</figcaption>
+            </figure>
             <table>
               <thead>
                 <tr><th>Component</th><th>Role</th><th>Code</th></tr>
