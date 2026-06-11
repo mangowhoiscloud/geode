@@ -168,7 +168,7 @@ export default function Page() {
                 <tr><td>소스 위치</td><td><code>core/llm/prompts/*.md</code> (외부 markdown)</td><td><code>agent/prompt_builder.py</code> (Python const)</td><td><code>src/agents/system-prompt.ts</code> (TS const)</td><td><code>src/core/system-prompt.ts</code> (TS 조립)</td></tr>
                 <tr><td>빌드 시점</td><td>모듈 임포트 시 해시, 턴마다 조립</td><td>세션 시작 (캐시)</td><td>호출별 모듈식</td><td>턴별 동적</td></tr>
                 <tr><td>사용자 메모리</td><td>5-tier <code>~/.geode/memory/</code></td><td>Frozen JSON 스냅샷</td><td>Workspace HEARTBEAT.md</td><td>CLAUDE.md 4계층 + auto MEMORY.md</td></tr>
-                <tr><td>스킬 포맷</td><td>Markdown 블록 (<code>{`{skill_context}`}</code>, <code>core/agent/loop/_context.py</code>)</td><td>XML <code>&lt;available_skills&gt;</code></td><td>XML <code>&lt;available_skills&gt;</code></td><td>SKILL.md markdown + JSON manifest</td></tr>
+                <tr><td>스킬 포맷</td><td>XML <code>&lt;available_skills&gt;</code> (<code>core/skills/skills.py</code>, <code>{`{skill_context}`}</code> 치환)</td><td>XML <code>&lt;available_skills&gt;</code></td><td>XML <code>&lt;available_skills&gt;</code></td><td>SKILL.md markdown + JSON manifest</td></tr>
               </tbody>
             </table>
 
@@ -394,7 +394,7 @@ export default function Page() {
                 <tr><td>Source location</td><td><code>core/llm/prompts/*.md</code> (external markdown)</td><td><code>agent/prompt_builder.py</code> (Python const)</td><td><code>src/agents/system-prompt.ts</code> (TS const)</td><td><code>src/core/system-prompt.ts</code> (TS assembly)</td></tr>
                 <tr><td>Build time</td><td>Hashed at module import, assembled per turn</td><td>Session start (cached)</td><td>Per-call modular</td><td>Per-turn dynamic</td></tr>
                 <tr><td>User memory</td><td>5-tier <code>~/.geode/memory/</code></td><td>Frozen JSON snapshot</td><td>Workspace HEARTBEAT.md</td><td>CLAUDE.md 4-tier + auto MEMORY.md</td></tr>
-                <tr><td>Skill format</td><td>Markdown block (<code>{`{skill_context}`}</code> in <code>core/agent/loop/_context.py</code>)</td><td>XML <code>&lt;available_skills&gt;</code></td><td>XML <code>&lt;available_skills&gt;</code></td><td>SKILL.md markdown + JSON manifest</td></tr>
+                <tr><td>Skill format</td><td>XML <code>&lt;available_skills&gt;</code> (<code>core/skills/skills.py</code>, substituted via <code>{`{skill_context}`}</code>)</td><td>XML <code>&lt;available_skills&gt;</code></td><td>XML <code>&lt;available_skills&gt;</code></td><td>SKILL.md markdown + JSON manifest</td></tr>
               </tbody>
             </table>
 
