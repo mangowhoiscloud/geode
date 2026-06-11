@@ -16,6 +16,7 @@ from core.llm.fallback import (
     retry_with_backoff_generic,
     retry_with_backoff_generic_async,
 )
+from core.llm.loop_affinity import LoopAffineClientCache
 from core.llm.model_capabilities import (
     ANTHROPIC_ADAPTIVE_MODELS,
     ANTHROPIC_CONTEXT_MGMT_MODELS,
@@ -149,8 +150,9 @@ def _build_httpx_limits() -> httpx.Limits:
 _sync_client: anthropic.Anthropic | None = None
 _sync_client_lock = threading.Lock()
 
-_async_client: anthropic.AsyncAnthropic | None = None
-_async_client_lock = threading.Lock()
+# PR-LOOP-POLLUTION-FIX (2026-06-12) — async client is per-event-loop, not
+# process-global (see core/llm/loop_affinity.py).
+_async_clients = LoopAffineClientCache("anthropic-provider")
 
 
 # ---------------------------------------------------------------------------
@@ -357,52 +359,57 @@ def get_anthropic_client() -> anthropic.Anthropic:
 
 
 def get_async_anthropic_client(api_key: str | None = None) -> anthropic.AsyncAnthropic:
-    """Return a singleton async Anthropic client with configured connection pool.
+    """Return the async Anthropic client bound to the CURRENT event loop.
 
-    Thread-safe. The client is created once and reused for all async LLM calls
-    (AgenticLoop, etc.), ensuring httpx connection pooling works effectively.
-    SDK-level retries are disabled (max_retries=0) to avoid conflict with
-    app-level retry logic.
+    PR-LOOP-POLLUTION-FIX (2026-06-12) — previously a process-global
+    singleton. The serve daemon runs multiple event loops (main serve loop
+    for gateway turns, CLIPoller thread loop for CLI sessions); httpx
+    connection-pool primitives bind to the loop that first drives them, so
+    one shared client poisoned the pool across loops (instant
+    APIConnectionError / eternal hang — see ``core/llm/loop_affinity.py``).
+    Now one client per owning loop; same key-resolution and pool settings.
+    SDK-level retries stay disabled (max_retries=0) — app-level retry
+    (AgenticLoop) and the dispatch connection-transient retry own that.
 
     Args:
         api_key: Optional API key override. If None, uses settings.
+        Note: the override only affects the loop that triggers the build
+        (same first-caller-wins semantics as the old singleton).
     """
     import anthropic
     import httpx
 
-    global _async_client
-    if _async_client is not None:
-        return _async_client
-    with _async_client_lock:
-        if _async_client is None:
-            key = api_key or _resolve_anthropic_key()
-            http_client = httpx.AsyncClient(
-                limits=_build_httpx_limits(),
-                timeout=_build_httpx_timeout(),
-                event_hooks={"response": [_async_response_hook]},
-            )
-            _async_client = anthropic.AsyncAnthropic(
-                api_key=key,
-                max_retries=0,  # app-level retry handles this
-                http_client=http_client,
-            )
-        return _async_client
+    def _build() -> anthropic.AsyncAnthropic:
+        key = api_key or _resolve_anthropic_key()
+        http_client = httpx.AsyncClient(
+            limits=_build_httpx_limits(),
+            timeout=_build_httpx_timeout(),
+            event_hooks={"response": [_async_response_hook]},
+        )
+        return anthropic.AsyncAnthropic(
+            api_key=key,
+            max_retries=0,  # app-level retry handles this
+            http_client=http_client,
+        )
+
+    client: anthropic.AsyncAnthropic = _async_clients.get(_build)
+    return client
 
 
 async def areset_clients() -> None:
-    """Close and reset singleton clients. Used in tests and on API key change."""
-    global _sync_client, _async_client
+    """Reset cached clients. Used in tests and on API key change.
+
+    Async clients are dropped (not closed) — ``aclose()`` requires each
+    client's owning event loop, which may not be the current one; GC
+    finalizers reclaim the sockets (see core/llm/loop_affinity.py).
+    """
+    global _sync_client
     with _sync_client_lock:
         if _sync_client is not None:
             with contextlib.suppress(Exception):
                 _sync_client.close()
             _sync_client = None
-    with _async_client_lock:
-        client = _async_client
-        _async_client = None
-    if client is not None:
-        with contextlib.suppress(Exception):
-            await client.close()
+    _async_clients.invalidate()
 
 
 def system_with_cache(system: str) -> list[TextBlockParam]:
@@ -708,8 +715,13 @@ class ClaudeAgenticAdapter:
             log.warning("No Anthropic API key for agentic loop")
             return None
 
-        if self._client is None:
-            self._client = get_async_anthropic_client(api_key)
+        # PR-LOOP-POLLUTION-FIX (2026-06-12) — resolve the client PER CALL
+        # so it is always the current event loop's client (the provider
+        # getter is loop-affine; an instance slot would re-pin the first
+        # loop's client across loops and reintroduce the pollution).
+        # ``self._client`` survives only as a test seam: when pre-seeded it
+        # wins; production code never assigns it.
+        client = self._client or get_async_anthropic_client(api_key)
 
         # PR-M4.4 (2026-05-21) — 4-slot in-context wiring. No-op fast
         # path inside ``apply_in_context_slots`` when no SoT is
@@ -742,10 +754,9 @@ class ClaudeAgenticAdapter:
         failover_models = [model] + [m for m in ANTHROPIC_FALLBACK_CHAIN if m != model]
 
         async def _do_call(m: str) -> Any:
-            # ``self._client`` is initialised right before this nested
-            # function in the outer scope (line 448-449); the assert
-            # localises the invariant for mypy across the closure.
-            assert self._client is not None
+            # ``client`` is resolved right before this nested function in
+            # the outer scope — loop-affine, current loop's instance.
+            assert client is not None
 
             # Server-side context management only for models that support it.
             # Haiku 4.5 rejects the compact beta → 400 misclassified as overflow.
@@ -902,7 +913,7 @@ class ClaudeAgenticAdapter:
             # ``anthropic.types.Message`` 를 반환 — ``messages.create`` 와
             # 동일 schema 이므로 ``normalize_anthropic`` / 회계 path 가
             # 변경 없이 작동. agentic 소비자 interface 불변.
-            async with self._client.messages.stream(**create_kwargs) as _stream:
+            async with client.messages.stream(**create_kwargs) as _stream:
                 return await _stream.get_final_message()
 
         try:

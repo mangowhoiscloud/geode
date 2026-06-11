@@ -464,6 +464,14 @@ class CLIPoller:
         log.info("CLI client connected (%d active)", active)
         try:
             await self._handle_client_async(reader, endpoint)
+        except (ConnectionResetError, BrokenPipeError) as exc:
+            # PR-LOOP-POLLUTION-FIX (2026-06-12) — the thin CLI's probe
+            # connection (capability handshake) disconnects abruptly; the
+            # session-handshake write then fails with ConnectionResetError.
+            # Expected client behaviour, not a daemon fault — pre-fix it
+            # surfaced as ``asyncio ERROR Unhandled exception in
+            # client_connected_cb`` noise on every CLI connect.
+            log.info("CLI client dropped during handshake/read (%s) — benign", type(exc).__name__)
         finally:
             with self._clients_lock:
                 self._active_clients.discard(endpoint)

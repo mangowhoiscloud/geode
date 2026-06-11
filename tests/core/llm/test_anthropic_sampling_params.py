@@ -58,7 +58,7 @@ def _run_agentic_call(model: str) -> dict[str, Any]:
     client.messages = MagicMock()
     client.messages.create = AsyncMock(side_effect=fake_create)
     client.messages.stream = MagicMock(side_effect=fake_stream)
-    adapter._client = client
+    adapter._client = client  # ClaudeAgenticAdapter test seam (pre-seeded client wins)
 
     async def fake_failover(models: list[str], do_call: Any) -> tuple[Any, str]:
         return await do_call(models[0]), models[0]

@@ -72,3 +72,23 @@ ANTHROPIC_XHIGH_MODELS: frozenset[str] = frozenset(
         "claude-opus-4-7",
     }
 )
+
+# Models documented to support the ``web_search_20260209`` server tool.
+# ref: https://platform.claude.com/docs/en/agents-and-tools/tool-use/web-search-tool
+# (verified 2026-06-12) — "The latest web search tool version
+# (web_search_20260209) supports dynamic filtering with Claude Fable 5,
+# Claude Opus 4.8, Claude Mythos 5, Claude Mythos Preview, Claude Opus 4.7,
+# Claude Opus 4.6, and Claude Sonnet 4.6." Mythos models are not in GEODE's
+# routing set and are intentionally omitted. A session model outside this
+# set escalates to ANTHROPIC_PRIMARY for the search call
+# (core/llm/adapters/_capability_impls.py:resolve_web_search_model) instead
+# of risking an undocumented model+tool pairing.
+ANTHROPIC_WEB_SEARCH_20260209_MODELS: frozenset[str] = frozenset(
+    {
+        "claude-fable-5",
+        "claude-opus-4-8",
+        "claude-opus-4-7",
+        "claude-opus-4-6",
+        "claude-sonnet-4-6",
+    }
+)

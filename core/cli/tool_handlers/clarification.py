@@ -15,8 +15,6 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
 
-from core.async_runtime import run_process_coroutine
-
 if TYPE_CHECKING:
     from core.tools.base import ToolContext
 
@@ -37,7 +35,7 @@ def _clarify(
     }
 
 
-def _safe_delegate(
+async def _safe_delegate(
     tool_class: type,
     kwargs: dict[str, Any],
     *,
@@ -50,6 +48,13 @@ def _safe_delegate(
     kwargs. Tools that consume LLM-identity (web_search and future
     LLM-backed tools) read ``kwargs.get("_tool_context")``; tools that do
     not care absorb the extra key through their ``**kwargs`` splat.
+
+    PR-LOOP-POLLUTION-FIX (2026-06-12) — now a coroutine awaited on the
+    session's event loop. The previous sync shape ran
+    ``run_process_coroutine(aexecute(...))`` from a ``to_thread`` worker —
+    one throwaway ``asyncio.Runner`` loop per tool call, which combined
+    with shared SDK clients to poison httpx connection pools (instant
+    APIConnectionError / eternal hang; see core/llm/loop_affinity.py).
     """
     try:
         tool = tool_class()
@@ -58,7 +63,7 @@ def _safe_delegate(
             raise TypeError(f"{tool_class.__name__} must implement aexecute()")
         if context is not None:
             kwargs["_tool_context"] = context
-        result: dict[str, Any] = run_process_coroutine(aexecute(**kwargs))
+        result: dict[str, Any] = await aexecute(**kwargs)
         return result
     except (KeyError, TypeError) as exc:
         param = str(exc).strip("'\"")

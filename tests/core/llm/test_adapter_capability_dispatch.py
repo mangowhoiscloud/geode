@@ -65,7 +65,9 @@ class _StubWebSearchAdapter:
         self.source = source
         self._mode = mode  # "ok" | "billing" | "transient"
 
-    async def aweb_search(self, query: str, *, max_results: int = 5) -> WebSearchResult:
+    async def aweb_search(
+        self, query: str, *, max_results: int = 5, model: str = ""
+    ) -> WebSearchResult:
         if self._mode == "billing":
             raise BillingError("stub billing", provider=self.provider, plan_display_name=self.name)
         if self._mode == "transient":

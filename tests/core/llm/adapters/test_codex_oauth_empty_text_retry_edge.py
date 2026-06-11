@@ -127,7 +127,7 @@ def test_acomplete_empty_response_no_schema_dumps_and_returns_empty(
     """
     client, capture = _build_mock_codex_client_empty_response()
     adapter = CodexOAuthAdapter()
-    adapter._client = client  # bypass _get_client OAuth probe
+    adapter._get_client = lambda: client  # type: ignore[method-assign] # bypass OAuth probe
 
     with patch("core.paths.GLOBAL_DIAGNOSTICS_DIR", tmp_path):
         result = asyncio.run(adapter.acomplete(_voter_req(schema=None)))
@@ -164,7 +164,7 @@ def test_acomplete_empty_response_with_schema_still_dumps(tmp_path: Path) -> Non
     """
     client, capture = _build_mock_codex_client_empty_response()
     adapter = CodexOAuthAdapter()
-    adapter._client = client
+    adapter._get_client = lambda: client  # type: ignore[method-assign]
 
     with patch("core.paths.GLOBAL_DIAGNOSTICS_DIR", tmp_path):
         result = asyncio.run(adapter.acomplete(_voter_req(schema=_VOTE_SCHEMA)))
@@ -214,7 +214,7 @@ def test_acomplete_non_empty_response_with_schema_no_dump(tmp_path: Path) -> Non
     client.responses.stream = MagicMock(side_effect=_create_stream)
 
     adapter = CodexOAuthAdapter()
-    adapter._client = client
+    adapter._get_client = lambda: client  # type: ignore[method-assign]
 
     with patch("core.paths.GLOBAL_DIAGNOSTICS_DIR", tmp_path):
         result = asyncio.run(adapter.acomplete(_voter_req(schema=_VOTE_SCHEMA)))

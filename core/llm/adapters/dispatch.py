@@ -435,6 +435,7 @@ async def web_search_via_adapters(
     max_results: int = 5,
     prefer_provider: str | None = None,
     prefer_source: str | None = None,
+    model: str = "",
 ) -> WebSearchResult:
     """Route a web-search request through the adapter registry, strictly
     using one adapter (no fallback chain).
@@ -443,6 +444,12 @@ async def web_search_via_adapters(
     ``prefer_provider`` / ``prefer_source`` flow from the AgenticLoop via
     :class:`core.tools.base.ToolContext` (PR-TOOL-EXEC-CONTEXT) — when
     set, the exact (provider, source) match is required.
+
+    ``model`` is the session's resolved model, forwarded to the adapter
+    as a routing HINT (PR-WEB-SEARCH-MODEL-HINT, 2026-06-12): Anthropic
+    adapters honour it when the model is in the documented
+    ``web_search_20260209`` support set and escalate to ANTHROPIC_PRIMARY
+    otherwise; other providers keep their provider primary.
     """
     capability = "supports_web_search"
     adapter = _select_adapter(
@@ -465,7 +472,9 @@ async def web_search_via_adapters(
     for try_no in range(_CONNECTION_TRANSIENT_RETRIES + 1):
         t0 = time.monotonic()
         try:
-            result: WebSearchResult = await adapter.aweb_search(query, max_results=max_results)
+            result: WebSearchResult = await adapter.aweb_search(
+                query, max_results=max_results, model=model
+            )
         except BillingError as exc:
             elapsed_ms = (time.monotonic() - t0) * 1000
             attempt = AdapterAttempt(

@@ -265,3 +265,28 @@ __all__ = [
     "openai_responses_complete_text",
     "openai_web_search",
 ]
+
+
+def resolve_web_search_model(requested: str) -> str:
+    """Pick the Anthropic model for a ``web_search_20260209`` call.
+
+    PR-WEB-SEARCH-MODEL-HINT (2026-06-12) — the session's resolved model
+    is honoured when it is in the documented support set
+    (``ANTHROPIC_WEB_SEARCH_20260209_MODELS``); anything else (empty hint,
+    non-Anthropic model on a mixed lane, unsupported Anthropic model)
+    escalates to ``ANTHROPIC_PRIMARY``. Previously the search model was
+    hardcoded to ANTHROPIC_PRIMARY regardless of the session model.
+    """
+    from core.config import ANTHROPIC_PRIMARY
+    from core.llm.model_capabilities import ANTHROPIC_WEB_SEARCH_20260209_MODELS
+
+    if requested in ANTHROPIC_WEB_SEARCH_20260209_MODELS:
+        return requested
+    if requested:
+        log.info(
+            "web_search: session model %r is outside the documented "
+            "web_search_20260209 support set — escalating to %s",
+            requested,
+            ANTHROPIC_PRIMARY,
+        )
+    return ANTHROPIC_PRIMARY

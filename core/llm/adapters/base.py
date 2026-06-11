@@ -402,7 +402,16 @@ class WebSearchCapable(Protocol):
     source: str
     supports_web_search: bool
 
-    async def aweb_search(self, query: str, *, max_results: int = 5) -> WebSearchResult: ...
+    # ``model`` is the SESSION's resolved model — a routing HINT, not a
+    # command (PR-WEB-SEARCH-MODEL-HINT, 2026-06-12). Anthropic adapters
+    # honour it when the model is in the documented
+    # ``web_search_20260209`` support set and escalate to
+    # ANTHROPIC_PRIMARY otherwise; non-Anthropic adapters currently keep
+    # their provider primary (their backend's per-model web_search
+    # support matrix is unverified — doc-before-behaviour, CLAUDE.md §4d).
+    async def aweb_search(
+        self, query: str, *, max_results: int = 5, model: str = ""
+    ) -> WebSearchResult: ...
 
 
 @runtime_checkable
