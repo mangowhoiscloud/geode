@@ -27,6 +27,7 @@
 
 <!-- Completed items. Keep recent 10, archive older ones. -->
 <!-- - [x] #issue-number — Short description (PR #N) -->
+- [x] stale-dim 할루시네이션 가드 — 시드/풀이 live taxonomy(AXIS_TIERS) 밖 dim 참조 시 assemble 시점 fail-closed(런타임 HALT보다 앞). 운영자 지시(캠페인 HALT 후). 인시던트=held-out redundant_tool_invocation stale. 가드 4종+CLAUDE.md CANNOT (PR #2185 → #2186, v0.99.181)
 - [x] dispatch transient-retry + 가드레일 — 장수 데몬의 오염된 pooled connection이 web_search/complete_text를 2-4ms 즉사시키던 건. 같은 adapter 1회 재시도(연결류 한정, PR-NO-FALLBACK 보존, billing 재시도 금지) + cause-chain 로깅 + 15-테스트 가드레일(병렬배치 회복·registry parity ratchet). Codex 3건 반영 (PR #2181 → #2182, v0.99.180)
 - [x] 시나리오 품질 P0 — frontier survivor selection(~50% R-Zero band) + saturation 신호 generator wire. self-improving 포화(critical 전부 1.0) 탈출 1차. Codex 검증(orphan 1건 수정). 효과측정=캠페인 variant 분산 (PR #2177 → #2178, v0.99.179)
 - [x] /model picker Cancelled — thin CLI가 profile 미하이드레이션→model_available 전부 False→blocked-Enter. ensure_profile_store로 hydrate (PR #2145, v0.99.176)
