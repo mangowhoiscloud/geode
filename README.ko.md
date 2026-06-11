@@ -383,7 +383,7 @@ frontier 하네스 (Claude Code, Codex CLI, OpenClaw) 옆에서 GEODE 가 어디
 | | Claude Code | Codex CLI | OpenClaw | **GEODE** |
 |---|---|---|---|---|
 | 상시 데몬 | ❌ per-invocation | ⚠️ opt-in `codex remote-control` | ✅✅ launchd / systemd 컨트롤 plane | ✅ `geode serve` 데몬 |
-| 네이티브 스케줄러 (cron) | ❌ (claude.ai 웹 전용) | ❌ (Codex Cloud Automations 전용 — [issue #8317](https://github.com/openai/codex/issues/8317)) | ✅ `cron add/edit/list` CLI | ✅ cron + 이벤트 트리거 |
+| 네이티브 스케줄러 (cron) | ⚠️ scheduled cloud agents (`/schedule`, 클라우드 실행) | ❌ (Codex Cloud Automations 전용 — [issue #8317](https://github.com/openai/codex/issues/8317)) | ✅ `cron add/edit/list` CLI | ✅ cron + 이벤트 트리거 |
 | Thin CLI ↔ 데몬 IPC | ❌ | ⚠️ remote-control 서버 모드 | ✅ Gateway / Agent 분리 | ✅ IPC 서버 |
 | Sub-agent 격리 | ✅ Agent 도구 + `run_in_background` | ✅ `multi_agent` 기능 | ✅✅ Lane Queue + Session bindings | ✅ Lane + depth / cost 가드 |
 | 세션 resume / fork | ✅ JSONL 트랜스크립트 | ✅ `/resume` + `/fork` 슬래시 커맨드 | ✅ Session bindings + TTL | ✅ session resume |
@@ -397,7 +397,7 @@ frontier 하네스 (Claude Code, Codex CLI, OpenClaw) 옆에서 GEODE 가 어디
 |---|---|---|---|---|
 | Slack | ❌ (MCP 플러그인 가능) | ⚠️ Codex Cloud 전용, CLI 는 미지원 | ✅ Socket Mode, first-class | ✅ Socket Mode, first-class |
 | Discord / Telegram / 기타 chat | ❌ | ❌ | ✅✅ 다수 채널 (Discord, Telegram, WhatsApp, Signal, iMessage, Teams, Matrix, Feishu, LINE, ...) | ✅ Discord + Telegram 폴러 |
-| IDE 플러그인 | ❌ (Chrome MCP 확장만) | ✅✅ VS Code · JetBrains · Cursor · Windsurf | ❌ | ❌ |
+| IDE 플러그인 | ✅ VS Code · JetBrains | ✅✅ VS Code · JetBrains · Cursor · Windsurf | ❌ | ❌ |
 | Web UI | ✅ claude.ai/code | ✅ Codex Cloud | ⚠️ WebChat 플러그인 | ❌ (문서 사이트만) |
 | MCP 서버 카탈로그 | ✅ first-class | ✅ first-class | ✅ first-class | ✅ Anthropic 배포 레지스트리 (`~/.geode/mcp/registry-cache.json` 캐시) |
 
@@ -421,11 +421,11 @@ frontier 하네스 (Claude Code, Codex CLI, OpenClaw) 옆에서 GEODE 가 어디
 
 | | Claude Code | Codex CLI | OpenClaw | **GEODE** |
 |---|---|---|---|---|
-| 메모리 tier | ⚠️ user / project / local 세팅 머지 | ✅ 계층적 AGENTS.md (전역 `~/.codex/` + repo + nested dirs) | ⚠️ 세션 범위 | ✅✅ **multi-tier** (SOUL · User · Org · Project · Session) |
+| 메모리 tier | ✅ CLAUDE.md 머지 + auto memory (`~/.claude/projects/*/memory`) | ✅ 계층적 AGENTS.md (전역 `~/.codex/` + repo + nested dirs) | ⚠️ 세션 범위 | ✅✅ **multi-tier** (SOUL · User · Org · Project · Session) |
 | 디스크 영구 plan | ✅ TodoWrite 영속화 | ⚠️ resumable 스레드 경유 | ✅ task registry | ✅ `.geode/plans.json` |
 | 권한 / 샌드박스 계층 | ✅ default / auto / bypass 모드 + Confirmation UI | ✅ `sandbox_mode` (read-only / workspace-write / danger-full-access) | ✅✅ Policy Chain, 다수 감사 표면 | ✅ Policy Chain + 도구 게이트 |
 | 다중 계층 가드레일 | ⚠️ 권한 + hooks | ⚠️ hooks + 샌드박스 | ✅ `audit.runtime` 엔진 | ✅✅ **코어 검증** (G1-G4 + Cross-LLM Krippendorff α ≥ 0.67 + Rights Risk, 편향/캘리브레이션용 플러그인 확장점) |
-| Hook 이벤트 | ⚠️ PreToolUse / PostToolUse / SessionStart / Notification / ConfigChange | ⚠️ SessionStart / UserPromptSubmit / PreToolUse / PostToolUse / PermissionRequest / Stop | ✅ 여러 이벤트 타입 · 다수 번들 핸들러 | ✅✅ 넓은 이벤트 표면 (`docs/architecture/hook-system.md`) |
+| Hook 이벤트 | ✅ PreToolUse / PostToolUse / UserPromptSubmit / Stop / SubagentStop / PreCompact / SessionStart / SessionEnd / Notification | ⚠️ SessionStart / UserPromptSubmit / PreToolUse / PostToolUse / PermissionRequest / Stop | ✅ 여러 이벤트 타입 · 다수 번들 핸들러 | ✅✅ 넓은 이벤트 표면 (`docs/architecture/hook-system.md`) |
 
 </details>
 

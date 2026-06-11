@@ -384,7 +384,7 @@ A qualitative read on where GEODE sits next to the frontier harnesses (Claude Co
 | | Claude Code | Codex CLI | OpenClaw | **GEODE** |
 |---|---|---|---|---|
 | Always-on daemon | ❌ per-invocation | ⚠️ opt-in `codex remote-control` | ✅✅ launchd / systemd control plane | ✅ `geode serve` daemon |
-| Native scheduler (cron) | ❌ (claude.ai web-only) | ❌ (Codex Cloud Automations only — [issue #8317](https://github.com/openai/codex/issues/8317)) | ✅ `cron add/edit/list` CLI | ✅ cron + event triggers |
+| Native scheduler (cron) | ⚠️ scheduled cloud agents (`/schedule`, cloud-executed) | ❌ (Codex Cloud Automations only — [issue #8317](https://github.com/openai/codex/issues/8317)) | ✅ `cron add/edit/list` CLI | ✅ cron + event triggers |
 | Thin CLI ↔ daemon IPC | ❌ | ⚠️ remote-control server mode | ✅ Gateway / Agent split | ✅ IPC server |
 | Sub-agent isolation | ✅ Agent tool + `run_in_background` | ✅ `multi_agent` feature | ✅✅ Lane Queue + Session bindings | ✅ Lane + depth / cost guard |
 | Session resume / fork | ✅ JSONL transcripts | ✅ `/resume` + `/fork` slash commands | ✅ Session bindings with TTL | ✅ session resume |
@@ -398,7 +398,7 @@ A qualitative read on where GEODE sits next to the frontier harnesses (Claude Co
 |---|---|---|---|---|
 | Slack | ❌ (MCP plugin possible) | ⚠️ Codex Cloud only, not CLI | ✅ Socket Mode, first-class | ✅ Socket Mode, first-class |
 | Discord / Telegram / other chat | ❌ | ❌ | ✅✅ many channels (Discord, Telegram, WhatsApp, Signal, iMessage, Teams, Matrix, Feishu, LINE, ...) | ✅ Discord + Telegram pollers |
-| IDE plugin | ❌ (Chrome MCP extension only) | ✅✅ VS Code · JetBrains · Cursor · Windsurf | ❌ | ❌ |
+| IDE plugin | ✅ VS Code · JetBrains | ✅✅ VS Code · JetBrains · Cursor · Windsurf | ❌ | ❌ |
 | Web UI | ✅ claude.ai/code | ✅ Codex Cloud | ⚠️ WebChat plugin | ❌ (docs site only) |
 | MCP server catalog | ✅ first-class | ✅ first-class | ✅ first-class | ✅ Anthropic-published registry (cached at `~/.geode/mcp/registry-cache.json`) |
 
@@ -422,11 +422,11 @@ A qualitative read on where GEODE sits next to the frontier harnesses (Claude Co
 
 | | Claude Code | Codex CLI | OpenClaw | **GEODE** |
 |---|---|---|---|---|
-| Memory tiers | ⚠️ user / project / local settings merge | ✅ hierarchical AGENTS.md (global `~/.codex/` + repo + nested dirs) | ⚠️ session-scoped | ✅✅ **multi-tier** (SOUL · User · Org · Project · Session) |
+| Memory tiers | ✅ CLAUDE.md merge + auto memory (`~/.claude/projects/*/memory`) | ✅ hierarchical AGENTS.md (global `~/.codex/` + repo + nested dirs) | ⚠️ session-scoped | ✅✅ **multi-tier** (SOUL · User · Org · Project · Session) |
 | Disk-persistent plans | ✅ TodoWrite persistence | ⚠️ via resumable threads | ✅ task registry | ✅ `.geode/plans.json` |
 | Permission / sandbox layers | ✅ default / auto / bypass modes + Confirmation UI | ✅ `sandbox_mode` (read-only / workspace-write / danger-full-access) | ✅✅ Policy Chain across many audit surfaces | ✅ Policy Chain + tool gates |
 | Multi-layer guardrails | ⚠️ permission + hooks | ⚠️ hooks + sandbox | ✅ `audit.runtime` engine | ✅✅ **core verification** (G1-G4 + Cross-LLM Krippendorff α ≥ 0.67 + Rights Risk, plugin extension points for bias/calibration) |
-| Hook events | ⚠️ PreToolUse / PostToolUse / SessionStart / Notification / ConfigChange | ⚠️ SessionStart / UserPromptSubmit / PreToolUse / PostToolUse / PermissionRequest / Stop | ✅ several event types · many bundled handlers | ✅✅ broad event surface (`docs/architecture/hook-system.md`) |
+| Hook events | ✅ PreToolUse / PostToolUse / UserPromptSubmit / Stop / SubagentStop / PreCompact / SessionStart / SessionEnd / Notification | ⚠️ SessionStart / UserPromptSubmit / PreToolUse / PostToolUse / PermissionRequest / Stop | ✅ several event types · many bundled handlers | ✅✅ broad event surface (`docs/architecture/hook-system.md`) |
 
 </details>
 
