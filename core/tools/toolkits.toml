@@ -49,7 +49,7 @@ tools = ["write_file", "edit_file"]
 [toolkits.web_research]
 description = "Web research — search + fetch + read primitives."
 includes = ["common_read"]
-tools = ["general_web_search", "web_fetch"]
+tools = ["general_web_search", "web_fetch", "llms_txt_index"]
 
 [toolkits.data_analysis]
 description = "Read-only analysis kit with web + memory context."
@@ -59,7 +59,7 @@ tools = ["general_web_search", "memory_search"]
 [toolkits.general_purpose]
 description = "Broad-surface kit for orchestrator-style agents — read/write + web + notes. Distinct from ``_default`` (which is the *fallback* minimal safety net for undeclared agents); ``general_purpose`` is a *declared* full-research surface."
 includes = ["common_read", "common_write"]
-tools = ["general_web_search", "web_fetch", "memory_save", "note_save"]
+tools = ["general_web_search", "web_fetch", "llms_txt_index", "memory_save", "note_save"]
 
 [toolkits.literature_research]
 description = "Literature grounding for research / Petri-seed-style agents — arXiv API + intra-corpus seed-pool search + common read primitives. Domain-shifted replacement for the co-scientist port's PubMed/INDRA path (GEODE's domain is LLM self-improving loops + Petri audit, not biology)."
