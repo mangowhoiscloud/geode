@@ -1,0 +1,16 @@
+%% model-resolution — the precedence ladder for the effective model.
+%% SoT for site/public/diagrams/model-resolution.svg (npm run render-diagrams).
+%% Grounded in site/src/app/docs/run/providers/page.tsx
+%% (geode config explain model / geode about).
+%% NOTE: do not start a label with "1. " — mermaid parses it as a markdown
+%% ordered list and svg-label rendering crashes (splitLineToFitWidth).
+flowchart TD
+  L1["1 · CLI argument"] -->|set: wins| WIN["effective model<br/>verify: geode about"]
+  L1 -->|unset| L2["2 · env layer<br/>os.environ + project .env + global .env"]
+  L2 -->|set: wins| WIN
+  L2 -->|unset| L3["3 · project .geode/config.toml"]
+  L3 -->|set: wins| WIN
+  L3 -->|unset| L4["4 · global ~/.geode/config.toml"]
+  L4 -->|set: wins| WIN
+  L4 -->|unset| L5["5 · routing default<br/>core/config/routing.toml"]
+  L5 --> WIN

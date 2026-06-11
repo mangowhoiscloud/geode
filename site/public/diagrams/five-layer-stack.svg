@@ -1,0 +1,31 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 460" role="img" aria-label="GEODE 5-layer stack: SELF-IMPROVING, AGENT, HARNESS, RUNTIME, MODEL">
+  <!-- Hand-authored signature SVG. Tokens: site/DESIGN.md section 2 (Axolotl Rose).
+       Grounded in site/CONTENT-CANON.md section 3 (5-Layer Stack). -->
+  <style>
+    text { font-family: "Fira Code", ui-monospace, SFMono-Regular, Menlo, monospace; }
+    .layer { font-size: 19px; fill: #F2EEF5; font-weight: 500; }
+    .parts { font-size: 15px; fill: #ABA4BC; }
+    .row { fill: #14121B; stroke: rgba(244,155,196,0.25); stroke-width: 1; }
+  </style>
+  <g>
+    <rect class="row" x="20" y="24" width="860" height="76" rx="6"/>
+    <text class="layer" x="44" y="56">SELF-IMPROVING</text>
+    <text class="parts" x="44" y="84">train.py + measure / fitness / gate / ledger + loop/{mutate, observe, inject}</text>
+
+    <rect class="row" x="20" y="108" width="860" height="76" rx="6"/>
+    <text class="layer" x="44" y="140">AGENT</text>
+    <text class="parts" x="44" y="168">AgenticLoop (while tool_use), SubAgentManager, CLIPoller, Gateway</text>
+
+    <rect class="row" x="20" y="192" width="860" height="76" rx="6"/>
+    <text class="layer" x="44" y="224">HARNESS</text>
+    <text class="parts" x="44" y="252">SessionLane, LaneQueue, PolicyChain, TaskGraph, HookSystem</text>
+
+    <rect class="row" x="20" y="276" width="860" height="76" rx="6"/>
+    <text class="layer" x="44" y="308">RUNTIME</text>
+    <text class="parts" x="44" y="336">ToolRegistry, MCP Registry, Skills, Memory (5-Tier), Reports</text>
+
+    <rect class="row" x="20" y="360" width="860" height="76" rx="6"/>
+    <text class="layer" x="44" y="392">MODEL</text>
+    <text class="parts" x="44" y="420">ClaudeAdapter, OpenAIAdapter, GLMAdapter (3-provider routing)</text>
+  </g>
+</svg>

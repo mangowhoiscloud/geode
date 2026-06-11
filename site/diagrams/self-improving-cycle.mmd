@@ -1,0 +1,13 @@
+%% self-improving-cycle — one cycle of the outer selection loop.
+%% SoT for site/public/diagrams/self-improving-cycle.svg (npm run render-diagrams).
+%% Canon vocabulary only (site/CONTENT-CANON.md section 2): mutate, audit,
+%% fitness, margin gate, promote, revert, champion chain. Never ML terms.
+flowchart TD
+  MUT["mutate<br/>one scaffold section"] --> AUDIT["adversarial safety audit<br/>Petri, 22-dim judge"]
+  AUDIT --> FIT["fitness scalar"]
+  FIT --> GATE{"margin gate"}
+  GATE -->|gain clears margin| PROM["promote<br/>new champion"]
+  GATE -->|otherwise| REV["revert<br/>pre-mutation scaffold"]
+  PROM --> CHAIN["git champion chain<br/>lineage of promoted scaffolds"]
+  CHAIN --> MUT
+  REV --> MUT

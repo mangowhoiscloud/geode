@@ -1,0 +1,12 @@
+%% gateway-routing — messenger pollers through binding and lanes to the loop.
+%% SoT for site/public/diagrams/gateway-routing.svg (npm run render-diagrams).
+%% Grounded in site/src/app/docs/harness/serve-gateway/page.tsx
+%% (core/messaging/binding.py, core/orchestration/lane_queue.py).
+flowchart TD
+  SLACK["Slack poller"] --> CM
+  DISCORD["Discord poller"] --> CM
+  TELEGRAM["Telegram poller"] --> CM
+  CM{"binding match?<br/>ChannelManager"}
+  CM -->|no| DROP["ignored"]
+  CM -->|yes| LANE["LaneQueue<br/>SessionLane, then global lane<br/>same session serial, sessions parallel"]
+  LANE --> LOOP["AgenticLoop (DAEMON mode)<br/>run_bash / delegate_task denied"]

@@ -97,6 +97,13 @@ export default function Page() {
 3. 프로젝트 .geode/config.toml
 4. 전역 ~/.geode/config.toml
 5. 라우팅 기본값 (core/config/routing.toml)`}</pre>
+            <figure>
+              <img
+                src="/geode/diagrams/model-resolution.svg"
+                alt="Model resolution ladder: CLI argument, env layer, project config.toml, global config.toml, then the routing default; the first layer with a value wins"
+              />
+              <figcaption>값이 설정된 첫 레이어가 이깁니다. 어느 레이어가 이겼는지는 geode config explain model이 보여줍니다.</figcaption>
+            </figure>
             <p>
               데몬은 시작할 때 모델 계열 env 키를 의도적으로 버리므로
               (<code>BEHAVIOR_ENV_KEYS</code>, <code>core/config/env_io.py</code>),
@@ -254,6 +261,13 @@ geode about                   # 실효(EFFECTIVE) 모델 + 프로바이더`}</pr
 3. project .geode/config.toml
 4. global ~/.geode/config.toml
 5. routing default (core/config/routing.toml)`}</pre>
+            <figure>
+              <img
+                src="/geode/diagrams/model-resolution.svg"
+                alt="Model resolution ladder: CLI argument, env layer, project config.toml, global config.toml, then the routing default; the first layer with a value wins"
+              />
+              <figcaption>The first layer with a value wins; geode config explain model shows which one did.</figcaption>
+            </figure>
             <p>
               The serve daemon deliberately drops model-pick env keys at startup
               (<code>BEHAVIOR_ENV_KEYS</code>, <code>core/config/env_io.py</code>),

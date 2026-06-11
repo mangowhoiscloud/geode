@@ -42,26 +42,13 @@ export default function Page() {
             </p>
 
             <h2>데몬 안에서 일어나는 일</h2>
-            <pre>{`geode (thin CLI, REPL)
-  |  free text
-  v
-~/.geode/cli.sock          Unix socket, line-delimited JSON
-  |
-  v
-serve daemon
-  CLIPoller                core/server/ipc_server/poller.py
-  -> lanes ["session", "global"]
-  |
-  v
-AgenticLoop                core/agent/loop/agent_loop.py
-  while stop_reason == "tool_use":
-    round guards -> LLM call -> tool execution
-       |
-       +-> tools (ToolRegistry) / MCP servers / skills
-  |
-  v
-events streamed back over the same socket
-  -> client renders them   core/ui/event_renderer.py`}</pre>
+            <figure>
+              <img
+                src="/geode/diagrams/request-flow.svg"
+                alt="Request flow: thin CLI over the Unix socket to the daemon's CLIPoller, through the lanes into AgenticLoop and its tools, with events streaming back over the same socket"
+              />
+              <figcaption>요청 하나의 전 구간. 이벤트는 같은 소켓을 타고 thin CLI로 돌아옵니다.</figcaption>
+            </figure>
             <p>
               소켓 건너편에서 요청을 받는 것은{" "}
               <code>core/server/ipc_server/poller.py</code>의 CLIPoller입니다.
@@ -189,26 +176,13 @@ events streamed back over the same socket
             </p>
 
             <h2>Inside the daemon</h2>
-            <pre>{`geode (thin CLI, REPL)
-  |  free text
-  v
-~/.geode/cli.sock          Unix socket, line-delimited JSON
-  |
-  v
-serve daemon
-  CLIPoller                core/server/ipc_server/poller.py
-  -> lanes ["session", "global"]
-  |
-  v
-AgenticLoop                core/agent/loop/agent_loop.py
-  while stop_reason == "tool_use":
-    round guards -> LLM call -> tool execution
-       |
-       +-> tools (ToolRegistry) / MCP servers / skills
-  |
-  v
-events streamed back over the same socket
-  -> client renders them   core/ui/event_renderer.py`}</pre>
+            <figure>
+              <img
+                src="/geode/diagrams/request-flow.svg"
+                alt="Request flow: thin CLI over the Unix socket to the daemon's CLIPoller, through the lanes into AgenticLoop and its tools, with events streaming back over the same socket"
+              />
+              <figcaption>One request end to end; events return to the thin CLI over the same socket.</figcaption>
+            </figure>
             <p>
               On the far side of the socket, the CLIPoller in{" "}
               <code>core/server/ipc_server/poller.py</code> receives the

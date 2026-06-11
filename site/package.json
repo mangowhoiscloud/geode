@@ -7,7 +7,8 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "sync-stats": "node scripts/sync-stats.mjs"
+    "sync-stats": "node scripts/sync-stats.mjs",
+    "render-diagrams": "node scripts/render-diagrams.mjs"
   },
   "dependencies": {
     "@radix-ui/react-dialog": "^1.1.15",

@@ -1,0 +1,12 @@
+%% request-flow — thin CLI to daemon to loop, and the event stream back.
+%% SoT for site/public/diagrams/request-flow.svg (npm run render-diagrams).
+%% Grounded in site/src/app/docs/overview/how-it-runs/page.tsx
+%% (core/server/ipc_server/poller.py, core/agent/loop/agent_loop.py).
+flowchart TD
+  CLI["geode thin CLI (REPL)"] -->|free text| SOCK["~/.geode/cli.sock<br/>Unix socket, line-delimited JSON"]
+  SOCK --> POLLER["serve daemon: CLIPoller<br/>core/server/ipc_server/poller.py"]
+  POLLER -->|lanes: session, global| LOOP["AgenticLoop<br/>core/agent/loop/agent_loop.py<br/>while stop_reason == tool_use"]
+  LOOP --> CAP["tools (ToolRegistry) / MCP servers / skills"]
+  CAP --> LOOP
+  LOOP -->|events stream back| SOCK
+  SOCK -->|rendered events| CLI

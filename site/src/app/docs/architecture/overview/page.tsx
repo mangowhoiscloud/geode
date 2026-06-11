@@ -11,20 +11,16 @@ export default function Page() {
       summary="Model, Runtime, Harness, Agent, Self-Improving. What each layer owns, and where its responsibility ends."
       summaryKo="Model, Runtime, Harness, Agent, Self-Improving. 각 계층이 무엇을 맡고, 책임이 어디서 끝나는지 설명합니다."
     >
-      <pre>{`SELF-IMPROVING  train.py + measure / fitness / gate / ledger
-                + loop/{mutate, observe, inject}
-AGENT           AgenticLoop (while tool_use), SubAgentManager,
-                CLIPoller, Gateway
-HARNESS         SessionLane, LaneQueue, PolicyChain, TaskGraph,
-                HookSystem
-RUNTIME         ToolRegistry (deferred loading), MCP Registry,
-                Skills, Memory (5-Tier), Reports
-MODEL           ClaudeAdapter, OpenAIAdapter, GLMAdapter
-                (3-provider routing)`}</pre>
-
       <Bi
         ko={
           <>
+            <figure>
+              <img
+                src="/geode/diagrams/five-layer-stack.svg"
+                alt="The GEODE 5-layer stack: SELF-IMPROVING, AGENT, HARNESS, RUNTIME, MODEL, with the components each layer owns"
+              />
+              <figcaption>5-계층 스택과 각 계층이 소유한 구성 요소.</figcaption>
+            </figure>
             <h2>왜 4가 아니라 5인가</h2>
             <p>
               GEODE는 오랫동안 4-계층(Model, Runtime, Harness, Agent)으로
@@ -170,6 +166,13 @@ MODEL           ClaudeAdapter, OpenAIAdapter, GLMAdapter
         }
         en={
           <>
+            <figure>
+              <img
+                src="/geode/diagrams/five-layer-stack.svg"
+                alt="The GEODE 5-layer stack: SELF-IMPROVING, AGENT, HARNESS, RUNTIME, MODEL, with the components each layer owns"
+              />
+              <figcaption>The 5-layer stack and the components each layer owns.</figcaption>
+            </figure>
             <h2>Why five, not four</h2>
             <p>
               GEODE was described as a 4-layer stack (Model, Runtime, Harness,

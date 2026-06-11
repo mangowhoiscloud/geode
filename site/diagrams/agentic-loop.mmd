@@ -1,0 +1,17 @@
+%% agentic-loop — the while(tool_use) turn cycle with its termination paths.
+%% SoT for site/public/diagrams/agentic-loop.svg (npm run render-diagrams).
+%% Grounded in site/src/app/docs/architecture/agentic-loop/page.tsx
+%% (core/agent/loop/agent_loop.py, core/agent/loop/models.py).
+%%{init: {"flowchart": {"nodeSpacing": 18, "rankSpacing": 40}}}%%
+flowchart TD
+  REQ["request"] --> GUARDS["round-entry guards<br/>round / time / session / cost"]
+  GUARDS --> CTX["context-overflow check<br/>compact or prune"]
+  CTX --> LLM["call_llm(messages, tools)"]
+  LLM --> DEC{"stop_reason ==<br/>tool_use ?"}
+  DEC -->|yes| TOOLS["run tool calls<br/>append msg + tool_results"]
+  TOOLS --> GUARDS
+  DEC -->|no| ANSWER["answer<br/>natural / forced_text"]
+  GUARDS -->|budget exhausted| TERM
+  CTX -->|still critical| TERM
+  LLM -->|refusal| TERM
+  TERM["early termination<br/>max_rounds / time_budget_expired /<br/>cost_budget_exceeded /<br/>context_exhausted / model_refusal"]
