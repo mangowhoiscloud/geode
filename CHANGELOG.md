@@ -45,6 +45,27 @@ functional change.
 
 ---
 
+## [0.99.178] - 2026-06-11
+
+### Fixed
+- **REPL input UI: arrow keys dead + Korean ghost artifacts + literal `^[[D`**
+  (operator report). Three stacked causes, one root: the #1180 CJK repaint
+  patch registered a custom `<any>` key binding, which takes precedence over
+  prompt_toolkit's DEFAULT bindings for every unmatched key — arrows,
+  Ctrl-A/E, word movement, and history keys all matched `<any>`, fell through
+  its printable-only filter, and became no-ops. Replaced the key-layer patch
+  with a buffer-layer `Buffer.on_text_changed` invalidate hook
+  (`core/cli/prompt_session.py::_invalidate_on_text_changed`): wide-char
+  repaint stays in sync on insert AND delete while key routing returns
+  entirely to the defaults (arrows, editing, history all restored).
+  Separately, a single transient prompt_toolkit error used to disable line
+  editing permanently for the session (`False` sentinel) and silently
+  downgrade to `console.input`, where arrows render as literal `^[[D`; the
+  fallback is now bounded — rebuild on next prompt, permanent disable only
+  after 3 consecutive failures. Guards:
+  `tests/core/cli/test_prompt_session.py` (no-`<any>` pin, repaint-hook pin,
+  transient-vs-permanent fallback).
+
 ## [0.99.177] - 2026-06-11
 
 ### Fixed

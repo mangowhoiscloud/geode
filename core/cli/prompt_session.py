@@ -39,17 +39,25 @@ def _sigint_handler(signum: int, frame: Any) -> None:
 # ---------------------------------------------------------------------------
 # prompt_toolkit REPL input (arrow keys, history)
 # ---------------------------------------------------------------------------
-def _event_data_is_printable_character(event: Any, data: str | None) -> bool:
-    """Return True only for printable character key events."""
-    if not data or not data.isprintable():
-        return False
+def _invalidate_on_text_changed(_buffer: Any) -> None:
+    """Force a renderer repaint whenever the input buffer changes.
 
-    key_sequence = getattr(event, "key_sequence", ())
-    if not key_sequence:
-        return True
+    Fixes the wide-char (Korean) one-keystroke-late repaint (#1180) at the
+    buffer layer instead of the key layer. The previous fix bound
+    ``<any>`` plus Backspace/Delete in the custom KeyBindings, which took
+    precedence over prompt_toolkit's DEFAULT bindings for every unmatched
+    key — arrows, Ctrl-A/E, word movement, and history keys all matched
+    ``<any>``, fell through its printable-only filter, and became no-ops
+    (the "cursor does not move" report, 2026-06-11). A buffer
+    ``on_text_changed`` hook repaints after every insert AND delete while
+    leaving key routing entirely to the defaults.
+    """
+    try:
+        from prompt_toolkit.application.current import get_app
 
-    key = getattr(key_sequence[-1], "key", None)
-    return key == data
+        get_app().invalidate()
+    except Exception:  # pragma: no cover - no running app (tests, teardown)
+        log.debug("invalidate skipped: no running prompt application", exc_info=True)
 
 
 def _build_prompt_session() -> Any:
@@ -59,10 +67,9 @@ def _build_prompt_session() -> Any:
     instead of each newline triggering a separate submit. Enter submits,
     Escape+Enter inserts a real newline.
 
-    Includes custom printable-insert plus Backspace/Delete key bindings
-    that force a full renderer redraw after the buffer changes — fixes
-    wide-char (Korean jamo) ghost artifacts where the display doesn't
-    update even though the buffer is correctly modified.
+    Editing keys (arrows, Backspace/Delete, Ctrl-A/E, history) are the
+    prompt_toolkit DEFAULTS on purpose — see _invalidate_on_text_changed
+    for why no custom editing or ``<any>`` bindings may be added here.
     """
     from prompt_toolkit import PromptSession
     from prompt_toolkit.filters import is_done
@@ -82,29 +89,6 @@ def _build_prompt_session() -> Any:
         """Escape+Enter inserts a real newline for intentional multi-line."""
         event.current_buffer.insert_text("\n")
 
-    @kb.add("<any>")
-    def _insert_printable(event: Any) -> None:
-        data = event.data
-        if not _event_data_is_printable_character(event, data):
-            return
-
-        event.current_buffer.insert_text(data)
-        event.app.invalidate()
-
-    @kb.add("backspace")
-    def _backspace(event: Any) -> None:
-        buf = event.app.current_buffer
-        if buf.cursor_position > 0:
-            buf.delete_before_cursor(count=1)
-            event.app.invalidate()
-
-    @kb.add("delete")
-    def _delete(event: Any) -> None:
-        buf = event.app.current_buffer
-        if buf.cursor_position < len(buf.text):
-            buf.delete(count=1)
-            event.app.invalidate()
-
     history_path = Path.home() / ".geode_history"
 
     # PR-γ1 — install + bind the subscription quota banner. Lazy-load
@@ -120,7 +104,7 @@ def _build_prompt_session() -> Any:
     global _toolbar_render
     _toolbar_render = bottom_toolbar
 
-    return PromptSession(
+    session: Any = PromptSession(
         history=FileHistory(str(history_path)),
         message=HTML("<b>&gt;</b> "),
         enable_history_search=True,
@@ -128,6 +112,11 @@ def _build_prompt_session() -> Any:
         key_bindings=kb,
         bottom_toolbar=bottom_toolbar,
     )
+    # Repaint sync for wide-char edits — buffer-level, never key-level.
+    default_buffer = getattr(session, "default_buffer", None)
+    if default_buffer is not None:
+        default_buffer.on_text_changed += _invalidate_on_text_changed
+    return session
 
 
 def _make_bottom_toolbar() -> Any:
@@ -219,6 +208,15 @@ def _force_select_event_loop() -> None:
 # Module-level lazy singleton
 _prompt_session: Any = None
 
+# Consecutive prompt_toolkit runtime failures. A single transient error used
+# to disable prompt_toolkit for the whole session (permanent `False`
+# sentinel), silently downgrading every later input to the editing-free
+# ``console.input`` — where arrows render as literal ``^[[D`` (the 2026-06-11
+# report). Now the session is rebuilt on the next prompt and only
+# _MAX_PROMPT_FAILURES consecutive failures disable it permanently.
+_prompt_failures: int = 0
+_MAX_PROMPT_FAILURES = 3
+
 # The bottom_toolbar render callable, stashed by _build_prompt_session so
 # _apply_toolbar_visibility can toggle the bar on/off per prompt.
 _toolbar_render: Any = None
@@ -282,6 +280,7 @@ def _read_multiline_input(prompt: str) -> str:
     Paste handling is delegated to prompt_toolkit's built-in bracketed
     paste support (no manual stdin polling).
     """
+    global _prompt_failures, _prompt_session
     session = _get_prompt_session()
     if session is not None:
         try:
@@ -292,6 +291,7 @@ def _read_multiline_input(prompt: str) -> str:
             # (no empty reverse "white line" on cold start).
             _apply_toolbar_visibility(session)
             raw: str = str(session.prompt()).strip()
+            _prompt_failures = 0
             # Join pasted multi-line text into a single line.
             # Intentional newlines (Esc+Enter) are preserved by the caller
             # via "\n" detection in the slash command guard.
@@ -303,10 +303,22 @@ def _read_multiline_input(prompt: str) -> str:
         except (KeyboardInterrupt, EOFError):
             raise
         except Exception:
-            log.warning("prompt_toolkit failed, falling back to console.input", exc_info=True)
-            # Invalidate session to avoid retrying prompt_toolkit on every input
-            global _prompt_session
-            _prompt_session = False  # sentinel: permanently disabled
+            _prompt_failures += 1
+            if _prompt_failures >= _MAX_PROMPT_FAILURES:
+                log.warning(
+                    "prompt_toolkit failed %d times in a row; disabling for this session",
+                    _prompt_failures,
+                    exc_info=True,
+                )
+                _prompt_session = False  # sentinel: permanently disabled
+            else:
+                log.warning(
+                    "prompt_toolkit failed (%d/%d); will rebuild on next prompt",
+                    _prompt_failures,
+                    _MAX_PROMPT_FAILURES,
+                    exc_info=True,
+                )
+                _prompt_session = None  # rebuild lazily on the next call
             _restore_terminal()
             text = str(console.input("> ")).strip()
         finally:
