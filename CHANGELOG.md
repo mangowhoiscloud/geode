@@ -45,6 +45,11 @@ functional change.
 
 ---
 
+## [0.99.184] - 2026-06-12
+
+### Fixed
+- **`geode hub build` self-heals the seeds listing** — the publish chain (`sync_run_to_bundle` → `build_seeds_listing` → hub build) had a manual middle step: hub build only READ a stale `listing.json`, so a run synced to the bundle rendered no hub page until someone re-ran `build_seeds_listing` (frontier-2612-bt was silently absent, 2026-06-12). `load_seedgen` now rebuilds the listing from the seeds dir before reading it. CLAUDE.md gains an "index regenerated, not just read" wiring rule. Guard: `tests/scripts/test_hub_listing_autobuild.py` (2).
+
 ## [0.99.183] - 2026-06-12
 
 ### Fixed
