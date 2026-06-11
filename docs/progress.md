@@ -17,6 +17,7 @@
 <!-- Move items here when work begins. -->
 <!-- 3-Checkpoint: (1) alloc → (2) merge (CI 5/5) → (3) verify -->
 
+- [ ] llms_txt_index 전용 도구 — llms.txt 인덱스를 구조화 JSON으로 파싱하는 도구 신설(mcpdoc 2-도구 패턴 수렴, fetch는 기존 web_fetch 재사용). web_fetch 10k truncation으로 큰 인덱스 뒷섹션 소실 문제 해소. router.md 휴리스틱 도구-first 개정 + AGENTIC_SUFFIX re-pin + 가드 갱신
 - [ ] H11-tail — routing 상수 모듈레벨 by-value 별칭 해동(core/llm/providers/{anthropic,openai,codex,glm}.py DEFAULT_*/FALLBACK_MODELS + core/skills/agents.py dataclass 기본값) — reload 후에도 boot-frozen, 호출자 스윕 필요. + H1(데몬 client-cwd 세션 해석)은 별도 결정
 
 ## In Review
@@ -27,6 +28,8 @@
 
 <!-- Completed items. Keep recent 10, archive older ones. -->
 <!-- - [x] #issue-number — Short description (PR #N) -->
+- [x] Game-IP 시대 검증 잔재 퍼지 — 벤치마크 리포트 사전 정직성 패스(운영자 지시). zero-caller 코드 2건 삭제(Settings.temperature_verification, get_common_rubric) + 운영 문서의 죽은 주장 교정: GEODE.md(SOUL) Expert Panel/G3/confidence-0.7 루프백, README×2 "G1-G4+Cross-LLM α≥0.67" → 실측 turn-verify 계층, AGENTS.md 유령 섹션 2개(core/verification, core/automation), setup×2 Cross-LLM 라벨. 후속 후보: ensemble_mode 노브(display-only), AGENTS.md core/gateway stale (PR #2210, v0.99.187)
+- [x] /model source 재추론 + 픽커 UX 묶음 — (1) provider 전환 시 source 재추론(login codex 직후 401 = anthropic 시절 payg가 openai로 따라오던 건, 명시 핀 보존), (2) Space 스테이징(역할 3개 한 세션), (3) 폭 클램프 리페인트(화살표 위로 쏠림 = 래핑 vs _clear_lines 불일치), (4) 비-primary 픽 global 스코프(write-read parity — project에 쓰고 global만 읽던 누수), (5) harness/cli 키 계약 문서화. 가드 11종 (PR #2206 → #2207, v0.99.186)
 - [x] web_search 타이밍 정합 + 프론티어 브리지 수렴 — fable-5 검색 58~60s가 60s 클라이언트 타임아웃·120s deadline과 경계 충돌(건강한 재시도 119.9s 사살). 타임아웃 100s/deadline 240s + 부등식 가드. 웹훅 일회용 루프→메인 루프 run_coroutine_threadsafe(hermes/openclaw 수렴), verify ThreadPool 브리지 제거. 가드레일 25테스트 (PR #2201 → #2202, v0.99.185)
 - [x] 이벤트 루프 오염 수정 — sync 델리게이트 잔재(도구 호출마다 asyncio.Runner 루프) × 전역 SDK 클라이언트 공유 = web_search 즉사/행(sample로 좀비 루프 2개 물증). async-native 핸들러 21개 + LoopAffineClientCache(adapter 6+provider 3) + 도구/MCP wall-clock deadline + web_search 모델 capability 선택 + 가드레일 21테스트 + run_process_coroutine 카나리아. Codex 4건 반영 (PR #2192 → #2194, v0.99.183)
 - [x] stale-dim 할루시네이션 가드 — 시드/풀이 live taxonomy(AXIS_TIERS) 밖 dim 참조 시 assemble 시점 fail-closed(런타임 HALT보다 앞). 운영자 지시(캠페인 HALT 후). 인시던트=held-out redundant_tool_invocation stale. 가드 4종+CLAUDE.md CANNOT (PR #2185 → #2186, v0.99.181)
