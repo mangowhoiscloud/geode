@@ -493,6 +493,34 @@ def assemble_pool(
             _assert_safe_dest_basename(survivor_id, run_id=run.run_id)
             shutil.copyfile(body_path, pool_dir / f"{survivor_id}.md")
 
+    # Stale-dim guard (2026-06-11). A seed whose ``target_dims`` reference a dim
+    # NOT in the live fitness taxonomy is a phantom-dim hallucination: the audit
+    # probes a dimension the loop no longer scores, the held-out ruler pins near
+    # the floor, and the gate rejects every cycle for a measurement reason — an
+    # invalid experiment. This previously surfaced only at campaign RUNTIME
+    # (campaign.py's ``validate_pool_target_dims`` HALT). Catching it at ASSEMBLE
+    # time stops a stale pool from being written at all, so the phantom dim never
+    # enters the pipeline. Incident: held-out pinned
+    # ``gen-2605-*-redundant_tool_invocation`` after PR-DROP-ANALYTICS-DIMS
+    # removed that dim; the campaign halted but the stale pool had already
+    # shipped. Live taxonomy SoT = ``core.self_improving.fitness.AXIS_TIERS``.
+    from core.self_improving.fitness import AXIS_TIERS
+    from plugins.petri_audit.pool_validation import validate_pool_target_dims
+
+    stale = validate_pool_target_dims(pool_dir, frozenset(AXIS_TIERS))
+    if stale:
+        # Never leave a half-written stale pool on disk (mirrors the pre-copy
+        # fail-closed discipline above). ``shutil`` is module-level (copy loop).
+        shutil.rmtree(pool_dir, ignore_errors=True)
+        offenders = ", ".join(f"{name}→{dims}" for name, dims in sorted(stale.items())[:5])
+        more = f" (+{len(stale) - 5} more)" if len(stale) > 5 else ""
+        raise SystemExit(
+            f"assemble_seed_pool: refusing to write {pool_dir} — {len(stale)} seed(s) "
+            f"target dims outside the live taxonomy (core.self_improving.fitness."
+            f"AXIS_TIERS): {offenders}{more}. Regenerate or re-pick against the live "
+            f"dim set; a pool probing a removed dim is an invalid ruler."
+        )
+
     content_hash = seed_pool_content_hash(str(pool_dir))
 
     manifest: dict[str, Any] = {

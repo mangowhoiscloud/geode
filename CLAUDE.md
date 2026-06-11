@@ -8,7 +8,7 @@
 
 A general-purpose autonomous execution agent built on LangGraph. Autonomously performs research, analysis, automation, and scheduling.
 
-- **Version**: 0.99.180
+- **Version**: 0.99.181
 - **Python**: >= 3.12
 - **Package Manager**: uv
 - **Entry Points**: `geode` (`core.cli:app`, Typer) / `geode-mcp` (`core.mcp_server:main`)
@@ -97,6 +97,7 @@ Rationale cites the originating incident when one exists. The `karpathy-patterns
 | | No bare `_` for unused variables — use `_prefix` naming (e.g. `_tok_before`) | Readability |
 | | No unauthorized live test (`-m live`) execution | Cost control (P3) |
 | | No "graceful" return contract without applying it at every schema-typed cast (not just outer try) | Boundary completeness. *Incident: PR-G3 #1347 (2026-05-20) — `float()` on non-numeric raised before contract* |
+| | No seed / pool referencing a dim outside the live fitness taxonomy (`core.self_improving.fitness.AXIS_TIERS`) — a phantom-dim "hallucination" (the audit probes a removed dimension, the held-out ruler pins at the floor, the gate rejects every cycle for a measurement reason = invalid experiment). When a dim is dropped (e.g. PR-DROP-ANALYTICS-DIMS), every pool referencing it goes stale. Validate at **assemble time** (`scripts/assemble_seed_pool.py` → `validate_pool_target_dims`), not only at campaign runtime. | Phantom-dim drift. *Incident: held-out `gen-2605-*-redundant_tool_invocation` stale after the dim was removed; the campaign HALTed but the stale pool had already shipped — fail at assemble so it never enters the pipeline (2026-06-11). Guard: `tests/scripts/test_assemble_stale_dim_guard.py`* |
 | | No conflating "latest" and "promoted" SoTs — readers must document which they assume; persist both if the loop needs both | SoT clarity. *Incident: PR-G2 #1346 (2026-05-20) — downstream read stale evidence forever* |
 | | No dual SoT (disk + fallback literal) without shared anchor + drift invariant test | Drift prevention. *Incident: PR-MINIMAL-2 #1398 (2026-05-21) — `program.md` ↔ `_FALLBACK_SYSTEM_PROMPT` divergence* |
 | | No external-SDK / 3rd-party-backend capability assumption (e.g. ``supports_X=True``, hosted tool acceptance, model availability) hardcoded as ``True`` without `ctx7 library` + `ctx7 docs` verification first; if ctx7 is ambiguous, mark the assumption ``unverified — live test required`` in the docstring and surface the live-test as an explicit pending verification | Doc-before-behaviour. *Incident: PR-NO-FALLBACK #1839 (2026-05-28) — `codex_oauth.supports_web_search` flipped False → True based on SDK ``ToolParam`` Union alone; Codex backend's actual acceptance of ``{"type": "web_search"}`` is undocumented in ctx7 / Codex CLI repo, so the assumption needed a live-test gate rather than a behavioural test* |

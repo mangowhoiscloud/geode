@@ -45,6 +45,11 @@ functional change.
 
 ---
 
+## [0.99.181] - 2026-06-11
+
+### Added
+- **Stale-dim guard at seed-pool assemble time** (operator-requested after a campaign HALT): a seed whose `target_dims` reference a dim outside the live fitness taxonomy (`core.self_improving.fitness.AXIS_TIERS`) is a phantom-dim reference — the audit probes a removed dimension, the held-out ruler pins at the floor, and the gate rejects every cycle for a measurement reason (an invalid experiment). This was caught only at campaign RUNTIME (`campaign.py`'s `validate_pool_target_dims` HALT), by which point the stale pool had already shipped. `scripts/assemble_seed_pool.py::assemble_pool` now validates against the live taxonomy and fails CLOSED (removing the half-written pool) before the manifest is written, so a phantom dim never enters the pipeline. CLAUDE.md CANNOT rule added. Incident: held-out `gen-2605-*-redundant_tool_invocation` stale after PR-DROP-ANALYTICS-DIMS removed that dim. Guards: `tests/scripts/test_assemble_stale_dim_guard.py` (4).
+
 ## [0.99.180] - 2026-06-11
 
 ### Fixed
