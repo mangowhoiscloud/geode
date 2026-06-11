@@ -133,3 +133,16 @@ def test_pick_unchanged_by_headroom_signal() -> None:
     # signal, not a pick filter (a headroom filter would be a no-op here).
     dim_means = {"broken_tool_use": 1.0, "stuck_in_loops": 4.5}
     assert pick_regression_target_dim(_snapshot(dim_means)) == "stuck_in_loops"
+
+
+def test_generator_consumes_saturation_signal() -> None:
+    """The saturation helpers must be wired into the generator's evidence
+    block, not orphaned (Codex review, 2026-06-11)."""
+    import inspect
+
+    from plugins.seed_generation.agents import generator as gen_mod
+
+    source = inspect.getsource(gen_mod._format_baseline_evidence)
+    assert "saturated_dims(" in source
+    assert "has_measurable_headroom(" in source
+    assert "SATURATION WARNING" in source
