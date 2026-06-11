@@ -165,14 +165,14 @@ class ToolCallTracker:
                 dur = f" ({float(t['duration']):.1f}s)"
                 if t["error"]:
                     err = _truncate_display(str(t["error"]), 60)
-                    lines.append(f"\033[2K  \033[31m\u2717 {name}\033[0m — {err}{dur}")
+                    lines.append(f"\r\033[2K  \033[31m\u2717 {name}\033[0m — {err}{dur}")
                 else:
                     summary = _truncate_display(str(t["summary"]), 60)
-                    lines.append(f"\033[2K  \033[32m\u2713 {name}\033[0m → {summary}{dur}")
+                    lines.append(f"\r\033[2K  \033[32m\u2713 {name}\033[0m → {summary}{dur}")
             else:
                 args = str(t["args"]).replace("\n", " ")
                 args = _truncate_display(args, 50)
-                lines.append(f"\033[2K  {frame} \033[35m{name}\033[0m({args})")
+                lines.append(f"\r\033[2K  {frame} \033[35m{name}\033[0m({args})")
 
         # Always update line count (tests inspect this)
         self._line_count = len(lines)
@@ -183,6 +183,13 @@ class ToolCallTracker:
         out = sys.stdout
         if self._line_count > 0:
             out.write(f"\033[{self._line_count}A")
+        # Each line starts with ``\r`` so it paints from column 0 even when a
+        # prior writer (activity spinner, thinking region, interleaved stream)
+        # left the cursor mid-line. ``\033[{n}A`` moves UP but preserves the
+        # column, and ``\033[2K`` clears the line without moving the cursor —
+        # so without the ``\r`` the ``  ✓ name`` text printed at the stale
+        # column and the tool lines rendered with ragged indentation
+        # (operator-reported, 2026-06-11). ``suspend()`` already does this.
         output = "\n".join(lines)
         if lines:
             output += "\n"
