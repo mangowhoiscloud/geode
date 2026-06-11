@@ -22,12 +22,13 @@ export default function Page() {
               kinds입니다. 메커니즘은 선택(selection)입니다. 변이를 만들고,
               적대적 안전 감사로 측정하고, 통계적으로 유의한 개선만 승격합니다.
             </p>
-            <pre>{`변이(mutate)
-  → 적대적 안전 감사 (Petri, 22-dim judge)
-  → fitness 스칼라 (18-dim universe)
-  → margin 게이트
-  → 승격(promote) 또는 되돌림(revert)
-       옵티마이저 = git champion chain`}</pre>
+            <figure>
+              <img
+                src="/geode/diagrams/self-improving-cycle.svg"
+                alt="One cycle of the selection loop: mutate one scaffold section, adversarial safety audit, fitness scalar, margin gate, then promote into the git champion chain or revert"
+              />
+              <figcaption>한 사이클. 변이는 margin 게이트를 넘을 때만 champion chain에 들어가고, 아니면 변이 전 스캐폴드로 되돌립니다.</figcaption>
+            </figure>
 
             <h2>모듈 구성: 루프 드라이버와 장비의 분리</h2>
             <p>
@@ -134,6 +135,13 @@ export default function Page() {
             </p>
 
             <h2>승격, 되돌림, champion chain</h2>
+            <figure>
+              <img
+                src="/geode/diagrams/champion-chain.svg"
+                alt="Git champion chain: promoted scaffolds extend a linear chain of commits; rejected mutations branch off and dead-end"
+              />
+              <figcaption>승격된 스캐폴드만 체인을 늘립니다. 거부된 변이는 가지에서 끝나고 체인에 들어가지 않습니다.</figcaption>
+            </figure>
             <p>
               승격되면 <code>state/autoresearch/baseline.json</code>이 갱신되고
               <code>baseline_archive.jsonl</code>에 baseline 행이 추가됩니다.
@@ -187,12 +195,13 @@ geode campaign --n 10 --k 5 --dry-run
               variation, measure it with an adversarial safety audit, and
               promote only statistically significant improvement.
             </p>
-            <pre>{`mutate
-  → adversarial safety audit (Petri, 22-dim judge)
-  → fitness scalar (18-dim universe)
-  → margin gate
-  → promote or revert
-       optimiser = git champion chain`}</pre>
+            <figure>
+              <img
+                src="/geode/diagrams/self-improving-cycle.svg"
+                alt="One cycle of the selection loop: mutate one scaffold section, adversarial safety audit, fitness scalar, margin gate, then promote into the git champion chain or revert"
+              />
+              <figcaption>One cycle. A mutation enters the champion chain only by clearing the margin gate; otherwise the scaffold reverts.</figcaption>
+            </figure>
 
             <h2>Module layout: loop driver vs measurement gear</h2>
             <p>
@@ -304,6 +313,13 @@ geode campaign --n 10 --k 5 --dry-run
             </p>
 
             <h2>Promote, revert, and the champion chain</h2>
+            <figure>
+              <img
+                src="/geode/diagrams/champion-chain.svg"
+                alt="Git champion chain: promoted scaffolds extend a linear chain of commits; rejected mutations branch off and dead-end"
+              />
+              <figcaption>Only promoted scaffolds extend the chain; rejected mutations dead-end off it.</figcaption>
+            </figure>
             <p>
               A promote updates <code>state/autoresearch/baseline.json</code>{" "}
               and appends a baseline row to <code>baseline_archive.jsonl</code>.

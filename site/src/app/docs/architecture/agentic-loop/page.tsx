@@ -43,6 +43,13 @@ export default function Page() {
               <li>모델이 요청한 도구 실행.</li>
               <li>assistant 메시지와 tool_result를 히스토리에 붙이고 다음 라운드로 진입합니다.</li>
             </ol>
+            <figure>
+              <img
+                src="/geode/diagrams/agentic-loop.svg"
+                alt="AgenticLoop turn cycle: round-entry guards, context-overflow check, LLM call, tool execution, and the early-termination paths"
+              />
+              <figcaption>한 턴의 사이클과 종료 경로. 가드에 막히면 라운드에 들어가지 않고 종료 사유를 남기고 끝납니다.</figcaption>
+            </figure>
 
             <h2>라운드 진입 가드</h2>
             <table>
@@ -186,6 +193,13 @@ export default function Page() {
               <li>Execute the tools the model requested.</li>
               <li>Append the assistant message and tool_results to history, enter the next round.</li>
             </ol>
+            <figure>
+              <img
+                src="/geode/diagrams/agentic-loop.svg"
+                alt="AgenticLoop turn cycle: round-entry guards, context-overflow check, LLM call, tool execution, and the early-termination paths"
+              />
+              <figcaption>One turn through the loop, and the paths that end it. A blocked guard skips the round and records its termination reason.</figcaption>
+            </figure>
 
             <h2>Round-entry guards</h2>
             <table>
