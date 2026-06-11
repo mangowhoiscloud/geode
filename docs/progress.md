@@ -16,7 +16,7 @@
 
 <!-- Move items here when work begins. -->
 <!-- 3-Checkpoint: (1) alloc → (2) merge (CI 5/5) → (3) verify -->
-- [ ] Docs sprint — 전 페이지 재생성/재설계 진행 중: Phase 0 캐논(v0.99.168)·Phase 1 팩트시트 4종(~/.geode/diagnostics/docs-sprint/)·Phase 2 Axolotl Rose 재스킨(v0.99.173)·**3a(PR #2130→#2131) + 3b Concepts+Self-Improving 21페이지+문체 검수(PR #2135→#2134) 완료**. 잔여: 3c Operate/Guides/Reference/Develop+08b 삭제(워크트리 docs-3c, 에이전트 진행 중), 3d Config, Phase 4 최종 검증(Codex MCP). 브리프=memory project_docs_sprint_brief_2026_06_11 + project_docs_redesign_decisions_2026_06_11
+
 - [ ] H11-tail — routing 상수 모듈레벨 by-value 별칭 해동(core/llm/providers/{anthropic,openai,codex,glm}.py DEFAULT_*/FALLBACK_MODELS + core/skills/agents.py dataclass 기본값) — reload 후에도 boot-frozen, 호출자 스윕 필요. + H1(데몬 client-cwd 세션 해석)은 별도 결정
 
 ## In Review
@@ -27,6 +27,7 @@
 
 <!-- Completed items. Keep recent 10, archive older ones. -->
 <!-- - [x] #issue-number — Short description (PR #N) -->
+- [x] Docs sprint — 전 페이지 재생성/재설계 COMPLETE: Phase 0 캐논+금지어 CI 게이트(v0.99.168) → Phase 1 팩트시트 4종 → Phase 2 Axolotl Rose 재스킨(v0.99.173) → 3a~3d 콘텐츠 4배치(랜딩+66페이지 재생성, 08b 4p 삭제, runtime/research 신규, README Site 링크 제거, 배치별 문체 검수) → Phase 4 Codex 적대 감사(26주장: 24 OK, REFUTED 2건 p4 정정 #2151→#2152). 잔존 후속은 memory project_docs_sprint_complete_2026_06_11 (GEODE.md 격리 과장=운영자 결정, Mermaid/시그니처 SVG 미구현)
 - [x] geode-mcp HTTP 원격 접근 — `--http` streamable-HTTP + GEODE_MCP_TOKEN bearer (PR #2118, v0.99.171)
 - [x] geode-mcp run_agent 라이브 핫픽스 — adapter bootstrap(.172) + event-loop async(.174) (PR #2123/#2127)
 - [x] /model 라이브 세션 미반영 버그 — thin-CLI↔daemon gap, cmd_model이 settings만 갱신·live loop 미반영(drift-sync는 PR-DRIFT-CUT no-op). CLIPoller가 /model 후 live loop 동기화(primary-axis delta gate, role-switch clobber 방지). Codex 검증 1건 반영 (PR #2139 → #2140, v0.99.175)
