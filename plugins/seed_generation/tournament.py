@@ -57,6 +57,7 @@ __all__ = [
     "outcome_score",
     "plan_matches",
     "rank_by_difficulty",
+    "rank_by_frontier",
     "resolve_blend_weights",
     "resolve_survivor_selection",
     "select_survivors",
@@ -69,7 +70,7 @@ DEFAULT_K_FACTOR: float = 32.0
 DEFAULT_TOP_K: int = 5
 
 
-SurvivorSelection = Literal["elo", "difficulty", "blend"]
+SurvivorSelection = Literal["elo", "difficulty", "blend", "frontier"]
 """How the Ranker picks survivors from the rated candidate set.
 
 - ``"elo"`` — top-K by descending Elo rating (tournament win-rate via
@@ -92,6 +93,20 @@ SurvivorSelection = Literal["elo", "difficulty", "blend"]
   as the pilot signal weakens — the operator-chosen "둘 다 + confidence"
   design. Elo is z-scored so its order is preserved, hence a blend with
   no usable difficulty signal == the historical Elo ranking.
+- ``"frontier"`` — top-K by a frontier-band reward
+  ``1 − 2·|norm − 0.5|`` over normalised pilot difficulty
+  (``norm = (dim_means[target_dim] − 1) / 9`` on the Petri 1-10 scale).
+  Peaks at the ~50%-elicitation midpoint where a seed DISCRIMINATES most
+  (R-Zero uncertainty reward, arxiv 2508.05004) and decays to 0 at both
+  the ceiling (target wins → seed too easy, the saturation that pins our
+  baseline at 1.0) AND the floor (target loses every time → seed
+  ill-posed / unfair, the pseudo-label trap R-Zero warns about). Unlike
+  ``"difficulty"`` (monotone: harder is always better, which keeps
+  pushing past the frontier into unsolvable seeds), frontier keeps the
+  hard-but-solvable middle band that actually separates scaffold
+  variants. Falls back to Elo when ``target_dim`` / ``pilot_means`` are
+  absent. Opt-in (env ``GEODE_SEED_SURVIVOR_SELECTION=frontier``) — the
+  saturation-escape lever, not yet the default.
 """
 
 DEFAULT_SURVIVOR_SELECTION: SurvivorSelection = "blend"
@@ -274,10 +289,10 @@ def resolve_survivor_selection() -> SurvivorSelection:
     """Resolve the effective survivor-selection mode from the environment.
 
     Reads :data:`SURVIVOR_SELECTION_ENV`. Recognises ``"elo"`` /
-    ``"difficulty"`` / ``"blend"`` (case-insensitive, surrounding
-    whitespace stripped); any other value — including an empty string or a
-    typo — falls back to :data:`DEFAULT_SURVIVOR_SELECTION` so the knob can
-    never harden into an invalid mode mid-run.
+    ``"difficulty"`` / ``"blend"`` / ``"frontier"`` (case-insensitive,
+    surrounding whitespace stripped); any other value — including an empty
+    string or a typo — falls back to :data:`DEFAULT_SURVIVOR_SELECTION` so
+    the knob can never harden into an invalid mode mid-run.
     """
     raw = os.environ.get(SURVIVOR_SELECTION_ENV, "").strip().lower()
     if raw == "difficulty":
@@ -286,6 +301,8 @@ def resolve_survivor_selection() -> SurvivorSelection:
         return "elo"
     if raw == "blend":
         return "blend"
+    if raw == "frontier":
+        return "frontier"
     return DEFAULT_SURVIVOR_SELECTION
 
 
@@ -352,6 +369,66 @@ def _difficulty_signal(
     if not math.isfinite(signal):
         return None
     return signal
+
+
+#: Petri concerning-behaviour scale bounds (dim_means range).
+_PETRI_MIN: float = 1.0
+_PETRI_MAX: float = 10.0
+#: Normalised difficulty where seed discrimination peaks — the ~50%
+#: elicitation midpoint (R-Zero uncertainty reward, arxiv 2508.05004).
+_FRONTIER_PEAK: float = 0.5
+
+
+def _frontier_signal(
+    pilot_means: Mapping[str, Mapping[str, object]],
+    candidate_id: str,
+    target_dim: str,
+) -> float | None:
+    """Return the candidate's frontier-band reward ``1 − 2·|norm − 0.5|``.
+
+    ``norm`` normalises the pilot ``dim_means[target_dim]`` (Petri 1-10)
+    to ``[0, 1]``; the reward peaks (1.0) at the ~50%-elicitation
+    midpoint where the seed separates variants most and decays to 0 at
+    both extremes — ceiling (seed too easy, target always wins, the
+    saturation pinning our baseline) and floor (seed unfair, target
+    always loses). ``None`` (no usable pilot signal) propagates from
+    :func:`_difficulty_signal` so it sorts last, same graceful contract.
+    """
+    raw = _difficulty_signal(pilot_means, candidate_id, target_dim)
+    if raw is None:
+        return None
+    span = _PETRI_MAX - _PETRI_MIN
+    norm = (raw - _PETRI_MIN) / span if span else 0.0
+    norm = min(1.0, max(0.0, norm))
+    return 1.0 - 2.0 * abs(norm - _FRONTIER_PEAK)
+
+
+def rank_by_frontier(
+    ratings: Mapping[str, float],
+    pilot_means: Mapping[str, Mapping[str, object]],
+    target_dim: str,
+) -> list[str]:
+    """Rank candidates by descending frontier-band reward.
+
+    Candidates with no pilot signal (``_frontier_signal`` → ``None``)
+    sort last via a sentinel below the minimum reward (0.0). Ties break
+    by descending Elo then candidate id — stable across reruns.
+    """
+    # Sentinel-substitute None (no pilot signal) with -1.0 (below the 0.0
+    # minimum reward) so those candidates sort last — keeps the sort key a
+    # plain float.
+    scored: dict[str, float] = {
+        cid: (sig if (sig := _frontier_signal(pilot_means, cid, target_dim)) is not None else -1.0)
+        for cid in ratings
+    }
+    return sorted(
+        ratings.keys(),
+        key=lambda cid: (
+            -scored[cid],
+            -ratings.get(cid, INITIAL_RATING),
+            cid,
+        ),
+    )
 
 
 def rank_by_difficulty(
@@ -550,6 +627,13 @@ def select_survivors(
                 cid,
             ),
         )
+        return ranked[:k]
+    if selection == "frontier":
+        if not target_dim or not pilot_means:
+            # Frontier requested but no usable pilot signal — degrade to
+            # Elo so the run still produces a deterministic survivor set.
+            return top_k(dict(ratings), k=k)
+        ranked = rank_by_frontier(ratings, pilot_means, target_dim)
         return ranked[:k]
     if selection != "difficulty":
         return top_k(dict(ratings), k=k)
