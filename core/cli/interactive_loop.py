@@ -65,7 +65,13 @@ def _render_text_with_latex(text: str) -> None:
     """
     from rich.markdown import Markdown
 
+    from core.ui.cjk_markdown import cjk_safe_emphasis
     from core.ui.latex import extract_and_render_inline
+
+    # CommonMark rejects `**…**` when the closer touches a Korean particle
+    # (`**[추정]**이지만`) — pad spans so emphasis renders instead of
+    # literal asterisks. Code regions pass through untouched.
+    text = cjk_safe_emphasis(text)
 
     segments = list(extract_and_render_inline(text))
     has_math = any(kind != "text" for kind, _ in segments)

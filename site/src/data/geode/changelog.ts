@@ -2,7 +2,7 @@
  * GEODE CHANGELOG, auto-synced from the GEODE repo via `npm run sync-stats`.
  * Do not edit manually. Edit CHANGELOG.md in the GEODE repo and re-run sync.
  *
- * Last sync: 2026-06-10
+ * Last sync: 2026-06-11
  *
  * Each entry's `body` is the raw markdown between two version headings.
  * The Changelog page renders the body with a minimal markdown renderer
@@ -16,6 +16,31 @@ export type ChangelogEntry = {
 };
 
 export const CHANGELOG: ChangelogEntry[] = [
+  {
+    "version": "0.99.178",
+    "date": "2026-06-11",
+    "body": "### Fixed\n- **REPL input UI: arrow keys dead + Korean ghost artifacts + literal `^[[D`**\n  (operator report). Three stacked causes, one root: the #1180 CJK repaint\n  patch registered a custom `<any>` key binding, which takes precedence over\n  prompt_toolkit's DEFAULT bindings for every unmatched key — arrows,\n  Ctrl-A/E, word movement, and history keys all matched `<any>`, fell through\n  its printable-only filter, and became no-ops. Replaced the key-layer patch\n  with a buffer-layer `Buffer.on_text_changed` invalidate hook\n  (`core/cli/prompt_session.py::_invalidate_on_text_changed`): wide-char\n  repaint stays in sync on insert AND delete while key routing returns\n  entirely to the defaults (arrows, editing, history all restored).\n  Separately, a single transient prompt_toolkit error used to disable line\n  editing permanently for the session (`False` sentinel) and silently\n  downgrade to `console.input`, where arrows render as literal `^[[D`; the\n  fallback is now bounded — rebuild on next prompt, permanent disable only\n  after 3 consecutive failures. Guards:\n  `tests/core/cli/test_prompt_session.py` (no-`<any>` pin, repaint-hook pin,\n  transient-vs-permanent fallback)."
+  },
+  {
+    "version": "0.99.177",
+    "date": "2026-06-11",
+    "body": "### Fixed\n- **Tool-call lines rendered with ragged indentation** (operator-reported: some `✓ tool` lines indented ~16 columns, others 2). `ToolCallTracker._redraw` moved the cursor up with `\\033[{n}A` (preserves the column) and cleared each line with `\\033[2K` (does not move the cursor), so when a prior writer — the activity spinner, the thinking region, or an interleaved stream — left the cursor mid-line, the `  ✓ name` text printed at that stale column. Every rendered tool line now starts with `\\r` to paint from column 0 (matching what `suspend()` already did). Guards: `tests/core/ui/test_tool_tracker_indent.py` (2)."
+  },
+  {
+    "version": "0.99.176",
+    "date": "2026-06-11",
+    "body": "### Fixed\n- **`/model` picker reported \"Cancelled\" for every switch — thin-CLI profile not hydrated** (operator-reported, the real cause behind \"fable 5로 바꿔도 안 먹힘\"): the interactive picker runs in the thin CLI process (relayed locally so the terminal keeps stdin), which — unlike the serve daemon — never runs the wiring bootstrap. So `get_profile_store()` was empty and `model_available()` → `resolve_routing()` returned None for EVERY model; the picker treats Enter on an unavailable entry as a blocked-Enter and reports `Cancelled`, so no switch ever landed even though the daemon was authenticated and the current model ran fine. `_interactive_model_picker` / `_interactive_model_picker_for_role` now call `_ensure_profiles_hydrated()` (idempotent `ensure_profile_store()` from `~/.geode/auth.toml`) before evaluating availability. Distinct from and upstream of the v0.99.175 live-session fix — that handled a switch that *landed*; this lets the switch land at all. Guards: `tests/core/cli/test_picker_profile_hydrate.py` (4)."
+  },
+  {
+    "version": "0.99.175",
+    "date": "2026-06-11",
+    "body": "### Fixed\n- **`/model` switch ignored inside a live session — thin-CLI ↔ daemon model gap** (operator-reported, recurring): a `/model` issued mid-session relays to the daemon, where `cmd_model` updates `settings.model`/`agentic_effort` + config.toml but never the AgenticLoop the active session runs on (its docstring: \"applies to *new* sessions\"). The per-turn drift sync that used to re-point the loop was cut to a no-op (PR-DRIFT-CUT, 2026-05-24) because *inferring* drift caused an auto-revert smoke incident — leaving `/model` as the sole explicit entry point, but one that never reached the live loop. `CLIPoller._handle_command_on_server` now calls `_sync_live_loop_to_settings(loop)` after a `/model` command lands: model + provider + identity breadcrumb + context-window adapt + effort axis, using the same synchronous swap helpers `update_model_async` uses (minus the async-only telemetry hook). Fires ONLY on an explicit `/model` command, so it carries operator intent without reintroducing speculative drift. Verify the effective model with `geode about`, not config.toml (`geode config explain model` shows the winning layer). Guards: `tests/core/server/test_model_switch_live_session.py` (5)."
+  },
+  {
+    "version": "0.99.174",
+    "date": "2026-06-11",
+    "body": "### Fixed\n- **geode-mcp `run_agent` event-loop conflict** — second live HTTP defect: FastMCP executes tool handlers inside the server's event loop, where the sync `run_agentic_oneshot` wrapper's `run_process_coroutine` raises \"cannot be called from an active event loop\". `run_agentic_oneshot` split into async core `arun_agentic_oneshot` (carrying the adapter bootstrap from v0.99.172) + thin sync wrapper; the MCP `run_agent` tool is now `async def` awaiting the core directly. Fork-skill caller keeps the sync wrapper. Guards: `test_run_agent_tool_is_async_and_awaits_async_core`, `test_sync_oneshot_wrapper_delegates_to_async_core`."
+  },
   {
     "version": "0.99.173",
     "date": "2026-06-11",
@@ -1588,4 +1613,4 @@ export const CHANGELOG: ChangelogEntry[] = [
   }
 ];
 
-export const CHANGELOG_SYNCED_AT = "2026-06-10";
+export const CHANGELOG_SYNCED_AT = "2026-06-11";
