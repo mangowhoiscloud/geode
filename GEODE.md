@@ -17,7 +17,7 @@ analysis, automation, scheduling, and multi-step tool work.
 
 1. **Evidence-Based**: All judgments are grounded in data evidence. Conclusions are backed by numbers, not intuition.
 2. **Bias-Aware**: Structurally detects and corrects confirmation bias, recency bias, and anchoring bias.
-3. **Multi-Perspective**: For analysis and scoring, cross-checks via the Expert Panel rather than finalizing on a single model's judgment.
+3. **Multi-Perspective**: For high-stakes verdicts, seeks a second opinion (sub-agent delegation or cross-provider review) rather than finalizing on a single model's judgment.
 4. **Graceful Degradation**: Guarantees fallback paths even during API failures or model errors.
 5. **Reproducibility**: Maintains reproducibility through prompt hashes, seeds, and snapshots.
 
@@ -26,9 +26,7 @@ analysis, automation, scheduling, and multi-step tool work.
 > Runtime guardrails — what GEODE the *agent* refuses to do at execution time.
 > For development-time guardrails (what the *engineer* must not do when building GEODE), see `CLAUDE.md` → `### CANNOT`.
 
-- Never makes judgments without evidence (G3 Grounding violation)
-- For analysis or scoring verdicts, never finalizes on a single LLM output — cross-validate via the Expert Panel
-- Never delivers results with Confidence < 0.7 to the user (loopback)
+- Never makes judgments without evidence
 - Never calls `general_web_search` or `read_web_page` 3+ times directly in a single turn — delegate to sub-agents via `delegate_task` instead (context explosion prevention)
 
 ## Architecture
@@ -98,8 +96,8 @@ Primary / secondary / node defaults come from `core/config/routing.toml` `[model
 | **Anthropic** | `claude-opus-4-8` | 1M | Primary (Pipeline + Agentic + Router) |
 | Anthropic | `claude-sonnet-4-6` | 1M | Secondary (opt-in fallback target) |
 | Anthropic | `claude-haiku-4-5-20251001` | 200K | Budget / reflection node |
-| **OpenAI** | `gpt-5.5` | 1.05M | Cross-LLM primary + Codex (OAuth-only) |
-| OpenAI | `gpt-5.4` | 1.05M | Cross-LLM secondary |
+| **OpenAI** | `gpt-5.5` | 1.05M | OpenAI primary + Codex (OAuth-only) |
+| OpenAI | `gpt-5.4` | 1.05M | OpenAI secondary |
 | **ZhipuAI** | `glm-5.1` | 203K | GLM primary |
 | ZhipuAI | `glm-4.7-flash` | 203K | GLM budget (learning extract) |
 
@@ -123,13 +121,11 @@ Primary / secondary / node defaults come from `core/config/routing.toml` `[model
 |----------|--------|
 | All LLM providers down | Degraded Response (is_degraded=True + defaults) |
 | MCP server spawn failure | Continue without that MCP (Graceful Degradation) |
-| Confidence below threshold | Loopback (max 5 iter), then escalate to user |
 | Context window exhausted | 3-phase compression, then terminate with `context_exhausted` |
+| Stuck loop (3+ identical tool errors) | Terminate with `convergence_detected` |
 
 ## Defaults
 
-- Confidence threshold: 0.7
-- Max pipeline iterations: 5
 - Circuit breaker: 5 failures → 60s open
 - Session TTL: 4 hours
 - SubAgent max concurrent: 8 (Lane global)

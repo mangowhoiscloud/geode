@@ -45,6 +45,11 @@ functional change.
 
 ---
 
+## [0.99.187] - 2026-06-12
+
+### Removed
+- **Dead Game-IP-era verification residue purged from code + operator docs** (PR-SLOP-DEAD-VERIFICATION-REFS, follow-up to the v0.99.149/v0.99.157 pipeline removal). Two zero-caller code artifacts deleted: `Settings.temperature_verification` (its consumer, the cross-LLM agreement rescoring path, left with the pipeline — the PR-TEMP ratchet site list already excluded it) and `MonoLakeOrganizationMemory.get_common_rubric` (14-axis / S-D tier IP rubric; the OrganizationMemoryPort that required it was folded earlier). Operator-facing docs no longer claim the deleted machinery as current capability: GEODE.md drops the Expert Panel / "Confidence < 0.7 loopback" / G3 runtime rules and the confidence-gate defaults (the failure-mode table now documents the real `convergence_detected` stuck-loop guard), README/README.ko replace "Core verification (G1-G4 + Cross-LLM Krippendorff α ≥ 0.67 + Rights Risk)" with the implemented turn-verify layer (`core/agent/verify.py`, rule-based + opt-in LLM-judge → replan on FAIL) and an honest ⚠️ WIP label on the cross-provider ranking panel, AGENTS.md drops the nonexistent `core/verification/` + `core/automation/` sections, and setup docs relabel `OPENAI_API_KEY` (was "Cross-LLM").
+
 ## [0.99.186] - 2026-06-12
 
 ### Fixed

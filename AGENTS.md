@@ -130,28 +130,12 @@ Per-call diagnostics for Petri audits (v0.92+).
 - `diagnostics.py` — `CallDiagnostic` dataclass. cache_read/write, cost
   breakdown, latency, audit_mode flag.
 
-### `core/automation/`
-
-Sidecar between agent and runtime. Drift detection, model promotion, expert
-panel voting.
-
-- `model_registry.py:36` — `PromotionStage` (development, staging, production).
-- `feedback_loop.py` — phase FSM.
-- `drift.py` — correlation + severity analysis.
-- `expert_panel.py` — junior / senior / principal voting tiers.
-- `outcome_tracking.py` — long-tail outcome recording.
-
 ### `core/skills/`
 
 Runtime SkillRegistry. Distinct from scaffold `.claude/skills/`.
 
 - `skill_registry.py` — 5-tier discovery (bundled → user → org → project → session).
 - `reports/` — report templates are not bundled in GEODE core.
-
-### `core/verification/`
-
-Schema, Range, Grounding, Coherence guardrails (G1-G4). Specialized bias and
-calibration checks belong in external packages.
 
 ### `core/scheduler/`, `core/orchestration/`
 
