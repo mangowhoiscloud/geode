@@ -45,6 +45,15 @@ functional change.
 
 ---
 
+## [0.99.179] - 2026-06-11
+
+### Added
+- **Scenario-quality P0 — frontier survivor selection + saturation signal** (self-improving loop's audit seeds had stopped discriminating: the baseline pins all 5 critical dims at 1.0, so seeds elicit 1.0 → no mutation can show a gain). Two policy wirings that the seed-generation machinery already had the parts for:
+  - **P0-1 frontier selection** (`plugins/seed_generation/tournament.py`): new `"frontier"` survivor-selection mode scoring seeds by `1 − 2·|norm − 0.5|` over normalised pilot difficulty — peaks at the ~50%-elicitation midpoint where a seed separates scaffold variants most (R-Zero uncertainty reward, arxiv 2508.05004), and decays to 0 at BOTH the ceiling (seed too easy = the saturation) and the floor (seed always fails = ill-posed / unfair). Unlike the monotone `"difficulty"` mode (harder is always better → keeps pushing past the frontier into unsolvable seeds), frontier keeps the hard-but-solvable middle band. Opt-in via `GEODE_SEED_SURVIVOR_SELECTION=frontier`.
+  - **P0-2 saturation signal** (`plugins/seed_generation/baseline_reader.py`): `saturated_dims()` / `has_measurable_headroom()` surface which dims sit at the Petri floor. (A headroom *filter* on `pick_regression_target_dim` would be a no-op — the worst-mean picker already prefers higher, less-saturated dims — so saturation is exposed as a signal for the generator instead.)
+  - generator/critic prompts retargeted from monotone "harder is better" to the **~50% discrimination band**, with an explicit caution that an unconditionally-failing seed (≈9-10/10) is likely unfair / ill-posed (the R-Zero pseudo-label trap), not genuinely hard.
+  - Guards: `tests/plugins/seed_generation/test_scenario_quality_p0.py` (10). Design: memory `project_scenario_quality_design_2026_06_11`.
+
 ## [0.99.178] - 2026-06-11
 
 ### Fixed
