@@ -45,7 +45,7 @@ functional change.
 
 ---
 
-## [0.99.182] - 2026-06-12
+## [0.99.183] - 2026-06-12
 
 ### Fixed
 - **Event-loop pollution — the root cause behind web_search insta-fail/hang** (PR-LOOP-POLLUTION-FIX). Incident (serve daemon, 2026-06-12 00:08): three parallel `general_web_search` calls; one died in 4ms (`asyncio.locks.Event ... is bound to a different event loop`, recovered by the v0.99.180 dispatch retry), two hung for 50+ minutes with zero log output (process `sample` showed two zombie `asyncio_N` worker loops in kevent; the Anthropic socket sat in CLOSE_WAIT). Two structural defects combined:
@@ -57,6 +57,11 @@ functional change.
 ### Added
 - **web_search model capability selection** (PR-WEB-SEARCH-MODEL-HINT, operator-directed): the search model is no longer hardcoded to ANTHROPIC_PRIMARY. The session's resolved model flows ToolContext → `web_search_via_adapters(model=...)` → adapter `aweb_search(model=...)`; Anthropic adapters honour it when it is in the documented `web_search_20260209` support set (`core/llm/model_capabilities.py::ANTHROPIC_WEB_SEARCH_20260209_MODELS` — Fable 5, Opus 4.8/4.7/4.6, Sonnet 4.6; ref platform web-search-tool docs, verified 2026-06-12) and escalate to ANTHROPIC_PRIMARY otherwise; openai/glm/codex adapters keep their provider primary (per-model support matrix unverified — doc-before-behaviour §4d).
 - **Loop-pollution guardrail suite** (`tests/core/llm/test_loop_pollution_guardrails.py`, 21 tests): every delegated handler + tool `aexecute` must be async (registry-iterating, covers future tools); `LoopAffineClientCache` same-loop-reuse / cross-loop-isolation / no-loop-uncached / invalidate semantics; source ratchet `self._client =` banned in the adapters package; registry-wide ratchet that every `bootstrap_builtins` adapter owning a client uses the loop-affine cache (covers future adapters); provider getters per-loop; hung-handler → `{"timeout": True}`; deadline override sanity; `resolve_web_search_model` honour/escalate; every web_search-capable adapter accepts the `model` hint (model-onboarding parity); web tools forward the session model; IPC reset handling pin. Plus a runtime canary: `run_process_coroutine` from a `to_thread` worker logs a loop-pollution warning naming the regression. Four Codex MCP review findings folded in: `computer` deadline-override key fixed (was dead `computer_use`), MCP dispatch wall-clock coverage, closed-loop entry sweep in the cache (a client's loop back-reference can keep the weak key alive), and legacy external adapters without the `model` kwarg keep working (signature-checked forwarding).
+
+## [0.99.182] - 2026-06-12
+
+### Fixed
+- **Seed-generation entry now bootstraps .env + the auth profile store** — the thin CLI `audit-seeds generate` / `resume` never run `GeodeRuntime.create`, so the wiring `ProfileStore` started empty and the ranker's voter sub-agents resolved credentials through it, failing with `openai.api_key — unknown` and losing tournament quorum (observed on the frontier-2612 live run — pilot completed but ranker halted). The pilot's `inspect eval` subprocess reads `os.environ` directly so a hand-exported key masked the gap there, but the voter path needs the profile store hydrated. `run_audit_seeds` + `run_audit_seeds_resume` now call `_bootstrap_seed_generation_env` (`load_env_files` + idempotent `ensure_profile_store`, the same pattern as the /model picker hydration in v0.99.176). Guards: `tests/plugins/seed_generation/test_env_auth_bootstrap.py` (4).
 
 ## [0.99.181] - 2026-06-11
 
