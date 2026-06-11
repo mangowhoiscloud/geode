@@ -130,12 +130,33 @@ def _apply_model_update(
         # on a provider change so ``/model`` between providers points
         # ``loop._new_adapter`` at the new provider's adapter (else the
         # next ``_call_llm`` would dispatch to the wrong API).
-        # ``loop._source`` was set at init (defaults to ``"payg"``)
-        # and stays constant across the switch — operators don't
-        # expect ``/model`` to also flip the source axis.
+        #
+        # PR-MODEL-SWITCH-SOURCE (2026-06-12) — the source axis is
+        # RE-INFERRED for the new provider when it was inferred at init.
+        # The previous "stays constant across the switch" rule carried
+        # the OLD provider's source onto the new one: an anthropic
+        # session (source=payg) switched to gpt-5.5 kept payg, routing
+        # through openai-payg's stale API key and 401-ing even though
+        # the operator had just completed /login codex and
+        # infer_source("openai") resolves to subscription (incident
+        # 2026-06-12 02:34, serve.log). An explicit caller-pinned
+        # source still survives the switch.
         # PR-MAINPATH-67 (2026-05-24) — the legacy ``loop._adapter``
         # re-resolution was deleted with the rest of the resolver
         # surface; Path-B is now the sole call path.
+        if not getattr(loop, "_source_explicit", False):
+            from core.llm.adapters._source_inference import infer_source
+
+            new_source = infer_source(new_provider)
+            if new_source != loop._source:
+                log.info(
+                    "AgenticLoop source re-inferred on provider switch: %s (%s) -> %s (%s)",
+                    loop._source,
+                    old_model,
+                    new_source,
+                    model,
+                )
+                loop._source = new_source
         loop._new_adapter = _resolve_path_b_adapter(new_provider, loop._source)
     loop.model = model
     loop._tool_processor._model = model

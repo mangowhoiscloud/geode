@@ -13,6 +13,7 @@ as _pkg`` lookup, mirroring the pattern used by ``core/ui/agentic_ui``.
 from __future__ import annotations
 
 import logging
+from typing import Any
 
 from core.cli.commands._state import (
     _MODEL_INDEX,
@@ -126,6 +127,17 @@ def _apply_model(
     from core.config.env_io import upsert_config_toml
 
     role_def = role_by_name(role)
+    # PR-PICKER-ROLE-SCOPE (2026-06-12) — non-primary roles are
+    # daemon-global: their READERS consult the GLOBAL config only
+    # (`_read_toml_value` → GLOBAL_CONFIG_TOML; the self-improving
+    # runner's `load_self_improving_loop_config` → GEODE_CONFIG_TOML or
+    # GLOBAL_CONFIG_TOML). The previous default scope="project" wrote a
+    # mutator/reflection pick into the PROJECT toml where neither reader
+    # ever looked — the pick appeared to vanish (picker re-rendered
+    # "(inherits Settings.model)" and the runner kept the old model).
+    # Write-read parity: non-primary always persists to global.
+    if role_def.name != "primary":
+        scope = "global"
     old = _current_model_for_role(role_def)
     old_effort = getattr(settings, "agentic_effort", "high")
     same_model = selected.id == old
@@ -240,6 +252,15 @@ def _apply_model(
             f"  [success]Effort[/success]  {old_effort} → [bold]{effort}[/bold]"
             f"  [muted](model unchanged: {selected.label})[/muted]"
         )
+    else:
+        # PR-PICKER-ROLE-CONFIRM (2026-06-12) — an unchanged pick used to
+        # close with NO output, which on the Reflection/Mutator tabs read
+        # as "Enter does not confirm". Every non-cancelled Enter now gets
+        # explicit feedback.
+        _pkg.console.print(
+            f"  [muted]Model unchanged: [/muted][bold]{selected.label}[/bold]"
+            f"  [muted]({selected.id})[/muted]{role_tag}"
+        )
     if not same_model:
         where = "this project" if scope == "project" else "all projects"
         _pkg.console.print(
@@ -331,6 +352,22 @@ def _interactive_model_picker() -> None:
         _pkg.console.print()
         return
 
+    _apply_picker_result(result)
+
+
+def _apply_picker_result(result: Any) -> None:
+    """Apply a non-cancelled picker result: staged per-role picks first
+    (Space, PR-PICKER-SPACE-STAGE 2026-06-12), then the final Enter pick.
+
+    Each staged role gets the same persistence path as the final pick
+    (``_apply_model`` with the matching role) so the operator can set
+    Primary + Reflection + Mutator in ONE picker session.
+    """
+    for staged_role, staged_mid in getattr(result, "staged", ()) or ():
+        staged_profile = next((p for p in MODEL_PROFILES if p.id == staged_mid), None)
+        if staged_profile is None:
+            continue
+        _apply_model(staged_profile, effort=None, role=staged_role)
     chosen_profile = next(p for p in MODEL_PROFILES if p.id == result.model_id)
     _apply_model(chosen_profile, effort=result.effort, role=result.role)
 
@@ -378,8 +415,7 @@ def _interactive_model_picker_for_role(role_def: AgentRole) -> None:
         _pkg.console.print("  [muted]Cancelled[/muted]")
         _pkg.console.print()
         return
-    chosen_profile = next(p for p in MODEL_PROFILES if p.id == result.model_id)
-    _apply_model(chosen_profile, effort=result.effort, role=result.role)
+    _apply_picker_result(result)
 
 
 def cmd_model(args: str) -> None:

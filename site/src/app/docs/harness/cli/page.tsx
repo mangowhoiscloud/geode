@@ -139,6 +139,17 @@ export default function Page() {
               <code>/model</code>은 TTY에서 picker를 로컬로 띄운 뒤 선택 결과만
               데몬에 전달합니다(<code>core/cli/__init__.py</code>).
             </p>
+            <p>
+              picker 키 계약(<code>core/cli/effort_picker.py</code>): Tab이
+              역할 탭(Primary, Reflection, Mutator)을 순환하고 ↑↓가 모델,
+              ←→가 effort를 고릅니다. <strong>Space는 포커스된 역할에
+              적용하고 picker를 유지</strong>하므로 세 역할을 한 세션에서
+              모두 설정할 수 있습니다. Enter는 staged 선택까지 전부 확정하고
+              닫으며, Esc는 staged 선택을 포함해 전부 폐기합니다. provider가
+              바뀌는 전환은 credential source(payg, subscription)를 새
+              provider 기준으로 다시 추론합니다. <code>/login codex</code>{" "}
+              직후의 GPT 전환이 구독 쿼터로 라우팅되는 근거입니다.
+            </p>
 
             <h2>geode-mcp 서버</h2>
             <p>
@@ -313,6 +324,18 @@ export default function Page() {
               <code>/model</code> with no arguments runs the interactive picker
               locally on a TTY, then relays only the chosen model to the daemon
               (<code>core/cli/__init__.py</code>).
+            </p>
+            <p>
+              Picker key contract (<code>core/cli/effort_picker.py</code>): Tab
+              cycles the role tabs (Primary, Reflection, Mutator), ↑↓ pick the
+              model, ←→ pick effort. <strong>Space applies the focused row to
+              the focused role and keeps the picker open</strong>, so all three
+              roles can be set in one session. Enter confirms everything
+              (including staged picks) and closes; Esc discards everything,
+              staged picks included. A provider-changing switch re-infers the
+              credential source (payg, subscription) for the new provider,
+              which is why a GPT switch right after <code>/login codex</code>{" "}
+              routes through the subscription quota.
             </p>
 
             <h2>The geode-mcp server</h2>
