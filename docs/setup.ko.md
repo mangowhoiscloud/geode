@@ -270,7 +270,7 @@ geode serve [-p 3.0]                   # Headless daemon
 |------|--------|------|
 | **LLM** | | |
 | `ANTHROPIC_API_KEY` | | Claude API key |
-| `OPENAI_API_KEY` | | GPT API key (Cross-LLM) |
+| `OPENAI_API_KEY` | | GPT API key (OpenAI adapter) |
 | `ZAI_API_KEY` | | ZhipuAI GLM key |
 | `GEODE_MODEL` | `claude-opus-4-6` | 기본 LLM 모델 |
 | `GEODE_ENSEMBLE_MODE` | `single` | 앙상블 모드 (`single` / `cross`) |

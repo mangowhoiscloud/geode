@@ -238,22 +238,6 @@ class Settings(BaseSettings):
             "confidence call. Previously hardcoded to 0.2."
         ),
     )
-    temperature_verification: float = Field(
-        default=0.0,
-        ge=0.0,
-        le=2.0,
-        validation_alias=AliasChoices(
-            "temperature_verification",
-            "GEODE_TEMPERATURE_VERIFICATION",
-        ),
-        description=(
-            "Sampling temperature for cross-LLM agreement rescoring. "
-            "Defaults to 0.0 because consensus needs determinism — "
-            "stochastic rescoring would make the G3 agreement coefficient "
-            "noisy. Operators may raise it if the secondary model rejects "
-            "0.0 sampling. Previously hardcoded to 0.1."
-        ),
-    )
     temperature_commentary: float = Field(
         default=1.0,
         ge=0.0,

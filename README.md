@@ -23,7 +23,7 @@
   <a href="README.ko.md">한국어</a>
 </p>
 
-# GEODE v0.99.186 — A Self-improving Autonomous Execution Agent
+# GEODE v0.99.187 — A Self-improving Autonomous Execution Agent
 
 A general-purpose autonomous agent that also rewrites the scaffolding it runs on. You ask in plain language; GEODE plans, calls tools, and reports, for one prompt or a long-running session. Underneath, an outer loop keeps tuning the system that runs your tasks.
 
@@ -353,7 +353,7 @@ geode update                  # source checkout
 | **MCP server (`geode-mcp`)** | Exposes GEODE itself as an MCP server (stdio): `run_agent`, `self_improving_status`, `self_improving_propose`/`apply` (2-step confirm gate), `query_memory`, `get_health`. Registered for Claude Code via the repo-shipped `.mcp.json` |
 | **Long-running daemon** | `geode serve` runs as background daemon. Slack / Discord / Telegram pollers + scheduler tick + IPC for the thin CLI |
 | **Sub-agents** | Full inheritance of parent capability, depth/cost guards, isolation by Lane |
-| **Core verification** | Guardrails G1-G4 (structural) + Cross-LLM (inter-model, Krippendorff α ≥ 0.67) + Rights Risk (legal). External packages can add specialized bias / calibration layers |
+| **Turn verification** | Rule-based per-turn checks (empty turn, tool errors, plan-step mismatch) + opt-in LLM-judge scoring (`core/agent/verify.py`); a verify FAIL triggers replanning |
 
 
 ### Using GEODE as an MCP server
@@ -425,7 +425,7 @@ A qualitative read on where GEODE sits next to the frontier harnesses (Claude Co
 | Memory tiers | ✅ CLAUDE.md merge + auto memory (`~/.claude/projects/*/memory`) | ✅ hierarchical AGENTS.md (global `~/.codex/` + repo + nested dirs) | ⚠️ session-scoped | ✅✅ **multi-tier** (SOUL · User · Org · Project · Session) |
 | Disk-persistent plans | ✅ TodoWrite persistence | ⚠️ via resumable threads | ✅ task registry | ✅ `.geode/plans.json` |
 | Permission / sandbox layers | ✅ default / auto / bypass modes + Confirmation UI | ✅ `sandbox_mode` (read-only / workspace-write / danger-full-access) | ✅✅ Policy Chain across many audit surfaces | ✅ Policy Chain + tool gates |
-| Multi-layer guardrails | ⚠️ permission + hooks | ⚠️ hooks + sandbox | ✅ `audit.runtime` engine | ✅✅ **core verification** (G1-G4 + Cross-LLM Krippendorff α ≥ 0.67 + Rights Risk, plugin extension points for bias/calibration) |
+| Multi-layer guardrails | ⚠️ permission + hooks | ⚠️ hooks + sandbox | ✅ `audit.runtime` engine | ✅ **turn verify** (rule-based + opt-in LLM-judge, `core/agent/verify.py`) → replan on FAIL, plus safety-axis fitness gate in the self-improving loop |
 | Hook events | ✅ PreToolUse / PostToolUse / UserPromptSubmit / Stop / SubagentStop / PreCompact / SessionStart / SessionEnd / Notification | ⚠️ SessionStart / UserPromptSubmit / PreToolUse / PostToolUse / PermissionRequest / Stop | ✅ several event types · many bundled handlers | ✅✅ broad event surface (`docs/architecture/hook-system.md`) |
 
 </details>
@@ -440,7 +440,7 @@ A qualitative read on where GEODE sits next to the frontier harnesses (Claude Co
 | **Swappable pipeline DAG** | ❌ | ❌ | ⚠️ flows (channel-setup / doctor / provider — not a DAG abstraction) | ⚠️ external package responsibility; GEODE core no longer ships a pipeline port |
 | Trace / replay / Run Log | ✅ `tengu_*` telemetry + `/insights` HTML | ⚠️ `/status` + `/debug-config` only | ✅ ACP session lineage + Task Registry | ✅ Native RunLog + Petri eval integration |
 | Self-improving safety loop | ❌ | ❌ | ❌ | ✅✅ outer loop: scaffold mutation + adversarial safety audit + (1+1) promote/revert |
-| Cross-LLM verification | ❌ | ❌ | ❌ | ✅✅ Krippendorff α ≥ 0.67 inter-rater agreement gate |
+| Cross-provider review | ❌ | ❌ | ❌ | ⚠️ multi-voter cross-provider ranking panel (≥2 providers, `plugins/seed_generation/agents/ranker.py`) in the self-improving loop; agreement calibration is WIP |
 
 </details>
 
