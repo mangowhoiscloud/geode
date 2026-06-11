@@ -27,6 +27,7 @@
 
 <!-- Completed items. Keep recent 10, archive older ones. -->
 <!-- - [x] #issue-number — Short description (PR #N) -->
+- [x] 시나리오 품질 P0 — frontier survivor selection(~50% R-Zero band) + saturation 신호 generator wire. self-improving 포화(critical 전부 1.0) 탈출 1차. Codex 검증(orphan 1건 수정). 효과측정=캠페인 variant 분산 (PR #2177 → #2178, v0.99.179)
 - [x] /model picker Cancelled — thin CLI가 profile 미하이드레이션→model_available 전부 False→blocked-Enter. ensure_profile_store로 hydrate (PR #2145, v0.99.176)
 - [x] tool-call 줄 들여쓰기 들쭉날쭉 — _redraw가 cursor-up 후 column 미복귀. 각 줄 \\r prefix (PR #2155, v0.99.177)
 - [x] Docs sprint — 전 페이지 재생성/재설계 COMPLETE: Phase 0 캐논+금지어 CI 게이트(v0.99.168) → Phase 1 팩트시트 4종 → Phase 2 Axolotl Rose 재스킨(v0.99.173) → 3a~3d 콘텐츠 4배치(랜딩+66페이지 재생성, 08b 4p 삭제, runtime/research 신규, README Site 링크 제거, 배치별 문체 검수) → Phase 4 Codex 적대 감사(26주장: 24 OK, REFUTED 2건 p4 정정 #2151→#2152). 잔존 후속은 memory project_docs_sprint_complete_2026_06_11 (GEODE.md 격리 과장=운영자 결정, Mermaid/시그니처 SVG 미구현)
