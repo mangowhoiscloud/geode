@@ -30,7 +30,7 @@ const personal: Entry[] = [
   },
   {
     id: "eco2",
-    href: "/eco2",
+    href: "",  // no dedicated page on this site; renders as non-link
     range: "2025.10 → 2026.02",
     status: "SeSACTHON 2025 Excellence",
     titleKo: "Eco²",

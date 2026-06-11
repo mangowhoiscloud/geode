@@ -210,10 +210,12 @@ jobs:
           ln -sfn "${{ github.workspace }}/site/out" _lc/geode
 
       # External broken-link checker (lychee) over the ACTUAL built HTML that
-      # ships to Pages: internal nav, anchors, copied hub surfaces, and outbound
-      # links. Reporting mode (jobSummary) so a transient external rate-limit
-      # does not block a deploy; the internal gate above is the hard blocker.
-      # Flip `fail: true` to make external rot block once the summary reads clean.
+      # ships to Pages: internal nav, anchors, and outbound links.
+      # BLOCKING since 2026-06-11 (operator promotion): the 2026-06-11 summary
+      # read 501 errors, all of them link targets inside the vendored/generated
+      # hub surfaces (petri-bundle viewer, self-improving hub) plus 7 site-side
+      # rots fixed in the same PR. Hub targets are excluded below; the hub has
+      # its own validator (petri-publish.yml). Everything else now blocks.
       - name: Broken-link check on built HTML (lychee)
         uses: lycheeverse/lychee-action@v2
         with:
@@ -223,12 +225,14 @@ jobs:
             --cache --max-cache-age 1d
             --max-retries 2 --retry-wait-time 2 --timeout 20
             --accept 200,206,403,429
+            --exclude 'petri-bundle'
+            --exclude 'self-improving'
             site/out/index.html
             site/out/docs.html
             site/out/about.html
             'site/out/docs/**/*.html'
             'site/out/portfolio/**/*.html'
-          fail: false
+          fail: true
           jobSummary: true
           output: lychee-report.md
 
