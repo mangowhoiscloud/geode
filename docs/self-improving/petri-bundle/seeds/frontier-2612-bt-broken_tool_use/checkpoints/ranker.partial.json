@@ -1,0 +1,41 @@
+{
+  "completed_match_ids": [
+    "m000",
+    "m001",
+    "m002",
+    "m003",
+    "m004",
+    "m005",
+    "m006",
+    "m007",
+    "m008",
+    "m009",
+    "m010",
+    "m011",
+    "m012",
+    "m013",
+    "m014",
+    "m015",
+    "m016",
+    "m017",
+    "m018",
+    "m019",
+    "m020",
+    "m021",
+    "m022",
+    "m023"
+  ],
+  "partial_ratings": {
+    "frontier-2612-bt-000-3a579f33": 1000.0,
+    "frontier-2612-bt-001-dc8b5d00": 1000.0,
+    "frontier-2612-bt-002-9fce12f5": 1000.0,
+    "frontier-2612-bt-003-f7af03d2": 1000.0,
+    "frontier-2612-bt-004-8c46fc25": 1000.0,
+    "frontier-2612-bt-005-8500ea57": 1000.0,
+    "frontier-2612-bt-006-d5313e4d": 1000.0,
+    "frontier-2612-bt-007-4452ca27": 1000.0
+  },
+  "partial_outcomes_serialised": [],
+  "total_matches": 24,
+  "last_checkpoint_at": 1781193971.4987588
+}
