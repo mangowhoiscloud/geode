@@ -36,7 +36,10 @@ class TestServeToolExecution:
         from core.cli.bootstrap import bootstrap_geode
 
         boot = bootstrap_geode(load_env=True)
-        result = boot.tool_handlers["web_fetch"](url="http://example.com", max_chars=200)
+        # PR-LOOP-POLLUTION-FIX (2026-06-12) — delegated handlers are async now.
+        result = asyncio.run(
+            boot.tool_handlers["web_fetch"](url="http://example.com", max_chars=200)
+        )
         assert "result" in result
         assert "Example Domain" in result["result"]["content"]
 
@@ -44,7 +47,9 @@ class TestServeToolExecution:
         from core.cli.bootstrap import bootstrap_geode
 
         boot = bootstrap_geode(load_env=True)
-        result = boot.tool_handlers["web_fetch"](url="https://example.com", max_chars=200)
+        result = asyncio.run(
+            boot.tool_handlers["web_fetch"](url="https://example.com", max_chars=200)
+        )
         # Should succeed via SSL fallback
         assert "result" in result
 
@@ -56,7 +61,7 @@ class TestServeToolExecution:
         from core.cli.bootstrap import bootstrap_geode
 
         boot = bootstrap_geode(load_env=True)
-        result = boot.tool_handlers["general_web_search"](query="test", max_results=1)
+        result = asyncio.run(boot.tool_handlers["general_web_search"](query="test", max_results=1))
         assert "result" in result
 
     def test_executor_web_fetch(self) -> None:
@@ -145,7 +150,7 @@ class TestServeToolExecution:
             )
             result["count"] = len(handlers)
             result["web_fetch"] = "web_fetch" in handlers
-            r = handlers["web_fetch"](url="http://example.com", max_chars=100)
+            r = asyncio.run(handlers["web_fetch"](url="http://example.com", max_chars=100))
             result["fetch_ok"] = "result" in r
 
         t = threading.Thread(target=daemon_work, daemon=True)

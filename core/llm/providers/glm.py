@@ -12,6 +12,7 @@ import threading
 from typing import Any
 
 from core.config import GLM_BASE_URL, GLM_FALLBACK_CHAIN, GLM_PRIMARY
+from core.llm.loop_affinity import LoopAffineClientCache
 
 log = logging.getLogger(__name__)
 
@@ -23,8 +24,9 @@ GLM_FALLBACK_MODELS = GLM_FALLBACK_CHAIN
 
 _glm_client: Any = None  # openai.OpenAI | None — GLM via OpenAI-compatible API
 _glm_lock = threading.Lock()
-_async_glm_client: Any = None  # openai.AsyncOpenAI | None — GLM via OpenAI-compatible API
-_async_glm_lock = threading.Lock()
+# PR-LOOP-POLLUTION-FIX (2026-06-12) — async client is per-event-loop, not
+# process-global (see core/llm/loop_affinity.py).
+_async_glm_clients = LoopAffineClientCache("glm-provider")
 
 
 def _resolve_glm_endpoint() -> tuple[str, str]:
@@ -69,26 +71,26 @@ def _get_glm_client() -> Any:
 
 
 def _get_async_glm_client() -> Any:
-    """Lazy import and return cached async GLM client (OpenAI-compatible)."""
-    global _async_glm_client
-    if _async_glm_client is None:
-        with _async_glm_lock:
-            if _async_glm_client is None:
-                import openai
+    """Return the async GLM client bound to the CURRENT event loop
+    (OpenAI-compatible). See core/llm/loop_affinity.py for the per-loop
+    cache rationale."""
 
-                api_key, base_url = _resolve_glm_endpoint()
-                _async_glm_client = openai.AsyncOpenAI(
-                    api_key=api_key,
-                    base_url=base_url,
-                    max_retries=0,  # PR-ADAPTER-TIMEOUT-AND-SERIALIZATION
-                )
-    return _async_glm_client
+    def _build() -> Any:
+        import openai
+
+        api_key, base_url = _resolve_glm_endpoint()
+        return openai.AsyncOpenAI(
+            api_key=api_key,
+            base_url=base_url,
+            max_retries=0,  # PR-ADAPTER-TIMEOUT-AND-SERIALIZATION
+        )
+
+    return _async_glm_clients.get(_build)
 
 
 def reset_glm_client() -> None:
     """Reset cached GLM client (e.g. after /key glm changes)."""
-    global _async_glm_client, _glm_client
+    global _glm_client
     with _glm_lock:
         _glm_client = None
-    with _async_glm_lock:
-        _async_glm_client = None
+    _async_glm_clients.invalidate()

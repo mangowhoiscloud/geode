@@ -53,23 +53,33 @@ _DELEGATED_TOOLS: dict[str, tuple[str, str]] = {
 def _make_delegate_handler(
     module_path: str,
     class_name: str,
-) -> Callable[..., dict[str, Any]]:
-    """Return a handler that lazily imports *class_name* from *module_path* and delegates.
+) -> Callable[..., Any]:
+    """Return an ASYNC handler that lazily imports *class_name* from
+    *module_path* and awaits its ``aexecute``.
 
     PR-TOOL-EXEC-CONTEXT (2026-05-28) — pulls the framework-injected
     ``_tool_context`` (set by ``ToolCallProcessor``) out of ``kwargs`` and
     forwards it to ``_safe_delegate`` so the underlying tool's
     ``aexecute`` receives it. The reserved-name kwarg must not reach the
     LLM-arg validation path inside the tool, hence the explicit pop.
+
+    PR-LOOP-POLLUTION-FIX (2026-06-12) — the handler is a coroutine
+    function so ``ToolExecutor._call_handler_async`` awaits it natively on
+    the session loop. The previous sync handler was bridged through
+    ``asyncio.to_thread`` + ``run_process_coroutine`` — a brand-new event
+    loop per tool call (async → sync → thread → new loop → async double
+    inversion, residue of the pre-async-only era) — which poisoned shared
+    httpx connection pools. Pinned by
+    ``tests/core/llm/test_loop_pollution_guardrails.py``.
     """
 
-    def _handler(**kwargs: Any) -> dict[str, Any]:
+    async def _handler(**kwargs: Any) -> dict[str, Any]:
         import importlib
 
         tool_context = kwargs.pop("_tool_context", None)
         mod = importlib.import_module(module_path)
         tool_cls = getattr(mod, class_name)
-        return _safe_delegate(tool_cls, kwargs, context=tool_context)
+        return await _safe_delegate(tool_cls, kwargs, context=tool_context)
 
     return _handler
 

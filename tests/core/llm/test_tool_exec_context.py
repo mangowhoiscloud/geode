@@ -211,7 +211,8 @@ def test_safe_delegate_injects_context_into_aexecute_kwargs() -> None:
             return {"result": "ok"}
 
     ctx = ToolContext(provider="anthropic", source="subscription")
-    result = _safe_delegate(_CapturingTool, {"query": "hello"}, context=ctx)
+    # PR-LOOP-POLLUTION-FIX (2026-06-12) — _safe_delegate is a coroutine now.
+    result = asyncio.run(_safe_delegate(_CapturingTool, {"query": "hello"}, context=ctx))
     assert result == {"result": "ok"}
     assert captured["query"] == "hello"
     assert captured["_tool_context"] is ctx
@@ -229,7 +230,7 @@ def test_safe_delegate_without_context_omits_kwarg() -> None:
             captured.update(kw)
             return {"result": "ok"}
 
-    _safe_delegate(_CapturingTool, {"query": "hello"})
+    asyncio.run(_safe_delegate(_CapturingTool, {"query": "hello"}))
     assert "_tool_context" not in captured
 
 

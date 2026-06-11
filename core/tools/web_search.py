@@ -69,6 +69,8 @@ class WebSearchTool:
         ctx = kwargs.get("_tool_context")
         prefer_provider = getattr(ctx, "provider", "") or None
         prefer_source = getattr(ctx, "source", "") or None
+        # PR-WEB-SEARCH-MODEL-HINT (2026-06-12) — see GeneralWebSearchTool.
+        session_model = getattr(ctx, "model", "") or ""
         from core.llm.adapters.dispatch import (
             AdapterDispatchError,
             AdapterUnavailableError,
@@ -83,6 +85,7 @@ class WebSearchTool:
                 max_results=max_results,
                 prefer_provider=prefer_provider,
                 prefer_source=prefer_source,
+                model=session_model,
             )
         except BillingError as exc:
             return tool_error(

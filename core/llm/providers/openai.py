@@ -16,6 +16,7 @@ from typing import Any
 
 from core.config import OPENAI_FALLBACK_CHAIN, OPENAI_PRIMARY
 from core.llm.fallback import retry_with_backoff_generic_async
+from core.llm.loop_affinity import LoopAffineClientCache
 from core.llm.token_tracker import LLMUsage, get_tracker
 
 log = logging.getLogger(__name__)
@@ -36,8 +37,9 @@ OPENAI_FALLBACK_MODELS = OPENAI_FALLBACK_CHAIN
 
 _openai_client: Any = None  # openai.OpenAI | None — lazy import
 _openai_lock = threading.Lock()
-_async_openai_client: Any = None  # openai.AsyncOpenAI | None — lazy import
-_async_openai_lock = threading.Lock()
+# PR-LOOP-POLLUTION-FIX (2026-06-12) — async client is per-event-loop, not
+# process-global (see core/llm/loop_affinity.py).
+_async_openai_clients = LoopAffineClientCache("openai-provider")
 
 
 def _resolve_openai_key() -> str:
@@ -69,29 +71,26 @@ def _get_openai_client() -> Any:
 
 
 def _get_async_openai_client() -> Any:
-    """Lazy import and return cached async OpenAI client (thread-safe).
+    """Return the async OpenAI client bound to the CURRENT event loop.
 
-    See :func:`_get_openai_client` for the ``max_retries=0`` rationale.
+    See :func:`_get_openai_client` for the ``max_retries=0`` rationale and
+    ``core/llm/loop_affinity.py`` for why the cache is per-loop.
     """
-    global _async_openai_client
-    if _async_openai_client is None:
-        with _async_openai_lock:
-            if _async_openai_client is None:
-                import openai
 
-                _async_openai_client = openai.AsyncOpenAI(
-                    api_key=_resolve_openai_key(), max_retries=0
-                )
-    return _async_openai_client
+    def _build() -> Any:
+        import openai
+
+        return openai.AsyncOpenAI(api_key=_resolve_openai_key(), max_retries=0)
+
+    return _async_openai_clients.get(_build)
 
 
 def reset_openai_client() -> None:
     """Reset cached OpenAI client (e.g. after /key openai changes)."""
-    global _async_openai_client, _openai_client
+    global _openai_client
     with _openai_lock:
         _openai_client = None
-    with _async_openai_lock:
-        _async_openai_client = None
+    _async_openai_clients.invalidate()
 
 
 def _get_retryable_errors() -> tuple[type[Exception], ...]:
