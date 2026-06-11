@@ -398,6 +398,21 @@ def load_petri(bundle_root: Path) -> list[PetriRow]:
 
 
 def load_seedgen(bundle_root: Path) -> list[SeedGenRow]:
+    # Rebuild listing.json from the seeds dir FIRST so a run synced via
+    # ``sync_run_to_bundle`` is never silently absent from the hub. Pre-fix,
+    # ``geode hub build`` only READ a stale listing — a freshly-synced run
+    # (e.g. frontier-2612-bt, 2026-06-12) rendered no page because the
+    # operator had to remember the separate ``build_seeds_listing`` step. The
+    # three-stage publish chain (sync → listing → hub build) now self-heals
+    # its middle stage. Best-effort: a listing-build failure must not abort
+    # the hub render (the stale listing, if any, is still read below).
+    import contextlib
+
+    with contextlib.suppress(Exception):
+        from scripts.build_seeds_listing import write_listing
+
+        write_listing(bundle_root.parents[2])  # repo root = <repo>/docs/self-improving/petri-bundle
+
     listing = bundle_root / "seeds" / "listing.json"
     if not listing.exists():
         LOG.warning("seedgen listing missing: %s", listing)
