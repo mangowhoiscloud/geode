@@ -1,0 +1,10 @@
+{
+  "task_id": "vote-m021-v00-openai.api_key",
+  "success": false,
+  "output": "✕ API key invalid or expired. Refresh credentials or switch provider with /model.\n\n  error_type : auth\n  severity   : error\n  model      : gpt-5.5 (openai-codex)\n  attempts   : 1\n  cost_so_far: $0.0000\n  detail     : Incorrect API key provided: sk-proj-********************************************************************************************************************************************************utUA. You can find your API key at https://platform.openai.com/account/api-keys.\n\nNext step: run `/model <id>` to switch, then resume your last request.",
+  "summary": "Sub-agent failed: model_action_required; termination_reason=model_action_required",
+  "duration_ms": 4321.562051773071,
+  "prompt_tokens": 0,
+  "completion_tokens": 0,
+  "usd_spent": 0.0
+}

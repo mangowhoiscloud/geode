@@ -8,7 +8,7 @@
 
 A general-purpose autonomous execution agent built on LangGraph. Autonomously performs research, analysis, automation, and scheduling.
 
-- **Version**: 0.99.183
+- **Version**: 0.99.184
 - **Python**: >= 3.12
 - **Package Manager**: uv
 - **Entry Points**: `geode` (`core.cli:app`, Typer) / `geode-mcp` (`core.mcp_server:main`)
@@ -142,6 +142,7 @@ Anything not in CANNOT is freely permitted. Specifically:
 | **Singleton lifecycle** | Singleton created at startup may use stale data. Verify refresh/invalidation path exists for mutable state (OAuth tokens, config). |
 | **Conditional read parity** | A reader that loads context in ONE branch (e.g. auto-pick) must load it in the SYMMETRIC branch (explicit input) too — otherwise the feature half-disconnects depending on call shape. *Incident: PR-G3 #1347 (2026-05-20) — `_resolve_target_dim` loaded baseline only for `--target-dim auto`.* |
 | **Writer destination tracked** | Every file the code writes for "audit / history / ledger" must be `git check-ignore`-clean. An ignored path silently breaks `git add`; the writer thinks it persisted, history doesn't. *Incident: PR-G5b #1350 (2026-05-20) — `autoresearch/state/mutations.jsonl` silently ignored, caught by Codex MCP after 8/8 CI green; pinned by `test_policy_files_not_gitignored`.* |
+| **Index regenerated, not just read** | A renderer that reads an index/listing file (hub seeds `listing.json`, search index, manifest) must REGENERATE it from the source dir, not assume an upstream step refreshed it. A read-only renderer over a stale index silently drops newly-added items with no error. *Incident: a seed-gen run synced to the bundle rendered no hub page because `geode hub build` only read a stale `listing.json` — the operator had to remember the separate `build_seeds_listing` step (frontier-2612-bt, 2026-06-12). Fixed: `load_seedgen` rebuilds the listing first. Guard: `tests/scripts/test_hub_listing_autobuild.py`* |
 
 ### Refactoring Deception Prevention
 
