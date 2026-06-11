@@ -65,6 +65,16 @@ functional change.
   after 3 consecutive failures. Guards:
   `tests/core/cli/test_prompt_session.py` (no-`<any>` pin, repaint-hook pin,
   transient-vs-permanent fallback).
+- **Markdown rendering dropped Korean bold** (same operator session):
+  CommonMark flanking rules reject `**…**` when the closer touches a Korean
+  particle (`**[추정]**이지만`, `**"인용"**로`) — rich rendered literal
+  asterisks (verified empirically against rich/markdown-it). New
+  `core/ui/cjk_markdown.py::cjk_safe_emphasis` pads strong spans with
+  U+200B so the delimiters are always flanking-valid; fenced blocks and
+  inline code pass through byte-identical. Wired at the CLI's final render
+  (`core/cli/interactive_loop.py::_render_text_with_latex`). Guards:
+  `tests/core/ui/test_cjk_markdown.py` (reported shapes end-to-end, code
+  protection, fast path).
 
 ## [0.99.177] - 2026-06-11
 
