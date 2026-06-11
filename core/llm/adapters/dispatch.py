@@ -21,8 +21,12 @@ Each dispatch call:
       order) when no preference — for hook / compaction callers
       outside the tool-dispatch flow.
 
-2. **Tries that single adapter exactly once.** No fallback to other
-   adapters even on failure.
+2. **Tries that single adapter — and only that adapter.** No fallback to
+   other adapters even on failure. One exception class gets a bounded
+   SAME-adapter re-attempt: connection-class transport errors (broken
+   pooled connection in the long-lived daemon) retry once on a fresh
+   connection — see the "Connection-transient retry policy" section.
+   Billing-fatal errors are never retried.
 
 3. **On failure** → raises a structured error with an honest hint
    listing all three credential-source switch options (subscription,
@@ -42,6 +46,7 @@ journals so operators can trace exactly which adapter was tried.
 
 from __future__ import annotations
 
+import asyncio
 import dataclasses
 import logging
 import time
@@ -344,6 +349,82 @@ def _fire_attempt(attempt: AdapterAttempt) -> None:
 
 
 # ---------------------------------------------------------------------------
+# Connection-transient retry policy — PR-DISPATCH-TRANSIENT-RETRY (2026-06-11)
+# ---------------------------------------------------------------------------
+#
+# Adapter-owned clients are built with ``max_retries=0``
+# (core/llm/adapters/_anthropic_common.py) because the *app-level* retry in
+# AgenticLoop covers ``acomplete``. ``web_search_via_adapters`` has no such
+# outer retry, so a single broken pooled httpx connection in the long-lived
+# serve daemon failed the next request in ~2-4ms as ``APIConnectionError``
+# with no recovery (serve.log 2026-06-10 22:08/22:48/22:51 — sibling calls on
+# fresh connections succeeded in 27-50s while the poisoned one insta-failed).
+#
+# Policy: retry the SAME adapter once when the failure is connection-class.
+# This is NOT a fallback chain — PR-NO-FALLBACK semantics are preserved:
+# never a different adapter, never a different (provider, source), and
+# billing-fatal errors are never retried.
+
+_CONNECTION_TRANSIENT_RETRIES = 1
+
+# Matched by exception type NAME (not isinstance) so the policy covers both
+# ``anthropic.APIConnectionError`` and raw ``httpx`` transport errors without
+# importing either SDK here. Names checked across the __cause__/__context__
+# chain, depth-limited to the first 4 links (see _cause_chain).
+_CONNECTION_TRANSIENT_ERROR_NAMES: frozenset[str] = frozenset(
+    {
+        "APIConnectionError",
+        "APITimeoutError",
+        "ConnectError",
+        "ConnectTimeout",
+        "ReadError",
+        "ReadTimeout",
+        "WriteError",
+        "RemoteProtocolError",
+    }
+)
+
+
+def _cause_chain(exc: BaseException, *, limit: int = 4) -> list[BaseException]:
+    """Return ``exc`` plus its ``__cause__``/``__context__`` chain (cycle-safe)."""
+    chain: list[BaseException] = []
+    seen: set[int] = set()
+    cur: BaseException | None = exc
+    while cur is not None and id(cur) not in seen and len(chain) < limit:
+        seen.add(id(cur))
+        chain.append(cur)
+        cur = cur.__cause__ or cur.__context__
+    return chain
+
+
+def _is_connection_transient(exc: Exception) -> bool:
+    """True when ``exc`` (or any link in its cause chain, depth-limited)
+    is a connection-class transport error eligible for a same-adapter retry.
+
+    Billing-fatal errors are categorically excluded — quota / credit
+    failures must surface immediately (PR-NO-FALLBACK billing honesty).
+    The billing check runs on EVERY chain link, not just the outer
+    exception, so a connection-named wrapper around a billing-fatal root
+    (``raise APIConnectionError(...) from quota_exc``) cannot smuggle a
+    quota failure into the retry path (Codex MCP review 2026-06-11).
+    """
+    chain = _cause_chain(exc)
+    for link in chain:
+        if isinstance(link, BillingError):
+            return False
+        if isinstance(link, Exception) and is_billing_fatal(link):
+            return False
+    return any(type(link).__name__ in _CONNECTION_TRANSIENT_ERROR_NAMES for link in chain)
+
+
+def _error_with_cause(exc: BaseException) -> str:
+    """Format ``exc`` with its cause chain — ``APIConnectionError: Connection
+    error. <- ReadError:`` — so serve logs show the transport-level root
+    cause instead of the SDK's generic wrapper message."""
+    return " <- ".join(f"{type(link).__name__}: {link}" for link in _cause_chain(exc))
+
+
+# ---------------------------------------------------------------------------
 # web_search — strict single-adapter dispatch
 # ---------------------------------------------------------------------------
 
@@ -377,36 +458,16 @@ async def web_search_via_adapters(
             f"Registered adapters: {_registered_adapter_summary()}. " + _SOURCE_SWITCH_HINT
         )
 
-    t0 = time.monotonic()
-    try:
-        result: WebSearchResult = await adapter.aweb_search(query, max_results=max_results)
-    except BillingError as exc:
-        elapsed_ms = (time.monotonic() - t0) * 1000
-        attempt = AdapterAttempt(
-            adapter_name=adapter.name,
-            provider=adapter.provider,
-            source=adapter.source,
-            capability=capability,
-            outcome="billing",
-            elapsed_ms=elapsed_ms,
-            error_type=type(exc).__name__,
-            error_msg=str(exc),
-        )
-        _fire_attempt(attempt)
-        # Re-raise with adapter context attached so the tool layer can show
-        # the operator exactly which credential was exhausted.
-        billing = BillingError(
-            f"{adapter.name} ({adapter.source}) credit exhausted: {exc}. " + _SOURCE_SWITCH_HINT,
-            provider=adapter.provider,
-            plan_id=getattr(exc, "plan_id", ""),
-            plan_display_name=adapter.name,
-            upgrade_url=getattr(exc, "upgrade_url", ""),
-            resets_in_seconds=getattr(exc, "resets_in_seconds", 0),
-        )
-        raise billing from exc
-    except Exception as exc:
-        elapsed_ms = (time.monotonic() - t0) * 1000
-        if is_billing_fatal(exc):
+    # Same-adapter retry on connection-class transients ONLY — see the
+    # retry-policy section above. The loop exits via ``break`` (success) or
+    # ``raise``; ``continue`` happens at most _CONNECTION_TRANSIENT_RETRIES
+    # times because the final iteration cannot satisfy the retry guard.
+    for try_no in range(_CONNECTION_TRANSIENT_RETRIES + 1):
+        t0 = time.monotonic()
+        try:
+            result: WebSearchResult = await adapter.aweb_search(query, max_results=max_results)
+        except BillingError as exc:
+            elapsed_ms = (time.monotonic() - t0) * 1000
             attempt = AdapterAttempt(
                 adapter_name=adapter.name,
                 provider=adapter.provider,
@@ -418,30 +479,71 @@ async def web_search_via_adapters(
                 error_msg=str(exc),
             )
             _fire_attempt(attempt)
-            raise BillingError(
+            # Re-raise with adapter context attached so the tool layer can show
+            # the operator exactly which credential was exhausted.
+            billing = BillingError(
                 f"{adapter.name} ({adapter.source}) credit exhausted: {exc}. "
                 + _SOURCE_SWITCH_HINT,
                 provider=adapter.provider,
-                plan_id="",
+                plan_id=getattr(exc, "plan_id", ""),
                 plan_display_name=adapter.name,
+                upgrade_url=getattr(exc, "upgrade_url", ""),
+                resets_in_seconds=getattr(exc, "resets_in_seconds", 0),
+            )
+            raise billing from exc
+        except Exception as exc:
+            elapsed_ms = (time.monotonic() - t0) * 1000
+            if is_billing_fatal(exc):
+                attempt = AdapterAttempt(
+                    adapter_name=adapter.name,
+                    provider=adapter.provider,
+                    source=adapter.source,
+                    capability=capability,
+                    outcome="billing",
+                    elapsed_ms=elapsed_ms,
+                    error_type=type(exc).__name__,
+                    error_msg=str(exc),
+                )
+                _fire_attempt(attempt)
+                raise BillingError(
+                    f"{adapter.name} ({adapter.source}) credit exhausted: {exc}. "
+                    + _SOURCE_SWITCH_HINT,
+                    provider=adapter.provider,
+                    plan_id="",
+                    plan_display_name=adapter.name,
+                ) from exc
+            attempt = AdapterAttempt(
+                adapter_name=adapter.name,
+                provider=adapter.provider,
+                source=adapter.source,
+                capability=capability,
+                outcome="transient",
+                elapsed_ms=elapsed_ms,
+                error_type=type(exc).__name__,
+                error_msg=_error_with_cause(exc),
+            )
+            _fire_attempt(attempt)
+            if try_no < _CONNECTION_TRANSIENT_RETRIES and _is_connection_transient(exc):
+                log.warning(
+                    "web_search via %s (%s) hit a connection-class transient "
+                    "(%s) after %.0fms — retrying the SAME adapter on a fresh "
+                    "connection (retry %d/%d)",
+                    adapter.name,
+                    adapter.source,
+                    _error_with_cause(exc),
+                    elapsed_ms,
+                    try_no + 1,
+                    _CONNECTION_TRANSIENT_RETRIES,
+                )
+                await asyncio.sleep(0.1 * (try_no + 1))
+                continue
+            raise AdapterDispatchError(
+                f"web_search via {adapter.name} ({adapter.source}) failed: "
+                f"{_error_with_cause(exc)}. "
+                f"No automatic fallback — {_SOURCE_SWITCH_HINT}",
+                attempt=attempt,
             ) from exc
-        attempt = AdapterAttempt(
-            adapter_name=adapter.name,
-            provider=adapter.provider,
-            source=adapter.source,
-            capability=capability,
-            outcome="transient",
-            elapsed_ms=elapsed_ms,
-            error_type=type(exc).__name__,
-            error_msg=str(exc),
-        )
-        _fire_attempt(attempt)
-        raise AdapterDispatchError(
-            f"web_search via {adapter.name} ({adapter.source}) failed: "
-            f"{type(exc).__name__}: {exc}. "
-            f"No automatic fallback — {_SOURCE_SWITCH_HINT}",
-            attempt=attempt,
-        ) from exc
+        break
 
     elapsed_ms = (time.monotonic() - t0) * 1000
     _fire_attempt(
@@ -514,71 +616,93 @@ async def complete_text_via_adapters(
 
     overrides = model_by_provider or {}
     chosen_model = overrides.get(adapter.provider, model)
-    t0 = time.monotonic()
-    try:
-        result: TextCompletionResult = await adapter.acomplete_text(
-            prompt, system=system, model=chosen_model, max_tokens=max_tokens
-        )
-    except BillingError as exc:
-        elapsed_ms = (time.monotonic() - t0) * 1000
-        attempt = AdapterAttempt(
-            adapter_name=adapter.name,
-            provider=adapter.provider,
-            source=adapter.source,
-            capability=capability,
-            outcome="billing",
-            elapsed_ms=elapsed_ms,
-            error_type=type(exc).__name__,
-            error_msg=str(exc),
-        )
-        _fire_attempt(attempt)
-        raise BillingError(
-            f"{adapter.name} ({adapter.source}) credit exhausted: {exc}. " + _SOURCE_SWITCH_HINT,
-            provider=adapter.provider,
-            plan_id=getattr(exc, "plan_id", ""),
-            plan_display_name=adapter.name,
-            upgrade_url=getattr(exc, "upgrade_url", ""),
-            resets_in_seconds=getattr(exc, "resets_in_seconds", 0),
-        ) from exc
-    except Exception as exc:
-        elapsed_ms = (time.monotonic() - t0) * 1000
-        if is_billing_fatal(exc):
-            _fire_attempt(
-                AdapterAttempt(
-                    adapter_name=adapter.name,
-                    provider=adapter.provider,
-                    source=adapter.source,
-                    capability=capability,
-                    outcome="billing",
-                    elapsed_ms=elapsed_ms,
-                    error_type=type(exc).__name__,
-                    error_msg=str(exc),
-                )
+    # Same-adapter retry on connection-class transients ONLY — mirrors
+    # web_search_via_adapters. Compaction / learning-extraction callers have
+    # no app-level outer retry (unlike AgenticLoop's ``acomplete``), so the
+    # same broken-pooled-connection failure mode applies here (serve.log
+    # 2026-06-10 22:51 — reflection calls insta-failed twice, then succeeded).
+    for try_no in range(_CONNECTION_TRANSIENT_RETRIES + 1):
+        t0 = time.monotonic()
+        try:
+            result: TextCompletionResult = await adapter.acomplete_text(
+                prompt, system=system, model=chosen_model, max_tokens=max_tokens
             )
+        except BillingError as exc:
+            elapsed_ms = (time.monotonic() - t0) * 1000
+            attempt = AdapterAttempt(
+                adapter_name=adapter.name,
+                provider=adapter.provider,
+                source=adapter.source,
+                capability=capability,
+                outcome="billing",
+                elapsed_ms=elapsed_ms,
+                error_type=type(exc).__name__,
+                error_msg=str(exc),
+            )
+            _fire_attempt(attempt)
             raise BillingError(
                 f"{adapter.name} ({adapter.source}) credit exhausted: {exc}. "
                 + _SOURCE_SWITCH_HINT,
                 provider=adapter.provider,
-                plan_id="",
+                plan_id=getattr(exc, "plan_id", ""),
                 plan_display_name=adapter.name,
+                upgrade_url=getattr(exc, "upgrade_url", ""),
+                resets_in_seconds=getattr(exc, "resets_in_seconds", 0),
             ) from exc
-        attempt = AdapterAttempt(
-            adapter_name=adapter.name,
-            provider=adapter.provider,
-            source=adapter.source,
-            capability=capability,
-            outcome="transient",
-            elapsed_ms=elapsed_ms,
-            error_type=type(exc).__name__,
-            error_msg=str(exc),
-        )
-        _fire_attempt(attempt)
-        raise AdapterDispatchError(
-            f"complete_text via {adapter.name} ({adapter.source}) failed: "
-            f"{type(exc).__name__}: {exc}. "
-            f"No automatic fallback — {_SOURCE_SWITCH_HINT}",
-            attempt=attempt,
-        ) from exc
+        except Exception as exc:
+            elapsed_ms = (time.monotonic() - t0) * 1000
+            if is_billing_fatal(exc):
+                _fire_attempt(
+                    AdapterAttempt(
+                        adapter_name=adapter.name,
+                        provider=adapter.provider,
+                        source=adapter.source,
+                        capability=capability,
+                        outcome="billing",
+                        elapsed_ms=elapsed_ms,
+                        error_type=type(exc).__name__,
+                        error_msg=str(exc),
+                    )
+                )
+                raise BillingError(
+                    f"{adapter.name} ({adapter.source}) credit exhausted: {exc}. "
+                    + _SOURCE_SWITCH_HINT,
+                    provider=adapter.provider,
+                    plan_id="",
+                    plan_display_name=adapter.name,
+                ) from exc
+            attempt = AdapterAttempt(
+                adapter_name=adapter.name,
+                provider=adapter.provider,
+                source=adapter.source,
+                capability=capability,
+                outcome="transient",
+                elapsed_ms=elapsed_ms,
+                error_type=type(exc).__name__,
+                error_msg=_error_with_cause(exc),
+            )
+            _fire_attempt(attempt)
+            if try_no < _CONNECTION_TRANSIENT_RETRIES and _is_connection_transient(exc):
+                log.warning(
+                    "complete_text via %s (%s) hit a connection-class transient "
+                    "(%s) after %.0fms — retrying the SAME adapter on a fresh "
+                    "connection (retry %d/%d)",
+                    adapter.name,
+                    adapter.source,
+                    _error_with_cause(exc),
+                    elapsed_ms,
+                    try_no + 1,
+                    _CONNECTION_TRANSIENT_RETRIES,
+                )
+                await asyncio.sleep(0.1 * (try_no + 1))
+                continue
+            raise AdapterDispatchError(
+                f"complete_text via {adapter.name} ({adapter.source}) failed: "
+                f"{_error_with_cause(exc)}. "
+                f"No automatic fallback — {_SOURCE_SWITCH_HINT}",
+                attempt=attempt,
+            ) from exc
+        break
 
     elapsed_ms = (time.monotonic() - t0) * 1000
     _fire_attempt(

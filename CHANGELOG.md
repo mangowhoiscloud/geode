@@ -45,6 +45,17 @@ functional change.
 
 ---
 
+## [0.99.180] - 2026-06-11
+
+### Fixed
+- **Dispatch — bounded same-adapter retry on connection-class transients** (`core/llm/adapters/dispatch.py`). Operator incident (serve.log 2026-06-10 22:08/22:48/22:51): a broken pooled httpx connection in the long-lived serve daemon failed the next `web_search` dispatch in ~2-4ms as `APIConnectionError` while sibling calls on fresh connections succeeded in 27-50s. Adapter-owned clients run with `max_retries=0` (`_anthropic_common.py`) — correct for `acomplete` (AgenticLoop owns the app-level retry) but `web_search_via_adapters` / `complete_text_via_adapters` had no retry of their own, so one poisoned connection killed a parallel tool-search batch member and reflection/compaction calls with no recovery.
+  - Both dispatch coroutines now retry the SAME adapter exactly once (`_CONNECTION_TRANSIENT_RETRIES = 1`) when the failure is connection-class (`_is_connection_transient` — exception type name matched across the `__cause__`/`__context__` chain, depth-limited to 4 links: `APIConnectionError`, `APITimeoutError`, `ConnectError`, `ConnectTimeout`, `ReadError`, `ReadTimeout`, `WriteError`, `RemoteProtocolError`), with 100ms backoff and a WARNING log row per retry.
+  - PR-NO-FALLBACK (2026-05-28) semantics preserved: never a different adapter, never a different (provider, source); `BillingError` / billing-fatal errors are never retried — billing-fatality is checked on every cause-chain link, so a connection-named wrapper around a quota root cannot smuggle into the retry path; non-connection transients (schema mismatch etc.) still fail fast with zero retries.
+  - Observability: error messages and `AdapterAttempt.error_msg` now carry the transport-level cause chain via `_error_with_cause` (`APIConnectionError: Connection error. <- ReadError: …`) — previously the httpx root cause was swallowed by the SDK's generic wrapper message.
+
+### Added
+- **Dispatch guardrail suite** (`tests/core/llm/test_dispatch_transient_retry_guardrails.py`, 15 tests) — pins the retry contract so adapter/model additions and client-construction changes cannot silently regress it: exactly-one same-adapter retry (success + exhaustion + exact `["transient","transient"]` attempt-hook trace + `_CONNECTION_TRANSIENT_RETRIES == 1` pin), healthy-sibling isolation (no cross-adapter fallback even during retry), billing-never-retried (including billing-fatal masquerading under a connection-class name and a billing-fatal root beneath a connection-named wrapper), non-connection fail-fast, parallel-batch recovery from one poisoned connection, real `anthropic.APIConnectionError`/`httpx.ReadError` classification (guards SDK renames), cause-chain presence in error messages, a drift invariant that both dispatch coroutines share the retry policy, and a registry-wide capability parity ratchet (every adapter in `bootstrap_builtins` advertising a `supports_*` flag must back it with a coroutine method — new adapters are covered automatically instead of being silently dropped by `_select_adapter`). Three Codex MCP review findings folded in (exact-retry pin, chain-level billing precedence, depth-limit honesty).
+
 ## [0.99.179] - 2026-06-11
 
 ### Added
