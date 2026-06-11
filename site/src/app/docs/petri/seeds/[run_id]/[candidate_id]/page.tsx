@@ -7,7 +7,15 @@ import { DocsShell, Bi } from "@/components/geode-docs/docs-shell";
 
 const REPO_ROOT = path.join(process.cwd(), "..");
 const SEEDS_DIR = path.join(REPO_ROOT, "docs", "self-improving", "petri-bundle", "seeds");
-const RAW_BUNDLE_URL = "/self-improving/petri-bundle/seeds/";
+const RAW_BUNDLE_URL = "/geode/self-improving/petri-bundle/seeds/";
+
+function candidatePageExists(runId: string, candidateId: string): boolean {
+  for (const dir of ["candidates", "candidates_evolved"]) {
+    if (fs.existsSync(path.join(SEEDS_DIR, runId, dir, `${candidateId}.md`))) return true;
+  }
+  return false;
+}
+
 
 type Candidate = { run_id: string; candidate_id: string; kind: "candidate" | "evolved" };
 
@@ -314,7 +322,11 @@ function SeedDetail(props: DetailProps) {
             <tr>
               <th>parent_id</th>
               <td>
-                <a href={`./${seed.parent_id}`}><code>{seed.parent_id}</code></a>
+                {candidatePageExists(seed.run_id, seed.parent_id) ? (
+                  <a href={`./${seed.parent_id}`}><code>{seed.parent_id}</code></a>
+                ) : (
+                  <code>{seed.parent_id}</code>
+                )}
               </td>
             </tr>
           )}
@@ -322,9 +334,13 @@ function SeedDetail(props: DetailProps) {
             <tr>
               <th>{t("진화 자식", "evolved children")}</th>
               <td>
-                {seed.evolved_children.map((c) => (
-                  <a key={c} href={`./${c}`} className="mr-2"><code>{c}</code></a>
-                ))}
+                {seed.evolved_children.map((c) =>
+                  candidatePageExists(seed.run_id, c) ? (
+                    <a key={c} href={`./${c}`} className="mr-2"><code>{c}</code></a>
+                  ) : (
+                    <code key={c} className="mr-2">{c}</code>
+                  )
+                )}
               </td>
             </tr>
           )}
@@ -418,10 +434,10 @@ function SeedDetail(props: DetailProps) {
           <a href={seed.raw_path}>{t("raw `.md` 다운로드", "raw `.md` download")}</a>
         </li>
         <li>
-          <a href={`/petri-bundle/landing.html`}>{t("Petri bundle 허브", "Petri bundle hub")}</a>
+          <a href="/geode/self-improving/">{t("Self-improving 허브", "Self-improving hub")}</a>
         </li>
         <li>
-          <a href={`/petri-bundle/`}>{t("Eval 로그 viewer", "Eval log viewer")}</a>
+          <a href="/geode/self-improving/petri-bundle/">{t("Eval 로그 viewer", "Eval log viewer")}</a>
         </li>
       </ul>
     </>
