@@ -429,7 +429,8 @@ def test_render_confirm_hint_names_focused_role(capsys) -> None:
         show_effort=False,
     )
     rendered = capsys.readouterr().out
-    assert "Enter to set Mutator model" in rendered
+    assert "Space to set Mutator" in rendered
+    assert "Enter to confirm & close" in rendered
 
 
 def test_apply_model_prints_feedback_for_unchanged_role_pick() -> None:
@@ -441,3 +442,105 @@ def test_apply_model_prints_feedback_for_unchanged_role_pick() -> None:
 
     src = inspect.getsource(model_cmd._apply_model)
     assert "Model unchanged:" in src
+
+
+# ---------------------------------------------------------------------------
+# PR-PICKER-SPACE-STAGE (2026-06-12) — Space applies the focused role
+# without closing; Enter confirms everything; Esc discards staged picks
+# ---------------------------------------------------------------------------
+
+
+def _two_role_picker_kwargs() -> dict:
+    return {
+        "roles": [
+            ("primary", "Primary", "main loop"),
+            ("mutator", "Mutator", "loop mutator"),
+        ],
+        "initial_role": "primary",
+        "role_initial_models": {
+            "primary": "claude-fable-5",
+            "mutator": "claude-fable-5",
+        },
+        "role_has_effort": {"primary": True, "mutator": False},
+    }
+
+
+_PICKER_PROFILES = [
+    ("claude-fable-5", "anthropic", "Fable 5", "", True, None),
+    ("claude-haiku-4-5-20251001", "anthropic", "Haiku 4.5", "", True, None),
+]
+
+
+def test_space_stages_role_pick_without_closing(monkeypatch) -> None:
+    """TAB→DOWN→SPACE stages the mutator pick and the picker stays open;
+    the following TAB→ENTER confirms primary and returns the staged pick."""
+    from core.cli import effort_picker
+
+    keys = iter(
+        [
+            effort_picker._KEY_TAB,  # focus mutator
+            effort_picker._KEY_DOWN,  # haiku
+            effort_picker._KEY_SPACE,  # stage mutator=haiku, stay open
+            effort_picker._KEY_TAB,  # wrap back to primary
+            effort_picker._KEY_ENTER,  # confirm + close
+        ]
+    )
+    monkeypatch.setattr(effort_picker, "_read_key", lambda: next(keys))
+    monkeypatch.setattr(effort_picker, "_clear_lines", lambda n: None)
+
+    result = effort_picker.pick_model_and_effort(
+        _PICKER_PROFILES, "claude-fable-5", "high", **_two_role_picker_kwargs()
+    )
+    assert result.cancelled is False
+    assert result.role == "primary"
+    assert result.staged == (("mutator", "claude-haiku-4-5-20251001"),)
+
+
+def test_escape_discards_staged_picks(monkeypatch) -> None:
+    from core.cli import effort_picker
+
+    keys = iter(
+        [
+            effort_picker._KEY_TAB,
+            effort_picker._KEY_DOWN,
+            effort_picker._KEY_SPACE,
+            effort_picker._KEY_QUIT,
+        ]
+    )
+    monkeypatch.setattr(effort_picker, "_read_key", lambda: next(keys))
+    monkeypatch.setattr(effort_picker, "_clear_lines", lambda n: None)
+
+    result = effort_picker.pick_model_and_effort(
+        _PICKER_PROFILES, "claude-fable-5", "high", **_two_role_picker_kwargs()
+    )
+    assert result.cancelled is True
+    assert result.staged == (), "Esc must never half-apply staged picks"
+
+
+def test_apply_picker_result_applies_staged_then_final(monkeypatch) -> None:
+    """Caller contract — every staged role persists via _apply_model with
+    its own role, then the final Enter pick applies."""
+    from core.cli.commands import model as model_cmd
+    from core.cli.effort_picker import PickerResult
+
+    applied: list[tuple[str, str | None, str]] = []
+    monkeypatch.setattr(
+        model_cmd,
+        "_apply_model",
+        lambda profile, effort=None, role="primary": applied.append((profile.id, effort, role)),
+    )
+
+    known = [p.id for p in model_cmd.MODEL_PROFILES[:2]]
+    result = PickerResult(
+        model_id=known[0],
+        effort="high",
+        cancelled=False,
+        role="primary",
+        staged=((("mutator"), known[1]),),
+    )
+    model_cmd._apply_picker_result(result)
+
+    assert applied == [
+        (known[1], None, "mutator"),
+        (known[0], "high", "primary"),
+    ]

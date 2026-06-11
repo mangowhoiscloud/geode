@@ -185,12 +185,20 @@ class PickerResult:
     the *currently focused* agent role (primary / reflection / future:
     mutator). Defaults to ``"primary"`` for backward compatibility
     with callers that don't pass ``roles``.
+
+    PR-PICKER-SPACE-STAGE (2026-06-12) — ``staged`` carries per-role
+    picks applied with Space WITHOUT closing the picker (operator:
+    three role tabs, Enter-only meant one pick per open). Each entry is
+    ``(role_name, model_id)``; the final Enter pick is still
+    ``(role, model_id)`` and is NOT duplicated into ``staged``. Esc /
+    q discards staged picks (``cancelled=True`` + empty ``staged``).
     """
 
     model_id: str
     effort: str | None  # None → no effort knob applies for this model
     cancelled: bool = False
     role: str = "primary"
+    staged: tuple[tuple[str, str], ...] = ()
 
 
 # ---------------------------------------------------------------------------
@@ -204,6 +212,7 @@ _KEY_RIGHT = "RIGHT"
 _KEY_ENTER = "ENTER"
 _KEY_QUIT = "QUIT"
 _KEY_TAB = "TAB"
+_KEY_SPACE = "SPACE"
 
 
 def _read_key() -> str:
@@ -226,6 +235,8 @@ def _read_key() -> str:
             return _KEY_ENTER
         if ch == "\t":
             return _KEY_TAB
+        if ch == " ":
+            return _KEY_SPACE
         if ch in ("q", "Q"):
             return _KEY_QUIT
         if ch == "\x03":
@@ -332,9 +343,13 @@ def _render(
     focused_role_label = ""
     if roles and len(roles) > 1 and 0 <= role_cursor < len(roles):
         focused_role_label = roles[role_cursor][1]
+    # PR-PICKER-SPACE-STAGE (2026-06-12) — with multiple role tabs, Space
+    # applies to the focused role WITHOUT closing (set all three in one
+    # session); Enter confirms everything and closes.
     confirm_hint = (
-        f"Enter to set {focused_role_label} model · Esc to exit"
-        if focused_role_label and focused_role_label.lower() != "primary"
+        f"Space to set {focused_role_label} · Tab next role · "
+        "Enter to confirm & close · Esc to discard"
+        if focused_role_label
         else "Enter to confirm · Esc to exit"
     )
     if not show_effort:
@@ -444,6 +459,9 @@ def pick_model_and_effort(
             effort_per_model[mid] = default_effort(mid, prov)
 
     role_has_effort = dict(role_has_effort or {})
+    # PR-PICKER-SPACE-STAGE (2026-06-12) — picks applied with Space per
+    # role; returned on Enter, discarded on Esc/q.
+    staged_picks: dict[str, str] = {}
     initial_for_render = role_initial_models.get(role_names[role_cursor], current_model)
     show_effort = role_has_effort.get(role_names[role_cursor], True)
     line_count = _render(
@@ -481,6 +499,8 @@ def pick_model_and_effort(
                 # M5 — block the selection so the caller can render a
                 # "Login first" hint. Treat as cancellation so settings
                 # don't shift to a model the LLM call would reject.
+                # Staged picks are intentionally discarded — a cancel
+                # exit never half-applies.
                 _clear_lines(line_count)
                 return PickerResult(
                     model_id=current_model,
@@ -489,13 +509,30 @@ def pick_model_and_effort(
                     role=role_names[role_cursor],
                 )
             _clear_lines(line_count)
+            final_role = role_names[role_cursor]
             return PickerResult(
                 model_id=chosen_mid,
                 effort=effort_per_model.get(chosen_mid),
                 cancelled=False,
-                role=role_names[role_cursor],
+                role=final_role,
+                staged=tuple(
+                    (role_name, mid)
+                    for role_name, mid in staged_picks.items()
+                    if role_name != final_role
+                ),
             )
-        if key == _KEY_TAB and len(role_names) > 1:
+        if key == _KEY_SPACE and len(role_names) > 1:
+            # PR-PICKER-SPACE-STAGE (2026-06-12) — apply the focused row
+            # to the focused ROLE without closing, so all three role tabs
+            # can be set in one picker session (Enter-only closed after
+            # a single pick). The tab strip's per-role marker updates
+            # immediately via role_initial_models; Esc discards.
+            staged_mid, _prov, _label, _cost, staged_available, _forced = profiles[cursor]
+            if staged_available:
+                staged_role = role_names[role_cursor]
+                staged_picks[staged_role] = staged_mid
+                role_initial_models[staged_role] = staged_mid
+        elif key == _KEY_TAB and len(role_names) > 1:
             role_cursor = (role_cursor + 1) % len(role_names)
             # Re-anchor cursor to the new role's current model so the
             # picker's highlight follows the role-switch instead of

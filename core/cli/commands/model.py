@@ -13,6 +13,7 @@ as _pkg`` lookup, mirroring the pattern used by ``core/ui/agentic_ui``.
 from __future__ import annotations
 
 import logging
+from typing import Any
 
 from core.cli.commands._state import (
     _MODEL_INDEX,
@@ -340,6 +341,22 @@ def _interactive_model_picker() -> None:
         _pkg.console.print()
         return
 
+    _apply_picker_result(result)
+
+
+def _apply_picker_result(result: Any) -> None:
+    """Apply a non-cancelled picker result: staged per-role picks first
+    (Space, PR-PICKER-SPACE-STAGE 2026-06-12), then the final Enter pick.
+
+    Each staged role gets the same persistence path as the final pick
+    (``_apply_model`` with the matching role) so the operator can set
+    Primary + Reflection + Mutator in ONE picker session.
+    """
+    for staged_role, staged_mid in getattr(result, "staged", ()) or ():
+        staged_profile = next((p for p in MODEL_PROFILES if p.id == staged_mid), None)
+        if staged_profile is None:
+            continue
+        _apply_model(staged_profile, effort=None, role=staged_role)
     chosen_profile = next(p for p in MODEL_PROFILES if p.id == result.model_id)
     _apply_model(chosen_profile, effort=result.effort, role=result.role)
 
@@ -387,8 +404,7 @@ def _interactive_model_picker_for_role(role_def: AgentRole) -> None:
         _pkg.console.print("  [muted]Cancelled[/muted]")
         _pkg.console.print()
         return
-    chosen_profile = next(p for p in MODEL_PROFILES if p.id == result.model_id)
-    _apply_model(chosen_profile, effort=result.effort, role=result.role)
+    _apply_picker_result(result)
 
 
 def cmd_model(args: str) -> None:
