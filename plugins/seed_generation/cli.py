@@ -422,6 +422,8 @@ def run_audit_seeds_resume(
     out = stdout if stdout is not None else sys.stdout
     err = stderr if stderr is not None else sys.stderr
 
+    _bootstrap_seed_generation_env()
+
     from core.observability.run_dir import run_dir_scope
     from core.paths import STATE_SEED_GENERATION_DIR
     from core.self_improving.loop.observe.run_transcript import RunTranscript, run_transcript_scope
@@ -613,6 +615,39 @@ def _load_priors_snapshot(*, err: IO[str]) -> Any:
     return snapshot
 
 
+def _bootstrap_seed_generation_env() -> None:
+    """Load .env + hydrate the auth profile store before the pipeline runs.
+
+    The thin CLI seed-generation entry never goes through ``GeodeRuntime.create``
+    / the serve wiring bootstrap, so two credential surfaces start empty:
+
+    1. ``.env`` API keys are not in ``os.environ`` — the pilot's ``inspect eval``
+       subprocess reads ``os.environ`` directly, so a key the operator exported
+       by hand works there, but the run is not self-sufficient.
+    2. The wiring ``ProfileStore`` is unhydrated — the ranker's voter sub-agents
+       resolve credentials through it, NOT through ``os.environ``, so an
+       ``api_key`` voter fails with ``openai.api_key — unknown`` and the
+       tournament loses quorum (the frontier-2612 ranker halt, 2026-06-12). An
+       exported key does NOT fix this path because the voter never reads
+       ``os.environ``.
+
+    ``load_env_files`` promotes ``.env`` keys to ``os.environ`` (the shared
+    C-3 loader) and ``ensure_profile_store`` hydrates the auth profiles from
+    ``~/.geode/auth.toml`` + env (idempotent — the same pattern as
+    ``core.cli.commands.model._ensure_profiles_hydrated`` for the /model
+    picker). Both surfaces are then populated for the whole pipeline.
+    """
+    import contextlib
+
+    from core.config.env_io import load_env_files
+
+    load_env_files()
+    with contextlib.suppress(Exception):
+        from core.wiring.container import ensure_profile_store
+
+        ensure_profile_store()
+
+
 def run_audit_seeds(
     *,
     target_dim: str | None = None,
@@ -643,6 +678,8 @@ def run_audit_seeds(
     """
     out = stdout if stdout is not None else sys.stdout
     err = stderr if stderr is not None else sys.stderr
+
+    _bootstrap_seed_generation_env()
 
     resolved_dim, baseline_snapshot = _resolve_target_dim(target_dim, err=err)
     if resolved_dim is None:

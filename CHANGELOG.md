@@ -45,6 +45,11 @@ functional change.
 
 ---
 
+## [0.99.182] - 2026-06-12
+
+### Fixed
+- **Seed-generation entry now bootstraps .env + the auth profile store** — the thin CLI `audit-seeds generate` / `resume` never run `GeodeRuntime.create`, so the wiring `ProfileStore` started empty and the ranker's voter sub-agents resolved credentials through it, failing with `openai.api_key — unknown` and losing tournament quorum (observed on the frontier-2612 live run — pilot completed but ranker halted). The pilot's `inspect eval` subprocess reads `os.environ` directly so a hand-exported key masked the gap there, but the voter path needs the profile store hydrated. `run_audit_seeds` + `run_audit_seeds_resume` now call `_bootstrap_seed_generation_env` (`load_env_files` + idempotent `ensure_profile_store`, the same pattern as the /model picker hydration in v0.99.176). Guards: `tests/plugins/seed_generation/test_env_auth_bootstrap.py` (4).
+
 ## [0.99.181] - 2026-06-11
 
 ### Added
