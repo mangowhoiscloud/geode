@@ -198,6 +198,64 @@ export default function Page() {
               건드리지 않아 prefix가 라운드 간 바이트 단위로 안정됩니다.
             </p>
 
+            <h2>비동기 런타임 규율</h2>
+            <p>
+              2026-06-12 이벤트 루프 오염 사건(v0.99.183~185) 이후 워크스페이스
+              소스를 직접 실측한 비교입니다. 세 시스템의 수렴점은 하나입니다.
+              런타임에 일회용 이벤트 루프를 만들지 않는다. 루프에 귀속되는
+              자원(httpx 연결 풀)은 만든 루프 안에서만 쓴다.
+            </p>
+            <table>
+              <thead><tr><th>축</th><th>GEODE</th><th>Hermes</th><th>OpenClaw</th></tr></thead>
+              <tbody>
+                <tr>
+                  <td>루프 토폴로지</td>
+                  <td>다중 영속 루프. 메인 serve + CLI 포러 + 채널 포러별 (<code>asyncio.Runner</code> 스레드)</td>
+                  <td>단일 게이트웨이 루프. 채널 어댑터는 그 위의 async task (<code>gateway/run.py</code>)</td>
+                  <td>Node 단일 루프 + lane 동시성 (<code>command-queue.ts</code>)</td>
+                </tr>
+                <tr>
+                  <td>스레드 → 루프 브리지</td>
+                  <td><code>run_coroutine_threadsafe</code>. 웹훅 스레드가 메인 serve 루프로 마샬링 (<code>core/cli/typer_serve.py</code>)</td>
+                  <td><code>run_coroutine_threadsafe</code>. cron 스레드가 메인 루프로 마샬링</td>
+                  <td>해당 없음. 단일 루프</td>
+                </tr>
+                <tr>
+                  <td>sync 브리지의 루프</td>
+                  <td>일회용 0. 진짜 프로세스 경계만 <code>asyncio.run</code>, 위반은 <code>run_process_coroutine</code> 카나리아가 WARNING (<code>core/async_runtime.py</code>)</td>
+                  <td>영속 per-thread 루프 캐시. 일회용 금지 (<code>model_tools.py</code> <code>_run_async</code>)</td>
+                  <td>해당 없음</td>
+                </tr>
+                <tr>
+                  <td>SDK 클라이언트 스코프</td>
+                  <td>루프별. <code>LoopAffineClientCache</code>가 루프를 약참조 키로 클라이언트를 분리 (<code>core/llm/loop_affinity.py</code>)</td>
+                  <td>생성 루프 귀속. 영속 루프와 수명을 같이함</td>
+                  <td>전역. 단일 루프라 안전</td>
+                </tr>
+                <tr>
+                  <td>행(hang) 방어</td>
+                  <td>도구·MCP wall-clock deadline (<code>asyncio.wait_for</code>) + 시간상수 정합 부등식 가드</td>
+                  <td>개별 도구 timeout</td>
+                  <td>lane 동시성 한도</td>
+                </tr>
+                <tr>
+                  <td>회귀 가드</td>
+                  <td>25-테스트 가드레일 (핸들러 async 핀, 클라이언트 캐시 ratchet, deadline 정합) + 런타임 카나리아</td>
+                  <td>없음</td>
+                  <td>없음</td>
+                </tr>
+              </tbody>
+            </table>
+            <p>
+              GEODE만 다중 루프를 유지합니다. 채널별 스레드 격리는 설계
+              선택이고, 그 대가였던 루프 귀속 자원의 교차 공유 문제(도구
+              호출별 일회용 루프 × 전역 클라이언트 캐시가 만든 web_search
+              즉사·무한 행)는 v0.99.183~185에서 핸들러 async화, 루프별
+              클라이언트, deadline의 3겹으로 닫았습니다. 일회용 루프 잔재는
+              도구 경로, 웹훅, verify judge에서 전부 제거됐고 가드레일
+              테스트가 재발을 막습니다.
+            </p>
+
             <h2>관측성</h2>
             <table>
               <thead><tr><th>축</th><th>GEODE</th><th>Hermes</th><th>OpenClaw</th><th>Claude Code</th></tr></thead>
@@ -422,6 +480,66 @@ export default function Page() {
               appends the system reminder as the last message on a per-request
               copy (<code>core/agent/system_injection.py</code>), so the shared
               history prefix stays byte-stable across rounds.
+            </p>
+
+            <h2>Async runtime discipline</h2>
+            <p>
+              Measured directly from workspace sources after the 2026-06-12
+              event-loop pollution incident (v0.99.183~185). All three systems
+              converge on one rule: never build a disposable event loop at
+              runtime, and keep loop-bound resources (httpx connection pools)
+              inside the loop that created them.
+            </p>
+            <table>
+              <thead><tr><th>Axis</th><th>GEODE</th><th>Hermes</th><th>OpenClaw</th></tr></thead>
+              <tbody>
+                <tr>
+                  <td>Loop topology</td>
+                  <td>Multiple persistent loops: main serve + CLI poller + per-channel pollers (<code>asyncio.Runner</code> threads)</td>
+                  <td>One gateway loop; channel adapters are async tasks on it (<code>gateway/run.py</code>)</td>
+                  <td>Single Node loop + lane concurrency (<code>command-queue.ts</code>)</td>
+                </tr>
+                <tr>
+                  <td>Thread → loop bridge</td>
+                  <td><code>run_coroutine_threadsafe</code>: webhook thread marshals into the main serve loop (<code>core/cli/typer_serve.py</code>)</td>
+                  <td><code>run_coroutine_threadsafe</code>: cron thread marshals into the main loop</td>
+                  <td>n/a (single loop)</td>
+                </tr>
+                <tr>
+                  <td>Loops in sync bridges</td>
+                  <td>Zero disposable: <code>asyncio.run</code> only at true process edges; violations trip the <code>run_process_coroutine</code> canary WARNING (<code>core/async_runtime.py</code>)</td>
+                  <td>Persistent per-thread loop cache, never disposable (<code>model_tools.py</code> <code>_run_async</code>)</td>
+                  <td>n/a</td>
+                </tr>
+                <tr>
+                  <td>SDK client scope</td>
+                  <td>Per-loop: <code>LoopAffineClientCache</code> keys clients by weakly-referenced loop (<code>core/llm/loop_affinity.py</code>)</td>
+                  <td>Bound to the creating loop, sharing its lifetime</td>
+                  <td>Global (safe under a single loop)</td>
+                </tr>
+                <tr>
+                  <td>Hang defense</td>
+                  <td>Tool/MCP wall-clock deadlines (<code>asyncio.wait_for</code>) + a timing-constant coherence inequality guard</td>
+                  <td>Per-tool timeouts</td>
+                  <td>Lane concurrency caps</td>
+                </tr>
+                <tr>
+                  <td>Regression guard</td>
+                  <td>25-test guardrail suite (async handler pins, client-cache ratchets, deadline coherence) + runtime canary</td>
+                  <td>None</td>
+                  <td>None</td>
+                </tr>
+              </tbody>
+            </table>
+            <p>
+              GEODE is the only one keeping multiple loops. Per-channel thread
+              isolation is a design choice; its cost, cross-loop sharing of
+              loop-bound resources (the web_search instant-fail/eternal-hang
+              incident: disposable loops per tool call × a global client
+              cache), was closed in v0.99.183~185 with async-native handlers,
+              per-loop clients, and deadlines. The disposable-loop residues
+              (tool path, webhook, verify judge) are all gone, and the
+              guardrail suite keeps them gone.
             </p>
 
             <h2>Observability</h2>
