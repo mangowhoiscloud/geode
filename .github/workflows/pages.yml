@@ -227,6 +227,7 @@ jobs:
             --accept 200,206,403,429
             --exclude 'petri-bundle'
             --exclude 'self-improving'
+            --exclude 'linkedin\.com'
             site/out/index.html
             site/out/docs.html
             site/out/about.html
