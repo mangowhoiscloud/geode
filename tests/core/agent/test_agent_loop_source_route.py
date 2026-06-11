@@ -92,13 +92,25 @@ def test_unregistered_pair_hard_fails() -> None:
         _make_loop(source="payg")
 
 
-def test_runtime_model_switch_re_resolves_path_b_adapter() -> None:
+def test_runtime_model_switch_re_resolves_path_b_adapter(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     """PR-MAINPATH-4 (2026-05-24) — ``/model`` between providers must
     re-resolve ``_new_adapter``. PR-MAINPATH-67 (2026-05-24) deleted
     the legacy ``_adapter`` re-resolution alongside the resolver, so
     Path-B is now the sole adapter swapped on provider change.
+
+    PR-MODEL-SWITCH-SOURCE (2026-06-12) — the source is now RE-INFERRED
+    for the new provider on a cross-provider switch (the constant-source
+    rule routed codex-OAuth operators through openai-payg's stale key).
+    ``infer_source`` is pinned to ``payg`` here so the adapter assertion
+    stays hermetic regardless of the developer machine's real OAuth
+    profiles; the re-inference contract itself is pinned in
+    ``test_model_switch_source_reinfer.py``.
     """
     from core.agent.loop._model_switching import _apply_model_update
+
+    monkeypatch.setattr("core.llm.adapters._source_inference.infer_source", lambda provider: "payg")
 
     loop = _make_loop(provider="anthropic")
     assert loop._new_adapter is not None
@@ -107,7 +119,7 @@ def test_runtime_model_switch_re_resolves_path_b_adapter() -> None:
     # Switch to an OpenAI model — ``_apply_model_update`` resolves
     # ``provider`` via ``_resolve_provider("gpt-5.5")`` →
     # ``openai-codex``. The Path-B helper normalises to ``openai``
-    # internally, so we end up on ``openai-payg``.
+    # internally; with the pinned payg source we end up on ``openai-payg``.
     _apply_model_update(loop, "gpt-5.5")
 
     assert loop._provider == "openai-codex"

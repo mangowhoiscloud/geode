@@ -22,6 +22,7 @@ focused model's valid effort range, Enter confirms, q/ESC cancels.
 
 from __future__ import annotations
 
+import re
 import sys
 from dataclasses import dataclass
 
@@ -185,12 +186,20 @@ class PickerResult:
     the *currently focused* agent role (primary / reflection / future:
     mutator). Defaults to ``"primary"`` for backward compatibility
     with callers that don't pass ``roles``.
+
+    PR-PICKER-SPACE-STAGE (2026-06-12) — ``staged`` carries per-role
+    picks applied with Space WITHOUT closing the picker (operator:
+    three role tabs, Enter-only meant one pick per open). Each entry is
+    ``(role_name, model_id)``; the final Enter pick is still
+    ``(role, model_id)`` and is NOT duplicated into ``staged``. Esc /
+    q discards staged picks (``cancelled=True`` + empty ``staged``).
     """
 
     model_id: str
     effort: str | None  # None → no effort knob applies for this model
     cancelled: bool = False
     role: str = "primary"
+    staged: tuple[tuple[str, str], ...] = ()
 
 
 # ---------------------------------------------------------------------------
@@ -204,6 +213,7 @@ _KEY_RIGHT = "RIGHT"
 _KEY_ENTER = "ENTER"
 _KEY_QUIT = "QUIT"
 _KEY_TAB = "TAB"
+_KEY_SPACE = "SPACE"
 
 
 def _read_key() -> str:
@@ -226,6 +236,8 @@ def _read_key() -> str:
             return _KEY_ENTER
         if ch == "\t":
             return _KEY_TAB
+        if ch == " ":
+            return _KEY_SPACE
         if ch in ("q", "Q"):
             return _KEY_QUIT
         if ch == "\x03":
@@ -233,6 +245,42 @@ def _read_key() -> str:
         return ""
     finally:
         termios.tcsetattr(fd, termios.TCSADRAIN, old_settings)
+
+
+_ANSI_RE = re.compile(r"\x1b\[[0-9;]*m")
+
+
+def _fit_to_width(line: str, width: int | None = None) -> str:
+    """Truncate ``line`` so its VISIBLE length fits one terminal row.
+
+    PR-PICKER-NO-WRAP (2026-06-12) — ``_clear_lines`` rewinds exactly the
+    number of logical lines ``_render`` counted; a line that soft-wraps
+    occupies more physical rows than counted, so each repaint cleared too
+    few rows and the picker scrolled upward over prior output. ANSI SGR
+    sequences are zero-width; a truncated line gets a reset appended so
+    an open color never bleeds into the next row.
+    """
+    if width is None:
+        import shutil
+
+        width = shutil.get_terminal_size(fallback=(120, 24)).columns
+    budget = max(width - 1, 10)
+    visible = 0
+    out_chars: list[str] = []
+    i = 0
+    while i < len(line):
+        match = _ANSI_RE.match(line, i)
+        if match:
+            out_chars.append(match.group(0))
+            i = match.end()
+            continue
+        if visible >= budget:
+            out_chars.append("\033[0m")
+            break
+        out_chars.append(line[i])
+        visible += 1
+        i += 1
+    return "".join(out_chars)
 
 
 def _render(
@@ -268,8 +316,11 @@ def _render(
 
     out.write("\n  \033[1mSelect model\033[0m\n")
     out.write(
-        "  \033[2mSwitch between LLM models. Applies to this session and future sessions. "
-        "Models with effort knobs let you tune reasoning depth with ←→ arrows.\033[0m\n\n"
+        _fit_to_width(
+            "  \033[2mSwitch between LLM models. Applies to this session and future sessions. "
+            "Models with effort knobs let you tune reasoning depth with ←→ arrows.\033[0m"
+        )
+        + "\n\n"
     )
     lines += 4
 
@@ -283,9 +334,11 @@ def _render(
                 tab_parts.append(f"\033[1;36m[ {role_label} ]\033[0m")
             else:
                 tab_parts.append(f"\033[2m[ {role_label} ]\033[0m")
-        out.write("  " + " ".join(tab_parts) + "  \033[2m(Tab to cycle)\033[0m\n")
+        out.write(
+            _fit_to_width("  " + " ".join(tab_parts) + "  \033[2m(Tab to cycle)\033[0m") + "\n"
+        )
         if 0 <= role_cursor < len(roles):
-            out.write(f"  \033[2m{roles[role_cursor][2]}\033[0m\n")
+            out.write(_fit_to_width(f"  \033[2m{roles[role_cursor][2]}\033[0m") + "\n")
         out.write("\n")
         lines += 3
 
@@ -303,18 +356,24 @@ def _render(
         suffixes = f"{avail_suffix}{forced_suffix}"
         if i == cursor:
             highlight = "1;36" if available else "0;36"
-            out.write(
+            row = (
                 f"  \033[{highlight}m{cursor_marker} {index} {label:<{label_width}}"
                 f"{default_check}\033[0m"
-                f"  \033[2m{desc}\033[0m{suffixes}\n"
+                f"  \033[2m{desc}\033[0m{suffixes}"
             )
         else:
             row_open = "\033[2m" if not available else ""
             row_close = "\033[0m" if not available else ""
-            out.write(
+            row = (
                 f"  {row_open}{cursor_marker} {index} {label:<{label_width}}{default_check}"
-                f"{row_close}  \033[2m{desc}\033[0m{suffixes}\n"
+                f"{row_close}  \033[2m{desc}\033[0m{suffixes}"
             )
+        # PR-PICKER-NO-WRAP (2026-06-12) — clamp each row to the terminal
+        # width. A row that WRAPS occupies 2+ physical lines while the
+        # repaint accounting counts 1, so every ↑↓ repaint cleared too few
+        # lines and the picker crept upward over previous output
+        # (operator: "화살표로 이동하면 위로 출력이 쏠려").
+        out.write(_fit_to_width(row) + "\n")
         lines += 1
 
     # Effort line for the focused model. PR-A fix-up #1 — when the
@@ -323,10 +382,28 @@ def _render(
     # ← → adjuster, which the dispatcher would silently ignore.
     out.write("\n")
     lines += 1
+    # PR-PICKER-ROLE-CONFIRM (2026-06-12) — name the focused role in the
+    # confirm hint. Operators on the Reflection / Mutator tabs reported
+    # "no key confirms the change": Enter always confirmed, but the hint
+    # said only "Enter to confirm" (and an unchanged pick closed with no
+    # output at all — fixed in commands/model.py). The role-named hint
+    # makes the confirm target explicit.
+    focused_role_label = ""
+    if roles and len(roles) > 1 and 0 <= role_cursor < len(roles):
+        focused_role_label = roles[role_cursor][1]
+    # PR-PICKER-SPACE-STAGE (2026-06-12) — with multiple role tabs, Space
+    # applies to the focused role WITHOUT closing (set all three in one
+    # session); Enter confirms everything and closes.
+    confirm_hint = (
+        f"Space to set {focused_role_label} · Tab next role · "
+        "Enter to confirm & close · Esc to discard"
+        if focused_role_label
+        else "Enter to confirm · Esc to exit"
+    )
     if not show_effort:
         out.write("  \033[2m· No effort knob for this role · ←→ disabled\033[0m\n")
         lines += 1
-        out.write("\n  \033[2mEnter to confirm · Esc to exit\033[0m\n")
+        out.write(_fit_to_width(f"\n  \033[2m{confirm_hint}\033[0m") + "\n")
         lines += 2
         out.flush()
         return lines
@@ -341,12 +418,15 @@ def _render(
         name = effort_label(current or default or "")
         suffix = " (default)" if current == default else ""
         out.write(
-            f"  \033[1;36m{sym}\033[0m {name} effort\033[2m{suffix}\033[0m"
-            f"  \033[2m← → to adjust\033[0m\n"
+            _fit_to_width(
+                f"  \033[1;36m{sym}\033[0m {name} effort\033[2m{suffix}\033[0m"
+                f"  \033[2m← → to adjust\033[0m"
+            )
+            + "\n"
         )
     lines += 1
 
-    out.write("\n  \033[2mEnter to confirm · Esc to exit\033[0m\n")
+    out.write(_fit_to_width(f"\n  \033[2m{confirm_hint}\033[0m") + "\n")
     lines += 2
     out.flush()
     return lines
@@ -430,6 +510,9 @@ def pick_model_and_effort(
             effort_per_model[mid] = default_effort(mid, prov)
 
     role_has_effort = dict(role_has_effort or {})
+    # PR-PICKER-SPACE-STAGE (2026-06-12) — picks applied with Space per
+    # role; returned on Enter, discarded on Esc/q.
+    staged_picks: dict[str, str] = {}
     initial_for_render = role_initial_models.get(role_names[role_cursor], current_model)
     show_effort = role_has_effort.get(role_names[role_cursor], True)
     line_count = _render(
@@ -467,6 +550,8 @@ def pick_model_and_effort(
                 # M5 — block the selection so the caller can render a
                 # "Login first" hint. Treat as cancellation so settings
                 # don't shift to a model the LLM call would reject.
+                # Staged picks are intentionally discarded — a cancel
+                # exit never half-applies.
                 _clear_lines(line_count)
                 return PickerResult(
                     model_id=current_model,
@@ -475,13 +560,30 @@ def pick_model_and_effort(
                     role=role_names[role_cursor],
                 )
             _clear_lines(line_count)
+            final_role = role_names[role_cursor]
             return PickerResult(
                 model_id=chosen_mid,
                 effort=effort_per_model.get(chosen_mid),
                 cancelled=False,
-                role=role_names[role_cursor],
+                role=final_role,
+                staged=tuple(
+                    (role_name, mid)
+                    for role_name, mid in staged_picks.items()
+                    if role_name != final_role
+                ),
             )
-        if key == _KEY_TAB and len(role_names) > 1:
+        if key == _KEY_SPACE and len(role_names) > 1:
+            # PR-PICKER-SPACE-STAGE (2026-06-12) — apply the focused row
+            # to the focused ROLE without closing, so all three role tabs
+            # can be set in one picker session (Enter-only closed after
+            # a single pick). The tab strip's per-role marker updates
+            # immediately via role_initial_models; Esc discards.
+            staged_mid, _prov, _label, _cost, staged_available, _forced = profiles[cursor]
+            if staged_available:
+                staged_role = role_names[role_cursor]
+                staged_picks[staged_role] = staged_mid
+                role_initial_models[staged_role] = staged_mid
+        elif key == _KEY_TAB and len(role_names) > 1:
             role_cursor = (role_cursor + 1) % len(role_names)
             # Re-anchor cursor to the new role's current model so the
             # picker's highlight follows the role-switch instead of

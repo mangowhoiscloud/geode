@@ -370,3 +370,271 @@ def test_picker_render_show_effort_false_emits_no_knob_hint() -> None:
     assert "No effort knob for this role" in out
     # And it does NOT render the disc + ←→ adjuster
     assert "← → to adjust" not in out
+
+
+# ---------------------------------------------------------------------------
+# PR-PICKER-ROLE-CONFIRM (2026-06-12) — role tabs have an explicit,
+# visible confirm contract (operator: "Reflection/Mutator에서 변경할 때
+# 확정짓는 키가 없어")
+# ---------------------------------------------------------------------------
+
+
+def test_enter_confirms_selection_on_role_tab(monkeypatch) -> None:
+    """Behavioral pin — TAB to a non-primary role then ENTER returns a
+    non-cancelled result tagged with that role (Enter IS the confirm key)."""
+    from core.cli import effort_picker
+
+    keys = iter([effort_picker._KEY_TAB, effort_picker._KEY_DOWN, effort_picker._KEY_ENTER])
+    monkeypatch.setattr(effort_picker, "_read_key", lambda: next(keys))
+    monkeypatch.setattr(effort_picker, "_clear_lines", lambda n: None)
+
+    profiles = [
+        ("claude-fable-5", "anthropic", "Fable 5", "", True, None),
+        ("claude-haiku-4-5-20251001", "anthropic", "Haiku 4.5", "", True, None),
+    ]
+    result = effort_picker.pick_model_and_effort(
+        profiles,
+        "claude-fable-5",
+        "high",
+        roles=[
+            ("primary", "Primary", "main loop"),
+            ("mutator", "Mutator", "loop mutator"),
+        ],
+        initial_role="primary",
+        role_initial_models={"primary": "claude-fable-5", "mutator": "claude-fable-5"},
+        role_has_effort={"primary": True, "mutator": False},
+    )
+    assert result.cancelled is False
+    assert result.role == "mutator"
+    assert result.model_id == "claude-haiku-4-5-20251001"
+
+
+def test_render_confirm_hint_names_focused_role(capsys, monkeypatch) -> None:
+    """The footer must say WHICH role Enter confirms when a non-primary
+    tab is focused — the generic hint read as 'no confirm key exists'."""
+    import os
+    import shutil
+
+    from core.cli import effort_picker
+
+    # Wide terminal pin — this test asserts hint CONTENT; the width clamp
+    # (PR-PICKER-NO-WRAP) would truncate the tail on CI's 80 columns.
+    monkeypatch.setattr(
+        shutil, "get_terminal_size", lambda fallback=(80, 24): os.terminal_size((200, 24))
+    )
+
+    profiles = [("claude-haiku-4-5-20251001", "anthropic", "Haiku 4.5", "", True, None)]
+    effort_picker._render(
+        profiles,
+        0,
+        {},
+        "claude-haiku-4-5-20251001",
+        roles=[
+            ("primary", "Primary", "main loop"),
+            ("mutator", "Mutator", "loop mutator"),
+        ],
+        role_cursor=1,
+        role_initials={},
+        show_effort=False,
+    )
+    rendered = capsys.readouterr().out
+    assert "Space to set Mutator" in rendered
+    assert "Enter to confirm & close" in rendered
+
+
+def test_apply_model_prints_feedback_for_unchanged_role_pick() -> None:
+    """Source pin — an unchanged pick must not close silently; the
+    else-branch feedback line exists."""
+    import inspect
+
+    from core.cli.commands import model as model_cmd
+
+    src = inspect.getsource(model_cmd._apply_model)
+    assert "Model unchanged:" in src
+
+
+# ---------------------------------------------------------------------------
+# PR-PICKER-SPACE-STAGE (2026-06-12) — Space applies the focused role
+# without closing; Enter confirms everything; Esc discards staged picks
+# ---------------------------------------------------------------------------
+
+
+def _two_role_picker_kwargs() -> dict:
+    return {
+        "roles": [
+            ("primary", "Primary", "main loop"),
+            ("mutator", "Mutator", "loop mutator"),
+        ],
+        "initial_role": "primary",
+        "role_initial_models": {
+            "primary": "claude-fable-5",
+            "mutator": "claude-fable-5",
+        },
+        "role_has_effort": {"primary": True, "mutator": False},
+    }
+
+
+_PICKER_PROFILES = [
+    ("claude-fable-5", "anthropic", "Fable 5", "", True, None),
+    ("claude-haiku-4-5-20251001", "anthropic", "Haiku 4.5", "", True, None),
+]
+
+
+def test_space_stages_role_pick_without_closing(monkeypatch) -> None:
+    """TAB→DOWN→SPACE stages the mutator pick and the picker stays open;
+    the following TAB→ENTER confirms primary and returns the staged pick."""
+    from core.cli import effort_picker
+
+    keys = iter(
+        [
+            effort_picker._KEY_TAB,  # focus mutator
+            effort_picker._KEY_DOWN,  # haiku
+            effort_picker._KEY_SPACE,  # stage mutator=haiku, stay open
+            effort_picker._KEY_TAB,  # wrap back to primary
+            effort_picker._KEY_ENTER,  # confirm + close
+        ]
+    )
+    monkeypatch.setattr(effort_picker, "_read_key", lambda: next(keys))
+    monkeypatch.setattr(effort_picker, "_clear_lines", lambda n: None)
+
+    result = effort_picker.pick_model_and_effort(
+        _PICKER_PROFILES, "claude-fable-5", "high", **_two_role_picker_kwargs()
+    )
+    assert result.cancelled is False
+    assert result.role == "primary"
+    assert result.staged == (("mutator", "claude-haiku-4-5-20251001"),)
+
+
+def test_escape_discards_staged_picks(monkeypatch) -> None:
+    from core.cli import effort_picker
+
+    keys = iter(
+        [
+            effort_picker._KEY_TAB,
+            effort_picker._KEY_DOWN,
+            effort_picker._KEY_SPACE,
+            effort_picker._KEY_QUIT,
+        ]
+    )
+    monkeypatch.setattr(effort_picker, "_read_key", lambda: next(keys))
+    monkeypatch.setattr(effort_picker, "_clear_lines", lambda n: None)
+
+    result = effort_picker.pick_model_and_effort(
+        _PICKER_PROFILES, "claude-fable-5", "high", **_two_role_picker_kwargs()
+    )
+    assert result.cancelled is True
+    assert result.staged == (), "Esc must never half-apply staged picks"
+
+
+def test_apply_picker_result_applies_staged_then_final(monkeypatch) -> None:
+    """Caller contract — every staged role persists via _apply_model with
+    its own role, then the final Enter pick applies."""
+    from core.cli.commands import model as model_cmd
+    from core.cli.effort_picker import PickerResult
+
+    applied: list[tuple[str, str | None, str]] = []
+    monkeypatch.setattr(
+        model_cmd,
+        "_apply_model",
+        lambda profile, effort=None, role="primary": applied.append((profile.id, effort, role)),
+    )
+
+    known = [p.id for p in model_cmd.MODEL_PROFILES[:2]]
+    result = PickerResult(
+        model_id=known[0],
+        effort="high",
+        cancelled=False,
+        role="primary",
+        staged=((("mutator"), known[1]),),
+    )
+    model_cmd._apply_picker_result(result)
+
+    assert applied == [
+        (known[1], None, "mutator"),
+        (known[0], "high", "primary"),
+    ]
+
+
+# ---------------------------------------------------------------------------
+# PR-PICKER-NO-WRAP + PR-PICKER-ROLE-SCOPE (2026-06-12)
+# ---------------------------------------------------------------------------
+
+
+def test_fit_to_width_keeps_one_physical_line() -> None:
+    """Drift guard — a rendered line whose VISIBLE length exceeds the
+    terminal width soft-wraps, breaking _clear_lines accounting (every
+    arrow repaint scrolled the picker upward over prior output)."""
+    from core.cli import effort_picker
+
+    long_line = "  \033[1;36m❯ 1. " + "x" * 500 + "\033[0m"
+    fitted = effort_picker._fit_to_width(long_line, width=80)
+    visible = effort_picker._ANSI_RE.sub("", fitted)
+    assert len(visible) <= 79
+    assert fitted.endswith("\033[0m"), "truncation must reset open ANSI color"
+
+    short_line = "  ok"
+    assert effort_picker._fit_to_width(short_line, width=80) == short_line
+
+
+def test_render_rows_never_exceed_terminal_width(monkeypatch, capsys) -> None:
+    """Every physical line _render writes must fit the terminal width so
+    line accounting equals physical rows (no upward creep)."""
+    import shutil
+
+    from core.cli import effort_picker
+
+    monkeypatch.setattr(
+        shutil,
+        "get_terminal_size",
+        lambda fallback=(80, 24): __import__("os").terminal_size((60, 24)),
+    )
+    profiles = [
+        ("claude-fable-5", "anthropic", "Fable 5 with an extremely long label", "", True, None),
+        ("claude-haiku-4-5-20251001", "anthropic", "Haiku 4.5", "", False, "apikey"),
+    ]
+    effort_picker._render(
+        profiles,
+        0,
+        {},
+        "claude-fable-5",
+        roles=[
+            ("primary", "Primary", "main loop with a very very long description text here"),
+            ("mutator", "Mutator", "loop mutator"),
+        ],
+        role_cursor=0,
+        role_initials={},
+        show_effort=True,
+    )
+    rendered = capsys.readouterr().out
+    for raw_line in rendered.splitlines():
+        visible = effort_picker._ANSI_RE.sub("", raw_line)
+        assert len(visible) <= 60, f"line wraps ({len(visible)} > 60): {visible[:60]}..."
+
+
+def test_non_primary_apply_persists_to_global_scope(monkeypatch) -> None:
+    """Write-read parity — mutator/reflection readers consult the GLOBAL
+    config only, so _apply_model must force scope=global for non-primary
+    roles (a project-scoped write silently vanished from the picker's
+    read-back AND the self-improving runner)."""
+    from core.cli.commands import model as model_cmd
+
+    captured: list[tuple[str, str, str, str]] = []
+    monkeypatch.setattr(
+        "core.config.env_io.upsert_config_toml",
+        lambda section, key, value, *, scope="project": captured.append(
+            (section, key, value, scope)
+        ),
+    )
+    monkeypatch.setattr(model_cmd, "_current_model_for_role", lambda role_def: "old-model")
+    import core.cli.commands as _pkg
+
+    monkeypatch.setattr(_pkg, "_check_provider_key", lambda profile: None, raising=False)
+    monkeypatch.setattr(_pkg, "remove_env", lambda var: False, raising=False)
+
+    profile = model_cmd.MODEL_PROFILES[0]
+    model_cmd._apply_model(profile, effort=None, role="mutator", scope="project")
+
+    assert captured, "mutator pick must persist to config.toml"
+    assert all(scope == "global" for *_rest, scope in captured), (
+        f"non-primary picks must write GLOBAL scope (readers are global-only): {captured}"
+    )
