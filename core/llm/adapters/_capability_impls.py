@@ -29,6 +29,19 @@ log = logging.getLogger(__name__)
 # Anthropic — used by AnthropicPaygAdapter + AnthropicOAuthAdapter
 # ---------------------------------------------------------------------------
 
+# Per-attempt client timeout for the server-side web_search call.
+# PR-GATEWAY-BRIDGE-FRONTIER (2026-06-12) — was 60.0, which collided with
+# observed server-side durations once the session-model hint landed:
+# claude-fable-5 search+synthesis runs 58-60s (serve.log 2026-06-12 02:05 —
+# successes at 58.1s/59.8s, ReadTimeout cuts at exactly 60.0s), so healthy
+# calls were killed at the wire and re-run by the dispatch retry, doubling
+# wall time and then colliding with the tool deadline (119.9s ≈ 2×60s).
+# 100s gives fable-5 headroom; the tool deadline override
+# (executor._TOOL_DEADLINE_OVERRIDES_S) covers attempt + retry + backoff —
+# the coherence is pinned by
+# test_web_search_deadline_covers_client_timeout_with_retry.
+ANTHROPIC_WEB_SEARCH_TIMEOUT_S = 100.0
+
 
 async def anthropic_web_search(
     client: Any, *, query: str, max_results: int, model: str, adapter_name: str
@@ -48,7 +61,7 @@ async def anthropic_web_search(
                 ),
             }
         ],
-        timeout=60.0,
+        timeout=ANTHROPIC_WEB_SEARCH_TIMEOUT_S,
     )
     text_parts: list[str] = []
     source_urls: list[str] = []
