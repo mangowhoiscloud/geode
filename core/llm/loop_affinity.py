@@ -76,6 +76,14 @@ class LoopAffineClientCache:
             return builder()
 
         with self._lock:
+            # Sweep closed-loop entries. The WeakKeyDictionary alone is NOT
+            # sufficient cleanup: the cached client's loop-bound transports
+            # can keep a strong reference back to its (closed) loop, so the
+            # weak key never dies and the entry would otherwise persist —
+            # one leaked client per throwaway loop (Codex MCP review
+            # 2026-06-12). The sweep bounds that to "until any next get()".
+            for cached_loop in [k for k in self._by_loop if k.is_closed()]:
+                del self._by_loop[cached_loop]
             cached = self._by_loop.get(loop)
             if cached is not None:
                 return cached

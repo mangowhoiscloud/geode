@@ -174,6 +174,33 @@ def test_loop_affine_cache_invalidate_drops_entries() -> None:
     assert first is not second
 
 
+def test_loop_affine_cache_sweeps_closed_loop_entries() -> None:
+    """Codex MCP review 2026-06-12 — a cached client can hold a strong
+    reference back to its (closed) loop, keeping the weak key alive
+    forever. get() must sweep closed-loop entries so throwaway loops do
+    not leak one client each."""
+    cache = LoopAffineClientCache("test")
+
+    class _ClientHoldingItsLoop:
+        def __init__(self) -> None:
+            self.loop = asyncio.get_running_loop()  # strong back-reference
+
+    async def _seed() -> None:
+        cache.get(_ClientHoldingItsLoop)
+
+    asyncio.run(_seed())  # loop now closed; entry survives via back-ref
+    assert cache.bound_loop_count() == 1
+
+    async def _touch() -> None:
+        cache.get(object)
+
+    asyncio.run(_touch())  # any next get() sweeps the dead entry
+    # The back-ref entry must be swept; the _touch entry's plain-object
+    # value holds no loop back-ref, so its weak key dies with the loop —
+    # a broken sweep would leave the back-ref entry behind (count 1).
+    assert cache.bound_loop_count() == 0, "closed-loop entry must be swept"
+
+
 def test_no_single_slot_client_cache_left_in_adapters() -> None:
     """Source ratchet — a new or refactored adapter that reintroduces
     ``self._client = ...`` single-slot caching reopens the cross-loop
@@ -224,19 +251,32 @@ def test_builtin_adapters_with_get_client_use_loop_affine_cache() -> None:
 
 def test_provider_async_clients_are_per_loop(monkeypatch: pytest.MonkeyPatch) -> None:
     """The provider-level getters (main agentic path — crosses the gateway
-    main loop and the CLIPoller loop) must also be loop-affine."""
+    main loop and the CLIPoller loop) must ALL be loop-affine. Covers
+    anthropic + openai + glm (Codex MCP review 2026-06-12 — the original
+    pin only exercised anthropic)."""
     from core.llm.providers import anthropic as anthropic_provider
+    from core.llm.providers import glm as glm_provider
+    from core.llm.providers import openai as openai_provider
 
     monkeypatch.setattr(anthropic_provider, "_resolve_anthropic_key", lambda: "test-key")
-    anthropic_provider._async_clients.invalidate()
+    monkeypatch.setattr(openai_provider, "_resolve_openai_key", lambda: "test-key")
+    monkeypatch.setattr(glm_provider, "_resolve_glm_endpoint", lambda: ("test-key", "https://e"))
 
-    async def _get() -> object:
-        return anthropic_provider.get_async_anthropic_client()
+    getters = [
+        (anthropic_provider._async_clients, anthropic_provider.get_async_anthropic_client),
+        (openai_provider._async_openai_clients, openai_provider._get_async_openai_client),
+        (glm_provider._async_glm_clients, glm_provider._get_async_glm_client),
+    ]
+    for cache, getter in getters:
+        cache.invalidate()
 
-    client_a = asyncio.run(_get())
-    client_b = asyncio.run(_get())
-    assert client_a is not client_b
-    anthropic_provider._async_clients.invalidate()
+        async def _get(_getter: Any = getter) -> object:
+            return _getter()
+
+        client_a = asyncio.run(_get())
+        client_b = asyncio.run(_get())
+        assert client_a is not client_b, getter.__name__
+        cache.invalidate()
 
 
 # ---------------------------------------------------------------------------
@@ -293,6 +333,53 @@ def test_deadline_overrides_cover_long_running_tools() -> None:
     )
     for tool_name, deadline in _TOOL_DEADLINE_OVERRIDES_S.items():
         assert deadline > _TOOL_DEADLINE_DEFAULT_S, tool_name
+
+
+def test_deadline_override_keys_match_registered_handler_names() -> None:
+    """Codex MCP review 2026-06-12 — the original table keyed
+    ``computer_use`` while the registered handler is ``computer``, so the
+    600s override silently never applied. Every override key must be an
+    actually-registered handler name."""
+    from core.agent.tool_executor.executor import _TOOL_DEADLINE_OVERRIDES_S
+    from core.cli.tool_handlers import _build_tool_handlers
+
+    registered = set(_build_tool_handlers().keys())
+    # ``computer`` registers only when GEODE_COMPUTER_USE_ENABLED + pyautogui
+    # are present — pin its name against the builder source instead.
+    single_tool_src = (REPO_ROOT / "core" / "cli" / "tool_handlers" / "single_tool.py").read_text(
+        encoding="utf-8"
+    )
+    conditional = {"computer"} if '"computer"' in single_tool_src else set()
+    unknown = sorted(set(_TOOL_DEADLINE_OVERRIDES_S) - registered - conditional)
+    assert not unknown, (
+        f"deadline override keys with no registered handler (dead overrides): {unknown}"
+    )
+
+
+def test_dispatch_tolerates_legacy_adapter_without_model_kwarg(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Codex MCP review 2026-06-12 — the registry is open to external
+    plugin adapters; one still on the pre-hint ``aweb_search`` signature
+    must keep working instead of raising TypeError when dispatch forwards
+    ``model=``."""
+    from core.llm.adapters.base import WebSearchResult
+    from core.llm.adapters.dispatch import web_search_via_adapters
+
+    class _LegacyAdapter:
+        name = "legacy-external"
+        provider = "anthropic"
+        source = "payg"
+        supports_web_search = True
+
+        async def aweb_search(self, query: str, *, max_results: int = 5) -> WebSearchResult:
+            return WebSearchResult(query=query, text="legacy ok", adapter_name=self.name)
+
+    monkeypatch.setattr("core.llm.adapters.dispatch.list_adapters", lambda: [_LegacyAdapter()])
+    monkeypatch.setattr("core.llm.adapters._source_inference.infer_source", lambda provider: "payg")
+
+    result = asyncio.run(web_search_via_adapters("q", model="claude-opus-4-8"))
+    assert result.text == "legacy ok"
 
 
 # ---------------------------------------------------------------------------
