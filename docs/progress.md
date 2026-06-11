@@ -18,6 +18,7 @@
 <!-- 3-Checkpoint: (1) alloc → (2) merge (CI 5/5) → (3) verify -->
 
 - [ ] H11-tail — routing 상수 모듈레벨 by-value 별칭 해동(core/llm/providers/{anthropic,openai,codex,glm}.py DEFAULT_*/FALLBACK_MODELS + core/skills/agents.py dataclass 기본값) — reload 후에도 boot-frozen, 호출자 스윕 필요. + H1(데몬 client-cwd 세션 해석)은 별도 결정
+- [ ] 이벤트 루프 오염 수정 — sync 델리게이트 핸들러가 도구 호출마다 asyncio.Runner 루프 생성 + 프로세스 전역 adapter 클라이언트 공유 = web_search 크랙/행(py-spy급 sample로 좀비 루프 2개 물증). async-native 핸들러 + 루프-키 클라이언트 + 도구 deadline + web_search 모델 capability 선택 + IPC ConnectionReset 처리 (워크트리 loop-pollution-fix)
 
 ## In Review
 
