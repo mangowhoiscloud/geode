@@ -17,6 +17,7 @@
 <!-- Move items here when work begins. -->
 <!-- 3-Checkpoint: (1) alloc → (2) merge (CI 5/5) → (3) verify -->
 
+- [ ] llms_txt_index 전용 도구 — llms.txt 인덱스를 구조화 JSON으로 파싱하는 도구 신설(mcpdoc 2-도구 패턴 수렴, fetch는 기존 web_fetch 재사용). web_fetch 10k truncation으로 큰 인덱스 뒷섹션 소실 문제 해소. router.md 휴리스틱 도구-first 개정 + AGENTIC_SUFFIX re-pin + 가드 갱신
 - [ ] H11-tail — routing 상수 모듈레벨 by-value 별칭 해동(core/llm/providers/{anthropic,openai,codex,glm}.py DEFAULT_*/FALLBACK_MODELS + core/skills/agents.py dataclass 기본값) — reload 후에도 boot-frozen, 호출자 스윕 필요. + H1(데몬 client-cwd 세션 해석)은 별도 결정
 
 ## In Review
