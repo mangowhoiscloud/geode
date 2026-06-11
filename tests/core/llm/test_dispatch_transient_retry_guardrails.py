@@ -223,6 +223,28 @@ def test_retry_fires_transient_attempt_then_success(monkeypatch: pytest.MonkeyPa
     assert outcomes == ["transient", "success"]
 
 
+def test_persistent_failure_fires_exactly_two_transient_attempts(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Codex MCP review 2026-06-11 — pin the exact attempt trace for a
+    persistently broken connection: one original try + one retry, both
+    fired as ``transient``, nothing more. Catches a silent bump of the
+    retry constant via the hook surface too."""
+    _force_payg_first(monkeypatch)
+    _no_backoff(monkeypatch)
+    outcomes: list[str] = []
+    monkeypatch.setattr(
+        "core.llm.adapters.dispatch._fire_attempt",
+        lambda attempt: outcomes.append(attempt.outcome),
+    )
+    _install_stubs(monkeypatch, [_FlakyWebSearchAdapter(fail_first_n=99)])
+
+    with pytest.raises(AdapterDispatchError):
+        asyncio.run(web_search_via_adapters("test query"))
+
+    assert outcomes == ["transient", "transient"]
+
+
 # ---------------------------------------------------------------------------
 # 3-4. Never retried: billing + non-connection transients
 # ---------------------------------------------------------------------------
@@ -322,11 +344,25 @@ def test_real_anthropic_and_httpx_errors_classify_as_connection_transient() -> N
     assert not _is_connection_transient(ValueError("bad arg"))
 
 
+def test_billing_fatal_root_cause_disqualifies_connection_wrapper() -> None:
+    """Codex MCP review 2026-06-11 — a connection-NAMED wrapper raised
+    ``from`` a billing-fatal root must NOT classify as retryable: billing
+    honesty is checked on every cause-chain link, not just the outer
+    exception, so a quota failure cannot smuggle into the retry path."""
+    quota = BillingError("quota exhausted", provider="anthropic", plan_display_name="payg")
+    wrapper = APIConnectionError("Connection error.")
+    wrapper.__cause__ = quota
+    assert not _is_connection_transient(wrapper)
+
+
 def test_retry_policy_invariants() -> None:
-    assert _CONNECTION_TRANSIENT_RETRIES >= 1, (
-        "adapter-owned clients run with max_retries=0 (_anthropic_common.py) "
-        "— the dispatch layer MUST own at least one connection-transient "
-        "retry or the 2026-06-10 poisoned-pooled-connection incident returns"
+    assert _CONNECTION_TRANSIENT_RETRIES == 1, (
+        "the dispatch contract is EXACTLY one same-adapter retry: 0 reopens "
+        "the 2026-06-10 poisoned-pooled-connection incident (adapter-owned "
+        "clients run max_retries=0, _anthropic_common.py); >1 double-fires "
+        "transient attempt hooks and stretches operator-visible latency on "
+        "genuinely dead networks — change this pin only with a deliberate "
+        "contract revision (Codex MCP review 2026-06-11)"
     )
     assert "BillingError" not in _CONNECTION_TRANSIENT_ERROR_NAMES
     assert "APIStatusError" not in _CONNECTION_TRANSIENT_ERROR_NAMES, (

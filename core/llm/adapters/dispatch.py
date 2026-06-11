@@ -369,7 +369,8 @@ _CONNECTION_TRANSIENT_RETRIES = 1
 
 # Matched by exception type NAME (not isinstance) so the policy covers both
 # ``anthropic.APIConnectionError`` and raw ``httpx`` transport errors without
-# importing either SDK here. Names checked across the full __cause__ chain.
+# importing either SDK here. Names checked across the __cause__/__context__
+# chain, depth-limited to the first 4 links (see _cause_chain).
 _CONNECTION_TRANSIENT_ERROR_NAMES: frozenset[str] = frozenset(
     {
         "APIConnectionError",
@@ -397,17 +398,23 @@ def _cause_chain(exc: BaseException, *, limit: int = 4) -> list[BaseException]:
 
 
 def _is_connection_transient(exc: Exception) -> bool:
-    """True when ``exc`` (or any link in its cause chain) is a
-    connection-class transport error eligible for a same-adapter retry.
+    """True when ``exc`` (or any link in its cause chain, depth-limited)
+    is a connection-class transport error eligible for a same-adapter retry.
 
     Billing-fatal errors are categorically excluded — quota / credit
     failures must surface immediately (PR-NO-FALLBACK billing honesty).
+    The billing check runs on EVERY chain link, not just the outer
+    exception, so a connection-named wrapper around a billing-fatal root
+    (``raise APIConnectionError(...) from quota_exc``) cannot smuggle a
+    quota failure into the retry path (Codex MCP review 2026-06-11).
     """
-    if is_billing_fatal(exc):
-        return False
-    return any(
-        type(link).__name__ in _CONNECTION_TRANSIENT_ERROR_NAMES for link in _cause_chain(exc)
-    )
+    chain = _cause_chain(exc)
+    for link in chain:
+        if isinstance(link, BillingError):
+            return False
+        if isinstance(link, Exception) and is_billing_fatal(link):
+            return False
+    return any(type(link).__name__ in _CONNECTION_TRANSIENT_ERROR_NAMES for link in chain)
 
 
 def _error_with_cause(exc: BaseException) -> str:
