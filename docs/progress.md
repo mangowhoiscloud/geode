@@ -17,6 +17,7 @@
 <!-- Move items here when work begins. -->
 <!-- 3-Checkpoint: (1) alloc → (2) merge (CI 5/5) → (3) verify -->
 
+- [ ] v1.0.0 사전 정리 스프린트 — 감사 확정분: Cortex 스텁 2종 삭제(컨테이너 잔존), subagent_max_rounds dead knob, MCP 핸드셰이크 "0.9.0" 하드코드, check_docs_links emoji, tool_search.py→tool_ranking.py rename, register_handler dead method. 이후 tool_search defer 실배선(매 요청 60 스키마→코어+tool_search 광고) → v1.0.0 스탬프
 - [ ] H11-tail — routing 상수 모듈레벨 by-value 별칭 해동(core/llm/providers/{anthropic,openai,codex,glm}.py DEFAULT_*/FALLBACK_MODELS + core/skills/agents.py dataclass 기본값) — reload 후에도 boot-frozen, 호출자 스윕 필요. + H1(데몬 client-cwd 세션 해석)은 별도 결정
 
 ## In Review
