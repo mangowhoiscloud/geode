@@ -166,6 +166,13 @@ jobs:
       - name: Build static export
         run: npm run build
 
+      # llms.txt convention, publication side step 2 (PR-LLMS-TXT-MD-TWINS):
+      # markdown twins for every docs page (rendered URL + ".md") and the
+      # true full-content llms-full.txt. Runs after build because the twins
+      # are converted from the static-export HTML.
+      - name: Export docs markdown twins + llms-full.txt
+        run: npm run export-md
+
       - name: Copy docs/self-improving into site/out (hub root + petri-bundle)
         working-directory: ${{ github.workspace }}
         run: |
