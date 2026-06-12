@@ -352,16 +352,6 @@ class TestToolSearchToolMCP:
 class TestCategoryDetection:
     """Category strings in tool_search description."""
 
-    def test_data_category(self) -> None:
-        reg = _make_registry(
-            "cortex_analyst",
-            "cortex_search",
-            *[f"extra{i}" for i in range(9)],
-        )
-        result = reg.to_anthropic_tools_with_defer(defer_threshold=DEFAULT_THRESHOLD)
-        desc = result[0]["description"]
-        assert "data" in desc
-
     def test_memory_category(self) -> None:
         reg = _make_registry(
             "memory_search",
@@ -387,13 +377,12 @@ class TestCategoryDetection:
     def test_multiple_categories(self) -> None:
         reg = _make_registry(
             "memory_search",
-            "cortex_search",
             "generate_report",
-            *[f"extra{i}" for i in range(8)],
+            *[f"extra{i}" for i in range(9)],
         )
         result = reg.to_anthropic_tools_with_defer(defer_threshold=DEFAULT_THRESHOLD)
         desc = result[0]["description"]
-        for cat in ("memory", "data", "output", "other"):
+        for cat in ("memory", "output", "other"):
             assert cat in desc
 
 

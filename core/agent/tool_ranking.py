@@ -1,5 +1,10 @@
 """Tool selection ranking — CL-A2 (Tool Selection as Search).
 
+Renamed from ``tool_search.py`` (PR-V1-PRE-CLEANUP, 2026-06-13): the old
+name collided with the ``ToolSearchTool`` meta-tool in
+``core.tools.registry`` — this module RANKS tools by episodic success,
+it does not search them.
+
 GEODE's tool selection is currently the LLM's free choice each step —
 no policy. The cognitive-loop-uplift roadmap calls for an A*-style
 policy biased by historical success and current plan step
@@ -138,13 +143,13 @@ def load_recent_episodes(limit: int = RECENT_WINDOW) -> list[object]:
     try:
         from core.memory.episodic import EpisodicStore
     except Exception as exc:  # pragma: no cover — defensive
-        log.debug("tool_search: episodic store import failed: %s", exc)
+        log.debug("tool_ranking: episodic store import failed: %s", exc)
         return []
     try:
         store = EpisodicStore()
         return list(store.recent(limit=limit))
     except Exception as exc:
-        log.debug("tool_search: episodic store read failed: %s", exc)
+        log.debug("tool_ranking: episodic store read failed: %s", exc)
         return []
 
 
