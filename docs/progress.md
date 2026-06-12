@@ -17,6 +17,7 @@
 <!-- Move items here when work begins. -->
 <!-- 3-Checkpoint: (1) alloc → (2) merge (CI 5/5) → (3) verify -->
 
+- [ ] llms.txt 발행 측 보강 — docs 67페이지 .md 트윈 export(빌드 후 article 추출+turndown), llms.txt 링크 .md 전환, llms-full.txt 진짜 전체 콘텐츠 덤프化(단일 작성자=export 스크립트), pages.yml 배선 + 가드
 - [ ] H11-tail — routing 상수 모듈레벨 by-value 별칭 해동(core/llm/providers/{anthropic,openai,codex,glm}.py DEFAULT_*/FALLBACK_MODELS + core/skills/agents.py dataclass 기본값) — reload 후에도 boot-frozen, 호출자 스윕 필요. + H1(데몬 client-cwd 세션 해석)은 별도 결정
 
 ## In Review
