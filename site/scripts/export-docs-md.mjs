@@ -40,7 +40,11 @@ const SOT_FILE = resolve(SITE_ROOT, "src/data/geode/sot.ts");
 const LLMS_FULL_PUBLIC = resolve(SITE_ROOT, "public/llms-full.txt");
 const LLMS_FULL_OUT = resolve(OUT_DIR, "llms-full.txt");
 
-const ARTICLE_RE = /<article class="docs-prose">([\s\S]*?)<\/article>/;
+// Pages whose body exceeds this in llms-full.txt get an explicit omission
+// note instead (the changelog page alone renders ~1.5MB — embedding it
+// would balloon the one-file dump from ~240KB to ~1.7MB). The .md twin
+// always carries the complete body; the cap is never silent (note + log).
+const LLMS_FULL_BODY_CAP = 100_000;
 
 function fail(msg) {
   console.error(`export-docs-md: ${msg}`);
@@ -52,6 +56,27 @@ function readVersion() {
   const m = sot.match(/version:\s*"([^"]+)"/);
   if (!m) fail(`could not parse version from ${SOT_FILE} (run sync-stats first)`);
   return m[1];
+}
+
+/**
+ * Extract the docs-prose article body with BALANCED tag matching. A lazy
+ * regex to the first </article> truncates any page that nests articles —
+ * the changelog page renders each of its 300+ entries as an inner
+ * <article>, so the lazy version shipped a 1-entry twin (Codex review of
+ * PR #2218, finding 1).
+ */
+function extractDocsProse(html, htmlPath) {
+  const open = html.indexOf('<article class="docs-prose">');
+  if (open < 0) return null;
+  const bodyStart = open + '<article class="docs-prose">'.length;
+  const tag = /<article\b|<\/article>/g;
+  tag.lastIndex = bodyStart;
+  let depth = 1;
+  for (let m = tag.exec(html); m; m = tag.exec(html)) {
+    depth += m[0] === "</article>" ? -1 : 1;
+    if (depth === 0) return html.slice(bodyStart, m.index);
+  }
+  fail(`unbalanced <article> tags in ${htmlPath}`);
 }
 
 function buildTurndown() {
@@ -68,8 +93,14 @@ function buildTurndown() {
   // snippet flattens into plain paragraphs.
   td.addRule("barePre", {
     filter: (node) => node.nodeName === "PRE" && !node.querySelector("code"),
-    replacement: (_content, node) =>
-      "\n\n```\n" + node.textContent.replace(/\n+$/, "") + "\n```\n\n",
+    replacement: (_content, node) => {
+      const text = node.textContent.replace(/\n+$/, "");
+      // Grow the fence past any backtick run inside the snippet so an
+      // embedded ``` cannot terminate the block early.
+      const longestRun = (text.match(/`+/g) ?? []).reduce((n, run) => Math.max(n, run.length), 0);
+      const fence = "`".repeat(Math.max(3, longestRun + 1));
+      return `\n\n${fence}\n${text}\n${fence}\n\n`;
+    },
   });
   return td;
 }
@@ -85,10 +116,13 @@ function absolutizeLinks(markdown) {
     .replaceAll("](/geode/", `](${PAGES_BASE_URL}/`)
     .replaceAll("](/geode)", `](${PAGES_BASE_URL})`);
   const docsLink = new RegExp(
-    `\\((${PAGES_BASE_URL.replaceAll(".", "\\.")}/docs(?:/[a-z0-9\\-/]+)?)(#[^)\\s]*)?\\)`,
+    `\\((${PAGES_BASE_URL.replaceAll(".", "\\.")}/docs(?:/[a-z0-9\\-/]+)?/?)(#[^)\\s]*)?\\)`,
     "g",
   );
-  return absolute.replace(docsLink, (_m, pageUrl, fragment) => `(${pageUrl}.md${fragment ?? ""})`);
+  return absolute.replace(
+    docsLink,
+    (_m, pageUrl, fragment) => `(${pageUrl.replace(/\/+$/, "")}.md${fragment ?? ""})`,
+  );
 }
 
 function htmlPathFor(slug) {
@@ -109,11 +143,11 @@ function exportPage(td, page) {
     fail(`missing build output for sitemap page "${page.slug || "(docs root)"}": ${htmlPath}`);
   }
   const html = readFileSync(htmlPath, "utf8");
-  const articleMatch = ARTICLE_RE.exec(html);
-  if (!articleMatch) {
-    fail(`no <article class="docs-prose"> in ${htmlPath} — docs layout drifted, fix ARTICLE_RE`);
+  const article = extractDocsProse(html, htmlPath);
+  if (article === null) {
+    fail(`no <article class="docs-prose"> in ${htmlPath} — docs layout drifted`);
   }
-  const body = absolutizeLinks(td.turndown(articleMatch[1])).trim() + "\n";
+  const body = absolutizeLinks(td.turndown(article)).trim() + "\n";
   // The page h1 + summary live outside <article> (docs layout chrome), so
   // the twin gets a sitemap-derived header; llms-full.txt adds its own
   // per-page header and embeds the raw body instead.
@@ -155,7 +189,19 @@ function writeLlmsFull(pages, bodies, version) {
     lines.push(`URL: ${renderedUrlFor(page.slug)}`);
     lines.push(`Markdown: ${renderedUrlFor(page.slug)}.md`);
     lines.push("");
-    lines.push(bodies.get(page.slug).trim());
+    const body = bodies.get(page.slug).trim();
+    if (body.length > LLMS_FULL_BODY_CAP) {
+      lines.push(
+        `(body omitted from llms-full: ${Math.round(body.length / 1024)} KB — ` +
+          "fetch the Markdown twin above for the complete page)",
+      );
+      console.log(
+        `export-docs-md: llms-full body omitted for "${page.slug}" ` +
+          `(${Math.round(body.length / 1024)} KB > cap)`,
+      );
+    } else {
+      lines.push(body);
+    }
     lines.push("");
     lines.push("---");
   }

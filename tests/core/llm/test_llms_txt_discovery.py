@@ -113,6 +113,14 @@ def test_published_llms_full_txt_carries_page_content() -> None:
     assert len(content) > 100_000, "llms-full.txt regressed to a summary-only index"
     assert "```" in content, "page bodies (code fences) missing — index-only regression"
     assert "\nMarkdown: https://" in content, "per-page .md twin links missing"
+    # Indirect balanced-extraction pin (Codex review of PR #2218, finding 1):
+    # the changelog page nests 300+ inner <article>s; only a COMPLETE
+    # extraction exceeds the llms-full body cap and earns the explicit
+    # omission note. If extraction regresses to first-</article> truncation,
+    # the body shrinks under the cap and this note disappears.
+    assert "body omitted from llms-full" in content, (
+        "changelog body under cap — nested-<article> extraction truncated again?"
+    )
 
 
 def test_md_twin_export_is_wired_into_pages_deploy() -> None:

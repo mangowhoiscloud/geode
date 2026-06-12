@@ -37,7 +37,7 @@ GEODE 를 가르는 핵심은 **두 개의 루프**입니다.
 
 ## 섹션
 
-[01-overview개요GEODE 소개, GEODE가 작업을 처리하는 흐름, 5-계층 스택](https://mangowhoiscloud.github.io/geode/docs/)[02-start시작하기빠른 시작, 경로 선택, 프로바이더 설정, 데몬으로 실행](https://mangowhoiscloud.github.io/geode/docs/quick-start.md)[03-concepts핵심 개념두 개의 루프, 안쪽 agentic 루프, 컨텍스트 조립, 메모리 계층, …](https://mangowhoiscloud.github.io/geode/docs/concepts/two-loops.md)[04-self-improving자기개선 루프폐루프, Co-scientist seed 생성, Seed 파이프라인, 아우터 루프 설정, …](https://mangowhoiscloud.github.io/geode/docs/capabilities/autoresearch.md)[05-operateGEODE 운영Serve와 게이트웨이, 메신저 연동, 작업 예약, 스케줄러 내부, …](https://mangowhoiscloud.github.io/geode/docs/harness/serve-gateway.md)[06-guides가이드도구 작성, 훅 등록, LLM 어댑터 추가, 바인딩 설정, …](https://mangowhoiscloud.github.io/geode/docs/guides/custom-tool.md)[07-config설정설정 기초, config.toml 레퍼런스, 인증과 OAuth, OAuth 토큰 회전, …](https://mangowhoiscloud.github.io/geode/docs/config/basics.md)[08-reference레퍼런스프론티어 비교, 외부 참고, CLI와 슬래시 명령, 리서치·탐색과 llms.txt, …](https://mangowhoiscloud.github.io/geode/docs/reference/frontier-comparison.md)[09-develop개발과 아키텍처아키텍처 심화, 시스템 색인, 왜 5계층인가, 왜 self-hosting 하네스인가, …](https://mangowhoiscloud.github.io/geode/docs/develop/architecture.md)
+[01-overview개요GEODE 소개, GEODE가 작업을 처리하는 흐름, 5-계층 스택](https://mangowhoiscloud.github.io/geode/docs.md)[02-start시작하기빠른 시작, 경로 선택, 프로바이더 설정, 데몬으로 실행](https://mangowhoiscloud.github.io/geode/docs/quick-start.md)[03-concepts핵심 개념두 개의 루프, 안쪽 agentic 루프, 컨텍스트 조립, 메모리 계층, …](https://mangowhoiscloud.github.io/geode/docs/concepts/two-loops.md)[04-self-improving자기개선 루프폐루프, Co-scientist seed 생성, Seed 파이프라인, 아우터 루프 설정, …](https://mangowhoiscloud.github.io/geode/docs/capabilities/autoresearch.md)[05-operateGEODE 운영Serve와 게이트웨이, 메신저 연동, 작업 예약, 스케줄러 내부, …](https://mangowhoiscloud.github.io/geode/docs/harness/serve-gateway.md)[06-guides가이드도구 작성, 훅 등록, LLM 어댑터 추가, 바인딩 설정, …](https://mangowhoiscloud.github.io/geode/docs/guides/custom-tool.md)[07-config설정설정 기초, config.toml 레퍼런스, 인증과 OAuth, OAuth 토큰 회전, …](https://mangowhoiscloud.github.io/geode/docs/config/basics.md)[08-reference레퍼런스프론티어 비교, 외부 참고, CLI와 슬래시 명령, 리서치·탐색과 llms.txt, …](https://mangowhoiscloud.github.io/geode/docs/reference/frontier-comparison.md)[09-develop개발과 아키텍처아키텍처 심화, 시스템 색인, 왜 5계층인가, 왜 self-hosting 하네스인가, …](https://mangowhoiscloud.github.io/geode/docs/develop/architecture.md)
 
 ## 다음에 어디로
 
@@ -4158,15 +4158,7 @@ Tier 2  latex2sympy2 + sympy.pretty  블록 전용. 분수·적분을 2D Unicode
 URL: https://mangowhoiscloud.github.io/geode/docs/reference/changelog
 Markdown: https://mangowhoiscloud.github.io/geode/docs/reference/changelog.md
 
-모든 entry를 CHANGELOG.md에서 자동 추출합니다. 상단 토글로 한국어와 영어를 전환합니다. 한쪽 언어로만 작성된 entry에는`KR only`/`EN only` 라벨이 붙고, 현재 언어에 콘텐츠가 없으면 다른 언어로 자동 폴백합니다. 정본은 repo의 `CHANGELOG.md`입니다.
-
-한국어English
-
-v0.99.1882026-06-12EN only
-
-### Added
-
--   **\`llms\_txt\_index\` dedicated tool — structured /llms.txt index discovery** (PR-LLMS-TXT-TOOL, dedicated-tool upgrade of the instruction-level llms.txt-first heuristic from v0.99.156; LangChain mcpdoc convergence — explicit tool paired with a prompt rule, page fetch stays on `web_fetch`). `core/tools/llms_txt.py` probes `<path>/llms.txt` then `<origin>/llms.txt` (`candidate_index_urls`; a direct llms.txt / llms-full.txt URL passes verbatim) and parses the llmstxt.org shape (H1 → blockquote summary → H2 link sections) into `{title, summary, sections[].links[{name, url, notes, same_origin}]}` — unlike fetching the index through `web_fetch`, whose 10k-char cap silently drops the tail sections of larger indexes and leaves the markdown parsing to the model. `section` filter (unknown filter returns the available section names) + `max_links` cap with observable `truncated`/`total_links`; a site without llms.txt returns `not_found` with the explicit fallback hint (general\_web\_search scoped to the site) — no silent auto-probing on the web\_fetch path, per the original frontier-convergence decision. The ConnectError → verify=False TLS retry is factored into `web_tools.http_get_with_tls_fallback` and shared by both fetch paths so the downgrade behaviour cannot drift. Wired across definitions.json + the delegated-handler registry + `SAFE_TOOLS` + the `web_research`/`general_purpose` toolkits; the router agentic-suffix heuristic now instructs `llms_txt_index` first (AGENTIC\_SUFFIX re-pinned `0a32efea943d`). Consumption parser is pinned against the repo's own published `site/public/llms.txt` (publication-consumption drift guard). Guards: `tests/core/tools/test_llms_txt_index.py` (16, incl. delegation-path E2E) + wiring/heuristic pins in `tests/core/llm/test_llms_txt_discovery.py`.
+(body omitted from llms-full: 1196 KB — fetch the Markdown twin above for the complete page)
 
 ---
 
