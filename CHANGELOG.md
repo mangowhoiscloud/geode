@@ -45,6 +45,11 @@ functional change.
 
 ---
 
+## [0.99.188] - 2026-06-12
+
+### Added
+- **`llms_txt_index` dedicated tool — structured /llms.txt index discovery** (PR-LLMS-TXT-TOOL, dedicated-tool upgrade of the instruction-level llms.txt-first heuristic from v0.99.156; LangChain mcpdoc convergence — explicit tool paired with a prompt rule, page fetch stays on `web_fetch`). `core/tools/llms_txt.py` probes `<path>/llms.txt` then `<origin>/llms.txt` (`candidate_index_urls`; a direct llms.txt / llms-full.txt URL passes verbatim) and parses the llmstxt.org shape (H1 → blockquote summary → H2 link sections) into `{title, summary, sections[].links[{name, url, notes, same_origin}]}` — unlike fetching the index through `web_fetch`, whose 10k-char cap silently drops the tail sections of larger indexes and leaves the markdown parsing to the model. `section` filter (unknown filter returns the available section names) + `max_links` cap with observable `truncated`/`total_links`; a site without llms.txt returns `not_found` with the explicit fallback hint (general_web_search scoped to the site) — no silent auto-probing on the web_fetch path, per the original frontier-convergence decision. The ConnectError → verify=False TLS retry is factored into `web_tools.http_get_with_tls_fallback` and shared by both fetch paths so the downgrade behaviour cannot drift. Wired across definitions.json + the delegated-handler registry + `SAFE_TOOLS` + the `web_research`/`general_purpose` toolkits; the router agentic-suffix heuristic now instructs `llms_txt_index` first (AGENTIC_SUFFIX re-pinned `0a32efea943d`). Consumption parser is pinned against the repo's own published `site/public/llms.txt` (publication-consumption drift guard). Guards: `tests/core/tools/test_llms_txt_index.py` (16, incl. delegation-path E2E) + wiring/heuristic pins in `tests/core/llm/test_llms_txt_discovery.py`.
+
 ## [0.99.187] - 2026-06-12
 
 ### Removed

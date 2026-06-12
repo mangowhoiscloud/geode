@@ -507,8 +507,34 @@
     }
   },
   {
+    "name": "llms_txt_index",
+    "description": "Fetches a documentation site's /llms.txt index (llmstxt.org convention) and returns it parsed into structured sections of links: title, summary, sections[].links[{name, url, notes, same_origin}]. Use this FIRST when researching a documentation site, then web_fetch only the relevant linked pages. Accepts a site or base URL (probes <path>/llms.txt then <origin>/llms.txt) or a direct llms.txt URL. Unlike web_fetch, the full index is parsed without the 10k-char truncation. If the site publishes no llms.txt, returns not_found with a fallback hint (general_web_search scoped to the site).",
+    "category": "external",
+    "cost_tier": "cheap",
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "url": {
+          "type": "string",
+          "description": "Documentation site URL (base URL or direct llms.txt URL)"
+        },
+        "section": {
+          "type": "string",
+          "description": "Optional case-insensitive section-name filter (e.g. 'Docs', 'Optional')"
+        },
+        "max_links": {
+          "type": "integer",
+          "description": "Maximum links to return across sections (default: 200, max: 1000); excess sets truncated=true"
+        }
+      },
+      "required": [
+        "url"
+      ]
+    }
+  },
+  {
     "name": "web_fetch",
-    "description": "Fetches text content from a URL (returns plain text, NOT a visual browser). Use when the user provides a URL and wants to read its content. To visually open a URL in a browser, use playwright MCP (browser_navigate) instead. To search the web, use general_web_search instead. For documentation sites, fetch the site's /llms.txt first when available - a curated LLM-readable index of all docs pages (llmstxt.org convention); then fetch only the relevant linked pages. llms-full.txt, when present, holds the entire docs in one file (large).",
+    "description": "Fetches text content from a URL (returns plain text, NOT a visual browser). Use when the user provides a URL and wants to read its content. To visually open a URL in a browser, use playwright MCP (browser_navigate) instead. To search the web, use general_web_search instead. For documentation sites, use llms_txt_index first - it fetches and parses the site's /llms.txt index (llmstxt.org convention); then web_fetch only the relevant linked pages. llms-full.txt, when present, holds the entire docs in one file (large).",
     "category": "external",
     "cost_tier": "cheap",
     "input_schema": {

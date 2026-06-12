@@ -14,6 +14,7 @@ SAFE_TOOLS: frozenset[str] = frozenset(
         "memory_search",
         "manage_rule",
         "web_fetch",
+        "llms_txt_index",
         "general_web_search",
         "note_read",
         "read_document",
