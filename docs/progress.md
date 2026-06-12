@@ -17,7 +17,6 @@
 <!-- Move items here when work begins. -->
 <!-- 3-Checkpoint: (1) alloc → (2) merge (CI 5/5) → (3) verify -->
 
-- [ ] llms.txt 발행 측 보강 — docs 67페이지 .md 트윈 export(빌드 후 article 추출+turndown), llms.txt 링크 .md 전환, llms-full.txt 진짜 전체 콘텐츠 덤프化(단일 작성자=export 스크립트), pages.yml 배선 + 가드
 - [ ] H11-tail — routing 상수 모듈레벨 by-value 별칭 해동(core/llm/providers/{anthropic,openai,codex,glm}.py DEFAULT_*/FALLBACK_MODELS + core/skills/agents.py dataclass 기본값) — reload 후에도 boot-frozen, 호출자 스윕 필요. + H1(데몬 client-cwd 세션 해석)은 별도 결정
 
 ## In Review
@@ -28,6 +27,7 @@
 
 <!-- Completed items. Keep recent 10, archive older ones. -->
 <!-- - [x] #issue-number — Short description (PR #N) -->
+- [x] llms.txt 발행 측 완성 — docs 66페이지 .md 트윈 export(post-build extractDocsProse 균형 추출+turndown+GFM+bare-pre 펜스, 렌더 URL+.md=트윈, 트윈-투-트윈 링크), llms.txt 링크 전부 .md 전환, llms-full.txt 진짜 전문 덤프(100KB 초과 본문은 명시적 생략 노트 — changelog 1.2MB, 노트=균형추출 간접 가드), sitemap 파서 단일화(sitemap-pages.mjs), pages.yml export-md 배선. Codex 검증 3건 반영(중첩 article 330개로 1-항목 트윈 출하되던 MAJOR 포함). 라이브 검증: quick-start.md 200 text/markdown, llms-full 66엔트리. 가드 5종 (PR #2218 → #2219, v0.99.189)
 - [x] llms_txt_index 전용 도구 — instruction-level llms.txt-first 휴리스틱(v0.99.156)을 mcpdoc 수렴 패턴의 전용 도구로 승격: 경로우선 2-probe + llmstxt.org 파서(구조화 sections/links, same_origin=scheme+host, BOM 허용, 희소 인덱스 정직 처리) + section 필터/max_links 관측가능 truncation + not_found 폴백 힌트. TLS 폴백 http_get_with_tls_fallback 공유화. 배선 definitions+delegated+SAFE_TOOLS+toolkits 2종, router.md 도구-first + AGENTIC_SUFFIX re-pin. Codex 검증 4건 반영·1건 반박. 라이브 스모크: platform.claude.com 1,642링크 구조화 PASS. 가드 21+4종 (PR #2213 → #2214, v0.99.188)
 - [x] Game-IP 시대 검증 잔재 퍼지 — 벤치마크 리포트 사전 정직성 패스(운영자 지시). zero-caller 코드 2건 삭제(Settings.temperature_verification, get_common_rubric) + 운영 문서의 죽은 주장 교정: GEODE.md(SOUL) Expert Panel/G3/confidence-0.7 루프백, README×2 "G1-G4+Cross-LLM α≥0.67" → 실측 turn-verify 계층, AGENTS.md 유령 섹션 2개(core/verification, core/automation), setup×2 Cross-LLM 라벨. 후속 후보: ensemble_mode 노브(display-only), AGENTS.md core/gateway stale (PR #2210, v0.99.187)
 - [x] /model source 재추론 + 픽커 UX 묶음 — (1) provider 전환 시 source 재추론(login codex 직후 401 = anthropic 시절 payg가 openai로 따라오던 건, 명시 핀 보존), (2) Space 스테이징(역할 3개 한 세션), (3) 폭 클램프 리페인트(화살표 위로 쏠림 = 래핑 vs _clear_lines 불일치), (4) 비-primary 픽 global 스코프(write-read parity — project에 쓰고 global만 읽던 누수), (5) harness/cli 키 계약 문서화. 가드 11종 (PR #2206 → #2207, v0.99.186)
