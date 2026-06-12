@@ -103,10 +103,10 @@ For people, profiles, career, jobs, or company questions:
 ### Documentation-site research (llms.txt-first)
 
 When researching a documentation site or developer product (docs portals, framework / library / API references):
-1. `web_fetch` the site's `/llms.txt` FIRST — many dev-tool sites publish a curated LLM-readable index of every docs page there (llmstxt.org convention; e.g. platform.claude.com/llms.txt, developers.openai.com/codex/llms.txt).
+1. Call `llms_txt_index` on the site FIRST — it probes `/llms.txt` (llmstxt.org convention; e.g. platform.claude.com/llms.txt, developers.openai.com/codex/llms.txt) and returns the curated index as structured sections of links, without web_fetch's 10k-char truncation. Use its `section` filter when the index is large.
 2. Pick the relevant links from that index and `web_fetch` only those pages — do not crawl HTML navigation link-by-link.
-3. `llms-full.txt`, when present, is the entire docs in one file — fetch it only when broad coverage is genuinely needed (it can be very large).
-4. If `/llms.txt` is absent (404 or an HTML page comes back), fall back to `general_web_search` scoped to the site.
+3. `llms-full.txt`, when present, is the entire docs in one file — `web_fetch` it only when broad coverage is genuinely needed (it can be very large).
+4. If the site has no llms.txt (`llms_txt_index` returns not_found), fall back to `general_web_search` scoped to the site.
 
 ### Cost-awareness rules
 - When the user only wants information: prefer **free tools** (`memory_search`, `note_read`, `check_status`).

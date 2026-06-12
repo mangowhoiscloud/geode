@@ -10,11 +10,45 @@ from __future__ import annotations
 import asyncio
 import logging
 from datetime import date
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from core.config import CONTEXT_BLOCK_MAX_CHARS
 
+if TYPE_CHECKING:
+    import httpx
+
 log = logging.getLogger(__name__)
+
+
+def http_get_with_tls_fallback(url: str, *, timeout: float = 10.0) -> tuple[httpx.Response, bool]:
+    """GET *url*, retrying once with TLS verification disabled on ConnectError.
+
+    SSL cert fallback (Python 3.14 + macOS certifi issue).
+    PR-AUDIT-AB (2026-06-10) — ConnectError also covers DNS failure /
+    connection-refused, so this retry can silently drop TLS verification
+    for reasons that have nothing to do with certificates. Keep the
+    fallback (the certifi issue is real) but make it observable: warn +
+    return the ``tls_verified`` flag so callers tag their results.
+
+    Shared by :class:`WebFetchTool` and
+    :class:`core.tools.llms_txt.LlmsTxtIndexTool` (PR-LLMS-TXT-TOOL,
+    2026-06-12) so the downgrade behaviour cannot drift between the two
+    fetch paths.
+
+    Returns ``(response, tls_verified)``. Propagates ImportError when
+    httpx is not installed; callers surface that as a dependency
+    tool_error.
+    """
+    import httpx
+
+    tls_verified = True
+    try:
+        resp = httpx.get(url, timeout=timeout, follow_redirects=True)
+    except httpx.ConnectError:
+        log.warning("fetch_url retrying %s with TLS verification DISABLED", url)
+        tls_verified = False
+        resp = httpx.get(url, timeout=timeout, follow_redirects=True, verify=False)  # noqa: S501  # nosec B501
+    return resp, tls_verified
 
 
 class WebFetchTool:
@@ -45,19 +79,7 @@ class WebFetchTool:
             )
 
         try:
-            tls_verified = True
-            try:
-                resp = httpx.get(url, timeout=10.0, follow_redirects=True)
-            except httpx.ConnectError:
-                # SSL cert fallback (Python 3.14 + macOS certifi issue).
-                # PR-AUDIT-AB (2026-06-10) — ConnectError also covers DNS
-                # failure / connection-refused, so this retry can silently
-                # drop TLS verification for reasons that have nothing to do
-                # with certificates. Keep the fallback (the certifi issue is
-                # real) but make it observable: warn + tag the result.
-                log.warning("fetch_url retrying %s with TLS verification DISABLED", url)
-                tls_verified = False
-                resp = httpx.get(url, timeout=10.0, follow_redirects=True, verify=False)  # noqa: S501  # nosec B501
+            resp, tls_verified = http_get_with_tls_fallback(url)
             resp.raise_for_status()
             content_type = resp.headers.get("content-type", "")
 

@@ -26,11 +26,6 @@ class TestMonoLakeOrganizationMemory:
         ctx = org.get_subject_context("Unknown Subject")
         assert ctx == {}
 
-    def test_get_common_rubric(self):
-        org = MonoLakeOrganizationMemory()
-        rubric = org.get_common_rubric()
-        assert rubric["axes_count"] == 14
-
     def test_save_analysis_result(self):
         org = MonoLakeOrganizationMemory()
         result = {"tier": "S", "score": 82.2}

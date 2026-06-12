@@ -27,7 +27,6 @@ class MonoLakeOrganizationMemory:
     Usage:
         org = MonoLakeOrganizationMemory()
         ctx = org.get_subject_context("example")
-        rubric = org.get_common_rubric()
     """
 
     def __init__(
@@ -64,21 +63,6 @@ class MonoLakeOrganizationMemory:
         Empty dict if the subject is not found.
         """
         return self._cache.get(subject.lower(), {})
-
-    def get_common_rubric(self) -> dict[str, Any]:
-        """Get organization-wide default rubric configuration."""
-        return {
-            "axes_count": 14,
-            "scale": "1-5",
-            "confidence_threshold": 0.7,
-            "tier_mapping": {
-                "S": {"min_score": 80},
-                "A": {"min_score": 65},
-                "B": {"min_score": 50},
-                "C": {"min_score": 35},
-                "D": {"min_score": 0},
-            },
-        }
 
     def get_soul(self) -> str:
         """Load GEODE.md — agent identity and mission statement.

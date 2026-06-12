@@ -279,7 +279,7 @@ geode serve [-p 3.0]                   # Headless daemon
 |----------|---------|-------------|
 | **LLM** | | |
 | `ANTHROPIC_API_KEY` | | Claude API key |
-| `OPENAI_API_KEY` | | GPT API key (Cross-LLM) |
+| `OPENAI_API_KEY` | | GPT API key (OpenAI adapter) |
 | `ZAI_API_KEY` | | ZhipuAI GLM key |
 | `GEODE_MODEL` | `claude-opus-4-8` | Model override (env layer — outranks config files; see Model resolution) |
 | `GEODE_ENSEMBLE_MODE` | `single` | Ensemble mode (`single` / `cross`) |

@@ -5,6 +5,10 @@ commentary 0.4 / self-improving mutation 0.3 / progressive compression 0.0)
 were lifted into ``Settings.temperature_*`` knobs so operators can tune each
 call path via ``~/.geode/config.toml`` or env vars.
 
+``temperature_verification`` was retired in v0.99.187: its consumer (the
+cross-LLM agreement rescoring path) left with the Game-IP pipeline in
+v0.99.149, leaving the knob with zero call sites.
+
 These tests ratchet the migration so future edits cannot silently
 re-introduce a literal at the same site (Karpathy P4 ratchet).
 """
@@ -30,7 +34,6 @@ REPO_ROOT = Path(__file__).resolve().parents[3]
     [
         ("temperature_agent_loop", 1.0),
         ("temperature_reflection", 1.0),
-        ("temperature_verification", 0.0),
         ("temperature_commentary", 1.0),
         ("temperature_self_improving_mutation", 1.0),
     ],
@@ -38,11 +41,8 @@ REPO_ROOT = Path(__file__).resolve().parents[3]
 def test_temperature_setting_default(attr: str, expected_default: float) -> None:
     """Each temperature knob must exist on ``Settings`` with the expected
     frontier-aligned default. The defaults encode the design decision:
-    most paths default to 1.0 (provider default — Anthropic/OpenAI/Gemini
-    all converge on 1.0); verification and compression default to 0.0
-    because their downstream consumers (cross-LLM agreement coefficient +
-    reproducible summaries) are functional invariants where stochastic
-    output is meaningless.
+    these paths default to 1.0 (provider default — Anthropic/OpenAI/Gemini
+    all converge on 1.0).
     """
     assert hasattr(settings, attr), f"Settings.{attr} missing"
     value = getattr(settings, attr)
@@ -64,7 +64,6 @@ def test_temperature_setting_range_validation() -> None:
     for attr in (
         "temperature_agent_loop",
         "temperature_reflection",
-        "temperature_verification",
         "temperature_commentary",
         "temperature_self_improving_mutation",
     ):

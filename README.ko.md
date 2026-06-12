@@ -23,7 +23,7 @@
   <a href="README.md">English</a>
 </p>
 
-# GEODE v0.99.186 — A Self-improving Autonomous Execution Agent
+# GEODE v0.99.188 — A Self-improving Autonomous Execution Agent
 
 자기 자신이 올라탄 scaffold 를 스스로 고쳐쓰는 범용 자율 에이전트. 자연어로 물으면 GEODE 가 계획을 세우고, 도구를 호출해, 결과를 보고합니다. 1회성 프롬프트도, 장시간 세션도 동일하게. 그 아래에서는 outer loop 가 작업을 수행하는 시스템 자체를 계속 다듬습니다.
 
@@ -352,7 +352,7 @@ geode update                  # 소스 체크아웃
 | **MCP 서버 (`geode-mcp`)** | GEODE 자체를 MCP 서버(stdio)로 노출: `run_agent`, `self_improving_status`, `self_improving_propose`/`apply`(2-step 확인 게이트), `query_memory`, `get_health`. repo의 `.mcp.json`으로 Claude Code에 자동 등록 |
 | **장시간 데몬** | `geode serve` 가 백그라운드로 상주. Slack / Discord / Telegram 폴러 + 스케줄러 tick + thin CLI 용 IPC |
 | **서브에이전트** | 부모 권한 완전 상속, depth/cost 가드, Lane 격리 |
-| **코어 검증** | Guardrails G1-G4 (structural) + Cross-LLM (inter-model, Krippendorff α ≥ 0.67) + Rights Risk (legal). 전문 편향 / 캘리브레이션 계층은 외부 패키지가 추가 |
+| **턴 검증** | Rule-based 턴 단위 체크 (empty turn, tool error, plan-step 불일치) + opt-in LLM-judge 채점 (`core/agent/verify.py`); verify FAIL 시 리플래닝 트리거 |
 
 
 ### GEODE를 MCP 서버로 쓰기
@@ -424,7 +424,7 @@ frontier 하네스 (Claude Code, Codex CLI, OpenClaw) 옆에서 GEODE 가 어디
 | 메모리 tier | ✅ CLAUDE.md 머지 + auto memory (`~/.claude/projects/*/memory`) | ✅ 계층적 AGENTS.md (전역 `~/.codex/` + repo + nested dirs) | ⚠️ 세션 범위 | ✅✅ **multi-tier** (SOUL · User · Org · Project · Session) |
 | 디스크 영구 plan | ✅ TodoWrite 영속화 | ⚠️ resumable 스레드 경유 | ✅ task registry | ✅ `.geode/plans.json` |
 | 권한 / 샌드박스 계층 | ✅ default / auto / bypass 모드 + Confirmation UI | ✅ `sandbox_mode` (read-only / workspace-write / danger-full-access) | ✅✅ Policy Chain, 다수 감사 표면 | ✅ Policy Chain + 도구 게이트 |
-| 다중 계층 가드레일 | ⚠️ 권한 + hooks | ⚠️ hooks + 샌드박스 | ✅ `audit.runtime` 엔진 | ✅✅ **코어 검증** (G1-G4 + Cross-LLM Krippendorff α ≥ 0.67 + Rights Risk, 편향/캘리브레이션용 플러그인 확장점) |
+| 다중 계층 가드레일 | ⚠️ 권한 + hooks | ⚠️ hooks + 샌드박스 | ✅ `audit.runtime` 엔진 | ✅ **턴 검증** (rule-based + opt-in LLM-judge, `core/agent/verify.py`) → FAIL 시 리플랜, self-improving 루프의 safety-axis fitness 게이트 별도 |
 | Hook 이벤트 | ✅ PreToolUse / PostToolUse / UserPromptSubmit / Stop / SubagentStop / PreCompact / SessionStart / SessionEnd / Notification | ⚠️ SessionStart / UserPromptSubmit / PreToolUse / PostToolUse / PermissionRequest / Stop | ✅ 여러 이벤트 타입 · 다수 번들 핸들러 | ✅✅ 넓은 이벤트 표면 (`docs/architecture/hook-system.md`) |
 
 </details>
@@ -439,7 +439,7 @@ frontier 하네스 (Claude Code, Codex CLI, OpenClaw) 옆에서 GEODE 가 어디
 | **교체 가능한 파이프라인 DAG** | ❌ | ❌ | ⚠️ flows (channel-setup / doctor / provider — DAG 추상화 아님) | ⚠️ 외부 패키지 책임. GEODE core 는 더 이상 파이프라인 포트를 제공하지 않음 |
 | 트레이스 / 리플레이 / Run Log | ✅ `tengu_*` 텔레메트리 + `/insights` HTML | ⚠️ `/status` + `/debug-config` 만 | ✅ ACP 세션 lineage + Task Registry | ✅ 자체 RunLog + Petri eval 통합 |
 | Self-improving 안전성 loop | ❌ | ❌ | ❌ | ✅✅ outer loop: scaffold 변이 + 적대적 안전성 audit + (1+1) promote/revert |
-| Cross-LLM 검증 | ❌ | ❌ | ❌ | ✅✅ Krippendorff α ≥ 0.67 평가자 간 일치도 게이트 |
+| 크로스 프로바이더 리뷰 | ❌ | ❌ | ❌ | ⚠️ self-improving 루프의 멀티-voter 크로스 프로바이더 랭킹 패널 (≥2 providers, `plugins/seed_generation/agents/ranker.py`); 일치도 캘리브레이션은 WIP |
 
 </details>
 
