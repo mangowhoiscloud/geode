@@ -131,10 +131,6 @@ class ToolExecutor:
         """Delegates to ApprovalWorkflow."""
         self._approval.track_decision(tool_name, decision)
 
-    def register(self, tool_name: str, handler: ToolHandler) -> None:
-        """Register a tool handler."""
-        self._handlers[tool_name] = handler
-
     # Delegation methods — route to ApprovalWorkflow, patchable by tests
     def _confirm_write(self, tool_name: str, tool_input: dict[str, Any]) -> bool:
         return self._approval.confirm_write(tool_name, tool_input)

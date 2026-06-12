@@ -343,11 +343,11 @@ def main() -> int:
     broken, unresolved, external = classify_and_check(links, routes, assets, page_ids)
 
     if broken:
-        print(f"❌ {len(broken)} broken internal link(s):")
+        print(f"[FAIL] {len(broken)} broken internal link(s):")
         for line in broken:
             print(line)
     else:
-        print("✅ no broken internal links")
+        print("[OK] no broken internal links")
     print()
 
     # Raw `<a href="/docs/...">` in TSX bypasses Next.js basePath rewriting
@@ -365,7 +365,7 @@ def main() -> int:
             )
     if base_path_violations:
         print(
-            f"❌ {len(base_path_violations)} raw href missing /geode basePath:",
+            f"[FAIL] {len(base_path_violations)} raw href missing /geode basePath:",
         )
         for line in base_path_violations:
             print(line)
@@ -377,7 +377,7 @@ def main() -> int:
         print()
 
     if unresolved and not args.quiet:
-        print(f"ℹ️  {len(unresolved)} unresolved (interpolated or relative):")
+        print(f"[INFO]  {len(unresolved)} unresolved (interpolated or relative):")
         for line in unresolved[:20]:
             print(line)
         if len(unresolved) > 20:
@@ -390,11 +390,11 @@ def main() -> int:
         print("Probing external URLs (HEAD with GET fallback)...")
         ext_broken = http_probe(external)
         if ext_broken:
-            print(f"❌ {len(ext_broken)} broken external URL(s):")
+            print(f"[FAIL] {len(ext_broken)} broken external URL(s):")
             for line in ext_broken:
                 print(line)
         else:
-            print("✅ all external URLs reachable")
+            print("[OK] all external URLs reachable")
 
     return 1 if broken or ext_broken or base_path_violations else 0
 

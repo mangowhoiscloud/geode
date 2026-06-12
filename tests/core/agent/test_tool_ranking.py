@@ -1,4 +1,4 @@
-"""CL-A2 — ``core.agent.tool_search`` invariants.
+"""CL-A2 — ``core.agent.tool_ranking`` invariants.
 
 Pins the Wilson score interval LB math, the
 ``find_recommended_tools`` aggregation contract, and the rendered
@@ -12,8 +12,8 @@ import math
 from dataclasses import dataclass
 
 import pytest
-from core.agent import tool_search
-from core.agent.tool_search import (
+from core.agent import tool_ranking
+from core.agent.tool_ranking import (
     MIN_INVOCATIONS,
     WILSON_THRESHOLD,
     ToolRanking,
@@ -43,7 +43,7 @@ def test_module_exports_stable():
         "load_recent_episodes",
         "wilson_lower_bound",
     }
-    assert set(tool_search.__all__) == expected
+    assert set(tool_ranking.__all__) == expected
 
 
 # ── Wilson lower-bound math ───────────────────────────────────────────
@@ -235,12 +235,12 @@ def test_min_invocations_constant_matches_tool_hints():
 
 
 def test_load_recent_episodes_handles_missing_store(monkeypatch: pytest.MonkeyPatch):
-    """``tool_search.load_recent_episodes`` is the module-internal loader
+    """``tool_ranking.load_recent_episodes`` is the module-internal loader
     used when callers invoke the ranker without going through
     ``in_context_wiring``. The wiring opts to share ``tool_hints``'
     loader as a shared-read optimisation; this test pins the parallel
     public API so it isn't quietly dead code."""
-    import core.agent.tool_search as ts_module
+    import core.agent.tool_ranking as ts_module
 
     class _ExplodingStore:
         def recent(self, *, limit: int) -> list[object]:
@@ -254,7 +254,7 @@ def test_load_recent_episodes_handles_missing_store(monkeypatch: pytest.MonkeyPa
 
 def test_load_recent_episodes_returns_store_output(monkeypatch: pytest.MonkeyPatch):
     """Happy path — loader forwards the store's ``recent()`` result."""
-    import core.agent.tool_search as ts_module
+    import core.agent.tool_ranking as ts_module
 
     expected = [_FakeEpisode("read", True), _FakeEpisode("read", False)]
 

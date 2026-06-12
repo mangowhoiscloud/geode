@@ -45,6 +45,21 @@ functional change.
 
 ---
 
+## [0.99.190] - 2026-06-13
+
+### Removed
+- **v1.0.0 pre-release cleanup — audit-confirmed dummy/slop/dead surface** (PR-V1-PRE-CLEANUP; 3-dimension audit: slop/dummy + leak/hygiene + wiring/contract, leak dimension fully clean). `CortexAnalystTool` / `CortexSearchTool` deleted from `core/tools/data_tools.py` + container registration — Game-IP-era Snowflake placeholders that always returned `{"status": "stub"}` while registered as live tools (the v0.99.187 purge missed them); the dead `("query_monolake", "cortex_analyst", "cortex_search")` category branch in `ToolRegistry.to_anthropic_tools_with_defer` went with them. `Settings.subagent_max_rounds` removed (zero readers). `ToolExecutor.register` removed (zero callers — handlers arrive via the `_build_tool_handlers` map, dangerous tools via the executor's built-in paths).
+
+### Fixed
+- **MCP client handshake reported a hardcoded "0.9.0"** — `core/mcp/stdio_client.py` clientInfo now resolves the real package version (same handshake-misreport class geode-mcp fixed server-side in v0.99.169). Would have read as a wrong major after the v1.0.0 bump.
+
+### Changed
+- **`core/agent/tool_search.py` renamed to `core/agent/tool_ranking.py`** — the module ranks tools by episodic Wilson-LB success, it does not search them; the old name collided with the `tool_search` meta-tool (`ToolSearchTool`, `core.tools.registry`) that the upcoming defer wiring makes prominent. Importer (`in_context_wiring.py`) + test module migrated in the same PR (no shim, per the 1-release-grace rule).
+- `scripts/check_docs_links.py` CLI output de-emojified (`[OK]`/`[FAIL]`/`[INFO]` — emoji are report-only per the slop rule); `core/ui/mascot.py` docstring drops a stale `v0.10.0` example.
+
+### Audit notes (no change shipped)
+- Audit false-positives refuted with evidence: `run_bash`/`delegate_task` are NOT half-wired (they execute via the executor's built-in dangerous/delegation paths, `core/agent/tool_executor/executor.py:177,183`, not the handler map); `ADAPTER_DISPATCH_ATTEMPT` does emit (`core/llm/adapters/dispatch.py:294`). `recall_tool_result`/`doctor_slack` handler-without-definition is intentional (offload-recovery hint path / internal diagnostics). 20 reserved-unemitted HookEvents remain documented-RESERVED tracked debt, not a 1.0 blocker.
+
 ## [0.99.189] - 2026-06-12
 
 ### Added

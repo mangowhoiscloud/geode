@@ -269,9 +269,7 @@ class ToolRegistry:
         categories: set[str] = set()
         for tool in all_tools:
             name = tool.get("name", "")
-            if name in ("query_monolake", "cortex_analyst", "cortex_search"):
-                categories.add("data")
-            elif name in ("memory_search", "memory_get", "memory_save"):
+            if name in ("memory_search", "memory_get", "memory_save"):
                 categories.add("memory")
             elif name in ("generate_report", "export_json", "send_notification"):
                 categories.add("output")

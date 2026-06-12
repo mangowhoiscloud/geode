@@ -206,7 +206,7 @@ def apply_in_context_slots(
         # confidence threshold. Complements tool_hints.
         if tool_ranking_cfg is not None:
             try:
-                from core.agent.tool_search import (
+                from core.agent.tool_ranking import (
                     find_recommended_tools,
                     format_tool_ranking_block,
                 )

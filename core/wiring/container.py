@@ -110,10 +110,8 @@ def build_default_registry() -> ToolRegistry:
     """
     registry = ToolRegistry()
     # Data (3)
-    from core.tools.data_tools import CortexAnalystTool, CortexSearchTool, GenerateDataTool
+    from core.tools.data_tools import GenerateDataTool
 
-    registry.register(CortexAnalystTool())
-    registry.register(CortexSearchTool())
     registry.register(GenerateDataTool())
 
     # Search (2)
