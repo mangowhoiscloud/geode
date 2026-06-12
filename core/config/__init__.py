@@ -60,6 +60,8 @@ _TOML_TO_SETTINGS: dict[str, str] = {
     # C-2 (2026-06-11) — H7 fix: /login source was writing these toml rows
     # but nothing read them back (dead write); now they are part of the cascade.
     "llm.anthropic_credential_source": "anthropic_credential_source",
+    # PR-TOOL-SEARCH-WIRE (2026-06-13) — hosted tool-search defer kill switch.
+    "llm.tool_search_defer": "tool_search_defer",
     "llm.openai_credential_source": "openai_credential_source",
     # PR-CL-A1 (2026-05-23) — Dynamic Replan knobs.
     "replan.enabled": "replan_enabled",

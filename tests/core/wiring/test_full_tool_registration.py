@@ -32,8 +32,6 @@ ALL_TOOL_NAMES = {
     "send_notification",
     # Recall (1) — PR-Hermes-1d
     "session_search",
-    # Meta (1)
-    "tool_search",
 }
 
 

@@ -290,6 +290,10 @@ class Settings(BaseSettings):
     # Tier 0.5 — User Profile
     user_profile_dir: str = ""  # global dir override (default: ~/.geode/user_profile)
 
+    # Tool search — hosted defer_loading on the Anthropic adapter
+    # (PR-TOOL-SEARCH-WIRE; reader: core/llm/providers/anthropic.py)
+    tool_search_defer: bool = True  # kill switch for deferred tool loading
+
     # Ensemble — Multi-LLM mode
     ensemble_mode: str = "single"  # single | cross
 

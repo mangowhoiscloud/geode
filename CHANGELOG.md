@@ -45,6 +45,14 @@ functional change.
 
 ---
 
+## [0.99.191] - 2026-06-13
+
+### Added
+- **Hosted tool-search defer wired into the Anthropic adapter** (PR-TOOL-SEARCH-WIRE; the v1.0 audit's "docstring claims defer, body never defers" finding, resolved with the OFFICIAL Messages API mechanism instead of the bespoke one). `core/llm/providers/anthropic.py:apply_tool_search_defer` — above 16 tools, every custom tool outside the immediate core set (`TOOL_SEARCH_ALWAYS_LOADED`: memory/note/read/glob/grep/web/llms_txt_index/check_status, 11 names) is marked with the official `defer_loading: true` field and the hosted `tool_search_tool_regex_20251119` is prepended; the API keeps deferred schemas out of the context window and expands discovered `tool_reference` blocks server-side, preserving the prompt-cache prefix (doc-attested: platform.claude.com tool-search-tool page; model support Opus 4.0+/Sonnet 4.0+/Haiku 4.5+/Fable 5 covers every model this adapter routes). GEODE's production loop sends 60 tool schemas per request today — 49 of them now defer. Kill switch: `Settings.tool_search_defer` (default True, reader at the adapter call site). `defer_loading` added to `_API_ALLOWED_KEYS` (the filter silently stripped it before — the exact reason the old path never deferred on the wire). OpenAI-family adapters rebuild tool defs from name/description/schema, so the field cannot leak cross-provider. Request-shaping invariants pinned by `tests/core/llm/test_tool_search_defer_wire.py` (7): at-least-one-non-deferred, search-tool-never-defers, native/hosted-never-defer, key-filter passthrough, kill-switch + threshold no-ops, no-op-when-nothing-defers.
+
+### Removed
+- **Bespoke registry-level defer deleted** — `ToolSearchTool` (client-side substring meta-tool) + `ToolRegistry.to_anthropic_tools_with_defer` + `ALWAYS_LOADED_TOOLS` + container registration + their test module. One mechanism per domain: the official field + hosted search replaces all of it. Its only production caller (`runtime.get_tool_state_injection`, the 14-tool graph-state path) moved to plain `to_anthropic_tools` — the old markers were stripped by the adapter key filter, so that path never deferred on the wire anyway. `get_agentic_tools`'s lying docstring (the original finding) now documents where defer actually happens.
+
 ## [0.99.190] - 2026-06-13
 
 ### Removed

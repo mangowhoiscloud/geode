@@ -59,11 +59,15 @@ def get_agentic_tools(
     mcp_tools: list[dict[str, Any]] | None = None,
     force_include: set[str] | None = None,
 ) -> list[dict[str, Any]]:
-    """Return tool definitions with unified deferred loading for native + MCP tools.
+    """Return the merged tool definitions for the agentic loop.
 
     Merges base tools, registry extras, and MCP tools into a single list.
-    When the combined count exceeds the defer threshold (10), deferred loading
-    activates: core tools stay loaded, the rest are deferred via tool_search.
+    Deferred loading is NOT applied here — it happens at the Anthropic
+    adapter (``core.llm.providers.anthropic.apply_tool_search_defer``,
+    PR-TOOL-SEARCH-WIRE), where the official ``defer_loading`` field and
+    the hosted tool-search tool are a Messages-API concern. This docstring
+    previously claimed a defer threshold that the body never implemented
+    (the v1.0 audit's doc-implementation parity finding).
 
     Args:
         registry: Optional ToolRegistry with additional native tools.
