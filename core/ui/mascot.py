@@ -2,7 +2,7 @@
 
 3-line layout mirroring Claude Code::
 
-    ╲╲( ◕ ᵕ ◕ )╱╱  GEODE v0.10.0
+    ╲╲( ◕ ᵕ ◕ )╱╱  GEODE v<version>
                      claude-opus-4-6 · autonomous execution agent
                      ~/geode
 

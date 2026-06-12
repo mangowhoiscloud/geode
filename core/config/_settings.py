@@ -290,13 +290,16 @@ class Settings(BaseSettings):
     # Tier 0.5 — User Profile
     user_profile_dir: str = ""  # global dir override (default: ~/.geode/user_profile)
 
+    # Tool search — hosted defer_loading on the Anthropic adapter
+    # (PR-TOOL-SEARCH-WIRE; reader: core/llm/providers/anthropic.py)
+    tool_search_defer: bool = True  # kill switch for deferred tool loading
+
     # Ensemble — Multi-LLM mode
     ensemble_mode: str = "single"  # single | cross
 
     # Sub-Agent Orchestration (P2)
     max_subagent_depth: int = 1  # 최대 재귀 깊이 (depth=1 강제, Claude Code 패턴)
     max_total_subagents: int = 15  # 세션 내 최대 서브에이전트 수
-    subagent_max_rounds: int = 0  # 0 = unlimited (time-based control)
     subagent_max_tokens: int = 32768  # 서브에이전트 출력 토큰 제한 (부모와 동일)
 
     # Token Guard — tool result truncation threshold (0 = unlimited)

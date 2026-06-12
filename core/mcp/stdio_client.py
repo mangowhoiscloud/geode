@@ -19,6 +19,19 @@ from typing import Any
 
 log = logging.getLogger(__name__)
 
+
+def _geode_version() -> str:
+    """Real package version for the MCP handshake clientInfo.
+
+    PR-V1-PRE-CLEANUP (2026-06-13): was a hardcoded "0.9.0" — the same
+    handshake-misreport class geode-mcp fixed in v0.99.169, on the
+    client side this time.
+    """
+    from core import __version__
+
+    return __version__
+
+
 # Graceful shutdown timeout before force kill (seconds)
 _CLOSE_TIMEOUT_S = 5
 
@@ -95,7 +108,7 @@ class StdioMCPClient:
                 {
                     "protocolVersion": "2024-11-05",
                     "capabilities": {},
-                    "clientInfo": {"name": "geode", "version": "0.9.0"},
+                    "clientInfo": {"name": "geode", "version": _geode_version()},
                 },
             )
 

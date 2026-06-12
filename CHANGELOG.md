@@ -45,6 +45,29 @@ functional change.
 
 ---
 
+## [0.99.191] - 2026-06-13
+
+### Added
+- **Hosted tool-search defer wired into the Anthropic adapter** (PR-TOOL-SEARCH-WIRE; the v1.0 audit's "docstring claims defer, body never defers" finding, resolved with the OFFICIAL Messages API mechanism instead of the bespoke one). `core/llm/providers/anthropic.py:apply_tool_search_defer` — above 16 tools, every custom tool outside the immediate core set (`TOOL_SEARCH_ALWAYS_LOADED`: memory/note/read/glob/grep/web/llms_txt_index/check_status, 11 names) is marked with the official `defer_loading: true` field and the hosted `tool_search_tool_regex_20251119` is prepended; the API keeps deferred schemas out of the context window and expands discovered `tool_reference` blocks server-side, preserving the prompt-cache prefix (doc-attested: platform.claude.com tool-search-tool page; model support Opus 4.0+/Sonnet 4.0+/Haiku 4.5+/Fable 5 covers every model this adapter routes). GEODE's production loop sends 60 tool schemas per request today — 49 of them now defer. Kill switch: `Settings.tool_search_defer` (default True, reader at the adapter call site). `defer_loading` added to `_API_ALLOWED_KEYS` (the filter silently stripped it before — the exact reason the old path never deferred on the wire). OpenAI-family adapters rebuild tool defs from name/description/schema, so the field cannot leak cross-provider. Request-shaping invariants pinned by `tests/core/llm/test_tool_search_defer_wire.py` (7): at-least-one-non-deferred, search-tool-never-defers, native/hosted-never-defer, key-filter passthrough, kill-switch + threshold no-ops, no-op-when-nothing-defers.
+
+### Removed
+- **Bespoke registry-level defer deleted** — `ToolSearchTool` (client-side substring meta-tool) + `ToolRegistry.to_anthropic_tools_with_defer` + `ALWAYS_LOADED_TOOLS` + container registration + their test module. One mechanism per domain: the official field + hosted search replaces all of it. Its only production caller (`runtime.get_tool_state_injection`, the 14-tool graph-state path) moved to plain `to_anthropic_tools` — the old markers were stripped by the adapter key filter, so that path never deferred on the wire anyway. `get_agentic_tools`'s lying docstring (the original finding) now documents where defer actually happens.
+
+## [0.99.190] - 2026-06-13
+
+### Removed
+- **v1.0.0 pre-release cleanup — audit-confirmed dummy/slop/dead surface** (PR-V1-PRE-CLEANUP; 3-dimension audit: slop/dummy + leak/hygiene + wiring/contract, leak dimension fully clean). `CortexAnalystTool` / `CortexSearchTool` deleted from `core/tools/data_tools.py` + container registration — Game-IP-era Snowflake placeholders that always returned `{"status": "stub"}` while registered as live tools (the v0.99.187 purge missed them); the dead `("query_monolake", "cortex_analyst", "cortex_search")` category branch in `ToolRegistry.to_anthropic_tools_with_defer` went with them. `Settings.subagent_max_rounds` removed (zero readers). `ToolExecutor.register` removed (zero callers — handlers arrive via the `_build_tool_handlers` map, dangerous tools via the executor's built-in paths).
+
+### Fixed
+- **MCP client handshake reported a hardcoded "0.9.0"** — `core/mcp/stdio_client.py` clientInfo now resolves the real package version (same handshake-misreport class geode-mcp fixed server-side in v0.99.169). Would have read as a wrong major after the v1.0.0 bump.
+
+### Changed
+- **`core/agent/tool_search.py` renamed to `core/agent/tool_ranking.py`** — the module ranks tools by episodic Wilson-LB success, it does not search them; the old name collided with the `tool_search` meta-tool (`ToolSearchTool`, `core.tools.registry`) that the upcoming defer wiring makes prominent. Importer (`in_context_wiring.py`) + test module migrated in the same PR (no shim, per the 1-release-grace rule).
+- `scripts/check_docs_links.py` CLI output de-emojified (`[OK]`/`[FAIL]`/`[INFO]` — emoji are report-only per the slop rule); `core/ui/mascot.py` docstring drops a stale `v0.10.0` example.
+
+### Audit notes (no change shipped)
+- Audit false-positives refuted with evidence: `run_bash`/`delegate_task` are NOT half-wired (they execute via the executor's built-in dangerous/delegation paths, `core/agent/tool_executor/executor.py:177,183`, not the handler map); `ADAPTER_DISPATCH_ATTEMPT` does emit (`core/llm/adapters/dispatch.py:294`). `recall_tool_result`/`doctor_slack` handler-without-definition is intentional (offload-recovery hint path / internal diagnostics). 20 reserved-unemitted HookEvents remain documented-RESERVED tracked debt, not a 1.0 blocker.
+
 ## [0.99.189] - 2026-06-12
 
 ### Added

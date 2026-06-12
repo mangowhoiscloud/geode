@@ -67,7 +67,7 @@ adding a provider, or touching cache/tool-choice/streaming behaviour.
 
 ### `core/tools/`
 
-57 tools. Deferred-loading registry.
+60 tools. Deferred loading lives at the Anthropic adapter (official defer_loading + hosted tool_search), not in the registry.
 
 - `base.py:35` — `Tool` Protocol.
 - `registry.py:209-218` — `ALWAYS_LOADED_TOOLS` frozenset (6 tools).

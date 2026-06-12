@@ -13,7 +13,7 @@ from core.auth.profiles import ProfileStore
 from core.auth.rotation import ProfileRotator
 from core.orchestration.lane_queue import LaneQueue
 from core.tools.policy import PolicyChain, ToolPolicy
-from core.tools.registry import ToolRegistry, ToolSearchTool
+from core.tools.registry import ToolRegistry
 
 log = logging.getLogger(__name__)
 
@@ -110,10 +110,8 @@ def build_default_registry() -> ToolRegistry:
     """
     registry = ToolRegistry()
     # Data (3)
-    from core.tools.data_tools import CortexAnalystTool, CortexSearchTool, GenerateDataTool
+    from core.tools.data_tools import GenerateDataTool
 
-    registry.register(CortexAnalystTool())
-    registry.register(CortexSearchTool())
     registry.register(GenerateDataTool())
 
     # Search (2)
@@ -151,8 +149,6 @@ def build_default_registry() -> ToolRegistry:
     from core.tools.session_search import SessionSearchTool
 
     registry.register(SessionSearchTool())
-    # Meta-tool: tool_search (enables deferred loading)
-    registry.register(ToolSearchTool(registry))
     return registry
 
 

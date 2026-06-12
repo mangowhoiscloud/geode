@@ -13,9 +13,7 @@ from core.wiring.container import (
 )
 
 ALL_TOOL_NAMES = {
-    # Data (3)
-    "cortex_analyst",
-    "cortex_search",
+    # Data (1) — Cortex stubs deleted (PR-V1-PRE-CLEANUP 2026-06-13)
     "generate_data",
     # Search (2)
     "web_search",
@@ -34,8 +32,6 @@ ALL_TOOL_NAMES = {
     "send_notification",
     # Recall (1) — PR-Hermes-1d
     "session_search",
-    # Meta (1)
-    "tool_search",
 }
 
 
@@ -70,7 +66,7 @@ class TestPolicyChainDryRun:
 
     def test_dry_run_allows_data_tools(self) -> None:
         chain = _build_default_policies()
-        for tool in ("cortex_analyst", "cortex_search", "generate_data"):
+        for tool in ("generate_data",):
             assert chain.is_allowed(tool, mode="dry_run") is True
 
     def test_dry_run_allows_memory_tools(self) -> None:
@@ -112,7 +108,7 @@ class TestPolicyFilterIntegration:
         dry_tools = runtime.get_available_tools(mode="dry_run")
         assert "send_notification" not in dry_tools
         assert "memory_search" in dry_tools
-        assert "cortex_search" in dry_tools
+        assert "generate_data" in dry_tools
 
     def test_runtime_full_pipeline_filtering(self, tmp_path: Path) -> None:
         runtime = GeodeRuntime.create("Project Atlas", log_dir=tmp_path)
