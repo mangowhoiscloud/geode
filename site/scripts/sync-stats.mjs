@@ -13,6 +13,7 @@
 // Override GEODE repo: GEODE_REPO=/abs/path npm run sync-stats
 
 import { readFileSync, writeFileSync, existsSync } from "node:fs";
+import { parseSitemap } from "./sitemap-pages.mjs";
 import { resolve, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -37,7 +38,6 @@ const REPO_URL = "https://github.com/mangowhoiscloud/geode";
 const SOT_FILE = resolve(SITE_ROOT, "src/data/geode/sot.ts");
 const CHANGELOG_FILE = resolve(SITE_ROOT, "src/data/geode/changelog.ts");
 const LLMS_TXT_FILE = resolve(SITE_ROOT, "public/llms.txt");
-const LLMS_FULL_TXT_FILE = resolve(SITE_ROOT, "public/llms-full.txt");
 const SITEMAP_TS_FILE = resolve(SITE_ROOT, "src/lib/geode-docs/sitemap.ts");
 
 function fail(msg) {
@@ -151,53 +151,6 @@ export const CHANGELOG_SYNCED_AT = "${today}";
 }
 
 /**
- * Parse the sitemap.ts file to extract the list of pages. We treat the file
- * as text and walk it line by line, capturing each page's slug/title/titleKo/
- * summary/summaryKo. Brittle but adequate for a tightly-controlled SOT file.
- */
-function parseSitemap() {
-  const src = readFileSync(SITEMAP_TS_FILE, "utf8");
-  const pages = [];
-  const lines = src.split("\n");
-  let currentSection = null;
-  let pendingSectionTitle = null;
-  for (const line of lines) {
-    // Section header: post-redesign sitemap puts title / titleKo on their own
-    // lines inside the section object (pages carry slug on the same line).
-    if (!line.includes("slug:")) {
-      const titleOnly = line.match(/^\s*title:\s*"([^"]+)",\s*$/);
-      if (titleOnly) {
-        pendingSectionTitle = titleOnly[1];
-        continue;
-      }
-      const titleKoOnly = line.match(/^\s*titleKo:\s*"([^"]+)",\s*$/);
-      if (titleKoOnly && pendingSectionTitle) {
-        currentSection = { title: pendingSectionTitle, titleKo: titleKoOnly[1] };
-        pendingSectionTitle = null;
-        continue;
-      }
-    }
-    // Page entry. Inline object with slug.
-    const pm = line.match(/{\s*slug:\s*"([^"]*)"/);
-    if (!pm) continue;
-    const slug = pm[1];
-    const titleM = line.match(/title:\s*"([^"]*)"/);
-    const titleKoM = line.match(/titleKo:\s*"([^"]*)"/);
-    const summaryM = line.match(/summary:\s*"([^"]*)"/);
-    const summaryKoM = line.match(/summaryKo:\s*"([^"]*)"/);
-    pages.push({
-      slug,
-      title: titleM?.[1] ?? "",
-      titleKo: titleKoM?.[1] ?? "",
-      summary: summaryM?.[1] ?? "",
-      summaryKo: summaryKoM?.[1] ?? "",
-      section: currentSection,
-    });
-  }
-  return pages;
-}
-
-/**
  * llms.txt — spec-conformant (llmstxt.org) index of every public page.
  *
  * Shape: H1 name → blockquote summary → detail line → one H2 file-list
@@ -219,11 +172,14 @@ function writeLlmsTxt(pages, version) {
       " (Petri audit -> fitness gate) tunes the system that runs them.",
   );
   lines.push("");
-  lines.push(`Version v${version}. Last sync ${today}. Every link below is a rendered docs page.`);
+  lines.push(
+    `Version v${version}. Last sync ${today}. Docs links point to clean markdown twins (.md);` +
+      " drop the .md suffix for the rendered page.",
+  );
   lines.push("");
   lines.push("## Start here");
   lines.push("");
-  lines.push(`- [Docs](${base}/docs): documentation root, what GEODE is and where to go next`);
+  lines.push(`- [Docs](${base}/docs.md): documentation root, what GEODE is and where to go next`);
   lines.push(`- [Portfolio](${base}/portfolio): capability overview with demos`);
   lines.push(`- [About](${base}/about): project background`);
   lines.push(`- [Source](${REPO_URL}): GitHub repository`);
@@ -236,7 +192,7 @@ function writeLlmsTxt(pages, version) {
       lines.push(`## ${p.section.title}`);
       lines.push("");
     }
-    const url = p.slug ? `${base}/docs/${p.slug}` : `${base}/docs`;
+    const url = p.slug ? `${base}/docs/${p.slug}.md` : `${base}/docs.md`;
     const title = p.title || "Docs index";
     const summary = p.summary || "";
     lines.push(`- [${title}](${url})${summary ? ": " + summary : ""}`);
@@ -245,7 +201,7 @@ function writeLlmsTxt(pages, version) {
   lines.push("## Optional");
   lines.push("");
   lines.push(
-    `- [llms-full.txt](${base}/llms-full.txt): extended index with bilingual per-page summaries`,
+    `- [llms-full.txt](${base}/llms-full.txt): the entire docs content in one file (large)`,
   );
   lines.push(
     `- [CHANGELOG](${REPO_URL}/blob/main/CHANGELOG.md): full release history`,
@@ -260,44 +216,8 @@ function writeLlmsTxt(pages, version) {
   writeFileSync(LLMS_TXT_FILE, lines.join("\n") + "\n");
 }
 
-/**
- * llms-full.txt — extended index: per-page bilingual summaries (EN/KO).
- * NOT full page bodies (docs pages are JSX-rendered, no markdown twins yet).
- * Reasonable plain-text scan target. Stays well under 1MB.
- */
-function writeLlmsFullTxt(pages, version) {
-  const base = PAGES_BASE_URL;
-  const today = new Date().toISOString().slice(0, 10);
-
-  const lines = [];
-  lines.push("# GEODE");
-  lines.push("");
-  lines.push(`GEODE v${version}. A self-evolving autonomous execution agent.`);
-  lines.push(`스스로 진화하는 자율 실행 에이전트.`);
-  lines.push("");
-  lines.push(`Last sync: ${today}`);
-  lines.push("");
-  lines.push("---");
-  lines.push("");
-
-  let currentSection = null;
-  for (const p of pages) {
-    if (p.section && p.section.title !== currentSection) {
-      currentSection = p.section.title;
-      lines.push("");
-      lines.push(`## ${p.section.title} . ${p.section.titleKo}`);
-      lines.push("");
-    }
-    const url = p.slug ? `${base}/docs/${p.slug}` : `${base}/docs`;
-    lines.push(`### ${p.title || "(index)"} (${p.titleKo || ""})`);
-    lines.push(`URL: ${url}`);
-    if (p.summary) lines.push(`EN: ${p.summary}`);
-    if (p.summaryKo) lines.push(`KO: ${p.summaryKo}`);
-    lines.push("");
-  }
-
-  writeFileSync(LLMS_FULL_TXT_FILE, lines.join("\n") + "\n");
-}
+// llms-full.txt is written by export-docs-md.mjs (post-build, real page
+// content) — single writer per file. This script only writes the index.
 
 function main() {
   console.log(`sync-stats: reading from ${GEODE_REPO}`);
@@ -311,11 +231,10 @@ function main() {
   writeChangelog(entries);
   console.log(`sync-stats: wrote ${CHANGELOG_FILE} (${entries.length} entries)`);
 
-  const pages = parseSitemap();
+  const pages = parseSitemap(SITEMAP_TS_FILE);
   writeLlmsTxt(pages, version);
-  writeLlmsFullTxt(pages, version);
   console.log(`sync-stats: wrote ${LLMS_TXT_FILE} (${pages.length} pages)`);
-  console.log(`sync-stats: wrote ${LLMS_FULL_TXT_FILE}`);
+  console.log("sync-stats: llms-full.txt is owned by export-docs-md.mjs (run after build)");
 }
 
 main();
