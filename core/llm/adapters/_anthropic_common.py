@@ -103,8 +103,8 @@ def build_create_kwargs(req: AdapterCallRequest) -> dict[str, Any]:
     if req.temperature is not None:
         kwargs["temperature"] = req.temperature
     if req.tools:
-        kwargs["tools"] = [translate_tool(t) for t in req.tools]
         tc = _translate_tool_choice(req.tool_choice)
+        kwargs["tools"] = _shape_tools(req, tc)
         if tc is not None:
             kwargs["tool_choice"] = tc
     if req.stop_sequences:
@@ -112,6 +112,29 @@ def build_create_kwargs(req: AdapterCallRequest) -> dict[str, Any]:
     if req.thinking_budget > 0:
         kwargs["thinking"] = {"type": "enabled", "budget_tokens": req.thinking_budget}
     return kwargs
+
+
+def _shape_tools(req: AdapterCallRequest, tc: dict[str, Any] | None) -> list[dict[str, Any]]:
+    """Translate + apply hosted tool-search defer on the LIVE adapter path.
+
+    PR-TOOL-SEARCH-WIRE Codex review finding 1 (2026-06-13): the defer
+    shaping was first wired into the legacy ``ClaudeAgenticAdapter``
+    request builder, but the production AgenticLoop reaches Anthropic
+    through ``build_create_kwargs`` / ``build_stream_kwargs`` here — the
+    exact docstring-vs-live-path class of bug this PR set out to fix.
+    Shaping is skipped under a forced single-tool ``tool_choice`` (the
+    official docs do not state that a forced DEFERRED tool resolves, so
+    we do not gamble a 400 on it).
+    """
+    from core.config import settings as _settings
+    from core.llm.providers.anthropic import apply_tool_search_defer
+
+    translated = [translate_tool(t) for t in req.tools]
+    if tc is not None and tc.get("type") == "tool":
+        return translated
+    return apply_tool_search_defer(
+        translated, enabled=getattr(_settings, "tool_search_defer", True)
+    )
 
 
 def _translate_tool_choice(tc: str | dict[str, Any]) -> dict[str, Any] | None:
@@ -146,8 +169,8 @@ def build_stream_kwargs(req: AdapterCallRequest) -> dict[str, Any]:
     if req.temperature is not None:
         kwargs["temperature"] = req.temperature
     if req.tools:
-        kwargs["tools"] = [translate_tool(t) for t in req.tools]
         tc = _translate_tool_choice(req.tool_choice)
+        kwargs["tools"] = _shape_tools(req, tc)
         if tc is not None:
             kwargs["tool_choice"] = tc
     return kwargs

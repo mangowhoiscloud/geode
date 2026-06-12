@@ -186,10 +186,10 @@ export default function Page() {
             <p>
               The tool catalog itself is searchable. When the combined count of
               native and MCP tools crosses a threshold, GEODE stops shipping
-              every schema up front: it exposes a <code>tool_search</code>
-              meta-tool, keeps a small always-loaded set eager, and loads the
-              rest on demand (the deferred path in
-              <code>core/tools/registry.py</code>).
+              every schema up front: it keeps a small always-loaded set eager and
+              defers the rest behind the hosted tool_search tool (the official
+              defer_loading wiring in
+              <code>core/llm/providers/anthropic.py</code>).
             </p>
 
             <h2>This site&apos;s llms.txt</h2>

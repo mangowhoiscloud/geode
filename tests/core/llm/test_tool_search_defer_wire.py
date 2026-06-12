@@ -104,3 +104,61 @@ def test_call_site_reads_kill_switch() -> None:
     )
     assert "tool_search_defer" in adapter_source
     assert "apply_tool_search_defer(" in adapter_source.split("async def agentic_call", 1)[1]
+
+
+# ---------------------------------------------------------------------------
+# LIVE adapter path — build_create_kwargs / build_stream_kwargs
+# (Codex review of PR #2226, finding 1: the first wiring landed on the
+# legacy ClaudeAgenticAdapter only; the production AgenticLoop reaches
+# Anthropic through the adapter-registry request builders pinned here.)
+# ---------------------------------------------------------------------------
+
+
+def _live_request(tool_count: int, tool_choice: str | dict = "auto"):
+    from core.llm.adapters.base import AdapterCallRequest, Message, ToolSpec
+
+    tool_specs = tuple(
+        ToolSpec(name=f"extra_{i}", description=f"extra {i}", input_schema={"type": "object"})
+        for i in range(tool_count)
+    )
+    return AdapterCallRequest(
+        model="claude-opus-4-8",
+        messages=(Message(role="user", content="hi"),),
+        tools=tool_specs,
+        tool_choice=tool_choice,
+    )
+
+
+def test_live_create_path_defers_above_threshold() -> None:
+    from core.llm.adapters._anthropic_common import build_create_kwargs
+
+    request_kwargs = build_create_kwargs(_live_request(TOOL_DEFER_THRESHOLD + 5))
+    tool_names = [t["name"] for t in request_kwargs["tools"]]
+    assert tool_names[0] == _TOOL_SEARCH_TOOL["name"]
+    assert sum(1 for t in request_kwargs["tools"] if t.get("defer_loading")) == (
+        TOOL_DEFER_THRESHOLD + 5
+    )
+
+
+def test_live_stream_path_defers_above_threshold() -> None:
+    from core.llm.adapters._anthropic_common import build_stream_kwargs
+
+    request_kwargs = build_stream_kwargs(_live_request(TOOL_DEFER_THRESHOLD + 5))
+    assert request_kwargs["tools"][0]["name"] == _TOOL_SEARCH_TOOL["name"]
+
+
+def test_live_path_skips_shaping_under_forced_tool_choice() -> None:
+    """A forced single-tool tool_choice must not gamble on a deferred
+    target resolving (undocumented in the official contract)."""
+    from core.llm.adapters._anthropic_common import build_create_kwargs
+
+    forced = {"type": "tool", "name": "extra_0"}
+    request_kwargs = build_create_kwargs(_live_request(TOOL_DEFER_THRESHOLD + 5, forced))
+    assert not any(t.get("defer_loading") for t in request_kwargs["tools"])
+    assert request_kwargs["tools"][0]["name"] != _TOOL_SEARCH_TOOL["name"]
+
+
+def test_apply_is_idempotent_on_already_shaped_input() -> None:
+    shaped_once = apply_tool_search_defer(_big_toolset())
+    shaped_twice = apply_tool_search_defer(shaped_once)
+    assert shaped_twice is shaped_once, "second pass must not duplicate the search tool"

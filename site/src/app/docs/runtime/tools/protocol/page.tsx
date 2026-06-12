@@ -34,7 +34,9 @@ export default function Page() {
             <h2>지연 로딩</h2>
             <p>
               모든 도구 스키마를 모든 호출에 실으면 턴마다 input 토큰을 크게
-              태웁니다. <code>ToolRegistry.to_anthropic_tools_with_defer</code>가
+              태웁니다. Anthropic 어댑터의{" "}
+              <code>apply_tool_search_defer</code>가 공식{" "}
+              <code>defer_loading</code> 필드와 호스티드 tool_search 도구로
               카탈로그를 나눕니다.
             </p>
             <table>
@@ -155,9 +157,10 @@ export default function Page() {
             <h2>Deferred loading</h2>
             <p>
               Shipping every tool schema on every call burns a large chunk of
-              input tokens per turn.{" "}
-              <code>ToolRegistry.to_anthropic_tools_with_defer</code> splits the
-              catalog.
+              input tokens per turn. The Anthropic adapter's{" "}
+              <code>apply_tool_search_defer</code> splits the catalog with the
+              official <code>defer_loading</code> field and the hosted
+              tool_search tool.
             </p>
             <table>
               <thead>

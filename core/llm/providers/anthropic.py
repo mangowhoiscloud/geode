@@ -705,6 +705,11 @@ def apply_tool_search_defer(
     """
     if not enabled or len(api_tools) <= threshold:
         return api_tools
+    search_name = _TOOL_SEARCH_TOOL["name"]
+    if any(t.get("name") == search_name or t.get("defer_loading") for t in api_tools):
+        # Already shaped — idempotent pass-through (Codex review finding 2:
+        # a second pass must not duplicate the search tool or re-mark defs).
+        return api_tools
     shaped: list[dict[str, Any]] = []
     deferred_count = 0
     for tool in api_tools:
