@@ -54,7 +54,10 @@ def candidate_index_urls(url: str) -> list[str]:
 
     A direct ``llms.txt`` / ``llms-full.txt`` URL is returned verbatim.
     Otherwise probe path-relative first (handles sub-path indexes like
-    developers.openai.com/codex/llms.txt), then the origin root.
+    developers.openai.com/codex/llms.txt), then the origin root. A
+    file-like leaf (``/docs/page.html``) probes its parent directory
+    (``/docs/llms.txt``), not ``page.html/llms.txt`` (Codex review of
+    PR #2213, finding 1).
 
     Raises ValueError on URLs without an http(s) scheme + host.
     """
@@ -63,11 +66,16 @@ def candidate_index_urls(url: str) -> list[str]:
         msg = f"not an absolute http(s) URL: {url!r}"
         raise ValueError(msg)
 
-    if split.path.rsplit("/", 1)[-1] in _INDEX_FILENAMES:
+    leaf = split.path.rsplit("/", 1)[-1]
+    if leaf in _INDEX_FILENAMES:
         return [url]
 
     base = url.split("?", 1)[0].split("#", 1)[0]
-    path_relative = urljoin(base.rstrip("/") + "/", "llms.txt")
+    if "." in leaf:
+        # file-like leaf — sibling resolution drops it (RFC 3986 merge)
+        path_relative = urljoin(base, "llms.txt")
+    else:
+        path_relative = urljoin(base.rstrip("/") + "/", "llms.txt")
     origin_root = f"{split.scheme}://{split.netloc}/llms.txt"
     candidates = [path_relative]
     if origin_root != path_relative:
@@ -78,16 +86,23 @@ def candidate_index_urls(url: str) -> list[str]:
 def parse_llms_txt(text: str, *, base_url: str) -> dict[str, Any] | None:
     """Parse llmstxt.org-shaped *text* into title / summary / sections.
 
-    Returns ``None`` when the text carries no link lines at all — by the
-    graceful contract of this module that means "not an llms.txt index"
-    (e.g. an SPA's catch-all HTML route or an unrelated text file), and
-    the caller treats it as a probe miss.
+    Returns ``None`` only when the text has neither an H1 title nor any
+    link lines — by the graceful contract of this module that means "not
+    an llms.txt index" (e.g. an SPA's catch-all HTML route or an
+    unrelated text file), and the caller treats it as a probe miss. The
+    spec requires only the H1; a sparse-but-valid index (title, no link
+    sections yet) parses to empty ``sections`` instead of a false
+    "site publishes no llms.txt" miss (Codex review of PR #2213,
+    finding 2).
 
     Links that appear before any H2 land in an unnamed root section
     (``name: ""``). Sections without link lines are dropped — the value
-    of the index is its links.
+    of the index is its links. ``same_origin`` compares scheme + host
+    (web origin), and a leading UTF-8 BOM is tolerated.
     """
-    index_host = urlsplit(base_url).netloc
+    index_split = urlsplit(base_url)
+    index_origin = (index_split.scheme, index_split.netloc)
+    text = text.lstrip("﻿")
     title = ""
     summary_parts: list[str] = []
     sections: list[dict[str, Any]] = []
@@ -111,18 +126,19 @@ def parse_llms_txt(text: str, *, base_url: str) -> dict[str, Any] | None:
         matched = _LINK_LINE_RE.match(line)
         if matched:
             resolved = urljoin(base_url, matched.group("target"))
+            resolved_split = urlsplit(resolved)
             current["links"].append(
                 {
                     "name": matched.group("name").strip(),
                     "url": resolved,
                     "notes": (matched.group("notes") or "").strip(),
-                    "same_origin": urlsplit(resolved).netloc == index_host,
+                    "same_origin": (resolved_split.scheme, resolved_split.netloc) == index_origin,
                 }
             )
     if current["links"]:
         sections.append(current)
 
-    if not sections:
+    if not sections and not title:
         return None
     return {"title": title, "summary": " ".join(summary_parts).strip(), "sections": sections}
 
@@ -202,7 +218,9 @@ class LlmsTxtIndexTool:
                 misses.append(
                     {
                         "url": candidate,
-                        "reason": "no '- [name](url)' link lines — not llmstxt.org shape",
+                        "reason": (
+                            "no H1 title and no '- [name](url)' link lines — not llmstxt.org shape"
+                        ),
                     }
                 )
                 continue

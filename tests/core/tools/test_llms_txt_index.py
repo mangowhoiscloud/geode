@@ -62,6 +62,16 @@ def test_candidates_subpath_probes_path_then_origin() -> None:
     ]
 
 
+def test_candidates_file_leaf_probes_parent_directory() -> None:
+    """Codex review of PR #2213, finding 1 — /docs/page.html must probe
+    /docs/llms.txt, not page.html/llms.txt."""
+    probes = candidate_index_urls("https://example.com/docs/page.html")
+    assert probes == [
+        "https://example.com/docs/llms.txt",
+        "https://example.com/llms.txt",
+    ]
+
+
 def test_candidates_direct_index_url_is_verbatim() -> None:
     direct = "https://example.com/docs/llms.txt"
     assert candidate_index_urls(direct) == [direct]
@@ -101,9 +111,39 @@ def test_parse_resolves_relative_links_and_tags_origin() -> None:
     assert optional["links"][0]["notes"] == "release notes"
 
 
-def test_parse_returns_none_without_link_lines() -> None:
-    assert parse_llms_txt("# Title\n\nprose only\n", base_url="https://x.test/llms.txt") is None
+def test_parse_returns_none_without_title_or_links() -> None:
     assert parse_llms_txt("<!doctype html><html>", base_url="https://x.test/llms.txt") is None
+    assert parse_llms_txt("plain prose, no shape\n", base_url="https://x.test/llms.txt") is None
+
+
+def test_parse_sparse_index_with_title_only_is_valid() -> None:
+    """Codex review of PR #2213, finding 2 — the spec requires only the
+    H1; a sparse index must not be misreported as 'no llms.txt'."""
+    sparse = parse_llms_txt(
+        "# Title\n\n> Summary.\n\nprose only\n", base_url="https://x.test/llms.txt"
+    )
+    assert sparse is not None
+    assert sparse["title"] == "Title"
+    assert sparse["sections"] == []
+
+
+def test_parse_tolerates_utf8_bom() -> None:
+    bom_index = parse_llms_txt(
+        "﻿# Bom Docs\n\n- [A](https://x.test/a)\n", base_url="https://x.test/llms.txt"
+    )
+    assert bom_index is not None
+    assert bom_index["title"] == "Bom Docs"
+
+
+def test_parse_same_origin_requires_matching_scheme() -> None:
+    """Web origin is scheme + host — an http:// link in an https index
+    is NOT same-origin (Codex review of PR #2213, finding 4)."""
+    downgraded = parse_llms_txt(
+        "# T\n\n- [A](http://docs.example.com/a)\n",
+        base_url="https://docs.example.com/llms.txt",
+    )
+    assert downgraded is not None
+    assert downgraded["sections"][0]["links"][0]["same_origin"] is False
 
 
 def test_parse_accepts_published_site_index() -> None:
