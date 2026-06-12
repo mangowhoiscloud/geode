@@ -1,9 +1,9 @@
 """Tool selection ranking — CL-A2 (Tool Selection as Search).
 
 Renamed from ``tool_search.py`` (PR-V1-PRE-CLEANUP, 2026-06-13): the old
-name collided with the ``ToolSearchTool`` meta-tool in
-``core.tools.registry`` — this module RANKS tools by episodic success,
-it does not search them.
+name collided with the ``tool_search`` meta-tool surface (now the
+hosted tool-search wiring in ``core/llm/providers/anthropic.py``) — this
+module RANKS tools by episodic success, it does not search them.
 
 GEODE's tool selection is currently the LLM's free choice each step —
 no policy. The cognitive-loop-uplift roadmap calls for an A*-style

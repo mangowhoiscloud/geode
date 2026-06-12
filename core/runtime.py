@@ -455,7 +455,13 @@ class GeodeRuntime:
         if not available:
             set_async_tool_executor(None)
             return {}
-        tool_defs = self.tool_registry.to_anthropic_tools_with_defer(
+        # PR-TOOL-SEARCH-WIRE (2026-06-13): plain serialization. The bespoke
+        # registry-level defer (to_anthropic_tools_with_defer + ToolSearchTool)
+        # was superseded by the official hosted tool-search wiring in
+        # core/llm/providers/anthropic.py — its defer_loading markers were
+        # stripped by the adapter key filter anyway, so this path never
+        # actually deferred on the wire.
+        tool_defs = self.tool_registry.to_anthropic_tools(
             policy=self.policy_chain,
             mode=mode,
         )

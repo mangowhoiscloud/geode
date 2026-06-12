@@ -596,7 +596,7 @@ async def retry_with_backoff_async(
 # ---------------------------------------------------------------------------
 
 _API_ALLOWED_KEYS = frozenset(
-    {"name", "description", "input_schema", "cache_control", "type", "strict"}
+    {"name", "description", "input_schema", "cache_control", "type", "strict", "defer_loading"}
 )
 
 # Models that support server-side context management + compaction beta.
@@ -644,6 +644,87 @@ _ANTHROPIC_NATIVE_TOOLS: list[dict[str, Any]] = [
     {"type": "web_search_20260209", "name": "web_search", "allowed_callers": ["direct"]},
     {"type": "web_fetch_20260209", "name": "web_fetch", "allowed_callers": ["direct"]},
 ]
+
+# Hosted tool-search tool (PR-TOOL-SEARCH-WIRE, 2026-06-13). Official
+# Messages API mechanism for large tool sets: deferred tools stay out of
+# the context window until the model discovers them; the API expands
+# tool_reference blocks server-side, preserving the prompt-cache prefix.
+# ref: https://platform.claude.com/docs/en/agents-and-tools/tool-use/tool-search-tool
+#   - ``defer_loading`` is an official tool-definition field
+#   - model support: Opus 4.0+ / Sonnet 4.0+ / Haiku 4.5+ / Fable 5
+#     (covers every model GEODE routes to this adapter)
+#   - constraints: at least one tool must stay non-deferred; the search
+#     tool itself must never carry defer_loading
+_TOOL_SEARCH_TOOL: dict[str, Any] = {
+    "type": "tool_search_tool_regex_20251119",
+    "name": "tool_search_tool_regex",
+}
+
+TOOL_DEFER_THRESHOLD = 16
+"""Tool count above which deferred loading activates (docs: 10+ tools is
+the good-use-case bar; GEODE ships ~60). Below it, defer adds a search
+round-trip for no context saving."""
+
+# Immediately-loaded core set — the high-frequency tools the loop should
+# never pay a search round-trip for. Everything else defers behind
+# tool_search. Kept here (provider-level) because defer_loading is an
+# Anthropic Messages API field; OpenAI-family adapters rebuild tool
+# definitions from name/description/schema, so the field never leaks.
+TOOL_SEARCH_ALWAYS_LOADED: frozenset[str] = frozenset(
+    {
+        "memory_search",
+        "memory_save",
+        "note_read",
+        "note_save",
+        "read_document",
+        "glob_files",
+        "grep_files",
+        "general_web_search",
+        "web_fetch",
+        "llms_txt_index",
+        "check_status",
+    }
+)
+
+
+def apply_tool_search_defer(
+    api_tools: list[dict[str, Any]],
+    *,
+    enabled: bool = True,
+    threshold: int = TOOL_DEFER_THRESHOLD,
+) -> list[dict[str, Any]]:
+    """Shape *api_tools* for the hosted tool-search tool.
+
+    Above *threshold*: every custom tool outside
+    :data:`TOOL_SEARCH_ALWAYS_LOADED` gets ``defer_loading: True`` and the
+    hosted search tool is prepended. Hosted/native entries (anything
+    carrying a ``type``) are never deferred — together with the core set
+    they satisfy the API's at-least-one-non-deferred invariant. Returns
+    the input unchanged when disabled, under threshold, or when nothing
+    would defer (a defer pass that defers zero tools is pure overhead).
+    """
+    if not enabled or len(api_tools) <= threshold:
+        return api_tools
+    shaped: list[dict[str, Any]] = []
+    deferred_count = 0
+    for tool in api_tools:
+        if tool.get("type") or tool.get("name", "") in TOOL_SEARCH_ALWAYS_LOADED:
+            shaped.append(tool)
+            continue
+        deferred_tool = dict(tool)
+        deferred_tool["defer_loading"] = True
+        shaped.append(deferred_tool)
+        deferred_count += 1
+    if not deferred_count:
+        return api_tools
+    log.info(
+        "tool_search defer active: %d/%d tool defs deferred behind %s",
+        deferred_count,
+        len(shaped) + 1,
+        _TOOL_SEARCH_TOOL["name"],
+    )
+    return [dict(_TOOL_SEARCH_TOOL), *shaped]
+
 
 # Computer-use tool (injected when enabled via settings)
 _COMPUTER_USE_TOOL: dict[str, Any] = {
@@ -750,6 +831,14 @@ class ClaudeAgenticAdapter:
         # Inject computer-use tool if enabled
         if is_computer_use_enabled() and "computer" not in existing_names:
             api_tools.append(_COMPUTER_USE_TOOL)
+
+        # PR-TOOL-SEARCH-WIRE — large tool sets defer behind the hosted
+        # tool-search tool (kill switch: settings.tool_search_defer).
+        from core.config import settings as _settings
+
+        api_tools = apply_tool_search_defer(
+            api_tools, enabled=getattr(_settings, "tool_search_defer", True)
+        )
 
         failover_models = [model] + [m for m in ANTHROPIC_FALLBACK_CHAIN if m != model]
 
