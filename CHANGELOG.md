@@ -45,6 +45,11 @@ functional change.
 
 ---
 
+## [0.99.189] - 2026-06-12
+
+### Added
+- **Docs markdown twins + true llms-full.txt — llms.txt publication side completed** (PR-LLMS-TXT-MD-TWINS, follow-up to the v0.99.188 consumer tool; what the llmstxt.org convention actually promises is a clean markdown version of each page, which the JSX-rendered docs never had — the old llms-full.txt even said "no markdown twins yet"). New post-build step `site/scripts/export-docs-md.mjs` (`npm run export-md`, wired into pages.yml after `npm run build`): extracts each docs page's `<article class="docs-prose">` from the static export, converts to markdown (turndown + GFM tables, custom bare-`<pre>` fence rule — docs code blocks have no nested `<code>`), prepends a sitemap-derived title/summary header, absolutizes internal links AND retargets docs links at sibling twins (twin-to-twin hops, no rendered-page tokens), and writes `out/docs/<slug>.md` so every rendered URL + `.md` serves the twin (66 pages). The same step assembles llms-full.txt as a TRUE full-content dump (240KB, per-page URL + Markdown twin link + full body) into `site/public/` (committed SoT) and `site/out/` (deploy artifact). `sync-stats.mjs` now points every docs link in llms.txt at the `.md` twin (header line documents the "drop .md for rendered" rule) and no longer writes llms-full.txt — single writer per file; its sitemap parser moved to the shared `site/scripts/sitemap-pages.mjs` (one parser, imported by both scripts — the v0.99.156 lost-sections drift came from exactly this duplication). Build/sitemap drift fails the deploy: a sitemap page with no built HTML or no docs-prose article exits 1. Guards: `.md`-twin link pin, full-content pin (size + fences + twin links), pages.yml step-order + single-writer pin in `tests/core/llm/test_llms_txt_discovery.py`.
+
 ## [0.99.188] - 2026-06-12
 
 ### Added

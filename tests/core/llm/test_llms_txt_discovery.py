@@ -92,3 +92,52 @@ def test_published_llms_full_txt_keeps_sections() -> None:
     section header. Pin that sections survive."""
     content = LLMS_FULL_TXT.read_text(encoding="utf-8")
     assert content.count("\n## ") >= 3, "section H2s missing — sitemap parser drift"
+
+
+def test_published_llms_txt_docs_links_target_md_twins() -> None:
+    """PR-LLMS-TXT-MD-TWINS — docs links must point at the clean markdown
+    twins (rendered URL + .md), not the Next.js-rendered HTML pages an LLM
+    pays hydration-payload tokens for."""
+    lines = LLMS_TXT.read_text(encoding="utf-8").splitlines()
+    docs_links = [ln for ln in lines if ln.startswith("- ") and "github.io/geode/docs" in ln]
+    assert docs_links, "no docs links in llms.txt"
+    bad = [ln for ln in docs_links if ".md)" not in ln]
+    assert not bad, f"docs links still target rendered pages: {bad[:3]}"
+
+
+def test_published_llms_full_txt_carries_page_content() -> None:
+    """llms-full.txt must be the TRUE full-content dump the llmstxt.org
+    convention promises (it used to be a summary-only index — the
+    'no markdown twins yet' era). Written post-build by export-docs-md.mjs."""
+    content = LLMS_FULL_TXT.read_text(encoding="utf-8")
+    assert len(content) > 100_000, "llms-full.txt regressed to a summary-only index"
+    assert "```" in content, "page bodies (code fences) missing — index-only regression"
+    assert "\nMarkdown: https://" in content, "per-page .md twin links missing"
+    # Indirect balanced-extraction pin (Codex review of PR #2218, finding 1):
+    # the changelog page nests 300+ inner <article>s; only a COMPLETE
+    # extraction exceeds the llms-full body cap and earns the explicit
+    # omission note. If extraction regresses to first-</article> truncation,
+    # the body shrinks under the cap and this note disappears.
+    assert "body omitted from llms-full" in content, (
+        "changelog body under cap — nested-<article> extraction truncated again?"
+    )
+
+
+def test_md_twin_export_is_wired_into_pages_deploy() -> None:
+    """The twins are build artifacts (converted from the static-export
+    HTML), so the export step must run in pages.yml after `npm run build`
+    — a script that exists but never runs ships zero twins. Single-writer
+    pin: sync-stats.mjs must NOT write llms-full.txt anymore."""
+    pages_yml = (REPO_ROOT / ".github" / "workflows" / "pages.yml").read_text(encoding="utf-8")
+    build_at = pages_yml.index("npm run build")
+    export_at = pages_yml.index("npm run export-md")
+    assert export_at > build_at, "export-md must run AFTER the static build"
+
+    export_script = REPO_ROOT / "site" / "scripts" / "export-docs-md.mjs"
+    assert export_script.exists(), "export-docs-md.mjs missing"
+    assert "llms-full.txt" in export_script.read_text(encoding="utf-8")
+
+    sync_stats = (REPO_ROOT / "site" / "scripts" / "sync-stats.mjs").read_text(encoding="utf-8")
+    assert "writeLlmsFullTxt" not in sync_stats, (
+        "sync-stats writes llms-full.txt again — two writers for one file"
+    )
