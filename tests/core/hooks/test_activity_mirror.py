@@ -77,9 +77,9 @@ def test_m1_typed_lifecycle_event_carries_typed_details() -> None:
 
 
 def test_m1_non_lifecycle_event_falls_through_to_generic() -> None:
-    """Non-lifecycle events (43 of 74) have no registry entry, so
-    they land via ``GenericActivityRow`` with the dotted action
-    inferred from the enum value."""
+    """A K-group event (MEMORY_SAVED) now mirrors as its concrete typed
+    row (PR-OBS-CONTRACT typed all 43 formerly-generic events). The
+    payload is the validated details schema, not a free-form dict."""
     with tempfile.TemporaryDirectory() as tmp, run_dir_scope(tmp):
         journal = RunTranscript(
             session_id="gen1-X",
@@ -89,16 +89,40 @@ def test_m1_non_lifecycle_event_falls_through_to_generic() -> None:
         )
         with run_transcript_scope(journal):
             hs = HookSystem()
-            hs.trigger(HookEvent.MEMORY_SAVED, {"memory_id": "m1", "kind": "episode"})
+            hs.trigger(HookEvent.MEMORY_SAVED, {"key": "recipe-pho", "persistent": True})
         rows = _read_rows(Path(tmp) / "transcript.jsonl")
         assert len(rows) == 1
         row = rows[0]
-        # Dotted action inferred from enum value
         assert row["action"] == "memory.saved"
-        # actor_type heuristic put memory into "agent"
         assert row["actor_type"] == "agent"
-        # Generic payload pass-through
-        assert row["payload"]["memory_id"] == "m1"
+        # Typed details schema — only declared fields, validated.
+        assert row["payload"] == {"key": "recipe-pho", "persistent": True}
+        assert row["entity_id"] == "recipe-pho"
+
+
+def test_m1b_builder_failure_falls_through_to_distinguishable_generic() -> None:
+    """A malformed payload (missing a required details field) must NOT
+    break the timeline — it fail-softs to ``GenericActivityRow`` carrying
+    a ``_fallback_reason`` so operators can tell a forced-generic row from
+    an intentionally-typed one (silent-fallback anti-pattern guard)."""
+    with tempfile.TemporaryDirectory() as tmp, run_dir_scope(tmp):
+        journal = RunTranscript(
+            session_id="gen1-Y",
+            gen_tag="gen1",
+            component="seed-generation",
+            path=Path(tmp) / "transcript.jsonl",
+        )
+        with run_transcript_scope(journal):
+            hs = HookSystem()
+            # MUTATION_APPLIED requires ``mutation_id`` — omit it.
+            hs.trigger(HookEvent.MUTATION_APPLIED, {"target_kind": "prompt"})
+        rows = _read_rows(Path(tmp) / "transcript.jsonl")
+        assert len(rows) == 1
+        row = rows[0]
+        assert row["action"] == "mutation.applied"
+        assert "_fallback_reason" in row["payload"], (
+            "forced-generic fallback must be distinguishable in the timeline"
+        )
 
 
 def test_m2_mirror_no_op_outside_run_transcript_scope() -> None:

@@ -6,21 +6,24 @@ Adapts paperclip's ``PluginEvent<TPayload>`` envelope
 (``~/workspace/paperclip/packages/plugins/sdk/src/types.ts:180``) and
 openclaw's ``z.discriminatedUnion("type")`` pattern
 (``~/workspace/openclaw/extensions/voice-call/src/types.ts:90``) to
-GEODE. Pre-PR-COMM-1 the 74 ``HookEvent`` payloads were untyped
+GEODE. Pre-PR-COMM-1 the ``HookEvent`` payloads were untyped
 ``dict[str, Any]`` — bugs only surfaced at the handler reading the dict.
 
-After PR-COMM-1 (S2 scope):
-  - 1 envelope (``ActivityRowBase``)
-  - 11 group bases (``LifecycleStartedRow`` / ``LifecycleCompletedRow`` /
-    ``LifecycleFailedRow`` / ``LifecycleRetriedRow`` / ``CognitiveStepRow`` /
-    ``AutoTriggerRow`` / ``StateChangeRow`` / ``CostBudgetRow`` /
-    ``MemoryMutationRow`` / ``McpServerRow`` / ``GenericActivityRow``)
-  - 32 lifecycle-pair concrete classes (A+B+C+D groups: 9 started + 13
-    completed + 9 failed + 1 retried) with discriminator on ``action``
-  - 42 non-lifecycle events fall through to ``GenericActivityRow``
+Structure (PR-OBS-CONTRACT, 2026-06-13 — full coverage):
+  - 1 envelope (``ActivityRowBase``) with ``schema_version``
+  - 4 lifecycle detail mixins (started / completed / failed / retried)
+  - 19 lifecycle concrete classes (A=6 started, B=7 completed, C=5 failed,
+    D=1 retried) with discriminator on ``action``
+  - 43 K-group concrete classes covering every remaining HookEvent, each
+    with a typed ``details`` sub-schema (23 shared details models — one per
+    event family, e.g. ``CognitivePhaseDetails`` for 6 cognitive phases)
+  - ``GenericActivityRow`` is now ONLY a fail-soft fallback (a typed
+    builder that hits a malformed payload), never a routine destination —
+    every one of the 62 events has a concrete typed row.
 
-Subsequent PRs (not in S2) will add concrete subclasses for the E-K
-groups as their schemas stabilise.
+Construction is centralized in ``activity_registry.py``: 19 lifecycle
+curry-builders + a single declarative ``_TYPED_ROW_SPECS`` table that drives
+all 43 K-group rows through one ``_build_from_spec`` builder.
 """
 
 from __future__ import annotations
@@ -32,9 +35,34 @@ from pydantic import BaseModel, ConfigDict, Field
 __all__ = [
     "ActivityRow",
     "ActivityRowBase",
-    "AutoTriggerRow",
-    "CognitiveStepRow",
-    "CostBudgetRow",
+    "AdapterDispatchAttemptDetails",
+    "AdapterDispatchAttemptRow",
+    "AutoTriggerDetails",
+    "AutoTriggerFiredRow",
+    "AutoTriggerIntervalBlockedRow",
+    "AutoTriggerLockBusyRow",
+    "AutoTriggerMaxGenerationReachedRow",
+    "AutoTriggerParseErrorRow",
+    "AutoTriggerRunnerErrorRow",
+    "BaselinePromotedDetails",
+    "BaselinePromotedRow",
+    "CognitiveActRow",
+    "CognitiveObserveRow",
+    "CognitivePerceiveRow",
+    "CognitivePhaseDetails",
+    "CognitivePlanRow",
+    "CognitiveReflectRow",
+    "CognitiveUpdateMemoryRow",
+    "ConfigReloadedDetails",
+    "ConfigReloadedRow",
+    "ContextCriticalRow",
+    "ContextOverflowActionRow",
+    "ContextPressureDetails",
+    "CostGuardDetails",
+    "CostLimitExceededRow",
+    "CostWarningRow",
+    "ExecutionCancelledDetails",
+    "ExecutionCancelledRow",
     "GenericActivityRow",
     "HandoffTriggeredRow",
     "LLMCallEndedRow",
@@ -49,24 +77,59 @@ __all__ = [
     "LifecycleRetriedRow",
     "LifecycleStartedDetails",
     "LifecycleStartedRow",
-    "McpServerRow",
-    "MemoryMutationRow",
+    "McpServerConnectedRow",
+    "McpServerDetails",
+    "McpServerFailedRow",
+    "MemorySavedDetails",
+    "MemorySavedRow",
+    "ModelSwitchedDetails",
+    "ModelSwitchedRow",
+    "MutationAppliedRow",
+    "MutationDetails",
+    "MutationProposedRow",
+    "MutationRejectedRow",
+    "MutationRevertedRow",
+    "PostAnalysisDetails",
+    "PostAnalysisRow",
+    "ProgramMdUnreadableDetails",
+    "ProgramMdUnreadableRow",
+    "PromptAssembledDetails",
+    "PromptAssembledRow",
+    "ReasoningMetricsDetails",
+    "ReasoningMetricsRow",
+    "RuleChangeDetails",
+    "RuleCreatedRow",
+    "RuleDeletedRow",
+    "RuleUpdatedRow",
     "SessionEndedRow",
     "SessionStartedRow",
-    "StateChangeRow",
+    "ShutdownStartedDetails",
+    "ShutdownStartedRow",
     "SubAgentCompletedRow",
     "SubAgentFailedRow",
     "SubAgentStartedRow",
+    "ToolApprovalDeniedRow",
+    "ToolApprovalDetails",
+    "ToolApprovalGrantedRow",
+    "ToolApprovalRequestedRow",
     "ToolExecEndedRow",
     "ToolExecFailedRow",
     "ToolExecStartedRow",
     "ToolRecoveryAttemptedRow",
     "ToolRecoveryFailedRow",
     "ToolRecoverySucceededRow",
+    "ToolResultOffloadedDetails",
+    "ToolResultOffloadedRow",
+    "ToolResultTransformDetails",
+    "ToolResultTransformRow",
+    "TriggerFiredDetails",
+    "TriggerFiredRow",
     "TurnCompletedRow",
     "TurnVerifyFailedRow",
     "TurnVerifyPassedRow",
     "TypedActivityRow",
+    "UserInputReceivedDetails",
+    "UserInputReceivedRow",
 ]
 
 
@@ -91,6 +154,11 @@ class ActivityRowBase(BaseModel):
     """
 
     model_config = ConfigDict(frozen=True, extra="forbid")
+
+    schema_version: int = 1
+    """Row-schema version (PR-OBS-CONTRACT, 2026-06-13). Bump when a
+    field is added/renamed/retyped on any row class so JSONL re-readers
+    can branch on shape instead of guessing from key presence."""
 
     ts: float
     run_id: str
@@ -167,53 +235,6 @@ class LifecycleRetriedDetails(BaseModel):
 class LifecycleRetriedRow(ActivityRowBase):
     level: Literal["info", "warn", "error"] = "warn"
     details: LifecycleRetriedDetails
-
-
-# Group E-K base classes (defined for forward-compat with subsequent PRs
-# that will add concrete subclasses; S2 routes these via GenericActivityRow).
-
-
-class CognitiveStepRow(ActivityRowBase):
-    """Group E — COGNITIVE_PERCEIVE / PLAN / ACT / OBSERVE / REFLECT /
-    UPDATE_MEMORY. Concrete subclasses pending."""
-
-    details: dict[str, Any] = Field(default_factory=dict)
-
-
-class AutoTriggerRow(ActivityRowBase):
-    """Group F — SELF_IMPROVING_AUTO_TRIGGER_* (5 events). Concrete
-    subclasses pending."""
-
-    details: dict[str, Any] = Field(default_factory=dict)
-
-
-class StateChangeRow(ActivityRowBase):
-    """Group G — MODEL_SWITCHED / TOOL_APPROVAL_* / VERIFICATION_* /
-    CONFIG_RELOADED. Concrete subclasses pending."""
-
-    details: dict[str, Any] = Field(default_factory=dict)
-
-
-class CostBudgetRow(ActivityRowBase):
-    """Group H — COST_WARNING / COST_LIMIT_EXCEEDED. Concrete
-    subclasses pending."""
-
-    level: Literal["info", "warn", "error"] = "warn"
-    details: dict[str, Any] = Field(default_factory=dict)
-
-
-class MemoryMutationRow(ActivityRowBase):
-    """Group I — MEMORY_SAVED / RULE_CREATED / RULE_UPDATED / RULE_DELETED.
-    Concrete subclasses pending."""
-
-    details: dict[str, Any] = Field(default_factory=dict)
-
-
-class McpServerRow(ActivityRowBase):
-    """Group J — MCP_SERVER_CONNECTED / MCP_SERVER_FAILED. Concrete
-    subclasses pending."""
-
-    details: dict[str, Any] = Field(default_factory=dict)
 
 
 class GenericActivityRow(ActivityRowBase):
@@ -340,6 +361,564 @@ class LLMCallRetriedRow(LifecycleRetriedRow):
 
 
 # ---------------------------------------------------------------------------
+# PR-OBS-CONTRACT (2026-06-13) — typed details for the formerly-generic 43.
+# Each class IS the payload contract for its event family; the HookEvent
+# enum carries a single pointer note instead of 43 scattered comments
+# (dual-SoT rule: one schema home). Privacy/size drops are explicit:
+# raw user input, full tool results, and cognitive-state snapshots are
+# NOT persisted — derived scalars stand in for them.
+# ---------------------------------------------------------------------------
+
+
+class AdapterDispatchAttemptDetails(BaseModel):
+    """ADAPTER_DISPATCH_ATTEMPT — one row per adapter try (dispatch.py)."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    adapter_name: str
+    provider: str = ""
+    source: str = ""
+    capability: str = ""
+    outcome: str = ""
+    elapsed_ms: float = 0.0
+    error_type: str = ""
+    error_msg: str = ""
+
+
+class BaselinePromotedDetails(BaseModel):
+    """BASELINE_PROMOTED — self-improving baseline SoT rotation."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    baseline_path: str
+    prior_baseline_path: str = ""
+    run_id: str = ""
+    reason: str = ""
+    ts: float = 0.0
+
+
+class CognitivePhaseDetails(BaseModel):
+    """COGNITIVE_* family — loop phase telemetry. The full
+    ``cognitive_state`` snapshot and raw ``user_input`` are intentionally
+    NOT persisted (size + privacy); ``input_len`` stands in."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    session_id: str = ""
+    round: int = 0
+    tool_names: tuple[str, ...] = ()
+    result_count: int = 0
+    input_len: int = 0
+
+
+class ConfigReloadedDetails(BaseModel):
+    """CONFIG_RELOADED — runtime config re-read."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    config_path: str = ""
+
+
+class ContextPressureDetails(BaseModel):
+    """CONTEXT_CRITICAL / CONTEXT_OVERFLOW_ACTION — context-budget
+    pressure. ``metrics`` is the ContextMetrics asdict (usage_pct,
+    estimated_tokens, context_window, ...)."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    metrics: dict[str, Any] = Field(default_factory=dict)
+    model: str = ""
+    provider: str = ""
+
+
+class CostGuardDetails(BaseModel):
+    """COST_WARNING / COST_LIMIT_EXCEEDED — session cost-cap telemetry."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    total_cost_usd: float
+    limit_usd: float
+    pct: float = 1.0
+
+
+class ExecutionCancelledDetails(BaseModel):
+    """EXECUTION_CANCELLED — isolated-execution subprocess cancel."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    session_id: str = ""
+    reason: str = ""
+
+
+class McpServerDetails(BaseModel):
+    """MCP_SERVER_CONNECTED / MCP_SERVER_FAILED."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    server_name: str
+    error: str = ""
+
+
+class MemorySavedDetails(BaseModel):
+    """MEMORY_SAVED — note/memory persistence. The CLI handler omits
+    ``persistent`` (defaults False) — accepted divergence."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    key: str = ""
+    persistent: bool = False
+
+
+class ModelSwitchedDetails(BaseModel):
+    """MODEL_SWITCHED — live-session model switch (trigger_async emit;
+    ``purged_ack_count`` = stale-ack purge count, PR-SIL-5THEME C5)."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    from_model: str = ""
+    to_model: str = ""
+    reason: str = ""
+    purged_ack_count: int = 0
+
+
+class MutationDetails(BaseModel):
+    """MUTATION_PROPOSED/APPLIED/REJECTED/REVERTED — scaffold mutation
+    lifecycle (reason populated on reject/revert)."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    mutation_id: str
+    target_kind: str = ""
+    target_path: str = ""
+    run_id: str = ""
+    reason: str = ""
+    ts: float = 0.0
+
+
+class PostAnalysisDetails(BaseModel):
+    """POST_ANALYSIS — scheduler trigger post-run summary."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    trigger_type: str = ""
+    automation_id: str = ""
+    session_id: str = ""
+    snapshot_id: str = ""
+    success: bool = True
+
+
+class ProgramMdUnreadableDetails(BaseModel):
+    """PROGRAM_MD_UNREADABLE — feedback hook (trigger_with_result)."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    path: str = ""
+
+
+class PromptAssembledDetails(BaseModel):
+    """PROMPT_ASSEMBLED — D4 X2 system-prompt rebuild telemetry."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    model: str = ""
+    provider: str = ""
+    reason: str = ""
+    x2_injected: bool = False
+    prompt_len: int = 0
+
+
+class ReasoningMetricsDetails(BaseModel):
+    """REASONING_METRICS — per-session reasoning economics."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    total_rounds: int = 0
+    thinking_tokens: int = 0
+    output_tokens: int = 0
+    thinking_ratio: float = 0.0
+    tool_calls_total: int = 0
+    empty_rounds: int = 0
+    cost_usd: float = 0.0
+    cost_per_tool_call: float | None = None
+    overthinking_detected: bool = False
+
+
+class AutoTriggerDetails(BaseModel):
+    """SELF_IMPROVING_AUTO_TRIGGER_* family — one terminal state per row."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    trigger_id: str
+    detail: str = ""
+    ts: float = 0.0
+
+
+class ShutdownStartedDetails(BaseModel):
+    """SHUTDOWN_STARTED — serve daemon shutdown entry."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    active_sessions: int = 0
+
+
+class ToolApprovalDetails(BaseModel):
+    """TOOL_APPROVAL_REQUESTED/GRANTED/DENIED — HITL gate telemetry."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    tool_name: str
+    safety_level: str = ""
+    always: bool = False
+    permission_level: str = ""
+    decision: str = ""
+    latency_ms: float = 0.0
+
+
+class ToolResultOffloadedDetails(BaseModel):
+    """TOOL_RESULT_OFFLOADED — large-result filesystem offload."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    ref_id: str = ""
+    original_tokens: int = 0
+    block_id: str = ""
+
+
+class ToolResultTransformDetails(BaseModel):
+    """TOOL_RESULT_TRANSFORM — feedback hook. The full ``result`` and
+    ``tool_input`` are intentionally NOT persisted (size)."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    tool_name: str = ""
+    has_error: bool = False
+
+
+class RuleChangeDetails(BaseModel):
+    """RULE_CREATED/UPDATED/DELETED — analysis-rule CRUD."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    name: str
+    paths: tuple[str, ...] = ()
+
+
+class TriggerFiredDetails(BaseModel):
+    """TRIGGER_FIRED — scheduler trigger callback success."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    trigger_id: str = ""
+    type: str = ""
+
+
+class UserInputReceivedDetails(BaseModel):
+    """USER_INPUT_RECEIVED — interceptor hook. Raw input is NOT
+    persisted (privacy, G9 lesson); ``input_len`` stands in."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    session_id: str = ""
+    input_len: int = 0
+
+
+# ---------------------------------------------------------------------------
+# Tier 3 — 43 K-group concrete classes (PR-OBS-CONTRACT, 2026-06-13)
+#
+# Each formerly-generic HookEvent now has a concrete typed row with a
+# Literal ``action`` discriminator + a typed ``details`` sub-schema. The
+# details models (shared across event families — one CognitivePhaseDetails
+# for 6 cognitive phases, one MutationDetails for 4 mutation verbs, one
+# AutoTriggerDetails for 6 auto-trigger terminal states) are defined above.
+# Construction is driven by the single declarative ``_TYPED_ROW_SPECS`` table
+# in activity_registry.py — NOT 43 hand-written builders.
+# ---------------------------------------------------------------------------
+
+
+class AdapterDispatchAttemptRow(ActivityRowBase):
+    action: Literal["adapter.dispatch.attempt"] = "adapter.dispatch.attempt"
+    entity_type: Literal["adapter"] = "adapter"
+    details: AdapterDispatchAttemptDetails
+
+
+class BaselinePromotedRow(ActivityRowBase):
+    action: Literal["baseline.promoted"] = "baseline.promoted"
+    entity_type: Literal["baseline"] = "baseline"
+    details: BaselinePromotedDetails
+
+
+class CognitivePerceiveRow(ActivityRowBase):
+    action: Literal["cognitive.perceive"] = "cognitive.perceive"
+    entity_type: Literal["cognitive"] = "cognitive"
+    details: CognitivePhaseDetails
+
+
+class CognitivePlanRow(ActivityRowBase):
+    action: Literal["cognitive.plan"] = "cognitive.plan"
+    entity_type: Literal["cognitive"] = "cognitive"
+    details: CognitivePhaseDetails
+
+
+class CognitiveActRow(ActivityRowBase):
+    action: Literal["cognitive.act"] = "cognitive.act"
+    entity_type: Literal["cognitive"] = "cognitive"
+    details: CognitivePhaseDetails
+
+
+class CognitiveObserveRow(ActivityRowBase):
+    action: Literal["cognitive.observe"] = "cognitive.observe"
+    entity_type: Literal["cognitive"] = "cognitive"
+    details: CognitivePhaseDetails
+
+
+class CognitiveReflectRow(ActivityRowBase):
+    action: Literal["cognitive.reflect"] = "cognitive.reflect"
+    entity_type: Literal["cognitive"] = "cognitive"
+    details: CognitivePhaseDetails
+
+
+class CognitiveUpdateMemoryRow(ActivityRowBase):
+    action: Literal["cognitive.update.memory"] = "cognitive.update.memory"
+    entity_type: Literal["cognitive"] = "cognitive"
+    details: CognitivePhaseDetails
+
+
+class ConfigReloadedRow(ActivityRowBase):
+    action: Literal["config.reloaded"] = "config.reloaded"
+    entity_type: Literal["config"] = "config"
+    details: ConfigReloadedDetails
+
+
+class ContextCriticalRow(ActivityRowBase):
+    level: Literal["info", "warn", "error"] = "warn"
+    action: Literal["context.critical"] = "context.critical"
+    entity_type: Literal["context"] = "context"
+    details: ContextPressureDetails
+
+
+class ContextOverflowActionRow(ActivityRowBase):
+    level: Literal["info", "warn", "error"] = "warn"
+    action: Literal["context.overflow.action"] = "context.overflow.action"
+    entity_type: Literal["context"] = "context"
+    details: ContextPressureDetails
+
+
+class CostWarningRow(ActivityRowBase):
+    level: Literal["info", "warn", "error"] = "warn"
+    action: Literal["cost.warning"] = "cost.warning"
+    entity_type: Literal["cost"] = "cost"
+    details: CostGuardDetails
+
+
+class CostLimitExceededRow(ActivityRowBase):
+    level: Literal["info", "warn", "error"] = "error"
+    action: Literal["cost.limit.exceeded"] = "cost.limit.exceeded"
+    entity_type: Literal["cost"] = "cost"
+    details: CostGuardDetails
+
+
+class ExecutionCancelledRow(ActivityRowBase):
+    level: Literal["info", "warn", "error"] = "warn"
+    action: Literal["execution.cancelled"] = "execution.cancelled"
+    entity_type: Literal["execution"] = "execution"
+    details: ExecutionCancelledDetails
+
+
+class McpServerConnectedRow(ActivityRowBase):
+    action: Literal["mcp.server.connected"] = "mcp.server.connected"
+    entity_type: Literal["mcp_server"] = "mcp_server"
+    details: McpServerDetails
+
+
+class McpServerFailedRow(ActivityRowBase):
+    level: Literal["info", "warn", "error"] = "error"
+    action: Literal["mcp.server.failed"] = "mcp.server.failed"
+    entity_type: Literal["mcp_server"] = "mcp_server"
+    details: McpServerDetails
+
+
+class MemorySavedRow(ActivityRowBase):
+    action: Literal["memory.saved"] = "memory.saved"
+    entity_type: Literal["memory"] = "memory"
+    details: MemorySavedDetails
+
+
+class RuleCreatedRow(ActivityRowBase):
+    action: Literal["rule.created"] = "rule.created"
+    entity_type: Literal["rule"] = "rule"
+    details: RuleChangeDetails
+
+
+class RuleUpdatedRow(ActivityRowBase):
+    action: Literal["rule.updated"] = "rule.updated"
+    entity_type: Literal["rule"] = "rule"
+    details: RuleChangeDetails
+
+
+class RuleDeletedRow(ActivityRowBase):
+    action: Literal["rule.deleted"] = "rule.deleted"
+    entity_type: Literal["rule"] = "rule"
+    details: RuleChangeDetails
+
+
+class ModelSwitchedRow(ActivityRowBase):
+    action: Literal["model.switched"] = "model.switched"
+    entity_type: Literal["model"] = "model"
+    details: ModelSwitchedDetails
+
+
+class PromptAssembledRow(ActivityRowBase):
+    action: Literal["prompt.assembled"] = "prompt.assembled"
+    entity_type: Literal["prompt"] = "prompt"
+    details: PromptAssembledDetails
+
+
+class ReasoningMetricsRow(ActivityRowBase):
+    action: Literal["reasoning.metrics"] = "reasoning.metrics"
+    entity_type: Literal["reasoning"] = "reasoning"
+    details: ReasoningMetricsDetails
+
+
+class MutationProposedRow(ActivityRowBase):
+    action: Literal["mutation.proposed"] = "mutation.proposed"
+    entity_type: Literal["mutation"] = "mutation"
+    details: MutationDetails
+
+
+class MutationAppliedRow(ActivityRowBase):
+    action: Literal["mutation.applied"] = "mutation.applied"
+    entity_type: Literal["mutation"] = "mutation"
+    details: MutationDetails
+
+
+class MutationRejectedRow(ActivityRowBase):
+    level: Literal["info", "warn", "error"] = "warn"
+    action: Literal["mutation.rejected"] = "mutation.rejected"
+    entity_type: Literal["mutation"] = "mutation"
+    details: MutationDetails
+
+
+class MutationRevertedRow(ActivityRowBase):
+    level: Literal["info", "warn", "error"] = "warn"
+    action: Literal["mutation.reverted"] = "mutation.reverted"
+    entity_type: Literal["mutation"] = "mutation"
+    details: MutationDetails
+
+
+class AutoTriggerFiredRow(ActivityRowBase):
+    action: Literal["self.improving.auto.trigger.fired"] = "self.improving.auto.trigger.fired"
+    entity_type: Literal["auto_trigger"] = "auto_trigger"
+    details: AutoTriggerDetails
+
+
+class AutoTriggerLockBusyRow(ActivityRowBase):
+    level: Literal["info", "warn", "error"] = "warn"
+    action: Literal["self.improving.auto.trigger.lock.busy"] = (
+        "self.improving.auto.trigger.lock.busy"
+    )
+    entity_type: Literal["auto_trigger"] = "auto_trigger"
+    details: AutoTriggerDetails
+
+
+class AutoTriggerIntervalBlockedRow(ActivityRowBase):
+    level: Literal["info", "warn", "error"] = "warn"
+    action: Literal["self.improving.auto.trigger.interval.blocked"] = (
+        "self.improving.auto.trigger.interval.blocked"
+    )
+    entity_type: Literal["auto_trigger"] = "auto_trigger"
+    details: AutoTriggerDetails
+
+
+class AutoTriggerRunnerErrorRow(ActivityRowBase):
+    level: Literal["info", "warn", "error"] = "error"
+    action: Literal["self.improving.auto.trigger.runner.error"] = (
+        "self.improving.auto.trigger.runner.error"
+    )
+    entity_type: Literal["auto_trigger"] = "auto_trigger"
+    details: AutoTriggerDetails
+
+
+class AutoTriggerParseErrorRow(ActivityRowBase):
+    level: Literal["info", "warn", "error"] = "warn"
+    action: Literal["self.improving.auto.trigger.parse.error"] = (
+        "self.improving.auto.trigger.parse.error"
+    )
+    entity_type: Literal["auto_trigger"] = "auto_trigger"
+    details: AutoTriggerDetails
+
+
+class AutoTriggerMaxGenerationReachedRow(ActivityRowBase):
+    level: Literal["info", "warn", "error"] = "warn"
+    action: Literal["self.improving.auto.trigger.max.generation.reached"] = (
+        "self.improving.auto.trigger.max.generation.reached"
+    )
+    entity_type: Literal["auto_trigger"] = "auto_trigger"
+    details: AutoTriggerDetails
+
+
+class ShutdownStartedRow(ActivityRowBase):
+    action: Literal["shutdown.started"] = "shutdown.started"
+    entity_type: Literal["shutdown"] = "shutdown"
+    details: ShutdownStartedDetails
+
+
+class ToolApprovalRequestedRow(ActivityRowBase):
+    action: Literal["tool.approval.requested"] = "tool.approval.requested"
+    entity_type: Literal["tool_approval"] = "tool_approval"
+    details: ToolApprovalDetails
+
+
+class ToolApprovalGrantedRow(ActivityRowBase):
+    action: Literal["tool.approval.granted"] = "tool.approval.granted"
+    entity_type: Literal["tool_approval"] = "tool_approval"
+    details: ToolApprovalDetails
+
+
+class ToolApprovalDeniedRow(ActivityRowBase):
+    level: Literal["info", "warn", "error"] = "warn"
+    action: Literal["tool.approval.denied"] = "tool.approval.denied"
+    entity_type: Literal["tool_approval"] = "tool_approval"
+    details: ToolApprovalDetails
+
+
+class ToolResultOffloadedRow(ActivityRowBase):
+    action: Literal["tool.result.offloaded"] = "tool.result.offloaded"
+    entity_type: Literal["tool_result"] = "tool_result"
+    details: ToolResultOffloadedDetails
+
+
+class ToolResultTransformRow(ActivityRowBase):
+    action: Literal["tool.result.transform"] = "tool.result.transform"
+    entity_type: Literal["tool_result"] = "tool_result"
+    details: ToolResultTransformDetails
+
+
+class PostAnalysisRow(ActivityRowBase):
+    action: Literal["post.analysis"] = "post.analysis"
+    entity_type: Literal["trigger"] = "trigger"
+    details: PostAnalysisDetails
+
+
+class ProgramMdUnreadableRow(ActivityRowBase):
+    level: Literal["info", "warn", "error"] = "warn"
+    action: Literal["program.md.unreadable"] = "program.md.unreadable"
+    entity_type: Literal["program_md"] = "program_md"
+    details: ProgramMdUnreadableDetails
+
+
+class TriggerFiredRow(ActivityRowBase):
+    action: Literal["trigger.fired"] = "trigger.fired"
+    entity_type: Literal["trigger"] = "trigger"
+    details: TriggerFiredDetails
+
+
+class UserInputReceivedRow(ActivityRowBase):
+    action: Literal["user.input.received"] = "user.input.received"
+    entity_type: Literal["user_input"] = "user_input"
+    details: UserInputReceivedDetails
+
+
+# ---------------------------------------------------------------------------
 # Discriminated union — openclaw NormalizedEventSchema parity
 # ---------------------------------------------------------------------------
 
@@ -369,6 +948,50 @@ TypedActivityRow = Annotated[
         TurnVerifyFailedRow,
         # D
         LLMCallRetriedRow,
+        # K (PR-OBS-CONTRACT — 43 formerly-generic events)
+        AdapterDispatchAttemptRow,
+        BaselinePromotedRow,
+        CognitivePerceiveRow,
+        CognitivePlanRow,
+        CognitiveActRow,
+        CognitiveObserveRow,
+        CognitiveReflectRow,
+        CognitiveUpdateMemoryRow,
+        ConfigReloadedRow,
+        ContextCriticalRow,
+        ContextOverflowActionRow,
+        CostWarningRow,
+        CostLimitExceededRow,
+        ExecutionCancelledRow,
+        McpServerConnectedRow,
+        McpServerFailedRow,
+        MemorySavedRow,
+        RuleCreatedRow,
+        RuleUpdatedRow,
+        RuleDeletedRow,
+        ModelSwitchedRow,
+        PromptAssembledRow,
+        ReasoningMetricsRow,
+        MutationProposedRow,
+        MutationAppliedRow,
+        MutationRejectedRow,
+        MutationRevertedRow,
+        AutoTriggerFiredRow,
+        AutoTriggerLockBusyRow,
+        AutoTriggerIntervalBlockedRow,
+        AutoTriggerRunnerErrorRow,
+        AutoTriggerParseErrorRow,
+        AutoTriggerMaxGenerationReachedRow,
+        ShutdownStartedRow,
+        ToolApprovalRequestedRow,
+        ToolApprovalGrantedRow,
+        ToolApprovalDeniedRow,
+        ToolResultOffloadedRow,
+        ToolResultTransformRow,
+        PostAnalysisRow,
+        ProgramMdUnreadableRow,
+        TriggerFiredRow,
+        UserInputReceivedRow,
     ],
     Field(discriminator="action"),
 ]

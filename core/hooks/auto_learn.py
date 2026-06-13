@@ -240,6 +240,8 @@ def make_auto_learn_handler(
                     last_learn_ts = now
                     log.debug("auto-learn: saved [%s] %s", category, pattern_text[:60])
             except Exception:
-                log.debug("auto-learn: failed to save pattern", exc_info=True)
+                # PR-OBS-CONTRACT — losing a learned pattern is a user-
+                # visible feature failure; surface it once at WARNING.
+                log.warning("auto-learn: failed to save pattern", exc_info=True)
 
     return ("turn_auto_learn", _on_turn_complete)

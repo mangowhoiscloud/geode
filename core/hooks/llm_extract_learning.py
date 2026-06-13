@@ -122,6 +122,9 @@ async def _call_budget_llm(prompt: str) -> str | None:
         log.debug("LLM extract: single attempt transient failure")
         return None
     except Exception:
+        # Expected degrade (no key / quota / offline) — extraction is an
+        # optional enrichment, so debug is the right level; the save path
+        # below warns because losing an EXTRACTED pattern is data loss.
         log.debug("LLM extract call failed", exc_info=True)
         return None
     return result.text or None
@@ -228,6 +231,8 @@ def make_llm_extract_handler() -> tuple[str, Callable[..., Awaitable[None]]]:
                         pattern_text[:80],
                     )
             except Exception:
-                log.debug("LLM extract save failed", exc_info=True)
+                # PR-OBS-CONTRACT — extracted-but-unsaved is silent data
+                # loss; surface at WARNING.
+                log.warning("LLM extract save failed", exc_info=True)
 
     return ("turn_llm_extract", _on_turn_complete)
