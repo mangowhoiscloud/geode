@@ -481,6 +481,7 @@ class SubAgentManager:
         *,
         on_progress: Callable[[SubResult], None] | None = None,
         announce: bool = True,
+        default_model: str = "",
     ) -> list[SubResult]:
         """Async sibling of :meth:`delegate` — ``asyncio.gather`` based fan-out.
 
@@ -580,7 +581,7 @@ class SubAgentManager:
             )
             fn_or_request: Any
             if self._action_handlers is not None:
-                fn_or_request = self._build_worker_request(task)
+                fn_or_request = self._build_worker_request(task, default_model=default_model)
             else:
                 # _execute_subtask is bound method; arun expects callable
                 # passed via args/kwargs. The thread-mode path is sync.
@@ -719,7 +720,7 @@ class SubAgentManager:
             child_result.status,
         )
 
-    def _build_worker_request(self, task: SubTask) -> WorkerRequest:
+    def _build_worker_request(self, task: SubTask, *, default_model: str = "") -> WorkerRequest:
         """Build a WorkerRequest for subprocess execution (Phase 2).
 
         The subprocess inherits API keys via env vars. Model config and
@@ -760,7 +761,13 @@ class SubAgentManager:
         # didn't declare one — the worker falls back to
         # ``agent_allowed_tools`` (legacy) or the ``_default`` toolkit.
         agent_toolkit = ""
-        worker_model = settings.model
+        # PR-SUBAGENT-MODEL-ALIGN (2026-06-14) — base model is the loop's LIVE
+        # model (forwarded from the delegate_task ToolContext) so delegation
+        # tracks a mid-session ``/model`` switch, symmetric with web_search.
+        # ``settings.model`` is the fallback for callers without a live context
+        # (services bootstrap / tests). AgentDefinition + per-task overrides
+        # below still win, preserving the voter/agent-model semantics.
+        worker_model = default_model or settings.model
         if agent_ctx is not None:
             agent_name = str(agent_ctx.get("agent_name", ""))
             agent_system_prompt = str(agent_ctx.get("system_prompt", ""))

@@ -122,9 +122,15 @@ async def anthropic_complete_text(
 async def openai_web_search(
     client: Any, *, query: str, max_results: int, model: str, adapter_name: str
 ) -> WebSearchResult:
-    """OpenAI Responses API ``web_search`` hosted tool. PAYG only — the Codex
-    backend subscription endpoint does not advertise web_search support
-    (frontier audit 2026-05-28)."""
+    """OpenAI PAYG Responses API ``web_search`` hosted tool.
+
+    This is the **PAYG** path. The Codex **subscription** backend has its OWN
+    ``web_search`` implementation in ``codex_oauth.CodexOAuthAdapter.aweb_search``
+    — it requires the ``instructions`` field + a typed ``input`` list that PAYG
+    treats as optional (PR-NO-FALLBACK; the two 400s + a 200 OK proved the Codex
+    backend exposes the tool). Both OpenAI sources support web_search; they just
+    use different request shapes (PR-SUBAGENT-MODEL-ALIGN — corrected the stale
+    "Codex does not support web_search" claim)."""
     response = await client.responses.create(
         model=model,
         tools=[{"type": "web_search"}],
