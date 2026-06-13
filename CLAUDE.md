@@ -8,7 +8,7 @@
 
 A general-purpose autonomous execution agent. The core runtime is an **AgenticLoop** (`while tool_use`) — sub-agents, plans, and batches are all instances of the same loop. Autonomously performs research, analysis, automation, and scheduling.
 
-- **Version**: 0.99.209
+- **Version**: 0.99.210
 - **Python**: >= 3.12
 - **Package Manager**: uv
 - **Entry Points**: `geode` (`core.cli:app`, Typer) / `geode-mcp` (`core.mcp_server:main`)
@@ -259,7 +259,9 @@ See `geode-changelog` skill.
 
 #### 6. PR & Merge
 
-See `geode-gitflow` skill. **Flow**: `feature → develop` (per-change), then for releases `release/* → develop → main` (the release branch carries stamp + CHANGELOG bumps; it merges into develop *first* so develop never lags behind main on those files; develop → main is then a straight pass-through). HEREDOC PR. CI 5/5 required. `.github/workflows/auto-backmerge.yml` is the safety net — fires only if some past release skipped the rotation and develop drifts behind main.
+See `geode-gitflow` skill. **Flow**: `feature → develop` **squash-merged** (one commit per change — collapses Codex-round fix commits; no per-feature merge commit on main), then `develop → main` pass-through `--merge`. HEREDOC PR. CI 5/5 required.
+
+> **Before EVERY `develop → main` merge, sync `main → develop` first** (`gh pr create --base develop --head main` → merge) so develop ⊇ main and never merges while lagging. The only recurring main-only drift is the kanban (`docs/progress.md`, committed on main post-merge); the pre-sync pulls the prior cycle's kanban into develop each time, so it self-heals and never accumulates. *This replaces the deleted `auto-backmerge.yml` workflow, which fired on every push to main and piled up unmerged main→develop PRs (10 open at once, 2026-06-14) because the feature/main divergence is never a fast-forward. Manual pre-sync is the single, deliberate back-merge per cycle.*
 
 **PR Body Template (MANDATORY):**
 
@@ -305,8 +307,9 @@ worktree, and the local branch. Tear all three down — in this order, because
 the order is load-bearing:
 
 ```bash
-# 1) Merge + delete the REMOTE branch in one option (never chain && git push --delete)
-gh pr merge <PR#> --merge --delete-branch        # cf. [[feedback_merge_then_delete]]
+# 1) Merge + delete the REMOTE branch in one option (never chain && git push --delete).
+#    feature → develop = --squash (one commit/feature); develop → main = --merge.
+gh pr merge <PR#> --squash --delete-branch       # feature→develop; cf. [[feedback_merge_then_delete]]
 
 # 2) Remove the WORKTREE first — `git branch -d` REFUSES to delete a branch a
 #    worktree still holds, so worktree-remove must precede branch-delete.
