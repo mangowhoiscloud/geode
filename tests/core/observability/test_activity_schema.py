@@ -428,3 +428,24 @@ def test_k4_fallback_path_also_scrubs_raw_content() -> None:
     assert secret not in str(payload), "raw content must not survive the fallback path"
     # The derived signal is preserved even on the fallback path.
     assert payload.get("input_len") == len(secret)
+
+
+def test_k5_fallback_reason_never_echoes_field_values() -> None:
+    """`_fallback_reason` must describe WHY a builder failed (error type +
+    field loc) WITHOUT echoing the offending VALUE — pydantic's
+    `str(ValidationError)` embeds `input_value=...`, which would carry raw
+    content into the persisted row (Codex review BLOCKER #2). The secret is
+    the value of the field (`input_len`) that fails int-parsing; the reason
+    must name the field but not its value."""
+    secret = "SENSITIVE-VALUE-1234"
+    row = map_hook_to_activity(
+        HookEvent.USER_INPUT_RECEIVED,
+        {"session_id": "s1", "input_len": secret},  # wrong type -> ValidationError
+        run_id="r1",
+    )
+    assert isinstance(row, GenericActivityRow)
+    reason = row.details["_fallback_reason"]
+    # The reason carries the failing field name + error type, never the value.
+    assert "input_len" in reason
+    assert "int_parsing" in reason
+    assert secret not in reason, "fallback reason must not echo the raw field value"

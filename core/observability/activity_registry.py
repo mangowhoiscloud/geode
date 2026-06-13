@@ -375,7 +375,13 @@ class _TypedRowSpec:
 # would otherwise leak via ``details=data`` exactly what the typed row drops
 # (Codex MCP review BLOCKER, 2026-06-13 — graceful contract must hold at
 # EVERY exit, not just the typed one).
-_TIMELINE_FORBIDDEN_KEYS = frozenset({"user_input", "cognitive_state", "tool_input", "result"})
+# ``args_preview`` is a bounded display string but ``approval._write_summary``
+# can fill it from ``tool_input["content"][:80]`` — i.e. up to 80 chars of raw
+# tool content — so it is forbidden from the fail-soft path too (Codex MCP
+# review MAJOR). Typed approval rows already drop it (not a declared field).
+_TIMELINE_FORBIDDEN_KEYS = frozenset(
+    {"user_input", "cognitive_state", "tool_input", "result", "args_preview"}
+)
 
 
 def _derive_input_len(data: dict[str, Any]) -> dict[str, Any]:
@@ -759,13 +765,33 @@ def map_hook_to_activity(
             )
             # PR-OBS-CONTRACT — a fallback row must be distinguishable
             # from an intentionally-generic row IN THE TIMELINE, not
-            # only in the daemon log (silent-fallback anti-pattern).
+            # only in the daemon log (silent-fallback anti-pattern). The
+            # reason is value-free (see :func:`_safe_fallback_reason`) so a
+            # ValidationError that echoes a raw field value never leaks it
+            # into the persisted row (Codex MCP review BLOCKER #2).
             return _build_generic(
                 event,
-                {**payload, "_fallback_reason": f"{type(exc).__name__}: {exc}"},
+                {**payload, "_fallback_reason": _safe_fallback_reason(exc)},
                 run_id=run_id,
             )
     return _build_generic(event, payload, run_id=run_id)
+
+
+def _safe_fallback_reason(exc: Exception) -> str:
+    """Describe WHY a typed builder failed without echoing any field VALUE.
+
+    ``str(ValidationError)`` embeds ``input_value=...`` and a plain
+    ``ValueError``/``TypeError`` message often embeds the offending value
+    (``could not convert string to float: '<value>'``) — either would carry
+    raw content into the persisted timeline row. So we record only the error
+    type + field location for pydantic, and only the class name otherwise."""
+    if isinstance(exc, ValidationError):
+        locs = [
+            f"{err.get('type', '?')}@{'.'.join(str(p) for p in err.get('loc', ()))}"
+            for err in exc.errors(include_input=False, include_url=False)
+        ]
+        return f"ValidationError[{'; '.join(locs)}]"
+    return type(exc).__name__
 
 
 def _build_generic(
