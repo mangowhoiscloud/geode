@@ -17,7 +17,7 @@
 <!-- Move items here when work begins. -->
 <!-- 3-Checkpoint: (1) alloc → (2) merge (CI 5/5) → (3) verify -->
 
-- [ ] 시스템 프롬프트 어셈블 + 리팩토링 — ~/workspace/resume의 fable5 프롬프트를 1급 예시로 GEODE 프롬프트 표면(router/program/decomposer/commentary/도구 설명) slop·부실 지점 전수 감사 → 일괄 개선 계획부터. P0(dump)·P2-a(구조결함) 완료, 잔여 P2-b(router.md/AGENTIC_SUFFIX 루브릭 산문)·P2-c(60 도구 설명 trigger-pass)·P3(가드 확장+토큰 실측)
+- [ ] 시스템 프롬프트 어셈블 + 리팩토링 — fable5 프롬프트(CL4R1T4S 공개 출처)를 1급 예시로 GEODE 프롬프트 표면(router/program/decomposer/commentary/도구 설명) slop·부실 지점 전수 감사 → 일괄 개선 계획부터. P0(dump)·P2-a(구조결함) 완료, 잔여 P2-b(router.md/AGENTIC_SUFFIX 루브릭 산문)·P2-c(60 도구 설명 trigger-pass)·P3(가드 확장+토큰 실측)
 - [ ] v1.0.0 스탬프 — 사전 정리(.190)+tool-search(.191) 완료, 위 작업 후 릴리스
 - [ ] H11-tail — routing 상수 모듈레벨 by-value 별칭 해동(core/llm/providers/{anthropic,openai,codex,glm}.py DEFAULT_*/FALLBACK_MODELS + core/skills/agents.py dataclass 기본값) — reload 후에도 boot-frozen, 호출자 스윕 필요. + H1(데몬 client-cwd 세션 해석)은 별도 결정
 
