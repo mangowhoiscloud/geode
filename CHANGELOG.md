@@ -45,6 +45,11 @@ functional change.
 
 ---
 
+## [0.99.204] - 2026-06-14
+
+### Fixed
+- **Self-improving hub harness chip relabels the OpenAI subscription lane `Codex` → `ChatGPT`** (PR-HUB-CODEX-LABEL; operator report). The `openai-codex` prefix is the **ChatGPT subscription** OAuth lane (`core.config.credential_source.OPENAI_CODEX` "OpenAI OAuth via the Codex CLI / ChatGPT subscription"; `core.llm.adapters.codex_oauth` "ChatGPT subscription OAuth path via Codex backend"), but the hub chip showed the opaque CLI name `Codex` — unlike the parallel `Claude Code` chip, which reveals its provider, `Codex` hid that the run was a GPT/ChatGPT subscription. `scripts/build_self_improving_hub.py` `HARNESS_MAP` now labels `codex` / `openai-codex` as `ChatGPT` (the CSS class stays `codex`), and the three chip legends say "ChatGPT subscription, Codex CLI OAuth". The generic "ChatGPT" label (no tier) avoids both the prior `Codex` mislabel and the `ChatGPT Plus` tier-hallucination (cf. the gpt-5.4-mini "Codex (Plus)" PAYG mislabel pinned by `test_provider_label_consistency.py`, and PR-FIX-CHATGPT-PLAN-HALLUCINATION's dynamic `chatgpt_plan_label`). The legend was updated in all 10 hub templates (seed-gen + main + 7 autoresearch), so 559 committed hub HTML pages (every page carrying the harness chip legend or an `openai-codex` chip) were regenerated for label consistency. Guard: `tests/scripts/test_seedgen_harness_models.py` + `tests/core/self_improving/test_self_improving_hub_e2e.py`.
+
 ## [0.99.203] - 2026-06-14
 
 ### Fixed

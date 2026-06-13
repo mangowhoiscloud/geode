@@ -92,9 +92,11 @@ def test_chips_render_real_models_not_hardcoded_claude_code() -> None:
     # the actual models appear...
     assert "claude-opus-4-8" in html
     assert "gpt-5.5" in html
-    # ...with the right chips: Claude Code (cli), Codex (codex), PAYG (anthropic)
+    # ...with the right chips: Claude Code (cli), ChatGPT (openai-codex
+    # subscription lane — NOT the opaque "Codex" CLI name), PAYG (anthropic)
     assert "Claude Code" in html
-    assert "Codex" in html
+    assert "ChatGPT" in html
+    assert "Codex" not in html  # the openai-codex lane reveals the ChatGPT subscription
     assert "PAYG" in html
     # regression: the former hardcoded wrong version must NOT appear
     assert "claude-opus-4-7" not in html
