@@ -31,7 +31,7 @@ def test_unset_wrapper_override_keeps_default_wrapper() -> None:
 
     assert "You are an autonomous execution agent" in prompt
     assert "AUTORESEARCH_MUTATED_WRAPPER" not in prompt
-    assert "<math_formatting>" in prompt
+    assert "## Math formatting" in prompt
 
 
 def test_valid_wrapper_override_replaces_default_wrapper(
@@ -51,7 +51,7 @@ def test_valid_wrapper_override_replaces_default_wrapper(
     assert "You are an autonomous execution agent" not in prompt
     assert "AUTORESEARCH_MUTATED_WRAPPER" in prompt
     assert "Preserve tool-call discipline under mutation." in prompt
-    assert "<math_formatting>" in prompt
+    assert "## Math formatting" in prompt
     assert "<dynamic_context>" in prompt
 
 

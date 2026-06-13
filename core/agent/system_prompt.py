@@ -34,7 +34,7 @@ from core.agent.style_guide_policy import (
 from core.llm.model_guidance import render_model_guidance
 from core.llm.platform_hints import render_platform_hint
 from core.llm.prompt_assembler import with_math_output_formatting
-from core.llm.prompts import ROUTER_SYSTEM
+from core.llm.prompts import AGENTIC_SUFFIX, ROUTER_SYSTEM
 from core.paths import GLOBAL_WRAPPER_SECTIONS_PATH, get_project_root
 
 log = logging.getLogger(__name__)
@@ -267,7 +267,10 @@ def build_system_prompt(model: str = "") -> str:
         parts.append(_build_date_context())
         dynamic = PROMPT_CACHE_BOUNDARY + "\n\n" + "\n\n".join(parts)
         _emit_scaffold_diag(wrapper_override, audit_mode=True)
-        return static + "\n\n" + dynamic
+        # PR-PROMPT-P2A — AGENTIC_SUFFIX is authored-static (cache zone) and
+        # the dynamic envelope must CLOSE (B1: it had shipped unterminated
+        # on every call since the 2026-05-12 XML conversion).
+        return static + "\n\n" + AGENTIC_SUFFIX + "\n\n" + dynamic + "\n\n</dynamic_context>"
 
     static = with_math_output_formatting(wrapper_override or _generic_static_prefix())
 
@@ -328,7 +331,22 @@ def build_system_prompt(model: str = "") -> str:
     dynamic = "\n\n".join(dynamic_parts)
 
     _emit_scaffold_diag(wrapper_override, audit_mode=False)
-    return static + "\n\n" + PROMPT_CACHE_BOUNDARY + "\n\n" + dynamic
+    # PR-PROMPT-P2A — composition: [authored static incl. AGENTIC_SUFFIX,
+    # markdown, cache-stable] // <dynamic_context> [injected per-turn XML
+    # envelopes] </dynamic_context>. Moving the suffix out of the loop-level
+    # post-dynamic append means memory churn no longer invalidates the cache
+    # prefix that carries the core behaviour rules; closing the envelope
+    # fixes B1 (unterminated tag on every call).
+    return (
+        static
+        + "\n\n"
+        + AGENTIC_SUFFIX
+        + "\n\n"
+        + PROMPT_CACHE_BOUNDARY
+        + "\n\n"
+        + dynamic
+        + "\n\n</dynamic_context>"
+    )
 
 
 def format_current_date() -> str:
@@ -480,7 +498,6 @@ def _build_user_context() -> str:
     Sources:
       ~/.geode/user_profile/profile.md   — role, expertise, bio
       ~/.geode/user_profile/preferences.json — language, output format
-      ~/.geode/user_profile/learned.md   — learned patterns
       ~/.geode/identity/career.toml      — career summary
 
     IMPORTANT: This is the USER's profile, not GEODE's identity.
@@ -502,11 +519,13 @@ def _build_user_context() -> str:
         if career_summary:
             parts.append(f"Career: {career_summary}")
 
-        # Learned patterns (last 5)
-        learned = profile.get_learned_patterns()
-        if learned:
-            recent = learned[:5]
-            parts.append("Learned: " + " | ".join(recent))
+        # PR-PROMPT-P2A (B2) — learned patterns are NOT injected here.
+        # This builder shipped raw ``get_learned_patterns()`` rows (prior-
+        # turn transcripts, error strings like "Max agentic rounds reached",
+        # mid-sentence truncation) straight into every call, bypassing the
+        # G9 sanitizer — the exact leak G9 was built to stop, surviving in
+        # the SYMMETRIC builder (Conditional Read Parity). Single channel:
+        # ``_build_learning_context`` (G3, <agent_learning>, sanitized).
 
         if not parts:
             return ""

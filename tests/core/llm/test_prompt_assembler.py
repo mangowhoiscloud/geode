@@ -28,7 +28,7 @@ def test_with_math_output_formatting_appends_instruction() -> None:
     result = with_math_output_formatting(system)
 
     assert result == system + "\n\n" + MATH_OUTPUT_FORMATTING_INSTRUCTION
-    assert "<math_formatting>" in result
+    assert "## Math formatting" in result
     assert "Inline math: wrap with `$...$`" in result
     assert "Display math: put `$$...$$` on its own lines" in result
     assert "$r_t = (P_t - P_{t-1}) / P_{t-1}$" in result

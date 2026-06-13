@@ -45,6 +45,14 @@ functional change.
 
 ---
 
+## [0.99.195] - 2026-06-13
+
+### Fixed
+- **Assembled-prompt structural defects (prompt-refactor P2-a; found by the P1 rubric audit over real `geode prompt dump` artifacts)** (PR-PROMPT-P2A). **B1 — the `<dynamic_context>` envelope had shipped UNTERMINATED on every call** since the 2026-05-12 XML conversion (18/18 dumped cells, zero closing tags): both assembly branches now close it. **B2 — the G9 learned-pattern sanitizer was bypassed by the symmetric builder**: `_build_user_context` joined raw `get_learned_patterns()` rows (prior-turn transcripts, error strings like "Max agentic rounds reached", mid-sentence truncation) into every call while `_build_learning_context` sanitized the same source — the exact Conditional Read Parity class; the unsanitized channel is deleted (single channel: G3 `<agent_learning>`). Conflicting tool-failure contracts unified (Agentic-execution bullet vs Grounding rule 5 prescribed different all-tools-failed behaviour — one contract now lives in Grounding rule 5 with the `[Unverified]` labeling rule folded in); duplicate "concise + user's language" line dropped.
+
+### Changed
+- **Two-zone markup rule + cache-stable suffix** — frontier-aligned convention (Codex CLI = pure markdown, claude.ai Fable 5 = XML containers, Claude Code = authored-md / injected-XML hybrid; GEODE is multi-provider so the Claude Code split wins): authored static instructions are markdown, runtime-injected content is XML envelopes. `<math_formatting>` (authored) became a `## Math formatting` section; **`AGENTIC_SUFFIX` moved from the loop-level post-dynamic append into the base's static zone** — the core behaviour rules now sit BEFORE `<dynamic_context>`, so per-turn memory churn no longer invalidates their cache prefix (override-spawn path still appends, documented). Measured effect across the 18-cell matrix: **4,942-5,087 → 4,174-4,319 tokens (~-770/call, -15.5%)**, duplicate tags still zero. AGENTIC_SUFFIX hash re-pinned `f8a38f80fc90`. NOTE: the audit-mode branch composition changed too (suffix into static + closed envelope) — petri baselines measured on the old composition are stale; re-measure before the next promote gate.
+
 ## [0.99.194] - 2026-06-13
 
 ### Added
