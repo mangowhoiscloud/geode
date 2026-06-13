@@ -130,7 +130,11 @@ def _build_computer_use_handler() -> dict[str, Any]:
     harness = ComputerUseHarness()
 
     async def handle_computer(**kwargs: Any) -> dict[str, Any]:
-        action = kwargs.get("action", "screenshot")
+        # ``pop`` (not ``get``) — ``aexecute(action, **kwargs)`` passes
+        # ``action`` positionally, so leaving it in ``kwargs`` raised
+        # "got multiple values for argument 'action'" on every non-default
+        # call (the tool was never live-exercised, so the crash stayed latent).
+        action = kwargs.pop("action", "screenshot")
         return await harness.aexecute(action, **kwargs)
 
     return {"computer": handle_computer}

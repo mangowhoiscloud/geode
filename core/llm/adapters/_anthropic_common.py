@@ -27,6 +27,11 @@ from core.llm.adapters.base import (
     UsageSummary,
 )
 
+# Computer-use display dims live in the harness module (single SoT) so the
+# injected tool DEFINITION and the local executor never drift.
+from core.tools.computer_use import TARGET_HEIGHT as _COMPUTER_DISPLAY_HEIGHT
+from core.tools.computer_use import TARGET_WIDTH as _COMPUTER_DISPLAY_WIDTH
+
 if TYPE_CHECKING:
     import anthropic
 
@@ -92,6 +97,70 @@ def translate_tool(tool: ToolSpec) -> dict[str, Any]:
     }
 
 
+# Anthropic beta-header token for the computer-use tool.
+#
+# Two SEPARATE versioning axes (do not conflate):
+#   * tool SCHEMA version — ``computer_20251124`` (Nov 2025), the current
+#     action set / params (ctx7 ``beta_tool_computer_use_20251124_param.py``:
+#     display_width_px / display_height_px / display_number).
+#   * feature-gate beta HEADER — ``computer-use-2025-01-24``, held stable by
+#     Anthropic. ctx7 ``anthropic_beta_param.py`` is fresh to 2026-06 (carries
+#     ``server-side-fallback-2026-06-01`` …) yet the ONLY computer-use strings
+#     remain ``2024-10-22`` / ``2025-01-24`` — there is no ``computer-use-2026-*``.
+#     So the low date is the CURRENT (only) gate, not a stale pick; it pairs
+#     with the latest ``_20251124`` schema.
+# Residual: the header↔schema pairing is strongly inferred (no paired ctx7
+# example) → ``unverified — live test required`` (CLAUDE.md §4d). Safe to ship:
+# computer-use never reached this LIVE path at all (it was wired only into the
+# legacy ``ClaudeAgenticAdapter.agentic_call`` that PR-MAINPATH-67 deleted), so
+# any working injection is strictly better than the current dead state, and a
+# recognized-but-unneeded beta is a server-side no-op.
+_COMPUTER_USE_BETA = "computer-use-2025-01-24"
+
+
+def anthropic_computer_tool_param(display_width: int, display_height: int) -> dict[str, Any]:
+    """Anthropic ``computer_20251124`` tool definition (ComputerUseCapable).
+
+    ``display_number`` (X11) is omitted on the host path; the Xvfb sandbox
+    (Phase E) sets it to the virtual display number.
+    """
+    return {
+        "type": "computer_20251124",
+        "name": "computer",
+        "display_width_px": display_width,
+        "display_height_px": display_height,
+    }
+
+
+def _maybe_inject_computer_use(kwargs: dict[str, Any]) -> None:
+    """Inject the computer-use tool + beta header on the LIVE adapter path.
+
+    Computer-use was wired only into the now-deleted legacy
+    ``ClaudeAgenticAdapter.agentic_call`` (PR-MAINPATH-67, 2026-05-24 removed
+    that branch), so it never reached production through ``build_*_kwargs`` —
+    the model was never even offered the tool. This restores it on the live
+    path. The tool is type-carrying so it is exempt from tool-search defer; it
+    is appended here (not inside ``_shape_tools``) so it also injects when the
+    request carries no registry tools.
+    """
+    from core.llm.providers.anthropic import is_computer_use_enabled
+
+    if not is_computer_use_enabled():
+        return
+    tools = list(kwargs.get("tools") or [])
+    if any(t.get("name") == "computer" for t in tools):
+        return
+    tools.append(anthropic_computer_tool_param(_COMPUTER_DISPLAY_WIDTH, _COMPUTER_DISPLAY_HEIGHT))
+    kwargs["tools"] = tools
+    # Merge the beta token (never clobber an existing anthropic-beta header).
+    headers = dict(kwargs.get("extra_headers") or {})
+    tokens = [t for t in headers.get("anthropic-beta", "").split(",") if t]
+    if _COMPUTER_USE_BETA not in tokens:
+        tokens.append(_COMPUTER_USE_BETA)
+    headers["anthropic-beta"] = ",".join(tokens)
+    kwargs["extra_headers"] = headers
+
+
 def build_create_kwargs(req: AdapterCallRequest) -> dict[str, Any]:
     """Shared ``messages.create`` kwargs for both PAYG + OAuth Anthropic adapters."""
     kwargs: dict[str, Any] = {
@@ -111,6 +180,7 @@ def build_create_kwargs(req: AdapterCallRequest) -> dict[str, Any]:
         kwargs["stop_sequences"] = list(req.stop_sequences)
     if req.thinking_budget > 0:
         kwargs["thinking"] = {"type": "enabled", "budget_tokens": req.thinking_budget}
+    _maybe_inject_computer_use(kwargs)
     return kwargs
 
 
@@ -173,6 +243,7 @@ def build_stream_kwargs(req: AdapterCallRequest) -> dict[str, Any]:
         kwargs["tools"] = _shape_tools(req, tc)
         if tc is not None:
             kwargs["tool_choice"] = tc
+    _maybe_inject_computer_use(kwargs)
     return kwargs
 
 
@@ -207,6 +278,7 @@ def translate_response(response: Any) -> AdapterCallResult:
 
 
 __all__ = [
+    "anthropic_computer_tool_param",
     "build_async_anthropic_client",
     "build_create_kwargs",
     "build_messages",

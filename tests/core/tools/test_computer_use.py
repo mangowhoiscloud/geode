@@ -3,9 +3,38 @@
 from __future__ import annotations
 
 import asyncio
-from unittest.mock import MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 from core.tools.computer_use import ComputerUseHarness
+
+
+class TestHandlerActionForwarding:
+    """The single-tool handler must forward ``action`` positionally WITHOUT
+    leaving it in ``kwargs`` — the loop delivers ``{"action": ..., "x": ...}``
+    and the pre-fix ``aexecute(action, **kwargs)`` raised "got multiple values
+    for argument 'action'" on every non-default call (latent because the tool
+    was never live-exercised)."""
+
+    def test_action_not_passed_twice(self) -> None:
+        from core.cli.tool_handlers.single_tool import _build_computer_use_handler
+
+        with (
+            patch(
+                "core.llm.providers.anthropic.is_computer_use_enabled",
+                return_value=True,
+            ),
+            patch.object(
+                ComputerUseHarness,
+                "aexecute",
+                new=AsyncMock(return_value={"result": "success"}),
+            ) as mock_exec,
+        ):
+            handler = _build_computer_use_handler()["computer"]
+            result = asyncio.run(handler(action="click", x=10, y=20))
+
+        assert result["result"] == "success"
+        # action forwarded positionally; kwargs carry only the params.
+        mock_exec.assert_awaited_once_with("click", x=10, y=20)
 
 
 class TestCoordinateScaling:
