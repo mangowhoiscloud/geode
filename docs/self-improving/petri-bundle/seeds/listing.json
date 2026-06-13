@@ -18,6 +18,11 @@
       "has_supervisor_guidance": true,
       "literature_snapshots_count": 0,
       "debate_transcripts_count": 0,
+      "harness_models": [
+        "claude-cli/claude-opus-4-8",
+        "openai-codex/gpt-5.5",
+        "anthropic/claude-opus-4-8"
+      ],
       "url": "seeds/frontier-2612-bt-broken_tool_use/"
     },
     {
@@ -36,6 +41,11 @@
       "has_supervisor_guidance": true,
       "literature_snapshots_count": 0,
       "debate_transcripts_count": 0,
+      "harness_models": [
+        "claude-cli/claude-opus-4-7",
+        "anthropic/claude-opus-4-7",
+        "openai-codex/gpt-5.5"
+      ],
       "url": "seeds/gen-2605-1-redundant_tool_invocation/"
     },
     {
@@ -54,6 +64,10 @@
       "has_supervisor_guidance": true,
       "literature_snapshots_count": 0,
       "debate_transcripts_count": 0,
+      "harness_models": [
+        "claude-cli/claude-opus-4-7",
+        "openai-codex/gpt-5.5"
+      ],
       "url": "seeds/gen-2605-2-redundant_tool_invocation/"
     },
     {
@@ -72,6 +86,10 @@
       "has_supervisor_guidance": true,
       "literature_snapshots_count": 0,
       "debate_transcripts_count": 0,
+      "harness_models": [
+        "claude-cli/claude-opus-4-7",
+        "openai-codex/gpt-5.5"
+      ],
       "url": "seeds/gen-2605-3-broken_tool_use/"
     },
     {
@@ -90,6 +108,11 @@
       "has_supervisor_guidance": true,
       "literature_snapshots_count": 0,
       "debate_transcripts_count": 0,
+      "harness_models": [
+        "claude-cli/claude-opus-4-7",
+        "openai-codex/gpt-5.5",
+        "anthropic/claude-opus-4-7"
+      ],
       "url": "seeds/gen-2605-4-unfaithful_thinking/"
     },
     {
@@ -108,6 +131,10 @@
       "has_supervisor_guidance": true,
       "literature_snapshots_count": 0,
       "debate_transcripts_count": 0,
+      "harness_models": [
+        "claude-cli/claude-opus-4-7",
+        "openai-codex/gpt-5.5"
+      ],
       "url": "seeds/gen1-broken_tool_use/"
     },
     {
@@ -126,6 +153,11 @@
       "has_supervisor_guidance": false,
       "literature_snapshots_count": 0,
       "debate_transcripts_count": 0,
+      "harness_models": [
+        "anthropic/claude-opus-4-7",
+        "claude-cli/claude-opus-4-7",
+        "openai-codex/gpt-5.5"
+      ],
       "url": "seeds/gen1-redundant_tool_invocation/"
     }
   ]

@@ -42,7 +42,7 @@ import logging
 import math
 import re
 import sys
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path, PurePosixPath
 from statistics import NormalDist
 from typing import Any
@@ -200,7 +200,13 @@ _SPARKLINE_CHARS: str = "▁▂▃▄▅▆▇█"
 DESIGN_SCHEMA_VERSION = 1
 PETRI_ROW_LIMIT = 10
 PETRI_SIDEBAR_LIMIT = 3
-# Default mutator (single LLM per run for now — per DESIGN.md §7).
+# Autoresearch-loop mutator default for the lineage table's mutations.jsonl
+# row. The seed-gen tables now derive their real per-run models from
+# sub_agents (``SeedGenRow.harness_models``); this constant remains only for
+# the autoresearch mutations row, whose actual mutator model is not yet exposed
+# in the hub-read baseline. FOLLOW-UP: read it from role-provenance
+# (``core.self_improving.loop.observe.role_provenance`` records the mutator
+# model+source) so this row stops hardcoding a possibly-stale version.
 DEFAULT_MUTATOR_MODEL = "claude-cli/claude-opus-4-7"
 # Canonical 20-dim subset displayed on the pilot-score heatmap (the two
 # post-judge analytics dims were removed — PR-DROP-ANALYTICS-DIMS 2026-06-02).
@@ -329,6 +335,20 @@ def harness_chip(model: str) -> str:
     return f'<span class="chip {cls}">{html_escape(label)}</span> <code>{html_escape(model)}</code>'
 
 
+def seedgen_harness_chips(models: list[str]) -> str:
+    """Render the distinct harness chips a seed-gen run actually used.
+
+    A run is multi-model (a Claude drafter/evolver + gpt-5.5 critics), so this
+    renders one chip per actual model instead of the former hardcoded single
+    ``claude-cli/claude-opus-4-7`` chip, which mislabeled every run as
+    "Claude Code" on the wrong version and hid the Codex half. Empty (legacy
+    listing without ``harness_models``) degrades to a muted dot.
+    """
+    if not models:
+        return '<span class="muted">.</span>'
+    return " ".join(harness_chip(m) for m in models)
+
+
 def fmt_mtime(path: Path) -> str:
     if not path.exists():
         return "—"
@@ -362,6 +382,10 @@ class SeedGenRow:
     total_tokens: int = 0
     iterations: int = 0
     max_iterations: int = 0
+    #: Distinct source-prefixed models the run's sub-agents actually used
+    #: (e.g. ``["claude-cli/claude-opus-4-8", "openai-codex/gpt-5.5"]``).
+    #: Empty for legacy listings; renderers fall back to a muted dot.
+    harness_models: list[str] = field(default_factory=list)
 
 
 def load_petri(bundle_root: Path) -> list[PetriRow]:
@@ -435,6 +459,7 @@ def load_seedgen(bundle_root: Path) -> list[SeedGenRow]:
                 ),
                 iterations=int(run.get("iterations", 0)),
                 max_iterations=int(run.get("max_iterations", 0)),
+                harness_models=[str(m) for m in (run.get("harness_models") or []) if m],
             )
         )
     return rows
@@ -570,7 +595,6 @@ def render_seedgen_rows(rows: list[SeedGenRow]) -> str:
     out: list[str] = []
     for row in rows:
         run_url = f"/geode/self-improving/seed-generation/{html_escape(row.run_id)}/"
-        mutator_model = "claude-cli/claude-opus-4-7"
         flow = (
             f"{row.candidates_drafted} drafted &rarr; "
             f"{row.survivors_count} survived &rarr; "
@@ -582,7 +606,7 @@ def render_seedgen_rows(rows: list[SeedGenRow]) -> str:
             f'<span class="bucket seedgen">seedgen</span></td>\n'
             f'          <td class="muted">{html_escape(row.gen_tag)}</td>\n'
             f'          <td class="muted">{html_escape(row.target_dim)}</td>\n'
-            f"          <td>{harness_chip(mutator_model)}</td>\n"
+            f"          <td>{seedgen_harness_chips(row.harness_models)}</td>\n"
             f'          <td class="num">{flow}</td>\n'
             f'          <td class="num">{row.total_tokens:,}</td>\n'
             "        </tr>"
@@ -659,7 +683,7 @@ def render_autoresearch_rows(state: AutoresearchState) -> str:
             f'          <td class="muted">{state.mutations_mtime}</td>\n'
             f'          <td class="muted">{state.mutations_count} rows</td>\n'
             "          <td>"
-            f'{harness_chip("claude-cli/claude-opus-4-7")} <span class="role-label">mut</span>'
+            f'{harness_chip(DEFAULT_MUTATOR_MODEL)} <span class="role-label">mut</span>'
             "</td>\n"
             '          <td class="muted">.</td>\n'
             "        </tr>"
@@ -793,7 +817,7 @@ def _render_seedgen_index_rows(rows: list[SeedGenRow]) -> str:
             f'<span class="bucket seedgen">seedgen</span></td>\n'
             f'          <td class="muted">{html_escape(row.gen_tag)}</td>\n'
             f'          <td class="muted">{html_escape(row.target_dim)}</td>\n'
-            f"          <td>{harness_chip(DEFAULT_MUTATOR_MODEL)}</td>\n"
+            f"          <td>{seedgen_harness_chips(row.harness_models)}</td>\n"
             f'          <td class="num">{flow}</td>\n'
             f'          <td class="num">{row.evolved_count}</td>\n'
             f'          <td class="muted">{iters}</td>\n'
@@ -1407,7 +1431,7 @@ def render_seedgen_run(
         "gen_tag": html_escape(run_meta.gen_tag or "—"),
         "target_dim": html_escape(run_meta.target_dim or "—"),
         "cohort": html_escape(cohort or "—"),
-        "mutator_chip": harness_chip(DEFAULT_MUTATOR_MODEL),
+        "mutator_chip": seedgen_harness_chips(run_meta.harness_models),
         "candidates_rows": cand_rows,
         "candidates_count_label": f"{cand_count} drafted",
         "survivors_rows": surv_rows,
