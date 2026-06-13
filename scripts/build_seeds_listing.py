@@ -68,6 +68,78 @@ def _seed_count(state: dict[str, Any], key: str) -> int:
     return 0
 
 
+def _resolve_harness_source(model: str, provider: str, cli: bool) -> str:
+    """Source-prefixed model identifier (e.g. ``claude-cli/claude-opus-4-8``,
+    ``openai-codex/gpt-5.5``). ``claude-cli`` when the sub-agent ran via the
+    Claude Code CLI (``claude_cli_session_id`` present), else the bare
+    ``provider``. Mirrors ``build_self_improving_hub._subagent_harness`` so the
+    seedgen table chips match the per-sub-agent detail chips."""
+    source = "claude-cli" if cli else (provider or "")
+    if source and model and "/" not in model:
+        return f"{source}/{model}"
+    return model
+
+
+def _run_harness_models(run_dir: Path) -> list[str]:
+    """Distinct source-prefixed models the run's sub-agents ACTUALLY used,
+    read from ``sub_agents/*/dialogue.jsonl`` (session_start model+provider) +
+    ``session.json`` (claude_cli_session_id), preserving first-seen order.
+
+    A seed-gen run is multi-model (e.g. a Claude drafter/evolver + gpt-5.5
+    critics). The hub formerly hardcoded a single ``claude-cli/claude-opus-4-7``
+    chip, mislabeling every run as "Claude Code" on the wrong model version and
+    hiding the gpt-5.5 (Codex) half entirely. Recording the real set here lets
+    the hub render truthful chips.
+    """
+    sub_root = run_dir / "sub_agents"
+    if not sub_root.is_dir():
+        return []
+    seen: list[str] = []
+    for agent_dir in sorted(sub_root.iterdir()):
+        if not agent_dir.is_dir():
+            continue
+        model = ""
+        provider = ""
+        dialogue = agent_dir / "dialogue.jsonl"
+        if dialogue.is_file():
+            try:
+                dialogue_lines = dialogue.read_text(encoding="utf-8").splitlines()
+            except OSError:
+                dialogue_lines = []
+            for line in dialogue_lines:
+                try:
+                    event = json.loads(line)
+                except (json.JSONDecodeError, ValueError):
+                    continue
+                if isinstance(event, dict) and event.get("event") == "session_start":
+                    model = str(event.get("model") or "")
+                    provider = str(event.get("provider") or "")
+                    break
+        # session.json carries claude_cli_session_id and, for non-cli agents,
+        # the model/provider that dialogue.jsonl omits — read it before the
+        # empty-model skip so we mirror the hub's _subagent_harness fallback
+        # (build_self_improving_hub.py) and the two resolvers can't drift.
+        session: dict[str, Any] = {}
+        session_path = agent_dir / "session.json"
+        if session_path.is_file():
+            try:
+                loaded = json.loads(session_path.read_text(encoding="utf-8"))
+                session = loaded if isinstance(loaded, dict) else {}
+            except (json.JSONDecodeError, ValueError, OSError):
+                session = {}
+        if not model:
+            model = str(session.get("model") or "")
+        if not provider:
+            provider = str(session.get("provider") or "")
+        if not model:
+            continue
+        cli = bool(session.get("claude_cli_session_id"))
+        resolved = _resolve_harness_source(model, provider, cli)
+        if resolved and resolved not in seen:
+            seen.append(resolved)
+    return seen
+
+
 def _build_row(run_dir: Path) -> dict[str, Any] | None:
     """Build one listing row from a per-run dir. Returns None if the run
     is incomplete (no state.json)."""
@@ -100,6 +172,7 @@ def _build_row(run_dir: Path) -> dict[str, Any] | None:
         "has_supervisor_guidance": bool(state.get("supervisor_guidance")),
         "literature_snapshots_count": _seed_count(state, "literature_snapshots"),
         "debate_transcripts_count": _seed_count(state, "debate_transcripts"),
+        "harness_models": _run_harness_models(run_dir),
         "url": f"seeds/{run_dir.name}/",
     }
 

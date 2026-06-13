@@ -66,7 +66,7 @@
 
   <main class="content">
     <h1 class="page-title">Seed Generation &middot; All runs</h1>
-    <p class="page-sub">Per-run catalog of GEODE's autonomous seed-generation pipeline. Each row links to a per-run detail page with candidates, survivors, evolved variants, pilot scores, and meta-review. Mutator chip shows the LLM responsible for drafting + critiquing + evolving candidates.</p>
+    <p class="page-sub">Per-run catalog of GEODE's autonomous seed-generation pipeline. Each row links to a per-run detail page with candidates, survivors, evolved variants, pilot scores, and meta-review. The harness chips show the models a run actually used across drafting, critiquing, and evolving (a run is multi-model).</p>
 
     <!-- PR-HUB-LOOP-VIZ (2026-05-29) — the co-scientist loop as a STATIC
          diagram: a one-time prelude feeds an iterating core that repeats x N
@@ -116,7 +116,7 @@
           <th scope="col">run_id</th>
           <th scope="col">gen_tag</th>
           <th scope="col">target_dim</th>
-          <th scope="col">mutator</th>
+          <th scope="col">harness</th>
           <th scope="col">draft &rarr; surv</th>
           <th scope="col">evolved</th>
           <th scope="col">iterations</th>

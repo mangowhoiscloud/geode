@@ -45,6 +45,11 @@ functional change.
 
 ---
 
+## [0.99.203] - 2026-06-14
+
+### Fixed
+- **Self-improving hub seed-gen chips now show each run's REAL models, not a hardcoded "Claude Code"** (PR-HUB-PAYG-LABEL; operator report: runs done with `payg:opus-4-8` / `payg:gpt-5-5` were displayed as "claude code"). `scripts/build_self_improving_hub.py` hardcoded a single `claude-cli/claude-opus-4-7` chip in every seed-gen table row, run-detail page, and the second table (`render_seedgen_rows` + `DEFAULT_MUTATOR_MODEL`), so every multi-model run (a Claude drafter/evolver + gpt-5.5 critics) was mislabeled as "Claude Code" on the wrong model version, hiding the Codex/gpt-5.5 half entirely. The fix derives the distinct source-prefixed models each run ACTUALLY used from `sub_agents/*/dialogue.jsonl` (session_start model+provider) + `session.json` (`claude_cli_session_id`) — `scripts/build_seeds_listing.py` records them as `harness_models` in the listing, and the hub renders one chip per real model via `seedgen_harness_chips`. e.g. `frontier-2612-bt` now shows `Claude Code claude-opus-4-8` + `Codex gpt-5.5` + `PAYG claude-opus-4-8` instead of `Claude Code claude-opus-4-7`. Run data is read-only; only the derived listing + rendered HTML change. (The autoresearch `mutations.jsonl` mutator chip still uses `DEFAULT_MUTATOR_MODEL` — its real model needs role-provenance exposure in the baseline; tracked as a follow-up.) Guard: `tests/scripts/test_seedgen_harness_models.py`.
+
 ## [0.99.202] - 2026-06-14
 
 ### Added
