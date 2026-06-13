@@ -214,6 +214,36 @@ handler: my_hook.handler  # Python module path
 
 ---
 
+## Activity row schema + timeline mirror (62/62 typed)
+
+Every `trigger*()` call mirrors as one **typed Activity row** into the active
+`RunTranscript` (`core/observability/activity.py` + `activity_registry.py`,
+spec `docs/plans/2026-05-24-hookevent-activity-schema.md`) — the equivalent of
+openclaw's `z.discriminatedUnion("type")`, with `action` as the discriminator.
+
+| Item | Policy |
+|------|--------|
+| **Coverage** | All 62 events map to a concrete typed row (19 lifecycle + 43 K-group). `GenericActivityRow` is a *fail-soft fallback only*, never a routine destination |
+| **details schema** | 23 shared details models (one per family: `CognitivePhaseDetails`×6, `MutationDetails`×4, `AutoTriggerDetails`×6, ...), `frozen=True` + `extra="forbid"` |
+| **Centralization** | The 43 K-group rows are built from a single declarative `_TYPED_ROW_SPECS` table + one `_build_from_spec` builder (not 43 functions); details field names match emit payload keys → key-intersection pull |
+| **Mirror parity** | Mirrors from all 4 trigger variants — `trigger(_async)` AND `trigger_with_result(_async)` / `trigger_interceptor(_async)` — so feedback/interceptor events (e.g. USER_INPUT_RECEIVED) also land in the timeline |
+| **schema_version** | Every row carries `schema_version: int`; bump on field add/rename/retype so JSONL re-readers branch on shape, not key presence |
+
+### Error / privacy policy (silent fallback = anti-pattern)
+
+| Situation | Handling |
+|-----------|----------|
+| Typed builder meets a malformed payload | Fail-soft to `GenericActivityRow` carrying `_fallback_reason` — a forced-generic row is distinguishable from an intentional one in the timeline itself, not only the daemon log |
+| Mirror / dispatch / learning-save failure | **Once-per-event `WARNING`** (dedup set, no hot-loop spam). No debug-swallow — a dead observability sink must be visible |
+| Missing identifier key | No silent empty-identifier ship — warn once on the emit-site key error |
+| **Raw content** | Raw `user_input` / `cognitive_state` snapshots / full tool results are NEVER written to the timeline JSONL — only derived scalars (`input_len`) via `_derive_input_len` (privacy + size) |
+
+> "Always emit a row" contract: the timeline stays complete even when typing
+> fails (paperclip `logActivity` swallow-and-warn equivalent) — but the swallow
+> must be VISIBLE: a `WARNING` + `_fallback_reason`, never silent.
+
+---
+
 ## Design Principles
 
 1. **Non-blocking execution**: One handler's exception does not interrupt other handlers

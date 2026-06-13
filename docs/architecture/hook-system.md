@@ -116,7 +116,7 @@ graph TB
 
 ---
 
-## HookEvent 열거형 (64개)
+## HookEvent 열거형 (62개)
 
 | 카테고리 | 이벤트 | 소스 | 핸들러 | 트리거 모드 | 성숙도 |
 |---|---|---|---|---|---|
@@ -268,6 +268,37 @@ None                                        # 통과 (관찰만)
 {"additional_context": "추가 맥락"}          # 결과에 context 주입
 None                                        # 통과 (관찰만)
 ```
+
+---
+
+## Activity row 스키마 + timeline mirror (62/62 typed)
+
+모든 `trigger*()` 호출은 활성 `RunTranscript` 에 **typed Activity row** 한 줄로
+mirror 된다 (`core/observability/activity.py` + `activity_registry.py`,
+spec `docs/plans/2026-05-24-hookevent-activity-schema.md`). openclaw 의
+`z.discriminatedUnion("type")` 등가 — `action` 필드가 discriminator.
+
+| 항목 | 정책 |
+|------|------|
+| **커버리지** | 62 이벤트 전부 concrete typed row (19 lifecycle + 43 K-group). `GenericActivityRow` 는 *fail-soft 폴백 전용* — 정상 경로 목적지 아님 |
+| **details 스키마** | 23 공유 details 모델(패밀리당 1개: `CognitivePhaseDetails`×6, `MutationDetails`×4, `AutoTriggerDetails`×6 등), `frozen=True` + `extra="forbid"` |
+| **중앙화** | 43 K-group 은 선언적 `_TYPED_ROW_SPECS` 테이블 + 단일 `_build_from_spec` 빌더로 구성 (빌더 함수 43개 아님). details 필드명 = emit payload 키 → 키 교집합 추출 |
+| **mirror parity** | `trigger`/`trigger_async` 뿐 아니라 `trigger_with_result(_async)`/`trigger_interceptor(_async)` **4 변형 전부** mirror. feedback/interceptor 이벤트(USER_INPUT_RECEIVED 등)도 timeline 진입 |
+| **schema_version** | 모든 row 에 `schema_version: int`. 필드 추가/개명/변형 시 bump → JSONL 재독자가 key 유무 추측 대신 shape 분기 |
+| **dotted action** | `pipeline.*` / `tool.exec.*` / `cognitive.*` 네임스페이스 (wildcard 구독 prefix) |
+
+### 에러 / 프라이버시 정책 (silent fallback = 안티패턴)
+
+| 상황 | 처리 |
+|------|------|
+| typed 빌더가 malformed payload 만남 | `GenericActivityRow` 로 fail-soft + `_fallback_reason` 동봉 → timeline 에서 "강제 generic" 과 "의도된 generic" 구분 가능 (daemon log 만 아니라 row 자체에) |
+| mirror / dispatch / 학습 저장 실패 | **once-per-event `WARNING`** (dedup set, hot-loop 스팸 없음). debug-swallow 금지 — 죽은 observability sink 는 보여야 한다 |
+| identifier 키 누락 | 빈 identifier 로 조용히 출하 금지 — emit-site 키 오류를 1회 WARNING |
+| **raw 콘텐츠** | raw `user_input` / `cognitive_state` 스냅샷 / 전체 tool result 는 timeline JSONL 적재 **금지**. 파생 스칼라(`input_len`)만 (`_derive_input_len`). 프라이버시 + 크기 |
+
+> "always emit a row" 계약: typing 이 실패해도 timeline 은 완전하게 유지한다
+> (paperclip `logActivity` swallow-and-warn 등가). 단 swallow 는 **보이는**
+> swallow 여야 한다 — silent 가 아니라 WARNING + `_fallback_reason`.
 
 ---
 
