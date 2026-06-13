@@ -61,6 +61,17 @@ class TestLivePathInjection:
         assert computer["type"] == "computer_20250124"
         assert "computer-use-2025-01-24" in kwargs["extra_headers"]["anthropic-beta"]
 
+    def test_dated_legacy_model_id_resolves_to_legacy(self) -> None:
+        """GEODE uses dated ids (``claude-haiku-4-5-20251001``); the date suffix
+        must be stripped before the legacy lookup, else it falls through to the
+        wrong current generation."""
+        for dated in ("claude-haiku-4-5-20251001", "claude-sonnet-4-5-20250929"):
+            with patch(_ENABLED, return_value=True):
+                kwargs = common.build_create_kwargs(_req(model=dated))
+            computer = next(t for t in kwargs["tools"] if t.get("name") == "computer")
+            assert computer["type"] == "computer_20250124", dated
+            assert "computer-use-2025-01-24" in kwargs["extra_headers"]["anthropic-beta"], dated
+
     def test_stream_injects_computer_tool_when_enabled(self) -> None:
         with patch(_ENABLED, return_value=True):
             kwargs = common.build_stream_kwargs(_req())

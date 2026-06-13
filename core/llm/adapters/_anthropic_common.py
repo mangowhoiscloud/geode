@@ -18,6 +18,7 @@ Lives next to the concrete Anthropic adapters (``anthropic_payg.py``,
 
 from __future__ import annotations
 
+import re
 from typing import TYPE_CHECKING, Any
 
 from core.llm.adapters.base import (
@@ -118,10 +119,14 @@ def _computer_use_spec(model: str) -> tuple[str, str]:
 
     Legacy models are an explicit set; every other model (incl. future ones)
     defaults to the current generation so a new model tracks the newer beta.
+    The dated GEODE id suffix (e.g. ``claude-haiku-4-5-20251001``,
+    ``claude-sonnet-4-5-20250929``) is stripped before the lookup so dated
+    legacy ids are not mistaken for current-gen models.
     """
     from core.llm.model_capabilities import ANTHROPIC_COMPUTER_USE_LEGACY_MODELS
 
-    if model in ANTHROPIC_COMPUTER_USE_LEGACY_MODELS:
+    base = re.sub(r"-\d{8}$", "", model)  # strip trailing -YYYYMMDD
+    if base in ANTHROPIC_COMPUTER_USE_LEGACY_MODELS:
         return _COMPUTER_USE_LEGACY
     return _COMPUTER_USE_CURRENT
 
