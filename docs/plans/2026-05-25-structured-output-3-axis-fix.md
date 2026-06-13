@@ -27,7 +27,7 @@ File "/opt/homebrew/.../asyncio/streams.py", line 539, in _wait_for_data
     await self._waiter
 asyncio.exceptions.CancelledError
 ...
-File "/Users/mango/workspace/geode/core/agent/plan.py", line 721, in decompose_async
+File "~/workspace/geode/core/agent/plan.py", line 721, in decompose_async
     response = await asyncio.wait_for(...)
 File "/opt/homebrew/.../asyncio/timeouts.py", line 114, in __aexit__
     raise TimeoutError from exc_val

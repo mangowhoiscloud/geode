@@ -56,7 +56,7 @@ Hermes `codex_responses_adapter._preflight_codex_api_kwargs` (`agent/codex_respo
 
 ### Hermes Agent — `agent/transports/codex.py`
 
-Source: `/Users/mango/workspace/hermes-agent/agent/transports/codex.py:92-130`
+Source: `~/workspace/hermes-agent/agent/transports/codex.py:92-130`
 
 ```python
 kwargs = {
@@ -89,7 +89,7 @@ if max_tokens is not None and not is_codex_backend:   # <-- the gate
 
 ### OpenClaw — `src/agents/openai-transport-stream.ts`
 
-Source: `/Users/mango/workspace/openclaw/src/agents/openai-transport-stream.ts:724-778` (`buildOpenAIResponsesParams`).
+Source: `~/workspace/openclaw/src/agents/openai-transport-stream.ts:724-778` (`buildOpenAIResponsesParams`).
 
 ```ts
 const params: OpenAIResponsesRequestParams = {
@@ -203,8 +203,8 @@ Reasoning per field:
 
 All retrieved 2026-04-27.
 
-- Hermes Agent (local): `/Users/mango/workspace/hermes-agent/agent/transports/codex.py:14-130`, `/Users/mango/workspace/hermes-agent/agent/codex_responses_adapter.py:466-565`, `/Users/mango/workspace/hermes-agent/run_agent.py:4698-4827`, `/Users/mango/workspace/hermes-agent/hermes_cli/auth.py:70` (`DEFAULT_CODEX_BASE_URL`), `/Users/mango/workspace/hermes-agent/hermes_cli/providers.py:61`.
-- OpenClaw (local): `/Users/mango/workspace/openclaw/extensions/openai/openai-codex-provider.ts:1-373`, `/Users/mango/workspace/openclaw/src/agents/openai-transport-stream.ts:724-778`, `/Users/mango/workspace/openclaw/src/agents/openai-responses-payload-policy.ts:91-162`, `/Users/mango/workspace/openclaw/src/agents/provider-attribution.ts:340-383, 460-606`.
+- Hermes Agent (local): `~/workspace/hermes-agent/agent/transports/codex.py:14-130`, `~/workspace/hermes-agent/agent/codex_responses_adapter.py:466-565`, `~/workspace/hermes-agent/run_agent.py:4698-4827`, `~/workspace/hermes-agent/hermes_cli/auth.py:70` (`DEFAULT_CODEX_BASE_URL`), `~/workspace/hermes-agent/hermes_cli/providers.py:61`.
+- OpenClaw (local): `~/workspace/openclaw/extensions/openai/openai-codex-provider.ts:1-373`, `~/workspace/openclaw/src/agents/openai-transport-stream.ts:724-778`, `~/workspace/openclaw/src/agents/openai-responses-payload-policy.ts:91-162`, `~/workspace/openclaw/src/agents/provider-attribution.ts:340-383, 460-606`.
 - Codex CLI (Rust, GitHub `openai/codex@main`):
   - `codex-rs/codex-api/src/common.rs:117-133` — `ResponsesApiRequest` struct (https://github.com/openai/codex/blob/main/codex-rs/codex-api/src/common.rs)
   - `codex-rs/core/src/client.rs:851-923` — `build_responses_request` (https://github.com/openai/codex/blob/main/codex-rs/core/src/client.rs)

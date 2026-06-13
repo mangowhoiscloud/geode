@@ -13,7 +13,7 @@ GEODE에서 생성된 리서치, 분석 결과, 아키텍처 문서를 mango-wik
 ## Target Vault
 
 ```
-/Users/mango/workspace/mango-wiki/vault/
+~/workspace/mango-wiki/vault/
 ```
 
 ## Workflow

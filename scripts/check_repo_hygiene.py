@@ -20,6 +20,9 @@ Exits 0 if clean, 1 on violations (details on stderr).
 from __future__ import annotations
 
 import os
+import re
+import shutil
+import subprocess
 import sys
 from pathlib import Path
 
@@ -28,6 +31,38 @@ from pathlib import Path
 # this number when adding archives; lowering it requires explicit review.
 PETRI_EVAL_FLOOR = 9
 PETRI_LOGS_DIR = Path("docs/self-improving/petri-bundle/logs")
+
+# Absolute home paths with a REAL username (``/Users/<u>/`` or ``/home/<u>/``)
+# are a machine-specific PII leak: they break portability AND expose the
+# operator's home dir on the public GitHub-Pages site when they ride along in
+# published run artifacts (docs/self-improving/**). Most enter via the
+# state/ -> docs/ hub sync, which copies run_dir / candidate_path / transcript
+# strings verbatim. This ratchet (Karpathy P4) rejects them so a re-sync must
+# anonymize the prefix (the reconcile precedent already writes bundle-relative
+# paths for survivors.json). Generic placeholder usernames used in docs/tests
+# (``/Users/<name>``, ``/home/user``, ``foo`` ...) are allowed.
+_HOME_PATH_RE = re.compile(r"/(?:Users|home)/([a-z][a-z0-9_.-]*)/")
+_PLACEHOLDER_USERS: frozenset[str] = frozenset(
+    {
+        "user",
+        "users",
+        "dev",
+        "somebody",
+        "foo",
+        "bar",
+        "name",
+        "example",
+        "test",
+        "runner",
+        "u",
+        "ci",
+        "root",
+        "alice",
+        "bob",
+        "jane",
+        "home",
+    }
+)
 
 EXCLUDED_DIRS: frozenset[tuple[str, ...]] = frozenset(
     {
@@ -85,6 +120,42 @@ def find_absolute_symlinks(root: Path) -> list[tuple[Path, str]]:
     return result
 
 
+def find_home_path_leaks(root: Path) -> list[tuple[str, int, str]]:
+    """Return (relpath, lineno, username) for each tracked file embedding an
+    absolute home path with a real (non-placeholder) username.
+
+    Scans tracked files only (``git grep`` respects .gitignore + skips binary
+    with ``-I``); ``*.lock`` is excluded because the editable self-reference
+    legitimately carries the absolute checkout path. Placeholder usernames in
+    :data:`_PLACEHOLDER_USERS` (and angle-bracket forms like ``/Users/<name>``,
+    which the leading-``[a-z]`` anchor already rejects) are allowed."""
+    git = shutil.which("git")
+    if git is None:
+        return []  # git unavailable — nothing to assert
+    try:
+        proc = subprocess.run(  # noqa: S603 — resolved git path, fixed argv + constant regex
+            [git, "grep", "-nIE", r"/(Users|home)/[a-z][a-z0-9_.-]*/", "--", ":!*.lock"],
+            cwd=root,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+    except (OSError, subprocess.SubprocessError):
+        return []  # not a git checkout — nothing to assert
+    leaks: list[tuple[str, int, str]] = []
+    for line in proc.stdout.splitlines():
+        path, _, rest = line.partition(":")
+        lineno_s, _, content = rest.partition(":")
+        if not lineno_s.isdigit():
+            continue
+        for match in _HOME_PATH_RE.finditer(content):
+            username = match.group(1)
+            if username not in _PLACEHOLDER_USERS:
+                leaks.append((path, int(lineno_s), username))
+                break  # one finding per line is enough to flag it
+    return leaks
+
+
 def check_petri_eval_floor(root: Path) -> tuple[int, int] | None:
     """Return (found, floor) when below the petri archive floor, else None.
 
@@ -121,8 +192,15 @@ def format_report(
     absolute: list[tuple[Path, str]],
     orphans: list[Path],
     petri_shortfall: tuple[int, int] | None,
+    home_leaks: list[tuple[str, int, str]],
 ) -> str:
-    total = len(dangling) + len(absolute) + len(orphans) + (1 if petri_shortfall else 0)
+    total = (
+        len(dangling)
+        + len(absolute)
+        + len(orphans)
+        + (1 if petri_shortfall else 0)
+        + len(home_leaks)
+    )
     if total == 0:
         return ""
     lines = [f"Repo hygiene check: {total} issues", ""]
@@ -154,6 +232,16 @@ def format_report(
             "in the same PR (explicit-action ratchet).",
         )
         lines.append("")
+    if home_leaks:
+        lines.append("[hardcoded home path]")
+        for path, lineno, username in home_leaks:
+            lines.append(f"  {path}:{lineno} -> /Users|home/{username}/...")
+        lines.append(
+            "    hint: anonymize the home prefix (~/...) — a real username path "
+            "leaks the operator's machine and breaks portability. If this is a "
+            "placeholder, add the username to _PLACEHOLDER_USERS.",
+        )
+        lines.append("")
     return "\n".join(lines)
 
 
@@ -163,7 +251,8 @@ def main() -> int:
     absolute = find_absolute_symlinks(root)
     orphans = find_orphan_worktrees(root)
     petri_shortfall = check_petri_eval_floor(root)
-    report = format_report(root, dangling, absolute, orphans, petri_shortfall)
+    home_leaks = find_home_path_leaks(root)
+    report = format_report(root, dangling, absolute, orphans, petri_shortfall, home_leaks)
     if report:
         print(report, file=sys.stderr)
         return 1

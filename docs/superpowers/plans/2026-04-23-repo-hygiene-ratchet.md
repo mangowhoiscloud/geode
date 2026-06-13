@@ -1034,7 +1034,7 @@ Expected: develop → main merge commit at tip.
 - [ ] **Step 1: Leave the worktree directory**
 
 ```bash
-cd /Users/pinxbot9/workspace/geode
+cd ~/workspace/geode
 ```
 
 - [ ] **Step 2: Remove the worktree**

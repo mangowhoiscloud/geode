@@ -47,7 +47,7 @@
 ## 3. 다음 session 의 진입 plan
 
 ### Step 0 — session 시작 시
-- 본 작업 디렉터리: `/Users/mango/workspace/geode`
+- 본 작업 디렉터리: `~/workspace/geode`
 - main HEAD: `ba330df8` (Merge PR #1148)
 - Codex MCP 등록 확인: `claude mcp list` 의 `codex: codex mcp-server - ✓ Connected`
 - Codex MCP 의 tool list 노출: `mcp__codex__*` 형태 (정확한 list 는 reload 후 확인)
@@ -77,7 +77,7 @@ mcp__codex__exec(
     4. Edge cases — reserved field collision, duplicate dims
 
     Output: structured GAP list with severity (CRITICAL/HIGH/MEDIUM/LOW).""",
-    cwd="/Users/mango/workspace/geode",
+    cwd="~/workspace/geode",
 )
 ```
 
@@ -91,7 +91,7 @@ mcp__codex__exec(
 
 옵션 B (autoresearch generation 1) 의 dim expansion 후보:
 - `unprompted_deception_toward_user`, `unprompted_encouragement_of_user_delusion`
-- 본 dim 이 inspect_petri default-38 안에 있는지 (`/Users/mango/.cache/uv/archive-v0/.../inspect_petri/_judge/dimensions/*.md`)
+- 본 dim 이 inspect_petri default-38 안에 있는지 (`~/.cache/uv/archive-v0/.../inspect_petri/_judge/dimensions/*.md`)
 - `build_judge_schema` 의 21 dim expansion 자동 적용 검증
 
 ## 4. 본 session 의 미완 작업
@@ -107,14 +107,14 @@ mcp__codex__exec(
 ## 5. Worktree cleanup 상태
 
 ```
-/Users/mango/workspace/geode                                               ba330df8 [main]
-/Users/mango/workspace/geode/.claude/worktrees/autoresearch-bootstrap      <stale, PR #1145 merged>
-/Users/mango/workspace/geode/.claude/worktrees/petri-claude-code-judge     <stale, PR #1147 merged>
-/Users/mango/workspace/geode/.claude/worktrees/petri-a1-harness            <stale, 이전 session>
-/Users/mango/workspace/geode/.claude/worktrees/petri-a2-transcripts        <stale, 이전 session>
-/Users/mango/workspace/geode/.claude/worktrees/petri-a3-judge-split        <stale, 이전 session>
-/Users/mango/workspace/geode/.claude/worktrees/petri-b1-report-caveat      <stale, 이전 session>
-/Users/mango/workspace/geode/.claude/worktrees/petri-verification-summary  <stale, 이전 session>
+~/workspace/geode                                               ba330df8 [main]
+~/workspace/geode/.claude/worktrees/autoresearch-bootstrap      <stale, PR #1145 merged>
+~/workspace/geode/.claude/worktrees/petri-claude-code-judge     <stale, PR #1147 merged>
+~/workspace/geode/.claude/worktrees/petri-a1-harness            <stale, 이전 session>
+~/workspace/geode/.claude/worktrees/petri-a2-transcripts        <stale, 이전 session>
+~/workspace/geode/.claude/worktrees/petri-a3-judge-split        <stale, 이전 session>
+~/workspace/geode/.claude/worktrees/petri-b1-report-caveat      <stale, 이전 session>
+~/workspace/geode/.claude/worktrees/petri-verification-summary  <stale, 이전 session>
 ```
 
 본 session 의 worktree 2개 (autoresearch-bootstrap, petri-claude-code-judge) — PR 머지 완료. cleanup 추천. 이전 session 의 5 worktree — `.owner` 부재, 본 session 의 cleanup 보류.

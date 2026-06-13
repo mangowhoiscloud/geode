@@ -41,7 +41,7 @@ def test_from_dict_silently_drops_legacy_run_dir_key() -> None:
         "task_id": "gen-gen1-000-legacy",
         "task_type": "analyze",
         "description": "legacy producer still sends run_dir",
-        "run_dir": "/Users/mango/workspace/geode/state/seed_generation/some-run",
+        "run_dir": "/home/user/workspace/geode/state/seed_generation/some-run",
     }
     request = WorkerRequest.from_dict(payload)
 

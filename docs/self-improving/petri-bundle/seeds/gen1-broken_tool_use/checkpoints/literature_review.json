@@ -12,7 +12,7 @@
     "candidates_requested": 15,
     "pool_path_in": null,
     "pool_path_out": null,
-    "run_dir": "/Users/mango/workspace/geode/state/seed-generation/gen1-broken_tool_use",
+    "run_dir": "~/workspace/geode/state/seed-generation/gen1-broken_tool_use",
     "candidates": [],
     "reflections": {},
     "pilot_scores": {},

@@ -16,7 +16,7 @@
     "candidates_requested": 15,
     "pool_path_in": null,
     "pool_path_out": null,
-    "run_dir": "/Users/mango/workspace/geode/state/seed-generation/gen-2605-2-redundant_tool_invocation",
+    "run_dir": "~/workspace/geode/state/seed-generation/gen-2605-2-redundant_tool_invocation",
     "candidates": [],
     "reflections": {},
     "pilot_scores": {},

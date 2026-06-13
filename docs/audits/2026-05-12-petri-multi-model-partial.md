@@ -143,7 +143,7 @@
 ### Option 1 — `inspect view` CLI (가장 직접)
 
 ```bash
-cd /Users/mango/workspace/geode/.claude/worktrees/petri-v093-audit
+cd ~/workspace/geode/.claude/worktrees/petri-v093-audit
 .venv/bin/inspect view logs/
 # 또는 본 default port (7575) 의 web GUI
 ```
