@@ -17,7 +17,7 @@
 <!-- Move items here when work begins. -->
 <!-- 3-Checkpoint: (1) alloc → (2) merge (CI 5/5) → (3) verify -->
 
-- [ ] 프롬프트 P0 — geode prompt dump 명령(모델×표면 어셈블 전문+토큰 실측) + 스냅샷 가드
+- [ ] 프롬프트 P2-a — 어셈블 코드 수정: dynamic_context 태그 폐합(B1), 학습패턴 새니타이저 parity(B2, 이중 채널 정리), 2-존 표기 규칙(저작=md/주입=XML), AGENTIC_SUFFIX 정적 존 이동(캐시), 중복·상충 규칙 단일화
 - [ ] 시스템 프롬프트 어셈블 + 리팩토링 — ~/workspace/resume의 fable5 프롬프트를 1급 예시로 GEODE 프롬프트 표면(router/program/decomposer/commentary/도구 설명) slop·부실 지점 전수 감사 → 일괄 개선 계획부터
 - [ ] v1.0.0 스탬프 — 사전 정리(.190)+tool-search(.191) 완료, 위 작업 후 릴리스
 - [ ] H11-tail — routing 상수 모듈레벨 by-value 별칭 해동(core/llm/providers/{anthropic,openai,codex,glm}.py DEFAULT_*/FALLBACK_MODELS + core/skills/agents.py dataclass 기본값) — reload 후에도 boot-frozen, 호출자 스윕 필요. + H1(데몬 client-cwd 세션 해석)은 별도 결정
@@ -30,6 +30,7 @@
 
 <!-- Completed items. Keep recent 10, archive older ones. -->
 <!-- - [x] #issue-number — Short description (PR #N) -->
+- [x] 프롬프트 P0 — geode prompt dump(모델3×표면6 매트릭스, count_tokens 실측, 중복태그 신호) + 가드 5종 + 4단계 계획 문서. 실측: 18셀 4,942~5,087tok, 중복 0. P1 감사에서 코드버그 2(B1 미폐합 태그·B2 새니타이저 우회)+루브릭 위반 카탈로그 도출 (PR #2234, v0.99.194)
 - [x] openai Responses 이행 + OpenAI tool_search defer — payg acomplete/astream을 공유 build_responses_kwargs(backend 델타 1개)로 Responses 합류(.192, Codex 리뷰 2건: usage 캐시 토큰·stop_sequences 관측 드롭). OpenAI 공식 tool_search를 양 백엔드 배선(.193) — 정책 SoT tool_defer.py 단일화, 모델 게이트(5.4+), Codex 백엔드 라이브 게이트 통과(DEFER-OK, gpt-5.5, defer 20) 후 기본 ON, "web" 500 블록리스트. 가드 6+6종 (PR #2229/#2230, v0.99.192/193)
 - [x] v1.0 사전 정리 + tool-search defer 실배선 — 3-차원 감사(slop·누수·배선, Explore 3기+오탐 3건 증거 반박) 확정분 정리(.190: Cortex 스텁·dead knob/method·MCP 핸드셰이크 "0.9.0"·emoji·tool_ranking rename) 후, 감사 핵심 결함(docstring만 defer 주장, 매 요청 60 스키마 전송)을 공식 Messages API로 해소(.191: defer_loading 필드+호스티드 tool_search_tool_regex, 코어 11종 즉시·49종 defer, 캐시 프리픽스 보존, kill switch=llm.tool_search_defer). 자작 ToolSearchTool 경로 전체 삭제. Codex 검증 BLOCKER 1건(레거시 경로 배선→라이브 빌더 2종 이행) 포함 7건 반영. 라이브 검증: opus-4-8이 defer 20/21 요청 수락(DEFER-OK·end_turn). 가드 11종 (PR #2223/#2224 → #2225, v0.99.190/191)
 - [x] llms.txt 발행 측 완성 — docs 66페이지 .md 트윈 export(post-build extractDocsProse 균형 추출+turndown+GFM+bare-pre 펜스, 렌더 URL+.md=트윈, 트윈-투-트윈 링크), llms.txt 링크 전부 .md 전환, llms-full.txt 진짜 전문 덤프(100KB 초과 본문은 명시적 생략 노트 — changelog 1.2MB, 노트=균형추출 간접 가드), sitemap 파서 단일화(sitemap-pages.mjs), pages.yml export-md 배선. Codex 검증 3건 반영(중첩 article 330개로 1-항목 트윈 출하되던 MAJOR 포함). 라이브 검증: quick-start.md 200 text/markdown, llms-full 66엔트리. 가드 5종 (PR #2218 → #2219, v0.99.189)
