@@ -41,7 +41,12 @@ PETRI_LOGS_DIR = Path("docs/self-improving/petri-bundle/logs")
 # anonymize the prefix (the reconcile precedent already writes bundle-relative
 # paths for survivors.json). Generic placeholder usernames used in docs/tests
 # (``/Users/<name>``, ``/home/user``, ``foo`` ...) are allowed.
-_HOME_PATH_RE = re.compile(r"/(?:Users|home)/([a-z][a-z0-9_.-]*)/")
+# Scoped to POSIX paths (macOS / Linux). The username segment need NOT be
+# followed by ``/`` — a bare ``/Users/<name>`` at the end of a token still
+# leaks the prefix (Codex review). Case-insensitive so a capitalised
+# ``/Users/<Name>`` is caught; the allow-list comparison lower-cases the
+# capture. Windows ``C:\\Users\\`` is intentionally out of scope (POSIX-only).
+_HOME_PATH_RE = re.compile(r"/(?:Users|home)/([A-Za-z][A-Za-z0-9_.-]*)")
 _PLACEHOLDER_USERS: frozenset[str] = frozenset(
     {
         "user",
@@ -61,6 +66,7 @@ _PLACEHOLDER_USERS: frozenset[str] = frozenset(
         "bob",
         "jane",
         "home",
+        "shared",  # /Users/Shared — macOS system dir, not a username
     }
 )
 
@@ -134,7 +140,7 @@ def find_home_path_leaks(root: Path) -> list[tuple[str, int, str]]:
         return []  # git unavailable — nothing to assert
     try:
         proc = subprocess.run(  # noqa: S603 — resolved git path, fixed argv + constant regex
-            [git, "grep", "-nIE", r"/(Users|home)/[a-z][a-z0-9_.-]*/", "--", ":!*.lock"],
+            [git, "grep", "-nIE", r"/(Users|home)/[A-Za-z]", "--", ":!*.lock"],
             cwd=root,
             capture_output=True,
             text=True,
@@ -150,7 +156,7 @@ def find_home_path_leaks(root: Path) -> list[tuple[str, int, str]]:
             continue
         for match in _HOME_PATH_RE.finditer(content):
             username = match.group(1)
-            if username not in _PLACEHOLDER_USERS:
+            if username.lower() not in _PLACEHOLDER_USERS:
                 leaks.append((path, int(lineno_s), username))
                 break  # one finding per line is enough to flag it
     return leaks

@@ -138,11 +138,28 @@ def test_real_username_home_path_fails(tmp_path: Path) -> None:
     assert username in result.stderr
 
 
+def test_bare_and_capitalized_home_path_fails(tmp_path: Path) -> None:
+    """A bare ``/Users/<name>`` (no trailing component) and a capitalised
+    username are both leaks (Codex review — the trailing-slash and lowercase
+    gaps)."""
+    _init_git_repo(tmp_path)
+    bare = "/Users/" + "operator9"  # no trailing slash; split so the source has no literal
+    cap = "/home/" + "Operator9"  # capitalised
+    (tmp_path / "a.txt").write_text(f"see {bare}\n")
+    (tmp_path / "b.txt").write_text(f"see {cap}\n")
+    subprocess.run(["git", "add", "-A"], cwd=tmp_path, check=True, capture_output=True)  # noqa: S607
+    result = run_check(tmp_path)
+    assert result.returncode == 1, result.stdout + result.stderr
+    assert result.stderr.count("hardcoded home path") == 1
+    assert "operator9" in result.stderr.lower()
+
+
 def test_placeholder_home_path_passes(tmp_path: Path) -> None:
-    """Generic placeholder usernames (user / dev / foo / <name>) are allowed."""
+    """Generic placeholder usernames (user / dev / foo / <name> / Shared) are allowed."""
     _init_git_repo(tmp_path)
     (tmp_path / "doc.md").write_text(
-        "Example: /home/user/workspace/geode and /Users/<name>/x and /Users/foo/y\n"
+        "Example: /home/user/workspace/geode and /Users/<name>/x and /Users/foo/y "
+        "and /Users/Shared/data and /Users/dev\n"
     )
     subprocess.run(["git", "add", "-A"], cwd=tmp_path, check=True, capture_output=True)  # noqa: S607
     result = run_check(tmp_path)
