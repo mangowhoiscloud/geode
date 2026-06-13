@@ -23,8 +23,6 @@ from core.hooks.system import HookEvent
 from core.observability.activity import (
     ActivityRowBase,
     GenericActivityRow,
-    HandoffCompletedRow,
-    HandoffFailedRow,
     HandoffTriggeredRow,
     LifecycleCompletedDetails,
     LifecycleCompletedRow,
@@ -217,9 +215,6 @@ HOOK_EVENT_TO_ROW_BUILDER: dict[HookEvent, Callable[[dict[str, Any], str], Activ
     HookEvent.TOOL_EXEC_ENDED: _lifecycle_completed(
         ToolExecEndedRow, actor_type_default="agent", identifier_key="tool_call_id"
     ),
-    HookEvent.HANDOFF_COMPLETED: _lifecycle_completed(
-        HandoffCompletedRow, actor_type_default="orchestrator", identifier_key="handoff_id"
-    ),
     HookEvent.TOOL_RECOVERY_SUCCEEDED: _lifecycle_completed(
         ToolRecoverySucceededRow, actor_type_default="agent", identifier_key="tool_call_id"
     ),
@@ -239,9 +234,6 @@ HOOK_EVENT_TO_ROW_BUILDER: dict[HookEvent, Callable[[dict[str, Any], str], Activ
     ),
     HookEvent.TOOL_RECOVERY_FAILED: _lifecycle_failed(
         ToolRecoveryFailedRow, actor_type_default="agent", identifier_key="tool_call_id"
-    ),
-    HookEvent.HANDOFF_FAILED: _lifecycle_failed(
-        HandoffFailedRow, actor_type_default="orchestrator", identifier_key="handoff_id"
     ),
     HookEvent.TURN_VERIFY_FAILED: _lifecycle_failed(
         TurnVerifyFailedRow, actor_type_default="agent", identifier_key="turn_id"

@@ -42,13 +42,12 @@ more accurate selection" + Anthropic tool-use guide.
 from __future__ import annotations
 
 import copy
-import json
 import logging
 from pathlib import Path
 from typing import Any
 
+from core.agent.policy_sot import load_policy_sot
 from core.paths import GLOBAL_TOOL_DESCRIPTIONS_PATH, OPERATOR_LOCAL_TOOL_DESCRIPTIONS_PATH
-from core.self_improving.loop.mutate.sot_resolution import resolve_sot
 
 log = logging.getLogger(__name__)
 
@@ -71,45 +70,15 @@ def _load_tool_descriptions_override() -> dict[str, dict[str, Any]] | None:
 
     Resolution order — see module docstring (3-layer chain).
     """
-    selection = resolve_sot(
+    return load_policy_sot(
         env_var=_TOOL_DESCRIPTIONS_OVERRIDE_ENV,
         operator_local=_OPERATOR_LOCAL_TOOL_DESCRIPTIONS_PATH,
         in_repo=_TOOL_DESCRIPTIONS_SOT_PATH,
+        label="tool-descriptions",
+        validate_strict=_validate_schema,
+        validate_graceful=_validate_schema,
+        coerce=_coerce,
     )
-    if selection is None:
-        return None
-    if selection.strict:
-        return _strict_load(selection.path)
-    return _graceful_load(selection.path)
-
-
-def _strict_load(path: Path) -> dict[str, dict[str, Any]]:
-    """Audit-subprocess path: schema 실패 시 ``RuntimeError`` (fail-fast)."""
-    if not path.is_file():
-        raise RuntimeError(f"{_TOOL_DESCRIPTIONS_OVERRIDE_ENV}={path} file not found")
-    try:
-        raw = path.read_text(encoding="utf-8")
-        data = json.loads(raw)
-    except (OSError, json.JSONDecodeError) as exc:
-        raise RuntimeError(f"{_TOOL_DESCRIPTIONS_OVERRIDE_ENV}={path} load failed: {exc}") from exc
-    _validate_schema(data, path)
-    return _coerce(data)
-
-
-def _graceful_load(path: Path) -> dict[str, dict[str, Any]] | None:
-    """Daily-run path: schema 실패 시 WARNING + ``None``."""
-    try:
-        raw = path.read_text(encoding="utf-8")
-        data = json.loads(raw)
-    except (OSError, json.JSONDecodeError):
-        log.warning("tool-descriptions SoT at %s is unreadable; ignoring", path)
-        return None
-    try:
-        _validate_schema(data, path)
-    except RuntimeError as exc:
-        log.warning("tool-descriptions SoT at %s schema invalid: %s; ignoring", path, exc)
-        return None
-    return _coerce(data)
 
 
 def _validate_schema(data: Any, path: Path) -> None:

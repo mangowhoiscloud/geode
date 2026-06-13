@@ -17,7 +17,7 @@ export default function Page() {
             <p>
               HookSystem(<code>core/hooks/system.py</code>)은 런타임의 모든 의미
               있는 경계에서 이벤트를 발화하는 단일 버스입니다.{" "}
-              <code>HookEvent</code> enum은 정확히 64개의 라이프사이클 이벤트를
+              <code>HookEvent</code> enum은 정확히 62개의 라이프사이클 이벤트를
               정의합니다. 새 동작은 루프 코드를 고치는 대신 이 이벤트들 위에
               핸들러로 쌓입니다.
             </p>
@@ -57,7 +57,7 @@ export default function Page() {
             <p>비동기 변형으로 <code>trigger_async</code>가 있습니다.</p>
 
             <h2>이벤트 카테고리</h2>
-            <p>64개 이벤트는 enum 안의 섹션 주석으로 분류됩니다. 대표만 추리면 이렇습니다.</p>
+            <p>62개 이벤트는 enum 안의 섹션 주석으로 분류됩니다. 대표만 추리면 이렇습니다.</p>
             <table>
               <thead>
                 <tr><th>카테고리</th><th>대표 이벤트</th></tr>
@@ -138,7 +138,7 @@ hooks.register_prefix("*", mirror_everything)  # 와일드카드 구독`}</pre>
             <p>
               The HookSystem (<code>core/hooks/system.py</code>) is the single
               bus that fires events at every meaningful boundary of the runtime.
-              The <code>HookEvent</code> enum defines exactly 64 lifecycle
+              The <code>HookEvent</code> enum defines exactly 62 lifecycle
               events. New behaviour stacks onto these events as handlers instead
               of editing loop code.
             </p>
@@ -178,7 +178,7 @@ hooks.register_prefix("*", mirror_everything)  # 와일드카드 구독`}</pre>
             <p>An async variant, <code>trigger_async</code>, also exists.</p>
 
             <h2>Event categories</h2>
-            <p>The 64 events are grouped by section comments inside the enum. The highlights:</p>
+            <p>The 62 events are grouped by section comments inside the enum. The highlights:</p>
             <table>
               <thead>
                 <tr><th>Category</th><th>Representative events</th></tr>

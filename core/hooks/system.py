@@ -237,15 +237,11 @@ class HookEvent(Enum):
     #    "budget_total_s": float, "ts": float}
     # ``HANDOFF_TRIGGERED`` fires once per session — at the threshold
     # crossing — even if the round loop re-enters the budget check.
-    # ``HANDOFF_COMPLETED`` / ``HANDOFF_FAILED`` are RESERVED for the
-    # handoff watcher, which is not built yet — ``complete_handoff`` /
-    # ``fail_handoff`` (core/agent/handoff.py) have no production caller,
-    # so today nothing fires these two events. Wire the emits when the
-    # watcher lands (PR-AUDIT-AB 2026-06-10 made this honest instead of
-    # promising emits that did not exist).
+    # PR-LOOP-PRUNE (2026-06-13): the RESERVED ``HANDOFF_COMPLETED`` /
+    # ``HANDOFF_FAILED`` pair was deleted with the unbuilt watcher's
+    # write API (reserve-without-emit rule) — re-add WITH emit sites
+    # when a watcher actually lands.
     HANDOFF_TRIGGERED = "handoff_triggered"
-    HANDOFF_COMPLETED = "handoff_completed"
-    HANDOFF_FAILED = "handoff_failed"
 
     # Per-turn verify telemetry (PR-CL-A3, 2026-05-23). Distinct from the
     # pipeline-level ``VERIFICATION_PASS / VERIFICATION_FAIL`` pair (which
