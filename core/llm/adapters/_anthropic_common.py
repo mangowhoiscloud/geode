@@ -18,6 +18,7 @@ Lives next to the concrete Anthropic adapters (``anthropic_payg.py``,
 
 from __future__ import annotations
 
+import re
 from typing import TYPE_CHECKING, Any
 
 from core.llm.adapters.base import (
@@ -26,6 +27,11 @@ from core.llm.adapters.base import (
     ToolSpec,
     UsageSummary,
 )
+
+# Computer-use display dims live in the harness module (single SoT) so the
+# injected tool DEFINITION and the local executor never drift.
+from core.tools.computer_use import TARGET_HEIGHT as _COMPUTER_DISPLAY_HEIGHT
+from core.tools.computer_use import TARGET_WIDTH as _COMPUTER_DISPLAY_WIDTH
 
 if TYPE_CHECKING:
     import anthropic
@@ -92,6 +98,93 @@ def translate_tool(tool: ToolSpec) -> dict[str, Any]:
     }
 
 
+# Computer-use tool generation — the (tool type, beta header) pair is
+# MODEL-AWARE. Verified against the Anthropic docs (CANNOT §4d):
+#   https://platform.claude.com/docs/en/agents-and-tools/tool-use/computer-use-tool
+#   current  (Opus 4.8/4.7/4.6, Sonnet 4.6, Opus 4.5, + future): computer_20251124
+#            + "computer-use-2025-11-24"
+#   legacy   (Sonnet 4.5, Haiku 4.5, deprecated 4.1/4):          computer_20250124
+#            + "computer-use-2025-01-24"
+# Earlier this code shipped a single ``2025-01-24`` header for ALL models — wrong
+# for the default Opus 4.8 (Codex review caught it). The SDK Literal lags
+# ("computer-use-2025-11-24" is sent as a plain string); the docs page is SoT.
+_COMPUTER_USE_CURRENT = ("computer_20251124", "computer-use-2025-11-24")
+_COMPUTER_USE_LEGACY = ("computer_20250124", "computer-use-2025-01-24")
+# Both native tool types — used for dedup (either generation counts as present).
+_COMPUTER_USE_TYPES = frozenset({_COMPUTER_USE_CURRENT[0], _COMPUTER_USE_LEGACY[0]})
+
+
+def _computer_use_spec(model: str) -> tuple[str, str]:
+    """Return ``(tool_type, beta_header)`` for the model's computer-use generation.
+
+    Legacy models are an explicit set; every other model (incl. future ones)
+    defaults to the current generation so a new model tracks the newer beta.
+    The dated GEODE id suffix (e.g. ``claude-haiku-4-5-20251001``,
+    ``claude-sonnet-4-5-20250929``) is stripped before the lookup so dated
+    legacy ids are not mistaken for current-gen models.
+    """
+    from core.llm.model_capabilities import ANTHROPIC_COMPUTER_USE_LEGACY_MODELS
+
+    base = re.sub(r"-\d{8}$", "", model)  # strip trailing -YYYYMMDD
+    if base in ANTHROPIC_COMPUTER_USE_LEGACY_MODELS:
+        return _COMPUTER_USE_LEGACY
+    return _COMPUTER_USE_CURRENT
+
+
+def anthropic_computer_tool_param(
+    display_width: int, display_height: int, tool_type: str = _COMPUTER_USE_CURRENT[0]
+) -> dict[str, Any]:
+    """Anthropic computer-use tool definition (ComputerUseCapable).
+
+    ``tool_type`` is the model-aware schema version (``computer_20251124`` /
+    ``computer_20250124``). ``display_number`` (X11) is omitted on the host
+    path; the Xvfb sandbox (Phase E) sets it to the virtual display number.
+    """
+    return {
+        "type": tool_type,
+        "name": "computer",
+        "display_width_px": display_width,
+        "display_height_px": display_height,
+    }
+
+
+def _maybe_inject_computer_use(kwargs: dict[str, Any]) -> None:
+    """Inject the computer-use tool + beta header on the LIVE adapter path.
+
+    Computer-use was wired only into the now-deleted legacy
+    ``ClaudeAgenticAdapter.agentic_call`` (PR-MAINPATH-67, 2026-05-24 removed
+    that branch), so it never reached production through ``build_*_kwargs`` —
+    the model was never even offered the tool. This restores it on the live
+    path. The tool is type-carrying so it is exempt from tool-search defer; it
+    is appended here (not inside ``_shape_tools``) so it also injects when the
+    request carries no registry tools.
+    """
+    from core.llm.providers.anthropic import is_computer_use_enabled
+
+    if not is_computer_use_enabled():
+        return
+    tool_type, beta = _computer_use_spec(kwargs.get("model", ""))
+    tools = list(kwargs.get("tools") or [])
+    # Dedup by the NATIVE type (either generation), not the name: a caller's
+    # custom same-name tool must not suppress native injection, and re-entrancy
+    # must not double it.
+    if not any(t.get("type") in _COMPUTER_USE_TYPES for t in tools):
+        tools.append(
+            anthropic_computer_tool_param(
+                _COMPUTER_DISPLAY_WIDTH, _COMPUTER_DISPLAY_HEIGHT, tool_type
+            )
+        )
+        kwargs["tools"] = tools
+    # Always ensure the model's beta token when the native tool is present
+    # (merge, never clobber an existing anthropic-beta header).
+    headers = dict(kwargs.get("extra_headers") or {})
+    tokens = [t for t in headers.get("anthropic-beta", "").split(",") if t]
+    if beta not in tokens:
+        tokens.append(beta)
+    headers["anthropic-beta"] = ",".join(tokens)
+    kwargs["extra_headers"] = headers
+
+
 def build_create_kwargs(req: AdapterCallRequest) -> dict[str, Any]:
     """Shared ``messages.create`` kwargs for both PAYG + OAuth Anthropic adapters."""
     kwargs: dict[str, Any] = {
@@ -111,6 +204,7 @@ def build_create_kwargs(req: AdapterCallRequest) -> dict[str, Any]:
         kwargs["stop_sequences"] = list(req.stop_sequences)
     if req.thinking_budget > 0:
         kwargs["thinking"] = {"type": "enabled", "budget_tokens": req.thinking_budget}
+    _maybe_inject_computer_use(kwargs)
     return kwargs
 
 
@@ -173,6 +267,7 @@ def build_stream_kwargs(req: AdapterCallRequest) -> dict[str, Any]:
         kwargs["tools"] = _shape_tools(req, tc)
         if tc is not None:
             kwargs["tool_choice"] = tc
+    _maybe_inject_computer_use(kwargs)
     return kwargs
 
 
@@ -207,6 +302,7 @@ def translate_response(response: Any) -> AdapterCallResult:
 
 
 __all__ = [
+    "anthropic_computer_tool_param",
     "build_async_anthropic_client",
     "build_create_kwargs",
     "build_messages",

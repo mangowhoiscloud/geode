@@ -415,6 +415,39 @@ class WebSearchCapable(Protocol):
 
 
 @runtime_checkable
+class ComputerUseCapable(Protocol):
+    """Mixin Protocol — source-level adapters whose backend exposes a native
+    computer-use tool (Anthropic ``computer_20251124`` / OpenAI
+    ``{type: "computer"}``).
+
+    Same level as :class:`WebSearchCapable` (the per-(provider, source)
+    adapters), so a caller can enumerate computer-use support the same way
+    ``dispatch`` enumerates ``supports_web_search``. Execution is ALWAYS local
+    (``core.tools.computer_use.ComputerUseHarness``); this contract covers only
+    the per-provider tool DEFINITION. The tool itself is injected onto the live
+    request path by the provider's request builder (Anthropic:
+    ``_anthropic_common._maybe_inject_computer_use``) — ``computer_tool_param``
+    returns the same param so the enumerable contract and the injected wire
+    payload never drift. The harness translates each provider's action
+    vocabulary (Anthropic ``left_click`` ↔ OpenAI ``click`` …).
+    """
+
+    name: str
+    provider: str
+    source: str
+    supports_computer_use: bool
+
+    def computer_tool_param(
+        self, *, display_width: int, display_height: int
+    ) -> dict[str, Any] | None:
+        """Return the provider's computer-use tool param, or ``None`` if the
+        adapter cannot inject one. ``display_width`` / ``display_height`` are
+        the harness target dims so the tool definition and the local harness
+        never drift."""
+        ...
+
+
+@runtime_checkable
 class TextCompletionCapable(Protocol):
     """Mixin Protocol — adapters that support a one-shot ``(system, prompt) ->
     text`` call. Used by compaction (conversation summary) and learning
@@ -444,6 +477,7 @@ __all__ = [
     "AdapterBillingType",
     "AdapterCallRequest",
     "AdapterCallResult",
+    "ComputerUseCapable",
     "CredentialDetection",
     "EnvironmentReport",
     "LLMAdapter",

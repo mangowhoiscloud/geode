@@ -54,6 +54,9 @@ class AnthropicPaygAdapter:
     # ``core.llm.adapters.dispatch`` for tool-side fallback chains.
     supports_web_search: bool = True
     supports_text_completion: bool = True
+    # ComputerUseCapable — injected on the live request path
+    # (``_anthropic_common._maybe_inject_computer_use``).
+    supports_computer_use: bool = True
     _last_error: Exception | None = field(default=None, init=False, repr=False)
     # PR-LOOP-POLLUTION-FIX (2026-06-12) — one client per owning event loop.
     # The previous single-slot ``_client`` cache was shared across the
@@ -62,6 +65,18 @@ class AnthropicPaygAdapter:
     _clients: LoopAffineClientCache = field(
         default_factory=lambda: LoopAffineClientCache("anthropic-payg"), init=False, repr=False
     )
+
+    def computer_tool_param(
+        self, *, display_width: int, display_height: int
+    ) -> dict[str, Any] | None:
+        """ComputerUseCapable — Anthropic ``computer_20251124`` tool definition.
+
+        Delegates to the shared builder so this enumerable contract returns the
+        exact param the live request path injects (no drift).
+        """
+        from core.llm.adapters._anthropic_common import anthropic_computer_tool_param
+
+        return anthropic_computer_tool_param(display_width, display_height)
 
     def _get_client(self) -> Any:
         from core.config import settings
