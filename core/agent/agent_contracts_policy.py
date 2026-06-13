@@ -40,16 +40,15 @@ Unknown agent name / 부적합 schema → graceful drop (forward-compat).
 from __future__ import annotations
 
 import copy
-import json
 import logging
 from pathlib import Path
 from typing import Any
 
+from core.agent.policy_sot import load_policy_sot
 from core.paths import (
     GLOBAL_AGENT_CONTRACTS_PATH,
     OPERATOR_LOCAL_AGENT_CONTRACTS_PATH,
 )
-from core.self_improving.loop.mutate.sot_resolution import resolve_sot
 
 log = logging.getLogger(__name__)
 
@@ -71,43 +70,15 @@ _MUTABLE_FIELDS = frozenset({_FIELD_ROLE, _FIELD_SYSTEM_PROMPT, _FIELD_TOOLS})
 
 def _load_agent_contracts_override() -> dict[str, dict[str, Any]] | None:
     """Return the active agent-contracts dict, or ``None`` if no SoT applies."""
-    selection = resolve_sot(
+    return load_policy_sot(
         env_var=_AGENT_CONTRACTS_OVERRIDE_ENV,
         operator_local=_OPERATOR_LOCAL_AGENT_CONTRACTS_PATH,
         in_repo=_AGENT_CONTRACTS_SOT_PATH,
+        label="agent-contracts",
+        validate_strict=_validate_schema,
+        validate_graceful=_validate_schema,
+        coerce=_coerce,
     )
-    if selection is None:
-        return None
-    if selection.strict:
-        return _strict_load(selection.path)
-    return _graceful_load(selection.path)
-
-
-def _strict_load(path: Path) -> dict[str, dict[str, Any]]:
-    if not path.is_file():
-        raise RuntimeError(f"{_AGENT_CONTRACTS_OVERRIDE_ENV}={path} file not found")
-    try:
-        raw = path.read_text(encoding="utf-8")
-        data = json.loads(raw)
-    except (OSError, json.JSONDecodeError) as exc:
-        raise RuntimeError(f"{_AGENT_CONTRACTS_OVERRIDE_ENV}={path} load failed: {exc}") from exc
-    _validate_schema(data, path)
-    return _coerce(data)
-
-
-def _graceful_load(path: Path) -> dict[str, dict[str, Any]] | None:
-    try:
-        raw = path.read_text(encoding="utf-8")
-        data = json.loads(raw)
-    except (OSError, json.JSONDecodeError):
-        log.warning("agent-contracts SoT at %s is unreadable; ignoring", path)
-        return None
-    try:
-        _validate_schema(data, path)
-    except RuntimeError as exc:
-        log.warning("agent-contracts SoT at %s schema invalid: %s; ignoring", path, exc)
-        return None
-    return _coerce(data)
 
 
 def _validate_schema(data: Any, path: Path) -> None:

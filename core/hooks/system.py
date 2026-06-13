@@ -27,6 +27,9 @@ from typing import Any
 log = logging.getLogger(__name__)
 
 
+_MIRROR_FAILURE_WARNED: set[str] = set()
+
+
 def _mirror_hook_to_active_transcript(event: HookEvent, data: dict[str, Any]) -> None:
     """Mirror a HookSystem trigger into the active RunTranscript as a
     paperclip-style activity_log row.
@@ -78,7 +81,19 @@ def _mirror_hook_to_active_transcript(event: HookEvent, data: dict[str, Any]) ->
             payload=details_payload,
         )
     except Exception as exc:
-        log.debug("HookEvent → ActivityRow mirror failed for %s: %s", event.value, exc)
+        # PR-OBS-CONTRACT — a dead observability sink must be VISIBLE.
+        # debug-level swallow meant a broken transcript writer dropped
+        # timeline rows with zero operator signal (silent-fallback
+        # anti-pattern). WARN once per event type to avoid hot-loop spam.
+        if event.value not in _MIRROR_FAILURE_WARNED:
+            _MIRROR_FAILURE_WARNED.add(event.value)
+            log.warning(
+                "HookEvent -> ActivityRow mirror failed for %s (suppressing repeats): %s",
+                event.value,
+                exc,
+            )
+        else:
+            log.debug("HookEvent -> ActivityRow mirror failed for %s: %s", event.value, exc)
 
 
 class HookEvent(Enum):
@@ -237,15 +252,11 @@ class HookEvent(Enum):
     #    "budget_total_s": float, "ts": float}
     # ``HANDOFF_TRIGGERED`` fires once per session — at the threshold
     # crossing — even if the round loop re-enters the budget check.
-    # ``HANDOFF_COMPLETED`` / ``HANDOFF_FAILED`` are RESERVED for the
-    # handoff watcher, which is not built yet — ``complete_handoff`` /
-    # ``fail_handoff`` (core/agent/handoff.py) have no production caller,
-    # so today nothing fires these two events. Wire the emits when the
-    # watcher lands (PR-AUDIT-AB 2026-06-10 made this honest instead of
-    # promising emits that did not exist).
+    # PR-LOOP-PRUNE (2026-06-13): the RESERVED ``HANDOFF_COMPLETED`` /
+    # ``HANDOFF_FAILED`` pair was deleted with the unbuilt watcher's
+    # write API (reserve-without-emit rule) — re-add WITH emit sites
+    # when a watcher actually lands.
     HANDOFF_TRIGGERED = "handoff_triggered"
-    HANDOFF_COMPLETED = "handoff_completed"
-    HANDOFF_FAILED = "handoff_failed"
 
     # Per-turn verify telemetry (PR-CL-A3, 2026-05-23). Distinct from the
     # pipeline-level ``VERIFICATION_PASS / VERIFICATION_FAIL`` pair (which
@@ -597,6 +608,14 @@ class HookSystem:
                     )
                 )
 
+        # PR-OBS-CONTRACT (2026-06-13) — mirror parity. Pre-fix only
+        # ``trigger``/``trigger_async`` mirrored to the timeline, so the
+        # feedback-pattern events (CONTEXT_OVERFLOW_ACTION,
+        # PROGRAM_MD_UNREADABLE, TOOL_RESULT_TRANSFORM) fired via
+        # ``trigger_with_result`` were invisible — a half-connected
+        # "every hook event → one row" contract. Mirroring here closes it.
+        _mirror_hook_to_active_transcript(event, data)
+
         return results
 
     async def trigger_with_result_async(
@@ -631,6 +650,9 @@ class HookSystem:
                     )
                 )
 
+        # PR-OBS-CONTRACT (2026-06-13) — async-path mirror parity.
+        _mirror_hook_to_active_transcript(event, data)
+
         return results
 
     def trigger_interceptor(
@@ -660,6 +682,10 @@ class HookSystem:
                 ret = self._call_handler(hook, event, data, timeout_s=timeout_s)
                 if isinstance(ret, dict):
                     if ret.get("block"):
+                        # PR-OBS-CONTRACT — mirror the blocked interception
+                        # too: a blocked USER_INPUT_RECEIVED is a timeline
+                        # event, not a non-event.
+                        _mirror_hook_to_active_transcript(event, data)
                         return InterceptResult(
                             blocked=True,
                             reason=ret.get("reason", f"Blocked by {hook.name}"),
@@ -672,6 +698,9 @@ class HookSystem:
                 log.warning("Interceptor '%s' failed on %s: %s", hook.name, event.value, exc)
                 # Interceptor errors are non-blocking — continue chain
 
+        # PR-OBS-CONTRACT (2026-06-13) — interceptor mirror parity (the
+        # interceptor-pattern event USER_INPUT_RECEIVED was timeline-invisible).
+        _mirror_hook_to_active_transcript(event, data)
         return InterceptResult(blocked=False, data=data)
 
     async def trigger_interceptor_async(
@@ -687,6 +716,8 @@ class HookSystem:
                 ret = await self._call_handler_async(hook, event, data, timeout_s=timeout_s)
                 if isinstance(ret, dict):
                     if ret.get("block"):
+                        # PR-OBS-CONTRACT — mirror the blocked interception.
+                        _mirror_hook_to_active_transcript(event, data)
                         return InterceptResult(
                             blocked=True,
                             reason=ret.get("reason", f"Blocked by {hook.name}"),
@@ -698,6 +729,8 @@ class HookSystem:
             except Exception as exc:
                 log.warning("Interceptor '%s' failed on %s: %s", hook.name, event.value, exc)
 
+        # PR-OBS-CONTRACT (2026-06-13) — async interceptor mirror parity.
+        _mirror_hook_to_active_transcript(event, data)
         return InterceptResult(blocked=False, data=data)
 
     # -- Internal helpers ------------------------------------------------------

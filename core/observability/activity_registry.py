@@ -1,13 +1,14 @@
 """HookEvent → ActivityRow mapping registry.
 
-Spec: ``docs/plans/2026-05-24-hookevent-activity-schema.md`` §3.
+Spec: ``docs/plans/2026-05-24-hookevent-activity-schema.md`` §3, §7.1.
 
-Each of the 32 lifecycle events maps to a builder that produces the
-appropriate concrete ``ActivityRow`` subclass with validated payload.
-The 42 non-lifecycle events fall through to
-:class:`GenericActivityRow` so they still land in the timeline — but
-without the type-safety + IDE autocomplete benefit. Subsequent PRs
-(E-K group concretes) will move events out of the fall-through.
+Every one of the 62 HookEvents maps to a builder that produces a
+concrete typed ``ActivityRow`` subclass with a validated payload:
+19 lifecycle events via the curry builders below, and the 43 K-group
+events via the single declarative ``_TYPED_ROW_SPECS`` table +
+``_build_from_spec`` (PR-OBS-CONTRACT, 2026-06-13). ``GenericActivityRow``
+is now ONLY the fail-soft fallback for a typed builder that meets a
+malformed payload — never a routine destination.
 """
 
 from __future__ import annotations
@@ -15,16 +16,43 @@ from __future__ import annotations
 import logging
 import time
 from collections.abc import Callable
-from typing import Any
+from dataclasses import dataclass
+from typing import Any, Literal
 
-from pydantic import ValidationError
+from pydantic import BaseModel, ValidationError
 
 from core.hooks.system import HookEvent
 from core.observability.activity import (
     ActivityRowBase,
+    AdapterDispatchAttemptDetails,
+    AdapterDispatchAttemptRow,
+    AutoTriggerDetails,
+    AutoTriggerFiredRow,
+    AutoTriggerIntervalBlockedRow,
+    AutoTriggerLockBusyRow,
+    AutoTriggerMaxGenerationReachedRow,
+    AutoTriggerParseErrorRow,
+    AutoTriggerRunnerErrorRow,
+    BaselinePromotedDetails,
+    BaselinePromotedRow,
+    CognitiveActRow,
+    CognitiveObserveRow,
+    CognitivePerceiveRow,
+    CognitivePhaseDetails,
+    CognitivePlanRow,
+    CognitiveReflectRow,
+    CognitiveUpdateMemoryRow,
+    ConfigReloadedDetails,
+    ConfigReloadedRow,
+    ContextCriticalRow,
+    ContextOverflowActionRow,
+    ContextPressureDetails,
+    CostGuardDetails,
+    CostLimitExceededRow,
+    CostWarningRow,
+    ExecutionCancelledDetails,
+    ExecutionCancelledRow,
     GenericActivityRow,
-    HandoffCompletedRow,
-    HandoffFailedRow,
     HandoffTriggeredRow,
     LifecycleCompletedDetails,
     LifecycleCompletedRow,
@@ -38,20 +66,58 @@ from core.observability.activity import (
     LLMCallFailedRow,
     LLMCallRetriedRow,
     LLMCallStartedRow,
+    McpServerConnectedRow,
+    McpServerDetails,
+    McpServerFailedRow,
+    MemorySavedDetails,
+    MemorySavedRow,
+    ModelSwitchedDetails,
+    ModelSwitchedRow,
+    MutationAppliedRow,
+    MutationDetails,
+    MutationProposedRow,
+    MutationRejectedRow,
+    MutationRevertedRow,
+    PostAnalysisDetails,
+    PostAnalysisRow,
+    ProgramMdUnreadableDetails,
+    ProgramMdUnreadableRow,
+    PromptAssembledDetails,
+    PromptAssembledRow,
+    ReasoningMetricsDetails,
+    ReasoningMetricsRow,
+    RuleChangeDetails,
+    RuleCreatedRow,
+    RuleDeletedRow,
+    RuleUpdatedRow,
     SessionEndedRow,
     SessionStartedRow,
+    ShutdownStartedDetails,
+    ShutdownStartedRow,
     SubAgentCompletedRow,
     SubAgentFailedRow,
     SubAgentStartedRow,
+    ToolApprovalDeniedRow,
+    ToolApprovalDetails,
+    ToolApprovalGrantedRow,
+    ToolApprovalRequestedRow,
     ToolExecEndedRow,
     ToolExecFailedRow,
     ToolExecStartedRow,
     ToolRecoveryAttemptedRow,
     ToolRecoveryFailedRow,
     ToolRecoverySucceededRow,
+    ToolResultOffloadedDetails,
+    ToolResultOffloadedRow,
+    ToolResultTransformDetails,
+    ToolResultTransformRow,
+    TriggerFiredDetails,
+    TriggerFiredRow,
     TurnCompletedRow,
     TurnVerifyFailedRow,
     TurnVerifyPassedRow,
+    UserInputReceivedDetails,
+    UserInputReceivedRow,
 )
 
 log = logging.getLogger(__name__)
@@ -62,6 +128,26 @@ __all__ = ["map_hook_to_activity"]
 # ---------------------------------------------------------------------------
 # Per-event row builders (32 lifecycle events typed in S2 scope)
 # ---------------------------------------------------------------------------
+
+
+_MISSING_IDENTIFIER_WARNED: set[tuple[str, str]] = set()
+
+
+def _warn_missing_identifier(row_name: str, identifier_key: str) -> None:
+    """One WARNING per (row, key) per process when the identifier
+    fallback chain bottoms out at "" — an emit site is using the wrong
+    key name and the row would otherwise ship with a silent empty
+    identifier (PR-OBS-CONTRACT; silent coercion is an anti-pattern)."""
+    seen_key = (row_name, identifier_key)
+    if seen_key in _MISSING_IDENTIFIER_WARNED:
+        return
+    _MISSING_IDENTIFIER_WARNED.add(seen_key)
+    log.warning(
+        "%s: emit payload carries neither %r nor 'session_id' — identifier empty; "
+        "fix the emit-site key",
+        row_name,
+        identifier_key,
+    )
 
 
 def _lifecycle_started(
@@ -78,6 +164,8 @@ def _lifecycle_started(
 
     def _build(data: dict[str, Any], run_id: str) -> ActivityRowBase:
         identifier = str(data.get(identifier_key) or data.get("session_id") or "")
+        if not identifier:
+            _warn_missing_identifier(row_cls.__name__, identifier_key)
         actor_id = str(data.get(actor_key) or data.get("session_id") or actor_type_default)
         return row_cls(  # type: ignore[call-arg]  # concrete row_cls overrides action/entity_type with Literal defaults; mypy can't see through dynamic type[]
             ts=time.time(),
@@ -103,6 +191,8 @@ def _lifecycle_completed(
 
     def _build(data: dict[str, Any], run_id: str) -> ActivityRowBase:
         identifier = str(data.get(identifier_key) or data.get("session_id") or "")
+        if not identifier:
+            _warn_missing_identifier(row_cls.__name__, identifier_key)
         actor_id = str(data.get(actor_key) or data.get("session_id") or actor_type_default)
         duration_ms = float(data.get("duration_ms", 0.0) or 0.0)
         success = bool(data.get("success", True))
@@ -130,6 +220,8 @@ def _lifecycle_failed(
 
     def _build(data: dict[str, Any], run_id: str) -> ActivityRowBase:
         identifier = str(data.get(identifier_key) or data.get("session_id") or "")
+        if not identifier:
+            _warn_missing_identifier(row_cls.__name__, identifier_key)
         actor_id = str(data.get(actor_key) or data.get("session_id") or actor_type_default)
         duration_ms = data.get("duration_ms")
         return row_cls(  # type: ignore[call-arg]  # concrete row_cls overrides action/entity_type with Literal defaults; mypy can't see through dynamic type[]
@@ -217,9 +309,6 @@ HOOK_EVENT_TO_ROW_BUILDER: dict[HookEvent, Callable[[dict[str, Any], str], Activ
     HookEvent.TOOL_EXEC_ENDED: _lifecycle_completed(
         ToolExecEndedRow, actor_type_default="agent", identifier_key="tool_call_id"
     ),
-    HookEvent.HANDOFF_COMPLETED: _lifecycle_completed(
-        HandoffCompletedRow, actor_type_default="orchestrator", identifier_key="handoff_id"
-    ),
     HookEvent.TOOL_RECOVERY_SUCCEEDED: _lifecycle_completed(
         ToolRecoverySucceededRow, actor_type_default="agent", identifier_key="tool_call_id"
     ),
@@ -240,15 +329,390 @@ HOOK_EVENT_TO_ROW_BUILDER: dict[HookEvent, Callable[[dict[str, Any], str], Activ
     HookEvent.TOOL_RECOVERY_FAILED: _lifecycle_failed(
         ToolRecoveryFailedRow, actor_type_default="agent", identifier_key="tool_call_id"
     ),
-    HookEvent.HANDOFF_FAILED: _lifecycle_failed(
-        HandoffFailedRow, actor_type_default="orchestrator", identifier_key="handoff_id"
-    ),
     HookEvent.TURN_VERIFY_FAILED: _lifecycle_failed(
         TurnVerifyFailedRow, actor_type_default="agent", identifier_key="turn_id"
     ),
     # D — retry (1)
     HookEvent.LLM_CALL_RETRIED: _lifecycle_retried(LLMCallRetriedRow, actor_type_default="agent"),
 }
+
+
+# ---------------------------------------------------------------------------
+# K-group typed rows (PR-OBS-CONTRACT, 2026-06-13) — centralized spec table
+#
+# The 43 formerly-generic events are typed via ONE declarative table +
+# ONE builder, not 43 hand-written functions. Each _TypedRowSpec names the
+# concrete row class, its details model, the envelope actor_type, and which
+# payload key becomes entity_id. Construction pulls the intersection of the
+# details model's declared fields and the live payload keys — which works
+# because the details field names were chosen to MATCH the emit-site payload
+# keys (see docs/plans/2026-05-24-hookevent-activity-schema.md, updated).
+#
+# Privacy/size drops are explicit and centralized in _derive_input_len:
+# raw user_input / cognitive_state snapshots / full tool results never reach
+# the timeline JSONL — derived scalars (input_len) stand in.
+# ---------------------------------------------------------------------------
+
+
+@dataclass(frozen=True)
+class _TypedRowSpec:
+    """Declarative construction spec for one K-group event."""
+
+    row_cls: type[ActivityRowBase]
+    details_cls: type[BaseModel]
+    actor_type: Literal["orchestrator", "agent", "system", "plugin"]
+    entity_id_key: str = ""  # payload key -> entity_id; "" => event.value
+    actor_id_key: str = "session_id"
+    derive: Callable[[dict[str, Any]], dict[str, Any]] | None = None
+
+
+# Payload keys carrying raw user content or oversized blobs that must NEVER
+# be persisted to the timeline JSONL (privacy + size; the G9 sanitizer lesson).
+# The typed path drops them implicitly — the details models declare none of
+# them, so the key-intersection pull in _build_from_spec excludes them. The
+# generic FAIL-SOFT path must scrub them explicitly: a builder failure on a
+# privacy-sensitive event (USER_INPUT_RECEIVED / COGNITIVE_* / TOOL_RESULT_*)
+# would otherwise leak via ``details=data`` exactly what the typed row drops
+# (Codex MCP review BLOCKER, 2026-06-13 — graceful contract must hold at
+# EVERY exit, not just the typed one).
+# ``args_preview`` is a bounded display string but ``approval._write_summary``
+# can fill it from ``tool_input["content"][:80]`` — i.e. up to 80 chars of raw
+# tool content — so it is forbidden from the fail-soft path too (Codex MCP
+# review MAJOR). Typed approval rows already drop it (not a declared field).
+_TIMELINE_FORBIDDEN_KEYS = frozenset(
+    {"user_input", "cognitive_state", "tool_input", "result", "args_preview"}
+)
+
+
+def _derive_input_len(data: dict[str, Any]) -> dict[str, Any]:
+    """COGNITIVE_PERCEIVE / USER_INPUT_RECEIVED carry the raw ``user_input``
+    string in their hook payload. Persist only its LENGTH — raw user prompts
+    must never land in the timeline JSONL (privacy; the G9 sanitizer lesson).
+    ``cognitive_state`` snapshots and other non-field keys are dropped
+    automatically because the builder only pulls declared details fields."""
+    if "user_input" not in data:
+        return data
+    out = dict(data)
+    out["input_len"] = len(str(out.get("user_input") or ""))
+    return out
+
+
+def _scrub_for_timeline(data: dict[str, Any]) -> dict[str, Any]:
+    """Drop raw-content keys before they can reach a ``GenericActivityRow``
+    on the fail-soft path, preserving the derived ``input_len`` signal where a
+    raw ``user_input`` was. No-op (returns the same dict) when nothing is
+    forbidden, so the common typed path pays nothing."""
+    if not _TIMELINE_FORBIDDEN_KEYS.intersection(data):
+        return data
+    scrubbed = {k: v for k, v in data.items() if k not in _TIMELINE_FORBIDDEN_KEYS}
+    if "user_input" in data and "input_len" not in scrubbed:
+        scrubbed["input_len"] = len(str(data.get("user_input") or ""))
+    return scrubbed
+
+
+def _build_from_spec(
+    spec: _TypedRowSpec,
+    event: HookEvent,
+    data: dict[str, Any],
+    run_id: str,
+) -> ActivityRowBase:
+    """Construct a concrete typed K-group row from its spec.
+
+    Pulls the intersection of the details model's declared fields and the
+    payload keys, then lets pydantic validate/coerce (``list`` -> ``tuple``,
+    numeric strings -> floats). A missing required field or a bad value
+    raises ``ValidationError`` / ``ValueError`` which :func:`map_hook_to_activity`
+    catches and routes to the distinguishable generic fallback row — the
+    "always emit a row" contract holds."""
+    src = spec.derive(data) if spec.derive is not None else data
+    detail_kwargs = {k: src[k] for k in spec.details_cls.model_fields if k in src}
+    details = spec.details_cls(**detail_kwargs)
+    entity_id = (str(data.get(spec.entity_id_key)) if spec.entity_id_key else "") or event.value
+    actor_id = str(data.get(spec.actor_id_key) or spec.actor_type)
+    task_id = str(data["task_id"]) if data.get("task_id") else None
+    return spec.row_cls(  # type: ignore[call-arg]  # action/entity_type are Literal class defaults; mypy can't see through dynamic type[]
+        ts=time.time(),
+        run_id=run_id,
+        actor_type=spec.actor_type,
+        actor_id=actor_id,
+        entity_id=entity_id,
+        task_id=task_id,
+        details=details,
+    )
+
+
+_TYPED_ROW_SPECS: dict[HookEvent, _TypedRowSpec] = {
+    HookEvent.ADAPTER_DISPATCH_ATTEMPT: _TypedRowSpec(
+        row_cls=AdapterDispatchAttemptRow,
+        details_cls=AdapterDispatchAttemptDetails,
+        actor_type="system",
+        entity_id_key="adapter_name",
+    ),
+    HookEvent.BASELINE_PROMOTED: _TypedRowSpec(
+        row_cls=BaselinePromotedRow,
+        details_cls=BaselinePromotedDetails,
+        actor_type="system",
+        entity_id_key="run_id",
+    ),
+    HookEvent.COGNITIVE_PERCEIVE: _TypedRowSpec(
+        row_cls=CognitivePerceiveRow,
+        details_cls=CognitivePhaseDetails,
+        actor_type="agent",
+        entity_id_key="session_id",
+        derive=_derive_input_len,
+    ),
+    HookEvent.COGNITIVE_PLAN: _TypedRowSpec(
+        row_cls=CognitivePlanRow,
+        details_cls=CognitivePhaseDetails,
+        actor_type="agent",
+        entity_id_key="session_id",
+        derive=_derive_input_len,
+    ),
+    HookEvent.COGNITIVE_ACT: _TypedRowSpec(
+        row_cls=CognitiveActRow,
+        details_cls=CognitivePhaseDetails,
+        actor_type="agent",
+        entity_id_key="session_id",
+        derive=_derive_input_len,
+    ),
+    HookEvent.COGNITIVE_OBSERVE: _TypedRowSpec(
+        row_cls=CognitiveObserveRow,
+        details_cls=CognitivePhaseDetails,
+        actor_type="agent",
+        entity_id_key="session_id",
+        derive=_derive_input_len,
+    ),
+    HookEvent.COGNITIVE_REFLECT: _TypedRowSpec(
+        row_cls=CognitiveReflectRow,
+        details_cls=CognitivePhaseDetails,
+        actor_type="agent",
+        entity_id_key="session_id",
+        derive=_derive_input_len,
+    ),
+    HookEvent.COGNITIVE_UPDATE_MEMORY: _TypedRowSpec(
+        row_cls=CognitiveUpdateMemoryRow,
+        details_cls=CognitivePhaseDetails,
+        actor_type="agent",
+        entity_id_key="session_id",
+        derive=_derive_input_len,
+    ),
+    HookEvent.CONFIG_RELOADED: _TypedRowSpec(
+        row_cls=ConfigReloadedRow,
+        details_cls=ConfigReloadedDetails,
+        actor_type="system",
+        entity_id_key="config_path",
+    ),
+    HookEvent.CONTEXT_CRITICAL: _TypedRowSpec(
+        row_cls=ContextCriticalRow,
+        details_cls=ContextPressureDetails,
+        actor_type="agent",
+        entity_id_key="model",
+    ),
+    HookEvent.CONTEXT_OVERFLOW_ACTION: _TypedRowSpec(
+        row_cls=ContextOverflowActionRow,
+        details_cls=ContextPressureDetails,
+        actor_type="agent",
+        entity_id_key="model",
+    ),
+    HookEvent.COST_WARNING: _TypedRowSpec(
+        row_cls=CostWarningRow, details_cls=CostGuardDetails, actor_type="agent"
+    ),
+    HookEvent.COST_LIMIT_EXCEEDED: _TypedRowSpec(
+        row_cls=CostLimitExceededRow, details_cls=CostGuardDetails, actor_type="agent"
+    ),
+    HookEvent.EXECUTION_CANCELLED: _TypedRowSpec(
+        row_cls=ExecutionCancelledRow,
+        details_cls=ExecutionCancelledDetails,
+        actor_type="orchestrator",
+        entity_id_key="session_id",
+    ),
+    HookEvent.MCP_SERVER_CONNECTED: _TypedRowSpec(
+        row_cls=McpServerConnectedRow,
+        details_cls=McpServerDetails,
+        actor_type="system",
+        entity_id_key="server_name",
+    ),
+    HookEvent.MCP_SERVER_FAILED: _TypedRowSpec(
+        row_cls=McpServerFailedRow,
+        details_cls=McpServerDetails,
+        actor_type="system",
+        entity_id_key="server_name",
+    ),
+    HookEvent.MEMORY_SAVED: _TypedRowSpec(
+        row_cls=MemorySavedRow,
+        details_cls=MemorySavedDetails,
+        actor_type="agent",
+        entity_id_key="key",
+    ),
+    HookEvent.RULE_CREATED: _TypedRowSpec(
+        row_cls=RuleCreatedRow,
+        details_cls=RuleChangeDetails,
+        actor_type="agent",
+        entity_id_key="name",
+    ),
+    HookEvent.RULE_UPDATED: _TypedRowSpec(
+        row_cls=RuleUpdatedRow,
+        details_cls=RuleChangeDetails,
+        actor_type="agent",
+        entity_id_key="name",
+    ),
+    HookEvent.RULE_DELETED: _TypedRowSpec(
+        row_cls=RuleDeletedRow,
+        details_cls=RuleChangeDetails,
+        actor_type="agent",
+        entity_id_key="name",
+    ),
+    HookEvent.MODEL_SWITCHED: _TypedRowSpec(
+        row_cls=ModelSwitchedRow,
+        details_cls=ModelSwitchedDetails,
+        actor_type="agent",
+        entity_id_key="to_model",
+    ),
+    HookEvent.PROMPT_ASSEMBLED: _TypedRowSpec(
+        row_cls=PromptAssembledRow,
+        details_cls=PromptAssembledDetails,
+        actor_type="agent",
+        entity_id_key="model",
+    ),
+    HookEvent.REASONING_METRICS: _TypedRowSpec(
+        row_cls=ReasoningMetricsRow, details_cls=ReasoningMetricsDetails, actor_type="agent"
+    ),
+    HookEvent.MUTATION_PROPOSED: _TypedRowSpec(
+        row_cls=MutationProposedRow,
+        details_cls=MutationDetails,
+        actor_type="system",
+        entity_id_key="mutation_id",
+    ),
+    HookEvent.MUTATION_APPLIED: _TypedRowSpec(
+        row_cls=MutationAppliedRow,
+        details_cls=MutationDetails,
+        actor_type="system",
+        entity_id_key="mutation_id",
+    ),
+    HookEvent.MUTATION_REJECTED: _TypedRowSpec(
+        row_cls=MutationRejectedRow,
+        details_cls=MutationDetails,
+        actor_type="system",
+        entity_id_key="mutation_id",
+    ),
+    HookEvent.MUTATION_REVERTED: _TypedRowSpec(
+        row_cls=MutationRevertedRow,
+        details_cls=MutationDetails,
+        actor_type="system",
+        entity_id_key="mutation_id",
+    ),
+    HookEvent.SELF_IMPROVING_AUTO_TRIGGER_FIRED: _TypedRowSpec(
+        row_cls=AutoTriggerFiredRow,
+        details_cls=AutoTriggerDetails,
+        actor_type="system",
+        entity_id_key="trigger_id",
+    ),
+    HookEvent.SELF_IMPROVING_AUTO_TRIGGER_LOCK_BUSY: _TypedRowSpec(
+        row_cls=AutoTriggerLockBusyRow,
+        details_cls=AutoTriggerDetails,
+        actor_type="system",
+        entity_id_key="trigger_id",
+    ),
+    HookEvent.SELF_IMPROVING_AUTO_TRIGGER_INTERVAL_BLOCKED: _TypedRowSpec(
+        row_cls=AutoTriggerIntervalBlockedRow,
+        details_cls=AutoTriggerDetails,
+        actor_type="system",
+        entity_id_key="trigger_id",
+    ),
+    HookEvent.SELF_IMPROVING_AUTO_TRIGGER_RUNNER_ERROR: _TypedRowSpec(
+        row_cls=AutoTriggerRunnerErrorRow,
+        details_cls=AutoTriggerDetails,
+        actor_type="system",
+        entity_id_key="trigger_id",
+    ),
+    HookEvent.SELF_IMPROVING_AUTO_TRIGGER_PARSE_ERROR: _TypedRowSpec(
+        row_cls=AutoTriggerParseErrorRow,
+        details_cls=AutoTriggerDetails,
+        actor_type="system",
+        entity_id_key="trigger_id",
+    ),
+    HookEvent.SELF_IMPROVING_AUTO_TRIGGER_MAX_GENERATION_REACHED: _TypedRowSpec(
+        row_cls=AutoTriggerMaxGenerationReachedRow,
+        details_cls=AutoTriggerDetails,
+        actor_type="system",
+        entity_id_key="trigger_id",
+    ),
+    HookEvent.SHUTDOWN_STARTED: _TypedRowSpec(
+        row_cls=ShutdownStartedRow, details_cls=ShutdownStartedDetails, actor_type="system"
+    ),
+    HookEvent.TOOL_APPROVAL_REQUESTED: _TypedRowSpec(
+        row_cls=ToolApprovalRequestedRow,
+        details_cls=ToolApprovalDetails,
+        actor_type="agent",
+        entity_id_key="tool_name",
+    ),
+    HookEvent.TOOL_APPROVAL_GRANTED: _TypedRowSpec(
+        row_cls=ToolApprovalGrantedRow,
+        details_cls=ToolApprovalDetails,
+        actor_type="agent",
+        entity_id_key="tool_name",
+    ),
+    HookEvent.TOOL_APPROVAL_DENIED: _TypedRowSpec(
+        row_cls=ToolApprovalDeniedRow,
+        details_cls=ToolApprovalDetails,
+        actor_type="agent",
+        entity_id_key="tool_name",
+    ),
+    HookEvent.TOOL_RESULT_OFFLOADED: _TypedRowSpec(
+        row_cls=ToolResultOffloadedRow,
+        details_cls=ToolResultOffloadedDetails,
+        actor_type="agent",
+        entity_id_key="ref_id",
+    ),
+    HookEvent.TOOL_RESULT_TRANSFORM: _TypedRowSpec(
+        row_cls=ToolResultTransformRow,
+        details_cls=ToolResultTransformDetails,
+        actor_type="agent",
+        entity_id_key="tool_name",
+    ),
+    HookEvent.POST_ANALYSIS: _TypedRowSpec(
+        row_cls=PostAnalysisRow,
+        details_cls=PostAnalysisDetails,
+        actor_type="orchestrator",
+        entity_id_key="automation_id",
+    ),
+    HookEvent.PROGRAM_MD_UNREADABLE: _TypedRowSpec(
+        row_cls=ProgramMdUnreadableRow,
+        details_cls=ProgramMdUnreadableDetails,
+        actor_type="system",
+        entity_id_key="path",
+    ),
+    HookEvent.TRIGGER_FIRED: _TypedRowSpec(
+        row_cls=TriggerFiredRow,
+        details_cls=TriggerFiredDetails,
+        actor_type="orchestrator",
+        entity_id_key="trigger_id",
+    ),
+    HookEvent.USER_INPUT_RECEIVED: _TypedRowSpec(
+        row_cls=UserInputReceivedRow,
+        details_cls=UserInputReceivedDetails,
+        actor_type="agent",
+        entity_id_key="session_id",
+        derive=_derive_input_len,
+    ),
+}
+
+
+def _make_spec_builder(
+    event: HookEvent, spec: _TypedRowSpec
+) -> Callable[[dict[str, Any], str], ActivityRowBase]:
+    """Bind one spec into a (data, run_id) builder for the registry. A
+    factory (not an inline lambda) so the loop variable is captured by value,
+    not by late-binding reference."""
+
+    def _build(data: dict[str, Any], run_id: str) -> ActivityRowBase:
+        return _build_from_spec(spec, event, data, run_id)
+
+    return _build
+
+
+for _ev, _spec in _TYPED_ROW_SPECS.items():
+    HOOK_EVENT_TO_ROW_BUILDER[_ev] = _make_spec_builder(_ev, _spec)
 
 
 # ---------------------------------------------------------------------------
@@ -265,20 +729,19 @@ def map_hook_to_activity(
     """Convert a ``HookEvent`` + ``data`` dict into a typed
     :class:`ActivityRowBase` subclass.
 
-    Lifecycle events (32, see :data:`HOOK_EVENT_TO_ROW_BUILDER`) get
-    full pydantic validation against their per-event details schema —
-    a payload bug surfaces at dispatch time with a precise
-    ``ValidationError`` instead of much later at the handler. The 43
-    non-lifecycle events fall through to :class:`GenericActivityRow`
-    which keeps the timeline complete without forcing schema work
-    upfront; subsequent PRs will tighten high-volume events.
+    All 62 events (see :data:`HOOK_EVENT_TO_ROW_BUILDER`) get full
+    pydantic validation against their per-event details schema — a
+    payload bug surfaces at dispatch time with a precise
+    ``ValidationError`` instead of much later at the handler.
 
     Any builder failure (pydantic ``ValidationError`` from a malformed
-    data dict, or a builder bug) also falls through to
-    :class:`GenericActivityRow` with a warning log — the policy is
-    "always emit a row so the timeline is complete, even when typing
-    fails", which mirrors paperclip's ``logActivity`` swallow-and-warn
-    contract.
+    data dict, or a builder bug) falls through to
+    :class:`GenericActivityRow` with a warning log + a ``_fallback_reason``
+    on the row — the policy is "always emit a row so the timeline is
+    complete, even when typing fails", which mirrors paperclip's
+    ``logActivity`` swallow-and-warn contract. With full coverage, a
+    GenericActivityRow in the timeline now signals a payload bug worth
+    investigating, not a routine untyped event.
     """
     payload = data or {}
     builder = HOOK_EVENT_TO_ROW_BUILDER.get(event)
@@ -300,7 +763,35 @@ def map_hook_to_activity(
                 type(exc).__name__,
                 exc,
             )
+            # PR-OBS-CONTRACT — a fallback row must be distinguishable
+            # from an intentionally-generic row IN THE TIMELINE, not
+            # only in the daemon log (silent-fallback anti-pattern). The
+            # reason is value-free (see :func:`_safe_fallback_reason`) so a
+            # ValidationError that echoes a raw field value never leaks it
+            # into the persisted row (Codex MCP review BLOCKER #2).
+            return _build_generic(
+                event,
+                {**payload, "_fallback_reason": _safe_fallback_reason(exc)},
+                run_id=run_id,
+            )
     return _build_generic(event, payload, run_id=run_id)
+
+
+def _safe_fallback_reason(exc: Exception) -> str:
+    """Describe WHY a typed builder failed without echoing any field VALUE.
+
+    ``str(ValidationError)`` embeds ``input_value=...`` and a plain
+    ``ValueError``/``TypeError`` message often embeds the offending value
+    (``could not convert string to float: '<value>'``) — either would carry
+    raw content into the persisted timeline row. So we record only the error
+    type + field location for pydantic, and only the class name otherwise."""
+    if isinstance(exc, ValidationError):
+        locs = [
+            f"{err.get('type', '?')}@{'.'.join(str(p) for p in err.get('loc', ()))}"
+            for err in exc.errors(include_input=False, include_url=False)
+        ]
+        return f"ValidationError[{'; '.join(locs)}]"
+    return type(exc).__name__
 
 
 def _build_generic(
@@ -309,14 +800,20 @@ def _build_generic(
     *,
     run_id: str,
 ) -> GenericActivityRow:
-    """Build the catch-all :class:`GenericActivityRow` for any event
-    without a registry entry (or whose typed builder failed). The
-    ``actor_type`` is heuristic — operators should treat
-    ``GenericActivityRow`` rows as candidates for promotion to a
-    typed subclass in a future PR."""
+    """Build the catch-all :class:`GenericActivityRow`. With 62/62
+    coverage this is now ONLY reached when a typed builder fails on a
+    malformed payload (carrying ``_fallback_reason``) or, defensively,
+    for a future event added without a registry entry. The ``actor_type``
+    is heuristic.
+
+    The payload is scrubbed of raw-content keys first — the privacy
+    contract the typed rows enforce must hold on this fail-soft path too,
+    so a builder failure on a privacy-sensitive event does not leak raw
+    ``user_input`` / ``cognitive_state`` / tool results into the JSONL."""
+    safe_data = _scrub_for_timeline(data)
     dotted_action = event.value.replace("_", ".")
     actor_type = _infer_actor_type_from_event(event)
-    actor_id = str(data.get("session_id") or data.get("actor_id") or actor_type)
+    actor_id = str(safe_data.get("session_id") or safe_data.get("actor_id") or actor_type)
     return GenericActivityRow(
         ts=time.time(),
         run_id=run_id,
@@ -325,19 +822,16 @@ def _build_generic(
         action=dotted_action,
         entity_type="system",
         entity_id=event.value,
-        task_id=str(data["task_id"]) if data.get("task_id") else None,
-        details=data,
+        task_id=str(safe_data["task_id"]) if safe_data.get("task_id") else None,
+        details=safe_data,
     )
 
 
 def _infer_actor_type_from_event(event: HookEvent) -> str:
-    """Best-effort actor classification for the generic fall-through.
-
-    The 42 non-lifecycle events span four actor types — pre-typing the
-    fall-through helps operators filter the timeline by ``actor_type``
-    without waiting for the per-event concrete class. ``GenericActivityRow``
-    rows should still be considered "untyped" — promoting them to a
-    concrete class is the path to strict validation.
+    """Best-effort actor classification for the generic fail-soft
+    fallback row (a typed builder that hit a malformed payload). The
+    primary typed path sets ``actor_type`` from the spec; this heuristic
+    only applies when a row degrades to generic.
     """
     name = event.name
     if name.startswith("SESSION_"):

@@ -271,13 +271,40 @@ def _mirror_to_active_transcript(self, event: HookEvent, data: dict[str, Any]) -
 | Item | 상태 |
 |---|---|
 | Spec doc | DONE (이 파일) |
-| Tier 1 + Tier 2 (11 base) | PENDING |
-| Tier 3 (32 lifecycle concrete) | PENDING |
-| Registry (HOOK_EVENT_TO_ROW_BUILDER) | PENDING |
-| Union channel wiring | PENDING |
-| Tests (I1-I5 + M1-M3) | PENDING |
+| Tier 1 + Tier 2 (lifecycle detail mixins) | DONE (S2) |
+| Tier 3 — 19 lifecycle concrete | DONE (S2; PR-DEAD-PIPELINE 가 11 pipeline rows 제거, PR-LOOP-PRUNE 가 handoff pair 제거) |
+| Tier 3 — 43 K-group concrete | **DONE (PR-OBS-CONTRACT, 2026-06-13)** |
+| Registry (HOOK_EVENT_TO_ROW_BUILDER) | DONE — 19 lifecycle curry + 43 K-group via 단일 `_TYPED_ROW_SPECS` 테이블 |
+| Union channel wiring | DONE — 4 trigger 변형 전부 mirror (PR-OBS-CONTRACT 가 with_result/interceptor half-connection 해소) |
+| Tests (I1-I5 + M1-M3 + K1-K3) | DONE |
 | Codex MCP review | PENDING |
 | CHANGELOG | PENDING |
+
+### 7.1 PR-OBS-CONTRACT (2026-06-13) — K-group 완성 + emit-audit 정정
+
+S2 의 §1 "11 group" 표는 emit-site 감사 *이전*에 작성된 **이상화 가설**이었다.
+실제 emit payload 를 43 이벤트 전수 추출(`core/**` grep)한 결과 다음 정정:
+
+- **Group G (State change)** 의 가설 키 `previous`+`current` 는 어느 emit site
+  에도 없음. 실제로 MODEL_SWITCHED=`from_model/to_model/reason/purged_ack_count`,
+  TOOL_APPROVAL_*=`tool_name/safety_level/...`, CONFIG_RELOADED=`config_path`
+  로 **payload 가 전부 다름** → 단일 family details 불가, 이벤트별 실측 details
+  모델 채택.
+- 최종: **23 details 모델**(패밀리 공유 — `CognitivePhaseDetails`×6,
+  `MutationDetails`×4, `AutoTriggerDetails`×6, `RuleChangeDetails`×3,
+  `CostGuardDetails`×2, `McpServerDetails`×2, `ContextPressureDetails`×2,
+  `ToolApprovalDetails`×3, `ToolResult*`×2) → **43 concrete row**.
+- **MODEL_SWITCHED** 는 S2-시점 추정과 달리 `_model_switching.py:222` 에서 실제
+  발화(emit) — typed.
+- **NO-EMIT 0건**: feedback/interceptor 패턴 4 이벤트(USER_INPUT_RECEIVED /
+  TOOL_RESULT_TRANSFORM / CONTEXT_OVERFLOW_ACTION / PROGRAM_MD_UNREADABLE)는
+  `trigger_with_result`/`trigger_interceptor` 로 발화돼 S2 의 반쪽 mirror 로는
+  timeline 에 안 들어왔다. 4 trigger 변형 전부에 mirror 를 배선해 해소 →
+  reserve-without-emit 회피, 전 이벤트가 실제로 mapper 도달.
+- **Privacy 계약**: raw `user_input` / `cognitive_state` 스냅샷 / 전체 tool
+  result 는 timeline 에 적재 금지 — `input_len` 등 파생 스칼라만(`_derive_input_len`).
+- **payload divergence**(MEMORY_SAVED tool-vs-CLI 의 `persistent`,
+  RULE_UPDATED 의 `paths` 부재)는 field default 로 graceful 흡수(허용된 정정).
 
 ---
 

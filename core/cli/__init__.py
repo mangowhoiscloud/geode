@@ -333,10 +333,12 @@ app.add_typer(config_app, name="config")
 
 # S-3 (2026-06-11) — scripts→CLI promotion: operator-procedure steps reachable
 # as geode subcommands (repo-only; thin wrappers over scripts/ modules).
+from core.cli.commands.prompt_inspect import prompt_app  # noqa: E402
 from core.cli.commands.seed_pool import hub_app, seeds_app  # noqa: E402
 
 app.add_typer(seeds_app, name="seeds")
 app.add_typer(hub_app, name="hub")
+app.add_typer(prompt_app, name="prompt")
 
 
 # ---------------------------------------------------------------------------

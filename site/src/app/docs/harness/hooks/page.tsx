@@ -17,7 +17,7 @@ export default function Page() {
             <p>
               HookSystem(<code>core/hooks/system.py</code>)은 런타임의 모든 의미
               있는 경계에서 이벤트를 발화하는 단일 버스입니다.{" "}
-              <code>HookEvent</code> enum은 정확히 64개의 라이프사이클 이벤트를
+              <code>HookEvent</code> enum은 정확히 62개의 라이프사이클 이벤트를
               정의합니다. 새 동작은 루프 코드를 고치는 대신 이 이벤트들 위에
               핸들러로 쌓입니다.
             </p>
@@ -57,7 +57,7 @@ export default function Page() {
             <p>비동기 변형으로 <code>trigger_async</code>가 있습니다.</p>
 
             <h2>이벤트 카테고리</h2>
-            <p>64개 이벤트는 enum 안의 섹션 주석으로 분류됩니다. 대표만 추리면 이렇습니다.</p>
+            <p>62개 이벤트는 enum 안의 섹션 주석으로 분류됩니다. 대표만 추리면 이렇습니다.</p>
             <table>
               <thead>
                 <tr><th>카테고리</th><th>대표 이벤트</th></tr>
@@ -125,6 +125,38 @@ hooks.register_prefix("*", mirror_everything)  # 와일드카드 구독`}</pre>
               </tbody>
             </table>
 
+            <h2>Activity row 스키마와 에러 정책</h2>
+            <p>
+              모든 <code>trigger*()</code> 호출은 활성 <code>RunTranscript</code>에
+              typed Activity row 한 줄로 mirror됩니다. 62개 이벤트 전부 concrete
+              typed row를 가집니다 (19 lifecycle + 43 K-group). <code>action</code>
+              필드가 discriminator이고, <code>GenericActivityRow</code>는 정상 경로
+              목적지가 아니라 fail-soft 폴백 전용입니다.
+            </p>
+            <table>
+              <thead>
+                <tr><th>정책</th><th>내용</th></tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>커버리지</td>
+                  <td>62/62 typed. 43 K-group은 선언적 spec 테이블 + 단일 빌더로 구성</td>
+                </tr>
+                <tr>
+                  <td>details 스키마</td>
+                  <td>23 공유 모델, <code>frozen</code> + <code>extra=forbid</code>. 모든 row에 <code>schema_version</code></td>
+                </tr>
+                <tr>
+                  <td>silent fallback 금지</td>
+                  <td>강제 generic 폴백은 <code>_fallback_reason</code>을 동봉해 timeline에서 구분 가능. mirror / dispatch / 학습 저장 실패는 once-per-event WARNING</td>
+                </tr>
+                <tr>
+                  <td>프라이버시 드롭</td>
+                  <td>raw <code>user_input</code>, cognitive-state 스냅샷, 전체 tool result는 적재 금지. <code>input_len</code> 같은 파생 스칼라만</td>
+                </tr>
+              </tbody>
+            </table>
+
             <h2>다음</h2>
             <ul>
               <li><a href="/geode/docs/guides/register-hook">훅 핸들러 등록 가이드</a>. 손으로 따라가는 절차.</li>
@@ -138,7 +170,7 @@ hooks.register_prefix("*", mirror_everything)  # 와일드카드 구독`}</pre>
             <p>
               The HookSystem (<code>core/hooks/system.py</code>) is the single
               bus that fires events at every meaningful boundary of the runtime.
-              The <code>HookEvent</code> enum defines exactly 64 lifecycle
+              The <code>HookEvent</code> enum defines exactly 62 lifecycle
               events. New behaviour stacks onto these events as handlers instead
               of editing loop code.
             </p>
@@ -178,7 +210,7 @@ hooks.register_prefix("*", mirror_everything)  # 와일드카드 구독`}</pre>
             <p>An async variant, <code>trigger_async</code>, also exists.</p>
 
             <h2>Event categories</h2>
-            <p>The 64 events are grouped by section comments inside the enum. The highlights:</p>
+            <p>The 62 events are grouped by section comments inside the enum. The highlights:</p>
             <table>
               <thead>
                 <tr><th>Category</th><th>Representative events</th></tr>
@@ -242,6 +274,39 @@ hooks.register_prefix("*", mirror_everything)  # wildcard subscription`}</pre>
                   <td>Exceptions in an observe handler are invisible</td>
                   <td><code>trigger()</code> isolates errors and only logs them</td>
                   <td>Check the logs; move flow-blocking logic to an interceptor</td>
+                </tr>
+              </tbody>
+            </table>
+
+            <h2>Activity row schema and error policy</h2>
+            <p>
+              Every <code>trigger*()</code> call mirrors as one typed Activity
+              row into the active <code>RunTranscript</code>. All 62 events have
+              a concrete typed row (19 lifecycle plus 43 K-group). The{" "}
+              <code>action</code> field is the discriminator, and{" "}
+              <code>GenericActivityRow</code> is a fail-soft fallback only, not a
+              routine destination.
+            </p>
+            <table>
+              <thead>
+                <tr><th>Policy</th><th>Detail</th></tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>Coverage</td>
+                  <td>62/62 typed. The 43 K-group rows build from one declarative spec table plus a single builder</td>
+                </tr>
+                <tr>
+                  <td>details schema</td>
+                  <td>23 shared models, <code>frozen</code> plus <code>extra=forbid</code>. Every row carries <code>schema_version</code></td>
+                </tr>
+                <tr>
+                  <td>No silent fallback</td>
+                  <td>A forced-generic row carries <code>_fallback_reason</code> so it is distinguishable in the timeline. Mirror, dispatch, and learning-save failures warn once per event</td>
+                </tr>
+                <tr>
+                  <td>Privacy drops</td>
+                  <td>Raw <code>user_input</code>, cognitive-state snapshots, and full tool results are never written. Only derived scalars like <code>input_len</code></td>
                 </tr>
               </tbody>
             </table>
