@@ -11,11 +11,11 @@ const scenarios: { tab: string; lines: Line[] }[] = [
   {
     tab: "agentic",
     lines: [
-      { type: "prompt", text: "mango@mangoui-MacBookAir resume % geode" },
+      { type: "prompt", text: "mango@mangoui-MacBookAir geode % geode" },
       { type: "dots", text: "", rich: <><br/></> },
       { type: "dots", text: '  ╲╲( ◕ ᵕ ◕ )╱╱  GEODE', rich: <>{`  `}<span style={{color:"#9775c4"}}>╲╲</span><span style={{color:"#fff"}}>{`( ◕ ᵕ ◕ )`}</span><span style={{color:"#9775c4"}}>╱╱</span>{`  `}<span style={{color:"#5f9ea0",fontWeight:700}}>GEODE</span></> },
       { type: "dots", text: "                       claude-opus-4-7 · autonomous execution agent", rich: <span style={{color:"#d4a0a0",opacity:0.5}}>{`                       claude-opus-4-7 · autonomous execution agent`}</span> },
-      { type: "dots", text: "                       /Users/mango/workspace/resume", rich: <span style={{opacity:0.35}}>{`                       /Users/mango/workspace/resume`}</span> },
+      { type: "dots", text: "                       ~/workspace/geode", rich: <span style={{opacity:0.35}}>{`                       ~/workspace/geode`}</span> },
       { type: "dots", text: "" },
       { type: "dots", text: "  harness: GEODE", rich: <>{`  `}<span style={{opacity:0.35}}>harness:</span>{` `}<span style={{color:"#5f9ea0"}}>GEODE</span></> },
       { type: "dots", text: "  ✓ LLM Analysis  ✓ Project Memory  ✓ User Profile", rich: <>{`  `}<span style={{color:"#22c55e",fontWeight:700}}>✓</span>{` LLM Analysis  `}<span style={{color:"#22c55e",fontWeight:700}}>✓</span>{` Project Memory  `}<span style={{color:"#22c55e",fontWeight:700}}>✓</span>{` User Profile`}</> },

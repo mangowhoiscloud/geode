@@ -124,7 +124,7 @@ Sprint columns:
 ## Notes
 
 - `existing` 페이지: 현재 `<a href="/geode/docs/...">` raw anchors 사용 — basePath 변경 후에도 동작 ([Sprint 1.5 분석](../README.md))
-- `wiki source` 컬럼은 `/Users/mango/workspace/mango-wiki/vault/projects/geode/concepts/geode-*.md` 파일 가리킴
+- `wiki source` 컬럼은 `~/workspace/mango-wiki/vault/projects/geode/concepts/geode-*.md` 파일 가리킴
 - Petri 외부 링크 `https://mangowhoiscloud.github.io/geode/petri-bundle/` — site/public/petri-bundle/ 는 사용자가 별도 publish 예정
 - 모든 페이지 `quadrant` prop을 사이드바 chip + 페이지 상단 chip으로 렌더
 - 메트릭 (v, 모듈, 테스트, 릴리스 등)은 SOT (`site/src/data/geode/sot.ts`) import만 — 페이지 본문에 하드코딩 0개 목표

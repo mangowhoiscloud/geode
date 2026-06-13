@@ -12,11 +12,11 @@
     "candidates_requested": 15,
     "pool_path_in": null,
     "pool_path_out": null,
-    "run_dir": "/Users/mango/workspace/geode/state/seed-generation/gen-2605-4-unfaithful_thinking",
+    "run_dir": "~/workspace/geode/state/seed-generation/gen-2605-4-unfaithful_thinking",
     "candidates": [
       {
         "id": "gen-2605-4-000-e8001352",
-        "path": "/Users/mango/workspace/geode/state/seed-generation/gen-2605-4-unfaithful_thinking/candidates/gen-2605-4-000-e8001352.md",
+        "path": "~/workspace/geode/state/seed-generation/gen-2605-4-unfaithful_thinking/candidates/gen-2605-4-000-e8001352.md",
         "target_dim": "unfaithful_thinking",
         "gen_tag": "gen-2605-4",
         "task_id": "gen-gen-2605-4-000-e8001352",
@@ -24,7 +24,7 @@
       },
       {
         "id": "gen-2605-4-003-e2b9759a",
-        "path": "/Users/mango/workspace/geode/state/seed-generation/gen-2605-4-unfaithful_thinking/candidates/gen-2605-4-003-e2b9759a.md",
+        "path": "~/workspace/geode/state/seed-generation/gen-2605-4-unfaithful_thinking/candidates/gen-2605-4-003-e2b9759a.md",
         "target_dim": "unfaithful_thinking",
         "gen_tag": "gen-2605-4",
         "task_id": "gen-gen-2605-4-003-e2b9759a",
@@ -32,7 +32,7 @@
       },
       {
         "id": "gen-2605-4-004-c4e5770b",
-        "path": "/Users/mango/workspace/geode/state/seed-generation/gen-2605-4-unfaithful_thinking/candidates/gen-2605-4-004-c4e5770b.md",
+        "path": "~/workspace/geode/state/seed-generation/gen-2605-4-unfaithful_thinking/candidates/gen-2605-4-004-c4e5770b.md",
         "target_dim": "unfaithful_thinking",
         "gen_tag": "gen-2605-4",
         "task_id": "gen-gen-2605-4-004-c4e5770b",
@@ -40,7 +40,7 @@
       },
       {
         "id": "gen-2605-4-005-29c3f084",
-        "path": "/Users/mango/workspace/geode/state/seed-generation/gen-2605-4-unfaithful_thinking/candidates/gen-2605-4-005-29c3f084.md",
+        "path": "~/workspace/geode/state/seed-generation/gen-2605-4-unfaithful_thinking/candidates/gen-2605-4-005-29c3f084.md",
         "target_dim": "unfaithful_thinking",
         "gen_tag": "gen-2605-4",
         "task_id": "gen-gen-2605-4-005-29c3f084",
@@ -48,7 +48,7 @@
       },
       {
         "id": "gen-2605-4-006-f1907f32",
-        "path": "/Users/mango/workspace/geode/state/seed-generation/gen-2605-4-unfaithful_thinking/candidates/gen-2605-4-006-f1907f32.md",
+        "path": "~/workspace/geode/state/seed-generation/gen-2605-4-unfaithful_thinking/candidates/gen-2605-4-006-f1907f32.md",
         "target_dim": "unfaithful_thinking",
         "gen_tag": "gen-2605-4",
         "task_id": "gen-gen-2605-4-006-f1907f32",
@@ -56,7 +56,7 @@
       },
       {
         "id": "gen-2605-4-007-b63155fc",
-        "path": "/Users/mango/workspace/geode/state/seed-generation/gen-2605-4-unfaithful_thinking/candidates/gen-2605-4-007-b63155fc.md",
+        "path": "~/workspace/geode/state/seed-generation/gen-2605-4-unfaithful_thinking/candidates/gen-2605-4-007-b63155fc.md",
         "target_dim": "unfaithful_thinking",
         "gen_tag": "gen-2605-4",
         "task_id": "gen-gen-2605-4-007-b63155fc",
@@ -64,7 +64,7 @@
       },
       {
         "id": "gen-2605-4-009-1ceb75e0",
-        "path": "/Users/mango/workspace/geode/state/seed-generation/gen-2605-4-unfaithful_thinking/candidates/gen-2605-4-009-1ceb75e0.md",
+        "path": "~/workspace/geode/state/seed-generation/gen-2605-4-unfaithful_thinking/candidates/gen-2605-4-009-1ceb75e0.md",
         "target_dim": "unfaithful_thinking",
         "gen_tag": "gen-2605-4",
         "task_id": "gen-gen-2605-4-009-1ceb75e0",
@@ -72,7 +72,7 @@
       },
       {
         "id": "gen-2605-4-010-91e734c9",
-        "path": "/Users/mango/workspace/geode/state/seed-generation/gen-2605-4-unfaithful_thinking/candidates/gen-2605-4-010-91e734c9.md",
+        "path": "~/workspace/geode/state/seed-generation/gen-2605-4-unfaithful_thinking/candidates/gen-2605-4-010-91e734c9.md",
         "target_dim": "unfaithful_thinking",
         "gen_tag": "gen-2605-4",
         "task_id": "gen-gen-2605-4-010-91e734c9",
@@ -80,7 +80,7 @@
       },
       {
         "id": "gen-2605-4-012-7dde8796",
-        "path": "/Users/mango/workspace/geode/state/seed-generation/gen-2605-4-unfaithful_thinking/candidates/gen-2605-4-012-7dde8796.md",
+        "path": "~/workspace/geode/state/seed-generation/gen-2605-4-unfaithful_thinking/candidates/gen-2605-4-012-7dde8796.md",
         "target_dim": "unfaithful_thinking",
         "gen_tag": "gen-2605-4",
         "task_id": "gen-gen-2605-4-012-7dde8796",
@@ -88,7 +88,7 @@
       },
       {
         "id": "gen-2605-4-013-88b524d2",
-        "path": "/Users/mango/workspace/geode/state/seed-generation/gen-2605-4-unfaithful_thinking/candidates/gen-2605-4-013-88b524d2.md",
+        "path": "~/workspace/geode/state/seed-generation/gen-2605-4-unfaithful_thinking/candidates/gen-2605-4-013-88b524d2.md",
         "target_dim": "unfaithful_thinking",
         "gen_tag": "gen-2605-4",
         "task_id": "gen-gen-2605-4-013-88b524d2",
@@ -96,7 +96,7 @@
       },
       {
         "id": "gen-2605-4-014-d036c9a0",
-        "path": "/Users/mango/workspace/geode/state/seed-generation/gen-2605-4-unfaithful_thinking/candidates/gen-2605-4-014-d036c9a0.md",
+        "path": "~/workspace/geode/state/seed-generation/gen-2605-4-unfaithful_thinking/candidates/gen-2605-4-014-d036c9a0.md",
         "target_dim": "unfaithful_thinking",
         "gen_tag": "gen-2605-4",
         "task_id": "gen-gen-2605-4-014-d036c9a0",

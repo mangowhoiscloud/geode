@@ -613,7 +613,7 @@ gh pr checks <PR#> --watch --repo mangowhoiscloud/geode
 
 ```bash
 # 1. Return to main repo
-cd /Users/mango/workspace/geode
+cd ~/workspace/geode
 
 # 2. Update develop/main to latest
 git checkout develop && git pull origin develop

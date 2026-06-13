@@ -394,4 +394,4 @@ The viewer hash routes (`#/tasks/...`) are not Next.js basePath-aware. Always us
 
 ---
 
-**Maintained at**: `/Users/mango/workspace/portfolio/DESIGN.md`. Tokens authoritative source: `src/app/globals.css`. When tokens change in code, update this file in the same commit. Drift between code and DESIGN.md is a regression.
+**Maintained at**: `~/workspace/portfolio/DESIGN.md`. Tokens authoritative source: `src/app/globals.css`. When tokens change in code, update this file in the same commit. Drift between code and DESIGN.md is a regression.

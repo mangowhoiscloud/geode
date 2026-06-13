@@ -6,6 +6,6 @@
 
 This portfolio repo is **dark, harness-engineer aesthetic**. Audience: developers and technical reviewers. Surface: Next.js 16 + Tailwind 4 + React 19, static-exported to GH Pages at `mangowhoiscloud.github.io/portfolio`.
 
-For cross-surface conventions (when content moves between portfolio / resume / mango-wiki), see [`/Users/mango/workspace/DESIGN-shared.md`](../DESIGN-shared.md).
+For cross-surface conventions (when content moves between portfolio / resume / mango-wiki), see [`~/workspace/DESIGN-shared.md`](../DESIGN-shared.md).
 
 Format: Google Stitch DESIGN.md 9-section spec — https://stitch.withgoogle.com/docs/design-md/overview

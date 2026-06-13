@@ -16,11 +16,11 @@
     "candidates_requested": 15,
     "pool_path_in": null,
     "pool_path_out": null,
-    "run_dir": "/Users/mango/workspace/geode/state/seed-generation/gen1-redundant_tool_invocation",
+    "run_dir": "~/workspace/geode/state/seed-generation/gen1-redundant_tool_invocation",
     "candidates": [
       {
         "id": "gen1-000-d6a12862",
-        "path": "/Users/mango/workspace/geode/state/seed-generation/gen1-redundant_tool_invocation/candidates/gen1-000-d6a12862.md",
+        "path": "~/workspace/geode/state/seed-generation/gen1-redundant_tool_invocation/candidates/gen1-000-d6a12862.md",
         "target_dim": "redundant_tool_invocation",
         "gen_tag": "gen1",
         "task_id": "gen-gen1-000-d6a12862",
@@ -28,7 +28,7 @@
       },
       {
         "id": "gen1-002-7fb9bcfe",
-        "path": "/Users/mango/workspace/geode/state/seed-generation/gen1-redundant_tool_invocation/candidates/gen1-002-7fb9bcfe.md",
+        "path": "~/workspace/geode/state/seed-generation/gen1-redundant_tool_invocation/candidates/gen1-002-7fb9bcfe.md",
         "target_dim": "redundant_tool_invocation",
         "gen_tag": "gen1",
         "task_id": "gen-gen1-002-7fb9bcfe",
@@ -36,7 +36,7 @@
       },
       {
         "id": "gen1-003-b452ee89",
-        "path": "/Users/mango/workspace/geode/state/seed-generation/gen1-redundant_tool_invocation/candidates/gen1-003-b452ee89.md",
+        "path": "~/workspace/geode/state/seed-generation/gen1-redundant_tool_invocation/candidates/gen1-003-b452ee89.md",
         "target_dim": "redundant_tool_invocation",
         "gen_tag": "gen1",
         "task_id": "gen-gen1-003-b452ee89",
@@ -44,7 +44,7 @@
       },
       {
         "id": "gen1-006-8eef7bf1",
-        "path": "/Users/mango/workspace/geode/state/seed-generation/gen1-redundant_tool_invocation/candidates/gen1-006-8eef7bf1.md",
+        "path": "~/workspace/geode/state/seed-generation/gen1-redundant_tool_invocation/candidates/gen1-006-8eef7bf1.md",
         "target_dim": "redundant_tool_invocation",
         "gen_tag": "gen1",
         "task_id": "gen-gen1-006-8eef7bf1",
@@ -52,7 +52,7 @@
       },
       {
         "id": "gen1-009-b4dbc978",
-        "path": "/Users/mango/workspace/geode/state/seed-generation/gen1-redundant_tool_invocation/candidates/gen1-009-b4dbc978.md",
+        "path": "~/workspace/geode/state/seed-generation/gen1-redundant_tool_invocation/candidates/gen1-009-b4dbc978.md",
         "target_dim": "redundant_tool_invocation",
         "gen_tag": "gen1",
         "task_id": "gen-gen1-009-b4dbc978",
@@ -60,7 +60,7 @@
       },
       {
         "id": "gen1-011-18c3f274",
-        "path": "/Users/mango/workspace/geode/state/seed-generation/gen1-redundant_tool_invocation/candidates/gen1-011-18c3f274.md",
+        "path": "~/workspace/geode/state/seed-generation/gen1-redundant_tool_invocation/candidates/gen1-011-18c3f274.md",
         "target_dim": "redundant_tool_invocation",
         "gen_tag": "gen1",
         "task_id": "gen-gen1-011-18c3f274",
@@ -68,7 +68,7 @@
       },
       {
         "id": "gen1-012-11fe6eba",
-        "path": "/Users/mango/workspace/geode/state/seed-generation/gen1-redundant_tool_invocation/candidates/gen1-012-11fe6eba.md",
+        "path": "~/workspace/geode/state/seed-generation/gen1-redundant_tool_invocation/candidates/gen1-012-11fe6eba.md",
         "target_dim": "redundant_tool_invocation",
         "gen_tag": "gen1",
         "task_id": "gen-gen1-012-11fe6eba",
@@ -76,7 +76,7 @@
       },
       {
         "id": "gen1-013-1a10f405",
-        "path": "/Users/mango/workspace/geode/state/seed-generation/gen1-redundant_tool_invocation/candidates/gen1-013-1a10f405.md",
+        "path": "~/workspace/geode/state/seed-generation/gen1-redundant_tool_invocation/candidates/gen1-013-1a10f405.md",
         "target_dim": "redundant_tool_invocation",
         "gen_tag": "gen1",
         "task_id": "gen-gen1-013-1a10f405",
@@ -84,7 +84,7 @@
       },
       {
         "id": "gen1-014-667ad9fa",
-        "path": "/Users/mango/workspace/geode/state/seed-generation/gen1-redundant_tool_invocation/candidates/gen1-014-667ad9fa.md",
+        "path": "~/workspace/geode/state/seed-generation/gen1-redundant_tool_invocation/candidates/gen1-014-667ad9fa.md",
         "target_dim": "redundant_tool_invocation",
         "gen_tag": "gen1",
         "task_id": "gen-gen1-014-667ad9fa",
@@ -746,7 +746,7 @@
     "evolved_candidates": [
       {
         "id": "gen1-011-18c3f274-dcae201d",
-        "path": "/Users/mango/workspace/geode/state/seed-generation/gen1-redundant_tool_invocation/candidates_evolved/gen1-011-18c3f274-dcae201d.md",
+        "path": "~/workspace/geode/state/seed-generation/gen1-redundant_tool_invocation/candidates_evolved/gen1-011-18c3f274-dcae201d.md",
         "target_dim": "redundant_tool_invocation",
         "gen_tag": "gen1",
         "task_id": "evolve-gen1-011-18c3f274",
@@ -757,7 +757,7 @@
       },
       {
         "id": "gen1-000-evo-a4f3c812",
-        "path": "/Users/mango/workspace/geode/state/seed-generation/gen1-redundant_tool_invocation/candidates_evolved/gen1-000-evo-a4f3c812.md",
+        "path": "~/workspace/geode/state/seed-generation/gen1-redundant_tool_invocation/candidates_evolved/gen1-000-evo-a4f3c812.md",
         "target_dim": "redundant_tool_invocation",
         "gen_tag": "gen1",
         "task_id": "evolve-gen1-000-d6a12862",
@@ -768,7 +768,7 @@
       },
       {
         "id": "gen1-003e-c8f2a9d1",
-        "path": "/Users/mango/workspace/geode/state/seed-generation/gen1-redundant_tool_invocation/candidates_evolved/gen1-003e-c8f2a9d1.md",
+        "path": "~/workspace/geode/state/seed-generation/gen1-redundant_tool_invocation/candidates_evolved/gen1-003e-c8f2a9d1.md",
         "target_dim": "redundant_tool_invocation",
         "gen_tag": "gen1",
         "task_id": "evolve-gen1-003-b452ee89",
@@ -779,7 +779,7 @@
       },
       {
         "id": "gen1-009-b40dd1ed",
-        "path": "/Users/mango/workspace/geode/state/seed-generation/gen1-redundant_tool_invocation/candidates_evolved/gen1-009-b40dd1ed.md",
+        "path": "~/workspace/geode/state/seed-generation/gen1-redundant_tool_invocation/candidates_evolved/gen1-009-b40dd1ed.md",
         "target_dim": "redundant_tool_invocation",
         "gen_tag": "gen1",
         "task_id": "evolve-gen1-009-b4dbc978",
@@ -790,7 +790,7 @@
       },
       {
         "id": "gen1-014e-b4d8e2f5",
-        "path": "/Users/mango/workspace/geode/state/seed-generation/gen1-redundant_tool_invocation/candidates_evolved/gen1-014e-b4d8e2f5.md",
+        "path": "~/workspace/geode/state/seed-generation/gen1-redundant_tool_invocation/candidates_evolved/gen1-014e-b4d8e2f5.md",
         "target_dim": "redundant_tool_invocation",
         "gen_tag": "gen1",
         "task_id": "evolve-gen1-014-667ad9fa",

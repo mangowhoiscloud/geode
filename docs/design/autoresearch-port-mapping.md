@@ -13,7 +13,7 @@ parent: self-improving-hub-system.md
 
 ### `prepare.py` — Constants & Utilities (CANNOT modify)
 
-**Source**: `/Users/mango/workspace/autoresearch/prepare.py`
+**Source**: `~/workspace/autoresearch/prepare.py`
 
 | Line Range | Role | Agent Contract |
 |---|---|---|
@@ -27,7 +27,7 @@ parent: self-improving-hub-system.md
 
 ### `train.py` — Model, Optimizer, Training Loop (AGENT modifies)
 
-**Source**: `/Users/mango/workspace/autoresearch/train.py`
+**Source**: `~/workspace/autoresearch/train.py`
 
 | Line Range | Agent Freedom | Notes |
 |---|---|---|
@@ -42,7 +42,7 @@ parent: self-improving-hub-system.md
 
 ### `program.md` — Agent Instructions (HUMAN or AGENT edits)
 
-**Source**: `/Users/mango/workspace/autoresearch/program.md`
+**Source**: `~/workspace/autoresearch/program.md`
 
 | Section | Role | Agent Contract |
 |---|---|---|
@@ -62,7 +62,7 @@ GEODE **inherits verbatim** the 3-file idiom, fixed-budget constraint, and git-a
 
 ### 2a. Multi-Axis Fitness (4 axes, not 1 scalar)
 
-**Source**: `/Users/mango/workspace/geode/.claude/worktrees/self-improving-p5-e2e/autoresearch/train.py:418–424`
+**Source**: `~/workspace/geode/.claude/worktrees/self-improving-p5-e2e/autoresearch/train.py:418–424`
 
 Instead of a single `val_bpb` metric, GEODE computes a **weighted 4-axis aggregate**:
 
@@ -84,7 +84,7 @@ FITNESS_BENCH_4AX: float = 0.25      # Capability 7-field (positive pressure)
 
 ### 2b. Schema v2 `baseline.json` (6 namespaces, not flat dict)
 
-**Source**: `/Users/mango/workspace/geode/.claude/worktrees/self-improving-p5-e2e/autoresearch/train.py:1806–1828`
+**Source**: `~/workspace/geode/.claude/worktrees/self-improving-p5-e2e/autoresearch/train.py:1806–1828`
 
 **Karpathy**: flat dict `{dim_means, dim_stderr}`
 
@@ -123,7 +123,7 @@ FITNESS_BENCH_4AX: float = 0.25      # Capability 7-field (positive pressure)
 
 ### 2c. `mutations.jsonl` Ledger (ApplyRecord + AttributionRecord schemas, W4 2026-05-25)
 
-**Source**: `/Users/mango/workspace/geode/.claude/worktrees/self-improving-p5-e2e/core/self_improving_loop/runner.py:80–182`
+**Source**: `~/workspace/geode/.claude/worktrees/self-improving-p5-e2e/core/self_improving_loop/runner.py:80–182`
 
 **Karpathy**: no mutation ledger (only git history + results.tsv)
 
@@ -155,13 +155,13 @@ fitness_delta: float  # change in fitness from before to after
 attribution_score: float  # magnitude of intended effect (0–1)
 ```
 
-**Location**: `/Users/mango/workspace/geode/.claude/worktrees/self-improving-p5-e2e/autoresearch/state/mutations.jsonl` (gitignored)
+**Location**: `~/workspace/geode/.claude/worktrees/self-improving-p5-e2e/autoresearch/state/mutations.jsonl` (gitignored)
 
 **Consumer**: `autoresearch/ux_means.py:156–225` — reads the ledger to compute success_rate, token_cost, revert_ratio, latency.
 
 ### 2d. Policies SoT: 14 Policy Files (not 1)
 
-**Source**: `/Users/mango/workspace/geode/.claude/worktrees/self-improving-p5-e2e/docs/design/self-improving-autoresearch-policies.md:22–37`
+**Source**: `~/workspace/geode/.claude/worktrees/self-improving-p5-e2e/docs/design/self-improving-autoresearch-policies.md:22–37`
 
 Karpathy's agent only modified `train.py`. GEODE's agent can modify **14 policy files** under `autoresearch/state/policies/`:
 

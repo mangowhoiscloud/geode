@@ -1,7 +1,7 @@
 """Bug class B1 — OAuth success message must display the actual SOT path.
 
 The v0.52.1 incident: ``/login openai`` succeeded and printed
-``Stored: /Users/mango/.geode/auth.json``, but the actual write landed
+``Stored: ~/.geode/auth.json``, but the actual write landed
 in ``~/.geode/auth.toml`` (v0.50.2 SOT). The display constant lagged
 behind the SOT migration.
 

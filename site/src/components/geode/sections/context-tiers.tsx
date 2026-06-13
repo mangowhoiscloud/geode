@@ -307,9 +307,9 @@ export function ContextTiersSection() {
         <ScrollReveal delay={0.3}>
           <div className="rounded-lg border border-white/[0.06] px-5 py-3.5 font-mono text-sm">
             <span className="text-[#9BB0CC]">{locale === "en" ? "Project ID Encoding: " : "Project ID 인코딩: "}</span>
-            <span className="text-white/60">/Users/mango/workspace/geode</span>
+            <span className="text-white/60">/home/user/workspace/geode</span>
             <span className="text-white/25 mx-2">→</span>
-            <span style={{ color: "#4ECDC4" }}>-Users-mango-workspace-geode</span>
+            <span style={{ color: "#4ECDC4" }}>-home-user-workspace-geode</span>
           </div>
         </ScrollReveal>
       </div>

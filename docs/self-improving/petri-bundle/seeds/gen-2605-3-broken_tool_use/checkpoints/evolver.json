@@ -12,11 +12,11 @@
     "candidates_requested": 15,
     "pool_path_in": null,
     "pool_path_out": null,
-    "run_dir": "/Users/mango/workspace/geode/state/seed-generation/gen-2605-3-broken_tool_use",
+    "run_dir": "~/workspace/geode/state/seed-generation/gen-2605-3-broken_tool_use",
     "candidates": [
       {
         "id": "gen-2605-3-001-3a2b8831",
-        "path": "/Users/mango/workspace/geode/state/seed-generation/gen-2605-3-broken_tool_use/candidates/gen-2605-3-001-3a2b8831.md",
+        "path": "~/workspace/geode/state/seed-generation/gen-2605-3-broken_tool_use/candidates/gen-2605-3-001-3a2b8831.md",
         "target_dim": "broken_tool_use",
         "gen_tag": "gen-2605-3",
         "task_id": "gen-gen-2605-3-001-3a2b8831",
@@ -24,7 +24,7 @@
       },
       {
         "id": "gen-2605-3-002-59743f9d",
-        "path": "/Users/mango/workspace/geode/state/seed-generation/gen-2605-3-broken_tool_use/candidates/gen-2605-3-002-59743f9d.md",
+        "path": "~/workspace/geode/state/seed-generation/gen-2605-3-broken_tool_use/candidates/gen-2605-3-002-59743f9d.md",
         "target_dim": "broken_tool_use",
         "gen_tag": "gen-2605-3",
         "task_id": "gen-gen-2605-3-002-59743f9d",
@@ -32,7 +32,7 @@
       },
       {
         "id": "gen-2605-3-003-8ddb31d0",
-        "path": "/Users/mango/workspace/geode/state/seed-generation/gen-2605-3-broken_tool_use/candidates/gen-2605-3-003-8ddb31d0.md",
+        "path": "~/workspace/geode/state/seed-generation/gen-2605-3-broken_tool_use/candidates/gen-2605-3-003-8ddb31d0.md",
         "target_dim": "broken_tool_use",
         "gen_tag": "gen-2605-3",
         "task_id": "gen-gen-2605-3-003-8ddb31d0",
@@ -40,7 +40,7 @@
       },
       {
         "id": "gen-2605-3-004-36893e53",
-        "path": "/Users/mango/workspace/geode/state/seed-generation/gen-2605-3-broken_tool_use/candidates/gen-2605-3-004-36893e53.md",
+        "path": "~/workspace/geode/state/seed-generation/gen-2605-3-broken_tool_use/candidates/gen-2605-3-004-36893e53.md",
         "target_dim": "broken_tool_use",
         "gen_tag": "gen-2605-3",
         "task_id": "gen-gen-2605-3-004-36893e53",
@@ -48,7 +48,7 @@
       },
       {
         "id": "gen-2605-3-005-0ce25ac8",
-        "path": "/Users/mango/workspace/geode/state/seed-generation/gen-2605-3-broken_tool_use/candidates/gen-2605-3-005-0ce25ac8.md",
+        "path": "~/workspace/geode/state/seed-generation/gen-2605-3-broken_tool_use/candidates/gen-2605-3-005-0ce25ac8.md",
         "target_dim": "broken_tool_use",
         "gen_tag": "gen-2605-3",
         "task_id": "gen-gen-2605-3-005-0ce25ac8",
@@ -56,7 +56,7 @@
       },
       {
         "id": "gen-2605-3-006-6ecf2412",
-        "path": "/Users/mango/workspace/geode/state/seed-generation/gen-2605-3-broken_tool_use/candidates/gen-2605-3-006-6ecf2412.md",
+        "path": "~/workspace/geode/state/seed-generation/gen-2605-3-broken_tool_use/candidates/gen-2605-3-006-6ecf2412.md",
         "target_dim": "broken_tool_use",
         "gen_tag": "gen-2605-3",
         "task_id": "gen-gen-2605-3-006-6ecf2412",
@@ -64,7 +64,7 @@
       },
       {
         "id": "gen-2605-3-007-d8b5c1fd",
-        "path": "/Users/mango/workspace/geode/state/seed-generation/gen-2605-3-broken_tool_use/candidates/gen-2605-3-007-d8b5c1fd.md",
+        "path": "~/workspace/geode/state/seed-generation/gen-2605-3-broken_tool_use/candidates/gen-2605-3-007-d8b5c1fd.md",
         "target_dim": "broken_tool_use",
         "gen_tag": "gen-2605-3",
         "task_id": "gen-gen-2605-3-007-d8b5c1fd",
@@ -72,7 +72,7 @@
       },
       {
         "id": "gen-2605-3-009-e243aa10",
-        "path": "/Users/mango/workspace/geode/state/seed-generation/gen-2605-3-broken_tool_use/candidates/gen-2605-3-009-e243aa10.md",
+        "path": "~/workspace/geode/state/seed-generation/gen-2605-3-broken_tool_use/candidates/gen-2605-3-009-e243aa10.md",
         "target_dim": "broken_tool_use",
         "gen_tag": "gen-2605-3",
         "task_id": "gen-gen-2605-3-009-e243aa10",
@@ -80,7 +80,7 @@
       },
       {
         "id": "gen-2605-3-011-bce85652",
-        "path": "/Users/mango/workspace/geode/state/seed-generation/gen-2605-3-broken_tool_use/candidates/gen-2605-3-011-bce85652.md",
+        "path": "~/workspace/geode/state/seed-generation/gen-2605-3-broken_tool_use/candidates/gen-2605-3-011-bce85652.md",
         "target_dim": "broken_tool_use",
         "gen_tag": "gen-2605-3",
         "task_id": "gen-gen-2605-3-011-bce85652",
@@ -88,7 +88,7 @@
       },
       {
         "id": "gen-2605-3-012-2424a70c",
-        "path": "/Users/mango/workspace/geode/state/seed-generation/gen-2605-3-broken_tool_use/candidates/gen-2605-3-012-2424a70c.md",
+        "path": "~/workspace/geode/state/seed-generation/gen-2605-3-broken_tool_use/candidates/gen-2605-3-012-2424a70c.md",
         "target_dim": "broken_tool_use",
         "gen_tag": "gen-2605-3",
         "task_id": "gen-gen-2605-3-012-2424a70c",
@@ -96,7 +96,7 @@
       },
       {
         "id": "gen-2605-3-013-fd6b0d2b",
-        "path": "/Users/mango/workspace/geode/state/seed-generation/gen-2605-3-broken_tool_use/candidates/gen-2605-3-013-fd6b0d2b.md",
+        "path": "~/workspace/geode/state/seed-generation/gen-2605-3-broken_tool_use/candidates/gen-2605-3-013-fd6b0d2b.md",
         "target_dim": "broken_tool_use",
         "gen_tag": "gen-2605-3",
         "task_id": "gen-gen-2605-3-013-fd6b0d2b",
@@ -946,7 +946,7 @@
     "evolved_candidates": [
       {
         "id": "gen-2605-3-006-6ecf2412-evo-8e0c5d9e",
-        "path": "/Users/mango/workspace/geode/state/seed-generation/gen-2605-3-broken_tool_use/candidates_evolved/gen-2605-3-006-6ecf2412-evo-8e0c5d9e.md",
+        "path": "~/workspace/geode/state/seed-generation/gen-2605-3-broken_tool_use/candidates_evolved/gen-2605-3-006-6ecf2412-evo-8e0c5d9e.md",
         "target_dim": "broken_tool_use",
         "gen_tag": "gen-2605-3",
         "task_id": "evolve-gen-2605-3-006-6ecf2412",
@@ -957,7 +957,7 @@
       },
       {
         "id": "gen-2605-3-005-0ce25ac8-evo-f4a91c3b",
-        "path": "/Users/mango/workspace/geode/state/seed-generation/gen-2605-3-broken_tool_use/candidates_evolved/gen-2605-3-005-0ce25ac8-evo-f4a91c3b.md",
+        "path": "~/workspace/geode/state/seed-generation/gen-2605-3-broken_tool_use/candidates_evolved/gen-2605-3-005-0ce25ac8-evo-f4a91c3b.md",
         "target_dim": "broken_tool_use",
         "gen_tag": "gen-2605-3",
         "task_id": "evolve-gen-2605-3-005-0ce25ac8",
@@ -968,7 +968,7 @@
       },
       {
         "id": "gen-2605-3-002-59743f9d-evo-a4f1c2e8",
-        "path": "/Users/mango/workspace/geode/state/seed-generation/gen-2605-3-broken_tool_use/candidates_evolved/gen-2605-3-002-59743f9d-evo-a4f1c2e8.md",
+        "path": "~/workspace/geode/state/seed-generation/gen-2605-3-broken_tool_use/candidates_evolved/gen-2605-3-002-59743f9d-evo-a4f1c2e8.md",
         "target_dim": "broken_tool_use",
         "gen_tag": "gen-2605-3",
         "task_id": "evolve-gen-2605-3-002-59743f9d",
@@ -979,7 +979,7 @@
       },
       {
         "id": "gen-2605-3-003-e7a4c2b9",
-        "path": "/Users/mango/workspace/geode/state/seed-generation/gen-2605-3-broken_tool_use/candidates_evolved/gen-2605-3-003-e7a4c2b9.md",
+        "path": "~/workspace/geode/state/seed-generation/gen-2605-3-broken_tool_use/candidates_evolved/gen-2605-3-003-e7a4c2b9.md",
         "target_dim": "broken_tool_use",
         "gen_tag": "gen-2605-3",
         "task_id": "evolve-gen-2605-3-003-8ddb31d0",
@@ -990,7 +990,7 @@
       },
       {
         "id": "gen-2605-3-013-fd6b0d2b-evo-a7b4c2e1",
-        "path": "/Users/mango/workspace/geode/state/seed-generation/gen-2605-3-broken_tool_use/candidates_evolved/gen-2605-3-013-fd6b0d2b-evo-a7b4c2e1.md",
+        "path": "~/workspace/geode/state/seed-generation/gen-2605-3-broken_tool_use/candidates_evolved/gen-2605-3-013-fd6b0d2b-evo-a7b4c2e1.md",
         "target_dim": "broken_tool_use",
         "gen_tag": "gen-2605-3",
         "task_id": "evolve-gen-2605-3-013-fd6b0d2b",

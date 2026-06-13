@@ -1,5 +1,5 @@
 {
   "claude_cli_session_id": "2fe3eef4-da0d-4796-b2ac-1f7b935c1b26",
   "updated_at": 1779905648.935049,
-  "cwd": "/Users/mango/workspace/geode/state/seed-generation/gen1-broken_tool_use/sub_agents/critic-gen1-008-90ff3550/cwd"
+  "cwd": "~/workspace/geode/state/seed-generation/gen1-broken_tool_use/sub_agents/critic-gen1-008-90ff3550/cwd"
 }

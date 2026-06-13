@@ -586,7 +586,7 @@ def test_classify_signal_assistant_event_exclamation_prefix_still_fires() -> Non
 def test_classify_signal_smoke22_llm_prose_in_result_event_not_false_positive() -> None:
     """PR-TRANSIENT-CLI-INJECTION-RESULT-SCOPE (Sprint H1, 2026-05-26)
     regression — smoke 22 evidence: dump
-    ``/Users/mango/.geode/diagnostics/claude-cli-transient/1779767762-claude-opus-4-7.json``.
+    ``~/.geode/diagnostics/claude-cli-transient/1779767762-claude-opus-4-7.json``.
     LLM seed body landed in ``event.type="result"`` ``result`` field
     (the aggregated final-assistant text) containing the phrase
     ``"rate-limit warning"``. Pre-fix the broad transient regex matched

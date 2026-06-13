@@ -14,7 +14,7 @@ triggers: codex, mcp, codex-verify, second opinion, cross-llm, gpt-5, codex revi
 - **명령**: `codex mcp-server`
 - **인증**: `~/.codex/auth.json` (ChatGPT Plus / Pro OAuth, 본 cycle 의 PR #1133 의 sibling source)
 - **확인**: `claude mcp list` 의 `codex: codex mcp-server - ✓ Connected`
-- **scope**: project-level (`/Users/mango/workspace/geode`)
+- **scope**: project-level (`~/workspace/geode`)
 
 ## 2. 사용 시점
 
@@ -85,6 +85,6 @@ mcp__codex__review(
 
 - Codex MCP 등록: `~/.claude.json` 의 project-level mcpServers (확인: `claude mcp list`)
 - Codex auth: `~/.codex/auth.json` (PR #1133 의 codex_provider 와 같은 source)
-- Codex CLI binary: `/Users/mango/.local/bin/codex` 또는 `/Applications/cmux.app/.../codex`
+- Codex CLI binary: `~/.local/bin/codex` 또는 `/Applications/cmux.app/.../codex`
 - 본 skill: `.geode/skills/codex-mcp-verify/SKILL.md` (project 의 untracked)
 - Handoff: `docs/audits/2026-05-15-session-handoff-codex-verify.md` (다음 session 의 SOT)
