@@ -304,7 +304,7 @@ def test_strict_role_schemas_pass_openai_strict_check(name: str, schema: dict) -
     constraint that prevents gpt-5.5's reasoning budget from consuming
     the entire output budget on empty responses.
     """
-    from core.llm.adapters.codex_oauth import _is_openai_strict_compatible
+    from core.llm.adapters._openai_common import _is_openai_strict_compatible
 
     assert _is_openai_strict_compatible(schema), (
         f"{name} declared strict-compatible but failed the codex adapter's "
@@ -327,7 +327,7 @@ def test_non_strict_role_schemas_documented_reason(name: str, schema: dict) -> N
     would start enforcing strict on a schema the role doesn't
     actually conform to.
     """
-    from core.llm.adapters.codex_oauth import _is_openai_strict_compatible
+    from core.llm.adapters._openai_common import _is_openai_strict_compatible
 
     assert not _is_openai_strict_compatible(schema), (
         f"{name} is documented as non-strict-compatible "

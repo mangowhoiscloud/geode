@@ -9,6 +9,15 @@ isolation.
 
 Pair with :class:`CodexOAuthAdapter` (same provider, OAuth path) and
 :class:`CodexCliAdapter` (subprocess path).
+
+PR-OPENAI-RESPONSES (2026-06-13): ``acomplete``/``astream`` moved from
+Chat Completions to the Responses API via the shared
+:func:`core.llm.adapters._openai_common.build_responses_kwargs`
+(``backend="platform"``) — completing the migration that
+``acomplete_text``/``aweb_search`` started. Responses is OpenAI's
+forward-going surface; new features (tool_search deferred loading 등)
+are Responses-only. Chat Completions now lives only on the GLM adapters
+(z.ai compatibility surface lacks Responses).
 """
 
 from __future__ import annotations
@@ -20,11 +29,8 @@ from typing import Any
 
 from core.llm.adapters._openai_common import (
     build_async_openai_client,
-    build_messages,
-    cap_tools,
-    get_openai_model_spec,
-    translate_chat_response,
-    translate_tool,
+    build_responses_kwargs,
+    translate_codex_response,
 )
 from core.llm.adapters.base import (
     SOURCE_PAYG,
@@ -77,47 +83,6 @@ class OpenAIPaygAdapter:
             )
         return self._clients.get(lambda: build_async_openai_client(api_key))
 
-    def _build_kwargs(self, req: AdapterCallRequest, *, stream: bool) -> dict[str, Any]:
-        """Compose Chat Completions kwargs honouring per-model spec quirks.
-
-        PR-DRIFT-CUT (2026-05-24) consults
-        :func:`core.llm.adapters._openai_common.get_openai_model_spec`
-        for the per-model API surface (rather than the previous
-        ``startswith("gpt-5")`` heuristic):
-
-          * ``spec.uses_max_completion_tokens`` chooses between
-            ``max_completion_tokens`` (GPT-5.x + o-series) and the
-            legacy ``max_tokens`` key.
-          * ``spec.accepts_temperature`` is False for reasoning models,
-            so ``temperature`` is omitted entirely.
-          * ``tools`` array hard-caps at 128 entries via shared
-            :func:`cap_tools` with an operator-actionable log.
-
-        Unknown ``req.model`` falls back to legacy gpt-4.x defaults
-        with a one-shot WARNING so silent drift on new models is
-        impossible.
-        """
-        spec = get_openai_model_spec(req.model)
-        token_key = "max_completion_tokens" if spec.uses_max_completion_tokens else "max_tokens"
-        kwargs: dict[str, Any] = {
-            "model": req.model,
-            "messages": build_messages(req),
-            token_key: req.max_tokens,
-        }
-        if stream:
-            kwargs["stream"] = True
-        if req.temperature is not None and spec.accepts_temperature:
-            kwargs["temperature"] = req.temperature
-        if req.tools:
-            translated = [translate_tool(t) for t in req.tools]
-            kwargs["tools"] = cap_tools(translated, model=req.model, adapter_name=self.name)
-            tc = _translate_tool_choice(req.tool_choice)
-            if tc is not None:
-                kwargs["tool_choice"] = tc
-        if req.stop_sequences:
-            kwargs["stop"] = list(req.stop_sequences)
-        return kwargs
-
     async def aweb_search(
         self, query: str, *, max_results: int = 5, model: str = ""
     ) -> WebSearchResult:
@@ -166,38 +131,44 @@ class OpenAIPaygAdapter:
 
     async def acomplete(self, req: AdapterCallRequest) -> AdapterCallResult:
         client = self._get_client()
-        kwargs = self._build_kwargs(req, stream=False)
+        kwargs = build_responses_kwargs(req, backend="platform", adapter_name=self.name)
         # PR-OAUTH-API-LANES (2026-05-26) — pooled with codex-oauth in
         # the same per-account openai-api lane (OpenAI rate-limits
         # per-account, not per-source).
         lane_key = f"openai-payg:{req.model}"
         async with acquire_openai_api_lane_async(lane_key):
             try:
-                response = await client.chat.completions.create(**kwargs)
+                # Stream + aggregate, mirroring codex-oauth: uniform SSE
+                # handling across both Responses backends, and reasoning
+                # items arrive as typed output items either way.
+                async with client.responses.stream(**kwargs) as stream:
+                    accumulated: list[Any] = []
+                    async for event in stream:
+                        if getattr(event, "type", "") == "response.output_item.done":
+                            item = getattr(event, "item", None)
+                            if item is not None:
+                                accumulated.append(item)
+                    final = await stream.get_final_response()
             except Exception as exc:
                 self._last_error = exc
                 log.warning(
-                    "openai-payg: chat.completions.create failed model=%s err=%s",
+                    "openai-payg: responses.stream failed model=%s err=%s",
                     req.model,
                     exc,
                 )
                 raise
-        return translate_chat_response(response)
+        return translate_codex_response(final, accumulated_items=accumulated)
 
     async def astream(self, req: AdapterCallRequest) -> AsyncIterator[StreamEvent]:
         client = self._get_client()
-        kwargs = self._build_kwargs(req, stream=True)
-        async for chunk in await client.chat.completions.create(**kwargs):
-            choice = chunk.choices[0] if chunk.choices else None
-            if choice is None:
-                continue
-            delta = getattr(choice, "delta", None)
-            text_chunk = getattr(delta, "content", None) if delta else None
-            if text_chunk:
-                yield StreamEvent(kind="text", payload={"text": text_chunk})
-            finish_reason = getattr(choice, "finish_reason", None)
-            if finish_reason is not None:
-                yield StreamEvent(kind="stop", payload={"stop_reason": finish_reason})
+        kwargs = build_responses_kwargs(req, backend="platform", adapter_name=self.name)
+        async with client.responses.stream(**kwargs) as stream:
+            async for event in stream:
+                ev_type = getattr(event, "type", "")
+                if ev_type.endswith("output_text.delta"):
+                    yield StreamEvent(kind="text", payload={"text": getattr(event, "delta", "")})
+                elif ev_type == "response.completed":
+                    yield StreamEvent(kind="stop", payload={"stop_reason": "completed"})
 
     def test_environment(self) -> EnvironmentReport:
         from core.config import settings
@@ -250,22 +221,6 @@ class OpenAIPaygAdapter:
             provider=self.provider,
             source_path="settings.openai_api_key",
         )
-
-
-def _translate_tool_choice(tc: str | dict[str, Any]) -> str | dict[str, Any] | None:
-    """Adapter-neutral ``tool_choice`` → Chat Completions wire shape.
-
-    Routes through :func:`core.llm.tool_choice.normalize` with
-    ``provider="glm"`` — Chat Completions uses the SAME nested
-    ``{"type": "function", "function": {"name": "..."}}`` shape that
-    GLM does. The legacy helper accepts the Anthropic-shape dicts the
-    AgenticLoop emits (``{"type": "auto"}`` / ``{"type": "none"}`` /
-    ``{"type": "any"}`` / ``{"type": "tool", "name": "..."}``) and
-    returns the Chat-correct payload (Codex MCP A2 BLOCKER 2).
-    """
-    from core.llm.tool_choice import normalize
-
-    return normalize("glm", tc)
 
 
 __all__ = ["OpenAIPaygAdapter"]

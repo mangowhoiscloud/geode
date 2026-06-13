@@ -30,9 +30,8 @@ from __future__ import annotations
 from types import SimpleNamespace
 
 import pytest
-from core.llm.adapters._openai_common import translate_codex_response
+from core.llm.adapters._openai_common import build_responses_kwargs, translate_codex_response
 from core.llm.adapters.base import AdapterCallResult, UsageSummary
-from core.llm.adapters.codex_oauth import _build_codex_call_kwargs
 from core.llm.adapters.translation import (
     agentic_response_from_adapter_result,
     build_adapter_request,
@@ -197,7 +196,7 @@ def test_codex_call_kwargs_replays_reasoning_at_assistant_turn() -> None:
             Message(role="user", content="next"),
         ],
     )
-    kwargs = _build_codex_call_kwargs(req)
+    kwargs = build_responses_kwargs(req, backend="codex", adapter_name="codex-oauth")
     # Sequence: user1, reasoning_for_assistant1, assistant1, user2
     assert kwargs["input"][0] == {"role": "user", "content": "first"}
     assert kwargs["input"][1]["type"] == "reasoning"
@@ -216,7 +215,7 @@ def test_codex_call_kwargs_no_reasoning_when_empty() -> None:
         system_prompt="be brief",
         messages=[Message(role="user", content="hello")],
     )
-    kwargs = _build_codex_call_kwargs(req)
+    kwargs = build_responses_kwargs(req, backend="codex", adapter_name="codex-oauth")
     assert kwargs["input"][0] == {"role": "user", "content": "hello"}
 
 
@@ -373,7 +372,7 @@ def test_codex_call_kwargs_tool_choice_translation(
         tools=[ToolSpec(name="t", description="", input_schema={"type": "object"})],
         tool_choice=tool_choice,
     )
-    kwargs = _build_codex_call_kwargs(req)
+    kwargs = build_responses_kwargs(req, backend="codex", adapter_name="codex-oauth")
     assert kwargs["tool_choice"] == expected
 
 
@@ -394,7 +393,13 @@ def test_codex_call_kwargs_tool_choice_translation(
     ],
 )
 def test_chat_tool_choice_translation(tool_choice: str | dict, expected: str | dict) -> None:
-    """OpenAI Chat Completions tool_choice translation (BLOCKER 2 fix)."""
-    from core.llm.adapters.openai_payg import _translate_tool_choice
+    """Chat Completions tool_choice translation (BLOCKER 2 fix).
 
-    assert _translate_tool_choice(tool_choice) == expected
+    PR-OPENAI-RESPONSES (2026-06-13): openai-payg left Chat Completions,
+    so the Chat nested shape now lives only on the GLM adapters — this
+    pins the same ``normalize("glm", ...)`` path glm_payg/glm_coding_plan
+    call (glm_payg.py / glm_coding_plan.py).
+    """
+    from core.llm.tool_choice import normalize
+
+    assert normalize("glm", tool_choice) == expected

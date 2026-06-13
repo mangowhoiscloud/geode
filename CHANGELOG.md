@@ -45,6 +45,11 @@ functional change.
 
 ---
 
+## [0.99.192] - 2026-06-13
+
+### Changed
+- **openai-payg moved off Chat Completions onto the Responses API** (PR-OPENAI-RESPONSES) — `acomplete`/`astream` now go through a shared `build_responses_kwargs` builder in `_openai_common.py` (extracted from codex_oauth's `_build_codex_call_kwargs`), completing the migration `acomplete_text`/`aweb_search` started. One builder, one `backend` param carrying the only wire delta: `backend="platform"` sends `max_output_tokens` (supported on the platform API), `backend="codex"` omits it (Subscription manages it server-side; sending returns 400). Everything else — `instructions` system prompt, `store=False`, flat tool shape, reasoning passthrough (`include: reasoning.encrypted_content`), `text.format` response-schema enforcement with strict auto-detection — is now literally the same code on both OpenAI backends. The payg response path reuses the codex SSE stream-aggregation (`translate_codex_response` + `output_item.done` accumulation), so reasoning items survive on payg too. Chat Completions now lives only on the GLM adapters (z.ai's compatibility surface lacks Responses); the payg-side chat tool_choice translator was deleted and its test retargeted at the GLM `normalize("glm", ...)` path. Why: Responses is OpenAI's forward-going surface — new features (tool_search deferred loading 등) are Responses-only, and this PR is the prerequisite for joining them. Naming debt recorded in the builder docstring: `build_codex_input`/`translate_tool_for_codex` keep codex- names while now platform-shared (12-file rename kept out of a migration diff). Guards: `tests/core/llm/adapters/test_openai_payg_responses.py` (4 — backend delta, shared shape, chat-completions source pin, reasoning branch) + 3 test modules migrated to the shared builder import.
+
 ## [0.99.191] - 2026-06-13
 
 ### Added
