@@ -132,6 +132,24 @@ class TestAdoptHelper:
         assert current_skip_permissions() is False
 
 
+class TestSubAgentPropagation:
+    """A write-capable sub-agent under skip mode must also bypass HITL — the
+    worker is a subprocess with no IPC handshake, so the EFFECTIVE flag is
+    forwarded via env (whitelisted + explicitly set at spawn)."""
+
+    def test_skip_env_is_whitelisted_for_workers(self) -> None:
+        from core.orchestration.isolated_execution import IsolatedRunner
+
+        assert _ENV in IsolatedRunner._SUBPROCESS_ENV_WHITELIST
+
+    def test_worker_resolves_skip_from_env_default(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """The worker (ContextVar unset) resolves skip from the forwarded env."""
+        _skip_permissions_var.set(None)
+        monkeypatch.setenv(_ENV, "1")
+        reload_settings_from_disk()
+        assert current_skip_permissions() is True
+
+
 class TestCapabilityAdvertise:
     def test_includes_flag_when_env_set(self, monkeypatch: pytest.MonkeyPatch) -> None:
         from core.cli.ipc_client import IPCClient
