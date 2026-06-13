@@ -195,7 +195,7 @@
       <p>Harness chip legend:
         <span class="chip payg">PAYG</span>API key billing &middot;
         <span class="chip claude">Claude Code</span>Max OAuth &middot;
-        <span class="chip codex">Codex</span>ChatGPT OAuth &middot;
+        <span class="chip codex">ChatGPT</span>ChatGPT subscription, Codex CLI OAuth &middot;
         <span class="chip geode">GEODE</span>self-target wrapper.
       </p>
       <p class="version-stamp">

@@ -206,8 +206,8 @@ def _check_provider_key(selected: ModelProfile) -> None:
         "GLM": (settings.zai_api_key, "ZAI_API_KEY"),
     }
 
-    # Codex (Plus) requires OAuth — check token availability
-    if "Codex" in selected.provider:
+    # openai-codex (ChatGPT subscription) requires OAuth — check token availability
+    if "openai-codex" in selected.provider:
         try:
             from core.auth.codex_cli_oauth import read_codex_cli_credentials
             from core.auth.oauth_login import read_geode_openai_credentials
@@ -216,12 +216,13 @@ def _check_provider_key(selected: ModelProfile) -> None:
             codex_creds = read_codex_cli_credentials()
             if not geode_creds and not codex_creds:
                 _pkg.console.print(
-                    "  [warning]Warning: No Codex OAuth token found. "
+                    "  [warning]Warning: No ChatGPT subscription OAuth token found. "
                     "Run /login openai to authenticate.[/warning]"
                 )
         except Exception:
             _pkg.console.print(
-                "  [warning]Warning: Codex OAuth not configured. Run /login openai first.[/warning]"
+                "  [warning]Warning: ChatGPT subscription OAuth not configured. "
+                "Run /login openai first.[/warning]"
             )
         return
 

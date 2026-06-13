@@ -15,7 +15,7 @@ export default function Page() {
         ko={
           <>
             <p>
-              GEODE는 Anthropic, OpenAI(Codex OAuth 레인 포함), GLM 세
+              GEODE는 Anthropic, OpenAI(ChatGPT 구독 OAuth 레인 포함), GLM 세
               프로바이더로 라우팅합니다. 이 페이지는 키와 설정이 어디에
               저장되는지, 모델이 어떤 순서로 결정되는지, 막혔을 때 어떻게
               디버깅하는지 다룹니다.
@@ -180,7 +180,7 @@ geode about                   # 실효(EFFECTIVE) 모델 + 프로바이더`}</pr
           <>
             <p>
               GEODE routes across three providers: Anthropic, OpenAI (including
-              the Codex OAuth lane), and GLM. This page covers where keys and
+              the ChatGPT subscription OAuth lane), and GLM. This page covers where keys and
               settings live, the order the effective model resolves in, and how
               to debug when a change does not take.
             </p>

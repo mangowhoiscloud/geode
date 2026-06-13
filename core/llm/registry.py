@@ -59,7 +59,7 @@ PROVIDER_VARIANTS: dict[str, ProviderSpec] = {
     ),
     "openai-codex": ProviderSpec(
         id="openai-codex",
-        display_name="OpenAI Codex (Plus)",
+        display_name="OpenAI (ChatGPT subscription)",
         default_base_url="https://chatgpt.com/backend-api/codex",
         auth_type="oauth_external",
         extra_headers_factory=_codex_extra_headers,
