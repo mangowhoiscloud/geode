@@ -180,7 +180,11 @@ class ToolExecutor:
             # PR-Async-Phase-C step 3 (2026-05-22) — switched to native
             # async delegate dispatch. The old asyncio.to_thread bridge
             # over sync ``_execute_delegate`` is gone.
-            return await self._aexecute_delegate(tool_input)
+            # PR-SUBAGENT-MODEL-ALIGN (2026-06-14) — forward the ToolContext
+            # so the sub-agent inherits the loop's LIVE model (the same
+            # ``ctx.model`` web_search uses), not the global ``settings.model``
+            # which can lag a mid-session ``/model`` switch.
+            return await self._aexecute_delegate(tool_input, context)
 
         handler = self._handlers.get(tool_name)
         if handler is None:
@@ -335,18 +339,27 @@ class ToolExecutor:
 
         return classify_tool_exception(exc, tool_name=tool_name)
 
-    async def _aexecute_delegate(self, tool_input: dict[str, Any]) -> dict[str, Any]:
+    async def _aexecute_delegate(
+        self, tool_input: dict[str, Any], context: ToolContext | None = None
+    ) -> dict[str, Any]:
         """Delegate task(s) to sub-agent (async). Supports single and batch.
 
         PR-Async-Phase-C step 3 (2026-05-22) — async-native sibling of
         :meth:`_execute_delegate`. Uses ``await
         SubAgentManager.adelegate(...)`` so the parent ToolExecutor's
         event loop is not pinned during sub-agent fan-out.
+
+        ``context`` carries the loop's live LLM identity; its ``model`` is
+        forwarded as the sub-agent's default model so delegation inherits
+        the current ``/model`` (PR-SUBAGENT-MODEL-ALIGN). Per-task and
+        AgentDefinition model overrides still win over this default.
         """
         from core.agent.sub_agent import SubTask
 
         if not self._sub_agent_manager:
             return {"error": "SubAgentManager not configured"}
+
+        default_model = getattr(context, "model", "") or ""
 
         tasks_raw: list[dict[str, Any]] = tool_input.get("tasks", [])
         if not tasks_raw:
@@ -391,7 +404,7 @@ class ToolExecutor:
         # announce=False: delegate_task returns full results via tool_result,
         # so skip announce queue to avoid double context injection.
         results = await self._sub_agent_manager.adelegate(
-            sub_tasks, on_progress=_on_progress, announce=False
+            sub_tasks, on_progress=_on_progress, announce=False, default_model=default_model
         )
 
         # Final summary line
