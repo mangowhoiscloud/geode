@@ -68,7 +68,20 @@ class TestLivePathInjection:
         }
         with patch(_ENABLED, return_value=True):
             common._maybe_inject_computer_use(kwargs)
-        assert sum(1 for t in kwargs["tools"] if t.get("name") == "computer") == 1
+        # not doubled, and the beta header is still ensured for the native tool.
+        assert sum(1 for t in kwargs["tools"] if t.get("type") == "computer_20251124") == 1
+        assert "computer-use-2025-01-24" in kwargs["extra_headers"]["anthropic-beta"]
+
+    def test_custom_same_name_tool_does_not_suppress_native(self) -> None:
+        """Dedup is by native TYPE, not name — a caller's custom ``computer``
+        tool must not block the native ``computer_20251124`` injection."""
+        kwargs: dict = {
+            "tools": [{"name": "computer", "description": "custom", "input_schema": {}}]
+        }
+        with patch(_ENABLED, return_value=True):
+            common._maybe_inject_computer_use(kwargs)
+        assert any(t.get("type") == "computer_20251124" for t in kwargs["tools"])
+        assert "computer-use-2025-01-24" in kwargs["extra_headers"]["anthropic-beta"]
 
     def test_beta_header_merges_not_clobbers(self) -> None:
         kwargs: dict = {"extra_headers": {"anthropic-beta": "context-management-2025-06-27"}}

@@ -148,11 +148,15 @@ def _maybe_inject_computer_use(kwargs: dict[str, Any]) -> None:
     if not is_computer_use_enabled():
         return
     tools = list(kwargs.get("tools") or [])
-    if any(t.get("name") == "computer" for t in tools):
-        return
-    tools.append(anthropic_computer_tool_param(_COMPUTER_DISPLAY_WIDTH, _COMPUTER_DISPLAY_HEIGHT))
-    kwargs["tools"] = tools
-    # Merge the beta token (never clobber an existing anthropic-beta header).
+    # Dedup by the NATIVE type (not the name): a caller's custom same-name tool
+    # must not suppress the native injection, and re-entrancy must not double it.
+    if not any(t.get("type") == "computer_20251124" for t in tools):
+        tools.append(
+            anthropic_computer_tool_param(_COMPUTER_DISPLAY_WIDTH, _COMPUTER_DISPLAY_HEIGHT)
+        )
+        kwargs["tools"] = tools
+    # Always ensure the beta token when the native tool is present (merge, never
+    # clobber an existing anthropic-beta header).
     headers = dict(kwargs.get("extra_headers") or {})
     tokens = [t for t in headers.get("anthropic-beta", "").split(",") if t]
     if _COMPUTER_USE_BETA not in tokens:

@@ -66,6 +66,7 @@
 - **핸들러 버그 수정**: `core/cli/tool_handlers/single_tool.py` `handle_computer`가 `action`을 `pop`(기존 `get` → positional+kwargs 중복 TypeError). 회귀 가드 `test_computer_use.py::TestHandlerActionForwarding`.
 - **production 주입 부활**: `core/llm/adapters/_anthropic_common.py`에 `_maybe_inject_computer_use(kwargs)` — `build_create_kwargs`/`build_stream_kwargs` 양쪽에서 `is_computer_use_enabled()`일 때 `computer_20251124` 툴 + `computer-use-2025-01-24` beta 헤더 주입(merge, no-clobber). `req.tools` 비어도 주입, 이미 있으면 idempotent, type-carrying이라 defer 면제. dim은 harness `TARGET_*` 단일 SoT.
 - **`ComputerUseCapable` 프로토콜**: `core/llm/adapters/base.py`(WebSearchCapable 미러, source-adapter 레벨). 라이브 어댑터 `AnthropicOAuthAdapter`/`AnthropicPaygAdapter`가 `supports_computer_use=True` + `computer_tool_param()`(주입 payload와 동일 — drift 가드 테스트로 핀).
+- **스크린샷 image-block (Codex HIGH)**: `ToolCallProcessor._serialize_computer_result` — computer 결과의 screenshot을 Anthropic `tool_result` **image 블록**으로 반환(base64 텍스트 X). 안 그러면 모델이 다음 턴에 화면을 못 보고, token-guard/offload가 base64를 truncate. 루프가 native `{"role":"user","content":[tool_result]}`을 쓰므로 content 리스트가 그대로 통과 — 메시지 모델 변경 불필요.
 - 가드: `tests/core/llm/adapters/test_computer_use_live_path.py`(주입/비주입/idempotent/merge/defer-exempt/protocol/dim-unify) + 핸들러 회귀.
 - **이월(다음 PR)**: harness `_execute_sync`의 OpenAI batched `actions[]` 일반화 + 좌표 규약 분기는 Phase C와 함께(OpenAI 어휘가 실제 들어오는 시점).
 

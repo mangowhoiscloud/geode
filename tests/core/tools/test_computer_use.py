@@ -37,6 +37,65 @@ class TestHandlerActionForwarding:
         mock_exec.assert_awaited_once_with("click", x=10, y=20)
 
 
+class TestComputerResultImageBlock:
+    """The screenshot must reach the model as an IMAGE content block, not base64
+    text — otherwise the model is blind on the next turn AND the token guard /
+    offload store corrupt the (huge) base64 string."""
+
+    def test_serialize_computer_result_emits_image_block(self) -> None:
+        from core.agent.tool_executor.processor import ToolCallProcessor
+
+        block = ToolCallProcessor._serialize_computer_result(
+            {"result": "success", "action": "screenshot", "screenshot": "BASE64DATA"},
+            "tu_1",
+        )
+        assert block["type"] == "tool_result"
+        assert block["tool_use_id"] == "tu_1"
+        content = block["content"]
+        assert isinstance(content, list)
+        images = [c for c in content if c.get("type") == "image"]
+        texts = [c for c in content if c.get("type") == "text"]
+        assert images[0]["source"] == {
+            "type": "base64",
+            "media_type": "image/jpeg",
+            "data": "BASE64DATA",
+        }
+        # The base64 blob must NOT leak into the text block (it would be
+        # truncated/offloaded and is unreadable to the model anyway).
+        assert "BASE64DATA" not in texts[0]["text"]
+        assert "success" in texts[0]["text"]
+
+    def test_serialize_dispatches_computer_to_image_path(self) -> None:
+        from core.agent.tool_executor.processor import ToolCallProcessor
+
+        proc = ToolCallProcessor(
+            executor=MagicMock(), op_logger=MagicMock(), error_recovery=MagicMock()
+        )
+        result = {"result": "success", "action": "click", "screenshot": "IMG"}
+        block = asyncio.run(proc._serialize_tool_result(result, "tu2", "computer"))
+        assert isinstance(block["content"], list)
+        assert any(c.get("type") == "image" for c in block["content"])
+
+    def test_non_computer_result_stays_json_text(self) -> None:
+        from core.agent.tool_executor.processor import ToolCallProcessor
+
+        proc = ToolCallProcessor(
+            executor=MagicMock(), op_logger=MagicMock(), error_recovery=MagicMock()
+        )
+        block = asyncio.run(proc._serialize_tool_result({"ok": True}, "tu3", "read_file"))
+        assert isinstance(block["content"], str)
+
+    def test_computer_error_without_screenshot_stays_text(self) -> None:
+        """A failed computer action returns no screenshot → normal text path."""
+        from core.agent.tool_executor.processor import ToolCallProcessor
+
+        proc = ToolCallProcessor(
+            executor=MagicMock(), op_logger=MagicMock(), error_recovery=MagicMock()
+        )
+        block = asyncio.run(proc._serialize_tool_result({"error": "no display"}, "tu4", "computer"))
+        assert isinstance(block["content"], str)
+
+
 class TestCoordinateScaling:
     def test_scale_to_screen(self):
         h = ComputerUseHarness(target_width=1280, target_height=800)
