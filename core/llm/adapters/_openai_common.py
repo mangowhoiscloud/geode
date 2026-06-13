@@ -863,11 +863,21 @@ def translate_codex_response(
     if not text and fallback_text_parts:
         text = "".join(fallback_text_parts)
     usage = getattr(response, "usage", None)
+    # Codex review of PR-OPENAI-RESPONSES (2026-06-13): Responses reports
+    # prompt-cache hits under ``input_tokens_details.cached_tokens`` —
+    # dropping it under-reported cache reads/cost on BOTH backends (the
+    # codex path had always dropped it). Same path the legacy normalizer
+    # reads in ``core/llm/agentic_response.py``.
+    cached_tokens = 0
+    if usage is not None:
+        input_details = getattr(usage, "input_tokens_details", None)
+        cached_tokens = int(getattr(input_details, "cached_tokens", 0) or 0)
     return AdapterCallResult(
         text=text,
         usage=UsageSummary(
             input_tokens=getattr(usage, "input_tokens", 0) if usage else 0,
             output_tokens=getattr(usage, "output_tokens", 0) if usage else 0,
+            cached_input_tokens=cached_tokens,
         ),
         stop_reason=getattr(response, "status", "completed") or "completed",
         tool_uses=tuple(tool_uses),
@@ -981,6 +991,16 @@ def build_responses_kwargs(
     }
     if backend == "platform":
         kwargs["max_output_tokens"] = req.max_tokens
+    if req.stop_sequences:
+        # Responses API exposes no ``stop`` parameter (Chat Completions
+        # did). Observable drop instead of a silent one — Codex review of
+        # PR-OPENAI-RESPONSES, finding 2.
+        log.warning(
+            "%s: stop_sequences unsupported on the Responses API — ignoring %d entr%s",
+            adapter_name,
+            len(req.stop_sequences),
+            "y" if len(req.stop_sequences) == 1 else "ies",
+        )
     if req.tools:
         translated = [translate_tool_for_codex(t) for t in req.tools]
         kwargs["tools"] = cap_tools(translated, model=req.model, adapter_name=adapter_name)

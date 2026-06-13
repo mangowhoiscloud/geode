@@ -74,3 +74,37 @@ def test_reasoning_branch_applies_on_platform_backend() -> None:
     assert platform["include"] == ["reasoning.encrypted_content"]
     assert platform["reasoning"]["effort"] == "high"
     assert "temperature" not in platform
+
+
+def test_usage_carries_cached_input_tokens() -> None:
+    """Responses reports cache hits under input_tokens_details.cached_tokens
+    — both backends must surface them (Codex review finding 1; the codex
+    path had always dropped them)."""
+    from types import SimpleNamespace
+
+    from core.llm.adapters._openai_common import translate_codex_response
+
+    fake_response = SimpleNamespace(
+        output_text="ok",
+        output=[],
+        status="completed",
+        usage=SimpleNamespace(
+            input_tokens=100,
+            output_tokens=10,
+            input_tokens_details=SimpleNamespace(cached_tokens=64),
+        ),
+    )
+    result = translate_codex_response(fake_response)
+    assert result.usage.cached_input_tokens == 64
+
+
+def test_stop_sequences_drop_is_observable(caplog) -> None:
+    """Responses has no ``stop`` param — the builder must warn, never
+    silently drop (Codex review finding 2)."""
+    import logging
+
+    with caplog.at_level(logging.WARNING, logger="core.llm.adapters._openai_common"):
+        build_responses_kwargs(
+            _request(stop_sequences=("END",)), backend="platform", adapter_name="openai-payg"
+        )
+    assert any("stop_sequences unsupported" in r.message for r in caplog.records)
