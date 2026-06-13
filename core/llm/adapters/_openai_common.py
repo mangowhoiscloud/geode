@@ -83,6 +83,12 @@ class OpenAIModelSpec:
     context_window: int
     """Total context window (input + output) in tokens — for guard logging only."""
 
+    supports_tool_search: bool = False
+    """True → model accepts ``{"type": "tool_search"}`` + ``defer_loading``
+    on the Responses API ("only gpt-5.4 and later models support
+    tool_search" — developers.openai.com/api/docs/guides/tools-tool-search).
+    Default False so unknown/legacy models never gamble a 400."""
+
 
 # Registry — keep alphabetically sorted within each family for stable diffs.
 _OPENAI_MODELS: dict[str, OpenAIModelSpec] = {
@@ -100,6 +106,7 @@ _OPENAI_MODELS: dict[str, OpenAIModelSpec] = {
         accepts_temperature=False,
         reasoning_effort_values=("none", "low", "medium", "high", "xhigh"),
         context_window=1_050_000,
+        supports_tool_search=True,
     ),
     "gpt-5.4-mini": OpenAIModelSpec(
         model_id="gpt-5.4-mini",
@@ -107,6 +114,7 @@ _OPENAI_MODELS: dict[str, OpenAIModelSpec] = {
         accepts_temperature=False,
         reasoning_effort_values=("none", "low", "medium", "high", "xhigh"),
         context_window=1_050_000,
+        supports_tool_search=True,
     ),
     "gpt-5.5": OpenAIModelSpec(
         model_id="gpt-5.5",
@@ -114,6 +122,7 @@ _OPENAI_MODELS: dict[str, OpenAIModelSpec] = {
         accepts_temperature=False,
         reasoning_effort_values=("none", "low", "medium", "high", "xhigh"),
         context_window=1_050_000,
+        supports_tool_search=True,
     ),
     # ── o-series (always-on reasoning, no temperature, no "none" effort) ──
     "o3": OpenAIModelSpec(
@@ -929,6 +938,79 @@ def _normalize_summary_list(summary: Any) -> list[dict[str, Any]]:
     return out
 
 
+def _apply_openai_tool_search_defer(
+    tools: list[dict[str, Any]],
+    *,
+    backend: str,
+    spec: OpenAIModelSpec,
+    adapter_name: str,
+) -> list[dict[str, Any]]:
+    """OpenAI Responses deferred tool loading — official mechanism.
+
+    Marks non-core function tools with the official ``defer_loading: true``
+    field and appends the hosted ``{"type": "tool_search"}`` tool, mirroring
+    the Anthropic wiring (policy SoT: ``core.llm.tool_defer``).
+    ref: https://developers.openai.com/api/docs/guides/tools-tool-search
+    (Responses-only; "only gpt-5.4 and later models support tool_search").
+
+    Backend gating:
+
+    - ``platform`` — documented supported; enabled by
+      ``settings.tool_search_defer`` (same kill switch as Anthropic).
+    - ``codex`` — the docs cover the platform API only (same ambiguity
+      class as PR-NO-FALLBACK #1839), so Codex backend acceptance was
+      gated on a live call: verified 2026-06-13 (20 deferred defs +
+      tool_search on gpt-5.5 → normal completion). Kill switch:
+      ``settings.tool_search_defer_codex`` (default True post-gate).
+
+    Never defers: the model lacks ``supports_tool_search``, hosted entries
+    (anything whose ``type`` is not ``"function"``), the always-loaded core
+    set, and names in ``OPENAI_DEFER_NAME_BLOCKLIST`` (upstream 500 when a
+    deferred function named "web" rides with tool_search + web_search).
+    Idempotent: already-shaped input passes through unchanged.
+    """
+    from core.config import settings as _settings
+    from core.llm.tool_defer import (
+        OPENAI_DEFER_NAME_BLOCKLIST,
+        TOOL_DEFER_THRESHOLD,
+        TOOL_SEARCH_ALWAYS_LOADED,
+    )
+
+    if not spec.supports_tool_search or len(tools) <= TOOL_DEFER_THRESHOLD:
+        return tools
+    if backend == "codex":
+        if not getattr(_settings, "tool_search_defer_codex", False):
+            return tools
+    elif not getattr(_settings, "tool_search_defer", True):
+        return tools
+    if any(t.get("type") == "tool_search" or t.get("defer_loading") for t in tools):
+        return tools  # already shaped — idempotent pass-through
+    shaped: list[dict[str, Any]] = []
+    deferred_count = 0
+    for tool in tools:
+        name = str(tool.get("name", ""))
+        if (
+            tool.get("type") != "function"
+            or name in TOOL_SEARCH_ALWAYS_LOADED
+            or name in OPENAI_DEFER_NAME_BLOCKLIST
+        ):
+            shaped.append(tool)
+            continue
+        deferred_tool = dict(tool)
+        deferred_tool["defer_loading"] = True
+        shaped.append(deferred_tool)
+        deferred_count += 1
+    if not deferred_count:
+        return tools
+    log.info(
+        "%s: openai tool_search defer active — %d/%d tool defs deferred",
+        adapter_name,
+        deferred_count,
+        len(shaped) + 1,
+    )
+    return [*shaped, {"type": "tool_search"}]
+
+
 def build_responses_kwargs(
     req: AdapterCallRequest, *, backend: str, adapter_name: str
 ) -> dict[str, Any]:
@@ -1003,7 +1085,10 @@ def build_responses_kwargs(
         )
     if req.tools:
         translated = [translate_tool_for_codex(t) for t in req.tools]
-        kwargs["tools"] = cap_tools(translated, model=req.model, adapter_name=adapter_name)
+        capped = cap_tools(translated, model=req.model, adapter_name=adapter_name)
+        kwargs["tools"] = _apply_openai_tool_search_defer(
+            capped, backend=backend, spec=spec, adapter_name=adapter_name
+        )
         kwargs["tool_choice"] = translate_responses_tool_choice(req.tool_choice)
         kwargs["parallel_tool_calls"] = True
     if spec.reasoning_effort_values is not None:

@@ -45,6 +45,11 @@ functional change.
 
 ---
 
+## [0.99.193] - 2026-06-13
+
+### Added
+- **OpenAI tool_search deferred loading — both backends, live-gated** (PR-CODEX-TOOL-SEARCH). The shared Responses builder now applies the official OpenAI mechanism (`defer_loading: true` on function defs + hosted `{"type": "tool_search"}`, Responses-only, gpt-5.4+ per developers.openai.com tool-search guide) — mirroring the Anthropic wiring of v0.99.191, with the policy constants (threshold 16 + 11-name always-loaded core set) moved to the provider-neutral `core/llm/tool_defer.py` so both vendors share ONE policy SoT. Per-model gate via `OpenAIModelSpec.supports_tool_search` (gpt-5.4/5.4-mini/5.5 True; o-series/legacy False — unknown models never gamble a 400). **Codex backend acceptance was the open question** (docs cover the platform API only — the PR-NO-FALLBACK ambiguity class): gated on a live call and **verified 2026-06-13** — 20 deferred defs + tool_search through `chatgpt.com/backend-api/codex/responses` on gpt-5.5 returned a normal completion ("DEFER-OK"), so `Settings.tool_search_defer_codex` ships default-True with the attestation in its docstring (kill switches: `llm.tool_search_defer` platform/Anthropic, `llm.tool_search_defer_codex` Codex). `OPENAI_DEFER_NAME_BLOCKLIST` pins the upstream 500 (deferred function named "web" + tool_search + web_search). Platform-side live call blocked by a stale `OPENAI_API_KEY` (401) — platform support is documented, so doc-attestation suffices there. Guards: `tests/core/llm/adapters/test_openai_tool_search_defer.py` (6 — platform shaping, unsupported-model gate, codex default-on + kill switch, "web" blocklist, idempotency).
+
 ## [0.99.192] - 2026-06-13
 
 ### Changed
