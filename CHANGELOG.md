@@ -45,6 +45,11 @@ functional change.
 
 ---
 
+## [0.99.194] - 2026-06-13
+
+### Added
+- **`geode prompt dump` — the assembled system prompt as one inspectable artifact** (PR-PROMPT-DUMP; prompt-refactor sprint P0, plan at `docs/plans/2026-06-13-prompt-assembly-refactor.md`). The prompt the model actually receives is a 7-layer composition (wrapper/generic prefix + math + style guide + heuristics + optional persona, then model card + model guidance + platform hint + date + G2/G3/G4 memory + user context, then the agentic suffix) that had never been auditable as a whole. `core/agent/prompt_dump.py` reproduces the AgenticLoop's final composition faithfully (skill placeholder collapse + AGENTIC_SUFFIX join identical to `_context.build_system_prompt`; per-spawn override/suffix documented as out of scope) and dumps a (model x surface) matrix to `~/.geode/diagnostics/prompt-dump/<ts>/` with structure analysis (duplicate-section-tag drift signal) and `--measure` real token counts via the free Anthropic count_tokens endpoint (single ruler across vendors). First measurement, v0.99.193 runtime: 18 cells (3 models x 6 surfaces) all 4,942-5,087 tokens, zero duplicate tags. Guards (5): loop-composition contract (placeholder collapse, suffix-last, exactly one cache boundary, static-before-dynamic order), surface pin reach, env restore, duplicate detection, matrix write.
+
 ## [0.99.193] - 2026-06-13
 
 ### Added
