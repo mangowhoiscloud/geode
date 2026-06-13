@@ -366,6 +366,18 @@ class _TypedRowSpec:
     derive: Callable[[dict[str, Any]], dict[str, Any]] | None = None
 
 
+# Payload keys carrying raw user content or oversized blobs that must NEVER
+# be persisted to the timeline JSONL (privacy + size; the G9 sanitizer lesson).
+# The typed path drops them implicitly — the details models declare none of
+# them, so the key-intersection pull in _build_from_spec excludes them. The
+# generic FAIL-SOFT path must scrub them explicitly: a builder failure on a
+# privacy-sensitive event (USER_INPUT_RECEIVED / COGNITIVE_* / TOOL_RESULT_*)
+# would otherwise leak via ``details=data`` exactly what the typed row drops
+# (Codex MCP review BLOCKER, 2026-06-13 — graceful contract must hold at
+# EVERY exit, not just the typed one).
+_TIMELINE_FORBIDDEN_KEYS = frozenset({"user_input", "cognitive_state", "tool_input", "result"})
+
+
 def _derive_input_len(data: dict[str, Any]) -> dict[str, Any]:
     """COGNITIVE_PERCEIVE / USER_INPUT_RECEIVED carry the raw ``user_input``
     string in their hook payload. Persist only its LENGTH — raw user prompts
@@ -377,6 +389,19 @@ def _derive_input_len(data: dict[str, Any]) -> dict[str, Any]:
     out = dict(data)
     out["input_len"] = len(str(out.get("user_input") or ""))
     return out
+
+
+def _scrub_for_timeline(data: dict[str, Any]) -> dict[str, Any]:
+    """Drop raw-content keys before they can reach a ``GenericActivityRow``
+    on the fail-soft path, preserving the derived ``input_len`` signal where a
+    raw ``user_input`` was. No-op (returns the same dict) when nothing is
+    forbidden, so the common typed path pays nothing."""
+    if not _TIMELINE_FORBIDDEN_KEYS.intersection(data):
+        return data
+    scrubbed = {k: v for k, v in data.items() if k not in _TIMELINE_FORBIDDEN_KEYS}
+    if "user_input" in data and "input_len" not in scrubbed:
+        scrubbed["input_len"] = len(str(data.get("user_input") or ""))
+    return scrubbed
 
 
 def _build_from_spec(
@@ -753,10 +778,16 @@ def _build_generic(
     coverage this is now ONLY reached when a typed builder fails on a
     malformed payload (carrying ``_fallback_reason``) or, defensively,
     for a future event added without a registry entry. The ``actor_type``
-    is heuristic."""
+    is heuristic.
+
+    The payload is scrubbed of raw-content keys first — the privacy
+    contract the typed rows enforce must hold on this fail-soft path too,
+    so a builder failure on a privacy-sensitive event does not leak raw
+    ``user_input`` / ``cognitive_state`` / tool results into the JSONL."""
+    safe_data = _scrub_for_timeline(data)
     dotted_action = event.value.replace("_", ".")
     actor_type = _infer_actor_type_from_event(event)
-    actor_id = str(data.get("session_id") or data.get("actor_id") or actor_type)
+    actor_id = str(safe_data.get("session_id") or safe_data.get("actor_id") or actor_type)
     return GenericActivityRow(
         ts=time.time(),
         run_id=run_id,
@@ -765,8 +796,8 @@ def _build_generic(
         action=dotted_action,
         entity_type="system",
         entity_id=event.value,
-        task_id=str(data["task_id"]) if data.get("task_id") else None,
-        details=data,
+        task_id=str(safe_data["task_id"]) if safe_data.get("task_id") else None,
+        details=safe_data,
     )
 
 

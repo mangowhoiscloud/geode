@@ -401,3 +401,30 @@ def test_k3_payload_divergence_degrades_gracefully() -> None:
     # RULE_UPDATED carries only ``name`` (no ``paths``).
     rule = map_hook_to_activity(HookEvent.RULE_UPDATED, {"name": "n"}, run_id="r1")
     assert rule.details.model_dump() == {"name": "n", "paths": ()}  # type: ignore[union-attr]
+
+
+def test_k4_fallback_path_also_scrubs_raw_content() -> None:
+    """The privacy contract must hold on the FAIL-SOFT path too: when a
+    privacy-sensitive event's typed builder fails (here COGNITIVE_PERCEIVE
+    with a non-coercible ``round``), the generic fallback row must still
+    drop raw ``user_input`` / ``cognitive_state`` — a builder failure must
+    not leak what the typed row would have dropped (Codex review BLOCKER)."""
+    secret = "raw private prompt body"
+    row = map_hook_to_activity(
+        HookEvent.COGNITIVE_PERCEIVE,
+        {
+            "session_id": "s1",
+            "user_input": secret,
+            "cognitive_state": {"plan": secret},
+            "round": "not-an-int",  # forces ValidationError -> generic fallback
+        },
+        run_id="r1",
+    )
+    assert isinstance(row, GenericActivityRow), "bad payload should fail-soft to generic"
+    payload = row.details
+    assert "_fallback_reason" in payload, "forced-generic must be distinguishable"
+    assert "user_input" not in payload
+    assert "cognitive_state" not in payload
+    assert secret not in str(payload), "raw content must not survive the fallback path"
+    # The derived signal is preserved even on the fallback path.
+    assert payload.get("input_len") == len(secret)

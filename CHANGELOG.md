@@ -53,6 +53,7 @@ functional change.
 
 ### Fixed
 - **Silent-fallback removal across the observability + hook layers** (PR-OBS-CONTRACT; "silent fallback은 안티패턴이니 제거하고 에러 핸들링도 점검"). A forced-generic fallback row (a typed builder hitting a malformed payload) now carries a `_fallback_reason` so it is distinguishable from an intentionally-generic row in the timeline, not only in the daemon log. Debug-swallowed failures upgraded to once-per-event `WARNING` (dedup sets, no hot-loop spam): hook-mirror failures (`system.py`), hook-dispatch failures (`dispatch.py`), auto-learn pattern-save failures (`auto_learn.py`), llm-extract-learning save failures (`llm_extract_learning.py`), and an empty-identifier coercion warning (`activity_registry.py`). `ActivityRowBase.schema_version` added so JSONL re-readers branch on shape instead of key-presence guessing.
+- **Privacy contract holds on the fail-soft path too** (PR-OBS-CONTRACT; Codex MCP review BLOCKER). The typed rows drop raw content implicitly (the details models declare no raw-content field), but the generic fail-soft path stored `details=data` verbatim — so a typed builder failure on a privacy-sensitive event (`USER_INPUT_RECEIVED` / `COGNITIVE_*` / `TOOL_RESULT_TRANSFORM`) would have leaked raw `user_input` / `cognitive_state` / tool results into the timeline JSONL. `_build_generic` now scrubs `_TIMELINE_FORBIDDEN_KEYS` (preserving the derived `input_len`) so the graceful contract holds at every exit, not just the typed one.
 
 ## [0.99.196] - 2026-06-13
 
