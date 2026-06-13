@@ -248,13 +248,13 @@ def test_apply_respects_max_entries_cap() -> None:
 
 def test_path_constants_present() -> None:
     from core.paths import (
-        GLOBAL_FEW_SHOT_POOL_PATH,
+        AUTORESEARCH_FEW_SHOT_POOL_PATH,
         OPERATOR_LOCAL_FEW_SHOT_POOL_PATH,
     )
 
-    assert GLOBAL_FEW_SHOT_POOL_PATH.name == "few-shot-pool.jsonl"
+    assert AUTORESEARCH_FEW_SHOT_POOL_PATH.name == "few-shot-pool.jsonl"
     assert OPERATOR_LOCAL_FEW_SHOT_POOL_PATH.name == "few-shot-pool.jsonl"
-    assert "policies" in str(GLOBAL_FEW_SHOT_POOL_PATH)
+    assert "policies" in str(AUTORESEARCH_FEW_SHOT_POOL_PATH)
     assert "autoresearch/handoff" in str(OPERATOR_LOCAL_FEW_SHOT_POOL_PATH)
 
 
@@ -263,7 +263,7 @@ def test_train_py_sets_few_shot_pool_env_pair() -> None:
     src = (repo_root / "core/self_improving/measure.py").read_text(encoding="utf-8")
     assert "GEODE_FEW_SHOT_POOL_OVERRIDE" in src
     assert "GEODE_FEW_SHOT_POOL_STRICT" in src
-    assert "GLOBAL_FEW_SHOT_POOL_PATH" in src
+    assert "AUTORESEARCH_FEW_SHOT_POOL_PATH" in src
 
 
 def test_few_shot_pool_jsonl_referenced_in_inference_path() -> None:

@@ -45,6 +45,14 @@ functional change.
 
 ---
 
+## [0.99.199] - 2026-06-13
+
+### Added
+- **`GEODE_HOME` env override — frontier `{APP}_HOME` parity** (PR-PATH-MODERNIZE Phase 1; plan `docs/plans/2026-06-13-path-system-modernization.md`). `core/paths.py` `GEODE_HOME` was hardcoded `Path.home() / ".geode"`; it now resolves `os.environ.get("GEODE_HOME") or ~/.geode` — matching every surveyed frontier agent CLI (Codex `CODEX_HOME`, Hermes `HERMES_HOME`, OpenClaw `OPENCLAW_HOME`, Paperclip `PAPERCLIP_HOME`, Crumb `CRUMB_HOME`) and the existing `GEODE_STATE_ROOT` pattern. Every `GLOBAL_*` constant derives from the single point, so the override redirects the whole user-global tree (testability + alternate-home). Both `GEODE_HOME` and `GEODE_STATE_ROOT` now `.expanduser()` so a `~` in the env expands. `ipc_client`'s `GEODE_HOME` read (a serve-cwd misnomer = project root, a different tier) renamed to `GEODE_PROJECT_DIR` (env was unset everywhere — zero migration). The rigor sweep also added `.expanduser()` to `GEODE_AUTH_TOML` + `GEODE_PROJECT_DIR` which lacked it. XDG was surveyed and skipped (0/5 frontier adoption); project-ID encoding already matches Claude Code. Guards: `tests/core/test_paths_env_override.py`.
+
+### Changed
+- **Path-policy debt/slop sweep** (PR-PATH-MODERNIZE Phases 2-4). **Tier rename**: `GLOBAL_POLICIES_DIR` + 15 `GLOBAL_*_POLICY_PATH` resolve under `state/autoresearch/policies/` (in-repo STATE tier) but were named `GLOBAL_` (user-global `~/.geode` tier) since PR-RATCHET-1 moved them in-repo — renamed to `AUTORESEARCH_*` (227 occurrences / 34 files, consistent with `AUTORESEARCH_STATE_DIR`; CHANGELOG retains the old names as accurate history). **Dead/dup removal**: deleted unused `PROJECT_SCHEDULER_LOCK`, inlined single-child `GLOBAL_SEARCH_DIR`, routed `scripts/retrofit_manifest.py`'s duplicated `~/.geode/petri/logs` literal through `core.paths.PETRI_LOGS_DIR`. **Guard hardening**: the path-literal guard now also scans `plugins/` (a plugin could previously duplicate `~/.geode/...` freely) and catches the `Path/expanduser("~/.geode/...")` construction form (anchored so sibling `~/.geode_history` is not over-matched); module docstring corrected two-tier → three-tier (STATE_ROOT was omitted); a verified vendor-home catalog (`.codex`/`.claude`/`.local`/`.cache` — the only non-`.geode` paths GEODE actually constructs) documents what the guard intentionally ignores. Phase 5 (split the 741-line module into a `core/paths/` package) is deferred — re-export keeps imports stable but the mechanical churn isn't justified yet.
+
 ## [0.99.198] - 2026-06-13
 
 ### Fixed

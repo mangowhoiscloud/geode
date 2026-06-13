@@ -25,8 +25,11 @@ import sys
 from pathlib import Path
 
 from core.audit.manifest import append_manifest
+from core.paths import PETRI_LOGS_DIR
 
-DEFAULT_ARCHIVE_DIR = Path("~/.geode/petri/logs").expanduser()
+# Single SoT — was a duplicated ``~/.geode/petri/logs`` literal; routing through
+# core.paths also picks up the GEODE_HOME env override (PR-PATH-MODERNIZE).
+DEFAULT_ARCHIVE_DIR = PETRI_LOGS_DIR
 DEFAULT_SUMMARY_DIR = Path("docs/audits/eval-logs")
 
 

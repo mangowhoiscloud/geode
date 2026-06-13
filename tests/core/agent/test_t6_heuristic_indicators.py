@@ -2,7 +2,7 @@
 
 5-element 패턴:
 - SoT: heuristics.json
-- Path: GLOBAL_HEURISTICS_PATH + OPERATOR_LOCAL_HEURISTICS_PATH
+- Path: AUTORESEARCH_HEURISTICS_PATH + OPERATOR_LOCAL_HEURISTICS_PATH
 - Reader: core/agent/heuristics_policy.py
 - Entry: core/agent/system_prompt.py:build_system_prompt
 - Env: GEODE_HEURISTICS_OVERRIDE + GEODE_HEURISTICS_STRICT
@@ -208,11 +208,11 @@ def test_system_prompt_wires_apply_into_static() -> None:
 
 
 def test_path_constants_present() -> None:
-    from core.paths import GLOBAL_HEURISTICS_PATH, OPERATOR_LOCAL_HEURISTICS_PATH
+    from core.paths import AUTORESEARCH_HEURISTICS_PATH, OPERATOR_LOCAL_HEURISTICS_PATH
 
-    assert GLOBAL_HEURISTICS_PATH.name == "heuristics.json"
+    assert AUTORESEARCH_HEURISTICS_PATH.name == "heuristics.json"
     assert OPERATOR_LOCAL_HEURISTICS_PATH.name == "heuristics.json"
-    assert "policies" in str(GLOBAL_HEURISTICS_PATH)
+    assert "policies" in str(AUTORESEARCH_HEURISTICS_PATH)
     assert "autoresearch/handoff" in str(OPERATOR_LOCAL_HEURISTICS_PATH)
 
 
@@ -224,7 +224,7 @@ def test_train_py_sets_heuristics_env_pair() -> None:
     src = (repo_root / "core/self_improving/measure.py").read_text(encoding="utf-8")
     assert "GEODE_HEURISTICS_OVERRIDE" in src
     assert "GEODE_HEURISTICS_STRICT" in src
-    assert "GLOBAL_HEURISTICS_PATH" in src
+    assert "AUTORESEARCH_HEURISTICS_PATH" in src
 
 
 # ALIVE marker ----------------------------------------------------------------

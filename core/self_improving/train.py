@@ -422,7 +422,7 @@ except ImportError:
 RUN_LOG = STATE_DIR / "run.log"
 
 try:
-    from core.paths import GLOBAL_WRAPPER_SECTIONS_PATH as _CORE_WRAPPER_SECTIONS_SOT
+    from core.paths import AUTORESEARCH_WRAPPER_SECTIONS_PATH as _CORE_WRAPPER_SECTIONS_SOT
 except ImportError:
     # ``core.self_improving.train`` is importable from environments where ``core``
     # isn't installed (legacy fixture path) — fall back to a literal so the

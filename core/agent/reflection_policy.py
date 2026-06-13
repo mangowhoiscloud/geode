@@ -48,13 +48,13 @@ from pathlib import Path
 from typing import Any
 
 from core.agent.policy_sot import load_policy_sot
-from core.paths import GLOBAL_REFLECTION_POLICY_PATH, OPERATOR_LOCAL_REFLECTION_POLICY_PATH
+from core.paths import AUTORESEARCH_REFLECTION_POLICY_PATH, OPERATOR_LOCAL_REFLECTION_POLICY_PATH
 
 log = logging.getLogger(__name__)
 
 _REFLECTION_POLICY_OVERRIDE_ENV = "GEODE_REFLECTION_POLICY_OVERRIDE"
 
-_REFLECTION_POLICY_SOT_PATH = GLOBAL_REFLECTION_POLICY_PATH
+_REFLECTION_POLICY_SOT_PATH = AUTORESEARCH_REFLECTION_POLICY_PATH
 """Cross-process in-repo SoT path (S0b, 2026-05-21). module-local alias 로
 테스트가 monkeypatch 가능 (path-literal guard contract)."""
 

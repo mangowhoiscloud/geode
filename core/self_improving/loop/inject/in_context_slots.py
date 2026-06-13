@@ -73,7 +73,7 @@ from pathlib import Path
 from typing import Any
 
 from core.paths import (
-    GLOBAL_IN_CONTEXT_SLOTS_PATH,
+    AUTORESEARCH_IN_CONTEXT_SLOTS_PATH,
     OPERATOR_LOCAL_IN_CONTEXT_SLOTS_PATH,
 )
 from core.self_improving.loop.mutate.sot_resolution import resolve_sot
@@ -82,7 +82,7 @@ log = logging.getLogger(__name__)
 
 _IN_CONTEXT_SLOTS_OVERRIDE_ENV = "GEODE_IN_CONTEXT_SLOTS_OVERRIDE"
 
-_IN_CONTEXT_SLOTS_SOT_PATH = GLOBAL_IN_CONTEXT_SLOTS_PATH
+_IN_CONTEXT_SLOTS_SOT_PATH = AUTORESEARCH_IN_CONTEXT_SLOTS_PATH
 """Cross-process in-repo SoT path (S5, 2026-05-21). Module-local alias."""
 
 _OPERATOR_LOCAL_IN_CONTEXT_SLOTS_PATH = OPERATOR_LOCAL_IN_CONTEXT_SLOTS_PATH

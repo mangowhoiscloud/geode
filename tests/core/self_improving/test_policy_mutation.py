@@ -80,9 +80,9 @@ def test_policy_path_returns_distinct_paths() -> None:
 
 
 def test_policy_path_prompt_points_to_wrapper_sections() -> None:
-    from core.paths import GLOBAL_WRAPPER_SECTIONS_PATH
+    from core.paths import AUTORESEARCH_WRAPPER_SECTIONS_PATH
 
-    assert policy_path("prompt") == GLOBAL_WRAPPER_SECTIONS_PATH
+    assert policy_path("prompt") == AUTORESEARCH_WRAPPER_SECTIONS_PATH
 
 
 def test_policy_path_raises_on_unknown() -> None:
@@ -491,24 +491,24 @@ def test_global_policy_paths_under_policies_dir() -> None:
     PR-HYPERPARAM-FOUNDATION (2026-05-28) adds the hyperparam SoT path
     to the co-location invariant."""
     from core.paths import (
-        GLOBAL_DECOMPOSITION_POLICY_PATH,
-        GLOBAL_HYPERPARAM_POLICY_PATH,
-        GLOBAL_POLICIES_DIR,
-        GLOBAL_REFLECTION_POLICY_PATH,
-        GLOBAL_RETRIEVAL_POLICY_PATH,
-        GLOBAL_TOOL_POLICY_PATH,
-        GLOBAL_WRAPPER_SECTIONS_PATH,
+        AUTORESEARCH_DECOMPOSITION_POLICY_PATH,
+        AUTORESEARCH_HYPERPARAM_POLICY_PATH,
+        AUTORESEARCH_POLICIES_DIR,
+        AUTORESEARCH_REFLECTION_POLICY_PATH,
+        AUTORESEARCH_RETRIEVAL_POLICY_PATH,
+        AUTORESEARCH_TOOL_POLICY_PATH,
+        AUTORESEARCH_WRAPPER_SECTIONS_PATH,
     )
 
     for path in (
-        GLOBAL_WRAPPER_SECTIONS_PATH,
-        GLOBAL_TOOL_POLICY_PATH,
-        GLOBAL_DECOMPOSITION_POLICY_PATH,
-        GLOBAL_RETRIEVAL_POLICY_PATH,
-        GLOBAL_REFLECTION_POLICY_PATH,
-        GLOBAL_HYPERPARAM_POLICY_PATH,
+        AUTORESEARCH_WRAPPER_SECTIONS_PATH,
+        AUTORESEARCH_TOOL_POLICY_PATH,
+        AUTORESEARCH_DECOMPOSITION_POLICY_PATH,
+        AUTORESEARCH_RETRIEVAL_POLICY_PATH,
+        AUTORESEARCH_REFLECTION_POLICY_PATH,
+        AUTORESEARCH_HYPERPARAM_POLICY_PATH,
     ):
-        assert path.parent == GLOBAL_POLICIES_DIR
+        assert path.parent == AUTORESEARCH_POLICIES_DIR
 
 
 # ---------------------------------------------------------------------------

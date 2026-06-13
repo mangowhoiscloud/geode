@@ -63,8 +63,13 @@ def start_serve_if_needed(socket_path: Path | None = None, timeout_s: float = 10
         geode_bin = shutil.which("geode")
         cmd = [geode_bin, "serve"] if geode_bin else [sys.executable, "-m", "geode.cli", "serve"]
 
-        # Resolve serve working directory: needs .geode/config.toml
-        serve_cwd = os.environ.get("GEODE_HOME")
+        # Resolve serve working directory: the PROJECT root holding
+        # ``.geode/config.toml``. Uses ``GEODE_PROJECT_DIR`` — NOT ``GEODE_HOME``,
+        # which now means the user-global ``~/.geode`` tree (frontier
+        # ``{APP}_HOME`` parity, core/paths.py). The two are different tiers;
+        # the old ``GEODE_HOME`` name here was a misnomer (PR-PATH-MODERNIZE).
+        _project_dir_env = os.environ.get("GEODE_PROJECT_DIR")
+        serve_cwd = str(Path(_project_dir_env).expanduser()) if _project_dir_env else None
         if not serve_cwd:
             # Find project root via this file's location (core/cli/ipc_client.py → ../../)
             pkg_dir = Path(__file__).resolve().parent.parent.parent

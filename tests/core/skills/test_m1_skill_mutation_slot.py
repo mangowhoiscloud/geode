@@ -49,9 +49,9 @@ def test_is_valid_target_kind_still_rejects_retrieval() -> None:
 
 
 def test_policy_path_skill_catalog_maps_to_in_repo() -> None:
-    from core.paths import GLOBAL_SKILL_CATALOG_PATH
+    from core.paths import AUTORESEARCH_SKILL_CATALOG_PATH
 
-    assert pol.policy_path("skill_catalog") == GLOBAL_SKILL_CATALOG_PATH
+    assert pol.policy_path("skill_catalog") == AUTORESEARCH_SKILL_CATALOG_PATH
 
 
 # Flatten / Unflatten round-trip ---------------------------------------------
@@ -172,12 +172,12 @@ def test_write_then_load_skill_catalog_round_trips(isolated_skill_catalog: Path)
 
 
 def test_load_skill_catalog_missing_file_returns_empty() -> None:
-    from core.paths import GLOBAL_SKILL_CATALOG_PATH
+    from core.paths import AUTORESEARCH_SKILL_CATALOG_PATH
 
     # No isolated_skill_catalog fixture — default path. Test only asserts
     # graceful empty-dict behaviour, not against the operator's file.
     # If the operator has a real file we monkey-patch around it.
-    if GLOBAL_SKILL_CATALOG_PATH.is_file():
+    if AUTORESEARCH_SKILL_CATALOG_PATH.is_file():
         pytest.skip("operator-local skill-catalog.json present; skipping")
     assert pol.load_policy("skill_catalog") == {}
 

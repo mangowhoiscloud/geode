@@ -44,13 +44,13 @@ from pathlib import Path
 from typing import Any
 
 from core.agent.policy_sot import load_policy_sot
-from core.paths import GLOBAL_HEURISTICS_PATH, OPERATOR_LOCAL_HEURISTICS_PATH
+from core.paths import AUTORESEARCH_HEURISTICS_PATH, OPERATOR_LOCAL_HEURISTICS_PATH
 
 log = logging.getLogger(__name__)
 
 _HEURISTICS_OVERRIDE_ENV = "GEODE_HEURISTICS_OVERRIDE"
 
-_HEURISTICS_SOT_PATH = GLOBAL_HEURISTICS_PATH
+_HEURISTICS_SOT_PATH = AUTORESEARCH_HEURISTICS_PATH
 """Cross-process in-repo SoT path (T6, 2026-05-21). Module-local alias."""
 
 _OPERATOR_LOCAL_HEURISTICS_PATH = OPERATOR_LOCAL_HEURISTICS_PATH

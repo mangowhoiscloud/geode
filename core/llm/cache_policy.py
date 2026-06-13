@@ -52,14 +52,14 @@ import logging
 from pathlib import Path
 from typing import Any
 
-from core.paths import GLOBAL_CACHE_POLICY_PATH, OPERATOR_LOCAL_CACHE_POLICY_PATH
+from core.paths import AUTORESEARCH_CACHE_POLICY_PATH, OPERATOR_LOCAL_CACHE_POLICY_PATH
 from core.self_improving.loop.mutate.sot_resolution import resolve_sot
 
 log = logging.getLogger(__name__)
 
 _CACHE_POLICY_OVERRIDE_ENV = "GEODE_CACHE_POLICY_OVERRIDE"
 
-_CACHE_POLICY_SOT_PATH = GLOBAL_CACHE_POLICY_PATH
+_CACHE_POLICY_SOT_PATH = AUTORESEARCH_CACHE_POLICY_PATH
 """Cross-process in-repo SoT path (T5, 2026-05-21). Module-local alias."""
 
 _OPERATOR_LOCAL_CACHE_POLICY_PATH = OPERATOR_LOCAL_CACHE_POLICY_PATH

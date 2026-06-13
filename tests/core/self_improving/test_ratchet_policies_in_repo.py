@@ -32,28 +32,28 @@ def test_policy_constants_under_in_repo_policies_dir() -> None:
     ``<repo>/state/autoresearch/policies/`` — NOT ``~/.geode/...``.
     The in-repo location is the CI-ratchet alignment fix."""
     from core.paths import (
-        GLOBAL_DECOMPOSITION_POLICY_PATH,
-        GLOBAL_POLICIES_DIR,
-        GLOBAL_REFLECTION_POLICY_PATH,
-        GLOBAL_RETRIEVAL_POLICY_PATH,
-        GLOBAL_TOOL_POLICY_PATH,
-        GLOBAL_WRAPPER_SECTIONS_PATH,
+        AUTORESEARCH_DECOMPOSITION_POLICY_PATH,
+        AUTORESEARCH_POLICIES_DIR,
+        AUTORESEARCH_REFLECTION_POLICY_PATH,
+        AUTORESEARCH_RETRIEVAL_POLICY_PATH,
+        AUTORESEARCH_TOOL_POLICY_PATH,
+        AUTORESEARCH_WRAPPER_SECTIONS_PATH,
     )
 
-    policies_dir_parts = GLOBAL_POLICIES_DIR.parts
+    policies_dir_parts = AUTORESEARCH_POLICIES_DIR.parts
     # The in-repo policies dir's last three components are fixed:
     assert policies_dir_parts[-3:] == ("state", "autoresearch", "policies")
 
     paths_by_kind = {
-        "wrapper-sections.json": GLOBAL_WRAPPER_SECTIONS_PATH,
-        "tool-policy.json": GLOBAL_TOOL_POLICY_PATH,
-        "decomposition.json": GLOBAL_DECOMPOSITION_POLICY_PATH,
-        "retrieval.json": GLOBAL_RETRIEVAL_POLICY_PATH,
-        "reflection.json": GLOBAL_REFLECTION_POLICY_PATH,
+        "wrapper-sections.json": AUTORESEARCH_WRAPPER_SECTIONS_PATH,
+        "tool-policy.json": AUTORESEARCH_TOOL_POLICY_PATH,
+        "decomposition.json": AUTORESEARCH_DECOMPOSITION_POLICY_PATH,
+        "retrieval.json": AUTORESEARCH_RETRIEVAL_POLICY_PATH,
+        "reflection.json": AUTORESEARCH_REFLECTION_POLICY_PATH,
     }
     for filename, path in paths_by_kind.items():
         assert path.name == filename
-        assert path.parent == GLOBAL_POLICIES_DIR
+        assert path.parent == AUTORESEARCH_POLICIES_DIR
 
 
 def test_legacy_sot_dir_still_exported() -> None:
@@ -86,12 +86,12 @@ def test_policy_files_not_gitignored(filename: str) -> None:
     new in-repo policy files. Pre-PR-RATCHET-1, ``state/autoresearch/*``
     swept everything under the rug; the negation
     ``!state/autoresearch/policies/**`` re-includes them."""
-    from core.paths import GLOBAL_POLICIES_DIR
+    from core.paths import AUTORESEARCH_POLICIES_DIR
 
     git_bin = shutil.which("git")
     if git_bin is None:
         pytest.skip("git executable not in PATH")
-    target = GLOBAL_POLICIES_DIR / filename
+    target = AUTORESEARCH_POLICIES_DIR / filename
     # Run from the worktree root so .gitignore is the right one.
     repo_root = Path(__file__).resolve().parents[3]
     result = subprocess.run(  # noqa: S603

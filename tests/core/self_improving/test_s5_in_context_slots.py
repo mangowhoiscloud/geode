@@ -2,7 +2,7 @@
 
 5-element 패턴 (schema-only, no inference wiring yet — M4.4 deferred):
 - SoT: in-context-slots.json
-- Path: GLOBAL_IN_CONTEXT_SLOTS_PATH + OPERATOR_LOCAL_IN_CONTEXT_SLOTS_PATH
+- Path: AUTORESEARCH_IN_CONTEXT_SLOTS_PATH + OPERATOR_LOCAL_IN_CONTEXT_SLOTS_PATH
 - Reader: core/self_improving/loop/inject/in_context_slots.py
 - Entry: deferred (M4.4 후속 PR)
 - Env: GEODE_IN_CONTEXT_SLOTS_OVERRIDE + _STRICT=1 (train.py audit)
@@ -288,11 +288,11 @@ def test_operator_local_layer_priority(isolated_sot: Path) -> None:
 
 def test_path_constants_present() -> None:
     from core.paths import (
-        GLOBAL_IN_CONTEXT_SLOTS_PATH,
+        AUTORESEARCH_IN_CONTEXT_SLOTS_PATH,
         OPERATOR_LOCAL_IN_CONTEXT_SLOTS_PATH,
     )
 
-    assert GLOBAL_IN_CONTEXT_SLOTS_PATH.name == "in-context-slots.json"
+    assert AUTORESEARCH_IN_CONTEXT_SLOTS_PATH.name == "in-context-slots.json"
     assert OPERATOR_LOCAL_IN_CONTEXT_SLOTS_PATH.name == "in-context-slots.json"
 
 
@@ -306,7 +306,7 @@ def test_train_py_sets_in_context_slots_env_pair() -> None:
     src = (repo_root / "core/self_improving/measure.py").read_text(encoding="utf-8")
     assert "GEODE_IN_CONTEXT_SLOTS_OVERRIDE" in src
     assert "GEODE_IN_CONTEXT_SLOTS_STRICT" in src
-    assert "GLOBAL_IN_CONTEXT_SLOTS_PATH" in src
+    assert "AUTORESEARCH_IN_CONTEXT_SLOTS_PATH" in src
 
 
 # ALIVE marker ----------------------------------------------------------------

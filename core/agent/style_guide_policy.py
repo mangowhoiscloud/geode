@@ -45,13 +45,13 @@ from pathlib import Path
 from typing import Any
 
 from core.agent.policy_sot import load_policy_sot
-from core.paths import GLOBAL_STYLE_GUIDE_PATH, OPERATOR_LOCAL_STYLE_GUIDE_PATH
+from core.paths import AUTORESEARCH_STYLE_GUIDE_PATH, OPERATOR_LOCAL_STYLE_GUIDE_PATH
 
 log = logging.getLogger(__name__)
 
 _STYLE_GUIDE_OVERRIDE_ENV = "GEODE_STYLE_GUIDE_OVERRIDE"
 
-_STYLE_GUIDE_SOT_PATH = GLOBAL_STYLE_GUIDE_PATH
+_STYLE_GUIDE_SOT_PATH = AUTORESEARCH_STYLE_GUIDE_PATH
 """Cross-process in-repo SoT path (T3, 2026-05-21). Module-local alias."""
 
 _OPERATOR_LOCAL_STYLE_GUIDE_PATH = OPERATOR_LOCAL_STYLE_GUIDE_PATH
