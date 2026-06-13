@@ -97,35 +97,46 @@ def translate_tool(tool: ToolSpec) -> dict[str, Any]:
     }
 
 
-# Anthropic beta-header token for the computer-use tool.
-#
-# Two SEPARATE versioning axes (do not conflate):
-#   * tool SCHEMA version — ``computer_20251124`` (Nov 2025), the current
-#     action set / params (ctx7 ``beta_tool_computer_use_20251124_param.py``:
-#     display_width_px / display_height_px / display_number).
-#   * feature-gate beta HEADER — ``computer-use-2025-01-24``, held stable by
-#     Anthropic. ctx7 ``anthropic_beta_param.py`` is fresh to 2026-06 (carries
-#     ``server-side-fallback-2026-06-01`` …) yet the ONLY computer-use strings
-#     remain ``2024-10-22`` / ``2025-01-24`` — there is no ``computer-use-2026-*``.
-#     So the low date is the CURRENT (only) gate, not a stale pick; it pairs
-#     with the latest ``_20251124`` schema.
-# Residual: the header↔schema pairing is strongly inferred (no paired ctx7
-# example) → ``unverified — live test required`` (CLAUDE.md §4d). Safe to ship:
-# computer-use never reached this LIVE path at all (it was wired only into the
-# legacy ``ClaudeAgenticAdapter.agentic_call`` that PR-MAINPATH-67 deleted), so
-# any working injection is strictly better than the current dead state, and a
-# recognized-but-unneeded beta is a server-side no-op.
-_COMPUTER_USE_BETA = "computer-use-2025-01-24"
+# Computer-use tool generation — the (tool type, beta header) pair is
+# MODEL-AWARE. Verified against the Anthropic docs (CANNOT §4d):
+#   https://platform.claude.com/docs/en/agents-and-tools/tool-use/computer-use-tool
+#   current  (Opus 4.8/4.7/4.6, Sonnet 4.6, Opus 4.5, + future): computer_20251124
+#            + "computer-use-2025-11-24"
+#   legacy   (Sonnet 4.5, Haiku 4.5, deprecated 4.1/4):          computer_20250124
+#            + "computer-use-2025-01-24"
+# Earlier this code shipped a single ``2025-01-24`` header for ALL models — wrong
+# for the default Opus 4.8 (Codex review caught it). The SDK Literal lags
+# ("computer-use-2025-11-24" is sent as a plain string); the docs page is SoT.
+_COMPUTER_USE_CURRENT = ("computer_20251124", "computer-use-2025-11-24")
+_COMPUTER_USE_LEGACY = ("computer_20250124", "computer-use-2025-01-24")
+# Both native tool types — used for dedup (either generation counts as present).
+_COMPUTER_USE_TYPES = frozenset({_COMPUTER_USE_CURRENT[0], _COMPUTER_USE_LEGACY[0]})
 
 
-def anthropic_computer_tool_param(display_width: int, display_height: int) -> dict[str, Any]:
-    """Anthropic ``computer_20251124`` tool definition (ComputerUseCapable).
+def _computer_use_spec(model: str) -> tuple[str, str]:
+    """Return ``(tool_type, beta_header)`` for the model's computer-use generation.
 
-    ``display_number`` (X11) is omitted on the host path; the Xvfb sandbox
-    (Phase E) sets it to the virtual display number.
+    Legacy models are an explicit set; every other model (incl. future ones)
+    defaults to the current generation so a new model tracks the newer beta.
+    """
+    from core.llm.model_capabilities import ANTHROPIC_COMPUTER_USE_LEGACY_MODELS
+
+    if model in ANTHROPIC_COMPUTER_USE_LEGACY_MODELS:
+        return _COMPUTER_USE_LEGACY
+    return _COMPUTER_USE_CURRENT
+
+
+def anthropic_computer_tool_param(
+    display_width: int, display_height: int, tool_type: str = _COMPUTER_USE_CURRENT[0]
+) -> dict[str, Any]:
+    """Anthropic computer-use tool definition (ComputerUseCapable).
+
+    ``tool_type`` is the model-aware schema version (``computer_20251124`` /
+    ``computer_20250124``). ``display_number`` (X11) is omitted on the host
+    path; the Xvfb sandbox (Phase E) sets it to the virtual display number.
     """
     return {
-        "type": "computer_20251124",
+        "type": tool_type,
         "name": "computer",
         "display_width_px": display_width,
         "display_height_px": display_height,
@@ -147,20 +158,24 @@ def _maybe_inject_computer_use(kwargs: dict[str, Any]) -> None:
 
     if not is_computer_use_enabled():
         return
+    tool_type, beta = _computer_use_spec(kwargs.get("model", ""))
     tools = list(kwargs.get("tools") or [])
-    # Dedup by the NATIVE type (not the name): a caller's custom same-name tool
-    # must not suppress the native injection, and re-entrancy must not double it.
-    if not any(t.get("type") == "computer_20251124" for t in tools):
+    # Dedup by the NATIVE type (either generation), not the name: a caller's
+    # custom same-name tool must not suppress native injection, and re-entrancy
+    # must not double it.
+    if not any(t.get("type") in _COMPUTER_USE_TYPES for t in tools):
         tools.append(
-            anthropic_computer_tool_param(_COMPUTER_DISPLAY_WIDTH, _COMPUTER_DISPLAY_HEIGHT)
+            anthropic_computer_tool_param(
+                _COMPUTER_DISPLAY_WIDTH, _COMPUTER_DISPLAY_HEIGHT, tool_type
+            )
         )
         kwargs["tools"] = tools
-    # Always ensure the beta token when the native tool is present (merge, never
-    # clobber an existing anthropic-beta header).
+    # Always ensure the model's beta token when the native tool is present
+    # (merge, never clobber an existing anthropic-beta header).
     headers = dict(kwargs.get("extra_headers") or {})
     tokens = [t for t in headers.get("anthropic-beta", "").split(",") if t]
-    if _COMPUTER_USE_BETA not in tokens:
-        tokens.append(_COMPUTER_USE_BETA)
+    if beta not in tokens:
+        tokens.append(beta)
     headers["anthropic-beta"] = ",".join(tokens)
     kwargs["extra_headers"] = headers
 

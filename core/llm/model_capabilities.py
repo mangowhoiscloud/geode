@@ -92,3 +92,28 @@ ANTHROPIC_WEB_SEARCH_20260209_MODELS: frozenset[str] = frozenset(
         "claude-sonnet-4-6",
     }
 )
+
+# Computer-use tool generation per model (doc-before-behaviour, CANNOT §4d).
+# ref: https://platform.claude.com/docs/en/agents-and-tools/tool-use/computer-use-tool
+#   beta "computer-use-2025-11-24" + tool type "computer_20251124"
+#       → Opus 4.8 / 4.7 / 4.6, Sonnet 4.6, Opus 4.5  (the current generation)
+#   beta "computer-use-2025-01-24" + tool type "computer_20250124"
+#       → Sonnet 4.5, Haiku 4.5, (deprecated) Opus 4.1 / Sonnet 4 / Opus 4
+# The SDK's ``AnthropicBetaParam`` Literal does NOT yet enumerate
+# "computer-use-2025-11-24" ("typed constant pending in the Go SDK" per the
+# docs example) — it is sent as a plain string, which the ``Union[str,
+# Literal]`` type permits. ctx7's SDK snapshot lagged here; the docs page is
+# the SoT.
+#
+# This set is the LEGACY (2025-01-24) generation; every other model — incl.
+# Fable 5 and any future model — defaults to the 2025-11-24 generation so a
+# newly onboarded model tracks the newer beta automatically.
+ANTHROPIC_COMPUTER_USE_LEGACY_MODELS: frozenset[str] = frozenset(
+    {
+        "claude-sonnet-4-5",
+        "claude-haiku-4-5",
+        "claude-opus-4-1",
+        "claude-sonnet-4",
+        "claude-opus-4",
+    }
+)

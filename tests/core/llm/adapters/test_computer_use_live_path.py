@@ -25,9 +25,9 @@ from core.tools.computer_use import TARGET_HEIGHT, TARGET_WIDTH
 _ENABLED = "core.llm.providers.anthropic.is_computer_use_enabled"
 
 
-def _req(tools: tuple[ToolSpec, ...] = ()) -> AdapterCallRequest:
+def _req(tools: tuple[ToolSpec, ...] = (), model: str = "claude-opus-4-8") -> AdapterCallRequest:
     return AdapterCallRequest(
-        model="claude-opus-4-8",
+        model=model,
         messages=(Message(role="user", content="hi"),),
         tools=tools,
     )
@@ -41,13 +41,31 @@ class TestLivePathInjection:
         assert any(
             t.get("name") == "computer" and t.get("type") == "computer_20251124" for t in tools
         ), tools
+        assert "computer-use-2025-11-24" in kwargs["extra_headers"]["anthropic-beta"]
+
+    def test_current_gen_model_uses_2025_11_generation(self) -> None:
+        """Opus 4.8 (default) must get the current generation — the exact bug
+        Codex caught (a single 2025-01-24 header was wrong for Opus 4.8)."""
+        with patch(_ENABLED, return_value=True):
+            kwargs = common.build_create_kwargs(_req(model="claude-opus-4-8"))
+        computer = next(t for t in kwargs["tools"] if t.get("name") == "computer")
+        assert computer["type"] == "computer_20251124"
+        assert "computer-use-2025-11-24" in kwargs["extra_headers"]["anthropic-beta"]
+        assert "computer-use-2025-01-24" not in kwargs["extra_headers"]["anthropic-beta"]
+
+    def test_legacy_gen_model_uses_2025_01_generation(self) -> None:
+        """Sonnet 4.5 / Haiku 4.5 are on the legacy computer-use generation."""
+        with patch(_ENABLED, return_value=True):
+            kwargs = common.build_create_kwargs(_req(model="claude-haiku-4-5"))
+        computer = next(t for t in kwargs["tools"] if t.get("name") == "computer")
+        assert computer["type"] == "computer_20250124"
         assert "computer-use-2025-01-24" in kwargs["extra_headers"]["anthropic-beta"]
 
     def test_stream_injects_computer_tool_when_enabled(self) -> None:
         with patch(_ENABLED, return_value=True):
             kwargs = common.build_stream_kwargs(_req())
         assert any(t.get("name") == "computer" for t in kwargs.get("tools", []))
-        assert "computer-use-2025-01-24" in kwargs["extra_headers"]["anthropic-beta"]
+        assert "computer-use-2025-11-24" in kwargs["extra_headers"]["anthropic-beta"]
 
     def test_disabled_injects_nothing(self) -> None:
         with patch(_ENABLED, return_value=False):
@@ -70,7 +88,7 @@ class TestLivePathInjection:
             common._maybe_inject_computer_use(kwargs)
         # not doubled, and the beta header is still ensured for the native tool.
         assert sum(1 for t in kwargs["tools"] if t.get("type") == "computer_20251124") == 1
-        assert "computer-use-2025-01-24" in kwargs["extra_headers"]["anthropic-beta"]
+        assert "computer-use-2025-11-24" in kwargs["extra_headers"]["anthropic-beta"]
 
     def test_custom_same_name_tool_does_not_suppress_native(self) -> None:
         """Dedup is by native TYPE, not name — a caller's custom ``computer``
@@ -81,7 +99,7 @@ class TestLivePathInjection:
         with patch(_ENABLED, return_value=True):
             common._maybe_inject_computer_use(kwargs)
         assert any(t.get("type") == "computer_20251124" for t in kwargs["tools"])
-        assert "computer-use-2025-01-24" in kwargs["extra_headers"]["anthropic-beta"]
+        assert "computer-use-2025-11-24" in kwargs["extra_headers"]["anthropic-beta"]
 
     def test_beta_header_merges_not_clobbers(self) -> None:
         kwargs: dict = {"extra_headers": {"anthropic-beta": "context-management-2025-06-27"}}
@@ -89,7 +107,7 @@ class TestLivePathInjection:
             common._maybe_inject_computer_use(kwargs)
         beta = kwargs["extra_headers"]["anthropic-beta"]
         assert "context-management-2025-06-27" in beta
-        assert "computer-use-2025-01-24" in beta
+        assert "computer-use-2025-11-24" in beta
 
     def test_computer_tool_is_type_carrying_so_defer_exempt(self) -> None:
         """Defer skips type-carrying entries — the injected computer tool must
