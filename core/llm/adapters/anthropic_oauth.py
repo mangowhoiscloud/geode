@@ -57,12 +57,28 @@ class AnthropicOAuthAdapter:
     # PR-ADAPTER-PATTERN-UNIFICATION — same web_search tool API as PAYG endpoint.
     supports_web_search: bool = True
     supports_text_completion: bool = True
+    # ComputerUseCapable — the ``computer_20251124`` tool is injected on the
+    # live request path (``_anthropic_common._maybe_inject_computer_use``);
+    # this flag + method are the enumerable capability contract.
+    supports_computer_use: bool = True
     _last_error: Exception | None = field(default=None, init=False, repr=False)
     # PR-LOOP-POLLUTION-FIX (2026-06-12) — one client per owning event loop
     # (see core/llm/loop_affinity.py).
     _clients: LoopAffineClientCache = field(
         default_factory=lambda: LoopAffineClientCache("anthropic-oauth"), init=False, repr=False
     )
+
+    def computer_tool_param(
+        self, *, display_width: int, display_height: int
+    ) -> dict[str, Any] | None:
+        """ComputerUseCapable — Anthropic ``computer_20251124`` tool definition.
+
+        Delegates to the shared builder so this enumerable contract returns the
+        exact param the live request path injects (no drift).
+        """
+        from core.llm.adapters._anthropic_common import anthropic_computer_tool_param
+
+        return anthropic_computer_tool_param(display_width, display_height)
 
     def _get_client(self) -> Any:
         token = _resolve_oauth_token()

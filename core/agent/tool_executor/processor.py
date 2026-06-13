@@ -140,8 +140,44 @@ class ToolCallProcessor:
             }
         )
 
-    async def _serialize_tool_result(self, result: Any, block_id: str) -> dict[str, Any]:
+    @staticmethod
+    def _serialize_computer_result(result: dict[str, Any], block_id: str) -> dict[str, Any]:
+        """Computer-use ``tool_result`` carrying the screenshot as an IMAGE block.
+
+        The screenshot must reach the model as a viewable image, not base64
+        text: (1) the model cannot "see" a base64 string, and (2) a JPEG
+        screenshot is ~10K+ tokens of base64 that the token guard / offload
+        store below would truncate or offload — blinding the agent on the very
+        next turn. Anthropic ``tool_result.content`` accepts a content-block
+        list, and the loop forwards it natively
+        (``messages.append({"role": "user", "content": tool_results})`` →
+        ``_anthropic_common.build_messages`` passes user content through), so
+        the image block reaches the wire unchanged. The non-image fields stay
+        as a compact text block.
+        """
+        meta = {k: v for k, v in result.items() if k != "screenshot"}
+        content: list[dict[str, Any]] = [
+            {"type": "text", "text": json.dumps(meta, ensure_ascii=False, default=str)},
+            {
+                "type": "image",
+                "source": {
+                    "type": "base64",
+                    "media_type": "image/jpeg",  # harness encodes JPEG (computer_use.screenshot)
+                    "data": result["screenshot"],
+                },
+            },
+        ]
+        return {"type": "tool_result", "tool_use_id": block_id, "content": content}
+
+    async def _serialize_tool_result(
+        self, result: Any, block_id: str, tool_name: str = ""
+    ) -> dict[str, Any]:
         """Apply token guard, offload large results, and serialize for LLM."""
+        # Computer-use screenshots return as an image block (see above) —
+        # before the token guard / offload that would otherwise corrupt them.
+        if tool_name == "computer" and isinstance(result, dict) and result.get("screenshot"):
+            return self._serialize_computer_result(result, block_id)
+
         # Token guard: truncate oversized results to prevent context explosion
         # For small-context models (e.g. GLM-5), apply model-aware limit
         if isinstance(result, dict):
@@ -235,7 +271,7 @@ class ToolCallProcessor:
                 result = {"error": intercept.reason, "blocked_by_hook": True}
                 self._op_logger.log_tool_result(tool_name, result, visible=visible)
                 self._record_tool_activity(tool_name, tool_input, result, visible)
-                return await self._serialize_tool_result(result, block.id)
+                return await self._serialize_tool_result(result, block.id, tool_name)
 
             # Apply input modifications from interceptor hook
             if intercept is not None:
@@ -342,7 +378,7 @@ class ToolCallProcessor:
                 }
 
         self._record_tool_activity(tool_name, tool_input, result, visible)
-        return await self._serialize_tool_result(result, block.id)
+        return await self._serialize_tool_result(result, block.id, tool_name)
 
     async def _execute_sequential(self, tool_blocks: list[Any]) -> list[dict[str, Any]]:
         """Execute tool blocks one by one (single-tool fast path)."""
