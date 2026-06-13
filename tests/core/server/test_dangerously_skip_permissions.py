@@ -10,11 +10,9 @@ from __future__ import annotations
 
 import os
 from collections.abc import Iterator
-from unittest.mock import MagicMock
 
 import pytest
 from core.config import reload_settings_from_disk, settings
-from core.server.supervised.services import SessionMode, SharedServices
 
 _ENV = "GEODE_DANGEROUSLY_SKIP_PERMISSIONS"
 
@@ -25,16 +23,6 @@ def _reset_skip() -> Iterator[None]:
     yield
     os.environ.pop(_ENV, None)
     settings.dangerously_skip_permissions = False
-
-
-def _services() -> SharedServices:
-    return SharedServices(
-        mcp_manager=MagicMock(),
-        skill_registry=MagicMock(),
-        hook_system=MagicMock(),
-        tool_handlers={"test_tool": lambda **kw: {"ok": True}},
-        _cost_budget=1.0,
-    )
 
 
 def _enable(monkeypatch: pytest.MonkeyPatch, on: bool) -> None:
@@ -50,27 +38,55 @@ class TestSettingField:
         assert settings.dangerously_skip_permissions is False
 
 
-class TestCreateSessionOverride:
-    def test_skip_forces_hitl_0_and_auto_approve_in_repl(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
-        """REPL is hitl=2 by default; the flag must force it to 0 + auto-approve."""
-        _enable(monkeypatch, True)
-        executor, _ = _services().create_session(SessionMode.REPL)
-        assert executor._hitl_level == 0
-        assert executor._auto_approve is True
+class TestApprovalGatesBypass:
+    """The flag is read DYNAMICALLY by each HITL gate (not cached at executor
+    construction) — so a full-HITL (hitl_level=2) executor still bypasses once
+    the flag is set, and resets when it clears. This is what makes a running
+    daemon honour the per-connection capability without a sticky-on next
+    session."""
 
-    def test_skip_forces_hitl_0_in_ipc(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        _enable(monkeypatch, True)
-        executor, _ = _services().create_session(SessionMode.IPC)
-        assert executor._hitl_level == 0
-        assert executor._auto_approve is True
+    def _workflow(self):  # hitl_level=2 = full HITL (would otherwise prompt)
+        from core.agent.approval import ApprovalWorkflow
 
-    def test_no_skip_keeps_mode_default(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        return ApprovalWorkflow(hitl_level=2)
+
+    def test_write_gate_bypassed_when_skip(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        _enable(monkeypatch, True)
+        rejection, approved = self._workflow().apply_safety_gates(
+            "edit_file", {"path": "x", "content": "y"}
+        )
+        assert rejection is None
+        assert approved is True
+
+    def test_write_gate_not_bypassed_without_skip(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """Sanity: with skip off + hitl=2 the write gate does NOT auto-approve
+        (it would prompt) — confirms the bypass is the flag, not a test artifact."""
         _enable(monkeypatch, False)
-        executor, _ = _services().create_session(SessionMode.REPL)
-        assert executor._hitl_level == 2
-        assert executor._auto_approve is False
+        wf = self._workflow()
+        # auto-deny path returns a rejection without prompting (3+ denials).
+        for _ in range(3):
+            wf.track_decision("edit_file", "n")
+        rejection, approved = wf.apply_safety_gates("edit_file", {"path": "x"})
+        assert approved is False
+
+    def test_bash_auto_approved_when_skip(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        _enable(monkeypatch, True)
+        assert self._workflow().is_bash_auto_approved("rm -rf /tmp/x") is True
+
+    def test_bash_not_auto_approved_without_skip(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        _enable(monkeypatch, False)
+        # a write (non-read-only) command at hitl=2 needs approval
+        assert self._workflow().is_bash_auto_approved("rm -rf /tmp/x") is False
+
+    def test_mcp_auto_approved_when_skip(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        _enable(monkeypatch, True)
+        assert self._workflow().is_mcp_approved("some-server") is True
+
+    def test_batch_cost_bypassed_when_skip(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        import asyncio
+
+        _enable(monkeypatch, True)
+        assert asyncio.run(self._workflow().batch_cost_approval([])) is True
 
 
 class TestAdoptHelper:
