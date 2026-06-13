@@ -1058,12 +1058,12 @@ class SubAgentManager:
                 retryable=category in {ErrorCategory.TIMEOUT, ErrorCategory.API_ERROR},
                 duration_ms=isolation.duration_ms,
             )
-        data: dict[str, Any]
+        result_payload: dict[str, Any]
         raw_text = isolation.output or ""
         candidate_text = _strip_json_codeblock(raw_text) if raw_text else raw_text
         try:
             parsed = json.loads(candidate_text) if candidate_text else {}
-            data = parsed if isinstance(parsed, dict) else {"raw": parsed}
+            result_payload = parsed if isinstance(parsed, dict) else {"raw": parsed}
         except (json.JSONDecodeError, RecursionError):
             # PR-HANDOFF-SCHEMAS — embedded {...} fallback (see
             # _last_balanced_json_object docstring).
@@ -1071,20 +1071,22 @@ class SubAgentManager:
             if embedded is not None:
                 try:
                     parsed_emb = json.loads(embedded)
-                    data = parsed_emb if isinstance(parsed_emb, dict) else {"raw": raw_text}
+                    result_payload = (
+                        parsed_emb if isinstance(parsed_emb, dict) else {"raw": raw_text}
+                    )
                 except (json.JSONDecodeError, RecursionError):
-                    data = {"raw": raw_text}
+                    result_payload = {"raw": raw_text}
             else:
-                data = {"raw": raw_text}
-        summary = data.get("summary", "")
+                result_payload = {"raw": raw_text}
+        summary = result_payload.get("summary", "")
         if not summary:
-            summary = str(data.get("tier", data.get("status", "")))[:200]
+            summary = str(result_payload.get("tier", result_payload.get("status", "")))[:200]
         return SubAgentResult(
             task_id=task.task_id,
             task_type=task.task_type,
             status="ok",
             summary=summary,
-            data=data,
+            data=result_payload,
             duration_ms=isolation.duration_ms,
         )
 

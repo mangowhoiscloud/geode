@@ -240,6 +240,16 @@ def classify_tool_exception(exc: Exception, tool_name: str = "") -> dict[str, An
 
 _TOOLS_JSON_PATH = Path(__file__).resolve().parent / "definitions.json"
 
+# Two-layer tool model (intentional, not redundancy — PR-LOWRISK-SLOP C):
+#   1. ``definitions.json`` — the DECLARATIVE layer: name / description /
+#      input_schema / category / cost_tier. Single SoT for the metadata the LLM
+#      sees (prompt-injectable + git-diffable). No behaviour here.
+#   2. the ``Tool`` protocol + ``ToolRegistry`` — the BEHAVIOUR layer: each tool
+#      class implements ``aexecute()``. The registry filters/dispatches instances.
+# The split is deliberate: metadata that ships to the model must be a static,
+# reviewable artifact, while execution is polymorphic Python. The registry's
+# schema is validated against this JSON so the two layers cannot silently drift.
+
 
 def load_all_tool_definitions() -> list[dict[str, Any]]:
     """Load all tool definitions from definitions.json (single source of truth).

@@ -45,6 +45,11 @@ functional change.
 
 ---
 
+## [0.99.200] - 2026-06-13
+
+### Changed
+- **Low-risk slop tidy from the codebase-wide scan** (PR-LOWRISK-SLOP; the scan otherwise found the codebase clean — 0 dead public fns, 0 dual registries, 0 emoji-anchor violations, frontier-aligned module sizes). **A — policy-loader dedup**: `core/llm/cache_policy.py` + `core/llm/strategies/provider_routing_policy.py` were the two policy loaders the v0.99.196 7-to-1 `load_policy_sot` dedup missed — they still hand-rolled the strict/graceful `resolve_sot` + read-json + validate + coerce. Migrated both to the shared `load_policy_sot` (behaviour preserved: identical `RuntimeError` shapes + log wording via `label`; `core/llm → core/agent.policy_sot` import verified clean against the import contracts), removing ~60 duplicated lines. **C — tool-definition two-layer doc**: documented why `definitions.json` (declarative LLM-facing metadata SoT) and the `Tool` protocol / `ToolRegistry` (behaviour) coexist by design (`core/tools/base.py`) — not redundancy. **D — naive variable names**: `data` → `result_payload` in `sub_agent.py`'s sub-result parse, `data` → `info_fields` in `eval_export.py`. The flagged "god-modules" (agent_loop 2577, _openai_common 1229, sub_agent 1108) were measured against frontier agent CLIs (hermes core files 13k-16k lines, codex 2.2k-3.8k, openclaw 3k-4k) and found to be at or BELOW the frontier norm for cohesive agent cores — splitting them would make GEODE an over-decomposed outlier, so they are accepted as large-but-cohesive (not slop).
+
 ## [0.99.199] - 2026-06-13
 
 ### Added

@@ -47,13 +47,12 @@ turns deserve the breakpoint budget.
 
 from __future__ import annotations
 
-import json
 import logging
 from pathlib import Path
 from typing import Any
 
+from core.agent.policy_sot import load_policy_sot
 from core.paths import AUTORESEARCH_CACHE_POLICY_PATH, OPERATOR_LOCAL_CACHE_POLICY_PATH
-from core.self_improving.loop.mutate.sot_resolution import resolve_sot
 
 log = logging.getLogger(__name__)
 
@@ -74,44 +73,21 @@ _MIN_BREAKPOINTS = 0
 
 
 def _load_cache_policy_override() -> dict[str, int] | None:
-    """Return the active cache-policy dict, or ``None`` if no SoT applies."""
-    selection = resolve_sot(
+    """Return the active cache-policy dict, or ``None`` if no SoT applies.
+
+    Uses the shared :func:`load_policy_sot` loader (PR-LOWRISK-SLOP — this
+    module + provider_routing were the two policy loaders the v0.99.196
+    7-to-1 dedup missed, still hand-rolling the strict/graceful read).
+    Behaviour preserved: same RuntimeError shapes + log wording (via ``label``)."""
+    return load_policy_sot(
         env_var=_CACHE_POLICY_OVERRIDE_ENV,
         operator_local=_OPERATOR_LOCAL_CACHE_POLICY_PATH,
         in_repo=_CACHE_POLICY_SOT_PATH,
+        label="cache-policy",
+        validate_strict=_validate_schema,
+        validate_graceful=_validate_schema,
+        coerce=_coerce,
     )
-    if selection is None:
-        return None
-    if selection.strict:
-        return _strict_load(selection.path)
-    return _graceful_load(selection.path)
-
-
-def _strict_load(path: Path) -> dict[str, int]:
-    if not path.is_file():
-        raise RuntimeError(f"{_CACHE_POLICY_OVERRIDE_ENV}={path} file not found")
-    try:
-        raw = path.read_text(encoding="utf-8")
-        data = json.loads(raw)
-    except (OSError, json.JSONDecodeError) as exc:
-        raise RuntimeError(f"{_CACHE_POLICY_OVERRIDE_ENV}={path} load failed: {exc}") from exc
-    _validate_schema(data, path)
-    return _coerce(data)
-
-
-def _graceful_load(path: Path) -> dict[str, int] | None:
-    try:
-        raw = path.read_text(encoding="utf-8")
-        data = json.loads(raw)
-    except (OSError, json.JSONDecodeError):
-        log.warning("cache-policy SoT at %s is unreadable; ignoring", path)
-        return None
-    try:
-        _validate_schema(data, path)
-    except RuntimeError as exc:
-        log.warning("cache-policy SoT at %s schema invalid: %s; ignoring", path, exc)
-        return None
-    return _coerce(data)
 
 
 def _validate_schema(data: Any, path: Path) -> None:
