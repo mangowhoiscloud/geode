@@ -128,6 +128,7 @@ _TOML_TO_SETTINGS: dict[str, str] = {
     "computer_use.enabled": "computer_use_enabled",
     "cost.limit_usd": "cost_limit_usd",
     "ensemble.mode": "ensemble_mode",
+    "hitl.dangerously_skip_permissions": "dangerously_skip_permissions",
     "hitl.level": "hitl_level",
     "gateway.enabled": "gateway_enabled",
     "gateway.max_concurrent": "gateway_max_concurrent",

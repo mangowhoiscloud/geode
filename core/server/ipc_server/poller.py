@@ -63,6 +63,23 @@ def _get_client_capability() -> tuple[bool, int]:
     return is_tty, width
 
 
+def _adopt_skip_permissions(msg: dict[str, Any]) -> None:
+    """Adopt the thin CLI's ``--dangerously-skip-permissions`` for THIS connection.
+
+    Sets the PER-SESSION ContextVar (not a process-global) in the connection's
+    task / thread, before the first prompt — so the gates + plan handler read it
+    at call time and a concurrent normal session is unaffected (Codex review).
+    Set explicitly on every ``client_capability`` (True/False) so the value is
+    always this connection's intent.
+    """
+    from core.agent.safety import set_skip_permissions
+
+    skip = bool(msg.get("dangerously_skip_permissions", False))
+    set_skip_permissions(skip)
+    if skip:
+        log.warning("client_capability: --dangerously-skip-permissions ACTIVE (all HITL bypassed)")
+
+
 class _AsyncClientEndpoint:
     """Thread-safe bridge around an asyncio StreamWriter.
 
@@ -609,6 +626,7 @@ class CLIPoller:
                     log.warning(
                         "client_capability: failed to adopt CLI model %s", cli_model, exc_info=True
                     )
+            _adopt_skip_permissions(msg)
             log.debug("client_capability: is_tty=%s width=%d", is_tty, width if width > 0 else 120)
             return {"type": "ack"}
 
@@ -775,6 +793,7 @@ class CLIPoller:
                 width = 120
             _client_capability_local.is_tty = is_tty
             _client_capability_local.width = width
+            _adopt_skip_permissions(msg)
             log.debug("client_capability: is_tty=%s width=%d", is_tty, width)
             return {"type": "ack"}
 

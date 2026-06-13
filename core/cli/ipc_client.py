@@ -191,6 +191,15 @@ class IPCClient:
             model = _settings.model
         except Exception:
             model = ""
+        # --dangerously-skip-permissions: advertise the bypass so a running
+        # daemon adopts it for THIS connection (same handshake as model). The
+        # thin CLI sets GEODE_DANGEROUSLY_SKIP_PERMISSIONS when the flag is
+        # passed; sent explicitly (True/False) so a normal client resets it.
+        skip_perms = os.getenv("GEODE_DANGEROUSLY_SKIP_PERMISSIONS", "").strip().lower() in (
+            "1",
+            "true",
+            "yes",
+        )
         self._send(
             {
                 "type": "client_capability",
@@ -198,6 +207,7 @@ class IPCClient:
                 "width": width,
                 "model": model,
                 "cwd": os.getcwd(),
+                "dangerously_skip_permissions": skip_perms,
             }
         )
 

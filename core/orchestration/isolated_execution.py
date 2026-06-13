@@ -130,6 +130,10 @@ class IsolatedRunner:
         "GEODE_CONFIG_PATH",
         "GEODE_DATA_DIR",
         "GEODE_CODEX_OAUTH_POLL_DISABLED",
+        # Daemon-wide skip-permissions; the PER-SESSION value (ContextVar) is
+        # forwarded explicitly at spawn (the whitelist only carries the parent
+        # process env, not the per-connection ContextVar).
+        "GEODE_DANGEROUSLY_SKIP_PERMISSIONS",
     }
 
     def __init__(
@@ -406,6 +410,15 @@ class IsolatedRunner:
                 return slot_error
             acquired = True
             safe_env = {k: v for k, v in os.environ.items() if k in self._SUBPROCESS_ENV_WHITELIST}
+            # Forward the EFFECTIVE skip-permissions (per-session ContextVar OR
+            # daemon-wide env) so a write-capable sub-agent under
+            # --dangerously-skip-permissions also bypasses HITL in the worker
+            # subprocess (which has no IPC handshake; it reads the env default).
+            from core.agent.safety import current_skip_permissions
+
+            safe_env["GEODE_DANGEROUSLY_SKIP_PERMISSIONS"] = (
+                "1" if current_skip_permissions() else "0"
+            )
             # PR-Q (2026-05-24) — forward the parent's active run_dir
             # binding to the subprocess so its observability writers
             # (``_save_result_backup``, ``SessionTranscript``) land
