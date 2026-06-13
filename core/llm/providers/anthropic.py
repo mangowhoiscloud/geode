@@ -660,30 +660,12 @@ _TOOL_SEARCH_TOOL: dict[str, Any] = {
     "name": "tool_search_tool_regex",
 }
 
-TOOL_DEFER_THRESHOLD = 16
-"""Tool count above which deferred loading activates (docs: 10+ tools is
-the good-use-case bar; GEODE ships ~60). Below it, defer adds a search
-round-trip for no context saving."""
-
-# Immediately-loaded core set — the high-frequency tools the loop should
-# never pay a search round-trip for. Everything else defers behind
-# tool_search. Kept here (provider-level) because defer_loading is an
-# Anthropic Messages API field; OpenAI-family adapters rebuild tool
-# definitions from name/description/schema, so the field never leaks.
-TOOL_SEARCH_ALWAYS_LOADED: frozenset[str] = frozenset(
-    {
-        "memory_search",
-        "memory_save",
-        "note_read",
-        "note_save",
-        "read_document",
-        "glob_files",
-        "grep_files",
-        "general_web_search",
-        "web_fetch",
-        "llms_txt_index",
-        "check_status",
-    }
+# Policy constants (threshold + always-loaded core set) live in the
+# provider-neutral ``core.llm.tool_defer`` since PR-CODEX-TOOL-SEARCH —
+# the OpenAI Responses builder shares the same policy.
+from core.llm.tool_defer import (  # noqa: E402  (policy import next to its use)
+    TOOL_DEFER_THRESHOLD,
+    TOOL_SEARCH_ALWAYS_LOADED,
 )
 
 
