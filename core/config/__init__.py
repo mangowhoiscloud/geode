@@ -81,7 +81,65 @@ _TOML_TO_SETTINGS: dict[str, str] = {
     "sandbox.max_glob_results": "sandbox_max_glob_results",
     "sandbox.max_grep_results": "sandbox_max_grep_results",
     "sandbox.max_grep_line_chars": "sandbox_max_grep_line_chars",
+    # PR-OBS-LOGGING-CONFIG (2026-06-14) — env↔TOML parity. Every non-secret
+    # Settings field is now also settable via config.toml (was env-only),
+    # completing the documented cascade. Pinned by ``test_toml_settings_map``.
+    "llm.write_timeout": "llm_write_timeout",
+    "llm.retry_base_delay": "llm_retry_base_delay",
+    "llm.retry_max_delay": "llm_retry_max_delay",
+    "temperature.agent_loop": "temperature_agent_loop",
+    "temperature.reflection": "temperature_reflection",
+    "temperature.commentary": "temperature_commentary",
+    "temperature.self_improving_mutation": "temperature_self_improving_mutation",
+    "subagent.max_depth": "max_subagent_depth",
+    "subagent.max_total": "max_total_subagents",
+    "subagent.max_tokens": "subagent_max_tokens",
+    "subagent.max_tool_result_tokens": "max_tool_result_tokens",
+    "observation.mask_keep_rounds": "observation_mask_keep_rounds",
+    "plan.auto_execute": "plan_auto_execute",
+    "tool_offload.threshold": "tool_offload_threshold",
+    "tool_offload.ttl_hours": "tool_offload_ttl_hours",
+    "scheduler.interval_s": "scheduler_interval_s",
+    "scheduler.auto_start": "scheduler_auto_start",
+    "scheduler.jitter_enabled": "scheduler_jitter_enabled",
+    "scheduler.max_jitter_ms": "scheduler_max_jitter_ms",
+    "scheduler.trigger_interval_s": "trigger_scheduler_interval_s",
+    "session.ttl_hours": "session_ttl_hours",
+    "session.storage_dir": "session_storage_dir",
+    "notification.channel": "notification_channel",
+    "notification.recipient": "notification_recipient",
+    "webhook.enabled": "webhook_enabled",
+    "webhook.port": "webhook_port",
+    "persistence.postgres_url": "postgres_url",
+    "persistence.redis_url": "redis_url",
+    "paths.user_profile_dir": "user_profile_dir",
+    "paths.organization_fixture_dir": "organization_fixture_dir",
+    "llm.connect_timeout": "llm_connect_timeout",
+    "llm.read_timeout": "llm_read_timeout",
+    "llm.pool_timeout": "llm_pool_timeout",
+    "llm.keepalive_expiry": "llm_keepalive_expiry",
+    "llm.max_connections": "llm_max_connections",
+    "llm.max_keepalive_connections": "llm_max_keepalive_connections",
+    "llm.max_retries": "llm_max_retries",
+    "llm.max_fallback_cost_ratio": "llm_max_fallback_cost_ratio",
+    "llm.forced_login_method": "forced_login_method",
+    "compact.keep_recent": "compact_keep_recent",
+    "checkpoint.db": "checkpoint_db",
+    "computer_use.enabled": "computer_use_enabled",
+    "cost.limit_usd": "cost_limit_usd",
+    "ensemble.mode": "ensemble_mode",
+    "hitl.level": "hitl_level",
+    "gateway.enabled": "gateway_enabled",
+    "gateway.max_concurrent": "gateway_max_concurrent",
+    "gateway.poll_interval_s": "gateway_poll_interval_s",
 }
+
+#: Settings fields intentionally NOT in the TOML map — env/CLI-only because
+#: putting a secret in a committed/synced ``config.toml`` is the leak we avoid.
+#: The parity guard (test_toml_settings_map) allows exactly these.
+_TOML_ENV_ONLY_FIELDS: frozenset[str] = frozenset(
+    {"anthropic_api_key", "openai_api_key", "zai_api_key"}
+)
 
 DEFAULT_CONFIG_TOML = """\
 # GEODE config.toml
