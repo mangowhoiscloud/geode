@@ -18,6 +18,21 @@ from core.config.credential_source import (
 )
 from core.paths import GLOBAL_ENV_FILE
 
+#: Union of every per-provider effort the picker can persist to ``[agentic]
+#: effort`` — Anthropic ``low..xhigh``, OpenAI ``none``/``minimal``, GLM
+#: ``disabled``/``enabled`` (SoT: ``core.cli.effort_picker.supported_efforts``).
+#: ``_validate_effort`` MUST accept the full union: the picker writes the
+#: provider-specific value here, so a narrower set would reject a valid config
+#: the picker itself produced (e.g. gpt-5.5 + ``none``) and brick the next
+#: ``Settings()`` load. Pinned to the picker by
+#: ``tests/core/config/test_config_centralization.py``. Defined at module level
+#: (not in the class body) so pydantic doesn't treat it as a field and the test
+#: can import it directly. ``core.cli`` is a higher layer than ``core.config``,
+#: so the constant is duplicated here rather than imported (the test bridges).
+AGENTIC_EFFORTS = frozenset(
+    {"none", "minimal", "low", "medium", "high", "max", "xhigh", "disabled", "enabled"}
+)
+
 
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(
@@ -357,6 +372,35 @@ class Settings(BaseSettings):
         allowed = {s.value for s in CredentialSource} | {LEGACY_OAUTH_ALIAS, DISABLE_SENTINEL}
         if v not in allowed:
             raise ValueError(f"credential source must be one of {sorted(allowed)}, got {v!r}")
+        return v
+
+    # PR-OBS-LOGGING-CONFIG (2026-06-14) — value validators. pydantic's cheap
+    # boot-time checks catch a malformed config.toml/.env BEFORE it produces a
+    # silent runtime failure (a 0s timeout that busy-loops, an unknown effort
+    # the picker can't map). Previously only credential_source was validated.
+    # temperature_* already carry native ``Field(ge=0.0, le=2.0)`` constraints
+    # (see the field defs above); the timeout / interval / effort fields below
+    # were plain scalars accepting any value, so they get explicit guards here.
+    @field_validator(
+        "llm_connect_timeout",
+        "llm_read_timeout",
+        "llm_write_timeout",
+        "llm_pool_timeout",
+        "scheduler_interval_s",
+        "trigger_scheduler_interval_s",
+        "gateway_poll_interval_s",
+    )
+    @classmethod
+    def _validate_positive_seconds(cls, v: float) -> float:
+        if v <= 0.0:
+            raise ValueError(f"duration must be > 0 seconds, got {v}")
+        return v
+
+    @field_validator("agentic_effort")
+    @classmethod
+    def _validate_effort(cls, v: str) -> str:
+        if v not in AGENTIC_EFFORTS:
+            raise ValueError(f"agentic_effort must be one of {sorted(AGENTIC_EFFORTS)}, got {v!r}")
         return v
 
     # Cost guard — session-level cost limit (0 = no limit)

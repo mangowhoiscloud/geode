@@ -21,11 +21,14 @@ Mode notes:
 
 from __future__ import annotations
 
+import json
 import logging
+import os
 import sys
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
 
+from core.observability.redaction import redact_secrets
 from core.paths import GEODE_HOME, SERVE_LOG_PATH
 
 LOGS_DIR: Path = GEODE_HOME / "logs"
@@ -33,6 +36,12 @@ LOGS_DIR: Path = GEODE_HOME / "logs"
 _FILE_FORMAT = "%(asctime)s %(name)s %(levelname)s %(message)s"
 _DEFAULT_MAX_BYTES = 10 * 1024 * 1024
 _DEFAULT_BACKUP_COUNT = 5
+
+#: ``GEODE_LOG_FORMAT=json`` switches the FILE handler to one JSON object per
+#: line (frontier convergence — openclaw tslog→JSONL, paperclip pino). The
+#: stderr console stays human-readable text in both modes (openclaw also keeps
+#: console=pretty / file=jsonl). Default ``text`` preserves the legacy format.
+_LOG_FORMAT_ENV = "GEODE_LOG_FORMAT"
 
 #: mode -> (log file path or None, console format)
 _MODE_SPECS: dict[str, tuple[Path | None, str]] = {
@@ -44,12 +53,49 @@ _MODE_SPECS: dict[str, tuple[Path | None, str]] = {
 }
 
 
+class _RedactingTextFormatter(logging.Formatter):
+    """Text formatter that scrubs API-key patterns from the FINAL rendered
+    line (PR-OBS-LOGGING-CONFIG). Redaction at the formatter — not at each of
+    the 240 call sites — makes it AUTOMATIC and unmissable (frontier parity:
+    openclaw/hermes redact at the logger/formatter level, not per-call)."""
+
+    def format(self, record: logging.LogRecord) -> str:
+        return redact_secrets(super().format(record))
+
+
+class _JsonFormatter(logging.Formatter):
+    """One JSON object per line. Machine-filterable by ``logger`` / ``level``;
+    the redacted ``msg`` never carries a raw key. ``trace_id`` / ``span_id``
+    are reserved slots for the follow-up OTel trace↔log coupling (plan A3)."""
+
+    def format(self, record: logging.LogRecord) -> str:
+        payload: dict[str, object] = {
+            "ts": self.formatTime(record),
+            "level": record.levelname,
+            "logger": record.name,
+            "msg": redact_secrets(record.getMessage()),
+        }
+        if record.exc_info:
+            payload["exc"] = redact_secrets(self.formatException(record.exc_info))
+        return json.dumps(payload, ensure_ascii=False)
+
+
+def _file_formatter() -> logging.Formatter:
+    """JSON when ``GEODE_LOG_FORMAT=json``, else the redacting text format."""
+    if os.environ.get(_LOG_FORMAT_ENV, "text").strip().lower() == "json":
+        return _JsonFormatter()
+    return _RedactingTextFormatter(_FILE_FORMAT)
+
+
 def configure_logging(mode: str, *, level: int = logging.INFO) -> None:
     """Install the unified handler set for a GEODE entry point.
 
     Replaces any pre-existing root handlers (an imported module may have
     called ``basicConfig`` already) so handlers never double-log — same
     discipline the serve entry point established.
+
+    Both handlers redact API-key patterns automatically (PR-OBS-LOGGING-CONFIG)
+    so a leaked credential never reaches stderr or the rotating file.
     """
     if mode not in _MODE_SPECS:
         raise ValueError(f"unknown logging mode {mode!r} (known: {sorted(_MODE_SPECS)})")
@@ -62,7 +108,7 @@ def configure_logging(mode: str, *, level: int = logging.INFO) -> None:
 
     stream_handler = logging.StreamHandler(sys.stderr)
     stream_handler.setLevel(level)
-    stream_handler.setFormatter(logging.Formatter(console_format))
+    stream_handler.setFormatter(_RedactingTextFormatter(console_format))
     root.addHandler(stream_handler)
 
     if log_file is not None:
@@ -74,7 +120,7 @@ def configure_logging(mode: str, *, level: int = logging.INFO) -> None:
             encoding="utf-8",
         )
         file_handler.setLevel(level)
-        file_handler.setFormatter(logging.Formatter(_FILE_FORMAT))
+        file_handler.setFormatter(_file_formatter())
         root.addHandler(file_handler)
         logging.getLogger(__name__).info(
             "%s log opened: %s (10MB x%d rotation)", mode, log_file, _DEFAULT_BACKUP_COUNT
