@@ -17,8 +17,7 @@
 <!-- Move items here when work begins. -->
 <!-- 3-Checkpoint: (1) alloc → (2) merge (CI 5/5) → (3) verify -->
 
-- [ ] 프롬프트 P2-a — 어셈블 코드 수정: dynamic_context 태그 폐합(B1), 학습패턴 새니타이저 parity(B2, 이중 채널 정리), 2-존 표기 규칙(저작=md/주입=XML), AGENTIC_SUFFIX 정적 존 이동(캐시), 중복·상충 규칙 단일화
-- [ ] 시스템 프롬프트 어셈블 + 리팩토링 — ~/workspace/resume의 fable5 프롬프트를 1급 예시로 GEODE 프롬프트 표면(router/program/decomposer/commentary/도구 설명) slop·부실 지점 전수 감사 → 일괄 개선 계획부터
+- [ ] 시스템 프롬프트 어셈블 + 리팩토링 — ~/workspace/resume의 fable5 프롬프트를 1급 예시로 GEODE 프롬프트 표면(router/program/decomposer/commentary/도구 설명) slop·부실 지점 전수 감사 → 일괄 개선 계획부터. P0(dump)·P2-a(구조결함) 완료, 잔여 P2-b(router.md/AGENTIC_SUFFIX 루브릭 산문)·P2-c(60 도구 설명 trigger-pass)·P3(가드 확장+토큰 실측)
 - [ ] v1.0.0 스탬프 — 사전 정리(.190)+tool-search(.191) 완료, 위 작업 후 릴리스
 - [ ] H11-tail — routing 상수 모듈레벨 by-value 별칭 해동(core/llm/providers/{anthropic,openai,codex,glm}.py DEFAULT_*/FALLBACK_MODELS + core/skills/agents.py dataclass 기본값) — reload 후에도 boot-frozen, 호출자 스윕 필요. + H1(데몬 client-cwd 세션 해석)은 별도 결정
 
@@ -30,6 +29,9 @@
 
 <!-- Completed items. Keep recent 10, archive older ones. -->
 <!-- - [x] #issue-number — Short description (PR #N) -->
+- [x] PR-OBS-CONTRACT — Activity-row 스키마 100% typed 커버리지(62/62, union 19→62) + 중앙화. 43 K-group을 선언적 _TYPED_ROW_SPECS 테이블 + 단일 _build_from_spec 빌더로(빌더 43개 아님), 23 공유 details 모델(패밀리당 1개). mirror parity — 4 trigger 변형 전부 mirror(feedback/interceptor 이벤트 timeline 진입, half-connected 계약 해소). silent fallback 제거 — _fallback_reason로 강제-generic 구분 + mirror/dispatch/학습저장 실패 once-per-event WARNING + schema_version. 프라이버시 — raw user_input/cognitive_state/tool result 미적재(input_len만), Codex BLOCKER 2건(fail-soft 경계 스크럽 + value-free reason) 반영. 공식문서(hook-system.md/.en + site hooks 페이지) 로깅·에러·스키마 정책 기록. Codex(gpt-5.5 high) 최종 clean. 가드 6종 (PR #2238, v0.99.197)
+- [x] 루프 prune + 정책 로더 dedup — HookEvent 64→62(HANDOFF_COMPLETED/FAILED reserve-without-emit 쌍 삭제) + handoff watcher API 전체 삭제(zero-caller) + 정책 SoT 로더 7→1(load_policy_sot, net -424). 이벤트 카운트 6표면 동기화 (PR #2237, v0.99.196)
+- [x] 프롬프트 P2-a — 어셈블 코드 결함 2건: dynamic_context 미폐합 태그(18/18셀) 폐합(B1), 학습패턴 새니타이저 우회 채널 삭제(B2, Conditional Read Parity). 2-존 표기 규칙(저작=md/주입=XML), AGENTIC_SUFFIX 정적 존 이동(캐시 프리픽스 안정). 실측 −770tok/call(−15.5%) (PR #2236, v0.99.195)
 - [x] 프롬프트 P0 — geode prompt dump(모델3×표면6 매트릭스, count_tokens 실측, 중복태그 신호) + 가드 5종 + 4단계 계획 문서. 실측: 18셀 4,942~5,087tok, 중복 0. P1 감사에서 코드버그 2(B1 미폐합 태그·B2 새니타이저 우회)+루브릭 위반 카탈로그 도출 (PR #2234, v0.99.194)
 - [x] openai Responses 이행 + OpenAI tool_search defer — payg acomplete/astream을 공유 build_responses_kwargs(backend 델타 1개)로 Responses 합류(.192, Codex 리뷰 2건: usage 캐시 토큰·stop_sequences 관측 드롭). OpenAI 공식 tool_search를 양 백엔드 배선(.193) — 정책 SoT tool_defer.py 단일화, 모델 게이트(5.4+), Codex 백엔드 라이브 게이트 통과(DEFER-OK, gpt-5.5, defer 20) 후 기본 ON, "web" 500 블록리스트. 가드 6+6종 (PR #2229/#2230, v0.99.192/193)
 - [x] v1.0 사전 정리 + tool-search defer 실배선 — 3-차원 감사(slop·누수·배선, Explore 3기+오탐 3건 증거 반박) 확정분 정리(.190: Cortex 스텁·dead knob/method·MCP 핸드셰이크 "0.9.0"·emoji·tool_ranking rename) 후, 감사 핵심 결함(docstring만 defer 주장, 매 요청 60 스키마 전송)을 공식 Messages API로 해소(.191: defer_loading 필드+호스티드 tool_search_tool_regex, 코어 11종 즉시·49종 defer, 캐시 프리픽스 보존, kill switch=llm.tool_search_defer). 자작 ToolSearchTool 경로 전체 삭제. Codex 검증 BLOCKER 1건(레거시 경로 배선→라이브 빌더 2종 이행) 포함 7건 반영. 라이브 검증: opus-4-8이 defer 20/21 요청 수락(DEFER-OK·end_turn). 가드 11종 (PR #2223/#2224 → #2225, v0.99.190/191)
