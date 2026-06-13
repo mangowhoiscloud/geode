@@ -43,13 +43,13 @@ from pathlib import Path
 from typing import Any
 
 from core.agent.policy_sot import load_policy_sot
-from core.paths import GLOBAL_TOOL_POLICY_PATH, OPERATOR_LOCAL_TOOL_POLICY_PATH
+from core.paths import AUTORESEARCH_TOOL_POLICY_PATH, OPERATOR_LOCAL_TOOL_POLICY_PATH
 
 log = logging.getLogger(__name__)
 
 _TOOL_POLICY_OVERRIDE_ENV = "GEODE_TOOL_POLICY_OVERRIDE"
 
-_TOOL_POLICY_SOT_PATH = GLOBAL_TOOL_POLICY_PATH
+_TOOL_POLICY_SOT_PATH = AUTORESEARCH_TOOL_POLICY_PATH
 """Cross-process in-repo SoT path shared with :mod:`core.self_improving.train`
 (S0a, 2026-05-21). Module-local alias kept for monkeypatch in tests."""
 

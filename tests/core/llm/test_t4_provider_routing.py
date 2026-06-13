@@ -2,7 +2,7 @@
 
 5-element 패턴:
 - SoT: provider-routing.json (in-repo + operator-local)
-- Path: GLOBAL_PROVIDER_ROUTING_PATH + OPERATOR_LOCAL_PROVIDER_ROUTING_PATH
+- Path: AUTORESEARCH_PROVIDER_ROUTING_PATH + OPERATOR_LOCAL_PROVIDER_ROUTING_PATH
 - Reader: core/llm/strategies/provider_routing_policy.py
 - Entry: core/llm/strategies/plan_registry.py:resolve_routing (explicit-chain branch)
 - Env: GEODE_PROVIDER_ROUTING_OVERRIDE + GEODE_PROVIDER_ROUTING_STRICT
@@ -183,11 +183,11 @@ def test_plan_registry_uses_apply_before_iterating_chain() -> None:
 
 
 def test_path_constants_present() -> None:
-    from core.paths import GLOBAL_PROVIDER_ROUTING_PATH, OPERATOR_LOCAL_PROVIDER_ROUTING_PATH
+    from core.paths import AUTORESEARCH_PROVIDER_ROUTING_PATH, OPERATOR_LOCAL_PROVIDER_ROUTING_PATH
 
-    assert GLOBAL_PROVIDER_ROUTING_PATH.name == "provider-routing.json"
+    assert AUTORESEARCH_PROVIDER_ROUTING_PATH.name == "provider-routing.json"
     assert OPERATOR_LOCAL_PROVIDER_ROUTING_PATH.name == "provider-routing.json"
-    assert "policies" in str(GLOBAL_PROVIDER_ROUTING_PATH)
+    assert "policies" in str(AUTORESEARCH_PROVIDER_ROUTING_PATH)
     assert "autoresearch/handoff" in str(OPERATOR_LOCAL_PROVIDER_ROUTING_PATH)
 
 
@@ -199,7 +199,7 @@ def test_train_py_sets_provider_routing_env_pair() -> None:
     src = (repo_root / "core/self_improving/measure.py").read_text(encoding="utf-8")
     assert "GEODE_PROVIDER_ROUTING_OVERRIDE" in src
     assert "GEODE_PROVIDER_ROUTING_STRICT" in src
-    assert "GLOBAL_PROVIDER_ROUTING_PATH" in src
+    assert "AUTORESEARCH_PROVIDER_ROUTING_PATH" in src
 
 
 # ALIVE marker ----------------------------------------------------------------

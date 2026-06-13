@@ -68,9 +68,9 @@ def test_target_kinds_count_is_7_behaviour_kinds() -> None:
 
 
 def test_policy_path_agent_contract_maps_to_in_repo() -> None:
-    from core.paths import GLOBAL_AGENT_CONTRACTS_PATH
+    from core.paths import AUTORESEARCH_AGENT_CONTRACTS_PATH
 
-    assert pol.policy_path("agent_contract") == GLOBAL_AGENT_CONTRACTS_PATH
+    assert pol.policy_path("agent_contract") == AUTORESEARCH_AGENT_CONTRACTS_PATH
 
 
 def test_is_valid_target_kind_accepts_agent_contract() -> None:

@@ -54,7 +54,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from core.config import CONTEXT_BLOCK_MAX_CHARS
-from core.paths import GLOBAL_SKILL_CATALOG_PATH, OPERATOR_LOCAL_SKILL_CATALOG_PATH
+from core.paths import AUTORESEARCH_SKILL_CATALOG_PATH, OPERATOR_LOCAL_SKILL_CATALOG_PATH
 from core.self_improving.loop.mutate.sot_resolution import resolve_sot
 
 if TYPE_CHECKING:
@@ -64,7 +64,7 @@ log = logging.getLogger(__name__)
 
 _SKILL_CATALOG_OVERRIDE_ENV = "GEODE_SKILL_CATALOG_OVERRIDE"
 
-_SKILL_CATALOG_SOT_PATH = GLOBAL_SKILL_CATALOG_PATH
+_SKILL_CATALOG_SOT_PATH = AUTORESEARCH_SKILL_CATALOG_PATH
 """Cross-process in-repo SoT path (T2, 2026-05-21). Module-local alias
 for monkey-patch in tests."""
 

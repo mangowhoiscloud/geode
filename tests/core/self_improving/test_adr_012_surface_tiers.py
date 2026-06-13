@@ -268,9 +268,9 @@ def test_retrieval_deprecated_but_path_constant_preserved() -> None:
         "retrieval 은 TARGET_KINDS 에서 제거되어야 함"
     )
     # 단 path constant 매핑은 보존
-    assert '"retrieval": GLOBAL_RETRIEVAL_POLICY_PATH' in src, (
-        "GLOBAL_RETRIEVAL_POLICY_PATH 매핑은 보존되어야 함 (미래 복원 가능)"
+    assert '"retrieval": AUTORESEARCH_RETRIEVAL_POLICY_PATH' in src, (
+        "AUTORESEARCH_RETRIEVAL_POLICY_PATH 매핑은 보존되어야 함 (미래 복원 가능)"
     )
     # core/paths.py 의 path constant 도 보존
     paths_src = (REPO_ROOT / "core/paths.py").read_text(encoding="utf-8")
-    assert "GLOBAL_RETRIEVAL_POLICY_PATH" in paths_src
+    assert "AUTORESEARCH_RETRIEVAL_POLICY_PATH" in paths_src

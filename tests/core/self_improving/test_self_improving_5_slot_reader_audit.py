@@ -265,10 +265,10 @@ def test_active_slots_registered_as_mutation_targets() -> None:
     )
     # path constant 보존 — 미래 복원용 + runtime config reader
     src = _read("core/self_improving/loop/mutate/policies.py")
-    assert '"retrieval": GLOBAL_RETRIEVAL_POLICY_PATH' in src, (
-        "GLOBAL_RETRIEVAL_POLICY_PATH 매핑은 deprecate 후에도 보존 필요"
+    assert '"retrieval": AUTORESEARCH_RETRIEVAL_POLICY_PATH' in src, (
+        "AUTORESEARCH_RETRIEVAL_POLICY_PATH 매핑은 deprecate 후에도 보존 필요"
     )
-    assert '"hyperparam": GLOBAL_HYPERPARAM_POLICY_PATH' in src, (
-        "GLOBAL_HYPERPARAM_POLICY_PATH 매핑은 mutation surface 제거 후에도 "
+    assert '"hyperparam": AUTORESEARCH_HYPERPARAM_POLICY_PATH' in src, (
+        "AUTORESEARCH_HYPERPARAM_POLICY_PATH 매핑은 mutation surface 제거 후에도 "
         "보존 필요 (runtime config reader + 미래 재추가)"
     )

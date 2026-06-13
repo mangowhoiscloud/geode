@@ -44,14 +44,14 @@ import logging
 from pathlib import Path
 from typing import Any
 
-from core.paths import GLOBAL_PROVIDER_ROUTING_PATH, OPERATOR_LOCAL_PROVIDER_ROUTING_PATH
+from core.paths import AUTORESEARCH_PROVIDER_ROUTING_PATH, OPERATOR_LOCAL_PROVIDER_ROUTING_PATH
 from core.self_improving.loop.mutate.sot_resolution import resolve_sot
 
 log = logging.getLogger(__name__)
 
 _PROVIDER_ROUTING_OVERRIDE_ENV = "GEODE_PROVIDER_ROUTING_OVERRIDE"
 
-_PROVIDER_ROUTING_SOT_PATH = GLOBAL_PROVIDER_ROUTING_PATH
+_PROVIDER_ROUTING_SOT_PATH = AUTORESEARCH_PROVIDER_ROUTING_PATH
 """Cross-process in-repo SoT path (T4, 2026-05-21). Module-local alias."""
 
 _OPERATOR_LOCAL_PROVIDER_ROUTING_PATH = OPERATOR_LOCAL_PROVIDER_ROUTING_PATH

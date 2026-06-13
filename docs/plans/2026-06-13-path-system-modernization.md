@@ -127,7 +127,7 @@ GEODE 경로 정책은 *이미 성숙*하다: 중앙 SoT(`core/paths.py`), path-
 | Phase | 상태 |
 |---|---|
 | 1 — GEODE_HOME 수렴 + expanduser + ipc 개명 | **DONE** (4 가드 테스트, `tests/core/test_paths_env_override.py`) |
-| 2 — policy-path tier 정명명 | PENDING |
+| 2 — policy-path tier 정명명 (16상수 GLOBAL_→AUTORESEARCH_, 227건) | **DONE** |
 | 3 — dead/우회 정돈 | PENDING |
 | 4 — 가드 강화 + docstring + vendor 카탈로그 | PENDING |
 | 5 — god-module 분할(선택) | DEFERRED(재평가) |

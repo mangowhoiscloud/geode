@@ -290,7 +290,7 @@ GLOBAL_AUTORESEARCH_HANDOFF_DIR = GEODE_HOME / "autoresearch" / "handoff"
 # by :mod:`core.self_improving.loop.mutate.policies`.
 # The in-repo policy/ledger state dir is ``AUTORESEARCH_STATE_DIR``
 # (``state/autoresearch/``, defined at the top of this module).
-GLOBAL_POLICIES_DIR = AUTORESEARCH_STATE_DIR / "policies"
+AUTORESEARCH_POLICIES_DIR = AUTORESEARCH_STATE_DIR / "policies"
 LEGACY_SOT_DIR = GLOBAL_AUTORESEARCH_HANDOFF_DIR
 """Pre-RATCHET-1 policy dir under ``~/.geode/autoresearch/handoff/``.
 Kept for the lazy migration path so an upgrade of an existing
@@ -300,7 +300,7 @@ the new in-repo location on first read/write."""
 # sections. Written by ``core.self_improving.train.write_wrapper_prompt_sections``
 # after a self-improving-loop promotion; read by
 # ``core.agent.system_prompt._load_wrapper_override`` for daily GEODE runs.
-GLOBAL_WRAPPER_SECTIONS_PATH = GLOBAL_POLICIES_DIR / "wrapper-sections.json"
+AUTORESEARCH_WRAPPER_SECTIONS_PATH = AUTORESEARCH_POLICIES_DIR / "wrapper-sections.json"
 # PR-6 C-5 (2026-05-21) — policy mutation SoT files. Each
 # ``target_kind`` (tool_policy / decomposition / retrieval /
 # reflection) gets its own ``dict[str, str]`` JSON file alongside
@@ -308,12 +308,12 @@ GLOBAL_WRAPPER_SECTIONS_PATH = GLOBAL_POLICIES_DIR / "wrapper-sections.json"
 # sections name so older mutation rows replay correctly; the others
 # land in fresh files because they evolve independently. Read /
 # written by :mod:`core.self_improving.loop.mutate.policies`.
-GLOBAL_TOOL_POLICY_PATH = GLOBAL_POLICIES_DIR / "tool-policy.json"
-GLOBAL_DECOMPOSITION_POLICY_PATH = GLOBAL_POLICIES_DIR / "decomposition.json"
-GLOBAL_RETRIEVAL_POLICY_PATH = GLOBAL_POLICIES_DIR / "retrieval.json"
-GLOBAL_REFLECTION_POLICY_PATH = GLOBAL_POLICIES_DIR / "reflection.json"
+AUTORESEARCH_TOOL_POLICY_PATH = AUTORESEARCH_POLICIES_DIR / "tool-policy.json"
+AUTORESEARCH_DECOMPOSITION_POLICY_PATH = AUTORESEARCH_POLICIES_DIR / "decomposition.json"
+AUTORESEARCH_RETRIEVAL_POLICY_PATH = AUTORESEARCH_POLICIES_DIR / "retrieval.json"
+AUTORESEARCH_REFLECTION_POLICY_PATH = AUTORESEARCH_POLICIES_DIR / "reflection.json"
 # ADR-013 T1 (2026-05-21) — Tool descriptions mutation SoT.
-GLOBAL_TOOL_DESCRIPTIONS_PATH = GLOBAL_POLICIES_DIR / "tool-descriptions.json"
+AUTORESEARCH_TOOL_DESCRIPTIONS_PATH = AUTORESEARCH_POLICIES_DIR / "tool-descriptions.json"
 # PR-HYPERPARAM-FOUNDATION (2026-05-28) — numeric / categorical
 # hyperparameter mutation SoT. Distinct from the 7 text-artifact kinds:
 # this slot directly tunes the audit-subprocess command line
@@ -327,7 +327,7 @@ GLOBAL_TOOL_DESCRIPTIONS_PATH = GLOBAL_POLICIES_DIR / "tool-descriptions.json"
 # at the SoT (``{"max_turns": "5"}``) for schema consistency with the
 # other 4 simple-shape kinds; runtime readers convert to int /
 # categorical at the consumption site (PR-HYPERPARAM-WIRE).
-GLOBAL_HYPERPARAM_POLICY_PATH = GLOBAL_POLICIES_DIR / "hyperparam.json"
+AUTORESEARCH_HYPERPARAM_POLICY_PATH = AUTORESEARCH_POLICIES_DIR / "hyperparam.json"
 # PR-BACKFILL-SOT (2026-05-21) — operator-local SoT layer for the 4 active
 # mutation surface readers (tool_policy / reflection / decomposition /
 # tool_descriptions). Per-machine overrides without touching in-repo
@@ -340,7 +340,7 @@ OPERATOR_LOCAL_TOOL_DESCRIPTIONS_PATH = GLOBAL_AUTORESEARCH_HANDOFF_DIR / "tool-
 # ADR-013 T2 (2026-05-21) — Skill catalog mutation SoT. Mutator overrides
 # per-skill description text + user_invocable visibility for the LLM's
 # skill-routing context block.
-GLOBAL_SKILL_CATALOG_PATH = GLOBAL_POLICIES_DIR / "skill-catalog.json"
+AUTORESEARCH_SKILL_CATALOG_PATH = AUTORESEARCH_POLICIES_DIR / "skill-catalog.json"
 OPERATOR_LOCAL_SKILL_CATALOG_PATH = GLOBAL_AUTORESEARCH_HANDOFF_DIR / "skill-catalog.json"
 # ADR-013 T3 (2026-05-21) — Response style guide mutation SoT. Typed enum
 # schema (tone / verbosity_level / response_format / code_style) — mutator
@@ -348,20 +348,20 @@ OPERATOR_LOCAL_SKILL_CATALOG_PATH = GLOBAL_AUTORESEARCH_HANDOFF_DIR / "skill-cat
 # PR-MARGIN-FITNESS-SCALE 2026-05-30 에 제거 — 이제 Petri dim 경유로만
 # fitness 영향.) wrapper-sections.json (G5a/G5b) 의 free-form 텍스트
 # mutation 과 분리: T3 는 constrained typed 선택지.
-GLOBAL_STYLE_GUIDE_PATH = GLOBAL_POLICIES_DIR / "style-guide.json"
+AUTORESEARCH_STYLE_GUIDE_PATH = AUTORESEARCH_POLICIES_DIR / "style-guide.json"
 OPERATOR_LOCAL_STYLE_GUIDE_PATH = GLOBAL_AUTORESEARCH_HANDOFF_DIR / "style-guide.json"
 # ADR-013 T4 (2026-05-21) — Provider routing mutation SoT. Mutator picks
 # per-model preferred plan chain (plan_id ordered list). OpenRouter-style
 # explicit routing — per-call cost knob. (ux_means.token_cost_norm fitness
 # 축은 PR-MARGIN-FITNESS-SCALE 2026-05-30 에 제거.)
-GLOBAL_PROVIDER_ROUTING_PATH = GLOBAL_POLICIES_DIR / "provider-routing.json"
+AUTORESEARCH_PROVIDER_ROUTING_PATH = AUTORESEARCH_POLICIES_DIR / "provider-routing.json"
 OPERATOR_LOCAL_PROVIDER_ROUTING_PATH = GLOBAL_AUTORESEARCH_HANDOFF_DIR / "provider-routing.json"
 # ADR-013 T5 (2026-05-21) — Cache breakpoint policy mutation SoT. Mutator
 # picks how many trailing-message cache_control breakpoints to apply
 # (Anthropic의 4-breakpoint cap 중 messages 가 가져갈 수). 0-3 사이.
 # trade-off: ↑ → cache hit ↑ but per-call overhead ↑ (각 breakpoint 가
 # $0.10/MTok 오버헤드). ↓ → cache hit ↓ but per-call cost ↓.
-GLOBAL_CACHE_POLICY_PATH = GLOBAL_POLICIES_DIR / "cache-policy.json"
+AUTORESEARCH_CACHE_POLICY_PATH = AUTORESEARCH_POLICIES_DIR / "cache-policy.json"
 OPERATOR_LOCAL_CACHE_POLICY_PATH = GLOBAL_AUTORESEARCH_HANDOFF_DIR / "cache-policy.json"
 # ADR-013 T6 (2026-05-21) — Heuristic indicators mutation SoT. Mutator
 # evolves the keyword/phrase list that primes the LLM's task-triage
@@ -370,26 +370,26 @@ OPERATOR_LOCAL_CACHE_POLICY_PATH = GLOBAL_AUTORESEARCH_HANDOFF_DIR / "cache-poli
 # uses indicators to classify task → better triage. (ux_means success_rate
 # fitness 축은 PR-MARGIN-FITNESS-SCALE 2026-05-30 에 제거 — 이제 Petri dim
 # 경유로만 fitness 영향.)
-GLOBAL_HEURISTICS_PATH = GLOBAL_POLICIES_DIR / "heuristics.json"
+AUTORESEARCH_HEURISTICS_PATH = AUTORESEARCH_POLICIES_DIR / "heuristics.json"
 OPERATOR_LOCAL_HEURISTICS_PATH = GLOBAL_AUTORESEARCH_HANDOFF_DIR / "heuristics.json"
 # ADR-012 S5 (2026-05-21) — in-context slot configuration SoT. Declares
 # the 4 canonical slot categories (exemplars / memory_recall /
 # rubric_excerpts / tool_hints) and their per-slot top-K / rank_by /
 # injection_point. M4.4 후속 PR 이 이 schema 를 실제 inference path 에서
 # 소비하는 wiring 을 담당; 본 PR 은 schema + reader + validation 만.
-GLOBAL_IN_CONTEXT_SLOTS_PATH = GLOBAL_POLICIES_DIR / "in-context-slots.json"
+AUTORESEARCH_IN_CONTEXT_SLOTS_PATH = AUTORESEARCH_POLICIES_DIR / "in-context-slots.json"
 OPERATOR_LOCAL_IN_CONTEXT_SLOTS_PATH = GLOBAL_AUTORESEARCH_HANDOFF_DIR / "in-context-slots.json"
 # ADR-012 M2 (2026-05-21) — AgentDefinition contract mutation SoT.
 # Mutator overrides per-agent role / system_prompt / tools. ``model``
 # field 은 Tier 2 — 변경 시 안전성 invariants 가 단번에 무효화될 수
 # 있어 mutation surface 에서 제외.
-GLOBAL_AGENT_CONTRACTS_PATH = GLOBAL_POLICIES_DIR / "agent-contracts.json"
+AUTORESEARCH_AGENT_CONTRACTS_PATH = AUTORESEARCH_POLICIES_DIR / "agent-contracts.json"
 OPERATOR_LOCAL_AGENT_CONTRACTS_PATH = GLOBAL_AUTORESEARCH_HANDOFF_DIR / "agent-contracts.json"
 # ADR-012 M3 (2026-05-21) — Few-shot exemplar pool (JSONL append-only).
 # fitness gate 통과한 task-completion candidate 를 누적; runtime 에
 # top-K 선별해 system prompt 직후 in-context exemplar 로 적재. S5 의
 # ``exemplars`` slot 의 실제 *적재 메커니즘*.
-GLOBAL_FEW_SHOT_POOL_PATH = GLOBAL_POLICIES_DIR / "few-shot-pool.jsonl"
+AUTORESEARCH_FEW_SHOT_POOL_PATH = AUTORESEARCH_POLICIES_DIR / "few-shot-pool.jsonl"
 OPERATOR_LOCAL_FEW_SHOT_POOL_PATH = GLOBAL_AUTORESEARCH_HANDOFF_DIR / "few-shot-pool.jsonl"
 # PR-MINIMAL-2 (2026-05-21) — git-tracked audit ledger of every
 # applied mutation. Lives in-repo alongside the 5 policy SoT JSONs

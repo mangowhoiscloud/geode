@@ -139,7 +139,7 @@ def _load_hyperparam_overrides() -> dict[str, str]:
 
     Resolution order matches the other policy SoTs:
       1. ``GEODE_HYPERPARAM_OVERRIDE`` env var (set by the audit subprocess)
-      2. ``GLOBAL_HYPERPARAM_POLICY_PATH``
+      2. ``AUTORESEARCH_HYPERPARAM_POLICY_PATH``
          (``state/autoresearch/policies/hyperparam.json``)
 
     Return value is a flat ``dict[str, str]`` — same shape as the SoT
@@ -157,9 +157,9 @@ def _load_hyperparam_overrides() -> dict[str, str]:
     if env_path:
         path = Path(env_path)
     else:
-        from core.paths import GLOBAL_HYPERPARAM_POLICY_PATH
+        from core.paths import AUTORESEARCH_HYPERPARAM_POLICY_PATH
 
-        path = GLOBAL_HYPERPARAM_POLICY_PATH
+        path = AUTORESEARCH_HYPERPARAM_POLICY_PATH
     if not path.is_file():
         return {}
     try:
@@ -385,19 +385,19 @@ def _build_audit_env(override_path: Path) -> dict[str, str]:
     # 은 "SoT 가 디스크에 있는데도 subprocess 가 못 읽는 경우" 만 발화 —
     # mutation 이 진행 중인 audit 의 quota 절약 목적.
     from core.paths import (
-        GLOBAL_AGENT_CONTRACTS_PATH,
-        GLOBAL_CACHE_POLICY_PATH,
-        GLOBAL_DECOMPOSITION_POLICY_PATH,
-        GLOBAL_FEW_SHOT_POOL_PATH,
-        GLOBAL_HEURISTICS_PATH,
-        GLOBAL_HYPERPARAM_POLICY_PATH,
-        GLOBAL_IN_CONTEXT_SLOTS_PATH,
-        GLOBAL_PROVIDER_ROUTING_PATH,
-        GLOBAL_REFLECTION_POLICY_PATH,
-        GLOBAL_SKILL_CATALOG_PATH,
-        GLOBAL_STYLE_GUIDE_PATH,
-        GLOBAL_TOOL_DESCRIPTIONS_PATH,
-        GLOBAL_TOOL_POLICY_PATH,
+        AUTORESEARCH_AGENT_CONTRACTS_PATH,
+        AUTORESEARCH_CACHE_POLICY_PATH,
+        AUTORESEARCH_DECOMPOSITION_POLICY_PATH,
+        AUTORESEARCH_FEW_SHOT_POOL_PATH,
+        AUTORESEARCH_HEURISTICS_PATH,
+        AUTORESEARCH_HYPERPARAM_POLICY_PATH,
+        AUTORESEARCH_IN_CONTEXT_SLOTS_PATH,
+        AUTORESEARCH_PROVIDER_ROUTING_PATH,
+        AUTORESEARCH_REFLECTION_POLICY_PATH,
+        AUTORESEARCH_SKILL_CATALOG_PATH,
+        AUTORESEARCH_STYLE_GUIDE_PATH,
+        AUTORESEARCH_TOOL_DESCRIPTIONS_PATH,
+        AUTORESEARCH_TOOL_POLICY_PATH,
     )
 
     # PR-BACKFILL-SOT (2026-05-21) — audit subprocess sets both _OVERRIDE
@@ -405,14 +405,14 @@ def _build_audit_env(override_path: Path) -> dict[str, str]:
     # (env → operator-local → in-repo), env path defaults to graceful for
     # operator daily use; audit explicitly opts into strict for mutation
     # cycle fidelity.
-    if GLOBAL_TOOL_POLICY_PATH.is_file():
-        env["GEODE_TOOL_POLICY_OVERRIDE"] = str(GLOBAL_TOOL_POLICY_PATH)
+    if AUTORESEARCH_TOOL_POLICY_PATH.is_file():
+        env["GEODE_TOOL_POLICY_OVERRIDE"] = str(AUTORESEARCH_TOOL_POLICY_PATH)
         env["GEODE_TOOL_POLICY_STRICT"] = "1"
-    if GLOBAL_REFLECTION_POLICY_PATH.is_file():
-        env["GEODE_REFLECTION_POLICY_OVERRIDE"] = str(GLOBAL_REFLECTION_POLICY_PATH)
+    if AUTORESEARCH_REFLECTION_POLICY_PATH.is_file():
+        env["GEODE_REFLECTION_POLICY_OVERRIDE"] = str(AUTORESEARCH_REFLECTION_POLICY_PATH)
         env["GEODE_REFLECTION_POLICY_STRICT"] = "1"
-    if GLOBAL_DECOMPOSITION_POLICY_PATH.is_file():
-        env["GEODE_DECOMPOSITION_POLICY_OVERRIDE"] = str(GLOBAL_DECOMPOSITION_POLICY_PATH)
+    if AUTORESEARCH_DECOMPOSITION_POLICY_PATH.is_file():
+        env["GEODE_DECOMPOSITION_POLICY_OVERRIDE"] = str(AUTORESEARCH_DECOMPOSITION_POLICY_PATH)
         env["GEODE_DECOMPOSITION_POLICY_STRICT"] = "1"
     # PR-TOOL-DESCRIPTIONS-MUTATE (2026-05-27, Codex MCP review fix-up)
     # — three resolution rules together close the dual-SoT drift:
@@ -433,32 +433,32 @@ def _build_audit_env(override_path: Path) -> dict[str, str]:
         if OPERATOR_LOCAL_TOOL_DESCRIPTIONS_PATH.is_file():
             env["GEODE_TOOL_DESCRIPTIONS_OVERRIDE"] = str(OPERATOR_LOCAL_TOOL_DESCRIPTIONS_PATH)
             env["GEODE_TOOL_DESCRIPTIONS_STRICT"] = "1"
-        elif GLOBAL_TOOL_DESCRIPTIONS_PATH.is_file():
-            env["GEODE_TOOL_DESCRIPTIONS_OVERRIDE"] = str(GLOBAL_TOOL_DESCRIPTIONS_PATH)
+        elif AUTORESEARCH_TOOL_DESCRIPTIONS_PATH.is_file():
+            env["GEODE_TOOL_DESCRIPTIONS_OVERRIDE"] = str(AUTORESEARCH_TOOL_DESCRIPTIONS_PATH)
             env["GEODE_TOOL_DESCRIPTIONS_STRICT"] = "1"
-    if GLOBAL_SKILL_CATALOG_PATH.is_file():
-        env["GEODE_SKILL_CATALOG_OVERRIDE"] = str(GLOBAL_SKILL_CATALOG_PATH)
+    if AUTORESEARCH_SKILL_CATALOG_PATH.is_file():
+        env["GEODE_SKILL_CATALOG_OVERRIDE"] = str(AUTORESEARCH_SKILL_CATALOG_PATH)
         env["GEODE_SKILL_CATALOG_STRICT"] = "1"
-    if GLOBAL_STYLE_GUIDE_PATH.is_file():
-        env["GEODE_STYLE_GUIDE_OVERRIDE"] = str(GLOBAL_STYLE_GUIDE_PATH)
+    if AUTORESEARCH_STYLE_GUIDE_PATH.is_file():
+        env["GEODE_STYLE_GUIDE_OVERRIDE"] = str(AUTORESEARCH_STYLE_GUIDE_PATH)
         env["GEODE_STYLE_GUIDE_STRICT"] = "1"
-    if GLOBAL_PROVIDER_ROUTING_PATH.is_file():
-        env["GEODE_PROVIDER_ROUTING_OVERRIDE"] = str(GLOBAL_PROVIDER_ROUTING_PATH)
+    if AUTORESEARCH_PROVIDER_ROUTING_PATH.is_file():
+        env["GEODE_PROVIDER_ROUTING_OVERRIDE"] = str(AUTORESEARCH_PROVIDER_ROUTING_PATH)
         env["GEODE_PROVIDER_ROUTING_STRICT"] = "1"
-    if GLOBAL_CACHE_POLICY_PATH.is_file():
-        env["GEODE_CACHE_POLICY_OVERRIDE"] = str(GLOBAL_CACHE_POLICY_PATH)
+    if AUTORESEARCH_CACHE_POLICY_PATH.is_file():
+        env["GEODE_CACHE_POLICY_OVERRIDE"] = str(AUTORESEARCH_CACHE_POLICY_PATH)
         env["GEODE_CACHE_POLICY_STRICT"] = "1"
-    if GLOBAL_HEURISTICS_PATH.is_file():
-        env["GEODE_HEURISTICS_OVERRIDE"] = str(GLOBAL_HEURISTICS_PATH)
+    if AUTORESEARCH_HEURISTICS_PATH.is_file():
+        env["GEODE_HEURISTICS_OVERRIDE"] = str(AUTORESEARCH_HEURISTICS_PATH)
         env["GEODE_HEURISTICS_STRICT"] = "1"
-    if GLOBAL_IN_CONTEXT_SLOTS_PATH.is_file():
-        env["GEODE_IN_CONTEXT_SLOTS_OVERRIDE"] = str(GLOBAL_IN_CONTEXT_SLOTS_PATH)
+    if AUTORESEARCH_IN_CONTEXT_SLOTS_PATH.is_file():
+        env["GEODE_IN_CONTEXT_SLOTS_OVERRIDE"] = str(AUTORESEARCH_IN_CONTEXT_SLOTS_PATH)
         env["GEODE_IN_CONTEXT_SLOTS_STRICT"] = "1"
-    if GLOBAL_AGENT_CONTRACTS_PATH.is_file():
-        env["GEODE_AGENT_CONTRACTS_OVERRIDE"] = str(GLOBAL_AGENT_CONTRACTS_PATH)
+    if AUTORESEARCH_AGENT_CONTRACTS_PATH.is_file():
+        env["GEODE_AGENT_CONTRACTS_OVERRIDE"] = str(AUTORESEARCH_AGENT_CONTRACTS_PATH)
         env["GEODE_AGENT_CONTRACTS_STRICT"] = "1"
-    if GLOBAL_FEW_SHOT_POOL_PATH.is_file():
-        env["GEODE_FEW_SHOT_POOL_OVERRIDE"] = str(GLOBAL_FEW_SHOT_POOL_PATH)
+    if AUTORESEARCH_FEW_SHOT_POOL_PATH.is_file():
+        env["GEODE_FEW_SHOT_POOL_OVERRIDE"] = str(AUTORESEARCH_FEW_SHOT_POOL_PATH)
         env["GEODE_FEW_SHOT_POOL_STRICT"] = "1"
     # PR-HYPERPARAM-FOUNDATION (2026-05-28) — hyperparam SoT path
     # propagation. PR-2 lands the env literal so the sibling-SoT env-map
@@ -469,8 +469,8 @@ def _build_audit_env(override_path: Path) -> dict[str, str]:
     # env var is set but no reader inside the audit subprocess loads it;
     # this is a deliberate 2-PR seam (foundation → wire-through) to
     # keep each PR's scope small.
-    if GLOBAL_HYPERPARAM_POLICY_PATH.is_file():
-        env["GEODE_HYPERPARAM_OVERRIDE"] = str(GLOBAL_HYPERPARAM_POLICY_PATH)
+    if AUTORESEARCH_HYPERPARAM_POLICY_PATH.is_file():
+        env["GEODE_HYPERPARAM_OVERRIDE"] = str(AUTORESEARCH_HYPERPARAM_POLICY_PATH)
         env["GEODE_HYPERPARAM_STRICT"] = "1"
     return env
 

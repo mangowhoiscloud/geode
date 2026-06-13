@@ -4,7 +4,7 @@ Pins:
 
 - ``tool_descriptions`` lives in ``TARGET_KINDS`` (mutator-dispatchable).
 - ``tool_descriptions`` no longer lives in ``_READER_ONLY_KINDS``.
-- ``policy_path("tool_descriptions")`` resolves to ``GLOBAL_TOOL_DESCRIPTIONS_PATH``.
+- ``policy_path("tool_descriptions")`` resolves to ``AUTORESEARCH_TOOL_DESCRIPTIONS_PATH``.
 - nested-schema round-trip: ``load_policy`` flattens disk shape,
   ``write_policy`` un-flattens including the ``hints`` list field.
 - ``parse_mutation`` accepts ``target_kind="tool_descriptions"`` (no
@@ -33,10 +33,10 @@ def test_tool_descriptions_removed_from_reader_only() -> None:
 
 
 def test_policy_path_routes_to_tool_descriptions_constant() -> None:
-    from core.paths import GLOBAL_TOOL_DESCRIPTIONS_PATH
+    from core.paths import AUTORESEARCH_TOOL_DESCRIPTIONS_PATH
     from core.self_improving.loop.mutate.policies import policy_path
 
-    assert policy_path("tool_descriptions") == GLOBAL_TOOL_DESCRIPTIONS_PATH
+    assert policy_path("tool_descriptions") == AUTORESEARCH_TOOL_DESCRIPTIONS_PATH
 
 
 def test_nested_load_flattens_description_and_hints(
@@ -211,7 +211,7 @@ def test_audit_env_override_honours_operator_local_tool_descriptions() -> None:
     assert "OPERATOR_LOCAL_TOOL_DESCRIPTIONS_PATH" in src, (
         "run_audit's env-override block must check "
         "OPERATOR_LOCAL_TOOL_DESCRIPTIONS_PATH before falling back to "
-        "GLOBAL_TOOL_DESCRIPTIONS_PATH — otherwise the env layer "
+        "AUTORESEARCH_TOOL_DESCRIPTIONS_PATH — otherwise the env layer "
         "overrides operator-local content despite the mutator writing "
         "there."
     )

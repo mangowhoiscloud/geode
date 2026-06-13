@@ -44,7 +44,7 @@ from pathlib import Path
 from typing import Any
 
 from core.paths import (
-    GLOBAL_FEW_SHOT_POOL_PATH,
+    AUTORESEARCH_FEW_SHOT_POOL_PATH,
     OPERATOR_LOCAL_FEW_SHOT_POOL_PATH,
 )
 from core.self_improving.loop.mutate.sot_resolution import resolve_sot
@@ -53,7 +53,7 @@ log = logging.getLogger(__name__)
 
 _FEW_SHOT_POOL_OVERRIDE_ENV = "GEODE_FEW_SHOT_POOL_OVERRIDE"
 
-_FEW_SHOT_POOL_SOT_PATH = GLOBAL_FEW_SHOT_POOL_PATH
+_FEW_SHOT_POOL_SOT_PATH = AUTORESEARCH_FEW_SHOT_POOL_PATH
 """Cross-process in-repo SoT path (M3, 2026-05-21). Module-local alias."""
 
 _OPERATOR_LOCAL_FEW_SHOT_POOL_PATH = OPERATOR_LOCAL_FEW_SHOT_POOL_PATH
@@ -207,7 +207,7 @@ def append_exemplar(
         source: Provenance tag (``"autoresearch_audit_promote"`` /
             ``"petri_per_turn"`` / ``"live_session"``).
         pool_path: Optional override of the SoT path
-            (:data:`GLOBAL_FEW_SHOT_POOL_PATH`). Tests pass ``tmp_path``.
+            (:data:`AUTORESEARCH_FEW_SHOT_POOL_PATH`). Tests pass ``tmp_path``.
         max_size: Cap; older entries (top of file) are evicted FIFO when
             the new pool would exceed this.
 

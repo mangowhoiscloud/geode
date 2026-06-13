@@ -45,7 +45,7 @@ from typing import Any
 
 from core.agent.policy_sot import load_policy_sot
 from core.paths import (
-    GLOBAL_DECOMPOSITION_POLICY_PATH,
+    AUTORESEARCH_DECOMPOSITION_POLICY_PATH,
     OPERATOR_LOCAL_DECOMPOSITION_POLICY_PATH,
 )
 
@@ -53,7 +53,7 @@ log = logging.getLogger(__name__)
 
 _DECOMPOSITION_POLICY_OVERRIDE_ENV = "GEODE_DECOMPOSITION_POLICY_OVERRIDE"
 
-_DECOMPOSITION_POLICY_SOT_PATH = GLOBAL_DECOMPOSITION_POLICY_PATH
+_DECOMPOSITION_POLICY_SOT_PATH = AUTORESEARCH_DECOMPOSITION_POLICY_PATH
 """Cross-process in-repo SoT path (S0c, 2026-05-21). module-local alias 로
 테스트가 monkeypatch 가능 (path-literal guard contract)."""
 

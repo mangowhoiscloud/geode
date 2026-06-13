@@ -2,7 +2,7 @@
 
 5-element 패턴 (S0a-checked):
 - SoT: skill-catalog.json
-- Path: GLOBAL_SKILL_CATALOG_PATH + OPERATOR_LOCAL_SKILL_CATALOG_PATH
+- Path: AUTORESEARCH_SKILL_CATALOG_PATH + OPERATOR_LOCAL_SKILL_CATALOG_PATH
 - Reader: core/skills/skill_catalog_policy.py
 - Entry: core/agent/loop/_context.py:_build_system_prompt
 - Env: GEODE_SKILL_CATALOG_OVERRIDE (+ _STRICT=1 opt-in)
@@ -199,11 +199,11 @@ def test_context_module_calls_apply_instead_of_get_context_block_direct() -> Non
 
 
 def test_path_constants_present() -> None:
-    from core.paths import GLOBAL_SKILL_CATALOG_PATH, OPERATOR_LOCAL_SKILL_CATALOG_PATH
+    from core.paths import AUTORESEARCH_SKILL_CATALOG_PATH, OPERATOR_LOCAL_SKILL_CATALOG_PATH
 
-    assert GLOBAL_SKILL_CATALOG_PATH.name == "skill-catalog.json"
+    assert AUTORESEARCH_SKILL_CATALOG_PATH.name == "skill-catalog.json"
     assert OPERATOR_LOCAL_SKILL_CATALOG_PATH.name == "skill-catalog.json"
-    assert "policies" in str(GLOBAL_SKILL_CATALOG_PATH)
+    assert "policies" in str(AUTORESEARCH_SKILL_CATALOG_PATH)
     assert "autoresearch/handoff" in str(OPERATOR_LOCAL_SKILL_CATALOG_PATH)
 
 
@@ -215,7 +215,7 @@ def test_train_py_sets_skill_catalog_env() -> None:
     src = (repo_root / "core/self_improving/measure.py").read_text(encoding="utf-8")
     assert "GEODE_SKILL_CATALOG_OVERRIDE" in src
     assert "GEODE_SKILL_CATALOG_STRICT" in src
-    assert "GLOBAL_SKILL_CATALOG_PATH" in src
+    assert "AUTORESEARCH_SKILL_CATALOG_PATH" in src
 
 
 # ALIVE marker ----------------------------------------------------------------
