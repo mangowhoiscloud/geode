@@ -8,6 +8,6 @@
  */
 
 export const GEODE_SOT = {
-  version: "0.99.203",
+  version: "0.99.204",
   syncedAt: "2026-06-13",
 } as const;

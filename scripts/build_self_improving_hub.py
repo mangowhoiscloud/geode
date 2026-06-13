@@ -235,12 +235,19 @@ PILOT_HEATMAP_DIMS: tuple[str, ...] = (
 
 # Map provider prefix (model.split("/")[0]) -> chip class + chip label.
 # Per master DESIGN.md §3 — 4 chips only; palette explosion forbidden.
+# The label names the ACCESS LANE: PAYG = API-key billing; Claude Code = Claude
+# subscription via Claude Code CLI (Max OAuth); ChatGPT = ChatGPT subscription
+# via the Codex CLI/backend (ChatGPT OAuth — see core.config.credential_source
+# OPENAI_CODEX + core.llm.adapters.codex_oauth). The ``openai-codex`` prefix is
+# the ChatGPT-subscription lane, NOT the bare ``openai`` PAYG API lane, so the
+# chip says "ChatGPT" (the subscription) rather than the opaque CLI name "Codex"
+# (the CSS class stays ``codex``).
 HARNESS_MAP: dict[str, tuple[str, str]] = {
     "anthropic": ("payg", "PAYG"),
     "openai": ("payg", "PAYG"),
     "claude-cli": ("claude", "Claude Code"),
-    "codex": ("codex", "Codex"),
-    "openai-codex": ("codex", "Codex"),
+    "codex": ("codex", "ChatGPT"),
+    "openai-codex": ("codex", "ChatGPT"),
     "geode": ("geode", "GEODE"),
 }
 

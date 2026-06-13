@@ -2191,8 +2191,10 @@ def test_pr2_agents_index_renders(built_seedgen_pages: dict[str, str]) -> None:
     # Claude Code chip + source-aligned model name, NOT PAYG.
     assert 'class="chip claude"' in html or "Claude Code" in html
     assert "claude-cli/claude-opus-4-7" in html, "expected source-aligned cli-local model name"
-    # The codex voter (provider openai-codex) keeps its Codex chip.
-    assert 'class="chip codex"' in html or "Codex" in html, "codex voter chip missing"
+    # The openai-codex voter keeps the `codex` chip CSS class but the visible
+    # label is "ChatGPT" (the subscription lane), not the opaque "Codex" name.
+    assert 'class="chip codex"' in html, "codex (ChatGPT lane) chip missing"
+    assert "ChatGPT" in html, "openai-codex lane should show the ChatGPT label"
 
 
 def test_pr2_agent_detail_paginates_via_details(built_seedgen_pages: dict[str, str]) -> None:
