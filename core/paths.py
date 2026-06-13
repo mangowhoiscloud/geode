@@ -449,8 +449,7 @@ GLOBAL_SKILLS_DIR = GEODE_HOME / "skills"
 # across my history?" without opening N project DBs. The index is a
 # rebuild-from-source artefact (no ground-truth lives here) so the
 # rebuild is idempotent.
-GLOBAL_SEARCH_DIR = GEODE_HOME / "search"
-GLOBAL_SEARCH_DB = GLOBAL_SEARCH_DIR / "global.db"
+GLOBAL_SEARCH_DB = GEODE_HOME / "search" / "global.db"
 
 # Project-scoped user data root
 GLOBAL_PROJECTS_DIR = GEODE_HOME / "projects"
@@ -493,7 +492,6 @@ PROJECT_SKILLS_DIR = PROJECT_GEODE_DIR / "skills"
 PROJECT_REPORTS_DIR = PROJECT_GEODE_DIR / "reports"
 PROJECT_RESULT_CACHE_DIR = PROJECT_GEODE_DIR / "result_cache"
 PROJECT_SCHEDULER_FILE = PROJECT_GEODE_DIR / "scheduled_tasks.json"
-PROJECT_SCHEDULER_LOCK = PROJECT_GEODE_DIR / "scheduled_tasks.lock"
 PROJECT_SCHEDULER_LOG_DIR = PROJECT_GEODE_DIR / "scheduler_logs"
 PROJECT_PLANS_FILE = PROJECT_GEODE_DIR / "plans.json"
 PROJECT_USER_PROFILE_DIR = PROJECT_GEODE_DIR / "user_profile"
