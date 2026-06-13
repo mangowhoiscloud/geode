@@ -7,6 +7,41 @@ parallel batching).
 
 from __future__ import annotations
 
+from contextvars import ContextVar
+
+# --dangerously-skip-permissions — PER-SESSION state (not process-global).
+#
+# Set by the IPC ``client_capability`` handshake in the connection's task /
+# thread (``_adopt_skip_permissions``), BEFORE the first prompt, and read at
+# gate-call time by ``ApprovalWorkflow`` + the plan handler. Per-task isolation
+# (a ContextVar, like ``_current_loop_ctx``) is the load-bearing property: a
+# process-global flag would let a skip client flip approvals for ANOTHER
+# session that is concurrently awaiting tool work (Codex review HIGH). Unset
+# (internal sessions with no handshake) falls back to the daemon-wide
+# ``settings.dangerously_skip_permissions`` env default.
+_skip_permissions_var: ContextVar[bool | None] = ContextVar("geode_skip_permissions", default=None)
+
+
+def set_skip_permissions(on: bool) -> None:
+    """Set ``--dangerously-skip-permissions`` for the CURRENT session context."""
+    _skip_permissions_var.set(on)
+
+
+def current_skip_permissions() -> bool:
+    """Resolve the effective skip-permissions flag for the current context.
+
+    Per-session ContextVar wins when set (IPC capability adoption); otherwise
+    the process-wide env default (``GEODE_DANGEROUSLY_SKIP_PERMISSIONS``, e.g.
+    a daemon launched in skip mode) applies.
+    """
+    override = _skip_permissions_var.get()
+    if override is not None:
+        return override
+    from core.config import settings
+
+    return bool(getattr(settings, "dangerously_skip_permissions", False))
+
+
 # Read-only tools — safe for sub-agent auto-approval
 SAFE_TOOLS: frozenset[str] = frozenset(
     {

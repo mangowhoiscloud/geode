@@ -436,6 +436,16 @@ class Settings(BaseSettings):
     # 2 = all prompts (default, ask everything)
     hitl_level: int = 2
 
+    # Dangerously skip permissions (Claude Code parity, GEODE_DANGEROUSLY_SKIP_PERMISSIONS).
+    # When True, EVERY HITL gate is bypassed (write/expensive/bash/MCP approval →
+    # hitl_level forced to 0 + auto_approve) AND the plan-approval stop is
+    # skipped (plan → action directly, ``plan_auto_execute`` treated as on).
+    # For a frictionless autonomous agent experience; the operator opts in with
+    # ``geode --dangerously-skip-permissions``. Adopted per IPC connection from
+    # the thin CLI's ``client_capability`` handshake (same mechanism as the
+    # session model) so a running daemon honours it without a restart.
+    dangerously_skip_permissions: bool = False
+
     # Plan Mode — Autonomous Execution
     plan_auto_execute: bool = False  # GEODE_PLAN_AUTO_EXECUTE=true to enable
 

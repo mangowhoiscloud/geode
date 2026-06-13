@@ -86,6 +86,21 @@ class ApprovalWorkflow:
         self._tool_approval_counts: dict[str, int] = {}
         self._tool_denial_counts: dict[str, int] = {}
 
+    @staticmethod
+    def _skip_permissions() -> bool:
+        """``--dangerously-skip-permissions`` — read DYNAMICALLY (per gate call).
+
+        Resolves the PER-SESSION ContextVar (set by the IPC capability
+        handshake before the first prompt) at gate time, not cached at executor
+        construction: the daemon builds the executor at CONNECTION time, the
+        flag arrives AFTER. Per-session isolation means a concurrent skip
+        session can't flip another session's gates (see
+        :func:`core.agent.safety.current_skip_permissions`).
+        """
+        from core.agent.safety import current_skip_permissions
+
+        return current_skip_permissions()
+
     def _fire_hook(self, event: HookEvent, data: dict[str, Any]) -> None:
         if self._hooks is None:
             return
@@ -213,7 +228,8 @@ class ApprovalWorkflow:
         if tool_name in WRITE_TOOLS:
             with self._approval_lock:
                 if (
-                    self._hitl_level == 0
+                    self._skip_permissions()
+                    or self._hitl_level == 0
                     or "write" in self._always_approved_categories
                     or tool_name in self._always_approved_tools
                 ):
@@ -249,7 +265,8 @@ class ApprovalWorkflow:
         if tool_name in EXPENSIVE_TOOLS and not self._auto_approve:
             with self._approval_lock:
                 if (
-                    self._hitl_level == 0
+                    self._skip_permissions()
+                    or self._hitl_level == 0
                     or "cost" in self._always_approved_categories
                     or tool_name in self._always_approved_tools
                 ):
@@ -300,7 +317,8 @@ class ApprovalWorkflow:
 
             async def write_gate() -> tuple[dict[str, Any] | None, bool]:
                 if (
-                    self._hitl_level == 0
+                    self._skip_permissions()
+                    or self._hitl_level == 0
                     or "write" in self._always_approved_categories
                     or tool_name in self._always_approved_tools
                 ):
@@ -339,7 +357,8 @@ class ApprovalWorkflow:
 
             async def cost_gate() -> tuple[dict[str, Any] | None, bool]:
                 if (
-                    self._hitl_level == 0
+                    self._skip_permissions()
+                    or self._hitl_level == 0
                     or "cost" in self._always_approved_categories
                     or tool_name in self._always_approved_tools
                 ):
@@ -913,6 +932,8 @@ class ApprovalWorkflow:
             return True
         if f"mcp:{server}" in self._always_approved_categories:
             return True
+        if self._skip_permissions():
+            return True
         if self._hitl_level <= 1:
             return True
         return server in self._mcp_approved_servers
@@ -928,10 +949,13 @@ class ApprovalWorkflow:
     def is_bash_auto_approved(self, command: str) -> bool:
         """Check if a bash command can skip HITL approval.
 
-        Auto-approves when HITL is fully open (level ≤ 1), the user explicitly
-        marked `run_bash` / category `bash` always-allowed, or the command is
-        a read-only pipeline (see :func:`is_bash_command_read_only`).
+        Auto-approves when ``--dangerously-skip-permissions`` is set, HITL is
+        fully open (level ≤ 1), the user explicitly marked `run_bash` /
+        category `bash` always-allowed, or the command is a read-only pipeline
+        (see :func:`is_bash_command_read_only`).
         """
+        if self._skip_permissions():
+            return True
         if self._hitl_level <= 1:
             return True
         if "bash" in self._always_approved_categories or "run_bash" in self._always_approved_tools:
@@ -944,6 +968,15 @@ class ApprovalWorkflow:
 
     async def batch_cost_approval(self, blocks: list[Any]) -> bool:
         """Show a single cost confirmation prompt for all EXPENSIVE tools."""
+        # --dangerously-skip-permissions / fully-open HITL / always-approved
+        # cost → no batch prompt (parity with the per-tool expensive gate).
+        if (
+            self._skip_permissions()
+            or self._hitl_level == 0
+            or self._auto_approve
+            or "cost" in self._always_approved_categories
+        ):
+            return True
         items: list[tuple[str, dict[str, Any], float]] = []
         for block in blocks:
             cost = EXPENSIVE_TOOLS.get(block.name, 0.0)

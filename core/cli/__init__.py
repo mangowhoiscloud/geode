@@ -469,9 +469,25 @@ def main(
         False, "--continue", help="Resume the most recent session"
     ),
     resume: str = typer.Option("", "--resume", help="Resume a specific session by ID"),
+    dangerously_skip_permissions: bool = typer.Option(
+        False,
+        "--dangerously-skip-permissions",
+        help="Bypass ALL HITL approval gates + the plan-approval stop (autonomous). Use with care.",
+    ),
 ) -> None:
     """GEODE — Autonomous Research Harness."""
     _ = show_version
+    # --dangerously-skip-permissions: set the env BEFORE serve auto-start so a
+    # freshly-spawned daemon inherits it, and so ``_send_client_capability``
+    # advertises it to an already-running daemon (adopted per connection).
+    if dangerously_skip_permissions:
+        import os
+
+        os.environ["GEODE_DANGEROUSLY_SKIP_PERMISSIONS"] = "1"
+        console.print(
+            "  [warning]⚠ --dangerously-skip-permissions: all HITL gates + plan "
+            "approval bypassed[/warning]"
+        )
     if ctx.invoked_subcommand is None:
         _welcome_screen()
 
