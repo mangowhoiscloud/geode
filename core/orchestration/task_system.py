@@ -223,8 +223,8 @@ class TaskGraph:
     def has_failed_dependency(self, node_name: str, prefix: str) -> bool:
         """Check if any task associated with *node_name* has a failed dependency.
 
-        Convenience wrapper for LangGraph integration — resolves task IDs
-        from a node name prefix pattern and checks each.
+        Resolves task IDs from a node-name prefix pattern and checks each
+        for a failed/skipped dependency.
         """
         for tid, _task in self._tasks.items():
             if not tid.startswith(prefix):

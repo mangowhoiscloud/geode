@@ -7,7 +7,6 @@ hierarchical string for checkpoint filtering and session isolation.
 from __future__ import annotations
 
 import re
-from typing import Any
 
 ROUTER = "router"
 SIGNALS = "signals"
@@ -41,24 +40,6 @@ def build_subagent_session_key(subject_id: str, task_id: str, phase: str = "pipe
     normalized_subject = _normalize_name(subject_id)
     normalized_task_id = _normalize_name(task_id)
     return f"subject:{normalized_subject}:{phase}:subagent:{normalized_task_id}"
-
-
-def build_subagent_thread_config(
-    subject_id: str, task_id: str, phase: str = "pipeline"
-) -> dict[str, Any]:
-    """Build a LangGraph thread config for a sub-agent execution."""
-    thread_id = build_subagent_session_key(subject_id, task_id, phase)
-    return {
-        "configurable": {"thread_id": thread_id},
-        "run_name": f"geode:subagent:{subject_id}:{task_id}",
-        "tags": [f"subject:{subject_id}", f"phase:{phase}", "subagent"],
-        "metadata": {
-            "subject_id": subject_id,
-            "phase": phase,
-            "task_id": task_id,
-            "is_subagent": True,
-        },
-    }
 
 
 def parse_session_key(key: str) -> dict[str, str | None | bool]:
@@ -102,16 +83,3 @@ def build_gateway_session_key(
     if thread_id:
         key += f":{_normalize_name(thread_id)}"
     return key
-
-
-def build_thread_config(
-    subject_id: str, phase: str, sub_context: str | None = None
-) -> dict[str, Any]:
-    """Build a LangGraph thread config with hierarchical session key."""
-    thread_id = build_session_key(subject_id, phase, sub_context)
-    return {
-        "configurable": {"thread_id": thread_id},
-        "run_name": f"geode:{subject_id}:{phase}",
-        "tags": [f"subject:{subject_id}", f"phase:{phase}"],
-        "metadata": {"subject_id": subject_id, "phase": phase},
-    }

@@ -4,7 +4,6 @@ from __future__ import annotations
 
 from pathlib import Path
 
-import pytest
 from core.hooks import HookEvent, HookSystem
 from core.memory.session import InMemorySessionStore
 from core.observability.run_log import RunLog
@@ -40,13 +39,6 @@ class TestGeodeRuntimeCreate:
     def test_create_custom_phase(self, tmp_path: Path):
         runtime = GeodeRuntime.create("Demo Subject", phase="scoring", log_dir=tmp_path)
         assert runtime.session_key == "subject:demo_subject:scoring"
-
-    def test_thread_config(self, tmp_path: Path):
-        runtime = GeodeRuntime.create("demo", log_dir=tmp_path)
-        config = runtime.thread_config
-        assert config["configurable"] == {"thread_id": "subject:demo:analysis"}
-        assert config["run_name"] == "geode:demo:analysis"
-        assert "subject:demo" in config["tags"]
 
 
 class TestRuntimeHooksRunLog:
@@ -156,18 +148,6 @@ class TestRuntimeToolRegistry:
         assert "generate_report" in runtime.tool_registry
         assert "export_json" in runtime.tool_registry
         assert "send_notification" in runtime.tool_registry
-
-
-class TestRuntimeCompileGraph:
-    def test_compile_without_checkpoint(self, tmp_path: Path):
-        runtime = GeodeRuntime.create("Project Atlas", log_dir=tmp_path)
-        with pytest.raises(RuntimeError, match="no longer ships"):
-            runtime.compile_graph()
-
-    def test_compile_with_checkpoint(self, tmp_path: Path):
-        runtime = GeodeRuntime.create("Project Atlas", log_dir=tmp_path)
-        with pytest.raises(RuntimeError, match="no longer ships"):
-            runtime.compile_graph(enable_checkpoint=True)
 
 
 class TestRunLogPruning:

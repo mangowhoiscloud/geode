@@ -13,7 +13,6 @@ from core.memory.session_key import (
     SYNTHESIS,
     VERIFICATION,
     build_session_key,
-    build_thread_config,
     parse_session_key,
 )
 
@@ -73,19 +72,6 @@ class TestParseSessionKey:
         parsed = parse_session_key(original)
         rebuilt = build_session_key(parsed["subject_id"], parsed["phase"], parsed["sub_context"])
         assert rebuilt == original
-
-
-class TestBuildThreadConfig:
-    def test_basic_config(self):
-        config = build_thread_config("demo", ANALYSIS)
-        assert config["configurable"] == {"thread_id": "subject:demo:analysis"}
-        assert config["run_name"] == "geode:demo:analysis"
-        assert "subject:demo" in config["tags"]
-        assert config["metadata"]["subject_id"] == "demo"
-
-    def test_config_with_sub_context(self):
-        config = build_thread_config("demo", EVALUATION, "hidden_value")
-        assert config["configurable"]["thread_id"] == "subject:demo:evaluation:hidden_value"
 
 
 class TestPhaseConstants:
