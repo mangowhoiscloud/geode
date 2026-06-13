@@ -43,21 +43,14 @@ def make_sigint_handler() -> Any:
 
 
 def suppress_noisy_warnings() -> None:
-    """Suppress known noisy warnings from dependencies."""
-    import warnings
+    """Startup hook to silence known-noisy dependency warnings.
 
-    # Pydantic V1 deprecation from langchain_core on Python 3.14+
-    warnings.filterwarnings("ignore", message="Core Pydantic V1 functionality")
-    # LangGraph msgpack deserialization warning (warnings.warn path)
-    warnings.filterwarnings("ignore", message="Deserializing unregistered type")
-
-    # LangGraph checkpoint deserialization also logs via logging.warning —
-    # suppress those at the logging level.
-    for noisy_logger in (
-        "langgraph.checkpoint.serde.jsonplus",
-        "langgraph.checkpoint.serde.base",
-    ):
-        logging.getLogger(noisy_logger).setLevel(logging.ERROR)
+    Currently a no-op: the only entries were LangGraph / langchain_core
+    warnings (msgpack deserialization, checkpoint serde loggers, the Pydantic
+    V1 deprecation), all removed when the vestigial LangGraph dependency was
+    purged (the in-tree analysis graph was removed in v0.99.149). Kept as the
+    single place to re-add a filter if a future dependency gets noisy.
+    """
 
 
 def drain_stdin() -> None:

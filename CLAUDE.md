@@ -6,14 +6,14 @@
 
 ## Project Overview
 
-A general-purpose autonomous execution agent built on LangGraph. Autonomously performs research, analysis, automation, and scheduling.
+A general-purpose autonomous execution agent. The core runtime is an **AgenticLoop** (`while tool_use`) — sub-agents, plans, and batches are all instances of the same loop. Autonomously performs research, analysis, automation, and scheduling.
 
-- **Version**: 0.99.205
+- **Version**: 0.99.206
 - **Python**: >= 3.12
 - **Package Manager**: uv
 - **Entry Points**: `geode` (`core.cli:app`, Typer) / `geode-mcp` (`core.mcp_server:main`)
 - **Modules**: 385 core + 72 plugins = 457
-- **Tests**: 8724 (+1 live)
+- **Tests**: 8718 (+1 live)
 - **CHANGELOG**: `CHANGELOG.md` (Keep a Changelog + SemVer)
 
 ## Quick Start
@@ -295,7 +295,6 @@ develop → main PRs may use abbreviated form (Summary + Verification only).
 | Change | Cascading Updates |
 |--------|-------------------|
 | New tool | `definitions.json` + handlers + E2E |
-| Pipeline node | `graph.py` + E2E |
 | LLM adapter | `core/llm/router/` + `core/llm/providers/` + E2E |
 
 ##### Post-Merge Cleanup (MANDATORY after every merge)

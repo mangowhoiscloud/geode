@@ -1,6 +1,6 @@
 [project]
 name = "geode-agent"
-version = "0.99.205"
+version = "0.99.206"
 description = "GEODE — 범용 자율 실행 에이전트"
 license = "Apache-2.0"
 readme = "README.md"
@@ -20,7 +20,6 @@ dependencies = [
     # so the build never relies on a dep that could vanish.
     "markdown-it-py>=3.0",
     "httpx>=0.27.0",
-    "langgraph>=1.1.0",
     "openai>=2.26.0",
     "openai-agents>=0.13.0",
     "prompt-toolkit>=3.0.52",
@@ -395,21 +394,12 @@ known_first_party = ["core", "plugins"]
 [tool.deptry.per_rule_ignores]
 # DEP002 — declared as dep but not imported anywhere by deptry's static scan.
 # All entries below are confirmed-needed:
-#   langgraph-checkpoint{,-sqlite}: namespace packages (langgraph.checkpoint.*),
-#       deptry's ImportFinder can't link the namespace import back to the
-#       distribution name reliably.
-#   langgraph: kept as the graph runtime contract for external packages.
-#       GEODE core no longer builds a bundled graph in v1, so
-#       only TYPE_CHECKING references remain locally.
 #   openai-agents: kept for Responses-API runtime path even when no static
 #       import exists in core/ today; removing it would break the optional
 #       agents harness when re-enabled. Re-evaluate if/when that surface
 #       is fully retired.
 #   Pillow: imported as `PIL` from core/tools/computer_use.py (desktop extra).
 DEP002 = [
-    "langgraph",
-    "langgraph-checkpoint",
-    "langgraph-checkpoint-sqlite",
     "openai-agents",
     "Pillow",
     # `inspect-petri` is loaded via inspect_ai's evaluation harness
@@ -517,8 +507,6 @@ plugins = ["pydantic.mypy"]
 
 [[tool.mypy.overrides]]
 module = [
-    "langgraph.*",
-    "langchain_core.*",
     "simple_term_menu.*",
     "mcp.*",
     # Petri × GEODE [audit] optional extra. Only present when

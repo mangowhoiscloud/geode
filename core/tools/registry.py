@@ -9,8 +9,6 @@ from __future__ import annotations
 
 import inspect
 import logging
-from collections.abc import Awaitable, Callable
-from contextvars import ContextVar
 from typing import TYPE_CHECKING, Any
 
 from core.tools.base import Tool
@@ -19,26 +17,6 @@ if TYPE_CHECKING:
     from core.tools.policy import PolicyChain
 
 log = logging.getLogger(__name__)
-
-# ---------------------------------------------------------------------------
-# Tool executor contextvar (NOT in state — functions are not serializable)
-# ---------------------------------------------------------------------------
-
-AsyncToolExecutorCallable = Callable[..., Awaitable[dict[str, Any]]]
-
-_async_tool_executor_ctx: ContextVar[AsyncToolExecutorCallable | None] = ContextVar(
-    "async_tool_executor", default=None
-)
-
-
-def set_async_tool_executor(executor: AsyncToolExecutorCallable | None) -> None:
-    """Inject async tool executor callable for async-native nodes."""
-    _async_tool_executor_ctx.set(executor)
-
-
-def get_async_tool_executor() -> AsyncToolExecutorCallable | None:
-    """Get injected async tool executor. Returns None if not injected."""
-    return _async_tool_executor_ctx.get()
 
 
 class ToolRegistry:

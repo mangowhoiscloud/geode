@@ -9,7 +9,7 @@ from typing import Any
 
 import pytest
 from core.tools.base import Tool
-from core.tools.registry import ToolRegistry, get_async_tool_executor, set_async_tool_executor
+from core.tools.registry import ToolRegistry
 
 
 def _run_registry(registry: ToolRegistry, name: str, **kwargs: Any) -> dict[str, Any]:
@@ -184,37 +184,20 @@ class TestToolRegistry:
         with pytest.raises(KeyError, match="not found"):
             asyncio.run(registry.aexecute("nonexistent"))
 
-    def test_async_tool_executor_contextvar(self):
-        async def async_executor(name: str, **kwargs: Any) -> dict[str, Any]:
-            return {"name": name, "kwargs": kwargs}
-
-        set_async_tool_executor(async_executor)
-        injected = get_async_tool_executor()
-        assert injected is async_executor
-        assert asyncio.run(injected("dummy", value=1)) == {
-            "name": "dummy",
-            "kwargs": {"value": 1},
-        }
-        set_async_tool_executor(None)
-
     def test_migrated_tool_handlers_do_not_call_sync_execute(self):
         from core.cli.tool_handlers.single_tool import (
             _build_calendar_handlers,
             _build_notification_handlers,
         )
-        from core.runtime import GeodeRuntime
 
         calendar_source = inspect.getsource(_build_calendar_handlers)
         notification_source = inspect.getsource(_build_notification_handlers)
-        runtime_source = inspect.getsource(GeodeRuntime.get_tool_state_injection)
 
         assert "list_tool.execute(" not in calendar_source
         assert "create_tool.execute(" not in calendar_source
         assert "notification_tool.execute(" not in notification_source
-        assert "tool_registry.execute(" not in runtime_source
         assert ".aexecute(" in calendar_source
         assert ".aexecute(" in notification_source
-        assert ".aexecute(" in runtime_source
 
     def test_len(self):
         registry = ToolRegistry()

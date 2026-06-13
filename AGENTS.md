@@ -12,7 +12,7 @@
 
 ## Project at a glance
 
-- **What**: a self-hosting autonomous-agent harness on top of LangGraph.
+- **What**: a self-hosting autonomous-agent harness whose runtime is an AgenticLoop (`while tool_use`).
 - **Language**: Python 3.12+, type-hinted, uv-managed.
 - **Layout**: two top-level packages.
   - `core/` — domain-agnostic runtime.
@@ -139,7 +139,7 @@ Runtime SkillRegistry. Distinct from scaffold `.claude/skills/`.
 
 ### `core/scheduler/`, `core/orchestration/`
 
-Natural-language scheduling, LangGraph StateGraph.
+Natural-language scheduling, task graph (TaskGraph).
 
 ### `core/cli/`
 
