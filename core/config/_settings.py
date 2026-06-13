@@ -18,6 +18,21 @@ from core.config.credential_source import (
 )
 from core.paths import GLOBAL_ENV_FILE
 
+#: Union of every per-provider effort the picker can persist to ``[agentic]
+#: effort`` — Anthropic ``low..xhigh``, OpenAI ``none``/``minimal``, GLM
+#: ``disabled``/``enabled`` (SoT: ``core.cli.effort_picker.supported_efforts``).
+#: ``_validate_effort`` MUST accept the full union: the picker writes the
+#: provider-specific value here, so a narrower set would reject a valid config
+#: the picker itself produced (e.g. gpt-5.5 + ``none``) and brick the next
+#: ``Settings()`` load. Pinned to the picker by
+#: ``tests/core/config/test_config_centralization.py``. Defined at module level
+#: (not in the class body) so pydantic doesn't treat it as a field and the test
+#: can import it directly. ``core.cli`` is a higher layer than ``core.config``,
+#: so the constant is duplicated here rather than imported (the test bridges).
+AGENTIC_EFFORTS = frozenset(
+    {"none", "minimal", "low", "medium", "high", "max", "xhigh", "disabled", "enabled"}
+)
+
 
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(
@@ -384,9 +399,8 @@ class Settings(BaseSettings):
     @field_validator("agentic_effort")
     @classmethod
     def _validate_effort(cls, v: str) -> str:
-        allowed = {"low", "medium", "high", "max", "xhigh"}
-        if v not in allowed:
-            raise ValueError(f"agentic_effort must be one of {sorted(allowed)}, got {v!r}")
+        if v not in AGENTIC_EFFORTS:
+            raise ValueError(f"agentic_effort must be one of {sorted(AGENTIC_EFFORTS)}, got {v!r}")
         return v
 
     # Cost guard — session-level cost limit (0 = no limit)

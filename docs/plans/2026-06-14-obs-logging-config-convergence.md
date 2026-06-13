@@ -80,3 +80,8 @@
 | L — llms.txt 버전 동기화 + 가드 | DONE — `scripts/check_llms_version.py`(check + `--fix`), ci.yml ratchet 배선, 가드 4 테스트, CLAUDE.md docs-sync 행. docs-sync에서 sync-stats 재생성 + `--fix`. |
 
 **감사 정정**: 발견 D1의 "`Field(ge/le)` 0개"는 부정확 — temperature_* 4필드는 이미 `Field(ge=0.0, le=2.0)`. 실제 미검증 표면은 timeout 4 + interval 3 + agentic_effort. 중복 validator를 만들지 않고 plain 필드만 가드.
+
+**Codex(gpt-5.5) 리뷰 수정 3건**:
+1. **effort validator 브릭 버그(P0)** — `agentic_effort` enum이 5개(`low..xhigh`)만 허용했으나 picker는 OpenAI `none`/`minimal`·GLM `disabled`/`enabled`도 `[agentic] effort`에 기록 → 다음 `Settings()` 로드에서 ValidationError = config 브릭. 9개 합집합(`AGENTIC_EFFORTS`)으로 확대 + picker에 핀하는 드리프트 테스트.
+2. **가드 false-pass** — llms 헤더만 검사해 `sot.ts`/`changelog.ts`가 stale(.189)인데 통과. 가드를 `sot.ts`까지 확장(생성 파일이라 check-only, remedy=sync-stats) + sync-stats로 sot.ts/changelog.ts 실제 resync.
+3. **config 레퍼런스 docs stale** — `page.tsx`가 Phase C로 매핑된 필드를 "env-only"로 표기 + 죽은 `temperature_verification`. env-only 섹션을 "시크릿만 .env 전용"으로 재구성(KO/EN) + 죽은 필드 제거.
