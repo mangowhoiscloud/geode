@@ -39,6 +39,34 @@ _FILE_ALLOWLIST: frozenset[str] = frozenset(
     }
 )
 
+# Plugin files allowed to define their OWN `.geode/` path SoT (a plugin owns
+# its config path the way core/paths.py owns core paths). PR-PATH-MODERNIZE F9
+# extends the guard to plugins/ — a plugin must still NOT duplicate a *core*
+# path literal (e.g. `~/.geode/petri/logs`); it should import the core constant.
+_PLUGIN_FILE_ALLOWLIST: frozenset[str] = frozenset(
+    {
+        # petri_audit's worktree-local opt-in flag — a plugin-owned single
+        # named SoT (`.geode/audit-mode.toml`), not a core path.
+        "plugins/petri_audit/audit_mode.py",
+    }
+)
+
+# Vendor / system home paths that GEODE actually constructs (`~/.claude` for
+# Anthropic OAuth, `~/.codex` for Codex OAuth/CLI, `~/.local/bin` for the codex
+# binary lookup, `~/.cache` for pricing/petri caches) are intentional
+# non-`.geode` locations owned by a 3rd-party tool or the XDG spec. The guard is
+# `.geode`-specific and never matches them — this note is the catalog so a
+# future reader does not "fix" them into core.paths (they carry their own vendor
+# env overrides, e.g. CODEX_HOME / CLAUDE_CONFIG_DIR). PR-PATH-MODERNIZE F11.
+# (`~/.hermes` is NOT here: Hermes is a frontier-survey reference, not a path
+# GEODE reads/writes — it appears only in an env_io docstring comparison.)
+_VENDOR_HOME_PATHS_DOCUMENTED = (
+    "~/.claude",
+    "~/.codex",
+    "~/.local",
+    "~/.cache",
+)
+
 # Patterns that indicate a hardcoded ``.geode`` literal. Caught by
 # substring + regex — no AST needed because the literal forms are
 # narrow.
@@ -51,6 +79,15 @@ _LITERAL_PATTERNS: list[re.Pattern[str]] = [
     # `Path(".geode")` exact (no trailing slash) — used as relative root
     re.compile(r'Path\(\s*"\.geode"\s*\)'),
     re.compile(r"Path\(\s*'\.geode'\s*\)"),
+    # `Path("~/.geode/...")` / `os.path.expanduser("~/.geode/...")` — the
+    # expanduser construction form (PR-PATH-MODERNIZE F10). NARROW on purpose:
+    # (1) only a *Path/expanduser of a "~/.geode" literal* is a bypass — a bare
+    # "~/.geode/..." string in a help/display message (doctor_bootstrap,
+    # config-explain) is NOT a path construction, so it is not matched; and
+    # (2) the trailing ``(?:/|["'])`` anchors on ``~/.geode/`` or ``~/.geode"``
+    # so the sibling ``~/.geode_history`` (a distinct path) is NOT caught.
+    re.compile(r'Path\(\s*["\']~/\.geode(?:/|["\'])'),
+    re.compile(r'expanduser\(\s*["\']~/\.geode(?:/|["\'])'),
 ]
 
 # Per-line opt-out annotation. Avoid Ruff's suppression-comment spelling so
@@ -59,6 +96,7 @@ _NOQA_RE = re.compile(r"#\s*paths-literal-ok\b")
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 _CORE_ROOT = _REPO_ROOT / "core"
+_PLUGINS_ROOT = _REPO_ROOT / "plugins"
 
 
 def _strip_inline_comment(line: str) -> str:
@@ -121,11 +159,22 @@ def test_no_hardcoded_geode_path_literals_in_core() -> None:
 
     See ``docs/architecture/storage-hierarchy.md`` for the SoT policy.
     """
-    violations_by_file: dict[str, list[tuple[int, str]]] = {}
+    _assert_no_literals(_CORE_ROOT, _FILE_ALLOWLIST, "core/")
 
-    for py_file in sorted(_CORE_ROOT.rglob("*.py")):
+
+def test_no_hardcoded_geode_path_literals_in_plugins() -> None:
+    """Every ``.geode`` path under ``plugins/`` must come from ``core.paths``
+    (for *core* paths) or be a plugin-owned single SoT in
+    :data:`_PLUGIN_FILE_ALLOWLIST`. PR-PATH-MODERNIZE F9 closed the
+    core-only blind spot (a plugin could duplicate ``~/.geode/...`` freely)."""
+    _assert_no_literals(_PLUGINS_ROOT, _PLUGIN_FILE_ALLOWLIST, "plugins/")
+
+
+def _assert_no_literals(root: Path, allowlist: frozenset[str], label: str) -> None:
+    violations_by_file: dict[str, list[tuple[int, str]]] = {}
+    for py_file in sorted(root.rglob("*.py")):
         rel = py_file.relative_to(_REPO_ROOT).as_posix()
-        if rel in _FILE_ALLOWLIST:
+        if rel in allowlist:
             continue
         if "__pycache__" in py_file.parts:
             continue
@@ -135,9 +184,9 @@ def test_no_hardcoded_geode_path_literals_in_core() -> None:
 
     if violations_by_file:
         lines = [
-            "Hardcoded `.geode` path literals found in core/ — bypass `core.paths` SoT.",
+            f"Hardcoded `.geode` path literals found in {label} — bypass `core.paths` SoT.",
             "Resolve by importing the matching constant, or annotate with",
-            "  # noqa: paths-literal  — <reason>",
+            "  # paths-literal-ok  — <reason>",
             "(see docs/architecture/storage-hierarchy.md).",
             "",
         ]
@@ -167,3 +216,15 @@ def test_allowlisted_files_actually_have_literals() -> None:
         if not any(p.search(text) for p in _LITERAL_PATTERNS):
             stale.append(f"{rel}: no literals remain — drop from allowlist")
     assert not stale, "Stale entries in `_FILE_ALLOWLIST` (this guard):\n  " + "\n  ".join(stale)
+
+
+def test_vendor_home_paths_not_flagged() -> None:
+    """F11 contract — the guard is `.geode`-specific and must NOT flag the
+    catalogued vendor / XDG home paths (each owns a separate env override)."""
+    for vendor in _VENDOR_HOME_PATHS_DOCUMENTED:
+        line = f'    path = Path("{vendor}").expanduser()'
+        assert not _is_violation_line(_strip_inline_comment(line)), (
+            f"vendor path {vendor!r} should not be flagged by the .geode guard"
+        )
+    # ...but a real `~/.geode` construction IS flagged (sanity on the patterns).
+    assert _is_violation_line('Path("~/.geode/petri").expanduser()')

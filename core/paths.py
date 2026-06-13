@@ -1,16 +1,26 @@
 """GEODE directory hierarchy — centralized path resolution.
 
-Two-tier directory structure following Claude Code's ~/.claude pattern:
+Three-tier directory structure:
 
-  User-level (~/.geode/):
-    Global config, credentials, identity, vault, models, usage.
-    Project-scoped session data lives in ~/.geode/projects/{project_id}/.
+  Repo-relative state (``STATE_ROOT`` = ``<repo>/state/``, gitignored):
+    Machine-portable cross-run artefacts — autoresearch ledgers, policy
+    mutation SoT (``AUTORESEARCH_*``), seed-generation runs, handoff
+    pointer. Override via ``GEODE_STATE_ROOT`` (CSP-7).
 
-  Project-level ({workspace}/.geode/):
-    Project config (gateway bindings), memory, rules, skills, reports, cache.
+  User-global (``GEODE_HOME`` = ``~/.geode/``, Claude Code ``~/.claude``
+  pattern): global config, credentials, identity, vault, models, usage.
+    Project-scoped session data lives in ``~/.geode/projects/{project_id}/``.
+    Override via ``GEODE_HOME`` (the frontier ``{APP}_HOME`` convention,
+    e.g. Codex's ``CODEX_HOME`` → ``~/.codex``).
+
+  Project-local (``{workspace}/.geode/``):
+    Project config (gateway bindings), memory, rules, skills, reports, cache,
+    scheduler, hooks, tool-offload, plans.
 
 Project ID encoding follows Claude Code's convention:
   /home/user/workspace/geode  ->  -home-user-workspace-geode
+
+Both root overrides ``.expanduser()`` so a ``~`` in the env expands.
 """
 
 from __future__ import annotations

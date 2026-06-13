@@ -47,6 +47,8 @@ GEODE 경로 정책은 *이미 성숙*하다: 중앙 SoT(`core/paths.py`), path-
 | F11 | vendor-path(`~/.claude` `~/.codex` `~/.geode_history` `~/.local/bin` `~/.cache`) tier 미분류 — 의도적이나 비카탈로그 | `core/llm/adapters/*oauth*.py` 등 | LOW(문서) | 4 |
 | F12 | 모듈 docstring "two-tier" — 실제 3-tier(STATE_ROOT 누락) | `core/paths.py:1-14` | LOW | 4 |
 | F13 | 741줄 god-module(user-global 257줄) — 분할 후보 | `core/paths.py` 전체 | HIGH effort | 5(선택) |
+| F14 | (엄밀 누락 점검 발견) `GEODE_AUTH_TOML`·`GEODE_PROJECT_DIR` expanduser 누락 — `~` 미전개 | `core/auth/auth_toml.py:59`, `core/cli/ipc_client.py:71` | LOW(버그) | 4 |
+| — | vendor 카탈로그 `~/.hermes` 할루시네이션 제거(실 construction 0, env_io 주석뿐), `.codex/.claude/.local/.cache` 4개만 코드-검증 | — | (rigor) | 4 |
 
 ---
 
@@ -129,5 +131,5 @@ GEODE 경로 정책은 *이미 성숙*하다: 중앙 SoT(`core/paths.py`), path-
 | 1 — GEODE_HOME 수렴 + expanduser + ipc 개명 | **DONE** (4 가드 테스트, `tests/core/test_paths_env_override.py`) |
 | 2 — policy-path tier 정명명 (16상수 GLOBAL_→AUTORESEARCH_, 227건) | **DONE** |
 | 3 — dead/우회 정돈 | **DONE** (PROJECT_SCHEDULER_LOCK 삭제·GLOBAL_SEARCH_DIR 인라인·retrofit core 경유; audit_mode=plugin SoT 유지) |
-| 4 — 가드 강화 + docstring + vendor 카탈로그 | PENDING |
+| 4 — 가드 강화 + docstring + vendor 카탈로그 | **DONE** |
 | 5 — god-module 분할(선택) | DEFERRED(재평가) |
