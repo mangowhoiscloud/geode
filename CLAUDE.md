@@ -8,12 +8,12 @@
 
 A general-purpose autonomous execution agent. The core runtime is an **AgenticLoop** (`while tool_use`) — sub-agents, plans, and batches are all instances of the same loop. Autonomously performs research, analysis, automation, and scheduling.
 
-- **Version**: 0.99.206
+- **Version**: 0.99.207
 - **Python**: >= 3.12
 - **Package Manager**: uv
 - **Entry Points**: `geode` (`core.cli:app`, Typer) / `geode-mcp` (`core.mcp_server:main`)
 - **Modules**: 385 core + 72 plugins = 457
-- **Tests**: 8718 (+1 live)
+- **Tests**: 8721 (+1 live)
 - **CHANGELOG**: `CHANGELOG.md` (Keep a Changelog + SemVer)
 
 ## Quick Start
@@ -37,7 +37,7 @@ uv run geode "schedule daily standup reminder at 9am"
 
 | Document | Path | Content |
 |----------|------|---------|
-| Agent Identity | `GEODE.md` | Runtime architecture, LLM models, conventions |
+| Agent Identity | `GEODE.md` | Identity, Voice & Conduct, runtime architecture, LLM models |
 | Hook System | `docs/architecture/hook-system.md` | HookSystem 62 events |
 | Scaffold | `CLAUDE.md` | Development workflow, quality gates, CANNOT/CAN (this file) |
 
@@ -105,6 +105,7 @@ Rationale cites the originating incident when one exists. The `karpathy-patterns
 | **Docs** | No omitting CHANGELOG from code commits | Traceability |
 | | No leaving `[Unreleased]` on main | Release discipline |
 | | No version mismatch across 5 locations | Single source of truth |
+| | No non-English content in files injected into LLM context (`GEODE.md`, memory, prompts) — the model consumes them at runtime | Prompt clarity (moved from GEODE.md Conventions, PR-GEODE-SOUL) |
 | | No emoji as section anchors / nav prefixes; no decorative card grids when content is data — dense table/list only on docs/site/CLI surfaces | Slop signal. *Incident: PR-CSP-14-UI mockup (2026-05-23) — see [[feedback-no-box-ui-no-emoji]]* |
 | | No colored left-border accent bars on cards/blocks (`border-left: Npx solid var(--bucket-*)`); use a neutral hairline (`var(--rule)`), an uppercase role-label, or spacing. No box-card grid as a *navigation* surface (extends the card-grid rule above) — use a dense inline link row/list. Minimize decorative `--`/`&mdash;` separators (prefer `·` / `.` / `,`). | Slop signal. *Incident: lineage-station / mutator-banner accent bars + run-page sub-view card grid, PR-HUB-DESLOP (2026-05-29) — see [[feedback-no-box-ui-no-emoji]]* |
 | **Naming** | No abstract-noun package names (`text`, `storage`, `runtime_state`, `helpers`, `common`, `lib`, `manager`) — use domain-verb / domain-noun (claude-code-ref / openclaw / hermes / crumb all converge). *Incident: PR-CLEANUP-2 #1562 (2026-05-23) folded 3 such packages.* | Frontier convergence + [[feedback-explicit-naming]] |

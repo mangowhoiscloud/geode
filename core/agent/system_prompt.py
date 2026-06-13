@@ -4,7 +4,7 @@ Builds the base system prompt from the router.md template, enriched with
 project memory context.
 
 Memory hierarchy injected into the system prompt (G1-G3):
-  G1: GEODE.md  — Agent identity (Core Principles + RUNTIME CANNOT + Defaults, ~20 lines)
+  G1: GEODE.md  — Behavioral identity (Voice/Conduct + Principles + CANNOT, ~20 lines)
   G2: .geode/MEMORY.md — Project meta-index (architecture, pipelines, key files)
   G3: .geode/LEARNING.md — Agent learning (patterns, corrections, preferences)
   G4: .geode/memory/PROJECT.md — Runtime insights + rules
@@ -546,10 +546,14 @@ def _build_user_context() -> str:
 
 
 def _build_identity_context() -> str:
-    """G1: Extract core identity from GEODE.md (Core Principles + RUNTIME CANNOT + Defaults).
+    """G1: Extract behavioral identity from GEODE.md.
 
-    Reads GEODE.md via OrganizationMemory.get_soul() and extracts only the
-    essential sections to stay within context budget (~20 lines).
+    Reads GEODE.md via OrganizationMemory.get_soul() and injects the
+    BEHAVIORAL sections (Voice & Conduct + Operating Principles + RUNTIME
+    CANNOT) — how GEODE sounds and acts — into the system prompt, within the
+    ~20-line context budget. The numeric Defaults section is reference, not
+    behavioral identity, so it is deliberately NOT injected here (it stays in
+    GEODE.md for the full-soul read + human reference).
     """
     try:
         from core.memory.organization import MonoLakeOrganizationMemory
@@ -559,8 +563,12 @@ def _build_identity_context() -> str:
         if not soul:
             return ""
 
-        # Extract targeted sections: Core Principles, RUNTIME CANNOT, Defaults
-        target_sections = {"## Core Principles", "## RUNTIME CANNOT", "## Defaults"}
+        # Extract the behavioral sections only.
+        target_sections = {
+            "## Voice & Conduct",
+            "## Operating Principles",
+            "## RUNTIME CANNOT",
+        }
         extracted_lines: list[str] = []
 
         current_in_target = False
@@ -571,6 +579,10 @@ def _build_identity_context() -> str:
                 current_in_target = stripped in target_sections
                 if current_in_target:
                     extracted_lines.append(stripped)
+                continue
+            # Skip cross-reference blockquotes (`> see CLAUDE.md …`) — they are
+            # author-facing notes, not runtime directives.
+            if stripped.startswith(">"):
                 continue
             if current_in_target and stripped:
                 extracted_lines.append(stripped)
