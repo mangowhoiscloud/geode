@@ -113,6 +113,7 @@
 - 라이브 E2E(실제 GUI 제어·컨테이너)는 운영자 환경 — `-m live` 무단 실행 금지.
 
 ## 6. Out-of-scope (보류)
+- **Phase A 후속 — 스크린샷 compaction 가드** (Codex): 정상 다음-턴 경로는 image 블록을 그대로 전달하나, overflow/compaction(`summarize_tool_results`)이 트리거되면 image-bearing tool_result를 텍스트로 치환해 모델을 다시 "장님"으로 만들 수 있음. 최근 스크린샷 1장은 compaction에서 보존하는 가드를 별도 PR로. (blocker 아님)
 - **Phase B' — Anthropic `zoom` 액션 + Opus 1:1 좌표**: ctx7(SDK)로 `zoom` 액션·`enable_zoom` 미확인 → live-test로 모델이 zoom을 실제 emit하는지 확인 후 별도 PR.
 - Zhipu 폰(AutoGLM-Phone 안드로이드) — 데스크탑 범위 밖.
 - OpenAI hosted browser(Operator/ChatGPT Agent) — API 미노출, self-host computer로 대체.
