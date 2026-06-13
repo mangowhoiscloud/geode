@@ -110,3 +110,57 @@ def test_petri_bundle_below_floor_fails(tmp_path: Path) -> None:
     assert result.returncode == 1, result.stdout + result.stderr
     assert "petri bundle deletion" in result.stderr
     assert f"floor is {PETRI_EVAL_FLOOR}" in result.stderr
+
+
+def _init_git_repo(root: Path) -> None:
+    """Minimal git repo so `git grep` (used by the home-path-leak check) works."""
+    for argv in (
+        ["git", "init", "-q"],
+        ["git", "config", "user.email", "t@t"],
+        ["git", "config", "user.name", "t"],
+    ):
+        subprocess.run(argv, cwd=root, check=True, capture_output=True)  # noqa: S603
+
+
+def test_real_username_home_path_fails(tmp_path: Path) -> None:
+    """A tracked file embedding /Users/<real-username>/ is a PII leak → fail.
+
+    The leak path is assembled at runtime (not a source literal) so this very
+    test file does not itself trip the hygiene gate it exercises."""
+    _init_git_repo(tmp_path)
+    username = "operator9"  # not in _PLACEHOLDER_USERS
+    leak = f"/Users/{username}/workspace/geode/state/x"
+    (tmp_path / "run.json").write_text(f'{{"run_dir": "{leak}"}}\n')
+    subprocess.run(["git", "add", "-A"], cwd=tmp_path, check=True, capture_output=True)  # noqa: S607
+    result = run_check(tmp_path)
+    assert result.returncode == 1, result.stdout + result.stderr
+    assert "hardcoded home path" in result.stderr
+    assert username in result.stderr
+
+
+def test_bare_and_capitalized_home_path_fails(tmp_path: Path) -> None:
+    """A bare ``/Users/<name>`` (no trailing component) and a capitalised
+    username are both leaks (Codex review — the trailing-slash and lowercase
+    gaps)."""
+    _init_git_repo(tmp_path)
+    bare = "/Users/" + "operator9"  # no trailing slash; split so the source has no literal
+    cap = "/home/" + "Operator9"  # capitalised
+    (tmp_path / "a.txt").write_text(f"see {bare}\n")
+    (tmp_path / "b.txt").write_text(f"see {cap}\n")
+    subprocess.run(["git", "add", "-A"], cwd=tmp_path, check=True, capture_output=True)  # noqa: S607
+    result = run_check(tmp_path)
+    assert result.returncode == 1, result.stdout + result.stderr
+    assert result.stderr.count("hardcoded home path") == 1
+    assert "operator9" in result.stderr.lower()
+
+
+def test_placeholder_home_path_passes(tmp_path: Path) -> None:
+    """Generic placeholder usernames (user / dev / foo / <name> / Shared) are allowed."""
+    _init_git_repo(tmp_path)
+    (tmp_path / "doc.md").write_text(
+        "Example: /home/user/workspace/geode and /Users/<name>/x and /Users/foo/y "
+        "and /Users/Shared/data and /Users/dev\n"
+    )
+    subprocess.run(["git", "add", "-A"], cwd=tmp_path, check=True, capture_output=True)  # noqa: S607
+    result = run_check(tmp_path)
+    assert result.returncode == 0, result.stderr

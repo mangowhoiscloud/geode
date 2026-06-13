@@ -12,7 +12,7 @@ Built 2026-04-27 by 3 parallel agents (claw+hermes /model UX | GEODE /model audi
 
 ### OpenClaw
 
-**`/model` picker**: `/Users/mango/workspace/openclaw/src/flows/model-picker.ts:118-158` — shows bare `provider/model` keys (e.g. `anthropic/claude-sonnet-4-5`), auth status as **hint** (`"auth missing"` line 150), not a filter.
+**`/model` picker**: `~/workspace/openclaw/src/flows/model-picker.ts:118-158` — shows bare `provider/model` keys (e.g. `anthropic/claude-sonnet-4-5`), auth status as **hint** (`"auth missing"` line 150), not a filter.
 
 ```ts
 // model-picker.ts:152-156
@@ -23,7 +23,7 @@ params.options.push({
 });
 ```
 
-**Auth resolution**: `/Users/mango/workspace/openclaw/src/agents/model-auth.ts:340-478` — single entry point `resolveApiKeyForProvider({provider, ...})`. Precedence: explicit profileId → `models.providers.<p>.auth` override → config apiKey → profile order → env vars → custom config → synthesized.
+**Auth resolution**: `~/workspace/openclaw/src/agents/model-auth.ts:340-478` — single entry point `resolveApiKeyForProvider({provider, ...})`. Precedence: explicit profileId → `models.providers.<p>.auth` override → config apiKey → profile order → env vars → custom config → synthesized.
 
 **Per-provider order user override**: ✅ `models auth-order set <provider> <profile-1> <profile-2>` (`commands/models/auth-order.ts:46-71`).
 
@@ -31,7 +31,7 @@ params.options.push({
 
 ### Hermes Agent
 
-**`/model` picker**: `/Users/mango/workspace/hermes-agent/hermes_cli/model_switch.py:226-243` — auth-aware filter via `list_authenticated_providers()` (line 783-1190); shows bare model names (`gpt-4o`, `claude-opus-4-6`) per authenticated provider.
+**`/model` picker**: `~/workspace/hermes-agent/hermes_cli/model_switch.py:226-243` — auth-aware filter via `list_authenticated_providers()` (line 783-1190); shows bare model names (`gpt-4o`, `claude-opus-4-6`) per authenticated provider.
 
 **Auth resolution**: `model_switch.py:411-776` calls `resolve_runtime_provider(requested=target_provider)` (`runtime_provider.py:109-230+`). Precedence: PROVIDER_REGISTRY env vars → auth store (auth.json) → credential pool → base_url override.
 
@@ -100,7 +100,7 @@ reference (claw + hermes) 둘 다 system prompt 에 model identity 안 주입. G
 ### OpenClaw
 
 **Entry point**: `/openclaw models auth <subcommand>` (nested under `models` command)
-- File:line: `/Users/mango/workspace/openclaw/src/cli/models-cli.ts:290–441`
+- File:line: `~/workspace/openclaw/src/cli/models-cli.ts:290–441`
 
 **Subcommands**:
 ```
@@ -119,7 +119,7 @@ openclaw models auth order clear        — reset to config default
 1. Picker for provider? **Yes** — required flag `--provider <id>` or interactive
 2. Auth method choice? **Yes** (if plugin supports multiple) — flag `--method <id>`
 3. What's stored at end?
-   - File: `/Users/mango/workspace/openclaw/src/commands/models/auth.ts:20–32` imports `upsertAuthProfile`
+   - File: `~/workspace/openclaw/src/commands/models/auth.ts:20–32` imports `upsertAuthProfile`
    - Stores: `AuthProfileCredential` with `{ provider, method, profileId, expiresAt, refreshToken, accessToken }`
    - Storage: `.openclaw/auth-profiles.json` (per-agent)
 4. Confirmation message? **Yes, implicit** — command completes silently or shows "Profile added"
@@ -157,7 +157,7 @@ openclaw models auth order clear        — reset to config default
 ### Hermes Agent
 
 **Entry point**: `hermes auth <subcommand>` (top-level command)
-- File:line: `/Users/mango/workspace/hermes-agent/hermes_cli/auth_commands.py:572–587`
+- File:line: `~/workspace/hermes-agent/hermes_cli/auth_commands.py:572–587`
 
 **Subcommands**:
 ```
@@ -215,7 +215,7 @@ hermes auth reset      — reset cooldown timers for a provider
 ### GEODE current (v0.50.0+)
 
 **Entry point**: `/login <subcommand>` (unified command in CLI REPL)
-- File:line: `/Users/mango/workspace/geode/core/cli/commands.py:1887–1997`
+- File:line: `~/workspace/geode/core/cli/commands.py:1887–1997`
 
 **Subcommands**:
 ```

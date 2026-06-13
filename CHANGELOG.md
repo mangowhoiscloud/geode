@@ -45,6 +45,14 @@ functional change.
 
 ---
 
+## [0.99.198] - 2026-06-13
+
+### Fixed
+- **Hardcoded home-path PII redaction across the repo** (operator-directed cleanup). Removed the operator's macOS home prefix (the `/Users/<name>/...` machine path, 1,914 occurrences across 916 tracked files) and a stray second username, anonymizing it to `~/` while preserving the relative structure. The bulk lived in the published self-improving run artifacts under `docs/self-improving/**` (checkpoint / session / transcript JSON + HTML viewers) — copied verbatim from `state/` by the hub sync — plus the portfolio site CLI mockups (`gateway.tsx` / `loop.tsx`), the Project-ID-encoding demo (`context-tiers.tsx` + 5 version snapshots, aligned to `core/paths.py`'s generic `/home/user` example), three test fixtures/docstrings, and historical CHANGELOG/changelog.ts text. A personal `~/workspace/resume` reference was likewise scrubbed (site mockups + CHANGELOG + a bash-safe-prefix test). Generic placeholder usernames (`/Users/<name>`, `/home/user`, `foo`, `somebody`, ...) are kept.
+
+### Infrastructure
+- **Repo-hygiene ratchet now rejects hardcoded home paths** (`scripts/check_repo_hygiene.py::find_home_path_leaks`; root-cause guard for the redaction above). The existing CI hygiene check (ci.yml + petri-publish.yml) already blocked absolute symlinks as "path leaks to a specific machine"; this extends it to tracked file *contents* — any `/Users/<user>/` or `/home/<user>/` with a real (non-placeholder) username fails the gate, so a future `state/`→`docs/` hub re-sync that re-introduces the operator's path is caught instead of silently shipping to the public Pages site. Placeholder usernames are allow-listed. Guards: `test_real_username_home_path_fails` + `test_placeholder_home_path_passes`.
+
 ## [0.99.197] - 2026-06-13
 
 ### Changed
@@ -1471,11 +1479,11 @@ functional change.
   the now-deleted file).
 
 ### Fixed
-- **Cross-machine portability — removed hardcoded `/Users/mango` absolute paths.**
-  `core/llm/adapters/codex_cli.py` codex-binary hint `/Users/mango/.local/bin/codex`
+- **Cross-machine portability — removed hardcoded `~` absolute paths.**
+  `core/llm/adapters/codex_cli.py` codex-binary hint `~/.local/bin/codex`
   → `os.path.expanduser("~/.local/bin/codex")` (PATH lookup stays first, so this is
   the per-user fallback). `scripts/probes/probe_codex_oauth_*.py` hardcoded
-  `/Users/mango/workspace/geode` → `Path(__file__).resolve().parents[2]`-relative
+  `~/workspace/geode` → `Path(__file__).resolve().parents[2]`-relative
   repo root, so the probes run on any checkout.
 
 ## [0.99.112] - 2026-06-01
@@ -18544,7 +18552,7 @@ routing ownership 이동.
   `core/tools/sandbox.py:validate_path()` advertised that bare `~` and `~/`
   were "expanded by Python, not shell" (`check_shell_expansion` allowed
   them through), but the actual `os.path.expanduser()` call was missing.
-  Result: paths like `~/workspace/resume/common` were joined against the
+  Result: paths like `~/workspace/example/common` were joined against the
   project root verbatim, producing `/<project>/~/workspace/...` and a
   misleading `Not a directory` error instead of the proper
   `expanded-path-outside-sandbox` permission error. Surfaced by `geode

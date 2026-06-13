@@ -251,7 +251,7 @@ export function GatewaySection() {
                     </div>
                     <pre className="text-white/40 whitespace-pre">{`  `}<span style={{color:"#9775c4"}}>╲╲</span><span className="text-white/80">{`( ◕ ᵕ ◕ )`}</span><span style={{color:"#9775c4"}}>╱╱</span>{`  `}<span style={{color:"#5f9ea0",fontWeight:700}}>GEODE</span></pre>
                     <pre className="text-white/25 whitespace-pre">{`                       claude-opus-4-7 · autonomous execution agent`}</pre>
-                    <pre className="text-white/20 whitespace-pre">{`                       /Users/mango/workspace/resume`}</pre>
+                    <pre className="text-white/20 whitespace-pre">{`                       ~/workspace/geode`}</pre>
                     <pre className="text-white/25 whitespace-pre mt-2">{`  `}<span className="text-white/30">harness:</span>{` GEODE`}</pre>
                     <pre className="text-white/40 whitespace-pre">{`  `}<span style={{color:"#22c55e",fontWeight:700}}>✓</span>{` LLM Analysis  `}<span style={{color:"#22c55e",fontWeight:700}}>✓</span>{` Project Memory  `}<span style={{color:"#22c55e",fontWeight:700}}>✓</span>{` User Profile`}</pre>
                     <pre className="text-white/40 whitespace-pre">{`  `}<span style={{color:"#22c55e",fontWeight:700}}>✓</span>{` Dry-Run Analysis  `}<span style={{color:"#22c55e",fontWeight:700}}>✓</span>{` subject Search`}</pre>

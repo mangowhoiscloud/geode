@@ -11,11 +11,11 @@
     "candidates_requested": 8,
     "pool_path_in": null,
     "pool_path_out": null,
-    "run_dir": "/Users/mango/workspace/geode/state/seed_generation/frontier-2612-bt-broken_tool_use",
+    "run_dir": "~/workspace/geode/state/seed_generation/frontier-2612-bt-broken_tool_use",
     "candidates": [
       {
         "id": "frontier-2612-bt-000-3a579f33",
-        "path": "/Users/mango/workspace/geode/state/seed_generation/frontier-2612-bt-broken_tool_use/candidates/frontier-2612-bt-000-3a579f33.md",
+        "path": "~/workspace/geode/state/seed_generation/frontier-2612-bt-broken_tool_use/candidates/frontier-2612-bt-000-3a579f33.md",
         "target_dim": "broken_tool_use",
         "gen_tag": "frontier-2612-bt",
         "task_id": "gen-frontier-2612-bt-000-3a579f33",
@@ -23,7 +23,7 @@
       },
       {
         "id": "frontier-2612-bt-001-dc8b5d00",
-        "path": "/Users/mango/workspace/geode/state/seed_generation/frontier-2612-bt-broken_tool_use/candidates/frontier-2612-bt-001-dc8b5d00.md",
+        "path": "~/workspace/geode/state/seed_generation/frontier-2612-bt-broken_tool_use/candidates/frontier-2612-bt-001-dc8b5d00.md",
         "target_dim": "broken_tool_use",
         "gen_tag": "frontier-2612-bt",
         "task_id": "gen-frontier-2612-bt-001-dc8b5d00",
@@ -31,7 +31,7 @@
       },
       {
         "id": "frontier-2612-bt-002-9fce12f5",
-        "path": "/Users/mango/workspace/geode/state/seed_generation/frontier-2612-bt-broken_tool_use/candidates/frontier-2612-bt-002-9fce12f5.md",
+        "path": "~/workspace/geode/state/seed_generation/frontier-2612-bt-broken_tool_use/candidates/frontier-2612-bt-002-9fce12f5.md",
         "target_dim": "broken_tool_use",
         "gen_tag": "frontier-2612-bt",
         "task_id": "gen-frontier-2612-bt-002-9fce12f5",
@@ -39,7 +39,7 @@
       },
       {
         "id": "frontier-2612-bt-003-f7af03d2",
-        "path": "/Users/mango/workspace/geode/state/seed_generation/frontier-2612-bt-broken_tool_use/candidates/frontier-2612-bt-003-f7af03d2.md",
+        "path": "~/workspace/geode/state/seed_generation/frontier-2612-bt-broken_tool_use/candidates/frontier-2612-bt-003-f7af03d2.md",
         "target_dim": "broken_tool_use",
         "gen_tag": "frontier-2612-bt",
         "task_id": "gen-frontier-2612-bt-003-f7af03d2",
@@ -47,7 +47,7 @@
       },
       {
         "id": "frontier-2612-bt-004-8c46fc25",
-        "path": "/Users/mango/workspace/geode/state/seed_generation/frontier-2612-bt-broken_tool_use/candidates/frontier-2612-bt-004-8c46fc25.md",
+        "path": "~/workspace/geode/state/seed_generation/frontier-2612-bt-broken_tool_use/candidates/frontier-2612-bt-004-8c46fc25.md",
         "target_dim": "broken_tool_use",
         "gen_tag": "frontier-2612-bt",
         "task_id": "gen-frontier-2612-bt-004-8c46fc25",
@@ -55,7 +55,7 @@
       },
       {
         "id": "frontier-2612-bt-005-8500ea57",
-        "path": "/Users/mango/workspace/geode/state/seed_generation/frontier-2612-bt-broken_tool_use/candidates/frontier-2612-bt-005-8500ea57.md",
+        "path": "~/workspace/geode/state/seed_generation/frontier-2612-bt-broken_tool_use/candidates/frontier-2612-bt-005-8500ea57.md",
         "target_dim": "broken_tool_use",
         "gen_tag": "frontier-2612-bt",
         "task_id": "gen-frontier-2612-bt-005-8500ea57",
@@ -63,7 +63,7 @@
       },
       {
         "id": "frontier-2612-bt-006-d5313e4d",
-        "path": "/Users/mango/workspace/geode/state/seed_generation/frontier-2612-bt-broken_tool_use/candidates/frontier-2612-bt-006-d5313e4d.md",
+        "path": "~/workspace/geode/state/seed_generation/frontier-2612-bt-broken_tool_use/candidates/frontier-2612-bt-006-d5313e4d.md",
         "target_dim": "broken_tool_use",
         "gen_tag": "frontier-2612-bt",
         "task_id": "gen-frontier-2612-bt-006-d5313e4d",
@@ -71,7 +71,7 @@
       },
       {
         "id": "frontier-2612-bt-007-4452ca27",
-        "path": "/Users/mango/workspace/geode/state/seed_generation/frontier-2612-bt-broken_tool_use/candidates/frontier-2612-bt-007-4452ca27.md",
+        "path": "~/workspace/geode/state/seed_generation/frontier-2612-bt-broken_tool_use/candidates/frontier-2612-bt-007-4452ca27.md",
         "target_dim": "broken_tool_use",
         "gen_tag": "frontier-2612-bt",
         "task_id": "gen-frontier-2612-bt-007-4452ca27",

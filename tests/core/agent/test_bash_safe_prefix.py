@@ -77,7 +77,7 @@ class TestReadOnlyPipelines:
     def test_find_pipe_sed_pipe_head_is_safe(self):
         """The exact command shape the agent emits for file enumeration."""
         assert self._is_safe(
-            "find ~/workspace/resume/common -maxdepth 3 -type f | sed 's#^#- #' | head -200"
+            "find ~/workspace/example/common -maxdepth 3 -type f | sed 's#^#- #' | head -200"
         )
 
     def test_ls_pipe_grep_pipe_head_is_safe(self):
