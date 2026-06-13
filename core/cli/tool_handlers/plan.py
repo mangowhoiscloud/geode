@@ -44,6 +44,10 @@ def _build_plan_handlers(force_dry: bool) -> dict[str, Any]:
         from core.config import settings
         from core.orchestration.plan_mode import PlanExecutionMode, PlanMode
 
+        # --dangerously-skip-permissions treats the plan-approval stop as just
+        # another HITL gate: skip it and run the plan immediately (plan → action).
+        auto_execute = settings.plan_auto_execute or settings.dangerously_skip_permissions
+
         goal = kwargs.get("goal", "")
         subject = kwargs.get("subject") or kwargs.get("subject_id", "")
         custom_steps = kwargs.get("steps", [])
@@ -93,7 +97,7 @@ def _build_plan_handlers(force_dry: bool) -> dict[str, Any]:
             f"  [muted]예상: {plan.total_estimated_time_s:.0f}s · "
             f"{plan.step_count} 단계 · plan_id={plan.plan_id}[/muted]"
         )
-        if not settings.plan_auto_execute:
+        if not auto_execute:
             console.print(
                 "  [dim]→ 승인(approve_plan) · 수정(modify_plan) · 거부(reject_plan)[/dim]"
             )
@@ -106,7 +110,7 @@ def _build_plan_handlers(force_dry: bool) -> dict[str, Any]:
         )
 
         # AUTO mode: approve and execute immediately without user intervention
-        if settings.plan_auto_execute:
+        if auto_execute:
             store.put(plan)
             log.info(
                 "PlanStore write (AUTO): plan_id=%s len=%d",

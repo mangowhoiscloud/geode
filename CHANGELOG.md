@@ -45,6 +45,11 @@ functional change.
 
 ---
 
+## [0.99.209] - 2026-06-14
+
+### Added
+- **`--dangerously-skip-permissions` flag** (Claude Code parity; operator-directed). A single opt-in for a frictionless autonomous agent experience: when set, EVERY HITL gate is bypassed (write/expensive/bash/MCP approval) AND the plan-approval stop is skipped — after `create_plan` the agent runs the plan immediately instead of waiting for `approve_plan` ("treat the plan stop like any other HITL gate"). Wiring: `core/config/_settings.py` `dangerously_skip_permissions` (env `GEODE_DANGEROUSLY_SKIP_PERMISSIONS`); the `geode --dangerously-skip-permissions` callback (`core/cli/__init__.py`) sets the env (so a freshly auto-started daemon inherits it) + prints a warning banner; the thin CLI advertises it in the `client_capability` handshake (`core/cli/ipc_client.py`), and the daemon adopts it per connection (`core/server/ipc_server/poller.py::_adopt_skip_permissions` — sets both env and the in-memory singleton, explicit each connection so a normal client resets it, no sticky-on) so a RUNNING daemon honours it without a restart; `core/server/supervised/services.py::create_session` then forces `hitl_level=0` + `auto_approve=True` for every mode (overriding REPL/IPC's default `hitl=2`); the plan handler (`core/cli/tool_handlers/plan.py`) treats it as `plan_auto_execute`. The headless tool-deny filter (`_HEADLESS_DENIED_TOOLS` for Slack/cron) is intentionally left intact — a separate unattended-channel safety concern. Guards: `tests/core/server/test_dangerously_skip_permissions.py` (settings, create_session override, adopt no-sticky, capability advertise) + plan-handler auto-execute tests.
+
 ## [0.99.208] - 2026-06-14
 
 ### Fixed

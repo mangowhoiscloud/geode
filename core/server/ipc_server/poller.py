@@ -63,6 +63,27 @@ def _get_client_capability() -> tuple[bool, int]:
     return is_tty, width
 
 
+def _adopt_skip_permissions(msg: dict[str, Any]) -> None:
+    """Adopt the thin CLI's ``--dangerously-skip-permissions`` for this connection.
+
+    Sets BOTH ``os.environ`` (so ``create_session``'s
+    ``reload_settings_from_disk()`` keeps it for the plan handler) and the
+    in-memory singleton (read by the executor before that reload). Set
+    explicitly on every ``client_capability`` so a normal client resets it —
+    no sticky-on across connections. Single-user daemon: process-global mirror
+    of the connecting client's intent, same pattern as model adoption.
+    """
+    import os
+
+    from core.config import settings
+
+    skip = bool(msg.get("dangerously_skip_permissions", False))
+    os.environ["GEODE_DANGEROUSLY_SKIP_PERMISSIONS"] = "1" if skip else "0"
+    settings.dangerously_skip_permissions = skip
+    if skip:
+        log.warning("client_capability: --dangerously-skip-permissions ACTIVE (all HITL bypassed)")
+
+
 class _AsyncClientEndpoint:
     """Thread-safe bridge around an asyncio StreamWriter.
 
@@ -609,6 +630,7 @@ class CLIPoller:
                     log.warning(
                         "client_capability: failed to adopt CLI model %s", cli_model, exc_info=True
                     )
+            _adopt_skip_permissions(msg)
             log.debug("client_capability: is_tty=%s width=%d", is_tty, width if width > 0 else 120)
             return {"type": "ack"}
 
@@ -775,6 +797,7 @@ class CLIPoller:
                 width = 120
             _client_capability_local.is_tty = is_tty
             _client_capability_local.width = width
+            _adopt_skip_permissions(msg)
             log.debug("client_capability: is_tty=%s width=%d", is_tty, width)
             return {"type": "ack"}
 

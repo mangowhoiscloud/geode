@@ -154,6 +154,18 @@ class SharedServices:
         if mode == SessionMode.REPL:
             quiet = not verbose
 
+        # --dangerously-skip-permissions: force EVERY HITL gate open for every
+        # mode (REPL/IPC's hitl=2 → 0) + auto-approve. Read in-memory here (the
+        # ``client_capability`` handler set it before the prompt arrived, and
+        # also set GEODE_DANGEROUSLY_SKIP_PERMISSIONS so the
+        # ``reload_settings_from_disk()`` below keeps it for the plan handler).
+        from core.config import settings as _skip_settings
+
+        auto_approve = False
+        if getattr(_skip_settings, "dangerously_skip_permissions", False):
+            hitl = 0
+            auto_approve = True
+
         # Conversation context
         if conversation is None:
             from core.agent.conversation import ConversationContext
@@ -177,6 +189,7 @@ class SharedServices:
             mcp_manager=self.mcp_manager,
             sub_agent_manager=sub_mgr,
             hitl_level=hitl,
+            auto_approve=auto_approve,
             hooks=self.hook_system,
             approval_callback=approval_cb,
         )

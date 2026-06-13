@@ -94,3 +94,34 @@ def test_create_plan_auto_execute_path(monkeypatch: pytest.MonkeyPatch) -> None:
     assert result["status"] == "ok"
     assert result["auto_executed"] is True
     assert result["execution_result"]["completed_steps"] == 1
+
+
+def test_dangerously_skip_permissions_auto_executes_plan(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """--dangerously-skip-permissions bypasses the plan-approval stop even when
+    ``plan_auto_execute`` is off (plan → action directly)."""
+    store = InMemoryPlanStore()
+    monkeypatch.setattr(tool_handlers, "_PLAN_STORE", store)
+    monkeypatch.setattr("core.config.settings.plan_auto_execute", False)
+    monkeypatch.setattr("core.config.settings.dangerously_skip_permissions", True)
+    handlers = _build_plan_handlers(force_dry=True)
+
+    result = handlers["create_plan"](goal="skip and run")
+
+    assert result["auto_executed"] is True
+    assert result["execution_mode"] == "auto"
+
+
+def test_no_skip_keeps_plan_manual(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Without the flag (and auto-execute off) the plan stops for approval."""
+    store = InMemoryPlanStore()
+    monkeypatch.setattr(tool_handlers, "_PLAN_STORE", store)
+    monkeypatch.setattr("core.config.settings.plan_auto_execute", False)
+    monkeypatch.setattr("core.config.settings.dangerously_skip_permissions", False)
+    handlers = _build_plan_handlers(force_dry=True)
+
+    result = handlers["create_plan"](goal="wait for approval")
+
+    assert result["execution_mode"] == "manual"
+    assert "auto_executed" not in result
