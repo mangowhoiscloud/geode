@@ -40,13 +40,12 @@ free-form prose — easier to A/B-test and roll back.
 
 from __future__ import annotations
 
-import json
 import logging
 from pathlib import Path
 from typing import Any
 
+from core.agent.policy_sot import load_policy_sot
 from core.paths import GLOBAL_STYLE_GUIDE_PATH, OPERATOR_LOCAL_STYLE_GUIDE_PATH
-from core.self_improving.loop.mutate.sot_resolution import resolve_sot
 
 log = logging.getLogger(__name__)
 
@@ -97,43 +96,15 @@ _DIRECTIVES: dict[str, dict[str, str]] = {
 
 def _load_style_guide_override() -> dict[str, str] | None:
     """Return the active style guide dict, or ``None`` if no SoT applies."""
-    selection = resolve_sot(
+    return load_policy_sot(
         env_var=_STYLE_GUIDE_OVERRIDE_ENV,
         operator_local=_OPERATOR_LOCAL_STYLE_GUIDE_PATH,
         in_repo=_STYLE_GUIDE_SOT_PATH,
+        label="style-guide",
+        validate_strict=_validate_schema,
+        validate_graceful=_validate_schema,
+        coerce=_coerce,
     )
-    if selection is None:
-        return None
-    if selection.strict:
-        return _strict_load(selection.path)
-    return _graceful_load(selection.path)
-
-
-def _strict_load(path: Path) -> dict[str, str]:
-    if not path.is_file():
-        raise RuntimeError(f"{_STYLE_GUIDE_OVERRIDE_ENV}={path} file not found")
-    try:
-        raw = path.read_text(encoding="utf-8")
-        data = json.loads(raw)
-    except (OSError, json.JSONDecodeError) as exc:
-        raise RuntimeError(f"{_STYLE_GUIDE_OVERRIDE_ENV}={path} load failed: {exc}") from exc
-    _validate_schema(data, path)
-    return _coerce(data)
-
-
-def _graceful_load(path: Path) -> dict[str, str] | None:
-    try:
-        raw = path.read_text(encoding="utf-8")
-        data = json.loads(raw)
-    except (OSError, json.JSONDecodeError):
-        log.warning("style-guide SoT at %s is unreadable; ignoring", path)
-        return None
-    try:
-        _validate_schema(data, path)
-    except RuntimeError as exc:
-        log.warning("style-guide SoT at %s schema invalid: %s; ignoring", path, exc)
-        return None
-    return _coerce(data)
 
 
 def _validate_schema(data: Any, path: Path) -> None:

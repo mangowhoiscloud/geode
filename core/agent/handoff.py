@@ -20,18 +20,16 @@ Adapted from hermes-agent's `sessions` table handoff_state pattern
    (the successor invocation is out of scope; a future PR can extend
    the watcher to re-spawn).
 
-State machine::
-
-    None ─request_handoff()─► PENDING
-                                  │
-                                  │ claim_handoff()
-                                  ▼
-                              RUNNING
-                                  │
-                       ┌──────────┴──────────┐
-                       │                     │
-                       ▼                     ▼
-                  COMPLETED              FAILED
+PR-LOOP-PRUNE (2026-06-13): the watcher-side API (claim / complete /
+fail / list_pending / handoff_summary) and its reserved HookEvents
+(HANDOFF_COMPLETED / HANDOFF_FAILED) were deleted — no watcher exists,
+so none of it had a production caller since PR-CL-BUDGET
+(reserve-without-emit rule). What remains is the minimal write+read
+pair: ``request_handoff`` (loop fires it once at the T-10min budget
+threshold) and ``get_handoff`` (row inspection — keeps the persisted
+contract readable so the table is not write-only). Rebuild the watcher
+API in the same PR that builds the watcher; the RUNNING/COMPLETED/
+FAILED enum states stay because persisted rows may carry them.
 
 Schema lives in :mod:`core.memory.session_manager` (3 ALTER TABLE
 columns on the existing ``sessions`` table — additive, no rename).
@@ -44,18 +42,13 @@ import sqlite3
 import time
 from dataclasses import dataclass
 from enum import StrEnum
-from typing import Any
 
 log = logging.getLogger(__name__)
 
 __all__ = [
     "Handoff",
     "HandoffState",
-    "claim_handoff",
-    "complete_handoff",
-    "fail_handoff",
     "get_handoff",
-    "list_pending_handoffs",
     "request_handoff",
 ]
 
@@ -118,54 +111,6 @@ def request_handoff(
     return cursor.rowcount > 0
 
 
-def claim_handoff(conn: sqlite3.Connection, *, session_id: str) -> bool:
-    """Atomic CAS PENDING → RUNNING claim. Returns True if the watcher
-    successfully claimed this row, False if another watcher beat it or
-    the row isn't pending."""
-    cursor = conn.execute(
-        """\
-        UPDATE sessions
-        SET handoff_state = ?
-        WHERE session_id = ? AND handoff_state = ?
-        """,
-        (HandoffState.RUNNING.value, session_id, HandoffState.PENDING.value),
-    )
-    conn.commit()
-    return cursor.rowcount > 0
-
-
-def complete_handoff(conn: sqlite3.Connection, *, session_id: str) -> bool:
-    """Mark a claimed handoff as COMPLETED. Returns True iff state was
-    RUNNING (idempotent on COMPLETED — returns False without raising)."""
-    cursor = conn.execute(
-        """\
-        UPDATE sessions
-        SET handoff_state = ?
-        WHERE session_id = ? AND handoff_state = ?
-        """,
-        (HandoffState.COMPLETED.value, session_id, HandoffState.RUNNING.value),
-    )
-    conn.commit()
-    return cursor.rowcount > 0
-
-
-def fail_handoff(conn: sqlite3.Connection, *, session_id: str, error: str) -> bool:
-    """Mark a handoff as FAILED with an error message. Returns True iff
-    state was RUNNING. Truncates the error string at 500 chars (matches
-    hermes ``handoff_error`` TEXT column convention)."""
-    safe_error = (error or "")[:500]
-    cursor = conn.execute(
-        """\
-        UPDATE sessions
-        SET handoff_state = ?, handoff_error = ?
-        WHERE session_id = ? AND handoff_state = ?
-        """,
-        (HandoffState.FAILED.value, safe_error, session_id, HandoffState.RUNNING.value),
-    )
-    conn.commit()
-    return cursor.rowcount > 0
-
-
 def get_handoff(conn: sqlite3.Connection, *, session_id: str) -> Handoff | None:
     """Read the current handoff snapshot for a session. Returns None when
     the session row is missing (not a handoff-state thing — that's a
@@ -197,45 +142,3 @@ def get_handoff(conn: sqlite3.Connection, *, session_id: str) -> Handoff | None:
         error=str(row[3] or ""),
         triggered_at=float(row[4] or 0.0),
     )
-
-
-def list_pending_handoffs(conn: sqlite3.Connection, *, limit: int = 50) -> list[Handoff]:
-    """Watcher-side reader — return all PENDING rows ordered by
-    ``triggered_at`` so the oldest pending claim is processed first."""
-    rows = conn.execute(
-        """\
-        SELECT session_id, handoff_state, handoff_platform, handoff_error,
-               handoff_triggered_at
-        FROM sessions
-        WHERE handoff_state = ?
-        ORDER BY handoff_triggered_at ASC
-        LIMIT ?
-        """,
-        (HandoffState.PENDING.value, limit),
-    ).fetchall()
-    out: list[Handoff] = []
-    for r in rows:
-        out.append(
-            Handoff(
-                session_id=str(r[0]),
-                state=HandoffState.PENDING,
-                platform=str(r[2] or ""),
-                error=str(r[3] or ""),
-                triggered_at=float(r[4] or 0.0),
-            )
-        )
-    return out
-
-
-def handoff_summary(handoff: Handoff | None) -> dict[str, Any]:
-    """JSON-friendly summary used in HANDOFF hook payloads + transcript
-    rows. Empty dict when handoff is None or NONE state."""
-    if handoff is None or handoff.state is HandoffState.NONE:
-        return {}
-    return {
-        "session_id": handoff.session_id,
-        "state": handoff.state.value,
-        "platform": handoff.platform,
-        "error": handoff.error,
-        "triggered_at": handoff.triggered_at,
-    }

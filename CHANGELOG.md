@@ -45,6 +45,15 @@ functional change.
 
 ---
 
+## [0.99.196] - 2026-06-13
+
+### Removed
+- **Loop prune — reserve-without-emit pair + dead watcher API** (PR-LOOP-PRUNE; operator-directed pre-1.0 tidy). `HookEvent.HANDOFF_COMPLETED`/`HANDOFF_FAILED` deleted (64 → 62 events) together with the unbuilt watcher's entire API surface in `core/agent/handoff.py` — `claim_handoff`/`complete_handoff`/`fail_handoff`/`list_pending_handoffs`/`handoff_summary` had zero production callers since PR-CL-BUDGET (the watcher was never built). What remains is the minimal write+read pair (`request_handoff` fired at the T-10min budget threshold + `get_handoff` row inspection) so the persisted table is not write-only; activity rows (`HandoffCompletedRow`/`HandoffFailedRow`) and registry entries removed with their events. Audit false-positive refuted with evidence: the `SELF_IMPROVING_AUTO_TRIGGER_*` 6-event family is NOT dead — `auto_trigger.py` emits via string-name indirection (`STATE_TO_HOOK_EVENT` → `getattr(HookEvent, name)`, auto_trigger.py:332), invisible to attribute-pattern greps. Event-count SoT synced across 6 surfaces (hook-system.md KO/EN, CLAUDE.md, GEODE.md, site hooks page).
+
+### Changed
+- **Policy SoT loading deduplicated 7-to-1** — `core/agent/policy_sot.py:load_policy_sot` now owns the strict (audit path, fail-fast RuntimeError) / graceful (daily path, WARN + None) JSON-loading asymmetry that heuristics/style-guide/tool/reflection/decomposition/agent-contracts/tool-descriptions policy modules each carried as a textually identical `_strict_load`/`_graceful_load` pair (~420 duplicated lines; net diff -424). Per-module validators/coercers stay local; tool_policy's strict-flag validator variance handled via per-mode callables. Log labels and the env-var error message shapes ("file not found"/"load failed") preserved exactly — pinned tests unchanged.
+- Audit suggestion declined with rationale: caching `_load_wrapper_override()` per session would break live pickup of self-improving-loop mutations — the per-call lazy read is the documented design (ADR-012 injection pipeline), not an inefficiency.
+
 ## [0.99.195] - 2026-06-13
 
 ### Fixed

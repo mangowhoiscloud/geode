@@ -207,7 +207,7 @@ def test_i5_all_hookevents_produce_a_row() -> None:
     enum value either has a typed builder entry or falls through to
     ``GenericActivityRow`` — never raises."""
     all_events = list(HookEvent)
-    assert len(all_events) >= 64, f"expected at least 64 HookEvents, got {len(all_events)}"
+    assert len(all_events) >= 62, f"expected at least 62 HookEvents, got {len(all_events)}"
 
     typed_count = 0
     for event in all_events:
@@ -221,7 +221,9 @@ def test_i5_all_hookevents_produce_a_row() -> None:
 
     # 21 lifecycle events typed (A=6, B=9, C=5, D=1) — PR-DEAD-PIPELINE
     # removed the 11 pipeline/node/analysis rows.
-    assert typed_count == 21, f"expected 21 typed lifecycle events, got {typed_count}"
+    assert typed_count == 19, (
+        f"expected 19 typed lifecycle events, got {typed_count}"
+    )  # PR-LOOP-PRUNE: handoff pair deleted
 
 
 def test_i5_registry_action_matches_concrete_action_literal() -> None:

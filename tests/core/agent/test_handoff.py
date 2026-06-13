@@ -2,10 +2,7 @@
 
 Verifies the 5-state machine (NONE → PENDING → RUNNING → COMPLETED/FAILED):
 - atomic CAS for ``request_handoff`` (no double-trigger)
-- atomic CAS for ``claim_handoff`` (multi-watcher race-safe)
-- ``complete_handoff`` / ``fail_handoff`` only from RUNNING state
 - ``get_handoff`` returns snapshot, None when session missing
-- ``list_pending_handoffs`` is ordered by triggered_at ASC
 - Migration: legacy DB without handoff cols → ALTER TABLE adds them
 - ``SessionManager`` __init__ runs the migration idempotently
 
@@ -19,14 +16,8 @@ from pathlib import Path
 
 import pytest
 from core.agent.handoff import (
-    Handoff,
     HandoffState,
-    claim_handoff,
-    complete_handoff,
-    fail_handoff,
     get_handoff,
-    handoff_summary,
-    list_pending_handoffs,
     request_handoff,
 )
 from core.memory.session_manager import SessionManager, SessionMeta
@@ -83,102 +74,9 @@ def test_request_handoff_idempotent_on_pending(manager: SessionManager) -> None:
     assert snapshot.platform == "x"  # First write wins.
 
 
-def test_claim_handoff_atomic(manager: SessionManager) -> None:
-    """Claim flips PENDING → RUNNING; subsequent claim returns False."""
-    _seed_session(manager, "s3")
-    request_handoff(manager._conn, session_id="s3")
-    assert claim_handoff(manager._conn, session_id="s3") is True
-    snapshot = get_handoff(manager._conn, session_id="s3")
-    assert snapshot is not None
-    assert snapshot.state is HandoffState.RUNNING
-    # Second watcher loses the race.
-    assert claim_handoff(manager._conn, session_id="s3") is False
-
-
-def test_claim_handoff_rejects_non_pending(manager: SessionManager) -> None:
-    """Cannot claim a row that's still NONE state."""
-    _seed_session(manager, "s4")
-    assert claim_handoff(manager._conn, session_id="s4") is False
-
-
-def test_complete_handoff_from_running(manager: SessionManager) -> None:
-    """RUNNING → COMPLETED."""
-    _seed_session(manager, "s5")
-    request_handoff(manager._conn, session_id="s5")
-    claim_handoff(manager._conn, session_id="s5")
-    assert complete_handoff(manager._conn, session_id="s5") is True
-    snapshot = get_handoff(manager._conn, session_id="s5")
-    assert snapshot is not None
-    assert snapshot.state is HandoffState.COMPLETED
-
-
-def test_complete_handoff_rejects_non_running(manager: SessionManager) -> None:
-    """Cannot mark COMPLETED from PENDING (missing claim)."""
-    _seed_session(manager, "s6")
-    request_handoff(manager._conn, session_id="s6")
-    assert complete_handoff(manager._conn, session_id="s6") is False
-
-
-def test_fail_handoff_records_error(manager: SessionManager) -> None:
-    """RUNNING → FAILED with truncated error message (500 char cap)."""
-    _seed_session(manager, "s7")
-    request_handoff(manager._conn, session_id="s7")
-    claim_handoff(manager._conn, session_id="s7")
-    big_error = "x" * 1000
-    assert fail_handoff(manager._conn, session_id="s7", error=big_error) is True
-    snapshot = get_handoff(manager._conn, session_id="s7")
-    assert snapshot is not None
-    assert snapshot.state is HandoffState.FAILED
-    assert len(snapshot.error) == 500
-
-
 def test_get_handoff_missing_session(manager: SessionManager) -> None:
     """Unknown session_id returns None, not an exception."""
     assert get_handoff(manager._conn, session_id="ghost") is None
-
-
-def test_list_pending_handoffs_orders_by_triggered_at(manager: SessionManager) -> None:
-    """Oldest pending first — watcher fairness."""
-    _seed_session(manager, "early")
-    _seed_session(manager, "middle")
-    _seed_session(manager, "late")
-    request_handoff(manager._conn, session_id="late", triggered_at=300.0)
-    request_handoff(manager._conn, session_id="early", triggered_at=100.0)
-    request_handoff(manager._conn, session_id="middle", triggered_at=200.0)
-    pending = list_pending_handoffs(manager._conn)
-    assert [h.session_id for h in pending] == ["early", "middle", "late"]
-
-
-def test_list_pending_handoffs_excludes_claimed(manager: SessionManager) -> None:
-    """RUNNING / COMPLETED rows are not surfaced to the watcher."""
-    _seed_session(manager, "p1")
-    _seed_session(manager, "p2")
-    request_handoff(manager._conn, session_id="p1")
-    request_handoff(manager._conn, session_id="p2")
-    claim_handoff(manager._conn, session_id="p1")  # p1 → RUNNING
-    pending = list_pending_handoffs(manager._conn)
-    assert [h.session_id for h in pending] == ["p2"]
-
-
-def test_handoff_summary_renders() -> None:
-    """``handoff_summary`` produces hook-payload-friendly dict."""
-    snap = Handoff(
-        session_id="s",
-        state=HandoffState.PENDING,
-        platform="slack",
-        triggered_at=123.456,
-    )
-    summary = handoff_summary(snap)
-    assert summary["session_id"] == "s"
-    assert summary["state"] == "pending"
-    assert summary["platform"] == "slack"
-    assert summary["triggered_at"] == 123.456
-
-
-def test_handoff_summary_empty_on_none() -> None:
-    """``None`` snapshot → empty dict, never crashes."""
-    assert handoff_summary(None) == {}
-    assert handoff_summary(Handoff(session_id="s", state=HandoffState.NONE)) == {}
 
 
 def test_legacy_db_migration_adds_columns(tmp_path: Path) -> None:

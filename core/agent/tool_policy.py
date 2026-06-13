@@ -38,13 +38,12 @@ reader 의 패턴을 그대로 차용해 ``tool-policy.json`` 의 정책을 도�
 
 from __future__ import annotations
 
-import json
 import logging
 from pathlib import Path
 from typing import Any
 
+from core.agent.policy_sot import load_policy_sot
 from core.paths import GLOBAL_TOOL_POLICY_PATH, OPERATOR_LOCAL_TOOL_POLICY_PATH
-from core.self_improving.loop.mutate.sot_resolution import resolve_sot
 
 log = logging.getLogger(__name__)
 
@@ -71,49 +70,15 @@ def _load_tool_policy_override() -> dict[str, list[str]] | None:
 
     Resolution order — see module docstring (3-layer chain).
     """
-    selection = resolve_sot(
+    return load_policy_sot(
         env_var=_TOOL_POLICY_OVERRIDE_ENV,
         operator_local=_OPERATOR_LOCAL_TOOL_POLICY_PATH,
         in_repo=_TOOL_POLICY_SOT_PATH,
+        label="tool policy",
+        validate_strict=lambda data, path: _validate_schema(data, path, strict=True),
+        validate_graceful=lambda data, path: _validate_schema(data, path, strict=False),
+        coerce=_coerce,
     )
-    if selection is None:
-        return None
-    if selection.strict:
-        return _strict_load(selection.path)
-    return _graceful_load(selection.path)
-
-
-def _strict_load(path: Path) -> dict[str, list[str]]:
-    """Audit-subprocess path: schema 실패 시 ``RuntimeError`` (fail-fast)."""
-    if not path.is_file():
-        raise RuntimeError(f"{_TOOL_POLICY_OVERRIDE_ENV}={path} file not found")
-    try:
-        raw = path.read_text(encoding="utf-8")
-        data = json.loads(raw)
-    except (OSError, json.JSONDecodeError) as exc:
-        raise RuntimeError(f"{_TOOL_POLICY_OVERRIDE_ENV}={path} load failed: {exc}") from exc
-    _validate_schema(data, path, strict=True)
-    return _coerce(data)
-
-
-def _graceful_load(path: Path) -> dict[str, list[str]] | None:
-    """Daily-run path: schema 실패 시 WARNING + ``None`` (graceful degrade).
-
-    Asymmetric handling vs ``_strict_load`` is intentional — 동일 사유
-    (``wrapper-sections.json`` reader 의 docstring 참조): 일상 ``geode``
-    호출이 손상된 self-improving-loop artifact 때문에 hard-fail 하면 안 됨."""
-    try:
-        raw = path.read_text(encoding="utf-8")
-        data = json.loads(raw)
-    except (OSError, json.JSONDecodeError):
-        log.warning("tool policy SoT at %s is unreadable; ignoring", path)
-        return None
-    try:
-        _validate_schema(data, path, strict=False)
-    except RuntimeError as exc:
-        log.warning("tool policy SoT at %s schema invalid: %s; ignoring", path, exc)
-        return None
-    return _coerce(data)
 
 
 def _validate_schema(data: Any, path: Path, *, strict: bool) -> None:

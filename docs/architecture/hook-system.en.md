@@ -37,7 +37,7 @@ The Hook System evolves beyond simple event logging through 4 stages: **Observe,
 ├─────────────────────────────────────────────────────────────────┤
 │  L1 OBSERVE    Record only, no state changes                    │
 │                                                                 │
-│  ✓ RunLog             P50  ALL 64 events → JSONL                │
+│  ✓ RunLog             P50  ALL 62 events → JSONL                │
 │  ✓ JournalHook        P60  END/ERROR/SUBAGENT → journal         │
 │  ✓ NotificationHook  P200  SUBAGENT_FAILED → Slack             │
 │  ✓ TableLoggers ×20+  P90  tool exec / llm / cost → struct log  │
@@ -112,7 +112,7 @@ graph TB
 
 ---
 
-## HookEvent Enum (64 events)
+## HookEvent Enum (62 events)
 
 | Category | Event | Source | Handler | Maturity |
 |---|---|---|---|---|
@@ -161,7 +161,7 @@ AgenticLoop turn boundary:
 
 | P | Handler Name | Subscribed Events | Registration Location | Maturity |
 |---|---|---|---|---|
-| **50** | `run_log_writer` | **All 64 events** | `bootstrap.build_hooks()` | L1 |
+| **50** | `run_log_writer` | **All 62 events** | `bootstrap.build_hooks()` | L1 |
 | **60** | `journal_subagent` | `SUBAGENT_COMPLETED` | `bootstrap.build_hooks()` | L1 |
 | **85** | `turn_auto_memory` | `TURN_COMPLETE` | `bootstrap.build_hooks()` | L2 |
 | **90** | `trigger_logger` | `TRIGGER_FIRED` | `scheduling.build_scheduling()` | L1 |

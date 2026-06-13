@@ -36,8 +36,6 @@ __all__ = [
     "CognitiveStepRow",
     "CostBudgetRow",
     "GenericActivityRow",
-    "HandoffCompletedRow",
-    "HandoffFailedRow",
     "HandoffTriggeredRow",
     "LLMCallEndedRow",
     "LLMCallFailedRow",
@@ -290,11 +288,6 @@ class ToolExecEndedRow(LifecycleCompletedRow):
     entity_type: Literal["tool_call"] = "tool_call"
 
 
-class HandoffCompletedRow(LifecycleCompletedRow):
-    action: Literal["handoff.completed"] = "handoff.completed"
-    entity_type: Literal["handoff"] = "handoff"
-
-
 class ToolRecoverySucceededRow(LifecycleCompletedRow):
     action: Literal["tool.recovery.succeeded"] = "tool.recovery.succeeded"
     entity_type: Literal["tool_call"] = "tool_call"
@@ -333,11 +326,6 @@ class ToolRecoveryFailedRow(LifecycleFailedRow):
     entity_type: Literal["tool_call"] = "tool_call"
 
 
-class HandoffFailedRow(LifecycleFailedRow):
-    action: Literal["handoff.failed"] = "handoff.failed"
-    entity_type: Literal["handoff"] = "handoff"
-
-
 class TurnVerifyFailedRow(LifecycleFailedRow):
     action: Literal["turn.verify.failed"] = "turn.verify.failed"
     entity_type: Literal["turn_verify"] = "turn_verify"
@@ -370,7 +358,6 @@ TypedActivityRow = Annotated[
         SubAgentCompletedRow,
         LLMCallEndedRow,
         ToolExecEndedRow,
-        HandoffCompletedRow,
         ToolRecoverySucceededRow,
         TurnCompletedRow,
         TurnVerifyPassedRow,
@@ -379,7 +366,6 @@ TypedActivityRow = Annotated[
         LLMCallFailedRow,
         ToolExecFailedRow,
         ToolRecoveryFailedRow,
-        HandoffFailedRow,
         TurnVerifyFailedRow,
         # D
         LLMCallRetriedRow,
