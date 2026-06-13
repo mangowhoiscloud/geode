@@ -11,7 +11,6 @@ Third-party dependencies and their licenses:
   anthropic         — MIT License
   beautifulsoup4    — MIT License
   httpx             — BSD License
-  langgraph         — MIT License
   numpy             — BSD-3-Clause License
   openai            — MIT License
   openai-agents     — MIT License

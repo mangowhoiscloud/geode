@@ -32,7 +32,6 @@ export default function Page() {
                 <tr><td><strong>Cursor</strong></td><td>cursor.com</td><td>Composer 패턴 (참조용. GEODE는 별도 구현).</td></tr>
                 <tr><td><strong>Aider</strong></td><td>aider.chat</td><td>"AI pair programming in your terminal" 카피 패턴 (간결한 hero 1-line).</td></tr>
                 <tr><td><strong>Devin / Cognition</strong></td><td>cognition.ai/devin</td><td>"The AI software engineer" 명사구 정체성. 장기 실행 소프트웨어 에이전트 비교점.</td></tr>
-                <tr><td><strong>LangGraph</strong></td><td><a href="https://www.langchain.com/langgraph">langchain.com/langgraph</a></td><td>StateGraph, Send API, Conditional Edges, Reducer 패턴. GEODE의 graph.py 직접 기반.</td></tr>
               </tbody>
             </table>
 
@@ -136,7 +135,6 @@ export default function Page() {
                 <tr><td><strong>Cursor</strong></td><td>cursor.com</td><td>Composer pattern (reference; GEODE implements separately).</td></tr>
                 <tr><td><strong>Aider</strong></td><td>aider.chat</td><td>"AI pair programming in your terminal" copy pattern (succinct one-line hero).</td></tr>
                 <tr><td><strong>Devin / Cognition</strong></td><td>cognition.ai/devin</td><td>"The AI software engineer" noun-anchored identity. Long-running software-agent comparison point.</td></tr>
-                <tr><td><strong>LangGraph</strong></td><td><a href="https://www.langchain.com/langgraph">langchain.com/langgraph</a></td><td>StateGraph, Send API, Conditional Edges, Reducer patterns. The direct foundation of GEODE's graph.py.</td></tr>
               </tbody>
             </table>
 

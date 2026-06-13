@@ -2,7 +2,7 @@
 
 > GEODE is a self-evolving autonomous execution agent: an inner agentic loop runs tasks (research, analysis, automation, scheduling) and an outer self-improving loop (Petri audit -> fitness gate) tunes the system that runs them.
 
-Version v0.99.205. Last sync 2026-06-12. Full content of every docs page, one file (llms-full.txt convention). Per-page index: /llms.txt.
+Version v0.99.206. Last sync 2026-06-12. Full content of every docs page, one file (llms-full.txt convention). Per-page index: /llms.txt.
 
 ## Overview . 개요
 
@@ -3799,7 +3799,6 @@ Markdown: https://mangowhoiscloud.github.io/geode/docs/reference/external-refere
 | **Cursor** | cursor.com | Composer 패턴 (참조용. GEODE는 별도 구현). |
 | **Aider** | aider.chat | "AI pair programming in your terminal" 카피 패턴 (간결한 hero 1-line). |
 | **Devin / Cognition** | cognition.ai/devin | "The AI software engineer" 명사구 정체성. 장기 실행 소프트웨어 에이전트 비교점. |
-| **LangGraph** | [langchain.com/langgraph](https://www.langchain.com/langgraph) | StateGraph, Send API, Conditional Edges, Reducer 패턴. GEODE의 graph.py 직접 기반. |
 
 ## Diátaxis 와 docs 디자인 표준
 

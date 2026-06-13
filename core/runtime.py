@@ -27,17 +27,14 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
-    from langgraph.graph.state import CompiledStateGraph
-
     # ``from __future__ import annotations`` defers evaluation of all
     # type annotations to strings, so the classes referenced only in
     # field / variable annotations below do not need to be imported at
     # runtime.  Pushing them into ``TYPE_CHECKING`` removes their entire
-    # module trees (the L2 memory graph, scheduler.triggers, langgraph
-    # hot-reload, task system) from the cold-start path.  Each tree is
-    # loaded lazily by the wiring builders
-    # (``core.wiring.{bootstrap,scheduling}``) only when the matching
-    # component actually fires.
+    # module trees (the L2 memory graph, scheduler.triggers, task system)
+    # from the cold-start path.  Each tree is loaded lazily by the wiring
+    # builders (``core.wiring.{bootstrap,scheduling}``) only when the
+    # matching component actually fires.
     from core.memory.context import ContextAssembler
     from core.memory.organization import MonoLakeOrganizationMemory
     from core.memory.project import ProjectMemory
@@ -50,7 +47,7 @@ from core.auth.profiles import ProfileStore
 from core.auth.rotation import ProfileRotator
 from core.hooks import HookSystem
 from core.memory.port import SessionStorePort
-from core.memory.session_key import build_session_key, build_thread_config
+from core.memory.session_key import build_session_key
 from core.observability.run_log import RunLog
 from core.orchestration.lane_queue import LaneQueue
 from core.paths import GLOBAL_RUNS_DIR
@@ -122,9 +119,9 @@ class GeodeRuntime:
 
     Usage:
         runtime = GeodeRuntime.create("subject")
-        graph = runtime.compile_graph()
-        async for event in graph.astream(state, config=runtime.thread_config):
-            ...
+        # the agent executes via the AgenticLoop (core.agent.loop), not a
+        # graph; this object provides the wired infra (memory, tools, hooks,
+        # scheduler) the loop draws on.
     """
 
     def __init__(
@@ -153,7 +150,6 @@ class GeodeRuntime:
         self.mcp_manager = core.mcp_manager
         self.skill_registry = core.skill_registry
         self.readiness = core.readiness
-        self._compiled_graph: CompiledStateGraph[Any, None, Any, Any] | None = None
         # Unpack scheduling
         sched = scheduling or RuntimeSchedulingConfig()
         self.trigger_manager = sched.trigger_manager
@@ -175,7 +171,6 @@ class GeodeRuntime:
         subject_id: str,
         *,
         phase: str = "analysis",
-        enable_checkpoint: bool = True,
         log_dir: Path | str | None = None,
         session_ttl: float = DEFAULT_SESSION_TTL,
     ) -> GeodeRuntime:
@@ -352,44 +347,8 @@ class GeodeRuntime:
         return memory, scheduling
 
     # ------------------------------------------------------------------
-    # Properties
-    # ------------------------------------------------------------------
-
-    @property
-    def thread_config(self) -> dict[str, Any]:
-        """LangGraph thread config for this session."""
-        return build_thread_config(self.subject_id, "analysis")
-
-    @property
-    def checkpoint_db(self) -> str | None:
-        """Checkpoint DB path from settings, or None.
-
-        Returns None for empty strings so the MemorySaver fallback
-        in compile_graph kicks in.
-        """
-        from core.config import settings
-
-        db = settings.checkpoint_db
-        return db if db and db.strip() else None
-
-    # ------------------------------------------------------------------
     # Instance methods
     # ------------------------------------------------------------------
-
-    def compile_graph(
-        self,
-        *,
-        enable_checkpoint: bool = True,
-    ) -> CompiledStateGraph[Any, None, Any, Any]:
-        """Compile a graph with hooks and checkpointing.
-
-        Caches the compiled graph for reuse across multiple invocations.
-        """
-        raise RuntimeError(
-            "GEODE core no longer ships a built-in analysis graph. "
-            "Install an external package that provides a LangGraph pipeline "
-            "before calling compile_graph()."
-        )
 
     def store_session_data(self, data: dict[str, Any]) -> None:
         """Store data in the session store under the current session key."""
@@ -437,43 +396,6 @@ class GeodeRuntime:
     def get_available_tools(self, *, mode: str = "full_pipeline") -> list[str]:
         """Get tools available under the given pipeline mode."""
         return self.tool_registry.list_tools(policy=self.policy_chain, mode=mode)
-
-    def get_tool_state_injection(self, *, mode: str = "full_pipeline") -> dict[str, Any]:
-        """Return tool definitions for injection into graph state.
-
-        Nodes that support tool-augmented paths (for example, Synthesizer) read
-        ``_tool_definitions`` from state and ``get_async_tool_executor()`` from contextvar.
-        The executor callable is NOT stored in state (functions are not serializable
-        by LangGraph's msgpack checkpointer).
-
-        Returns empty dict if no tools are available (dry_run, etc).
-        Also injects tool executor into contextvar via ``set_async_tool_executor()``.
-        """
-        from core.tools.registry import set_async_tool_executor
-
-        available = self.tool_registry.list_tools(policy=self.policy_chain, mode=mode)
-        if not available:
-            set_async_tool_executor(None)
-            return {}
-        # PR-TOOL-SEARCH-WIRE (2026-06-13): plain serialization. The bespoke
-        # registry-level defer (to_anthropic_tools_with_defer + ToolSearchTool)
-        # was superseded by the official hosted tool-search wiring in
-        # core/llm/providers/anthropic.py — its defer_loading markers were
-        # stripped by the adapter key filter anyway, so this path never
-        # actually deferred on the wire.
-        tool_defs = self.tool_registry.to_anthropic_tools(
-            policy=self.policy_chain,
-            mode=mode,
-        )
-        if not tool_defs:
-            set_async_tool_executor(None)
-            return {}
-
-        async def _aexecutor(name: str, **kwargs: Any) -> dict[str, Any]:
-            return await self.tool_registry.aexecute(name, policy=self.policy_chain, **kwargs)
-
-        set_async_tool_executor(_aexecutor)
-        return {"_tool_definitions": tool_defs}
 
     def prune_logs(self) -> int:
         """Prune run logs if they exceed size limits."""
