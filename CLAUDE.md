@@ -8,12 +8,12 @@
 
 A general-purpose autonomous execution agent built on LangGraph. Autonomously performs research, analysis, automation, and scheduling.
 
-- **Version**: 0.99.201
+- **Version**: 0.99.202
 - **Python**: >= 3.12
 - **Package Manager**: uv
 - **Entry Points**: `geode` (`core.cli:app`, Typer) / `geode-mcp` (`core.mcp_server:main`)
 - **Modules**: 385 core + 72 plugins = 457
-- **Tests**: 8698 (+1 live)
+- **Tests**: 8717 (+1 live)
 - **CHANGELOG**: `CHANGELOG.md` (Keep a Changelog + SemVer)
 
 ## Quick Start
@@ -252,6 +252,7 @@ See `geode-changelog` skill.
 |-------------|--------------|
 | Version across 5 locations | CHANGELOG, CLAUDE.md, README.md, README.ko.md, pyproject.toml |
 | Metrics | Tests, Modules, Commands — measured values |
+| llms.txt header version | `site/public/llms.txt` + `llms-full.txt`의 `Version vX` 헤더 == pyproject. 버전 범프 시 `node site/scripts/sync-stats.mjs` (llms.txt 전체 재생성) + `uv run python scripts/check_llms_version.py --fix` (llms-full 헤더). 드리프트는 ci.yml `check_llms_version.py` ratchet가 차단(committed 스냅샷이 12버전 stale했던 사건). 본문은 배포 빌드(pages.yml)가 갱신. |
 
 **Versioning**: New feature = MINOR, Bug fix = PATCH, Docs only = none.
 
