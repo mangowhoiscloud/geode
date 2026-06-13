@@ -58,7 +58,7 @@ def _resolve_repo_root() -> Path:
 
 
 _REPO_ROOT = _resolve_repo_root()
-STATE_ROOT = Path(os.environ.get("GEODE_STATE_ROOT") or (_REPO_ROOT / "state"))
+STATE_ROOT = Path(os.environ.get("GEODE_STATE_ROOT") or (_REPO_ROOT / "state")).expanduser()
 
 # Seed pools — single SoT for the directory the campaign reads and the
 # assemble script writes (PR-CLEANUP-D2, 2026-06-10). Deliberately
@@ -220,7 +220,14 @@ def _stringify_relative(path: Path) -> str:
 # User-level (global) — ~/.geode/
 # ---------------------------------------------------------------------------
 
-GEODE_HOME = Path.home() / ".geode"
+# ``GEODE_HOME`` env override mirrors the frontier agent-CLI convention
+# (``CODEX_HOME`` / ``HERMES_HOME`` / ``OPENCLAW_HOME`` / ``PAPERCLIP_HOME`` /
+# ``CRUMB_HOME`` all resolve ``env.get({APP}_HOME) ?? ~/.{app}``) and the
+# ``GEODE_STATE_ROOT`` pattern above. Every ``GLOBAL_*`` constant derives from
+# this single point, so the override redirects the whole user-global tree (the
+# testability + alternate-home story). ``expanduser`` so ``GEODE_HOME=~/x`` and
+# ``GEODE_STATE_ROOT=~/x`` actually expand. (PR-PATH-MODERNIZE Phase 1.)
+GEODE_HOME = Path(os.environ.get("GEODE_HOME") or (Path.home() / ".geode")).expanduser()
 
 # Global config & credentials
 GLOBAL_CONFIG_TOML = GEODE_HOME / "config.toml"
