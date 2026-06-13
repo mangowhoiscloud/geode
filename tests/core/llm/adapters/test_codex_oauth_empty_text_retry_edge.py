@@ -38,8 +38,9 @@ from types import SimpleNamespace
 from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
 
+from core.llm.adapters._openai_common import build_responses_kwargs
 from core.llm.adapters.base import AdapterCallRequest, Message
-from core.llm.adapters.codex_oauth import CodexOAuthAdapter, _build_codex_call_kwargs
+from core.llm.adapters.codex_oauth import CodexOAuthAdapter
 
 _VOTE_SCHEMA: dict[str, Any] = {
     "title": "vote",
@@ -237,7 +238,9 @@ def test_acomplete_with_schema_preserves_codex_backend_invariants() -> None:
     dropping another (e.g. an over-eager refactor that overwrites kwargs)
     is caught.
     """
-    kwargs = _build_codex_call_kwargs(_voter_req(schema=_VOTE_SCHEMA))
+    kwargs = build_responses_kwargs(
+        _voter_req(schema=_VOTE_SCHEMA), backend="codex", adapter_name="codex-oauth"
+    )
     # Pre-PR invariants (must coexist with the new text block).
     assert kwargs["store"] is False
     assert kwargs["instructions"] == "You are a ranker voter."
@@ -260,8 +263,12 @@ def test_kwargs_text_format_is_the_only_schema_difference() -> None:
     ``_build_codex_call_kwargs`` quietly diverges other fields based on
     schema presence, this test catches it before it lands in production.
     """
-    no_schema = _build_codex_call_kwargs(_voter_req(schema=None))
-    with_schema = _build_codex_call_kwargs(_voter_req(schema=_VOTE_SCHEMA))
+    no_schema = build_responses_kwargs(
+        _voter_req(schema=None), backend="codex", adapter_name="codex-oauth"
+    )
+    with_schema = build_responses_kwargs(
+        _voter_req(schema=_VOTE_SCHEMA), backend="codex", adapter_name="codex-oauth"
+    )
 
     # Drop the differing field and assert the rest is identical.
     with_schema_pruned = {k: v for k, v in with_schema.items() if k != "text"}

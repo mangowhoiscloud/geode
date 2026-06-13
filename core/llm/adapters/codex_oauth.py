@@ -27,9 +27,8 @@ from typing import Any
 
 from core.llm.adapters._openai_common import (
     build_async_codex_client,
-    build_codex_input,
+    build_responses_kwargs,
     translate_codex_response,
-    translate_tool_for_codex,
 )
 from core.llm.adapters.base import (
     SOURCE_SUBSCRIPTION,
@@ -136,7 +135,7 @@ class CodexOAuthAdapter:
         forwards them to :attr:`AgenticResponse.codex_reasoning_items`.
         """
         client = self._get_client()
-        kwargs = _build_codex_call_kwargs(req)
+        kwargs = build_responses_kwargs(req, backend="codex", adapter_name="codex-oauth")
         # PR-LEGACY-PROVIDER-REMOVAL (2026-05-28) — pre-send input-shape
         # diagnostic backfilled from the now-deleted
         # ``CodexAgenticAdapter.agentic_call``. The Codex backend rejects
@@ -321,7 +320,7 @@ class CodexOAuthAdapter:
 
     async def astream(self, req: AdapterCallRequest) -> AsyncIterator[StreamEvent]:
         client = self._get_client()
-        kwargs = _build_codex_call_kwargs(req)
+        kwargs = build_responses_kwargs(req, backend="codex", adapter_name="codex-oauth")
         async with client.responses.stream(**kwargs) as stream:
             async for event in stream:
                 ev_type = getattr(event, "type", "")
@@ -403,169 +402,6 @@ class CodexOAuthAdapter:
             provider=self.provider,
             source_path=source_path,
         )
-
-
-def _build_codex_call_kwargs(req: AdapterCallRequest) -> dict[str, Any]:
-    """Codex Responses API call kwargs — mirrors CodexAgenticAdapter shape.
-
-    Critical Codex backend constraints (from
-    ``docs/research/codex-oauth-request-spec.md``):
-
-    - ``instructions`` carries the system prompt (not ``input[].role:system``)
-    - ``input`` is the user/assistant/tool array — built via
-      :func:`build_codex_input` which re-encodes Anthropic content blocks
-      into Codex typed items (``function_call`` / ``function_call_output``)
-    - ``store=False`` is mandatory
-    - ``max_output_tokens`` is FORBIDDEN — Subscription manages it
-      server-side, sending the field returns 400
-    - Tools use the FLAT shape (``translate_tool_for_codex``)
-    - Reasoning models (per
-      :func:`core.llm.adapters._openai_common.get_openai_model_spec`)
-      omit ``temperature`` and add ``reasoning`` + ``include:
-      ["reasoning.encrypted_content"]``
-    - A2 (v0.99.44): previous-turn reasoning items replay inline via
-      :func:`build_codex_input` — each assistant :class:`Message` carries
-      its own ``codex_reasoning_items`` (populated by the bridge from the
-      Anthropic-shape assistant message dict's ``codex_reasoning_items``
-      key) and ``build_codex_input`` prepends those entries at the
-      correct ordinal position. The legacy whole-input prepend approach
-      lost per-turn association for multi-assistant histories — Codex
-      MCP A2 BLOCKER 3.
-    - PR-DRIFT-CUT (2026-05-24): replaced ``req.model.startswith("gpt-5")``
-      heuristic with explicit registry lookup so o3 / o4-mini / new
-      reasoning models go through the same branch automatically.
-    """
-    from core.llm.adapters._openai_common import cap_tools, get_openai_model_spec
-
-    spec = get_openai_model_spec(req.model)
-    resp_input = build_codex_input(req)
-    kwargs: dict[str, Any] = {
-        "model": req.model,
-        "instructions": req.system_prompt or "You are a helpful assistant.",
-        "input": resp_input or [{"role": "user", "content": "hello"}],
-        "store": False,
-    }
-    if req.tools:
-        translated = [translate_tool_for_codex(t) for t in req.tools]
-        kwargs["tools"] = cap_tools(translated, model=req.model, adapter_name="codex-oauth")
-        kwargs["tool_choice"] = _translate_codex_tool_choice(req.tool_choice)
-        kwargs["parallel_tool_calls"] = True
-    if spec.reasoning_effort_values is not None:
-        # Reasoning-model branch — encrypted reasoning passthrough +
-        # reasoning effort. Temperature is dropped per spec.
-        kwargs["include"] = ["reasoning.encrypted_content"]
-        kwargs["reasoning"] = {"effort": req.effort, "summary": "auto"}
-    elif req.temperature is not None and spec.accepts_temperature:
-        kwargs["temperature"] = req.temperature
-    # PR-CODEX-OAUTH-RESPONSE-SCHEMA (2026-05-25) — Responses API
-    # structured-output enforcement. PR-JSON-WIRE (#79) routed
-    # ``req.response_schema`` through claude-cli (--json-schema) and
-    # codex-cli (--output-schema <FILE>) but silently dropped the
-    # codex-oauth path. Without API-level schema enforcement, gpt-5.x
-    # reasoning models can return ``stop_reason=completed`` with the
-    # entire output budget spent on encrypted reasoning items + empty
-    # ``output_text`` (smoke 17: 20+ codex-oauth-empty-text dumps,
-    # ~10 per match). Adding ``text.format = {type:"json_schema", ...}``
-    # forwards the schema for server-side enforcement. Spec: OpenAI
-    # Responses API ``text.format`` (replaces Chat Completions
-    # ``response_format``).
-    #
-    # Codex MCP review of PR #1687: ``strict: True`` requires the schema
-    # to satisfy OpenAI's Structured Outputs subset (all object schemas
-    # set ``additionalProperties: false`` AND every property listed in
-    # ``required``). GEODE's seed-generation schemas in
-    # ``plugins/seed_generation/json_schemas.py`` intentionally use the
-    # additive helper that omits both, so unconditional strict=True would
-    # cause the server to **reject the request** (400) before generation
-    # — a worse retry storm than the empty-text path. Auto-detect strict
-    # compatibility per schema and fall through to ``strict: False`` for
-    # non-compatible schemas (still forwards the shape as a strong hint,
-    # but server treats it as informational rather than gated).
-    if req.response_schema is not None:
-        schema_name = str(req.response_schema.get("title") or "response")
-        kwargs["text"] = {
-            "format": {
-                "type": "json_schema",
-                "name": schema_name,
-                "strict": _is_openai_strict_compatible(req.response_schema),
-                "schema": req.response_schema,
-            }
-        }
-    return kwargs
-
-
-def _is_openai_strict_compatible(schema: Any) -> bool:
-    """Check whether ``schema`` satisfies OpenAI's strict Structured Outputs subset.
-
-    Provider-specific (OpenAI Responses API only). Do NOT reuse from
-    other adapters without verifying the target API's subset rules —
-    Anthropic Structured Outputs (Claude API) shares the
-    ``additionalProperties: false`` constraint but DIVERGES on:
-
-    - ``required`` completeness: OpenAI requires every property key to
-      appear in ``required``; Anthropic allows up to 24 optional
-      properties.
-    - ``oneOf``: OpenAI supports; Anthropic does not.
-    - Numerical / string constraints (``minimum`` / ``maxLength`` …):
-      OpenAI supports; Anthropic does not.
-
-    Codex OAuth hits the OpenAI Responses API, so this helper enforces
-    OpenAI's stricter rule set. Per OpenAI docs (ctx7 `/websites/
-    developers_openai_api`, responses-vs-chat-completions guide),
-    ``strict: True`` requires every ``type: "object"`` subschema:
-
-    - sets ``additionalProperties: false`` (typed-additional or True is rejected)
-    - lists ALL declared property keys in ``required``
-
-    Plus array ``items`` and nested objects must satisfy the same recursively.
-    ``oneOf`` / ``anyOf`` / ``allOf`` branches must each be strict-compatible.
-
-    Returns ``True`` when the schema is safe to send with ``strict: True``;
-    ``False`` when ``strict: False`` should be used instead. This keeps
-    legacy GEODE schemas (designed for additive-output tolerance) from
-    causing 400 rejections while still forwarding the schema shape as a
-    server hint.
-    """
-    if not isinstance(schema, dict):
-        return True
-    schema_type = schema.get("type")
-    if schema_type == "object":
-        if schema.get("additionalProperties") is not False:
-            return False
-        properties = schema.get("properties") or {}
-        required = set(schema.get("required") or [])
-        if set(properties.keys()) != required:
-            return False
-        for prop_schema in properties.values():
-            if not _is_openai_strict_compatible(prop_schema):
-                return False
-    if "items" in schema and not _is_openai_strict_compatible(schema["items"]):
-        return False
-    for combinator_key in ("oneOf", "anyOf", "allOf"):
-        # Combinators are accepted only when every branch is strict-compatible.
-        branches = schema.get(combinator_key)
-        if isinstance(branches, list):
-            for branch in branches:
-                if not _is_openai_strict_compatible(branch):
-                    return False
-    return True
-
-
-def _translate_codex_tool_choice(tc: str | dict[str, Any]) -> str | dict[str, Any]:
-    """Adapter-neutral ``tool_choice`` → Codex Responses API wire shape.
-
-    Routes through :func:`core.llm.tool_choice.normalize` with
-    ``provider="openai"`` — Responses API uses the FLAT shape
-    ``{"type": "function", "name": "..."}`` (not the Chat nested
-    ``function`` wrapper). The legacy helper accepts the Anthropic-shape
-    dicts the AgenticLoop emits (``{"type": "auto"}`` / ``{"type":
-    "none"}`` / ``{"type": "any"}`` / ``{"type": "tool", "name": "..."}``)
-    and returns the Codex-correct payload (Codex MCP A2 BLOCKER 2).
-    """
-    from core.llm.tool_choice import normalize
-
-    normalised = normalize("openai", tc)
-    return normalised if normalised is not None else "auto"
 
 
 def _dump_empty_text_postmortem(

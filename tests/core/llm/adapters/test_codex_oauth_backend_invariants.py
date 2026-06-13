@@ -12,8 +12,8 @@ References:
 
 from __future__ import annotations
 
+from core.llm.adapters._openai_common import build_responses_kwargs
 from core.llm.adapters.base import AdapterCallRequest, Message, ToolSpec
-from core.llm.adapters.codex_oauth import _build_codex_call_kwargs
 
 
 def _req(model: str = "gpt-5.5", **kw: object) -> AdapterCallRequest:
@@ -29,20 +29,24 @@ def _req(model: str = "gpt-5.5", **kw: object) -> AdapterCallRequest:
 
 def test_codex_kwargs_does_not_send_max_output_tokens() -> None:
     """Codex backend rejects ``max_output_tokens`` with 400 — must not be sent."""
-    kwargs = _build_codex_call_kwargs(_req(max_tokens=2048))
+    kwargs = build_responses_kwargs(
+        _req(max_tokens=2048), backend="codex", adapter_name="codex-oauth"
+    )
     assert "max_output_tokens" not in kwargs
     assert "max_tokens" not in kwargs
 
 
 def test_codex_kwargs_sets_store_false() -> None:
     """``store = False`` is required on Codex backend (Plus subscription policy)."""
-    kwargs = _build_codex_call_kwargs(_req())
+    kwargs = build_responses_kwargs(_req(), backend="codex", adapter_name="codex-oauth")
     assert kwargs["store"] is False
 
 
 def test_codex_kwargs_lifts_system_prompt_to_instructions() -> None:
     """System prompt belongs in ``instructions``, not in ``input[].role=system``."""
-    kwargs = _build_codex_call_kwargs(_req(system_prompt="audit only"))
+    kwargs = build_responses_kwargs(
+        _req(system_prompt="audit only"), backend="codex", adapter_name="codex-oauth"
+    )
     assert kwargs["instructions"] == "audit only"
     roles_in_input = [m.get("role") for m in kwargs["input"]]
     assert "system" not in roles_in_input
@@ -50,13 +54,17 @@ def test_codex_kwargs_lifts_system_prompt_to_instructions() -> None:
 
 def test_codex_kwargs_instructions_default_when_empty() -> None:
     """Empty system_prompt still produces a non-empty instructions string."""
-    kwargs = _build_codex_call_kwargs(_req(system_prompt=""))
+    kwargs = build_responses_kwargs(
+        _req(system_prompt=""), backend="codex", adapter_name="codex-oauth"
+    )
     assert kwargs["instructions"]  # non-empty fallback
 
 
 def test_codex_kwargs_gpt5_omits_temperature_adds_reasoning() -> None:
     """gpt-5.x family omits ``temperature`` and adds ``reasoning`` block."""
-    kwargs = _build_codex_call_kwargs(_req(model="gpt-5.5", temperature=0.7))
+    kwargs = build_responses_kwargs(
+        _req(model="gpt-5.5", temperature=0.7), backend="codex", adapter_name="codex-oauth"
+    )
     assert "temperature" not in kwargs
     assert kwargs["reasoning"] == {"effort": "medium", "summary": "auto"}
     assert kwargs["include"] == ["reasoning.encrypted_content"]
@@ -72,7 +80,9 @@ def test_codex_kwargs_o_series_also_omits_temperature() -> None:
     omit ``temperature`` and add the ``reasoning`` block. Verified
     2026-05-24 against OpenAI reasoning-models guide.
     """
-    kwargs = _build_codex_call_kwargs(_req(model="o3", temperature=0.3))
+    kwargs = build_responses_kwargs(
+        _req(model="o3", temperature=0.3), backend="codex", adapter_name="codex-oauth"
+    )
     assert "temperature" not in kwargs
     assert kwargs["reasoning"] == {"effort": "medium", "summary": "auto"}
     assert kwargs["include"] == ["reasoning.encrypted_content"]
@@ -86,7 +96,9 @@ def test_codex_kwargs_legacy_model_keeps_temperature() -> None:
     unknown model id (e.g. ``gpt-4o`` until it's registered) keeps
     the temperature path.
     """
-    kwargs = _build_codex_call_kwargs(_req(model="gpt-4o-legacy", temperature=0.3))
+    kwargs = build_responses_kwargs(
+        _req(model="gpt-4o-legacy", temperature=0.3), backend="codex", adapter_name="codex-oauth"
+    )
     assert kwargs["temperature"] == 0.3
     assert "reasoning" not in kwargs
 
@@ -94,7 +106,7 @@ def test_codex_kwargs_legacy_model_keeps_temperature() -> None:
 def test_codex_kwargs_tools_use_flat_responses_shape() -> None:
     """Codex Responses API requires the FLAT tool shape (not nested ``function``)."""
     tool = ToolSpec(name="search", description="web search", input_schema={"type": "object"})
-    kwargs = _build_codex_call_kwargs(_req(tools=[tool]))
+    kwargs = build_responses_kwargs(_req(tools=[tool]), backend="codex", adapter_name="codex-oauth")
     assert kwargs["tools"] == [
         {
             "type": "function",
@@ -108,7 +120,7 @@ def test_codex_kwargs_tools_use_flat_responses_shape() -> None:
 
 
 def test_codex_kwargs_no_tools_when_none_provided() -> None:
-    kwargs = _build_codex_call_kwargs(_req())
+    kwargs = build_responses_kwargs(_req(), backend="codex", adapter_name="codex-oauth")
     assert "tools" not in kwargs
     assert "parallel_tool_calls" not in kwargs
 
@@ -130,7 +142,7 @@ _VOTE_SCHEMA: dict[str, object] = {
 
 def test_codex_kwargs_omits_text_format_when_no_response_schema() -> None:
     """Back-compat: callers that don't pin a schema keep the pre-fix shape."""
-    kwargs = _build_codex_call_kwargs(_req())
+    kwargs = build_responses_kwargs(_req(), backend="codex", adapter_name="codex-oauth")
     assert "text" not in kwargs
 
 
@@ -148,7 +160,9 @@ def test_codex_kwargs_wires_response_schema_to_text_format() -> None:
     ``False``. Strict=True is exercised by
     ``test_codex_kwargs_text_format_strict_true_for_strict_compat_schema``.
     """
-    kwargs = _build_codex_call_kwargs(_req(response_schema=_VOTE_SCHEMA))
+    kwargs = build_responses_kwargs(
+        _req(response_schema=_VOTE_SCHEMA), backend="codex", adapter_name="codex-oauth"
+    )
     assert "text" in kwargs, "text.format missing — codex-oauth silently dropped response_schema"
     text = kwargs["text"]
     assert isinstance(text, dict)
@@ -164,7 +178,9 @@ def test_codex_kwargs_wires_response_schema_to_text_format() -> None:
 def test_codex_kwargs_text_format_name_fallback_when_no_title() -> None:
     """Schemas without ``title`` get a generic ``response`` name."""
     untitled = {k: v for k, v in _VOTE_SCHEMA.items() if k != "title"}
-    kwargs = _build_codex_call_kwargs(_req(response_schema=untitled))
+    kwargs = build_responses_kwargs(
+        _req(response_schema=untitled), backend="codex", adapter_name="codex-oauth"
+    )
     assert kwargs["text"]["format"]["name"] == "response"
 
 
@@ -173,7 +189,9 @@ def test_codex_kwargs_text_format_coexists_with_reasoning() -> None:
 
     The fix must not regress the reasoning kwargs — both blocks coexist.
     """
-    kwargs = _build_codex_call_kwargs(_req(response_schema=_VOTE_SCHEMA))
+    kwargs = build_responses_kwargs(
+        _req(response_schema=_VOTE_SCHEMA), backend="codex", adapter_name="codex-oauth"
+    )
     assert kwargs["reasoning"] == {"effort": "medium", "summary": "auto"}
     assert kwargs["include"] == ["reasoning.encrypted_content"]
     assert kwargs["text"]["format"]["type"] == "json_schema"
@@ -205,7 +223,9 @@ def test_codex_kwargs_text_format_strict_true_for_strict_compat_schema() -> None
     docs): every object schema must set ``additionalProperties: false``
     AND list every property in ``required``.
     """
-    kwargs = _build_codex_call_kwargs(_req(response_schema=_STRICT_COMPAT_SCHEMA))
+    kwargs = build_responses_kwargs(
+        _req(response_schema=_STRICT_COMPAT_SCHEMA), backend="codex", adapter_name="codex-oauth"
+    )
     assert kwargs["text"]["format"]["strict"] is True
 
 
@@ -219,7 +239,9 @@ def test_codex_kwargs_text_format_strict_false_when_additional_properties_open()
         "required": ["x"],
         # NB: no additionalProperties → not strict-compatible
     }
-    kwargs = _build_codex_call_kwargs(_req(response_schema=open_schema))
+    kwargs = build_responses_kwargs(
+        _req(response_schema=open_schema), backend="codex", adapter_name="codex-oauth"
+    )
     assert kwargs["text"]["format"]["strict"] is False
 
 
@@ -235,7 +257,9 @@ def test_codex_kwargs_text_format_strict_false_when_required_misses_property() -
         "required": ["a"],  # b missing
         "additionalProperties": False,
     }
-    kwargs = _build_codex_call_kwargs(_req(response_schema=partial_required))
+    kwargs = build_responses_kwargs(
+        _req(response_schema=partial_required), backend="codex", adapter_name="codex-oauth"
+    )
     assert kwargs["text"]["format"]["strict"] is False
 
 
@@ -258,7 +282,9 @@ def test_codex_kwargs_text_format_strict_false_when_typed_additional_properties(
         "required": ["scores"],
         "additionalProperties": False,
     }
-    kwargs = _build_codex_call_kwargs(_req(response_schema=typed_extra))
+    kwargs = build_responses_kwargs(
+        _req(response_schema=typed_extra), backend="codex", adapter_name="codex-oauth"
+    )
     assert kwargs["text"]["format"]["strict"] is False
 
 
@@ -281,5 +307,7 @@ def test_codex_kwargs_text_format_strict_recurses_into_array_items() -> None:
         "required": ["list"],
         "additionalProperties": False,
     }
-    kwargs = _build_codex_call_kwargs(_req(response_schema=array_of_open))
+    kwargs = build_responses_kwargs(
+        _req(response_schema=array_of_open), backend="codex", adapter_name="codex-oauth"
+    )
     assert kwargs["text"]["format"]["strict"] is False
