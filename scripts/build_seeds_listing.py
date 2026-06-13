@@ -115,16 +115,25 @@ def _run_harness_models(run_dir: Path) -> list[str]:
                     model = str(event.get("model") or "")
                     provider = str(event.get("provider") or "")
                     break
-        if not model:
-            continue
-        cli = False
+        # session.json carries claude_cli_session_id and, for non-cli agents,
+        # the model/provider that dialogue.jsonl omits — read it before the
+        # empty-model skip so we mirror the hub's _subagent_harness fallback
+        # (build_self_improving_hub.py) and the two resolvers can't drift.
+        session: dict[str, Any] = {}
         session_path = agent_dir / "session.json"
         if session_path.is_file():
             try:
-                session = json.loads(session_path.read_text(encoding="utf-8"))
-                cli = bool(isinstance(session, dict) and session.get("claude_cli_session_id"))
+                loaded = json.loads(session_path.read_text(encoding="utf-8"))
+                session = loaded if isinstance(loaded, dict) else {}
             except (json.JSONDecodeError, ValueError, OSError):
-                cli = False
+                session = {}
+        if not model:
+            model = str(session.get("model") or "")
+        if not provider:
+            provider = str(session.get("provider") or "")
+        if not model:
+            continue
+        cli = bool(session.get("claude_cli_session_id"))
         resolved = _resolve_harness_source(model, provider, cli)
         if resolved and resolved not in seen:
             seen.append(resolved)

@@ -78,8 +78,8 @@
     </div>
 
     <div class="mutator-banner">
-      <span class="role-label">mutator</span>
-      {{ mutator_chip }}
+      <span class="role-label">harness</span>
+      {{ harness_chips }}
     </div>
 
     <nav class="subview-nav" aria-label="Run sub-views">{{ subview_links }}</nav>

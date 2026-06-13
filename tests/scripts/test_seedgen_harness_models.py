@@ -59,6 +59,19 @@ def test_no_subagents_returns_empty(tmp_path: Path) -> None:
     assert _run_harness_models(run) == []
 
 
+def test_falls_back_to_session_json_when_dialogue_absent(tmp_path: Path) -> None:
+    """Mirror the hub's _subagent_harness fallback: when dialogue.jsonl is
+    missing or has no session_start, model/provider come from session.json."""
+    run = tmp_path / "gen-fallback"
+    agent = run / "sub_agents" / "critic-0"
+    agent.mkdir(parents=True)
+    # no dialogue.jsonl — only session.json carries the model/provider
+    (agent / "session.json").write_text(
+        json.dumps({"model": "gpt-5.5", "provider": "openai-codex"}), encoding="utf-8"
+    )
+    assert _run_harness_models(run) == ["openai-codex/gpt-5.5"]
+
+
 def test_build_row_includes_harness_models(tmp_path: Path) -> None:
     run = tmp_path / "gen-y-broken_tool_use"
     run.mkdir()

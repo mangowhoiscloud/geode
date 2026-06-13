@@ -1431,7 +1431,7 @@ def render_seedgen_run(
         "gen_tag": html_escape(run_meta.gen_tag or "—"),
         "target_dim": html_escape(run_meta.target_dim or "—"),
         "cohort": html_escape(cohort or "—"),
-        "mutator_chip": seedgen_harness_chips(run_meta.harness_models),
+        "harness_chips": seedgen_harness_chips(run_meta.harness_models),
         "candidates_rows": cand_rows,
         "candidates_count_label": f"{cand_count} drafted",
         "survivors_rows": surv_rows,
