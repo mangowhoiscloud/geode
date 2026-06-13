@@ -90,17 +90,16 @@ class ApprovalWorkflow:
     def _skip_permissions() -> bool:
         """``--dangerously-skip-permissions`` — read DYNAMICALLY (per gate call).
 
-        Read at gate time (not cached at construction) on purpose: the daemon
-        builds the session's executor at CONNECTION time, but the thin CLI only
-        advertises the flag in the ``client_capability`` handshake that arrives
-        AFTER — and before the first prompt. A dynamic read therefore reflects
-        the active connection's intent at tool-call time and resets cleanly for
-        the next (normal) client, where a construction-time read would either
-        miss a running daemon or stick ON for the following session.
+        Resolves the PER-SESSION ContextVar (set by the IPC capability
+        handshake before the first prompt) at gate time, not cached at executor
+        construction: the daemon builds the executor at CONNECTION time, the
+        flag arrives AFTER. Per-session isolation means a concurrent skip
+        session can't flip another session's gates (see
+        :func:`core.agent.safety.current_skip_permissions`).
         """
-        from core.config import settings
+        from core.agent.safety import current_skip_permissions
 
-        return bool(getattr(settings, "dangerously_skip_permissions", False))
+        return current_skip_permissions()
 
     def _fire_hook(self, event: HookEvent, data: dict[str, Any]) -> None:
         if self._hooks is None:

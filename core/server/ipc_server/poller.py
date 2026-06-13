@@ -64,22 +64,18 @@ def _get_client_capability() -> tuple[bool, int]:
 
 
 def _adopt_skip_permissions(msg: dict[str, Any]) -> None:
-    """Adopt the thin CLI's ``--dangerously-skip-permissions`` for this connection.
+    """Adopt the thin CLI's ``--dangerously-skip-permissions`` for THIS connection.
 
-    Sets BOTH ``os.environ`` (so ``create_session``'s
-    ``reload_settings_from_disk()`` keeps it for the plan handler) and the
-    in-memory singleton (read by the executor before that reload). Set
-    explicitly on every ``client_capability`` so a normal client resets it —
-    no sticky-on across connections. Single-user daemon: process-global mirror
-    of the connecting client's intent, same pattern as model adoption.
+    Sets the PER-SESSION ContextVar (not a process-global) in the connection's
+    task / thread, before the first prompt — so the gates + plan handler read it
+    at call time and a concurrent normal session is unaffected (Codex review).
+    Set explicitly on every ``client_capability`` (True/False) so the value is
+    always this connection's intent.
     """
-    import os
-
-    from core.config import settings
+    from core.agent.safety import set_skip_permissions
 
     skip = bool(msg.get("dangerously_skip_permissions", False))
-    os.environ["GEODE_DANGEROUSLY_SKIP_PERMISSIONS"] = "1" if skip else "0"
-    settings.dangerously_skip_permissions = skip
+    set_skip_permissions(skip)
     if skip:
         log.warning("client_capability: --dangerously-skip-permissions ACTIVE (all HITL bypassed)")
 

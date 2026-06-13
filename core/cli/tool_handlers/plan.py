@@ -41,12 +41,14 @@ def _build_plan_handlers(force_dry: bool) -> dict[str, Any]:
         return plan
 
     def handle_create_plan(**kwargs: Any) -> dict[str, Any]:
+        # --dangerously-skip-permissions treats the plan-approval stop as just
+        # another HITL gate: skip it and run the plan immediately (plan → action).
+        # Per-session (ContextVar), same source the approval gates read.
+        from core.agent.safety import current_skip_permissions
         from core.config import settings
         from core.orchestration.plan_mode import PlanExecutionMode, PlanMode
 
-        # --dangerously-skip-permissions treats the plan-approval stop as just
-        # another HITL gate: skip it and run the plan immediately (plan → action).
-        auto_execute = settings.plan_auto_execute or settings.dangerously_skip_permissions
+        auto_execute = settings.plan_auto_execute or current_skip_permissions()
 
         goal = kwargs.get("goal", "")
         subject = kwargs.get("subject") or kwargs.get("subject_id", "")

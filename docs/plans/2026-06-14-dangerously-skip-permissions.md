@@ -22,10 +22,13 @@
 ## 1. 설계
 
 `--dangerously-skip-permissions` = `settings.dangerously_skip_permissions: bool`를 켜고, 그 값이:
-1. **모든 HITL 게이트 바이패스** — `ApprovalWorkflow`의 각 게이트(write/expensive/bash/MCP + parallel batch-cost)가 **호출 시점에 동적으로** `settings.dangerously_skip_permissions`를 읽어 바이패스.
+1. **모든 HITL 게이트 바이패스** — `ApprovalWorkflow`의 각 게이트(write/expensive/bash/MCP + parallel batch-cost)가 **호출 시점에** `current_skip_permissions()`(per-session ContextVar, fallback=env)를 읽어 바이패스.
 2. **plan 중단 바이패스** — plan 핸들러가 `plan_auto_execute or dangerously_skip_permissions` → 즉시 auto-execute("일반 HITL과 동일하게" = HITL 게이트의 일종으로 취급).
 
-**전파(running daemon 포함)**: 세션은 daemon 프로세스에서 돌고 thin client는 별도 프로세스. 기존 `client_capability` 핸드셰이크가 model을 글로벌 `settings`에 adopt하는 패턴을 차용 — thin client가 `dangerously_skip_permissions`를 capability에 실으면 daemon이 매 연결마다 `settings.dangerously_skip_permissions`로 adopt(미전송=False로 명시 set). **핵심: 게이트가 construction 시점이 아닌 호출 시점에 동적으로 읽음.** 이유(Codex BLOCKER): daemon은 세션 executor를 *연결* 시점에 만들지만 capability는 그 *후*(첫 프롬프트 전)에 도착 → construction-time 읽기는 ① running daemon 미적용 ② 다음 normal client에 sticky-on. 동적 읽기는 active 연결의 의도를 tool-call 시점에 반영하고 다음 연결에 깨끗이 리셋. 단일 사용자 데몬 전제(동시 다른-의도 연결은 글로벌 race = accepted MEDIUM).
+**전파(running daemon 포함) = per-session ContextVar**: 세션은 daemon 프로세스에서 돌고 thin client는 별도 프로세스. thin client가 `dangerously_skip_permissions`를 `client_capability`에 실으면 `_adopt_skip_permissions`가 그 **연결의 task/thread**에서 `set_skip_permissions()`(ContextVar)를 첫 프롬프트 전에 set. 게이트+plan은 호출 시점에 `current_skip_permissions()`로 읽음(ContextVar 미설정 시 env-backed `settings`로 fallback → skip 모드로 띄운 daemon은 daemon-wide 적용). **per-session 격리가 핵심**:
+- construction-time 읽기(executor 생성 시점)는 ① running daemon 미적용(capability가 그 후 도착) ② 다음 normal client에 sticky-on → **Codex BLOCKER**.
+- process-global 동적 읽기는 동시 세션 누출(skip 클라가 normal 클라 실행 중 글로벌 flip) → **Codex HIGH**.
+- ContextVar는 둘 다 회피(태스크별 격리, capability가 프롬프트 전 set).
 
 ## 2. 변경
 
@@ -34,8 +37,9 @@
 | `core/config/_settings.py` | `dangerously_skip_permissions: bool = False` (env `GEODE_DANGEROUSLY_SKIP_PERMISSIONS`) |
 | `core/cli/__init__.py` `main` | `--dangerously-skip-permissions` typer 옵션 → 모듈 플래그 set + 경고 배너 + serve auto-start 전에 `os.environ` set(fresh daemon용) |
 | `core/cli/ipc_client.py` `_send_client_capability` | capability에 `dangerously_skip_permissions` 필드 추가(모듈 플래그에서 읽음) |
-| `core/server/ipc_server/poller.py` | `_adopt_skip_permissions` — `client_capability` 핸들러(2곳)에서 env + `settings.dangerously_skip_permissions` adopt (model adopt 옆) |
-| `core/agent/approval.py` | `ApprovalWorkflow._skip_permissions()` (동적 read) + write/expensive/bash/MCP/batch 게이트에 바이패스 조건 추가 |
+| `core/agent/safety.py` | `_skip_permissions_var` ContextVar + `set_skip_permissions()` / `current_skip_permissions()` (per-session, env fallback) |
+| `core/server/ipc_server/poller.py` | `_adopt_skip_permissions` — `client_capability` 핸들러(2곳)에서 `set_skip_permissions()` (연결 task에서) |
+| `core/agent/approval.py` | `ApprovalWorkflow._skip_permissions()` → `current_skip_permissions()` + write/expensive/bash/MCP/batch 게이트 바이패스 |
 | `core/cli/tool_handlers/plan.py` | `settings.plan_auto_execute or settings.dangerously_skip_permissions` → auto-execute |
 
 ## 3. 안전/범위
@@ -54,7 +58,7 @@
 |---|---|
 | settings 플래그 (`dangerously_skip_permissions`, env-backed) | ✅ |
 | CLI 옵션 `--dangerously-skip-permissions` + env set + 경고 배너 | ✅ |
-| capability 전파(client advertise + poller `_adopt_skip_permissions`) | ✅ |
-| ApprovalWorkflow 동적 게이트 바이패스(write/expensive/bash/MCP/batch) | ✅ |
+| per-session ContextVar (`safety.py`) + capability 전파(client + poller) | ✅ |
+| ApprovalWorkflow 게이트 바이패스(write/expensive/bash/MCP/batch, per-session) | ✅ |
 | plan auto-proceed (`plan_auto_execute or dangerously_skip_permissions`) | ✅ |
 | 테스트 (server + plan handler) | ✅ |
