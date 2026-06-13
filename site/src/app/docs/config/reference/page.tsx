@@ -112,32 +112,21 @@ export default function Page() {
               </tbody>
             </table>
 
-            <h2>Settings: 그 외 필드 (config.toml 매핑됨)</h2>
+            <h2>Settings: env 전용 필드</h2>
             <p>
-              v0.99.202 (Phase C)부터 아래 비-시크릿 필드도 모두
-              <code>[섹션] 키</code>로 <code>config.toml</code>에서 설정할 수
-              있습니다(대응 <code>GEODE_*</code> env 변수도 유효). 오직
-              시크릿(API 키)만 <code>.env</code> 전용으로 남습니다.
+              아래 무리는 toml 매핑이 없습니다. <code>GEODE_*</code> env
+              변수나 <code>.env</code>로만 설정합니다.
             </p>
 
-            <h3>시크릿 (.env 전용)</h3>
+            <h3>시크릿과 프로바이더</h3>
             <table>
               <thead>
                 <tr><th>필드</th><th>타입 / 기본값</th><th>용도</th></tr>
               </thead>
               <tbody>
-                <tr><td><code>anthropic_api_key</code> / <code>openai_api_key</code> / <code>zai_api_key</code></td><td>str = <code>&quot;&quot;</code></td><td><code>ANTHROPIC_API_KEY</code> / <code>OPENAI_API_KEY</code> / <code>ZAI_API_KEY</code>로 별칭됩니다. 시크릿이므로 <code>.env</code> 층에만 둡니다.</td></tr>
-              </tbody>
-            </table>
-
-            <h3>프로바이더</h3>
-            <table>
-              <thead>
-                <tr><th>필드</th><th>타입 / 기본값</th><th>용도 / toml</th></tr>
-              </thead>
-              <tbody>
-                <tr><td><code>ensemble_mode</code></td><td>str = <code>&quot;single&quot;</code></td><td><code>single</code> 또는 <code>cross</code> 멀티 LLM 모드. <code>[ensemble] mode</code>.</td></tr>
-                <tr><td><code>forced_login_method</code></td><td>dict = {`{}`}</td><td>프로바이더별 인증 방식 강제(<code>{`{"openai": "apikey"}`}</code>). 기본은 구독 우선. <code>[llm] forced_login_method</code>.</td></tr>
+                <tr><td><code>anthropic_api_key</code> / <code>openai_api_key</code> / <code>zai_api_key</code></td><td>str = <code>&quot;&quot;</code></td><td><code>ANTHROPIC_API_KEY</code> / <code>OPENAI_API_KEY</code> / <code>ZAI_API_KEY</code>로 별칭됩니다. 시크릿이므로 <code>.env</code> 층에 둡니다.</td></tr>
+                <tr><td><code>ensemble_mode</code></td><td>str = <code>&quot;single&quot;</code></td><td><code>single</code> 또는 <code>cross</code> 멀티 LLM 모드.</td></tr>
+                <tr><td><code>forced_login_method</code></td><td>dict = {`{}`}</td><td>프로바이더별 인증 방식 강제(<code>{`{"openai": "apikey"}`}</code>). 기본은 구독 우선.</td></tr>
               </tbody>
             </table>
 
@@ -147,10 +136,11 @@ export default function Page() {
                 <tr><th>필드</th><th>기본값</th><th>용도</th></tr>
               </thead>
               <tbody>
-                <tr><td><code>temperature_agent_loop</code></td><td>1.0</td><td>에이전트 루프 호출. <code>[temperature] agent_loop</code>.</td></tr>
-                <tr><td><code>temperature_reflection</code></td><td>1.0</td><td>리플렉션 호출. <code>[temperature] reflection</code>.</td></tr>
-                <tr><td><code>temperature_commentary</code></td><td>1.0</td><td>커멘터리 호출. <code>[temperature] commentary</code>.</td></tr>
-                <tr><td><code>temperature_self_improving_mutation</code></td><td>1.0</td><td>변이 제안 호출. <code>[temperature] self_improving_mutation</code>.</td></tr>
+                <tr><td><code>temperature_agent_loop</code></td><td>1.0</td><td>에이전트 루프 호출.</td></tr>
+                <tr><td><code>temperature_reflection</code></td><td>1.0</td><td>리플렉션 호출.</td></tr>
+                <tr><td><code>temperature_verification</code></td><td>0.0</td><td>verify 호출. cross-LLM 합의를 위한 결정성.</td></tr>
+                <tr><td><code>temperature_commentary</code></td><td>1.0</td><td>커멘터리 호출.</td></tr>
+                <tr><td><code>temperature_self_improving_mutation</code></td><td>1.0</td><td>변이 제안 호출.</td></tr>
               </tbody>
             </table>
 
@@ -487,32 +477,21 @@ export default function Page() {
               </tbody>
             </table>
 
-            <h2>Settings: remaining fields (config.toml-mapped)</h2>
+            <h2>Settings: env-only fields</h2>
             <p>
-              As of v0.99.202 (Phase C) every non-secret field below is also
-              settable via <code>[section] key</code> in <code>config.toml</code>
-              (the matching <code>GEODE_*</code> env var still works). Only
-              secrets (API keys) remain <code>.env</code>-only.
+              The groups below carry no toml mapping. Configure them through
+              <code>GEODE_*</code> env vars or <code>.env</code>.
             </p>
 
-            <h3>Secrets (.env-only)</h3>
+            <h3>Secrets and providers</h3>
             <table>
               <thead>
                 <tr><th>Field</th><th>Type / default</th><th>Purpose</th></tr>
               </thead>
               <tbody>
-                <tr><td><code>anthropic_api_key</code> / <code>openai_api_key</code> / <code>zai_api_key</code></td><td>str = <code>&quot;&quot;</code></td><td>Aliased to <code>ANTHROPIC_API_KEY</code> / <code>OPENAI_API_KEY</code> / <code>ZAI_API_KEY</code>. Secrets, so they live on the <code>.env</code> layer only.</td></tr>
-              </tbody>
-            </table>
-
-            <h3>Providers</h3>
-            <table>
-              <thead>
-                <tr><th>Field</th><th>Type / default</th><th>Purpose / toml</th></tr>
-              </thead>
-              <tbody>
-                <tr><td><code>ensemble_mode</code></td><td>str = <code>&quot;single&quot;</code></td><td><code>single</code> or <code>cross</code> multi-LLM mode. <code>[ensemble] mode</code>.</td></tr>
-                <tr><td><code>forced_login_method</code></td><td>dict = {`{}`}</td><td>Per-provider auth-mode escape hatch (<code>{`{"openai": "apikey"}`}</code>). Subscription preferred by default. <code>[llm] forced_login_method</code>.</td></tr>
+                <tr><td><code>anthropic_api_key</code> / <code>openai_api_key</code> / <code>zai_api_key</code></td><td>str = <code>&quot;&quot;</code></td><td>Aliased to <code>ANTHROPIC_API_KEY</code> / <code>OPENAI_API_KEY</code> / <code>ZAI_API_KEY</code>. Secrets, so they live on the <code>.env</code> layer.</td></tr>
+                <tr><td><code>ensemble_mode</code></td><td>str = <code>&quot;single&quot;</code></td><td><code>single</code> or <code>cross</code> multi-LLM mode.</td></tr>
+                <tr><td><code>forced_login_method</code></td><td>dict = {`{}`}</td><td>Per-provider auth-mode escape hatch (<code>{`{"openai": "apikey"}`}</code>). Subscription preferred by default.</td></tr>
               </tbody>
             </table>
 
@@ -522,10 +501,11 @@ export default function Page() {
                 <tr><th>Field</th><th>Default</th><th>Purpose</th></tr>
               </thead>
               <tbody>
-                <tr><td><code>temperature_agent_loop</code></td><td>1.0</td><td>Agent-loop calls. <code>[temperature] agent_loop</code>.</td></tr>
-                <tr><td><code>temperature_reflection</code></td><td>1.0</td><td>Reflection calls. <code>[temperature] reflection</code>.</td></tr>
-                <tr><td><code>temperature_commentary</code></td><td>1.0</td><td>Commentary calls. <code>[temperature] commentary</code>.</td></tr>
-                <tr><td><code>temperature_self_improving_mutation</code></td><td>1.0</td><td>Mutation-proposal calls. <code>[temperature] self_improving_mutation</code>.</td></tr>
+                <tr><td><code>temperature_agent_loop</code></td><td>1.0</td><td>Agent-loop calls.</td></tr>
+                <tr><td><code>temperature_reflection</code></td><td>1.0</td><td>Reflection calls.</td></tr>
+                <tr><td><code>temperature_verification</code></td><td>0.0</td><td>Verify calls. Determinism for cross-LLM agreement.</td></tr>
+                <tr><td><code>temperature_commentary</code></td><td>1.0</td><td>Commentary calls.</td></tr>
+                <tr><td><code>temperature_self_improving_mutation</code></td><td>1.0</td><td>Mutation-proposal calls.</td></tr>
               </tbody>
             </table>
 

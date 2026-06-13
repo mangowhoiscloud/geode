@@ -84,4 +84,6 @@
 **Codex(gpt-5.5) 리뷰 수정 3건**:
 1. **effort validator 브릭 버그(P0)** — `agentic_effort` enum이 5개(`low..xhigh`)만 허용했으나 picker는 OpenAI `none`/`minimal`·GLM `disabled`/`enabled`도 `[agentic] effort`에 기록 → 다음 `Settings()` 로드에서 ValidationError = config 브릭. 9개 합집합(`AGENTIC_EFFORTS`)으로 확대 + picker에 핀하는 드리프트 테스트.
 2. **가드 false-pass** — llms 헤더만 검사해 `sot.ts`/`changelog.ts`가 stale(.189)인데 통과. 가드를 `sot.ts`까지 확장(생성 파일이라 check-only, remedy=sync-stats) + sync-stats로 sot.ts/changelog.ts 실제 resync.
-3. **config 레퍼런스 docs stale** — `page.tsx`가 Phase C로 매핑된 필드를 "env-only"로 표기 + 죽은 `temperature_verification`. env-only 섹션을 "시크릿만 .env 전용"으로 재구성(KO/EN) + 죽은 필드 제거.
+3. **config 레퍼런스 docs stale** — `page.tsx`가 Phase C로 매핑된 필드를 "env-only"로 표기 + 죽은 필드(`temperature_verification`, `subagent_max_rounds`) + effort enum 미갱신 + llms-full 본문 미러까지 **체계적 staleness**. effort enum은 picker↔adapter 정합성(picker가 server-거부 `minimal` 노출)에 묶이고 llms-full 본문은 빌드 재생성 필요 → 코드 PR에서 반쪽 고치면 page↔llms-full↔picker 불일치. **별도 config-docs 리프레시 PR로 분리**: 죽은 필드 전수 제거 + picker를 adapter spec에 grounding(→ validator/docs 자동 정합) + env-only 재구성 + `npm run build && export-md`로 llms-full 본문 재생성 + 본문 freshness 가드. 이 PR은 코드(A/C/D) + 버전 토큰 동기화(L)만.
+
+**Out-of-scope 추가(후속 config-docs PR)**: effort_picker `minimal` server-reject 버그(F1), page.tsx 죽은 필드/enum(F2/F3), llms-full 본문 재생성(F4).
