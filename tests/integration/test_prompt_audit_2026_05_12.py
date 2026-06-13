@@ -144,7 +144,7 @@ def test_math_formatting_instruction_reaches_agentic_system_prompt(
 
     out = build_system_prompt(model="")
 
-    assert "<math_formatting>" in out
+    assert "## Math formatting" in out
     assert "Inline math: wrap with `$...$`" in out
     assert "Display math: put `$$...$$` on its own lines" in out
 

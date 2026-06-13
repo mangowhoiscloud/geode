@@ -107,10 +107,16 @@ def build_system_prompt(loop: AgenticLoop) -> str:
             base = override
             if skill_ctx:
                 base = base + "\n\n" + skill_ctx
+        # Override spawns replace the whole base, so the suffix (tool-
+        # calling contract) must still be appended here.
+        prompt: str = base + "\n" + AGENTIC_SUFFIX
     else:
+        # PR-PROMPT-P2A — the default base now carries AGENTIC_SUFFIX in
+        # its authored-static zone (before <dynamic_context>), so memory
+        # churn no longer invalidates the cached behaviour rules. Append-
+        # ing it again here would duplicate the entire contract block.
         base = _build_system_prompt(model=loop.model)
-        base = base.replace("{skill_context}", skill_replacement)
-    prompt: str = base + "\n" + AGENTIC_SUFFIX
+        prompt = base.replace("{skill_context}", skill_replacement)
     if loop._system_suffix:
         prompt += "\n\n" + loop._system_suffix
     return prompt

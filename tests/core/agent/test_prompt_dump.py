@@ -21,13 +21,16 @@ def test_assembled_prompt_matches_loop_composition_contract() -> None:
     prompt = assemble_full_prompt("claude-opus-4-8", "cli")
     assert "{skill_context}" not in prompt, "placeholder must collapse to the empty marker"
     assert SKILL_EMPTY_MARKER in prompt
-    assert prompt.endswith(AGENTIC_SUFFIX), "agentic suffix appended last, loop-identical"
+    assert prompt.count(AGENTIC_SUFFIX) == 1, "suffix exactly once (no loop double-append)"
     assert prompt.count("<dynamic_context>") == 1, "exactly one cache boundary"
-    # static layers must precede the dynamic (cache) boundary
+    assert prompt.count("</dynamic_context>") == 1, "B1: the envelope must CLOSE"
     boundary_at = prompt.index("<dynamic_context>")
-    assert prompt.index("<math_formatting>") < boundary_at
-    # per-call layers live after the boundary
+    # PR-PROMPT-P2A zone rule — authored static (markdown, incl. the
+    # agentic suffix) precedes the boundary; injected XML follows it.
+    assert prompt.index("## Math formatting") < boundary_at
+    assert prompt.index(AGENTIC_SUFFIX) < boundary_at, "suffix is cache-stable static"
     assert prompt.index("<current_date>") > boundary_at
+    assert prompt.rstrip().endswith("</dynamic_context>")
 
 
 def test_surface_pin_reaches_platform_hint() -> None:
