@@ -344,11 +344,11 @@ def test_policy_path_constants_use_path_suffix_not_sot() -> None:
     from core import paths
 
     new_names = (
-        "GLOBAL_WRAPPER_SECTIONS_PATH",
-        "GLOBAL_TOOL_POLICY_PATH",
-        "GLOBAL_DECOMPOSITION_POLICY_PATH",
-        "GLOBAL_RETRIEVAL_POLICY_PATH",
-        "GLOBAL_REFLECTION_POLICY_PATH",
+        "AUTORESEARCH_WRAPPER_SECTIONS_PATH",
+        "AUTORESEARCH_TOOL_POLICY_PATH",
+        "AUTORESEARCH_DECOMPOSITION_POLICY_PATH",
+        "AUTORESEARCH_RETRIEVAL_POLICY_PATH",
+        "AUTORESEARCH_REFLECTION_POLICY_PATH",
     )
     for name in new_names:
         assert hasattr(paths, name), f"core.paths must export {name}"

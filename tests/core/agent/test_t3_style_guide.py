@@ -2,7 +2,7 @@
 
 5-element 패턴:
 - SoT: style-guide.json (in-repo + operator-local)
-- Path: GLOBAL_STYLE_GUIDE_PATH + OPERATOR_LOCAL_STYLE_GUIDE_PATH
+- Path: AUTORESEARCH_STYLE_GUIDE_PATH + OPERATOR_LOCAL_STYLE_GUIDE_PATH
 - Reader: core/agent/style_guide_policy.py
 - Entry: core/agent/system_prompt.py:build_system_prompt
 - Env: GEODE_STYLE_GUIDE_OVERRIDE + GEODE_STYLE_GUIDE_STRICT
@@ -202,11 +202,11 @@ def test_system_prompt_wires_apply_into_static() -> None:
 
 
 def test_path_constants_present() -> None:
-    from core.paths import GLOBAL_STYLE_GUIDE_PATH, OPERATOR_LOCAL_STYLE_GUIDE_PATH
+    from core.paths import AUTORESEARCH_STYLE_GUIDE_PATH, OPERATOR_LOCAL_STYLE_GUIDE_PATH
 
-    assert GLOBAL_STYLE_GUIDE_PATH.name == "style-guide.json"
+    assert AUTORESEARCH_STYLE_GUIDE_PATH.name == "style-guide.json"
     assert OPERATOR_LOCAL_STYLE_GUIDE_PATH.name == "style-guide.json"
-    assert "policies" in str(GLOBAL_STYLE_GUIDE_PATH)
+    assert "policies" in str(AUTORESEARCH_STYLE_GUIDE_PATH)
     assert "autoresearch/handoff" in str(OPERATOR_LOCAL_STYLE_GUIDE_PATH)
 
 
@@ -218,7 +218,7 @@ def test_train_py_sets_style_guide_env_pair() -> None:
     src = (repo_root / "core/self_improving/measure.py").read_text(encoding="utf-8")
     assert "GEODE_STYLE_GUIDE_OVERRIDE" in src
     assert "GEODE_STYLE_GUIDE_STRICT" in src
-    assert "GLOBAL_STYLE_GUIDE_PATH" in src
+    assert "AUTORESEARCH_STYLE_GUIDE_PATH" in src
 
 
 # ALIVE marker ----------------------------------------------------------------

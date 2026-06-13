@@ -35,7 +35,7 @@ from core.llm.model_guidance import render_model_guidance
 from core.llm.platform_hints import render_platform_hint
 from core.llm.prompt_assembler import with_math_output_formatting
 from core.llm.prompts import AGENTIC_SUFFIX, ROUTER_SYSTEM
-from core.paths import GLOBAL_WRAPPER_SECTIONS_PATH, get_project_root
+from core.paths import AUTORESEARCH_WRAPPER_SECTIONS_PATH, get_project_root
 
 log = logging.getLogger(__name__)
 
@@ -53,10 +53,10 @@ WRAPPER_OVERRIDE_HOOK_READY = True
 PROMPT_CACHE_BOUNDARY = "<dynamic_context>"
 
 
-_WRAPPER_SECTIONS_SOT_PATH = GLOBAL_WRAPPER_SECTIONS_PATH
+_WRAPPER_SECTIONS_SOT_PATH = AUTORESEARCH_WRAPPER_SECTIONS_PATH
 """G5a — cross-process SoT path shared with :mod:`core.self_improving.train`.
 
-Aliased from :data:`core.paths.GLOBAL_WRAPPER_SECTIONS_PATH` so the
+Aliased from :data:`core.paths.AUTORESEARCH_WRAPPER_SECTIONS_PATH` so the
 ``.geode`` literal lives in exactly one place (path-literal guard
 contract); the module-local alias is kept so tests can monkeypatch
 ``core.agent.system_prompt._WRAPPER_SECTIONS_SOT_PATH`` without

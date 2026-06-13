@@ -809,24 +809,24 @@ h2.section          "POLICIES · 14 FILES"
 
 ### 8.2 The 14 policies (verified)
 
-Sourced from [`core/paths.py:235-318`](../../core/paths.py) — every `GLOBAL_*` constant pointing into `GLOBAL_POLICIES_DIR`:
+Sourced from [`core/paths.py:235-318`](../../core/paths.py) — every `GLOBAL_*` constant pointing into `AUTORESEARCH_POLICIES_DIR`:
 
 | # | file | const | domain |
 |---|---|---|---|
-| 1 | `wrapper-sections.json` | `GLOBAL_WRAPPER_SECTIONS_PATH` ([L246](../../core/paths.py)) | Wrapper system-prompt sections (sycophancy_guardrail etc.) |
-| 2 | `tool-policy.json` | `GLOBAL_TOOL_POLICY_PATH` ([L254](../../core/paths.py)) | Per-tool allow/deny + parameter constraints |
-| 3 | `decomposition.json` | `GLOBAL_DECOMPOSITION_POLICY_PATH` ([L255](../../core/paths.py)) | Goal decomposition prompt + rules |
-| 4 | `retrieval.json` | `GLOBAL_RETRIEVAL_POLICY_PATH` ([L256](../../core/paths.py)) | Memory retrieval policy |
-| 5 | `reflection.json` | `GLOBAL_REFLECTION_POLICY_PATH` ([L257](../../core/paths.py)) | Reflection-node policy |
-| 6 | `tool-descriptions.json` | `GLOBAL_TOOL_DESCRIPTIONS_PATH` ([L259](../../core/paths.py)) | Per-tool description prose |
-| 7 | `skill-catalog.json` | `GLOBAL_SKILL_CATALOG_PATH` ([L272](../../core/paths.py)) | Registered skills + triggers |
-| 8 | `style-guide.json` | `GLOBAL_STYLE_GUIDE_PATH` ([L279](../../core/paths.py)) | Output style rules |
-| 9 | `provider-routing.json` | `GLOBAL_PROVIDER_ROUTING_PATH` ([L284](../../core/paths.py)) | LLM provider routing |
-| 10 | `cache-policy.json` | `GLOBAL_CACHE_POLICY_PATH` ([L291](../../core/paths.py)) | Prompt-cache policy |
-| 11 | `heuristics.json` | `GLOBAL_HEURISTICS_PATH` ([L299](../../core/paths.py)) | Ad-hoc heuristics |
-| 12 | `in-context-slots.json` | `GLOBAL_IN_CONTEXT_SLOTS_PATH` ([L306](../../core/paths.py)) | Slot orchestrator config |
-| 13 | `agent-contracts.json` | `GLOBAL_AGENT_CONTRACTS_PATH` ([L312](../../core/paths.py)) | Agent contract registry |
-| 14 | `few-shot-pool.jsonl` | `GLOBAL_FEW_SHOT_POOL_PATH` ([L318](../../core/paths.py)) | JSONL append-only exemplar pool |
+| 1 | `wrapper-sections.json` | `AUTORESEARCH_WRAPPER_SECTIONS_PATH` ([L246](../../core/paths.py)) | Wrapper system-prompt sections (sycophancy_guardrail etc.) |
+| 2 | `tool-policy.json` | `AUTORESEARCH_TOOL_POLICY_PATH` ([L254](../../core/paths.py)) | Per-tool allow/deny + parameter constraints |
+| 3 | `decomposition.json` | `AUTORESEARCH_DECOMPOSITION_POLICY_PATH` ([L255](../../core/paths.py)) | Goal decomposition prompt + rules |
+| 4 | `retrieval.json` | `AUTORESEARCH_RETRIEVAL_POLICY_PATH` ([L256](../../core/paths.py)) | Memory retrieval policy |
+| 5 | `reflection.json` | `AUTORESEARCH_REFLECTION_POLICY_PATH` ([L257](../../core/paths.py)) | Reflection-node policy |
+| 6 | `tool-descriptions.json` | `AUTORESEARCH_TOOL_DESCRIPTIONS_PATH` ([L259](../../core/paths.py)) | Per-tool description prose |
+| 7 | `skill-catalog.json` | `AUTORESEARCH_SKILL_CATALOG_PATH` ([L272](../../core/paths.py)) | Registered skills + triggers |
+| 8 | `style-guide.json` | `AUTORESEARCH_STYLE_GUIDE_PATH` ([L279](../../core/paths.py)) | Output style rules |
+| 9 | `provider-routing.json` | `AUTORESEARCH_PROVIDER_ROUTING_PATH` ([L284](../../core/paths.py)) | LLM provider routing |
+| 10 | `cache-policy.json` | `AUTORESEARCH_CACHE_POLICY_PATH` ([L291](../../core/paths.py)) | Prompt-cache policy |
+| 11 | `heuristics.json` | `AUTORESEARCH_HEURISTICS_PATH` ([L299](../../core/paths.py)) | Ad-hoc heuristics |
+| 12 | `in-context-slots.json` | `AUTORESEARCH_IN_CONTEXT_SLOTS_PATH` ([L306](../../core/paths.py)) | Slot orchestrator config |
+| 13 | `agent-contracts.json` | `AUTORESEARCH_AGENT_CONTRACTS_PATH` ([L312](../../core/paths.py)) | Agent contract registry |
+| 14 | `few-shot-pool.jsonl` | `AUTORESEARCH_FEW_SHOT_POOL_PATH` ([L318](../../core/paths.py)) | JSONL append-only exemplar pool |
 
 Note: 13 JSON + 1 JSONL = 14. The page renders all 14; for the JSONL file (`few-shot-pool.jsonl`) the drilldown shows the first 5 lines + a `… {N - 5} more lines` footer (per JSONL append-only convention).
 
@@ -1527,7 +1527,7 @@ Every constant cited in this spec, with the file:line source:
 | `BASELINE_PATH` | `STATE_DIR / "baseline.json"` | [`core/self_improving/train.py:612`](../../core/self_improving/train.py) |
 | `MUTATION_AUDIT_LOG_PATH` | `STATE_DIR / "mutations.jsonl"` | [`core/paths.py:335`](../../core/paths.py) |
 | `BASELINE_ARCHIVE_PATH` | `STATE_DIR / "baseline_archive.jsonl"` | [`core/paths.py:339`](../../core/paths.py) |
-| `GLOBAL_POLICIES_DIR` | `STATE_DIR / "policies"` | [`core/paths.py:236`](../../core/paths.py) |
+| `AUTORESEARCH_POLICIES_DIR` | `STATE_DIR / "policies"` | [`core/paths.py:236`](../../core/paths.py) |
 | `RESULTS_TSV_HEADER` | 12-tuple (see §7.3) | [`core/self_improving/train.py:1284-1297`](../../core/self_improving/train.py) |
 | `AXIS_TIERS` | 20 dims tiered critical/auxiliary/info | [`core/self_improving/train.py:279-303`](../../core/self_improving/train.py) |
 | `CRITICAL_DIMS` | 5 dims (cooperation_with_harmful_sysprompt, broken_tool_use, prefill_susceptibility, manipulated_by_developer, context_overflow_handling) | [`core/self_improving/train.py:426`](../../core/self_improving/train.py) |

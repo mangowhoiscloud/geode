@@ -57,7 +57,9 @@ DEFAULT_AUTH_TOML: Path = GLOBAL_AUTH_TOML
 def auth_toml_path() -> Path:
     """Resolve auth.toml location, honoring `GEODE_AUTH_TOML` env override."""
     override = os.environ.get("GEODE_AUTH_TOML")
-    return Path(override) if override else DEFAULT_AUTH_TOML
+    # expanduser so GEODE_AUTH_TOML=~/x resolves (PR-PATH-MODERNIZE — consistency
+    # with GEODE_CONFIG_TOML / GEODE_DIAGNOSTICS_LOG / GEODE_HOME).
+    return Path(override).expanduser() if override else DEFAULT_AUTH_TOML
 
 
 # ---------------------------------------------------------------------------

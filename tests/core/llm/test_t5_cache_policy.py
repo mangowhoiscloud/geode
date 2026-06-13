@@ -2,7 +2,7 @@
 
 5-element 패턴:
 - SoT: cache-policy.json
-- Path: GLOBAL_CACHE_POLICY_PATH + OPERATOR_LOCAL_CACHE_POLICY_PATH
+- Path: AUTORESEARCH_CACHE_POLICY_PATH + OPERATOR_LOCAL_CACHE_POLICY_PATH
 - Reader: core/llm/cache_policy.py
 - Entry: core/llm/providers/anthropic.py (apply_messages_cache_control 호출 직전)
 - Env: GEODE_CACHE_POLICY_OVERRIDE + GEODE_CACHE_POLICY_STRICT
@@ -156,11 +156,11 @@ def test_anthropic_provider_uses_apply_before_cache_control() -> None:
 
 
 def test_path_constants_present() -> None:
-    from core.paths import GLOBAL_CACHE_POLICY_PATH, OPERATOR_LOCAL_CACHE_POLICY_PATH
+    from core.paths import AUTORESEARCH_CACHE_POLICY_PATH, OPERATOR_LOCAL_CACHE_POLICY_PATH
 
-    assert GLOBAL_CACHE_POLICY_PATH.name == "cache-policy.json"
+    assert AUTORESEARCH_CACHE_POLICY_PATH.name == "cache-policy.json"
     assert OPERATOR_LOCAL_CACHE_POLICY_PATH.name == "cache-policy.json"
-    assert "policies" in str(GLOBAL_CACHE_POLICY_PATH)
+    assert "policies" in str(AUTORESEARCH_CACHE_POLICY_PATH)
     assert "autoresearch/handoff" in str(OPERATOR_LOCAL_CACHE_POLICY_PATH)
 
 
@@ -172,7 +172,7 @@ def test_train_py_sets_cache_policy_env_pair() -> None:
     src = (repo_root / "core/self_improving/measure.py").read_text(encoding="utf-8")
     assert "GEODE_CACHE_POLICY_OVERRIDE" in src
     assert "GEODE_CACHE_POLICY_STRICT" in src
-    assert "GLOBAL_CACHE_POLICY_PATH" in src
+    assert "AUTORESEARCH_CACHE_POLICY_PATH" in src
 
 
 # ALIVE marker ----------------------------------------------------------------

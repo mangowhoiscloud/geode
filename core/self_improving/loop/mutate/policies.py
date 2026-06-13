@@ -46,15 +46,15 @@ import logging
 from pathlib import Path
 
 from core.paths import (
-    GLOBAL_AGENT_CONTRACTS_PATH,
-    GLOBAL_DECOMPOSITION_POLICY_PATH,
-    GLOBAL_HYPERPARAM_POLICY_PATH,
-    GLOBAL_REFLECTION_POLICY_PATH,
-    GLOBAL_RETRIEVAL_POLICY_PATH,
-    GLOBAL_SKILL_CATALOG_PATH,
-    GLOBAL_TOOL_DESCRIPTIONS_PATH,
-    GLOBAL_TOOL_POLICY_PATH,
-    GLOBAL_WRAPPER_SECTIONS_PATH,
+    AUTORESEARCH_AGENT_CONTRACTS_PATH,
+    AUTORESEARCH_DECOMPOSITION_POLICY_PATH,
+    AUTORESEARCH_HYPERPARAM_POLICY_PATH,
+    AUTORESEARCH_REFLECTION_POLICY_PATH,
+    AUTORESEARCH_RETRIEVAL_POLICY_PATH,
+    AUTORESEARCH_SKILL_CATALOG_PATH,
+    AUTORESEARCH_TOOL_DESCRIPTIONS_PATH,
+    AUTORESEARCH_TOOL_POLICY_PATH,
+    AUTORESEARCH_WRAPPER_SECTIONS_PATH,
     LEGACY_SOT_DIR,
     OPERATOR_LOCAL_TOOL_DESCRIPTIONS_PATH,
 )
@@ -163,7 +163,7 @@ def _maybe_migrate_legacy_sot(kind: str, new_path: Path) -> None:
 # (d) GEODE 의 retrieval slot 은 audit 시점부터 reader 부재 (PR-AUDIT-5SLOT).
 #     reader 신설은 외부 vector store 인프라 (sqlite-vec/chromadb + 로컬
 #     embedding) 도입 비용 대비 ROI 불명확.
-# 보존: ``GLOBAL_RETRIEVAL_POLICY_PATH`` 와 ``_KIND_TO_PATH`` 의 ``retrieval``
+# 보존: ``AUTORESEARCH_RETRIEVAL_POLICY_PATH`` 와 ``_KIND_TO_PATH`` 의 ``retrieval``
 # 매핑은 그대로 둠 — 미래 RAG 인프라 신설 시 별도 ADR 로 ``TARGET_KINDS``
 # 에 재추가 가능하도록 path-literal guard 유지.
 #
@@ -251,15 +251,15 @@ TARGET_KINDS: tuple[str, ...] = (
 # readers (``core.self_improving.train._load_hyperparam_overrides``) 와 미래 ADR
 # 재추가를 위해 path 매핑 보존.
 _KIND_TO_PATH: dict[str, Path] = {
-    "prompt": GLOBAL_WRAPPER_SECTIONS_PATH,
-    "tool_policy": GLOBAL_TOOL_POLICY_PATH,
-    "decomposition": GLOBAL_DECOMPOSITION_POLICY_PATH,
-    "retrieval": GLOBAL_RETRIEVAL_POLICY_PATH,
-    "reflection": GLOBAL_REFLECTION_POLICY_PATH,
-    "skill_catalog": GLOBAL_SKILL_CATALOG_PATH,
-    "agent_contract": GLOBAL_AGENT_CONTRACTS_PATH,
-    "tool_descriptions": GLOBAL_TOOL_DESCRIPTIONS_PATH,
-    "hyperparam": GLOBAL_HYPERPARAM_POLICY_PATH,
+    "prompt": AUTORESEARCH_WRAPPER_SECTIONS_PATH,
+    "tool_policy": AUTORESEARCH_TOOL_POLICY_PATH,
+    "decomposition": AUTORESEARCH_DECOMPOSITION_POLICY_PATH,
+    "retrieval": AUTORESEARCH_RETRIEVAL_POLICY_PATH,
+    "reflection": AUTORESEARCH_REFLECTION_POLICY_PATH,
+    "skill_catalog": AUTORESEARCH_SKILL_CATALOG_PATH,
+    "agent_contract": AUTORESEARCH_AGENT_CONTRACTS_PATH,
+    "tool_descriptions": AUTORESEARCH_TOOL_DESCRIPTIONS_PATH,
+    "hyperparam": AUTORESEARCH_HYPERPARAM_POLICY_PATH,
 }
 
 # M1+M2 (2026-05-21) — nested-schema kinds. ``load_policy`` /

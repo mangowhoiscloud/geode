@@ -2,7 +2,7 @@
 
 S0a 검증된 5-element 패턴 (SoT + path + reader + entry + env) 의 T1 적용:
 - SoT: tool-descriptions.json
-- Path: GLOBAL_TOOL_DESCRIPTIONS_PATH
+- Path: AUTORESEARCH_TOOL_DESCRIPTIONS_PATH
 - Reader: core/agent/tool_descriptions_policy.py
 - Entry: core/agent/loop/_tool_factory.py:get_agentic_tools
 - Env: GEODE_TOOL_DESCRIPTIONS_OVERRIDE
@@ -191,9 +191,9 @@ def test_helpers_applies_descriptions_before_tool_policy() -> None:
 
 
 def test_path_constant_in_core_paths() -> None:
-    from core.paths import GLOBAL_TOOL_DESCRIPTIONS_PATH
+    from core.paths import AUTORESEARCH_TOOL_DESCRIPTIONS_PATH
 
-    assert GLOBAL_TOOL_DESCRIPTIONS_PATH.name == "tool-descriptions.json"
+    assert AUTORESEARCH_TOOL_DESCRIPTIONS_PATH.name == "tool-descriptions.json"
 
 
 # Env wiring in train.py ------------------------------------------------------
@@ -203,7 +203,7 @@ def test_train_py_sets_descriptions_override_env() -> None:
     repo_root = Path(__file__).resolve().parents[3]
     src = (repo_root / "core/self_improving/measure.py").read_text(encoding="utf-8")
     assert "GEODE_TOOL_DESCRIPTIONS_OVERRIDE" in src
-    assert "GLOBAL_TOOL_DESCRIPTIONS_PATH" in src
+    assert "AUTORESEARCH_TOOL_DESCRIPTIONS_PATH" in src
 
 
 # ALIVE marker ----------------------------------------------------------------
