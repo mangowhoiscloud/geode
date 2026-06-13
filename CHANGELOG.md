@@ -45,6 +45,11 @@ functional change.
 
 ---
 
+## [0.99.210] - 2026-06-14
+
+### Infrastructure
+- **Removed the `auto-backmerge.yml` workflow; back-merge is now a deliberate pre-sync step** (operator-directed — "dev↔main back-merges are too many"). The workflow fired on every push to `main` and opened a `main → develop` PR whenever develop lagged; because the feature/main divergence is never a fast-forward, those PRs never auto-merged and piled up (10 open at once). The only recurring drift is the kanban (`docs/progress.md`, committed on main post-merge). Replaced by a mandatory **`main → develop` sync before every `develop → main` merge** (documented in CLAUDE.md §6) — one deliberate back-merge per cycle that pulls the prior kanban into develop, so develop never merges to main while lagging and the drift self-heals instead of accumulating. Also switched **`feature → develop` to squash-merge** (one commit per change, collapsing the per-PR Codex-round fix commits and the per-feature merge commit) to further cut main-history noise; `develop → main` stays `--merge`. Cleared the 10 stale auto-backmerge PRs (#2265–#2283, kanban-only).
+
 ## [0.99.209] - 2026-06-14
 
 ### Added
