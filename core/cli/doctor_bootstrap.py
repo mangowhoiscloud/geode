@@ -139,7 +139,7 @@ def _check_profile_store() -> CheckResult:
             name="ProfileStore",
             ok=False,
             detail="no usable profiles",
-            fix="Run `geode setup` to add a Codex OAuth or API key credential",
+            fix="Run `geode setup` to add a ChatGPT subscription OAuth or API key credential",
         )
     summary = ", ".join(sorted({p.provider for p in profiles}))
     return CheckResult(

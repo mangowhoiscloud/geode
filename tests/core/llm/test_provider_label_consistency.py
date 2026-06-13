@@ -92,6 +92,24 @@ class TestModelProfileLabels:
                 return
         raise AssertionError("gpt-5.4-mini missing from MODEL_PROFILES")
 
+    def test_openai_codex_display_reveals_chatgpt_subscription(self) -> None:
+        # PR-CODEX-LABEL-ALIGN — the `openai-codex` lane IS the ChatGPT
+        # subscription (credential_source.OPENAI_CODEX). Its user-facing display
+        # name must REVEAL ChatGPT, not hide it behind the opaque CLI name
+        # "Codex" (parallel to how "Claude Code" reveals Claude). The mechanism
+        # endpoint (chatgpt.com/backend-api/codex) keeps "codex" — that's fine.
+        from core.llm.registry import get_provider_spec
+
+        spec = get_provider_spec("openai-codex")
+        assert spec is not None
+        assert "ChatGPT" in spec.display_name, (
+            f"openai-codex display must reveal ChatGPT subscription, got {spec.display_name!r}"
+        )
+        assert "Codex" not in spec.display_name, (
+            f"openai-codex display must not show the opaque 'Codex' lane name, "
+            f"got {spec.display_name!r}"
+        )
+
     def test_glm_models_use_glm_provider_label(self) -> None:
         # v0.53.0 — provider label MUST equal the canonical provider ID
         # (lowercase ``glm``), matching /login dashboard + auth.toml +

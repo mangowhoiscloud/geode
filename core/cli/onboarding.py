@@ -242,7 +242,7 @@ def key_registration_gate() -> str | None:
             "[bold]GEODE needs a credential to talk to an LLM.[/bold]\n\n"
             "  [cyan]/login add[/cyan]                — Interactive wizard "
             "(plans + keys + OAuth)\n"
-            "  [cyan]/login openai[/cyan]             — Codex OAuth (subscription quota)\n"
+            "  [cyan]/login openai[/cyan]             — ChatGPT subscription OAuth\n"
             "  [cyan]/login anthropic[/cyan]          — Claude subscription OAuth\n"
             "  [cyan]/key <sk-ant-...>[/cyan]        — Quick paste (Anthropic)\n"
             "  [cyan]/key openai <sk-...>[/cyan]     — Quick paste (OpenAI)\n"

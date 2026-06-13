@@ -53,7 +53,7 @@ def cmd_login(args: str) -> None:
 
     Providers (case-insensitive, aliases accepted)::
 
-        /login openai      — Codex subscription device-code flow (aliases: codex, chatgpt)
+        /login openai      — ChatGPT subscription device-code flow (aliases: codex, chatgpt)
         /login anthropic   — Claude subscription login via local `claude` CLI
                              (aliases: claude, claude-code)
 
@@ -238,7 +238,7 @@ def _login_help() -> None:
         "\n  [header]/login[/header] — credentials & subscription plans\n"
         "\n"
         "  [label]/login[/label]                       Show all plans, profiles, routing\n"
-        "  [label]/login openai[/label]                OAuth flow (Codex subscription quota)\n"
+        "  [label]/login openai[/label]                OAuth flow (ChatGPT subscription quota)\n"
         "  [label]/login anthropic[/label]             OAuth flow (Claude subscription)\n"
         "  [label]/login add[/label]                   Interactive wizard\n"
         "  [label]/login source[/label] <prov> <type>   Pick credential source per provider\n"
@@ -642,7 +642,7 @@ def _login_oauth(target: str) -> None:
     caller has already resolved aliases via :data:`_PROVIDER_ALIASES`.
     Each branch is responsible for the provider-specific flow:
 
-    - ``openai``: GEODE-native device-code flow (Codex subscription quota).
+    - ``openai``: GEODE-native device-code flow (ChatGPT subscription quota).
     - ``anthropic``: delegate to the local ``claude`` CLI's
       ``claude /login`` browser flow, then sync the keychain blob into
       ``ProfileStore`` so other parts of the system see the credential.
@@ -664,7 +664,7 @@ def _login_oauth(target: str) -> None:
 
                     reset_codex_client()
                 _pkg.console.print(
-                    "  [success]Codex OAuth registered.[/success]  "
+                    "  [success]ChatGPT subscription OAuth registered.[/success]  "
                     "[muted]Provider: openai-codex[/muted]\n"
                 )
         except Exception as exc:
@@ -677,7 +677,8 @@ def _login_oauth(target: str) -> None:
 
     _pkg.console.print(
         f"  [warning]OAuth not implemented for '{target}'.[/warning]\n"
-        "  [muted]Available: openai (Codex subscription), anthropic (Claude subscription)[/muted]\n"
+        "  [muted]Available: openai (ChatGPT subscription), "
+        "anthropic (Claude subscription)[/muted]\n"
     )
 
 
@@ -1300,7 +1301,7 @@ def _login_providers() -> None:
     X3 — pre-fix the equivalence map (``openai ↔ openai-codex``,
     ``glm ↔ glm-coding``) lived only in ``core.llm.registry``; users
     saw the ``provider`` label in ``/login`` / ``/model`` and had no way
-    to discover that a Codex subscription token and an OpenAI PAYG key both
+    to discover that a ChatGPT subscription token and an OpenAI PAYG key both
     serve a ``gpt-5.x`` request, or that a GLM Coding key shadows the
     PAYG endpoint. Surfacing the table makes the policy auditable
     without grep'ing ``PROVIDER_EQUIVALENCE`` in code.

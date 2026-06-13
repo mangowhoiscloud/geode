@@ -90,7 +90,7 @@ $ geode
           <ul className="mt-8 max-w-2xl divide-y divide-[var(--rule-soft)] text-[13px]">
             {[
               ["Agentic loop", "도구 호출이 끝날 때까지 도는 실행 루프. 서브에이전트 병렬 분기."],
-              ["3-provider routing", "Claude, OpenAI(Codex OAuth), GLM. 구독과 API 키 모두 지원."],
+              ["3-provider routing", "Claude, OpenAI(ChatGPT 구독 OAuth), GLM. 구독과 API 키 모두 지원."],
               ["Messaging gateway", "Slack, Discord, Telegram을 데몬 하나로. 자연어와 cron 스케줄러 내장."],
               ["MCP both ways", "MCP 클라이언트이자 서버. geode-mcp로 Claude Code 같은 호스트에 도구를 제공."],
               ["Self-improving loop", "스캐폴드 변이를 Petri 적대 감사로 선별. 가중치 갱신 없음."], // canon-ok: correct negation

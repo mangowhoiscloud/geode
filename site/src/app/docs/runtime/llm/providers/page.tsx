@@ -15,7 +15,7 @@ export default function Page() {
         ko={
           <>
             <p>
-              GEODE는 세 프로바이더를 라우팅합니다. Anthropic, OpenAI(+Codex),
+              GEODE는 세 프로바이더를 라우팅합니다. Anthropic, OpenAI(+ChatGPT 구독),
               GLM입니다. 이 페이지는 모델이 어떻게 결정되고, 호출이 어느
               어댑터로 가며, 실패했을 때 무엇이 일어나는지 정리합니다.
             </p>
@@ -140,7 +140,7 @@ export default function Page() {
         en={
           <>
             <p>
-              GEODE routes across three providers: Anthropic, OpenAI (+Codex),
+              GEODE routes across three providers: Anthropic, OpenAI (+ChatGPT subscription),
               and GLM. This page covers how the model gets resolved, which
               adapter a call lands on, and what happens on failure.
             </p>

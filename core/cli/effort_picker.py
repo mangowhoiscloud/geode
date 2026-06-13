@@ -133,7 +133,7 @@ _MODEL_DESCRIPTIONS: dict[str, str] = {
     "claude-sonnet-4-6": "Sonnet 4.6 · Best for everyday tasks",
     "claude-haiku-4-5": "Haiku 4.5 · Fastest for quick answers",
     # OpenAI / Codex
-    "gpt-5.5": "GPT-5.5 via Codex subscription · subscription-routed",
+    "gpt-5.5": "GPT-5.5 via ChatGPT subscription · subscription-routed",
     "gpt-5.4": "GPT-5.4 · PAYG balanced reasoning",
     "gpt-5.4-mini": "GPT-5.4 Mini · cheap + fast",
     "gpt-5.3-codex": "GPT-5.3 Codex · code-tuned, reasoning-aware",

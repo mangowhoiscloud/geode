@@ -23,7 +23,7 @@
   <a href="README.md">English</a>
 </p>
 
-# GEODE v0.99.204 — A Self-improving Autonomous Execution Agent
+# GEODE v0.99.205 — A Self-improving Autonomous Execution Agent
 
 자기 자신이 올라탄 scaffold 를 스스로 고쳐쓰는 범용 자율 에이전트. 자연어로 물으면 GEODE 가 계획을 세우고, 도구를 호출해, 결과를 보고합니다. 1회성 프롬프트도, 장시간 세션도 동일하게. 그 아래에서는 outer loop 가 작업을 수행하는 시스템 자체를 계속 다듬습니다.
 
@@ -346,7 +346,7 @@ geode update                  # 소스 체크아웃
 | **`while(tool_use)` 루프** | 모든 자율 행동의 단일 원시 동작. 서브에이전트, 플랜, 배치 모두 같은 루프의 인스턴스 |
 | **Self-improving outer loop** | GEODE 자신의 scaffold 를 변이시키고, 각 변경을 적대적 안전성 루브릭으로 audit 한 뒤, 실제 이득이 있을 때만 promote 합니다. [closed loop](https://mangowhoiscloud.github.io/geode/docs/capabilities/autoresearch) 참고 |
 | **Agentic tools + MCP 카탈로그** | 웹 검색, 파일 작업, 스케줄링, 메모리, 캘린더, Slack/Discord, 한국 채용공고 검색, 그리고 Anthropic 발행 MCP 레지스트리 (`~/.geode/mcp/registry-cache.json` 에 캐시). 첫 사용 시 자동 설치 |
-| **3-프로바이더 페일오버** | Anthropic + OpenAI + ZhipuAI. 구독 OAuth (Codex) 자동 감지; 사용량 과금 API 키도 사용 가능; 페일오버는 동일 프로바이더 내에서만 (예상치 못한 vendor 횡단 과금 없음, v0.53.0 거버넌스) |
+| **3-프로바이더 페일오버** | Anthropic + OpenAI + ZhipuAI. ChatGPT / Claude 구독 OAuth 자동 감지; 사용량 과금 API 키도 사용 가능; 페일오버는 동일 프로바이더 내에서만 (예상치 못한 vendor 횡단 과금 없음, v0.53.0 거버넌스) |
 | **5-tier 메모리** | SOUL (0) → User Profile (0.5) → Organization (1) → Project (2) → Session (3). 영속화, 데몬 재시작 후에도 유지 |
 | **Plan-mode + audit trail** | `create_plan` + `approve_plan` + `list_plans` 로 다단계 작업 관리. 디스크 영구화 (`.geode/plans.json`), 재시작 후에도 유지 |
 | **MCP 서버 (`geode-mcp`)** | GEODE 자체를 MCP 서버(stdio)로 노출: `run_agent`, `self_improving_status`, `self_improving_propose`/`apply`(2-step 확인 게이트), `query_memory`, `get_health`. repo의 `.mcp.json`으로 Claude Code에 자동 등록 |
