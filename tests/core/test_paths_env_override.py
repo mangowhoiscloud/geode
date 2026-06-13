@@ -13,20 +13,35 @@ afterwards so no other test sees a redirected tree.
 from __future__ import annotations
 
 import importlib
+import os
 from collections.abc import Iterator
 from pathlib import Path
 
 import pytest
 from core import paths
 
+# Path env vars these tests patch — snapshotted/restored by the fixture.
+_PATCHED_ENV = ("GEODE_HOME", "GEODE_STATE_ROOT")
+
 
 @pytest.fixture
 def reload_paths() -> Iterator[None]:
-    """Reload ``core.paths`` after the test so the module's import-time
-    constants return to the pristine (un-patched) values."""
+    """Restore the path env vars to their pre-test values, THEN reload
+    ``core.paths``, so the module's import-time constants return to pristine.
+
+    This fixture's teardown runs BEFORE ``monkeypatch``'s (teardown is
+    reverse-of-setup), so we must restore the env ourselves rather than rely on
+    monkeypatch — otherwise the final reload re-reads the still-patched env and
+    leaks a redirected ``GEODE_HOME`` into later tests (Codex review MAJOR)."""
+    saved = {k: os.environ.get(k) for k in _PATCHED_ENV}
     try:
         yield
     finally:
+        for key, value in saved.items():
+            if value is None:
+                os.environ.pop(key, None)
+            else:
+                os.environ[key] = value
         importlib.reload(paths)
 
 
