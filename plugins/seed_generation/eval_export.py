@@ -162,8 +162,8 @@ def export_run_to_evals(
         """
         if not isinstance(payload, dict):
             return []
-        data = _drop_empty(payload)
-        return [InfoEvent(data=data, source=info_source)] if data else []
+        info_fields = _drop_empty(payload)
+        return [InfoEvent(data=info_fields, source=info_source)] if info_fields else []
 
     state = _read_json(run_dir_path / "state.json")
     if state is None:
