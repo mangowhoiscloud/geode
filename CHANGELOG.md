@@ -45,6 +45,12 @@ functional change.
 
 ---
 
+## [0.99.201] - 2026-06-14
+
+### Fixed
+- **Sub-agent (`delegate_task`) now inherits the loop's LIVE `/model`** (PR-SUBAGENT-MODEL-ALIGN; operator review of web-search/tool model consistency). web_search + the main loop route tools through the per-call `ToolContext` (`ctx.model` = the loop's live model, PR-TOOL-EXEC-CONTEXT), so they always track a mid-session `/model` switch. But the `delegate_task` dispatch branch in `ToolExecutor.aexecute` **dropped the `context`** when calling `_aexecute_delegate`, so `SubAgentManager._build_worker_request` fell back to the global `settings.model` — which can lag a live switch (the `loop.model`↔`settings.model` drift-sync was cut, `_model_switching.sync_model_from_settings_async` is a no-op). A sub-agent could therefore run on the pre-switch model. The dispatch now forwards `context` → `default_model` is threaded through `adelegate` → `_build_worker_request`, where it is the base model. Precedence preserved: per-task model (voter) > AgentDefinition model > live `default_model` > `settings.model` (the last only for non-loop callers — services bootstrap / tests). Verified: web_search already used `ctx.model` (live-checked: the current gpt-5.5/codex session searches on gpt-5.5 via `codex-oauth`). Guards: 4 tests incl. a dispatch-wiring test pinning `context.model → adelegate(default_model=)`.
+- **Stale docstring corrected** — `_capability_impls.openai_web_search` claimed "PAYG only — the Codex backend does not advertise web_search support", contradicting `codex_oauth.CodexOAuthAdapter.aweb_search` (the codex-subscription web_search, verified 200 OK, `supports_web_search=True`). Reworded: both OpenAI sources support web_search via different request shapes (PAYG vs the Codex `instructions`+typed-`input` form).
+
 ## [0.99.200] - 2026-06-13
 
 ### Changed

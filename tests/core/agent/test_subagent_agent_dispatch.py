@@ -219,3 +219,72 @@ def test_shared_services_passes_agent_registry_to_manager() -> None:
         assert defn is not None
         assert defn.role  # non-empty role
         assert defn.system_prompt  # non-empty prompt
+
+
+# PR-SUBAGENT-MODEL-ALIGN (2026-06-14) — delegate_task forwards the loop's
+# live ToolContext model as the sub-agent default, symmetric with web_search.
+
+
+def test_build_worker_request_honors_default_model() -> None:
+    """The live ``default_model`` (from the delegate ToolContext) is the base
+    when neither an AgentDefinition nor a per-task model override applies —
+    previously this silently used the global ``settings.model``."""
+    manager = _make_manager(AgentRegistry())
+    task = SubTask(task_id="d-1", description="x", task_type="unknown", args={}, agent=None)
+    request: WorkerRequest = manager._build_worker_request(task, default_model="claude-opus-4-8")
+    assert request.model == "claude-opus-4-8"
+
+
+def test_task_and_agent_model_override_win_over_default_model(
+    seed_generator_registry: AgentRegistry,
+) -> None:
+    """Precedence preserved: per-task model > AgentDefinition model >
+    live default_model. The alignment must NOT clobber the voter/agent path."""
+    manager = _make_manager(seed_generator_registry)
+    # AgentDefinition model (claude-sonnet-4-6) wins over default_model.
+    agent_task = SubTask(
+        task_id="d-2", description="x", task_type="seed-generation", args={}, agent="seed_generator"
+    )
+    assert (
+        manager._build_worker_request(agent_task, default_model="claude-opus-4-8").model
+        == "claude-sonnet-4-6"
+    )
+    # Per-task model (voter) wins over both.
+    voter_task = SubTask(
+        task_id="d-3", description="x", task_type="unknown", args={}, agent=None, model="glm-5"
+    )
+    assert (
+        manager._build_worker_request(voter_task, default_model="claude-opus-4-8").model == "glm-5"
+    )
+
+
+def test_default_model_empty_falls_back_to_settings() -> None:
+    """No live context (services bootstrap / legacy callers) → settings.model."""
+    from core.config import _get_settings
+
+    manager = _make_manager(AgentRegistry())
+    task = SubTask(task_id="d-4", description="x", task_type="unknown", args={}, agent=None)
+    request: WorkerRequest = manager._build_worker_request(task, default_model="")
+    assert request.model == _get_settings().model
+
+
+def test_delegate_dispatch_forwards_tool_context_model() -> None:
+    """Wiring guard for the exact bug: the delegate_task dispatch branch must
+    forward the ToolContext's live ``model`` to ``adelegate(default_model=)``.
+    Pre-fix the ``context`` was dropped at the ``_aexecute_delegate`` call so
+    sub-agents silently used ``settings.model`` instead of the live ``/model``."""
+    import asyncio
+    from unittest.mock import AsyncMock
+
+    from core.agent.tool_executor import ToolExecutor
+    from core.tools.base import ToolContext
+
+    mgr = _make_manager(AgentRegistry())
+    mgr.adelegate = AsyncMock(return_value=[])  # type: ignore[method-assign]
+    executor = ToolExecutor(sub_agent_manager=mgr, auto_approve=True, hitl_level=0)
+    ctx = ToolContext(
+        provider="anthropic", source="subscription", model="claude-opus-4-8", adapter_name="x"
+    )
+    asyncio.run(executor.aexecute("delegate_task", {"task_description": "do a thing"}, context=ctx))
+    assert mgr.adelegate.await_count == 1
+    assert mgr.adelegate.await_args.kwargs.get("default_model") == "claude-opus-4-8"
