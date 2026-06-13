@@ -23,7 +23,7 @@
   <a href="README.ko.md">한국어</a>
 </p>
 
-# GEODE v0.99.204 — A Self-improving Autonomous Execution Agent
+# GEODE v0.99.205 — A Self-improving Autonomous Execution Agent
 
 A general-purpose autonomous agent that also rewrites the scaffolding it runs on. You ask in plain language; GEODE plans, calls tools, and reports, for one prompt or a long-running session. Underneath, an outer loop keeps tuning the system that runs your tasks.
 
@@ -347,7 +347,7 @@ geode update                  # source checkout
 | **`while(tool_use)` loop** | The single primitive every behavior is built on. Sub-agents, plans, batches are all instances of the same loop |
 | **Self-improving outer loop** | Mutates GEODE's own scaffolding, audits each change against an adversarial safety rubric, and promotes only on a real gain. See [the closed loop](https://mangowhoiscloud.github.io/geode/docs/capabilities/autoresearch) |
 | **Agentic tools + MCP catalog** | Web search, file ops, scheduling, memory, calendar, Slack/Discord, Korean job-board search, plus the Anthropic-published MCP registry (cached at `~/.geode/mcp/registry-cache.json`). Auto-installed on first use |
-| **3-provider failover** | Anthropic + OpenAI + ZhipuAI. Subscription OAuth (Codex) auto-detected; pay-as-you-go API keys also work; failover is in-provider only (no surprise cross-vendor charges, v0.53.0 governance) |
+| **3-provider failover** | Anthropic + OpenAI + ZhipuAI. ChatGPT / Claude subscription OAuth auto-detected; pay-as-you-go API keys also work; failover is in-provider only (no surprise cross-vendor charges, v0.53.0 governance) |
 | **5-tier memory** | SOUL (0) → User Profile (0.5) → Organization (1) → Project (2) → Session (3). Persistent, survives daemon restarts |
 | **Plan-mode + audit trail** | `create_plan` + `approve_plan` + `list_plans` for multi-step work. Disk-persistent (`.geode/plans.json`), survives restarts |
 | **MCP server (`geode-mcp`)** | Exposes GEODE itself as an MCP server (stdio): `run_agent`, `self_improving_status`, `self_improving_propose`/`apply` (2-step confirm gate), `query_memory`, `get_health`. Registered for Claude Code via the repo-shipped `.mcp.json` |

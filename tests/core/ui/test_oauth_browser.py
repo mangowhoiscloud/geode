@@ -68,13 +68,13 @@ class TestEmitOauthLoginStartedFallback:
         monkeypatch.setattr("core.ui.oauth_browser.start_oauth_browser_watcher", _fake_watcher)
 
         events.emit_oauth_login_started(
-            provider="OpenAI Codex",
+            provider="OpenAI ChatGPT",
             verification_uri="https://example.test/device",
             user_code="ABCD-1234",
         )
 
         rendered = buf.getvalue()
-        assert "OpenAI Codex OAuth Login" in rendered
+        assert "OpenAI ChatGPT OAuth Login" in rendered
         assert "https://example.test/device" in rendered
         assert "ABCD-1234" in rendered
         assert "Press [Enter]" in rendered
@@ -105,7 +105,7 @@ class TestEmitOauthLoginStartedFallback:
         _ipc_writer_local.writer = _FakeWriter()
         try:
             events.emit_oauth_login_started(
-                provider="OpenAI Codex",
+                provider="OpenAI ChatGPT",
                 verification_uri="https://example.test/device",
                 user_code="ABCD-1234",
             )

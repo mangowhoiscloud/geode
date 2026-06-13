@@ -37,7 +37,7 @@ class TestOAuthIpcEvents:
         prior = _swap_writer(w)
         try:
             agentic_ui.emit_oauth_login_started(
-                provider="OpenAI Codex",
+                provider="OpenAI ChatGPT",
                 verification_uri="https://example.test/device",
                 user_code="ABCD-1234",
             )
@@ -46,7 +46,7 @@ class TestOAuthIpcEvents:
         assert w.events == [
             {
                 "type": "oauth_login_started",
-                "provider": "OpenAI Codex",
+                "provider": "OpenAI ChatGPT",
                 "verification_uri": "https://example.test/device",
                 "user_code": "ABCD-1234",
             }
@@ -56,8 +56,8 @@ class TestOAuthIpcEvents:
         w = _CapturingWriter()
         prior = _swap_writer(w)
         try:
-            agentic_ui.emit_oauth_login_pending("OpenAI Codex", 5)
-            agentic_ui.emit_oauth_login_pending("OpenAI Codex", 10)
+            agentic_ui.emit_oauth_login_pending("OpenAI ChatGPT", 5)
+            agentic_ui.emit_oauth_login_pending("OpenAI ChatGPT", 10)
         finally:
             _swap_writer(prior)
         assert [e["elapsed_s"] for e in w.events] == [5, 10]
@@ -67,7 +67,7 @@ class TestOAuthIpcEvents:
         prior = _swap_writer(w)
         try:
             agentic_ui.emit_oauth_login_success(
-                provider="OpenAI Codex",
+                provider="OpenAI ChatGPT",
                 account_id="acct-123",
                 email="user@example.test",
                 plan_type="plus",
@@ -84,13 +84,13 @@ class TestOAuthIpcEvents:
         w = _CapturingWriter()
         prior = _swap_writer(w)
         try:
-            agentic_ui.emit_oauth_login_failed("OpenAI Codex", "cancelled by user")
+            agentic_ui.emit_oauth_login_failed("OpenAI ChatGPT", "cancelled by user")
         finally:
             _swap_writer(prior)
         assert w.events == [
             {
                 "type": "oauth_login_failed",
-                "provider": "OpenAI Codex",
+                "provider": "OpenAI ChatGPT",
                 "reason": "cancelled by user",
             }
         ]
@@ -99,14 +99,14 @@ class TestOAuthIpcEvents:
         prior = _swap_writer(None)
         try:
             agentic_ui.emit_oauth_login_started(
-                "OpenAI Codex", "https://example.test/device", "XYZ-1"
+                "OpenAI ChatGPT", "https://example.test/device", "XYZ-1"
             )
         finally:
             _swap_writer(prior)
         captured = capsys.readouterr()
         # Rich strips ANSI when not attached to a terminal — the URL and
         # code should appear in the captured output.
-        assert "OpenAI Codex" in captured.out
+        assert "OpenAI ChatGPT" in captured.out
         assert "https://example.test/device" in captured.out
         assert "XYZ-1" in captured.out
 

@@ -65,7 +65,7 @@ export default function Page() {
                 <tr><th>서브커맨드</th><th>동작</th></tr>
               </thead>
               <tbody>
-                <tr><td><code>/login openai</code></td><td>Codex OAuth 로그인. device-code 플로우는 <code>core/auth/oauth_login.py</code>이고, 결과는 <code>auth.toml</code>에 OAUTH_BORROWED 플랜 + 프로파일 쌍으로 저장됩니다.</td></tr>
+                <tr><td><code>/login openai</code></td><td>ChatGPT 구독 OAuth 로그인. device-code 플로우는 <code>core/auth/oauth_login.py</code>이고, 결과는 <code>auth.toml</code>에 OAUTH_BORROWED 플랜 + 프로파일 쌍으로 저장됩니다.</td></tr>
                 <tr><td><code>/login anthropic</code></td><td>Claude 구독 OAuth. macOS 키체인의 <code>&quot;Claude Code-credentials&quot;</code> 항목을 읽습니다(routing.toml <code>[credentials.keychain]</code>, override는 <code>GEODE_ANTHROPIC_KEYCHAIN_SERVICE</code>).</td></tr>
                 <tr><td><code>/login add</code></td><td>자격 추가. 키 모양(<code>sk-ant-</code>, <code>sk-proj-</code>, GLM {`{id}.{secret}`})으로 프로바이더를 추정합니다.</td></tr>
                 <tr><td><code>/login use</code> / <code>remove</code></td><td>프로파일 선택과 제거.</td></tr>
@@ -194,7 +194,7 @@ ZAI_API_KEY={id}.{secret}`}</pre>
                 <tr><th>Subcommand</th><th>Behavior</th></tr>
               </thead>
               <tbody>
-                <tr><td><code>/login openai</code></td><td>Codex OAuth login. The device-code flow lives in <code>core/auth/oauth_login.py</code>; the result lands in <code>auth.toml</code> as an OAUTH_BORROWED plan plus profile pair.</td></tr>
+                <tr><td><code>/login openai</code></td><td>ChatGPT subscription OAuth login. The device-code flow lives in <code>core/auth/oauth_login.py</code>; the result lands in <code>auth.toml</code> as an OAUTH_BORROWED plan plus profile pair.</td></tr>
                 <tr><td><code>/login anthropic</code></td><td>Claude subscription OAuth. Reads the macOS keychain entry <code>&quot;Claude Code-credentials&quot;</code> (routing.toml <code>[credentials.keychain]</code>; override with <code>GEODE_ANTHROPIC_KEYCHAIN_SERVICE</code>).</td></tr>
                 <tr><td><code>/login add</code></td><td>Add a credential. The provider is sniffed from the key shape (<code>sk-ant-</code>, <code>sk-proj-</code>, GLM {`{id}.{secret}`}).</td></tr>
                 <tr><td><code>/login use</code> / <code>remove</code></td><td>Select and remove profiles.</td></tr>

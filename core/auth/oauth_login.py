@@ -287,7 +287,7 @@ def _persist_oauth_to_authtoml(creds: dict[str, Any]) -> None:
         id=_GEODE_OPENAI_PLAN_ID,
         provider="openai-codex",
         kind=PlanKind.OAUTH_BORROWED,
-        display_name="OpenAI Codex (GEODE OAuth)",
+        display_name="OpenAI (ChatGPT subscription, GEODE OAuth)",
         base_url="https://chatgpt.com/backend-api/codex",
         auth_type="oauth_external",
         subscription_tier=str(creds.get("plan_type") or "") or None,
@@ -431,7 +431,7 @@ def login_openai() -> dict[str, Any]:
         emit_oauth_login_started,
     )
 
-    _PROVIDER_LABEL = "OpenAI Codex"
+    _PROVIDER_LABEL = "OpenAI ChatGPT"
     emit_oauth_login_started(
         provider=_PROVIDER_LABEL,
         verification_uri=_DEVICE_PAGE,

@@ -45,6 +45,11 @@ functional change.
 
 ---
 
+## [0.99.205] - 2026-06-14
+
+### Fixed
+- **Codex/ChatGPT-subscription label alignment across config + UI** (PR-CODEX-LABEL-ALIGN; operator: "GEODE 설정이나 UI에도 Codex와 subscription을 혼동한 표기가 많다"). The `openai-codex` lane IS the ChatGPT subscription OAuth path (`core.config.credential_source.OPENAI_CODEX`), but ~18 user-facing surfaces labeled it the opaque CLI name "Codex" where they meant the ChatGPT subscription — asymmetric with the parallel "Claude subscription" strings. Aligned to the convention **user-facing access tier/lane → "ChatGPT (subscription)"; mechanism (CLI / OAuth backend / `~/.codex/auth.json` / `codex auth login` / the `openai-codex` provider ID / `codex-oauth` adapter) → keep "Codex"**. Fixed: `core/llm/registry.py` (`OpenAI Codex (Plus)` → `OpenAI (ChatGPT subscription)` — also drops the hard-coded "Plus" tier, deferring tier display to the dynamic `chatgpt_plan_label`), `core/cli/{commands/login.py,commands/_state.py,commands/key.py,onboarding.py,effort_picker.py,doctor_bootstrap.py}`, `core/tools/definitions.json` (`/login` tool description), 3 site docs (`runtime/auth`, `run/providers`, `runtime/llm/providers` + homepage `page.tsx`), README/README.ko. Mechanism references and the `/login codex` alias are preserved. Also fixes a **latent dead branch**: `key.py`'s `if "Codex" in selected.provider:` never matched (the provider ID is lowercase `openai-codex`), so the OAuth-token-availability warning for `gpt-5.5`/`gpt-5.3-codex` picks was unreachable — now keys on `"openai-codex"`. Builds on the gpt-5.4-mini "Codex (Plus)" PAYG mislabel guard (`test_provider_label_consistency.py`) + PR-FIX-CHATGPT-PLAN-HALLUCINATION. Guard: `test_provider_label_consistency.py::test_openai_codex_display_reveals_chatgpt_subscription`.
+
 ## [0.99.204] - 2026-06-14
 
 ### Fixed
