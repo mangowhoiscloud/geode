@@ -293,6 +293,12 @@ class Settings(BaseSettings):
     # Tool search — hosted defer_loading on the Anthropic adapter
     # (PR-TOOL-SEARCH-WIRE; reader: core/llm/providers/anthropic.py)
     tool_search_defer: bool = True  # kill switch for deferred tool loading
+    # Codex backend acceptance of OpenAI tool_search: live-verified
+    # 2026-06-13 — 20 defer_loading defs + {"type": "tool_search"} through
+    # chatgpt.com/backend-api/codex/responses on gpt-5.5 returned a normal
+    # completion ("DEFER-OK"). Docs cover the platform API only, so the
+    # live call was the gate (PR-NO-FALLBACK rule); reader: _openai_common.py.
+    tool_search_defer_codex: bool = True
 
     # Ensemble — Multi-LLM mode
     ensemble_mode: str = "single"  # single | cross
