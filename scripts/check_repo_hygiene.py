@@ -240,8 +240,8 @@ def format_report(
         lines.append("")
     if home_leaks:
         lines.append("[hardcoded home path]")
-        for path, lineno, username in home_leaks:
-            lines.append(f"  {path}:{lineno} -> /Users|home/{username}/...")
+        for leak_path, lineno, username in home_leaks:
+            lines.append(f"  {leak_path}:{lineno} -> /Users|home/{username}/...")
         lines.append(
             "    hint: anonymize the home prefix (~/...) — a real username path "
             "leaks the operator's machine and breaks portability. If this is a "
