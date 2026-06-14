@@ -41,15 +41,16 @@ def mask_key(key: str) -> str:
 def load_env_files(*, skip_behavior_keys: bool = False) -> None:
     """Promote .env values into ``os.environ`` — the ONE promotion order.
 
-    C-4 (2026-06-11). Order: manual exports > project ``.env`` > global
-    ``~/.geode/.env`` — the same direction as the pydantic ``env_file``
+    Order: manual exports > global ``~/.geode/.env`` > project ``.env``
+    (2026-06-15, Hermes-aligned secret precedence — supersedes C-4's
+    project>global for the .env layer). The global file is the authoritative
+    secret store; a project ``.env`` only FILLS keys global lacks and can
+    never shadow a global key. Same direction as the pydantic ``env_file``
     cascade (core/config/_settings.py). Files never clobber pre-existing
     process env; empty values never clobber. Callers: the serve daemon
     (via ``core.cli.bootstrap.load_daemon_env``, with
-    ``skip_behavior_keys=True`` unless the operator pins) and the
-    standalone self-improving train/campaign entrypoints (pre-fix they
-    promoted ONLY the global file, so a global key beat the project
-    ``.env`` — the inverse of every other layer).
+    ``skip_behavior_keys=True`` unless the operator pins) and the standalone
+    self-improving train/campaign entrypoints.
     """
     import os
 
@@ -58,7 +59,10 @@ def load_env_files(*, skip_behavior_keys: bool = False) -> None:
     from core.paths import GLOBAL_ENV_FILE
 
     inherited = frozenset(os.environ)
-    for env_file in (GLOBAL_ENV_FILE, Path(".env")):
+    # Project first, global LAST so a non-empty global value overwrites the
+    # project's (global is the authoritative secret store); empty / inherited
+    # values are skipped below, so a project key only fills a global gap.
+    for env_file in (Path(".env"), GLOBAL_ENV_FILE):
         if not env_file.exists():
             continue
         for key, val in dotenv_values(str(env_file)).items():

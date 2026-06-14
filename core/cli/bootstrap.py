@@ -79,8 +79,8 @@ def load_daemon_env() -> None:
     """Serve-daemon env load (C-3/C-4, 2026-06-11).
 
     Delegates promotion to :func:`core.config.env_io.load_env_files` — the
-    ONE dotenv precedence (manual exports > project .env > global
-    ~/.geode/.env, hazard H5) shared with the standalone train/campaign
+    ONE dotenv precedence (manual exports > global ~/.geode/.env > project
+    .env, Hermes-aligned secret precedence) shared with the standalone train/campaign
     entrypoints.
 
     Behavior(model-pick) keys (``core.config.env_io.BEHAVIOR_ENV_KEYS``) are

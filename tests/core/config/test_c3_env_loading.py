@@ -2,9 +2,11 @@
 
 Config-unification sprint, 2026-06-11. Pins:
 
-1. pydantic ``env_file`` order is (global, project) so the LATER (project)
-   file wins — pre-fix it was (".env", global) = global beat project, the
-   inverse of every other layer's project>global direction (hazard H5).
+1. pydantic ``env_file`` order is (project, global) so the LATER (global)
+   file wins — the GLOBAL ~/.geode/.env is the authoritative secret store and
+   a project ``.env`` only fills keys it lacks (2026-06-15, Hermes-aligned;
+   supersedes C-3's project-wins for the .env layer). config.toml keeps
+   project>global.
 2. The serve daemon's ``load_daemon_env`` drops behavior(model-pick) keys
    from its inherited os.environ and never promotes them from .env files,
    so per-session settings reloads always win (hazard H2) — with the
@@ -23,12 +25,27 @@ from core.cli.bootstrap import load_daemon_env
 from core.config.env_io import BEHAVIOR_ENV_KEYS
 
 
-def test_settings_env_file_order_is_global_then_project() -> None:
-    """Later file wins in pydantic — project must come AFTER global."""
+def test_settings_env_file_order_is_project_then_global() -> None:
+    """Later file wins in pydantic — global must come AFTER project so the
+    global secret store is authoritative (Hermes-aligned)."""
     import core.config._settings as settings_mod
 
     source = inspect.getsource(settings_mod)
-    assert 'env_file=(str(GLOBAL_ENV_FILE), ".env")' in source
+    assert 'env_file=(".env", str(GLOBAL_ENV_FILE))' in source
+
+
+def test_settings_global_env_wins_over_empty_project(tmp_path, monkeypatch) -> None:
+    """The reported bug, pydantic path: a project .env with an empty key must
+    NOT shadow the real global key — Settings reads the global value."""
+    from core.config._settings import Settings
+
+    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+    proj = tmp_path / ".env"
+    proj.write_text("ANTHROPIC_API_KEY=\n")
+    glob = tmp_path / "global.env"
+    glob.write_text("ANTHROPIC_API_KEY=sk-real\n")
+    s = Settings(_env_file=(str(proj), str(glob)))
+    assert s.anthropic_api_key == "sk-real"
 
 
 def test_behavior_keys_cover_all_model_pick_surfaces() -> None:
@@ -99,13 +116,26 @@ def test_keep_model_env_escape_hatch(daemon_env, monkeypatch) -> None:
     assert os.environ.get("GEODE_MODEL") == "pinned-pick"
 
 
-def test_project_env_beats_global_env_in_promotion(daemon_env, monkeypatch) -> None:
+def test_global_env_beats_project_env_in_promotion(daemon_env, monkeypatch) -> None:
+    """Hermes-aligned: the global secret store wins over a project .env key."""
     import os
 
     daemon_env["global_env"].write_text("C3_TEST_SECRET=from-global\n")
     daemon_env["project_env"].write_text("C3_TEST_SECRET=from-project\n")
     load_daemon_env()
-    assert os.environ.get("C3_TEST_SECRET") == "from-project"
+    assert os.environ.get("C3_TEST_SECRET") == "from-global"
+    monkeypatch.delenv("C3_TEST_SECRET", raising=False)
+
+
+def test_empty_project_env_does_not_shadow_global_secret(daemon_env, monkeypatch) -> None:
+    """The reported bug, promotion path: an auto-generated project .env with an
+    empty key must NOT shadow the real global key."""
+    import os
+
+    daemon_env["global_env"].write_text("C3_TEST_SECRET=real-global\n")
+    daemon_env["project_env"].write_text("C3_TEST_SECRET=\n")
+    load_daemon_env()
+    assert os.environ.get("C3_TEST_SECRET") == "real-global"
     monkeypatch.delenv("C3_TEST_SECRET", raising=False)
 
 

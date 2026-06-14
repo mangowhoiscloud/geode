@@ -11,12 +11,15 @@ the SAME precedence the real resolution applies:
     os.environ  >  dotenv layer  >  project config.toml  >  global
     config.toml  >  code default
 
-Dotenv-layer order (C-3, 2026-06-11): one direction everywhere —
-project ``.env`` beats global ``~/.geode/.env``. pydantic-settings
-merges ``env_file=(global, ".env")`` with the LATER file winning, and
-the serve daemon's bootstrap promotion follows the same order, so the
-per-process inversion (hazard H5) is gone. Behavior(model-pick) keys
-additionally never survive into the daemon's os.environ (hazard H2,
+Dotenv-layer order (2026-06-15, Hermes-aligned): the GLOBAL
+``~/.geode/.env`` is the authoritative secret store and beats the project
+``.env`` — a project file only fills keys global lacks, never shadows a
+global key. pydantic-settings merges ``env_file=(".env", global)`` with
+the LATER (global) file winning, and the serve daemon's bootstrap
+promotion follows the same order (both loaders flip together, so the
+per-process inversion hazard H5 stays fixed). Secrets differ from config:
+config.toml keeps project>global. Behavior(model-pick) keys never survive
+into the daemon's os.environ (hazard H2,
 ``core.config.env_io.BEHAVIOR_ENV_KEYS``).
 """
 
@@ -43,8 +46,8 @@ def _global_toml_path() -> Path:
 #: Layer identifiers in precedence order (index 0 = strongest).
 LAYERS: tuple[str, ...] = (
     "os.environ",
-    "project .env",
     "global .env",
+    "project .env",
     "project config.toml",
     "global config.toml",
     "code default",
@@ -95,15 +98,21 @@ def explain_field(field_name: str) -> FieldReport:
 
     candidates.append(LayerValue("os.environ", "process env", os.environ.get(env_var)))
 
-    # Dotenv layer — env_file=(global, project) with later-file-wins, so
-    # the PROJECT file beats global (C-3); report both files separately so
-    # a duplicate key is visible.
+    # Dotenv layer — env_file=(project, global) with later-file-wins, so the
+    # GLOBAL file beats project (2026-06-15 Hermes-aligned secret precedence);
+    # report both files separately so a duplicate key is visible. An empty
+    # value (KEY=) coalesces to None so it never registers as a winning layer,
+    # matching the loaders' "empty never clobbers" contract.
     global_env = dotenv_values(GLOBAL_ENV_FILE) if GLOBAL_ENV_FILE.exists() else {}
     project_env = dotenv_values(PROJECT_ENV_FILE) if PROJECT_ENV_FILE.exists() else {}
     candidates.append(
-        LayerValue("project .env", str(PROJECT_ENV_FILE.resolve()), project_env.get(env_var))
+        LayerValue("global .env", str(GLOBAL_ENV_FILE), global_env.get(env_var) or None)
     )
-    candidates.append(LayerValue("global .env", str(GLOBAL_ENV_FILE), global_env.get(env_var)))
+    candidates.append(
+        LayerValue(
+            "project .env", str(PROJECT_ENV_FILE.resolve()), project_env.get(env_var) or None
+        )
+    )
 
     def _toml_value(path: Path) -> Any | None:
         if toml_key is None or not path.exists():

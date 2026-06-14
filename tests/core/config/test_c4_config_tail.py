@@ -9,8 +9,8 @@
 3. H13: a per-field copy failure during reload logs a warning instead of
    being silently suppressed.
 4. C-3 follow-up (Codex review): train/campaign standalone env load uses the
-   shared :func:`core.config.env_io.load_env_files` (project>global, never
-   clobbers exports) instead of a global-file-only ``load_dotenv``.
+   shared :func:`core.config.env_io.load_env_files` (global>project secrets,
+   never clobbers exports) instead of a global-file-only ``load_dotenv``.
 5. C-3 follow-up: ``GEODE_SERVE_KEEP_MODEL_ENV=1`` works when written in a
    .env file, not only as a process export.
 """
