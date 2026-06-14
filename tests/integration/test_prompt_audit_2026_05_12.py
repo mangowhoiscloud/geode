@@ -4,7 +4,7 @@ Each test pins a specific behaviour discovered or established by the audit:
 
 * G2: petri runner no longer caps max_rounds at 4.
 * G3 + G10: GEODE_AUDIT_UNRESTRICTED=1 strips identity / memory / user
-  context; GEODE_PERSONA=on opts back into the GEODE identity layer.
+  context; GEODE identity ships by default (GEODE_PERSONA, opt out with =off).
 * G9: ``_sanitize_learned_pattern`` strips the ``[context: ...]`` trailer
   so prior-turn user transcripts no longer leak into every system prompt.
 * G1: ``_load_template`` parses ``<key>...</key>`` XML sections (not the
@@ -86,10 +86,11 @@ def test_g3_audit_mode_supersedes_persona(monkeypatch: pytest.MonkeyPatch) -> No
 # ---------------------------------------------------------------------------
 
 
-def test_g10_persona_default_off(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_g10_persona_default_on(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Default ON (flipped 2026-06-14) — the soul + RUNTIME CANNOT ship by default."""
     monkeypatch.delenv("GEODE_PERSONA", raising=False)
     monkeypatch.delenv("GEODE_AUDIT_UNRESTRICTED", raising=False)
-    assert _persona_on() is False
+    assert _persona_on() is True
 
 
 def test_g10_persona_on_recognised(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -99,16 +100,47 @@ def test_g10_persona_on_recognised(monkeypatch: pytest.MonkeyPatch) -> None:
         assert _persona_on() is True, f"expected on for {val!r}"
 
 
+def test_g10_persona_opt_out_recognised(monkeypatch: pytest.MonkeyPatch) -> None:
+    """GEODE_PERSONA=off (and aliases) opts back out to the thin-wrapper baseline."""
+    monkeypatch.delenv("GEODE_AUDIT_UNRESTRICTED", raising=False)
+    for val in ("off", "0", "false", "FALSE", "No"):
+        monkeypatch.setenv("GEODE_PERSONA", val)
+        assert _persona_on() is False, f"expected off for {val!r}"
+
+
+def test_g10_persona_default_injects_geode_identity(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Default-on persona injects the GEODE Identity + RUNTIME CANNOT sections."""
+    monkeypatch.delenv("GEODE_PERSONA", raising=False)
+    monkeypatch.delenv("GEODE_AUDIT_UNRESTRICTED", raising=False)
+    out = build_system_prompt(model="claude-opus-4-8")
+    assert "<agent_identity>" in out
+    assert "You are GEODE" in out
+    assert "RUNTIME CANNOT" in out
+
+
 def test_g10_router_md_no_geode_name_in_baseline() -> None:
     """G11 — the router.md baseline must NOT carry 'You are GEODE'.
 
-    The GEODE-identity assertion now lives only in the opt-in
-    <agent_identity> layer (G10), so the baseline reads neutrally.
+    The GEODE-identity assertion lives only in the <agent_identity> layer
+    (G10, default-on), so the router baseline itself reads neutrally.
     """
     from core.llm.prompts import ROUTER_SYSTEM
 
     assert "You are GEODE" not in ROUTER_SYSTEM
     assert "autonomous execution agent" in ROUTER_SYSTEM
+
+
+def test_fable5_followup_policies_present() -> None:
+    """PR-PROMPT-POLICY-ADDITIONS — unrecognized-entity search + evenhandedness
+    (router system) and source-fidelity/copyright (agentic suffix) ship in the
+    always-on baseline (survive persona-off / audit)."""
+    from core.llm.prompts import AGENTIC_SUFFIX, ROUTER_SYSTEM
+
+    assert "Answering discipline" in ROUTER_SYSTEM
+    assert "Unrecognized named entity" in ROUTER_SYSTEM
+    assert "even-handed" in ROUTER_SYSTEM
+    assert "Source fidelity & copyright" in AGENTIC_SUFFIX
+    assert "Paraphrase fetched material" in AGENTIC_SUFFIX
 
 
 def test_wrapper_fallback_role_is_generic_not_geode_persona() -> None:
