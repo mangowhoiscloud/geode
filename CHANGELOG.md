@@ -45,6 +45,14 @@ functional change.
 
 ---
 
+## [0.99.214] - 2026-06-14
+
+### Changed
+- **All 60 tool descriptions audited against the Fable 5 standard; 35 rewritten** (PR-TOOL-DESC-FABLE5; operator-directed, continuing the Fable 5 contrast). Triage of `core/tools/definitions.json` found mostly "use when user X" one-liners with almost no when-NOT-to-use (4/60), almost no examples (5/60), unresolved sibling-trigger collisions, and stale Game-IP/pipeline vocabulary. Rewrote 35 to add sibling-disambiguation and purge dead vocabulary: the **memory_save ↔ note_save** collision (both fired on "remember this / save this") now cross-references (GEODE-derived insight vs user-dictated note); memory_search/note_read/session_search, create_plan/task_create, and schedule_job/trigger_event/calendar_create_event likewise disambiguated; "analysis result/plan" → "result"/"execution plan", and the Game-IP `genre` example dropped from generate_data. The 24 already-Fable-5-quality descriptions (run_bash, web_fetch, llms_txt_index, petri_audit, the file tools, arxiv/seed tools) were left as-is. Guard: `tests/core/tools/test_tool_descriptions_fable5.py`.
+
+### Removed
+- **Vestigial `rerun_node` tool deleted** (same PR). Its handler hardcoded `allowed: set[str] = set()`, so every call returned "Cannot rerun … Allowed: []" — the success path was unreachable — and it referenced pipeline "nodes" removed in the LangGraph purge (v0.99.149/206). Removed the tool definition, `handle_rerun_node` + its handler-map entry (`core/cli/tool_handlers/hitl.py`), the `reject_result` hint that pointed at it, and the docstring mentions; tool count 60 → 59 (`GEODE.md` Identity + Architecture synced). The sibling `rate_result`/`accept_result`/`reject_result` handlers are kept but flagged — they record feedback into closure-local dicts with no downstream reader (a separate dead-code follow-up: wire or remove).
+
 ## [0.99.213] - 2026-06-14
 
 ### Added

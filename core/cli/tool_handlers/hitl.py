@@ -1,4 +1,4 @@
-"""HITL (Human-in-the-Loop) tool handlers: rate/accept/reject_result, rerun_node."""
+"""HITL (Human-in-the-Loop) tool handlers: rate/accept/reject_result."""
 
 from __future__ import annotations
 
@@ -72,37 +72,10 @@ def _build_hitl_handlers() -> dict[str, Any]:
             "action": "reject_result",
             "subject": subject,
             "reason": reason,
-            "hint": ("Use rerun_node to re-execute specific pipeline steps."),
-        }
-
-    def handle_rerun_node(**kwargs: Any) -> dict[str, Any]:
-        node_name = kwargs.get("node_name", "")
-        subject = kwargs.get("subject") or kwargs.get("subject_id") or ""
-        if not node_name or not subject:
-            missing = [k for k, v in {"node_name": node_name, "subject": subject}.items() if not v]
-            return _clarify("rerun_node", missing, "재실행할 노드와 대상을 알려주세요.")
-        allowed: set[str] = set()
-        if node_name not in allowed:
-            return {
-                "error": (f"Cannot rerun '{node_name}'. Allowed: {sorted(allowed)}"),
-            }
-        console.print(f"  [header]▸ Rerunning {node_name} for {subject}[/header]")
-        log.info(
-            "HITL rerun: %s for %s",
-            node_name,
-            subject,
-        )
-        return {
-            "status": "ok",
-            "action": "rerun_node",
-            "node_name": node_name,
-            "subject": subject,
-            "hint": ("Node re-execution queued. Results will update in-place."),
         }
 
     return {
         "rate_result": handle_rate_result,
         "accept_result": handle_accept_result,
         "reject_result": handle_reject_result,
-        "rerun_node": handle_rerun_node,
     }
