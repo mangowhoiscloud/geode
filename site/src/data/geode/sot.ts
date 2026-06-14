@@ -4,10 +4,10 @@
  * Auto-synced from the GEODE repo via `npm run sync-stats`.
  * Do not edit manually. Edit the GEODE repo and re-run sync.
  *
- * Last sync: 2026-06-13
+ * Last sync: 2026-06-14
  */
 
 export const GEODE_SOT = {
-  version: "0.99.210",
-  syncedAt: "2026-06-13",
+  version: "0.99.211",
+  syncedAt: "2026-06-14",
 } as const;

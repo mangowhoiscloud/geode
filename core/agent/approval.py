@@ -85,6 +85,9 @@ class ApprovalWorkflow:
         self._always_approved_categories: set[str] = set()
         self._tool_approval_counts: dict[str, int] = {}
         self._tool_denial_counts: dict[str, int] = {}
+        # Computer-use is a DANGEROUS, continuous-control tool — per-action HITL
+        # is impractical, so it is approved ONCE per session (then remembered).
+        self._computer_approved: bool = False
 
     @staticmethod
     def _skip_permissions() -> bool:
@@ -961,6 +964,29 @@ class ApprovalWorkflow:
         if "bash" in self._always_approved_categories or "run_bash" in self._always_approved_tools:
             return True
         return is_bash_command_read_only(command)
+
+    async def confirm_computer_async(self) -> bool:
+        """Computer-use gate — approve ONCE per session, then remember.
+
+        ``computer`` is DANGEROUS but continuous-control (screenshot → click →
+        type loops), so a per-action HITL prompt is impractical; enabling the
+        tool (``computer_use_enabled``) is the operator's standing opt-in.
+        Auto-approves under ``--dangerously-skip-permissions`` / open HITL
+        (≤ 1) / a prior session approval; otherwise prompts once and any
+        approval (Y / A) is remembered for the rest of the session.
+        """
+        if self._skip_permissions() or self._hitl_level <= 1 or self._computer_approved:
+            return True
+        response = await self.prompt_with_always_async(
+            "Allow computer control (screen + mouse + keyboard)?",
+            "computer",
+            safety_level="dangerous",
+            tool_name="computer",
+        )
+        if response in ("a", "y"):
+            self._computer_approved = True
+            return True
+        return False
 
     # -----------------------------------------------------------------
     # Batch cost approval (used by ToolCallProcessor)
