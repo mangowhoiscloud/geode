@@ -134,8 +134,9 @@ def _cmd_status() -> None:
          · per-row ``ts`` / ``mutation_id`` / ``target_kind`` /
            ``target_section`` / ``kind`` (applied | rejected | rolled_back)
 
-    Both files are git-tracked; missing files render an empty-state
-    line rather than raising so an operator can call ``status`` on a
+    The mutation ledger is git-tracked (in-repo) and ``baseline.json`` is
+    runtime (``~/.geode/self-improving/``, out-of-repo); missing files render an
+    empty-state line rather than raising so an operator can call ``status`` on a
     fresh clone before any run.
     """
     from core.self_improving.loop.mutate.runner import MUTATION_AUDIT_LOG_PATH

@@ -21,7 +21,9 @@ core/self_improving/state/
 ├── results.tsv                rolling 12-column run results (S10 + P1a)
 ├── results.jsonl              rolling raw 18-dim per-row results
 ├── policies/                  mutation-target SoT JSONs (wrapper-sections, tool-policy, …)
-├── seed_pools/                git-tracked campaign INPUT (cycle-input + held-out)
+├── seed_pools/                repo-pinned LOCATION for campaign INPUT pools
+│                              (cycle-input/ + held-out/ assembled by
+│                              scripts/assemble_seed_pool.py; committed when pinned)
 └── _archive/README.md         epoch-boundary archive convention doc
 ```
 

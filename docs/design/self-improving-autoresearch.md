@@ -19,10 +19,10 @@ Landing page for the autoresearch surface — the closed-loop self-improvement e
 
 | Runtime SoT | Bundle mirror destination |
 |---|---|
-| `state/self_improving/baseline.json` | `docs/self-improving/autoresearch/baseline.json` |
-| `state/self_improving/baseline_archive.jsonl` | `docs/self-improving/autoresearch/baseline_archive.jsonl` |
-| `state/self_improving/mutations.jsonl` | `docs/self-improving/autoresearch/mutations.jsonl` |
-| `state/self_improving/policies/*.json` | `docs/self-improving/autoresearch/policies/*.json` (14 files) |
+| `~/.geode/self-improving/baseline.json` | `docs/self-improving/autoresearch/baseline.json` |
+| `core/self_improving/state/baseline_archive.jsonl` | `docs/self-improving/autoresearch/baseline_archive.jsonl` |
+| `core/self_improving/state/mutations.jsonl` | `docs/self-improving/autoresearch/mutations.jsonl` |
+| `core/self_improving/state/policies/*.json` | `docs/self-improving/autoresearch/policies/*.json` (14 files) |
 | `autoresearch/results.tsv` | `docs/self-improving/autoresearch/results.tsv` |
 | `autoresearch/results.jsonl` | `docs/self-improving/autoresearch/results.jsonl` |
 

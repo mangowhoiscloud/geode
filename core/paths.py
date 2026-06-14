@@ -130,13 +130,15 @@ AUTORESEARCH_STATE_DIR = SELF_IMPROVING_SOT_DIR
 AUTORESEARCH_HANDOFF_DIR = RUNTIME_ROOT / "handoff"
 
 # Per-run artefacts (state.json, candidates/, survivors/, meta_review.json,
-# elo_log.tsv). Pre-CSP-7: ``~/.geode/seed-generation/<run_id>/``.
-# PR-STATE-AUTORESEARCH-RENAME (2026-06-01) — snake_case ``seed_generation``
-# to match the plugin package ``plugins/seed_generation/`` (no hyphen/
-# underscore twin). The Pages-served bundle dir
-# (``docs/self-improving/seed-generation/``) keeps its hyphen URL — only
-# the READ/state path goes snake.
-STATE_SEED_GENERATION_DIR = STATE_ROOT / "seed_generation"
+# elo_log.tsv) — RUNTIME scratch, so derived from ``RUNTIME_ROOT`` (NOT the
+# back-compat ``STATE_ROOT`` alias, which is the RAW env root in an isolated
+# worker; this keeps seed-gen runtime under the same root as baseline.json /
+# run.log). Default ``~/.geode/self-improving/seed_generation/``.
+# PR-STATE-AUTORESEARCH-RENAME (2026-06-01) — snake_case ``seed_generation`` to
+# match the plugin package ``plugins/seed_generation/`` (no hyphen/underscore
+# twin). The Pages-served bundle dir (``docs/self-improving/seed-generation/``)
+# keeps its hyphen URL — only the READ/state path goes snake.
+STATE_SEED_GENERATION_DIR = RUNTIME_ROOT / "seed_generation"
 
 # Single forward-pointer JSON file the seed-generation orchestrator
 # writes at the end of every run (CSP-7). Replaces the pre-CSP-7

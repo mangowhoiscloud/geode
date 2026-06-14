@@ -37,28 +37,41 @@
    branch tip = best wrapper.
 4. **Simplicity Selection** — "20 lines added for 0.001 improvement? No.
    Code deleted for 0.001 improvement? Yes" (CLAUDE.md P10).
-5. **Context Budget Management** — audit stdout → `state/run.log`, grep 으로
+5. **Context Budget Management** — audit stdout → `~/.geode/self-improving/run.log`, grep 으로
    fitness 만 추출.
 
 ## 3. 실제 디렉터리 layout
 
+PR-SELF-IMPROVING-UMBRELLA(2026-05-31)로 코드는 `core/self_improving/` 패키지에
+안착했고, PR-STATE-SOT-RUNTIME-SPLIT(2026-06-14)로 데이터가 lifecycle 두 home으로
+분리됨 — git-tracked SoT는 in-repo, runtime scratch는 out-of-repo(`~/.geode`).
+
 ```
 geode/
-├── autoresearch/                ← Karpathy 3-file pattern
-│   ├── __init__.py
-│   ├── README.md                ← fork 컨텍스트 + invocation
+├── core/self_improving/         ← 루프 코드 (Karpathy 3-file 패턴의 umbrella)
 │   ├── program.md               ← human-authored research direction (instruction)
 │   ├── prepare.py               ← seed pool + rubric sanity check (do not modify)
-│   ├── train.py                 ← mutation target (agent modifies only this file)
-│   └── state/                   ← .gitignored runtime artifact
-│       ├── results.tsv          ← generation 별 fitness + verdict (append-only)
-│       ├── wrapper-override.json← mutation 의 GEODE runtime 전달 path
-│       └── run.log              ← audit subprocess stdout/stderr
+│   ├── train.py                 ← mutation target (agent modifies WRAPPER_PROMPT_SECTIONS)
+│   ├── campaign.py              ← 3-arm campaign driver
+│   ├── loop/                    ← 루프 runtime (runner / mutator / policies / inject)
+│   └── state/                   ← TRACKED SoT (in-repo, git-versioned)
+│       ├── mutations.jsonl      ← mutation audit 원장 (git-as-optimiser)
+│       ├── baseline_archive.jsonl, baseline_epochs.json
+│       ├── results.tsv, results.jsonl  ← rolling per-audit 이력
+│       ├── policies/            ← mutation-target SoT JSONs
+│       └── seed_pools/          ← campaign INPUT (repo-pinned)
+├── ~/.geode/self-improving/     ← RUNTIME scratch (out-of-repo, machine-local)
+│   ├── baseline.json            ← LATEST 승격 baseline (vs tracked archive)
+│   ├── run.log, wrapper-override.json
+│   ├── campaign/{gen-0-snapshot/, runs/<id>.json}
+│   └── handoff/, seed_generation/<run_id>/
 ├── plugins/petri_audit/         ← inner-loop harness (Karpathy prepare 등가, 고정)
 └── core/agent/system_prompt.py  ← `_load_wrapper_override` (active hook)
 ```
 
-`.gitignore` 의 `state/self_improving/` 가 runtime artifact 격리.
+`core/self_improving/state/`는 `core/` 아래라 자연히 git-tracked(negation dance 불필요).
+runtime은 `core.paths.RUNTIME_ROOT`(`GEODE_STATE_ROOT`/`GEODE_HOME` override). 워커
+격리 시 `GEODE_STATE_ROOT` 하나로 tracked+runtime가 `$ENV/autoresearch/`로 co-locate.
 
 ## 4. 동작 프로세스 — experiment cycle
 
@@ -83,12 +96,12 @@ agent 가 직접 코드 편집 (별도 `hypothesis.py` 모듈 없음 — Karpath
 ### Step 4 — inner-loop audit 실행
 
 ```bash
-uv run python core/self_improving/train.py > state/self_improving/run.log 2>&1
+uv run python core/self_improving/train.py > ~/.geode/self-improving/run.log 2>&1
 ```
 
 train.py 가 내부적으로 수행:
 
-1. `WRAPPER_PROMPT_SECTIONS` → `state/wrapper-override.json` 으로 dump.
+1. `WRAPPER_PROMPT_SECTIONS` → `~/.geode/self-improving/wrapper-override.json` 으로 dump.
 2. `GEODE_WRAPPER_OVERRIDE=<path>` env 로 `geode audit` subprocess 호출.
 3. subprocess 안에서 `core/agent/system_prompt.py:_load_wrapper_override`
    가 본 dict 를 AgenticLoop system prompt 의 static wrapper 로 inject.
@@ -100,14 +113,15 @@ train.py 가 내부적으로 수행:
 ### Step 5 — metric 추출
 
 ```bash
-grep "^fitness:\|^input_hallucination_mean:" state/self_improving/run.log
+grep "^fitness:\|^input_hallucination_mean:" ~/.geode/self-improving/run.log
 ```
 
 빈 결과 = crash. `tail -n 50` 로 stack trace 확인 + 단순 fix 시도.
 
 ### Step 6 — `results.tsv` append
 
-`state/self_improving/results.tsv` (tab-separated, untracked).
+`core/self_improving/state/results.tsv` (tab-separated, git-tracked — the
+runner appends automatically on every non-dry-run; no manual append).
 
 ### Step 7 — ratchet 결정 (promote / reject)
 

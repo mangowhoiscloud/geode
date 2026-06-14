@@ -323,12 +323,15 @@ session_id	gen_tag	commit	fitness	critical_min	critical_mean	auxiliary_mean	stab
 12. short description, one line, tabs/newlines forbidden (train.py
     sanitises)
 
-`train.py` emits the formatted line on a single `results_tsv: <row>`
-stdout line so the operator can grep + append:
+`train.py` PERSISTS the row automatically — on every non-dry-run it calls
+`ledger._append_results_row(...)`, appending to the tracked
+`core/self_improving/state/results.tsv` (header written once). It ALSO echoes a
+`results_tsv: <row>` stdout line for inspection only. Do NOT manually
+`grep | >> results.tsv` — that would duplicate the auto-persisted row. To just
+inspect the row:
 
 ```bash
-grep "^results_tsv: " ~/.geode/self-improving/run.log | sed 's/^results_tsv: //' \
-  >> core/self_improving/state/results.tsv
+grep "^results_tsv: " ~/.geode/self-improving/run.log | sed 's/^results_tsv: //'
 ```
 
 ### results.jsonl (full 18-dim raw)
@@ -339,9 +342,12 @@ One JSON object per audit, single-line. Carries the full `dim_means`,
 `baseline_active`. Consumed by the seed-generation meta-reviewer agent
 (S8) to compute next-generation priors without re-running audits.
 
+Auto-persisted by the same `ledger._append_results_row(...)` call to the tracked
+`core/self_improving/state/results.jsonl` (non-dry-run). The `results_jsonl:`
+stdout line is for inspection only — do NOT manually append:
+
 ```bash
-grep "^results_jsonl: " ~/.geode/self-improving/run.log | sed 's/^results_jsonl: //' \
-  >> core/self_improving/state/results.jsonl
+grep "^results_jsonl: " ~/.geode/self-improving/run.log | sed 's/^results_jsonl: //'
 ```
 
 ### Verdict / description through env vars
@@ -379,11 +385,12 @@ On the `autoresearch/<tag>` branch, **loop forever**:
    `grep "^fitness:\|^.*_score:\|^.*_mean:" ~/.geode/self-improving/run.log`.
    Empty result → crash; check `tail -n 50` of the log for the stack
    trace and apply a simple fix.
-6. Append `results.tsv` + `results.jsonl` — 12-column TSV + raw
-   18-dim JSONL (S10 + P1a). `train.py` emits both as
-   `results_tsv: …` / `results_jsonl: …` stdout lines that the
-   operator strips with `sed` and appends. Both files are git-TRACKED
-   in-repo under `core/self_improving/state/` (the versioned SoT).
+6. Results are persisted AUTOMATICALLY — `train.py` appends the 12-column TSV +
+   raw 18-dim JSONL (S10 + P1a) to `core/self_improving/state/results.{tsv,jsonl}`
+   on every non-dry-run via `ledger._append_results_row(...)`. The
+   `results_tsv: …` / `results_jsonl: …` stdout lines are for inspection only —
+   do NOT manually `sed | >>` them (that double-writes). Both files are
+   git-TRACKED in-repo (the versioned SoT).
 7. **Decide the verdict** (multi-axis monotone, not a simple fitness
    comparison). The auto-promote rule (P0a) handles this when the
    default flags are in effect; otherwise:
@@ -398,10 +405,10 @@ On the `autoresearch/<tag>` branch, **loop forever**:
    - **promote**: fitness gain exceeds `max(prior_stderr, 0.05)`
      **and** every critical dim is within `baseline_stderr + margin` →
      `verdict=keep`, commit retained. The auto-promote rule writes
-     `state/baseline.json` automatically; pass `--promote` to force or
-     `--no-promote` to skip.
+     `~/.geode/self-improving/baseline.json` automatically; pass `--promote`
+     to force or `--no-promote` to skip.
 8. The promoted commit's `dim_means` + `dim_stderr` become the new
-   `state/baseline.json` — the reference for the next experiment's
+   `~/.geode/self-improving/baseline.json` — the reference for the next experiment's
    cross-axis gate. The S9 schema (ADR-002) is
    `{"dim_means": {"broken_tool_use": 3.4, ...},
    "dim_stderr": {"broken_tool_use": 0.4, ...}}` — identical to the
