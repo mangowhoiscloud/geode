@@ -2,7 +2,7 @@
  * GEODE CHANGELOG, auto-synced from the GEODE repo via `npm run sync-stats`.
  * Do not edit manually. Edit CHANGELOG.md in the GEODE repo and re-run sync.
  *
- * Last sync: 2026-06-13
+ * Last sync: 2026-06-14
  *
  * Each entry's `body` is the raw markdown between two version headings.
  * The Changelog page renders the body with a minimal markdown renderer
@@ -16,6 +16,11 @@ export type ChangelogEntry = {
 };
 
 export const CHANGELOG: ChangelogEntry[] = [
+  {
+    "version": "0.99.211",
+    "date": "2026-06-14",
+    "body": "### Fixed\n- **Computer-use reaches its handler — unified tool dispatch (classify → gate → dispatch)** (PR-TOOL-DISPATCH-UNIFY; operator-directed \"raise the constraint to a higher level, don't patch\"). `ToolExecutor.aexecute` short-circuited DANGEROUS tools to `_execute_dangerous_async`, which only implemented `run_bash` — so `computer` (also in `DANGEROUS_TOOLS`) returned \"Dangerous tool not implemented\" and its registered `handle_computer` was **never reached** (computer-use was still non-functional after PR-COMPUTER-USE-A's injection fix). Root cause: DANGEROUS tools routed to an *execution* method instead of being *gated* then dispatched like every other tool, so any DANGEROUS tool without an explicit branch silently dead-ended. Fix: a single `_gate_async` (DANGEROUS → `_gate_dangerous_async` approval-only; WRITE/EXPENSIVE/MCP → `apply_safety_gates_async`) followed by **uniform dispatch** — `delegate_task`, `run_bash` (`_run_bash_exec_async`, validation+approval moved to the gate), `computer`, and every registered handler now flow through the same path, so a registered handler is always reachable and a DANGEROUS tool with no explicit gate branch FAILS CLOSED (refuses to dispatch unapproved, even with a handler — Codex review) instead of a bespoke dead-end. `computer` is gated by `ApprovalWorkflow.confirm_computer_async` (session-level approval — continuous control makes per-action HITL impractical; auto under `--dangerously-skip-permissions` / open HITL). Removed the now-dead `_execute_dangerous_async` and the unused `_confirm_write` / `_confirm_cost` executor wrappers. Guard: `tests/core/agent/test_tool_dispatch_unify.py`. (The dead-in-production sync `ApprovalWorkflow` API — `apply_safety_gates`/`confirm_*`/`request_bash_approval` sync twins — is a separable legacy-cleanup follow-up; its removal requires migrating the B6 parallel-approval incident tests to async.)"
+  },
   {
     "version": "0.99.210",
     "date": "2026-06-14",
@@ -1773,4 +1778,4 @@ export const CHANGELOG: ChangelogEntry[] = [
   }
 ];
 
-export const CHANGELOG_SYNCED_AT = "2026-06-13";
+export const CHANGELOG_SYNCED_AT = "2026-06-14";
