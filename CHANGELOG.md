@@ -45,6 +45,11 @@ functional change.
 
 ---
 
+## [0.99.213] - 2026-06-14
+
+### Added
+- **Three Fable 5-parity policies added to the always-on runtime prompt** (PR-PROMPT-POLICY-ADDITIONS; operator-directed, continuing the Fable 5 contrast). (1) **Unrecognized-entity search discipline** + (2) **even-handedness on contested topics** as a new `## Answering discipline` block in `router.md`'s `<system>`: do not answer about a product/release/person/work you cannot place — search first (knowing a franchise ≠ knowing its newest release); and present contested political/ethical topics as each side's strongest case rather than asserting one view. (3) **Source fidelity & copyright** section in the agentic suffix: paraphrase fetched material by default, no long verbatim passages from a single source, never reproduce lyrics/poems/whole articles, and a report is your own synthesis — clarifying that Grounding rule 4's "quote the exact number" covers data points, not prose (the one line that could read as license to quote at length). All three live in the always-on baseline (survive `GEODE_PERSONA=off` / audit-mode). Prompt hash pins re-stamped (ROUTER_SYSTEM / AGENTIC_SUFFIX). Guard: `tests/integration/test_prompt_audit_2026_05_12.py::test_fable5_followup_policies_present`.
+
 ## [0.99.212] - 2026-06-14
 
 ### Changed

@@ -130,6 +130,19 @@ def test_g10_router_md_no_geode_name_in_baseline() -> None:
     assert "autonomous execution agent" in ROUTER_SYSTEM
 
 
+def test_fable5_followup_policies_present() -> None:
+    """PR-PROMPT-POLICY-ADDITIONS — unrecognized-entity search + evenhandedness
+    (router system) and source-fidelity/copyright (agentic suffix) ship in the
+    always-on baseline (survive persona-off / audit)."""
+    from core.llm.prompts import AGENTIC_SUFFIX, ROUTER_SYSTEM
+
+    assert "Answering discipline" in ROUTER_SYSTEM
+    assert "Unrecognized named entity" in ROUTER_SYSTEM
+    assert "even-handed" in ROUTER_SYSTEM
+    assert "Source fidelity & copyright" in AGENTIC_SUFFIX
+    assert "Paraphrase fetched material" in AGENTIC_SUFFIX
+
+
 def test_wrapper_fallback_role_is_generic_not_geode_persona() -> None:
     """Mirror of G11 for the self-improving wrapper baseline.
 
