@@ -419,7 +419,9 @@ try:
     from core.paths import RUN_LOG_PATH as RUN_LOG  # runtime (per-run log)
 except ImportError:
     STATE_DIR = REPO_ROOT / "core" / "self_improving" / "state"  # tracked SoT
-    RUN_LOG = Path.home() / ".geode" / "self-improving" / "run.log"  # runtime
+    # degraded-import fallback only (core.paths unavailable, legacy fixture path);
+    # production always takes the RUN_LOG_PATH branch above.
+    RUN_LOG = Path.home() / ".geode" / "self-improving" / "run.log"  # paths-literal-ok
 
 try:
     from core.paths import AUTORESEARCH_WRAPPER_SECTIONS_PATH as _CORE_WRAPPER_SECTIONS_SOT
