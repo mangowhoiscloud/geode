@@ -92,20 +92,36 @@ class TestRunBashSplitGateExec:
         assert "No command" in result["error"]
 
 
-class TestNoSilentSkipForUnimplementedDangerous:
-    """A DANGEROUS tool with no gate branch AND no handler must honest-error
-    (the old code returned 'Dangerous tool not implemented'; the new code lets
-    it fall through to the uniform 'Unknown tool' path — never a silent skip)."""
+class TestUnhandledDangerousFailsClosed:
+    """A DANGEROUS tool with no explicit gate branch must FAIL CLOSED — even
+    with a registered handler it must not dispatch unapproved (Codex MEDIUM:
+    the gate must not fail open for a future DANGEROUS tool)."""
 
-    def test_unhandled_dangerous_tool_honest_errors(self) -> None:
-        ex = ToolExecutor(hitl_level=0)
+    def test_fails_closed_even_with_handler(self) -> None:
+        ran = {"v": False}
+
+        async def fake_handler(**kw):
+            ran["v"] = True
+            return {"ran": True}
+
+        ex = ToolExecutor(action_handlers={"fake_danger": fake_handler}, hitl_level=0)
         with patch(
             "core.agent.tool_executor.executor.DANGEROUS_TOOLS",
             frozenset({"run_bash", "computer", "fake_danger"}),
         ):
             result = _run(ex.aexecute("fake_danger", {}))
-        assert "error" in result
-        assert "Unknown tool" in result["error"]
+        assert result.get("denied") is True
+        assert "no approval gate" in result["error"]
+        assert ran["v"] is False  # handler never ran (fail closed)
+
+    def test_every_dangerous_tool_is_gated(self) -> None:
+        """Forces a new DANGEROUS tool to get an explicit gate branch."""
+        from core.agent.safety import DANGEROUS_TOOLS
+
+        assert set(DANGEROUS_TOOLS) <= {"run_bash", "computer"}, (
+            "A new DANGEROUS tool needs an explicit branch in "
+            "ToolExecutor._gate_dangerous_async (fail-closed default otherwise)."
+        )
 
 
 class TestComputerSessionApproval:

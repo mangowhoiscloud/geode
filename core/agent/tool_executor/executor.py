@@ -296,7 +296,17 @@ class ToolExecutor:
             if not await self._approval.confirm_computer_async():
                 return {"error": "User denied computer-use", "denied": True}, False
             return None, True
-        return None, False
+        # Fail CLOSED: a DANGEROUS tool with no explicit gate branch must NOT
+        # dispatch unapproved (a registered handler would otherwise run without
+        # any approval). Adding a DANGEROUS tool requires adding its gate branch
+        # here — pinned by ``test_every_dangerous_tool_is_gated``.
+        return {
+            "error": (
+                f"DANGEROUS tool '{tool_name}' has no approval gate; refusing to run it "
+                "unapproved. Add a branch to ToolExecutor._gate_dangerous_async."
+            ),
+            "denied": True,
+        }, False
 
     async def _apply_safety_gates_async(
         self, tool_name: str, tool_input: dict[str, Any]
@@ -486,7 +496,10 @@ class ToolExecutor:
         command = tool_input.get("command", "")
         if not command:
             return {"error": "No command provided"}
-        timeout = int(tool_input.get("timeout") or 30)
+        try:
+            timeout = int(tool_input.get("timeout") or 30)
+        except (TypeError, ValueError):
+            timeout = 30  # graceful: a malformed timeout must not raise post-approval
         with _tool_spinner(f"Running: {command}"):
             result = await self._bash.aexecute(
                 command,
