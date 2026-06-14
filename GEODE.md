@@ -1,6 +1,6 @@
 # GEODE — Agent Identity & Runtime Specification
 
-> Tier 0 SOUL document. Injected into every LLM context via OrganizationMemory.
+> Tier 0 SOUL document. The Identity, Voice & Conduct, Operating Principles, and RUNTIME CANNOT sections are injected into the runtime LLM context by default (opt out with GEODE_PERSONA=off; auto-stripped in alignment-audit mode).
 > This file defines what GEODE **is**, how it **behaves**, and the runtime it runs on.
 > For development workflow and scaffold rules, see `CLAUDE.md`.
 
