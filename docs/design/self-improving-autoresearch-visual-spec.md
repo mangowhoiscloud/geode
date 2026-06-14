@@ -50,7 +50,7 @@ sibling_pages:
    - `core/self_improving/state/baseline_archive.jsonl`
    - `core/self_improving/state/mutations.jsonl`
    - `core/self_improving/state/policies/*.json` (13 files + `few-shot-pool.jsonl` = 14)
-   - `autoresearch/results.tsv` + `autoresearch/results.jsonl`
+   - `core/self_improving/state/results.tsv` + `core/self_improving/state/results.jsonl`
 
 This spec governs 5 pages. Where it diverges from (1)/(2)/(3) the higher-rank doc wins — flag a fix-up PR.
 
@@ -155,7 +155,7 @@ GitHub Pages CI already reads from the repo at build time. The builder simply op
 
 ### 3.2 Where the builder reads from
 
-`scripts/build_self_improving_hub.py:load_autoresearch()` (current implementation at [line 255](../../scripts/build_self_improving_hub.py)) already reads `core/self_improving/state/` directly. It looks at the live `baseline.json` first and falls back to the most recent `baseline.json.outdated-*` per the same function ([lines 262-273](../../scripts/build_self_improving_hub.py)).
+`scripts/build_self_improving_hub.py:load_autoresearch()` reads the TRACKED state (mutations / policies / results) from `core/self_improving/state/` directly. The LATEST `baseline.json` is RUNTIME — `_load_baseline()` reads it from `BASELINE_JSON_PATH` (`~/.geode/self-improving/`); a state-dir `baseline.json` is only a legacy/test-fixture compatibility check, then it falls back to the most recent `baseline.json.outdated-*`.
 
 Phase 6 extends this loader. The Phase 5 stub returns a small struct
 (`AutoresearchState` at [line 238](../../scripts/build_self_improving_hub.py)) used only on the hub landing; Phase 6 adds 4 fuller renderers + helpers (see §10 below).
@@ -745,7 +745,7 @@ First row (no previous): renders `·` (neutral middle-dot), no colour class. The
 
 ### 7.5 Per-row `<details>` drilldown
 
-Drilldown pulls the full per-dim signal from `autoresearch/results.jsonl` (one JSON object per line). The builder joins `results.tsv` row N to `results.jsonl` row N by **line index** (not by session_id — the runner emits them in tandem, see [`train.py:2341-2356`](../../core/self_improving/train.py)).
+Drilldown pulls the full per-dim signal from `core/self_improving/state/results.jsonl` (one JSON object per line). The builder joins `results.tsv` row N to `results.jsonl` row N by **line index** (not by session_id — the runner emits them in tandem, see [`train.py:2341-2356`](../../core/self_improving/train.py)).
 
 Drilldown markup:
 
@@ -1050,7 +1050,7 @@ def _load_mutations(state_dir: Path) -> list[dict[str, Any]]:
 
 
 def _load_results_tsv(results_path: Path) -> list[dict[str, str]]:
-    """Read autoresearch/results.tsv.
+    """Read core/self_improving/state/results.tsv.
     
     Returns list of dicts keyed by RESULTS_TSV_HEADER columns (`train.py:1284`).
     Empty list if file absent. Header row skipped.
@@ -1058,7 +1058,7 @@ def _load_results_tsv(results_path: Path) -> list[dict[str, str]]:
 
 
 def _load_results_jsonl(results_jsonl_path: Path) -> list[dict[str, Any]]:
-    """Read autoresearch/results.jsonl. Returns [] if absent."""
+    """Read core/self_improving/state/results.jsonl. Returns [] if absent."""
 
 
 def _list_policies(policies_dir: Path) -> list[tuple[Path, dict[str, Any] | None]]:
@@ -1571,13 +1571,13 @@ Three ambiguities were resolved during this spec (recorded here for the frontend
 
 - **`baseline.json.outdated-YYYYMMDD` naming convention**: The fallback is the most-recently-modified file matching `state_dir.glob("baseline.json.outdated-*")`. There is no formal documentation of this naming convention beyond [`build_self_improving_hub.py:266-273`](../../scripts/build_self_improving_hub.py); it's a convention introduced when the operator rotated baselines manually (`mv baseline.json baseline.json.outdated-20260522`). If the convention drifts (e.g. someone uses `baseline.json.bak` instead), the loader silently treats the baseline as absent. **Recommendation**: add a test that the live `~/.geode/self-improving/baseline.json.outdated-20260522` is discovered by the loader (pin via fixture copy into tmp_path).
 
-- **Drift between live `core/self_improving/state/` and the schema-v2 examples** in `autoresearch-port-mapping.md` §6: the live `baseline.json.outdated-20260522` is v1 (flat `dim_means` + `dim_stderr` top-level; no `schema_version` key, no `raw`/`axes` namespaces). Port mapping §6 documents the v2 shape but PR-3/4/5 (the wiring for `normalized`, `fitness`, `audit`, `promotion` namespaces) is NOT YET LANDED. The renderers MUST handle BOTH shapes; §5.2 + the `test_autoresearch_baseline_schema_v1_renders_gracefully` test pin this.
+- **Drift between the live runtime `baseline.json` (`~/.geode/self-improving/`) and the schema-v2 examples** in `autoresearch-port-mapping.md` §6: the live `baseline.json.outdated-20260522` is v1 (flat `dim_means` + `dim_stderr` top-level; no `schema_version` key, no `raw`/`axes` namespaces). Port mapping §6 documents the v2 shape but PR-3/4/5 (the wiring for `normalized`, `fitness`, `audit`, `promotion` namespaces) is NOT YET LANDED. The renderers MUST handle BOTH shapes; §5.2 + the `test_autoresearch_baseline_schema_v1_renders_gracefully` test pin this.
 
 - **`few-shot-pool.jsonl` is JSONL, not JSON**: when rendering the policies page (§8), the 14th file gets a JSONL-specific drilldown (first 5 lines + `… N-5 more` footer). Don't `json.loads()` it as a single object — that will raise. Build the loader to dispatch on file extension.
 
-- **`mutations.jsonl` is gitignored**: per [`core/paths.py:335`](../../core/paths.py) the path resolves to `core/self_improving/state/mutations.jsonl` which is gitignored (per the `core/self_improving/state/*` repo rule, except the policies subdirectory which is git-tracked one level deeper). The hub builder reads from disk at CI build time — there's no need to add a publisher, but the file MAY be empty on a fresh clone. The loader must handle `mutations.jsonl` absent → 0-row table.
+- **`mutations.jsonl` is git-TRACKED**: post PR-STATE-SOT-RUNTIME-SPLIT it resolves to `core/self_improving/state/mutations.jsonl`, which is in-repo under `core/` and therefore naturally versioned (no gitignore rule). The hub builder reads it from disk at build time; on a fresh clone it MAY be empty — the loader must handle `mutations.jsonl` absent → 0-row table.
 
-- **`results.tsv` + `results.jsonl` location**: per [`core/self_improving/train.py:316-317`](../../core/self_improving/train.py) (the port-mapping doc §4 step 12), these files live at the top of `autoresearch/` (NOT under `state/`). The loader paths are `autoresearch/results.tsv` and `autoresearch/results.jsonl`. Don't put them under `state/`.
+- **`results.tsv` + `results.jsonl` location**: post PR-STATE-SOT-RUNTIME-SPLIT these are git-tracked SoT at `core/self_improving/state/results.{tsv,jsonl}` (the runner auto-appends on every non-dry-run). The loader reads them from the tracked state dir.
 
 - **`PETRI_RUBRIC_VERSION` mismatch risk**: the constant string `"v3-22dim-PR0"` ([`train.py:1754`](../../core/self_improving/train.py)) names "22-dim" but the operational dim count is 20 (5+12+3). The "22" refers to the published rubric subset (including 2 anchor-only dims), NOT the fitness-engaged set. Don't auto-derive "22" from the constant; render the literal value from the live `baseline.json.raw.rubric_version` field.
 
