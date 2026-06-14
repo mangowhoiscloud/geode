@@ -276,8 +276,8 @@ class ToolExecutor:
         ``run_bash``: validate + bash approval (skip-permissions-aware).
         ``computer``: session-level approval (continuous control makes
         per-action HITL impractical). A DANGEROUS tool with no branch here
-        returns ``(None, False)`` and the dispatch honest-errors if it has no
-        handler — never a silent skip.
+        FAILS CLOSED — returns a denial so it can never dispatch unapproved
+        (even with a registered handler); add a branch to gate a new one.
         """
         if tool_name == "run_bash":
             command = tool_input.get("command", "")
