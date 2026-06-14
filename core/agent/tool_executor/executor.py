@@ -131,13 +131,6 @@ class ToolExecutor:
         """Delegates to ApprovalWorkflow."""
         self._approval.track_decision(tool_name, decision)
 
-    # Delegation methods — route to ApprovalWorkflow, patchable by tests
-    def _confirm_write(self, tool_name: str, tool_input: dict[str, Any]) -> bool:
-        return self._approval.confirm_write(tool_name, tool_input)
-
-    def _confirm_cost(self, tool_name: str, estimated_cost: float) -> bool:
-        return self._approval.confirm_cost(tool_name, estimated_cost)
-
     # Proxy properties for backward compat (tests access these directly)
     @property
     def _always_approved_categories(self) -> set[str]:
@@ -169,10 +162,13 @@ class ToolExecutor:
         if context and context.cancellation and context.cancellation.is_set():
             return {"error": "Tool execution cancelled before start", "cancelled": True}
 
-        if tool_name in DANGEROUS_TOOLS:
-            return await self._execute_dangerous_async(tool_name, tool_input, context=context)
-
-        gate_result, approved_via_hitl = await self._apply_safety_gates_async(tool_name, tool_input)
+        # Single safety GATE for EVERY tool (classify → approve). DANGEROUS
+        # tools are gated HERE (approval only) and then fall through to the
+        # SAME dispatch as every other tool — no execution short-circuit that
+        # could leave a registered handler unreachable. (The bug this fixes:
+        # ``computer`` ∈ DANGEROUS_TOOLS was routed to a bash-only execution
+        # method and never reached its registered ``handle_computer``.)
+        gate_result, approved_via_hitl = await self._gate_async(tool_name, tool_input)
         if gate_result is not None:
             return gate_result
 
@@ -185,6 +181,11 @@ class ToolExecutor:
             # ``ctx.model`` web_search uses), not the global ``settings.model``
             # which can lag a mid-session ``/model`` switch.
             return await self._aexecute_delegate(tool_input, context)
+
+        if tool_name == "run_bash":
+            # Validation + approval already cleared in the gate; this is the
+            # subprocess execution, dispatched uniformly like any handler.
+            return await self._run_bash_exec_async(tool_input, context=context)
 
         handler = self._handlers.get(tool_name)
         if handler is None:
@@ -250,6 +251,52 @@ class ToolExecutor:
             }
         except Exception as exc:
             return self._classify_execution_exception(tool_name, exc)
+
+    async def _gate_async(
+        self, tool_name: str, tool_input: dict[str, Any]
+    ) -> tuple[dict[str, Any] | None, bool]:
+        """Single safety gate for EVERY tool — classify by safety level + approve.
+
+        Returns ``(rejection_result | None, approved_via_hitl)``. DANGEROUS
+        tools approve here and then dispatch uniformly; WRITE / EXPENSIVE / MCP
+        go through :class:`ApprovalWorkflow`. Consolidating the gate is what
+        keeps a new tool from falling into a dispatch gap — there is one place
+        that decides "may this run?", separate from "how does it run?".
+        """
+        if tool_name in DANGEROUS_TOOLS:
+            return await self._gate_dangerous_async(tool_name, tool_input)
+        return await self._approval.apply_safety_gates_async(tool_name, tool_input)
+
+    async def _gate_dangerous_async(
+        self, tool_name: str, tool_input: dict[str, Any]
+    ) -> tuple[dict[str, Any] | None, bool]:
+        """Approval gate for DANGEROUS tools — approval ONLY (execution happens
+        in the uniform dispatch so each reaches its handler).
+
+        ``run_bash``: validate + bash approval (skip-permissions-aware).
+        ``computer``: session-level approval (continuous control makes
+        per-action HITL impractical). A DANGEROUS tool with no branch here
+        returns ``(None, False)`` and the dispatch honest-errors if it has no
+        handler — never a silent skip.
+        """
+        if tool_name == "run_bash":
+            command = tool_input.get("command", "")
+            if command:
+                blocked = self._bash.validate(command)
+                if blocked:
+                    return self._bash.to_tool_result(blocked), False
+                if not self._approval.is_bash_auto_approved(command):
+                    approved = await self._request_approval_async(
+                        command, tool_input.get("reason", "")
+                    )
+                    if not approved:
+                        return {"error": "User denied execution", "denied": True}, False
+            return None, True
+        if tool_name == "computer":
+            if not await self._approval.confirm_computer_async():
+                return {"error": "User denied computer-use", "denied": True}, False
+            return None, True
+        return None, False
 
     async def _apply_safety_gates_async(
         self, tool_name: str, tool_input: dict[str, Any]
@@ -425,45 +472,21 @@ class ToolExecutor:
             "summary": f"{succeeded}/{len(results)} tasks completed. [{', '.join(summary_parts)}]",
         }
 
-    async def _execute_dangerous_async(
-        self,
-        tool_name: str,
-        tool_input: dict[str, Any],
-        *,
-        context: ToolContext | None = None,
-    ) -> dict[str, Any]:
-        """Async dangerous tool execution with async approval."""
-        if tool_name == "run_bash":
-            return await self._execute_bash_async(tool_input, context=context)
-
-        return {"error": f"Dangerous tool not implemented: {tool_name}"}
-
     async def _request_approval_async(self, command: str, reason: str) -> bool:
         return await self._approval.request_bash_approval_async(command, reason)
 
-    async def _execute_bash_async(
+    async def _run_bash_exec_async(
         self,
         tool_input: dict[str, Any],
         *,
         context: ToolContext | None = None,
     ) -> dict[str, Any]:
-        """Async bash execution with nonblocking approval prompt and subprocess call."""
+        """Bash subprocess execution + result shaping. Validation + approval
+        already cleared in the gate (``_gate_dangerous_async``)."""
         command = tool_input.get("command", "")
-        reason = tool_input.get("reason", "")
-        timeout = int(tool_input.get("timeout") or 30)
-
         if not command:
             return {"error": "No command provided"}
-
-        blocked = self._bash.validate(command)
-        if blocked:
-            return self._bash.to_tool_result(blocked)
-
-        if not self._approval.is_bash_auto_approved(command):
-            approved = await self._request_approval_async(command, reason)
-            if not approved:
-                return {"error": "User denied execution", "denied": True}
-
+        timeout = int(tool_input.get("timeout") or 30)
         with _tool_spinner(f"Running: {command}"):
             result = await self._bash.aexecute(
                 command,
