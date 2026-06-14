@@ -152,6 +152,9 @@ def test_load_bundle_events_baseline_synthetic(
     mut = tmp_path / "state" / "mutations.jsonl"
     mut.parent.mkdir(parents=True)
     baseline = mut.parent / "baseline.json"
+    # baseline.json is a separate runtime constant post PR-STATE-SOT-RUNTIME-SPLIT
+    # (no longer derived from MUTATION_AUDIT_LOG_PATH.parent); point it explicitly.
+    monkeypatch.setattr("core.paths.BASELINE_JSON_PATH", baseline)
     baseline.write_text(
         json.dumps(
             {
@@ -181,6 +184,9 @@ def test_load_bundle_events_sorts_ascending(
     mut = tmp_path / "state" / "mutations.jsonl"
     mut.parent.mkdir(parents=True)
     baseline = mut.parent / "baseline.json"
+    # baseline.json is a separate runtime constant post PR-STATE-SOT-RUNTIME-SPLIT
+    # (no longer derived from MUTATION_AUDIT_LOG_PATH.parent); point it explicitly.
+    monkeypatch.setattr("core.paths.BASELINE_JSON_PATH", baseline)
 
     hist.write_text(
         json.dumps({"ts": 1500.0, "state": "fired", "detail": "x"}) + "\n",
@@ -298,6 +304,9 @@ def test_baseline_uses_file_mtime_when_no_timestamp_field(
     mut = tmp_path / "state" / "mutations.jsonl"
     mut.parent.mkdir(parents=True)
     baseline = mut.parent / "baseline.json"
+    # baseline.json is a separate runtime constant post PR-STATE-SOT-RUNTIME-SPLIT
+    # (no longer derived from MUTATION_AUDIT_LOG_PATH.parent); point it explicitly.
+    monkeypatch.setattr("core.paths.BASELINE_JSON_PATH", baseline)
     # Production schema — only aggregate payload, NO timestamp/fitness.
     baseline.write_text(
         json.dumps(

@@ -32,7 +32,7 @@ dim) 직접 영향.
    - Without strict flag (operator daily): graceful (no fall-through).
 
 2. ``~/.geode/autoresearch/handoff/tool-descriptions.json`` — operator-local, graceful.
-3. ``state/autoresearch/policies/tool-descriptions.json`` — in-repo, graceful.
+3. ``core/self_improving/state/policies/tool-descriptions.json`` — in-repo, graceful.
 4. ``None`` — no-op (default description 사용).
 
 **Frontier**: OpenAI function calling docs — "clearer descriptions yield

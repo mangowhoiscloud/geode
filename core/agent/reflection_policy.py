@@ -31,7 +31,7 @@
    - Without strict flag (operator daily): graceful (no fall-through).
 
 2. ``~/.geode/autoresearch/handoff/reflection.json`` — operator-local, graceful.
-3. ``state/autoresearch/policies/reflection.json`` — in-repo, graceful.
+3. ``core/self_improving/state/policies/reflection.json`` — in-repo, graceful.
 4. ``None`` — no-op.
 
 **Read-Write parity** (S0a Codex MCP lesson): ``write_policy()`` 가

@@ -36,7 +36,7 @@ authoritative.
 
 2. ``~/.geode/autoresearch/handoff/skill-catalog.json`` — operator-local,
    graceful.
-3. ``state/autoresearch/policies/skill-catalog.json`` — in-repo, graceful.
+3. ``core/self_improving/state/policies/skill-catalog.json`` — in-repo, graceful.
 4. ``None`` — no-op.
 
 **Frontier**: Voyager (Wang et al., 2023) curriculum loop — agent

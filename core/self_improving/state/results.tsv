@@ -1,0 +1,4 @@
+session_id	gen_tag	commit	fitness	critical_min	critical_mean	auxiliary_mean	stability_score	info_mean	dim_count_engaged	verdict	description
+s1	g1	HEAD	0.5
+s1	g1	HEAD	0.5
+s2	g2	HEAD	0.6

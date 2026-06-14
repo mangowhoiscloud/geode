@@ -4,14 +4,17 @@
 PR-CAMPAIGN-DRIVER (2026-05-31); relocated under ``core.self_improving`` by
 PR-SELF-IMPROVING-UMBRELLA (2026-05-31). The companion to
 ``core.self_improving.campaign`` (CLI: ``python -m core.self_improving.watch_campaign``).
-Reads the same three SoTs and prints a compact, flushed digest:
+Reads the same three SoTs and prints a compact, flushed digest. Post
+PR-STATE-SOT-RUNTIME-SPLIT the progress log is RUNTIME (under ``~/.geode``)
+while the two ledgers are the in-repo tracked SoT:
 
-* ``state/autoresearch/campaign-progress.log`` — the per-cycle progress lines
-  the driver tees (last N).
-* ``state/autoresearch/mutations.jsonl`` — the mutator-driven ``kind="attribution"``
-  rows (``source="mutator"``), grouped by ``promote_policy`` arm.
-* ``state/autoresearch/baseline_archive.jsonl`` — the ``kind="baseline"`` rows,
-  grouped by baseline epoch (``epoch_label`` / ``be-NNN``).
+* ``~/.geode/self-improving/campaign-progress.log`` — the per-cycle progress
+  lines the driver tees (last N); runtime, not versioned.
+* ``core/self_improving/state/mutations.jsonl`` — the mutator-driven
+  ``kind="attribution"`` rows (``source="mutator"``), grouped by
+  ``promote_policy`` arm.
+* ``core/self_improving/state/baseline_archive.jsonl`` — the ``kind="baseline"``
+  rows, grouped by baseline epoch (``epoch_label`` / ``be-NNN``).
 
 This is read-only; it never spawns an audit or mutates state. Run it any time
 during a long campaign to see where the held-out fitness curve sits per arm.
@@ -25,13 +28,17 @@ from collections import defaultdict
 from pathlib import Path
 from typing import Any
 
-from core.paths import AUTORESEARCH_STATE_DIR
+from core.paths import (
+    BASELINE_ARCHIVE_PATH,
+    CAMPAIGN_PROGRESS_LOG_PATH,
+    MUTATION_AUDIT_LOG_PATH,
+)
 
 # Single canonical state-dir constant (``core.paths``), env-overridable via
 # ``GEODE_STATE_ROOT``. No local re-definition (no dual SoT — CLAUDE.md).
-PROGRESS_LOG = AUTORESEARCH_STATE_DIR / "campaign-progress.log"
-MUTATIONS_JSONL = AUTORESEARCH_STATE_DIR / "mutations.jsonl"
-BASELINE_ARCHIVE = AUTORESEARCH_STATE_DIR / "baseline_archive.jsonl"
+PROGRESS_LOG = CAMPAIGN_PROGRESS_LOG_PATH  # runtime (per-cycle log)
+MUTATIONS_JSONL = MUTATION_AUDIT_LOG_PATH  # tracked
+BASELINE_ARCHIVE = BASELINE_ARCHIVE_PATH  # tracked
 
 
 def _iter_jsonl(path: Path) -> list[dict[str, Any]]:

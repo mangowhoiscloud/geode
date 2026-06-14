@@ -1,4 +1,4 @@
-# `state/autoresearch/_archive/` — baseline-epoch snapshots
+# `core/self_improving/state/_archive/` — baseline-epoch snapshots
 
 Epoch-boundary snapshot location for the self-improving loop.
 Content-addressed by the baseline **epoch label** `be-NNN` (assigned by
@@ -14,7 +14,7 @@ When a spec change opens a **new** baseline epoch
 production surface is frozen here as an immutable record:
 
 ```
-state/autoresearch/_archive/<prior-be-NNN>/
+core/self_improving/state/_archive/<prior-be-NNN>/
   policies/            # the 5+ mutation-target SoT JSONs at the epoch boundary
   baseline.json        # the promoted fitness baseline (the epoch's final state)
   pool-identity.txt    # the seed-pool content hash the epoch was measured on
@@ -36,7 +36,10 @@ single-responsibility.
 
 ## Git tracking
 
-`_archive/<be-NNN>/` snapshot payloads stay **gitignored** (machine-local
-execution records, like the rest of `state/autoresearch/*`). Only THIS
-`README.md` (the convention) is git-tracked, via an explicit `.gitignore`
-negation.
+This `_archive/` dir lives under the in-repo TRACKED SoT
+(`core/self_improving/state/`), so post PR-STATE-SOT-RUNTIME-SPLIT no
+`.gitignore` negation dance is needed. Epoch snapshots are immutable VERSIONED
+records of the production surface at each ruler change — when the deferred
+auto-snapshot lands, `_archive/<be-NNN>/` payloads are git-tracked alongside the
+`baseline_archive.jsonl` history they index (the runtime LATEST `baseline.json`
+stays out-of-repo under `~/.geode/self-improving/`).

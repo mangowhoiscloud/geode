@@ -266,9 +266,9 @@ def test_mutation_audit_log_path_canonical_in_core_paths() -> None:
     assert hasattr(paths, "MUTATION_AUDIT_LOG_PATH")
     assert paths.MUTATION_AUDIT_LOG_PATH.name == "mutations.jsonl"
     parts = paths.MUTATION_AUDIT_LOG_PATH.parts
-    # PR-STATE-SELF-IMPROVING-RENAME (2026-06-01) — state moved from
-    # autoresearch/state (#1955) → state/autoresearch → state/autoresearch (Scheme A).
-    assert parts[-3:] == ("state", "autoresearch", "mutations.jsonl")
+    # PR-STATE-SOT-RUNTIME-SPLIT (2026-06-14) — the tracked SoT moved in-repo
+    # next to its package: ``<repo>/core/self_improving/state/mutations.jsonl``.
+    assert parts[-3:] == ("self_improving", "state", "mutations.jsonl")
 
 
 def test_runner_reexports_mutation_audit_log_path() -> None:
@@ -287,10 +287,9 @@ def test_runner_reexports_mutation_audit_log_path() -> None:
     # canonical core.paths location.
     canonical = paths.MUTATION_AUDIT_LOG_PATH
     assert canonical.name == "mutations.jsonl"
-    # PR-STATE-AUTORESEARCH-RENAME (2026-06-01, Scheme A) — parent dir is
-    # ``autoresearch`` (under ``state/``); renamed from ``self_improving``
-    # of #1955 to kill the underscore/hyphen twin.
-    assert canonical.parts[-2] == "autoresearch"
+    # PR-STATE-SOT-RUNTIME-SPLIT (2026-06-14) — the tracked SoT now lives at
+    # ``<repo>/core/self_improving/state/``, so the parent dir is ``state``.
+    assert canonical.parts[-2] == "state"
     # The runner export resolves to the same path. ``is`` would also
     # work in a fresh process; we use value equality so the test
     # tolerates other tests' monkeypatches that didn't reset.

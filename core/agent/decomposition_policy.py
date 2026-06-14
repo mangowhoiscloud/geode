@@ -33,7 +33,7 @@ prompt 를 로드하지만 ``decomposition.json`` 과는 미연결 (PR-AUDIT-5SL
    - Without strict flag (operator daily): graceful (no fall-through).
 
 2. ``~/.geode/autoresearch/handoff/decomposition.json`` — operator-local, graceful.
-3. ``state/autoresearch/policies/decomposition.json`` — in-repo, graceful.
+3. ``core/self_improving/state/policies/decomposition.json`` — in-repo, graceful.
 4. ``None`` — no-op.
 """
 

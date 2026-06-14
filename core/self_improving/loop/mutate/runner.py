@@ -22,7 +22,7 @@ What the runner adds:
    JSON, validate against the SoT schema.
 5. **Apply + audit log** — call ``write_wrapper_prompt_sections`` and
    append the mutation to the git-tracked audit jsonl
-   (``state/autoresearch/mutations.jsonl``).
+   (``core/self_improving/state/mutations.jsonl``).
 6. **Optional re-run** — when ``rerun=True`` (default ``False`` to
    keep dry-runs cheap), spawn ``core/self_improving/train.py`` so the next
    baseline reflects the new wrapper.
@@ -884,7 +884,7 @@ def _default_llm_call(system_prompt: str, user_prompt: str) -> str:
 # moot — ALL hyperparam mutations are rejected — and is removed rather than
 # left as dead branches. A single clear rejection replaces it.
 #
-# PRESERVED: ``state/autoresearch/policies/hyperparam.json`` and its RUNTIME
+# PRESERVED: ``core/self_improving/state/policies/hyperparam.json`` and its RUNTIME
 # readers (``core.self_improving.train._load_hyperparam_overrides`` →
 # seed_limit/max_turns/dim_set/reflection_depth consumed by the audit subprocess
 # + AgenticLoop). Only the MUTATION surface is gone.
@@ -1230,12 +1230,13 @@ def _git_commit_audit_log(
     argv without running real git.
     """
     try:
-        # parents[2] = repo root. ``log_path`` is
-        # ``<repo>/state/autoresearch/mutations.jsonl``; parents[1]
-        # resolves to ``<repo>/state`` which is *inside* the git tree but
-        # is not the repo root and would silently rebase git operations
-        # against a non-canonical cwd.
-        repo_root = log_path.resolve().parents[2]
+        # parents[3] = repo root. ``log_path`` is
+        # ``<repo>/core/self_improving/state/mutations.jsonl`` (PR-STATE-SOT-
+        # RUNTIME-SPLIT moved it in-repo, one level deeper than the old
+        # ``state/autoresearch/`` — parents went 2 → 3). parents[2] would
+        # resolve to ``<repo>/core`` and silently run git in a non-root cwd.
+        # Guarded by test_runner_repo_root_invariant.
+        repo_root = log_path.resolve().parents[3]
         subprocess.run(  # noqa: S603  # nosec B603 — argv = audit-log path
             ["git", "add", str(log_path)],  # noqa: S607  # nosec B607 — git in PATH
             cwd=str(repo_root),
@@ -1544,11 +1545,12 @@ class SelfImprovingLoopRunner:
         if self.commit_enabled:
             _git_commit_audit_log(log_path, mutation=proposal.mutation)
         if self.rerun_enabled:
-            # MUTATION_AUDIT_LOG_PATH lives at <repo>/state/autoresearch/mutations.jsonl,
-            # so parents[2] is the repo root. parents[1] would point at
-            # <repo>/state and spawn `uv run python -m core.self_improving.train`
-            # with cwd=state → ENOENT on state/core/self_improving/train.py.
-            repo_root = log_path.resolve().parents[2]
+            # MUTATION_AUDIT_LOG_PATH lives at
+            # <repo>/core/self_improving/state/mutations.jsonl, so parents[3] is
+            # the repo root (PR-STATE-SOT-RUNTIME-SPLIT moved it in-repo, depth
+            # 2 → 3). parents[2] would point at <repo>/core and spawn
+            # `uv run python -m core.self_improving.train` with the wrong cwd.
+            repo_root = log_path.resolve().parents[3]
             # PR-SOT-REVERT-ON-AUDIT-FAIL (2026-05-26) — forward
             # ``proposal.original_sections`` so _invoke_autoresearch can
             # rollback the canonical SoT if the audit subprocess crashes

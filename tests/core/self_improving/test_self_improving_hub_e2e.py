@@ -37,6 +37,7 @@ documented in ``docs/design/self-improving-hub-system.md`` +
 from __future__ import annotations
 
 import json
+import os
 import re
 import shutil
 import subprocess
@@ -63,11 +64,25 @@ def _run_builder(
     *,
     bundle_root: Path | None = None,
     autoresearch_root: Path | None = None,
+    repo_root: Path | None = None,
+    runtime_home: Path | None = None,
     seedgen_out_dir: Path | None = None,
     autoresearch_out_dir: Path | None = None,
 ) -> subprocess.CompletedProcess[str]:
-    """Run the hub builder against fixture roots, output into ``out_dir``."""
+    """Run the hub builder against fixture roots, output into ``out_dir``.
+
+    PR-STATE-SOT-RUNTIME-SPLIT — the builder reads from three lifecycle homes, so
+    the harness isolates all three: ``--autoresearch-root`` (TRACKED state),
+    ``--repo-root`` (in-repo docs/audits MANIFEST, default = fixture root), and
+    ``GEODE_HOME`` (RUNTIME baseline.json / campaign-progress.log / gen-0 snapshot,
+    default = the fixture's ``runtime-home/``). Setting ``GEODE_HOME`` is what keeps
+    the build hermetic w.r.t. the operator's real ``~/.geode`` runtime tree.
+    """
     out_dir.mkdir(parents=True, exist_ok=True)
+    if repo_root is None:
+        repo_root = FIXTURE_ROOT
+    if runtime_home is None:
+        runtime_home = FIXTURE_ROOT / "runtime-home"
     # Redirect EVERY output dir to a sibling under the test's own out_dir so a
     # builder run never writes into the production docs/ tree. The builder
     # defaults --out / --seedgen-out-dir / --autoresearch-out-dir to
@@ -87,12 +102,17 @@ def _run_builder(
         "--autoresearch-out-dir",
         str(autoresearch_out_dir),
     ]
+    cmd.extend(["--repo-root", str(repo_root)])
     if bundle_root is not None:
         cmd.extend(["--bundle-root", str(bundle_root)])
     if autoresearch_root is not None:
         cmd.extend(["--autoresearch-root", str(autoresearch_root)])
+    # Isolate the RUNTIME root: GEODE_HOME → RUNTIME_ROOT=<home>/self-improving, so
+    # the builder reads the fixture's runtime files, never the operator's ~/.geode.
+    env = {**os.environ, "GEODE_HOME": str(runtime_home)}
+    env.pop("GEODE_STATE_ROOT", None)  # don't let an ambient override win over GEODE_HOME
     return subprocess.run(  # noqa: S603 — fixture-only invocation, no user input
-        cmd, check=False, capture_output=True, text=True, cwd=str(REPO_ROOT)
+        cmd, check=False, capture_output=True, text=True, cwd=str(REPO_ROOT), env=env
     )
 
 
@@ -417,6 +437,9 @@ def test_missing_autoresearch_baseline_renders_warning(tmp_path: Path) -> None:
         out,
         bundle_root=FIXTURE_ROOT / "petri-bundle",
         autoresearch_root=fake_ar,
+        # Empty RUNTIME home too (no baseline.json) so the "absent baseline" path is
+        # genuinely exercised — not silently satisfied by the fixture's runtime tree.
+        runtime_home=tmp_path / "empty-home",
     )
     assert result.returncode == 0, result.stderr
     html = _read_built(out)
@@ -526,28 +549,12 @@ def built_seedgen_pages(tmp_path_factory: pytest.TempPathFactory) -> dict[str, s
     hub_out = out / "hub"
     seedgen_out = out / "seedgen"
     autoresearch_out = out / "autoresearch"
-    result = subprocess.run(  # noqa: S603 — fixture invocation
-        [
-            sys.executable,
-            str(BUILDER),
-            "--out",
-            str(hub_out / "index.html"),
-            "--bundle-root",
-            str(FIXTURE_ROOT / "petri-bundle"),
-            "--autoresearch-root",
-            str(FIXTURE_ROOT / "autoresearch"),
-            "--seedgen-out-dir",
-            str(seedgen_out),
-            # Redirect autoresearch output to tmp too — without this flag the
-            # builder renders into docs/self-improving/autoresearch/, dirtying
-            # the worktree on every run.
-            "--autoresearch-out-dir",
-            str(autoresearch_out),
-        ],
-        check=False,
-        capture_output=True,
-        text=True,
-        cwd=str(REPO_ROOT),
+    result = _run_builder(
+        hub_out,
+        bundle_root=FIXTURE_ROOT / "petri-bundle",
+        autoresearch_root=FIXTURE_ROOT / "autoresearch",
+        seedgen_out_dir=seedgen_out,
+        autoresearch_out_dir=autoresearch_out,
     )
     assert result.returncode == 0, (
         f"seedgen builder failed: stdout={result.stdout!r} stderr={result.stderr!r}"
@@ -894,25 +901,15 @@ def built_autoresearch_pages(tmp_path_factory: pytest.TempPathFactory) -> dict[s
     hub_out = out / "hub"
     seedgen_out = out / "seedgen"
     autoresearch_out = out / "autoresearch"
-    result = subprocess.run(  # noqa: S603 — fixture invocation
-        [
-            sys.executable,
-            str(BUILDER),
-            "--out",
-            str(hub_out / "index.html"),
-            "--bundle-root",
-            str(FIXTURE_ROOT / "petri-bundle"),
-            "--autoresearch-root",
-            str(FIXTURE_ROOT / "autoresearch"),
-            "--seedgen-out-dir",
-            str(seedgen_out),
-            "--autoresearch-out-dir",
-            str(autoresearch_out),
-        ],
-        check=False,
-        capture_output=True,
-        text=True,
-        cwd=str(REPO_ROOT),
+    # Use the shared harness so the RUNTIME (GEODE_HOME) + in-repo-docs (--repo-root)
+    # isolation applies — otherwise the baseline page reads the operator's real
+    # ~/.geode and the namespace blocks vanish (PR-STATE-SOT-RUNTIME-SPLIT).
+    result = _run_builder(
+        hub_out,
+        bundle_root=FIXTURE_ROOT / "petri-bundle",
+        autoresearch_root=FIXTURE_ROOT / "autoresearch",
+        seedgen_out_dir=seedgen_out,
+        autoresearch_out_dir=autoresearch_out,
     )
     assert result.returncode == 0, (
         f"autoresearch builder failed: stdout={result.stdout!r} stderr={result.stderr!r}"
@@ -1094,38 +1091,29 @@ def test_autoresearch_baseline_renders(built_autoresearch_pages: dict[str, str])
 
 
 def test_autoresearch_baseline_stale_warning(tmp_path: Path) -> None:
-    """When live baseline.json is absent but `.outdated-*` exists, the
-    `.warning-banner` div renders on baseline + landing pages."""
-    # Build a fixture variant: only an outdated baseline file.
-    fake_ar = tmp_path / "fake-autoresearch"
-    state = fake_ar / "state"
-    state.mkdir(parents=True)
-    (state / "baseline.json.outdated-20260520").write_text(
+    """When live baseline.json is absent but `.outdated-*` exists in the RUNTIME
+    home, the `.warning-banner` div renders on baseline + landing pages.
+
+    Post PR-STATE-SOT-RUNTIME-SPLIT the baseline (live + outdated) is RUNTIME, so
+    the outdated snapshot is seeded into the isolated GEODE_HOME, not the tracked
+    state dir."""
+    # Isolated RUNTIME home with ONLY an outdated baseline (no live baseline.json).
+    runtime_home = tmp_path / "home"
+    runtime_self_improving = runtime_home / "self-improving"
+    runtime_self_improving.mkdir(parents=True)
+    (runtime_self_improving / "baseline.json.outdated-20260520").write_text(
         '{"schema_version": 2, "metadata": {"gen_tag": "gen-old"}, '
         '"fitness": {"value": 0.5}, "audit": {}, "promotion": {}}',
         encoding="utf-8",
     )
     out = tmp_path / "out"
     autoresearch_out = out / "autoresearch"
-    result = subprocess.run(  # noqa: S603 — fixture invocation
-        [
-            sys.executable,
-            str(BUILDER),
-            "--out",
-            str(out / "index.html"),
-            "--bundle-root",
-            str(FIXTURE_ROOT / "petri-bundle"),
-            "--autoresearch-root",
-            str(fake_ar),
-            "--seedgen-out-dir",
-            str(out / "seedgen"),
-            "--autoresearch-out-dir",
-            str(autoresearch_out),
-        ],
-        check=False,
-        capture_output=True,
-        text=True,
-        cwd=str(REPO_ROOT),
+    result = _run_builder(
+        out,
+        bundle_root=FIXTURE_ROOT / "petri-bundle",
+        autoresearch_root=FIXTURE_ROOT / "autoresearch",
+        autoresearch_out_dir=autoresearch_out,
+        runtime_home=runtime_home,
     )
     assert result.returncode == 0, result.stderr
     baseline_html = (autoresearch_out / "baseline" / "index.html").read_text(encoding="utf-8")
@@ -1242,25 +1230,12 @@ def test_autoresearch_held_out_curve_omitted_without_bench(tmp_path: Path) -> No
     mutations_path.write_text("\n".join(stripped_lines) + "\n", encoding="utf-8")
 
     out = tmp_path / "out"
-    result = subprocess.run(  # noqa: S603 — test invocation
-        [
-            sys.executable,
-            str(BUILDER),
-            "--out",
-            str(out / "hub" / "index.html"),
-            "--bundle-root",
-            str(fixture_copy / "petri-bundle"),
-            "--autoresearch-root",
-            str(fixture_copy / "autoresearch"),
-            "--seedgen-out-dir",
-            str(out / "seedgen"),
-            "--autoresearch-out-dir",
-            str(out / "autoresearch"),
-        ],
-        check=False,
-        capture_output=True,
-        text=True,
-        cwd=str(REPO_ROOT),
+    result = _run_builder(
+        out / "hub",
+        bundle_root=fixture_copy / "petri-bundle",
+        autoresearch_root=fixture_copy / "autoresearch",
+        seedgen_out_dir=out / "seedgen",
+        autoresearch_out_dir=out / "autoresearch",
     )
     assert result.returncode == 0, f"builder failed: {result.stderr!r}"
     mutations_html = (out / "autoresearch" / "mutations" / "index.html").read_text(encoding="utf-8")
@@ -1467,25 +1442,12 @@ def built_run_report_pages(tmp_path_factory: pytest.TempPathFactory) -> dict[str
     hub_out = out / "hub"
     seedgen_out = out / "seedgen"
     autoresearch_out = out / "autoresearch"
-    result = subprocess.run(  # noqa: S603 — fixture invocation
-        [
-            sys.executable,
-            str(BUILDER),
-            "--out",
-            str(hub_out / "index.html"),
-            "--bundle-root",
-            str(FIXTURE_ROOT / "petri-bundle"),
-            "--autoresearch-root",
-            str(FIXTURE_ROOT / "autoresearch"),
-            "--seedgen-out-dir",
-            str(seedgen_out),
-            "--autoresearch-out-dir",
-            str(autoresearch_out),
-        ],
-        check=False,
-        capture_output=True,
-        text=True,
-        cwd=str(REPO_ROOT),
+    result = _run_builder(
+        hub_out,
+        bundle_root=FIXTURE_ROOT / "petri-bundle",
+        autoresearch_root=FIXTURE_ROOT / "autoresearch",
+        seedgen_out_dir=seedgen_out,
+        autoresearch_out_dir=autoresearch_out,
     )
     assert result.returncode == 0, (
         f"run-report builder failed: stdout={result.stdout!r} stderr={result.stderr!r}"
@@ -2295,26 +2257,14 @@ def built_pr3_pages(tmp_path_factory: pytest.TempPathFactory) -> dict[str, str]:
     out = tmp_path_factory.mktemp("seedgen-out-p3")
     seedgen_out = out / "seedgen"
     autoresearch_out = out / "autoresearch"
-    subprocess.run(  # noqa: S603
-        [
-            sys.executable,
-            str(BUILDER),
-            "--out",
-            str(out / "hub" / "index.html"),
-            "--bundle-root",
-            str(FIXTURE_ROOT / "petri-bundle"),
-            "--autoresearch-root",
-            str(FIXTURE_ROOT / "autoresearch"),
-            "--seedgen-out-dir",
-            str(seedgen_out),
-            # Redirect autoresearch output to tmp too — otherwise the builder
-            # writes into docs/self-improving/autoresearch/ and dirties the tree.
-            "--autoresearch-out-dir",
-            str(autoresearch_out),
-        ],
-        check=True,
-        cwd=str(REPO_ROOT),
+    result = _run_builder(
+        out / "hub",
+        bundle_root=FIXTURE_ROOT / "petri-bundle",
+        autoresearch_root=FIXTURE_ROOT / "autoresearch",
+        seedgen_out_dir=seedgen_out,
+        autoresearch_out_dir=autoresearch_out,
     )
+    assert result.returncode == 0, result.stderr
     pages: dict[str, str] = {}
     active_path = seedgen_out / "active" / "index.html"
     if active_path.is_file():
@@ -2430,24 +2380,14 @@ def built_seedgen_tree(tmp_path_factory: pytest.TempPathFactory) -> Path:
     """
     build_root = tmp_path_factory.mktemp("seedgen-tree")
     seedgen_out = build_root / "seedgen"
-    subprocess.run(  # noqa: S603 — fixture invocation, no user input
-        [
-            sys.executable,
-            str(BUILDER),
-            "--out",
-            str(build_root / "hub" / "index.html"),
-            "--bundle-root",
-            str(FIXTURE_ROOT / "petri-bundle"),
-            "--autoresearch-root",
-            str(FIXTURE_ROOT / "autoresearch"),
-            "--seedgen-out-dir",
-            str(seedgen_out),
-            "--autoresearch-out-dir",
-            str(build_root / "autoresearch"),
-        ],
-        check=True,
-        cwd=str(REPO_ROOT),
+    result = _run_builder(
+        build_root / "hub",
+        bundle_root=FIXTURE_ROOT / "petri-bundle",
+        autoresearch_root=FIXTURE_ROOT / "autoresearch",
+        seedgen_out_dir=seedgen_out,
+        autoresearch_out_dir=build_root / "autoresearch",
     )
+    assert result.returncode == 0, result.stderr
     return seedgen_out
 
 
@@ -2498,25 +2438,12 @@ def test_viewer_diff_link_gated_on_diff_page(tmp_path: Path) -> None:
 
     out = tmp_path / "out"
     seedgen_out = out / "seedgen"
-    result = subprocess.run(  # noqa: S603 — fixture invocation, no user input
-        [
-            sys.executable,
-            str(BUILDER),
-            "--out",
-            str(out / "hub" / "index.html"),
-            "--bundle-root",
-            str(bundle),
-            "--autoresearch-root",
-            str(FIXTURE_ROOT / "autoresearch"),
-            "--seedgen-out-dir",
-            str(seedgen_out),
-            "--autoresearch-out-dir",
-            str(out / "autoresearch"),
-        ],
-        check=False,
-        capture_output=True,
-        text=True,
-        cwd=str(REPO_ROOT),
+    result = _run_builder(
+        out / "hub",
+        bundle_root=bundle,
+        autoresearch_root=FIXTURE_ROOT / "autoresearch",
+        seedgen_out_dir=seedgen_out,
+        autoresearch_out_dir=out / "autoresearch",
     )
     assert result.returncode == 0, result.stderr
     run_root = seedgen_out / SEEDGEN_FIXTURE_RUN_ID
@@ -2789,10 +2716,11 @@ def test_current_campaign_rows_are_all_pre_1947_penalized() -> None:
 def test_campaign_progress_parses_cycles_gen0_and_noise() -> None:
     """The campaign-progress.log parser yields per-cycle records (verdict + SKIP),
     the gen-0 K-mean repeats, and the noise band — the verdict SoT the attribution
-    rows do not carry. Reads the committed fixture log."""
+    rows do not carry. Reads the committed fixture log (now under the RUNTIME home
+    post PR-STATE-SOT-RUNTIME-SPLIT, no longer beside the tracked mutations.jsonl)."""
     builder = _load_builder_module()
-    state_dir = FIXTURE_ROOT / "autoresearch" / "state"
-    progress = builder._load_campaign_progress(state_dir)
+    runtime_dir = FIXTURE_ROOT / "runtime-home" / "self-improving"
+    progress = builder._load_campaign_progress(runtime_dir)
     arms = {c["arm"] for c in progress["cycles"]}
     assert {"gate", "never"} <= arms, "both fixture arms must be parsed"
     gate = [c for c in progress["cycles"] if c["arm"] == "gate"]

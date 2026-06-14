@@ -319,11 +319,13 @@ def test_rollback_check_baseline_dependent_predicate_uses_patched_path(
 ) -> None:
     """Codex MCP review #2 (CONDITIONAL_PASS must-fix #2) — pin that the
     rollback-check command reads baseline.json from the *patched*
-    ``MUTATION_AUDIT_LOG_PATH`` location, NOT from the runner-cached
-    default. The predicate "any dim regresses by more than X" depends on
-    baseline_dim — if baseline.json isn't read from the right place, the
-    predicate either returns False silently (no baseline_dim → fall
-    through to False) or evaluates against operator's real baseline.
+    ``BASELINE_JSON_PATH`` location, NOT from the operator's real runtime
+    baseline. Post PR-STATE-SOT-RUNTIME-SPLIT baseline.json is a separate
+    runtime constant (no longer a sibling of ``MUTATION_AUDIT_LOG_PATH``). The
+    predicate "any dim regresses by more than X" depends on baseline_dim — if
+    baseline.json isn't read from the right place, the predicate either returns
+    False silently (no baseline_dim → fall through to False) or evaluates
+    against operator's real baseline.
 
     Writes a baseline.json with one dim at 5.0, an apply row with the
     regression-by-more-than-0.5 predicate, and an attribution row whose
@@ -353,6 +355,7 @@ def test_rollback_check_baseline_dependent_predicate_uses_patched_path(
     )
 
     monkeypatch.setattr("core.paths.MUTATION_AUDIT_LOG_PATH", log_path)
+    monkeypatch.setattr("core.paths.BASELINE_JSON_PATH", baseline_path)
 
     _cmd_rollback_check([])
     output = capsys.readouterr().out

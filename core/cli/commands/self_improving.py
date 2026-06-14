@@ -2,7 +2,7 @@
 
 PR-OPS-1 (2026-05-21) — smallest operator-facing surface for the
 self-improving loop. Today only the ``status`` sub-action is wired:
-it reads ``state/autoresearch/mutations.jsonl`` (the git-tracked
+it reads ``core/self_improving/state/mutations.jsonl`` (the git-tracked
 mutation audit) and the most recent ``baseline.json`` to print a
 two-block summary — current baseline fitness + the last N mutations.
 
@@ -127,10 +127,10 @@ def _cmd_status() -> None:
     """Render current baseline + recent mutations.
 
     Output blocks (Mode B mutator state):
-      1. Baseline — ``state/autoresearch/baseline.json`` (if exists)
+      1. Baseline — ``~/.geode/self-improving/baseline.json`` (if exists)
          · ``fitness`` scalar, ``promote_reason``, ``timestamp``
       2. Recent mutations — last N rows from
-         ``state/autoresearch/mutations.jsonl``
+         ``core/self_improving/state/mutations.jsonl``
          · per-row ``ts`` / ``mutation_id`` / ``target_kind`` /
            ``target_section`` / ``kind`` (applied | rejected | rolled_back)
 
@@ -180,12 +180,14 @@ def _cmd_status() -> None:
 
 
 def _baseline_path() -> Path:
-    """Resolve ``state/autoresearch/baseline.json`` relative to the
-    project root. The audit ledger lives in the same dir, so we lean
-    on its constant rather than reinventing root-detection here."""
-    from core.self_improving.loop.mutate.runner import MUTATION_AUDIT_LOG_PATH
+    """Resolve the LATEST runtime ``baseline.json`` (``~/.geode/self-improving/``).
 
-    return Path(MUTATION_AUDIT_LOG_PATH).parent / "baseline.json"
+    Post PR-STATE-SOT-RUNTIME-SPLIT the runtime baseline no longer sits beside
+    the tracked ``mutations.jsonl``; read it from its own constant (which honours
+    ``GEODE_STATE_ROOT`` so an isolated worker still resolves its own copy)."""
+    import core.paths
+
+    return Path(core.paths.BASELINE_JSON_PATH)
 
 
 def _load_json(path: Path) -> dict[str, Any] | None:
@@ -612,8 +614,8 @@ def _clip(s: str, n: int) -> str:
 #
 # These two actions intentionally delegate to git rather than
 # re-implement what git already does on top of the in-repo mutation
-# ledger (``state/autoresearch/mutations.jsonl``) + the 5 policy SoT
-# JSONs at ``state/autoresearch/policies/`` (both git-tracked since
+# ledger (``core/self_improving/state/mutations.jsonl``) + the 5 policy SoT
+# JSONs at ``core/self_improving/state/policies/`` (both git-tracked since
 # PR-RATCHET-1, 2026-05-21). Re-implementing the JSONL tail walker +
 # a custom rollback verb would duplicate `git log` + `git revert`
 # while losing standard git ergonomics (refs / SHAs / signed
@@ -624,8 +626,8 @@ def _clip(s: str, n: int) -> str:
 def _cmd_history() -> None:
     """Show the operator how to read the mutation history via git.
 
-    The mutation ledger (``state/autoresearch/mutations.jsonl``) +
-    the 5 policy SoT JSONs (``state/autoresearch/policies/``) are
+    The mutation ledger (``core/self_improving/state/mutations.jsonl``) +
+    the 5 policy SoT JSONs (``core/self_improving/state/policies/``) are
     git-trackable (``.gitignore`` negation lets them be added);
     after the first applied mutation lands a commit, ``git log``
     over either path is the canonical history view. Codex MCP
@@ -641,20 +643,20 @@ def _cmd_history() -> None:
         "  [muted]Mutation ledger (one row per mutation, with ts / id / "
         "target_kind / target_section / rationale):[/muted]"
     )
-    console.print("    [bold]git log -p state/autoresearch/mutations.jsonl[/bold]")
+    console.print("    [bold]git log -p core/self_improving/state/mutations.jsonl[/bold]")
     console.print(
         "    [muted]→ empty when no mutation has been applied yet "
         "(first /self-improving run apply seeds the ledger).[/muted]"
     )
     console.print()
     console.print("  [muted]Compact form (commit message + 1-line ledger row):[/muted]")
-    console.print("    [bold]git log --oneline state/autoresearch/mutations.jsonl[/bold]")
+    console.print("    [bold]git log --oneline core/self_improving/state/mutations.jsonl[/bold]")
     console.print()
     console.print(
         "  [muted]Current policy state (5 SoT files, see ``git diff`` for "
         "the current vs last-promoted snapshot):[/muted]"
     )
-    console.print("    [bold]git log --stat state/autoresearch/policies/[/bold]")
+    console.print("    [bold]git log --stat core/self_improving/state/policies/[/bold]")
     console.print()
     console.print(
         "  [muted]Quick recent summary (last N applied/rejected/rolled_back rows):[/muted]"
@@ -679,14 +681,16 @@ def _cmd_rollback(opts: list[str]) -> None:
         console.print(f"  [muted]Find the commit that applied mutation_id={target!r}:[/muted]")
         console.print(
             f"    [bold]git log --all --grep={target!r} -- "
-            "state/autoresearch/mutations.jsonl[/bold]"
+            "core/self_improving/state/mutations.jsonl[/bold]"
         )
         console.print()
         console.print("  [muted]Revert that commit:[/muted]")
         console.print("    [bold]git revert <sha-from-above>[/bold]")
     else:
         console.print("  [muted]Find the SHA of the mutation you want to undo:[/muted]")
-        console.print("    [bold]git log --oneline -p state/autoresearch/mutations.jsonl[/bold]")
+        console.print(
+            "    [bold]git log --oneline -p core/self_improving/state/mutations.jsonl[/bold]"
+        )
         console.print()
         console.print("  [muted]Revert it:[/muted]")
         console.print("    [bold]git revert <sha>[/bold]")
@@ -705,7 +709,7 @@ def _cmd_rollback(opts: list[str]) -> None:
 #
 # PR-RATCHET-1 introduced a *lazy* migration helper that copies
 # pre-PR ``~/.geode/autoresearch/handoff/<file>.json`` payloads to
-# the new in-repo ``state/autoresearch/policies/`` location on the
+# the new in-repo ``core/self_improving/state/policies/`` location on the
 # first ``load_policy`` / ``write_policy`` call. The lazy path is
 # operator-invisible — they don't see a "migration in progress"
 # signal, so they can't confirm the move happened. PR-MINIMAL-2's
@@ -717,7 +721,7 @@ def _cmd_rollback(opts: list[str]) -> None:
 
 def _cmd_migrate() -> None:
     """Explicit one-shot migration from ``~/.geode/autoresearch/handoff/``
-    to the in-repo ``state/autoresearch/policies/`` directory.
+    to the in-repo ``core/self_improving/state/policies/`` directory.
 
     Iterates every ``TARGET_KINDS`` entry, calls
     ``_maybe_migrate_legacy_sot`` for each, and renders a per-kind
@@ -1311,7 +1315,7 @@ def _cmd_rollback_check(opts: list[str]) -> None:
     Operators use this to spot mutations whose rollback condition is now
     firing against current state — manual rollback candidates.
     """
-    from core.paths import MUTATION_AUDIT_LOG_PATH
+    import core.paths
     from core.self_improving.loop.observe.mutations_reader import (
         read_recent_applies,
         read_recent_attributions,
@@ -1319,8 +1323,8 @@ def _cmd_rollback_check(opts: list[str]) -> None:
     from core.self_improving.loop.observe.rollback_condition import evaluate_rollback_condition
 
     last_n = _parse_last_n(opts)
-    apply_rows = read_recent_applies(n=last_n, path=MUTATION_AUDIT_LOG_PATH)
-    attr_rows = read_recent_attributions(n=last_n, path=MUTATION_AUDIT_LOG_PATH)
+    apply_rows = read_recent_applies(n=last_n, path=core.paths.MUTATION_AUDIT_LOG_PATH)
+    attr_rows = read_recent_attributions(n=last_n, path=core.paths.MUTATION_AUDIT_LOG_PATH)
 
     console.print()
     console.print(f"  [header]Rollback-condition evaluation[/header] (last {last_n} applied rows)")
@@ -1329,14 +1333,12 @@ def _cmd_rollback_check(opts: list[str]) -> None:
         console.print()
         return
 
-    # Codex MCP review (CONDITIONAL_PASS must-fix #1) — derive baseline
-    # path from the SAME freshly-resolved ``MUTATION_AUDIT_LOG_PATH`` we
-    # used for the JSONL reads, not from ``_baseline_path()`` which
-    # imports the runner's module-cached copy. Without this, a
-    # monkeypatch on ``core.paths.MUTATION_AUDIT_LOG_PATH`` would only
-    # swap the apply/attribution reads and silently fall through to the
-    # operator's real baseline.json — wrong evaluation target.
-    baseline_path = Path(MUTATION_AUDIT_LOG_PATH).parent / "baseline.json"
+    # baseline.json is RUNTIME (out-of-repo, PR-STATE-SOT-RUNTIME-SPLIT), no
+    # longer a sibling of the tracked mutations.jsonl — read it from the live
+    # ``core.paths.BASELINE_JSON_PATH`` via attribute access so a test monkeypatch
+    # on that constant is seen here (the original Codex must-fix #1 isolation
+    # property, now keyed on the baseline constant rather than the audit log).
+    baseline_path = Path(core.paths.BASELINE_JSON_PATH)
     baseline = _load_json(baseline_path) or {}
     baseline_dim_raw = baseline.get("dim_means") if isinstance(baseline, dict) else None
     if not isinstance(baseline_dim_raw, dict):

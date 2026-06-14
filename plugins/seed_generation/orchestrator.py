@@ -317,7 +317,7 @@ class PipelineState:
     baseline_means: dict[str, float] | None = None
     baseline_stderr: dict[str, float] | None = None
     # G3 — full BaselineSnapshot (dim_means + dim_stderr + evidence) loaded
-    # from ``state/autoresearch/baseline.json`` when the CLI flow auto-picks
+    # from ``~/.geode/self-improving/baseline.json`` when the CLI flow auto-picks
     # or the operator explicitly opts into baseline-grounded generation. The
     # generator / critic / evolver agents read ``snapshot.evidence[target_dim]``
     # via :func:`plugins.seed_generation.baseline_reader.format_evidence_block`.
@@ -770,20 +770,18 @@ class Pipeline:
         )
 
     def _append_session_index(self, *, started_at: float, ended_at: float) -> None:
-        """Append one row to ``state/autoresearch/handoff/sessions.jsonl``.
+        """Append one row to the cross-run ``handoff/sessions.jsonl`` index.
 
         P1a — shared cross-loop registry. ``session_id`` defaults to
         ``state.run_id`` (already unique per ``audit-seeds generate``
         invocation). I/O failures are logged but never raise; the
         in-memory ``state`` stays authoritative.
         """
-        # CSP-7 (2026-05-22) — cross-run state moved into the repo
-        # (``state/autoresearch/handoff/`` by default, env-overridable
-        # via ``GEODE_STATE_ROOT``). PR-STATE-AUTORESEARCH-RENAME
-        # (2026-06-01, Scheme A) nested it under the autoresearch root
-        # (was ``state/self-improving-loop/``). Pre-CSP-7 path was
-        # ``~/.geode/autoresearch/handoff/`` — machine-specific, broke
-        # reproducibility when the run was cloned to a different host.
+        # The handoff index is RUNTIME (per-run pointers, not versioned). Post
+        # PR-STATE-SOT-RUNTIME-SPLIT (2026-06-14) it lives under the runtime root
+        # (``~/.geode/self-improving/handoff/`` by default, env-overridable via
+        # ``GEODE_STATE_ROOT``) — moved OUT of the interim in-repo ``state/``
+        # tree so a clone/worktree never carries another host's run pointers.
         from core.paths import AUTORESEARCH_HANDOFF_DIR
 
         handoff_home = AUTORESEARCH_HANDOFF_DIR

@@ -5,12 +5,12 @@ Reads live data at build time and renders the static landing page:
 
 - `docs/self-improving/petri-bundle/logs/listing.json`     -> Petri audit table (top-10)
 - `docs/self-improving/petri-bundle/seeds/listing.json`    -> Seed-generation table
-- `state/autoresearch/baseline.json`      -> Autoresearch baseline row
+- `~/.geode/self-improving/baseline.json`      -> Autoresearch baseline row
    (falls back to most recent `baseline.json.outdated-*` with a stale flag
    per design contract §10 of the master DESIGN.md)
-- `state/autoresearch/mutations.jsonl`    -> row count for autoresearch row
-- `state/autoresearch/results.tsv`        -> row count for autoresearch row
-- `state/autoresearch/policies/`          -> file count
+- `core/self_improving/state/mutations.jsonl`    -> row count for autoresearch row
+- `core/self_improving/state/results.tsv`        -> row count for autoresearch row
+- `core/self_improving/state/policies/`          -> file count
 - `pyproject.toml`                          -> GEODE version stamp
 
 Page contract:   docs/design/self-improving-hub.md
@@ -19,7 +19,7 @@ Master tokens:   docs/design/self-improving-hub-system.md
 CLI:
     python scripts/build_self_improving_hub.py
         [--bundle-root docs/self-improving/petri-bundle]
-        [--state-dir state/autoresearch]
+        [--state-dir core/self_improving/state]
         [--out docs/self-improving/index.html]
 
 The served section dir + URLs stay `docs/self-improving/autoresearch/` +
@@ -48,7 +48,12 @@ from statistics import NormalDist
 from typing import Any
 from urllib.parse import quote
 
-from core.paths import GEODE_REPO_URL
+from core.paths import (
+    AUTORESEARCH_STATE_DIR,
+    BASELINE_JSON_PATH,
+    GEODE_REPO_URL,
+    RUNTIME_ROOT,
+)
 from markdown_it import MarkdownIt
 
 LOG = logging.getLogger("build_self_improving_hub")
@@ -56,14 +61,14 @@ LOG = logging.getLogger("build_self_improving_hub")
 REPO_ROOT = Path(__file__).resolve().parent.parent
 TEMPLATE_PATH = REPO_ROOT / "docs" / "self-improving" / "index.html.template"
 DEFAULT_BUNDLE_ROOT = REPO_ROOT / "docs" / "self-improving" / "petri-bundle"
-# PR-STATE-AUTORESEARCH-RENAME (2026-06-01, Scheme A) — the self-improving
-# state DATA dir is ``state/autoresearch`` (mirrors
-# ``core.paths.AUTORESEARCH_STATE_DIR``; this builder is intentionally
-# stdlib-only so it cannot import core, hence the literal). Renamed from
-# ``state/self_improving`` of #1955 to kill the underscore/hyphen twin. The
-# SERVED output dir + URLs below keep the hyphenated lineage name to preserve
+# PR-STATE-SOT-RUNTIME-SPLIT (2026-06-14) — the TRACKED state dir (mutations.jsonl
+# / results.* / policies/ / baseline_archive) is the in-repo SoT colocated with
+# its package; read it from the single ``core.paths`` constant (the builder
+# already imports core.paths, and Pages CI installs core via ``uv sync``). The
+# LATEST baseline.json is RUNTIME and resolved separately in ``load_autoresearch``.
+# The SERVED output dir + URLs below keep the hyphenated lineage name to preserve
 # deep links.
-DEFAULT_STATE_DIR = REPO_ROOT / "state" / "autoresearch"
+DEFAULT_STATE_DIR = AUTORESEARCH_STATE_DIR
 DEFAULT_OUT = REPO_ROOT / "docs" / "self-improving" / "index.html"
 DEFAULT_SEEDGEN_OUT_DIR = REPO_ROOT / "docs" / "self-improving" / "seed-generation"
 SEEDGEN_INDEX_TEMPLATE = (
@@ -119,11 +124,13 @@ _EVIDENCE_ARMS: tuple[tuple[str, str], ...] = (
 )
 
 # PR-HUB-CAMPAIGN-VIZ (2026-06-01) — the live 3-arm campaign per-cycle ledger.
-# campaign-progress.log lives next to mutations.jsonl in the autoresearch state
-# dir; the gen-0 K-mean snapshot is a SIBLING of the autoresearch root
-# (``<repo>/state/campaign/gen-0-snapshot/``), written by the campaign runner.
-_CAMPAIGN_PROGRESS_LOG = "campaign-progress.log"
-_CAMPAIGN_GEN0_SNAPSHOT = ("state", "campaign", "gen-0-snapshot", "baseline.json")
+# Post PR-STATE-SOT-RUNTIME-SPLIT both are RUNTIME (out-of-repo, operator-local;
+# absent on CI → graceful empty viz): campaign-progress.log lives at the runtime
+# ROOT and the gen-0 K-mean snapshot under ``<runtime>/campaign/gen-0-snapshot/``,
+# both written by the campaign runner. The parsers take the runtime dir as a
+# param (so tests stay hermetic); ``main`` passes ``core.paths.RUNTIME_ROOT``.
+_CAMPAIGN_PROGRESS_LOG_NAME = "campaign-progress.log"
+_GEN0_SNAPSHOT_RELPATH = ("campaign", "gen-0-snapshot", "baseline.json")
 # The Petri eval-log MANIFEST (one row per audit archive) + the Inspect-View
 # deep-link base. The MANIFEST is the only ledger linking a cycle's completed_at
 # to its .eval archive filename + the seeds it scored + its per-sample dims.
@@ -490,14 +497,21 @@ class AutoresearchState:
 
 
 def load_autoresearch(state_dir: Path) -> AutoresearchState:
-    """Load the self-improving loop's state surface from ``state_dir``.
+    """Load the self-improving loop's state surface.
 
-    ``state_dir`` is the canonical ``state/autoresearch`` directory
-    (``--state-dir``; PR-STATE-SELF-IMPROVING-RENAME 2026-06-01 — formerly
-    ``<autoresearch-root>/state``). ``results.tsv`` lives INSIDE ``state_dir``
-    (next to ``mutations.jsonl``), matching the train.py writer.
+    ``state_dir`` is the canonical TRACKED dir (``core/self_improving/state/``;
+    ``--state-dir``) holding ``mutations.jsonl`` / ``results.tsv`` / ``policies/``.
+    Post PR-STATE-SOT-RUNTIME-SPLIT the LATEST ``baseline.json`` is RUNTIME
+    (out-of-repo, ``~/.geode/self-improving/``): read it from ``state_dir`` first
+    (so test fixtures / a legacy co-located file still win + stay hermetic), then
+    fall back to ``core.paths.BASELINE_JSON_PATH`` (the operator's default build
+    reads tracked state in-repo + the live baseline from ~/.geode). On CI neither
+    exists → graceful "no baseline".
     """
-    live_baseline = state_dir / "baseline.json"
+    baseline_dir = (
+        state_dir if (state_dir / "baseline.json").exists() else BASELINE_JSON_PATH.parent
+    )
+    live_baseline = baseline_dir / "baseline.json"
     baseline_path: Path | None = None
     baseline_stale = False
     baseline_data: dict[str, Any] | None = None
@@ -507,7 +521,7 @@ def load_autoresearch(state_dir: Path) -> AutoresearchState:
     else:
         # Fallback per design §10: pick most recent baseline.json.outdated-*
         candidates = sorted(
-            state_dir.glob("baseline.json.outdated-*"),
+            baseline_dir.glob("baseline.json.outdated-*"),
             key=lambda p: p.stat().st_mtime,
             reverse=True,
         )
@@ -757,7 +771,7 @@ def render_stale_banner(state: AutoresearchState) -> str:
         '    <div class="warning" role="status">'
         "Autoresearch baseline is stale, rendering from "
         f"<code>{html_escape(state.baseline_path.name if state.baseline_path else '')}</code>. "
-        "No live <code>baseline.json</code> present in <code>state/autoresearch/</code>."
+        "No live <code>baseline.json</code> present in <code>~/.geode/self-improving/</code>."
         "</div>"
     )
 
@@ -3555,15 +3569,17 @@ def emit_seedgen_lineage_pages(
 # --------------------------------------------------------------------------- #
 # Autoresearch surface loaders + renderers (P6)                               #
 # --------------------------------------------------------------------------- #
-def _load_baseline(state_dir: Path) -> tuple[dict[str, Any] | None, bool, Path | None]:
+def _load_baseline(baseline_dir: Path) -> tuple[dict[str, Any] | None, bool, Path | None]:
     """Return ``(baseline_data, stale, source_path)``.
 
-    Reads ``baseline.json`` if present. Otherwise falls back to the
-    most recent ``baseline.json.outdated-*`` snapshot (per design
-    contract). Returns ``(None, False, None)`` if neither exists or
-    if JSON parse fails.
+    ``baseline_dir`` is the RUNTIME root holding the LATEST ``baseline.json``
+    (``core.paths.RUNTIME_ROOT`` in production; a fixture/tmp dir in tests). Post
+    PR-STATE-SOT-RUNTIME-SPLIT this is out-of-repo, not the tracked state dir.
+    Reads ``baseline.json`` if present. Otherwise falls back to the most recent
+    ``baseline.json.outdated-*`` snapshot (per design contract). Returns
+    ``(None, False, None)`` if neither exists or if JSON parse fails.
     """
-    live = state_dir / "baseline.json"
+    live = baseline_dir / "baseline.json"
     if live.exists():
         try:
             data = json.loads(live.read_text(encoding="utf-8"))
@@ -3575,7 +3591,7 @@ def _load_baseline(state_dir: Path) -> tuple[dict[str, Any] | None, bool, Path |
         return (data, False, live)
     # Outdated fallback — pick the freshest .outdated-* by mtime.
     candidates = sorted(
-        state_dir.glob("baseline.json.outdated-*"),
+        baseline_dir.glob("baseline.json.outdated-*"),
         key=lambda p: p.stat().st_mtime,
         reverse=True,
     )
@@ -3642,8 +3658,13 @@ def _load_mutations(state_dir: Path) -> list[dict[str, Any]]:
     return rows
 
 
-def _load_campaign_progress(state_dir: Path) -> dict[str, Any]:
+def _load_campaign_progress(runtime_dir: Path) -> dict[str, Any]:
     """Parse ``campaign-progress.log`` into per-cycle records + the gen-0 noise band.
+
+    ``runtime_dir`` is the RUNTIME root holding ``campaign-progress.log``
+    (``core.paths.RUNTIME_ROOT`` in production; a fixture/tmp dir in tests). Post
+    PR-STATE-SOT-RUNTIME-SPLIT the log is out-of-repo, not beside the tracked
+    mutations.jsonl.
 
     The campaign runner is the AUTHORITATIVE source for the per-cycle **verdict**
     (``promote`` / ``reject`` / ``SKIP``) and the gen-0 K-mean baseline band —
@@ -3661,7 +3682,7 @@ def _load_campaign_progress(state_dir: Path) -> dict[str, Any]:
     rejects/SKIPs) — so this is the per-cycle ``latest`` SoT, distinct from the
     ``promoted`` baseline_archive SoT.
     """
-    path = state_dir / _CAMPAIGN_PROGRESS_LOG
+    path = runtime_dir / _CAMPAIGN_PROGRESS_LOG_NAME
     out: dict[str, Any] = {"cycles": [], "gen0": [], "noise": None}
     if not path.exists():
         return out
@@ -3721,17 +3742,19 @@ def _load_campaign_progress(state_dir: Path) -> dict[str, Any]:
     return out
 
 
-def _load_campaign_gen0_baseline(repo_root: Path) -> dict[str, Any] | None:
+def _load_campaign_gen0_baseline(runtime_dir: Path) -> dict[str, Any] | None:
     """Read the campaign gen-0 K-mean snapshot baseline.json.
 
-    Located at ``<repo>/state/campaign/gen-0-snapshot/baseline.json`` (a sibling of
-    the self-improving state dir — NOT ``state/autoresearch/baseline.json``, which
-    is the top-level promoted SoT). Carries ``raw.dim_means`` (24 dims, Petri 1-10 scale,
-    LOWER-is-better) + ``raw.fitness_stderr`` — the per-dim floor the campaign's
-    per-cycle held-out is compared against. Returns ``None`` (honest awaiting state)
-    when the snapshot is absent or malformed.
+    RUNTIME (out-of-repo) post PR-STATE-SOT-RUNTIME-SPLIT — at
+    ``<runtime_dir>/campaign/gen-0-snapshot/baseline.json`` (NOT the promoted
+    ``baseline.json`` SoT). ``runtime_dir`` is ``core.paths.RUNTIME_ROOT`` in
+    production (a fixture/tmp dir in tests). Carries ``raw.dim_means`` (24 dims,
+    Petri 1-10 scale, LOWER-is-better) + ``raw.fitness_stderr`` — the per-dim floor
+    the campaign's per-cycle held-out is compared against. Returns ``None`` (honest
+    awaiting state) when the snapshot is absent or malformed (e.g. on CI, which has
+    no runtime tree).
     """
-    path = repo_root.joinpath(*_CAMPAIGN_GEN0_SNAPSHOT)
+    path = runtime_dir.joinpath(*_GEN0_SNAPSHOT_RELPATH)
     if not path.exists():
         return None
     try:
@@ -4085,7 +4108,7 @@ def _render_warning_banner(baseline_path: Path | None, stale: bool) -> str:
         '    <div class="warning-banner" role="status">'
         "Autoresearch baseline read from <code>"
         f"{html_escape(baseline_path.name)}</code>, no live "
-        "<code>baseline.json</code> present in <code>state/autoresearch/</code>. "
+        "<code>baseline.json</code> present in <code>~/.geode/self-improving/</code>. "
         "Run <code>uv run python -m core.self_improving.train --promote</code> to refresh."
         "</div>"
     )
@@ -4580,7 +4603,7 @@ def _is_pre_e1_mixed_scale(attr: dict[str, Any] | None) -> bool:
 
     E1 (2026-05-30) reconciled per-mutation ``fitness_before`` / ``fitness_delta``
     to the canonical 0-1 ``compute_fitness`` scale. The 8 rows already committed to
-    ``state/autoresearch/mutations.jsonl`` still carry the OLD dim-aggregate scale
+    ``core/self_improving/state/mutations.jsonl`` still carry the OLD dim-aggregate scale
     (``fitness_before`` was the 1-10 ``dim_means`` mean, so it sits ≈ 1.73-2.29 and
     ``fitness_delta`` ≈ -1.1 to -1.76 — both meaningless against a 0-1 row). The
     git-tracked ledger is intentionally NOT rewritten (a one-shot historical
@@ -6861,12 +6884,18 @@ def main(argv: list[str] | None = None) -> int:
         "--state-dir",
         type=Path,
         default=None,
-        help="self-improving state dir (default: state/autoresearch)",
+        help="self-improving tracked state dir (default: core/self_improving/state)",
     )
     # Back-compat (PR-STATE-SELF-IMPROVING-RENAME 2026-06-01): older invocations
     # + the e2e fixtures pass the dir CONTAINING ``state/``. When given, the
     # state dir resolves to ``<value>/state``. Prefer ``--state-dir``.
     parser.add_argument("--autoresearch-root", type=Path, default=None)
+    # Repo root for the in-repo TRACKED docs reads (audit-log MANIFEST + summary
+    # dims under ``docs/audits/``). Default = this builder's repo. The e2e points
+    # it at its fixture root so audit-manifest reads stay hermetic. RUNTIME reads
+    # (baseline.json / campaign-progress.log / gen-0 snapshot) are NOT here — they
+    # resolve from ``core.paths.RUNTIME_ROOT`` (honours GEODE_HOME/GEODE_STATE_ROOT).
+    parser.add_argument("--repo-root", type=Path, default=REPO_ROOT)
     parser.add_argument("--out", type=Path, default=DEFAULT_OUT)
     parser.add_argument("--template", type=Path, default=TEMPLATE_PATH)
     parser.add_argument("--pyproject", type=Path, default=PYPROJECT)
@@ -6943,10 +6972,10 @@ def main(argv: list[str] | None = None) -> int:
     )
     args = parser.parse_args(argv)
 
-    # Resolve the canonical state dir from the two accepted spellings.
+    # Resolve the canonical TRACKED state dir from the two accepted spellings.
     # ``--state-dir`` wins; ``--autoresearch-root`` is the legacy
-    # "dir containing state/" spelling → ``<root>/state``; default is
-    # the production ``state/autoresearch``.
+    # "dir containing state/" spelling → ``<root>/state``; default is the
+    # in-repo ``core/self_improving/state`` (AUTORESEARCH_STATE_DIR).
     if args.state_dir is not None:
         state_dir = args.state_dir
     elif args.autoresearch_root is not None:
@@ -7093,21 +7122,21 @@ def main(argv: list[str] | None = None) -> int:
     # already loaded above for the hub landing.                        #
     # ----------------------------------------------------------------- #
     ar_state_dir = state_dir
-    baseline_data, baseline_stale, baseline_source = _load_baseline(ar_state_dir)
+    # PR-STATE-SOT-RUNTIME-SPLIT — read each datum from its lifecycle home:
+    #   * TRACKED (in-repo state_dir): baseline_archive / mutations / results / policies
+    #   * RUNTIME (out-of-repo RUNTIME_ROOT, honours GEODE_HOME): baseline.json,
+    #     campaign-progress.log, gen-0 snapshot — operator-local, absent on CI → empty
+    #   * IN-REPO DOCS (--repo-root): the eval-log MANIFEST + summary dims
+    runtime_dir = RUNTIME_ROOT
+    baseline_data, baseline_stale, baseline_source = _load_baseline(runtime_dir)
     archive_rows = _load_baseline_archive(ar_state_dir)
     mutations_rows = _load_mutations(ar_state_dir)
     results_tsv_rows = _load_results_tsv(ar_state_dir)
     results_jsonl_rows = _load_results_jsonl(ar_state_dir)
     policies_entries = _list_policies(ar_state_dir / "policies")
-    # PR-HUB-CAMPAIGN-VIZ — the live 3-arm campaign ledgers. The campaign-progress.log
-    # sits in the self-improving state dir; the gen-0 snapshot + the eval-log MANIFEST
-    # live under the repo root. With the canonical layout the state dir is
-    # ``<repo>/state/autoresearch`` so the repo root is two levels up; with the
-    # legacy ``--autoresearch-root <X>`` spelling it is ``<X>/state`` → also two up.
-    campaign_progress = _load_campaign_progress(ar_state_dir)
-    campaign_repo_root = state_dir.parent.parent
-    campaign_gen0_baseline = _load_campaign_gen0_baseline(campaign_repo_root)
-    audit_manifest = _load_audit_manifest(campaign_repo_root)
+    campaign_progress = _load_campaign_progress(runtime_dir)
+    campaign_gen0_baseline = _load_campaign_gen0_baseline(runtime_dir)
+    audit_manifest = _load_audit_manifest(args.repo_root)
 
     LOG.info(
         "autoresearch loaded baseline=%s stale=%s archive=%d mutations=%d "
@@ -7222,7 +7251,7 @@ def main(argv: list[str] | None = None) -> int:
             progress=campaign_progress,
             gen0_baseline=campaign_gen0_baseline,
             manifest=audit_manifest,
-            repo_root=campaign_repo_root,
+            repo_root=args.repo_root,
         ),
     )
 
@@ -7255,7 +7284,7 @@ def main(argv: list[str] | None = None) -> int:
                 args.autoresearch_out_dir,
                 template=run_report_template,
                 ctx=ar_ctx,
-                repo_root=campaign_repo_root,
+                repo_root=args.repo_root,
             ),
         )
 

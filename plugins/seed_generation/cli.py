@@ -273,7 +273,7 @@ def audit_seeds_generate(
         help=(
             "Target Petri dim for this generation (e.g. broken_tool_use). "
             "Omit / pass 'auto' to let G3 pick the worst-regressed dim from "
-            "``state/autoresearch/baseline.json``. Required only when no "
+            "``~/.geode/self-improving/baseline.json``. Required only when no "
             "baseline exists yet."
         ),
     ),
@@ -546,7 +546,7 @@ def _resolve_target_dim(
     operator supplied an explicit dim — auto-pick stays opt-in).
 
     When ``target_dim`` is ``None`` / ``"auto"``:
-    1. Load ``state/autoresearch/baseline.json``.
+    1. Load ``~/.geode/self-improving/baseline.json``.
     2. Pick the worst-regressed dim via
        :func:`plugins.seed_generation.baseline_reader.pick_regression_target_dim`.
     3. On no baseline / no operational dim → print actionable error and
@@ -573,7 +573,7 @@ def _resolve_target_dim(
     if snapshot is None:
         err.write(
             "seed-generation: --target-dim required (no autoresearch baseline "
-            "found at state/autoresearch/baseline.json yet; run an audit + "
+            "found at ~/.geode/self-improving/baseline.json yet; run an audit + "
             "promote first, or pass --target-dim <dim> explicitly).\n"
         )
         return None, None

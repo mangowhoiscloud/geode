@@ -1,7 +1,8 @@
 """Extract the baseline audit's auditor↔target↔judge transcripts to JSON.
 
-The self-improving baseline (``state/autoresearch/baseline.json``) is produced
-by one Petri audit over the survivor seed pool. That audit's ``.eval`` log holds
+The self-improving baseline (the runtime ``baseline.json`` under
+``~/.geode/self-improving/``) is produced by one Petri audit over the survivor
+seed pool. That audit's ``.eval`` log holds
 everything the baseline hub page needs to *show its work*: the seed scenario
 bodies, the auditor↔target conversation per seed, and the judge's 22-dim scores
 that aggregate into the promoted ``dim_means``.
@@ -28,11 +29,14 @@ import sys
 from pathlib import Path
 from typing import Any
 
+from core.paths import BASELINE_JSON_PATH
+
 REPO_ROOT = Path(__file__).resolve().parent.parent
-# READ path is state/autoresearch (PR-STATE-AUTORESEARCH-RENAME 2026-06-01,
-# Scheme A; renamed from state/self_improving of #1955); the served output
-# dir keeps the ``autoresearch`` lineage name.
-DEFAULT_BASELINE = REPO_ROOT / "state" / "autoresearch" / "baseline.json"
+# baseline.json is RUNTIME (out-of-repo) post PR-STATE-SOT-RUNTIME-SPLIT — resolve
+# it from the single core.paths SoT (honours GEODE_STATE_ROOT) rather than the
+# deleted repo-root ``state/`` tree. The served output dir keeps the
+# ``autoresearch`` lineage name.
+DEFAULT_BASELINE = BASELINE_JSON_PATH
 DEFAULT_OUT = (
     REPO_ROOT / "docs" / "self-improving" / "autoresearch" / "baseline" / "transcripts.json"
 )

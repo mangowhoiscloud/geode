@@ -68,43 +68,66 @@ def _resolve_repo_root() -> Path:
 
 
 _REPO_ROOT = _resolve_repo_root()
-STATE_ROOT = Path(os.environ.get("GEODE_STATE_ROOT") or (_REPO_ROOT / "state")).expanduser()
+# ``GEODE_HOME`` is defined here (moved up from the Global section below) so the
+# state roots can derive the runtime home from it. See the Global section for
+# the full frontier ``{APP}_HOME`` convention note.
+GEODE_HOME = Path(os.environ.get("GEODE_HOME") or (Path.home() / ".geode")).expanduser()
 
-# Seed pools — single SoT for the directory the campaign reads and the
-# assemble script writes (PR-CLEANUP-D2, 2026-06-10). Deliberately
-# REPO-pinned (not STATE_ROOT): the cycle-input pool is a git-tracked
-# campaign input, and the 2026-06-03 incident (assemble to a custom
-# --out → every worker dropped with "train.py exited 1") came from the
-# writer and reader resolving this path independently. REPO-pinned is
-# the OPERATOR-DECIDED semantic (D-3, 2026-06-10) — do not make this
-# honor GEODE_STATE_ROOT without a new operator decision.
-SEED_POOLS_DIR = _REPO_ROOT / "state" / "seed-pools"
+# --- State homes by lifecycle (PR-STATE-SOT-RUNTIME-SPLIT, 2026-06-14) -------
+# Operator decision: split the CSP-7 repo-root ``state/`` (which mixed both)
+# into two homes by lifecycle —
+#   * TRACKED SoT (versioned policy / ledger / seed-pool INPUTS the loop reads
+#     across runs + reviewers must see) → IN-REPO. Data-in-package, same as
+#     ``core/llm/model_pricing.toml`` / ``core/config/routing.toml``.
+#   * RUNTIME scratch (per-run execution traces, handoff pointers, the LATEST
+#     baseline) → OUT-OF-REPO under ``~/.geode`` (machine-local, never in git).
+#     This restores the pre-CSP-7 ``~/.geode`` home for runtime while keeping
+#     the SoT versioned. Worktree/clone runs no longer scatter or vanish.
+#
+# ISOLATION KNOB (``GEODE_STATE_ROOT``): the campaign fans path-independent
+# workers out as ``train.py`` subprocesses, each with its OWN ``GEODE_STATE_ROOT``
+# temp tree seeded by ``campaign._seed_isolated_state_root`` (which lays out
+# ``<root>/autoresearch/{policies/*, baseline.json}``). When the env is set, the
+# tracked-SoT dir AND the runtime root therefore BOTH collapse to
+# ``$GEODE_STATE_ROOT/autoresearch`` so a worker's reads/writes land in its own
+# tree — restoring the pre-split single-knob isolation. The in-repo/``~/.geode``
+# split applies only to the persistent DEFAULT (orchestrator / serve / CLI),
+# where the env is unset. Seed pools are the one exception: always repo-pinned
+# (below), so an isolated worker still reads the real git-tracked input pools.
+_IN_REPO_SOT_DIR = _REPO_ROOT / "core" / "self_improving" / "state"
+_ISOLATED_STATE_ROOT = os.environ.get("GEODE_STATE_ROOT")
+if _ISOLATED_STATE_ROOT:
+    STATE_ROOT = Path(_ISOLATED_STATE_ROOT).expanduser()
+    # Co-locate tracked + runtime under the worker root's ``autoresearch/``
+    # subdir — the literal must match ``campaign._seed_isolated_state_root``.
+    SELF_IMPROVING_SOT_DIR = STATE_ROOT / "autoresearch"
+    RUNTIME_ROOT = STATE_ROOT / "autoresearch"
+else:
+    SELF_IMPROVING_SOT_DIR = _IN_REPO_SOT_DIR
+    RUNTIME_ROOT = GEODE_HOME / "self-improving"
+    # Back-compat name — ``STATE_ROOT`` means the RUNTIME root in the default home.
+    STATE_ROOT = RUNTIME_ROOT
+
+# Seed pools — git-tracked campaign INPUT (cycle-input read by the campaign +
+# held-out bench). REPO-pinned SoT (operator decision D-3, 2026-06-10): ALWAYS
+# in-repo, never under ``GEODE_STATE_ROOT``, so an isolated worker reads the same
+# tracked pools the assemble writer + campaign reader share (PR-CLEANUP-D2).
+SEED_POOLS_DIR = _IN_REPO_SOT_DIR / "seed_pools"
 CYCLE_INPUT_POOL = SEED_POOLS_DIR / "cycle-input"
 HELD_OUT_BENCH_POOL = SEED_POOLS_DIR / "held-out"
 
-# PR-STATE-AUTORESEARCH-RENAME (2026-06-01, Scheme A) — the autoresearch
-# optimization loop's in-repo runtime DATA. "autoresearch" is the engine's
-# name (operator-approved); this was ``state/autoresearch/`` under
-# PR-STATE-SELF-IMPROVING-RENAME (#1955) which collided as a near-synonym
-# twin with the hyphenated cross-run handoff dir ``self-improving-loop/``.
-# Scheme A folds BOTH under a single ``state/autoresearch/`` root (the
-# handoff is now ``handoff/`` NESTED below — see AUTORESEARCH_HANDOFF_DIR)
-# so the twin is eliminated. Env-overridable via ``GEODE_STATE_ROOT`` +
-# clone-portable like the seed-generation state. This is the SINGLE
-# canonical definition — ``core.self_improving.train`` / ``.watch_campaign``
-# / ``.campaign`` / ``.prepare`` and ``scripts/build_self_improving_hub.py``
-# all import it (no dual SoT, per CLAUDE.md Registry/SoT rules). The CODE
-# package ``core/self_improving/`` keeps its name — only the STATE dir moves.
-AUTORESEARCH_STATE_DIR = STATE_ROOT / "autoresearch"
+# TRACKED ledgers + policies (mutations audit, baseline-history registry,
+# baseline_epochs map, mutation-target policy JSONs) — the in-repo SoT. The
+# CODE package ``core/self_improving/`` keeps its name; the tracked STATE now
+# lives at ``core/self_improving/state/`` (was the interim repo-root
+# ``state/autoresearch/`` under CSP-7). Single canonical definition imported by
+# ``core.self_improving.*`` + ``scripts/build_self_improving_hub.py``.
+AUTORESEARCH_STATE_DIR = SELF_IMPROVING_SOT_DIR
 
-# Cross-run handoff (latest_pointer.json, sessions.jsonl). PR-STATE-
-# AUTORESEARCH-RENAME (2026-06-01, Scheme A) — nested UNDER the
-# autoresearch state root so there is no ``self_improving`` (underscore)
-# vs ``self-improving-loop`` (hyphen) near-synonym twin. The handoff
-# pointer + run-level registry belong to the same autoresearch loop
-# whose ledgers live in ``AUTORESEARCH_STATE_DIR``; the only reason
-# they were a separate top-level dir was the pre-CSP-7 history.
-AUTORESEARCH_HANDOFF_DIR = AUTORESEARCH_STATE_DIR / "handoff"
+# Cross-run handoff (latest_pointer.json, sessions.jsonl) — RUNTIME (per-run
+# pointers, not versioned), so it lives under the runtime root, NOT the tracked
+# SoT. (Was nested under the tracked dir pre-split.)
+AUTORESEARCH_HANDOFF_DIR = RUNTIME_ROOT / "handoff"
 
 # Per-run artefacts (state.json, candidates/, survivors/, meta_review.json,
 # elo_log.tsv). Pre-CSP-7: ``~/.geode/seed-generation/<run_id>/``.
@@ -237,7 +260,8 @@ def _stringify_relative(path: Path) -> str:
 # this single point, so the override redirects the whole user-global tree (the
 # testability + alternate-home story). ``expanduser`` so ``GEODE_HOME=~/x`` and
 # ``GEODE_STATE_ROOT=~/x`` actually expand. (PR-PATH-MODERNIZE Phase 1.)
-GEODE_HOME = Path(os.environ.get("GEODE_HOME") or (Path.home() / ".geode")).expanduser()
+# NOTE: ``GEODE_HOME`` itself is defined near the top of this module (moved up
+# so the state roots can derive the runtime home from it).
 
 # Global config & credentials
 GLOBAL_CONFIG_TOML = GEODE_HOME / "config.toml"
@@ -277,15 +301,15 @@ GLOBAL_DIAGNOSTICS_DIR = GEODE_HOME / "diagnostics"
 # autoresearch/seed-generation run) + ``<session_id>/transcript.jsonl``
 # (P1c, event stream within a single run). See
 # ``docs/plans/2026-05-19-self-improving-loop-wiring-sprint.md``.
-# PR-STATE-AUTORESEARCH-RENAME (2026-06-01, Scheme A) — the home handoff
-# dir moves from ``~/.geode/autoresearch/handoff/`` to
-# ``~/.geode/autoresearch/handoff/`` IN CODE so the home layout mirrors
-# the in-repo ``state/autoresearch/handoff/`` and the underscore/hyphen
-# twin is gone. (The live ``~/.geode`` dir is migrated by the operator
-# command, not by the constant.)
+# LEGACY home dir ``~/.geode/autoresearch/handoff/`` — the pre-split policy
+# location, kept ONLY as the lazy-migration source (see ``LEGACY_SOT_DIR``
+# below). Post PR-STATE-SOT-RUNTIME-SPLIT the live runtime handoff is
+# ``AUTORESEARCH_HANDOFF_DIR`` (``RUNTIME_ROOT/handoff``) and the tracked
+# policies live in-repo under ``AUTORESEARCH_POLICIES_DIR``; this constant is
+# neither — it is the rollback breadcrumb the operator may still hold.
 GLOBAL_AUTORESEARCH_HANDOFF_DIR = GEODE_HOME / "autoresearch" / "handoff"
 # PR-RATCHET-1 (2026-05-21) — the 5 mutation-target files now live in
-# the in-repo ``state/autoresearch/policies/`` directory rather than
+# the in-repo ``core/self_improving/state/policies/`` directory rather than
 # the operator's ``~/.geode/autoresearch/handoff/``. The rename converges
 # on upstream Karpathy's "branch tip = current best" principle: each
 # policy is git-tracked, so ``git diff`` shows the current mutation
@@ -299,7 +323,7 @@ GLOBAL_AUTORESEARCH_HANDOFF_DIR = GEODE_HOME / "autoresearch" / "handoff"
 # ``~/.geode/autoresearch/handoff/<file>.json`` payload is handled
 # by :mod:`core.self_improving.loop.mutate.policies`.
 # The in-repo policy/ledger state dir is ``AUTORESEARCH_STATE_DIR``
-# (``state/autoresearch/``, defined at the top of this module).
+# (``core/self_improving/state/``, defined at the top of this module).
 AUTORESEARCH_POLICIES_DIR = AUTORESEARCH_STATE_DIR / "policies"
 LEGACY_SOT_DIR = GLOBAL_AUTORESEARCH_HANDOFF_DIR
 """Pre-RATCHET-1 policy dir under ``~/.geode/autoresearch/handoff/``.
@@ -414,6 +438,22 @@ MUTATION_AUDIT_LOG_PATH = AUTORESEARCH_STATE_DIR / "mutations.jsonl"
 # the hub still reads any rows for the autoresearch timeline, and the
 # baseline-registry follow-up repurposes it as the promote-history SoT.)
 BASELINE_ARCHIVE_PATH = AUTORESEARCH_STATE_DIR / "baseline_archive.jsonl"
+
+# PR-STATE-SOT-RUNTIME-SPLIT (2026-06-14) — every self-improving state FILE gets
+# ONE constant here (single SoT for both home + filename), so no caller
+# reconstructs ``ROOT / "literal"`` (the dual-hardcode the split removed —
+# frontier paths.ts convergence: crumb ``PROJECT_PIN_FILE`` / paperclip
+# ``PAPERCLIP_CONFIG_BASENAME`` keep filenames as named constants).
+#   TRACKED (in-repo SoT) — versioned evidence the hub reads across runs:
+BASELINE_EPOCHS_PATH = AUTORESEARCH_STATE_DIR / "baseline_epochs.json"
+RESULTS_TSV_PATH = AUTORESEARCH_STATE_DIR / "results.tsv"
+RESULTS_JSONL_PATH = AUTORESEARCH_STATE_DIR / "results.jsonl"
+#   RUNTIME (~/.geode) — per-run scratch, never versioned:
+BASELINE_JSON_PATH = RUNTIME_ROOT / "baseline.json"  # LATEST (vs tracked archive)
+CAMPAIGN_PROGRESS_LOG_PATH = RUNTIME_ROOT / "campaign-progress.log"
+RUN_LOG_PATH = RUNTIME_ROOT / "run.log"
+WRAPPER_OVERRIDE_PATH = RUNTIME_ROOT / "wrapper-override.json"
+PREPARE_REPORT_PATH = RUNTIME_ROOT / "prepare-report.txt"
 GLOBAL_AUTH_TOML = GEODE_HOME / "auth.toml"
 # PR-4 C-3 (2026-05-21) — cross-session episodic action-outcome log
 # (~/.geode/memory/episodes.jsonl). Append-only JSONL: one row per
