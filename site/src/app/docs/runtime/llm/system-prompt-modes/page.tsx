@@ -8,8 +8,8 @@ export default function Page() {
       slug="runtime/llm/system-prompt-modes"
       title="System prompt modes"
       titleKo="시스템 프롬프트 모드"
-      summary="The persona opt-in, the audit-mode strip with the wrapper override, and the program.md contract for the mutator."
-      summaryKo="persona opt-in, wrapper override가 붙는 audit-mode strip, 그리고 mutator의 program.md 계약을 다룹니다."
+      summary="The default-on persona injection, the audit-mode strip with the wrapper override, and the program.md contract for the mutator."
+      summaryKo="기본 ON persona 주입, wrapper override가 붙는 audit-mode strip, 그리고 mutator의 program.md 계약을 다룹니다."
     >
       <Bi
         ko={
@@ -21,18 +21,19 @@ export default function Page() {
               무엇을 싣고 무엇을 벗길지 정합니다.
             </p>
 
-            <h2>기본 모드: persona는 옵트인</h2>
+            <h2>기본 모드: persona 주입(기본 ON)</h2>
             <p>
-              기본값에서 GEODE는 베이스 모델의 얇은 래퍼로 동작합니다.
-              GEODE.md의 &quot;You are GEODE&quot; 정체성 프리앰블은 주입되지
-              않습니다. <code>GEODE_PERSONA=on</code>을 켜면 GEODE.md에서 Core
-              Principles, RUNTIME CANNOT, Defaults 섹션만 추려
-              <code>&lt;agent_identity&gt;</code> 레이어로 들어갑니다.
+              기본값에서 GEODE는 자신의 persona를 주입합니다. GEODE.md의
+              Identity, Voice &amp; Conduct, Operating Principles, RUNTIME
+              CANNOT 섹션을 추려 <code>&lt;agent_identity&gt;</code> 레이어로
+              모든 컨텍스트에 싣습니다. 선언된 소울과 런타임 가드레일이 실제로
+              모델에 도달하게 하기 위함입니다. <code>GEODE_PERSONA=off</code>로
+              끄면 정체성 프리앰블 없이 베이스 모델의 얇은 래퍼로 동작합니다.
               audit-mode가 켜져 있으면 이 플래그와 무관하게 강제 OFF입니다.
             </p>
             <pre>{`<static_context>        턴 사이 불변, 캐시 적중
   <agent_baseline>      항상 포함. 기본 능력
-  <agent_identity>      GEODE_PERSONA=on일 때만
+  <agent_identity>      기본 ON; GEODE_PERSONA=off로 제외
 </static_context>
 <dynamic_context>       턴마다 변함, 캐시 제외
   <model_card> <current_date>
@@ -110,9 +111,9 @@ export default function Page() {
                   <td>로그의 WARNING을 확인하고 <code>wrapper-sections.json</code>을 복구합니다.</td>
                 </tr>
                 <tr>
-                  <td>GEODE가 자기 정체성을 말하지 않음</td>
-                  <td>persona 기본 OFF</td>
-                  <td>의도된 동작입니다. 원하면 <code>GEODE_PERSONA=on</code>.</td>
+                  <td>얇은 래퍼를 원하는데 GEODE가 persona를 주입함</td>
+                  <td>persona 기본 ON</td>
+                  <td><code>GEODE_PERSONA=off</code>로 끕니다.</td>
                 </tr>
               </tbody>
             </table>
@@ -135,18 +136,20 @@ export default function Page() {
               decide what gets loaded and what gets stripped.
             </p>
 
-            <h2>Default mode: persona is opt-in</h2>
+            <h2>Default mode: persona is injected</h2>
             <p>
-              By default GEODE behaves as a thin wrapper around the base
-              model: the GEODE.md &quot;You are GEODE&quot; identity preamble
-              is not injected. Setting <code>GEODE_PERSONA=on</code> injects
-              an <code>&lt;agent_identity&gt;</code> layer extracted from
-              GEODE.md (Core Principles, RUNTIME CANNOT, Defaults only).
-              Audit-mode forces this off regardless of the flag.
+              By default GEODE injects its persona: an
+              <code>&lt;agent_identity&gt;</code> layer extracted from GEODE.md
+              (Identity, Voice &amp; Conduct, Operating Principles, and RUNTIME
+              CANNOT) ships in every context, so the declared soul and runtime
+              guardrails actually reach the model. Opt out with
+              <code>GEODE_PERSONA=off</code> to run as a thin wrapper around the
+              base model, with no identity preamble. Audit-mode forces it off
+              regardless of the flag.
             </p>
             <pre>{`<static_context>        stable across turns, cache hit
   <agent_baseline>      always present. base capabilities
-  <agent_identity>      only with GEODE_PERSONA=on
+  <agent_identity>      on by default; off with GEODE_PERSONA=off
 </static_context>
 <dynamic_context>       changes per turn, uncached
   <model_card> <current_date>
@@ -227,9 +230,9 @@ export default function Page() {
                   <td>Check the WARNING in the logs and repair <code>wrapper-sections.json</code>.</td>
                 </tr>
                 <tr>
-                  <td>GEODE never asserts its own identity</td>
-                  <td>Persona defaults to off</td>
-                  <td>Working as intended. Opt in with <code>GEODE_PERSONA=on</code>.</td>
+                  <td>GEODE injects its persona but you want a bare wrapper</td>
+                  <td>Persona defaults to on</td>
+                  <td>Set <code>GEODE_PERSONA=off</code> for thin-wrapper mode.</td>
                 </tr>
               </tbody>
             </table>
