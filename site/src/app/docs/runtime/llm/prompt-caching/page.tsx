@@ -28,7 +28,7 @@ export default function Page() {
               <code>PROMPT_CACHE_BOUNDARY</code>
               마커(<code>&lt;dynamic_context&gt;</code> 여는 태그)로 두 쪽이
               납니다. 마커 앞은 턴 사이 불변(베이스 스캐폴드, 스타일 가이드,
-              옵트인 identity), 마커 뒤는 턴마다 변합니다(model card, 날짜,
+              기본 ON identity), 마커 뒤는 턴마다 변합니다(model card, 날짜,
               메모리 레이어, 사용자 컨텍스트).
             </p>
             <p>
@@ -135,7 +135,7 @@ export default function Page() {
               <code>&lt;dynamic_context&gt;</code> tag) defined in
               <code>core/agent/system_prompt.py</code>. Everything before the
               marker is stable across turns (base scaffold, style guide,
-              opt-in identity); everything after changes per turn (model
+              default-on identity); everything after changes per turn (model
               card, date, memory layers, user context).
             </p>
             <p>
