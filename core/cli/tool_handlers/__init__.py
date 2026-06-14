@@ -7,7 +7,7 @@ into one file per handler group while preserving the public API surface
 Handler groups:
 - :mod:`memory`         — memory_search, memory_save, manage_rule
 - :mod:`plan`           — create/approve/reject/modify/list_plan
-- :mod:`hitl`           — rate/accept/reject_result, rerun_node
+- :mod:`hitl`           — rate/accept/reject_result
 - :mod:`system`         — show_help, check_status, switch_model, set_api_key,
                            manage_auth, manage_login, doctor_slack
 - :mod:`execution`      — schedule_job, trigger_event

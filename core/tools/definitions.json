@@ -12,7 +12,7 @@
   },
   {
     "name": "generate_report",
-    "description": "Generates a report from structured runtime results. Use when the user requests a report or document generation.",
+    "description": "Generate a formatted report file (markdown/json/html) from findings you have ALREADY gathered this turn — pass them in analysis_data. Use when the user asks for a report, write-up, or document deliverable. For raw machine-readable output use export_json; for a quick answer the user will just read in chat, write prose inline instead of creating a file.",
     "category": "analysis",
     "cost_tier": "free",
     "input_schema": {
@@ -41,7 +41,7 @@
   },
   {
     "name": "export_json",
-    "description": "Exports structured data as a JSON artifact. Use when the user asks to save results, export structured output, or create a machine-readable artifact.",
+    "description": "Export structured data to a JSON file artifact on disk. Use when the user asks to save results as JSON, export machine-readable output, or persist structured data. For a human-readable document use generate_report; for arbitrary text/code files use write_file.",
     "category": "analysis",
     "cost_tier": "free",
     "input_schema": {
@@ -67,7 +67,7 @@
   },
   {
     "name": "check_status",
-    "description": "Checks the GEODE system status, MCP server connections, and available tools. Use when the user asks about system status, MCP server list/connection status, health check, model info, or configuration. Also useful to verify which MCP tools (playwright, steam, etc.) are currently available.",
+    "description": "Report GEODE runtime status: connected/inactive MCP servers, available tools, current model, and config. Use when the user asks about system or health status, the MCP list, which tools are available, or 'what's connected'. Do NOT call it just to name the current model — that is already in your model card; answer directly.",
     "category": "discovery",
     "cost_tier": "free",
     "input_schema": {
@@ -78,7 +78,7 @@
   },
   {
     "name": "switch_model",
-    "description": "Switches the LLM model or ensemble mode. Use when the user requests a model change or ensemble mode switch.",
+    "description": "Switch the active LLM model or ensemble mode (e.g. 'use opus', 'switch to gpt', 'cross-check'). Omit model_hint to show the picker. This only swaps the active model — for login, subscription plans, API keys, or provider routing use manage_login instead.",
     "category": "model",
     "cost_tier": "free",
     "input_schema": {
@@ -106,7 +106,10 @@
         },
         "scope": {
           "type": "string",
-          "enum": ["project", "all"],
+          "enum": [
+            "project",
+            "all"
+          ],
           "description": "'project' = current project's sessions.db (default). 'all' = cross-project ~/.geode/search/global.db rebuilt by 'geode reindex'.",
           "default": "project"
         },
@@ -137,7 +140,7 @@
   },
   {
     "name": "memory_search",
-    "description": "Searches memory for past analysis results, insights, and rules. Use when the user asks about previous analysis records or learned patterns.",
+    "description": "Search GEODE's curated memory — saved insights, rules, and prior results — across tiers (session/project/organization). Use when the user asks what GEODE has learned or recorded before. Siblings: note_read for the user's own saved notes, session_search for the raw transcript of past conversations. This searches distilled memory, not chat logs.",
     "category": "memory",
     "cost_tier": "free",
     "input_schema": {
@@ -165,7 +168,7 @@
   },
   {
     "name": "memory_save",
-    "description": "Saves information to memory. Use when the user requests 'remember this', 'save this', etc.",
+    "description": "Save a GEODE-derived insight or fact to memory under a key, to recall in later sessions (e.g. key 'project_insight'). Read it back with memory_search. Sibling: note_save stores the user's own dictated content verbatim ('remember my flight is at 9') — use memory_save for knowledge GEODE distilled, note_save for the user's jottings.",
     "category": "memory",
     "cost_tier": "cheap",
     "input_schema": {
@@ -188,7 +191,7 @@
   },
   {
     "name": "manage_rule",
-    "description": "Creates, updates, deletes, or lists analysis rules. Use when the user wants to manage analysis rules or train patterns.",
+    "description": "Create, update, delete, or list runtime rules — named, path-scoped guidance GEODE applies while working. Use when the user wants to add, edit, remove, or see active rules. action is required; create/update also need name and content.",
     "category": "memory",
     "cost_tier": "free",
     "input_schema": {
@@ -291,7 +294,7 @@
   },
   {
     "name": "generate_data",
-    "description": "Generates synthetic data for testing/demo purposes. Use when the user requests test data, sample data, or demo data generation.",
+    "description": "Generate synthetic sample data for testing or demos. Use ONLY when the user explicitly asks for test, sample, mock, or dummy data. Never use it to answer a real question or fetch real data — use general_web_search or a real source for that.",
     "category": "data",
     "cost_tier": "cheap",
     "input_schema": {
@@ -303,7 +306,7 @@
         },
         "genre": {
           "type": "string",
-          "description": "Genre filter (e.g. 'mecha', 'dark_fantasy')"
+          "description": "Optional category/genre filter for the generated samples."
         }
       },
       "required": []
@@ -311,7 +314,7 @@
   },
   {
     "name": "schedule_job",
-    "description": "Manage scheduled jobs. For create: MUST provide both expression (WHEN) and action (WHAT). The action is a natural language prompt that AgenticLoop will execute at the scheduled time.",
+    "description": "Manage scheduled jobs that run a natural-language action on a timed or recurring basis. For sub_action=create you MUST supply both expression (WHEN, e.g. 'daily at 9:00', 'every 5 minutes') and action (WHAT — a prompt the AgenticLoop runs at fire time, e.g. 'search new AI papers and post a digest'). Use for 'remind me', 'every morning', 'schedule X'. For a one-off thing to do now, just do it; for named event/cron triggers use trigger_event; for putting an entry on the user's calendar use calendar_create_event.",
     "category": "scheduling",
     "cost_tier": "cheap",
     "input_schema": {
@@ -350,7 +353,7 @@
   },
   {
     "name": "trigger_event",
-    "description": "Manages event or cron triggers, or fires them manually. Use when the user requests trigger management, event firing, or manual execution.",
+    "description": "Manage event/cron triggers or fire one manually. Use when the user wants to list triggers, fire a named event, or run a trigger now. Omit sub_action to list. Sibling: schedule_job creates time-based recurring jobs (this fires named events).",
     "category": "scheduling",
     "cost_tier": "cheap",
     "input_schema": {
@@ -454,7 +457,7 @@
   },
   {
     "name": "create_plan",
-    "description": "Creates an execution plan for a task. Builds a plan for pre-review of complex requests (3+ steps, expensive operations). Put the user-facing objective in the goal field.",
+    "description": "Create an execution plan the user reviews before a complex task runs (3+ tool calls or expensive operations). Put the user-facing objective in goal; steps auto-generate if omitted. Use for multi-step research/report jobs. Skip it for simple one-shot requests — execute directly. After the user accepts, the runtime runs it (or call approve_plan); change it with modify_plan, discard with reject_plan.",
     "category": "planning",
     "cost_tier": "cheap",
     "input_schema": {
@@ -490,7 +493,7 @@
   },
   {
     "name": "approve_plan",
-    "description": "Approves a generated analysis plan and executes it. Use after first creating a plan with create_plan.",
+    "description": "Approve and run a plan created by create_plan. Use after the user accepts a proposed plan; pass the plan_id from the create_plan result. Siblings: modify_plan to adjust it first, reject_plan to discard it.",
     "category": "planning",
     "cost_tier": "cheap",
     "input_schema": {
@@ -719,7 +722,7 @@
   },
   {
     "name": "note_save",
-    "description": "Permanently saves a user note. Use when the user says 'remember this', 'save this', etc.",
+    "description": "Save a user-dictated note verbatim under a key (the user says 'remember my parking spot is B2'). Read it back with note_read. Sibling: memory_save stores GEODE-derived insights — note_save stores the user's own content exactly as given.",
     "category": "memory",
     "cost_tier": "cheap",
     "input_schema": {
@@ -742,7 +745,7 @@
   },
   {
     "name": "note_read",
-    "description": "Reads saved notes. Use when the user asks about previously saved information.",
+    "description": "Read back the user's saved notes, optionally filtered by query. Use when the user asks about something they told GEODE to remember. Siblings: memory_search for GEODE's curated insights, session_search for what was said in earlier conversation turns.",
     "category": "memory",
     "cost_tier": "free",
     "input_schema": {
@@ -758,7 +761,7 @@
   },
   {
     "name": "reject_plan",
-    "description": "Rejects a generated analysis plan. Use when the plan is not satisfactory.",
+    "description": "Discard an execution plan created by create_plan when the user doesn't want it. Pass plan_id (reason optional). Siblings: approve_plan to run it, modify_plan to adjust it.",
     "category": "planning",
     "cost_tier": "free",
     "input_schema": {
@@ -778,7 +781,7 @@
   },
   {
     "name": "modify_plan",
-    "description": "Modifies a generated analysis plan. Supports template changes and step removal.",
+    "description": "Adjust an execution plan created by create_plan — change its template or remove steps — when the user wants to tweak a proposal rather than approve or reject it outright. Pass plan_id. Siblings: approve_plan, reject_plan.",
     "category": "planning",
     "cost_tier": "free",
     "input_schema": {
@@ -809,7 +812,7 @@
   },
   {
     "name": "list_plans",
-    "description": "Lists all generated analysis plans.",
+    "description": "List the execution plans created this session via create_plan.",
     "category": "planning",
     "cost_tier": "free",
     "input_schema": {
@@ -820,7 +823,7 @@
   },
   {
     "name": "rate_result",
-    "description": "Rates an analysis result. Used for collecting user feedback.",
+    "description": "Record the operator's 1-5 rating of a result produced this session (shown + logged as lightweight feedback). subject and rating (1-5) are required. Siblings: accept_result / reject_result for a binary verdict.",
     "category": "analysis",
     "cost_tier": "free",
     "input_schema": {
@@ -847,7 +850,7 @@
   },
   {
     "name": "accept_result",
-    "description": "Accepts an analysis result.",
+    "description": "Record the operator's acceptance of a result produced this session (shown + logged). Pass the subject. Siblings: reject_result to flag it for redo, rate_result for a 1-5 score.",
     "category": "analysis",
     "cost_tier": "free",
     "input_schema": {
@@ -865,7 +868,7 @@
   },
   {
     "name": "reject_result",
-    "description": "Rejects an analysis result. Use when re-analysis is needed.",
+    "description": "Record the operator's rejection of a result produced this session, with an optional reason (shown + logged). Pass the subject. Siblings: accept_result to approve, rate_result for a 1-5 score.",
     "category": "analysis",
     "cost_tier": "free",
     "input_schema": {
@@ -886,36 +889,8 @@
     }
   },
   {
-    "name": "rerun_node",
-    "description": "Re-runs a specific pipeline node when rerun support is available.",
-    "category": "analysis",
-    "cost_tier": "expensive",
-    "input_schema": {
-      "type": "object",
-      "properties": {
-        "node_name": {
-          "type": "string",
-          "enum": [
-            "scoring",
-            "verification",
-            "synthesizer"
-          ],
-          "description": "Name of the node to re-run"
-        },
-        "subject": {
-          "type": "string",
-          "description": "Target subject name"
-        }
-      },
-      "required": [
-        "node_name",
-        "subject"
-      ]
-    }
-  },
-  {
     "name": "install_mcp_server",
-    "description": "Searches the Anthropic MCP registry for available servers. Returns server info and setup instructions. Use when the user wants to find or add an MCP server.",
+    "description": "Search the MCP server registry for installable connectors and return their setup instructions. Use when the user wants to find or add an MCP server (e.g. 'add a linkedin connector', 'is there a steam MCP'). This only searches and returns instructions — the user then adds the server to .geode/config.toml and restarts. Check active/inactive servers with check_status.",
     "category": "model",
     "cost_tier": "cheap",
     "input_schema": {
@@ -933,7 +908,7 @@
   },
   {
     "name": "profile_show",
-    "description": "Displays the user profile. Use when the user asks about their profile, personal info, or assigned roles.",
+    "description": "Show the USER's profile (role, expertise, name, team, bio). Use when the user asks what GEODE knows about them or about their own profile. To change it use profile_update; for preference settings use profile_preference.",
     "category": "profile",
     "cost_tier": "free",
     "input_schema": {
@@ -944,7 +919,7 @@
   },
   {
     "name": "profile_update",
-    "description": "Updates the user profile. Use when the user wants to set or change their role, expertise, name, or team info.",
+    "description": "Update the USER's identity fields (role, expertise, name, team, bio). Use when the user states or changes who they are ('I'm a data scientist', 'set my team to Platform'). View with profile_show. For how-they-want-responses settings (language, format) use profile_preference instead.",
     "category": "profile",
     "cost_tier": "cheap",
     "input_schema": {
@@ -976,7 +951,7 @@
   },
   {
     "name": "profile_preference",
-    "description": "Views or changes user preference settings. Includes language, output format, domains of interest, etc.",
+    "description": "View or set a USER preference — language, output_format, domains_of_interest, and similar. Pass key alone to read, key and value to set. Use for response-style settings; for identity (role/name/team) use profile_update.",
     "category": "profile",
     "cost_tier": "cheap",
     "input_schema": {
@@ -998,7 +973,7 @@
   },
   {
     "name": "profile_learn",
-    "description": "Learns user patterns and insights. Use to automatically remember recurring preferences, workflow patterns, and domain interests.",
+    "description": "Record a durable pattern about the user (recurring preference, workflow habit, domain interest) into the profile-learning layer, tagged by category. Use to capture something worth applying in future turns. Distinct from memory_save (general GEODE insights) — this specifically feeds the user profile.",
     "category": "profile",
     "cost_tier": "cheap",
     "input_schema": {
@@ -1027,7 +1002,7 @@
   },
   {
     "name": "send_notification",
-    "description": "Sends a notification via an external messaging service. Delivers messages to Slack, Discord, or Telegram channels.",
+    "description": "Send a message to an external channel (Slack, Discord, Telegram, email, or webhook). Use when the user asks to notify, ping, or post somewhere, or to announce a long job's completion. channel and message are required; set recipient for the target (channel name, chat id, or URL). Not for replying in the current conversation — just write your reply.",
     "category": "notification",
     "cost_tier": "free",
     "input_schema": {
@@ -1070,7 +1045,7 @@
   },
   {
     "name": "calendar_list_events",
-    "description": "Lists calendar events. Retrieves events from Google Calendar or Apple Calendar.",
+    "description": "List events from the connected calendar (Google/Apple) within a date range (defaults: now to +7 days). Use when the user asks what's on their calendar or schedule. To add an event use calendar_create_event.",
     "category": "calendar",
     "cost_tier": "free",
     "input_schema": {
@@ -1098,7 +1073,7 @@
   },
   {
     "name": "calendar_create_event",
-    "description": "Creates a new calendar event. Adds an event to Google Calendar or Apple Calendar.",
+    "description": "Create an event on the connected calendar (Google/Apple). Use when the user asks to add or schedule a calendar entry. title and start_datetime (ISO) are required; end defaults to +1 hour. For a recurring GEODE agent action (not a calendar entry) use schedule_job instead.",
     "category": "calendar",
     "cost_tier": "free",
     "input_schema": {
@@ -1137,7 +1112,7 @@
   },
   {
     "name": "calendar_sync_scheduler",
-    "description": "Synchronizes the GEODE scheduler with an external calendar. Pushes scheduler jobs to the calendar, or imports calendar events into the scheduler.",
+    "description": "Sync GEODE's scheduler with the external calendar — push scheduler jobs onto the calendar, pull calendar events into the scheduler, or both (direction). Use when the user wants the two kept aligned.",
     "category": "calendar",
     "cost_tier": "free",
     "input_schema": {
@@ -1158,7 +1133,7 @@
   },
   {
     "name": "manage_context",
-    "description": "Manages conversation context. Use when the user requests 'clean up context', 'reset conversation', 'reduce context', 'compact', 'clear context', 'check tokens', etc.",
+    "description": "Manage the conversation's context window. action=status reports token usage, compact compresses history, clear fully resets it. Use when the user says 'compact', 'clear/reset context', or asks how many tokens are used. clear is destructive — it needs force=true to skip the confirmation.",
     "category": "model",
     "cost_tier": "free",
     "input_schema": {
@@ -1185,7 +1160,7 @@
   },
   {
     "name": "task_create",
-    "description": "Creates a new task. Use to break down complex requests into step-by-step tasks or to track progress.",
+    "description": "Create a tracked item in the task list. Use to break a complex request into trackable steps or to record follow-ups, then advance them with task_update. subject (imperative, e.g. 'Analyze repository state') is required. Sibling: create_plan builds ONE reviewable plan for up-front approval; the task_* tools manage an ongoing checklist.",
     "category": "task",
     "cost_tier": "free",
     "input_schema": {
@@ -1211,7 +1186,7 @@
   },
   {
     "name": "task_update",
-    "description": "Updates the status or content of an existing task. Use to start a task or mark it as completed.",
+    "description": "Update a task's status or fields — start it (in_progress), finish it (completed), or abandon it (failed). Pass the task_id from task_create. Use to advance the task list as work proceeds; cancel-with-skip-of-dependents is task_stop.",
     "category": "task",
     "cost_tier": "free",
     "input_schema": {
@@ -1254,7 +1229,7 @@
   },
   {
     "name": "task_get",
-    "description": "Retrieves detailed information for a specific task.",
+    "description": "Get the full details of one task by task_id. For the whole list use task_list.",
     "category": "task",
     "cost_tier": "free",
     "input_schema": {
@@ -1272,7 +1247,7 @@
   },
   {
     "name": "task_list",
-    "description": "Lists all tasks. Use to check current progress or decide the next task.",
+    "description": "List tasks, optionally filtered by status. Use to review progress or choose the next task. For one task's detail use task_get.",
     "category": "task",
     "cost_tier": "free",
     "input_schema": {
@@ -1295,7 +1270,7 @@
   },
   {
     "name": "task_stop",
-    "description": "Cancels (marks as failed) a running task. Downstream dependent tasks are also skipped.",
+    "description": "Cancel a task — marks it failed and skips its downstream dependents. Pass task_id (reason optional). Use to abandon a tracked task; to merely mark one done use task_update(status=completed).",
     "category": "task",
     "cost_tier": "free",
     "input_schema": {
@@ -1627,12 +1602,16 @@
         },
         "authors": {
           "type": "array",
-          "items": {"type": "string"},
+          "items": {
+            "type": "string"
+          },
           "description": "List of author name strings (optional, empty list OK)."
         },
         "categories": {
           "type": "array",
-          "items": {"type": "string"},
+          "items": {
+            "type": "string"
+          },
           "description": "arXiv category codes (e.g. ['cs.AI', 'cs.CL']). Optional."
         },
         "published_at": {
