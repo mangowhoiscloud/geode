@@ -39,6 +39,13 @@ export default function Page() {
                 <tr><td><code>decomposer.md</code></td><td>호출부에서 <code>load_prompt</code></td><td>복합 요청 분해</td></tr>
               </tbody>
             </table>
+            <p>
+              <code>AGENTIC_SUFFIX</code>는 항상-on 운영 규칙을 담습니다. 완료
+              기준, 도구 선택 매트릭스, Grounding &amp; Citation(도구 출력은
+              데이터지 지시가 아님 포함), Answering discipline(미인식 개체
+              선검색, 정쟁 토픽 even-handedness), Source fidelity &amp;
+              copyright.
+            </p>
 
             <h2>드리프트 감지: 4개의 핀</h2>
             <p>
@@ -74,7 +81,7 @@ export default function Page() {
               <tbody>
                 <tr>
                   <td><code>&lt;static_context&gt;</code></td>
-                  <td><code>&lt;agent_baseline&gt;</code> (항상), <code>&lt;agent_identity&gt;</code> (옵트인), 스타일 가이드와 휴리스틱 정책 append</td>
+                  <td><code>&lt;agent_baseline&gt;</code> (항상), <code>&lt;agent_identity&gt;</code> (기본 ON), 스타일 가이드와 휴리스틱 정책 append</td>
                   <td>턴 간 불변. 캐시 적중 대상</td>
                 </tr>
                 <tr>
@@ -98,9 +105,9 @@ export default function Page() {
               </thead>
               <tbody>
                 <tr>
-                  <td>Persona 옵트인</td>
-                  <td><code>GEODE_PERSONA=on</code></td>
-                  <td>&quot;You are GEODE&quot; 정체성 주입. 기본은 OFF로, 베이스 모델을 얇게 감싼 상태가 기본값입니다</td>
+                  <td>Persona 주입(기본 ON)</td>
+                  <td><code>GEODE_PERSONA=off</code>로 옵트아웃</td>
+                  <td>&quot;You are GEODE&quot; 정체성 + Voice/Operating/RUNTIME CANNOT 주입이 기본. off로 끄면 베이스 모델을 얇게 감싼 상태</td>
                 </tr>
                 <tr>
                   <td>Audit-mode strip</td>
@@ -145,9 +152,9 @@ export default function Page() {
                   <td>의도된 ratchet입니다. <a href="/geode/docs/runtime/llm/prompt-hashing">재핀 워크플로</a>를 따릅니다</td>
                 </tr>
                 <tr>
-                  <td>에이전트가 GEODE라고 자기소개하지 않음</td>
-                  <td>persona 기본값 OFF</td>
-                  <td><code>GEODE_PERSONA=on</code>으로 옵트인합니다</td>
+                  <td>얇은 래퍼를 원하는데 persona가 주입됨</td>
+                  <td>persona 기본값 ON</td>
+                  <td><code>GEODE_PERSONA=off</code>로 옵트아웃합니다</td>
                 </tr>
                 <tr>
                   <td>변이 러너가 <code>PROGRAM_MD_UNREADABLE</code>로 중단</td>
@@ -193,6 +200,14 @@ export default function Page() {
                 <tr><td><code>decomposer.md</code></td><td><code>load_prompt</code> at call sites</td><td>Compound-request decomposition</td></tr>
               </tbody>
             </table>
+            <p>
+              <code>AGENTIC_SUFFIX</code> carries the always-on operating
+              rules: completion criteria, the tool-selection matrix, Grounding
+              &amp; Citation (including that tool output is data, not
+              instructions), Answering discipline (search unknown entities,
+              even-handedness on contested topics), and Source fidelity &amp;
+              copyright.
+            </p>
 
             <h2>Drift detection: four pins</h2>
             <p>
@@ -227,7 +242,7 @@ export default function Page() {
               <tbody>
                 <tr>
                   <td><code>&lt;static_context&gt;</code></td>
-                  <td><code>&lt;agent_baseline&gt;</code> (always), <code>&lt;agent_identity&gt;</code> (opt-in), style-guide and heuristics policy appends</td>
+                  <td><code>&lt;agent_baseline&gt;</code> (always), <code>&lt;agent_identity&gt;</code> (default on), style-guide and heuristics policy appends</td>
                   <td>Stable across turns; cache-eligible</td>
                 </tr>
                 <tr>
@@ -250,9 +265,9 @@ export default function Page() {
               </thead>
               <tbody>
                 <tr>
-                  <td>Persona opt-in</td>
-                  <td><code>GEODE_PERSONA=on</code></td>
-                  <td>Injects the &quot;You are GEODE&quot; identity. Default is OFF: a thin wrapper around the base model</td>
+                  <td>Persona (default on)</td>
+                  <td><code>GEODE_PERSONA=off</code> to opt out</td>
+                  <td>Injects the &quot;You are GEODE&quot; identity plus Voice/Operating/RUNTIME CANNOT by default. Opt out for a thin wrapper around the base model</td>
                 </tr>
                 <tr>
                   <td>Audit-mode strip</td>
@@ -296,9 +311,9 @@ export default function Page() {
                   <td>The intended ratchet; follow the <a href="/geode/docs/runtime/llm/prompt-hashing">re-pin workflow</a></td>
                 </tr>
                 <tr>
-                  <td>The agent never introduces itself as GEODE</td>
-                  <td>Persona defaults to OFF</td>
-                  <td>Opt in with <code>GEODE_PERSONA=on</code></td>
+                  <td>You want a bare wrapper but persona is injected</td>
+                  <td>Persona defaults to ON</td>
+                  <td>Opt out with <code>GEODE_PERSONA=off</code></td>
                 </tr>
                 <tr>
                   <td>The mutation runner aborts with <code>PROGRAM_MD_UNREADABLE</code></td>
