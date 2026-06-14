@@ -41,6 +41,10 @@ log = logging.getLogger(__name__)
 
 # Max lines per memory hierarchy section to control context budget
 _MAX_SECTION_LINES = 20
+# Identity carries four GEODE.md sections (Identity + Voice & Conduct +
+# Operating Principles + RUNTIME CANNOT); give it a larger budget than a
+# single memory section so RUNTIME CANNOT is never truncated by the cap.
+_MAX_IDENTITY_LINES = 40
 
 _SYSTEM_PROMPT_TEMPLATE = ROUTER_SYSTEM
 _WRAPPER_OVERRIDE_ENV = "GEODE_WRAPPER_OVERRIDE"
@@ -187,16 +191,19 @@ def _audit_mode_active() -> bool:
 
 
 def _persona_on() -> bool:
-    """G10 (2026-05-12) — GEODE identity is opt-in.
+    """G10 (2026-05-12; default flipped ON 2026-06-14) — GEODE identity injection.
 
-    Default OFF — when the user runs GEODE as a thin wrapper around the
-    underlying base model (e.g. Opus 4.7), the GEODE.md "You are GEODE"
-    identity preamble is NOT injected. Set `GEODE_PERSONA=on` to opt in.
-    Audit-mode forces OFF regardless of this flag (G3 supersedes G10).
+    Default ON — the GEODE.md Identity / Voice & Conduct / Operating
+    Principles / RUNTIME CANNOT sections are injected into the runtime
+    context so the declared soul + runtime guardrails actually ship. Opt
+    out with `GEODE_PERSONA=off` (thin-wrapper mode: behave as a bare
+    wrapper around the base model). Audit-mode forces OFF regardless of
+    this flag (G3 supersedes G10) — the Petri auditor controls scenario
+    identity end-to-end.
     """
     if _audit_mode_active():
         return False
-    return os.environ.get("GEODE_PERSONA", "").lower() in {"on", "1", "true"}
+    return os.environ.get("GEODE_PERSONA", "on").lower() not in {"off", "0", "false", "no"}
 
 
 def _generic_static_prefix() -> str:
@@ -216,7 +223,7 @@ def build_system_prompt(model: str = "") -> str:
 
       <static_context> ──── stable across turns → cache hit
         <agent_baseline>   (always present — base capabilities)
-        <agent_identity>   (G10: opt-in via GEODE_PERSONA=on)
+        <agent_identity>   (G10: default on; opt out via GEODE_PERSONA=off)
       </static_context>
       <dynamic_context>    ──── changes per turn → no cache
         <model_card>       (always present when ``model`` argument set)
@@ -235,9 +242,9 @@ def build_system_prompt(model: str = "") -> str:
       GEODE-specific layer — identity, memory, user_context — leaving
       only model_card + current_date + the caller's ``system_suffix``.
       Petri auditor controls the scenario's identity end-to-end.
-    - ``GEODE_PERSONA=on`` (G10): inject GEODE identity (G1). Default OFF
-      — GEODE behaves as a thin wrapper around the base model. Audit-mode
-      forces OFF regardless.
+    - ``GEODE_PERSONA`` (G10): inject GEODE identity (G1). Default ON so
+      the declared soul + runtime guardrails ship; set ``=off`` for a thin
+      wrapper around the base model. Audit-mode forces OFF regardless.
 
     The baseline is intentionally domain-neutral. Specialized pipelines live
     outside the core runtime.
@@ -284,8 +291,8 @@ def build_system_prompt(model: str = "") -> str:
     # Promptbreeder-식 phrase library — agent 가 task-triage 시 매칭.
     static = apply_heuristics_policy(static, _load_heuristics_override())
 
-    # G10: Agent identity (opt-in via GEODE_PERSONA=on; default OFF so
-    # GEODE behaves as a thin wrapper around the base model).
+    # G10: Agent identity (default ON; opt out via GEODE_PERSONA=off for a
+    # thin wrapper around the base model).
     if _persona_on():
         identity_ctx = _build_identity_context()
         if identity_ctx:
@@ -546,14 +553,16 @@ def _build_user_context() -> str:
 
 
 def _build_identity_context() -> str:
-    """G1: Extract behavioral identity from GEODE.md.
+    """G1: Extract identity + behavioral sections from GEODE.md.
 
     Reads GEODE.md via OrganizationMemory.get_soul() and injects the
-    BEHAVIORAL sections (Voice & Conduct + Operating Principles + RUNTIME
-    CANNOT) — how GEODE sounds and acts — into the system prompt, within the
-    ~20-line context budget. The numeric Defaults section is reference, not
-    behavioral identity, so it is deliberately NOT injected here (it stays in
-    GEODE.md for the full-soul read + human reference).
+    Identity (who GEODE is) plus the BEHAVIORAL sections (Voice & Conduct +
+    Operating Principles + RUNTIME CANNOT — how GEODE sounds, acts, and
+    refuses) into the system prompt, within the ``_MAX_IDENTITY_LINES``
+    budget. Default on (GEODE_PERSONA) so the declared soul + runtime
+    guardrails actually ship; audit-mode strips it. The numeric Defaults
+    section is reference, not identity, so it is deliberately NOT injected
+    here (it stays in GEODE.md for the full-soul read + human reference).
     """
     try:
         from core.memory.organization import MonoLakeOrganizationMemory
@@ -563,8 +572,9 @@ def _build_identity_context() -> str:
         if not soul:
             return ""
 
-        # Extract the behavioral sections only.
+        # Extract the identity + behavioral sections only.
         target_sections = {
+            "## Identity",
             "## Voice & Conduct",
             "## Operating Principles",
             "## RUNTIME CANNOT",
@@ -591,7 +601,7 @@ def _build_identity_context() -> str:
             return ""
 
         # Cap at budget
-        capped = extracted_lines[:_MAX_SECTION_LINES]
+        capped = extracted_lines[:_MAX_IDENTITY_LINES]
         return "<agent_identity>\n" + "\n".join(capped) + "\n</agent_identity>"
     except Exception:
         log.debug("Failed to build identity context (G1 layer)", exc_info=True)
