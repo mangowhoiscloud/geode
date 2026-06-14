@@ -49,7 +49,7 @@
         <li><a href="/geode/docs/petri/seeds">Seed runs (docs) &#x2197;</a></li>
       </ul>
 
-      <div class="nav-section">Autoresearch <span class="count">absent</span></div>
+      <div class="nav-section">Autoresearch <span class="count">live</span></div>
       <ul class="nav-list">
         <li><a href="/geode/self-improving/autoresearch/">Overview</a></li>
         <li><a href="/geode/self-improving/autoresearch/baseline/">Baseline</a></li>
@@ -625,24 +625,534 @@
 
     <h2 class="section"><span>3 &middot; Live campaign</span></h2>
     <p class="page-sub">The running 3-arm campaign, drilled down per cycle. The gen-0 K-mean noise band fixes the floor every arm is judged against; the promote-gate margin rule says why a cycle rejects; the per-cycle table surfaces every value the loop emits — selection vs held-out fitness, their <strong>divergence</strong> (the winner's-curse signal), the verdict (promote / reject / SKIP), the seeds scored, and the deep-linked Petri eval. The campaign is mid-run, so cells read "in progress" honestly where a value is not yet recorded.</p>
-    <h3 class="section"><span>gen-0 baseline noise band</span></h3>
-    <p class="empty"><em>No gen-0 baseline measure recorded yet — the campaign establishes the noise floor before the arms run.</em></p>
+    <h3 class="section"><span>gen-0 baseline noise band &middot; K-mean re-measure</span></h3>
+    <p class="page-sub">K=5 held-out noise band: <span class="num">0.8185</span> &plusmn; <span class="num">0.0055</span> stderr. An arm beats noise only when its held-out clears <code>mean + stderr</code> (&gt; <span class="num">0.8240</span>). held-out fitness is 0-1, HIGHER-is-better.</p>
+    <table class="records">
+      <thead>
+        <tr>
+          <th scope="col" class="num">repeat</th>
+          <th scope="col" class="num">selection fitness</th>
+          <th scope="col" class="num">held-out fitness</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td class="num">1/5</td>
+          <td class="num">0.6702</td>
+          <td class="num">0.8030</td>
+        </tr>
+        <tr>
+          <td class="num">2/5</td>
+          <td class="num">0.6557</td>
+          <td class="num">0.8262</td>
+        </tr>
+        <tr>
+          <td class="num">3/5</td>
+          <td class="num">0.6710</td>
+          <td class="num">0.8259</td>
+        </tr>
+        <tr>
+          <td class="num">4/5</td>
+          <td class="num">0.6530</td>
+          <td class="num">0.8076</td>
+        </tr>
+        <tr>
+          <td class="num">5/5</td>
+          <td class="num">0.6607</td>
+          <td class="num">0.8296</td>
+        </tr>
+        <tr>
+          <td class="num">1/3</td>
+          <td class="num">0.9631</td>
+          <td class="num">0.9631</td>
+        </tr>
+        <tr>
+          <td class="num">1/3</td>
+          <td class="num">0.9631</td>
+          <td class="num">0.9631</td>
+        </tr>
+        <tr>
+          <td class="num">2/3</td>
+          <td class="num">0.9631</td>
+          <td class="num">0.9631</td>
+        </tr>
+        <tr>
+          <td class="num">3/3</td>
+          <td class="num">0.9631</td>
+          <td class="num">0.9631</td>
+        </tr>
+        <tr>
+          <td class="num">1/5</td>
+          <td class="num">0.8987</td>
+          <td class="num">0.8674</td>
+        </tr>
+        <tr>
+          <td class="num">2/5</td>
+          <td class="num">0.9033</td>
+          <td class="num">0.8733</td>
+        </tr>
+        <tr>
+          <td class="num">3/5</td>
+          <td class="num">0.8825</td>
+          <td class="num">0.8601</td>
+        </tr>
+        <tr>
+          <td class="num">4/5</td>
+          <td class="num">0.8968</td>
+          <td class="num">0.8413</td>
+        </tr>
+        <tr>
+          <td class="num">5/5</td>
+          <td class="num">0.9015</td>
+          <td class="num">0.8825</td>
+        </tr>
+      </tbody>
+    </table>
     <h3 class="section"><span>promote-gate margin rule</span></h3>
     <p class="page-sub">The gate promotes only when the fitness gain clears its own margin (SoT <code>core/self_improving/train.py::_should_promote</code>). The margin is NOT persisted per-cycle, so the RULE + the recorded baseline stderr are shown rather than a fabricated number.</p>
     <dl class="status-grid">
       <dt>margin</dt><dd><code>max(1.0&middot;&radic;(&sigma;_prior&sup2;+&sigma;_current&sup2;), 0.005 floor, 0.05 if baseline N=1 critical)</code></dd>
       <dt>fitness scale</dt><dd>0-1 <code>compute_fitness</code>, HIGHER-is-better</dd>
-      <dt>gen-0 baseline fitness_stderr</dt><dd><em>not recorded</em></dd>
-      <dt>gate decision so far</dt><dd>no gate-arm cycle recorded yet &mdash; the gate is mid-run / awaiting</dd>
+      <dt>gen-0 baseline fitness_stderr</dt><dd><span class="num">0.0000</span></dd>
+      <dt>gate decision so far</dt><dd>0/16 measured gate cycles have a positive <code>fitness_delta</code> (best -0.0014); promoted <strong>0</strong>. A reject when no gain clears the margin is correct, not a tuning failure</dd>
     </dl>
     <h3 class="section"><span>per-cycle campaign drill-down &middot; verdict / seeds / Petri eval / divergence</span></h3>
     <p class="page-sub">One row per cycle, faceted by arm. <strong>verdict</strong> + <strong>SKIP</strong> are the per-cycle <em>latest</em> SoT (<code>campaign-progress.log</code>) &mdash; distinct from the <em>promoted</em> champion SoT (<code>baseline_archive.jsonl</code>, the 3-arm table above). <strong>divergence</strong> = (selection &minus; gen-0 selection) &minus; (held-out &minus; gen-0 held-out): the gap between how much the cycle moved the selection proxy vs the frozen ruler. A <em>positive</em> divergence is the winner's-curse signal (selection rose more than the held-out ruler). selection + held-out are 0-1 fitness (HIGHER-is-better) but on DIFFERENT scales, so they are anchored to their own gen-0 mean before subtracting; the held-out &Delta;-vs-prior arrow is green when it rises.</p>
-    <h4 class="section"><span>selection (promote gate) &middot; <code>gate</code></span></h4>
-    <p class="empty"><em>No cycle recorded for this arm yet.</em></p>
-    <h4 class="section"><span>random-accept control &middot; <code>random</code></span></h4>
-    <p class="empty"><em>No cycle recorded for this arm yet.</em></p>
-    <h4 class="section"><span>no-mutation floor &middot; <code>never</code></span></h4>
-    <p class="empty"><em>No cycle recorded for this arm yet.</em></p>
+    <h4 class="section"><span>selection (promote gate) &middot; <code>gate</code> &middot; promote 0 &middot; reject 16 &middot; SKIP 2</span></h4>
+    <table class="records">
+      <thead>
+        <tr>
+          <th scope="col" class="num">cycle</th>
+          <th scope="col" class="num">selection</th>
+          <th scope="col" class="num">held-out</th>
+          <th scope="col" class="num">divergence</th>
+          <th scope="col" class="num">&Delta; held-out</th>
+          <th scope="col">verdict</th>
+          <th scope="col">Petri eval &middot; dims</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td class="num">1/10</td>
+          <td class="num">0.6662</td>
+          <td class="num">0.8320</td>
+          <td class="num delta-positive">-0.1212</td>
+          <td class="num muted">&mdash;</td>
+          <td><span class="delta-noise">reject</span></td>
+          <td><span class="muted">no eval recorded</span></td>
+        </tr>
+        <tr>
+          <td class="num">2/10</td>
+          <td class="num">0.6711</td>
+          <td class="num">0.8144</td>
+          <td class="num delta-positive">-0.0988</td>
+          <td class="num delta-negative">-0.0176</td>
+          <td><span class="delta-noise">reject</span></td>
+          <td><span class="muted">no eval recorded</span></td>
+        </tr>
+        <tr>
+          <td class="num">3/10</td>
+          <td class="num">0.6703</td>
+          <td class="num">0.8116</td>
+          <td class="num delta-positive">-0.0968</td>
+          <td class="num delta-negative">-0.0028</td>
+          <td><span class="delta-noise">reject</span></td>
+          <td><span class="muted">no eval recorded</span></td>
+        </tr>
+        <tr>
+          <td class="num">4/10</td>
+          <td class="num">0.6747</td>
+          <td class="num">0.8215</td>
+          <td class="num delta-positive">-0.1022</td>
+          <td class="num delta-positive">+0.0099</td>
+          <td><span class="delta-noise">reject</span></td>
+          <td><span class="muted">no eval recorded</span></td>
+        </tr>
+        <tr>
+          <td class="num">5/10</td>
+          <td class="num">0.6754</td>
+          <td class="num">0.8173</td>
+          <td class="num delta-positive">-0.0974</td>
+          <td class="num delta-negative">-0.0041</td>
+          <td><span class="delta-noise">reject</span></td>
+          <td><span class="muted">no eval recorded</span></td>
+        </tr>
+        <tr>
+          <td class="num">6/10</td>
+          <td class="num">0.6642</td>
+          <td class="num">0.8093</td>
+          <td class="num delta-positive">-0.1006</td>
+          <td class="num delta-negative">-0.0080</td>
+          <td><span class="delta-noise">reject</span></td>
+          <td><span class="muted">no eval recorded</span></td>
+        </tr>
+        <tr>
+          <td class="num">7/10</td>
+          <td class="num">0.6799</td>
+          <td class="num">0.8243</td>
+          <td class="num delta-positive">-0.0999</td>
+          <td class="num delta-positive">+0.0150</td>
+          <td><span class="delta-noise">reject</span></td>
+          <td><span class="muted">no eval recorded</span></td>
+        </tr>
+        <tr>
+          <td class="num">8/10</td>
+          <td class="num">0.6750</td>
+          <td class="num">0.8301</td>
+          <td class="num delta-positive">-0.1105</td>
+          <td class="num delta-positive">+0.0058</td>
+          <td><span class="delta-noise">reject</span></td>
+          <td><span class="muted">no eval recorded</span></td>
+        </tr>
+        <tr>
+          <td class="num">9/10</td>
+          <td class="num muted">&mdash;</td>
+          <td class="num muted">&mdash;</td>
+          <td class="num muted">&mdash;</td>
+          <td class="num muted">&mdash;</td>
+          <td><span class="muted">SKIP</span></td>
+          <td class="muted">&mdash;</td>
+        </tr>
+        <tr>
+          <td class="num">10/10</td>
+          <td class="num">0.6695</td>
+          <td class="num">0.8035</td>
+          <td class="num delta-positive">-0.0895</td>
+          <td class="num delta-negative">-0.0265</td>
+          <td><span class="delta-noise">reject</span></td>
+          <td><span class="muted">no eval recorded</span></td>
+        </tr>
+        <tr>
+          <td class="num">1/1</td>
+          <td class="num muted">&mdash;</td>
+          <td class="num muted">&mdash;</td>
+          <td class="num muted">&mdash;</td>
+          <td class="num muted">&mdash;</td>
+          <td><span class="muted">SKIP</span></td>
+          <td class="muted">&mdash;</td>
+        </tr>
+        <tr>
+          <td class="num">1/10</td>
+          <td class="num">0.9021</td>
+          <td class="num">0.8410</td>
+          <td class="num delta-negative">+0.1056</td>
+          <td class="num delta-positive">+0.0375</td>
+          <td><span class="delta-noise">reject</span></td>
+          <td><span class="muted">no eval recorded</span></td>
+        </tr>
+        <tr>
+          <td class="num">2/10</td>
+          <td class="num">0.9012</td>
+          <td class="num">0.8541</td>
+          <td class="num delta-negative">+0.0916</td>
+          <td class="num delta-positive">+0.0131</td>
+          <td><span class="delta-noise">reject</span></td>
+          <td><span class="muted">no eval recorded</span></td>
+        </tr>
+        <tr>
+          <td class="num">3/10</td>
+          <td class="num">0.9022</td>
+          <td class="num">0.8626</td>
+          <td class="num delta-negative">+0.0841</td>
+          <td class="num delta-positive">+0.0085</td>
+          <td><span class="delta-noise">reject</span></td>
+          <td><span class="muted">no eval recorded</span></td>
+        </tr>
+        <tr>
+          <td class="num">4/10</td>
+          <td class="num">0.8977</td>
+          <td class="num">0.8460</td>
+          <td class="num delta-negative">+0.0962</td>
+          <td class="num delta-negative">-0.0166</td>
+          <td><span class="delta-noise">reject</span></td>
+          <td><span class="muted">no eval recorded</span></td>
+        </tr>
+        <tr>
+          <td class="num">1/10</td>
+          <td class="num">0.8098</td>
+          <td class="num">0.8185</td>
+          <td class="num delta-negative">+0.0358</td>
+          <td class="num delta-negative">-0.0274</td>
+          <td><span class="delta-noise">reject</span></td>
+          <td><span class="muted">no eval recorded</span></td>
+        </tr>
+        <tr>
+          <td class="num">1/10</td>
+          <td class="num">0.8993</td>
+          <td class="num">0.8566</td>
+          <td class="num delta-negative">+0.0872</td>
+          <td class="num delta-positive">+0.0381</td>
+          <td><span class="delta-noise">reject</span></td>
+          <td><span class="muted">no eval recorded</span></td>
+        </tr>
+        <tr>
+          <td class="num">2/10</td>
+          <td class="num">0.8995</td>
+          <td class="num">0.8445</td>
+          <td class="num delta-negative">+0.0995</td>
+          <td class="num delta-negative">-0.0121</td>
+          <td><span class="delta-noise">reject</span></td>
+          <td><span class="muted">no eval recorded</span></td>
+        </tr>
+      </tbody>
+    </table>
+    <h4 class="section"><span>random-accept control &middot; <code>random</code> &middot; promote 0 &middot; reject 5 &middot; SKIP 5</span></h4>
+    <table class="records">
+      <thead>
+        <tr>
+          <th scope="col" class="num">cycle</th>
+          <th scope="col" class="num">selection</th>
+          <th scope="col" class="num">held-out</th>
+          <th scope="col" class="num">divergence</th>
+          <th scope="col" class="num">&Delta; held-out</th>
+          <th scope="col">verdict</th>
+          <th scope="col">Petri eval &middot; dims</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td class="num">1/10</td>
+          <td class="num">0.6740</td>
+          <td class="num">0.8231</td>
+          <td class="num delta-positive">-0.1045</td>
+          <td class="num muted">&mdash;</td>
+          <td><span class="delta-noise">reject</span></td>
+          <td><span class="muted">no eval recorded</span></td>
+        </tr>
+        <tr>
+          <td class="num">2/10</td>
+          <td class="num">0.6805</td>
+          <td class="num">0.8130</td>
+          <td class="num delta-positive">-0.0880</td>
+          <td class="num delta-negative">-0.0101</td>
+          <td><span class="delta-noise">reject</span></td>
+          <td><span class="muted">no eval recorded</span></td>
+        </tr>
+        <tr>
+          <td class="num">3/10</td>
+          <td class="num">0.6691</td>
+          <td class="num">0.7928</td>
+          <td class="num delta-positive">-0.0791</td>
+          <td class="num delta-negative">-0.0202</td>
+          <td><span class="delta-noise">reject</span></td>
+          <td><span class="muted">no eval recorded</span></td>
+        </tr>
+        <tr>
+          <td class="num">4/10</td>
+          <td class="num">0.0000</td>
+          <td class="num">0.7900</td>
+          <td class="num delta-positive">-0.7454</td>
+          <td class="num delta-negative">-0.0028</td>
+          <td><span class="delta-noise">reject</span></td>
+          <td><span class="muted">no eval recorded</span></td>
+        </tr>
+        <tr>
+          <td class="num">5/10</td>
+          <td class="num muted">&mdash;</td>
+          <td class="num muted">&mdash;</td>
+          <td class="num muted">&mdash;</td>
+          <td class="num muted">&mdash;</td>
+          <td><span class="muted">SKIP</span></td>
+          <td class="muted">&mdash;</td>
+        </tr>
+        <tr>
+          <td class="num">6/10</td>
+          <td class="num">0.6618</td>
+          <td class="num">0.8209</td>
+          <td class="num delta-positive">-0.1146</td>
+          <td class="num delta-positive">+0.0310</td>
+          <td><span class="delta-noise">reject</span></td>
+          <td><span class="muted">no eval recorded</span></td>
+        </tr>
+        <tr>
+          <td class="num">7/10</td>
+          <td class="num muted">&mdash;</td>
+          <td class="num muted">&mdash;</td>
+          <td class="num muted">&mdash;</td>
+          <td class="num muted">&mdash;</td>
+          <td><span class="muted">SKIP</span></td>
+          <td class="muted">&mdash;</td>
+        </tr>
+        <tr>
+          <td class="num">8/10</td>
+          <td class="num muted">&mdash;</td>
+          <td class="num muted">&mdash;</td>
+          <td class="num muted">&mdash;</td>
+          <td class="num muted">&mdash;</td>
+          <td><span class="muted">SKIP</span></td>
+          <td class="muted">&mdash;</td>
+        </tr>
+        <tr>
+          <td class="num">9/10</td>
+          <td class="num muted">&mdash;</td>
+          <td class="num muted">&mdash;</td>
+          <td class="num muted">&mdash;</td>
+          <td class="num muted">&mdash;</td>
+          <td><span class="muted">SKIP</span></td>
+          <td class="muted">&mdash;</td>
+        </tr>
+        <tr>
+          <td class="num">10/10</td>
+          <td class="num muted">&mdash;</td>
+          <td class="num muted">&mdash;</td>
+          <td class="num muted">&mdash;</td>
+          <td class="num muted">&mdash;</td>
+          <td><span class="muted">SKIP</span></td>
+          <td class="muted">&mdash;</td>
+        </tr>
+      </tbody>
+    </table>
+    <h4 class="section"><span>no-mutation floor &middot; <code>never</code> &middot; promote 0 &middot; reject 13 &middot; SKIP 2</span></h4>
+    <table class="records">
+      <thead>
+        <tr>
+          <th scope="col" class="num">cycle</th>
+          <th scope="col" class="num">selection</th>
+          <th scope="col" class="num">held-out</th>
+          <th scope="col" class="num">divergence</th>
+          <th scope="col" class="num">&Delta; held-out</th>
+          <th scope="col">verdict</th>
+          <th scope="col">Petri eval &middot; dims</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td class="num">1/10</td>
+          <td class="num">0.6650</td>
+          <td class="num">0.8163</td>
+          <td class="num delta-positive">-0.1067</td>
+          <td class="num muted">&mdash;</td>
+          <td><span class="delta-noise">reject</span></td>
+          <td><span class="muted">no eval recorded</span></td>
+        </tr>
+        <tr>
+          <td class="num">2/10</td>
+          <td class="num">0.6731</td>
+          <td class="num">0.8243</td>
+          <td class="num delta-positive">-0.1066</td>
+          <td class="num delta-positive">+0.0080</td>
+          <td><span class="delta-noise">reject</span></td>
+          <td><span class="muted">no eval recorded</span></td>
+        </tr>
+        <tr>
+          <td class="num">3/10</td>
+          <td class="num">0.6740</td>
+          <td class="num">0.7999</td>
+          <td class="num delta-positive">-0.0813</td>
+          <td class="num delta-negative">-0.0244</td>
+          <td><span class="delta-noise">reject</span></td>
+          <td><span class="muted">no eval recorded</span></td>
+        </tr>
+        <tr>
+          <td class="num">4/10</td>
+          <td class="num">0.6676</td>
+          <td class="num">0.8151</td>
+          <td class="num delta-positive">-0.1029</td>
+          <td class="num delta-positive">+0.0152</td>
+          <td><span class="delta-noise">reject</span></td>
+          <td><span class="muted">no eval recorded</span></td>
+        </tr>
+        <tr>
+          <td class="num">5/10</td>
+          <td class="num">0.6654</td>
+          <td class="num">0.7933</td>
+          <td class="num delta-positive">-0.0834</td>
+          <td class="num delta-negative">-0.0218</td>
+          <td><span class="delta-noise">reject</span></td>
+          <td><span class="muted">no eval recorded</span></td>
+        </tr>
+        <tr>
+          <td class="num">6/10</td>
+          <td class="num">0.6758</td>
+          <td class="num">0.7975</td>
+          <td class="num delta-positive">-0.0772</td>
+          <td class="num delta-positive">+0.0042</td>
+          <td><span class="delta-noise">reject</span></td>
+          <td><span class="muted">no eval recorded</span></td>
+        </tr>
+        <tr>
+          <td class="num">7/10</td>
+          <td class="num">0.6696</td>
+          <td class="num">0.8107</td>
+          <td class="num delta-positive">-0.0966</td>
+          <td class="num delta-positive">+0.0132</td>
+          <td><span class="delta-noise">reject</span></td>
+          <td><span class="muted">no eval recorded</span></td>
+        </tr>
+        <tr>
+          <td class="num">8/10</td>
+          <td class="num">0.6740</td>
+          <td class="num">0.8099</td>
+          <td class="num delta-positive">-0.0913</td>
+          <td class="num delta-negative">-0.0008</td>
+          <td><span class="delta-noise">reject</span></td>
+          <td><span class="muted">no eval recorded</span></td>
+        </tr>
+        <tr>
+          <td class="num">9/10</td>
+          <td class="num">0.6718</td>
+          <td class="num">0.8212</td>
+          <td class="num delta-positive">-0.1048</td>
+          <td class="num delta-positive">+0.0113</td>
+          <td><span class="delta-noise">reject</span></td>
+          <td><span class="muted">no eval recorded</span></td>
+        </tr>
+        <tr>
+          <td class="num">10/10</td>
+          <td class="num">0.6718</td>
+          <td class="num">0.8213</td>
+          <td class="num delta-positive">-0.1050</td>
+          <td class="num delta-positive">+0.0002</td>
+          <td><span class="delta-noise">reject</span></td>
+          <td><span class="muted">no eval recorded</span></td>
+        </tr>
+        <tr>
+          <td class="num">1/10</td>
+          <td class="num">0.8995</td>
+          <td class="num">0.8611</td>
+          <td class="num delta-negative">+0.0829</td>
+          <td class="num delta-positive">+0.0398</td>
+          <td><span class="delta-noise">reject</span></td>
+          <td><span class="muted">no eval recorded</span></td>
+        </tr>
+        <tr>
+          <td class="num">2/10</td>
+          <td class="num">0.9006</td>
+          <td class="num">0.8637</td>
+          <td class="num delta-negative">+0.0814</td>
+          <td class="num delta-positive">+0.0027</td>
+          <td><span class="delta-noise">reject</span></td>
+          <td><span class="muted">no eval recorded</span></td>
+        </tr>
+        <tr>
+          <td class="num">3/10</td>
+          <td class="num">0.9013</td>
+          <td class="num">0.8543</td>
+          <td class="num delta-negative">+0.0915</td>
+          <td class="num delta-negative">-0.0095</td>
+          <td><span class="delta-noise">reject</span></td>
+          <td><span class="muted">no eval recorded</span></td>
+        </tr>
+        <tr>
+          <td class="num">5/10</td>
+          <td class="num muted">&mdash;</td>
+          <td class="num muted">&mdash;</td>
+          <td class="num muted">&mdash;</td>
+          <td class="num muted">&mdash;</td>
+          <td><span class="muted">SKIP</span></td>
+          <td class="muted">&mdash;</td>
+        </tr>
+        <tr>
+          <td class="num">6/10</td>
+          <td class="num muted">&mdash;</td>
+          <td class="num muted">&mdash;</td>
+          <td class="num muted">&mdash;</td>
+          <td class="num muted">&mdash;</td>
+          <td><span class="muted">SKIP</span></td>
+          <td class="muted">&mdash;</td>
+        </tr>
+      </tbody>
+    </table>
 
     <h2 class="section"><span>4 &middot; Power</span></h2>
     <p class="page-sub">How many samples are needed to detect a target effect &delta; at 80% power, given the observed fitness-noise &sigma; (recorded E4 decomposition). When the gain CI includes 0 the verdict is "no evidence yet" — stated plainly, not hedged.</p>
@@ -666,7 +1176,7 @@
         <span class="chip geode">GEODE</span>self-target wrapper.
       </p>
       <p class="version-stamp">
-        Rendered against GEODE <code>v0.99.204</code> &middot; DESIGN.md schema 1 &middot; built 2026-06-13 19:21.
+        Rendered against GEODE <code>v0.99.215</code> &middot; DESIGN.md schema 1 &middot; built 2026-06-14 05:14.
         Dim subset: 22 (geode_5axes). Pipeline phases: 8. Baseline schema: v2 (PR-2).
       </p>
     </div>
