@@ -95,6 +95,10 @@ def test_status_payload_graceful_on_missing_files(
     monkeypatch.setattr(
         core_paths, "MUTATION_AUDIT_LOG_PATH", tmp_path / "state" / "mutations.jsonl"
     )
+    # baseline.json is a SEPARATE runtime constant post PR-STATE-SOT-RUNTIME-SPLIT;
+    # point it at a nonexistent tmp path so the reader doesn't fall through to the
+    # operator's real ~/.geode/self-improving/baseline.json.
+    monkeypatch.setattr(core_paths, "BASELINE_JSON_PATH", tmp_path / "state" / "baseline.json")
     payload = _self_improving_status_payload()
     assert payload == {"baseline": None, "recent_mutations": []}
 
@@ -108,6 +112,9 @@ def test_status_payload_reads_baseline_and_ledger_tail(
     state_dir.mkdir()
     audit_path = state_dir / "mutations.jsonl"
     monkeypatch.setattr(core_paths, "MUTATION_AUDIT_LOG_PATH", audit_path)
+    # baseline.json is now a separate runtime constant (PR-STATE-SOT-RUNTIME-SPLIT);
+    # co-locate it in the test's state dir and point the constant at it.
+    monkeypatch.setattr(core_paths, "BASELINE_JSON_PATH", state_dir / "baseline.json")
 
     (state_dir / "baseline.json").write_text(
         json.dumps(

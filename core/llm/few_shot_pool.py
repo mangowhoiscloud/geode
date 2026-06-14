@@ -27,7 +27,7 @@ Field 정의:
    - With ``GEODE_FEW_SHOT_POOL_STRICT=1`` (audit subprocess): strict.
    - Without strict flag: graceful (no fall-through).
 2. ``~/.geode/autoresearch/handoff/few-shot-pool.jsonl`` — operator-local.
-3. ``state/autoresearch/policies/few-shot-pool.jsonl`` — in-repo.
+3. ``core/self_improving/state/policies/few-shot-pool.jsonl`` — in-repo.
 4. ``None`` — no-op.
 
 **Frontier**: Anthropic prompt caching docs — 동일 prefix 의 multi-turn

@@ -32,7 +32,7 @@ from pathlib import Path
 
 import yaml
 
-from core.paths import AUTORESEARCH_STATE_DIR
+from core.paths import PREPARE_REPORT_PATH
 
 # ---------------------------------------------------------------------------
 # Constants (fixed, do not modify — agent 가 수정 X)
@@ -49,11 +49,9 @@ EXPECTED_DIM_COUNT = (
 
 CACHE_DIR = Path.home() / ".cache" / "autoresearch-petri"
 REPORT_FILE = CACHE_DIR / "prepare-report.txt"
-# Fallback report destination when ``~/.cache`` is unwritable — the in-repo
-# autoresearch state dir (PR-STATE-AUTORESEARCH-RENAME 2026-06-01, Scheme A;
-# renamed from ``state/self_improving`` of #1955). Sourced from the single
-# canonical constant.
-FALLBACK_REPORT_FILE = AUTORESEARCH_STATE_DIR / "prepare-report.txt"
+# Fallback report destination when ``~/.cache`` is unwritable — runtime
+# (~/.geode/self-improving). A per-run report is runtime, not tracked SoT.
+FALLBACK_REPORT_FILE = PREPARE_REPORT_PATH
 
 
 # ---------------------------------------------------------------------------

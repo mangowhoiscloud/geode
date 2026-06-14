@@ -1,9 +1,13 @@
 # GEODE self-improving loop — overview (DATA + program SoT)
 
-The self-improving loop's **runtime DATA** lives at `state/autoresearch/`
-(under `STATE_ROOT`, env-overridable via `GEODE_STATE_ROOT`; the single
-canonical `core.paths.AUTORESEARCH_STATE_DIR`) and the **agent program
-SoT** is `core/self_improving/program.md`. The loop *CODE* lives under the
+The self-improving loop's **DATA** splits by lifecycle
+(PR-STATE-SOT-RUNTIME-SPLIT, 2026-06-14): the git-tracked SoT (ledgers +
+policies + seed pools) is in-repo at `core/self_improving/state/` (the single
+canonical `core.paths.AUTORESEARCH_STATE_DIR`), while the runtime scratch (the
+LATEST `baseline.json`, `run.log`, handoff, per-run dirs) is out-of-repo at
+`~/.geode/self-improving/` (`core.paths.RUNTIME_ROOT`, env-overridable via
+`GEODE_STATE_ROOT`). The **agent program SoT** is
+`core/self_improving/program.md`. The loop *CODE* lives under the
 `core.self_improving` umbrella package (PR-SELF-IMPROVING-UMBRELLA,
 2026-05-31) — `core/self_improving/train.py` (the audit runner, formerly
 `autoresearch/train.py`), `core/self_improving/prepare.py`,
@@ -72,7 +76,7 @@ signal lives in the companion `results.jsonl`.
 
 Mutations to `WRAPPER_PROMPT_SECTIONS` propagate into the audit
 subprocess through the `GEODE_WRAPPER_OVERRIDE` env var (which points
-at `state/autoresearch/wrapper-override.json`). The GEODE runtime's
+at `~/.geode/self-improving/wrapper-override.json`). The GEODE runtime's
 `PromptAssembler` Phase 0 reads it and replaces the wrapper base.
 `--dry-run` skips the subprocess entirely so plumbing can be verified
 without spending budget.
@@ -124,12 +128,17 @@ core/self_improving/           — loop CODE + program SoT (umbrella package)
 ├── admire_means.py / bench_means.py — positive-pressure / capability axes
 └── loop/          — loop runtime (runner, mutator, policies, …)
 
-state/autoresearch/            — runtime DATA (under STATE_ROOT)
-├── policies/      — mutation-target SoT JSONs (git-tracked)
-├── mutations.jsonl, baseline_archive.jsonl, baseline_epochs.json (git-tracked)
-├── results.tsv, results.jsonl — rolling per-audit history (git-tracked)
-├── baseline.json, run.log, campaign-progress.log (gitignored)
-└── _archive/<be-NNN>/ — epoch-boundary snapshots (gitignored; see _archive/README.md)
+core/self_improving/state/     — TRACKED SoT (in-repo, versioned)
+├── policies/      — mutation-target SoT JSONs
+├── mutations.jsonl, baseline_archive.jsonl, baseline_epochs.json
+├── results.tsv, results.jsonl — rolling per-audit history
+├── seed_pools/    — git-tracked campaign INPUT (cycle-input + held-out)
+└── _archive/<be-NNN>/ — epoch-boundary snapshots (see _archive/README.md)
+
+~/.geode/self-improving/       — RUNTIME scratch (out-of-repo, machine-local)
+├── baseline.json, run.log, wrapper-override.json
+├── campaign/{gen-0-snapshot/, runs/<run_id>.json}
+└── handoff/, seed_generation/<run_id>/
 
 docs/self-improving/loop-overview.md  — this file (formerly autoresearch/README.md)
 ```

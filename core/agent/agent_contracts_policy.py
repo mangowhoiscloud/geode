@@ -29,7 +29,7 @@ Unknown agent name / 부적합 schema → graceful drop (forward-compat).
    - With ``GEODE_AGENT_CONTRACTS_STRICT=1``: strict.
    - Without strict flag: graceful (no fall-through).
 2. ``~/.geode/autoresearch/handoff/agent-contracts.json`` — operator-local.
-3. ``state/autoresearch/policies/agent-contracts.json`` — in-repo.
+3. ``core/self_improving/state/policies/agent-contracts.json`` — in-repo.
 4. ``None`` — no-op.
 
 **Frontier**: Claude Code 의 ``.claude/agents/*.md`` agent definitions

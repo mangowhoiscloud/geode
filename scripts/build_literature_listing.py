@@ -7,7 +7,7 @@ Algorithm (per ``docs/plans/2026-05-23-seed-gen-loop3-bundle-serving.md`` § 6):
 1. Scan ``docs/self-improving/petri-bundle/literature/*.json`` (skip ``listing.json``).
 2. For each snapshot, extract the lightweight row fields (arxiv_id, title,
    retrieved_at, content_hash short, categories, url).
-3. Scan ``state/autoresearch/mutations.jsonl`` (if present) for evidence
+3. Scan ``core/self_improving/state/mutations.jsonl`` (if present) for evidence
    rows that cite snapshots (defensive parser — handles both the typed-
    array shape from the petri-autoresearch session AND the flat-shape
    pre-realign).
@@ -36,7 +36,7 @@ from typing import Any
 log = logging.getLogger(__name__)
 
 LITERATURE_DIR = "docs/self-improving/petri-bundle/literature"
-MUTATIONS_LOG = "state/autoresearch/mutations.jsonl"
+MUTATIONS_LOG = "core/self_improving/state/mutations.jsonl"
 SEED_GLOB = "plugins/petri_audit/seeds_gen*/**/*.md"
 LISTING_FILENAME = "listing.json"
 

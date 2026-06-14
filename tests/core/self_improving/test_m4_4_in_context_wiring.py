@@ -230,16 +230,26 @@ def test_orchestrator_module_public_api() -> None:
 
 
 def test_stub_slots_do_not_break_when_configured(monkeypatch: pytest.MonkeyPatch) -> None:
-    """memory_recall / rubric_excerpts / tool_hints active → no-op (no reader yet).
+    """memory_recall / rubric_excerpts active → no-op; tool_hints reader isolated.
 
-    Verifies the orchestrator's iteration over stub slots doesn't raise
-    or mutate output; their readers land in follow-up PRs.
+    Verifies the orchestrator's iteration over the slots doesn't raise or mutate
+    output. ``tool_hints`` DOES now have a reader (``load_recent_episodes`` over
+    ``~/.geode/memory/episodes.jsonl``); we pin it to empty so the no-op
+    assertion is hermetic and never leaks the dev machine's real episodic store
+    (which would inject a ``<tool-hints>`` block and fail the ``== "S"`` check).
     """
     from core.self_improving.loop.inject.in_context_slots import (
         SLOT_MEMORY_RECALL,
         SLOT_RUBRIC_EXCERPTS,
         SLOT_TOOL_HINTS,
         InContextSlot,
+    )
+
+    # tool_hints is imported lazily inside apply_in_context_slots from the
+    # source module, so patch the source (not the wiring namespace).
+    monkeypatch.setattr(
+        "core.self_improving.loop.inject.tool_hints.load_recent_episodes",
+        lambda *a, **k: [],
     )
 
     monkeypatch.setattr(

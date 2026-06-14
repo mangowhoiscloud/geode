@@ -42,65 +42,59 @@ def audit_log_path() -> Path:
     return Path(MUTATION_AUDIT_LOG_PATH)
 
 
-def test_mutation_audit_log_lives_two_levels_below_repo_root(
+def test_mutation_audit_log_lives_three_levels_below_repo_root(
     audit_log_path: Path,
 ) -> None:
-    """``parents[2]`` of the audit log path is the repo root.
+    """``parents[3]`` of the audit log path is the repo root.
 
-    Pin: ``MUTATION_AUDIT_LOG_PATH`` =
-    ``<repo>/state/autoresearch/mutations.jsonl`` → ``parents[2]``
-    is the repo root containing ``core/self_improving/train.py``.
+    Pin (post PR-STATE-SOT-RUNTIME-SPLIT): ``MUTATION_AUDIT_LOG_PATH`` =
+    ``<repo>/core/self_improving/state/mutations.jsonl`` → ``parents[3]``
+    is the repo root containing ``core/self_improving/train.py`` (the move
+    in-repo deepened it one level, 2 → 3).
     """
-    repo_root = audit_log_path.resolve().parents[2]
+    repo_root = audit_log_path.resolve().parents[3]
     assert (repo_root / "core" / "self_improving" / "train.py").is_file(), (
         f"repo_root={repo_root!r} does not contain core/self_improving/train.py — "
-        f"the parents[2] offset is wrong or the audit log path moved again."
+        f"the parents[3] offset is wrong or the audit log path moved again."
     )
 
 
-def test_parents_one_is_not_repo_root(
+def test_parents_two_is_not_repo_root(
     audit_log_path: Path,
 ) -> None:
-    """``parents[3]`` points at ``state/`` not the repo root.
+    """``parents[2]`` points at ``<repo>/core``, not the repo root.
 
-    Direct negative pin: if some future refactor flips back to
-    ``parents[3]``, the ``cwd`` becomes ``<repo>/state`` and the
-    ``-m core.self_improving.train`` spawn cannot find the ``core`` package
-    (which lives at the repo root, NOT under ``state/``). This test
-    asserts that ``parents[3]`` does NOT contain ``core/self_improving/train.py``
-    so the wrong cwd cannot silently pass.
+    Negative pin: if a future refactor flips back to ``parents[2]``, the
+    git ``cwd`` becomes ``<repo>/core`` and the ``-m core.self_improving.train``
+    spawn cannot find the ``core`` package (which lives at the repo root). This
+    asserts ``parents[2]`` does NOT contain ``core/self_improving/train.py`` so
+    the wrong cwd cannot silently pass.
     """
-    wrong_root = audit_log_path.resolve().parents[3]
+    wrong_root = audit_log_path.resolve().parents[2]
     wrong_path = wrong_root / "core" / "self_improving" / "train.py"
     assert not wrong_path.exists(), (
-        f"Unexpected: {wrong_path!r} exists — runner.py's parents[2] arithmetic "
-        f"was chosen against parents[3] precisely because parents[3] "
-        f"resolves to the autoresearch/ subdirectory, not the repo root."
+        f"Unexpected: {wrong_path!r} exists — runner.py uses parents[3] (not "
+        f"parents[2]) because parents[2] resolves to <repo>/core, not the repo root."
     )
 
 
 def test_runner_apply_proposal_uses_correct_parents_offset() -> None:
-    """The two ``parents[N]`` call sites in ``runner.py`` must use ``parents[2]``.
+    """The two ``parents[N]`` call sites in ``runner.py`` must use ``parents[3]``.
 
-    Source-level pin: greps the runner module so a regression to
-    ``parents[3]`` on either call site fails before any subprocess
-    spawn. Catches the off-by-one bug introduced after PR-G5b
-    moved the audit log under ``state/autoresearch/``.
+    Source-level pin: greps the runner module so a regression to ``parents[2]``
+    on either call site fails before any subprocess spawn. The audit log moved
+    in-repo to ``core/self_improving/state/`` (PR-STATE-SOT-RUNTIME-SPLIT), one
+    level deeper, so the git-cwd derivation is now ``parents[3]``.
     """
     from core.self_improving.loop.mutate import runner
 
     source = Path(runner.__file__).read_text(encoding="utf-8")
-    # Both call sites should now read parents[2]; parents[3] must not
-    # appear in any repo_root computation downstream of MUTATION_AUDIT_LOG_PATH
-    # / self.audit_log_path / log_path. We guard with a substring scan rather
-    # than AST parsing because the patterns are unambiguous and the file is
-    # already line-stable here.
     forbidden = [
-        "log_path.resolve().parents[3]",
-        "MUTATION_AUDIT_LOG_PATH).resolve().parents[3]",
+        "log_path.resolve().parents[2]",
+        "MUTATION_AUDIT_LOG_PATH).resolve().parents[2]",
     ]
     for needle in forbidden:
         assert needle not in source, (
-            f"runner.py still contains {needle!r} — re-introducing the "
-            f"off-by-one bug. Replace with parents[2]."
+            f"runner.py still contains {needle!r} — re-introducing the off-by-one "
+            f"bug. The audit log is now 3 levels below repo root; use parents[3]."
         )

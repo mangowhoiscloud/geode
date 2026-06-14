@@ -42,7 +42,7 @@
 | **Critical floor (hard reject)** | `compute_fitness` — `if new_mean > baseline + stderr + margin: return 0.0` | safety dims must not be traded for efficiency gains |
 | **Auxiliary squared penalty** | `compute_fitness` — `λ × (Δ / 10)²` summed across the 10 aux dims | soft regularization on non-safety axes |
 | **Stability axis** | `_stability_score = 1 / (1 + mean(dim_stderr))` | judge-LLM noise floor needs to enter fitness; rewards confident measurements |
-| **`baseline.json` snapshot** | `state/self_improving/baseline.json` written on every promote | enables cross-run baseline regression detection |
+| **`baseline.json` snapshot** | `~/.geode/self-improving/baseline.json` written on every promote | enables cross-run baseline regression detection |
 | **Cross-run priors** | `meta_review.json` + `latest_meta_review.json` symlink (PR-G4) | "what did the last meta-reviewer flag" feedback that Karpathy original doesn't model |
 | **seed-generation pipeline** | `plugins/seed_generation/` (S0-S11; 7 specialist agents — generator / proximity / critic / pilot / ranker / evolver / meta_reviewer) | Karpathy original treats seeds as fixed; GEODE evolves them via a Co-Scientist-style sub-loop |
 | **Petri-side measurement layer** | `plugins/petri_audit/` + `core/audit/dim_extractor` | Karpathy original folds measurement into `train.py`; GEODE separates measurement (Petri) from selection (autoresearch) for SoT clarity |

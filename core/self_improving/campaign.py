@@ -96,7 +96,14 @@ from datetime import UTC
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
-from core.paths import AUTORESEARCH_STATE_DIR
+from core.paths import (
+    AUTORESEARCH_POLICIES_DIR,
+    AUTORESEARCH_STATE_DIR,
+    BASELINE_JSON_PATH,
+    CAMPAIGN_PROGRESS_LOG_PATH,
+    MUTATION_AUDIT_LOG_PATH,
+    RUNTIME_ROOT,
+)
 from core.paths import CYCLE_INPUT_POOL as _CYCLE_INPUT_POOL  # PR-CLEANUP-D2
 from core.paths import HELD_OUT_BENCH_POOL as _HELD_OUT_BENCH_POOL  # PR-CLEANUP-D2
 from core.paths import PETRI_LOGS_DIR as _PETRI_LOGS_DIR  # PR-CLEANUP-D2
@@ -115,25 +122,32 @@ log = logging.getLogger("self_improving.campaign")
 REPO_ROOT = Path(__file__).resolve().parents[2]
 """The git repo root. ``core/self_improving/campaign.py`` → ``parents[2]`` = repo root."""
 
-# Single canonical state-dir constant (``core.paths.AUTORESEARCH_STATE_DIR``
-# = ``state/autoresearch`` under ``STATE_ROOT``, env-overridable via
-# ``GEODE_STATE_ROOT``). No local re-definition — no dual SoT (CLAUDE.md).
-STATE_DIR = AUTORESEARCH_STATE_DIR
-POLICIES_DIR = STATE_DIR / "policies"
-BASELINE_JSON = STATE_DIR / "baseline.json"
-MUTATIONS_JSONL = STATE_DIR / "mutations.jsonl"
-PROGRESS_LOG = STATE_DIR / "campaign-progress.log"
+# Single canonical state-dir constant (``core.paths.AUTORESEARCH_STATE_DIR`` =
+# in-repo ``core/self_improving/state/`` by default; under
+# ``$GEODE_STATE_ROOT/autoresearch`` for an isolated worker). No local
+# re-definition — no dual SoT (CLAUDE.md). Module aliases → the single-SoT
+# core.paths constants (no literal re-construction). Note post
+# PR-STATE-SOT-RUNTIME-SPLIT the tracked SoT (STATE_DIR / POLICIES_DIR /
+# MUTATIONS_JSONL) and the runtime files (BASELINE_JSON / PROGRESS_LOG) no longer
+# share a parent in the default home — read each from its own alias.
+STATE_DIR = AUTORESEARCH_STATE_DIR  # tracked SoT root (in-repo)
+POLICIES_DIR = AUTORESEARCH_POLICIES_DIR  # tracked
+MUTATIONS_JSONL = MUTATION_AUDIT_LOG_PATH  # tracked audit ledger
+BASELINE_JSON = BASELINE_JSON_PATH  # runtime (latest, vs tracked archive)
+PROGRESS_LOG = CAMPAIGN_PROGRESS_LOG_PATH  # runtime
 
-#: gen-0 SoT snapshot destination (under the gitignored ``state/`` runtime tree
-#: so a matched-reset snapshot of a real campaign never enters git history).
-GEN0_SNAPSHOT_DIR = REPO_ROOT / "state" / "campaign" / "gen-0-snapshot"
+#: gen-0 SoT snapshot destination — RUNTIME (under the out-of-repo runtime root,
+#: ``~/.geode/self-improving/campaign/`` by default) so a matched-reset snapshot
+#: of a real campaign never enters git history (PR-STATE-SOT-RUNTIME-SPLIT moved
+#: it out of the deleted repo-root ``state/`` tree).
+GEN0_SNAPSHOT_DIR = RUNTIME_ROOT / "campaign" / "gen-0-snapshot"
 
-#: Per-run resume-checkpoint directory (same gitignored ``state/campaign/`` tree
-#: as the snapshot — a resume marker is a runtime artifact, not git history). A
-#: campaign run writes ``<this>/<run_id>.json`` recording which path-independent
+#: Per-run resume-checkpoint directory (same out-of-repo ``campaign/`` runtime
+#: tree as the snapshot — a resume marker is a runtime artifact, not git history).
+#: A campaign run writes ``<this>/<run_id>.json`` recording which path-independent
 #: workers COMPLETED, so a re-run after a crash skips the finished ones and only
 #: re-runs the missing replicates / cycles, then aggregates the union (S4).
-CAMPAIGN_RUNS_DIR = REPO_ROOT / "state" / "campaign" / "runs"
+CAMPAIGN_RUNS_DIR = RUNTIME_ROOT / "campaign" / "runs"
 
 #: Seed-pool launch wiring (campaign-procedure.md §3, cycle-input-pool.md) —
 #: paths anchored in core.paths (PR-CLEANUP-D2).
@@ -335,8 +349,8 @@ def build_campaign_env(
 # SoT snapshot / restore (campaign-procedure.md §6 — matched gen-0 reset)
 # ---------------------------------------------------------------------------
 
-#: Glob patterns under ``state/autoresearch/`` that make up the full scaffold
-#: SoT a matched reset must round-trip (campaign-procedure.md §1, §2.1, §7).
+#: Glob patterns under the tracked SoT (``core/self_improving/state/``) that make
+#: up the full scaffold SoT a matched reset round-trips (campaign-procedure.md §1).
 _SNAPSHOT_SOURCES: tuple[tuple[Path, str], ...] = (
     (POLICIES_DIR, "*.json"),
     (POLICIES_DIR, "*.jsonl"),
@@ -346,8 +360,8 @@ _SNAPSHOT_SOURCES: tuple[tuple[Path, str], ...] = (
 def snapshot_sot(dest_dir: Path) -> list[Path]:
     """Copy the full scaffold SoT into ``dest_dir`` for a matched reset.
 
-    Captures every ``state/autoresearch/policies/*.{json,jsonl}`` plus
-    ``baseline.json``. Returns the list of destination paths written. The dest
+    Captures every tracked ``core/self_improving/state/policies/*.{json,jsonl}``
+    plus the runtime ``baseline.json``. Returns the destination paths written. Dest
     dir is wiped first so a re-snapshot is a clean overwrite (never a merge of a
     stale snapshot with a fresh one).
     """
@@ -374,9 +388,9 @@ def restore_sot(snapshot_dir: Path) -> list[Path]:
     """Restore the scaffold SoT from a ``snapshot_sot`` directory — an EXACT
     matched reset.
 
-    Round-trips ``snapshot_sot`` exactly: the policy files are copied back into
-    ``state/autoresearch/policies/`` and ``baseline.json`` back into
-    ``state/autoresearch/``. Crucially this is a *mirror*, not an overlay: any
+    Round-trips ``snapshot_sot`` exactly: the policy files are copied back into the
+    tracked ``core/self_improving/state/policies/`` and ``baseline.json`` back into
+    the runtime root. Crucially this is a *mirror*, not an overlay: any
     live ``policies/*.{json,jsonl}`` file that is NOT in the snapshot is DELETED,
     so an earlier arm that created a new policy file (e.g. the gate arm inserting
     ``wrapper-sections.json`` where gen-0 had only ``hyperparam.json``) cannot
@@ -404,7 +418,10 @@ def restore_sot(snapshot_dir: Path) -> list[Path]:
             restored.append(dst)
     baseline_src = snapshot_dir / "baseline.json"
     if baseline_src.exists():
-        STATE_DIR.mkdir(parents=True, exist_ok=True)
+        # baseline.json is RUNTIME (its parent is the runtime root, NOT the
+        # tracked STATE_DIR) post PR-STATE-SOT-RUNTIME-SPLIT — mkdir the actual
+        # destination parent so the copy never fails on a fresh ~/.geode.
+        BASELINE_JSON.parent.mkdir(parents=True, exist_ok=True)
         shutil.copy2(baseline_src, BASELINE_JSON)
         restored.append(BASELINE_JSON)
     return restored
@@ -1011,9 +1028,12 @@ def _spawn_train_subprocess(
 #
 # State isolation mirrors the proven ``scripts/floor_sampler.sh`` pattern:
 # each worker runs with its OWN ``GEODE_STATE_ROOT`` (a per-worker temp
-# dir), seeded from the frozen baseline snapshot, so concurrent workers
-# never race on the shared ``mutations.jsonl`` / ``baseline.json`` /
-# ``policies/*`` under the single production ``state/autoresearch/`` root.
+# dir), seeded from the frozen baseline snapshot, so concurrent workers never
+# race on the shared production trees (the in-repo tracked SoT + the ~/.geode
+# runtime). Post PR-STATE-SOT-RUNTIME-SPLIT a worker's ``GEODE_STATE_ROOT``
+# co-locates BOTH the tracked SoT and the runtime under ``$ENV/autoresearch`` so
+# all of ``mutations.jsonl`` / ``baseline.json`` / ``policies/*`` land in the
+# worker's own isolated tree.
 # Each worker resolves ``core.paths.*`` (which read ``GEODE_STATE_ROOT`` at
 # import time) under its isolated root, so its writes land in its own tree.
 #
@@ -2155,7 +2175,7 @@ def run_arm(
         # Dry-run is read-only w.r.t. the git-tracked policy SoT: the offline
         # runner writes nothing, so a matched reset would only re-copy identical
         # bytes. Skipping restore_sot keeps the smoke from touching
-        # ``state/autoresearch/policies/*`` at all (Codex MCP finding #5).
+        # ``core/self_improving/state/policies/*`` at all (Codex MCP finding #5).
         progress.emit(f"arm '{arm}' (index {arm_index}): dry-run (gen-0 restore skipped)")
     else:
         progress.emit(f"arm '{arm}' (index {arm_index}): restoring gen-0 SoT snapshot")

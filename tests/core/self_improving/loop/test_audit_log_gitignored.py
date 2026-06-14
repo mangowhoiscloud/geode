@@ -1,25 +1,22 @@
-"""G5b.fix1 (2026-05-20) — mutations.jsonl must NOT be git-ignored.
+"""The mutation ledger (tracked SoT) must enter git history; runtime scratch must not.
 
-The G5b self-improving-loop runner appends every applied wrapper-prompt
-mutation to ``state/autoresearch/mutations.jsonl`` (PR-STATE-AUTORESEARCH-
-RENAME 2026-06-01, Scheme A — renamed from ``state/autoresearch/`` of #1955) and calls
-``_git_commit_audit_log`` to stage + commit the row. The Codex MCP
-LLM-as-Judge audit on 2026-05-20 found that ``.gitignore`` matched
-the broad state glob and silently ignored the ledger; the runner's
-``git add`` then no-op'd, and the CHANGELOG's "git-tracked audit log"
-claim was false.
+History: G5b.fix1 (2026-05-20) — a Codex MCP LLM-as-Judge audit found
+``.gitignore`` swept the ledger under a broad ``state/autoresearch/*`` glob, so
+the runner's ``git add`` silently no-op'd and the CHANGELOG's "git-tracked audit
+log" claim was false. The fix was a ``!...mutations.jsonl`` negation re-including
+it.
 
-These tests pin the negation in ``.gitignore`` so the ledger really
-enters git history.
+PR-STATE-SOT-RUNTIME-SPLIT (2026-06-14) retired that whole negation dance. The
+tracked SoT (``mutations.jsonl`` / ``baseline_archive.jsonl`` / ``results.*`` /
+``policies/``) moved IN-REPO to ``core/self_improving/state/`` — under ``core/``,
+which nothing ignores, so it is *naturally* git-tracked with no negation. The
+RUNTIME scratch (``baseline.json``, ``run.log``, per-run ``seed_generation/``)
+moved OUT of the repo to ``~/.geode/self-improving/`` — so it is structurally
+impossible to commit, no gitignore rule required.
 
-Test strategy: two independent checks.
-
-1. **File-content guard** — read the repo ``.gitignore`` and assert
-   the negation line is present. Cheap, runs in <1ms.
-2. **Behavioural guard** — shell out to ``git check-ignore`` (when
-   git is available in the test env) and assert the exit code is 1
-   (= not ignored). Costlier but catches subtler regressions like a
-   later ``*.jsonl`` glob that re-ignores the ledger.
+These tests pin both halves of that split:
+1. the tracked ledger really is not ignored (behavioural ``git check-ignore``),
+2. the runtime baseline lives outside the repo tree (structural).
 """
 
 from __future__ import annotations
@@ -33,71 +30,83 @@ import pytest
 _REPO_ROOT = Path(__file__).resolve().parents[4]
 
 
-def _read_gitignore() -> str:
-    return (_REPO_ROOT / ".gitignore").read_text(encoding="utf-8")
-
-
-def test_gitignore_has_mutations_negation() -> None:
-    """``.gitignore`` carries the explicit negation for the mutation ledger."""
-    text = _read_gitignore()
-    assert "!state/autoresearch/mutations.jsonl" in text, (
-        "G5b.fix1 regression: the mutation audit log negation is missing from "
-        ".gitignore — `git add state/autoresearch/mutations.jsonl` would fail "
-        "silently and the runner's git-as-optimiser ledger would never enter "
-        "history. Add `!state/autoresearch/mutations.jsonl` AFTER the "
-        "`state/autoresearch/*` line."
-    )
-
-
-def test_gitignore_state_glob_still_present() -> None:
-    """The base ignore of ``state/autoresearch/*`` is preserved.
-
-    The negation should be additive, not a wholesale removal of the
-    ignore (which would leak run logs, baseline.json snapshots, etc.).
-    """
-    text = _read_gitignore()
-    assert "state/autoresearch/*" in text, (
-        "The base ignore rule for `state/autoresearch/*` is missing. The "
-        "G5b.fix1 negation must coexist with the base ignore; otherwise "
-        "stale run.log / audit_logs/ / baseline.json files leak into commits."
-    )
-
-
-def test_git_check_ignore_says_mutations_not_ignored() -> None:
-    """Behavioural check via ``git check-ignore`` — exit 1 = not ignored."""
+def _check_ignore(repo_relative: str) -> subprocess.CompletedProcess[str] | None:
+    """Run ``git check-ignore`` from the repo root; None if git is unavailable."""
     try:
-        result = subprocess.run(  # nosec B603 — argv hard-coded
-            ["git", "check-ignore", "state/autoresearch/mutations.jsonl"],  # noqa: S607  # nosec B607
+        return subprocess.run(  # noqa: S603  # nosec B603 — argv hard-coded
+            ["git", "check-ignore", repo_relative],  # noqa: S607  # nosec B607
             cwd=str(_REPO_ROOT),
             capture_output=True,
             text=True,
             check=False,
         )
     except FileNotFoundError:
+        return None
+
+
+def test_gitignore_no_longer_carries_state_negation_dance() -> None:
+    """The retired negation dance must be GONE from ``.gitignore``.
+
+    Architecture pin: after the SoT moved under ``core/`` the old
+    ``state/autoresearch/*`` ignore + ``!...mutations.jsonl`` negation are dead.
+    Their reappearance would mean someone re-created a top-level ``state/`` home
+    and re-introduced the silent-ignore footgun the split removed.
+    """
+    text = (_REPO_ROOT / ".gitignore").read_text(encoding="utf-8")
+    assert "state/autoresearch/*" not in text, (
+        "The retired `state/autoresearch/*` ignore glob is back in .gitignore — "
+        "the tracked SoT now lives under core/self_improving/state/ and must not "
+        "be re-homed at a top-level state/ that needs a negation dance."
+    )
+    assert "!state/autoresearch/mutations.jsonl" not in text, (
+        "The retired mutations.jsonl negation is back — it only existed to undo "
+        "the broad state/ glob, which no longer exists."
+    )
+
+
+@pytest.mark.parametrize(
+    "constant_name",
+    [
+        "MUTATION_AUDIT_LOG_PATH",
+        "BASELINE_ARCHIVE_PATH",
+        "RESULTS_TSV_PATH",
+        "RESULTS_JSONL_PATH",
+        "AUTORESEARCH_TOOL_POLICY_PATH",
+    ],
+)
+def test_tracked_sot_not_gitignored(constant_name: str) -> None:
+    """Every tracked-SoT path must be git-tracked (``check-ignore`` exit 1).
+
+    Derives the path from ``core.paths`` so a future relocation that re-ignores
+    the SoT fails here regardless of the literal path.
+    """
+    from core import paths
+
+    target = Path(getattr(paths, constant_name)).resolve()
+    repo_relative = str(target.relative_to(_REPO_ROOT))
+    result = _check_ignore(repo_relative)
+    if result is None:
         pytest.skip("git binary not available in test environment")
     assert result.returncode == 1, (
-        "git check-ignore considers state/autoresearch/mutations.jsonl "
-        f"ignored (exit={result.returncode}, stdout={result.stdout!r}). "
-        "The G5b.fix1 negation in .gitignore is not effective — perhaps a "
-        "later glob (`*.jsonl`?) re-ignores it."
+        f"git check-ignore considers {repo_relative} ignored "
+        f"(exit={result.returncode}, stdout={result.stdout!r}). The tracked SoT "
+        f"under core/self_improving/state/ must enter git history — a later glob "
+        f"(`*.jsonl`?) may have re-ignored it."
     )
 
 
-def test_git_check_ignore_still_ignores_baseline() -> None:
-    """Sanity: baseline.json (and other state/ artifacts) still ignored."""
-    try:
-        result = subprocess.run(  # nosec B603 — argv hard-coded
-            ["git", "check-ignore", "state/autoresearch/baseline.json"],  # noqa: S607  # nosec B607
-            cwd=str(_REPO_ROOT),
-            capture_output=True,
-            text=True,
-            check=False,
-        )
-    except FileNotFoundError:
-        pytest.skip("git binary not available in test environment")
-    assert result.returncode == 0, (
-        "Sanity check failed: state/autoresearch/baseline.json should still "
-        "be ignored (exit 0 from `git check-ignore`), but got "
-        f"exit={result.returncode}. The G5b.fix1 negation may have leaked "
-        "into a too-broad rule."
+def test_runtime_baseline_lives_outside_repo() -> None:
+    """The runtime ``baseline.json`` must resolve OUTSIDE the repo tree.
+
+    Replaces the old "baseline.json is gitignored" sanity check. Runtime scratch
+    now lives at ``~/.geode/self-improving/`` (out of repo), so it is
+    structurally uncommittable — no gitignore rule can regress.
+    """
+    from core import paths
+
+    baseline = Path(paths.BASELINE_JSON_PATH).resolve()
+    assert not baseline.is_relative_to(_REPO_ROOT), (
+        f"BASELINE_JSON_PATH={baseline} resolved INSIDE the repo tree "
+        f"({_REPO_ROOT}). Runtime baseline must live under GEODE_HOME "
+        f"(~/.geode/self-improving/) so it cannot be committed."
     )

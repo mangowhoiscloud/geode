@@ -1,8 +1,8 @@
 """Rubric excerpts reader — ADR-012 M4.4.2 (in-context slot follow-up).
 
-Activates the ``rubric_excerpts`` slot declared in S5 (#1425). Reads
-``state/autoresearch/baseline.json`` (the fitness baseline that the
-self-improving loop most recently promoted), computes the worst-regressed
+Activates the ``rubric_excerpts`` slot declared in S5 (#1425). Reads the runtime
+``baseline.json`` (``~/.geode/self-improving/baseline.json``, the fitness baseline
+the self-improving loop most recently promoted), computes the worst-regressed
 dimension(s), and emits a compact ``<rubric-warning>`` block reminding
 the agent of the rubric directives for those dims.
 
@@ -16,9 +16,8 @@ the ball on these dims" — frontier harnesses (Claude Code's
 
 **Data path**:
 
-1. Read ``state/autoresearch/baseline.json`` via
-   ``MUTATION_AUDIT_LOG_PATH.parent / "baseline.json"`` (the constant
-   ``self_improving.py`` already uses for the slash status output).
+1. Read the runtime ``baseline.json`` via ``core.paths.BASELINE_JSON_PATH``
+   (the same constant ``self_improving.py`` uses for the slash status output).
 2. Pair ``dim_means`` (current) with ``baseline_means`` (last
    promoted). Regression = ``baseline_means[d] - dim_means[d]``.
    Positive regression = drift in the wrong direction.
@@ -122,14 +121,16 @@ class DimRegression:
 
 
 def resolve_baseline_path() -> Path:
-    """Where the reader expects ``baseline.json`` to live.
+    """Where the reader expects the LATEST runtime ``baseline.json`` to live.
 
-    Single source of truth — same path the ``/self-improving status``
-    slash uses (``MUTATION_AUDIT_LOG_PATH.parent / "baseline.json"``).
+    Single source of truth — ``core.paths.BASELINE_JSON_PATH`` (the runtime root,
+    ``~/.geode/self-improving/`` by default; honours ``GEODE_STATE_ROOT`` so an
+    isolated worker resolves its own seeded copy). Post PR-STATE-SOT-RUNTIME-SPLIT
+    this is NO LONGER a sibling of the tracked ``mutations.jsonl``.
     """
-    from core.self_improving.loop.mutate.runner import MUTATION_AUDIT_LOG_PATH
+    import core.paths
 
-    return Path(MUTATION_AUDIT_LOG_PATH).parent / "baseline.json"
+    return Path(core.paths.BASELINE_JSON_PATH)
 
 
 def load_baseline(path: Path | None = None) -> dict[str, Any] | None:

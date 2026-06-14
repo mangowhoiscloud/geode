@@ -14,7 +14,7 @@ audit was regressing on. The runner-friendly fix is a thin reader that
 exposes three contracts:
 
 * :func:`load_baseline` — return a typed snapshot of
-  ``state/autoresearch/baseline.json`` (post-G2 schema:
+  ``~/.geode/self-improving/baseline.json`` (post-G2 schema:
   ``{dim_means, dim_stderr, evidence}``), or ``None`` when the file
   is missing / unparseable.
 * :func:`pick_regression_target_dim` — choose the dim with the highest
@@ -88,7 +88,7 @@ SEED_COHORTS: tuple[str, ...] = (PETRI_17DIM_COHORT, TASK_COMPLETION_COHORT)
 
 @dataclass(frozen=True)
 class BaselineSnapshot:
-    """Frozen view of one ``state/autoresearch/baseline.json``.
+    """Frozen view of one ``~/.geode/self-improving/baseline.json``.
 
     All five fields are always present (empty dict when the underlying
     JSON omits the key). Frozen so the snapshot is safe to pass through
@@ -140,7 +140,7 @@ def _default_baseline_path() -> Path | None:
 
 
 def load_baseline(path: Path | str | None = None) -> BaselineSnapshot | None:
-    """Read ``state/autoresearch/baseline.json`` into a :class:`BaselineSnapshot`.
+    """Read ``~/.geode/self-improving/baseline.json`` into a :class:`BaselineSnapshot`.
 
     Returns ``None`` (not an empty snapshot) when:
 

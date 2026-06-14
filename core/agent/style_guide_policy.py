@@ -30,7 +30,7 @@ WARNING + 해당 axis drop (forward-compat 위해 다른 axes 는 유지).
    - Without strict flag (operator daily): graceful (no fall-through).
 
 2. ``~/.geode/autoresearch/handoff/style-guide.json`` — operator-local, graceful.
-3. ``state/autoresearch/policies/style-guide.json`` — in-repo, graceful.
+3. ``core/self_improving/state/policies/style-guide.json`` — in-repo, graceful.
 4. ``None`` — no-op.
 
 **Frontier**: OpenAI / Anthropic system prompt guides converge on

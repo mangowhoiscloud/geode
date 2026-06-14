@@ -567,7 +567,6 @@ def test_build_audit_command_uses_resolved_seed_select(
 def test_real_mode_invokes_subprocess_with_override_env(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
-    monkeypatch.setattr(measure, "STATE_DIR", tmp_path / "state")
     monkeypatch.setattr(auto_train, "RUN_LOG", tmp_path / "state" / "run.log")
 
     captured: dict[str, Any] = {}
@@ -603,7 +602,6 @@ def test_real_mode_invokes_subprocess_with_override_env(
 def test_real_mode_parses_dim_stderr_when_emitted(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
-    monkeypatch.setattr(measure, "STATE_DIR", tmp_path / "state")
     monkeypatch.setattr(auto_train, "RUN_LOG", tmp_path / "state" / "run.log")
 
     def _fake_run(argv: list[str], **kwargs: Any) -> MagicMock:
@@ -630,7 +628,6 @@ def test_real_mode_parses_dim_stderr_when_emitted(
 def test_real_mode_raises_when_summary_json_missing(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
-    monkeypatch.setattr(measure, "STATE_DIR", tmp_path / "state")
     monkeypatch.setattr(auto_train, "RUN_LOG", tmp_path / "state" / "run.log")
 
     def _fake_run(argv: list[str], **kwargs: Any) -> MagicMock:
@@ -654,7 +651,6 @@ def test_real_mode_prefers_eval_archive_when_extract_succeeds(
     closed-loop after a Summary-serialization TypeError corrupts the
     final stdout JSON line but leaves the archive intact.
     """
-    monkeypatch.setattr(measure, "STATE_DIR", tmp_path / "state")
     monkeypatch.setattr(auto_train, "RUN_LOG", tmp_path / "state" / "run.log")
 
     def _fake_run(argv: list[str], **kwargs: Any) -> MagicMock:
@@ -698,7 +694,6 @@ def test_real_mode_falls_back_to_stdout_when_archive_empty(
     parser falls through to the legacy stdout JSON path. Preserves the
     pre-PR behaviour for environments where the archive isn't useful.
     """
-    monkeypatch.setattr(measure, "STATE_DIR", tmp_path / "state")
     monkeypatch.setattr(auto_train, "RUN_LOG", tmp_path / "state" / "run.log")
 
     def _fake_run(argv: list[str], **kwargs: Any) -> MagicMock:
@@ -741,7 +736,6 @@ def test_real_mode_falls_back_to_stdout_when_archive_raises(
     the legacy stdout JSON path takes over. The closed loop must
     continue rather than crash.
     """
-    monkeypatch.setattr(measure, "STATE_DIR", tmp_path / "state")
     monkeypatch.setattr(auto_train, "RUN_LOG", tmp_path / "state" / "run.log")
 
     def _fake_run(argv: list[str], **kwargs: Any) -> MagicMock:
@@ -2164,7 +2158,6 @@ def _drive_main_dry_run(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> tupl
     monkeypatch.setattr(ledger, "SESSIONS_INDEX_PATH", sip_home / "sessions.jsonl")
     # Redirect state/autoresearch writes so they don't pollute the repo.
     state_dir = tmp_path / "state"
-    monkeypatch.setattr(measure, "STATE_DIR", state_dir)
     monkeypatch.setattr(auto_train, "RUN_LOG", state_dir / "run.log")
     monkeypatch.setattr(ledger, "BASELINE_PATH", state_dir / "baseline.json")
     # No baseline file → baseline_decision payload reflects the empty case.
@@ -2311,9 +2304,9 @@ def test_run_audit_subprocess_timeout_emits_event(
 
     _redirect_journal(tmp_path, monkeypatch)
     monkeypatch.setattr(auto_train, "WRAPPER_OVERRIDE_HOOK_READY", True)
-    # State-dir redirects so wrapper_override write doesn't touch the repo.
-    state_dir = tmp_path / "state"
-    monkeypatch.setattr(measure, "STATE_DIR", state_dir)
+    # wrapper_override write is isolated to tmp via the self_improving conftest's
+    # WRAPPER_OVERRIDE_PATH monkeypatch (post PR-STATE-SOT-RUNTIME-SPLIT), so no
+    # per-test state-dir redirect is needed here.
 
     def _raise_timeout(*_args: object, **kwargs: object) -> object:
         raise subprocess.TimeoutExpired(cmd=["geode", "audit"], timeout=420)
