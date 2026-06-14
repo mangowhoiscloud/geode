@@ -37,13 +37,17 @@ AGENTIC_EFFORTS = frozenset(
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(
         env_prefix="GEODE_",
-        # C-3 (2026-06-11) — pydantic merges env_file with the LATER file
-        # winning. Pre-fix the order was (".env", global) = GLOBAL beat the
-        # project file, the exact inverse of the project>global convention
-        # every other layer follows (and of the serve daemon's promotion
-        # order — hazard H5, per-process precedence inversion). Order is now
-        # (global, project): one direction everywhere.
-        env_file=(str(GLOBAL_ENV_FILE), ".env"),
+        # Secrets precedence (2026-06-15, Hermes-aligned; supersedes C-3 for
+        # the .env layer). pydantic merges env_file with the LATER file
+        # winning, so order (project, global) makes the GLOBAL ~/.geode/.env
+        # the authoritative secret store: a project .env can only FILL keys the
+        # global lacks, never shadow a global key (the bug an auto-generated
+        # project .env with an empty ANTHROPIC_API_KEY= caused under C-3's
+        # project-wins). Secrets differ from config: config.toml keeps
+        # project>global (per-project tuning), but a credential has one global
+        # source. Both loaders (this + env_io.load_env_files) flip together,
+        # so the H5 per-process inversion C-3 fixed stays fixed.
+        env_file=(".env", str(GLOBAL_ENV_FILE)),
         extra="ignore",
     )
 

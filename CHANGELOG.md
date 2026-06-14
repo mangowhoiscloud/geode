@@ -45,6 +45,11 @@ functional change.
 
 ---
 
+## [0.99.216] - 2026-06-15
+
+### Fixed
+- **Secret `.env` precedence flipped to global-authoritative (Hermes-aligned) — a project `.env` no longer shadows global API keys** (PR-HERMES-ENV-ALIGN; operator-directed, benchmarked against the ~/workspace agent harnesses). Symptom: `geode` reported "No LLM API key set" / dry-run despite real keys living in `~/.geode/.env`. Root cause chain: C-3 (v0.99.167) made the project `.env` beat the global `~/.geode/.env` (pydantic `env_file=(global, ".env")`, later-file-wins), and `welcome.auto_generate_env` writes a project `.env` from `.env.example` with **empty** key placeholders (`ANTHROPIC_API_KEY=`) — so the empty project value shadowed the real global key (pydantic, unlike `env_io.load_env_files`, does not skip empty values). A survey of codex / claude-code / openclaw / hermes / crumb / paperclip found all six keep secrets global-authoritative or empty-never-shadows; GEODE was the only one auto-generating empty placeholders under project-wins. Fix (Hermes pattern): flip BOTH loaders — pydantic `env_file=(".env", global)` and `env_io.load_env_files` order `(.env, global)` — so the **global `~/.geode/.env` is the authoritative secret store and a project `.env` only fills keys it lacks, never shadows a global key**. `config.toml` keeps project>global (config is per-project tunable; a credential has one global source). Both loaders flip together so the C-3 H5 per-process inversion stays fixed. `config explain` coalesces an empty `.env` value to None so it never registers as a winning layer. Guards: `tests/core/config/test_c3_env_loading.py` (global-beats-project + empty-project-doesn't-shadow-global, both the os.environ promotion and the pydantic paths) + `test_config_explain.py`.
+
 ## [0.99.215] - 2026-06-14
 
 ### Architecture
