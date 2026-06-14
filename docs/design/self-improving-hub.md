@@ -21,10 +21,10 @@ The landing page for the entire Self-Improving Hub. Visitor lands here from `htt
 |---|---|
 | `docs/self-improving/petri-bundle/logs/listing.json` | Petri audit table — filter `task=inspect_petri/audit` |
 | `docs/self-improving/petri-bundle/seeds/listing.json` | Seed-gen runs section (count + run list) |
-| `state/self_improving/baseline.json` | Autoresearch baseline status (live or stale flag) |
-| `state/self_improving/baseline_archive.jsonl` | Generation index, last promote, fitness deltas |
-| `state/self_improving/mutations.jsonl` | Recent mutation rows |
-| `autoresearch/results.tsv` (if present) | Row count |
+| `~/.geode/self-improving/baseline.json` | Autoresearch baseline status (live or stale flag) |
+| `core/self_improving/state/baseline_archive.jsonl` | Generation index, last promote, fitness deltas |
+| `core/self_improving/state/mutations.jsonl` | Recent mutation rows |
+| `core/self_improving/state/results.tsv` (if present) | Row count |
 | `~/.geode/diagnostics/<YYYY-MM>.log` | Optional last activity timestamp (skip if absent) |
 
 Build-time render — static HTML produced by `scripts/build_self_improving_hub.py` (new, Phase 4). No client-side fetch.

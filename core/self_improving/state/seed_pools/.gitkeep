@@ -1,0 +1,5 @@
+# Tracked LOCATION for the campaign's seed pools (repo-pinned, operator decision
+# D-3). Pool CONTENT — cycle-input/ + held-out/ — is assembled by
+# scripts/assemble_seed_pool.py and committed when an operator pins a specific
+# campaign input. This .gitkeep ships the location so a clone resolves
+# core.paths.SEED_POOLS_DIR / CYCLE_INPUT_POOL / HELD_OUT_BENCH_POOL.

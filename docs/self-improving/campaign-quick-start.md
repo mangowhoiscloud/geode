@@ -119,13 +119,13 @@ baseline, no network, no quota): it emits the real output shape with
 uv run python -m core.self_improving.train --dry-run
 
 # Real single audit (consumes budget). Redirect, never flood stdout.
-uv run python -m core.self_improving.train > state/autoresearch/run.log 2>&1
+uv run python -m core.self_improving.train > ~/.geode/self-improving/run.log 2>&1
 ```
 
 Extract the metrics from the log:
 
 ```bash
-grep "^fitness:\|^.*_score:\|^.*_mean:" state/autoresearch/run.log
+grep "^fitness:\|^.*_score:\|^.*_mean:" ~/.geode/self-improving/run.log
 ```
 
 An empty grep result means the audit crashed (check `tail -n 50` of the log) or
@@ -180,10 +180,10 @@ the full loop completes before scaling up.
 
 | Artifact | Path | What it holds |
 |----------|------|---------------|
-| Mutation ledger | `state/autoresearch/mutations.jsonl` | One row per mutate / apply / audit / baseline / attribution event (git-tracked). Arms are tagged via `promote_policy` / `promote_policy_seed`, so you can split the stream by arm. |
-| Promoted baseline | `state/autoresearch/baseline.json` | The promoted baseline `dim_means` + `dim_stderr`. Advances only on a gate promote; a reject leaves it untouched. |
+| Mutation ledger | `core/self_improving/state/mutations.jsonl` | One row per mutate / apply / audit / baseline / attribution event (git-tracked). Arms are tagged via `promote_policy` / `promote_policy_seed`, so you can split the stream by arm. |
+| Promoted baseline | `~/.geode/self-improving/baseline.json` | The promoted baseline `dim_means` + `dim_stderr`. Advances only on a gate promote; a reject leaves it untouched. |
 | Per-cycle eval | `~/.geode/petri/logs/*.eval` (+ `latest.eval`) | The Petri `.eval` per cycle, the single source for per-dim evidence. |
-| Run logs | `state/autoresearch/run.log` (single audit), `state/campaign/` (campaign progress + runs) | Stdout / progress for inspection. |
+| Run logs | `~/.geode/self-improving/run.log` (single audit), `state/campaign/` (campaign progress + runs) | Stdout / progress for inspection. |
 | Self-improving hub | `docs/self-improving/` (`index.html`) | The rendered pages: baseline epochs and the cross-generation evidence page. The held-out fitness curve, partitioned by baseline epoch and by arm, is the curve that counts. |
 
 Read order for a finished run: the per-arm held-out curves on the hub

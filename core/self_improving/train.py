@@ -251,9 +251,9 @@ def _resolve_seed_select() -> str:
 
     Precedence (Codex CLI pattern, CSP-7 4-tier):
     1. ``AUTORESEARCH_SEED_SELECT`` env var (per-run override).
-    2. ``state/autoresearch/handoff/latest_pointer.json`` — CSP-7
-       closed-loop fallback (was: pre-CSP-7
-       ``~/.geode/autoresearch/handoff/latest_seed_pool`` symlink).
+    2. ``~/.geode/self-improving/handoff/latest_pointer.json`` — runtime
+       closed-loop fallback (out-of-repo post PR-STATE-SOT-RUNTIME-SPLIT; was
+       pre-CSP-7 the ``~/.geode/autoresearch/handoff/latest_seed_pool`` symlink).
        Lets autoresearch auto-pick the freshest survivor pool without
        a manual env export. Skipped when the pointer file is missing
        (e.g. clean clone with no prior seed-generation run) or has no
@@ -416,10 +416,12 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 
 try:
     from core.paths import AUTORESEARCH_STATE_DIR as STATE_DIR
+    from core.paths import RUN_LOG_PATH as RUN_LOG  # runtime (per-run log)
 except ImportError:
-    STATE_DIR = REPO_ROOT / "state" / "autoresearch"
-
-RUN_LOG = STATE_DIR / "run.log"
+    STATE_DIR = REPO_ROOT / "core" / "self_improving" / "state"  # tracked SoT
+    # degraded-import fallback only (core.paths unavailable, legacy fixture path);
+    # production always takes the RUN_LOG_PATH branch above.
+    RUN_LOG = Path.home() / ".geode" / "self-improving" / "run.log"  # paths-literal-ok
 
 try:
     from core.paths import AUTORESEARCH_WRAPPER_SECTIONS_PATH as _CORE_WRAPPER_SECTIONS_SOT
@@ -427,17 +429,15 @@ except ImportError:
     # ``core.self_improving.train`` is importable from environments where ``core``
     # isn't installed (legacy fixture path) — fall back to a literal so the
     # module still loads. Tests pin parity via ``test_sot_path_parity_with_autoresearch``.
-    # PR-RATCHET-1 (2026-05-21) — fallback path follows the in-repo
-    # ``state/autoresearch/policies/`` location (PR-STATE-AUTORESEARCH-RENAME
-    # 2026-06-01, Scheme A), not the pre-PR ``~/.geode/autoresearch/handoff/``,
-    # so a degraded import does not silently re-introduce the legacy out-of-repo
-    # location and bypass the git-as-optimiser invariant.
+    # PR-STATE-SOT-RUNTIME-SPLIT (2026-06-14) — fallback follows the in-repo
+    # tracked SoT now colocated with this package (``core/self_improving/state/
+    # policies/``), not the pre-PR ``~/.geode/autoresearch/handoff/`` nor the
+    # interim repo-root ``state/autoresearch/``, so a degraded import does not
+    # silently re-introduce a legacy/out-of-repo location and bypass the
+    # git-as-optimiser invariant. ``__file__`` is ``core/self_improving/train.py``
+    # so ``.parent`` is the package dir that holds ``state/``.
     _CORE_WRAPPER_SECTIONS_SOT = (
-        Path(__file__).resolve().parents[2]
-        / "state"
-        / "autoresearch"
-        / "policies"
-        / "wrapper-sections.json"
+        Path(__file__).resolve().parent / "state" / "policies" / "wrapper-sections.json"
     )
 
 WRAPPER_SECTIONS_SOT_PATH = _CORE_WRAPPER_SECTIONS_SOT
@@ -1280,7 +1280,7 @@ def main() -> int:
 
     # S10 — emit results.{tsv,jsonl} lines on stdout so the self-improving-loop
     # operator (or a follow-up script) can read them, AND persist them to the
-    # rolling ``state/autoresearch/results.{tsv,jsonl}``.
+    # rolling ``core/self_improving/state/results.{tsv,jsonl}``.
     # PR-CLEANUP-D3A (2026-06-10, operator decision "pending 해소") — the row
     # is now emitted AFTER the promote gate so ``verdict`` records the gate's
     # actual outcome (promote/reject) instead of a permanent ``pending``.

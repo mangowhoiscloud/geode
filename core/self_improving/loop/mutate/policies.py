@@ -81,7 +81,7 @@ _LEGACY_FILE_NAMES: dict[str, str] = {
 # The runtime reader at ``core/agent/tool_descriptions_policy.py`` (ADR-013 T1)
 # honours a 3-layer resolution: env → operator-local
 # (``~/.geode/autoresearch/handoff/tool-descriptions.json``) → in-repo
-# (``state/autoresearch/policies/tool-descriptions.json``). Pre-fix the
+# (``core/self_improving/state/policies/tool-descriptions.json``). Pre-fix the
 # mutator's ``load_policy("tool_descriptions")`` only saw the in-repo
 # layer, so an operator using the operator-local override would see
 # the runtime read from THERE while the mutator wrote to the in-repo
@@ -350,7 +350,7 @@ def load_policy(kind: str) -> dict[str, str]:
 
     PR-RATCHET-1 (2026-05-21) — lazy migration from the pre-PR
     ``~/.geode/autoresearch/handoff/`` location to the in-repo
-    ``state/autoresearch/policies/`` location runs before the read.
+    ``core/self_improving/state/policies/`` location runs before the read.
 
     M1 (2026-05-21) — ``skill_catalog`` kind 는 disk 상 nested
     ``{skill_name: {description, user_invocable}}`` 이지만 mutation

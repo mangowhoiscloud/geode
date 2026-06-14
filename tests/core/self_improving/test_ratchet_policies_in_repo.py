@@ -29,8 +29,9 @@ import pytest
 
 def test_policy_constants_under_in_repo_policies_dir() -> None:
     """Each of the 5 policy SoT constants must resolve under
-    ``<repo>/state/autoresearch/policies/`` — NOT ``~/.geode/...``.
-    The in-repo location is the CI-ratchet alignment fix."""
+    ``<repo>/core/self_improving/state/policies/`` — NOT ``~/.geode/...``.
+    The in-repo location is the CI-ratchet alignment fix
+    (PR-STATE-SOT-RUNTIME-SPLIT colocated the tracked SoT with its package)."""
     from core.paths import (
         AUTORESEARCH_DECOMPOSITION_POLICY_PATH,
         AUTORESEARCH_POLICIES_DIR,
@@ -42,7 +43,7 @@ def test_policy_constants_under_in_repo_policies_dir() -> None:
 
     policies_dir_parts = AUTORESEARCH_POLICIES_DIR.parts
     # The in-repo policies dir's last three components are fixed:
-    assert policies_dir_parts[-3:] == ("state", "autoresearch", "policies")
+    assert policies_dir_parts[-3:] == ("self_improving", "state", "policies")
 
     paths_by_kind = {
         "wrapper-sections.json": AUTORESEARCH_WRAPPER_SECTIONS_PATH,

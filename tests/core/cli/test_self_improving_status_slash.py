@@ -164,6 +164,9 @@ def test_status_renders_baseline_block(
     state_dir = tmp_path / "autoresearch"
     state_dir.mkdir(parents=True)
     baseline_path = state_dir / "baseline.json"
+    # baseline.json is a separate runtime constant post PR-STATE-SOT-RUNTIME-SPLIT
+    # (no longer beside the tracked mutations.jsonl); redirect it explicitly.
+    monkeypatch.setattr("core.paths.BASELINE_JSON_PATH", baseline_path)
     fake_audit = state_dir / "mutations.jsonl"
     baseline_path.write_text(
         json.dumps(
@@ -203,6 +206,9 @@ def test_status_renders_baseline_v2_block(
     state_dir = tmp_path / "autoresearch"
     state_dir.mkdir(parents=True)
     baseline_path = state_dir / "baseline.json"
+    # baseline.json is a separate runtime constant post PR-STATE-SOT-RUNTIME-SPLIT
+    # (no longer beside the tracked mutations.jsonl); redirect it explicitly.
+    monkeypatch.setattr("core.paths.BASELINE_JSON_PATH", baseline_path)
     fake_audit = state_dir / "mutations.jsonl"
     baseline_path.write_text(
         json.dumps(
@@ -331,6 +337,9 @@ def test_status_tolerates_malformed_baseline(
     state_dir = tmp_path / "autoresearch"
     state_dir.mkdir(parents=True)
     baseline_path = state_dir / "baseline.json"
+    # baseline.json is a separate runtime constant post PR-STATE-SOT-RUNTIME-SPLIT
+    # (no longer beside the tracked mutations.jsonl); redirect it explicitly.
+    monkeypatch.setattr("core.paths.BASELINE_JSON_PATH", baseline_path)
     fake_audit = state_dir / "mutations.jsonl"
     baseline_path.write_text("{not valid json", encoding="utf-8")
     fake_audit.touch()

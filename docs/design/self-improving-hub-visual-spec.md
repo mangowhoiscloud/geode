@@ -649,7 +649,7 @@ The build script (`scripts/build_self_improving_hub.py`, Phase 4) substitutes ea
 | `{DIM_SUBSET_COUNT}` | YAML row count `plugins/petri_audit/judge_dims/geode_judge_subset.yaml` | `22` |
 | `{DIM_SUBSET_NAME}` | basename of subset file (sans `.yaml`) | `geode_5axes` (or `geode_judge_subset`) |
 | `{PIPELINE_PHASE_COUNT}` | `len(_PHASE_ORDER)` in `plugins/seed_generation/orchestrator.py` | `8` |
-| `{BASELINE_SCHEMA_VERSION}` | constant in `state/self_improving/baseline.json.metadata.schema_version` | `2` |
+| `{BASELINE_SCHEMA_VERSION}` | constant in `~/.geode/self-improving/baseline.json.metadata.schema_version` | `2` |
 
 If any placeholder cannot be resolved at build time → CI fails. **No silent default substitution**
 (this prevents the [[feedback-changelog-implementation-parity]] anti-pattern of stale stamps).

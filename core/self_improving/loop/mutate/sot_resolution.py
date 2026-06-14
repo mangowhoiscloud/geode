@@ -23,7 +23,7 @@ claim about an unimplemented operator-local layer (Codex MCP catch on PR
    machine override (graceful). Useful when an operator wants policies that
    don't enter the in-repo ratchet (e.g. experimenting locally).
 
-3. **In-repo** ``state/autoresearch/policies/<file>.json`` — ratchet-
+3. **In-repo** ``core/self_improving/state/policies/<file>.json`` — ratchet-
    tracked baseline (graceful). Default policy site populated by the
    mutator's ``write_policy()``.
 
@@ -66,7 +66,7 @@ def resolve_sot(
             ``_OVERRIDE`` so the matching strict flag can be derived as
             ``<prefix>_STRICT``.
         operator_local: ``~/.geode/autoresearch/handoff/<file>.json`` candidate.
-        in_repo: ``state/autoresearch/policies/<file>.json`` candidate.
+        in_repo: ``core/self_improving/state/policies/<file>.json`` candidate.
 
     Returns:
         ``SoTSelection(path, strict)`` for the highest-priority layer present,

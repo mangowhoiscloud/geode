@@ -278,7 +278,7 @@ class HookEvent(Enum):
     # (b) observability central SoT sprint PR-5 wildcard firehose +
     # PR-10 autoresearch indexer — the wildcard listener captures
     # every event into ``events`` SQLite, the autoresearch_indexer
-    # cross-references against ``state/autoresearch/mutations.jsonl``
+    # cross-references against ``core/self_improving/state/mutations.jsonl``
     # by ``mutation_id``. Reserving the names + values up-front avoids
     # value drift once both sprints start emitting concurrently.
     #

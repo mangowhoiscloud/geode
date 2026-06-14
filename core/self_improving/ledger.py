@@ -30,7 +30,12 @@ if TYPE_CHECKING:
     from core.self_improving.loop.observe.run_provenance import RunProvenanceFields
     from core.self_improving.loop.observe.statistical_power import PowerRecordFields
 
-from core.paths import AUTORESEARCH_STATE_DIR as STATE_DIR
+from core.paths import (
+    BASELINE_ARCHIVE_PATH,
+    BASELINE_JSON_PATH,
+    RESULTS_JSONL_PATH,
+    RESULTS_TSV_PATH,
+)
 from core.paths import GLOBAL_AUTORESEARCH_HANDOFF_DIR as _SELF_IMPROVING_LOOP_HOME
 
 log = logging.getLogger(__name__)
@@ -48,7 +53,10 @@ def _train() -> Any:
     return _t
 
 
-BASELINE_PATH = STATE_DIR / "baseline.json"
+# LATEST baseline — runtime (per-run, regenerated), NOT versioned. Distinct
+# from the TRACKED promoted history ``baseline_archive.jsonl`` (see
+# ``_baseline_archive_path``). latest-vs-promoted SoT split.
+BASELINE_PATH = BASELINE_JSON_PATH
 
 SELF_IMPROVING_LOOP_HOME = _SELF_IMPROVING_LOOP_HOME
 
@@ -738,10 +746,12 @@ _VALID_MARGIN_RULES = frozenset({"dim-stderr", "fitness-stderr"})
 
 
 def _baseline_archive_path() -> Path:
-    """Registry path — derived from ``BASELINE_PATH`` so it follows the same
-    test monkeypatch (sibling of ``baseline.json``); equals
-    ``core.paths.BASELINE_ARCHIVE_PATH`` in production."""
-    return BASELINE_PATH.parent / "baseline_archive.jsonl"
+    """TRACKED promoted-baseline registry (in-repo SoT). Decoupled from
+    ``BASELINE_PATH`` by the state split: the LATEST baseline is runtime
+    (~/.geode) while this promoted history is versioned (in-repo), so they no
+    longer share a parent. Tests monkeypatch ``BASELINE_ARCHIVE_PATH``
+    (or ``ledger._baseline_archive_path``) to redirect this independently."""
+    return BASELINE_ARCHIVE_PATH
 
 
 def _next_baseline_id(now: datetime) -> str:
@@ -909,9 +919,10 @@ def _append_baseline_registry_row(
         save_epoch_label_map(_label_map_path, _label_map)
         # TODO(PR-STATE-SELF-IMPROVING-RENAME, deferred): epoch-boundary snapshot.
         # When a NEW epoch opens (``_epoch_is_new``), the convention
-        # (state/autoresearch/_archive/README.md) is to freeze the PRIOR epoch's
-        # full production surface (policies/ + baseline.json + pool identity) under
-        # ``state/autoresearch/_archive/<prior-be-NNN>/``. NOT auto-wired here:
+        # (core/self_improving/state/_archive/README.md) is to freeze the PRIOR
+        # epoch's full production surface (policies/ + baseline.json + pool identity)
+        # under ``core/self_improving/state/_archive/<prior-be-NNN>/``. NOT auto-wired
+        # here:
         # adding snapshot I/O inside the promote write path risks the promote
         # itself (a copy failure must not abort a gate-approved promote). Left as
         # an explicit follow-up — snapshot via a separate, post-promote step
@@ -1016,14 +1027,15 @@ def _append_baseline_registry_row(
 
 
 def _results_paths() -> tuple[Path, Path]:
-    """Return ``(results.tsv, results.jsonl)`` — siblings of ``baseline.json``.
+    """Return ``(results.tsv, results.jsonl)`` — the TRACKED rolling results
+    history the hub reads (git-tracked so the curve survives ``git clean``,
+    same writer-destination invariant as mutations.jsonl / baseline_archive).
 
-    Derived from ``BASELINE_PATH`` (like :func:`_baseline_archive_path`) so a
-    test that monkeypatches ``BASELINE_PATH`` redirects the results files too;
-    equals ``AUTORESEARCH_STATE_DIR / "results.{tsv,jsonl}"`` in production.
+    The state split decoupled these from ``BASELINE_PATH`` (the LATEST baseline
+    is runtime ~/.geode; this history is in-repo SoT) — they live alongside the
+    tracked ledgers under ``AUTORESEARCH_STATE_DIR``.
     """
-    state_dir = BASELINE_PATH.parent
-    return state_dir / "results.tsv", state_dir / "results.jsonl"
+    return RESULTS_TSV_PATH, RESULTS_JSONL_PATH
 
 
 def _append_results_row(tsv_row: str, jsonl_row: str) -> None:
@@ -1035,7 +1047,7 @@ def _append_results_row(tsv_row: str, jsonl_row: str) -> None:
     persisted, so the self-improving hub's results section stayed empty while
     ``mutations.jsonl`` + ``baseline_archive.jsonl`` were written directly.
 
-    Both files live under ``AUTORESEARCH_STATE_DIR`` (``state/autoresearch/``);
+    Both files live under ``AUTORESEARCH_STATE_DIR`` (``core/self_improving/state/``);
     the ``.tsv`` gets the ``RESULTS_TSV_HEADER`` line on first write only (so it
     stays grep-friendly with stable columns), the ``.jsonl`` is header-less. Both
     are git-tracked (gitignore negations) so the rolling history survives

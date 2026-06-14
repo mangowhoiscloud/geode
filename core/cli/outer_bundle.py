@@ -6,10 +6,10 @@ OL-A3 (2026-05-22) prerequisite stack now in place:
   — per-firing JSONL, one row per terminal state of the auto-trigger
   state machine (fired / lock_busy / interval_blocked / runner_error /
   parse_error).
-- ``state/autoresearch/mutations.jsonl`` — git-tracked mutation audit
+- ``core/self_improving/state/mutations.jsonl`` — git-tracked mutation audit
   ledger (one row per ``apply_mutation`` call: applied / rejected /
   rolled_back).
-- ``state/autoresearch/baseline.json`` — current fitness baseline
+- ``~/.geode/self-improving/baseline.json`` — current fitness baseline
   (promoted only — failing audits do not update it; see PR-G2 #1346
   retrospective).
 
@@ -201,10 +201,12 @@ def _load_baseline_event() -> BundleEvent | None:
     historical fixture data with the legacy schema keeps working.
     """
     try:
-        from core.self_improving.loop.mutate.runner import MUTATION_AUDIT_LOG_PATH
+        import core.paths
     except ImportError:
         return None
-    baseline_path = Path(MUTATION_AUDIT_LOG_PATH).parent / "baseline.json"
+    # baseline.json is RUNTIME (out-of-repo, PR-STATE-SOT-RUNTIME-SPLIT) — read it
+    # from its own constant, not as a sibling of the tracked mutations.jsonl.
+    baseline_path = Path(core.paths.BASELINE_JSON_PATH)
     if not baseline_path.is_file():
         return None
     try:
@@ -329,7 +331,7 @@ def outer_bundle_command(
     Output (default) is a Rich table sorted ascending by timestamp.
     ``--json`` switches to JSONL-on-stdout for downstream tools.
 
-    Files outside ``~/.geode/`` and ``state/autoresearch/`` are
+    Files outside ``~/.geode/`` and ``core/self_improving/state/`` are
     ignored. Missing files render as an empty bundle (no error).
     """
     events = load_bundle_events(limit=limit)

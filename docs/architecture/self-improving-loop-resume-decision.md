@@ -37,7 +37,7 @@ Net: **co-scientist neither in paper nor reference impl provides a usable design
 | Outer | `~/.geode/self-improving-loop/sessions.jsonl` (P1a) | ✅ append | tail only | ❌ index only |
 | Outer | `~/.geode/self-improving-loop/<session>/journal.jsonl` (P1c) | ✅ append | tail only | ❌ event audit |
 | Seed-pipeline | `<run_dir>/state.json` (S8 `_persist_state`) | ✅ write_text (non-atomic) | ❌ **`_load_state()` 미구현** | ❌ |
-| Autoresearch | `state/self_improving/baseline.json` (P0a) | ✅ atomic | ✅ `_load_baseline()` | partial (promote/run only) |
+| Autoresearch | `~/.geode/self-improving/baseline.json` (P0a) | ✅ atomic | ✅ `_load_baseline()` | partial (promote/run only) |
 | Primitive | `core/utils/atomic_io.py` | tmp + `os.replace` + `fsync` | — | ✅ |
 
 **Key insight**: GEODE already has `SessionCheckpoint` — a production-ready C3 checkpoint+resume layer with `atomic_write_json` + SQLite + `/resume` CLI. The self-improving-loop drivers (seed-generation + autoresearch) are NOT yet layered on top of it. The S8 `_persist_state` comment says *"S11 CLI `geode audit-seeds resume` will re-hydrate"* but the load path is not implemented.

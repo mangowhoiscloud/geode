@@ -47,10 +47,13 @@ def _self_improving_status_payload() -> dict[str, Any]:
     Missing files yield ``None`` / ``[]`` rather than raising so an MCP
     client can poll on a fresh clone.
     """
-    from core.paths import MUTATION_AUDIT_LOG_PATH
+    import core.paths
 
-    audit_path = Path(MUTATION_AUDIT_LOG_PATH)
-    baseline_path = audit_path.parent / "baseline.json"
+    audit_path = Path(core.paths.MUTATION_AUDIT_LOG_PATH)
+    # baseline.json is RUNTIME (out-of-repo); mutations.jsonl is the tracked
+    # in-repo SoT — they no longer share a parent (PR-STATE-SOT-RUNTIME-SPLIT),
+    # so read each from its own constant rather than deriving one from the other.
+    baseline_path = Path(core.paths.BASELINE_JSON_PATH)
 
     baseline: dict[str, Any] | None = None
     if baseline_path.is_file():

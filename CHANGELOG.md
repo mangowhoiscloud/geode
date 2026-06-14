@@ -45,6 +45,16 @@ functional change.
 
 ---
 
+## [0.99.215] - 2026-06-14
+
+### Architecture
+- **Self-improving state split by lifecycle: tracked SoT in-repo, runtime out-of-repo** (PR-STATE-SOT-RUNTIME-SPLIT; operator-directed). The CSP-7 repo-root `state/` (which mixed both) splits into two homes: the git-TRACKED SoT — `mutations.jsonl`, `baseline_archive.jsonl`, `baseline_epochs.json`, `policies/`, `seed_pools/`, `results.{tsv,jsonl}` — moves in-repo to `core/self_improving/state/` (data-in-package, colocated with `core.paths.AUTORESEARCH_STATE_DIR`); the RUNTIME scratch — `baseline.json`, `run.log`, `handoff/`, `campaign/`, per-run `seed_generation/` — moves out-of-repo to `~/.geode/self-improving/` (`core.paths.RUNTIME_ROOT`) so worktree/clone runs no longer scatter runtime files into git nor lose them on `git clean`. `seed_pools/` is always repo-pinned (operator decision D-3).
+
+### Fixed
+- **Campaign worker isolation restored under the split** — when `GEODE_STATE_ROOT` is set (path-independent worker subprocesses), BOTH the tracked SoT and the runtime root collapse to `$GEODE_STATE_ROOT/autoresearch/` (matching `campaign._seed_isolated_state_root`), so concurrent workers never race on / pollute the in-repo `mutations.jsonl` and read `baseline.json` from their own seeded tree. Pinned by `tests/core/test_paths_env_override.py`.
+- **`baseline.json` readers no longer derive it as a sibling of the tracked `mutations.jsonl`** — the MCP `self_improving_status` payload, `/self-improving status` + `rollback-check`, `rubric_excerpts` injection, and `outer-bundle` now read the runtime `core.paths.BASELINE_JSON_PATH` directly (the split moved them to different roots).
+- **Hub builder (`build_self_improving_hub.py`) reads each datum from its lifecycle home** — tracked ledgers/policies from `--state-dir`, the runtime baseline/campaign-progress/gen-0-snapshot from `RUNTIME_ROOT`, and the in-repo audit MANIFEST from the new `--repo-root`. `restore_sot`, campaign snapshot/checkpoint dirs, `train.py` fallback, and `extract_baseline_transcripts` likewise corrected to lifecycle constants.
+
 ## [0.99.214] - 2026-06-14
 
 ### Changed

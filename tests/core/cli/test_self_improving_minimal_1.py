@@ -35,8 +35,8 @@ def test_history_action_prints_git_log_recipes(
     # NOT deferred any more
     assert "reserved for" not in out
     # Recipes present
-    assert "git log -p state/autoresearch/mutations.jsonl" in out
-    assert "git log --stat state/autoresearch/policies/" in out
+    assert "git log -p core/self_improving/state/mutations.jsonl" in out
+    assert "git log --stat core/self_improving/state/policies/" in out
     # Cross-reference back to status for the quick path
     assert "/self-improving status" in out
     # Empty-state caveat for the not-yet-committed state
@@ -57,7 +57,7 @@ def test_rollback_action_prints_git_revert_recipes(
 
     cmd_self_improving("rollback")
     out = capsys.readouterr().out
-    assert "git log --oneline -p state/autoresearch/mutations.jsonl" in out
+    assert "git log --oneline -p core/self_improving/state/mutations.jsonl" in out
     assert "git revert <sha>" in out
     # Hints the parametrized form
     assert "/self-improving rollback <mutation_id>" in out
@@ -75,7 +75,7 @@ def test_rollback_with_mutation_id_uses_grep_form(
     out = capsys.readouterr().out
     assert "'mut-abc12345'" in out
     assert "git log --all --grep=" in out
-    assert "state/autoresearch/mutations.jsonl" in out
+    assert "core/self_improving/state/mutations.jsonl" in out
 
 
 # ---------------------------------------------------------------------------

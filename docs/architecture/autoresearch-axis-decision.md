@@ -153,9 +153,9 @@ commit / fitness / critical_min / auxiliary_mean / stability / gate_verdict
   - § "Cross-axis gate" — critical 2 → critical 4, dim 이름 명시.
   - § "Output format" — `^<axis>_score:` → `^<dim>_score:` (12 substantive dim).
   - § "Logging results" — 9 col → 10 col schema.
-- `state/self_improving/baseline.json` schema — Petri summary JSON 그대로 (`{dim_means: {...}, dim_stderr: {...}}`).
-- `state/self_improving/results.tsv` — 10 col header 갱신.
-- `state/self_improving/results.jsonl` — 신규 (line-per-gen raw dim aggregate).
+- `~/.geode/self-improving/baseline.json` schema — Petri summary JSON 그대로 (`{dim_means: {...}, dim_stderr: {...}}`).
+- `core/self_improving/state/results.tsv` — 10 col header 갱신.
+- `core/self_improving/state/results.jsonl` — 신규 (line-per-gen raw dim aggregate).
 - `tests/test_autoresearch_train.py` — 15 test 갱신 (dry-run baseline 0.535895 유지 위해 weight 재조정).
 
 ## References

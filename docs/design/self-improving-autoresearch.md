@@ -15,18 +15,17 @@ parent: self-improving-hub-system.md
 
 Landing page for the autoresearch surface — the closed-loop self-improvement engine. Surfaces 4 sub-views (baseline / mutations / results / policies) plus a generation timeline.
 
-**Critical**: autoresearch artifacts are NOT currently mirrored into `docs/petri-bundle/` or `docs/self-improving/`. Phase 6 of the sprint MUST add a publisher (`plugins/autoresearch/bundle_sync.py` or similar) that mirrors:
+**No publisher / mirror** (decision 2026-05-26, see `self-improving-autoresearch-visual-spec.md` §3): the hub builder reads the SoT DIRECTLY at build time, so there is no `bundle_sync.py` mirror hook. Post PR-STATE-SOT-RUNTIME-SPLIT the build reads each datum from its lifecycle home:
 
-| Runtime SoT | Bundle mirror destination |
-|---|---|
-| `state/self_improving/baseline.json` | `docs/self-improving/autoresearch/baseline.json` |
-| `state/self_improving/baseline_archive.jsonl` | `docs/self-improving/autoresearch/baseline_archive.jsonl` |
-| `state/self_improving/mutations.jsonl` | `docs/self-improving/autoresearch/mutations.jsonl` |
-| `state/self_improving/policies/*.json` | `docs/self-improving/autoresearch/policies/*.json` (14 files) |
-| `autoresearch/results.tsv` | `docs/self-improving/autoresearch/results.tsv` |
-| `autoresearch/results.jsonl` | `docs/self-improving/autoresearch/results.jsonl` |
+| Datum | Lifecycle | Read from |
+|---|---|---|
+| `baseline.json` (LATEST) | RUNTIME | `~/.geode/self-improving/baseline.json` (`BASELINE_JSON_PATH`; absent on CI → graceful) |
+| `baseline_archive.jsonl` (promoted history) | TRACKED | `core/self_improving/state/baseline_archive.jsonl` |
+| `mutations.jsonl` | TRACKED | `core/self_improving/state/mutations.jsonl` |
+| `policies/*.json` | TRACKED | `core/self_improving/state/policies/` |
+| `results.{tsv,jsonl}` | TRACKED | `core/self_improving/state/results.{tsv,jsonl}` |
 
-Publisher trigger: end-of-iteration hook in `core.self_improving_loop.runner` after `_apply_mutation` commits a new baseline.
+The tracked SoT ships in-repo (naturally git-tracked under `core/`); the runtime baseline is operator-local. No end-of-iteration mirror hook is needed — `scripts/build_self_improving_hub.py` opens the live files.
 
 ## 2. Sidebar `.active`
 

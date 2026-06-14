@@ -26,7 +26,6 @@ from core.self_improving import fitness as fitness_spec
 if TYPE_CHECKING:
     pass
 
-from core.paths import AUTORESEARCH_STATE_DIR as STATE_DIR
 from core.paths import LATEST_PETRI_EVAL
 
 log = logging.getLogger(__name__)
@@ -140,7 +139,7 @@ def _load_hyperparam_overrides() -> dict[str, str]:
     Resolution order matches the other policy SoTs:
       1. ``GEODE_HYPERPARAM_OVERRIDE`` env var (set by the audit subprocess)
       2. ``AUTORESEARCH_HYPERPARAM_POLICY_PATH``
-         (``state/autoresearch/policies/hyperparam.json``)
+         (``core/self_improving/state/policies/hyperparam.json``)
 
     Return value is a flat ``dict[str, str]`` — same shape as the SoT
     JSON. Caller is responsible for type-casting + bounds validation
@@ -207,7 +206,7 @@ def _build_audit_command() -> list[str]:
 
     PR-HYPERPARAM-WIRE (2026-05-28) — ``cfg.{seed_limit, dim_set,
     max_turns}`` are now overridable by the mutation SoT at
-    ``state/autoresearch/policies/hyperparam.json``. Resolution
+    ``core/self_improving/state/policies/hyperparam.json``. Resolution
     precedence (highest wins): mutation SoT value → autoresearch
     config default. The mutator-proposed values went through
     ``parse_mutation`` 's bounds guard, so by the time they reach
@@ -334,8 +333,10 @@ def _dump_wrapper_override() -> Path:
     the OLD scaffold, silently breaking the mutation→fitness causal link. The
     live read makes the dumped override match whatever is on disk right now.
     """
-    STATE_DIR.mkdir(parents=True, exist_ok=True)
-    override = STATE_DIR / "wrapper-override.json"
+    from core.paths import WRAPPER_OVERRIDE_PATH
+
+    override = WRAPPER_OVERRIDE_PATH  # runtime (per-run override dump)
+    override.parent.mkdir(parents=True, exist_ok=True)
     override.write_text(
         json.dumps(_train().load_wrapper_prompt_sections(), indent=2, ensure_ascii=False),
         encoding="utf-8",
@@ -703,7 +704,9 @@ def _finalize_audit_result(
     )
 
     log_text = stdout + "\n--- stderr ---\n" + stderr
-    _train().RUN_LOG.write_text(log_text, encoding="utf-8")
+    run_log = _train().RUN_LOG
+    run_log.parent.mkdir(parents=True, exist_ok=True)  # ensure own dir (no sibling-mkdir coupling)
+    run_log.write_text(log_text, encoding="utf-8")
 
     if returncode != 0:
         # PR-MINIMAL-4 (2026-05-21) — non-zero subprocess exit emits an

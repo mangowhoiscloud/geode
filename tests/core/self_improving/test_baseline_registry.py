@@ -50,7 +50,9 @@ _EXPECTED_ROW_KEYS = {
 @pytest.fixture
 def isolated(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     """Redirect ``BASELINE_PATH`` to tmp + stub the config so the registry
-    writer resolves role models / seed_select without ``~/.geode/config.toml``."""
+    writer resolves role models / seed_select without ``~/.geode/config.toml``.
+    (The tracked archive/results sinks co-locate to the same tmp via the autouse
+    conftest fixture — production keeps them decoupled to the in-repo SoT.)"""
     monkeypatch.setattr(ledger, "BASELINE_PATH", tmp_path / "baseline.json")
     fake_cfg = SimpleNamespace(
         auditor=SimpleNamespace(model="aud-m", source="api_key"),  # → PAYG
