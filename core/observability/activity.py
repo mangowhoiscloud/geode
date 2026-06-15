@@ -14,16 +14,16 @@ Structure (PR-OBS-CONTRACT, 2026-06-13 — full coverage):
   - 4 lifecycle detail mixins (started / completed / failed / retried)
   - 19 lifecycle concrete classes (A=6 started, B=7 completed, C=5 failed,
     D=1 retried) with discriminator on ``action``
-  - 43 K-group concrete classes covering every remaining HookEvent, each
-    with a typed ``details`` sub-schema (23 shared details models — one per
+  - 44 K-group concrete classes covering every remaining HookEvent, each
+    with a typed ``details`` sub-schema (24 shared details models — one per
     event family, e.g. ``CognitivePhaseDetails`` for 6 cognitive phases)
   - ``GenericActivityRow`` is now ONLY a fail-soft fallback (a typed
     builder that hits a malformed payload), never a routine destination —
-    every one of the 62 events has a concrete typed row.
+    every one of the 63 events has a concrete typed row.
 
 Construction is centralized in ``activity_registry.py``: 19 lifecycle
 curry-builders + a single declarative ``_TYPED_ROW_SPECS`` table that drives
-all 43 K-group rows through one ``_build_from_spec`` builder.
+all 44 K-group rows through one ``_build_from_spec`` builder.
 """
 
 from __future__ import annotations
@@ -97,6 +97,8 @@ __all__ = [
     "PromptAssembledRow",
     "ReasoningMetricsDetails",
     "ReasoningMetricsRow",
+    "ResultFeedbackDetails",
+    "ResultFeedbackRow",
     "RuleChangeDetails",
     "RuleCreatedRow",
     "RuleDeletedRow",
@@ -469,6 +471,20 @@ class MemorySavedDetails(BaseModel):
     persistent: bool = False
 
 
+class ResultFeedbackDetails(BaseModel):
+    """RESULT_FEEDBACK — operator verdict on a result (rate/accept/reject_result
+    tool handlers). ``verdict`` is one of ``rated`` / ``accepted`` / ``rejected``;
+    ``rating`` + ``comment`` accompany a rating, ``reason`` a rejection."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    subject: str = ""
+    verdict: str = ""
+    rating: int = 0
+    comment: str = ""
+    reason: str = ""
+
+
 class ModelSwitchedDetails(BaseModel):
     """MODEL_SWITCHED — live-session model switch (trigger_async emit;
     ``purged_ack_count`` = stale-ack purge count, PR-SIL-5THEME C5)."""
@@ -623,7 +639,7 @@ class UserInputReceivedDetails(BaseModel):
 
 
 # ---------------------------------------------------------------------------
-# Tier 3 — 43 K-group concrete classes (PR-OBS-CONTRACT, 2026-06-13)
+# Tier 3 — 44 K-group concrete classes (PR-OBS-CONTRACT, 2026-06-13)
 #
 # Each formerly-generic HookEvent now has a concrete typed row with a
 # Literal ``action`` discriminator + a typed ``details`` sub-schema. The
@@ -741,6 +757,12 @@ class MemorySavedRow(ActivityRowBase):
     action: Literal["memory.saved"] = "memory.saved"
     entity_type: Literal["memory"] = "memory"
     details: MemorySavedDetails
+
+
+class ResultFeedbackRow(ActivityRowBase):
+    action: Literal["result.feedback"] = "result.feedback"
+    entity_type: Literal["result"] = "result"
+    details: ResultFeedbackDetails
 
 
 class RuleCreatedRow(ActivityRowBase):
@@ -966,6 +988,7 @@ TypedActivityRow = Annotated[
         McpServerConnectedRow,
         McpServerFailedRow,
         MemorySavedRow,
+        ResultFeedbackRow,
         RuleCreatedRow,
         RuleUpdatedRow,
         RuleDeletedRow,

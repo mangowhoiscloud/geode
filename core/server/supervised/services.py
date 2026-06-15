@@ -335,6 +335,7 @@ class SharedServices:
             mcp_manager=self.mcp_manager,
             skill_registry=self.skill_registry,
             readiness=None,
+            hook_system=self.hook_system,
         )
         boot.propagate_to_thread()
 

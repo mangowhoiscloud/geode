@@ -2,9 +2,9 @@
 
 Spec: ``docs/plans/2026-05-24-hookevent-activity-schema.md`` §3, §7.1.
 
-Every one of the 62 HookEvents maps to a builder that produces a
+Every one of the 63 HookEvents maps to a builder that produces a
 concrete typed ``ActivityRow`` subclass with a validated payload:
-19 lifecycle events via the curry builders below, and the 43 K-group
+19 lifecycle events via the curry builders below, and the 44 K-group
 events via the single declarative ``_TYPED_ROW_SPECS`` table +
 ``_build_from_spec`` (PR-OBS-CONTRACT, 2026-06-13). ``GenericActivityRow``
 is now ONLY the fail-soft fallback for a typed builder that meets a
@@ -86,6 +86,8 @@ from core.observability.activity import (
     PromptAssembledRow,
     ReasoningMetricsDetails,
     ReasoningMetricsRow,
+    ResultFeedbackDetails,
+    ResultFeedbackRow,
     RuleChangeDetails,
     RuleCreatedRow,
     RuleDeletedRow,
@@ -544,6 +546,12 @@ _TYPED_ROW_SPECS: dict[HookEvent, _TypedRowSpec] = {
         actor_type="agent",
         entity_id_key="key",
     ),
+    HookEvent.RESULT_FEEDBACK: _TypedRowSpec(
+        row_cls=ResultFeedbackRow,
+        details_cls=ResultFeedbackDetails,
+        actor_type="agent",
+        entity_id_key="subject",
+    ),
     HookEvent.RULE_CREATED: _TypedRowSpec(
         row_cls=RuleCreatedRow,
         details_cls=RuleChangeDetails,
@@ -729,7 +737,7 @@ def map_hook_to_activity(
     """Convert a ``HookEvent`` + ``data`` dict into a typed
     :class:`ActivityRowBase` subclass.
 
-    All 62 events (see :data:`HOOK_EVENT_TO_ROW_BUILDER`) get full
+    All 63 events (see :data:`HOOK_EVENT_TO_ROW_BUILDER`) get full
     pydantic validation against their per-event details schema — a
     payload bug surfaces at dispatch time with a precise
     ``ValidationError`` instead of much later at the handler.
@@ -800,7 +808,7 @@ def _build_generic(
     *,
     run_id: str,
 ) -> GenericActivityRow:
-    """Build the catch-all :class:`GenericActivityRow`. With 62/62
+    """Build the catch-all :class:`GenericActivityRow`. With 63/63
     coverage this is now ONLY reached when a typed builder fails on a
     malformed payload (carrying ``_fallback_reason``) or, defensively,
     for a future event added without a registry entry. The ``actor_type``

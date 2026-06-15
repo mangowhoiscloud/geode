@@ -760,6 +760,13 @@ def build_memory(
     set_org_memory(organization_memory)
     set_memory_hooks(hooks)
 
+    # Shared tool-handler HookSystem injection (PR-PRE10-ROUND2) — lets
+    # cross-layer tool handlers (e.g. HITL feedback in core.cli) persist events
+    # without bootstrap importing the CLI layer (Server-never-CLI contract).
+    from core.hooks.tool_hooks import set_tool_hooks
+
+    set_tool_hooks(hooks)
+
     # Wire user profile into profile tools via contextvars
     from core.tools.profile_tools import set_user_profile
 
