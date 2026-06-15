@@ -7,7 +7,7 @@ per concern while preserving every public symbol previously imported by
 external consumers (CLI bootstrap, tool handlers, plugins, tests). Sub-
 modules:
 
-- :mod:`_state` — ``ModelProfile``, ``MODEL_PROFILES``, ``COMMAND_MAP``,
+- :mod:`_state` — ``ModelProfile``, ``get_model_profiles``, ``COMMAND_MAP``,
   conversation ContextVar, ``show_help``, ``resolve_action``,
   ``_get_profile_store``
 - :mod:`key`      — ``cmd_key`` + auth-state mirroring
@@ -51,13 +51,13 @@ from core.config.env_io import upsert_env as _upsert_env
 from core.ui.console import console as console
 
 from ._state import (
-    _MODEL_INDEX,
     COMMAND_MAP,
-    MODEL_PROFILES,
     ModelProfile,
     _conversation_ctx,
     _get_profile_store,
     get_conversation_context,
+    get_model_index,
+    get_model_profiles,
     resolve_action,
     set_conversation_context,
     show_help,
@@ -86,8 +86,6 @@ from .trigger import cmd_trigger
 
 __all__ = [
     "COMMAND_MAP",
-    "MODEL_PROFILES",
-    "_MODEL_INDEX",
     "ModelProfile",
     "_apply_model",
     "_budget_bar",
@@ -131,6 +129,8 @@ __all__ = [
     "cmd_trigger",
     "console",
     "get_conversation_context",
+    "get_model_index",
+    "get_model_profiles",
     "resolve_action",
     "set_conversation_context",
     "show_help",

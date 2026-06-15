@@ -654,23 +654,23 @@ class TestGlmClient:
 
 
 class TestModelProfiles:
-    """Test MODEL_PROFILES includes GLM entries."""
+    """Test the model picker list includes GLM entries."""
 
     def test_glm_profiles_present(self):
-        from core.cli.commands import MODEL_PROFILES
+        from core.cli.commands import get_model_profiles
 
-        ids = [p.id for p in MODEL_PROFILES]
+        ids = [p.id for p in get_model_profiles()]
         assert GLM_PRIMARY in ids
         assert "glm-5-turbo" in ids
         assert "glm-4.7-flash" in ids
 
     def test_glm_profiles_provider(self):
-        from core.cli.commands import MODEL_PROFILES
+        from core.cli.commands import get_model_profiles
 
         # v0.53.0 — provider labels are CANONICAL provider IDs (lowercase
         # `glm`), matching /login dashboard + auth.toml. Pre-fix used
         # capitalised "GLM" which diverged from the dispatch key.
-        glm_profiles = [p for p in MODEL_PROFILES if p.provider == "glm"]
+        glm_profiles = [p for p in get_model_profiles() if p.provider == "glm"]
         assert len(glm_profiles) == 3
 
 

@@ -14,7 +14,7 @@ walks the Path-B registry (``list_adapters``) instead.
 
 from __future__ import annotations
 
-from core.cli.commands import MODEL_PROFILES
+from core.cli.commands import get_model_profiles
 from core.config import _resolve_provider
 from core.llm import adapters as _adapters_mod
 
@@ -84,13 +84,13 @@ class TestModelProfileLabels:
         # Pre-0.50 the UI showed "Codex (Plus)" for gpt-5.4-mini even though
         # it routes to plain "openai". Users were billed PAYG while believing
         # they were on the Plus subscription.
-        for profile in MODEL_PROFILES:
+        for profile in get_model_profiles():
             if profile.id == "gpt-5.4-mini":
                 assert "Codex" not in profile.provider, (
                     "gpt-5.4-mini routes to PAYG OpenAI, must not advertise Codex"
                 )
                 return
-        raise AssertionError("gpt-5.4-mini missing from MODEL_PROFILES")
+        raise AssertionError("gpt-5.4-mini missing from the model picker list")
 
     def test_openai_codex_display_reveals_chatgpt_subscription(self) -> None:
         # PR-CODEX-LABEL-ALIGN — the `openai-codex` lane IS the ChatGPT
@@ -116,6 +116,6 @@ class TestModelProfileLabels:
         # rotator dispatch key. Pre-fix used capitalised "GLM" which
         # diverged from the dispatch key. v0.50 originally moved away
         # from "ZhipuAI" → "GLM"; v0.53.0 finishes by lowercasing.
-        for profile in MODEL_PROFILES:
+        for profile in get_model_profiles():
             if profile.id.startswith("glm-"):
                 assert profile.provider == "glm", profile.id

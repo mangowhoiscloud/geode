@@ -16,12 +16,12 @@ import logging
 from typing import Any
 
 from core.cli.commands._state import (
-    _MODEL_INDEX,
     AGENT_ROLES,
-    MODEL_PROFILES,
     AgentRole,
     ModelProfile,
     forced_login_method_for,
+    get_model_index,
+    get_model_profiles,
     model_available,
     role_by_name,
 )
@@ -323,7 +323,7 @@ def _interactive_model_picker() -> None:
             model_available(p.id),
             forced_login_method_for(p.provider),
         )
-        for p in MODEL_PROFILES
+        for p in get_model_profiles()
     ]
     role_tabs = [(r.name, r.label, r.description) for r in AGENT_ROLES]
     role_initial_models = {r.name: _current_model_for_role(r) for r in AGENT_ROLES}
@@ -363,12 +363,13 @@ def _apply_picker_result(result: Any) -> None:
     (``_apply_model`` with the matching role) so the operator can set
     Primary + Reflection + Mutator in ONE picker session.
     """
+    model_profiles = get_model_profiles()
     for staged_role, staged_mid in getattr(result, "staged", ()) or ():
-        staged_profile = next((p for p in MODEL_PROFILES if p.id == staged_mid), None)
+        staged_profile = next((p for p in model_profiles if p.id == staged_mid), None)
         if staged_profile is None:
             continue
         _apply_model(staged_profile, effort=None, role=staged_role)
-    chosen_profile = next(p for p in MODEL_PROFILES if p.id == result.model_id)
+    chosen_profile = next(p for p in model_profiles if p.id == result.model_id)
     _apply_model(chosen_profile, effort=result.effort, role=result.role)
 
 
@@ -395,7 +396,7 @@ def _interactive_model_picker_for_role(role_def: AgentRole) -> None:
             model_available(p.id),
             forced_login_method_for(p.provider),
         )
-        for p in MODEL_PROFILES
+        for p in get_model_profiles()
     ]
     role_tabs = [(r.name, r.label, r.description) for r in AGENT_ROLES]
     role_initial_models = {r.name: _current_model_for_role(r) for r in AGENT_ROLES}
@@ -487,7 +488,7 @@ def cmd_model(args: str) -> None:
             # marks all of them in one render — matches the
             # multi-tab picker's "Primary / Reflection" semantics.
             role_currents = {r.name: _current_model_for_role(r) for r in AGENT_ROLES}
-            for i, p in enumerate(MODEL_PROFILES, 1):
+            for i, p in enumerate(get_model_profiles(), 1):
                 role_marks = " ".join(
                     f"{r.label[0]}←" for r in AGENT_ROLES if role_currents[r.name] == p.id
                 )
@@ -516,21 +517,22 @@ def cmd_model(args: str) -> None:
     # Resolve by number or name
     selected: ModelProfile | None = None
 
+    model_profiles = get_model_profiles()
     if arg.isdigit():
         idx = int(arg) - 1
-        if 0 <= idx < len(MODEL_PROFILES):
-            selected = MODEL_PROFILES[idx]
+        if 0 <= idx < len(model_profiles):
+            selected = model_profiles[idx]
         else:
             _pkg.console.print(
-                f"  [warning]Invalid number: {arg} (1-{len(MODEL_PROFILES)})[/warning]"
+                f"  [warning]Invalid number: {arg} (1-{len(model_profiles)})[/warning]"
             )
             _pkg.console.print()
             return
     else:
-        selected = _MODEL_INDEX.get(arg)
+        selected = get_model_index().get(arg)
         if not selected:
             arg_norm = arg.lower().replace("-", "").replace(" ", "").replace("_", "")
-            for p in MODEL_PROFILES:
+            for p in model_profiles:
                 id_norm = p.id.lower().replace("-", "").replace(" ", "").replace("_", "")
                 label_norm = p.label.lower().replace("-", "").replace(" ", "").replace("_", "")
                 if arg_norm in id_norm or arg_norm in label_norm:
@@ -540,7 +542,7 @@ def cmd_model(args: str) -> None:
     if not selected:
         _pkg.console.print(f"  [warning]Unknown model: {arg}[/warning]")
         _pkg.console.print("  [muted]Available:[/muted]", end="")
-        for p in MODEL_PROFILES:
+        for p in model_profiles:
             _pkg.console.print(f" [muted]{p.id}[/muted]", end="")
         _pkg.console.print()
         _pkg.console.print()

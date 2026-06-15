@@ -539,7 +539,7 @@ def test_apply_picker_result_applies_staged_then_final(monkeypatch) -> None:
         lambda profile, effort=None, role="primary": applied.append((profile.id, effort, role)),
     )
 
-    known = [p.id for p in model_cmd.MODEL_PROFILES[:2]]
+    known = [p.id for p in model_cmd.get_model_profiles()[:2]]
     result = PickerResult(
         model_id=known[0],
         effort="high",
@@ -631,7 +631,7 @@ def test_non_primary_apply_persists_to_global_scope(monkeypatch) -> None:
     monkeypatch.setattr(_pkg, "_check_provider_key", lambda profile: None, raising=False)
     monkeypatch.setattr(_pkg, "remove_env", lambda var: False, raising=False)
 
-    profile = model_cmd.MODEL_PROFILES[0]
+    profile = model_cmd.get_model_profiles()[0]
     model_cmd._apply_model(profile, effort=None, role="mutator", scope="project")
 
     assert captured, "mutator pick must persist to config.toml"

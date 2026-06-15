@@ -137,21 +137,21 @@ class TestCycleEffort:
 
 class TestPerProviderEnumIntegrity:
     """Cross-provider sanity — the enum table covers every model in
-    MODEL_PROFILES with a sensible answer."""
+    the picker list with a sensible answer."""
 
     def test_every_profile_has_supported_efforts_callable(self) -> None:
-        from core.cli.commands import MODEL_PROFILES
+        from core.cli.commands import get_model_profiles
 
-        for p in MODEL_PROFILES:
+        for p in get_model_profiles():
             levels = supported_efforts(p.id, p.provider)
             assert isinstance(levels, tuple)
             # Every level should be a non-empty string
             assert all(isinstance(level, str) and level for level in levels)
 
     def test_default_either_in_enum_or_none(self) -> None:
-        from core.cli.commands import MODEL_PROFILES
+        from core.cli.commands import get_model_profiles
 
-        for p in MODEL_PROFILES:
+        for p in get_model_profiles():
             levels = supported_efforts(p.id, p.provider)
             d = default_effort(p.id, p.provider)
             if not levels:
