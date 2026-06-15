@@ -1,6 +1,6 @@
 """Module-level state, registry, and lookups for the slash-command package.
 
-Hosts the ``ModelProfile`` dataclass + ``MODEL_PROFILES`` table, the
+Hosts the ``ModelProfile`` dataclass + ``get_model_profiles`` factory, the
 ``COMMAND_MAP`` slash → action lookup, the conversation ContextVar, the
 generic help renderer, ``resolve_action``, and the small
 ``_get_profile_store`` accessor. Extracted from the
@@ -15,12 +15,6 @@ from dataclasses import dataclass
 from typing import Any as _Any
 
 from core.auth.profiles import ProfileStore
-from core.config import (
-    ANTHROPIC_BUDGET,
-    ANTHROPIC_SECONDARY,
-    GLM_PRIMARY,
-    OPENAI_PRIMARY,
-)
 from core.ui.console import console
 
 # ---------------------------------------------------------------------------
@@ -49,31 +43,45 @@ class ModelProfile:
 # `gpt-5.5` default routes to `openai-codex` per equivalence-class
 # scan when ChatGPT subscription OAuth is registered (v0.52.4 routing policy);
 # otherwise to `openai` PAYG. Both paths visible via /login dashboard.
-MODEL_PROFILES: list[ModelProfile] = [
-    # Fable 5 — Anthropic's most capable widely released model ($10/$50,
-    # 1M ctx, adaptive-only thinking, refusal stop_reason). GA 2026-06-09.
-    # ref: https://platform.claude.com/docs/en/about-claude/models/overview
-    ModelProfile("claude-fable-5", "anthropic", "Fable 5", "$$$$"),
-    ModelProfile("claude-opus-4-8", "anthropic", "Opus 4.8", "$$$"),
-    ModelProfile("claude-opus-4-7", "anthropic", "Opus 4.7", "$$$"),
-    ModelProfile("claude-opus-4-6", "anthropic", "Opus 4.6", "$$$"),
-    ModelProfile(ANTHROPIC_SECONDARY, "anthropic", "Sonnet 4.6", "$$"),
-    ModelProfile(ANTHROPIC_BUDGET, "anthropic", "Haiku 4.5", "$"),
-    # v0.53.2 — gpt-5.5 is OAuth-only (Codex backend per
-    # developers.openai.com/codex/models). _resolve_provider returns
-    # "openai-codex" for it via _CODEX_ONLY_MODELS; ModelProfile.provider
-    # must match so the /model picker label is honest about which
-    # auth-mode the user's pick will actually consume.
-    ModelProfile(OPENAI_PRIMARY, "openai-codex", "GPT-5.5", "$$"),
-    ModelProfile("gpt-5.4", "openai", "GPT-5.4", "$$"),
-    ModelProfile("gpt-5.4-mini", "openai", "GPT-5.4 Mini", "$"),
-    ModelProfile("gpt-5.3-codex", "openai-codex", "GPT-5.3 Codex", "$$"),
-    ModelProfile(GLM_PRIMARY, "glm", "GLM-5.1", "$"),
-    ModelProfile("glm-5-turbo", "glm", "GLM-5 Turbo", "$"),
-    ModelProfile("glm-4.7-flash", "glm", "GLM-4.7 Flash", "$"),
-]
+def get_model_profiles() -> list[ModelProfile]:
+    """The /model picker model list, built fresh per call (H11-tail).
 
-_MODEL_INDEX: dict[str, ModelProfile] = {m.id: m for m in MODEL_PROFILES}
+    Pre-PR this was a boot-frozen module-level list, so the routing-constant
+    entries (``ANTHROPIC_SECONDARY`` / ``ANTHROPIC_BUDGET`` / ``OPENAI_PRIMARY``
+    / ``GLM_PRIMARY``) ignored a mid-session ``routing.toml`` reload until
+    restart. A function-local import re-reads the live ``core.config`` values
+    each call; the hardcoded entries are version-pinned literals.
+    """
+    from core.config import ANTHROPIC_BUDGET, ANTHROPIC_SECONDARY, GLM_PRIMARY, OPENAI_PRIMARY
+
+    return [
+        # Fable 5 — Anthropic's most capable widely released model ($10/$50,
+        # 1M ctx, adaptive-only thinking, refusal stop_reason). GA 2026-06-09.
+        # ref: https://platform.claude.com/docs/en/about-claude/models/overview
+        ModelProfile("claude-fable-5", "anthropic", "Fable 5", "$$$$"),
+        ModelProfile("claude-opus-4-8", "anthropic", "Opus 4.8", "$$$"),
+        ModelProfile("claude-opus-4-7", "anthropic", "Opus 4.7", "$$$"),
+        ModelProfile("claude-opus-4-6", "anthropic", "Opus 4.6", "$$$"),
+        ModelProfile(ANTHROPIC_SECONDARY, "anthropic", "Sonnet 4.6", "$$"),
+        ModelProfile(ANTHROPIC_BUDGET, "anthropic", "Haiku 4.5", "$"),
+        # v0.53.2 — gpt-5.5 is OAuth-only (Codex backend per
+        # developers.openai.com/codex/models). _resolve_provider returns
+        # "openai-codex" for it via _CODEX_ONLY_MODELS; ModelProfile.provider
+        # must match so the /model picker label is honest about which
+        # auth-mode the user's pick will actually consume.
+        ModelProfile(OPENAI_PRIMARY, "openai-codex", "GPT-5.5", "$$"),
+        ModelProfile("gpt-5.4", "openai", "GPT-5.4", "$$"),
+        ModelProfile("gpt-5.4-mini", "openai", "GPT-5.4 Mini", "$"),
+        ModelProfile("gpt-5.3-codex", "openai-codex", "GPT-5.3 Codex", "$$"),
+        ModelProfile(GLM_PRIMARY, "glm", "GLM-5.1", "$"),
+        ModelProfile("glm-5-turbo", "glm", "GLM-5 Turbo", "$"),
+        ModelProfile("glm-4.7-flash", "glm", "GLM-4.7 Flash", "$"),
+    ]
+
+
+def get_model_index() -> dict[str, ModelProfile]:
+    """``{id: ModelProfile}`` over the live picker list (H11-tail)."""
+    return {m.id: m for m in get_model_profiles()}
 
 
 # ---------------------------------------------------------------------------

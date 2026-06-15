@@ -1,6 +1,6 @@
 """M5 — /model picker surfaces login-state.
 
-Pre-fix the picker rendered every entry in ``MODEL_PROFILES`` regardless
+Pre-fix the picker rendered every entry in the model list regardless
 of whether the user had registered a credential for that provider.
 Selecting an unauthenticated model bounced off the ``_check_provider_key``
 warning on the next LLM call — by then the settings had already shifted,

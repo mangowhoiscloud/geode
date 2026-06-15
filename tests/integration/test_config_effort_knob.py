@@ -79,16 +79,17 @@ class TestPickerPersistence:
         """After picker confirms an effort, .geode/config.toml must
         carry it so the next session re-loads from the durable layer."""
         monkeypatch.chdir(tmp_path)
-        from core.cli.commands import MODEL_PROFILES, _apply_model
+        from core.cli.commands import _apply_model, get_model_profiles
         from core.config import settings
 
+        model_profiles = get_model_profiles()
         old_model = settings.model
         old_effort = getattr(settings, "agentic_effort", "high")
         try:
-            settings.model = MODEL_PROFILES[0].id
+            settings.model = model_profiles[0].id
             object.__setattr__(settings, "agentic_effort", "low")
             # Pick a different model AND a different effort so both branches fire
-            target = MODEL_PROFILES[1]
+            target = model_profiles[1]
             _apply_model(target, effort="max")
             config_path = tmp_path / ".geode" / "config.toml"
             assert config_path.exists()
