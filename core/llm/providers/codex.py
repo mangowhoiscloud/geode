@@ -21,12 +21,14 @@ import logging
 import threading
 from typing import Any
 
-from core.config import CODEX_BASE_URL, CODEX_FALLBACK_CHAIN, CODEX_PRIMARY
+from core.config import CODEX_BASE_URL
 
 log = logging.getLogger(__name__)
 
-DEFAULT_CODEX_MODEL = CODEX_PRIMARY
-CODEX_FALLBACK_MODELS = CODEX_FALLBACK_CHAIN
+# H11-tail: DEFAULT_CODEX_MODEL / CODEX_FALLBACK_MODELS were dead module
+# aliases (boot-frozen copies of CODEX_PRIMARY / CODEX_FALLBACK_CHAIN) with no
+# consumer. Removed; live values come from ``core.config`` via function-local
+# imports so a routing.toml reload is seen without a restart.
 
 _codex_client: Any = None
 _codex_lock = threading.Lock()

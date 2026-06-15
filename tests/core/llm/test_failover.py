@@ -6,8 +6,8 @@ from unittest.mock import MagicMock, patch
 
 import anthropic
 import pytest
+from core.config import ANTHROPIC_FALLBACK_CHAIN
 from core.llm.fallback import MAX_RETRIES
-from core.llm.providers.anthropic import FALLBACK_MODELS
 from core.llm.providers.anthropic import retry_with_backoff as _retry_with_backoff
 from core.llm.router import call_llm, call_llm_json
 
@@ -124,10 +124,14 @@ class TestCallLlmFailover:
 
 class TestFallbackModels:
     def test_fallback_models_default_empty(self):
-        """v0.99.19 — shipped default knob is empty (no silent fallback)."""
-        assert isinstance(FALLBACK_MODELS, list)
-        assert FALLBACK_MODELS == [], (
-            "Shipped FALLBACK_MODELS must default to empty. "
+        """v0.99.19 — shipped default knob is empty (no silent fallback).
+
+        H11-tail (v0.99.220): asserts against the live SoT
+        ``core.config.ANTHROPIC_FALLBACK_CHAIN`` (the per-provider module
+        alias ``FALLBACK_MODELS`` was removed; consumers read core.config live)."""
+        assert isinstance(ANTHROPIC_FALLBACK_CHAIN, list)
+        assert ANTHROPIC_FALLBACK_CHAIN == [], (
+            "Shipped anthropic fallback chain must default to empty. "
             "Users opt in via ~/.geode/routing.toml [model.fallbacks]."
         )
 

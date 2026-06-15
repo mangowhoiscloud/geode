@@ -11,16 +11,15 @@ import logging
 import threading
 from typing import Any
 
-from core.config import GLM_BASE_URL, GLM_FALLBACK_CHAIN, GLM_PRIMARY
+from core.config import GLM_BASE_URL
 from core.llm.loop_affinity import LoopAffineClientCache
 
 log = logging.getLogger(__name__)
 
-# Default GLM model — from config.py single source of truth
-DEFAULT_GLM_MODEL = GLM_PRIMARY
-
-# GLM fallback chain — from config.py single source of truth
-GLM_FALLBACK_MODELS = GLM_FALLBACK_CHAIN
+# H11-tail: the former DEFAULT_GLM_MODEL / GLM_FALLBACK_MODELS module aliases
+# (boot-frozen copies of GLM_PRIMARY / GLM_FALLBACK_CHAIN) were dead — no
+# consumer read them. Removed; any live value comes from ``core.config`` via a
+# function-local import so a routing.toml reload is seen without restart.
 
 _glm_client: Any = None  # openai.OpenAI | None — GLM via OpenAI-compatible API
 _glm_lock = threading.Lock()
