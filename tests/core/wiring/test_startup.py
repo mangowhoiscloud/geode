@@ -61,7 +61,11 @@ class TestReadinessReport:
 
 class TestCheckReadiness:
     def test_without_api_key(self, tmp_path: Path):
-        with patch("core.config.settings") as mock_settings:
+        with (
+            patch("core.config.settings") as mock_settings,
+            patch("core.wiring.startup.detect_subscription_oauth", return_value=None),
+            patch("core.wiring.startup._has_available_profile", return_value=False),
+        ):
             _no_keys_mock(mock_settings)
             report = check_readiness(tmp_path)
 
@@ -71,6 +75,85 @@ class TestCheckReadiness:
         # Should have LLM Analysis capability marked unavailable
         llm_cap = next(c for c in report.capabilities if c.name == "LLM Analysis")
         assert llm_cap.available is False
+
+    def test_oauth_only_not_dry_run(self, tmp_path: Path):
+        """Codex-CLI OAuth-only operator (no raw key) is NOT forced to dry-run."""
+        with (
+            patch("core.config.settings") as mock_settings,
+            patch(
+                "core.wiring.startup.detect_subscription_oauth",
+                return_value="openai-codex",
+            ),
+        ):
+            _no_keys_mock(mock_settings)
+            report = check_readiness(tmp_path)
+
+        assert report.has_api_key is True
+        assert report.blocked is False
+        assert report.force_dry_run is False
+        llm_cap = next(c for c in report.capabilities if c.name == "LLM Analysis")
+        assert llm_cap.available is True
+
+    def test_geode_login_profile_not_dry_run(self, tmp_path: Path):
+        """A GEODE-owned /login profile (no raw key, no Codex-CLI OAuth) still
+        counts as a usable credential — readiness mirrors dispatch eligibility."""
+        from unittest.mock import MagicMock
+
+        usable_profile = MagicMock()
+        usable_profile.key = "oauth-access-token-real-jwt-value"  # real, non-placeholder
+        fake_store = MagicMock()
+        fake_store.list_available.return_value = [usable_profile]
+        with (
+            patch("core.config.settings") as mock_settings,
+            patch("core.wiring.startup.detect_subscription_oauth", return_value=None),
+            patch("core.wiring.container.ensure_profile_store", return_value=fake_store),
+        ):
+            _no_keys_mock(mock_settings)
+            report = check_readiness(tmp_path)
+
+        assert report.has_api_key is True
+        assert report.blocked is False
+        assert report.force_dry_run is False
+        llm_cap = next(c for c in report.capabilities if c.name == "LLM Analysis")
+        assert llm_cap.available is True
+
+    def test_placeholder_profile_does_not_unblock(self, tmp_path: Path):
+        """A profile seeded from a placeholder env value (`sk-ant-...`) is
+        `is_available` but is NOT a real credential — it must not pass readiness
+        when the raw-key path rejects it (mirrors `_has_any_llm_key`)."""
+        from unittest.mock import MagicMock
+
+        placeholder_profile = MagicMock()
+        placeholder_profile.key = "sk-ant-..."
+        fake_store = MagicMock()
+        fake_store.list_available.return_value = [placeholder_profile]
+        with (
+            patch("core.config.settings") as mock_settings,
+            patch("core.wiring.startup.detect_subscription_oauth", return_value=None),
+            patch("core.wiring.container.ensure_profile_store", return_value=fake_store),
+        ):
+            _no_keys_mock(mock_settings)
+            report = check_readiness(tmp_path)
+
+        assert report.has_api_key is False
+        assert report.force_dry_run is True
+
+    def test_no_credential_anywhere_is_dry_run(self, tmp_path: Path):
+        """No raw key, no Codex-CLI OAuth, and an empty ProfileStore → dry-run."""
+        from unittest.mock import MagicMock
+
+        empty_store = MagicMock()
+        empty_store.list_available.return_value = []
+        with (
+            patch("core.config.settings") as mock_settings,
+            patch("core.wiring.startup.detect_subscription_oauth", return_value=None),
+            patch("core.wiring.container.ensure_profile_store", return_value=empty_store),
+        ):
+            _no_keys_mock(mock_settings)
+            report = check_readiness(tmp_path)
+
+        assert report.has_api_key is False
+        assert report.force_dry_run is True
 
     def test_with_anthropic_key(self, tmp_path: Path):
         with patch("core.config.settings") as mock_settings:
@@ -105,7 +188,11 @@ class TestCheckReadiness:
         assert report.blocked is False
 
     def test_placeholder_key_treated_as_missing(self, tmp_path: Path):
-        with patch("core.config.settings") as mock_settings:
+        with (
+            patch("core.config.settings") as mock_settings,
+            patch("core.wiring.startup.detect_subscription_oauth", return_value=None),
+            patch("core.wiring.startup._has_available_profile", return_value=False),
+        ):
             mock_settings.anthropic_api_key = "sk-ant-..."
             mock_settings.openai_api_key = "sk-..."
             mock_settings.zai_api_key = "..."
@@ -368,10 +455,10 @@ class TestAutoGenerateEnv:
         env = tmp_path / ".env"
         assert env.exists()
         content = env.read_text()
-        assert "ANTHROPIC_API_KEY=" in content
-        # Placeholder should be replaced with empty value
+        # Placeholder secret line is emitted COMMENTED, not an active blank
+        assert "# ANTHROPIC_API_KEY=" in content
         assert "sk-ant-..." not in content
-        # Non-placeholder value should remain
+        # Non-placeholder value should remain active
         assert "DEBUG=true" in content
 
     def test_env_file_permissions(self, tmp_path: Path):
@@ -437,10 +524,12 @@ class TestAutoGenerateEnv:
         content = (tmp_path / ".env").read_text()
         lines = content.strip().split("\n")
 
-        # Placeholders become empty — assert value after '=' is empty
-        assert lines[0] == "ANTHROPIC_API_KEY="
-        assert lines[1] == "OPENAI_API_KEY="
-        assert lines[2] == "ZAI_API_KEY="
+        # Placeholders become COMMENTED — no active blank secret entry
+        assert lines[0] == "# ANTHROPIC_API_KEY="
+        assert lines[1] == "# OPENAI_API_KEY="
+        assert lines[2] == "# ZAI_API_KEY="
+        # No active (uncommented) blank key line survives
+        assert not any(ln == "ANTHROPIC_API_KEY=" for ln in lines)
 
         # Non-placeholders preserved
         assert "DEBUG=true" in content
