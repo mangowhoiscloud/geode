@@ -129,6 +129,9 @@ output_per_mtok = 4.00
 input_per_mtok = 0.60
 output_per_mtok = 2.20
 
+# Default learning-extraction model (settings.learning_extract_model). The
+# free tier is limited-time: when the promo ends this reverts to standard GLM
+# pricing, so a cost watcher should re-pin or update these once it lapses.
 [pricing.openai."glm-4.7-flash"]
 input_per_mtok = 0.00
 output_per_mtok = 0.00  # free tier (limited-time)

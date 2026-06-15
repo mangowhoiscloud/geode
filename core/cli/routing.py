@@ -99,7 +99,7 @@ COMMAND_REGISTRY: dict[str, CommandSpec] = {
     "/audit-seeds": CommandSpec(
         name="/audit-seeds",
         location=RunLocation.THIN,
-        description="Seed-pipeline candidate generation (co-scientist 7-role)",
+        description="Generate and score candidate evaluation seeds",
         handler_path="plugins.seed_generation.cli:cmd_audit_seeds_slash",
     ),
     "/self-improving": CommandSpec(

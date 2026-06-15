@@ -169,6 +169,19 @@ class SharedServices:
                 log.info("Headless mode %s: denied tools filtered — %s", mode, denied)
             handlers = {k: v for k, v in handlers.items() if k not in _HEADLESS_DENIED_TOOLS}
 
+        # Reload the settings singleton from disk (.env + config.toml) FIRST —
+        # before anything below reads it. v0.82.0 + PR-R6 (2026-05-24): `/model`
+        # writes disk + the CLI's settings but not the daemon's pydantic
+        # singleton, so without this in-place reload a long-lived daemon keeps
+        # its boot-time values and `/model gpt-5.5` is ignored at the next
+        # session. PR-CONFIG-SLOP-SWEEP moved the reload ABOVE the sub-agent
+        # manager build (was after) so the manager's caps
+        # (max_subagent_depth / max_total_subagents) no longer initialize from
+        # a stale pre-reload singleton.
+        from core.config import _resolve_provider, reload_settings_from_disk, settings
+
+        reload_settings_from_disk()
+
         # Build sub-agent manager + executor + loop
         sub_mgr = self._build_sub_agent_manager()
         approval_cb = kwargs.get("approval_callback")
@@ -180,24 +193,6 @@ class SharedServices:
             hooks=self.hook_system,
             approval_callback=approval_cb,
         )
-        # v0.82.0 — read settings.model FRESH per session so /model command
-        # mutations propagate to every new AgenticLoop. Previously the
-        # boot-time `self._model` was used and `/model gpt-5.5` was
-        # silently ignored by every subsequent session.
-        #
-        # PR-R6 (2026-05-24) — "fresh per session" was reading the daemon's
-        # *in-memory* ``settings.model``, which itself goes stale because
-        # ``_apply_model`` writes to disk + the CLI process's settings,
-        # but never touched the daemon's pydantic singleton. PR-DRIFT-CUT
-        # removed the auto-revert drift sync that silently masked the gap,
-        # surfacing the bug: ``/model gpt-5.5`` was ignored at the next
-        # session start because daemon.settings.model was still its
-        # boot-time value. ``reload_settings_from_disk()`` mutates the
-        # singleton in place from ``.env`` + ``config.toml`` so the read
-        # below sees what disk actually says. Hermes-style boundary read.
-        from core.config import _resolve_provider, reload_settings_from_disk, settings
-
-        reload_settings_from_disk()
 
         # PR-R6 (2026-05-24) — operator's effort choice from ``/model``
         # picker (writes ``GEODE_AGENTIC_EFFORT`` + ``[agentic].effort``)
@@ -256,6 +251,7 @@ class SharedServices:
             agent_registry=agent_registry,
             hooks=self.hook_system,
             max_depth=settings.max_subagent_depth,
+            max_total_subagents=settings.max_total_subagents,
         )
 
     def _build_agent_registry(self) -> Any:
