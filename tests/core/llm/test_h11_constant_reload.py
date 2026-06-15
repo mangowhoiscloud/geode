@@ -42,3 +42,20 @@ def test_openai_adapter_default_model_reads_live() -> None:
 
     with patch.object(core.config, "OPENAI_PRIMARY", "gpt-h11-live"):
         assert OpenAIAdapter()._default_model == "gpt-h11-live"
+
+
+def test_model_picker_list_reads_live() -> None:
+    # /model picker list was the last boot-frozen routing-constant site;
+    # get_model_profiles() now re-reads core.config per call.
+    from core.cli.commands._state import get_model_profiles
+
+    with patch.object(core.config, "ANTHROPIC_SECONDARY", "claude-picker-live"):
+        ids = [p.id for p in get_model_profiles()]
+        assert "claude-picker-live" in ids
+
+
+def test_model_picker_index_reads_live() -> None:
+    from core.cli.commands._state import get_model_index
+
+    with patch.object(core.config, "GLM_PRIMARY", "glm-picker-live"):
+        assert "glm-picker-live" in get_model_index()

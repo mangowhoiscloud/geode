@@ -45,6 +45,11 @@ functional change.
 
 ---
 
+## [0.99.222] - 2026-06-15
+
+### Fixed
+- **The `/model` picker list now reads routing constants live, closing the last boot-frozen site (H11-tail complete)** (PR-PRE10-H11-PICKER; pre-1.0 punch-list, the follow-up the v0.99.220 entry flagged). `core/cli/commands/_state.py` held `MODEL_PROFILES` as a module-level list (and `_MODEL_INDEX` derived from it), so the four routing-constant entries (`ANTHROPIC_SECONDARY` / `ANTHROPIC_BUDGET` / `OPENAI_PRIMARY` / `GLM_PRIMARY`) froze at import — an operator editing `~/.geode/routing.toml` mid-session saw stale model ids/labels in `/model` until a restart, even though the runtime resolution path already re-read them (v0.99.220). Both are now factories — `get_model_profiles()` / `get_model_index()` — that do a function-local `from core.config import …` per call. All ~14 consumers migrated in the same PR (no shim, per the 1-release-grace rule): `core/cli/commands/model.py` (caches the list once per function where used 2+ times), the `core.cli.commands` package re-exports, and 8 test modules. Guards: `tests/core/llm/test_h11_constant_reload.py::test_model_picker_list_reads_live` / `::test_model_picker_index_reads_live` (patch `core.config.*` → picker reflects the new value). With this, **0 boot-frozen routing-constant sites remain**.
+
 ## [0.99.221] - 2026-06-15
 
 ### Fixed

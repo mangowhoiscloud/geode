@@ -155,11 +155,11 @@ def test_gpt_5_5_model_profile_provider_matches_resolver() -> None:
     ``"openai-codex"`` (Codex-only per developers.openai.com/codex/models).
     The actual routing was correct via resolve_routing's equivalence-class
     scan, but the user-visible UI label was wrong."""
-    from core.cli.commands import MODEL_PROFILES
+    from core.cli.commands import get_model_profiles
     from core.config import _resolve_provider
 
-    profiles = {p.id: p for p in MODEL_PROFILES}
-    assert "gpt-5.5" in profiles, "gpt-5.5 must be in MODEL_PROFILES"
+    profiles = {p.id: p for p in get_model_profiles()}
+    assert "gpt-5.5" in profiles, "gpt-5.5 must be in the model picker list"
     assert profiles["gpt-5.5"].provider == _resolve_provider("gpt-5.5"), (
         f"gpt-5.5 ModelProfile.provider = {profiles['gpt-5.5'].provider!r}, "
         f"_resolve_provider returned {_resolve_provider('gpt-5.5')!r}. "
@@ -172,11 +172,11 @@ def test_all_model_profiles_provider_matches_resolver() -> None:
     """Stronger D4 invariant: every ModelProfile entry's provider field
     must equal ``_resolve_provider(profile.id)``. Catches future
     additions that forget the matching."""
-    from core.cli.commands import MODEL_PROFILES
+    from core.cli.commands import get_model_profiles
     from core.config import _resolve_provider
 
     mismatches: list[tuple[str, str, str]] = []
-    for profile in MODEL_PROFILES:
+    for profile in get_model_profiles():
         resolved = _resolve_provider(profile.id)
         if profile.provider != resolved:
             mismatches.append((profile.id, profile.provider, resolved))
