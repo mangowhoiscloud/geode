@@ -29,11 +29,11 @@ export default function Page() {
               <tbody>
                 <tr>
                   <td><code>~/.geode/.env</code></td>
-                  <td>전역 시크릿 층. API 키와 자격 증명이 들어갑니다. 온보딩과 <code>/login</code>의 키 기록이 여기로 갑니다.</td>
+                  <td>전역 시크릿 층이자 권위를 갖는 시크릿 저장소. API 키와 자격 증명이 들어가고, 온보딩과 <code>/login</code>의 키 기록이 여기로 갑니다.</td>
                 </tr>
                 <tr>
                   <td>프로젝트 <code>.env</code> (cwd)</td>
-                  <td>프로젝트 시크릿 층. 전역 <code>.env</code>보다 우선합니다.</td>
+                  <td>프로젝트 시크릿 층. 전역에 없는 키만 채우며 전역 키를 덮지 못합니다 (Hermes, 2026-06-15). 시크릿은 전역에 두는 것이 기본입니다.</td>
                 </tr>
                 <tr>
                   <td><code>~/.geode/config.toml</code></td>
@@ -67,11 +67,21 @@ export default function Page() {
               (<code>core/config/explain.py</code>의 <code>LAYERS</code>).
             </p>
             <pre>{`1. os.environ            셸 export. 세션 한정 수동 override
-2. 프로젝트 .env          cwd의 .env
-3. 전역 .env             ~/.geode/.env
+2. 전역 .env             ~/.geode/.env (시크릿 권위)
+3. 프로젝트 .env          cwd의 .env (전역에 없는 키만 채움)
 4. 프로젝트 config.toml   .geode/config.toml
 5. 전역 config.toml      ~/.geode/config.toml
 6. 코드 기본값`}</pre>
+            <p>
+              시크릿(<code>.env</code>)과 동작(<code>config.toml</code>)은 전역과
+              프로젝트의 우선 방향이 반대입니다. <code>.env</code>는 전역이
+              위(권위), <code>config.toml</code>은 프로젝트가 위(프로젝트 튜닝).
+              같은 키가 양쪽에 동시에 들어가지 않으므로(시크릿 전용, 동작 전용
+              분리, C-2) 사다리는 하나로 충분합니다. v0.99.216 이전에는
+              <code>.env</code>도 프로젝트가 위였는데, 빈 프로젝트
+              <code>.env</code>가 전역 실키를 가리는 함정이 있어 전역 권위로
+              뒤집었습니다 (Hermes 정렬).
+            </p>
             <p>
               모델 해석으로 좁히면 같은 사다리가 이렇게 읽힙니다. CLI 인자 &gt;
               env 층(os.environ + .env 파일들) &gt; 프로젝트 toml &gt; 전역
@@ -136,9 +146,10 @@ GEODE_ANTHROPIC_CREDENTIAL_SOURCE  GEODE_OPENAI_CREDENTIAL_SOURCE`}</pre>
               데몬의 모델을 env로 일부러 고정하고 싶다면
               <code>GEODE_SERVE_KEEP_MODEL_ENV=1</code>을 켭니다. C-4부터 이
               플래그는 프로세스 env뿐 아니라 양쪽 <code>.env</code> 파일에서도
-              읽힙니다. 승격 우선순위는 수동 export &gt; 프로젝트
-              <code>.env</code> &gt; 전역 <code>.env</code>이고, 파일은 이미
-              존재하는 프로세스 env를 덮지 않으며 빈 값도 덮지 않습니다.
+              읽힙니다. 승격 우선순위는 수동 export &gt; 전역 <code>.env</code>
+              &gt; 프로젝트 <code>.env</code>이고 (전역이 권위, 프로젝트는 전역에
+              없는 키만 채움), 파일은 이미 존재하는 프로세스 env를 덮지 않으며
+              빈 값도 덮지 않습니다.
             </p>
 
             <h2>실패 모드</h2>
@@ -163,9 +174,9 @@ GEODE_ANTHROPIC_CREDENTIAL_SOURCE  GEODE_OPENAI_CREDENTIAL_SOURCE`}</pre>
                   <td>세션 리로드로 매니페스트 독자는 갱신됩니다. 그래도 남으면 프로세스를 재시작합니다.</td>
                 </tr>
                 <tr>
-                  <td>프로젝트 <code>.env</code>가 전역에 짐</td>
-                  <td>C-3 이전 버전의 역전된 dotenv 순서</td>
-                  <td>업그레이드합니다. 현재 계약은 프로젝트 <code>.env</code>가 전역을 이깁니다.</td>
+                  <td>프로젝트 <code>.env</code>에 둔 시크릿이 안 먹고 전역 값이 이김</td>
+                  <td>전역 <code>~/.geode/.env</code>가 같은 키를 가짐. 전역이 권위입니다 (Hermes, 2026-06-15)</td>
+                  <td>의도된 동작입니다. 시크릿은 전역에 두고, 프로젝트는 전역에 없는 키만 채웁니다. <code>geode config explain &lt;KEY&gt;</code>로 WINNER 층을 확인하세요.</td>
                 </tr>
                 <tr>
                   <td><code>GEODE_CONFIG_TOML</code>이 일부 로더에만 적용</td>
@@ -201,11 +212,11 @@ GEODE_ANTHROPIC_CREDENTIAL_SOURCE  GEODE_OPENAI_CREDENTIAL_SOURCE`}</pre>
               <tbody>
                 <tr>
                   <td><code>~/.geode/.env</code></td>
-                  <td>Global secrets layer. API keys and credentials. Onboarding and <code>/login</code> write keys here.</td>
+                  <td>Global secrets layer, the authoritative secret store. API keys and credentials; onboarding and <code>/login</code> write keys here.</td>
                 </tr>
                 <tr>
                   <td>Project <code>.env</code> (cwd)</td>
-                  <td>Project secrets layer. Beats the global <code>.env</code>.</td>
+                  <td>Project secrets layer. Fills only the keys the global file lacks; it never shadows a global key (Hermes, 2026-06-15). Keep secrets in the global file by default.</td>
                 </tr>
                 <tr>
                   <td><code>~/.geode/config.toml</code></td>
@@ -240,11 +251,23 @@ GEODE_ANTHROPIC_CREDENTIAL_SOURCE  GEODE_OPENAI_CREDENTIAL_SOURCE`}</pre>
               (<code>LAYERS</code> in <code>core/config/explain.py</code>).
             </p>
             <pre>{`1. os.environ            shell exports. session-scoped manual override
-2. project .env          .env in the cwd
-3. global .env           ~/.geode/.env
+2. global .env           ~/.geode/.env (authoritative secrets)
+3. project .env          .env in the cwd (fills only keys global lacks)
 4. project config.toml   .geode/config.toml
 5. global config.toml    ~/.geode/config.toml
 6. code default`}</pre>
+            <p>
+              Secrets (<code>.env</code>) and behavior
+              (<code>config.toml</code>) order global vs project in opposite
+              directions. For <code>.env</code> the global file is higher
+              (authoritative); for <code>config.toml</code> the project file is
+              higher (project tuning). The same key never appears in both
+              layers (secrets-only, behavior-only, C-2), so one ladder is
+              enough. Before
+              v0.99.216 the <code>.env</code> pair was also project-first, but an
+              empty project <code>.env</code> could shadow a real global key, so
+              it was flipped to global-authoritative (the Hermes alignment).
+            </p>
             <p>
               Narrowed to model resolution, the same ladder reads: CLI args
               &gt; env layer (os.environ plus both .env files) &gt; project
@@ -315,10 +338,11 @@ GEODE_ANTHROPIC_CREDENTIAL_SOURCE  GEODE_OPENAI_CREDENTIAL_SOURCE`}</pre>
               To pin the daemon&apos;s model via env on purpose, set
               <code>GEODE_SERVE_KEEP_MODEL_ENV=1</code>. Since C-4 the flag is
               honored from the process env or from either <code>.env</code>
-              file. Promotion precedence is manual exports &gt; project
-              <code>.env</code> &gt; global <code>.env</code>; files never
-              clobber pre-existing process env, and empty values never
-              clobber anything.
+              file. Promotion precedence is manual exports &gt; global
+              <code>.env</code> &gt; project <code>.env</code> (global is
+              authoritative; the project file only fills keys global lacks);
+              files never clobber pre-existing process env, and empty values
+              never clobber anything.
             </p>
 
             <h2>Failure modes</h2>
@@ -343,9 +367,9 @@ GEODE_ANTHROPIC_CREDENTIAL_SOURCE  GEODE_OPENAI_CREDENTIAL_SOURCE`}</pre>
                   <td>Session reload refreshes manifest readers. If a path still lags, restart the process.</td>
                 </tr>
                 <tr>
-                  <td>Project <code>.env</code> loses to the global one</td>
-                  <td>Pre-C-3 versions had the dotenv order inverted</td>
-                  <td>Upgrade. The current contract is project <code>.env</code> beats global.</td>
+                  <td>A secret set in the project <code>.env</code> is ignored and the global value wins</td>
+                  <td>The global <code>~/.geode/.env</code> holds the same key, and global is authoritative (Hermes, 2026-06-15)</td>
+                  <td>This is intended. Keep secrets in the global file; the project file only fills keys global lacks. Run <code>geode config explain &lt;KEY&gt;</code> to see the WINNER layer.</td>
                 </tr>
                 <tr>
                   <td><code>GEODE_CONFIG_TOML</code> only applies to some loaders</td>

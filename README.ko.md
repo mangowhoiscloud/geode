@@ -281,6 +281,39 @@ geode config migrate-petri-toml --yes    # [self_improving_loop.petri.*] 를 con
 
 ---
 
+## 설정
+
+시크릿은 `.env`에, 동작은 `config.toml`에 둡니다. `.env`는 시크릿 전용, `config.toml`은 동작 전용이라 두 층은 충돌하지 않고 각각 우선순위 규칙이 하나씩 있습니다.
+
+- 전역 `~/.geode/.env`가 권위를 갖는 시크릿 저장소입니다. 프로젝트 `./.env`는 전역에 없는 키만 채우고 전역 키를 덮지 못합니다. `~/.geode/.env`의 `OPENAI_API_KEY`는 프로젝트 `./.env`가 비어 있어도 이깁니다.
+- 프로젝트 `./.geode/config.toml`이 전역 `~/.geode/config.toml`을 덮습니다. 동작은 프로젝트마다 조정합니다.
+
+모든 필드는 하나의 사다리를 탑니다. 위가 이깁니다:
+
+```
+1. os.environ                      셸 export (세션 한정)
+2. 전역  ~/.geode/.env             시크릿: 권위
+3. 프로젝트 ./.env                 전역에 없는 키만 채움
+4. 프로젝트 ./.geode/config.toml   동작: 프로젝트가 이김
+5. 전역  ~/.geode/config.toml
+6. 내장 기본값
+```
+
+`.env`는 전역이 위, `config.toml`은 프로젝트가 위입니다. 자격 증명은 한 곳에 두고 동작은 프로젝트마다 조정한다는 뜻입니다.
+
+자격 증명 추가/전환:
+
+```bash
+geode setup                          # wizard 재실행 (구독 OAuth 또는 API 키)
+/login openai                        # 세션 중: 구독 OAuth
+/key openai sk-proj-...              # 세션 중: API 키 붙여넣기
+echo 'OPENAI_API_KEY=sk-proj-...' >> ~/.geode/.env    # 권위를 갖는 파일 직접 편집
+```
+
+설정을 바꿨는데 안 먹으면 `geode config explain <KEY>`를 실행하세요. 층별 후보를 출력하고 winner와 가려진 층을 파일 경로까지 표시해 고칠 줄을 정확히 짚어 줍니다. `geode about`은 실효 모델을 보여줍니다. 전체 레퍼런스: [설정 기초](https://mangowhoiscloud.github.io/geode/docs/config/basics).
+
+---
+
 ## 트러블슈팅
 
 먼저 `geode doctor` 부터 실행하세요. Python 버전, `geode` PATH, `~/.geode/.env`, Codex CLI OAuth, ProfileStore, serve 소켓, `~/.local/bin` PATH 까지 확인하고, 실패한 항목마다 fix 명령을 알려줍니다. 아래 expander 들은 같은 내용을 글로 풀어쓴 것입니다.

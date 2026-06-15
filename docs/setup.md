@@ -66,7 +66,7 @@ EOF
 chmod 600 ~/.geode/.env
 ```
 
-**Key 우선순위**: Environment variable > Project `.env` > `~/.geode/.env`
+**시크릿(`.env`) 우선순위**: 수동 env export > 전역 `~/.geode/.env` > 프로젝트 `.env`. 전역이 권위를 갖는 시크릿 저장소이고, 프로젝트 `.env`는 전역에 없는 키만 채웁니다 (전역 키를 덮지 못함, Hermes 2026-06-15). 동작 설정(`config.toml`)은 방향이 반대로, 프로젝트가 전역을 덮습니다. 실효값은 `geode config explain <KEY>`로 확인하세요.
 
 ### 2. Project Setup
 
@@ -75,7 +75,7 @@ chmod 600 ~/.geode/.env
 uv run geode init
 
 # 또는 수동으로
-cp .env.example .env       # project-local keys (non-empty만 override)
+cp .env.example .env       # 프로젝트 시크릿. 전역에 없는 키만 채움(전역이 권위)
 ```
 
 ### 3. Global CLI Install

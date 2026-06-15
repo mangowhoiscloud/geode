@@ -282,6 +282,39 @@ To run a campaign, start with the quick-start: [docs/self-improving/campaign-qui
 
 ---
 
+## Configuration
+
+Secrets live in `.env`, behavior lives in `config.toml`. The two never collide, because `.env` is secrets-only and `config.toml` is behavior-only, so each has a single precedence rule.
+
+- The global `~/.geode/.env` is the authoritative secret store. A project `./.env` fills only the keys it lacks and never shadows a global key. An `OPENAI_API_KEY` in `~/.geode/.env` wins even when a project `./.env` leaves it blank.
+- The project `./.geode/config.toml` overrides the global `~/.geode/config.toml`. Behavior is tuned per project.
+
+Every field rides one ladder. Higher wins:
+
+```
+1. os.environ                      shell exports (session-scoped)
+2. global  ~/.geode/.env           secrets: authoritative
+3. project ./.env                  fills only the keys global lacks
+4. project ./.geode/config.toml    behavior: project wins
+5. global  ~/.geode/config.toml
+6. built-in defaults
+```
+
+`.env` ranks the global file higher, `config.toml` ranks the project file higher. The asymmetry is deliberate: credentials have one home, behavior is tuned per project.
+
+Add or switch a credential:
+
+```bash
+geode setup                          # re-run the wizard (subscription OAuth or API key)
+/login openai                        # in a session: subscription OAuth
+/key openai sk-proj-...              # in a session: paste an API key
+echo 'OPENAI_API_KEY=sk-proj-...' >> ~/.geode/.env    # edit the authoritative file
+```
+
+When a change does not take effect, run `geode config explain <KEY>`. It prints every layer, marks the winner and any masked layers with file paths, and points at the exact line to edit. `geode about` shows the effective model. Full reference: [Configuration basics](https://mangowhoiscloud.github.io/geode/docs/config/basics).
+
+---
+
 ## Troubleshooting
 
 Run `geode doctor` first. It checks Python version, `geode` PATH, `~/.geode/.env`, Codex CLI OAuth, ProfileStore, the serve socket, and `~/.local/bin` PATH — and prints a concrete fix command for each failure. The expanders below cover the same ground in narrative form.
