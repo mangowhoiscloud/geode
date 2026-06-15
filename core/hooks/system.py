@@ -116,6 +116,10 @@ class HookEvent(Enum):
     RULE_CREATED = "rule_created"
     RULE_UPDATED = "rule_updated"
     RULE_DELETED = "rule_deleted"
+    # Human result feedback (rate/accept/reject_result tool handlers). Flows to
+    # RunLog via the wildcard subscriber so operator verdicts are persisted and
+    # surfaced in `geode history`, not dropped into an in-memory dict.
+    RESULT_FEEDBACK = "result_feedback"
 
     # Prompt Assembly (ADR-007) + Drift Detection (Karpathy P4)
     PROMPT_ASSEMBLED = "prompt_assembled"

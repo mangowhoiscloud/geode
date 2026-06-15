@@ -21,7 +21,7 @@ class TestHookEvent:
         # baseline lifecycle) + 1 PR-MAX-GEN
         # (SELF_IMPROVING_AUTO_TRIGGER_MAX_GENERATION_REACHED) +
         # 1 PR-NO-FALLBACK (ADAPTER_DISPATCH_ATTEMPT).
-        assert len(HookEvent) == 62  # PR-LOOP-PRUNE: HANDOFF_COMPLETED/FAILED deleted
+        assert len(HookEvent) == 63  # +RESULT_FEEDBACK (PR-PRE10-ROUND2)
 
     def test_event_values(self):
         assert HookEvent.SESSION_STARTED.value == "session_start"

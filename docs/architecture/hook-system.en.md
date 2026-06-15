@@ -37,7 +37,7 @@ The Hook System evolves beyond simple event logging through 4 stages: **Observe,
 ├─────────────────────────────────────────────────────────────────┤
 │  L1 OBSERVE    Record only, no state changes                    │
 │                                                                 │
-│  ✓ RunLog             P50  ALL 62 events → JSONL                │
+│  ✓ RunLog             P50  ALL 63 events → JSONL                │
 │  ✓ JournalHook        P60  END/ERROR/SUBAGENT → journal         │
 │  ✓ NotificationHook  P200  SUBAGENT_FAILED → Slack             │
 │  ✓ TableLoggers ×20+  P90  tool exec / llm / cost → struct log  │
@@ -112,7 +112,7 @@ graph TB
 
 ---
 
-## HookEvent Enum (62 events)
+## HookEvent Enum (63 events)
 
 | Category | Event | Source | Handler | Maturity |
 |---|---|---|---|---|
@@ -120,6 +120,7 @@ graph TB
 | | `POST_ANALYSIS` | (reserved) | — | — |
 | **Memory** | `MEMORY_SAVED` | (planned) | — | — |
 | | `RULE_CREATED/UPDATED/DELETED` | (planned) | — | — |
+| **Feedback** | `RESULT_FEEDBACK` | rate/accept/reject_result tools | RunLog | L1 |
 | **Prompt** | `PROMPT_ASSEMBLED` | PromptAssembler | RunLog | L1 |
 | | `PROMPT_DRIFT_DETECTED` | (reserved) | — | — |
 | **SubAgent** | `SUBAGENT_STARTED` | SubAgentManager | RunLog | L1 |
@@ -161,7 +162,7 @@ AgenticLoop turn boundary:
 
 | P | Handler Name | Subscribed Events | Registration Location | Maturity |
 |---|---|---|---|---|
-| **50** | `run_log_writer` | **All 62 events** | `bootstrap.build_hooks()` | L1 |
+| **50** | `run_log_writer` | **All 63 events** | `bootstrap.build_hooks()` | L1 |
 | **60** | `journal_subagent` | `SUBAGENT_COMPLETED` | `bootstrap.build_hooks()` | L1 |
 | **85** | `turn_auto_memory` | `TURN_COMPLETE` | `bootstrap.build_hooks()` | L2 |
 | **90** | `trigger_logger` | `TRIGGER_FIRED` | `scheduling.build_scheduling()` | L1 |
@@ -214,7 +215,7 @@ handler: my_hook.handler  # Python module path
 
 ---
 
-## Activity row schema + timeline mirror (62/62 typed)
+## Activity row schema + timeline mirror (63/63 typed)
 
 Every `trigger*()` call mirrors as one **typed Activity row** into the active
 `RunTranscript` (`core/observability/activity.py` + `activity_registry.py`,
@@ -223,9 +224,9 @@ openclaw's `z.discriminatedUnion("type")`, with `action` as the discriminator.
 
 | Item | Policy |
 |------|--------|
-| **Coverage** | All 62 events map to a concrete typed row (19 lifecycle + 43 K-group). `GenericActivityRow` is a *fail-soft fallback only*, never a routine destination |
-| **details schema** | 23 shared details models (one per family: `CognitivePhaseDetails`×6, `MutationDetails`×4, `AutoTriggerDetails`×6, ...), `frozen=True` + `extra="forbid"` |
-| **Centralization** | The 43 K-group rows are built from a single declarative `_TYPED_ROW_SPECS` table + one `_build_from_spec` builder (not 43 functions); details field names match emit payload keys → key-intersection pull |
+| **Coverage** | All 63 events map to a concrete typed row (19 lifecycle + 44 K-group). `GenericActivityRow` is a *fail-soft fallback only*, never a routine destination |
+| **details schema** | 24 shared details models (one per family: `CognitivePhaseDetails`×6, `MutationDetails`×4, `AutoTriggerDetails`×6, ...), `frozen=True` + `extra="forbid"` |
+| **Centralization** | The 44 K-group rows are built from a single declarative `_TYPED_ROW_SPECS` table + one `_build_from_spec` builder (not 44 functions); details field names match emit payload keys → key-intersection pull |
 | **Mirror parity** | Mirrors from all 4 trigger variants — `trigger(_async)` AND `trigger_with_result(_async)` / `trigger_interceptor(_async)` — so feedback/interceptor events (e.g. USER_INPUT_RECEIVED) also land in the timeline |
 | **schema_version** | Every row carries `schema_version: int`; bump on field add/rename/retype so JSONL re-readers branch on shape, not key presence |
 
