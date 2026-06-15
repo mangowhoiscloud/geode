@@ -327,6 +327,7 @@ def migrate_env_to_toml(
         return 0
 
     from core.config import settings
+    from core.config.env_io import is_placeholder
 
     seeded = 0
     for provider, key in (
@@ -334,8 +335,8 @@ def migrate_env_to_toml(
         ("openai", settings.openai_api_key),
         ("glm", settings.zai_api_key),
     ):
-        if not key:
-            continue
+        if not key or is_placeholder(key):
+            continue  # empty or a placeholder (sk-ant-...) is not a real key
         plan = default_plan_for_payg(provider, key)
         registry.add(plan)
         profile_name = f"{plan.id}:env"

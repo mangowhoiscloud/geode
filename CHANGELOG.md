@@ -45,6 +45,14 @@ functional change.
 
 ---
 
+## [0.99.219] - 2026-06-15
+
+### Fixed
+- **Placeholder env values no longer seed junk auth profiles** (PR-PRE10-HYGIENE; pre-1.0 punch-list, follow-up to PR-READINESS-OAUTH). `build_auth` (`core/wiring/container.py`) and `migrate_env_to_toml` (`core/auth/auth_toml.py`) seeded an API-key `AuthProfile` for any non-empty `settings.*_api_key`, skipping only empty values — so a stale `.env.example` placeholder (`ANTHROPIC_API_KEY=sk-ant-...`) created a real-looking profile that polluted the rotator and slipped past readiness (the gap PR-READINESS-OAUTH had to defend at the readiness layer). Both seed sites now skip placeholders. The rule is centralized as `core.config.env_io.is_placeholder` — previously a private `_is_placeholder` in `core/wiring/startup.py`, now the single SoT that readiness (`_has_any_llm_key` / `_has_available_profile`), `.env` auto-generation, and both seeders share (startup delegates via a lazy import that keeps its module pydantic-free). Guard: `tests/core/auth/test_auth_toml.py::test_migration_skips_placeholder_keys`.
+
+### Changed
+- **Config deprecation warnings now name a concrete removal version** (same PR). The `[self_improving_loop.petri.*]` and `[self_improving_loop.mutator]` migration `DeprecationWarning`s said "removed in a future release"; they now commit to **v1.1.0** (the first minor after the v1.0.0 stable), giving operators a real deadline to move to `[self_improving_loop.autoresearch.<role>]`. A 1.0 contract needs a stated deprecation horizon.
+
 ## [0.99.218] - 2026-06-15
 
 ### Fixed

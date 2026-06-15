@@ -91,12 +91,14 @@ def auto_generate_env(project_root: Path | None = None) -> bool:
 
 
 def _is_placeholder(value: str) -> bool:
-    """Check if a .env value is a placeholder (not a real credential)."""
-    # Exact ellipsis
-    if value == "...":
-        return True
-    # Patterns like sk-ant-..., sk-..., lsv2_pt_..., BSA..., etc.
-    return bool(value.endswith("..."))
+    """Shared placeholder rule (SoT: ``core.config.env_io.is_placeholder``).
+
+    Lazy import keeps this module free of the pydantic-settings load cost at
+    import time, matching the ``__getattr__`` settings deferral above.
+    """
+    from core.config.env_io import is_placeholder
+
+    return is_placeholder(value)
 
 
 def _has_any_llm_key() -> bool:
