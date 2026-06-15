@@ -338,14 +338,16 @@ def build_auth() -> tuple[ProfileStore, ProfileRotator, CooldownTracker]:
     # ``save_auth_toml`` then persisted BOTH the legacy and plan-bound
     # entries — a silent shadow-duplicate that the rotator counted
     # twice.
+    from core.config.env_io import is_placeholder
+
     _legacy_providers = {
         "anthropic": settings.anthropic_api_key,
         "openai": settings.openai_api_key,
         "glm": settings.zai_api_key,
     }
     for _prov, _key in _legacy_providers.items():
-        if not _key:
-            continue
+        if not _key or is_placeholder(_key):
+            continue  # empty or a placeholder (sk-ant-...) is not a real key
         if profile_store.list_by_provider(_prov):
             continue  # canonical -payg:env (or other) already covers this provider
         profile_store.add(

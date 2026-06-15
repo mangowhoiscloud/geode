@@ -11,7 +11,7 @@ import os
 import threading
 from typing import TYPE_CHECKING, Any
 
-from core.config import ANTHROPIC_FALLBACK_CHAIN, is_model_allowed
+from core.config import is_model_allowed
 from core.llm.fallback import (
     retry_with_backoff_generic,
     retry_with_backoff_generic_async,
@@ -317,8 +317,10 @@ def _on_retry_journal_emit(
 # (``RETRYABLE_ERRORS = (anthropic.RateLimitError, …)``), which forced
 # the anthropic SDK import at module load.
 
-# Fallback models
-FALLBACK_MODELS = ANTHROPIC_FALLBACK_CHAIN
+# H11-tail: the module-level FALLBACK_MODELS alias (a boot-frozen copy of
+# ANTHROPIC_FALLBACK_CHAIN, also re-exported to router/calls/streaming.py) was
+# replaced by function-local ``from core.config import ANTHROPIC_FALLBACK_CHAIN``
+# reads at each consumer so a routing.toml reload is seen without a restart.
 
 
 def _resolve_anthropic_key() -> str:
@@ -519,11 +521,12 @@ def retry_with_backoff(
     """
     import anthropic
 
+    from core.config import ANTHROPIC_FALLBACK_CHAIN  # H11-tail: live read
     from core.llm.fallback import MAX_RETRIES as _DEFAULT_MAX_RETRIES
 
     _max_retries = max_retries if max_retries is not None else _DEFAULT_MAX_RETRIES
 
-    candidates = [model] + [m for m in FALLBACK_MODELS if m != model]
+    candidates = [model] + [m for m in ANTHROPIC_FALLBACK_CHAIN if m != model]
     models_to_try = [m for m in candidates if is_model_allowed(m)]
     if not models_to_try:
         raise RuntimeError(f"All models blocked by policy: {candidates}")
@@ -561,11 +564,12 @@ async def retry_with_backoff_async(
     """Execute async fn with retry + exponential backoff + model fallback."""
     import anthropic
 
+    from core.config import ANTHROPIC_FALLBACK_CHAIN  # H11-tail: live read
     from core.llm.fallback import MAX_RETRIES as _DEFAULT_MAX_RETRIES
 
     _max_retries = max_retries if max_retries is not None else _DEFAULT_MAX_RETRIES
 
-    candidates = [model] + [m for m in FALLBACK_MODELS if m != model]
+    candidates = [model] + [m for m in ANTHROPIC_FALLBACK_CHAIN if m != model]
     models_to_try = [m for m in candidates if is_model_allowed(m)]
     if not models_to_try:
         raise RuntimeError(f"All models blocked by policy: {candidates}")
@@ -757,6 +761,8 @@ class ClaudeAgenticAdapter:
 
     @property
     def fallback_chain(self) -> list[str]:
+        from core.config import ANTHROPIC_FALLBACK_CHAIN  # H11-tail: live read
+
         return list(ANTHROPIC_FALLBACK_CHAIN)
 
     async def agentic_call(
@@ -826,6 +832,8 @@ class ClaudeAgenticAdapter:
         api_tools = apply_tool_search_defer(
             api_tools, enabled=getattr(_settings, "tool_search_defer", True)
         )
+
+        from core.config import ANTHROPIC_FALLBACK_CHAIN  # H11-tail: live read
 
         failover_models = [model] + [m for m in ANTHROPIC_FALLBACK_CHAIN if m != model]
 

@@ -14,7 +14,6 @@ import time
 from collections.abc import Callable
 from typing import Any
 
-from core.config import OPENAI_FALLBACK_CHAIN, OPENAI_PRIMARY
 from core.llm.fallback import retry_with_backoff_generic_async
 from core.llm.loop_affinity import LoopAffineClientCache
 from core.llm.token_tracker import LLMUsage, get_tracker
@@ -28,11 +27,10 @@ log = logging.getLogger(__name__)
 # provider — previously OpenAI/GLM passed module-local constants that pinned
 # them to ``3`` regardless of configuration.
 
-# Default OpenAI model — from config.py single source of truth
-DEFAULT_OPENAI_MODEL = OPENAI_PRIMARY
-
-# OpenAI fallback chain — from config.py single source of truth
-OPENAI_FALLBACK_MODELS = OPENAI_FALLBACK_CHAIN
+# H11-tail: DEFAULT_OPENAI_MODEL / OPENAI_FALLBACK_MODELS were boot-frozen
+# module aliases of OPENAI_PRIMARY / OPENAI_FALLBACK_CHAIN. Consumers now read
+# the live values from ``core.config`` via function-local imports so a
+# routing.toml reload is seen without a restart.
 
 
 _openai_client: Any = None  # openai.OpenAI | None — lazy import
@@ -131,7 +129,14 @@ class OpenAIAdapter:
     :meth:`agenerate_with_tools` orchestration is load-bearing.
     """
 
-    def __init__(self, default_model: str = DEFAULT_OPENAI_MODEL) -> None:
+    def __init__(self, default_model: str = "") -> None:
+        # H11-tail: resolve the empty default lazily so it tracks a live
+        # routing.toml reload. A frozen ``DEFAULT_OPENAI_MODEL`` default arg
+        # would pin the boot value into every instance built after a reload.
+        if not default_model:
+            from core.config import OPENAI_PRIMARY
+
+            default_model = OPENAI_PRIMARY
         self._default_model = default_model
 
     async def agenerate_with_tools(
@@ -238,10 +243,12 @@ class OpenAIAdapter:
         """Async retry with exponential backoff + model fallback."""
         import openai
 
+        from core.config import OPENAI_FALLBACK_CHAIN  # H11-tail: live read
+
         return await retry_with_backoff_generic_async(
             fn,
             model=model,
-            fallback_models=list(OPENAI_FALLBACK_MODELS),
+            fallback_models=list(OPENAI_FALLBACK_CHAIN),
             retryable_errors=_get_retryable_errors(),
             bad_request_error=openai.BadRequestError,
             billing_message=(

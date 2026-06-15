@@ -9,12 +9,12 @@ from __future__ import annotations
 import logging
 from typing import Any
 
-from core.config import (
-    ANTHROPIC_FALLBACK_CHAIN,
-    GLM_FALLBACK_CHAIN,
-    OPENAI_FALLBACK_CHAIN,
-    is_model_allowed,
-)
+from core.config import is_model_allowed
+
+# H11-tail: the per-provider fallback chains are read LIVE inside each dispatch
+# lambda (``__import__("core.config", ...).X``), not imported by value here, so
+# a routing.toml reload is reflected without a process restart. (The codex
+# entry already used this pattern; anthropic/openai/glm now match.)
 from core.hooks.dispatch import fire_hook
 from core.hooks.system import HookEvent
 from core.llm.fallback import retry_with_backoff_generic
@@ -105,7 +105,11 @@ def _anthropic_get_client() -> Any:
 _PROVIDER_DISPATCH: dict[str, dict[str, Any]] = {
     "anthropic": {
         "get_client": _anthropic_get_client,
-        "fallback_chain": lambda: list(ANTHROPIC_FALLBACK_CHAIN),
+        "fallback_chain": lambda: list(
+            __import__(
+                "core.config", fromlist=["ANTHROPIC_FALLBACK_CHAIN"]
+            ).ANTHROPIC_FALLBACK_CHAIN
+        ),
         "retryable_errors": _anthropic_retryable,
         "bad_request_error": _anthropic_bad_request,
     },
@@ -113,7 +117,9 @@ _PROVIDER_DISPATCH: dict[str, dict[str, Any]] = {
         "get_client": lambda: __import__(
             "core.llm.providers.openai", fromlist=["_get_openai_client"]
         )._get_openai_client(),
-        "fallback_chain": lambda: list(OPENAI_FALLBACK_CHAIN),
+        "fallback_chain": lambda: list(
+            __import__("core.config", fromlist=["OPENAI_FALLBACK_CHAIN"]).OPENAI_FALLBACK_CHAIN
+        ),
         "retryable_errors": _openai_retryable,
         "bad_request_error": _openai_bad_request,
     },
@@ -121,7 +127,9 @@ _PROVIDER_DISPATCH: dict[str, dict[str, Any]] = {
         "get_client": lambda: __import__(
             "core.llm.providers.glm", fromlist=["_get_glm_client"]
         )._get_glm_client(),
-        "fallback_chain": lambda: list(GLM_FALLBACK_CHAIN),
+        "fallback_chain": lambda: list(
+            __import__("core.config", fromlist=["GLM_FALLBACK_CHAIN"]).GLM_FALLBACK_CHAIN
+        ),
         "retryable_errors": _openai_retryable,  # GLM uses openai SDK
         "bad_request_error": _openai_bad_request,
     },
