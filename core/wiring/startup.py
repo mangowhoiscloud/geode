@@ -13,8 +13,9 @@ Public surface:
   * ``setup_project_memory`` / ``setup_user_profile`` — first-run scaffolding
 
 Detects environment readiness:
-  ANY provider key present → full mode (LLM calls enabled)
-  No provider key         → caller surfaces the wizard
+  ANY usable credential — raw key / Codex-CLI OAuth / stored profile
+                       → full mode (LLM enabled)
+  None                 → caller surfaces the wizard
 """
 
 from __future__ import annotations
@@ -45,9 +46,11 @@ def __getattr__(name: str) -> Any:
 def auto_generate_env(project_root: Path | None = None) -> bool:
     """Auto-generate .env from .env.example if .env is absent.
 
-    Copies .env.example to .env, replacing placeholder values
-    (like ``sk-ant-...`` or ``...``) with empty strings so that
-    the Settings loader does not treat them as real keys.
+    Copies .env.example to .env. A line whose value is empty or a
+    placeholder (``sk-ant-...``, ``...``) is emitted COMMENTED
+    (``# KEY=``) rather than as an active blank ``KEY=`` — an active blank
+    secret entry reads as "key present but empty" and can shadow the
+    authoritative global ``~/.geode/.env`` value. Real values are kept.
 
     Returns True if .env was generated, False otherwise.
     """
@@ -71,9 +74,11 @@ def auto_generate_env(project_root: Path | None = None) -> bool:
         # Split on first '='
         key, _, value = line.partition("=")
         value = value.strip()
-        # Replace placeholder values with empty string
-        if _is_placeholder(value):
-            lines.append(f"{key}=")
+        # An empty or placeholder value is not a real credential — emit it
+        # commented so the generated .env documents the available keys
+        # without an active blank entry that could shadow the global value.
+        if value == "" or _is_placeholder(value):
+            lines.append(f"# {key.strip()}=")
         else:
             lines.append(line)
 
@@ -105,6 +110,34 @@ def _has_any_llm_key() -> bool:
     return bool(settings.zai_api_key and not _is_placeholder(settings.zai_api_key))
 
 
+def _has_available_profile() -> bool:
+    """True if the ProfileStore holds any usable (``is_available``) credential.
+
+    Covers credential origins the raw-key and Codex-CLI probes miss — chiefly
+    GEODE-owned ``/login`` profiles (``openai-codex-geode``, ``anthropic-cli``,
+    ``glm`` …) hydrated from ``~/.geode/auth.toml``. Mirrors the dispatch
+    eligibility filter (``is_available``) so readiness and the actual call
+    path agree on what counts as usable.
+
+    Applies the same placeholder rule as ``_has_any_llm_key``: ``build_auth`` /
+    ``migrate_env_to_toml`` seed an API-key profile from a non-empty env value
+    without checking for placeholders, so a stale ``ANTHROPIC_API_KEY=sk-ant-...``
+    would otherwise yield an ``is_available`` profile that passes here while the
+    raw-key path correctly rejects it. OAuth access-token keys are real, so they
+    pass. Best-effort: ``ensure_profile_store`` self-builds, but any failure
+    (pre-hydration, IO) is treated as no signal.
+    """
+    try:
+        from core.wiring.container import ensure_profile_store
+
+        return any(
+            p.key and not _is_placeholder(p.key) for p in ensure_profile_store().list_available()
+        )
+    except Exception:
+        log.debug("ProfileStore readiness probe failed", exc_info=True)
+        return False
+
+
 # ---------------------------------------------------------------------------
 # Proactive subscription OAuth detection (v0.54.0)
 # ---------------------------------------------------------------------------
@@ -120,9 +153,12 @@ def detect_subscription_oauth() -> str | None:
     reusing the Claude Code OAuth token; ``core/lifecycle/container.py:271``
     documents the policy decision.
 
-    Returns the provider id (``"openai-codex"``) if a fresh, non-expired
-    credential is found and the matching profile is registered in the
-    ProfileStore. Returns ``None`` otherwise.
+    Returns the provider id (``"openai-codex"``) when a Codex CLI token is
+    present. This is expiry-blind: the Codex CLI keeps its own access token
+    refreshed, so an expired-looking cached token is still usable — and the
+    dispatch path (``_resolve_codex_token``) treats it the same way, so
+    readiness and the call path agree. Best-effort profile registration into
+    the ProfileStore follows. Returns ``None`` otherwise.
     """
     try:
         from core.auth.codex_cli_oauth import read_codex_cli_credentials
@@ -206,17 +242,29 @@ def check_readiness(project_root: Path | None = None) -> ReadinessReport:
     root = project_root or Path(".")
     report = ReadinessReport()
 
-    # 1. API Key check — any provider key suffices
+    # 1. Credential check — full mode is unblocked by ANY of three origins,
+    #    so an operator with no raw key in .env is never wrongly forced into
+    #    dry-run: (a) a raw provider key, (b) a Codex-CLI subscription OAuth
+    #    login (~/.codex/auth.json), (c) any usable profile in the
+    #    ProfileStore (GEODE-owned /login creds in ~/.geode/auth.toml). The
+    #    later probes run only when the cheaper checks fail (short-circuit),
+    #    keeping the raw-key path free of the OAuth probe's ProfileStore
+    #    side-effect and the profile-store build.
     has_key = _has_any_llm_key()
-    report.has_api_key = has_key
-    if has_key:
+    oauth_provider = detect_subscription_oauth() if not has_key else None
+    has_credential = has_key or oauth_provider is not None or _has_available_profile()
+    report.has_api_key = has_credential
+    if has_credential:
         report.capabilities.append(Capability(name="LLM Analysis", available=True))
     else:
         report.capabilities.append(
             Capability(
                 name="LLM Analysis",
                 available=False,
-                reason="No LLM API key set (Anthropic/OpenAI/ZhipuAI)",
+                reason=(
+                    "No LLM credential — set a key (Anthropic/OpenAI/ZhipuAI) "
+                    "or log in to a subscription"
+                ),
             )
         )
 
@@ -271,9 +319,9 @@ def check_readiness(project_root: Path | None = None) -> ReadinessReport:
     # 5. Always-available capabilities
     report.capabilities.append(Capability(name="Dry-Run Analysis", available=True))
 
-    # 5. Block if no LLM key at all
-    report.blocked = not has_key
-    report.force_dry_run = not has_key  # backward-compat
+    # 5. Block only when there is no usable credential at all (key or OAuth)
+    report.blocked = not has_credential
+    report.force_dry_run = not has_credential  # backward-compat
 
     return report
 
