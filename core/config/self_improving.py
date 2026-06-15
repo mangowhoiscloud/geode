@@ -664,7 +664,7 @@ class SelfImprovingLoopConfig(BaseModel):
                 "[self_improving_loop.petri.*] is deprecated; move audit "
                 "role bindings to [self_improving_loop.autoresearch.<role>] "
                 "(autoresearch is the control-layer SoT). The legacy "
-                "section will be removed in a future release.",
+                "section will be removed in v1.1.0 (the first minor after the v1.0.0 stable).",
                 DeprecationWarning,
                 stacklevel=2,
             )
@@ -677,7 +677,7 @@ class SelfImprovingLoopConfig(BaseModel):
                 "[self_improving_loop.mutator] is deprecated; move the "
                 "mutator binding to [self_improving_loop.autoresearch.mutator] "
                 "(autoresearch owns its own engineering LLM). The legacy "
-                "section will be removed in a future release.",
+                "section will be removed in v1.1.0 (the first minor after the v1.0.0 stable).",
                 DeprecationWarning,
                 stacklevel=2,
             )

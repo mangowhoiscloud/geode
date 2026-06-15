@@ -120,6 +120,28 @@ class TestMigrateEnvToToml:
             assert "glm-payg" not in ids
         path.unlink()
 
+    def test_migration_skips_placeholder_keys(self) -> None:
+        """PR-PRE10-HYGIENE — a placeholder env value (`sk-ant-...`) must not
+        seed a PAYG plan/profile; it is not a real credential (same rule the
+        readiness path applies via `core.config.env_io.is_placeholder`)."""
+        _reset_state()
+        from unittest.mock import patch
+
+        path = _fresh_path()
+        with patch("core.config.settings") as mock_settings:
+            mock_settings.anthropic_api_key = "sk-ant-..."  # placeholder
+            mock_settings.openai_api_key = "sk-proj-real"
+            mock_settings.zai_api_key = ""
+
+            seeded = migrate_env_to_toml(path=path)
+            assert seeded == 1  # only the real openai key
+
+            ids = {p.id for p in get_plan_registry().list_all()}
+            assert "openai-payg" in ids
+            assert "anthropic-payg" not in ids  # placeholder skipped
+            assert "glm-payg" not in ids  # empty skipped
+        path.unlink()
+
     def test_migration_is_idempotent(self) -> None:
         _reset_state()
         from unittest.mock import patch
