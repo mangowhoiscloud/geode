@@ -45,6 +45,14 @@ functional change.
 
 ---
 
+## [0.99.221] - 2026-06-15
+
+### Fixed
+- **HITL result-feedback tools now persist the operator's verdict instead of dropping it** (PR-PRE10-ROUND2; pre-1.0 punch-list #4, Codex-MCP-reviewed). `rate_result` / `accept_result` / `reject_result` (`core/cli/tool_handlers/hitl.py`) wrote the verdict to a closure-local dict (`_human_ratings` / `_result_feedback`) that nothing ever read. They now fire a new `HookEvent.RESULT_FEEDBACK`, which the wildcard RunLog subscriber persists to the session JSONL (surfaced by `geode history`). New `core/hooks/tool_hooks.py` (`set_tool_hooks` / `fire_tool_hook`) holds the shared HookSystem injection in `core.hooks` so cross-layer tool handlers — including `core.cli` — can fire without bootstrap importing the CLI layer (the Server-never-CLI import contract; a first cut that put the setter in `hitl.py` broke it, caught by `lint-imports`). `GeodeBootstrap` gained a `hook_system` field so `propagate_to_thread()` re-injects the ctx into daemon/IPC worker threads (feedback persists in serve mode, not just REPL). Full ActivityRow typed-coverage cascade: new `ResultFeedbackRow` + `ResultFeedbackDetails` + `_TypedRowSpec` + `TypedActivityRow` union member + `__all__`; HookEvent count 62→63 across tests + docs (GEODE.md, hook-system.md/.en.md, activity*.py). Guard: `tests/core/cli/test_hitl_feedback_persist.py`.
+
+### GAP Audit (punch-list #4)
+- Dropped (already resolved / mis-flagged): the sync `ApprovalWorkflow` API was already removed; `prospect` / `full_pipeline` are **live** plan templates (`core/orchestration/plan_mode.py`), not stale enum values. Only the result-feedback dead dict was a genuine remnant, now wired.
+
 ## [0.99.220] - 2026-06-15
 
 ### Fixed

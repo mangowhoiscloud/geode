@@ -29,6 +29,7 @@ class GeodeBootstrap:
     skill_registry: Any = None
     tool_handlers: dict[str, Any] = field(default_factory=dict)
     readiness: Any = None
+    hook_system: Any = None
 
     # Snapshot of ContextVars for thread propagation
     _context: contextvars.Context = field(default_factory=contextvars.copy_context)
@@ -46,6 +47,14 @@ class GeodeBootstrap:
 
         set_project_memory(ProjectMemory())
         set_org_memory(MonoLakeOrganizationMemory())
+
+        # PR-PRE10-ROUND2: re-inject the tool-handler HookSystem so ctx-fired
+        # tool hooks (HITL RESULT_FEEDBACK) persist from daemon/IPC threads,
+        # which don't inherit ContextVars from the main thread.
+        if self.hook_system is not None:
+            from core.hooks.tool_hooks import set_tool_hooks
+
+            set_tool_hooks(self.hook_system)
 
         if self.readiness is not None:
             from core.cli import _set_readiness

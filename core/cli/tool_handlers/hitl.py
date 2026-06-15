@@ -1,4 +1,11 @@
-"""HITL (Human-in-the-Loop) tool handlers: rate/accept/reject_result."""
+"""HITL (Human-in-the-Loop) tool handlers: rate/accept/reject_result.
+
+The feedback handlers persist the operator's verdict by firing
+``HookEvent.RESULT_FEEDBACK``, which the wildcard RunLog subscriber
+(``core/wiring/bootstrap.py``) writes to the session JSONL — surfaced by
+``geode history``. Pre-PR-PRE10-ROUND2 the verdict was written to a
+closure-local dict that nothing ever read.
+"""
 
 from __future__ import annotations
 
@@ -6,6 +13,8 @@ import logging
 from typing import Any
 
 from core.cli.tool_handlers.clarification import _clarify
+from core.hooks.system import HookEvent
+from core.hooks.tool_hooks import fire_tool_hook
 from core.ui.console import console
 
 log = logging.getLogger(__name__)
@@ -13,9 +22,6 @@ log = logging.getLogger(__name__)
 
 def _build_hitl_handlers() -> dict[str, Any]:
     """Build HITL feedback tool handlers."""
-
-    _human_ratings: dict[str, dict[str, Any]] = {}
-    _result_feedback: dict[str, str] = {}
 
     def handle_rate_result(**kwargs: Any) -> dict[str, Any]:
         subject = kwargs.get("subject") or kwargs.get("subject_id") or ""
@@ -25,16 +31,12 @@ def _build_hitl_handlers() -> dict[str, Any]:
         if not (1 <= rating <= 5):
             return _clarify("rate_result", ["rating"], "평점은 1-5 사이로 입력해주세요.")
         comment = kwargs.get("comment", "")
-        _human_ratings[subject] = {
-            "rating": rating,
-            "comment": comment,
-        }
-        console.print(f"  [success]✓ Rating saved for {subject}: {rating}/5[/success]")
-        log.info(
-            "HITL rating: %s = %d/5",
-            subject,
-            rating,
+        fire_tool_hook(
+            HookEvent.RESULT_FEEDBACK,
+            {"subject": subject, "verdict": "rated", "rating": rating, "comment": comment},
         )
+        console.print(f"  [success]✓ Rating saved for {subject}: {rating}/5[/success]")
+        log.info("HITL rating: %s = %d/5", subject, rating)
         return {
             "status": "ok",
             "action": "rate_result",
@@ -46,7 +48,7 @@ def _build_hitl_handlers() -> dict[str, Any]:
         subject = kwargs.get("subject") or kwargs.get("subject_id") or ""
         if not subject:
             return _clarify("accept_result", ["subject"], "어떤 결과를 수락할까요?")
-        _result_feedback[subject] = "accepted"
+        fire_tool_hook(HookEvent.RESULT_FEEDBACK, {"subject": subject, "verdict": "accepted"})
         console.print(f"  [success]✓ Result accepted: {subject}[/success]")
         log.info("HITL accept: %s", subject)
         return {
@@ -60,13 +62,12 @@ def _build_hitl_handlers() -> dict[str, Any]:
         if not subject:
             return _clarify("reject_result", ["subject"], "어떤 결과를 거부할까요?")
         reason = kwargs.get("reason", "")
-        _result_feedback[subject] = "rejected"
-        console.print(f"  [warning]✗ Result rejected: {subject}[/warning]")
-        log.info(
-            "HITL reject: %s (reason=%s)",
-            subject,
-            reason or "(none)",
+        fire_tool_hook(
+            HookEvent.RESULT_FEEDBACK,
+            {"subject": subject, "verdict": "rejected", "reason": reason},
         )
+        console.print(f"  [warning]✗ Result rejected: {subject}[/warning]")
+        log.info("HITL reject: %s (reason=%s)", subject, reason or "(none)")
         return {
             "status": "ok",
             "action": "reject_result",
