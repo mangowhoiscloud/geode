@@ -45,6 +45,20 @@ functional change.
 
 ---
 
+## [0.99.218] - 2026-06-15
+
+### Fixed
+- **Two dead sub-agent guardrail knobs wired to actually enforce** (PR-CONFIG-SLOP-SWEEP; operator-directed config/design slop sweep, Codex-MCP-reviewed). `max_total_subagents` (default 15) and `subagent_max_tokens` (default 32768) were each declared on `Settings` AND mapped into the `config.toml` cascade, but no runtime code read them — so an operator setting `[subagent] max_total` / `max_tokens` got silently ignored (the same "setting surface with no wired consumer" slop class as PR-HERMES-ENV-ALIGN's empty `.env` placeholders). Now `max_total_subagents` is enforced as a per-session cap in `SubAgentManager.adelegate` (a monotonic `_spawned_total` counter reserved under the records lock; overflow tasks get an explicit failed `SubResult` instead of silently spawning), and `subagent_max_tokens` is threaded via `WorkerRequest` into the spawned `AgenticLoop`'s `max_tokens` (was a hardcoded `32768`). `services.py` passes both from settings; the default `max_total` stays 15 (operator-approved ceiling).
+- **`config.toml` values now actually reach the worker spawn** (same PR, Codex review catch). `SubAgentManager._build_worker_request` built a *fresh* `Settings()` (env + defaults only — the config.toml overlay applies only to the reloaded singleton), so `[subagent] max_tokens` / `[model]` were silently dropped for every spawned worker; it now reads the singleton. Relatedly, `SharedServices` calls `reload_settings_from_disk()` **before** building the per-session `SubAgentManager` (was after), so the manager's caps (`max_subagent_depth` + `max_total_subagents`) initialize from the config.toml-applied singleton, not a stale pre-reload one.
+
+### Changed
+- **Worker `WorkerRequest.model` / `provider` defaults are now inherit-sentinels (`""`) instead of a frozen `claude-opus-4-6` / `anthropic` literal** (same PR). The production spawn always sets both explicitly; the empty sentinel keeps a directly-constructed request from pinning a now-stale model — `_run_agentic` resolves `request.model or settings.model` (+ `_resolve_provider` for the matching provider), mirroring the sibling `time_budget_s = 0.0 (= inherit)` convention.
+- **De-jargoned two user-facing help strings** (same PR): the `/model` reflection-role description ("Belief-update node (PR-3 C-2)" → "Reviews and refines the agent's reasoning after each tool batch") and `/audit-seeds` ("Seed-pipeline candidate generation (co-scientist 7-role)" → "Generate and score candidate evaluation seeds"). Internal design nomenclature was leaking into the model picker / `/help`.
+- **`learning_extract_model` free-tier footgun made visible** (same PR): the default `glm-4.7-flash` rides a limited-time free tier; the field description + `model_pricing.toml` comment now warn that the call bills at the standard GLM rate when the promo lapses, so cost-watchers can re-pin a known-priced model.
+
+### Removed
+- **Two dead `Settings` fields deleted** (same PR): `agentic_loop_time_budget` (real wall-clock budgeting uses `time_budget_s`) and `checkpoint_db` (vestigial), each removed together with its `config.toml` mapping. New guard `tests/core/config/test_no_dead_settings_fields.py` fails CI if any non-secret `Settings` field has zero consumers outside config/tests, so a future dead knob can't ship. Noted follow-up: `build_auth` / `migrate_env_to_toml` still seed API-key profiles from placeholder env values (rotator/auth hygiene, separate PR).
+
 ## [0.99.217] - 2026-06-15
 
 ### Fixed

@@ -48,8 +48,15 @@ class WorkerRequest:
     description: str = ""  # Prompt text
     args: dict[str, Any] = field(default_factory=dict)
     denied_tools: list[str] = field(default_factory=list)
-    model: str = "claude-opus-4-6"
-    provider: str = "anthropic"
+    # "" = inherit the parent's effective model (resolved from settings.model
+    # in ``_run_agentic``). The production spawn always sets these explicitly
+    # (sub_agent.py ``_build_worker_request``); the empty sentinel keeps a
+    # directly-constructed request from pinning a now-stale model literal —
+    # mirrors the ``time_budget_s = 0.0 (= inherit)`` convention below.
+    model: str = ""
+    provider: str = ""  # "" = derive from the resolved model
+    # spawned AgenticLoop max_tokens (from settings.subagent_max_tokens)
+    subagent_max_tokens: int = 32768
     # PR-CHECKPOINT-RESUME-TIMEBUDGET (2026-05-25, S6) — default raised
     # 120 → 600 to match SubAgentManager default (env-tunable via
     # ``GEODE_SUBAGENT_TIMEOUT_S``). Smoke 16 evolver hit 122s in
@@ -125,8 +132,9 @@ class WorkerRequest:
             description=data.get("description", ""),
             args=data.get("args", {}),
             denied_tools=data.get("denied_tools", []),
-            model=data.get("model", "claude-opus-4-6"),
-            provider=data.get("provider", "anthropic"),
+            model=data.get("model", ""),
+            provider=data.get("provider", ""),
+            subagent_max_tokens=data.get("subagent_max_tokens", 32768),
             timeout_s=data.get("timeout_s", 600.0),
             # v0.55.0 R5 — reasoning depth fields were declared on the
             # dataclass since v0.50.x but never deserialised, so every
@@ -394,13 +402,22 @@ def _run_agentic(request: WorkerRequest) -> WorkerResult:
     # the subprocess does not need its own AgentRegistry lookup.
     system_prompt_override: str | None = request.agent_system_prompt or None
 
+    # Resolve the inherit-sentinels: an empty model/provider (e.g. a
+    # directly-constructed WorkerRequest) falls back to the runtime's
+    # effective model instead of a frozen literal. Production spawns set
+    # both explicitly (sub_agent.py ``_build_worker_request``).
+    from core.config import _resolve_provider, settings
+
+    effective_model = request.model or settings.model
+    effective_provider = request.provider or _resolve_provider(effective_model)
+
     loop = AgenticLoop(
         conversation,
         executor,
         max_rounds=0,  # unlimited — controlled by timeout_s from parent
-        max_tokens=32768,
-        model=request.model,
-        provider=request.provider,
+        max_tokens=request.subagent_max_tokens,
+        model=effective_model,
+        provider=effective_provider,
         # v0.55.0 R5 — propagate reasoning depth + time budget into the
         # sub-agent's loop. Pre-fix every sub-agent ran at the
         # AgenticLoop defaults (effort="high", thinking_budget=0,
