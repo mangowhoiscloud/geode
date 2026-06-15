@@ -441,6 +441,7 @@ class SubAgentManager:
         skill_registry: Any | None = None,
         depth: int = 0,
         max_depth: int = 1,  # Depth=1 enforced (Claude Code pattern: sub-agents cannot recurse)
+        max_total_subagents: int = 15,  # session-wide cap on total sub-agents spawned
         # Sandbox hardening: tool scope restriction
         denied_tools: set[str] | None = None,
         time_budget_s: float = 0.0,
@@ -468,6 +469,11 @@ class SubAgentManager:
         self._skill_registry = skill_registry
         self._depth = depth
         self._max_depth = max_depth
+        self._max_total_subagents = max_total_subagents
+        # Monotonic per-session spawn counter, guarded by ``_records_lock``.
+        # SubAgentManager is built once per session (services.py
+        # ``_build_sub_agent_manager``), so this counts the session total.
+        self._spawned_total = 0
         # Sandbox hardening: filter denied tools from action_handlers
         self._denied_tools: set[str] = denied_tools or set()
         # Sandbox: additional working directories for sub-agent
@@ -525,6 +531,36 @@ class SubAgentManager:
         if not tasks:
             log.info("All tasks coalesced — nothing to execute")
             return []
+
+        # Session-wide total sub-agent cap (settings.max_total_subagents).
+        # Reserve under the records lock so concurrent adelegate calls in the
+        # same session cannot jointly overshoot the budget. Overflow tasks get
+        # an explicit failed SubResult rather than silently spawning.
+        cap_overflow: list[SubResult] = []
+        with self._records_lock:
+            remaining = self._max_total_subagents - self._spawned_total
+            accepted = tasks if remaining >= len(tasks) else tasks[: max(remaining, 0)]
+            self._spawned_total += len(accepted)
+        if len(accepted) < len(tasks):
+            rejected = tasks[len(accepted) :]
+            log.warning(
+                "Session sub-agent cap reached (%d/%d) — rejecting %d task(s)",
+                self._spawned_total,
+                self._max_total_subagents,
+                len(rejected),
+            )
+            cap_overflow = [
+                SubResult(
+                    task_id=t.task_id,
+                    description=t.description,
+                    success=False,
+                    error=f"Session sub-agent limit reached ({self._max_total_subagents})",
+                )
+                for t in rejected
+            ]
+        if not accepted:
+            return cap_overflow
+        tasks = accepted
 
         # Expand sandbox for sub-agent working directories
         added_dirs: list[Path] = []
@@ -685,7 +721,9 @@ class SubAgentManager:
             succeeded,
             len(results),
         )
-        return list(results)
+        # Append any tasks rejected by the session cap so the caller sees one
+        # SubResult per submitted task (spawned outcomes + cap rejections).
+        return list(results) + cap_overflow
 
     @property
     def hooks(self) -> HookSystem | None:
@@ -726,9 +764,12 @@ class SubAgentManager:
         The subprocess inherits API keys via env vars. Model config and
         denied tools are passed explicitly.
         """
-        from core.config import Settings, _resolve_provider
+        # Use the reloaded singleton (config.toml overlay is applied at
+        # session-create via reload_settings_from_disk) so [subagent] max_tokens
+        # and [model] actually reach the worker — a fresh ``Settings()`` sees
+        # env + defaults only and silently drops every config.toml value.
+        from core.config import _resolve_provider, settings
 
-        settings = Settings()
         denied = list(self._denied_tools | {"delegate_task"})
 
         # Adaptive effort based on task difficulty hint
@@ -809,6 +850,7 @@ class SubAgentManager:
             timeout_s=self._timeout_s,
             time_budget_s=self._time_budget_s,
             thinking_budget=settings.agentic_thinking_budget,
+            subagent_max_tokens=settings.subagent_max_tokens,
             effort=task_effort,
             agent_name=agent_name,
             agent_system_prompt=agent_system_prompt,

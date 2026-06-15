@@ -43,8 +43,12 @@ class TestWorkerRequest:
 
     def test_defaults(self) -> None:
         req = WorkerRequest.from_dict({"task_id": "t-002"})
-        assert req.model == "claude-opus-4-6"
-        assert req.provider == "anthropic"
+        # PR-CONFIG-SLOP-SWEEP — model/provider are inherit-sentinels ("")
+        # resolved to the runtime's effective model in ``_run_agentic``,
+        # not a frozen (and stale-prone) literal.
+        assert req.model == ""
+        assert req.provider == ""
+        assert req.subagent_max_tokens == 32768
         # PR-CHECKPOINT-RESUME-TIMEBUDGET (2026-05-25, S6) — default
         # wall-clock cap lifted 120s → 600s. Operator overrides via
         # GEODE_SUBAGENT_TIMEOUT_S env or per-request payload.
