@@ -23,9 +23,6 @@ from core.agent.tool_executor import (
     ToolCallProcessor,
     ToolExecutor,
 )
-from core.config import (
-    ANTHROPIC_PRIMARY,
-)
 from core.hooks import HookEvent, HookSystem
 from core.llm.agentic_response import AgenticResponse
 from core.llm.errors import BillingError, UserCancelledError
@@ -329,6 +326,8 @@ class AgenticLoop:
                 act_model = act_raw.strip() if isinstance(act_raw, str) else ""
             except Exception:
                 act_model = ""
+            from core.config import ANTHROPIC_PRIMARY  # H11-tail: live read
+
             self.model = act_model or ANTHROPIC_PRIMARY
         else:
             self.model = model

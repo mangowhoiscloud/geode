@@ -45,6 +45,11 @@ functional change.
 
 ---
 
+## [0.99.220] - 2026-06-15
+
+### Fixed
+- **Routing constants in the model-resolution call path are now read live, not boot-frozen (H11-tail)** (PR-PRE10-H11-TAIL; pre-1.0 punch-list, Codex-MCP-reviewed). `reload_routing_constants()` rebinds `core.config.{ANTHROPIC,OPENAI,CODEX,GLM}_*` in place on a `routing.toml` reload, and function-local `from core.config import X` reads re-resolve the live value — but several **module-level by-value** importers held boot-time copies, so an operator editing `~/.geode/routing.toml` mid-session got stale models until a restart. De-frozen across the call path: provider failover chains (`core/llm/providers/{anthropic,openai,glm}.py` + `provider_dispatch.py` lambdas now match the codex entry's live `__import__` pattern), the OpenAI default model (`OpenAIAdapter.__init__` resolves `OPENAI_PRIMARY` lazily), the streaming retry chain (`router/calls/streaming.py`), the AgenticLoop's no-`act_model` Anthropic fallback (`agent_loop.py`), and the sub-agent default model (`core/skills/agents.py` `AgentDefinition.model` uses a `default_factory`; the 3 built-in `_DEFAULT_AGENTS` specs drop their frozen `"model"` key so the factory fills it live). Dead `DEFAULT_*_MODEL` / `*_FALLBACK_MODELS` provider aliases (glm/codex/openai/anthropic, no consumers) were removed. Guards: `tests/core/llm/test_h11_constant_reload.py` (patch `core.config.*` → consumers see the new value); `test_failover.py` repointed to the live `core.config.ANTHROPIC_FALLBACK_CHAIN` SoT. **Scope note (per Codex review):** this de-freezes the *runtime model-resolution path*; one frozen site remains — `core/cli/commands/_state.py` `MODEL_PROFILES` (the `/model` picker label/id list, ~12 CLI consumers) — tracked as a separate follow-up (display + picker-id only, not the core resolution path).
+
 ## [0.99.219] - 2026-06-15
 
 ### Fixed

@@ -12,7 +12,6 @@ from collections.abc import AsyncIterator
 # cold-start path does not pull anthropic at module import.
 from core.hooks.system import HookEvent
 from core.llm.providers.anthropic import (
-    FALLBACK_MODELS,
     get_async_anthropic_client,
 )
 from core.llm.providers.anthropic import (
@@ -101,7 +100,9 @@ async def call_llm_streaming_async(
             )
 
     # For streaming, retry at connection level only
-    models_to_try = [target_model] + [m for m in FALLBACK_MODELS if m != target_model]
+    from core.config import ANTHROPIC_FALLBACK_CHAIN  # H11-tail: live read
+
+    models_to_try = [target_model] + [m for m in ANTHROPIC_FALLBACK_CHAIN if m != target_model]
     last_error: Exception | None = None
 
     for current_model in models_to_try:

@@ -12,8 +12,18 @@ from typing import Any
 
 from pydantic import BaseModel, Field
 
-from core.config import ANTHROPIC_SECONDARY
 from core.skills._frontmatter import parse_yaml_frontmatter
+
+
+def _default_agent_model() -> str:
+    """Live default sub-agent model. H11-tail: a function-local import re-reads
+    ``core.config.ANTHROPIC_SECONDARY`` each call, so a ``routing.toml`` reload
+    is reflected without a process restart. A module-level alias would freeze
+    at boot."""
+    from core.config import ANTHROPIC_SECONDARY
+
+    return ANTHROPIC_SECONDARY
+
 
 # ---------------------------------------------------------------------------
 # Models
@@ -34,7 +44,7 @@ class AgentDefinition(BaseModel):
     # the pre-CSP-1 behaviour for AgentDefinitions that still use the
     # flat ``tools:`` list.
     toolkit: str = ""
-    model: str = ANTHROPIC_SECONDARY
+    model: str = Field(default_factory=_default_agent_model)
 
     def to_system_message(self) -> str:
         """Format as a system message combining role and prompt."""
@@ -65,7 +75,6 @@ _DEFAULT_AGENTS: list[dict[str, Any]] = [
         ),
         "tools": [],
         "toolkit": "web_research",
-        "model": ANTHROPIC_SECONDARY,
     },
     {
         "name": "data_analyst",
@@ -77,7 +86,6 @@ _DEFAULT_AGENTS: list[dict[str, Any]] = [
         ),
         "tools": [],
         "toolkit": "data_analysis",
-        "model": ANTHROPIC_SECONDARY,
     },
     {
         "name": "web_researcher",
@@ -89,7 +97,6 @@ _DEFAULT_AGENTS: list[dict[str, Any]] = [
         ),
         "tools": [],
         "toolkit": "web_research",
-        "model": ANTHROPIC_SECONDARY,
     },
 ]
 
@@ -277,7 +284,10 @@ class SubagentLoader:
         else:
             tools = list(tools_raw)
 
-        model = metadata.get("model", ANTHROPIC_SECONDARY)
+        # ``get(key, default)`` preserves an explicit ``model: ""`` (which the
+        # worker treats as "inherit parent/settings"); the default is the LIVE
+        # value (H11-tail) — evaluated each call, only used when the key is absent.
+        model = metadata.get("model", _default_agent_model())
         # CSP-1 — optional ``toolkit:`` frontmatter (string). Empty when
         # the agent still uses the legacy flat ``tools:`` list.
         toolkit_raw = metadata.get("toolkit", "")
