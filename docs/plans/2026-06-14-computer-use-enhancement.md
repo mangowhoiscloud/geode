@@ -15,7 +15,7 @@
 | 사람-레벨 조작 | **있음** (위 액션 = 마우스 포인터+스크롤+입력) | 동상 |
 | Anthropic 배선 | **있음** — `_COMPUTER_USE_TOOL`(`computer_20251124`) API 주입, `is_computer_use_enabled()` 게이트, handler | `core/llm/providers/anthropic.py:717-720,725,819-820`, `core/config/_settings.py` `computer_use_enabled` |
 | `zoom` 액션 | **없음** — `computer_20251124`의 신규 액션 미구현 | harness 액션셋에 `screenshot/click/double_click/type/key/scroll/move/drag/wait`만(`grep "def "` 검증) |
-| OpenAI computer-use | **없음** — `openai.py`에 `computer`/`ComputerUse` 참조 0개(grep 검증). GA `{type:computer}` 미배선 | `openai.py` grep 0 hits |
+| OpenAI computer-use | **없음** — `openai.py`에 `computer`/`ComputerUse` 참조 0개(grep 검증). GA `{type:"computer"}` 미배선 | `openai.py` grep 0 hits |
 | Zhipu computer-use | **없음** — `glm.py`에 `computer` 참조 0개(grep 검증) | `glm.py` grep 0 hits |
 | `ComputerUseCapable` 프로토콜 | **없음** — Anthropic 전용. (cf. `WebSearchCapable` 패턴) | `core/llm/adapters/base.py` |
 | 실행 격리(샌드박스) | **없음** — pyautogui 로컬 호스트 직접 | — |
@@ -34,7 +34,7 @@
 | 툴 | `computer_20251124` (beta) | **GA: `{type:"computer"}`** / preview: `computer_use_preview` | ComputerRL/AutoGLM(오픈) + GLM-5V grounding |
 | 모델 | Opus 4.8/4.7/4.6, Sonnet 4.6 | **GA `gpt-5.5`** (preview=`computer-use-preview`) | AutoGLM-OS-9B·Phone·GLM-5V-Turbo |
 | 액션 전달 | tool_use.input.action (단일) | **GA=batched `actions[]` 배열** / preview=단일 `action` | bbox grounding |
-| 툴 파라미터 | `display_width_px`·`display_height_px`·`display_number`(X11) | `display_width`·`display_height`·environment(mac/linux/windows/ubuntu/browser) | — |
+| 툴 파라미터 | `display_width_px`·`display_height_px`·`display_number`(X11) | **GA `{type:"computer"}`=무파라미터(bare)**; preview `computer_use_preview`=`display_width`·`display_height`·environment(mac/linux/windows/ubuntu/browser) | — |
 | 안전 | beta header(아래 ⚠) | safety check 적용(computer tool) | self-host |
 
 > **ctx7 출처**: Anthropic=`/anthropics/anthropic-sdk-python` `beta_tool_computer_use_20251124_param.py`(3필드: display_width_px/height_px/display_number) + `anthropic_beta_param.py`(beta enum). OpenAI=`/websites/developers_openai_api` `guides/tools-computer-use`(GA `{type:"computer"}` on gpt-5.5, batched actions[]).
@@ -77,7 +77,7 @@
 - 가드: computer 주입 시 beta 헤더에 computer-use 문자열 존재.
 
 ### Phase C — OpenAI GA 배선 (P1, ctx7 확정) ✅ DONE (v0.99.223)
-- `core/llm/providers/openai.py`: Responses API **`{type:"computer"}`** 주입(GA `gpt-5.5` 게이트, preview `computer_use_preview` 회피), `ComputerUseCapable` 구현. `display_width/height` + environment.
+- Responses API **`{type:"computer"}`** 주입(GA `gpt-5.5` 게이트, preview `computer_use_preview` 회피), `ComputerUseCapable` 구현. **GA 툴은 bare `{type:"computer"}`** — `display_width/height`·environment는 preview 전용이라 미포함(구현 시 확정, `core/llm/adapters/_openai_common.py:523-539`).
 - **GA batched `actions[]`**: computer_call이 액션 배열을 담음 → 핸들러가 배열 순회 실행(마지막 screenshot 반환). 액션 매핑(click/double_click/drag/scroll/move/type/keypress/wait/screenshot → harness).
 - safety check 흐름(computer tool 대상) 반영.
 - ctx7 출처(developers_openai_api guides/tools-computer-use) docstring 인용. backend 실제 수용은 live-test 게이트.
@@ -88,17 +88,21 @@
 - ctx7/z.ai docs 확인; self-host라 live 검증은 운영자 환경 의존 → `unverified` 게이트.
 - 가드: bbox→픽셀 변환 단위 테스트.
 
-### Phase E — 실행환경 추상화: 호스트 기본 + Docker+Xvfb 옵인 (P1)
-- `GEODE_COMPUTER_USE_ENV` (`host`(기본) | `sandbox`) config. `host`=현 pyautogui 직접. `sandbox`=Docker+Xvfb(:99)+window manager 컨테이너에서 pyautogui, optional x11vnc/Xpra 관측.
-- harness가 env에 따라 디스플레이 타깃 분기(host display vs `:99`). 컨테이너 spec(Dockerfile)+기동 헬퍼.
-- 패키지: 호스트=pyautogui(현행). 샌드박스=Docker + Xvfb + (fluxbox/x11vnc). 무거우니 옵인 + lazy.
-- 가드: env 분기 단위 테스트(컨테이너 미기동 시 host fallback). 실제 컨테이너 E2E는 운영자 환경(live).
+### Phase E — 실행환경 추상화: 호스트 기본 + Docker+Xvfb 샌드박스 옵인 (P1) — 모델 정정
+> **설계 정정**: 리서치 [`docs/research/computer-use-sandbox-frontier.md`](../research/computer-use-sandbox-frontier.md)(2026-06-17)로 모델 변경. frontier 합의는 **in-container shim**(모델 c)이고, 기존 "host가 `DISPLAY=:99` 설정"(모델 d)은 **격리 0 + macOS 불가**(pyautogui가 Quartz API 사용 — `core/tools/computer_use.py:17` — Quartz는 X11 `DISPLAY` 미사용이라 `:99` 무력, 추론)라 **폐기**. 아무 frontier도 (d)를 안 씀.
+- `GEODE_COMPUTER_USE_ENV` (`host`(기본) | `sandbox`) config. `host`=현 pyautogui 직접(현행, `DANGEROUS_TOOLS` HITL 게이트 유지).
+- `sandbox`=Docker(Linux) 이미지(Xvfb + 경량 WM + harness를 래핑한 작은 HTTP/WS shim)를 띄우고, **host harness는 thin client**가 되어 각 `aexecute(action)`을 컨테이너 `/cmd`에 POST → base64 screenshot 수신(E2B/trycua 모델). host는 디스플레이를 안 만지므로(HTTP 호출만) macOS host도 동작.
+- 스크린샷 모양 불변 → Phase A image-block 직렬화(`_serialize_computer_result`) 그대로 동작. 관측용 noVNC는 별도 채널(선택).
+- 구현 시 `core/llm/adapters/_anthropic_common.py:140-141` 주석(틀린 host-display 모델)도 in-container shim으로 정정.
+- **fail-open 금지**: `env=sandbox`인데 컨테이너 미기동/도달불가면 **fail-loud 에러** — host 데스크탑으로 silent fallback 절대 금지(운영자가 격리를 opt-in했는데 실제 데스크탑을 조작하면 fail-open 보안 구멍). host 제어는 명시적 `env=host`일 때만.
+- 가드: shim 클라이언트 단위(액션→POST 매핑; 컨테이너 미기동 시 host fallback이 아니라 raise 검증). 실제 컨테이너 격리 E2E는 운영자 환경 — `unverified — live test required`.
 
-### Phase F — run_bash 커맨드 샌드박스 (codex 수렴, P2)
-- `run_bash` 실행을 OS 샌드박스로 감싸기: macOS=`sandbox-exec`+`.sb`(deny default, cwd+/tmp writable, network off), Linux=`bwrap`(있으면)+seccomp. 패키지: macOS=OS 바이너리(crate 불필요), Linux=`pyseccomp`/`bwrap` 바이너리.
-- `GEODE_BASH_SANDBOX` (`off`(기본, 호환) | `on`) — 옵인, codex `AskForApproval` 정렬.
-- ctx7 불필요(OS 기제), 단 macOS seatbelt 프로필은 codex `.sbpl`(`seatbelt_base_policy.sbpl`) 참조.
-- 가드: 샌드박스 래퍼가 cwd 밖 쓰기/네트워크 차단(단위), 호스트 fallback.
+### Phase F — run_bash 커맨드 샌드박스 (codex 수렴, P2) — 구체화
+> **구체화**: 리서치 [`docs/research/computer-use-sandbox-frontier.md`](../research/computer-use-sandbox-frontier.md). GEODE는 Python(Rust 0) → codex Rust crate(landlock/seccompiler) 불가 → **OS 바이너리 shell-out**(codex가 `/usr/bin/sandbox-exec`/`bwrap` 부르는 형태). 삽입점 = `core/tools/bash_tool.py` `aexecute`(현 `create_subprocess_shell(command, cwd=...)` + regex `validate` deny-list) — `command`를 래핑.
+- macOS=`sandbox-exec -p <sbpl> -D WRITABLE_ROOT_0=<cwd> -- /bin/sh -c <cmd>`: codex `seatbelt_base_policy.sbpl` 본뜬 `(deny default)` + cwd(+TMPDIR) writable + network 규칙 없음(=차단). `/usr/bin/sandbox-exec` 하드코딩(PATH 주입 방어).
+- Linux=`bwrap --unshare-user --unshare-pid --unshare-net --die-with-parent --ro-bind / / --bind <cwd> <cwd> --proc /proc --dev /dev -- /bin/sh -c <cmd>`. seccomp syscall-deny(ptrace/io_uring/socket)는 Phase F+1(Python `libseccomp` ctypes 필요 — `--unshare-net`이 이미 network 차단).
+- `GEODE_BASH_SANDBOX` (`off`(기본, 호환) | `on` | `strict`) — 옵인. 바이너리 런타임 확인(`shutil.which("bwrap")`/`os.path.exists("/usr/bin/sandbox-exec")`), 부재 시 non-strict=fail-loud 경고+unsandboxed, strict=raise. `supports=True` 하드코딩 금지(codex도 bwrap 부재 시 warn+fallback).
+- 가드: argv/프로필 **builder** 단위(생성 argv에 `(deny default)`·cwd writable·`--unshare-net`·network-allow 부재 assert) + knob 게이팅 + 바이너리부재 분기(monkeypatch `which`). 실제 격리(cwd밖 쓰기/network 차단)는 live(macOS/Linux+userns) — `unverified — live test required`.
 
 ---
 
@@ -128,7 +132,7 @@
 | Phase | 상태 |
 |---|---|
 | A — production 경로 부활 + ComputerUseCapable 프로토콜 | ✅ DONE (v0.99.208) |
-| C — OpenAI GA {type:computer} 배선 (+harness batched actions[]) | ✅ DONE (v0.99.223) |
+| C — OpenAI GA {type:"computer"} 배선 (+harness batched actions[]) | ✅ DONE (v0.99.223) |
 | E — 호스트 기본 + Docker+Xvfb 샌드박스 옵인 | PENDING |
 | F — run_bash 커맨드 샌드박스(codex 수렴) | PENDING |
 | D — Zhipu GLM-5V grounding 배선 (self-host) | PENDING |
