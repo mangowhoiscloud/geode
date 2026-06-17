@@ -8,9 +8,16 @@ Both OpenAI live adapters (``OpenAIPaygAdapter`` backend="platform",
 on that builder, the ComputerUseCapable contract, and the ``computer_call`` /
 ``computer_call_output`` request+response round-trip.
 
-ctx7 confirms the SDK/API CONTRACT (``/websites/developers_openai_api``
-guides/tools-computer-use); the Codex/OpenAI backend's ACCEPTANCE of GEODE's
-request is NOT live-verified (CANNOT §4d).
+Backend split (2026-06-17 live E2E, operator-authorized):
+
+- ``backend="platform"`` (PAYG) — ctx7 confirms the Platform API CONTRACT
+  (``/websites/developers_openai_api`` guides/tools-computer-use). No PAYG
+  credentials were available to live-test, so backend ACCEPTANCE stays
+  ``unverified — live test required`` (CANNOT §4d); the tool IS injected.
+- ``backend="codex"`` (ChatGPT subscription) — live-REJECTED with
+  ``400 Unsupported tool type: computer``. The GA docs are Platform-only, so
+  the codex adapter advertises NO computer-use (``supports_computer_use=False``,
+  ``computer_tool_param`` → ``None``) and the live builder never injects on it.
 """
 
 from __future__ import annotations
@@ -85,8 +92,16 @@ class TestLivePathInjection:
     def test_idempotent_no_double_inject(self) -> None:
         kwargs: dict[str, Any] = {"tools": [common.openai_computer_tool_param()]}
         with patch(_ENABLED, return_value=True):
-            common._maybe_inject_openai_computer_use(kwargs, model=_GA_MODEL)
+            common._maybe_inject_openai_computer_use(kwargs, model=_GA_MODEL, backend="platform")
         assert len(_computer_tools(kwargs)) == 1
+
+    def test_codex_backend_never_injected(self) -> None:
+        """The ChatGPT-subscription Codex backend proven-rejects the GA tool
+        (``400 Unsupported tool type: computer``, 2026-06-17 live E2E), so the
+        builder must never inject it even on a GA model with the opt-in on."""
+        with patch(_ENABLED, return_value=True):
+            kwargs = _build(_req(), backend="codex")
+        assert _computer_tools(kwargs) == []
 
     def test_dated_ga_model_id_resolves_to_ga(self) -> None:
         """A dated id suffix (``gpt-5.5-20260601``) is stripped before the GA
@@ -97,16 +112,33 @@ class TestLivePathInjection:
 
 
 class TestComputerUseCapableContract:
-    def test_live_openai_adapters_are_computer_use_capable(self) -> None:
-        from core.llm.adapters.codex_oauth import CodexOAuthAdapter
+    def test_platform_adapter_advertises_computer_use(self) -> None:
+        """The PAYG/platform adapter conforms to ComputerUseCapable AND
+        advertises support (``supports_computer_use=True``) — the GA tool is
+        documented for the Platform API (acceptance still ``unverified``)."""
         from core.llm.adapters.openai_payg import OpenAIPaygAdapter
 
-        assert isinstance(OpenAIPaygAdapter(), ComputerUseCapable)
-        assert isinstance(CodexOAuthAdapter(), ComputerUseCapable)
+        adapter = OpenAIPaygAdapter()
+        assert isinstance(adapter, ComputerUseCapable)
+        assert adapter.supports_computer_use is True
+
+    def test_codex_adapter_advertises_no_computer_use(self) -> None:
+        """The codex (subscription) adapter is structurally ComputerUseCapable
+        but advertises NO support: ``supports_computer_use=False`` and its
+        enumerable ``computer_tool_param`` returns ``None`` — the backend
+        proven-rejects the GA tool (2026-06-17 live E2E)."""
+        from core.llm.adapters.codex_oauth import CodexOAuthAdapter
+
+        adapter = CodexOAuthAdapter()
+        assert adapter.supports_computer_use is False
+        assert (
+            adapter.computer_tool_param(display_width=TARGET_WIDTH, display_height=TARGET_HEIGHT)
+            is None
+        )
 
     def test_adapter_param_matches_injected_param(self) -> None:
-        """The enumerable contract (``computer_tool_param``) must return the
-        exact payload the live builder injects — no drift."""
+        """The platform enumerable contract (``computer_tool_param``) must return
+        the exact payload the live builder injects — no drift."""
         from core.llm.adapters.openai_payg import OpenAIPaygAdapter
 
         adapter = OpenAIPaygAdapter()
@@ -117,7 +149,10 @@ class TestComputerUseCapableContract:
             injected = _computer_tools(_build(_req()))[0]
         assert from_method == injected
 
-    def test_codex_adapter_param_matches_injected(self) -> None:
+    def test_codex_param_none_matches_excluded_live_path(self) -> None:
+        """Codex enumerable contract (``None``) mirrors the live path, which
+        injects nothing on ``backend="codex"`` — the no-drift invariant in the
+        rejected direction."""
         from core.llm.adapters.codex_oauth import CodexOAuthAdapter
 
         adapter = CodexOAuthAdapter()
@@ -125,8 +160,9 @@ class TestComputerUseCapableContract:
             display_width=TARGET_WIDTH, display_height=TARGET_HEIGHT
         )
         with patch(_ENABLED, return_value=True):
-            injected = _computer_tools(_build(_req(), backend="codex"))[0]
-        assert from_method == injected
+            injected = _computer_tools(_build(_req(), backend="codex"))
+        assert from_method is None
+        assert injected == []
 
 
 class _FakeUsage:
