@@ -37,6 +37,182 @@ class TestHandlerActionForwarding:
         mock_exec.assert_awaited_once_with("click", x=10, y=20)
 
 
+class TestOpenAIBatchedActions:
+    """OpenAI Responses GA ``computer_call`` delivers a BATCHED ``actions[]``
+    array (the adapter maps it onto ``input.actions``). The handler must run
+    each action in order, return the FINAL screenshot, and report per-action
+    errors honestly. The single-``action`` Anthropic path must still work.
+    """
+
+    _ENABLED = "core.llm.providers.anthropic.is_computer_use_enabled"
+
+    def test_batched_actions_run_in_order_final_screenshot(self) -> None:
+        from core.cli.tool_handlers.single_tool import _build_computer_use_handler
+
+        calls: list[tuple[str, dict]] = []
+
+        async def fake_exec(self: object, action: str, **params: object) -> dict:
+            calls.append((action, dict(params)))
+            return {"result": "success", "action": action, "screenshot": f"shot-{action}"}
+
+        with (
+            patch(self._ENABLED, return_value=True),
+            patch.object(ComputerUseHarness, "aexecute", new=fake_exec),
+        ):
+            handler = _build_computer_use_handler()["computer"]
+            result = asyncio.run(
+                handler(
+                    actions=[
+                        {"type": "click", "x": 10, "y": 20, "button": "left"},
+                        {"type": "type", "text": "hi"},
+                        {"type": "screenshot"},
+                    ]
+                )
+            )
+
+        assert [name for name, _ in calls] == ["click", "type", "screenshot"]
+        assert calls[0][1] == {"x": 10, "y": 20, "button": "left"}
+        assert calls[1][1] == {"text": "hi"}
+        # FINAL screenshot wins (the screen state the model sees next turn).
+        assert result["screenshot"] == "shot-screenshot"
+        assert "errors" not in result
+
+    def test_keypress_list_joined_scroll_and_drag_remapped(self) -> None:
+        from core.cli.tool_handlers.single_tool import _openai_action_to_harness
+
+        # keypress: GA ``keys`` list → ``+``-joined combo string.
+        name, params = _openai_action_to_harness({"type": "keypress", "keys": ["ctrl", "c"]})
+        assert name == "keypress"
+        assert params == {"keys": "ctrl+c"}
+
+        # scroll: GA ``scroll_x``/``scroll_y`` → direction + amount.
+        name, params = _openai_action_to_harness(
+            {"type": "scroll", "x": 5, "y": 6, "scroll_x": 0, "scroll_y": 120}
+        )
+        assert name == "scroll"
+        assert params["direction"] == "down"
+        assert params["amount"] == 120
+
+        # drag: GA ``path`` (array of points) → start/end coords.
+        name, params = _openai_action_to_harness(
+            {"type": "drag", "path": [{"x": 1, "y": 2}, {"x": 30, "y": 40}]}
+        )
+        assert name == "drag"
+        assert params == {"start_x": 1, "start_y": 2, "end_x": 30, "end_y": 40}
+
+    def test_batched_actions_collect_errors_honestly(self) -> None:
+        from core.cli.tool_handlers.single_tool import _build_computer_use_handler
+
+        async def fake_exec(self: object, action: str, **params: object) -> dict:
+            if action == "double_click":
+                return {"error": "no display", "action": action}
+            return {"result": "success", "action": action, "screenshot": "ok"}
+
+        with (
+            patch(self._ENABLED, return_value=True),
+            patch.object(ComputerUseHarness, "aexecute", new=fake_exec),
+        ):
+            handler = _build_computer_use_handler()["computer"]
+            result = asyncio.run(
+                handler(
+                    actions=[
+                        {"type": "double_click", "x": 1, "y": 2},
+                        {"type": "screenshot"},
+                    ]
+                )
+            )
+
+        assert result["errors"] == [{"action": "double_click", "error": "no display"}]
+
+    def test_final_action_error_still_yields_screenshot(self) -> None:
+        """Regression (Codex HIGH): when the FINAL (or only) batched action errors
+        with no screenshot, the handler must still capture one — else the pending
+        ``computer_call`` gets no serializable ``computer_call_output`` and the
+        loop stalls. The error is still surfaced honestly."""
+        from core.cli.tool_handlers.single_tool import _build_computer_use_handler
+
+        async def fake_exec(self: object, action: str, **params: object) -> dict:
+            if action == "screenshot":
+                return {"result": "success", "action": action, "screenshot": "recovered"}
+            return {"error": "no display", "action": action}  # no screenshot key
+
+        with (
+            patch(self._ENABLED, return_value=True),
+            patch.object(ComputerUseHarness, "aexecute", new=fake_exec),
+        ):
+            handler = _build_computer_use_handler()["computer"]
+            result = asyncio.run(handler(actions=[{"type": "click", "x": 1, "y": 2}]))
+
+        assert result["errors"] == [{"action": "click", "error": "no display"}]
+        assert result["screenshot"] == "recovered"
+
+    def test_unmapped_action_reaches_harness_for_honest_error(self) -> None:
+        """An unknown GA action type must reach the harness (which returns an
+        honest ``error`` dict) — never a silent skip."""
+        from core.cli.tool_handlers.single_tool import _openai_action_to_harness
+
+        name, params = _openai_action_to_harness({"type": "teleport", "x": 1})
+        assert name == "teleport"
+        assert params == {}
+        # The harness rejects an unknown action name with an error (not a crash).
+        result = asyncio.run(ComputerUseHarness().aexecute(name, **params))
+        assert "error" in result
+
+    def test_empty_batch_falls_back_to_screenshot(self) -> None:
+        from core.cli.tool_handlers.single_tool import _build_computer_use_handler
+
+        async def fake_exec(self: object, action: str, **params: object) -> dict:
+            return {"result": "success", "action": action, "screenshot": "current"}
+
+        with (
+            patch(self._ENABLED, return_value=True),
+            patch.object(ComputerUseHarness, "aexecute", new=fake_exec),
+        ):
+            handler = _build_computer_use_handler()["computer"]
+            result = asyncio.run(handler(actions=[]))
+
+        assert result["screenshot"] == "current"
+
+    def test_pending_safety_checks_echoed_as_acknowledged(self) -> None:
+        from core.cli.tool_handlers.single_tool import _build_computer_use_handler
+
+        async def fake_exec(self: object, action: str, **params: object) -> dict:
+            return {"result": "success", "action": action, "screenshot": "s"}
+
+        checks = [{"id": "sc_1", "code": "malicious_instructions"}]
+        with (
+            patch(self._ENABLED, return_value=True),
+            patch.object(ComputerUseHarness, "aexecute", new=fake_exec),
+        ):
+            handler = _build_computer_use_handler()["computer"]
+            result = asyncio.run(
+                handler(
+                    actions=[{"type": "screenshot"}],
+                    pending_safety_checks=checks,
+                )
+            )
+
+        assert result["acknowledged_safety_checks"] == checks
+
+    def test_single_action_anthropic_path_preserved(self) -> None:
+        """No ``actions`` list → the legacy single-``action`` path runs."""
+        from core.cli.tool_handlers.single_tool import _build_computer_use_handler
+
+        with (
+            patch(self._ENABLED, return_value=True),
+            patch.object(
+                ComputerUseHarness,
+                "aexecute",
+                new=AsyncMock(return_value={"result": "success"}),
+            ) as mock_exec,
+        ):
+            handler = _build_computer_use_handler()["computer"]
+            result = asyncio.run(handler(action="click", x=10, y=20))
+
+        assert result["result"] == "success"
+        mock_exec.assert_awaited_once_with("click", x=10, y=20)
+
+
 class TestComputerResultImageBlock:
     """The screenshot must reach the model as an IMAGE content block, not base64
     text — otherwise the model is blind on the next turn AND the token guard /

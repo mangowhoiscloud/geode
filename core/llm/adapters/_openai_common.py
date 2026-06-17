@@ -26,6 +26,7 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
@@ -499,6 +500,78 @@ def build_codex_input(req: AdapterCallRequest) -> list[dict[str, Any]]:
 
 
 # ---------------------------------------------------------------------------
+# Computer-use tool (OpenAI Responses API, GA `{type: "computer"}`)
+# ---------------------------------------------------------------------------
+# OpenAI computer-use went GA on the Responses API with model ``gpt-5.5`` and
+# the BARE request tool shape ``{type: "computer"}``. The GA tool takes NO
+# params — display geometry is inferred from the screenshots the agent returns.
+# ``display_width`` / ``display_height`` / ``environment`` belong to the
+# deprecated PREVIEW tool (``{type: "computer_use_preview"}`` on the
+# ``computer-use-preview`` model); the SDK keeps them as distinct union members
+# (``ComputerToolParam`` vs ``ComputerUsePreviewToolParam``). We emit GA only.
+#
+# ref: ctx7 ``/websites/developers_openai_api`` guides/tools-computer-use
+# (verified 2026-06-17). ctx7 confirms the SDK/API CONTRACT; the Codex /
+# OpenAI backend's actual ACCEPTANCE of GEODE's request is NOT live-verified.
+#
+# GA gate: only models in this frozenset get the tool. A non-GA OpenAI model
+# (e.g. gpt-5.4) must never be offered ``{type: "computer"}`` — the backend
+# rejects it, and the preview shape is deliberately out of scope.
+_OPENAI_COMPUTER_USE_GA_MODELS: frozenset[str] = frozenset({"gpt-5.5"})
+
+
+def openai_computer_tool_param() -> dict[str, Any]:
+    """OpenAI Responses GA computer-use tool definition (ComputerUseCapable).
+
+    Returns the BARE GA tool ``{"type": "computer"}``. The GA tool takes no
+    parameters — the display geometry is inferred from the screenshots the
+    agent sends back, NOT declared on the tool. ``display_width`` /
+    ``display_height`` / ``environment`` belong to the deprecated PREVIEW tool
+    (``{"type": "computer_use_preview"}``); emitting them on the GA tool is
+    rejected. The SDK reflects this split — ``ComputerToolParam`` (GA) vs
+    ``ComputerUsePreviewToolParam`` (preview) are distinct union members.
+
+    # ref: ctx7 /websites/developers_openai_api guides/tools-computer-use
+    #      (GA migration table: tools=[{type:"computer"}], dims/env preview-only)
+    #      + openai-python ComputerToolParam
+    # backend acceptance unverified — live test required (CANNOT §4d)
+    """
+    return {"type": "computer"}
+
+
+def _maybe_inject_openai_computer_use(kwargs: dict[str, Any], *, model: str) -> None:
+    """Inject the OpenAI GA computer-use tool on the LIVE Responses path.
+
+    Mirrors ``_anthropic_common._maybe_inject_computer_use`` (Phase A) for the
+    OpenAI Responses API (Phase C). Returns early unless computer-use is enabled
+    (``core.llm.providers.anthropic.is_computer_use_enabled`` — the provider-
+    agnostic opt-in + pyautogui guard, shared so both providers gate on one
+    SoT) AND ``model`` is GA-capable (``_OPENAI_COMPUTER_USE_GA_MODELS``). The
+    tool is appended to ``kwargs["tools"]`` (creating the list when the request
+    carried no registry tools — injection is not gated on ``req.tools``).
+
+    Idempotent: dedup by ``t.get("type") == "computer"`` so re-entrancy never
+    doubles it. The OpenAI Responses API has no per-tool beta header (unlike
+    Anthropic's ``anthropic-beta`` token), so none is set.
+
+    # backend acceptance unverified — live test required (CANNOT §4d)
+    """
+    from core.llm.providers.anthropic import is_computer_use_enabled
+
+    if not is_computer_use_enabled():
+        return
+    base = re.sub(r"-\d{8}$", "", model)  # strip a dated id suffix, if any
+    if base not in _OPENAI_COMPUTER_USE_GA_MODELS:
+        # Non-GA OpenAI model — the GA ``{type: "computer"}`` tool would be
+        # rejected, and the preview shape is out of scope. Never inject.
+        return
+    tools = list(kwargs.get("tools") or [])
+    if not any(isinstance(t, dict) and t.get("type") == "computer" for t in tools):
+        tools.append(openai_computer_tool_param())
+        kwargs["tools"] = tools
+
+
+# ---------------------------------------------------------------------------
 # Chat Completions per-message conversion
 # ---------------------------------------------------------------------------
 
@@ -629,14 +702,35 @@ def _convert_assistant_msg_to_responses(
             if text_parts:
                 _emit_text_item()
                 text_parts = []
-            items.append(
-                {
-                    "type": "function_call",
+            if block.get("name") == "computer":
+                # GA computer-use replay: the prior assistant turn's
+                # ``computer_call`` MUST be re-emitted as ``computer_call`` (NOT
+                # ``function_call``) so it pairs with the next-turn
+                # ``computer_call_output`` by ``call_id``. Replaying it as a
+                # function_call leaves the computer_call_output unpaired (the
+                # half-wired failure Phase A fixed for Anthropic). The stored
+                # ``input`` dict carries ``actions[]`` (+ optional
+                # ``pending_safety_checks``) from ``_normalize_computer_call``.
+                # backend acceptance unverified — live test required (CANNOT §4d)
+                cinput = block.get("input")
+                cinput = cinput if isinstance(cinput, dict) else {}
+                computer_call: dict[str, Any] = {
+                    "type": "computer_call",
                     "call_id": block.get("id", ""),
-                    "name": block.get("name", ""),
-                    "arguments": json.dumps(block.get("input", {}), ensure_ascii=False),
+                    "actions": cinput.get("actions", []),
                 }
-            )
+                if cinput.get("pending_safety_checks"):
+                    computer_call["pending_safety_checks"] = cinput["pending_safety_checks"]
+                items.append(computer_call)
+            else:
+                items.append(
+                    {
+                        "type": "function_call",
+                        "call_id": block.get("id", ""),
+                        "name": block.get("name", ""),
+                        "arguments": json.dumps(block.get("input", {}), ensure_ascii=False),
+                    }
+                )
     if text_parts:
         _emit_text_item()
     if items:
@@ -647,12 +741,73 @@ def _convert_assistant_msg_to_responses(
     return [fallback]
 
 
+def _maybe_computer_call_output(block: dict[str, Any]) -> dict[str, Any] | None:
+    """If a ``tool_result`` block carries a computer-use screenshot, return the
+    OpenAI Responses GA ``computer_call_output`` item; otherwise ``None``.
+
+    The computer harness is the ONLY tool whose ``tool_result.content`` is a
+    content-block LIST holding a base64 ``image`` block
+    (``core.agent.tool_executor.processor._serialize_computer_result``), so that
+    shape is a reliable, name-free signal at INPUT-build time (the tool name is
+    not carried on the ``tool_result`` block). Ordinary tools keep their
+    ``function_call_output`` shape.
+
+    Per the GA contract the output object is ``{"type": "computer_screenshot",
+    "image_url": <url>}``. The harness encodes JPEG, so the base64 data is
+    wrapped as a ``data:image/jpeg;base64,...`` data URL for ``image_url``. Any
+    safety checks acknowledged on the originating ``tool_result`` (carried via
+    the meta text block as ``acknowledged_safety_checks``) are echoed back so
+    the backend's ``pending_safety_checks`` are cleared.
+
+    # ref: ctx7 /websites/developers_openai_api guides/tools-computer-use
+    # backend acceptance unverified — live test required (CANNOT §4d)
+    """
+    raw = block.get("content")
+    if not isinstance(raw, list):
+        return None
+    image_data: str | None = None
+    media_type = "image/jpeg"  # harness encodes JPEG (computer_use.screenshot)
+    acknowledged: Any = None
+    for part in raw:
+        if not isinstance(part, dict):
+            continue
+        if part.get("type") == "image":
+            source = part.get("source")
+            if isinstance(source, dict) and source.get("type") == "base64" and source.get("data"):
+                image_data = str(source["data"])
+                media_type = str(source.get("media_type") or media_type)
+        elif part.get("type") == "text":
+            # The meta text block is JSON of the non-screenshot harness fields;
+            # surface any acknowledged safety checks the agent echoed back.
+            try:
+                meta = json.loads(part.get("text") or "{}")
+            except (TypeError, ValueError, json.JSONDecodeError):
+                meta = {}
+            if isinstance(meta, dict) and meta.get("acknowledged_safety_checks"):
+                acknowledged = meta["acknowledged_safety_checks"]
+    if image_data is None:
+        return None
+    output_item: dict[str, Any] = {
+        "type": "computer_call_output",
+        "call_id": block.get("tool_use_id", ""),
+        "output": {
+            "type": "computer_screenshot",
+            "image_url": f"data:{media_type};base64,{image_data}",
+        },
+    }
+    if acknowledged:
+        output_item["acknowledged_safety_checks"] = acknowledged
+    return output_item
+
+
 def _convert_user_msg_to_responses(content: Any) -> list[dict[str, Any]]:
     """Anthropic user content → Responses API typed items.
 
     ``tool_result`` blocks become ``{"type": "function_call_output",
-    "call_id", "output"}`` items; text blocks aggregate into a follow-up
-    ``{"role": "user", "content": ...}`` entry.
+    "call_id", "output"}`` items — EXCEPT a computer-use screenshot result,
+    which becomes a ``{"type": "computer_call_output", ...}`` item carrying a
+    ``computer_screenshot`` (see :func:`_maybe_computer_call_output`). Text
+    blocks aggregate into a follow-up ``{"role": "user", "content": ...}`` entry.
     """
     if isinstance(content, str):
         return [{"role": "user", "content": content}]
@@ -666,6 +821,10 @@ def _convert_user_msg_to_responses(content: Any) -> list[dict[str, Any]]:
             continue
         btype = block.get("type")
         if btype == "tool_result":
+            computer_output = _maybe_computer_call_output(block)
+            if computer_output is not None:
+                items.append(computer_output)
+                continue
             raw = block.get("content", "")
             output = raw if isinstance(raw, str) else json.dumps(raw, ensure_ascii=False)
             items.append(
@@ -823,6 +982,22 @@ def translate_codex_response(
                     "input": _attr_or_key(item, "arguments") or "{}",
                 }
             )
+        elif itype == "computer_call":
+            # OpenAI Responses GA computer-use (Phase C). The GA ``computer_call``
+            # carries a BATCHED ``actions[]`` array (the preview used a single
+            # ``action`` object) correlated by ``call_id`` — the next-turn
+            # ``computer_call_output`` MUST reference this same ``call_id`` (the
+            # ``id`` is server-internal, unstable under ``store=False``; same
+            # constraint as ``function_call``). We map it onto the uniform
+            # GEODE tool-call shape for the local ``computer`` tool: ``input`` is
+            # a DICT (``translation.py`` passes dict inputs straight through to
+            # the handler's kwargs) carrying ``actions`` (a list, even if the
+            # backend ever sends a single ``action`` we wrap it) plus any
+            # ``pending_safety_checks`` so the handler can iterate and the
+            # next-turn output can acknowledge them.
+            # ref: ctx7 /websites/developers_openai_api guides/tools-computer-use
+            # backend acceptance unverified — live test required (CANNOT §4d)
+            tool_uses.append(_normalize_computer_call(item))
         elif itype == "reasoning":
             entry: dict[str, Any] = {"type": "reasoning"}
             enc = _attr_or_key(item, "encrypted_content")
@@ -936,6 +1111,66 @@ def _normalize_summary_list(summary: Any) -> list[dict[str, Any]]:
         kind = getattr(item, "type", "summary_text") or "summary_text"
         out.append({"type": str(kind), "text": str(text)})
     return out
+
+
+def _json_safe(value: Any) -> Any:
+    """Coerce an OpenAI SDK object (or nested list/dict) to JSON-safe
+    primitives so a parsed item survives the IPC / SQLite session mirror
+    downstream (same hazard the reasoning ``Summary`` normalisation guards).
+
+    Pydantic v2 objects expose ``model_dump(mode="json")``; lists/dicts are
+    recursed; everything else passes through unchanged.
+    """
+    if isinstance(value, dict):
+        return {k: _json_safe(v) for k, v in value.items()}
+    if isinstance(value, (list, tuple)):
+        return [_json_safe(v) for v in value]
+    dump = getattr(value, "model_dump", None)
+    if callable(dump):
+        for kwargs in ({"mode": "json"}, {}):
+            try:
+                return _json_safe(dict(dump(**kwargs)))
+            except Exception as exc:
+                log.debug("%s.model_dump(%r) failed: %s", type(value).__name__, kwargs, exc)
+    return value
+
+
+def _normalize_computer_call(item: Any) -> dict[str, Any]:
+    """OpenAI Responses GA ``computer_call`` typed item → uniform GEODE
+    tool-call dict for the local ``computer`` tool.
+
+    The GA ``computer_call`` carries ``call_id`` + a BATCHED ``actions[]``
+    array (the preview used a single ``action`` object) + optional
+    ``pending_safety_checks``. ``input`` is emitted as a DICT (``translation.py``
+    passes dict tool inputs straight through to the handler kwargs) so the
+    handler receives ``{"actions": [...], "pending_safety_checks": [...]}`` and
+    can iterate the batch + acknowledge the safety checks in the next-turn
+    ``computer_call_output``. A lone ``action`` (defensive — should not occur on
+    GA) is wrapped into a single-element ``actions`` list so the handler's batch
+    path is the only code path.
+
+    SDK objects are coerced to JSON-safe primitives (``_json_safe``) so the
+    payload survives the session mirror / IPC downstream.
+
+    # ref: ctx7 /websites/developers_openai_api guides/tools-computer-use
+    # backend acceptance unverified — live test required (CANNOT §4d)
+    """
+    actions = _attr_or_key(item, "actions")
+    if actions is None:
+        # Defensive: a single ``action`` (preview shape / partial SDK) → wrap.
+        single = _attr_or_key(item, "action")
+        actions = [single] if single is not None else []
+    if not isinstance(actions, (list, tuple)):
+        actions = [actions]
+    tool_input: dict[str, Any] = {"actions": _json_safe(list(actions))}
+    safety = _attr_or_key(item, "pending_safety_checks")
+    if safety:
+        tool_input["pending_safety_checks"] = _json_safe(safety)
+    return {
+        "id": _attr_or_key(item, "call_id") or _attr_or_key(item, "id"),
+        "name": "computer",
+        "input": tool_input,
+    }
 
 
 def _apply_openai_tool_search_defer(
@@ -1091,6 +1326,10 @@ def build_responses_kwargs(
         )
         kwargs["tool_choice"] = translate_responses_tool_choice(req.tool_choice)
         kwargs["parallel_tool_calls"] = True
+    # Computer-use (Phase C) — injected AFTER the tools assembly so the GA
+    # ``{type: "computer"}`` tool reaches the model even when ``req.tools`` is
+    # empty (it creates the list). Gated on the opt-in + a GA-capable model.
+    _maybe_inject_openai_computer_use(kwargs, model=req.model)
     if spec.reasoning_effort_values is not None:
         # Reasoning-model branch — encrypted reasoning passthrough +
         # reasoning effort. Temperature is dropped per spec.
@@ -1222,6 +1461,7 @@ __all__ = [
     "build_async_openai_client",
     "build_codex_input",
     "build_messages",
+    "openai_computer_tool_param",
     "translate_chat_response",
     "translate_codex_response",
     "translate_tool",
