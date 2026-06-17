@@ -28,8 +28,8 @@
 |------|------|------|
 | P0 | `geode prompt dump` (모델x표면 매트릭스, --measure 실측, 중복 태그 경고) + 구조 가드 5종 | 본 PR |
 | P1 | 루브릭 8항으로 덤프 산출물+개별 표면 채점 -> slop 카탈로그(file:line, 심각도) | 다음 |
-| P2 | 일괄 개선: (a) 어셈블 코히어런스 (b) router.md+AGENTIC_SUFFIX 재작성 (c) 도구 설명 60종 트리거 패스(tool_search 검색 인덱스 직결) (d) 하드코딩 리터럴 5곳 (e) 시드 에이전트 페르소나 8종 | P1 결과로 범위 확정 |
-| P3 | 해시 re-pin + 어셈블 구조 가드 확장 + 전후 토큰 실측 비교 + wrapper sections는 self-improving baseline 재측정으로 행동 검증 | P2 후 |
+| P2 | 일괄 개선: (a) 어셈블 코히어런스 (b) router.md+AGENTIC_SUFFIX 재작성 (c) 도구 설명 60종 트리거 패스(tool_search 검색 인덱스 직결) (d) 하드코딩 리터럴 5곳 (e) 시드 에이전트 페르소나 8종 | (c)=P2-c done(v0.99.214). **(b)=P2-b: 루브릭 감사 결과 router.md/AGENTIC_SUFFIX 이미 규율적 → 무리한 재작성 안 함(런타임 프롬프트 고blast+최소주의). 의미보존 미세정돈 1건만 적용(near-empty `### Forbidden tool calls` 스텁→matrix intro fold), v0.99.228** |
+| P3 | 해시 re-pin + 어셈블 구조 가드 확장 + 전후 토큰 실측 비교 + wrapper sections는 self-improving baseline 재측정으로 행동 검증 | **DONE(v0.99.228): AGENTIC_SUFFIX 해시 re-pin + 미배선 드리프트 가드 배선(주석의 "CI verifies"를 사실로)+토큰 char-budget ratchet(`test_prompt_integrity.py`). baseline 전체 재측정(near-saturation 비용)은 라이브 1-call 동작 스모크로 대체(conversational→text, 0 spurious tool).** |
 
 ## 측정 기준 (Q3)
 

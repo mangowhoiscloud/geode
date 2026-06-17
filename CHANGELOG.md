@@ -45,6 +45,11 @@ functional change.
 
 ---
 
+## [0.99.228] - 2026-06-18
+
+### Fixed
+- **Prompt drift guard wired into CI + token-budget ratchet (prompt-refactor P3); router.md tightening (P2-b)** (PR-PROMPT-INTEGRITY-GUARD). `core/llm/prompts/__init__.py` carried `_PINNED_HASHES` with the comment "CI test verifies computed hashes match these pins" — but **no test enforced it** (an unbacked guard: an edited template would silently diverge from its pin). New `tests/core/llm/test_prompt_integrity.py` pins it: `test_pinned_hashes_match_current_prompts` (drift → must re-pin), `test_pin_set_matches_computed_set` (no stale/unpinned prompt), and `test_authored_prompt_within_char_budget` (the authored `ROUTER_SYSTEM` + `AGENTIC_SUFFIX` stays under a 12,000-char ceiling, measured 10,961 — a ratchet against prompt bloat that inflates every agent call). **P2-b audit** of `router.md`/`AGENTIC_SUFFIX` against the Fable-5 rubric found them already largely disciplined; the one defensible, semantics-preserving tightening — folding the near-empty `### Forbidden tool calls` subsection (a header for one cross-referencing line) into the Tool-Selection-Matrix intro — was applied (the rule "never call a tool absent from the tool list" is preserved verbatim-equivalent), `AGENTIC_SUFFIX` hash re-pinned `74a2b7e3` → `b9edd056`. Behaviour-preserving: a live Anthropic call on the edited prompt answered a conversational query in text with zero spurious tool calls. A wholesale prompt rewrite was deliberately NOT done (high blast radius on the runtime prompt + no concrete cataloged slop = change-for-change).
+
 ## [0.99.227] - 2026-06-18
 
 ### Added
