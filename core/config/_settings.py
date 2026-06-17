@@ -409,11 +409,24 @@ class Settings(BaseSettings):
             raise ValueError(f"agentic_effort must be one of {sorted(AGENTIC_EFFORTS)}, got {v!r}")
         return v
 
+    @field_validator("bash_sandbox")
+    @classmethod
+    def _validate_bash_sandbox(cls, v: str) -> str:
+        normalized = str(v or "").strip().lower()
+        if normalized not in {"off", "on", "strict"}:
+            raise ValueError(f"bash_sandbox must be 'off', 'on', or 'strict', got {v!r}")
+        return normalized
+
     # Cost guard — session-level cost limit (0 = no limit)
     cost_limit_usd: float = 0.0  # fires COST_WARNING at 80%, COST_LIMIT_EXCEEDED at 100%
 
     # Computer Use — desktop automation (requires pyautogui)
     computer_use_enabled: bool = True  # default on; pyautogui import guard handles missing dep
+
+    # run_bash command sandbox (Phase F) — "off" (default, compat) | "on" | "strict".
+    # "on": wrap commands in the OS sandbox (macOS sandbox-exec / Linux bwrap) when
+    # the binary exists, else warn + run unsandboxed. "strict": fail if unavailable.
+    bash_sandbox: str = "off"
 
     # Context Compaction — overflow prevention
     compact_keep_recent: int = 10  # messages to preserve during compaction/prune
