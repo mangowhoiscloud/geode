@@ -511,8 +511,10 @@ def build_codex_input(req: AdapterCallRequest) -> list[dict[str, Any]]:
 # (``ComputerToolParam`` vs ``ComputerUsePreviewToolParam``). We emit GA only.
 #
 # ref: ctx7 ``/websites/developers_openai_api`` guides/tools-computer-use
-# (verified 2026-06-17). ctx7 confirms the SDK/API CONTRACT; the Codex /
-# OpenAI backend's actual ACCEPTANCE of GEODE's request is NOT live-verified.
+# (verified 2026-06-17). ctx7 confirms the SDK/API CONTRACT; backend ACCEPTANCE
+# was then live-verified per-backend (2026-06-17 operator-authorized E2E): the
+# OpenAI Platform (PAYG) backend ACCEPTS GEODE's request (full round-trip), while
+# the ChatGPT-subscription Codex backend REJECTS it (400) and is excluded.
 #
 # GA gate: only models in this frozenset get the tool. A non-GA OpenAI model
 # (e.g. gpt-5.4) must never be offered ``{type: "computer"}`` — the backend
@@ -534,7 +536,7 @@ def openai_computer_tool_param() -> dict[str, Any]:
     # ref: ctx7 /websites/developers_openai_api guides/tools-computer-use
     #      (GA migration table: tools=[{type:"computer"}], dims/env preview-only)
     #      + openai-python ComputerToolParam
-    # backend acceptance unverified — live test required (CANNOT §4d)
+    # backend acceptance: platform live-verified 2026-06-17 (codex rejects)
     """
     return {"type": "computer"}
 
@@ -558,10 +560,12 @@ def _maybe_inject_openai_computer_use(kwargs: dict[str, Any], *, model: str, bac
       computer``. The ctx7 GA docs describe the OpenAI *Platform* API, not the
       Codex subscription backend (same ambiguity class as PR-NO-FALLBACK
       #1839's web_search). NEVER inject — proven reject.
-    - ``backend="platform"`` — the documented GA surface. No PAYG credentials
-      were available to live-test, so backend acceptance stays
-      ``unverified — live test required`` (CANNOT §4d), but the tool IS
-      injected because ctx7 confirms the Platform API contract.
+    - ``backend="platform"`` — the documented GA surface, now **live-verified**
+      (2026-06-17, operator-authorized): the OpenAI Platform (PAYG) backend
+      ACCEPTS ``{type:"computer"}`` on gpt-5.5, the model emits a
+      ``computer_call``, and a full screenshot round-trip completes (gpt-5.5
+      read real on-screen pixels back from the ``computer_call_output``). ctx7
+      confirms the contract; the live test confirms backend acceptance. INJECT.
 
     Idempotent: dedup by ``t.get("type") == "computer"`` so re-entrancy never
     doubles it. The OpenAI Responses API has no per-tool beta header (unlike
@@ -727,7 +731,7 @@ def _convert_assistant_msg_to_responses(
                 # half-wired failure Phase A fixed for Anthropic). The stored
                 # ``input`` dict carries ``actions[]`` (+ optional
                 # ``pending_safety_checks``) from ``_normalize_computer_call``.
-                # backend acceptance unverified — live test required (CANNOT §4d)
+                # backend acceptance: platform live-verified 2026-06-17 (codex rejects)
                 cinput = block.get("input")
                 cinput = cinput if isinstance(cinput, dict) else {}
                 computer_call: dict[str, Any] = {
@@ -776,7 +780,7 @@ def _maybe_computer_call_output(block: dict[str, Any]) -> dict[str, Any] | None:
     the backend's ``pending_safety_checks`` are cleared.
 
     # ref: ctx7 /websites/developers_openai_api guides/tools-computer-use
-    # backend acceptance unverified — live test required (CANNOT §4d)
+    # backend acceptance: platform live-verified 2026-06-17 (codex rejects)
     """
     raw = block.get("content")
     if not isinstance(raw, list):
@@ -1012,7 +1016,7 @@ def translate_codex_response(
             # ``pending_safety_checks`` so the handler can iterate and the
             # next-turn output can acknowledge them.
             # ref: ctx7 /websites/developers_openai_api guides/tools-computer-use
-            # backend acceptance unverified — live test required (CANNOT §4d)
+            # backend acceptance: platform live-verified 2026-06-17 (codex rejects)
             tool_uses.append(_normalize_computer_call(item))
         elif itype == "reasoning":
             entry: dict[str, Any] = {"type": "reasoning"}
@@ -1169,7 +1173,7 @@ def _normalize_computer_call(item: Any) -> dict[str, Any]:
     payload survives the session mirror / IPC downstream.
 
     # ref: ctx7 /websites/developers_openai_api guides/tools-computer-use
-    # backend acceptance unverified — live test required (CANNOT §4d)
+    # backend acceptance: platform live-verified 2026-06-17 (codex rejects)
     """
     actions = _attr_or_key(item, "actions")
     if actions is None:
