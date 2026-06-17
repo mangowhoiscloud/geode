@@ -28,6 +28,7 @@ from typing import Any
 from core.llm.adapters._openai_common import (
     build_async_codex_client,
     build_responses_kwargs,
+    openai_computer_tool_param,
     translate_codex_response,
 )
 from core.llm.adapters.base import (
@@ -85,12 +86,36 @@ class CodexOAuthAdapter:
     # actually exposes the tool.
     supports_web_search: bool = True
     supports_text_completion: bool = True
+    # ComputerUseCapable — the GA ``{type: "computer"}`` tool is injected on the
+    # live Responses path (``_openai_common._maybe_inject_openai_computer_use``)
+    # for GA-capable models only. The Codex subscription backend's acceptance of
+    # the computer tool is NOT live-verified (the web_search live test above does
+    # NOT generalise to the computer tool).
+    # backend acceptance unverified — live test required (CANNOT §4d)
+    supports_computer_use: bool = True
     _last_error: Exception | None = field(default=None, init=False, repr=False)
     # PR-LOOP-POLLUTION-FIX (2026-06-12) — one client per owning event loop
     # (see core/llm/loop_affinity.py).
     _clients: LoopAffineClientCache = field(
         default_factory=lambda: LoopAffineClientCache("codex-oauth"), init=False, repr=False
     )
+
+    def computer_tool_param(
+        self, *, display_width: int, display_height: int
+    ) -> dict[str, Any] | None:
+        """ComputerUseCapable — OpenAI Responses GA ``{type: "computer"}`` param.
+
+        Delegates to the shared builder so this enumerable contract returns the
+        exact param the live request path injects (no drift). The GA tool is
+        bare: ``display_width`` / ``display_height`` are part of the protocol
+        contract (Anthropic uses them) but the GA shape carries no dims — the
+        geometry is inferred from the screenshots — so they are accepted and
+        ignored here.
+
+        # backend acceptance unverified — live test required (CANNOT §4d)
+        """
+        del display_width, display_height  # GA {type:"computer"} is bare
+        return openai_computer_tool_param()
 
     def _get_client(self) -> Any:
         from core.llm.providers.codex import _resolve_codex_token
