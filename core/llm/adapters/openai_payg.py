@@ -68,7 +68,7 @@ class OpenAIPaygAdapter:
     # ComputerUseCapable — the GA ``{type: "computer"}`` tool is injected on the
     # live Responses path (``_openai_common._maybe_inject_openai_computer_use``)
     # for GA-capable models only.
-    # backend acceptance unverified — live test required (CANNOT §4d)
+    # backend acceptance: platform live-verified 2026-06-17 (gpt-5.5 round-trip)
     supports_computer_use: bool = True
     _last_error: Exception | None = field(default=None, init=False, repr=False)
     # PR-LOOP-POLLUTION-FIX (2026-06-12) — one client per owning event loop
@@ -89,7 +89,7 @@ class OpenAIPaygAdapter:
         geometry is inferred from the screenshots — so they are accepted and
         ignored here.
 
-        # backend acceptance unverified — live test required (CANNOT §4d)
+        # backend acceptance: platform live-verified 2026-06-17 (gpt-5.5 round-trip)
         """
         del display_width, display_height  # GA {type:"computer"} is bare
         return openai_computer_tool_param()

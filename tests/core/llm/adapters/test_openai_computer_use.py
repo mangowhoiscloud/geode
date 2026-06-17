@@ -11,9 +11,11 @@ on that builder, the ComputerUseCapable contract, and the ``computer_call`` /
 Backend split (2026-06-17 live E2E, operator-authorized):
 
 - ``backend="platform"`` (PAYG) — ctx7 confirms the Platform API CONTRACT
-  (``/websites/developers_openai_api`` guides/tools-computer-use). No PAYG
-  credentials were available to live-test, so backend ACCEPTANCE stays
-  ``unverified — live test required`` (CANNOT §4d); the tool IS injected.
+  (``/websites/developers_openai_api`` guides/tools-computer-use) AND a
+  2026-06-17 operator-authorized live E2E confirmed backend ACCEPTANCE: the
+  Platform backend accepts ``{type:"computer"}`` on gpt-5.5 and a full
+  screenshot round-trip completes (model reads real pixels). The tool IS
+  injected.
 - ``backend="codex"`` (ChatGPT subscription) — live-REJECTED with
   ``400 Unsupported tool type: computer``. The GA docs are Platform-only, so
   the codex adapter advertises NO computer-use (``supports_computer_use=False``,
