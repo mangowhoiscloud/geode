@@ -76,7 +76,7 @@
 - **zoom 액션 + 1:1 좌표는 분리**(ctx7 미확인) → Phase B' live-test 게이트 후속(§6 보류로 이동).
 - 가드: computer 주입 시 beta 헤더에 computer-use 문자열 존재.
 
-### Phase C — OpenAI GA 배선 (P1, ctx7 확정)
+### Phase C — OpenAI GA 배선 (P1, ctx7 확정) ✅ DONE (v0.99.223)
 - `core/llm/providers/openai.py`: Responses API **`{type:"computer"}`** 주입(GA `gpt-5.5` 게이트, preview `computer_use_preview` 회피), `ComputerUseCapable` 구현. `display_width/height` + environment.
 - **GA batched `actions[]`**: computer_call이 액션 배열을 담음 → 핸들러가 배열 순회 실행(마지막 screenshot 반환). 액션 매핑(click/double_click/drag/scroll/move/type/keypress/wait/screenshot → harness).
 - safety check 흐름(computer tool 대상) 반영.
@@ -128,7 +128,7 @@
 | Phase | 상태 |
 |---|---|
 | A — production 경로 부활 + ComputerUseCapable 프로토콜 | ✅ DONE (v0.99.208) |
-| C — OpenAI GA {type:computer} 배선 (+harness batched actions[]) | PENDING |
+| C — OpenAI GA {type:computer} 배선 (+harness batched actions[]) | ✅ DONE (v0.99.223) |
 | E — 호스트 기본 + Docker+Xvfb 샌드박스 옵인 | PENDING |
 | F — run_bash 커맨드 샌드박스(codex 수렴) | PENDING |
 | D — Zhipu GLM-5V grounding 배선 (self-host) | PENDING |
