@@ -195,6 +195,50 @@ def _check_local_bin_on_path() -> CheckResult:
     )
 
 
+def _check_bash_sandbox() -> CheckResult:
+    """Report the run_bash command sandbox (Phase F) — OS-native, no Docker.
+
+    The bash sandbox shells out to the platform's OS sandbox binary
+    (macOS ``sandbox-exec`` / Linux ``bwrap``); it does NOT use Docker. So this
+    check reports the OS-binary availability + the ``GEODE_BASH_SANDBOX`` mode,
+    and notes Docker only as optional info (relevant to the future GUI sandbox,
+    never to this one). It FAILS only when the operator turned the sandbox
+    on/strict but the OS binary is missing — a real misconfiguration.
+    """
+    from core.tools.bash_sandbox import bash_sandbox_mode, sandbox_binary_status
+
+    mode = bash_sandbox_mode()
+    binname, binpath = sandbox_binary_status()
+    docker_present = "present" if shutil.which("docker") else "absent"
+    docker_note = f"Docker {docker_present} — not required (GUI sandbox only)"
+
+    if binpath is None:
+        if mode in {"on", "strict"}:
+            if binname == "sandbox-exec":
+                install = "macOS ships it at /usr/bin/sandbox-exec"
+            elif binname == "bwrap":
+                install = "install bubblewrap (e.g. apt install bubblewrap)"
+            else:
+                install = f"the bash sandbox is unsupported on {binname}"
+            return CheckResult(
+                name="run_bash sandbox",
+                ok=False,
+                detail=f"mode={mode} but {binname} not found",
+                fix=f"{install}, or set GEODE_BASH_SANDBOX=off. {docker_note}.",
+            )
+        return CheckResult(
+            name="run_bash sandbox",
+            ok=True,
+            detail=f"mode=off; {binname} unavailable on this host. {docker_note}.",
+        )
+
+    if mode == "off":
+        detail = f"available ({binname}), off — GEODE_BASH_SANDBOX=on to enable. {docker_note}."
+    else:
+        detail = f"mode={mode} via {binpath}. {docker_note}."
+    return CheckResult(name="run_bash sandbox", ok=True, detail=detail)
+
+
 def run_bootstrap_doctor() -> BootstrapReport:
     """Run all bootstrap checks and return the aggregated report."""
     report = BootstrapReport()
@@ -204,6 +248,7 @@ def run_bootstrap_doctor() -> BootstrapReport:
     report.checks.append(_check_env_file())
     report.checks.append(_check_codex_oauth())
     report.checks.append(_check_profile_store())
+    report.checks.append(_check_bash_sandbox())
     report.checks.append(_check_serve_socket())
     return report
 

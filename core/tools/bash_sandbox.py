@@ -58,6 +58,25 @@ def _resolve_bwrap() -> str | None:
     return shutil.which("bwrap")
 
 
+def sandbox_binary_status() -> tuple[str, str | None]:
+    """Report the current platform's bash-sandbox binary and whether it is found.
+
+    Returns ``(binary_name, resolved_path_or_None)`` — e.g. ``("sandbox-exec",
+    "/usr/bin/sandbox-exec")`` on macOS, ``("bwrap", None)`` on a Linux host
+    without bubblewrap, ``("<platform>", None)`` on an unsupported OS. Used by
+    ``geode doctor`` / ``geode setup`` to surface availability WITHOUT
+    duplicating the per-platform resolution above — and to make clear the bash
+    sandbox needs only this OS binary, never Docker.
+    """
+    platform = sys.platform
+    if platform == "darwin":
+        path = _MACOS_SANDBOX_EXEC if os.path.exists(_MACOS_SANDBOX_EXEC) else None
+        return "sandbox-exec", path
+    if platform.startswith("linux"):
+        return "bwrap", _resolve_bwrap()
+    return platform, None
+
+
 # The Seatbelt profile. ``WRITABLE_ROOT_0`` (the command's cwd) is injected via
 # ``-D WRITABLE_ROOT_0=<path>`` and referenced with ``(param ...)``. Temp dirs
 # are writable so build tools function; everything else is read-only and there
