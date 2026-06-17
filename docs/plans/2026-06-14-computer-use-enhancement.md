@@ -132,8 +132,8 @@
 | Phase | 상태 |
 |---|---|
 | A — production 경로 부활 + ComputerUseCapable 프로토콜 | ✅ DONE (v0.99.208) |
-| C — OpenAI GA {type:"computer"} 배선 (+harness batched actions[]) | ✅ DONE (v0.99.223) |
-| E — 호스트 기본 + Docker+Xvfb 샌드박스 옵인 | PENDING |
-| F — run_bash 커맨드 샌드박스(codex 수렴) | PENDING |
-| D — Zhipu GLM-5V grounding 배선 (self-host) | PENDING |
+| C — OpenAI GA {type:"computer"} 배선 (+harness batched actions[]) | ✅ DONE (v0.99.223) + Platform 라이브 검증 (v0.99.225) |
+| E — 호스트 기본 + Docker+Xvfb 샌드박스 옵인 | PENDING (구현 live-Docker 세션 보류) |
+| F — run_bash 커맨드 샌드박스(codex 수렴) | ✅ DONE (v0.99.226) — `GEODE_BASH_SANDBOX` off/on/strict, macOS sandbox-exec 라이브 격리 검증, Linux bwrap builder는 `unverified` |
+| D — Zhipu GLM-5V grounding 배선 (self-host) | DEFERRED (glm 잔액0, 운영자 보류) |
 | B' — Anthropic zoom + 1:1 좌표 (live-test 게이트) | DEFERRED |

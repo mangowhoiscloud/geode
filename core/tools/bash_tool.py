@@ -22,6 +22,7 @@ from dataclasses import dataclass
 from typing import Any
 
 from core.tools.base import load_tool_definition
+from core.tools.bash_sandbox import resolve_sandbox_argv
 
 log = logging.getLogger(__name__)
 
@@ -129,17 +130,38 @@ class BashTool:
 
         timeout = max(1, min(int(timeout), _MAX_TIMEOUT))
 
+        # run_bash command sandbox (Phase F). resolve_sandbox_argv returns the
+        # OS-sandbox wrapping argv (macOS sandbox-exec / Linux bwrap) when the
+        # GEODE_BASH_SANDBOX knob is on and the binary is available; None means
+        # run unsandboxed (knob off, or on+unavailable → already warned); a
+        # non-empty error means strict mode + unavailable → fail loud (never run
+        # unsandboxed when isolation was demanded — that would be fail-open).
+        sandbox_argv, sandbox_err = resolve_sandbox_argv(command, cwd=self._working_dir)
+        if sandbox_err:
+            log.warning("Bash sandbox refused command: %s", sandbox_err)
+            return BashResult(blocked=True, error=sandbox_err, returncode=-1, command=command)
+
         process: asyncio.subprocess.Process | None = None
         communicate_task: asyncio.Task[tuple[bytes, bytes]] | None = None
         cancel_task: asyncio.Task[bool] | None = None
         try:
-            process = await asyncio.create_subprocess_shell(
-                command,
-                stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.PIPE,
-                cwd=self._working_dir,
-                preexec_fn=_prepare_child_process if os.name != "nt" else None,
-            )
+            _preexec = _prepare_child_process if os.name != "nt" else None
+            if sandbox_argv is not None:
+                process = await asyncio.create_subprocess_exec(
+                    *sandbox_argv,
+                    stdout=asyncio.subprocess.PIPE,
+                    stderr=asyncio.subprocess.PIPE,
+                    cwd=self._working_dir,
+                    preexec_fn=_preexec,
+                )
+            else:
+                process = await asyncio.create_subprocess_shell(
+                    command,
+                    stdout=asyncio.subprocess.PIPE,
+                    stderr=asyncio.subprocess.PIPE,
+                    cwd=self._working_dir,
+                    preexec_fn=_preexec,
+                )
             communicate_task = asyncio.create_task(process.communicate())
             wait_tasks: set[asyncio.Task[Any]] = {communicate_task}
             if cancellation is not None:
