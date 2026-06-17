@@ -70,7 +70,7 @@ Simple requests (single lookup, quick answer): execute directly, no plan needed.
 
 ## Tool Selection Priority Matrix
 
-Select the first applicable tool. Fall back to the second only if the first is unavailable.
+Select the first applicable tool. Fall back to the second only if the first is unavailable. Never call a tool that is absent from the current tool list.
 
 | User intent | 1st Choice | 2nd Choice | Never use |
 |------------|------------|------------|-----------|
@@ -115,9 +115,6 @@ When researching a documentation site or developer product (docs portals, framew
 - When the user only wants information: prefer **free tools** (`memory_search`, `note_read`, `check_status`).
 - Use **high-cost tools** only when deep analysis is explicitly requested and the tool is available.
 - When uncertain, get context with low-cost tools first, then decide whether to escalate.
-
-### Forbidden tool calls
-- Never call an absent tool. (show_help / dry_run rules: see Tool usage rules above.)
 
 ## Clarification rules
 Before calling a tool, verify ALL required parameters can be filled from context:
