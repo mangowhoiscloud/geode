@@ -159,6 +159,118 @@ def _wizard_api_key_path() -> bool:
 
 
 # ---------------------------------------------------------------------------
+# run_bash command sandbox (Phase F) setup — OS-native, no Docker
+# ---------------------------------------------------------------------------
+
+
+def _resolve_config_toml() -> Any:
+    """``GEODE_CONFIG_TOML`` env override → ``GLOBAL_CONFIG_TOML`` (test parity
+    with the loader's :func:`core.config.self_improving._resolve_config_path`)."""
+    import os
+    from pathlib import Path
+
+    from core.paths import GLOBAL_CONFIG_TOML
+
+    override = os.environ.get("GEODE_CONFIG_TOML", "").strip()
+    # expanduser so a ``~``-prefixed override resolves to the same file the
+    # loaders read (core/config/__init__.py + self_improving both expand) —
+    # otherwise setup writes a literal ``~/foo.toml`` runtime never reads.
+    return Path(override).expanduser() if override else GLOBAL_CONFIG_TOML
+
+
+def _splice_bash_sandbox_mode(text: str, mode: str) -> str:
+    """Return ``text`` with ``[bash_sandbox]`` carrying ``mode = "<mode>"``.
+
+    Single-section, single-key writer (the only key is ``mode``): replaces an
+    existing ``mode`` line inside the section, inserts one if the section exists
+    without it, or appends a fresh ``[bash_sandbox]`` block. Untouched sections
+    keep their comments/whitespace.
+    """
+    new_line = f'mode = "{mode}"'
+    lines = text.splitlines()
+    for i, line in enumerate(lines):
+        if line.strip() != "[bash_sandbox]":
+            continue
+        for j in range(i + 1, len(lines)):
+            stripped = lines[j].strip()
+            if stripped.startswith("[") and stripped.endswith("]"):
+                break  # next section — mode line absent in this one
+            if stripped.startswith("mode") and "=" in stripped:
+                lines[j] = new_line
+                return "\n".join(lines) + ("\n" if text.endswith("\n") else "")
+        lines.insert(i + 1, new_line)
+        return "\n".join(lines) + ("\n" if text.endswith("\n") else "")
+    block = f"[bash_sandbox]\n{new_line}\n"
+    if text.strip():
+        return text.rstrip("\n") + "\n\n" + block
+    return block
+
+
+def _persist_bash_sandbox_mode(mode: str) -> Any:
+    """Write ``[bash_sandbox] mode`` to config.toml atomically. Returns the path."""
+    from core.memory.atomic_write import atomic_write_text
+
+    path = _resolve_config_toml()
+    path.parent.mkdir(parents=True, exist_ok=True)
+    text = path.read_text(encoding="utf-8") if path.is_file() else ""
+    atomic_write_text(path, _splice_bash_sandbox_mode(text, mode))
+    return path
+
+
+def configure_bash_sandbox() -> None:
+    """Interactive ``run_bash`` command-sandbox setup — runs in ``geode setup``.
+
+    The bash sandbox (Phase F) confines each ``run_bash`` command with the
+    platform's OS sandbox binary (macOS ``sandbox-exec`` / Linux ``bwrap``) so
+    it cannot write outside its working dir or reach the network. It needs only
+    that OS binary — **never Docker** — so it can be set up on any machine. This
+    detects availability, shows the current mode, and (when available) offers to
+    enable it, persisting ``[bash_sandbox] mode`` to config.toml.
+    """
+    from core.tools.bash_sandbox import bash_sandbox_mode, sandbox_binary_status
+
+    mode = bash_sandbox_mode()
+    binname, binpath = sandbox_binary_status()
+
+    console.print("\n  [header]Command sandbox (run_bash)[/header]")
+    console.print(
+        "  [muted]Confines each shell command (no write outside cwd, no network) via the\n"
+        f"  OS sandbox — needs only [cyan]{binname}[/cyan], not Docker.[/muted]"
+    )
+
+    if binpath is None:
+        console.print(
+            f"  [warning]{binname} not available on this host[/warning] "
+            f"[muted]— leaving sandbox off (current: {mode}).[/muted]\n"
+        )
+        return
+
+    console.print(f"  [muted]Available via {binpath}. Current mode: [/muted][bold]{mode}[/bold]")
+    try:
+        answer = (
+            console.input(
+                "  Enable command sandbox? [cyan]off[/cyan]/[cyan]on[/cyan]/[cyan]strict[/cyan] "
+                f"(Enter = keep {mode}): "
+            )
+            .strip()
+            .lower()
+        )
+    except (KeyboardInterrupt, EOFError):
+        console.print("  [muted]Skipped.[/muted]\n")
+        return
+
+    if not answer or answer == mode:
+        console.print(f"  [muted]Kept mode = {mode}.[/muted]\n")
+        return
+    if answer not in {"off", "on", "strict"}:
+        console.print(f"  [warning]Unknown value {answer!r} — keeping {mode}.[/warning]\n")
+        return
+
+    path = _persist_bash_sandbox_mode(answer)
+    console.print(f"  [success]Command sandbox set to {answer}[/success] [muted]({path})[/muted]\n")
+
+
+# ---------------------------------------------------------------------------
 # API Key Detection (natural language input guard)
 # ---------------------------------------------------------------------------
 

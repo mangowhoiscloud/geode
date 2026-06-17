@@ -115,7 +115,7 @@ def setup(
     prompting for API keys. Use ``--reset`` to clear existing
     credentials and start over.
     """
-    from core.cli.onboarding import env_setup_wizard
+    from core.cli.onboarding import configure_bash_sandbox, env_setup_wizard
     from core.wiring.startup import _has_any_llm_key, detect_subscription_oauth
 
     if reset:
@@ -126,21 +126,22 @@ def setup(
             env_path.unlink()
             console.print(f"  [muted]Removed {env_path}[/muted]")
 
+    # Credential setup (skipped when already satisfied) — then the command
+    # sandbox step runs unconditionally so it is reachable on every machine,
+    # including ones with credentials already configured and no Docker.
     oauth_provider = detect_subscription_oauth()
     if oauth_provider:
         console.print(f"  [success]OAuth detected: {oauth_provider}[/success]")
-        console.print("  [muted]No further setup needed. Run [cyan]geode[/cyan] to start.[/muted]")
-        return
-
-    if _has_any_llm_key() and not reset:
+        console.print("  [muted]No further credential setup needed.[/muted]")
+    elif _has_any_llm_key() and not reset:
         console.print(
             "  [success]API key already configured.[/success]\n"
-            "  [muted]Run [cyan]geode[/cyan] to start, or [cyan]geode setup --reset[/cyan] "
-            "to start over.[/muted]"
+            "  [muted]Run [cyan]geode setup --reset[/cyan] to start over.[/muted]"
         )
-        return
+    else:
+        env_setup_wizard()
 
-    env_setup_wizard()
+    configure_bash_sandbox()
 
 
 def doctor(

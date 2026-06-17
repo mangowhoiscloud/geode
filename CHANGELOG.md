@@ -45,6 +45,11 @@ functional change.
 
 ---
 
+## [0.99.227] - 2026-06-18
+
+### Added
+- **`geode doctor` + `geode setup` surface the run_bash sandbox — set it up on any machine, no Docker** (PR-SANDBOX-DOCTOR-SETUP; follow-up to the Phase F bash sandbox, v0.99.226). The bash sandbox is OS-native (macOS `sandbox-exec` / Linux `bwrap`) and needs **no Docker**, so these make it discoverable + configurable everywhere: (1) `geode doctor` adds a `run_bash sandbox` check (`core/cli/doctor_bootstrap.py:_check_bash_sandbox`) reporting the `GEODE_BASH_SANDBOX` mode + whether the OS sandbox binary is present, with Docker shown only as optional info ("not required — GUI sandbox only") — it FAILS only when the operator set on/strict but the OS binary is missing, and **never** fails on Docker absence; (2) `geode setup` adds a `Command sandbox` step (`core/cli/onboarding.py:configure_bash_sandbox`) that detects availability and, when present, offers to enable it (off/on/strict), persisting `[bash_sandbox] mode` to `~/.geode/config.toml` — the setup command now always reaches this step (the credential branches became `elif`/`else`, so a machine with credentials already configured still gets the sandbox prompt). New public helper `core.tools.bash_sandbox.sandbox_binary_status()` reuses the Phase-F resolution (macOS hardcoded path / Linux absolute-then-PATH) so doctor/setup never duplicate it. 15 guards (`tests/core/cli/test_bash_sandbox_setup.py`): doctor verdicts (available-but-off ok / on+present ok / on+missing fail / never-fails-on-Docker-absence), the single-section config splicer (append/replace/insert/coexist), config round-trip through settings, and the interactive step (EOF-safe, persists, skips when unavailable).
+
 ## [0.99.226] - 2026-06-18
 
 ### Added
