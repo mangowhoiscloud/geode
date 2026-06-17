@@ -145,7 +145,7 @@ def _openai_action_to_harness(action: dict[str, Any]) -> tuple[str, dict[str, An
     Schema ref: ctx7 /websites/developers_openai_api
     api-reference/responses/get "actions: ComputerActionList"
     (Click/DoubleClick/Scroll/Type/Keypress/Move/Drag/Wait/Screenshot).
-    # backend acceptance unverified — live test required (CANNOT §4d)
+    # backend acceptance: platform live-verified 2026-06-17 (codex rejects)
     """
     atype = str(action.get("type", ""))
     if atype == "keypress":

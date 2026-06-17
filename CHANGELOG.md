@@ -45,6 +45,11 @@ functional change.
 
 ---
 
+## [0.99.225] - 2026-06-17
+
+### Changed
+- **OpenAI Platform computer-use is now live-verified — `unverified` attestation closed** (PR-CU-OPENAI-PLATFORM-VERIFIED; operator-authorized live E2E with a valid OpenAI Platform/PAYG key). v0.99.224 excluded the ChatGPT-subscription Codex backend (proven `400 Unsupported tool type: computer`) but left the OpenAI **Platform** path marked `unverified — live test required` (no PAYG credentials were available then). A 2026-06-17 live round-trip on the Platform key now confirms backend ACCEPTANCE end-to-end: the Platform backend accepts `{type:"computer"}` on `gpt-5.5`, the model emits a `computer_call`, the harness encodes the screenshot, and the `computer_call_output` round-trips so gpt-5.5 reads real on-screen pixels back (it described the live VS Code workspace). No behaviour change — the platform path already injected; this flips the CANNOT §4d attestation markers from `unverified — live test required` to `platform live-verified 2026-06-17` across `core/llm/adapters/_openai_common.py` (5 sites + the inject docstring) + `openai_payg.py` + the Phase-C test docstring, and updates the v1.0.0 stability contract §G.1/§G.3 (OpenAI computer-use: Platform verified, Codex subscription rejected/excluded). Net: GEODE's OpenAI computer-use is confirmed working on the Platform (API-key) lane; the subscription (Codex) lane stays unsupported by design.
+
 ## [0.99.224] - 2026-06-17
 
 ### Fixed
