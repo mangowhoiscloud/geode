@@ -45,6 +45,13 @@ functional change.
 
 ---
 
+## [0.99.224] - 2026-06-17
+
+### Fixed
+- **Computer-use live E2E fixes — screenshot RGBA→JPEG crash + Codex backend exclusion** (PR-COMPUTER-USE-LIVE-FIX; the first operator-authorized live round-trip of the Phase A/C work, Anthropic PAYG + ChatGPT subscription, the next v1.0.0 gate). The live run surfaced two real defects the un-live-tested path had masked, plus one falsified attestation:
+  - **Screenshot never encoded** — `ComputerUseHarness.screenshot()` saved the captured frame as JPEG directly, but macOS pyautogui/Pillow returns it in RGBA mode and JPEG has no alpha channel, so every capture raised `OSError: cannot write mode RGBA as JPEG`. Computer-use had therefore **never** completed a round-trip; the crash hid behind the path that was only ever unit-tested with PIL mocked away. Fixed: convert to RGB before the JPEG save (`if img.mode != "RGB": img = img.convert("RGB")`). Verified live — the capture now encodes a real 95 KB JPEG (Screen Recording permission already granted). Guard: `tests/core/tools/test_computer_use.py::TestScreenshot` now drives the **real** Pillow encode (Pillow is a dev-group dep) with an RGBA source and asserts a valid JPEG, replacing the PIL-mocked test that hid the bug.
+  - **Codex subscription backend rejects the GA computer tool** — the v0.99.223 Phase C entry advertised `{type:"computer"}` on **both** OpenAI live adapters. The ChatGPT-subscription Codex backend live-REJECTS it with `400 Unsupported tool type: computer`; the ctx7 GA docs describe the OpenAI **Platform** API, not the Codex subscription backend (the same SDK-contract-vs-backend-acceptance ambiguity as PR-NO-FALLBACK #1839's `web_search`). Fixed: `_maybe_inject_openai_computer_use` now takes `backend` and never injects on `backend="codex"`; `CodexOAuthAdapter` advertises `supports_computer_use=False` and its `computer_tool_param` returns `None` (no drift versus the now-excluded live path). The platform (PAYG) path is unchanged and still injects — its backend ACCEPTANCE stays `unverified — live test required` (no PAYG credentials available; CANNOT §4d). Guards: `tests/core/llm/adapters/test_openai_computer_use.py` (codex never injected, codex param `None`, platform unchanged).
+
 ## [0.99.223] - 2026-06-17
 
 ### Added
