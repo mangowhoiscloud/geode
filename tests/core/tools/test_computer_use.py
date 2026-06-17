@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 from unittest.mock import AsyncMock, MagicMock, patch
 
+import pytest
 from core.tools.computer_use import ComputerUseHarness
 
 
@@ -366,30 +367,41 @@ class TestGetToolParams:
 
 
 class TestScreenshot:
-    def test_screenshot_returns_base64(self):
-        h = ComputerUseHarness()
-        mock_img = MagicMock()
-        mock_img.size = (2560, 1600)
-        mock_resized = MagicMock()
-        mock_img.resize.return_value = mock_resized
+    """Exercises the REAL Pillow encode path (Pillow is a dev-group dep). Mocking
+    PIL away — as an earlier version did — hid the RGBA→JPEG bug: pyautogui
+    returns RGBA on macOS, JPEG has no alpha, so ``img.save(format="JPEG")``
+    raised ``OSError: cannot write mode RGBA as JPEG`` and every screenshot
+    errored (the un-live-tested path masked it until the 2026-06-17 live E2E)."""
 
-        def fake_save(buf, **kwargs):
-            buf.write(b"\xff\xd8fake_jpeg_data")
-
-        mock_resized.save = fake_save
-
-        mock_image_module = MagicMock()
-        mock_image_module.LANCZOS = 1
-
-        with (
-            patch.object(h, "_ensure_pyautogui") as mock_pag,
-            patch.dict("sys.modules", {"PIL": MagicMock(), "PIL.Image": mock_image_module}),
-        ):
-            mock_pag.return_value.screenshot.return_value = mock_img
-            result = h.screenshot()
-
-        assert isinstance(result, str)
+    def _capture(self, mode: str, size: tuple[int, int] = (2560, 1600)) -> bytes:
         import base64
 
-        decoded = base64.b64decode(result)
-        assert len(decoded) > 0
+        from PIL import Image
+
+        src = Image.new(mode, size)
+        h = ComputerUseHarness(target_width=1280, target_height=800)
+        with patch.object(h, "_ensure_pyautogui") as mock_pag:
+            mock_pag.return_value.screenshot.return_value = src
+            result = h.screenshot()
+        assert isinstance(result, str)
+        return base64.b64decode(result)
+
+    def test_screenshot_returns_jpeg_base64(self) -> None:
+        pytest.importorskip("PIL")
+        decoded = self._capture("RGB")
+        assert decoded[:2] == b"\xff\xd8"  # JPEG SOI marker — a real encode
+
+    def test_screenshot_converts_rgba_to_jpeg(self) -> None:
+        """Regression guard: an RGBA source (macOS pyautogui) must NOT raise
+        ``cannot write mode RGBA as JPEG`` — the harness converts to RGB first
+        and emits a valid JPEG that re-opens as RGB."""
+        pytest.importorskip("PIL")
+        import io
+
+        from PIL import Image
+
+        decoded = self._capture("RGBA")
+        assert decoded[:2] == b"\xff\xd8"  # JPEG SOI — no OSError on RGBA input
+        reopened = Image.open(io.BytesIO(decoded))
+        assert reopened.format == "JPEG"
+        assert reopened.mode == "RGB"

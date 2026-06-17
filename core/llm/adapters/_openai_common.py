@@ -539,26 +539,42 @@ def openai_computer_tool_param() -> dict[str, Any]:
     return {"type": "computer"}
 
 
-def _maybe_inject_openai_computer_use(kwargs: dict[str, Any], *, model: str) -> None:
+def _maybe_inject_openai_computer_use(kwargs: dict[str, Any], *, model: str, backend: str) -> None:
     """Inject the OpenAI GA computer-use tool on the LIVE Responses path.
 
     Mirrors ``_anthropic_common._maybe_inject_computer_use`` (Phase A) for the
     OpenAI Responses API (Phase C). Returns early unless computer-use is enabled
     (``core.llm.providers.anthropic.is_computer_use_enabled`` — the provider-
     agnostic opt-in + pyautogui guard, shared so both providers gate on one
-    SoT) AND ``model`` is GA-capable (``_OPENAI_COMPUTER_USE_GA_MODELS``). The
-    tool is appended to ``kwargs["tools"]`` (creating the list when the request
-    carried no registry tools — injection is not gated on ``req.tools``).
+    SoT), ``backend`` is the platform (PAYG) endpoint, AND ``model`` is
+    GA-capable (``_OPENAI_COMPUTER_USE_GA_MODELS``). The tool is appended to
+    ``kwargs["tools"]`` (creating the list when the request carried no registry
+    tools — injection is not gated on ``req.tools``).
+
+    Backend gating (2026-06-17 live E2E, operator-authorized):
+
+    - ``backend="codex"`` — the ChatGPT-subscription Codex endpoint
+      live-REJECTS the computer tool with ``400 Unsupported tool type:
+      computer``. The ctx7 GA docs describe the OpenAI *Platform* API, not the
+      Codex subscription backend (same ambiguity class as PR-NO-FALLBACK
+      #1839's web_search). NEVER inject — proven reject.
+    - ``backend="platform"`` — the documented GA surface. No PAYG credentials
+      were available to live-test, so backend acceptance stays
+      ``unverified — live test required`` (CANNOT §4d), but the tool IS
+      injected because ctx7 confirms the Platform API contract.
 
     Idempotent: dedup by ``t.get("type") == "computer"`` so re-entrancy never
     doubles it. The OpenAI Responses API has no per-tool beta header (unlike
     Anthropic's ``anthropic-beta`` token), so none is set.
-
-    # backend acceptance unverified — live test required (CANNOT §4d)
     """
     from core.llm.providers.anthropic import is_computer_use_enabled
 
     if not is_computer_use_enabled():
+        return
+    if backend == "codex":
+        # ChatGPT-subscription Codex backend proven-rejects {type:"computer"}
+        # with 400 ``Unsupported tool type: computer`` (2026-06-17 live E2E).
+        # ctx7 GA docs are Platform-only. Never inject on this backend.
         return
     base = re.sub(r"-\d{8}$", "", model)  # strip a dated id suffix, if any
     if base not in _OPENAI_COMPUTER_USE_GA_MODELS:
@@ -1328,8 +1344,9 @@ def build_responses_kwargs(
         kwargs["parallel_tool_calls"] = True
     # Computer-use (Phase C) — injected AFTER the tools assembly so the GA
     # ``{type: "computer"}`` tool reaches the model even when ``req.tools`` is
-    # empty (it creates the list). Gated on the opt-in + a GA-capable model.
-    _maybe_inject_openai_computer_use(kwargs, model=req.model)
+    # empty (it creates the list). Gated on the opt-in + a GA-capable model +
+    # the platform backend (the codex subscription backend proven-rejects it).
+    _maybe_inject_openai_computer_use(kwargs, model=req.model, backend=backend)
     if spec.reasoning_effort_values is not None:
         # Reasoning-model branch — encrypted reasoning passthrough +
         # reasoning effort. Temperature is dropped per spec.

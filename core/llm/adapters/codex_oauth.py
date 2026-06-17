@@ -28,7 +28,6 @@ from typing import Any
 from core.llm.adapters._openai_common import (
     build_async_codex_client,
     build_responses_kwargs,
-    openai_computer_tool_param,
     translate_codex_response,
 )
 from core.llm.adapters.base import (
@@ -86,13 +85,16 @@ class CodexOAuthAdapter:
     # actually exposes the tool.
     supports_web_search: bool = True
     supports_text_completion: bool = True
-    # ComputerUseCapable — the GA ``{type: "computer"}`` tool is injected on the
-    # live Responses path (``_openai_common._maybe_inject_openai_computer_use``)
-    # for GA-capable models only. The Codex subscription backend's acceptance of
-    # the computer tool is NOT live-verified (the web_search live test above does
-    # NOT generalise to the computer tool).
-    # backend acceptance unverified — live test required (CANNOT §4d)
-    supports_computer_use: bool = True
+    # ComputerUseCapable — structurally satisfied, but the ChatGPT-subscription
+    # Codex backend live-REJECTS the GA ``{type: "computer"}`` tool with
+    # ``400 Unsupported tool type: computer`` (2026-06-17 live E2E,
+    # operator-authorized). The ctx7 GA docs cover the OpenAI *Platform* API,
+    # not this subscription backend. So this adapter advertises NO computer-use:
+    # ``supports_computer_use=False`` + ``computer_tool_param`` returns ``None``,
+    # mirroring the live path which now excludes ``backend="codex"`` from
+    # ``_openai_common._maybe_inject_openai_computer_use`` (no drift). The
+    # web_search live test above does NOT generalise to the computer tool.
+    supports_computer_use: bool = False
     _last_error: Exception | None = field(default=None, init=False, repr=False)
     # PR-LOOP-POLLUTION-FIX (2026-06-12) — one client per owning event loop
     # (see core/llm/loop_affinity.py).
@@ -103,19 +105,18 @@ class CodexOAuthAdapter:
     def computer_tool_param(
         self, *, display_width: int, display_height: int
     ) -> dict[str, Any] | None:
-        """ComputerUseCapable — OpenAI Responses GA ``{type: "computer"}`` param.
+        """ComputerUseCapable — returns ``None``: the Codex subscription backend
+        does not accept the GA ``{type: "computer"}`` tool.
 
-        Delegates to the shared builder so this enumerable contract returns the
-        exact param the live request path injects (no drift). The GA tool is
-        bare: ``display_width`` / ``display_height`` are part of the protocol
-        contract (Anthropic uses them) but the GA shape carries no dims — the
-        geometry is inferred from the screenshots — so they are accepted and
-        ignored here.
-
-        # backend acceptance unverified — live test required (CANNOT §4d)
+        Live E2E (2026-06-17, operator-authorized) proved the backend rejects it
+        with ``400 Unsupported tool type: computer``. The enumerable contract
+        must mirror the live request path, which now excludes ``backend="codex"``
+        from ``_openai_common._maybe_inject_openai_computer_use`` — so this
+        returns ``None`` (cannot inject), keeping the contract and the wire
+        payload in lock-step. The GA tool is platform-only (``OpenAIPaygAdapter``).
         """
-        del display_width, display_height  # GA {type:"computer"} is bare
-        return openai_computer_tool_param()
+        del display_width, display_height  # backend rejects the GA computer tool
+        return None
 
     def _get_client(self) -> Any:
         from core.llm.providers.codex import _resolve_codex_token

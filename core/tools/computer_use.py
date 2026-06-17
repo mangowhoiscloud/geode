@@ -105,6 +105,13 @@ class ComputerUseHarness:
             Image.Resampling.LANCZOS,
         )
 
+        # JPEG has no alpha channel. pyautogui/Pillow returns RGBA on macOS (and
+        # P/LA for some sources), so a direct JPEG save raises "cannot write mode
+        # RGBA as JPEG". Convert to RGB first. (Surfaced by the 2026-06-17 live
+        # E2E: every screenshot errored here, so computer-use never actually
+        # round-tripped — the bug hid behind the un-live-tested path.)
+        if img.mode != "RGB":
+            img = img.convert("RGB")
         buf = io.BytesIO()
         img.save(buf, format="JPEG", quality=self._jpeg_quality)
         return base64.b64encode(buf.getvalue()).decode("ascii")
