@@ -32,6 +32,40 @@ TARGET_WIDTH = 1280
 TARGET_HEIGHT = 800
 
 
+def computer_use_env() -> str:
+    """Resolve the execution environment: "host" (default) | "sandbox".
+
+    Function-local settings read so a mid-session config reload is honoured
+    (mirrors the routing-constant accessors).
+
+    Fail-safe on a misconfig: host execution drives the operator's REAL desktop,
+    so it requires an EXACT "host" (or unset = documented default). A non-empty
+    invalid value (a config.toml typo bypasses the pydantic validator via
+    ``object.__setattr__``) must NOT silently fall through to host — it routes to
+    "sandbox" (which fails loud if no container) so a typo can never re-expose
+    the real desktop.
+    """
+    from core.config import settings
+
+    env = str(getattr(settings, "computer_use_env", "") or "").strip().lower()
+    if env in {"host", "sandbox"}:
+        return env
+    if not env:
+        return "host"  # documented default
+    log.warning(
+        "computer_use_env=%r is invalid — routing to 'sandbox' (fail-loud) so a "
+        "typo cannot silently drive the real desktop. Set 'host' or 'sandbox'.",
+        env,
+    )
+    return "sandbox"
+
+
+def _sandbox_url() -> str:
+    from core.config import settings
+
+    return str(getattr(settings, "computer_use_sandbox_url", "") or "").rstrip("/")
+
+
 class ComputerUseHarness:
     """Local OS harness for computer-use actions.
 
@@ -314,8 +348,54 @@ class ComputerUseHarness:
             }
 
     async def aexecute(self, action: str, **params: Any) -> dict[str, Any]:
-        """Run local OS automation off the event loop."""
+        """Dispatch one action — host (local OS) or sandbox (in-container shim).
+
+        Phase E: when ``computer_use_env() == "sandbox"`` the action is POSTed to
+        the container shim instead of running local pyautogui, so the host never
+        touches a display. fail-loud: a sandbox error is surfaced as an error
+        result and NEVER falls back to host execution.
+        """
+        if computer_use_env() == "sandbox":
+            return await asyncio.to_thread(self._sandbox_execute_sync, action, params)
         return await asyncio.to_thread(self._execute_sync, action, **params)
+
+    def _sandbox_execute_sync(self, action: str, params: dict[str, Any]) -> dict[str, Any]:
+        """POST one action to the in-container shim and return its result.
+
+        The shim (Docker + Xvfb virtual desktop, see ``docker/computer-use-
+        sandbox/``) runs the SAME action vocabulary against its own pyautogui +
+        Xvfb display and returns ``{"result"/"error", "action", "screenshot"}``
+        — identical shape to :meth:`_execute_sync`. On any transport failure we
+        return an error result; we do NOT run the action on the host (that would
+        be a fail-open hole: the operator opted into isolation).
+
+        # container isolation unverified — live test required (CANNOT §4d):
+        # no Docker host available to exercise the round-trip.
+        """
+        import httpx
+
+        base = _sandbox_url()
+        if not base:
+            return {
+                "error": "computer_use_env=sandbox but computer_use_sandbox_url is empty",
+                "action": action,
+            }
+        try:
+            resp = httpx.post(f"{base}/cmd", json={"action": action, "params": params}, timeout=30)
+            resp.raise_for_status()
+            result = resp.json()
+            if not isinstance(result, dict):
+                return {
+                    "error": f"sandbox returned non-object: {str(result)[:120]}",
+                    "action": action,
+                }
+            return result
+        except (httpx.HTTPError, ValueError, OSError) as exc:
+            # fail-loud: surface the error, never touch the host desktop.
+            return {
+                "error": f"computer-use sandbox unreachable ({base}/cmd): {exc}",
+                "action": action,
+            }
 
     def _get_cursor_position(self) -> str:
         """Get current cursor position (in target space) + screenshot."""
