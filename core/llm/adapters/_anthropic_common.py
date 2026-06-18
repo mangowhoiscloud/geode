@@ -137,8 +137,10 @@ def anthropic_computer_tool_param(
     """Anthropic computer-use tool definition (ComputerUseCapable).
 
     ``tool_type`` is the model-aware schema version (``computer_20251124`` /
-    ``computer_20250124``). ``display_number`` (X11) is omitted on the host
-    path; the Xvfb sandbox (Phase E) sets it to the virtual display number.
+    ``computer_20250124``). ``display_number`` (X11) is always omitted: the GA
+    tool infers geometry from the screenshots, and the Phase-E sandbox runs its
+    OWN Xvfb display *inside the container* (the host harness is a thin HTTP
+    client and never targets a display number — ``core.tools.computer_use``).
     """
     return {
         "type": tool_type,
