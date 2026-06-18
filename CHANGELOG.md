@@ -45,6 +45,11 @@ functional change.
 
 ---
 
+## [0.99.230] - 2026-06-18
+
+### Added
+- **Zhipu GLM-5V grounding core (Phase D) — bbox→click conversion + grounding-locate** (PR-ZHIPU-GLM5V-GROUNDING; the last computer-use provider, completing the 3-provider goal). Unlike Anthropic/OpenAI native computer-use (the model emits actions in a loop), GLM-5V is a *grounding* model: given a screenshot + a target description it returns a bounding box in a **normalised 0-1000** space (`bbox_2d: [x1,y1,x2,y2]`). New `core/tools/computer_grounding.py`: `bbox_center_to_target` (de-normalises the box centre onto the harness target space, clamped) + `parse_grounding_bboxes` (extracts `bbox_2d` from the GLM reply — strict JSON, markdown-fenced, or a regex sweep over free-form prose, malformed boxes skipped) + `glm_locate` (sends the screenshot+instruction to GLM-5V via the GLM OpenAI-compatible client and converts the first box to a click point). **ctx7-grounded** (CANNOT §4d): `docs.z.ai/guides/vlm/glm-5v-turbo` + `glm-4.6v` SHOW `bbox_2d` examples whose values are all sub-1000 (consistent with a 0-1000 grid) but do NOT state the normalisation explicitly — so the 0-1000 assumption is inferred and folded into the live-test gate. The **live grounding call + coordinate space are `unverified — live test required`** — the GLM account has no balance (429 insufficient balance), so only the parsing + conversion are exercised (11 guards with a mocked client; e.g. the ctx7 example `[599,99,799,599]` → `(895,279)` on 1280×800). The full GLM-5V GUI-agent control loop (intent → ground → act → re-screenshot) is a deferred integration (needs GLM balance + a live session).
+
 ## [0.99.229] - 2026-06-18
 
 ### Added
