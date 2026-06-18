@@ -44,7 +44,6 @@ finalized by the 2026-05-22 PR-CSP-12 single-SoT consolidation.
 from __future__ import annotations
 
 import logging
-import os
 import tomllib
 import warnings
 from pathlib import Path
@@ -53,7 +52,7 @@ from typing import Annotated, Any, Literal
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from core.config.credential_source import CredentialSource
-from core.paths import GLOBAL_CONFIG_TOML
+from core.config.toml_edit import resolve_config_toml_path
 
 log = logging.getLogger(__name__)
 
@@ -769,21 +768,6 @@ class SelfImprovingLoopConfig(BaseModel):
         return value
 
 
-def _resolve_config_path(path: Path | str | None) -> Path:
-    """Resolve which TOML to load.
-
-    Order: explicit ``path`` argument → ``GEODE_CONFIG_TOML`` env →
-    :data:`core.paths.GLOBAL_CONFIG_TOML`. Mirrors the pattern used by
-    :mod:`core.auth.auth_toml`.
-    """
-    if path is not None:
-        return Path(path).expanduser()
-    env = os.environ.get("GEODE_CONFIG_TOML", "").strip()
-    if env:
-        return Path(env).expanduser()
-    return GLOBAL_CONFIG_TOML
-
-
 def _emit_defaults_notice(reason: str, path: Path) -> None:
     """Notify the active RunTranscript that the loader fell back to defaults.
 
@@ -827,7 +811,7 @@ def load_self_improving_loop_config(path: Path | str | None = None) -> SelfImpro
             The error is bubbled verbatim so the operator sees the
             offending key / value.
     """
-    resolved = _resolve_config_path(path)
+    resolved = resolve_config_toml_path(path)
     if not resolved.is_file():
         log.debug("self-improving-loop config: %s does not exist; using defaults", resolved)
         _emit_defaults_notice("file_missing", resolved)

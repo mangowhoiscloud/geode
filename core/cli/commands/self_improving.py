@@ -32,6 +32,7 @@ from collections.abc import Iterable
 from pathlib import Path
 from typing import Any
 
+from core.config.toml_edit import persist_toml_section
 from core.ui.console import console
 
 __all__ = ["cmd_self_improving"]
@@ -1031,34 +1032,14 @@ def _prompt_component(
 
 
 # ---------------------------------------------------------------------------
-# TOML writer — minimal section-keyed updater
+# TOML writer — section-keyed config updates
 # ---------------------------------------------------------------------------
 #
-# We avoid pulling in a TOML writer dep (tomli_w / tomlkit) by following
-# the existing ``core/cli/commands/config.py`` pattern: read the file as
-# string, splice in the requested key=value pairs under the right
-# section header, write atomically. Limited to the subset of TOML the
-# self-improving-loop section uses (basic strings + ints + bools +
-# floats) — enough for source / model / numeric thresholds. Comments and
-# whitespace in unaffected sections are preserved.
-
-
-def _toml_escape(value: str) -> str:
-    """TOML basic-string escape (re-uses cmd_config.py logic, scoped here)."""
-    out: list[str] = []
-    for ch in value:
-        code = ord(ch)
-        if ch == "\\":
-            out.append("\\\\")
-        elif ch == '"':
-            out.append('\\"')
-        elif ch in ("\b", "\f", "\n", "\r", "\t"):
-            out.append({"\b": "\\b", "\f": "\\f", "\n": "\\n", "\r": "\\r", "\t": "\\t"}[ch])
-        elif code < 0x20 or code == 0x7F:
-            out.append(f"\\u{code:04x}")
-        else:
-            out.append(ch)
-    return "".join(out)
+# The string-splice writer (read → splice key=value under section header →
+# atomic write) lives in ``core.config.toml_edit`` so the loader-side path
+# resolution and this writer share one home (PR-DEDUP-CONFIG-TOML). The two
+# wrappers below name the self-improving-loop sections the interactive
+# editor targets.
 
 
 def _persist_mutator_updates(updates: dict[str, str]) -> None:
@@ -1071,7 +1052,8 @@ def _persist_mutator_updates(updates: dict[str, str]) -> None:
     ``_migrate_legacy_role_namespaces`` validator with a
     ``DeprecationWarning``.
     """
-    _persist_section_updates("self_improving_loop.autoresearch.mutator", updates)
+    if updates:
+        persist_toml_section("self_improving_loop.autoresearch.mutator", updates)
 
 
 def _persist_full_config(
@@ -1082,118 +1064,17 @@ def _persist_full_config(
 ) -> None:
     """Persist the interactive form's diff across every component."""
     if mutator:
-        _persist_section_updates("self_improving_loop.autoresearch.mutator", mutator)
+        persist_toml_section("self_improving_loop.autoresearch.mutator", mutator)
     for role, diff in petri.items():
-        _persist_section_updates(f"self_improving_loop.autoresearch.{role}", diff)
+        if diff:
+            persist_toml_section(f"self_improving_loop.autoresearch.{role}", diff)
     for role, diff in seed_generation.items():
         # Note: loader uses ``[self_improving_loop.seed_generation.roles.<role>]``
         # (plural ``roles``) — see ``SeedGenerationConfig.roles`` field. Singular
         # would land outside the schema's ``extra="forbid"`` allowlist and break
         # the next config load. Codex MCP catch on PR-PAPERCLIP.
-        _persist_section_updates(f"self_improving_loop.seed_generation.roles.{role}", diff)
-
-
-def _persist_section_updates(section: str, updates: dict[str, str]) -> None:
-    """Splice ``updates`` into ``[<section>]`` of the active config TOML.
-
-    Resolves the write path through
-    :func:`core.config.self_improving._resolve_config_path` — same
-    helper the loader uses for reads — so a ``GEODE_CONFIG_TOML`` env
-    override (test fixtures, isolated session runs) reads and writes
-    the same file. Without that resolution the read/write parity broke:
-    the loader honored the env override while the writer pinned the
-    hardcoded ``GLOBAL_CONFIG_TOML`` constant — operator's
-    ``[self_improving_loop.petri.<role>]`` updates landed in the home
-    config while the test loader read the env-pinned tmp file.
-
-    If the section is missing it's appended; if a key exists in the
-    section it's replaced in place; otherwise the key is inserted at the
-    end of the section block. Atomic write via ``core.memory.atomic_write``.
-    """
-    if not updates:
-        return
-    from core.config.self_improving import _resolve_config_path
-    from core.memory.atomic_write import atomic_write_text
-
-    path = _resolve_config_path(None)
-    path.parent.mkdir(parents=True, exist_ok=True)
-    text = path.read_text(encoding="utf-8") if path.is_file() else ""
-    new_text = _splice_section(text, section, updates)
-    atomic_write_text(path, new_text)
-
-
-def _splice_section(text: str, section: str, updates: dict[str, str]) -> str:
-    """Return ``text`` with ``[section]`` updated to carry every ``updates`` entry.
-
-    Empty-string values (``key == ""``) signal "delete this key": the
-    matching ``key = "..."`` line is dropped instead of replaced, and a
-    fresh section never picks up a delete request (no point writing a
-    blank key). This is the line-removal contract the single-SoT
-    consolidation needs so ``/petri source <role> auto`` (which sets
-    ``source=""`` to fall back to the manifest default) can clear a
-    stale ``source`` line in ``[self_improving_loop.petri.<role>]``
-    without touching the legacy ``~/.geode/petri.toml``.
-    """
-    header = f"[{section}]"
-    lines = text.splitlines(keepends=False)
-    # Locate the section header line; -1 means absent.
-    header_idx = -1
-    for i, line in enumerate(lines):
-        if line.strip() == header:
-            header_idx = i
-            break
-    if header_idx == -1:
-        # Append a fresh section block. Skip delete requests — they
-        # only matter when an existing line is being removed.
-        materialised = {k: v for k, v in updates.items() if v != ""}
-        if not materialised:
-            return text
-        block = [header]
-        for key, val in materialised.items():
-            block.append(f'{key} = "{_toml_escape(val)}"')
-        suffix = "" if text.endswith("\n") or text == "" else "\n"
-        sep = "\n" if text and not text.endswith("\n\n") else ""
-        return text + suffix + sep + "\n".join(block) + "\n"
-    # Find the section's end (next ``[…]`` header or EOF).
-    end_idx = len(lines)
-    for j in range(header_idx + 1, len(lines)):
-        stripped = lines[j].strip()
-        if stripped.startswith("[") and stripped.endswith("]"):
-            end_idx = j
-            break
-    # Replace existing key=value lines in place; collect remaining keys.
-    # ``key == ""`` signals delete — drop the line entirely.
-    remaining = dict(updates)
-    keep_lines: list[str] = []
-    for k in range(header_idx + 1, end_idx):
-        line = lines[k]
-        matched_key: str | None = None
-        for key in list(remaining):
-            if line.lstrip().startswith(f"{key} ") or line.lstrip().startswith(f"{key}="):
-                matched_key = key
-                break
-        if matched_key is None:
-            keep_lines.append(line)
-            continue
-        val = remaining.pop(matched_key)
-        if val == "":
-            # Skip — line dropped (delete-key path).
-            continue
-        keep_lines.append(f'{matched_key} = "{_toml_escape(val)}"')
-
-    # Append remaining keys just before the section ends. Skip trailing
-    # blank lines so the section stays visually tight. Delete requests
-    # for absent keys are no-ops.
-    new_kv_lines = [f'{key} = "{_toml_escape(val)}"' for key, val in remaining.items() if val != ""]
-    insert_at_keep = len(keep_lines)
-    while insert_at_keep > 0 and keep_lines[insert_at_keep - 1].strip() == "":
-        insert_at_keep -= 1
-    rebuilt = keep_lines[:insert_at_keep] + new_kv_lines + keep_lines[insert_at_keep:]
-    out_lines = lines[: header_idx + 1] + rebuilt + lines[end_idx:]
-    result = "\n".join(out_lines)
-    if not result.endswith("\n"):
-        result += "\n"
-    return result
+        if diff:
+            persist_toml_section(f"self_improving_loop.seed_generation.roles.{role}", diff)
 
 
 # ---------------------------------------------------------------------------

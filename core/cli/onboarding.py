@@ -23,6 +23,7 @@ from typing import Any
 
 from core.config.env_io import mask_key as _mask_key
 from core.config.env_io import upsert_env as _upsert_env
+from core.config.toml_edit import persist_toml_section
 from core.ui.console import console
 from core.wiring.startup import ReadinessReport, _has_any_llm_key, detect_subscription_oauth
 
@@ -163,60 +164,6 @@ def _wizard_api_key_path() -> bool:
 # ---------------------------------------------------------------------------
 
 
-def _resolve_config_toml() -> Any:
-    """``GEODE_CONFIG_TOML`` env override → ``GLOBAL_CONFIG_TOML`` (test parity
-    with the loader's :func:`core.config.self_improving._resolve_config_path`)."""
-    import os
-    from pathlib import Path
-
-    from core.paths import GLOBAL_CONFIG_TOML
-
-    override = os.environ.get("GEODE_CONFIG_TOML", "").strip()
-    # expanduser so a ``~``-prefixed override resolves to the same file the
-    # loaders read (core/config/__init__.py + self_improving both expand) —
-    # otherwise setup writes a literal ``~/foo.toml`` runtime never reads.
-    return Path(override).expanduser() if override else GLOBAL_CONFIG_TOML
-
-
-def _splice_bash_sandbox_mode(text: str, mode: str) -> str:
-    """Return ``text`` with ``[bash_sandbox]`` carrying ``mode = "<mode>"``.
-
-    Single-section, single-key writer (the only key is ``mode``): replaces an
-    existing ``mode`` line inside the section, inserts one if the section exists
-    without it, or appends a fresh ``[bash_sandbox]`` block. Untouched sections
-    keep their comments/whitespace.
-    """
-    new_line = f'mode = "{mode}"'
-    lines = text.splitlines()
-    for i, line in enumerate(lines):
-        if line.strip() != "[bash_sandbox]":
-            continue
-        for j in range(i + 1, len(lines)):
-            stripped = lines[j].strip()
-            if stripped.startswith("[") and stripped.endswith("]"):
-                break  # next section — mode line absent in this one
-            if stripped.startswith("mode") and "=" in stripped:
-                lines[j] = new_line
-                return "\n".join(lines) + ("\n" if text.endswith("\n") else "")
-        lines.insert(i + 1, new_line)
-        return "\n".join(lines) + ("\n" if text.endswith("\n") else "")
-    block = f"[bash_sandbox]\n{new_line}\n"
-    if text.strip():
-        return text.rstrip("\n") + "\n\n" + block
-    return block
-
-
-def _persist_bash_sandbox_mode(mode: str) -> Any:
-    """Write ``[bash_sandbox] mode`` to config.toml atomically. Returns the path."""
-    from core.memory.atomic_write import atomic_write_text
-
-    path = _resolve_config_toml()
-    path.parent.mkdir(parents=True, exist_ok=True)
-    text = path.read_text(encoding="utf-8") if path.is_file() else ""
-    atomic_write_text(path, _splice_bash_sandbox_mode(text, mode))
-    return path
-
-
 def configure_bash_sandbox() -> None:
     """Interactive ``run_bash`` command-sandbox setup — runs in ``geode setup``.
 
@@ -266,7 +213,7 @@ def configure_bash_sandbox() -> None:
         console.print(f"  [warning]Unknown value {answer!r} — keeping {mode}.[/warning]\n")
         return
 
-    path = _persist_bash_sandbox_mode(answer)
+    path = persist_toml_section("bash_sandbox", {"mode": answer})
     console.print(f"  [success]Command sandbox set to {answer}[/success] [muted]({path})[/muted]\n")
 
 

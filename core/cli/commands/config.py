@@ -22,41 +22,8 @@ from pathlib import Path
 import typer
 from rich.console import Console
 
+from core.config.toml_edit import toml_escape
 from core.memory.atomic_write import atomic_write_text
-
-
-def _toml_escape_basic_string(value: str) -> str:
-    """Escape ``value`` for embedding inside a TOML basic string (``"…"``).
-
-    Per TOML 1.0 §5.1 — backslash + double-quote MUST be escaped; control
-    characters (U+0000-U+001F + U+007F) need ``\\uXXXX`` form. Tab/LF/CR
-    have dedicated short escapes. Used by :func:`_render_petri_sections`
-    so legacy overrides containing quotes / backslashes round-trip through
-    the migration helper without corrupting the destination TOML.
-    """
-    out: list[str] = []
-    for ch in value:
-        code = ord(ch)
-        if ch == "\\":
-            out.append("\\\\")
-        elif ch == '"':
-            out.append('\\"')
-        elif ch == "\b":
-            out.append("\\b")
-        elif ch == "\f":
-            out.append("\\f")
-        elif ch == "\n":
-            out.append("\\n")
-        elif ch == "\r":
-            out.append("\\r")
-        elif ch == "\t":
-            out.append("\\t")
-        elif code < 0x20 or code == 0x7F:
-            out.append(f"\\u{code:04x}")
-        else:
-            out.append(ch)
-    return "".join(out)
-
 
 app = typer.Typer(
     name="config",
@@ -87,7 +54,7 @@ def _render_petri_sections(plan: dict[str, dict[str, str]]) -> str:
     for role, override in plan.items():
         lines.append(f"[self_improving_loop.autoresearch.{role}]")
         for key, value in override.items():
-            lines.append(f'{key} = "{_toml_escape_basic_string(value)}"')
+            lines.append(f'{key} = "{toml_escape(value)}"')
         lines.append("")
     return "\n".join(lines)
 

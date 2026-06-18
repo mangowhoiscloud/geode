@@ -296,7 +296,7 @@ def save_role_override_to_config_toml(
     new namespace is the only correct path.
 
     Empty-string (delete-axis) requests are honoured by
-    ``_persist_section_updates`` directly: it drops the matching
+    ``persist_toml_section`` directly: it drops the matching
     ``key = "..."`` line so a subsequent :func:`read_role_override`
     returns ``{}`` for the cleared axis and the binding registry falls
     through to the manifest default.
@@ -309,9 +309,9 @@ def save_role_override_to_config_toml(
     if not updates:
         return
 
-    from core.cli.commands.self_improving import _persist_section_updates
+    from core.config.toml_edit import persist_toml_section
 
-    _persist_section_updates(f"self_improving_loop.autoresearch.{role}", updates)
+    persist_toml_section(f"self_improving_loop.autoresearch.{role}", updates)
 
 
 def clear_overrides(role: str | None = None, *, path: Path | str | None = None) -> None:
