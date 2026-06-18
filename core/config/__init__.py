@@ -124,6 +124,8 @@ _TOML_TO_SETTINGS: dict[str, str] = {
     "llm.forced_login_method": "forced_login_method",
     "compact.keep_recent": "compact_keep_recent",
     "computer_use.enabled": "computer_use_enabled",
+    "computer_use.env": "computer_use_env",
+    "computer_use.sandbox_url": "computer_use_sandbox_url",
     "bash_sandbox.mode": "bash_sandbox",
     "cost.limit_usd": "cost_limit_usd",
     "ensemble.mode": "ensemble_mode",

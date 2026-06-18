@@ -45,6 +45,11 @@ functional change.
 
 ---
 
+## [0.99.229] - 2026-06-18
+
+### Added
+- **Computer-use sandbox env (Phase E) — opt-in in-container execution + audit safety guard** (PR-COMPUTER-USE-ENV-SANDBOX). New `GEODE_COMPUTER_USE_ENV` (`host` default | `sandbox`): on `sandbox`, `ComputerUseHarness.aexecute` becomes a thin HTTP client that POSTs each action to an in-container shim (`computer_use_sandbox_url`/cmd) running its own Xvfb virtual display, and gets a screenshot back — **the host never touches a display** (the frontier in-container-shim model; the only one that works on macOS, where Docker is a Linux VM that can't reach the host screen). **fail-loud**: an unreachable sandbox returns an error result and NEVER falls back to host execution (opting into isolation must not silently re-expose the real desktop). **Audit safety**: `is_computer_use_enabled()` now force-disables computer-use under `GEODE_AUDIT_UNRESTRICTED=1` unless `env=sandbox` — a Petri audit (which runs unattended, and would otherwise inject the computer tool now that `[desktop]` is installable) can never drive the operator's real desktop; it must use the virtual one. Host path unchanged (`env=host` default = current pyautogui behaviour). Reference container in `docker/computer-use-sandbox/` (Dockerfile + `shim_server.py`, the server end of the client↔shim contract) — `unverified — live test required` (the action→Xvfb→screenshot round-trip needs a real Docker host; CI has none). Corrects the stale "host sets the Xvfb display_number" mental-model comment in `_anthropic_common.py`. 12 host-side guards (`tests/core/tools/test_computer_use_sandbox.py`): env branch (host→local, sandbox→HTTP, never both), client request/response + fail-loud (unreachable → error, host NOT invoked), audit guard (audit+host → off, audit+sandbox → allowed). This also unblocks safely auditing computer-use in Petri later (audit against the virtual desktop).
+
 ## [0.99.228] - 2026-06-18
 
 ### Fixed

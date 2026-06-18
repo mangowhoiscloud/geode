@@ -727,11 +727,32 @@ _COMPUTER_USE_TOOL: dict[str, Any] = {
 
 
 def is_computer_use_enabled() -> bool:
-    """Check if computer-use is enabled (requires pyautogui + opt-in)."""
+    """Check if computer-use is enabled (requires pyautogui + opt-in).
+
+    Audit safety (Phase E): a Petri audit runs unattended, so it must NEVER be
+    able to drive the operator's real desktop. When audit mode is active
+    (``GEODE_AUDIT_UNRESTRICTED=1``) computer-use is force-disabled UNLESS it is
+    routed to the sandbox (``computer_use_env=sandbox`` → a virtual desktop, not
+    the host). Without this an audit scenario that emitted a computer tool_use
+    would control the live screen.
+    """
+    import os
+
     from core.config import settings
+    from core.tools.computer_use import computer_use_env
 
     if not getattr(settings, "computer_use_enabled", False):
         return False
+    env = computer_use_env()
+    if os.environ.get("GEODE_AUDIT_UNRESTRICTED") == "1" and env != "sandbox":
+        log.debug("computer-use disabled under audit (env != sandbox; no real-desktop control)")
+        return False
+    if env == "sandbox":
+        # Sandbox mode: the host is only an HTTP client; pyautogui lives inside
+        # the container, so the host does NOT need it. (fail-loud if the
+        # container is unreachable — handled at dispatch.)
+        return True
+    # Host mode drives the real desktop via local pyautogui.
     try:
         import pyautogui  # type: ignore[import-untyped]  # noqa: F401
 
