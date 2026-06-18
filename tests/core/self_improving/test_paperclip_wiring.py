@@ -7,9 +7,9 @@ Pins:
 - ``_default_llm_call`` dispatches to claude-cli / codex-cli when
   ``MutatorConfig.source`` is paperclip; legacy "api_key" / "auto"
   paths are unaffected.
-- ``_splice_section`` updates an existing TOML section in place, appends
-  a fresh section when missing, and replaces a single key while
-  preserving the rest of the section.
+- ``splice_toml_section`` (``core.config.toml_edit``) updates an existing
+  TOML section in place, appends a fresh section when missing, and replaces
+  a single key while preserving the rest of the section.
 - ``_cmd_source_set`` rejects invalid sources / unknown keys without
   touching the config file.
 """
@@ -350,9 +350,9 @@ def test_default_llm_call_api_key_path_unchanged(monkeypatch: pytest.MonkeyPatch
 
 
 def test_splice_section_appends_when_missing() -> None:
-    from core.cli.commands.self_improving import _splice_section
+    from core.config.toml_edit import splice_toml_section
 
-    out = _splice_section(
+    out = splice_toml_section(
         "[other]\nfoo = 1\n",
         "self_improving_loop.mutator",
         {"source": "claude-cli"},
@@ -363,27 +363,29 @@ def test_splice_section_appends_when_missing() -> None:
 
 
 def test_splice_section_replaces_existing_key() -> None:
-    from core.cli.commands.self_improving import _splice_section
+    from core.config.toml_edit import splice_toml_section
 
     src = '[self_improving_loop.mutator]\nsource = "api_key"\nmax_tokens = 1024\n'
-    out = _splice_section(src, "self_improving_loop.mutator", {"source": "claude-cli"})
+    out = splice_toml_section(src, "self_improving_loop.mutator", {"source": "claude-cli"})
     assert 'source = "claude-cli"' in out
     assert 'source = "api_key"' not in out
     assert "max_tokens = 1024" in out  # untouched neighbor preserved
 
 
 def test_splice_section_inserts_new_key_in_existing_section() -> None:
-    from core.cli.commands.self_improving import _splice_section
+    from core.config.toml_edit import splice_toml_section
 
     src = "[self_improving_loop.mutator]\nmax_tokens = 1024\n"
-    out = _splice_section(src, "self_improving_loop.mutator", {"default_model": "claude-opus-4-7"})
+    out = splice_toml_section(
+        src, "self_improving_loop.mutator", {"default_model": "claude-opus-4-7"}
+    )
     assert 'default_model = "claude-opus-4-7"' in out
     assert "max_tokens = 1024" in out
 
 
 def test_splice_section_does_not_clobber_sibling_section() -> None:
     """Updating mutator must not touch ``[self_improving_loop.petri.auditor]``."""
-    from core.cli.commands.self_improving import _splice_section
+    from core.config.toml_edit import splice_toml_section
 
     src = (
         "[self_improving_loop.mutator]\n"
@@ -393,7 +395,7 @@ def test_splice_section_does_not_clobber_sibling_section() -> None:
         'source = "api_key"\n'
         'model = "claude-opus-4-7"\n'
     )
-    out = _splice_section(src, "self_improving_loop.mutator", {"source": "claude-cli"})
+    out = splice_toml_section(src, "self_improving_loop.mutator", {"source": "claude-cli"})
     assert 'source = "claude-cli"' in out
     # Petri section untouched:
     assert "[self_improving_loop.petri.auditor]" in out
@@ -402,9 +404,9 @@ def test_splice_section_does_not_clobber_sibling_section() -> None:
 
 
 def test_splice_section_escapes_special_chars() -> None:
-    from core.cli.commands.self_improving import _splice_section
+    from core.config.toml_edit import splice_toml_section
 
-    out = _splice_section("", "x", {"k": 'has " quote and \\ backslash'})
+    out = splice_toml_section("", "x", {"k": 'has " quote and \\ backslash'})
     assert 'k = "has \\" quote and \\\\ backslash"' in out
 
 
@@ -419,11 +421,11 @@ def test_cmd_source_set_rejects_invalid_source(
 
     fake_toml = tmp_path / "config.toml"
     monkeypatch.setattr("core.paths.GLOBAL_CONFIG_TOML", fake_toml)
-    # Single-SoT (2026-05-22) — writer now resolves through
-    # ``core.config.self_improving._resolve_config_path`` which
-    # reads the module-local import; patch that symbol too so the test
-    # honors fake_toml regardless of which side calls in first.
-    monkeypatch.setattr("core.config.self_improving.GLOBAL_CONFIG_TOML", fake_toml)
+    # PR-DEDUP-CONFIG-TOML — writer + loader both resolve through
+    # ``core.config.toml_edit.resolve_config_toml_path``, which reads the
+    # module-local ``GLOBAL_CONFIG_TOML`` binding; patch that symbol so the
+    # test honors fake_toml regardless of which side calls in first.
+    monkeypatch.setattr("core.config.toml_edit.GLOBAL_CONFIG_TOML", fake_toml)
     with patch.object(self_improving, "console") as cmock:
         self_improving._cmd_source_set(["source=bogus"])
     assert not fake_toml.exists()
@@ -441,7 +443,7 @@ def test_cmd_source_set_persists_valid_source(
     fake_toml = tmp_path / "config.toml"
     monkeypatch.setattr("core.paths.GLOBAL_CONFIG_TOML", fake_toml)
     # See sibling test for rationale on patching both symbols.
-    monkeypatch.setattr("core.config.self_improving.GLOBAL_CONFIG_TOML", fake_toml)
+    monkeypatch.setattr("core.config.toml_edit.GLOBAL_CONFIG_TOML", fake_toml)
     self_improving._cmd_source_set(["source=claude-cli"])
     text = fake_toml.read_text(encoding="utf-8")
     # Step J-b.1 — writer target moved to autoresearch.mutator.
@@ -471,7 +473,7 @@ def test_persist_full_config_uses_plural_roles_path(
 
     fake_toml = tmp_path / "config.toml"
     monkeypatch.setattr("core.paths.GLOBAL_CONFIG_TOML", fake_toml)
-    monkeypatch.setattr("core.config.self_improving.GLOBAL_CONFIG_TOML", fake_toml)
+    monkeypatch.setattr("core.config.toml_edit.GLOBAL_CONFIG_TOML", fake_toml)
     self_improving._persist_full_config(
         mutator={},
         petri={},

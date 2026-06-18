@@ -45,6 +45,11 @@ functional change.
 
 ---
 
+## [0.99.231] - 2026-06-19
+
+### Changed
+- **Config-TOML helpers consolidated into one home — `core/config/toml_edit.py`** (PR-DEDUP-CONFIG-TOML). The `GEODE_CONFIG_TOML` read-path resolver and the string-splice section writer had drifted into **four** near-identical copies across the tree: `_resolve_config_path` (`core/config/self_improving.py`) + `_resolve_config_toml` (`core/cli/onboarding.py`) both carried the same explicit→env→`GLOBAL_CONFIG_TOML` logic; `_toml_escape` + `_persist_section_updates` + `_splice_section` (`core/cli/commands/self_improving.py`) were the general writer, `_splice_bash_sandbox_mode` + `_persist_bash_sandbox_mode` (`onboarding.py`) a single-section copy, and `_toml_escape_basic_string` (`core/cli/commands/config.py`) a fourth escape copy. New `core/config/toml_edit.py` is the single home: `resolve_config_toml_path` / `toml_escape` / `splice_toml_section` / `persist_toml_section`. Every caller migrated (`self_improving` loader + commands, `config` migrate command, `onboarding` bash-sandbox setup, `petri_audit.user_overrides`), removing the cross-layer `plugins → core.cli` import in the process (the override writer now reaches `core.config` directly). Behavior-preserving, with one robustness gain folded in from the consolidation (Codex MEDIUM): the unified section matcher now matches a key followed by **any** whitespace before `=` (TOML `key\t= v`), where the general splicer previously only matched a single space — so a hand-edited `[bash_sandbox] mode\t= ...` is replaced in place rather than duplicated, while prefix-safety (`model` not matching `model_extra`) is preserved. The inline resolver copies in `core/config/__init__.py` + `explain.py` (main settings loader) were intentionally left — they keep a module-global `GLOBAL_CONFIG_PATH` monkeypatch seam. Net −274/+270 LoC. New guard `tests/core/config/test_toml_edit.py` pins resolver precedence + delete-on-empty + tab-whitespace + prefix-safety.
+
 ## [0.99.230] - 2026-06-18
 
 ### Added
