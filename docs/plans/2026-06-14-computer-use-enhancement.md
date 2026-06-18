@@ -135,5 +135,5 @@
 | C — OpenAI GA {type:"computer"} 배선 (+harness batched actions[]) | ✅ DONE (v0.99.223) + Platform 라이브 검증 (v0.99.225) |
 | E — 호스트 기본 + Docker+Xvfb 샌드박스 옵인 | ✅ host-side DONE (v0.99.229) — `GEODE_COMPUTER_USE_ENV` host/sandbox + in-container shim thin client + fail-loud + audit 안전 가드. 컨테이너 라운드트립은 `unverified`(docker/computer-use-sandbox/ reference) |
 | F — run_bash 커맨드 샌드박스(codex 수렴) | ✅ DONE (v0.99.226) — `GEODE_BASH_SANDBOX` off/on/strict, macOS sandbox-exec 라이브 격리 검증, Linux bwrap builder는 `unverified` |
-| D — Zhipu GLM-5V grounding 배선 (self-host) | DEFERRED (glm 잔액0, 운영자 보류) |
+| D — Zhipu GLM-5V grounding 배선 (self-host) | ✅ grounding core DONE (v0.99.230) — bbox_2d(0-1000 normalized, ctx7 확정)→click 변환 + 응답 파싱 + glm_locate(`core/tools/computer_grounding.py`). 라이브 GLM 호출은 `unverified`(glm 잔액0). 전체 GUI-agent 루프 통합은 deferred |
 | B' — Anthropic zoom + 1:1 좌표 (live-test 게이트) | DEFERRED |

@@ -2,7 +2,7 @@
 
 > GEODE is a self-evolving autonomous execution agent: an inner agentic loop runs tasks (research, analysis, automation, scheduling) and an outer self-improving loop (Petri audit -> fitness gate) tunes the system that runs them.
 
-Version v0.99.229. Last sync 2026-06-17. Docs links point to clean markdown twins (.md); drop the .md suffix for the rendered page.
+Version v0.99.230. Last sync 2026-06-18. Docs links point to clean markdown twins (.md); drop the .md suffix for the rendered page.
 
 ## Start here
 
