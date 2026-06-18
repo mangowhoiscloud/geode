@@ -395,13 +395,13 @@ def test_default_path_resolves_to_global_config_toml(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
     """Without explicit path or env override, the loader resolves to
-    ``core.paths.GLOBAL_CONFIG_TOML``."""
-    import core.config.self_improving as mod
+    ``core.paths.GLOBAL_CONFIG_TOML`` (via ``core.config.toml_edit``)."""
+    import core.config.toml_edit as te
 
     monkeypatch.delenv("GEODE_CONFIG_TOML", raising=False)
     fake = tmp_path / "global.toml"
     _write_toml(fake, "[self_improving_loop]\nwarn_threshold = 0.33\n")
-    monkeypatch.setattr(mod, "GLOBAL_CONFIG_TOML", fake)
+    monkeypatch.setattr(te, "GLOBAL_CONFIG_TOML", fake)
     cfg = load_self_improving_loop_config()
     assert cfg.warn_threshold == pytest.approx(0.33)
 

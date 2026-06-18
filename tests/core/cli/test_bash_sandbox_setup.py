@@ -10,6 +10,7 @@ from __future__ import annotations
 import pytest
 from core.cli import doctor_bootstrap as db
 from core.cli import onboarding as ob
+from core.config import toml_edit as te
 from core.tools import bash_sandbox as bs
 
 
@@ -86,18 +87,25 @@ class TestDoctorCheck:
 
 class TestSpliceConfig:
     def test_append_when_absent(self) -> None:
-        assert ob._splice_bash_sandbox_mode("", "on") == '[bash_sandbox]\nmode = "on"\n'
+        assert (
+            te.splice_toml_section("", "bash_sandbox", {"mode": "on"})
+            == '[bash_sandbox]\nmode = "on"\n'
+        )
 
     def test_replace_existing_mode(self) -> None:
-        out = ob._splice_bash_sandbox_mode('[bash_sandbox]\nmode = "off"\n', "strict")
+        out = te.splice_toml_section(
+            '[bash_sandbox]\nmode = "off"\n', "bash_sandbox", {"mode": "strict"}
+        )
         assert out == '[bash_sandbox]\nmode = "strict"\n'
 
     def test_insert_when_section_has_no_mode(self) -> None:
-        out = ob._splice_bash_sandbox_mode("[bash_sandbox]\n[other]\nx=1\n", "on")
+        out = te.splice_toml_section(
+            "[bash_sandbox]\n[other]\nx=1\n", "bash_sandbox", {"mode": "on"}
+        )
         assert 'mode = "on"' in out and "[other]" in out
 
     def test_coexists_with_other_sections(self) -> None:
-        out = ob._splice_bash_sandbox_mode("[llm]\nx = 1\n", "on")
+        out = te.splice_toml_section("[llm]\nx = 1\n", "bash_sandbox", {"mode": "on"})
         assert "[llm]" in out and '[bash_sandbox]\nmode = "on"' in out
 
 
@@ -105,7 +113,7 @@ class TestPersistAndConfigure:
     def test_persist_round_trips_through_settings(self, tmp_path, monkeypatch) -> None:
         cfg = tmp_path / "config.toml"
         monkeypatch.setenv("GEODE_CONFIG_TOML", str(cfg))
-        path = ob._persist_bash_sandbox_mode("strict")
+        path = te.persist_toml_section("bash_sandbox", {"mode": "strict"})
         assert path == cfg
         assert 'mode = "strict"' in cfg.read_text()
 
@@ -113,7 +121,7 @@ class TestPersistAndConfigure:
         """A ``~``-prefixed override expands to the same path the loaders read
         (write/read parity — Codex MCP catch)."""
         monkeypatch.setenv("GEODE_CONFIG_TOML", "~/some/config.toml")
-        resolved = str(ob._resolve_config_toml())
+        resolved = str(te.resolve_config_toml_path())
         assert "~" not in resolved
         assert resolved.endswith("some/config.toml")
 

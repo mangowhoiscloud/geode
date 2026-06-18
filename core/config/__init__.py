@@ -189,7 +189,7 @@ def _load_toml_config(
     # H9 (C-4, 2026-06-11) — ``GEODE_CONFIG_TOML`` redirects the GLOBAL
     # config.toml for the MAIN settings loader too. Pre-fix only the
     # self-improving loop loader honored it
-    # (core/config/self_improving.py:_resolve_config_path), so an operator
+    # (core/config/toml_edit.py:resolve_config_toml_path), so an operator
     # pointing the env var at an alternate file changed loop behavior while
     # the runtime kept reading ~/.geode/config.toml — two meanings for one
     # variable. The project overlay still applies on top.
