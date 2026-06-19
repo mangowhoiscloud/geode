@@ -52,7 +52,7 @@ def _capture_internal_prompt(
     Returns the captured internal system prompt string.
     """
     from core.agent.loop import agent_loop as al
-    from plugins.petri_audit.targets.geode_target import _default_geode_runner
+    from plugins.petri_audit.geode_target import _default_geode_runner
 
     captured: dict[str, str] = {}
 
@@ -94,7 +94,7 @@ def _auditor_messages() -> list[dict[str, Any]]:
 def test_split_messages_routes_scenario_to_system_suffix() -> None:
     """The auditor's system scenario becomes ``system_suffix`` (the prefix
     slot is reserved for the GEODE scaffold)."""
-    from plugins.petri_audit.targets.geode_target import _split_messages
+    from plugins.petri_audit.geode_target import _split_messages
 
     system_suffix, history, last_user = _split_messages(_auditor_messages())
     assert SCENARIO_MARKER in system_suffix

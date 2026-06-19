@@ -2,7 +2,7 @@
 wiring into ``AgenticLoop``.
 
 The audit subprocess invokes the GEODE target through
-``plugins/petri_audit/targets/geode_target.py:_default_geode_runner``.
+``plugins/petri_audit/geode_target.py:_default_geode_runner``.
 Until 2026-05-27 the runner passed only ``provider=...`` to
 ``AgenticLoop`` and silently inherited the default ``source="payg"``,
 so the operator's ``[self_improving_loop.petri.target] source`` /
@@ -28,17 +28,13 @@ import pytest
 def test_default_geode_runner_passes_source_argument() -> None:
     """Source-level pin: AgenticLoop is constructed with a ``source=`` kwarg.
 
-    Greps ``plugins/petri_audit/targets/geode_target.py`` for the
+    Greps ``plugins/petri_audit/geode_target.py`` for the
     ``source=`` keyword inside the ``AgenticLoop(...)`` construction
     so a future refactor that drops the argument fails this test
     before the audit-subprocess fake-success path re-emerges.
     """
     target_module = (
-        Path(__file__).resolve().parents[3]
-        / "plugins"
-        / "petri_audit"
-        / "targets"
-        / "geode_target.py"
+        Path(__file__).resolve().parents[3] / "plugins" / "petri_audit" / "geode_target.py"
     )
     source = target_module.read_text(encoding="utf-8")
     # The construction site we care about is `loop = AgenticLoop(`.
@@ -74,11 +70,7 @@ def test_default_geode_runner_uses_get_binding() -> None:
     resolves the same source the operator gets at the command line.
     """
     target_module = (
-        Path(__file__).resolve().parents[3]
-        / "plugins"
-        / "petri_audit"
-        / "targets"
-        / "geode_target.py"
+        Path(__file__).resolve().parents[3] / "plugins" / "petri_audit" / "geode_target.py"
     )
     source = target_module.read_text(encoding="utf-8")
     assert "get_binding(" in source, (

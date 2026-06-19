@@ -42,7 +42,7 @@ _logging.getLogger("plugins.petri_audit").setLevel(_logging.INFO)
 # ``[audit]`` extra is absent (default ``uv sync``); registration only
 # matters when the user is actually running an audit.
 try:
-    from plugins.petri_audit.targets.geode_target import register as _register
+    from plugins.petri_audit.geode_target import register as _register
 
     _register()
 except ImportError:

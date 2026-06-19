@@ -481,7 +481,7 @@ def _build_model_card(model: str) -> str:
         # silently breaks every downstream GEODE consumer (slide build,
         # report PDF, artifact archiving) and inflates output_tokens 30-50%.
         # Anthropic + GLM do not exhibit this drift, so the guard is
-        # provider-gated.  ``core.llm.postprocess.html_output`` is the
+        # provider-gated.  ``core.llm.html_output`` is the
         # safety-net decoder when the guard fails.
         if provider in ("openai", "openai-codex"):
             parts.append(

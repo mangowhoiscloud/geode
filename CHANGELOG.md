@@ -45,6 +45,11 @@ functional change.
 
 ---
 
+## [0.99.234] - 2026-06-19
+
+### Changed
+- **Two single-file packages folded into their parents** (PR-FOLD-PKGS; the structural item from the codebase audit). Each was a package directory holding exactly one module plus a thin `__init__` (a re-export or a docstring stub) — the "no single-file packages" smell. (1) `core/llm/postprocess/` (its `__init__` only re-exported from `html_output`, a surface confirmed unused) → `html_output.py` moved up to `core/llm/html_output.py`; (2) `plugins/petri_audit/targets/` (docstring-only `__init__`) → `geode_target.py` moved up to `plugins/petri_audit/geode_target.py`. All importers migrated (`core.llm.postprocess.html_output` → `core.llm.html_output`; `plugins.petri_audit.targets.geode_target` → `plugins.petri_audit.geode_target`), including segmented `Path(...) / "targets" / ...` builders in three grep-based regression tests (Codex MCP caught one a substring grep missed). The third audit candidate — `core/hooks/plugins/notification_hook/` — was **kept**: it is a required hook-plugin directory (`core/hooks/discovery.py` scans `core/hooks/plugins/*/` for a `hook.yaml`/`hook.py` manifest), not a single-file package. Pure move, no behavior change; `git mv` preserves history. Net −2 modules (the two deleted `__init__.py`).
+
 ## [0.99.233] - 2026-06-19
 
 ### Fixed
