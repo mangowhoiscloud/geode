@@ -1,4 +1,4 @@
-"""Regression pin for ``plugins/petri_audit/targets/geode_target.py``'s
+"""Regression pin for ``plugins/petri_audit/geode_target.py``'s
 adapter-registry bootstrap.
 
 The inspect-ai audit subprocess (``uv run inspect eval inspect_petri/audit``)
@@ -30,17 +30,13 @@ from pathlib import Path
 def test_default_geode_runner_calls_bootstrap_builtins() -> None:
     """Source-level pin: the runner module references ``bootstrap_builtins``.
 
-    Greps ``plugins/petri_audit/targets/geode_target.py`` for the
+    Greps ``plugins/petri_audit/geode_target.py`` for the
     ``bootstrap_builtins`` symbol so a future refactor that drops the
     call (e.g. import rearrangement, function extraction) fails the
     test before the audit subprocess fake-success regression re-lands.
     """
     target_module = (
-        Path(__file__).resolve().parents[3]
-        / "plugins"
-        / "petri_audit"
-        / "targets"
-        / "geode_target.py"
+        Path(__file__).resolve().parents[3] / "plugins" / "petri_audit" / "geode_target.py"
     )
     source = target_module.read_text(encoding="utf-8")
     assert "bootstrap_builtins" in source, (

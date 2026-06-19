@@ -17,7 +17,7 @@ Layers below:
 Target role specialisation: when ``role == "target"``, the inspect id is
 ``geode/<model>`` regardless of the provider adapter's prefix — the audit
 always routes the target through ``GeodeModelAPI`` so the full GEODE
-stack is what gets evaluated. See ``plugins.petri_audit.targets.
+stack is what gets evaluated. See ``plugins.petri_audit.
 geode_target`` for the inspect_ai registration.
 """
 

@@ -2,7 +2,7 @@
 
 Maps the manifest binding ``[petri.adapter.zhipuai.api_key]`` to
 inspect_ai's ``geode/<model>`` provider (registered by
-:mod:`plugins.petri_audit.targets.geode_target`). inspect_ai has no
+:mod:`plugins.petri_audit.geode_target`). inspect_ai has no
 native GLM provider, so GLM provider ids are routed through the GEODE
 wrapper that the full agentic stack uses anyway — the same path
 production code takes.
@@ -16,7 +16,7 @@ from __future__ import annotations
 
 import os
 
-from plugins.petri_audit.targets.geode_target import register as _register_geode
+from plugins.petri_audit.geode_target import register as _register_geode
 
 __all__ = ["INSPECT_PREFIX", "is_available", "register"]
 

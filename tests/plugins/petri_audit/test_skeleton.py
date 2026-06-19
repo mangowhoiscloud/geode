@@ -60,7 +60,7 @@ def test_petri_audit_namespace_logger_level_is_info() -> None:
     # Child loggers inherit via effective level (their own level stays
     # NOTSET, which lets the namespace setLevel govern). Verify the
     # actually-used target logger is INFO-enabled.
-    child = logging.getLogger("plugins.petri_audit.targets.geode_target")
+    child = logging.getLogger("plugins.petri_audit.geode_target")
     assert child.isEnabledFor(logging.INFO)
     # propagate=True (default) is required for the root LogHandler to
     # see the record — fail loudly if a future change disables it.
@@ -75,7 +75,7 @@ def test_geode_target_module_imports_without_audit_extra() -> None:
     cold-start stays clean. ``inspect_ai`` is imported only when
     ``register()`` is actually invoked.
     """
-    from plugins.petri_audit.targets import geode_target
+    from plugins.petri_audit import geode_target
 
     assert hasattr(geode_target, "register")
     assert hasattr(geode_target, "_to_geode_messages")
@@ -90,7 +90,7 @@ def test_geode_target_module_imports_without_audit_extra() -> None:
 )
 def test_register_raises_import_error_without_audit_extra() -> None:
     """``register()`` requires the ``[audit]`` extra installed."""
-    from plugins.petri_audit.targets.geode_target import register
+    from plugins.petri_audit.geode_target import register
 
     with pytest.raises(ImportError):
         register()
@@ -98,7 +98,7 @@ def test_register_raises_import_error_without_audit_extra() -> None:
 
 def test_default_runner_rejects_empty_messages() -> None:
     """Empty message list fails fast before any GEODE bootstrap."""
-    from plugins.petri_audit.targets.geode_target import _default_geode_runner
+    from plugins.petri_audit.geode_target import _default_geode_runner
 
     with pytest.raises(ValueError, match="Empty message history"):
         asyncio.run(_default_geode_runner(messages=[]))
@@ -113,7 +113,7 @@ def test_default_runner_passes_pinned_model_to_loop_with_drift_disabled() -> Non
     """
     import inspect
 
-    from plugins.petri_audit.targets import geode_target
+    from plugins.petri_audit import geode_target
 
     src = inspect.getsource(geode_target._default_geode_runner)
     code_only = "\n".join(line for line in src.splitlines() if not line.lstrip().startswith("#"))
@@ -135,7 +135,7 @@ def test_geode_model_api_routes_default_sentinel_to_none() -> None:
     """
     import inspect
 
-    from plugins.petri_audit.targets import geode_target
+    from plugins.petri_audit import geode_target
 
     src = inspect.getsource(geode_target.register)
     assert 'base == "default"' in src, (
@@ -156,7 +156,7 @@ def test_default_runner_uses_async_arun_not_sync_run() -> None:
     """
     import inspect
 
-    from plugins.petri_audit.targets import geode_target
+    from plugins.petri_audit import geode_target
 
     src = inspect.getsource(geode_target._default_geode_runner)
     # Strip comments + docstrings before checking — those legitimately
@@ -201,7 +201,7 @@ def test_geode_target_runner_invokes_token_tracker_record() -> None:
     from core.agent.loop import _response
     from core.agent.loop import agent_loop as loop_mod
     from core.llm import token_tracker
-    from plugins.petri_audit.targets import geode_target
+    from plugins.petri_audit import geode_target
 
     # Link 1: runner → AgenticLoop.arun
     runner_src = inspect.getsource(geode_target._default_geode_runner)
@@ -277,8 +277,8 @@ def test_default_runner_returns_text_and_usage_tuple(monkeypatch) -> None:
         pytest.skip("[audit] extra not installed")
 
     from core.llm.token_tracker import LLMUsage
-    from plugins.petri_audit.targets import geode_target
-    from plugins.petri_audit.targets.geode_target import _default_geode_runner
+    from plugins.petri_audit import geode_target
+    from plugins.petri_audit.geode_target import _default_geode_runner
 
     class _FakeAgenticResult:
         text = "hi"
@@ -422,7 +422,7 @@ def test_geode_model_api_emits_zero_usage_when_runner_returns_none_usage(
 
 def test_to_geode_messages_converts_each_role() -> None:
     """All four ChatMessage roles map to the expected GEODE shape."""
-    from plugins.petri_audit.targets.geode_target import _to_geode_messages
+    from plugins.petri_audit.geode_target import _to_geode_messages
 
     converted = _to_geode_messages(
         [
@@ -451,7 +451,7 @@ def test_to_geode_messages_converts_each_role() -> None:
 
 
 def test_to_geode_messages_rejects_unknown_role() -> None:
-    from plugins.petri_audit.targets.geode_target import _to_geode_messages
+    from plugins.petri_audit.geode_target import _to_geode_messages
 
     with pytest.raises(ValueError, match="Unsupported message role"):
         _to_geode_messages([_FakeMsg(role="orchestrator", text="x")])
@@ -459,7 +459,7 @@ def test_to_geode_messages_rejects_unknown_role() -> None:
 
 def test_to_geode_messages_treats_missing_text_as_empty() -> None:
     """``text`` missing or None is normalised to empty string."""
-    from plugins.petri_audit.targets.geode_target import _to_geode_messages
+    from plugins.petri_audit.geode_target import _to_geode_messages
 
     class _NoText:
         role = "user"
@@ -475,7 +475,7 @@ def test_to_geode_messages_treats_missing_text_as_empty() -> None:
 
 def test_split_messages_extracts_system_history_and_last_user() -> None:
     """Standard layout: system → suffix, mid turns → history, tail → prompt."""
-    from plugins.petri_audit.targets.geode_target import _split_messages
+    from plugins.petri_audit.geode_target import _split_messages
 
     sys_text, history, last = _split_messages(
         [
@@ -495,13 +495,13 @@ def test_split_messages_extracts_system_history_and_last_user() -> None:
 
 
 def test_split_messages_empty_returns_blanks() -> None:
-    from plugins.petri_audit.targets.geode_target import _split_messages
+    from plugins.petri_audit.geode_target import _split_messages
 
     assert _split_messages([]) == ("", [], "")
 
 
 def test_split_messages_concatenates_multiple_system_messages() -> None:
-    from plugins.petri_audit.targets.geode_target import _split_messages
+    from plugins.petri_audit.geode_target import _split_messages
 
     sys_text, _, _ = _split_messages(
         [
@@ -522,7 +522,7 @@ def test_split_messages_non_user_last_falls_into_history() -> None:
     responsibility to handle (Petri's target_agent always seeds with a
     user message, so this branch is defensive).
     """
-    from plugins.petri_audit.targets.geode_target import _split_messages
+    from plugins.petri_audit.geode_target import _split_messages
 
     sys_text, history, last = _split_messages(
         [
