@@ -17,18 +17,15 @@ invariants.
 Remaining wiring (unchanged):
 - ``PetriRoleConfig.source`` / ``AutoresearchConfig.source`` default
   ``claude-cli`` (subscription-first).
-- ``core/self_improving/prepare.py`` ``check_subscription_cli_for_source`` pre-flight.
 """
 
 from __future__ import annotations
 
-import pytest
 from core.config.credential_source import CredentialSource
 from core.config.self_improving import (
     AutoresearchConfig,
     PetriRoleConfig,
 )
-from core.self_improving.prepare import check_subscription_cli_for_source
 
 # ---------------------------------------------------------------------------
 # 1. Source literal — api_key reject
@@ -95,73 +92,7 @@ def test_autoresearch_config_default_source_claude_cli() -> None:
 
 
 # ---------------------------------------------------------------------------
-# 3. check_subscription_cli_for_source — pre-flight
-# ---------------------------------------------------------------------------
-
-
-def test_preflight_claude_cli_missing_binary_returns_actionable_error(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    """``claude`` binary 가 PATH 에 없으면 actionable error 메시지 반환."""
-    monkeypatch.delenv("GEODE_CLAUDE_CLI_BIN", raising=False)
-    # shutil.which("claude") 가 None 반환하도록 mock
-    import core.self_improving.prepare as prepare_module
-
-    monkeypatch.setattr(prepare_module.shutil, "which", lambda _: None)
-
-    ok, msg = check_subscription_cli_for_source("claude-cli")
-    assert not ok
-    assert "claude-cli source selected" in msg
-    assert "GEODE_CLAUDE_CLI_BIN" in msg
-
-
-def test_preflight_codex_cli_missing_binary_returns_actionable_error(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    """``codex`` binary 부재 시 actionable error."""
-    monkeypatch.delenv("GEODE_CODEX_CLI_BIN", raising=False)
-    import core.self_improving.prepare as prepare_module
-
-    monkeypatch.setattr(prepare_module.shutil, "which", lambda _: None)
-
-    ok, msg = check_subscription_cli_for_source("openai-codex")
-    assert not ok
-    assert "openai-codex source selected" in msg
-    assert "GEODE_CODEX_CLI_BIN" in msg
-
-
-def test_preflight_claude_cli_env_override_wins(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    """GEODE_CLAUDE_CLI_BIN env override 가 shutil.which 보다 우선."""
-    monkeypatch.setenv("GEODE_CLAUDE_CLI_BIN", "/custom/path/claude")
-    import core.self_improving.prepare as prepare_module
-
-    # shutil.which 가 다른 값을 반환해도 env override 가 이김
-    monkeypatch.setattr(prepare_module.shutil, "which", lambda _: "/usr/local/bin/claude")
-
-    ok, msg = check_subscription_cli_for_source("claude-cli")
-    assert ok
-    assert "/custom/path/claude" in msg
-
-
-def test_preflight_auto_source_skips_binary_check() -> None:
-    """``source="auto"`` → cascade 가 fallback path 책임 → pre-flight skip."""
-    ok, msg = check_subscription_cli_for_source("auto")
-    assert ok
-    assert "auto source" in msg
-    assert "cascade" in msg
-
-
-def test_preflight_unknown_source_graceful_skip() -> None:
-    """Unknown source (e.g. legacy api_key) → graceful skip without error."""
-    ok, msg = check_subscription_cli_for_source("api_key")
-    assert ok
-    assert "api_key" in msg
-
-
-# ---------------------------------------------------------------------------
-# 4. Backend matrix — 4 cases (api_key reject + 3 valid)
+# 3. Backend matrix — 4 cases (api_key reject + 3 valid)
 # ---------------------------------------------------------------------------
 
 

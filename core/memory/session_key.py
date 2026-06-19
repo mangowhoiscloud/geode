@@ -42,34 +42,6 @@ def build_subagent_session_key(subject_id: str, task_id: str, phase: str = "pipe
     return f"subject:{normalized_subject}:{phase}:subagent:{normalized_task_id}"
 
 
-def parse_session_key(key: str) -> dict[str, str | None | bool]:
-    """Parse a session key back into components."""
-    parts = key.split(":")
-    if len(parts) < 3 or parts[0] != "subject":
-        raise ValueError(
-            f"Invalid session key format: '{key}'. Expected 'subject:{{id}}:{{phase}}'"
-        )
-
-    if len(parts) == 5 and parts[3] == "subagent":
-        return {
-            "prefix": parts[0],
-            "subject_id": parts[1],
-            "phase": parts[2],
-            "sub_context": parts[3],
-            "task_id": parts[4],
-            "is_subagent": True,
-        }
-
-    return {
-        "prefix": parts[0],
-        "subject_id": parts[1],
-        "phase": parts[2],
-        "sub_context": parts[3] if len(parts) > 3 else None,
-        "task_id": None,
-        "is_subagent": False,
-    }
-
-
 def build_gateway_session_key(
     channel: str,
     channel_id: str,

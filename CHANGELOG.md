@@ -45,6 +45,11 @@ functional change.
 
 ---
 
+## [0.99.236] - 2026-06-19
+
+### Removed
+- **Dead code + test-pinned orphans cut (ponytail audit, −1339 LoC)** (PR-PONYTAIL-CUT-A). A repo-wide "lazy senior dev" audit (the ponytail plugin's lens: YAGNI / stdlib-first / no unrequested abstractions) found genuine dead weight, all confirmed zero-production-caller before deletion and Codex-MCP-verified after. Removed: `core/mcp/base.py` (the `MCPClientBase` ABC — zero importers; `StdioMCPClient` reimplements the surface without inheriting it); `core/llm/html_output.py` (the GAP-17 "safety-net" HTML decoder — never wired into any output pipeline, only the provider-gated *prevention* guard in `system_prompt._build_model_card` is live and stays); `provider_dispatch.py`'s dead fallback-chain machinery (`_get_fallback_chain()` returns `[]` since the 2026-05-24 deprecation) + dead hook plumbing (`set_dispatch_hooks`/`_fire_hook` — the real wiring is `router/_hooks.py`); `scheduler/predefined.py`'s 3 unused functions; `memory/session_key.parse_session_key` + `session_checkpoint.CHECKPOINT_MAX_MESSAGES` (speculative re-exports, 0 refs); and **7 self_improving "test-pins-an-orphan" helpers** (`campaign.run_control_arm_async`, `prepare.check_subscription_cli_for_source`, `attribution.confidence_trajectory_from_episodes` + its now-dead `confidence_trajectory`/`confidence_stability` schema fields, `bench_means.validate_bench_schema`/`compute_missing_benches`, `policies.is_valid_target_kind`, `role_provenance.role_display_id`) — each had a unit test but no production caller. Test surgery removed only the orphan's tests (live-behavior tests kept, e.g. the `system_prompt` guard tests and the multi-arm campaign tests); the attribution schema drop stays read-compatible with legacy on-disk rows via `ConfigDict(extra="allow")`. Net −1339 LoC, −2 modules. Ironies caught by the lazy lens that the dedup lens missed: `html_output.py` had just been *folded* (PR-FOLD-PKGS) when it was actually dead.
+
 ## [0.99.235] - 2026-06-19
 
 ### Changed

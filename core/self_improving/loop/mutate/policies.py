@@ -298,15 +298,6 @@ _READER_ONLY_KINDS: frozenset[str] = frozenset(
 )
 
 
-def is_valid_target_kind(kind: str) -> bool:
-    """Return True iff ``kind`` is one of the *active* mutation targets.
-
-    S0d (2026-05-21) 이후: ``TARGET_KINDS`` 만 active. ``_KIND_TO_PATH`` 의
-    ``retrieval`` 매핑은 미래 복원을 위해 보존되지만 mutation 의 valid
-    target 은 아님 (Codex MCP S0d review 가 catch — 두 자료 구조의 정합성)."""
-    return kind in TARGET_KINDS
-
-
 def policy_path(kind: str) -> Path:
     """Return the SoT file path for ``kind``.
 
@@ -533,7 +524,6 @@ def _unflatten_nested(
 
 __all__ = [
     "TARGET_KINDS",
-    "is_valid_target_kind",
     "load_policy",
     "policy_path",
     "write_policy",

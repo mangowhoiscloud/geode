@@ -30,13 +30,6 @@ def _get_default_session_dir() -> Path:
 
 DEFAULT_SESSION_DIR = _get_default_session_dir()
 CLEANUP_AGE_HOURS = 72
-# ``CHECKPOINT_MAX_MESSAGES`` (= 20) used to trim the JSON snapshot for
-# context-budget reasons. Phase 1b (Hermes absorption) flips the SoT to the
-# SQLite ``messages`` table, which holds the *full* history, so the
-# JSON ``messages.json`` becomes a hot-cache copy of the same full list.
-# The constant is kept (re-exported) for any third-party caller that
-# imported it; the value of 0 means "no truncation".
-CHECKPOINT_MAX_MESSAGES = 0
 
 
 @dataclass

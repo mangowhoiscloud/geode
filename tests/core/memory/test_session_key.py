@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import pytest
 from core.memory.session_key import (
     ALL_PHASES,
     ANALYSIS,
@@ -13,7 +12,6 @@ from core.memory.session_key import (
     SYNTHESIS,
     VERIFICATION,
     build_session_key,
-    parse_session_key,
 )
 
 
@@ -43,35 +41,6 @@ class TestBuildSessionKey:
     def test_uppercase_normalized(self):
         key = build_session_key("DEMO", ROUTER)
         assert key == "subject:demo:router"
-
-
-class TestParseSessionKey:
-    def test_basic_parse(self):
-        result = parse_session_key("subject:demo:router")
-        assert result["prefix"] == "subject"
-        assert result["subject_id"] == "demo"
-        assert result["phase"] == "router"
-        assert result["sub_context"] is None
-
-    def test_parse_with_sub_context(self):
-        result = parse_session_key("subject:demo:evaluation:quality_judge")
-        assert result["subject_id"] == "demo"
-        assert result["phase"] == "evaluation"
-        assert result["sub_context"] == "quality_judge"
-
-    def test_invalid_format_raises(self):
-        with pytest.raises(ValueError, match="Invalid session key"):
-            parse_session_key("bad_key")
-
-    def test_wrong_prefix_raises(self):
-        with pytest.raises(ValueError, match="Invalid session key"):
-            parse_session_key("user:demo:router")
-
-    def test_roundtrip(self):
-        original = build_session_key("Demo Subject", VERIFICATION, "guardrails")
-        parsed = parse_session_key(original)
-        rebuilt = build_session_key(parsed["subject_id"], parsed["phase"], parsed["sub_context"])
-        assert rebuilt == original
 
 
 class TestPhaseConstants:

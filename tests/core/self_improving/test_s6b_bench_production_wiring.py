@@ -21,7 +21,6 @@ from core.self_improving.bench_means import (
     BENCH_RUBRIC_VERSION,
     BenchProvenance,
     collect_bench_means_from_inspect_ai,
-    compute_missing_benches,
 )
 
 # ---------------------------------------------------------------------------
@@ -88,28 +87,7 @@ def test_bench_provenance_default_init_has_empty_dicts_and_default_version() -> 
 
 
 # ---------------------------------------------------------------------------
-# 3. compute_missing_benches — Goodhart suppression surface
-# ---------------------------------------------------------------------------
-
-
-def test_compute_missing_benches_empty_when_all_present() -> None:
-    full = dict.fromkeys(BENCH_DIM_WEIGHTS, 0.5)
-    assert compute_missing_benches(full) == []
-
-
-def test_compute_missing_benches_lists_absent_sorted() -> None:
-    partial = {"swe_bench_pro_pass": 0.5, "gpqa_diamond": 0.7}
-    missing = compute_missing_benches(partial)
-    assert missing == sorted(set(BENCH_DIM_WEIGHTS) - {"swe_bench_pro_pass", "gpqa_diamond"})
-
-
-def test_compute_missing_benches_handles_none_input() -> None:
-    """``None`` 은 "측정 0건" — 7 field 전부 missing."""
-    assert compute_missing_benches(None) == sorted(BENCH_DIM_WEIGHTS)
-
-
-# ---------------------------------------------------------------------------
-# 4. collect_bench_means_from_inspect_ai — nominal smoke (env off)
+# 3. collect_bench_means_from_inspect_ai — nominal smoke (env off)
 # ---------------------------------------------------------------------------
 
 
