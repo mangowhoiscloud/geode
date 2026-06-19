@@ -177,6 +177,20 @@ class TestIterReadJsonl:
         found = next((r for r in iter_jsonl(f) if r.get("k") == "y"), None)
         assert found == {"k": "y"}
 
+    def test_iter_is_lazy_streaming(self, tmp_path: Path) -> None:
+        # Genuinely lazy: iter_jsonl is a generator that pulls one line at a time
+        # and can be closed mid-stream (releasing the file handle) — it does not
+        # read the whole file up front (Codex MEDIUM).
+        import types
+
+        f = tmp_path / "log.jsonl"
+        self._write(f, [f'{{"k": {i}}}' for i in range(4)])
+        gen = iter_jsonl(f)
+        assert isinstance(gen, types.GeneratorType)
+        assert next(gen) == {"k": 0}
+        assert next(gen) == {"k": 1}
+        gen.close()  # lazy generator → closeable mid-stream, no StopIteration leak
+
     def test_unreadable_file_warns_and_returns_empty(
         self, tmp_path: Path, caplog: pytest.LogCaptureFixture
     ) -> None:
@@ -185,7 +199,7 @@ class TestIterReadJsonl:
         f = tmp_path / "log.jsonl"
         self._write(f, ['{"a": 1}'])
         with (
-            patch.object(Path, "read_text", side_effect=OSError("boom")),
+            patch.object(Path, "open", side_effect=OSError("boom")),
             caplog.at_level("WARNING"),
         ):
             assert read_jsonl(f) == []

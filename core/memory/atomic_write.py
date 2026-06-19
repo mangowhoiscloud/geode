@@ -115,22 +115,25 @@ def iter_jsonl(path: Path) -> Iterator[dict[str, Any]]:
     if not path.is_file():
         return  # missing file is the expected common case (fresh repo) — silent
     try:
-        raw = path.read_text(encoding="utf-8")
+        handle = path.open(encoding="utf-8")
     except OSError as exc:
         # An existing-but-unreadable file is unexpected — degrade to empty (callers
         # treat "no rows" uniformly) but surface it so a real I/O fault isn't hidden.
         log.warning("iter_jsonl: %s unreadable: %s", path, exc)
         return
-    for line in raw.splitlines():
-        stripped = line.strip()
-        if not stripped:
-            continue
-        try:
-            row = json.loads(stripped)
-        except json.JSONDecodeError:
-            continue
-        if isinstance(row, dict):
-            yield row
+    # Stream line-by-line (genuinely lazy) so early-exit callers — ``any(... for
+    # row in iter_jsonl(...))`` — stop reading the file, not just parsing.
+    with handle:
+        for line in handle:
+            stripped = line.strip()
+            if not stripped:
+                continue
+            try:
+                row = json.loads(stripped)
+            except json.JSONDecodeError:
+                continue
+            if isinstance(row, dict):
+                yield row
 
 
 def read_jsonl(path: Path, *, tail: int | None = None) -> list[dict[str, Any]]:
