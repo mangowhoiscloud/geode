@@ -17,6 +17,8 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
+from core.auth.jwt_claims import decode_jwt_claims
+
 log = logging.getLogger(__name__)
 
 # OpenAI Codex OAuth constants (from Hermes Agent)
@@ -58,30 +60,9 @@ AUTH_STORE_PATH = auth_store_path()
 _GEODE_OPENAI_PLAN_ID = "openai-codex-geode"
 
 
-def _decode_jwt_claims(token: str) -> dict[str, Any]:
-    """Decode the payload section of a (signed) JWT, no verification.
-
-    Used to read OpenAI-issued claims like ``chatgpt_plan_type`` /
-    ``chatgpt_account_id`` / ``email`` from the access_token. The token's
-    signature is the OAuth provider's concern; GEODE only needs the
-    public claims for routing + display.
-    """
-    import base64
-
-    parts = token.split(".")
-    if len(parts) < 2:
-        return {}
-    try:
-        padded = parts[1] + "=" * (-len(parts[1]) % 4)
-        payload = json.loads(base64.urlsafe_b64decode(padded))
-    except (json.JSONDecodeError, ValueError, UnicodeDecodeError):
-        return {}
-    return payload if isinstance(payload, dict) else {}
-
-
 def _plan_type_from_token(token: str) -> str:
     """Extract ``chatgpt_plan_type`` from an OpenAI OAuth access token."""
-    claims = _decode_jwt_claims(token)
+    claims = decode_jwt_claims(token)
     auth_claim = claims.get("https://api.openai.com/auth", {})
     if isinstance(auth_claim, dict):
         plan_type = auth_claim.get("chatgpt_plan_type", "")
@@ -500,9 +481,9 @@ def login_openai() -> dict[str, Any]:
     if not access_token:
         raise RuntimeError("Token exchange did not return an access_token")
 
-    # Extract account info from JWT (uses _decode_jwt_claims helper —
+    # Extract account info from JWT (uses decode_jwt_claims helper —
     # any decode failure returns {} so the unpacks below resolve to "").
-    payload = _decode_jwt_claims(access_token)
+    payload = decode_jwt_claims(access_token)
     auth_claim = payload.get("https://api.openai.com/auth", {}) or {}
     profile_claim = payload.get("https://api.openai.com/profile", {}) or {}
     account_id = str(auth_claim.get("chatgpt_account_id", "") or "")

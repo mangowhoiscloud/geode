@@ -17,6 +17,8 @@ from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any
 
+from core.config.env_io import mask_key
+
 
 class CredentialType(Enum):
     """Credential type with implicit priority (lower ordinal = higher priority)."""
@@ -119,9 +121,7 @@ class AuthProfile:
 
     @property
     def masked_key(self) -> str:
-        if len(self.key) <= 14:
-            return "***"
-        return self.key[:10] + "..." + self.key[-4:]
+        return mask_key(self.key)
 
     def sort_key(self) -> tuple[int, float]:
         """Sort key for rotation: type priority first, then last_used (LRU)."""

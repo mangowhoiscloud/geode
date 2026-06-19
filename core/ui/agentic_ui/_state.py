@@ -17,6 +17,7 @@ from __future__ import annotations
 import time
 from dataclasses import dataclass, field
 
+from core.time_format import format_elapsed
 from core.ui.context_local import ContextLocal
 
 # Task/thread-local IPC writer for structured tool events.
@@ -67,7 +68,7 @@ class SessionMeter:
 
     @property
     def elapsed_display(self) -> str:
-        return self._format_seconds(self.elapsed_s)
+        return format_elapsed(self.elapsed_s)
 
     # -- Turn-level (per-turn delta) ---------------------------------------
 
@@ -77,17 +78,7 @@ class SessionMeter:
 
     @property
     def turn_elapsed_display(self) -> str:
-        return self._format_seconds(self.turn_elapsed_s)
-
-    # -- Helpers -----------------------------------------------------------
-
-    @staticmethod
-    def _format_seconds(seconds: float) -> str:
-        s = int(seconds)
-        if s < 60:
-            return f"{s}s"
-        m, sec = divmod(s, 60)
-        return f"{m}m {sec}s"
+        return format_elapsed(self.turn_elapsed_s)
 
 
 _meter_local = ContextLocal("geode_session_meter_local")

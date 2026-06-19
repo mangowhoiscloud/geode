@@ -45,6 +45,11 @@ functional change.
 
 ---
 
+## [0.99.232] - 2026-06-19
+
+### Changed
+- **Five more duplicated-helper clusters folded into shared homes** (PR-DEDUP-2; the codebase-audit follow-up to PR-DEDUP-CONFIG-TOML). A cross-tree sweep surfaced five real duplications, each migrated to one home with all callers updated: (1) **JWT payload decode** — four byte-identical "split → pad base64url → `json.loads` → swallow errors" blocks (`oauth_login`, `codex_cli_oauth`, `llm/providers/codex`, `petri_audit/codex_provider`) → new `core/auth/jwt_claims.py:decode_jwt_claims`; (2) **`mask_key`** — three copies (`profiles.masked_key`, `cli/doctor`, the canonical `config/env_io`) → the one `core/config/env_io.py:mask_key`; (3) **duration formatters** — four copies in two idioms (`_format_age` ×2, `_fmt_elapsed`/`_format_seconds`) → new `core/time_format.py` (`format_age` / `format_elapsed`); (4) **inline atomic-write** — four hand-rolled `tmp.write_text + os.replace` sites (`hybrid_session` ×2, `session._persist`, `scheduler/service`) → the existing `core/memory/atomic_write.py` helpers (which add `fsync` + crash-safe temp cleanup), keeping each site's lock / error-swallowing contract and exact serialization; (5) **read-json-or-none** — two copies (`cli/commands/self_improving._load_json`, `seed_generation/eval_export._read_json`) → new `core/memory/atomic_write.py:read_json_or_none`. Behavior-preserving (Codex MCP reviewed: one MEDIUM fixed by writing `hybrid_session` via `atomic_write_text` + bare `json.dumps` so serialization stays byte-identical; two benign edge-differences on unreachable inputs noted — a valid-but-empty codex JWT payload now yields `None` instead of a dict-of-`None`s, and `eval_export` warns on a present-but-non-dict artefact). Also removed two stale `__pycache__`-only ghost directories (`core/utils/`, `core/scheduler/scheduler/`) left by past moves. New `tests/core/test_time_format.py` adds the `format_elapsed` coverage the old copies never had. The four-copy `core/config/__init__.py`/`explain.py` inline config-TOML resolvers remain intentionally un-migrated (module-global monkeypatch seam, as in PR-DEDUP-CONFIG-TOML).
+
 ## [0.99.231] - 2026-06-19
 
 ### Changed

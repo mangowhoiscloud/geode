@@ -4,7 +4,8 @@ from __future__ import annotations
 
 import json
 
-from core.memory.project_journal import ProjectJournal, RunRecord, _format_age
+from core.memory.project_journal import ProjectJournal, RunRecord
+from core.time_format import format_age as _format_age
 
 
 class TestRunRecord:

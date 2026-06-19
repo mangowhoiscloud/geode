@@ -33,6 +33,7 @@ from pathlib import Path
 from typing import Any
 
 from core.config.toml_edit import persist_toml_section
+from core.memory.atomic_write import read_json_or_none
 from core.ui.console import console
 
 __all__ = ["cmd_self_improving"]
@@ -146,7 +147,7 @@ def _cmd_status() -> None:
     console.print("  [header]Self-improving loop — status[/header]")
 
     baseline_path = _baseline_path()
-    baseline = _load_json(baseline_path)
+    baseline = read_json_or_none(baseline_path)
     console.print()
     console.print("  [bold]Baseline[/bold]")
     if baseline is None:
@@ -190,19 +191,6 @@ def _baseline_path() -> Path:
     import core.paths
 
     return Path(core.paths.BASELINE_JSON_PATH)
-
-
-def _load_json(path: Path) -> dict[str, Any] | None:
-    """Return the parsed JSON dict, or ``None`` on missing/malformed
-    file. Slash output must never raise on bad input — operator may
-    inspect mid-run when the file is being rewritten."""
-    if not path.is_file():
-        return None
-    try:
-        data = json.loads(path.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError):
-        return None
-    return data if isinstance(data, dict) else None
 
 
 def _tail_jsonl(path: Path, n: int) -> Iterable[dict[str, Any]]:
@@ -1221,7 +1209,7 @@ def _cmd_rollback_check(opts: list[str]) -> None:
     # on that constant is seen here (the original Codex must-fix #1 isolation
     # property, now keyed on the baseline constant rather than the audit log).
     baseline_path = Path(core.paths.BASELINE_JSON_PATH)
-    baseline = _load_json(baseline_path) or {}
+    baseline = read_json_or_none(baseline_path) or {}
     baseline_dim_raw = baseline.get("dim_means") if isinstance(baseline, dict) else None
     if not isinstance(baseline_dim_raw, dict):
         baseline_dim_raw = None

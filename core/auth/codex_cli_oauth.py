@@ -12,7 +12,6 @@ Token source: ~/.codex/auth.json
 
 from __future__ import annotations
 
-import json
 import logging
 import time
 from typing import Any, TypedDict
@@ -22,6 +21,7 @@ from core.auth.credential_cache import (
     read_json_credentials_file,
     refresh_managed_token,
 )
+from core.auth.jwt_claims import decode_jwt_claims
 
 log = logging.getLogger(__name__)
 
@@ -46,21 +46,8 @@ def invalidate_cache() -> None:
 
 def _decode_jwt_expiry(token: str) -> float | None:
     """Decode exp claim from JWT access token (seconds)."""
-    import base64
-
-    parts = token.split(".")
-    if len(parts) < 2:
-        return None
-    try:
-        # Add padding for base64url
-        padded = parts[1] + "=" * (4 - len(parts[1]) % 4)
-        payload = json.loads(base64.urlsafe_b64decode(padded))
-        exp = payload.get("exp")
-        if isinstance(exp, (int, float)) and exp > 0:
-            return float(exp)
-    except (json.JSONDecodeError, ValueError, UnicodeDecodeError):
-        pass
-    return None
+    exp = decode_jwt_claims(token).get("exp")
+    return float(exp) if isinstance(exp, (int, float)) and exp > 0 else None
 
 
 def _read_from_file() -> dict[str, Any] | None:

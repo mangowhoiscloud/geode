@@ -11,11 +11,12 @@ from __future__ import annotations
 
 import json
 import logging
-import os
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
+
+from core.memory.atomic_write import atomic_write_json
 
 log = logging.getLogger(__name__)
 
@@ -145,22 +146,15 @@ class InMemorySessionStore:
         if entry is None:
             return
         fpath = self._storage_dir / self._safe_filename(session_id)
-        tmp = fpath.with_suffix(".tmp")
         try:
             payload = {
                 "session_id": session_id,
                 "data": entry.data,
                 "created_at": entry.created_at,
             }
-            tmp.write_text(
-                json.dumps(payload, ensure_ascii=False, default=str),
-                encoding="utf-8",
-            )
-            os.replace(str(tmp), str(fpath))
+            atomic_write_json(fpath, payload, ensure_ascii=False, default=str)
         except (TypeError, ValueError, OSError) as exc:
             log.debug("Failed to persist session %s: %s", session_id, exc)
-            if tmp.exists():
-                tmp.unlink(missing_ok=True)
 
     def _remove_from_disk(self, session_id: str) -> None:
         """Remove a session file from disk."""

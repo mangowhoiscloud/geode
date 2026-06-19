@@ -23,12 +23,12 @@ from __future__ import annotations
 
 import json
 import logging
-import os
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
+from core.memory.atomic_write import atomic_write_text
 from core.memory.port import SessionStorePort
 
 log = logging.getLogger(__name__)
@@ -140,10 +140,10 @@ class PostgreSQLSessionStore:
 
     def set(self, session_id: str, data: dict[str, Any]) -> None:
         record = {"session_id": session_id, "data": data, "updated_at": time.time()}
-        f = self._session_file(session_id)
-        tmp = f.with_suffix(".tmp")
-        tmp.write_text(json.dumps(record), encoding="utf-8")
-        os.replace(str(tmp), str(f))
+        # atomic_write_text + bare json.dumps (not atomic_write_json) keeps the
+        # original serialization exactly: ensure_ascii=True + no ``default`` so a
+        # non-JSON-native value still raises rather than coercing to str.
+        atomic_write_text(self._session_file(session_id), json.dumps(record))
 
     def delete(self, session_id: str) -> bool:
         f = self._session_file(session_id)
@@ -157,10 +157,7 @@ class PostgreSQLSessionStore:
 
     def save_checkpoint(self, session_id: str, checkpoint_data: dict[str, Any]) -> None:
         record = {"session_id": session_id, "data": checkpoint_data, "saved_at": time.time()}
-        f = self._checkpoint_file(session_id)
-        tmp = f.with_suffix(".tmp")
-        tmp.write_text(json.dumps(record), encoding="utf-8")
-        os.replace(str(tmp), str(f))
+        atomic_write_text(self._checkpoint_file(session_id), json.dumps(record))
 
     def load_checkpoint(self, session_id: str) -> dict[str, Any] | None:
         f = self._checkpoint_file(session_id)
