@@ -23,7 +23,6 @@ from __future__ import annotations
 
 import argparse
 import json
-import os
 import shutil
 import subprocess
 import sys
@@ -133,45 +132,6 @@ def check_audit_cli(skip_cli: bool) -> tuple[bool, str]:
             f"audit CLI --help exit={result.returncode}: {result.stderr.decode()[:200]}",
         )
     return True, "audit CLI reachable (--help OK)"
-
-
-def check_subscription_cli_for_source(source: str) -> tuple[bool, str]:
-    """PR-SIL-5THEME C6 (2026-05-23) — D1 provider pre-flight.
-
-    autoresearch / Petri audit 의 ``source`` setting 이 ``claude-cli`` 또는
-    ``openai-codex`` 일 때 해당 CLI binary 의 PATH 가용성 검증. 부재 시
-    actionable error 반환 → operator 가 subprocess 가 늦게 비-actionable
-    error 던지기 전 환경 정비. ``auto`` source 는 manifest cascade 가 다양
-    한 backend 사이에서 선택해서 단일 binary 검증 불가능 → "auto" 는 skip
-    (cascade 가 fallback path 책임).
-
-    GEODE_CLAUDE_CLI_BIN / GEODE_CODEX_CLI_BIN env override 우선시.
-    """
-    if source == "claude-cli":
-        bin_path = os.environ.get("GEODE_CLAUDE_CLI_BIN") or shutil.which("claude")
-        if bin_path is None:
-            return (
-                False,
-                "claude-cli source selected but `claude` binary not on PATH "
-                "(set GEODE_CLAUDE_CLI_BIN=/path/to/claude or run "
-                "`brew install anthropic-cli` / equivalent)",
-            )
-        return True, f"claude-cli reachable at {bin_path}"
-    if source == "openai-codex":
-        bin_path = os.environ.get("GEODE_CODEX_CLI_BIN") or shutil.which("codex")
-        if bin_path is None:
-            return (
-                False,
-                "openai-codex source selected but `codex` binary not on PATH "
-                "(set GEODE_CODEX_CLI_BIN=/path/to/codex or install ChatGPT "
-                "Codex CLI)",
-            )
-        return True, f"openai-codex reachable at {bin_path}"
-    if source == "auto":
-        # manifest cascade — single binary check 불가, skip
-        return True, "auto source — manifest cascade handles fallback"
-    # 기타 source (e.g. legacy api_key 가 어찌어찌 들어온 경우) — graceful skip
-    return True, f"source={source!r} — no CLI binary pre-flight applicable"
 
 
 def write_report(text: str) -> Path:

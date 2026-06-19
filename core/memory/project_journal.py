@@ -26,6 +26,7 @@ from datetime import date
 from pathlib import Path
 from typing import Any
 
+from core.memory.atomic_write import iter_jsonl
 from core.time_format import format_age
 
 log = logging.getLogger(__name__)
@@ -181,20 +182,15 @@ class ProjectJournal:
 
     def get_project_cost_summary(self) -> dict[str, Any]:
         """Aggregate project-level costs from costs.jsonl."""
-        lines = self._read_jsonl_all("costs.jsonl")
         total_cost = 0.0
         total_calls = 0
         by_model: dict[str, float] = {}
-        for line in lines:
-            try:
-                d = json.loads(line)
-                cost = d.get("cost", 0.0)
-                model = d.get("model", "unknown")
-                total_cost += cost
-                total_calls += 1
-                by_model[model] = by_model.get(model, 0.0) + cost
-            except (json.JSONDecodeError, KeyError):
-                continue
+        for d in iter_jsonl(self._dir / "costs.jsonl"):
+            cost = d.get("cost", 0.0)
+            model = d.get("model", "unknown")
+            total_cost += cost
+            total_calls += 1
+            by_model[model] = by_model.get(model, 0.0) + cost
         return {
             "total_cost": round(total_cost, 4),
             "total_calls": total_calls,
@@ -309,15 +305,6 @@ class ProjectJournal:
         try:
             lines = fpath.read_text(encoding="utf-8").splitlines()
             return [ln for ln in lines[-limit:] if ln.strip()]
-        except OSError:
-            return []
-
-    def _read_jsonl_all(self, filename: str) -> list[str]:
-        fpath = self._dir / filename
-        if not fpath.exists():
-            return []
-        try:
-            return [ln for ln in fpath.read_text(encoding="utf-8").splitlines() if ln.strip()]
         except OSError:
             return []
 

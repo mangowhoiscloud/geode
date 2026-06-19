@@ -14,7 +14,6 @@ import pytest
 from core.self_improving.loop.mutate import policies as _policies_mod
 from core.self_improving.loop.mutate.policies import (
     TARGET_KINDS,
-    is_valid_target_kind,
     load_policy,
     policy_path,
     write_policy,
@@ -26,7 +25,7 @@ from core.self_improving.loop.mutate.runner import (
 )
 
 # ---------------------------------------------------------------------------
-# TARGET_KINDS + is_valid_target_kind
+# TARGET_KINDS
 # ---------------------------------------------------------------------------
 
 
@@ -50,17 +49,6 @@ def test_target_kinds_contains_seven_behaviour_kinds() -> None:
     assert len(TARGET_KINDS) == 7
     # hyperparam is no longer a mutable kind.
     assert "hyperparam" not in TARGET_KINDS
-    assert is_valid_target_kind("hyperparam") is False
-
-
-def test_is_valid_target_kind_accepts_registered_kinds() -> None:
-    for kind in TARGET_KINDS:
-        assert is_valid_target_kind(kind) is True
-
-
-def test_is_valid_target_kind_rejects_unknown() -> None:
-    assert is_valid_target_kind("unknown") is False
-    assert is_valid_target_kind("") is False
 
 
 # ---------------------------------------------------------------------------
@@ -284,17 +272,12 @@ def test_apply_mutation_decomposition_writes_to_decomposition_file(
 
 def test_apply_mutation_retrieval_is_rejected_post_s0d() -> None:
     """ADR-012 S0d (2026-05-21) — retrieval 은 TARGET_KINDS 에서 deprecate.
-    ``apply_mutation`` 호출 시 ``is_valid_target_kind("retrieval") == False``
-    이므로 ``policy_path`` 가 ValueError 를 raise 한다."""
-    from core.self_improving.loop.mutate.policies import is_valid_target_kind, policy_path
+    parse_mutation 의 entry guard 가 ``retrieval`` mutation 을 거부한다."""
+    from core.self_improving.loop.mutate.policies import policy_path
 
-    assert is_valid_target_kind("retrieval") is False, (
-        "S0d 후 retrieval 은 active target_kind 가 아님"
-    )
+    assert "retrieval" not in TARGET_KINDS, "S0d 후 retrieval 은 active target_kind 가 아님"
     # policy_path 는 raise ValueError on unknown kinds — 그러나 dict 매핑은
     # 보존돼 있어서 직접 호출은 가능 (path constant preservation).
-    # apply_mutation 의 entry guard 는 is_valid_target_kind 를 거치므로
-    # retrieval mutation 시도는 거부됨.
     path = policy_path("retrieval")  # dict 매핑은 보존 — 미래 복원용
     assert path.name == "retrieval.json"
 

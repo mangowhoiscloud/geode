@@ -27,6 +27,8 @@ import logging
 from pathlib import Path
 from typing import Any
 
+from core.memory.atomic_write import iter_jsonl
+
 log = logging.getLogger(__name__)
 
 # Load core-generic MCP tool descriptions from centralized JSON.
@@ -69,31 +71,16 @@ def _self_improving_status_payload() -> dict[str, Any]:
         except (OSError, json.JSONDecodeError):
             baseline = None
 
-    recent: list[dict[str, Any]] = []
-    if audit_path.is_file():
-        try:
-            lines = audit_path.read_text(encoding="utf-8").splitlines()
-        except OSError:
-            lines = []
-        for line in lines:
-            line = line.strip()
-            if not line:
-                continue
-            try:
-                row = json.loads(line)
-            except json.JSONDecodeError:
-                continue
-            if isinstance(row, dict):
-                recent.append(
-                    {
-                        "ts": row.get("ts") or row.get("timestamp"),
-                        "kind": row.get("kind") or "applied",
-                        "mutation_id": row.get("mutation_id") or row.get("id"),
-                        "target_kind": row.get("target_kind"),
-                        "target_section": row.get("target_section"),
-                    }
-                )
-        recent = recent[-_STATUS_RECENT_N:]
+    recent: list[dict[str, Any]] = [
+        {
+            "ts": row.get("ts") or row.get("timestamp"),
+            "kind": row.get("kind") or "applied",
+            "mutation_id": row.get("mutation_id") or row.get("id"),
+            "target_kind": row.get("target_kind"),
+            "target_section": row.get("target_section"),
+        }
+        for row in iter_jsonl(audit_path)
+    ][-_STATUS_RECENT_N:]
 
     return {"baseline": baseline, "recent_mutations": recent}
 

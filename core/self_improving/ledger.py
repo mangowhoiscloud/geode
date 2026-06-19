@@ -30,6 +30,7 @@ if TYPE_CHECKING:
     from core.self_improving.loop.observe.run_provenance import RunProvenanceFields
     from core.self_improving.loop.observe.statistical_power import PowerRecordFields
 
+from core.memory.atomic_write import iter_jsonl
 from core.paths import (
     BASELINE_ARCHIVE_PATH,
     BASELINE_JSON_PATH,
@@ -354,46 +355,30 @@ def _next_gen_counter_for_commit(commit: str, sessions_path: Path | None = None)
     ``SESSIONS_INDEX_PATH``.
     """
     target = sessions_path if sessions_path is not None else SESSIONS_INDEX_PATH
-    if not target.is_file():
-        return 1
     max_n = 0
     saw_commit = False
     prefix = f"autoresearch-{commit}"
-    try:
-        with target.open("r", encoding="utf-8") as fh:
-            for line in fh:
-                line = line.strip()
-                if not line:
-                    continue
-                try:
-                    row = json.loads(line)
-                except json.JSONDecodeError:
-                    continue
-                if not isinstance(row, dict):
-                    continue
-                tag = row.get("gen_tag", "")
-                if not isinstance(tag, str) or not tag.startswith(prefix):
-                    continue
-                saw_commit = True
-                # Match either ``<prefix>`` (legacy = gen0 implied) or
-                # ``<prefix>-gen<N>`` (post-PR explicit counter).
-                suffix = tag[len(prefix) :]
-                if suffix == "":
-                    continue  # legacy gen0 — max_n stays at 0
-                m = _GEN_SUFFIX_RE.match(suffix)
-                if m:
-                    try:
-                        n = int(m.group(1))
-                    except ValueError:
-                        # Regex restricts to ``\d+`` so this cannot fire
-                        # in practice, but ``int`` *can* raise on
-                        # absurdly long digit strings. Treat as if the
-                        # row didn't match so the scan continues.
-                        continue
-                    max_n = max(max_n, n)
-    except OSError:
-        # Reading sessions.jsonl is best-effort — fall through to gen1.
-        return 1
+    # iter_jsonl is best-effort (missing/unreadable file → empty); a no-match
+    # scan falls through to gen1 via the ``not saw_commit`` guard below.
+    for row in iter_jsonl(target):
+        tag = row.get("gen_tag", "")
+        if not isinstance(tag, str) or not tag.startswith(prefix):
+            continue
+        saw_commit = True
+        # Match either ``<prefix>`` (legacy = gen0 implied) or
+        # ``<prefix>-gen<N>`` (post-PR explicit counter).
+        suffix = tag[len(prefix) :]
+        if suffix == "":
+            continue  # legacy gen0 — max_n stays at 0
+        m = _GEN_SUFFIX_RE.match(suffix)
+        if m:
+            try:
+                n = int(m.group(1))
+            except ValueError:
+                # Regex restricts to ``\d+`` so this cannot fire in practice,
+                # but ``int`` *can* raise on absurdly long digit strings.
+                continue
+            max_n = max(max_n, n)
     if not saw_commit:
         return 1
     return max_n + 1
@@ -770,16 +755,9 @@ def _next_baseline_id(now: datetime) -> str:
     """
     archive_path = _baseline_archive_path()
     seq = 1
-    if archive_path.is_file():
-        for line in archive_path.read_text(encoding="utf-8").splitlines():
-            stripped = line.strip()
-            if not stripped:
-                continue
-            try:
-                if json.loads(stripped).get("kind") == _BASELINE_REGISTRY_KIND:
-                    seq += 1
-            except json.JSONDecodeError:
-                continue
+    for row in iter_jsonl(archive_path):
+        if row.get("kind") == _BASELINE_REGISTRY_KIND:
+            seq += 1
     return f"baseline-{now.strftime('%y%m')}-{seq}"
 
 

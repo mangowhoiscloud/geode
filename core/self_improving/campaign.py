@@ -96,6 +96,7 @@ from datetime import UTC
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
+from core.memory.atomic_write import iter_jsonl
 from core.paths import (
     AUTORESEARCH_POLICIES_DIR,
     AUTORESEARCH_STATE_DIR,
@@ -455,21 +456,7 @@ def count_attribution_rows(path: Path | None = None) -> int:
     row as if it were this cycle's signal.
     """
     target = path if path is not None else MUTATIONS_JSONL
-    if not target.exists():
-        return 0
-    count = 0
-    with target.open("r", encoding="utf-8") as fh:
-        for raw in fh:
-            stripped = raw.strip()
-            if not stripped:
-                continue
-            try:
-                row = json.loads(stripped)
-            except json.JSONDecodeError:
-                continue
-            if isinstance(row, dict) and row.get("kind") == "attribution":
-                count += 1
-    return count
+    return sum(1 for row in iter_jsonl(target) if row.get("kind") == "attribution")
 
 
 def read_latest_attribution(path: Path | None = None, *, min_rows: int = 0) -> CycleSignal | None:
@@ -488,22 +475,12 @@ def read_latest_attribution(path: Path | None = None, *, min_rows: int = 0) -> C
     keeps the unconditional "newest row" behaviour for direct callers / tests.
     """
     target = path if path is not None else MUTATIONS_JSONL
-    if not target.exists():
-        return None
     latest: dict[str, Any] | None = None
     seen = 0
-    with target.open("r", encoding="utf-8") as fh:
-        for raw in fh:
-            stripped = raw.strip()
-            if not stripped:
-                continue
-            try:
-                row = json.loads(stripped)
-            except json.JSONDecodeError:
-                continue
-            if isinstance(row, dict) and row.get("kind") == "attribution":
-                latest = row
-                seen += 1
+    for row in iter_jsonl(target):
+        if row.get("kind") == "attribution":
+            latest = row
+            seen += 1
     if latest is None or seen <= min_rows:
         return None
     return CycleSignal(
@@ -1099,7 +1076,7 @@ def _serialise_worker(outcome: WorkerOutcome) -> dict[str, Any]:
     Persists only what the aggregators consume on resume: the worker ``index``,
     its RAW ``dim_means``, and the floor signal's ``held_out_fitness`` + ``fitness``
     (the only two :class:`CycleSignal` fields :func:`run_gen0_baseline_async` /
-    :func:`run_control_arm_async` read back). A reconstructed worker is marked
+    :func:`run_control_arms_async` read back). A reconstructed worker is marked
     ``ok=True`` with ``returncode=0`` and ``reason="resumed from checkpoint"``.
     """
     signal = outcome.signal
@@ -1575,22 +1552,8 @@ def merge_worker_transcripts(
     """
     rows: list[dict[str, Any]] = []
     for path in worker_transcripts:
-        if path is None or not path.exists():
-            continue
-        try:
-            text = path.read_text(encoding="utf-8")
-        except OSError:
-            continue
-        for line in text.splitlines():
-            stripped = line.strip()
-            if not stripped:
-                continue
-            try:
-                parsed = json.loads(stripped)
-            except json.JSONDecodeError:
-                continue
-            if isinstance(parsed, dict):
-                rows.append(parsed)
+        if path is not None:
+            rows.extend(iter_jsonl(path))
     if not rows:
         return 0
     rows.sort(key=_transcript_sort_key)
@@ -1776,69 +1739,6 @@ class ControlArmFloor:
         )
 
 
-async def run_control_arm_async(
-    *,
-    arm: str,
-    arm_index: int,
-    n: int,
-    audit_max_samples: int,
-    audit_max_connections: int,
-    dry_run: bool,
-    progress: ProgressLog,
-    snapshot_dir: Path = GEN0_SNAPSHOT_DIR,
-    per_audit_timeout: float | None = None,
-    workers_root: Path | None = None,
-    runner_fn: Any | None = None,
-    checkpoint: RunCheckpoint | None = None,
-    campaign_transcript: Path | None = None,
-) -> ControlArmFloor:
-    """Run ONE PATH-INDEPENDENT control arm's N cycles concurrently.
-
-    Thin single-arm wrapper over :func:`run_control_arms_async` (the multi-arm
-    orchestrator that, since PR-CAMPAIGN-CONCURRENT-CONTROL-ARMS, is the DEFAULT
-    control-arm path — it fans never+random out in ONE gather). Kept for the
-    single-arm caller / tests: it runs just this one arm's cycles, with the arm's
-    ``GEODE_PROMOTE_POLICY`` (+ per-cycle deterministic ``GEODE_PROMOTE_POLICY_SEED``
-    for ``random``), then aggregates the per-cycle held-out / fitness floor.
-
-    NOT for the GATE arm — that is path-dependent (a promote mutates the champion
-    + steers the next propose) and MUST stay the sequential :func:`run_arm`. This
-    function raises ``ValueError`` if asked to run ``gate`` so the path-dependence
-    invariant cannot be violated by a mis-call.
-
-    ``checkpoint`` (S4) keys this arm's completed cycles under its OWN group (the
-    arm name), so a re-run after a crash skips the cycles already recorded complete
-    and re-runs only the missing ones, then aggregates the union. ``checkpoint=None``
-    keeps the pre-S4 behaviour (every cycle runs).
-
-    ``campaign_transcript`` (S6) is the destination the per-cycle ISOLATED
-    transcripts are MERGED into after the gather (sorted by ``(ts, seq)``, each
-    row ``worker_id``-stamped ``f"{arm}-w{cycle}"``). ``None`` SKIPS the merge.
-    """
-    if arm == "gate":
-        raise ValueError(
-            "run_control_arm_async refuses the GATE arm — it is path-dependent "
-            "(promote mutates the champion chain) and MUST stay sequential (run_arm)"
-        )
-    if arm not in {"never", "random"}:
-        raise ValueError(f"run_control_arm_async expects 'never' or 'random', got {arm!r}")
-    floors = await run_control_arms_async(
-        control_arms=[(arm, arm_index)],
-        n=n,
-        audit_max_samples=audit_max_samples,
-        audit_max_connections=audit_max_connections,
-        dry_run=dry_run,
-        progress=progress,
-        snapshot_dir=snapshot_dir,
-        per_audit_timeout=per_audit_timeout,
-        workers_root=workers_root,
-        runner_fn=runner_fn,
-        checkpoint=checkpoint,
-        campaign_transcript=campaign_transcript,
-    )
-    return floors[arm]
-
-
 def _control_cycle_seed(arm: str, arm_index: int, n: int, cycle: int) -> int | None:
     """The deterministic ``GEODE_PROMOTE_POLICY_SEED`` for one control-arm cycle.
 
@@ -1865,9 +1765,8 @@ def _aggregate_control_floor(
 ) -> ControlArmFloor:
     """Aggregate ONE control arm's per-cycle outcomes into its :class:`ControlArmFloor`.
 
-    The post-gather per-arm aggregation, factored out so the single-arm
-    (:func:`run_control_arm_async`) and the concurrent multi-arm
-    (:func:`run_control_arms_async`) paths compute the floor IDENTICALLY. ``fresh``
+    The post-gather per-arm aggregation, factored out so the concurrent multi-arm
+    (:func:`run_control_arms_async`) path computes the floor IDENTICALLY. ``fresh``
     is only THIS arm's freshly-run outcomes (the multi-arm orchestrator partitions
     the single gather's results by arm BEFORE calling this, so a ``never`` cycle is
     never mixed into the ``random`` floor — attribution invariant #1). Records the

@@ -13,6 +13,7 @@ from pathlib import Path
 from typing import Any
 
 from core.hooks.system import HookEvent
+from core.memory.atomic_write import iter_jsonl
 
 log = logging.getLogger(__name__)
 
@@ -57,32 +58,17 @@ class ApprovalTracker:
 
     def suggest_auto_approve(self, tool_name: str) -> bool:
         """Return True if tool has N+ consecutive approvals with no denials in lookback."""
-        if not self._path.exists():
-            return False
-
         cutoff = time.time() - self.LOOKBACK_DAYS * 86400
         consecutive = 0
-
-        try:
-            with open(self._path) as f:
-                for line in f:
-                    line = line.strip()
-                    if not line:
-                        continue
-                    try:
-                        rec = json.loads(line)
-                    except json.JSONDecodeError:
-                        continue
-                    if rec.get("tool_name") != tool_name:
-                        continue
-                    if rec.get("ts", 0) < cutoff:
-                        continue
-                    if rec.get("decision") == "approved":
-                        consecutive += 1
-                    else:
-                        consecutive = 0
-        except OSError:
-            return False
+        for rec in iter_jsonl(self._path):
+            if rec.get("tool_name") != tool_name:
+                continue
+            if rec.get("ts", 0) < cutoff:
+                continue
+            if rec.get("decision") == "approved":
+                consecutive += 1
+            else:
+                consecutive = 0
 
         return consecutive >= self.CONSECUTIVE_THRESHOLD
 

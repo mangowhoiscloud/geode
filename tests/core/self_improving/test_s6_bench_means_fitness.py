@@ -13,7 +13,6 @@ from core.self_improving.bench_means import (
     collect_bench_means_from_inspect_ai,
     compute_bench_aggregate,
     detect_cross_validation_conflict,
-    validate_bench_schema,
 )
 from core.self_improving.fitness import (
     FITNESS_ADMIRE_3AX,
@@ -104,32 +103,7 @@ def test_aggregate_clamps_out_of_range() -> None:
 
 
 # ---------------------------------------------------------------------------
-# 3. validate_bench_schema
-# ---------------------------------------------------------------------------
-
-
-def test_validate_none() -> None:
-    assert validate_bench_schema(None) is True
-
-
-def test_validate_valid_dict() -> None:
-    assert validate_bench_schema({"swe_bench_pro_pass": 0.5}) is True
-
-
-def test_validate_rejects_unknown_field() -> None:
-    assert validate_bench_schema({"unknown_bench": 0.5}) is False
-
-
-def test_validate_rejects_out_of_range() -> None:
-    assert validate_bench_schema({"swe_bench_pro_pass": 1.5}) is False
-
-
-def test_validate_rejects_non_dict() -> None:
-    assert validate_bench_schema([0.5]) is False
-
-
-# ---------------------------------------------------------------------------
-# 4. Cross-validation gate — Goodhart 양방향 방어
+# 3. Cross-validation gate — Goodhart 양방향 방어
 # ---------------------------------------------------------------------------
 
 

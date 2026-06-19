@@ -17,7 +17,12 @@ from pathlib import Path
 from unittest.mock import patch
 
 import pytest
-from core.memory.atomic_write import atomic_write_json, atomic_write_text
+from core.memory.atomic_write import (
+    atomic_write_json,
+    atomic_write_text,
+    iter_jsonl,
+    read_jsonl,
+)
 
 
 class TestAtomicWriteText:
@@ -137,3 +142,65 @@ class TestConcurrentWrites:
         assert final.startswith("thread-")
         lines = final.strip().split("\n")
         assert len(set(lines)) == 1  # all lines from same thread
+
+
+class TestIterReadJsonl:
+    """The shared JSONL read+parse+skip helper (PR-DEDUP-JSONL)."""
+
+    def _write(self, path: Path, lines: list[str]) -> None:
+        path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+
+    def test_reads_valid_rows(self, tmp_path: Path) -> None:
+        f = tmp_path / "log.jsonl"
+        self._write(f, ['{"a": 1}', '{"b": 2}'])
+        assert read_jsonl(f) == [{"a": 1}, {"b": 2}]
+
+    def test_skips_blank_and_malformed_and_non_dict(self, tmp_path: Path) -> None:
+        f = tmp_path / "log.jsonl"
+        self._write(f, ['{"a": 1}', "", "  ", "not json", "[1, 2]", '{"b": 2}'])
+        assert read_jsonl(f) == [{"a": 1}, {"b": 2}]  # array row + garbage skipped
+
+    def test_missing_file_is_empty(self, tmp_path: Path) -> None:
+        assert read_jsonl(tmp_path / "absent.jsonl") == []
+        assert list(iter_jsonl(tmp_path / "absent.jsonl")) == []
+
+    def test_tail_keeps_last_n(self, tmp_path: Path) -> None:
+        f = tmp_path / "log.jsonl"
+        self._write(f, [f'{{"i": {i}}}' for i in range(5)])
+        assert read_jsonl(f, tail=2) == [{"i": 3}, {"i": 4}]
+        assert read_jsonl(f, tail=0) == []  # tail<=0 → empty (matches old _tail_jsonl)
+        assert read_jsonl(f) == [{"i": i} for i in range(5)]  # tail=None → all
+
+    def test_iter_supports_early_exit(self, tmp_path: Path) -> None:
+        f = tmp_path / "log.jsonl"
+        self._write(f, ['{"k": "x"}', '{"k": "y"}', '{"k": "z"}'])
+        found = next((r for r in iter_jsonl(f) if r.get("k") == "y"), None)
+        assert found == {"k": "y"}
+
+    def test_iter_is_lazy_streaming(self, tmp_path: Path) -> None:
+        # Genuinely lazy: iter_jsonl is a generator that pulls one line at a time
+        # and can be closed mid-stream (releasing the file handle) — it does not
+        # read the whole file up front (Codex MEDIUM).
+        import types
+
+        f = tmp_path / "log.jsonl"
+        self._write(f, [f'{{"k": {i}}}' for i in range(4)])
+        gen = iter_jsonl(f)
+        assert isinstance(gen, types.GeneratorType)
+        assert next(gen) == {"k": 0}
+        assert next(gen) == {"k": 1}
+        gen.close()  # lazy generator → closeable mid-stream, no StopIteration leak
+
+    def test_unreadable_file_warns_and_returns_empty(
+        self, tmp_path: Path, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        # An existing-but-unreadable file degrades to empty but is LOGGED (not
+        # silently swallowed) — observable fail-soft (Codex HIGH).
+        f = tmp_path / "log.jsonl"
+        self._write(f, ['{"a": 1}'])
+        with (
+            patch.object(Path, "open", side_effect=OSError("boom")),
+            caplog.at_level("WARNING"),
+        ):
+            assert read_jsonl(f) == []
+        assert any("unreadable" in r.message for r in caplog.records)

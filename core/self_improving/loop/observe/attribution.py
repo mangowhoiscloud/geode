@@ -75,8 +75,6 @@ class AttributionRecord(BaseModel):
     significant: dict[str, bool] = Field(default_factory=dict)
     attribution_score: float = 0.0
     missing_baseline: bool = True
-    confidence_trajectory: list[float] = Field(default_factory=list)
-    confidence_stability: float | None = None
     fitness_before: float | None = None
     fitness_after: float | None = None
     fitness_delta: float | None = None
@@ -239,73 +237,12 @@ def _attribution_score(expected_dim: dict[str, float], observed_dim: dict[str, f
     return max(-1.0, min(1.0, total))
 
 
-def _confidence_stability(trajectory: list[Any]) -> float | None:
-    """PR-E (2026-05-21) — derive a 0..1 stability score from the
-    confidence values the reflection node emitted across the
-    mutation's active rounds.
-
-    Formula: ``1.0 - clamp(sample_stddev, 0.0, 1.0)``. High stability
-    (score ≈ 1.0) means confidence stayed steady — the mutation is
-    consistent with itself. Low stability (score ≈ 0.0) means
-    confidence wildly oscillated, which usually flags an unstable
-    policy change even if the dim deltas look favourable.
-
-    Returns ``None`` for trajectories shorter than 2 samples (no
-    variance signal yet). Non-numeric / bool / out-of-range entries
-    are silently dropped — PR-3 reflection's bool-exclusion guard
-    has the same intent for the source data.
-    """
-    cleaned: list[float] = []
-    for value in trajectory:
-        if isinstance(value, bool):  # bool is int subclass — exclude
-            continue
-        if not isinstance(value, int | float):
-            continue
-        f = float(value)
-        if 0.0 <= f <= 1.0:
-            cleaned.append(f)
-    if len(cleaned) < 2:
-        return None
-    mean = sum(cleaned) / len(cleaned)
-    variance = sum((x - mean) ** 2 for x in cleaned) / (len(cleaned) - 1)
-    stddev = math.sqrt(variance)
-    return max(0.0, 1.0 - min(1.0, stddev))
-
-
-def confidence_trajectory_from_episodes(episodes: list[Any]) -> list[float]:
-    """Pull the per-round ``confidence`` values from a list of PR-4
-    :class:`core.memory.episodic.Episode` rows (or any duck-typed
-    objects that carry a ``cognitive_state`` dict). Missing /
-    non-numeric values are skipped silently so a partial trajectory
-    is still useful.
-
-    Returns the trajectory in input order — PR-4 ``recent()`` returns
-    newest-first, so callers that want chronological order should
-    reverse first. The order doesn't matter for variance, but a
-    future Wasserstein / drift metric would care.
-    """
-    out: list[float] = []
-    for ep in episodes:
-        snapshot = getattr(ep, "cognitive_state", None)
-        if not isinstance(snapshot, dict):
-            continue
-        raw = snapshot.get("confidence")
-        if isinstance(raw, bool):  # exclude bool (int subclass)
-            continue
-        if isinstance(raw, int | float):
-            f = float(raw)
-            if 0.0 <= f <= 1.0:
-                out.append(f)
-    return out
-
-
 def compute_attribution(
     *,
     mutation_id: str,
     expected_dim: dict[str, float],
     baseline_before: BaselineSnapshot | None,
     baseline_after: BaselineSnapshot | None,
-    confidence_trajectory: list[float] | None = None,
     fitness_before: float | None = None,
     fitness_after: float | None = None,
     audit_run_id: str = "",
@@ -331,19 +268,7 @@ def compute_attribution(
     ``observed_dim`` / ``ci95`` / ``significant`` are empty and
     ``attribution_score`` is ``0.0``. The caller can still write the
     row to record the *absence* of signal.
-
-    PR-E (2026-05-21) — added ``confidence_trajectory`` (optional
-    list of floats sampled from the reflection node's
-    ``cognitive_state.confidence`` across the mutation's active
-    rounds, typically pulled via :func:`confidence_trajectory_from_episodes`).
-    When supplied with >= 2 samples the payload gains a
-    ``confidence_stability`` term ∈ [0,1] (1.0 = rock-steady,
-    0.0 = wild oscillation). ``attribution_score`` stays unchanged
-    so downstream policy-mutation aggregators (PR-6) can weight
-    dim-deltas vs belief-stability independently.
     """
-    trajectory = list(confidence_trajectory or [])
-    stability = _confidence_stability(trajectory) if trajectory else None
     payload: dict[str, Any] = {
         "ts": time.time(),
         "kind": "attribution",
@@ -354,8 +279,6 @@ def compute_attribution(
         "significant": {},
         "attribution_score": 0.0,
         "missing_baseline": baseline_before is None or baseline_after is None,
-        "confidence_trajectory": trajectory,
-        "confidence_stability": stability,
     }
     # W3 (2026-05-25 attribution wiring) — cross-ref to the Petri eval
     # archive measured for this mutation. Empty string when the caller
@@ -491,7 +414,6 @@ def write_attribution(
     expected_dim: dict[str, float],
     baseline_before: BaselineSnapshot | None,
     baseline_after: BaselineSnapshot | None,
-    confidence_trajectory: list[float] | None = None,
     log_path: Path | None = None,
     fitness_before: float | None = None,
     fitness_after: float | None = None,
@@ -517,10 +439,6 @@ def write_attribution(
     the loop runner has both baseline snapshots in hand right after
     an audit completes.
 
-    PR-E (2026-05-21) — accepts the optional
-    ``confidence_trajectory`` and forwards it to
-    :func:`compute_attribution`.
-
     PR-SIL-5THEME C4 (2026-05-23) — ``fitness_before`` / ``fitness_after``
     optional forward to ``compute_attribution`` — caller (autoresearch
     run loop / scheduler) 가 둘 다 in-scope 일 때 (e.g. previous
@@ -531,7 +449,6 @@ def write_attribution(
         expected_dim=expected_dim,
         baseline_before=baseline_before,
         baseline_after=baseline_after,
-        confidence_trajectory=confidence_trajectory,
         fitness_before=fitness_before,
         fitness_after=fitness_after,
         audit_run_id=audit_run_id,
@@ -557,6 +474,5 @@ __all__ = [
     "AttributionRecord",
     "append_attribution_log",
     "compute_attribution",
-    "confidence_trajectory_from_episodes",
     "write_attribution",
 ]
