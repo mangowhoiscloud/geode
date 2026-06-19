@@ -68,6 +68,54 @@ class TestSkillShow:
         assert result.exit_code == 1
 
 
+class TestSkillListTiers:
+    """PR-SKILL-UNIFY — `geode skill list`/`show` must see the SAME tiers the
+    runtime SkillLoader does, including the bundled/builtin tier the old 2-tier
+    iterdir scan omitted."""
+
+    def _bundled(self, tmp_path: Path, monkeypatch) -> None:
+        import core.skills.skills as sk
+
+        d = tmp_path / "builtin" / "bundled-demo"
+        d.mkdir(parents=True)
+        (d / "SKILL.md").write_text(
+            "---\nname: bundled-demo\ndescription: shipped\nvisibility: public\n---\n# Body\nhi",
+            encoding="utf-8",
+        )
+        monkeypatch.setattr(
+            sk.SkillLoader, "_resolve_skill_dirs", lambda self: [tmp_path / "builtin"]
+        )
+
+    def test_list_surfaces_builtin_tier(self, tmp_path: Path, monkeypatch):
+        self._bundled(tmp_path, monkeypatch)
+        result = runner.invoke(app, ["list"])
+        assert result.exit_code == 0
+        assert "bundled-demo" in result.output
+        assert "builtin" in result.output  # tier column
+
+    def test_show_finds_builtin_tier(self, tmp_path: Path, monkeypatch):
+        self._bundled(tmp_path, monkeypatch)
+        result = runner.invoke(app, ["show", "bundled-demo"])
+        assert result.exit_code == 0
+        assert "bundled-demo" in result.output and "Body" in result.output
+
+    def test_show_matches_frontmatter_name_when_dir_differs(self, tmp_path: Path, monkeypatch):
+        """`list` prints the frontmatter name, so `show <that name>` must resolve
+        even when the skill dir differs (Codex MEDIUM)."""
+        import core.skills.skills as sk
+
+        d = tmp_path / "builtin" / "dir-name"
+        d.mkdir(parents=True)
+        (d / "SKILL.md").write_text(
+            "---\nname: declared-name\ndescription: x\n---\n# Body\nhi", encoding="utf-8"
+        )
+        monkeypatch.setattr(
+            sk.SkillLoader, "_resolve_skill_dirs", lambda self: [tmp_path / "builtin"]
+        )
+        assert runner.invoke(app, ["show", "declared-name"]).exit_code == 0
+        assert runner.invoke(app, ["show", "dir-name"]).exit_code == 0
+
+
 class TestSkillRemove:
     def test_remove_existing(self, tmp_path: Path, monkeypatch):
         monkeypatch.chdir(tmp_path)

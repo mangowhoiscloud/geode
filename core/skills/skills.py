@@ -259,6 +259,26 @@ class SkillLoader:
                 seen_names[name] = path  # later scope overrides
         return list(seen_names.values())
 
+    # Tier labels aligned to ``_resolve_skill_dirs`` order (bundled, global, project).
+    _TIER_LABELS = ("builtin", "personal", "project")
+
+    def discover_tiered(self) -> list[tuple[Path, str]]:
+        """Like :meth:`discover` but pairs each winning ``SKILL.md`` with its tier
+        label (``builtin`` / ``personal`` / ``project`` / ``extra``).
+
+        Lets a human-facing surface (``geode skill list``) show provenance using
+        the SAME discovery + override semantics the runtime uses, instead of
+        re-deriving the scope directories itself.
+        """
+        seen: dict[str, tuple[Path, str]] = {}
+        for i, d in enumerate(self._resolve_skill_dirs()):
+            if not d.exists():
+                continue
+            label = self._TIER_LABELS[i] if i < len(self._TIER_LABELS) else "extra"
+            for path in sorted(d.glob("*/SKILL.md")):
+                seen[path.parent.name] = (path, label)  # later scope overrides
+        return list(seen.values())
+
     def load_file(self, path: Path) -> SkillDefinition:
         """Load a single skill definition from a SKILL.md file."""
         if not path.exists():
@@ -292,6 +312,7 @@ class SkillLoader:
             body="" if self._lazy else body.strip(),
             source=metadata.get("source", ""),
             risk=metadata.get("risk", "safe"),
+            visibility=str(metadata.get("visibility", "public")),
             user_invocable=bool(user_invocable),
             context_fork=context_fork,
             argument_hint=argument_hint,
