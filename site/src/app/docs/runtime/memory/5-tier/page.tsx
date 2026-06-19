@@ -92,11 +92,6 @@ export default function Page() {
                   <td>프로젝트별 <code>sessions.db</code> (<code>~/.geode/projects/</code> 아래)</td>
                 </tr>
                 <tr>
-                  <td>Redis / PostgreSQL / Hybrid</td>
-                  <td><code>core/memory/hybrid_session.py</code></td>
-                  <td>외부 스토어 옵션</td>
-                </tr>
-                <tr>
                   <td>Episodic</td>
                   <td><code>core/memory/episodic.py</code></td>
                   <td>append-only <code>~/.geode/memory/episodes.jsonl</code></td>
@@ -225,11 +220,6 @@ export default function Page() {
                   <td>SessionManager (SQLite)</td>
                   <td><code>core/memory/session_manager.py</code></td>
                   <td>Per-project <code>sessions.db</code> under <code>~/.geode/projects/</code></td>
-                </tr>
-                <tr>
-                  <td>Redis / PostgreSQL / Hybrid</td>
-                  <td><code>core/memory/hybrid_session.py</code></td>
-                  <td>External-store options</td>
                 </tr>
                 <tr>
                   <td>Episodic</td>
