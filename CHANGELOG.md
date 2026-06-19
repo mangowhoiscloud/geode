@@ -45,6 +45,11 @@ functional change.
 
 ---
 
+## [0.99.237] - 2026-06-19
+
+### Removed
+- **Fake Redis/PostgreSQL/Hybrid session backends cut (ponytail audit, PR-PONYTAIL-CUT-B)**. `core/memory/hybrid_session.py` was deleted in full: its three "implementations" were never real backends — `RedisSessionStore` was an in-memory `dict` (docstring: "In-memory Redis simulation"), `PostgreSQLSessionStore` wrote JSON files (docstring: "File-based PostgreSQL simulation"), and `HybridSessionStore` tiered the two simulations. They were reachable only through `build_session_store`'s `if settings.redis_url or settings.postgres_url:` branch — a dead config door, since the two settings (`redis_url`/`postgres_url`) had no real consumer and only fed the simulations. The irony the lazy lens caught that the dedup lens missed: this module was *migrated onto the shared `atomic_write` helpers* in PR-DEDUP-2 (v0.99.232) — polishing fake backends. `build_session_store` now simply returns the real `InMemorySessionStore` (already the default for every shipped run); the `redis_url`/`postgres_url` Settings fields + their `persistence.*` TOML mappings + `tests/core/memory/test_hybrid_session.py` (23 tests for the simulations) are removed. `SessionStorePort` is kept — it is not single-impl cruft but the structural type for the session-store ContextVar DI seam in `core.tools.memory_tools` (`set_default_session_store` injects any conforming store); its docstring is corrected from the now-false "kept because HybridSessionStore combines two stores" to the real reason. Stale doc references fixed (`scaffold-architecture.md` tree, the `obs-logging-config-convergence` plan's candidate-mapping list). The existing `test_toml_settings_map_*` guards stay green (both the field and its mapping were removed, so the map remains complete + stale-free). Net −271 LoC, −1 module.
+
 ## [0.99.236] - 2026-06-19
 
 ### Removed

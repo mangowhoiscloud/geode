@@ -1,4 +1,4 @@
-"""Tests for L1 Memory Ports (SessionStorePort — multi-impl Protocol)."""
+"""Tests for L1 Memory Ports (SessionStorePort — DI-seam Protocol, single impl)."""
 
 from core.memory.port import SessionStorePort
 from core.memory.session import InMemorySessionStore

@@ -9,7 +9,7 @@ Centralizes creation and lifecycle of all infrastructure singletons:
 - LaneQueue for concurrency control
 - Session key utilities
 - Scheduling: TriggerManager + SchedulerService
-- L2 Memory: OrganizationMemory, HybridSessionStore, ContextAssembler
+- L2 Memory: OrganizationMemory, InMemorySessionStore, ContextAssembler
 
 Implementation details are decomposed into `core.wiring`:
     bootstrap  — hooks, memory, session, config_watcher, task, plugin_registry

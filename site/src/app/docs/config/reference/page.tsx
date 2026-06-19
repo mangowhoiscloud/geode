@@ -193,7 +193,6 @@ export default function Page() {
               <tbody>
                 <tr><td><code>session_ttl_hours</code></td><td>4.0</td><td>세션 보존 시간.</td></tr>
                 <tr><td><code>session_storage_dir</code></td><td><code>&quot;&quot;</code></td><td>세션 저장 디렉터리. 비우면 인메모리.</td></tr>
-                <tr><td><code>redis_url</code> / <code>postgres_url</code></td><td><code>&quot;&quot;</code></td><td>외부 스토어 연결 문자열.</td></tr>
                 <tr><td><code>organization_fixture_dir</code></td><td><code>&quot;&quot;</code></td><td>조직 메모리 픽스처 경로.</td></tr>
                 <tr><td><code>user_profile_dir</code></td><td><code>&quot;&quot;</code></td><td>비우면 <code>~/.geode/user_profile</code>.</td></tr>
                 <tr><td><code>checkpoint_db</code></td><td><code>&quot;geode_checkpoints.db&quot;</code></td><td>체크포인트 DB 파일명.</td></tr>
@@ -558,7 +557,6 @@ export default function Page() {
               <tbody>
                 <tr><td><code>session_ttl_hours</code></td><td>4.0</td><td>Session retention.</td></tr>
                 <tr><td><code>session_storage_dir</code></td><td><code>&quot;&quot;</code></td><td>Session storage dir. Empty means in-memory.</td></tr>
-                <tr><td><code>redis_url</code> / <code>postgres_url</code></td><td><code>&quot;&quot;</code></td><td>External store connection strings.</td></tr>
                 <tr><td><code>organization_fixture_dir</code></td><td><code>&quot;&quot;</code></td><td>Organization-memory fixture path.</td></tr>
                 <tr><td><code>user_profile_dir</code></td><td><code>&quot;&quot;</code></td><td>Empty means <code>~/.geode/user_profile</code>.</td></tr>
                 <tr><td><code>checkpoint_db</code></td><td><code>&quot;geode_checkpoints.db&quot;</code></td><td>Checkpoint DB filename.</td></tr>

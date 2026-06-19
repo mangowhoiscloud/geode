@@ -776,29 +776,14 @@ def build_memory(
 
 
 def build_session_store(*, session_ttl: float) -> SessionStorePort:
-    """Build session store — InMemory default, HybridSessionStore if URLs configured."""
+    """Build the ephemeral in-memory session store (optionally file-backed)."""
     from core.config import settings
     from core.memory.session import InMemorySessionStore
 
     session_storage_dir: Path | None = None
     if settings.session_storage_dir:
         session_storage_dir = Path(settings.session_storage_dir)
-    session_store: SessionStorePort = InMemorySessionStore(
-        ttl=session_ttl,
-        storage_dir=session_storage_dir,
-    )
-    if settings.redis_url or settings.postgres_url:
-        from core.memory.hybrid_session import (
-            HybridSessionStore,
-            PostgreSQLSessionStore,
-            RedisSessionStore,
-        )
-
-        l1 = RedisSessionStore(ttl_hours=settings.session_ttl_hours)
-        pg_path = settings.postgres_url or ".geode/sessions"
-        l2 = PostgreSQLSessionStore(storage_dir=Path(pg_path))
-        session_store = HybridSessionStore(l1=l1, l2=l2)
-    return session_store
+    return InMemorySessionStore(ttl=session_ttl, storage_dir=session_storage_dir)
 
 
 def build_config_watcher(*, hooks: HookSystem | None = None) -> ConfigWatcher:

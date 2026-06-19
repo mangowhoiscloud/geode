@@ -39,7 +39,7 @@
 
 ### Phase C — config TOML 매핑 완성 (C1) — **P1(저위험·고ROI)**
 
-`_TOML_TO_SETTINGS`에 누락 필드 추가 → operator가 `.geode/config.toml`로 설정 가능. **구현 전 각 필드 재검증**(Settings에 실존 + 현재 미매핑 + env-only 의도(api_key 류)는 제외). 후보(검증 후 확정): cost_limit_usd, hitl_level, plan_auto_execute, ensemble_mode, computer_use_enabled, scheduler_*(interval_s/auto_start/jitter), session_*(ttl_hours/storage_dir), notification_*, gateway_*, webhook_*, tool_offload_*, observation_mask_keep_rounds, checkpoint_db, postgres_url, redis_url, organization_fixture_dir, user_profile_dir. **보안 env-only 제외**: *_api_key.
+`_TOML_TO_SETTINGS`에 누락 필드 추가 → operator가 `.geode/config.toml`로 설정 가능. **구현 전 각 필드 재검증**(Settings에 실존 + 현재 미매핑 + env-only 의도(api_key 류)는 제외). 후보(검증 후 확정): cost_limit_usd, hitl_level, plan_auto_execute, ensemble_mode, computer_use_enabled, scheduler_*(interval_s/auto_start/jitter), session_*(ttl_hours/storage_dir), notification_*, gateway_*, webhook_*, tool_offload_*, observation_mask_keep_rounds, checkpoint_db, organization_fixture_dir, user_profile_dir. **보안 env-only 제외**: *_api_key. (`postgres_url`/`redis_url`는 가짜 백엔드와 함께 PR-DEDUP-HYBRID에서 제거됨 — 후보 아님.)
 가드: `test_toml_settings_map_coverage` — 모든 비-secret Settings 필드가 `_TOML_TO_SETTINGS`에 존재(미래 드리프트 방지).
 
 ### Phase D — config 검증자 (D1) — **P2(저위험 correctness)**
