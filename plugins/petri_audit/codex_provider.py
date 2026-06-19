@@ -82,8 +82,7 @@ def get_codex_oauth_metadata() -> dict[str, Any] | None:
     - the token is not a valid JWT (parts != 3)
     - the JWT payload cannot be decoded
     """
-    import base64
-    import json
+    from core.auth.jwt_claims import decode_jwt_claims
 
     try:
         from core.llm.providers.codex import _resolve_codex_token
@@ -95,13 +94,8 @@ def get_codex_oauth_metadata() -> dict[str, Any] | None:
         return None
     if not token:
         return None
-    parts = token.split(".")
-    if len(parts) < 2:
-        return None
-    try:
-        padded = parts[1] + "=" * (4 - len(parts[1]) % 4)
-        payload = json.loads(base64.urlsafe_b64decode(padded))
-    except (json.JSONDecodeError, ValueError, UnicodeDecodeError):
+    payload = decode_jwt_claims(token)
+    if not payload:
         return None
     auth_claim = payload.get("https://api.openai.com/auth", {})
     if not isinstance(auth_claim, dict):

@@ -16,11 +16,11 @@ and OpenClaw (openai-codex-provider.ts).
 
 from __future__ import annotations
 
-import json
 import logging
 import threading
 from typing import Any
 
+from core.auth.jwt_claims import decode_jwt_claims
 from core.config import CODEX_BASE_URL
 
 log = logging.getLogger(__name__)
@@ -38,19 +38,8 @@ _async_codex_lock = threading.Lock()
 
 def _extract_account_id(token: str) -> str:
     """Extract chatgpt_account_id from Codex OAuth JWT."""
-    import base64
-
-    parts = token.split(".")
-    if len(parts) < 2:
-        return ""
-    try:
-        padded = parts[1] + "=" * (4 - len(parts[1]) % 4)
-        payload = json.loads(base64.urlsafe_b64decode(padded))
-        auth_claim = payload.get("https://api.openai.com/auth", {})
-        result: str = auth_claim.get("chatgpt_account_id", "")
-        return result
-    except (json.JSONDecodeError, ValueError, UnicodeDecodeError):
-        return ""
+    auth_claim = decode_jwt_claims(token).get("https://api.openai.com/auth", {})
+    return str(auth_claim.get("chatgpt_account_id", "")) if isinstance(auth_claim, dict) else ""
 
 
 def build_codex_oauth_headers(token: str) -> dict[str, str]:

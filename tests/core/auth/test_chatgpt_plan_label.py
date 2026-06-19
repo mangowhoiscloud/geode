@@ -14,8 +14,8 @@ import json
 from pathlib import Path
 
 import pytest
+from core.auth.jwt_claims import decode_jwt_claims
 from core.auth.oauth_login import (
-    _decode_jwt_claims,
     _plan_type_from_token,
     chatgpt_plan_label,
     resolve_local_chatgpt_plan_label,
@@ -66,7 +66,7 @@ class TestChatgptPlanLabel:
 
 class TestPlanTypeFromToken:
     """JWT-extraction edge cases. The decode helper itself is tested via
-    ``_decode_jwt_claims``; this wraps the slug-extract step."""
+    ``decode_jwt_claims`` (core.auth.jwt_claims); this wraps the slug-extract step."""
 
     def test_empty_token(self) -> None:
         assert _plan_type_from_token("") == ""
@@ -120,13 +120,13 @@ class TestDecodeJwtClaims:
         # Force unpadded (rstrip already did, but assert no padding remains)
         assert "=" not in raw
         token = f"hdr.{raw}.sig"
-        assert _decode_jwt_claims(token) == payload
+        assert decode_jwt_claims(token) == payload
 
     def test_empty_token_returns_empty_dict(self) -> None:
-        assert _decode_jwt_claims("") == {}
+        assert decode_jwt_claims("") == {}
 
     def test_single_segment_token(self) -> None:
-        assert _decode_jwt_claims("only-one-segment") == {}
+        assert decode_jwt_claims("only-one-segment") == {}
 
 
 class TestResolveLocalLabel:

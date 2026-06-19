@@ -82,3 +82,21 @@ def atomic_write_json(
         default=default or str,
     )
     atomic_write_text(path, content, encoding=encoding)
+
+
+def read_json_or_none(path: Path) -> dict[str, Any] | None:
+    """Return the parsed JSON dict at *path*, or ``None``.
+
+    Read companion to :func:`atomic_write_json`. Returns ``None`` for a
+    missing / unreadable / malformed / non-dict file and NEVER raises — the
+    read counterpart to the crash-safe write, for callers (slash status,
+    eval export) that must tolerate a file being concurrently rewritten.
+    """
+    path = Path(path)
+    if not path.is_file():
+        return None
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return None
+    return data if isinstance(data, dict) else None

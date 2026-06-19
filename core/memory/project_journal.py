@@ -26,6 +26,8 @@ from datetime import date
 from pathlib import Path
 from typing import Any
 
+from core.time_format import format_age
+
 log = logging.getLogger(__name__)
 
 # Default resolves to ~/.geode/projects/{id}/journal/ with fallback to .geode/journal/
@@ -278,7 +280,7 @@ class ProjectJournal:
         now = time.time()
         parts = []
         for r in runs:
-            age = _format_age(now - r.ts)
+            age = format_age(now - r.ts)
             parts.append(f"{r.summary} ({age})")
         return "Project history: " + " | ".join(parts)
 
@@ -318,20 +320,6 @@ class ProjectJournal:
             return [ln for ln in fpath.read_text(encoding="utf-8").splitlines() if ln.strip()]
         except OSError:
             return []
-
-
-def _format_age(seconds: float) -> str:
-    """Format elapsed seconds as human-readable age."""
-    if seconds < 60:
-        return "now"
-    minutes = seconds / 60
-    if minutes < 60:
-        return f"{int(minutes)}m ago"
-    hours = minutes / 60
-    if hours < 24:
-        return f"{int(hours)}h ago"
-    days = hours / 24
-    return f"{int(days)}d ago"
 
 
 # ---------------------------------------------------------------------------
