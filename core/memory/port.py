@@ -1,10 +1,14 @@
-"""Memory Ports — abstract interfaces for memory stores with multiple implementations.
+"""Memory Ports — abstract interfaces for memory stores.
 
-SessionStorePort is kept because HybridSessionStore combines two different
-concrete stores (l1/l2), requiring a structural type for the parameter.
+SessionStorePort is kept as the structural type for the session-store
+dependency-injection seam: `core.tools.memory_tools` holds the active store in a
+ContextVar and lets callers inject any conforming store via
+`set_default_session_store`, so the tools layer types against the Protocol rather
+than a concrete class. InMemorySessionStore is the only shipped implementation.
 
 ProjectMemoryPort, OrganizationMemoryPort, UserProfilePort were single-impl
-Protocols and have been removed — use concrete types directly instead.
+Protocols with no such injection seam and have been removed — use concrete types
+directly instead.
 """
 
 from __future__ import annotations
@@ -16,8 +20,9 @@ from typing import Any, Protocol, runtime_checkable
 class SessionStorePort(Protocol):
     """Port for ephemeral session storage (L2 Session tier).
 
-    Multiple implementations: InMemorySessionStore, _RedisLikeStore,
-    _FileStore, HybridSessionStore (combines l1+l2).
+    Implemented by InMemorySessionStore; typed here as a Protocol so the
+    session-store ContextVar in `core.tools.memory_tools` can accept any
+    injected conforming store.
     """
 
     def get(self, session_id: str) -> dict[str, Any] | None: ...
