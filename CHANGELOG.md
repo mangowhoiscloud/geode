@@ -45,6 +45,11 @@ functional change.
 
 ---
 
+## [0.99.235] - 2026-06-19
+
+### Changed
+- **The "read JSONL, skip blank/malformed lines, keep dicts" idiom folded into one helper** (PR-DEDUP-JSONL; the JSONL item from the codebase audit). The pattern was hand-rolled at ~16 sites, including two byte-identical `_tail_jsonl` helpers and one `_iter_jsonl`. New `core/memory/atomic_write.py:iter_jsonl(path)` (lazy iterator, never raises) + `read_jsonl(path, *, tail=N)` (list, `tail<=0 → []`) join the existing `read_json_or_none`/`atomic_write_json` JSON-IO home. 14 sites migrated: the two `_tail_jsonl` (`cli/commands/self_improving`, `cli/outer_bundle`) + `_iter_jsonl` (`watch_campaign`) deleted outright; `audit/manifest` (`has_archive`/`read_manifest`), `self_improving/ledger` (`_next_gen_n`/`_next_baseline_id`), `self_improving/campaign` (`count_attribution_rows`/`read_latest_attribution`/`merge_worker_transcripts`), `loop/auto_trigger`, `mcp_server`, `hooks/approval_tracker`, and `seed_generation` (`generator`/`orchestrator`) keep their per-row counting/projection/accumulation on top of the shared reader. Left untouched: the typed-record / reverse-iteration / slice-before-parse readers (`observability/transcript.read_events`, `run_log`, `episodic`, `usage_store`, `project_journal`) — a meaningfully different contract. **Behavior-preserving** (Codex MCP reviewed): one HIGH fixed — `iter_jsonl` now logs a warning when an *existing* file is unreadable (the 5 readers that previously raised on `OSError` now degrade to empty, so the fail-soft is observable rather than silent); one MEDIUM fixed — `read_jsonl(tail<=0)` returns `[]` to match the old `_tail_jsonl(limit<=0)`. Net −158 LoC. `tests/core/utils/test_atomic_io.py` gains the iter/read/tail/early-exit/unreadable-warn guards.
+
 ## [0.99.234] - 2026-06-19
 
 ### Changed

@@ -50,6 +50,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from core.hooks import HookEvent, HookSystem
+from core.memory.atomic_write import iter_jsonl
 
 from plugins.seed_generation.agents.base import BaseSeedAgent, SeedAgentResult
 
@@ -1187,39 +1188,25 @@ class Pipeline:
                 )
                 agg["agent_count"] = int(agg["agent_count"]) + 1
                 dialogue = task_dir / "dialogue.jsonl"
-                if not dialogue.is_file():
-                    continue
-                try:
-                    for line in dialogue.read_text(encoding="utf-8").splitlines():
-                        if not line.strip():
-                            continue
-                        try:
-                            evt = json.loads(line)
-                        except json.JSONDecodeError:
-                            continue
-                        if not isinstance(evt, dict):
-                            continue
-                        if evt.get("event") != "session_end":
-                            continue
-                        with contextlib.suppress(TypeError, ValueError):
-                            agg["cost_usd"] = float(agg["cost_usd"]) + float(
-                                evt.get("total_cost") or 0.0
-                            )
-                        with contextlib.suppress(TypeError, ValueError):
-                            agg["duration_ms"] = (
-                                float(agg["duration_ms"])
-                                + float(evt.get("duration_s") or 0.0) * 1000.0
-                            )
-                        with contextlib.suppress(TypeError, ValueError):
-                            agg["prompt_tokens"] = int(agg["prompt_tokens"]) + int(
-                                evt.get("prompt_tokens") or 0
-                            )
-                        with contextlib.suppress(TypeError, ValueError):
-                            agg["completion_tokens"] = int(agg["completion_tokens"]) + int(
-                                evt.get("completion_tokens") or 0
-                            )
-                except OSError:
-                    continue
+                for evt in iter_jsonl(dialogue):
+                    if evt.get("event") != "session_end":
+                        continue
+                    with contextlib.suppress(TypeError, ValueError):
+                        agg["cost_usd"] = float(agg["cost_usd"]) + float(
+                            evt.get("total_cost") or 0.0
+                        )
+                    with contextlib.suppress(TypeError, ValueError):
+                        agg["duration_ms"] = (
+                            float(agg["duration_ms"]) + float(evt.get("duration_s") or 0.0) * 1000.0
+                        )
+                    with contextlib.suppress(TypeError, ValueError):
+                        agg["prompt_tokens"] = int(agg["prompt_tokens"]) + int(
+                            evt.get("prompt_tokens") or 0
+                        )
+                    with contextlib.suppress(TypeError, ValueError):
+                        agg["completion_tokens"] = int(agg["completion_tokens"]) + int(
+                            evt.get("completion_tokens") or 0
+                        )
         # Always include known finished phases even when agent_count == 0
         # (e.g. supervisor that did no sub-agent fan-out). Operators
         # expect the timeline + cost grid to reflect every phase ran.

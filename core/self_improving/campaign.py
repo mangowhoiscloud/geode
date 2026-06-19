@@ -96,6 +96,7 @@ from datetime import UTC
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
+from core.memory.atomic_write import iter_jsonl
 from core.paths import (
     AUTORESEARCH_POLICIES_DIR,
     AUTORESEARCH_STATE_DIR,
@@ -455,21 +456,7 @@ def count_attribution_rows(path: Path | None = None) -> int:
     row as if it were this cycle's signal.
     """
     target = path if path is not None else MUTATIONS_JSONL
-    if not target.exists():
-        return 0
-    count = 0
-    with target.open("r", encoding="utf-8") as fh:
-        for raw in fh:
-            stripped = raw.strip()
-            if not stripped:
-                continue
-            try:
-                row = json.loads(stripped)
-            except json.JSONDecodeError:
-                continue
-            if isinstance(row, dict) and row.get("kind") == "attribution":
-                count += 1
-    return count
+    return sum(1 for row in iter_jsonl(target) if row.get("kind") == "attribution")
 
 
 def read_latest_attribution(path: Path | None = None, *, min_rows: int = 0) -> CycleSignal | None:
@@ -488,22 +475,12 @@ def read_latest_attribution(path: Path | None = None, *, min_rows: int = 0) -> C
     keeps the unconditional "newest row" behaviour for direct callers / tests.
     """
     target = path if path is not None else MUTATIONS_JSONL
-    if not target.exists():
-        return None
     latest: dict[str, Any] | None = None
     seen = 0
-    with target.open("r", encoding="utf-8") as fh:
-        for raw in fh:
-            stripped = raw.strip()
-            if not stripped:
-                continue
-            try:
-                row = json.loads(stripped)
-            except json.JSONDecodeError:
-                continue
-            if isinstance(row, dict) and row.get("kind") == "attribution":
-                latest = row
-                seen += 1
+    for row in iter_jsonl(target):
+        if row.get("kind") == "attribution":
+            latest = row
+            seen += 1
     if latest is None or seen <= min_rows:
         return None
     return CycleSignal(
@@ -1575,22 +1552,8 @@ def merge_worker_transcripts(
     """
     rows: list[dict[str, Any]] = []
     for path in worker_transcripts:
-        if path is None or not path.exists():
-            continue
-        try:
-            text = path.read_text(encoding="utf-8")
-        except OSError:
-            continue
-        for line in text.splitlines():
-            stripped = line.strip()
-            if not stripped:
-                continue
-            try:
-                parsed = json.loads(stripped)
-            except json.JSONDecodeError:
-                continue
-            if isinstance(parsed, dict):
-                rows.append(parsed)
+        if path is not None:
+            rows.extend(iter_jsonl(path))
     if not rows:
         return 0
     rows.sort(key=_transcript_sort_key)

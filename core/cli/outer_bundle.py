@@ -51,6 +51,7 @@ import typer
 from rich.console import Console
 from rich.table import Table
 
+from core.memory.atomic_write import read_jsonl
 from core.paths import AUTORESEARCH_STATE_DIR
 from core.self_improving.loop.auto_trigger import AUTO_TRIGGER_HISTORY_PATH
 
@@ -114,37 +115,9 @@ def _parse_iso_or_epoch(value: Any) -> float | None:
         return None
 
 
-def _tail_jsonl(path: Path, *, limit: int) -> list[dict[str, Any]]:
-    """Read the last ``limit`` valid JSON rows from a JSONL file.
-
-    Missing path → empty list (graceful). Malformed lines → silently
-    skipped (the file is append-only; concurrent writer can leave a
-    half-flushed last row).
-    """
-    if not path.is_file() or limit <= 0:
-        return []
-    try:
-        lines = path.read_text(encoding="utf-8").splitlines()
-    except OSError as exc:
-        log.debug("outer_bundle: %s unreadable: %s", path, exc)
-        return []
-    parsed: list[dict[str, Any]] = []
-    for line in lines:
-        line = line.strip()
-        if not line:
-            continue
-        try:
-            row = json.loads(line)
-        except json.JSONDecodeError:
-            continue
-        if isinstance(row, dict):
-            parsed.append(row)
-    return parsed[-limit:]
-
-
 def _load_auto_trigger_events(*, limit: int) -> list[BundleEvent]:
     """Read OL-A1.5 audit log → BundleEvent list (source='auto_trigger')."""
-    rows = _tail_jsonl(AUTO_TRIGGER_HISTORY_PATH, limit=limit)
+    rows = read_jsonl(AUTO_TRIGGER_HISTORY_PATH, tail=limit)
     events: list[BundleEvent] = []
     for row in rows:
         ts = _parse_iso_or_epoch(row.get("ts"))
@@ -168,7 +141,7 @@ def _load_mutation_events(*, limit: int) -> list[BundleEvent]:
     except ImportError as exc:
         log.debug("outer_bundle: mutation log path unavailable: %s", exc)
         return []
-    rows = _tail_jsonl(Path(MUTATION_AUDIT_LOG_PATH), limit=limit)
+    rows = read_jsonl(Path(MUTATION_AUDIT_LOG_PATH), tail=limit)
     events: list[BundleEvent] = []
     for row in rows:
         ts = _parse_iso_or_epoch(row.get("ts"))
@@ -266,7 +239,7 @@ def load_bundle_events(
         # Temporarily redirect the constant via globals override.
         # Tests typically use monkeypatch.setattr; this branch is the
         # explicit-arg path that lets non-test callers swap the source.
-        rows = _tail_jsonl(history_path, limit=limit)
+        rows = read_jsonl(history_path, tail=limit)
         auto_events: list[BundleEvent] = []
         for row in rows:
             ts = _parse_iso_or_epoch(row.get("ts"))
