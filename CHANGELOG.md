@@ -45,6 +45,11 @@ functional change.
 
 ---
 
+## [0.99.233] - 2026-06-19
+
+### Fixed
+- **`geode skill list` / `show` now see the same tiers as the runtime `/skills`** (PR-SKILL-UNIFY; the dual-loader item from the codebase audit). `core/cli/commands/skill.py` hand-rolled a 2-tier (`project` + `personal`) `iterdir` scan that **omitted the bundled/builtin tier** (`<package>/.geode/skills`, shipped with GEODE) — so run from any dir other than the repo root, `geode skill list` silently showed a *different, smaller* skill set than the runtime `/skills` (which uses the canonical `core/skills/skills.py:SkillLoader`), and its own docstring even claimed a "tier 1: core/skills/" it never read. This is the "two loaders for one domain" anti-pattern the CANNOT/Registry rule forbids (same class as the already-removed `skill_registry.py`). Now `_discover_skills` + `show` delegate to `SkillLoader`: new `SkillLoader.discover_tiered()` returns `(path, tier)` pairs (builtin/personal/project, same dedup-override semantics as `discover()`), and `load_file` now parses the `visibility` frontmatter field it previously dropped (so the `--all`/unlisted filter is correct across all tiers). `show` matches the frontmatter `name` OR the dir name (Codex MEDIUM — a skill whose dir differs from its declared name, e.g. `seed-generation-cycle/` → `name: seed-pipeline-cycle`, is now showable). `create`/`remove` still write only to the user tiers (builtin is read-only). Live-confirmed: from a non-repo cwd, `geode skill list` now surfaces the 9 builtin skills (previously 0). Guards: `tests/core/cli/test_cmd_skill.py` (builtin tier surfaced, frontmatter-name show) + `tests/core/skills/test_skill_loader_tiers.py` (tier labels + override + visibility parse).
+
 ## [0.99.232] - 2026-06-19
 
 ### Changed
