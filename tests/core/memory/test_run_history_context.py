@@ -2,8 +2,9 @@
 
 import time
 
-from core.memory.context import ContextAssembler, _format_age
+from core.memory.context import ContextAssembler
 from core.observability.run_log import RunLog, RunLogEntry
+from core.time_format import format_age as _format_age
 
 
 class TestFormatAge:

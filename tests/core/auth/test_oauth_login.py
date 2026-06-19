@@ -164,7 +164,7 @@ class TestCmdLogin:
 def _build_fake_jwt(claims: dict) -> str:
     """Construct a JWT-shaped string with ``claims`` as the payload.
 
-    Signature is bogus — ``_decode_jwt_claims`` does no verification.
+    Signature is bogus — ``decode_jwt_claims`` does no verification.
     """
     import base64
     import json
@@ -179,11 +179,11 @@ def _build_fake_jwt(claims: dict) -> str:
 
 
 class TestJWTDecode:
-    """`_decode_jwt_claims` + `_plan_type_from_token` — regression for the
+    """`decode_jwt_claims` + `_plan_type_from_token` — regression for the
     v0.95.x plan tier reconciliation path."""
 
     def test_decode_valid_jwt(self):
-        from core.auth.oauth_login import _decode_jwt_claims
+        from core.auth.jwt_claims import decode_jwt_claims
 
         token = _build_fake_jwt(
             {
@@ -192,19 +192,19 @@ class TestJWTDecode:
                 "exp": 9999999999,
             }
         )
-        claims = _decode_jwt_claims(token)
+        claims = decode_jwt_claims(token)
         assert claims["exp"] == 9999999999
         assert claims["https://api.openai.com/auth"]["chatgpt_plan_type"] == "pro"
 
     def test_decode_malformed_returns_empty(self):
-        from core.auth.oauth_login import _decode_jwt_claims
+        from core.auth.jwt_claims import decode_jwt_claims
 
         # Fewer than 2 dot-separated parts → early return.
-        assert _decode_jwt_claims("not-a-jwt") == {}
-        assert _decode_jwt_claims("") == {}
+        assert decode_jwt_claims("not-a-jwt") == {}
+        assert decode_jwt_claims("") == {}
         # 2+ parts but the payload section is not valid base64+JSON.
-        assert _decode_jwt_claims("garbage.payload.sig") == {}
-        assert _decode_jwt_claims("only.one") == {}
+        assert decode_jwt_claims("garbage.payload.sig") == {}
+        assert decode_jwt_claims("only.one") == {}
 
     def test_plan_type_extraction(self):
         from core.auth.oauth_login import _plan_type_from_token

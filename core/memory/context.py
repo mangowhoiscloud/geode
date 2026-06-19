@@ -18,6 +18,7 @@ from core.memory.organization import MonoLakeOrganizationMemory
 from core.memory.port import SessionStorePort
 from core.memory.project import ProjectMemory
 from core.memory.user_profile import FileBasedUserProfile
+from core.time_format import format_age
 
 log = logging.getLogger(__name__)
 
@@ -26,22 +27,6 @@ DEFAULT_FRESHNESS_THRESHOLD_S = 3600.0  # 1 hour
 
 # Maximum run history entries to inject
 DEFAULT_RUN_HISTORY_MAX_ENTRIES = 3
-
-
-def _format_age(seconds: float) -> str:
-    """Format elapsed seconds as human-readable age string."""
-    if seconds < 0:
-        return "now"
-    minutes = seconds / 60
-    if minutes < 1:
-        return "now"
-    if minutes < 60:
-        return f"{int(minutes)}m ago"
-    hours = minutes / 60
-    if hours < 24:
-        return f"{int(hours)}h ago"
-    days = hours / 24
-    return f"{int(days)}d ago"
 
 
 class ContextAssembler:
@@ -249,7 +234,7 @@ class ContextAssembler:
             summaries = []
             for entry in recent:
                 score = entry.metadata.get("score", "?")
-                age = _format_age(now - entry.timestamp)
+                age = format_age(now - entry.timestamp)
                 name = entry.metadata.get("subject_id", subject_id)
                 summaries.append(f"{name} score={score} ({age})")
 

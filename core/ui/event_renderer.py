@@ -23,6 +23,7 @@ import time
 from dataclasses import dataclass, field
 from typing import Any
 
+from core.time_format import format_elapsed
 from core.ui.tool_tracker import ToolCallTracker
 
 log = logging.getLogger(__name__)
@@ -37,14 +38,6 @@ def _fmt_tokens(n: int) -> str:
     if n >= 1000:
         return f"{n / 1000:.1f}k"
     return str(n)
-
-
-def _fmt_elapsed(seconds: float) -> str:
-    s = int(seconds)
-    if s < 60:
-        return f"{s}s"
-    m, sec = divmod(s, 60)
-    return f"{m}m {sec}s"
 
 
 @dataclass
@@ -715,7 +708,7 @@ class EventRenderer:
         elapsed = time.monotonic() - self._turn_start
         in_str = _fmt_tokens(self._turn_in_tokens)
         out_str = _fmt_tokens(self._turn_out_tokens)
-        parts = [f"\u2722 Worked for {_fmt_elapsed(elapsed)}"]
+        parts = [f"\u2722 Worked for {format_elapsed(elapsed)}"]
         if self._turn_model:
             parts.append(self._turn_model)
         parts.append(f"\u2193{in_str} \u2191{out_str}")
@@ -917,7 +910,7 @@ class EventRenderer:
         elapsed = time.monotonic() - region.start_ts
         suffix = " \u2026 (still running)" if still_running else ""
         return (
-            f"  \033[90m\u2726 Thought for {_fmt_elapsed(elapsed)} \u00b7 "
+            f"  \033[90m\u2726 Thought for {format_elapsed(elapsed)} \u00b7 "
             f"{len(region.items)} items{suffix}\033[0m\n"
         )
 

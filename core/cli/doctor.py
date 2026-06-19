@@ -12,6 +12,8 @@ import os
 import subprocess
 from typing import Any
 
+from core.config.env_io import mask_key
+
 log = logging.getLogger(__name__)
 
 # Required Slack Bot Token scopes for full functionality
@@ -51,8 +53,7 @@ def _check_env() -> list[dict[str, Any]]:
 
     token = os.environ.get("SLACK_BOT_TOKEN", "")
     if token:
-        masked = token[:10] + "..." + token[-4:] if len(token) > 14 else "***"
-        results.append({"name": "SLACK_BOT_TOKEN", "ok": True, "detail": masked})
+        results.append({"name": "SLACK_BOT_TOKEN", "ok": True, "detail": mask_key(token)})
     else:
         results.append(
             {

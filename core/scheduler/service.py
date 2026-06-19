@@ -16,6 +16,7 @@ import time
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
+from core.memory.atomic_write import atomic_write_text
 from core.observability.run_log import JobRunLog
 from core.scheduler.jitter import _jittered_next_run
 from core.scheduler.lock import SchedulerLock
@@ -476,10 +477,7 @@ class SchedulerService:
         payload = json.dumps(data, ensure_ascii=False, indent=2)
         lock = SchedulerLock(path.parent / "scheduled_tasks.lock", session_id=self._session_id)
         with lock:
-            tmp_path = path.with_suffix(".json.tmp")
-            with open(tmp_path, "w", encoding="utf-8") as f:
-                f.write(payload)
-            os.replace(str(tmp_path), str(path))
+            atomic_write_text(path, payload)
         # Update mtime tracking
         with contextlib.suppress(OSError):
             self._last_store_mtime = os.path.getmtime(path)

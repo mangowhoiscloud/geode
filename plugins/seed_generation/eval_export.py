@@ -54,6 +54,8 @@ from pathlib import Path
 from typing import Any
 from uuid import uuid4
 
+from core.memory.atomic_write import read_json_or_none
+
 log = logging.getLogger(__name__)
 
 __all__ = ["PHASE_TASKS", "export_run_to_evals"]
@@ -91,15 +93,12 @@ def _coerce_list(v: Any) -> list[Any]:
 
 
 def _read_json(path: Path) -> dict[str, Any] | None:
-    if not path.exists():
-        return None
-    try:
-        with path.open(encoding="utf-8") as f:
-            data: Any = json.load(f)
-    except (OSError, json.JSONDecodeError):
-        log.warning("eval_export: failed to read %s", path, exc_info=True)
-        return None
-    return data if isinstance(data, dict) else None
+    # Shared silent reader (core.memory.atomic_write) + this module's warning:
+    # a present-but-unparseable artefact is worth surfacing here.
+    data = read_json_or_none(path)
+    if data is None and path.exists():
+        log.warning("eval_export: failed to read %s", path)
+    return data
 
 
 def _drop_empty(d: dict[str, Any]) -> dict[str, Any]:
