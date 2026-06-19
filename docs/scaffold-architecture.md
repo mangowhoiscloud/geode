@@ -173,7 +173,6 @@ mcp/
 memory/
 ├── agent_memory.py      # 에이전트 메모리 통합
 ├── context.py           # ★ ContextAssembler (4-Tier 병합)
-├── hybrid_session.py    # HybridSession (InMemory + SQLite WAL)
 ├── journal_hooks.py     # 저널 훅
 ├── organization.py      # Organization 메모리 (Tier 0)
 ├── port.py              # 메모리 포트 인터페이스

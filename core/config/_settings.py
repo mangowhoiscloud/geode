@@ -300,10 +300,6 @@ class Settings(BaseSettings):
     session_ttl_hours: float = 4.0
     session_storage_dir: str = ""  # file-backed persistence dir (empty = in-memory only)
 
-    # L2 Memory — Redis/PostgreSQL (simulation URLs)
-    redis_url: str = ""
-    postgres_url: str = ""
-
     # L2 Memory — Organization
     organization_fixture_dir: str = ""
 

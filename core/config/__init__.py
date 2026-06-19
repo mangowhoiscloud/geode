@@ -109,8 +109,6 @@ _TOML_TO_SETTINGS: dict[str, str] = {
     "notification.recipient": "notification_recipient",
     "webhook.enabled": "webhook_enabled",
     "webhook.port": "webhook_port",
-    "persistence.postgres_url": "postgres_url",
-    "persistence.redis_url": "redis_url",
     "paths.user_profile_dir": "user_profile_dir",
     "paths.organization_fixture_dir": "organization_fixture_dir",
     "llm.connect_timeout": "llm_connect_timeout",
