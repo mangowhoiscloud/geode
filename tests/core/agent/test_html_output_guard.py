@@ -2,7 +2,7 @@
 
 Two layers:
 
-1. ``core.llm.postprocess.html_output`` recovers HTML when a model emits
+1. ``core.llm.html_output`` recovers HTML when a model emits
    the address-bar shape anyway.
 2. ``core.agent.system_prompt._build_model_card`` prepends a provider-gated
    guard that tells OpenAI/Codex models not to emit the shape in the
@@ -16,7 +16,7 @@ import urllib.parse
 from pathlib import Path
 
 import pytest
-from core.llm.postprocess.html_output import (
+from core.llm.html_output import (
     decode_html,
     detect_data_url,
     extract_artifact_to,

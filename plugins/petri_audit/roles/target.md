@@ -46,7 +46,7 @@ scoring + the target's behaviour together.
 
 ## References
 
-- `plugins.petri_audit.targets.geode_target` — `GeodeModelAPI`
+- `plugins.petri_audit.geode_target` — `GeodeModelAPI`
   registration (inspect_ai `modelapi(name="geode")`).
 - `plugins.petri_audit.runner` — orchestrates target invocation.
 - Manifest binding: `[petri.role.target]` in `petri.plugin.toml`.

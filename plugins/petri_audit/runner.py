@@ -650,7 +650,7 @@ def run_audit(
 
     ``target=None`` falls back to GEODE's active ``settings.model``
     (drift sync stays active). A pinned target id is sticky for the
-    audit's lifetime — see ``plugins/petri_audit/targets/geode_target.py``
+    audit's lifetime — see ``plugins/petri_audit/geode_target.py``
     docstring "Model priority" section.
 
     **PR #6 (2026-05-14) — ``use_oauth``** governs whether gpt-5.x

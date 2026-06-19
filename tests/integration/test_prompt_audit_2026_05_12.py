@@ -233,7 +233,7 @@ def test_g2_petri_runner_no_max_rounds_cap() -> None:
     """
     import inspect
 
-    from plugins.petri_audit.targets import geode_target
+    from plugins.petri_audit import geode_target
 
     src = inspect.getsource(geode_target._default_geode_runner)
     code_only = "\n".join(ln for ln in src.splitlines() if not ln.lstrip().startswith("#"))
