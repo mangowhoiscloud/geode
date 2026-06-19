@@ -121,5 +121,5 @@ Each PR is independent and behavior-preserving except where it closes a parity g
 ## 8. Reference
 
 - Current-state evidence: four parallel subsystem audits (2026-06-19), file:line cited inline above.
-- Frontier alignment: `/Users/mango/workspace/codex` (`recorder.rs:826-836`), `/Users/mango/workspace/openclaw` (`transcript-stream.ts:4-12`), on-disk `~/.claude/projects/*.jsonl` (4399 files confirmed one-object-per-line).
+- Frontier alignment: `~/workspace/codex` (`recorder.rs:826-836`), `~/workspace/openclaw` (`transcript-stream.ts:4-12`), on-disk `~/.claude/projects/*.jsonl` (4399 files confirmed one-object-per-line).
 - Prior dedup precedent: PR-DEDUP-CONFIG-TOML, PR-DEDUP-2, PR-DEDUP-JSONL (#2383).
