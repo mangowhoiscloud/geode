@@ -40,6 +40,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+from core.memory.atomic_write import iter_jsonl
 from core.paths import GLOBAL_AUTORESEARCH_HANDOFF_DIR
 
 log = logging.getLogger(__name__)
@@ -248,25 +249,7 @@ def count_fired_generations(history_path: Path | None = None) -> int:
     Returns 0 when the history log is absent (fresh repo / never fired).
     """
     target = history_path if history_path is not None else AUTO_TRIGGER_HISTORY_PATH
-    if not target.is_file():
-        return 0
-    n = 0
-    try:
-        with target.open("r", encoding="utf-8") as fh:
-            for line in fh:
-                line = line.strip()
-                if not line:
-                    continue
-                try:
-                    row = json.loads(line)
-                except json.JSONDecodeError:
-                    continue
-                if isinstance(row, dict) and row.get("state") == "fired":
-                    n += 1
-    except OSError:
-        log.warning("auto_trigger: history read failed", exc_info=True)
-        return n
-    return n
+    return sum(1 for row in iter_jsonl(target) if row.get("state") == "fired")
 
 
 def append_history_entry(

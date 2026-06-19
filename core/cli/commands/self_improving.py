@@ -28,12 +28,11 @@ design.
 from __future__ import annotations
 
 import json
-from collections.abc import Iterable
 from pathlib import Path
 from typing import Any
 
 from core.config.toml_edit import persist_toml_section
-from core.memory.atomic_write import read_json_or_none
+from core.memory.atomic_write import read_json_or_none, read_jsonl
 from core.ui.console import console
 
 __all__ = ["cmd_self_improving"]
@@ -171,7 +170,7 @@ def _cmd_status() -> None:
         console.print(f"    reason   [muted]{reason}[/muted]")
 
     audit_path = Path(MUTATION_AUDIT_LOG_PATH)
-    rows = list(_tail_jsonl(audit_path, _HISTORY_DEFAULT_N))
+    rows = read_jsonl(audit_path, tail=_HISTORY_DEFAULT_N)
     console.print()
     console.print(f"  [bold]Recent mutations[/bold] (last {_HISTORY_DEFAULT_N})")
     if not rows:
@@ -191,33 +190,6 @@ def _baseline_path() -> Path:
     import core.paths
 
     return Path(core.paths.BASELINE_JSON_PATH)
-
-
-def _tail_jsonl(path: Path, n: int) -> Iterable[dict[str, Any]]:
-    """Yield the last ``n`` valid JSON rows from a JSONL file.
-
-    Yields nothing on missing path. Skips malformed lines silently —
-    the file is append-only so a partial last row during concurrent
-    write should not break ``status``.
-    """
-    if not path.is_file() or n <= 0:
-        return
-    try:
-        lines = path.read_text(encoding="utf-8").splitlines()
-    except OSError:
-        return
-    parsed: list[dict[str, Any]] = []
-    for line in lines:
-        line = line.strip()
-        if not line:
-            continue
-        try:
-            row = json.loads(line)
-        except json.JSONDecodeError:
-            continue
-        if isinstance(row, dict):
-            parsed.append(row)
-    yield from parsed[-n:]
 
 
 def _print_audit_row(row: dict[str, Any]) -> None:

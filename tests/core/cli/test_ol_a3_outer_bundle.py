@@ -3,7 +3,7 @@
 Pins:
 - `BundleEvent` shape (ts / source / detail) round-trips via as_dict.
 - `_parse_iso_or_epoch` accepts float, ISO-8601, returns None on garbage.
-- `_tail_jsonl` reads last N rows + skips malformed lines silently.
+- `read_jsonl(tail=)` (core.memory.atomic_write) reads last N rows + skips malformed lines silently.
 - `load_bundle_events` merges 3 sources chronologically.
 - Auto-trigger row → source='auto_trigger'.
 - Mutation row → source='mutation'.
@@ -58,31 +58,31 @@ def test_parse_iso_or_epoch_garbage_returns_none() -> None:
 
 
 def test_tail_jsonl_reads_last_n_rows(tmp_path: Path) -> None:
-    from core.cli.outer_bundle import _tail_jsonl
+    from core.memory.atomic_write import read_jsonl
 
     p = tmp_path / "log.jsonl"
     lines = [json.dumps({"i": i}) for i in range(10)]
     p.write_text("\n".join(lines) + "\n", encoding="utf-8")
-    out = _tail_jsonl(p, limit=3)
+    out = read_jsonl(p, tail=3)
     assert [r["i"] for r in out] == [7, 8, 9]
 
 
 def test_tail_jsonl_skips_malformed_lines(tmp_path: Path) -> None:
-    from core.cli.outer_bundle import _tail_jsonl
+    from core.memory.atomic_write import read_jsonl
 
     p = tmp_path / "log.jsonl"
     p.write_text(
         '{"ok": 1}\nnot-json\n{"ok": 2}\n   \n{"ok": 3}\n',
         encoding="utf-8",
     )
-    out = _tail_jsonl(p, limit=10)
+    out = read_jsonl(p, tail=10)
     assert [r["ok"] for r in out] == [1, 2, 3]
 
 
 def test_tail_jsonl_missing_file_returns_empty(tmp_path: Path) -> None:
-    from core.cli.outer_bundle import _tail_jsonl
+    from core.memory.atomic_write import read_jsonl
 
-    assert _tail_jsonl(tmp_path / "no_such.jsonl", limit=5) == []
+    assert read_jsonl(tmp_path / "no_such.jsonl", tail=5) == []
 
 
 def test_load_bundle_events_auto_trigger_only(

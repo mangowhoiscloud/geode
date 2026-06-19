@@ -28,6 +28,8 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
+from core.memory.atomic_write import iter_jsonl, read_jsonl
+
 log = logging.getLogger(__name__)
 
 __all__ = [
@@ -282,41 +284,13 @@ def has_archive(archive_sha: str, *, manifest_path: Path | str | None = None) ->
     if not archive_sha:
         return False
     target = Path(manifest_path) if manifest_path else DEFAULT_MANIFEST_PATH
-    if not target.is_file():
-        return False
-    try:
-        with target.open(encoding="utf-8") as f:
-            for line in f:
-                line = line.strip()
-                if not line:
-                    continue
-                try:
-                    data = json.loads(line)
-                except json.JSONDecodeError:
-                    continue
-                if data.get("archive_sha") == archive_sha:
-                    return True
-    except OSError:
-        return False
-    return False
+    return any(row.get("archive_sha") == archive_sha for row in iter_jsonl(target))
 
 
 def read_manifest(manifest_path: Path | str | None = None) -> list[dict[str, Any]]:
     """Return all manifest entries as a list of dicts. Empty when missing."""
     target = Path(manifest_path) if manifest_path else DEFAULT_MANIFEST_PATH
-    if not target.is_file():
-        return []
-    out: list[dict[str, Any]] = []
-    with target.open(encoding="utf-8") as f:
-        for line in f:
-            line = line.strip()
-            if not line:
-                continue
-            try:
-                out.append(json.loads(line))
-            except json.JSONDecodeError:
-                log.debug("manifest skip malformed line: %s", line[:80])
-    return out
+    return read_jsonl(target)
 
 
 def parse_started_ts(entry: dict[str, Any]) -> float | None:

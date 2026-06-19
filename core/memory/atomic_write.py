@@ -17,7 +17,7 @@ import json
 import logging
 import os
 import tempfile
-from collections.abc import Callable
+from collections.abc import Callable, Iterator
 from pathlib import Path
 from typing import Any
 
@@ -100,3 +100,47 @@ def read_json_or_none(path: Path) -> dict[str, Any] | None:
     except (OSError, json.JSONDecodeError):
         return None
     return data if isinstance(data, dict) else None
+
+
+def iter_jsonl(path: Path) -> Iterator[dict[str, Any]]:
+    """Yield each valid JSON-object row from a JSONL file.
+
+    The read companion to the append/write side. A missing or unreadable file
+    yields nothing; blank lines and rows that fail to parse or aren't dicts are
+    skipped silently. NEVER raises — JSONL logs are appended live and read
+    concurrently, so a partial last line during a write must not break a reader.
+    Callers layer their own filtering / projection / tail / counting on top.
+    """
+    path = Path(path)
+    if not path.is_file():
+        return  # missing file is the expected common case (fresh repo) — silent
+    try:
+        raw = path.read_text(encoding="utf-8")
+    except OSError as exc:
+        # An existing-but-unreadable file is unexpected — degrade to empty (callers
+        # treat "no rows" uniformly) but surface it so a real I/O fault isn't hidden.
+        log.warning("iter_jsonl: %s unreadable: %s", path, exc)
+        return
+    for line in raw.splitlines():
+        stripped = line.strip()
+        if not stripped:
+            continue
+        try:
+            row = json.loads(stripped)
+        except json.JSONDecodeError:
+            continue
+        if isinstance(row, dict):
+            yield row
+
+
+def read_jsonl(path: Path, *, tail: int | None = None) -> list[dict[str, Any]]:
+    """Materialise :func:`iter_jsonl` to a list, optionally keeping the last ``tail``.
+
+    ``tail=None`` (default) returns every row; ``tail=N`` (N>0) returns the last
+    N; ``tail<=0`` returns ``[]`` (matches the prior ``_tail_jsonl(limit<=0)``
+    helpers). Same never-raises contract as :func:`iter_jsonl`.
+    """
+    rows = list(iter_jsonl(path))
+    if tail is None:
+        return rows
+    return rows[-tail:] if tail > 0 else []

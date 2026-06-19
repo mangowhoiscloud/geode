@@ -49,11 +49,12 @@ Wiring history
 
 from __future__ import annotations
 
-import json
 import logging
 import uuid
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
+
+from core.memory.atomic_write import read_jsonl
 
 from plugins.seed_generation.agents.base import (
     DEFAULT_AGENT_MODEL,
@@ -472,27 +473,7 @@ def _read_debate_sidecars(
         if not path_value.endswith(".md"):
             continue
         sidecar = Path(path_value[: -len(".md")] + _DEBATE_SIDECAR_SUFFIX)
-        if not sidecar.is_file():
-            continue
-        turns: list[dict[str, Any]] = []
-        try:
-            for line in sidecar.read_text(encoding="utf-8").splitlines():
-                line = line.strip()
-                if not line:
-                    continue
-                try:
-                    entry = json.loads(line)
-                except json.JSONDecodeError:
-                    log.debug(
-                        "seed-generation: skipping malformed debate sidecar line in %s",
-                        sidecar,
-                    )
-                    continue
-                if isinstance(entry, dict):
-                    turns.append(entry)
-        except OSError as exc:
-            log.debug("seed-generation: failed to read debate sidecar %s: %s", sidecar, exc)
-            continue
+        turns = read_jsonl(sidecar)
         if turns:
             out[candidate_id] = turns
     return out

@@ -23,11 +23,11 @@ during a long campaign to see where the held-out fitness curve sits per arm.
 from __future__ import annotations
 
 import argparse
-import json
 from collections import defaultdict
 from pathlib import Path
 from typing import Any
 
+from core.memory.atomic_write import iter_jsonl
 from core.paths import (
     BASELINE_ARCHIVE_PATH,
     CAMPAIGN_PROGRESS_LOG_PATH,
@@ -39,24 +39,6 @@ from core.paths import (
 PROGRESS_LOG = CAMPAIGN_PROGRESS_LOG_PATH  # runtime (per-cycle log)
 MUTATIONS_JSONL = MUTATION_AUDIT_LOG_PATH  # tracked
 BASELINE_ARCHIVE = BASELINE_ARCHIVE_PATH  # tracked
-
-
-def _iter_jsonl(path: Path) -> list[dict[str, Any]]:
-    if not path.exists():
-        return []
-    rows: list[dict[str, Any]] = []
-    with path.open("r", encoding="utf-8") as fh:
-        for raw in fh:
-            stripped = raw.strip()
-            if not stripped:
-                continue
-            try:
-                row = json.loads(stripped)
-            except json.JSONDecodeError:
-                continue
-            if isinstance(row, dict):
-                rows.append(row)
-    return rows
 
 
 def tail_progress(path: Path, *, last: int) -> list[str]:
@@ -75,7 +57,7 @@ def attribution_by_arm(path: Path) -> dict[str, list[dict[str, Any]]]:
     from the per-arm split.
     """
     grouped: dict[str, list[dict[str, Any]]] = defaultdict(list)
-    for row in _iter_jsonl(path):
+    for row in iter_jsonl(path):
         if row.get("kind") != "attribution":
             continue
         if row.get("source") != "mutator":
@@ -88,7 +70,7 @@ def attribution_by_arm(path: Path) -> dict[str, list[dict[str, Any]]]:
 def baseline_epochs(path: Path) -> dict[str, list[dict[str, Any]]]:
     """Group ``kind="baseline"`` rows by epoch label (``be-NNN``)."""
     grouped: dict[str, list[dict[str, Any]]] = defaultdict(list)
-    for row in _iter_jsonl(path):
+    for row in iter_jsonl(path):
         if row.get("kind") != "baseline":
             continue
         label = str(row.get("epoch_label") or row.get("epoch_hash") or "?")
