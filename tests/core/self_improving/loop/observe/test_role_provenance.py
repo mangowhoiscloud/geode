@@ -14,7 +14,6 @@ from core.self_improving.loop.observe.role_provenance import (
     ROLES,
     build_role_provenance,
     collect_role_provenance,
-    role_display_id,
     source_to_lane,
 )
 
@@ -34,11 +33,6 @@ from core.self_improving.loop.observe.role_provenance import (
 )
 def test_source_to_lane(source: object, lane: str) -> None:
     assert source_to_lane(source) == lane  # type: ignore[arg-type]
-
-
-def test_role_display_id() -> None:
-    assert role_display_id("gpt-5.5", "Subscription") == "GEODE/gpt-5.5/Subscription"
-    assert role_display_id(None, "PAYG") == "GEODE/?/PAYG"
 
 
 def test_build_role_provenance_derives_lane_from_source() -> None:

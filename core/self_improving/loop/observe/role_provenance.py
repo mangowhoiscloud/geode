@@ -52,11 +52,6 @@ def source_to_lane(source: str | CredentialSource | None) -> str:
     return _SOURCE_TO_LANE.get(key, "Unknown")
 
 
-def role_display_id(model: str | None, lane: str) -> str:
-    """The canonical ``GEODE/{model}/{lane}`` per-role observability id."""
-    return f"GEODE/{model or '?'}/{lane}"
-
-
 def build_role_provenance(
     roles: Mapping[str, tuple[str | None, str | None]],
 ) -> dict[str, dict[str, str]]:
@@ -100,6 +95,5 @@ __all__ = [
     "ROLES",
     "build_role_provenance",
     "collect_role_provenance",
-    "role_display_id",
     "source_to_lane",
 ]

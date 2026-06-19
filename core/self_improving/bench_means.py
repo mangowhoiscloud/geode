@@ -94,7 +94,6 @@ import logging
 import os
 import shutil
 from dataclasses import dataclass, field
-from typing import Any
 
 log = logging.getLogger(__name__)
 
@@ -161,20 +160,6 @@ BENCH_REQUIRES_DOCKER: frozenset[str] = frozenset(
 BENCH_REQUIRES_VISION: frozenset[str] = frozenset({"hle_accuracy"})
 
 
-def compute_missing_benches(bench_means: dict[str, float] | None) -> list[str]:
-    """``BENCH_DIM_WEIGHTS`` universe 중 ``bench_means`` 에 없는 field 목록.
-
-    Goodhart-suppression surface — Petri-side ``compute_missing_dims`` (PR-4)
-    과 symmetry. mutation 이 bench 측정을 silently suppress 해서 fitness
-    aggregate 의 neutral fallback (0.5) 으로 도주하는 패턴을 노출한다.
-
-    Returns sorted list of missing field names. Empty list when all 7 present.
-    """
-    if bench_means is None:
-        return sorted(BENCH_DIM_WEIGHTS)
-    return sorted(set(BENCH_DIM_WEIGHTS) - set(bench_means))
-
-
 # Bench field 별 가중치 — 합 1.0. 2026-05-23 F1.b 갱신:
 # - SWE-bench Pro (Scale AI, Harbor resolve rate) — 0.25
 # - LiveCodeBench-Pro (C++ competitive, contam-defended, ICPC/IOI 2026 v2) — 0.15
@@ -207,24 +192,6 @@ def compute_bench_aggregate(bench_means: dict[str, float] | None) -> float:
         value = bench_means.get(field_name, 0.5)  # 누락 field neutral
         total += weight * max(0.0, min(1.0, value))
     return total
-
-
-def validate_bench_schema(bench_means: Any) -> bool:
-    """Validate ``bench_means`` — dict[str, float in 0-1], 알려진 field 만.
-    ``None`` 도 valid (no-op signal)."""
-    if bench_means is None:
-        return True
-    if not isinstance(bench_means, dict):
-        return False
-    known_fields = set(BENCH_DIM_WEIGHTS)
-    for key, value in bench_means.items():
-        if key not in known_fields:
-            return False
-        if not isinstance(value, int | float):
-            return False
-        if not (0.0 <= float(value) <= 1.0):
-            return False
-    return True
 
 
 def detect_cross_validation_conflict(
@@ -545,7 +512,5 @@ __all__ = [
     "BenchProvenance",
     "collect_bench_means_from_inspect_ai",
     "compute_bench_aggregate",
-    "compute_missing_benches",
     "detect_cross_validation_conflict",
-    "validate_bench_schema",
 ]

@@ -73,8 +73,8 @@ def test_policy_path_agent_contract_maps_to_in_repo() -> None:
     assert pol.policy_path("agent_contract") == AUTORESEARCH_AGENT_CONTRACTS_PATH
 
 
-def test_is_valid_target_kind_accepts_agent_contract() -> None:
-    assert pol.is_valid_target_kind("agent_contract") is True
+def test_agent_contract_is_a_target_kind() -> None:
+    assert "agent_contract" in pol.TARGET_KINDS
 
 
 # Reader --------------------------------------------------------------------

@@ -21,7 +21,7 @@ def isolated_skill_catalog(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> P
     return target
 
 
-# TARGET_KINDS / is_valid_target_kind ----------------------------------------
+# TARGET_KINDS ----------------------------------------------------------------
 
 
 def test_target_kinds_includes_skill_catalog() -> None:
@@ -34,15 +34,6 @@ def test_target_kinds_count_grows_with_each_m_pr() -> None:
     assert "skill_catalog" in pol.TARGET_KINDS
     assert "retrieval" not in pol.TARGET_KINDS
     assert len(pol.TARGET_KINDS) >= 5
-
-
-def test_is_valid_target_kind_accepts_skill_catalog() -> None:
-    assert pol.is_valid_target_kind("skill_catalog") is True
-
-
-def test_is_valid_target_kind_still_rejects_retrieval() -> None:
-    """S0d deprecation 유지 — M1 가 추가만 하고 retrieval 복원 안 함."""
-    assert pol.is_valid_target_kind("retrieval") is False
 
 
 # policy_path ----------------------------------------------------------------
@@ -214,4 +205,3 @@ def test_write_tool_policy_keeps_legacy_string_serialization(
 
 def test_policies_exports_target_kinds() -> None:
     assert "TARGET_KINDS" in pol.__all__
-    assert "is_valid_target_kind" in pol.__all__

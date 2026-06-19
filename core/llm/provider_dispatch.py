@@ -10,13 +10,6 @@ import logging
 from typing import Any
 
 from core.config import is_model_allowed
-
-# H11-tail: the per-provider fallback chains are read LIVE inside each dispatch
-# lambda (``__import__("core.config", ...).X``), not imported by value here, so
-# a routing.toml reload is reflected without a process restart. (The codex
-# entry already used this pattern; anthropic/openai/glm now match.)
-from core.hooks.dispatch import fire_hook
-from core.hooks.system import HookEvent
 from core.llm.fallback import retry_with_backoff_generic
 
 
@@ -37,24 +30,6 @@ def __getattr__(name: str) -> Any:
 # 248 ms anthropic graph through this module.
 
 log = logging.getLogger(__name__)
-
-# ---------------------------------------------------------------------------
-# Hook system — local _fire_hook to avoid circular import with router
-# ---------------------------------------------------------------------------
-
-_hooks_ctx: Any = None  # HookSystem | None — set via set_dispatch_hooks()
-
-
-def set_dispatch_hooks(hooks: Any) -> None:
-    """Wire HookSystem into provider_dispatch for compatibility."""
-    global _hooks_ctx
-    _hooks_ctx = hooks
-
-
-def _fire_hook(event: HookEvent, data: dict[str, Any]) -> None:
-    """Fire a hook event if HookSystem is wired (or no-op)."""
-    fire_hook(_hooks_ctx, event, data)
-
 
 # ---------------------------------------------------------------------------
 # Provider dispatch — single source of truth for per-provider configurations.
@@ -105,11 +80,6 @@ def _anthropic_get_client() -> Any:
 _PROVIDER_DISPATCH: dict[str, dict[str, Any]] = {
     "anthropic": {
         "get_client": _anthropic_get_client,
-        "fallback_chain": lambda: list(
-            __import__(
-                "core.config", fromlist=["ANTHROPIC_FALLBACK_CHAIN"]
-            ).ANTHROPIC_FALLBACK_CHAIN
-        ),
         "retryable_errors": _anthropic_retryable,
         "bad_request_error": _anthropic_bad_request,
     },
@@ -117,9 +87,6 @@ _PROVIDER_DISPATCH: dict[str, dict[str, Any]] = {
         "get_client": lambda: __import__(
             "core.llm.providers.openai", fromlist=["_get_openai_client"]
         )._get_openai_client(),
-        "fallback_chain": lambda: list(
-            __import__("core.config", fromlist=["OPENAI_FALLBACK_CHAIN"]).OPENAI_FALLBACK_CHAIN
-        ),
         "retryable_errors": _openai_retryable,
         "bad_request_error": _openai_bad_request,
     },
@@ -127,9 +94,6 @@ _PROVIDER_DISPATCH: dict[str, dict[str, Any]] = {
         "get_client": lambda: __import__(
             "core.llm.providers.glm", fromlist=["_get_glm_client"]
         )._get_glm_client(),
-        "fallback_chain": lambda: list(
-            __import__("core.config", fromlist=["GLM_FALLBACK_CHAIN"]).GLM_FALLBACK_CHAIN
-        ),
         "retryable_errors": _openai_retryable,  # GLM uses openai SDK
         "bad_request_error": _openai_bad_request,
     },
@@ -137,9 +101,6 @@ _PROVIDER_DISPATCH: dict[str, dict[str, Any]] = {
         "get_client": lambda: __import__(
             "core.llm.providers.codex", fromlist=["_get_codex_client"]
         )._get_codex_client(),
-        "fallback_chain": lambda: list(
-            __import__("core.config", fromlist=["CODEX_FALLBACK_CHAIN"]).CODEX_FALLBACK_CHAIN
-        ),
         "retryable_errors": _openai_retryable,
         "bad_request_error": _openai_bad_request,
     },
@@ -149,8 +110,7 @@ _PROVIDER_DISPATCH: dict[str, dict[str, Any]] = {
 def _get_provider_config(provider: str, key: str) -> Any:
     """Lookup a provider-specific configuration by key.
 
-    Valid keys: get_client, fallback_chain, retryable_errors,
-    bad_request_error.
+    Valid keys: get_client, retryable_errors, bad_request_error.
     """
     dispatch = _PROVIDER_DISPATCH.get(provider)
     if dispatch is None:
@@ -164,31 +124,6 @@ def _get_provider_config(provider: str, key: str) -> Any:
 # Convenience wrappers (preserve existing call sites)
 def _get_provider_client(provider: str) -> Any:
     return _get_provider_config(provider, "get_client")
-
-
-def _get_fallback_chain(provider: str) -> list[str]:
-    """**DEPRECATED — returns empty list (PR-DRIFT-CUT, 2026-05-24).**
-
-    Pre-PR: looked up a configured fallback chain per provider so that
-    when the primary model returned a retryable error the dispatcher
-    would silently try the next model in the chain (and even cross
-    providers in the case of GLM → OpenAI). In production that meant
-    a single 400 on Anthropic could cascade to a z.ai call that
-    succeeded but surfaced the *Anthropic* error to the user — see
-    the v0.99.52 smoke (gpt-5.5 ``Unsupported parameter`` → context
-    overflow misclassification → z.ai 200 OK → UI showed "Context
-    window exhausted"). The chain was the *amplifier*; cutting it at
-    the source isolates failures to their actual provider.
-
-    The function signature is preserved so callers don't fork on the
-    rollout. Operators wanting an alternative model must invoke
-    ``/model <id>`` explicitly — there is no silent auto-fallback.
-    The legacy chain constants in :mod:`core.config`
-    (``ANTHROPIC_FALLBACK_CHAIN`` etc.) are still imported by the
-    dispatch table above to keep test fixtures + introspection
-    working, but their content is no longer consulted at call time.
-    """
-    return []
 
 
 def _get_provider_retryable_errors(provider: str) -> tuple[type[Exception], ...]:
@@ -207,17 +142,19 @@ def _retry_provider_aware(
     model: str,
     provider: str,
 ) -> Any:
-    """Execute fn with retry + backoff + fallback, provider-aware."""
-    fallback = _get_fallback_chain(provider)
-    candidates = [model] + [m for m in fallback if m != model]
-    models_to_try = [m for m in candidates if is_model_allowed(m)]
-    if not models_to_try:
-        raise RuntimeError(f"All models blocked by policy: {candidates}")
+    """Execute fn with retry + backoff, provider-aware.
+
+    There is no silent cross-model auto-fallback (PR-DRIFT-CUT, 2026-05-24):
+    a failure is isolated to its actual provider/model. Operators wanting an
+    alternative model invoke ``/model <id>`` explicitly.
+    """
+    if not is_model_allowed(model):
+        raise RuntimeError(f"Model blocked by policy: {model}")
 
     return retry_with_backoff_generic(
         fn,
-        model=models_to_try[0],
-        fallback_models=models_to_try[1:],
+        model=model,
+        fallback_models=[],
         retryable_errors=_get_provider_retryable_errors(provider),
         bad_request_error=_get_provider_bad_request_error(provider),
         billing_message=f"{provider} API billing/credit error.",

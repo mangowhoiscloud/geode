@@ -5,7 +5,6 @@ from __future__ import annotations
 import time
 
 from core.memory.session_checkpoint import (
-    CHECKPOINT_MAX_MESSAGES,
     SessionCheckpoint,
     SessionState,
 )
@@ -45,11 +44,10 @@ class TestSessionCheckpoint:
         assert cp.load("nonexistent") is None
 
     def test_no_trim_full_history_preserved(self, tmp_path):
-        """Phase 1b — JSON trim removed. ``CHECKPOINT_MAX_MESSAGES = 0``
-        means "keep everything"; the SoT is now the SQLite ``messages``
-        table which holds the *full* conversation, and the JSON hot
-        cache is also kept untrimmed so old offline tooling still works
-        on long sessions."""
+        """Phase 1b — JSON trim removed. The SoT is now the SQLite
+        ``messages`` table which holds the *full* conversation, and the
+        JSON hot cache is also kept untrimmed so old offline tooling still
+        works on long sessions."""
         cp = SessionCheckpoint(tmp_path / "session")
         messages = [{"role": "user", "content": f"msg {i}"} for i in range(50)]
         state = SessionState(session_id="trim-test", messages=messages)
@@ -61,8 +59,6 @@ class TestSessionCheckpoint:
         # Both the first and last message survive (in-order).
         assert loaded.messages[0]["content"] == "msg 0"
         assert loaded.messages[-1]["content"] == "msg 49"
-        # The exported constant signals "no trim" to downstream callers.
-        assert CHECKPOINT_MAX_MESSAGES == 0
 
     def test_mark_completed(self, tmp_path):
         cp = SessionCheckpoint(tmp_path / "session")
