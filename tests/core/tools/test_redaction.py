@@ -38,6 +38,19 @@ class TestRedactSecrets:
         assert "ghp_" not in result
         assert "[REDACTED]" in result
 
+    def test_oauth_jwt_token(self) -> None:
+        text = (
+            "Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9."
+            "eyJzdWIiOiIxMjM0NTY3ODkwIn0.dozjgNryP4J3jVmNHl0w5N_XgL0n3I9PlFUP0THsR8U"
+        )
+        result = redact_secrets(text)
+        assert "eyJhbG" not in result
+        assert "[REDACTED]" in result
+
+    def test_jwt_normal_sentence_unchanged(self) -> None:
+        text = "The deploy succeeded and every region is now serving traffic."
+        assert redact_secrets(text) == text
+
     def test_slack_bot_token(self) -> None:
         text = "SLACK_TOKEN=xoxb-123456-abcdef-ghijkl"
         result = redact_secrets(text)

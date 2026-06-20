@@ -98,6 +98,7 @@ class ToolExecutor:
         hitl_level: int = 2,
         hooks: HookSystem | None = None,
         approval_callback: Callable[[str, str, str], str] | None = None,
+        denied_tools: frozenset[str] = frozenset(),
     ) -> None:
         self._handlers: dict[str, ToolHandler] = action_handlers or {}
         self._bash = bash_tool or BashTool()
@@ -105,6 +106,13 @@ class ToolExecutor:
         self._sub_agent_manager = sub_agent_manager
         self._mcp_manager = mcp_manager
         self._hitl_level = hitl_level
+        # Tools refused outright on this session, BEFORE any gate/approval or the
+        # run_bash/delegate_task special-cases. Removing a tool from
+        # ``action_handlers`` is NOT enough — run_bash/delegate_task are
+        # special-cased ahead of handler lookup, so a denylist must be enforced
+        # here. Used by headless sessions (scheduler/daemon/MCP run_agent) where
+        # no human can approve. (Codex MCP review, PR-EXEC-HARDENING.)
+        self._denied_tools = denied_tools
         self._hooks: HookSystem | None = hooks
         self._approval_callback = approval_callback
 
@@ -161,6 +169,16 @@ class ToolExecutor:
 
         if context and context.cancellation and context.cancellation.is_set():
             return {"error": "Tool execution cancelled before start", "cancelled": True}
+
+        # Headless denylist — refuse BEFORE the gate and the run_bash/
+        # delegate_task special-cases below (handler-dict filtering cannot stop
+        # those, since they never consult the handler dict). No human to approve.
+        if tool_name in self._denied_tools:
+            log.info("Tool %s denied on this session (headless denylist)", tool_name)
+            return {
+                "error": f"Tool '{tool_name}' is not available in this session.",
+                "denied": True,
+            }
 
         # Single safety GATE for EVERY tool (classify → approve). DANGEROUS
         # tools are gated HERE (approval only) and then fall through to the

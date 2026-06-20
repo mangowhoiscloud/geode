@@ -18,6 +18,8 @@ from enum import StrEnum
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
+from core.agent.safety import HEADLESS_DENIED_TOOLS
+
 if TYPE_CHECKING:
     from core.agent.loop import AgenticLoop
     from core.agent.tool_executor import ToolExecutor
@@ -37,16 +39,6 @@ class SessionMode(StrEnum):
     IPC = "ipc"  # Thin CLI via Unix socket — hitl=0, WRITE ok, DANGEROUS blocked
     DAEMON = "daemon"  # Slack/Discord poller — hitl=0, quiet, time=config
     SCHEDULER = "scheduler"  # Cron/scheduled jobs — hitl=0, quiet, time=300s cap
-
-
-# Tools denied for headless modes (DAEMON, SCHEDULER) — no user to approve.
-# IPC mode has HITL relay, so these tools are available with user approval.
-_HEADLESS_DENIED_TOOLS: frozenset[str] = frozenset(
-    {
-        "run_bash",
-        "delegate_task",
-    }
-)
 
 
 # ---------------------------------------------------------------------------
@@ -163,11 +155,13 @@ class SharedServices:
         # Filter DANGEROUS tools for truly headless modes (no user to approve).
         # IPC mode has HITL relay — tools are gated by approval, not denied.
         handlers = self.tool_handlers
+        headless_denied: frozenset[str] = frozenset()
         if mode in (SessionMode.SCHEDULER, SessionMode.DAEMON):
-            denied = _HEADLESS_DENIED_TOOLS & set(handlers)
+            headless_denied = HEADLESS_DENIED_TOOLS
+            denied = headless_denied & set(handlers)
             if denied:
                 log.info("Headless mode %s: denied tools filtered — %s", mode, denied)
-            handlers = {k: v for k, v in handlers.items() if k not in _HEADLESS_DENIED_TOOLS}
+            handlers = {k: v for k, v in handlers.items() if k not in headless_denied}
 
         # Reload the settings singleton from disk (.env + config.toml) FIRST —
         # before anything below reads it. v0.82.0 + PR-R6 (2026-05-24): `/model`
@@ -192,6 +186,7 @@ class SharedServices:
             hitl_level=hitl,
             hooks=self.hook_system,
             approval_callback=approval_cb,
+            denied_tools=headless_denied,
         )
 
         # PR-R6 (2026-05-24) — operator's effort choice from ``/model``
