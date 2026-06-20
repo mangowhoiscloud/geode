@@ -67,7 +67,7 @@ __all__ = [
 # ----------------------------------------------------------------------
 # Legacy decomposition models (PR-CL-A1-followup, 2026-05-23)
 # Moved from ``core/orchestration/goal_decomposer.py`` so a single module
-# owns the planner schema. Pydantic models stay so ``call_llm_parsed`` /
+# owns the planner schema. Pydantic models stay so structured-output /
 # JSON-schema validation paths keep working.
 # ----------------------------------------------------------------------
 

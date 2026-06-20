@@ -101,7 +101,7 @@ class TestFireHook:
                 {
                     "model": "gpt-5.4",
                     "provider": "openai",
-                    "function": "call_llm_parsed",
+                    "function": "call_llm",
                     "latency_ms": 456.0,
                     "error": None,
                 },
@@ -109,7 +109,7 @@ class TestFireHook:
 
             assert len(captured) == 1
             assert captured[0]["error"] is None
-            assert captured[0]["function"] == "call_llm_parsed"
+            assert captured[0]["function"] == "call_llm"
         finally:
             set_router_hooks(None)
 
