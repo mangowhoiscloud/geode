@@ -45,6 +45,11 @@ functional change.
 
 ---
 
+## [0.99.239] - 2026-06-20
+
+### Fixed
+- **Removed accidentally-committed root `package.json`/`package-lock.json` junk** (PR-NPM-JUNK-CLEANUP). A stray root `package.json` (`{"dependencies": {"foo": "^0.0.7"}}` — leftover from an ad-hoc `npm install foo`) reappeared in the PR-LLM-STACK-A1 worktree when `node site/scripts/sync-stats.mjs` ran from the repo root (npm derives a default manifest named after the cwd basename), and a `git add -A` swept it into #2392 → main. GEODE is a Python project; these files are pure junk and caused a spurious `name` diff (`llm-stack-unify`↔`geode`) whenever node ran from a different directory. Removed both from tracking and added root-anchored `/package.json` + `/package-lock.json` to `.gitignore` so `git add -A` can never recommit them. The legitimate Next.js manifests at `site/package.json` / `site/package-lock.json` are unaffected (the `/`-anchor ignores root only). No code/metric change.
+
 ## [0.99.238] - 2026-06-20
 
 ### Removed

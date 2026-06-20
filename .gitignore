@@ -140,6 +140,11 @@ geode_checkpoints.db-wal
 tmp/
 pilot_stderr.log
 /node_modules/
+# Root npm scratch — node tooling (site/scripts/*.mjs) run from the repo root
+# auto-creates a stray root package.json/lock (name=<dir basename>); ignore so
+# `git add -A` never commits it. The real Next.js manifests live at site/.
+/package.json
+/package-lock.json
 reports/
 # Allow the source package at core/skills/reports/ (split from reports.py in v0.71.0).
 # Only un-ignore source files + templates — let __pycache__/*.pyc stay ignored
