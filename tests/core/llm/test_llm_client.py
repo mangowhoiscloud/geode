@@ -6,7 +6,6 @@ import json
 import re
 from unittest.mock import MagicMock, patch
 
-import pytest
 from core.config import ANTHROPIC_BUDGET, ANTHROPIC_PRIMARY, OPENAI_PRIMARY
 from core.llm.router import (
     LLMUsage,
@@ -165,99 +164,6 @@ class TestUsageAccumulatorContext:
 
 
 # ---------------------------------------------------------------------------
-# call_llm_parsed (mocked)
-# ---------------------------------------------------------------------------
-
-
-class TestCallLLMParsed:
-    def test_parsed_output_success(self):
-        from core.llm.router import call_llm_parsed
-        from pydantic import BaseModel
-
-        class DummyOutput(BaseModel):
-            score: float = 0.0
-
-        mock_response = MagicMock()
-        mock_response.parsed_output = DummyOutput(score=4.2)
-        mock_response.usage = MagicMock(
-            input_tokens=500,
-            output_tokens=200,
-            cache_creation_input_tokens=0,
-            cache_read_input_tokens=0,
-        )
-
-        mock_client = MagicMock()
-        mock_client.messages.parse.return_value = mock_response
-
-        with patch("core.llm.router.calls.parsed.get_anthropic_client", return_value=mock_client):
-            result = call_llm_parsed(
-                system="test system",
-                user="test user",
-                output_model=DummyOutput,
-                model=ANTHROPIC_PRIMARY,
-            )
-        assert result.score == 4.2
-
-    def test_parsed_output_none_raises(self):
-        from core.llm.router import call_llm_parsed
-        from pydantic import BaseModel
-
-        class DummyOutput(BaseModel):
-            value: str = ""
-
-        mock_response = MagicMock()
-        mock_response.parsed_output = None
-        mock_response.usage = MagicMock(
-            input_tokens=100,
-            output_tokens=50,
-            cache_creation_input_tokens=0,
-            cache_read_input_tokens=0,
-        )
-
-        mock_client = MagicMock()
-        mock_client.messages.parse.return_value = mock_response
-
-        with (
-            patch("core.llm.router.calls.parsed.get_anthropic_client", return_value=mock_client),
-            pytest.raises(ValueError, match="LLM returned no structured output"),
-        ):
-            call_llm_parsed(
-                system="test",
-                user="test",
-                output_model=DummyOutput,
-                model=ANTHROPIC_PRIMARY,
-            )
-
-    def test_parsed_output_with_cache(self):
-        from core.llm.router import call_llm_parsed
-        from pydantic import BaseModel
-
-        class DummyOutput(BaseModel):
-            ok: bool = True
-
-        mock_response = MagicMock()
-        mock_response.parsed_output = DummyOutput(ok=True)
-        mock_response.usage = MagicMock(
-            input_tokens=500,
-            output_tokens=200,
-            cache_creation_input_tokens=100,
-            cache_read_input_tokens=50,
-        )
-
-        mock_client = MagicMock()
-        mock_client.messages.parse.return_value = mock_response
-
-        with patch("core.llm.router.calls.parsed.get_anthropic_client", return_value=mock_client):
-            result = call_llm_parsed(
-                system="test",
-                user="test",
-                output_model=DummyOutput,
-                model=ANTHROPIC_PRIMARY,
-            )
-        assert result.ok is True
-
-
-# ---------------------------------------------------------------------------
 # LLMUsage edge cases
 # ---------------------------------------------------------------------------
 
@@ -287,106 +193,7 @@ class TestLLMUsageEdgeCases:
 
 
 class TestProviderRouting:
-    """Verify call_llm_parsed / call_llm route to correct SDK based on model."""
-
-    def test_call_llm_parsed_routes_to_anthropic_for_claude(self):
-        """call_llm_parsed should use Anthropic SDK when model is claude-*."""
-        from pydantic import BaseModel
-
-        class _DummyOutput(BaseModel):
-            value: str
-
-        mock_response = MagicMock()
-        mock_response.parsed_output = _DummyOutput(value="test")
-        mock_response.usage = MagicMock(
-            input_tokens=10,
-            output_tokens=5,
-            cache_creation_input_tokens=0,
-            cache_read_input_tokens=0,
-        )
-
-        with patch("core.llm.router.calls.parsed.get_anthropic_client") as mock_get:
-            mock_client = MagicMock()
-            mock_client.messages.parse.return_value = mock_response
-            mock_get.return_value = mock_client
-
-            from core.llm.router import call_llm_parsed
-
-            result = call_llm_parsed(
-                "system",
-                "user",
-                output_model=_DummyOutput,
-                model="claude-opus-4-6",
-            )
-
-            assert result.value == "test"
-            mock_client.messages.parse.assert_called_once()
-
-    def test_call_llm_parsed_routes_to_openai_for_glm(self):
-        """call_llm_parsed should use OpenAI-compatible SDK when model is glm-*."""
-        from pydantic import BaseModel
-
-        class _DummyOutput(BaseModel):
-            value: str
-
-        mock_parsed = _DummyOutput(value="glm-result")
-        mock_choice = MagicMock()
-        mock_choice.message.parsed = mock_parsed
-
-        mock_response = MagicMock()
-        mock_response.choices = [mock_choice]
-        mock_response.usage = MagicMock(prompt_tokens=10, completion_tokens=5)
-
-        mock_glm_client = MagicMock()
-        mock_glm_client.beta.chat.completions.parse.return_value = mock_response
-
-        with patch(
-            "core.llm.router.calls.parsed._get_provider_client", return_value=mock_glm_client
-        ):
-            from core.llm.router import call_llm_parsed
-
-            result = call_llm_parsed(
-                "system",
-                "user",
-                output_model=_DummyOutput,
-                model="glm-5",
-            )
-
-            assert result.value == "glm-result"
-            mock_glm_client.beta.chat.completions.parse.assert_called_once()
-
-    def test_call_llm_parsed_routes_to_openai_for_gpt(self):
-        """call_llm_parsed should use OpenAI SDK when model is gpt-*."""
-        from pydantic import BaseModel
-
-        class _DummyOutput(BaseModel):
-            value: str
-
-        mock_parsed = _DummyOutput(value="gpt-result")
-        mock_choice = MagicMock()
-        mock_choice.message.parsed = mock_parsed
-
-        mock_response = MagicMock()
-        mock_response.choices = [mock_choice]
-        mock_response.usage = MagicMock(prompt_tokens=10, completion_tokens=5)
-
-        mock_openai_client = MagicMock()
-        mock_openai_client.beta.chat.completions.parse.return_value = mock_response
-
-        with patch(
-            "core.llm.router.calls.parsed._get_provider_client", return_value=mock_openai_client
-        ):
-            from core.llm.router import call_llm_parsed
-
-            result = call_llm_parsed(
-                "system",
-                "user",
-                output_model=_DummyOutput,
-                model="gpt-5.4",
-            )
-
-            assert result.value == "gpt-result"
-            mock_openai_client.beta.chat.completions.parse.assert_called_once()
+    """Verify call_llm routes to the correct SDK based on model."""
 
     def test_call_llm_routes_to_openai_for_glm(self):
         """call_llm should use OpenAI-compatible SDK when model is glm-*."""

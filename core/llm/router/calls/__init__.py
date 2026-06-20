@@ -1,14 +1,15 @@
 """LLM call functions — provider-aware dispatching and failover loops.
 
 This is the transport layer: ``call_with_failover`` (async failover for
-AgenticLoop), ``_route_provider`` (Plan-aware provider resolution), the
-remaining non-agentic text/JSON helpers, async streaming, and the async-only
-tool-use entry point ``call_llm_with_tools_async``.
+AgenticLoop), ``_route_provider`` (Plan-aware provider resolution), and the
+synchronous text entry point ``call_llm``.
 
-All five entry points share the same shape: resolve provider, fire
-LLM_CALL_START, dispatch to Anthropic SDK or OpenAI-compatible SDK, record
-usage, and fire LLM_CALL_END (with error or latency). Provider-internal
-fallback stays inside the selected provider's retry chain.
+``call_llm`` resolves the provider, fires LLM_CALL_START, dispatches to the
+Anthropic SDK or an OpenAI-compatible SDK, records usage, and fires
+LLM_CALL_END (with error or latency). ``call_with_failover`` iterates a
+supplied model list applying per-model retry/backoff and emits LLM_CALL_RETRIED
+on each retry. Provider-internal fallback stays inside the selected provider's
+retry chain.
 
 Each entry point lives in its own leaf sub-module for SRP and testability.
 Tests that need to monkeypatch a provider client (``get_anthropic_client``,
@@ -20,8 +21,4 @@ from __future__ import annotations
 
 from ._failover import call_with_failover as call_with_failover
 from ._route import _route_provider as _route_provider
-from .json import call_llm_json as call_llm_json
-from .parsed import call_llm_parsed as call_llm_parsed
-from .streaming import call_llm_streaming_async as call_llm_streaming_async
 from .text import call_llm as call_llm
-from .tools import call_llm_with_tools_async as call_llm_with_tools_async
