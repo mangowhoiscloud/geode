@@ -121,10 +121,9 @@ async def _run_tool_executor_async(
 class OpenAIAdapter:
     """OpenAI-compatible async tool-use orchestrator.
 
-    Powers OpenAI + GLM tool-use paths from
-    :func:`core.llm.router.calls.tools.call_llm_with_tools_async` — the legacy
-    sync ``generate`` / ``generate_structured`` / ``generate_parsed`` /
-    ``agenerate_stream`` surface (``LLMClientPort``) was removed in
+    Powers the OpenAI + GLM tool-use paths via :meth:`agenerate_with_tools` —
+    the legacy sync ``generate`` / ``generate_structured`` / ``generate_parsed``
+    / ``agenerate_stream`` surface (``LLMClientPort``) was removed in
     PR-LLMCLIENTPORT-COLLAPSE (2026-05-28); only the
     :meth:`agenerate_with_tools` orchestration is load-bearing.
     """

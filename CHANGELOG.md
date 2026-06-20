@@ -45,6 +45,14 @@ functional change.
 
 ---
 
+## [0.99.238] - 2026-06-20
+
+### Removed
+- **Dead legacy LLM router entry points cut (PR-LLM-STACK-A1; Phase A1 of the call-stack unification)**. GEODE runs LLM calls through a primary adapter stack (`AgenticLoop._call_llm → adapter.acomplete`) plus an auxiliary router transport (`call_with_failover` / sync `call_llm`). Four router entry points sat on neither live path: `call_llm_with_tools_async`, `call_llm_json`, `call_llm_parsed`, `call_llm_streaming_async` (modules `core/llm/router/calls/{tools,json,parsed,streaming}.py`) — reachable only through `__all__` re-exports + their own tests, with **zero production callers** (verified by grep + a deep behavior trace). Deleted the four modules + their re-exports (`router/__init__.py`, `router/calls/__init__.py`), `tests/core/llm/test_tool_use.py` (wholly testing the dead `call_llm_with_tools_async`), and the dead-entry tests surgically removed from three mixed test files (`test_failover.py` `TestCallLlmJsonExtraction`; `test_llm_client.py` `TestCallLLMParsed` + the `call_llm_parsed` routing tests; one incidental ref in `test_llm_lifecycle_hooks.py`) — the **live** `call_llm` / `call_with_failover` / `retry_with_backoff` / provider-routing tests are kept. `test_routing_policy.py`'s call-site count guard drops from `>= 4` to `>= 1` (it was a 5-module tally; only `call_llm` in `text.py` now resolves a provider) — the anti-bypass assertion (no live `call_llm*` path may use the static `_resolve_provider`) is unchanged. The live auxiliary surface (`call_with_failover`, sync `call_llm`, the `providers/{anthropic,openai}.py` shared client/retry helpers, `ANTHROPIC_FALLBACK_CHAIN`) is untouched. Net −1305 LoC, −4 modules, −25 tests. Codex MCP reviewed: no findings beyond one docstring drift (fixed). Plan: `docs/plans/2026-06-20-llm-call-stack-unification.md` (Phases A2 + B — auxiliary-retry consolidation onto one billing-honest helper — staged next).
+
+### Added
+- **LLM call-stack unification plan** (`docs/plans/2026-06-20-llm-call-stack-unification.md`). A zero-regression, phased resolution of the dual/triple retry stack, grounded in a verified 20-item behavior-preservation checklist. Key finding: the interactive (`arun`, fail-fast → `model_action_required`) and autonomous (`call_with_failover`, claude-cli 2m/10m/30m/2h quota-backoff — smoke-24 load-bearing for the self-improving loop) policies are **intentionally divergent**, so the plan preserves both as an explicit named split rather than collapsing them.
+
 ## [0.99.237] - 2026-06-19
 
 ### Removed

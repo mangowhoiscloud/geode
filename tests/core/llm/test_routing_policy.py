@@ -233,9 +233,13 @@ def test_router_route_provider_helper_exists() -> None:
         mod = importlib.import_module(mod_info.name)
         aggregated_src += inspect.getsource(mod)
 
-    # All 4 call sites must use the new helper.
-    assert aggregated_src.count("_route_provider(target_model)") >= 4, (
-        f"expected ≥4 call sites using _route_provider; got "
+    # The surviving provider-resolving entry (``call_llm`` in ``text.py``)
+    # must use the helper. ``call_with_failover`` resolves per-model inside
+    # its own loop, so the count is the live ``call_llm*`` surface, not a
+    # fixed 5-module tally (PR-LLM-STACK-A1 deleted the json/parsed/streaming/
+    # tools call modules).
+    assert aggregated_src.count("_route_provider(target_model)") >= 1, (
+        f"expected ≥1 call site using _route_provider; got "
         f"{aggregated_src.count('_route_provider(target_model)')}. "
         "Some call_llm* path still uses the static _resolve_provider."
     )
