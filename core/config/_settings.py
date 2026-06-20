@@ -442,6 +442,11 @@ class Settings(BaseSettings):
     # the binary exists, else warn + run unsandboxed. "strict": fail if unavailable.
     bash_sandbox: str = "off"
 
+    # Slopsquatting guard — block bash installs of packages that do not exist on
+    # PyPI/npm (LLMs hallucinate package names; attackers pre-register them).
+    # Fail-open: only a definitive 404 blocks; set False to disable entirely.
+    package_install_guard: bool = True
+
     # Context Compaction — overflow prevention
     compact_keep_recent: int = 10  # messages to preserve during compaction/prune
 

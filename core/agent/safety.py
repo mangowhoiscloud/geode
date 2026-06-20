@@ -90,6 +90,10 @@ WRITE_TOOLS: frozenset[str] = frozenset(
     }
 )
 
+# Tools denied on headless (no-human-to-approve) sessions: scheduler, daemon,
+# and the MCP run_agent fork.
+HEADLESS_DENIED_TOOLS: frozenset[str] = frozenset({"run_bash", "delegate_task", "computer"})
+
 # Expensive tools require cost confirmation before execution
 EXPENSIVE_TOOLS: dict[str, float] = {
     # Petri audit — conservative ceiling. Real estimate is rendered by

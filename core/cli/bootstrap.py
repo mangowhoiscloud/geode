@@ -261,7 +261,21 @@ async def arun_agentic_oneshot(
 
     conversation = ConversationContext()
     handlers = _build_tool_handlers_for_fork()
-    executor = ToolExecutor(action_handlers=handlers, hitl_level=0)
+    # The MCP run_agent fork is HEADLESS (no human to approve) — mirror
+    # services.py and strip the headless-denied tools before the executor is
+    # built, so the fork can never auto-run run_bash / delegate_task / computer.
+    from core.agent.safety import HEADLESS_DENIED_TOOLS
+
+    denied = HEADLESS_DENIED_TOOLS & set(handlers)
+    if denied:
+        log.info("Headless run_agent fork: denied tools filtered — %s", denied)
+    handlers = {k: v for k, v in handlers.items() if k not in HEADLESS_DENIED_TOOLS}
+    # denied_tools is the REAL enforcement — run_bash / delegate_task are
+    # special-cased ahead of handler lookup, so the filter above alone cannot
+    # stop them (handler-filter is defense-in-depth for handler-dispatched tools).
+    executor = ToolExecutor(
+        action_handlers=handlers, hitl_level=0, denied_tools=HEADLESS_DENIED_TOOLS
+    )
     loop = AgenticLoop(
         conversation,
         executor,

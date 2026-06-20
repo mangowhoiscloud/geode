@@ -120,6 +120,14 @@ class BashTool:
         blocked = self.validate(command)
         if blocked:
             return blocked
+
+        from core.tools.package_guard import check_install_command
+
+        install_block = await check_install_command(command)
+        if install_block:
+            log.warning("Blocked install of unverified package(s): %s", command[:120])
+            return BashResult(blocked=True, error=install_block, command=command)
+
         if cancellation is not None and cancellation.is_set():
             return BashResult(
                 interrupted=True,

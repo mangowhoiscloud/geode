@@ -45,6 +45,15 @@ functional change.
 
 ---
 
+## [0.99.240] - 2026-06-21
+
+### Security
+- **Autonomous-execution hardening (PR-EXEC-HARDENING)** — a security review through the "AI code runs but isn't safe to ship" lens (Veracode: 45% of AI-written code carries a known vuln) found GEODE strong on passive axes (no happy-path crashes; secrets masked at every sink) but exposed on the two *autonomous-execution* axes. Three fixes:
+  - **Headless tool denylist now actually enforced.** The denylist (`run_bash`, `delegate_task`, + newly `computer`) moved to one home `core/agent/safety.py:HEADLESS_DENIED_TOOLS`. The prior mechanism (filtering `action_handlers`) was **security theater** for `run_bash`/`delegate_task` — both are special-cased in `ToolExecutor.aexecute` *ahead* of handler lookup and auto-approved at `hitl_level=0`, so removing the handler never stopped them (Codex MCP caught this). Added a `denied_tools` param to `ToolExecutor` enforced at the **top** of `aexecute` (before the gate and the special-cases), and wired it on all three headless entry points: the MCP `run_agent` fork (`core/cli/bootstrap.py`, previously had **no** denylist at all), and scheduler/daemon (`core/server/supervised/services.py`). A scheduled job / Slack message / MCP call can no longer drive shell / sub-agent / screen-control with no human to approve.
+  - **Slopsquatting guard** (new `core/tools/package_guard.py`) — LLMs hallucinate package names (~20% don't exist; 43% repeat the same fake name) and attackers pre-register them with malware. `bash_tool.aexecute` now parses `pip`/`uv`/`npm` install commands (across shell-operator segments, `python -m pip`, and `env`/`VAR=` prefixes) and blocks any package that returns a definitive 404 on PyPI/npm. Fully **fail-open**: network errors, non-404s, custom index/registry flags or env vars (`--index-url`, `PIP_INDEX_URL=…`), scoped npm names, and `package_install_guard=false` all allow the install, so a private-index package is never false-blocked. New setting `package_install_guard` (default on, TOML `tools.package_install_guard`).
+  - **JWT/OAuth bearer-token redaction** — `core/observability/redaction.py` now also redacts `eyJ…` JWT access tokens (the formatter-level safety net previously covered `sk-ant-*`/`sk-proj`/GitHub/Slack but not OAuth JWTs; latent, now closed).
+  - Deferred (operator UX decision, flagged in the audit): `GEODE_BASH_SANDBOX` default-on for headless paths, and excluding `python -c` from the read-only auto-approve allowlist.
+
 ## [0.99.239] - 2026-06-20
 
 ### Fixed
