@@ -19,6 +19,9 @@ _SECRET_PATTERNS: list[re.Pattern[str]] = [
     re.compile(r"[a-f0-9]{32}\.[a-zA-Z0-9]{16,}"),  # ZhipuAI (hex.token)
     re.compile(r"ghp_[a-zA-Z0-9]{36,}"),  # GitHub PAT
     re.compile(r"gho_[a-zA-Z0-9]{36,}"),  # GitHub OAuth
+    re.compile(
+        r"eyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]+"
+    ),  # OAuth/JWT bearer token
     re.compile(r"xoxb-[a-zA-Z0-9\-]+"),  # Slack bot token
     re.compile(r"xoxp-[a-zA-Z0-9\-]+"),  # Slack user token
 ]

@@ -125,6 +125,7 @@ _TOML_TO_SETTINGS: dict[str, str] = {
     "computer_use.env": "computer_use_env",
     "computer_use.sandbox_url": "computer_use_sandbox_url",
     "bash_sandbox.mode": "bash_sandbox",
+    "tools.package_install_guard": "package_install_guard",
     "cost.limit_usd": "cost_limit_usd",
     "ensemble.mode": "ensemble_mode",
     "hitl.dangerously_skip_permissions": "dangerously_skip_permissions",
