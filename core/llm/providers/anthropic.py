@@ -432,10 +432,127 @@ def system_with_cache(system: str) -> list[TextBlockParam]:
     ]
 
 
+def _static_system_cache_control() -> dict[str, str]:
+    """``cache_control`` for the stable static system prefix (agentic adapter).
+
+    The static prefix — everything before ``<dynamic_context>`` — is
+    byte-identical across every turn of an agentic loop, so it benefits most
+    from the **1-hour TTL**: GA as of 2026-06, enabled by ``ttl: "1h"`` on the
+    ephemeral ``cache_control`` (no beta header). The 2x write premium amortizes
+    after ~3 cache reads, which any multi-turn loop clears immediately. The
+    5-minute default would expire between turns whenever tool execution exceeds
+    5 min, forcing a fresh write every resume.
+
+    Kill switch: ``settings.prompt_cache_extended_ttl`` (set False → 5-minute
+    ephemeral default). One-shot call shapes (``system_with_cache``) and the
+    dynamic / no-boundary blocks keep the 5-minute default — only the reused
+    static prefix earns the extended TTL.
+
+    SDK: ``anthropic.types.CacheControlEphemeralParam`` exposes optional ``ttl``
+    (verified 0.100.0).
+    ref: https://platform.claude.com/docs/en/build-with-claude/prompt-caching
+    """
+    from core.config import settings
+
+    if getattr(settings, "prompt_cache_extended_ttl", True):
+        return {"type": "ephemeral", "ttl": "1h"}
+    return {"type": "ephemeral"}
+
+
 # Anthropic allows up to 4 cache_control breakpoints per request.  The agentic
 # adapter already uses 1-2 on the system block (STATIC/DYNAMIC split).  Keep 3
 # slots for the messages array — Hermes "system_and_3" strategy.
 MAX_MESSAGE_CACHE_BREAKPOINTS = 3
+
+# Anthropic's cache lookup walks back at most this many content blocks from a
+# breakpoint to find a prior cached entry (verified against the prompt-caching
+# guide, 2026-06). When a single agentic turn appends more than this many
+# tool_use/tool_result blocks, breakpoints clustered on the last few messages
+# all fall outside the window on the next turn → silent full miss. Spread the
+# message breakpoints ~``_CACHE_BREAKPOINT_BLOCK_STRIDE`` blocks apart so the
+# newest breakpoint can always reach a prior entry. ref:
+# https://platform.claude.com/docs/en/build-with-claude/prompt-caching
+_CACHE_LOOKBACK_BLOCKS = 20
+_CACHE_BREAKPOINT_BLOCK_STRIDE = 18  # under the 20-block window, with margin
+
+
+def _content_block_count(content: Any) -> int:
+    """Number of content blocks a message contributes to the lookback window."""
+    if isinstance(content, list):
+        return len(content)
+    return 1 if content else 0
+
+
+def _is_markable(content: Any) -> bool:
+    """Whether :func:`apply_messages_cache_control` would actually attach a
+    breakpoint to this message (mirrors its empty-text guards).
+
+    An empty message is skipped at mark time, so selecting it as a breakpoint
+    target would waste a slot (and, for the anchor, leave the newest turn
+    uncached). Only markable messages should be selected.
+    """
+    if isinstance(content, str):
+        return bool(content)
+    if isinstance(content, list) and content:
+        last = content[-1]
+        return not (isinstance(last, dict) and last.get("type") == "text" and not last.get("text"))
+    return False
+
+
+def _select_breakpoint_targets(
+    messages: list[dict[str, Any]],
+    n_breakpoints: int,
+) -> list[int]:
+    """Indices of non-system messages to mark with ``cache_control``.
+
+    Short histories (total content blocks ≤ ``_CACHE_LOOKBACK_BLOCKS``) keep the
+    original "last ``n`` adjacent messages" behaviour — the whole history fits in
+    one lookback window, so spreading buys nothing. Long histories spread the
+    breakpoints ~``_CACHE_BREAKPOINT_BLOCK_STRIDE`` blocks apart (anchoring the
+    newest markable message) so each breakpoint stays within the 20-block window
+    of its predecessor across turns.
+
+    Distance is measured in **content blocks from each message's final block**
+    (where the breakpoint physically sits), counting every block in between —
+    including the newer breakpoint's own blocks, which consume the lookback
+    window. Only *markable* messages are eligible (an empty one is skipped at
+    mark time, so anchoring/spreading on it would waste the breakpoint slot).
+    """
+    non_system = [i for i, m in enumerate(messages) if m.get("role") != "system"]
+    # Guard n<=0 here too: ``markable[-0:]`` is ``markable[0:]`` (the whole
+    # list), so the short-history branch below would mark every message. The
+    # public caller already returns early on n<=0, but keep the helper safe for
+    # any future caller.
+    if not non_system or n_breakpoints <= 0:
+        return []
+
+    markable = [i for i in non_system if _is_markable(messages[i].get("content"))]
+    if not markable:
+        return []
+
+    total_blocks = sum(_content_block_count(messages[i].get("content")) for i in non_system)
+    if total_blocks <= _CACHE_LOOKBACK_BLOCKS:
+        return markable[-n_breakpoints:]
+
+    # ``end_offset[idx]`` = content blocks AFTER ``idx``'s final block (0 for the
+    # very last message). Walk from the end accumulating each message's own block
+    # count *after* recording, so the distance between two breakpoints is the
+    # difference of their end_offsets.
+    end_offset: dict[int, int] = {}
+    acc = 0
+    for idx in reversed(non_system):
+        end_offset[idx] = acc
+        acc += _content_block_count(messages[idx].get("content"))
+
+    selected = [markable[-1]]
+    last_offset = end_offset[markable[-1]]
+    for idx in reversed(markable[:-1]):
+        if len(selected) >= n_breakpoints:
+            break
+        if end_offset[idx] - last_offset >= _CACHE_BREAKPOINT_BLOCK_STRIDE:
+            selected.append(idx)
+            last_offset = end_offset[idx]
+    return sorted(selected)
 
 
 def apply_messages_cache_control(
@@ -443,8 +560,15 @@ def apply_messages_cache_control(
     *,
     n_breakpoints: int = MAX_MESSAGE_CACHE_BREAKPOINTS,
 ) -> list[dict[str, Any]]:
-    """Return a copy of *messages* with ephemeral cache_control on the last
+    """Return a copy of *messages* with ephemeral cache_control on up to
     *n_breakpoints* non-system messages' final content block.
+
+    Placement (see :func:`_select_breakpoint_targets`): short histories keep
+    the original "last ``n`` adjacent messages" strategy; long histories
+    (> 20 content blocks) spread the breakpoints ~18 blocks apart so the newest
+    one stays within Anthropic's 20-block lookback window of its predecessor
+    across turns — otherwise a single tool-heavy turn pushes every clustered
+    breakpoint out of the window and the whole rolling cache silently misses.
 
     Mirrors Hermes ``apply_anthropic_cache_control`` (system_and_3) and
     OpenClaw ``applyAnthropicCacheControlToMessages``.  Used by the agentic
@@ -467,7 +591,7 @@ def apply_messages_cache_control(
         return list(messages)
 
     out: list[dict[str, Any]] = list(messages)
-    targets = [i for i, m in enumerate(out) if m.get("role") != "system"][-n_breakpoints:]
+    targets = _select_breakpoint_targets(out, n_breakpoints)
 
     for i in targets:
         msg = dict(out[i])
@@ -945,7 +1069,7 @@ class ClaudeAgenticAdapter:
                         {
                             "type": "text",
                             "text": static_text,
-                            "cache_control": {"type": "ephemeral"},
+                            "cache_control": _static_system_cache_control(),
                         },
                         {"type": "text", "text": dynamic_text},
                     ]
@@ -962,7 +1086,7 @@ class ClaudeAgenticAdapter:
                         {
                             "type": "text",
                             "text": static_text,
-                            "cache_control": {"type": "ephemeral"},
+                            "cache_control": _static_system_cache_control(),
                         }
                     ]
                 else:

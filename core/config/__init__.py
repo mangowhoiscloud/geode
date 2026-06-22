@@ -63,6 +63,8 @@ _TOML_TO_SETTINGS: dict[str, str] = {
     # PR-TOOL-SEARCH-WIRE (2026-06-13) — hosted tool-search defer kill switch.
     "llm.tool_search_defer": "tool_search_defer",
     "llm.tool_search_defer_codex": "tool_search_defer_codex",
+    # PR-ANTHROPIC-CACHE-HARDENING (2026-06-23) — 1h prompt-cache TTL kill switch.
+    "llm.prompt_cache_extended_ttl": "prompt_cache_extended_ttl",
     "llm.openai_credential_source": "openai_credential_source",
     # PR-CL-A1 (2026-05-23) — Dynamic Replan knobs.
     "replan.enabled": "replan_enabled",

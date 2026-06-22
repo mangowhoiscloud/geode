@@ -2,7 +2,7 @@
  * GEODE CHANGELOG, auto-synced from the GEODE repo via `npm run sync-stats`.
  * Do not edit manually. Edit CHANGELOG.md in the GEODE repo and re-run sync.
  *
- * Last sync: 2026-06-20
+ * Last sync: 2026-06-22
  *
  * Each entry's `body` is the raw markdown between two version headings.
  * The Changelog page renders the body with a minimal markdown renderer
@@ -16,6 +16,11 @@ export type ChangelogEntry = {
 };
 
 export const CHANGELOG: ChangelogEntry[] = [
+  {
+    "version": "0.99.241",
+    "date": "2026-06-23",
+    "body": "### Fixed\n- **Anthropic prompt-cache hardening (PR-ANTHROPIC-CACHE-HARDENING)** — Anthropic flagged degraded prompt-cache performance. A 3-provider policy audit (refreshed to 2026-06) found GEODE's static/dynamic system split correct but the surrounding layers predating two changed Anthropic policies. Three fixes:\n  - **1-hour cache TTL on the stable static system prefix.** Every `cache_control` was 5-minute `ephemeral`; an agentic turn whose tool execution exceeds 5 min lets the static prefix expire and re-pays the cache-write premium on resume. The static prefix (everything before `<dynamic_context>`) is byte-identical across turns, so it now uses `ttl: \"1h\"` (GA 2026-06, no beta header; SDK 0.100.0 `CacheControlEphemeralParam.ttl`). One-shot calls (`system_with_cache`) and the dynamic / no-boundary blocks keep 5-min. Kill switch: `settings.prompt_cache_extended_ttl` (TOML `llm.prompt_cache_extended_ttl`, default on). reader: `core/llm/providers/anthropic.py:_static_system_cache_control`.\n  - **20-block lookback-aware message breakpoints.** Anthropic's cache walks back ≤20 content blocks from a breakpoint to find a prior entry; GEODE clustered all 3 message breakpoints on the last adjacent messages, so a single tool-heavy turn (>20 blocks) pushed every breakpoint out of the window → silent full miss on the next turn. Long histories now spread the breakpoints ~18 blocks apart (always anchoring the newest message); short histories keep the original last-n behaviour. `core/llm/providers/anthropic.py:_select_breakpoint_targets`.\n  - **Cache hit-rate telemetry + degraded-cache warning.** `LLMUsageAccumulator` recorded cache_creation/cache_read token counts but never a derived hit *rate*, so a busted prefix cache was invisible until the bill. Added `cache_hit_rate` (read / (read + creation)), surfaced in the usage summary, plus a one-shot WARNING when cumulative cacheable tokens exceed 50k at a <30% hit rate."
+  },
   {
     "version": "0.99.240",
     "date": "2026-06-21",
@@ -1923,4 +1928,4 @@ export const CHANGELOG: ChangelogEntry[] = [
   }
 ];
 
-export const CHANGELOG_SYNCED_AT = "2026-06-20";
+export const CHANGELOG_SYNCED_AT = "2026-06-22";
