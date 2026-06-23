@@ -65,6 +65,8 @@ _TOML_TO_SETTINGS: dict[str, str] = {
     "llm.tool_search_defer_codex": "tool_search_defer_codex",
     # PR-ANTHROPIC-CACHE-HARDENING (2026-06-23) — 1h prompt-cache TTL kill switch.
     "llm.prompt_cache_extended_ttl": "prompt_cache_extended_ttl",
+    # PR-OPENAI-CACHE-KEY (2026-06-23) — OpenAI prompt_cache_key routing hint.
+    "llm.prompt_cache_key_enabled": "prompt_cache_key_enabled",
     "llm.openai_credential_source": "openai_credential_source",
     # PR-CL-A1 (2026-05-23) — Dynamic Replan knobs.
     "replan.enabled": "replan_enabled",

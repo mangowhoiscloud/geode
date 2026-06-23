@@ -325,6 +325,16 @@ class Settings(BaseSettings):
     # core/llm/providers/anthropic.py:_static_system_cache_control
     prompt_cache_extended_ttl: bool = True
 
+    # Prompt cache — OpenAI ``prompt_cache_key`` cache-routing hint (Responses
+    # API; openai-payg + Codex backends). Groups same-prefix traffic onto the
+    # same cache machine; keyed on the static system prefix so it is stable
+    # across a session's turns. Live-verified accepted by the Codex
+    # subscription backend (2026-06-23 — streamed call with prompt_cache_key
+    # returned 200 + usage; PR-NO-FALLBACK gate) and documented on the platform
+    # Responses API (openai 2.30.0). Kill switch. reader:
+    # core/llm/adapters/_openai_common.py:_prompt_cache_key / build_responses_kwargs
+    prompt_cache_key_enabled: bool = True
+
     # Ensemble — Multi-LLM mode
     ensemble_mode: str = "single"  # single | cross
 

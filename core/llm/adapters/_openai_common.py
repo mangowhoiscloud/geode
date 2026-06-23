@@ -24,6 +24,7 @@ smoke that hit both ``Unsupported parameter: 'max_tokens'`` and
 
 from __future__ import annotations
 
+import hashlib
 import json
 import logging
 import re
@@ -1266,6 +1267,33 @@ def _apply_openai_tool_search_defer(
     return [*shaped, {"type": "tool_search"}]
 
 
+def _prompt_cache_key(system_prompt: str) -> str:
+    """Stable OpenAI ``prompt_cache_key`` derived from the static system prefix.
+
+    OpenAI routes same-``prompt_cache_key`` traffic onto the same cache machine
+    (combined with the prefix hash), improving cache-hit rate for requests that
+    share a common prefix. We key on the STATIC system prefix — everything
+    before ``<dynamic_context>`` — so the key is byte-stable across a session's
+    turns (the dynamic suffix: date / recalled memory / user context changes per
+    turn and must not perturb the routing key). Returns ``""`` when there is no
+    system prompt (nothing to group on).
+
+    Accepted on both surfaces: the platform Responses API (openai 2.30.0 exposes
+    ``prompt_cache_key``) and the Codex subscription backend — live-verified
+    2026-06-23: a streamed ``responses.stream`` call carrying the param returned
+    200 + usage. That live call was the gate (PR-NO-FALLBACK rule) because the
+    Codex backend is reverse-engineered and its parameter acceptance is
+    undocumented (the same backend 400s on ``max_output_tokens``).
+    """
+    if not system_prompt:
+        return ""
+    from core.agent.system_prompt import PROMPT_CACHE_BOUNDARY
+
+    static = system_prompt.split(PROMPT_CACHE_BOUNDARY, 1)[0]
+    digest = hashlib.sha256(static.encode("utf-8")).hexdigest()[:16]
+    return f"geode-{digest}"
+
+
 def build_responses_kwargs(
     req: AdapterCallRequest, *, backend: str, adapter_name: str
 ) -> dict[str, Any]:
@@ -1326,6 +1354,16 @@ def build_responses_kwargs(
         "input": resp_input or [{"role": "user", "content": "hello"}],
         "store": False,
     }
+    # OpenAI ``prompt_cache_key`` — cache-routing hint on both backends (each
+    # verified: platform documented + openai 2.30.0 SDK, Codex live-2026-06-23).
+    # Keyed on the static system prefix so it stays stable across a session's
+    # turns. Kill switch: settings.prompt_cache_key_enabled.
+    from core.config import settings as _settings
+
+    if getattr(_settings, "prompt_cache_key_enabled", True):
+        cache_key = _prompt_cache_key(req.system_prompt)
+        if cache_key:
+            kwargs["prompt_cache_key"] = cache_key
     if backend == "platform":
         kwargs["max_output_tokens"] = req.max_tokens
     if req.stop_sequences:
