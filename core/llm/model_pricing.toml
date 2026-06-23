@@ -113,31 +113,34 @@ reasoning = true
 # GLM uses the openai derive formula (cache_read = explicit cached, no
 # reasoning multiplier) by manifest convention.
 
-# GLM-5.2 (flagship, released 2026-06; docs.z.ai/guides/overview/pricing).
-# Official cached-input rate is $0.26/MTok, but GEODE's GLM Chat-Completions
-# path does not yet surface ``usage.prompt_tokens_details.cached_tokens``
-# (translate_chat_response drops it — true for every GLM model), so a
-# ``cached_per_mtok`` here would be parsed-but-never-applied. Match the family
-# (input/output only) until the GLM cached-token accounting is wired
-# (deferred — see docs/research/glm-5.2-model-spec.md §4).
+# GLM cached-input rates now applied: PR-CACHE-COST-ACCOUNTING wired
+# ``translate_chat_response`` to surface ``prompt_tokens_details.cached_tokens``
+# + made the openai-derive cost subtract cached from billable input, so
+# ``cached_per_mtok`` is honoured (was parsed-but-dropped before). Rates from
+# docs.z.ai/guides/overview/pricing (2026-06; cache storage free, limited-time).
 [pricing.openai."glm-5.2"]
 input_per_mtok = 1.40
+cached_per_mtok = 0.26
 output_per_mtok = 4.40
 
 [pricing.openai."glm-5.1"]
 input_per_mtok = 1.40
+cached_per_mtok = 0.26
 output_per_mtok = 4.40
 
 [pricing.openai."glm-5"]
 input_per_mtok = 1.00
+cached_per_mtok = 0.20
 output_per_mtok = 3.20
 
 [pricing.openai."glm-5-turbo"]
 input_per_mtok = 1.20
+cached_per_mtok = 0.24
 output_per_mtok = 4.00
 
 [pricing.openai."glm-4.7"]
 input_per_mtok = 0.60
+cached_per_mtok = 0.11
 output_per_mtok = 2.20
 
 # Default learning-extraction model (settings.learning_extract_model). The

@@ -897,11 +897,21 @@ def translate_chat_response(response: Any) -> AdapterCallResult:
                 }
             )
     usage = getattr(response, "usage", None)
+    # GLM / OpenAI Chat Completions report the cached-prefix hit under
+    # ``usage.prompt_tokens_details.cached_tokens`` (a subset of prompt_tokens).
+    # Surface it so the cached-input discount is applied; cost math subtracts it
+    # from the billable input (cache_inclusive_input). Previously dropped, so
+    # GLM cached tokens were billed at the full input rate.
+    cached_tokens = 0
+    if usage is not None:
+        prompt_details = getattr(usage, "prompt_tokens_details", None)
+        cached_tokens = int(getattr(prompt_details, "cached_tokens", 0) or 0)
     return AdapterCallResult(
         text=text,
         usage=UsageSummary(
             input_tokens=getattr(usage, "prompt_tokens", 0) if usage else 0,
             output_tokens=getattr(usage, "completion_tokens", 0) if usage else 0,
+            cached_input_tokens=cached_tokens,
         ),
         stop_reason=getattr(choice, "finish_reason", "stop") if choice else "stop",
         tool_uses=tuple(tool_uses),

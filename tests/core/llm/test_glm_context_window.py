@@ -58,16 +58,15 @@ def test_all_glm_models_share_same_window() -> None:
 
 
 def test_glm_5_2_pricing_registered() -> None:
-    """glm-5.2 priced with the official input/output rates — without this the
-    model bills at $0.00 (Unknown model fallback). cached_per_mtok is omitted
-    to match the GLM family (the GLM chat path doesn't surface cached_tokens
-    yet — see spec §4), so cache_read derives to 0.0."""
+    """glm-5.2 priced with the official input/cached/output rates. The cached
+    rate is honoured since PR-CACHE-COST-ACCOUNTING wired GLM cached-token
+    surfacing (translate_chat_response) + inclusive-input cost math."""
     from core.llm.token_tracker import MODEL_PRICING
 
     price = MODEL_PRICING["glm-5.2"]
     assert price.input == pytest.approx(1.40 / 1_000_000)
     assert price.output == pytest.approx(4.40 / 1_000_000)
-    assert price.cache_read == 0.0  # family-consistent (no cached_per_mtok)
+    assert price.cache_read == pytest.approx(0.26 / 1_000_000)
 
 
 def test_glm_5_2_in_model_picker() -> None:

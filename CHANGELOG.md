@@ -45,6 +45,12 @@ functional change.
 
 ---
 
+## [0.99.244] - 2026-06-23
+
+### Fixed
+- **Cached-token cost double-count (PR-CACHE-COST-ACCOUNTING)** — `TokenTracker.calculate_cost` added `cache_read_tokens × cache_read` on top of `input_tokens × input`. That is correct for Anthropic (its API reports `input_tokens` DISJOINT from `cache_read_input_tokens`), but OpenAI / GLM report `prompt_tokens` INCLUSIVE of cached tokens — so the cached portion was billed twice (full input rate + cache-read rate), inflating the cost estimate ~10x on the cached tokens of every OpenAI/Codex call (and would have for GLM). Added `ModelPrice.cache_inclusive_input` (set True by the openai derive, False by the anthropic derive); the cost math now subtracts cached from the billable input only for inclusive providers, leaving Anthropic unchanged. `input_tokens` telemetry / context-usage% are untouched (the fix is cost-only). This is GEODE's internal cost *estimate* — providers bill correctly server-side.
+- **GLM cached tokens now surfaced** — `translate_chat_response` (the GLM / OpenAI Chat-Completions translator) previously dropped `usage.prompt_tokens_details.cached_tokens`, so GLM cached tokens were billed at the full input rate. Now populated into `UsageSummary.cached_input_tokens`. With the cost fix above, `cached_per_mtok` is restored for the GLM pricing entries (glm-5.2 $0.26, glm-5.1 $0.26, glm-5 $0.20, glm-5-turbo $0.24, glm-4.7 $0.11; official z.ai 2026-06 rates) and now actually applied. Verifiable end-to-end with mocked usage — no GLM call required.
+
 ## [0.99.243] - 2026-06-23
 
 ### Added
