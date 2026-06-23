@@ -43,6 +43,24 @@ class ModelProfile:
 # `gpt-5.5` default routes to `openai-codex` per equivalence-class
 # scan when ChatGPT subscription OAuth is registered (v0.52.4 routing policy);
 # otherwise to `openai` PAYG. Both paths visible via /login dashboard.
+
+# GLM picker rows: id → display label. The live default (GLM_PRIMARY) leads the
+# GLM block and the rest follow, with the default skipped from the tail so an
+# operator override never duplicates a row. A label falls back to the id for an
+# unknown override value.
+_GLM_MODELS: tuple[tuple[str, str], ...] = (
+    ("glm-5.2", "GLM-5.2"),
+    ("glm-5.1", "GLM-5.1"),
+    ("glm-5-turbo", "GLM-5 Turbo"),
+    ("glm-4.7-flash", "GLM-4.7 Flash"),
+)
+_GLM_LABELS: dict[str, str] = dict(_GLM_MODELS)
+
+
+def _glm_label(model_id: str) -> str:
+    return _GLM_LABELS.get(model_id, model_id)
+
+
 def get_model_profiles() -> list[ModelProfile]:
     """The /model picker model list, built fresh per call (H11-tail).
 
@@ -73,10 +91,12 @@ def get_model_profiles() -> list[ModelProfile]:
         ModelProfile("gpt-5.4", "openai", "GPT-5.4", "$$"),
         ModelProfile("gpt-5.4-mini", "openai", "GPT-5.4 Mini", "$"),
         ModelProfile("gpt-5.3-codex", "openai-codex", "GPT-5.3 Codex", "$$"),
-        ModelProfile("glm-5.2", "glm", "GLM-5.2", "$"),
-        ModelProfile(GLM_PRIMARY, "glm", "GLM-5.1", "$"),
-        ModelProfile("glm-5-turbo", "glm", "GLM-5 Turbo", "$"),
-        ModelProfile("glm-4.7-flash", "glm", "GLM-4.7 Flash", "$"),
+        # GLM — the live default (GLM_PRIMARY, glm-5.2 as shipped) leads so a
+        # routing.toml reload is reflected mid-session (H11-tail), labelled via
+        # the id→label map; the rest follow with the default skipped so an
+        # operator override of the default never duplicates a row.
+        ModelProfile(GLM_PRIMARY, "glm", _glm_label(GLM_PRIMARY), "$"),
+        *[ModelProfile(mid, "glm", lbl, "$") for mid, lbl in _GLM_MODELS if mid != GLM_PRIMARY],
     ]
 
 

@@ -45,6 +45,11 @@ functional change.
 
 ---
 
+## [0.99.246] - 2026-06-23
+
+### Changed
+- **GLM-5.2 finalize (PR-GLM-5.2-FINALIZE)** — closes the remaining GLM-5.2 deferrals from the model spec §4. (1) **Default flipped** — `GLM_PRIMARY` is now `glm-5.2` (`routing.toml [model.defaults] glm`); a provider-`glm` call with no explicit model picks the flagship. glm-5.1 stays explicitly selectable in the `/model` picker (the GLM_PRIMARY picker entry is relabelled GLM-5.2; an explicit glm-5.1 entry is added). (2) **reasoning_effort / thinking wired (gated)** — the GLM adapters (`glm_payg`, `glm_coding_plan`, acomplete + astream) now send `reasoning_effort` + `thinking` to glm-5.2 via `extra_body`, built by `core/llm/providers/glm.py:build_glm_reasoning_extra_body`. Controlled by `settings.glm_reasoning_effort` (TOML `llm.glm_reasoning_effort`, default empty = send nothing → server default, hot path byte-unchanged). Valid z.ai values `max/xhigh/high/medium/low/minimal/none` (`none` → thinking disabled); an invalid value is dropped with a WARNING. The param shape is **doc-grounded** (official z.ai chat-completion API ref) but **live-unverified** (GLM balance 0) — so it ships gated OFF until a funded round-trip confirms backend acceptance through `extra_body` (PR-NO-FALLBACK rule). (3) **1M context** documented as not-applicable to GEODE's PAYG path (the `glm-5.2[1m]` form is a DevPack/Claude-Code routing convention; context window stays at the conservative family `202752`). Docs: README GLM badge → 5.2, site providers page GLM id → glm-5.2, spec §4 refreshed.
+
 ## [0.99.245] - 2026-06-23
 
 ### Changed

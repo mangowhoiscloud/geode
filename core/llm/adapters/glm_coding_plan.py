@@ -43,6 +43,7 @@ from core.llm.adapters.base import (
     WebSearchResult,
 )
 from core.llm.loop_affinity import LoopAffineClientCache
+from core.llm.providers.glm import build_glm_reasoning_extra_body
 
 log = logging.getLogger(__name__)
 
@@ -106,6 +107,9 @@ class GlmCodingPlanAdapter:
                 kwargs["tool_choice"] = tc
         if req.stop_sequences:
             kwargs["stop"] = list(req.stop_sequences)
+        _reasoning_xb = build_glm_reasoning_extra_body(req.model)
+        if _reasoning_xb is not None:
+            kwargs["extra_body"] = _reasoning_xb
         try:
             response = await client.chat.completions.create(**kwargs)
         except Exception as exc:
@@ -164,6 +168,9 @@ class GlmCodingPlanAdapter:
         }
         if req.temperature is not None:
             kwargs["temperature"] = req.temperature
+        _reasoning_xb = build_glm_reasoning_extra_body(req.model)
+        if _reasoning_xb is not None:
+            kwargs["extra_body"] = _reasoning_xb
         async for chunk in await client.chat.completions.create(**kwargs):
             choice = chunk.choices[0] if chunk.choices else None
             if choice is None:
@@ -243,9 +250,11 @@ def _resolve_coding_plan_endpoint() -> tuple[str, str]:
     refuses rather than silently falling back to PAYG.
     """
     try:
+        from core.config import GLM_PRIMARY
         from core.llm.strategies.plan_registry import resolve_routing
 
-        target = resolve_routing("glm-5.1")
+        # Probe the live GLM default (glm-5.2 now), not a hardcoded glm-5.1.
+        target = resolve_routing(GLM_PRIMARY)
         if target is not None and target.profile.key:
             return target.profile.key, target.base_url
     except Exception:

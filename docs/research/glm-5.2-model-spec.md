@@ -70,26 +70,30 @@ kwargs directly); `glm_payg.list_models()` (derives ids from config).
   routing convention GEODE's PAYG adapter does not use. Context window kept at the
   GLM-family `202752` (conservative — never over-claims headroom). Bump only if
   GEODE adopts the `[1m]` form.
-- **`reasoning_effort` / `thinking`**: GLM-5.2 exposes both, but the GLM adapter
-  (`glm_payg` / `glm_coding_plan`) sets `supports_thinking=False` and does not send
-  them, so the model runs at the GLM server default (`reasoning_effort=max` = heavy
-  thinking + token spend). Wiring the effort/thinking knob through the GLM adapter
-  (and reclassifying `glm-5.2` from `_GLM_ALWAYS_ON_MODELS` to a hybrid set) is a
-  follow-up — surfacing the knob before the adapter consumes it would be a
-  picker-vs-adapter disconnect.
+- **`reasoning_effort` / `thinking`** (wired, GATED, live-unverified — PR-GLM-5.2-FINALIZE):
+  GLM-5.2 exposes both, and the GLM adapters now send them via `extra_body` —
+  but ONLY when `settings.glm_reasoning_effort` is set to a valid z.ai value
+  (`max`/`xhigh`/`high`/`medium`/`low`/`minimal`/`none`). Empty (default) sends
+  nothing → the GLM server default applies, so the hot path is byte-unchanged.
+  `build_glm_reasoning_extra_body` (`core/llm/providers/glm.py`) builds
+  `{"reasoning_effort": <val>, "thinking": {"type": "enabled"|"disabled"}}`
+  (`none` → thinking disabled), validates the value (invalid → WARNING + drop),
+  and only fires for `glm-5.2`. The param shape is **doc-grounded** (official
+  z.ai chat-completion API ref) but the backend's acceptance through the
+  OpenAI-compatible `extra_body` is **live-unverified** (GLM balance 0) — a
+  funded round-trip is the pending gate, which is why the feature ships gated
+  OFF (PR-NO-FALLBACK rule). The effort_picker keeps `glm-5.2` in
+  `_GLM_ALWAYS_ON_MODELS` (no per-session toggle surfaced): the control is an
+  operator config setting, not an interactive knob, and surfacing a picker
+  toggle before a live-confirmed adapter would be a disconnect.
 - **`json_schema`**: GLM-5.2 supports only `json_object`, not strict `json_schema`.
   GEODE's response-schema path falls back to prompt-engineered JSON for GLM (no
   change needed).
-- **Default GLM model**: unchanged (`GLM_PRIMARY` = glm-5.1). Flipping the default
-  to glm-5.2 is a one-line `routing.toml [model.defaults] glm` operator decision.
-- **GLM cached-token accounting** (pre-existing, all GLM): `translate_chat_response`
-  (`_openai_common.py`) builds `UsageSummary` from `prompt_tokens` / `completion_tokens`
-  only — it never reads `usage.prompt_tokens_details.cached_tokens`, so the GLM cost
-  path is blind to cached tokens. GLM-5.2's official cached rate is $0.26/MTok, but a
-  `cached_per_mtok` in the pricing table would be parsed-but-never-applied, so it is
-  omitted (family-consistent). Wiring it requires: (a) populate `cached_input_tokens`
-  in `translate_chat_response`, AND (b) fix the openai-derive cost math so cached
-  tokens are not double-charged (`prompt_tokens` already includes them, so
-  `calculate_cost` must subtract cached from input before adding the cache-read rate —
-  Anthropic splits them, OpenAI/GLM does not). A cross-cutting follow-up affecting
-  every GLM (and OpenAI single-turn) model, deliberately out of this PR's scope.
+- **Default GLM model**: `GLM_PRIMARY` = **glm-5.2** (flipped from glm-5.1 in
+  PR-GLM-5.2-FINALIZE: `routing.toml [model.defaults] glm`). glm-5.1 stays
+  explicitly selectable in the `/model` picker.
+- **GLM cached-token accounting**: DONE in PR-CACHE-COST-ACCOUNTING (v0.99.244) —
+  `translate_chat_response` now surfaces `prompt_tokens_details.cached_tokens`,
+  the openai-derive cost subtracts cached from billable input
+  (`ModelPrice.cache_inclusive_input`), and `cached_per_mtok` is restored for the
+  GLM pricing entries. No longer deferred.
