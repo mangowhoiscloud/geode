@@ -16,6 +16,49 @@ from core.llm.loop_affinity import LoopAffineClientCache
 
 log = logging.getLogger(__name__)
 
+# Valid z.ai ``reasoning_effort`` values for GLM-5.2 (official chat-completion
+# API reference, docs.z.ai/api-reference/llm/chat-completion). reasoning_effort
+# is GLM-5.2-only; the server default is ``max``.
+_GLM_REASONING_EFFORTS = frozenset({"max", "xhigh", "high", "medium", "low", "minimal", "none"})
+
+
+def build_glm_reasoning_extra_body(model: str) -> dict[str, Any] | None:
+    """Build the ``extra_body`` for GLM-5.2 reasoning control, or ``None``.
+
+    Returns ``None`` (send nothing → server default) UNLESS
+    ``settings.glm_reasoning_effort`` is set to a valid z.ai value AND the model
+    is glm-5.2. When active, returns
+    ``{"reasoning_effort": <val>, "thinking": {"type": "enabled"|"disabled"}}``
+    (``none`` → thinking disabled). An invalid setting value is dropped with a
+    WARNING (graceful) rather than sent (which would 400).
+
+    **Doc-grounded but live-unverified**: the official z.ai API reference
+    documents both ``reasoning_effort`` (GLM-5.2-only enum) and ``thinking``
+    ({"type": enabled|disabled}); the GLM backend's acceptance of them through
+    the OpenAI-compatible endpoint's ``extra_body`` is not live-confirmed (the
+    GLM account balance is 0). A funded round-trip is the pending gate
+    (PR-NO-FALLBACK rule) — hence this is gated OFF by default so the GLM-5.2
+    hot path is unchanged until verified.
+    ref: https://docs.z.ai/api-reference/llm/chat-completion
+    """
+    from core.config import settings
+
+    effort = (getattr(settings, "glm_reasoning_effort", "") or "").strip().lower()
+    if not effort or not model.startswith("glm-5.2"):
+        return None
+    if effort not in _GLM_REASONING_EFFORTS:
+        log.warning(
+            "glm_reasoning_effort=%r is not a valid z.ai value %s — ignoring",
+            effort,
+            sorted(_GLM_REASONING_EFFORTS),
+        )
+        return None
+    return {
+        "reasoning_effort": effort,
+        "thinking": {"type": "disabled" if effort == "none" else "enabled"},
+    }
+
+
 # H11-tail: the former DEFAULT_GLM_MODEL / GLM_FALLBACK_MODELS module aliases
 # (boot-frozen copies of GLM_PRIMARY / GLM_FALLBACK_CHAIN) were dead — no
 # consumer read them. Removed; any live value comes from ``core.config`` via a
@@ -36,12 +79,14 @@ def _resolve_glm_endpoint() -> tuple[str, str]:
     calls the coding endpoint). Falls back to settings.zai_api_key +
     GLM_BASE_URL for legacy .env-only setups.
     """
-    from core.config import settings
+    from core.config import GLM_PRIMARY, settings
 
     try:
         from core.llm.strategies.plan_registry import resolve_routing
 
-        target = resolve_routing("glm-5.1")
+        # Probe the live GLM default's routing (glm-5.2 now) so a Plan route
+        # pinned to the current default is honoured — was hardcoded glm-5.1.
+        target = resolve_routing(GLM_PRIMARY)
         if target is not None and target.profile.key:
             return target.profile.key, target.base_url
     except Exception:

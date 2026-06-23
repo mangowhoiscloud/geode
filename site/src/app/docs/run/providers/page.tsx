@@ -46,7 +46,7 @@ export default function Page() {
                 </tr>
                 <tr>
                   <td>GLM (ZhipuAI)</td>
-                  <td><code>glm-5.1</code> (무료 티어 <code>glm-4.7-flash</code>)</td>
+                  <td><code>glm-5.2</code> (무료 티어 <code>glm-4.7-flash</code>)</td>
                   <td><code>glm-</code> 접두사</td>
                   <td><code>ZAI_API_KEY</code>. Coding Plan과 PAYG 엔드포인트가 분리되어 있습니다.</td>
                 </tr>
@@ -210,7 +210,7 @@ geode about                   # 실효(EFFECTIVE) 모델 + 프로바이더`}</pr
                 </tr>
                 <tr>
                   <td>GLM (ZhipuAI)</td>
-                  <td><code>glm-5.1</code> (free tier <code>glm-4.7-flash</code>)</td>
+                  <td><code>glm-5.2</code> (free tier <code>glm-4.7-flash</code>)</td>
                   <td><code>glm-</code> prefix</td>
                   <td><code>ZAI_API_KEY</code>. Coding Plan and PAYG endpoints are separate.</td>
                 </tr>

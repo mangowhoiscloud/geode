@@ -11,7 +11,7 @@
 <p align="center">
   <img src="https://img.shields.io/badge/Anthropic-Opus_4.8-cc785c?style=flat-square&logo=anthropic&logoColor=white" alt="Anthropic Opus 4.8">
   <img src="https://img.shields.io/badge/OpenAI-GPT--5.5-412991?style=flat-square&logo=openai&logoColor=white" alt="OpenAI GPT-5.5">
-  <img src="https://img.shields.io/badge/ZhipuAI-GLM--5.1-1a73e8?style=flat-square" alt="ZhipuAI GLM-5.1">
+  <img src="https://img.shields.io/badge/ZhipuAI-GLM--5.2-1a73e8?style=flat-square" alt="ZhipuAI GLM-5.2">
 </p>
 
 <p align="center">
@@ -22,7 +22,7 @@
   <a href="README.ko.md">한국어</a>
 </p>
 
-# GEODE v0.99.245 — A Self-improving Autonomous Execution Agent
+# GEODE v0.99.246 — A Self-improving Autonomous Execution Agent
 
 A general-purpose autonomous agent that also rewrites the scaffolding it runs on. You ask in plain language; GEODE plans, calls tools, and reports, for one prompt or a long-running session. Underneath, an outer loop keeps tuning the system that runs your tasks.
 

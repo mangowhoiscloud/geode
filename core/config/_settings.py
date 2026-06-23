@@ -335,6 +335,17 @@ class Settings(BaseSettings):
     # core/llm/adapters/_openai_common.py:_prompt_cache_key / build_responses_kwargs
     prompt_cache_key_enabled: bool = True
 
+    # GLM-5.2 reasoning control — when set to a z.ai ``reasoning_effort`` value
+    # (max / xhigh / high / medium / low / minimal / none), the GLM adapters
+    # send ``reasoning_effort`` + ``thinking`` to glm-5.2 via ``extra_body``.
+    # Empty (default) = send nothing → the server default applies (no
+    # regression). reasoning_effort is GLM-5.2-only per the official z.ai
+    # chat-completion API reference; acceptance is **doc-grounded but
+    # live-unverified** (the GLM account balance is 0, so the round-trip cannot
+    # be confirmed — funded live-check is the pending gate, PR-NO-FALLBACK).
+    # reader: core/llm/providers/glm.py:build_glm_reasoning_extra_body
+    glm_reasoning_effort: str = ""
+
     # Ensemble — Multi-LLM mode
     ensemble_mode: str = "single"  # single | cross
 
