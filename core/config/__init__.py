@@ -67,6 +67,8 @@ _TOML_TO_SETTINGS: dict[str, str] = {
     "llm.prompt_cache_extended_ttl": "prompt_cache_extended_ttl",
     # PR-OPENAI-CACHE-KEY (2026-06-23) — OpenAI prompt_cache_key routing hint.
     "llm.prompt_cache_key_enabled": "prompt_cache_key_enabled",
+    # PR-GLM-5.2-FINALIZE (2026-06-23) — GLM-5.2 reasoning_effort/thinking control.
+    "llm.glm_reasoning_effort": "glm_reasoning_effort",
     "llm.openai_credential_source": "openai_credential_source",
     # PR-CL-A1 (2026-05-23) — Dynamic Replan knobs.
     "replan.enabled": "replan_enabled",

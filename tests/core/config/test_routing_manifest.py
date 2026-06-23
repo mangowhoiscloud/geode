@@ -66,7 +66,7 @@ def test_default_manifest_loads() -> None:
     assert isinstance(manifest, RoutingManifest)
     assert manifest.defaults.anthropic == "claude-opus-4-8"
     assert manifest.defaults.openai == "gpt-5.5"
-    assert manifest.defaults.glm == "glm-5.1"
+    assert manifest.defaults.glm == "glm-5.2"
 
 
 def test_default_manifest_path_exists() -> None:
