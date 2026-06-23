@@ -113,6 +113,17 @@ reasoning = true
 # GLM uses the openai derive formula (cache_read = explicit cached, no
 # reasoning multiplier) by manifest convention.
 
+# GLM-5.2 (flagship, released 2026-06; docs.z.ai/guides/overview/pricing).
+# Official cached-input rate is $0.26/MTok, but GEODE's GLM Chat-Completions
+# path does not yet surface ``usage.prompt_tokens_details.cached_tokens``
+# (translate_chat_response drops it — true for every GLM model), so a
+# ``cached_per_mtok`` here would be parsed-but-never-applied. Match the family
+# (input/output only) until the GLM cached-token accounting is wired
+# (deferred — see docs/research/glm-5.2-model-spec.md §4).
+[pricing.openai."glm-5.2"]
+input_per_mtok = 1.40
+output_per_mtok = 4.40
+
 [pricing.openai."glm-5.1"]
 input_per_mtok = 1.40
 output_per_mtok = 4.40
@@ -161,6 +172,12 @@ output_per_mtok = 0.00  # free tier (limited-time)
 "gpt-5.3-codex"              = 200000
 "o3"                         = 200000
 "o4-mini"                    = 200000
+# glm-5.2 supports up to 1M context via the ``glm-5.2[1m]`` DevPack/Claude-Code
+# routing form (docs.z.ai/devpack/tool/claude); the plain ``glm-5.2`` id GEODE
+# calls over the OpenAI-compatible PAYG endpoint uses the standard window, so
+# keep the family value here (conservative for the 200K guard's early-trip
+# margin — never over-claims headroom). Bump if GEODE adopts the ``[1m]`` form.
+"glm-5.2"                    = 202752
 "glm-5.1"                    = 202752
 "glm-5"                      = 202752
 "glm-5-turbo"                = 202752

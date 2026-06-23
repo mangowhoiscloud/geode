@@ -45,6 +45,11 @@ functional change.
 
 ---
 
+## [0.99.243] - 2026-06-23
+
+### Added
+- **GLM-5.2 support (PR-GLM-5.2)** — Zhipu's new flagship (released 2026-06; MIT, ~753B MoE) wired into the model surface, grounded in official z.ai docs (`docs/research/glm-5.2-model-spec.md`). GLM routing is prefix-based (`glm-` → provider `glm`), so the adapter / dispatch / auth (`glm` profile, `ZAI_API_KEY`) / family guidance accept the new id automatically; only the literal model registries needed it: `model_pricing.toml` (`glm-5.2` = input $1.40 / output $4.40 + context window 202752), the `/model` picker (`_state.py` `get_model_profiles`), `effort_picker` (`_GLM_ALWAYS_ON_MODELS` + description), the `/login` GLM route hints (`login.py`), and the GLM Coding-Plan quota weights (`plans.py`). `GEODE_MODEL=glm-5.2` works end-to-end; GLM applies its automatic implicit prefix-cache discount server-side (no `cache_control` / `prompt_cache_key` needed). Endpoint recognizes the id (live request reached the balance check, past model-validation), but the **full round-trip is `unverified` — the `glm` account balance is 0**. Deferred (spec §4): GLM cached-token cost accounting (`translate_chat_response` drops `cached_tokens` for *all* GLM models, so no `cached_per_mtok` is set), `reasoning_effort`/`thinking` knob wiring (model runs at GLM server default until then), the 1M `glm-5.2[1m]` context form, and flipping `GLM_PRIMARY` default from glm-5.1.
+
 ## [0.99.242] - 2026-06-23
 
 ### Added

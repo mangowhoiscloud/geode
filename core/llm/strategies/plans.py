@@ -130,7 +130,7 @@ GLM_CODING_TIERS: dict[str, Plan] = {
         quota=Quota(
             window_s=18_000,
             max_calls=80,
-            model_weights={"glm-5.1": 3.0, "glm-5-turbo": 3.0, "glm-4.7": 1.0},
+            model_weights={"glm-5.2": 3.0, "glm-5.1": 3.0, "glm-5-turbo": 3.0, "glm-4.7": 1.0},
         ),
     ),
     "pro": Plan(
@@ -144,7 +144,7 @@ GLM_CODING_TIERS: dict[str, Plan] = {
         quota=Quota(
             window_s=18_000,
             max_calls=240,
-            model_weights={"glm-5.1": 3.0, "glm-5-turbo": 3.0, "glm-4.7": 1.0},
+            model_weights={"glm-5.2": 3.0, "glm-5.1": 3.0, "glm-5-turbo": 3.0, "glm-4.7": 1.0},
         ),
     ),
     "max": Plan(
@@ -158,7 +158,7 @@ GLM_CODING_TIERS: dict[str, Plan] = {
         quota=Quota(
             window_s=18_000,
             max_calls=600,
-            model_weights={"glm-5.1": 3.0, "glm-5-turbo": 3.0, "glm-4.7": 1.0},
+            model_weights={"glm-5.2": 3.0, "glm-5.1": 3.0, "glm-5-turbo": 3.0, "glm-4.7": 1.0},
         ),
     ),
 }

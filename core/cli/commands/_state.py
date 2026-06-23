@@ -73,6 +73,7 @@ def get_model_profiles() -> list[ModelProfile]:
         ModelProfile("gpt-5.4", "openai", "GPT-5.4", "$$"),
         ModelProfile("gpt-5.4-mini", "openai", "GPT-5.4 Mini", "$"),
         ModelProfile("gpt-5.3-codex", "openai-codex", "GPT-5.3 Codex", "$$"),
+        ModelProfile("glm-5.2", "glm", "GLM-5.2", "$"),
         ModelProfile(GLM_PRIMARY, "glm", "GLM-5.1", "$"),
         ModelProfile("glm-5-turbo", "glm", "GLM-5 Turbo", "$"),
         ModelProfile("glm-4.7-flash", "glm", "GLM-4.7 Flash", "$"),
