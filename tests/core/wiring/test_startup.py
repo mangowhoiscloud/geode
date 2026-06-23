@@ -671,7 +671,8 @@ class TestModelProfiles:
         # `glm`), matching /login dashboard + auth.toml. Pre-fix used
         # capitalised "GLM" which diverged from the dispatch key.
         glm_profiles = [p for p in get_model_profiles() if p.provider == "glm"]
-        assert len(glm_profiles) == 3
+        assert len(glm_profiles) == 4
+        assert "glm-5.2" in {p.id for p in glm_profiles}
 
 
 class TestSetupProjectMemory:

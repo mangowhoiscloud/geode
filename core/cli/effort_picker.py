@@ -53,6 +53,12 @@ _GLM_HYBRID_MODELS = frozenset(
 )
 _GLM_ALWAYS_ON_MODELS = frozenset(
     {
+        # glm-5.2 has a thinking enable/disable + reasoning_effort knob, but the
+        # GLM adapter (glm_payg / glm_coding_plan) does not send those params
+        # (supports_thinking=False), so surfacing a toggle here would be a
+        # picker-vs-adapter disconnect. Classify always-on like the rest of
+        # GLM-5.x until the adapter wires thinking through (deferred follow-up).
+        "glm-5.2",
         "glm-5.1",
         "glm-5",
         "glm-5-turbo",
@@ -138,6 +144,7 @@ _MODEL_DESCRIPTIONS: dict[str, str] = {
     "gpt-5.4-mini": "GPT-5.4 Mini · cheap + fast",
     "gpt-5.3-codex": "GPT-5.3 Codex · code-tuned, reasoning-aware",
     # GLM
+    "glm-5.2": "GLM-5.2 · flagship reasoning · 1M-capable, automatic caching",
     "glm-5.1": "GLM-5.1 · always-on reasoning",
     "glm-5-turbo": "GLM-5 Turbo · faster + cheaper",
     "glm-4.7-flash": "GLM-4.7 Flash · low-latency tier",
