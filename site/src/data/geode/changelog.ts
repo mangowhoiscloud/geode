@@ -2,7 +2,7 @@
  * GEODE CHANGELOG, auto-synced from the GEODE repo via `npm run sync-stats`.
  * Do not edit manually. Edit CHANGELOG.md in the GEODE repo and re-run sync.
  *
- * Last sync: 2026-06-22
+ * Last sync: 2026-06-23
  *
  * Each entry's `body` is the raw markdown between two version headings.
  * The Changelog page renders the body with a minimal markdown renderer
@@ -16,6 +16,11 @@ export type ChangelogEntry = {
 };
 
 export const CHANGELOG: ChangelogEntry[] = [
+  {
+    "version": "0.99.242",
+    "date": "2026-06-23",
+    "body": "### Added\n- **OpenAI `prompt_cache_key` cache-routing hint (PR-OPENAI-CACHE-KEY)** — follow-up to the Anthropic cache hardening, on the OpenAI Responses path that GEODE's effective default model (gpt-5.5 / openai-codex) actually uses. OpenAI prompt caching is automatic + already active on both backends (`cached_tokens` flows), so this is the one tuning that wasn't free: `prompt_cache_key` groups same-prefix traffic onto the same cache machine. `build_responses_kwargs` now sets it on **both** the platform Responses API and the Codex subscription backend, keyed on a hash of the **static** system prefix (before `<dynamic_context>`) so the key stays byte-stable across a session's turns (the dynamic suffix — date / recalled memory — must not perturb routing). The Codex backend's acceptance is undocumented (it 400s on `max_output_tokens`), so a **live call was the gate** (PR-NO-FALLBACK rule): a streamed `responses.stream` carrying `prompt_cache_key` returned 200 + usage on 2026-06-23. Kill switch `settings.prompt_cache_key_enabled` (TOML `llm.prompt_cache_key_enabled`, default on). `prompt_cache_retention:\"24h\"` deliberately not sent — it is already default-on for gpt-5.5 and an extra unknown param on the Codex backend. reader: `core/llm/adapters/_openai_common.py:_prompt_cache_key`."
+  },
   {
     "version": "0.99.241",
     "date": "2026-06-23",
@@ -1928,4 +1933,4 @@ export const CHANGELOG: ChangelogEntry[] = [
   }
 ];
 
-export const CHANGELOG_SYNCED_AT = "2026-06-22";
+export const CHANGELOG_SYNCED_AT = "2026-06-23";

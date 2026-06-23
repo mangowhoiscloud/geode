@@ -12,7 +12,8 @@ References:
 
 from __future__ import annotations
 
-from core.llm.adapters._openai_common import build_responses_kwargs
+from core.agent.system_prompt import PROMPT_CACHE_BOUNDARY
+from core.llm.adapters._openai_common import _prompt_cache_key, build_responses_kwargs
 from core.llm.adapters.base import AdapterCallRequest, Message, ToolSpec
 
 
@@ -311,3 +312,45 @@ def test_codex_kwargs_text_format_strict_recurses_into_array_items() -> None:
         _req(response_schema=array_of_open), backend="codex", adapter_name="codex-oauth"
     )
     assert kwargs["text"]["format"]["strict"] is False
+
+
+# --- PR-OPENAI-CACHE-KEY (2026-06-23) — prompt_cache_key routing hint -------
+
+
+def test_prompt_cache_key_set_on_both_backends() -> None:
+    """Both the Codex subscription backend (live-verified 2026-06-23) and the
+    platform Responses API carry the cache-routing key."""
+    for backend in ("codex", "platform"):
+        kwargs = build_responses_kwargs(
+            _req(system_prompt="stable instructions"), backend=backend, adapter_name="x"
+        )
+        assert kwargs["prompt_cache_key"].startswith("geode-")
+
+
+def test_prompt_cache_key_stable_across_dynamic_suffix() -> None:
+    """Keyed on the STATIC prefix (before <dynamic_context>) so a changing
+    dynamic suffix (date / recalled memory) does not perturb the routing key —
+    the whole point of a stable per-session key."""
+    static = "you are geode"
+    a = _prompt_cache_key(f"{static}{PROMPT_CACHE_BOUNDARY}date: monday\nmemory: x")
+    b = _prompt_cache_key(f"{static}{PROMPT_CACHE_BOUNDARY}date: tuesday\nmemory: y")
+    assert a == b
+    assert a.startswith("geode-")
+
+
+def test_prompt_cache_key_differs_on_static_change() -> None:
+    assert _prompt_cache_key("agent A instructions") != _prompt_cache_key("agent B instructions")
+
+
+def test_prompt_cache_key_empty_system_prompt_yields_no_key() -> None:
+    assert _prompt_cache_key("") == ""
+    kwargs = build_responses_kwargs(_req(system_prompt=""), backend="codex", adapter_name="x")
+    assert "prompt_cache_key" not in kwargs
+
+
+def test_prompt_cache_key_kill_switch_omits_key(monkeypatch) -> None:
+    from core.config import settings
+
+    monkeypatch.setattr(settings, "prompt_cache_key_enabled", False, raising=False)
+    kwargs = build_responses_kwargs(_req(system_prompt="x"), backend="codex", adapter_name="x")
+    assert "prompt_cache_key" not in kwargs
