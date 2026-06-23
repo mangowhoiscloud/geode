@@ -420,6 +420,7 @@ def build_reasoning_metrics(loop: AgenticLoop, result: AgenticResult) -> Any:
         output_tok = int(acc.total_output_tokens)
         cost = float(acc.total_cost_usd)
     except Exception:
+        log.debug("reasoning metrics tracker read failed — zeroing", exc_info=True)
         thinking_tok = 0
         output_tok = 0
         cost = 0.0

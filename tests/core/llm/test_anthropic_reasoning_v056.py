@@ -59,19 +59,17 @@ class TestXHighEffortGate:
 
 
 class TestEffortEnumIncludesXHigh:
-    """B3 — the AgenticLoop adaptive-compute table accepts ``xhigh``."""
+    """B3 — the adaptive-effort enum accepts ``xhigh``."""
 
     def test_loop_effort_levels_include_xhigh(self) -> None:
-        # The downgrade logic in loop.py indexes into _EFFORT_LEVELS by
-        # the user-supplied effort string; if "xhigh" is missing from
-        # the list, the index() call would raise ValueError.
-        from core.agent import loop as loop_mod
+        # The effort picker resolves the user-supplied effort string against
+        # the adaptive-effort tuple; if "xhigh" is missing, the highest tier
+        # is unreachable. Assert against the real source of the enum.
+        from core.cli.effort_picker import _ANTHROPIC_ADAPTIVE_EFFORTS
 
-        with open(loop_mod.__file__, encoding="utf-8") as f:
-            text = f.read()
-        assert '"xhigh"' in text, (
-            "core/agent/loop.py must include 'xhigh' in _EFFORT_LEVELS so "
-            "the overthinking auto-downgrade can index it without crashing"
+        assert "xhigh" in _ANTHROPIC_ADAPTIVE_EFFORTS, (
+            "_ANTHROPIC_ADAPTIVE_EFFORTS must include 'xhigh' so the adaptive "
+            "effort picker can reach the highest reasoning tier"
         )
 
 

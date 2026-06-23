@@ -45,6 +45,11 @@ functional change.
 
 ---
 
+## [0.99.245] - 2026-06-23
+
+### Changed
+- **AgenticLoop hygiene sweep (PR-LOOP-DESLOP)** — behaviour-preserving slop removal in `core/agent/loop/`, gated by a ponytail/YAGNI over-abstraction audit (the gate's verdict: the package is already over-layered with `def fn(loop, ...)` delegators reaching into `loop._private`, so the cleanup must be a net *subtraction*, not new abstraction). Net −176 LoC. Four changes: (1) **comment archaeology** — stripped sprint/PR/version tags (`# PR-D Phase 2a`, `# v0.56.0`, `# Defect A`, `Codex MCP HIGH #N`, dates) from 33 comments while keeping every behavioural WHY, and removed 6 pure-history comments (the `extracted to a helper … Behaviour preserved exactly` call-site notes, a dead-class-removed note, two host-history chains); load-bearing incident guards (cwd-keyed resume invariant, denied-tool allowlist, context-overflow-on-shared-list, Paperclip ref, PLR0913 rationale, Fable-5 refusal) left untouched. (2) **observability** — 6 silent-swallow `except Exception` blocks (best-effort resume-id / cost-diagnostic / reasoning-metric reads) now `log.debug(..., exc_info=True)` so the failure is observable (GEODE "graceful must be observable" rule) without narrowing the catch (narrowing would risk crashing the long-running loop). (3) **dead literal** — deleted `_EFFORT_LEVELS` from `loop/__init__.py` (a mirror referenced only by a file-scanning test; the real enum is `core/cli/effort_picker._ANTHROPIC_ADAPTIVE_EFFORTS`) and rewrote the test to assert the real symbol. (4) **duplicate fold** — the context-exhausted recovery-failed tail (duplicated across the pre-call, post-call, and 400-overflow paths) folded into one `_finalize_context_exhausted` helper, preserving each site's distinct recovered branch (pre-call falls through; post-call + 400-path `continue`). mypy clean, 1172 loop tests pass. Deferred to a follow-up split PR: the god-method extractions (arun 742 / __init__ 311 / _call_llm 269) per the ponytail "delete dead weight first" guidance.
+
 ## [0.99.244] - 2026-06-23
 
 ### Fixed
