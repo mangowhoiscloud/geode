@@ -7,11 +7,14 @@ edge cases (empty/short message lists), and content-shape handling
 
 from __future__ import annotations
 
+import itertools
 from typing import Any
 
 import pytest
 from core.llm.providers.anthropic import (
     MAX_MESSAGE_CACHE_BREAKPOINTS,
+    _select_breakpoint_targets,
+    _static_system_cache_control,
     apply_messages_cache_control,
 )
 
@@ -158,6 +161,8 @@ class TestNonMutation:
     [0, 1, 2, 3, 5, 10],
 )
 def test_n_breakpoints_bound(n: int):
+    # 20 single-block messages = 20 blocks, == lookback window → short-history
+    # path keeps the original "last n" behaviour, so exactly min(n, 20) marks.
     msgs = [{"role": "user", "content": f"m{i}"} for i in range(20)]
     out = apply_messages_cache_control(msgs, n_breakpoints=n)
     marked = sum(
@@ -166,6 +171,113 @@ def test_n_breakpoints_bound(n: int):
         if isinstance(m["content"], list) and m["content"] and m["content"][-1].get("cache_control")
     )
     assert marked == min(n, 20)
+
+
+class TestBreakpointSpreading:
+    """20-block lookback hardening (2026-06): long histories spread the
+    message breakpoints ~18 blocks apart instead of clustering on the last
+    few adjacent messages, so the newest breakpoint stays within Anthropic's
+    20-block lookback window of its predecessor across turns. Short histories
+    keep the original last-n behaviour (everything fits one window)."""
+
+    def test_short_history_keeps_last_n_adjacent(self):
+        # 10 blocks <= 20 → original behaviour: last 3 adjacent.
+        msgs = [{"role": "user", "content": f"m{i}"} for i in range(10)]
+        assert _select_breakpoint_targets(msgs, 3) == [7, 8, 9]
+
+    def test_zero_breakpoints_selects_nothing(self):
+        # Guard against the ``non_system[-0:]`` footgun (== whole list).
+        msgs = [{"role": "user", "content": f"m{i}"} for i in range(5)]
+        assert _select_breakpoint_targets(msgs, 0) == []
+
+    def test_long_history_anchors_newest_and_spreads(self):
+        # 60 single-block messages > 20 → spread to the full budget.
+        msgs = [{"role": "user", "content": f"m{i}"} for i in range(60)]
+        targets = _select_breakpoint_targets(msgs, 3)
+        assert targets[-1] == 59  # newest always anchored
+        assert len(targets) == 3
+        gaps = [b - a for a, b in itertools.pairwise(targets)]
+        assert all(1 <= g <= 18 for g in gaps)  # spaced within the window
+
+    def test_moderate_history_spaces_within_lookback_window(self):
+        # 30 blocks > 20 but < n*stride → fewer breakpoints, still spaced
+        # so no two consecutive ones exceed the 20-block window.
+        msgs = [{"role": "user", "content": f"m{i}"} for i in range(30)]
+        targets = _select_breakpoint_targets(msgs, 3)
+        assert targets[-1] == 29
+        assert all(b - a <= 20 for a, b in itertools.pairwise(targets))
+
+    def test_counts_list_content_blocks_not_messages(self):
+        # 3 messages × 10 blocks each = 30 blocks > 20 → spread by block count.
+        msgs = [
+            {"role": "user", "content": [{"type": "text", "text": f"b{j}"} for j in range(10)]}
+            for _ in range(3)
+        ]
+        # newest anchored (msg 2); walking back, msg1 adds 10 (<18), msg0 adds
+        # another 10 → 20 >= 18 → breakpoint on msg0. Result: [0, 2].
+        assert _select_breakpoint_targets(msgs, 3) == [0, 2]
+
+    def test_apply_marks_spread_targets_end_to_end(self):
+        msgs = [{"role": "user", "content": f"m{i}"} for i in range(60)]
+        out = apply_messages_cache_control(msgs, n_breakpoints=3)
+        marked = [
+            i
+            for i, m in enumerate(out)
+            if isinstance(m["content"], list) and m["content"][-1].get("cache_control")
+        ]
+        assert marked[-1] == 59
+        assert len(marked) == 3
+
+    def _block_distance(self, msgs, targets):
+        # Content-block distance between consecutive breakpoints' final blocks.
+        from core.llm.providers.anthropic import _content_block_count
+
+        end_offset = {}
+        acc = 0
+        for i in reversed(range(len(msgs))):
+            end_offset[i] = acc
+            acc += _content_block_count(msgs[i]["content"])
+        return [end_offset[a] - end_offset[b] for a, b in itertools.pairwise(targets)]
+
+    def test_newest_large_message_consumes_window(self):
+        # MED1 (Codex): the newest message's own blocks consume the lookback
+        # window, so distance must be measured from each final block — not the
+        # older messages' block sums. 60 one-block msgs + a newest 20-block msg.
+        msgs = [{"role": "user", "content": f"m{i}"} for i in range(60)]
+        msgs.append(
+            {"role": "user", "content": [{"type": "text", "text": f"b{j}"} for j in range(20)]}
+        )
+        targets = _select_breakpoint_targets(msgs, 3)
+        assert targets[-1] == 60  # newest anchored
+        # every consecutive breakpoint within the 20-block lookback window
+        assert all(d <= 20 for d in self._block_distance(msgs, targets))
+
+    def test_empty_tail_anchors_newest_markable(self):
+        # MED2 (Codex): an empty trailing message is unmarkable, so the anchor
+        # must fall on the newest *markable* message and no slot is wasted.
+        msgs = [{"role": "user", "content": f"m{i}"} for i in range(60)]
+        msgs.append({"role": "user", "content": ""})  # empty, unmarkable
+        targets = _select_breakpoint_targets(msgs, 3)
+        assert 60 not in targets  # empty tail never selected
+        assert targets[-1] == 59  # newest markable anchored
+        assert len(targets) == 3  # full budget, none wasted
+
+
+class TestStaticSystemCacheControl:
+    """1-hour TTL on the stable static system prefix (GA 2026-06). Kill
+    switch: settings.prompt_cache_extended_ttl."""
+
+    def test_extended_ttl_on_by_default(self, monkeypatch):
+        from core.config import settings
+
+        monkeypatch.setattr(settings, "prompt_cache_extended_ttl", True, raising=False)
+        assert _static_system_cache_control() == {"type": "ephemeral", "ttl": "1h"}
+
+    def test_kill_switch_falls_back_to_5min_ephemeral(self, monkeypatch):
+        from core.config import settings
+
+        monkeypatch.setattr(settings, "prompt_cache_extended_ttl", False, raising=False)
+        assert _static_system_cache_control() == {"type": "ephemeral"}
 
 
 class TestEmptyTextBlockGuard:

@@ -73,6 +73,10 @@ class LLMUsageAccumulator:
     """Accumulates multiple LLMUsage records for session-level summary."""
 
     calls: list[LLMUsage] = field(default_factory=list)
+    # One-shot guard for the degraded-cache warning (reset per accumulator,
+    # i.e. per session). Underscore-prefixed so it is not mistaken for a
+    # public field; excluded from ``to_dict``.
+    _warned_low_cache: bool = field(default=False, repr=False)
 
     @property
     def total_input_tokens(self) -> int:
@@ -95,11 +99,62 @@ class LLMUsageAccumulator:
         return sum(c.cache_read_tokens for c in self.calls)
 
     @property
+    def cache_hit_rate(self) -> float:
+        """Fraction of cacheable input tokens served from cache.
+
+        ``read / (read + creation)`` — 1.0 means every cacheable token was a
+        cache hit, 0.0 means every one was a fresh write (the symptom of a
+        silently-invalidated prefix). Returns 0.0 when there is no cache
+        activity yet (avoids div-by-zero).
+        """
+        read = self.total_cache_read_tokens
+        denom = read + self.total_cache_creation_tokens
+        return read / denom if denom else 0.0
+
+    @property
     def total_cost_usd(self) -> float:
         return sum(c.cost_usd for c in self.calls)
 
+    def maybe_warn_low_cache_hit_rate(
+        self, *, min_tokens: int = 50_000, threshold: float = 0.3
+    ) -> None:
+        """Emit a one-shot WARNING when the prompt-cache hit rate is degraded.
+
+        Fires at most once per accumulator (per session) once cumulative
+        cacheable tokens exceed *min_tokens* and the hit rate is below
+        *threshold*. A persistently low ratio is the visible signature of a
+        silent prefix-invalidator — volatile content in the cached prefix, a
+        prefix below the model's minimum, or the 20-block lookback exceeded.
+        Without this, a cache that has dropped to ~0% is invisible until an
+        operator (or the provider) notices the bill.
+        """
+        if self._warned_low_cache:
+            return
+        read = self.total_cache_read_tokens
+        denom = read + self.total_cache_creation_tokens
+        # Advisory telemetry must never break a real LLM-call path. Token totals
+        # are ints in production, but tests (and any future adapter that passes a
+        # mocked usage object) may carry non-numeric values — skip silently
+        # rather than raise from this record() hook.
+        if not isinstance(denom, int) or denom < min_tokens:
+            return
+        rate = read / denom if denom else 0.0
+        if rate < threshold:
+            self._warned_low_cache = True
+            log.warning(
+                "prompt cache hit rate degraded: %.1f%% (read=%d, creation=%d) "
+                "over %d cacheable tokens — check for volatile content in the "
+                "cached prefix, a prefix below the model minimum, or a long "
+                "tool-heavy turn exceeding the 20-block lookback window",
+                rate * 100.0,
+                read,
+                self.total_cache_creation_tokens,
+                denom,
+            )
+
     def record(self, usage: LLMUsage) -> None:
         self.calls.append(usage)
+        self.maybe_warn_low_cache_hit_rate()
 
     def to_dict(self) -> dict[str, Any]:
         d: dict[str, Any] = {
@@ -117,6 +172,8 @@ class LLMUsageAccumulator:
         cache_r = self.total_cache_read_tokens
         if cache_r:
             d["total_cache_read_tokens"] = cache_r
+        if cache_w or cache_r:
+            d["cache_hit_rate"] = round(self.cache_hit_rate, 3)
         return d
 
 
