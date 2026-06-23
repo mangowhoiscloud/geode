@@ -112,15 +112,23 @@ def test_models_no_longer_imports_anthropic_directly() -> None:
 
 
 def test_context_exhausted_call_sites_are_awaited() -> None:
-    """All three callers in agent_loop.py must await — non-await would
-    embed a coroutine object into the result text (visible UI bug)."""
+    """Every _context_exhausted_message call must await — a non-await would
+    embed a coroutine object into the result text (visible UI bug).
+
+    PR-LOOP-DESLOP folded the three duplicated recovery-failed tails into one
+    ``_finalize_context_exhausted`` helper, so there is now a single call site;
+    assert ALL occurrences are awaited (the real invariant) rather than pinning
+    a fixed count of duplicates."""
     src = (
         Path(__file__).resolve().parents[3] / "core" / "agent" / "loop" / "agent_loop.py"
     ).read_text(encoding="utf-8")
-    assert src.count("await _context_exhausted_message(user_input)") == 3, (
-        "Expected exactly 3 awaited call sites for _context_exhausted_message "
-        "in agent_loop.py (lines 1562 / 1627 / 1682); a missing await would "
-        "embed a coroutine object into the AgenticResult.text."
+    total = src.count("_context_exhausted_message(user_input)")
+    awaited = src.count("await _context_exhausted_message(user_input)")
+    assert total >= 1, "expected at least one _context_exhausted_message call site"
+    assert awaited == total, (
+        f"every _context_exhausted_message call must be awaited — "
+        f"{total - awaited} un-awaited call(s) would embed a coroutine into "
+        "AgenticResult.text (visible UI bug)."
     )
 
 

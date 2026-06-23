@@ -86,17 +86,13 @@ def _load_prior_session_id(session_id: str) -> str:
     sub-agent, or empty string when no prior session exists OR the
     saved session belongs to a different cwd-pool.
 
-    PR-COMM-3c (2026-05-24) — SQLite primary, file fallback.
-    PR-SESSION-RESUME-PARAMS (2026-05-25) — paperclip-aligned cwd
-    verification. Reading ``agent_runtime_state.claude_cli_session_id``
-    is not enough on its own: claude-cli's session storage is keyed
-    on cwd (``~/.claude/projects/<cwd-slug>/<session_id>.jsonl``), so
-    a stored UUID from a prior cwd produces ``"No conversation
-    found"`` against the current per-task cwd-pool (smoke 12
-    proximity + meta_reviewer evidence). Before returning the UUID
+    claude-cli session storage is cwd-keyed
+    (``~/.claude/projects/<cwd-slug>/<session_id>.jsonl``), so a UUID
+    stored under a prior cwd resolves to ``"No conversation found"``
+    against the current per-task cwd-pool. Before returning the UUID
     we verify ``session_resume_params.cwd == get_task_isolated_cwd()``;
-    on mismatch we return ``""`` to force a fresh session. Same
-    check applied to the legacy session.json file fallback.
+    on mismatch we return ``""`` to force a fresh session. The same
+    check applies to the legacy session.json file fallback.
 
     Returns empty on any I/O / parse / mismatch so the call falls
     back to a fresh session rather than crashing or resuming a
@@ -106,8 +102,8 @@ def _load_prior_session_id(session_id: str) -> str:
 
     current_cwd = get_task_isolated_cwd() or ""
 
-    # SQLite primary — read from the per-agent row landed by
-    # PR-COMM-3b's record_agent_session_end hook handler.
+    # SQLite primary — read from the per-agent row landed by the
+    # record_agent_session_end hook handler.
     try:
         from core.observability.agent_runtime_state import get_agent_runtime_state
 
@@ -130,13 +126,17 @@ def _load_prior_session_id(session_id: str) -> str:
             exc_info=True,
         )
 
-    # Legacy file fallback (PR-V) — kept for 1 release so deploys that
-    # haven't ingested the SQLite writer yet still resume cleanly.
+    # File fallback — used when the SQLite runtime-state row is absent.
     try:
         from core.observability.run_dir import resolve_sub_agent_path
 
         session_path = resolve_sub_agent_path(session_id, "session.json")
     except Exception:
+        log.debug(
+            "resolve_sub_agent_path failed for %s — no resume id",
+            session_id,
+            exc_info=True,
+        )
         return ""
     if session_path is None or not session_path.exists():
         return ""
@@ -147,9 +147,8 @@ def _load_prior_session_id(session_id: str) -> str:
         cached = payload.get("claude_cli_session_id", "")
         if not cached:
             return ""
-        # PR-SESSION-RESUME-PARAMS — file fallback gets the same
-        # paired-cwd gate. Missing key (legacy file pre-fix) skips
-        # the gate and returns the id (back-compat).
+        # File fallback gets the same paired-cwd gate. A missing key
+        # skips the gate and returns the id (back-compat).
         stored_cwd_file = str(payload.get("cwd", ""))
         if not _saved_cwd_matches_current(stored_cwd_file, current_cwd):
             log.info(
@@ -170,28 +169,21 @@ def _persist_session_id(session_id: str, emitted_session_id: str) -> None:
     turn of this sub-agent (or the same sub-agent in the next cycle)
     can ``--resume <id>``.
 
-    PR-COMM-3c (2026-05-24) — dual-write. The primary store is the
-    SQLite ``agent_runtime_state.claude_cli_session_id`` column
-    (populated end-to-end by PR-COMM-3b's SESSION_ENDED hook handler
-    via the loop's ``_last_emitted_session_id`` cache; this function's
-    direct write covers the early-turn case where the loop emits a
-    session_id BEFORE its lifecycle hook fires for the round). The
-    legacy ``<run_dir>/sub_agents/<session_id>/session.json`` file
-    keeps being written for one release as a fallback so existing
-    deploys/readers don't break — scheduled for deletion in v0.99.54.
-    Empty ``emitted_session_id`` is a no-op (non-claude-cli adapters
-    or claude-cli crash before init).
+    Dual-write: the SQLite ``agent_runtime_state.claude_cli_session_id``
+    column (primary) + the legacy
+    ``<run_dir>/sub_agents/<session_id>/session.json`` file. The direct
+    SQLite write covers the early-turn case where the loop emits a
+    session_id BEFORE its SESSION_ENDED lifecycle hook fires for the
+    round. Empty ``emitted_session_id`` is a no-op (non-claude-cli
+    adapters or claude-cli crash before init).
     """
     if not emitted_session_id:
         return
 
-    # PR-SESSION-RESUME-PARAMS (2026-05-25) — capture the cwd the
-    # session was actually written from. claude-cli's session
-    # storage is cwd-keyed (``~/.claude/projects/<cwd-slug>/``), so
-    # the next reader MUST know which cwd this id is good for. Empty
-    # string when no per-task isolation is in scope (direct-call
-    # surface) — the reader's gate skips on empty stored_cwd
-    # (back-compat with pre-fix rows).
+    # Capture the cwd the session was written from — claude-cli
+    # storage is cwd-keyed, so the reader must know which cwd this id
+    # is valid for. Empty when no per-task isolation is in scope
+    # (direct-call surface); the reader's gate skips on empty stored_cwd.
     from core.agent.task_isolation import get_task_isolated_cwd
 
     write_cwd = get_task_isolated_cwd() or ""
@@ -216,12 +208,17 @@ def _persist_session_id(session_id: str, emitted_session_id: str) -> None:
             exc_info=True,
         )
 
-    # Legacy file write (PR-V) — retained for 1-release grace.
+    # File-fallback write — mirrors the SQLite primary.
     try:
         from core.observability.run_dir import resolve_sub_agent_path
 
         session_path = resolve_sub_agent_path(session_id, "session.json")
     except Exception:
+        log.debug(
+            "resolve_sub_agent_path failed for %s — file fallback skipped",
+            session_id,
+            exc_info=True,
+        )
         return
     if session_path is None:
         return
@@ -233,9 +230,9 @@ def _persist_session_id(session_id: str, emitted_session_id: str) -> None:
             "claude_cli_session_id": emitted_session_id,
             "updated_at": time.time(),
         }
-        # PR-SESSION-RESUME-PARAMS — paired cwd in the file fallback
-        # as well so the reader's symmetric gate has the same SoT
-        # regardless of which path served the resume id.
+        # Pair the cwd in the file fallback too so the reader's
+        # symmetric gate has the same SoT regardless of which path
+        # served the resume id.
         if write_cwd:
             payload["cwd"] = write_cwd
         session_path.write_text(
@@ -292,9 +289,9 @@ class AgenticLoop:
         self._parent_session_key = parent_session_key
         self._parent_session_id = parent_session_id
         self._system_suffix = system_suffix
-        # S2-wire (2026-05-18): when set, _build_system_prompt uses this
-        # string as the entire role/instruction body, replacing the
-        # default ``_build_system_prompt(model=loop.model)`` output.
+        # When set, _build_system_prompt uses this string as the entire
+        # role/instruction body, replacing the default
+        # ``_build_system_prompt(model=loop.model)`` output.
         # Skill context + agentic suffix still appended (tool calling
         # contract preserved). Used by AgentDefinition-driven sub-agents
         # (``plugins/seed_generation/agents/*.md``) so the seed_generator role's
@@ -312,10 +309,10 @@ class AgenticLoop:
         self._total_empty_rounds = 0
         self._cost_budget = cost_budget
         self._loop_start_time: float = 0.0
-        # PR-CL-A6 (2026-05-23) — when the caller doesn't pass an explicit
-        # ``model``, prefer ``settings.act_model`` over the global default
-        # so operators can split Plan / Act per ReWOO. ``settings.act_model``
-        # default is empty string ("") which falls through to ``ANTHROPIC_PRIMARY``.
+        # When the caller doesn't pass an explicit ``model``, prefer
+        # ``settings.act_model`` over the global default so operators can
+        # split Plan / Act. Empty ``act_model`` falls through to
+        # ``ANTHROPIC_PRIMARY``.
         if model is None:
             try:
                 from core.config import settings
@@ -325,8 +322,11 @@ class AgenticLoop:
                 act_raw = getattr(settings, "act_model", "")
                 act_model = act_raw.strip() if isinstance(act_raw, str) else ""
             except Exception:
+                log.debug("settings.act_model read failed", exc_info=True)
                 act_model = ""
-            from core.config import ANTHROPIC_PRIMARY  # H11-tail: live read
+            # live read (not import-time bound) so a config change takes
+            # effect without restart
+            from core.config import ANTHROPIC_PRIMARY
 
             self.model = act_model or ANTHROPIC_PRIMARY
         else:
@@ -338,27 +338,25 @@ class AgenticLoop:
         # ``--target`` is not silently replaced by the user's GEODE
         # ``settings.model`` between rounds.
         self._disable_settings_drift = disable_settings_drift
-        # v0.52.5 — set by update_model_async() when model changes; consumed by
+        # set by update_model_async() when model changes; consumed by
         # the run-loop to rebuild system_prompt before the next LLM call.
         self._prompt_dirty: bool = False
         self._tool_registry = tool_registry
         self._mcp_manager = mcp_manager
         self._skill_registry = skill_registry
         self._hooks = hooks
-        # CSP-1 (2026-05-22) — when the caller (worker for sub-agents) has
-        # already resolved a tool allowlist (via toolkit / legacy whitelist),
-        # filter the model-visible tool schemas to match. Without this filter
-        # the handler dict in ``ToolExecutor`` would be filtered but the
-        # model would still see the full tool surface and only fail at
-        # execution with "Unknown tool" — leaking the existence of denied
-        # tools and weakening the whitelist contract. None preserves the
-        # pre-CSP-1 behaviour (full tool surface) for non-sub-agent callers
-        # (CLI, serve daemon).
+        # When the caller (worker for sub-agents) has already resolved a
+        # tool allowlist, filter the model-visible tool schemas to match.
+        # Without this filter the handler dict in ``ToolExecutor`` would be
+        # filtered but the model would still see the full tool surface and
+        # only fail at execution with "Unknown tool" — leaking the existence
+        # of denied tools and weakening the whitelist contract. None keeps
+        # the full tool surface for non-sub-agent callers (CLI, serve daemon).
         #
-        # PR-PILOT-PETRI-AUDIT-WIRING (2026-06-01) — store on self so the
-        # model-change / MCP-refresh rebuild (``_response.refresh_tools``)
-        # re-applies the same toolkit filter; pre-fix that rebuild dropped
-        # the filter and re-exposed the full surface mid-run.
+        # Stored on self so the model-change / MCP-refresh rebuild
+        # (``_response.refresh_tools``) re-applies the same toolkit filter;
+        # otherwise that rebuild drops the filter and re-exposes the full
+        # surface mid-run.
         self._allowed_tool_names = allowed_tool_names
         # Unified tool assembly: merge native + MCP tools together. The
         # toolkit allowlist is passed as ``force_include`` so the global
@@ -374,69 +372,33 @@ class AgenticLoop:
         if allowed_tool_names is not None:
             self._tools = [t for t in self._tools if t.get("name") in allowed_tool_names]
         self._last_llm_error: str | None = None  # last error type for user message
-        # v0.99.40 Follow-up A + v0.99.44 Follow-up A2 — opt-in adapter route
-        # via the v0.99.39 :class:`LLMAdapter` registry. A2 closes the
-        # Anthropic-only scope of Follow-up A by porting the multi-turn
-        # message converters to ``core/llm/adapters/_openai_common.py``
-        # (``build_codex_input`` / ``build_messages``) + capturing Codex
-        # encrypted-reasoning items + summaries on the SSE stream, so
-        # OpenAI Chat Completions and Codex Responses routes now also
-        # work through ``LLMAdapter.acomplete``.
-        #
-        # When ``source`` is concrete (one of CONCRETE_SOURCES), ``_call_llm``
-        # routes through ``LLMAdapter.acomplete`` for any provider. A
-        # concrete source with a missing adapter HARD-FAILS in
+        # ``_call_llm`` routes every (provider, source) through
+        # ``LLMAdapter.acomplete``. A missing adapter HARD-FAILS in
         # :func:`resolve_for` — silent fallback would mask operator
-        # misconfiguration (Codex MCP 2026-05-23 HIGH 2).
-        # PR-MAINPATH-1 (2026-05-24) — Path-B default cutover. The
-        # ``source=""`` default previously landed on the legacy
-        # ``resolve_agentic_adapter`` branch; Step 1 of the AgenticLoop
-        # main-path migration made Path-B the resolver default ("payg"
-        # matches the J-b.2 mutator runner + J-b.3 reflection node, so
-        # all three main callers share one registry surface).
-        # PR-MAINPATH-67 (2026-05-24) — final cutover: the legacy
-        # ``AgenticLLMPort`` resolver + ``self._adapter`` field were
-        # deleted. ``self._last_llm_error`` is now the sole error
+        # misconfiguration. ``self._last_llm_error`` is the sole error
         # surface that feeds the agentic UI (see :meth:`_call_llm`).
-        # The hard-fail contract from the Codex MCP 2026-05-23 HIGH 2
-        # review ("no silent fallback") is preserved — if the requested
-        # ``(provider, source)`` isn't in the registry, ``resolve_for``
-        # raises and the loop refuses to start.
         #
-        # PR-SOURCE-ROUTING (2026-05-28) — the unconditional ``"payg"``
-        # default silently routed every interactive CLI call (the daemon
-        # path at ``core/server/supervised/services.py:211`` never passes
-        # ``source=``) through the PAYG endpoint even when the operator
-        # had completed ``/login openai`` and the
-        # ``openai-codex-geode:user`` OAuth profile was sitting in the
-        # ProfileStore. :func:`infer_source` consults the
-        # ``{provider}_credential_source`` setting + the ProfileStore so
-        # an OAuth-registered provider promotes to ``"subscription"`` by
-        # default; callers that pass an explicit ``source=`` still win.
-        # PR-MODEL-SWITCH-SOURCE (2026-06-12) — remember whether the caller
-        # pinned the source explicitly. A cross-provider ``/model`` switch
-        # re-infers the source ONLY when it was inferred here (an explicit
-        # caller pin survives the switch).
+        # When no explicit ``source`` is passed, ``infer_source`` consults
+        # the ``{provider}_credential_source`` setting + the ProfileStore so
+        # an OAuth-registered provider promotes to ``"subscription"``;
+        # callers that pass an explicit ``source=`` still win. Track whether
+        # the caller pinned it so a cross-provider ``/model`` switch re-infers
+        # the source ONLY when it was inferred here.
         self._source_explicit = bool(source)
         if not source:
             from core.llm.adapters._source_inference import infer_source
 
             source = infer_source(provider)
         self._source = source
-        # PR-JSON-WIRE (2026-05-25) — per-loop structured-output JSON
-        # Schema. When non-None, every ``_call_llm`` populates
-        # ``AdapterCallRequest.response_schema`` with this value so
-        # the underlying provider (claude-cli ``--json-schema`` /
-        # codex-cli ``--output-schema``) constrains the model's
-        # response to the declared shape. None = free-form text
-        # (legacy back-compat).
+        # Per-loop structured-output JSON schema. When non-None, every
+        # ``_call_llm`` sets ``AdapterCallRequest.response_schema`` so
+        # claude-cli ``--json-schema`` / codex-cli ``--output-schema``
+        # constrains the response. None = free-form text.
         self._response_schema: dict[str, Any] | None = response_schema
         from core.llm.adapters import resolve_for
 
-        # PR-DRIFT-ANCHORS (2026-06-10) — the legacy→registry provider
-        # translation lives in ONE place now
-        # (``core.llm.adapters.registry.PROVIDER_REGISTRY_NORMALIZATION``);
-        # this used to be one of four unsynchronized literal copies.
+        # Legacy→registry provider translation lives in one place:
+        # ``normalize_registry_provider``.
         from core.llm.adapters.registry import normalize_registry_provider
 
         registry_provider = normalize_registry_provider(self._provider)
@@ -450,12 +412,10 @@ class AgenticLoop:
             self._new_adapter: Any = get_adapter(self._source)
         except AdapterNotFoundError:
             self._new_adapter = resolve_for(registry_provider, self._source)
-        # PR-COMM-3b (2026-05-24) — cache the latest claude-cli sessionId
-        # the adapter emitted so the SESSION_ENDED hook payload can carry
-        # it through to the agent_runtime_state SQLite writer (registered
-        # in this PR). Non-claude-cli adapters leave this empty; the
-        # writer's CASE-WHEN guard then preserves whatever prior value
-        # the row carries.
+        # Cache the latest claude-cli sessionId the adapter emitted so the
+        # SESSION_ENDED hook can carry it to the agent_runtime_state writer.
+        # Non-claude-cli adapters leave it empty; the writer's CASE-WHEN
+        # guard then preserves whatever prior value the row carries.
         self._last_emitted_session_id: str = ""
         self._op_logger = OperationLogger(quiet=self._quiet)
         self._error_recovery = ErrorRecoveryStrategy(tool_executor)
@@ -468,15 +428,13 @@ class AgenticLoop:
 
             from core.observability.transcript import SessionTranscript
 
-            # PR-Q.5 (2026-05-24, single-anchor invariant I1 in
-            # docs/plans/2026-05-24-transcript-standardization-and-claude-resume.md):
-            # caller-provided ``session_id`` wins over the auto-generated
-            # ephemeral uuid. The worker subprocess passes
-            # ``WorkerRequest.task_id`` so result.json + stderr.log +
-            # dialogue.jsonl all land under the SAME
+            # Caller-provided ``session_id`` wins over the auto-generated
+            # ephemeral uuid so the worker subprocess's task_id lands
+            # result.json + stderr.log + dialogue.jsonl under the SAME
             # ``<run_dir>/sub_agents/<task_id>/`` directory. Empty
-            # ``session_id`` (REPL / gateway / tests with no per-task identity)
-            # falls back to ``s-<uuid>`` so non-worker callers are unaffected.
+            # ``session_id`` (REPL / gateway / tests with no per-task
+            # identity) falls back to ``s-<uuid>`` so non-worker callers
+            # are unaffected.
             if session_id:
                 self._session_id = session_id
             else:
@@ -485,24 +443,15 @@ class AgenticLoop:
         except Exception:
             log.warning("Transcript init failed", exc_info=True)
 
-        # ToolCallProcessor: orchestrates tool_use block execution
-        # PR-TOOL-EXEC-CONTEXT (2026-05-28) — pass the loop's resolved LLM
-        # identity (provider / source / adapter_name) so every tool call
-        # dispatched through this processor carries that identity forward
-        # via :class:`core.tools.base.ToolContext`. LLM-touching tools
-        # (web_search and future LLM-backed tools) read the context to
-        # match the loop's adapter routing instead of independently re-
-        # resolving via ``infer_source``.
-        #
-        # Codex MCP audit (2026-05-28) — pull (provider, source) from
-        # ``self._new_adapter`` rather than the loop's ``self._provider``
-        # / ``self._source`` fields. The latter can carry pre-normalisation
-        # values (``openai-codex`` / ``zhipuai``) that the registry
-        # collapses to ``openai`` / ``glm`` (see ``_PROVIDER_NORMALIZATION``
-        # at line 432). The dispatch helper's ``_apply_prefer`` compares
-        # against ``adapter.provider`` / ``adapter.source``, so the
-        # registered adapter's own identity is the right source of truth
-        # for ``ToolContext`` preference matching.
+        # ToolCallProcessor: orchestrates tool_use block execution.
+        # Pass the loop's resolved LLM identity so LLM-touching tools
+        # (web_search) match the loop's routing instead of re-resolving via
+        # ``infer_source``. Pull (provider, source) from ``self._new_adapter``
+        # rather than ``self._provider`` / ``self._source``: the latter can
+        # carry pre-normalisation values (``openai-codex`` / ``zhipuai``) that
+        # the registry collapses to ``openai`` / ``glm``, while the dispatch
+        # helper's ``_apply_prefer`` compares against the registered adapter's
+        # own ``provider`` / ``source``.
         _ctx_provider = getattr(self._new_adapter, "provider", self._provider)
         _ctx_source = getattr(self._new_adapter, "source", self._source)
         self._tool_processor = ToolCallProcessor(
@@ -520,13 +469,9 @@ class AgenticLoop:
 
         # Goal decomposition: auto-decompose compound requests into sub-goal DAGs
         self._enable_goal_decomposition = enable_goal_decomposition
-        # PR-CL-A1-followup (2026-05-23) — ``_goal_decomposer`` removed.
-        # The legacy ``GoalDecomposer`` class is gone; ``decompose_async``
-        # (in ``core.agent.plan``) is stateless and called directly.
 
-        # LLM-call retry budget. v0.90.0 — auto-escalation removed; once
-        # the cap is hit the loop exits with ``model_action_required`` so
-        # the user picks a different model via ``/model``.
+        # LLM-call retry budget. Once the cap is hit the loop exits with
+        # ``model_action_required`` so the user picks a model via ``/model``.
         self._consecutive_llm_failures: int = 0
         self._LLM_RETRY_CAP: int = 5  # max retries before giving up
 
@@ -536,14 +481,13 @@ class AgenticLoop:
         self._ctx_mgr = ContextWindowManager(hooks=hooks, quiet=quiet)
 
         # Convergence detection + tool error tracking (extracted — SRP).
-        # v0.90.0 — ConvergenceDetector no longer takes an escalation_fn;
         # 3 identical errors break the loop and the caller surfaces a
         # ``model_action_required`` diagnostic.
         from core.agent.convergence import ConvergenceDetector
 
         self._convergence = ConvergenceDetector()
 
-        # Feature 8: Diversity forcing — prevent same tool 5x consecutively
+        # Diversity forcing — prevent same tool 5x consecutively
         self._consecutive_tool_tracker: list[str] = []
 
         # C3 checkpoint: full message persistence for /resume (Claude Code pattern)
@@ -612,8 +556,7 @@ class AgenticLoop:
         return _lifecycle.inject_credential_breadcrumb(self)
 
     async def _emit_cognitive(self, event: HookEvent, **payload: Any) -> None:
-        """PR-2 C-6 — emit a cognitive-cycle event with the state
-        snapshot attached.
+        """Emit a cognitive-cycle event with the state snapshot attached.
 
         Centralises the (a) hook-system None-guard, (b) session_id
         injection, (c) ``cognitive_state`` snapshot embedding so each
@@ -632,12 +575,12 @@ class AgenticLoop:
         )
 
     async def _record_text_only_round(self, round_idx: int, *, text: str) -> None:
-        """PR-2 C-6 — record round end + emit REFLECT/UPDATE_MEMORY for
-        text-only completions (``stop_reason != "tool_use"``).
+        """Record round end + emit REFLECT/UPDATE_MEMORY for text-only
+        completions (``stop_reason != "tool_use"``).
 
-        Codex MCP review #1 catch — without this, ``record_round`` only
-        ran on tool-use rounds, violating the conditional-read-parity
-        rule. ACT/OBSERVE are intentionally NOT emitted here: the loop
+        Without this, ``record_round`` only runs on tool-use rounds,
+        violating the conditional-read-parity rule. ACT/OBSERVE are
+        intentionally NOT emitted here: the loop
         took no action and observed no tool result this round, so the
         cognitive cycle on a text-only turn is PERCEIVE → PLAN →
         REFLECT (the LLM "thought aloud" then ended the turn).
@@ -659,14 +602,12 @@ class AgenticLoop:
     async def _run_cognitive_act_observe_cycle(
         self, response: Any, round_idx: int
     ) -> list[dict[str, Any]]:
-        """PR-2 C-6 — emit ACT before the tool batch, run the batch,
-        emit OBSERVE after, update :attr:`cognitive_state` round-end
-        fields, emit REFLECT + UPDATE_MEMORY.
+        """Emit ACT before the tool batch, run the batch, emit OBSERVE
+        after, update :attr:`cognitive_state` round-end fields, emit
+        REFLECT + UPDATE_MEMORY.
 
-        Extracted from ``arun`` to keep the run-loop within the ruff
-        complexity gates while preserving the cognitive-cycle event
-        ordering (PERCEIVE -> PLAN -> ACT -> OBSERVE -> REFLECT ->
-        UPDATE_MEMORY).
+        Preserves the cognitive-cycle event ordering (PERCEIVE -> PLAN ->
+        ACT -> OBSERVE -> REFLECT -> UPDATE_MEMORY).
         """
         tool_names: list[str] = []
         for block in getattr(response, "content", None) or []:
@@ -689,20 +630,19 @@ class AgenticLoop:
         )
 
         # Deterministic round-end state update. Action = tool names (or
-        # "text-only"); observation = result-count summary. PR-3
-        # replaces the deterministic summary with an LLM-derived
-        # belief update from the reflection node.
+        # "text-only"); observation = result-count summary. The reflection
+        # node below replaces this with an LLM-derived belief update.
         self.cognitive_state.record_round(
             action=("tools: " + ", ".join(tool_names)) if tool_names else "text-only",
             observation=f"{len(tool_results)} tool result(s)",
         )
 
-        # PR-3 C-2 — reflection node. One extra LLM call (opt-out via
-        # ``settings.cognitive_reflection_enabled = False``) populates
-        # ``hypotheses`` / ``confidence`` / appends a hint to
-        # ``subgoals``. The REFLECT hook fires *after* the LLM call so
-        # downstream listeners see the LLM-derived belief update, not
-        # the deterministic post-record_round snapshot.
+        # Reflection node = one extra LLM call (opt-out via
+        # ``settings.cognitive_reflection_enabled = False``) that populates
+        # ``hypotheses`` / ``confidence`` / appends a hint to ``subgoals``.
+        # The REFLECT hook fires *after* the call so downstream listeners
+        # see the LLM-derived belief update, not the deterministic
+        # post-record_round snapshot.
         await self._maybe_reflect(tool_results)
 
         await self._emit_cognitive(HookEvent.COGNITIVE_REFLECT, round=round_idx + 1)
@@ -711,7 +651,7 @@ class AgenticLoop:
         return tool_results
 
     async def _maybe_reflect(self, tool_results: list[dict[str, Any]]) -> None:
-        """PR-3 C-2 — call the reflection node if enabled.
+        """Call the reflection node if enabled.
 
         Reads ``settings.cognitive_reflection_enabled`` lazily so an
         operator flipping the toggle via ``GEODE_COGNITIVE_REFLECTION_ENABLED``
@@ -720,11 +660,9 @@ class AgenticLoop:
         ``reflect_async`` — the loop must stay robust to a flaky
         reflection model.
 
-        PR-C (2026-05-21) — every-N rounds gate. The 1 LLM call per
-        tool-use round was the dominant overhead for long-running
-        sessions (30 rounds ⇒ 30 extra Haiku calls). Operators can
-        set ``cognitive_reflection_interval=N`` (1 = current
-        behaviour) to thin the reflection cadence. The first round
+        ``cognitive_reflection_interval=N`` thins the reflection cadence
+        (1 = every tool-use round) because one LLM call per round is the
+        dominant overhead for long-running sessions. The first round
         always runs so the loop sees an LLM-derived belief snapshot
         before any throttling kicks in.
         """
@@ -758,22 +696,16 @@ class AgenticLoop:
         )
 
     async def _emit_session_start_signals(self, user_input: str) -> AgenticResult | None:
-        """PR-D Phase 1 — extracted session-start signal block from
-        ``arun``. Owns the USER_INPUT_RECEIVED interceptor, cognitive-
-        state goal init + ContextVar bind, COGNITIVE_PERCEIVE emit,
-        conversation-context append, transcript ``record_session_start``
-        / ``record_user_message``, and the SESSION_STARTED hook.
+        """Emit the session-start signals. Owns the USER_INPUT_RECEIVED
+        interceptor, cognitive-state goal init + ContextVar bind,
+        COGNITIVE_PERCEIVE emit, conversation-context append, transcript
+        ``record_session_start`` / ``record_user_message``, and the
+        SESSION_STARTED hook.
 
         Returns ``None`` on the happy path. Returns an
         :class:`AgenticResult` (with ``termination_reason="input_blocked"``)
         when the USER_INPUT_RECEIVED interceptor blocks the input —
         ``arun`` surfaces that result back to the caller verbatim.
-
-        Behaviour preserved exactly from the pre-refactor inline
-        block — this helper is a *structural* extraction so the god-
-        method's per-round body can be reasoned about without
-        intervening session-bootstrap code. Future phases will
-        extract the per-round body itself.
         """
         # Hook: USER_INPUT_RECEIVED (interceptor — can block input).
         # First and only early-exit in this helper; if the input
@@ -791,18 +723,17 @@ class AgenticLoop:
                     termination_reason="input_blocked",
                 )
 
-        # PR-2 C-1 + C-6 — set the cognitive-state goal to the user
-        # input of the first arun() call (subsequent calls in the
-        # same session keep the original goal so observations
-        # accumulate against it). Then fire PERCEIVE with the state
-        # snapshot so a downstream viewer can segment the session by
-        # cognitive cycle step.
+        # Set the cognitive-state goal to the user input of the first
+        # arun() call (subsequent calls in the same session keep the
+        # original goal so observations accumulate against it). Then fire
+        # PERCEIVE with the state snapshot so a downstream viewer can
+        # segment the session by cognitive cycle step.
         if not self.cognitive_state.goal:
             self.cognitive_state.goal = user_input
-        # PR-4 C-3 — bind the CognitiveState to the ContextVar so
-        # hooks fired from inside the tool executor (TOOL_EXEC_ENDED
-        # → episodic memory recorder) can read the live state without
-        # being coupled to AgenticLoop directly.
+        # Bind the CognitiveState to the ContextVar so hooks fired from
+        # inside the tool executor (TOOL_EXEC_ENDED → episodic memory
+        # recorder) can read the live state without being coupled to
+        # AgenticLoop directly.
         #
         # Lifetime: the binding is asyncio-task-scoped. Each top-level
         # task gets its own ``contextvars.Context`` copy, so two
@@ -843,10 +774,9 @@ class AgenticLoop:
             self._transcript.record_session_start(model=self.model, provider=self._provider)
             self._transcript.record_user_message(user_input)
 
-        # PR-DISPATCH-OBS-EXT (2026-05-28) — start a fresh per-session
-        # adapter usage counter so dispatch attempts during this session
-        # accumulate into a dict that SESSION_ENDED can emit as
-        # ``adapter_usage`` aggregate.
+        # Start a fresh per-session adapter usage counter so dispatch
+        # attempts accumulate into a dict SESSION_ENDED emits as
+        # ``adapter_usage``.
         from core.llm.adapters.dispatch import begin_session_adapter_tracking
 
         begin_session_adapter_tracking()
@@ -872,8 +802,7 @@ class AgenticLoop:
         round_idx: int,
         spinner: TextSpinner,
     ) -> AgenticResponse | AgenticResult | None:
-        """PR-D Phase 2c — LLM-call dispatch + simple-exception
-        handlers extracted from ``arun``'s while-loop body.
+        """Dispatch the LLM call and handle the simple exceptions.
 
         Returns:
           * ``AgenticResponse`` on a successful call (caller proceeds
@@ -890,9 +819,7 @@ class AgenticLoop:
         Side effect: stops ``spinner`` BEFORE calling
         ``_emit_quota_panel`` (BillingError) or ``log.info``
         (UserCancelledError) so terminal output stays clean. The
-        caller's outer ``finally`` block also stops the spinner — this
-        is the same defensive duplication the pre-refactor code had.
-        Behaviour preserved exactly.
+        caller's outer ``finally`` block also stops the spinner.
         """
         try:
             return await self._call_llm(system_prompt, messages, round_idx=round_idx)
@@ -919,8 +846,7 @@ class AgenticLoop:
         decomposition_hint: str | None,
         reflexion_hint: str | None = None,
     ) -> str:
-        """PR-D Phase 2b — model-drift sync + system_prompt rebuild
-        extracted from ``arun``'s while-loop body.
+        """Sync model drift + rebuild the system prompt.
 
         Between rounds the ``settings.model`` field may have changed
         (via the ``switch_model`` tool, the ``/model`` slash command,
@@ -928,20 +854,15 @@ class AgenticLoop:
         and rebuilds the system prompt so the next LLM call sees the
         updated model card.
 
-        ``v0.52.5`` — ``_prompt_dirty`` catches any direct
-        ``update_model_async`` call that bypasses the drift sync;
-        without it the system_prompt model card would stay pinned to
-        the previous model after a switch.
-        ``v0.90.0`` — auto-escalation paths removed; the only such
-        callers now are user-initiated ``/model`` switches.
-        ``PR-CL-A3 (2026-05-23)`` — ``reflexion_hint`` is re-applied on
-        rebuild so a model drift mid-arun does not silently drop the
-        verbal-RL hint (Codex MCP MEDIUM #6, 2026-05-23).
+        ``_prompt_dirty`` catches a direct ``update_model_async`` call
+        that bypasses the drift sync; without it the system_prompt model
+        card stays pinned to the previous model after a switch.
+        ``reflexion_hint`` is re-applied on rebuild so a model drift
+        mid-arun does not silently drop the verbal-RL hint.
 
         Returns the (possibly-rebuilt) ``system_prompt`` so ``arun``
         can rebind its local. Side-effect: clears ``_prompt_dirty``
-        after a rebuild. Behaviour preserved exactly from the
-        pre-refactor inline block.
+        after a rebuild.
         """
         drift_detected = await self._sync_model_from_settings_async()
         prompt_dirty = self._prompt_dirty
@@ -951,24 +872,20 @@ class AgenticLoop:
                 system_prompt += "\n\n" + decomposition_hint
             if reflexion_hint:
                 system_prompt += "\n\n" + reflexion_hint
-            # PR-CL-A1 (2026-05-23) — re-apply active Plan on rebuild so a
-            # model drift or replan-triggered ``_prompt_dirty`` flag doesn't
-            # silently drop the plan hint (parallels the reflexion_hint
-            # fix in PR-CL-A3 Codex MCP MEDIUM #6). ``getattr`` guard
-            # tolerates stub loops in unit tests (see
+            # Re-apply the active Plan on rebuild so a model drift or
+            # replan-triggered ``_prompt_dirty`` flag doesn't silently drop
+            # the plan hint (parallels the reflexion_hint re-apply above).
+            # The ``getattr`` guard tolerates stub loops in unit tests (see
             # ``tests/core/agent/test_arun_model_drift_sync.py::_StubLoop``).
             _plan_consume = getattr(self, "_consume_plan_hint", None)
             plan_hint = _plan_consume() if callable(_plan_consume) else ""
             if isinstance(plan_hint, str) and plan_hint:
                 system_prompt += "\n\n" + plan_hint
             self._prompt_dirty = False
-            # PR-SIL-5THEME C5 (2026-05-23) — D4 X2 telemetry. ``HookEvent.PROMPT_ASSEMBLED``
-            # 가 ``core/hooks/system.py:69`` 에 정의됐으나 fire 0회 였다 → X2
-            # injection (Option B 의 ``You are <model> (<provider>).`` 한 줄
-            # statement) 이 매 round 마다 발화하지만 관측 marker 0. 이제 hook
-            # handler 가 등록되면 model / provider / reason / x2_injected /
-            # prompt_len payload 받음. ``_hooks`` 부재 (stub loop / hook
-            # system 미초기화) 시 noop (backward compat).
+            # Fire PROMPT_ASSEMBLED so a registered handler observes each
+            # per-round prompt rebuild with the model / provider / reason /
+            # x2_injected / prompt_len payload. No-op when ``_hooks`` is
+            # absent (stub loop / hook system not initialised).
             hooks = getattr(self, "_hooks", None)
             if hooks:
                 from core.hooks import HookEvent
@@ -980,21 +897,20 @@ class AgenticLoop:
                         "model": self.model,
                         "provider": self._provider,
                         "reason": reason,
-                        "x2_injected": True,  # Option B identity 한 줄 always present
+                        "x2_injected": True,  # identity line always present
                         "prompt_len": len(system_prompt),
                     },
                 )
         return system_prompt
 
     def _check_round_guards(self, round_idx: int) -> str | None:
-        """PR-D Phase 2a — round-entry guards extracted from ``arun``.
+        """Run the round-entry guards.
 
         Returns ``None`` if both guards pass (proceed with the
         round). Returns a short string identifying the triggered
         guard otherwise — ``arun`` breaks the while-loop on a
         non-None response, deferring the result-construction to the
-        loop's existing wrap-up code below (mirrors the pre-refactor
-        ``break`` semantics).
+        loop's existing wrap-up code below.
 
         Guards (Karpathy P3):
           * ``round_limit`` — ``max_rounds > 0`` enforces; ``0`` =
@@ -1003,11 +919,6 @@ class AgenticLoop:
           * ``time_budget`` — ``time_budget_s > 0`` enforces;
             ``0.0`` = no time limit. Wall clock measured against
             ``self._loop_start_time``.
-
-        Behaviour preserved exactly from the pre-refactor inline
-        ``Guard 1`` + ``Guard 2`` blocks — this helper is a
-        *structural* extraction. PR-D Phase 2b/2c will continue
-        chipping at the god-method.
         """
         import time as _time
 
@@ -1017,11 +928,11 @@ class AgenticLoop:
             elapsed = _time.monotonic() - self._loop_start_time
             if elapsed >= self._time_budget_s:
                 return "time_budget"
-        # PR-CL-BUDGET — session-wide wall-clock cap (default 2h) with
-        # T-10min auto-handoff. ``handoff_due`` is one-shot per session;
-        # we fire HANDOFF_TRIGGERED on the boundary and break the loop
-        # so the caller drains gracefully. ``expired`` is the hard stop
-        # if the loop somehow runs past zero. ``getattr`` tolerates stub
+        # Session-wide wall-clock cap (default 2h) with T-10min
+        # auto-handoff. ``handoff_due`` is one-shot per session; we fire
+        # HANDOFF_TRIGGERED on the boundary and break the loop so the
+        # caller drains gracefully. ``expired`` is the hard stop if the
+        # loop somehow runs past zero. The ``getattr`` tolerates stub
         # loops in unit tests that bind ``_check_round_guards`` to a
         # minimal object (see tests/core/agent/test_arun_round_guards.py::_StubLoop).
         handoff_check = getattr(self, "_check_session_budget_and_maybe_handoff", None)
@@ -1032,9 +943,9 @@ class AgenticLoop:
         return None
 
     def _persist_handoff_request(self) -> None:
-        """PR-CL-BUDGET wiring (closed 2026-05-23) — flip the ``sessions``
-        row to ``handoff_state='pending'`` via the DB CAS helper. Called
-        once per session at the T-threshold crossing.
+        """Flip the ``sessions`` row to ``handoff_state='pending'`` via
+        the DB CAS helper. Called once per session at the T-threshold
+        crossing.
 
         Failures NEVER raise — observability hygiene. Skips when no
         session_id is bound (mid-test stub) or when the session row
@@ -1053,7 +964,7 @@ class AgenticLoop:
         except Exception:
             log.debug("Handoff DB request skipped", exc_info=True)
         finally:
-            # Close to avoid leaked SQLite handles (Codex MCP follow-up 2026-05-23).
+            # Close to avoid leaked SQLite handles.
             if mgr is not None:
                 try:
                     mgr.close()
@@ -1061,7 +972,7 @@ class AgenticLoop:
                     log.debug("Handoff SessionManager close failed", exc_info=True)
 
     async def _maybe_replan_async(self, round_idx: int) -> None:
-        """PR-CL-A1 (2026-05-23) — per-round Dynamic Replan trigger.
+        """Per-round Dynamic Replan trigger.
 
         Reads SessionMetrics' verify state + the active plan and asks
         :func:`core.agent.plan.should_replan` whether to fire. On a
@@ -1070,7 +981,7 @@ class AgenticLoop:
         JSON response into a new :class:`Plan`, and installs it via
         ``set_active_plan``. Increments ``record_replan`` for telemetry.
 
-        **Trigger timing** (Codex MCP HIGH #2, 2026-05-23):
+        **Trigger timing**:
           - **verify_fail** — verify runs at ``arun`` finalization, so
             this trigger fires only at the *first round of the next*
             ``arun`` (the prior turn's verify state lives on the
@@ -1104,13 +1015,13 @@ class AgenticLoop:
             )
             if trigger is None:
                 return
-            # PR-CL-A1 (2026-05-23) — abandon path. ``settings.replan_max_attempts``
-            # caps retries on a single step. If the verify_fail trigger
-            # fires again on the same step beyond the cap, advance the
-            # plan with ``abandoned=True`` instead of calling the
-            # planner LLM (operator-action signal: this step is stuck).
-            # Cadence trigger always proceeds to replan since it isn't
-            # tied to a single step's retry budget.
+            # Abandon path. ``settings.replan_max_attempts`` caps retries
+            # on a single step. If the verify_fail trigger fires again on
+            # the same step beyond the cap, advance the plan with
+            # ``abandoned=True`` instead of calling the planner LLM
+            # (operator-action signal: this step is stuck). The cadence
+            # trigger always proceeds to replan since it isn't tied to a
+            # single step's retry budget.
             if trigger == "verify_fail" and metrics.active_plan is not None:
                 metrics.record_step_attempt()
                 cap = _replan_max_attempts()
@@ -1134,6 +1045,7 @@ class AgenticLoop:
             try:
                 recent_text = self._tool_processor.tool_log[-1].get("result", "")
             except Exception:
+                log.debug("recent tool_log read for replanner failed", exc_info=True)
                 recent_text = ""
             stub_result = SimpleNamespace(text=str(recent_text))
             new_plan = await replan_async(
@@ -1175,8 +1087,8 @@ class AgenticLoop:
             log.warning("Replan dispatch crashed", exc_info=True)
 
     def _consume_plan_hint(self) -> str:
-        """PR-CL-A1 (2026-05-23) — render the active :class:`Plan` for the
-        system prompt as a ``<plan>...</plan>`` block.
+        """Render the active :class:`Plan` for the system prompt as a
+        ``<plan>...</plan>`` block.
 
         Read-only (no clear) — the plan persists across rounds and only
         changes when a replan installs a new revision. Returns the empty
@@ -1195,7 +1107,7 @@ class AgenticLoop:
             return ""
 
     def _consume_reflexion_hint(self) -> str:
-        """PR-CL-A3 — read+clear the verbal-RL hint left by the prior turn.
+        """Read+clear the verbal-RL hint left by the prior turn.
 
         Returns the ``<reflexion>...</reflexion>`` block synthesised after
         the previous turn's verify FAIL, or the empty string when verify
@@ -1209,14 +1121,13 @@ class AgenticLoop:
         double-fire. Failures NEVER raise — observability mustn't break
         the run it observes.
 
-        **Scope note** (Codex MCP MEDIUM #2, 2026-05-23) — pre-finalize
-        exits (``BillingError`` / ``UserCancelledError`` raised before
-        ``finalize_and_return*``) skip verify by design. The next arun
-        starts with an empty hint slot because the prior turn never
-        wrote one — this is consistent with "verify never ran for the
-        failed turn" semantics. If a future PR needs verify on those
-        paths, finalize them through ``finalize_and_return*`` instead of
-        re-wiring this consumer.
+        **Scope note** — pre-finalize exits (``BillingError`` /
+        ``UserCancelledError`` raised before ``finalize_and_return*``)
+        skip verify by design. The next arun starts with an empty hint
+        slot because the prior turn never wrote one — consistent with
+        "verify never ran for the failed turn" semantics. To get verify
+        on those paths, finalize them through ``finalize_and_return*``
+        instead of re-wiring this consumer.
         """
         try:
             from core.observability.session_metrics import current_session_metrics
@@ -1313,12 +1224,11 @@ class AgenticLoop:
                         )
                     except Exception:
                         log.warning("Transcript handoff_triggered record failed", exc_info=True)
-                # PR-CL-A3 persistence — flip the ``sessions`` row's
-                # ``handoff_state`` to PENDING via the DB CAS helper from
-                # PR-CL-BUDGET. Without this call the schema is wired but
-                # the actual DB-backed state machine never runs (read-write
-                # parity violation flagged 2026-05-23). Safe no-op when no
-                # session row exists yet (mid-test scenario).
+                # Flip the ``sessions`` row's ``handoff_state`` to PENDING
+                # via the DB CAS helper. Without this call the schema is
+                # wired but the DB-backed state machine never runs
+                # (read-write parity). Safe no-op when no session row
+                # exists yet (mid-test scenario).
                 self._persist_handoff_request()
                 return "session_time_budget_handoff"
             if check.expired:
@@ -1373,12 +1283,12 @@ class AgenticLoop:
 
             cost = float(get_tracker().accumulator.total_cost_usd)
         except Exception:
+            log.debug("total_cost_usd read for diagnostic failed", exc_info=True)
             cost = None
-        # PR-DRIFT-CUT (2026-05-24) — strip raw SDK exception JSON
-        # ("Error code: 400 - {'error': {'message': ...}}") down to the
-        # underlying message before forwarding to the user-facing message
-        # builder. ``summarize_error_detail`` is a no-op when it cannot
-        # prove a clean extraction, so we never accidentally lose context.
+        # Strip raw SDK exception JSON down to the underlying message
+        # before the user-facing builder. ``summarize_error_detail`` is a
+        # no-op when it can't prove a clean extraction, so context is
+        # never lost.
         clean_detail = summarize_error_detail(detail) if detail else None
         text = build_model_action_message(
             error_type=error_type,
@@ -1398,6 +1308,35 @@ class AgenticLoop:
             error="model_action_required",
             termination_reason="model_action_required",
         )
+
+    async def _finalize_context_exhausted(
+        self,
+        user_input: str,
+        messages: list[dict[str, Any]],
+        round_idx: int,
+    ) -> AgenticResult:
+        """Build + finalize the terminal context-exhausted result.
+
+        The common recovery-failed tail shared by the pre-call,
+        post-call, and 400-context-overflow recovery paths: notify the
+        ``exhausted`` event, sync the (already-pruned-as-far-as-possible)
+        messages back to the conversation context, and return the
+        terminal ``context_exhausted`` result through finalize.
+        """
+        self._notify_context_event(
+            "exhausted",
+            original_count=len(messages),
+            new_count=len(messages),
+        )
+        self._sync_messages_to_context(messages)
+        result = AgenticResult(
+            text=await _context_exhausted_message(user_input),
+            tool_calls=self._tool_processor.tool_log,
+            rounds=round_idx + 1,
+            error="context_exhausted",
+            termination_reason="context_exhausted",
+        )
+        return await self._afinalize_and_return(result, user_input, round_idx + 1)
 
     # ------------------------------------------------------------------
     # Tool list refresh — delegate to ``_response``
@@ -1439,8 +1378,8 @@ class AgenticLoop:
     def _purge_stale_model_switch_acks(self) -> int:
         """Delegates to :func:`_model_switching.purge_stale_model_switch_acks`.
 
-        PR-SIL-5THEME C5 (2026-05-23) — returns purged count (was ``None``)
-        for D4 X2 telemetry — caller forwards to MODEL_SWITCHED payload.
+        Returns the purged count, which the caller forwards to the
+        MODEL_SWITCHED payload.
         """
         return _model_switching.purge_stale_model_switch_acks(self)
 
@@ -1473,9 +1412,9 @@ class AgenticLoop:
             if added > 0:
                 log.info("MCP tools lazy-loaded: +%d tools (total %d)", added, len(self._tools))
 
-        # Goal decomposition: try to break compound requests into sub-goal DAGs.
-        # PR-CL-A1-followup (2026-05-23) — async now (planner LLM call); the
-        # return value is always None (Plan installed on SessionMetrics).
+        # Goal decomposition: try to break compound requests into sub-goal
+        # DAGs. Async because it makes a planner LLM call; the return value
+        # is always None (the Plan is installed on SessionMetrics).
         try:
             decomposition_hint = await self._try_decompose(user_input)
         except BillingError as exc:
@@ -1486,12 +1425,6 @@ class AgenticLoop:
                 termination_reason="billing_error",
             )
 
-        # PR-D Phase 1 — extracted session-start signals (hook
-        # interceptor / cognitive bind / transcript / SESSION_STARTED)
-        # into a single helper. Lets ``arun`` stay focused on the
-        # while-loop body. Behaviour preserved exactly — the helper
-        # returns the first ``AgenticResult`` to surface on a blocked
-        # interceptor (sole early-exit), or ``None`` on the happy path.
         intercept_result = await self._emit_session_start_signals(user_input)
         if intercept_result is not None:
             return intercept_result
@@ -1502,23 +1435,22 @@ class AgenticLoop:
         if decomposition_hint:
             system_prompt += "\n\n" + decomposition_hint
 
-        # PR-CL-A3 (2026-05-23) — Reflexion verbal-RL hint injection. The
-        # *previous* arun's TURN_VERIFY_FAILED outcome (recorded by
-        # ``record_verify``) leaves a ``<reflexion>...</reflexion>`` block
-        # in SessionMetrics; we prepend it to this arun's system prompt so
-        # the model sees its own failure analysis at the start of the next
-        # attempt. ``consume`` semantics — the hint is cleared after read
-        # so it does not leak into subsequent arun's that should be clean.
+        # Reflexion verbal-RL hint injection. The *previous* arun's
+        # TURN_VERIFY_FAILED outcome leaves a ``<reflexion>...</reflexion>``
+        # block in SessionMetrics; we prepend it to this arun's system
+        # prompt so the model sees its own failure analysis at the start of
+        # the next attempt. ``consume`` semantics — the hint is cleared
+        # after read so it does not leak into subsequent clean aruns.
         reflexion_hint = self._consume_reflexion_hint()
         if reflexion_hint:
             system_prompt += "\n\n" + reflexion_hint
 
-        # PR-CL-A1 (2026-05-23) — explicit Plan injection. If goal
-        # decomposition (or a prior replan) installed a Plan on
-        # SessionMetrics, render the current-step hint as a
-        # ``<plan>...</plan>`` block so the model sees "you are at step
-        # 3/5: …" at the top of every system prompt. Read-only consume —
-        # the plan persists until ``advance`` / replan swaps it.
+        # Explicit Plan injection. If goal decomposition (or a prior
+        # replan) installed a Plan on SessionMetrics, render the
+        # current-step hint as a ``<plan>...</plan>`` block so the model
+        # sees "you are at step 3/5: …" at the top of every system prompt.
+        # Read-only consume — the plan persists until ``advance`` / replan
+        # swaps it.
         plan_hint = self._consume_plan_hint()
         if plan_hint:
             system_prompt += "\n\n" + plan_hint
@@ -1529,50 +1461,38 @@ class AgenticLoop:
         import time as _time
 
         self._loop_start_time = _time.monotonic()
-        # PR-CL-BUDGET (2026-05-23) — start the session-wide 2-hour
-        # wall-clock budget on first ``arun`` within a SessionMetrics
-        # scope. Subsequent loops in the same session share the budget
-        # via the ContextVar-bound metrics (guard: only start if no
-        # prior budget). Env override: ``GEODE_SESSION_TIME_BUDGET_S=0``
-        # disables; positive float overrides the 7200s default. The
-        # session budget is *separate from* per-loop ``self._time_budget_s``
-        # — both gate the loop, whichever fires first wins.
+        # Start the session-wide 2-hour wall-clock budget on first
+        # ``arun`` within a SessionMetrics scope. Subsequent loops in the
+        # same session share the budget via the ContextVar-bound metrics
+        # (guard: only start if no prior budget). Env override:
+        # ``GEODE_SESSION_TIME_BUDGET_S=0`` disables; positive float
+        # overrides the 7200s default. The session budget is *separate
+        # from* per-loop ``self._time_budget_s`` — both gate the loop,
+        # whichever fires first wins.
         self._maybe_start_session_budget()
-        # Defect A F-A1 — capture tracker snapshot at the loop entry so
-        # ``finalize_and_return`` can compute a per-arun usage delta
-        # without double-counting calls from sibling loops sharing the
-        # same ``ContextVar``-scoped tracker. See ``AgenticResult.usage``.
+        # Capture tracker snapshot at loop entry so ``finalize_and_return``
+        # computes a per-arun usage delta without double-counting calls
+        # from sibling loops sharing the same ``ContextVar``-scoped
+        # tracker. See ``AgenticResult.usage``.
         from core.llm.token_tracker import get_tracker as _get_tracker
 
         self._usage_snapshot = _get_tracker().snapshot()
         round_idx = 0
         while True:
-            # PR-D Phase 2a — round-entry guards extracted to a helper
-            # so ``arun``'s while-loop body shrinks toward the Claude
-            # Code declarative shape. Returning ``None`` means "no
-            # guard triggered, proceed"; a non-None reason means
-            # "break the loop and finalize". Behaviour preserved
-            # exactly — both guards still ``break`` (not return) so
-            # the loop's downstream wrap-up paths run.
             if self._check_round_guards(round_idx) is not None:
                 break
 
             is_last_round = (self.max_rounds > 0) and (round_idx == self.max_rounds - 1)
             self._op_logger.begin_round("AgenticLoop")
 
-            # PR-CL-A1 (2026-05-23) — Dynamic Replan trigger. Fires on
-            # verify FAIL (from the prior round's record_verify) or
-            # cadence (every ``settings.replan_interval`` rounds). When a
-            # replan runs, the new plan replaces SessionMetrics.active_plan;
-            # the system_prompt rebuild below picks it up via the helper
-            # ``_consume_plan_hint`` already wired into the rebuild path.
+            # Dynamic Replan trigger. Fires on verify FAIL (from the prior
+            # round's record_verify) or cadence (every
+            # ``settings.replan_interval`` rounds). When a replan runs, the
+            # new plan replaces SessionMetrics.active_plan; the
+            # system_prompt rebuild below picks it up via
+            # ``_consume_plan_hint``.
             await self._maybe_replan_async(round_idx)
 
-            # PR-D Phase 2b — model-drift sync extracted to a helper.
-            # The helper returns the possibly-rebuilt system_prompt;
-            # ``arun`` rebinds the local so the next LLM call sees the
-            # updated model card. Behaviour preserved exactly — the
-            # _prompt_dirty side-effect reset still happens inside.
             system_prompt = await self._sync_model_and_rebuild_prompt(
                 system_prompt, decomposition_hint, reflexion_hint=reflexion_hint
             )
@@ -1594,22 +1514,9 @@ class AgenticLoop:
                     )
                     log.info("Pre-call recovery succeeded — proceeding with pruned context")
                 else:
-                    self._notify_context_event(
-                        "exhausted",
-                        original_count=len(messages),
-                        new_count=len(messages),
-                    )
-                    self._sync_messages_to_context(messages)
-                    result = AgenticResult(
-                        text=await _context_exhausted_message(user_input),
-                        tool_calls=self._tool_processor.tool_log,
-                        rounds=round_idx + 1,
-                        error="context_exhausted",
-                        termination_reason="context_exhausted",
-                    )
-                    return await self._afinalize_and_return(result, user_input, round_idx + 1)
+                    return await self._finalize_context_exhausted(user_input, messages, round_idx)
 
-            # PR-2 C-6 — pre-LLM-call PLAN event. See ``_emit_cognitive``.
+            # Pre-LLM-call PLAN event. See ``_emit_cognitive``.
             await self._emit_cognitive(
                 HookEvent.COGNITIVE_PLAN,
                 round=round_idx + 1,
@@ -1629,14 +1536,6 @@ class AgenticLoop:
                 _spinner = TextSpinner(f"✢ {label}", quiet=self._quiet)
             _spinner.start()
             try:
-                # PR-D Phase 2c — BillingError + UserCancelledError
-                # paths extracted into a helper. The helper stops the
-                # spinner before its side-effects (emit_quota_panel,
-                # log.info) so terminal output stays clean. Returns
-                # ``AgenticResponse`` on success or ``AgenticResult``
-                # on early-exit; ``_ContextExhaustedError`` is NOT
-                # caught (keeps its complex recovery path inline
-                # because of the ``continue`` semantics).
                 _llm_outcome = await self._dispatch_llm_call(
                     system_prompt, messages, round_idx, _spinner
                 )
@@ -1658,25 +1557,8 @@ class AgenticLoop:
                     log.info("Aggressive recovery succeeded — continuing loop")
                     continue  # retry LLM call with pruned context
 
-                # Recovery failed — break loop
-                self._notify_context_event(
-                    "exhausted",
-                    original_count=len(messages),
-                    new_count=len(messages),
-                )
-                self._sync_messages_to_context(messages)
-                result = AgenticResult(
-                    text=await _context_exhausted_message(user_input),
-                    tool_calls=self._tool_processor.tool_log,
-                    rounds=round_idx + 1,
-                    error="context_exhausted",
-                    termination_reason="context_exhausted",
-                )
-                return await self._afinalize_and_return(
-                    result,
-                    user_input,
-                    round_idx + 1,
-                )
+                # Recovery failed — finalize the terminal result.
+                return await self._finalize_context_exhausted(user_input, messages, round_idx)
             finally:
                 _spinner.stop()
                 if _ipc_writer is not None and not self._quiet:
@@ -1687,11 +1569,8 @@ class AgenticLoop:
                 # Defaults cover the case where the adapter swallowed the
                 # original exception (None response without a trailing
                 # ``_last_error``); the diagnostic builder still needs
-                # ``_sev`` / ``_hint`` populated. PR-MAINPATH-67
-                # (2026-05-24) — reads from the Path-B adapter's
-                # ``_last_error`` (preserved across providers); legacy
-                # ``self._adapter.last_error`` access was deleted with
-                # the resolver.
+                # ``_sev`` / ``_hint`` populated. Reads from the adapter's
+                # ``_last_error`` (preserved across providers).
                 adapter_exc = getattr(self._new_adapter, "_last_error", None)
                 from core.llm.errors import _ERROR_CLASSIFICATION
 
@@ -1713,33 +1592,21 @@ class AgenticLoop:
                             )
                             log.info("Context overflow recovery succeeded — retrying LLM call")
                             continue  # retry with pruned context
-                        # Recovery failed — context is unrecoverably large
-                        self._notify_context_event(
-                            "exhausted",
-                            original_count=len(messages),
-                            new_count=len(messages),
+                        # Recovery failed — context is unrecoverably large.
+                        return await self._finalize_context_exhausted(
+                            user_input, messages, round_idx
                         )
-                        self._sync_messages_to_context(messages)
-                        result = AgenticResult(
-                            text=await _context_exhausted_message(user_input),
-                            tool_calls=self._tool_processor.tool_log,
-                            rounds=round_idx + 1,
-                            error="context_exhausted",
-                            termination_reason="context_exhausted",
-                        )
-                        return await self._afinalize_and_return(result, user_input, round_idx + 1)
 
-                    # Auth errors → surface to user; auto-swap was removed
-                    # in v0.90.0 (cross-provider stub already in place since
-                    # v0.53.0). Credentials are user-owned, so let the user
-                    # refresh keys or pick a different provider via /model.
+                    # Auth errors surface to the user (auto-swap removed —
+                    # credentials are user-owned, so let the user refresh
+                    # keys or pick a provider via /model).
                     if _et == "auth":
                         if not self._quiet:
                             from core.ui.agentic_ui import emit_llm_error
 
                             emit_llm_error(_et, _sev, _hint, self.model, self._provider)
-                        # v0.51.0: inject LLM-readable credential breadcrumb so
-                        # the next round sees structured eligibility verdicts
+                        # Inject an LLM-readable credential breadcrumb so the
+                        # next round sees structured eligibility verdicts
                         # (Claude Code createModelSwitchBreadcrumbs pattern).
                         self._inject_credential_breadcrumb()
                         result = self._build_model_action_result(
@@ -1751,16 +1618,14 @@ class AgenticLoop:
                         )
                         return await self._afinalize_and_return(result, user_input, round_idx + 1)
 
-                    # Non-retryable errors → immediate exit (no retry budget waste)
-                    # PR-DRIFT-CUT (2026-05-24) — replaced the raw
-                    # ``f"LLM call failed ({detail})."`` text emission with
-                    # the structured ``build_model_action_message`` shared
-                    # with the auth / convergence-break branches. Operators
-                    # were seeing the unfiltered SDK exception (e.g.
-                    # ``{'error': {'message': "Invalid 'tools': ..."}}``)
-                    # leak into the assistant transcript; the structured
-                    # message exposes the classified hint + a concrete
-                    # next-action (``/model <id>``) without the raw JSON.
+                    # Non-retryable errors → immediate exit (no retry budget
+                    # waste). Use the structured ``build_model_action_message``
+                    # shared with the auth / convergence-break branches so the
+                    # unfiltered SDK exception (e.g. ``{'error': {'message':
+                    # "Invalid 'tools': ..."}}``) doesn't leak into the
+                    # assistant transcript; the structured message exposes the
+                    # classified hint + a concrete next-action (``/model <id>``)
+                    # without the raw JSON.
                     if _et == "bad_request":
                         if not self._quiet:
                             from core.ui.agentic_ui import emit_llm_error
@@ -1799,9 +1664,8 @@ class AgenticLoop:
                             },
                         )
 
-                # Auto-checkpoint before retry so user can resume after a
-                # model switch. v0.90.0 — auto-escalation removed; the loop
-                # only ever retries the same model now.
+                # Auto-checkpoint before retry so the user can resume after
+                # a model switch. The loop only ever retries the same model.
                 self._sync_messages_to_context(messages)
                 self._save_checkpoint(user_input, round_idx=round_idx)
 
@@ -2000,9 +1864,10 @@ class AgenticLoop:
                 self._consecutive_text_only_rounds = 0
 
             if response.stop_reason == "refusal":
-                # PR-FABLE5 (2026-06-11) — Fable 5 safety classifiers decline
-                # via stop_reason="refusal" (HTTP 200, often empty content).
-                # Surface it honestly instead of returning a silent empty turn.
+                # Fable 5 safety classifiers decline via
+                # stop_reason="refusal" (HTTP 200, often empty content).
+                # Surface it honestly instead of returning a silent empty
+                # turn.
                 # ref: https://platform.claude.com/docs/en/about-claude/models/migration-guide
                 self._op_logger.finalize()
                 self._sync_messages_to_context(messages)
@@ -2031,17 +1896,15 @@ class AgenticLoop:
                     "role": "assistant",
                     "content": assistant_content,
                 }
-                # v0.55.0 — Codex subscription encrypted reasoning passthrough.
-                # Sidecar stays on the assistant message and is consumed
-                # by ``_convert_messages_to_responses`` (Codex adapter)
-                # to echo the reasoning items back into the next-turn
-                # ``input`` array. Other adapters ignore the field.
+                # Codex encrypted-reasoning passthrough — the sidecar stays
+                # on the assistant message and the Codex adapter echoes the
+                # reasoning items back into the next-turn ``input`` array.
+                # Other adapters ignore the field.
                 if getattr(response, "codex_reasoning_items", None):
                     _assistant_msg["codex_reasoning_items"] = response.codex_reasoning_items
-                # PR-CODEX-MULTITURN-PHASE-PRESERVE (Sprint H follow-up,
-                # 2026-05-26) — persist phase from the Codex response so
-                # the next-turn replay carries ``EasyInputMessageParam.phase``.
-                # Other adapters ignore the field.
+                # Persist phase from the Codex response so the next-turn
+                # replay carries ``EasyInputMessageParam.phase``. Other
+                # adapters ignore the field.
                 _phase = getattr(response, "assistant_phase", "")
                 if _phase:
                     _assistant_msg["phase"] = _phase
@@ -2103,7 +1966,7 @@ class AgenticLoop:
                 }
                 tool_results.append(backpressure_hint)
 
-            # Feature 8: Diversity forcing — prevent same tool 5x consecutively
+            # Diversity forcing — prevent same tool 5x consecutively.
             # Read/search tools are naturally repetitive — exempt from diversity forcing
             _DIVERSITY_EXEMPT: frozenset[str] = frozenset(
                 {
@@ -2153,12 +2016,11 @@ class AgenticLoop:
             # Convert content blocks to serializable format
             assistant_content = self._serialize_content(response.content)
             _assistant_msg = {"role": "assistant", "content": assistant_content}
-            # v0.55.0 — Codex reasoning passthrough (see end_turn branch
-            # above for the rationale; same shape on tool-use rounds).
+            # Codex reasoning passthrough (see the end_turn branch above for
+            # the rationale; same shape on tool-use rounds).
             if getattr(response, "codex_reasoning_items", None):
                 _assistant_msg["codex_reasoning_items"] = response.codex_reasoning_items
-            # PR-CODEX-MULTITURN-PHASE-PRESERVE (Sprint H follow-up,
-            # 2026-05-26) — same phase persistence on tool-use rounds.
+            # Same phase persistence on tool-use rounds.
             _phase = getattr(response, "assistant_phase", "")
             if _phase:
                 _assistant_msg["phase"] = _phase
@@ -2240,12 +2102,8 @@ class AgenticLoop:
     async def _try_decompose(self, user_input: str) -> str | None:
         """Delegates to :func:`_planner_dispatch.try_decompose`.
 
-        Async (PR-CL-A1-followup, 2026-05-23) because the planner path
-        awaits ``loop._call_llm`` — single async LLM dispatch, no
-        thread-pool hop. Host history:
-        ``_decomposition.py`` (Tier 3 #7) → ``_helpers.py`` (PR-CLEANUP-1,
-        2026-05-23) → ``_planner_dispatch.py`` (PR-HELPERS-3SPLIT,
-        2026-05-24, current).
+        Async because the planner path awaits ``loop._call_llm`` — single
+        async LLM dispatch, no thread-pool hop.
         """
         return await _planner_dispatch.try_decompose(self, user_input)
 
@@ -2254,12 +2112,7 @@ class AgenticLoop:
     # ------------------------------------------------------------------
 
     def _check_announced_results(self, messages: list[dict[str, Any]]) -> int:
-        """Delegates to :func:`_sub_agent_announce.check_announced_results`.
-
-        Host history: ``_announce.py`` (Tier 3 #7) → ``_helpers.py``
-        (PR-CLEANUP-1, 2026-05-23) → ``_sub_agent_announce.py``
-        (PR-HELPERS-3SPLIT, 2026-05-24, current).
-        """
+        """Delegates to :func:`_sub_agent_announce.check_announced_results`."""
         return _sub_agent_announce.check_announced_results(self, messages)
 
     # ------------------------------------------------------------------
@@ -2281,18 +2134,13 @@ class AgenticLoop:
         Returns a normalized ``AgenticResponse`` or None on failure.
         Raises ``UserCancelledError`` on Ctrl+C (caught by ``arun()``).
 
-        PR-CL-A6 (2026-05-23) — optional ``model`` override lets callers
-        (verify judge, future Plan/Act split) request a non-default model
-        for one call without mutating ``self.model``. Falls back to
-        ``self.model`` when ``None``. The override threads through to
-        the adapter request's ``model`` field; the rest of the loop
-        (token tracker, retry budget, ContextVar metrics) is unaffected.
-
-        PR-MAINPATH-67 (2026-05-24) — the legacy ``_adapter.agentic_call``
-        fallback branch was deleted; all dispatch now routes through the
-        Path-B ``LLMAdapter.acomplete`` surface unconditionally
-        (``self._new_adapter`` is resolved in :meth:`__init__` and
-        hard-fails on missing registration).
+        Optional ``model`` override lets callers (verify judge, Plan/Act
+        split) request a non-default model for one call without mutating
+        ``self.model``; falls back to ``self.model`` when ``None``. The
+        override threads through to the adapter request's ``model`` field;
+        the rest of the loop (token tracker, retry budget, ContextVar
+        metrics) is unaffected. ``self._new_adapter`` is resolved in
+        :meth:`__init__` and hard-fails on missing registration.
         """
         effective_model = model or self.model
         # Context overflow detection (Karpathy P6 Context Budget).
@@ -2324,10 +2172,9 @@ class AgenticLoop:
         tool_choice: dict[str, str] = {"type": "none"} if force_text else {"type": "auto"}
 
         # Adaptive compute allocation (DTR insight: match budget to round purpose).
-        # Context-proportional caps derived from model's context window.
-        # v0.90.0 — the prior overthinking effort-downgrade branch is gone:
-        # the post-response check now exits the loop on the same condition,
-        # so the only remaining adaptive case is wrap-up.
+        # Context-proportional caps derived from the model's context window.
+        # The only remaining adaptive case is wrap-up — the overthinking
+        # check exits the loop rather than downgrading effort.
         from core.config import settings as _settings
         from core.llm.token_tracker import MODEL_CONTEXT_WINDOW
 
@@ -2343,32 +2190,26 @@ class AgenticLoop:
             adaptive_thinking = 0
             adaptive_effort = "low"
 
-        # PR-TEMP (2026-05-23) — config-driven temperature, replacing the
-        # prior hardcoded 0.0. See ``Settings.temperature_agent_loop`` for
-        # the frontier-API grounding behind the new 1.0 default.
+        # Config-driven temperature (see ``Settings.temperature_agent_loop``
+        # for the frontier-API grounding behind the 1.0 default).
         loop_temperature = _settings.temperature_agent_loop
 
-        # PR-MAINPATH-67 (2026-05-24) — Path-B only. Build
-        # adapter-neutral request, call ``LLMAdapter.acomplete``,
-        # translate result back to ``AgenticResponse`` so the rest of
-        # the loop (tool dispatch, cost tracking, retry budget) is
-        # unchanged. The legacy ``self._adapter.agentic_call`` branch
-        # was deleted; ``self._new_adapter`` is guaranteed non-None by
+        # Build the adapter-neutral request, call ``LLMAdapter.acomplete``,
+        # and translate the result back to ``AgenticResponse`` so the rest
+        # of the loop (tool dispatch, cost tracking, retry budget) is
+        # unchanged. ``self._new_adapter`` is guaranteed non-None by
         # ``__init__``'s hard-fail :func:`resolve_for` call.
         from core.llm.adapters.translation import (
             agentic_response_from_adapter_result,
             build_adapter_request,
         )
 
-        # PR-V (2026-05-24, spec doc §3 V.4) — paperclip
-        # ``agent_runtime_state.sessionId`` parity. Read the prior
-        # session_id from ``<run_dir>/sub_agents/<task_id>/session.json``
-        # so the adapter resumes via ``--resume <id>``. claude-cli then
-        # reuses the cached system prompt + prior conversation context
-        # for the cached-marker input billing tier (5-10K tokens saved
-        # per turn per paperclip ``execute.ts:680``). Empty when no
-        # prior session (first turn of a fresh sub-agent or outside a
-        # run_dir scope) so first-call behaviour is unchanged.
+        # Read the prior session_id so the adapter resumes via
+        # ``--resume <id>``: claude-cli then reuses the cached system
+        # prompt + prior context for the cached-marker input billing tier
+        # (~5-10K tokens saved/turn). Empty when no prior session (first
+        # turn of a fresh sub-agent or outside a run_dir scope) so
+        # first-call behaviour is unchanged.
         prior_session_id = _load_prior_session_id(self._session_id)
 
         req = build_adapter_request(
@@ -2382,17 +2223,13 @@ class AgenticLoop:
             thinking_budget=adaptive_thinking,
             effort=adaptive_effort,
             resume_session_id=prior_session_id,
-            # PR-JSON-WIRE (2026-05-25) — pass the per-loop schema
-            # so claude-cli ``--json-schema`` / codex-cli
-            # ``--output-schema`` constrains the response.
+            # Pass the per-loop schema so claude-cli ``--json-schema`` /
+            # codex-cli ``--output-schema`` constrains the response.
             response_schema=self._response_schema,
         )
-        # PR-COMM-3d (2026-05-24) — emit LLM_CALL_STARTED / LLM_CALL_ENDED
-        # for the AgenticLoop's main dispatch path. Pre-fix only the
-        # ``router/calls/*.py`` one-off helpers fired these events, so
-        # the SQLite ``agent_runtime_state.total_*_tokens`` cumulative
-        # writer (registered in PR-COMM-3d's bootstrap.py addition
-        # below) saw zero traffic from the real per-turn loop. Payload
+        # Emit LLM_CALL_STARTED / LLM_CALL_ENDED for the main dispatch
+        # path so the SQLite ``agent_runtime_state.total_*_tokens``
+        # cumulative writer sees the per-turn loop's traffic. Payload
         # carries ``session_id`` + ``usage`` + ``cost_usd`` so the
         # writer's ``accumulate_tokens_and_cost`` call has the data it
         # needs.
@@ -2441,24 +2278,25 @@ class AgenticLoop:
                     log.debug("LLM_CALL_ENDED (error) hook trigger failed", exc_info=True)
         else:
             response = agentic_response_from_adapter_result(result)
-            # PR-V — persist the newly-emitted session_id so the next
-            # turn of THIS sub-agent (or the same sub-agent in the next
-            # cycle) can resume. Non-claude-cli adapters return empty
-            # session_id; the persistence helper is a no-op there.
+            # Persist the newly-emitted session_id so the next turn of THIS
+            # sub-agent (or the same sub-agent in the next cycle) can
+            # resume. Non-claude-cli adapters return an empty session_id;
+            # the persistence helper is a no-op there.
             emitted_sid = getattr(result, "session_id", "")
             _persist_session_id(self._session_id, emitted_sid)
-            # PR-COMM-3b — cache for SESSION_ENDED payload (the
-            # ``_final_hook_payloads`` reader walks ``loop._last_emitted_session_id``
-            # to populate ``claude_cli_session_id`` on the SQLite write).
+            # Cache for the SESSION_ENDED payload (the
+            # ``_final_hook_payloads`` reader walks
+            # ``loop._last_emitted_session_id`` to populate
+            # ``claude_cli_session_id`` on the SQLite write).
             if emitted_sid:
                 self._last_emitted_session_id = emitted_sid
-            # PR-COMM-3d — emit LLM_CALL_ENDED with usage + cost so the
-            # cumulative writer accumulates correctly. ``cost_usd`` is
-            # computed locally via the same ``calculate_cost`` helper
-            # the token tracker uses (no double-counting — the
-            # accumulator already records; this hook payload exists
-            # purely to surface the per-call snapshot for SQLite
-            # accumulation and any future per-call observers).
+            # Emit LLM_CALL_ENDED with usage + cost so the cumulative
+            # writer accumulates correctly. ``cost_usd`` is computed
+            # locally via the same ``calculate_cost`` helper the token
+            # tracker uses (no double-counting — the accumulator already
+            # records; this payload exists purely to surface the per-call
+            # snapshot for SQLite accumulation and future per-call
+            # observers).
             if self._hooks:
                 usage = getattr(result, "usage", None)
                 input_tokens = int(getattr(usage, "input_tokens", 0) or 0)
@@ -2476,11 +2314,11 @@ class AgenticLoop:
                         )
                     )
                 except Exception:
-                    # PR-AUDIT-AB (2026-06-10) — a silent 0.0 makes every
-                    # call of an unpriced model FREE to the cost limiter
-                    # (COST_WARNING / COST_LIMIT_EXCEEDED under-count),
-                    # exactly when a new model is most likely missing from
-                    # the pricing table. Keep the graceful 0.0 but log it.
+                    # A silent 0.0 makes every call of an unpriced model
+                    # FREE to the cost limiter (COST_WARNING /
+                    # COST_LIMIT_EXCEEDED under-count), exactly when a new
+                    # model is most likely missing from the pricing table.
+                    # Keep the graceful 0.0 but log it.
                     log.warning(
                         "calculate_cost failed for model=%s — recording cost_usd=0.0 "
                         "(cost limiter will under-count this call)",
@@ -2516,10 +2354,9 @@ class AgenticLoop:
             elif not self._last_llm_error:
                 self._last_llm_error = f"All {self._provider} models exhausted"
 
-        # v0.57.0 R6 — surface reasoning summaries to AgenticUI. Per-item
-        # granularity (the sidecar collects one entry per finished
-        # reasoning item / thinking block) — see ``emit_reasoning_summary``
-        # for the rationale on not streaming per-delta.
+        # Surface reasoning summaries to AgenticUI at per-item granularity
+        # (one entry per finished reasoning item / thinking block) — see
+        # ``emit_reasoning_summary`` for why not per-delta.
         if response is not None and not self._quiet:
             summaries = getattr(response, "reasoning_summaries", None) or []
             for summary in summaries:
