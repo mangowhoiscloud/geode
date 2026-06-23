@@ -507,7 +507,7 @@ def _login_add_interactive(_args: str) -> None:
     if kind_id == "subscription":
         # Currently only GLM Coding Plan tiers are templated
         tier_entries = [
-            "GLM Coding Lite  ($6/mo · 80 calls/5h · 3× weight on glm-5.1)",
+            "GLM Coding Lite  ($6/mo · 80 calls/5h · 3× weight on glm-5.2/5.1)",
             "GLM Coding Pro   ($30/mo · 240 calls/5h)",
             "GLM Coding Max   ($80/mo · 600 calls/5h)",
         ]
@@ -531,8 +531,8 @@ def _login_add_interactive(_args: str) -> None:
             _pkg.console.print("  [warning]No key provided.[/warning]\n")
             return
         registry.add(plan)
-        registry.set_routing("glm-5.1", [plan.id, *registry.get_routing("glm-5.1")])
-        for m in ("glm-5", "glm-5-turbo", "glm-4.7-flash"):
+        registry.set_routing("glm-5.2", [plan.id, *registry.get_routing("glm-5.2")])
+        for m in ("glm-5.1", "glm-5", "glm-5-turbo", "glm-4.7-flash"):
             registry.set_routing(m, [plan.id, *registry.get_routing(m)])
         store.add(
             AuthProfile(
@@ -962,8 +962,8 @@ def _login_use(rest: str) -> None:
         return
     # Pin this plan ahead of any other for a few common models in its provider
     model_hints = {
-        "glm-coding": ["glm-5.1", "glm-5", "glm-5-turbo", "glm-4.7-flash"],
-        "glm": ["glm-5.1", "glm-5", "glm-5-turbo"],
+        "glm-coding": ["glm-5.2", "glm-5.1", "glm-5", "glm-5-turbo", "glm-4.7-flash"],
+        "glm": ["glm-5.2", "glm-5.1", "glm-5", "glm-5-turbo"],
         "openai": ["gpt-5.4", "gpt-5.4-mini"],
         "openai-codex": ["gpt-5.3-codex", "gpt-5.4-mini"],
         "anthropic": ["claude-opus-4-8", "claude-opus-4-7", "claude-sonnet-4-6"],

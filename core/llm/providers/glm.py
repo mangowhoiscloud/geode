@@ -1,6 +1,6 @@
 """ZhipuAI GLM provider — OpenAI-compatible API with custom base_url.
 
-Separate provider for GLM models (glm-5.1, glm-5, glm-5-turbo,
+Separate provider for GLM models (glm-5.2, glm-5.1, glm-5, glm-5-turbo,
 glm-5v-turbo, glm-4.7-flash).  Uses OpenAI SDK but managed as an
 independent provider with its own client lifecycle and failover chain.
 """

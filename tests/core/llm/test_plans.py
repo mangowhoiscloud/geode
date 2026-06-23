@@ -54,6 +54,8 @@ class TestGlmCodingTiers:
         assert plan.quota.window_s == 18_000
         assert plan.quota.max_calls == 80
         assert plan.quota.model_weights["glm-5.1"] == 3.0
+        # glm-5.2 (flagship) carries the same coding-plan quota weight.
+        assert plan.quota.model_weights["glm-5.2"] == 3.0
 
     def test_subscription_kind(self) -> None:
         for plan in GLM_CODING_TIERS.values():
