@@ -59,6 +59,13 @@ class ModelPrice:
     cache_write: float = 0.0
     cache_read: float = 0.0
     thinking: float = 0.0
+    # Whether the provider's reported ``input_tokens`` INCLUDES the cached
+    # tokens (OpenAI / GLM: ``prompt_tokens`` is the total, ``cached_tokens`` a
+    # subset) or is DISJOINT from them (Anthropic: ``input_tokens`` is the
+    # uncached remainder, ``cache_read_input_tokens`` separate). The cost math
+    # must subtract cached from input ONLY for the inclusive case, else cached
+    # tokens are billed at both the full input rate and the cache-read rate.
+    cache_inclusive_input: bool = False
 
 
 def _derive_anthropic(input_mtok: float, output_mtok: float) -> ModelPrice:
@@ -90,6 +97,8 @@ def _derive_openai(
         output=out,
         cache_read=cached_mtok / 1_000_000 if cached_mtok else 0.0,
         thinking=out if reasoning else 0.0,
+        # OpenAI / GLM report ``prompt_tokens`` inclusive of cached tokens.
+        cache_inclusive_input=True,
     )
 
 
