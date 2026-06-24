@@ -71,8 +71,9 @@ export default function Page() {
             <h2>레이어 조립: build_system_prompt</h2>
             <p>
               호출 직전 조립은 <code>core/agent/system_prompt.py</code>의{" "}
-              <code>build_system_prompt(model)</code>이 담당합니다. XML 태그로
-              구분된 두 구역으로 나뉩니다.
+              <code>build_system_prompt(model)</code>이 담당합니다. 실제 문자열은
+              정적 prefix 뒤에 <code>&lt;dynamic_context&gt;</code> 경계 마커를
+              붙이는 형태입니다.
             </p>
             <table>
               <thead>
@@ -80,7 +81,7 @@ export default function Page() {
               </thead>
               <tbody>
                 <tr>
-                  <td><code>&lt;static_context&gt;</code></td>
+                  <td>정적 prefix</td>
                   <td><code>&lt;agent_baseline&gt;</code> (항상), <code>&lt;agent_identity&gt;</code> (기본 ON), 스타일 가이드와 휴리스틱 정책 append</td>
                   <td>턴 간 불변. 캐시 적중 대상</td>
                 </tr>
@@ -92,8 +93,9 @@ export default function Page() {
               </tbody>
             </table>
             <p>
-              두 구역 사이의 <code>PROMPT_CACHE_BOUNDARY</code> 마커가
-              프로바이더 캐싱의 분할점입니다. 자세한 동작은{" "}
+              <code>PROMPT_CACHE_BOUNDARY</code> 값은 <code>&lt;dynamic_context&gt;</code>
+              여는 태그입니다. 프로바이더 캐싱은 이 태그 앞의 prefix를 정적
+              영역으로 봅니다. 자세한 동작은{" "}
               <a href="/geode/docs/runtime/llm/prompt-caching">프롬프트 캐싱</a>을
               참고합니다.
             </p>
@@ -232,8 +234,9 @@ export default function Page() {
             <p>
               Assembly right before the call is{" "}
               <code>build_system_prompt(model)</code> in{" "}
-              <code>core/agent/system_prompt.py</code>. The result is two
-              XML-tag-delimited regions.
+              <code>core/agent/system_prompt.py</code>. The actual string is a
+              static prefix followed by the <code>&lt;dynamic_context&gt;</code>{" "}
+              boundary marker.
             </p>
             <table>
               <thead>
@@ -241,7 +244,7 @@ export default function Page() {
               </thead>
               <tbody>
                 <tr>
-                  <td><code>&lt;static_context&gt;</code></td>
+                  <td>Static prefix</td>
                   <td><code>&lt;agent_baseline&gt;</code> (always), <code>&lt;agent_identity&gt;</code> (default on), style-guide and heuristics policy appends</td>
                   <td>Stable across turns; cache-eligible</td>
                 </tr>
@@ -253,8 +256,9 @@ export default function Page() {
               </tbody>
             </table>
             <p>
-              The <code>PROMPT_CACHE_BOUNDARY</code> marker between the two
-              regions is where provider caching splits. Details in{" "}
+              <code>PROMPT_CACHE_BOUNDARY</code> is the opening
+              <code>&lt;dynamic_context&gt;</code> tag. Provider caching treats
+              the prefix before that tag as the static region. Details in{" "}
               <a href="/geode/docs/runtime/llm/prompt-caching">Prompt caching</a>.
             </p>
 

@@ -34,10 +34,9 @@ export default function Page() {
             <h2>지연 로딩</h2>
             <p>
               모든 도구 스키마를 모든 호출에 실으면 턴마다 input 토큰을 크게
-              태웁니다. Anthropic 어댑터의{" "}
-              <code>apply_tool_search_defer</code>가 공식{" "}
-              <code>defer_loading</code> 필드와 호스티드 tool_search 도구로
-              카탈로그를 나눕니다.
+              태웁니다. 프로바이더 어댑터가 <code>core/llm/tool_defer.py</code>의
+              공통 정책을 읽고, 공식 <code>defer_loading</code> 필드와 호스티드
+              tool_search 도구로 카탈로그를 나눕니다.
             </p>
             <table>
               <thead>
@@ -45,20 +44,19 @@ export default function Page() {
               </thead>
               <tbody>
                 <tr>
-                  <td>네이티브 + MCP 합계가 <code>defer_threshold</code>(기본 10) 이하</td>
+                  <td>도구 수가 <code>TOOL_DEFER_THRESHOLD</code>(16) 이하</td>
                   <td>전부 즉시 로드</td>
                 </tr>
                 <tr>
                   <td>임계값 초과</td>
-                  <td><code>tool_search</code> 메타 도구를 추가하고, 상시 로드 5종만 즉시 싣고, 나머지는 <code>defer_loading=True</code>로 표시해 검색 후 로드</td>
+                  <td>호스티드 <code>tool_search</code>를 추가하고, core set만 즉시 싣고, 나머지는 <code>defer_loading=True</code>로 표시해 검색 후 로드</td>
                 </tr>
               </tbody>
             </table>
             <p>
-              상시 로드 도구는 <code>ALWAYS_LOADED_TOOLS</code>에 고정된
-              다섯입니다. <code>memory_search</code>, <code>memory_get</code>,{" "}
-              <code>memory_save</code>, <code>web_search</code>,{" "}
-              <code>wanted_jobs_search</code>. 나머지는 에이전트가{" "}
+              즉시 로드 core set은 <code>TOOL_SEARCH_ALWAYS_LOADED</code>입니다.
+              기억, 노트, 파일 읽기, 웹 탐색, 상태 확인처럼 검색 왕복을 치르면
+              손해인 고빈도 도구가 여기에 남고, 나머지는 에이전트가{" "}
               <code>tool_search</code>로 찾아 그때 가져옵니다.
             </p>
 
@@ -88,7 +86,7 @@ export default function Page() {
               <code>ToolResultOffloadStore</code>가 본문을 세션별 디렉터리
               (<code>.geode/tool-offload/</code> 아래)에 내려쓰고, 컨텍스트에는
               요약과 <code>ref_id</code>만 남깁니다. 모델이 원본이 필요하면{" "}
-              <code>recall(ref_id)</code>로 다시 가져옵니다. 오프로드마다{" "}
+              <code>recall_tool_result(ref_id)</code>로 다시 가져옵니다. 오프로드마다{" "}
               <code>TOOL_RESULT_OFFLOADED</code> 훅이 발화합니다.
             </p>
 
@@ -100,7 +98,9 @@ export default function Page() {
               Node-scope allowlist, 서브에이전트 자동 승인 위임 순서입니다.
               권한 등급은 STANDARD(서브에이전트 자동 승인 가능),
               WRITE(승인 필요), DANGEROUS(항상 HITL. <code>run_bash</code>,{" "}
-              <code>delegate_task</code>)입니다.
+              <code>computer</code>)입니다. <code>delegate_task</code>는 별도
+              위임 경로로 실행되며, 사람이 없는 headless 세션에서는 denylist가
+              먼저 막습니다.
             </p>
 
             <h2>실패 모드</h2>
@@ -122,7 +122,7 @@ export default function Page() {
                 <tr>
                   <td>도구 결과가 잘려 보임</td>
                   <td>5000 토큰 초과로 오프로드됨</td>
-                  <td><code>recall(ref_id)</code>로 원본을 조회합니다</td>
+                  <td><code>recall_tool_result(ref_id)</code>로 원본을 조회합니다</td>
                 </tr>
               </tbody>
             </table>
@@ -157,9 +157,9 @@ export default function Page() {
             <h2>Deferred loading</h2>
             <p>
               Shipping every tool schema on every call burns a large chunk of
-              input tokens per turn. The Anthropic adapter's{" "}
-              <code>apply_tool_search_defer</code> splits the catalog with the
-              official <code>defer_loading</code> field and the hosted
+              input tokens per turn. Provider adapters read the shared policy in{" "}
+              <code>core/llm/tool_defer.py</code> and split the catalog with the
+              official <code>defer_loading</code> field plus the hosted
               tool_search tool.
             </p>
             <table>
@@ -168,22 +168,21 @@ export default function Page() {
               </thead>
               <tbody>
                 <tr>
-                  <td>Native + MCP combined count at or below <code>defer_threshold</code> (default 10)</td>
+                  <td>Tool count at or below <code>TOOL_DEFER_THRESHOLD</code> (16)</td>
                   <td>Everything loads eagerly</td>
                 </tr>
                 <tr>
                   <td>Above the threshold</td>
-                  <td>Adds a <code>tool_search</code> meta-tool, keeps the five always-loaded tools eager, marks the rest <code>defer_loading=True</code> to be loaded after a search</td>
+                  <td>Adds hosted <code>tool_search</code>, keeps the core set eager, and marks the rest <code>defer_loading=True</code> to be loaded after a search</td>
                 </tr>
               </tbody>
             </table>
             <p>
-              The always-loaded set is the five tools pinned in{" "}
-              <code>ALWAYS_LOADED_TOOLS</code>: <code>memory_search</code>,{" "}
-              <code>memory_get</code>, <code>memory_save</code>,{" "}
-              <code>web_search</code>, <code>wanted_jobs_search</code>. The
-              agent discovers everything else through <code>tool_search</code>{" "}
-              and loads it on demand.
+              The eager core set is <code>TOOL_SEARCH_ALWAYS_LOADED</code>:
+              high-frequency memory, note, file-read, web, and status tools
+              where paying a search round-trip would be wasteful. The agent
+              discovers everything else through <code>tool_search</code> and
+              loads it on demand.
             </p>
 
             <h2>Toolkits: sub-agent tool bundles</h2>
@@ -213,7 +212,7 @@ export default function Page() {
               <code>core/orchestration/tool_offload.py</code> persists the body
               to a per-session directory under <code>.geode/tool-offload/</code>{" "}
               and leaves a summary plus a <code>ref_id</code> in context. The
-              model re-fetches the original with <code>recall(ref_id)</code>.
+              model re-fetches the original with <code>recall_tool_result(ref_id)</code>.
               Each offload fires the <code>TOOL_RESULT_OFFLOADED</code> hook.
             </p>
 
@@ -225,7 +224,9 @@ export default function Page() {
               then sub-agent auto-approval delegation. Permission levels are
               STANDARD (eligible for sub-agent auto-approval), WRITE (approval
               required), and DANGEROUS (always human-in-the-loop:{" "}
-              <code>run_bash</code>, <code>delegate_task</code>).
+              <code>run_bash</code>, <code>computer</code>).{" "}
+              <code>delegate_task</code> runs through the delegation path and is
+              denied up front in headless sessions.
             </p>
 
             <h2>Failure modes</h2>
@@ -247,7 +248,7 @@ export default function Page() {
                 <tr>
                   <td>A tool result looks truncated</td>
                   <td>It crossed 5000 tokens and was offloaded</td>
-                  <td>Fetch the original with <code>recall(ref_id)</code></td>
+                  <td>Fetch the original with <code>recall_tool_result(ref_id)</code></td>
                 </tr>
               </tbody>
             </table>

@@ -24,22 +24,25 @@ export default function Page() {
             <h2>재료 1: 메모리 계층</h2>
             <p>
               <code>core/memory/context.py</code>의 <code>ContextAssembler</code>가
-              5계층 메모리를 하나의 요약으로 접습니다. <code>max_chars</code>
-              예산에 맞출 때 계층별 비례 배분을 씁니다.
+              5계층 메모리를 병합하고, LLM에 넣을 <code>_llm_summary</code>를
+              만듭니다. 병합은 Identity, User Profile, Organization, Project,
+              Session 순서로 흐르고, 더 구체적인 계층이 앞 계층을 덮습니다.
             </p>
             <table>
               <thead>
-                <tr><th>계층</th><th>예산</th></tr>
+                <tr><th>계층</th><th>요약 예산</th></tr>
               </thead>
               <tbody>
                 <tr><td>Identity (SOUL.md)</td><td>10%</td></tr>
+                <tr><td>User Profile</td><td>있으면 앞부분 예산에 짧게 포함</td></tr>
                 <tr><td>Organization</td><td>25%</td></tr>
                 <tr><td>Project</td><td>25%</td></tr>
                 <tr><td>Session</td><td>나머지. 최신 항목부터 채웁니다</td></tr>
               </tbody>
             </table>
             <p>
-              계층 자체의 구조와 override 규칙은{" "}
+              계층 병합 뒤에는 프로젝트 타입, 최근 실행 기록, 프로젝트 저널,
+              Vault 요약 같은 보강 블록이 붙습니다. 계층 자체의 구조와 override 규칙은{" "}
               <a href="/geode/docs/runtime/memory/5-tier">메모리 계층</a>에서
               다룹니다.
             </p>
@@ -48,8 +51,8 @@ export default function Page() {
             <p>
               <code>core/agent/system_prompt.py</code>의{" "}
               <code>build_system_prompt(model)</code>이 캐시 가능한 정적
-              섹션(<code>&lt;static_context&gt;</code>)과 턴마다 바뀌는 동적
-              섹션(<code>&lt;dynamic_context&gt;</code>)을 경계 마커로 나눠
+              prefix와 턴마다 바뀌는 동적 섹션(<code>&lt;dynamic_context&gt;</code>)을
+              경계 마커로 나눠
               조립합니다. 레이어 구성과 모드는{" "}
               <a href="/geode/docs/runtime/llm/prompt-system">프롬프트 조립</a>,
               캐시 동작은{" "}
@@ -117,7 +120,7 @@ export default function Page() {
               <code>ToolResultOffloadStore</code>가 결과를 디스크
               (<code>.geode/tool-offload/</code> 아래 세션 디렉터리)로 내리고,
               컨텍스트에는 요약과 <code>ref_id</code>만 남깁니다. 모델은 필요할
-              때 <code>recall(ref_id)</code>로 원본을 다시 가져옵니다. 오프로드
+              때 <code>recall_tool_result(ref_id)</code> 경로로 원본을 다시 가져옵니다. 오프로드
               시 <code>TOOL_RESULT_OFFLOADED</code> 훅이 발화합니다.
             </p>
 
@@ -145,7 +148,7 @@ export default function Page() {
                 <tr>
                   <td>도구 결과가 요약으로만 보임</td>
                   <td>5000 토큰 임계값을 넘어 오프로드됨</td>
-                  <td>정상 동작입니다. <code>recall(ref_id)</code>로 원본을 조회합니다</td>
+                  <td>정상 동작입니다. <code>recall_tool_result(ref_id)</code>로 원본을 조회합니다</td>
                 </tr>
                 <tr>
                   <td>캐시 적중률이 갑자기 하락</td>
@@ -175,21 +178,26 @@ export default function Page() {
             <h2>Ingredient 1: memory tiers</h2>
             <p>
               <code>ContextAssembler</code> in <code>core/memory/context.py</code>{" "}
-              folds the five memory tiers into one summary. When fitting under{" "}
-              <code>max_chars</code> it uses proportional budgets per tier.
+              merges the five memory tiers and builds the <code>_llm_summary</code>{" "}
+              that prompt consumers read. Merge order is Identity, User
+              Profile, Organization, Project, then Session; more specific
+              tiers override earlier ones.
             </p>
             <table>
               <thead>
-                <tr><th>Tier</th><th>Budget</th></tr>
+                <tr><th>Tier</th><th>Summary budget</th></tr>
               </thead>
               <tbody>
                 <tr><td>Identity (SOUL.md)</td><td>10%</td></tr>
+                <tr><td>User Profile</td><td>Included briefly when present</td></tr>
                 <tr><td>Organization</td><td>25%</td></tr>
                 <tr><td>Project</td><td>25%</td></tr>
                 <tr><td>Session</td><td>The remainder, filled most-recent-first</td></tr>
               </tbody>
             </table>
             <p>
+              After the tier merge, project type, recent run history, project
+              journal, and Vault summaries can add compact reinforcement blocks.
               The tier structure and override rules live in{" "}
               <a href="/geode/docs/runtime/memory/5-tier">Memory tiers</a>.
             </p>
@@ -198,9 +206,9 @@ export default function Page() {
             <p>
               <code>build_system_prompt(model)</code> in{" "}
               <code>core/agent/system_prompt.py</code> assembles a cacheable
-              static section (<code>&lt;static_context&gt;</code>) and a per-turn
-              dynamic section (<code>&lt;dynamic_context&gt;</code>) split by a
-              boundary marker. Layer composition and modes are in{" "}
+              static prefix and a per-turn dynamic section
+              (<code>&lt;dynamic_context&gt;</code>) split by a boundary marker.
+              Layer composition and modes are in{" "}
               <a href="/geode/docs/runtime/llm/prompt-system">Prompt assembly</a>;
               cache behaviour is in{" "}
               <a href="/geode/docs/runtime/llm/prompt-caching">Prompt caching</a>.
@@ -270,7 +278,7 @@ export default function Page() {
               (a per-session directory under <code>.geode/tool-offload/</code>)
               and leaves only a summary plus a <code>ref_id</code> in context.
               The model re-fetches the original with{" "}
-              <code>recall(ref_id)</code> when needed. Each offload fires the{" "}
+              <code>recall_tool_result(ref_id)</code> when needed. Each offload fires the{" "}
               <code>TOOL_RESULT_OFFLOADED</code> hook.
             </p>
 
@@ -298,7 +306,7 @@ export default function Page() {
                 <tr>
                   <td>A tool result shows up only as a summary</td>
                   <td>It crossed the 5000-token threshold and was offloaded</td>
-                  <td>Working as intended; fetch the original with <code>recall(ref_id)</code></td>
+                  <td>Working as intended; fetch the original with <code>recall_tool_result(ref_id)</code></td>
                 </tr>
                 <tr>
                   <td>Cache hit rate suddenly drops</td>
