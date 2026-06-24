@@ -2,7 +2,7 @@
  * GEODE CHANGELOG, auto-synced from the GEODE repo via `npm run sync-stats`.
  * Do not edit manually. Edit CHANGELOG.md in the GEODE repo and re-run sync.
  *
- * Last sync: 2026-06-23
+ * Last sync: 2026-06-24
  *
  * Each entry's `body` is the raw markdown between two version headings.
  * The Changelog page renders the body with a minimal markdown renderer
@@ -16,6 +16,11 @@ export type ChangelogEntry = {
 };
 
 export const CHANGELOG: ChangelogEntry[] = [
+  {
+    "version": "0.99.247",
+    "date": "2026-06-24",
+    "body": "### Changed\n- **AgenticLoop comment role-only reduction (PR-LOOP-COMMENT-ROLE)** — a comment-policy pass on `core/agent/loop/agent_loop.py` under the new policy: the CHANGELOG is the SOT for *what happened / why / history*; code comments state only the *role / contract at that point*. ~30 multi-line WHY/narration blocks compressed to one-line role statements; load-bearing contracts/invariants that were only in inline narration **relocated to the enclosing function docstrings** (new `Invariants:`/`Contract:` notes on `_call_llm`, `_saved_cwd_matches_current`, `_load_prior_session_id`, `_record_text_only_round`, `_consume_reflexion_hint`) with a terse one-line marker left at the code line — so a contract is never *evaporated*, only relocated + compressed. The bug-reentry-prevention invariants (shared-list in-place-prune ordering, byte-stable cache-prefix reminder placement, denied-tool security filter, unpriced-model graceful-0.0) kept as compressed one-liners. Net −331 LoC, all comment/docstring text. **Behaviour-preserving, proven**: AST-stripped of comments+docstrings and `ast.unparse`-normalized, both HEAD and the new file are byte-identical (independently re-verified). Extractions (`resolve_loop_adapter`, `build_loop_request`) deliberately deferred to a separate PR to keep this diff a pure, AST-verifiable comment change."
+  },
   {
     "version": "0.99.246",
     "date": "2026-06-23",
@@ -1953,4 +1958,4 @@ export const CHANGELOG: ChangelogEntry[] = [
   }
 ];
 
-export const CHANGELOG_SYNCED_AT = "2026-06-23";
+export const CHANGELOG_SYNCED_AT = "2026-06-24";

@@ -55,18 +55,12 @@ log = logging.getLogger(__name__)
 
 
 def _saved_cwd_matches_current(stored_cwd: str, current_cwd: str) -> bool:
-    """Paperclip-aligned cwd-equality check
-    (``packages/adapters/claude-local/src/server/execute.ts:592`` ->
-    ``claudeSessionCwdMatchesExecutionTarget``).
+    """cwd-equality check for the claude-cli resume gate.
 
-    Returns True when EITHER the stored side or the current side is
-    empty (legacy rows / direct-call callers without per-task cwd)
-    so the resume gate skips and the call falls through to the
-    existing happy path. When both are non-empty, compares via
-    ``Path(x).resolve()`` to normalise symlinks / ``..`` / trailing
-    slashes — string equality alone is insufficient when the worker
-    and the claude-cli call sites pass differently-shaped absolute
-    paths.
+    Contract: True when either side is empty (no per-task cwd → skip the
+    gate); otherwise ``Path.resolve()`` equality (normalises symlinks /
+    ``..`` / trailing slashes). Resolution failure → False (force fresh
+    session).
     """
     from pathlib import Path
 
@@ -75,35 +69,24 @@ def _saved_cwd_matches_current(stored_cwd: str, current_cwd: str) -> bool:
     try:
         return Path(stored_cwd).resolve() == Path(current_cwd).resolve()
     except (OSError, RuntimeError):
-        # Path resolution can raise on cycles / inaccessible mounts.
-        # Treat as mismatch to force a fresh session rather than a
-        # doomed resume.
+        # resolution failure → mismatch (force fresh session)
         return False
 
 
 def _load_prior_session_id(session_id: str) -> str:
-    """Return the claude-cli session_id from the prior turn of this
-    sub-agent, or empty string when no prior session exists OR the
-    saved session belongs to a different cwd-pool.
+    """Return the claude-cli session_id from this sub-agent's prior turn.
 
-    claude-cli session storage is cwd-keyed
-    (``~/.claude/projects/<cwd-slug>/<session_id>.jsonl``), so a UUID
-    stored under a prior cwd resolves to ``"No conversation found"``
-    against the current per-task cwd-pool. Before returning the UUID
-    we verify ``session_resume_params.cwd == get_task_isolated_cwd()``;
-    on mismatch we return ``""`` to force a fresh session. The same
-    check applies to the legacy session.json file fallback.
-
-    Returns empty on any I/O / parse / mismatch so the call falls
-    back to a fresh session rather than crashing or resuming a
-    stale id.
+    Contract: claude-cli session storage is cwd-keyed, so the saved
+    ``cwd`` must equal ``get_task_isolated_cwd()`` or the id is unusable.
+    Returns ``""`` on cwd mismatch, missing session, or any I/O/parse
+    error (force a fresh session — never crash, never resume a stale id).
+    Reads SQLite runtime-state first, then the legacy session.json file.
     """
     from core.agent.task_isolation import get_task_isolated_cwd
 
     current_cwd = get_task_isolated_cwd() or ""
 
-    # SQLite primary — read from the per-agent row landed by the
-    # record_agent_session_end hook handler.
+    # SQLite primary — per-agent row landed by record_agent_session_end.
     try:
         from core.observability.agent_runtime_state import get_agent_runtime_state
 
@@ -126,7 +109,7 @@ def _load_prior_session_id(session_id: str) -> str:
             exc_info=True,
         )
 
-    # File fallback — used when the SQLite runtime-state row is absent.
+    # File fallback — when the SQLite runtime-state row is absent.
     try:
         from core.observability.run_dir import resolve_sub_agent_path
 
@@ -147,8 +130,7 @@ def _load_prior_session_id(session_id: str) -> str:
         cached = payload.get("claude_cli_session_id", "")
         if not cached:
             return ""
-        # File fallback gets the same paired-cwd gate. A missing key
-        # skips the gate and returns the id (back-compat).
+        # same paired-cwd gate; missing key → skip gate (back-compat)
         stored_cwd_file = str(payload.get("cwd", ""))
         if not _saved_cwd_matches_current(stored_cwd_file, current_cwd):
             log.info(
@@ -165,34 +147,25 @@ def _load_prior_session_id(session_id: str) -> str:
 
 
 def _persist_session_id(session_id: str, emitted_session_id: str) -> None:
-    """Persist the claude-cli session_id this turn emitted so the next
-    turn of this sub-agent (or the same sub-agent in the next cycle)
-    can ``--resume <id>``.
+    """Persist the claude-cli session_id this turn emitted for the next
+    turn's ``--resume <id>``.
 
-    Dual-write: the SQLite ``agent_runtime_state.claude_cli_session_id``
-    column (primary) + the legacy
-    ``<run_dir>/sub_agents/<session_id>/session.json`` file. The direct
-    SQLite write covers the early-turn case where the loop emits a
-    session_id BEFORE its SESSION_ENDED lifecycle hook fires for the
-    round. Empty ``emitted_session_id`` is a no-op (non-claude-cli
-    adapters or claude-cli crash before init).
+    Dual-write: SQLite ``agent_runtime_state.claude_cli_session_id``
+    (primary, covers the case where the id is emitted before the round's
+    SESSION_ENDED hook fires) + the legacy session.json file. The cwd is
+    paired into both writes (storage is cwd-keyed). Empty
+    ``emitted_session_id`` is a no-op (non-claude-cli adapters).
     """
     if not emitted_session_id:
         return
 
-    # Capture the cwd the session was written from — claude-cli
-    # storage is cwd-keyed, so the reader must know which cwd this id
-    # is valid for. Empty when no per-task isolation is in scope
-    # (direct-call surface); the reader's gate skips on empty stored_cwd.
+    # cwd the session was written from — reader's gate is keyed on it
     from core.agent.task_isolation import get_task_isolated_cwd
 
     write_cwd = get_task_isolated_cwd() or ""
     resume_params = {"cwd": write_cwd} if write_cwd else {}
 
-    # SQLite primary write — directly upsert the resumable session_id
-    # so the next turn's _load_prior_session_id sees it even if the
-    # round's SESSION_ENDED hook hasn't fired yet (early termination,
-    # round-budget exhaustion mid-turn, etc).
+    # SQLite primary write — upsert the resumable session_id
     try:
         from core.observability.agent_runtime_state import record_agent_session_end
 
@@ -230,9 +203,7 @@ def _persist_session_id(session_id: str, emitted_session_id: str) -> None:
             "claude_cli_session_id": emitted_session_id,
             "updated_at": time.time(),
         }
-        # Pair the cwd in the file fallback too so the reader's
-        # symmetric gate has the same SoT regardless of which path
-        # served the resume id.
+        # pair cwd here too — reader's gate is symmetric across both paths
         if write_cwd:
             payload["cwd"] = write_cwd
         session_path.write_text(
@@ -289,14 +260,9 @@ class AgenticLoop:
         self._parent_session_key = parent_session_key
         self._parent_session_id = parent_session_id
         self._system_suffix = system_suffix
-        # When set, _build_system_prompt uses this string as the entire
-        # role/instruction body, replacing the default
-        # ``_build_system_prompt(model=loop.model)`` output.
-        # Skill context + agentic suffix still appended (tool calling
-        # contract preserved). Used by AgentDefinition-driven sub-agents
-        # (``plugins/seed_generation/agents/*.md``) so the seed_generator role's
-        # full contract — not GEODE's generic system prompt — drives
-        # the spawned worker.
+        # When set, replaces the default role/instruction body (skill
+        # context + agentic suffix still appended). Drives AgentDefinition
+        # sub-agents off their own role contract.
         self._system_prompt_override = system_prompt_override
         self._quiet = quiet  # suppress spinner (sub-agent, headless)
         self.max_rounds = max_rounds
@@ -309,60 +275,41 @@ class AgenticLoop:
         self._total_empty_rounds = 0
         self._cost_budget = cost_budget
         self._loop_start_time: float = 0.0
-        # When the caller doesn't pass an explicit ``model``, prefer
-        # ``settings.act_model`` over the global default so operators can
-        # split Plan / Act. Empty ``act_model`` falls through to
-        # ``ANTHROPIC_PRIMARY``.
+        # No explicit model → prefer settings.act_model (Plan/Act split),
+        # else ANTHROPIC_PRIMARY.
         if model is None:
             try:
                 from core.config import settings
 
-                # ``isinstance(..., str)`` filters MagicMock-auto-attrs in
-                # test fixtures that don't seed ``act_model`` explicitly.
+                # isinstance(str) filters MagicMock auto-attrs in fixtures
                 act_raw = getattr(settings, "act_model", "")
                 act_model = act_raw.strip() if isinstance(act_raw, str) else ""
             except Exception:
                 log.debug("settings.act_model read failed", exc_info=True)
                 act_model = ""
-            # live read (not import-time bound) so a config change takes
-            # effect without restart
+            # live read — config change takes effect without restart
             from core.config import ANTHROPIC_PRIMARY
 
             self.model = act_model or ANTHROPIC_PRIMARY
         else:
             self.model = model
         self._provider = provider  # "anthropic", "openai", or "glm"
-        # When True, ``sync_model_from_settings`` becomes a no-op so the
-        # caller's chosen ``model`` is sticky for the lifetime of the
-        # loop. Used by the petri_audit runner so a user-selected
-        # ``--target`` is not silently replaced by the user's GEODE
-        # ``settings.model`` between rounds.
+        # When True, sync_model_from_settings is a no-op — caller's model
+        # stays sticky for the loop's lifetime.
         self._disable_settings_drift = disable_settings_drift
-        # set by update_model_async() when model changes; consumed by
-        # the run-loop to rebuild system_prompt before the next LLM call.
+        # set by update_model_async on model change; the run-loop rebuilds
+        # system_prompt before the next LLM call.
         self._prompt_dirty: bool = False
         self._tool_registry = tool_registry
         self._mcp_manager = mcp_manager
         self._skill_registry = skill_registry
         self._hooks = hooks
-        # When the caller (worker for sub-agents) has already resolved a
-        # tool allowlist, filter the model-visible tool schemas to match.
-        # Without this filter the handler dict in ``ToolExecutor`` would be
-        # filtered but the model would still see the full tool surface and
-        # only fail at execution with "Unknown tool" — leaking the existence
-        # of denied tools and weakening the whitelist contract. None keeps
-        # the full tool surface for non-sub-agent callers (CLI, serve daemon).
-        #
-        # Stored on self so the model-change / MCP-refresh rebuild
-        # (``_response.refresh_tools``) re-applies the same toolkit filter;
-        # otherwise that rebuild drops the filter and re-exposes the full
-        # surface mid-run.
+        # security: model-visible tool schemas filtered to the allowlist —
+        # the full surface must not leak past the whitelist (None = no
+        # filter). Stored on self so refresh_tools re-applies it on rebuild.
         self._allowed_tool_names = allowed_tool_names
-        # Unified tool assembly: merge native + MCP tools together. The
-        # toolkit allowlist is passed as ``force_include`` so the global
-        # ADR-012 tool_policy cannot strip a tool the sub-agent's toolkit
-        # explicitly granted (the toolkit whitelist is authoritative for a
-        # named sub-agent — see ``get_agentic_tools`` docstring).
+        # merge native + MCP tools; allowlist as force_include so the global
+        # tool_policy can't strip a tool the sub-agent's toolkit granted
         mcp_tool_list = mcp_manager.get_all_tools() if mcp_manager is not None else None
         self._tools = get_agentic_tools(
             tool_registry,
@@ -372,55 +319,37 @@ class AgenticLoop:
         if allowed_tool_names is not None:
             self._tools = [t for t in self._tools if t.get("name") in allowed_tool_names]
         self._last_llm_error: str | None = None  # last error type for user message
-        # ``_call_llm`` routes every (provider, source) through
-        # ``LLMAdapter.acomplete``. A missing adapter HARD-FAILS in
-        # :func:`resolve_for` — silent fallback would mask operator
-        # misconfiguration. ``self._last_llm_error`` is the sole error
-        # surface that feeds the agentic UI (see :meth:`_call_llm`).
-        #
-        # When no explicit ``source`` is passed, ``infer_source`` consults
-        # the ``{provider}_credential_source`` setting + the ProfileStore so
-        # an OAuth-registered provider promotes to ``"subscription"``;
-        # callers that pass an explicit ``source=`` still win. Track whether
-        # the caller pinned it so a cross-provider ``/model`` switch re-infers
-        # the source ONLY when it was inferred here.
+        # No explicit source → infer_source promotes an OAuth provider to
+        # "subscription". _source_explicit tracks the pin so a cross-provider
+        # /model switch only re-infers when the source was inferred here.
         self._source_explicit = bool(source)
         if not source:
             from core.llm.adapters._source_inference import infer_source
 
             source = infer_source(provider)
         self._source = source
-        # Per-loop structured-output JSON schema. When non-None, every
-        # ``_call_llm`` sets ``AdapterCallRequest.response_schema`` so
-        # claude-cli ``--json-schema`` / codex-cli ``--output-schema``
-        # constrains the response. None = free-form text.
+        # Per-loop structured-output JSON schema (None = free-form text);
+        # threaded into every _call_llm's AdapterCallRequest.response_schema.
         self._response_schema: dict[str, Any] | None = response_schema
         from core.llm.adapters import resolve_for
-
-        # Legacy→registry provider translation lives in one place:
-        # ``normalize_registry_provider``.
         from core.llm.adapters.registry import normalize_registry_provider
 
         registry_provider = normalize_registry_provider(self._provider)
-        # Adapter resolution: direct registry-name lookup first
-        # (``codex-oauth`` / ``claude-cli`` / ``openai-payg`` / ...),
-        # falling back to the legacy category-axis path for
-        # non-migrated callers (``payg`` / ``subscription`` / ``adapter``).
+        # Adapter resolution: direct registry-name lookup, else legacy
+        # category-axis path. Missing adapter HARD-FAILS (no silent fallback).
         from core.llm.adapters.registry import AdapterNotFoundError, get_adapter
 
         try:
             self._new_adapter: Any = get_adapter(self._source)
         except AdapterNotFoundError:
             self._new_adapter = resolve_for(registry_provider, self._source)
-        # Cache the latest claude-cli sessionId the adapter emitted so the
-        # SESSION_ENDED hook can carry it to the agent_runtime_state writer.
-        # Non-claude-cli adapters leave it empty; the writer's CASE-WHEN
-        # guard then preserves whatever prior value the row carries.
+        # latest claude-cli sessionId the adapter emitted — SESSION_ENDED
+        # carries it to the agent_runtime_state writer (empty for others)
         self._last_emitted_session_id: str = ""
         self._op_logger = OperationLogger(quiet=self._quiet)
         self._error_recovery = ErrorRecoveryStrategy(tool_executor)
 
-        # Tier 1 transcript: append-only JSONL event stream (snapshot-redesign)
+        # Tier 1 transcript: append-only JSONL event stream
         self._transcript: Any | None = None
         self._session_id: str = ""
         try:
@@ -428,13 +357,8 @@ class AgenticLoop:
 
             from core.observability.transcript import SessionTranscript
 
-            # Caller-provided ``session_id`` wins over the auto-generated
-            # ephemeral uuid so the worker subprocess's task_id lands
-            # result.json + stderr.log + dialogue.jsonl under the SAME
-            # ``<run_dir>/sub_agents/<task_id>/`` directory. Empty
-            # ``session_id`` (REPL / gateway / tests with no per-task
-            # identity) falls back to ``s-<uuid>`` so non-worker callers
-            # are unaffected.
+            # caller-provided session_id wins (keeps the worker's artifacts
+            # under one sub_agents/<task_id>/ dir); else ephemeral s-<uuid>
             if session_id:
                 self._session_id = session_id
             else:
@@ -443,15 +367,10 @@ class AgenticLoop:
         except Exception:
             log.warning("Transcript init failed", exc_info=True)
 
-        # ToolCallProcessor: orchestrates tool_use block execution.
-        # Pass the loop's resolved LLM identity so LLM-touching tools
-        # (web_search) match the loop's routing instead of re-resolving via
-        # ``infer_source``. Pull (provider, source) from ``self._new_adapter``
-        # rather than ``self._provider`` / ``self._source``: the latter can
-        # carry pre-normalisation values (``openai-codex`` / ``zhipuai``) that
-        # the registry collapses to ``openai`` / ``glm``, while the dispatch
-        # helper's ``_apply_prefer`` compares against the registered adapter's
-        # own ``provider`` / ``source``.
+        # ToolCallProcessor: orchestrates tool_use block execution. Pull
+        # (provider, source) from the resolved adapter — the loop's own
+        # fields can hold pre-normalisation values the registry collapses,
+        # while dispatch's _apply_prefer compares against the adapter's.
         _ctx_provider = getattr(self._new_adapter, "provider", self._provider)
         _ctx_source = getattr(self._new_adapter, "source", self._source)
         self._tool_processor = ToolCallProcessor(
@@ -470,19 +389,16 @@ class AgenticLoop:
         # Goal decomposition: auto-decompose compound requests into sub-goal DAGs
         self._enable_goal_decomposition = enable_goal_decomposition
 
-        # LLM-call retry budget. Once the cap is hit the loop exits with
-        # ``model_action_required`` so the user picks a model via ``/model``.
+        # LLM-call retry budget; at the cap the loop exits with
+        # model_action_required so the user picks a model via /model.
         self._consecutive_llm_failures: int = 0
         self._LLM_RETRY_CAP: int = 5  # max retries before giving up
 
-        # Context window management (extracted — SRP)
         from core.agent.context_manager import ContextWindowManager
 
         self._ctx_mgr = ContextWindowManager(hooks=hooks, quiet=quiet)
 
-        # Convergence detection + tool error tracking (extracted — SRP).
-        # 3 identical errors break the loop and the caller surfaces a
-        # ``model_action_required`` diagnostic.
+        # Convergence detection — 3 identical errors break the loop.
         from core.agent.convergence import ConvergenceDetector
 
         self._convergence = ConvergenceDetector()
@@ -490,7 +406,7 @@ class AgenticLoop:
         # Diversity forcing — prevent same tool 5x consecutively
         self._consecutive_tool_tracker: list[str] = []
 
-        # C3 checkpoint: full message persistence for /resume (Claude Code pattern)
+        # full message persistence for /resume
         self._checkpoint: Any | None = None
         try:
             from core.memory.session_checkpoint import SessionCheckpoint
@@ -499,12 +415,8 @@ class AgenticLoop:
         except Exception:
             log.warning("SessionCheckpoint init failed", exc_info=True)
 
-        # PR-2 C-1 — explicit cognitive state container. ``goal`` is set on
-        # the first ``arun()`` call (user input becomes the session goal);
-        # ``round_count`` / ``last_action`` / ``last_observation`` /
-        # ``observations`` are updated at each round end. Hypotheses +
-        # confidence are PR-3 territory (the reflection node will populate
-        # them). See ``core/agent/cognitive_state.py`` for the rationale.
+        # Cognitive state container — goal set on first arun(); round-end
+        # fields updated each round; hypotheses/confidence by the reflection node.
         from core.agent.cognitive_state import CognitiveState
 
         self.cognitive_state = CognitiveState()
@@ -578,16 +490,10 @@ class AgenticLoop:
         """Record round end + emit REFLECT/UPDATE_MEMORY for text-only
         completions (``stop_reason != "tool_use"``).
 
-        Without this, ``record_round`` only runs on tool-use rounds,
-        violating the conditional-read-parity rule. ACT/OBSERVE are
-        intentionally NOT emitted here: the loop
-        took no action and observed no tool result this round, so the
-        cognitive cycle on a text-only turn is PERCEIVE → PLAN →
-        REFLECT (the LLM "thought aloud" then ended the turn).
-        ``last_action`` is recorded as ``"text-only"`` and
-        ``last_observation`` as a 80-char head of the emitted text so
-        downstream readers can distinguish *no-action* turns from
-        *failed-tool* turns.
+        Contract: ACT/OBSERVE are NOT emitted (no action taken) — the
+        text-only cycle is PERCEIVE → PLAN → REFLECT. ``last_action`` =
+        ``"text-only"``, ``last_observation`` = 80-char head of the text
+        (distinguishes no-action from failed-tool turns).
         """
         head = text.strip().replace("\n", " ")
         if len(head) > 80:
@@ -629,20 +535,14 @@ class AgenticLoop:
             result_count=len(tool_results),
         )
 
-        # Deterministic round-end state update. Action = tool names (or
-        # "text-only"); observation = result-count summary. The reflection
-        # node below replaces this with an LLM-derived belief update.
+        # deterministic round-end update — reflection node overwrites below
         self.cognitive_state.record_round(
             action=("tools: " + ", ".join(tool_names)) if tool_names else "text-only",
             observation=f"{len(tool_results)} tool result(s)",
         )
 
-        # Reflection node = one extra LLM call (opt-out via
-        # ``settings.cognitive_reflection_enabled = False``) that populates
-        # ``hypotheses`` / ``confidence`` / appends a hint to ``subgoals``.
-        # The REFLECT hook fires *after* the call so downstream listeners
-        # see the LLM-derived belief update, not the deterministic
-        # post-record_round snapshot.
+        # reflection runs before the REFLECT hook so listeners see the
+        # LLM-derived belief update, not the deterministic snapshot
         await self._maybe_reflect(tool_results)
 
         await self._emit_cognitive(HookEvent.COGNITIVE_REFLECT, round=round_idx + 1)
@@ -653,30 +553,19 @@ class AgenticLoop:
     async def _maybe_reflect(self, tool_results: list[dict[str, Any]]) -> None:
         """Call the reflection node if enabled.
 
-        Reads ``settings.cognitive_reflection_enabled`` lazily so an
-        operator flipping the toggle via ``GEODE_COGNITIVE_REFLECTION_ENABLED``
-        or ``[cognitive] reflection_enabled = false`` takes effect at
-        the next round (no restart needed). Errors are swallowed inside
-        ``reflect_async`` — the loop must stay robust to a flaky
-        reflection model.
-
-        ``cognitive_reflection_interval=N`` thins the reflection cadence
-        (1 = every tool-use round) because one LLM call per round is the
-        dominant overhead for long-running sessions. The first round
-        always runs so the loop sees an LLM-derived belief snapshot
-        before any throttling kicks in.
+        Reads ``settings.cognitive_reflection_enabled`` lazily (toggle
+        takes effect next round, no restart). ``reflection_interval=N``
+        thins the cadence; the first round always reflects. Errors are
+        swallowed inside ``reflect_async`` (loop stays robust to a flaky
+        reflection model).
         """
         from core.config import settings
 
         if not settings.cognitive_reflection_enabled:
             return
         interval = max(1, int(settings.cognitive_reflection_interval))
-        # ``record_round`` ran immediately before ``_maybe_reflect`` in
-        # ``_run_cognitive_act_observe_cycle`` so ``round_count`` is
-        # already the *current* round's number (1-based: 1, 2, 3...).
-        # ``(round_count - 1) % interval == 0`` runs on rounds
-        # 1, 1+N, 1+2N, ... — first round always reflects, then every
-        # Nth thereafter.
+        # round_count is 1-based (record_round ran just before this);
+        # (round_count - 1) % interval == 0 → rounds 1, 1+N, 1+2N, ...
         round_count = self.cognitive_state.round_count
         if interval > 1 and (round_count - 1) % interval != 0:
             log.debug(
@@ -707,10 +596,7 @@ class AgenticLoop:
         when the USER_INPUT_RECEIVED interceptor blocks the input —
         ``arun`` surfaces that result back to the caller verbatim.
         """
-        # Hook: USER_INPUT_RECEIVED (interceptor — can block input).
-        # First and only early-exit in this helper; if the input
-        # passes the interceptor we proceed to the cognitive-state
-        # bind + transcript + SESSION_STARTED sequence.
+        # Hook: USER_INPUT_RECEIVED (interceptor — can block input)
         if self._hooks:
             intercept = await self._hooks.trigger_interceptor_async(
                 HookEvent.USER_INPUT_RECEIVED,
@@ -723,25 +609,13 @@ class AgenticLoop:
                     termination_reason="input_blocked",
                 )
 
-        # Set the cognitive-state goal to the user input of the first
-        # arun() call (subsequent calls in the same session keep the
-        # original goal so observations accumulate against it). Then fire
-        # PERCEIVE with the state snapshot so a downstream viewer can
-        # segment the session by cognitive cycle step.
+        # goal = first arun()'s input (later calls keep it so observations
+        # accumulate against one goal)
         if not self.cognitive_state.goal:
             self.cognitive_state.goal = user_input
-        # Bind the CognitiveState to the ContextVar so hooks fired from
-        # inside the tool executor (TOOL_EXEC_ENDED → episodic memory
-        # recorder) can read the live state without being coupled to
-        # AgenticLoop directly.
-        #
-        # Lifetime: the binding is asyncio-task-scoped. Each top-level
-        # task gets its own ``contextvars.Context`` copy, so two
-        # concurrent AgenticLoops in different tasks each see their
-        # own bind. Within the same task multiple ``arun`` calls
-        # overwrite idempotently. No explicit reset is needed since
-        # the next ``arun`` overwrites and out-of-loop hook firings
-        # in the same task are not a documented use case.
+        # Bind CognitiveState/session ids to ContextVars so tool-executor
+        # hooks read the live state without coupling to AgenticLoop. Binding
+        # is asyncio-task-scoped; the next arun overwrites idempotently.
         from core.agent.cognitive_state_ctx import (
             set_cognitive_state,
             set_parent_session_id,
@@ -751,14 +625,7 @@ class AgenticLoop:
 
         set_cognitive_state(self.cognitive_state)
         set_session_id(self._session_id)
-        # Sub-agent lineage. When this loop was spawned via the
-        # OpenClaw spawn pattern (in-process or subprocess),
-        # ``_parent_session_key`` holds the parent's routing key
-        # (``"subject:foo:bar"``) and ``_parent_session_id`` holds the
-        # parent's ``_session_id`` uuid. Both flow through to
-        # ``Episode`` rows so cross-session attribution can group by
-        # routing key AND attribute back to a single parent run.
-        # Empty strings for top-level loops.
+        # Sub-agent lineage → Episode rows (empty for top-level loops)
         set_parent_session_key(self._parent_session_key)
         set_parent_session_id(self._parent_session_id)
         await self._emit_cognitive(
@@ -774,9 +641,7 @@ class AgenticLoop:
             self._transcript.record_session_start(model=self.model, provider=self._provider)
             self._transcript.record_user_message(user_input)
 
-        # Start a fresh per-session adapter usage counter so dispatch
-        # attempts accumulate into a dict SESSION_ENDED emits as
-        # ``adapter_usage``.
+        # fresh per-session adapter usage counter → SESSION_ENDED adapter_usage
         from core.llm.adapters.dispatch import begin_session_adapter_tracking
 
         begin_session_adapter_tracking()
@@ -812,14 +677,9 @@ class AgenticLoop:
           * ``None`` when ``_call_llm`` returns ``None`` (caller's
             existing error-classification path handles it).
 
-        ``_ContextExhaustedError`` is NOT caught — propagates to the
-        caller so the inline aggressive-recovery path runs with its
-        ``continue``/``finalize_and_return`` branches intact.
-
-        Side effect: stops ``spinner`` BEFORE calling
-        ``_emit_quota_panel`` (BillingError) or ``log.info``
-        (UserCancelledError) so terminal output stays clean. The
-        caller's outer ``finally`` block also stops the spinner.
+        ``_ContextExhaustedError`` is NOT caught — propagates so the
+        caller's aggressive-recovery path runs intact. Stops ``spinner``
+        before emitting quota/cancel output (caller's finally also stops it).
         """
         try:
             return await self._call_llm(system_prompt, messages, round_idx=round_idx)
@@ -848,21 +708,11 @@ class AgenticLoop:
     ) -> str:
         """Sync model drift + rebuild the system prompt.
 
-        Between rounds the ``settings.model`` field may have changed
-        (via the ``switch_model`` tool, the ``/model`` slash command,
-        or a config hot-reload). The drift sync detects the change
-        and rebuilds the system prompt so the next LLM call sees the
-        updated model card.
-
-        ``_prompt_dirty`` catches a direct ``update_model_async`` call
-        that bypasses the drift sync; without it the system_prompt model
-        card stays pinned to the previous model after a switch.
-        ``reflexion_hint`` is re-applied on rebuild so a model drift
-        mid-arun does not silently drop the verbal-RL hint.
-
-        Returns the (possibly-rebuilt) ``system_prompt`` so ``arun``
-        can rebind its local. Side-effect: clears ``_prompt_dirty``
-        after a rebuild.
+        Rebuilds when the model drifted (``settings.model`` changed) or
+        ``_prompt_dirty`` is set (direct ``update_model_async``). On
+        rebuild, re-applies the decomposition / reflexion / plan hints so
+        a mid-arun drift doesn't drop them. Returns the (possibly-rebuilt)
+        prompt; clears ``_prompt_dirty``.
         """
         drift_detected = await self._sync_model_from_settings_async()
         prompt_dirty = self._prompt_dirty
@@ -872,20 +722,13 @@ class AgenticLoop:
                 system_prompt += "\n\n" + decomposition_hint
             if reflexion_hint:
                 system_prompt += "\n\n" + reflexion_hint
-            # Re-apply the active Plan on rebuild so a model drift or
-            # replan-triggered ``_prompt_dirty`` flag doesn't silently drop
-            # the plan hint (parallels the reflexion_hint re-apply above).
-            # The ``getattr`` guard tolerates stub loops in unit tests (see
-            # ``tests/core/agent/test_arun_model_drift_sync.py::_StubLoop``).
+            # re-apply the active plan on rebuild (getattr tolerates stub loops)
             _plan_consume = getattr(self, "_consume_plan_hint", None)
             plan_hint = _plan_consume() if callable(_plan_consume) else ""
             if isinstance(plan_hint, str) and plan_hint:
                 system_prompt += "\n\n" + plan_hint
             self._prompt_dirty = False
-            # Fire PROMPT_ASSEMBLED so a registered handler observes each
-            # per-round prompt rebuild with the model / provider / reason /
-            # x2_injected / prompt_len payload. No-op when ``_hooks`` is
-            # absent (stub loop / hook system not initialised).
+            # Fire PROMPT_ASSEMBLED on each per-round rebuild (no-op if no hooks)
             hooks = getattr(self, "_hooks", None)
             if hooks:
                 from core.hooks import HookEvent
@@ -906,19 +749,12 @@ class AgenticLoop:
     def _check_round_guards(self, round_idx: int) -> str | None:
         """Run the round-entry guards.
 
-        Returns ``None`` if both guards pass (proceed with the
-        round). Returns a short string identifying the triggered
-        guard otherwise — ``arun`` breaks the while-loop on a
-        non-None response, deferring the result-construction to the
-        loop's existing wrap-up code below.
+        Returns ``None`` to proceed, else a short guard-name string
+        (``arun`` breaks the while-loop on a non-None response).
 
-        Guards (Karpathy P3):
-          * ``round_limit`` — ``max_rounds > 0`` enforces; ``0`` =
-            unlimited. Round indices are 0-based, so we break when
-            ``round_idx >= max_rounds``.
-          * ``time_budget`` — ``time_budget_s > 0`` enforces;
-            ``0.0`` = no time limit. Wall clock measured against
-            ``self._loop_start_time``.
+        Guards (Karpathy P3): ``round_limit`` (``max_rounds > 0``, 0-based
+        index), ``time_budget`` (``time_budget_s > 0``, wall clock vs
+        ``_loop_start_time``), and the session-wide budget/handoff check.
         """
         import time as _time
 
@@ -928,13 +764,7 @@ class AgenticLoop:
             elapsed = _time.monotonic() - self._loop_start_time
             if elapsed >= self._time_budget_s:
                 return "time_budget"
-        # Session-wide wall-clock cap (default 2h) with T-10min
-        # auto-handoff. ``handoff_due`` is one-shot per session; we fire
-        # HANDOFF_TRIGGERED on the boundary and break the loop so the
-        # caller drains gracefully. ``expired`` is the hard stop if the
-        # loop somehow runs past zero. The ``getattr`` tolerates stub
-        # loops in unit tests that bind ``_check_round_guards`` to a
-        # minimal object (see tests/core/agent/test_arun_round_guards.py::_StubLoop).
+        # session-wide cap + T-threshold handoff (getattr tolerates stub loops)
         handoff_check = getattr(self, "_check_session_budget_and_maybe_handoff", None)
         if handoff_check is not None:
             handoff_reason: str | None = handoff_check()
@@ -943,13 +773,11 @@ class AgenticLoop:
         return None
 
     def _persist_handoff_request(self) -> None:
-        """Flip the ``sessions`` row to ``handoff_state='pending'`` via
-        the DB CAS helper. Called once per session at the T-threshold
-        crossing.
+        """Flip the ``sessions`` row to ``handoff_state='pending'`` via the
+        DB CAS helper (once per session at the T-threshold crossing).
 
-        Failures NEVER raise — observability hygiene. Skips when no
-        session_id is bound (mid-test stub) or when the session row
-        hasn't been ``upsert``-ed yet (request_handoff returns False).
+        Failures NEVER raise. No-op when no session_id is bound or the row
+        isn't upserted yet.
         """
         session_id = getattr(self, "_session_id", "")
         if not session_id:
@@ -974,29 +802,14 @@ class AgenticLoop:
     async def _maybe_replan_async(self, round_idx: int) -> None:
         """Per-round Dynamic Replan trigger.
 
-        Reads SessionMetrics' verify state + the active plan and asks
-        :func:`core.agent.plan.should_replan` whether to fire. On a
-        trigger, calls :func:`core.agent.plan.replan_async` which uses
-        ``settings.plan_model`` for the planner LLM call, parses the
-        JSON response into a new :class:`Plan`, and installs it via
-        ``set_active_plan``. Increments ``record_replan`` for telemetry.
+        Asks :func:`core.agent.plan.should_replan`; on a trigger calls
+        :func:`replan_async` (planner LLM via ``settings.plan_model`) and
+        installs the new :class:`Plan` via ``set_active_plan``.
 
-        **Trigger timing**:
-          - **verify_fail** — verify runs at ``arun`` finalization, so
-            this trigger fires only at the *first round of the next*
-            ``arun`` (the prior turn's verify state lives on the
-            SessionMetrics ContextVar). Mid-``arun`` rounds within a
-            single user turn see ``last_verify_passed=True`` until the
-            turn completes.
-          - **cadence** — fires every ``settings.replan_interval``
-            rounds within the same ``arun``, regardless of verify
-            state. This is the safety-net for long-horizon work where
-            verify hasn't surfaced a problem yet but the plan is
-            getting stale.
-
-        Failures NEVER raise — observability mustn't break the run it
-        observes. When ``settings.replan_enabled=False`` or no trigger
-        fires, this is a cheap no-op.
+        Triggers: ``verify_fail`` (fires at the first round of the *next*
+        ``arun``, since verify runs at finalization) and ``cadence``
+        (every ``settings.replan_interval`` rounds). Failures NEVER raise;
+        no-op when ``replan_enabled=False`` or no trigger fires.
         """
         try:
             from core.agent.plan import (
@@ -1015,19 +828,15 @@ class AgenticLoop:
             )
             if trigger is None:
                 return
-            # Abandon path. ``settings.replan_max_attempts`` caps retries
-            # on a single step. If the verify_fail trigger fires again on
-            # the same step beyond the cap, advance the plan with
-            # ``abandoned=True`` instead of calling the planner LLM
-            # (operator-action signal: this step is stuck). The cadence
-            # trigger always proceeds to replan since it isn't tied to a
-            # single step's retry budget.
+            # Abandon path: a verify_fail past replan_max_attempts on one
+            # step advances the plan instead of calling the planner (step
+            # is stuck). The cadence trigger isn't capped.
             if trigger == "verify_fail" and metrics.active_plan is not None:
                 metrics.record_step_attempt()
                 cap = _replan_max_attempts()
                 if metrics.replan_attempts_on_current_step > cap:
                     advanced = metrics.active_plan.advance(completed=False)
-                    # Advancing to a new step → reset the per-step counter.
+                    # new step → reset the per-step counter
                     metrics.set_active_plan(advanced, reset_attempts=True)
                     self._prompt_dirty = True
                     log.info(
@@ -1035,10 +844,7 @@ class AgenticLoop:
                         cap,
                     )
                     return
-            # Build a synthetic "result" object capturing the prior turn's
-            # text + tool calls so the planner sees what happened. The
-            # replan_async helper only reads ``getattr(turn_result, "text",
-            # "")`` so any object with that attr works.
+            # synthetic turn_result — replan_async only reads ``.text``
             from types import SimpleNamespace
 
             recent_text = ""
@@ -1056,9 +862,9 @@ class AgenticLoop:
                 return
             metrics.record_replan(trigger)
             metrics.set_active_plan(new_plan)
-            # Trigger a prompt rebuild so the next LLM call sees the new plan.
+            # next LLM call must see the new plan
             self._prompt_dirty = True
-            # Emit UI event so thin client renders the replan banner.
+            # UI replan banner
             try:
                 from core.ui.agentic_ui import emit_plan_step, emit_replan
 
@@ -1087,12 +893,10 @@ class AgenticLoop:
             log.warning("Replan dispatch crashed", exc_info=True)
 
     def _consume_plan_hint(self) -> str:
-        """Render the active :class:`Plan` for the system prompt as a
-        ``<plan>...</plan>`` block.
+        """Render the active :class:`Plan` as a ``<plan>...</plan>`` block.
 
-        Read-only (no clear) — the plan persists across rounds and only
-        changes when a replan installs a new revision. Returns the empty
-        string when no plan is active. Failures NEVER raise.
+        Read-only (no clear) — the plan persists until a replan installs a
+        new revision. Empty string when no plan is active. Failures NEVER raise.
         """
         try:
             from core.agent.plan import render_plan_for_prompt
@@ -1109,25 +913,14 @@ class AgenticLoop:
     def _consume_reflexion_hint(self) -> str:
         """Read+clear the verbal-RL hint left by the prior turn.
 
-        Returns the ``<reflexion>...</reflexion>`` block synthesised after
-        the previous turn's verify FAIL, or the empty string when verify
-        passed / didn't run. asyncio-task safe (no ``await`` between read
-        and clear); threaded fan-out sharing the same SessionMetrics could
-        race the read+clear, but the only consequence is one duplicate
-        prepend of the hint into a second arun — recoverable, not data
-        loss. The handoff latch in :class:`SessionMetrics` uses a
-        ``threading.Lock``; we deliberately *don't* mirror that here
-        because hint duplication is a much weaker race than handoff
-        double-fire. Failures NEVER raise — observability mustn't break
-        the run it observes.
+        Returns the ``<reflexion>...</reflexion>`` block from the prior
+        turn's verify FAIL, else empty (verify passed / didn't run).
+        Read+clear is asyncio-task safe (no ``await`` between); a threaded
+        race only risks a duplicate prepend, not data loss. Failures NEVER
+        raise.
 
-        **Scope note** — pre-finalize exits (``BillingError`` /
-        ``UserCancelledError`` raised before ``finalize_and_return*``)
-        skip verify by design. The next arun starts with an empty hint
-        slot because the prior turn never wrote one — consistent with
-        "verify never ran for the failed turn" semantics. To get verify
-        on those paths, finalize them through ``finalize_and_return*``
-        instead of re-wiring this consumer.
+        Contract: pre-finalize exits (BillingError / UserCancelledError)
+        skip verify, so the next arun's hint slot is empty by design.
         """
         try:
             from core.observability.session_metrics import current_session_metrics
@@ -1142,15 +935,12 @@ class AgenticLoop:
             return ""
 
     def _maybe_start_session_budget(self) -> None:
-        """Begin session-wide wall-clock budget if not already started.
+        """Begin the session-wide wall-clock budget if not already started.
 
-        Idempotent — if a prior AgenticLoop in the same SessionMetrics
-        scope already started the budget (``time_budget_total_s > 0``),
-        this is a no-op so the elapsed clock keeps running across the
-        nested loops. ``GEODE_SESSION_TIME_BUDGET_S`` env knob overrides
-        the default (set to 0 to disable; set to a positive float to
-        change the cap). Failures NEVER raise — observability mustn't
-        break the run it observes.
+        Idempotent — no-op when a prior loop in the same SessionMetrics
+        scope already started it (clock keeps running across nested loops).
+        ``GEODE_SESSION_TIME_BUDGET_S`` overrides the default (0 disables).
+        Failures NEVER raise.
         """
         import os
 
@@ -1224,11 +1014,8 @@ class AgenticLoop:
                         )
                     except Exception:
                         log.warning("Transcript handoff_triggered record failed", exc_info=True)
-                # Flip the ``sessions`` row's ``handoff_state`` to PENDING
-                # via the DB CAS helper. Without this call the schema is
-                # wired but the DB-backed state machine never runs
-                # (read-write parity). Safe no-op when no session row
-                # exists yet (mid-test scenario).
+                # flip the sessions row to handoff_state=PENDING (read-write
+                # parity; no-op when no session row exists yet)
                 self._persist_handoff_request()
                 return "session_time_budget_handoff"
             if check.expired:
@@ -1240,16 +1027,8 @@ class AgenticLoop:
     def _overthinking_token_threshold(self) -> int:
         """Per-round output-token threshold for the overthinking signal.
 
-        Context-proportional (1% of context window, floor 1024). Replaces
-        the legacy absolute 2000-token magic number so the threshold
-        scales with the model: 200K → 2000 (parity), 1M → 10000, 64K → 1024.
-        Mirrors the wrap-up (0.5%) and overthinking-budget (2%) ratios
-        used elsewhere in this file.
-
-        Defensive: if the token-tracker module is mocked or the lookup
-        otherwise fails (some tests stub ``sys.modules`` for a different
-        purpose), fall back to the legacy 2000-token threshold so the
-        loop still makes a deterministic decision.
+        Context-proportional (1% of context window, floor 1024). Falls
+        back to 2000 when the token-tracker lookup fails (mocked module).
         """
         try:
             from core.llm.token_tracker import MODEL_CONTEXT_WINDOW
@@ -1271,9 +1050,7 @@ class AgenticLoop:
         """Build an ``AgenticResult`` carrying a user-facing diagnostic.
 
         Used when an LLM error survives the retry budget (or convergence
-        breaks). Replaces the prior auto-escalation path: rather than
-        silently swap to the next model, surface enough context for the
-        user to pick one with ``/model``.
+        breaks) — surfaces context for the user to pick a model via ``/model``.
         """
         from core.llm.errors import build_model_action_message, summarize_error_detail
 
@@ -1285,10 +1062,7 @@ class AgenticLoop:
         except Exception:
             log.debug("total_cost_usd read for diagnostic failed", exc_info=True)
             cost = None
-        # Strip raw SDK exception JSON down to the underlying message
-        # before the user-facing builder. ``summarize_error_detail`` is a
-        # no-op when it can't prove a clean extraction, so context is
-        # never lost.
+        # strip raw SDK JSON to the underlying message (no-op if unclear)
         clean_detail = summarize_error_detail(detail) if detail else None
         text = build_model_action_message(
             error_type=error_type,
@@ -1317,10 +1091,8 @@ class AgenticLoop:
     ) -> AgenticResult:
         """Build + finalize the terminal context-exhausted result.
 
-        The common recovery-failed tail shared by the pre-call,
-        post-call, and 400-context-overflow recovery paths: notify the
-        ``exhausted`` event, sync the (already-pruned-as-far-as-possible)
-        messages back to the conversation context, and return the
+        Shared recovery-failed tail (pre-call / post-call / 400-overflow):
+        notify ``exhausted``, sync messages back to context, return the
         terminal ``context_exhausted`` result through finalize.
         """
         self._notify_context_event(
@@ -1405,16 +1177,14 @@ class AgenticLoop:
 
         set_conversation_context(self.context)
 
-        # Lazy MCP tool refresh: if tools were empty at init (MCP not yet connected),
-        # try to load them now. This handles the startup timing gap.
+        # Lazy MCP tool refresh — load tools empty at init (startup timing gap)
         if self._mcp_manager is not None and len(self._tools) < TOOL_LAZY_LOAD_THRESHOLD:
             added = self.refresh_tools()
             if added > 0:
                 log.info("MCP tools lazy-loaded: +%d tools (total %d)", added, len(self._tools))
 
-        # Goal decomposition: try to break compound requests into sub-goal
-        # DAGs. Async because it makes a planner LLM call; the return value
-        # is always None (the Plan is installed on SessionMetrics).
+        # Goal decomposition — break compound requests into sub-goal DAGs
+        # (planner LLM call; the Plan is installed on SessionMetrics).
         try:
             decomposition_hint = await self._try_decompose(user_input)
         except BillingError as exc:
@@ -1435,22 +1205,14 @@ class AgenticLoop:
         if decomposition_hint:
             system_prompt += "\n\n" + decomposition_hint
 
-        # Reflexion verbal-RL hint injection. The *previous* arun's
-        # TURN_VERIFY_FAILED outcome leaves a ``<reflexion>...</reflexion>``
-        # block in SessionMetrics; we prepend it to this arun's system
-        # prompt so the model sees its own failure analysis at the start of
-        # the next attempt. ``consume`` semantics — the hint is cleared
-        # after read so it does not leak into subsequent clean aruns.
+        # Reflexion hint injection — prepend the prior turn's verify-FAIL
+        # analysis (consume semantics; cleared after read).
         reflexion_hint = self._consume_reflexion_hint()
         if reflexion_hint:
             system_prompt += "\n\n" + reflexion_hint
 
-        # Explicit Plan injection. If goal decomposition (or a prior
-        # replan) installed a Plan on SessionMetrics, render the
-        # current-step hint as a ``<plan>...</plan>`` block so the model
-        # sees "you are at step 3/5: …" at the top of every system prompt.
-        # Read-only consume — the plan persists until ``advance`` / replan
-        # swaps it.
+        # Plan injection — render the current-step ``<plan>`` block
+        # (read-only consume; plan persists until advance / replan).
         plan_hint = self._consume_plan_hint()
         if plan_hint:
             system_prompt += "\n\n" + plan_hint
@@ -1461,19 +1223,11 @@ class AgenticLoop:
         import time as _time
 
         self._loop_start_time = _time.monotonic()
-        # Start the session-wide 2-hour wall-clock budget on first
-        # ``arun`` within a SessionMetrics scope. Subsequent loops in the
-        # same session share the budget via the ContextVar-bound metrics
-        # (guard: only start if no prior budget). Env override:
-        # ``GEODE_SESSION_TIME_BUDGET_S=0`` disables; positive float
-        # overrides the 7200s default. The session budget is *separate
-        # from* per-loop ``self._time_budget_s`` — both gate the loop,
-        # whichever fires first wins.
+        # session-wide budget (separate from per-loop _time_budget_s; either
+        # may fire first)
         self._maybe_start_session_budget()
-        # Capture tracker snapshot at loop entry so ``finalize_and_return``
-        # computes a per-arun usage delta without double-counting calls
-        # from sibling loops sharing the same ``ContextVar``-scoped
-        # tracker. See ``AgenticResult.usage``.
+        # tracker snapshot at entry → finalize computes a per-arun usage
+        # delta without double-counting sibling loops on the shared tracker
         from core.llm.token_tracker import get_tracker as _get_tracker
 
         self._usage_snapshot = _get_tracker().snapshot()
@@ -1485,12 +1239,8 @@ class AgenticLoop:
             is_last_round = (self.max_rounds > 0) and (round_idx == self.max_rounds - 1)
             self._op_logger.begin_round("AgenticLoop")
 
-            # Dynamic Replan trigger. Fires on verify FAIL (from the prior
-            # round's record_verify) or cadence (every
-            # ``settings.replan_interval`` rounds). When a replan runs, the
-            # new plan replaces SessionMetrics.active_plan; the
-            # system_prompt rebuild below picks it up via
-            # ``_consume_plan_hint``.
+            # Dynamic Replan trigger (verify-FAIL / cadence); the rebuild
+            # below picks up the new plan via _consume_plan_hint.
             await self._maybe_replan_async(round_idx)
 
             system_prompt = await self._sync_model_and_rebuild_prompt(
@@ -1523,8 +1273,7 @@ class AgenticLoop:
                 model=self.model,
             )
 
-            # Show spinner while waiting for LLM response
-            # IPC mode: send structured event; direct mode: TextSpinner
+            # spinner while waiting for the LLM (IPC event or TextSpinner)
             from core.ui.agentic_ui import _ipc_writer_local
 
             _ipc_writer = getattr(_ipc_writer_local, "writer", None)
@@ -1565,12 +1314,8 @@ class AgenticLoop:
                     _ipc_writer.send_event("thinking_end")
 
             if response is None:
-                # Classify error for type-specific retry strategy.
-                # Defaults cover the case where the adapter swallowed the
-                # original exception (None response without a trailing
-                # ``_last_error``); the diagnostic builder still needs
-                # ``_sev`` / ``_hint`` populated. Reads from the adapter's
-                # ``_last_error`` (preserved across providers).
+                # Classify error for type-specific retry; defaults cover an
+                # adapter that swallowed the exception (None, no _last_error).
                 adapter_exc = getattr(self._new_adapter, "_last_error", None)
                 from core.llm.errors import _ERROR_CLASSIFICATION
 
@@ -1580,7 +1325,7 @@ class AgenticLoop:
 
                     _et, _sev, _hint = classify_llm_error(adapter_exc)
 
-                    # Context overflow from 400 → attempt recovery + retry
+                    # context overflow from 400 → recovery + retry
                     if _et == "context_overflow":
                         log.warning("Context overflow detected from 400 — attempting recovery")
                         recovered = await self._aggressive_context_recovery(system_prompt, messages)
@@ -1592,22 +1337,19 @@ class AgenticLoop:
                             )
                             log.info("Context overflow recovery succeeded — retrying LLM call")
                             continue  # retry with pruned context
-                        # Recovery failed — context is unrecoverably large.
+                        # recovery failed — context unrecoverably large
                         return await self._finalize_context_exhausted(
                             user_input, messages, round_idx
                         )
 
-                    # Auth errors surface to the user (auto-swap removed —
-                    # credentials are user-owned, so let the user refresh
-                    # keys or pick a provider via /model).
+                    # Auth errors surface to the user (credentials are
+                    # user-owned — refresh keys or pick a provider via /model).
                     if _et == "auth":
                         if not self._quiet:
                             from core.ui.agentic_ui import emit_llm_error
 
                             emit_llm_error(_et, _sev, _hint, self.model, self._provider)
-                        # Inject an LLM-readable credential breadcrumb so the
-                        # next round sees structured eligibility verdicts
-                        # (Claude Code createModelSwitchBreadcrumbs pattern).
+                        # LLM-readable credential breadcrumb for the next round
                         self._inject_credential_breadcrumb()
                         result = self._build_model_action_result(
                             error_type=_et,
@@ -1618,14 +1360,8 @@ class AgenticLoop:
                         )
                         return await self._afinalize_and_return(result, user_input, round_idx + 1)
 
-                    # Non-retryable errors → immediate exit (no retry budget
-                    # waste). Use the structured ``build_model_action_message``
-                    # shared with the auth / convergence-break branches so the
-                    # unfiltered SDK exception (e.g. ``{'error': {'message':
-                    # "Invalid 'tools': ..."}}``) doesn't leak into the
-                    # assistant transcript; the structured message exposes the
-                    # classified hint + a concrete next-action (``/model <id>``)
-                    # without the raw JSON.
+                    # Non-retryable → immediate exit via the structured
+                    # builder (raw SDK JSON must not leak into the transcript).
                     if _et == "bad_request":
                         if not self._quiet:
                             from core.ui.agentic_ui import emit_llm_error
@@ -1664,18 +1400,14 @@ class AgenticLoop:
                             },
                         )
 
-                # Auto-checkpoint before retry so the user can resume after
-                # a model switch. The loop only ever retries the same model.
+                # auto-checkpoint before retry (resume after a model switch)
                 self._sync_messages_to_context(messages)
                 self._save_checkpoint(user_input, round_idx=round_idx)
 
                 self._consecutive_llm_failures += 1
 
-                # Rate limit → surface to user. We no longer auto-swap to a
-                # different model on rate_limit (silent provider/model
-                # change masks cost surprise). Wait, switch model via
-                # /model, or pick a different provider — the diagnostic
-                # carries the suggested fallback chain.
+                # rate_limit → surface to user (no auto-swap; the diagnostic
+                # carries the suggested fallback chain)
                 if _et == "rate_limit":
                     result = self._build_model_action_result(
                         error_type=_et,
@@ -1686,12 +1418,8 @@ class AgenticLoop:
                     )
                     return await self._afinalize_and_return(result, user_input, round_idx + 1)
 
-                # Non-rate-limit errors: try aggressive context recovery
-                # before retrying the same model. If recovery helps, reset
-                # the failure counter and continue. Otherwise keep retrying
-                # the same model; once we hit ``_LLM_RETRY_CAP`` the
-                # bottom-of-loop branch surfaces a model_action_required
-                # diagnostic.
+                # Non-rate-limit: try context recovery before retrying the
+                # same model; on success reset the failure counter.
                 if self._consecutive_llm_failures >= 2:
                     recovered = await self._aggressive_context_recovery(system_prompt, messages)
                     if recovered:
@@ -1743,10 +1471,7 @@ class AgenticLoop:
                     await _asyncio.sleep(delay)
                     continue  # retry without incrementing round_idx
 
-                # All retries exhausted — surface as model_action_required.
-                # The diagnostic carries provider/model/attempts/cost +
-                # suggested fallback so the user can switch via /model
-                # and resume (conversation context is preserved).
+                # all retries exhausted → model_action_required diagnostic
                 detail = self._last_llm_error or "unknown error"
                 result = self._build_model_action_result(
                     error_type=_et,
@@ -1810,18 +1535,9 @@ class AgenticLoop:
                 except Exception:
                     log.debug("Cost budget check failed", exc_info=True)
 
-            # Adaptive compute: overthinking detection (DTR insight).
-            # Consecutive rounds with long text but no tool calls = the
-            # model is talking to itself. v0.90.0 — when the threshold is
-            # crossed we no longer just log a warning and downgrade
-            # silently; we stop the loop and ask the user to narrow the
-            # request (``user_clarification_needed``).
-            #
-            # Threshold is context-window proportional (1%, floor 1024)
-            # — matches the 0.5% wrap-up budget / 2% overthinking-budget
-            # ratios used elsewhere in this file. Replaces the prior
-            # absolute 2000-token magic number, which mis-calibrated for
-            # both small-context (64K) and 1M-context models.
+            # Overthinking detection — N consecutive long-text/no-tool
+            # rounds stop the loop with user_clarification_needed (threshold
+            # is context-proportional, 1% / floor 1024).
             if response.stop_reason != "tool_use":
                 out_tok = getattr(response.usage, "output_tokens", 0) if response.usage else 0
                 threshold = self._overthinking_token_threshold()
@@ -1830,9 +1546,8 @@ class AgenticLoop:
                 else:
                     self._consecutive_text_only_rounds = 0
                 if self._consecutive_text_only_rounds >= 2:
-                    # Count this round once (the running consec is reported in the warning).
-                    # Previous code added the running counter every round, inflating the total
-                    # quadratically (consec=2,3,4 → +2+3+4=9 instead of 3 actual flagged rounds).
+                    # count this flagged round ONCE — adding the running
+                    # consec would inflate the total quadratically
                     self._total_empty_rounds += 1
                     log.warning(
                         "Overthinking detected: %d consecutive text-only rounds "
@@ -1864,10 +1579,8 @@ class AgenticLoop:
                 self._consecutive_text_only_rounds = 0
 
             if response.stop_reason == "refusal":
-                # Fable 5 safety classifiers decline via
-                # stop_reason="refusal" (HTTP 200, often empty content).
-                # Surface it honestly instead of returning a silent empty
-                # turn.
+                # Fable 5 safety decline (HTTP 200, often empty) — surface it
+                # honestly instead of a silent empty turn.
                 # ref: https://platform.claude.com/docs/en/about-claude/models/migration-guide
                 self._op_logger.finalize()
                 self._sync_messages_to_context(messages)
@@ -1896,15 +1609,11 @@ class AgenticLoop:
                     "role": "assistant",
                     "content": assistant_content,
                 }
-                # Codex encrypted-reasoning passthrough — the sidecar stays
-                # on the assistant message and the Codex adapter echoes the
-                # reasoning items back into the next-turn ``input`` array.
-                # Other adapters ignore the field.
+                # Codex encrypted-reasoning passthrough — echoed back into
+                # the next-turn input array (other adapters ignore the field)
                 if getattr(response, "codex_reasoning_items", None):
                     _assistant_msg["codex_reasoning_items"] = response.codex_reasoning_items
-                # Persist phase from the Codex response so the next-turn
-                # replay carries ``EasyInputMessageParam.phase``. Other
-                # adapters ignore the field.
+                # Codex phase for the next-turn replay (other adapters ignore)
                 _phase = getattr(response, "assistant_phase", "")
                 if _phase:
                     _assistant_msg["phase"] = _phase
@@ -1922,8 +1631,7 @@ class AgenticLoop:
 
             tool_results = await self._run_cognitive_act_observe_cycle(response, round_idx)
 
-            # Feature 5: Backpressure on consecutive tool failures
-            # Feature 6: Convergence detection (stuck loop)
+            # backpressure on consecutive tool failures + convergence detection
             self._update_tool_error_tracking(tool_results)
 
             if self._check_convergence_break():
@@ -1949,7 +1657,7 @@ class AgenticLoop:
                 return await self._afinalize_and_return(result, user_input, round_idx + 1)
 
             if self._convergence.total_consecutive_tool_errors >= 3:
-                # Backpressure: inject a cooldown hint
+                # backpressure cooldown hint
                 from core.ui.agentic_ui import emit_tool_backpressure
 
                 emit_tool_backpressure(self._convergence.total_consecutive_tool_errors)
@@ -1966,8 +1674,8 @@ class AgenticLoop:
                 }
                 tool_results.append(backpressure_hint)
 
-            # Diversity forcing — prevent same tool 5x consecutively.
-            # Read/search tools are naturally repetitive — exempt from diversity forcing
+            # Diversity forcing — prevent same tool 5x consecutively
+            # (read/search tools are naturally repetitive → exempt)
             _DIVERSITY_EXEMPT: frozenset[str] = frozenset(
                 {
                     "read_file",
@@ -2012,15 +1720,13 @@ class AgenticLoop:
                             _repeated_tool,
                         )
 
-            # Accumulate messages for next round
-            # Convert content blocks to serializable format
+            # accumulate serialized messages for the next round
             assistant_content = self._serialize_content(response.content)
             _assistant_msg = {"role": "assistant", "content": assistant_content}
-            # Codex reasoning passthrough (see the end_turn branch above for
-            # the rationale; same shape on tool-use rounds).
+            # Codex reasoning passthrough (same as the end_turn branch)
             if getattr(response, "codex_reasoning_items", None):
                 _assistant_msg["codex_reasoning_items"] = response.codex_reasoning_items
-            # Same phase persistence on tool-use rounds.
+            # Codex phase on tool-use rounds
             _phase = getattr(response, "assistant_phase", "")
             if _phase:
                 _assistant_msg["phase"] = _phase
@@ -2129,32 +1835,26 @@ class AgenticLoop:
     ) -> AgenticResponse | None:
         """Multi-provider LLM call via :class:`LLMAdapter` (P1 Gateway pattern).
 
-        Delegates to ``self._new_adapter.acomplete()`` which handles
-        provider-specific message/tool conversion, retry, and failover.
-        Returns a normalized ``AgenticResponse`` or None on failure.
-        Raises ``UserCancelledError`` on Ctrl+C (caught by ``arun()``).
+        Delegates to ``self._new_adapter.acomplete()`` (provider-specific
+        conversion, retry, failover). Returns a normalized
+        ``AgenticResponse`` or None on failure. Raises ``UserCancelledError``
+        on Ctrl+C (caught by ``arun()``). Optional ``model`` overrides the
+        request model for one call without mutating ``self.model``.
 
-        Optional ``model`` override lets callers (verify judge, Plan/Act
-        split) request a non-default model for one call without mutating
-        ``self.model``; falls back to ``self.model`` when ``None``. The
-        override threads through to the adapter request's ``model`` field;
-        the rest of the loop (token tracker, retry budget, ContextVar
-        metrics) is unaffected. ``self._new_adapter`` is resolved in
-        :meth:`__init__` and hard-fails on missing registration.
+        Invariants:
+          * the context-overflow check mutates the SHARED messages list in
+            place (must precede the per-request reminder copy, or the
+            in-place prune evaporates and re-triggers every round);
+          * the system reminder is appended LAST on a per-request COPY —
+            the history prefix must stay byte-stable across rounds or the
+            rolling message cache breakpoints never hit.
         """
         effective_model = model or self.model
-        # Context overflow detection (Karpathy P6 Context Budget).
-        # MUST run on the SHARED history list before the reminder copy is
-        # made: emergency prune/compaction mutates ``messages`` in place and
-        # that mutation has to persist via _sync_messages_to_context — on a
-        # per-request copy it would evaporate and re-trigger every round.
+        # shared list — in-place prune must persist (precede the reminder copy)
         await self._check_context_overflow(system, messages)
 
-        # System reminder appended LAST, on a per-request copy — never at
-        # messages[0] and never into the shared history list. Position and
-        # immutability are load-bearing for prompt caching: the history
-        # prefix must stay byte-stable across rounds or the rolling message
-        # cache breakpoints never hit (see core/agent/system_injection.py).
+        # reminder appended LAST on a per-request copy — byte-stable history
+        # prefix is load-bearing for prompt-cache breakpoints
         from core.agent.system_injection import append_system_reminder
 
         messages = append_system_reminder(messages, model=effective_model, round_idx=round_idx)
@@ -2171,10 +1871,8 @@ class AgenticLoop:
             force_text = remaining_time <= self._WRAP_UP_TIME_HEADROOM_S
         tool_choice: dict[str, str] = {"type": "none"} if force_text else {"type": "auto"}
 
-        # Adaptive compute allocation (DTR insight: match budget to round purpose).
-        # Context-proportional caps derived from the model's context window.
-        # The only remaining adaptive case is wrap-up — the overthinking
-        # check exits the loop rather than downgrading effort.
+        # Adaptive compute — context-proportional caps; the only adaptive
+        # case left is wrap-up (overthinking exits the loop instead).
         from core.config import settings as _settings
         from core.llm.token_tracker import MODEL_CONTEXT_WINDOW
 
@@ -2184,32 +1882,23 @@ class AgenticLoop:
         adaptive_thinking = self._thinking_budget
         adaptive_effort = self._effort
         if force_text:
-            # Wrap-up: minimal budget — summarize, don't reason
-            # Context-proportional: 0.5% of window, floor 4096
+            # wrap-up: minimal budget (0.5% of window, floor 4096)
             adaptive_max_tokens = max(4096, min(self.max_tokens, ctx_window // 200))
             adaptive_thinking = 0
             adaptive_effort = "low"
 
-        # Config-driven temperature (see ``Settings.temperature_agent_loop``
-        # for the frontier-API grounding behind the 1.0 default).
+        # config-driven temperature (1.0 default)
         loop_temperature = _settings.temperature_agent_loop
 
-        # Build the adapter-neutral request, call ``LLMAdapter.acomplete``,
-        # and translate the result back to ``AgenticResponse`` so the rest
-        # of the loop (tool dispatch, cost tracking, retry budget) is
-        # unchanged. ``self._new_adapter`` is guaranteed non-None by
-        # ``__init__``'s hard-fail :func:`resolve_for` call.
+        # build the adapter-neutral request, then translate back to
+        # AgenticResponse so the rest of the loop is unchanged
         from core.llm.adapters.translation import (
             agentic_response_from_adapter_result,
             build_adapter_request,
         )
 
-        # Read the prior session_id so the adapter resumes via
-        # ``--resume <id>``: claude-cli then reuses the cached system
-        # prompt + prior context for the cached-marker input billing tier
-        # (~5-10K tokens saved/turn). Empty when no prior session (first
-        # turn of a fresh sub-agent or outside a run_dir scope) so
-        # first-call behaviour is unchanged.
+        # prior session_id → adapter ``--resume <id>`` (claude-cli reuses the
+        # cached prefix); empty on first turn (behaviour unchanged)
         prior_session_id = _load_prior_session_id(self._session_id)
 
         req = build_adapter_request(
@@ -2223,16 +1912,11 @@ class AgenticLoop:
             thinking_budget=adaptive_thinking,
             effort=adaptive_effort,
             resume_session_id=prior_session_id,
-            # Pass the per-loop schema so claude-cli ``--json-schema`` /
-            # codex-cli ``--output-schema`` constrains the response.
+            # per-loop schema → claude-cli --json-schema / codex --output-schema
             response_schema=self._response_schema,
         )
-        # Emit LLM_CALL_STARTED / LLM_CALL_ENDED for the main dispatch
-        # path so the SQLite ``agent_runtime_state.total_*_tokens``
-        # cumulative writer sees the per-turn loop's traffic. Payload
-        # carries ``session_id`` + ``usage`` + ``cost_usd`` so the
-        # writer's ``accumulate_tokens_and_cost`` call has the data it
-        # needs.
+        # Fire LLM_CALL_STARTED/ENDED with usage+cost for the SQLite
+        # token/cost accumulator.
         import time as _llm_call_time
 
         _llm_t0 = _llm_call_time.monotonic()
@@ -2278,25 +1962,15 @@ class AgenticLoop:
                     log.debug("LLM_CALL_ENDED (error) hook trigger failed", exc_info=True)
         else:
             response = agentic_response_from_adapter_result(result)
-            # Persist the newly-emitted session_id so the next turn of THIS
-            # sub-agent (or the same sub-agent in the next cycle) can
-            # resume. Non-claude-cli adapters return an empty session_id;
-            # the persistence helper is a no-op there.
+            # persist the emitted session_id for the next turn's resume
+            # (no-op for non-claude-cli adapters)
             emitted_sid = getattr(result, "session_id", "")
             _persist_session_id(self._session_id, emitted_sid)
-            # Cache for the SESSION_ENDED payload (the
-            # ``_final_hook_payloads`` reader walks
-            # ``loop._last_emitted_session_id`` to populate
-            # ``claude_cli_session_id`` on the SQLite write).
+            # cache for the SESSION_ENDED claude_cli_session_id write
             if emitted_sid:
                 self._last_emitted_session_id = emitted_sid
-            # Emit LLM_CALL_ENDED with usage + cost so the cumulative
-            # writer accumulates correctly. ``cost_usd`` is computed
-            # locally via the same ``calculate_cost`` helper the token
-            # tracker uses (no double-counting — the accumulator already
-            # records; this payload exists purely to surface the per-call
-            # snapshot for SQLite accumulation and future per-call
-            # observers).
+            # LLM_CALL_ENDED with usage + locally-computed cost (no
+            # double-count — the accumulator already records)
             if self._hooks:
                 usage = getattr(result, "usage", None)
                 input_tokens = int(getattr(usage, "input_tokens", 0) or 0)
@@ -2314,11 +1988,8 @@ class AgenticLoop:
                         )
                     )
                 except Exception:
-                    # A silent 0.0 makes every call of an unpriced model
-                    # FREE to the cost limiter (COST_WARNING /
-                    # COST_LIMIT_EXCEEDED under-count), exactly when a new
-                    # model is most likely missing from the pricing table.
-                    # Keep the graceful 0.0 but log it.
+                    # graceful 0.0, but logged — an unpriced model would
+                    # otherwise be FREE to the cost limiter (under-count)
                     log.warning(
                         "calculate_cost failed for model=%s — recording cost_usd=0.0 "
                         "(cost limiter will under-count this call)",
@@ -2354,9 +2025,7 @@ class AgenticLoop:
             elif not self._last_llm_error:
                 self._last_llm_error = f"All {self._provider} models exhausted"
 
-        # Surface reasoning summaries to AgenticUI at per-item granularity
-        # (one entry per finished reasoning item / thinking block) — see
-        # ``emit_reasoning_summary`` for why not per-delta.
+        # surface reasoning summaries to AgenticUI per finished item
         if response is not None and not self._quiet:
             summaries = getattr(response, "reasoning_summaries", None) or []
             for summary in summaries:

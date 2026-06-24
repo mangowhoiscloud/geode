@@ -45,6 +45,11 @@ functional change.
 
 ---
 
+## [0.99.247] - 2026-06-24
+
+### Changed
+- **AgenticLoop comment role-only reduction (PR-LOOP-COMMENT-ROLE)** — a comment-policy pass on `core/agent/loop/agent_loop.py` under the new policy: the CHANGELOG is the SOT for *what happened / why / history*; code comments state only the *role / contract at that point*. ~30 multi-line WHY/narration blocks compressed to one-line role statements; load-bearing contracts/invariants that were only in inline narration **relocated to the enclosing function docstrings** (new `Invariants:`/`Contract:` notes on `_call_llm`, `_saved_cwd_matches_current`, `_load_prior_session_id`, `_record_text_only_round`, `_consume_reflexion_hint`) with a terse one-line marker left at the code line — so a contract is never *evaporated*, only relocated + compressed. The bug-reentry-prevention invariants (shared-list in-place-prune ordering, byte-stable cache-prefix reminder placement, denied-tool security filter, unpriced-model graceful-0.0) kept as compressed one-liners. Net −331 LoC, all comment/docstring text. **Behaviour-preserving, proven**: AST-stripped of comments+docstrings and `ast.unparse`-normalized, both HEAD and the new file are byte-identical (independently re-verified). Extractions (`resolve_loop_adapter`, `build_loop_request`) deliberately deferred to a separate PR to keep this diff a pure, AST-verifiable comment change.
+
 ## [0.99.246] - 2026-06-23
 
 ### Changed
