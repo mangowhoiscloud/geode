@@ -31,10 +31,9 @@ export default function Page() {
               끄면 정체성 프리앰블 없이 베이스 모델의 얇은 래퍼로 동작합니다.
               audit-mode가 켜져 있으면 이 플래그와 무관하게 강제 OFF입니다.
             </p>
-            <pre>{`<static_context>        턴 사이 불변, 캐시 적중
+            <pre>{`static prefix           턴 사이 불변, 캐시 적중
   <agent_baseline>      항상 포함. 기본 능력
   <agent_identity>      기본 ON; GEODE_PERSONA=off로 제외
-</static_context>
 <dynamic_context>       턴마다 변함, 캐시 제외
   <model_card> <current_date>
   <project_memory> <agent_learning> <runtime_rules> <user_context>
@@ -147,10 +146,9 @@ export default function Page() {
               base model, with no identity preamble. Audit-mode forces it off
               regardless of the flag.
             </p>
-            <pre>{`<static_context>        stable across turns, cache hit
+            <pre>{`static prefix           stable across turns, cache hit
   <agent_baseline>      always present. base capabilities
   <agent_identity>      on by default; off with GEODE_PERSONA=off
-</static_context>
 <dynamic_context>       changes per turn, uncached
   <model_card> <current_date>
   <project_memory> <agent_learning> <runtime_rules> <user_context>

@@ -90,7 +90,7 @@ OpenAI/GLM  80%   클라이언트 LLM 기반 compaction
               임계값을 넘는 도구 결과는 컨텍스트에 그대로 쌓이지 않습니다.{" "}
               <code>.geode/tool-offload/&#123;session_id&#125;/</code>에
               저장되고 컨텍스트에는 요약과 <code>ref_id</code>만 남으며,
-              필요하면 <code>recall(ref_id)</code>로 다시 불러옵니다
+              필요하면 <code>recall_tool_result(ref_id)</code>로 다시 불러옵니다
               (<code>core/orchestration/tool_offload.py</code>). 임계값은{" "}
               <code>tool_offload_threshold</code> 설정이고 0이면 꺼집니다.
               오프로드 시 <code>TOOL_RESULT_OFFLOADED</code> 훅이 발화합니다.
@@ -199,7 +199,7 @@ All         200K  absolute ceiling even on larger windows
               Oversized tool results never pile into the context. They persist
               to <code>.geode/tool-offload/&#123;session_id&#125;/</code> and
               the context keeps only a summary plus a <code>ref_id</code>;{" "}
-              <code>recall(ref_id)</code> fetches the full result back
+              <code>recall_tool_result(ref_id)</code> fetches the full result back
               (<code>core/orchestration/tool_offload.py</code>). The knob is{" "}
               <code>tool_offload_threshold</code>; 0 disables it. Each offload
               fires the <code>TOOL_RESULT_OFFLOADED</code> hook.
