@@ -76,7 +76,7 @@ export default function Page() {
                   <td><code>core/mcp_server.py</code></td>
                 </tr>
                 <tr>
-                  <td><code>recall(ref_id)</code></td>
+                  <td><code>recall_tool_result(ref_id)</code></td>
                   <td>임계값을 넘겨 오프로드된 대형 도구 결과 재조회</td>
                   <td><code>core/orchestration/tool_offload.py</code></td>
                 </tr>
@@ -175,7 +175,7 @@ export default function Page() {
                   <td><code>core/mcp_server.py</code></td>
                 </tr>
                 <tr>
-                  <td><code>recall(ref_id)</code></td>
+                  <td><code>recall_tool_result(ref_id)</code></td>
                   <td>Re-fetch a large tool result that was offloaded past the size threshold</td>
                   <td><code>core/orchestration/tool_offload.py</code></td>
                 </tr>
