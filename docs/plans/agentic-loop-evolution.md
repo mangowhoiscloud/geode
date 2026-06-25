@@ -1,7 +1,7 @@
 # Plan: Agentic Loop Evolution (Plan → Gather → Action → Verify)
 
 > Companion research: [`docs/research/agentic-loop-optimization.md`](../research/agentic-loop-optimization.md)
-> Scope: `core/cli/agentic_loop.py` + `core/agent/*` runtime — **NOT** the `core/graph.py` StateGraph pipeline.
+> Scope: `core/agent/loop/agent_loop.py` + `core/agent/*` runtime.
 > Status: planning (not yet implementation)
 
 ## Problem
@@ -10,8 +10,8 @@ Furiosa Agent System JD asks for "tool use, planning, reasoning systems" — i.e
 
 | Loop kind | Code | Behavior | Furiosa relevance |
 |-----------|------|----------|-------------------|
-| Pipeline loop | `core/graph.py` (7-node StateGraph + confidence ≥ 0.7 feedback) | Fixed topology. game_ip domain analysis. | Tangential |
-| **Agentic loop** | `core/cli/agentic_loop.py` + `core/agent/{convergence,error_recovery,context_manager}.py` | Dynamic next-step. Domain-agnostic. | **Direct match** |
+| Legacy pipeline loop | Removed Game-IP StateGraph pipeline | Historical domain-analysis topology. Not current runtime. | Archive only |
+| **Agentic loop** | `core/agent/loop/agent_loop.py` + `core/agent/{convergence,error_recovery,context_manager}.py` | Dynamic next-step. Domain-agnostic. | **Direct match** |
 
 Prior interview feedback flagged "methodology clarity" weakness (autoresearch-class patterns). The agentic loop is where that gap shows. This plan focuses **only** on the agentic loop side.
 
@@ -29,7 +29,7 @@ Prior interview feedback flagged "methodology clarity" weakness (autoresearch-cl
 
 ### Approach
 
-Evolve `AgenticLoop` from "single-thread ReAct + error recovery" to **explicit Plan / Gather / Action / Verify phases** with measurable optimizations at each phase. Keep the existing `core/graph.py` pipeline as-is — it serves the game_ip domain plugin and is out of scope.
+Evolve `AgenticLoop` from "single-thread ReAct + error recovery" to **explicit Plan / Gather / Action / Verify phases** with measurable optimizations at each phase. Keep the removed Game-IP pipeline out of scope; current work targets the AgenticLoop runtime only.
 
 The full body of this plan is split into **9 capability cards** grouped under three layers:
 
@@ -139,7 +139,7 @@ Layer 3 — Cross-cutting Infra       (A6, A7, A9)
 
 ### Out of Scope (explicitly)
 
-These are valuable but belong to the **pipeline loop** (`core/graph.py`), not the agentic loop:
+These are historical Game-IP pipeline ideas, not current AgenticLoop runtime work:
 
 - Final-node re-selection across iteration_history (game_ip pipeline only)
 - `_gather_node` Σ(T) summarization
@@ -147,13 +147,13 @@ These are valuable but belong to the **pipeline loop** (`core/graph.py`), not th
 - `enrichment_needed` dynamic threshold
 - Domain entity PageRank gather
 
-These may be tracked in a separate `pipeline-loop-tightening.md` plan if motivated by game_ip needs.
+They are archived outside the main project with the confidence-gate material.
 
 ### Alternatives Considered
 
 | Alternative | Why rejected |
 |-------------|--------------|
-| Patch `core/graph.py` and call it agentic | Conflates pipeline with agentic loop. Furiosa-tier interview answer demands the distinction. |
+| Recreate the deleted pipeline and call it agentic | Conflates a domain DAG with the current agentic loop. Furiosa-tier interview answer demands the distinction. |
 | Rebuild the loop from scratch | Existing `ConvergenceDetector` + `ErrorRecovery` + `ContextManager` are solid. Phase-additive plan preserves them. |
 | Adopt LangGraph React agent wholesale | Loses GEODE-specific Hooks, Skills, Memory. Phase plan keeps these intact. |
 | Implement A8 first (sexy) | Greedy baseline must be measured before adding tree search complexity (Karpathy P10). |
@@ -312,7 +312,7 @@ Phases that don't hit their bar **stay open** rather than ship. No "soft success
 
 ## Interview Talking Points (post-Phase 1+)
 
-1. **autoresearch parity** — wall-clock budget (A7) + ratchet (existing `ConvergenceDetector`) + context budget (existing 200K guard) implemented; SETI@home limit acknowledged via Send API parallelism in pipeline.
+1. **autoresearch parity** — wall-clock budget (A7) + ratchet (existing `ConvergenceDetector`) + context budget (existing 200K guard) implemented; parallelism belongs to `SubAgentManager`/lane orchestration, not a fixed pipeline.
 2. **Verify priority** — Anthropic's *"single highest-leverage thing"* operationalized as A3 dedicated phase, citing Reflexion HumanEval 91%.
 3. **Search-theoretic answer to attempt reduction** — A2 cites ToolChain* 7.35x; A8 cites LATS / Koh +28–39.7%.
 4. **Cost-conscious deployment** — A6 model split cites Cursor 13x speed and AlphaEvolve ensemble.
