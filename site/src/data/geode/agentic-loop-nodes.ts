@@ -3,8 +3,8 @@ import { Node, Edge } from "@xyflow/react";
 // AgenticLoop node definitions for GEODE's while(tool_use) autonomous agent loop
 // Topology: USER -> THINK -> SELECT -> EXECUTE -> THINK (loop)
 //                   THINK -> FINALIZE (shortcut if no tool needed)
-//           EXECUTE -> VERIFY -> FINALIZE (confidence >= 0.7)
-//                      VERIFY -> THINK (retry with failover if confidence < 0.7)
+//           FINALIZE -> VERIFY (turn boundary)
+//                      VERIFY -> THINK on retryable miss via reflexion/replan
 
 export const agenticLoopNodes: Node[] = [
   // USER — entry point, left side
@@ -63,7 +63,7 @@ export const agenticLoopNodes: Node[] = [
     },
   },
 
-  // VERIFY — confidence check, bottom center
+  // VERIFY — per-turn quality check, bottom center
   {
     id: "verify",
     type: "loopStage",
@@ -71,7 +71,7 @@ export const agenticLoopNodes: Node[] = [
     data: {
       icon: "🛡️",
       label: "VERIFY",
-      description: "Confidence check",
+      description: "Rule checks · judge opt-in",
       color: "emerald",
       delay: 0.4,
     },
@@ -165,7 +165,7 @@ export const agenticLoopEdges: Edge[] = [
     style: { stroke: "#FBBF24", strokeWidth: 2 },
   },
 
-  // VERIFY → FINALIZE (confidence >= 0.7)
+  // VERIFY → FINALIZE (checks passed)
   {
     id: "e-verify-finalize",
     source: "verify",
@@ -173,13 +173,13 @@ export const agenticLoopEdges: Edge[] = [
     target: "finalize",
     animated: true,
     style: { stroke: "#34D399", strokeWidth: 2 },
-    label: "confidence >= 0.7",
+    label: "passed",
     labelStyle: { fill: "#34D399", fontSize: 9, fontFamily: "var(--font-geist-mono)" },
     labelBgStyle: { fill: "#0a0a12", fillOpacity: 0.8 },
     labelBgPadding: [4, 2] as [number, number],
   },
 
-  // VERIFY → THINK (retry with failover)
+  // VERIFY → THINK (retryable miss)
   {
     id: "e-verify-think",
     source: "verify",
@@ -188,7 +188,7 @@ export const agenticLoopEdges: Edge[] = [
     targetHandle: "think-left",
     animated: true,
     style: { stroke: "#F472B6", strokeWidth: 1.5, strokeDasharray: "5,5" },
-    label: "retry + failover",
+    label: "reflexion / replan",
     labelStyle: { fill: "#F472B6", fontSize: 9, fontFamily: "var(--font-geist-mono)" },
     labelBgStyle: { fill: "#0a0a12", fillOpacity: 0.8 },
     labelBgPadding: [4, 2] as [number, number],

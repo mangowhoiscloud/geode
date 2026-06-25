@@ -14,10 +14,10 @@ const pipelineLayers = [
   },
   {
     tier: 2,
-    title: "Confidence Gate",
-    items: ["threshold 0.7", "max 5 iterations", "cortex loopback"],
+    title: "Turn Verify",
+    items: ["rule_based", "llm_judge opt-in", "reflexion"],
     accent: "#818CF8",
-    description: "Scoring 신뢰도가 0.7 미만이면 Cortex부터 자동 재실행합니다. 최대 5회 반복 후에도 미달이면 low-confidence 경고와 함께 결과를 반환합니다.",
+    description: "턴 경계에서 구조 검증을 실행하고, 재시도 가능한 실패는 다음 턴의 reflexion/replan 신호로 넘깁니다.",
   },
   {
     tier: 3,

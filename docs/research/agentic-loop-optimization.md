@@ -14,11 +14,11 @@
 | 영역 | 결론 |
 |------|------|
 | 학술 foundation | plan/gather/action/verify 각 단계마다 SOTA 논문 명확. 통합은 **search 패러다임**(LATS, Koh, Snell)으로 수렴 중 |
-| autoresearch | Karpathy 본인이 인정한 한계는 **single-thread + local optima**. GEODE의 Send API 4-way 병렬 + G1-G4 가드레일이 정확히 그 응답 |
+| autoresearch | Karpathy 본인이 인정한 한계는 **single-thread + local optima**. GEODE의 현재 응답은 AgenticLoop + SubAgentManager 병렬 위임 + 턴 검증이다 |
 | ML 엔지니어링 자율 에이전트 | **AIDE / MLE-STAR / AlphaEvolve**가 SOTA. 공통 패턴은 tree search + automatic verifier + best-so-far ratchet |
 | 프로덕션 코딩 에이전트 | **plan/action 모델 분리(Cursor), repo-map graph rank(Aider), max_iter hard cap(Computer Use), prompt caching(Claude Code)** 5대 패턴 |
 
-**핵심 인사이트**: "longer DAG"가 아니라 **"search over a thinner DAG with verifier-driven ratchet"** 이 차세대 방향. GEODE는 fixed 7-node DAG → 동적 plan/verify 루프로 진화시켜야 한다.
+**핵심 인사이트**: "longer DAG"가 아니라 **"search over a thinner loop with verifier-driven ratchet"** 이 차세대 방향. GEODE는 현재 AgenticLoop 위에 동적 plan/verify/replan을 강화하는 쪽으로 진화해야 한다.
 
 ---
 
@@ -289,9 +289,9 @@
 | 8 | **Verify가 루프 핵심 기여** | Anthropic 명시 | G1-G4 + BiasBuster 있음 ✓ | 학술 인용 부족 | 인용 보강 |
 | 9 | **max_iter hard cap** | 4/4 | 5 iter ✓ | 이미 있음 ✓ | — |
 | 10 | **Wall-clock budget** | autoresearch P3, s1 | iteration count만 | wall-clock 추가 | P3 |
-| 11 | **Best-so-far ratchet** | autoresearch, AlphaEvolve, FunSearch | confidence 기반 ✓ | 부분 구현 ✓ | — |
+| 11 | **Best-so-far ratchet** | autoresearch, AlphaEvolve, FunSearch | verify/replan telemetry 기반 | 부분 구현 ✓ | — |
 | 12 | **Repo-map / 도메인 그래프 rank** | Aider | 14-axis 직접 주입 | PageRank류 도메인 엔티티 selection 부재 | P3 |
-| 13 | **Subagent isolation** | Claude Code, Devin | Send API 4-way ✓ | 컨텍스트 격리 강화 여지 | P2 |
+| 13 | **Subagent isolation** | Claude Code, Devin | SubAgentManager + IsolatedRunner ✓ | 컨텍스트 격리 강화 여지 | P2 |
 | 14 | **prompt caching cache_control** | Claude Code | v0.65.0 messages 적용 ✓ | system/tools breakpoint 추가 | P3 |
 | 15 | **외부 봇 closed loop** | Devin | linter/CI 미통합 | autofix 루프 부재 | P4 |
 | 16 | **Skill compression on-match** | Anthropic | 100/2000 tokens 패턴 부분 적용 | 명시적 trigger 매칭 강화 | P3 |
@@ -304,19 +304,19 @@
 
 ### P1 (즉시) — 면접 차별화 + 1줄 효과
 1. **Final-node re-selection 단계 추가** — synthesizer 직전 evaluator로 iteration_history 재선택. [Meta 2025](https://arxiv.org/html/2507.02554) 인용으로 "일반화 갭 60% 회복" 정량 주장 가능.
-2. **Dynamic Plan 노드 (plan_node)** — router → plan_node → signals 순서. LLM이 task별 sub-step JSON 생성, weak_areas와 함께 monolake 주입. ReWOO/Self-Discover 인용으로 5x 토큰 + 10–40x fewer inferences 정량화.
+2. **Dynamic Plan 강화** — `Plan` 객체와 replan 트리거를 더 적극적으로 사용. LLM이 task별 sub-step JSON을 만들고 현재 단계 힌트로 주입. ReWOO/Self-Discover 인용으로 5x 토큰 + 10–40x fewer inferences 정량화.
 
 ### P2 (단기) — 토큰/시도 절감 직접 효과
 3. **Plan/Action 모델 분리** — Plan(Opus) → Action(Sonnet/Haiku). Cursor 13x speed 패턴 차용. analyst 4-way가 fast 모델로 전환 가능한지 판정.
-4. **AIDE Σ(T) summarization** — `gather_node`에서 iteration_history를 `{iter, conf, weak_axes, delta}` 5필드로 압축. iter 5 prompt 토큰을 iter 1 수준으로 유지.
+4. **AIDE Σ(T) summarization** — AgenticLoop transcript/verify telemetry를 `{round, action, observation, misses, next_hint}` 형태로 압축. 장기 작업의 prompt 토큰 증가를 제한.
 5. **MLE-STAR ablation** — verification 직후 14-axis ablation 1회 → 상위 3 axis만 다음 iter에 refine. 탐색 공간 의미적 절단.
 6. **Plan 외부화** — `iteration_history`를 `docs/runs/<task_id>/plan.md` 파일로 영구 기록. autoresearch program.md 패턴.
-7. **Subagent isolation 강화** — Send API analyst가 system_prompt에서 "다른 analyst 결과 참조 금지" 명시. Clean Context 강화.
+7. **Subagent isolation 강화** — SubAgentManager worker가 sibling 결과를 보지 않는다는 계약을 system prompt/toolkit 수준에서 명시. Clean Context 강화.
 
 ### P3 (중기) — 아키텍처 진화
 8. **Tree search 도입 검토** — 5-iter greedy → best-first search. LATS/Koh/ToolChain* 인용. AIRA 비교 연구 기준 일반화 갭 줄어듦.
 9. **Wall-clock budget** — `max_wall_seconds` 파라미터 추가. autoresearch P3 + s1 budget forcing 패턴.
-10. **도메인 그래프 PageRank gather** — IGDB/Wikidata 엔티티 그래프에서 top-k만 monolake에 주입. Aider repo-map과 isomorphic.
+10. **도메인 그래프 PageRank recall** — 코드/도메인 그래프에서 top-k만 컨텍스트에 주입. Aider repo-map과 isomorphic.
 11. **prompt caching system/tools breakpoint** — v0.65.0 messages caching 위에 system/tools에도 cache_control 추가. read 0.1x 비용 효과.
 
 ### P4 (장기) — 외부 시스템 통합
@@ -330,13 +330,13 @@
 ## 8. 면접 답변 talking points
 
 ### "autoresearch와 같은 방법론을 어떻게 적용했나?"
-> "autoresearch는 P3 fixed wall-clock budget(5분), P4 git-ratchet, P2 single-file constraint, P6 context budget 4가지를 train.py 630줄로 압축한 recipe입니다. GEODE는 wall-clock 대신 iteration cap(5), git reset 대신 confidence-based ratchet, single-file 대신 fixed 7-node DAG로 동형 매핑했습니다. **단 Karpathy 본인이 SETI@home 비전 트윗에서 인정한 single-thread 한계를 GEODE는 Send API 4-way 병렬 Analyst로 마이크로 구현**했습니다."
+> "autoresearch는 P3 fixed wall-clock budget(5분), P4 git-ratchet, P2 single-file constraint, P6 context budget 4가지를 train.py 630줄로 압축한 recipe입니다. GEODE는 AgenticLoop의 시간/비용 예산, ConvergenceDetector, turn verify/replan, SubAgentManager 병렬 위임으로 같은 압력을 런타임에 옮겼습니다."
 
 ### "왜 ReAct만으로 부족한가?"
 > "ReAct (Yao 2022, [2210.03629](https://arxiv.org/abs/2210.03629))는 reasoning과 acting을 인터리브하지만, ReWOO (Xu 2023, [2305.18323](https://arxiv.org/abs/2305.18323))는 plan을 observation과 decouple하면 **5x 토큰 효율, +4% accuracy on HotpotQA**를 보였습니다. GEODE는 현재 fixed DAG로 인터리빙을 회피했고, 다음 단계는 dynamic plan 노드 추가입니다."
 
 ### "시도 횟수를 어떻게 줄이나?"
-> "Self-Discover (Zhou 2024, [2402.03620](https://arxiv.org/abs/2402.03620))는 meta-reasoning을 task당 1회 사전 결정해 **10–40x fewer inferences**를 달성했고, ToolChain* (Zhuang 2023, [2310.13227](https://arxiv.org/abs/2310.13227))는 action을 A\* search로 풀어 **7.35x speedup**을 보였습니다. GEODE는 Send API 병렬 + 5-iter cap + adaptive weak_areas 주입으로 의미적 탐색 공간 절단을 구현했습니다."
+> "Self-Discover (Zhou 2024, [2402.03620](https://arxiv.org/abs/2402.03620))는 meta-reasoning을 task당 1회 사전 결정해 **10–40x fewer inferences**를 달성했고, ToolChain* (Zhuang 2023, [2310.13227](https://arxiv.org/abs/2310.13227))는 action을 A\* search로 풀어 **7.35x speedup**을 보였습니다. GEODE는 Plan/replan 힌트와 SubAgentManager 병렬 위임으로 의미적 탐색 공간을 줄입니다."
 
 ### "verify를 어떻게 강화하는가?"
 > "Anthropic Claude Code 가이드는 'verify를 루프에 묶는 것이 the single highest-leverage thing'이라고 명시합니다. GEODE는 G1-G4 가드레일 + Cross-LLM (Self-Consistency [2203.11171](https://arxiv.org/abs/2203.11171) 동형) + BiasBuster (MT-Bench [2306.05685](https://arxiv.org/abs/2306.05685) bias 카탈로그 동형) + Calibration (CAI [2212.08073](https://arxiv.org/abs/2212.08073) 동형) 4중 방어를 구현했습니다. 다음 단계는 Cobbe 2021 [2110.14168](https://arxiv.org/abs/2110.14168) 스타일의 trained verifier 추가와 Snell 2024 [2408.03314](https://arxiv.org/abs/2408.03314) test-time compute optimal allocation입니다."
@@ -345,7 +345,7 @@
 > "Karpathy 본인이 인정한 한계는 single-thread synchronous loop와 local optima입니다. HN 비판도 'BayesOpt 비교 부재', 'eval overfitting', 'Goodhart's law'을 지적했습니다. **GEODE는 14-axis rubric으로 search space를 의미적으로 구조화**해 brute-force와 차별화했고, **G1-G4 + BiasBuster 3-bias로 metric gaming을 차단**했으며, **Cross-LLM + Calibration의 Layer 5 Swiss Cheese**로 eval overfitting을 막았습니다."
 
 ### "다음 아키텍처 방향은?"
-> "LATS ([2310.04406](https://arxiv.org/abs/2310.04406))와 Koh 2024 ([2407.01476](https://arxiv.org/abs/2407.01476))가 보여준 통합 view는 **'longer DAG'가 아니라 'search over a thinner DAG with verifier-driven ratchet'**입니다. VisualWebArena +39.7% 결과가 그 근거입니다. GEODE는 fixed 7-node DAG에서 동적 plan + tree search + final-node re-selection 방향으로 진화 중입니다."
+> "LATS ([2310.04406](https://arxiv.org/abs/2310.04406))와 Koh 2024 ([2407.01476](https://arxiv.org/abs/2407.01476))가 보여준 통합 view는 **'longer DAG'가 아니라 'search over a thinner loop with verifier-driven ratchet'**입니다. VisualWebArena +39.7% 결과가 그 근거입니다. GEODE는 AgenticLoop 위에서 동적 plan + replan + tree-search 방향으로 진화 중입니다."
 
 ---
 

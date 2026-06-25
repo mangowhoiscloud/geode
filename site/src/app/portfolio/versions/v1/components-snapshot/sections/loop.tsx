@@ -354,7 +354,7 @@ export function LoopSection() {
             사고 → 선택 → 실행 → 검증. LLM이 <code className="text-[#4ECDC4]/70 text-[13px]">tool_use</code>를
             반환하는 한 이 궤도는 멈추지 않습니다.
             매 라운드마다 4중 Guardrail(G1-G4)이 출력을 교차 검증하며,
-            confidence ≥ 0.7에 도달해야 비로소 루프를 벗어납니다.
+            모델이 더 이상 도구를 요청하지 않으면 턴 검증 후 결과를 반환합니다.
           </p>
         </ScrollReveal>
 
