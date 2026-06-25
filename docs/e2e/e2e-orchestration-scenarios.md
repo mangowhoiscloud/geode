@@ -309,14 +309,14 @@ Expected:
   - No exceptions
 ```
 
-### 5-3. Feedback Loop (high confidence)
+### 5-3. Turn Verify (structural pass)
 
 ```
-Input:   "berserk" (dry-run, typically high confidence fixtures)
+Input:   "berserk" (dry-run)
 Expected:
-  - confidence > 70% → skip feedback loop
+  - turn verification records pass
   - synthesizer visited
-  - "gather" NOT visited (no re-iteration)
+  - no reflexion/replan hint emitted
 ```
 
 ---
@@ -415,7 +415,7 @@ Expected:
 | 4-3 client cache | test_agentic_loop.py | TestAgenticLoopEdgeCases::test_client_cached_across_rounds | PASS |
 | 5-1 pipeline | test_e2e.py | TestFullPipelineDryRun::test_dry_run_berserk | PASS |
 | 5-2 multi-IP | test_e2e.py | TestFullPipelineDryRun::test_dry_run_all_ips | PASS |
-| 5-3 feedback | test_e2e.py | TestFeedbackLoopE2E::test_high_confidence_skips_loop | PASS |
+| 5-3 turn verify | test_e2e.py | TestFeedbackLoopE2E::test_turn_verify_pass | PASS |
 | 6-* tools | test_e2e.py | TestToolRegistryE2E | PASS |
 | 7-* auth | test_e2e.py | TestAuthProfileE2E | PASS |
 | 8-* cross-LLM | test_e2e.py | TestCrossLLME2E | PASS |
