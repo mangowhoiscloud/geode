@@ -45,6 +45,15 @@ functional change.
 
 ---
 
+## [Unreleased]
+
+### Fixed
+- **GEODE context skill stale-runtime cleanup.** Refreshed `.geode/skills/geode-context`
+  from the old v0.99.11 / LangGraph-pipeline framing to the current
+  v0.99.247 `AgenticLoop(while tool_use)` runtime shape, and added explicit
+  guardrails against reintroducing fixed-DAG or confidence-threshold pipeline
+  claims into GEODE prompt context.
+
 ## [0.99.247] - 2026-06-24
 
 ### Changed
