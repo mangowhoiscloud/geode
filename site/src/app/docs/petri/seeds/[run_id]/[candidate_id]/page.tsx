@@ -434,7 +434,7 @@ function SeedDetail(props: DetailProps) {
           <a href={seed.raw_path}>{t("raw `.md` 다운로드", "raw `.md` download")}</a>
         </li>
         <li>
-          <a href="/geode/self-improving/">{t("Self-improving 허브", "Self-improving hub")}</a>
+          <a href="/geode/self-improving/">{t("자기개선 허브", "Self-improving hub")}</a>
         </li>
         <li>
           <a href="/geode/self-improving/petri-bundle/">{t("Eval 로그 viewer", "Eval log viewer")}</a>

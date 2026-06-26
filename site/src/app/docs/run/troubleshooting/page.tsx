@@ -74,6 +74,16 @@ export default function Page() {
                   <td><code>/mcp</code>로 서버 상태와 도구 목록을 확인합니다. <code>/status</code>에도 MCP 블록이 있습니다.</td>
                 </tr>
                 <tr>
+                  <td><code>MCP_SERVER_FAILED</code> 로그가 반복됨</td>
+                  <td>serve 프로세스에서 MCP 명령(<code>npx</code>, <code>codex</code>, <code>uvx</code>)이나 필수 env를 못 찾음</td>
+                  <td><code>~/.geode/logs/serve.log</code>에서 실패 서버 이름을 보고 PATH와 <code>.env</code>를 맞춥니다. 실패한 서버는 짧게 캐시되므로 수정 뒤에는 serve를 재시작합니다.</td>
+                </tr>
+                <tr>
+                  <td>읽기 도구가 너무 자주 호출됨</td>
+                  <td><code>read_document</code>, <code>grep_files</code>는 항상 로드되는 핵심 도구. 도구 수 제한에 숨은 것이 아님</td>
+                  <td>run log의 검색 쿼리와 읽은 경로를 보고 질문에 파일 범위, 제외 경로, 원하는 깊이를 명시합니다.</td>
+                </tr>
+                <tr>
                   <td>메신저 무반응</td>
                   <td>게이트웨이 또는 binding 문제</td>
                   <td><code>geode doctor slack</code>과 <a href="/geode/docs/run/messaging">메신저 연동</a>의 실패 표를 따릅니다.</td>
@@ -168,6 +178,16 @@ export default function Page() {
                   <td>MCP tools missing</td>
                   <td>An MCP server failed to connect</td>
                   <td><code>/mcp</code> shows server state and tools; <code>/status</code> carries an MCP block too.</td>
+                </tr>
+                <tr>
+                  <td><code>MCP_SERVER_FAILED</code> repeats in logs</td>
+                  <td>The serve process cannot see an MCP command (<code>npx</code>, <code>codex</code>, <code>uvx</code>) or required env</td>
+                  <td>Use <code>~/.geode/logs/serve.log</code> to find the server name, then fix PATH and <code>.env</code>. Failed servers are briefly cached, so restart serve after fixing the environment.</td>
+                </tr>
+                <tr>
+                  <td>Read tools fire too often</td>
+                  <td><code>read_document</code> and <code>grep_files</code> are always-loaded core tools; this is not the tool cap hiding them</td>
+                  <td>Inspect the run log for search queries and read paths, then constrain file scope, excluded paths, or desired depth in the prompt.</td>
                 </tr>
                 <tr>
                   <td>Messenger silence</td>

@@ -83,13 +83,13 @@ export default function Page() {
               </tbody>
             </table>
 
-            <h2>도구 탐색: deferred loading</h2>
+            <h2>도구 탐색: 지연 로딩</h2>
             <p>
               도구 목록 자체도 탐색 대상입니다. 네이티브와 MCP 도구를 합친 수가
               임계값을 넘으면 전체 스키마를 다 싣지 않고 <code>tool_search</code>
               메타 도구를 노출해, 에이전트가 필요한 도구를 찾아 그때 로드합니다.
               항상 적재되는 도구는 소수로 고정되어 있습니다
-              (<code>core/tools/registry.py</code>의 deferred 경로).
+              (<code>core/tools/registry.py</code>의 지연 로딩 경로).
             </p>
 
             <h2>이 사이트의 llms.txt</h2>
@@ -104,7 +104,7 @@ export default function Page() {
 
             <h2>다음</h2>
             <ul>
-              <li><a href="/geode/docs/runtime/tools/protocol">도구와 툴셋</a>. deferred loading의 자세한 동작.</li>
+              <li><a href="/geode/docs/runtime/tools/protocol">도구와 툴셋</a>. 지연 로딩의 자세한 동작.</li>
               <li><a href="/geode/docs/runtime/tools/mcp">MCP 서버</a>. 외부 도구를 붙이는 클라이언트 측.</li>
               <li><a href="/geode/docs/runtime/orchestration">서브에이전트 오케스트레이션</a>. 위임이 실행되는 곳.</li>
             </ul>
