@@ -45,6 +45,45 @@ functional change.
 
 ---
 
+## [0.99.252] - 2026-07-02
+
+### Changed
+- **Context budget policy resolver.** Context overflow handling now derives
+  warning/critical thresholds, prompt budget, output reserve, safety margin,
+  tool-result summary thresholds, prune budget, and keep-recent caps from a
+  single `ContextBudgetPolicy` resolver. Model switches, Anthropic server-side
+  compaction triggers, `/compact`, and tool-result guards all consume the same
+  policy, replacing the prior scattered 80/95/200K/0.7-style literals with
+  tiered budgets that compress smaller context windows earlier while preserving
+  the 200K absolute ceiling guard for large-window rate-limit pools.
+- **Hermes/OpenClaw-grade compaction and SQLite long-context artifacts.**
+  Tool-result compression now preserves useful facts (commands, paths, counts,
+  URLs, tool names) instead of replacing large outputs with generic placeholders;
+  duplicate outputs, image payloads, and oversized tool-call arguments are
+  reduced while preserving provider-valid tool pairing. Non-Anthropic critical
+  pressure now follows cheap tool compression → structured LLM compaction →
+  adaptive prune, with model-switch downshifts attempting inline compaction when
+  safe. `sessions.db` now stores searchable `context_artifacts` for compaction
+  summaries and background dreaming; `session_search` can include those
+  artifacts, and `ContextAssembler` can inject bounded long-context summaries.
+  A new SQLite-backed dreaming service synthesizes durable facts/decisions/tasks
+  off the turn path and degrades to a local fallback when no auxiliary LLM route
+  is available.
+- **Centralized model catalog surfaces.** Adapter `list_models()` now derives
+  `context_tokens` and thinking support from the model catalog instead of local
+  128K/200K literals, so UI/introspection agrees with `MODEL_CONTEXT_WINDOW` and
+  context-budget policy. OpenAI lower-context variants are now represented
+  explicitly (`gpt-5.4-mini`/`gpt-5.4-nano`/`gpt-5-mini`/`gpt-5-nano` at 400K
+  and `o3`/`o4-mini` at 200K), and OpenAI-internal model switches are covered
+  in both directions (1.05M → 400K/200K downshift and 400K → 1.05M upshift).
+  GLM ids keep the explicit conservative 202,752-token guard — the 1M window
+  stays a DevPack ``[1m]``-alias surface, NOT GEODE's OpenAI-compatible PAYG
+  path (0.99.246 decision; revisit only with a funded live test). Routing prefixes
+  for provider names without built-in adapters (`google`, `deepseek`, `meta`,
+  `alibaba`) were removed; unsupported families now fall through to the
+  executable fallback provider (legitimate for OpenAI-compatible proxies) with
+  a once-per-model WARNING so the reroute is never silent, until adapters exist.
+
 ## [0.99.251] - 2026-07-02
 
 ### Fixed
@@ -218,7 +257,6 @@ functional change.
 
 ### Changed
 - **AgenticLoop comment role-only reduction (PR-LOOP-COMMENT-ROLE)** — a comment-policy pass on `core/agent/loop/agent_loop.py` under the new policy: the CHANGELOG is the SOT for *what happened / why / history*; code comments state only the *role / contract at that point*. ~30 multi-line WHY/narration blocks compressed to one-line role statements; load-bearing contracts/invariants that were only in inline narration **relocated to the enclosing function docstrings** (new `Invariants:`/`Contract:` notes on `_call_llm`, `_saved_cwd_matches_current`, `_load_prior_session_id`, `_record_text_only_round`, `_consume_reflexion_hint`) with a terse one-line marker left at the code line — so a contract is never *evaporated*, only relocated + compressed. The bug-reentry-prevention invariants (shared-list in-place-prune ordering, byte-stable cache-prefix reminder placement, denied-tool security filter, unpriced-model graceful-0.0) kept as compressed one-liners. Net −331 LoC, all comment/docstring text. **Behaviour-preserving, proven**: AST-stripped of comments+docstrings and `ast.unparse`-normalized, both HEAD and the new file are byte-identical (independently re-verified). Extractions (`resolve_loop_adapter`, `build_loop_request`) deliberately deferred to a separate PR to keep this diff a pure, AST-verifiable comment change.
-
 ## [0.99.246] - 2026-06-23
 
 ### Changed

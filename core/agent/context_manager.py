@@ -8,9 +8,15 @@ from __future__ import annotations
 
 import dataclasses
 import logging
+from collections.abc import Callable
 from typing import Any
 
 from core.hooks import HookEvent, HookSystem
+from core.orchestration.context_budget import (
+    ABSOLUTE_TOKEN_CEILING,
+    PRUNE_ACTIVATION_MESSAGE_COUNT,
+    resolve_context_budget_policy,
+)
 
 log = logging.getLogger(__name__)
 
@@ -27,9 +33,14 @@ class ContextWindowManager:
         *,
         hooks: HookSystem | None,
         quiet: bool,
+        session_id_provider: Callable[[], str | None] | None = None,
     ) -> None:
         self._hooks = hooks
         self._quiet = quiet
+        # Late-bound: the loop's session_id is assigned after construction, so
+        # compaction resolves it at call time — without it the primary overflow
+        # path never persists context_artifacts (writer-reader parity).
+        self._session_id_provider = session_id_provider
 
     def maybe_prune_messages(self, messages: list[dict[str, Any]]) -> None:
         """Prune old messages when conversation exceeds 5 rounds (10 msgs).
@@ -40,7 +51,7 @@ class ContextWindowManager:
         2. No orphaned tool_result messages (each tool_result must follow
            an assistant message containing the matching tool_use block)
         """
-        if len(messages) <= 30:
+        if len(messages) <= PRUNE_ACTIVATION_MESSAGE_COUNT:
             return
         first = messages[0]
         # Walk backward to find a safe cut point:
@@ -84,19 +95,16 @@ class ContextWindowManager:
         """Check context window usage and apply provider-aware compression.
 
         Strategy by provider:
-        - Anthropic: server-side compaction (compact_20260112) handles 80%+ automatically.
-          Client only intervenes at 95% as emergency prune safety net.
-        - OpenAI/GLM: no server-side compaction. Client triggers LLM-based compaction
-          at 80% and emergency prune at 95%.
+        - Anthropic: server-side compaction handles warning-level pressure.
+          Client only intervenes at the policy critical threshold.
+        - OpenAI/GLM: no server-side compaction. Client triggers LLM-based
+          compaction at warning pressure and emergency prune at critical pressure.
 
-        Absolute ceiling (200K tokens):
-        - Large-context models (1M) hit rate limit pool separation at >200K tokens.
-          Percentage thresholds (80%=800K) are too distant to catch this.
-          When estimated > 200K on a >200K-window model, force tool result
-          summarization + compact to stay under the ceiling.
+        The policy also carries the absolute ceiling that avoids large-context
+        rate-limit pool separation before percentage thresholds become relevant.
 
         Compression strategy is delegated to the CONTEXT_OVERFLOW_ACTION hook handler.
-        If no handler is registered or all fail, falls back to hardcoded defaults.
+        If no handler is registered or all fail, falls back to the resolved policy.
         """
         try:
             from core.config import settings
@@ -117,11 +125,32 @@ class ContextWindowManager:
                         {"metrics": dataclasses.asdict(metrics), "model": model},
                     )
 
+                from core.orchestration.context_monitor import (
+                    adaptive_prune,
+                    summarize_tool_results,
+                )
+
+                summarize_tool_results(
+                    messages,
+                    getattr(metrics, "policy", None) or metrics.context_window,
+                )
+                metrics = check_context(messages, model, system_prompt=system)
                 strategy = await self._resolve_overflow_strategy(metrics, settings, model, provider)
                 await self._apply_overflow_strategy(strategy, messages, settings, model, provider)
 
                 # Re-check: if still critical after pruning, context is exhausted
                 post = check_context(messages, model, system_prompt=system)
+                if post.is_critical:
+                    pruned = adaptive_prune(
+                        messages,
+                        getattr(post, "policy", None) or post.context_window,
+                    )
+                    from core.orchestration.compaction import repair_tool_pairs
+
+                    messages.clear()
+                    messages.extend(repair_tool_pairs(pruned))
+                    post = check_context(messages, model, system_prompt=system)
+
                 if post.is_critical:
                     from core.agent.loop import _ContextExhaustedError
 
@@ -153,7 +182,7 @@ class ContextWindowManager:
 
                     summarized, _tok_before, _tok_after = summarize_tool_results(
                         messages,
-                        metrics.context_window,
+                        metrics.policy or metrics.context_window,
                     )
                     if summarized > 0:
                         log.info(
@@ -164,7 +193,6 @@ class ContextWindowManager:
 
             elif metrics.is_ceiling_exceeded:
                 from core.orchestration.context_monitor import (
-                    ABSOLUTE_TOKEN_CEILING,
                     summarize_tool_results,
                 )
 
@@ -172,7 +200,9 @@ class ContextWindowManager:
                     "Context ceiling: %d tokens > %dK ceiling (%.0f%% of %dK window) "
                     "— compressing to avoid rate limit pool separation",
                     metrics.estimated_tokens,
-                    ABSOLUTE_TOKEN_CEILING // 1000,
+                    metrics.policy.absolute_ceiling_tokens // 1000
+                    if metrics.policy
+                    else ABSOLUTE_TOKEN_CEILING // 1000,
                     metrics.usage_pct,
                     metrics.context_window // 1000,
                 )
@@ -180,13 +210,23 @@ class ContextWindowManager:
                 # Phase 1: summarize large tool results
                 summarized, _tok_before, _tok_after = summarize_tool_results(
                     messages,
-                    ABSOLUTE_TOKEN_CEILING,
+                    metrics.policy or ABSOLUTE_TOKEN_CEILING,
                 )
                 post = check_context(messages, model, system_prompt=system)
 
                 if post.is_ceiling_exceeded:
                     # Phase 2: compact conversation
-                    strategy = {"strategy": "compact", "keep_recent": settings.compact_keep_recent}
+                    keep_recent = (
+                        post.policy.resolve_keep_recent(settings.compact_keep_recent)
+                        if post.policy
+                        else settings.compact_keep_recent
+                    )
+                    strategy = {
+                        "strategy": "compact",
+                        "keep_recent": keep_recent,
+                        "policy": post.policy,
+                        "trigger": "ceiling",
+                    }
                     await self._apply_overflow_strategy(
                         strategy, messages, settings, model, provider
                     )
@@ -216,11 +256,15 @@ class ContextWindowManager:
             from core.orchestration.compaction import compact_conversation
 
             try:
+                session_id = self._session_id_provider() if self._session_id_provider else None
                 new_msgs, did_compact = await compact_conversation(
                     messages,
                     provider=provider,
                     model=model,
                     keep_recent=keep_recent,
+                    policy=strategy.get("policy"),
+                    session_id=session_id,
+                    trigger=strategy.get("trigger", "overflow"),
                 )
                 if did_compact:
                     original_count = len(messages)
@@ -241,8 +285,10 @@ class ContextWindowManager:
             pruned = prune_oldest_messages(messages, keep_recent=keep_recent)
             original_count = len(messages)
             if len(pruned) < original_count:
+                from core.orchestration.compaction import repair_tool_pairs
+
                 messages.clear()
-                messages.extend(pruned)
+                messages.extend(repair_tool_pairs(pruned))
                 log.info(
                     "Emergency pruned: %d → %d messages (keep_recent=%d)",
                     original_count,
@@ -279,12 +325,11 @@ class ContextWindowManager:
             original_count = len(messages)
 
             # Phase 1: summarize large tool_result blocks in-place
-            ctx_window = getattr(
-                check_context(messages, model, system_prompt=system),
-                "context_window",
-                200_000,
+            metrics = check_context(messages, model, system_prompt=system)
+            summarized, _tok_before, _tok_after = summarize_tool_results(
+                messages,
+                metrics.policy or metrics.context_window,
             )
-            summarized, _tok_before, _tok_after = summarize_tool_results(messages, ctx_window)
             if summarized > 0:
                 log.info("Aggressive recovery: summarized %d tool results", summarized)
 
@@ -296,8 +341,11 @@ class ContextWindowManager:
             # Phase 2: delegate to CONTEXT_OVERFLOW_ACTION hook for strategy
             strategy = await self._resolve_overflow_strategy(post, settings, model, provider)
 
-            # Override keep_recent aggressively (halved, min 3)
-            aggressive_keep = max(3, settings.compact_keep_recent // 2)
+            aggressive_keep = (
+                post.policy.resolve_aggressive_keep_recent(settings.compact_keep_recent)
+                if post.policy
+                else max(3, settings.compact_keep_recent // 2)
+            )
             strategy["keep_recent"] = aggressive_keep
 
             # Force prune if hook returned "none" — aggressive recovery must act
@@ -348,23 +396,53 @@ class ContextWindowManager:
             )
             for result in results:
                 if result.success and result.data.get("strategy"):
+                    result.data.setdefault("policy", getattr(metrics, "policy", None))
+                    result.data.setdefault("trigger", "overflow_hook")
                     return result.data
 
-        # Fallback: hardcoded default (no handler registered or all failed)
-        keep_recent = settings.compact_keep_recent
+        policy = getattr(metrics, "policy", None)
+        if policy is None:
+            policy = resolve_context_budget_policy(
+                model,
+                context_window=getattr(metrics, "context_window", None),
+            )
+        keep_recent = (
+            policy.resolve_keep_recent(settings.compact_keep_recent)
+            if policy is not None
+            else settings.compact_keep_recent
+        )
+        estimated_tokens = getattr(metrics, "estimated_tokens", None)
+        if estimated_tokens is None:
+            estimated_tokens = int(getattr(metrics, "usage_pct", 0.0) / 100 * policy.context_window)
+        is_critical = bool(
+            getattr(metrics, "is_critical", estimated_tokens >= policy.critical_tokens)
+        )
+        is_warning = bool(getattr(metrics, "is_warning", estimated_tokens >= policy.warning_tokens))
         if provider == "anthropic":
-            if metrics.usage_pct >= 95:
-                return {"strategy": "prune", "keep_recent": keep_recent}
-            return {"strategy": "none"}
+            if is_critical:
+                return {
+                    "strategy": "prune",
+                    "keep_recent": keep_recent,
+                    "policy": policy,
+                    "trigger": "critical",
+                }
+            return {"strategy": "none", "policy": policy, "trigger": "warning"}
 
-        # Non-Anthropic: compact at 80%, prune at 95%
-        if metrics.context_window < 200_000:
-            keep_recent = min(keep_recent, 5)
-        if metrics.usage_pct >= 95:
-            return {"strategy": "prune", "keep_recent": keep_recent}
-        elif metrics.usage_pct >= 80:
-            return {"strategy": "compact", "keep_recent": keep_recent}
-        return {"strategy": "none"}
+        if is_critical:
+            return {
+                "strategy": "compact",
+                "keep_recent": keep_recent,
+                "policy": policy,
+                "trigger": "critical",
+            }
+        elif is_warning:
+            return {
+                "strategy": "compact",
+                "keep_recent": keep_recent,
+                "policy": policy,
+                "trigger": "warning",
+            }
+        return {"strategy": "none", "policy": policy, "trigger": "ok"}
 
     @staticmethod
     def repair_messages(messages: list[dict[str, Any]]) -> None:

@@ -38,6 +38,7 @@ from core.llm.adapters.base import (
     ToolSpec,
     UsageSummary,
 )
+from core.llm.token_tracker import MODEL_CONTEXT_WINDOW
 
 log = logging.getLogger(__name__)
 
@@ -51,6 +52,11 @@ log = logging.getLogger(__name__)
 # published a cap, but we apply the same defensive limit to keep
 # behaviour predictable across the OpenAI-family adapter set.
 OPENAI_TOOLS_MAX = 128
+
+
+def _catalog_context_window(model_id: str) -> int:
+    """Read context windows from the central pricing/context catalogue."""
+    return MODEL_CONTEXT_WINDOW[model_id]
 
 
 # ---------------------------------------------------------------------------
@@ -100,14 +106,14 @@ _OPENAI_MODELS: dict[str, OpenAIModelSpec] = {
         uses_max_completion_tokens=True,
         accepts_temperature=False,
         reasoning_effort_values=("none", "low", "medium", "high", "xhigh"),
-        context_window=200_000,
+        context_window=_catalog_context_window("gpt-5.3-codex"),
     ),
     "gpt-5.4": OpenAIModelSpec(
         model_id="gpt-5.4",
         uses_max_completion_tokens=True,
         accepts_temperature=False,
         reasoning_effort_values=("none", "low", "medium", "high", "xhigh"),
-        context_window=1_050_000,
+        context_window=_catalog_context_window("gpt-5.4"),
         supports_tool_search=True,
     ),
     "gpt-5.4-mini": OpenAIModelSpec(
@@ -115,16 +121,37 @@ _OPENAI_MODELS: dict[str, OpenAIModelSpec] = {
         uses_max_completion_tokens=True,
         accepts_temperature=False,
         reasoning_effort_values=("none", "low", "medium", "high", "xhigh"),
-        context_window=1_050_000,
+        context_window=_catalog_context_window("gpt-5.4-mini"),
         supports_tool_search=True,
+    ),
+    "gpt-5.4-nano": OpenAIModelSpec(
+        model_id="gpt-5.4-nano",
+        uses_max_completion_tokens=True,
+        accepts_temperature=False,
+        reasoning_effort_values=("none", "low", "medium", "high", "xhigh"),
+        context_window=_catalog_context_window("gpt-5.4-nano"),
     ),
     "gpt-5.5": OpenAIModelSpec(
         model_id="gpt-5.5",
         uses_max_completion_tokens=True,
         accepts_temperature=False,
         reasoning_effort_values=("none", "low", "medium", "high", "xhigh"),
-        context_window=1_050_000,
+        context_window=_catalog_context_window("gpt-5.5"),
         supports_tool_search=True,
+    ),
+    "gpt-5-mini": OpenAIModelSpec(
+        model_id="gpt-5-mini",
+        uses_max_completion_tokens=True,
+        accepts_temperature=False,
+        reasoning_effort_values=("none", "low", "medium", "high", "xhigh"),
+        context_window=_catalog_context_window("gpt-5-mini"),
+    ),
+    "gpt-5-nano": OpenAIModelSpec(
+        model_id="gpt-5-nano",
+        uses_max_completion_tokens=True,
+        accepts_temperature=False,
+        reasoning_effort_values=("none", "low", "medium", "high", "xhigh"),
+        context_window=_catalog_context_window("gpt-5-nano"),
     ),
     # ── o-series (always-on reasoning, no temperature, no "none" effort) ──
     "o3": OpenAIModelSpec(
@@ -132,14 +159,14 @@ _OPENAI_MODELS: dict[str, OpenAIModelSpec] = {
         uses_max_completion_tokens=True,
         accepts_temperature=False,
         reasoning_effort_values=("low", "medium", "high"),
-        context_window=200_000,
+        context_window=_catalog_context_window("o3"),
     ),
     "o4-mini": OpenAIModelSpec(
         model_id="o4-mini",
         uses_max_completion_tokens=True,
         accepts_temperature=False,
         reasoning_effort_values=("low", "medium", "high"),
-        context_window=200_000,
+        context_window=_catalog_context_window("o4-mini"),
     ),
 }
 

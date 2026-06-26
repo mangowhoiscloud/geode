@@ -1,14 +1,11 @@
 """Tests for model-first provider inference (Feature 7).
 
-Feature 7: Make _resolve_provider handle more model prefixes.
+Feature 7: Make _resolve_provider handle executable model prefixes.
   - gpt-* → openai
   - o3-*/o4-* → openai
-  - gemini-* → google
-  - deepseek-* → deepseek
-  - llama-* → meta
-  - qwen-*/qwen3* → alibaba
   - claude-* → anthropic
   - glm-* → glm
+  - unsupported families → openai fallback
   - unknown → openai (fallback)
 """
 
@@ -63,42 +60,39 @@ class TestResolveProvider:
     def test_o3_pro(self) -> None:
         assert _resolve_provider("o3-pro") == "openai"
 
-    # Google — gemini-*
+    # Unsupported families — no built-in adapters, so fallback to OpenAI.
     def test_gemini_pro(self) -> None:
-        assert _resolve_provider("gemini-pro") == "google"
+        assert _resolve_provider("gemini-pro") == "openai"
 
     def test_gemini_2_5_flash(self) -> None:
-        assert _resolve_provider("gemini-2.5-flash") == "google"
+        assert _resolve_provider("gemini-2.5-flash") == "openai"
 
     def test_gemini_ultra(self) -> None:
-        assert _resolve_provider("gemini-ultra") == "google"
+        assert _resolve_provider("gemini-ultra") == "openai"
 
-    # DeepSeek — deepseek-*
     def test_deepseek_v3(self) -> None:
-        assert _resolve_provider("deepseek-v3") == "deepseek"
+        assert _resolve_provider("deepseek-v3") == "openai"
 
     def test_deepseek_coder(self) -> None:
-        assert _resolve_provider("deepseek-coder") == "deepseek"
+        assert _resolve_provider("deepseek-coder") == "openai"
 
     def test_deepseek_r1(self) -> None:
-        assert _resolve_provider("deepseek-r1") == "deepseek"
+        assert _resolve_provider("deepseek-r1") == "openai"
 
-    # Meta — llama-*
     def test_llama_3_1(self) -> None:
-        assert _resolve_provider("llama-3.1") == "meta"
+        assert _resolve_provider("llama-3.1") == "openai"
 
     def test_llama_guard(self) -> None:
-        assert _resolve_provider("llama-guard-3") == "meta"
+        assert _resolve_provider("llama-guard-3") == "openai"
 
-    # Alibaba — qwen-*/qwen3*
     def test_qwen_72b(self) -> None:
-        assert _resolve_provider("qwen-72b") == "alibaba"
+        assert _resolve_provider("qwen-72b") == "openai"
 
     def test_qwen3_235b(self) -> None:
-        assert _resolve_provider("qwen3-235b-a22b") == "alibaba"
+        assert _resolve_provider("qwen3-235b-a22b") == "openai"
 
     def test_qwen_turbo(self) -> None:
-        assert _resolve_provider("qwen-turbo") == "alibaba"
+        assert _resolve_provider("qwen-turbo") == "openai"
 
     # Fallback — unknown models default to openai
     def test_unknown_model_fallback(self) -> None:

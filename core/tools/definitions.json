@@ -130,6 +130,18 @@
           "type": "boolean",
           "description": "scope='project' only — query the trigram index (substring + CJK partial-word recall). Falls back to unicode61 when trigram is unavailable. scope='all' always uses unicode61.",
           "default": false
+        },
+        "include_artifacts": {
+          "type": "boolean",
+          "description": "Also search synthesized long-context artifacts such as compaction summaries and dreams. Default false.",
+          "default": false
+        },
+        "artifact_kinds": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Optional artifact kind filter when include_artifacts=true, for example ['compaction_summary', 'dream']."
         }
       },
       "required": [

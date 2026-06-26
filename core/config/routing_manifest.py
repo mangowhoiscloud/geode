@@ -25,7 +25,9 @@ Sections (mirroring TOML structure):
 - :class:`ModelDefaults` — ``[model.defaults]`` provider → primary model
 - :class:`ModelFallbacks` — ``[model.fallbacks]`` provider → fallback chain
 - :class:`RoutingRules` — ``[routing.prefixes]`` + ``[routing]``
-  codex_only_models, codex_suffixes, fallback_provider
+  codex_only_models, codex_suffixes, fallback_provider. Prefix targets are
+  limited to executable built-in providers; unsupported families fall through
+  to the fallback provider until an adapter exists.
 - :class:`CredentialPatterns` — ``[credentials.patterns]`` regex → provider
 - :class:`CredentialKeychain` — ``[credentials.keychain]`` per-provider
   macOS keychain service name
@@ -39,6 +41,7 @@ single key, leaving every other shipped default intact.
 
 from __future__ import annotations
 
+import logging
 import tomllib
 from functools import lru_cache
 from pathlib import Path
@@ -48,6 +51,7 @@ from pydantic import BaseModel, Field, model_validator
 
 __all__ = [
     "DEFAULT_MANIFEST_PATH",
+    "EXECUTABLE_ROUTING_PROVIDERS",
     "USER_OVERRIDE_PATH",
     "CredentialEnvVars",
     "CredentialKeychain",
@@ -62,6 +66,7 @@ __all__ = [
 ]
 
 DEFAULT_MANIFEST_PATH = Path(__file__).parent / "routing.toml"
+EXECUTABLE_ROUTING_PROVIDERS: frozenset[str] = frozenset({"anthropic", "openai", "glm"})
 
 # Re-export from `core.paths` (SoT) so the routing manifest's user
 # override path stays aligned with every other ``~/.geode/`` file.
@@ -129,8 +134,7 @@ class RoutingRules(BaseModel):
       OpenAI's Codex models page).
     - ``codex_suffixes``: suffix match for ``*-codex`` / ``*-codex-max``
       / ``*-codex-mini`` ids.
-    - ``fallback_provider``: last-resort when no rule matches. Preserves
-      the legacy "openai" default from ``_resolve_provider``.
+    - ``fallback_provider``: last-resort when no executable rule matches.
     """
 
     prefixes: dict[str, str] = Field(default_factory=dict)
@@ -215,13 +219,24 @@ class RoutingManifest(BaseModel):
                     f"{default!r} (drift between [model.defaults] and "
                     f"[model.fallbacks.{provider}])"
                 )
-        # 2) Routing prefix targets reference known providers (light check
-        # — we don't fail on unknown providers because new providers can
-        # legitimately appear without a fallback chain yet; just guarantee
-        # the value is a non-empty string).
+        # 2) Routing prefix targets must reference executable built-in
+        # providers. Provider names without adapters are not routes; unknown
+        # families fall through to ``fallback_provider`` until an adapter exists.
         for prefix, provider in self.routing.prefixes.items():
             if not provider:
                 raise ValueError(f"[routing.prefixes] {prefix!r} → empty provider")
+            if provider not in EXECUTABLE_ROUTING_PROVIDERS:
+                raise ValueError(
+                    f"[routing.prefixes] {prefix!r} → unsupported provider "
+                    f"{provider!r}; executable providers: "
+                    f"{sorted(EXECUTABLE_ROUTING_PROVIDERS)}"
+                )
+        if self.routing.fallback_provider not in EXECUTABLE_ROUTING_PROVIDERS:
+            raise ValueError(
+                f"[routing] fallback_provider={self.routing.fallback_provider!r} "
+                f"is unsupported; executable providers: "
+                f"{sorted(EXECUTABLE_ROUTING_PROVIDERS)}"
+            )
         return self
 
     # ── Accessors ─────────────────────────────────────────────────────
@@ -369,7 +384,7 @@ def resolve_provider(model: str, manifest: RoutingManifest | None = None) -> str
 
     1. Codex-only models match first (e.g. gpt-5.5 → openai-codex).
     2. Codex suffixes (``*-codex`` etc.) → openai-codex.
-    3. Prefix table — first matching prefix wins.
+    3. Prefix table — first matching executable provider prefix wins.
     4. Fallback provider (``openai`` by default).
     """
     m = manifest or load_routing_manifest()
@@ -381,4 +396,19 @@ def resolve_provider(model: str, manifest: RoutingManifest | None = None) -> str
     for prefix, provider in m.routing.prefixes.items():
         if model.startswith(prefix):
             return provider
+    # Observable fallback — a family with no built-in adapter (gemini/deepseek/
+    # llama/qwen/…) rides the OpenAI-compatible fallback. Legitimate for
+    # OpenAI-compatible proxies serving those models, but never silent: warn
+    # once per model id so a typo'd family doesn't quietly hit the wrong backend.
+    if model not in _FALLBACK_WARNED:
+        _FALLBACK_WARNED.add(model)
+        logging.getLogger(__name__).warning(
+            "No built-in adapter family matches model %r — routing to fallback "
+            "provider %r (OpenAI-compatible endpoint must serve this id)",
+            model,
+            m.routing.fallback_provider,
+        )
     return m.routing.fallback_provider
+
+
+_FALLBACK_WARNED: set[str] = set()

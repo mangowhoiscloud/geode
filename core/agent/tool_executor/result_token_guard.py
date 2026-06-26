@@ -9,16 +9,15 @@ from typing import Any
 def _compute_model_tool_limit(model: str) -> int:
     """Compute per-tool-result token limit based on model context window.
 
-    For large-context models (>=200K), returns 0 (unlimited — server-side handles it).
-    For small-context models (<200K, e.g. GLM-5), caps each tool result at 5% of
-    the context window to prevent a single result from consuming the budget.
+    Large-window tiers rely on server-side handling.  Small-window tiers cap
+    each tool result at the policy-derived share of the context window.
     """
-    from core.llm.token_tracker import MODEL_CONTEXT_WINDOW
+    from core.orchestration.context_budget import resolve_context_budget_policy
 
-    ctx = MODEL_CONTEXT_WINDOW.get(model, 200_000)
-    if ctx >= 200_000:
-        return 0  # trust server-side clear_tool_uses
-    return ctx // 20  # 5% of context window
+    policy = resolve_context_budget_policy(model)
+    if policy.tier.name != "small":
+        return 0
+    return policy.per_tool_result_limit_tokens
 
 
 def _guard_tool_result(
@@ -39,7 +38,9 @@ def _guard_tool_result(
         serialized = json.dumps(result, ensure_ascii=False, default=str)
     except (TypeError, ValueError):
         return result
-    estimated_tokens = len(serialized) // 4
+    from core.orchestration.context_budget import TOKEN_ESTIMATE_CHARS_PER_TOKEN
+
+    estimated_tokens = len(serialized) // TOKEN_ESTIMATE_CHARS_PER_TOKEN
     if estimated_tokens <= max_tokens:
         return result
     # Preserve summary if present (SubAgentResult always has one)
@@ -56,5 +57,5 @@ def _guard_tool_result(
     return {
         "_truncated": True,
         "_original_tokens": estimated_tokens,
-        "preview": serialized[: max_tokens * 4],
+        "preview": serialized[: max_tokens * TOKEN_ESTIMATE_CHARS_PER_TOKEN],
     }

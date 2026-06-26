@@ -167,6 +167,7 @@ class CodexCliAdapter:
 
     def list_models(self) -> list[ModelSpec]:
         from core.config import CODEX_FALLBACK_CHAIN, CODEX_PRIMARY
+        from core.llm.model_catalog import model_spec_for_adapter
 
         ids = [CODEX_PRIMARY, *CODEX_FALLBACK_CHAIN]
         seen: set[str] = set()
@@ -176,11 +177,10 @@ class CodexCliAdapter:
                 continue
             seen.add(mid)
             out.append(
-                ModelSpec(
-                    id=mid,
+                model_spec_for_adapter(
+                    mid,
                     label=f"{mid} (via codex-cli)",
-                    context_tokens=128_000,
-                    supports_thinking=mid.startswith(("o3", "o4")),
+                    provider="openai",
                     supports_tools=False,
                 )
             )

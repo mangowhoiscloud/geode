@@ -421,7 +421,11 @@ class AgenticLoop:
 
         from core.agent.context_manager import ContextWindowManager
 
-        self._ctx_mgr = ContextWindowManager(hooks=hooks, quiet=quiet)
+        self._ctx_mgr = ContextWindowManager(
+            hooks=hooks,
+            quiet=quiet,
+            session_id_provider=lambda: self._session_id or None,
+        )
 
         # Convergence detection — 3 identical errors break the loop.
         from core.agent.convergence import ConvergenceDetector

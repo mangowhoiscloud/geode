@@ -113,7 +113,7 @@ def test_default_manifest_credentials_env_vars() -> None:
     assert manifest.credential_env_vars.env_vars.get("glm") == "ZAI_API_KEY"
 
 
-# ── resolve_provider — legacy parity ───────────────────────────────────────
+# ── resolve_provider — executable providers only ──────────────────────────
 
 
 @pytest.mark.parametrize(
@@ -128,17 +128,20 @@ def test_default_manifest_credentials_env_vars() -> None:
         ("gpt-5.3-codex", "openai-codex"),  # codex suffix
         ("o3-mini", "openai"),
         ("o4-mini", "openai"),
-        ("gemini-1.5-pro", "google"),
-        ("deepseek-r1", "deepseek"),
-        ("llama-3.3", "meta"),
-        ("qwen-72b", "alibaba"),
-        ("qwen3-72b", "alibaba"),
+        ("gemini-1.5-pro", "openai"),  # no built-in google adapter
+        ("deepseek-r1", "openai"),  # no built-in deepseek adapter
+        ("llama-3.3", "openai"),  # no built-in meta adapter
+        ("qwen-72b", "openai"),  # no built-in alibaba adapter
+        ("qwen3-72b", "openai"),  # no built-in alibaba adapter
         ("mystery-model", "openai"),  # fallback
     ],
 )
-def test_resolve_provider_legacy_parity(model: str, expected: str) -> None:
-    """resolve_provider matches the legacy _resolve_provider behaviour for
-    every documented branch in core.config.__init__._resolve_provider."""
+def test_resolve_provider_routes_only_executable_providers(model: str, expected: str) -> None:
+    """resolve_provider returns only executable built-in providers.
+
+    Families without adapters fall through to fallback_provider instead of
+    routing to inert provider names.
+    """
     assert resolve_provider(model) == expected
 
 
@@ -166,6 +169,20 @@ def test_prefix_target_empty_raises() -> None:
     bad = _valid_dict()
     bad["routing"]["prefixes"]["weird-"] = ""
     with pytest.raises(ValueError, match="empty provider"):
+        _parse_manifest(bad)
+
+
+def test_prefix_target_without_builtin_adapter_raises() -> None:
+    bad = _valid_dict()
+    bad["routing"]["prefixes"]["gemini-"] = "google"
+    with pytest.raises(ValueError, match="unsupported provider"):
+        _parse_manifest(bad)
+
+
+def test_fallback_provider_without_builtin_adapter_raises() -> None:
+    bad = _valid_dict()
+    bad["routing"]["fallback_provider"] = "google"
+    with pytest.raises(ValueError, match="fallback_provider"):
         _parse_manifest(bad)
 
 
@@ -249,14 +266,14 @@ anthropic = ["claude-sonnet-4-6", "claude-haiku-4-5-20251001"]
 
 
 def test_user_override_merges_nested_section(tmp_path: Path) -> None:
-    """User overrides at ``[routing.prefixes]`` merge instead of replace."""
+    """Executable user prefix overrides merge instead of replace."""
     override = tmp_path / "routing.toml"
     override.write_text(
-        '[routing.prefixes]\n"custom-" = "custom-provider"\n',
+        '[routing.prefixes]\n"custom-openai-" = "openai"\n',
         encoding="utf-8",
     )
     manifest = load_routing_manifest(user_path=override)
-    assert manifest.routing.prefixes.get("custom-") == "custom-provider"
+    assert manifest.routing.prefixes.get("custom-openai-") == "openai"
     # Shipped prefixes preserved
     assert manifest.routing.prefixes.get("claude-") == "anthropic"
 

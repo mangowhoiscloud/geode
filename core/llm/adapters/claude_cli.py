@@ -310,6 +310,7 @@ class ClaudeCliAdapter:
 
     def list_models(self) -> list[ModelSpec]:
         from core.config import ANTHROPIC_FALLBACK_CHAIN, ANTHROPIC_PRIMARY
+        from core.llm.model_catalog import model_spec_for_adapter
 
         ids = [ANTHROPIC_PRIMARY, *ANTHROPIC_FALLBACK_CHAIN]
         seen: set[str] = set()
@@ -319,11 +320,10 @@ class ClaudeCliAdapter:
                 continue
             seen.add(mid)
             out.append(
-                ModelSpec(
-                    id=mid,
+                model_spec_for_adapter(
+                    mid,
                     label=f"{mid} (via claude-cli)",
-                    context_tokens=200_000,
-                    supports_thinking=True,
+                    provider=self.provider,
                     supports_tools=False,  # subprocess text-only path
                 )
             )

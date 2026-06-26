@@ -204,6 +204,7 @@ class GlmCodingPlanAdapter:
 
     def list_models(self) -> list[ModelSpec]:
         from core.config import GLM_FALLBACK_CHAIN, GLM_PRIMARY
+        from core.llm.model_catalog import model_spec_for_adapter
 
         ids = [GLM_PRIMARY, *GLM_FALLBACK_CHAIN]
         seen: set[str] = set()
@@ -213,11 +214,10 @@ class GlmCodingPlanAdapter:
                 continue
             seen.add(mid)
             models.append(
-                ModelSpec(
-                    id=mid,
+                model_spec_for_adapter(
+                    mid,
                     label=f"{mid} (via Coding Plan)",
-                    context_tokens=128_000,
-                    supports_thinking=False,
+                    provider=self.provider,
                     supports_tools=True,
                 )
             )

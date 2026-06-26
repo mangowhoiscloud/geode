@@ -17,6 +17,7 @@ import sqlite3
 import threading
 import time
 from dataclasses import dataclass
+from hashlib import sha256
 from pathlib import Path
 from typing import Any
 
@@ -49,6 +50,24 @@ class SessionMeta:
     user_input: str = ""
     round_count: int = 0
     message_count: int = 0
+
+
+@dataclass(frozen=True, slots=True)
+class ContextArtifact:
+    """Durable synthesized context derived from session transcripts."""
+
+    artifact_id: str
+    session_id: str
+    kind: str
+    content: str
+    source_start_seq: int | None = None
+    source_end_seq: int | None = None
+    token_count: int | None = None
+    model: str = ""
+    provider: str = ""
+    metadata: dict[str, Any] | None = None
+    created_at: float = 0.0
+    updated_at: float = 0.0
 
 
 _CREATE_TABLE_SQL = """\
@@ -139,6 +158,35 @@ CREATE INDEX IF NOT EXISTS idx_messages_session ON messages (session_id, seq)
 
 _CREATE_MESSAGES_TOOL_INDEX_SQL = """\
 CREATE INDEX IF NOT EXISTS idx_messages_tool_name ON messages (tool_name)
+"""
+
+_CREATE_CONTEXT_ARTIFACTS_TABLE_SQL = """\
+CREATE TABLE IF NOT EXISTS context_artifacts (
+    artifact_id      TEXT PRIMARY KEY,
+    session_id       TEXT NOT NULL,
+    kind             TEXT NOT NULL,
+    source_start_seq INTEGER,
+    source_end_seq   INTEGER,
+    content          TEXT NOT NULL,
+    metadata         TEXT NOT NULL DEFAULT '{}',
+    token_count      INTEGER,
+    model            TEXT NOT NULL DEFAULT '',
+    provider         TEXT NOT NULL DEFAULT '',
+    content_hash     TEXT NOT NULL,
+    created_at       REAL NOT NULL,
+    updated_at       REAL NOT NULL,
+    UNIQUE(session_id, kind, source_start_seq, source_end_seq, content_hash)
+)
+"""
+
+_CREATE_CONTEXT_ARTIFACTS_SESSION_INDEX_SQL = """\
+CREATE INDEX IF NOT EXISTS idx_context_artifacts_session
+    ON context_artifacts (session_id, kind, updated_at DESC)
+"""
+
+_CREATE_CONTEXT_ARTIFACTS_KIND_INDEX_SQL = """\
+CREATE INDEX IF NOT EXISTS idx_context_artifacts_kind
+    ON context_artifacts (kind, updated_at DESC)
 """
 
 # PR-COMM-3 (2026-05-24) — per-agent cumulative state. Mirrors paperclip
@@ -283,6 +331,35 @@ CREATE VIRTUAL TABLE IF NOT EXISTS messages_fts_trigram USING fts5(
     content_rowid='id',
     tokenize='trigram'
 )
+"""
+
+_CREATE_CONTEXT_ARTIFACTS_FTS_SQL = """\
+CREATE VIRTUAL TABLE IF NOT EXISTS context_artifacts_fts USING fts5(
+    content, kind, metadata,
+    content='context_artifacts',
+    content_rowid='rowid',
+    tokenize='unicode61'
+)
+"""
+
+_CONTEXT_ARTIFACTS_FTS_TRIGGERS_SQL = """\
+CREATE TRIGGER IF NOT EXISTS context_artifacts_fts_after_insert
+AFTER INSERT ON context_artifacts BEGIN
+    INSERT INTO context_artifacts_fts(rowid, content, kind, metadata)
+    VALUES (new.rowid, new.content, new.kind, new.metadata);
+END;
+CREATE TRIGGER IF NOT EXISTS context_artifacts_fts_after_delete
+AFTER DELETE ON context_artifacts BEGIN
+    INSERT INTO context_artifacts_fts(context_artifacts_fts, rowid, content, kind, metadata)
+    VALUES ('delete', old.rowid, old.content, old.kind, old.metadata);
+END;
+CREATE TRIGGER IF NOT EXISTS context_artifacts_fts_after_update
+AFTER UPDATE ON context_artifacts BEGIN
+    INSERT INTO context_artifacts_fts(context_artifacts_fts, rowid, content, kind, metadata)
+    VALUES ('delete', old.rowid, old.content, old.kind, old.metadata);
+    INSERT INTO context_artifacts_fts(rowid, content, kind, metadata)
+    VALUES (new.rowid, new.content, new.kind, new.metadata);
+END;
 """
 
 
@@ -448,6 +525,16 @@ def _extract_message_fields(msg: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def _loads_json_object(raw: Any) -> dict[str, Any]:
+    if not isinstance(raw, str) or not raw:
+        return {}
+    try:
+        parsed = json.loads(raw)
+    except json.JSONDecodeError:
+        return {}
+    return parsed if isinstance(parsed, dict) else {"value": parsed}
+
+
 class SessionManager:
     """SQLite-backed session index.
 
@@ -492,6 +579,9 @@ class SessionManager:
         self._conn.execute(_CREATE_MESSAGES_TABLE_SQL)
         self._conn.execute(_CREATE_MESSAGES_SESSION_INDEX_SQL)
         self._conn.execute(_CREATE_MESSAGES_TOOL_INDEX_SQL)
+        self._conn.execute(_CREATE_CONTEXT_ARTIFACTS_TABLE_SQL)
+        self._conn.execute(_CREATE_CONTEXT_ARTIFACTS_SESSION_INDEX_SQL)
+        self._conn.execute(_CREATE_CONTEXT_ARTIFACTS_KIND_INDEX_SQL)
         # PR-COMM-3 (2026-05-24) — per-agent runtime state + per-run
         # lineage. Co-located in sessions.db rather than a separate
         # runtime.db so cross-table joins (agent → its messages → its
@@ -545,6 +635,8 @@ class SessionManager:
                 "unicode61-only search. Substring recall (e.g. partial Korean "
                 "words / identifier fragments) will be limited."
             )
+        self._conn.executescript(_CREATE_CONTEXT_ARTIFACTS_FTS_SQL)
+        self._conn.executescript(_CONTEXT_ARTIFACTS_FTS_TRIGGERS_SQL)
         self._conn.commit()
 
     def upsert(self, meta: SessionMeta) -> None:
@@ -918,6 +1010,176 @@ class SessionManager:
             )
         return out
 
+    # ------------------------------------------------------------------
+    # Durable context artifacts: compaction summaries, handoffs, dreams
+    # ------------------------------------------------------------------
+
+    def upsert_context_artifact(
+        self,
+        *,
+        session_id: str,
+        kind: str,
+        content: str,
+        artifact_id: str | None = None,
+        source_start_seq: int | None = None,
+        source_end_seq: int | None = None,
+        token_count: int | None = None,
+        model: str = "",
+        provider: str = "",
+        metadata: dict[str, Any] | None = None,
+        created_at: float | None = None,
+    ) -> str:
+        """Insert/update a synthesized long-context artifact.
+
+        ``artifact_id`` is stable by default: session + kind + source range +
+        content hash. Re-running a compaction/dream pass over the same source
+        updates metadata/timestamps rather than duplicating rows.
+        """
+        now = time.time()
+        created = created_at if created_at is not None else now
+        clean_metadata = metadata or {}
+        metadata_json = json.dumps(clean_metadata, ensure_ascii=False, sort_keys=True)
+        content_hash = sha256(content.encode("utf-8", errors="replace")).hexdigest()
+        resolved_id = (
+            artifact_id
+            or sha256(
+                "|".join(
+                    (
+                        session_id,
+                        kind,
+                        str(source_start_seq if source_start_seq is not None else ""),
+                        str(source_end_seq if source_end_seq is not None else ""),
+                        content_hash,
+                    )
+                ).encode("utf-8")
+            ).hexdigest()[:32]
+        )
+        with self._lock:
+            self._conn.execute(
+                """\
+                INSERT INTO context_artifacts
+                    (artifact_id, session_id, kind, source_start_seq, source_end_seq,
+                     content, metadata, token_count, model, provider, content_hash,
+                     created_at, updated_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(artifact_id) DO UPDATE SET
+                    content          = excluded.content,
+                    metadata         = excluded.metadata,
+                    token_count      = excluded.token_count,
+                    model            = excluded.model,
+                    provider         = excluded.provider,
+                    content_hash     = excluded.content_hash,
+                    updated_at       = excluded.updated_at
+                """,
+                (
+                    resolved_id,
+                    session_id,
+                    kind,
+                    source_start_seq,
+                    source_end_seq,
+                    content,
+                    metadata_json,
+                    token_count,
+                    model,
+                    provider,
+                    content_hash,
+                    created,
+                    now,
+                ),
+            )
+            self._conn.commit()
+        return resolved_id
+
+    def list_context_artifacts(
+        self,
+        *,
+        session_id: str | None = None,
+        kinds: list[str] | tuple[str, ...] | None = None,
+        limit: int = 20,
+    ) -> list[ContextArtifact]:
+        """Return newest context artifacts, optionally filtered by session/kind."""
+        clauses: list[str] = []
+        params: list[Any] = []
+        if session_id is not None:
+            clauses.append("session_id = ?")
+            params.append(session_id)
+        if kinds:
+            placeholders = ",".join("?" for _ in kinds)
+            clauses.append(f"kind IN ({placeholders})")
+            params.extend(kinds)
+        where = f"WHERE {' AND '.join(clauses)}" if clauses else ""
+        rows = self._conn.execute(
+            f"""\
+            SELECT artifact_id, session_id, kind, source_start_seq, source_end_seq,
+                   content, metadata, token_count, model, provider, created_at, updated_at
+            FROM context_artifacts
+            {where}
+            ORDER BY updated_at DESC
+            LIMIT ?
+            """,  # noqa: S608  # nosec B608 - placeholders are generated from a fixed count.
+            (*params, max(1, int(limit))),
+        ).fetchall()
+        return [self._row_to_context_artifact(r) for r in rows]
+
+    def search_context_artifacts(
+        self,
+        query: str,
+        *,
+        session_id: str | None = None,
+        kinds: list[str] | tuple[str, ...] | None = None,
+        limit: int = 20,
+    ) -> list[dict[str, Any]]:
+        """FTS5 search over synthesized context artifacts."""
+        from core.memory.fts_query import sanitize_fts5_query
+
+        clean = sanitize_fts5_query(query)
+        if not clean:
+            return []
+        sql = (
+            "SELECT a.artifact_id, a.session_id, a.kind, a.source_start_seq, "
+            "a.source_end_seq, a.content, a.metadata, a.token_count, a.model, "
+            "a.provider, a.created_at, a.updated_at, "
+            "snippet(context_artifacts_fts, 0, '[', ']', '…', 16), "
+            "bm25(context_artifacts_fts) "
+            "FROM context_artifacts_fts JOIN context_artifacts a "
+            "ON a.rowid = context_artifacts_fts.rowid "
+            "WHERE context_artifacts_fts MATCH ?"
+        )
+        params: list[Any] = [clean]
+        if session_id is not None:
+            sql += " AND a.session_id = ?"
+            params.append(session_id)
+        if kinds:
+            placeholders = ",".join("?" for _ in kinds)
+            sql += f" AND a.kind IN ({placeholders})"
+            params.extend(kinds)
+        sql += " ORDER BY rank LIMIT ?"
+        params.append(max(1, int(limit)))
+        try:
+            rows = self._conn.execute(sql, params).fetchall()
+        except sqlite3.OperationalError as exc:
+            log.warning("search_context_artifacts FTS5 query failed: %s", exc)
+            return []
+        return [
+            {
+                "artifact_id": r[0],
+                "session_id": r[1],
+                "kind": r[2],
+                "source_start_seq": r[3],
+                "source_end_seq": r[4],
+                "content": r[5],
+                "metadata": _loads_json_object(r[6]),
+                "token_count": r[7],
+                "model": r[8],
+                "provider": r[9],
+                "created_at": r[10],
+                "updated_at": r[11],
+                "snippet": r[12],
+                "score": r[13],
+            }
+            for r in rows
+        ]
+
     @staticmethod
     def _row_to_message(row: tuple) -> dict[str, Any]:  # type: ignore[type-arg]
         msg: dict[str, Any] = {
@@ -969,6 +1231,23 @@ class SessionManager:
     def close(self) -> None:
         """Close the database connection."""
         self._conn.close()
+
+    @staticmethod
+    def _row_to_context_artifact(row: tuple) -> ContextArtifact:  # type: ignore[type-arg]
+        return ContextArtifact(
+            artifact_id=str(row[0]),
+            session_id=str(row[1]),
+            kind=str(row[2]),
+            source_start_seq=int(row[3]) if row[3] is not None else None,
+            source_end_seq=int(row[4]) if row[4] is not None else None,
+            content=str(row[5]),
+            metadata=_loads_json_object(row[6]),
+            token_count=int(row[7]) if row[7] is not None else None,
+            model=str(row[8] or ""),
+            provider=str(row[9] or ""),
+            created_at=float(row[10] or 0.0),
+            updated_at=float(row[11] or 0.0),
+        )
 
     @staticmethod
     def _row_to_meta(row: tuple) -> SessionMeta:  # type: ignore[type-arg]

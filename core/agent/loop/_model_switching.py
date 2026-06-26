@@ -6,6 +6,7 @@ function takes the ``AgenticLoop`` as the first parameter (``loop``).
 
 from __future__ import annotations
 
+import asyncio
 import logging
 from typing import TYPE_CHECKING, Any
 
@@ -295,8 +296,9 @@ def adapt_context_for_model(loop: AgenticLoop, target_model: str) -> None:
 
     Hybrid approach (Research 방안 E):
     Phase 1: Summarize large tool_result blocks (most effective)
-    Phase 2: Token-aware adaptive pruning
-    Phase 3: Log warning if still over budget (minimal mode)
+    Phase 2: Structured LLM compaction when synchronous inline execution is safe
+    Phase 3: Token-aware adaptive pruning
+    Phase 4: Log warning if still over budget (minimal mode)
     """
     from core.orchestration.context_monitor import (
         adaptive_prune,
@@ -309,25 +311,33 @@ def adapt_context_for_model(loop: AgenticLoop, target_model: str) -> None:
 
     metrics = check_context(loop.context.messages, target_model)
     if not metrics.is_warning:
-        return  # Under 80% — no adaptation needed
+        return
 
     original_tokens = metrics.estimated_tokens
     log.info(
-        "Context adaptation: %.0f%% (%d/%d tokens) for %s",
+        "Context adaptation: %.0f%% (%d/%d prompt budget) for %s",
         metrics.usage_pct,
         metrics.estimated_tokens,
-        metrics.context_window,
+        metrics.prompt_budget_tokens,
         target_model,
     )
 
     # Phase 1: Summarize large tool results (preserves conversation structure)
-    summarize_tool_results(loop.context.messages, metrics.context_window)
+    summarize_tool_results(loop.context.messages, metrics.policy or metrics.context_window)
 
-    # Phase 2: Token-aware pruning if still over budget
+    # Phase 2: LLM structured compaction if still critical and this sync path
+    # is not already running inside an event loop.
     metrics = check_context(loop.context.messages, target_model)
     if metrics.is_critical:
-        pruned = adaptive_prune(loop.context.messages, metrics.context_window)
-        loop.context.messages = pruned
+        _try_inline_compact_for_model_switch(loop, target_model, metrics)
+
+    # Phase 3: Token-aware pruning if still over budget
+    metrics = check_context(loop.context.messages, target_model)
+    if metrics.is_critical:
+        pruned = adaptive_prune(loop.context.messages, metrics.policy or metrics.context_window)
+        from core.orchestration.compaction import repair_tool_pairs
+
+        loop.context.messages = repair_tool_pairs(pruned)
 
     # Phase 3: Final check — log result
     metrics = check_context(loop.context.messages, target_model)
@@ -338,6 +348,46 @@ def adapt_context_for_model(loop: AgenticLoop, target_model: str) -> None:
         metrics.usage_pct,
         target_model,
     )
+
+
+def _try_inline_compact_for_model_switch(
+    loop: AgenticLoop,
+    target_model: str,
+    metrics: Any,
+) -> None:
+    try:
+        asyncio.get_running_loop()
+    except RuntimeError:
+        pass
+    else:
+        log.info("Skipping inline LLM compaction during model switch inside running event loop")
+        return
+
+    try:
+        from core.orchestration.compaction import compact_conversation
+
+        policy = metrics.policy
+        keep_recent = policy.resolve_keep_recent(10) if policy is not None else 10
+        provider = getattr(loop, "provider", "") or _resolve_provider(target_model)
+        new_messages, did_compact = asyncio.run(
+            compact_conversation(
+                loop.context.messages,
+                provider=provider,
+                model=target_model,
+                keep_recent=keep_recent,
+                policy=policy,
+                session_id=getattr(loop, "_session_id", None) or None,
+                trigger="model_switch",
+            )
+        )
+        if did_compact:
+            loop.context.messages = new_messages
+            log.info(
+                "Inline model-switch compaction succeeded: %d messages",
+                len(new_messages),
+            )
+    except Exception:
+        log.warning("Inline model-switch compaction failed; falling back to prune", exc_info=True)
 
 
 def fallback_chain_suggestions(loop: AgenticLoop) -> list[str]:

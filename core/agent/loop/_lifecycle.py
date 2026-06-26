@@ -234,6 +234,9 @@ def _final_hook_payloads(
         "adapter_usage": adapter_usage,
     }
     turn_completed = {
+        "session_id": loop._session_id,
+        "model": loop.model,
+        "provider": loop._provider,
         "user_input": user_input,
         "text": result.text[:500] if result.text else "",
         "rounds": result.rounds,

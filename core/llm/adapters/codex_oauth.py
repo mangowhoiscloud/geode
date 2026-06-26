@@ -37,6 +37,7 @@ from core.llm.adapters.base import (
     AdapterCallResult,
     CredentialDetection,
     EnvironmentReport,
+    Message,
     ModelSpec,
     QuotaWindows,
     StreamEvent,
@@ -231,23 +232,29 @@ class CodexOAuthAdapter:
         max_tokens: int = 1024,
     ) -> TextCompletionResult:
         """Single-turn text completion via the Codex subscription Responses
-        endpoint. Same wire shape as :meth:`acomplete` minus tools/multi-turn
-        — the Codex backend's mandatory ``store=False`` + ``instructions``
-        field constraints are handled by ``openai_responses_complete_text``.
+        endpoint.
+
+        Route through :meth:`acomplete` so compaction / dreaming text calls
+        use the same Codex backend shape as agent turns: typed ``input`` list,
+        ``instructions`` for system text, ``store=False``, no
+        ``max_output_tokens``, and streaming aggregation.
         """
         from core.config import CODEX_PRIMARY
-        from core.llm.adapters._capability_impls import openai_responses_complete_text
 
-        # Codex backend forbids ``max_output_tokens`` (server-managed); we
-        # rely on the helper passing it as ``max_output_tokens`` and let the
-        # backend ignore-or-reject as documented. ``CODEX_PRIMARY`` mirrors
-        # what ``acomplete`` defaults to.
-        return await openai_responses_complete_text(
-            self._get_client(),
-            prompt=prompt,
-            system=system,
-            model=model or CODEX_PRIMARY,
-            max_tokens=max_tokens,
+        result = await self.acomplete(
+            AdapterCallRequest(
+                model=model or CODEX_PRIMARY,
+                messages=(Message(role="user", content=prompt),),
+                system_prompt=system,
+                max_tokens=max_tokens,
+            )
+        )
+        return TextCompletionResult(
+            text=result.text,
+            usage=result.usage,
+            adapter_name=self.name,
+            adapter_provider=self.provider,
+            adapter_source=self.source,
         )
 
     async def aweb_search(
@@ -381,6 +388,7 @@ class CodexOAuthAdapter:
 
     def list_models(self) -> list[ModelSpec]:
         from core.config import CODEX_FALLBACK_CHAIN, CODEX_PRIMARY
+        from core.llm.model_catalog import model_spec_for_adapter
 
         ids = [CODEX_PRIMARY, *CODEX_FALLBACK_CHAIN]
         seen: set[str] = set()
@@ -389,15 +397,7 @@ class CodexOAuthAdapter:
             if mid in seen:
                 continue
             seen.add(mid)
-            out.append(
-                ModelSpec(
-                    id=mid,
-                    label=mid,
-                    context_tokens=128_000,
-                    supports_thinking=mid.startswith(("o3", "o4")),
-                    supports_tools=True,
-                )
-            )
+            out.append(model_spec_for_adapter(mid, provider=self.provider))
         return out
 
     def get_quota_windows(self) -> QuotaWindows | None:

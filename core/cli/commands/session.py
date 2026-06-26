@@ -421,7 +421,7 @@ def cmd_context(args: str) -> None:
 def cmd_compact(args: str) -> None:
     """Compact conversation context to fit within model budget.
 
-    /compact         -> compact to current model's 70% budget
+    /compact         -> compact to current model's policy budget
     /compact --hard  -> keep only last 1 turn
     """
     from core.cli import commands as _pkg
@@ -452,8 +452,8 @@ def cmd_compact(args: str) -> None:
         ctx.messages.clear()
         ctx.messages.extend(last_pair)
     else:
-        summarize_tool_results(ctx.messages, before.context_window)
-        compacted = adaptive_prune(ctx.messages, before.context_window)
+        summarize_tool_results(ctx.messages, before.policy or before.context_window)
+        compacted = adaptive_prune(ctx.messages, before.policy or before.context_window)
         ctx.messages.clear()
         ctx.messages.extend(compacted)
 
