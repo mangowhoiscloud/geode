@@ -15,8 +15,8 @@ modules:
 - :mod:`mcp`      — ``/mcp`` server management
 - :mod:`skills`   — ``/skills`` + ``/skill`` invoke
 - :mod:`cost`     — ``/cost`` dashboard + budget helpers
-- :mod:`session`  — ``/resume``, ``/apply``, ``/context``, ``/compact``,
-  ``/clear``
+- :mod:`session`  — ``/resume``, ``/cognitive``, ``/apply``, ``/context``,
+  ``/compact``, ``/clear``
 - :mod:`tasks`    — ``/tasks`` user task list
 - :mod:`trigger`  — ``/trigger`` event/cron manager
 - :mod:`login`    — unified ``/login`` (PR #C, 2026-05-17 — replaces ``/auth``)
@@ -79,7 +79,7 @@ from .login import (
 from .mcp import _mcp_add, cmd_mcp
 from .model import _apply_model, _interactive_model_picker, cmd_model
 from .petri import cmd_petri
-from .session import cmd_apply, cmd_clear, cmd_compact, cmd_context, cmd_resume
+from .session import cmd_apply, cmd_clear, cmd_cognitive, cmd_compact, cmd_context, cmd_resume
 from .skills import _skills_add, cmd_skill_invoke, cmd_skills
 from .tasks import cmd_tasks
 from .trigger import cmd_trigger
@@ -113,6 +113,7 @@ __all__ = [
     "_upsert_env",
     "cmd_apply",
     "cmd_clear",
+    "cmd_cognitive",
     "cmd_compact",
     "cmd_context",
     "cmd_cost",

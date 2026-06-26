@@ -47,6 +47,17 @@ functional change.
 
 ## [Unreleased]
 
+### Added
+- **CognitiveState checkpoint resume unit.** `SessionCheckpoint` now persists the
+  cognitive-loop snapshot alongside messages/tool logs, `AgenticLoop` writes its
+  live `CognitiveState` into every checkpoint, and IPC resume restores the loop's
+  cognitive state plus ContextVar binding so post-resume hooks and episodic
+  memory see the resumed goal/observations/hypotheses/confidence state. A new
+  SQLite-backed `CognitiveStateStore` centralizes the latest snapshot and
+  append-only `COGNITIVE_*` event stream; checkpoint load now reads that store
+  before falling back to the legacy `state.json` cache. `/resume` now renders a
+  compact cognitive summary from the loaded central snapshot.
+
 ### Fixed
 - **GEODE context skill stale-runtime cleanup.** Refreshed `.geode/skills/geode-context`
   from the old v0.99.11 / LangGraph-pipeline framing to the current

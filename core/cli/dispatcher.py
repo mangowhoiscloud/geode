@@ -139,6 +139,10 @@ def _handle_command(
 
         resume_state = cmd_resume(args)
         return False, verbose, resume_state
+    elif action == "cognitive":
+        from core.cli.commands import cmd_cognitive
+
+        cmd_cognitive(args)
     elif action == "context":
         cmd_context(args)
     elif action == "apply":

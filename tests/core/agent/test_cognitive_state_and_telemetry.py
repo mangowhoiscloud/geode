@@ -129,6 +129,35 @@ def test_to_snapshot_returns_dict_with_eight_keys() -> None:
     assert s.observations == []
 
 
+def test_from_snapshot_restores_bounded_state() -> None:
+    """Checkpoint resume reconstructs the runtime container from a
+    serialized snapshot while keeping list fields bounded."""
+    from core.agent.cognitive_state import CognitiveState
+
+    snapshot = {
+        "goal": "ship",
+        "subgoals": [f"s{i}" for i in range(7)],
+        "observations": [f"o{i}" for i in range(35)],
+        "hypotheses": [f"h{i}" for i in range(8)],
+        "confidence": 1.5,
+        "last_action": "tools: read",
+        "last_observation": "1 tool result(s)",
+        "round_count": 4,
+    }
+
+    state = CognitiveState.from_snapshot(snapshot)
+
+    assert state.goal == "ship"
+    assert state.subgoals == ["s2", "s3", "s4", "s5", "s6"]
+    assert state.observations[0] == "o3"
+    assert len(state.observations) == 32
+    assert state.hypotheses == ["h3", "h4", "h5", "h6", "h7"]
+    assert state.confidence == 1.0
+    assert state.last_action == "tools: read"
+    assert state.last_observation == "1 tool result(s)"
+    assert state.round_count == 4
+
+
 # ---------------------------------------------------------------------------
 # C-6 — 6 cognitive HookEvents
 # ---------------------------------------------------------------------------

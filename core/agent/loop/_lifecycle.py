@@ -37,6 +37,7 @@ def save_checkpoint(loop: AgenticLoop, user_input: str, round_idx: int = 0) -> N
             status="active",
             messages=loop.context.messages,
             tool_log=loop._tool_processor.tool_log,
+            cognitive_state=loop.cognitive_state.to_snapshot(),
             user_input=user_input,
         )
         loop._checkpoint.save(state)

@@ -505,6 +505,16 @@ class TestCLIChannelIntegration:
                     {"role": "user", "content": "hello"},
                     {"role": "assistant", "content": "hi there"},
                 ],
+                cognitive_state={
+                    "goal": "hello",
+                    "subgoals": ["continue"],
+                    "observations": ["tools: read -> 1 tool result(s)"],
+                    "hypotheses": ["session can resume"],
+                    "confidence": 0.75,
+                    "last_action": "tools: read",
+                    "last_observation": "1 tool result(s)",
+                    "round_count": 3,
+                },
                 user_input="hello",
             )
             cp.save(state)
@@ -517,6 +527,9 @@ class TestCLIChannelIntegration:
             assert result["session_id"] == "s-test123"
             assert result["round_idx"] == 3
             assert result["message_count"] == 2
+            assert result["cognitive_state"]["goal"] == "hello"
+            assert mock_loop.cognitive_state.goal == "hello"
+            assert mock_loop.cognitive_state.round_count == 3
 
             client.close()
         finally:

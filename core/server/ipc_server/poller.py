@@ -1057,6 +1057,13 @@ class CLIPoller:
             # Sync loop session_id for checkpoint continuity
             loop._session_id = state.session_id
 
+            from core.agent.cognitive_state import CognitiveState
+            from core.agent.cognitive_state_ctx import set_cognitive_state, set_session_id
+
+            loop.cognitive_state = CognitiveState.from_snapshot(state.cognitive_state)
+            set_cognitive_state(loop.cognitive_state)
+            set_session_id(state.session_id)
+
             # Restore model if different
             if state.model and state.model != loop.model:
                 from core.async_runtime import run_process_coroutine
@@ -1076,6 +1083,7 @@ class CLIPoller:
                 "model": state.model,
                 "user_input": state.user_input,
                 "message_count": len(state.messages),
+                "cognitive_state": loop.cognitive_state.to_snapshot(),
             }
         except Exception as exc:
             log.warning("Session resume failed", exc_info=True)
