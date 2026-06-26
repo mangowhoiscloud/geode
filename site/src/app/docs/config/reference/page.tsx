@@ -9,7 +9,7 @@ export default function Page() {
       title="config.toml reference"
       titleKo="config.toml 레퍼런스"
       summary="The exhaustive key reference: Settings fields with their toml mappings, the routing.toml manifest, and the self-improving loop sections."
-      summaryKo="전체 키 레퍼런스입니다. toml 매핑이 붙은 Settings 필드, routing.toml 매니페스트, self-improving 루프 섹션을 다룹니다."
+      summaryKo="전체 키 레퍼런스입니다. toml 매핑이 붙은 Settings 필드, routing.toml 매니페스트, 자기개선 루프 섹션을 다룹니다."
     >
       <Bi
         ko={
@@ -19,7 +19,7 @@ export default function Page() {
               읽히는지는 <a href="/geode/docs/config/basics">설정 기초</a>가
               다룹니다. 키는 세 무리로 나뉩니다. Settings 필드
               (<code>core/config/_settings.py</code>), 라우팅 매니페스트
-              (<code>core/config/routing.toml</code>), self-improving 루프
+              (<code>core/config/routing.toml</code>), 자기개선 루프
               섹션(<code>core/config/self_improving.py</code>).
             </p>
             <p>
@@ -370,7 +370,7 @@ export default function Page() {
             <h2>다음</h2>
             <ul>
               <li><a href="/geode/docs/config/basics">설정 기초</a>. 층과 해석 순서.</li>
-              <li><a href="/geode/docs/capabilities/outer-loop">아우터 루프 설정</a>. self-improving 섹션의 동작 맥락.</li>
+              <li><a href="/geode/docs/capabilities/outer-loop">아우터 루프 설정</a>. 자기개선 섹션의 동작 맥락.</li>
               <li><a href="/geode/docs/runtime/llm/providers">LLM 라우팅</a>. routing.toml의 소비처.</li>
             </ul>
           </>

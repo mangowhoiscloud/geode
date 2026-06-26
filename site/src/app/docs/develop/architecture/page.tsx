@@ -30,7 +30,7 @@ export default function Page() {
               플러그인(petri_audit, seed_generation)입니다. <code>core/</code>의
               서브시스템은 5계층 스택에 정렬됩니다.
             </p>
-            <pre>{`Self-Improving  core/self_improving/  train.py + measure/fitness/gate/ledger + loop/{mutate,observe,inject}
+            <pre>{`자기개선       core/self_improving/  train.py + measure/fitness/gate/ledger + loop/{mutate,observe,inject}
 Agent           core/agent/           AgenticLoop(while tool_use), sub_agent, system_prompt
 Harness         core/cli/             thin CLI + commands/ + IPC 클라이언트
                 core/server/          serve 데몬. ipc_server(CLIPoller) + supervised(메신저 폴러)
@@ -66,7 +66,7 @@ Model           core/llm/             라우터 + 어댑터 레지스트리
             <ol>
               <li><a href="/geode/docs/concepts/two-loops">두 개의 루프</a>. 나머지 문서가 기대는 멘탈 모델입니다. 여기서 시작하세요.</li>
               <li><a href="/geode/docs/architecture/overview">5계층 스택</a>. 각 계층이 무엇을 맡고 책임이 어디서 끝나는지.</li>
-              <li><a href="/geode/docs/architecture/agentic-loop">안쪽 agentic 루프</a>. while(tool_use) 기본 단위와 턴이 끝나는 경로들.</li>
+              <li><a href="/geode/docs/architecture/agentic-loop">안쪽 에이전틱 루프</a>. while(tool_use) 기본 단위와 턴이 끝나는 경로들.</li>
               <li><a href="/geode/docs/runtime/context">컨텍스트 조립</a>. 매 LLM 호출의 컨텍스트가 만들어지는 곳.</li>
               <li><a href="/geode/docs/runtime/orchestration">서브에이전트 오케스트레이션</a>. 격리된 병렬 레인과 완료 시 병합.</li>
               <li><a href="/geode/docs/harness/hooks">훅과 관측성</a>. 한 이벤트 위에 쌓이는 observe와 act.</li>
@@ -107,12 +107,12 @@ LLM 호출  (core/llm/router/ → core/llm/providers/)
             <h2>흐름 추적 둘. 자기개선 사이클</h2>
             <pre>{`auto-trigger 또는 운영자  (core/wiring/scheduling.py → loop/auto_trigger.py)
    ▼
-변이 제안 + 적용  (core/self_improving/loop/mutate/runner.py, 7 behaviour kinds)
+변이 제안 + 적용  (core/self_improving/loop/mutate/runner.py, 7개 동작 종류)
    ▼
 Petri 감사 서브프로세스  (measure.py → geode audit → plugins/petri_audit/)
    │  GEODE_WRAPPER_OVERRIDE로 변이된 스캐폴드를 주입한 같은 AgenticLoop를 측정
    ▼
-fitness 계산  (fitness.py, 22-dim 판정 → 스칼라)
+적합도 계산  (fitness.py, 22차원 판정 → 스칼라)
    ▼
 margin 게이트  (gate.py)
    ├ 통과 → 승격. baseline.json 갱신 + baseline_archive.jsonl append  (ledger.py)
