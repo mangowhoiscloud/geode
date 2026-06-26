@@ -17,6 +17,7 @@ class TestSessionState:
         assert state.provider == "anthropic"
         assert state.round_idx == 0
         assert state.messages == []
+        assert state.cognitive_state == {}
 
 
 class TestSessionCheckpoint:
@@ -38,6 +39,59 @@ class TestSessionCheckpoint:
         assert loaded.round_idx == 3
         assert len(loaded.messages) == 1
         assert loaded.user_input == "hello"
+
+    def test_cognitive_state_snapshot_saved_and_loaded(self, tmp_path):
+        cp = SessionCheckpoint(tmp_path / "session")
+        cognitive_state = {
+            "goal": "understand loop",
+            "subgoals": ["inspect checkpoint"],
+            "observations": ["tools: read -> 1 tool result(s)"],
+            "hypotheses": ["checkpoint should be resume SoT"],
+            "confidence": 0.82,
+            "last_action": "tools: read",
+            "last_observation": "1 tool result(s)",
+            "round_count": 3,
+        }
+        cp.save(SessionState(session_id="cog-1", cognitive_state=cognitive_state))
+
+        loaded = cp.load("cog-1")
+
+        assert loaded is not None
+        assert loaded.cognitive_state == cognitive_state
+
+    def test_cognitive_state_load_prefers_db_over_json_cache(self, tmp_path):
+        from core.memory.cognitive_state_store import CognitiveStateStore
+
+        root = tmp_path / "session"
+        cp = SessionCheckpoint(root)
+        cp.save(SessionState(session_id="cog-db", cognitive_state={"goal": "json"}))
+
+        store = CognitiveStateStore(root / "sessions.db")
+        try:
+            store.save_latest("cog-db", {"goal": "db"}, updated_at=123.0)
+        finally:
+            store.close()
+
+        loaded = cp.load("cog-db")
+
+        assert loaded is not None
+        assert loaded.cognitive_state == {"goal": "db"}
+
+    def test_legacy_checkpoint_without_cognitive_state_loads_empty_snapshot(self, tmp_path):
+        import json
+
+        session_dir = tmp_path / "session" / "legacy-cog"
+        session_dir.mkdir(parents=True)
+        (session_dir / "state.json").write_text(
+            json.dumps({"session_id": "legacy-cog", "status": "active"}),
+            encoding="utf-8",
+        )
+
+        cp = SessionCheckpoint(tmp_path / "session")
+        loaded = cp.load("legacy-cog")
+
+        assert loaded is not None
+        assert loaded.cognitive_state == {}
 
     def test_load_nonexistent(self, tmp_path):
         cp = SessionCheckpoint(tmp_path / "session")

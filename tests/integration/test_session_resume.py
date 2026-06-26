@@ -7,7 +7,9 @@ from unittest.mock import MagicMock
 
 import pytest
 from core.agent.conversation import ConversationContext
-from core.cli.commands import cmd_resume, resolve_action
+from core.cli.commands import cmd_cognitive, cmd_resume, resolve_action
+from core.cli.commands.session import _format_cognitive_state_summary, _parse_last_flag
+from core.memory.cognitive_state_store import CognitiveStateStore
 from core.memory.session_checkpoint import SessionCheckpoint, SessionState
 
 
@@ -16,6 +18,9 @@ class TestResumeCommandMap:
 
     def test_resolve_resume(self) -> None:
         assert resolve_action("/resume") == "resume"
+
+    def test_resolve_cognitive(self) -> None:
+        assert resolve_action("/cognitive") == "cognitive"
 
 
 class TestCmdResume:
@@ -66,6 +71,24 @@ class TestCmdResume:
         assert len(result.messages) == 2
         assert result.user_input == "analyze Project Atlas"
 
+    def test_cognitive_state_summary_uses_loaded_snapshot(self) -> None:
+        summary = _format_cognitive_state_summary(
+            {
+                "round_count": 4,
+                "confidence": 0.8123,
+                "last_action": "tools: read_file, search_files",
+                "hypotheses": ["h1", "h2"],
+            }
+        )
+
+        assert summary == "round=4 | confidence=0.81 | last=tools: read_file, search_files | hypotheses=2"
+
+    def test_parse_last_flag(self) -> None:
+        remaining, limit = _parse_last_flag(["abc", "--last", "3"])
+
+        assert remaining == ["abc"]
+        assert limit == 3
+
     def test_resume_nonexistent_returns_none(self) -> None:
         result = cmd_resume("nonexistent-id")
         assert result is None
@@ -92,6 +115,52 @@ class TestCmdResume:
         checkpoint.save(SessionState(session_id="a2", user_input="second", messages=[]))
         result = cmd_resume("")
         assert result is None  # listing only, no auto-resume
+
+    def test_cmd_cognitive_shows_snapshot_and_recent_events(
+        self,
+        checkpoint: SessionCheckpoint,
+        session_dir: Path,
+        capsys: pytest.CaptureFixture[str],
+    ) -> None:
+        checkpoint.save(
+            SessionState(
+                session_id="cog-1",
+                user_input="inspect state",
+                cognitive_state={
+                    "goal": "inspect state",
+                    "round_count": 2,
+                    "confidence": 0.75,
+                    "last_action": "tools: search",
+                    "observations": ["first", "second"],
+                    "hypotheses": ["state is resumable"],
+                },
+            )
+        )
+        store = CognitiveStateStore(session_dir / "sessions.db")
+        store.append_event("cog-1", "cognitive_plan", {"round_count": 1})
+        store.append_event(
+            "cog-1",
+            "cognitive_reflect",
+            {
+                "goal": "inspect state",
+                "round_count": 2,
+                "confidence": 0.75,
+                "last_action": "tools: search",
+                "observations": ["first", "second"],
+                "hypotheses": ["state is resumable"],
+            },
+        )
+        store.close()
+
+        cmd_cognitive("cog-1 --last 1")
+
+        out = capsys.readouterr().out
+        assert "Cognitive State" in out
+        assert "round=2 | confidence=0.75" in out
+        assert "Events:" in out
+        assert "2 persisted" in out
+        assert "cognitive_reflect" in out
+        assert "cognitive_plan" not in out
 
 
 class TestCheckpointSaveFromAgenticLoop:
@@ -130,6 +199,29 @@ class TestCheckpointSaveFromAgenticLoop:
         msg_file = session_dir / sid / "messages.json"
         assert state_file.exists()
         assert msg_file.exists()
+
+    def test_save_checkpoint_persists_cognitive_state(self, session_dir: Path) -> None:
+        """_save_checkpoint includes CognitiveState as a resume unit."""
+        from core.agent.loop import AgenticLoop
+
+        ctx = ConversationContext()
+        ctx.add_user_message("hello")
+        executor = MagicMock()
+        loop = AgenticLoop(ctx, executor)
+        loop.cognitive_state.goal = "hello"
+        loop.cognitive_state.record_round(
+            action="tools: read",
+            observation="1 tool result(s)",
+        )
+
+        loop._save_checkpoint("hello", round_idx=1)
+
+        cp = SessionCheckpoint(session_dir=session_dir)
+        state = cp.load(loop._session_id)
+        assert state is not None
+        assert state.cognitive_state["goal"] == "hello"
+        assert state.cognitive_state["round_count"] == 1
+        assert state.cognitive_state["last_action"] == "tools: read"
 
     def test_mark_session_completed(self, session_dir: Path) -> None:
         """mark_session_completed marks checkpoint as completed."""

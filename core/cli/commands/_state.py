@@ -242,6 +242,7 @@ COMMAND_MAP: dict[str, str] = {
     "/skill": "skill_invoke",
     "/cost": "cost",
     "/resume": "resume",
+    "/cognitive": "cognitive",
     "/context": "context",
     "/ctx": "context",
     "/apply": "apply",
@@ -283,6 +284,7 @@ def show_help() -> None:
     console.print("  [label]/skills[/label]             — List/add/reload skills")
     console.print("  [label]/skill[/label] <name> [args] — Invoke a skill")
     console.print("  [label]/resume[/label]             — Resume interrupted session")
+    console.print("  [label]/cognitive[/label] <sid>    — Show cognitive state for a session")
     console.print("  [label]/context[/label]            — Show assembled context tiers")
     console.print("  [label]/apply[/label]              — Manage job applications")
     console.print("  [label]/tasks[/label]              — Show task list")
