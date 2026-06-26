@@ -69,7 +69,7 @@ export default function Page() {
                   <td>gateway 중심</td>
                   <td>agent + skills</td>
                   <td>3-파일 계약</td>
-                  <td>5계층. Model / Runtime / Harness / Agent / Self-Improving</td>
+                  <td>5계층. 모델 / 런타임 / 하네스 / 에이전트 / 자기개선</td>
                 </tr>
                 <tr>
                   <td>메모리</td>
@@ -132,8 +132,8 @@ export default function Page() {
             <ul>
               <li>
                 <strong>명시적 자기개선 계층</strong>. 다섯 번째 계층이 일곱
-                behaviour kinds의 스캐폴드를 변이하고, Petri 22-dim 감사와
-                margin 게이트로 선택하며, 계보를 git champion chain으로
+                동작 종류의 스캐폴드를 변이하고, Petri 22차원 감사와
+                margin 게이트로 선택하며, 계보를 git 챔피언 체인으로
                 보존합니다(<code>core/self_improving/</code>). 가중치나
                 파라미터 갱신은 없습니다. 메커니즘은 선택입니다.
               </li>

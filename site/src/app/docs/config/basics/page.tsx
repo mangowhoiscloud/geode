@@ -180,7 +180,7 @@ GEODE_ANTHROPIC_CREDENTIAL_SOURCE  GEODE_OPENAI_CREDENTIAL_SOURCE`}</pre>
                 </tr>
                 <tr>
                   <td><code>GEODE_CONFIG_TOML</code>이 일부 로더에만 적용</td>
-                  <td>C-4 이전에는 self-improving 로더만 인식</td>
+                  <td>C-4 이전에는 자기개선 로더만 인식</td>
                   <td>업그레이드합니다. <code>geode config explain</code>이 실제로 읽은 경로를 보고합니다.</td>
                 </tr>
               </tbody>

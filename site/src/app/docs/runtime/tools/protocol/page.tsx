@@ -49,15 +49,22 @@ export default function Page() {
                 </tr>
                 <tr>
                   <td>임계값 초과</td>
-                  <td>호스티드 <code>tool_search</code>를 추가하고, core set만 즉시 싣고, 나머지는 <code>defer_loading=True</code>로 표시해 검색 후 로드</td>
+                  <td>호스티드 <code>tool_search</code>를 추가하고, 핵심 묶음만 즉시 싣고, 나머지는 <code>defer_loading=True</code>로 표시해 검색 후 로드</td>
                 </tr>
               </tbody>
             </table>
             <p>
-              즉시 로드 core set은 <code>TOOL_SEARCH_ALWAYS_LOADED</code>입니다.
+              즉시 로드 핵심 묶음은 <code>TOOL_SEARCH_ALWAYS_LOADED</code>입니다.
               기억, 노트, 파일 읽기, 웹 탐색, 상태 확인처럼 검색 왕복을 치르면
               손해인 고빈도 도구가 여기에 남고, 나머지는 에이전트가{" "}
               <code>tool_search</code>로 찾아 그때 가져옵니다.
+            </p>
+            <p>
+              따라서 도구가 지연 로딩 뒤로 밀렸다는 말은 모든 도구가 보이지
+              않는다는 뜻이 아닙니다. <code>read_document</code>,{" "}
+              <code>grep_files</code>처럼 핵심 읽기 도구는 항상 적재됩니다.
+              이런 도구가 반복 호출된다면 보통 도구 수 제한 때문이 아니라
+              모델이 더 많은 근거 파일을 읽겠다고 판단한 결과입니다.
             </p>
 
             <h2>툴킷: 서브에이전트 도구 번들</h2>
@@ -113,6 +120,11 @@ export default function Page() {
                   <td>모델이 분명히 있는 도구를 못 찾음</td>
                   <td>지연 로딩으로 스키마가 아직 적재되지 않음</td>
                   <td>정상 경로입니다. 모델이 <code>tool_search</code>로 찾으면 로드됩니다</td>
+                </tr>
+                <tr>
+                  <td><code>read_document</code>나 <code>grep_files</code>가 반복 호출됨</td>
+                  <td>핵심 읽기 도구는 항상 적재됨. 도구 수 제한에 숨은 것이 아니라 모델의 탐색 판단일 가능성이 큼</td>
+                  <td>run log에서 직전 <code>grep_files</code> 쿼리와 읽은 경로를 보고, 필요한 경우 질문에 파일 범위나 금지 경로를 명시합니다</td>
                 </tr>
                 <tr>
                   <td>서브에이전트가 도구 없이 동작</td>
@@ -184,6 +196,12 @@ export default function Page() {
               discovers everything else through <code>tool_search</code> and
               loads it on demand.
             </p>
+            <p>
+              Deferred does not mean invisible across the board. Core read tools
+              such as <code>read_document</code> and <code>grep_files</code> stay
+              eager. Repeated calls to those tools usually mean the model chose
+              to gather more evidence, not that the tool cap hid a better tool.
+            </p>
 
             <h2>Toolkits: sub-agent tool bundles</h2>
             <p>
@@ -239,6 +257,11 @@ export default function Page() {
                   <td>The model cannot find a tool that clearly exists</td>
                   <td>Deferred loading; the schema is not loaded yet</td>
                   <td>The normal path: the model finds it via <code>tool_search</code> and it loads</td>
+                </tr>
+                <tr>
+                  <td><code>read_document</code> or <code>grep_files</code> repeats</td>
+                  <td>Core read tools are always loaded; this is usually exploration strategy, not the tool cap hiding alternatives</td>
+                  <td>Inspect the run log for the preceding <code>grep_files</code> query and read paths; constrain the file scope in the prompt when needed</td>
                 </tr>
                 <tr>
                   <td>A sub-agent runs without its tools</td>

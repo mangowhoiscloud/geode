@@ -29,12 +29,12 @@ export default function DocsIndex() {
               에이전트에 도구로 붙습니다. 진입점은 <code>geode</code>와{" "}
               <code>geode-mcp</code> 둘이며, 어느 쪽으로 들어와도 같은{" "}
               <a href="/geode/docs/architecture/overview">5-계층 스택</a>
-              (Model, Runtime, Harness, Agent, Self-Improving)을 지납니다.
+              (모델, 런타임, 하네스, 에이전트, 자기개선)을 지납니다.
             </p>
             <p>
               그 본체 위의 시그니처가 <strong>자기개선 루프</strong>입니다. 모델
               가중치와 파라미터는 절대 건드리지 않습니다. 갱신 대상은 모델을
-              감싼 스캐폴드, 곧 시스템 프롬프트 섹션과 behaviour kinds이고,
+              감싼 스캐폴드, 곧 시스템 프롬프트 섹션과 동작 종류이고,
               메커니즘은 변이와 선택입니다. 변화의 적합도는 능력 벤치마크가
               아니라 <strong>적대적 안전 감사</strong>(Petri 급의 다차원
               감사)로 측정하며, 핵심 안전 차원에는 하한선이 있어 그 선을 넘어
@@ -48,12 +48,12 @@ export default function DocsIndex() {
             </p>
             <ul>
               <li>
-                <strong>Inner loop (Agentic Loop)</strong>. 한 작업을 푸는{" "}
+                <strong>안쪽 루프(에이전틱 루프)</strong>. 한 작업을 푸는{" "}
                 <code>while(tool_use)</code> 실행 루프입니다. 라운드 상한과 종료
                 경로 안에서 도구를 지연 로딩하며 일을 끝까지 처리합니다.
               </li>
               <li>
-                <strong>Outer loop (Self-Improving Loop)</strong>. 작업을 처리하는
+                <strong>바깥쪽 루프(자기개선 루프)</strong>. 작업을 처리하는
                 시스템 자체를 다듬는 폐루프입니다. 스캐폴드를 변형하고, 감사하고,
                 결과를 귀속한 뒤, 실제 이득이 있을 때만 승격하고 아니면 되돌립니다.
                 정직한 (1+1) 챔피언 체인입니다.

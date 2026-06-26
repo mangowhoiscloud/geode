@@ -9,7 +9,7 @@ export default function Page() {
       title="The 5-layer stack"
       titleKo="5-계층 스택"
       summary="Model, Runtime, Harness, Agent, Self-Improving. What each layer owns, and where its responsibility ends."
-      summaryKo="Model, Runtime, Harness, Agent, Self-Improving. 각 계층이 무엇을 맡고, 책임이 어디서 끝나는지 설명합니다."
+      summaryKo="모델, 런타임, 하네스, 에이전트, 자기개선. 각 계층이 무엇을 맡고, 책임이 어디서 끝나는지 설명합니다."
     >
       <Bi
         ko={
@@ -23,7 +23,7 @@ export default function Page() {
             </figure>
             <h2>왜 4가 아니라 5인가</h2>
             <p>
-              GEODE는 오랫동안 4-계층(Model, Runtime, Harness, Agent)으로
+              GEODE는 오랫동안 4-계층(모델, 런타임, 하네스, 에이전트)으로
               서술됐습니다. 그런데 자기개선 코드는 그 어디에도 깔끔하게 들어가지
               않았고, 문서 밖에 떠 있었습니다. 실제로 존재하고 별도의 책임을
               갖는 계층이라면 다이어그램에도 있어야 합니다. 그래서 지금의 공식
@@ -114,22 +114,22 @@ export default function Page() {
               처리하는 시스템 자체를 고치는 일은 다음 계층의 몫입니다.
             </p>
 
-            <h2>SELF-IMPROVING. 시스템을 고치는 계층</h2>
+            <h2>자기개선. 시스템을 고치는 계층</h2>
             <p>
               맨 위 계층은 아래 네 계층 전체를 피험자로 다룹니다. 루프 드라이버는{" "}
               <code>core/self_improving/train.py</code>입니다. 파일명은 Karpathy
               autoresearch의 3-파일 관습에서 빌린 것으로, 이 안에서 모델 훈련은
               일어나지 않습니다. 갱신 대상은 모델이 아니라 모델을 감싼 스캐폴드,
-              곧 시스템 프롬프트 섹션과 behaviour kinds입니다.
+              곧 시스템 프롬프트 섹션과 동작 종류입니다.
             </p>
             <p>
               메커니즘은 선택입니다. 스캐폴드를 변이하고, 적대적 안전 감사
-              (Petri)로 측정하고, fitness 스칼라를 margin 게이트에 통과시켜
+              (Petri)로 측정하고, 적합도 스칼라를 margin 게이트에 통과시켜
               이긴 변이만 승격하고 나머지는 되돌립니다. 측정과 판정 장비는{" "}
               <code>measure.py</code>, <code>fitness.py</code>,{" "}
               <code>gate.py</code>, <code>ledger.py</code>에 있고, 런타임 쪽
-              배선은 <code>core/self_improving/loop/</code>의 mutate, observe,
-              inject가 맡습니다. 전체 루프는{" "}
+              배선은 <code>core/self_improving/loop/</code>의 변이, 관측,
+              주입 경로가 맡습니다. 전체 루프는{" "}
               <a href="/geode/docs/capabilities/autoresearch">폐루프</a>에서
               다룹니다.
             </p>
@@ -152,7 +152,7 @@ export default function Page() {
                 <tr><td>도구 추가</td><td>RUNTIME</td><td><code>core/tools/definitions.json</code> + 핸들러</td></tr>
                 <tr><td>훅 핸들러 추가</td><td>HARNESS</td><td>핸들러 작성 + <code>core/wiring/bootstrap.py</code> 등록</td></tr>
                 <tr><td>루프 의미 변경</td><td>AGENT</td><td><code>core/agent/loop/agent_loop.py</code>. 드물고, 리뷰 게이트를 거칩니다.</td></tr>
-                <tr><td>변이 대상 추가</td><td>SELF-IMPROVING</td><td><code>core/self_improving/loop/mutate/</code></td></tr>
+                <tr><td>변이 대상 추가</td><td>자기개선</td><td><code>core/self_improving/loop/mutate/</code></td></tr>
               </tbody>
             </table>
             <p>

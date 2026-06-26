@@ -46,12 +46,20 @@ export default function Page() {
               <code>MCP_SERVER_FAILED</code> 훅으로 관측됩니다. 전송은
               stdio입니다(<code>core/mcp/stdio_client.py</code>).
             </p>
+            <p>
+              stdio 서버 연결이 실패하면 같은 서버는 짧은 시간 동안 실패로
+              기억됩니다. 도구 목록을 다시 만들 때 같은 프로세스를 즉시
+              재시도해 <code>MCP_SERVER_FAILED</code> 로그를 반복해서 쌓지
+              않기 위한 장치입니다. 운영자가 설정을 고쳤거나 서버를 강제로
+              재시작하는 경우에는 헬스 체크와 서버 재등록 경로가 이 실패
+              캐시를 비우고 다시 연결을 시도합니다.
+            </p>
 
             <h2>클라이언트: 실행 경로와 가드</h2>
             <p>
               발견된 MCP 도구는 네이티브 도구와 합쳐져 에이전트에
               노출됩니다(<code>core/agent/loop/_tool_factory.py</code>).
-              도구 수가 임계값을 넘으면 deferred loading이 켜져
+              도구 수가 임계값을 넘으면 지연 로딩이 켜져
               <code>tool_search</code>로 찾아 로드합니다. 검색 스코어링은
               <code>core/mcp/registry.py</code>에 있습니다.
             </p>
@@ -136,6 +144,11 @@ export default function Page() {
                   <td><code>/mcp</code>로 상태를 보고, 참조된 <code>${`{VAR}`}</code>를 <code>.env</code>에 채웁니다.</td>
                 </tr>
                 <tr>
+                  <td><code>MCP_SERVER_FAILED</code> 로그가 많음</td>
+                  <td>서버 명령을 찾지 못하거나 필수 환경이 빠짐. launchd로 띄운 serve는 셸보다 PATH가 좁을 수 있음</td>
+                  <td><code>~/.geode/logs/serve.log</code>에서 실패 서버 이름을 보고 <code>command -v npx</code>, <code>command -v codex</code>, <code>command -v uvx</code>가 serve 환경에서도 보이게 맞춥니다. 수정 후 serve를 재시작하면 실패 캐시가 비워집니다.</td>
+                </tr>
+                <tr>
                   <td>MCP 결과가 잘려서 옴</td>
                   <td>결과 크기 가드 작동</td>
                   <td>정상 동작입니다. 더 좁은 쿼리로 다시 호출하거나 <code>max_tool_result_tokens</code>를 조정합니다.</td>
@@ -152,7 +165,7 @@ export default function Page() {
             <ul>
               <li><a href="/geode/docs/harness/cli">CLI와 슬래시 명령</a>. geode-mcp 도구 표면의 전체 레퍼런스.</li>
               <li><a href="/geode/docs/runtime/research">리서치·탐색과 llms.txt</a>. 외부 호스트에서 query_memory를 쓰는 맥락.</li>
-              <li><a href="/geode/docs/runtime/tools/protocol">도구와 툴셋</a>. deferred loading의 자세한 동작.</li>
+              <li><a href="/geode/docs/runtime/tools/protocol">도구와 툴셋</a>. 지연 로딩의 자세한 동작.</li>
             </ul>
           </>
         }
@@ -191,6 +204,13 @@ export default function Page() {
               <code>MCP_SERVER_CONNECTED</code> /
               <code>MCP_SERVER_FAILED</code> hooks. Transport is stdio
               (<code>core/mcp/stdio_client.py</code>).
+            </p>
+            <p>
+              A failed stdio connection is negative-cached briefly per server.
+              That prevents tool-list rebuilds from retrying the same broken
+              process immediately and spamming <code>MCP_SERVER_FAILED</code>.
+              Intentional recovery paths such as health restart or server
+              re-registration clear the cache before trying again.
             </p>
 
             <h2>Client: execution path and guards</h2>
@@ -282,6 +302,11 @@ export default function Page() {
                   <td>A configured server exposes no tools</td>
                   <td>Connection skipped over an unresolved required env</td>
                   <td>Check <code>/mcp</code>, then fill the referenced <code>${`{VAR}`}</code> in <code>.env</code>.</td>
+                </tr>
+                <tr>
+                  <td>Many <code>MCP_SERVER_FAILED</code> log lines</td>
+                  <td>The server command is not visible, or required environment is missing. A launchd-started serve process can have a narrower PATH than your shell.</td>
+                  <td>Read <code>~/.geode/logs/serve.log</code> for the failing server name and make <code>command -v npx</code>, <code>command -v codex</code>, and <code>command -v uvx</code> resolve in the serve environment. Restart serve after fixing it; restart clears the failure cache.</td>
                 </tr>
                 <tr>
                   <td>MCP results arrive truncated</td>
