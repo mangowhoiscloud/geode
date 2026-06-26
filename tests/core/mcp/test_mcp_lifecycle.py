@@ -385,6 +385,36 @@ class TestMCPManagerConnectAll:
         assert result == 2
         assert call_count == 3
 
+    def test_failed_server_is_not_retried_until_cooldown(self) -> None:
+        """Repeated tool-list builds must not spam MCP_SERVER_FAILED hooks."""
+        mgr = MCPServerManager()
+        mgr._servers = {"missing": {"command": "missing-mcp"}}
+
+        mock_client = MagicMock()
+        mock_client.connect.return_value = False
+
+        with (
+            patch("core.mcp.manager.StdioMCPClient", return_value=mock_client) as client_cls,
+            patch("core.mcp.manager._fire_mcp_hook") as fire_hook,
+        ):
+            assert mgr._get_client("missing") is None
+            assert mgr._get_client("missing") is None
+
+        client_cls.assert_called_once()
+        fire_hook.assert_called_once()
+
+    def test_auto_restart_bypasses_failed_server_cooldown(self) -> None:
+        mgr = MCPServerManager()
+        mgr._servers = {"s1": {"command": "mock"}}
+        mgr._failed_at["s1"] = 1.0
+
+        with patch.object(mgr, "_get_client", return_value=None) as get_client:
+            result = mgr.check_health(auto_restart=True)
+
+        assert result == {"s1": False}
+        assert "s1" not in mgr._failed_at
+        get_client.assert_called_once_with("s1")
+
 
 class TestMCPAsyncCalls:
     """Test async MCP dispatch wrappers."""

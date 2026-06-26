@@ -20,6 +20,7 @@ import json
 import logging
 import os
 import signal
+import time
 from collections.abc import Callable
 from pathlib import Path
 from typing import Any
@@ -34,6 +35,7 @@ log = logging.getLogger(__name__)
 _GLOBAL_DOTENV_PATH = GLOBAL_ENV_FILE
 
 _EMPTY_SCHEMA: dict[str, Any] = {"type": "object", "properties": {}}
+_FAILED_RETRY_COOLDOWN_S = 300.0
 
 # Hook system injection (same pattern as core/llm/router.py)
 _mcp_hooks: Any = None
@@ -120,6 +122,7 @@ class MCPServerManager:
         self._config_path = config_path or (get_project_root() / ".claude" / "mcp_servers.json")
         self._servers: dict[str, dict[str, Any]] = {}
         self._clients: dict[str, StdioMCPClient] = {}
+        self._failed_at: dict[str, float] = {}
         self._dotenv_cache: dict[str, str | None] = {}
         self._signal_installed = False
         self._prev_sigterm: Any = None
@@ -298,6 +301,7 @@ class MCPServerManager:
         from core.paths import GLOBAL_CONFIG_TOML
 
         self._servers = {}
+        self._failed_at.clear()
 
         # Layer 1 & 2: Global then project config.toml [mcp.servers]
         config_toml_paths = [
@@ -398,6 +402,11 @@ class MCPServerManager:
             client = self._clients[server_name]
             if client.is_connected():
                 return client
+            self._clients.pop(server_name, None)
+
+        failed_at = self._failed_at.get(server_name)
+        if failed_at is not None and (time.monotonic() - failed_at) < _FAILED_RETRY_COOLDOWN_S:
+            return None
 
         config = self._servers.get(server_name)
         if config is None:
@@ -423,9 +432,11 @@ class MCPServerManager:
         client = StdioMCPClient(command=command, args=args, env=env)
         if client.connect():
             self._clients[server_name] = client
+            self._failed_at.pop(server_name, None)
             _fire_mcp_hook(HookEvent.MCP_SERVER_CONNECTED, {"server_name": server_name})
             return client
 
+        self._failed_at[server_name] = time.monotonic()
         _fire_mcp_hook(
             HookEvent.MCP_SERVER_FAILED,
             {"server_name": server_name, "error": "Connection failed"},
@@ -546,6 +557,7 @@ class MCPServerManager:
                 log.info("MCP server '%s' is down, attempting restart", name)
                 # Remove dead client reference
                 self._clients.pop(name, None)
+                self._failed_at.pop(name, None)
                 new_client = self._get_client(name)
                 alive = new_client is not None and new_client.is_connected()
                 if alive:
@@ -574,6 +586,7 @@ class MCPServerManager:
             entry["env"] = env
 
         self._servers[name] = entry
+        self._failed_at.pop(name, None)
 
         # Persist to config file
         try:
