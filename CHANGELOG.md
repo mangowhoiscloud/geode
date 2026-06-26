@@ -59,6 +59,13 @@ functional change.
   compact cognitive summary from the loaded central snapshot.
 
 ### Fixed
+- **MCP failed-server retry noise.** `MCPServerManager` now negative-caches
+  failed stdio server connections for a short cooldown, so lazy tool discovery
+  and repeated tool-list builds do not re-emit the same `MCP_SERVER_FAILED`
+  hook dozens of times in one agent turn. Explicit health-check
+  `auto_restart=True`, config reload, and server add still bypass/clear the
+  cache for intentional retries.
+
 - **GEODE context skill stale-runtime cleanup.** Refreshed `.geode/skills/geode-context`
   from the old v0.99.11 / LangGraph-pipeline framing to the current
   v0.99.247 `AgenticLoop(while tool_use)` runtime shape, and added explicit
