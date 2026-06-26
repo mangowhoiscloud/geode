@@ -128,8 +128,8 @@ hooks.register_prefix("*", mirror_everything)  # 와일드카드 구독`}</pre>
             <h2>Activity row 스키마와 에러 정책</h2>
             <p>
               모든 <code>trigger*()</code> 호출은 활성 <code>RunTranscript</code>에
-              typed Activity row 한 줄로 mirror됩니다. 62개 이벤트 전부 concrete
-              typed row를 가집니다 (19 lifecycle + 43 K-group). <code>action</code>
+              타입이 지정된 Activity row 한 줄로 미러링됩니다. 62개 이벤트 전부
+              구체 타입의 row를 가집니다 (19 lifecycle + 43 K-group). <code>action</code>
               필드가 discriminator이고, <code>GenericActivityRow</code>는 정상 경로
               목적지가 아니라 fail-soft 폴백 전용입니다.
             </p>
@@ -140,7 +140,7 @@ hooks.register_prefix("*", mirror_everything)  # 와일드카드 구독`}</pre>
               <tbody>
                 <tr>
                   <td>커버리지</td>
-                  <td>62/62 typed. 43 K-group은 선언적 spec 테이블 + 단일 빌더로 구성</td>
+                  <td>62/62 타입 지정. 43 K-group은 선언적 spec 테이블 + 단일 빌더로 구성</td>
                 </tr>
                 <tr>
                   <td>details 스키마</td>
@@ -148,7 +148,7 @@ hooks.register_prefix("*", mirror_everything)  # 와일드카드 구독`}</pre>
                 </tr>
                 <tr>
                   <td>silent fallback 금지</td>
-                  <td>강제 generic 폴백은 <code>_fallback_reason</code>을 동봉해 timeline에서 구분 가능. mirror / dispatch / 학습 저장 실패는 once-per-event WARNING</td>
+                  <td>강제 generic 폴백은 <code>_fallback_reason</code>을 동봉해 timeline에서 구분 가능. 미러링 / dispatch / 학습 저장 실패는 이벤트당 한 번만 WARNING</td>
                 </tr>
                 <tr>
                   <td>프라이버시 드롭</td>

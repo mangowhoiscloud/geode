@@ -104,7 +104,7 @@ export default function Page() {
               한 seed의 한 차원이 튀는 것은 노이즈일 수 있습니다. 의미 있는
               신호는 (1) 같은 차원이 여러 seed에서 함께 퇴행하는 패턴, (2)
               stderr 대비 큰 이동입니다. 의심스러운 점수는 transcript를 직접
-              읽어 확인합니다. publish된 런은{" "}
+              읽어 확인합니다. 공개된 런은{" "}
               <a href="/geode/self-improving/petri-bundle/">번들 뷰어</a>에서
               열 수 있고, 요약 시각화는{" "}
               <code>scripts/petri_viz_summary.py</code>가 만듭니다.

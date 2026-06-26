@@ -59,7 +59,7 @@ export default function Page() {
             <p>
               발견된 MCP 도구는 네이티브 도구와 합쳐져 에이전트에
               노출됩니다(<code>core/agent/loop/_tool_factory.py</code>).
-              도구 수가 임계값을 넘으면 지연 로딩이 켜져
+              도구 수가 임계값을 넘으면 deferred loading이 켜져
               <code>tool_search</code>로 찾아 로드합니다. 검색 스코어링은
               <code>core/mcp/registry.py</code>에 있습니다.
             </p>
@@ -165,7 +165,7 @@ export default function Page() {
             <ul>
               <li><a href="/geode/docs/harness/cli">CLI와 슬래시 명령</a>. geode-mcp 도구 표면의 전체 레퍼런스.</li>
               <li><a href="/geode/docs/runtime/research">리서치·탐색과 llms.txt</a>. 외부 호스트에서 query_memory를 쓰는 맥락.</li>
-              <li><a href="/geode/docs/runtime/tools/protocol">도구와 툴셋</a>. 지연 로딩의 자세한 동작.</li>
+              <li><a href="/geode/docs/runtime/tools/protocol">도구와 툴셋</a>. deferred loading의 자세한 동작.</li>
             </ul>
           </>
         }

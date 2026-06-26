@@ -17,7 +17,7 @@ export default function Page() {
             <h2>왜 seed를 에이전트가 만드나</h2>
             <p>
               고정된 벤치마크는 루프가 돌수록 포화됩니다. 폐루프가 스캐폴드를
-              개선하는 동안 테스트 분포도 함께 자라야 측정에 headroom이
+              개선하는 동안 테스트 분포도 함께 자라야 측정 여유가
               남습니다. 그래서 GEODE는 Google AI Co-Scientist의 generate,
               review, rank, evolve 멀티 에이전트 흐름을 Petri seed 생성에
               이식했습니다. 한 target dimension(예:{" "}
@@ -52,7 +52,7 @@ export default function Page() {
               </tbody>
             </table>
             <p>
-              반복 사이클에서는 evolved 후보를 candidates로 승격한 뒤 critic,
+              반복 사이클에서는 evolved 후보를 후보 목록(candidates)으로 승격한 뒤 critic,
               pilot, ranker, evolver, meta_reviewer만 다시 돕니다. 새 초안이
               아니라 진화된 후보를 다듬는 단계이기 때문입니다.
             </p>
@@ -78,7 +78,7 @@ export default function Page() {
             <p>
               생존자 선택의 기본값은 Elo 단독이 아니라 <code>blend</code>입니다.
               Elo와 난이도를 z-score로 합치되, pilot 신호가 약한 후보는
-              자동으로 Elo만으로 평가됩니다. 식과 knob은{" "}
+              자동으로 Elo만으로 평가됩니다. 식과 조정값은{" "}
               <a href="/geode/docs/capabilities/seed-pipeline">Seed 파이프라인</a>에서
               다룹니다.
             </p>

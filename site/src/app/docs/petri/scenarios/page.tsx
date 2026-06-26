@@ -61,8 +61,8 @@ export default function Page() {
               생성</a>)이 target dimension별로 새 seed를 만들고, 생존자가{" "}
               <code>geode seeds assemble</code>을 거쳐 사이클 입력
               풀(<code>state/seed-pools/cycle-input</code>)로 조립됩니다.
-              버전 고정 held-out bench(<code>state/seed-pools/held-out</code>)는
-              비교의 자로 따로 둡니다.
+              버전 고정 held-out 벤치마크(<code>state/seed-pools/held-out</code>)는
+              비교 기준자로 따로 둡니다.
             </p>
 
             <h2>upstream Petri 기본 seed</h2>
@@ -86,7 +86,7 @@ export default function Page() {
             <ul>
               <li><a href="/geode/docs/petri/run">감사 실행</a>. seed 선택과 dry-run 흐름.</li>
               <li><a href="/geode/docs/petri/judge-dimensions">Judge 차원</a>. 티어와 가중치의 근거.</li>
-              <li><a href="/geode/self-improving/petri-bundle/">번들 뷰어</a>. publish된 감사 결과.</li>
+              <li><a href="/geode/self-improving/petri-bundle/">번들 뷰어</a>. 공개된 감사 결과.</li>
             </ul>
           </>
         }

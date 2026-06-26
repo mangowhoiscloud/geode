@@ -80,7 +80,7 @@ export default function Page() {
                 </tr>
                 <tr>
                   <td>읽기 도구가 너무 자주 호출됨</td>
-                  <td><code>read_document</code>, <code>grep_files</code>는 항상 로드되는 핵심 도구. 도구 수 제한에 숨은 것이 아님</td>
+                  <td><code>read_document</code>, <code>grep_files</code>는 항상 로드되는 핵심 도구. tool cap에 숨은 것이 아님</td>
                   <td>run log의 검색 쿼리와 읽은 경로를 보고 질문에 파일 범위, 제외 경로, 원하는 깊이를 명시합니다.</td>
                 </tr>
                 <tr>
