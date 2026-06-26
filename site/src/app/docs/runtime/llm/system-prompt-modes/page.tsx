@@ -106,7 +106,7 @@ export default function Page() {
                 </tr>
                 <tr>
                   <td>승격했는데 일상 실행이 기본 프롬프트</td>
-                  <td>SoT 파일 손상으로 graceful 폴백</td>
+                  <td>SoT 파일 손상으로 복구 폴백</td>
                   <td>로그의 WARNING을 확인하고 <code>wrapper-sections.json</code>을 복구합니다.</td>
                 </tr>
                 <tr>

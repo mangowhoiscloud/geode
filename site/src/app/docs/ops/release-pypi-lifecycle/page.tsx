@@ -52,8 +52,8 @@ export default function Page() {
             <p>
               main 푸시는 CI와 Pages만 돌립니다. 패키지 배포는{" "}
               <code>.github/workflows/release.yml</code>을 workflow_dispatch로
-              직접 실행해야 하고, publish 잡들은 보호된 <code>release</code>{" "}
-              environment를 지납니다.
+              직접 실행해야 하고, 배포 잡들은 보호된 <code>release</code>{" "}
+              환경을 지납니다.
             </p>
             <table>
               <thead><tr><th>입력</th><th>의미</th></tr></thead>
@@ -67,7 +67,7 @@ export default function Page() {
             <p>
               validate-build 잡이 lint와 hygiene, 타입 체크, 프롬프트 무결성,
               공식 문서 생성 게이트, 테스트, 런타임 E2E 스모크, twine check를
-              모두 통과해야 publish 잡이 시작됩니다.
+              모두 통과해야 배포 잡이 시작됩니다.
             </p>
 
             <h2>릴리스 후 rebuild</h2>

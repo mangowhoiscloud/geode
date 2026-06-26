@@ -9,25 +9,25 @@ export default function Page() {
       title="The closed loop"
       titleKo="폐루프"
       summary="The outer loop end to end. Mutate the scaffold, audit with Petri, gate the fitness gain on a margin, then promote or revert. No model weight or parameter ever changes."
-      summaryKo="바깥쪽 루프의 전체 흐름입니다. 스캐폴드를 변이하고, Petri로 감사하고, 적합도 이득을 margin 게이트로 검증해 승격하거나 되돌립니다. 모델 가중치와 파라미터는 일절 바꾸지 않습니다."
+      summaryKo="바깥쪽 루프의 전체 흐름입니다. 스캐폴드를 변이하고, Petri로 감사하고, fitness 이득을 margin 게이트로 검증해 승격하거나 되돌립니다. 모델 가중치와 파라미터는 일절 바꾸지 않습니다."
     >
       <Bi
         ko={
           <>
             <p>
-              자기개선 루프의 정확한 정체는 비모수적
+              자기개선 루프의 정확한 정체는 non-parametric
               자기개선입니다. 모델 가중치나 파라미터는 일절 갱신하지 않습니다.
               갱신 대상은 모델을 감싼 스캐폴드, 곧 시스템 프롬프트
-              섹션(<code>WRAPPER_PROMPT_SECTIONS</code>)과 7개 동작
-              종류입니다. 메커니즘은 선택입니다. 변이를 만들고,
+              섹션(<code>WRAPPER_PROMPT_SECTIONS</code>)과 7개 behaviour
+              kinds입니다. 메커니즘은 선택입니다. 변이를 만들고,
               적대적 안전 감사로 측정하고, 통계적으로 유의한 개선만 승격합니다.
             </p>
             <figure>
               <img
                 src="/geode/diagrams/self-improving-cycle.svg"
-                alt="선택 루프 한 사이클. 스캐폴드 한 섹션을 변이하고, 적대적 안전 감사와 적합도 스칼라와 margin 게이트를 거쳐 git 챔피언 체인으로 승격하거나 되돌린다"
+                alt="선택 루프 한 사이클. 스캐폴드 한 섹션을 변이하고, 적대적 안전 감사와 fitness 스칼라와 margin 게이트를 거쳐 git champion chain으로 승격하거나 되돌린다"
               />
-              <figcaption>한 사이클. 변이는 margin 게이트를 넘을 때만 챔피언 체인에 들어가고, 아니면 변이 전 스캐폴드로 되돌립니다.</figcaption>
+              <figcaption>한 사이클. 변이는 margin 게이트를 넘을 때만 champion chain에 들어가고, 아니면 변이 전 스캐폴드로 되돌립니다.</figcaption>
             </figure>
 
             <h2>모듈 구성: 루프 드라이버와 장비의 분리</h2>
@@ -54,11 +54,11 @@ export default function Page() {
                 </tr>
                 <tr>
                   <td><code>core/self_improving/fitness.py</code></td>
-                  <td>적합도 명세와 계산. 축 티어, 가중치, 안정성 축.</td>
+                  <td>fitness 명세와 계산. 축 티어, 가중치, 안정성 축.</td>
                 </tr>
                 <tr>
                   <td><code>core/self_improving/gate.py</code></td>
-                  <td>승격 게이트. margin 규칙, 거부 시 SoT 되돌림, 하드 도구 호출 계약 거부권.</td>
+                  <td>승격 게이트. margin 규칙, 거부 시 SoT 되돌림, 하드 tool-call 계약 거부권.</td>
                 </tr>
                 <tr>
                   <td><code>core/self_improving/ledger.py</code></td>
@@ -66,25 +66,25 @@ export default function Page() {
                 </tr>
                 <tr>
                   <td><code>core/self_improving/loop/</code></td>
-                  <td>모드 B 런타임. <code>mutate/</code>(제안과 적용), <code>observe/</code>(귀속과 출처), <code>inject/</code>(컨텍스트 내 슬롯).</td>
+                  <td>Mode B 런타임. <code>mutate/</code>는 제안과 적용, <code>observe/</code>는 attribution과 provenance, <code>inject/</code>는 in-context 슬롯을 맡습니다.</td>
                 </tr>
               </tbody>
             </table>
             <p>
               <code>train.py</code>라는 파일명은 Karpathy autoresearch의 3-파일
               관습(<code>prepare</code> / <code>train</code> / <code>program.md</code>)을
-              빌린 것이며, 이 파일에서 훈련은 일어나지 않습니다.
+              빌린 것이며, 이 파일에서 training은 일어나지 않습니다.
             </p>
 
-            <h2>변이 표면: 7개 동작 종류</h2>
+            <h2>변이 표면: 7개 behaviour kinds</h2>
             <p>
               변이 가능한 표면은 <code>core/self_improving/loop/mutate/policies.py</code>의
-              <code>TARGET_KINDS</code>가 고정합니다. 목록에 없는 종류는
+              <code>TARGET_KINDS</code>가 고정합니다. 목록에 없는 kind는
               <code>parse_mutation</code>에서 fail-closed로 거부됩니다.
             </p>
             <table>
               <thead>
-                <tr><th>종류</th><th>SoT 형태</th></tr>
+                <tr><th>kind</th><th>SoT 형태</th></tr>
               </thead>
               <tbody>
                 <tr><td><code>prompt</code></td><td>시스템 프롬프트 섹션 dict (wrapper-sections)</td></tr>
@@ -102,11 +102,11 @@ export default function Page() {
               <code>measure.py</code>가 <code>geode audit</code> 서브프로세스를
               띄우면서 후보 스캐폴드를 <code>GEODE_WRAPPER_OVERRIDE</code> env로
               주입합니다. 감사 대상이 정확히 그 후보인지가 측정의 전부이므로 이
-              경로는 엄격합니다. 파일이 없거나 파싱에 실패하면 조용히 기본
+              경로는 strict입니다. 파일이 없거나 파싱에 실패하면 조용히 기본
               스캐폴드로 떨어지는 대신 즉시 실패합니다. 역할 분리도
-              엄격합니다. 무엇을 측정하는가(루브릭, 판정자, 차원 추출)는 Petri가
+              엄격합니다. 무엇을 측정하는가(루브릭, judge, dim 추출)는 Petri가
               소유하고, 측정이 어떻게 선택 신호로 쌓이는가(티어, 가중치,
-              게이트)는 train과 적합도가 소유합니다. 자세한 측정 계층은{" "}
+              게이트)는 train과 fitness가 소유합니다. 자세한 측정 계층은{" "}
               <a href="/geode/docs/petri/overview">Petri × GEODE</a>를 보세요.
             </p>
 
@@ -116,12 +116,12 @@ export default function Page() {
               판정합니다.
             </p>
             <ol>
-              <li>하드 도구 호출 계약 거부권. <code>required_tool_path</code>와 <code>args_shape_valid</code> 계약을 어긴 후보는 점수와 무관하게 즉시 거부됩니다.</li>
+              <li>하드 tool-call 계약 거부권. <code>required_tool_path</code>와 <code>args_shape_valid</code> 계약을 어긴 후보는 점수와 무관하게 즉시 거부됩니다.</li>
               <li>이전 baseline이 없으면 부트스트랩 승격.</li>
-              <li>critical 축이 퇴행하면 적합도가 0.0으로 붕괴되어 거부됩니다.</li>
+              <li>critical 축이 퇴행하면 fitness가 0.0으로 붕괴되어 거부됩니다.</li>
               <li>
-                적합도 이득이 margin을 넘어야 승격됩니다.
-                margin = max(1.0σ × √(σ_prior² + σ_current²), floor)이며 적합도
+                fitness 이득이 margin을 넘어야 승격됩니다.
+                margin = max(1.0σ × √(σ_prior² + σ_current²), floor)이며 fitness
                 스케일에서 계산합니다. floor는 0.005, 이전 baseline의 critical
                 dim 중 표본이 1개뿐이면 0.05입니다.
               </li>
@@ -130,22 +130,22 @@ export default function Page() {
               승격 정책은 3개 arm으로 나뉩니다. <code>gate</code>(기본, 선택),
               <code>random</code>(시드 고정 동전 던지기),
               <code>never</code>(무변이 바닥선). 이득이 선택에서 왔는지 judge
-              노이즈에서 왔는지를 대조군으로 귀속하기 위한 설계입니다. 환경 변수
-              스위치는 <code>GEODE_PROMOTE_POLICY</code>입니다.
+              노이즈에서 왔는지를 대조군으로 귀속하기 위한 설계입니다. env
+              knob은 <code>GEODE_PROMOTE_POLICY</code>입니다.
             </p>
 
-            <h2>승격, 되돌림, 챔피언 체인</h2>
+            <h2>승격, 되돌림, champion chain</h2>
             <figure>
               <img
                 src="/geode/diagrams/champion-chain.svg"
-                alt="Git 챔피언 체인. 승격된 스캐폴드는 선형 커밋 체인을 늘리고, 거부된 변이는 가지에서 끝난다"
+                alt="Git champion chain. 승격된 스캐폴드는 선형 커밋 체인을 늘리고, 거부된 변이는 가지에서 끝난다"
               />
               <figcaption>승격된 스캐폴드만 체인을 늘립니다. 거부된 변이는 가지에서 끝나고 체인에 들어가지 않습니다.</figcaption>
             </figure>
             <p>
               승격되면 <code>state/autoresearch/baseline.json</code>이 갱신되고
               <code>baseline_archive.jsonl</code>에 baseline 행이 추가됩니다.
-              <code>baseline.json</code>은 승격된 챔피언의 SoT이지 최신 측정
+              <code>baseline.json</code>은 승격된 champion의 SoT이지 최신 측정
               결과가 아닙니다. 거부되면 <code>_revert_sot_after_reject</code>가
               <code>mutations.jsonl</code>의 apply 행에 기록된 변이 전 값으로
               SoT를 복원합니다. 승격된 스캐폴드 상태의 계보가 git-tracked
@@ -169,7 +169,7 @@ geode campaign --n 10 --k 5 --dry-run
 # 세션 안에서 상태 확인
 /self-improving status`}</pre>
             <p>
-              조정값(<code>BUDGET_MINUTES</code>, <code>SEED_LIMIT</code>,
+              튜너블(<code>BUDGET_MINUTES</code>, <code>SEED_LIMIT</code>,
               promote_policy 등)은 <code>~/.geode/config.toml</code>의
               <code>[self_improving_loop.autoresearch]</code>에서 읽습니다.
               스키마는 <a href="/geode/docs/capabilities/outer-loop">아우터 루프 설정</a>을
@@ -178,7 +178,7 @@ geode campaign --n 10 --k 5 --dry-run
 
             <h2>다음</h2>
             <ul>
-              <li><a href="/geode/docs/petri/judge-dimensions">판정 차원</a>. 18차원 적합도 공간과 critical floor.</li>
+              <li><a href="/geode/docs/petri/judge-dimensions">Judge 차원</a>. 18-dim fitness universe와 critical floor.</li>
               <li><a href="/geode/docs/capabilities/co-scientist">Co-scientist seed 생성</a>. 테스트 분포를 함께 키우는 쪽.</li>
               <li><a href="/geode/docs/capabilities/lineage">계보와 좌표</a>. 이 루프가 문헌 어디에 서 있는지.</li>
             </ul>

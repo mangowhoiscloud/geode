@@ -33,7 +33,7 @@ export default function Page() {
               </tbody>
             </table>
 
-            <h2>자기개선</h2>
+            <h2>Self-Improving</h2>
             <table>
               <thead><tr><th>서브시스템</th><th>루트</th><th>핵심 모듈</th></tr></thead>
               <tbody>

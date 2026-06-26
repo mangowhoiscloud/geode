@@ -30,7 +30,7 @@ export default function Page() {
               플러그인(petri_audit, seed_generation)입니다. <code>core/</code>의
               서브시스템은 5계층 스택에 정렬됩니다.
             </p>
-            <pre>{`자기개선       core/self_improving/  train.py + measure/fitness/gate/ledger + loop/{mutate,observe,inject}
+            <pre>{`Self-Improving  core/self_improving/  train.py + measure/fitness/gate/ledger + loop/{mutate,observe,inject}
 Agent           core/agent/           AgenticLoop(while tool_use), sub_agent, system_prompt
 Harness         core/cli/             thin CLI + commands/ + IPC 클라이언트
                 core/server/          serve 데몬. ipc_server(CLIPoller) + supervised(메신저 폴러)
@@ -40,7 +40,7 @@ Harness         core/cli/             thin CLI + commands/ + IPC 클라이언트
                 core/scheduler/       cron/이벤트 트리거 + 예약 작업
                 core/wiring/          부트스트랩 주입 (container, bootstrap, scheduling)
                 core/ui/              터미널 렌더 (event_renderer, latex)
-Runtime         core/tools/           도구 레지스트리 + 지연 로딩 + PolicyChain
+Runtime         core/tools/           도구 레지스트리 + deferred loading + PolicyChain
                 core/mcp/             MCP 클라이언트 (manager, stdio_client)
                 core/memory/          5-tier 컨텍스트 + 세션 저장소
                 core/skills/          스킬 레지스트리
@@ -107,12 +107,12 @@ LLM 호출  (core/llm/router/ → core/llm/providers/)
             <h2>흐름 추적 둘. 자기개선 사이클</h2>
             <pre>{`auto-trigger 또는 운영자  (core/wiring/scheduling.py → loop/auto_trigger.py)
    ▼
-변이 제안 + 적용  (core/self_improving/loop/mutate/runner.py, 7개 동작 종류)
+변이 제안 + 적용  (core/self_improving/loop/mutate/runner.py, 7 behaviour kinds)
    ▼
 Petri 감사 서브프로세스  (measure.py → geode audit → plugins/petri_audit/)
    │  GEODE_WRAPPER_OVERRIDE로 변이된 스캐폴드를 주입한 같은 AgenticLoop를 측정
    ▼
-적합도 계산  (fitness.py, 22차원 판정 → 스칼라)
+fitness 계산  (fitness.py, 22-dim 판정 → 스칼라)
    ▼
 margin 게이트  (gate.py)
    ├ 통과 → 승격. baseline.json 갱신 + baseline_archive.jsonl append  (ledger.py)

@@ -18,7 +18,7 @@ export default function Page() {
         ko={
           <>
             <p>
-              가장 최근 publish된 Petri × GEODE 감사의 transcript를 vendored
+              가장 최근 공개된 Petri × GEODE 감사의 transcript를 함께 제공되는
               Inspect View로 직접 볼 수 있습니다. 같은 GitHub Pages 도메인의
               별도 경로에 배포됩니다.
             </p>
@@ -56,13 +56,13 @@ export default function Page() {
               씁니다.
             </p>
 
-            <h2>publish 경로</h2>
+            <h2>공개 경로</h2>
             <p>
               번들의 SoT는 리포지토리의{" "}
               <code>docs/self-improving/petri-bundle/</code>이고,{" "}
               <code>geode hub build</code>가 허브 정적 페이지를 갱신합니다.
               Pages 워크플로우가 빌드 시 이 트리를 사이트로 복사합니다. 새
-              감사를 publish하려면 <a href="/geode/docs/petri/run">감사
+              감사를 공개하려면 <a href="/geode/docs/petri/run">감사
               실행</a> 후 <code>geode petri-archive</code>로 아카이브와 요약을
               남기고 번들을 동기화합니다.
             </p>

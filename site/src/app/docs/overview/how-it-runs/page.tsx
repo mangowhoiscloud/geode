@@ -68,7 +68,7 @@ export default function Page() {
               (<code>core/tools/registry.py</code>), 연결된 MCP 서버의 도구
               (<code>core/mcp/manager.py</code>), 스킬이 한 호출 표면에서
               섞입니다. 도구 수가 많으면 일부만 미리 싣고 나머지는 검색해서
-              가져오는 지연 로딩이 동작합니다(
+              가져오는 deferred loading이 동작합니다(
               <a href="/geode/docs/runtime/tools/protocol">도구와 툴셋</a>).
             </p>
             <p>

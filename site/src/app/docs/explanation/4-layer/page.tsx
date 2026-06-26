@@ -9,7 +9,7 @@ export default function Page() {
       title="Why five layers"
       titleKo="왜 5계층인가"
       summary="Model, Runtime, Harness, Agent, Self-Improving. Where each boundary falls, and why the fifth layer became explicit."
-      summaryKo="모델, 런타임, 하네스, 에이전트, 자기개선. 경계가 어디에 있고, 다섯 번째 계층이 왜 명시적이 되었는지 설명합니다."
+      summaryKo="Model, Runtime, Harness, Agent, Self-Improving. 경계가 어디에 있고, 다섯 번째 계층이 왜 명시적이 되었는지 설명합니다."
     >
       <Bi
         ko={
@@ -28,7 +28,7 @@ export default function Page() {
                 <tr><td><strong>Runtime</strong></td><td>시스템콜 + 드라이버</td><td>도구, MCP, 메모리, 스킬. LLM이 외부와 닿는 모든 경로</td><td><code>core/tools/</code>, <code>core/mcp/</code>, <code>core/memory/</code></td></tr>
                 <tr><td><strong>Harness</strong></td><td>셸 + init</td><td>CLI, serve, 훅, 게이트웨이, 레인. 사용자와 메신저가 시스템에 닿는 경로</td><td><code>core/cli/</code>, <code>core/server/</code>, <code>core/hooks/</code>, <code>core/orchestration/</code></td></tr>
                 <tr><td><strong>Agent</strong></td><td>실행 루프</td><td>while(tool_use). 항상 도는 실행 단위와 서브에이전트</td><td><code>core/agent/loop/</code>, <code>core/agent/sub_agent.py</code></td></tr>
-                <tr><td><strong>자기개선</strong></td><td>패키지 매니저 + 업데이트 채널</td><td>에이전트가 도는 스캐폴드 자체를 변이하고, 감사로 선택하고, 계보를 보존</td><td><code>core/self_improving/</code></td></tr>
+                <tr><td><strong>Self-Improving</strong></td><td>패키지 매니저 + 업데이트 채널</td><td>에이전트가 도는 스캐폴드 자체를 변이하고, 감사로 선택하고, 계보를 보존</td><td><code>core/self_improving/</code></td></tr>
               </tbody>
             </table>
 
@@ -70,7 +70,7 @@ export default function Page() {
               경계가 장식이 아니라면 교체 실험이 통과해야 합니다. 모델 교체
               (<code>/model</code>)는 Model 계층만 바꿉니다. 메신저 추가는
               Harness의 폴러 하나를 추가합니다. 스캐폴드 변이가 reject되면
-              자기개선 계층의 되돌림이 SoT를 복원할 뿐, 아래 계층 코드는
+              Self-Improving 계층의 되돌림이 SoT를 복원할 뿐, 아래 계층 코드는
               건드리지 않습니다. 세 실험 모두 현재 코드에서 단일 계층
               변경입니다.
             </p>

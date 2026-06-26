@@ -34,7 +34,7 @@ export default function Page() {
                 <tr><td><code>pre_flight.py</code></td><td>자격, 쿼터, 의존성 사전 점검</td></tr>
                 <tr><td><code>tournament.py</code></td><td>Elo 토너먼트 + 생존자 선택</td></tr>
                 <tr><td><code>checkpointer.py</code> / <code>resume.py</code></td><td>phase별 체크포인트와 재개</td></tr>
-                <tr><td><code>bundle_sync.py</code></td><td>완료 런을 <code>docs/self-improving/petri-bundle/seeds/&lt;run_id&gt;/</code>로 미러</td></tr>
+                <tr><td><code>bundle_sync.py</code></td><td>완료 런을 <code>docs/self-improving/petri-bundle/seeds/&lt;run_id&gt;/</code>로 동기화</td></tr>
               </tbody>
             </table>
             <p>
@@ -61,12 +61,12 @@ confidence = pilot stderr 기반 가중치      # 노이즈가 크면 자동 감
             <ul>
               <li>z-score는 rating이 있는 후보들 사이에서 계산합니다.</li>
               <li>
-                후보 단위 graceful degrade: pilot이 깨졌거나 stderr가 없으면 그
+                후보 단위 점진적 약화: pilot이 깨졌거나 stderr가 없으면 그
                 후보는 순수 Elo로 평가됩니다. 깨진 pilot이 선택을 Elo보다
                 나쁘게 만들 수는 없습니다.
               </li>
               <li>
-                knob: <code>GEODE_SEED_SURVIVOR_SELECTION</code>
+                조정값: <code>GEODE_SEED_SURVIVOR_SELECTION</code>
                 (<code>elo</code> / <code>difficulty</code> / <code>blend</code>),{" "}
                 <code>GEODE_SEED_BLEND_ELO_WEIGHT</code> /{" "}
                 <code>GEODE_SEED_BLEND_DIFFICULTY_WEIGHT</code> (기본 각 1.0).
@@ -87,14 +87,14 @@ confidence = pilot stderr 기반 가중치      # 노이즈가 크면 자동 감
               </li>
               <li>
                 <code>state/seed-pools/held-out</code>. 버전 고정 held-out
-                bench. arm 간 비교의 자(ruler)로 쓰며 사이클 입력과 섞지
+                벤치마크. arm 간 비교의 기준자로 쓰며 사이클 입력과 섞지
                 않습니다.
               </li>
             </ul>
 
             <h2>다음</h2>
             <ul>
-              <li><a href="/geode/docs/petri/seeds">Seed 생성 런</a>. publish된 런별 대시보드.</li>
+              <li><a href="/geode/docs/petri/seeds">Seed 생성 런</a>. 공개된 런별 대시보드.</li>
               <li><a href="/geode/docs/capabilities/autoresearch">폐루프</a>. 이 seed들이 측정에 쓰이는 곳.</li>
             </ul>
           </>
