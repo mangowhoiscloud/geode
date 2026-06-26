@@ -115,6 +115,12 @@ COMMAND_REGISTRY: dict[str, CommandSpec] = {
         description="Memory-recall pool — list/show/save persistent memory entries",
         handler_path="core.cli.commands.recall:cmd_recall",
     ),
+    "/cognitive": CommandSpec(
+        name="/cognitive",
+        location=RunLocation.THIN,
+        description="Show persisted cognitive state and recent events for a session",
+        handler_path="core.cli.commands:cmd_cognitive",
+    ),
     # ────────── DAEMON_RPC — short read-only daemon queries ──────────
     # Phase 4에서 core/server/handlers/ 로 이동 후 handler_path 갱신.
     # 현재는 cli/__init__.py:_handle_command 가 IPC RPC로 위임 (호환).

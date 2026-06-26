@@ -45,6 +45,7 @@ class SessionState:
     status: str = "active"  # active | paused | completed | error
     messages: list[dict[str, Any]] = field(default_factory=list)
     tool_log: list[dict[str, Any]] = field(default_factory=list)
+    cognitive_state: dict[str, Any] = field(default_factory=dict)
     system_prompt_hash: str = ""
     user_input: str = ""  # original user request for context
 
@@ -63,6 +64,11 @@ class SessionCheckpoint:
 
     def __init__(self, session_dir: Path | str | None = None) -> None:
         self._dir = Path(session_dir) if session_dir else DEFAULT_SESSION_DIR
+
+    @property
+    def session_dir(self) -> Path:
+        """Directory backing this checkpoint store."""
+        return self._dir
 
     def save(self, state: SessionState) -> None:
         """Save session checkpoint. Overwrites previous checkpoint for same ID.
@@ -87,11 +93,14 @@ class SessionCheckpoint:
             "status": state.status,
             "system_prompt_hash": state.system_prompt_hash,
             "user_input": state.user_input,
+            "cognitive_state": state.cognitive_state,
         }
 
         # Write state.json (metadata)
         state_file = session_path / "state.json"
         atomic_write_json(state_file, data, indent=2)
+
+        self._sync_cognitive_state_to_db(state)
 
         # Phase 1b: SoT lives in SQLite ``messages`` table. Mirror the
         # *full* message list into the DB **first** so a JSON-only failure
@@ -173,6 +182,12 @@ class SessionCheckpoint:
             if tools_file.exists():
                 tool_log = json.loads(tools_file.read_text(encoding="utf-8"))
 
+            cognitive_state = self._load_cognitive_state_from_db(session_id)
+            if cognitive_state is None:
+                cognitive_state = data.get("cognitive_state", {})
+            if not isinstance(cognitive_state, dict):
+                cognitive_state = {}
+
             return SessionState(
                 session_id=data["session_id"],
                 created_at=data.get("created_at", 0),
@@ -183,6 +198,7 @@ class SessionCheckpoint:
                 status=data.get("status", "paused"),
                 messages=messages,
                 tool_log=tool_log,
+                cognitive_state=cognitive_state,
                 system_prompt_hash=data.get("system_prompt_hash", ""),
                 user_input=data.get("user_input", ""),
             )
@@ -341,6 +357,47 @@ class SessionCheckpoint:
                 state.session_id,
                 exc_info=True,
             )
+
+    def _sync_cognitive_state_to_db(self, state: SessionState) -> None:
+        """Mirror ``state.cognitive_state`` into the central cognitive store."""
+        if not state.cognitive_state:
+            return
+        try:
+            from core.memory.cognitive_state_store import CognitiveStateStore
+
+            store = CognitiveStateStore(self._dir / "sessions.db")
+            try:
+                store.save_latest(
+                    state.session_id,
+                    state.cognitive_state,
+                    updated_at=state.updated_at,
+                )
+            finally:
+                store.close()
+        except Exception:
+            log.warning(
+                "Failed to mirror cognitive_state to sessions.db "
+                "(session=%s); JSON cache retained.",
+                state.session_id,
+                exc_info=True,
+            )
+
+    def _load_cognitive_state_from_db(self, session_id: str) -> dict[str, Any] | None:
+        """Read the latest cognitive snapshot from the central store."""
+        db_path = self._dir / "sessions.db"
+        if not db_path.exists():
+            return None
+        try:
+            from core.memory.cognitive_state_store import CognitiveStateStore
+
+            store = CognitiveStateStore(db_path)
+            try:
+                return store.load_latest(session_id)
+            finally:
+                store.close()
+        except Exception:
+            log.debug("DB-first cognitive state load failed for %s", session_id, exc_info=True)
+            return None
 
     def _clear_active_if_matches(self, session_id: str) -> None:
         active_file = self._dir / "active.json"

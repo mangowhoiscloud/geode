@@ -248,6 +248,30 @@ def build_hooks(
 
     _register_plugin("agent_runtime_state", _reg_agent_runtime_state)
 
+    def _reg_cognitive_state_store() -> None:
+        from core.memory.cognitive_state_store import CognitiveStateStore
+
+        store = CognitiveStateStore()
+
+        def _on_cognitive_event(event: HookEvent, data: dict[str, Any]) -> None:
+            session_id = str(data.get("session_id") or "")
+            snapshot = data.get("cognitive_state")
+            if not session_id or not isinstance(snapshot, dict):
+                return
+            try:
+                store.append_event(session_id, event.value, snapshot)
+            except Exception:
+                log.warning("cognitive state store append failed; skipping", exc_info=True)
+
+        hooks.register_prefix(
+            "COGNITIVE",
+            _on_cognitive_event,
+            name="cognitive_state_store_recorder",
+            priority=65,
+        )
+
+    _register_plugin("cognitive_state_store", _reg_cognitive_state_store)
+
     # Context overflow action handler (CONTEXT_OVERFLOW_ACTION -> strategy recommendation)
     def _reg_context_action() -> None:
         from core.hooks.context_action import make_context_action_handler

@@ -38,6 +38,7 @@ later PRs wire the remaining writers.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from typing import Any
 
 
 @dataclass
@@ -57,6 +58,48 @@ class CognitiveState:
     last_action: str = ""
     last_observation: str = ""
     round_count: int = 0
+
+    @classmethod
+    def from_snapshot(cls, snapshot: dict[str, Any] | None) -> CognitiveState:
+        """Build a bounded state object from a persisted snapshot."""
+        if not isinstance(snapshot, dict):
+            return cls()
+
+        def _string_list(key: str, limit: int) -> list[str]:
+            raw = snapshot.get(key)
+            if not isinstance(raw, list):
+                return []
+            values: list[str] = []
+            for item in raw[-limit:]:
+                if isinstance(item, str):
+                    head = item.strip()
+                    if head:
+                        values.append(head)
+            return values
+
+        confidence: float | None = None
+        raw_confidence = snapshot.get("confidence")
+        if isinstance(raw_confidence, int | float) and not isinstance(raw_confidence, bool):
+            confidence = max(0.0, min(1.0, float(raw_confidence)))
+
+        raw_round_count = snapshot.get("round_count")
+        round_count = (
+            raw_round_count
+            if isinstance(raw_round_count, int) and not isinstance(raw_round_count, bool)
+            else 0
+        )
+        round_count = max(round_count, 0)
+
+        return cls(
+            goal=str(snapshot.get("goal") or ""),
+            subgoals=_string_list("subgoals", 5),
+            observations=_string_list("observations", 32),
+            hypotheses=_string_list("hypotheses", 5),
+            confidence=confidence,
+            last_action=str(snapshot.get("last_action") or ""),
+            last_observation=str(snapshot.get("last_observation") or ""),
+            round_count=round_count,
+        )
 
     def record_round(
         self,

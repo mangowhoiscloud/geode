@@ -16,12 +16,56 @@ mirroring the pattern used by ``core/ui/agentic_ui``.
 from __future__ import annotations
 
 import logging
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     from core.memory.session_checkpoint import SessionState
 
 log = logging.getLogger(__name__)
+
+
+def _format_cognitive_state_summary(snapshot: dict[str, Any]) -> str:
+    """Render a compact operator-facing cognitive state summary."""
+    if not snapshot:
+        return ""
+
+    parts: list[str] = []
+    round_count = snapshot.get("round_count")
+    if isinstance(round_count, int) and not isinstance(round_count, bool):
+        parts.append(f"round={round_count}")
+
+    confidence = snapshot.get("confidence")
+    if isinstance(confidence, int | float) and not isinstance(confidence, bool):
+        parts.append(f"confidence={float(confidence):.2f}")
+
+    last_action = snapshot.get("last_action")
+    if isinstance(last_action, str) and last_action:
+        parts.append(f"last={last_action[:40]}")
+
+    hypotheses = snapshot.get("hypotheses")
+    if isinstance(hypotheses, list) and hypotheses:
+        parts.append(f"hypotheses={len(hypotheses)}")
+
+    return " | ".join(parts)
+
+
+def _parse_last_flag(args: list[str], *, default: int = 10) -> tuple[list[str], int]:
+    """Parse ``--last N`` from a small slash-command argv list."""
+    cleaned: list[str] = []
+    limit = default
+    i = 0
+    while i < len(args):
+        arg = args[i]
+        if arg == "--last" and i + 1 < len(args):
+            try:
+                limit = max(0, int(args[i + 1]))
+            except ValueError:
+                limit = default
+            i += 2
+            continue
+        cleaned.append(arg)
+        i += 1
+    return cleaned, limit
 
 
 def cmd_resume(args: str) -> SessionState | None:
@@ -54,6 +98,9 @@ def cmd_resume(args: str) -> SessionState | None:
         _pkg.console.print(
             f"  [muted]Round: {state.round_idx} | Messages: {len(state.messages)}[/muted]"
         )
+        cognitive_summary = _format_cognitive_state_summary(state.cognitive_state)
+        if cognitive_summary:
+            _pkg.console.print(f"  [muted]Cognitive: {cognitive_summary}[/muted]")
         _pkg.console.print()
         return state
 
@@ -72,12 +119,81 @@ def cmd_resume(args: str) -> SessionState | None:
         age_min = (_time.time() - s.updated_at) / 60
         age_str = f"{age_min:.0f}m ago" if age_min < 60 else f"{age_min / 60:.1f}h ago"
         label = s.user_input[:50] if s.user_input else "(no input)"
-        _pkg.console.print(f"  {i}. [bold]{s.session_id}[/bold] [{s.status}] {age_str}")
+        cognitive_summary = _format_cognitive_state_summary(s.cognitive_state)
+        suffix = f" | {cognitive_summary}" if cognitive_summary else ""
+        _pkg.console.print(
+            f"  {i}. [bold]{s.session_id}[/bold] [{s.status}] {age_str}{suffix}"
+        )
         _pkg.console.print(f"     [muted]{label}[/muted]")
     _pkg.console.print()
     _pkg.console.print("  [muted]Usage: /resume <session_id>[/muted]")
     _pkg.console.print()
     return None
+
+
+def cmd_cognitive(args: str) -> None:
+    """Show persisted cognitive state for a resumable session.
+
+    Usage:
+        /cognitive <session_id> [--last N]
+    """
+    from core.cli import commands as _pkg
+    from core.memory.cognitive_state_store import CognitiveStateStore
+    from core.memory.session_checkpoint import SessionCheckpoint
+
+    parts, limit = _parse_last_flag(args.strip().split())
+    if not parts:
+        _pkg.console.print("  [warning]Usage: /cognitive <session_id> [--last N][/warning]")
+        _pkg.console.print("  [muted]/resume lists available session ids.[/muted]")
+        _pkg.console.print()
+        return
+
+    session_id = parts[0]
+    checkpoint = SessionCheckpoint()
+    state = checkpoint.load(session_id)
+    if state is None:
+        _pkg.console.print(f"  [warning]Session not found: {session_id}[/warning]")
+        _pkg.console.print()
+        return
+
+    snapshot = state.cognitive_state
+    _pkg.console.print()
+    _pkg.console.print(f"  [header]Cognitive State[/header] [muted]{session_id}[/muted]")
+    summary = _format_cognitive_state_summary(snapshot)
+    if summary:
+        _pkg.console.print(f"  [muted]{summary}[/muted]")
+    else:
+        _pkg.console.print("  [muted]No persisted cognitive snapshot.[/muted]")
+
+    goal = snapshot.get("goal") if isinstance(snapshot, dict) else ""
+    if isinstance(goal, str) and goal:
+        _pkg.console.print(f"  [label]Goal:[/label] {goal[:160]}")
+
+    observations = snapshot.get("observations") if isinstance(snapshot, dict) else None
+    if isinstance(observations, list) and observations:
+        _pkg.console.print("  [label]Recent observations:[/label]")
+        for item in observations[-5:]:
+            if isinstance(item, str):
+                _pkg.console.print(f"    - {item[:160]}")
+
+    hypotheses = snapshot.get("hypotheses") if isinstance(snapshot, dict) else None
+    if isinstance(hypotheses, list) and hypotheses:
+        _pkg.console.print("  [label]Hypotheses:[/label]")
+        for item in hypotheses[-5:]:
+            if isinstance(item, str):
+                _pkg.console.print(f"    - {item[:160]}")
+
+    store = CognitiveStateStore(checkpoint.session_dir / "sessions.db")
+    try:
+        events = store.recent_events(session_id, limit=limit)
+        _pkg.console.print(f"  [label]Events:[/label] {store.event_count(session_id)} persisted")
+        for event in events:
+            event_summary = _format_cognitive_state_summary(event.snapshot)
+            suffix = f" — {event_summary}" if event_summary else ""
+            _pkg.console.print(f"    - #{event.id} {event.phase}{suffix}")
+    finally:
+        store.close()
+    _pkg.console.print()
 
 
 def cmd_apply(args: str) -> None:
