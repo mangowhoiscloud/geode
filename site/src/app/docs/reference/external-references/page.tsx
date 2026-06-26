@@ -27,11 +27,11 @@ export default function Page() {
                 <tr><td><strong>Codex CLI</strong></td><td>OpenAI Codex</td><td>thin CLI + IPC daemon, OAuth flow, sandbox policy.</td></tr>
                 <tr><td><strong>OpenClaw</strong></td><td><a href="https://github.com/openclaw/openclaw">github.com/openclaw/openclaw</a></td><td>Gateway-centric routing, Lane Queue 동시성, Session 격리, Plugin 발견, Policy Chain.</td></tr>
                 <tr><td><strong>Karpathy autoresearch</strong></td><td><a href="https://github.com/karpathy/autoresearch">github.com/karpathy/autoresearch</a> (2026-03)</td><td>Fixed wall-budget으로 비교 가능성 보존. Frozen scoreboard 분리. git monotone ratchet. Token-economic loop. Simplicity criterion.</td></tr>
-                <tr><td><strong>Karpathy LLM Wiki</strong></td><td>gist (2024+)</td><td>"wiki = compiled artifact" 지식 컴파일 패턴.</td></tr>
+                <tr><td><strong>Karpathy LLM Wiki</strong></td><td>gist (2024+)</td><td>&quot;wiki = compiled artifact&quot; 지식 컴파일 패턴.</td></tr>
                 <tr><td><strong>Hermes Agent (NousResearch)</strong></td><td><a href="https://hermes-agent.nousresearch.com/docs/">hermes-agent.nousresearch.com/docs</a></td><td>llms.txt / llms-full.txt 듀얼 인덱스, system_and_3 cache_control 패턴, 멀티채널 personal agent.</td></tr>
                 <tr><td><strong>Cursor</strong></td><td>cursor.com</td><td>Composer 패턴 (참조용. GEODE는 별도 구현).</td></tr>
-                <tr><td><strong>Aider</strong></td><td>aider.chat</td><td>"AI pair programming in your terminal" 카피 패턴 (간결한 hero 1-line).</td></tr>
-                <tr><td><strong>Devin / Cognition</strong></td><td>cognition.ai/devin</td><td>"The AI software engineer" 명사구 정체성. 장기 실행 소프트웨어 에이전트 비교점.</td></tr>
+                <tr><td><strong>Aider</strong></td><td>aider.chat</td><td>&quot;AI pair programming in your terminal&quot; 카피 패턴 (간결한 hero 1-line).</td></tr>
+                <tr><td><strong>Devin / Cognition</strong></td><td>cognition.ai/devin</td><td>&quot;The AI software engineer&quot; 명사구 정체성. 장기 실행 소프트웨어 에이전트 비교점.</td></tr>
               </tbody>
             </table>
 
@@ -65,7 +65,7 @@ export default function Page() {
               </li>
               <li>
                 <strong>inspect_ai (UK AISI)</strong>{" "}
-                (<a href="https://inspect.aisi.org.uk/">inspect.aisi.org.uk</a>) — Petri의 base framework. transcript viewer v3가 Petri 네이티브 지원 (2026-05-07).
+                (<a href="https://inspect.aisi.org.uk/">inspect.aisi.org.uk</a>) — Petri의 기반 프레임워크. transcript viewer v3가 Petri 네이티브 지원 (2026-05-07).
               </li>
               <li>
                 <strong>Meridian Labs</strong>{" "}
@@ -102,11 +102,11 @@ export default function Page() {
               <a href="/geode/docs/explanation/ratchet">왜 ratchet 규율인가</a> 페이지에서 직접 인용합니다.
             </p>
             <ol>
-              <li><strong>Fixed wall-budget</strong>으로 비교가능성 보존. 모든 실험이 5분 wall-clock. → GEODE의 StuckDetector 7200s + 30s wrap-up headroom.</li>
+              <li><strong>Fixed wall-budget</strong>으로 비교가능성 보존. 모든 실험이 5분 wall-clock. → GEODE의 StuckDetector 7200s + 30s wrap-up 여유.</li>
               <li><strong>Frozen scoreboard</strong> 분리. 평가 harness가 agent-mutable 영역 밖에 동결. → GEODE의 validator + CourtEval grader 분리.</li>
               <li><strong>git monotone ratchet</strong>. branch HEAD가 절대 안 나빠짐. KEEP만 commit. → GEODE의 transcript-jsonl audit cycle.</li>
               <li><strong>Token-economic loop</strong>. run.log + grep anchor + TSV append-only. → GEODE의 200-turn sliding window.</li>
-              <li><strong>Simplicity criterion</strong>. "removing code with equal-or-better metric = great outcome". → GEODE Runtime 1476→517 라인 분해 (v0.30), Registry 257 라인 제거 (v0.44).</li>
+              <li><strong>Simplicity criterion</strong>. &quot;removing code with equal-or-better metric = great outcome&quot;. → GEODE Runtime 1476→517 라인 분해 (v0.30), Registry 257 라인 제거 (v0.44).</li>
             </ol>
 
             <p className="text-[var(--ink-3)] text-sm">
@@ -117,7 +117,7 @@ export default function Page() {
         en={
           <>
             <p>
-              <strong>Reference:</strong> an index of external systems, standards, and prior work that influenced GEODE's
+	              <strong>Reference:</strong> an index of external systems, standards, and prior work that influenced GEODE&apos;s
               design and documentation structure. Specific borrowings are cited inside the relevant chapters; this page
               collects the sources in one place.
             </p>
@@ -130,11 +130,11 @@ export default function Page() {
                 <tr><td><strong>Codex CLI</strong></td><td>OpenAI Codex</td><td>thin CLI plus IPC daemon, OAuth flow, sandbox policy.</td></tr>
                 <tr><td><strong>OpenClaw</strong></td><td><a href="https://github.com/openclaw/openclaw">github.com/openclaw/openclaw</a></td><td>Gateway-centric routing, Lane Queue concurrency, Session isolation, plugin discovery, Policy Chain.</td></tr>
                 <tr><td><strong>Karpathy autoresearch</strong></td><td><a href="https://github.com/karpathy/autoresearch">github.com/karpathy/autoresearch</a> (2026-03)</td><td>Fixed wall-budget for comparability. Frozen scoreboard. git monotone ratchet. Token-economic loop. Simplicity criterion.</td></tr>
-                <tr><td><strong>Karpathy LLM Wiki</strong></td><td>gist (2024+)</td><td>"wiki = compiled artifact" knowledge-compilation pattern.</td></tr>
+                <tr><td><strong>Karpathy LLM Wiki</strong></td><td>gist (2024+)</td><td>&quot;wiki = compiled artifact&quot; knowledge-compilation pattern.</td></tr>
                 <tr><td><strong>Hermes Agent (NousResearch)</strong></td><td><a href="https://hermes-agent.nousresearch.com/docs/">hermes-agent.nousresearch.com/docs</a></td><td>llms.txt and llms-full.txt dual index, system_and_3 cache_control pattern, multi-channel personal agent.</td></tr>
                 <tr><td><strong>Cursor</strong></td><td>cursor.com</td><td>Composer pattern (reference; GEODE implements separately).</td></tr>
-                <tr><td><strong>Aider</strong></td><td>aider.chat</td><td>"AI pair programming in your terminal" copy pattern (succinct one-line hero).</td></tr>
-                <tr><td><strong>Devin / Cognition</strong></td><td>cognition.ai/devin</td><td>"The AI software engineer" noun-anchored identity. Long-running software-agent comparison point.</td></tr>
+                <tr><td><strong>Aider</strong></td><td>aider.chat</td><td>&quot;AI pair programming in your terminal&quot; copy pattern (succinct one-line hero).</td></tr>
+                <tr><td><strong>Devin / Cognition</strong></td><td>cognition.ai/devin</td><td>&quot;The AI software engineer&quot; noun-anchored identity. Long-running software-agent comparison point.</td></tr>
               </tbody>
             </table>
 
@@ -185,7 +185,7 @@ export default function Page() {
                 <strong>mango-wiki/projects/geode/concepts/</strong> (33 narrative files) — per-system design narratives.
                 agentic-loop, gateway, hook-production-gap, memory-system, the five prompt-* variants,
                 scaffold-production, session-lane, tool-routing, and more. The primary source when filling in this
-                site's deeper page bodies.
+                site&apos;s deeper page bodies.
               </li>
               <li>
                 <strong>mango-wiki/projects/geode/references/</strong> (33 blog hub files) — blog post index, ADR,
@@ -200,7 +200,7 @@ export default function Page() {
                 categories. Used for resume and interview citations.
               </li>
               <li>
-                <strong>resume/common/narratives/autoresearch-ratchet-reference.md</strong> — Karpathy autoresearch's
+                <strong>resume/common/narratives/autoresearch-ratchet-reference.md</strong> — Karpathy autoresearch&apos;s
                 five reusable patterns mapped onto GEODE and Crumb.
               </li>
               <li>
@@ -210,15 +210,15 @@ export default function Page() {
 
             <h2>Karpathy autoresearch (2026-03): five reusable patterns</h2>
             <p>
-              GEODE's core safety mechanism generalizes Karpathy's autoresearch patterns to a long-running agent
+              GEODE&apos;s core safety mechanism generalizes Karpathy&apos;s autoresearch patterns to a long-running agent
               context. <a href="/geode/docs/explanation/ratchet">Why Ratchet Discipline</a> cites these directly.
             </p>
             <ol>
-              <li><strong>Fixed wall-budget</strong> preserves comparability. Every experiment is five minutes of wall-clock. GEODE's StuckDetector at 7200s plus 30s wrap-up headroom is the generalized form.</li>
-              <li><strong>Frozen scoreboard</strong>. The evaluation harness lives outside the agent-mutable region. GEODE's validator plus CourtEval grader separation is the same idea.</li>
-              <li><strong>git monotone ratchet</strong>. Branch HEAD never gets worse. Only KEEP commits. GEODE's transcript-jsonl audit cycle is the variant.</li>
-              <li><strong>Token-economic loop</strong>. run.log plus grep anchors plus append-only TSV. GEODE's 200-turn sliding window is the variant.</li>
-              <li><strong>Simplicity criterion</strong>. "Removing code with equal-or-better metric = great outcome." GEODE Runtime 1476 → 517 lines (v0.30) and Registry minus 257 lines (v0.44) follow the same rule.</li>
+	              <li><strong>Fixed wall-budget</strong> preserves comparability. Every experiment is five minutes of wall-clock. GEODE&apos;s StuckDetector at 7200s plus 30s wrap-up headroom is the generalized form.</li>
+	              <li><strong>Frozen scoreboard</strong>. The evaluation harness lives outside the agent-mutable region. GEODE&apos;s validator plus CourtEval grader separation is the same idea.</li>
+	              <li><strong>git monotone ratchet</strong>. Branch HEAD never gets worse. Only KEEP commits. GEODE&apos;s transcript-jsonl audit cycle is the variant.</li>
+	              <li><strong>Token-economic loop</strong>. run.log plus grep anchors plus append-only TSV. GEODE&apos;s 200-turn sliding window is the variant.</li>
+	              <li><strong>Simplicity criterion</strong>. &quot;Removing code with equal-or-better metric = great outcome.&quot; GEODE Runtime 1476 → 517 lines (v0.30) and Registry minus 257 lines (v0.44) follow the same rule.</li>
             </ol>
 
             <p className="text-[var(--ink-3)] text-sm">

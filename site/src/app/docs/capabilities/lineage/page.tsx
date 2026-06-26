@@ -80,8 +80,8 @@ export default function Page() {
                   <td>2026 상반기</td>
                   <td>survey 통합 단계</td>
                   <td>
-                    분야 이름이 자기진화 에이전트로 굳고, 모수적(가중치)
-                    진화와 비모수적(프롬프트, 메모리, 도구, 스캐폴딩)
+                    분야 이름이 self-evolving agents로 굳고, parametric(가중치)
+                    진화와 non-parametric(프롬프트, 메모리, 도구, scaffolding)
                     진화로 갈림
                   </td>
                 </tr>
@@ -95,27 +95,27 @@ export default function Page() {
             <h2>두 갈래, 그리고 비어 있는 칸</h2>
             <p>
               위 계보를 두 축으로 나눠 보면 분야의 무게중심이 드러납니다. 한 축은
-	              적합도가 무엇인가(능력인가 안전인가), 다른 축은 무엇을 바꾸는가
-	              (스캐폴딩인가 가중치인가)입니다.
+              fitness가 무엇인가(능력인가 안전인가), 다른 축은 무엇을 바꾸는가
+              (scaffolding인가 가중치인가)입니다.
             </p>
             <ul>
               <li>
-	                스캐폴딩을 건드리는 시스템(DGM, ADAS, STOP, Promptbreeder,
+                scaffolding을 건드리는 시스템(DGM, ADAS, STOP, Promptbreeder,
                 GEPA, AlphaEvolve, SICA)은 대부분 <strong>능력</strong>을
                 최적화합니다. SWE-bench, 알고리즘, 정확도가 그 대상입니다.
               </li>
               <li>
-	                적합도가 <strong>안전</strong>인 시스템(Constitutional AI, MART,
+                fitness가 <strong>안전</strong>인 시스템(Constitutional AI, MART,
                 Self-MOA)은 대부분 <strong>가중치</strong>를 갱신합니다.
               </li>
             </ul>
             <p>
-	              그러면 한 칸이 비어 있습니다. 적합도가 안전이면서, 가중치를 건드리지
-	              않고 스캐폴딩만 바꾸는 칸입니다. 2026년 5월 기준으로 이 칸은 거의
+              그러면 한 칸이 비어 있습니다. fitness가 안전이면서, 가중치를 건드리지
+              않고 scaffolding만 바꾸는 칸입니다. 2026년 5월 기준으로 이 칸은 거의
               비어 있습니다.
             </p>
-            <pre>{`                 적합도 = 능력            적합도 = 안전
-스캐폴딩       DGM, ADAS, STOP,        <- 거의 비어 있음
+            <pre>{`                 fitness = 능력            fitness = 안전
+scaffolding   DGM, ADAS, STOP,        <- 거의 비어 있음
 (가중치 X)    GEPA, AlphaEvolve, SICA     (GEODE가 겨누는 칸)
 
 가중치 갱신   (RLHF 계열)              Constitutional AI, MART, Self-MOA`}</pre>
@@ -127,13 +127,13 @@ export default function Page() {
             </p>
             <ol>
               <li>
-	                <strong>능력 벤치마크 적합도 → 적대적 안전 감사 적합도</strong>.
+                <strong>능력 벤치마크 fitness → 적대적 안전 감사 fitness</strong>.
                 SWE-bench 점수 대신 Petri 등급의 다차원 안전 감사로 평가합니다.
               </li>
               <li>
-	                <strong>개방형 아카이브 → 정직한 (1+1) 챔피언 체인</strong>.
-	                다양한 frontier를 유지하는 대신, 핵심 차원에 거부권을 둔
-                단일 챔피언 계보를 이어갑니다.
+                <strong>open-ended 아카이브 → 정직한 (1+1) champion chain</strong>.
+                다양한 frontier를 유지하는 대신, critical dimension에 거부권을
+                둔 단일 champion 계보를 이어갑니다.
               </li>
               <li>
                 <strong>고정 벤치마크 → 공진화하는 적대적 seed</strong>.
@@ -142,9 +142,9 @@ export default function Page() {
               </li>
             </ol>
             <p>
-	              그리고 한 가지 더. GEODE는 비모수적입니다. 스캐폴딩만
-	              바꿉니다. 변이 표면은 7개 동작 종류, 곧 프롬프트 섹션, 도구
-	              정책, 분해 방식, 반성, 스킬 카탈로그, 에이전트 계약,
+              그리고 한 가지 더. GEODE는 non-parametric입니다. scaffolding만
+              바꿉니다. 변이 표면은 7개 behaviour kinds, 곧 프롬프트 섹션, 도구
+              정책, 분해 방식, reflection, skill 카탈로그, 에이전트 contract,
               도구 설명이며, 가중치는 절대 건드리지 않습니다.
             </p>
             <p>
@@ -165,12 +165,12 @@ export default function Page() {
               <tbody>
                 <tr>
                   <td>DGM</td>
-                  <td>루프 구조와 scaffolding을 바꾸는 substrate</td>
+                  <td>루프 구조와, scaffolding을 바꿀 수 있는 실행 기반</td>
                 </tr>
                 <tr>
                   <td>GEPA</td>
                   <td>
-                    reflective single-mutation 방식, 그리고 가중치 없는 프롬프트
+                    reflection 기반 single-mutation 방식, 그리고 가중치 없는 프롬프트
                     진화가 RL을 이길 수 있다는 최근의 가장 강한 증거
                   </td>
                 </tr>

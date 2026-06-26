@@ -374,17 +374,17 @@ export default function Page() {
             <p>
               자기개선 루프의 seed-generation 파이프라인은 세대마다 산출한
               결과를 <code>docs/self-improving/petri-bundle/seeds/</code>에
-              git-tracked 스냅샷으로 publish합니다. 이 페이지는 빌드 시점에{" "}
+              git-tracked 스냅샷으로 공개합니다. 이 페이지는 빌드 시점에{" "}
               <code>listing.json</code>과 run별 <code>state.json</code> /{" "}
               <code>survivors.json</code> / <code>meta_review.json</code>을 읽어
               대시보드로 렌더링합니다.
             </p>
             <p>
               raw 파일은 <a href={RAW_BUNDLE_URL}><code>{RAW_BUNDLE_URL}</code></a>의
-              정적 viewer에서 보거나, run별 <code>state.json</code> /{" "}
+              정적 뷰어에서 보거나, run별 <code>state.json</code> /{" "}
               <code>survivors.json</code>을 직접 엽니다. Pages는 디렉토리
-              listing을 제공하지 않습니다. inspect_ai <code>.eval</code> 아카이브
-              viewer는{" "}
+              목록을 제공하지 않습니다. inspect_ai <code>.eval</code> 아카이브
+              뷰어는{" "}
               <a href="/geode/self-improving/petri-bundle/">/geode/self-improving/petri-bundle/</a>에
               따로 있습니다.
             </p>
@@ -393,9 +393,9 @@ export default function Page() {
             <RunsTable runs={runs} locale="ko" />
 
             <h2>Run별 상세</h2>
-            <p>각 row를 펼치면 survivors, 비용, meta-review, next-gen prior, Elo 분포가 보입니다.</p>
+            <p>각 행을 펼치면 survivors, 비용, meta-review, next-gen prior, Elo 분포가 보입니다.</p>
             {runs.length === 0 ? (
-              <p><em>아직 publish된 run이 없습니다. <code>docs/self-improving/petri-bundle/seeds/listing.json</code>을 확인하세요.</em></p>
+              <p><em>아직 공개된 run이 없습니다. <code>docs/self-improving/petri-bundle/seeds/listing.json</code>을 확인하세요.</em></p>
             ) : (
               runs.map((r) => <RunDetailBlock key={r.run.run_id} detail={r} locale="ko" />)
             )}
@@ -403,8 +403,8 @@ export default function Page() {
             <h2>SoT와 파이프라인</h2>
             <ul>
               <li>seed-generation 소스: <code>plugins/seed_generation/orchestrator.py</code> (9-역할: supervisor → literature_review → generator → proximity → critic → pilot → ranker → evolver → meta_reviewer. 상세는 <a href="/geode/docs/capabilities/co-scientist">Co-scientist seed 생성</a>)</li>
-              <li>bundle 동기화: <code>plugins/seed_generation/bundle_sync.py</code>가 run 종료 시 결과를 <code>docs/self-improving/petri-bundle/seeds/&lt;run_id&gt;/</code>로 mirror합니다</li>
-              <li>관련 문서: <a href="/geode/docs/capabilities/seed-pipeline">Seed Pipeline</a> · <a href="/geode/docs/petri/scenarios">Petri Scenarios</a></li>
+              <li>bundle 동기화: <code>plugins/seed_generation/bundle_sync.py</code>가 run 종료 시 결과를 <code>docs/self-improving/petri-bundle/seeds/&lt;run_id&gt;/</code>로 동기화합니다</li>
+              <li>관련 문서: <a href="/geode/docs/capabilities/seed-pipeline">Seed 파이프라인</a> · <a href="/geode/docs/petri/scenarios">Petri 시나리오</a></li>
             </ul>
           </>
         }

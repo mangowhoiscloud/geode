@@ -92,7 +92,7 @@ export default function Page() {
             <p>
               무엇을 측정하는가(루브릭, judge, <code>dim_extractor</code>
               출력)는 Petri 쪽이 소유합니다. 측정이 어떻게 선택 신호로
-              쌓이는가(티어, 가중치, 게이트)는 루프의 train과 fitness가
+              쌓이는가(티어, 가중치, 게이트)는 루프의 train 단계와 fitness가
               소유합니다. 원시 측정을 다시 구현하는 코드 경로는 없습니다.
             </p>
 
@@ -100,7 +100,7 @@ export default function Page() {
             <ul>
               <li><a href="/geode/docs/petri/run">감사 실행</a>. 플래그와 기본값.</li>
               <li><a href="/geode/docs/petri/judge-dimensions">Judge 차원</a>. 22-dim 루브릭과 18-dim fitness universe.</li>
-              <li><a href="/geode/self-improving/petri-bundle/">번들 뷰어</a>. 최신 publish된 transcript.</li>
+              <li><a href="/geode/self-improving/petri-bundle/">번들 뷰어</a>. 최신 공개 transcript.</li>
             </ul>
           </>
         }

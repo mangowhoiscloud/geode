@@ -9,7 +9,7 @@ export default function Page() {
       title="The two loops"
       titleKo="두 개의 루프"
       summary="The mental model the rest of the docs build on. An inner agentic loop runs a task; an outer loop tunes the system that runs tasks."
-      summaryKo="나머지 문서가 기대는 멘탈 모델입니다. 안쪽 에이전틱 루프가 작업을 처리하고, 바깥쪽 루프가 작업을 처리하는 시스템 자체를 다듬습니다."
+      summaryKo="나머지 문서가 기대는 멘탈 모델입니다. 안쪽 agentic 루프가 작업을 처리하고, 바깥쪽 루프가 작업을 처리하는 시스템 자체를 다듬습니다."
     >
       <Bi
         ko={
@@ -27,7 +27,7 @@ export default function Page() {
               기록입니다.
             </p>
 
-            <h2>안쪽: 에이전틱 루프</h2>
+            <h2>안쪽: agentic 루프</h2>
             <p>
               안쪽 루프는 작업 하나를 실행하는 기본 단위입니다.{" "}
               <code>core/agent/loop/agent_loop.py</code>의 <code>AgenticLoop</code>가
@@ -45,7 +45,7 @@ export default function Page() {
             </p>
             <p>
               한 턴이 실제로 어떻게 도는지, 어떤 경로로 끝나는지는{" "}
-              <a href="/geode/docs/architecture/agentic-loop">안쪽 에이전틱 루프</a>에서
+              <a href="/geode/docs/architecture/agentic-loop">안쪽 agentic 루프</a>에서
               자세히 다룹니다.
             </p>
 
@@ -53,7 +53,7 @@ export default function Page() {
             <p>
               바깥쪽 루프가 다루는 대상은 작업이 아니라 시스템 자체입니다.
               정확히는 모델을 감싼 <strong>스캐폴드</strong>, 곧 시스템 프롬프트
-              섹션(<code>WRAPPER_PROMPT_SECTIONS</code>)과 동작 종류입니다.
+              섹션(<code>WRAPPER_PROMPT_SECTIONS</code>)과 behaviour kinds입니다.
               모델 가중치와 파라미터는 일절 건드리지 않습니다. 메커니즘은
               선택입니다. 후보를 만들고, 측정하고, 더 나은 쪽만
               남깁니다.
@@ -68,7 +68,7 @@ export default function Page() {
                 Petri 적대적 안전 감사가 차원별로 채점합니다.
               </li>
               <li>
-                <strong>적합도</strong>. 차원 점수를 스칼라 하나로 접습니다
+                <strong>fitness</strong>. 차원 점수를 스칼라 하나로 접습니다
                 (<code>core/self_improving/fitness.py</code>).
               </li>
               <li>
@@ -76,15 +76,15 @@ export default function Page() {
                 통과시킵니다 (<code>core/self_improving/gate.py</code>).
               </li>
               <li>
-                <strong>승격 또는 되돌림</strong>. 통과하면 새 챔피언으로
+                <strong>승격 또는 되돌림</strong>. 통과하면 새 champion으로
                 승격하고, 아니면 변이 이전 상태로 되돌립니다. 계보는 git
-                챔피언 체인으로 보존됩니다.
+                champion chain으로 보존됩니다.
               </li>
             </ol>
             <p>
               루프 드라이버는 <code>core/self_improving/train.py</code>입니다.
               파일명은 Karpathy autoresearch의 3-파일 관습을 빌린 것으로, 실제
-              훈련은 일어나지 않습니다. 전체 그림은{" "}
+              training은 일어나지 않습니다. 전체 그림은{" "}
               <a href="/geode/docs/capabilities/autoresearch">자기개선 루프</a>에서,
               측정에 쓰는 평가 프레임워크는{" "}
               <a href="/geode/docs/petri/overview">Petri × GEODE</a>에서 다룹니다.
@@ -100,7 +100,7 @@ export default function Page() {
             <figure>
               <img
                 src="/geode/diagrams/two-loops.svg"
-                alt="바깥쪽 선택 루프(변이, Petri 감사, 적합도, margin 게이트, 챔피언 체인)와 안쪽 에이전틱 루프(LLM 호출, 도구 실행, 관찰)가 나란히 있고, 스캐폴드는 안쪽으로 흐르며 트랜스크립트는 바깥쪽 감사로 돌아간다"
+                alt="바깥쪽 선택 루프(변이, Petri 감사, fitness, margin 게이트, champion chain)와 안쪽 agentic 루프(LLM 호출, 도구 실행, 관찰)가 나란히 있고, 스캐폴드는 안쪽으로 흐르며 트랜스크립트는 바깥쪽 감사로 돌아간다"
               />
               <figcaption>두 루프는 호출이 아니라 데이터로 맞물립니다. 스캐폴드는 안쪽으로, 트랜스크립트는 바깥쪽 감사로 흐릅니다.</figcaption>
             </figure>
