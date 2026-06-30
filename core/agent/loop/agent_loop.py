@@ -490,8 +490,10 @@ class AgenticLoop:
         """Record round end + emit REFLECT/UPDATE_MEMORY for text-only
         completions (``stop_reason != "tool_use"``).
 
-        Contract: ACT/OBSERVE are NOT emitted (no action taken) — the
-        text-only cycle is PERCEIVE → PLAN → REFLECT. ``last_action`` =
+        Contract: ACT/OBSERVE are NOT emitted (no action taken). If
+        ``cognitive_reflection_enabled`` is on, the reflection node still
+        gets one final chance to update beliefs from the terminal text
+        snapshot before REFLECT/UPDATE_MEMORY fire. ``last_action`` =
         ``"text-only"``, ``last_observation`` = 80-char head of the text
         (distinguishes no-action from failed-tool turns).
         """
@@ -502,6 +504,7 @@ class AgenticLoop:
             action="text-only",
             observation=head or "(empty text)",
         )
+        await self._maybe_reflect([])
         await self._emit_cognitive(HookEvent.COGNITIVE_REFLECT, round=round_idx + 1)
         await self._emit_cognitive(HookEvent.COGNITIVE_UPDATE_MEMORY, round=round_idx + 1)
 
