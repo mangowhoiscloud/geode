@@ -9,7 +9,7 @@ Coverage:
 - :func:`should_replan` env-knob policy: verify FAIL wins; cadence
   fires every N rounds; ``GEODE_REPLAN_ENABLED=false`` disables.
 - :func:`parse_replan_response` handles code fences + bad JSON.
-- :func:`replan_async` calls ``loop._call_llm`` with ``settings.plan_model``,
+- :func:`replan_async` calls ``loop._call_llm`` with the active loop model,
   parses the response, records token usage via ``_track_usage_async``,
   returns None on timeout / bad JSON.
 - SessionMetrics integration: ``set_active_plan`` / ``record_replan`` /
@@ -334,9 +334,9 @@ def test_parse_replan_missing_steps_returns_none() -> None:
 # -- replan_async (LLM call orchestration) ----------------------------
 
 
-def test_replan_async_uses_plan_model(monkeypatch: pytest.MonkeyPatch) -> None:
-    """``replan_async`` calls ``loop._call_llm`` with ``settings.plan_model``."""
-    fake_settings = SimpleNamespace(plan_model="claude-opus-4-7")
+def test_replan_async_inherits_loop_model(monkeypatch: pytest.MonkeyPatch) -> None:
+    """``replan_async`` calls ``loop._call_llm`` with the active loop model."""
+    fake_settings = SimpleNamespace(model="claude-haiku-4-5")
     monkeypatch.setattr("core.config.settings", fake_settings)
     captured: dict[str, str] = {}
 
@@ -358,13 +358,13 @@ def test_replan_async_uses_plan_model(monkeypatch: pytest.MonkeyPatch) -> None:
     assert new_plan.revision == 1  # prior revision was 0
     assert len(new_plan.steps) == 1
     assert new_plan.steps[0].id == "s1"
-    assert captured["model"] == "claude-opus-4-7"
+    assert captured["model"] == "claude-sonnet-4-6"
 
 
 def test_replan_async_records_usage(monkeypatch: pytest.MonkeyPatch) -> None:
     """The response is fed to ``loop._track_usage_async`` so planner cost
     surfaces in the TokenTracker."""
-    fake_settings = SimpleNamespace(plan_model="m")
+    fake_settings = SimpleNamespace(model="m")
     monkeypatch.setattr("core.config.settings", fake_settings)
     recorded: list[Any] = []
 
@@ -387,7 +387,7 @@ def test_replan_async_returns_none_on_bad_response(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """Unparseable JSON → None so caller keeps prior plan."""
-    fake_settings = SimpleNamespace(plan_model="")
+    fake_settings = SimpleNamespace(model="m")
     monkeypatch.setattr("core.config.settings", fake_settings)
 
     async def _bad(_system: str, _msgs: list, *, model: str | None = None) -> SimpleNamespace:
@@ -595,7 +595,7 @@ def test_build_tool_summary_empty() -> None:
 
 
 def test_build_tool_summary_cost_tier_label() -> None:
-    """``[cost_tier]`` label preserves planner cost-awareness (Codex LOW #3
+    """``[cost_tier]`` label preserves operator-visible tool tradeoffs (Codex LOW #3
     parity with legacy goal_decomposer._build_tool_summary)."""
     from core.agent.plan import _build_tool_summary
 
@@ -691,7 +691,6 @@ def test_maybe_replan_async_verify_fail_triggers(
     from core.agent.loop.agent_loop import AgenticLoop
 
     fake_settings = SimpleNamespace(
-        plan_model="claude-opus-4-7",
         replan_enabled=True,
         replan_interval=5,
         replan_max_attempts=3,
@@ -735,7 +734,6 @@ def test_maybe_replan_async_cadence_triggers(monkeypatch: pytest.MonkeyPatch) ->
     from core.agent.loop.agent_loop import AgenticLoop
 
     fake_settings = SimpleNamespace(
-        plan_model="m",
         replan_enabled=True,
         replan_interval=2,
         replan_max_attempts=3,
@@ -776,7 +774,6 @@ def test_maybe_replan_async_abandons_after_max_attempts(
     from core.agent.loop.agent_loop import AgenticLoop
 
     fake_settings = SimpleNamespace(
-        plan_model="m",
         replan_enabled=True,
         replan_interval=0,  # cadence off
         replan_max_attempts=2,

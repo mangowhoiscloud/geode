@@ -153,6 +153,25 @@ class TestRenderPlanSteps:
         assert "Analyze" in combined
         assert "3." in combined
 
+    @patch("core.ui.agentic_ui.console")
+    def test_renders_progress_plan(self, mock_console) -> None:  # type: ignore[no-untyped-def]
+        from core.ui.agentic_ui import render_progress_plan
+
+        render_progress_plan(
+            [
+                {"step": "Inspect UX", "status": "completed"},
+                {"step": "Patch tools", "status": "in_progress"},
+                {"step": "Run tests", "status": "pending"},
+            ],
+            explanation="implementation",
+        )
+        calls = [str(c) for c in mock_console.print.call_args_list]
+        combined = " ".join(calls)
+        assert "Plan · implementation" in combined
+        assert "Inspect UX" in combined
+        assert "Patch tools" in combined
+        assert "Run tests" in combined
+
 
 class TestRenderSubagent:
     """Sub-agent dispatch/complete rendering."""

@@ -156,7 +156,7 @@ class TestCategoryMembershsubject:
 
     def test_planning_tools(self) -> None:
         m = self._category_map()
-        for name in ("create_plan", "approve_plan", "delegate_task"):
+        for name in ("update_plan", "create_plan", "approve_plan", "delegate_task"):
             assert m.get(name) == "planning", f"{name} should be planning"
 
     def test_external_tools(self) -> None:
@@ -194,6 +194,7 @@ class TestCostTierMembershsubject:
             "note_read",
             "manage_rule",
             "switch_model",
+            "update_plan",
             "generate_report",
             "export_json",
         ):

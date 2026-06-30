@@ -52,9 +52,8 @@ PROJECT_CONFIG_PATH = PROJECT_CONFIG_TOML
 _TOML_TO_SETTINGS: dict[str, str] = {
     "llm.primary_model": "model",
     "llm.learning_extract_model": "learning_extract_model",
-    # PR-CL-A6 (2026-05-23) — Plan / Action / Judge model knobs. Empty
-    # string falls back to ``llm.primary_model``.
-    "llm.plan_model": "plan_model",
+    # PR-CL-A6 (2026-05-23) — Action / Judge model knobs. Empty string
+    # falls back to ``llm.primary_model``. Planning inherits loop.model.
     "llm.act_model": "act_model",
     "llm.judge_model": "judge_model",
     # C-2 (2026-06-11) — H7 fix: /login source was writing these toml rows

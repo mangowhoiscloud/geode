@@ -72,19 +72,17 @@ class Settings(BaseSettings):
         validation_alias=AliasChoices("learning_extract_model", "GEODE_LEARNING_EXTRACT_MODEL"),
         description=(
             "GLM model for the learning-extraction hook "
-            "(``core.hooks.llm_extract_learning``) — a cheap budget call run "
-            "outside the main loop. The default ``glm-4.7-flash`` is on a "
-            "limited-time free tier (see model_pricing.toml); when that promo "
-            "ends the call bills at the standard GLM rate, so cost-sensitive "
-            "operators should pin a known-priced model here."
+            "(``core.hooks.llm_extract_learning``), run outside the main "
+            "loop. Operators can pin a model here when they want the "
+            "learning extraction hook to differ from provider defaults."
         ),
     )
     # PR-3 C-2 (2026-05-21) — Reflection node knobs. The reflection
     # step runs one extra LLM call per tool-use round to populate
-    # ``CognitiveState.hypotheses`` / ``confidence``, so operators
-    # who want the loop to stay zero-extra-cost can flip the toggle.
+    # ``CognitiveState.hypotheses`` / ``confidence``; operators can flip
+    # the toggle when they do not want that extra reflection pass.
     # Empty model inherits the live AgenticLoop model/provider/source;
-    # operators can still pin a separate cheap or strong model.
+    # operators can still pin a separate reflection model.
     cognitive_reflection_enabled: bool = Field(
         default=True,
         validation_alias=AliasChoices(
@@ -113,31 +111,17 @@ class Settings(BaseSettings):
             "PR-3 C-2."
         ),
     )
-    # PR-CL-A6 (2026-05-23) — Plan / Action / Judge model separation
-    # (agentic-loop-evolution.md A6). Empty string ("") means "fall back
-    # to ``settings.model``" so existing operators see no behaviour change
-    # until they set a concrete value. ReWOO (arxiv 2305.18323) showed
-    # plan / observation decoupling yields 5x token efficiency; Anthropic
-    # Plan / Edit mode pattern (claude-code) splits Opus-class planning
-    # from Sonnet-class action.
-    plan_model: str = Field(
-        default="",
-        validation_alias=AliasChoices("plan_model", "GEODE_PLAN_MODEL"),
-        description=(
-            "Model used by the planning step (goal decomposition before "
-            "the main loop). Empty string falls back to ``settings.model``. "
-            "Set to ``claude-opus-4-8`` for higher-quality plans, "
-            "``claude-haiku-4-5-20251001`` for cheaper. PR-CL-A6."
-        ),
-    )
+    # PR-CL-A6 (2026-05-23) originally split Plan / Action / Judge models.
+    # PR-PLAN-MODEL-INHERITANCE keeps planning on the active AgenticLoop
+    # model instead; only action and judge remain operator-tunable.
     act_model: str = Field(
         default="",
         validation_alias=AliasChoices("act_model", "GEODE_ACT_MODEL"),
         description=(
             "Model used by the action loop (per-round tool calls). Empty "
             "string falls back to ``settings.model``. Set to ``claude-"
-            "sonnet-4-6`` to keep planning on Opus while action runs on "
-            "Sonnet for cost. PR-CL-A6."
+            "sonnet-4-6`` only when the operator wants the action loop "
+            "model to differ from the primary model. PR-CL-A6."
         ),
     )
     judge_model: str = Field(
@@ -146,8 +130,7 @@ class Settings(BaseSettings):
         description=(
             "Model used by the per-turn verify LLM-judge mode "
             "(``GEODE_VERIFY_MODE=llm_judge``). Empty string falls back "
-            "to ``settings.model``. Cheap models like Haiku 4.5 are "
-            "appropriate for binary pass/fail judgement. PR-CL-A6."
+            "to ``settings.model``. PR-CL-A6."
         ),
     )
     # PR-CL-A1 (2026-05-23) — Dynamic Replan knobs.
@@ -169,7 +152,7 @@ class Settings(BaseSettings):
             "Number of rounds between cadence-based replans. ``0`` "
             "disables cadence (verify FAIL still triggers). Default 5 "
             "balances ReWOO 5x-token-efficiency target with the cost of "
-            "an extra plan_model call per N rounds. PR-CL-A1."
+            "an extra planner call per N rounds. PR-CL-A1."
         ),
     )
     replan_max_attempts: int = Field(

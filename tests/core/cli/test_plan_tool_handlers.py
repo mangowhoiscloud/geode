@@ -45,6 +45,37 @@ def test_create_plan_requires_goal_or_subject(plan_handlers: dict[str, Any]) -> 
     assert result["missing"] == ["goal"]
 
 
+def test_update_plan_is_non_persistent_progress_surface(
+    plan_handlers: dict[str, Any],
+) -> None:
+    result = plan_handlers["update_plan"](
+        explanation="repo change",
+        plan=[
+            {"step": "Inspect plan UX", "status": "completed"},
+            {"step": "Patch router prompt", "status": "in_progress"},
+            {"step": "Run focused tests", "status": "pending"},
+        ],
+    )
+
+    assert result["status"] == "ok"
+    assert result["action"] == "update_plan"
+    assert result["counts"] == {"pending": 1, "in_progress": 1, "completed": 1}
+    assert (
+        result["hint"] == "Progress plan updated. Continue with the task; no approval is required."
+    )
+
+    listed = plan_handlers["list_plans"]()
+    assert listed["count"] == 0
+
+
+def test_update_plan_rejects_unknown_status(plan_handlers: dict[str, Any]) -> None:
+    result = plan_handlers["update_plan"](
+        plan=[{"step": "Patch", "status": "blocked"}],
+    )
+
+    assert "Invalid plan status" in result["error"]
+
+
 def test_create_list_approve_and_latest_fallback(plan_handlers: dict[str, Any]) -> None:
     created = plan_handlers["create_plan"](goal="ship release", steps=["build", "test"])
 
@@ -114,7 +145,7 @@ def test_dangerously_skip_permissions_auto_executes_plan(
 
 
 def test_no_skip_keeps_plan_manual(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Without the flag (and auto-execute off) the plan stops for approval."""
+    """Explicit review checkpoints still stop when auto-execute is disabled."""
     store = InMemoryPlanStore()
     monkeypatch.setattr(tool_handlers, "_PLAN_STORE", store)
     monkeypatch.setattr("core.config.settings.plan_auto_execute", False)

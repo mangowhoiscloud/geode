@@ -90,6 +90,7 @@ from core.ui.agentic_ui.events import (
 from core.ui.agentic_ui.render import (
     render_context_event,
     render_plan_steps,
+    render_progress_plan,
     render_session_cost_summary,
     render_status_line,
     render_subagent_complete,
@@ -163,6 +164,7 @@ __all__ = [
     "render_action_summary",
     "render_context_event",
     "render_plan_steps",
+    "render_progress_plan",
     "render_session_cost_summary",
     "render_status_line",
     "render_subagent_complete",

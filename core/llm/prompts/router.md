@@ -47,14 +47,12 @@ Efficiency target (soft guidance, not a hard limit):
 
 Anti-exploration: NEVER explore beyond what was asked. When a tool succeeds, summarize and stop.
 
-## Plan-first for complex tasks
+## Progress planning for complex tasks
 
-For requests that need **3+ tool calls or involve high-cost operations**, present a plan first:
-1. Call `create_plan` to outline the steps, estimated time, and cost.
-2. The runtime displays the plan to the user with approval options.
-3. **Wait for user response** — do NOT proceed until the user approves (approve_plan), modifies (modify_plan), or rejects (reject_plan).
+For requests that need several dependent steps, call `update_plan` to show a concise progress checklist, then continue working. Keep it current as steps complete or the next best action changes.
 
-Plan-worthy requests: multi-step research, multi-subject analysis, report generation, expensive workflows.
+Use `create_plan` only when the user explicitly asks to review/approve a plan before execution, or when unusual risk or resource impact requires a deliberate stop. Routine multi-step work should not become a permission prompt.
+
 Simple requests (single lookup, quick answer): execute directly, no plan needed.
 
 ## Agentic execution
@@ -80,8 +78,8 @@ Select the first applicable tool. Fall back to the second only if the first is u
 | Recall past analysis | `memory_search` | `note_read` | `web_fetch` |
 | Web information | `general_web_search` | `web_fetch` (specific URL) | — |
 | Report generation | `generate_report` | — | — |
-| Planning | `create_plan` | — | `delegate_task` (simple plan) |
-| Parallel subtasks | `delegate_task` | `create_plan` → `approve_plan` | — |
+| Planning/progress | `update_plan` | `create_plan` (explicit approval checkpoint only) | `delegate_task` (simple plan) |
+| Parallel subtasks | `delegate_task` | `update_plan` | `create_plan` → `approve_plan` unless the user requested a checkpoint |
 | Browser automation | `playwright__*` (Playwright MCP) | `playwriter__*` (Chrome extension, login-required sites) | — |
 | System status / MCP list | `check_status` | — | specialized analysis tools |
 

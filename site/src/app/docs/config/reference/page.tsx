@@ -42,7 +42,6 @@ export default function Page() {
               </thead>
               <tbody>
                 <tr><td><code>model</code></td><td><code>llm.primary_model</code></td><td>str = <code>&quot;claude-opus-4-8&quot;</code></td><td>기본 모델. 기본값은 routing.toml의 anthropic 기본값을 따라갑니다.</td></tr>
-                <tr><td><code>plan_model</code></td><td><code>llm.plan_model</code></td><td>str = <code>&quot;&quot;</code></td><td>플래닝 단계 모델. 비우면 <code>model</code>로 폴백합니다.</td></tr>
                 <tr><td><code>act_model</code></td><td><code>llm.act_model</code></td><td>str = <code>&quot;&quot;</code></td><td>액션 루프 모델. 비우면 <code>model</code>로 폴백합니다.</td></tr>
                 <tr><td><code>judge_model</code></td><td><code>llm.judge_model</code></td><td>str = <code>&quot;&quot;</code></td><td>턴 단위 verify judge 모델. 비우면 <code>model</code>로 폴백합니다.</td></tr>
                 <tr><td><code>learning_extract_model</code></td><td><code>llm.learning_extract_model</code></td><td>str = <code>&quot;glm-4.7-flash&quot;</code></td><td>learning 추출 훅용 무료 티어 GLM 모델.</td></tr>
@@ -406,7 +405,6 @@ export default function Page() {
               </thead>
               <tbody>
                 <tr><td><code>model</code></td><td><code>llm.primary_model</code></td><td>str = <code>&quot;claude-opus-4-8&quot;</code></td><td>Primary model. The default mirrors the anthropic default in routing.toml.</td></tr>
-                <tr><td><code>plan_model</code></td><td><code>llm.plan_model</code></td><td>str = <code>&quot;&quot;</code></td><td>Planning-step model. Empty falls back to <code>model</code>.</td></tr>
                 <tr><td><code>act_model</code></td><td><code>llm.act_model</code></td><td>str = <code>&quot;&quot;</code></td><td>Action-loop model. Empty falls back to <code>model</code>.</td></tr>
                 <tr><td><code>judge_model</code></td><td><code>llm.judge_model</code></td><td>str = <code>&quot;&quot;</code></td><td>Per-turn verify judge model. Empty falls back to <code>model</code>.</td></tr>
                 <tr><td><code>learning_extract_model</code></td><td><code>llm.learning_extract_model</code></td><td>str = <code>&quot;glm-4.7-flash&quot;</code></td><td>Free-tier GLM model for the learning-extract hook.</td></tr>

@@ -9,9 +9,8 @@ structured :class:`Plan` object on :class:`SessionMetrics` so:
 - PR-CL-A3 verify gains a new ``step_expected_mismatch`` rubric_miss
   that compares the just-finished turn against
   :class:`PlanStep.expected_outcome`.
-- ``_maybe_replan_async`` fires the planner LLM (using
-  :data:`settings.plan_model` from PR-CL-A6) when either of the two
-  triggers fires:
+- ``_maybe_replan_async`` fires the planner LLM on the active
+  :class:`AgenticLoop` model when either of the two triggers fires:
 
   - **Verify FAIL trigger**: ``metrics.last_verify_should_retry``.
   - **Cadence trigger**: every ``settings.replan_interval`` rounds
@@ -20,9 +19,8 @@ structured :class:`Plan` object on :class:`SessionMetrics` so:
 Frontier alignment (Socratic Q5):
 
 - **ReWOO** (arxiv 2305.18323) — plan / observation decouple → 5x token
-  efficiency. ReWOO's *Planner* / *Worker* / *Solver* split is the
-  closest 1:1 to GEODE's plan_model / act_model / judge_model now that
-  A6 has shipped.
+  efficiency. GEODE keeps planner and worker calls on the same active loop
+  model unless the operator explicitly changes the loop model itself.
 - **Self-Discover** (arxiv 2402.03620) — task-level plan composition →
   10-40x fewer inferences vs ToT / Self-Consistency.
 - **Reflexion** (NeurIPS 2023) — verbal RL hint we already prepend
@@ -503,27 +501,21 @@ async def replan_async(
 ) -> Plan | None:
     """Call the planner LLM to revise the plan.
 
-    Uses :data:`settings.plan_model` (PR-CL-A6 knob) so an operator
-    running Opus-plan + Sonnet-act sees cost-aware replans. Failures
-    return ``None`` so the caller keeps the prior plan rather than
-    proceeding plan-less. Bounded by ``asyncio.wait_for`` so a stuck
+    Uses the active :class:`AgenticLoop` model so replans match the main
+    loop's reasoning tier. Failures return ``None`` so the caller keeps
+    the prior plan rather than proceeding plan-less. Bounded by
+    ``asyncio.wait_for`` so a stuck
     planner cannot hang the session.
     """
     try:
         import asyncio
 
-        from core.config import settings
-
-        plan_model_raw = getattr(settings, "plan_model", "")
-        plan_model = (
-            plan_model_raw.strip() if isinstance(plan_model_raw, str) else ""
-        ) or loop.model
         user_prompt = _build_replan_user_prompt(plan, turn_result, trigger)
         response = await asyncio.wait_for(
             loop._call_llm(
                 _REPLAN_SYSTEM_PROMPT,
                 [{"role": "user", "content": user_prompt}],
-                model=plan_model,
+                model=loop.model,
             ),
             timeout=timeout_s,
         )
@@ -637,8 +629,7 @@ def _build_tool_summary(tools: list[dict[str, Any]]) -> str:
     Migrated from ``goal_decomposer._build_tool_summary`` with full
     legacy parity (Codex MCP LOW #3, PR-CL-A1-followup 2026-05-23):
     bold tool name, ``[cost_tier]`` label when present (e.g.
-    ``[expensive]`` / ``[free]`` — preserves cost-aware prompt context
-    the planner uses to choose between paid and free tools), and
+    ``[expensive]`` / ``[free]`` for operator-visible tradeoffs), and
     first-sentence truncation of the description.
     """
     if not tools:
@@ -681,8 +672,8 @@ async def decompose_async(
     2. **System prompt**: ``load_prompt("decomposer", "system")`` +
        ``apply_decomposition_policy`` (ADR-012 SoT — preserves the
        operator-tunable policy surface; only the call site moves).
-    3. **LLM call**: ``loop._call_llm`` with ``settings.plan_model``
-       (PR-CL-A6 knob) bounded by ``_DECOMPOSE_CALL_TIMEOUT_S``
+    3. **LLM call**: ``loop._call_llm`` with the active loop model,
+       bounded by ``_DECOMPOSE_CALL_TIMEOUT_S``
        (180s post-PR-CHECKPOINT-RESUME-TIMEBUDGET, 2026-05-25).
     4. **Parse**: pydantic ``DecompositionResult.model_validate_json``
        — schema-validated, error-on-malformed.
@@ -708,13 +699,7 @@ async def decompose_async(
             _load_decomposition_policy_override,
             apply_decomposition_policy,
         )
-        from core.config import settings
         from core.llm.prompts import load_prompt
-
-        plan_model_raw = getattr(settings, "plan_model", "")
-        plan_model = (
-            plan_model_raw.strip() if isinstance(plan_model_raw, str) else ""
-        ) or loop.model
 
         system_prompt = load_prompt("decomposer", "system")
         # ADR-012 S0c — the decomposition SoT's *single application
@@ -730,7 +715,7 @@ async def decompose_async(
             loop._call_llm(
                 system_prompt,
                 [{"role": "user", "content": user_prompt}],
-                model=plan_model,
+                model=loop.model,
             ),
             timeout=_DECOMPOSE_CALL_TIMEOUT_S,
         )
