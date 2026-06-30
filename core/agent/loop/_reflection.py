@@ -237,6 +237,50 @@ def _apply_reflection(state: CognitiveState, parsed: dict[str, Any]) -> None:
                 del state.subgoals[0 : len(state.subgoals) - 5]
 
 
+# Reason-code -> human-readable failure summary mapping used by final-turn
+# verify. It lives in the reflection module so all next-turn self-feedback
+# prompt material has one canonical owner.
+_FAILURE_REASON_DESCRIPTIONS: dict[str, str] = {
+    "empty_turn": "Last turn produced no text and called no tools.",
+    "short_output": "Last turn returned an unusually short response without tool action.",
+    "tool_error": "A tool call in the last turn failed with an error.",
+    "model_action_required": "The model surfaced a recoverable error (cost, billing, etc.).",
+    "step_expected_mismatch": (
+        "Last turn's output did not contain any keyword from the current "
+        "PlanStep's expected_outcome. Replan may revise the plan."
+    ),
+    "judge_fail": "The turn-level judge rejected the previous turn.",
+}
+
+
+def synthesize_failure_reflection_hint(rubric_misses: tuple[str, ...]) -> str:
+    """Build the final-turn failure reflection block for the next prompt.
+
+    This is the non-LLM sibling of :func:`reflect_async`: verify supplies
+    rubric miss codes, and this renderer turns them into a compact
+    ``<reflection>`` block that the next ``AgenticLoop.arun`` can prepend.
+    The separate ``synthesize_reflexion_hint`` name remains as a legacy
+    alias for older callers and stored telemetry.
+    """
+    if not rubric_misses:
+        return ""
+    lines = ["<reflection>", "Self-evaluation flagged the previous turn:"]
+    for code in rubric_misses:
+        description = _FAILURE_REASON_DESCRIPTIONS.get(code, code)
+        lines.append(f"- {code}: {description}")
+    lines.append(
+        "Next turn: address the flagged item(s) directly. "
+        "If you cannot, say so and ask the user to clarify."
+    )
+    lines.append("</reflection>")
+    return "\n".join(lines)
+
+
+def synthesize_reflexion_hint(rubric_misses: tuple[str, ...]) -> str:
+    """Legacy alias for :func:`synthesize_failure_reflection_hint`."""
+    return synthesize_failure_reflection_hint(rubric_misses)
+
+
 async def reflect_async(
     state: CognitiveState,
     tool_results: list[dict[str, Any]],
@@ -268,7 +312,7 @@ async def reflect_async(
     # escape and break the agentic loop, violating the "errors
     # swallowed at WARN" guarantee).
     try:
-        resolved_provider = provider or _resolve_provider(model)
+        provider = provider or _resolve_provider(model)
         # PR-SOURCE-ROUTING (2026-05-28) — reflection used to hard-code
         # ``"payg"`` so a subscription-only operator (Pattern B) routed
         # the reflection turn through the depleted PAYG endpoint while
@@ -278,15 +322,15 @@ async def reflect_async(
         # default resolution.
         from core.llm.adapters._source_inference import infer_source
 
-        resolved_source = source or infer_source(resolved_provider)
-        adapter = resolve_for(normalize_registry_provider(resolved_provider), resolved_source)
+        resolved_source = source or infer_source(provider)
+        adapter = resolve_for(normalize_registry_provider(provider), resolved_source)
         tool_summary = _summarise_tool_results(tool_results)
         user_prompt = _build_user_prompt(state, tool_summary)
 
         log.info(
             "reflection dispatch: model=%s provider=%s source=%s round=%d max_tokens=%d",
             model,
-            resolved_provider,
+            provider,
             resolved_source,
             state.round_count,
             max_tokens,
@@ -369,4 +413,9 @@ async def reflect_async(
     _apply_reflection(state, parsed)
 
 
-__all__ = ["REFLECTION_TOOL_NAME", "reflect_async"]
+__all__ = [
+    "REFLECTION_TOOL_NAME",
+    "reflect_async",
+    "synthesize_failure_reflection_hint",
+    "synthesize_reflexion_hint",
+]

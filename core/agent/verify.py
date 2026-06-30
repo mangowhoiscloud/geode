@@ -1,4 +1,4 @@
-"""In-loop verify (Reflexion-style) for AgenticLoop turns.
+"""In-loop verify for AgenticLoop turns.
 
 Per-turn verification of agent action quality. Fires once per turn at the
 TURN_COMPLETED boundary so it does not interrupt mid-turn execution. The
@@ -19,8 +19,8 @@ When a verify check FAILs, the result includes:
 
 - ``rubric_misses``: tuple of short reason codes (e.g. ``"empty_turn"``,
   ``"tool_error"``).
-- ``reflexion_hint``: a ready-to-inject ``<reflexion>...</reflexion>``
-  block (verbal RL pattern, Reflexion paper NeurIPS 2023). Callers
+- ``reflection_hint``: a ready-to-inject ``<reflection>...</reflection>``
+  block (verbal-RL pattern, Reflexion paper NeurIPS 2023). Callers
   prepend this to the next round's ``loop._system_suffix`` so the model
   sees its own failure analysis next turn.
 
@@ -42,6 +42,11 @@ from dataclasses import dataclass, field
 from enum import StrEnum
 from typing import TYPE_CHECKING, Any
 
+from core.agent.loop._reflection import (
+    synthesize_failure_reflection_hint,
+    synthesize_reflexion_hint,
+)
+
 if TYPE_CHECKING:
     from core.agent.loop.models import AgenticResult
 
@@ -52,9 +57,13 @@ __all__ = [
     "VerifyMode",
     "VerifyResult",
     "get_verify_mode",
+    "synthesize_failure_reflection_hint",
+    "synthesize_reflection_hint",
     "synthesize_reflexion_hint",
     "verify_turn",
 ]
+
+synthesize_reflection_hint = synthesize_failure_reflection_hint
 
 
 class VerifyMode(StrEnum):
@@ -84,7 +93,7 @@ _RETRYABLE_MISSES: frozenset[str] = frozenset(
 )
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(frozen=True, slots=True, init=False)
 class VerifyResult:
     """Outcome of a single per-turn verify pass.
 
@@ -100,7 +109,7 @@ class VerifyResult:
     - ``score``: 0.0–1.0 numeric score. ``rule_based`` returns 1.0 on pass,
       0.0 on fail (no gradation). ``llm_judge`` returns the judge's score.
     - ``rubric_misses``: short reason codes for failed checks. Empty on pass.
-    - ``reflexion_hint``: ready-to-inject system-suffix block for the next
+    - ``reflection_hint``: ready-to-inject system-suffix block for the next
       round. Empty when passed.
     - ``ts``: monotonic timestamp when the verify ran (for ordering).
     """
@@ -109,7 +118,7 @@ class VerifyResult:
     mode: VerifyMode
     score: float = 1.0
     rubric_misses: tuple[str, ...] = ()
-    reflexion_hint: str = ""
+    reflection_hint: str = ""
     ts: float = 0.0
     # ``effective_mode`` differs from ``mode`` when the requested mode
     # falls back to a different implementation. Today the only fallback
@@ -119,11 +128,38 @@ class VerifyResult:
     # ``should_retry`` is the machine-readable replan signal for PR-CL-A1
     # (Dynamic Replan) — agentic-loop-evolution.md A3 spec calls for a
     # "pass / fail / retry" signal, distinct from the human-readable
-    # ``reflexion_hint`` (Codex MCP MEDIUM #4, 2026-05-23). Set True when
+    # ``reflection_hint`` (Codex MCP MEDIUM #4, 2026-05-23). Set True when
     # a verify failure is recoverable (any rubric_miss is in the
     # ``_RETRYABLE_MISSES`` allowlist); set False on a hard fail (e.g.
     # ``model_action_required`` indicates operator intervention needed).
     should_retry: bool = False
+
+    def __init__(
+        self,
+        passed: bool,
+        mode: VerifyMode,
+        score: float = 1.0,
+        rubric_misses: tuple[str, ...] = (),
+        reflection_hint: str = "",
+        ts: float = 0.0,
+        effective_mode: VerifyMode = VerifyMode.RULE_BASED,
+        should_retry: bool = False,
+        reflexion_hint: str | None = None,
+    ) -> None:
+        hint = reflection_hint if reflexion_hint is None else reflexion_hint
+        object.__setattr__(self, "passed", passed)
+        object.__setattr__(self, "mode", mode)
+        object.__setattr__(self, "score", score)
+        object.__setattr__(self, "rubric_misses", rubric_misses)
+        object.__setattr__(self, "reflection_hint", hint)
+        object.__setattr__(self, "ts", ts)
+        object.__setattr__(self, "effective_mode", effective_mode)
+        object.__setattr__(self, "should_retry", should_retry)
+
+    @property
+    def reflexion_hint(self) -> str:
+        """Legacy alias for callers that still use the paper spelling."""
+        return self.reflection_hint
 
     def to_payload(self) -> dict[str, Any]:
         """Render as a hook-payload-friendly dict."""
@@ -133,7 +169,8 @@ class VerifyResult:
             "effective_mode": self.effective_mode.value,
             "score": round(self.score, 4),
             "rubric_misses": list(self.rubric_misses),
-            "reflexion_hint": self.reflexion_hint,
+            "reflection_hint": self.reflection_hint,
+            "reflexion_hint": self.reflection_hint,
             "should_retry": self.should_retry,
             "ts": self.ts,
         }
@@ -255,7 +292,7 @@ def _verify_rule_based(result: AgenticResult) -> VerifyResult:
         misses.append("step_expected_mismatch")
 
     passed = not misses
-    hint = "" if passed else synthesize_reflexion_hint(tuple(misses))
+    hint = "" if passed else synthesize_failure_reflection_hint(tuple(misses))
     # Retry signal: hard-fail (e.g. ``model_action_required``) ALWAYS
     # wins — even if a retryable miss (e.g. ``step_expected_mismatch``)
     # co-occurs, the operator-action signal should not be ignored
@@ -270,50 +307,10 @@ def _verify_rule_based(result: AgenticResult) -> VerifyResult:
         effective_mode=VerifyMode.RULE_BASED,
         score=1.0 if passed else 0.0,
         rubric_misses=tuple(misses),
-        reflexion_hint=hint,
+        reflection_hint=hint,
         should_retry=retry,
         ts=time.monotonic(),
     )
-
-
-# Reason-code → human-readable failure summary mapping used by
-# ``synthesize_reflexion_hint``. Kept module-local so reason codes stay
-# in lock-step with hint text and downstream test harnesses can lift the
-# table to assert on phrasing.
-_REASON_DESCRIPTIONS: dict[str, str] = {
-    "empty_turn": "Last turn produced no text and called no tools.",
-    "short_output": "Last turn returned an unusually short response without tool action.",
-    "tool_error": "A tool call in the last turn failed with an error.",
-    "model_action_required": "The model surfaced a recoverable error (cost, billing, etc.).",
-    "step_expected_mismatch": (
-        "Last turn's output did not contain any keyword from the current "
-        "PlanStep's expected_outcome. PR-CL-A1 replan may revise the plan."
-    ),
-}
-
-
-def synthesize_reflexion_hint(rubric_misses: tuple[str, ...]) -> str:
-    """Build the ``<reflexion>...</reflexion>`` system-suffix block.
-
-    Verbal RL — the agent reads its own failure analysis at the start of
-    the next round. The block is concise (3 lines per miss max) to avoid
-    crowding the system prompt; longer rubrics live in the LLM-judge mode.
-
-    Returns the empty string when no misses are supplied so callers can
-    cheaply skip the suffix mutation on pass.
-    """
-    if not rubric_misses:
-        return ""
-    lines = ["<reflexion>", "Self-evaluation flagged the previous turn:"]
-    for code in rubric_misses:
-        description = _REASON_DESCRIPTIONS.get(code, code)
-        lines.append(f"- {code}: {description}")
-    lines.append(
-        "Next turn: address the flagged item(s) directly. "
-        "If you cannot, say so and ask the user to clarify."
-    )
-    lines.append("</reflexion>")
-    return "\n".join(lines)
 
 
 _LLM_JUDGE_SYSTEM_PROMPT = """\
@@ -388,7 +385,7 @@ def _build_judge_result_from_response(response: Any, result: AgenticResult) -> V
     hint = ""
     if not passed:
         misses = ("judge_fail",) if not reason else ("judge_fail", reason[:40])
-        hint = synthesize_reflexion_hint(("judge_fail",)) + (
+        hint = synthesize_failure_reflection_hint(("judge_fail",)) + (
             f"\nJudge reason: {reason}" if reason else ""
         )
     return VerifyResult(
@@ -397,7 +394,7 @@ def _build_judge_result_from_response(response: Any, result: AgenticResult) -> V
         effective_mode=VerifyMode.LLM_JUDGE,
         score=score,
         rubric_misses=misses,
-        reflexion_hint=hint,
+        reflection_hint=hint,
         should_retry=(not passed),
         ts=time.monotonic(),
     )
@@ -513,7 +510,7 @@ def _llm_judge_fallback(result: AgenticResult) -> VerifyResult:
         effective_mode=VerifyMode.RULE_BASED,
         score=rb.score,
         rubric_misses=rb.rubric_misses,
-        reflexion_hint=rb.reflexion_hint,
+        reflection_hint=rb.reflection_hint,
         should_retry=rb.should_retry,
         ts=rb.ts,
     )

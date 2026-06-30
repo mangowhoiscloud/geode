@@ -718,13 +718,13 @@ class AgenticLoop:
         self,
         system_prompt: str,
         decomposition_hint: str | None,
-        reflexion_hint: str | None = None,
+        reflection_hint: str | None = None,
     ) -> str:
         """Sync model drift + rebuild the system prompt.
 
         Rebuilds when the model drifted (``settings.model`` changed) or
         ``_prompt_dirty`` is set (direct ``update_model_async``). On
-        rebuild, re-applies the decomposition / reflexion / plan hints so
+        rebuild, re-applies the decomposition / reflection / plan hints so
         a mid-arun drift doesn't drop them. Returns the (possibly-rebuilt)
         prompt; clears ``_prompt_dirty``.
         """
@@ -734,8 +734,8 @@ class AgenticLoop:
             system_prompt = self._build_system_prompt()
             if decomposition_hint:
                 system_prompt += "\n\n" + decomposition_hint
-            if reflexion_hint:
-                system_prompt += "\n\n" + reflexion_hint
+            if reflection_hint:
+                system_prompt += "\n\n" + reflection_hint
             # re-apply the active plan on rebuild (getattr tolerates stub loops)
             _plan_consume = getattr(self, "_consume_plan_hint", None)
             plan_hint = _plan_consume() if callable(_plan_consume) else ""
@@ -924,10 +924,10 @@ class AgenticLoop:
             log.warning("Plan hint consume failed", exc_info=True)
             return ""
 
-    def _consume_reflexion_hint(self) -> str:
-        """Read+clear the verbal-RL hint left by the prior turn.
+    def _consume_reflection_hint(self) -> str:
+        """Read+clear the failure-reflection hint left by the prior turn.
 
-        Returns the ``<reflexion>...</reflexion>`` block from the prior
+        Returns the ``<reflection>...</reflection>`` block from the prior
         turn's verify FAIL, else empty (verify passed / didn't run).
         Read+clear is asyncio-task safe (no ``await`` between); a threaded
         race only risks a duplicate prepend, not data loss. Failures NEVER
@@ -940,13 +940,17 @@ class AgenticLoop:
             from core.observability.session_metrics import current_session_metrics
 
             metrics = current_session_metrics()
-            hint = metrics.last_verify_reflexion_hint
+            hint = metrics.last_verify_reflection_hint
             if hint:
-                metrics.last_verify_reflexion_hint = ""
+                metrics.last_verify_reflection_hint = ""
             return hint
         except Exception:
-            log.warning("Reflexion hint consume failed", exc_info=True)
+            log.warning("Reflection hint consume failed", exc_info=True)
             return ""
+
+    def _consume_reflexion_hint(self) -> str:
+        """Legacy alias for :meth:`_consume_reflection_hint`."""
+        return AgenticLoop._consume_reflection_hint(self)
 
     def _maybe_start_session_budget(self) -> None:
         """Begin the session-wide wall-clock budget if not already started.
@@ -1219,11 +1223,11 @@ class AgenticLoop:
         if decomposition_hint:
             system_prompt += "\n\n" + decomposition_hint
 
-        # Reflexion hint injection — prepend the prior turn's verify-FAIL
+        # Failure reflection injection — prepend the prior turn's verify-FAIL
         # analysis (consume semantics; cleared after read).
-        reflexion_hint = self._consume_reflexion_hint()
-        if reflexion_hint:
-            system_prompt += "\n\n" + reflexion_hint
+        reflection_hint = self._consume_reflection_hint()
+        if reflection_hint:
+            system_prompt += "\n\n" + reflection_hint
 
         # Plan injection — render the current-step ``<plan>`` block
         # (read-only consume; plan persists until advance / replan).
@@ -1258,7 +1262,7 @@ class AgenticLoop:
             await self._maybe_replan_async(round_idx)
 
             system_prompt = await self._sync_model_and_rebuild_prompt(
-                system_prompt, decomposition_hint, reflexion_hint=reflexion_hint
+                system_prompt, decomposition_hint, reflection_hint=reflection_hint
             )
 
             # Poll for sub-agent announced results (OpenClaw Spawn+Announce)

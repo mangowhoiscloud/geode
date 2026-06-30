@@ -121,9 +121,7 @@ def cmd_resume(args: str) -> SessionState | None:
         label = s.user_input[:50] if s.user_input else "(no input)"
         cognitive_summary = _format_cognitive_state_summary(s.cognitive_state)
         suffix = f" | {cognitive_summary}" if cognitive_summary else ""
-        _pkg.console.print(
-            f"  {i}. [bold]{s.session_id}[/bold] [{s.status}] {age_str}{suffix}"
-        )
+        _pkg.console.print(f"  {i}. [bold]{s.session_id}[/bold] [{s.status}] {age_str}{suffix}")
         _pkg.console.print(f"     [muted]{label}[/muted]")
     _pkg.console.print()
     _pkg.console.print("  [muted]Usage: /resume <session_id>[/muted]")

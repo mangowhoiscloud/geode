@@ -269,7 +269,8 @@ class HookEvent(Enum):
     # (Dynamic Replan) can read them to decide whether to replan the
     # next round. Payload schema:
     #   {"passed": bool, "mode": str, "score": float,
-    #    "rubric_misses": list[str], "reflexion_hint": str, "ts": float}
+    #    "rubric_misses": list[str], "reflection_hint": str,
+    #    "reflexion_hint": str, "ts": float}
     TURN_VERIFY_PASSED = "turn_verify_passed"
     TURN_VERIFY_FAILED = "turn_verify_failed"
 

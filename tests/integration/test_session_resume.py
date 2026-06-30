@@ -81,7 +81,10 @@ class TestCmdResume:
             }
         )
 
-        assert summary == "round=4 | confidence=0.81 | last=tools: read_file, search_files | hypotheses=2"
+        assert (
+            summary
+            == "round=4 | confidence=0.81 | last=tools: read_file, search_files | hypotheses=2"
+        )
 
     def test_parse_last_flag(self) -> None:
         remaining, limit = _parse_last_flag(["abc", "--last", "3"])
