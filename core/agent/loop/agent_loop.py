@@ -1674,6 +1674,26 @@ class AgenticLoop:
                 )
                 return await self._afinalize_and_return(result, user_input, round_idx + 1)
 
+            if self._check_repeated_success_no_progress():
+                from core.ui.agentic_ui import emit_repeated_success_no_progress
+
+                tool_name = self._convergence.last_success_tool or "unknown"
+                streak = self._convergence.repeated_success_streak
+                emit_repeated_success_no_progress(tool_name, streak, round_idx + 1)
+                self._op_logger.finalize()
+                self._sync_messages_to_context(messages)
+                result = AgenticResult(
+                    text=(
+                        "Detected repeated successful tool results without new progress. "
+                        "Breaking loop to avoid polling the same state indefinitely."
+                    ),
+                    tool_calls=self._tool_processor.tool_log,
+                    rounds=round_idx + 1,
+                    error="repeated_success_no_progress",
+                    termination_reason="repeated_success_no_progress",
+                )
+                return await self._afinalize_and_return(result, user_input, round_idx + 1)
+
             if self._convergence.total_consecutive_tool_errors >= 3:
                 # backpressure cooldown hint
                 from core.ui.agentic_ui import emit_tool_backpressure
@@ -2082,6 +2102,10 @@ class AgenticLoop:
     def _check_convergence_break(self) -> bool:
         """Delegates to :func:`_response.check_convergence_break`."""
         return _response.check_convergence_break(self)
+
+    def _check_repeated_success_no_progress(self) -> bool:
+        """Delegates to :func:`_response.check_repeated_success_no_progress`."""
+        return _response.check_repeated_success_no_progress(self)
 
 
 # ---------------------------------------------------------------------------

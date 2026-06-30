@@ -164,16 +164,101 @@ Petri × GEODE alignment audit (v0.92+).
 
 ## Workflow constraints
 
-These are absolute. They live in `CLAUDE.md` under "CANNOT". Highlights:
+These are absolute. `CLAUDE.md` remains the full development scaffold and
+source of truth for rationale. Codex should treat this section as the compact,
+executable workflow.
+
+### Non-negotiables
 
 - **Worktree required**: never commit directly on `main` or `develop`. Use
   `git worktree add .claude/worktrees/<name> -b feature/<name> develop`.
+- **No branch switching inside a worktree**: never use `git checkout` to reuse
+  a checkout for another branch. Allocate or enter the correct worktree instead.
+- **Fetch before allocating branches**: run `git fetch origin` before creating
+  a worktree. Do not claim a branch needs sync from commit counts alone; verify
+  content with `git diff A B --stat`.
+- **Protect other sessions**: never delete a worktree or branch held by another
+  active worktree. If an `.owner` file exists and does not belong to the current
+  session, leave it alone.
+- **No direct push to `main` or `develop`**: open a PR and wait for CI.
+- **No tracking-doc edits from feature/develop**: project tracking documents are
+  maintained from `main` unless the user explicitly asks otherwise.
 - **No CHANGELOG omission**: every functional commit updates `CHANGELOG.md`
-  under `[Unreleased]`. The bilingual convention is documented at the top of
-  CHANGELOG.md.
+  under `[Unreleased]`. Documentation-only changes do not need a changelog
+  entry.
 - **Prompt hashes are pinned**: changing any prompt under `core/llm/prompts/`
   requires updating `_PINNED_HASHES` in the same commit.
 - **No `# type: ignore` proliferation**: fix the type error.
+- **No live tests by default**: tests marked `-m live` require explicit user
+  approval because they may spend money or call external services.
+- **No unsupported SDK/backend assumptions**: for third-party capability
+  claims, verify against primary docs or source before shipping behaviour.
+
+### Codex Operating Loop
+
+Use this loop for code changes unless the user explicitly asks for a different
+process.
+
+0. **Orient**: read this file, then read the module-map entry for the files you
+   will touch. Check `git status --short --branch`.
+1. **Worktree**: if you are on `main` or `develop`, create a feature worktree
+   from `develop`. If you are already in the correct feature worktree, continue
+   there. Do not switch branches in-place.
+2. **GAP audit**: search before editing. Confirm whether the requested
+   behaviour already exists, partially exists, or is absent.
+3. **Plan gate**: for non-trivial work, state the smallest measurable plan.
+   Simple bug fixes and docs fixes may proceed directly after the GAP audit.
+4. **Implement**: keep changes scoped. Prefer existing helpers and local
+   patterns. Do not revert unrelated dirty work.
+5. **Verify**: run the narrowest relevant tests first, then broaden when the
+   blast radius justifies it. Functional changes should usually run ruff, mypy
+   for touched modules, and targeted pytest.
+6. **Docs sync**: update `CHANGELOG.md` for functional changes. Update public
+   docs only when behaviour or user-facing workflow changes.
+7. **PR prep**: summarize Summary / Why / Changes / Verification. Use
+   `feature -> develop` squash merge when merging; use `develop -> main`
+   merge after syncing `main -> develop`.
+8. **Post-merge cleanup**: after a PR merges, delete in order: remote branch
+   via merge option, worktree, then local branch. Never force-delete unmerged
+   or worktree-held branches.
+
+### Quality Gates
+
+Use the repo's current CI-equivalent commands when scope requires full checks:
+
+```bash
+uv run ruff check core/ tests/ plugins/ scripts/
+uv run ruff format --check core/ tests/ plugins/ scripts/
+uv run mypy core/ plugins/
+uv run lint-imports
+uv run pytest tests/ -m "not live"
+uv run geode version
+```
+
+Do not pipe gate output through commands that can hide non-zero exit codes.
+For local iteration, targeted subsets are fine, but the final report must state
+exactly what ran and what did not.
+
+### PR Body
+
+Every feature PR needs at least:
+
+```markdown
+## Summary
+- What changed and why.
+
+## Why
+Problem, missing capability, or user-reported failure.
+
+## Changes
+| File | Change |
+|------|--------|
+
+## Verification
+- Commands run and results.
+```
+
+Add a GAP Audit table when the PR was driven by a plan, audit, or cleanup.
 
 ## Where to look for things
 
