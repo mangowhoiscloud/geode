@@ -274,3 +274,58 @@ class TestConvergenceDetection:
 
         assert result.termination_reason == "convergence_detected"
         assert result.error == "convergence_detected"
+
+    def test_arun_repeated_success_no_progress_terminates_loop(self) -> None:
+        """Repeated identical successful observations break without a round cap."""
+        import asyncio
+
+        loop = _make_loop()
+        call_count = 0
+
+        async def fake_call_llm(system: str, messages: list, *, round_idx: int = 0) -> Any:
+            nonlocal call_count
+            call_count += 1
+            resp = MagicMock()
+            resp.stop_reason = "tool_use"
+            block = MagicMock()
+            block.type = "tool_use"
+            block.name = "check_status"
+            block.input = {}
+            block.id = f"tu_{call_count}"
+            resp.content = [block]
+            resp.usage = None
+            return resp
+
+        async def fake_process_tool_calls(response: Any) -> list[dict]:
+            block = response.content[0]
+            loop._tool_processor._tool_log.append(
+                {
+                    "tool": block.name,
+                    "input": block.input,
+                    "result": {"status": "ok"},
+                    "tool_use_id": block.id,
+                }
+            )
+            return [
+                {
+                    "type": "tool_result",
+                    "tool_use_id": block.id,
+                    "content": json.dumps({"status": "ok"}),
+                }
+            ]
+
+        with (
+            patch.object(loop, "_call_llm", side_effect=fake_call_llm),
+            patch.object(
+                loop._tool_processor,
+                "process",
+                side_effect=fake_process_tool_calls,
+            ),
+            patch.object(loop, "_build_system_prompt", return_value="system"),
+            patch.object(loop, "_try_decompose", return_value=None),
+        ):
+            result = asyncio.run(loop.arun("test prompt"))
+
+        assert call_count == 5
+        assert result.termination_reason == "repeated_success_no_progress"
+        assert result.error == "repeated_success_no_progress"

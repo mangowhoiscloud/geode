@@ -208,6 +208,24 @@ def emit_convergence_detected(error_pattern: str, rounds: int) -> None:
     )
 
 
+def emit_repeated_success_no_progress(tool_name: str, streak: int, rounds: int) -> None:
+    """Emit repeated_success_no_progress when same successful observation loops."""
+    from core.ui import agentic_ui as _pkg
+
+    writer = getattr(_ipc_writer_local, "writer", None)
+    if writer is not None:
+        writer.send_event(
+            "repeated_success_no_progress",
+            tool=tool_name,
+            streak=streak,
+            rounds=rounds,
+        )
+        return
+    _pkg.console.print(
+        f"  [warning]⟳ No progress: {tool_name} returned the same success {streak}x[/warning]"
+    )
+
+
 def emit_goal_decomposition(steps: list[str]) -> None:
     """Emit goal_decomposition event when multi-step plan is created."""
     from core.ui import agentic_ui as _pkg
