@@ -21,7 +21,9 @@ at runtime.
 
 from __future__ import annotations
 
+import asyncio
 import inspect
+from types import SimpleNamespace
 
 # ---------------------------------------------------------------------------
 # C-1 — CognitiveState dataclass
@@ -259,6 +261,7 @@ def test_text_only_round_also_calls_record_round() -> None:
     # The helper exists and updates round_count + emits REFLECT/UPDATE.
     src = inspect.getsource(AgenticLoop._record_text_only_round)
     assert "self.cognitive_state.record_round(" in src
+    assert "await self._maybe_reflect([])" in src
     assert "HookEvent.COGNITIVE_REFLECT" in src
     assert "HookEvent.COGNITIVE_UPDATE_MEMORY" in src
 
@@ -269,6 +272,35 @@ def test_text_only_round_also_calls_record_round() -> None:
         "natural/forced_text) must call _record_text_only_round before "
         "returning, or round_count drifts from the actual round count."
     )
+
+
+def test_text_only_round_runs_reflection_before_reflect_event() -> None:
+    """Terminal text-only rounds should still pass through the optional
+    reflection node before COGNITIVE_REFLECT listeners read the snapshot."""
+    from core.agent.cognitive_state import CognitiveState
+    from core.agent.loop.agent_loop import AgenticLoop
+    from core.hooks import HookEvent
+
+    calls: list[str] = []
+
+    async def _fake_reflect(_tool_results: list[dict]) -> None:
+        calls.append("reflect")
+
+    async def _fake_emit(event: HookEvent, **_payload: object) -> None:
+        calls.append(event.value)
+
+    stub = SimpleNamespace(
+        cognitive_state=CognitiveState(),
+        _maybe_reflect=_fake_reflect,
+        _emit_cognitive=_fake_emit,
+    )
+    bound = AgenticLoop._record_text_only_round.__get__(stub, SimpleNamespace)
+
+    asyncio.run(bound(0, text="final answer"))
+
+    assert calls == ["reflect", "cognitive_reflect", "cognitive_update_memory"]
+    assert stub.cognitive_state.last_action == "text-only"
+    assert stub.cognitive_state.last_observation == "final answer"
 
 
 def test_arun_emits_cognitive_state_snapshot_in_payload() -> None:

@@ -14,6 +14,7 @@ Coverage:
 
 from __future__ import annotations
 
+import inspect
 import os
 
 import pytest
@@ -394,6 +395,61 @@ def test_lifecycle_run_turn_verify_off_mode_skips(monkeypatch: pytest.MonkeyPatc
         payload = _run_turn_verify(loop, result)
         assert payload is None
         assert current_session_metrics().verify_fail_count == 0
+
+
+def test_finalizers_run_verify_before_lifecycle_hooks() -> None:
+    """Reflexion runs at the task-completion boundary before terminal
+    lifecycle hooks are emitted."""
+    from core.agent.loop import _lifecycle
+
+    sync_src = inspect.getsource(_lifecycle.finalize_and_return)
+    async_src = inspect.getsource(_lifecycle.finalize_and_return_async)
+
+    assert sync_src.index("verify_payload = _run_turn_verify(") < sync_src.index(
+        "HookEvent.SESSION_ENDED"
+    )
+    assert async_src.index("verify_payload = await _run_turn_verify_async(") < async_src.index(
+        "HookEvent.SESSION_ENDED"
+    )
+
+
+def test_final_hook_payloads_include_verify_payload(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """SESSION_ENDED and TURN_COMPLETED payloads carry the final verify
+    result when verify/reflexion is enabled."""
+    from types import SimpleNamespace
+
+    from core.agent.loop import _lifecycle
+
+    monkeypatch.setattr(
+        "core.llm.adapters.dispatch.get_session_adapter_usage",
+        lambda: {},
+    )
+    monkeypatch.setattr(
+        "core.llm.adapters.dispatch.end_session_adapter_tracking",
+        lambda: None,
+    )
+    loop = SimpleNamespace(
+        model="gpt-5.5",
+        _provider="openai-codex",
+        _session_id="s-final",
+        _parent_session_id="",
+        _new_adapter=None,
+        _last_emitted_session_id="",
+    )
+    result = _make_result(text="done", tool_calls=[])
+    verify_payload = {"passed": True, "mode": "rule_based"}
+
+    session_ended, turn_completed, _metrics = _lifecycle._final_hook_payloads(
+        loop,
+        result,
+        "do work",
+        verify_payload=verify_payload,
+    )
+
+    assert session_ended["turn_verify"] is verify_payload
+    assert turn_completed["turn_verify"] is verify_payload
 
 
 def test_should_retry_signal_for_recoverable_miss() -> None:
