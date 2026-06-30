@@ -40,7 +40,7 @@ invokes the ``record_reflection`` tool which carries:
 
 Settings knobs (see ``core.config._settings``):
   cognitive_reflection_enabled       (bool, default True)
-  cognitive_reflection_model         (str, default haiku-4.5)
+  cognitive_reflection_model         (str, default "" = inherit loop)
   cognitive_reflection_max_tokens    (int, default 512)
 
 Dispatch goes through ``core.llm.router.call_with_failover`` so the
@@ -243,6 +243,8 @@ async def reflect_async(
     *,
     model: str,
     max_tokens: int,
+    provider: str | None = None,
+    source: str | None = None,
 ) -> None:
     """Run the reflection LLM call and update ``state`` in place.
 
@@ -266,24 +268,26 @@ async def reflect_async(
     # escape and break the agentic loop, violating the "errors
     # swallowed at WARN" guarantee).
     try:
-        provider = _resolve_provider(model)
+        resolved_provider = provider or _resolve_provider(model)
         # PR-SOURCE-ROUTING (2026-05-28) — reflection used to hard-code
         # ``"payg"`` so a subscription-only operator (Pattern B) routed
         # the reflection turn through the depleted PAYG endpoint while
         # the main loop's gpt-5.x turns landed on the subscription
-        # endpoint. :func:`infer_source` mirrors the AgenticLoop main-
-        # path resolution so the reflection sub-call shares the same
-        # credential source as the parent.
+        # endpoint. The parent AgenticLoop may pass its already-resolved
+        # source; otherwise :func:`infer_source` mirrors the main-path
+        # default resolution.
         from core.llm.adapters._source_inference import infer_source
 
-        adapter = resolve_for(normalize_registry_provider(provider), infer_source(provider))
+        resolved_source = source or infer_source(resolved_provider)
+        adapter = resolve_for(normalize_registry_provider(resolved_provider), resolved_source)
         tool_summary = _summarise_tool_results(tool_results)
         user_prompt = _build_user_prompt(state, tool_summary)
 
         log.info(
-            "reflection dispatch: model=%s provider=%s round=%d max_tokens=%d",
+            "reflection dispatch: model=%s provider=%s source=%s round=%d max_tokens=%d",
             model,
-            provider,
+            resolved_provider,
+            resolved_source,
             state.round_count,
             max_tokens,
         )

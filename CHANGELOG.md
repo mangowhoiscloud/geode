@@ -59,6 +59,12 @@ functional change.
   compact cognitive summary from the loaded central snapshot.
 
 ### Fixed
+- **Cognitive reflection model inheritance.** Empty
+  `cognitive.reflection_model` now inherits the active `AgenticLoop`
+  model, provider, and credential source instead of forcing a separate
+  Haiku reflection model by default. Explicit `/model reflection` or
+  config overrides still route reflection through the configured model.
+
 - **MCP failed-server retry noise.** `MCPServerManager` now negative-caches
   failed stdio server connections for a short cooldown, so lazy tool discovery
   and repeated tool-list builds do not re-emit the same `MCP_SERVER_FAILED`

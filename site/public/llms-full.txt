@@ -3159,7 +3159,7 @@ Markdown: https://mangowhoiscloud.github.io/geode/docs/config/reference.md
 | 필드 | toml 키 | 타입 / 기본값 | 용도 |
 | --- | --- | --- | --- |
 | `cognitive_reflection_enabled` | `cognitive.reflection_enabled` | bool = true | 인지 리플렉션 활성화. |
-| `cognitive_reflection_model` | `cognitive.reflection_model` | str = `"claude-haiku-4-5-20251001"` | 리플렉션 모델. |
+| `cognitive_reflection_model` | `cognitive.reflection_model` | str = `""` | 비워두면 현재 agentic loop 모델/소스를 상속하고, 값이 있으면 별도 reflection 모델로 사용한다. |
 | `cognitive_reflection_max_tokens` | `cognitive.reflection_max_tokens` | int = 512 | 리플렉션 출력 토큰 상한. |
 | `cognitive_reflection_interval` | `cognitive.reflection_interval` | int = 1 | 몇 라운드마다 리플렉션할지. 1이면 매 라운드. |
 

@@ -83,9 +83,8 @@ class Settings(BaseSettings):
     # step runs one extra LLM call per tool-use round to populate
     # ``CognitiveState.hypotheses`` / ``confidence``, so operators
     # who want the loop to stay zero-extra-cost can flip the toggle.
-    # Default model is Haiku 4.5 — cheapest current Claude that
-    # still follows the JSON schema reliably; operators who want
-    # higher quality reflection can switch to opus / sonnet.
+    # Empty model inherits the live AgenticLoop model/provider/source;
+    # operators can still pin a separate cheap or strong model.
     cognitive_reflection_enabled: bool = Field(
         default=True,
         validation_alias=AliasChoices(
@@ -101,16 +100,17 @@ class Settings(BaseSettings):
         ),
     )
     cognitive_reflection_model: str = Field(
-        default="claude-haiku-4-5-20251001",
+        default="",
         validation_alias=AliasChoices(
             "cognitive_reflection_model",
             "GEODE_COGNITIVE_REFLECTION_MODEL",
         ),
         description=(
-            "Model used by the reflection node. Default is Haiku 4.5 "
-            "(cheapest Claude family that still follows the JSON "
-            "schema). Operators wanting higher-fidelity reflection can "
-            "set this to opus / sonnet. PR-3 C-2."
+            "Model override used by the reflection node. Empty string "
+            "(default) inherits the active AgenticLoop model, provider, "
+            "and credential source. Operators wanting a separate "
+            "reflection model can set this to haiku / sonnet / opus. "
+            "PR-3 C-2."
         ),
     )
     # PR-CL-A6 (2026-05-23) — Plan / Action / Judge model separation

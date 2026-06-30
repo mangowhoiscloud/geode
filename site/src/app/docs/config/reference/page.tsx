@@ -82,7 +82,7 @@ export default function Page() {
               </thead>
               <tbody>
                 <tr><td><code>cognitive_reflection_enabled</code></td><td><code>cognitive.reflection_enabled</code></td><td>bool = true</td><td>인지 리플렉션 활성화.</td></tr>
-                <tr><td><code>cognitive_reflection_model</code></td><td><code>cognitive.reflection_model</code></td><td>str = <code>&quot;claude-haiku-4-5-20251001&quot;</code></td><td>리플렉션 모델.</td></tr>
+                <tr><td><code>cognitive_reflection_model</code></td><td><code>cognitive.reflection_model</code></td><td>str = <code>&quot;&quot;</code></td><td>비워두면 현재 agentic loop 모델/소스를 상속하고, 값이 있으면 별도 reflection 모델로 사용한다.</td></tr>
                 <tr><td><code>cognitive_reflection_max_tokens</code></td><td><code>cognitive.reflection_max_tokens</code></td><td>int = 512</td><td>리플렉션 출력 토큰 상한.</td></tr>
                 <tr><td><code>cognitive_reflection_interval</code></td><td><code>cognitive.reflection_interval</code></td><td>int = 1</td><td>몇 라운드마다 리플렉션할지. 1이면 매 라운드.</td></tr>
               </tbody>
@@ -446,7 +446,7 @@ export default function Page() {
               </thead>
               <tbody>
                 <tr><td><code>cognitive_reflection_enabled</code></td><td><code>cognitive.reflection_enabled</code></td><td>bool = true</td><td>Enable cognitive reflection.</td></tr>
-                <tr><td><code>cognitive_reflection_model</code></td><td><code>cognitive.reflection_model</code></td><td>str = <code>&quot;claude-haiku-4-5-20251001&quot;</code></td><td>Reflection model.</td></tr>
+                <tr><td><code>cognitive_reflection_model</code></td><td><code>cognitive.reflection_model</code></td><td>str = <code>&quot;&quot;</code></td><td>Empty inherits the active agentic loop model/source; a value sets a separate reflection model.</td></tr>
                 <tr><td><code>cognitive_reflection_max_tokens</code></td><td><code>cognitive.reflection_max_tokens</code></td><td>int = 512</td><td>Reflection output cap.</td></tr>
                 <tr><td><code>cognitive_reflection_interval</code></td><td><code>cognitive.reflection_interval</code></td><td>int = 1</td><td>Reflect every N rounds. 1 means every round.</td></tr>
               </tbody>
