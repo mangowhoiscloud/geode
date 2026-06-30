@@ -577,11 +577,22 @@ class AgenticLoop:
             return
         from core.agent.loop._reflection import reflect_async
 
+        raw_model = settings.cognitive_reflection_model
+        configured_model = raw_model.strip() if isinstance(raw_model, str) else ""
+        inherit_loop_model = not configured_model
+        reflection_model = configured_model or self.model
+        reflection_provider = self._provider if inherit_loop_model else None
+        reflection_source = (
+            getattr(self._new_adapter, "source", self._source) if inherit_loop_model else None
+        )
+
         await reflect_async(
             self.cognitive_state,
             tool_results,
-            model=settings.cognitive_reflection_model,
+            model=reflection_model,
             max_tokens=settings.cognitive_reflection_max_tokens,
+            provider=reflection_provider,
+            source=reflection_source,
         )
 
     async def _emit_session_start_signals(self, user_input: str) -> AgenticResult | None:

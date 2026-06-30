@@ -102,9 +102,10 @@ def _apply_model(
 
     PR-A (2026-05-21) — ``role`` selects which agent's model knob is
     updated. ``"primary"`` (default) writes ``settings.model`` + ``[llm]
-    primary_model``; ``"reflection"`` writes the PR-3 C-2 knob
+    primary_model``; ``"reflection"`` writes the PR-3 C-2 override knob
     (``settings.cognitive_reflection_model`` + ``[cognitive]
-    reflection_model``). Effort is *only* applied when the role declares
+    reflection_model``); when empty, reflection inherits the active loop
+    model/provider/source. Effort is *only* applied when the role declares
     ``has_effort=True`` — the reflection node has no effort axis.
 
     ``scope`` picks the durable config target (precedence: CLI > env >

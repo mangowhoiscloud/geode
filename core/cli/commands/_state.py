@@ -157,7 +157,9 @@ AGENT_ROLES: list[AgentRole] = [
         env_var="GEODE_COGNITIVE_REFLECTION_MODEL",
         toml_section="cognitive",
         toml_key="reflection_model",
-        description="Reviews and refines the agent's reasoning after each tool batch",
+        description=(
+            "Reflection override - empty inherits the main agentic loop model/source"
+        ),
         has_effort=False,
     ),
     # PR-G2 (2026-05-21) — self-improving loop mutator role. Unlike
