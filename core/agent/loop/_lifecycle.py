@@ -159,6 +159,7 @@ def _final_hook_payloads(
     loop: AgenticLoop,
     result: AgenticResult,
     user_input: str,
+    verify_payload: dict[str, Any] | None = None,
 ) -> tuple[dict[str, Any], dict[str, Any], dict[str, Any]]:
     """Build final lifecycle hook payloads once for sync and async callers.
 
@@ -233,6 +234,9 @@ def _final_hook_payloads(
         "tool_calls": [tc.get("name", "") for tc in result.tool_calls],
         "termination_reason": result.termination_reason,
     }
+    if verify_payload is not None:
+        session_ended["turn_verify"] = verify_payload
+        turn_completed["turn_verify"] = verify_payload
     return session_ended, turn_completed, result.reasoning_metrics or {}
 
 
@@ -347,9 +351,13 @@ def finalize_and_return(
 ) -> AgenticResult:
     """Log result, record transcript end, save checkpoint, and return (DRY)."""
     _prepare_final_result(loop, result, user_input, round_idx)
+    # Verify/reflexion belongs to the task-completion boundary. Run it
+    # before SESSION_ENDED/TURN_COMPLETED hooks so lifecycle consumers can
+    # read the final self-evaluation from the same terminal payload.
+    verify_payload = _run_turn_verify(loop, result)
     if loop._hooks:
         session_ended, turn_completed, reasoning_metrics = _final_hook_payloads(
-            loop, result, user_input
+            loop, result, user_input, verify_payload=verify_payload
         )
         loop._hooks.trigger(
             HookEvent.SESSION_ENDED,
@@ -363,11 +371,6 @@ def finalize_and_return(
             HookEvent.REASONING_METRICS,
             reasoning_metrics,
         )
-    # PR-CL-A3 — verify must run even when ``loop._hooks is None`` so the
-    # reflexion hint reaches the next arun via SessionMetrics regardless of
-    # the hook system being wired (Codex MCP HIGH #1, 2026-05-23). Only the
-    # ``TURN_VERIFY_*`` hook fire is gated on hooks-present.
-    verify_payload = _run_turn_verify(loop, result)
     if verify_payload is not None and loop._hooks:
         event = (
             HookEvent.TURN_VERIFY_PASSED
@@ -386,18 +389,17 @@ async def finalize_and_return_async(
 ) -> AgenticResult:
     """Async finalizer for ``AgenticLoop.arun`` hook emission."""
     _prepare_final_result(loop, result, user_input, round_idx)
+    # Verify/reflexion belongs to the task-completion boundary. Run it
+    # before SESSION_ENDED/TURN_COMPLETED hooks so lifecycle consumers can
+    # read the final self-evaluation from the same terminal payload.
+    verify_payload = await _run_turn_verify_async(loop, result)
     if loop._hooks:
         session_ended, turn_completed, reasoning_metrics = _final_hook_payloads(
-            loop, result, user_input
+            loop, result, user_input, verify_payload=verify_payload
         )
         await loop._hooks.trigger_async(HookEvent.SESSION_ENDED, session_ended)
         await loop._hooks.trigger_async(HookEvent.TURN_COMPLETED, turn_completed)
         await loop._hooks.trigger_async(HookEvent.REASONING_METRICS, reasoning_metrics)
-    # PR-CL-A3 + PR-CL-A6 — async verify dispatch so LLM-judge mode can
-    # ``await loop._call_llm`` under the same event loop without the
-    # cross-loop thread hop the sync wrapper falls back to (Codex MCP
-    # HIGH #2 fix, 2026-05-23).
-    verify_payload = await _run_turn_verify_async(loop, result)
     if verify_payload is not None and loop._hooks:
         event = (
             HookEvent.TURN_VERIFY_PASSED

@@ -59,6 +59,14 @@ functional change.
   compact cognitive summary from the loaded central snapshot.
 
 ### Fixed
+- **Task-completion Reflexion ordering.** Final turn verify/reflexion now
+  runs before `SESSION_ENDED` / `TURN_COMPLETED` hooks are emitted, and
+  those terminal payloads include `turn_verify` when verification is
+  enabled. Text-only terminal rounds also pass through the optional
+  cognitive reflection node before `COGNITIVE_REFLECT`, so the final
+  answer can update `CognitiveState` hypotheses/confidence when
+  `cognitive_reflection_enabled` is on.
+
 - **Cognitive reflection model inheritance.** Empty
   `cognitive.reflection_model` now inherits the active `AgenticLoop`
   model, provider, and credential source instead of forcing a separate
