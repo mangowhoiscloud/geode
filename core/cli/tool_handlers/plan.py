@@ -1,4 +1,8 @@
-"""Plan-mode tool handlers (create/approve/reject/modify/list).
+"""Planning tool handlers.
+
+``update_plan`` is the Codex-style progress surface: it replaces the
+current visible checklist for this turn and never waits for approval.
+``create_plan`` / ``approve_plan`` remain for explicit review checkpoints.
 
 The disk-persistent ``PlanStore`` singleton (`_PLAN_STORE`) lives at the
 package level (``core.cli.tool_handlers.__init__``) so test fixtures can
@@ -23,6 +27,53 @@ def _build_plan_handlers(force_dry: bool) -> dict[str, Any]:
     from core.cli.tool_handlers import _get_plan_store
 
     store = _get_plan_store()
+
+    def handle_update_plan(**kwargs: Any) -> dict[str, Any]:
+        plan_items = kwargs.get("plan")
+        if not isinstance(plan_items, list):
+            return _clarify("update_plan", ["plan"], "진행 항목 목록을 알려주세요.")
+
+        explanation = str(kwargs.get("explanation") or "").strip()
+        cleaned: list[dict[str, str]] = []
+        counts = {"pending": 0, "in_progress": 0, "completed": 0}
+        for item in plan_items:
+            if not isinstance(item, dict):
+                continue
+            step = str(item.get("step") or "").strip()
+            status = str(item.get("status") or "pending").strip()
+            if not step:
+                continue
+            if status not in counts:
+                return {
+                    "error": (
+                        "Invalid plan status: "
+                        f"{status}. Expected pending, in_progress, or completed."
+                    )
+                }
+            cleaned.append({"step": step, "status": status})
+            counts[status] += 1
+
+        if not cleaned:
+            return _clarify("update_plan", ["plan"], "비어 있지 않은 진행 항목이 필요합니다.")
+
+        from core.ui.agentic_ui import render_progress_plan
+
+        render_progress_plan(cleaned, explanation=explanation)
+
+        log.info(
+            "Progress plan updated: total=%d pending=%d in_progress=%d completed=%d",
+            len(cleaned),
+            counts["pending"],
+            counts["in_progress"],
+            counts["completed"],
+        )
+        return {
+            "status": "ok",
+            "action": "update_plan",
+            "plan": cleaned,
+            "counts": counts,
+            "hint": "Progress plan updated. Continue with the task; no approval is required.",
+        }
 
     def _resolve_plan(plan_id: str) -> Any | None:
         """Resolve plan by ID, falling back to most recent."""
@@ -88,7 +139,8 @@ def _build_plan_handlers(force_dry: bool) -> dict[str, Any]:
         else:
             return _clarify("create_plan", ["goal"], "어떤 작업의 계획을 세울까요?")
 
-        # Display plan steps with HITL approval prompt
+        # Display review checkpoint steps. Routine progress should use
+        # update_plan; this path is for explicit approval checkpoints.
         console.print()
         console.print(f"  [header]● Plan: {plan_title}[/header]")
         console.print()
@@ -101,7 +153,7 @@ def _build_plan_handlers(force_dry: bool) -> dict[str, Any]:
         )
         if not auto_execute:
             console.print(
-                "  [dim]→ 승인(approve_plan) · 수정(modify_plan) · 거부(reject_plan)[/dim]"
+                "  [dim]→ 승인 checkpoint: approve_plan · modify_plan · reject_plan[/dim]"
             )
         console.print()
         log.info(
@@ -168,7 +220,10 @@ def _build_plan_handlers(force_dry: bool) -> dict[str, Any]:
             "steps": [s.description for s in plan.steps],
             "summary": plan_summary,
             "execution_mode": PlanExecutionMode.MANUAL.value,
-            "hint": ("Use approve_plan, reject_plan, or modify_plan to proceed."),
+            "hint": (
+                "Review checkpoint created. Use approve_plan, reject_plan, "
+                "or modify_plan only if the user explicitly wants this gate."
+            ),
         }
 
     def handle_approve_plan(**kwargs: Any) -> dict[str, Any]:
@@ -283,6 +338,7 @@ def _build_plan_handlers(force_dry: bool) -> dict[str, Any]:
         }
 
     return {
+        "update_plan": handle_update_plan,
         "create_plan": handle_create_plan,
         "approve_plan": handle_approve_plan,
         "reject_plan": handle_reject_plan,

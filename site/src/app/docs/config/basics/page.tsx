@@ -138,7 +138,7 @@ geode about                    # 실효 모델 + 마스크 경고 한 줄`}</pre
               수정입니다. 대상 키 목록은 <code>core/config/env_io.py</code>의
               <code>BEHAVIOR_ENV_KEYS</code>입니다.
             </p>
-            <pre>{`GEODE_MODEL  GEODE_PLAN_MODEL  GEODE_ACT_MODEL  GEODE_JUDGE_MODEL
+            <pre>{`GEODE_MODEL  GEODE_ACT_MODEL  GEODE_JUDGE_MODEL
 GEODE_COGNITIVE_REFLECTION_MODEL  GEODE_LEARNING_EXTRACT_MODEL
 GEODE_AGENTIC_EFFORT
 GEODE_ANTHROPIC_CREDENTIAL_SOURCE  GEODE_OPENAI_CREDENTIAL_SOURCE`}</pre>
@@ -330,7 +330,7 @@ geode about                    # effective model + one-line mask warning`}</pre>
               <code>BEHAVIOR_ENV_KEYS</code> in
               <code>core/config/env_io.py</code>.
             </p>
-            <pre>{`GEODE_MODEL  GEODE_PLAN_MODEL  GEODE_ACT_MODEL  GEODE_JUDGE_MODEL
+            <pre>{`GEODE_MODEL  GEODE_ACT_MODEL  GEODE_JUDGE_MODEL
 GEODE_COGNITIVE_REFLECTION_MODEL  GEODE_LEARNING_EXTRACT_MODEL
 GEODE_AGENTIC_EFFORT
 GEODE_ANTHROPIC_CREDENTIAL_SOURCE  GEODE_OPENAI_CREDENTIAL_SOURCE`}</pre>

@@ -46,16 +46,16 @@ export const geodeCategories: CategoryData[] = [
     icon: "▶️",
     title: "Runtime & Router",
     postsCount: 2,
-    statusKo: "Planner (GLM-5) 비용 기반 라우팅",
-    statusEn: "Planner (GLM-5) cost-aware routing",
-    techBadges: ["GLM-5", "Planner", "Plan Mode", "Pydantic Settings"],
+    statusKo: "Planner 진행 상태 + 체크포인트",
+    statusEn: "Planner progress + checkpoints",
+    techBadges: ["Planner", "Progress Plan", "Review Checkpoint", "Pydantic Settings"],
     descriptionKo:
-      "GLM-5 기반 Planner가 작업의 비용과 깊이에 맞춰 라우트를 고릅니다. full_pipeline부터 script_route, direct_answer까지 비용 폭이 넓고, Plan Mode에서 사용자 승인 후 실행합니다.",
+      "Planner는 메인 루프 모델을 그대로 사용해 요청을 분해하고 진행 상태를 드러냅니다. 일반 작업은 진행 체크리스트로 계속 실행하고, 명시적 검토가 필요할 때만 승인 checkpoint를 둡니다.",
     descriptionEn:
-      "A GLM-5 Planner picks the route by the task's cost and depth, from full_pipeline down to script_route and direct_answer. Plan Mode requires user approval before execution.",
+      "The Planner uses the main loop model to decompose work and surface progress. Routine work uses a live checklist and keeps going; explicit review checkpoints remain available when needed.",
     achievements: [
-      { icon: "⚙️", titleKo: "Planner full_pipeline~script_route 비용 최적화 분기", titleEn: "Planner full_pipeline~script_route cost-optimized routing", modalId: "modal-geode-settings" },
-      { icon: "🏭", titleKo: "Plan Mode 분석 전략 수립 → 사용자 승인 → 실행", titleEn: "Plan Mode analysis strategy → user approval → execution", modalId: "modal-geode-factory" },
+      { icon: "⚙️", titleKo: "Planner가 메인 루프 모델을 상속해 작업 분해", titleEn: "Planner inherits the main loop model for task decomposition", modalId: "modal-geode-settings" },
+      { icon: "🏭", titleKo: "Progress Plan 진행 상태 표시 + 명시적 checkpoint 분리", titleEn: "Progress Plan updates with explicit checkpoints separated", modalId: "modal-geode-factory" },
       { icon: "💉", titleKo: "LLMClientPort 추상화로 Claude·GPT·GLM 계열 역할별 DI", titleEn: "LLMClientPort abstraction wires Claude/GPT/GLM families by role", modalId: "modal-geode-di" },
     ],
     blogLink: "",
@@ -97,7 +97,7 @@ export const geodeCategories: CategoryData[] = [
     achievements: [
       { icon: "🪝", titleKo: "Hook System 이벤트 × CONTINUE/ABORT/MODIFY 제어", titleEn: "Hook System events × CONTINUE/ABORT/MODIFY control", modalId: "modal-geode-hooks" },
       { icon: "📝", titleKo: "TaskSystem 의존성 그래프 기반 병렬/순차 작업 스케줄링", titleEn: "TaskSystem dependency graph-based parallel/sequential scheduling", modalId: "modal-geode-task-system" },
-      { icon: "🧭", titleKo: "Planner GLM-5 비용 기반 분기 + Plan Mode 승인", titleEn: "Planner GLM-5 cost-aware branching + Plan Mode approval", modalId: "modal-geode-planner" },
+      { icon: "🧭", titleKo: "Planner 진행 체크리스트 + 승인 checkpoint", titleEn: "Planner progress checklist + approval checkpoints", modalId: "modal-geode-planner" },
       { icon: "🔌", titleKo: "Bootstrap 서비스 와이어링 + Hook Registry 초기화", titleEn: "Bootstrap service wiring + Hook Registry initialization", modalId: "modal-geode-bootstrap" },
     ],
     blogLink: "",

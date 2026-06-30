@@ -3089,7 +3089,7 @@ geode about                    # 실효 모델 + 마스크 경고 한 줄
 serve 데몬은 시작할 때 상속받은 환경에서 동작(모델 선택) 계열 env 키를 떨어뜨리고, `.env` 승격에서도 건너뜁니다 (`core/cli/bootstrap.py`의`load_daemon_env`). 데몬 환경에 승격된 모델 키가 모든 `/model` 전환보다 오래 살아남던 문제의 수정입니다. 대상 키 목록은 `core/config/env_io.py`의`BEHAVIOR_ENV_KEYS`입니다.
 
 ```
-GEODE_MODEL  GEODE_PLAN_MODEL  GEODE_ACT_MODEL  GEODE_JUDGE_MODEL
+GEODE_MODEL  GEODE_ACT_MODEL  GEODE_JUDGE_MODEL
 GEODE_COGNITIVE_REFLECTION_MODEL  GEODE_LEARNING_EXTRACT_MODEL
 GEODE_AGENTIC_EFFORT
 GEODE_ANTHROPIC_CREDENTIAL_SOURCE  GEODE_OPENAI_CREDENTIAL_SOURCE
@@ -3131,7 +3131,6 @@ Markdown: https://mangowhoiscloud.github.io/geode/docs/config/reference.md
 | 필드 | toml 키 | 타입 / 기본값 | 용도 |
 | --- | --- | --- | --- |
 | `model` | `llm.primary_model` | str = `"claude-opus-4-8"` | 기본 모델. 기본값은 routing.toml의 anthropic 기본값을 따라갑니다. |
-| `plan_model` | `llm.plan_model` | str = `""` | 플래닝 단계 모델. 비우면 `model`로 폴백합니다. |
 | `act_model` | `llm.act_model` | str = `""` | 액션 루프 모델. 비우면 `model`로 폴백합니다. |
 | `judge_model` | `llm.judge_model` | str = `""` | 턴 단위 verify judge 모델. 비우면 `model`로 폴백합니다. |
 | `learning_extract_model` | `llm.learning_extract_model` | str = `"glm-4.7-flash"` | learning 추출 훅용 무료 티어 GLM 모델. |

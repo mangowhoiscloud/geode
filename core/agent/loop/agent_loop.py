@@ -817,7 +817,7 @@ class AgenticLoop:
         """Per-round Dynamic Replan trigger.
 
         Asks :func:`core.agent.plan.should_replan`; on a trigger calls
-        :func:`replan_async` (planner LLM via ``settings.plan_model`) and
+        :func:`replan_async` (planner LLM via the active loop model) and
         installs the new :class:`Plan` via ``set_active_plan``.
 
         Triggers: ``verify_fail`` (fires at the first round of the *next*

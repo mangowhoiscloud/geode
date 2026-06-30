@@ -1,12 +1,12 @@
-"""Unit tests for PR-CL-A6 — Plan/Action/Judge model separation.
+"""Unit tests for model role wiring.
 
 Coverage:
-- Settings knobs (``plan_model`` / ``act_model`` / ``judge_model``) default
-  to empty string (= fall back to ``settings.model``).
-- TOML mapping covers all three knobs.
+- Settings knobs (``act_model`` / ``judge_model``) default to empty string
+  (= fall back to ``settings.model``).
+- TOML mapping covers both live knobs.
 - ``AgenticLoop.__init__`` honours ``settings.act_model`` when no explicit
   ``model`` is passed; explicit ``model`` wins.
-- ``_helpers.try_decompose`` uses ``settings.plan_model`` when set.
+- ``decompose_async`` inherits the active loop model.
 - ``_call_llm(model=...)`` override threads through to the adapter call.
 - ``_verify_llm_judge`` actually calls the LLM via ``loop._call_llm`` with
   ``settings.judge_model`` + parses the judge JSON response.
@@ -37,7 +37,6 @@ from core.agent.verify import (
 @pytest.fixture(autouse=True)
 def reset_env(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.delenv("GEODE_VERIFY_MODE", raising=False)
-    monkeypatch.delenv("GEODE_PLAN_MODEL", raising=False)
     monkeypatch.delenv("GEODE_ACT_MODEL", raising=False)
     monkeypatch.delenv("GEODE_JUDGE_MODEL", raising=False)
 
@@ -60,36 +59,32 @@ def _make_result(
 
 
 def test_settings_default_to_empty_string() -> None:
-    """All three knobs default to ``""`` so existing callers fall back
+    """Live model-role knobs default to ``""`` so existing callers fall back
     to ``settings.model`` until they set a concrete value."""
     from core.config._settings import Settings
 
     s = Settings()
-    assert s.plan_model == ""
     assert s.act_model == ""
     assert s.judge_model == ""
 
 
 def test_settings_env_override(monkeypatch: pytest.MonkeyPatch) -> None:
-    """``GEODE_PLAN_MODEL`` / ``ACT_MODEL`` / ``JUDGE_MODEL`` env vars
-    populate the knobs via pydantic AliasChoices."""
+    """``GEODE_ACT_MODEL`` / ``GEODE_JUDGE_MODEL`` env vars populate the
+    knobs via pydantic AliasChoices."""
     from core.config._settings import Settings
 
-    monkeypatch.setenv("GEODE_PLAN_MODEL", "claude-opus-4-7")
     monkeypatch.setenv("GEODE_ACT_MODEL", "claude-sonnet-4-6")
     monkeypatch.setenv("GEODE_JUDGE_MODEL", "claude-haiku-4-5-20251001")
     s = Settings()
-    assert s.plan_model == "claude-opus-4-7"
     assert s.act_model == "claude-sonnet-4-6"
     assert s.judge_model == "claude-haiku-4-5-20251001"
 
 
-def test_toml_mapping_covers_three_knobs() -> None:
-    """Config cascade maps ``[llm].plan_model`` / ``act_model`` /
-    ``judge_model`` to the matching Settings fields."""
+def test_toml_mapping_covers_live_model_knobs() -> None:
+    """Config cascade maps the live model role knobs."""
     from core.config import _TOML_TO_SETTINGS
 
-    assert _TOML_TO_SETTINGS["llm.plan_model"] == "plan_model"
+    assert "llm.plan_model" not in _TOML_TO_SETTINGS
     assert _TOML_TO_SETTINGS["llm.act_model"] == "act_model"
     assert _TOML_TO_SETTINGS["llm.judge_model"] == "judge_model"
 
@@ -158,16 +153,15 @@ def test_call_llm_signature_accepts_model_override() -> None:
     assert param.kind == inspect.Parameter.KEYWORD_ONLY
 
 
-# -- Goal decomposition uses plan_model -------------------------------
+# -- Goal decomposition inherits loop model ---------------------------
 
 
-def test_decompose_async_uses_plan_model(monkeypatch: pytest.MonkeyPatch) -> None:
-    """PR-CL-A1-followup (2026-05-23) — ``decompose_async`` reads
-    ``settings.plan_model`` and threads it through ``loop._call_llm``.
-    Replaces the pre-followup test that mocked ``GoalDecomposer``."""
+def test_decompose_async_inherits_loop_model(monkeypatch: pytest.MonkeyPatch) -> None:
+    """``decompose_async`` threads the active loop model through
+    ``loop._call_llm``."""
     import asyncio
 
-    fake_settings = SimpleNamespace(plan_model="claude-opus-4-7", model="claude-haiku-4-5")
+    fake_settings = SimpleNamespace(model="claude-haiku-4-5")
     monkeypatch.setattr("core.config.settings", fake_settings)
 
     captured: dict[str, str] = {}
@@ -185,16 +179,17 @@ def test_decompose_async_uses_plan_model(monkeypatch: pytest.MonkeyPatch) -> Non
     from core.agent.plan import decompose_async
 
     asyncio.run(decompose_async(loop, "comprehensive analysis and report"))
-    assert captured["model"] == "claude-opus-4-7"
+    assert captured["model"] == "claude-haiku-4-5"
 
 
-def test_decompose_async_falls_back_to_loop_model(
+def test_decompose_async_ignores_removed_plan_model(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Empty ``plan_model`` → ``decompose_async`` uses ``loop.model``."""
+    """A stale ``settings.plan_model`` attribute cannot split planner model
+    selection away from the active loop."""
     import asyncio
 
-    fake_settings = SimpleNamespace(plan_model="", model="claude-haiku-4-5")
+    fake_settings = SimpleNamespace(plan_model="claude-opus-4-7", model="claude-haiku-4-5")
     monkeypatch.setattr("core.config.settings", fake_settings)
     captured: dict[str, str] = {}
 

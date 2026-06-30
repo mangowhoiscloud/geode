@@ -119,7 +119,7 @@ _log.debug("Prompt versions loaded (%d): %s", len(PROMPT_VERSIONS), PROMPT_VERSI
 #   python -c "from core.llm.prompts import PROMPT_VERSIONS as V; \
 #     print(dict(sorted(V.items())))"
 _PINNED_HASHES: dict[str, str] = {
-    "AGENTIC_SUFFIX": "b9edd05682d9",
+    "AGENTIC_SUFFIX": "e692d51fa0cc",
     "COMMENTARY_SYSTEM": "9a0936efe790",
     "COMMENTARY_USER": "2024ac4eba69",
     "ROUTER_SYSTEM": "a944cdc73e4f",

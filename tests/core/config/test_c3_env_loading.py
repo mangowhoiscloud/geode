@@ -51,7 +51,6 @@ def test_settings_global_env_wins_over_empty_project(tmp_path, monkeypatch) -> N
 def test_behavior_keys_cover_all_model_pick_surfaces() -> None:
     expected = {
         "GEODE_MODEL",
-        "GEODE_PLAN_MODEL",
         "GEODE_ACT_MODEL",
         "GEODE_JUDGE_MODEL",
         "GEODE_COGNITIVE_REFLECTION_MODEL",

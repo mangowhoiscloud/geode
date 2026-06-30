@@ -48,6 +48,12 @@ functional change.
 ## [Unreleased]
 
 ### Added
+- **Non-blocking progress plans.** GEODE now exposes an `update_plan` tool
+  modelled on Codex's per-turn checklist: it renders a concise
+  pending/in-progress/completed plan for the current task, does not write to
+  `.geode/plans.json`, and does not wait for approval. `create_plan` /
+  `approve_plan` remain available for explicit review checkpoints.
+
 - **CognitiveState checkpoint resume unit.** `SessionCheckpoint` now persists the
   cognitive-loop snapshot alongside messages/tool logs, `AgenticLoop` writes its
   live `CognitiveState` into every checkpoint, and IPC resume restores the loop's
@@ -57,6 +63,20 @@ functional change.
   append-only `COGNITIVE_*` event stream; checkpoint load now reads that store
   before falling back to the legacy `state.json` cache. `/resume` now renders a
   compact cognitive summary from the loaded central snapshot.
+
+### Changed
+- **Plan-first no longer means approval-first.** The router prompt and tool
+  descriptions now direct routine multi-step work to `update_plan` and
+  continued execution. `create_plan` is scoped to user-requested review or
+  unusual risk/resource checkpoints, so normal planning does not become a
+  natural-language permission loop.
+
+- **Planner model split removed.** Initial decomposition and dynamic replan now
+  call the active `AgenticLoop` model directly. The live `plan_model`
+  setting, `GEODE_PLAN_MODEL` env key, and `llm.plan_model` TOML mapping were
+  removed so planning cannot silently diverge into a separate planner-model
+  lane. `act_model` and `judge_model` remain available for their distinct
+  runtime roles.
 
 ### Fixed
 - **Reflection hint naming unified.** Verify failure feedback now uses the
