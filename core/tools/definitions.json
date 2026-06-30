@@ -456,8 +456,54 @@
     }
   },
   {
+    "name": "update_plan",
+    "description": "Show or update the current turn's progress checklist. Use for complex, multi-step work to keep the user informed while continuing execution. This is NOT an approval gate and does not persist an execution plan; after calling it, keep working unless the user explicitly asked to stop for review. Keep 3-7 concise steps, exactly one in_progress step while work remains, and update statuses as steps complete. Sibling: create_plan is only for an explicit review checkpoint that should wait for approve_plan.",
+    "category": "planning",
+    "cost_tier": "free",
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "explanation": {
+          "type": "string",
+          "description": "Optional short reason for a plan change."
+        },
+        "plan": {
+          "type": "array",
+          "description": "Complete replacement checklist for this turn.",
+          "items": {
+            "type": "object",
+            "properties": {
+              "step": {
+                "type": "string",
+                "description": "One concise task step."
+              },
+              "status": {
+                "type": "string",
+                "enum": [
+                  "pending",
+                  "in_progress",
+                  "completed"
+                ],
+                "description": "Current status for this step."
+              }
+            },
+            "required": [
+              "step",
+              "status"
+            ],
+            "additionalProperties": false
+          }
+        }
+      },
+      "required": [
+        "plan"
+      ],
+      "additionalProperties": false
+    }
+  },
+  {
     "name": "create_plan",
-    "description": "Create an execution plan the user reviews before a complex task runs (3+ tool calls or expensive operations). Put the user-facing objective in goal; steps auto-generate if omitted. Use for multi-step research/report jobs. Skip it for simple one-shot requests — execute directly. After the user accepts, the runtime runs it (or call approve_plan); change it with modify_plan, discard with reject_plan.",
+    "description": "Create a disk-persistent review checkpoint that waits for approve_plan before execution. Use only when the user explicitly asks to review/approve a plan first, or when you need an intentional stop before an unusually risky/expensive workflow. For ordinary multi-step work, use update_plan and continue executing; do not turn routine planning into a permission prompt.",
     "category": "planning",
     "cost_tier": "cheap",
     "input_schema": {
@@ -493,7 +539,7 @@
   },
   {
     "name": "approve_plan",
-    "description": "Approve and run a plan created by create_plan. Use after the user accepts a proposed plan; pass the plan_id from the create_plan result. Siblings: modify_plan to adjust it first, reject_plan to discard it.",
+    "description": "Approve and run a review checkpoint created by create_plan. Use only after the user explicitly accepts that checkpoint; pass the plan_id from the create_plan result. Siblings: modify_plan to adjust it first, reject_plan to discard it. Do not use for update_plan checklists.",
     "category": "planning",
     "cost_tier": "cheap",
     "input_schema": {
@@ -761,7 +807,7 @@
   },
   {
     "name": "reject_plan",
-    "description": "Discard an execution plan created by create_plan when the user doesn't want it. Pass plan_id (reason optional). Siblings: approve_plan to run it, modify_plan to adjust it.",
+    "description": "Discard a review checkpoint created by create_plan when the user doesn't want it. Pass plan_id (reason optional). Siblings: approve_plan to run it, modify_plan to adjust it. Do not use for update_plan checklists.",
     "category": "planning",
     "cost_tier": "free",
     "input_schema": {
@@ -781,7 +827,7 @@
   },
   {
     "name": "modify_plan",
-    "description": "Adjust an execution plan created by create_plan — change its template or remove steps — when the user wants to tweak a proposal rather than approve or reject it outright. Pass plan_id. Siblings: approve_plan, reject_plan.",
+    "description": "Adjust a review checkpoint created by create_plan — change its template or remove steps — when the user wants to tweak it rather than approve or reject it outright. Pass plan_id. Siblings: approve_plan, reject_plan. Use update_plan for ordinary progress checklist changes.",
     "category": "planning",
     "cost_tier": "free",
     "input_schema": {
@@ -812,7 +858,7 @@
   },
   {
     "name": "list_plans",
-    "description": "List the execution plans created this session via create_plan.",
+    "description": "List disk-persistent review checkpoints created this session via create_plan. This does not list update_plan progress checklists.",
     "category": "planning",
     "cost_tier": "free",
     "input_schema": {
@@ -1160,7 +1206,7 @@
   },
   {
     "name": "task_create",
-    "description": "Create a tracked item in the task list. Use to break a complex request into trackable steps or to record follow-ups, then advance them with task_update. subject (imperative, e.g. 'Analyze repository state') is required. Sibling: create_plan builds ONE reviewable plan for up-front approval; the task_* tools manage an ongoing checklist.",
+    "description": "Create a durable tracked item in the task list for follow-ups or work that should survive the current turn. subject (imperative, e.g. 'Analyze repository state') is required. Siblings: update_plan shows the current turn's non-persistent progress checklist; create_plan creates an explicit review checkpoint.",
     "category": "task",
     "cost_tier": "free",
     "input_schema": {

@@ -124,6 +124,28 @@ def render_plan_steps(subject_id: str, steps: list[str]) -> None:
     _pkg.console.print()
 
 
+def render_progress_plan(plan: list[dict[str, str]], *, explanation: str = "") -> None:
+    """Render a non-blocking progress checklist."""
+    from core.ui import agentic_ui as _pkg
+
+    status_style = {
+        "pending": ("○", "dim"),
+        "in_progress": ("●", "warning"),
+        "completed": ("✓", "success"),
+    }
+    _pkg.console.print()
+    header = "Plan"
+    if explanation:
+        header = f"Plan · {explanation}"
+    _pkg.console.print(f"  [header]{header}[/header]")
+    for item in plan:
+        status = item.get("status", "pending")
+        symbol, style = status_style.get(status, ("○", "dim"))
+        step = item.get("step", "")
+        _pkg.console.print(f"    [{style}]{symbol}[/{style}] {step}")
+    _pkg.console.print()
+
+
 def render_subagent_dispatch(task_id: str, task_type: str, description: str) -> None:
     """Render a sub-agent delegation line."""
     from core.ui import agentic_ui as _pkg

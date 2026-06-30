@@ -20,7 +20,6 @@ from pathlib import Path
 # always win — hazard H2), and the bootstrap .env promotion skips them.
 BEHAVIOR_ENV_KEYS: tuple[str, ...] = (
     "GEODE_MODEL",
-    "GEODE_PLAN_MODEL",
     "GEODE_ACT_MODEL",
     "GEODE_JUDGE_MODEL",
     "GEODE_COGNITIVE_REFLECTION_MODEL",
