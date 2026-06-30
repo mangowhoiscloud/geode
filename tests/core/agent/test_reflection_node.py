@@ -236,7 +236,7 @@ def test_settings_carries_cognitive_reflection_fields() -> None:
     assert "cognitive_reflection_enabled" in fields
     assert fields["cognitive_reflection_enabled"].default is True
     assert "cognitive_reflection_model" in fields
-    assert fields["cognitive_reflection_model"].default == "claude-haiku-4-5-20251001"
+    assert fields["cognitive_reflection_model"].default == ""
     assert "cognitive_reflection_max_tokens" in fields
     assert fields["cognitive_reflection_max_tokens"].default == 512
 
@@ -280,6 +280,120 @@ def test_run_cognitive_act_observe_cycle_calls_maybe_reflect() -> None:
         "Cognitive cycle ordering broken: record_round must precede "
         "_maybe_reflect must precede COGNITIVE_REFLECT event emission."
     )
+
+
+def test_maybe_reflect_inherits_loop_model_provider_source(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Empty ``cognitive_reflection_model`` means reflection follows the
+    active AgenticLoop route, including subscription/PAYG source."""
+    from core.agent.loop.agent_loop import AgenticLoop
+    from core.config import settings
+
+    captured: dict[str, Any] = {}
+
+    async def _fake_reflect_async(
+        _state: CognitiveState,
+        _tool_results: list[dict[str, Any]],
+        *,
+        model: str,
+        max_tokens: int,
+        provider: str | None = None,
+        source: str | None = None,
+    ) -> None:
+        captured.update(
+            model=model,
+            max_tokens=max_tokens,
+            provider=provider,
+            source=source,
+        )
+
+    monkeypatch.setattr(_reflection, "reflect_async", _fake_reflect_async)
+    old_model = getattr(settings, "cognitive_reflection_model", "")
+    old_tokens = getattr(settings, "cognitive_reflection_max_tokens", 512)
+    old_enabled = getattr(settings, "cognitive_reflection_enabled", True)
+    old_interval = getattr(settings, "cognitive_reflection_interval", 1)
+    try:
+        object.__setattr__(settings, "cognitive_reflection_enabled", True)
+        object.__setattr__(settings, "cognitive_reflection_interval", 1)
+        object.__setattr__(settings, "cognitive_reflection_model", "")
+        object.__setattr__(settings, "cognitive_reflection_max_tokens", 321)
+
+        class _Adapter:
+            source = "subscription"
+
+        class _StubSelf:
+            cognitive_state = CognitiveState(round_count=1)
+            model = "gpt-5.5"
+            _provider = "openai-codex"
+            _source = "api_key"
+            _new_adapter = _Adapter()
+
+        bound = AgenticLoop._maybe_reflect.__get__(_StubSelf(), _StubSelf)
+        asyncio.run(bound([]))
+    finally:
+        object.__setattr__(settings, "cognitive_reflection_model", old_model)
+        object.__setattr__(settings, "cognitive_reflection_max_tokens", old_tokens)
+        object.__setattr__(settings, "cognitive_reflection_enabled", old_enabled)
+        object.__setattr__(settings, "cognitive_reflection_interval", old_interval)
+
+    assert captured == {
+        "model": "gpt-5.5",
+        "max_tokens": 321,
+        "provider": "openai-codex",
+        "source": "subscription",
+    }
+
+
+def test_maybe_reflect_configured_model_stays_explicit(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A configured reflection model remains an override and lets
+    ``reflect_async`` resolve provider/source from that model."""
+    from core.agent.loop.agent_loop import AgenticLoop
+    from core.config import settings
+
+    captured: dict[str, Any] = {}
+
+    async def _fake_reflect_async(
+        _state: CognitiveState,
+        _tool_results: list[dict[str, Any]],
+        *,
+        model: str,
+        max_tokens: int,
+        provider: str | None = None,
+        source: str | None = None,
+    ) -> None:
+        captured.update(model=model, provider=provider, source=source)
+
+    monkeypatch.setattr(_reflection, "reflect_async", _fake_reflect_async)
+    old_model = getattr(settings, "cognitive_reflection_model", "")
+    old_enabled = getattr(settings, "cognitive_reflection_enabled", True)
+    old_interval = getattr(settings, "cognitive_reflection_interval", 1)
+    try:
+        object.__setattr__(settings, "cognitive_reflection_enabled", True)
+        object.__setattr__(settings, "cognitive_reflection_interval", 1)
+        object.__setattr__(settings, "cognitive_reflection_model", "claude-haiku-4-5-20251001")
+
+        class _StubSelf:
+            cognitive_state = CognitiveState(round_count=1)
+            model = "gpt-5.5"
+            _provider = "openai-codex"
+            _source = "subscription"
+            _new_adapter = object()
+
+        bound = AgenticLoop._maybe_reflect.__get__(_StubSelf(), _StubSelf)
+        asyncio.run(bound([]))
+    finally:
+        object.__setattr__(settings, "cognitive_reflection_model", old_model)
+        object.__setattr__(settings, "cognitive_reflection_enabled", old_enabled)
+        object.__setattr__(settings, "cognitive_reflection_interval", old_interval)
+
+    assert captured == {
+        "model": "claude-haiku-4-5-20251001",
+        "provider": None,
+        "source": None,
+    }
 
 
 # ---------------------------------------------------------------------------
@@ -338,6 +452,52 @@ def _install_reflection_stubs(
     # replaces the legacy ``resolve_agentic_adapter(provider)``.
     monkeypatch.setattr(_reflection, "resolve_for", lambda _p, _src="payg": adapter, raising=False)
     monkeypatch.setattr(_reflection, "_resolve_provider", lambda _m: "anthropic", raising=False)
+
+
+def test_reflect_async_uses_supplied_provider_source(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Inherited reflection routing must use the parent loop's provider/source
+    instead of re-inferring a possibly different credential path."""
+    state = CognitiveState()
+    adapter = _StubAdapter(
+        response=SimpleNamespace(
+            tool_uses=(
+                {
+                    "id": "tu_1",
+                    "name": REFLECTION_TOOL_NAME,
+                    "input": {"hypotheses": [], "confidence": 0.5},
+                },
+            ),
+        )
+    )
+    resolve_calls: list[tuple[str, str]] = []
+
+    async def _fake_call_with_failover(_models: list[str], do_call: Any) -> tuple[Any, str]:
+        result = await do_call(_models[0])
+        return result, _models[0]
+
+    def _fake_resolve_for(provider: str, source: str) -> _StubAdapter:
+        resolve_calls.append((provider, source))
+        return adapter
+
+    def _unexpected_model_resolve(_model: str) -> str:
+        raise AssertionError("_resolve_provider should not run when provider is supplied")
+
+    monkeypatch.setattr(_reflection, "call_with_failover", _fake_call_with_failover, raising=False)
+    monkeypatch.setattr(_reflection, "resolve_for", _fake_resolve_for, raising=False)
+    monkeypatch.setattr(_reflection, "_resolve_provider", _unexpected_model_resolve, raising=False)
+
+    asyncio.run(
+        _reflection.reflect_async(
+            state,
+            [],
+            model="gpt-5.5",
+            max_tokens=128,
+            provider="openai-codex",
+            source="subscription",
+        )
+    )
+
+    assert resolve_calls == [("openai", "subscription")]
 
 
 def test_reflect_async_swallows_llm_failure(monkeypatch: pytest.MonkeyPatch) -> None:

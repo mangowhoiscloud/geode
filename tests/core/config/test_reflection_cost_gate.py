@@ -66,6 +66,8 @@ class _Recorder:
         *,
         model: str,
         max_tokens: int,
+        provider: str | None = None,
+        source: str | None = None,
     ) -> None:
         self.calls.append(state.round_count)
 
@@ -101,6 +103,10 @@ def _maybe_reflect_runner(
 
     class _StubSelf:
         cognitive_state = state
+        model = "claude-sonnet-4-6"
+        _provider = "anthropic"
+        _source = "api_key"
+        _new_adapter = object()
 
     bound = AgenticLoop._maybe_reflect.__get__(_StubSelf(), _StubSelf)
     asyncio.run(bound([]))
