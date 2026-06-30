@@ -15,9 +15,9 @@ const pipelineLayers = [
   {
     tier: 2,
     title: "Turn Verify",
-    items: ["rule_based", "llm_judge opt-in", "reflexion"],
+    items: ["rule_based", "llm_judge opt-in", "reflection hint"],
     accent: "#818CF8",
-    description: "턴 경계에서 구조 검증을 실행하고, 재시도 가능한 실패는 다음 턴의 reflexion/replan 신호로 넘깁니다.",
+    description: "턴 경계에서 구조 검증을 실행하고, 재시도 가능한 실패는 다음 턴의 reflection/replan 신호로 넘깁니다.",
   },
   {
     tier: 3,
