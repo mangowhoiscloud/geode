@@ -246,7 +246,7 @@ def test_verify_llm_judge_judge_fail_records_misses(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """Judge FAIL response → ``passed=False`` + ``judge_fail`` rubric_miss
-    + reflexion_hint includes judge's reason."""
+    + reflection_hint includes judge's reason."""
     fake_settings = SimpleNamespace(judge_model="claude-haiku-4-5-20251001")
     monkeypatch.setattr("core.config.settings", fake_settings)
 
@@ -263,7 +263,7 @@ def test_verify_llm_judge_judge_fail_records_misses(
     assert vr.effective_mode is VerifyMode.LLM_JUDGE
     assert "judge_fail" in vr.rubric_misses
     assert vr.should_retry is True
-    assert "tool error masked the goal" in vr.reflexion_hint
+    assert "tool error masked the goal" in vr.reflection_hint
 
 
 def test_verify_llm_judge_falls_back_when_no_loop() -> None:

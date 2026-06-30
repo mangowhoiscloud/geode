@@ -175,9 +175,9 @@ class SessionMetrics:
         default_factory=threading.Lock, repr=False, compare=False
     )
 
-    # J. Per-turn verify telemetry (PR-CL-A3, 2026-05-23) — feeds the
-    #    Dynamic Replan path (PR-CL-A1) and supplies the verbal-RL hint
-    #    callers prepend to the next round's ``loop._system_suffix``.
+    # J. Per-turn verify telemetry — feeds the Dynamic Replan path and
+    #    supplies the failure-reflection hint callers prepend to the next
+    #    round's system prompt.
     #    ``last_verify_passed`` defaults to True so a session with no
     #    verify runs reads as "clean" (no false replan signal).
     verify_pass_count: int = 0
@@ -188,7 +188,7 @@ class SessionMetrics:
     # may fall back to RULE_BASED until PR-CL-A6 lands; preserves the
     # distinction in sessions.jsonl telemetry — Codex MCP follow-up #1)
     last_verify_rubric_misses: tuple[str, ...] = ()
-    last_verify_reflexion_hint: str = ""
+    last_verify_reflection_hint: str = ""
     last_verify_should_retry: bool = False  # PR-CL-A3 — machine-readable replan signal
 
     # K. Active execution plan (PR-CL-A1, 2026-05-23) — the explicit
@@ -320,15 +320,16 @@ class SessionMetrics:
         mode: str,
         effective_mode: str = "",
         rubric_misses: tuple[str, ...] = (),
-        reflexion_hint: str = "",
+        reflection_hint: str = "",
+        reflexion_hint: str | None = None,
         should_retry: bool = False,
     ) -> None:
         """Record one per-turn verify outcome.
 
         Increments pass/fail counters + stores the *latest* miss list and
-        reflexion hint. The next-turn caller reads
-        ``last_verify_reflexion_hint`` to decide whether to prepend a
-        reflexion block to ``loop._system_suffix`` (verbal RL pattern).
+        reflection hint. The next-turn caller reads
+        ``last_verify_reflection_hint`` to decide whether to prepend a
+        failure-reflection block to the system prompt.
 
         ``mode`` is the operator-requested mode (e.g. ``llm_judge``);
         ``effective_mode`` is the path that actually ran (e.g. ``rule_based``
@@ -343,8 +344,18 @@ class SessionMetrics:
         self.last_verify_mode = str(mode)
         self.last_verify_effective_mode = str(effective_mode or mode)
         self.last_verify_rubric_misses = tuple(rubric_misses)
-        self.last_verify_reflexion_hint = str(reflexion_hint)
+        hint = reflection_hint if reflexion_hint is None else reflexion_hint
+        self.last_verify_reflection_hint = str(hint)
         self.last_verify_should_retry = bool(should_retry)
+
+    @property
+    def last_verify_reflexion_hint(self) -> str:
+        """Legacy alias for ``last_verify_reflection_hint``."""
+        return self.last_verify_reflection_hint
+
+    @last_verify_reflexion_hint.setter
+    def last_verify_reflexion_hint(self, value: str) -> None:
+        self.last_verify_reflection_hint = str(value)
 
     def set_active_plan(self, plan: Any, *, reset_attempts: bool = False) -> None:
         """PR-CL-A1 — install or replace the active execution plan.

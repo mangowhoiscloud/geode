@@ -261,7 +261,7 @@ def _finalize_verify_outcome(
         mode=vr.mode.value,
         effective_mode=vr.effective_mode.value,
         rubric_misses=vr.rubric_misses,
-        reflexion_hint=vr.reflexion_hint,
+        reflection_hint=vr.reflection_hint,
         should_retry=vr.should_retry,
     )
     _persist_verify_state(loop, metrics, vr.should_retry)
@@ -351,7 +351,7 @@ def finalize_and_return(
 ) -> AgenticResult:
     """Log result, record transcript end, save checkpoint, and return (DRY)."""
     _prepare_final_result(loop, result, user_input, round_idx)
-    # Verify/reflexion belongs to the task-completion boundary. Run it
+    # Verify/reflection belongs to the task-completion boundary. Run it
     # before SESSION_ENDED/TURN_COMPLETED hooks so lifecycle consumers can
     # read the final self-evaluation from the same terminal payload.
     verify_payload = _run_turn_verify(loop, result)
@@ -389,7 +389,7 @@ async def finalize_and_return_async(
 ) -> AgenticResult:
     """Async finalizer for ``AgenticLoop.arun`` hook emission."""
     _prepare_final_result(loop, result, user_input, round_idx)
-    # Verify/reflexion belongs to the task-completion boundary. Run it
+    # Verify/reflection belongs to the task-completion boundary. Run it
     # before SESSION_ENDED/TURN_COMPLETED hooks so lifecycle consumers can
     # read the final self-evaluation from the same terminal payload.
     verify_payload = await _run_turn_verify_async(loop, result)

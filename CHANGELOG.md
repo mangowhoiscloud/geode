@@ -59,7 +59,12 @@ functional change.
   compact cognitive summary from the loaded central snapshot.
 
 ### Fixed
-- **Task-completion Reflexion ordering.** Final turn verify/reflexion now
+- **Reflection hint naming unified.** Verify failure feedback now uses the
+  canonical `reflection_hint` / `<reflection>` surface owned by
+  `core.agent.loop._reflection`, with `reflexion_hint` retained only as a
+  legacy payload/API alias for existing consumers.
+
+- **Task-completion reflection ordering.** Final turn verify/reflection now
   runs before `SESSION_ENDED` / `TURN_COMPLETED` hooks are emitted, and
   those terminal payloads include `turn_verify` when verification is
   enabled. Text-only terminal rounds also pass through the optional

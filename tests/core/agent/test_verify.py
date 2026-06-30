@@ -1,4 +1,4 @@
-"""Unit tests for :mod:`core.agent.verify` — per-turn verify (Reflexion).
+"""Unit tests for :mod:`core.agent.verify` — per-turn verify.
 
 Coverage:
 - ``VerifyMode`` StrEnum values
@@ -6,10 +6,10 @@ Coverage:
 - ``get_verify_mode`` env knob parsing (default + override + invalid fallback)
 - ``_verify_rule_based`` catches: empty_turn, short_output, tool_error,
   model_action_required
-- ``synthesize_reflexion_hint`` renders the verbal-RL block + empty on no misses
+- ``synthesize_reflection_hint`` renders the failure-reflection block
 - ``verify_turn`` dispatcher: OFF / RULE_BASED / LLM_JUDGE (stub-falls-back)
-- SessionMetrics integration: ``record_verify`` + ``last_verify_reflexion_hint``
-- AgenticLoop hint consumption: ``_consume_reflexion_hint`` reads+clears
+- SessionMetrics integration: ``record_verify`` + ``last_verify_reflection_hint``
+- AgenticLoop hint consumption: ``_consume_reflection_hint`` reads+clears
 """
 
 from __future__ import annotations
@@ -24,6 +24,7 @@ from core.agent.verify import (
     VerifyMode,
     VerifyResult,
     get_verify_mode,
+    synthesize_reflection_hint,
     synthesize_reflexion_hint,
     verify_turn,
 )
@@ -78,15 +79,27 @@ def test_verify_result_to_payload() -> None:
         mode=VerifyMode.RULE_BASED,
         score=0.0,
         rubric_misses=("empty_turn",),
-        reflexion_hint="<reflexion>...</reflexion>",
+        reflection_hint="<reflection>...</reflection>",
         ts=123.4,
     )
     payload = vr.to_payload()
     assert payload["passed"] is False
     assert payload["mode"] == "rule_based"
     assert payload["rubric_misses"] == ["empty_turn"]
-    assert payload["reflexion_hint"].startswith("<reflexion>")
+    assert payload["reflection_hint"].startswith("<reflection>")
+    assert payload["reflexion_hint"] == payload["reflection_hint"]
     assert payload["score"] == 0.0
+
+
+def test_verify_result_accepts_reflexion_hint_legacy_kwarg() -> None:
+    """The constructor accepts the old spelling while storing canonical state."""
+    vr = VerifyResult(
+        passed=False,
+        mode=VerifyMode.RULE_BASED,
+        reflexion_hint="<reflection>legacy</reflection>",
+    )
+    assert vr.reflection_hint == "<reflection>legacy</reflection>"
+    assert vr.reflexion_hint == vr.reflection_hint
 
 
 # -- Mode resolution ----------------------------------------------------
@@ -134,7 +147,8 @@ def test_rule_based_flags_empty_turn() -> None:
     vr = verify_turn(result)
     assert vr.passed is False
     assert "empty_turn" in vr.rubric_misses
-    assert vr.reflexion_hint.startswith("<reflexion>")
+    assert vr.reflection_hint.startswith("<reflection>")
+    assert vr.reflexion_hint == vr.reflection_hint
 
 
 def test_rule_based_flags_short_output() -> None:
@@ -186,20 +200,25 @@ def test_rule_based_min_chars_env_override(monkeypatch: pytest.MonkeyPatch) -> N
     assert "short_output" in vr.rubric_misses
 
 
-# -- Reflexion hint -----------------------------------------------------
+# -- Reflection hint ----------------------------------------------------
 
 
 def test_synthesize_hint_empty_on_no_misses() -> None:
-    assert synthesize_reflexion_hint(()) == ""
+    assert synthesize_reflection_hint(()) == ""
 
 
 def test_synthesize_hint_includes_reason_codes() -> None:
     """Each rubric_miss code surfaces in the hint body."""
-    hint = synthesize_reflexion_hint(("empty_turn", "tool_error"))
-    assert hint.startswith("<reflexion>")
-    assert hint.endswith("</reflexion>")
+    hint = synthesize_reflection_hint(("empty_turn", "tool_error"))
+    assert hint.startswith("<reflection>")
+    assert hint.endswith("</reflection>")
     assert "empty_turn" in hint
     assert "tool_error" in hint
+
+
+def test_synthesize_reflexion_hint_legacy_alias() -> None:
+    """Older callers using the paper spelling get the canonical block."""
+    assert synthesize_reflexion_hint(("empty_turn",)).startswith("<reflection>")
 
 
 # -- Mode dispatch ------------------------------------------------------
@@ -238,7 +257,7 @@ def test_record_verify_pass() -> None:
         assert m.verify_pass_count == 1
         assert m.verify_fail_count == 0
         assert m.last_verify_passed is True
-        assert m.last_verify_reflexion_hint == ""
+        assert m.last_verify_reflection_hint == ""
 
 
 def test_record_verify_fail() -> None:
@@ -248,12 +267,13 @@ def test_record_verify_fail() -> None:
             passed=False,
             mode="rule_based",
             rubric_misses=("empty_turn",),
-            reflexion_hint="<reflexion>x</reflexion>",
+            reflection_hint="<reflection>x</reflection>",
         )
         assert m.verify_fail_count == 1
         assert m.last_verify_passed is False
         assert m.last_verify_rubric_misses == ("empty_turn",)
-        assert m.last_verify_reflexion_hint == "<reflexion>x</reflexion>"
+        assert m.last_verify_reflection_hint == "<reflection>x</reflection>"
+        assert m.last_verify_reflexion_hint == m.last_verify_reflection_hint
 
 
 def test_session_row_exposes_verify_telemetry() -> None:
@@ -268,24 +288,34 @@ def test_session_row_exposes_verify_telemetry() -> None:
         assert row["last_verify_rubric_misses"] == ["empty_turn"]
 
 
-# -- AgenticLoop reflexion-hint consume --------------------------------
+# -- AgenticLoop reflection-hint consume -------------------------------
 
 
-def test_consume_reflexion_hint_clears_after_read() -> None:
-    """``_consume_reflexion_hint`` returns the hint then leaves an empty slot
+def test_consume_reflection_hint_clears_after_read() -> None:
+    """``_consume_reflection_hint`` returns the hint then leaves an empty slot
     so the same hint can't be injected into two consecutive arun's."""
     from core.agent.loop.agent_loop import AgenticLoop
 
     with session_metrics_scope(session_id="t-consume"):
-        current_session_metrics().last_verify_reflexion_hint = "<reflexion>z</reflexion>"
-        consume = AgenticLoop._consume_reflexion_hint.__get__(
+        current_session_metrics().last_verify_reflection_hint = "<reflection>z</reflection>"
+        consume = AgenticLoop._consume_reflection_hint.__get__(
             object(), object
         )  # bind to a bare stub
-        assert consume() == "<reflexion>z</reflexion>"
+        assert consume() == "<reflection>z</reflection>"
         # Second call yields empty.
         assert consume() == ""
         # Stored value also cleared.
-        assert current_session_metrics().last_verify_reflexion_hint == ""
+        assert current_session_metrics().last_verify_reflection_hint == ""
+
+
+def test_consume_reflexion_hint_legacy_alias() -> None:
+    """The old AgenticLoop method name remains as an alias."""
+    from core.agent.loop.agent_loop import AgenticLoop
+
+    with session_metrics_scope(session_id="t-consume-legacy"):
+        current_session_metrics().last_verify_reflection_hint = "<reflection>z</reflection>"
+        consume = AgenticLoop._consume_reflexion_hint.__get__(object(), object)
+        assert consume() == "<reflection>z</reflection>"
 
 
 def test_verify_turn_crash_treats_as_pass() -> None:
@@ -335,9 +365,9 @@ def test_rule_based_multi_miss_combination() -> None:
     assert "tool_error" in multi_vr.rubric_misses
     assert "model_action_required" in multi_vr.rubric_misses
     assert len(multi_vr.rubric_misses) >= 2
-    # Reflexion hint surfaces both codes.
-    assert "tool_error" in multi_vr.reflexion_hint
-    assert "model_action_required" in multi_vr.reflexion_hint
+    # Reflection hint surfaces both codes.
+    assert "tool_error" in multi_vr.reflection_hint
+    assert "model_action_required" in multi_vr.reflection_hint
 
 
 def test_effective_mode_distinguishes_fallback(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -378,7 +408,7 @@ def test_lifecycle_finalize_sync_records_verify(monkeypatch: pytest.MonkeyPatch)
         assert "empty_turn" in payload["rubric_misses"]
         m = current_session_metrics()
         assert m.verify_fail_count == 1
-        assert m.last_verify_reflexion_hint.startswith("<reflexion>")
+        assert m.last_verify_reflection_hint.startswith("<reflection>")
 
 
 def test_lifecycle_run_turn_verify_off_mode_skips(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -398,7 +428,7 @@ def test_lifecycle_run_turn_verify_off_mode_skips(monkeypatch: pytest.MonkeyPatc
 
 
 def test_finalizers_run_verify_before_lifecycle_hooks() -> None:
-    """Reflexion runs at the task-completion boundary before terminal
+    """Reflection verification runs at the task-completion boundary before terminal
     lifecycle hooks are emitted."""
     from core.agent.loop import _lifecycle
 
@@ -417,7 +447,7 @@ def test_final_hook_payloads_include_verify_payload(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """SESSION_ENDED and TURN_COMPLETED payloads carry the final verify
-    result when verify/reflexion is enabled."""
+    result when verify/reflection is enabled."""
     from types import SimpleNamespace
 
     from core.agent.loop import _lifecycle
