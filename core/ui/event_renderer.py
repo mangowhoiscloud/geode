@@ -416,6 +416,17 @@ class EventRenderer:
         )
         self._out.flush()
 
+    def _handle_repeated_success_no_progress(self, event: dict[str, Any]) -> None:
+        self._clear_activity_line()
+        tool = str(event.get("tool", ""))
+        streak = int(event.get("streak", 0))
+        rounds = int(event.get("rounds", 0))
+        self._out.write(
+            f"  \033[1;33m\u27f3 No progress: {tool} returned the same success"
+            f" {streak}x ({rounds} rounds)\033[0m\n"
+        )
+        self._out.flush()
+
     def _handle_goal_decomposition(self, event: dict[str, Any]) -> None:
         self._clear_activity_line()
         steps = event.get("steps", [])
@@ -436,7 +447,7 @@ class EventRenderer:
         count = int(event.get("count", 0))
         self._out.write(
             f"  \033[1;33m\u27f3 Diversity: {tool} called {count}x"
-            " \u2014 forcing alternative\033[0m\n"
+            " \u2014 hinting alternate path\033[0m\n"
         )
         self._out.flush()
 

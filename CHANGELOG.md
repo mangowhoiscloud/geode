@@ -64,6 +64,12 @@ functional change.
   `core.agent.loop._reflection`, with `reflexion_hint` retained only as a
   legacy payload/API alias for existing consumers.
 
+- **Agentic loop repeated-success polling.** The loop now detects identical
+  successful tool observations, such as repeated `check_status -> ok`, and
+  exits with `repeated_success_no_progress` instead of only injecting diversity
+  hints while continuing to poll the same state. The default round cap remains
+  unlimited unless explicitly configured.
+
 - **Task-completion reflection ordering.** Final turn verify/reflection now
   runs before `SESSION_ENDED` / `TURN_COMPLETED` hooks are emitted, and
   those terminal payloads include `turn_verify` when verification is

@@ -115,6 +115,7 @@ class ToolCallProcessor:
         tool_input: dict[str, Any],
         result: Any,
         visible: bool,
+        tool_use_id: str = "",
     ) -> None:
         """Log result, record transcript events, and append to tool_log."""
         # Progressive log: show tool result summary (skip if already logged)
@@ -137,6 +138,7 @@ class ToolCallProcessor:
                 "tool": tool_name,
                 "input": tool_input,
                 "result": result,
+                "tool_use_id": tool_use_id,
             }
         )
 
@@ -270,7 +272,7 @@ class ToolCallProcessor:
                 log.info("Tool %s blocked by TOOL_EXEC_START hook: %s", tool_name, intercept.reason)
                 result = {"error": intercept.reason, "blocked_by_hook": True}
                 self._op_logger.log_tool_result(tool_name, result, visible=visible)
-                self._record_tool_activity(tool_name, tool_input, result, visible)
+                self._record_tool_activity(tool_name, tool_input, result, visible, block.id)
                 return await self._serialize_tool_result(result, block.id, tool_name)
 
             # Apply input modifications from interceptor hook
@@ -377,7 +379,7 @@ class ToolCallProcessor:
                     "max_clarifications_exceeded": True,
                 }
 
-        self._record_tool_activity(tool_name, tool_input, result, visible)
+        self._record_tool_activity(tool_name, tool_input, result, visible, block.id)
         return await self._serialize_tool_result(result, block.id, tool_name)
 
     async def _execute_sequential(self, tool_blocks: list[Any]) -> list[dict[str, Any]]:

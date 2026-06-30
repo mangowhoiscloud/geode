@@ -25,6 +25,8 @@ class TestConvergenceDetector:
         # v0.90.0 — escalation flag removed from public surface
         assert not hasattr(det, "convergence_escalated")
         assert det.last_error_key is None
+        assert det.repeated_success_streak == 0
+        assert det.last_success_tool is None
 
     # -- update_tool_error_tracking --
 
@@ -48,6 +50,85 @@ class TestConvergenceDetector:
         ]
         det.update_tool_error_tracking(results, [])
         assert det.total_consecutive_tool_errors == 0
+
+    def test_repeated_success_detects_no_progress_after_threshold(self) -> None:
+        det = ConvergenceDetector()
+        for i in range(5):
+            results = [
+                {"tool_use_id": f"t{i}", "content": json.dumps({"status": "ok"})},
+            ]
+            tool_log: list[dict[str, Any]] = [
+                {
+                    "tool": "check_status",
+                    "input": {},
+                    "result": {"status": "ok"},
+                    "tool_use_id": f"t{i}",
+                },
+            ]
+            det.update_tool_error_tracking(results, tool_log)
+
+        assert det.repeated_success_streak == 5
+        assert det.last_success_tool == "check_status"
+        assert det.check_repeated_success_no_progress() is True
+
+    def test_repeated_success_resets_when_input_changes(self) -> None:
+        det = ConvergenceDetector()
+        for i in range(4):
+            results = [
+                {"tool_use_id": f"t{i}", "content": json.dumps({"status": "ok"})},
+            ]
+            tool_log: list[dict[str, Any]] = [
+                {
+                    "tool": "check_status",
+                    "input": {},
+                    "result": {"status": "ok"},
+                    "tool_use_id": f"t{i}",
+                },
+            ]
+            det.update_tool_error_tracking(results, tool_log)
+
+        det.update_tool_error_tracking(
+            [{"tool_use_id": "t_changed", "content": json.dumps({"status": "ok"})}],
+            [
+                {
+                    "tool": "check_status",
+                    "input": {"scope": "different"},
+                    "result": {"status": "ok"},
+                    "tool_use_id": "t_changed",
+                }
+            ],
+        )
+
+        assert det.repeated_success_streak == 1
+        assert det.check_repeated_success_no_progress() is False
+
+    def test_tool_error_resets_repeated_success_streak(self) -> None:
+        det = ConvergenceDetector()
+        det.update_tool_error_tracking(
+            [{"tool_use_id": "t1", "content": json.dumps({"status": "ok"})}],
+            [
+                {
+                    "tool": "check_status",
+                    "input": {},
+                    "result": {"status": "ok"},
+                    "tool_use_id": "t1",
+                }
+            ],
+        )
+        det.update_tool_error_tracking(
+            [{"tool_use_id": "t2", "content": json.dumps({"error": "fail"})}],
+            [
+                {
+                    "tool": "check_status",
+                    "input": {},
+                    "result": {"error": "fail"},
+                    "tool_use_id": "t2",
+                }
+            ],
+        )
+
+        assert det.repeated_success_streak == 0
+        assert det.last_success_tool is None
 
     def test_recent_errors_capped_at_6(self) -> None:
         det = ConvergenceDetector()
