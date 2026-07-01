@@ -267,7 +267,8 @@ class TestEventRendererV2:
         out = renderer._out.getvalue()
         assert "Plan" in out
         assert "2 steps" in out
-        assert "● a" in out
+        assert "●" in out
+        assert "a" in out
 
     def test_progress_plan_first_render_is_full_checklist(self, renderer) -> None:
         renderer.on_event(
@@ -334,28 +335,42 @@ class TestEventRendererV2:
         assert "This full-list tail should not print" not in compact
 
     def test_plan_step(self, renderer) -> None:
+        renderer.on_event({"type": "goal_decomposition", "steps": ["inspect", "patch"], "count": 2})
         renderer.on_event(
             {
                 "type": "plan_step",
                 "current": 2,
-                "total": 4,
+                "total": 2,
                 "description": "verify the renderer",
                 "revision": 1,
             }
         )
         out = renderer._out.getvalue()
+        assert "\033[" in out and "A" in out
         assert "Plan" in out
-        assert "step 2/4" in out
+        assert "step 2/2" in out
         assert "verify the renderer" in out
+        assert "✓" in out
 
     def test_replan(self, renderer) -> None:
+        renderer.on_event({"type": "goal_decomposition", "steps": ["inspect", "patch"], "count": 2})
         renderer.on_event(
             {"type": "replan", "trigger": "verify_fail", "step_count": 3, "revision": 2}
         )
         out = renderer._out.getvalue()
-        assert "Plan revised" in out
+        assert "\033[" in out and "A" in out
+        assert "Plan · revised" in out
         assert "verify_fail" in out
         assert "3 steps" in out
+
+    def test_replan_after_tool_output_is_compact(self, renderer) -> None:
+        renderer.on_event({"type": "goal_decomposition", "steps": ["inspect", "patch"], "count": 2})
+        renderer.on_event({"type": "subagent_complete", "count": 2, "elapsed_s": 5.0})
+        renderer.on_event({"type": "replan", "trigger": "cadence", "step_count": 2, "revision": 1})
+        out = renderer._out.getvalue()
+        compact = out[out.rindex("Plan revised") :]
+        assert "Plan revised · cadence · 2 steps · rev 1" in compact
+        assert "Step 2" not in compact
 
     def test_tool_backpressure(self, renderer) -> None:
         renderer.on_event({"type": "tool_backpressure", "consecutive_errors": 3})
