@@ -53,6 +53,11 @@ functional change.
   calls and replacing completed batches instead of appending an unbounded log
   that can push the active checklist out of view.
 
+- **Provider-aware PDF page ranges.** `document_ingest` now accepts wide
+  `page_range` requests, applies provider-specific PDF limits, slices local PDFs
+  for OpenAI/Claude page selection, and chunks Zhipu GLM-OCR calls with a
+  100-page default plus 30-page retry fallback.
+
 - **Geodi startup mascot.** The thin-CLI welcome now renders Geodi (the rose
   axolotl) as a real inline image on terminals that speak an image protocol:
   the Kitty protocol (Ghostty/kitty) plays a short client-driven bob intro then
