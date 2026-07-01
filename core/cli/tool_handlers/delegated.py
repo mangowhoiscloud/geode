@@ -18,6 +18,7 @@ _DELEGATED_TOOLS: dict[str, tuple[str, str]] = {
     "llms_txt_index": ("core.tools.llms_txt", "LlmsTxtIndexTool"),
     "general_web_search": ("core.tools.web_tools", "GeneralWebSearchTool"),
     "read_document": ("core.tools.document_tools", "ReadDocumentTool"),
+    "document_ingest": ("core.tools.document_ingest", "DocumentIngestTool"),
     "glob_files": ("core.tools.file_tools", "GlobTool"),
     "grep_files": ("core.tools.file_tools", "GrepTool"),
     "edit_file": ("core.tools.file_tools", "EditFileTool"),

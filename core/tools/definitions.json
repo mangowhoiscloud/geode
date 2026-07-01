@@ -656,6 +656,63 @@
     }
   },
   {
+    "name": "document_ingest",
+    "description": "Ingest a local PDF into a GEODE-readable bundle under .geode/documents/<doc_id>. Use this when the user asks GEODE to read, analyze, parse, summarize, OCR, or use a PDF as context. Backends are provider-specific: local_text extracts embedded text with pdftotext, openai_pdf uses OpenAI Responses input_file, claude_pdf uses Claude PDF document blocks, and zhipu_ocr uses Z.ai GLM-OCR layout_parsing. Prefer local_text for text-layer PDFs; use provider backends for visual layout, scans, charts, tables, or OCR.",
+    "category": "discovery",
+    "cost_tier": "expensive",
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "file_path": {
+          "type": "string",
+          "description": "Path to a local PDF inside the GEODE file sandbox."
+        },
+        "backend": {
+          "type": "string",
+          "enum": [
+            "auto",
+            "claude_pdf",
+            "local_text",
+            "openai_pdf",
+            "zhipu_ocr"
+          ],
+          "description": "Backend to use. auto tries local text first, then the current provider family if local extraction is empty."
+        },
+        "task_prompt": {
+          "type": "string",
+          "description": "Provider prompt for PDF parsing or extraction."
+        },
+        "model": {
+          "type": "string",
+          "description": "Provider model override for OpenAI or Claude backends."
+        },
+        "doc_id": {
+          "type": "string",
+          "description": "Optional stable output bundle id."
+        },
+        "output_dir": {
+          "type": "string",
+          "description": "Optional output directory. Defaults to .geode/documents/<doc_id> under the project root."
+        },
+        "start_page": {
+          "type": "integer",
+          "description": "First PDF page for Zhipu GLM-OCR, 1-indexed."
+        },
+        "end_page": {
+          "type": "integer",
+          "description": "Last PDF page for Zhipu GLM-OCR, 1-indexed."
+        },
+        "timeout_s": {
+          "type": "integer",
+          "description": "Backend timeout in seconds. Default: 300."
+        }
+      },
+      "required": [
+        "file_path"
+      ]
+    }
+  },
+  {
     "name": "glob_files",
     "description": "Find files by glob pattern (e.g. '**/*.py', 'core/**/*.json'). Results sorted by modification time. ALWAYS prefer this over run_bash for file discovery (ls, find). To search file contents, use grep_files instead.",
     "category": "discovery",

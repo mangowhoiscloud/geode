@@ -48,6 +48,12 @@ functional change.
 ## [Unreleased]
 
 ### Added
+- **Provider-specific PDF ingest tool.** Added `document_ingest`, a gated PDF
+  workflow tool that turns local PDFs into `.geode/documents/<doc_id>/`
+  Markdown bundles. It keeps a thin shared manifest/page writer while exposing
+  separate backends for `local_text`, OpenAI Responses PDF input, Claude PDF
+  document blocks, and Zhipu GLM-OCR layout parsing.
+
 - **Non-blocking progress plans.** GEODE now exposes an `update_plan` tool
   modelled on Codex's per-turn checklist: it renders a concise
   pending/in-progress/completed plan for the current task, does not write to

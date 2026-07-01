@@ -85,6 +85,7 @@ WRITE_TOOLS: frozenset[str] = frozenset(
         "calendar_sync_scheduler",
         "manage_context",
         "switch_model",
+        "document_ingest",
         "edit_file",
         "write_file",
     }
