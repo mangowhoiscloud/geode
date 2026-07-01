@@ -29,7 +29,7 @@ REQUIRED_WHEEL_PATHS = {
     "plugins/petri_audit/roles/target.md",
     "plugins/petri_audit/roles/judge.md",
     "plugins/petri_audit/judge_dims/geode_judge_subset.yaml",
-    "plugins/petri_audit/seeds/calibration_false_refusal_drift.md",
+    "plugins/petri_audit/seeds/auxiliary/overrefusal/01_base.md",
 }
 
 REQUIRED_SDIST_PATHS = {
