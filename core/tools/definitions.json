@@ -694,13 +694,22 @@
           "type": "string",
           "description": "Optional output directory. Defaults to .geode/documents/<doc_id> under the project root."
         },
+        "page_range": {
+          "type": "string",
+          "description": "Optional 1-indexed PDF page range, e.g. '1-100' or '1-25,40,80-120'. GEODE accepts wide ranges and applies provider-specific chunking where needed."
+        },
+        "page_chunk_size": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Optional provider chunk size in pages. Zhipu defaults to 100 pages per request, with a 30-page retry fallback."
+        },
         "start_page": {
           "type": "integer",
-          "description": "First PDF page for Zhipu GLM-OCR, 1-indexed."
+          "description": "Deprecated compatibility alias for page_range. First PDF page, 1-indexed."
         },
         "end_page": {
           "type": "integer",
-          "description": "Last PDF page for Zhipu GLM-OCR, 1-indexed."
+          "description": "Deprecated compatibility alias for page_range. Last PDF page, 1-indexed."
         },
         "timeout_s": {
           "type": "integer",
