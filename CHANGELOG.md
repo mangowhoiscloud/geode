@@ -48,6 +48,11 @@ functional change.
 ## [Unreleased]
 
 ### Added
+- **Bounded AgenticLoop activity surface.** Thin-client Plan UI now keeps
+  tool/thought progress in a compact live activity block, grouping repeated tool
+  calls and replacing completed batches instead of appending an unbounded log
+  that can push the active checklist out of view.
+
 - **Provider-specific PDF ingest tool.** Added `document_ingest`, a gated PDF
   workflow tool that turns local PDFs into `.geode/documents/<doc_id>/`
   Markdown bundles. It keeps a thin shared manifest/page writer while exposing
