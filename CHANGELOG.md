@@ -53,6 +53,18 @@ functional change.
   calls and replacing completed batches instead of appending an unbounded log
   that can push the active checklist out of view.
 
+- **Geodi startup mascot.** The thin-CLI welcome now renders Geodi (the rose
+  axolotl) as a real inline image on terminals that speak an image protocol:
+  the Kitty protocol (Ghostty/kitty) plays a short client-driven bob intro then
+  settles on the resting frame (Ghostty draws static images only, so the
+  animation re-transmits frames with a small delay), iTerm2/WezTerm draw the
+  static sprite, and everything else falls back to a solid truecolor half-block
+  sprite. Assets (transparent PNG frames + ANSI + a bold small-size icon) are
+  baked from `site/public/images/geodi*.svg` by
+  `scripts/visualizations/geodi_ansi.py`; `GEODE_MASCOT_ANIM=0` disables the
+  intro. Replaces the prior kaomoji face (`EXPR`/`_face`) and its now-unused
+  `mascot.*` theme keys.
+
 - **Provider-specific PDF ingest tool.** Added `document_ingest`, a gated PDF
   workflow tool that turns local PDFs into `.geode/documents/<doc_id>/`
   Markdown bundles. It keeps a thin shared manifest/page writer while exposing

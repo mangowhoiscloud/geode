@@ -64,11 +64,6 @@ GEODE_THEME = Theme(
         "token_info": "dim",
         "plan_step": _CYAN,
         "subagent": "bold blue",
-        # -- Mascot --
-        "mascot.gills": _MAGENTA,
-        "mascot.lamp": f"bold {_GOLD}",
-        "mascot.body": "white",
-        "mascot.outline": "dim",
     }
 )
 
