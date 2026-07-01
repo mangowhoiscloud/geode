@@ -430,9 +430,34 @@ class EventRenderer:
     def _handle_goal_decomposition(self, event: dict[str, Any]) -> None:
         self._clear_activity_line()
         steps = event.get("steps", [])
-        self._out.write(f"  \033[2m\u25cf Goal decomposed into {len(steps)} steps\033[0m\n")
+        self._out.write(f"  \033[2mPlan \u00b7 {len(steps)} steps\033[0m\n")
         for i, s in enumerate(steps[:5], 1):
-            self._out.write(f"    \033[2m{i}. {s}\033[0m\n")
+            marker = "\u25cf" if i == 1 else "\u25cb"
+            self._out.write(f"    \033[2m{marker} {s}\033[0m\n")
+        if len(steps) > 5:
+            self._out.write(f"    \033[2m\u2026 +{len(steps) - 5} more steps\033[0m\n")
+        self._out.flush()
+
+    def _handle_plan_step(self, event: dict[str, Any]) -> None:
+        self._clear_activity_line()
+        current = int(event.get("current", 0))
+        total = int(event.get("total", 0))
+        revision = int(event.get("revision", 0))
+        description = str(event.get("description", ""))
+        rev = f" · rev {revision}" if revision else ""
+        self._out.write(f"  \033[2mPlan \u00b7 step {current}/{total}{rev}\033[0m\n")
+        if description:
+            self._out.write(f"    \033[2m\u25cf {description}\033[0m\n")
+        self._out.flush()
+
+    def _handle_replan(self, event: dict[str, Any]) -> None:
+        self._clear_activity_line()
+        trigger = str(event.get("trigger", ""))
+        step_count = int(event.get("step_count", 0))
+        revision = int(event.get("revision", 0))
+        suffix = f" · {trigger}" if trigger else ""
+        rev = f" · rev {revision}" if revision else ""
+        self._out.write(f"  \033[2mPlan revised{suffix} · {step_count} steps{rev}\033[0m\n")
         self._out.flush()
 
     def _handle_tool_backpressure(self, event: dict[str, Any]) -> None:

@@ -250,7 +250,34 @@ class TestEventRendererV2:
 
     def test_goal_decomposition(self, renderer) -> None:
         renderer.on_event({"type": "goal_decomposition", "steps": ["a", "b"], "count": 2})
-        assert "2 steps" in renderer._out.getvalue()
+        out = renderer._out.getvalue()
+        assert "Plan" in out
+        assert "2 steps" in out
+        assert "● a" in out
+
+    def test_plan_step(self, renderer) -> None:
+        renderer.on_event(
+            {
+                "type": "plan_step",
+                "current": 2,
+                "total": 4,
+                "description": "verify the renderer",
+                "revision": 1,
+            }
+        )
+        out = renderer._out.getvalue()
+        assert "Plan" in out
+        assert "step 2/4" in out
+        assert "verify the renderer" in out
+
+    def test_replan(self, renderer) -> None:
+        renderer.on_event(
+            {"type": "replan", "trigger": "verify_fail", "step_count": 3, "revision": 2}
+        )
+        out = renderer._out.getvalue()
+        assert "Plan revised" in out
+        assert "verify_fail" in out
+        assert "3 steps" in out
 
     def test_tool_backpressure(self, renderer) -> None:
         renderer.on_event({"type": "tool_backpressure", "consecutive_errors": 3})

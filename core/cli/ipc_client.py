@@ -248,6 +248,11 @@ class IPCClient:
         """
         if not self._sock:
             return {"type": "error", "message": "Not connected"}
+        # Refresh width immediately before each prompt. The initial handshake
+        # happens at connect-time, but users often resize the terminal between
+        # prompts; stale Rich widths make streamed panels/code blocks paint a
+        # stair-step background at the old column count.
+        self._send_client_capability()
         self._send({"type": "prompt", "text": text})
 
         while True:
