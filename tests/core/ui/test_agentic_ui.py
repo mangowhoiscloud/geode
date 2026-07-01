@@ -809,6 +809,61 @@ class TestRepeatCounter:
         output = r._out.getvalue()
         assert "claude-opus-4-6" not in output  # tokens line suppressed
 
+    def test_activity_surface_groups_repeated_tool_batches(self) -> None:
+        """Repeated tool batches render as one bounded live activity surface."""
+        r = self._make_renderer()
+        for _ in range(8):
+            r.on_event({"type": "tool_start", "name": "general_web_search"})
+            r.on_event(
+                {
+                    "type": "tool_end",
+                    "name": "general_web_search",
+                    "summary": "ok",
+                    "duration_s": 1.0,
+                }
+            )
+
+        r._flush_repeat()
+        visible = "".join(r._activity_surface.visible_lines)
+
+        assert "Activity" in visible
+        assert "general_web_search" in visible
+        assert "\u00d78" in visible
+        assert visible.count("general_web_search") == 1
+
+    def test_activity_surface_stays_bounded_for_many_tool_types(self) -> None:
+        r = self._make_renderer()
+        for i in range(12):
+            name = f"tool_{i}"
+            r.on_event({"type": "tool_start", "name": name})
+            r.on_event({"type": "tool_end", "name": name, "summary": "ok", "duration_s": 0.1})
+
+        lines = r._activity_surface.visible_lines
+        visible = "".join(lines)
+
+        assert len(lines) <= 8
+        assert "+7 tool types" in visible
+        assert "tool_11" in visible
+
+    def test_thought_completion_uses_activity_surface(self, monkeypatch: Any) -> None:
+        from core.ui.event_renderer import _ThinkingRegion
+
+        r = self._make_renderer()
+        r._tty = True
+        r._thinking_region = _ThinkingRegion(
+            start_ts=100.0,
+            items=["  \033[90m∙ thinking · one\033[0m\n"] * 5,
+            visible_lines=["  \033[90m∙ thinking · one\033[0m\n"] * 5,
+        )
+        monkeypatch.setattr("core.ui.event_renderer.time.monotonic", lambda: 119.0)
+
+        r._handle_thinking_end({})
+        visible = "".join(r._activity_surface.visible_lines)
+
+        assert "Activity" in visible
+        assert "1 thoughts" in visible
+        assert "Thought for 19s · 5 items" in visible
+
 
 # ─────────────────────────────────────────────────────────────────────────
 # Thread-local isolation tests
