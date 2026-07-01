@@ -49,6 +49,14 @@ class _ThinkingRegion:
     ended: bool = False
 
 
+@dataclass
+class _ProgressPlanSurface:
+    visible_lines: list[str] = field(default_factory=list)
+    rendered_once: bool = False
+    at_bottom: bool = False
+    compact: bool = False
+
+
 class EventRenderer:
     """Dispatches IPC events to appropriate rendering handlers.
 
@@ -103,6 +111,7 @@ class EventRenderer:
         # accidentally streams plain assistant Markdown, keep enough state to
         # erase that transient region before final Markdown rendering happens.
         self._clearable_stream_parts: list[str] = []
+        self._progress_plan = _ProgressPlanSurface()
 
     # -- Public API -----------------------------------------------------------
 
@@ -140,10 +149,13 @@ class EventRenderer:
         handler = getattr(self, f"_handle_{etype}", None)
         if handler:
             self._reset_clearable_stream_region()
+            if etype != "progress_plan":
+                self._mark_progress_plan_obscured()
             handler(event)
 
     def on_stream(self, data: str) -> None:
         """Handle raw console stream (Rich panels, pipeline output)."""
+        self._mark_progress_plan_obscured()
         self._suppress_all_spinners()
         if self._is_clearable_plain_stream(data):
             self._clearable_stream_parts.append(data)
@@ -459,6 +471,44 @@ class EventRenderer:
         rev = f" · rev {revision}" if revision else ""
         self._out.write(f"  \033[2mPlan revised{suffix} · {step_count} steps{rev}\033[0m\n")
         self._out.flush()
+
+    def _handle_progress_plan(self, event: dict[str, Any]) -> None:
+        """Render update_plan as a managed single plan surface.
+
+        If the previous plan block is still the bottom-most thing in the terminal,
+        redraw it in place. Once tool logs or stream output have appeared below it,
+        do not print a second full checklist; show a compact transition instead.
+        A scrollback terminal cannot safely rewrite an arbitrary older block.
+        """
+        plan = event.get("plan", [])
+        if not isinstance(plan, list):
+            return
+        items = [item for item in plan if isinstance(item, dict)]
+        if not items:
+            return
+
+        explanation = str(event.get("explanation", "") or "").strip()
+        with self._render_lock:
+            self._suppress_all_spinners()
+            surface = self._progress_plan
+            if surface.at_bottom and surface.visible_lines:
+                self._erase_lines_locked(surface.visible_lines)
+
+            should_compact = surface.rendered_once and not (
+                surface.at_bottom and not surface.compact
+            )
+            lines = (
+                self._render_compact_progress_plan(items, explanation)
+                if should_compact
+                else self._render_full_progress_plan(items, explanation)
+            )
+            for line in lines:
+                self._out.write(line)
+            surface.visible_lines = list(lines)
+            surface.rendered_once = True
+            surface.at_bottom = True
+            surface.compact = should_compact
+            self._out.flush()
 
     def _handle_tool_backpressure(self, event: dict[str, Any]) -> None:
         self._clear_activity_line()
@@ -930,7 +980,13 @@ class EventRenderer:
         region.is_collapsed = False
 
     def _erase_thinking_visible_locked(self, region: _ThinkingRegion) -> None:
-        rows = self._thinking_visual_rows(region.visible_lines)
+        rows = self._visual_rows(region.visible_lines)
+        self._erase_visual_rows_locked(rows)
+
+    def _erase_lines_locked(self, lines: list[str]) -> None:
+        self._erase_visual_rows_locked(self._visual_rows(lines))
+
+    def _erase_visual_rows_locked(self, rows: int) -> None:
         self._out.write("\r\033[2K")
         if rows <= 0:
             return
@@ -951,12 +1007,70 @@ class EventRenderer:
         )
 
     def _thinking_visual_rows(self, lines: list[str]) -> int:
+        return self._visual_rows(lines)
+
+    def _visual_rows(self, lines: list[str]) -> int:
         width = max(20, shutil.get_terminal_size(fallback=(80, 24)).columns)
         rows = 0
         for line in lines:
             plain = _ANSI_ESCAPE.sub("", line).rstrip("\n")
             rows += max(1, (len(plain) + width - 1) // width)
         return rows
+
+    def _mark_progress_plan_obscured(self) -> None:
+        if self._progress_plan.visible_lines:
+            self._progress_plan.at_bottom = False
+
+    def _render_full_progress_plan(
+        self, items: list[dict[Any, Any]], explanation: str
+    ) -> list[str]:
+        header = "Plan"
+        if explanation:
+            header = f"Plan · {explanation}"
+        lines = ["\n", f"  \033[1;36m{header}\033[0m\n"]
+        for item in items:
+            status = str(item.get("status", "pending"))
+            step = str(item.get("step", ""))
+            symbol, style = self._progress_plan_symbol(status)
+            lines.append(f"    {style}{symbol}\033[0m {step}\n")
+        lines.append("\n")
+        return lines
+
+    def _render_compact_progress_plan(
+        self, items: list[dict[Any, Any]], explanation: str
+    ) -> list[str]:
+        total = len(items)
+        completed = sum(1 for item in items if item.get("status") == "completed")
+        active = next(
+            (
+                str(item.get("step", ""))
+                for item in items
+                if item.get("status") == "in_progress" and item.get("step")
+            ),
+            "",
+        )
+        if not active:
+            active = next(
+                (
+                    str(item.get("step", ""))
+                    for item in items
+                    if item.get("status") == "pending" and item.get("step")
+                ),
+                "",
+            )
+        suffix = f" · {explanation}" if explanation else ""
+        lines = [f"\n  \033[2mPlan updated{suffix} · {completed}/{total} complete\033[0m\n"]
+        if active:
+            lines.append(f"    \033[1;33m●\033[0m {active}\n")
+        return lines
+
+    @staticmethod
+    def _progress_plan_symbol(status: str) -> tuple[str, str]:
+        if status == "completed":
+            return "✓", "\033[32m"
+        if status == "in_progress":
+            return "●", "\033[1;33m"
+        return "○", "\033[2m"
 
     def _suppress_all_spinners(self) -> None:
         """Stop thinking + tool spinners, clear line for new content."""
