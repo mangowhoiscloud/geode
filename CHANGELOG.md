@@ -79,6 +79,13 @@ functional change.
   runtime roles.
 
 ### Fixed
+- **AgenticLoop terminal resize and tool-log stability.** Thin-client UI now
+  renders plan progress events, collapses large concurrent tool batches into a
+  bounded head/tail view, clears active tool regions by visual rows instead of
+  logical lines, refreshes Rich console width before final Markdown/code-block
+  rendering, and re-sends terminal width before each IPC prompt so resizing the
+  window does not leave stair-step ANSI/code-block artifacts.
+
 - **Reflection hint naming unified.** Verify failure feedback now uses the
   canonical `reflection_hint` / `<reflection>` surface owned by
   `core.agent.loop._reflection`, with `reflexion_hint` retained only as a
