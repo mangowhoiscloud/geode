@@ -49,6 +49,15 @@ class _ThinkingRegion:
     ended: bool = False
 
 
+@dataclass
+class _ProgressPlanSurface:
+    visible_lines: list[str] = field(default_factory=list)
+    items: list[dict[str, str]] = field(default_factory=list)
+    rendered_once: bool = False
+    at_bottom: bool = False
+    compact: bool = False
+
+
 class EventRenderer:
     """Dispatches IPC events to appropriate rendering handlers.
 
@@ -68,6 +77,7 @@ class EventRenderer:
     _REPEAT_SUPPRESSIBLE = frozenset(
         {"tool_start", "tool_end", "tokens", "thinking_start", "thinking_end", "round_start"}
     )
+    _PLAN_SURFACE_EVENTS = frozenset({"goal_decomposition", "plan_step", "progress_plan", "replan"})
 
     def __init__(self) -> None:
         self._tool_tracker = ToolCallTracker()
@@ -103,6 +113,7 @@ class EventRenderer:
         # accidentally streams plain assistant Markdown, keep enough state to
         # erase that transient region before final Markdown rendering happens.
         self._clearable_stream_parts: list[str] = []
+        self._progress_plan = _ProgressPlanSurface()
 
     # -- Public API -----------------------------------------------------------
 
@@ -140,10 +151,13 @@ class EventRenderer:
         handler = getattr(self, f"_handle_{etype}", None)
         if handler:
             self._reset_clearable_stream_region()
+            if etype not in self._PLAN_SURFACE_EVENTS:
+                self._mark_progress_plan_obscured()
             handler(event)
 
     def on_stream(self, data: str) -> None:
         """Handle raw console stream (Rich panels, pipeline output)."""
+        self._mark_progress_plan_obscured()
         self._suppress_all_spinners()
         if self._is_clearable_plain_stream(data):
             self._clearable_stream_parts.append(data)
@@ -428,37 +442,125 @@ class EventRenderer:
         self._out.flush()
 
     def _handle_goal_decomposition(self, event: dict[str, Any]) -> None:
-        self._clear_activity_line()
         steps = event.get("steps", [])
-        self._out.write(f"  \033[2mPlan \u00b7 {len(steps)} steps\033[0m\n")
-        for i, s in enumerate(steps[:5], 1):
-            marker = "\u25cf" if i == 1 else "\u25cb"
-            self._out.write(f"    \033[2m{marker} {s}\033[0m\n")
-        if len(steps) > 5:
-            self._out.write(f"    \033[2m\u2026 +{len(steps) - 5} more steps\033[0m\n")
-        self._out.flush()
+        if not isinstance(steps, list):
+            return
+        items = [
+            {"step": str(step), "status": "in_progress" if i == 0 else "pending"}
+            for i, step in enumerate(steps)
+            if str(step).strip()
+        ]
+        if not items:
+            return
+        self._render_progress_plan_surface(items, f"{len(items)} steps")
 
     def _handle_plan_step(self, event: dict[str, Any]) -> None:
-        self._clear_activity_line()
         current = int(event.get("current", 0))
         total = int(event.get("total", 0))
         revision = int(event.get("revision", 0))
         description = str(event.get("description", ""))
+        if current <= 0 or total <= 0:
+            return
+        surface_items = list(self._progress_plan.items)
+        if len(surface_items) != total:
+            surface_items = [
+                {"step": description if i == current else f"Step {i}", "status": "pending"}
+                for i in range(1, total + 1)
+            ]
+        for idx, item in enumerate(surface_items, 1):
+            if idx < current:
+                item["status"] = "completed"
+            elif idx == current:
+                item["status"] = "in_progress"
+                if description:
+                    item["step"] = description
+            else:
+                item["status"] = "pending"
         rev = f" · rev {revision}" if revision else ""
-        self._out.write(f"  \033[2mPlan \u00b7 step {current}/{total}{rev}\033[0m\n")
-        if description:
-            self._out.write(f"    \033[2m\u25cf {description}\033[0m\n")
-        self._out.flush()
+        self._render_progress_plan_surface(surface_items, f"step {current}/{total}{rev}")
 
     def _handle_replan(self, event: dict[str, Any]) -> None:
-        self._clear_activity_line()
         trigger = str(event.get("trigger", ""))
         step_count = int(event.get("step_count", 0))
         revision = int(event.get("revision", 0))
         suffix = f" · {trigger}" if trigger else ""
         rev = f" · rev {revision}" if revision else ""
-        self._out.write(f"  \033[2mPlan revised{suffix} · {step_count} steps{rev}\033[0m\n")
-        self._out.flush()
+        items = list(self._progress_plan.items)
+        if step_count > 0 and len(items) != step_count:
+            items = [{"step": f"Step {i}", "status": "pending"} for i in range(1, step_count + 1)]
+        compact_explanation = (
+            f"{trigger} · {step_count} steps{rev}" if trigger else f"{step_count} steps{rev}"
+        )
+        self._render_progress_plan_surface(
+            items,
+            f"revised{suffix} · {step_count} steps{rev}",
+            compact_message="Plan revised",
+            compact_explanation=compact_explanation,
+        )
+
+    def _handle_progress_plan(self, event: dict[str, Any]) -> None:
+        """Render update_plan as a managed single plan surface.
+
+        If the previous plan block is still the bottom-most thing in the terminal,
+        redraw it in place. Once tool logs or stream output have appeared below it,
+        do not print a second full checklist; show a compact transition instead.
+        A scrollback terminal cannot safely rewrite an arbitrary older block.
+        """
+        plan = event.get("plan", [])
+        if not isinstance(plan, list):
+            return
+        items = [item for item in plan if isinstance(item, dict)]
+        if not items:
+            return
+
+        explanation = str(event.get("explanation", "") or "").strip()
+        self._render_progress_plan_surface(items, explanation)
+
+    def _render_progress_plan_surface(
+        self,
+        items: list[dict[Any, Any]],
+        explanation: str,
+        *,
+        compact_message: str = "Plan updated",
+        compact_explanation: str | None = None,
+    ) -> None:
+        normalized = [
+            {
+                "step": str(item.get("step", "")).strip(),
+                "status": str(item.get("status", "pending")).strip() or "pending",
+            }
+            for item in items
+            if str(item.get("step", "")).strip()
+        ]
+        if not normalized:
+            return
+
+        with self._render_lock:
+            self._suppress_all_spinners()
+            surface = self._progress_plan
+            if surface.at_bottom and surface.visible_lines:
+                self._erase_lines_locked(surface.visible_lines)
+
+            should_compact = surface.rendered_once and not (
+                surface.at_bottom and not surface.compact
+            )
+            lines = (
+                self._render_compact_progress_plan(
+                    normalized,
+                    compact_explanation if compact_explanation is not None else explanation,
+                    message=compact_message,
+                )
+                if should_compact
+                else self._render_full_progress_plan(normalized, explanation)
+            )
+            for line in lines:
+                self._out.write(line)
+            surface.visible_lines = list(lines)
+            surface.items = list(normalized)
+            surface.rendered_once = True
+            surface.at_bottom = True
+            surface.compact = should_compact
+            self._out.flush()
 
     def _handle_tool_backpressure(self, event: dict[str, Any]) -> None:
         self._clear_activity_line()
@@ -930,7 +1032,13 @@ class EventRenderer:
         region.is_collapsed = False
 
     def _erase_thinking_visible_locked(self, region: _ThinkingRegion) -> None:
-        rows = self._thinking_visual_rows(region.visible_lines)
+        rows = self._visual_rows(region.visible_lines)
+        self._erase_visual_rows_locked(rows)
+
+    def _erase_lines_locked(self, lines: list[str]) -> None:
+        self._erase_visual_rows_locked(self._visual_rows(lines))
+
+    def _erase_visual_rows_locked(self, rows: int) -> None:
         self._out.write("\r\033[2K")
         if rows <= 0:
             return
@@ -951,12 +1059,70 @@ class EventRenderer:
         )
 
     def _thinking_visual_rows(self, lines: list[str]) -> int:
+        return self._visual_rows(lines)
+
+    def _visual_rows(self, lines: list[str]) -> int:
         width = max(20, shutil.get_terminal_size(fallback=(80, 24)).columns)
         rows = 0
         for line in lines:
             plain = _ANSI_ESCAPE.sub("", line).rstrip("\n")
             rows += max(1, (len(plain) + width - 1) // width)
         return rows
+
+    def _mark_progress_plan_obscured(self) -> None:
+        if self._progress_plan.visible_lines:
+            self._progress_plan.at_bottom = False
+
+    def _render_full_progress_plan(
+        self, items: list[dict[Any, Any]], explanation: str
+    ) -> list[str]:
+        header = "Plan"
+        if explanation:
+            header = f"Plan · {explanation}"
+        lines = ["\n", f"  \033[1;36m{header}\033[0m\n"]
+        for item in items:
+            status = str(item.get("status", "pending"))
+            step = str(item.get("step", ""))
+            symbol, style = self._progress_plan_symbol(status)
+            lines.append(f"    {style}{symbol}\033[0m {step}\n")
+        lines.append("\n")
+        return lines
+
+    def _render_compact_progress_plan(
+        self, items: list[dict[Any, Any]], explanation: str, *, message: str = "Plan updated"
+    ) -> list[str]:
+        total = len(items)
+        completed = sum(1 for item in items if item.get("status") == "completed")
+        active = next(
+            (
+                str(item.get("step", ""))
+                for item in items
+                if item.get("status") == "in_progress" and item.get("step")
+            ),
+            "",
+        )
+        if not active:
+            active = next(
+                (
+                    str(item.get("step", ""))
+                    for item in items
+                    if item.get("status") == "pending" and item.get("step")
+                ),
+                "",
+            )
+        suffix = f" · {explanation}" if explanation else ""
+        lines = [f"\n  \033[2m{message}{suffix} · {completed}/{total} complete\033[0m\n"]
+        if active:
+            lines.append(f"    \033[1;33m●\033[0m {active}\n")
+        return lines
+
+    @staticmethod
+    def _progress_plan_symbol(status: str) -> tuple[str, str]:
+        if status == "completed":
+            return "✓", "\033[32m"
+        if status == "in_progress":
+            return "●", "\033[1;33m"
+        return "○", "\033[2m"
 
     def _suppress_all_spinners(self) -> None:
         """Stop thinking + tool spinners, clear line for new content."""

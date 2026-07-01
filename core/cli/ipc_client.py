@@ -294,6 +294,7 @@ class IPCClient:
                 "convergence_detected",
                 "repeated_success_no_progress",
                 "goal_decomposition",
+                "progress_plan",
                 # PR-CL-A1 (2026-05-23) — Dynamic Replan UI events.
                 "plan_step",
                 "replan",

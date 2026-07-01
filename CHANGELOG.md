@@ -79,6 +79,17 @@ functional change.
   runtime roles.
 
 ### Fixed
+- **Codex-style plan surface convergence.** `goal_decomposition`,
+  `plan_step`, `replan`, and `update_plan` now share the same thin-client plan
+  surface policy, so plan revisions and step advances update the visible plan
+  instead of emitting separate full plan banners into the transcript.
+
+- **Dynamic update_plan terminal surface.** `update_plan` now travels over IPC as
+  a structured `progress_plan` event instead of raw console text, so the thin
+  client can update the current plan in place when possible and avoids printing
+  a second full checklist after tool/sub-agent output has already scrolled below
+  the first plan.
+
 - **AgenticLoop terminal resize and tool-log stability.** Thin-client UI now
   renders plan progress events, collapses large concurrent tool batches into a
   bounded head/tail view, clears active tool regions by visual rows instead of

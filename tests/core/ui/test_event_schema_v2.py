@@ -87,6 +87,20 @@ class TestAgenticLoopEmitters:
             count=2,
         )
 
+    def test_render_progress_plan_sends_structured_event(self) -> None:
+        from core.ui.agentic_ui import render_progress_plan
+
+        plan = [
+            {"step": "Inspect UX", "status": "completed"},
+            {"step": "Patch renderer", "status": "in_progress"},
+        ]
+        render_progress_plan(plan, explanation="implementation")
+        self.mock_writer.send_event.assert_called_once_with(
+            "progress_plan",
+            plan=plan,
+            explanation="implementation",
+        )
+
     def test_emit_tool_backpressure(self) -> None:
         from core.ui.agentic_ui import emit_tool_backpressure
 
@@ -253,31 +267,110 @@ class TestEventRendererV2:
         out = renderer._out.getvalue()
         assert "Plan" in out
         assert "2 steps" in out
-        assert "● a" in out
+        assert "●" in out
+        assert "a" in out
+
+    def test_progress_plan_first_render_is_full_checklist(self, renderer) -> None:
+        renderer.on_event(
+            {
+                "type": "progress_plan",
+                "explanation": "implementation",
+                "plan": [
+                    {"step": "Inspect UX", "status": "completed"},
+                    {"step": "Patch renderer", "status": "in_progress"},
+                    {"step": "Run tests", "status": "pending"},
+                ],
+            }
+        )
+        out = renderer._out.getvalue()
+        assert "Plan · implementation" in out
+        assert "✓" in out
+        assert "Inspect UX" in out
+        assert "Patch renderer" in out
+        assert "Run tests" in out
+
+    def test_progress_plan_updates_in_place_when_still_at_bottom(self, renderer) -> None:
+        renderer.on_event(
+            {
+                "type": "progress_plan",
+                "plan": [{"step": "First plan", "status": "in_progress"}],
+            }
+        )
+        renderer.on_event(
+            {
+                "type": "progress_plan",
+                "plan": [{"step": "Second plan", "status": "in_progress"}],
+            }
+        )
+        out = renderer._out.getvalue()
+        assert "\033[" in out and "A" in out
+        assert "Second plan" in out
+
+    def test_progress_plan_after_tool_output_is_compact_not_second_full_block(
+        self, renderer
+    ) -> None:
+        renderer.on_event(
+            {
+                "type": "progress_plan",
+                "explanation": "first",
+                "plan": [{"step": "Initial investigation", "status": "in_progress"}],
+            }
+        )
+        renderer.on_event({"type": "subagent_complete", "count": 4, "elapsed_s": 12.0})
+        renderer.on_event(
+            {
+                "type": "progress_plan",
+                "explanation": "fallback",
+                "plan": [
+                    {"step": "Already done", "status": "completed"},
+                    {"step": "Direct verification", "status": "in_progress"},
+                    {"step": "This full-list tail should not print", "status": "pending"},
+                ],
+            }
+        )
+        out = renderer._out.getvalue()
+        compact = out[out.rindex("Plan updated") :]
+        assert "Plan updated · fallback · 1/3 complete" in compact
+        assert "Direct verification" in compact
+        assert "This full-list tail should not print" not in compact
 
     def test_plan_step(self, renderer) -> None:
+        renderer.on_event({"type": "goal_decomposition", "steps": ["inspect", "patch"], "count": 2})
         renderer.on_event(
             {
                 "type": "plan_step",
                 "current": 2,
-                "total": 4,
+                "total": 2,
                 "description": "verify the renderer",
                 "revision": 1,
             }
         )
         out = renderer._out.getvalue()
+        assert "\033[" in out and "A" in out
         assert "Plan" in out
-        assert "step 2/4" in out
+        assert "step 2/2" in out
         assert "verify the renderer" in out
+        assert "✓" in out
 
     def test_replan(self, renderer) -> None:
+        renderer.on_event({"type": "goal_decomposition", "steps": ["inspect", "patch"], "count": 2})
         renderer.on_event(
             {"type": "replan", "trigger": "verify_fail", "step_count": 3, "revision": 2}
         )
         out = renderer._out.getvalue()
-        assert "Plan revised" in out
+        assert "\033[" in out and "A" in out
+        assert "Plan · revised" in out
         assert "verify_fail" in out
         assert "3 steps" in out
+
+    def test_replan_after_tool_output_is_compact(self, renderer) -> None:
+        renderer.on_event({"type": "goal_decomposition", "steps": ["inspect", "patch"], "count": 2})
+        renderer.on_event({"type": "subagent_complete", "count": 2, "elapsed_s": 5.0})
+        renderer.on_event({"type": "replan", "trigger": "cadence", "step_count": 2, "revision": 1})
+        out = renderer._out.getvalue()
+        compact = out[out.rindex("Plan revised") :]
+        assert "Plan revised · cadence · 2 steps · rev 1" in compact
+        assert "Step 2" not in compact
 
     def test_tool_backpressure(self, renderer) -> None:
         renderer.on_event({"type": "tool_backpressure", "consecutive_errors": 3})
@@ -487,6 +580,7 @@ class TestIPCClientEventWhitelist:
             "time_budget_expired",
             "convergence_detected",
             "goal_decomposition",
+            "progress_plan",
             "tool_backpressure",
             "tool_diversity_forced",
             "model_switched",
