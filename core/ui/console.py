@@ -81,6 +81,20 @@ def _get_terminal_width() -> int | None:
     return max(80, min(cols, 160))
 
 
+def refresh_console_width() -> None:
+    """Refresh the active Rich console width from the current terminal.
+
+    The default Console is created once at import time. If the user resizes
+    the terminal before the final Markdown render, Rich code-block backgrounds
+    otherwise keep painting to the stale width and leave stair-step artifacts.
+    Test/capture consoles and non-TTY output keep their fixed width.
+    """
+    if not sys.stdout.isatty():
+        return
+    current = console._current() if isinstance(console, _ConsoleProxy) else console
+    current.width = _get_terminal_width() or current.width
+
+
 # ───────────────────────────────────────────────────────────────────────────
 # Thread-safe Console proxy
 # ───────────────────────────────────────────────────────────────────────────
