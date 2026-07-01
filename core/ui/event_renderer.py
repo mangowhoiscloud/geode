@@ -58,6 +58,27 @@ class _ProgressPlanSurface:
     compact: bool = False
 
 
+@dataclass
+class _ToolActivityStat:
+    count: int = 0
+    errors: int = 0
+    duration_s: float = 0.0
+    summary: str = "ok"
+    error: str = ""
+    last_seq: int = 0
+
+
+@dataclass
+class _ActivitySurface:
+    visible_lines: list[str] = field(default_factory=list)
+    tool_stats: dict[str, _ToolActivityStat] = field(default_factory=dict)
+    notices: list[str] = field(default_factory=list)
+    thought_count: int = 0
+    thought_items: int = 0
+    rendered_once: bool = False
+    at_bottom: bool = False
+
+
 class EventRenderer:
     """Dispatches IPC events to appropriate rendering handlers.
 
@@ -78,6 +99,8 @@ class EventRenderer:
         {"tool_start", "tool_end", "tokens", "thinking_start", "thinking_end", "round_start"}
     )
     _PLAN_SURFACE_EVENTS = frozenset({"goal_decomposition", "plan_step", "progress_plan", "replan"})
+    _MAX_ACTIVITY_TOOL_LINES = 5
+    _MAX_ACTIVITY_NOTICE_LINES = 2
 
     def __init__(self) -> None:
         self._tool_tracker = ToolCallTracker()
@@ -114,6 +137,8 @@ class EventRenderer:
         # erase that transient region before final Markdown rendering happens.
         self._clearable_stream_parts: list[str] = []
         self._progress_plan = _ProgressPlanSurface()
+        self._activity_surface = _ActivitySurface()
+        self._activity_seq = 0
 
     # -- Public API -----------------------------------------------------------
 
@@ -138,6 +163,7 @@ class EventRenderer:
             elif etype == "tool_end":
                 name = str(event.get("name", ""))
                 if name == self._repeat_name:
+                    self._record_tool_activity(event)
                     self._repeat_count += 1
                     dur = event.get("duration_s")
                     if dur is not None:
@@ -153,11 +179,14 @@ class EventRenderer:
             self._reset_clearable_stream_region()
             if etype not in self._PLAN_SURFACE_EVENTS:
                 self._mark_progress_plan_obscured()
+            if etype not in {"tool_start", "tool_end", "thinking_start", "thinking_end"}:
+                self._mark_activity_obscured()
             handler(event)
 
     def on_stream(self, data: str) -> None:
         """Handle raw console stream (Rich panels, pipeline output)."""
         self._mark_progress_plan_obscured()
+        self._mark_activity_obscured()
         self._suppress_all_spinners()
         if self._is_clearable_plain_stream(data):
             self._clearable_stream_parts.append(data)
@@ -196,6 +225,7 @@ class EventRenderer:
     def _handle_thinking_start(self, event: dict[str, Any]) -> None:
         self._activity_suppressed = True
         self._tool_tracker.stop()
+        self._erase_activity_surface()
         with self._render_lock:
             self._thinking_region = _ThinkingRegion(start_ts=time.monotonic())
             self._thinking = True
@@ -207,13 +237,18 @@ class EventRenderer:
 
     def _handle_thinking_end(self, _event: dict[str, Any]) -> None:
         self._stop_thinking()
+        should_render_activity = False
         with self._render_lock:
             region = self._thinking_region
             if region:
                 region.ended = True
                 if self._tty:
-                    self._collapse_thinking_region_locked(region, still_running=False)
+                    self._erase_thinking_visible_locked(region)
+                    self._record_thought_activity_locked(region)
+                    should_render_activity = True
         self._activity_suppressed = False  # resume activity spinner
+        if should_render_activity:
+            self._render_activity_surface()
 
     def _handle_tool_start(self, event: dict[str, Any]) -> None:
         name = str(event.get("name", ""))
@@ -226,12 +261,14 @@ class EventRenderer:
             # count/dur/summary already set from last batch's tool_end
             return
 
+        self._erase_activity_surface()
         self._activity_suppressed = True
         self._stop_thinking()
         self._tool_tracker.on_tool_start(event)
 
     def _handle_tool_end(self, event: dict[str, Any]) -> None:
         name = str(event.get("name", ""))
+        self._record_tool_activity(event)
         self._tool_tracker.on_tool_end(event)
         # Resume activity when all tools done
         with self._tool_tracker._lock:
@@ -240,6 +277,10 @@ class EventRenderer:
             is_single = len(tools) == 1
         if all_done:
             self._activity_suppressed = False
+            self._tool_tracker.suspend()
+            with self._tool_tracker._lock:
+                self._tool_tracker._tools.clear()
+            self._render_activity_surface()
             # Track last single-tool batch for repeat detection
             if is_single:
                 dur = event.get("duration_s")
@@ -569,14 +610,13 @@ class EventRenderer:
         self._out.flush()
 
     def _handle_tool_diversity_forced(self, event: dict[str, Any]) -> None:
-        self._clear_activity_line()
         tool = str(event.get("tool", ""))
         count = int(event.get("count", 0))
-        self._out.write(
-            f"  \033[1;33m\u27f3 Diversity: {tool} called {count}x"
-            " \u2014 hinting alternate path\033[0m\n"
+        self._append_activity_notice(
+            f"\033[1;33m\u27f3 Diversity: {tool} called {count}x"
+            " \u2014 hinting alternate path\033[0m"
         )
-        self._out.flush()
+        self._render_activity_surface()
 
     def _handle_model_switched(self, event: dict[str, Any]) -> None:
         self._clear_activity_line()
@@ -866,19 +906,13 @@ class EventRenderer:
         """Emit accumulated repeat summary and exit repeat mode."""
         if not self._in_repeat:
             return
-        name = self._repeat_name
         count = self._repeat_count
-        dur = self._repeat_dur
-        summary = self._repeat_summary
         self._in_repeat = False
         self._repeat_name = ""
         self._last_batch_tool = ""
         if count <= 1:
             return
-        self._clear_activity_line()
-        dur_str = f" ({dur:.1f}s)" if dur > 0 else ""
-        self._out.write(f"  \033[32m\u2713 {name}\033[0m \u00d7{count} \u2192 {summary}{dur_str}\n")
-        self._out.flush()
+        self._render_activity_surface()
 
     # -- HITL approval spinner coordination ------------------------------------
 
@@ -1072,6 +1106,104 @@ class EventRenderer:
     def _mark_progress_plan_obscured(self) -> None:
         if self._progress_plan.visible_lines:
             self._progress_plan.at_bottom = False
+
+    def _mark_activity_obscured(self) -> None:
+        if self._activity_surface.visible_lines:
+            self._activity_surface.at_bottom = False
+
+    def _erase_activity_surface(self) -> None:
+        with self._render_lock:
+            surface = self._activity_surface
+            if surface.at_bottom and surface.visible_lines:
+                self._erase_lines_locked(surface.visible_lines)
+                surface.visible_lines = []
+                surface.at_bottom = False
+
+    def _record_tool_activity(self, event: dict[str, Any]) -> None:
+        name = str(event.get("name", "")) or "tool"
+        error = str(event.get("error", "") or "")
+        summary = str(event.get("summary", "") or ("error" if error else "ok"))
+        try:
+            duration_s = float(str(event.get("duration_s", 0) or 0))
+        except ValueError:
+            duration_s = 0.0
+        with self._render_lock:
+            self._activity_seq += 1
+            stat = self._activity_surface.tool_stats.setdefault(name, _ToolActivityStat())
+            stat.count += 1
+            stat.duration_s += max(0.0, duration_s)
+            stat.summary = summary
+            stat.last_seq = self._activity_seq
+            stat.error = error
+            if error:
+                stat.errors += 1
+
+    def _record_thought_activity_locked(self, region: _ThinkingRegion) -> None:
+        surface = self._activity_surface
+        surface.thought_count += 1
+        surface.thought_items += len(region.items)
+        self._append_activity_notice_locked(
+            _ANSI_ESCAPE.sub("", self._thinking_header(region, still_running=False)).strip()
+        )
+
+    def _append_activity_notice(self, text: str) -> None:
+        with self._render_lock:
+            self._append_activity_notice_locked(text)
+
+    def _append_activity_notice_locked(self, text: str) -> None:
+        clean = text.strip()
+        if not clean:
+            return
+        notices = self._activity_surface.notices
+        notices.append(clean)
+        del notices[: max(0, len(notices) - self._MAX_ACTIVITY_NOTICE_LINES)]
+
+    def _render_activity_surface(self) -> None:
+        with self._render_lock:
+            surface = self._activity_surface
+            if surface.at_bottom and surface.visible_lines:
+                self._erase_lines_locked(surface.visible_lines)
+            lines = self._render_activity_lines()
+            if not lines:
+                return
+            for line in lines:
+                self._out.write(line)
+            surface.visible_lines = list(lines)
+            surface.rendered_once = True
+            surface.at_bottom = True
+            self._out.flush()
+
+    def _render_activity_lines(self) -> list[str]:
+        surface = self._activity_surface
+        tool_total = sum(stat.count for stat in surface.tool_stats.values())
+        parts: list[str] = []
+        if tool_total:
+            parts.append(f"{tool_total} tool calls")
+        if surface.thought_count:
+            parts.append(f"{surface.thought_count} thoughts")
+        if not parts and not surface.notices:
+            return []
+
+        lines = [f"\n  \033[2mActivity · {' · '.join(parts) or 'updated'}\033[0m\n"]
+        stats = sorted(
+            surface.tool_stats.items(),
+            key=lambda item: (-item[1].count, -item[1].last_seq, item[0]),
+        )
+        for name, stat in stats[: self._MAX_ACTIVITY_TOOL_LINES]:
+            symbol = "\u2717" if stat.errors else "\u2713"
+            color = "31" if stat.errors else "32"
+            count = f" \u00d7{stat.count}" if stat.count > 1 else ""
+            duration = f" ({stat.duration_s:.1f}s)" if stat.duration_s > 0 else ""
+            summary = stat.error or stat.summary or "ok"
+            lines.append(
+                f"    \033[{color}m{symbol} {name}\033[0m{count} \u2192 {summary}{duration}\n"
+            )
+        omitted = len(stats) - self._MAX_ACTIVITY_TOOL_LINES
+        if omitted > 0:
+            lines.append(f"    \033[2m\u2026 +{omitted} tool types\033[0m\n")
+        for notice in surface.notices[-self._MAX_ACTIVITY_NOTICE_LINES :]:
+            lines.append(f"    \033[2m{notice}\033[0m\n")
+        return lines
 
     def _render_full_progress_plan(
         self, items: list[dict[Any, Any]], explanation: str

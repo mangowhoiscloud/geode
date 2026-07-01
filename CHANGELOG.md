@@ -48,6 +48,11 @@ functional change.
 ## [Unreleased]
 
 ### Added
+- **Bounded AgenticLoop activity surface.** Thin-client Plan UI now keeps
+  tool/thought progress in a compact live activity block, grouping repeated tool
+  calls and replacing completed batches instead of appending an unbounded log
+  that can push the active checklist out of view.
+
 - **Provider-aware PDF page ranges.** `document_ingest` now accepts wide
   `page_range` requests, applies provider-specific PDF limits, slices local PDFs
   for OpenAI/Claude page selection, and chunks Zhipu GLM-OCR calls with a
