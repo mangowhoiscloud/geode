@@ -128,6 +128,11 @@ def render_progress_plan(plan: list[dict[str, str]], *, explanation: str = "") -
     """Render a non-blocking progress checklist."""
     from core.ui import agentic_ui as _pkg
 
+    writer = getattr(_ipc_writer_local, "writer", None)
+    if writer is not None:
+        writer.send_event("progress_plan", plan=plan, explanation=explanation)
+        return
+
     status_style = {
         "pending": ("○", "dim"),
         "in_progress": ("●", "warning"),

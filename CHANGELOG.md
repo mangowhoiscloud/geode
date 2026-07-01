@@ -79,6 +79,12 @@ functional change.
   runtime roles.
 
 ### Fixed
+- **Dynamic update_plan terminal surface.** `update_plan` now travels over IPC as
+  a structured `progress_plan` event instead of raw console text, so the thin
+  client can update the current plan in place when possible and avoids printing
+  a second full checklist after tool/sub-agent output has already scrolled below
+  the first plan.
+
 - **AgenticLoop terminal resize and tool-log stability.** Thin-client UI now
   renders plan progress events, collapses large concurrent tool batches into a
   bounded head/tail view, clears active tool regions by visual rows instead of
