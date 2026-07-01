@@ -1,118 +1,44 @@
-"""GEODE mascot — minimal axolotl face, Claude Code-style layout.
+"""GEODE mascot — Geodi, the rose axolotl, in the startup brand block.
 
-3-line layout mirroring Claude Code::
+Terminals that speak an inline-image protocol draw the real transparent PNG:
+  * Kitty (Ghostty/kitty) — the CLI cycles a short bob loop on startup, then
+    settles on the resting frame (Ghostty draws static images only, so the
+    animation is client-driven: re-transmit each frame with a small delay).
+  * iTerm2 / WezTerm — the static resting image.
+Everywhere else it falls back to a solid half-block ANSI sprite. Either way the
+brand text (version / model / cwd / optional plan) follows.
 
-    ╲╲( ◕ ᵕ ◕ )╱╱  GEODE v<version>
-                     claude-opus-4-6 · autonomous execution agent
-                     ~/geode
-
-Expression library (used across UI contexts):
-    normal   ( ◕ ᵕ ◕ )   welcome, idle
-    happy    ( ◕ ω ◕ )   success, done
-    sleepy   ( ─ ᵕ ─ )   startup animation
-    wink     ( ◕ ᵕ ˘ )   hint, tip
-    sparkle  ( ✧ ᵕ ✧ )   discovery, high score
-    thinking ( ◔ ᵕ ◔ )   processing
-    surprise ( ◉ △ ◉ )   unexpected
-    proud    ( ◕ ε ◕ )   achievement
-    cry      ( ◕ д ◕ )   error, failure
+Set ``GEODE_MASCOT_ANIM=0`` to skip the intro animation (static image instead).
+Assets are baked by ``scripts/visualizations/geodi_ansi.py``.
 """
 
 from __future__ import annotations
 
+import os
 import sys
 import time
-from dataclasses import dataclass
 
 from rich.text import Text
 
 from core.ui.console import console
+from core.ui.geodi_art import GEODI_ART
 
-_G = "mascot.gills"
-_B = "mascot.body"
-_D = "mascot.outline"
-
-
-# -- Expressions ----------------------------------------------------------
+_IMG_ROWS = 6  # cell height of the inline image / block sprite
+_FRAME_DELAY = 0.09  # seconds per bob frame
+_LOOPS = 2  # bob cycles before settling
 
 
-@dataclass(frozen=True)
-class Expression:
-    left_eye: str
-    mouth: str
-    right_eye: str
-    eye_style: str = "mascot.body"
-    mouth_style: str = "mascot.outline"
-
-
-EXPR: dict[str, Expression] = {
-    "normal": Expression("◕", "ᵕ", "◕"),
-    "happy": Expression("◕", "ω", "◕", mouth_style="brand"),
-    "sleepy": Expression("─", "ᵕ", "─", eye_style="dim"),
-    "wink": Expression("◕", "ᵕ", "˘"),
-    "sparkle": Expression("✧", "ᵕ", "✧", eye_style="brand.gold"),
-    "thinking": Expression("◔", "ᵕ", "◔"),
-    "surprise": Expression("◉", "△", "◉"),
-    "proud": Expression("◕", "ε", "◕", mouth_style="brand"),
-    "cry": Expression("◕", "д", "◕", mouth_style="error"),
-}
-
-
-# -- Frame builder --------------------------------------------------------
-
-
-def _face(expr: Expression) -> Text:
-    """Build a single mascot face: ╲╲( ◕ ᵕ ◕ )╱╱"""
+def _brand_text(version: str, model: str, cwd: str, pad: str = "") -> Text:
+    """Version / model / cwd / optional plan, each line prefixed with ``pad``."""
     t = Text()
-    t.append("╲╲", _G)
-    t.append("( ", _B)
-    t.append(f"{expr.left_eye} ", expr.eye_style)
-    t.append(expr.mouth, expr.mouth_style)
-    t.append(f" {expr.right_eye}", expr.eye_style)
-    t.append(" )", _B)
-    t.append("╱╱", _G)
-    return t
-
-
-def _brand_line(
-    expr: Expression,
-    version: str,
-    model: str,
-    cwd: str,
-) -> Text:
-    """Build the full 3-line brand block.
-
-    A 4th line is appended when an active plan is registered for the
-    current model (Phase 5 v0.50.0): ``Plan: GLM Coding Lite (used 23/80,
-    resets 2h 14m)`` so users see how much subscription quota they have
-    left at a glance — the same role Claude Code's account/Usage tab
-    plays.
-    """
-    pad = "                     "  # align lines 2-3 under text start
-
-    t = Text()
-    # Line 1: face + GEODE version
-    t.append("  ")
-    t.append_text(_face(expr))
-    t.append("  ")
+    t.append(pad)
     t.append("GEODE", "header")
-    t.append(f" v{version}")
-    t.append("\n")
-
-    # Line 2: model + description
-    desc = "autonomous execution agent"
-    t.append(f"  {pad}{model} · {desc}", "dim")
-    t.append("\n")
-
-    # Line 3: cwd
-    t.append(f"  {pad}{cwd}", "dim")
-
-    # Line 4 (optional): active plan summary
+    t.append(f" v{version}\n")
+    t.append(f"{pad}{model} · autonomous execution agent", "dim")
+    t.append(f"\n{pad}{cwd}", "dim")
     plan_summary = _resolve_active_plan_summary(model)
     if plan_summary:
-        t.append("\n")
-        t.append(f"  {pad}{plan_summary}", "dim")
-
+        t.append(f"\n{pad}{plan_summary}", "dim")
     return t
 
 
@@ -146,49 +72,100 @@ def _resolve_active_plan_summary(model: str) -> str:
         return ""
 
 
-# -- Public API -----------------------------------------------------------
+# -- inline image (real PNG) ---------------------------------------------------
 
 
-def play_mascot_animation(version: str, model: str, cwd: str) -> None:
-    """Play a brief startup animation (~0.8s), then print final frame."""
+def _kitty(b64: str, rows: int, img_id: int = 1) -> str:
+    """Kitty graphics: transmit+display a PNG at r=rows, keeping the cursor put."""
+    e = "\x1b"
+    chunks = [b64[i : i + 4096] for i in range(0, len(b64), 4096)]
+    out = []
+    for j, ch in enumerate(chunks):
+        more = 0 if j == len(chunks) - 1 else 1
+        keys = f"a=T,f=100,t=d,i={img_id},r={rows},C=1,m={more}" if j == 0 else f"m={more}"
+        out.append(f"{e}_G{keys};{ch}{e}\\")
+    return "".join(out)
+
+
+def _play_kitty_intro(frames: list[str], resting: str, rows: int) -> None:
+    """Cycle the bob frames in place, then leave the resting frame and step below."""
+    e = "\x1b"
+    delete = f"{e}_Ga=d,d=i,i=1{e}\\"  # drop image 1 before redrawing (avoids stacking)
+    for _ in range(_LOOPS):
+        for fr in frames:
+            sys.stdout.write(delete + _kitty(fr, rows))
+            sys.stdout.flush()
+            time.sleep(_FRAME_DELAY)
+    sys.stdout.write(delete + _kitty(resting, rows) + "\n" * rows)
+    sys.stdout.flush()
+
+
+def _draw_image(rows: int) -> bool:
+    """Draw Geodi via an image protocol if the terminal supports one. False = no."""
     if not sys.stdout.isatty():
-        render_mascot_static(version, model, cwd)
-        return
+        return False
+    term = os.environ.get("TERM", "").lower()
+    prog = os.environ.get("TERM_PROGRAM", "").lower()
+    animate = os.environ.get("GEODE_MASCOT_ANIM", "1") != "0"
+    if (
+        "kitty" in term
+        or "ghostty" in term
+        or prog == "ghostty"
+        or os.environ.get("KITTY_WINDOW_ID")
+    ):
+        from core.ui.geodi_img import GEODI_FRAMES, GEODI_PNG_B64
 
-    from rich.live import Live
+        if animate and GEODI_FRAMES:
+            _play_kitty_intro(GEODI_FRAMES, GEODI_PNG_B64, rows)
+        else:
+            sys.stdout.write(_kitty(GEODI_PNG_B64, rows) + "\n" * rows)
+            sys.stdout.flush()
+        return True
+    if (
+        prog in ("iterm.app", "wezterm")
+        or os.environ.get("ITERM_SESSION_ID")
+        or os.environ.get("WEZTERM_PANE")
+    ):
+        from core.ui.geodi_img import GEODI_PNG_B64, GEODI_PNG_SIZE
 
-    frames: list[tuple[str, float]] = [
-        ("sleepy", 0.30),
-        ("normal", 0.25),
-        ("happy", 0.30),
-    ]
-
-    try:
-        with Live(
-            Text(""),
-            console=console,
-            refresh_per_second=20,
-            transient=True,
-        ) as live:
-            for expr_name, delay in frames:
-                block = _brand_line(
-                    EXPR[expr_name],
-                    version,
-                    model,
-                    cwd,
-                )
-                live.update(block)
-                time.sleep(delay)
-
-        # Final static frame persists
-        render_mascot_static(version, model, cwd)
-    except Exception:
-        render_mascot_static(version, model, cwd)
+        e = "\x1b"
+        sys.stdout.write(
+            f"{e}]1337;File=inline=1;height={rows};preserveAspectRatio=1;size={GEODI_PNG_SIZE}:{GEODI_PNG_B64}\a"
+        )
+        sys.stdout.flush()
+        return True
+    return False
 
 
-def render_mascot_static(version: str, model: str, cwd: str) -> None:
-    """Print the mascot brand block (no animation)."""
-    block = _brand_line(EXPR["normal"], version, model, cwd)
+# -- ANSI fallback -------------------------------------------------------------
+
+
+def _art_block() -> Text:
+    """Solid half-block Geodi (baked), for terminals without image support."""
+    t = Text(no_wrap=True)
+    for i, row in enumerate(GEODI_ART):
+        if i:
+            t.append("\n")
+        t.append_text(Text.from_ansi(row))
+    return t
+
+
+def render_mascot(version: str, model: str, cwd: str) -> None:
+    """Draw Geodi (real image where supported, half-block otherwise) + brand text."""
     console.print()
-    console.print(block, highlight=False)
+    try:
+        if _draw_image(_IMG_ROWS):
+            console.print(_brand_text(version, model, cwd, pad="  "))
+            console.print()
+            return
+    except Exception:  # noqa: S110 — never let branding break startup
+        pass
+
+    from rich.table import Table
+
+    grid = Table.grid(padding=(0, 3))
+    grid.add_column()
+    grid.add_column(vertical="middle")
+    grid.add_row(_art_block(), _brand_text(version, model, cwd))
+    console.print(grid)
     console.print()
