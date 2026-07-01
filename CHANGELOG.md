@@ -79,6 +79,10 @@ functional change.
   runtime roles.
 
 ### Fixed
+- **Package artifact seed gate.** The release package content check now
+  verifies the current hierarchical Petri seed path instead of the retired
+  flat `calibration_false_refusal_drift.md` location.
+
 - **Codex-style plan surface convergence.** `goal_decomposition`,
   `plan_step`, `replan`, and `update_plan` now share the same thin-client plan
   surface policy, so plan revisions and step advances update the visible plan
