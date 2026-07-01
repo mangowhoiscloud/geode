@@ -21,12 +21,12 @@ from core.wiring.startup import (
 
 
 def _render_welcome_brand() -> None:
-    """Render animated Claude Code-style branding with axolotl mascot."""
+    """Render the Geodi mascot branding block, then detected project env."""
     from core.config import settings
-    from core.ui.mascot import play_mascot_animation
+    from core.ui.mascot import render_mascot
 
     cwd = str(Path.cwd())
-    play_mascot_animation(version=__version__, model=settings.model, cwd=cwd)
+    render_mascot(version=__version__, model=settings.model, cwd=cwd)
 
     # Show detected project environment
     try:
