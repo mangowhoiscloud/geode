@@ -48,6 +48,11 @@ functional change.
 ## [Unreleased]
 
 ### Added
+- **Provider-aware PDF page ranges.** `document_ingest` now accepts wide
+  `page_range` requests, applies provider-specific PDF limits, slices local PDFs
+  for OpenAI/Claude page selection, and chunks Zhipu GLM-OCR calls with a
+  100-page default plus 30-page retry fallback.
+
 - **Provider-specific PDF ingest tool.** Added `document_ingest`, a gated PDF
   workflow tool that turns local PDFs into `.geode/documents/<doc_id>/`
   Markdown bundles. It keeps a thin shared manifest/page writer while exposing
