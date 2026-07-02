@@ -391,6 +391,14 @@ class TokenTracker:
         ``record`` already populated these on the in-memory accumulator
         but ``_persist_usage`` dropped them, so the JSONL on disk and
         ``geode history`` rollups silently zero-rated prompt-cache cost.
+
+        Trajectory audit 2026-07-03 — stamp the active session id on the
+        row. ``UsageRecord`` carried a ``session`` column since inception
+        but this writer never populated it, so ``~/.geode/usage/*.jsonl``
+        could not be joined back to transcripts / evidence ledgers /
+        session checkpoints (all keyed by session_id). Resolution reads
+        the EXISTING ContextVar chain (see :func:`_current_session_id`) —
+        no new global.
         """
         try:
             from core.llm.usage_store import get_usage_store
@@ -400,6 +408,7 @@ class TokenTracker:
                 input_tokens,
                 output_tokens,
                 cost_usd,
+                session=_current_session_id(),
                 cache_creation_tokens=cache_creation_tokens,
                 cache_read_tokens=cache_read_tokens,
                 thinking_tokens=thinking_tokens,
@@ -411,6 +420,41 @@ class TokenTracker:
 # ───────────────────────────────────────────────────────────────────────────
 # Context-local singleton
 # ───────────────────────────────────────────────────────────────────────────
+
+
+def _current_session_id() -> str:
+    """Best-effort session id for usage-row attribution (never raises).
+
+    Trajectory audit 2026-07-03 — reads the two EXISTING session-scoped
+    carriers instead of introducing a new global:
+
+    1. ``core.agent.cognitive_state_ctx`` — ``AgenticLoop.arun`` binds its
+       ``_session_id`` here every turn (REPL, gateway, subprocess worker),
+       so any LLM call made inside an active loop resolves through this.
+    2. ``core.observability.session_metrics`` — self-improving-loop runners
+       bind ``session_metrics_scope(session_id=...)`` without an agentic
+       loop; fall back to that scope's id for non-loop callers.
+
+    Empty string when neither is bound (ad-hoc scripts, tests) — the
+    ``UsageRecord.to_json`` writer already omits falsy ``session`` values,
+    so pre-existing row shapes are unchanged.
+    """
+    try:
+        from core.agent.cognitive_state_ctx import get_session_id
+
+        session_id = get_session_id()
+        if session_id:
+            return session_id
+    except Exception:
+        log.debug("cognitive_state_ctx session id read failed", exc_info=True)
+    try:
+        from core.observability.session_metrics import current_session_metrics
+
+        return current_session_metrics().session_id or ""
+    except Exception:
+        log.debug("session metrics session id read failed", exc_info=True)
+        return ""
+
 
 _tracker_ctx: ContextVar[TokenTracker | None] = ContextVar(
     "token_tracker",

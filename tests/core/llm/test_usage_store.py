@@ -365,6 +365,68 @@ class TestTokenTrackerPersistsCacheFields:
             us_mod._store = None
 
 
+class TestTokenTrackerPersistsSessionId:
+    """Trajectory audit 2026-07-03 — TokenTracker._persist_usage stamps the
+    active session id so ``~/.geode/usage/*.jsonl`` rows join back to
+    transcripts / evidence ledgers / checkpoints (all keyed by session_id).
+    ``UsageRecord.session`` existed since inception but the tracker never
+    populated it."""
+
+    def _read_single_row(self, tmp_path: Path) -> dict:
+        today = date.today()
+        fpath = tmp_path / f"{today.year:04d}-{today.month:02d}.jsonl"
+        return json.loads(fpath.read_text(encoding="utf-8").strip())
+
+    def test_record_stamps_active_loop_session_id(self, tmp_path: Path):
+        from core.agent.cognitive_state_ctx import set_session_id
+        from core.llm import usage_store as us_mod
+        from core.llm.token_tracker import TokenTracker
+
+        us_mod._store = UsageStore(usage_dir=tmp_path)
+        set_session_id("s-usage-join")
+        try:
+            TokenTracker().record("claude-opus-4-7", 100, 20)
+            data = self._read_single_row(tmp_path)
+            assert data["session"] == "s-usage-join"
+        finally:
+            set_session_id("")
+            us_mod._store = None
+
+    def test_record_falls_back_to_session_metrics_scope(self, tmp_path: Path):
+        from core.agent.cognitive_state_ctx import set_session_id
+        from core.llm import usage_store as us_mod
+        from core.llm.token_tracker import TokenTracker
+        from core.observability.session_metrics import session_metrics_scope
+
+        us_mod._store = UsageStore(usage_dir=tmp_path)
+        set_session_id("")  # no active agentic loop
+        try:
+            with session_metrics_scope(session_id="sm-usage-fallback"):
+                TokenTracker().record("claude-opus-4-7", 100, 20)
+            data = self._read_single_row(tmp_path)
+            assert data["session"] == "sm-usage-fallback"
+        finally:
+            us_mod._store = None
+
+    def test_record_without_any_session_omits_field(self, tmp_path: Path):
+        """Unscoped callers keep the pre-fix row shape — falsy ``session``
+        is omitted by ``UsageRecord.to_json``."""
+        from core.agent.cognitive_state_ctx import set_session_id
+        from core.llm import usage_store as us_mod
+        from core.llm.token_tracker import TokenTracker
+        from core.observability.session_metrics import session_metrics_scope
+
+        us_mod._store = UsageStore(usage_dir=tmp_path)
+        set_session_id("")
+        try:
+            with session_metrics_scope(session_id=""):
+                TokenTracker().record("claude-opus-4-7", 100, 20)
+            data = self._read_single_row(tmp_path)
+            assert "session" not in data
+        finally:
+            us_mod._store = None
+
+
 class TestUsageStoreSingleton:
     """Tests for module-level singleton."""
 
