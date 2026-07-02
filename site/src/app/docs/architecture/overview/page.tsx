@@ -130,7 +130,7 @@ export default function Page() {
               <code>gate.py</code>, <code>ledger.py</code>에 있고, 런타임 쪽
               배선은 <code>core/self_improving/loop/</code>의 mutate, observe,
               inject 경로가 맡습니다. 전체 루프는{" "}
-              <a href="/geode/docs/capabilities/autoresearch">폐루프</a>에서
+              <a href="/geode/docs/capabilities/autoresearch">Closed-Loop</a>에서
               다룹니다.
             </p>
             <p>
@@ -292,7 +292,7 @@ export default function Page() {
               <code>gate.py</code>, and <code>ledger.py</code>; the runtime
               wiring is mutate, observe, and inject under{" "}
               <code>core/self_improving/loop/</code>. The full loop is covered
-              in <a href="/geode/docs/capabilities/autoresearch">The closed loop</a>.
+              in <a href="/geode/docs/capabilities/autoresearch">Closed-Loop</a>.
             </p>
             <p>
               Where its responsibility ends: this layer never produces the

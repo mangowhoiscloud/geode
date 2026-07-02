@@ -402,7 +402,7 @@ export default function Page() {
 
             <h2>SoT와 파이프라인</h2>
             <ul>
-              <li>seed-generation 소스: <code>plugins/seed_generation/orchestrator.py</code> (9-역할: supervisor → literature_review → generator → proximity → critic → pilot → ranker → evolver → meta_reviewer. 상세는 <a href="/geode/docs/capabilities/co-scientist">Co-scientist seed 생성</a>)</li>
+              <li>seed-generation 소스: <code>plugins/seed_generation/orchestrator.py</code> (9-역할: supervisor → literature_review → generator → proximity → critic → pilot → ranker → evolver → meta_reviewer. 상세는 <a href="/geode/docs/capabilities/co-scientist">Seed Scenario Generation</a>)</li>
               <li>bundle 동기화: <code>plugins/seed_generation/bundle_sync.py</code>가 run 종료 시 결과를 <code>docs/self-improving/petri-bundle/seeds/&lt;run_id&gt;/</code>로 동기화합니다</li>
               <li>관련 문서: <a href="/geode/docs/capabilities/seed-pipeline">Seed 파이프라인</a> · <a href="/geode/docs/petri/scenarios">Petri 시나리오</a></li>
             </ul>
@@ -435,7 +435,7 @@ export default function Page() {
 
             <h2>Source &amp; pipeline</h2>
             <ul>
-              <li>seed-generation source: <code>plugins/seed_generation/orchestrator.py</code> (nine roles: supervisor → literature_review → generator → proximity → critic → pilot → ranker → evolver → meta_reviewer; details in <a href="/geode/docs/capabilities/co-scientist">Co-scientist seed generation</a>)</li>
+              <li>seed-generation source: <code>plugins/seed_generation/orchestrator.py</code> (nine roles: supervisor → literature_review → generator → proximity → critic → pilot → ranker → evolver → meta_reviewer; details in <a href="/geode/docs/capabilities/co-scientist">Seed Scenario Generation</a>)</li>
               <li>bundle sync: <code>plugins/seed_generation/bundle_sync.py</code> mirrors completed runs into <code>docs/self-improving/petri-bundle/seeds/&lt;run_id&gt;/</code></li>
               <li>related: <a href="/geode/docs/capabilities/seed-pipeline">Seed Pipeline</a> · <a href="/geode/docs/petri/scenarios">Petri Scenarios</a></li>
             </ul>

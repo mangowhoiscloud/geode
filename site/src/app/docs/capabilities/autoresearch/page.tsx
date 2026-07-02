@@ -1,13 +1,13 @@
 import { DocsShell, Bi } from "@/components/geode-docs/docs-shell";
 
-export const metadata = { title: "The closed loop — GEODE Docs" };
+export const metadata = { title: "Closed-Loop — GEODE Docs" };
 
 export default function Page() {
   return (
     <DocsShell
       slug="capabilities/autoresearch"
-      title="The closed loop"
-      titleKo="폐루프"
+      title="Closed-Loop"
+      titleKo="Closed-Loop"
       summary="The outer loop end to end. Mutate the scaffold, audit with Petri, gate the fitness gain on a margin, then promote or revert. No model weight or parameter ever changes."
       summaryKo="바깥쪽 루프의 전체 흐름입니다. 스캐폴드를 변이하고, Petri로 감사하고, fitness 이득을 margin 게이트로 검증해 승격하거나 되돌립니다. 모델 가중치와 파라미터는 일절 바꾸지 않습니다."
     >
@@ -179,7 +179,7 @@ geode campaign --n 10 --k 5 --dry-run
             <h2>다음</h2>
             <ul>
               <li><a href="/geode/docs/petri/judge-dimensions">Judge 차원</a>. 18-dim fitness universe와 critical floor.</li>
-              <li><a href="/geode/docs/capabilities/co-scientist">Co-scientist seed 생성</a>. 테스트 분포를 함께 키우는 쪽.</li>
+              <li><a href="/geode/docs/capabilities/co-scientist">Seed Scenario Generation</a>. 테스트 분포를 함께 키우는 쪽.</li>
               <li><a href="/geode/docs/capabilities/lineage">계보와 좌표</a>. 이 루프가 문헌 어디에 서 있는지.</li>
             </ul>
           </>
@@ -361,7 +361,7 @@ geode campaign --n 10 --k 5 --dry-run
             <h2>Next</h2>
             <ul>
               <li><a href="/geode/docs/petri/judge-dimensions">Judge dimensions</a>. The 18-dim fitness universe and the critical floor.</li>
-              <li><a href="/geode/docs/capabilities/co-scientist">Co-scientist seed generation</a>. The side that grows the test distribution.</li>
+              <li><a href="/geode/docs/capabilities/co-scientist">Seed Scenario Generation</a>. The side that grows the test distribution.</li>
               <li><a href="/geode/docs/capabilities/lineage">Lineage and positioning</a>. Where this loop sits in the literature.</li>
             </ul>
           </>
