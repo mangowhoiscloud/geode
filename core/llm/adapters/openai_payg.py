@@ -212,6 +212,7 @@ class OpenAIPaygAdapter:
 
     def list_models(self) -> list[ModelSpec]:
         from core.config import OPENAI_FALLBACK_CHAIN, OPENAI_PRIMARY
+        from core.llm.model_catalog import model_spec_for_adapter
 
         ids = [OPENAI_PRIMARY, *OPENAI_FALLBACK_CHAIN]
         seen: set[str] = set()
@@ -220,15 +221,7 @@ class OpenAIPaygAdapter:
             if mid in seen:
                 continue
             seen.add(mid)
-            models.append(
-                ModelSpec(
-                    id=mid,
-                    label=mid,
-                    context_tokens=128_000,
-                    supports_thinking=mid.startswith(("o3", "o4")),
-                    supports_tools=True,
-                )
-            )
+            models.append(model_spec_for_adapter(mid, provider=self.provider))
         return models
 
     def get_quota_windows(self) -> QuotaWindows | None:

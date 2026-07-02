@@ -45,6 +45,55 @@ functional change.
 
 ---
 
+## [0.99.252] - 2026-07-02
+
+### Fixed
+- **Context-window resolver trusts only real ints** — `_resolve_context_window` returns the default window unless the catalog value is an actual positive `int`. A mocked `core.llm.token_tracker` module (tests patch `sys.modules`) or a garbage catalog entry previously coerced through `int(MagicMock)` to a 1-token window, tripping context-exhausted on every loop turn (CI `test_autonomous_safety` failures on the 0.99.252 merge).
+
+### Changed
+- **Context budget policy resolver.** Context overflow handling now derives
+  warning/critical thresholds, prompt budget, output reserve, safety margin,
+  tool-result summary thresholds, prune budget, and keep-recent caps from a
+  single `ContextBudgetPolicy` resolver. Model switches, Anthropic server-side
+  compaction triggers, `/compact`, and tool-result guards all consume the same
+  policy, replacing the prior scattered 80/95/200K/0.7-style literals with
+  tiered budgets that compress smaller context windows earlier while preserving
+  the 200K absolute ceiling guard for large-window rate-limit pools.
+- **Hermes/OpenClaw-grade compaction and SQLite long-context artifacts.**
+  Tool-result compression now preserves useful facts (commands, paths, counts,
+  URLs, tool names) instead of replacing large outputs with generic placeholders;
+  duplicate outputs, image payloads, and oversized tool-call arguments are
+  reduced while preserving provider-valid tool pairing. Non-Anthropic critical
+  pressure now follows cheap tool compression → structured LLM compaction →
+  adaptive prune, with model-switch downshifts attempting inline compaction when
+  safe. `sessions.db` now stores searchable `context_artifacts` for compaction
+  summaries and background dreaming; `session_search` can include those
+  artifacts, and `ContextAssembler` can inject bounded long-context summaries.
+  A new SQLite-backed dreaming service synthesizes durable facts/decisions/tasks
+  off the turn path and degrades to a local fallback when no auxiliary LLM route
+  is available.
+- **Centralized model catalog surfaces.** Adapter `list_models()` now derives
+  `context_tokens` and thinking support from the model catalog instead of local
+  128K/200K literals, so UI/introspection agrees with `MODEL_CONTEXT_WINDOW` and
+  context-budget policy. OpenAI lower-context variants are now represented
+  explicitly (`gpt-5.4-mini`/`gpt-5.4-nano`/`gpt-5-mini`/`gpt-5-nano` at 400K
+  and `o3`/`o4-mini` at 200K), and OpenAI-internal model switches are covered
+  in both directions (1.05M → 400K/200K downshift and 400K → 1.05M upshift).
+  GLM ids keep the explicit conservative 202,752-token guard — the 1M window
+  stays a DevPack ``[1m]``-alias surface, NOT GEODE's OpenAI-compatible PAYG
+  path (0.99.246 decision; revisit only with a funded live test). Routing prefixes
+  for provider names without built-in adapters (`google`, `deepseek`, `meta`,
+  `alibaba`) were removed; unsupported families now fall through to the
+  executable fallback provider (legitimate for OpenAI-compatible proxies) with
+  a once-per-model WARNING so the reroute is never silent, until adapters exist.
+
+## [0.99.251] - 2026-07-02
+
+### Fixed
+- **Plan/Activity live region — no more stacked walls (PR-PLAN-LIVE-REGION)** — the thin-CLI plan checklist and activity block are now ONE bottom-anchored live region with a single moving copy, the scrollback equivalent of Claude Code's Ink todo widget. Root cause of the stacked near-identical `Plan`/`Activity` blocks: obscuring output only *marked* the surfaces stale (`at_bottom=False`) without erasing them, so every obscure left a full stale copy in scrollback. Now `on_stream` and every non-self-managed event call `_erase_live_region()` (erase while still bottom-most) *before* printing, and surface updates redraw plan + activity together via `_render_live_region()`. The plan always re-renders as the **full checklist** — the compact `Plan updated · … · N/M complete` breadcrumb path is removed (`_render_compact_progress_plan` deleted), so progress (✓/◆/○ transitions) is always visible. `stop()` freezes the final region state into scrollback (re-printing it once if answer streaming erased it) so the turn ends with the completed checklist on screen.
+- **Activity stat honesty** — a tool with failures no longer renders the contradictory `✗ name ×N → ok`: when errors exist the summary is the last error text or `E/N failed · last ok`; summaries/errors are display-width truncated to 60 (no more full-URL arxiv spam repeated per block). Trivially empty thinking phases (`Thought for 0s · 0 items`) are dropped from the activity notices and counts.
+- **Stray `[57;1R` after answers** — `core/cli/prompt_session.py` sets `PROMPT_TOOLKIT_NO_CPR=1`: prompt_toolkit's cursor-position query (`ESC[6n`, fired on every prompt render by the `bottom_toolbar`) was the only DSR emitter in the stack, and a reply that missed the raw-mode window echoed as literal `[row;colR` garbage. GEODE always prompts at a fresh line, so disabling CPR costs nothing (`vt100.py` honours the env var at query time).
+
 ## [0.99.250] - 2026-07-02
 
 ### Changed
@@ -211,7 +260,6 @@ functional change.
 
 ### Changed
 - **AgenticLoop comment role-only reduction (PR-LOOP-COMMENT-ROLE)** — a comment-policy pass on `core/agent/loop/agent_loop.py` under the new policy: the CHANGELOG is the SOT for *what happened / why / history*; code comments state only the *role / contract at that point*. ~30 multi-line WHY/narration blocks compressed to one-line role statements; load-bearing contracts/invariants that were only in inline narration **relocated to the enclosing function docstrings** (new `Invariants:`/`Contract:` notes on `_call_llm`, `_saved_cwd_matches_current`, `_load_prior_session_id`, `_record_text_only_round`, `_consume_reflexion_hint`) with a terse one-line marker left at the code line — so a contract is never *evaporated*, only relocated + compressed. The bug-reentry-prevention invariants (shared-list in-place-prune ordering, byte-stable cache-prefix reminder placement, denied-tool security filter, unpriced-model graceful-0.0) kept as compressed one-liners. Net −331 LoC, all comment/docstring text. **Behaviour-preserving, proven**: AST-stripped of comments+docstrings and `ast.unparse`-normalized, both HEAD and the new file are byte-identical (independently re-verified). Extractions (`resolve_loop_adapter`, `build_loop_request`) deliberately deferred to a separate PR to keep this diff a pure, AST-verifiable comment change.
-
 ## [0.99.246] - 2026-06-23
 
 ### Changed

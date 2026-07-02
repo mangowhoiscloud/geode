@@ -50,3 +50,16 @@ groups and keep targeted tests clean.
 Live provider checks require explicit user approval. Without approval, mark
 ambiguous provider acceptance as `live_test_required` and keep the production
 path guarded.
+
+## Cross-Verification (Codex MCP)
+
+Local gates alone do not close verification — run an independent
+second-opinion review before push:
+
+- Commit first, then ask the Codex MCP server to review the committed diff
+  against the base branch (read-only sandbox, `approval-policy: never`).
+- The prompt names the exact scope, the invariants to attack (threading,
+  ANSI/cursor math, scope/lifetime, CHANGELOG parity), and demands numbered
+  findings with HIGH/MED/LOW severity + file:line, or "No findings".
+- Fix or explicitly accept every finding; amend and re-verify fixes.
+- Historical yield: ~1.6 real catches per PR that local gates missed.

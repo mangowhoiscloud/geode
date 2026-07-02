@@ -57,6 +57,7 @@ class ContextAssembler:
         project_journal: Any | None = None,
         vault: Any | None = None,
         project_root: Path | str | None = None,
+        session_manager: Any | None = None,
     ) -> None:
         self._org_memory = organization_memory
         self._project_memory = project_memory
@@ -68,6 +69,7 @@ class ContextAssembler:
         self._project_journal = project_journal  # C2: ProjectJournal
         self._vault = vault  # V0: Vault (artifact storage)
         self._project_root: Path | None = Path(project_root) if project_root else None
+        self._session_manager = session_manager
 
     def assemble(
         self,
@@ -167,6 +169,9 @@ class ContextAssembler:
 
         # V0 Vault: inject artifact inventory summary
         self._inject_vault_context(context)
+
+        # Long-context SQLite artifacts: compaction summaries + dreams.
+        self._inject_long_context_artifacts(session_id, context)
 
         assembled_at = time.time()
         context["_assembled_at"] = assembled_at
@@ -270,6 +275,30 @@ class ContextAssembler:
         except Exception:
             log.debug("Failed to inject vault context", exc_info=True)
 
+    def _inject_long_context_artifacts(self, session_id: str, context: dict[str, Any]) -> None:
+        """Inject bounded synthesized context from SQLite artifacts."""
+        manager = self._session_manager
+        if manager is None:
+            return
+        try:
+            artifacts = manager.list_context_artifacts(
+                session_id=session_id,
+                kinds=("compaction_summary", "dream"),
+                limit=3,
+            )
+            if not artifacts:
+                return
+            lines = []
+            for artifact in artifacts:
+                source = ""
+                if artifact.source_start_seq is not None or artifact.source_end_seq is not None:
+                    source = f" seq={artifact.source_start_seq}-{artifact.source_end_seq}"
+                content = artifact.content.strip().replace("\n", " ")
+                lines.append(f"{artifact.kind}{source}: {content[:500]}")
+            context["_long_context_summary"] = " | ".join(lines)
+        except Exception:
+            log.debug("Failed to inject long-context artifacts", exc_info=True)
+
     def _inject_project_env(self, context: dict[str, Any]) -> None:
         """Inject detected project type and harness information."""
         if not self._project_root:
@@ -350,5 +379,9 @@ class ContextAssembler:
                         break
                     parts.append(f"Prev: {entry}")
                     remaining -= len(entry) + 8  # "Prev: " + " | "
+
+        long_context = context.get("_long_context_summary", "")
+        if long_context:
+            parts.append(f"Long context: {str(long_context)[:budget_session]}")
 
         return " | ".join(parts) if parts else ""

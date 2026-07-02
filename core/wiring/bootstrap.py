@@ -375,6 +375,20 @@ def build_hooks(
 
     _register_plugin("turn_llm_extract", _reg_llm_extract)
 
+    # C3d: SQLite long-context dreaming (Hermes curator-style idle synthesis)
+    def _reg_turn_dreaming() -> None:
+        from core.memory.dreaming import make_dreaming_handler
+
+        name, handler = make_dreaming_handler()
+        hooks.register(
+            HookEvent.TURN_COMPLETED,
+            handler,
+            name=name,
+            priority=80,
+        )
+
+    _register_plugin("turn_dreaming", _reg_turn_dreaming)
+
     # C4: Session lifecycle hooks (OpenClaw agent:bootstrap pattern)
     def _reg_session_lifecycle() -> None:
         def _on_session_start(event: HookEvent, data: dict[str, Any]) -> None:
@@ -755,6 +769,10 @@ def build_memory(
     vault = Vault()
     vault.ensure_structure()
 
+    from core.memory.session_manager import SessionManager
+
+    context_artifact_store = SessionManager()
+
     context_assembler = ContextAssembler(
         organization_memory=organization_memory,
         project_memory=project_memory,
@@ -764,6 +782,7 @@ def build_memory(
         project_journal=project_journal,
         vault=vault,
         project_root=Path("."),
+        session_manager=context_artifact_store,
     )
 
     # Wire memory into memory tools via contextvars (P1 memory autonomy).

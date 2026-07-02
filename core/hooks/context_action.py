@@ -1,10 +1,11 @@
 """Context overflow action handler — decides compression strategy via Hook.
 
 Provider-aware strategy selection:
-- Anthropic: server-side compaction (compact_20260112) handles everything.
-  Client only intervenes at 95% as emergency safety net.
+- Anthropic: server-side compaction (compact_20260112) handles warning-level
+  pressure. Client only intervenes at the resolved policy critical threshold.
 - OpenAI/GLM: no server-side compaction. Client triggers LLM-based compaction
-  at 80% and emergency prune at 95%.
+  at the resolved policy warning threshold and emergency prune remains a
+  fallback when compaction cannot recover enough context.
 """
 
 from __future__ import annotations
@@ -25,31 +26,32 @@ def make_context_action_handler() -> tuple[str, Any]:
 
     def _decide_strategy(event: HookEvent, data: dict[str, Any]) -> dict[str, Any]:
         from core.config import settings
+        from core.orchestration.context_budget import resolve_context_budget_policy
 
         metrics = data.get("metrics", {})
-        context_window: int = metrics.get("context_window", 1_000_000)
-        usage_pct: float = metrics.get("usage_pct", 0)
+        model: str = data.get("model", "unknown")
         provider: str = data.get("provider", "anthropic")
+        context_window = metrics.get("context_window")
+        policy = resolve_context_budget_policy(model, context_window=context_window)
+        estimated_tokens = metrics.get("estimated_tokens")
+        if estimated_tokens is None:
+            usage_pct: float = metrics.get("usage_pct", 0)
+            estimated_tokens = int(usage_pct / 100 * policy.context_window)
+        is_warning = bool(metrics.get("is_warning", estimated_tokens >= policy.warning_tokens))
+        is_critical = bool(metrics.get("is_critical", estimated_tokens >= policy.critical_tokens))
+        keep_recent = policy.resolve_keep_recent(settings.compact_keep_recent)
 
-        # Anthropic: server-side compaction + clear_tool_uses handle 80-95%.
-        # Client only intervenes at 95% as emergency safety net.
+        # Anthropic: server-side compaction + clear_tool_uses handle warning pressure.
+        # Client only intervenes at the policy critical threshold as an
+        # emergency safety net.
         if provider == "anthropic":
-            if usage_pct >= 95:
-                return {"strategy": "prune", "keep_recent": settings.compact_keep_recent}
+            if is_critical:
+                return {"strategy": "prune", "keep_recent": keep_recent, "policy": policy}
             return {"strategy": "none"}
 
         # Non-Anthropic (OpenAI, GLM): no server-side compaction.
-        # Small-context models get aggressive treatment.
-        if context_window < 200_000:
-            if usage_pct >= 80:
-                return {"strategy": "prune", "keep_recent": min(settings.compact_keep_recent, 5)}
-            return {"strategy": "none"}
-
-        # Large-context non-Anthropic models: compact at 80%, prune at 95%.
-        if usage_pct >= 95:
-            return {"strategy": "prune", "keep_recent": settings.compact_keep_recent}
-        elif usage_pct >= 80:
-            return {"strategy": "compact", "keep_recent": settings.compact_keep_recent}
+        if is_critical or is_warning:
+            return {"strategy": "compact", "keep_recent": keep_recent, "policy": policy}
 
         return {"strategy": "none"}
 

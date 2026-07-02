@@ -64,7 +64,8 @@ class TestSummarizeToolResults:
         assert count == 1
         assert before > after
         result_block = msgs[2]["content"][0]
-        assert "[summarized:" in result_block["content"]
+        assert "[web_fetch]" in result_block["content"]
+        assert "summarized from" in result_block["content"]
         assert result_block["type"] == "tool_result"
         assert result_block["tool_use_id"] == "t1"
 
@@ -112,10 +113,13 @@ class TestAdaptivePrune:
         assert result is not msgs
 
     def test_within_budget(self):
+        from core.orchestration.context_budget import resolve_context_budget_policy
+
         msgs = _build_conversation(10, tool_result_size=200)
         result = adaptive_prune(msgs, target_tokens=50_000)
         tokens = estimate_message_tokens(result)
-        assert tokens <= 50_000 * 0.7 + 1000
+        policy = resolve_context_budget_policy(context_window=50_000)
+        assert tokens <= policy.prune_budget_tokens + 1000
 
 
 # ---------------------------------------------------------------------------

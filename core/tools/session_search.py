@@ -130,6 +130,22 @@ class SessionSearchTool:
                     ),
                     "default": False,
                 },
+                "include_artifacts": {
+                    "type": "boolean",
+                    "description": (
+                        "Also search synthesized long-context artifacts "
+                        "such as compaction summaries and dreams. Default false."
+                    ),
+                    "default": False,
+                },
+                "artifact_kinds": {
+                    "type": "array",
+                    "items": {"type": "string"},
+                    "description": (
+                        "Optional artifact kind filter when include_artifacts=true, "
+                        "for example ['compaction_summary', 'dream']."
+                    ),
+                },
             },
             "required": ["query"],
             "additionalProperties": False,
@@ -149,6 +165,13 @@ class SessionSearchTool:
         limit = kwargs.get("limit", 20)
         prefer_trigram = bool(kwargs.get("prefer_trigram", False))
         project_id = kwargs.get("project_id")
+        include_artifacts = bool(kwargs.get("include_artifacts", False))
+        artifact_kinds_raw = kwargs.get("artifact_kinds")
+        artifact_kinds = (
+            [str(k) for k in artifact_kinds_raw if isinstance(k, str)]
+            if isinstance(artifact_kinds_raw, list)
+            else None
+        )
         if not isinstance(limit, int) or limit <= 0:
             limit = 20
         try:
@@ -168,6 +191,8 @@ class SessionSearchTool:
             session_id=session_id if isinstance(session_id, str) else None,
             limit=limit,
             prefer_trigram=prefer_trigram,
+            include_artifacts=include_artifacts,
+            artifact_kinds=artifact_kinds,
         )
 
     def _search_project(
@@ -177,6 +202,8 @@ class SessionSearchTool:
         session_id: str | None,
         limit: int,
         prefer_trigram: bool,
+        include_artifacts: bool = False,
+        artifact_kinds: list[str] | None = None,
     ) -> dict[str, Any]:
         try:
             from core.memory.session_manager import SessionManager
@@ -203,12 +230,23 @@ class SessionSearchTool:
                 limit=limit,
                 prefer_trigram=prefer_trigram,
             )
+            artifact_hits = (
+                mgr.search_context_artifacts(
+                    query,
+                    session_id=session_id,
+                    kinds=artifact_kinds,
+                    limit=limit,
+                )
+                if include_artifacts
+                else []
+            )
         finally:
             mgr.close()
 
         return {
-            "matched": bool(hits),
+            "matched": bool(hits or artifact_hits),
             "count": len(hits),
+            "artifact_count": len(artifact_hits),
             "scope": SCOPE_PROJECT,
             "hits": [
                 {
@@ -221,6 +259,19 @@ class SessionSearchTool:
                     "score": h["score"],
                 }
                 for h in hits
+            ],
+            "artifacts": [
+                {
+                    "artifact_id": h["artifact_id"],
+                    "session_id": h["session_id"],
+                    "kind": h["kind"],
+                    "source_start_seq": h["source_start_seq"],
+                    "source_end_seq": h["source_end_seq"],
+                    "snippet": h["snippet"],
+                    "score": h["score"],
+                    "updated_at": h["updated_at"],
+                }
+                for h in artifact_hits
             ],
         }
 

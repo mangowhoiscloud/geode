@@ -66,3 +66,11 @@ git diff --check
 
 Live tests require explicit user approval. Provider acceptance that cannot be
 proven without a live call must remain guarded or marked `live_test_required`.
+
+## Cross-Verification (Codex MCP)
+
+Local gates alone do not close verification. Before pushing a non-trivial PR,
+run an independent second-opinion review of the committed diff through the
+Codex MCP server (read-only sandbox, numbered findings with HIGH/MED/LOW
+severity). Fix or explicitly accept every finding, then re-verify the fixes.
+Historical yield is ~1.6 real catches per PR that local gates missed.

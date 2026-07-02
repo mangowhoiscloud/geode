@@ -992,8 +992,12 @@ class ClaudeAgenticAdapter:
             extra_h: dict[str, str] = {}
             extra_b: dict[str, Any] = {}
             if m in _CONTEXT_MGMT_MODELS:
-                m_window = MODEL_CONTEXT_WINDOW.get(m, 200_000)
-                m_trigger = max(50_000, int(m_window * 0.8))
+                from core.orchestration.context_budget import resolve_context_budget_policy
+
+                m_trigger = resolve_context_budget_policy(
+                    m,
+                    context_window=MODEL_CONTEXT_WINDOW.get(m),
+                ).anthropic_compact_trigger_tokens
                 extra_h["anthropic-beta"] = "context-management-2025-06-27,compact-2026-01-12"
                 extra_b["context_management"] = {
                     "edits": [

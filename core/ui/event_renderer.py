@@ -54,9 +54,8 @@ class _ThinkingRegion:
 class _ProgressPlanSurface:
     visible_lines: list[str] = field(default_factory=list)
     items: list[dict[str, str]] = field(default_factory=list)
-    rendered_once: bool = False
+    explanation: str = ""
     at_bottom: bool = False
-    compact: bool = False
 
 
 @dataclass
@@ -76,7 +75,6 @@ class _ActivitySurface:
     notices: list[str] = field(default_factory=list)
     thought_count: int = 0
     thought_items: int = 0
-    rendered_once: bool = False
     at_bottom: bool = False
 
 
@@ -100,6 +98,22 @@ class EventRenderer:
         {"tool_start", "tool_end", "tokens", "thinking_start", "thinking_end", "round_start"}
     )
     _PLAN_SURFACE_EVENTS = frozenset({"goal_decomposition", "plan_step", "progress_plan", "replan"})
+    # Events whose handlers manage the live region themselves (erase/redraw at
+    # the right moment) or print nothing — everything else gets an
+    # erase-before-print so no stale live-region copy is ever left in scrollback.
+    _LIVE_REGION_SELF_MANAGED = frozenset(
+        {
+            "goal_decomposition",
+            "plan_step",
+            "progress_plan",
+            "replan",
+            "tool_start",
+            "tool_end",
+            "thinking_start",
+            "thinking_end",
+            "tokens",
+        }
+    )
     _MAX_ACTIVITY_TOOL_LINES = 5
     _MAX_ACTIVITY_NOTICE_LINES = 2
 
@@ -179,17 +193,16 @@ class EventRenderer:
         handler = getattr(self, f"_handle_{etype}", None)
         if handler:
             self._reset_clearable_stream_region()
-            if etype not in self._PLAN_SURFACE_EVENTS:
-                self._mark_progress_plan_obscured()
-            if etype not in {"tool_start", "tool_end", "thinking_start", "thinking_end"}:
-                self._mark_activity_obscured()
+            if etype not in self._LIVE_REGION_SELF_MANAGED:
+                self._erase_live_region()
             handler(event)
 
     def on_stream(self, data: str) -> None:
         """Handle raw console stream (Rich panels, pipeline output)."""
-        self._mark_progress_plan_obscured()
-        self._mark_activity_obscured()
+        # Spinners first — a spinner frame landing mid cursor-up erase would
+        # corrupt the cursor position the erase math depends on.
         self._suppress_all_spinners()
+        self._erase_live_region()
         if self._is_clearable_plain_stream(data):
             self._clearable_stream_parts.append(data)
         else:
@@ -199,7 +212,6 @@ class EventRenderer:
 
     def stop(self) -> None:
         """Stop all spinners and render turn status. Call when result arrives."""
-        self._flush_repeat()
         self._stop_stdin_reader()
         self._activity = False
         self._activity_suppressed = True
@@ -210,8 +222,26 @@ class EventRenderer:
             self._activity_thread = None
         # Clear any leftover spinner line
         self._out.write("\r\033[2K")
+        # Clear the transient Markdown stream region BEFORE any live-region
+        # render — _flush_repeat may redraw the region at the cursor, and the
+        # upward stream-erase would eat those fresh rows if it ran after.
         self._clear_markdown_stream_region()
         self._out.flush()
+        self._flush_repeat()
+        # Freeze the live region as the turn's final state: if answer streaming
+        # already erased it, print one last permanent copy, then release it to
+        # scrollback (at_bottom=False) so the final answer renders below it.
+        with self._render_lock:
+            has_content = bool(self._progress_plan.items) or bool(
+                self._activity_surface.tool_stats or self._activity_surface.notices
+            )
+            visible = bool(
+                self._progress_plan.visible_lines or self._activity_surface.visible_lines
+            )
+            if has_content and not visible:
+                self._render_live_region()
+            self._progress_plan.at_bottom = False
+            self._activity_surface.at_bottom = False
         # Render accumulated turn status (Claude Code style)
         self._render_turn_status()
 
@@ -227,7 +257,7 @@ class EventRenderer:
     def _handle_thinking_start(self, event: dict[str, Any]) -> None:
         self._activity_suppressed = True
         self._tool_tracker.stop()
-        self._erase_activity_surface()
+        self._erase_live_region()
         with self._render_lock:
             self._thinking_region = _ThinkingRegion(start_ts=time.monotonic())
             self._thinking = True
@@ -251,7 +281,7 @@ class EventRenderer:
                     should_render_activity = True
         self._activity_suppressed = False  # resume activity spinner
         if should_render_activity:
-            self._render_activity_surface()
+            self._render_live_region()
 
     def _handle_tool_start(self, event: dict[str, Any]) -> None:
         name = str(event.get("name", ""))
@@ -264,7 +294,7 @@ class EventRenderer:
             # count/dur/summary already set from last batch's tool_end
             return
 
-        self._erase_activity_surface()
+        self._erase_live_region()
         self._activity_suppressed = True
         self._stop_thinking()
         self._tool_tracker.on_tool_start(event)
@@ -283,7 +313,7 @@ class EventRenderer:
             self._tool_tracker.suspend()
             with self._tool_tracker._lock:
                 self._tool_tracker._tools.clear()
-            self._render_activity_surface()
+            self._render_live_region()
             # Track last single-tool batch for repeat detection
             if is_single:
                 dur = event.get("duration_s")
@@ -532,24 +562,10 @@ class EventRenderer:
         items = list(self._progress_plan.items)
         if step_count > 0 and len(items) != step_count:
             items = [{"step": f"Step {i}", "status": "pending"} for i in range(1, step_count + 1)]
-        compact_explanation = (
-            f"{trigger} · {step_count} steps{rev}" if trigger else f"{step_count} steps{rev}"
-        )
-        self._render_progress_plan_surface(
-            items,
-            f"revised{suffix} · {step_count} steps{rev}",
-            compact_message="Plan revised",
-            compact_explanation=compact_explanation,
-        )
+        self._render_progress_plan_surface(items, f"revised{suffix} · {step_count} steps{rev}")
 
     def _handle_progress_plan(self, event: dict[str, Any]) -> None:
-        """Render update_plan as a managed single plan surface.
-
-        If the previous plan block is still the bottom-most thing in the terminal,
-        redraw it in place. Once tool logs or stream output have appeared below it,
-        do not print a second full checklist; show a compact transition instead.
-        A scrollback terminal cannot safely rewrite an arbitrary older block.
-        """
+        """Render update_plan into the managed live region (full checklist, always)."""
         plan = event.get("plan", [])
         if not isinstance(plan, list):
             return
@@ -560,14 +576,7 @@ class EventRenderer:
         explanation = str(event.get("explanation", "") or "").strip()
         self._render_progress_plan_surface(items, explanation)
 
-    def _render_progress_plan_surface(
-        self,
-        items: list[dict[Any, Any]],
-        explanation: str,
-        *,
-        compact_message: str = "Plan updated",
-        compact_explanation: str | None = None,
-    ) -> None:
+    def _render_progress_plan_surface(self, items: list[dict[Any, Any]], explanation: str) -> None:
         normalized = [
             {
                 "step": str(item.get("step", "")).strip(),
@@ -581,30 +590,9 @@ class EventRenderer:
 
         with self._render_lock:
             self._suppress_all_spinners()
-            surface = self._progress_plan
-            if surface.at_bottom and surface.visible_lines:
-                self._erase_lines_locked(surface.visible_lines)
-
-            should_compact = surface.rendered_once and not (
-                surface.at_bottom and not surface.compact
-            )
-            lines = (
-                self._render_compact_progress_plan(
-                    normalized,
-                    compact_explanation if compact_explanation is not None else explanation,
-                    message=compact_message,
-                )
-                if should_compact
-                else self._render_full_progress_plan(normalized, explanation)
-            )
-            for line in lines:
-                self._out.write(line)
-            surface.visible_lines = list(lines)
-            surface.items = list(normalized)
-            surface.rendered_once = True
-            surface.at_bottom = True
-            surface.compact = should_compact
-            self._out.flush()
+            self._progress_plan.items = list(normalized)
+            self._progress_plan.explanation = explanation
+            self._render_live_region()
 
     def _handle_tool_backpressure(self, event: dict[str, Any]) -> None:
         self._clear_activity_line()
@@ -619,7 +607,7 @@ class EventRenderer:
             f"\033[1;33m\u27f3 Diversity: {tool} called {count}x"
             " \u2014 hinting alternate path\033[0m"
         )
-        self._render_activity_surface()
+        self._render_live_region()
 
     def _handle_model_switched(self, event: dict[str, Any]) -> None:
         self._clear_activity_line()
@@ -915,7 +903,7 @@ class EventRenderer:
         self._last_batch_tool = ""
         if count <= 1:
             return
-        self._render_activity_surface()
+        self._render_live_region()
 
     # -- HITL approval spinner coordination ------------------------------------
 
@@ -938,8 +926,12 @@ class EventRenderer:
         while self._activity:
             if not self._activity_suppressed:
                 body = spinner_glyph.shimmer(f"{spinner_glyph.GLYPH} Working…", time.monotonic())
-                self._out.write(f"\r\033[2K  {body}")
-                self._out.flush()
+                # Under the render lock: a frame landing mid live-region erase
+                # would corrupt the cursor position the erase math depends on.
+                with self._render_lock:
+                    if self._activity and not self._activity_suppressed:
+                        self._out.write(f"\r\033[2K  {body}")
+                        self._out.flush()
             time.sleep(0.05)
 
     def _animate_thinking(self) -> None:
@@ -1132,21 +1124,48 @@ class EventRenderer:
             rows += max(1, (len(plain) + width - 1) // width)
         return rows
 
-    def _mark_progress_plan_obscured(self) -> None:
-        if self._progress_plan.visible_lines:
-            self._progress_plan.at_bottom = False
+    def _erase_live_region(self) -> None:
+        """Erase the bottom-anchored live surfaces while they are still bottom-most.
 
-    def _mark_activity_obscured(self) -> None:
-        if self._activity_surface.visible_lines:
-            self._activity_surface.at_bottom = False
-
-    def _erase_activity_surface(self) -> None:
+        Callers print scrollback content immediately after, so the region never
+        gets buried — the pre-fix pathology was mark-obscured-without-erase,
+        which left a stale full copy behind on every obscure (stacked walls of
+        near-identical Plan/Activity blocks).
+        """
         with self._render_lock:
+            # Reverse render order: activity sits below the plan checklist.
+            for surface in (self._activity_surface, self._progress_plan):
+                if surface.at_bottom and surface.visible_lines:
+                    self._erase_lines_locked(surface.visible_lines)
+                    surface.visible_lines = []
+                    surface.at_bottom = False
+
+    def _render_live_region(self) -> None:
+        """Redraw plan checklist + activity block at the bottom as ONE unit.
+
+        The scrollback equivalent of Claude Code's live todo widget: a single
+        moving copy — always the full checklist, never a compact breadcrumb —
+        erased before any other output prints and redrawn on state change.
+        """
+        with self._render_lock:
+            self._erase_live_region()
+            plan = self._progress_plan
+            plan_lines = (
+                self._render_full_progress_plan(plan.items, plan.explanation) if plan.items else []
+            )
+            activity_lines = self._render_activity_lines()
+            if not plan_lines and not activity_lines:
+                return
+            for line in (*plan_lines, *activity_lines):
+                self._out.write(line)
+            # Non-TTY (piped/log) output is append-only: never mark at_bottom,
+            # so no cursor-up erase sequences are ever emitted into a pipe.
+            plan.visible_lines = plan_lines
+            plan.at_bottom = bool(plan_lines) and self._tty
             surface = self._activity_surface
-            if surface.at_bottom and surface.visible_lines:
-                self._erase_lines_locked(surface.visible_lines)
-                surface.visible_lines = []
-                surface.at_bottom = False
+            surface.visible_lines = activity_lines
+            surface.at_bottom = bool(activity_lines) and self._tty
+            self._out.flush()
 
     def _record_tool_activity(self, event: dict[str, Any]) -> None:
         name = str(event.get("name", "")) or "tool"
@@ -1168,6 +1187,11 @@ class EventRenderer:
                 stat.errors += 1
 
     def _record_thought_activity_locked(self, region: _ThinkingRegion) -> None:
+        # Trivially empty thinking phases ("Thought for 0s · 0 items") are
+        # round-trip noise, not activity — drop them entirely.
+        elapsed = time.monotonic() - region.start_ts
+        if not region.items and elapsed < 1.0:
+            return
         surface = self._activity_surface
         surface.thought_count += 1
         surface.thought_items += len(region.items)
@@ -1186,21 +1210,6 @@ class EventRenderer:
         notices = self._activity_surface.notices
         notices.append(clean)
         del notices[: max(0, len(notices) - self._MAX_ACTIVITY_NOTICE_LINES)]
-
-    def _render_activity_surface(self) -> None:
-        with self._render_lock:
-            surface = self._activity_surface
-            if surface.at_bottom and surface.visible_lines:
-                self._erase_lines_locked(surface.visible_lines)
-            lines = self._render_activity_lines()
-            if not lines:
-                return
-            for line in lines:
-                self._out.write(line)
-            surface.visible_lines = list(lines)
-            surface.rendered_once = True
-            surface.at_bottom = True
-            self._out.flush()
 
     def _render_activity_lines(self) -> list[str]:
         surface = self._activity_surface
@@ -1223,7 +1232,13 @@ class EventRenderer:
             color = "31" if stat.errors else "32"
             count = f" \u00d7{stat.count}" if stat.count > 1 else ""
             duration = f" ({stat.duration_s:.1f}s)" if stat.duration_s > 0 else ""
-            summary = stat.error or stat.summary or "ok"
+            if stat.errors:
+                # Honest mixed-outcome summary \u2014 never "\u2717 \u2026 \u2192 ok" (a red cross
+                # next to a stale success summary reads as a contradiction).
+                summary = stat.error or f"{stat.errors}/{stat.count} failed \u00b7 last ok"
+            else:
+                summary = stat.summary or "ok"
+            summary = _truncate_display(summary, 60)
             lines.append(
                 f"    \033[{color}m{symbol} {name}\033[0m{count} \u2192 {summary}{duration}\n"
             )
@@ -1247,36 +1262,6 @@ class EventRenderer:
             symbol, style, text_style = self._progress_plan_symbol(status)
             lines.append(f"    {style}{symbol}\033[0m {text_style}{step}\033[0m\n")
         lines.append("\n")
-        return lines
-
-    def _render_compact_progress_plan(
-        self, items: list[dict[Any, Any]], explanation: str, *, message: str = "Plan updated"
-    ) -> list[str]:
-        total = len(items)
-        completed = sum(1 for item in items if item.get("status") == "completed")
-        active = next(
-            (
-                str(item.get("step", ""))
-                for item in items
-                if item.get("status") == "in_progress" and item.get("step")
-            ),
-            "",
-        )
-        if not active:
-            active = next(
-                (
-                    str(item.get("step", ""))
-                    for item in items
-                    if item.get("status") == "pending" and item.get("step")
-                ),
-                "",
-            )
-        suffix = f" · {explanation}" if explanation else ""
-        lines = [f"\n  \033[2m{message}{suffix} · {completed}/{total} complete\033[0m\n"]
-        if active:
-            lines.append(
-                f"    {spinner_glyph.ROSE}{spinner_glyph.GLYPH}\033[0m \033[1m{active}\033[0m\n"
-            )
         return lines
 
     @staticmethod
