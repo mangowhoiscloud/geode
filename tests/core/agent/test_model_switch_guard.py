@@ -89,6 +89,20 @@ class TestT1LargeToSmall:
         after = check_context(ctx.messages, "glm-5").estimated_tokens
         assert after < before
 
+    def test_downshift_summarizes_without_pruning_when_summary_fits(self):
+        ctx = ConversationContext()
+        ctx.messages = _build_large_conversation(num_tool_results=20, tool_result_chars=50_000)
+        original_count = len(ctx.messages)
+
+        loop = _make_loop(ctx, model="claude-opus-4-6")
+        loop._adapt_context_for_model("glm-5")
+
+        after = check_context(ctx.messages, "glm-5")
+        assert not after.is_critical
+        assert len(ctx.messages) == original_count
+        assert ctx.messages[0]["content"] == "initial question"
+        assert "summarized from" in str(ctx.messages)
+
 
 # ---------------------------------------------------------------------------
 # T2: Small context → GLM-5 — no adaptation
@@ -128,6 +142,7 @@ class TestT3HugeContext:
 
         after = check_context(ctx.messages, "glm-5")
         assert after.estimated_tokens < before.estimated_tokens
+        assert not after.is_critical
 
 
 # ---------------------------------------------------------------------------
@@ -149,6 +164,81 @@ class TestT4Upgrade:
 
         # No changes — context fits easily in 1M window
         assert len(ctx.messages) == original_count
+
+    def test_upgrade_from_small_to_large_does_not_force_compaction(self):
+        ctx = ConversationContext()
+        ctx.messages = [
+            {"role": "user", "content": "x" * 120_000},
+            {"role": "assistant", "content": "response"},
+        ]
+        original = list(ctx.messages)
+        before_small = check_context(ctx.messages, "glm-5")
+        assert not before_small.is_critical
+
+        loop = _make_loop(ctx, model="glm-5")
+        loop._adapt_context_for_model("claude-opus-4-6")
+
+        after_large = check_context(ctx.messages, "claude-opus-4-6")
+        assert ctx.messages == original
+        assert not after_large.is_warning
+        assert not after_large.is_ceiling_exceeded
+
+
+# ---------------------------------------------------------------------------
+# OpenAI internal downshift/upshift — 1.05M ↔ 400K / 200K
+# ---------------------------------------------------------------------------
+
+
+class TestOpenAIBidirectionalSwitch:
+    def test_gpt55_to_gpt54_mini_downshift_adapts_to_400k_window(self):
+        ctx = ConversationContext()
+        ctx.messages = _build_large_conversation(num_tool_results=24, tool_result_chars=100_000)
+
+        before = check_context(ctx.messages, "gpt-5.4-mini")
+        assert before.context_window == 400_000
+        assert before.is_critical
+
+        loop = _make_loop(ctx, model="gpt-5.5")
+        loop._adapt_context_for_model("gpt-5.4-mini")
+
+        after = check_context(ctx.messages, "gpt-5.4-mini")
+        assert after.estimated_tokens < before.estimated_tokens
+        assert not after.is_critical
+
+    def test_gpt55_to_o4_mini_downshift_adapts_to_200k_window(self):
+        ctx = ConversationContext()
+        ctx.messages = _build_large_conversation(num_tool_results=20, tool_result_chars=50_000)
+
+        before = check_context(ctx.messages, "o4-mini")
+        assert before.context_window == 200_000
+        assert before.is_critical
+
+        loop = _make_loop(ctx, model="gpt-5.5")
+        loop._adapt_context_for_model("o4-mini")
+
+        after = check_context(ctx.messages, "o4-mini")
+        assert after.estimated_tokens < before.estimated_tokens
+        assert not after.is_critical
+
+    def test_gpt54_mini_to_gpt55_upshift_does_not_mutate_context(self):
+        ctx = ConversationContext()
+        ctx.messages = [
+            {"role": "user", "content": "x" * 180_000},
+            {"role": "assistant", "content": "response"},
+        ]
+        original = list(ctx.messages)
+
+        before_large = check_context(ctx.messages, "gpt-5.5")
+        assert before_large.context_window == 1_050_000
+        assert not before_large.is_warning
+
+        loop = _make_loop(ctx, model="gpt-5.4-mini")
+        loop._adapt_context_for_model("gpt-5.5")
+
+        after_large = check_context(ctx.messages, "gpt-5.5")
+        assert ctx.messages == original
+        assert not after_large.is_warning
+        assert not after_large.is_ceiling_exceeded
 
 
 # ---------------------------------------------------------------------------
@@ -175,6 +265,8 @@ class TestT6PureText:
 
         after = check_context(ctx.messages, "glm-5")
         assert after.estimated_tokens < before.estimated_tokens
+        assert not after.is_critical
+        assert ctx.messages[0]["content"].endswith("q0")
 
 
 # ---------------------------------------------------------------------------

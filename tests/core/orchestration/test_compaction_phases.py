@@ -24,6 +24,7 @@ from core.orchestration.compaction import (
     COMPACTION_MARKER,
     compact_conversation,
     find_safe_boundary,
+    repair_tool_pairs,
     strip_orphan_tool_results,
 )
 
@@ -268,6 +269,47 @@ def test_strip_orphan_no_op_when_all_matched():
     assert cleaned == msgs
 
 
+def test_repair_tool_pairs_inserts_missing_anthropic_result():
+    msgs = [
+        {
+            "role": "assistant",
+            "content": [
+                {
+                    "type": "tool_use",
+                    "id": "tu_missing",
+                    "name": "read_file",
+                    "input": {"path": "a.py"},
+                }
+            ],
+        },
+        {"role": "assistant", "content": "next assistant turn"},
+    ]
+    repaired = repair_tool_pairs(msgs)
+    assert repaired[1]["role"] == "user"
+    assert repaired[1]["content"][0]["type"] == "tool_result"
+    assert repaired[1]["content"][0]["tool_use_id"] == "tu_missing"
+
+
+def test_repair_tool_pairs_inserts_missing_openai_tool_result():
+    msgs = [
+        {
+            "role": "assistant",
+            "content": "",
+            "tool_calls": [
+                {
+                    "id": "call_missing",
+                    "type": "function",
+                    "function": {"name": "run_bash", "arguments": "{}"},
+                }
+            ],
+        },
+        {"role": "user", "content": "continue"},
+    ]
+    repaired = repair_tool_pairs(msgs)
+    assert repaired[1]["role"] == "tool"
+    assert repaired[1]["tool_call_id"] == "call_missing"
+
+
 # ── Phase 3+4: end-to-end via compact_conversation ──────────────────
 
 
@@ -301,7 +343,13 @@ def test_compaction_uses_safe_boundary(monkeypatch: pytest.MonkeyPatch):
     """End-to-end: head must not contain orphan tool_uses + tail must
     contain the full pair when the natural cut would split one."""
 
-    async def _fake_summarize(text: str, provider: str, model: str) -> str | None:
+    async def _fake_summarize(
+        text: str,
+        provider: str,
+        model: str,
+        *,
+        max_tokens: int,
+    ) -> str | None:
         return "SUMMARY"
 
     monkeypatch.setattr(compaction, "_call_summarize", _fake_summarize)
@@ -341,7 +389,13 @@ def test_compaction_uses_safe_boundary(monkeypatch: pytest.MonkeyPatch):
 def test_compaction_marker_and_preamble_shape(monkeypatch: pytest.MonkeyPatch):
     """Phase 4 carry-forward — exactly 4 preamble messages + tail."""
 
-    async def _fake_summarize(text: str, provider: str, model: str) -> str | None:
+    async def _fake_summarize(
+        text: str,
+        provider: str,
+        model: str,
+        *,
+        max_tokens: int,
+    ) -> str | None:
         return "TEST SUMMARY"
 
     monkeypatch.setattr(compaction, "_call_summarize", _fake_summarize)
@@ -361,10 +415,53 @@ def test_compaction_marker_and_preamble_shape(monkeypatch: pytest.MonkeyPatch):
     assert new_msgs[4:] == msgs[-8:]
 
 
+def test_compaction_persists_summary_artifact(monkeypatch: pytest.MonkeyPatch, tmp_path):
+    async def _fake_summarize(
+        text: str,
+        provider: str,
+        model: str,
+        *,
+        max_tokens: int,
+    ) -> str | None:
+        return "TEST SUMMARY WITH CONTEXT"
+
+    monkeypatch.setattr(compaction, "_call_summarize", _fake_summarize)
+    from core.memory.session_manager import SessionManager
+
+    mgr = SessionManager(tmp_path / "sessions.db")
+    try:
+        msgs = _build_long_conversation(20)
+        new_msgs, did = asyncio.run(
+            compact_conversation(
+                msgs,
+                provider="openai",
+                model="gpt-5",
+                keep_recent=8,
+                session_id="s1",
+                session_manager=mgr,
+                trigger="test",
+            )
+        )
+        assert did is True
+        assert new_msgs[0]["content"] == "[Conversation Summary]\nTEST SUMMARY WITH CONTEXT"
+        artifacts = mgr.list_context_artifacts(session_id="s1", kinds=("compaction_summary",))
+        assert len(artifacts) == 1
+        assert artifacts[0].content == "TEST SUMMARY WITH CONTEXT"
+        assert artifacts[0].metadata["trigger"] == "test"
+    finally:
+        mgr.close()
+
+
 def test_summary_failure_no_op(monkeypatch: pytest.MonkeyPatch):
     """If the summarizer returns None, the original messages survive."""
 
-    async def _fake_summarize(text: str, provider: str, model: str) -> str | None:
+    async def _fake_summarize(
+        text: str,
+        provider: str,
+        model: str,
+        *,
+        max_tokens: int,
+    ) -> str | None:
         return None
 
     monkeypatch.setattr(compaction, "_call_summarize", _fake_summarize)
@@ -381,6 +478,7 @@ def test_module_exports_stable():
         "COMPACTION_MARKER",
         "compact_conversation",
         "find_safe_boundary",
+        "repair_tool_pairs",
         "strip_orphan_tool_results",
     }
     assert set(compaction.__all__) == expected

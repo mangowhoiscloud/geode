@@ -188,6 +188,7 @@ class AnthropicPaygAdapter:
 
     def list_models(self) -> list[ModelSpec]:
         from core.config import ANTHROPIC_FALLBACK_CHAIN, ANTHROPIC_PRIMARY
+        from core.llm.model_catalog import model_spec_for_adapter
 
         ids = [ANTHROPIC_PRIMARY, *ANTHROPIC_FALLBACK_CHAIN]
         seen: set[str] = set()
@@ -196,15 +197,7 @@ class AnthropicPaygAdapter:
             if mid in seen:
                 continue
             seen.add(mid)
-            models.append(
-                ModelSpec(
-                    id=mid,
-                    label=mid,
-                    context_tokens=200_000,
-                    supports_thinking=mid.startswith("claude-"),
-                    supports_tools=True,
-                )
-            )
+            models.append(model_spec_for_adapter(mid, provider=self.provider))
         return models
 
     def get_quota_windows(self) -> QuotaWindows | None:

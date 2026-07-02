@@ -12,9 +12,17 @@ References:
 
 from __future__ import annotations
 
+import asyncio
+
 from core.agent.system_prompt import PROMPT_CACHE_BOUNDARY
 from core.llm.adapters._openai_common import _prompt_cache_key, build_responses_kwargs
-from core.llm.adapters.base import AdapterCallRequest, Message, ToolSpec
+from core.llm.adapters.base import (
+    AdapterCallRequest,
+    AdapterCallResult,
+    Message,
+    ToolSpec,
+    UsageSummary,
+)
 
 
 def _req(model: str = "gpt-5.5", **kw: object) -> AdapterCallRequest:
@@ -35,6 +43,37 @@ def test_codex_kwargs_does_not_send_max_output_tokens() -> None:
     )
     assert "max_output_tokens" not in kwargs
     assert "max_tokens" not in kwargs
+
+
+def test_codex_text_completion_reuses_agent_turn_wire_shape(monkeypatch) -> None:
+    """Compaction text calls must not use PAYG string-input Responses shape."""
+    from core.llm.adapters.codex_oauth import CodexOAuthAdapter
+
+    captured: AdapterCallRequest | None = None
+
+    async def fake_acomplete(self: CodexOAuthAdapter, req: AdapterCallRequest) -> AdapterCallResult:
+        nonlocal captured
+        captured = req
+        return AdapterCallResult(
+            text="ok",
+            usage=UsageSummary(input_tokens=1, output_tokens=1),
+            stop_reason="completed",
+        )
+
+    monkeypatch.setattr(CodexOAuthAdapter, "acomplete", fake_acomplete)
+
+    result = asyncio.run(
+        CodexOAuthAdapter().acomplete_text(
+            "summarize", system="compact", model="gpt-5.5", max_tokens=77
+        )
+    )
+
+    assert result.text == "ok"
+    assert result.adapter_name == "codex-oauth"
+    assert captured is not None
+    assert captured.messages == (Message(role="user", content="summarize"),)
+    assert captured.system_prompt == "compact"
+    assert captured.max_tokens == 77
 
 
 def test_codex_kwargs_sets_store_false() -> None:

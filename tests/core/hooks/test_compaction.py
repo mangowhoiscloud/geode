@@ -9,6 +9,7 @@ from core.orchestration.compaction import (
     _build_summary_input,
     compact_conversation,
 )
+from core.orchestration.context_budget import resolve_context_budget_policy
 
 # ---------------------------------------------------------------------------
 # _build_summary_input
@@ -38,9 +39,11 @@ class TestBuildSummaryInput:
         assert "tool output" in result
 
     def test_caps_long_content(self):
-        msgs = [{"role": "user", "content": "x" * 5000}]
+        policy = resolve_context_budget_policy()
+        msgs = [{"role": "user", "content": "x" * 10_000}]
         result = _build_summary_input(msgs)
-        assert len(result) <= 2100  # 2000 cap + role prefix
+        assert len(result) <= policy.summary_input_message_max_chars + 100
+        assert "truncated" in result
 
     def test_empty_messages(self):
         assert _build_summary_input([]) == ""
@@ -71,7 +74,7 @@ class TestCompactConversation:
         """Test full compaction flow with mocked LLM call."""
         msgs = [{"role": "user", "content": f"message {i}"} for i in range(20)]
 
-        async def mock_summarize(text, provider, model):
+        async def mock_summarize(text, provider, model, *, max_tokens):
             return "Summary of conversation about messages 0-9."
 
         monkeypatch.setattr(
@@ -95,7 +98,7 @@ class TestCompactConversation:
         """If summarization fails, return original messages."""
         msgs = [{"role": "user", "content": f"msg {i}"} for i in range(20)]
 
-        async def mock_fail(text, provider, model):
+        async def mock_fail(text, provider, model, *, max_tokens):
             return None
 
         monkeypatch.setattr(
@@ -158,7 +161,7 @@ class TestContextActionStrategy:
         )
         assert result["strategy"] == "compact"
 
-    def test_openai_prune_at_critical(self):
+    def test_openai_compact_at_critical(self):
         from core.hooks.context_action import make_context_action_handler
         from core.hooks.system import HookEvent
 
@@ -170,7 +173,7 @@ class TestContextActionStrategy:
                 "provider": "openai",
             },
         )
-        assert result["strategy"] == "prune"
+        assert result["strategy"] == "compact"
 
     def test_glm_compact_at_warning(self):
         from core.hooks.context_action import make_context_action_handler
@@ -194,13 +197,13 @@ class TestContextActionStrategy:
         result = handler(
             HookEvent.CONTEXT_OVERFLOW_ACTION,
             {
-                "metrics": {"context_window": 200_000, "usage_pct": 50},
+                "metrics": {"context_window": 200_000, "usage_pct": 40},
                 "provider": "glm",
             },
         )
         assert result["strategy"] == "none"
 
-    def test_small_context_model_prune(self):
+    def test_small_context_model_compact(self):
         from core.hooks.context_action import make_context_action_handler
         from core.hooks.system import HookEvent
 
@@ -212,5 +215,5 @@ class TestContextActionStrategy:
                 "provider": "openai",
             },
         )
-        assert result["strategy"] == "prune"
+        assert result["strategy"] == "compact"
         assert result["keep_recent"] <= 5

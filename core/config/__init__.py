@@ -439,9 +439,9 @@ def _resolve_provider(model: str) -> str:
     sibling ``_CODEX_ONLY_MODELS`` frozenset) is replaced by a single
     delegation to :func:`core.config.routing_manifest.resolve_provider`.
     The manifest's ``[routing.prefixes]`` table, ``codex_only_models``
-    list, and ``codex_suffixes`` list together produce identical output
-    for every documented branch (parity verified in
-    ``tests/core/config/test_routing_manifest.py::test_resolve_provider_legacy_parity``).
+    list, and ``codex_suffixes`` list together produce only executable
+    built-in providers. Families without adapters fall through to
+    ``fallback_provider`` instead of returning inert provider names.
     Users now adjust provider routing by editing
     ``core/config/routing.toml`` (or ``~/.geode/routing.toml``) instead
     of patching code.

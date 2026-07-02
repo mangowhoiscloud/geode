@@ -102,16 +102,14 @@ class TestCheckContext:
         assert metrics.remaining_tokens > 0
 
     def test_large_context_triggers_warning(self):
-        # Build messages that exceed 80% of context window
-        # claude-opus-4-6 = 1M context (updated 2026-03-19)
-        # 80% = 800k tokens → ~3.2M chars
+        # Build messages that exceed the large-window warning threshold.
         big_msg = "x" * (3_200_000)
         msgs = [{"role": "user", "content": big_msg}]
         metrics = check_context(msgs, "claude-opus-4-6")
         assert metrics.is_warning
 
     def test_critical_threshold(self):
-        # 95% of 1M = 950k tokens → ~3.8M chars (opus-4-6 has 1M ctx)
+        # Large-window critical threshold should trip before API overflow.
         big_msg = "x" * (3_800_000)
         msgs = [{"role": "user", "content": big_msg}]
         metrics = check_context(msgs, "claude-opus-4-6")
@@ -264,7 +262,8 @@ class TestSummarizeToolResults:
         ]
         count, _tok_before, _tok_after = summarize_tool_results(msgs, target_window=80_000)
         assert count == 1
-        assert "[summarized:" in msgs[0]["content"][0]["content"]
+        assert "[unknown]" in msgs[0]["content"][0]["content"]
+        assert "summarized from" in msgs[0]["content"][0]["content"]
 
     def test_multiple_results_mixed(self):
         msgs = [
@@ -321,7 +320,6 @@ class TestAdaptivePrune:
     def test_prunes_to_fit_budget(self):
         # Each message ~2500 tokens (10K chars / 4)
         msgs = [{"role": "user", "content": f"{'x' * 10_000} msg{i}"} for i in range(50)]
-        # Budget: 80K * 0.7 = 56K → can fit ~22 messages
         result = adaptive_prune(msgs, target_tokens=80_000)
         assert len(result) < 50
         # First message preserved
@@ -378,24 +376,21 @@ class TestComputeModelToolLimit:
         # 1M context → unlimited (server-side handles it)
         assert _compute_model_tool_limit("claude-opus-4-6") == 0
 
-    def test_glm5_unlimited(self):
+    def test_glm5_uses_small_tier_cap(self):
         from core.agent.tool_executor import _compute_model_tool_limit
 
-        # GLM-5: 200K context → unlimited (server-side handles it)
         limit = _compute_model_tool_limit("glm-5")
-        assert limit == 0
+        assert limit > 0
 
-    def test_200k_model_unlimited(self):
+    def test_200k_model_uses_small_tier_cap(self):
         from core.agent.tool_executor import _compute_model_tool_limit
 
-        # 200K context → unlimited (threshold boundary)
-        assert _compute_model_tool_limit("glm-5-turbo") == 0
+        assert _compute_model_tool_limit("glm-5-turbo") > 0
 
-    def test_unknown_model_unlimited(self):
+    def test_unknown_model_uses_default_window_cap(self):
         from core.agent.tool_executor import _compute_model_tool_limit
 
-        # Unknown → default 200K → unlimited
-        assert _compute_model_tool_limit("unknown-xyz") == 0
+        assert _compute_model_tool_limit("unknown-xyz") > 0
 
 
 # ---------------------------------------------------------------------------

@@ -82,7 +82,7 @@ class TestContextWindowManager:
     # -- _resolve_overflow_strategy --
 
     def test_resolve_strategy_anthropic_no_action(self) -> None:
-        """Anthropic below 95% should return 'none'."""
+        """Anthropic below policy critical pressure should return 'none'."""
 
         class FakeMetrics:
             usage_pct = 60.0
@@ -98,10 +98,10 @@ class TestContextWindowManager:
         assert result["strategy"] == "none"
 
     def test_resolve_strategy_openai_compact(self) -> None:
-        """OpenAI at 85% should trigger compact."""
+        """OpenAI at policy warning pressure should trigger compact."""
 
         class FakeMetrics:
-            usage_pct = 85.0
+            usage_pct = 60.0
             context_window = 200_000
 
         class FakeSettings:
@@ -113,8 +113,8 @@ class TestContextWindowManager:
         )
         assert result["strategy"] == "compact"
 
-    def test_resolve_strategy_prune_at_95(self) -> None:
-        """Any provider at 95%+ should trigger prune."""
+    def test_resolve_strategy_compact_at_critical_for_openai(self) -> None:
+        """Non-Anthropic critical pressure should try LLM compaction before prune."""
 
         class FakeMetrics:
             usage_pct = 96.0
@@ -127,7 +127,7 @@ class TestContextWindowManager:
         result = asyncio.run(
             mgr._resolve_overflow_strategy(FakeMetrics(), FakeSettings(), "gpt-4o", "openai")
         )
-        assert result["strategy"] == "prune"
+        assert result["strategy"] == "compact"
 
     def test_check_context_overflow_awaits_compaction_inside_running_loop(self) -> None:
         """Compaction should be awaited, not driven via run_until_complete."""
@@ -201,3 +201,25 @@ class TestContextWindowManager:
         except _ContextExhaustedError:
             return
         raise AssertionError("expected _ContextExhaustedError")
+
+
+def test_overflow_compaction_session_provider_reads_loop_session_id() -> None:
+    """The ctx manager's session provider must resolve the loop's REAL
+    session id attribute (_session_id) — a getattr on a non-existent public
+    name silently disables context_artifacts persistence (writer-reader parity)."""
+    from unittest.mock import MagicMock
+
+    from core.agent.conversation import ConversationContext
+    from core.agent.loop import AgenticLoop
+    from core.agent.tool_executor import ToolExecutor
+
+    loop = AgenticLoop(
+        ConversationContext(max_turns=2),
+        ToolExecutor(action_handlers={"noop": MagicMock(return_value={})}),
+        quiet=True,
+    )
+    provider = loop._ctx_mgr._session_id_provider
+    assert provider is not None
+    assert provider() == (loop._session_id or None)
+    loop._session_id = "s-test123"
+    assert provider() == "s-test123"

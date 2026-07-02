@@ -107,6 +107,8 @@ def test_test_environment_returns_report() -> None:
 
 
 def test_list_models_returns_specs() -> None:
+    from core.llm.model_catalog import context_window_for
+
     for cls in (
         AnthropicPaygAdapter,
         AnthropicOAuthAdapter,
@@ -122,3 +124,6 @@ def test_list_models_returns_specs() -> None:
         for m in models:
             assert m.id
             assert m.context_tokens > 0
+            assert m.context_tokens == context_window_for(m.id), (
+                f"{cls.__name__}.{m.id} must derive context_tokens from model_catalog"
+            )

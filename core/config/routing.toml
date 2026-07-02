@@ -68,11 +68,6 @@ glm = []
 "o3" = "openai"  # bare ``o3`` — P2-D parity with legacy family_of's special-case
 "o4-" = "openai"
 "o4-mini" = "openai"  # bare ``o4-mini`` — same special-case
-"gemini-" = "google"
-"deepseek-" = "deepseek"
-"llama-" = "meta"
-"qwen-" = "alibaba"
-"qwen3" = "alibaba"
 
 # Codex-only models — OAuth-only path (chatgpt.com/backend-api/codex). The
 # resolver checks this list before the prefix table so gpt-5.5 routes to
