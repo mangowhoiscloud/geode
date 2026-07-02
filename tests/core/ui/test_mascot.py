@@ -6,7 +6,7 @@ import re
 from io import StringIO
 from pathlib import Path
 
-from core.ui.geodi_art import GEODI_PALETTE, GEODI_PIXELS, geodi_pixel_lines
+from core.ui.geodi_art import GEODI_PALETTE, GEODI_PIXELS, GEODI_SOURCE_PIXELS, geodi_pixel_lines
 from core.ui.mascot import _collapse_home, _spec_lines, render_mascot
 
 _ANSI = re.compile(r"\x1b\[[0-9;]*m")
@@ -15,12 +15,16 @@ _ANSI = re.compile(r"\x1b\[[0-9;]*m")
 class TestGeodiPixels:
     """The hand-authored sprite grid stays well-formed."""
 
+    def test_source_grid_dimensions(self) -> None:
+        assert len(GEODI_SOURCE_PIXELS) == 20
+        assert all(len(row) == 22 for row in GEODI_SOURCE_PIXELS)
+
     def test_grid_dimensions(self) -> None:
         assert len(GEODI_PIXELS) == 14  # even row count — pairs into half-blocks
         assert all(len(row) == 16 for row in GEODI_PIXELS)
 
     def test_only_palette_chars(self) -> None:
-        assert set("".join(GEODI_PIXELS)) <= set(GEODI_PALETTE)
+        assert set("".join(GEODI_SOURCE_PIXELS + GEODI_PIXELS)) <= set(GEODI_PALETTE)
 
     def test_character_canon(self) -> None:
         joined = "".join(GEODI_PIXELS)
@@ -55,6 +59,16 @@ class TestGeodiPixels:
         lines = geodi_pixel_lines()
         assert len(lines) <= 7
         assert max(len(_ANSI.sub("", line)) for line in lines) <= 16
+
+    def test_compact_keeps_source_silhouette_cues(self) -> None:
+        """The compact grid should read like the original, not a redesigned mascot."""
+        assert GEODI_SOURCE_PIXELS[2].startswith(".rr..")
+        assert GEODI_PIXELS[2].startswith(".rr.")
+        assert GEODI_SOURCE_PIXELS[5].startswith(".rrr")
+        assert GEODI_PIXELS[5].startswith(".rrr")
+        assert "ppew" in GEODI_SOURCE_PIXELS[8] and "ppew" in GEODI_PIXELS[8]
+        assert "llllll" in "".join(GEODI_SOURCE_PIXELS)
+        assert "llllll" in "".join(GEODI_PIXELS)
 
 
 class TestMascotBrandBlock:

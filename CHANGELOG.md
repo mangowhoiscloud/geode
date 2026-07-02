@@ -45,6 +45,18 @@ functional change.
 
 ---
 
+## [0.99.258] - 2026-07-02
+
+### Fixed
+- **Geodi compact mascot preserves the original character shape.** v0.99.257
+  made the welcome mascot smaller by redrawing it at 16×14 pixels, but that
+  changed the face/body proportions and made Geodi look like a different
+  character. The full 22×20 source sprite is now retained as
+  `GEODI_SOURCE_PIXELS`, while the 16×14 welcome sprite is a compact derivative
+  that preserves the original round head, six gill stalks, eye catchlights,
+  cheek blush, belly patch, and feet. Tests now pin both the source grid and the
+  compact silhouette cues.
+
 ## [0.99.257] - 2026-07-02
 
 ### Changed
