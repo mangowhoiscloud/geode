@@ -37,9 +37,11 @@ _CREST = (255, 236, 248)  # bright rose the shimmer band lights up to
 _PERIOD = 2.0  # seconds for the band to sweep the full line once
 _BAND = 4.0  # band half-width in characters (wider = softer, slower-looking wave)
 _PAD = 6  # lead-in/out so the crest glides on from off-screen and off again
-_WORD_EVERY = 4.0  # seconds per whimsical word (slow — the shimmer is the motion)
 
-# Whimsical geode/crystal-flavoured activity words — rotate like Claude's spinner.
+# Whimsical geode/crystal-flavoured activity words — ONE per turn (Claude Code
+# picks one random verb per spinner mount and keeps it; a word that flips every
+# few seconds reads as noise, not liveliness). Fallback only — a contextual
+# label (active plan step, reflection) always outranks the whimsy.
 _GERUNDS = (
     "Crystallizing",
     "Faceting",
@@ -100,9 +102,13 @@ def shimmer(text: str, elapsed: float) -> str:
     return "".join(out)
 
 
-def gerund(elapsed: float) -> str:
-    """Rotating activity word — changes slowly so the shimmer is the primary motion."""
-    return _GERUNDS[int(elapsed / _WORD_EVERY) % len(_GERUNDS)]
+def gerund(seed: float) -> str:
+    """One stable whimsical word per turn — seed with the turn's start time.
+
+    The same seed always yields the same word (the label must not flicker
+    mid-turn); different turns land on different words as the clock advances.
+    """
+    return _GERUNDS[int(seed) % len(_GERUNDS)]
 
 
 def elapsed(seconds: float) -> str:
@@ -118,7 +124,8 @@ def _check() -> None:
     assert a != b, "shimmer band must move over time"
     # the glyph shape is constant — only colour varies
     assert shimmer(GLYPH, 0.0).count(GLYPH) == 1 and shimmer(GLYPH, 1.0).count(GLYPH) == 1
-    assert gerund(0.0) != gerund(_WORD_EVERY), "word must rotate"
+    assert gerund(3.0) == gerund(3.9), "word must be stable within a turn"
+    assert gerund(0.0) != gerund(1.0), "different turns must land on different words"
     assert elapsed(9) == "9s" and elapsed(65) == "1m 05s"
 
 
@@ -129,10 +136,11 @@ if __name__ == "__main__":
     import time
 
     start = time.monotonic()
+    word = gerund(start)  # one word per run, like a real turn
     try:
         while True:
             el = time.monotonic() - start
-            body = shimmer(f"{GLYPH} {gerund(el)}…", el)
+            body = shimmer(f"{GLYPH} {word}…", el)
             sys.stdout.write(f"\r\x1b[2K  {body} {DIM}({elapsed(el)}){RST}")
             sys.stdout.flush()
             time.sleep(0.05)

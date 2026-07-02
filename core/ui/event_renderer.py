@@ -25,7 +25,7 @@ from typing import Any
 
 from core.time_format import format_elapsed
 from core.ui import spinner_glyph
-from core.ui.tool_tracker import ToolCallTracker
+from core.ui.tool_tracker import ToolCallTracker, _truncate_display
 
 log = logging.getLogger(__name__)
 
@@ -109,6 +109,7 @@ class EventRenderer:
         self._thinking_thread: threading.Thread | None = None
         self._thinking_model = ""
         self._thinking_round = 0
+        self._thinking_reflection = False
         self._thinking_region: _ThinkingRegion | None = None
         self._render_lock = threading.RLock()
         self._tty = sys.stdout.isatty()
@@ -232,6 +233,7 @@ class EventRenderer:
             self._thinking = True
             self._thinking_model = str(event.get("model", ""))
             self._thinking_round = int(event.get("round", 1))
+            self._thinking_reflection = bool(event.get("reflection", False))
         self._start_stdin_reader()
         self._thinking_thread = threading.Thread(target=self._animate_thinking, daemon=True)
         self._thinking_thread.start()
@@ -946,13 +948,33 @@ class EventRenderer:
             self._render_thinking_frame()
             time.sleep(0.05)
 
+    def _thinking_label(self) -> str:
+        """Claude Code-style contextual label: reflection > active plan step > whimsy.
+
+        The whimsical gerund is a fallback seeded by the turn start \u2014 one word
+        per turn, never flipping mid-turn.
+        """
+        if self._thinking_reflection:
+            return "Reflecting"
+        active = next(
+            (
+                str(item.get("step", ""))
+                for item in self._progress_plan.items
+                if item.get("status") == "in_progress" and item.get("step")
+            ),
+            "",
+        )
+        if active:
+            return _truncate_display(active, 48)
+        return spinner_glyph.gerund(self._turn_start)
+
     def _render_thinking_frame(self) -> None:
         with self._render_lock:
             if not self._thinking:
                 return
             region = self._thinking_region
             el = time.monotonic() - region.start_ts if region is not None else time.monotonic()
-            word = spinner_glyph.gerund(el) + "\u2026"
+            word = self._thinking_label() + "\u2026"
             if self._thinking_round > 1:
                 word += f" (round {self._thinking_round})"
             body = spinner_glyph.shimmer(f"{spinner_glyph.GLYPH} {word}", el)
