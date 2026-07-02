@@ -292,6 +292,7 @@ class TestEventRendererV2:
         assert "Run tests" in out
 
     def test_progress_plan_updates_in_place_when_still_at_bottom(self, renderer) -> None:
+        renderer._tty = True  # in-place erase is a TTY-only contract
         renderer.on_event(
             {
                 "type": "progress_plan",
@@ -308,9 +309,10 @@ class TestEventRendererV2:
         assert "\033[" in out and "A" in out
         assert "Second plan" in out
 
-    def test_progress_plan_after_tool_output_is_compact_not_second_full_block(
-        self, renderer
-    ) -> None:
+    def test_progress_plan_after_tool_output_rerenders_full_checklist(self, renderer) -> None:
+        """Live-region policy: after other output obscures the plan, the next
+        update re-renders the FULL checklist at the bottom (the old copy was
+        erased before the obscuring output printed — never stacked)."""
         renderer.on_event(
             {
                 "type": "progress_plan",
@@ -326,17 +328,19 @@ class TestEventRendererV2:
                 "plan": [
                     {"step": "Already done", "status": "completed"},
                     {"step": "Direct verification", "status": "in_progress"},
-                    {"step": "This full-list tail should not print", "status": "pending"},
+                    {"step": "Pending tail step", "status": "pending"},
                 ],
             }
         )
         out = renderer._out.getvalue()
-        compact = out[out.rindex("Plan updated") :]
-        assert "Plan updated · fallback · 1/3 complete" in compact
-        assert "Direct verification" in compact
-        assert "This full-list tail should not print" not in compact
+        tail = out[out.rindex("Plan · fallback") :]
+        assert "Already done" in tail
+        assert "Direct verification" in tail
+        assert "Pending tail step" in tail  # full checklist re-rendered
+        assert "Plan updated" not in out  # compact breadcrumb path removed
 
     def test_plan_step(self, renderer) -> None:
+        renderer._tty = True  # in-place erase is a TTY-only contract
         renderer.on_event({"type": "goal_decomposition", "steps": ["inspect", "patch"], "count": 2})
         renderer.on_event(
             {
@@ -355,6 +359,7 @@ class TestEventRendererV2:
         assert "✓" in out
 
     def test_replan(self, renderer) -> None:
+        renderer._tty = True  # in-place erase is a TTY-only contract
         renderer.on_event({"type": "goal_decomposition", "steps": ["inspect", "patch"], "count": 2})
         renderer.on_event(
             {"type": "replan", "trigger": "verify_fail", "step_count": 3, "revision": 2}
@@ -365,14 +370,14 @@ class TestEventRendererV2:
         assert "verify_fail" in out
         assert "3 steps" in out
 
-    def test_replan_after_tool_output_is_compact(self, renderer) -> None:
+    def test_replan_after_tool_output_rerenders_full_checklist(self, renderer) -> None:
         renderer.on_event({"type": "goal_decomposition", "steps": ["inspect", "patch"], "count": 2})
         renderer.on_event({"type": "subagent_complete", "count": 2, "elapsed_s": 5.0})
         renderer.on_event({"type": "replan", "trigger": "cadence", "step_count": 2, "revision": 1})
         out = renderer._out.getvalue()
-        compact = out[out.rindex("Plan revised") :]
-        assert "Plan revised · cadence · 2 steps · rev 1" in compact
-        assert "Step 2" not in compact
+        tail = out[out.rindex("Plan · revised") :]
+        assert "revised · cadence · 2 steps · rev 1" in tail
+        assert "inspect" in tail  # full checklist re-rendered with revision header
 
     def test_tool_backpressure(self, renderer) -> None:
         renderer.on_event({"type": "tool_backpressure", "consecutive_errors": 3})

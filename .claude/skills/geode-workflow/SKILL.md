@@ -25,7 +25,9 @@ then report honestly.
    transcript helpers, and atomic-write utilities.
 7. **Observe**: make runtime behaviour inspectable with bounded structured
    records.
-8. **Verify**: run targeted checks first, then broaden when risk justifies it.
+8. **Verify**: run targeted checks first, then broaden when risk justifies
+   it. Non-trivial PRs also get a Codex MCP second-opinion review of the
+   committed diff before push (see `references/verification-gates.md`).
 9. **Report/GitFlow**: state what changed, what ran, what failed or was
    skipped, and only claim merge/push/cleanup after commands complete.
 
