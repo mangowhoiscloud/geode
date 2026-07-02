@@ -46,7 +46,7 @@ Sierra 분석: telecom은 **patient diagnostic dialog**를 보상 — Chinese re
 | Sandbox | **순수 Python in-process** — Docker 불필요 |
 | Scoring | Pydantic world state diff (oracle) — LLM judge 미사용 |
 | Trace | `results/<run_id>/` JSONL (메시지+tool call+task reward) |
-| External | LLM keys (LiteLLM). User simulator 모델 명시 필수 — leaderboard는 v0.2.0부터 **`gpt-4.1` 고정** |
+| External | GEODE subscription route for `geode_agent` + `geode_user`; native tau2 `user_simulator` still needs LiteLLM credentials |
 | Cost — smoke | 5-task airline @ Sonnet 4.5 ≈ **<$3** |
 | Cost — full | 4-domain × 4 trial @ Sonnet 4.5 ≈ **$200-400** |
 | CI 적합도 | 5-task smoke GHA 가능 (~10-15분), full은 VM |
@@ -73,34 +73,59 @@ def create_agent(tools, domain_policy, **kwargs) -> HalfDuplexAgent: ...
 ### Phase 0 — Smoke (≤30분, cost <$1)
 
 ```bash
-tau2 run --domain mock --agent-llm <ours> --num-tasks 1 --num-trials 1
+python scripts/eval/tau2_geode_agent.py --domain mock --num-tasks 1 --num-trials 1
 ```
 
 `mock` 도메인은 LLM cost 거의 없이 `core/agent/loop.py::AgenticLoop` 와이어업만 검증.
 
 **Pass criteria**: results/ 폴더에 JSONL 생성, agent contract 호출 trace 확인.
 
-### Phase 1 — PoC 어댑터 (~6-10시간)
+### Phase 1 — GEODE runner adapter
 
-신규 파일:
-- `eval/tau2/__init__.py`
-- `eval/tau2/adapter.py` — `class GeodeTau2Agent(HalfDuplexAgent)`
-- `eval/tau2/factory.py` — `create_agent()` factory
-- `eval/tau2/README.md` — 실행 방법
+Repository script:
+- `scripts/eval/tau2_geode_agent.py`
 
 매핑:
-- `generate_next_message(message, state)` → 한 번의 `AgenticLoop.step()`
-- `tools` constructor 인자 → GEODE tool registry에 wrap (LangGraph tool node 형태)
-- `domain_policy` → AgenticLoop system prompt prefix
-- `state` → AgenticLoop의 conversation state를 Pydantic으로 직렬화
+- `generate_next_message(message, state)` → 한 번의 `AgenticLoop.arun()`
+- tau2 `tools` constructor 인자 → GEODE `ToolRegistry` + `ToolExecutor`
+  handler로 wrap
+- tau2 `user_simulator` 대신 기본 `geode_user` 등록 → user side도
+  `source=subscription`으로 실행
+- `domain_policy` → `AgenticLoop(system_prompt_override=...)`
+- `state` → per-task `ConversationContext`와 `AgenticLoop` 보존
+
+GEODE smoke command:
+
+```bash
+python scripts/eval/tau2_geode_agent.py \
+  --harness-dir artifacts/eval/harnesses/tau2-bench \
+  --domain mock \
+  --num-tasks 1 \
+  --num-trials 1 \
+  --model gpt-5.5 \
+  --provider openai \
+  --source subscription \
+  --effort xhigh \
+  --user geode_user \
+  --user-llm gpt-5.5 \
+  --user-source subscription \
+  --save-to geode-gpt-5-5-xhigh-mock-smoke-20260703
+```
 
 ### Phase 2 — First Real Run
 
-- **대상**: telecom 24 tasks × 1 trial × **Sonnet 4.5**
+- **대상**: telecom small/base slice × 1 trial × **GPT-5.5 xhigh**
 - **선정 사유**: dual-control 도메인이 Slack/MCP execution path에 가장 가까움
 - **예상 baseline**: **35-45% pass^1** (비특화 scaffold 평균치 기준)
 - **예상 cost**: $25-40
 - **출력 보관**: `artifacts/eval/tau2/<date>/`
+- **비교 분리**: subscription-only 기본 run은 `user=geode_user`로 기록한다.
+  legacy GPT-5.5 공개 수치와 맞추는 native `user_simulator` +
+  `user-llm=gpt-4.1` run, 현재 tau2 leaderboard 권장 native
+  `user_simulator` + `user-llm=gpt-5.2` run과 평균내지 않는다.
+- **Auth caveat**: `geode_user` 경로는 GEODE subscription route를 사용한다.
+  native tau2 `user_simulator`를 선택한 경우에만 LiteLLM provider
+  credential이 별도로 필요하다.
 
 ### Phase 3 — CI / 운영 Ratchet
 
@@ -111,6 +136,69 @@ tau2 run --domain mock --agent-llm <ours> --num-tasks 1 --num-trials 1
 | Monthly (main) | telecom × 4 trial pass^k | pass^4 −5pp → release block | ~$80 |
 
 선정 사유: telecom = GEODE Slack-ops day job에 가장 근접.
+
+## 2026-07-03 GEODE subscription-only mock smoke
+
+| Field | Value |
+|---|---|
+| Run ID | `geode-gpt-5-5-xhigh-geode-user-mock-smoke-20260703-r5` |
+| GEODE revision | `6db5b7ade3410eff6ea7718d2f65347fce164eff` plus local runner/doc changes |
+| Harness | `sierra-research/tau2-bench` `1901a30`, package `tau2==1.0.0` |
+| Domain / task | `mock`, `create_task_1`, `num_trials=1`, `num_tasks=1` |
+| Agent route | `geode_agent`, `gpt-5.5`, provider `openai`, source `subscription`, effort `xhigh` |
+| User route | `geode_user`, `gpt-5.5`, provider `openai`, source `subscription`, effort `high` |
+| Result | **1 / 1**, reward `1.0`, pass^1 `1.000` |
+| DB check | `1.0` |
+| Action check | `create_task` write action `1.0` |
+| Termination | `user_stop` |
+| Duration | `54.90s` |
+| Artifact | `artifacts/eval/harnesses/tau2-bench/data/simulations/geode-gpt-5-5-xhigh-geode-user-mock-smoke-20260703-r5/results.json` |
+
+Command:
+
+```bash
+uv run python scripts/eval/tau2_geode_agent.py \
+  --harness-dir artifacts/eval/harnesses/tau2-bench \
+  --domain mock \
+  --num-tasks 1 \
+  --num-trials 1 \
+  --max-concurrency 1 \
+  --max-steps 8 \
+  --timeout 900 \
+  --model gpt-5.5 \
+  --provider openai \
+  --source subscription \
+  --effort xhigh \
+  --time-budget-s 180 \
+  --user geode_user \
+  --user-llm gpt-5.5 \
+  --user-provider openai \
+  --user-source subscription \
+  --user-effort high \
+  --user-time-budget-s 120 \
+  --save-to geode-gpt-5-5-xhigh-geode-user-mock-smoke-20260703-r5 \
+  --log-level INFO \
+  --verbose-logs
+```
+
+Adapter calibration notes:
+
+- r1 exposed GEODE default tools (`grep_files`) to the tau2 agent surface.
+- r2 restricted visible tools to tau2 domain tools.
+- r3 projected GEODE internal tool logs back to tau2 `ToolCall` messages.
+- r4 made mutating tools dry-run inside GEODE so tau2 orchestrator applies the
+  official state mutation exactly once.
+- r5 stripped empty optional arguments before projection, matching tau2's
+  action comparator exactly.
+
+Comparability:
+
+- This is a GEODE-owned subscription-only smoke, not a tau2 leaderboard score.
+- It should not be averaged with native tau2 `user_simulator` runs using
+  `gpt-4.1` or `gpt-5.2`.
+- It proves the full tau2 cycle wiring: GEODE agent route, GEODE user route,
+  tau2 tool projection, tau2 DB diff, artifact preservation, and docs
+  publication.
 
 ## 참고
 
