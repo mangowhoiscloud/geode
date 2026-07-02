@@ -200,9 +200,16 @@ def _resolve_context_window(model: str, context_window: int | None = None) -> in
     try:
         from core.llm.token_tracker import MODEL_CONTEXT_WINDOW
 
-        return max(1, int(MODEL_CONTEXT_WINDOW.get(model, DEFAULT_CONTEXT_WINDOW_TOKENS)))
+        window = MODEL_CONTEXT_WINDOW.get(model, DEFAULT_CONTEXT_WINDOW_TOKENS)
     except (TypeError, ValueError, AttributeError):
         return DEFAULT_CONTEXT_WINDOW_TOKENS
+    # Trust only real positive ints — a mocked module (tests patch
+    # sys.modules['core.llm.token_tracker']) or a garbage catalog entry
+    # otherwise coerces to a 1-token window and every loop turn trips
+    # context-exhausted before its actual assertion.
+    if not isinstance(window, int) or isinstance(window, bool) or window < 1:
+        return DEFAULT_CONTEXT_WINDOW_TOKENS
+    return window
 
 
 def _resolve_tier(context_window: int) -> ContextBudgetTier:

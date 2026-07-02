@@ -47,6 +47,9 @@ functional change.
 
 ## [0.99.252] - 2026-07-02
 
+### Fixed
+- **Context-window resolver trusts only real ints** — `_resolve_context_window` returns the default window unless the catalog value is an actual positive `int`. A mocked `core.llm.token_tracker` module (tests patch `sys.modules`) or a garbage catalog entry previously coerced through `int(MagicMock)` to a 1-token window, tripping context-exhausted on every loop turn (CI `test_autonomous_safety` failures on the 0.99.252 merge).
+
 ### Changed
 - **Context budget policy resolver.** Context overflow handling now derives
   warning/critical thresholds, prompt budget, output reserve, safety margin,
