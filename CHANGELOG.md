@@ -47,6 +47,13 @@ functional change.
 
 ## [Unreleased]
 
+### Added
+
+- **tau2 GEODE benchmark runner.** Added `scripts/eval/tau2_geode_agent.py`, a
+  reproducible runner that registers GEODE as an in-process tau2
+  `HalfDuplexAgent`, wraps tau2 domain tools into GEODE's `ToolRegistry` and
+  `ToolExecutor`, and preserves tau2's native simulator/evaluator/output path.
+
 ### Fixed
 
 - **MCP filesystem argument compatibility.** MCP tool dispatch now normalizes

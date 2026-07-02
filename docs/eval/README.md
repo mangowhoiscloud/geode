@@ -2,7 +2,7 @@
 
 > Action/tool-execution 4종 벤치마크. GEODE의 quality ratchet(P4)에 통합 예정.
 > 각 문서는 **사례 + 필요 인프라 + 4-Phase 진행 시나리오**를 담음.
-> 마지막 갱신: 2026-05-07
+> 마지막 갱신: 2026-07-03
 
 ## 채택 4종
 
@@ -26,6 +26,21 @@
 운영 스캐폴드: [benchmark-publishing-cycle.md](benchmark-publishing-cycle.md),
 [benchmark-run-record.template.md](benchmark-run-record.template.md)
 
+## 다음 측정 큐
+
+현재 남은 agentic tool-use benchmark는 아래 순서로 진행한다. 사용자가
+`tau2-bench`를 2순위로 올리도록 지정했으므로, BFCL V4는 tau2 smoke와
+Telecom small run 이후로 둔다.
+
+| 순위 | 벤치 | 첫 목표 | 완료 기준 |
+|---:|---|---|---|
+| 1 | MCPMark Verified | `easy` across available MCPs, then Verified filesystem slice | GEODE adapter로 verifier-backed result 생성, MCPMark Verified와 `filesystem/easy`를 분리 기록 |
+| 2 | τ²-bench | `mock` smoke, then Telecom small run; run `gpt-4.1` user simulator for legacy GPT-5.5 comparators and `gpt-5.2` user simulator for current leaderboard comparability | tau2 result directory와 domain split을 보존하고, user simulator / trial 수를 public page에 명시 |
+| 3 | BFCL V4 | Agentic subset first | native/prompt function-calling route와 aggregation을 고정한 뒤 result/score artifact 보존 |
+| 4 | HAL Reliability | tau-bench airline single-rerun smoke | τ² adapter 재사용 여부와 rerun consistency schema 확인 |
+| 5 | Terminal-Bench 2.0 | 1-task Docker/tmux smoke | post-run test artifact와 shell transcript 보존 |
+| 6 | Toolathlon | credential-free or lowest-credential smoke | MCP app surface, turn cap, and credential caveats 기록 |
+
 ## 의존성 그래프
 
 ```
@@ -34,8 +49,10 @@
 HAL Reliability (τ-bench airline rerun) ← 절반 무료
 ```
 
-τ² 어댑터를 먼저 만들면 HAL Reliability의 tau-bench 부분이 그대로 따라옴. 우선순위:
-**τ² → HAL Reliability → Terminal-Bench → Toolathlon** (lift 가벼운 순).
+τ² 어댑터를 먼저 만들면 HAL Reliability의 tau-bench 부분이 그대로 따라옴.
+장기 로드맵의 lift 순서는 **τ² → HAL Reliability → Terminal-Bench →
+Toolathlon**이지만, 현재 agentic tool-use 3종 측정 큐에서는 MCPMark
+Verified 다음에 τ²-bench를 둔다.
 
 ## 채택 안 한 것
 
@@ -73,6 +90,8 @@ HAL Reliability (τ-bench airline rerun) ← 절반 무료
 
 | 일자 | 변경 |
 |---|---|
+| 2026-07-03 | 남은 벤치마크 측정 큐를 추가하고 `tau2-bench`를 2순위로 승격 |
+| 2026-07-03 | 최신 tau2 하네스의 `gpt-5.2` user simulator 권장 설정을 별도 비교군으로 보정 |
 | 2026-07-03 | Benchmark Publishing Cycle 스캐폴드와 run-record 템플릿 추가 |
 | 2026-07-03 | MCPMark filesystem easy에서 GEODE + GPT-5.5 xhigh 10/10 실측 및 EOF offload 결과 기록 |
 | 2026-07-02 | GPT-5.5 subscription 측정 준비용 MCPMark/BFCL V4/tau2 공개 사례 ledger 추가 |

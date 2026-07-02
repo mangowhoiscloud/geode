@@ -46,7 +46,7 @@ Sierra 분석: telecom은 **patient diagnostic dialog**를 보상 — Chinese re
 | Sandbox | **순수 Python in-process** — Docker 불필요 |
 | Scoring | Pydantic world state diff (oracle) — LLM judge 미사용 |
 | Trace | `results/<run_id>/` JSONL (메시지+tool call+task reward) |
-| External | LLM keys (LiteLLM). User simulator 모델 명시 필수 — leaderboard는 v0.2.0부터 **`gpt-4.1` 고정** |
+| External | LLM keys (LiteLLM). User simulator 모델 명시 필수 — legacy GPT-5.5 비교는 **`gpt-4.1`**, 현재 tau2 leaderboard 비교는 upstream 권장 **`gpt-5.2`**를 별도 run으로 분리 |
 | Cost — smoke | 5-task airline @ Sonnet 4.5 ≈ **<$3** |
 | Cost — full | 4-domain × 4 trial @ Sonnet 4.5 ≈ **$200-400** |
 | CI 적합도 | 5-task smoke GHA 가능 (~10-15분), full은 VM |
@@ -80,27 +80,47 @@ tau2 run --domain mock --agent-llm <ours> --num-tasks 1 --num-trials 1
 
 **Pass criteria**: results/ 폴더에 JSONL 생성, agent contract 호출 trace 확인.
 
-### Phase 1 — PoC 어댑터 (~6-10시간)
+### Phase 1 — GEODE runner adapter
 
-신규 파일:
-- `eval/tau2/__init__.py`
-- `eval/tau2/adapter.py` — `class GeodeTau2Agent(HalfDuplexAgent)`
-- `eval/tau2/factory.py` — `create_agent()` factory
-- `eval/tau2/README.md` — 실행 방법
+Repository script:
+- `scripts/eval/tau2_geode_agent.py`
 
 매핑:
-- `generate_next_message(message, state)` → 한 번의 `AgenticLoop.step()`
-- `tools` constructor 인자 → GEODE tool registry에 wrap (LangGraph tool node 형태)
-- `domain_policy` → AgenticLoop system prompt prefix
-- `state` → AgenticLoop의 conversation state를 Pydantic으로 직렬화
+- `generate_next_message(message, state)` → 한 번의 `AgenticLoop.arun()`
+- tau2 `tools` constructor 인자 → GEODE `ToolRegistry` + `ToolExecutor`
+  handler로 wrap
+- `domain_policy` → `AgenticLoop(system_prompt_override=...)`
+- `state` → per-task `ConversationContext`와 `AgenticLoop` 보존
+
+GEODE smoke command:
+
+```bash
+python scripts/eval/tau2_geode_agent.py \
+  --harness-dir artifacts/eval/harnesses/tau2-bench \
+  --domain mock \
+  --num-tasks 1 \
+  --num-trials 1 \
+  --model gpt-5.5 \
+  --provider openai \
+  --source subscription \
+  --effort xhigh \
+  --save-to geode-gpt-5-5-xhigh-mock-smoke-20260703
+```
 
 ### Phase 2 — First Real Run
 
-- **대상**: telecom 24 tasks × 1 trial × **Sonnet 4.5**
+- **대상**: telecom small/base slice × 1 trial × **GPT-5.5 xhigh**
 - **선정 사유**: dual-control 도메인이 Slack/MCP execution path에 가장 가까움
 - **예상 baseline**: **35-45% pass^1** (비특화 scaffold 평균치 기준)
 - **예상 cost**: $25-40
 - **출력 보관**: `artifacts/eval/tau2/<date>/`
+- **비교 분리**: legacy GPT-5.5 공개 수치와 맞추는 `user-llm=gpt-4.1`
+  run과, 현재 tau2 leaderboard 권장 설정인 `user-llm=gpt-5.2` run을
+  평균내지 않는다.
+- **Auth caveat**: GEODE agent 호출은 `source=subscription`으로 가능하지만,
+  tau2 `user_simulator`는 LiteLLM 경로의 별도 provider credential을
+  요구한다. MCPMark filesystem/easy처럼 `OPENAI_API_KEY=dummy`로
+  user simulator를 우회할 수 없다.
 
 ### Phase 3 — CI / 운영 Ratchet
 

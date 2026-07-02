@@ -131,6 +131,7 @@ export const DOCS_SITEMAP: DocSection[] = [
     titleKo: "벤치마크",
     pages: [
       { slug: "benchmarks/publishing-cycle", title: "Benchmark publishing cycle", titleKo: "Benchmark publishing cycle", summary: "Repeatable runbook for measuring GEODE, recording the evidence ledger, publishing official docs, and verifying GitHub Pages.", summaryKo: "GEODE 측정, evidence ledger 기록, 공식문서 배포, GitHub Pages 검증을 하나로 묶은 반복 runbook입니다.", quadrant: "how-to" },
+      { slug: "benchmarks/queue", title: "Benchmark queue", titleKo: "Benchmark queue", summary: "Current GEODE benchmark execution order: MCPMark Verified, tau2-bench, BFCL V4, then roadmap benchmarks.", summaryKo: "현재 GEODE benchmark 실행 순서입니다. MCPMark Verified, tau2-bench, BFCL V4 이후 로드맵 benchmark로 진행합니다.", quadrant: "how-to" },
       { slug: "benchmarks/mcpmark/filesystem-easy", title: "MCPMark: filesystem/easy", titleKo: "MCPMark: filesystem/easy", summary: "Verifier-backed GEODE run record for MCPMark's filesystem easy subset, including run spec, artifacts, task scores, and the EOF offload note.", summaryKo: "MCPMark filesystem easy 하위 suite에 대한 GEODE verifier-backed 실측 기록입니다. run spec, 산출물, task별 점수, EOF offload 기록을 포함합니다.", quadrant: "reference" },
     ],
   },
