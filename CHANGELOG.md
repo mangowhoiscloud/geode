@@ -56,6 +56,11 @@ functional change.
   exposed MCP tool descriptions, and offloading source EOF preservation from
   model turns into the MCP dispatch layer for same-name text writes.
 
+## [0.99.265] - 2026-07-03
+
+### Changed
+- **`/model` picker context guard consumes ContextBudgetPolicy** — the primary-role downgrade guard warned when the conversation exceeded a bare `MODEL_CONTEXT_WINDOW * 0.8` literal; it now resolves the model's tiered `ContextBudgetPolicy` and warns at `policy.warning_tokens` (small windows warn earlier, large windows keep the absolute ceiling), so the picker and the running loop agree on when a window is too full. The warning message now names the tier. Follow-up on PR-CONTEXT-BUDGET (Codex LOW). Guard: `tests/core/cli/test_picker_context_guard.py`.
+
 ## [0.99.263] - 2026-07-03
 
 ### Fixed
