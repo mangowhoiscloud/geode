@@ -40,8 +40,8 @@ export default function Page() {
                 <tr>
                   <td>2</td>
                   <td>τ²-bench</td>
-                  <td><code>mock</code> smoke, then Telecom small runs with separate <code>gpt-4.1</code> and <code>gpt-5.2</code> user simulators</td>
-                  <td>domain split, user simulator, trial 수를 result page에 명시</td>
+                  <td><code>mock</code> smoke with <code>geode_agent</code> + <code>geode_user</code> over subscription, then Telecom small run</td>
+                  <td>domain split, user route, trial 수를 result page에 명시</td>
                 </tr>
                 <tr>
                   <td>3</td>
@@ -75,7 +75,8 @@ export default function Page() {
               <li>각 benchmark는 <code>Benchmark publishing cycle</code>을 하나씩 통과합니다.</li>
               <li>τ²-bench는 사용자 지시에 따라 BFCL V4보다 먼저 진행합니다.</li>
               <li>Live run은 model route, subscription/API 구분, user simulator를 결과에 남깁니다.</li>
-              <li>τ²-bench의 <code>gpt-4.1</code> user run과 <code>gpt-5.2</code> user run은 별도 비교군으로 보관합니다.</li>
+              <li>τ²-bench의 기본 run은 agent와 user 모두 GEODE subscription route로 실행합니다.</li>
+              <li>native tau2 <code>gpt-4.1</code>/<code>gpt-5.2</code> user simulator run은 별도 비교군으로 보관합니다.</li>
               <li>공개 점수는 verifier-backed artifact가 있는 경우에만 추가합니다.</li>
             </ul>
 
@@ -115,8 +116,8 @@ export default function Page() {
                 <tr>
                   <td>2</td>
                   <td>τ²-bench</td>
-                  <td><code>mock</code> smoke, then Telecom small runs with separate <code>gpt-4.1</code> and <code>gpt-5.2</code> user simulators</td>
-                  <td>Domain split, user simulator, and trial count published</td>
+                  <td><code>mock</code> smoke with <code>geode_agent</code> + <code>geode_user</code> over subscription, then Telecom small run</td>
+                  <td>Domain split, user route, and trial count published</td>
                 </tr>
                 <tr>
                   <td>3</td>
@@ -150,7 +151,8 @@ export default function Page() {
               <li>Each benchmark passes through one <code>Benchmark publishing cycle</code>.</li>
               <li>τ²-bench runs before BFCL V4 by operator priority.</li>
               <li>Live runs record model route, subscription/API source, and user simulator.</li>
-              <li>τ²-bench <code>gpt-4.1</code> user runs and <code>gpt-5.2</code> user runs stay in separate comparator groups.</li>
+              <li>τ²-bench defaults to GEODE subscription route for both agent and user.</li>
+              <li>Native tau2 <code>gpt-4.1</code>/<code>gpt-5.2</code> user simulator runs stay in separate comparator groups.</li>
               <li>Public scores are added only when backed by verifier artifacts.</li>
             </ul>
 

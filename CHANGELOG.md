@@ -51,8 +51,10 @@ functional change.
 
 - **tau2 GEODE benchmark runner.** Added `scripts/eval/tau2_geode_agent.py`, a
   reproducible runner that registers GEODE as an in-process tau2
-  `HalfDuplexAgent`, wraps tau2 domain tools into GEODE's `ToolRegistry` and
-  `ToolExecutor`, and preserves tau2's native simulator/evaluator/output path.
+  `HalfDuplexAgent` and `HalfDuplexUser`, wraps tau2 domain tools into
+  GEODE's `ToolRegistry` and `ToolExecutor`, and preserves tau2's native
+  evaluator/output path while letting both agent and simulated user run through
+  the subscription route.
 
 ### Fixed
 

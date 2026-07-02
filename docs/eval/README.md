@@ -35,7 +35,7 @@ Telecom small run 이후로 둔다.
 | 순위 | 벤치 | 첫 목표 | 완료 기준 |
 |---:|---|---|---|
 | 1 | MCPMark Verified | `easy` across available MCPs, then Verified filesystem slice | GEODE adapter로 verifier-backed result 생성, MCPMark Verified와 `filesystem/easy`를 분리 기록 |
-| 2 | τ²-bench | `mock` smoke, then Telecom small run; run `gpt-4.1` user simulator for legacy GPT-5.5 comparators and `gpt-5.2` user simulator for current leaderboard comparability | tau2 result directory와 domain split을 보존하고, user simulator / trial 수를 public page에 명시 |
+| 2 | τ²-bench | `mock` smoke with `geode_agent` + `geode_user` over subscription, then Telecom small run; native tau2 `gpt-4.1` / `gpt-5.2` user-simulator runs are optional comparator tracks | tau2 result directory와 domain split을 보존하고, user route / trial 수를 public page에 명시 |
 | 3 | BFCL V4 | Agentic subset first | native/prompt function-calling route와 aggregation을 고정한 뒤 result/score artifact 보존 |
 | 4 | HAL Reliability | tau-bench airline single-rerun smoke | τ² adapter 재사용 여부와 rerun consistency schema 확인 |
 | 5 | Terminal-Bench 2.0 | 1-task Docker/tmux smoke | post-run test artifact와 shell transcript 보존 |
