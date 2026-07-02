@@ -531,12 +531,22 @@ The relevant GEODE injection points already exist:
 
 ## Suggested First Measurement Pass
 
+The active queue after the 2026-07-03 priority update is:
+
 1. MCPMark Verified `easy` suite across all available MCPs using the GEODE
    adapter, starting with filesystem.
-2. tau2 `mock` smoke, then Telecom small run using GPT-4.1 as user simulator.
+2. tau2 `mock` smoke, then Telecom small run. The default GEODE route uses
+   `geode_agent` + `geode_user`, both with `source=subscription`, so no
+   LiteLLM credential is required for the first GEODE-owned run. Native tau2
+   `user_simulator` runs with GPT-4.1 or GPT-5.2 are optional comparator tracks
+   and must stay separate from the subscription-only score.
 3. BFCL V4 agentic subset first; full BFCL V4 only after the function-calling
    route is stable.
-4. Archive every run under `artifacts/eval/<bench>/<date>/` and add only
+4. HAL Reliability tau-bench airline smoke, reusing the tau2 adapter shape where
+   possible.
+5. Terminal-Bench 2.0 smoke.
+6. Toolathlon smoke.
+7. Archive every run under `artifacts/eval/<bench>/<date>/` and add only
    verifier-backed scores to the public docs.
 
 ## Sources
