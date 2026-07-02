@@ -17,6 +17,11 @@ export type ChangelogEntry = {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    "version": "0.99.258",
+    "date": "2026-07-02",
+    "body": "### Fixed\n- **Geodi compact mascot preserves the original character shape.** v0.99.257\n  made the welcome mascot smaller by redrawing it at 16×14 pixels, but that\n  changed the face/body proportions and made Geodi look like a different\n  character. The full 22×20 source sprite is now retained as\n  `GEODI_SOURCE_PIXELS`, while the 16×14 welcome sprite is a compact derivative\n  that preserves the original round head, six gill stalks, eye catchlights,\n  cheek blush, belly patch, and feet. Tests now pin both the source grid and the\n  compact silhouette cues."
+  },
+  {
     "version": "0.99.257",
     "date": "2026-07-02",
     "body": "### Changed\n- **Compact Geodi welcome mascot.** The startup pixel mascot now follows the\n  Claude Code-style treatment of keeping terminal welcome UI text-first and\n  small: the native half-block Geodi sprite is reduced from 22×20 pixels\n  (22×10 terminal cells) to 16×14 pixels (16×7 terminal cells). The rose\n  axolotl canon remains pinned by tests, including six separated gill stalks,\n  eye catchlights, cheek blush, belly patch, and a compact footprint guard so\n  the mascot cannot grow back into a splash panel."
