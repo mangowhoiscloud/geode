@@ -9,6 +9,7 @@
     "lint": "eslint",
     "sync-stats": "node scripts/sync-stats.mjs",
     "render-diagrams": "node scripts/render-diagrams.mjs",
+    "build-layer-graph": "node scripts/build-layer-graph.mjs",
     "export-md": "node scripts/export-docs-md.mjs"
   },
   "dependencies": {

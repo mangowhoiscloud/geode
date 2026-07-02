@@ -1,0 +1,1149 @@
+{
+  "meta": {
+    "tool": "Understand-Anything",
+    "toolVersion": "2.8.1",
+    "sourceCommit": "b742381",
+    "sourceCommitFull": "b742381184d6798ecc1e43462eb988f3ab8105dd",
+    "analyzedAt": "2026-07-02T16:13:42.198611Z",
+    "snapshotDate": "2026-07-03",
+    "generatedLabel": "Generated with Understand-Anything v2.8.1 from HEAD b742381, 2026-07-03",
+    "graph": {
+      "nodes": 14555,
+      "edges": 15596,
+      "layers": 14,
+      "tour": 7
+    },
+    "crossLayerImportEdges": 1384,
+    "distinctCrossLayerPairs": 46,
+    "regenerateGraph": "Understand-Anything v2.8.1 re-scan of the repo -> .understand-anything/knowledge-graph.json",
+    "regenerateCommand": "KG_JSON=/abs/.understand-anything/knowledge-graph.json npm run build-layer-graph",
+    "viewBox": "0 0 960 640"
+  },
+  "nodes": [
+    {
+      "id": "runtime-entry-points",
+      "name": "Runtime Entry Points",
+      "short": "Entry Points",
+      "description": "Top-level runtime bootstrap modules, path helpers, async runtime setup, and MCP entry point.",
+      "fileCount": 6,
+      "intraImports": 1,
+      "importsIn": 101,
+      "importsOut": 12,
+      "degree": 113,
+      "role": "runtime",
+      "x": 250,
+      "y": 96,
+      "r": 12.2
+    },
+    {
+      "id": "agent-runtime",
+      "name": "Agent Runtime",
+      "short": "Agent Runtime",
+      "description": "AgenticLoop, sub-agents, conversation state, task orchestration, safety, and plan execution.",
+      "fileCount": 67,
+      "intraImports": 105,
+      "importsIn": 241,
+      "importsOut": 125,
+      "degree": 366,
+      "role": "runtime",
+      "x": 330,
+      "y": 250,
+      "r": 19.6
+    },
+    {
+      "id": "llm-and-prompts",
+      "name": "LLM And Prompts",
+      "short": "LLM & Prompts",
+      "description": "Provider adapters, prompt assembly, pricing, token tracking, and prompt templates.",
+      "fileCount": 67,
+      "intraImports": 104,
+      "importsIn": 193,
+      "importsOut": 49,
+      "degree": 242,
+      "role": "runtime",
+      "x": 492,
+      "y": 172,
+      "r": 19.6
+    },
+    {
+      "id": "tools-mcp-skills",
+      "name": "Tools MCP Skills",
+      "short": "Tools/MCP/Skills",
+      "description": "Native tool registry, MCP integration, skill registry, and tool-facing runtime extensions.",
+      "fileCount": 49,
+      "intraImports": 29,
+      "importsIn": 101,
+      "importsOut": 23,
+      "degree": 124,
+      "role": "runtime",
+      "x": 505,
+      "y": 322,
+      "r": 18.1
+    },
+    {
+      "id": "memory-hooks-wiring",
+      "name": "Memory Hooks Wiring",
+      "short": "Memory & Hooks",
+      "description": "Memory hierarchy, lifecycle hooks, daemon bootstrap, IPC, scheduling, and gateways.",
+      "fileCount": 61,
+      "intraImports": 80,
+      "importsIn": 180,
+      "importsOut": 63,
+      "degree": 243,
+      "role": "runtime",
+      "x": 336,
+      "y": 402,
+      "r": 19.2
+    },
+    {
+      "id": "cli-ui-messaging",
+      "name": "CLI UI Messaging",
+      "short": "CLI/UI/Messaging",
+      "description": "Typer CLI surface, command handlers, terminal UI, messaging bindings, and user-facing interaction utilities.",
+      "fileCount": 79,
+      "intraImports": 127,
+      "importsIn": 111,
+      "importsOut": 79,
+      "degree": 190,
+      "role": "runtime",
+      "x": 172,
+      "y": 342,
+      "r": 20.6
+    },
+    {
+      "id": "config-auth-observability",
+      "name": "Config Auth Observability",
+      "short": "Config/Auth/Obs",
+      "description": "Settings, auth profiles, audit diagnostics, activity logs, transcript state, and runtime observability support.",
+      "fileCount": 38,
+      "intraImports": 24,
+      "importsIn": 198,
+      "importsOut": 14,
+      "degree": 212,
+      "role": "runtime",
+      "x": 168,
+      "y": 188,
+      "r": 17
+    },
+    {
+      "id": "self-improving-seed-generation",
+      "name": "Self Improving And Seed Generation",
+      "short": "Self-Improving",
+      "description": "Non-parametric self-improvement loop, campaign machinery, fitness/ledger logic, and adversarial seed generation plugin.",
+      "fileCount": 93,
+      "intraImports": 67,
+      "importsIn": 221,
+      "importsOut": 27,
+      "degree": 248,
+      "role": "runtime",
+      "x": 566,
+      "y": 250,
+      "r": 21.5
+    },
+    {
+      "id": "petri-audit-plugin",
+      "name": "Petri Audit Plugin",
+      "short": "Petri Audit",
+      "description": "Petri audit plugin, judge dimensions, seeds, and audit adapters.",
+      "fileCount": 68,
+      "intraImports": 29,
+      "importsIn": 30,
+      "importsOut": 9,
+      "degree": 39,
+      "role": "runtime",
+      "x": 656,
+      "y": 366,
+      "r": 19.7
+    },
+    {
+      "id": "public-site",
+      "name": "Public Site",
+      "short": "Public Site",
+      "description": "Next.js public documentation site, site data, diagrams, and exported assets.",
+      "fileCount": 258,
+      "intraImports": 349,
+      "importsIn": 0,
+      "importsOut": 0,
+      "degree": 0,
+      "role": "docs",
+      "x": 838,
+      "y": 150,
+      "r": 29.9
+    },
+    {
+      "id": "architecture-docs",
+      "name": "Architecture Docs",
+      "short": "Architecture Docs",
+      "description": "Architecture, ADR, setup, design, evaluation, examples, diagrams, and operator documentation.",
+      "fileCount": 70,
+      "intraImports": 0,
+      "importsIn": 0,
+      "importsOut": 0,
+      "degree": 0,
+      "role": "docs",
+      "x": 822,
+      "y": 300,
+      "r": 19.9
+    },
+    {
+      "id": "research-audit-docs",
+      "name": "Research Audit Docs",
+      "short": "Research Docs",
+      "description": "Research notes, audit reports, plans, self-improving reports, Petri bundle pages, and progress documents.",
+      "fileCount": 135,
+      "intraImports": 0,
+      "importsIn": 0,
+      "importsOut": 0,
+      "degree": 0,
+      "role": "docs",
+      "x": 862,
+      "y": 438,
+      "r": 24.1
+    },
+    {
+      "id": "tests",
+      "name": "Tests",
+      "short": "Tests",
+      "description": "Unit, integration, and fixture coverage for runtime, tools, providers, plugins, and site behavior.",
+      "fileCount": 617,
+      "intraImports": 13,
+      "importsIn": 0,
+      "importsOut": 976,
+      "degree": 976,
+      "role": "tests",
+      "x": 430,
+      "y": 552,
+      "r": 41.3
+    },
+    {
+      "id": "project-config",
+      "name": "Project Config And Automation",
+      "short": "Project Config",
+      "description": "Repository manifests, CI, packaging, Docker files, top-level documentation, and maintenance scripts.",
+      "fileCount": 68,
+      "intraImports": 0,
+      "importsIn": 8,
+      "importsOut": 7,
+      "degree": 15,
+      "role": "config",
+      "x": 728,
+      "y": 528,
+      "r": 19.7
+    }
+  ],
+  "edges": [
+    {
+      "a": "self-improving-seed-generation",
+      "b": "tests",
+      "weight": 207,
+      "x1": 566,
+      "y1": 250,
+      "x2": 430,
+      "y2": 552,
+      "strokeWidth": 5.8,
+      "opacity": 0.66,
+      "top": true,
+      "rank": 1,
+      "mx": 506,
+      "my": 383
+    },
+    {
+      "a": "agent-runtime",
+      "b": "tests",
+      "weight": 205,
+      "x1": 330,
+      "y1": 250,
+      "x2": 430,
+      "y2": 552,
+      "strokeWidth": 5.7,
+      "opacity": 0.66,
+      "top": true,
+      "rank": 2,
+      "mx": 374,
+      "my": 383
+    },
+    {
+      "a": "llm-and-prompts",
+      "b": "tests",
+      "weight": 141,
+      "x1": 492,
+      "y1": 172,
+      "x2": 430,
+      "y2": 552,
+      "strokeWidth": 4.1,
+      "opacity": 0.5,
+      "top": true,
+      "rank": 3,
+      "mx": 465,
+      "my": 339
+    },
+    {
+      "a": "config-auth-observability",
+      "b": "tests",
+      "weight": 109,
+      "x1": 168,
+      "y1": 188,
+      "x2": 430,
+      "y2": 552,
+      "strokeWidth": 3.3,
+      "opacity": 0.42,
+      "top": true,
+      "rank": 4,
+      "mx": 283,
+      "my": 348
+    },
+    {
+      "a": "memory-hooks-wiring",
+      "b": "tests",
+      "weight": 105,
+      "x1": 336,
+      "y1": 402,
+      "x2": 430,
+      "y2": 552,
+      "strokeWidth": 3.2,
+      "opacity": 0.41,
+      "top": true,
+      "rank": 5,
+      "mx": 377,
+      "my": 468
+    },
+    {
+      "a": "cli-ui-messaging",
+      "b": "tests",
+      "weight": 87,
+      "x1": 172,
+      "y1": 342,
+      "x2": 430,
+      "y2": 552,
+      "strokeWidth": 2.8,
+      "opacity": 0.37,
+      "top": false,
+      "rank": null,
+      "mx": 286,
+      "my": 434
+    },
+    {
+      "a": "tests",
+      "b": "tools-mcp-skills",
+      "weight": 71,
+      "x1": 430,
+      "y1": 552,
+      "x2": 505,
+      "y2": 322,
+      "strokeWidth": 2.4,
+      "opacity": 0.33,
+      "top": false,
+      "rank": null,
+      "mx": 463,
+      "my": 451
+    },
+    {
+      "a": "agent-runtime",
+      "b": "llm-and-prompts",
+      "weight": 46,
+      "x1": 330,
+      "y1": 250,
+      "x2": 492,
+      "y2": 172,
+      "strokeWidth": 1.8,
+      "opacity": 0.27,
+      "top": false,
+      "rank": null,
+      "mx": 401,
+      "my": 216
+    },
+    {
+      "a": "agent-runtime",
+      "b": "memory-hooks-wiring",
+      "weight": 38,
+      "x1": 330,
+      "y1": 250,
+      "x2": 336,
+      "y2": 402,
+      "strokeWidth": 1.6,
+      "opacity": 0.25,
+      "top": false,
+      "rank": null,
+      "mx": 333,
+      "my": 317
+    },
+    {
+      "a": "cli-ui-messaging",
+      "b": "memory-hooks-wiring",
+      "weight": 29,
+      "x1": 172,
+      "y1": 342,
+      "x2": 336,
+      "y2": 402,
+      "strokeWidth": 1.3,
+      "opacity": 0.23,
+      "top": false,
+      "rank": null,
+      "mx": 244,
+      "my": 368
+    },
+    {
+      "a": "petri-audit-plugin",
+      "b": "tests",
+      "weight": 26,
+      "x1": 656,
+      "y1": 366,
+      "x2": 430,
+      "y2": 552,
+      "strokeWidth": 1.3,
+      "opacity": 0.22,
+      "top": false,
+      "rank": null,
+      "mx": 557,
+      "my": 448
+    },
+    {
+      "a": "agent-runtime",
+      "b": "config-auth-observability",
+      "weight": 25,
+      "x1": 330,
+      "y1": 250,
+      "x2": 168,
+      "y2": 188,
+      "strokeWidth": 1.2,
+      "opacity": 0.22,
+      "top": false,
+      "rank": null,
+      "mx": 259,
+      "my": 223
+    },
+    {
+      "a": "agent-runtime",
+      "b": "cli-ui-messaging",
+      "weight": 22,
+      "x1": 330,
+      "y1": 250,
+      "x2": 172,
+      "y2": 342,
+      "strokeWidth": 1.2,
+      "opacity": 0.21,
+      "top": false,
+      "rank": null,
+      "mx": 260,
+      "my": 290
+    },
+    {
+      "a": "config-auth-observability",
+      "b": "llm-and-prompts",
+      "weight": 21,
+      "x1": 168,
+      "y1": 188,
+      "x2": 492,
+      "y2": 172,
+      "strokeWidth": 1.1,
+      "opacity": 0.21,
+      "top": false,
+      "rank": null,
+      "mx": 311,
+      "my": 181
+    },
+    {
+      "a": "memory-hooks-wiring",
+      "b": "runtime-entry-points",
+      "weight": 19,
+      "x1": 336,
+      "y1": 402,
+      "x2": 250,
+      "y2": 96,
+      "strokeWidth": 1.1,
+      "opacity": 0.21,
+      "top": false,
+      "rank": null,
+      "mx": 298,
+      "my": 267
+    },
+    {
+      "a": "cli-ui-messaging",
+      "b": "config-auth-observability",
+      "weight": 18,
+      "x1": 172,
+      "y1": 342,
+      "x2": 168,
+      "y2": 188,
+      "strokeWidth": 1.1,
+      "opacity": 0.2,
+      "top": false,
+      "rank": null,
+      "mx": 170,
+      "my": 274
+    },
+    {
+      "a": "memory-hooks-wiring",
+      "b": "tools-mcp-skills",
+      "weight": 18,
+      "x1": 336,
+      "y1": 402,
+      "x2": 505,
+      "y2": 322,
+      "strokeWidth": 1.1,
+      "opacity": 0.2,
+      "top": false,
+      "rank": null,
+      "mx": 410,
+      "my": 367
+    },
+    {
+      "a": "runtime-entry-points",
+      "b": "tests",
+      "weight": 17,
+      "x1": 250,
+      "y1": 96,
+      "x2": 430,
+      "y2": 552,
+      "strokeWidth": 1,
+      "opacity": 0.2,
+      "top": false,
+      "rank": null,
+      "mx": 329,
+      "my": 297
+    },
+    {
+      "a": "config-auth-observability",
+      "b": "memory-hooks-wiring",
+      "weight": 15,
+      "x1": 168,
+      "y1": 188,
+      "x2": 336,
+      "y2": 402,
+      "strokeWidth": 1,
+      "opacity": 0.2,
+      "top": false,
+      "rank": null,
+      "mx": 242,
+      "my": 282
+    },
+    {
+      "a": "agent-runtime",
+      "b": "runtime-entry-points",
+      "weight": 14,
+      "x1": 330,
+      "y1": 250,
+      "x2": 250,
+      "y2": 96,
+      "strokeWidth": 1,
+      "opacity": 0.19,
+      "top": false,
+      "rank": null,
+      "mx": 295,
+      "my": 182
+    },
+    {
+      "a": "config-auth-observability",
+      "b": "runtime-entry-points",
+      "weight": 14,
+      "x1": 168,
+      "y1": 188,
+      "x2": 250,
+      "y2": 96,
+      "strokeWidth": 1,
+      "opacity": 0.19,
+      "top": false,
+      "rank": null,
+      "mx": 204,
+      "my": 148
+    },
+    {
+      "a": "runtime-entry-points",
+      "b": "self-improving-seed-generation",
+      "weight": 14,
+      "x1": 250,
+      "y1": 96,
+      "x2": 566,
+      "y2": 250,
+      "strokeWidth": 1,
+      "opacity": 0.19,
+      "top": false,
+      "rank": null,
+      "mx": 389,
+      "my": 164
+    },
+    {
+      "a": "agent-runtime",
+      "b": "tools-mcp-skills",
+      "weight": 12,
+      "x1": 330,
+      "y1": 250,
+      "x2": 505,
+      "y2": 322,
+      "strokeWidth": 0.9,
+      "opacity": 0.19,
+      "top": false,
+      "rank": null,
+      "mx": 407,
+      "my": 282
+    },
+    {
+      "a": "cli-ui-messaging",
+      "b": "runtime-entry-points",
+      "weight": 12,
+      "x1": 172,
+      "y1": 342,
+      "x2": 250,
+      "y2": 96,
+      "strokeWidth": 0.9,
+      "opacity": 0.19,
+      "top": false,
+      "rank": null,
+      "mx": 206,
+      "my": 234
+    },
+    {
+      "a": "memory-hooks-wiring",
+      "b": "self-improving-seed-generation",
+      "weight": 12,
+      "x1": 336,
+      "y1": 402,
+      "x2": 566,
+      "y2": 250,
+      "strokeWidth": 0.9,
+      "opacity": 0.19,
+      "top": false,
+      "rank": null,
+      "mx": 437,
+      "my": 335
+    },
+    {
+      "a": "cli-ui-messaging",
+      "b": "llm-and-prompts",
+      "weight": 11,
+      "x1": 172,
+      "y1": 342,
+      "x2": 492,
+      "y2": 172,
+      "strokeWidth": 0.9,
+      "opacity": 0.19,
+      "top": false,
+      "rank": null,
+      "mx": 313,
+      "my": 267
+    },
+    {
+      "a": "runtime-entry-points",
+      "b": "tools-mcp-skills",
+      "weight": 9,
+      "x1": 250,
+      "y1": 96,
+      "x2": 505,
+      "y2": 322,
+      "strokeWidth": 0.8,
+      "opacity": 0.18,
+      "top": false,
+      "rank": null,
+      "mx": 362,
+      "my": 195
+    },
+    {
+      "a": "project-config",
+      "b": "tests",
+      "weight": 8,
+      "x1": 728,
+      "y1": 528,
+      "x2": 430,
+      "y2": 552,
+      "strokeWidth": 0.8,
+      "opacity": 0.18,
+      "top": false,
+      "rank": null,
+      "mx": 597,
+      "my": 539
+    },
+    {
+      "a": "llm-and-prompts",
+      "b": "memory-hooks-wiring",
+      "weight": 7,
+      "x1": 492,
+      "y1": 172,
+      "x2": 336,
+      "y2": 402,
+      "strokeWidth": 0.8,
+      "opacity": 0.18,
+      "top": false,
+      "rank": null,
+      "mx": 423,
+      "my": 273
+    },
+    {
+      "a": "llm-and-prompts",
+      "b": "runtime-entry-points",
+      "weight": 6,
+      "x1": 492,
+      "y1": 172,
+      "x2": 250,
+      "y2": 96,
+      "strokeWidth": 0.8,
+      "opacity": 0.17,
+      "top": false,
+      "rank": null,
+      "mx": 386,
+      "my": 139
+    },
+    {
+      "a": "cli-ui-messaging",
+      "b": "tools-mcp-skills",
+      "weight": 5,
+      "x1": 172,
+      "y1": 342,
+      "x2": 505,
+      "y2": 322,
+      "strokeWidth": 0.7,
+      "opacity": 0.17,
+      "top": false,
+      "rank": null,
+      "mx": 319,
+      "my": 333
+    },
+    {
+      "a": "config-auth-observability",
+      "b": "tools-mcp-skills",
+      "weight": 5,
+      "x1": 168,
+      "y1": 188,
+      "x2": 505,
+      "y2": 322,
+      "strokeWidth": 0.7,
+      "opacity": 0.17,
+      "top": false,
+      "rank": null,
+      "mx": 316,
+      "my": 247
+    },
+    {
+      "a": "agent-runtime",
+      "b": "self-improving-seed-generation",
+      "weight": 4,
+      "x1": 330,
+      "y1": 250,
+      "x2": 566,
+      "y2": 250,
+      "strokeWidth": 0.7,
+      "opacity": 0.17,
+      "top": false,
+      "rank": null,
+      "mx": 434,
+      "my": 250
+    },
+    {
+      "a": "llm-and-prompts",
+      "b": "petri-audit-plugin",
+      "weight": 4,
+      "x1": 492,
+      "y1": 172,
+      "x2": 656,
+      "y2": 366,
+      "strokeWidth": 0.7,
+      "opacity": 0.17,
+      "top": false,
+      "rank": null,
+      "mx": 564,
+      "my": 257
+    },
+    {
+      "a": "llm-and-prompts",
+      "b": "self-improving-seed-generation",
+      "weight": 4,
+      "x1": 492,
+      "y1": 172,
+      "x2": 566,
+      "y2": 250,
+      "strokeWidth": 0.7,
+      "opacity": 0.17,
+      "top": false,
+      "rank": null,
+      "mx": 525,
+      "my": 206
+    },
+    {
+      "a": "petri-audit-plugin",
+      "b": "runtime-entry-points",
+      "weight": 4,
+      "x1": 656,
+      "y1": 366,
+      "x2": 250,
+      "y2": 96,
+      "strokeWidth": 0.7,
+      "opacity": 0.17,
+      "top": false,
+      "rank": null,
+      "mx": 477,
+      "my": 247
+    },
+    {
+      "a": "project-config",
+      "b": "runtime-entry-points",
+      "weight": 4,
+      "x1": 728,
+      "y1": 528,
+      "x2": 250,
+      "y2": 96,
+      "strokeWidth": 0.7,
+      "opacity": 0.17,
+      "top": false,
+      "rank": null,
+      "mx": 518,
+      "my": 338
+    },
+    {
+      "a": "cli-ui-messaging",
+      "b": "self-improving-seed-generation",
+      "weight": 3,
+      "x1": 172,
+      "y1": 342,
+      "x2": 566,
+      "y2": 250,
+      "strokeWidth": 0.7,
+      "opacity": 0.17,
+      "top": false,
+      "rank": null,
+      "mx": 345,
+      "my": 302
+    },
+    {
+      "a": "cli-ui-messaging",
+      "b": "petri-audit-plugin",
+      "weight": 3,
+      "x1": 172,
+      "y1": 342,
+      "x2": 656,
+      "y2": 366,
+      "strokeWidth": 0.7,
+      "opacity": 0.17,
+      "top": false,
+      "rank": null,
+      "mx": 385,
+      "my": 353
+    },
+    {
+      "a": "llm-and-prompts",
+      "b": "tools-mcp-skills",
+      "weight": 2,
+      "x1": 492,
+      "y1": 172,
+      "x2": 505,
+      "y2": 322,
+      "strokeWidth": 0.7,
+      "opacity": 0.16,
+      "top": false,
+      "rank": null,
+      "mx": 498,
+      "my": 238
+    },
+    {
+      "a": "config-auth-observability",
+      "b": "self-improving-seed-generation",
+      "weight": 2,
+      "x1": 168,
+      "y1": 188,
+      "x2": 566,
+      "y2": 250,
+      "strokeWidth": 0.7,
+      "opacity": 0.16,
+      "top": false,
+      "rank": null,
+      "mx": 343,
+      "my": 215
+    },
+    {
+      "a": "config-auth-observability",
+      "b": "petri-audit-plugin",
+      "weight": 2,
+      "x1": 168,
+      "y1": 188,
+      "x2": 656,
+      "y2": 366,
+      "strokeWidth": 0.7,
+      "opacity": 0.16,
+      "top": false,
+      "rank": null,
+      "mx": 383,
+      "my": 266
+    },
+    {
+      "a": "self-improving-seed-generation",
+      "b": "tools-mcp-skills",
+      "weight": 1,
+      "x1": 566,
+      "y1": 250,
+      "x2": 505,
+      "y2": 322,
+      "strokeWidth": 0.6,
+      "opacity": 0.16,
+      "top": false,
+      "rank": null,
+      "mx": 539,
+      "my": 282
+    },
+    {
+      "a": "project-config",
+      "b": "tools-mcp-skills",
+      "weight": 1,
+      "x1": 728,
+      "y1": 528,
+      "x2": 505,
+      "y2": 322,
+      "strokeWidth": 0.6,
+      "opacity": 0.16,
+      "top": false,
+      "rank": null,
+      "mx": 630,
+      "my": 437
+    },
+    {
+      "a": "project-config",
+      "b": "self-improving-seed-generation",
+      "weight": 1,
+      "x1": 728,
+      "y1": 528,
+      "x2": 566,
+      "y2": 250,
+      "strokeWidth": 0.6,
+      "opacity": 0.16,
+      "top": false,
+      "rank": null,
+      "mx": 657,
+      "my": 406
+    },
+    {
+      "a": "config-auth-observability",
+      "b": "project-config",
+      "weight": 1,
+      "x1": 168,
+      "y1": 188,
+      "x2": 728,
+      "y2": 528,
+      "strokeWidth": 0.6,
+      "opacity": 0.16,
+      "top": false,
+      "rank": null,
+      "mx": 414,
+      "my": 338
+    }
+  ],
+  "topEdges": [
+    {
+      "rank": 1,
+      "a": "self-improving-seed-generation",
+      "b": "tests",
+      "aName": "Self Improving And Seed Generation",
+      "bName": "Tests",
+      "weight": 207
+    },
+    {
+      "rank": 2,
+      "a": "agent-runtime",
+      "b": "tests",
+      "aName": "Agent Runtime",
+      "bName": "Tests",
+      "weight": 205
+    },
+    {
+      "rank": 3,
+      "a": "llm-and-prompts",
+      "b": "tests",
+      "aName": "LLM And Prompts",
+      "bName": "Tests",
+      "weight": 141
+    },
+    {
+      "rank": 4,
+      "a": "config-auth-observability",
+      "b": "tests",
+      "aName": "Config Auth Observability",
+      "bName": "Tests",
+      "weight": 109
+    },
+    {
+      "rank": 5,
+      "a": "memory-hooks-wiring",
+      "b": "tests",
+      "aName": "Memory Hooks Wiring",
+      "bName": "Tests",
+      "weight": 105
+    }
+  ],
+  "hubs": [
+    {
+      "id": "tests",
+      "name": "Tests",
+      "degree": 976,
+      "importsIn": 0,
+      "importsOut": 976,
+      "note": "Widest importer: the test suite reaches into every runtime layer (imports-out only, nothing imports the tests back)."
+    },
+    {
+      "id": "agent-runtime",
+      "name": "Agent Runtime",
+      "degree": 366,
+      "importsIn": 241,
+      "importsOut": 125,
+      "note": "Runtime hub: the most-imported code layer — the agentic loop and its result model that the other runtime layers depend on."
+    }
+  ],
+  "isolated": [
+    {
+      "id": "public-site",
+      "name": "Public Site",
+      "fileCount": 258,
+      "note": "No cross-layer import edges: it connects through prose references and the build, not through Python imports."
+    },
+    {
+      "id": "architecture-docs",
+      "name": "Architecture Docs",
+      "fileCount": 70,
+      "note": "No cross-layer import edges: it connects through prose references and the build, not through Python imports."
+    },
+    {
+      "id": "research-audit-docs",
+      "name": "Research Audit Docs",
+      "fileCount": 135,
+      "note": "No cross-layer import edges: it connects through prose references and the build, not through Python imports."
+    }
+  ],
+  "tour": [
+    {
+      "order": 1,
+      "title": "Project Identity",
+      "description": "Start with the public README and runtime identity documents to understand what GEODE is.",
+      "modules": [
+        {
+          "kind": "document",
+          "path": "README.md"
+        },
+        {
+          "kind": "document",
+          "path": "GEODE.md"
+        },
+        {
+          "kind": "document",
+          "path": "AGENTS.md"
+        }
+      ]
+    },
+    {
+      "order": 2,
+      "title": "Agentic Loop",
+      "description": "Follow the core while(tool_use) execution loop and its result model.",
+      "modules": [
+        {
+          "kind": "file",
+          "path": "core/agent/loop/agent_loop.py"
+        },
+        {
+          "kind": "file",
+          "path": "core/agent/loop/models.py"
+        },
+        {
+          "kind": "file",
+          "path": "core/agent/loop/_context.py"
+        },
+        {
+          "kind": "file",
+          "path": "core/agent/loop/_response.py"
+        }
+      ]
+    },
+    {
+      "order": 3,
+      "title": "Tool Execution",
+      "description": "Inspect tool processing, approval gates, result serialization, and native tool registry surfaces.",
+      "modules": [
+        {
+          "kind": "file",
+          "path": "core/agent/tool_executor/processor.py"
+        },
+        {
+          "kind": "file",
+          "path": "core/agent/tool_executor/executor.py"
+        },
+        {
+          "kind": "file",
+          "path": "core/tools/registry.py"
+        },
+        {
+          "kind": "config",
+          "path": "core/tools/definitions.json"
+        }
+      ]
+    },
+    {
+      "order": 4,
+      "title": "Prompt And Provider Stack",
+      "description": "Review prompt assembly and provider adapters that turn runtime state into model calls.",
+      "modules": [
+        {
+          "kind": "file",
+          "path": "core/llm/prompt_assembler.py"
+        },
+        {
+          "kind": "file",
+          "path": "core/llm/providers/anthropic.py"
+        },
+        {
+          "kind": "file",
+          "path": "core/llm/providers/openai.py"
+        },
+        {
+          "kind": "file",
+          "path": "core/llm/providers/glm.py"
+        }
+      ]
+    },
+    {
+      "order": 5,
+      "title": "Memory, Hooks, And Wiring",
+      "description": "See how context, lifecycle events, bootstrap, IPC, and gateway execution surround the loop.",
+      "modules": [
+        {
+          "kind": "file",
+          "path": "core/memory/context.py"
+        },
+        {
+          "kind": "file",
+          "path": "core/hooks/system.py"
+        },
+        {
+          "kind": "file",
+          "path": "core/wiring/container.py"
+        }
+      ]
+    },
+    {
+      "order": 6,
+      "title": "Petri Audit Extension",
+      "description": "Explore the plugin that evaluates GEODE behavior with Petri-style alignment audits.",
+      "modules": [
+        {
+          "kind": "file",
+          "path": "plugins/petri_audit/runner.py"
+        },
+        {
+          "kind": "file",
+          "path": "plugins/petri_audit/cli_audit.py"
+        }
+      ]
+    },
+    {
+      "order": 7,
+      "title": "Public Site",
+      "description": "Inspect the Next.js site, generated source-of-truth data, diagrams, and docs surface.",
+      "modules": [
+        {
+          "kind": "file",
+          "path": "site/src/data/geode/sot.ts"
+        },
+        {
+          "kind": "file",
+          "path": "site/src/app/docs/architecture/agentic-loop/page.tsx"
+        },
+        {
+          "kind": "file",
+          "path": "site/src/components/geode/agentic-loop-diagram.tsx"
+        }
+      ]
+    }
+  ]
+}
