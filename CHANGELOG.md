@@ -56,6 +56,16 @@ functional change.
   evaluator/output path while letting both agent and simulated user run through
   the subscription route.
 
+### Changed
+
+- **CLI live task surface compacted.** The IPC event renderer now treats
+  `update_plan` like a Claude Code-scale task list: at most five visible tasks
+  around the active item, a `Tasks · done/total` header, and no phase-start
+  plan reprint. Thinking/tool phases carry the active step in the spinner label
+  and restore one compact task list after the phase, avoiding the repeated
+  `Plan:` blocks seen in long runs. The REPL prompt now renders as `geode >`
+  instead of a bare chevron.
+
 ### Fixed
 
 - **MCP filesystem argument compatibility.** MCP tool dispatch now normalizes

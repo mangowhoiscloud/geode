@@ -173,7 +173,7 @@ def _thin_interactive_loop(
         while True:
             console.show_cursor(True)
             try:
-                user_input = _read_multiline_input("[header]>[/header] ")
+                user_input = _read_multiline_input("[header]geode[/header] [muted]>[/muted] ")
             except (KeyboardInterrupt, EOFError):
                 console.print("\n  [muted]Goodbye.[/muted]\n")
                 break

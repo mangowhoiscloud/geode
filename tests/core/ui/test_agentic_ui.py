@@ -167,10 +167,27 @@ class TestRenderPlanSteps:
         )
         calls = [str(c) for c in mock_console.print.call_args_list]
         combined = " ".join(calls)
-        assert "Plan · implementation" in combined
+        assert "Tasks · 1/3 done · implementation" in combined
         assert "Inspect UX" in combined
         assert "Patch tools" in combined
         assert "Run tests" in combined
+
+    @patch("core.ui.agentic_ui.console")
+    def test_progress_plan_direct_path_windows_around_active_step(self, mock_console) -> None:  # type: ignore[no-untyped-def]
+        from core.ui.agentic_ui import render_progress_plan
+
+        render_progress_plan(
+            [
+                {"step": f"step {i}", "status": "in_progress" if i == 6 else "pending"}
+                for i in range(1, 9)
+            ]
+        )
+
+        calls = [str(c) for c in mock_console.print.call_args_list]
+        combined = " ".join(calls)
+        assert "step 6" in combined
+        assert "step 3" not in combined
+        assert "… 3 earlier" in combined
 
 
 class TestRenderSubagent:
@@ -957,7 +974,7 @@ class TestThreadLocalConsoleIsolation:
 
 
 class TestPlanSurfaceVisualLanguage:
-    """Plan checklist: completed = dim+strike, active = rose GEODE mark, pending = dim."""
+    """Task list: completed = dim+strike, active = rose GEODE mark, pending = dim."""
 
     def _renderer(self) -> Any:
         import io
@@ -968,7 +985,7 @@ class TestPlanSurfaceVisualLanguage:
         r._out = io.StringIO()
         return r
 
-    def test_full_plan_styles_by_status(self) -> None:
+    def test_compact_task_list_styles_by_status(self) -> None:
         from core.ui import spinner_glyph
 
         r = self._renderer()
@@ -982,14 +999,15 @@ class TestPlanSurfaceVisualLanguage:
                 "step 2/3",
             )
         )
+        assert "Tasks · 1/3 done · step 2/3" in lines
         assert "\033[2;9mdone step" in lines  # checked off: dim + strikethrough
         assert f"{spinner_glyph.GLYPH}\033[0m \033[1mactive step" in lines  # rose mark + bold
         assert "\033[2mnext step" in lines  # pending stays quiet
         assert spinner_glyph.ROSE in lines
 
-    def test_plan_rerenders_full_checklist_after_obscure(self) -> None:
-        """Live region: an obscured plan re-renders as the FULL checklist (no
-        compact breadcrumb), and the previous copy is erased, not stacked."""
+    def test_task_list_rerenders_compact_window_after_obscure(self) -> None:
+        """Live region: an obscured task list re-renders as a compact window,
+        and the previous copy is erased, not stacked."""
         r = self._renderer()
         r._tty = True
         r.on_event(
@@ -1009,10 +1027,23 @@ class TestPlanSurfaceVisualLanguage:
             }
         )
         out = r._out.getvalue()
-        tail = out[out.rindex("Plan") :]
-        assert "second step" in tail  # full checklist, not a one-line breadcrumb
+        tail = out[out.rindex("Tasks") :]
+        assert "second step" in tail
         assert "first step" in tail
         assert "complete\033[0m" not in tail  # compact "N/M complete" line is gone
+
+    def test_task_list_shows_five_item_window_around_active_step(self) -> None:
+        r = self._renderer()
+        items = [
+            {"step": f"step {i}", "status": "in_progress" if i == 6 else "pending"}
+            for i in range(1, 9)
+        ]
+        lines = "".join(r._render_full_progress_plan(items, ""))
+        assert "step 4" in lines
+        assert "step 8" in lines
+        assert "step 3" not in lines
+        assert "… 3 earlier" in lines
+        assert "Tasks · 0/8 done" in lines
 
     def test_live_region_erased_before_foreign_output(self) -> None:
         """Any non-surface event erases the live region first — no stale copies."""
@@ -1031,7 +1062,7 @@ class TestPlanSurfaceVisualLanguage:
 
 
 class TestPinnedPlanDuringPhases:
-    """Plan checklist stays visible (pinned) while thinking/tool phases run."""
+    """Task list hides during phases and returns as one compact bottom copy."""
 
     def _renderer(self) -> Any:
         import io
@@ -1043,8 +1074,8 @@ class TestPinnedPlanDuringPhases:
         r._tty = True
         return r
 
-    def test_plan_stays_visible_through_thinking_start(self) -> None:
-        """thinking_start re-prints the plan (pinned) instead of erasing it."""
+    def test_thinking_start_hides_task_list_without_reprinting_it(self) -> None:
+        """thinking_start clears the task list; spinner label carries active step."""
         r = self._renderer()
         r.on_event(
             {
@@ -1056,10 +1087,10 @@ class TestPinnedPlanDuringPhases:
         r.on_event({"type": "thinking_start", "model": "m", "round": 1})
         try:
             assert r._plan_pinned is True
-            assert r._progress_plan.visible_lines  # still tracked on screen
-            assert r._progress_plan.at_bottom is False  # pinned: not erasable mid-phase
+            assert r._progress_plan.visible_lines == []
+            assert r._progress_plan.at_bottom is False
             written_after = r._out.getvalue()[marker:]
-            assert "pinned step" in written_after  # re-written for the phase
+            assert "pinned step" not in written_after
         finally:
             r._stop_thinking()
 
@@ -1075,13 +1106,13 @@ class TestPinnedPlanDuringPhases:
         r.on_event({"type": "thinking_start", "model": "m", "round": 1})
         r.on_event({"type": "thinking_end"})
         out = r._out.getvalue()
-        tail = out[out.rindex("Plan") :]  # after the LAST Plan header
+        tail = out[out.rindex("Tasks") :]  # after the LAST Tasks header
         assert tail.count("cycle step") == 1
         assert r._plan_pinned is False
         assert r._progress_plan.at_bottom is True  # bottom copy is erasable again
 
-    def test_tool_cycle_restores_plan_to_bottom(self) -> None:
-        """tool_start pins the plan; tool_end all-done re-anchors it."""
+    def test_tool_cycle_restores_task_list_to_bottom(self) -> None:
+        """tool_start clears the task list; tool_end all-done redraws it."""
         r = self._renderer()
         r.on_event(
             {
@@ -1095,7 +1126,7 @@ class TestPinnedPlanDuringPhases:
         assert r._plan_pinned is False
         assert r._progress_plan.at_bottom is True
         out = r._out.getvalue()
-        assert "tool step" in out[out.rindex("Plan") :]
+        assert "tool step" in out[out.rindex("Tasks") :]
 
 
 def test_tool_tracker_running_row_uses_signature_shimmer() -> None:
