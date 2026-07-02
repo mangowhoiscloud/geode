@@ -17,6 +17,11 @@ export type ChangelogEntry = {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    "version": "0.99.257",
+    "date": "2026-07-02",
+    "body": "### Changed\n- **Compact Geodi welcome mascot.** The startup pixel mascot now follows the\n  Claude Code-style treatment of keeping terminal welcome UI text-first and\n  small: the native half-block Geodi sprite is reduced from 22×20 pixels\n  (22×10 terminal cells) to 16×14 pixels (16×7 terminal cells). The rose\n  axolotl canon remains pinned by tests, including six separated gill stalks,\n  eye catchlights, cheek blush, belly patch, and a compact footprint guard so\n  the mascot cannot grow back into a splash panel."
+  },
+  {
     "version": "0.99.256",
     "date": "2026-07-02",
     "body": "### Infrastructure\n- **Slop growth ratchet.** CI now runs `scripts/check_slop_ratchet.py`, a\n  committed-baseline gate over four low-signal-growth metrics: bypass markers,\n  stale TODO markers, dead placeholder branches, and duplicated function\n  signatures. Existing debt is tolerated through\n  `scripts/slop_ratchet_baseline.json`; PRs fail only when a metric grows\n  above the accepted floor unless the baseline is deliberately updated and\n  reviewed in the diff."

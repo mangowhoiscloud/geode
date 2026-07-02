@@ -5,13 +5,13 @@ side, deeper rose, visibly separated), simple symmetric 2x2 dark eyes with a
 1px white catchlight in the top-right corner of each, a tiny 2px mouth, a
 lighter belly patch, and a subtle deep-rose cheek blush beside the eyes.
 
-The sprite is authored as a 22x20 pixel grid (``GEODI_PIXELS``) and rendered
+The sprite is authored as a 16x14 pixel grid (``GEODI_PIXELS``) and rendered
 as truecolor half-blocks — ``▀`` with fg = upper pixel, bg = lower pixel, two
-pixels per terminal cell — so it draws in ANY truecolor terminal: 22 cols x
-10 rows, one code path, no Kitty/iTerm2 detection. Transparent pixels reset
+pixels per terminal cell — so it draws in ANY truecolor terminal: 16 cols x
+7 rows, one code path, no Kitty/iTerm2 detection. Transparent pixels reset
 to the terminal's default background.
 
-Hand-edit ``GEODI_PIXELS`` directly; every row must stay exactly 22 chars.
+Hand-edit ``GEODI_PIXELS`` directly; every row must stay exactly 16 chars.
 Live preview: ``python -m core.ui.geodi_art``.
 """
 
@@ -29,34 +29,28 @@ GEODI_PALETTE: dict[str, str | None] = {
     "w": "#FFFFFF",  # white — eye catchlight
 }
 
-# 22 wide x 20 tall. Rows pair top/bottom into half-block cells (10 rows out).
+# 16 wide x 14 tall. Rows pair top/bottom into half-block cells (7 rows out).
 # Gills: THREE stalks per side — upper diagonal (r2-r3), middle (r5), lower
 # (r7) — with fully transparent side rows (r4, r6) between them so each
 # counts visually. Face (kawaii): symmetric 2x2 dark eyes (r8-r9) with the
 # 1px catchlight in the TOP-RIGHT corner of each, nothing above them but
 # body; cheek blush one row below the eyes (r10); ONE tiny 2px mouth row
-# (r11, cols 10-11). No other dark pixels on the face.
+# (r11, cols 8-9). No other dark pixels on the face.
 GEODI_PIXELS: list[str] = [
-    "........pppppp........",
-    "......pppppppppp......",
-    ".rr..pppppppppppp..rr.",
-    "..rrpppppppppppppprr..",
-    "....pppppppppppppp....",
-    ".rrrpppppppppppppprrr.",
-    "....pppppppppppppp....",
-    "..rrpppppppppppppprr..",
-    "....pppewppppewppp....",
-    "....pppeeppppeeppp....",
-    "....prrpppppppprrp....",
-    "....ppppppeepppppp....",
-    "....ppppllllllpppp....",
-    "....pppllllllllppp....",
-    "....pppllllllllppp....",
-    ".....pppllllllppp.....",
-    "......pppppppppp......",
-    ".......pppppppp.......",
-    "......ppp....ppp......",
-    "......ppp....ppp......",
+    ".....pppppp.....",
+    "...pppppppppp...",
+    ".r.pppppppppp.r.",
+    "..rppppppppppr..",
+    "...pppppppppp...",
+    ".rrpppppppppprr.",
+    "...pppppppppp...",
+    "..rppppppppppr..",
+    "...ppewppppew...",
+    "...ppeeppppee...",
+    "...prpppppprp...",
+    "...pppppeeppp...",
+    "....ppllllpp....",
+    ".....pp..pp.....",
 ]
 
 
