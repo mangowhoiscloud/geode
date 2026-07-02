@@ -45,6 +45,13 @@ functional change.
 
 ---
 
+## [0.99.251] - 2026-07-02
+
+### Fixed
+- **Plan/Activity live region — no more stacked walls (PR-PLAN-LIVE-REGION)** — the thin-CLI plan checklist and activity block are now ONE bottom-anchored live region with a single moving copy, the scrollback equivalent of Claude Code's Ink todo widget. Root cause of the stacked near-identical `Plan`/`Activity` blocks: obscuring output only *marked* the surfaces stale (`at_bottom=False`) without erasing them, so every obscure left a full stale copy in scrollback. Now `on_stream` and every non-self-managed event call `_erase_live_region()` (erase while still bottom-most) *before* printing, and surface updates redraw plan + activity together via `_render_live_region()`. The plan always re-renders as the **full checklist** — the compact `Plan updated · … · N/M complete` breadcrumb path is removed (`_render_compact_progress_plan` deleted), so progress (✓/◆/○ transitions) is always visible. `stop()` freezes the final region state into scrollback (re-printing it once if answer streaming erased it) so the turn ends with the completed checklist on screen.
+- **Activity stat honesty** — a tool with failures no longer renders the contradictory `✗ name ×N → ok`: when errors exist the summary is the last error text or `E/N failed · last ok`; summaries/errors are display-width truncated to 60 (no more full-URL arxiv spam repeated per block). Trivially empty thinking phases (`Thought for 0s · 0 items`) are dropped from the activity notices and counts.
+- **Stray `[57;1R` after answers** — `core/cli/prompt_session.py` sets `PROMPT_TOOLKIT_NO_CPR=1`: prompt_toolkit's cursor-position query (`ESC[6n`, fired on every prompt render by the `bottom_toolbar`) was the only DSR emitter in the stack, and a reply that missed the raw-mode window echoed as literal `[row;colR` garbage. GEODE always prompts at a fresh line, so disabling CPR costs nothing (`vt100.py` honours the env var at query time).
+
 ## [0.99.250] - 2026-07-02
 
 ### Changed

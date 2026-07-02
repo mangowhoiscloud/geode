@@ -987,21 +987,47 @@ class TestPlanSurfaceVisualLanguage:
         assert "\033[2mnext step" in lines  # pending stays quiet
         assert spinner_glyph.ROSE in lines
 
-    def test_compact_plan_marks_active_with_glyph(self) -> None:
-        from core.ui import spinner_glyph
-
+    def test_plan_rerenders_full_checklist_after_obscure(self) -> None:
+        """Live region: an obscured plan re-renders as the FULL checklist (no
+        compact breadcrumb), and the previous copy is erased, not stacked."""
         r = self._renderer()
-        lines = "".join(
-            r._render_compact_progress_plan(
-                [
-                    {"step": "done", "status": "completed"},
-                    {"step": "current", "status": "in_progress"},
-                ],
-                "",
-            )
+        r._tty = True
+        r.on_event(
+            {
+                "type": "progress_plan",
+                "plan": [{"step": "first step", "status": "in_progress"}],
+            }
         )
-        assert spinner_glyph.GLYPH in lines
-        assert "\033[1mcurrent" in lines
+        r.on_event({"type": "subagent_complete", "count": 1, "elapsed_s": 1.0})  # obscures
+        r.on_event(
+            {
+                "type": "progress_plan",
+                "plan": [
+                    {"step": "first step", "status": "completed"},
+                    {"step": "second step", "status": "in_progress"},
+                ],
+            }
+        )
+        out = r._out.getvalue()
+        tail = out[out.rindex("Plan") :]
+        assert "second step" in tail  # full checklist, not a one-line breadcrumb
+        assert "first step" in tail
+        assert "complete\033[0m" not in tail  # compact "N/M complete" line is gone
+
+    def test_live_region_erased_before_foreign_output(self) -> None:
+        """Any non-surface event erases the live region first — no stale copies."""
+        r = self._renderer()
+        r._tty = True
+        r.on_event(
+            {
+                "type": "progress_plan",
+                "plan": [{"step": "only step", "status": "in_progress"}],
+            }
+        )
+        assert r._progress_plan.at_bottom is True
+        r.on_stream("some daemon output\n")
+        assert r._progress_plan.at_bottom is False
+        assert r._progress_plan.visible_lines == []  # erased, not just marked
 
 
 def test_tool_tracker_running_row_uses_signature_shimmer() -> None:

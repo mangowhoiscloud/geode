@@ -10,12 +10,20 @@ the helpers here are CLI-loop facing wrappers.
 from __future__ import annotations
 
 import logging
+import os
 import signal
 import sys
 from pathlib import Path
 from typing import Any
 
 from core.ui.console import console
+
+# Disable prompt_toolkit's cursor-position query (ESC[6n). With bottom_toolbar
+# it fires on every prompt render; when the terminal's reply loses the raw-mode
+# window it echoes as literal "[57;1R" garbage after the answer. GEODE always
+# prompts at a fresh line, so skipping CPR costs nothing (vt100.py honours
+# PROMPT_TOOLKIT_NO_CPR at query time — responds_to_cpr).
+os.environ.setdefault("PROMPT_TOOLKIT_NO_CPR", "1")
 
 log = logging.getLogger(__name__)
 
