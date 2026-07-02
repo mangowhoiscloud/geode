@@ -63,3 +63,15 @@ second-opinion review before push:
   findings with HIGH/MED/LOW severity + file:line, or "No findings".
 - Fix or explicitly accept every finding; amend and re-verify fixes.
 - Historical yield: ~1.6 real catches per PR that local gates missed.
+
+## Repo Hygiene Ratchet
+
+Run before every push (CI's Lint & Format job includes it; local ruff does not):
+
+```bash
+uv run python scripts/check_repo_hygiene.py
+```
+
+Catches hardcoded home paths with real usernames (placeholders like
+``/Users/x/…`` are allowlisted in ``_PLACEHOLDER_USERS``), dangling/absolute
+symlinks, and orphan worktrees.

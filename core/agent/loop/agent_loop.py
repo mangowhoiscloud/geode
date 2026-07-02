@@ -387,6 +387,13 @@ class AgenticLoop:
                 computer_use_enabled=is_computer_use_enabled(),
             )
             self._evidence_ledger: Any | None = EvidenceLedger.for_session(self._session_id)
+            # PR-HITL-APPROVAL-FSM (2026-07-02) — hand the session ledger to
+            # the executor so approval-FSM terminal states (granted/denied +
+            # executed/skipped) land as evidence rows. getattr-guarded: tests
+            # construct the loop with executor doubles that lack the hook.
+            _attach_ledger = getattr(tool_executor, "attach_evidence_ledger", None)
+            if callable(_attach_ledger):
+                _attach_ledger(self._evidence_ledger)
         except Exception:
             self._capability_graph = None
             self._evidence_ledger = None

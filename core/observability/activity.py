@@ -14,16 +14,16 @@ Structure (PR-OBS-CONTRACT, 2026-06-13 — full coverage):
   - 4 lifecycle detail mixins (started / completed / failed / retried)
   - 19 lifecycle concrete classes (A=6 started, B=7 completed, C=5 failed,
     D=1 retried) with discriminator on ``action``
-  - 44 K-group concrete classes covering every remaining HookEvent, each
-    with a typed ``details`` sub-schema (24 shared details models — one per
+  - 45 K-group concrete classes covering every remaining HookEvent, each
+    with a typed ``details`` sub-schema (25 shared details models — one per
     event family, e.g. ``CognitivePhaseDetails`` for 6 cognitive phases)
   - ``GenericActivityRow`` is now ONLY a fail-soft fallback (a typed
     builder that hits a malformed payload), never a routine destination —
-    every one of the 63 events has a concrete typed row.
+    every one of the 64 events has a concrete typed row.
 
 Construction is centralized in ``activity_registry.py``: 19 lifecycle
 curry-builders + a single declarative ``_TYPED_ROW_SPECS`` table that drives
-all 44 K-group rows through one ``_build_from_spec`` builder.
+all 45 K-group rows through one ``_build_from_spec`` builder.
 """
 
 from __future__ import annotations
@@ -37,6 +37,8 @@ __all__ = [
     "ActivityRowBase",
     "AdapterDispatchAttemptDetails",
     "AdapterDispatchAttemptRow",
+    "ApprovalTransitionDetails",
+    "ApprovalTransitionRow",
     "AutoTriggerDetails",
     "AutoTriggerFiredRow",
     "AutoTriggerIntervalBlockedRow",
@@ -590,6 +592,25 @@ class ToolApprovalDetails(BaseModel):
     latency_ms: float = 0.0
 
 
+class ApprovalTransitionDetails(BaseModel):
+    """APPROVAL_TRANSITION — one ApprovalRecord FSM handoff.
+
+    ``raw_input`` and the full ``transitions`` trail are deliberately NOT
+    declared — the key-intersection pull in ``_build_from_spec`` drops them
+    from the timeline (they persist on the EvidenceLedger rail instead).
+    """
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    tool_name: str
+    approval_id: str = ""
+    category: str = ""
+    state: str = ""
+    verdict: str = ""
+    detail: str = ""
+    illegal: bool = False
+
+
 class ToolResultOffloadedDetails(BaseModel):
     """TOOL_RESULT_OFFLOADED — large-result filesystem offload."""
 
@@ -903,6 +924,12 @@ class ToolApprovalDeniedRow(ActivityRowBase):
     details: ToolApprovalDetails
 
 
+class ApprovalTransitionRow(ActivityRowBase):
+    action: Literal["tool.approval.transition"] = "tool.approval.transition"
+    entity_type: Literal["tool_approval"] = "tool_approval"
+    details: ApprovalTransitionDetails
+
+
 class ToolResultOffloadedRow(ActivityRowBase):
     action: Literal["tool.result.offloaded"] = "tool.result.offloaded"
     entity_type: Literal["tool_result"] = "tool_result"
@@ -1009,6 +1036,7 @@ TypedActivityRow = Annotated[
         ToolApprovalRequestedRow,
         ToolApprovalGrantedRow,
         ToolApprovalDeniedRow,
+        ApprovalTransitionRow,
         ToolResultOffloadedRow,
         ToolResultTransformRow,
         PostAnalysisRow,
