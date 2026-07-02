@@ -22,7 +22,7 @@
   <a href="README.md">English</a>
 </p>
 
-# GEODE v0.99.252 — A Self-improving Autonomous Execution Agent
+# GEODE v0.99.254 — A Self-improving Autonomous Execution Agent
 
 자기 자신이 올라탄 scaffold 를 스스로 고쳐쓰는 범용 자율 에이전트. 자연어로 물으면 GEODE 가 계획을 세우고, 도구를 호출해, 결과를 보고합니다. 1회성 프롬프트도, 장시간 세션도 동일하게. 그 아래에서는 outer loop 가 작업을 수행하는 시스템 자체를 계속 다듬습니다.
 
@@ -174,7 +174,6 @@ geode "오늘 AI 새 소식 뭐야?"                         # 1회성 프롬프
 이런 모습이 보이면:
 
 ```
-● AgenticLoop
   ✓ web_search → ok (1.5s)
   ✓ web_fetch → ok (1.1s)
 

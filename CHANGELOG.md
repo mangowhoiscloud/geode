@@ -45,6 +45,46 @@ functional change.
 
 ---
 
+## [0.99.254] - 2026-07-02
+
+### Changed
+- **Plan checklist stays pinned through thinking/tool phases.** The thin-client
+  `EventRenderer` no longer erases the plan when a thinking or tool phase
+  starts: `_pin_plan_for_phase` re-prints it as a pinned copy, phase content
+  draws below it, and phase end (`thinking_end` / all-tools-done / `stop()`)
+  re-anchors the single bottom copy for the unified plan+activity redraw.
+- **Welcome screen decluttered.** Brand block beside the mascot is now three
+  lines — `◆ GEODE v{version}` (rose mark), dim `{model} · {cwd}` with `$HOME`
+  collapsed to `~`, dim `/help for commands · type naturally`. The
+  project-detect row, the all-green `✓` capability row, the
+  `Connected to serve via IPC` line, and the trailing `/help` hint are removed;
+  the session id renders as one dim `session cli-… · connected` line. Problems
+  stay loud: `✗` capability lines, the blocked-key warning, and the dry-run
+  warning are unchanged.
+- **Native pixel-art Geodi.** The mascot is a hand-authored 22×20 sprite
+  (`GEODI_PIXELS` + `GEODI_PALETTE` in `core/ui/geodi_art.py`) rendered as
+  truecolor half-blocks (`geodi_pixel_lines()`, 22 cols × 10 rows) — one code
+  path for every terminal. Character canon: round rose axolotl, exactly six
+  deep-rose gill stalks, 2×2 dark eyes with 1px catchlight, small smile, light
+  belly patch, cheek blush.
+- **HITL approval prompts restyled.** All approval surfaces (direct-mode
+  `core/agent/approval.py` and the IPC thin client) share one header shape —
+  `◆ Approval · {tool} ({category})` with the rose mark and categories
+  mcp/write/bash/expensive — and a dim `y allow · n deny · a always-allow`
+  options line replacing the bare `Allow? [Y/n/A]` label. Input parsing,
+  return values, and detail/preview lines are unchanged.
+
+### Removed
+- **`● AgenticLoop` round header** in the thin-client event renderer (and its
+  `_round_header_printed` state).
+- **`core/ui/geodi_img.py`** (baked base64 PNG sprite + animation frames), the
+  Kitty/iTerm2 image-protocol paths and PNG-baked fallback in
+  `core/ui/mascot.py`, and the `GEODE_MASCOT_ANIM` env knob (now a no-op).
+
+## [0.99.253] - 2026-07-02
+
+### Added
+- **Sub-agent capability role registry + typed result validation** (`core/agent/subagent_roles.py`). `delegate_task` gains an optional `role` parameter (enum: `repo_researcher` / `patcher` / `verifier` / `reviewer`) declaring, per role, a tool allowlist and a pydantic output model (`ResearchFindings` / `PatchSet` / `VerificationResult` / `ReviewFindings`). Enforcement reuses the existing `ToolExecutor.denied_tools` rail (denied = all tools − role allowlist, computed in `SubAgentManager._build_worker_request`; the worker subprocess now passes `WorkerRequest.denied_tools` into its child executor, which also blocks the `run_bash`/`delegate_task` special-cases handler filtering cannot). The parent validates the sub-agent's raw text at the parse site (`_to_sub_result`): direct JSON → fenced ```json``` block recovery → observable structured error `{"validated": false, "error", "raw"}` + `log.warning` — a role result never raises `JSONDecodeError` into the loop and never propagates un-validated garbage (two live `delegate_task` JSONDecodeError failures, 2026-07-02). A role with an output model also appends its JSON schema as one prompt line for generation-side pressure. Unknown/absent role = legacy behaviour unchanged (opt-in). Registry↔schema drift pinned by `tests/core/agent/test_subagent_roles.py` (29 tests).
 ## [0.99.252] - 2026-07-02
 
 ### Fixed

@@ -21,6 +21,7 @@ from core.agent.safety import (
     is_bash_command_read_only,
 )
 from core.hooks.system import HookEvent
+from core.ui import spinner_glyph
 from core.ui.console import console
 
 if TYPE_CHECKING:
@@ -31,6 +32,24 @@ log = logging.getLogger(__name__)
 _AUTO_APPROVE_THRESHOLD = 3
 _AUTO_DENY_THRESHOLD = 3
 _T = TypeVar("_T")
+
+# Bare prompt labels carry no information beyond "answer the gate" — the
+# options line replaces them. Anything else (e.g. the computer-control
+# question) is a real question and still renders above the options line.
+_BARE_PROMPT_LABELS = frozenset({"Allow?", "Proceed?"})
+
+
+def _approval_header(tool_name: str, category: str) -> str:
+    """``◆ Approval · tool (category)`` — rose mark, bold tool, dim category.
+
+    The IPC thin client renders the same header shape in
+    ``core/cli/ipc_client.py::_handle_approval_request`` (kept inline there so
+    the thin client does not import the agent layer).
+    """
+    return (
+        f"  [bold {spinner_glyph.ROSE_HEX}]{spinner_glyph.GLYPH}[/] Approval · "
+        f"[bold]{tool_name}[/bold] [dim]({category})[/dim]"
+    )
 
 
 def _write_denial_with_fallback(tool_name: str) -> dict[str, Any]:
@@ -160,7 +179,7 @@ class ApprovalWorkflow:
         safety_level: str = "write",
         tool_name: str = "",
     ) -> str:
-        """Show a [Y/n/A] prompt and return 'y', 'n', or 'a'."""
+        """Show the approval options line and return 'y', 'n', or 'a'."""
         if self._approval_callback is not None:
             decision = self._approval_callback(tool_name or label, detail, safety_level)
             log.debug("HITL: IPC callback decision=%s tool=%s", decision, tool_name or label)
@@ -169,8 +188,12 @@ class ApprovalWorkflow:
         from core.cli import _restore_terminal
 
         _restore_terminal()
+        if label not in _BARE_PROMPT_LABELS:
+            console.print(f"  [bold]{label}[/bold]")
         try:
-            response = console.input(f"  [header]{label} [Y/n/A][/header] ").strip().lower()
+            response = (
+                console.input("  [muted]y allow · n deny · a always-allow[/muted] ").strip().lower()
+            )
         except (KeyboardInterrupt, EOFError):
             console.print()
             return "n"
@@ -410,9 +433,8 @@ class ApprovalWorkflow:
 
             _restore_terminal()
             console.print()
-            console.print("  [warning]MCP tool requires approval[/warning]")
+            console.print(_approval_header(tool_name, "mcp"))
             console.print(f"  [dim]Server:[/dim] [bold]{server}[/bold]")
-            console.print(f"  [dim]Tool:[/dim]   [bold]{tool_name}[/bold]")
             console.print()
 
         self._fire_hook(
@@ -539,8 +561,7 @@ class ApprovalWorkflow:
             summary = self._write_summary(tool_name, tool_input)
 
             console.print()
-            console.print("  [warning]Write operation requires approval[/warning]")
-            console.print(f"  [dim]Tool:[/dim]    [bold]{tool_name}[/bold]")
+            console.print(_approval_header(tool_name, "write"))
             if summary:
                 console.print(f"  [dim]Summary:[/dim] {summary}")
             console.print()
@@ -605,8 +626,7 @@ class ApprovalWorkflow:
             _restore_terminal()
             summary = self._write_summary(tool_name, tool_input)
             console.print()
-            console.print("  [warning]Write operation requires approval[/warning]")
-            console.print(f"  [dim]Tool:[/dim]    [bold]{tool_name}[/bold]")
+            console.print(_approval_header(tool_name, "write"))
             if summary:
                 console.print(f"  [dim]Summary:[/dim] {summary}")
             console.print()
@@ -670,8 +690,7 @@ class ApprovalWorkflow:
 
             _restore_terminal()
             console.print()
-            console.print("  [warning]$ Cost confirmation[/warning]")
-            console.print(f"  [dim]Tool:[/dim] [bold]{tool_name}[/bold]")
+            console.print(_approval_header(tool_name, "expensive"))
             console.print(f"  [dim]Estimated cost:[/dim] ~${estimated_cost:.2f}")
             console.print()
 
@@ -734,8 +753,7 @@ class ApprovalWorkflow:
 
             _restore_terminal()
             console.print()
-            console.print("  [warning]$ Cost confirmation[/warning]")
-            console.print(f"  [dim]Tool:[/dim] [bold]{tool_name}[/bold]")
+            console.print(_approval_header(tool_name, "expensive"))
             console.print(f"  [dim]Estimated cost:[/dim] ~${estimated_cost:.2f}")
             console.print()
 
@@ -798,7 +816,7 @@ class ApprovalWorkflow:
 
             _restore_terminal()
             console.print()
-            console.print("  [warning]Bash command requires approval[/warning]")
+            console.print(_approval_header("run_bash", "bash"))
             console.print(f"  [dim]Command:[/dim] [value]{command}[/value]")
             if reason:
                 console.print(f"  [dim]Reason:[/dim]  {reason}")
@@ -1018,19 +1036,17 @@ class ApprovalWorkflow:
             except Exception:
                 log.debug("_restore_terminal() unavailable in batch approval")
 
-            console.print()
-            console.print("  [warning]$ Cost confirmation[/warning]")
             count = len(items)
-            plural = "s" if count > 1 else ""
-            verb = "s" if count == 1 else ""
-            console.print(f"  {count} tool{plural} require{verb} approval:")
+            plural = "s" if count != 1 else ""
+            console.print()
+            console.print(_approval_header(f"{count} tool{plural}", "expensive"))
             for name, inp, cost in items:
                 args_preview = ", ".join(f"{k}={v!r}" for k, v in inp.items())
                 console.print(f"    [dim]--[/dim] {name}({args_preview}) -- ~${cost:.2f}")
             console.print(f"  [dim]Total estimated cost:[/dim] ~${total_cost:.2f}")
             console.print()
             try:
-                response = console.input("  [header]Proceed? [Y/n][/header] ").strip().lower()
+                response = console.input("  [muted]y allow · n deny[/muted] ").strip().lower()
             except (KeyboardInterrupt, EOFError):
                 console.print()
                 return False

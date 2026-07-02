@@ -129,8 +129,10 @@ class EventRenderer:
         self._tty = sys.stdout.isatty()
         self._stdin_stop = threading.Event()
         self._stdin_thread: threading.Thread | None = None
-        self._round_header_printed = False
         self._out = sys.stdout
+        # True while a phase (thinking/tool) draws BELOW a pinned plan copy —
+        # the plan stays on screen for the whole phase instead of vanishing.
+        self._plan_pinned = False
         # Persistent activity spinner state
         self._activity = False
         self._activity_suppressed = False
@@ -232,6 +234,10 @@ class EventRenderer:
         # already erased it, print one last permanent copy, then release it to
         # scrollback (at_bottom=False) so the final answer renders below it.
         with self._render_lock:
+            # A phase interrupted mid-flight (Ctrl+C, error) may leave the plan
+            # pinned; spinner/tool/thinking output is stopped and erased by
+            # now, so the pinned copy is bottom-most again — re-anchor it.
+            self._restore_pinned_plan_locked()
             has_content = bool(self._progress_plan.items) or bool(
                 self._activity_surface.tool_stats or self._activity_surface.notices
             )
@@ -249,15 +255,11 @@ class EventRenderer:
 
     def _handle_round_start(self, event: dict[str, Any]) -> None:
         self._clear_activity_line()
-        if not self._round_header_printed:
-            self._round_header_printed = True
-            self._out.write("\n\033[1m\u25cf AgenticLoop\033[0m\n")
-            self._out.flush()
 
     def _handle_thinking_start(self, event: dict[str, Any]) -> None:
         self._activity_suppressed = True
         self._tool_tracker.stop()
-        self._erase_live_region()
+        self._pin_plan_for_phase()
         with self._render_lock:
             self._thinking_region = _ThinkingRegion(start_ts=time.monotonic())
             self._thinking = True
@@ -279,6 +281,11 @@ class EventRenderer:
                     self._erase_thinking_visible_locked(region)
                     self._record_thought_activity_locked(region)
                     should_render_activity = True
+            # Cursor is just below the pinned plan copy again — re-anchor it
+            # so _render_live_region erases it and redraws plan+activity as
+            # ONE bottom unit (never a stale stacked copy).
+            if self._restore_pinned_plan_locked():
+                should_render_activity = True
         self._activity_suppressed = False  # resume activity spinner
         if should_render_activity:
             self._render_live_region()
@@ -294,9 +301,9 @@ class EventRenderer:
             # count/dur/summary already set from last batch's tool_end
             return
 
-        self._erase_live_region()
         self._activity_suppressed = True
         self._stop_thinking()
+        self._pin_plan_for_phase()
         self._tool_tracker.on_tool_start(event)
 
     def _handle_tool_end(self, event: dict[str, Any]) -> None:
@@ -313,6 +320,10 @@ class EventRenderer:
             self._tool_tracker.suspend()
             with self._tool_tracker._lock:
                 self._tool_tracker._tools.clear()
+            # suspend() erased the tool rows — cursor is back just below the
+            # pinned plan copy, so re-anchor it before the unified redraw.
+            with self._render_lock:
+                self._restore_pinned_plan_locked()
             self._render_live_region()
             # Track last single-tool batch for repeat detection
             if is_single:
@@ -1133,12 +1144,59 @@ class EventRenderer:
         near-identical Plan/Activity blocks).
         """
         with self._render_lock:
+            if self._plan_pinned:
+                # The pinned plan copy is being buried by foreign output.
+                # Release it to scrollback WITHOUT erase sequences — its
+                # at_bottom is already False, and phase content below it makes
+                # the cursor-up math unsafe.
+                self._progress_plan.visible_lines = []
+                self._plan_pinned = False
             # Reverse render order: activity sits below the plan checklist.
             for surface in (self._activity_surface, self._progress_plan):
                 if surface.at_bottom and surface.visible_lines:
                     self._erase_lines_locked(surface.visible_lines)
                     surface.visible_lines = []
                     surface.at_bottom = False
+
+    def _pin_plan_for_phase(self) -> None:
+        """Keep the plan checklist visible while a thinking/tool phase runs.
+
+        Erases the live region, then immediately re-prints the plan as a
+        PINNED copy (``at_bottom=False`` — never erased mid-phase). The phase
+        content (thinking region / tool tracker rows) draws BELOW it and
+        redraws in place without touching it; the phase end re-anchors the
+        pinned copy via :meth:`_restore_pinned_plan_locked`.
+        """
+        # Already pinned (thinking→tool transition) — the copy on screen stays;
+        # printing another without erasing the first stacks duplicates (Codex HIGH).
+        if self._plan_pinned and self._progress_plan.visible_lines:
+            return
+        with self._render_lock:
+            self._erase_live_region()
+            plan = self._progress_plan
+            if not (self._tty and plan.items):
+                return
+            lines = self._render_full_progress_plan(plan.items, plan.explanation)
+            self._out.write("\r\033[2K")  # clear any spinner residue first
+            for line in lines:
+                self._out.write(line)
+            self._out.flush()
+            plan.visible_lines = lines
+            plan.at_bottom = False
+            self._plan_pinned = True
+
+    def _restore_pinned_plan_locked(self) -> bool:
+        """Re-anchor the pinned plan copy as the erasable bottom surface.
+
+        Call ONLY when the cursor sits just below the pinned copy again (phase
+        content erased). Returns True when a pinned copy was restored.
+        """
+        if not self._plan_pinned:
+            return False
+        plan = self._progress_plan
+        plan.at_bottom = bool(plan.visible_lines)
+        self._plan_pinned = False
+        return True
 
     def _render_live_region(self) -> None:
         """Redraw plan checklist + activity block at the bottom as ONE unit.

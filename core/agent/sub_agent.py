@@ -261,6 +261,14 @@ class SubTask:
     task_type: str  # "analyze", "search", "compare"
     args: dict[str, Any] = field(default_factory=dict)
     agent: str | None = None  # Explicit agent override
+    # PR-SUBAGENT-ROLES (2026-07-02) — built-in capability role
+    # (``core.agent.subagent_roles.SUBAGENT_ROLES``). When set to a
+    # registered role, the spawned worker's tool surface is narrowed to
+    # the role's allowlist (via the denied_tools rail) and the parent
+    # validates the result against the role's pydantic output model at
+    # the parse site. Empty / unknown role = legacy behaviour unchanged
+    # (opt-in registry).
+    role: str = ""
     source: str = ""  # adapter source; empty falls back to "payg"
     # PR-VOTER-PROVIDER-WIRE (2026-05-25) — per-task model override.
     # Pre-fix every SubTask inherited ``worker_model = settings.model``
@@ -770,7 +778,35 @@ class SubAgentManager:
         # env + defaults only and silently drops every config.toml value.
         from core.config import _resolve_provider, settings
 
-        denied = list(self._denied_tools | {"delegate_task"})
+        denied_set = set(self._denied_tools) | {"delegate_task"}
+
+        # PR-SUBAGENT-ROLES (2026-07-02) — resolve the built-in capability
+        # role. Unknown role names log a WARNING and fall through to the
+        # legacy default surface (the registry is opt-in; a typo must not
+        # zero out the sub-agent). A registered role narrows the tool
+        # surface via the EXISTING denied_tools rail (denied = all −
+        # allowed) — computed here, enforced by the worker's ToolExecutor.
+        from core.agent.subagent_roles import (
+            SUBAGENT_ROLES,
+            get_role,
+            output_schema_line,
+            role_denied_tools,
+        )
+
+        role_def = get_role(task.role) if task.role else None
+        if task.role and role_def is None:
+            log.warning(
+                "delegate_task: unknown sub-agent role %r — running with the "
+                "default tool surface (known roles: %s)",
+                task.role,
+                sorted(SUBAGENT_ROLES),
+            )
+        if role_def is not None:
+            from core.tools.base import load_all_tool_definitions
+
+            all_tool_names = [d["name"] for d in load_all_tool_definitions()]
+            denied_set |= role_denied_tools(role_def, all_tool_names)
+        denied = list(denied_set)
 
         # Adaptive effort based on task difficulty hint
         _DIFFICULTY_TO_EFFORT = {"low": "low", "medium": "medium", "high": "high"}
@@ -828,6 +864,27 @@ class SubAgentManager:
         if task.model:
             worker_model = task.model
 
+        # PR-SUBAGENT-ROLES (2026-07-02) — a registered role supplies the
+        # tool ALLOWLIST when the AgentDefinition declared neither a
+        # toolkit nor a tools: list. Without this, filter_handlers' Tier 3
+        # would apply the minimal ``_default`` toolkit (read_document +
+        # grep_files) and silently strip role tools (verifier's run_bash,
+        # repo_researcher's glob_files/session_search). The denied set
+        # computed above remains the hard rail either way — an agent
+        # toolkit cannot re-open tools outside the role's allowlist.
+        description = task.description
+        if role_def is not None:
+            if not agent_toolkit and not agent_allowed_tools:
+                agent_allowed_tools = list(role_def.tools)
+            # Generation-side pressure: one line carrying the role's
+            # output JSON schema, appended to the prompt the worker
+            # assembles from ``description``. Parent-side validation at
+            # ``_to_sub_result`` is the enforcement; this line raises the
+            # odds the first response already conforms.
+            schema_line = output_schema_line(role_def)
+            if schema_line:
+                description = f"{description}\n\n{schema_line}"
+
         # Sub-agent lineage (2026-05-21) — capture the calling parent
         # loop's session_id from the ContextVar bound in
         # ``AgenticLoop._emit_session_start_signals``. Falls back to
@@ -842,7 +899,7 @@ class SubAgentManager:
         return WorkerRequest(
             task_id=task.task_id,
             task_type=task.task_type,
-            description=task.description,
+            description=description,
             args=task.args,
             denied_tools=denied,
             model=worker_model,
@@ -1052,6 +1109,33 @@ class SubAgentManager:
             )
         output: dict[str, Any]
         raw_text = isolation.output or ""
+
+        # PR-SUBAGENT-ROLES (2026-07-02) — when the task ran under a
+        # registered role with an output model, validate here at the
+        # parse site instead of the legacy best-effort JSON scavenging.
+        # ``validate_role_output`` NEVER raises: it returns either
+        # ``{"validated": True, "data": ...}`` or an observable
+        # ``{"validated": False, "error": ..., "raw": ...}`` structured
+        # error (+ log.warning inside) — no JSONDecodeError reaches the
+        # loop, no un-validated garbage propagates as a role result.
+        if task.role:
+            from core.agent.subagent_roles import get_role, validate_role_output
+
+            role_def = get_role(task.role)
+            if role_def is not None:
+                validated_output = validate_role_output(role_def, raw_text)
+                if validated_output is not None:
+                    return SubResult(
+                        task_id=task.task_id,
+                        description=task.description,
+                        success=True,
+                        output=validated_output,
+                        duration_ms=isolation.duration_ms,
+                        prompt_tokens=isolation.prompt_tokens,
+                        completion_tokens=isolation.completion_tokens,
+                        usd_spent=isolation.usd_spent,
+                    )
+
         candidate_text = _strip_json_codeblock(raw_text) if raw_text else raw_text
         try:
             parsed = json.loads(candidate_text) if candidate_text else {}

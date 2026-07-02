@@ -362,6 +362,7 @@ class IPCClient:
         """Display approval prompt to user."""
         import time
 
+        from core.ui import spinner_glyph
         from core.ui.console import console as c
 
         self._restore_terminal()
@@ -370,18 +371,21 @@ class IPCClient:
         detail = msg.get("detail", "")
         level = msg.get("safety_level", "write")
 
-        _LEVEL_STYLES = {
-            "write": "warning",
-            "dangerous": "error",
-            "mcp": "header",
-            "cost": "warning",
+        # Same header shape as core/agent/approval.py::_approval_header (kept
+        # inline — the thin client does not import the agent layer).
+        _LEVEL_CATEGORIES = {
+            "write": "write",
+            "dangerous": "bash",
+            "mcp": "mcp",
+            "cost": "expensive",
         }
-        style = _LEVEL_STYLES.get(level, "warning")
-        label = level.capitalize()
+        category = _LEVEL_CATEGORIES.get(level, level)
 
         c.print()
-        c.print(f"  [{style}]{label} tool requires approval[/{style}]")
-        c.print(f"  [bold]{tool}[/bold]")
+        c.print(
+            f"  [bold {spinner_glyph.ROSE_HEX}]{spinner_glyph.GLYPH}[/] Approval · "
+            f"[bold]{tool}[/bold] [dim]({category})[/dim]"
+        )
         if detail:
             # Single-line truncated detail
             short = detail.replace("\n", " ")[:80]
@@ -390,7 +394,7 @@ class IPCClient:
 
         t0 = time.monotonic()
         try:
-            resp = c.input("  [header]Allow? [Y/n/A][/header] ").strip().lower()
+            resp = c.input("  [muted]y allow · n deny · a always-allow[/muted] ").strip().lower()
         except (KeyboardInterrupt, EOFError):
             c.print()
             log.info(

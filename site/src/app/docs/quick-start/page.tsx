@@ -61,7 +61,7 @@ geode setup -r     # 처음부터 다시`}</pre>
 
             <h2>성공 기준</h2>
             <ul>
-              <li>배너에 버전과 모델이 표시되고 &quot;Connected to serve via IPC&quot;가 보입니다.</li>
+              <li>배너에 버전과 모델이 표시되고 dim한 &quot;session cli-… · connected&quot; 라인이 보입니다.</li>
               <li>자유 텍스트에 에이전트가 도구를 호출하며 답합니다.</li>
               <li><code>geode about</code>의 EFFECTIVE 모델이 의도한 모델과 일치합니다.</li>
             </ul>
@@ -168,7 +168,7 @@ geode setup -r     # start over`}</pre>
 
             <h2>What success looks like</h2>
             <ul>
-              <li>The banner shows the version and model, and &quot;Connected to serve via IPC&quot; appears.</li>
+              <li>The banner shows the version and model, and a dim &quot;session cli-… · connected&quot; line appears.</li>
               <li>Free text gets an answer that uses tools along the way.</li>
               <li><code>geode about</code> reports the EFFECTIVE model you intended.</li>
             </ul>
