@@ -93,6 +93,13 @@ def test_prompt_session_attaches_text_changed_repaint_hook(
     assert _invalidate_on_text_changed in session.default_buffer.on_text_changed
 
 
+def test_prompt_session_uses_named_geode_prompt(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The idle prompt names the REPL instead of showing a bare chevron."""
+    _build_with_fakes(monkeypatch)
+
+    assert "geode" in str(_FakePromptSession.captured["message"])
+
+
 def test_invalidate_on_text_changed_invalidates_running_app(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
