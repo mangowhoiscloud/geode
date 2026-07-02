@@ -49,6 +49,8 @@ from ._tool_factory import (
 from .models import AgenticResult, _context_exhausted_message, _ContextExhaustedError
 
 if TYPE_CHECKING:
+    from core.agent.capability_graph import CapabilityGraph
+    from core.agent.task_preflight import TaskPreflight
     from core.tools.registry import ToolRegistry
 
 log = logging.getLogger(__name__)
@@ -304,6 +306,15 @@ class AgenticLoop:
         self._mcp_manager = mcp_manager
         self._skill_registry = skill_registry
         self._hooks = hooks
+        # No explicit source → infer_source promotes an OAuth provider to
+        # "subscription". _source_explicit tracks the pin so a cross-provider
+        # /model switch only re-infers when the source was inferred here.
+        self._source_explicit = bool(source)
+        if not source:
+            from core.llm.adapters._source_inference import infer_source
+
+            source = infer_source(provider)
+        self._source = source
         # security: model-visible tool schemas filtered to the allowlist —
         # the full surface must not leak past the whitelist (None = no
         # filter). Stored on self so refresh_tools re-applies it on rebuild.
@@ -315,19 +326,14 @@ class AgenticLoop:
             tool_registry,
             mcp_tools=mcp_tool_list,
             force_include=allowed_tool_names,
+            provider=self._provider,
+            source=self._source,
         )
         if allowed_tool_names is not None:
             self._tools = [t for t in self._tools if t.get("name") in allowed_tool_names]
+        self._capability_graph: CapabilityGraph | None = None
+        self._task_preflight: TaskPreflight | None = None
         self._last_llm_error: str | None = None  # last error type for user message
-        # No explicit source → infer_source promotes an OAuth provider to
-        # "subscription". _source_explicit tracks the pin so a cross-provider
-        # /model switch only re-infers when the source was inferred here.
-        self._source_explicit = bool(source)
-        if not source:
-            from core.llm.adapters._source_inference import infer_source
-
-            source = infer_source(provider)
-        self._source = source
         # Per-loop structured-output JSON schema (None = free-form text);
         # threaded into every _call_llm's AdapterCallRequest.response_schema.
         self._response_schema: dict[str, Any] | None = response_schema
@@ -366,6 +372,25 @@ class AgenticLoop:
             self._transcript = SessionTranscript(self._session_id)
         except Exception:
             log.warning("Transcript init failed", exc_info=True)
+        try:
+            from core.agent.capability_graph import build_capability_graph
+            from core.agent.evidence_ledger import EvidenceLedger
+            from core.llm.providers.anthropic import is_computer_use_enabled
+
+            self._capability_graph = build_capability_graph(
+                model=self.model,
+                provider=self._provider,
+                source=self._source,
+                visible_tool_names={
+                    str(tool.get("name", "")) for tool in self._tools if tool.get("name")
+                },
+                computer_use_enabled=is_computer_use_enabled(),
+            )
+            self._evidence_ledger: Any | None = EvidenceLedger.for_session(self._session_id)
+        except Exception:
+            self._capability_graph = None
+            self._evidence_ledger = None
+            log.debug("Capability graph/evidence ledger init failed", exc_info=True)
 
         # ToolCallProcessor: orchestrates tool_use block execution. Pull
         # (provider, source) from the resolved adapter — the loop's own
@@ -1029,6 +1054,9 @@ class AgenticLoop:
                             component="agentic_loop",
                             level="warning",
                             payload=payload,
+                            action="agent.handoff_triggered",
+                            entity_type="session",
+                            entity_id=self._session_id,
                         )
                     except Exception:
                         log.warning("Transcript handoff_triggered record failed", exc_info=True)
@@ -1185,6 +1213,40 @@ class AgenticLoop:
     # Run loop entry points
     # ------------------------------------------------------------------
 
+    def _prepare_task_preflight(self, user_input: str) -> str:
+        """Run capability-aware preflight and return a system-prompt hint."""
+        try:
+            from core.agent.capability_graph import graph_summary
+            from core.agent.task_preflight import plan_task_preflight, render_preflight_hint
+
+            capability_graph = self._capability_graph
+            if capability_graph is None:
+                raise RuntimeError("capability graph is unavailable")
+            self._task_preflight = plan_task_preflight(user_input, capability_graph)
+            preflight_hint = render_preflight_hint(self._task_preflight)
+            if self._evidence_ledger is not None:
+                self._evidence_ledger.append_preflight(
+                    capability_graph=graph_summary(capability_graph),
+                    preflight=self._task_preflight,
+                )
+            if self._transcript is not None:
+                self._transcript.record_lifecycle_event(
+                    event="task_preflight",
+                    component="agentic_loop",
+                    level="info",
+                    payload={
+                        "capability_graph": graph_summary(capability_graph),
+                        "preflight": self._task_preflight,
+                    },
+                    action="agent.preflight",
+                    entity_type="session",
+                    entity_id=self._session_id,
+                )
+            return preflight_hint
+        except Exception:
+            log.debug("Task preflight failed", exc_info=True)
+            return ""
+
     async def arun(self, user_input: str) -> AgenticResult:
         """Run the agentic loop until LLM emits end_turn or max rounds."""
         self._tool_processor.reset()
@@ -1200,6 +1262,8 @@ class AgenticLoop:
             added = self.refresh_tools()
             if added > 0:
                 log.info("MCP tools lazy-loaded: +%d tools (total %d)", added, len(self._tools))
+
+        preflight_hint = self._prepare_task_preflight(user_input)
 
         # Goal decomposition — break compound requests into sub-goal DAGs
         # (planner LLM call; the Plan is installed on SessionMetrics).
@@ -1222,6 +1286,8 @@ class AgenticLoop:
         system_prompt = self._build_system_prompt()
         if decomposition_hint:
             system_prompt += "\n\n" + decomposition_hint
+        if preflight_hint:
+            system_prompt += "\n\n" + preflight_hint
 
         # Failure reflection injection — prepend the prior turn's verify-FAIL
         # analysis (consume semantics; cleared after read).

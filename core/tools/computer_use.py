@@ -23,13 +23,47 @@ import asyncio
 import base64
 import io
 import logging
+import re
 from typing import Any
+
+from core.tools.computer_observation import enrich_computer_result
 
 log = logging.getLogger(__name__)
 
 # Target resolution sent to LLM (smaller = cheaper tokens, matches Anthropic demo)
 TARGET_WIDTH = 1280
 TARGET_HEIGHT = 800
+
+
+_BLOCKED_KEY_COMBOS: tuple[frozenset[str], ...] = (
+    frozenset({"cmd", "shift", "backspace"}),
+    frozenset({"cmd", "option", "backspace"}),
+    frozenset({"cmd", "ctrl", "q"}),
+    frozenset({"cmd", "shift", "q"}),
+    frozenset({"cmd", "option", "shift", "q"}),
+    frozenset({"win", "l"}),
+    frozenset({"ctrl", "option", "delete"}),
+    frozenset({"ctrl", "option", "del"}),
+    frozenset({"option", "f4"}),
+)
+
+_KEY_ALIASES = {
+    "command": "cmd",
+    "control": "ctrl",
+    "alt": "option",
+    "windows": "win",
+    "super": "win",
+    "meta": "win",
+}
+
+_BLOCKED_TYPE_PATTERNS: tuple[re.Pattern[str], ...] = (
+    re.compile(r"curl\s+[^|]*\|\s*bash", re.IGNORECASE),
+    re.compile(r"curl\s+[^|]*\|\s*sh", re.IGNORECASE),
+    re.compile(r"wget\s+[^|]*\|\s*bash", re.IGNORECASE),
+    re.compile(r"\bsudo\s+rm\s+-[rf]", re.IGNORECASE),
+    re.compile(r"\brm\s+-rf\s+/\s*$", re.IGNORECASE),
+    re.compile(r":\s*\(\)\s*\{\s*:\|:\s*&\s*\}", re.IGNORECASE),
+)
 
 
 def computer_use_env() -> str:
@@ -66,6 +100,46 @@ def _sandbox_url() -> str:
     return str(getattr(settings, "computer_use_sandbox_url", "") or "").rstrip("/")
 
 
+def _canon_key_combo(keys: str) -> frozenset[str]:
+    parts = [p.strip().lower() for p in re.split(r"\s*\+\s*", keys) if p.strip()]
+    return frozenset(_KEY_ALIASES.get(p, p) for p in parts)
+
+
+def _blocked_key_combo(keys: str) -> list[str] | None:
+    combo = _canon_key_combo(keys)
+    for blocked in _BLOCKED_KEY_COMBOS:
+        if blocked.issubset(combo):
+            return sorted(blocked)
+    return None
+
+
+def _blocked_type_pattern(text: str) -> str | None:
+    for pattern in _BLOCKED_TYPE_PATTERNS:
+        if pattern.search(text):
+            return pattern.pattern
+    return None
+
+
+def _strip_screenshot(result: dict[str, Any]) -> dict[str, Any]:
+    """Return a computer-use result safe for normal function-tool channels.
+
+    Native ``computer`` tool results are serialized as image blocks. The
+    emulated ``computer_use`` function path is different: OpenAI/Codex function
+    outputs are text payloads, so raw base64 would bloat context and can be
+    misinterpreted as a native ``computer_call_output`` on replay. Keep compact
+    observation metadata and drop the image bytes.
+    """
+    out = dict(result)
+    if out.pop("screenshot", None) is not None:
+        out["screenshot_omitted"] = True
+        out["screenshot_omitted_reason"] = (
+            "computer_use is a normal function tool; screenshots are reduced to "
+            "observation metadata to avoid base64 context bloat. Use action='locate' "
+            "with an instruction when a visual target must be grounded."
+        )
+    return out
+
+
 class ComputerUseHarness:
     """Local OS harness for computer-use actions.
 
@@ -85,6 +159,7 @@ class ComputerUseHarness:
         self._jpeg_quality = jpeg_quality
         self._screen_width: int = 0
         self._screen_height: int = 0
+        self._last_cursor_target: tuple[int, int] | None = None
 
     def _ensure_pyautogui(self) -> Any:
         """Lazy import pyautogui (avoids import cost when not used)."""
@@ -287,6 +362,50 @@ class ComputerUseHarness:
 
     # -- Dispatch (provider-agnostic) --
 
+    def _target_size(self) -> tuple[int, int]:
+        return (self._target_width, self._target_height)
+
+    def _screen_size(self) -> tuple[int, int]:
+        return (self._screen_width, self._screen_height)
+
+    def _cursor_for_action(self, action: str, params: dict[str, Any]) -> tuple[int, int] | None:
+        if action == "cursor_position":
+            return self._last_cursor_target
+        if action in {
+            "click",
+            "double_click",
+            "move",
+            "scroll",
+            "left_click",
+            "right_click",
+            "middle_click",
+            "triple_click",
+        }:
+            return (int(params.get("x", 0) or 0), int(params.get("y", 0) or 0))
+        if action == "drag":
+            return (
+                int(params.get("end_x", 0) or 0),
+                int(params.get("end_y", 0) or 0),
+            )
+        return None
+
+    def _enrich_result(
+        self,
+        result: dict[str, Any],
+        *,
+        action: str,
+        params: dict[str, Any] | None = None,
+        env: str | None = None,
+    ) -> dict[str, Any]:
+        return enrich_computer_result(
+            result,
+            action=action,
+            target_size=self._target_size(),
+            screen_size=self._screen_size(),
+            env=env or computer_use_env(),
+            cursor=self._cursor_for_action(action, params or {}),
+        )
+
     def _execute_sync(self, action: str, **params: Any) -> dict[str, Any]:
         """Execute a computer-use action and return result with screenshot.
 
@@ -328,24 +447,36 @@ class ComputerUseHarness:
 
         handler = handlers.get(action)
         if handler is None:
-            return {
-                "error": f"Unknown computer-use action: {action}",
-                "supported_actions": list(handlers.keys()),
-            }
+            return self._enrich_result(
+                {
+                    "error": f"Unknown computer-use action: {action}",
+                    "supported_actions": list(handlers.keys()),
+                },
+                action=action,
+                params=params,
+            )
 
         try:
             screenshot_b64 = handler()
-            return {
-                "result": "success",
-                "action": action,
-                "screenshot": screenshot_b64,
-            }
+            return self._enrich_result(
+                {
+                    "result": "success",
+                    "action": action,
+                    "screenshot": screenshot_b64,
+                },
+                action=action,
+                params=params,
+            )
         except Exception as exc:
             log.error("Computer-use action %s failed: %s", action, exc)
-            return {
-                "error": f"Action '{action}' failed: {exc}",
-                "action": action,
-            }
+            return self._enrich_result(
+                {
+                    "error": f"Action '{action}' failed: {exc}",
+                    "action": action,
+                },
+                action=action,
+                params=params,
+            )
 
     async def aexecute(self, action: str, **params: Any) -> dict[str, Any]:
         """Dispatch one action — host (local OS) or sandbox (in-container shim).
@@ -376,32 +507,48 @@ class ComputerUseHarness:
 
         base = _sandbox_url()
         if not base:
-            return {
-                "error": "computer_use_env=sandbox but computer_use_sandbox_url is empty",
-                "action": action,
-            }
+            return self._enrich_result(
+                {
+                    "error": "computer_use_env=sandbox but computer_use_sandbox_url is empty",
+                    "action": action,
+                },
+                action=action,
+                params=params,
+                env="sandbox",
+            )
         try:
             resp = httpx.post(f"{base}/cmd", json={"action": action, "params": params}, timeout=30)
             resp.raise_for_status()
             result = resp.json()
             if not isinstance(result, dict):
-                return {
-                    "error": f"sandbox returned non-object: {str(result)[:120]}",
-                    "action": action,
-                }
-            return result
+                return self._enrich_result(
+                    {
+                        "error": f"sandbox returned non-object: {str(result)[:120]}",
+                        "action": action,
+                    },
+                    action=action,
+                    params=params,
+                    env="sandbox",
+                )
+            return self._enrich_result(result, action=action, params=params, env="sandbox")
         except (httpx.HTTPError, ValueError, OSError) as exc:
             # fail-loud: surface the error, never touch the host desktop.
-            return {
-                "error": f"computer-use sandbox unreachable ({base}/cmd): {exc}",
-                "action": action,
-            }
+            return self._enrich_result(
+                {
+                    "error": f"computer-use sandbox unreachable ({base}/cmd): {exc}",
+                    "action": action,
+                },
+                action=action,
+                params=params,
+                env="sandbox",
+            )
 
     def _get_cursor_position(self) -> str:
         """Get current cursor position (in target space) + screenshot."""
         pag = self._ensure_pyautogui()
         pos = pag.position()
         tx, ty = self._scale_to_target(pos.x, pos.y)
+        self._last_cursor_target = (tx, ty)
         log.info("cursor_position: screen(%d,%d) → target(%d,%d)", pos.x, pos.y, tx, ty)
         return self.screenshot()
 
@@ -413,3 +560,206 @@ class ComputerUseHarness:
             "display_width_px": self._target_width,
             "display_height_px": self._target_height,
         }
+
+
+async def execute_emulated_computer_use(
+    harness: ComputerUseHarness,
+    *,
+    action: str = "capture",
+    instruction: str = "",
+    x: int | None = None,
+    y: int | None = None,
+    button: str = "left",
+    click_count: int = 1,
+    text: str = "",
+    keys: str = "",
+    direction: str = "down",
+    amount: int = 3,
+    start_x: int | None = None,
+    start_y: int | None = None,
+    end_x: int | None = None,
+    end_y: int | None = None,
+    ms: int = 1000,
+    capture_after: bool = True,
+) -> dict[str, Any]:
+    """Run a model-agnostic computer-use action through the local harness.
+
+    This is the subscription-model workaround path: the model sees a normal
+    JSON function named ``computer_use`` instead of a provider-native hosted
+    computer tool. The result is deliberately text/JSON-safe, so it strips raw
+    screenshots and asks callers to use ``locate`` for visual grounding.
+    """
+    action = (action or "capture").strip().lower()
+    if action == "capture":
+        result = await harness.aexecute("screenshot")
+        return _strip_screenshot(
+            {
+                **result,
+                "mode": "emulated",
+                "hint": (
+                    "For visual target selection, call computer_use with "
+                    "action='locate' and a concise instruction, then click the "
+                    "returned coordinates."
+                ),
+            }
+        )
+
+    if action == "locate":
+        if not instruction.strip():
+            return {
+                "error": "computer_use action='locate' requires instruction",
+                "error_type": "validation",
+                "hint": "Describe the UI element to locate, e.g. 'the blue Submit button'.",
+            }
+        shot = await harness.aexecute("screenshot")
+        screenshot_b64 = shot.get("screenshot") if isinstance(shot, dict) else None
+        if not isinstance(screenshot_b64, str) or not screenshot_b64:
+            return _strip_screenshot(
+                {
+                    **(shot if isinstance(shot, dict) else {}),
+                    "error": "Unable to capture screenshot for visual grounding",
+                    "error_type": "dependency",
+                    "hint": "Check computer-use permissions or use sandbox mode.",
+                }
+            )
+        try:
+            from core.tools.computer_grounding import glm_locate
+
+            point = await glm_locate(
+                screenshot_b64,
+                instruction,
+                target_width=harness._target_width,
+                target_height=harness._target_height,
+            )
+        except Exception as exc:
+            log.warning("computer_use locate failed: %s", exc)
+            return _strip_screenshot(
+                {
+                    **shot,
+                    "error": f"visual grounding failed: {exc}",
+                    "error_type": "dependency",
+                    "hint": (
+                        "GLM-5V grounding is unavailable. Try a simpler coordinate-based "
+                        "action only if the target is known."
+                    ),
+                }
+            )
+        if point is None:
+            return _strip_screenshot(
+                {
+                    **shot,
+                    "result": "not_found",
+                    "action": "locate",
+                    "instruction": instruction,
+                    "hint": "Rephrase the target or narrow the active window, then retry locate.",
+                }
+            )
+        return _strip_screenshot(
+            {
+                **shot,
+                "result": "success",
+                "action": "locate",
+                "instruction": instruction,
+                "coordinate": [point[0], point[1]],
+                "hint": "Use action='click' with these x/y coordinates, or inspect again.",
+            }
+        )
+
+    if action == "key":
+        blocked = _blocked_key_combo(keys)
+        if blocked:
+            return {
+                "error": f"blocked key combo: {blocked}",
+                "error_type": "permission",
+                "recoverable": False,
+                "hint": "Destructive system shortcuts are hard-blocked.",
+            }
+    if action == "type":
+        pattern = _blocked_type_pattern(text)
+        if pattern:
+            return {
+                "error": f"blocked pattern in typed text: {pattern!r}",
+                "error_type": "permission",
+                "recoverable": False,
+                "hint": "Dangerous shell patterns cannot be typed via computer_use.",
+            }
+
+    dispatch_action = action
+    params: dict[str, Any] = {}
+    if action in {"click", "double_click", "move"}:
+        if x is None or y is None:
+            return {"error": f"{action} requires x and y", "error_type": "validation"}
+        params = {"x": x, "y": y}
+        if action == "click":
+            params["button"] = button
+            params["click_count"] = click_count
+    elif action in {"right_click", "middle_click", "triple_click"}:
+        if x is None or y is None:
+            return {"error": f"{action} requires x and y", "error_type": "validation"}
+        dispatch_action = {
+            "right_click": "right_click",
+            "middle_click": "middle_click",
+            "triple_click": "triple_click",
+        }[action]
+        params = {"x": x, "y": y}
+    elif action == "scroll":
+        if x is None or y is None:
+            return {"error": "scroll requires x and y", "error_type": "validation"}
+        params = {"x": x, "y": y, "direction": direction, "amount": amount}
+    elif action == "drag":
+        missing = [
+            name
+            for name, value in {
+                "start_x": start_x,
+                "start_y": start_y,
+                "end_x": end_x,
+                "end_y": end_y,
+            }.items()
+            if value is None
+        ]
+        if missing:
+            return {
+                "error": f"drag requires {', '.join(missing)}",
+                "error_type": "validation",
+            }
+        params = {
+            "start_x": start_x,
+            "start_y": start_y,
+            "end_x": end_x,
+            "end_y": end_y,
+        }
+    elif action == "type":
+        params = {"text": text}
+    elif action == "key":
+        params = {"keys": keys}
+    elif action == "wait":
+        params = {"ms": ms}
+    elif action == "cursor_position":
+        params = {}
+    else:
+        return {
+            "error": f"Unknown computer_use action: {action}",
+            "error_type": "validation",
+            "supported_actions": [
+                "capture",
+                "locate",
+                "click",
+                "double_click",
+                "right_click",
+                "middle_click",
+                "triple_click",
+                "move",
+                "scroll",
+                "drag",
+                "type",
+                "key",
+                "wait",
+                "cursor_position",
+            ],
+        }
+
+    result = await harness.aexecute(dispatch_action, **params)
+    safe = _strip_screenshot(result)
+    if capture_after:
+        safe["post_action_observation"] = safe.get("observation", {})
+    return safe

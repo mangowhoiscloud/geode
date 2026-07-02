@@ -50,6 +50,7 @@ _TOOL_DEADLINE_OVERRIDES_S: dict[str, float] = {
     "petri_audit": 900.0,  # inspect_ai audit subprocess (own 600s wall clock)
     "eval_dspy_optimize": 900.0,  # optimizer loop
     "computer": 600.0,  # multi-step UI automation (_build_computer_use_handler)
+    "computer_use": 600.0,  # emulated function-call UI automation
     # web_search: must cover per-attempt client timeout (100s,
     # _capability_impls.ANTHROPIC_WEB_SEARCH_TIMEOUT_S) × the dispatch
     # retry (1 original + 1 same-adapter retry) + backoff. The 120s
@@ -310,7 +311,7 @@ class ToolExecutor:
                     if not approved:
                         return {"error": "User denied execution", "denied": True}, False
             return None, True
-        if tool_name == "computer":
+        if tool_name in {"computer", "computer_use"}:
             if not await self._approval.confirm_computer_async():
                 return {"error": "User denied computer-use", "denied": True}, False
             return None, True

@@ -100,7 +100,10 @@ class TestSandboxClient:
         result = {"result": "success", "action": "click", "screenshot": "B64"}
         with patch("httpx.post", return_value=_FakeResp(result)):
             out = h._sandbox_execute_sync("click", {"x": 1, "y": 2})
-        assert out == result
+        assert out["result"] == "success"
+        assert out["action"] == "click"
+        assert out["screenshot"] == "B64"
+        assert out["observation"]["env"] == "sandbox"
 
     def test_unreachable_is_fail_loud_not_host_fallback(self, _env) -> None:
         """Sandbox down → error result; the host _execute_sync is NOT called."""
@@ -114,6 +117,8 @@ class TestSandboxClient:
         ):
             out = h._sandbox_execute_sync("screenshot", {})
         assert "error" in out and "unreachable" in out["error"]
+        assert out["error_kind"] == "sandbox_unreachable"
+        assert out["recovery"]["policy"] == "escalate"
         ex.assert_not_called()
 
     def test_empty_url_errors(self, _env) -> None:
@@ -121,6 +126,7 @@ class TestSandboxClient:
         h = ComputerUseHarness()
         out = h._sandbox_execute_sync("screenshot", {})
         assert "error" in out and "empty" in out["error"]
+        assert out["error_kind"] == "sandbox_config"
 
     def test_non_object_response_errors(self, _env) -> None:
         _env("sandbox")

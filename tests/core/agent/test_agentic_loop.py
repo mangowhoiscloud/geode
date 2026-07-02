@@ -789,6 +789,34 @@ class TestAgenticLoop:
         tools = get_agentic_tools(mock_registry)
         assert len(tools) == len(AGENTIC_TOOLS)  # no extra
 
+    def test_computer_use_hidden_by_default(self) -> None:
+        names = {t["name"] for t in get_agentic_tools(None)}
+        assert "computer_use" not in names
+
+    def test_computer_use_visible_for_openai_subscription_when_enabled(self) -> None:
+        with patch("core.llm.providers.anthropic.is_computer_use_enabled", return_value=True):
+            names = {
+                t["name"]
+                for t in get_agentic_tools(
+                    None,
+                    provider="openai",
+                    source="subscription",
+                )
+            }
+        assert "computer_use" in names
+
+    def test_computer_use_hidden_for_openai_payg_even_when_enabled(self) -> None:
+        with patch("core.llm.providers.anthropic.is_computer_use_enabled", return_value=True):
+            names = {
+                t["name"]
+                for t in get_agentic_tools(
+                    None,
+                    provider="openai",
+                    source="payg",
+                )
+            }
+        assert "computer_use" not in names
+
     def test_agentric_result_dataclass(self) -> None:
         """Test AgenticResult fields."""
         r = AgenticResult(text="hello", rounds=2, error="test_err", termination_reason="natural")

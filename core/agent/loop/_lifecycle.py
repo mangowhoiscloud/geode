@@ -152,6 +152,12 @@ def _prepare_final_result(
             log.debug("usage delta snapshot failed", exc_info=True)
 
     loop._record_transcript_end(result)
+    ledger = getattr(loop, "_evidence_ledger", None)
+    if ledger is not None:
+        try:
+            ledger.append_final(result=result)
+        except Exception:
+            log.debug("Evidence final row failed", exc_info=True)
     loop._save_checkpoint(user_input, round_idx=round_idx)
 
 
