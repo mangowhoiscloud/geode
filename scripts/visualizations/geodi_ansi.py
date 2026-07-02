@@ -24,7 +24,10 @@ from pathlib import Path
 from PIL import Image, ImageFilter
 
 ROOT = Path(__file__).resolve().parents[2]
-CUTE_SVG = ROOT / "site/public/images/geodi.svg"  # full detail -> inline image
+CUTE_SVG = ROOT / "site/public/images/geodi.svg"  # full detail (eyes open) -> inline image
+BLINK_SVG = ROOT / "site/public/images/geodi-blink.svg"  # eyes closed -> blink frames
+SWAY_L_SVG = ROOT / "site/public/images/geodi-sway-l.svg"  # gill crown swayed left
+SWAY_R_SVG = ROOT / "site/public/images/geodi-sway-r.svg"  # gill crown swayed right
 ICON_SVG = ROOT / "site/public/images/geodi-icon.svg"  # bold -> block-art fallback
 ART_OUT = ROOT / "core/ui/geodi_art.py"
 IMG_OUT = ROOT / "core/ui/geodi_img.py"
@@ -38,7 +41,8 @@ def _is_bg(r, g, b):
     return r > 248 and g > 248 and b > 248
 
 
-def _keyed(svg, size):
+def _keyed_raw(svg, size=240):
+    """Render via Quick Look and key the white background to transparency (uncropped)."""
     with tempfile.TemporaryDirectory() as d:
         subprocess.run(
             ["qlmanage", "-t", "-s", str(size), "-o", d, str(svg)], check=True, capture_output=True
@@ -50,7 +54,13 @@ def _keyed(svg, size):
         for x in range(src.width):
             r, g, b = sp[x, y]
             kp[x, y] = (r, g, b, 0 if _is_bg(r, g, b) else 255)
-    return keyed.crop(keyed.split()[3].getbbox())
+    return keyed
+
+
+def _keyed(svg, size):
+    """Keyed sprite, tight-cropped to its alpha bounding box."""
+    im = _keyed_raw(svg, size)
+    return im.crop(im.split()[3].getbbox())
 
 
 def _cell(top, bot):
@@ -85,7 +95,8 @@ def bake_art():
 
 
 BOB = 6  # bob travel in px
-FRAMES = 8  # animation frames per bob cycle
+FRAMES = 12  # animation frames per loop
+BLINK_AT = (5, 6)  # frame indices whose eyes are closed (a quick blink)
 
 
 def _png_b64(canvas):
@@ -95,27 +106,48 @@ def _png_b64(canvas):
     return data, base64.b64encode(data).decode()
 
 
-def bake_img():
-    im = _keyed(CUTE_SVG, 240)
-    # kill the light "paper outline" fringe (qlmanage anti-aliases against white):
-    # erode the alpha 2px so the whitish boundary ring drops out.
+def _erode_crop(raw, bbox):
+    """Crop a keyed sprite to the shared bbox and erode the 2px anti-alias fringe."""
+    im = raw.crop(bbox)
     a = im.split()[3]
     for _ in range(2):
         a = a.filter(ImageFilter.MinFilter(3))
     im.putalpha(a)
-    im = im.crop(im.split()[3].getbbox())
-    w, h = im.size
+    return im
 
-    def frame(y):  # sprite on a bob-tall canvas at vertical offset y
+
+def bake_img():
+    # 4 source states (eyes open, eyes shut, gills swayed L/R). One shared (union)
+    # bbox keeps every frame aligned so the head bobs/blinks/flutters in place.
+    raws = {
+        n: _keyed_raw(p)
+        for n, p in (("op", CUTE_SVG), ("bl", BLINK_SVG), ("sl", SWAY_L_SVG), ("sr", SWAY_R_SVG))
+    }
+    boxes = [im.split()[3].getbbox() for im in raws.values()]
+    bbox = (
+        min(b[0] for b in boxes),
+        min(b[1] for b in boxes),
+        max(b[2] for b in boxes),
+        max(b[3] for b in boxes),
+    )
+    op, bl, sl, sr = (_erode_crop(raws[n], bbox) for n in ("op", "bl", "sl", "sr"))
+    w, h = op.size
+
+    def frame(src, y):  # sprite on a bob-tall canvas at vertical offset y
         c = Image.new("RGBA", (w, h + BOB), (0, 0, 0, 0))
-        c.alpha_composite(im, (0, y))
+        c.alpha_composite(src, (0, y))
         return c
 
-    # bob = ease-in-out up/down (cosine); rest = mid-travel
-    frames = [
-        frame(round(BOB / 2 * (1 - math.cos(2 * math.pi * i / FRAMES)))) for i in range(FRAMES)
-    ]
-    rest = frame(round(BOB / 2))
+    frames = []
+    for i in range(FRAMES):
+        y = round(BOB / 2 * (1 - math.cos(2 * math.pi * i / FRAMES)))  # ease-in-out bob
+        if i in BLINK_AT:
+            src = bl  # quick blink
+        else:
+            s = math.sin(2 * math.pi * i / FRAMES)  # gill sway L <-> R over the loop
+            src = sl if s < -0.35 else sr if s > 0.35 else op
+        frames.append(frame(src, y))
+    rest = frame(op, round(BOB / 2))
     rest_data, rest_b64 = _png_b64(rest)
     frames_b64 = [_png_b64(f)[1] for f in frames]
 

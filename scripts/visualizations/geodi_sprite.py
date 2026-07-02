@@ -3,7 +3,7 @@
 
 Soft chibi axolotl. One hue family (rose = identity), elevated from flat fill to
 a highlight -> base -> shade gradient for volume, plus gloss + faint glow.
-Feathery gill crown + short stubby arms. Behaviour is pure-CSS:
+Feathery gill crown + full body (head, belly, arms, feet). Behaviour is pure-CSS:
 bounce (squash/stretch) + blink + gill flutter. No JS, no libs. No outline.
 
 Run:  uv run python scripts/visualizations/geodi_sprite.py
@@ -59,44 +59,64 @@ def frond(cx, cy, rx, ry, rot, delay):
 
 
 # three slender fronds per side, fanning UP-and-out (iconic axolotl gill crown)
-GILLS = "".join(
-    [
-        frond(62, 74, 8, 30, -18, 0.0),
-        frond(48, 88, 8, 32, -46, 0.3),
-        frond(40, 106, 8, 30, -70, 0.6),
-        frond(178, 74, 8, 30, 18, 0.15),
-        frond(192, 88, 8, 32, 46, 0.45),
-        frond(200, 106, 8, 30, 70, 0.75),
-    ]
-)
+_FRONDS = [
+    (62, 74, 8, 30, -18, 0.0),
+    (48, 88, 8, 32, -46, 0.3),
+    (40, 106, 8, 30, -70, 0.6),
+    (178, 74, 8, 30, 18, 0.15),
+    (192, 88, 8, 32, 46, 0.45),
+    (200, 106, 8, 30, 70, 0.75),
+]
 
 
-# short chubby arms — arm + fist as ONE particle (thick round-capped stub)
-ARMS = (
-    f'<path d="M82,158 Q62,168 55,179" stroke="{FILL}" stroke-width="20" stroke-linecap="round" fill="none"/>'
-    f'<path d="M158,158 Q178,168 185,179" stroke="{FILL}" stroke-width="20" stroke-linecap="round" fill="none"/>'
-)
+def gills(sway=0):
+    """The gill crown; ``sway`` rotates every frond a few degrees (flutter frames)."""
+    return "".join(frond(cx, cy, rx, ry, rot + sway, d) for cx, cy, rx, ry, rot, d in _FRONDS)
 
-BODY = f"""
-   {GILLS}
+
+GILLS = gills(0)
+
+# Body parts shared across the open / blink / sway variants (full body — head,
+# belly, arms, feet, gloss, cheeks). Only the gills sway and the eyes blink.
+BODY_PARTS = f"""
    <ellipse cx="120" cy="120" rx="84" ry="64" fill="{FILL}"/>
    <ellipse cx="120" cy="170" rx="56" ry="44" fill="{FILL}"/>
-   {ARMS}
+   <path d="M82,158 Q62,168 55,179" stroke="{FILL}" stroke-width="20" stroke-linecap="round" fill="none"/>
+   <path d="M158,158 Q178,168 185,179" stroke="{FILL}" stroke-width="20" stroke-linecap="round" fill="none"/>
    <ellipse cx="98" cy="208" rx="15" ry="11" fill="{FILL}"/>
    <ellipse cx="142" cy="208" rx="15" ry="11" fill="{FILL}"/>
    <ellipse cx="92" cy="86" rx="34" ry="20" fill="{ROSE_HI}" opacity=".45" transform="rotate(-16 92 86)"/>
    <circle cx="74" cy="140" r="11" fill="{ROSE_L}" opacity=".6"/>
-   <circle cx="166" cy="140" r="11" fill="{ROSE_L}" opacity=".6"/>
+   <circle cx="166" cy="140" r="11" fill="{ROSE_L}" opacity=".6"/>"""
+
+EYES_OPEN = f"""
    <ellipse class="eye" cx="90" cy="116" rx="10" ry="12" fill="{EYE}"/>
    <ellipse class="eye" cx="150" cy="116" rx="10" ry="12" fill="{EYE}"/>
    <circle cx="86" cy="111" r="3.4" fill="{ROSE_L}"/>
    <circle cx="146" cy="111" r="3.4" fill="{ROSE_L}"/>
    <path d="M96,134 Q120,152 144,134" stroke="{EYE}" stroke-width="4.5" fill="none" stroke-linecap="round"/>"""
 
+EYES_SHUT = f"""
+   <path d="M81,115 Q90,121 99,115" stroke="{EYE}" stroke-width="3.6" fill="none" stroke-linecap="round"/>
+   <path d="M141,115 Q150,121 159,115" stroke="{EYE}" stroke-width="3.6" fill="none" stroke-linecap="round"/>
+   <path d="M96,134 Q120,152 144,134" stroke="{EYE}" stroke-width="4.5" fill="none" stroke-linecap="round"/>"""
 
-# Bold icon for tiny renders (terminal art). Same shape as BODY but with the
-# thin features that vanish when downscaled made bold: bigger eyes, a thick
-# wide smile, chunky feet; no hair-thin arms / sparkles / cheeks. Static.
+
+def sprite(sway=0, eyes=EYES_OPEN):
+    return f"\n   {gills(sway)}{BODY_PARTS}{eyes}"
+
+
+BODY = sprite(0, EYES_OPEN)  # geodi.svg (CSS-animated) + geodi-dark.svg
+
+
+# Terminal animation frames (static): eyes-closed blink + gill crown swayed L/R.
+BLINK = sprite(0, EYES_SHUT)
+SWAY_L = sprite(-9, EYES_OPEN)
+SWAY_R = sprite(9, EYES_OPEN)
+
+
+# Bold full-body icon for tiny renders (terminal art). Bigger eyes + thick wide
+# smile + chunky belly/feet so they survive downscaling. Static.
 ICON = f"""
    {GILLS}
    <ellipse cx="120" cy="120" rx="84" ry="64" fill="{FILL}"/>
@@ -121,10 +141,11 @@ def svg(bg=None):
     )
 
 
-def icon_svg():
+def static_svg(body):
+    """A single static frame (no CSS animation) — used for the baked terminal frames."""
     return (
         f'<svg xmlns="http://www.w3.org/2000/svg" width="240" height="240" '
-        f'viewBox="0 0 240 240">{DEFS}\n<g>{ICON}\n</g>\n</svg>\n'
+        f'viewBox="0 0 240 240">{DEFS}\n<g>{body}\n</g>\n</svg>\n'
     )
 
 
@@ -132,8 +153,11 @@ def main():
     out = Path(__file__).resolve().parents[2] / "site/public/images"
     (out / "geodi.svg").write_text(svg())
     (out / "geodi-dark.svg").write_text(svg(SUB))
-    (out / "geodi-icon.svg").write_text(icon_svg())
-    print(f"geodi sprite -> {out}/geodi.svg (+dark, +icon)")
+    (out / "geodi-icon.svg").write_text(static_svg(ICON))
+    (out / "geodi-blink.svg").write_text(static_svg(BLINK))
+    (out / "geodi-sway-l.svg").write_text(static_svg(SWAY_L))
+    (out / "geodi-sway-r.svg").write_text(static_svg(SWAY_R))
+    print(f"geodi sprite -> {out}/geodi.svg (+dark, +icon, +blink, +sway-l/r)")
 
 
 def _check():

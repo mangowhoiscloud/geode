@@ -42,10 +42,9 @@ root(s):
    mentions).
 3. Return the top-N by score.
 
-Why not embedding similarity? Proximity already does that
-(`plugins/seed_generation/agents/proximity.py:_embedding_track`), and
-calling the embedding tool here would (a) require an OpenAI API
-roundtrip every search and (b) re-embed the entire pool on every call.
+Why not embedding similarity? It would need an OpenAI API roundtrip every
+search and re-embed the whole pool each call; the seed-generation pipeline
+deliberately uses no embeddings (Proximity clusters via LLM, not vectors).
 Token overlap is O(pool_size) with no I/O beyond stat — cheap enough
 to expose as a per-call tool.
 """
