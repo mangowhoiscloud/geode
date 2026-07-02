@@ -45,6 +45,17 @@ functional change.
 
 ---
 
+## [0.99.257] - 2026-07-02
+
+### Changed
+- **Compact Geodi welcome mascot.** The startup pixel mascot now follows the
+  Claude Code-style treatment of keeping terminal welcome UI text-first and
+  small: the native half-block Geodi sprite is reduced from 22×20 pixels
+  (22×10 terminal cells) to 16×14 pixels (16×7 terminal cells). The rose
+  axolotl canon remains pinned by tests, including six separated gill stalks,
+  eye catchlights, cheek blush, belly patch, and a compact footprint guard so
+  the mascot cannot grow back into a splash panel.
+
 ## [0.99.256] - 2026-07-02
 
 ### Infrastructure

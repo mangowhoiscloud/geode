@@ -1,9 +1,11 @@
 """GEODE mascot — Geodi, the rose axolotl, in the startup brand block.
 
 The sprite is the hand-authored pixel grid in ``core/ui/geodi_art.py``,
-rendered as truecolor half-blocks: ONE code path for every terminal — no
-Kitty/iTerm2 image protocol, no baked PNG, no animation env knob. The brand
-text sits to the sprite's right, vertically centred:
+rendered as a compact truecolor half-block accent: ONE code path for every
+terminal — no Kitty/iTerm2 image protocol, no baked PNG, no animation env knob.
+This follows the Claude Code treatment: keep the welcome surface text-first and
+small, with any character art bounded so it cannot dominate the first screen.
+The brand text sits to the sprite's right, vertically centred:
 
     line 1  ``◆ GEODE v{version}``   (rose mark, bold name)
     line 2  dim ``{model} · {cwd}``  ($HOME collapsed to ~)

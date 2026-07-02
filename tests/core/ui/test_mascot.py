@@ -16,8 +16,8 @@ class TestGeodiPixels:
     """The hand-authored sprite grid stays well-formed."""
 
     def test_grid_dimensions(self) -> None:
-        assert len(GEODI_PIXELS) == 20  # even row count — pairs into half-blocks
-        assert all(len(row) == 22 for row in GEODI_PIXELS)
+        assert len(GEODI_PIXELS) == 14  # even row count — pairs into half-blocks
+        assert all(len(row) == 16 for row in GEODI_PIXELS)
 
     def test_only_palette_chars(self) -> None:
         assert set("".join(GEODI_PIXELS)) <= set(GEODI_PALETTE)
@@ -43,12 +43,18 @@ class TestGeodiPixels:
 
     def test_pixel_lines_render_constant_width(self) -> None:
         lines = geodi_pixel_lines()
-        assert len(lines) == 10  # 20 px tall -> 10 half-block rows
+        assert len(lines) == 7  # 14 px tall -> 7 half-block rows
         for line in lines:
-            assert len(_ANSI.sub("", line)) == 22  # text can align beside it
+            assert len(_ANSI.sub("", line)) == 16  # text can align beside it
             assert "▀" in line or "▄" in line or " " in line
         # Truecolor body rose must appear (244;155;196 = #F49BC4).
         assert any("38;2;244;155;196" in line for line in lines)
+
+    def test_sprite_stays_compact(self) -> None:
+        """Keep the welcome mascot as a Claude Code-scale accent, not a splash panel."""
+        lines = geodi_pixel_lines()
+        assert len(lines) <= 7
+        assert max(len(_ANSI.sub("", line)) for line in lines) <= 16
 
 
 class TestMascotBrandBlock:
