@@ -1030,6 +1030,74 @@ class TestPlanSurfaceVisualLanguage:
         assert r._progress_plan.visible_lines == []  # erased, not just marked
 
 
+class TestPinnedPlanDuringPhases:
+    """Plan checklist stays visible (pinned) while thinking/tool phases run."""
+
+    def _renderer(self) -> Any:
+        import io
+
+        from core.ui.event_renderer import EventRenderer
+
+        r = EventRenderer()
+        r._out = io.StringIO()
+        r._tty = True
+        return r
+
+    def test_plan_stays_visible_through_thinking_start(self) -> None:
+        """thinking_start re-prints the plan (pinned) instead of erasing it."""
+        r = self._renderer()
+        r.on_event(
+            {
+                "type": "progress_plan",
+                "plan": [{"step": "pinned step", "status": "in_progress"}],
+            }
+        )
+        marker = len(r._out.getvalue())
+        r.on_event({"type": "thinking_start", "model": "m", "round": 1})
+        try:
+            assert r._plan_pinned is True
+            assert r._progress_plan.visible_lines  # still tracked on screen
+            assert r._progress_plan.at_bottom is False  # pinned: not erasable mid-phase
+            written_after = r._out.getvalue()[marker:]
+            assert "pinned step" in written_after  # re-written for the phase
+        finally:
+            r._stop_thinking()
+
+    def test_thinking_cycle_leaves_single_bottom_copy(self) -> None:
+        """progress_plan → thinking_start → thinking_end: ONE plan copy at bottom."""
+        r = self._renderer()
+        r.on_event(
+            {
+                "type": "progress_plan",
+                "plan": [{"step": "cycle step", "status": "in_progress"}],
+            }
+        )
+        r.on_event({"type": "thinking_start", "model": "m", "round": 1})
+        r.on_event({"type": "thinking_end"})
+        out = r._out.getvalue()
+        tail = out[out.rindex("Plan") :]  # after the LAST Plan header
+        assert tail.count("cycle step") == 1
+        assert r._plan_pinned is False
+        assert r._progress_plan.at_bottom is True  # bottom copy is erasable again
+
+    def test_tool_cycle_restores_plan_to_bottom(self) -> None:
+        """tool_start pins the plan; tool_end all-done re-anchors it."""
+        r = self._renderer()
+        r.on_event(
+            {
+                "type": "progress_plan",
+                "plan": [{"step": "tool step", "status": "in_progress"}],
+            }
+        )
+        r.on_event({"type": "tool_start", "name": "web_search"})
+        assert r._plan_pinned is True
+        r.on_event({"type": "tool_end", "name": "web_search", "summary": "ok", "duration_s": 0.1})
+        assert r._plan_pinned is False
+        assert r._progress_plan.at_bottom is True
+        out = r._out.getvalue()
+        assert "tool step" in out[out.rindex("Plan") :]
+
+
 def test_tool_tracker_running_row_uses_signature_shimmer() -> None:
     """Running tool rows render via spinner_glyph (single spinner source)."""
     from core.ui import spinner_glyph

@@ -1,6 +1,6 @@
 [project]
 name = "geode-agent"
-version = "0.99.253"
+version = "0.99.254"
 description = "GEODE — 범용 자율 실행 에이전트"
 license = "Apache-2.0"
 readme = "README.md"
@@ -352,12 +352,9 @@ ignore = [
 # Manim visualization scripts use long literal vector / score lists; line-length not
 # enforced on this path (mirrors the tests/** allowance).
 "scripts/visualizations/**.py" = ["E501"]
-# geodi_ansi.py is a build tool that shells out to Quick Look to rasterize the sprite.
-"scripts/visualizations/geodi_ansi.py" = ["E501", "S603", "S607"]
 # Generated terminal art: one long truecolor-ANSI string literal per pixel row.
 "core/ui/geodi_art.py" = ["E501"]
 # Generated inline-image data: one long base64 PNG string literal.
-"core/ui/geodi_img.py" = ["E501"]
 
 # Complexity ratchets — thresholds set to current worst offender (day-1 failures = 0).
 # Ratchet down per release as step 4-8 of the domain-free-core refactor extracts god methods.

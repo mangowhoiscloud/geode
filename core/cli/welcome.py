@@ -21,43 +21,22 @@ from core.wiring.startup import (
 
 
 def _render_welcome_brand() -> None:
-    """Render the Geodi mascot branding block, then detected project env."""
+    """Render the Geodi mascot branding block."""
     from core.config import settings
     from core.ui.mascot import render_mascot
 
-    cwd = str(Path.cwd())
-    render_mascot(version=__version__, model=settings.model, cwd=cwd)
-
-    # Show detected project environment
-    try:
-        from core.config.project_detect import detect_project_type, get_harness_summary
-
-        info = detect_project_type(Path.cwd())
-        parts: list[str] = []
-        if info.project_type != "unknown":
-            parts.append(f"[label]{info.project_type}[/label]")
-            if info.pkg_mgr:
-                parts.append(f"({info.pkg_mgr})")
-        if info.harnesses:
-            parts.append(f"[muted]harness:[/muted] {get_harness_summary(info.harnesses)}")
-        if parts:
-            console.print(f"  {' '.join(parts)}")
-    except Exception:  # noqa: S110
-        pass  # Startup display — never block on detection failure
+    render_mascot(version=__version__, model=settings.model, cwd=str(Path.cwd()))
 
 
 def _render_readiness_compact(report: ReadinessReport) -> None:
-    """Render readiness as a compact block."""
-    ready = [c for c in report.capabilities if c.available]
+    """Render readiness PROBLEMS only — silence means healthy."""
     not_ready = [c for c in report.capabilities if not c.available]
+    if not not_ready and not report.blocked:
+        return
 
-    if ready:
-        names = "  ".join(f"[success]✓[/success] {c.name}" for c in ready)
-        console.print(f"  {names}")
-    if not_ready:
-        for c in not_ready:
-            hint = f" [muted]({c.reason})[/muted]" if c.reason else ""
-            console.print(f"  [warning]✗[/warning] {c.name}{hint}")
+    for c in not_ready:
+        hint = f" [muted]({c.reason})[/muted]" if c.reason else ""
+        console.print(f"  [warning]✗[/warning] {c.name}{hint}")
 
     if report.blocked:
         console.print()
@@ -115,8 +94,3 @@ def _welcome_screen() -> None:
 
     # Tier 0.5 — initialize user profile if absent
     setup_user_profile()
-
-    console.print(
-        "  [muted]/help[/muted] for commands  [muted]·[/muted]  [muted]type naturally[/muted]"
-    )
-    console.print()
