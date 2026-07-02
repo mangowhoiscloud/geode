@@ -82,6 +82,8 @@ __all__ = [
     "McpServerConnectedRow",
     "McpServerDetails",
     "McpServerFailedRow",
+    "MemoryPromotionProposedDetails",
+    "MemoryPromotionProposedRow",
     "MemorySavedDetails",
     "MemorySavedRow",
     "ModelSwitchedDetails",
@@ -473,6 +475,20 @@ class MemorySavedDetails(BaseModel):
     persistent: bool = False
 
 
+class MemoryPromotionProposedDetails(BaseModel):
+    """MEMORY_PROMOTION_PROPOSED — memory dedup cluster crossed the
+    >=3-distinct-sessions gate and a HITL proposal file was written
+    (never an automatic rules/ write)."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    slug: str = ""
+    proposal_path: str = ""
+    session_ids: tuple[str, ...] = ()
+    source_count: int = 0
+    ts: float = 0.0
+
+
 class ResultFeedbackDetails(BaseModel):
     """RESULT_FEEDBACK — operator verdict on a result (rate/accept/reject_result
     tool handlers). ``verdict`` is one of ``rated`` / ``accepted`` / ``rejected``;
@@ -780,6 +796,12 @@ class MemorySavedRow(ActivityRowBase):
     details: MemorySavedDetails
 
 
+class MemoryPromotionProposedRow(ActivityRowBase):
+    action: Literal["memory.promotion.proposed"] = "memory.promotion.proposed"
+    entity_type: Literal["memory_promotion"] = "memory_promotion"
+    details: MemoryPromotionProposedDetails
+
+
 class ResultFeedbackRow(ActivityRowBase):
     action: Literal["result.feedback"] = "result.feedback"
     entity_type: Literal["result"] = "result"
@@ -1015,6 +1037,7 @@ TypedActivityRow = Annotated[
         McpServerConnectedRow,
         McpServerFailedRow,
         MemorySavedRow,
+        MemoryPromotionProposedRow,
         ResultFeedbackRow,
         RuleCreatedRow,
         RuleUpdatedRow,

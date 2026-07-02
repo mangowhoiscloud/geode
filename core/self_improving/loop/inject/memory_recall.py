@@ -115,6 +115,11 @@ def load_memory_entries() -> list[MemoryEntry]:
     if base is None:
         return []
     entries: list[MemoryEntry] = []
+    # Lifecycle contract (core/memory/memory_lifecycle.py): archived entries
+    # live in the `_archive/` SUBDIRECTORY and must stay out of prompt
+    # injection. The non-recursive glob below IS that exclusion — never
+    # switch this walk to rglob without filtering `_archive/`/`_proposals/`
+    # (pinned by tests/core/memory/test_memory_lifecycle.py).
     for path in sorted(base.glob("*.md")):
         try:
             raw = path.read_text(encoding="utf-8")

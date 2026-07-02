@@ -2,9 +2,9 @@
 
 Spec: ``docs/plans/2026-05-24-hookevent-activity-schema.md`` §3, §7.1.
 
-Every one of the 64 HookEvents maps to a builder that produces a
+Every one of the 65 HookEvents maps to a builder that produces a
 concrete typed ``ActivityRow`` subclass with a validated payload:
-19 lifecycle events via the curry builders below, and the 45 K-group
+19 lifecycle events via the curry builders below, and the 46 K-group
 events via the single declarative ``_TYPED_ROW_SPECS`` table +
 ``_build_from_spec`` (PR-OBS-CONTRACT, 2026-06-13). ``GenericActivityRow``
 is now ONLY the fail-soft fallback for a typed builder that meets a
@@ -71,6 +71,8 @@ from core.observability.activity import (
     McpServerConnectedRow,
     McpServerDetails,
     McpServerFailedRow,
+    MemoryPromotionProposedDetails,
+    MemoryPromotionProposedRow,
     MemorySavedDetails,
     MemorySavedRow,
     ModelSwitchedDetails,
@@ -548,6 +550,12 @@ _TYPED_ROW_SPECS: dict[HookEvent, _TypedRowSpec] = {
         actor_type="agent",
         entity_id_key="key",
     ),
+    HookEvent.MEMORY_PROMOTION_PROPOSED: _TypedRowSpec(
+        row_cls=MemoryPromotionProposedRow,
+        details_cls=MemoryPromotionProposedDetails,
+        actor_type="system",
+        entity_id_key="slug",
+    ),
     HookEvent.RESULT_FEEDBACK: _TypedRowSpec(
         row_cls=ResultFeedbackRow,
         details_cls=ResultFeedbackDetails,
@@ -745,7 +753,7 @@ def map_hook_to_activity(
     """Convert a ``HookEvent`` + ``data`` dict into a typed
     :class:`ActivityRowBase` subclass.
 
-    All 64 events (see :data:`HOOK_EVENT_TO_ROW_BUILDER`) get full
+    All 65 events (see :data:`HOOK_EVENT_TO_ROW_BUILDER`) get full
     pydantic validation against their per-event details schema — a
     payload bug surfaces at dispatch time with a precise
     ``ValidationError`` instead of much later at the handler.
@@ -816,7 +824,7 @@ def _build_generic(
     *,
     run_id: str,
 ) -> GenericActivityRow:
-    """Build the catch-all :class:`GenericActivityRow`. With 64/64
+    """Build the catch-all :class:`GenericActivityRow`. With 65/65
     coverage this is now ONLY reached when a typed builder fails on a
     malformed payload (carrying ``_fallback_reason``) or, defensively,
     for a future event added without a registry entry. The ``actor_type``

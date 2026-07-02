@@ -52,6 +52,17 @@ def build_scheduling(*, hooks: HookSystem) -> dict[str, Any]:
     # via /schedule enable <template_id> when an external package provides
     # the callback wiring.
 
+    # PR-MEMORY-LIFECYCLE (2026-07-03) — first-party read-only engineering
+    # report jobs (callback path: pure-python collectors, budget_usd=0.0,
+    # no tool loop). Registered DISABLED by default; operators opt in via
+    # /schedule enable <job_id> or run once via /schedule run <job_id>.
+    try:
+        from core.scheduler.engineering_reports import register_engineering_report_jobs
+
+        register_engineering_report_jobs(scheduler_service)
+    except Exception:
+        log.exception("engineering report job wiring failed; scheduler continues without them")
+
     if settings.scheduler_auto_start:
         scheduler_service.start(
             interval_s=settings.scheduler_interval_s,

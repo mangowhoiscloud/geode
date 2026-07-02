@@ -370,6 +370,12 @@ from core.cli.commands.reindex import reindex  # noqa: E402
 
 app.command(name="reindex")(reindex)
 
+# PR-MEMORY-LIFECYCLE (2026-07-03) — weekly project-memory decay + HITL
+# promotion-proposal pass (dry-run default, --apply to move/write).
+from core.cli.commands.memory_lifecycle import memory_lifecycle  # noqa: E402
+
+app.command(name="memory-lifecycle")(memory_lifecycle)
+
 
 # PR-CAMPAIGN-CLI: discoverable front end for the 3-arm self-improving campaign.
 # This is a THIN forwarder: it collects the same options the argparse driver in
