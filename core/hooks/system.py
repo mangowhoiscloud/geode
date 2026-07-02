@@ -321,6 +321,17 @@ class HookEvent(Enum):
     # Payload: ``{"path": str}``.
     PROGRAM_MD_UNREADABLE = "program_md_unreadable"
 
+    # Memory promotion proposal (PR-MEMORY-LIFECYCLE, 2026-07-03). Fired by
+    # ``core.memory.memory_lifecycle.propose_memory_promotions`` when a
+    # dedup cluster of dream artifacts + project-memory entries crosses the
+    # >=3-distinct-sessions gate and a HITL proposal file is written to
+    # ``.geode/memory/_proposals/<slug>.md``. Emit-only (APPROVAL_TRANSITION
+    # pattern) — the P50 wildcard RunLog subscriber persists it; promotion
+    # into ``.geode/rules/`` stays a human decision, never a handler.
+    # Payload: ``{"slug": str, "proposal_path": str, "session_ids": list[str],
+    #             "source_count": int, "ts": float}``.
+    MEMORY_PROMOTION_PROPOSED = "memory_promotion_proposed"
+
 
 @dataclass
 class HookResult:

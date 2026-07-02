@@ -8,12 +8,12 @@
 
 A general-purpose autonomous execution agent. The core runtime is an **AgenticLoop** (`while tool_use`) — sub-agents, plans, and batches are all instances of the same loop. Autonomously performs research, analysis, automation, and scheduling.
 
-- **Version**: 0.99.258
+- **Version**: 0.99.260
 - **Python**: >= 3.12
 - **Package Manager**: uv
 - **Entry Points**: `geode` (`core.cli:app`, Typer) / `geode-mcp` (`core.mcp_server:main`)
-- **Modules**: 397 core + 71 plugins = 468
-- **Tests**: 9090 (+1 live)
+- **Modules**: 400 core + 71 plugins = 471
+- **Tests**: 9144 (+1 live)
 - **CHANGELOG**: `CHANGELOG.md` (Keep a Changelog + SemVer)
 
 ## Quick Start
@@ -39,7 +39,7 @@ uv run geode "schedule daily standup reminder at 9am"
 |----------|------|---------|
 | Agent Identity | `GEODE.md` | Identity, Voice & Conduct, runtime architecture, LLM models |
 | Operational Workflow | `docs/workflow.md` + `.claude/skills/geode-workflow/` | Evidence-first execution scaffold shared by Claude Code, Codex, and contributors |
-| Hook System | `docs/architecture/hook-system.md` | HookSystem 64 events |
+| Hook System | `docs/architecture/hook-system.md` | HookSystem 65 events |
 | Scaffold | `CLAUDE.md` | Development workflow, quality gates, CANNOT/CAN (this file) |
 
 ## Project Structure
@@ -102,6 +102,7 @@ Rationale cites the originating incident when one exists. The `karpathy-patterns
 | | No excessive `# type: ignore` — fix type errors instead | Correctness |
 | | No bare `_` for unused variables — use `_prefix` naming (e.g. `_tok_before`) | Readability |
 | | No unauthorized live test (`-m live`) execution | Cost control (P3) |
+| | No gate / CI-status command behind an exit-code absorber — never `gate \| tail`, `gate \| grep -c`, or `check; merge`. Assert gates bare; gate merges on the REAL result (`test "$(gh pr checks N \| grep -cE 'fail\|pending')" -eq 0 && gh pr merge …`) | Gate integrity. *Incidents (2026-07-02/03, same session): PR #2463 merged with a failing Test job because the check was chained with `;`; the slop-ratchet failure on PR #2482 was invisible locally behind `\| tail -1`. A swallowed exit code turns every downstream "green" claim into fiction.* |
 | | No "graceful" return contract without applying it at every schema-typed cast (not just outer try) | Boundary completeness. *Incident: PR-G3 #1347 (2026-05-20) — `float()` on non-numeric raised before contract* |
 | | No seed / pool referencing a dim outside the live fitness taxonomy (`core.self_improving.fitness.AXIS_TIERS`) — a phantom-dim "hallucination" (the audit probes a removed dimension, the held-out ruler pins at the floor, the gate rejects every cycle for a measurement reason = invalid experiment). When a dim is dropped (e.g. PR-DROP-ANALYTICS-DIMS), every pool referencing it goes stale. Validate at **assemble time** (`scripts/assemble_seed_pool.py` → `validate_pool_target_dims`), not only at campaign runtime. | Phantom-dim drift. *Incident: held-out `gen-2605-*-redundant_tool_invocation` stale after the dim was removed; the campaign HALTed but the stale pool had already shipped — fail at assemble so it never enters the pipeline (2026-06-11). Guard: `tests/scripts/test_assemble_stale_dim_guard.py`* |
 | | No conflating "latest" and "promoted" SoTs — readers must document which they assume; persist both if the loop needs both | SoT clarity. *Incident: PR-G2 #1346 (2026-05-20) — downstream read stale evidence forever* |
