@@ -162,6 +162,9 @@ def _apply_model_update(
     loop._tool_processor._model = model
     if old_model != model:
         loop._prompt_dirty = True
+        refresh_tools = getattr(loop, "refresh_tools", None)
+        if callable(refresh_tools):
+            refresh_tools()
 
     # Sync SessionMeter so "Worked for" status line shows the correct model
     from core.ui.agentic_ui import update_session_model

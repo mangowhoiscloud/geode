@@ -17,6 +17,7 @@ def test_headless_denied_tools_contents() -> None:
     assert "run_bash" in HEADLESS_DENIED_TOOLS
     assert "delegate_task" in HEADLESS_DENIED_TOOLS
     assert "computer" in HEADLESS_DENIED_TOOLS
+    assert "computer_use" in HEADLESS_DENIED_TOOLS
 
 
 def test_run_agent_fork_excludes_denied_tools() -> None:
@@ -29,6 +30,7 @@ def test_run_agent_fork_excludes_denied_tools() -> None:
         "run_bash": MagicMock(),
         "delegate_task": MagicMock(),
         "computer": MagicMock(),
+        "computer_use": MagicMock(),
         "memory_search": MagicMock(),
     }
 
@@ -59,6 +61,7 @@ def test_run_agent_fork_excludes_denied_tools() -> None:
     assert "run_bash" not in handlers
     assert "delegate_task" not in handlers
     assert "computer" not in handlers
+    assert "computer_use" not in handlers
     # Non-denied tools survive the filter.
     assert "web_fetch" in handlers
     assert "memory_search" in handlers

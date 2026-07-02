@@ -399,6 +399,116 @@
     }
   },
   {
+    "name": "computer_use",
+    "description": "Emulated desktop control through a normal function-call tool, used when the active model/backend cannot use a provider-native computer tool. Requires user approval and computer-use opt-in. Workflow: call action='capture' to record a compact screen observation; when visual targeting is needed, call action='locate' with a concise instruction to use the configured API vision/grounding path and return coordinates; then use click/type/key/scroll/drag and verify with capture_after. This tool intentionally omits raw screenshot base64 from results to keep normal function-call contexts small and wire-safe.",
+    "category": "external",
+    "cost_tier": "cheap",
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "action": {
+          "type": "string",
+          "enum": [
+            "capture",
+            "locate",
+            "click",
+            "double_click",
+            "right_click",
+            "middle_click",
+            "triple_click",
+            "move",
+            "scroll",
+            "drag",
+            "type",
+            "key",
+            "wait",
+            "cursor_position"
+          ],
+          "description": "Action to perform. Use capture first. Use locate when the model needs coordinates for a described visual target."
+        },
+        "instruction": {
+          "type": "string",
+          "description": "For action='locate': concise visual target description, e.g. 'the blue Submit button'."
+        },
+        "x": {
+          "type": "integer",
+          "description": "Target-space x coordinate, usually returned by locate. Required for click/move/scroll."
+        },
+        "y": {
+          "type": "integer",
+          "description": "Target-space y coordinate, usually returned by locate. Required for click/move/scroll."
+        },
+        "button": {
+          "type": "string",
+          "enum": [
+            "left",
+            "right",
+            "middle"
+          ],
+          "description": "Mouse button for click. Defaults to left."
+        },
+        "click_count": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 3,
+          "description": "Click count for action='click'. Defaults to 1."
+        },
+        "text": {
+          "type": "string",
+          "description": "Text to type for action='type'. Dangerous shell patterns are blocked."
+        },
+        "keys": {
+          "type": "string",
+          "description": "Key or key combo for action='key', e.g. 'cmd+s', 'ctrl+c', 'return'. Destructive system shortcuts are blocked."
+        },
+        "direction": {
+          "type": "string",
+          "enum": [
+            "up",
+            "down",
+            "left",
+            "right"
+          ],
+          "description": "Scroll direction. Defaults to down."
+        },
+        "amount": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Scroll amount in wheel ticks. Defaults to 3."
+        },
+        "start_x": {
+          "type": "integer",
+          "description": "Drag start x coordinate."
+        },
+        "start_y": {
+          "type": "integer",
+          "description": "Drag start y coordinate."
+        },
+        "end_x": {
+          "type": "integer",
+          "description": "Drag end x coordinate."
+        },
+        "end_y": {
+          "type": "integer",
+          "description": "Drag end y coordinate."
+        },
+        "ms": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 30000,
+          "description": "Milliseconds to wait for action='wait'."
+        },
+        "capture_after": {
+          "type": "boolean",
+          "description": "Whether action results should include compact post-action observation metadata. Defaults to true."
+        }
+      },
+      "required": [
+        "action"
+      ]
+    }
+  },
+  {
     "name": "delegate_task",
     "description": "Delegates a task to a sub-agent for parallel execution. Use when: (1) analyzing multiple subjects simultaneously, (2) running independent subtasks in parallel, (3) long-running tasks that shouldn't block the main conversation. Each sub-agent gets its own context and tool access. For sequential single tasks, execute directly instead.",
     "category": "planning",

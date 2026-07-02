@@ -38,6 +38,7 @@ uv run geode "schedule daily standup reminder at 9am"
 | Document | Path | Content |
 |----------|------|---------|
 | Agent Identity | `GEODE.md` | Identity, Voice & Conduct, runtime architecture, LLM models |
+| Operational Workflow | `docs/workflow.md` + `.claude/skills/geode-workflow/` | Evidence-first execution scaffold shared by Claude Code, Codex, and contributors |
 | Hook System | `docs/architecture/hook-system.md` | HookSystem 63 events |
 | Scaffold | `CLAUDE.md` | Development workflow, quality gates, CANNOT/CAN (this file) |
 
@@ -69,6 +70,11 @@ Core tests pass without bundled analysis fixtures. External packages own their
 own fixture/E2E gates.
 
 ## Implementation Workflow
+
+The canonical execution loop is `docs/workflow.md` plus the Claude Code project
+skill `.claude/skills/geode-workflow/`. Claude Code should use the skill as the
+step-by-step scaffold with progressive disclosure, while this file remains the
+rulebook for constraints, quality gates, and project-specific rationale.
 
 > **Design Principle**: CANNOT (guardrails) comes before CAN (freedom). Constraints guarantee quality. (Karpathy P1, OpenClaw Policy Chain, Codex Sandbox)
 
@@ -403,6 +409,7 @@ Skills used by Scaffold during GEODE development (`.claude/skills/`). Separate f
 
 | Skill | Triggers | Content |
 |-------|----------|---------|
+| `geode-workflow` | workflow, scaffold, feature work, provider/model changes, GUI/computer-use, observability, verification | Evidence-first execution scaffold with progressive-disclosure references |
 | `geode-gitflow` | branch, git, pr, merge, commit | Gitflow strategy, PR templates, CI fix loops |
 | `geode-changelog` | changelog, release, version, release | CHANGELOG management, SemVer versioning |
 | `agent-ops-debugging` | safe default, root cause, contextvar, multi-gap | Agent-ops debugging patterns — Safe Default anti-pattern, multi-gap root cause, ContextVar DI |

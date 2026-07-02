@@ -28,10 +28,8 @@ def refresh_tools(loop: AgenticLoop) -> int:
     Rebuilds the unified tool list with deferred loading applied.
     Returns number of newly added tools.
     """
-    if loop._mcp_manager is None:
-        return 0
     old_count = len(loop._tools)
-    mcp_tool_list = loop._mcp_manager.get_all_tools()
+    mcp_tool_list = loop._mcp_manager.get_all_tools() if loop._mcp_manager is not None else None
     # PR-PILOT-PETRI-AUDIT-WIRING (2026-06-01) — re-apply the sub-agent
     # toolkit allowlist on rebuild. Pre-fix this path dropped the
     # ``allowed_tool_names`` filter that the ctor applied, so an MCP install
@@ -43,9 +41,24 @@ def refresh_tools(loop: AgenticLoop) -> int:
         loop._tool_registry,
         mcp_tools=mcp_tool_list,
         force_include=allowed,
+        provider=getattr(loop, "_provider", ""),
+        source=getattr(loop, "_source", ""),
     )
     if allowed is not None:
         loop._tools = [t for t in loop._tools if t.get("name") in allowed]
+    try:
+        from core.agent.capability_graph import build_capability_graph
+        from core.llm.providers.anthropic import is_computer_use_enabled
+
+        loop._capability_graph = build_capability_graph(
+            model=getattr(loop, "model", ""),
+            provider=getattr(loop, "_provider", ""),
+            source=getattr(loop, "_source", ""),
+            visible_tool_names={str(t.get("name", "")) for t in loop._tools if t.get("name")},
+            computer_use_enabled=is_computer_use_enabled(),
+        )
+    except Exception:
+        log.debug("refresh_tools: capability graph rebuild failed", exc_info=True)
     new_count = len(loop._tools)
     return max(0, new_count - old_count)
 
