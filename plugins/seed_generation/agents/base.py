@@ -35,10 +35,9 @@ Sub-agent integration
 =====================
 
 Every role dispatches through ``SubAgentManager.delegate`` (S2+).
-There is no per-role embedding branch — pre-CSP-8 Proximity called
-``text_embed`` directly outside the delegate path; CSP-8 reverted
-that to the paper's §3 LLM-clustering, and CSP-10 dropped the
-remaining ``kind`` plumbing from the manifest / picker / pre-flight.
+There is no per-role embedding branch: Proximity clusters via LLM
+(CSP-8, paper §3), not vectors, and CSP-10 dropped the remaining
+``kind`` plumbing from the manifest / picker / pre-flight.
 """
 
 from __future__ import annotations

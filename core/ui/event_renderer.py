@@ -24,6 +24,7 @@ from dataclasses import dataclass, field
 from typing import Any
 
 from core.time_format import format_elapsed
+from core.ui import spinner_glyph
 from core.ui.tool_tracker import ToolCallTracker
 
 log = logging.getLogger(__name__)
@@ -930,31 +931,37 @@ class EventRenderer:
 
     # -- Internal helpers -----------------------------------------------------
 
-    _FRAMES = "\u280b\u2819\u2839\u2838\u283c\u2834\u2826\u2827\u2807\u280f"
-
     def _animate_activity(self) -> None:
         """Persistent activity spinner — runs until stop() is called."""
         while self._activity:
             if not self._activity_suppressed:
-                frame = self._FRAMES[int(time.monotonic() * 12) % len(self._FRAMES)]
-                self._out.write(f"\r\033[2K  {frame} \033[2mWorking...\033[0m")
+                body = spinner_glyph.shimmer(f"{spinner_glyph.GLYPH} Working…", time.monotonic())
+                self._out.write(f"\r\033[2K  {body}")
                 self._out.flush()
-            time.sleep(0.08)
+            time.sleep(0.05)
 
     def _animate_thinking(self) -> None:
         """Thinking spinner — overrides activity spinner."""
         while self._thinking:
             self._render_thinking_frame()
-            time.sleep(0.08)
+            time.sleep(0.05)
 
     def _render_thinking_frame(self) -> None:
         with self._render_lock:
             if not self._thinking:
                 return
-            frame = self._FRAMES[int(time.monotonic() * 12) % len(self._FRAMES)]
-            r = self._thinking_round
-            label = "Thinking..." if r <= 1 else f"Thinking... (round {r})"
-            self._out.write(f"\r\033[2K  {frame} \033[2m\u2722 {label}\033[0m")
+            region = self._thinking_region
+            el = time.monotonic() - region.start_ts if region is not None else time.monotonic()
+            word = spinner_glyph.gerund(el) + "\u2026"
+            if self._thinking_round > 1:
+                word += f" (round {self._thinking_round})"
+            body = spinner_glyph.shimmer(f"{spinner_glyph.GLYPH} {word}", el)
+            meta = (
+                f" {spinner_glyph.DIM}({spinner_glyph.elapsed(el)}){spinner_glyph.RST}"
+                if region is not None
+                else ""
+            )
+            self._out.write(f"\r\033[2K  {body}{meta}")
             self._out.flush()
 
     def _stop_thinking(self) -> None:

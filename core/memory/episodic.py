@@ -32,10 +32,9 @@ Retrieval API:
   - :meth:`EpisodicStore.recent` — most-recent N rows, optionally
     filtered by ``tool_name`` and/or ``session_id``.
 
-PR-5 will add cosine-embedding-based retrieval on top of this base
-layer (Voyager ``SkillLibrary`` pattern); PR-4 stops at the file +
-recency filter so the foundation is committed before the embedding
-dependency lands.
+Retrieval stops at the file + recency filter (``recent``); the project
+ranks by keyword overlap, not embeddings, so no cosine / vector
+dependency is layered on top.
 """
 
 from __future__ import annotations
