@@ -385,6 +385,14 @@ def _run_agentic(request: WorkerRequest) -> WorkerResult:
     executor = ToolExecutor(
         action_handlers=handlers,
         auto_approve=True,  # Sub-agents skip HITL prompts
+        # PR-SUBAGENT-ROLES (2026-07-02) — enforce the parent's denied set
+        # on the EXISTING executor rail, not only via handler filtering.
+        # ``run_bash`` / ``delegate_task`` are special-cased in
+        # ``ToolExecutor.aexecute`` BEFORE handler lookup, so removing them
+        # from the handler dict is theater (same finding as the headless
+        # denylist, PR-EXEC-HARDENING). This is what makes a role
+        # allowlist (e.g. repo_researcher without run_bash) actually hold.
+        denied_tools=frozenset(request.denied_tools) | {"delegate_task"},
     )
 
     # 4. Build ConversationContext

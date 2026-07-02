@@ -444,9 +444,15 @@ class ToolExecutor:
                     "task_description": tool_input.get("task_description", ""),
                     "task_type": tool_input.get("task_type", "analyze"),
                     "args": tool_input.get("args", {}),
+                    # PR-SUBAGENT-ROLES (2026-07-02) — optional built-in
+                    # capability role (see core/agent/subagent_roles.py).
+                    "role": tool_input.get("role", ""),
                 }
             ]
 
+        # Batch items may carry their own ``role``; the top-level ``role``
+        # is the default for items that don't declare one.
+        default_role = tool_input.get("role", "")
         ts = int(time.time())
         sub_tasks = [
             SubTask(
@@ -454,6 +460,7 @@ class ToolExecutor:
                 description=t.get("task_description", ""),
                 task_type=t.get("task_type", "analyze"),
                 args=t.get("args", {}),
+                role=str(t.get("role") or default_role or ""),
             )
             for i, t in enumerate(tasks_raw)
         ]

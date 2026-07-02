@@ -45,6 +45,11 @@ functional change.
 
 ---
 
+## [0.99.253] - 2026-07-02
+
+### Added
+- **Sub-agent capability role registry + typed result validation** (`core/agent/subagent_roles.py`). `delegate_task` gains an optional `role` parameter (enum: `repo_researcher` / `patcher` / `verifier` / `reviewer`) declaring, per role, a tool allowlist and a pydantic output model (`ResearchFindings` / `PatchSet` / `VerificationResult` / `ReviewFindings`). Enforcement reuses the existing `ToolExecutor.denied_tools` rail (denied = all tools − role allowlist, computed in `SubAgentManager._build_worker_request`; the worker subprocess now passes `WorkerRequest.denied_tools` into its child executor, which also blocks the `run_bash`/`delegate_task` special-cases handler filtering cannot). The parent validates the sub-agent's raw text at the parse site (`_to_sub_result`): direct JSON → fenced ```json``` block recovery → observable structured error `{"validated": false, "error", "raw"}` + `log.warning` — a role result never raises `JSONDecodeError` into the loop and never propagates un-validated garbage (two live `delegate_task` JSONDecodeError failures, 2026-07-02). A role with an output model also appends its JSON schema as one prompt line for generation-side pressure. Unknown/absent role = legacy behaviour unchanged (opt-in). Registry↔schema drift pinned by `tests/core/agent/test_subagent_roles.py` (29 tests).
+
 ## [0.99.252] - 2026-07-02
 
 ### Fixed

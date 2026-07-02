@@ -545,6 +545,16 @@
           "type": "object",
           "description": "Arguments for the delegated task"
         },
+        "role": {
+          "type": "string",
+          "enum": [
+            "repo_researcher",
+            "patcher",
+            "verifier",
+            "reviewer"
+          ],
+          "description": "Optional built-in capability role. Restricts the sub-agent to the role's tool allowlist and validates its result against the role's output schema (repo_researcher: read-only research findings; patcher: file edits + patch list; verifier: run_bash checks + pass/fail; reviewer: read-only review findings). Omit for the default unrestricted sub-agent."
+        },
         "tasks": {
           "type": "array",
           "description": "Batch mode: array of tasks to run in parallel",
@@ -564,6 +574,15 @@
               },
               "args": {
                 "type": "object"
+              },
+              "role": {
+                "type": "string",
+                "enum": [
+                  "repo_researcher",
+                  "patcher",
+                  "verifier",
+                  "reviewer"
+                ]
               }
             },
             "required": [
