@@ -83,6 +83,11 @@ class ScheduledJob:
     action: str = ""  # Prompt text to enqueue when fired (no callback)
     isolated: bool = True  # Run in isolated session (agentTurn) vs main session (systemEvent)
     active_hours: ActiveHours | None = None
+    # Per-job spend ceiling in USD. 0.0 = the job must not spend anything
+    # (pure-python collectors, no LLM calls). Informational for callback
+    # jobs (they never enter an LLM loop); prompt-action jobs surface it to
+    # the session cost guard via metadata propagation.
+    budget_usd: float = 0.0
     metadata: dict[str, Any] = field(default_factory=dict)
     # State tracking
     created_at_ms: float = 0.0

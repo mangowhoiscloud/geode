@@ -45,11 +45,47 @@ functional change.
 
 ---
 
+## [0.99.260] - 2026-07-03
+
+### Added
+- **Project-memory lifecycle (`core/memory/memory_lifecycle.py`).** Memory
+  entry files gain optional `resolution: {pr, guard_test, resolved_at}`
+  frontmatter. `evaluate_decay` archives an entry iff its guard test still
+  exists in the tree (static `ast` parse of `tests/file.py::[Class::]name` —
+  never runs pytest) and resurfaces it with a WARNING when the guard test
+  disappears; there is no time-based decay. Archived entries move to
+  `.geode/memory/_archive/` (file kept) and stay out of prompt injection —
+  the recall reader's non-recursive walk is now a pinned contract.
+- **Memory promotion proposals (HITL, hook event 65).**
+  `propose_memory_promotions()` clusters `context_artifacts` dream rows +
+  active memory entries by pure-python token-Jaccard (>= 0.6); a cluster
+  spanning >= 3 distinct sessions writes a proposal file to
+  `.geode/memory/_proposals/<slug>.md` (merged text, source session ids,
+  `superseded_by` lineage) and fires the new `MEMORY_PROMOTION_PROPOSED`
+  hook event with a typed activity row. Promotion into `.geode/rules/` or
+  `PROJECT.md` is never automatic.
+- **`geode memory-lifecycle` CLI.** Weekly evaluation entry point running
+  decay verdicts + promotion proposals; dry-run by default, `--apply` moves
+  files and writes proposals.
+- **Scheduled engineering reports (`core/scheduler/engineering_reports.py`).**
+  Four read-only collector jobs registered on the SchedulerService callback
+  path at boot (disabled by default; `/schedule enable <job_id>` to opt in,
+  `/schedule run <job_id>` for one-shot): `engineering:todo_aging_report`
+  (git grep TODO/FIXME + git blame age buckets),
+  `engineering:dependency_drift_report` (uv.lock resolved-package snapshot
+  diff vs last run), `engineering:docs_link_report`
+  (`scripts/check_docs_links.py` pass/fail capture), and
+  `engineering:runtime_warning_triage` (serve.log WARNING lines grouped by
+  logger). Each writes `.geode/reports/<job>/<date>.md` and returns a
+  summary string. Pure-python collectors: no tool loop, no LLM calls in v1
+  (`budget_usd=0.0`); LLM synthesis is a follow-up.
+- **`ScheduledJob.budget_usd`.** Per-job spend-ceiling field, serialization
+  round-trips (legacy stores default to `0.0`).
+
 ## [0.99.259] - 2026-07-03
 
 ### Fixed
 - **Compact Geodi restored to the reviewed character, sized to the welcome block** — the 0.99.257/258 compact derivative had broken the face (squished eyes, lost smile). `GEODI_PIXELS` is now a hand-authored 14x8 chibi of the canonical 0.99.256 sprite — 3 separated gill stalks per side, symmetric 2px eyes with same-corner catchlights, minimal mouth, under-eye blush, belly patch, feet — rendering as 4 half-block rows to sit beside the 3-line welcome text (operator size spec). `GEODI_SOURCE_PIXELS` (22x20 original) unchanged; silhouette-cue tests rewritten against grid semantics instead of hard row indices.
-
 ## [0.99.258] - 2026-07-02
 
 ### Fixed
