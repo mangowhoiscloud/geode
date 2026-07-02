@@ -45,6 +45,11 @@ functional change.
 
 ---
 
+## [0.99.261] - 2026-07-03
+
+### Changed
+- **Welcome Geodi keeps the full 0.99.256 detail, minus the forehead** — operator review: the 14x8 chibi traded away too much character. `GEODI_PIXELS` is now the 22x20 source art with two forehead rows removed (one head-top rounding row, one upper-gill thickness row) → 22x18, rendering 9 half-block rows. All source detail retained: 3 separated gill stalks per side, 2px eyes with catchlights, blush, smile, belly, feet.
+
 ## [0.99.260] - 2026-07-03
 
 ### Added
@@ -81,7 +86,6 @@ functional change.
   (`budget_usd=0.0`); LLM synthesis is a follow-up.
 - **`ScheduledJob.budget_usd`.** Per-job spend-ceiling field, serialization
   round-trips (legacy stores default to `0.0`).
-
 ## [0.99.259] - 2026-07-03
 
 ### Fixed
