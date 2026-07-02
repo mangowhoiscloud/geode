@@ -116,6 +116,7 @@ class EventRenderer:
     )
     _MAX_ACTIVITY_TOOL_LINES = 5
     _MAX_ACTIVITY_NOTICE_LINES = 2
+    _MAX_PLAN_VISIBLE_ITEMS = 5
 
     def __init__(self) -> None:
         self._tool_tracker = ToolCallTracker()
@@ -130,8 +131,8 @@ class EventRenderer:
         self._stdin_stop = threading.Event()
         self._stdin_thread: threading.Thread | None = None
         self._out = sys.stdout
-        # True while a phase (thinking/tool) draws BELOW a pinned plan copy —
-        # the plan stays on screen for the whole phase instead of vanishing.
+        # True while a phase (thinking/tool) owns the bottom rows. The compact
+        # task list is hidden during the phase and restored afterward.
         self._plan_pinned = False
         # Persistent activity spinner state
         self._activity = False
@@ -230,13 +231,12 @@ class EventRenderer:
         self._clear_markdown_stream_region()
         self._out.flush()
         self._flush_repeat()
-        # Freeze the live region as the turn's final state: if answer streaming
-        # already erased it, print one last permanent copy, then release it to
-        # scrollback (at_bottom=False) so the final answer renders below it.
+        # Freeze the compact live region as the turn's final state: if answer
+        # streaming already erased it, print one last permanent copy, then
+        # release it to scrollback so the final answer renders below it.
         with self._render_lock:
-            # A phase interrupted mid-flight (Ctrl+C, error) may leave the plan
-            # pinned; spinner/tool/thinking output is stopped and erased by
-            # now, so the pinned copy is bottom-most again — re-anchor it.
+            # A phase interrupted mid-flight (Ctrl+C, error) may leave legacy
+            # pinned state set. Clear it before rendering the final live region.
             self._restore_pinned_plan_locked()
             has_content = bool(self._progress_plan.items) or bool(
                 self._activity_surface.tool_stats or self._activity_surface.notices
@@ -281,9 +281,8 @@ class EventRenderer:
                     self._erase_thinking_visible_locked(region)
                     self._record_thought_activity_locked(region)
                     should_render_activity = True
-            # Cursor is just below the pinned plan copy again — re-anchor it
-            # so _render_live_region erases it and redraws plan+activity as
-            # ONE bottom unit (never a stale stacked copy).
+            # The phase ended; restore the compact task list + activity as one
+            # bottom unit.
             if self._restore_pinned_plan_locked():
                 should_render_activity = True
         self._activity_suppressed = False  # resume activity spinner
@@ -320,8 +319,7 @@ class EventRenderer:
             self._tool_tracker.suspend()
             with self._tool_tracker._lock:
                 self._tool_tracker._tools.clear()
-            # suspend() erased the tool rows — cursor is back just below the
-            # pinned plan copy, so re-anchor it before the unified redraw.
+            # suspend() erased the tool rows; redraw the compact live region.
             with self._render_lock:
                 self._restore_pinned_plan_locked()
             self._render_live_region()
@@ -576,7 +574,7 @@ class EventRenderer:
         self._render_progress_plan_surface(items, f"revised{suffix} · {step_count} steps{rev}")
 
     def _handle_progress_plan(self, event: dict[str, Any]) -> None:
-        """Render update_plan into the managed live region (full checklist, always)."""
+        """Render update_plan into the managed compact live region."""
         plan = event.get("plan", [])
         if not isinstance(plan, list):
             return
@@ -1145,10 +1143,9 @@ class EventRenderer:
         """
         with self._render_lock:
             if self._plan_pinned:
-                # The pinned plan copy is being buried by foreign output.
-                # Release it to scrollback WITHOUT erase sequences — its
-                # at_bottom is already False, and phase content below it makes
-                # the cursor-up math unsafe.
+                # A phase-owned live region is being buried by foreign output.
+                # Release it without cursor-up erase sequences; phase output
+                # below it makes that math unsafe.
                 self._progress_plan.visible_lines = []
                 self._plan_pinned = False
             # Reverse render order: activity sits below the plan checklist.
@@ -1159,51 +1156,35 @@ class EventRenderer:
                     surface.at_bottom = False
 
     def _pin_plan_for_phase(self) -> None:
-        """Keep the plan checklist visible while a thinking/tool phase runs.
+        """Clear the bottom live region before a thinking/tool phase runs.
 
-        Erases the live region, then immediately re-prints the plan as a
-        PINNED copy (``at_bottom=False`` — never erased mid-phase). The phase
-        content (thinking region / tool tracker rows) draws BELOW it and
-        redraws in place without touching it; the phase end re-anchors the
-        pinned copy via :meth:`_restore_pinned_plan_locked`.
+        Claude Code keeps the current step in the spinner label and exposes the
+        full task list as a separate compact surface. Re-printing the checklist
+        above every tool/thinking phase leaves duplicate Plan blocks in
+        scrollback, so phases now run with only the contextual spinner/tool row;
+        the compact task list returns after the phase ends.
         """
-        # Already pinned (thinking→tool transition) — the copy on screen stays;
-        # printing another without erasing the first stacks duplicates (Codex HIGH).
-        if self._plan_pinned and self._progress_plan.visible_lines:
-            return
         with self._render_lock:
             self._erase_live_region()
-            plan = self._progress_plan
-            if not (self._tty and plan.items):
-                return
-            lines = self._render_full_progress_plan(plan.items, plan.explanation)
-            self._out.write("\r\033[2K")  # clear any spinner residue first
-            for line in lines:
-                self._out.write(line)
-            self._out.flush()
-            plan.visible_lines = lines
-            plan.at_bottom = False
             self._plan_pinned = True
 
     def _restore_pinned_plan_locked(self) -> bool:
-        """Re-anchor the pinned plan copy as the erasable bottom surface.
+        """Clear legacy pinned state after a phase.
 
-        Call ONLY when the cursor sits just below the pinned copy again (phase
-        content erased). Returns True when a pinned copy was restored.
+        The plan is no longer physically pinned during phases; it is redrawn as
+        part of the compact live region at phase end.
         """
         if not self._plan_pinned:
             return False
-        plan = self._progress_plan
-        plan.at_bottom = bool(plan.visible_lines)
         self._plan_pinned = False
         return True
 
     def _render_live_region(self) -> None:
-        """Redraw plan checklist + activity block at the bottom as ONE unit.
+        """Redraw compact task list + activity block at the bottom as ONE unit.
 
         The scrollback equivalent of Claude Code's live todo widget: a single
-        moving copy — always the full checklist, never a compact breadcrumb —
-        erased before any other output prints and redrawn on state change.
+        moving copy, capped at five visible tasks and erased before any other
+        output prints.
         """
         with self._render_lock:
             self._erase_live_region()
@@ -1310,17 +1291,49 @@ class EventRenderer:
     def _render_full_progress_plan(
         self, items: list[dict[Any, Any]], explanation: str
     ) -> list[str]:
-        header = "Plan"
+        total = len(items)
+        completed = sum(1 for item in items if str(item.get("status", "")) == "completed")
+        header = f"Tasks · {completed}/{total} done"
         if explanation:
-            header = f"Plan · {explanation}"
+            header = f"{header} · {explanation}"
         lines = ["\n", f"  \033[1;36m{header}\033[0m\n"]
-        for item in items:
+        visible_items, hidden_before, hidden_after = self._visible_plan_window(items)
+        if hidden_before:
+            lines.append(f"    \033[2m… {hidden_before} earlier\033[0m\n")
+        for item in visible_items:
             status = str(item.get("status", "pending"))
             step = str(item.get("step", ""))
             symbol, style, text_style = self._progress_plan_symbol(status)
             lines.append(f"    {style}{symbol}\033[0m {text_style}{step}\033[0m\n")
+        if hidden_after:
+            lines.append(f"    \033[2m… {hidden_after} later\033[0m\n")
         lines.append("\n")
         return lines
+
+    def _visible_plan_window(
+        self, items: list[dict[Any, Any]]
+    ) -> tuple[list[dict[Any, Any]], int, int]:
+        """Return the Claude Code-scale task-list window around the active item."""
+        if len(items) <= self._MAX_PLAN_VISIBLE_ITEMS:
+            return items, 0, 0
+        active_idx = next(
+            (idx for idx, item in enumerate(items) if str(item.get("status", "")) == "in_progress"),
+            -1,
+        )
+        if active_idx < 0:
+            active_idx = next(
+                (
+                    idx
+                    for idx, item in enumerate(items)
+                    if str(item.get("status", "pending")) == "pending"
+                ),
+                len(items) - 1,
+            )
+        half = self._MAX_PLAN_VISIBLE_ITEMS // 2
+        start = max(0, active_idx - half)
+        end = min(len(items), start + self._MAX_PLAN_VISIBLE_ITEMS)
+        start = max(0, end - self._MAX_PLAN_VISIBLE_ITEMS)
+        return items[start:end], start, len(items) - end
 
     @staticmethod
     def _progress_plan_symbol(status: str) -> tuple[str, str, str]:

@@ -267,12 +267,12 @@ class TestEventRendererV2:
 
         renderer.on_event({"type": "goal_decomposition", "steps": ["a", "b"], "count": 2})
         out = renderer._out.getvalue()
-        assert "Plan" in out
+        assert "Tasks" in out
         assert "2 steps" in out
         assert spinner_glyph.GLYPH in out  # active step carries the rose GEODE mark
         assert "a" in out
 
-    def test_progress_plan_first_render_is_full_checklist(self, renderer) -> None:
+    def test_progress_plan_first_render_is_compact_task_list(self, renderer) -> None:
         renderer.on_event(
             {
                 "type": "progress_plan",
@@ -285,7 +285,7 @@ class TestEventRendererV2:
             }
         )
         out = renderer._out.getvalue()
-        assert "Plan · implementation" in out
+        assert "Tasks · 1/3 done · implementation" in out
         assert "✓" in out
         assert "Inspect UX" in out
         assert "Patch renderer" in out
@@ -309,9 +309,9 @@ class TestEventRendererV2:
         assert "\033[" in out and "A" in out
         assert "Second plan" in out
 
-    def test_progress_plan_after_tool_output_rerenders_full_checklist(self, renderer) -> None:
-        """Live-region policy: after other output obscures the plan, the next
-        update re-renders the FULL checklist at the bottom (the old copy was
+    def test_progress_plan_after_tool_output_rerenders_compact_task_list(self, renderer) -> None:
+        """Live-region policy: after other output obscures the task list, the
+        next update re-renders the compact list at the bottom (the old copy was
         erased before the obscuring output printed — never stacked)."""
         renderer.on_event(
             {
@@ -333,10 +333,10 @@ class TestEventRendererV2:
             }
         )
         out = renderer._out.getvalue()
-        tail = out[out.rindex("Plan · fallback") :]
+        tail = out[out.rindex("Tasks · 1/3 done · fallback") :]
         assert "Already done" in tail
         assert "Direct verification" in tail
-        assert "Pending tail step" in tail  # full checklist re-rendered
+        assert "Pending tail step" in tail
         assert "Plan updated" not in out  # compact breadcrumb path removed
 
     def test_plan_step(self, renderer) -> None:
@@ -353,7 +353,7 @@ class TestEventRendererV2:
         )
         out = renderer._out.getvalue()
         assert "\033[" in out and "A" in out
-        assert "Plan" in out
+        assert "Tasks" in out
         assert "step 2/2" in out
         assert "verify the renderer" in out
         assert "✓" in out
@@ -366,18 +366,18 @@ class TestEventRendererV2:
         )
         out = renderer._out.getvalue()
         assert "\033[" in out and "A" in out
-        assert "Plan · revised" in out
+        assert "Tasks · 0/3 done · revised" in out
         assert "verify_fail" in out
         assert "3 steps" in out
 
-    def test_replan_after_tool_output_rerenders_full_checklist(self, renderer) -> None:
+    def test_replan_after_tool_output_rerenders_compact_task_list(self, renderer) -> None:
         renderer.on_event({"type": "goal_decomposition", "steps": ["inspect", "patch"], "count": 2})
         renderer.on_event({"type": "subagent_complete", "count": 2, "elapsed_s": 5.0})
         renderer.on_event({"type": "replan", "trigger": "cadence", "step_count": 2, "revision": 1})
         out = renderer._out.getvalue()
-        tail = out[out.rindex("Plan · revised") :]
+        tail = out[out.rindex("Tasks · 0/2 done · revised") :]
         assert "revised · cadence · 2 steps · rev 1" in tail
-        assert "inspect" in tail  # full checklist re-rendered with revision header
+        assert "inspect" in tail
 
     def test_tool_backpressure(self, renderer) -> None:
         renderer.on_event({"type": "tool_backpressure", "consecutive_errors": 3})
