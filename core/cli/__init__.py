@@ -148,7 +148,7 @@ def _thin_interactive_loop(
         console.print("  [error]Failed to connect to serve[/error]")
         return
 
-    console.print(f"  [success]Session: {client.session_id}[/success]")
+    console.print(f"  [muted]session {client.session_id} · connected[/muted]")
 
     # Resume a previous session if requested
     if resume_session or continue_latest:
@@ -506,7 +506,6 @@ def main(
                 console.print("  [dim]Try manually: geode serve &[/dim]")
                 raise typer.Exit(1)
 
-        console.print("  [muted]Connected to serve via IPC[/muted]")
         _thin_interactive_loop(
             resume_session=resume,
             continue_latest=continue_session,
