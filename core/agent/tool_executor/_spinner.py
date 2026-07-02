@@ -1,4 +1,4 @@
-"""Tool execution spinner — Rich dots spinner during post-approval tool execution."""
+"""Tool execution spinner — signature shimmer line during post-approval tool execution."""
 
 from __future__ import annotations
 
@@ -8,17 +8,18 @@ from contextlib import contextmanager
 
 @contextmanager
 def _tool_spinner(label: str) -> Iterator[None]:
-    """Show a Rich dots spinner during post-approval tool execution.
+    """Show the signature shimmer spinner during post-approval tool execution.
 
-    Displays ``label`` with a spinner while the wrapped block runs,
-    then clears it on exit so OperationLogger markers (✓/✗) render cleanly.
+    Displays ``label`` on the shared rose shimmer line (``core.ui.status.TextSpinner``,
+    which renders through ``core.ui.spinner_glyph`` — the single spinner source)
+    while the wrapped block runs, then clears it on exit so OperationLogger
+    markers (✓/✗) render cleanly.
 
     Skipped in IPC mode — thin CLI has its own ToolCallTracker spinner.
     Running both causes ANSI cursor-up race → UI corruption.
 
     Also skipped when the active console is non-TTY (e.g. local REPL
-    piped to a file, CI). v0.84.0 — prevents braille spinner frames
-    from polluting non-terminal output.
+    piped to a file, CI) — spinner ANSI frames would pollute log output.
     """
     # IPC mode: ToolCallTracker on thin CLI handles the spinner
     from core.ui.agentic_ui import _ipc_writer_local
@@ -31,15 +32,15 @@ def _tool_spinner(label: str) -> Iterator[None]:
     # `core.agent.tool_executor.console` affect this code path.
     from core.agent import tool_executor as _pkg
 
-    # Non-TTY path (local REPL piped, CI). Rich's spinner emits cursor
-    # control + braille frames that look like garbage in a log file.
     if not getattr(_pkg.console, "is_terminal", True):
         yield
         return
 
-    status = _pkg.console.status(f"  [dim]✢ {label}[/dim]", spinner="dots", spinner_style="cyan")
-    status.start()
+    from core.ui.status import TextSpinner
+
+    spinner = TextSpinner(label)
+    spinner.start()
     try:
         yield
     finally:
-        status.stop()
+        spinner.stop()

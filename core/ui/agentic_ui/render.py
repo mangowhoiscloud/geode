@@ -133,10 +133,14 @@ def render_progress_plan(plan: list[dict[str, str]], *, explanation: str = "") -
         writer.send_event("progress_plan", plan=plan, explanation=explanation)
         return
 
+    from core.ui import spinner_glyph
+
+    # Same todo visual language as the IPC plan surface (EventRenderer):
+    # checked-off / rose GEODE mark on the active step / quiet pending.
     status_style = {
-        "pending": ("○", "dim"),
-        "in_progress": ("●", "warning"),
-        "completed": ("✓", "success"),
+        "pending": ("○", "dim", "dim"),
+        "in_progress": (spinner_glyph.GLYPH, f"bold {spinner_glyph.ROSE_HEX}", "bold"),
+        "completed": ("✓", "success", "dim strike"),
     }
     _pkg.console.print()
     header = "Plan"
@@ -145,9 +149,9 @@ def render_progress_plan(plan: list[dict[str, str]], *, explanation: str = "") -
     _pkg.console.print(f"  [header]{header}[/header]")
     for item in plan:
         status = item.get("status", "pending")
-        symbol, style = status_style.get(status, ("○", "dim"))
+        symbol, style, text_style = status_style.get(status, ("○", "dim", "dim"))
         step = item.get("step", "")
-        _pkg.console.print(f"    [{style}]{symbol}[/{style}] {step}")
+        _pkg.console.print(f"    [{style}]{symbol}[/{style}] [{text_style}]{step}[/{text_style}]")
     _pkg.console.print()
 
 

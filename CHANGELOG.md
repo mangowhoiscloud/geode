@@ -167,6 +167,12 @@ functional change.
   guardrails against reintroducing fixed-DAG or confidence-threshold pipeline
   claims into GEODE prompt context.
 
+## [0.99.249] - 2026-07-02
+
+### Changed
+- **Plan surface → Claude Code todo visual language (PR-PLAN-UI-SIGNATURE)** — the live plan checklist (`core/ui/event_renderer.py`) now styles steps by status the way a todo widget reads: completed = green ✓ with the step text dim + strikethrough (checked off; SGR 9 degrades to plain dim where unsupported), in-progress = the rose GEODE mark `◆` (`spinner_glyph.ROSE`, new public constant off the shimmer's base rose) with the step text bold, pending = quiet dim ○. The compact one-line transition marks the active step with the same rose `◆` (was a yellow `●`). The direct-mode (non-IPC) `render_progress_plan` (`core/ui/agentic_ui/render.py`) renders the same language via Rich markup (`spinner_glyph.ROSE_HEX`, hex twin of `ROSE` off the same `_BASE` anchor) — both plan branches stay symmetric. In-place redraw / compact-when-obscured machinery unchanged.
+- **Tool tracker → signature shimmer (single-spinner-source complete)** — `core/ui/tool_tracker.py` drops its braille `_FRAMES` copy (the last remaining separate spinner, flagged in the 0.99.248 entry); a running tool row now renders `◆ name` through `spinner_glyph.shimmer` with the args in dim, and the direct-mode post-approval tool spinner (`core/agent/tool_executor/_spinner.py`) swaps its Rich `dots` spinner for the shared `TextSpinner` — so every animated glyph in the CLI comes from `core/ui/spinner_glyph.py`. Completed rows keep static ✓/✗. Guard: `tests/core/ui/test_agentic_ui.py::test_tool_tracker_running_row_uses_signature_shimmer` + `TestPlanSurfaceVisualLanguage`.
+
 ## [0.99.248] - 2026-07-02
 
 ### Added
