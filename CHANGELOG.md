@@ -45,6 +45,17 @@ functional change.
 
 ---
 
+## [0.99.256] - 2026-07-02
+
+### Infrastructure
+- **Slop growth ratchet.** CI now runs `scripts/check_slop_ratchet.py`, a
+  committed-baseline gate over four low-signal-growth metrics: bypass markers,
+  stale TODO markers, dead placeholder branches, and duplicated function
+  signatures. Existing debt is tolerated through
+  `scripts/slop_ratchet_baseline.json`; PRs fail only when a metric grows
+  above the accepted floor unless the baseline is deliberately updated and
+  reviewed in the diff.
+
 ## [0.99.255] - 2026-07-02
 
 ### Added
