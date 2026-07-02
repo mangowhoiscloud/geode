@@ -24,8 +24,9 @@ from core.llm.router import LLMUsageAccumulator, get_usage_accumulator
 from core.ui import spinner_glyph
 from core.ui.console import console
 
-# Generic messages that hand the spinner line over to the rotating gerunds
-# (the crystal glyph + activity words live in core.ui.spinner_glyph \u2014 one source).
+# Generic messages that hand the spinner line over to a whimsical gerund \u2014
+# ONE word per spinner lifetime, seeded by its start time (Claude Code parity).
+# The crystal glyph + activity words live in core.ui.spinner_glyph \u2014 one source.
 _GENERIC = {"", "processing...", "thinking...", "working..."}
 
 
@@ -33,7 +34,7 @@ class TextSpinner:
     """Non-invasive rose-crystal status spinner. No raw mode, no cursor hiding.
 
     Renders a Claude Code-style live status line: an animated GEODE crystal, a
-    rotating activity word (or the caller's message), and a live elapsed timer,
+    per-turn activity word (or the caller's message), and a live elapsed timer,
     rewritten in place with a carriage return + line clear. The output target is
     resolved at write-time so it follows ``redirect_console()`` (IPC streaming).
     """
@@ -75,9 +76,10 @@ class TextSpinner:
         self._rotate = message.strip().lower() in _GENERIC
 
     def _animate(self) -> None:
+        word_of_turn = spinner_glyph.gerund(self._start)  # stable for this spinner's lifetime
         while self._running:
             el = time.monotonic() - self._start
-            word = f"{spinner_glyph.gerund(el)}…" if self._rotate else self._message
+            word = f"{word_of_turn}…" if self._rotate else self._message
             body = spinner_glyph.shimmer(f"{spinner_glyph.GLYPH} {word}", el)
             meta = spinner_glyph.elapsed(el)
             meta += f" · {self._model}" if self._model else ""

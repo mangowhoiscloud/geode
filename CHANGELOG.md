@@ -45,7 +45,10 @@ functional change.
 
 ---
 
-## [Unreleased]
+## [0.99.250] - 2026-07-02
+
+### Changed
+- **Contextual spinner label (PR-SPINNER-CONTEXT-LABEL)** — the thinking status line now discloses what the loop is actually doing, Claude Code-style (its spinner shows the in-progress todo's LLM-authored `activeForm`, whimsy only as fallback). Label priority in `core/ui/event_renderer.py:_thinking_label`: **reflection round** (`Reflecting…` — `agent_loop.py` marks the `thinking_start` event with `reflection=true` when a verify-FAIL reflection hint is injected into the round, and the direct-mode TextSpinner label says `Reflecting...` likewise) > **active plan step** (the `in_progress` step text from the live plan surface, display-width bounded) > **whimsical gerund**. The gerund is now ONE stable word per turn — `spinner_glyph.gerund(seed)` is seeded by the turn/spinner start time instead of rotating every 4s (`_WORD_EVERY` removed); `status.py` TextSpinner picks its word once per lifetime. Guards: `tests/core/ui/test_agentic_ui.py::TestThinkingLabelContext` + `test_gerund_is_stable_per_seed`.
 
 ### Added
 - **Subscription-backend computer-use emulation.** GEODE now exposes a guarded

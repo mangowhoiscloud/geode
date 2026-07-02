@@ -1017,3 +1017,55 @@ def test_tool_tracker_running_row_uses_signature_shimmer() -> None:
     assert spinner_glyph.GLYPH in line
     assert "query=geode" in line
     assert spinner_glyph.shimmer(f"{spinner_glyph.GLYPH} web_search", 0.0) in line
+
+
+class TestThinkingLabelContext:
+    """Thinking label priority: reflection > active plan step > per-turn gerund."""
+
+    def _renderer(self) -> Any:
+        import io
+
+        from core.ui.event_renderer import EventRenderer
+
+        r = EventRenderer()
+        r._out = io.StringIO()
+        return r
+
+    def test_reflection_outranks_everything(self) -> None:
+        r = self._renderer()
+        r._thinking_reflection = True
+        r._progress_plan.items = [{"step": "Patch tools", "status": "in_progress"}]
+        assert r._thinking_label() == "Reflecting"
+
+    def test_active_plan_step_outranks_gerund(self) -> None:
+        r = self._renderer()
+        r._progress_plan.items = [
+            {"step": "Inspect UX", "status": "completed"},
+            {"step": "Patch tools", "status": "in_progress"},
+        ]
+        assert r._thinking_label() == "Patch tools"
+
+    def test_falls_back_to_turn_stable_gerund(self) -> None:
+        from core.ui import spinner_glyph
+
+        r = self._renderer()
+        assert r._thinking_label() == spinner_glyph.gerund(r._turn_start)
+        # stable across calls — one word per turn, no rotation
+        assert r._thinking_label() == r._thinking_label()
+
+    def test_thinking_start_event_sets_reflection_flag(self) -> None:
+        r = self._renderer()
+        r._tty = False
+        r.on_event({"type": "thinking_start", "model": "m", "round": 1, "reflection": True})
+        try:
+            assert r._thinking_reflection is True
+        finally:
+            r._stop_thinking()
+
+
+def test_gerund_is_stable_per_seed() -> None:
+    """One whimsical word per turn: same seed → same word; turns differ."""
+    from core.ui import spinner_glyph
+
+    assert spinner_glyph.gerund(7.2) == spinner_glyph.gerund(7.9)
+    assert spinner_glyph.gerund(0.0) != spinner_glyph.gerund(1.0)
