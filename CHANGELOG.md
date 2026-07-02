@@ -47,6 +47,27 @@ functional change.
 
 ## [Unreleased]
 
+### Added
+
+- **Judge ↔ human agreement — external-anchor validation of the LLM judge.**
+  New `geode audit-agreement` sub-app (`extract` / `label` / `report` /
+  `recalibrate`) and `core/audit/judge_agreement.py` measure whether the
+  Petri LLM-judge's per-dim scores track a human's, closing the
+  "judge validated only by another judge" loop. A deterministic, stratified
+  pilot is extracted from the `~/.geode/petri/logs/` `.eval` archives across
+  the reliability-critical dims (broken_tool_use, input_hallucination,
+  overrefusal, stuck_in_loops, eval_awareness); a resumable CLI labels each
+  transcript excerpt blind (judge score revealed only after the human commits);
+  agreement is reported as per-dim weighted Cohen's kappa (ordinal, linear +
+  quadratic) plus an overall Krippendorff's alpha (ordinal), with systematic
+  bias direction and disagreement cases feeding a judge-recalibration proposal.
+  Statistics are implemented from their definitions in pure stdlib (no numpy /
+  scipy dependency) and pinned by known-value tests (hand-derived weighted
+  kappa; canonical Hayes & Krippendorff 2007 alpha values). Ships harness +
+  methodology + staged pilot (N=20); human labels are collected separately, so
+  no agreement coefficient is reported until labels exist. Methodology:
+  `docs/audits/judge-human-agreement.md`.
+
 ### Fixed
 
 - **MCP filesystem argument compatibility.** MCP tool dispatch now normalizes

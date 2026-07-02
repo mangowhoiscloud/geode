@@ -298,6 +298,11 @@ GLOBAL_SCHEDULER_DIR = GEODE_HOME / "scheduler"
 # `core.auth.auth_toml` overrides via `GEODE_AUTH_TOML` env var; this
 # constant is the default fallback.
 GLOBAL_DIAGNOSTICS_DIR = GEODE_HOME / "diagnostics"
+# Judge ↔ human agreement pilot (external-anchor judge validation). Holds the
+# staged blind items, the human-label JSONL ledger, and the generated
+# agreement + recalibration reports. See core/audit/judge_agreement.py and
+# docs/audits/judge-human-agreement.md.
+GLOBAL_AUDIT_AGREEMENT_DIR = GEODE_HOME / "audit" / "agreement"
 # P1a + P1c (2026-05-19) — self-improving-loop wiring sprint. Shared cross-loop
 # namespace: ``sessions.jsonl`` (P1a, run-level index, one row per
 # autoresearch/seed-generation run) + ``<session_id>/transcript.jsonl``
