@@ -47,6 +47,9 @@ functional change.
 
 ## [0.99.254] - 2026-07-02
 
+### Infrastructure
+- **Repo-hygiene placeholder allowlist widened** — `scripts/check_repo_hygiene.py` `_PLACEHOLDER_USERS` gains `x`/`y`/`you`/`yourname`/`username` (a docstring example `/Users/x/dev` tripped the real-username ratchet on PR #2468); the geode-workflow verification-gates reference now lists the hygiene checker as a pre-push gate (CI runs it, local ruff does not).
+
 ### Changed
 - **Plan checklist stays pinned through thinking/tool phases.** The thin-client
   `EventRenderer` no longer erases the plan when a thinking or tool phase
