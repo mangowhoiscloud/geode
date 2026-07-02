@@ -207,9 +207,6 @@ export function DocsShell({
       <header className="sticky top-0 z-30 border-b border-[var(--rule-soft)] bg-[color-mix(in_srgb,var(--paper)_85%,transparent)] backdrop-blur">
         <div className="max-w-7xl mx-auto flex items-center justify-between px-6 py-4">
           <div className="flex items-center gap-6">
-            <Link href="/portfolio" className="text-sm text-[var(--ink-2)] hover:text-[var(--ink)]">
-              ← /geode/portfolio
-            </Link>
             <span className="text-sm font-display font-bold tracking-wide">
               {t(locale, "GEODE . 문서", "GEODE . Docs")}
             </span>

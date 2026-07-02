@@ -1300,7 +1300,7 @@ class AgenticLoop:
                 _spinner = TextSpinner("", quiet=True)  # no-op spinner
             else:
                 label = "Thinking..." if round_idx == 0 else f"Thinking... (round {round_idx + 1})"
-                _spinner = TextSpinner(f"✢ {label}", quiet=self._quiet)
+                _spinner = TextSpinner(label, quiet=self._quiet)
             _spinner.start()
             try:
                 _llm_outcome = await self._dispatch_llm_call(

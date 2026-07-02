@@ -97,7 +97,7 @@ class TestGeodeStatusContextManager:
             status.update("Step 2")
             # Verify the spinner's message was updated
             assert status._spinner is not None
-            assert status._spinner._message == "✢ Step 2"
+            assert status._spinner._message == "Step 2"
             status.stop("done")
 
     @patch("core.ui.status.console")
@@ -248,9 +248,9 @@ class TestModelDisplay:
         mock_acc_fn.return_value = LLMUsageAccumulator()
 
         with GeodeStatus("Classifying...", model=ANTHROPIC_PRIMARY) as status:
-            # Verify model appears in the spinner format string
-            fmt = status._format_spinner("Classifying...")
-            assert ANTHROPIC_PRIMARY in fmt
+            # Model is forwarded to the spinner, which renders it in the meta segment
+            assert status._spinner is not None
+            assert status._spinner._model == ANTHROPIC_PRIMARY
             status.stop("done")
 
     @patch("core.ui.status.console")
@@ -259,6 +259,7 @@ class TestModelDisplay:
         mock_acc_fn.return_value = LLMUsageAccumulator()
 
         with GeodeStatus("Working...") as status:
-            fmt = status._format_spinner("Working...")
-            assert "Working..." in fmt
+            assert status._spinner is not None
+            assert status._spinner._message == "Working..."
+            assert status._spinner._model == ""
             status.stop("done")

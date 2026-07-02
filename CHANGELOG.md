@@ -167,6 +167,17 @@ functional change.
   guardrails against reintroducing fixed-DAG or confidence-threshold pipeline
   claims into GEODE prompt context.
 
+## [0.99.248] - 2026-07-02
+
+### Added
+- **GEODE signature shimmer spinner (PR-CLI-UX-SHIMMER)** — new single-source module `core/ui/spinner_glyph.py`: a fixed rose crystal glyph `◆` plus label swept by a raised-cosine brightness band (soft-edged, truecolor rose base→crest, 2.0s period, 4-cell half-width, 6-cell lead-in/out). The glyph shape never changes — only brightness glides left→right — so the motion reads smooth instead of flip-book mechanical (codex-rs shimmer pattern). Ships a rotating activity gerund (20 words, 4s rotation), a compact elapsed formatter (`12s` / `1m 05s`), a built-in `_check()` self-test, and a live preview (`python -m core.ui.spinner_glyph`). The activity / thinking / direct-mode status lines all consume this module; `core/ui/tool_tracker.py`'s per-tool braille frames are the one remaining separate spinner (follow-up with the plan-UI pass).
+
+### Changed
+- **CLI spinners → shimmer** — `core/ui/event_renderer.py` activity (`◆ Working…`) and thinking (`◆ <gerund>… (elapsed)`) lines render through `spinner_glyph.shimmer` at 20fps; the braille `_FRAMES` cycle and the `✢ Thinking...` prefix are removed. `core/ui/status.py` GeodeStatus/TextSpinner (direct-mode LLM calls) render the same line with rotating gerunds for generic messages and the model name in the dim meta segment (`_format_spinner` folded into the spinner; tests updated to the new contract).
+- **Geodi mascot refresh** — `scripts/visualizations/geodi_sprite.py` regenerates the full-body rose axolotl SVG set (`site/public/images/geodi.svg` + dark; new blink / sway-l / sway-r variants; gradient body, CSS bob/blink/gill-flutter); `scripts/visualizations/geodi_ansi.py` re-bakes terminal frames into `core/ui/geodi_img.py` (12 frames: cosine bob + blink + gill sway). `core/ui/mascot.py` kitty renderer hardened: text scrolls in first, then the image overlays via relative cursor motion, and the graphics escape carries `q=2` so the terminal ACK is not echoed into stdin; `GEODE_MASCOT_ANIM=0` disables animation.
+- **Docs-site header** — dropped the `← /geode/portfolio` back-link from the docs shell.
+- **Stale embedding narration removed** — `core/memory/episodic.py`, `plugins/seed_generation/agents/base.py`, `plugins/seed_generation/tools/seed_pool_search.py` docstrings state the current contract (keyword/LLM ranking, no vector dependency) instead of narrating abandoned embedding plans.
+
 ## [0.99.247] - 2026-06-24
 
 ### Changed

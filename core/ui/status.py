@@ -1,7 +1,8 @@
 """Claude Code-style status spinner for AgenticLoop LLM calls.
 
-Shows a braille-dot spinner during API calls, then replaces with a
-permanent summary line including action, token counts, cost and elapsed time.
+Shows a rose-crystal (GEODE signature) spinner with a rotating activity word
+and live elapsed timer during API calls, then replaces it with a permanent
+summary line including action, token counts, cost and elapsed time.
 
 Usage::
 
@@ -20,35 +21,31 @@ from dataclasses import dataclass
 from typing import Any
 
 from core.llm.router import LLMUsageAccumulator, get_usage_accumulator
+from core.ui import spinner_glyph
 from core.ui.console import console
+
+# Generic messages that hand the spinner line over to the rotating gerunds
+# (the crystal glyph + activity words live in core.ui.spinner_glyph \u2014 one source).
+_GENERIC = {"", "processing...", "thinking...", "working..."}
 
 
 class TextSpinner:
-    """Non-invasive text spinner. No raw mode, no cursor hiding.
+    """Non-invasive rose-crystal status spinner. No raw mode, no cursor hiding.
 
-    Output target is resolved at write-time: if the global console has
-    been redirected (e.g. via ``redirect_console()`` for IPC streaming),
-    the spinner writes through that redirect instead of ``sys.stdout``.
+    Renders a Claude Code-style live status line: an animated GEODE crystal, a
+    rotating activity word (or the caller's message), and a live elapsed timer,
+    rewritten in place with a carriage return + line clear. The output target is
+    resolved at write-time so it follows ``redirect_console()`` (IPC streaming).
     """
 
-    FRAMES = [
-        "\u280b",
-        "\u2819",
-        "\u2839",
-        "\u2838",
-        "\u283c",
-        "\u2834",
-        "\u2826",
-        "\u2827",
-        "\u2807",
-        "\u280f",
-    ]
-
-    def __init__(self, message: str, *, quiet: bool = False) -> None:
+    def __init__(self, message: str, *, model: str = "", quiet: bool = False) -> None:
         self._message = message
+        self._model = model
+        self._rotate = message.strip().lower() in _GENERIC
         self._running = False
         self._thread: threading.Thread | None = None
         self._quiet = quiet  # suppress output (sub-agent, headless)
+        self._start = 0.0
 
     @staticmethod
     def _out() -> Any:
@@ -68,22 +65,26 @@ class TextSpinner:
         if getattr(_ipc_writer_local, "writer", None) is not None:
             return
         self._running = True
+        self._start = time.monotonic()
         self._thread = threading.Thread(target=self._animate, daemon=True)
         self._thread.start()
 
     def update(self, message: str) -> None:
         """Update the spinner message while running."""
         self._message = message
+        self._rotate = message.strip().lower() in _GENERIC
 
     def _animate(self) -> None:
-        idx = 0
         while self._running:
-            frame = self.FRAMES[idx % len(self.FRAMES)]
+            el = time.monotonic() - self._start
+            word = f"{spinner_glyph.gerund(el)}…" if self._rotate else self._message
+            body = spinner_glyph.shimmer(f"{spinner_glyph.GLYPH} {word}", el)
+            meta = spinner_glyph.elapsed(el)
+            meta += f" · {self._model}" if self._model else ""
             out = self._out()
-            out.write(f"\r\x1b[2K  {frame} {self._message}")
+            out.write(f"\r\x1b[2K  {body} {spinner_glyph.DIM}({meta}){spinner_glyph.RST}")
             out.flush()
-            time.sleep(0.08)
-            idx += 1
+            time.sleep(0.05)
 
     def stop(self, final_message: str = "") -> None:
         self._running = False
@@ -142,14 +143,14 @@ class GeodeStatus:
     def __enter__(self) -> GeodeStatus:
         self._start_time = time.monotonic()
         self._snap_before = _snapshot(get_usage_accumulator())
-        self._spinner = TextSpinner(self._format_spinner(self._initial_message))
+        self._spinner = TextSpinner(self._initial_message, model=self._model)
         self._spinner.start()
         return self
 
     def update(self, message: str) -> None:
         """Change the spinner message while running."""
         if self._spinner is not None and not self._stopped:
-            self._spinner.update(self._format_spinner(message))
+            self._spinner.update(message)
 
     def stop(self, summary: str) -> None:
         """End spinner and print a permanent summary line."""
@@ -194,13 +195,6 @@ class GeodeStatus:
     # ------------------------------------------------------------------
     # Internal helpers
     # ------------------------------------------------------------------
-
-    def _format_spinner(self, message: str) -> str:
-        """Build the spinner text with optional model name."""
-        parts = [f"✢ {message}"]
-        if self._model:
-            parts.append(self._model)
-        return " · ".join(parts)
 
     def _get_token_delta(self) -> _UsageSnapshot:
         """Compute the token/cost delta since ``__enter__``."""
