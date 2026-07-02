@@ -37,7 +37,7 @@ def test_rendered_tool_lines_are_carriage_return_prefixed() -> None:
         {**_tool("grep_files"), "error": "failed"},
     ]
 
-    lines = tracker._render_tool_lines("⠋")
+    lines = tracker._render_tool_lines(0.0)
 
     assert len(lines) == 3
     for line in lines:
@@ -82,7 +82,7 @@ def test_large_tool_batches_collapse_to_bounded_view() -> None:
     tracker = ToolCallTracker()
     tracker._tools = [_tool(f"tool_{i}") for i in range(10)]
 
-    lines = tracker._render_tool_lines("⠋")
+    lines = tracker._render_tool_lines(0.0)
 
     assert len(lines) == 8
     assert "tool_0" in lines[0]

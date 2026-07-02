@@ -72,6 +72,12 @@ def _rose(level: float) -> str:
     return f"\x1b[1;38;2;{r};{g};{b}m"
 
 
+# Static signature-rose for non-animated marks (plan active step, etc.):
+# raw SGR for direct writers, hex for Rich-markup consumers — one _BASE anchor.
+ROSE = _rose(0.0)
+ROSE_HEX = f"#{_BASE[0]:02x}{_BASE[1]:02x}{_BASE[2]:02x}"
+
+
 def shimmer(text: str, elapsed: float) -> str:
     """``text`` in rose with a bright band gliding across it at ``elapsed`` seconds.
 
