@@ -9,12 +9,40 @@ from __future__ import annotations
 
 from unittest.mock import patch
 
+import pytest
 from core.cli.commands import cmd_login
 from core.llm.strategies.plan_registry import (
     get_plan_registry,
     reset_plan_registry,
 )
 from core.llm.strategies.plans import GLM_CODING_TIERS, default_plan_for_payg
+
+
+@pytest.fixture(autouse=True)
+def _scrub_real_provider_keys(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Isolate the machine's real credentials from the auth/profile store.
+
+    ``build_auth`` seeds ``<provider>-payg:env`` profiles from
+    ``settings.{openai,anthropic,zai}_api_key`` (``migrate_env_to_toml`` +
+    the legacy-provider loop in ``core.wiring.container``). ``Settings``
+    resolves those from the process env AND an ``env_file`` fallback
+    (``.env`` + ``~/.geode/.env``), so on a developer box with real keys
+    present the store gains a real-key profile the test never created —
+    ``test_set_key_updates_existing_plan`` then reads that leaked key
+    instead of the one it bound. CI passes only because a clean HOME has
+    no keys.
+
+    Empty-string values (not ``delenv``) are required: pydantic prefers
+    the env var over the ``env_file``, so an empty var shadows the file,
+    whereas ``delenv`` lets pydantic fall back to ``~/.geode/.env``.
+    Resetting the cached ``Settings`` singleton forces a re-read with the
+    scrubbed values before ``build_auth`` runs.
+    """
+    import core.config as cfg
+
+    for _var in ("OPENAI_API_KEY", "ANTHROPIC_API_KEY", "ZAI_API_KEY"):
+        monkeypatch.setenv(_var, "")
+    monkeypatch.setattr(cfg, "_settings_instance", None, raising=False)
 
 
 def _reset_state() -> None:
