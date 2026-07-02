@@ -5,13 +5,17 @@ side, deeper rose, visibly separated), simple symmetric 2x2 dark eyes with a
 1px white catchlight in the top-right corner of each, a tiny 2px mouth, a
 lighter belly patch, and a subtle deep-rose cheek blush beside the eyes.
 
-The sprite is authored as a 16x14 pixel grid (``GEODI_PIXELS``) and rendered
-as truecolor half-blocks — ``▀`` with fg = upper pixel, bg = lower pixel, two
-pixels per terminal cell — so it draws in ANY truecolor terminal: 16 cols x
-7 rows, one code path, no Kitty/iTerm2 detection. Transparent pixels reset
-to the terminal's default background.
+The canonical sprite is authored as a 22x20 pixel grid
+(``GEODI_SOURCE_PIXELS``). The welcome screen renders a compact 16x14 pixel
+derivative (``GEODI_PIXELS``) that preserves the original silhouette while
+matching the adjacent three-line brand block. Pixels render as truecolor
+half-blocks — ``▀`` with fg = upper pixel, bg = lower pixel, two pixels per
+terminal cell — so the compact mascot draws as 16 cols x 7 rows in ANY
+truecolor terminal. Transparent pixels reset to the terminal's default
+background.
 
-Hand-edit ``GEODI_PIXELS`` directly; every row must stay exactly 16 chars.
+Hand-edit ``GEODI_SOURCE_PIXELS`` first; keep ``GEODI_PIXELS`` as a compact
+derivative of that shape. Every compact row must stay exactly 16 chars.
 Live preview: ``python -m core.ui.geodi_art``.
 """
 
@@ -29,6 +33,31 @@ GEODI_PALETTE: dict[str, str | None] = {
     "w": "#FFFFFF",  # white — eye catchlight
 }
 
+# 22 wide x 20 tall. Full-detail source retained to prevent the compact welcome
+# mascot from drifting into a different character.
+GEODI_SOURCE_PIXELS: list[str] = [
+    "........pppppp........",
+    "......pppppppppp......",
+    ".rr..pppppppppppp..rr.",
+    "..rrpppppppppppppprr..",
+    "....pppppppppppppp....",
+    ".rrrpppppppppppppprrr.",
+    "....pppppppppppppp....",
+    "..rrpppppppppppppprr..",
+    "....pppewppppewppp....",
+    "....pppeeppppeeppp....",
+    "....prrpppppppprrp....",
+    "....ppppppeepppppp....",
+    "....ppppllllllpppp....",
+    "....pppllllllllppp....",
+    "....pppllllllllppp....",
+    ".....pppllllllppp.....",
+    "......pppppppppp......",
+    ".......pppppppp.......",
+    "......ppp....ppp......",
+    "......ppp....ppp......",
+]
+
 # 16 wide x 14 tall. Rows pair top/bottom into half-block cells (7 rows out).
 # Gills: THREE stalks per side — upper diagonal (r2-r3), middle (r5), lower
 # (r7) — with fully transparent side rows (r4, r6) between them so each
@@ -39,18 +68,18 @@ GEODI_PALETTE: dict[str, str | None] = {
 GEODI_PIXELS: list[str] = [
     ".....pppppp.....",
     "...pppppppppp...",
-    ".r.pppppppppp.r.",
+    ".rr.pppppppp.rr.",
     "..rppppppppppr..",
     "...pppppppppp...",
-    ".rrpppppppppprr.",
+    ".rrrpppppppprrr.",
     "...pppppppppp...",
     "..rppppppppppr..",
     "...ppewppppew...",
     "...ppeeppppee...",
-    "...prpppppprp...",
+    "...prrpppprrp...",
     "...pppppeeppp...",
-    "....ppllllpp....",
-    ".....pp..pp.....",
+    "..pppllllllppp..",
+    "...ppp....ppp...",
 ]
 
 
@@ -64,7 +93,7 @@ def geodi_pixel_lines() -> list[str]:
 
     Each cell: both pixels colored -> ``▀`` with fg=upper/bg=lower; upper only
     -> reset + fg ``▀`` (default bg below); lower only -> reset + fg ``▄``;
-    both transparent -> reset + space, so rows keep a constant 22-cell width
+    both transparent -> reset + space, so rows keep a constant compact width
     and text can align beside the sprite.
     """
     lines: list[str] = []
