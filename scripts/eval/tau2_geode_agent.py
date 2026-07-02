@@ -19,6 +19,7 @@ import json
 import site
 import sys
 import time
+from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -248,9 +249,12 @@ def _usage_dict(result: Any) -> dict[str, Any] | None:
         return None
     to_dict = getattr(result_usage, "to_dict", None)
     if callable(to_dict):
-        return to_dict()
+        maybe_dict = to_dict()
+        if isinstance(maybe_dict, Mapping):
+            return {str(key): value for key, value in maybe_dict.items()}
+        return None
     raw = getattr(result_usage, "__dict__", None)
-    return dict(raw) if isinstance(raw, dict) else None
+    return {str(key): value for key, value in raw.items()} if isinstance(raw, dict) else None
 
 
 def _tau2_tool_calls(result: Any, *, requestor: str) -> list[Any]:

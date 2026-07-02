@@ -538,8 +538,18 @@ module = [
     "pixelmatch.*",
     # P4 D 단계 — [reason] optional extra (DSPy).
     "dspy.*",
+    # tau2-bench harness lives under artifacts/eval/harnesses and is opt-in.
+    # CI default sync does not install tau2 or its untyped in-tree modules.
+    "tau2.*",
 ]
 ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+# tau2's runtime base classes are imported from the external harness checkout
+# and do not ship stubs in GEODE's default CI environment. Keep the relaxation
+# scoped to this opt-in runner instead of disabling checks for scripts/eval.
+module = ["scripts.eval.tau2_geode_agent"]
+disallow_subclassing_any = false
 
 [[tool.mypy.overrides]]
 # Manim visualization scripts subclass Scene (Any) and use literal lists /
