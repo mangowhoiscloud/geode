@@ -17,6 +17,16 @@ export type ChangelogEntry = {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    "version": "Unreleased",
+    "date": "",
+    "body": "### Fixed\n\n- **MCP filesystem argument compatibility.** MCP tool dispatch now normalizes\n  common schema mismatches before server calls, including mapping `file_path`\n  to `path` when the MCP schema requires `path`, dropping conflicting\n  `read_text_file` `head`/`tail` pairs, annotating exact-read caveats in\n  exposed MCP tool descriptions, and offloading source EOF preservation from\n  model turns into the MCP dispatch layer for same-name text writes."
+  },
+  {
+    "version": "0.99.262",
+    "date": "2026-07-03",
+    "body": "### Changed\n- **Welcome Geodi cropped to a round face** — operator review: even forehead-trimmed, the full body sat too tall beside the 3-line welcome text. `GEODI_PIXELS` is now the head-down-to-mouth crop of the source (22x12 → 6 half-block rows): 3 separated gill stalks per side, 2px eyes with catchlights, cheek blush, mouth, and a rounded chin close — belly patch and feet removed so the face reads level with the welcome block. `GEODI_SOURCE_PIXELS` (full 22x20 body) unchanged."
+  },
+  {
     "version": "0.99.261",
     "date": "2026-07-03",
     "body": "### Changed\n- **Welcome Geodi keeps the full 0.99.256 detail, minus the forehead** — operator review: the 14x8 chibi traded away too much character. `GEODI_PIXELS` is now the 22x20 source art with two forehead rows removed (one head-top rounding row, one upper-gill thickness row) → 22x18, rendering 9 half-block rows. All source detail retained: 3 separated gill stalks per side, 2px eyes with catchlights, blush, smile, belly, feet."

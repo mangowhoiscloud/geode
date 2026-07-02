@@ -56,6 +56,11 @@ functional change.
   exposed MCP tool descriptions, and offloading source EOF preservation from
   model turns into the MCP dispatch layer for same-name text writes.
 
+## [0.99.262] - 2026-07-03
+
+### Changed
+- **Welcome Geodi cropped to a round face** — operator review: even forehead-trimmed, the full body sat too tall beside the 3-line welcome text. `GEODI_PIXELS` is now the head-down-to-mouth crop of the source (22x12 → 6 half-block rows): 3 separated gill stalks per side, 2px eyes with catchlights, cheek blush, mouth, and a rounded chin close — belly patch and feet removed so the face reads level with the welcome block. `GEODI_SOURCE_PIXELS` (full 22x20 body) unchanged.
+
 ## [0.99.261] - 2026-07-03
 
 ### Changed
