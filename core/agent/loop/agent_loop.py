@@ -216,6 +216,25 @@ def _persist_session_id(session_id: str, emitted_session_id: str) -> None:
         log.debug("session.json write failed for %s", session_id, exc_info=True)
 
 
+def _tool_args_signature(tool_input: Any) -> str:
+    """Short stable signature of a tool call's arguments.
+
+    The diversity guard folds this into the call identity so that two calls
+    of the same tool only count as a no-progress repeat when their arguments
+    ALSO match. Five ``grep_files`` with five different patterns therefore
+    produce five distinct signatures and never look like a stuck loop, while
+    the identical call issued over and over does.
+    """
+    import hashlib
+    import json
+
+    try:
+        canonical = json.dumps(tool_input, sort_keys=True, ensure_ascii=False, default=str)
+    except (TypeError, ValueError):
+        canonical = repr(tool_input)
+    return hashlib.sha256(canonical.encode("utf-8")).hexdigest()[:16]
+
+
 class AgenticLoop:
     """Claude Code-style agentic execution loop.
 
@@ -439,8 +458,10 @@ class AgenticLoop:
 
         self._convergence = ConvergenceDetector()
 
-        # Diversity forcing — prevent same tool 5x consecutively
-        self._consecutive_tool_tracker: list[str] = []
+        # Diversity forcing — detect the SAME tool called with IDENTICAL
+        # arguments N times in a row (a genuine no-progress loop). Entries are
+        # ``(tool_name, args_signature)`` tuples.
+        self._consecutive_tool_tracker: list[tuple[str, str]] = []
 
         # full message persistence for /resume
         self._checkpoint: Any | None = None
@@ -1796,51 +1817,51 @@ class AgenticLoop:
                 }
                 tool_results.append(backpressure_hint)
 
-            # Diversity forcing — prevent same tool 5x consecutively
-            # (read/search tools are naturally repetitive → exempt)
-            _DIVERSITY_EXEMPT: frozenset[str] = frozenset(
-                {
-                    "read_file",
-                    "read_text_file",
-                    "search_files",
-                    "list_directory",
-                    "memory_search",
-                    "note_read",
-                    "web_search",
-                    "general_web_search",
-                    "sequentialthinking",
-                }
-            )
+            # Diversity forcing — fire only on a genuine no-progress loop: the
+            # SAME tool called with IDENTICAL arguments N times in a row. Folding
+            # args into the identity means five grep_files with five different
+            # patterns (healthy fan-out research) never trip it, so no exempt
+            # list of "naturally repetitive" tools is needed. Distinct calls
+            # inside a single response are deduped so one parallel batch of N
+            # distinct calls adds N distinct signatures (never trips), while an
+            # identical call repeated across turns does.
+            _DIVERSITY_N = 5
+            _this_response: list[tuple[str, str]] = []
             for block in response.content:
                 if getattr(block, "type", None) == "tool_use":
-                    self._consecutive_tool_tracker.append(getattr(block, "name", ""))
+                    _sig = (
+                        getattr(block, "name", ""),
+                        _tool_args_signature(getattr(block, "input", None)),
+                    )
+                    if _sig not in _this_response:
+                        _this_response.append(_sig)
+            self._consecutive_tool_tracker.extend(_this_response)
             if len(self._consecutive_tool_tracker) > 10:
                 self._consecutive_tool_tracker = self._consecutive_tool_tracker[-10:]
-            if len(self._consecutive_tool_tracker) >= 5:
-                _last_5 = self._consecutive_tool_tracker[-5:]
-                if len(set(_last_5)) == 1:
-                    _repeated_tool = _last_5[0]
-                    if _repeated_tool in _DIVERSITY_EXEMPT:
-                        self._consecutive_tool_tracker.clear()
-                    else:
-                        diversity_hint = {
-                            "type": "text",
-                            "text": (
-                                f"[system] The tool '{_repeated_tool}' has been called 5 times "
-                                "consecutively with similar results. "
-                                "Try a different approach or tool to make progress."
-                            ),
-                        }
-                        tool_results.append(diversity_hint)
-                        self._consecutive_tool_tracker.clear()
+            if len(self._consecutive_tool_tracker) >= _DIVERSITY_N:
+                _last_n = self._consecutive_tool_tracker[-_DIVERSITY_N:]
+                if len(set(_last_n)) == 1:
+                    _repeated_tool = _last_n[0][0]
+                    diversity_hint = {
+                        "type": "text",
+                        "text": (
+                            f"[system] The tool '{_repeated_tool}' has been called "
+                            f"{_DIVERSITY_N} times with identical arguments — repeating this "
+                            "exact call is unlikely to add new evidence. Try a different "
+                            "approach or tool to make progress."
+                        ),
+                    }
+                    tool_results.append(diversity_hint)
+                    self._consecutive_tool_tracker.clear()
 
-                        from core.ui.agentic_ui import emit_tool_diversity_forced
+                    from core.ui.agentic_ui import emit_tool_diversity_forced
 
-                        emit_tool_diversity_forced(_repeated_tool, 5)
-                        log.warning(
-                            "Diversity forcing: %s called 5x — injecting hint",
-                            _repeated_tool,
-                        )
+                    emit_tool_diversity_forced(_repeated_tool, _DIVERSITY_N)
+                    log.warning(
+                        "Diversity forcing: %s called %dx with identical args — injecting hint",
+                        _repeated_tool,
+                        _DIVERSITY_N,
+                    )
 
             # accumulate serialized messages for the next round
             assistant_content = self._serialize_content(response.content)
