@@ -69,6 +69,9 @@ jobs:
       - name: Repo hygiene ratchet
         if: needs.changes.outputs.code == 'true'
         run: uv run python scripts/check_repo_hygiene.py
+      - name: Slop growth ratchet
+        if: needs.changes.outputs.code == 'true'
+        run: uv run python scripts/check_slop_ratchet.py
       - name: llms.txt version drift ratchet
         if: needs.changes.outputs.code == 'true'
         run: uv run python scripts/check_llms_version.py
