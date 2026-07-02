@@ -45,6 +45,11 @@ functional change.
 
 ---
 
+## [0.99.259] - 2026-07-03
+
+### Fixed
+- **Compact Geodi restored to the reviewed character, sized to the welcome block** — the 0.99.257/258 compact derivative had broken the face (squished eyes, lost smile). `GEODI_PIXELS` is now a hand-authored 14x8 chibi of the canonical 0.99.256 sprite — 3 separated gill stalks per side, symmetric 2px eyes with same-corner catchlights, minimal mouth, under-eye blush, belly patch, feet — rendering as 4 half-block rows to sit beside the 3-line welcome text (operator size spec). `GEODI_SOURCE_PIXELS` (22x20 original) unchanged; silhouette-cue tests rewritten against grid semantics instead of hard row indices.
+
 ## [0.99.258] - 2026-07-02
 
 ### Fixed

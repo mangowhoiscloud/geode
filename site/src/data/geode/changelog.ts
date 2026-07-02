@@ -17,6 +17,11 @@ export type ChangelogEntry = {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    "version": "0.99.259",
+    "date": "2026-07-03",
+    "body": "### Fixed\n- **Compact Geodi restored to the reviewed character, sized to the welcome block** — the 0.99.257/258 compact derivative had broken the face (squished eyes, lost smile). `GEODI_PIXELS` is now a hand-authored 14x8 chibi of the canonical 0.99.256 sprite — 3 separated gill stalks per side, symmetric 2px eyes with same-corner catchlights, minimal mouth, under-eye blush, belly patch, feet — rendering as 4 half-block rows to sit beside the 3-line welcome text (operator size spec). `GEODI_SOURCE_PIXELS` (22x20 original) unchanged; silhouette-cue tests rewritten against grid semantics instead of hard row indices."
+  },
+  {
     "version": "0.99.258",
     "date": "2026-07-02",
     "body": "### Fixed\n- **Geodi compact mascot preserves the original character shape.** v0.99.257\n  made the welcome mascot smaller by redrawing it at 16×14 pixels, but that\n  changed the face/body proportions and made Geodi look like a different\n  character. The full 22×20 source sprite is now retained as\n  `GEODI_SOURCE_PIXELS`, while the 16×14 welcome sprite is a compact derivative\n  that preserves the original round head, six gill stalks, eye catchlights,\n  cheek blush, belly patch, and feet. Tests now pin both the source grid and the\n  compact silhouette cues."

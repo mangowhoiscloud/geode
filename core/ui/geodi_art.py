@@ -6,16 +6,17 @@ side, deeper rose, visibly separated), simple symmetric 2x2 dark eyes with a
 lighter belly patch, and a subtle deep-rose cheek blush beside the eyes.
 
 The canonical sprite is authored as a 22x20 pixel grid
-(``GEODI_SOURCE_PIXELS``). The welcome screen renders a compact 16x14 pixel
+(``GEODI_SOURCE_PIXELS``). The welcome screen renders a compact 14x8 pixel
 derivative (``GEODI_PIXELS``) that preserves the original silhouette while
 matching the adjacent three-line brand block. Pixels render as truecolor
 half-blocks — ``▀`` with fg = upper pixel, bg = lower pixel, two pixels per
-terminal cell — so the compact mascot draws as 16 cols x 7 rows in ANY
+terminal cell — so the compact mascot draws as 14 cols x 4 rows — sized to sit beside the
+3-line welcome text block — in ANY
 truecolor terminal. Transparent pixels reset to the terminal's default
 background.
 
 Hand-edit ``GEODI_SOURCE_PIXELS`` first; keep ``GEODI_PIXELS`` as a compact
-derivative of that shape. Every compact row must stay exactly 16 chars.
+derivative of that shape. Every compact row must stay exactly 14 chars.
 Live preview: ``python -m core.ui.geodi_art``.
 """
 
@@ -66,20 +67,14 @@ GEODI_SOURCE_PIXELS: list[str] = [
 # body; cheek blush one row below the eyes (r10); ONE tiny 2px mouth row
 # (r11, cols 8-9). No other dark pixels on the face.
 GEODI_PIXELS: list[str] = [
-    ".....pppppp.....",
-    "...pppppppppp...",
-    ".rr.pppppppp.rr.",
-    "..rppppppppppr..",
-    "...pppppppppp...",
-    ".rrrpppppppprrr.",
-    "...pppppppppp...",
-    "..rppppppppppr..",
-    "...ppewppppew...",
-    "...ppeeppppee...",
-    "...prrpppprrp...",
-    "...pppppeeppp...",
-    "..pppllllllppp..",
-    "...ppp....ppp...",
+    "....pppppp....",
+    "rr.pppppppp.rr",
+    "...pppppppp...",
+    "rr.pewppewp.rr",
+    "...prpeeprp...",
+    "rr.ppllllpp.rr",
+    "...ppllllpp...",
+    "....rr..rr....",
 ]
 
 
