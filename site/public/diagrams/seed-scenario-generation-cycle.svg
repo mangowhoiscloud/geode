@@ -1,0 +1,80 @@
+<svg width="100%" viewBox="0 0 760 520" fill="none" xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="title desc">
+  <title id="title">Seed Scenario Generation cycle</title>
+  <desc id="desc">A flowchart showing target dimension selection, candidate drafting, critique, pilot measurement, tournament ranking, evolution, seed pools, and the Closed-Loop audit consumer.</desc>
+  <defs>
+    <marker id="seed-arrow" markerWidth="10" markerHeight="8" refX="9" refY="4" orient="auto" markerUnits="strokeWidth">
+      <path d="M0 0L10 4L0 8Z" fill="#ABA4BC"/>
+    </marker>
+    <marker id="seed-arrow-accent" markerWidth="10" markerHeight="8" refX="9" refY="4" orient="auto" markerUnits="strokeWidth">
+      <path d="M0 0L10 4L0 8Z" fill="#F49BC4"/>
+    </marker>
+    <style>
+      .label { font-family: Fira Code, ui-monospace, SFMono-Regular, Menlo, monospace; fill: #F2EEF5; font-size: 14px; font-weight: 600; }
+      .sub { font-family: Fira Code, ui-monospace, SFMono-Regular, Menlo, monospace; fill: #ABA4BC; font-size: 10px; }
+      .tag { font-family: Fira Code, ui-monospace, SFMono-Regular, Menlo, monospace; fill: #F49BC4; font-size: 8px; letter-spacing: .12em; }
+      .node { fill: #14121B; stroke: rgba(244,155,196,.45); stroke-width: 1; }
+      .node-soft { fill: rgba(244,155,196,.06); stroke: rgba(244,155,196,.35); stroke-width: 1; }
+      .store { fill: rgba(171,164,188,.07); stroke: rgba(171,164,188,.45); stroke-width: 1; }
+      .edge { stroke: #ABA4BC; stroke-width: 1.5; marker-end: url(#seed-arrow); }
+      .edge-accent { stroke: #F49BC4; stroke-width: 1.8; marker-end: url(#seed-arrow-accent); }
+      .dash { stroke-dasharray: 5 5; }
+    </style>
+  </defs>
+
+  <rect width="760" height="520" fill="transparent"/>
+
+  <rect x="286" y="20" width="188" height="58" rx="6" class="node-soft"/>
+  <text x="380" y="43" text-anchor="middle" class="label">target dimension</text>
+  <text x="380" y="62" text-anchor="middle" class="sub">picker + prior gaps</text>
+
+  <rect x="70" y="120" width="170" height="70" rx="6" class="node"/>
+  <text x="155" y="142" text-anchor="middle" class="tag">DRAFT</text>
+  <text x="155" y="164" text-anchor="middle" class="label">candidate seeds</text>
+  <text x="155" y="181" text-anchor="middle" class="sub">generator debate</text>
+
+  <rect x="298" y="120" width="164" height="70" rx="6" class="node"/>
+  <text x="380" y="142" text-anchor="middle" class="tag">FILTER</text>
+  <text x="380" y="164" text-anchor="middle" class="label">cluster + critique</text>
+  <text x="380" y="181" text-anchor="middle" class="sub">proximity, critic</text>
+
+  <rect x="520" y="120" width="170" height="70" rx="6" class="node"/>
+  <text x="605" y="142" text-anchor="middle" class="tag">MEASURE</text>
+  <text x="605" y="164" text-anchor="middle" class="label">pilot audit</text>
+  <text x="605" y="181" text-anchor="middle" class="sub">dim_means + stderr</text>
+
+  <path d="M380 78V101C380 112 380 112 367 118" class="edge"/>
+  <path d="M240 155H286" class="edge"/>
+  <path d="M462 155H508" class="edge"/>
+
+  <polygon points="380,244 456,304 380,364 304,304" class="node-soft"/>
+  <text x="380" y="292" text-anchor="middle" class="tag">SELECT</text>
+  <text x="380" y="313" text-anchor="middle" class="label">3-judge Elo</text>
+  <text x="380" y="331" text-anchor="middle" class="sub">blend with difficulty</text>
+
+  <path d="M605 190V304H468" class="edge-accent"/>
+
+  <rect x="70" y="398" width="170" height="70" rx="6" class="node"/>
+  <text x="155" y="420" text-anchor="middle" class="tag">EVOLVE</text>
+  <text x="155" y="442" text-anchor="middle" class="label">survivor mutation</text>
+  <text x="155" y="459" text-anchor="middle" class="sub">next candidates</text>
+
+  <rect x="295" y="398" width="170" height="70" rx="6" class="store"/>
+  <text x="380" y="420" text-anchor="middle" class="tag">STORE</text>
+  <text x="380" y="442" text-anchor="middle" class="label">seed pools</text>
+  <text x="380" y="459" text-anchor="middle" class="sub">cycle-input, held-out</text>
+
+  <rect x="520" y="398" width="170" height="70" rx="6" class="node-soft"/>
+  <text x="605" y="420" text-anchor="middle" class="tag">CONSUME</text>
+  <text x="605" y="442" text-anchor="middle" class="label">Closed-Loop audit</text>
+  <text x="605" y="459" text-anchor="middle" class="sub">fitness gate input</text>
+
+  <path d="M323 344L218 397" class="edge"/>
+  <path d="M240 433H283" class="edge"/>
+  <path d="M465 433H508" class="edge-accent"/>
+  <path d="M155 398V304H292" class="edge dash"/>
+  <rect x="144" y="296" width="80" height="18" rx="3" fill="#0B0A10"/>
+  <text x="184" y="309" text-anchor="middle" class="sub">repeat</text>
+
+  <line x1="60" y1="498" x2="700" y2="498" stroke="rgba(171,164,188,.2)" stroke-width="1"/>
+  <text x="60" y="512" class="sub">Source pattern: Google AI Co-Scientist-style generate, review, rank, evolve flow adapted for GEODE Petri seeds.</text>
+</svg>

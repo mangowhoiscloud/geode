@@ -18,7 +18,7 @@ from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
 
 from core.hooks import HookEvent
-from core.mcp.manager import MCPServerManager
+from core.mcp.manager import MCPServerManager, _normalise_mcp_tool
 from core.mcp.stdio_client import _CLOSE_TIMEOUT_S, StdioMCPClient
 
 # ---------------------------------------------------------------------------
@@ -436,6 +436,12 @@ class TestMCPAsyncCalls:
     def test_manager_acall_tool_uses_client_async_path(self) -> None:
         mgr = MCPServerManager()
         mock_client = MagicMock()
+        mock_client.list_tools.return_value = [
+            {
+                "name": "navigate",
+                "inputSchema": {"type": "object", "properties": {"url": {"type": "string"}}},
+            }
+        ]
         mock_client.acall_tool = AsyncMock(return_value={"result": "ok"})
 
         async def scenario() -> dict[str, Any]:
@@ -446,6 +452,224 @@ class TestMCPAsyncCalls:
 
         mock_client.acall_tool.assert_awaited_once_with("navigate", {"url": "x"})
         assert result == {"result": "ok"}
+
+    def test_manager_acall_tool_maps_file_path_alias_to_schema_path(self) -> None:
+        mgr = MCPServerManager()
+        mock_client = MagicMock()
+        mock_client.list_tools.return_value = [
+            {
+                "name": "write_file",
+                "inputSchema": {
+                    "type": "object",
+                    "properties": {
+                        "path": {"type": "string"},
+                        "content": {"type": "string"},
+                    },
+                },
+            }
+        ]
+        mock_client.acall_tool = AsyncMock(return_value={"result": "ok"})
+
+        async def scenario() -> dict[str, Any]:
+            with patch.object(mgr, "_get_client", return_value=mock_client):
+                return await mgr.acall_tool(
+                    "filesystem",
+                    "write_file",
+                    {"file_path": "/workspace/out.txt", "content": "hello"},
+                )
+
+        result = asyncio.run(scenario())
+
+        mock_client.acall_tool.assert_awaited_once_with(
+            "write_file",
+            {"path": "/workspace/out.txt", "content": "hello"},
+        )
+        assert result == {"result": "ok"}
+
+    def test_manager_acall_tool_preserves_file_path_when_schema_requires_it(self) -> None:
+        mgr = MCPServerManager()
+        mock_client = MagicMock()
+        mock_client.list_tools.return_value = [
+            {
+                "name": "write_file",
+                "inputSchema": {
+                    "type": "object",
+                    "properties": {
+                        "file_path": {"type": "string"},
+                        "content": {"type": "string"},
+                    },
+                },
+            }
+        ]
+        mock_client.acall_tool = AsyncMock(return_value={"result": "ok"})
+
+        async def scenario() -> dict[str, Any]:
+            with patch.object(mgr, "_get_client", return_value=mock_client):
+                return await mgr.acall_tool(
+                    "filesystem",
+                    "write_file",
+                    {"file_path": "/workspace/out.txt", "content": "hello"},
+                )
+
+        result = asyncio.run(scenario())
+
+        mock_client.acall_tool.assert_awaited_once_with(
+            "write_file",
+            {"file_path": "/workspace/out.txt", "content": "hello"},
+        )
+        assert result == {"result": "ok"}
+
+    def test_manager_acall_tool_drops_conflicting_read_text_window_args(self) -> None:
+        mgr = MCPServerManager()
+        mock_client = MagicMock()
+        mock_client.list_tools.return_value = [
+            {
+                "name": "read_text_file",
+                "inputSchema": {
+                    "type": "object",
+                    "properties": {
+                        "path": {"type": "string"},
+                        "head": {"type": "integer"},
+                        "tail": {"type": "integer"},
+                    },
+                },
+            }
+        ]
+        mock_client.acall_tool = AsyncMock(return_value={"result": "ok"})
+
+        async def scenario() -> dict[str, Any]:
+            with patch.object(mgr, "_get_client", return_value=mock_client):
+                return await mgr.acall_tool(
+                    "filesystem",
+                    "read_text_file",
+                    {"path": "/workspace/in.txt", "head": 2000, "tail": 2000},
+                )
+
+        result = asyncio.run(scenario())
+
+        mock_client.acall_tool.assert_awaited_once_with(
+            "read_text_file",
+            {"path": "/workspace/in.txt"},
+        )
+        assert result == {"result": "ok"}
+
+    def test_manager_acall_tool_offloads_eof_trim_from_cached_multi_read(self, tmp_path) -> None:
+        source = tmp_path / "file_01.txt"
+        target = tmp_path / "uppercase" / "file_01.txt"
+        source.write_text("Hello world", encoding="utf-8")
+
+        mgr = MCPServerManager()
+        mock_client = MagicMock()
+        mock_client.list_tools.return_value = [
+            {
+                "name": "read_multiple_files",
+                "inputSchema": {
+                    "type": "object",
+                    "properties": {"paths": {"type": "array"}},
+                },
+            },
+            {
+                "name": "write_file",
+                "inputSchema": {
+                    "type": "object",
+                    "properties": {
+                        "path": {"type": "string"},
+                        "content": {"type": "string"},
+                    },
+                },
+            },
+        ]
+        mock_client.acall_tool = AsyncMock(
+            side_effect=[
+                {"content": [{"type": "text", "text": f"{source}:\nHello world\n"}]},
+                {"result": "ok"},
+            ]
+        )
+
+        async def scenario() -> None:
+            with patch.object(mgr, "_get_client", return_value=mock_client):
+                await mgr.acall_tool(
+                    "filesystem",
+                    "read_multiple_files",
+                    {"paths": [str(source)]},
+                )
+                await mgr.acall_tool(
+                    "filesystem",
+                    "write_file",
+                    {"path": str(target), "content": "HELLO WORLD\n"},
+                )
+
+        asyncio.run(scenario())
+
+        mock_client.acall_tool.assert_any_await(
+            "write_file",
+            {"path": str(target), "content": "HELLO WORLD"},
+        )
+
+    def test_manager_acall_tool_keeps_newline_when_cached_source_has_one(self, tmp_path) -> None:
+        source = tmp_path / "file_01.txt"
+        target = tmp_path / "uppercase" / "file_01.txt"
+        source.write_text("Hello world\n", encoding="utf-8")
+
+        mgr = MCPServerManager()
+        mock_client = MagicMock()
+        mock_client.list_tools.return_value = [
+            {
+                "name": "read_multiple_files",
+                "inputSchema": {
+                    "type": "object",
+                    "properties": {"paths": {"type": "array"}},
+                },
+            },
+            {
+                "name": "write_file",
+                "inputSchema": {
+                    "type": "object",
+                    "properties": {
+                        "path": {"type": "string"},
+                        "content": {"type": "string"},
+                    },
+                },
+            },
+        ]
+        mock_client.acall_tool = AsyncMock(
+            side_effect=[
+                {"content": [{"type": "text", "text": f"{source}:\nHello world\n"}]},
+                {"result": "ok"},
+            ]
+        )
+
+        async def scenario() -> None:
+            with patch.object(mgr, "_get_client", return_value=mock_client):
+                await mgr.acall_tool(
+                    "filesystem",
+                    "read_multiple_files",
+                    {"paths": [str(source)]},
+                )
+                await mgr.acall_tool(
+                    "filesystem",
+                    "write_file",
+                    {"path": str(target), "content": "HELLO WORLD\n"},
+                )
+
+        asyncio.run(scenario())
+
+        mock_client.acall_tool.assert_any_await(
+            "write_file",
+            {"path": str(target), "content": "HELLO WORLD\n"},
+        )
+
+    def test_normalised_mcp_tool_adds_exact_read_warning(self) -> None:
+        tool = _normalise_mcp_tool(
+            {
+                "name": "read_multiple_files",
+                "description": "Read several files.",
+                "inputSchema": {"type": "object", "properties": {}},
+            }
+        )
+
+        assert "tracks local source EOF metadata" in tool["description"]
+        assert "input_schema" in tool
 
 
 class TestMCPFallbackHints:

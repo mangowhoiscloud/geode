@@ -37,6 +37,22 @@ _GLOBAL_DOTENV_PATH = GLOBAL_ENV_FILE
 _EMPTY_SCHEMA: dict[str, Any] = {"type": "object", "properties": {}}
 _FAILED_RETRY_COOLDOWN_S = 300.0
 
+_MCP_TOOL_DESCRIPTION_NOTES: dict[str, str] = {
+    "read_multiple_files": (
+        "For exact file-copy or text-conversion work, do not infer source EOF from "
+        "combined display separators. GEODE tracks local source EOF metadata after "
+        "successful reads and preserves it for same-name writes when possible."
+    ),
+    "read_text_file": (
+        "For whole-file reads, omit head and tail. Do not pass head and tail together."
+    ),
+    "write_file": (
+        "Use the server schema's path argument when it is present; GEODE also accepts "
+        "file_path as a compatibility alias for path and preserves cached source EOF "
+        "for same-name text writes when possible."
+    ),
+}
+
 # Hook system injection (same pattern as core/llm/router.py)
 _mcp_hooks: Any = None
 
@@ -103,11 +119,77 @@ def _normalise_mcp_tool(raw: dict[str, Any]) -> dict[str, Any]:
     minimal ``{"type": "object", "properties": {}}``.
     """
     schema = raw.get("input_schema") or raw.get("inputSchema") or _EMPTY_SCHEMA
-    return {
+    tool = {
         "name": raw.get("name", ""),
         "description": raw.get("description", ""),
         "input_schema": schema,
     }
+    _augment_mcp_tool_description(tool)
+    return tool
+
+
+def _augment_mcp_tool_description(tool: dict[str, Any]) -> None:
+    """Add GEODE-side compatibility notes for common MCP tool ambiguities."""
+    name = str(tool.get("name") or "")
+    note = _MCP_TOOL_DESCRIPTION_NOTES.get(name)
+    if not note:
+        return
+    description = str(tool.get("description") or "")
+    if note in description:
+        return
+    separator = " " if description else ""
+    tool["description"] = f"{description}{separator}GEODE note: {note}"
+
+
+def _mcp_tool_schema_properties(raw_tool: dict[str, Any]) -> dict[str, Any]:
+    schema = raw_tool.get("input_schema") or raw_tool.get("inputSchema") or {}
+    if not isinstance(schema, dict):
+        return {}
+    properties = schema.get("properties")
+    return properties if isinstance(properties, dict) else {}
+
+
+def _mcp_result_text(result: dict[str, Any]) -> str | None:
+    content = result.get("content")
+    if not isinstance(content, list):
+        return None
+    for item in content:
+        if not isinstance(item, dict):
+            continue
+        text = item.get("text")
+        if isinstance(text, str):
+            return text
+    return None
+
+
+def _normalise_mcp_tool_args(
+    *,
+    tool_name: str,
+    args: dict[str, Any],
+    raw_tool: dict[str, Any] | None,
+) -> dict[str, Any]:
+    """Apply narrow MCP argument compatibility fixes before dispatch.
+
+    These are not semantic rewrites of tool calls. They handle common schema
+    aliasing and mutually-exclusive parameter mistakes that otherwise produce
+    deterministic MCP validation failures.
+    """
+    normalised = dict(args)
+    properties = _mcp_tool_schema_properties(raw_tool or {})
+
+    if (
+        "path" in properties
+        and "file_path" not in properties
+        and "path" not in normalised
+        and "file_path" in normalised
+    ):
+        normalised["path"] = normalised.pop("file_path")
+
+    if tool_name == "read_text_file" and "head" in normalised and "tail" in normalised:
+        normalised.pop("head", None)
+        normalised.pop("tail", None)
+
+    return normalised
 
 
 class MCPServerManager:
@@ -124,6 +206,7 @@ class MCPServerManager:
         self._clients: dict[str, StdioMCPClient] = {}
         self._failed_at: dict[str, float] = {}
         self._dotenv_cache: dict[str, str | None] = {}
+        self._text_read_cache: dict[tuple[str, str], str] = {}
         self._signal_installed = False
         self._prev_sigterm: Any = None
         self._prev_sigint: signal.Handlers | None = None
@@ -498,7 +581,25 @@ class MCPServerManager:
             )
 
         try:
-            return await client.acall_tool(tool_name, args)
+            raw_tool = self._raw_tool_for_client(client, tool_name)
+            normalised_args = _normalise_mcp_tool_args(
+                tool_name=tool_name,
+                args=args,
+                raw_tool=raw_tool,
+            )
+            normalised_args = self._normalise_cached_text_write(
+                server_name=server_name,
+                tool_name=tool_name,
+                args=normalised_args,
+            )
+            result = await client.acall_tool(tool_name, normalised_args)
+            self._record_text_read_result(
+                server_name=server_name,
+                tool_name=tool_name,
+                args=normalised_args,
+                result=result,
+            )
+            return result
         except Exception as exc:
             log.error("MCP async tool call failed: %s/%s: %s", server_name, tool_name, exc)
             hint = self._FALLBACK_HINTS.get(server_name, "")
@@ -509,6 +610,82 @@ class MCPServerManager:
                 hint=f"Use {hint} instead" if hint else "Retry or use an alternative tool.",
                 context={"server": server_name, "tool": tool_name},
             )
+
+    def _raw_tool_for_client(self, client: StdioMCPClient, tool_name: str) -> dict[str, Any] | None:
+        try:
+            tools = client.list_tools()
+        except Exception:
+            log.debug("MCP tool schema lookup failed: %s", tool_name, exc_info=True)
+            return None
+        for tool in tools:
+            if tool.get("name") == tool_name:
+                return tool
+        return None
+
+    def _record_text_read_result(
+        self,
+        *,
+        server_name: str,
+        tool_name: str,
+        args: dict[str, Any],
+        result: dict[str, Any],
+    ) -> None:
+        if result.get("isError") or result.get("error"):
+            return
+
+        paths: list[str] = []
+        if tool_name in {"read_file", "read_text_file"} and isinstance(args.get("path"), str):
+            paths.append(args["path"])
+        elif tool_name == "read_multiple_files" and isinstance(args.get("paths"), list):
+            paths.extend(path for path in args["paths"] if isinstance(path, str))
+        else:
+            return
+
+        fallback_text = _mcp_result_text(result)
+        for path in paths:
+            text = self._read_local_text_if_available(path)
+            if text is None and len(paths) == 1 and tool_name in {"read_file", "read_text_file"}:
+                text = fallback_text
+            if text is None:
+                continue
+            self._text_read_cache[(server_name, Path(path).name)] = text
+
+    def _normalise_cached_text_write(
+        self,
+        *,
+        server_name: str,
+        tool_name: str,
+        args: dict[str, Any],
+    ) -> dict[str, Any]:
+        if tool_name != "write_file":
+            return args
+        content = args.get("content")
+        path = args.get("path") or args.get("file_path")
+        if not isinstance(content, str) or not isinstance(path, str):
+            return args
+        if not content.endswith("\n"):
+            return args
+
+        source = self._text_read_cache.get((server_name, Path(path).name))
+        if source is None or source.endswith("\n"):
+            return args
+
+        candidate = content[:-1]
+        if candidate not in {source, source.upper(), source.lower()}:
+            return args
+
+        normalised = dict(args)
+        normalised["content"] = candidate
+        return normalised
+
+    def _read_local_text_if_available(self, path: str) -> str | None:
+        try:
+            file_path = Path(path)
+            if not file_path.is_file():
+                return None
+            return file_path.read_text(encoding="utf-8")
+        except (OSError, UnicodeDecodeError):
+            return None
 
     def find_server_for_tool(self, tool_name: str) -> str | None:
         """Find which server provides a given tool."""

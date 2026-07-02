@@ -112,7 +112,7 @@ export default function Page() {
 
             <h2>다음</h2>
             <ul>
-              <li><a href="/geode/docs/capabilities/autoresearch">폐루프</a>. 이 점수가 게이트로 들어가는 곳.</li>
+              <li><a href="/geode/docs/capabilities/autoresearch">Closed-Loop</a>. 이 점수가 게이트로 들어가는 곳.</li>
               <li><a href="/geode/docs/petri/scenarios">시나리오</a>. 티어별 seed 코퍼스.</li>
             </ul>
           </>
@@ -221,7 +221,7 @@ export default function Page() {
 
             <h2>Next</h2>
             <ul>
-              <li><a href="/geode/docs/capabilities/autoresearch">The closed loop</a>. Where these scores feed the gate.</li>
+              <li><a href="/geode/docs/capabilities/autoresearch">Closed-Loop</a>. Where these scores feed the gate.</li>
               <li><a href="/geode/docs/petri/scenarios">Scenarios</a>. The seed corpus, organized by tier.</li>
             </ul>
           </>

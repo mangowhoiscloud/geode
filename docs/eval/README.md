@@ -19,6 +19,9 @@
 |---|---|---|
 | GUI Trajectory Eval | observation coverage, classified failures, coordinate sanity, final screenshot availability | `computer`/`computer_use` trajectory rows를 모델 prose와 분리해 사후 평가 |
 | Capability/Evidence Preflight | provider/source/tool support, required evidence classes | 작업 시작 전 route mismatch를 드러내고 evidence ledger에 남김 |
+| Frontier agentic tool-use benchmark cases | MCPMark/BFCL V4/tau2 공개 사례와 GEODE 측정 계약 | GPT-5.5 subscription 결과를 공개 baseline과 섞기 전 비교 가능성 분리 |
+
+참고: [frontier-agentic-tool-use-benchmark-cases.md](frontier-agentic-tool-use-benchmark-cases.md)
 
 ## 의존성 그래프
 
@@ -67,4 +70,6 @@ HAL Reliability (τ-bench airline rerun) ← 절반 무료
 
 | 일자 | 변경 |
 |---|---|
+| 2026-07-03 | MCPMark filesystem easy에서 GEODE + GPT-5.5 xhigh 10/10 실측 및 EOF offload 결과 기록 |
+| 2026-07-02 | GPT-5.5 subscription 측정 준비용 MCPMark/BFCL V4/tau2 공개 사례 ledger 추가 |
 | 2026-05-07 | 초기 작성 — 4종 채택, 각 벤치별 사례/인프라/시나리오 |

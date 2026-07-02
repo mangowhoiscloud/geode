@@ -14,7 +14,7 @@
  * Bilingual: every entry carries an English and Korean title + summary.
  *
  * PR-DOCS-REDESIGN (2026-05-29) — restructured from ten layer-named sections
- * into nine reader-facing sections, concepts-first with a task router on top.
+ * into reader-facing sections, concepts-first with a task router on top.
  * The self-improving loop is its own top-level section (GEODE's signature,
  * carries the petri-blue accent). Vanity counts (tool / hook / module / seed
  * numbers) are removed from every title and summary; the system is described
@@ -96,8 +96,8 @@ export const DOCS_SITEMAP: DocSection[] = [
     title: "The Self-Improving Loop",
     titleKo: "자기개선 루프",
     pages: [
-      { slug: "capabilities/autoresearch", title: "The closed loop", titleKo: "폐루프", summary: "The outer loop end to end. Mutate the scaffold, audit with Petri, gate the fitness gain on a margin, then promote or revert. No model weight or parameter ever changes.", summaryKo: "바깥쪽 루프의 전체 흐름입니다. 스캐폴드를 변이하고, Petri로 감사하고, fitness 이득을 margin 게이트로 검증해 승격하거나 되돌립니다. 모델 가중치와 파라미터는 일절 바꾸지 않습니다.", quadrant: "explanation" },
-      { slug: "capabilities/co-scientist", title: "Co-scientist seed generation", titleKo: "Co-scientist seed 생성", summary: "A nine-role agent loop that grows the evaluation seed corpus. Supervisor, literature review, generator, proximity, critic, pilot, ranker, evolver, meta-reviewer.", summaryKo: "평가용 seed 코퍼스를 키우는 9-역할 에이전트 루프입니다. supervisor, literature review, generator, proximity, critic, pilot, ranker, evolver, meta-reviewer로 이어집니다.", quadrant: "explanation" },
+      { slug: "capabilities/autoresearch", title: "Closed-Loop", titleKo: "Closed-Loop", summary: "The outer loop end to end. Mutate the scaffold, audit with Petri, gate the fitness gain on a margin, then promote or revert. No model weight or parameter ever changes.", summaryKo: "바깥쪽 루프의 전체 흐름입니다. 스캐폴드를 변이하고, Petri로 감사하고, fitness 이득을 margin 게이트로 검증해 승격하거나 되돌립니다. 모델 가중치와 파라미터는 일절 바꾸지 않습니다.", quadrant: "explanation" },
+      { slug: "capabilities/co-scientist", title: "Seed Scenario Generation", titleKo: "Seed Scenario Generation", summary: "A nine-role generation loop that grows the evaluation scenario corpus. Supervisor, literature review, generator, proximity, critic, pilot, ranker, evolver, meta-reviewer.", summaryKo: "평가용 scenario corpus를 키우는 9-역할 생성 루프입니다. supervisor, literature review, generator, proximity, critic, pilot, ranker, evolver, meta-reviewer로 이어집니다.", quadrant: "explanation" },
       { slug: "capabilities/seed-pipeline", title: "Seed pipeline", titleKo: "Seed 파이프라인", summary: "The plugin that regenerates the seed corpus each generation. Picker, orchestrator, manifest, cost preview, and the blend survivor selection.", summaryKo: "세대마다 seed 코퍼스를 다시 만드는 플러그인입니다. picker, orchestrator, manifest, cost preview와 blend 생존자 선택을 다룹니다.", quadrant: "reference" },
       { slug: "capabilities/outer-loop", title: "Outer-loop configuration", titleKo: "아우터 루프 설정", summary: "The shared schema and loader for autoresearch, seed generation, Petri roles, and the auto-trigger scheduler. Strict by default.", summaryKo: "autoresearch, seed 생성, Petri 역할, auto-trigger 스케줄러가 공유하는 스키마와 로더입니다. 기본은 strict 검증입니다.", quadrant: "reference" },
       { slug: "petri/overview", title: "Petri × GEODE", titleKo: "Petri × GEODE", summary: "Anthropic Alignment Science's evaluation framework, wrapped over the GEODE agent as the loop's measurement layer.", summaryKo: "Anthropic Alignment Science의 평가 프레임워크를 GEODE 에이전트 위에 얹어 루프의 측정 계층으로 씁니다.", quadrant: "explanation" },
@@ -126,7 +126,15 @@ export const DOCS_SITEMAP: DocSection[] = [
     ],
   },
   {
-    id: "06-guides",
+    id: "06-benchmarks",
+    title: "Benchmarks",
+    titleKo: "벤치마크",
+    pages: [
+      { slug: "benchmarks/mcpmark/filesystem-easy", title: "MCPMark: filesystem/easy", titleKo: "MCPMark: filesystem/easy", summary: "Verifier-backed GEODE run record for MCPMark's filesystem easy subset, including run spec, artifacts, task scores, and the EOF offload note.", summaryKo: "MCPMark filesystem easy 하위 suite에 대한 GEODE verifier-backed 실측 기록입니다. run spec, 산출물, task별 점수, EOF offload 기록을 포함합니다.", quadrant: "reference" },
+    ],
+  },
+  {
+    id: "07-guides",
     title: "Guides and How-to",
     titleKo: "가이드",
     pages: [
@@ -138,7 +146,7 @@ export const DOCS_SITEMAP: DocSection[] = [
     ],
   },
   {
-    id: "07-config",
+    id: "08-config",
     title: "Configuration",
     titleKo: "설정",
     pages: [
@@ -153,7 +161,7 @@ export const DOCS_SITEMAP: DocSection[] = [
     ],
   },
   {
-    id: "08-reference",
+    id: "09-reference",
     title: "Reference",
     titleKo: "레퍼런스",
     pages: [
@@ -169,7 +177,7 @@ export const DOCS_SITEMAP: DocSection[] = [
     ],
   },
   {
-    id: "09-develop",
+    id: "10-develop",
     title: "Developer and Architecture",
     titleKo: "개발과 아키텍처",
     pages: [

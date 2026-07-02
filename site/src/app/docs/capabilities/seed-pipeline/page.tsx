@@ -28,7 +28,7 @@ export default function Page() {
               </thead>
               <tbody>
                 <tr><td><code>picker.py</code></td><td>다음 런이 겨눌 target dimension 선택</td></tr>
-                <tr><td><code>orchestrator.py</code></td><td>9-역할 phase 그래프 실행 (<a href="/geode/docs/capabilities/co-scientist">Co-scientist seed 생성</a>)</td></tr>
+                <tr><td><code>orchestrator.py</code></td><td>9-역할 phase 그래프 실행 (<a href="/geode/docs/capabilities/co-scientist">Seed Scenario Generation</a>)</td></tr>
                 <tr><td><code>manifest.py</code></td><td>seed 파일 × dimension × 예산 manifest</td></tr>
                 <tr><td><code>cost_preview.py</code></td><td>실행 전 비용 추정. confirm 프롬프트의 근거</td></tr>
                 <tr><td><code>pre_flight.py</code></td><td>자격, 쿼터, 의존성 사전 점검</td></tr>
@@ -75,7 +75,7 @@ confidence = pilot stderr 기반 가중치      # 노이즈가 크면 자동 감
 
             <h2>seed pool로의 연결</h2>
             <p>
-              생존자는 런 번들에 남는 것으로 끝나지 않습니다. 폐루프가 실제로
+              생존자는 런 번들에 남는 것으로 끝나지 않습니다. Closed-Loop가 실제로
               읽는 곳은 두 풀입니다.
             </p>
             <ul>
@@ -95,7 +95,7 @@ confidence = pilot stderr 기반 가중치      # 노이즈가 크면 자동 감
             <h2>다음</h2>
             <ul>
               <li><a href="/geode/docs/petri/seeds">Seed 생성 런</a>. 공개된 런별 대시보드.</li>
-              <li><a href="/geode/docs/capabilities/autoresearch">폐루프</a>. 이 seed들이 측정에 쓰이는 곳.</li>
+              <li><a href="/geode/docs/capabilities/autoresearch">Closed-Loop</a>. 이 seed들이 측정에 쓰이는 곳.</li>
             </ul>
           </>
         }
@@ -117,7 +117,7 @@ confidence = pilot stderr 기반 가중치      # 노이즈가 크면 자동 감
               </thead>
               <tbody>
                 <tr><td><code>picker.py</code></td><td>Selects the target dimension the next run aims at</td></tr>
-                <tr><td><code>orchestrator.py</code></td><td>Runs the nine-role phase graph (<a href="/geode/docs/capabilities/co-scientist">Co-scientist seed generation</a>)</td></tr>
+                <tr><td><code>orchestrator.py</code></td><td>Runs the nine-role phase graph (<a href="/geode/docs/capabilities/co-scientist">Seed Scenario Generation</a>)</td></tr>
                 <tr><td><code>manifest.py</code></td><td>Seed file by dimension by budget manifest</td></tr>
                 <tr><td><code>cost_preview.py</code></td><td>Pre-run cost estimate behind the confirm prompt</td></tr>
                 <tr><td><code>pre_flight.py</code></td><td>Credential, quota, and dependency checks</td></tr>
@@ -165,7 +165,7 @@ confidence = weight from pilot stderr      # noisy pilots are damped`}</pre>
 
             <h2>Into the seed pools</h2>
             <p>
-              Survivors do not stop at the run bundle. The closed loop reads
+              Survivors do not stop at the run bundle. The Closed-Loop reads
               from two pools.
             </p>
             <ul>
@@ -186,7 +186,7 @@ confidence = weight from pilot stderr      # noisy pilots are damped`}</pre>
             <h2>Next</h2>
             <ul>
               <li><a href="/geode/docs/petri/seeds">Seed-generation runs</a>. The published per-run dashboard.</li>
-              <li><a href="/geode/docs/capabilities/autoresearch">The closed loop</a>. Where these seeds get used for measurement.</li>
+              <li><a href="/geode/docs/capabilities/autoresearch">Closed-Loop</a>. Where these seeds get used for measurement.</li>
             </ul>
           </>
         }
