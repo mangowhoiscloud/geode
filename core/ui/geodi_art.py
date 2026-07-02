@@ -6,11 +6,12 @@ side, deeper rose, visibly separated), simple symmetric 2x2 dark eyes with a
 lighter belly patch, and a subtle deep-rose cheek blush beside the eyes.
 
 The canonical sprite is authored as a 22x20 pixel grid
-(``GEODI_SOURCE_PIXELS``). The welcome screen renders a forehead-trimmed 22x18 pixel
+(``GEODI_SOURCE_PIXELS``). The welcome screen renders a face-only 22x12 pixel
 derivative (``GEODI_PIXELS``) that preserves the original silhouette while
 matching the adjacent three-line brand block. Pixels render as truecolor
 half-blocks — ``▀`` with fg = upper pixel, bg = lower pixel, two pixels per
-terminal cell — so the compact mascot draws as 22 cols x 9 rows — the full-detail source minus two forehead rows — in ANY
+terminal cell — so the mascot draws as 22 cols x 6 rows — the head down to the mouth, cropped
+to a round face (belly/feet removed) so it sits level with the 3-line welcome — in ANY
 truecolor terminal. Transparent pixels reset to the terminal's default
 background.
 
@@ -76,14 +77,8 @@ GEODI_PIXELS: list[str] = [
     "....pppeeppppeeppp....",
     "....prrpppppppprrp....",
     "....ppppppeepppppp....",
-    "....ppppllllllpppp....",
-    "....pppllllllllppp....",
-    "....pppllllllllppp....",
-    ".....pppllllllppp.....",
+    ".....pppppppppppp.....",
     "......pppppppppp......",
-    ".......pppppppp.......",
-    "......ppp....ppp......",
-    "......ppp....ppp......",
 ]
 
 
