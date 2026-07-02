@@ -22,7 +22,7 @@
   <a href="README.ko.md">한국어</a>
 </p>
 
-# GEODE v0.99.252 — A Self-improving Autonomous Execution Agent
+# GEODE v0.99.253 — A Self-improving Autonomous Execution Agent
 
 A general-purpose autonomous agent that also rewrites the scaffolding it runs on. You ask in plain language; GEODE plans, calls tools, and reports, for one prompt or a long-running session. Underneath, an outer loop keeps tuning the system that runs your tasks.
 
