@@ -91,7 +91,7 @@ min_interval_minutes = 60`}</pre>
 
             <h2>다음</h2>
             <ul>
-              <li><a href="/geode/docs/capabilities/autoresearch">폐루프</a>. 이 설정을 소비하는 루프 본체.</li>
+              <li><a href="/geode/docs/capabilities/autoresearch">Closed-Loop</a>. 이 설정을 소비하는 루프 본체.</li>
               <li><a href="/geode/docs/config/reference">설정 레퍼런스</a>. config.toml 전체 표면.</li>
             </ul>
           </>
@@ -178,7 +178,7 @@ min_interval_minutes = 60`}</pre>
 
             <h2>Next</h2>
             <ul>
-              <li><a href="/geode/docs/capabilities/autoresearch">The closed loop</a>. The loop body these settings drive.</li>
+              <li><a href="/geode/docs/capabilities/autoresearch">Closed-Loop</a>. The loop body these settings drive.</li>
               <li><a href="/geode/docs/config/reference">Config reference</a>. The full config.toml surface.</li>
             </ul>
           </>

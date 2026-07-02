@@ -45,6 +45,17 @@ functional change.
 
 ---
 
+## [Unreleased]
+
+### Fixed
+
+- **MCP filesystem argument compatibility.** MCP tool dispatch now normalizes
+  common schema mismatches before server calls, including mapping `file_path`
+  to `path` when the MCP schema requires `path`, dropping conflicting
+  `read_text_file` `head`/`tail` pairs, annotating exact-read caveats in
+  exposed MCP tool descriptions, and offloading source EOF preservation from
+  model turns into the MCP dispatch layer for same-name text writes.
+
 ## [0.99.261] - 2026-07-03
 
 ### Changed
@@ -101,7 +112,6 @@ functional change.
   that preserves the original round head, six gill stalks, eye catchlights,
   cheek blush, belly patch, and feet. Tests now pin both the source grid and the
   compact silhouette cues.
-
 ## [0.99.257] - 2026-07-02
 
 ### Changed

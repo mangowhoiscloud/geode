@@ -57,8 +57,8 @@ export default function Page() {
             <h2>코퍼스는 어떻게 자라나</h2>
             <p>
               정적 카탈로그가 아닙니다. seed-generation 파이프라인
-              (<a href="/geode/docs/capabilities/co-scientist">Co-scientist seed
-              생성</a>)이 target dimension별로 새 seed를 만들고, 생존자가{" "}
+              (<a href="/geode/docs/capabilities/co-scientist">Seed Scenario
+              Generation</a>)이 target dimension별로 새 seed를 만들고, 생존자가{" "}
               <code>geode seeds assemble</code>을 거쳐 사이클 입력
               풀(<code>state/seed-pools/cycle-input</code>)로 조립됩니다.
               버전 고정 held-out 벤치마크(<code>state/seed-pools/held-out</code>)는
@@ -137,8 +137,8 @@ export default function Page() {
             <h2>How the corpus grows</h2>
             <p>
               This is not a static catalog. The seed-generation pipeline
-              (<a href="/geode/docs/capabilities/co-scientist">Co-scientist
-              seed generation</a>) drafts new seeds per target dimension, and
+              (<a href="/geode/docs/capabilities/co-scientist">Seed Scenario
+              Generation</a>) drafts new seeds per target dimension, and
               survivors are assembled by <code>geode seeds assemble</code> into
               the cycle-input pool
               (<code>state/seed-pools/cycle-input</code>). A version-frozen
