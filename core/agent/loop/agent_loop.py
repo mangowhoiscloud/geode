@@ -1357,15 +1357,22 @@ class AgenticLoop:
                 model=self.model,
             )
 
-            # spinner while waiting for the LLM (IPC event or TextSpinner)
+            # spinner while waiting for the LLM (IPC event or TextSpinner);
+            # a reflection round (verify-FAIL hint injected) is disclosed as such
             from core.ui.agentic_ui import _ipc_writer_local
 
             _ipc_writer = getattr(_ipc_writer_local, "writer", None)
             if _ipc_writer is not None and not self._quiet:
-                _ipc_writer.send_event("thinking_start", model=self.model, round=round_idx + 1)
+                _ipc_writer.send_event(
+                    "thinking_start",
+                    model=self.model,
+                    round=round_idx + 1,
+                    reflection=bool(reflection_hint),
+                )
                 _spinner = TextSpinner("", quiet=True)  # no-op spinner
             else:
-                label = "Thinking..." if round_idx == 0 else f"Thinking... (round {round_idx + 1})"
+                verb = "Reflecting..." if reflection_hint else "Thinking..."
+                label = verb if round_idx == 0 else f"{verb} (round {round_idx + 1})"
                 _spinner = TextSpinner(label, quiet=self._quiet)
             _spinner.start()
             try:
