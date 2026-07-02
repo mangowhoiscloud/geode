@@ -45,6 +45,41 @@ functional change.
 
 ---
 
+## [0.99.255] - 2026-07-02
+
+### Added
+- **Explicit HITL approval FSM** (`core/agent/approval_fsm.py`). Every gated
+  tool call (write / expensive / bash / mcp / batch) threads one
+  `ApprovalRecord` through
+  `requested → displayed → user_selected(raw_input) → parsed(verdict) →
+  granted|denied → propagated → executed|skipped`, each transition
+  timestamped and validated against a legal-transition table (illegal
+  transitions log a warning and are recorded with `illegal=True`, never
+  raised into the approval flow). Transitions emit on two rails: a new
+  `HookEvent.APPROVAL_TRANSITION` (one event with `state` in the payload;
+  typed timeline row `ApprovalTransitionRow`) and an `EvidenceLedger`
+  `hitl_approval` row per terminal state (granted/denied +
+  executed/skipped) via the session ledger the AgenticLoop now attaches to
+  the executor (`ToolExecutor.attach_evidence_ledger`).
+- **IPC approval_id round-trip.** The serve-side `approval_request` carries
+  the record's `approval_id`; the thin client echoes it in
+  `approval_response`; `request_approval` discards a stale reply whose id
+  does not match, so the late answer to a previous timed-out prompt no
+  longer misroutes into the wrong gate. Legacy 3-arg approval callbacks and
+  replies without an id keep working.
+
+### Fixed
+- **A-but-denied approval loss (memory_save incident, 2026-07-02).** The
+  async IPC read loop awaited `_process_message_async` inline, so while a
+  prompt ran nothing read the socket — the thin client's
+  `approval_response` ("a") never reached `feed_approval_response`, every
+  in-prompt approval hit the 120s timeout and fail-closed to "n" ("User
+  denied write operation"), and the late reply poisoned the next prompt's
+  approval queue. `_handle_client_async` now runs a dedicated reader pump
+  that consumes approval replies the moment they arrive while other
+  messages stay strictly ordered. Regression pinned by
+  `tests/core/agent/test_approval_fsm.py::TestIPCApprovalRoundTrip::test_approval_reply_consumed_mid_prompt_memory_save_incident`.
+
 ## [0.99.254] - 2026-07-02
 
 ### Infrastructure

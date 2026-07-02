@@ -228,10 +228,11 @@ _SUPERSET_PAYLOAD = {
 
 def test_i5_all_hookevents_produce_a_row() -> None:
     """Every HookEvent now has a typed builder (PR-OBS-CONTRACT closed the
-    44 K-group fall-throughs). With a well-formed payload each maps to its
-    concrete row — never GenericActivityRow, never raises."""
+    44 K-group fall-throughs; PR-HITL-APPROVAL-FSM added the 45th). With a
+    well-formed payload each maps to its concrete row — never
+    GenericActivityRow, never raises."""
     all_events = list(HookEvent)
-    assert len(all_events) >= 63, f"expected at least 63 HookEvents, got {len(all_events)}"
+    assert len(all_events) >= 64, f"expected at least 64 HookEvents, got {len(all_events)}"
 
     typed_count = 0
     for event in all_events:
@@ -244,9 +245,9 @@ def test_i5_all_hookevents_produce_a_row() -> None:
                 f"under a well-formed payload"
             )
 
-    # 100% typed coverage. +RESULT_FEEDBACK (PR-PRE10-ROUND2) → 63.
-    assert typed_count == 63, f"expected 63 typed events (full coverage), got {typed_count}"
-    assert len(HOOK_EVENT_TO_ROW_BUILDER) == 63, "every HookEvent must have a registry entry"
+    # 100% typed coverage. +APPROVAL_TRANSITION (PR-HITL-APPROVAL-FSM) → 64.
+    assert typed_count == 64, f"expected 64 typed events (full coverage), got {typed_count}"
+    assert len(HOOK_EVENT_TO_ROW_BUILDER) == 64, "every HookEvent must have a registry entry"
 
 
 def test_i5_registry_action_matches_concrete_action_literal() -> None:

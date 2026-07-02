@@ -162,6 +162,13 @@ class HookEvent(Enum):
     TOOL_APPROVAL_REQUESTED = "tool_approval_requested"
     TOOL_APPROVAL_GRANTED = "tool_approval_granted"
     TOOL_APPROVAL_DENIED = "tool_approval_denied"
+    # Approval FSM — ONE event per ApprovalRecord state transition, with the
+    # target ``state`` (requested / displayed / user_selected / parsed /
+    # granted / denied / propagated / executed / skipped) in the payload
+    # instead of nine enums. Fired by ``ApprovalWorkflow.record_transition``
+    # (emit-only; no bootstrap handler required — the wildcard RunLog
+    # subscriber persists it). See ``core/agent/approval_fsm.py``.
+    APPROVAL_TRANSITION = "approval_transition"
 
     # Per-adapter dispatch attempt — fired by
     # ``core.llm.adapters.dispatch._fire_attempt`` for every single-adapter

@@ -8,11 +8,19 @@ approvals, auto-deny after 3 consecutive denials).
 from __future__ import annotations
 
 import asyncio
+import inspect
 import logging
 import time
 from collections.abc import Awaitable, Callable
 from typing import TYPE_CHECKING, Any, TypeVar
 
+from core.agent.approval_fsm import (
+    LEDGER_ROW_STATES,
+    VERDICT_BY_DECISION,
+    VERDICT_DENY,
+    ApprovalRecord,
+    parse_decision,
+)
 from core.agent.safety import (
     AUTO_APPROVED_MCP_SERVERS,
     DANGEROUS_TOOLS,
@@ -89,12 +97,16 @@ class ApprovalWorkflow:
         auto_approve: bool = False,
         hitl_level: int = 2,
         hooks: HookSystem | None = None,
-        approval_callback: Callable[[str, str, str], str] | None = None,
+        approval_callback: Callable[..., str] | None = None,
     ) -> None:
         self._auto_approve = auto_approve
         self._hitl_level = hitl_level
         self._hooks = hooks
         self._approval_callback = approval_callback
+        # Session EvidenceLedger — attached by AgenticLoop via
+        # ToolExecutor.attach_evidence_ledger (best-effort rail; None when the
+        # workflow runs outside a loop, e.g. tests / CLI utilities).
+        self._evidence_ledger: Any | None = None
 
         import threading
 
@@ -148,6 +160,110 @@ class ApprovalWorkflow:
             self._approval_lock.release()
 
     # -----------------------------------------------------------------
+    # Approval FSM — per-transition records (PR-HITL-APPROVAL-FSM)
+    # -----------------------------------------------------------------
+
+    def attach_evidence_ledger(self, ledger: Any | None) -> None:
+        """Attach the session's EvidenceLedger (terminal-state rows rail)."""
+        self._evidence_ledger = ledger
+
+    def begin_record(self, tool_name: str) -> ApprovalRecord | None:
+        """Create an ApprovalRecord for a gated tool; ``None`` for ungated.
+
+        Category mirrors the gate that will run: ``bash`` (run_bash),
+        ``dangerous`` (computer), ``write``, ``expensive``. MCP tools are not
+        classifiable here (server lookup happens at dispatch) — see
+        :meth:`begin_mcp_record`.
+        """
+        if tool_name == "run_bash":
+            category = "bash"
+        elif tool_name in DANGEROUS_TOOLS:
+            category = "dangerous"
+        elif tool_name in WRITE_TOOLS:
+            category = "write"
+        elif tool_name in EXPENSIVE_TOOLS:
+            category = "expensive"
+        else:
+            return None
+        record = ApprovalRecord(tool_name=tool_name, category=category)
+        self.record_transition(record, "requested", "gate")
+        return record
+
+    def begin_mcp_record(self, server: str, tool_name: str) -> ApprovalRecord:
+        """Create the ApprovalRecord for an MCP server confirmation."""
+        record = ApprovalRecord(tool_name=tool_name, category="mcp")
+        self.record_transition(record, "requested", f"server={server}")
+        return record
+
+    def record_transition(
+        self, record: ApprovalRecord | None, state: str, detail: str = ""
+    ) -> None:
+        """Record one FSM transition on BOTH observability rails.
+
+        Rail (a): ``HookEvent.APPROVAL_TRANSITION`` — one event per handoff
+        with the target ``state`` in the payload. Rail (b): an EvidenceLedger
+        row for terminal states (granted/denied + executed/skipped) when a
+        session ledger is attached; skipped silently otherwise (the ledger is
+        best-effort). ``record=None`` is a no-op so ungated tools pay nothing.
+        """
+        if record is None:
+            return
+        record.transition(state, detail)
+        payload = record.to_event_payload()
+        payload["detail"] = detail
+        self._fire_hook(HookEvent.APPROVAL_TRANSITION, payload)
+        if state in LEDGER_ROW_STATES and self._evidence_ledger is not None:
+            try:
+                self._evidence_ledger.append(
+                    kind="hitl_approval",
+                    summary=f"{record.tool_name} {state} ({record.category})",
+                    payload=payload,
+                )
+            except Exception:
+                log.debug("EvidenceLedger approval row write failed", exc_info=True)
+
+    def _auto_grant_reason(self, category: str, tool_name: str) -> str:
+        """Return the auto-approve reason for a gate short-circuit, or ""."""
+        if self._skip_permissions():
+            return "auto:skip-permissions"
+        if self._hitl_level == 0:
+            return "auto:hitl-open"
+        if category in self._always_approved_categories:
+            return f"auto:always-category:{category}"
+        if tool_name and tool_name in self._always_approved_tools:
+            return "auto:always-tool"
+        return ""
+
+    def _invoke_approval_callback(
+        self, tool_name: str, detail: str, safety_level: str, approval_id: str
+    ) -> str:
+        """Call the IPC approval callback, forwarding ``approval_id`` when the
+        callback accepts it (4-positional / var-positional signature). Legacy
+        3-arg callbacks (tests, third-party wiring) are called without it."""
+        callback = self._approval_callback
+        assert callback is not None
+        if self._callback_accepts_approval_id(callback):
+            return callback(tool_name, detail, safety_level, approval_id)
+        return callback(tool_name, detail, safety_level)
+
+    @staticmethod
+    def _callback_accepts_approval_id(callback: Callable[..., str]) -> bool:
+        try:
+            signature = inspect.signature(callback)
+        except (TypeError, ValueError):
+            return False
+        params = list(signature.parameters.values())
+        if any(p.kind is inspect.Parameter.VAR_POSITIONAL for p in params):
+            return True
+        positional = [
+            p
+            for p in params
+            if p.kind
+            in (inspect.Parameter.POSITIONAL_ONLY, inspect.Parameter.POSITIONAL_OR_KEYWORD)
+        ]
+        return len(positional) >= 4
+
+    # -----------------------------------------------------------------
     # Pattern learning
     # -----------------------------------------------------------------
 
@@ -178,11 +294,28 @@ class ApprovalWorkflow:
         *,
         safety_level: str = "write",
         tool_name: str = "",
+        record: ApprovalRecord | None = None,
     ) -> str:
-        """Show the approval options line and return 'y', 'n', or 'a'."""
+        """Show the approval options line and return 'y', 'n', or 'a'.
+
+        Threads the ApprovalRecord through display → input → parse: the
+        direct console path records the actual raw keystrokes; the IPC path
+        records the thin client's parsed decision char as the selection (the
+        raw input stays client-side) plus the ``approval_id`` round-trip.
+        """
         if self._approval_callback is not None:
-            decision = self._approval_callback(tool_name or label, detail, safety_level)
+            decision = self._invoke_approval_callback(
+                tool_name or label,
+                detail,
+                safety_level,
+                record.approval_id if record is not None else "",
+            )
             log.debug("HITL: IPC callback decision=%s tool=%s", decision, tool_name or label)
+            self.record_transition(record, "displayed", "ipc")
+            self.record_transition(record, "user_selected", decision)
+            self.record_transition(
+                record, "parsed", VERDICT_BY_DECISION.get(decision, VERDICT_DENY)
+            )
             return decision
 
         from core.cli import _restore_terminal
@@ -190,18 +323,18 @@ class ApprovalWorkflow:
         _restore_terminal()
         if label not in _BARE_PROMPT_LABELS:
             console.print(f"  [bold]{label}[/bold]")
+        self.record_transition(record, "displayed", "console")
         try:
-            response = (
-                console.input("  [muted]y allow · n deny · a always-allow[/muted] ").strip().lower()
-            )
+            raw = console.input("  [muted]y allow · n deny · a always-allow[/muted] ")
         except (KeyboardInterrupt, EOFError):
             console.print()
+            self.record_transition(record, "user_selected", "<interrupt>")
+            self.record_transition(record, "parsed", VERDICT_DENY)
             return "n"
-        if response in ("a", "always"):
-            return "a"
-        if response in ("", "y", "yes"):
-            return "y"
-        return "n"
+        self.record_transition(record, "user_selected", raw.strip()[:20])
+        decision, verdict = parse_decision(raw)
+        self.record_transition(record, "parsed", verdict)
+        return decision
 
     async def prompt_with_always_async(
         self,
@@ -210,6 +343,7 @@ class ApprovalWorkflow:
         *,
         safety_level: str = "write",
         tool_name: str = "",
+        record: ApprovalRecord | None = None,
     ) -> str:
         """Async wrapper for approval prompts.
 
@@ -222,6 +356,7 @@ class ApprovalWorkflow:
             detail,
             safety_level=safety_level,
             tool_name=tool_name,
+            record=record,
         )
 
     # -----------------------------------------------------------------
@@ -229,7 +364,10 @@ class ApprovalWorkflow:
     # -----------------------------------------------------------------
 
     def apply_safety_gates(
-        self, tool_name: str, tool_input: dict[str, Any]
+        self,
+        tool_name: str,
+        tool_input: dict[str, Any],
+        record: ApprovalRecord | None = None,
     ) -> tuple[dict[str, Any] | None, bool]:
         """Check HITL gates. Returns (rejection_result, approved_via_hitl)."""
         if tool_name in DANGEROUS_TOOLS:
@@ -253,19 +391,16 @@ class ApprovalWorkflow:
         # Write tools
         if tool_name in WRITE_TOOLS:
             with self._approval_lock:
-                if (
-                    self._skip_permissions()
-                    or self._hitl_level == 0
-                    or "write" in self._always_approved_categories
-                    or tool_name in self._always_approved_tools
-                ):
+                auto_reason = self._auto_grant_reason("write", tool_name)
+                if auto_reason:
+                    self.record_transition(record, "granted", auto_reason)
                     approved = True
                 else:
                     self._fire_hook(
                         HookEvent.TOOL_APPROVAL_REQUESTED,
                         {"tool_name": tool_name, "safety_level": "write"},
                     )
-                    if not self.confirm_write(tool_name, tool_input):
+                    if not self.confirm_write(tool_name, tool_input, record=record):
                         self._fire_hook(
                             HookEvent.TOOL_APPROVAL_DENIED,
                             {
@@ -290,12 +425,9 @@ class ApprovalWorkflow:
         # Expensive tools
         if tool_name in EXPENSIVE_TOOLS and not self._auto_approve:
             with self._approval_lock:
-                if (
-                    self._skip_permissions()
-                    or self._hitl_level == 0
-                    or "cost" in self._always_approved_categories
-                    or tool_name in self._always_approved_tools
-                ):
+                auto_reason = self._auto_grant_reason("cost", tool_name)
+                if auto_reason:
+                    self.record_transition(record, "granted", auto_reason)
                     approved = True
                 else:
                     cost = EXPENSIVE_TOOLS[tool_name]
@@ -303,7 +435,7 @@ class ApprovalWorkflow:
                         HookEvent.TOOL_APPROVAL_REQUESTED,
                         {"tool_name": tool_name, "safety_level": "cost"},
                     )
-                    if not self.confirm_cost(tool_name, cost):
+                    if not self.confirm_cost(tool_name, cost, record=record):
                         self._fire_hook(
                             HookEvent.TOOL_APPROVAL_DENIED,
                             {
@@ -331,7 +463,10 @@ class ApprovalWorkflow:
         return None, approved
 
     async def apply_safety_gates_async(
-        self, tool_name: str, tool_input: dict[str, Any]
+        self,
+        tool_name: str,
+        tool_input: dict[str, Any],
+        record: ApprovalRecord | None = None,
     ) -> tuple[dict[str, Any] | None, bool]:
         """Async HITL gate path used by ToolExecutor.aexecute()."""
         if tool_name in DANGEROUS_TOOLS:
@@ -342,18 +477,15 @@ class ApprovalWorkflow:
         if tool_name in WRITE_TOOLS:
 
             async def write_gate() -> tuple[dict[str, Any] | None, bool]:
-                if (
-                    self._skip_permissions()
-                    or self._hitl_level == 0
-                    or "write" in self._always_approved_categories
-                    or tool_name in self._always_approved_tools
-                ):
+                auto_reason = self._auto_grant_reason("write", tool_name)
+                if auto_reason:
+                    self.record_transition(record, "granted", auto_reason)
                     return None, True
                 await self._fire_hook_async(
                     HookEvent.TOOL_APPROVAL_REQUESTED,
                     {"tool_name": tool_name, "safety_level": "write"},
                 )
-                if not await self.confirm_write_async(tool_name, tool_input):
+                if not await self.confirm_write_async(tool_name, tool_input, record=record):
                     await self._fire_hook_async(
                         HookEvent.TOOL_APPROVAL_DENIED,
                         {
@@ -382,19 +514,16 @@ class ApprovalWorkflow:
         if tool_name in EXPENSIVE_TOOLS and not self._auto_approve:
 
             async def cost_gate() -> tuple[dict[str, Any] | None, bool]:
-                if (
-                    self._skip_permissions()
-                    or self._hitl_level == 0
-                    or "cost" in self._always_approved_categories
-                    or tool_name in self._always_approved_tools
-                ):
+                auto_reason = self._auto_grant_reason("cost", tool_name)
+                if auto_reason:
+                    self.record_transition(record, "granted", auto_reason)
                     return None, True
                 cost = EXPENSIVE_TOOLS[tool_name]
                 await self._fire_hook_async(
                     HookEvent.TOOL_APPROVAL_REQUESTED,
                     {"tool_name": tool_name, "safety_level": "cost"},
                 )
-                if not await self.confirm_cost_async(tool_name, cost):
+                if not await self.confirm_cost_async(tool_name, cost, record=record):
                     await self._fire_hook_async(
                         HookEvent.TOOL_APPROVAL_DENIED,
                         {
@@ -426,7 +555,9 @@ class ApprovalWorkflow:
     # Confirmation prompts
     # -----------------------------------------------------------------
 
-    def confirm_mcp(self, server: str, tool_name: str) -> bool:
+    def confirm_mcp(
+        self, server: str, tool_name: str, record: ApprovalRecord | None = None
+    ) -> bool:
         """Prompt user for MCP tool confirmation with A=Always option."""
         if self._approval_callback is None:
             from core.cli import _restore_terminal
@@ -448,12 +579,17 @@ class ApprovalWorkflow:
 
         t0 = time.monotonic()
         response = self.prompt_with_always(
-            "Allow?", f"{server}/{tool_name}", safety_level="mcp", tool_name=tool_name
+            "Allow?",
+            f"{server}/{tool_name}",
+            safety_level="mcp",
+            tool_name=tool_name,
+            record=record,
         )
         latency_ms = (time.monotonic() - t0) * 1000
         if response in ("a", "y"):
             if response == "a":
                 self._always_approved_categories.add(f"mcp:{server}")
+            self.record_transition(record, "granted", f"user:{response}")
             self._fire_hook(
                 HookEvent.TOOL_APPROVAL_GRANTED,
                 {
@@ -464,6 +600,7 @@ class ApprovalWorkflow:
                 },
             )
             return True
+        self.record_transition(record, "denied", f"user:{response}")
         self._fire_hook(
             HookEvent.TOOL_APPROVAL_DENIED,
             {
@@ -475,7 +612,9 @@ class ApprovalWorkflow:
         )
         return False
 
-    async def confirm_mcp_async(self, server: str, tool_name: str) -> bool:
+    async def confirm_mcp_async(
+        self, server: str, tool_name: str, record: ApprovalRecord | None = None
+    ) -> bool:
         """Async MCP tool confirmation with A=Always option."""
 
         async def gate() -> bool:
@@ -500,12 +639,17 @@ class ApprovalWorkflow:
 
             t0 = time.monotonic()
             response = await self.prompt_with_always_async(
-                "Allow?", f"{server}/{tool_name}", safety_level="mcp", tool_name=tool_name
+                "Allow?",
+                f"{server}/{tool_name}",
+                safety_level="mcp",
+                tool_name=tool_name,
+                record=record,
             )
             latency_ms = (time.monotonic() - t0) * 1000
             if response in ("a", "y"):
                 if response == "a":
                     self._always_approved_categories.add(f"mcp:{server}")
+                self.record_transition(record, "granted", f"user:{response}")
                 await self._fire_hook_async(
                     HookEvent.TOOL_APPROVAL_GRANTED,
                     {
@@ -516,6 +660,7 @@ class ApprovalWorkflow:
                     },
                 )
                 return True
+            self.record_transition(record, "denied", f"user:{response}")
             await self._fire_hook_async(
                 HookEvent.TOOL_APPROVAL_DENIED,
                 {
@@ -552,7 +697,12 @@ class ApprovalWorkflow:
             return str(tool_input.get("pattern", ""))[:80]
         return ""
 
-    def confirm_write(self, tool_name: str, tool_input: dict[str, Any]) -> bool:
+    def confirm_write(
+        self,
+        tool_name: str,
+        tool_input: dict[str, Any],
+        record: ApprovalRecord | None = None,
+    ) -> bool:
         """Prompt user for write operation confirmation."""
         if self._approval_callback is None:
             from core.cli import _restore_terminal
@@ -567,6 +717,7 @@ class ApprovalWorkflow:
             console.print()
 
         if self.check_auto_deny(tool_name):
+            self.record_transition(record, "denied", "auto_denied:3-strikes")
             self._fire_hook(
                 HookEvent.TOOL_APPROVAL_DENIED,
                 {
@@ -589,13 +740,14 @@ class ApprovalWorkflow:
 
         t0 = time.monotonic()
         response = self.prompt_with_always(
-            "Allow?", tool_name, safety_level="write", tool_name=tool_name
+            "Allow?", tool_name, safety_level="write", tool_name=tool_name, record=record
         )
         latency_ms = (time.monotonic() - t0) * 1000
         self.track_decision(tool_name, response)
         if response in ("a", "y"):
             if response == "a":
                 self._always_approved_categories.add("write")
+            self.record_transition(record, "granted", f"user:{response}")
             self._fire_hook(
                 HookEvent.TOOL_APPROVAL_GRANTED,
                 {
@@ -607,6 +759,7 @@ class ApprovalWorkflow:
                 },
             )
             return True
+        self.record_transition(record, "denied", f"user:{response}")
         self._fire_hook(
             HookEvent.TOOL_APPROVAL_DENIED,
             {
@@ -618,7 +771,12 @@ class ApprovalWorkflow:
         )
         return False
 
-    async def confirm_write_async(self, tool_name: str, tool_input: dict[str, Any]) -> bool:
+    async def confirm_write_async(
+        self,
+        tool_name: str,
+        tool_input: dict[str, Any],
+        record: ApprovalRecord | None = None,
+    ) -> bool:
         """Async write operation confirmation."""
         if self._approval_callback is None:
             from core.cli import _restore_terminal
@@ -632,6 +790,7 @@ class ApprovalWorkflow:
             console.print()
 
         if self.check_auto_deny(tool_name):
+            self.record_transition(record, "denied", "auto_denied:3-strikes")
             await self._fire_hook_async(
                 HookEvent.TOOL_APPROVAL_DENIED,
                 {
@@ -654,13 +813,14 @@ class ApprovalWorkflow:
 
         t0 = time.monotonic()
         response = await self.prompt_with_always_async(
-            "Allow?", tool_name, safety_level="write", tool_name=tool_name
+            "Allow?", tool_name, safety_level="write", tool_name=tool_name, record=record
         )
         latency_ms = (time.monotonic() - t0) * 1000
         self.track_decision(tool_name, response)
         if response in ("a", "y"):
             if response == "a":
                 self._always_approved_categories.add("write")
+            self.record_transition(record, "granted", f"user:{response}")
             await self._fire_hook_async(
                 HookEvent.TOOL_APPROVAL_GRANTED,
                 {
@@ -672,6 +832,7 @@ class ApprovalWorkflow:
                 },
             )
             return True
+        self.record_transition(record, "denied", f"user:{response}")
         await self._fire_hook_async(
             HookEvent.TOOL_APPROVAL_DENIED,
             {
@@ -683,7 +844,12 @@ class ApprovalWorkflow:
         )
         return False
 
-    def confirm_cost(self, tool_name: str, estimated_cost: float) -> bool:
+    def confirm_cost(
+        self,
+        tool_name: str,
+        estimated_cost: float,
+        record: ApprovalRecord | None = None,
+    ) -> bool:
         """Prompt user for cost confirmation with A=Always option."""
         if self._approval_callback is None:
             from core.cli import _restore_terminal
@@ -704,6 +870,7 @@ class ApprovalWorkflow:
         )
 
         if self.check_auto_deny(tool_name):
+            self.record_transition(record, "denied", "auto_denied:3-strikes")
             self._fire_hook(
                 HookEvent.TOOL_APPROVAL_DENIED,
                 {
@@ -717,13 +884,14 @@ class ApprovalWorkflow:
 
         t0 = time.monotonic()
         response = self.prompt_with_always(
-            "Proceed?", tool_name, safety_level="cost", tool_name=tool_name
+            "Proceed?", tool_name, safety_level="cost", tool_name=tool_name, record=record
         )
         latency_ms = (time.monotonic() - t0) * 1000
         self.track_decision(tool_name, response)
         if response in ("a", "y"):
             if response == "a":
                 self._always_approved_categories.add("cost")
+            self.record_transition(record, "granted", f"user:{response}")
             self._fire_hook(
                 HookEvent.TOOL_APPROVAL_GRANTED,
                 {
@@ -735,6 +903,7 @@ class ApprovalWorkflow:
                 },
             )
             return True
+        self.record_transition(record, "denied", f"user:{response}")
         self._fire_hook(
             HookEvent.TOOL_APPROVAL_DENIED,
             {
@@ -746,7 +915,12 @@ class ApprovalWorkflow:
         )
         return False
 
-    async def confirm_cost_async(self, tool_name: str, estimated_cost: float) -> bool:
+    async def confirm_cost_async(
+        self,
+        tool_name: str,
+        estimated_cost: float,
+        record: ApprovalRecord | None = None,
+    ) -> bool:
         """Async cost confirmation with A=Always option."""
         if self._approval_callback is None:
             from core.cli import _restore_terminal
@@ -767,6 +941,7 @@ class ApprovalWorkflow:
         )
 
         if self.check_auto_deny(tool_name):
+            self.record_transition(record, "denied", "auto_denied:3-strikes")
             await self._fire_hook_async(
                 HookEvent.TOOL_APPROVAL_DENIED,
                 {
@@ -780,13 +955,14 @@ class ApprovalWorkflow:
 
         t0 = time.monotonic()
         response = await self.prompt_with_always_async(
-            "Proceed?", tool_name, safety_level="cost", tool_name=tool_name
+            "Proceed?", tool_name, safety_level="cost", tool_name=tool_name, record=record
         )
         latency_ms = (time.monotonic() - t0) * 1000
         self.track_decision(tool_name, response)
         if response in ("a", "y"):
             if response == "a":
                 self._always_approved_categories.add("cost")
+            self.record_transition(record, "granted", f"user:{response}")
             await self._fire_hook_async(
                 HookEvent.TOOL_APPROVAL_GRANTED,
                 {
@@ -798,6 +974,7 @@ class ApprovalWorkflow:
                 },
             )
             return True
+        self.record_transition(record, "denied", f"user:{response}")
         await self._fire_hook_async(
             HookEvent.TOOL_APPROVAL_DENIED,
             {
@@ -809,7 +986,9 @@ class ApprovalWorkflow:
         )
         return False
 
-    def request_bash_approval(self, command: str, reason: str) -> bool:
+    def request_bash_approval(
+        self, command: str, reason: str, record: ApprovalRecord | None = None
+    ) -> bool:
         """Prompt user for bash command approval with A=Always option."""
         if self._approval_callback is None:
             from core.cli import _restore_terminal
@@ -832,6 +1011,7 @@ class ApprovalWorkflow:
         )
 
         if self.check_auto_deny("run_bash"):
+            self.record_transition(record, "denied", "auto_denied:3-strikes")
             self._fire_hook(
                 HookEvent.TOOL_APPROVAL_DENIED,
                 {
@@ -845,13 +1025,14 @@ class ApprovalWorkflow:
 
         t0 = time.monotonic()
         response = self.prompt_with_always(
-            "Allow?", command, safety_level="dangerous", tool_name="run_bash"
+            "Allow?", command, safety_level="dangerous", tool_name="run_bash", record=record
         )
         latency_ms = (time.monotonic() - t0) * 1000
         self.track_decision("run_bash", response)
         if response in ("a", "y"):
             if response == "a":
                 self._always_approved_categories.add("bash")
+            self.record_transition(record, "granted", f"user:{response}")
             self._fire_hook(
                 HookEvent.TOOL_APPROVAL_GRANTED,
                 {
@@ -863,6 +1044,7 @@ class ApprovalWorkflow:
                 },
             )
             return True
+        self.record_transition(record, "denied", f"user:{response}")
         self._fire_hook(
             HookEvent.TOOL_APPROVAL_DENIED,
             {
@@ -874,7 +1056,9 @@ class ApprovalWorkflow:
         )
         return False
 
-    async def request_bash_approval_async(self, command: str, reason: str) -> bool:
+    async def request_bash_approval_async(
+        self, command: str, reason: str, record: ApprovalRecord | None = None
+    ) -> bool:
         """Async bash command approval with A=Always option."""
 
         async def gate() -> bool:
@@ -899,6 +1083,7 @@ class ApprovalWorkflow:
             )
 
             if self.check_auto_deny("run_bash"):
+                self.record_transition(record, "denied", "auto_denied:3-strikes")
                 await self._fire_hook_async(
                     HookEvent.TOOL_APPROVAL_DENIED,
                     {
@@ -912,13 +1097,14 @@ class ApprovalWorkflow:
 
             t0 = time.monotonic()
             response = await self.prompt_with_always_async(
-                "Allow?", command, safety_level="dangerous", tool_name="run_bash"
+                "Allow?", command, safety_level="dangerous", tool_name="run_bash", record=record
             )
             latency_ms = (time.monotonic() - t0) * 1000
             self.track_decision("run_bash", response)
             if response in ("a", "y"):
                 if response == "a":
                     self._always_approved_categories.add("bash")
+                self.record_transition(record, "granted", f"user:{response}")
                 await self._fire_hook_async(
                     HookEvent.TOOL_APPROVAL_GRANTED,
                     {
@@ -930,6 +1116,7 @@ class ApprovalWorkflow:
                     },
                 )
                 return True
+            self.record_transition(record, "denied", f"user:{response}")
             await self._fire_hook_async(
                 HookEvent.TOOL_APPROVAL_DENIED,
                 {
@@ -983,7 +1170,7 @@ class ApprovalWorkflow:
             return True
         return is_bash_command_read_only(command)
 
-    async def confirm_computer_async(self) -> bool:
+    async def confirm_computer_async(self, record: ApprovalRecord | None = None) -> bool:
         """Computer-use gate — approve ONCE per session, then remember.
 
         ``computer`` is DANGEROUS but continuous-control (screenshot → click →
@@ -994,16 +1181,20 @@ class ApprovalWorkflow:
         approval (Y / A) is remembered for the rest of the session.
         """
         if self._skip_permissions() or self._hitl_level <= 1 or self._computer_approved:
+            self.record_transition(record, "granted", "auto:computer-session")
             return True
         response = await self.prompt_with_always_async(
             "Allow computer control (screen + mouse + keyboard)?",
             "computer",
             safety_level="dangerous",
             tool_name="computer",
+            record=record,
         )
         if response in ("a", "y"):
             self._computer_approved = True
+            self.record_transition(record, "granted", f"user:{response}")
             return True
+        self.record_transition(record, "denied", f"user:{response}")
         return False
 
     # -----------------------------------------------------------------
@@ -1011,15 +1202,29 @@ class ApprovalWorkflow:
     # -----------------------------------------------------------------
 
     async def batch_cost_approval(self, blocks: list[Any]) -> bool:
-        """Show a single cost confirmation prompt for all EXPENSIVE tools."""
+        """Show a single cost confirmation prompt for all EXPENSIVE tools.
+
+        Threads ONE ApprovalRecord for the whole batch (the per-tool records
+        cover propagation/execution; this one covers the shared decision).
+        """
+        record = ApprovalRecord(
+            tool_name=",".join(str(block.name) for block in blocks) or "batch",
+            category="expensive",
+        )
+        self.record_transition(record, "requested", f"batch:{len(blocks)}")
         # --dangerously-skip-permissions / fully-open HITL / always-approved
         # cost → no batch prompt (parity with the per-tool expensive gate).
-        if (
-            self._skip_permissions()
-            or self._hitl_level == 0
-            or self._auto_approve
-            or "cost" in self._always_approved_categories
-        ):
+        if self._skip_permissions():
+            self.record_transition(record, "granted", "auto:skip-permissions")
+            return True
+        if self._hitl_level == 0:
+            self.record_transition(record, "granted", "auto:hitl-open")
+            return True
+        if self._auto_approve:
+            self.record_transition(record, "granted", "auto:auto-approve")
+            return True
+        if "cost" in self._always_approved_categories:
+            self.record_transition(record, "granted", "auto:always-category:cost")
             return True
         items: list[tuple[str, dict[str, Any], float]] = []
         for block in blocks:
@@ -1045,11 +1250,21 @@ class ApprovalWorkflow:
                 console.print(f"    [dim]--[/dim] {name}({args_preview}) -- ~${cost:.2f}")
             console.print(f"  [dim]Total estimated cost:[/dim] ~${total_cost:.2f}")
             console.print()
+            self.record_transition(record, "displayed", "console")
             try:
-                response = console.input("  [muted]y allow · n deny[/muted] ").strip().lower()
+                raw = console.input("  [muted]y allow · n deny[/muted] ")
             except (KeyboardInterrupt, EOFError):
                 console.print()
+                self.record_transition(record, "user_selected", "<interrupt>")
+                self.record_transition(record, "parsed", VERDICT_DENY)
                 return False
-            return response in ("", "y", "yes")
+            self.record_transition(record, "user_selected", raw.strip()[:20])
+            # Batch grammar is y/n only — "a" is NOT an always-allow here
+            # (the options line offers none), so it parses to deny.
+            allowed = raw.strip().lower() in ("", "y", "yes")
+            self.record_transition(record, "parsed", "allow" if allowed else "deny")
+            return allowed
 
-        return await asyncio.to_thread(_prompt)
+        approved = await asyncio.to_thread(_prompt)
+        self.record_transition(record, "granted" if approved else "denied", "batch-decision")
+        return approved

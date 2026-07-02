@@ -10,6 +10,7 @@ from collections.abc import Awaitable, Callable
 from typing import TYPE_CHECKING, Any, cast
 
 if TYPE_CHECKING:
+    from core.agent.approval_fsm import ApprovalRecord
     from core.agent.sub_agent import SubAgentManager
     from core.hooks import HookSystem
     from core.tools.base import ToolContext
@@ -98,7 +99,10 @@ class ToolExecutor:
         mcp_manager: Any | None = None,
         hitl_level: int = 2,
         hooks: HookSystem | None = None,
-        approval_callback: Callable[[str, str, str], str] | None = None,
+        # (tool_name, detail, safety_level[, approval_id]) -> decision char.
+        # 4-arg callbacks receive the ApprovalRecord id for reply matching;
+        # legacy 3-arg callbacks are detected and called without it.
+        approval_callback: Callable[..., str] | None = None,
         denied_tools: frozenset[str] = frozenset(),
     ) -> None:
         self._handlers: dict[str, ToolHandler] = action_handlers or {}
@@ -135,6 +139,16 @@ class ToolExecutor:
             self._hooks.trigger(event, data)
         except Exception:
             log.debug("Hook fire failed for %s", event, exc_info=True)
+
+    def attach_evidence_ledger(self, ledger: Any | None) -> None:
+        """Attach the session EvidenceLedger for approval-FSM terminal rows.
+
+        Called by AgenticLoop after it builds the per-session ledger (the
+        loop owns the session identity; the executor is constructed before
+        the loop exists). Best-effort — approval flows skip the ledger rail
+        silently when none is attached.
+        """
+        self._approval.attach_evidence_ledger(ledger)
 
     def _track_decision(self, tool_name: str, decision: str) -> None:
         """Delegates to ApprovalWorkflow."""
@@ -187,10 +201,45 @@ class ToolExecutor:
         # could leave a registered handler unreachable. (The bug this fixes:
         # ``computer`` ∈ DANGEROUS_TOOLS was routed to a bash-only execution
         # method and never reached its registered ``handle_computer``.)
-        gate_result, approved_via_hitl = await self._gate_async(tool_name, tool_input)
+        #
+        # PR-HITL-APPROVAL-FSM (2026-07-02) — gated tools thread ONE
+        # ApprovalRecord through gate → verdict → dispatch so a lost or
+        # misrouted decision (the A-but-denied incident) is diagnosable from
+        # the transition trail instead of a bare denial string.
+        record = self._approval.begin_record(tool_name)
+        gate_result, approved_via_hitl = await self._gate_async(tool_name, tool_input, record)
         if gate_result is not None:
+            self._approval.record_transition(record, "skipped", "gate-rejected")
             return gate_result
+        if record is not None and record.state == "requested":
+            # No gate branch consumed the record (e.g. an EXPENSIVE tool while
+            # batch approval temporarily set auto_approve) — close the chain
+            # explicitly so the dispatch transitions stay legal.
+            self._approval.record_transition(record, "granted", "auto:ungated")
+        self._approval.record_transition(record, "propagated", "dispatch")
+        result = await self._dispatch_async(
+            tool_name, tool_input, context=context, approved_via_hitl=approved_via_hitl
+        )
+        if record is not None:
+            has_error = isinstance(result, dict) and bool(result.get("error"))
+            self._approval.record_transition(record, "executed", "error" if has_error else "ok")
+        return result
 
+    async def _dispatch_async(
+        self,
+        tool_name: str,
+        tool_input: dict[str, Any],
+        *,
+        context: ToolContext | None = None,
+        approved_via_hitl: bool = False,
+    ) -> dict[str, Any]:
+        """Uniform post-gate dispatch — 'how does it run?', gate-free.
+
+        Extracted from :meth:`aexecute` so the approval FSM records
+        ``propagated`` exactly once before dispatch and ``executed`` exactly
+        once after, regardless of which branch (delegate / bash / handler /
+        MCP / unknown) serves the call.
+        """
         if tool_name == "delegate_task":
             # PR-Async-Phase-C step 3 (2026-05-22) — switched to native
             # async delegate dispatch. The old asyncio.to_thread bridge
@@ -272,7 +321,10 @@ class ToolExecutor:
             return self._classify_execution_exception(tool_name, exc)
 
     async def _gate_async(
-        self, tool_name: str, tool_input: dict[str, Any]
+        self,
+        tool_name: str,
+        tool_input: dict[str, Any],
+        record: ApprovalRecord | None = None,
     ) -> tuple[dict[str, Any] | None, bool]:
         """Single safety gate for EVERY tool — classify by safety level + approve.
 
@@ -283,11 +335,14 @@ class ToolExecutor:
         that decides "may this run?", separate from "how does it run?".
         """
         if tool_name in DANGEROUS_TOOLS:
-            return await self._gate_dangerous_async(tool_name, tool_input)
-        return await self._approval.apply_safety_gates_async(tool_name, tool_input)
+            return await self._gate_dangerous_async(tool_name, tool_input, record)
+        return await self._approval.apply_safety_gates_async(tool_name, tool_input, record=record)
 
     async def _gate_dangerous_async(
-        self, tool_name: str, tool_input: dict[str, Any]
+        self,
+        tool_name: str,
+        tool_input: dict[str, Any],
+        record: ApprovalRecord | None = None,
     ) -> tuple[dict[str, Any] | None, bool]:
         """Approval gate for DANGEROUS tools — approval ONLY (execution happens
         in the uniform dispatch so each reaches its handler).
@@ -303,22 +358,26 @@ class ToolExecutor:
             if command:
                 blocked = self._bash.validate(command)
                 if blocked:
+                    self._approval.record_transition(record, "denied", "validator:blocked")
                     return self._bash.to_tool_result(blocked), False
-                if not self._approval.is_bash_auto_approved(command):
+                if self._approval.is_bash_auto_approved(command):
+                    self._approval.record_transition(record, "granted", "auto:bash")
+                else:
                     approved = await self._request_approval_async(
-                        command, tool_input.get("reason", "")
+                        command, tool_input.get("reason", ""), record
                     )
                     if not approved:
                         return {"error": "User denied execution", "denied": True}, False
             return None, True
         if tool_name in {"computer", "computer_use"}:
-            if not await self._approval.confirm_computer_async():
+            if not await self._approval.confirm_computer_async(record):
                 return {"error": "User denied computer-use", "denied": True}, False
             return None, True
         # Fail CLOSED: a DANGEROUS tool with no explicit gate branch must NOT
         # dispatch unapproved (a registered handler would otherwise run without
         # any approval). Adding a DANGEROUS tool requires adding its gate branch
         # here — pinned by ``test_every_dangerous_tool_is_gated``.
+        self._approval.record_transition(record, "denied", "fail-closed:no-gate-branch")
         return {
             "error": (
                 f"DANGEROUS tool '{tool_name}' has no approval gate; refusing to run it "
@@ -508,8 +567,10 @@ class ToolExecutor:
             "summary": f"{succeeded}/{len(results)} tasks completed. [{', '.join(summary_parts)}]",
         }
 
-    async def _request_approval_async(self, command: str, reason: str) -> bool:
-        return await self._approval.request_bash_approval_async(command, reason)
+    async def _request_approval_async(
+        self, command: str, reason: str, record: ApprovalRecord | None = None
+    ) -> bool:
+        return await self._approval.request_bash_approval_async(command, reason, record=record)
 
     async def _run_bash_exec_async(
         self,
@@ -540,10 +601,14 @@ class ToolExecutor:
         """Async MCP tool execution with async server approval."""
         log.info("MCP tool: %s → %s (args=%s)", tool_name, server, list(tool_input.keys()))
 
+        mcp_record: ApprovalRecord | None = None
         if not self._auto_approve and not self._approval.is_mcp_approved(server):
-            if not await self._approval.confirm_mcp_async(server, tool_name):
+            mcp_record = self._approval.begin_mcp_record(server, tool_name)
+            if not await self._approval.confirm_mcp_async(server, tool_name, record=mcp_record):
+                self._approval.record_transition(mcp_record, "skipped", "mcp-denial")
                 return {"error": "User denied MCP tool execution", "denied": True}
             self._approval.mark_mcp_approved(server)
+            self._approval.record_transition(mcp_record, "propagated", f"mcp:{server}")
 
         assert self._mcp_manager is not None
         with _tool_spinner(f"Calling {server}/{tool_name}..."):
@@ -567,6 +632,10 @@ class ToolExecutor:
         for key in ("stdout", "stderr", "output", "content", "text", "result"):
             if key in result and isinstance(result[key], str):
                 result[key] = redact_secrets(result[key])
+        if mcp_record is not None:
+            self._approval.record_transition(
+                mcp_record, "executed", "error" if result.get("error") else "ok"
+            )
         return result
 
     @property
