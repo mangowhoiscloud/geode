@@ -271,7 +271,17 @@ class IPCClient:
                 decision = self._handle_approval_request(response)
                 if on_approval_end is not None:
                     on_approval_end()
-                self._send({"type": "approval_response", "decision": decision})
+                # Echo the approval_id so the serve side can match this reply
+                # to the exact prompt it answers — a stale reply from a
+                # previous (timed-out) prompt is discarded instead of
+                # misrouted (PR-HITL-APPROVAL-FSM).
+                self._send(
+                    {
+                        "type": "approval_response",
+                        "decision": decision,
+                        "approval_id": str(response.get("approval_id", "")),
+                    }
+                )
                 continue
             # Structured events — all non-stream, non-terminal types
             if rtype in (

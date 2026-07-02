@@ -94,7 +94,10 @@ class _AsyncClientEndpoint:
         self._writer = writer
         self._write_lock = asyncio.Lock()
         self._pending_sends: set[asyncio.Task[None]] = set()
-        self._approval_responses: queue.Queue[str] = queue.Queue()
+        # (decision, approval_id) pairs — the id lets request_approval discard
+        # a stale reply left over from a previous (timed-out) prompt instead of
+        # misrouting it into the wrong gate (PR-HITL-APPROVAL-FSM).
+        self._approval_responses: queue.Queue[tuple[str, str]] = queue.Queue()
         self._is_tty = True
         self._width = 120
 
@@ -136,8 +139,8 @@ class _AsyncClientEndpoint:
         except Exception:
             log.debug("Async IPC send failed", exc_info=True)
 
-    def feed_approval_response(self, decision: str) -> None:
-        self._approval_responses.put(decision)
+    def feed_approval_response(self, decision: str, approval_id: str = "") -> None:
+        self._approval_responses.put((decision, approval_id))
 
     def set_capability(self, *, is_tty: bool, width: int) -> None:
         self._is_tty = is_tty
@@ -151,6 +154,9 @@ class _AsyncClientEndpoint:
         tool_name: str,
         detail: str,
         safety_level: str = "write",
+        approval_id: str = "",
+        *,
+        timeout_s: float = 120.0,
     ) -> str:
         import time as _time
 
@@ -160,27 +166,53 @@ class _AsyncClientEndpoint:
                 "tool_name": tool_name,
                 "detail": detail,
                 "safety_level": safety_level,
+                "approval_id": approval_id,
             },
             timeout_s=10.0,
         )
-        log.debug("HITL: sent approval_request tool=%s level=%s", tool_name, safety_level)
+        log.debug(
+            "HITL: sent approval_request tool=%s level=%s id=%s",
+            tool_name,
+            safety_level,
+            approval_id,
+        )
         _t0 = _time.monotonic()
-        try:
-            decision = self._approval_responses.get(timeout=120.0)
+        deadline = _t0 + timeout_s
+        while True:
+            remaining = deadline - _time.monotonic()
+            if remaining <= 0:
+                break
+            try:
+                decision, reply_id = self._approval_responses.get(timeout=remaining)
+            except queue.Empty:
+                break
+            # A reply for a DIFFERENT prompt (stale leftover from a timed-out
+            # request) must not be misrouted into this gate — discard and keep
+            # waiting for the matching id. Legacy clients that don't echo the
+            # id (empty reply_id) are accepted as-is.
+            if approval_id and reply_id and reply_id != approval_id:
+                log.warning(
+                    "HITL: discarding stale approval reply id=%s (want id=%s tool=%s)",
+                    reply_id,
+                    approval_id,
+                    tool_name,
+                )
+                continue
             log.info(
-                "HITL: approval_response tool=%s decision=%s elapsed=%.1fs",
+                "HITL: approval_response tool=%s decision=%s id=%s elapsed=%.1fs",
                 tool_name,
                 decision,
+                reply_id,
                 _time.monotonic() - _t0,
             )
             return decision
-        except queue.Empty:
-            log.warning(
-                "HITL: approval TIMEOUT tool=%s elapsed=%.1fs",
-                tool_name,
-                _time.monotonic() - _t0,
-            )
-            return "n"
+        log.warning(
+            "HITL: approval TIMEOUT tool=%s id=%s elapsed=%.1fs",
+            tool_name,
+            approval_id,
+            _time.monotonic() - _t0,
+        )
+        return "n"
 
     def close_threadsafe(self) -> None:
         async def _close() -> None:
@@ -234,13 +266,14 @@ class _StreamingWriter:
         tool_name: str,
         detail: str,
         safety_level: str = "write",
+        approval_id: str = "",
     ) -> str:
         """Send approval request to thin CLI and wait for response.
 
         Returns 'y', 'n', or 'a' (always).
         """
         if isinstance(self._client, _AsyncClientEndpoint):
-            return self._client.request_approval(tool_name, detail, safety_level)
+            return self._client.request_approval(tool_name, detail, safety_level, approval_id)
 
         self._send_json(
             {
@@ -248,6 +281,7 @@ class _StreamingWriter:
                 "tool_name": tool_name,
                 "detail": detail,
                 "safety_level": safety_level,
+                "approval_id": approval_id,
             }
         )
         log.debug("HITL: sent approval_request tool=%s level=%s", tool_name, safety_level)
@@ -272,6 +306,14 @@ class _StreamingWriter:
                     line, buf = buf.split(b"\n", 1)
                     msg = json.loads(line.decode("utf-8"))
                     if msg.get("type") == "approval_response":
+                        reply_id = str(msg.get("approval_id", ""))
+                        if approval_id and reply_id and reply_id != approval_id:
+                            log.warning(
+                                "HITL: discarding stale approval reply id=%s (want id=%s)",
+                                reply_id,
+                                approval_id,
+                            )
+                            continue
                         decision = str(msg.get("decision", "n"))
                         log.info(
                             "HITL: approval_response tool=%s decision=%s elapsed=%.1fs",
@@ -519,8 +561,10 @@ class CLIPoller:
         conversation = ConversationContext()
         session_id = f"cli-{os.urandom(4).hex()}"
 
-        def _ipc_approval(tool_name: str, detail: str, safety_level: str) -> str:
-            return endpoint.request_approval(tool_name, detail, safety_level)
+        def _ipc_approval(
+            tool_name: str, detail: str, safety_level: str, approval_id: str = ""
+        ) -> str:
+            return endpoint.request_approval(tool_name, detail, safety_level, approval_id)
 
         _executor, agent_loop = self._services.create_session(
             SessionMode.IPC,
@@ -531,37 +575,100 @@ class CLIPoller:
 
         await endpoint.send_json_async({"type": "session", "session_id": session_id})
 
-        while not self._stop_event.is_set():
+        # Dedicated reader pump — PR-HITL-APPROVAL-FSM (2026-07-02).
+        #
+        # ROOT CAUSE of the A-but-denied incident: the old loop awaited
+        # ``_process_message_async`` INLINE, so while a prompt ran (the
+        # AgenticLoop awaiting an approval), nothing called
+        # ``reader.readline()`` — the thin client's approval_response could
+        # never reach ``feed_approval_response``. Every in-prompt approval
+        # therefore hit the 120s queue timeout and fail-closed to "n"
+        # ("User denied write operation") even when the user answered ``A``,
+        # and the late reply then poisoned the NEXT prompt's approval queue.
+        # The pump keeps reading during prompt processing and short-circuits
+        # approval replies to the endpoint the moment they arrive; everything
+        # else is handled strictly in order via the message queue.
+        # Bounded: a pipelining/buggy local client must not grow daemon memory
+        # while a prompt stalls processing. put_nowait + drop keeps the pump
+        # reading (an awaited put on a full queue would re-starve approval
+        # replies — the exact defect this pump exists to fix).
+        msg_queue: asyncio.Queue[dict[str, Any] | None] = asyncio.Queue(maxsize=256)
+
+        def _enqueue(msg: dict[str, Any] | None) -> None:
             try:
-                line = await reader.readline()
-                if not line:
+                msg_queue.put_nowait(msg)
+            except asyncio.QueueFull:
+                if msg is None:
+                    # Sentinel must land: drop one backlogged message for it.
+                    with contextlib.suppress(asyncio.QueueEmpty):
+                        msg_queue.get_nowait()
+                    with contextlib.suppress(asyncio.QueueFull):
+                        msg_queue.put_nowait(msg)
+                else:
+                    log.error(
+                        "IPC message queue full (256) — dropping %r from client",
+                        msg.get("type", "?"),
+                    )
+
+        async def _pump_reader() -> None:
+            try:
+                while True:
+                    line = await reader.readline()
+                    if not line:
+                        return
+                    try:
+                        msg = json.loads(line.decode("utf-8"))
+                    except (json.JSONDecodeError, UnicodeDecodeError):
+                        _enqueue({"type": "_invalid_json"})
+                        continue
+                    if msg.get("type") == "approval_response":
+                        endpoint.feed_approval_response(
+                            str(msg.get("decision", "n")),
+                            str(msg.get("approval_id", "")),
+                        )
+                        continue
+                    _enqueue(msg)
+            except (ConnectionResetError, BrokenPipeError, OSError):
+                return
+            except Exception:
+                # Any unexpected pump death must still wake the consumer —
+                # a silent exit would block msg_queue.get() forever.
+                log.warning("IPC reader pump died unexpectedly", exc_info=True)
+            finally:
+                _enqueue(None)
+
+        pump_task = asyncio.get_running_loop().create_task(_pump_reader())
+        try:
+            while not self._stop_event.is_set():
+                msg = await msg_queue.get()
+                if msg is None:
                     log.info("CLI client disconnected")
                     break
-                msg = json.loads(line.decode("utf-8"))
-
-                if msg.get("type") == "approval_response":
-                    endpoint.feed_approval_response(str(msg.get("decision", "n")))
-                    continue
-
-                msg["_client"] = endpoint
-                response = await self._process_message_async(
-                    msg,
-                    agent_loop,
-                    conversation,
-                    session_id,
-                )
-                if response is None:
-                    await endpoint.send_json_async({"type": "exit_ack"})
-                    return
-                await endpoint.send_json_async(response)
-            except (ConnectionResetError, BrokenPipeError):
-                log.info("CLI client connection lost")
-                break
-            except json.JSONDecodeError:
-                await endpoint.send_json_async({"type": "error", "message": "Invalid JSON"})
-            except Exception:
-                log.warning("CLI handler error", exc_info=True)
-                await endpoint.send_json_async({"type": "error", "message": "Internal error"})
+                try:
+                    if msg.get("type") == "_invalid_json":
+                        await endpoint.send_json_async({"type": "error", "message": "Invalid JSON"})
+                        continue
+                    msg["_client"] = endpoint
+                    response = await self._process_message_async(
+                        msg,
+                        agent_loop,
+                        conversation,
+                        session_id,
+                    )
+                    if response is None:
+                        await endpoint.send_json_async({"type": "exit_ack"})
+                        return
+                    await endpoint.send_json_async(response)
+                except (ConnectionResetError, BrokenPipeError):
+                    log.info("CLI client connection lost")
+                    break
+                except Exception:
+                    log.warning("CLI handler error", exc_info=True)
+                    await endpoint.send_json_async({"type": "error", "message": "Internal error"})
+        finally:
+            pump_task.cancel()
+            with contextlib.suppress(asyncio.CancelledError):
+                await pump_task
 
     async def _process_message_async(
         self,
@@ -701,8 +808,10 @@ class CLIPoller:
         # Build IPC approval relay: WRITE/DANGEROUS tools prompt thin CLI
         _writer = _StreamingWriter(client)
 
-        def _ipc_approval(tool_name: str, detail: str, safety_level: str) -> str:
-            return _writer.request_approval(tool_name, detail, safety_level)
+        def _ipc_approval(
+            tool_name: str, detail: str, safety_level: str, approval_id: str = ""
+        ) -> str:
+            return _writer.request_approval(tool_name, detail, safety_level, approval_id)
 
         # Create an IPC session backed by serve's SharedServices
         _executor, loop = self._services.create_session(
