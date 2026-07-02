@@ -23,6 +23,8 @@ import threading
 import time
 import unicodedata
 
+from core.ui import spinner_glyph
+
 _ANSI_ESCAPE = re.compile(r"\x1b\[[0-?]*[ -/]*[@-~]")
 
 
@@ -36,20 +38,6 @@ def _truncate_display(text: str, max_width: int) -> str:
         width += w
     return text
 
-
-# Braille spinner frames (same as TextSpinner)
-_FRAMES = [
-    "\u280b",
-    "\u2819",
-    "\u2839",
-    "\u2838",
-    "\u283c",
-    "\u2834",
-    "\u2826",
-    "\u2827",
-    "\u2807",
-    "\u280f",
-]
 
 _MAX_VISIBLE_TOOL_LINES = 8
 _VISIBLE_TOOL_HEAD = 3
@@ -171,8 +159,7 @@ class ToolCallTracker:
         Internal state (_line_count) is always updated so tests can verify
         tracker behaviour.  ANSI stdout writes are suppressed in non-TTY.
         """
-        frame = _FRAMES[int(time.monotonic() * 12) % len(_FRAMES)]
-        lines = self._render_tool_lines(frame)
+        lines = self._render_tool_lines(time.monotonic())
 
         previous_lines = list(self._rendered_lines)
         width = self._terminal_width()
@@ -204,9 +191,9 @@ class ToolCallTracker:
 
         out.flush()
 
-    def _render_tool_lines(self, frame: str) -> list[str]:
+    def _render_tool_lines(self, now: float) -> list[str]:
         """Return the bounded terminal rows for the currently tracked tools."""
-        lines = [self._render_tool_line(t, frame) for t in self._tools]
+        lines = [self._render_tool_line(t, now) for t in self._tools]
         if len(lines) <= _MAX_VISIBLE_TOOL_LINES:
             return lines
 
@@ -220,8 +207,12 @@ class ToolCallTracker:
             *lines[-_VISIBLE_TOOL_TAIL:],
         ]
 
-    def _render_tool_line(self, tool: dict[str, str | bool | float], frame: str) -> str:
-        """Render one tool call row. Every row starts from column 0."""
+    def _render_tool_line(self, tool: dict[str, str | bool | float], now: float) -> str:
+        """Render one tool call row. Every row starts from column 0.
+
+        A running row carries the signature shimmer (``core.ui.spinner_glyph``,
+        the single spinner source) over ``◆ name``; completed rows keep static ✓/✗.
+        """
         name = tool["name"]
         if tool["done"]:
             dur = f" ({float(tool['duration']):.1f}s)"
@@ -233,7 +224,8 @@ class ToolCallTracker:
 
         args = str(tool["args"]).replace("\n", " ")
         args = _truncate_display(args, 50)
-        return f"\r\033[2K  {frame} \033[35m{name}\033[0m({args})"
+        body = spinner_glyph.shimmer(f"{spinner_glyph.GLYPH} {name}", now)
+        return f"\r\033[2K  {body}\033[2m({args})\033[0m"
 
     def _terminal_width(self) -> int:
         return max(20, shutil.get_terminal_size(fallback=(80, 24)).columns)

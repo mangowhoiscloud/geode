@@ -954,3 +954,66 @@ class TestThreadLocalConsoleIsolation:
 
         # In main thread (no thread-local set), proxy._current() returns default
         assert proxy._current() is _default_console
+
+
+class TestPlanSurfaceVisualLanguage:
+    """Plan checklist: completed = dim+strike, active = rose GEODE mark, pending = dim."""
+
+    def _renderer(self) -> Any:
+        import io
+
+        from core.ui.event_renderer import EventRenderer
+
+        r = EventRenderer()
+        r._out = io.StringIO()
+        return r
+
+    def test_full_plan_styles_by_status(self) -> None:
+        from core.ui import spinner_glyph
+
+        r = self._renderer()
+        lines = "".join(
+            r._render_full_progress_plan(
+                [
+                    {"step": "done step", "status": "completed"},
+                    {"step": "active step", "status": "in_progress"},
+                    {"step": "next step", "status": "pending"},
+                ],
+                "step 2/3",
+            )
+        )
+        assert "\033[2;9mdone step" in lines  # checked off: dim + strikethrough
+        assert f"{spinner_glyph.GLYPH}\033[0m \033[1mactive step" in lines  # rose mark + bold
+        assert "\033[2mnext step" in lines  # pending stays quiet
+        assert spinner_glyph.ROSE in lines
+
+    def test_compact_plan_marks_active_with_glyph(self) -> None:
+        from core.ui import spinner_glyph
+
+        r = self._renderer()
+        lines = "".join(
+            r._render_compact_progress_plan(
+                [
+                    {"step": "done", "status": "completed"},
+                    {"step": "current", "status": "in_progress"},
+                ],
+                "",
+            )
+        )
+        assert spinner_glyph.GLYPH in lines
+        assert "\033[1mcurrent" in lines
+
+
+def test_tool_tracker_running_row_uses_signature_shimmer() -> None:
+    """Running tool rows render via spinner_glyph (single spinner source)."""
+    from core.ui import spinner_glyph
+    from core.ui.tool_tracker import ToolCallTracker
+
+    tracker = ToolCallTracker()
+    line = tracker._render_tool_line(
+        {"name": "web_search", "args": "query=geode", "done": False, "error": "", "summary": ""},
+        0.0,
+    )
+    assert spinner_glyph.GLYPH in line
+    assert "query=geode" in line
+    assert spinner_glyph.shimmer(f"{spinner_glyph.GLYPH} web_search", 0.0) in line

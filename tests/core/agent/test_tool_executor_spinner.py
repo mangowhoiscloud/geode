@@ -27,43 +27,46 @@ def _run_executor(
 
 
 class TestToolSpinner:
-    """Test the _tool_spinner context manager itself."""
+    """Test the _tool_spinner context manager itself (signature shimmer TextSpinner)."""
 
+    @patch("core.ui.status.TextSpinner")
     @patch("core.agent.tool_executor.console")
-    def test_spinner_starts_and_stops(self, mock_console: MagicMock) -> None:
-        """Spinner calls status.start() on enter and status.stop() on exit."""
-        mock_status = MagicMock()
-        mock_console.status.return_value = mock_status
+    def test_spinner_starts_and_stops(
+        self, mock_console: MagicMock, mock_spinner_cls: MagicMock
+    ) -> None:
+        """Spinner calls start() on enter and stop() on exit."""
+        spinner = mock_spinner_cls.return_value
 
         with _tool_spinner("Testing..."):
-            mock_console.status.assert_called_once()
-            mock_status.start.assert_called_once()
-            mock_status.stop.assert_not_called()
+            mock_spinner_cls.assert_called_once()
+            spinner.start.assert_called_once()
+            spinner.stop.assert_not_called()
 
-        mock_status.stop.assert_called_once()
+        spinner.stop.assert_called_once()
 
+    @patch("core.ui.status.TextSpinner")
     @patch("core.agent.tool_executor.console")
-    def test_spinner_stops_on_exception(self, mock_console: MagicMock) -> None:
+    def test_spinner_stops_on_exception(
+        self, mock_console: MagicMock, mock_spinner_cls: MagicMock
+    ) -> None:
         """Spinner stops even if the wrapped block raises."""
-        mock_status = MagicMock()
-        mock_console.status.return_value = mock_status
+        spinner = mock_spinner_cls.return_value
 
         with pytest.raises(RuntimeError), _tool_spinner("Will fail"):
             raise RuntimeError("boom")
 
-        mock_status.stop.assert_called_once()
+        spinner.stop.assert_called_once()
 
+    @patch("core.ui.status.TextSpinner")
     @patch("core.agent.tool_executor.console")
-    def test_spinner_label_in_status(self, mock_console: MagicMock) -> None:
-        """Spinner label is passed to console.status()."""
-        mock_status = MagicMock()
-        mock_console.status.return_value = mock_status
-
+    def test_spinner_label_in_status(
+        self, mock_console: MagicMock, mock_spinner_cls: MagicMock
+    ) -> None:
+        """Spinner label is passed to the TextSpinner constructor."""
         with _tool_spinner("Calling server/tool..."):
             pass
 
-        call_args = mock_console.status.call_args
-        assert "Calling server/tool..." in call_args[0][0]
+        assert "Calling server/tool..." in mock_spinner_cls.call_args[0][0]
 
 
 # ---------------------------------------------------------------------------

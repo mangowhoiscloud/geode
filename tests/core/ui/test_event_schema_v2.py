@@ -263,11 +263,13 @@ class TestEventRendererV2:
         assert "convergence" in renderer._out.getvalue().lower()
 
     def test_goal_decomposition(self, renderer) -> None:
+        from core.ui import spinner_glyph
+
         renderer.on_event({"type": "goal_decomposition", "steps": ["a", "b"], "count": 2})
         out = renderer._out.getvalue()
         assert "Plan" in out
         assert "2 steps" in out
-        assert "●" in out
+        assert spinner_glyph.GLYPH in out  # active step carries the rose GEODE mark
         assert "a" in out
 
     def test_progress_plan_first_render_is_full_checklist(self, renderer) -> None:

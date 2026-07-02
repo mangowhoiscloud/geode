@@ -1222,8 +1222,8 @@ class EventRenderer:
         for item in items:
             status = str(item.get("status", "pending"))
             step = str(item.get("step", ""))
-            symbol, style = self._progress_plan_symbol(status)
-            lines.append(f"    {style}{symbol}\033[0m {step}\n")
+            symbol, style, text_style = self._progress_plan_symbol(status)
+            lines.append(f"    {style}{symbol}\033[0m {text_style}{step}\033[0m\n")
         lines.append("\n")
         return lines
 
@@ -1252,16 +1252,22 @@ class EventRenderer:
         suffix = f" · {explanation}" if explanation else ""
         lines = [f"\n  \033[2m{message}{suffix} · {completed}/{total} complete\033[0m\n"]
         if active:
-            lines.append(f"    \033[1;33m●\033[0m {active}\n")
+            lines.append(
+                f"    {spinner_glyph.ROSE}{spinner_glyph.GLYPH}\033[0m \033[1m{active}\033[0m\n"
+            )
         return lines
 
     @staticmethod
-    def _progress_plan_symbol(status: str) -> tuple[str, str]:
+    def _progress_plan_symbol(status: str) -> tuple[str, str, str]:
+        """(symbol, symbol_style, text_style) — the Claude Code todo visual language:
+        completed = checked off (dim + strikethrough), active = the rose GEODE mark
+        in bold, pending = quiet. SGR 9 (strike) degrades to plain dim where unsupported.
+        """
         if status == "completed":
-            return "✓", "\033[32m"
+            return "✓", "\033[32m", "\033[2;9m"
         if status == "in_progress":
-            return "●", "\033[1;33m"
-        return "○", "\033[2m"
+            return spinner_glyph.GLYPH, spinner_glyph.ROSE, "\033[1m"
+        return "○", "\033[2m", "\033[2m"
 
     def _suppress_all_spinners(self) -> None:
         """Stop thinking + tool spinners, clear line for new content."""
