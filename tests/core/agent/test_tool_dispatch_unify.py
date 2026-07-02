@@ -107,7 +107,7 @@ class TestUnhandledDangerousFailsClosed:
         ex = ToolExecutor(action_handlers={"fake_danger": fake_handler}, hitl_level=0)
         with patch(
             "core.agent.tool_executor.executor.DANGEROUS_TOOLS",
-            frozenset({"run_bash", "computer", "fake_danger"}),
+            frozenset({"run_bash", "computer", "computer_use", "fake_danger"}),
         ):
             result = _run(ex.aexecute("fake_danger", {}))
         assert result.get("denied") is True
@@ -118,7 +118,7 @@ class TestUnhandledDangerousFailsClosed:
         """Forces a new DANGEROUS tool to get an explicit gate branch."""
         from core.agent.safety import DANGEROUS_TOOLS
 
-        assert set(DANGEROUS_TOOLS) <= {"run_bash", "computer"}, (
+        assert set(DANGEROUS_TOOLS) <= {"run_bash", "computer", "computer_use"}, (
             "A new DANGEROUS tool needs an explicit branch in "
             "ToolExecutor._gate_dangerous_async (fail-closed default otherwise)."
         )

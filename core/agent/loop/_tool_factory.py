@@ -37,10 +37,39 @@ if TYPE_CHECKING:
 
 
 # Load base tool definitions from centralized JSON (SOT: core/tools/base.py)
-_BASE_TOOLS: list[dict[str, Any]] = load_all_tool_definitions()
+_DECLARATIVE_TOOLS: list[dict[str, Any]] = load_all_tool_definitions()
+
+
+def _computer_use_emulation_visible(*, provider: str = "", source: str = "") -> bool:
+    """Return whether the generic ``computer_use`` function tool should be shown.
+
+    Native computer-use providers inject their hosted tool separately
+    (Anthropic ``computer_2025*`` and OpenAI Platform ``{type:"computer"}``).
+    The generic function-call tool exists for the Codex/ChatGPT subscription
+    backend, which rejects the native OpenAI computer tool but still supports
+    normal function calls.
+    """
+    if provider not in {"openai", "openai-codex"} or source != "subscription":
+        return False
+    try:
+        from core.llm.providers.anthropic import is_computer_use_enabled
+
+        return is_computer_use_enabled()
+    except Exception:
+        return False
+
+
+def _surface_tools(*, provider: str = "", source: str = "") -> list[dict[str, Any]]:
+    include_emulated = _computer_use_emulation_visible(provider=provider, source=source)
+    return [
+        tool
+        for tool in _DECLARATIVE_TOOLS
+        if include_emulated or tool.get("name") != "computer_use"
+    ]
+
 
 # Backward-compatible alias
-AGENTIC_TOOLS: list[dict[str, Any]] = _BASE_TOOLS
+AGENTIC_TOOLS: list[dict[str, Any]] = _surface_tools()
 
 
 # ---------------------------------------------------------------------------
@@ -58,6 +87,8 @@ def get_agentic_tools(
     *,
     mcp_tools: list[dict[str, Any]] | None = None,
     force_include: set[str] | None = None,
+    provider: str = "",
+    source: str = "",
 ) -> list[dict[str, Any]]:
     """Return the merged tool definitions for the agentic loop.
 
@@ -89,7 +120,7 @@ def get_agentic_tools(
             guard still protects every other toolkit-granted sub-agent.)
             Pinned by ``tests/core/agent/test_tool_policy_force_include_toolkit.py``.
     """
-    tools = list(_BASE_TOOLS)
+    tools = _surface_tools(provider=provider, source=source)
     existing_names = {t["name"] for t in tools}
     if registry:
         for tool_def in registry.to_anthropic_tools():

@@ -48,6 +48,26 @@ functional change.
 ## [Unreleased]
 
 ### Added
+- **Subscription-backend computer-use emulation.** GEODE now exposes a guarded
+  `computer_use` function tool for OpenAI/Codex subscription sessions where the
+  native OpenAI `{"type":"computer"}` tool is rejected. The emulated path uses
+  the existing host/sandbox harness, strips raw screenshot base64 from normal
+  function results, supports API-based GLM visual grounding via `locate`, and
+  follows the same HITL/headless safety gates as native `computer`.
+
+- **Computer-use trajectory observations.** The `computer` tool now emits
+  compact screen-observation metadata, redacted action trajectory events, and
+  deterministic trajectory metrics while preserving screenshot image delivery
+  for the model. GUI failures now carry bounded recovery hints, and computer-use
+  is excluded from generic adaptive recovery so desktop control never retries or
+  falls back through unrelated tools.
+
+- **Capability/evidence runtime.** GEODE now builds a provider-aware capability
+  graph for each agent loop, runs task preflight against the active model/source
+  and visible tools, records compact evidence ledger rows, and scores GUI
+  trajectories for observation coverage, failures, coordinate sanity, and final
+  screenshot availability.
+
 - **Bounded AgenticLoop activity surface.** Thin-client Plan UI now keeps
   tool/thought progress in a compact live activity block, grouping repeated tool
   calls and replacing completed batches instead of appending an unbounded log

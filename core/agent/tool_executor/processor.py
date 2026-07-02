@@ -132,6 +132,18 @@ class ToolCallProcessor:
             if isinstance(result, dict):
                 summary = str(result.get("summary", result.get("error", "")))
             self._transcript.record_tool_result(tool_name, status, summary)
+            if tool_name in {"computer", "computer_use"} and isinstance(result, dict):
+                payload = self._computer_gui_payload(tool_input, result, tool_use_id)
+                if payload:
+                    self._transcript.record_lifecycle_event(
+                        event="gui_step",
+                        component="computer_use",
+                        level="info" if status == "ok" else "warning",
+                        payload=payload,
+                        action="computer.step",
+                        entity_type="tool_call",
+                        entity_id=tool_use_id or "computer",
+                    )
 
         self._tool_log.append(
             {
@@ -140,6 +152,35 @@ class ToolCallProcessor:
                 "result": result,
                 "tool_use_id": tool_use_id,
             }
+        )
+
+    @staticmethod
+    def _computer_gui_payload(
+        tool_input: dict[str, Any],
+        result: dict[str, Any],
+        tool_use_id: str,
+    ) -> dict[str, Any]:
+        """Return transcript-safe GUI metadata; never include screenshot base64."""
+        payload: dict[str, Any] = {
+            "schema_version": 1,
+            "tool_use_id": tool_use_id,
+            "input_action": tool_input.get("action"),
+        }
+        actions = tool_input.get("actions")
+        if isinstance(actions, list):
+            payload["input_action_count"] = len(actions)
+        if isinstance(result.get("observation"), dict):
+            payload["observation"] = result["observation"]
+        if isinstance(result.get("trajectory"), dict):
+            payload["trajectory"] = result["trajectory"]
+        if isinstance(result.get("error_kind"), str):
+            payload["error_kind"] = result["error_kind"]
+        if isinstance(result.get("recovery"), dict):
+            payload["recovery"] = result["recovery"]
+        return (
+            payload
+            if any(k in payload for k in ("observation", "trajectory", "error_kind"))
+            else {}
         )
 
     @staticmethod

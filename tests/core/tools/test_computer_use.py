@@ -37,6 +37,61 @@ class TestHandlerActionForwarding:
         # action forwarded positionally; kwargs carry only the params.
         mock_exec.assert_awaited_once_with("click", x=10, y=20)
 
+    def test_emulated_computer_use_handler_strips_screenshot(self) -> None:
+        from core.cli.tool_handlers.single_tool import _build_computer_use_handler
+
+        with (
+            patch(
+                "core.llm.providers.anthropic.is_computer_use_enabled",
+                return_value=True,
+            ),
+            patch.object(
+                ComputerUseHarness,
+                "aexecute",
+                new=AsyncMock(
+                    return_value={
+                        "result": "success",
+                        "action": "screenshot",
+                        "screenshot": "BASE64DATA",
+                        "observation": {"screenshot_sha256": "abc"},
+                    }
+                ),
+            ),
+        ):
+            handler = _build_computer_use_handler()["computer_use"]
+            result = asyncio.run(handler(action="capture"))
+
+        assert result["result"] == "success"
+        assert result["screenshot_omitted"] is True
+        assert "screenshot" not in result
+        assert "BASE64DATA" not in str(result)
+
+    def test_emulated_computer_use_disabled_returns_permission_error(self) -> None:
+        from core.cli.tool_handlers.single_tool import _build_computer_use_handler
+
+        with patch(
+            "core.llm.providers.anthropic.is_computer_use_enabled",
+            return_value=False,
+        ):
+            handler = _build_computer_use_handler()["computer_use"]
+            result = asyncio.run(handler(action="capture"))
+
+        assert result["error_type"] == "permission"
+
+    def test_emulated_computer_use_blocks_dangerous_key_combo(self) -> None:
+        from core.tools.computer_use import execute_emulated_computer_use
+
+        result = asyncio.run(
+            execute_emulated_computer_use(
+                ComputerUseHarness(),
+                action="key",
+                keys="cmd+shift+q",
+            )
+        )
+
+        assert result["error_type"] == "permission"
+        assert "blocked key combo" in result["error"]
+
 
 class TestOpenAIBatchedActions:
     """OpenAI Responses GA ``computer_call`` delivers a BATCHED ``actions[]``
@@ -77,6 +132,9 @@ class TestOpenAIBatchedActions:
         # FINAL screenshot wins (the screen state the model sees next turn).
         assert result["screenshot"] == "shot-screenshot"
         assert "errors" not in result
+        assert result["trajectory"]["metrics"]["total_actions"] == 3
+        assert result["trajectory"]["metrics"]["final_has_screenshot"] is True
+        assert result["trajectory"]["events"][1]["params"]["text"] == "<redacted:length=2>"
 
     def test_keypress_list_joined_scroll_and_drag_remapped(self) -> None:
         from core.cli.tool_handlers.single_tool import _openai_action_to_harness
@@ -124,6 +182,7 @@ class TestOpenAIBatchedActions:
             )
 
         assert result["errors"] == [{"action": "double_click", "error": "no display"}]
+        assert result["trajectory"]["metrics"]["failed_actions"] == 1
 
     def test_final_action_error_still_yields_screenshot(self) -> None:
         """Regression (Codex HIGH): when the FINAL (or only) batched action errors
@@ -146,6 +205,7 @@ class TestOpenAIBatchedActions:
 
         assert result["errors"] == [{"action": "click", "error": "no display"}]
         assert result["screenshot"] == "recovered"
+        assert result["trajectory"]["metrics"]["failed_actions"] == 1
 
     def test_unmapped_action_reaches_harness_for_honest_error(self) -> None:
         """An unknown GA action type must reach the harness (which returns an
@@ -272,6 +332,29 @@ class TestComputerResultImageBlock:
         block = asyncio.run(proc._serialize_tool_result({"error": "no display"}, "tu4", "computer"))
         assert isinstance(block["content"], str)
 
+    def test_computer_gui_payload_is_transcript_safe(self) -> None:
+        from core.agent.tool_executor.processor import ToolCallProcessor
+
+        payload = ToolCallProcessor._computer_gui_payload(
+            {"actions": [{"type": "screenshot"}]},
+            {
+                "screenshot": "BASE64DATA",
+                "observation": {
+                    "observation_id": "screen:abc",
+                    "screenshot_sha256": "abc",
+                    "target_width": 1280,
+                    "target_height": 800,
+                },
+                "trajectory": {"metrics": {"total_actions": 1}},
+            },
+            "tu5",
+        )
+
+        assert payload["input_action_count"] == 1
+        assert payload["observation"]["screenshot_sha256"] == "abc"
+        assert "screenshot" not in payload
+        assert "BASE64DATA" not in str(payload)
+
 
 class TestCoordinateScaling:
     def test_scale_to_screen(self):
@@ -306,6 +389,8 @@ class TestExecuteDispatch:
         assert "error" in result
         assert "Unknown" in result["error"]
         assert "supported_actions" in result
+        assert result["error_kind"] == "unknown_action"
+        assert result["recovery"]["policy"] == "replan"
 
     def test_screenshot_action(self):
         h = ComputerUseHarness()
@@ -313,6 +398,9 @@ class TestExecuteDispatch:
             result = asyncio.run(h.aexecute("screenshot"))
         assert result["result"] == "success"
         assert result["screenshot"] == "base64data"
+        assert result["observation"]["screenshot_sha256"]
+        assert result["observation"]["target_width"] == 1280
+        assert result["observation"]["surface"] == "desktop"
 
     def test_click_action(self):
         h = ComputerUseHarness()

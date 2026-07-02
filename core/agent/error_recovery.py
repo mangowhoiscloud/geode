@@ -30,6 +30,8 @@ log = logging.getLogger(__name__)
 _EXCLUDED_TOOLS: frozenset[str] = frozenset(
     {
         "run_bash",
+        "computer",
+        "computer_use",
         "memory_save",
         "note_save",
         "set_api_key",

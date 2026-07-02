@@ -1,88 +1,68 @@
-# GEODE Development Workflow
+# GEODE Evidence-First Development Workflow
 
-> Public-facing guide for contributors. For detailed scaffold rules, see `CLAUDE.md`.
+> Canonical public summary for GEODE contributors. Claude Code should use the
+> project skill at `.claude/skills/geode-workflow/SKILL.md`, which applies this
+> workflow through progressive disclosure.
 
-## Branch Strategy (GitFlow)
+GEODE uses an evidence-first workflow for feature work, provider/model changes,
+GUI/computer-use work, PDF/document ingestion, observability changes, and large
+audits. The full procedure is split across the `geode-workflow` skill and its
+`references/` files so agents load only the detail needed for the task.
 
+## Core Loop
+
+1. **Scope**: confirm branch, dirty files, objective, and unrelated work.
+2. **GAP audit**: search before designing; classify existing, partial, absent,
+   or misfit.
+3. **Grounding**: verify external provider, SDK, model, OS, browser, package,
+   or current API behaviour with official docs/source.
+4. **Preflight**: capture task class, affected providers, required tools,
+   evidence class, and explicit non-goals.
+5. **Design contract**: define schema, log, event, state, trajectory, provider
+   split, and rollback behaviour before code.
+6. **Implement**: use existing GEODE registries, adapters, redaction helpers,
+   transcript helpers, and atomic-write utilities.
+7. **Observe**: make runtime behaviour inspectable with bounded structured
+   records.
+8. **Verify**: run targeted checks first, then broaden when risk justifies it.
+9. **Report/GitFlow**: state what changed, what ran, what failed or was
+   skipped, and only claim merge/push/cleanup after commands complete.
+
+## Progressive Disclosure Map
+
+| Need | Skill reference |
+|---|---|
+| Ordinary code-work checklist | `.claude/skills/geode-workflow/references/phase-checklist.md` |
+| Provider/model/API capability claims | `.claude/skills/geode-workflow/references/provider-grounding.md` |
+| Schema/log/event/state/trajectory consistency | `.claude/skills/geode-workflow/references/observability-contract.md` |
+| Test, lint, type, prompt, and full-suite gates | `.claude/skills/geode-workflow/references/verification-gates.md` |
+| Branch, PR, merge, and cleanup operations | `.claude/skills/geode-workflow/references/gitflow.md` |
+
+## Worktree And GitFlow
+
+```text
+feature/<name> -> develop -> main
 ```
-feature/<name> ──> develop ──> main
-```
 
-- **feature/**: All new work branches from `develop`
-- **develop**: Integration branch, CI must pass before merge
-- **main**: Production, only receives merges from `develop`
+- Feature branches start from `develop`.
+- Feature PRs merge into `develop` with squash merge.
+- Before `develop -> main`, sync `main -> develop` if main has drift.
+- `develop -> main` is a pass-through merge after gates are satisfied.
+- Post-merge cleanup removes remote branch, worktree, local branch, then prunes.
 
-No direct pushes to `main` or `develop`. Always PR with CI 5/5.
+## Minimum Verification
 
-## Worktree Isolation
-
-Each task runs in its own git worktree:
+Use targeted tests for the changed behaviour, then broaden based on blast
+radius:
 
 ```bash
-git fetch origin
-git worktree add .claude/worktrees/<task-name> -b feature/<branch-name> develop
-echo "session=$(date -Iseconds) task_id=<task-name>" > .claude/worktrees/<task-name>/.owner
+uv run pytest -q tests/<targeted_path>.py
+uv run ruff check core/ tests/ plugins/ scripts/
+uv run ruff format --check core/ tests/ plugins/ scripts/
+uv run mypy core/ plugins/
+uv run lint-imports
+git diff --check
 ```
 
-On completion: `git push` then `git worktree remove`.
-
-## Quality Gates
-
-Every PR must pass all gates before merge:
-
-| Gate | Command | Criteria |
-|------|---------|----------|
-| Lint | `uv run ruff check core/ tests/` | 0 errors |
-| Format | `uv run ruff format --check core/ tests/` | 0 diffs |
-| Type | `uv run mypy core/` | 0 errors |
-| Test | `uv run pytest tests/ -m "not live"` | All pass |
-| E2E | `uv run geode analyze "Cowboy Bebop" --dry-run` | A (68.4) |
-
-## Workflow Steps
-
-```
-0. Issue + Worktree
-1. GAP Audit (does it already exist?)
-2. Plan + Socratic Gate (is it needed?)
-3. Implement + Test (iterate)
-4. Verify (plan vs diff cross-check)
-5. Docs Sync (CHANGELOG, version)
-6. PR + CI (feature -> develop -> main)
-7. Rebuild + Restart
-```
-
-### Socratic Gate (for non-trivial features)
-
-Before implementing, answer these 5 questions:
-
-1. **Does it already exist in code?** (grep/explore verification)
-2. **What breaks if we don't do this?** (failure scenario)
-3. **How do we measure the effect?** (tests, metrics)
-4. **What is the simplest implementation?** (minimum changes)
-5. **Is this the same pattern in 3+ frontier systems?** (validation)
-
-### PR Body (Required Sections)
-
-```markdown
-## Summary
-## Why
-## Changes
-## Verification
-```
-
-See `.github/PULL_REQUEST_TEMPLATE.md` for the full template.
-
-## Versioning
-
-- New feature: MINOR bump (0.X.0)
-- Bug fix: PATCH bump (0.0.X)
-- Docs only: No version change
-
-Version must match across: `CHANGELOG.md`, `CLAUDE.md`, `README.md`, `pyproject.toml`.
-
-## Conventions
-
-- **Commit messages**: Conventional commits (`feat:`, `fix:`, `chore:`, `refactor:`, `style:`)
-- **Language**: Korean or English (maintain consistency within a PR)
-- **No emojis** in code or prompts (allowed in reports only)
-- **Line length**: 100 characters (ruff enforced)
+Live tests require explicit user approval. Provider acceptance that cannot be
+proven without a live call must remain guarded or marked `live_test_required`.

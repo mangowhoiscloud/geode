@@ -17,11 +17,13 @@ import json
 import logging
 import os
 import tempfile
+import threading
 from collections.abc import Callable, Iterator
 from pathlib import Path
 from typing import Any
 
 log = logging.getLogger(__name__)
+_JSONL_APPEND_LOCK = threading.Lock()
 
 
 def atomic_write_text(
@@ -82,6 +84,32 @@ def atomic_write_json(
         default=default or str,
     )
     atomic_write_text(path, content, encoding=encoding)
+
+
+def append_jsonl(
+    path: Path,
+    record: dict[str, Any],
+    *,
+    ensure_ascii: bool = False,
+    default: Callable[..., Any] | None = None,
+    encoding: str = "utf-8",
+) -> None:
+    """Append one JSON object as one newline-terminated JSONL row.
+
+    This is the L0 write companion to :func:`iter_jsonl` /
+    :func:`read_jsonl`: callers get a shared, lock-serialised append
+    primitive instead of open-coded ``open("a")`` writers. Higher-level
+    sinks such as ``JsonlAppendLog`` still own pruning and layout policy.
+    """
+    path = Path(path)
+    line = json.dumps(
+        record,
+        ensure_ascii=ensure_ascii,
+        default=default or str,
+    )
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with _JSONL_APPEND_LOCK, path.open("a", encoding=encoding) as handle:
+        handle.write(line + "\n")
 
 
 def read_json_or_none(path: Path) -> dict[str, Any] | None:

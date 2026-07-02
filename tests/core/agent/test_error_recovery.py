@@ -135,11 +135,16 @@ class TestErrorRecoveryStrategy:
         assert len(result.attempts) <= 2
 
     def test_dangerous_tools_excluded(self, strategy: ErrorRecoveryStrategy) -> None:
-        """DANGEROUS tools (run_bash) are not eligible for recovery."""
-        assert not strategy.is_recoverable("run_bash")
-        result = _run_recovery(strategy, "run_bash", {"command": "echo hi"}, failure_count=2)
-        assert result.recovered is False
-        assert "recovery_skipped" in result.final_result
+        """DANGEROUS tools that can affect the host are not auto-recovered."""
+        for tool_name, tool_input in (
+            ("run_bash", {"command": "echo hi"}),
+            ("computer", {"action": "click", "x": 1, "y": 2}),
+            ("computer_use", {"action": "click", "x": 1, "y": 2}),
+        ):
+            assert not strategy.is_recoverable(tool_name)
+            result = _run_recovery(strategy, tool_name, tool_input, failure_count=2)
+            assert result.recovered is False
+            assert "recovery_skipped" in result.final_result
 
     def test_write_tools_excluded(self, strategy: ErrorRecoveryStrategy) -> None:
         """WRITE tools (memory_save, note_save, etc.) are not eligible."""
@@ -152,6 +157,8 @@ class TestErrorRecoveryStrategy:
     def test_excluded_tools_constant(self) -> None:
         """Verify the excluded tools set matches expectations."""
         assert "run_bash" in _EXCLUDED_TOOLS
+        assert "computer" in _EXCLUDED_TOOLS
+        assert "computer_use" in _EXCLUDED_TOOLS
         assert "memory_save" in _EXCLUDED_TOOLS
         assert "note_save" in _EXCLUDED_TOOLS
         assert "set_api_key" in _EXCLUDED_TOOLS

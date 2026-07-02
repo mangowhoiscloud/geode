@@ -13,6 +13,13 @@
 | Toolathlon | HIGH | 32 real apps × 604 MCP tools × 20턴 long-horizon | **야심 신호 (현 SOTA 38.6%)** | [toolathlon.md](toolathlon.md) |
 | HAL Reliability | HIGH | accuracy 위에 consistency/robustness/safety 레이어 | **차별화 — LangGraph reliability 스토리** | [hal-reliability.md](hal-reliability.md) |
 
+## GEODE 자체 평가 레이어
+
+| 레이어 | 측정 | 역할 |
+|---|---|---|
+| GUI Trajectory Eval | observation coverage, classified failures, coordinate sanity, final screenshot availability | `computer`/`computer_use` trajectory rows를 모델 prose와 분리해 사후 평가 |
+| Capability/Evidence Preflight | provider/source/tool support, required evidence classes | 작업 시작 전 route mismatch를 드러내고 evidence ledger에 남김 |
+
 ## 의존성 그래프
 
 ```
@@ -34,7 +41,7 @@ HAL Reliability (τ-bench airline rerun) ← 절반 무료
 | MLE-Bench | 2026-04-24 v2 대비로 leaderboard 일시 중단 |
 | AppWorld | 2026-02 이후 maintenance only, frontier 거의 풀어버림 |
 | BrowseComp / GAIA / SimpleQA | QA — GEODE 행동 기반 루프와 미스핏 |
-| OSWorld-Verified | 컴퓨터 사용 vision-heavy — GEODE에 GUI 추가 시 재검토 |
+| OSWorld-Verified | GUI trajectory schema added; adapter pending live sandbox/browser-desktop E2E |
 | BFCL V4 | 보조 회귀 게이트 후보 — 1차 4종에서 제외, 필요 시 5번째로 |
 | GDPval / MCP-Atlas | OpenAI/Anthropic 내부 전용, 못 돌림 |
 

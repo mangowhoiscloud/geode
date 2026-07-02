@@ -125,10 +125,12 @@ geode_checkpoints.db-wal
 # Personal memory — never commit
 .geode/memory/PROJECT.md
 
-# Scaffold harness — local-only
+# Scaffold harness — local-only except tracked project workflow skills.
 .claude/commands/
 .claude/hooks/
-.claude/skills/
+.claude/skills/*
+!.claude/skills/geode-workflow/
+!.claude/skills/geode-workflow/**
 .claude/workflow-state.json
 .claude/worktrees/
 .claude/MEMORY.md

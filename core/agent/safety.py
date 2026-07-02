@@ -66,6 +66,7 @@ DANGEROUS_TOOLS: frozenset[str] = frozenset(
     {
         "run_bash",
         "computer",  # computer-use: screen control
+        "computer_use",  # emulated function-call computer-use: screen control
     }
 )
 
@@ -93,7 +94,9 @@ WRITE_TOOLS: frozenset[str] = frozenset(
 
 # Tools denied on headless (no-human-to-approve) sessions: scheduler, daemon,
 # and the MCP run_agent fork.
-HEADLESS_DENIED_TOOLS: frozenset[str] = frozenset({"run_bash", "delegate_task", "computer"})
+HEADLESS_DENIED_TOOLS: frozenset[str] = frozenset(
+    {"run_bash", "delegate_task", "computer", "computer_use"}
+)
 
 # Expensive tools require cost confirmation before execution
 EXPENSIVE_TOOLS: dict[str, float] = {

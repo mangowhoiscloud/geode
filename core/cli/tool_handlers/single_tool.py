@@ -22,6 +22,13 @@ from __future__ import annotations
 
 from typing import Any
 
+from core.tools.computer_observation import (
+    ComputerActionEvent,
+    build_action_event,
+    evaluate_trajectory,
+    trajectory_metrics,
+)
+
 # ---------------------------------------------------------------------------
 # data — generate_data
 # ---------------------------------------------------------------------------
@@ -197,19 +204,23 @@ def _openai_action_to_harness(action: dict[str, Any]) -> tuple[str, dict[str, An
 def _build_computer_use_handler() -> dict[str, Any]:
     """Build computer-use handler (screenshot + mouse + keyboard).
 
-    Only active when ``GEODE_COMPUTER_USE_ENABLED=true`` and ``pyautogui`` is
-    installed. Returns an empty handler dict otherwise.
+    Handlers are always registered so the declarative tool metadata has an
+    executor path. Each handler checks ``GEODE_COMPUTER_USE_ENABLED`` at call
+    time and returns a structured permission error when disabled.
     """
-    from core.llm.providers.anthropic import is_computer_use_enabled
-
-    if not is_computer_use_enabled():
-        return {}
-
-    from core.tools.computer_use import ComputerUseHarness
+    from core.tools.computer_use import ComputerUseHarness, execute_emulated_computer_use
 
     harness = ComputerUseHarness()
 
     async def handle_computer(**kwargs: Any) -> dict[str, Any]:
+        from core.llm.providers.anthropic import is_computer_use_enabled
+
+        if not is_computer_use_enabled():
+            return {
+                "error": "computer-use is disabled",
+                "error_type": "permission",
+                "hint": "Enable computer_use_enabled and configure host or sandbox execution.",
+            }
         # OpenAI Responses GA path: ``computer_call`` delivers a BATCHED
         # ``actions[]`` array (the adapter maps it onto ``input.actions``). Run
         # each action in order, return the FINAL screenshot, and collect any
@@ -225,7 +236,19 @@ def _build_computer_use_handler() -> dict[str, Any]:
         action = kwargs.pop("action", "screenshot")
         return await harness.aexecute(action, **kwargs)
 
-    return {"computer": handle_computer}
+    async def handle_computer_use(**kwargs: Any) -> dict[str, Any]:
+        from core.llm.providers.anthropic import is_computer_use_enabled
+
+        if not is_computer_use_enabled():
+            return {
+                "error": "computer-use is disabled",
+                "error_type": "permission",
+                "hint": "Enable computer_use_enabled and configure host or sandbox execution.",
+            }
+        kwargs.pop("_tool_context", None)
+        return await execute_emulated_computer_use(harness, **kwargs)
+
+    return {"computer": handle_computer, "computer_use": handle_computer_use}
 
 
 async def _run_batched_actions(harness: Any, kwargs: dict[str, Any]) -> dict[str, Any]:
@@ -244,15 +267,33 @@ async def _run_batched_actions(harness: Any, kwargs: dict[str, Any]) -> dict[str
     pending_safety = kwargs.get("pending_safety_checks")
     last_result: dict[str, Any] = {}
     errors: list[dict[str, Any]] = []
-    for raw_action in actions:
+    trajectory_events: list[ComputerActionEvent] = []
+    for idx, raw_action in enumerate(actions):
         action = raw_action if isinstance(raw_action, dict) else {}
         name, params = _openai_action_to_harness(action)
         result = await harness.aexecute(name, **params)
         if isinstance(result, dict) and result.get("error"):
             errors.append({"action": name, "error": result["error"]})
         last_result = result if isinstance(result, dict) else {}
+        trajectory_events.append(
+            build_action_event(
+                index=idx,
+                action=name,
+                params=params,
+                result=last_result,
+            )
+        )
     if not actions:
         last_result = await harness.aexecute("screenshot")
+
+        trajectory_events.append(
+            build_action_event(
+                index=0,
+                action="screenshot",
+                params={},
+                result=last_result if isinstance(last_result, dict) else {},
+            )
+        )
     if not (isinstance(last_result, dict) and last_result.get("screenshot")):
         # The final action errored or was unmapped, so its result has no
         # screenshot. Capture the current screen so the pending ``computer_call``
@@ -263,9 +304,38 @@ async def _run_batched_actions(harness: Any, kwargs: dict[str, Any]) -> dict[str
         merged = dict(last_result) if isinstance(last_result, dict) else {}
         if isinstance(shot, dict) and shot.get("screenshot"):
             merged["screenshot"] = shot["screenshot"]
+            if isinstance(shot.get("observation"), dict):
+                merged["observation"] = shot["observation"]
         last_result = merged
     if errors:
         last_result = {**last_result, "errors": errors}
+
+    metrics = trajectory_metrics(
+        trajectory_events,
+        target_size=(
+            getattr(harness, "_target_width", 1280),
+            getattr(harness, "_target_height", 800),
+        ),
+        final_has_screenshot=bool(isinstance(last_result, dict) and last_result.get("screenshot")),
+    )
+    last_result = {
+        **last_result,
+        "trajectory": {
+            "schema_version": 1,
+            "events": trajectory_events,
+            "metrics": metrics,
+            "evaluation": evaluate_trajectory(
+                trajectory_events,
+                target_size=(
+                    getattr(harness, "_target_width", 1280),
+                    getattr(harness, "_target_height", 800),
+                ),
+                final_has_screenshot=bool(
+                    isinstance(last_result, dict) and last_result.get("screenshot")
+                ),
+            ),
+        },
+    }
     if pending_safety:
         # Echo the safety checks the model attached to the originating call so
         # the adapter's ``computer_call_output`` can acknowledge them.
