@@ -105,7 +105,7 @@ def test_enumeration_failure_is_internal(monkeypatch: pytest.MonkeyPatch) -> Non
 
 
 def test_ax_ready_rejects_non_macos(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(up.sys, "platform", "linux")
+    monkeypatch.setattr(up.platform, "system", lambda: "Linux")
     ready, reason = up._ax_ready()
     assert ready is False
     assert "macOS" in reason

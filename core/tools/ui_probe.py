@@ -33,7 +33,7 @@ dependency error rather than raising.
 from __future__ import annotations
 
 import asyncio
-import sys
+import platform
 from typing import Any
 
 _INSTALL_HINT = (
@@ -49,7 +49,11 @@ _MAX_ELEMENTS = 200
 
 def _ax_ready() -> tuple[bool, str]:
     """Return (ready, reason). ready=False carries a human/LLM-actionable reason."""
-    if sys.platform != "darwin":
+    # platform.system() (not sys.platform) — mypy narrows the sys.platform
+    # literal per --platform, marking the pyobjc block unreachable on the Linux
+    # CI runner. A runtime call is not narrowed, so the code stays reachable
+    # (and honest) on every platform.
+    if platform.system() != "Darwin":
         return False, "ui_probe is macOS-only (accessibility AX API)."
     try:
         from ApplicationServices import AXIsProcessTrusted
