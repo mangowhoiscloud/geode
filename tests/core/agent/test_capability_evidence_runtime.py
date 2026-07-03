@@ -121,3 +121,108 @@ def test_agentic_loop_wires_preflight_and_capability_refresh() -> None:
     assert "append_preflight" in helper_src
     assert "render_preflight_hint" in helper_src
     assert "build_capability_graph" in refresh_src
+
+
+def test_evidence_check_row_reports_present_and_missing(tmp_path) -> None:
+    """Trajectory audit 2026-07-03 — the evidence_check row compares the
+    preflight-declared ``required_evidence`` against the kinds actually
+    appended, resolving the two aliased names (preflight → task_preflight,
+    final_answer → final_result)."""
+    from types import SimpleNamespace
+
+    graph = build_capability_graph(
+        model="gpt-5.5",
+        provider="openai",
+        source="subscription",
+        visible_tool_names={"web_fetch", "general_web_search"},
+        computer_use_enabled=False,
+    )
+    preflight = plan_task_preflight("research the latest agent papers", graph)
+    assert "source_url" in preflight["required_evidence"]
+
+    ledger = EvidenceLedger(session_id="s-check", path=tmp_path / "evidence.jsonl")
+    ledger.append_preflight(capability_graph=graph_summary(graph), preflight=preflight)
+    ledger.append_final(
+        result=SimpleNamespace(tool_calls=[], termination_reason="natural", rounds=1, error=None)
+    )
+
+    row = ledger.append_evidence_check(required_evidence=preflight["required_evidence"])
+
+    assert row["kind"] == "evidence_check"
+    assert "preflight" in row["payload"]["present"]
+    assert "final_answer" in row["payload"]["present"]
+    assert "source_url" in row["payload"]["missing"]
+    assert "task_preflight" in row["payload"]["recorded_kinds"]
+    written = read_jsonl(ledger.path)
+    assert written[-1]["kind"] == "evidence_check"
+    assert written[-1]["payload"]["missing"] == ["source_url"]
+
+
+def test_finalize_appends_evidence_check_after_final_row(tmp_path) -> None:
+    """``_prepare_final_result`` closes the declared → recorded → verified
+    chain: the evidence_check row lands AFTER final_result so the declared
+    ``final_answer`` requirement can match the just-written final row."""
+    from types import SimpleNamespace
+
+    from core.agent.loop import _lifecycle
+    from core.agent.loop.models import AgenticResult
+
+    graph = build_capability_graph(
+        model="gpt-5.5",
+        provider="openai",
+        source="subscription",
+        visible_tool_names={"web_fetch"},
+        computer_use_enabled=False,
+    )
+    preflight = plan_task_preflight("최신 에이전트 트렌드 조사해줘", graph)
+
+    ledger = EvidenceLedger(session_id="s-final-check", path=tmp_path / "evidence.jsonl")
+    loop = SimpleNamespace(
+        model="test-model",
+        max_rounds=1,
+        _usage_snapshot=None,
+        _evidence_ledger=ledger,
+        _task_preflight=preflight,
+        _build_reasoning_metrics=lambda result: SimpleNamespace(to_dict=lambda: {}),
+        _record_transcript_end=lambda result: None,
+        _save_checkpoint=lambda user_input, round_idx=0: None,
+    )
+    result = AgenticResult(text="정리했습니다", rounds=1)
+
+    _lifecycle._prepare_final_result(loop, result, "조사해줘", 0)
+
+    kinds = [row["kind"] for row in ledger.rows]
+    assert "final_result" in kinds
+    assert kinds.index("final_result") < kinds.index("evidence_check")
+    check = ledger.rows[-1]
+    assert check["kind"] == "evidence_check"
+    # final_result was appended by the same finalize path → satisfied.
+    assert "final_answer" in check["payload"]["present"]
+    # The stub never recorded source_url evidence → surfaced as missing.
+    assert "source_url" in check["payload"]["missing"]
+
+
+def test_finalize_without_preflight_skips_evidence_check(tmp_path) -> None:
+    """A loop whose preflight never ran (init failure path sets
+    ``_task_preflight = None``) must not append an empty evidence_check."""
+    from types import SimpleNamespace
+
+    from core.agent.loop import _lifecycle
+    from core.agent.loop.models import AgenticResult
+
+    ledger = EvidenceLedger(session_id="s-no-preflight", path=tmp_path / "evidence.jsonl")
+    loop = SimpleNamespace(
+        model="test-model",
+        max_rounds=1,
+        _usage_snapshot=None,
+        _evidence_ledger=ledger,
+        _task_preflight=None,
+        _build_reasoning_metrics=lambda result: SimpleNamespace(to_dict=lambda: {}),
+        _record_transcript_end=lambda result: None,
+        _save_checkpoint=lambda user_input, round_idx=0: None,
+    )
+
+    _lifecycle._prepare_final_result(loop, AgenticResult(text="done", rounds=1), "u", 0)
+
+    kinds = [row["kind"] for row in ledger.rows]
+    assert kinds == ["final_result"]

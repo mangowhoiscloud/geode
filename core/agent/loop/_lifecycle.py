@@ -158,6 +158,22 @@ def _prepare_final_result(
             ledger.append_final(result=result)
         except Exception:
             log.debug("Evidence final row failed", exc_info=True)
+        # Trajectory audit 2026-07-03 — close the declared → recorded →
+        # verified chain. ``_prepare_task_preflight`` appended the
+        # ``required_evidence`` declaration at session start; the row
+        # writers appended evidence as the run progressed; this gate
+        # compares the two and appends a ``kind="evidence_check"`` row
+        # with the present / missing lists. Runs AFTER ``append_final``
+        # so the ``final_answer`` requirement can match the just-written
+        # ``final_result`` row. Never raises — the check is telemetry,
+        # not a hard failure path.
+        preflight = getattr(loop, "_task_preflight", None)
+        required = list(preflight.get("required_evidence", [])) if preflight else []
+        if required:
+            try:
+                ledger.append_evidence_check(required_evidence=required)
+            except Exception:
+                log.debug("Evidence check row failed", exc_info=True)
     loop._save_checkpoint(user_input, round_idx=round_idx)
 
 

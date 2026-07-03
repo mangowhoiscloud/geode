@@ -45,6 +45,40 @@ functional change.
 
 ---
 
+## [0.99.272] - 2026-07-04
+
+### Fixed
+
+Three defects found by the 2026-07-03 trajectory audit — each one a broken
+link in the "declared / recorded / joined" observability chain.
+
+- **Finalize evidence-check gate closes the preflight chain.** Task preflight
+  declared `required_evidence` kinds at session start and the runtime appended
+  evidence rows as it went, but nothing ever compared the two — a session that
+  promised `source_url` / `gui_trajectory` evidence and delivered none finished
+  indistinguishable from one that delivered all of it. The finalize path
+  (`_prepare_final_result`, after `append_final`) now appends a
+  `kind="evidence_check"` ledger row with the present / missing lists,
+  resolving the two aliased names (`preflight` → `task_preflight`,
+  `final_answer` → `final_result`) via `REQUIRED_EVIDENCE_KIND_ALIASES`.
+- **Usage rows join back to sessions.** `UsageRecord` carried a `session`
+  column since inception but `TokenTracker._persist_usage` never populated it,
+  so `~/.geode/usage/*.jsonl` could not be joined to transcripts / evidence
+  ledgers / checkpoints (all keyed by session_id). The writer now stamps the
+  active session id from the existing carriers — the `cognitive_state_ctx`
+  ContextVar bound by `AgenticLoop.arun`, falling back to the
+  `SessionMetrics` scope for non-loop runners. No new global; unscoped
+  callers keep the pre-fix row shape (falsy `session` omitted).
+- **Subprocess sub-agents keep their tool trajectory.** `worker._run_agentic`
+  built its AgenticLoop with `hooks=None`, so every subprocess sub-agent ran
+  with zero hook consumers: TOOL_EXEC_ENDED was never observed (no Episode
+  rows for the child's tool calls) and no run-log rows were written. A new
+  minimal bundle (`build_worker_hooks`) injects only the two trajectory rails
+  — the run-log `"*"` wildcard writer and the episodic recorder (extracted to
+  the shared `make_episodic_recorder_handler` factory) — deliberately NOT the
+  full `build_hooks` bundle, which would re-run plugin discovery per spawn and
+  double-write session stores the parent owns.
+
 ## [0.99.271] - 2026-07-04
 
 ### Added

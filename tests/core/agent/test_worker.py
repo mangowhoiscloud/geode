@@ -900,3 +900,84 @@ class TestSchemaAwareRetryWiring:
         # Retry carries the validator feedback + schema body.
         assert "start with `{`" in prompts_seen[1]
         assert "candidate_id" in prompts_seen[1]
+
+
+# ---------------------------------------------------------------------------
+# Minimal worker hook bundle (trajectory audit 2026-07-03)
+# ---------------------------------------------------------------------------
+
+
+class TestWorkerHookBundle:
+    """Subprocess sub-agents previously ran with ``hooks=None`` so their
+    tool trajectory (Episode rows + run-log rows) was silently lost.
+    ``build_worker_hooks`` injects only the two trajectory rails."""
+
+    def test_run_agentic_injects_worker_hooks(self) -> None:
+        import inspect
+
+        from core.agent import worker
+
+        src = inspect.getsource(worker._run_agentic)
+        assert "build_worker_hooks" in src
+        assert "hooks=worker_hooks" in src
+
+    def test_build_worker_hooks_records_episode_and_run_log(self, tmp_path: Path) -> None:
+        from core.agent.cognitive_state_ctx import set_session_id
+        from core.hooks import HookEvent
+        from core.memory.episodic import EpisodicStore, set_episodic_store
+        from core.wiring.bootstrap import build_worker_hooks
+
+        episodes_path = tmp_path / "episodes.jsonl"
+        set_episodic_store(EpisodicStore(path=episodes_path))
+        set_session_id("wk-hooks-1")
+        try:
+            hooks = build_worker_hooks(
+                session_key="wk-hooks-1",
+                run_id="wk-hooks-1",
+                log_dir=tmp_path,
+            )
+            hooks.trigger(
+                HookEvent.TOOL_EXEC_ENDED,
+                {
+                    "tool_name": "read_document",
+                    "tool_input": {"path": "notes.md"},
+                    "has_error": False,
+                    "result": {"ok": True},
+                    "duration_ms": 3.0,
+                },
+            )
+
+            # Episodic rail — the child's tool call landed as an Episode row.
+            episode = json.loads(episodes_path.read_text(encoding="utf-8").strip())
+            assert episode["tool_name"] == "read_document"
+            assert episode["session_id"] == "wk-hooks-1"
+            assert episode["success"] is True
+
+            # Run-log rail — the wildcard writer captured the same event.
+            run_log_lines = (
+                (tmp_path / "wk-hooks-1.jsonl").read_text(encoding="utf-8").strip().splitlines()
+            )
+            events = [json.loads(line)["event"] for line in run_log_lines]
+            assert "tool_exec_end" in events
+        finally:
+            set_episodic_store(None)
+            set_session_id("")
+
+    def test_build_worker_hooks_run_log_covers_all_events(self, tmp_path: Path) -> None:
+        """The run-log handler is a ``"*"`` wildcard — lifecycle events
+        beyond TOOL_EXEC_ENDED (e.g. SESSION_ENDED) also land."""
+        from core.hooks import HookEvent
+        from core.wiring.bootstrap import build_worker_hooks
+
+        hooks = build_worker_hooks(
+            session_key="wk-hooks-2",
+            run_id="wk-hooks-2",
+            log_dir=tmp_path,
+        )
+        hooks.trigger(HookEvent.SESSION_ENDED, {"session_id": "wk-hooks-2"})
+
+        run_log_lines = (
+            (tmp_path / "wk-hooks-2.jsonl").read_text(encoding="utf-8").strip().splitlines()
+        )
+        events = [json.loads(line)["event"] for line in run_log_lines]
+        assert HookEvent.SESSION_ENDED.value in events

@@ -82,6 +82,124 @@ def _make_run_log_handler(
 
 
 # ---------------------------------------------------------------------------
+# Episodic recorder hook handler — TOOL_EXEC_ENDED -> Episode row
+# ---------------------------------------------------------------------------
+
+
+def make_episodic_recorder_handler() -> tuple[str, Any]:
+    """Create the TOOL_EXEC_ENDED handler that records Episode rows.
+
+    Extracted from ``build_hooks``'s ``_reg_episodic_memory`` closure
+    (trajectory audit 2026-07-03) so the subprocess worker's minimal hook
+    bundle (:func:`build_worker_hooks`) can reuse the SAME recorder instead
+    of duplicating the Episode-building logic. Session / lineage ids come
+    from the ``core.agent.cognitive_state_ctx`` ContextVars that
+    ``AgenticLoop.arun`` binds per turn — valid in both the full runtime
+    and the worker subprocess.
+    """
+    import time
+
+    from core.agent.cognitive_state_ctx import (
+        get_cognitive_state,
+        get_parent_session_id,
+        get_parent_session_key,
+        get_session_id,
+    )
+    from core.memory.episodic import Episode, _summarise_tool_input, get_episodic_store
+
+    store = get_episodic_store()
+
+    def _on_tool_end(_event: HookEvent, data: dict[str, Any]) -> None:
+        tool_name = str(data.get("tool_name", "?"))
+        tool_input = data.get("tool_input")
+        has_error = bool(data.get("has_error"))
+        result = data.get("result")
+        error: str | None = None
+        if has_error and isinstance(result, dict):
+            error_val = result.get("error")
+            if isinstance(error_val, str):
+                error = error_val[:200]
+        state = get_cognitive_state()
+        snapshot = state.to_snapshot() if state is not None else {}
+        session_id = get_session_id()
+        # Sub-agent lineage — two complementary fields. Both empty
+        # for top-level loops; non-empty when the active loop was
+        # spawned via the OpenClaw spawn pattern (in-process or
+        # subprocess via SubAgentManager → WorkerRequest).
+        #   parent_session_key — OpenClaw routing key (group-by).
+        #   parent_session_id  — parent's _session_id uuid (link-to).
+        # The PR-E confidence-trajectory aggregator can group child
+        # Episodes by routing key while still attributing each row
+        # back to a concrete parent run via the uuid.
+        parent_session_key = get_parent_session_key()
+        parent_session_id = get_parent_session_id()
+        round_raw = snapshot.get("round_count", 0)
+        round_count = round_raw if isinstance(round_raw, int) else 0
+        input_head_arg = tool_input if isinstance(tool_input, dict | str) else None
+        episode = Episode(
+            timestamp_ns=time.time_ns(),
+            session_id=session_id,
+            round=round_count,
+            tool_name=tool_name,
+            tool_input_head=_summarise_tool_input(input_head_arg),
+            success=not has_error,
+            error=error,
+            duration_ms=float(data.get("duration_ms", 0.0)),
+            cognitive_state=snapshot,
+            parent_session_key=parent_session_key,
+            parent_session_id=parent_session_id,
+        )
+        try:
+            store.append(episode)
+        except OSError:
+            log.warning("episodic store append failed; skipping", exc_info=True)
+
+    return "episodic_memory_recorder", _on_tool_end
+
+
+def build_worker_hooks(
+    *,
+    session_key: str,
+    run_id: str,
+    log_dir: Path | str | None = None,
+) -> HookSystem:
+    """Minimal hook bundle for the subprocess sub-agent worker.
+
+    Trajectory audit 2026-07-03 — ``core.agent.worker._run_agentic`` built
+    its AgenticLoop with ``hooks=None``, so every subprocess sub-agent ran
+    with ZERO hook consumers: no Episode rows (TOOL_EXEC_ENDED never
+    observed) and no run-log rows. The parent's episodic / run-log
+    trajectory simply lost everything the child did with its tools.
+
+    Deliberately NOT :func:`build_hooks` — the worker is a short-lived
+    subprocess and only needs the two trajectory rails:
+
+    * run-log wildcard writer (``"*"`` prefix, priority 50) — same shape
+      as the full bootstrap's registration;
+    * episodic TOOL_EXEC_ENDED recorder (priority 70) — shared factory
+      :func:`make_episodic_recorder_handler`.
+
+    The full bundle (journal, auto-learn, dreaming, notification, plugin
+    discovery, agent_runtime_state SQLite writers) would re-run per spawn
+    and double-write session-scoped stores the parent already owns.
+    """
+    from core.observability.run_log import RunLog
+
+    hooks: HookSystem = HookSystem()
+    run_log = RunLog(session_key, log_dir=log_dir)
+    handler_name, handler_fn = _make_run_log_handler(run_log, session_key, run_id)
+    hooks.register_prefix("*", handler_fn, name=handler_name, priority=50)
+    episodic_name, episodic_fn = make_episodic_recorder_handler()
+    hooks.register(
+        HookEvent.TOOL_EXEC_ENDED,
+        episodic_fn,
+        name=episodic_name,
+        priority=70,
+    )
+    return hooks
+
+
+# ---------------------------------------------------------------------------
 # Plugin registration helper (DRY: replaces 8 bare except blocks)
 # ---------------------------------------------------------------------------
 
@@ -528,67 +646,11 @@ def build_hooks(
     # more overhead than it saves; revisit if hot-path profiling shows
     # the recorder is a tail-latency contributor.
     def _reg_episodic_memory() -> None:
-        import time
-
-        from core.agent.cognitive_state_ctx import (
-            get_cognitive_state,
-            get_parent_session_id,
-            get_parent_session_key,
-            get_session_id,
-        )
-        from core.memory.episodic import Episode, _summarise_tool_input, get_episodic_store
-
-        store = get_episodic_store()
-
-        def _on_tool_end(_event: HookEvent, data: dict[str, Any]) -> None:
-            tool_name = str(data.get("tool_name", "?"))
-            tool_input = data.get("tool_input")
-            has_error = bool(data.get("has_error"))
-            result = data.get("result")
-            error: str | None = None
-            if has_error and isinstance(result, dict):
-                error_val = result.get("error")
-                if isinstance(error_val, str):
-                    error = error_val[:200]
-            state = get_cognitive_state()
-            snapshot = state.to_snapshot() if state is not None else {}
-            session_id = get_session_id()
-            # Sub-agent lineage — two complementary fields. Both empty
-            # for top-level loops; non-empty when the active loop was
-            # spawned via the OpenClaw spawn pattern (in-process or
-            # subprocess via SubAgentManager → WorkerRequest).
-            #   parent_session_key — OpenClaw routing key (group-by).
-            #   parent_session_id  — parent's _session_id uuid (link-to).
-            # The PR-E confidence-trajectory aggregator can group child
-            # Episodes by routing key while still attributing each row
-            # back to a concrete parent run via the uuid.
-            parent_session_key = get_parent_session_key()
-            parent_session_id = get_parent_session_id()
-            round_raw = snapshot.get("round_count", 0)
-            round_count = round_raw if isinstance(round_raw, int) else 0
-            input_head_arg = tool_input if isinstance(tool_input, dict | str) else None
-            episode = Episode(
-                timestamp_ns=time.time_ns(),
-                session_id=session_id,
-                round=round_count,
-                tool_name=tool_name,
-                tool_input_head=_summarise_tool_input(input_head_arg),
-                success=not has_error,
-                error=error,
-                duration_ms=float(data.get("duration_ms", 0.0)),
-                cognitive_state=snapshot,
-                parent_session_key=parent_session_key,
-                parent_session_id=parent_session_id,
-            )
-            try:
-                store.append(episode)
-            except OSError:
-                log.warning("episodic store append failed; skipping", exc_info=True)
-
+        handler_name, handler_fn = make_episodic_recorder_handler()
         hooks.register(
             HookEvent.TOOL_EXEC_ENDED,
-            _on_tool_end,
-            name="episodic_memory_recorder",
+            handler_fn,
+            name=handler_name,
             priority=70,
         )
 
