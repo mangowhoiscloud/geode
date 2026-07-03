@@ -41,6 +41,30 @@ Telecom small run 이후로 둔다.
 | 5 | Terminal-Bench 2.0 | 1-task Docker/tmux smoke | post-run test artifact와 shell transcript 보존 |
 | 6 | Toolathlon | credential-free or lowest-credential smoke | MCP app surface, turn cap, and credential caveats 기록 |
 
+## Public benchmark serving contract
+
+사용자가 검토한 `MCPMark: filesystem/easy` 페이지 구성을 표준으로 삼는다.
+benchmark navigation은 짧은 suite label만 보여도 되지만, 본문은 숫자만
+보여주는 dashboard가 아니라 재현 가능한 run record여야 한다.
+
+| Section | Required content |
+|---|---|
+| Result summary | benchmark, suite/domain, run date, harness revision, model route, task count, headline score |
+| Comparability | directly comparable / directional / not comparable targets separated |
+| Run command | command, auth placeholder, subscription/API caveat |
+| Artifact | raw result directory, transcript/log, verifier output |
+| Task/domain rows | PASS/FAIL, reward, termination, duration, rounds/tokens when available |
+| Interpretation | failure cause, adapter limitation, next measurement |
+
+Current public routes:
+
+| Route | Role |
+|---|---|
+| `/docs/benchmarks/mcpmark/filesystem-easy` | reference detailed run record |
+| `/docs/benchmarks/mcpmark/service-matrix` | MCP task counts, credentials, infra blockers, adapter coverage |
+| `/docs/benchmarks/tau2/mock-smoke` | single mock verifier-backed run |
+| `/docs/benchmarks/tau2/domain-smoke` | multi-domain smoke matrix and caveats |
+
 ## 의존성 그래프
 
 ```
@@ -91,6 +115,7 @@ Verified 다음에 τ²-bench를 둔다.
 | 일자 | 변경 |
 |---|---|
 | 2026-07-03 | 남은 벤치마크 측정 큐를 추가하고 `tau2-bench`를 2순위로 승격 |
+| 2026-07-03 | Benchmark serving page contract와 MCPMark/tau2 coverage 페이지 계획 추가 |
 | 2026-07-03 | 최신 tau2 하네스의 `gpt-5.2` user simulator 권장 설정을 별도 비교군으로 보정 |
 | 2026-07-03 | Benchmark Publishing Cycle 스캐폴드와 run-record 템플릿 추가 |
 | 2026-07-03 | MCPMark filesystem easy에서 GEODE + GPT-5.5 xhigh 10/10 실측 및 EOF offload 결과 기록 |

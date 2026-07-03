@@ -73,6 +73,47 @@ export default function Page() {
               </tbody>
             </table>
 
+            <h2>서빙 페이지 형태</h2>
+            <p>
+              새 benchmark 결과 페이지는 <code>MCPMark: filesystem/easy</code>의
+              레코드형 구성을 표준으로 씁니다. 왼쪽 navigation에는 benchmark와
+              suite가 짧게 보이지만, 본문 첫 화면은 숫자만 던지지 않고 route,
+              artifact, caveat가 같이 보이는 ledger여야 합니다.
+            </p>
+            <table>
+              <thead>
+                <tr>
+                  <th>Section</th>
+                  <th>화면에 보여야 하는 정보</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr><td>Result summary</td><td>benchmark, suite/domain, run date, harness revision, agent/model route, task 수, score</td></tr>
+                <tr><td>Comparability</td><td>직접 비교 가능 / 방향성 참고 / 비교 불가 대상을 분리</td></tr>
+                <tr><td>Run command</td><td>재현 명령, auth placeholder, subscription/API route caveat</td></tr>
+                <tr><td>Artifacts</td><td>raw result directory, transcript/log, verifier output 위치</td></tr>
+                <tr><td>Task or domain rows</td><td>task별 PASS/FAIL, reward, termination, duration, rounds/tokens 가능하면 포함</td></tr>
+                <tr><td>Interpretation</td><td>실패 원인, adapter 한계, 다음 측정으로 넘길 항목</td></tr>
+              </tbody>
+            </table>
+
+            <h2>현재 공개 페이지 계획</h2>
+            <table>
+              <thead>
+                <tr>
+                  <th>Route</th>
+                  <th>역할</th>
+                  <th>상태</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr><td><code>/docs/benchmarks/mcpmark/filesystem-easy</code></td><td>MCPMark detailed run record의 기준 페이지</td><td>게시됨</td></tr>
+                <tr><td><code>/docs/benchmarks/mcpmark/service-matrix</code></td><td>MCP별 task 수, credential/infra, GEODE adapter 지원 상태</td><td>추가</td></tr>
+                <tr><td><code>/docs/benchmarks/tau2/mock-smoke</code></td><td>tau2 단일 mock verifier-backed record</td><td>게시됨</td></tr>
+                <tr><td><code>/docs/benchmarks/tau2/domain-smoke</code></td><td>mock/airline/retail/telecom/banking smoke matrix와 실패 caveat</td><td>추가</td></tr>
+              </tbody>
+            </table>
+
             <h2>진행 규칙</h2>
             <ul>
               <li>각 benchmark는 <code>Benchmark publishing cycle</code>을 하나씩 통과합니다.</li>
@@ -149,6 +190,47 @@ export default function Page() {
                   <td>credential-free or lowest-credential smoke</td>
                   <td>MCP app surface, turn cap, and credential caveats recorded</td>
                 </tr>
+              </tbody>
+            </table>
+
+            <h2>Serving Page Shape</h2>
+            <p>
+              New benchmark result pages use the same record-style structure as
+              <code>MCPMark: filesystem/easy</code>. The navigation label stays
+              short, but the first screen of the body must show the route,
+              artifact, and caveat next to the score.
+            </p>
+            <table>
+              <thead>
+                <tr>
+                  <th>Section</th>
+                  <th>What must be visible</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr><td>Result summary</td><td>benchmark, suite/domain, run date, harness revision, agent/model route, task count, score</td></tr>
+                <tr><td>Comparability</td><td>directly comparable, directional, and not-comparable targets separated</td></tr>
+                <tr><td>Run command</td><td>reproduction command, auth placeholder, subscription/API route caveat</td></tr>
+                <tr><td>Artifacts</td><td>raw result directory, transcript/log, and verifier output pointers</td></tr>
+                <tr><td>Task or domain rows</td><td>per-task PASS/FAIL, reward, termination, duration, and rounds/tokens when available</td></tr>
+                <tr><td>Interpretation</td><td>failure cause, adapter limitation, and next measured step</td></tr>
+              </tbody>
+            </table>
+
+            <h2>Current Public Page Plan</h2>
+            <table>
+              <thead>
+                <tr>
+                  <th>Route</th>
+                  <th>Purpose</th>
+                  <th>Status</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr><td><code>/docs/benchmarks/mcpmark/filesystem-easy</code></td><td>Reference page for detailed MCPMark run records</td><td>Published</td></tr>
+                <tr><td><code>/docs/benchmarks/mcpmark/service-matrix</code></td><td>MCP task counts, credentials, infra, and GEODE adapter support</td><td>Added</td></tr>
+                <tr><td><code>/docs/benchmarks/tau2/mock-smoke</code></td><td>Single tau2 mock verifier-backed run record</td><td>Published</td></tr>
+                <tr><td><code>/docs/benchmarks/tau2/domain-smoke</code></td><td>mock/airline/retail/telecom/banking smoke matrix and caveats</td><td>Added</td></tr>
               </tbody>
             </table>
 

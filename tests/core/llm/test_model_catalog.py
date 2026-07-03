@@ -12,6 +12,7 @@ from core.llm.model_catalog import (
 
 def test_context_window_comes_from_pricing_catalogue() -> None:
     assert context_window_for("gpt-5.5") == 1_050_000
+    assert context_window_for("gpt-5.2") == 400_000
     assert context_window_for("gpt-5.4-mini") == 400_000
     assert context_window_for("gpt-5.4-nano") == 400_000
     assert context_window_for("gpt-5-mini") == 400_000

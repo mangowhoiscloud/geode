@@ -131,6 +131,13 @@ _OPENAI_MODELS: dict[str, OpenAIModelSpec] = {
         reasoning_effort_values=("none", "low", "medium", "high", "xhigh"),
         context_window=_catalog_context_window("gpt-5.4-nano"),
     ),
+    "gpt-5.2": OpenAIModelSpec(
+        model_id="gpt-5.2",
+        uses_max_completion_tokens=True,
+        accepts_temperature=False,
+        reasoning_effort_values=("none", "low", "medium", "high", "xhigh"),
+        context_window=_catalog_context_window("gpt-5.2"),
+    ),
     "gpt-5.5": OpenAIModelSpec(
         model_id="gpt-5.5",
         uses_max_completion_tokens=True,
