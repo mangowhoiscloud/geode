@@ -103,21 +103,33 @@ class TestSnapshotOrdering:
 
 
 class TestCurrentActivityInvariant:
-    def test_current_activity_empty_by_default(self) -> None:
-        """Stage 1.5 not plumbed — current_activity must stay '' (never faked)."""
+    def test_current_activity_empty_when_not_plumbed(self) -> None:
+        """No activity fed → current_activity stays '' (never faked)."""
         reg = FleetRegistry()
         agent = reg.on_dispatch("t1", role="verifier")
         assert agent.current_activity == ""
         reg.on_state("t1", status="done", elapsed_s=1.0)
         assert agent.current_activity == ""
 
+    def test_on_state_updates_current_activity_from_live_field(self) -> None:
+        """Stage 1.5 — a running transition carrying the live tool sets it."""
+        reg = FleetRegistry()
+        reg.on_dispatch("t1", role="repo_researcher")
+        agent = reg.on_state("t1", status="running", current_activity="grep_files")
+        assert agent.current_activity == "grep_files"
+        # A later running update with a new tool replaces it.
+        agent = reg.on_state("t1", status="running", current_activity="read_document")
+        assert agent.current_activity == "read_document"
+        # A blank running update does NOT clobber the last known tool.
+        agent = reg.on_state("t1", status="running", current_activity="")
+        assert agent.current_activity == "read_document"
+
     def test_terminal_clears_any_activity(self) -> None:
         reg = FleetRegistry()
         reg.on_dispatch("t1")
-        # Even if a future plumbing pass sets activity mid-run…
         reg.on_state("t1", status="running", current_activity="grep_files")
         assert reg.snapshot()[0].current_activity == "grep_files"
-        # …a terminal transition clears it (nothing is running).
+        # A terminal transition clears it (nothing is running).
         agent = reg.on_state("t1", status="done", elapsed_s=1.0)
         assert agent.current_activity == ""
 

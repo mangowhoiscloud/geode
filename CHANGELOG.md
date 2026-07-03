@@ -45,10 +45,28 @@ functional change.
 
 ---
 
-## [Unreleased]
+## [0.99.268] - 2026-07-03
 
 ### Added
 
+- **Fleet view Stage 1.5 — live per-agent activity plumbing.** Sub-agent workers
+  can now stream their *current* tool and a best-effort mid-run cumulative token
+  count to the parent while they run, so the fleet view's
+  `FleetAgent.current_activity` is populated live instead of always `""`. The
+  worker→parent stdout protocol is extended from "exactly one result line" to
+  "zero or more `{"type":"activity",…}` lines, then exactly one result line
+  (last)". The parent reader (`IsolatedRunner._aexecute_subprocess`) now reads
+  stdout line-by-line and forwards activity to an `on_activity` callback, keeping
+  the last result line as the `IsolationResult`. Backward compatible: a worker
+  that emits only a bare legacy result line (no `type` key) still parses — the
+  classifier treats any non-activity JSON object as the terminal result. The
+  feature is gated behind `WorkerRequest.emit_activity` (default `False`); only the
+  interactive `delegate_task` turn path opts in, so seed-generation / headless
+  spawns keep the pure single-result-line contract. The child emits via a
+  process-local activity sink (`core/agent/activity_channel.py`) hooked at the
+  `ToolExecutor` per-tool boundary, throttled to skip consecutive duplicate tool
+  names; token counts are `0` for subscription / CLI calls and never fabricated.
+  The `subagent_state` event gains an additive `activity` field.
 - **tau2 GEODE benchmark runner.** Added `scripts/eval/tau2_geode_agent.py`, a
   reproducible runner that registers GEODE as an in-process tau2
   `HalfDuplexAgent` and `HalfDuplexUser`, wraps tau2 domain tools into

@@ -494,6 +494,7 @@ class SubAgentManager:
         tasks: list[SubTask],
         *,
         on_progress: Callable[[SubResult], None] | None = None,
+        on_activity: Callable[[dict[str, Any]], None] | None = None,
         announce: bool = True,
         default_model: str = "",
     ) -> list[SubResult]:
@@ -511,6 +512,13 @@ class SubAgentManager:
         sandbox directory expansion, hooks, run-record bookkeeping, announce
         semantics. Only the *waiting* mechanic differs (asyncio.gather vs
         polling).
+
+        Fleet view Stage 1.5 — when ``on_activity`` is provided (only the
+        interactive ``delegate_task`` turn path passes it), each spawned worker
+        is asked to emit live per-tool activity (``WorkerRequest.emit_activity``)
+        and every ``{"type":"activity", ...}`` line the worker streams before its
+        result is forwarded to ``on_activity`` as it arrives. ``None`` (seed-gen /
+        headless / tests) keeps the pure single-result-line worker contract.
         """
         import asyncio
 
@@ -625,7 +633,11 @@ class SubAgentManager:
             )
             fn_or_request: Any
             if self._action_handlers is not None:
-                fn_or_request = self._build_worker_request(task, default_model=default_model)
+                fn_or_request = self._build_worker_request(
+                    task,
+                    default_model=default_model,
+                    emit_activity=on_activity is not None,
+                )
             else:
                 # _execute_subtask is bound method; arun expects callable
                 # passed via args/kwargs. The thread-mode path is sync.
@@ -639,7 +651,11 @@ class SubAgentManager:
             try:
                 if self._action_handlers is not None:
                     # Subprocess mode — WorkerRequest carries the payload.
-                    isolation = await self._runner.arun(fn_or_request, config=config)
+                    # Stage 1.5 — forward live activity lines (no-op when the
+                    # caller didn't request activity: emit_activity stays False).
+                    isolation = await self._runner.arun(
+                        fn_or_request, config=config, on_activity=on_activity
+                    )
                 else:
                     # Thread mode — legacy callable + SubTask arg.
                     isolation = await self._runner.arun(fn_or_request, args=(task,), config=config)
@@ -766,11 +782,17 @@ class SubAgentManager:
             child_result.status,
         )
 
-    def _build_worker_request(self, task: SubTask, *, default_model: str = "") -> WorkerRequest:
+    def _build_worker_request(
+        self, task: SubTask, *, default_model: str = "", emit_activity: bool = False
+    ) -> WorkerRequest:
         """Build a WorkerRequest for subprocess execution (Phase 2).
 
         The subprocess inherits API keys via env vars. Model config and
         denied tools are passed explicitly.
+
+        ``emit_activity`` (fleet-view Stage 1.5) is threaded onto the request so
+        the worker installs its stdout activity side-channel. Default False keeps
+        the legacy pure single-result-line contract for seed-gen / headless.
         """
         # Use the reloaded singleton (config.toml overlay is applied at
         # session-create via reload_settings_from_disk) so [subagent] max_tokens
@@ -920,6 +942,9 @@ class SubAgentManager:
             # from SubTask down to the worker subprocess for
             # structured-output forcing.
             response_schema=task.response_schema,
+            # Fleet view Stage 1.5 — ask the worker to stream live per-tool
+            # activity when the caller wired an activity callback.
+            emit_activity=emit_activity,
         )
 
     def _resolve_agent(self, task: SubTask) -> dict[str, Any] | None:

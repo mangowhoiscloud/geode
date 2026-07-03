@@ -18,7 +18,7 @@ import sys
 import threading
 import time
 import uuid
-from collections.abc import Callable
+from collections.abc import Callable, Iterable
 from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any
@@ -27,6 +27,75 @@ from core.config import CONTEXT_BLOCK_MAX_CHARS
 from core.hooks import HookEvent, HookSystem
 
 log = logging.getLogger(__name__)
+
+
+# ---------------------------------------------------------------------------
+# Worker stdout protocol (fleet-view Stage 1.5)
+# ---------------------------------------------------------------------------
+#
+# The worker→parent stdout protocol is ZERO OR MORE activity lines followed by
+# EXACTLY ONE result line (last). Each line is a standalone JSON object with a
+# ``"type"`` discriminator for activity; the result stays a bare (legacy)
+# ``WorkerResult`` dict with no ``type`` key. See docs/plans/2026-07-03-fleet-view.md.
+
+
+def _classify_worker_line(line: str) -> tuple[str, dict[str, Any] | None]:
+    """Classify one worker stdout line as ``activity`` / ``result`` / ``skip``.
+
+    - ``{"type": "activity", ...}`` → a mid-run live update (``"activity"``).
+    - a WorkerResult-shaped object (``task_id`` + ``success``, the fields
+      ``WorkerResult.from_dict`` requires) OR an explicitly tagged
+      ``{"type": "result", ...}`` → the terminal result (``"result"``).
+    - blank / non-JSON / non-object lines, AND any JSON object that is neither
+      activity nor WorkerResult-shaped (a stray tool/library ``print``) →
+      ``"skip"`` — never fatal, and never mistaken for the result.
+
+    **Backward compat is the load-bearing rule**: a worker that emits ONLY a bare
+    result line (the pre-Stage-1.5 contract, and every older / in-flight worker)
+    has no ``type`` field, so it classifies as ``"result"`` and is never dropped.
+    A parser that *required* ``type`` would break every such worker.
+    """
+    line = line.strip()
+    if not line:
+        return ("skip", None)
+    try:
+        obj = json.loads(line)
+    except (json.JSONDecodeError, ValueError):
+        return ("skip", None)
+    if not isinstance(obj, dict):
+        return ("skip", None)
+    if obj.get("type") == "activity":
+        return ("activity", obj)
+    # A result candidate must LOOK like a WorkerResult (task_id + success — the
+    # two fields WorkerResult.from_dict requires) or be explicitly tagged
+    # `type=result`. A stray JSON object printed to stdout by a tool/library
+    # must not be mistaken for the terminal result and clobber it (Codex HIGH).
+    if obj.get("type") == "result" or ("task_id" in obj and "success" in obj):
+        return ("result", obj)
+    return ("skip", None)
+
+
+def parse_worker_stream(
+    lines: Iterable[str],
+) -> tuple[list[dict[str, Any]], dict[str, Any] | None]:
+    """Split worker stdout lines into ``(activity updates, final result dict)``.
+
+    Pure helper mirroring the live line-by-line reader in
+    :meth:`IsolatedRunner._pump_worker`, so the protocol is unit-testable without
+    spawning a subprocess. The LAST ``"result"`` line wins (the terminal line);
+    activity lines are collected in order; ``"skip"`` lines are dropped.
+    ``result`` is ``None`` when no result line was seen (a crashed worker that
+    emitted nothing parseable).
+    """
+    activities: list[dict[str, Any]] = []
+    result: dict[str, Any] | None = None
+    for raw in lines:
+        kind, obj = _classify_worker_line(raw)
+        if kind == "activity" and obj is not None:
+            activities.append(obj)
+        elif kind == "result" and obj is not None:
+            result = obj
+    return activities, result
 
 
 class PostToMainMode(Enum):
@@ -160,6 +229,7 @@ class IsolatedRunner:
         args: tuple[Any, ...] = (),
         kwargs: dict[str, Any] | None = None,
         config: IsolationConfig | None = None,
+        on_activity: Callable[[dict[str, Any]], None] | None = None,
     ) -> IsolationResult:
         """Run *fn_or_request* asynchronously in an isolated context.
 
@@ -169,9 +239,15 @@ class IsolatedRunner:
         :meth:`_aexecute_subprocess` (native ``asyncio.create_subprocess_exec``)
         so the parent event loop is not pinned. Thread path stays via
         :func:`asyncio.to_thread`.
+
+        ``on_activity`` (fleet-view Stage 1.5) — when the request is a
+        WorkerRequest and this callback is provided, each ``{"type":"activity"}``
+        line the worker streams before its result is forwarded here as it
+        arrives. ``None`` = the legacy behaviour (no live activity). Ignored for
+        the thread path.
         """
         cfg = self._resolve_config(config)
-        return await self._adispatch(fn_or_request, args, kwargs or {}, cfg)
+        return await self._adispatch(fn_or_request, args, kwargs or {}, cfg, on_activity)
 
     def list_active(self) -> list[str]:
         """Return session IDs of currently running executions."""
@@ -370,6 +446,7 @@ class IsolatedRunner:
         self,
         request: Any,  # WorkerRequest
         config: IsolationConfig,
+        on_activity: Callable[[dict[str, Any]], None] | None = None,
     ) -> IsolationResult:
         """Async subprocess execution via ``asyncio.create_subprocess_exec``.
 
@@ -383,10 +460,16 @@ class IsolatedRunner:
           cannot drop the slot mid-acquisition — the underlying
           ``to_thread`` is drained in the ``finally`` block and the
           slot is released if it ended up acquired.
-        * Timeout via ``asyncio.wait_for(proc.communicate(input), ...)``;
+        * Timeout via ``asyncio.wait_for(self._pump_worker(...), ...)``;
           on timeout, ``proc.kill()`` + ``await proc.wait()`` guarantee
           process death before the slot is released.
         * stderr persisted to ``~/.geode/workers/<sid>.stderr.log``.
+
+        Fleet-view Stage 1.5 — the stdout read is line-by-line (not a single
+        ``communicate()``) so the worker's ``{"type":"activity"}`` lines are
+        dispatched to ``on_activity`` live, while the LAST result line becomes
+        the ``IsolationResult``. A worker that emits only a bare legacy result
+        line still parses correctly (backward compatible).
         """
         # PR-Async-Phase-C step 4b fix-up — Codex MCP CRITICAL catch
         # (2026-05-22). Previously the slot acquire was a bare
@@ -439,6 +522,13 @@ class IsolatedRunner:
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.PIPE,
                 env=safe_env,
+                # A WorkerResult line carries the full sub-agent output and can
+                # exceed asyncio's default 64 KiB stream limit; line-by-line
+                # reading (`async for` in _pump_worker) would raise
+                # "chunk longer than limit" and lose the result. communicate()
+                # used to buffer the whole pipe, so bump the limit to match
+                # (Codex HIGH — Stage 1.5 line-reader regression).
+                limit=16 * 1024 * 1024,
             )
 
             with self._lock:
@@ -446,8 +536,8 @@ class IsolatedRunner:
 
             request_bytes = json.dumps(request.to_dict()).encode("utf-8") + b"\n"
             try:
-                stdout_bytes, stderr_bytes = await asyncio.wait_for(
-                    proc.communicate(input=request_bytes),
+                result_obj, stderr_bytes = await asyncio.wait_for(
+                    self._pump_worker(proc, request_bytes, on_activity),
                     timeout=config.timeout_s,
                 )
             except TimeoutError:
@@ -484,19 +574,18 @@ class IsolatedRunner:
             if stderr_bytes:
                 await asyncio.to_thread(self._save_stderr, config.session_id, stderr_bytes)
 
-            stdout_text = stdout_bytes.decode("utf-8", errors="replace").strip()
-            if not stdout_text:
+            if result_obj is None:
                 return IsolationResult(
                     session_id=config.session_id,
                     success=False,
-                    error="Worker produced no output on stdout",
+                    error="Worker produced no result line on stdout",
                     duration_ms=duration_ms,
                     started_at=started,
                     completed_at=completed,
                     metadata=dict(config.metadata),
                 )
 
-            result_data = json.loads(stdout_text)
+            result_data = result_obj
             result = IsolationResult(
                 session_id=config.session_id,
                 success=result_data.get("success", False),
@@ -576,19 +665,81 @@ class IsolatedRunner:
             if acquired:
                 await asyncio.to_thread(self._release_slot, config)
 
+    async def _pump_worker(
+        self,
+        proc: asyncio.subprocess.Process,
+        request_bytes: bytes,
+        on_activity: Callable[[dict[str, Any]], None] | None,
+    ) -> tuple[dict[str, Any] | None, bytes]:
+        """Feed stdin, stream stdout line-by-line, drain stderr concurrently.
+
+        Fleet-view Stage 1.5 replacement for ``proc.communicate()``: the whole
+        stdout is no longer read at once, because activity must be dispatched
+        *while the worker runs*. Returns ``(result_dict | None, stderr_bytes)``
+        where the result is the LAST ``"result"``-classified line
+        (see :func:`_classify_worker_line`); intermediate ``"activity"`` lines
+        are forwarded to ``on_activity`` as they arrive; ``"skip"`` lines are
+        dropped. stderr is drained concurrently so a chatty worker cannot fill
+        its stderr pipe buffer and deadlock while we read stdout.
+
+        Cancellation-safe: on the caller's ``wait_for`` timeout this coroutine is
+        cancelled at an await point; the ``finally`` cancels the stderr drain so
+        no orphan task is left, and the caller's timeout branch kills the process.
+        """
+        import contextlib as _cl
+
+        # Feed the request. A worker that died early makes the write raise —
+        # swallow it so the (empty) result path reports "no result line" rather
+        # than a write crash masking the real cause in stderr.
+        if proc.stdin is not None:
+            with _cl.suppress(BrokenPipeError, ConnectionResetError, OSError):
+                proc.stdin.write(request_bytes)
+                await proc.stdin.drain()
+            with _cl.suppress(BrokenPipeError, ConnectionResetError, OSError):
+                proc.stdin.close()
+
+        # Drain stderr concurrently so a chatty worker cannot fill its stderr
+        # pipe buffer and deadlock while we read stdout line-by-line.
+        stderr_task: asyncio.Task[bytes] | None = (
+            asyncio.create_task(proc.stderr.read()) if proc.stderr is not None else None
+        )
+        result_obj: dict[str, Any] | None = None
+        stderr_bytes = b""
+        try:
+            if proc.stdout is not None:
+                async for raw in proc.stdout:
+                    kind, obj = _classify_worker_line(raw.decode("utf-8", errors="replace"))
+                    if kind == "activity":
+                        if on_activity is not None and obj is not None:
+                            with _cl.suppress(Exception):
+                                on_activity(obj)
+                    elif kind == "result":
+                        # Last result line wins — the terminal line of the protocol.
+                        result_obj = obj
+            if stderr_task is not None:
+                stderr_bytes = await stderr_task
+        finally:
+            if stderr_task is not None and not stderr_task.done():
+                stderr_task.cancel()
+                with _cl.suppress(asyncio.CancelledError, Exception):
+                    await stderr_task
+        await proc.wait()
+        return result_obj, stderr_bytes
+
     async def _adispatch(
         self,
         fn_or_request: Callable[..., Any] | Any,
         args: tuple[Any, ...],
         kwargs: dict[str, Any],
         config: IsolationConfig,
+        on_activity: Callable[[dict[str, Any]], None] | None = None,
     ) -> IsolationResult:
         """Async router — WorkerRequest → :meth:`_aexecute_subprocess`,
         callable → thread (via :func:`asyncio.to_thread`)."""
         from core.agent.worker import WorkerRequest
 
         if isinstance(fn_or_request, WorkerRequest):
-            return await self._aexecute_subprocess(fn_or_request, config)
+            return await self._aexecute_subprocess(fn_or_request, config, on_activity)
         return await asyncio.to_thread(self._execute_thread, fn_or_request, args, kwargs, config)
 
     @staticmethod
