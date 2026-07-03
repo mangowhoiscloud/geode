@@ -482,6 +482,30 @@ def _run_agentic(request: WorkerRequest) -> WorkerResult:
     effective_model = request.model or settings.model
     effective_provider = request.provider or _resolve_provider(effective_model)
 
+    # 5.5 Minimal hook bundle (trajectory audit 2026-07-03) — pre-fix the
+    # loop below was built with ``hooks=None``, so the subprocess
+    # sub-agent's tool trajectory vanished: TOOL_EXEC_ENDED had no
+    # consumer (no Episode rows for the child's tool calls) and no run-log
+    # rows were written. Inject only the two trajectory rails (episodic
+    # recorder + run-log wildcard) via ``build_worker_hooks`` — the FULL
+    # ``build_hooks`` bundle is deliberately avoided (per-spawn plugin
+    # discovery + double-writing session stores the parent owns).
+    # Best-effort: a hook bootstrap failure must never take down the
+    # sub-agent itself.
+    worker_hooks = None
+    try:
+        from core.wiring.bootstrap import build_worker_hooks
+
+        worker_hooks = build_worker_hooks(
+            session_key=request.task_id or "worker",
+            run_id=request.task_id or "worker",
+        )
+    except Exception:
+        log.warning(
+            "worker hook bundle init failed — running without hooks",
+            exc_info=True,
+        )
+
     loop = AgenticLoop(
         conversation,
         executor,
@@ -489,6 +513,7 @@ def _run_agentic(request: WorkerRequest) -> WorkerResult:
         max_tokens=request.subagent_max_tokens,
         model=effective_model,
         provider=effective_provider,
+        hooks=worker_hooks,
         # v0.55.0 R5 — propagate reasoning depth + time budget into the
         # sub-agent's loop. Pre-fix every sub-agent ran at the
         # AgenticLoop defaults (effort="high", thinking_budget=0,

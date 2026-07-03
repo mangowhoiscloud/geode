@@ -196,6 +196,14 @@ export const DOCS_SITEMAP: DocSection[] = [
       { slug: "ops/backlog-dispose", title: "Backlog disposal", titleKo: "백로그 처분", summary: "Retire an idea with a paper trail instead of a silent delete.", summaryKo: "조용히 삭제하는 대신 흔적을 남기며 아이디어를 정리합니다.", quadrant: "how-to" },
     ],
   },
+  {
+    id: "10-codebase-map",
+    title: "Codebase Map",
+    titleKo: "코드베이스 지도",
+    pages: [
+      { slug: "codebase-map/layer-graph", title: "Layer architecture graph", titleKo: "레이어 아키텍처 그래프", summary: "A generation-date snapshot of the repository: 14 analyzed layers sized by files, drawn over their cross-layer import edges, plus a seven-step reading tour. Built by Understand-Anything, not hand-drawn.", summaryKo: "저장소를 특정 시점에 스냅숏한 지도입니다. 분석된 14개 레이어를 파일 수 크기로, 레이어를 가로지르는 import 의존을 엣지로 그리고, 7단계 읽기 투어를 덧붙입니다. 손으로 그린 것이 아니라 Understand-Anything가 만든 것입니다.", quadrant: "reference" },
+    ],
+  },
 ];
 
 /** Flat list of all leaf pages. Used by [...slug]/generateStaticParams. */

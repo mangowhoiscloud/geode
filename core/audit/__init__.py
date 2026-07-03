@@ -11,6 +11,12 @@ from __future__ import annotations
 
 from core.audit.diagnostics import DEFAULT_DIAGNOSTICS_DIR, diag, diagnostics_path
 from core.audit.eval_to_jsonl import extract_to_usage_store
+from core.audit.judge_agreement import (
+    compute_report,
+    extract_pairs,
+    krippendorff_alpha,
+    weighted_cohens_kappa,
+)
 from core.audit.manifest import (
     DEFAULT_MANIFEST_PATH,
     append_manifest,
@@ -22,9 +28,13 @@ __all__ = [
     "DEFAULT_DIAGNOSTICS_DIR",
     "DEFAULT_MANIFEST_PATH",
     "append_manifest",
+    "compute_report",
     "diag",
     "diagnostics_path",
+    "extract_pairs",
     "extract_to_usage_store",
     "has_archive",
+    "krippendorff_alpha",
     "read_manifest",
+    "weighted_cohens_kappa",
 ]

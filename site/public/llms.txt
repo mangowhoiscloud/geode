@@ -2,7 +2,7 @@
 
 > GEODE is a self-evolving autonomous execution agent: an inner agentic loop runs tasks (research, analysis, automation, scheduling) and an outer self-improving loop (Petri audit -> fitness gate) tunes the system that runs them.
 
-Version v0.99.271. Last sync 2026-07-03. Docs links point to clean markdown twins (.md); drop the .md suffix for the rendered page.
+Version v0.99.274. Last sync 2026-07-03. Docs links point to clean markdown twins (.md); drop the .md suffix for the rendered page.
 
 ## Start here
 
@@ -113,6 +113,10 @@ Version v0.99.271. Last sync 2026-07-03. Docs links point to clean markdown twin
 - [Why ratchet discipline](https://mangowhoiscloud.github.io/geode/docs/explanation/ratchet.md): Pinned prompt hashes and a staged CI. The shape that prevents drift.
 - [Release and PyPI lifecycle](https://mangowhoiscloud.github.io/geode/docs/ops/release-pypi-lifecycle.md): The version-bump locations, the release workflow, and the rebuild cadence.
 - [Backlog disposal](https://mangowhoiscloud.github.io/geode/docs/ops/backlog-dispose.md): Retire an idea with a paper trail instead of a silent delete.
+
+## Codebase Map
+
+- [Layer architecture graph](https://mangowhoiscloud.github.io/geode/docs/codebase-map/layer-graph.md): A generation-date snapshot of the repository: 14 analyzed layers sized by files, drawn over their cross-layer import edges, plus a seven-step reading tour. Built by Understand-Anything, not hand-drawn.
 
 ## Optional
 

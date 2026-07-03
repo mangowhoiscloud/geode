@@ -1,0 +1,134 @@
+suite: agentic_loop_smoke
+phase: 1
+goal: "Detect major AgenticLoop/tool-routing breakage in under 2 minutes."
+time_budget_s: 120
+cases:
+  - id: smoke_001_direct_answer_no_tool
+    intent: no_tool_direct_answer
+    turns:
+      - user: "ReAct와 Plan-and-Execute 차이를 짧게 설명해줘"
+    expect:
+      tools:
+        exact: []
+      final_response:
+        contains_any: ["ReAct", "Plan-and-Execute", "도구"]
+      max_rounds: 1
+
+  - id: smoke_002_read_file
+    intent: read_file
+    turns:
+      - user: "README.md 읽고 GEODE가 뭔지 세 줄로 요약해줘"
+    expect:
+      tools:
+        includes: [read_document]
+        excludes: [run_bash, glob_files]
+      final_response:
+        contains_any: ["GEODE", "agent", "에이전트"]
+      max_tool_calls: 2
+
+  - id: smoke_003_glob_files
+    intent: file_discovery
+    turns:
+      - user: "core 아래 Python 파일 몇 개 찾아줘"
+    expect:
+      tools:
+        includes: [glob_files]
+        excludes: [run_bash]
+      max_tool_calls: 2
+
+  - id: smoke_004_grep_symbol
+    intent: content_search
+    turns:
+      - user: "AgenticLoop 정의된 파일 찾아줘"
+    expect:
+      tools:
+        includes: [grep_files]
+        excludes: [run_bash]
+      final_response:
+        contains_any: ["AgenticLoop", "agent_loop"]
+      max_tool_calls: 3
+
+  - id: smoke_005_note_save
+    intent: remember_user_note
+    turns:
+      - user: "내 E2E 선호는 smoke 먼저, matrix는 nightly라고 기억해"
+    expect:
+      tools:
+        includes: [note_save]
+        excludes: [memory_save]
+      final_response:
+        contains_any: ["기억", "저장"]
+      max_tool_calls: 1
+
+  - id: smoke_006_note_read
+    intent: recall_user_note
+    turns:
+      - user: "내 E2E 선호로 기억해둔 것 알려줘"
+    expect:
+      tools:
+        includes: [note_read]
+        excludes: [memory_search, web_fetch]
+      final_response:
+        contains_any: ["smoke", "matrix", "E2E"]
+      max_tool_calls: 1
+
+  - id: smoke_007_status
+    intent: system_status
+    turns:
+      - user: "현재 MCP랑 사용 가능한 도구 상태 보여줘"
+    expect:
+      tools:
+        includes: [check_status]
+        excludes: [general_web_search]
+      final_response:
+        contains_any: ["MCP", "tool", "도구", "connected"]
+      max_tool_calls: 1
+
+  - id: smoke_008_url_fetch
+    intent: url_fetch
+    turns:
+      - user: "http://example.com 내용을 요약해줘"
+    expect:
+      tools:
+        includes: [web_fetch]
+        excludes: [general_web_search, browser_navigate]
+      final_response:
+        contains_any: ["Example Domain", "example.com"]
+      max_tool_calls: 2
+      requires_source_citation: true
+
+  - id: smoke_009_clarification_missing_target
+    intent: clarification
+    turns:
+      - user: "그거 분석해줘"
+    expect:
+      tools:
+        exact: []
+      termination_reason_any: [user_clarification_needed, natural, forced_text]
+      final_response:
+        contains_any: ["무엇", "대상", "URL", "파일", "분석"]
+
+  - id: smoke_010_plan_creation_for_complex_task
+    intent: plan_creation
+    turns:
+      - user: "GEODE 최근 변경사항을 여러 소스로 조사하고 리스크까지 보고서로 정리해줘"
+    expect:
+      tools:
+        includes: [create_plan]
+        excludes: [general_web_search, web_fetch, generate_report]
+      max_tool_calls: 1
+      final_response:
+        contains_any: ["Plan ID", "플랜", "승인"]
+
+  - id: smoke_011_tool_failure_handling
+    intent: tool_failure_fallback
+    turns:
+      - user: "https://nonexistent.invalid/geode-smoke-test 내용을 확인하고 요약해줘"
+    expect:
+      tools:
+        includes: [web_fetch]
+        includes_any_after_failure: [general_web_search]
+      final_response:
+        contains_any: ["확인", "verify", "검증", "실패"]
+        must_not_contain: ["성공적으로 확인했습니다"]
+      max_tool_calls: 2

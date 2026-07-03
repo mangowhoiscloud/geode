@@ -45,6 +45,78 @@ functional change.
 
 ---
 
+## [0.99.274] - 2026-07-04
+
+### Added
+
+- **Bundled skill: `frontier-ui-ux-catalog` (progressive disclosure).**
+  Source-grounded catalog of dynamic terminal UI/UX in Claude Code 2.1.170 and
+  Codex CLI 0.142.4 (captured 2026-06-30), skill-ized from an unlanded research
+  doc: compact SKILL.md metadata/summary at startup, full `reference.md` loaded
+  on demand via `use_skill`. Reference for GEODE CLI/REPL UX work.
+- **Plan docs: AgenticLoop E2E case specs.** `docs/plans/agentic-loop-e2e-cases/`
+  lands the 2026-06-30 `smoke.yaml` (phase 1) + `routing.yaml` (phase 2,
+  30-case tool-selection matrix) suite specs as plan documents — no runner
+  consumes them yet; the README marks the harness as pending so they do not
+  masquerade as wired tests.
+
+## [0.99.273] - 2026-07-04
+
+### Added
+
+- **Judge ↔ human agreement — external-anchor validation of the LLM judge.**
+  New `geode audit-agreement` sub-app (`extract` / `label` / `report` /
+  `recalibrate`) and `core/audit/judge_agreement.py` measure whether the
+  Petri LLM-judge's per-dim scores track a human's, closing the
+  "judge validated only by another judge" loop. A deterministic, stratified
+  pilot is extracted from the `~/.geode/petri/logs/` `.eval` archives across
+  the reliability-critical dims (broken_tool_use, input_hallucination,
+  overrefusal, stuck_in_loops, eval_awareness); a resumable CLI labels each
+  transcript excerpt blind (judge score revealed only after the human commits);
+  agreement is reported as per-dim weighted Cohen's kappa (ordinal, linear +
+  quadratic) plus an overall Krippendorff's alpha (ordinal), with systematic
+  bias direction and disagreement cases feeding a judge-recalibration proposal.
+  Statistics are implemented from their definitions in pure stdlib (no numpy /
+  scipy dependency) and pinned by known-value tests (hand-derived weighted
+  kappa; canonical Hayes & Krippendorff 2007 alpha values). Ships harness +
+  methodology + staged pilot (N=20); human labels are collected separately, so
+  no agreement coefficient is reported until labels exist. Methodology:
+  `docs/audits/judge-human-agreement.md`.
+
+## [0.99.272] - 2026-07-04
+
+### Fixed
+
+Three defects found by the 2026-07-03 trajectory audit — each one a broken
+link in the "declared / recorded / joined" observability chain.
+
+- **Finalize evidence-check gate closes the preflight chain.** Task preflight
+  declared `required_evidence` kinds at session start and the runtime appended
+  evidence rows as it went, but nothing ever compared the two — a session that
+  promised `source_url` / `gui_trajectory` evidence and delivered none finished
+  indistinguishable from one that delivered all of it. The finalize path
+  (`_prepare_final_result`, after `append_final`) now appends a
+  `kind="evidence_check"` ledger row with the present / missing lists,
+  resolving the two aliased names (`preflight` → `task_preflight`,
+  `final_answer` → `final_result`) via `REQUIRED_EVIDENCE_KIND_ALIASES`.
+- **Usage rows join back to sessions.** `UsageRecord` carried a `session`
+  column since inception but `TokenTracker._persist_usage` never populated it,
+  so `~/.geode/usage/*.jsonl` could not be joined to transcripts / evidence
+  ledgers / checkpoints (all keyed by session_id). The writer now stamps the
+  active session id from the existing carriers — the `cognitive_state_ctx`
+  ContextVar bound by `AgenticLoop.arun`, falling back to the
+  `SessionMetrics` scope for non-loop runners. No new global; unscoped
+  callers keep the pre-fix row shape (falsy `session` omitted).
+- **Subprocess sub-agents keep their tool trajectory.** `worker._run_agentic`
+  built its AgenticLoop with `hooks=None`, so every subprocess sub-agent ran
+  with zero hook consumers: TOOL_EXEC_ENDED was never observed (no Episode
+  rows for the child's tool calls) and no run-log rows were written. A new
+  minimal bundle (`build_worker_hooks`) injects only the two trajectory rails
+  — the run-log `"*"` wildcard writer and the episodic recorder (extracted to
+  the shared `make_episodic_recorder_handler` factory) — deliberately NOT the
+  full `build_hooks` bundle, which would re-run plugin discovery per spawn and
+  double-write session stores the parent owns.
+
 ## [0.99.271] - 2026-07-04
 
 ### Added
