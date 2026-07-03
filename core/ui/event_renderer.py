@@ -25,6 +25,7 @@ from typing import Any
 
 from core.time_format import format_elapsed
 from core.ui import spinner_glyph
+from core.ui.fleet import FleetRegistry
 from core.ui.tool_tracker import ToolCallTracker, _truncate_display
 
 log = logging.getLogger(__name__)
@@ -160,6 +161,9 @@ class EventRenderer:
         self._progress_plan = _ProgressPlanSurface()
         self._activity_surface = _ActivitySurface()
         self._activity_seq = 0
+        # Stage 1 fleet view — per-sub-agent live state fed by subagent_state
+        # events; read by the one-line fleet summary in the activity region.
+        self._fleet = FleetRegistry()
 
     # -- Public API -----------------------------------------------------------
 
@@ -358,8 +362,34 @@ class EventRenderer:
     def _handle_subagent_dispatch(self, event: dict[str, Any]) -> None:
         self._clear_activity_line()
         desc = str(event.get("description", ""))
+        # Legacy aggregate dispatch is render-only: the fleet registry is fed
+        # exclusively by the per-task `subagent_state` events, which carry a
+        # matching terminal transition. Feeding on_dispatch here would create a
+        # row the aggregate `subagent_complete` (no per-task id) can never
+        # clear \u2192 a permanently-"running" fleet row (Codex catch).
         self._out.write(f'  \033[34;1m\u25b8 delegate_task\033[0m("{desc}")\n')
         self._out.flush()
+
+    def _handle_subagent_state(self, event: dict[str, Any]) -> None:
+        """Feed a per-agent ``subagent_state`` transition into the fleet registry.
+
+        Additive to the aggregate dispatch/progress/complete handlers (which
+        keep working unchanged). After updating the registry, redraw the bottom
+        activity region so the one-line fleet summary reflects the new state
+        (or disappears when the last agent finishes).
+        """
+        task_id = str(event.get("task_id", ""))
+        if not task_id:
+            return
+        self._fleet.on_state(
+            task_id,
+            role=str(event.get("role", "")),
+            status=str(event.get("status", "running")),
+            description=str(event.get("description", "")),
+            tokens=int(event.get("tokens", 0) or 0),
+            elapsed_s=float(event.get("elapsed_s", 0) or 0),
+        )
+        self._render_activity_region()
 
     def _handle_subagent_progress(self, event: dict[str, Any]) -> None:
         completed = int(event.get("completed", 0))
@@ -1266,35 +1296,66 @@ class EventRenderer:
             parts.append(f"{tool_total} tool calls")
         if surface.thought_count:
             parts.append(f"{surface.thought_count} thoughts")
-        if not parts and not surface.notices:
+        fleet_line = self._fleet_summary_line()
+        if not parts and not surface.notices and not fleet_line:
             return []
 
-        lines = [f"\n  \033[2mActivity · {' · '.join(parts) or 'updated'}\033[0m\n"]
-        stats = sorted(
-            surface.tool_stats.items(),
-            key=lambda item: (-item[1].count, -item[1].last_seq, item[0]),
-        )
-        for name, stat in stats[: self._MAX_ACTIVITY_TOOL_LINES]:
-            symbol = "\u2717" if stat.errors else "\u2713"
-            color = "31" if stat.errors else "32"
-            count = f" \u00d7{stat.count}" if stat.count > 1 else ""
-            duration = f" ({stat.duration_s:.1f}s)" if stat.duration_s > 0 else ""
-            if stat.errors:
-                # Honest mixed-outcome summary \u2014 never "\u2717 \u2026 \u2192 ok" (a red cross
-                # next to a stale success summary reads as a contradiction).
-                summary = stat.error or f"{stat.errors}/{stat.count} failed \u00b7 last ok"
-            else:
-                summary = stat.summary or "ok"
-            summary = _truncate_display(summary, 60)
-            lines.append(
-                f"    \033[{color}m{symbol} {name}\033[0m{count} \u2192 {summary}{duration}\n"
+        lines: list[str] = []
+        if parts or surface.notices:
+            lines.append(f"\n  \033[2mActivity · {' · '.join(parts) or 'updated'}\033[0m\n")
+            stats = sorted(
+                surface.tool_stats.items(),
+                key=lambda item: (-item[1].count, -item[1].last_seq, item[0]),
             )
-        omitted = len(stats) - self._MAX_ACTIVITY_TOOL_LINES
-        if omitted > 0:
-            lines.append(f"    \033[2m\u2026 +{omitted} tool types\033[0m\n")
-        for notice in surface.notices[-self._MAX_ACTIVITY_NOTICE_LINES :]:
-            lines.append(f"    \033[2m{notice}\033[0m\n")
+            for name, stat in stats[: self._MAX_ACTIVITY_TOOL_LINES]:
+                symbol = "\u2717" if stat.errors else "\u2713"
+                color = "31" if stat.errors else "32"
+                count = f" \u00d7{stat.count}" if stat.count > 1 else ""
+                duration = f" ({stat.duration_s:.1f}s)" if stat.duration_s > 0 else ""
+                if stat.errors:
+                    # Honest mixed-outcome summary \u2014 never "\u2717 \u2026 \u2192 ok" (a red
+                    # cross next to a stale success summary reads as a contradiction).
+                    summary = stat.error or f"{stat.errors}/{stat.count} failed \u00b7 last ok"
+                else:
+                    summary = stat.summary or "ok"
+                summary = _truncate_display(summary, 60)
+                lines.append(
+                    f"    \033[{color}m{symbol} {name}\033[0m{count} \u2192 {summary}{duration}\n"
+                )
+            omitted = len(stats) - self._MAX_ACTIVITY_TOOL_LINES
+            if omitted > 0:
+                lines.append(f"    \033[2m\u2026 +{omitted} tool types\033[0m\n")
+            for notice in surface.notices[-self._MAX_ACTIVITY_NOTICE_LINES :]:
+                lines.append(f"    \033[2m{notice}\033[0m\n")
+        if fleet_line:
+            # A leading blank row only when the fleet line stands alone (no
+            # Activity header above it), so it is not glued to prior output.
+            lead = "" if lines else "\n"
+            lines.append(f"{lead}  {fleet_line}\n")
         return lines
+
+    def _fleet_summary_line(self) -> str:
+        """One compact line summarising the running sub-agents, or '' if none.
+
+        ``\u25c6 Fleet \u00b7 N running \u00b7 role_a, role_b`` uses the rose GEODE mark for
+        running, a dim body, no emoji, truncated to fit the terminal width. Drawn
+        only while at least one sub-agent is running (Stage 1 fleet view).
+        """
+        running = self._fleet.running()
+        if not running:
+            return ""
+        labels = [
+            agent.role or _truncate_display(agent.description, 24) or agent.task_id
+            for agent in running
+        ]
+        prefix = f"Fleet \u00b7 {len(running)} running \u00b7 "
+        width = max(20, shutil.get_terminal_size(fallback=(80, 24)).columns)
+        # Budget: total width minus the 2-space indent, the rose mark + space,
+        # and the prefix; the remainder is for the comma-joined role names.
+        budget = max(8, width - 2 - 2 - len(prefix))
+        names = _truncate_display(", ".join(labels), budget)
+        mark = f"{spinner_glyph.ROSE}{spinner_glyph.GLYPH}{spinner_glyph.RST}"
+        return f"{mark} \033[2m{prefix}{names}\033[0m"
 
     def _render_full_progress_plan(
         self, items: list[dict[Any, Any]], explanation: str
