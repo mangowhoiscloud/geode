@@ -18,6 +18,9 @@ export default function Page() {
               이 큐는 GEODE benchmark를 한 번에 섞어 평균내지 않기 위한 운영
               순서입니다. 각 항목은 별도 harness revision, model route, artifact
               path, 비교 가능성 판정을 가진 독립 run record로 공개합니다.
+              실측 표와 클릭 가능한 run record는{" "}
+              <a href="/geode/docs/benchmarks/results">Benchmark measurements</a>에
+              MCPMark와 Tau2 그룹으로 모읍니다.
             </p>
 
             <h2>현재 순서</h2>
@@ -94,6 +97,9 @@ export default function Page() {
               mixing unrelated scores into one average. Each item gets its own
               harness revision, model route, artifact path, and comparability
               decision.
+              The measured tables and clickable run records live in{" "}
+              <a href="/geode/docs/benchmarks/results">Benchmark measurements</a>,
+              grouped under MCPMark and Tau2.
             </p>
 
             <h2>Current order</h2>
