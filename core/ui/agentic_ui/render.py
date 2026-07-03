@@ -217,6 +217,50 @@ def render_subagent_progress(
     )
 
 
+def emit_subagent_state(
+    task_id: str,
+    role: str,
+    status: str,
+    description: str,
+    tokens: int,
+    elapsed_s: float,
+) -> None:
+    """Emit a per-agent fleet state transition (Stage 1 fleet view).
+
+    Additive to the aggregate ``subagent_dispatch/progress/complete`` events:
+    this one carries per-task identity (``task_id`` + ``role``) so the thin
+    client's ``FleetRegistry`` can track each sub-agent independently.
+
+    ``tokens`` is ``0`` at dispatch (``status="running"``) and the sub-agent's
+    final ``prompt + completion`` count at completion (``0`` for subscription /
+    CLI-routed calls — never fabricated). ``current_activity`` is intentionally
+    absent: the child subprocess runs ``quiet=True`` so its live tool text does
+    not cross the IPC boundary (that is Stage 1.5, see the fleet-view design doc).
+    """
+    from core.ui import agentic_ui as _pkg
+
+    writer = getattr(_ipc_writer_local, "writer", None)
+    if writer is not None:
+        writer.send_event(
+            "subagent_state",
+            task_id=task_id,
+            role=role,
+            status=status,
+            description=description,
+            tokens=tokens,
+            elapsed_s=round(elapsed_s, 1),
+        )
+        return
+    # Console fallback (direct mode, no IPC writer bound). Only terminal
+    # transitions print — a per-dispatch line would spam N rows for an
+    # N-way fan-out, and the aggregate dispatch/progress lines already cover
+    # the running phase in direct mode.
+    if status == "running":
+        return
+    label = role or description or task_id
+    _pkg.console.print(f"  [dim]⎿ {label} · {status} ({elapsed_s:.1f}s)[/dim]")
+
+
 def render_subagent_complete(count: int, elapsed_s: float) -> None:
     """Render sub-agent batch completion."""
     from core.ui import agentic_ui as _pkg

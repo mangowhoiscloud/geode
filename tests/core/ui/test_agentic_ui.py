@@ -1045,8 +1045,10 @@ class TestPlanSurfaceVisualLanguage:
         assert "… 3 earlier" in lines
         assert "Tasks · 0/8 done" in lines
 
-    def test_live_region_erased_before_foreign_output(self) -> None:
-        """Any non-surface event erases the live region first — no stale copies."""
+    def test_plan_released_to_scrollback_on_foreign_output(self) -> None:
+        """Foreign output releases the plan to scrollback (it scrolls up) — the
+        checklist is transcript content, never cursor-erased. Releasing it just
+        marks it no-longer-bottom-most so the next plan event draws fresh."""
         r = self._renderer()
         r._tty = True
         r.on_event(
@@ -1056,13 +1058,20 @@ class TestPlanSurfaceVisualLanguage:
             }
         )
         assert r._progress_plan.at_bottom is True
+        before = r._out.getvalue()
+        assert "only step" in before
         r.on_stream("some daemon output\n")
+        after = r._out.getvalue()
+        # Released for a fresh redraw next time, but NOT re-emitted or lost.
         assert r._progress_plan.at_bottom is False
-        assert r._progress_plan.visible_lines == []  # erased, not just marked
+        assert "some daemon output" in after
+        # The daemon output printed after the plan (plan scrolls up, not erased).
+        assert after.index("only step") < after.index("some daemon output")
 
 
-class TestPinnedPlanDuringPhases:
-    """Task list hides during phases and returns as one compact bottom copy."""
+class TestPlanNotReemittedDuringPhases:
+    """The plan is drawn once by its own events and scrolls up; thinking/tool
+    phases flow BELOW it and never re-emit the checklist."""
 
     def _renderer(self) -> Any:
         import io
@@ -1074,8 +1083,9 @@ class TestPinnedPlanDuringPhases:
         r._tty = True
         return r
 
-    def test_thinking_start_hides_task_list_without_reprinting_it(self) -> None:
-        """thinking_start clears the task list; spinner label carries active step."""
+    def test_thinking_start_does_not_reprint_the_plan(self) -> None:
+        """thinking_start leaves the plan in scrollback (not re-emitted); the
+        spinner label carries the active step and flows below it."""
         r = self._renderer()
         r.on_event(
             {
@@ -1086,16 +1096,17 @@ class TestPinnedPlanDuringPhases:
         marker = len(r._out.getvalue())
         r.on_event({"type": "thinking_start", "model": "m", "round": 1})
         try:
-            assert r._plan_pinned is True
-            assert r._progress_plan.visible_lines == []
+            # The plan stays drawn in scrollback — released, not cursor-erased.
+            assert r._progress_plan.visible_lines != []
             assert r._progress_plan.at_bottom is False
             written_after = r._out.getvalue()[marker:]
-            assert "pinned step" not in written_after
+            # No fresh checklist header is emitted for the phase.
+            assert "Tasks ·" not in written_after
         finally:
             r._stop_thinking()
 
-    def test_thinking_cycle_leaves_single_bottom_copy(self) -> None:
-        """progress_plan → thinking_start → thinking_end: ONE plan copy at bottom."""
+    def test_thinking_cycle_leaves_single_plan_copy(self) -> None:
+        """progress_plan → thinking_start → thinking_end: exactly ONE plan copy."""
         r = self._renderer()
         r.on_event(
             {
@@ -1106,13 +1117,13 @@ class TestPinnedPlanDuringPhases:
         r.on_event({"type": "thinking_start", "model": "m", "round": 1})
         r.on_event({"type": "thinking_end"})
         out = r._out.getvalue()
+        assert out.count("Tasks ·") == 1
         tail = out[out.rindex("Tasks") :]  # after the LAST Tasks header
         assert tail.count("cycle step") == 1
-        assert r._plan_pinned is False
-        assert r._progress_plan.at_bottom is True  # bottom copy is erasable again
 
-    def test_tool_cycle_restores_task_list_to_bottom(self) -> None:
-        """tool_start clears the task list; tool_end all-done redraws it."""
+    def test_tool_cycle_does_not_reprint_the_plan(self) -> None:
+        """tool_start/tool_end flow below the plan; the checklist is not
+        re-emitted, and the activity summary renders separately."""
         r = self._renderer()
         r.on_event(
             {
@@ -1121,12 +1132,11 @@ class TestPinnedPlanDuringPhases:
             }
         )
         r.on_event({"type": "tool_start", "name": "web_search"})
-        assert r._plan_pinned is True
         r.on_event({"type": "tool_end", "name": "web_search", "summary": "ok", "duration_s": 0.1})
-        assert r._plan_pinned is False
-        assert r._progress_plan.at_bottom is True
         out = r._out.getvalue()
+        assert out.count("Tasks ·") == 1  # plan drawn once, never re-emitted
         assert "tool step" in out[out.rindex("Tasks") :]
+        assert "Activity" in out  # activity summary rendered on its own surface
 
 
 def test_tool_tracker_running_row_uses_signature_shimmer() -> None:

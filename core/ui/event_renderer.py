@@ -25,6 +25,7 @@ from typing import Any
 
 from core.time_format import format_elapsed
 from core.ui import spinner_glyph
+from core.ui.fleet import FleetRegistry
 from core.ui.tool_tracker import ToolCallTracker, _truncate_display
 
 log = logging.getLogger(__name__)
@@ -56,6 +57,11 @@ class _ProgressPlanSurface:
     items: list[dict[str, str]] = field(default_factory=list)
     explanation: str = ""
     at_bottom: bool = False
+    # Signature of the last checklist actually drawn (items + statuses +
+    # explanation). Consecutive plan events carrying an identical state are
+    # deduped against this so a re-emitted-but-unchanged plan never reprints.
+    signature: str = ""
+    rendered: bool = False
 
 
 @dataclass
@@ -131,9 +137,6 @@ class EventRenderer:
         self._stdin_stop = threading.Event()
         self._stdin_thread: threading.Thread | None = None
         self._out = sys.stdout
-        # True while a phase (thinking/tool) owns the bottom rows. The compact
-        # task list is hidden during the phase and restored afterward.
-        self._plan_pinned = False
         # Persistent activity spinner state
         self._activity = False
         self._activity_suppressed = False
@@ -158,6 +161,9 @@ class EventRenderer:
         self._progress_plan = _ProgressPlanSurface()
         self._activity_surface = _ActivitySurface()
         self._activity_seq = 0
+        # Stage 1 fleet view — per-sub-agent live state fed by subagent_state
+        # events; read by the one-line fleet summary in the activity region.
+        self._fleet = FleetRegistry()
 
     # -- Public API -----------------------------------------------------------
 
@@ -231,21 +237,13 @@ class EventRenderer:
         self._clear_markdown_stream_region()
         self._out.flush()
         self._flush_repeat()
-        # Freeze the compact live region as the turn's final state: if answer
-        # streaming already erased it, print one last permanent copy, then
-        # release it to scrollback so the final answer renders below it.
+        # Freeze the activity block as the turn's final state, then release both
+        # surfaces to scrollback so the final answer renders below them. The plan
+        # checklist is transcript content — it was drawn by its own events and
+        # already sits in scrollback, so it is never redrawn here.
         with self._render_lock:
-            # A phase interrupted mid-flight (Ctrl+C, error) may leave legacy
-            # pinned state set. Clear it before rendering the final live region.
-            self._restore_pinned_plan_locked()
-            has_content = bool(self._progress_plan.items) or bool(
-                self._activity_surface.tool_stats or self._activity_surface.notices
-            )
-            visible = bool(
-                self._progress_plan.visible_lines or self._activity_surface.visible_lines
-            )
-            if has_content and not visible:
-                self._render_live_region()
+            if self._activity_surface.tool_stats or self._activity_surface.notices:
+                self._render_activity_region()
             self._progress_plan.at_bottom = False
             self._activity_surface.at_bottom = False
         # Render accumulated turn status (Claude Code style)
@@ -259,7 +257,9 @@ class EventRenderer:
     def _handle_thinking_start(self, event: dict[str, Any]) -> None:
         self._activity_suppressed = True
         self._tool_tracker.stop()
-        self._pin_plan_for_phase()
+        # Clear the bottom activity block so the thinking spinner flows below the
+        # plan; the plan itself stays in scrollback (never re-emitted per phase).
+        self._erase_live_region()
         with self._render_lock:
             self._thinking_region = _ThinkingRegion(start_ts=time.monotonic())
             self._thinking = True
@@ -272,7 +272,6 @@ class EventRenderer:
 
     def _handle_thinking_end(self, _event: dict[str, Any]) -> None:
         self._stop_thinking()
-        should_render_activity = False
         with self._render_lock:
             region = self._thinking_region
             if region:
@@ -280,14 +279,11 @@ class EventRenderer:
                 if self._tty:
                     self._erase_thinking_visible_locked(region)
                     self._record_thought_activity_locked(region)
-                    should_render_activity = True
-            # The phase ended; restore the compact task list + activity as one
-            # bottom unit.
-            if self._restore_pinned_plan_locked():
-                should_render_activity = True
         self._activity_suppressed = False  # resume activity spinner
-        if should_render_activity:
-            self._render_live_region()
+        # Redraw ONLY the activity block (thought/tool summary). The plan
+        # checklist is never re-emitted at phase end — that per-phase reprint
+        # is exactly what stacked N identical Plan blocks down the transcript.
+        self._render_activity_region()
 
     def _handle_tool_start(self, event: dict[str, Any]) -> None:
         name = str(event.get("name", ""))
@@ -302,7 +298,9 @@ class EventRenderer:
 
         self._activity_suppressed = True
         self._stop_thinking()
-        self._pin_plan_for_phase()
+        # Clear the bottom activity block so tool rows flow below the plan; the
+        # plan itself stays in scrollback (never re-emitted per phase).
+        self._erase_live_region()
         self._tool_tracker.on_tool_start(event)
 
     def _handle_tool_end(self, event: dict[str, Any]) -> None:
@@ -319,10 +317,9 @@ class EventRenderer:
             self._tool_tracker.suspend()
             with self._tool_tracker._lock:
                 self._tool_tracker._tools.clear()
-            # suspend() erased the tool rows; redraw the compact live region.
-            with self._render_lock:
-                self._restore_pinned_plan_locked()
-            self._render_live_region()
+            # suspend() erased the tool rows; redraw ONLY the activity block.
+            # The plan is not re-emitted at phase end (it lives in scrollback).
+            self._render_activity_region()
             # Track last single-tool batch for repeat detection
             if is_single:
                 dur = event.get("duration_s")
@@ -365,8 +362,34 @@ class EventRenderer:
     def _handle_subagent_dispatch(self, event: dict[str, Any]) -> None:
         self._clear_activity_line()
         desc = str(event.get("description", ""))
+        # Legacy aggregate dispatch is render-only: the fleet registry is fed
+        # exclusively by the per-task `subagent_state` events, which carry a
+        # matching terminal transition. Feeding on_dispatch here would create a
+        # row the aggregate `subagent_complete` (no per-task id) can never
+        # clear \u2192 a permanently-"running" fleet row (Codex catch).
         self._out.write(f'  \033[34;1m\u25b8 delegate_task\033[0m("{desc}")\n')
         self._out.flush()
+
+    def _handle_subagent_state(self, event: dict[str, Any]) -> None:
+        """Feed a per-agent ``subagent_state`` transition into the fleet registry.
+
+        Additive to the aggregate dispatch/progress/complete handlers (which
+        keep working unchanged). After updating the registry, redraw the bottom
+        activity region so the one-line fleet summary reflects the new state
+        (or disappears when the last agent finishes).
+        """
+        task_id = str(event.get("task_id", ""))
+        if not task_id:
+            return
+        self._fleet.on_state(
+            task_id,
+            role=str(event.get("role", "")),
+            status=str(event.get("status", "running")),
+            description=str(event.get("description", "")),
+            tokens=int(event.get("tokens", 0) or 0),
+            elapsed_s=float(event.get("elapsed_s", 0) or 0),
+        )
+        self._render_activity_region()
 
     def _handle_subagent_progress(self, event: dict[str, Any]) -> None:
         completed = int(event.get("completed", 0))
@@ -597,11 +620,22 @@ class EventRenderer:
         if not normalized:
             return
 
+        signature = self._plan_signature(normalized, explanation)
         with self._render_lock:
-            self._suppress_all_spinners()
-            self._progress_plan.items = list(normalized)
-            self._progress_plan.explanation = explanation
-            self._render_live_region()
+            plan = self._progress_plan
+            # Dedup: a re-emitted plan carrying an identical state (same steps,
+            # statuses, explanation) never reprints — only genuine state changes
+            # draw a fresh checklist.
+            if plan.rendered and signature == plan.signature:
+                return
+            plan.items = list(normalized)
+            plan.explanation = explanation
+            self._render_plan_region(signature)
+
+    @staticmethod
+    def _plan_signature(items: list[dict[str, str]], explanation: str) -> str:
+        steps = "\x1e".join(f"{it.get('step', '')}\x1f{it.get('status', '')}" for it in items)
+        return f"{steps}\x1d{explanation}"
 
     def _handle_tool_backpressure(self, event: dict[str, Any]) -> None:
         self._clear_activity_line()
@@ -616,7 +650,7 @@ class EventRenderer:
             f"\033[1;33m\u27f3 Diversity: {tool} called {count}x"
             " \u2014 hinting alternate path\033[0m"
         )
-        self._render_live_region()
+        self._render_activity_region()
 
     def _handle_model_switched(self, event: dict[str, Any]) -> None:
         self._clear_activity_line()
@@ -912,7 +946,7 @@ class EventRenderer:
         self._last_batch_tool = ""
         if count <= 1:
             return
-        self._render_live_region()
+        self._render_activity_region()
 
     # -- HITL approval spinner coordination ------------------------------------
 
@@ -1134,76 +1168,80 @@ class EventRenderer:
         return rows
 
     def _erase_live_region(self) -> None:
-        """Erase the bottom-anchored live surfaces while they are still bottom-most.
+        """Prepare the bottom rows for foreign output printing immediately after.
 
-        Callers print scrollback content immediately after, so the region never
-        gets buried — the pre-fix pathology was mark-obscured-without-erase,
-        which left a stale full copy behind on every obscure (stacked walls of
-        near-identical Plan/Activity blocks).
+        The activity block is a genuine bottom-anchored live surface, so it is
+        erased in place (cursor-up) while still bottom-most. The plan checklist
+        is transcript content — it is never cursor-erased; it is only *released*
+        (marked no-longer-bottom-most) so it scrolls up with the foreign output
+        and the next plan event draws a fresh copy below instead of stacking.
         """
         with self._render_lock:
-            if self._plan_pinned:
-                # A phase-owned live region is being buried by foreign output.
-                # Release it without cursor-up erase sequences; phase output
-                # below it makes that math unsafe.
-                self._progress_plan.visible_lines = []
-                self._plan_pinned = False
-            # Reverse render order: activity sits below the plan checklist.
-            for surface in (self._activity_surface, self._progress_plan):
-                if surface.at_bottom and surface.visible_lines:
-                    self._erase_lines_locked(surface.visible_lines)
-                    surface.visible_lines = []
-                    surface.at_bottom = False
+            self._erase_activity_locked()
+            self._release_plan_locked()
 
-    def _pin_plan_for_phase(self) -> None:
-        """Clear the bottom live region before a thinking/tool phase runs.
+    def _erase_activity_locked(self) -> None:
+        """Cursor-up erase the activity block if it is still the bottom-most row."""
+        surface = self._activity_surface
+        if surface.at_bottom and surface.visible_lines:
+            self._erase_lines_locked(surface.visible_lines)
+            surface.visible_lines = []
+            surface.at_bottom = False
 
-        Claude Code keeps the current step in the spinner label and exposes the
-        full task list as a separate compact surface. Re-printing the checklist
-        above every tool/thinking phase leaves duplicate Plan blocks in
-        scrollback, so phases now run with only the contextual spinner/tool row;
-        the compact task list returns after the phase ends.
+    def _release_plan_locked(self) -> None:
+        """Release the plan checklist to scrollback (leave it drawn, just not bottom-most)."""
+        self._progress_plan.at_bottom = False
+
+    def _render_plan_region(self, signature: str) -> None:
+        """Draw the compact task list once per state change (Claude Code todo).
+
+        Drawn only from plan events (progress_plan / plan_step / replan /
+        goal_decomposition), never from a thinking/tool phase. If the previous
+        checklist is still the bottom-most thing (a rapid consecutive update with
+        nothing printed since), it is erased in place and redrawn so an update
+        does not duplicate; the moment anything else printed it is released, and
+        the new checklist draws fresh below (the prior copy stays in scrollback).
         """
         with self._render_lock:
-            self._erase_live_region()
-            self._plan_pinned = True
-
-    def _restore_pinned_plan_locked(self) -> bool:
-        """Clear legacy pinned state after a phase.
-
-        The plan is no longer physically pinned during phases; it is redrawn as
-        part of the compact live region at phase end.
-        """
-        if not self._plan_pinned:
-            return False
-        self._plan_pinned = False
-        return True
-
-    def _render_live_region(self) -> None:
-        """Redraw compact task list + activity block at the bottom as ONE unit.
-
-        The scrollback equivalent of Claude Code's live todo widget: a single
-        moving copy, capped at five visible tasks and erased before any other
-        output prints.
-        """
-        with self._render_lock:
-            self._erase_live_region()
+            self._suppress_all_spinners()
             plan = self._progress_plan
-            plan_lines = (
-                self._render_full_progress_plan(plan.items, plan.explanation) if plan.items else []
-            )
-            activity_lines = self._render_activity_lines()
-            if not plan_lines and not activity_lines:
-                return
-            for line in (*plan_lines, *activity_lines):
+            # If the activity block sits below the plan, clear it first so the
+            # plan never ends up rendered below its own activity summary.
+            self._erase_activity_locked()
+            if plan.at_bottom and plan.visible_lines:
+                self._erase_lines_locked(plan.visible_lines)
+            plan_lines = self._render_full_progress_plan(plan.items, plan.explanation)
+            for line in plan_lines:
                 self._out.write(line)
+            plan.visible_lines = plan_lines
             # Non-TTY (piped/log) output is append-only: never mark at_bottom,
             # so no cursor-up erase sequences are ever emitted into a pipe.
-            plan.visible_lines = plan_lines
-            plan.at_bottom = bool(plan_lines) and self._tty
+            plan.at_bottom = self._tty
+            plan.signature = signature
+            plan.rendered = True
+            self._out.flush()
+
+    def _render_activity_region(self) -> None:
+        """Redraw the bottom-anchored activity block (tool/thought summary) in place.
+
+        The activity block legitimately updates as tools/thoughts accumulate, so
+        it keeps its own single moving copy. It never carries the plan checklist,
+        which is drawn separately by plan events and scrolls up independently.
+        """
+        with self._render_lock:
+            self._erase_activity_locked()
+            activity_lines = self._render_activity_lines()
+            if not activity_lines:
+                return
+            for line in activity_lines:
+                self._out.write(line)
             surface = self._activity_surface
             surface.visible_lines = activity_lines
-            surface.at_bottom = bool(activity_lines) and self._tty
+            # Non-TTY (piped/log) output is append-only: never mark at_bottom.
+            surface.at_bottom = self._tty
+            # The activity block is now the bottom-most row; the plan (above it)
+            # is no longer erasable in place.
+            self._progress_plan.at_bottom = False
             self._out.flush()
 
     def _record_tool_activity(self, event: dict[str, Any]) -> None:
@@ -1258,35 +1296,66 @@ class EventRenderer:
             parts.append(f"{tool_total} tool calls")
         if surface.thought_count:
             parts.append(f"{surface.thought_count} thoughts")
-        if not parts and not surface.notices:
+        fleet_line = self._fleet_summary_line()
+        if not parts and not surface.notices and not fleet_line:
             return []
 
-        lines = [f"\n  \033[2mActivity · {' · '.join(parts) or 'updated'}\033[0m\n"]
-        stats = sorted(
-            surface.tool_stats.items(),
-            key=lambda item: (-item[1].count, -item[1].last_seq, item[0]),
-        )
-        for name, stat in stats[: self._MAX_ACTIVITY_TOOL_LINES]:
-            symbol = "\u2717" if stat.errors else "\u2713"
-            color = "31" if stat.errors else "32"
-            count = f" \u00d7{stat.count}" if stat.count > 1 else ""
-            duration = f" ({stat.duration_s:.1f}s)" if stat.duration_s > 0 else ""
-            if stat.errors:
-                # Honest mixed-outcome summary \u2014 never "\u2717 \u2026 \u2192 ok" (a red cross
-                # next to a stale success summary reads as a contradiction).
-                summary = stat.error or f"{stat.errors}/{stat.count} failed \u00b7 last ok"
-            else:
-                summary = stat.summary or "ok"
-            summary = _truncate_display(summary, 60)
-            lines.append(
-                f"    \033[{color}m{symbol} {name}\033[0m{count} \u2192 {summary}{duration}\n"
+        lines: list[str] = []
+        if parts or surface.notices:
+            lines.append(f"\n  \033[2mActivity · {' · '.join(parts) or 'updated'}\033[0m\n")
+            stats = sorted(
+                surface.tool_stats.items(),
+                key=lambda item: (-item[1].count, -item[1].last_seq, item[0]),
             )
-        omitted = len(stats) - self._MAX_ACTIVITY_TOOL_LINES
-        if omitted > 0:
-            lines.append(f"    \033[2m\u2026 +{omitted} tool types\033[0m\n")
-        for notice in surface.notices[-self._MAX_ACTIVITY_NOTICE_LINES :]:
-            lines.append(f"    \033[2m{notice}\033[0m\n")
+            for name, stat in stats[: self._MAX_ACTIVITY_TOOL_LINES]:
+                symbol = "\u2717" if stat.errors else "\u2713"
+                color = "31" if stat.errors else "32"
+                count = f" \u00d7{stat.count}" if stat.count > 1 else ""
+                duration = f" ({stat.duration_s:.1f}s)" if stat.duration_s > 0 else ""
+                if stat.errors:
+                    # Honest mixed-outcome summary \u2014 never "\u2717 \u2026 \u2192 ok" (a red
+                    # cross next to a stale success summary reads as a contradiction).
+                    summary = stat.error or f"{stat.errors}/{stat.count} failed \u00b7 last ok"
+                else:
+                    summary = stat.summary or "ok"
+                summary = _truncate_display(summary, 60)
+                lines.append(
+                    f"    \033[{color}m{symbol} {name}\033[0m{count} \u2192 {summary}{duration}\n"
+                )
+            omitted = len(stats) - self._MAX_ACTIVITY_TOOL_LINES
+            if omitted > 0:
+                lines.append(f"    \033[2m\u2026 +{omitted} tool types\033[0m\n")
+            for notice in surface.notices[-self._MAX_ACTIVITY_NOTICE_LINES :]:
+                lines.append(f"    \033[2m{notice}\033[0m\n")
+        if fleet_line:
+            # A leading blank row only when the fleet line stands alone (no
+            # Activity header above it), so it is not glued to prior output.
+            lead = "" if lines else "\n"
+            lines.append(f"{lead}  {fleet_line}\n")
         return lines
+
+    def _fleet_summary_line(self) -> str:
+        """One compact line summarising the running sub-agents, or '' if none.
+
+        ``\u25c6 Fleet \u00b7 N running \u00b7 role_a, role_b`` uses the rose GEODE mark for
+        running, a dim body, no emoji, truncated to fit the terminal width. Drawn
+        only while at least one sub-agent is running (Stage 1 fleet view).
+        """
+        running = self._fleet.running()
+        if not running:
+            return ""
+        labels = [
+            agent.role or _truncate_display(agent.description, 24) or agent.task_id
+            for agent in running
+        ]
+        prefix = f"Fleet \u00b7 {len(running)} running \u00b7 "
+        width = max(20, shutil.get_terminal_size(fallback=(80, 24)).columns)
+        # Budget: total width minus the 2-space indent, the rose mark + space,
+        # and the prefix; the remainder is for the comma-joined role names.
+        budget = max(8, width - 2 - 2 - len(prefix))
+        names = _truncate_display(", ".join(labels), budget)
+        mark = f"{spinner_glyph.ROSE}{spinner_glyph.GLYPH}{spinner_glyph.RST}"
+        return f"{mark} \033[2m{prefix}{names}\033[0m"
 
     def _render_full_progress_plan(
         self, items: list[dict[Any, Any]], explanation: str
@@ -1296,7 +1365,9 @@ class EventRenderer:
         header = f"Tasks · {completed}/{total} done"
         if explanation:
             header = f"{header} · {explanation}"
-        lines = ["\n", f"  \033[1;36m{header}\033[0m\n"]
+        # Signature rose (not mint) for the checklist header — the plan surface
+        # shares GEODE's one hue with the spinner and the active-step mark.
+        lines = ["\n", f"  {spinner_glyph.ROSE}{header}\033[0m\n"]
         visible_items, hidden_before, hidden_after = self._visible_plan_window(items)
         if hidden_before:
             lines.append(f"    \033[2m… {hidden_before} earlier\033[0m\n")

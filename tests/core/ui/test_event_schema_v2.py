@@ -379,6 +379,91 @@ class TestEventRendererV2:
         assert "revised · cadence · 2 steps · rev 1" in tail
         assert "inspect" in tail
 
+    def test_plan_not_restacked_across_thinking_rounds(self, renderer) -> None:
+        """Regression: a plan drawn once must NOT be re-emitted on every thinking
+        round. Before the fix this stacked N identical 'Tasks ·' blocks down the
+        transcript (one per round); now the checklist appears exactly once."""
+        renderer._tty = True
+        renderer.on_event(
+            {
+                "type": "progress_plan",
+                "explanation": "implementation",
+                "plan": [
+                    {"step": "Inspect UX", "status": "completed"},
+                    {"step": "Patch renderer", "status": "in_progress"},
+                    {"step": "Run tests", "status": "pending"},
+                ],
+            }
+        )
+        # 5 thinking rounds with an UNCHANGED plan, with a round-transition
+        # stream between them (this is what pushed the block up / at_bottom=False
+        # so the old in-place erase could not keep up and copies stacked).
+        for i in range(5):
+            renderer.on_event({"type": "thinking_start", "model": "m", "round": i + 1})
+            renderer.on_event({"type": "thinking_end"})
+            renderer.on_stream("assistant round text\n")
+        renderer.stop()
+
+        out = renderer._out.getvalue()
+        assert out.count("Tasks ·") == 1  # exactly one checklist, not 6+
+        assert out.count("Patch renderer") == 1  # the plan step text, once
+
+    def test_plan_redraws_on_changed_status(self, renderer) -> None:
+        """A second progress_plan with a CHANGED status draws a new checklist."""
+        renderer._tty = True
+        renderer.on_event(
+            {
+                "type": "progress_plan",
+                "plan": [
+                    {"step": "Inspect UX", "status": "in_progress"},
+                    {"step": "Run tests", "status": "pending"},
+                ],
+            }
+        )
+        renderer.on_stream("tool output\n")  # push it up so a fresh copy is drawn
+        renderer.on_event(
+            {
+                "type": "progress_plan",
+                "plan": [
+                    {"step": "Inspect UX", "status": "completed"},
+                    {"step": "Run tests", "status": "in_progress"},
+                ],
+            }
+        )
+        out = renderer._out.getvalue()
+        assert out.count("Tasks ·") == 2  # genuine state change → new checklist
+
+    def test_plan_dedups_identical_consecutive_state(self, renderer) -> None:
+        """A second progress_plan with the SAME state does NOT add a checklist."""
+        renderer._tty = True
+        plan_event = {
+            "type": "progress_plan",
+            "explanation": "same",
+            "plan": [
+                {"step": "Inspect UX", "status": "in_progress"},
+                {"step": "Run tests", "status": "pending"},
+            ],
+        }
+        renderer.on_event(dict(plan_event))
+        renderer.on_stream("tool output\n")  # even after being pushed up…
+        renderer.on_event(dict(plan_event))  # …an identical plan is deduped
+        out = renderer._out.getvalue()
+        assert out.count("Tasks ·") == 1
+
+    def test_plan_header_uses_rose_not_mint(self, renderer) -> None:
+        """Header uses the signature rose SGR, never the old mint '1;36m'."""
+        from core.ui import spinner_glyph
+
+        renderer.on_event(
+            {
+                "type": "progress_plan",
+                "plan": [{"step": "Only step", "status": "in_progress"}],
+            }
+        )
+        out = renderer._out.getvalue()
+        assert spinner_glyph.ROSE in out
+        assert "\033[1;36m" not in out  # no mint on the plan surface
+
     def test_tool_backpressure(self, renderer) -> None:
         renderer.on_event({"type": "tool_backpressure", "consecutive_errors": 3})
         assert "3" in renderer._out.getvalue()
@@ -553,6 +638,162 @@ class TestEventRendererV2:
         out = renderer._out.getvalue()
         assert "**bold** answer" in out
         assert "\033[1A\033[2K" not in out
+
+
+class TestFleetView:
+    """Stage 1 fleet view — subagent_state emit + handler + one-line summary."""
+
+    def test_emit_subagent_state_sends_ipc_event(self) -> None:
+        from core.ui.agentic_ui import _ipc_writer_local, emit_subagent_state
+
+        mock_writer = MagicMock()
+        _ipc_writer_local.writer = mock_writer
+        try:
+            emit_subagent_state("delegate_1_0", "repo_researcher", "running", "scan repo", 0, 0.0)
+            mock_writer.send_event.assert_called_once_with(
+                "subagent_state",
+                task_id="delegate_1_0",
+                role="repo_researcher",
+                status="running",
+                description="scan repo",
+                tokens=0,
+                elapsed_s=0.0,
+            )
+        finally:
+            _ipc_writer_local.writer = None
+
+    def test_emit_subagent_state_console_fallback_terminal_only(self) -> None:
+        """No IPC writer → running is silent; terminal transitions print one line."""
+        from core.ui.agentic_ui import _ipc_writer_local, emit_subagent_state
+
+        _ipc_writer_local.writer = None
+        # running with no writer must not crash and must not require a writer.
+        emit_subagent_state("t1", "patcher", "running", "do a thing", 0, 0.0)
+        emit_subagent_state("t1", "patcher", "done", "do a thing", 100, 2.0)  # no crash
+
+    def _renderer(self):
+        import io
+
+        from core.ui.event_renderer import EventRenderer
+
+        r = EventRenderer()
+        r._out = io.StringIO()
+        return r
+
+    def test_handler_feeds_registry(self) -> None:
+        renderer = self._renderer()
+        renderer.on_event(
+            {
+                "type": "subagent_state",
+                "task_id": "d0",
+                "role": "repo_researcher",
+                "status": "running",
+                "description": "scan",
+                "tokens": 0,
+                "elapsed_s": 0.0,
+            }
+        )
+        snap = renderer._fleet.snapshot()
+        assert len(snap) == 1
+        assert snap[0].task_id == "d0"
+        assert snap[0].role == "repo_researcher"
+        assert snap[0].is_running is True
+
+    def test_fleet_summary_line_appears_when_running(self) -> None:
+        from core.ui import spinner_glyph
+
+        renderer = self._renderer()
+        renderer.on_event(
+            {
+                "type": "subagent_state",
+                "task_id": "d0",
+                "role": "repo_researcher",
+                "status": "running",
+                "description": "scan",
+            }
+        )
+        renderer.on_event(
+            {
+                "type": "subagent_state",
+                "task_id": "d1",
+                "role": "patcher",
+                "status": "running",
+                "description": "patch",
+            }
+        )
+        out = renderer._out.getvalue()
+        assert "Fleet · 2 running" in out
+        assert "repo_researcher" in out
+        assert "patcher" in out
+        assert spinner_glyph.GLYPH in out  # rose GEODE mark for running
+
+    def test_fleet_summary_absent_when_none_running(self) -> None:
+        renderer = self._renderer()
+        renderer.on_event(
+            {
+                "type": "subagent_state",
+                "task_id": "d0",
+                "role": "repo_researcher",
+                "status": "running",
+                "description": "scan",
+            }
+        )
+        renderer.on_event(
+            {
+                "type": "subagent_state",
+                "task_id": "d0",
+                "role": "repo_researcher",
+                "status": "done",
+                "description": "scan",
+                "tokens": 500,
+                "elapsed_s": 3.0,
+            }
+        )
+        # The summary line updates in place; the LAST render must carry no fleet line.
+        assert renderer._fleet_summary_line() == ""
+        assert "Fleet ·" not in "".join(renderer._render_activity_lines())
+
+    def test_no_emoji_in_fleet_line(self) -> None:
+        renderer = self._renderer()
+        renderer.on_event(
+            {
+                "type": "subagent_state",
+                "task_id": "d0",
+                "role": "verifier",
+                "status": "running",
+                "description": "verify",
+            }
+        )
+        line = renderer._fleet_summary_line()
+        # House style: rose GEODE mark only, no decorative emoji.
+        for emoji in ("🚀", "🤖", "✨", "🛰"):
+            assert emoji not in line
+
+    def test_legacy_subagent_events_still_render(self) -> None:
+        renderer = self._renderer()
+        renderer.on_event(
+            {"type": "subagent_dispatch", "task_id": "d0", "description": "legacy dispatch"}
+        )
+        renderer.on_event(
+            {
+                "type": "subagent_progress",
+                "completed": 1,
+                "total": 2,
+                "name": "x",
+                "duration_s": 1.0,
+            }
+        )
+        renderer.on_event({"type": "subagent_complete", "count": 2, "elapsed_s": 5.0})
+        out = renderer._out.getvalue()
+        assert "delegate_task" in out
+        assert "1/2" in out or "[1/2]" in out
+        assert "2 sub-agents completed" in out
+
+    def test_subagent_state_in_ipc_allowlist(self) -> None:
+        from pathlib import Path
+
+        source = Path("core/cli/ipc_client.py").read_text()
+        assert '"subagent_state"' in source
 
 
 class TestIPCClientEventWhitelist:
