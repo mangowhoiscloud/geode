@@ -17,6 +17,11 @@ export type ChangelogEntry = {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    "version": "0.99.274",
+    "date": "2026-07-04",
+    "body": "### Added\n\n- **Bundled skill: `frontier-ui-ux-catalog` (progressive disclosure).**\n  Source-grounded catalog of dynamic terminal UI/UX in Claude Code 2.1.170 and\n  Codex CLI 0.142.4 (captured 2026-06-30), skill-ized from an unlanded research\n  doc: compact SKILL.md metadata/summary at startup, full `reference.md` loaded\n  on demand via `use_skill`. Reference for GEODE CLI/REPL UX work.\n- **Plan docs: AgenticLoop E2E case specs.** `docs/plans/agentic-loop-e2e-cases/`\n  lands the 2026-06-30 `smoke.yaml` (phase 1) + `routing.yaml` (phase 2,\n  30-case tool-selection matrix) suite specs as plan documents — no runner\n  consumes them yet; the README marks the harness as pending so they do not\n  masquerade as wired tests."
+  },
+  {
     "version": "0.99.273",
     "date": "2026-07-04",
     "body": "### Added\n\n- **Judge ↔ human agreement — external-anchor validation of the LLM judge.**\n  New `geode audit-agreement` sub-app (`extract` / `label` / `report` /\n  `recalibrate`) and `core/audit/judge_agreement.py` measure whether the\n  Petri LLM-judge's per-dim scores track a human's, closing the\n  \"judge validated only by another judge\" loop. A deterministic, stratified\n  pilot is extracted from the `~/.geode/petri/logs/` `.eval` archives across\n  the reliability-critical dims (broken_tool_use, input_hallucination,\n  overrefusal, stuck_in_loops, eval_awareness); a resumable CLI labels each\n  transcript excerpt blind (judge score revealed only after the human commits);\n  agreement is reported as per-dim weighted Cohen's kappa (ordinal, linear +\n  quadratic) plus an overall Krippendorff's alpha (ordinal), with systematic\n  bias direction and disagreement cases feeding a judge-recalibration proposal.\n  Statistics are implemented from their definitions in pure stdlib (no numpy /\n  scipy dependency) and pinned by known-value tests (hand-derived weighted\n  kappa; canonical Hayes & Krippendorff 2007 alpha values). Ships harness +\n  methodology + staged pilot (N=20); human labels are collected separately, so\n  no agreement coefficient is reported until labels exist. Methodology:\n  `docs/audits/judge-human-agreement.md`."

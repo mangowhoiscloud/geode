@@ -45,6 +45,21 @@ functional change.
 
 ---
 
+## [0.99.274] - 2026-07-04
+
+### Added
+
+- **Bundled skill: `frontier-ui-ux-catalog` (progressive disclosure).**
+  Source-grounded catalog of dynamic terminal UI/UX in Claude Code 2.1.170 and
+  Codex CLI 0.142.4 (captured 2026-06-30), skill-ized from an unlanded research
+  doc: compact SKILL.md metadata/summary at startup, full `reference.md` loaded
+  on demand via `use_skill`. Reference for GEODE CLI/REPL UX work.
+- **Plan docs: AgenticLoop E2E case specs.** `docs/plans/agentic-loop-e2e-cases/`
+  lands the 2026-06-30 `smoke.yaml` (phase 1) + `routing.yaml` (phase 2,
+  30-case tool-selection matrix) suite specs as plan documents — no runner
+  consumes them yet; the README marks the harness as pending so they do not
+  masquerade as wired tests.
+
 ## [0.99.273] - 2026-07-04
 
 ### Added
