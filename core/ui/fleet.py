@@ -191,3 +191,34 @@ class FleetRegistry:
         self._agents.clear()
         self._seq.clear()
         self._next_seq = 0
+
+
+# ---------------------------------------------------------------------------
+# Session-scoped last-snapshot holder (Stage 2 data source)
+# ---------------------------------------------------------------------------
+# The interactive ``/fleet`` view (``core.ui.fleet_view``) is opened between
+# turns, when the per-turn ``EventRenderer``'s registry is already gone. This
+# module-level holder is the single-owner bridge: ``EventRenderer.stop`` writes
+# the just-finished turn's snapshot here (only when the turn dispatched ≥1
+# sub-agent, so a later sub-agent-free turn never wipes the last real fleet),
+# and the ``/fleet`` handler reads it. Empty ⟺ no sub-agent ran this session.
+
+_LAST_SNAPSHOT: list[FleetAgent] = []
+
+
+def set_last_fleet_snapshot(agents: list[FleetAgent]) -> None:
+    """Persist the most recent turn's fleet snapshot for the ``/fleet`` view."""
+    global _LAST_SNAPSHOT
+    _LAST_SNAPSHOT = list(agents)
+
+
+def get_last_fleet_snapshot() -> list[FleetAgent]:
+    """Return a copy of the last persisted fleet snapshot (``[]`` if none)."""
+    return list(_LAST_SNAPSHOT)
+
+
+def clear_last_fleet_snapshot() -> None:
+    """Drop the persisted snapshot — called when a session starts / resumes so a
+    prior session's fleet never leaks into a new one's ``/fleet`` (Codex)."""
+    global _LAST_SNAPSHOT
+    _LAST_SNAPSHOT = []

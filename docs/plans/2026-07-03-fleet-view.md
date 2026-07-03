@@ -1,7 +1,8 @@
 # Multi-agent Fleet View
 
-Status: Stage 1 (data layer + turn-time summary) and Stage 1.5 (child->parent live
-activity plumbing) implemented. Stage 2 (interactive full-screen view) is deferred.
+Status: Stage 1 (data layer + turn-time summary), Stage 1.5 (child->parent live
+activity plumbing), and Stage 2 (interactive full-screen `/fleet` view)
+implemented.
 
 ## Problem
 
@@ -28,20 +29,52 @@ correlation id.
   activity region (`_render_activity_region` / `_render_activity_lines`) — no Rich
   Live, no full-screen app.
 
-### Stage 2 (later) — interactive full-screen view
+### Stage 2 (DONE) — interactive full-screen `/fleet` view
 
-An interactive picker opened via a Ctrl-key / `/fleet`, listing every agent with
-up/down selection and Enter to drill into one agent's detail (transcript tail,
-tokens, elapsed). Built on `prompt_toolkit` (the same dependency Hermes uses for its
-interactive surfaces) as a full-screen `Application` that reads `FleetRegistry.snapshot()`.
-This is a separate stage: it is a new input-handling + layout surface, not a change to
-the turn-time transcript, and it must not regress the raw-ANSI live region Stage 1 uses.
+`core/ui/fleet_view.py` — an interactive picker opened via the `/fleet` slash
+command: a `prompt_toolkit` full-screen `Application` listing every agent with
+↑/↓ selection (rose-highlighted selected row + rose `◆` running marker) and
+Enter to drill into one agent's detail pane (task_id, role, full description,
+status, elapsed, tokens, current activity). Esc/q exits back to the REPL (from
+the detail pane, back to the list first). Each row renders
+`<glyph> <role> · <activity> · <elapsed> · <↓tokens>` — dense dot-joined list,
+no emoji, no box-card, width-truncated (house style). It is a new
+input-handling + layout surface, separate from the turn-time transcript, and
+does not touch the raw-ANSI live region Stage 1 uses.
 
-**What Stage 2 now has (post Stage 1.5):** per-agent `FleetAgent.current_activity` (the
-running child's live tool text) and a best-effort mid-run `tokens` count, in addition to
-the Stage-1 identity / status / elapsed / final-token fields. The interactive detail view
-can render each running agent's current tool without any further plumbing. (`tokens` is
-`0` for subscription / CLI-routed calls, which expose no usage — honest, never faked.)
+The row/detail/number formatting are **pure functions** (`compact_tokens` →
+`↓160k`/`↓1.2M`, `compact_elapsed` → `4m48s`, `build_fleet_rows`,
+`build_detail_lines`) so they are unit-tested (`tests/core/ui/test_fleet_view.py`)
+without spinning the event loop; `_FleetView` only binds keys + styles on top.
+
+**Data source decision — between-turns last-snapshot (NOT live-during-turn).**
+The `EventRenderer` that owns the live `FleetRegistry` is created *per prompt*
+in the thin client (`core/cli/__init__.py`) and discarded at turn end; `/fleet`
+is typed at the REPL **between** turns, where that registry is already gone.
+The REPL also blocks inside `client.send_prompt(...)` for the whole turn with no
+concurrent stdin reader, so a full-screen app cannot be opened *during* a turn
+without a new concurrent input surface. The honest, shippable scope is
+therefore the **most recent turn's fleet snapshot**, bridged by a session-scoped
+module-level holder in `core/ui/fleet.py`:
+
+- `EventRenderer.stop()` calls `set_last_fleet_snapshot(self._fleet.snapshot())`
+  at turn end — **only when the turn dispatched ≥1 sub-agent**, so a later plain
+  turn never wipes the last real fleet. Empty ⟺ no sub-agent ran this session
+  (which is exactly what the "No sub-agents this session." message says).
+- The `/fleet` handler reads `get_last_fleet_snapshot()`.
+
+Because a terminal transition clears `current_activity`, the between-turns view
+shows each agent's **final** state (role / status / elapsed / final tokens);
+the live "Reading …" tool text is a during-turn artefact of the Stage-1 summary
+line. **Live-during-turn interactivity is a deferred follow-up** — it needs a
+concurrent input surface the blocking REPL does not currently have.
+
+**Entry point wiring.** `/fleet` → `COMMAND_MAP["/fleet"] = "fleet"`
+(`core/cli/commands/_state.py`) → `_handle_command` action `"fleet"`
+(`core/cli/dispatcher.py`). `/fleet` is in `_LOCAL_COMMANDS`
+(`core/cli/__init__.py`) so it runs **THIN** in the thin client, where both the
+terminal and the snapshot holder live (the daemon's holder is always empty, and
+its `run_fleet_view([])` would only print the empty message — no TTY app).
 
 ### Stage 1.5 (live per-agent activity) — child->parent plumbing (DONE)
 
@@ -177,6 +210,15 @@ fleet summary shippable without touching the plan/activity erase math.
   the summary line; a terminal transition clears it; the fleet summary line appears while
   running and is absent when none; the existing `subagent_dispatch`/`progress`/`complete`
   handlers still render unchanged; `subagent_state` is in the IPC allowlist.
+- `tests/core/ui/test_fleet_view.py` (Stage 2) — the pure render/format helpers:
+  `compact_tokens` (`↓160k` / `↓1.2M` / raw / `""` for 0), `compact_elapsed`
+  (`4m48s` / `9s` / `1h04m`), `build_fleet_rows` (row shape, selected pointer,
+  dropped empty segments, running-first via `snapshot()`, width truncation,
+  empty list), `build_detail_lines` (all fields + `(none)` placeholders), the
+  `set/get_last_fleet_snapshot` holder roundtrip (returns a copy, single-owner),
+  and `run_fleet_view([])` printing `EMPTY_MESSAGE` without spinning an app. The
+  full-screen `Application` event loop is not spun (mirrors Stage 1/1.5 testing
+  parsers, not subprocesses).
 - `tests/core/agent/test_fleet_activity_protocol.py` (Stage 1.5) — the parent line
   classifier + `parse_worker_stream` (legacy bare-result-only compat, activity-then-
   result, malformed-line-skipped, no-result-line, last-result-wins); the child
