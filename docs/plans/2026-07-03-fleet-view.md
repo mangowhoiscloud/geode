@@ -1,7 +1,7 @@
 # Multi-agent Fleet View
 
-Status: Stage 1 (data layer + turn-time summary) implemented. Stage 2 (interactive
-full-screen view) and Stage 1.5 (child->parent live activity plumbing) are deferred.
+Status: Stage 1 (data layer + turn-time summary) and Stage 1.5 (child->parent live
+activity plumbing) implemented. Stage 2 (interactive full-screen view) is deferred.
 
 ## Problem
 
@@ -37,10 +37,57 @@ interactive surfaces) as a full-screen `Application` that reads `FleetRegistry.s
 This is a separate stage: it is a new input-handling + layout surface, not a change to
 the turn-time transcript, and it must not regress the raw-ANSI live region Stage 1 uses.
 
-### Stage 1.5 (prerequisite for live per-agent activity) — child->parent plumbing
+**What Stage 2 now has (post Stage 1.5):** per-agent `FleetAgent.current_activity` (the
+running child's live tool text) and a best-effort mid-run `tokens` count, in addition to
+the Stage-1 identity / status / elapsed / final-token fields. The interactive detail view
+can render each running agent's current tool without any further plumbing. (`tokens` is
+`0` for subscription / CLI-routed calls, which expose no usage — honest, never faked.)
 
-`current_activity` (a running child's current tool text) is **not available today**
-and is deliberately left as `""` rather than faked. See "Plumbing reality" below.
+### Stage 1.5 (live per-agent activity) — child->parent plumbing (DONE)
+
+`current_activity` (a running child's current tool text) plus a best-effort mid-run
+token count now cross the worker IPC boundary. The worker→parent stdout protocol was
+extended from "exactly one result line" to "**zero or more activity lines, then
+exactly one result line (last)**":
+
+| Line | Shape | Meaning |
+|------|-------|---------|
+| activity | `{"type":"activity","task_id":…,"tool":<current tool>,"tokens":<cumulative int>,"ts":…}` | mid-run live update, streamed before the result |
+| result | bare legacy `WorkerResult` dict (**no `type` key**) — or a tagged `{"type":"result",…}` | the terminal line (last) |
+
+**Compat rule (load-bearing).** The parent classifier
+(`isolated_execution._classify_worker_line`) treats a line with `type=="activity"` as
+a live update and *anything else that parses to a JSON object* — a bare result dict,
+`type=="result"`, etc. — as the terminal result; blank / non-JSON / non-object lines
+are skipped, never fatal. A worker that emits ONLY a bare result line (every
+pre-Stage-1.5 / older / in-flight worker) has no `type` field, so it still parses as
+the result. A parser that *required* `type` would have broken every such worker.
+
+**`emit_activity` gate (fail-safe).** `WorkerRequest.emit_activity` (default `False`)
+controls the child's emission. Only the interactive `delegate_task` turn path
+(`ToolExecutor._aexecute_delegate` → `SubAgentManager.adelegate(on_activity=…)` →
+`_build_worker_request(emit_activity=True)`) opts in; seed-generation / headless
+`adelegate` calls leave it `False`, so their stdout stays a pure single result line
+(mirrors how Stage 1 avoided seed-gen noise). When emission is off the parent never
+reads activity and `current_activity` stays `""` — nothing is faked.
+
+**Child emit path.** With the gate on, the worker installs a process-local activity
+sink (`core/agent/activity_channel.py`); the child `AgenticLoop`'s single per-tool
+dispatch boundary (`ToolExecutor.aexecute`, after the denylist) calls
+`emit_tool_activity(tool_name)`, which — only when a sink is installed — reads the
+cumulative token count from the process token tracker (fresh per subprocess; `0` for
+subscription / CLI calls, never faked) and writes one throttled activity line to
+stdout. The throttle skips consecutive duplicate tool names, so a same-tool batch
+emits once. In the parent process no sink is ever installed, so `emit_tool_activity`
+is a cheap no-op for the top-level loop.
+
+**Parent read path.** `IsolatedRunner._aexecute_subprocess` reads the worker stdout
+line-by-line (`_pump_worker`, replacing the single `communicate()`), draining stderr
+concurrently, forwarding each activity line to the `on_activity` callback and keeping
+the LAST result line as the `IsolationResult`. `_aexecute_delegate`'s `_on_activity`
+re-emits the sub-agent's `running` state carrying the live tool in a new additive
+`activity` field on the `subagent_state` event; `EventRenderer._handle_subagent_state`
+feeds it into `FleetRegistry.on_state(current_activity=…)`.
 
 ## `subagent_state` event schema
 
@@ -89,25 +136,24 @@ Methods:
 The registry is owned by one `EventRenderer` instance and mutated only from the
 single-threaded event-dispatch path, so it needs no lock.
 
-## Plumbing reality — what exists vs what is deferred
+## Plumbing reality — what exists
 
 Sub-agents execute as `python -m core.agent.worker` subprocesses launched by
-`IsolatedRunner`. The worker protocol is: one `WorkerRequest` JSON line on stdin, one
-`WorkerResult` JSON line on stdout **at exit**, stderr for logs. The child's
-`AgenticLoop` runs with `quiet=True` ("parent handles UI"), so the child emits **no**
-per-tool `tool_start`/`tool_end`/`tokens` IPC back to the parent's renderer.
+`IsolatedRunner`. The child's `AgenticLoop` still runs with `quiet=True` ("parent
+handles UI") — it emits no `tool_start`/`tool_end` IPC to the parent's renderer. The
+Stage 1.5 activity side-channel is deliberately NOT `quiet=False`: it is a dedicated,
+gated, single-purpose stdout stream (current tool + cumulative tokens only), so it adds
+live telemetry without turning on the full child UI or corrupting the result contract.
 
-- **Available now (Stage 1):** the `task_id` correlation id crosses the boundary in
-  both `WorkerRequest` and `WorkerResult`; the parent knows each task's dispatch time,
-  role, description, running/terminal status, wall-clock elapsed, and final token count
+- **Stage 1:** the `task_id` correlation id crosses the boundary in both
+  `WorkerRequest` and `WorkerResult`; the parent knows each task's dispatch time, role,
+  description, running/terminal status, wall-clock elapsed, and final token count
   (`WorkerResult.prompt_tokens + completion_tokens`, `0` for subscription/CLI).
-- **NOT available (deferred to Stage 1.5):** a child's *current* tool and mid-run token
-  count. There is no mid-run per-child event stream — the parent learns a task's final
-  state only when the subprocess exits. Surfacing live per-agent tool text requires a
-  child->parent activity side-channel (e.g. the worker forwarding `task_id`-tagged
-  tool events over a structured multi-line protocol or a dedicated pipe, or relaxing
-  `quiet=True` with a task-id-tagged event forwarder). `current_activity` is therefore
-  `""` in Stage 1 and must not be fabricated.
+- **Stage 1.5 (done):** the child's *current* tool and a best-effort mid-run cumulative
+  token count now cross the boundary via the activity-line protocol above, gated behind
+  `WorkerRequest.emit_activity`. `current_activity` is populated live for the interactive
+  path and stays `""` (never fabricated) whenever the gate is off (seed-gen / headless)
+  or a call exposes no usage.
 
 ## Deferred: Rich Live migration + sticky-plan widget
 
@@ -124,8 +170,16 @@ fleet summary shippable without touching the plan/activity erase math.
 
 - `tests/core/ui/test_fleet.py` — `FleetRegistry` lifecycle (dispatch -> running ->
   complete), snapshot ordering (running first), status transitions, tokens/elapsed
-  capture, `current_activity` stays `""`.
+  capture; `current_activity` is `""` when not plumbed, is set from the live field on a
+  running transition, is not clobbered by a blank update, and is cleared on terminal.
 - `tests/core/ui/test_event_schema_v2.py` — `subagent_state` handler feeds the registry;
-  the fleet summary line appears while running and is absent when none; the existing
-  `subagent_dispatch`/`progress`/`complete` handlers still render unchanged;
-  `subagent_state` is in the IPC allowlist.
+  the `activity` field surfaces as `FleetAgent.current_activity` and (single-running) in
+  the summary line; a terminal transition clears it; the fleet summary line appears while
+  running and is absent when none; the existing `subagent_dispatch`/`progress`/`complete`
+  handlers still render unchanged; `subagent_state` is in the IPC allowlist.
+- `tests/core/agent/test_fleet_activity_protocol.py` (Stage 1.5) — the parent line
+  classifier + `parse_worker_stream` (legacy bare-result-only compat, activity-then-
+  result, malformed-line-skipped, no-result-line, last-result-wins); the child
+  `_make_activity_sink` (well-formed activity JSON, change-only throttle, empty-tool
+  ignored); the `emit_activity` gate (roundtrip, default `False`, no-op emit without a
+  sink, forward-to-installed-sink).

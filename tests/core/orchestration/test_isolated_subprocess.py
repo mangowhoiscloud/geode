@@ -101,9 +101,9 @@ class TestAsyncSubprocessNative:
 
         original_async = runner._aexecute_subprocess
 
-        async def _spy_async(request, config):  # type: ignore[no-untyped-def]
+        async def _spy_async(request, config, on_activity=None):  # type: ignore[no-untyped-def]
             called.append(1)
-            return await original_async(request, config)
+            return await original_async(request, config, on_activity)
 
         runner._aexecute_subprocess = _spy_async  # type: ignore[method-assign]
 

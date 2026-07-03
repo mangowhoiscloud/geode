@@ -18,13 +18,14 @@ What Stage 1 can populate per agent (all parent-side, all honest):
   ``WorkerResult`` (``0`` for subscription / CLI-routed calls — the subscription
   path does not expose usage; never fabricated).
 
-What Stage 1 CANNOT populate (deferred to Stage 1.5): ``current_activity`` — a
-child's live current tool. Sub-agents run as ``python -m core.agent.worker``
-subprocesses with the child ``AgenticLoop`` in ``quiet=True`` mode, so the child
-emits no per-tool IPC back to the parent — only a single final ``WorkerResult``
-line crosses the boundary at exit. Surfacing the child's live tool text requires
-child->parent activity plumbing (a task_id-tagged event side-channel), which is
-Stage 1.5. It is left as ``""`` here rather than faked.
+``current_activity`` — a running child's live current tool — is populated by
+Stage 1.5 (landed): the worker subprocess streams ``{"type":"activity", ...}``
+lines to its stdout before the final ``WorkerResult`` line, gated behind
+``WorkerRequest.emit_activity`` (only the interactive ``delegate_task`` turn path
+opts in). The parent's line-by-line reader forwards each update to
+``emit_subagent_state(..., activity=<tool>)``, whose ``subagent_state`` event's
+``activity`` field flows into :meth:`FleetRegistry.on_state` here. It is ``""``
+whenever the feature was not opted into (seed-gen / headless) — never faked.
 """
 
 from __future__ import annotations
@@ -49,7 +50,9 @@ class FleetAgent:
     start_ts: float = 0.0
     end_ts: float | None = None
     tokens: int = 0
-    # '' until Stage 1.5 child->parent activity plumbing lands — never faked.
+    # The running child's current tool, fed by the Stage 1.5 activity
+    # side-channel (subagent_state ``activity`` field). '' when the caller did
+    # not opt into live activity, or once terminal — never faked.
     current_activity: str = ""
 
     @property

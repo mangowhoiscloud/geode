@@ -658,7 +658,24 @@ class TestFleetView:
                 description="scan repo",
                 tokens=0,
                 elapsed_s=0.0,
+                activity="",
             )
+        finally:
+            _ipc_writer_local.writer = None
+
+    def test_emit_subagent_state_carries_activity(self) -> None:
+        """Stage 1.5 — the live current tool rides on the additive activity field."""
+        from core.ui.agentic_ui import _ipc_writer_local, emit_subagent_state
+
+        mock_writer = MagicMock()
+        _ipc_writer_local.writer = mock_writer
+        try:
+            emit_subagent_state(
+                "delegate_1_0", "repo_researcher", "running", "scan", 42, 1.5, activity="grep_files"
+            )
+            _etype, kwargs = mock_writer.send_event.call_args
+            assert kwargs["activity"] == "grep_files"
+            assert kwargs["tokens"] == 42
         finally:
             _ipc_writer_local.writer = None
 
@@ -698,6 +715,54 @@ class TestFleetView:
         assert snap[0].task_id == "d0"
         assert snap[0].role == "repo_researcher"
         assert snap[0].is_running is True
+
+    def test_handler_surfaces_live_activity(self) -> None:
+        """Stage 1.5 — a mid-run subagent_state with an `activity` field feeds
+        FleetAgent.current_activity, and the single-running summary shows it."""
+        renderer = self._renderer()
+        renderer.on_event(
+            {
+                "type": "subagent_state",
+                "task_id": "d0",
+                "role": "repo_researcher",
+                "status": "running",
+                "description": "scan",
+                "activity": "grep_files",
+                "tokens": 128,
+            }
+        )
+        snap = renderer._fleet.snapshot()
+        assert snap[0].current_activity == "grep_files"
+        assert snap[0].tokens == 128
+        # Single running agent → the summary line surfaces the live tool inline.
+        assert "grep_files" in renderer._fleet_summary_line()
+
+    def test_terminal_state_clears_activity(self) -> None:
+        """A terminal transition wipes current_activity (nothing is running)."""
+        renderer = self._renderer()
+        renderer.on_event(
+            {
+                "type": "subagent_state",
+                "task_id": "d0",
+                "role": "patcher",
+                "status": "running",
+                "description": "patch",
+                "activity": "edit_file",
+            }
+        )
+        assert renderer._fleet.snapshot()[0].current_activity == "edit_file"
+        renderer.on_event(
+            {
+                "type": "subagent_state",
+                "task_id": "d0",
+                "role": "patcher",
+                "status": "done",
+                "description": "patch",
+                "tokens": 300,
+                "elapsed_s": 2.0,
+            }
+        )
+        assert renderer._fleet.snapshot()[0].current_activity == ""
 
     def test_fleet_summary_line_appears_when_running(self) -> None:
         from core.ui import spinner_glyph
