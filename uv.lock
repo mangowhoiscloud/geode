@@ -1340,7 +1340,7 @@ http = [
 
 [[package]]
 name = "geode-agent"
-version = "0.99.267"
+version = "0.99.269"
 source = { editable = "." }
 dependencies = [
     { name = "anthropic" },

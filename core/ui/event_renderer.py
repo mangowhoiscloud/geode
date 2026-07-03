@@ -25,7 +25,7 @@ from typing import Any
 
 from core.time_format import format_elapsed
 from core.ui import spinner_glyph
-from core.ui.fleet import FleetRegistry
+from core.ui.fleet import FleetRegistry, set_last_fleet_snapshot
 from core.ui.tool_tracker import ToolCallTracker, _truncate_display
 
 log = logging.getLogger(__name__)
@@ -248,6 +248,12 @@ class EventRenderer:
             self._activity_surface.at_bottom = False
         # Render accumulated turn status (Claude Code style)
         self._render_turn_status()
+        # Persist this turn's fleet for the between-turns `/fleet` view. Only
+        # when the turn actually dispatched sub-agents, so a later plain turn
+        # never wipes the most recent real fleet (see fleet.set_last_fleet_snapshot).
+        fleet_snapshot = self._fleet.snapshot()
+        if fleet_snapshot:
+            set_last_fleet_snapshot(fleet_snapshot)
 
     # -- Core event handlers --------------------------------------------------
 
@@ -388,6 +394,10 @@ class EventRenderer:
             description=str(event.get("description", "")),
             tokens=int(event.get("tokens", 0) or 0),
             elapsed_s=float(event.get("elapsed_s", 0) or 0),
+            # Stage 1.5 — the running child's current tool, plumbed over the
+            # worker activity side-channel. "" at dispatch/completion or when the
+            # caller did not opt into live activity; on_state ignores a blank one.
+            current_activity=str(event.get("activity", "")),
         )
         self._render_activity_region()
 
@@ -1340,6 +1350,10 @@ class EventRenderer:
         ``\u25c6 Fleet \u00b7 N running \u00b7 role_a, role_b`` uses the rose GEODE mark for
         running, a dim body, no emoji, truncated to fit the terminal width. Drawn
         only while at least one sub-agent is running (Stage 1 fleet view).
+
+        Stage 1.5 \u2014 when exactly one sub-agent is running and its live current
+        tool is known, the single label carries it (``role \u00b7 tool``). This stays
+        one line; the multi-line per-agent activity breakdown is Stage 2.
         """
         running = self._fleet.running()
         if not running:
@@ -1348,6 +1362,11 @@ class EventRenderer:
             agent.role or _truncate_display(agent.description, 24) or agent.task_id
             for agent in running
         ]
+        # Single running agent with a known live tool \u2192 surface it inline (one
+        # line, still width-truncated below). Kept to the single-agent case so
+        # the comma-joined multi-agent list never turns into an ambiguous soup.
+        if len(running) == 1 and running[0].current_activity:
+            labels[0] = f"{labels[0]} \u00b7 {running[0].current_activity}"
         prefix = f"Fleet \u00b7 {len(running)} running \u00b7 "
         width = max(20, shutil.get_terminal_size(fallback=(80, 24)).columns)
         # Budget: total width minus the 2-space indent, the rose mark + space,

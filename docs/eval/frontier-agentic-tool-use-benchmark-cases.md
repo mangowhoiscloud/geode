@@ -234,6 +234,12 @@ Current interpretation:
 
 ## Local Harness Inventory
 
+GEODE-owned benchmark glue now lives in the public-safe
+`plugins/benchmark_harness/` plugin. The plugin records upstream repo
+coordinates, pinned commits, preflight env names, and GEODE adapters. The
+third-party benchmark repositories themselves are still fetched under ignored
+local artifacts so GEODE does not vendor external harness code.
+
 The benchmark harnesses were fetched under ignored local artifacts so they can
 be used for setup and smoke testing without vendoring third-party repos into
 GEODE:

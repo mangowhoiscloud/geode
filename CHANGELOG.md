@@ -45,10 +45,54 @@ functional change.
 
 ---
 
-## [Unreleased]
+## [0.99.269] - 2026-07-03
 
 ### Added
 
+- **Fleet view Stage 2 — interactive full-screen `/fleet` picker.** A new
+  `prompt_toolkit` full-screen view (`core/ui/fleet_view.py`) lists every
+  sub-agent from the most recent turn (running first), moves a selection with
+  ↑/↓, opens a per-agent detail pane on Enter (task_id, role, description,
+  status, elapsed, tokens, current activity), and exits back to the REPL on
+  Esc/q. Each row renders `<glyph> <role> · <activity> · <elapsed> · <↓tokens>`
+  with the GEODE rose mark for running agents (no emoji, dense list). Opened
+  with the `/fleet` slash command, which runs THIN (in the thin client where
+  the terminal + the snapshot holder live). Data source: a session-scoped
+  last-snapshot holder (`fleet.set_last_fleet_snapshot` /
+  `get_last_fleet_snapshot`) that `EventRenderer.stop` writes at the end of
+  every turn that dispatched ≥1 sub-agent — the honest between-turns scope,
+  since the blocking REPL cannot open a full-screen app *during* a turn.
+  Live-during-turn interactivity is a deferred follow-up. Empty snapshot prints
+  "No sub-agents this session." without spinning an app.
+
+## [0.99.268] - 2026-07-03
+
+### Added
+
+- **Public benchmark harness plugin.** Added `plugins/benchmark_harness/` as
+  the public-safe home for GEODE-owned MCPMark and tau2-bench adapters, pinned
+  upstream harness coordinates, setup/preflight helpers, and redacted env
+  checks. Third-party benchmark repositories remain ignored local checkouts
+  under `artifacts/eval/harnesses/`; the legacy tau2 script now delegates to
+  the plugin adapter.
+- **Fleet view Stage 1.5 — live per-agent activity plumbing.** Sub-agent workers
+  can now stream their *current* tool and a best-effort mid-run cumulative token
+  count to the parent while they run, so the fleet view's
+  `FleetAgent.current_activity` is populated live instead of always `""`. The
+  worker→parent stdout protocol is extended from "exactly one result line" to
+  "zero or more `{"type":"activity",…}` lines, then exactly one result line
+  (last)". The parent reader (`IsolatedRunner._aexecute_subprocess`) now reads
+  stdout line-by-line and forwards activity to an `on_activity` callback, keeping
+  the last result line as the `IsolationResult`. Backward compatible: a worker
+  that emits only a bare legacy result line (no `type` key) still parses — the
+  classifier treats any non-activity JSON object as the terminal result. The
+  feature is gated behind `WorkerRequest.emit_activity` (default `False`); only the
+  interactive `delegate_task` turn path opts in, so seed-generation / headless
+  spawns keep the pure single-result-line contract. The child emits via a
+  process-local activity sink (`core/agent/activity_channel.py`) hooked at the
+  `ToolExecutor` per-tool boundary, throttled to skip consecutive duplicate tool
+  names; token counts are `0` for subscription / CLI calls and never fabricated.
+  The `subagent_state` event gains an additive `activity` field.
 - **tau2 GEODE benchmark runner.** Added `scripts/eval/tau2_geode_agent.py`, a
   reproducible runner that registers GEODE as an in-process tau2
   `HalfDuplexAgent` and `HalfDuplexUser`, wraps tau2 domain tools into

@@ -1,0 +1,48 @@
+# GEODE benchmark harness plugin manifest.
+#
+# This file is intentionally public-safe: it contains only upstream repo
+# coordinates, pinned commits, setup commands, and environment variable names.
+# Secrets live in ignored `.mcp_env` files.
+
+[benchmark_harness]
+artifact_root = "artifacts/eval/harnesses"
+
+[benchmark_harness.harness.mcpmark]
+repo = "https://github.com/eval-sys/mcpmark.git"
+commit = "cd45b7f57923b9b3985467f5139927575f83141c"
+local_dir = "mcpmark"
+python = "python3.12"
+install = [
+  "python3.12 -m venv .venv",
+  ".venv/bin/python -m pip install --upgrade pip",
+  ".venv/bin/pip install -e .",
+]
+public_adapter = "plugins.benchmark_harness.mcpmark_geode_agent"
+required_env = []
+optional_env = [
+  "OPENAI_API_KEY",
+  "SOURCE_NOTION_API_KEY",
+  "EVAL_NOTION_API_KEY",
+  "SOURCE_PARENT_PAGE_TITLE",
+  "SOURCE_PARENT_PAGE_URL",
+  "SOURCE_PARENT_PAGE_ID",
+  "EVAL_PARENT_PAGE_TITLE",
+  "EVAL_PARENT_PAGE_URL",
+  "EVAL_PARENT_PAGE_ID",
+  "PLAYWRIGHT_BROWSER",
+  "PLAYWRIGHT_HEADLESS",
+  "GITHUB_TOKENS",
+  "GITHUB_EVAL_ORG",
+  "DATABASE_URI",
+]
+
+[benchmark_harness.harness.tau2-bench]
+repo = "https://github.com/sierra-research/tau2-bench.git"
+commit = "1901a301961cbbe3fd11f3e84a2a376530c759e3"
+local_dir = "tau2-bench"
+python = "python3.12"
+install = ["uv sync"]
+healthcheck = ["uv run tau2 check-data"]
+public_adapter = "plugins.benchmark_harness.tau2_geode_agent"
+required_env = []
+optional_env = ["OPENAI_API_KEY", "ANTHROPIC_API_KEY", "ZHIPUAI_API_KEY"]

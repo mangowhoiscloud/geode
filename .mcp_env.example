@@ -1,0 +1,20 @@
+# MCPMark benchmark credentials.
+# Copy this file to `.mcp_env` in the MCPMark harness working directory.
+# Do not commit `.mcp_env`.
+
+# Notion.
+SOURCE_NOTION_API_KEY=
+EVAL_NOTION_API_KEY=
+SOURCE_PARENT_PAGE_TITLE=MCPMark Source Hub
+EVAL_PARENT_PAGE_TITLE=GEODE MCPMark Sandbox
+EVAL_PARENT_PAGE_URL=https://app.notion.com/p/GEODE-MCPMark-392581eae2fc80db80f6edef25672615?source=copy_link
+EVAL_PARENT_PAGE_ID=392581ea-e2fc-80db-80f6-edef25672615
+PLAYWRIGHT_BROWSER=chromium
+PLAYWRIGHT_HEADLESS=True
+
+# GitHub.
+GITHUB_TOKENS=
+GITHUB_EVAL_ORG=
+
+# Postgres.
+DATABASE_URI=postgresql://mcpmark:mcpmark@127.0.0.1:54329/mcpmark

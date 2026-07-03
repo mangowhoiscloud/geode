@@ -224,8 +224,9 @@ def emit_subagent_state(
     description: str,
     tokens: int,
     elapsed_s: float,
+    activity: str = "",
 ) -> None:
-    """Emit a per-agent fleet state transition (Stage 1 fleet view).
+    """Emit a per-agent fleet state transition (fleet view).
 
     Additive to the aggregate ``subagent_dispatch/progress/complete`` events:
     this one carries per-task identity (``task_id`` + ``role``) so the thin
@@ -233,9 +234,10 @@ def emit_subagent_state(
 
     ``tokens`` is ``0`` at dispatch (``status="running"``) and the sub-agent's
     final ``prompt + completion`` count at completion (``0`` for subscription /
-    CLI-routed calls — never fabricated). ``current_activity`` is intentionally
-    absent: the child subprocess runs ``quiet=True`` so its live tool text does
-    not cross the IPC boundary (that is Stage 1.5, see the fleet-view design doc).
+    CLI-routed calls — never fabricated). ``activity`` (Stage 1.5) is the
+    running child's *current* tool name, forwarded over the worker stdout
+    activity side-channel; ``""`` at dispatch/completion and whenever the caller
+    did not opt into live activity. It feeds ``FleetAgent.current_activity``.
     """
     from core.ui import agentic_ui as _pkg
 
@@ -249,6 +251,7 @@ def emit_subagent_state(
             description=description,
             tokens=tokens,
             elapsed_s=round(elapsed_s, 1),
+            activity=activity,
         )
         return
     # Console fallback (direct mode, no IPC writer bound). Only terminal

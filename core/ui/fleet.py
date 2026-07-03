@@ -18,13 +18,14 @@ What Stage 1 can populate per agent (all parent-side, all honest):
   ``WorkerResult`` (``0`` for subscription / CLI-routed calls — the subscription
   path does not expose usage; never fabricated).
 
-What Stage 1 CANNOT populate (deferred to Stage 1.5): ``current_activity`` — a
-child's live current tool. Sub-agents run as ``python -m core.agent.worker``
-subprocesses with the child ``AgenticLoop`` in ``quiet=True`` mode, so the child
-emits no per-tool IPC back to the parent — only a single final ``WorkerResult``
-line crosses the boundary at exit. Surfacing the child's live tool text requires
-child->parent activity plumbing (a task_id-tagged event side-channel), which is
-Stage 1.5. It is left as ``""`` here rather than faked.
+``current_activity`` — a running child's live current tool — is populated by
+Stage 1.5 (landed): the worker subprocess streams ``{"type":"activity", ...}``
+lines to its stdout before the final ``WorkerResult`` line, gated behind
+``WorkerRequest.emit_activity`` (only the interactive ``delegate_task`` turn path
+opts in). The parent's line-by-line reader forwards each update to
+``emit_subagent_state(..., activity=<tool>)``, whose ``subagent_state`` event's
+``activity`` field flows into :meth:`FleetRegistry.on_state` here. It is ``""``
+whenever the feature was not opted into (seed-gen / headless) — never faked.
 """
 
 from __future__ import annotations
@@ -49,7 +50,9 @@ class FleetAgent:
     start_ts: float = 0.0
     end_ts: float | None = None
     tokens: int = 0
-    # '' until Stage 1.5 child->parent activity plumbing lands — never faked.
+    # The running child's current tool, fed by the Stage 1.5 activity
+    # side-channel (subagent_state ``activity`` field). '' when the caller did
+    # not opt into live activity, or once terminal — never faked.
     current_activity: str = ""
 
     @property
@@ -188,3 +191,34 @@ class FleetRegistry:
         self._agents.clear()
         self._seq.clear()
         self._next_seq = 0
+
+
+# ---------------------------------------------------------------------------
+# Session-scoped last-snapshot holder (Stage 2 data source)
+# ---------------------------------------------------------------------------
+# The interactive ``/fleet`` view (``core.ui.fleet_view``) is opened between
+# turns, when the per-turn ``EventRenderer``'s registry is already gone. This
+# module-level holder is the single-owner bridge: ``EventRenderer.stop`` writes
+# the just-finished turn's snapshot here (only when the turn dispatched ≥1
+# sub-agent, so a later sub-agent-free turn never wipes the last real fleet),
+# and the ``/fleet`` handler reads it. Empty ⟺ no sub-agent ran this session.
+
+_LAST_SNAPSHOT: list[FleetAgent] = []
+
+
+def set_last_fleet_snapshot(agents: list[FleetAgent]) -> None:
+    """Persist the most recent turn's fleet snapshot for the ``/fleet`` view."""
+    global _LAST_SNAPSHOT
+    _LAST_SNAPSHOT = list(agents)
+
+
+def get_last_fleet_snapshot() -> list[FleetAgent]:
+    """Return a copy of the last persisted fleet snapshot (``[]`` if none)."""
+    return list(_LAST_SNAPSHOT)
+
+
+def clear_last_fleet_snapshot() -> None:
+    """Drop the persisted snapshot — called when a session starts / resumes so a
+    prior session's fleet never leaks into a new one's ``/fleet`` (Codex)."""
+    global _LAST_SNAPSHOT
+    _LAST_SNAPSHOT = []
