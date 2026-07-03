@@ -2,7 +2,7 @@
 
 > GEODE is a self-evolving autonomous execution agent: an inner agentic loop runs tasks (research, analysis, automation, scheduling) and an outer self-improving loop (Petri audit -> fitness gate) tunes the system that runs them.
 
-Version v0.99.265. Last sync 2026-07-02. Docs links point to clean markdown twins (.md); drop the .md suffix for the rendered page.
+Version v0.99.266. Last sync 2026-07-03. Docs links point to clean markdown twins (.md); drop the .md suffix for the rendered page.
 
 ## Start here
 
@@ -65,7 +65,11 @@ Version v0.99.265. Last sync 2026-07-02. Docs links point to clean markdown twin
 
 ## Benchmarks
 
+- [Benchmark publishing cycle](https://mangowhoiscloud.github.io/geode/docs/benchmarks/publishing-cycle.md): Repeatable runbook for measuring GEODE, recording the evidence ledger, publishing official docs, and verifying GitHub Pages.
+- [Benchmark measurements](https://mangowhoiscloud.github.io/geode/docs/benchmarks/results.md): Grouped GEODE benchmark measurement ledger for MCPMark and Tau2, with clickable run records and model-route metadata.
+- [Benchmark queue](https://mangowhoiscloud.github.io/geode/docs/benchmarks/queue.md): Current GEODE benchmark execution order: MCPMark Verified, tau2-bench, BFCL V4, then roadmap benchmarks.
 - [MCPMark: filesystem/easy](https://mangowhoiscloud.github.io/geode/docs/benchmarks/mcpmark/filesystem-easy.md): Verifier-backed GEODE run record for MCPMark's filesystem easy subset, including run spec, artifacts, task scores, and the EOF offload note.
+- [tau2: mock smoke](https://mangowhoiscloud.github.io/geode/docs/benchmarks/tau2/mock-smoke.md): Verifier-backed tau2 mock smoke run with GEODE as both agent and simulated user through the subscription route.
 
 ## Guides and How-to
 
