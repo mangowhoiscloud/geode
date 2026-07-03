@@ -13,7 +13,7 @@ A general-purpose autonomous execution agent. The core runtime is an **AgenticLo
 - **Package Manager**: uv
 - **Entry Points**: `geode` (`core.cli:app`, Typer) / `geode-mcp` (`core.mcp_server:main`)
 - **Modules**: 405 core + 77 plugins = 482
-- **Tests**: 9045 (+1 live)
+- **Tests**: 9258 (+1 live)
 - **CHANGELOG**: `CHANGELOG.md` (Keep a Changelog + SemVer)
 
 ## Quick Start
@@ -396,7 +396,7 @@ Update project tracking from main. Backlog → In Progress → Done.
 | Format | `uv run ruff format --check core/ tests/ plugins/ scripts/` | 0 reformats |
 | Type | `uv run mypy core/ plugins/` | 0 errors |
 | Imports | `uv run lint-imports` | contracts kept |
-| Test | `uv run pytest tests/ -m "not live"` | 3900+ pass |
+| Test | `uv run pytest tests/ -m "not live"` | 9200+ pass |
 | CLI smoke | `uv run geode version` | version prints |
 
 > 게이트 명령을 파이프로 감싸지 말 것 — `ruff check … \| tail -1` 은 zsh 기본
@@ -408,7 +408,7 @@ Update project tracking from main. Backlog → In Progress → Done.
 
 Skills used by Scaffold during GEODE development (`.claude/skills/`). Separate from GEODE runtime's `core/skills/` SkillRegistry.
 
-> `.claude/skills/` is gitignored (scaffold-local); the rows below are the repo-tracked set that ships with a clone. Additional local-only skills (e.g. `model-onboarding`, `codex-mcp-verify`, `smoke-green-loop`, `workflow-orchestrator`) may exist per machine and are intentionally not listed.
+> `.claude/skills/` is gitignored (scaffold-local); the rows below are the repo-tracked set that ships with a clone. Additional local-only skills (e.g. `model-onboarding`, `codex-mcp-verify`, `smoke-green-loop`) may exist per machine and are intentionally not listed.
 
 | Skill | Triggers | Content |
 |-------|----------|---------|
