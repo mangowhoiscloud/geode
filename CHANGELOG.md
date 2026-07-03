@@ -68,6 +68,10 @@ functional change.
 
 ### Fixed
 
+- **Serve CLI channel startup order.** `geode serve` now starts the local thin
+  CLI Unix socket before external gateway pollers, so blocking gateway adapters
+  cannot prevent `geode` clients from reconnecting after a daemon restart.
+
 - **Codex OAuth runtime cache refresh.** The `codex-oauth` adapter and
   legacy Codex provider now fingerprint the resolved OAuth token and rebuild
   cached OpenAI SDK clients when `~/.codex/auth.json` or GEODE auth state
