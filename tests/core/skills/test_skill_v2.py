@@ -220,3 +220,40 @@ class TestMultiScopeDiscovery:
         skills = loader.load_all()
         names = {s.name for s in skills}
         assert names == {"skill-a", "skill-b"}
+
+
+class TestTriggerFrontmatter:
+    """The ``triggers:`` frontmatter key (TEMPLATE.md schema) is honored by the loader."""
+
+    def _load_with(self, skills_root: Path, frontmatter: str):
+        skill_md = skills_root / "sample" / "SKILL.md"
+        skill_md.parent.mkdir(parents=True)
+        skill_md.write_text(f"---\n{frontmatter}\n---\n# Sample\nBody.\n")
+        return SkillLoader(skills_dir=skills_root).load_file(skill_md)
+
+    def test_comma_string_triggers(self, tmp_path: Path) -> None:
+        loaded = self._load_with(
+            tmp_path, "name: sample\ndescription: d\ntriggers: alpha, beta, 감마"
+        )
+        assert loaded.triggers == ["alpha", "beta", "감마"]
+
+    def test_inline_list_triggers(self, tmp_path: Path) -> None:
+        loaded = self._load_with(tmp_path, "name: sample\ndescription: d\ntriggers: [alpha, beta]")
+        assert loaded.triggers == ["alpha", "beta"]
+
+    def test_frontmatter_unions_with_description_pattern(self, tmp_path: Path) -> None:
+        loaded = self._load_with(
+            tmp_path,
+            'name: sample\ndescription: 조사 스킬. "조사해", "research" 키워드로 트리거.\n'
+            "triggers: alpha",
+        )
+        assert loaded.triggers[0] == "alpha"
+        assert "조사해" in loaded.triggers
+
+    def test_context_block_emits_triggers_and_use_skill_usage(self, tmp_path: Path) -> None:
+        loaded = self._load_with(tmp_path, "name: sample\ndescription: d\ntriggers: alpha, beta")
+        registry = SkillRegistry()
+        registry.register(loaded)
+        block = registry.get_context_block()
+        assert 'triggers="alpha, beta"' in block
+        assert "use_skill" in block

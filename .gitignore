@@ -27,6 +27,8 @@ media/
 
 # Environment
 .env
+.mcp_env
+.mcp_env.local
 
 # inspect_ai eval logs from `geode audit --live` runs (raw transcripts).
 # SOT 는 docs/audits/<date>-petri-*.md 보고서. logs 자체는 너무 크고 PII /

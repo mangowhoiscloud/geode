@@ -88,6 +88,7 @@ from core.ui.agentic_ui.events import (
     emit_tool_diversity_forced,
 )
 from core.ui.agentic_ui.render import (
+    emit_subagent_state,
     render_context_event,
     render_plan_steps,
     render_progress_plan,
@@ -155,6 +156,7 @@ __all__ = [
     "emit_repeated_success_no_progress",
     "emit_replan",
     "emit_retry_wait",
+    "emit_subagent_state",
     "emit_time_budget_expired",
     "emit_tool_backpressure",
     "emit_tool_diversity_forced",

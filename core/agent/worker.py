@@ -108,6 +108,14 @@ class WorkerRequest:
     # ``plugins/seed_generation/json_schemas.py`` and are wired in
     # each role's ``_build_tasks``.
     response_schema: dict[str, Any] | None = None
+    # Fleet view Stage 1.5 (docs/plans/2026-07-03-fleet-view.md) — when True the
+    # worker installs a process-local activity sink so the child's AgenticLoop
+    # forwards its *current* tool + cumulative token count to stdout as
+    # ``{"type":"activity", ...}`` lines BEFORE the final result line. Default
+    # False = fail-safe: seed-generation / headless spawns keep the pure
+    # single-result-line stdout contract. Only the interactive ``delegate_task``
+    # turn path (``ToolExecutor._aexecute_delegate``) sets this True.
+    emit_activity: bool = False
     # PR-Q (2026-05-24) chose to carry the orchestrator's active run_dir
     # across the parent → worker boundary via the ``GEODE_RUN_DIR``
     # environment variable (see
@@ -154,6 +162,7 @@ class WorkerRequest:
             parent_session_id=data.get("parent_session_id", ""),
             source=data.get("source", ""),
             response_schema=data.get("response_schema"),
+            emit_activity=data.get("emit_activity", False),
         )
 
 
@@ -321,9 +330,63 @@ def _save_result_backup(result: WorkerResult) -> None:
         log.debug("Failed to save result backup for %s", result.task_id, exc_info=True)
 
 
+def _make_activity_sink(task_id: str) -> Any:
+    """Build the worker's stdout activity sink (fleet-view Stage 1.5).
+
+    Returns a ``(tool_name, cumulative_tokens) -> None`` callable that writes a
+    single ``{"type":"activity", ...}`` JSON line to stdout and flushes. Two
+    invariants keep the result contract intact:
+
+    - **Line discipline** — one compact JSON object per line (``json.dumps``
+      with no indent never embeds a raw newline), well under PIPE_BUF, so the
+      cross-process append stays line-atomic and the parent's line reader can
+      classify each line independently. The final ``WorkerResult`` line is
+      still written last by :func:`main`, so it remains the terminal line.
+    - **Change-only throttle** — consecutive duplicate tool names are skipped,
+      so a batch of same-tool calls emits once, not once per call. This is the
+      "emit only when the current tool actually changes" rule from the design.
+
+    A broken stdout pipe (parent gone) is swallowed — activity is best-effort
+    telemetry and must never crash the child's tool dispatch.
+    """
+    last_tool: dict[str, str] = {"name": ""}
+
+    def _sink(tool: str, tokens: int) -> None:
+        if not tool or tool == last_tool["name"]:
+            return  # change-only throttle
+        last_tool["name"] = tool
+        line = json.dumps(
+            {
+                "type": "activity",
+                "task_id": task_id,
+                "tool": tool,
+                "tokens": int(tokens),
+                "ts": time.time(),
+            },
+            ensure_ascii=False,
+        )
+        try:
+            sys.stdout.write(line + "\n")
+            sys.stdout.flush()
+        except Exception:
+            log.debug("activity emit failed for task_id=%s tool=%s", task_id, tool, exc_info=True)
+
+    return _sink
+
+
 def _run_agentic(request: WorkerRequest) -> WorkerResult:
     """Bootstrap minimal GEODE runtime and run AgenticLoop."""
     started = time.time()
+
+    # Fleet view Stage 1.5 — when the parent opted in (interactive delegate_task
+    # turn path), install a process-local activity sink so the child's tool
+    # dispatch forwards the current tool + cumulative tokens to stdout. Default
+    # (emit_activity False) leaves the sink unset → no-op → pure result-line
+    # stdout (seed-generation / headless). See core/agent/activity_channel.py.
+    if request.emit_activity:
+        from core.agent.activity_channel import set_activity_sink
+
+        set_activity_sink(_make_activity_sink(request.task_id))
 
     # PR-RESUME-NO-PERSIST-FIX (2026-05-25) — bind a per-task isolated
     # working directory so claude-cli's cwd-keyed session cache
@@ -419,6 +482,30 @@ def _run_agentic(request: WorkerRequest) -> WorkerResult:
     effective_model = request.model or settings.model
     effective_provider = request.provider or _resolve_provider(effective_model)
 
+    # 5.5 Minimal hook bundle (trajectory audit 2026-07-03) — pre-fix the
+    # loop below was built with ``hooks=None``, so the subprocess
+    # sub-agent's tool trajectory vanished: TOOL_EXEC_ENDED had no
+    # consumer (no Episode rows for the child's tool calls) and no run-log
+    # rows were written. Inject only the two trajectory rails (episodic
+    # recorder + run-log wildcard) via ``build_worker_hooks`` — the FULL
+    # ``build_hooks`` bundle is deliberately avoided (per-spawn plugin
+    # discovery + double-writing session stores the parent owns).
+    # Best-effort: a hook bootstrap failure must never take down the
+    # sub-agent itself.
+    worker_hooks = None
+    try:
+        from core.wiring.bootstrap import build_worker_hooks
+
+        worker_hooks = build_worker_hooks(
+            session_key=request.task_id or "worker",
+            run_id=request.task_id or "worker",
+        )
+    except Exception:
+        log.warning(
+            "worker hook bundle init failed — running without hooks",
+            exc_info=True,
+        )
+
     loop = AgenticLoop(
         conversation,
         executor,
@@ -426,6 +513,7 @@ def _run_agentic(request: WorkerRequest) -> WorkerResult:
         max_tokens=request.subagent_max_tokens,
         model=effective_model,
         provider=effective_provider,
+        hooks=worker_hooks,
         # v0.55.0 R5 — propagate reasoning depth + time budget into the
         # sub-agent's loop. Pre-fix every sub-agent ran at the
         # AgenticLoop defaults (effort="high", thinking_budget=0,

@@ -142,17 +142,46 @@ def render_progress_plan(plan: list[dict[str, str]], *, explanation: str = "") -
         "in_progress": (spinner_glyph.GLYPH, f"bold {spinner_glyph.ROSE_HEX}", "bold"),
         "completed": ("✓", "success", "dim strike"),
     }
+    total = len(plan)
+    completed = sum(1 for item in plan if item.get("status") == "completed")
     _pkg.console.print()
-    header = "Plan"
+    header = f"Tasks · {completed}/{total} done"
     if explanation:
-        header = f"Plan · {explanation}"
+        header = f"{header} · {explanation}"
     _pkg.console.print(f"  [header]{header}[/header]")
-    for item in plan:
+    visible, hidden_before, hidden_after = _progress_plan_window(plan, max_items=5)
+    if hidden_before:
+        _pkg.console.print(f"    [dim]… {hidden_before} earlier[/dim]")
+    for item in visible:
         status = item.get("status", "pending")
         symbol, style, text_style = status_style.get(status, ("○", "dim", "dim"))
         step = item.get("step", "")
         _pkg.console.print(f"    [{style}]{symbol}[/{style}] [{text_style}]{step}[/{text_style}]")
+    if hidden_after:
+        _pkg.console.print(f"    [dim]… {hidden_after} later[/dim]")
     _pkg.console.print()
+
+
+def _progress_plan_window(
+    plan: list[dict[str, str]], *, max_items: int
+) -> tuple[list[dict[str, str]], int, int]:
+    """Select the visible task-list window around the active item."""
+    if len(plan) <= max_items:
+        return plan, 0, 0
+    active_idx = next(
+        (idx for idx, item in enumerate(plan) if item.get("status") == "in_progress"),
+        -1,
+    )
+    if active_idx < 0:
+        active_idx = next(
+            (idx for idx, item in enumerate(plan) if item.get("status", "pending") == "pending"),
+            len(plan) - 1,
+        )
+    half = max_items // 2
+    start = max(0, active_idx - half)
+    end = min(len(plan), start + max_items)
+    start = max(0, end - max_items)
+    return plan[start:end], start, len(plan) - end
 
 
 def render_subagent_dispatch(task_id: str, task_type: str, description: str) -> None:
@@ -186,6 +215,53 @@ def render_subagent_progress(
         f"  [dim]⎿[/dim] [success]✓[/success] {latest_name} ({latest_time:.1f}s)"
         f"  [{completed}/{total}]"
     )
+
+
+def emit_subagent_state(
+    task_id: str,
+    role: str,
+    status: str,
+    description: str,
+    tokens: int,
+    elapsed_s: float,
+    activity: str = "",
+) -> None:
+    """Emit a per-agent fleet state transition (fleet view).
+
+    Additive to the aggregate ``subagent_dispatch/progress/complete`` events:
+    this one carries per-task identity (``task_id`` + ``role``) so the thin
+    client's ``FleetRegistry`` can track each sub-agent independently.
+
+    ``tokens`` is ``0`` at dispatch (``status="running"``) and the sub-agent's
+    final ``prompt + completion`` count at completion (``0`` for subscription /
+    CLI-routed calls — never fabricated). ``activity`` (Stage 1.5) is the
+    running child's *current* tool name, forwarded over the worker stdout
+    activity side-channel; ``""`` at dispatch/completion and whenever the caller
+    did not opt into live activity. It feeds ``FleetAgent.current_activity``.
+    """
+    from core.ui import agentic_ui as _pkg
+
+    writer = getattr(_ipc_writer_local, "writer", None)
+    if writer is not None:
+        writer.send_event(
+            "subagent_state",
+            task_id=task_id,
+            role=role,
+            status=status,
+            description=description,
+            tokens=tokens,
+            elapsed_s=round(elapsed_s, 1),
+            activity=activity,
+        )
+        return
+    # Console fallback (direct mode, no IPC writer bound). Only terminal
+    # transitions print — a per-dispatch line would spam N rows for an
+    # N-way fan-out, and the aggregate dispatch/progress lines already cover
+    # the running phase in direct mode.
+    if status == "running":
+        return
+    label = role or description or task_id
+    _pkg.console.print(f"  [dim]⎿ {label} · {status} ({elapsed_s:.1f}s)[/dim]")
 
 
 def render_subagent_complete(count: int, elapsed_s: float) -> None:

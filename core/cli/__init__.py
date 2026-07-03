@@ -126,7 +126,7 @@ def _handle_memory_action(intent: Any, user_text: str, is_offline: bool) -> None
 # ---------------------------------------------------------------------------
 
 
-_LOCAL_COMMANDS = frozenset({"/help"})
+_LOCAL_COMMANDS = frozenset({"/help", "/fleet"})
 
 # Commands that need TTY interaction locally, then relay the result to serve
 _TTY_LOCAL_COMMANDS = frozenset({"/model"})
@@ -151,6 +151,12 @@ def _thin_interactive_loop(
 
     console.print(f"  [muted]session {client.session_id} · connected[/muted]")
 
+    # Fresh session (or resume below) starts with no fleet history, so a prior
+    # session's snapshot never shows in this session's /fleet (Codex).
+    from core.ui.fleet import clear_last_fleet_snapshot
+
+    clear_last_fleet_snapshot()
+
     # Resume a previous session if requested
     if resume_session or continue_latest:
         result = client.request_resume(
@@ -174,7 +180,7 @@ def _thin_interactive_loop(
         while True:
             console.show_cursor(True)
             try:
-                user_input = _read_multiline_input("[header]>[/header] ")
+                user_input = _read_multiline_input("[header]geode[/header] [muted]>[/muted] ")
             except (KeyboardInterrupt, EOFError):
                 console.print("\n  [muted]Goodbye.[/muted]\n")
                 break

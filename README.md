@@ -22,13 +22,44 @@
   <a href="README.ko.md">한국어</a>
 </p>
 
-# GEODE v0.99.265 — A Self-improving Autonomous Execution Agent
+# GEODE v0.99.272 — A Self-improving Autonomous Execution Agent
 
 A general-purpose autonomous agent that also rewrites the scaffolding it runs on. You ask in plain language; GEODE plans, calls tools, and reports, for one prompt or a long-running session. Underneath, an outer loop keeps tuning the system that runs your tasks.
 
 > **Have a ChatGPT Plus, Pro, Business, Edu, or Enterprise plan?** Route GEODE through that subscription. No API key. [Subscription setup ↓](#path-a--chatgpt-subscription-the-recommended-path-for-openai-users)
 >
 > **Claude Pro / Max?** Anthropic's terms (effective 2026-01-09) forbid third-party harness from using the Claude Code OAuth token, so GEODE doesn't read it. Use an Anthropic API key instead (Path B). Your Console account is the same; new accounts get $5 free credit.
+
+---
+
+## Benchmark snapshot — Tau2 native user-simulator track
+
+GEODE keeps benchmark numbers tied to the exact runtime and model route that
+produced them. The 2026-07-03/04 Tau2 run below used **GEODE v0.99.269** with
+the public `plugins/benchmark_harness` tau2 adapter, `sierra-research/tau2-bench@1901a30`
+(`tau2==1.0.0`), `gpt-5.2` through OpenAI **PAYG**, agent reasoning effort
+`high`, `max_steps=200`, and tau2's native `user_simulator` using
+`gpt-4.1-2025-04-14` with effort `medium`.
+
+| Domain | Tasks | Reward / pass^1 | Notable action checks | Duration |
+|---|---:|---:|---|---:|
+| Airline base | 50 | **0.8200** (41 / 50) | read 81/91, write 33/49 | avg 284.10s / max 979.65s |
+| Retail base | 114 | **0.7632** (87 / 114) | read 320/354, write 140/174 | avg 206.52s / max 873.92s |
+| Telecom base | 114 | **0.8772** (100 / 114) | write 471/496, generic 20/20 | avg 252.87s / max 818.58s |
+| **Weighted total** | **278** | **0.8201** (228 / 278) | domain action schemas differ | - |
+
+Artifacts are preserved under
+`artifacts/eval/harnesses/tau2-bench/data/simulations/geode-gpt-5-2-high-native-user-*-base-20260703/results.json`.
+These numbers are directly comparable to GEODE reruns with the same harness,
+split, user simulator, model route, and max-step settings. They should not be
+mixed with the earlier `geode_user` smoke rows. Compared with frontier Tau2
+headlines, this is an independently run GEODE adapter measurement, not the
+providers' internal research setup.
+
+The current weak spot is not gross tool availability. It is **required action
+coverage under compound tasks**: Retail failures often miss DB/write side
+effects, while Telecom failures cluster around MMS/APN/app-permission/roaming
+combinations where one necessary user or agent action is omitted.
 
 ---
 

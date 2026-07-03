@@ -131,7 +131,12 @@ export const DOCS_SITEMAP: DocSection[] = [
     titleKo: "벤치마크",
     pages: [
       { slug: "benchmarks/publishing-cycle", title: "Benchmark publishing cycle", titleKo: "Benchmark publishing cycle", summary: "Repeatable runbook for measuring GEODE, recording the evidence ledger, publishing official docs, and verifying GitHub Pages.", summaryKo: "GEODE 측정, evidence ledger 기록, 공식문서 배포, GitHub Pages 검증을 하나로 묶은 반복 runbook입니다.", quadrant: "how-to" },
+      { slug: "benchmarks/results", title: "Benchmark measurements", titleKo: "Benchmark measurements", summary: "Grouped GEODE benchmark measurement ledger for MCPMark and Tau2, with clickable run records and model-route metadata.", summaryKo: "MCPMark와 Tau2를 그룹으로 묶은 GEODE benchmark 실측 ledger입니다. 각 run은 클릭해서 model route metadata와 산출물을 확인합니다.", quadrant: "reference" },
+      { slug: "benchmarks/queue", title: "Benchmark queue", titleKo: "Benchmark queue", summary: "Current GEODE benchmark execution order: MCPMark Verified, tau2-bench, BFCL V4, then roadmap benchmarks.", summaryKo: "현재 GEODE benchmark 실행 순서입니다. MCPMark Verified, tau2-bench, BFCL V4 이후 로드맵 benchmark로 진행합니다.", quadrant: "how-to" },
       { slug: "benchmarks/mcpmark/filesystem-easy", title: "MCPMark: filesystem/easy", titleKo: "MCPMark: filesystem/easy", summary: "Verifier-backed GEODE run record for MCPMark's filesystem easy subset, including run spec, artifacts, task scores, and the EOF offload note.", summaryKo: "MCPMark filesystem easy 하위 suite에 대한 GEODE verifier-backed 실측 기록입니다. run spec, 산출물, task별 점수, EOF offload 기록을 포함합니다.", quadrant: "reference" },
+      { slug: "benchmarks/mcpmark/service-matrix", title: "MCPMark: service matrix", titleKo: "MCPMark: service matrix", summary: "MCPMark service coverage, task counts, credential requirements, and GEODE adapter support status.", summaryKo: "MCPMark 서비스별 task 수, credential 요구사항, GEODE adapter 지원 상태입니다.", quadrant: "reference" },
+      { slug: "benchmarks/tau2/mock-smoke", title: "tau2: mock smoke", titleKo: "tau2: mock smoke", summary: "Verifier-backed tau2 mock smoke run with GEODE as both agent and simulated user through the subscription route.", summaryKo: "GEODE가 agent와 simulated user 양쪽을 subscription route로 실행한 tau2 mock smoke verifier-backed 기록입니다.", quadrant: "reference" },
+      { slug: "benchmarks/tau2/domain-smoke", title: "tau2: domain matrix", titleKo: "tau2: domain matrix", summary: "GEODE tau2 smoke and native user-simulator full-domain measurements across mock, airline, retail, telecom, and banking_knowledge.", summaryKo: "GEODE tau2 smoke와 native user-simulator full-domain 실측을 mock, airline, retail, telecom, banking_knowledge별로 기록합니다.", quadrant: "reference" },
     ],
   },
   {
@@ -189,6 +194,14 @@ export const DOCS_SITEMAP: DocSection[] = [
       { slug: "explanation/ratchet", title: "Why ratchet discipline", titleKo: "왜 ratchet 규율인가", summary: "Pinned prompt hashes and a staged CI. The shape that prevents drift.", summaryKo: "프롬프트 해시 핀과 단계별 CI입니다. drift를 막는 형태를 설명합니다.", quadrant: "explanation" },
       { slug: "ops/release-pypi-lifecycle", title: "Release and PyPI lifecycle", titleKo: "릴리스와 PyPI 라이프사이클", summary: "The version-bump locations, the release workflow, and the rebuild cadence.", summaryKo: "버전 bump 위치, 릴리스 워크플로우, rebuild 주기를 다룹니다.", quadrant: "how-to" },
       { slug: "ops/backlog-dispose", title: "Backlog disposal", titleKo: "백로그 처분", summary: "Retire an idea with a paper trail instead of a silent delete.", summaryKo: "조용히 삭제하는 대신 흔적을 남기며 아이디어를 정리합니다.", quadrant: "how-to" },
+    ],
+  },
+  {
+    id: "10-codebase-map",
+    title: "Codebase Map",
+    titleKo: "코드베이스 지도",
+    pages: [
+      { slug: "codebase-map/layer-graph", title: "Layer architecture graph", titleKo: "레이어 아키텍처 그래프", summary: "A generation-date snapshot of the repository: 14 analyzed layers sized by files, drawn over their cross-layer import edges, plus a seven-step reading tour. Built by Understand-Anything, not hand-drawn.", summaryKo: "저장소를 특정 시점에 스냅숏한 지도입니다. 분석된 14개 레이어를 파일 수 크기로, 레이어를 가로지르는 import 의존을 엣지로 그리고, 7단계 읽기 투어를 덧붙입니다. 손으로 그린 것이 아니라 Understand-Anything가 만든 것입니다.", quadrant: "reference" },
     ],
   },
 ];

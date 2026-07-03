@@ -26,6 +26,21 @@ class EvidenceRow(TypedDict):
 
 _SENSITIVE_KEYS = {"api_key", "authorization", "password", "secret", "token", "text"}
 
+# Trajectory audit 2026-07-03 — ``task_preflight.required_evidence`` names
+# and the ledger ``kind`` values the runtime actually appends diverge for
+# two entries. The preflight declares intent ("preflight", "final_answer")
+# while the writers stamp the row after the producing step
+# ("task_preflight" via :meth:`EvidenceLedger.append_preflight`,
+# "final_result" via :meth:`EvidenceLedger.append_final`). The check gate
+# resolves through this alias map instead of renaming either side —
+# renaming the declared names would break the ``<geode_task_preflight>``
+# system-prompt hint wording, renaming the kinds would break existing
+# on-disk ledgers.
+REQUIRED_EVIDENCE_KIND_ALIASES: dict[str, str] = {
+    "preflight": "task_preflight",
+    "final_answer": "final_result",
+}
+
 
 def _redact(value: Any) -> Any:
     if isinstance(value, dict):
@@ -116,4 +131,42 @@ class EvidenceLedger:
             kind="final_result",
             summary=f"Agent finished with {payload['termination_reason'] or 'unknown'}.",
             payload=payload,
+        )
+
+    def append_evidence_check(self, *, required_evidence: list[str]) -> EvidenceRow:
+        """Append a ``kind="evidence_check"`` row closing the preflight chain.
+
+        Trajectory audit 2026-07-03 — ``task_preflight`` *declared*
+        ``required_evidence`` kinds and the runtime *recorded* rows, but
+        nothing ever compared the two, so a session that promised
+        ``source_url`` / ``gui_trajectory`` evidence and delivered none
+        finished indistinguishable from one that delivered all of it.
+        This row is the verification link: it lists which required kinds
+        have a matching ledger row (via
+        :data:`REQUIRED_EVIDENCE_KIND_ALIASES`) and which are missing.
+        Call it AFTER :meth:`append_final` so the ``final_answer``
+        requirement can be satisfied by the ``final_result`` row.
+        """
+        recorded_kinds = {row["kind"] for row in self.rows}
+        present: list[str] = []
+        missing: list[str] = []
+        for name in required_evidence:
+            kind = REQUIRED_EVIDENCE_KIND_ALIASES.get(name, name)
+            if kind in recorded_kinds:
+                present.append(name)
+            else:
+                missing.append(name)
+        return self.append(
+            kind="evidence_check",
+            summary=(
+                f"Evidence check: {len(present)}/{len(required_evidence)} "
+                f"required kinds recorded"
+                + (f", missing {', '.join(missing)}." if missing else ".")
+            ),
+            payload={
+                "required_evidence": list(required_evidence),
+                "present": present,
+                "missing": missing,
+                "recorded_kinds": sorted(recorded_kinds),
+            },
         )

@@ -117,6 +117,15 @@ def _handle_command(
             from core.cli.commands.lifecycle import show_status
 
             show_status()
+    elif action == "fleet":
+        # Stage 2 fleet view — interactive full-screen picker over the most
+        # recent turn's sub-agent snapshot (fleet.get_last_fleet_snapshot).
+        # THIN-only (see _LOCAL_COMMANDS): the snapshot holder + terminal both
+        # live in the thin client process.
+        from core.ui.fleet import get_last_fleet_snapshot
+        from core.ui.fleet_view import run_fleet_view
+
+        run_fleet_view(get_last_fleet_snapshot())
     elif action == "mcp":
         cmd_mcp(args, mcp_manager=mcp_manager)
     elif action == "skills":

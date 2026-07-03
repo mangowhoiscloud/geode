@@ -17,6 +17,13 @@ _DELEGATED_TOOLS: dict[str, tuple[str, str]] = {
     # PR-LLMS-TXT-TOOL (2026-06-12) — structured /llms.txt index discovery
     "llms_txt_index": ("core.tools.llms_txt", "LlmsTxtIndexTool"),
     "general_web_search": ("core.tools.web_tools", "GeneralWebSearchTool"),
+    # PR-BROWSER-CDP-BRIDGE — drive the operator's real Chrome over CDP
+    # (login sessions / fingerprint preserved), unlike headless web_fetch.
+    "browser_scan": ("core.tools.browser_tools", "BrowserScanTool"),
+    "browser_execute_js": ("core.tools.browser_tools", "BrowserExecuteJsTool"),
+    # PR-AX-UI-PROBE — structured macOS accessibility perception (a cheaper
+    # first rung than a computer_use screenshot). macOS-only, soft pyobjc dep.
+    "ui_probe": ("core.tools.ui_probe", "UiProbeTool"),
     "read_document": ("core.tools.document_tools", "ReadDocumentTool"),
     "document_ingest": ("core.tools.document_ingest", "DocumentIngestTool"),
     "glob_files": ("core.tools.file_tools", "GlobTool"),
