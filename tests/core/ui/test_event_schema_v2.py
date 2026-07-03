@@ -379,6 +379,91 @@ class TestEventRendererV2:
         assert "revised · cadence · 2 steps · rev 1" in tail
         assert "inspect" in tail
 
+    def test_plan_not_restacked_across_thinking_rounds(self, renderer) -> None:
+        """Regression: a plan drawn once must NOT be re-emitted on every thinking
+        round. Before the fix this stacked N identical 'Tasks ·' blocks down the
+        transcript (one per round); now the checklist appears exactly once."""
+        renderer._tty = True
+        renderer.on_event(
+            {
+                "type": "progress_plan",
+                "explanation": "implementation",
+                "plan": [
+                    {"step": "Inspect UX", "status": "completed"},
+                    {"step": "Patch renderer", "status": "in_progress"},
+                    {"step": "Run tests", "status": "pending"},
+                ],
+            }
+        )
+        # 5 thinking rounds with an UNCHANGED plan, with a round-transition
+        # stream between them (this is what pushed the block up / at_bottom=False
+        # so the old in-place erase could not keep up and copies stacked).
+        for i in range(5):
+            renderer.on_event({"type": "thinking_start", "model": "m", "round": i + 1})
+            renderer.on_event({"type": "thinking_end"})
+            renderer.on_stream("assistant round text\n")
+        renderer.stop()
+
+        out = renderer._out.getvalue()
+        assert out.count("Tasks ·") == 1  # exactly one checklist, not 6+
+        assert out.count("Patch renderer") == 1  # the plan step text, once
+
+    def test_plan_redraws_on_changed_status(self, renderer) -> None:
+        """A second progress_plan with a CHANGED status draws a new checklist."""
+        renderer._tty = True
+        renderer.on_event(
+            {
+                "type": "progress_plan",
+                "plan": [
+                    {"step": "Inspect UX", "status": "in_progress"},
+                    {"step": "Run tests", "status": "pending"},
+                ],
+            }
+        )
+        renderer.on_stream("tool output\n")  # push it up so a fresh copy is drawn
+        renderer.on_event(
+            {
+                "type": "progress_plan",
+                "plan": [
+                    {"step": "Inspect UX", "status": "completed"},
+                    {"step": "Run tests", "status": "in_progress"},
+                ],
+            }
+        )
+        out = renderer._out.getvalue()
+        assert out.count("Tasks ·") == 2  # genuine state change → new checklist
+
+    def test_plan_dedups_identical_consecutive_state(self, renderer) -> None:
+        """A second progress_plan with the SAME state does NOT add a checklist."""
+        renderer._tty = True
+        plan_event = {
+            "type": "progress_plan",
+            "explanation": "same",
+            "plan": [
+                {"step": "Inspect UX", "status": "in_progress"},
+                {"step": "Run tests", "status": "pending"},
+            ],
+        }
+        renderer.on_event(dict(plan_event))
+        renderer.on_stream("tool output\n")  # even after being pushed up…
+        renderer.on_event(dict(plan_event))  # …an identical plan is deduped
+        out = renderer._out.getvalue()
+        assert out.count("Tasks ·") == 1
+
+    def test_plan_header_uses_rose_not_mint(self, renderer) -> None:
+        """Header uses the signature rose SGR, never the old mint '1;36m'."""
+        from core.ui import spinner_glyph
+
+        renderer.on_event(
+            {
+                "type": "progress_plan",
+                "plan": [{"step": "Only step", "status": "in_progress"}],
+            }
+        )
+        out = renderer._out.getvalue()
+        assert spinner_glyph.ROSE in out
+        assert "\033[1;36m" not in out  # no mint on the plan surface
+
     def test_tool_backpressure(self, renderer) -> None:
         renderer.on_event({"type": "tool_backpressure", "consecutive_errors": 3})
         assert "3" in renderer._out.getvalue()
