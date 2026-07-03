@@ -45,7 +45,7 @@ functional change.
 
 ---
 
-## [0.99.272] - 2026-07-04
+## [0.99.273] - 2026-07-04
 
 ### Added
 
@@ -67,6 +67,8 @@ functional change.
   methodology + staged pilot (N=20); human labels are collected separately, so
   no agreement coefficient is reported until labels exist. Methodology:
   `docs/audits/judge-human-agreement.md`.
+
+## [0.99.272] - 2026-07-04
 
 ### Fixed
 
