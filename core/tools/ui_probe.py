@@ -1,6 +1,6 @@
 """UI Probe — structured macOS accessibility (AX) perception.
 
-A cheaper, more reliable first rung than a screenshot for "what is on screen".
+A cheaper, more reliable way to learn "what is on screen" than a screenshot.
 The ``computer_use`` harness perceives the desktop as pixels: every step ships a
 1280x800 JPEG (~1.5k tokens) to the model, and the model clicks by eyeballing
 coordinates. For native macOS apps the accessibility tree already carries the
@@ -8,20 +8,23 @@ same information as *text* — each control's role, title, value, enabled state,
 and on-screen rectangle — so the agent can perceive the UI in a few hundred
 tokens and read exact element rectangles instead of guessing from an image.
 
-Perception ladder (GenericAgent computer_use.md, mirrored): window/app probe ->
-accessibility tree -> visual detection/OCR -> vision model. This tool is the
-second rung; ``computer_use`` screenshots remain the fallback when AX is
-unavailable (games, custom-drawn canvases) or insufficient.
+Order of preference (GenericAgent computer_use.md, mirrored): read structure
+from the app's accessibility tree first, fall back to visual detection/OCR, then
+a vision model. This tool covers the accessibility-tree step; ``computer_use``
+screenshots are the fallback when AX is unavailable (games, custom-drawn
+canvases) or insufficient.
 
 Scope / live-status:
-- The **structured readout** (role/title/value/enabled + AX rectangle) is the
-  verified deliverable, exercised against a mocked AX layer in tests.
+- The **structured readout** (role/title/value/enabled + AX rectangle) is
+  live-verified (2026-07-04): with Accessibility permission granted, ui_probe
+  read the frontmost app's real AX tree (role/title/rectangles), both by direct
+  call and driven by the agent (gpt-5.5).
 - Mapping an AX rectangle to a ``computer_use`` *click* coordinate involves
   logical-point -> physical-pixel -> target-space scaling (Retina dpr, multi
-  display) that cannot be calibrated without a live macOS AX session:
-  rectangles are returned in AX logical points as reported, tagged
-  ``coord_space="ax_points"``. Click-coordinate mapping is
-  ``unverified — live test required``.
+  display) that is NOT yet calibrated: rectangles are returned in AX logical
+  points as reported, tagged ``coord_space="ax_points"``. Click-coordinate
+  mapping is ``unverified — live test required`` (negative coordinates on
+  off-primary displays are expected until calibrated).
 - Gated by the OS accessibility permission (AXIsProcessTrusted); no extra env
   flag — the permission prompt is the guard, same as any screen reader.
 
