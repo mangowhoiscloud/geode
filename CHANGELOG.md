@@ -45,14 +45,53 @@ functional change.
 
 ---
 
-## [Unreleased]
+## [0.99.270] - 2026-07-04
+
+### Added
+
+- **Real-Chrome browser control over CDP — `browser_scan` / `browser_execute_js`.**
+  A new tool pair (`core/tools/browser_tools.py`) attaches to the operator's own
+  Chrome via the DevTools Protocol debug endpoint (`--remote-debugging-port`),
+  so pages that block headless automation (login walls, SPAs, CAPTCHA risk
+  scoring) behave as they do for a human — the real profile, cookies, and
+  fingerprint are used and attaching does not set `navigator.webdriver`.
+  `browser_scan` lists tabs and returns compacted page text (reusing `web_fetch`
+  compaction); `browser_execute_js` runs arbitrary JS (top-level await
+  supported) for full control. Uses the already-installed `websockets` client —
+  no Chrome extension to build/install, no Playwright/Selenium. The live CDP
+  round-trip is `unverified — live test required` (needs a Chrome launched with
+  the debug port); connection errors return the launch command as a hint.
+  Ported approach from GenericAgent's TMWebdriver, via CDP-attach instead of a
+  bundled extension.
+- **Structured macOS accessibility perception — `ui_probe`.** A new tool
+  (`core/tools/ui_probe.py`) reads a native macOS app's accessibility (AX) tree
+  — each control's role, title, value, enabled state, and on-screen rectangle —
+  as compact text, a cheaper and more reliable first rung than a `computer_use`
+  screenshot (which ships a ~1.5k-token JPEG per step). Screenshots remain the
+  fallback when AX is unavailable (games, custom-drawn canvases). pyobjc is a
+  soft dependency (opt-in `[desktop]` extra, macOS-only); absent it or the
+  Accessibility permission, the tool returns an actionable error. The AX
+  rectangle→click-coordinate mapping (Retina dpr calibration) is
+  `unverified — live test required` and rectangles are tagged
+  `coord_space="ax_points"`; the structured readout is the verified deliverable.
+  Perception ladder mirrored from GenericAgent (`computer_use.md`).
+
+### Changed
+
+- **`web_fetch` collapses repeated list runs before truncation.**
+  `WebFetchTool._html_to_text` now detects runs of structurally-identical
+  siblings (search results, feed items, table rows) and keeps a small sample
+  plus an honest `[... N more <tag> items omitted ...]` marker, so a list
+  page's tail survives the char budget instead of being lost to the blind
+  10k head-truncation. Ported idea: GenericAgent `simphtml` cutlist.
 
 ### Fixed
 
 - **tau2 benchmark adapter action strictness.** GEODE's tau2-bench adapter now
   instructs the agent not to invent optional tool arguments that the user,
   policy, or prior tool results did not supply, preventing verifier drift from
-  extra inferred fields such as task descriptions.
+  extra inferred fields such as task descriptions. (Folded from develop's
+  `[Unreleased]` when this release absorbed concurrent work.)
 
 ## [0.99.269] - 2026-07-03
 

@@ -745,6 +745,72 @@
     }
   },
   {
+    "name": "browser_scan",
+    "description": "Perceive a REAL Chrome tab over the DevTools Protocol: lists open tabs and returns a compacted text view of a page (repeated lists collapsed). Unlike web_fetch (headless GET, no JS), this reads the operator's own logged-in browser — cookies, sessions, and rendered SPA content are all present. Requires Chrome launched with --remote-debugging-port=9222. Use browser_execute_js to act on the page.",
+    "category": "external",
+    "cost_tier": "cheap",
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "url_contains": {
+          "type": "string",
+          "description": "Pick the tab whose URL contains this substring; omit to use the active tab."
+        },
+        "tabs_only": {
+          "type": "boolean",
+          "description": "Return only the tab list, no page content (saves tokens). Default: false."
+        },
+        "max_chars": {
+          "type": "integer",
+          "description": "Max characters of page content to return (default 8000, cap 35000)."
+        }
+      },
+      "required": []
+    }
+  },
+  {
+    "name": "browser_execute_js",
+    "description": "Execute JavaScript in a REAL Chrome tab over the DevTools Protocol and return its value. Full control of the operator's logged-in browser (click, fill, navigate via location.href, read DOM). Top-level await is supported; return a serialisable value. Requires Chrome launched with --remote-debugging-port=9222.",
+    "category": "external",
+    "cost_tier": "cheap",
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "script": {
+          "type": "string",
+          "description": "JavaScript expression to evaluate in the tab. Its value is returned."
+        },
+        "url_contains": {
+          "type": "string",
+          "description": "Pick the tab whose URL contains this substring; omit to use the active tab."
+        }
+      },
+      "required": [
+        "script"
+      ]
+    }
+  },
+  {
+    "name": "ui_probe",
+    "description": "Perceive a macOS app's UI structurally via the accessibility (AX) tree — each control's role, title, value, enabled state, and on-screen rectangle as compact text. A cheaper, more reliable first step than a computer_use screenshot for 'what is on screen' on native macOS apps. Falls back to computer_use screenshots when AX is unavailable (games, custom-drawn canvases). Requires macOS Accessibility permission. Rectangles are AX logical points (coord_space=ax_points); mapping to a click coordinate is not yet calibrated.",
+    "category": "discovery",
+    "cost_tier": "cheap",
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "app_name": {
+          "type": "string",
+          "description": "App to inspect (localized name or bundle id). Omit to use the frontmost app."
+        },
+        "max_depth": {
+          "type": "integer",
+          "description": "Max AX tree recursion depth (default 12)."
+        }
+      },
+      "required": []
+    }
+  },
+  {
     "name": "general_web_search",
     "description": "Searches the web for up-to-date information. Dispatches through the adapter registry's WebSearchCapable chain (provider preference Anthropic -> OpenAI -> GLM, with subscription endpoints promoted ahead of PAYG per the operator's credential_source setting). Prefer this tool when the user asks about current information, news, or trends. This is a text search — for browsing a specific site visually, use playwright MCP (browser_navigate) instead.",
     "category": "external",

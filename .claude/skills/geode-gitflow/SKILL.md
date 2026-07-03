@@ -71,6 +71,56 @@ git push --force-with-lease
 # → CI re-triggered → confirm pass → merge
 ```
 
+### Concurrent-session drift & CI-trigger recovery
+
+Two failure modes surface when **another session merges to develop while your
+feature PR is open** (e.g. a Tau2-promotion or scheduled routine running in
+parallel). Both are expected under multi-session work — recognise and recover,
+don't re-investigate from scratch each time.
+
+**A. PR goes `CONFLICTING` / `DIRTY` — usually a CHANGELOG collision.** The
+other merge added its own top entry (often under `## [Unreleased]`) or bumped
+the version, so your top-of-CHANGELOG insert conflicts. Recover:
+
+```bash
+git fetch origin
+git merge origin/develop            # resolve on the feature branch (squash-merge flattens it later)
+# CHANGELOG.md is the usual (often only) conflict.
+```
+
+- **Fold, don't stack.** Absorb the concurrent `[Unreleased]` / entry INTO your
+  release version's own `### Added/Changed/Fixed` — a release captures *all*
+  unreleased work since the last version. Never leave a `## [Unreleased]`
+  heading on a branch bound for main (CLAUDE.md forbids it).
+- **Re-check the version number isn't already taken.** If the other session
+  bumped `pyproject`/CHANGELOG to the number you picked, bump past it
+  (`grep -m1 '^version' <(git show origin/develop:pyproject.toml)` before
+  resolving — see [[feedback_concurrent_session_version_collision]]).
+- **Regenerate the derived SoT after editing CHANGELOG.md** — the version
+  fan-out is not just the 5 text files: `node site/scripts/sync-stats.mjs`
+  (rebuilds `changelog.ts` / `sot.ts` / `llms.txt`) + `uv run python
+  scripts/check_llms_version.py --fix`, else the CI version ratchet blocks the
+  merge on a stale `changelog.ts`.
+- Re-run the gates, `git add -A`, `git commit` (completes the merge), push.
+
+**B. A fresh PR attaches 0 CI checks (webhook miss).** `gh pr checks <N>` prints
+"no checks reported" and stays that way. Confirm it's a *miss*, not slowness:
+
+```bash
+gh api "repos/<owner>/<repo>/commits/$(git rev-parse HEAD)/check-runs" --jq .total_count   # 0 = nothing attached
+```
+
+If `total_count` is 0 minutes after opening (Actions enabled, other PRs' runs
+present), re-fire the trigger:
+
+```bash
+gh pr close <N> && gh pr reopen <N>   # fires a `reopened` event → CI re-triggers
+```
+
+Verify attachment via the `check-runs` API, **not** `gh pr checks` alone (it
+errors identically on "not yet run" and "will never run"). Don't leave a monitor
+spinning on the repeating "no checks" error — diagnose the trigger first.
+
 ---
 
 ## Release Flow (rotation — eliminates backmerge)
