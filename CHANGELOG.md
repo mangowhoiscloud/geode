@@ -45,6 +45,15 @@ functional change.
 
 ---
 
+## [Unreleased]
+
+### Fixed
+
+- **tau2 benchmark adapter action strictness.** GEODE's tau2-bench adapter now
+  instructs the agent not to invent optional tool arguments that the user,
+  policy, or prior tool results did not supply, preventing verifier drift from
+  extra inferred fields such as task descriptions.
+
 ## [0.99.269] - 2026-07-03
 
 ### Added
