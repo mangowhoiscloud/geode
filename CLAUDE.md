@@ -8,12 +8,12 @@
 
 A general-purpose autonomous execution agent. The core runtime is an **AgenticLoop** (`while tool_use`) — sub-agents, plans, and batches are all instances of the same loop. Autonomously performs research, analysis, automation, and scheduling.
 
-- **Version**: 0.99.270
+- **Version**: 0.99.271
 - **Python**: >= 3.12
 - **Package Manager**: uv
 - **Entry Points**: `geode` (`core.cli:app`, Typer) / `geode-mcp` (`core.mcp_server:main`)
 - **Modules**: 405 core + 77 plugins = 482
-- **Tests**: 9258 (+1 live)
+- **Tests**: 9264 (+1 live)
 - **CHANGELOG**: `CHANGELOG.md` (Keep a Changelog + SemVer)
 
 ## Quick Start
@@ -45,7 +45,7 @@ uv run geode "schedule daily standup reminder at 9am"
 ## Project Structure
 
 Production code splits into two top-level Python packages:
-- `core/` — general-purpose autonomous agent runtime. 4-layer stack (layer diagram → `GEODE.md` → Architecture).
+- `core/` — general-purpose autonomous agent runtime. 5-layer stack (layer diagram → `GEODE.md` → Architecture).
 - `plugins/` — first-party auxiliary plugins.
 
 Check module count: `find core/ -name "*.py" | wc -l` for core, `find plugins/ -name "*.py" | wc -l` for plugins.

@@ -16,7 +16,7 @@
 - **Language**: Python 3.12+, type-hinted, uv-managed.
 - **Layout**: two top-level packages.
   - `core/` — domain-agnostic runtime.
-  - `plugins/` — domain extensions (currently `petri_audit`).
+  - `plugins/` — domain extensions (`petri_audit`, `seed_generation`, `benchmark_harness`).
 - **Quality bar**: ruff, mypy, pytest plus a prompt-hash ratchet. CI breaks on red.
 - **Public site**: `site/` (Next.js 16 static export, deployed to GitHub Pages).
 
@@ -46,7 +46,8 @@ The agentic loop. `while(tool_use)` primitive that drives every turn.
 - `system_prompt.py` — `build_system_prompt()`. Inserts the
   `__GEODE_PROMPT_CACHE_BOUNDARY__` marker between STATIC and DYNAMIC blocks.
   Since v0.93 the DYNAMIC block is wrapped in `<dynamic_context>` XML.
-- `subagent.py` — `MAX_CONCURRENT=5`, `SessionLane` slot allocation.
+- `sub_agent.py` — `SubAgentManager`: max depth 1 (no recursion), session cap 15,
+  global Lane concurrency 50 (`core/wiring/container.py`).
 
 Read this first when changing termination paths, loop bounds, or system prompt
 assembly.
@@ -63,8 +64,8 @@ LLM router, providers, prompt assembly, hashing.
 - `providers/glm.py` — GLM 5.x family. Context window 202_752 (not 200_000).
   Thinking gate (`thinking.type="off"|"none"`).
 - `providers/codex.py` — OAuth + reasoning sidecar.
-- `prompts/__init__.py` — `_PINNED_HASHES` (18 entries). Karpathy P4 ratchet.
-- `prompts/*.md` — 6 base templates plus 9 extended templates and 3 axes datasets.
+- `prompts/__init__.py` — `_PINNED_HASHES` (4 entries). Karpathy P4 ratchet.
+- `prompts/*.md` — 3 templates (`commentary` / `decomposer` / `router`).
 - `postprocess/html_output.py` — strips OpenAI data-URL HTML.
 
 Read this first when changing prompt content (will break the hash ratchet),
@@ -72,10 +73,10 @@ adding a provider, or touching cache/tool-choice/streaming behaviour.
 
 ### `core/tools/`
 
-60 tools. Deferred loading lives at the Anthropic adapter (official defer_loading + hosted tool_search), not in the registry.
+66 tools. Deferred loading lives at the provider adapters (official defer_loading + hosted tool_search), not in the registry.
 
 - `base.py:35` — `Tool` Protocol.
-- `registry.py:209-218` — `ALWAYS_LOADED_TOOLS` frozenset (6 tools).
+- `core/llm/tool_defer.py` — `TOOL_SEARCH_ALWAYS_LOADED` frozenset (12 tools).
 - `definitions.json` — single SOT for tool metadata.
 - Category modules: `file_tools.py`, `memory_tools.py`, `data_tools.py`,
   `computer_use.py`, `web_tools.py`, `profile_tools.py`, etc.
@@ -95,7 +96,7 @@ MCP server adapters plus 25K result guard.
 
 5-tier context hierarchy. Vault. Bidirectional learning.
 
-- `context.py:46` — `ContextAssembler`. Five tiers: Identity / Profile / Org /
+- `context.py:32` — `ContextAssembler`. Five tiers: Identity / Profile / Org /
   Project / Session.
 - `vault/` — agent-produced artifact storage.
 
@@ -104,10 +105,10 @@ absolute token guard.
 
 ### `core/hooks/`
 
-81 lifecycle events across 14 categories.
+65 lifecycle events.
 
-- `system.py:28` — `HookEvent` enum.
-- `system.py:200` — `HookSystem` class. Three trigger modes:
+- `system.py:99` — `HookEvent` enum.
+- `system.py:383` — `HookSystem` class. Three trigger modes:
   `trigger`, `trigger_with_result`, `trigger_interceptor`.
 
 Read this first when adding an event or wiring an interceptor.
@@ -139,8 +140,9 @@ Per-call diagnostics for Petri audits (v0.92+).
 
 Runtime SkillRegistry. Distinct from scaffold `.claude/skills/`.
 
-- `skill_registry.py` — 5-tier discovery (bundled → user → org → project → session).
-- `reports/` — report templates are not bundled in GEODE core.
+- `skills.py` — `SkillLoader` / `SkillRegistry`, 3-tier discovery
+  (bundled → global user `~/.geode/skills/` → project `.geode/skills/`).
+- `use_skill` tool loads a skill body on demand (Progressive Disclosure Tier 2).
 
 ### `core/scheduler/`, `core/orchestration/`
 
@@ -159,7 +161,7 @@ Slack / Discord / Telegram adapters. Lane queue concurrency.
 Petri × GEODE alignment audit (v0.92+).
 
 - `cli_audit.py` — `geode audit` Typer wrapper.
-- `seeds/` — 22 GEODE-specific seeds organised across 3 tiers
+- `seeds/` — 20 GEODE-specific seeds organised across 3 tiers
   (critical / auxiliary / info), spanning autonomy, calibration,
   compute_use, efficiency, exploratory, reasoning, research.
 - `judge_dims/` — judge dimension catalog. Default `subset`
@@ -274,7 +276,7 @@ Add a GAP Audit table when the PR was driven by a plan, audit, or cleanup.
 | What does a tool do? | `core/tools/definitions.json` and the category module |
 | What models can I use? | `core/llm/providers/<provider>.py` |
 | Why a layer? | `core/agent/loop/agent_loop.py` plus `docs/architecture/` |
-| How are hooks wired? | `core/hooks/system.py` plus `core/runtime/bootstrap.py` |
+| How are hooks wired? | `core/hooks/system.py` plus `core/wiring/bootstrap.py` |
 | How is cost tracked? | `~/.geode/usage/*.jsonl` plus `core/audit/diagnostics.py` |
 | Petri audit run? | `plugins/petri_audit/cli_audit.py` |
 | Site docs? | `site/src/app/docs/**` |
@@ -283,7 +285,7 @@ Add a GAP Audit table when the PR was driven by a plan, audit, or cleanup.
 
 Each subsystem has `tests/test_<name>.py`. Live tests are marked `-m live`.
 
-Total: 4608 standard plus 24 live (see `site/src/data/geode/sot.ts`).
+Total: 9264 standard plus 1 live (see `site/src/data/geode/sot.ts`).
 
 ## Frontier sources
 

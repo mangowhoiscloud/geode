@@ -1,7 +1,8 @@
 ---
 name: wiki-sync
 visibility: public
-description: GEODE 리서치/지식을 mango-wiki (Obsidian vault)에 인제스트. Triggers: 'wiki', '위키', 'vault', 'wiki-sync', '위키 동기화', 'wiki render', '위키 렌더링'.
+triggers: wiki, 위키, vault, wiki-sync, 위키 동기화, wiki render
+description: Ingest GEODE research/knowledge into the mango-wiki Obsidian vault (render + sync).
 tools: web_search, web_fetch, memory_save
 risk: safe
 ---

@@ -177,6 +177,8 @@ class SkillRegistry:
             ]
             if skill.tools:
                 attrs.append(f'tools="{escape(", ".join(skill.tools), quote=True)}"')
+            if skill.triggers:
+                attrs.append(f'triggers="{escape(", ".join(skill.triggers[:8]), quote=True)}"')
             if skill.context_fork:
                 attrs.append('context="fork"')
             desc = escape(skill.description[:200])
@@ -187,6 +189,10 @@ class SkillRegistry:
                 break
             lines.append(line)
             total += len(line)
+        lines.append(
+            "  <usage>Call the use_skill tool with a skill name to load its full"
+            " instructions before applying it.</usage>"
+        )
         lines.append("</available_skills>")
 
         return "\n".join(lines)
@@ -289,7 +295,15 @@ class SkillLoader:
 
         name = metadata.get("name", "") or path.parent.name
         description = metadata.get("description", "")
-        triggers = _extract_triggers(description)
+        # Triggers: the `triggers:` frontmatter key (list or comma-string, as
+        # documented in TEMPLATE.md) unioned with the legacy description-embedded
+        # `"kw" 키워드로 트리거` pattern. Frontmatter order wins.
+        triggers_raw: Any = metadata.get("triggers", [])
+        if isinstance(triggers_raw, str):
+            fm_triggers = [t.strip() for t in triggers_raw.split(",") if t.strip()]
+        else:
+            fm_triggers = [str(t).strip() for t in triggers_raw if str(t).strip()]
+        triggers = list(dict.fromkeys([*fm_triggers, *_extract_triggers(description)]))
 
         tools_raw: Any = metadata.get("tools", [])
         if isinstance(tools_raw, str):

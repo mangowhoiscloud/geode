@@ -45,6 +45,46 @@ functional change.
 
 ---
 
+## [0.99.271] - 2026-07-04
+
+### Added
+
+- **`use_skill` tool — model-side skill invocation (Progressive Disclosure Tier 2).**
+  The system prompt advertises `<available_skills>` metadata only; until now the
+  only paths that loaded a skill body were the CLI surfaces (`/skills`,
+  `geode skill show`), so headless (Gateway / DAEMON / sub-agent) sessions could
+  see skills but never use them. `use_skill` renders a skill body on demand with
+  `$ARGUMENTS` substitution, is always-loaded in the tool-search defer set, and
+  falls back to the same 3-tier `SkillLoader` scan when built without daemon
+  wiring (worker path). Guard: `tests/core/cli/test_tool_handlers_use_skill.py`.
+- **Bundled runtime skills: `long-task-watcher`, `tech-blog-writer`.** Ported
+  from the Claude Code scaffold to the bundled tier in runtime-adapted form.
+
+### Fixed
+
+- **Skill loader honors the `triggers:` frontmatter key.** `TEMPLATE.md`
+  documented `triggers:` but the loader only parsed the description-embedded
+  `"kw" 키워드로 트리거` pattern, so every bundled skill loaded with zero
+  triggers. The frontmatter key (inline list or comma-string) now unions with
+  the legacy pattern, and `<available_skills>` emits a `triggers="…"` attribute
+  plus a `use_skill` usage hint so the metadata has a runtime consumer.
+  `TEMPLATE.md`'s multi-line list example (never parsed by the line-based
+  frontmatter parser) corrected to the inline form.
+- **Bundled runtime skills swept.** `geode-context` de-versioned (was pinned to
+  v0.99.247 facts: stale metrics, removed `subagent.py` constants, stale
+  headless-deny path); `slop-audit` stale `autoresearch/` scan target removed;
+  `triggers:` keys added across bundled skills. Removed from the bundled tier:
+  `seed-generation-cycle` (completed Session-63 dev scaffold; frontmatter name
+  had drifted from its directory) and `codex-mcp-verify` (Claude Code scaffold
+  doc duplicated into the runtime tier).
+- **Doc-vs-code drift swept in `GEODE.md` / `AGENTS.md` / `CLAUDE.md`.**
+  Measured corrections: hook events 63/81 → 65, tool count 60 → 66, GLM primary
+  `glm-5.1` → `glm-5.2`, unbound `gpt-5.4` secondary row dropped, headless deny
+  path → `core/agent/safety.py:HEADLESS_DENIED_TOOLS`, skills discovery
+  5-tier → 3-tier, `_PINNED_HASHES` 18 → 4, prompt templates 15+ → 3, petri
+  seeds 22 → 20, `core/runtime/bootstrap.py` → `core/wiring/bootstrap.py`,
+  stale line refs, 4-layer → 5-layer stack label.
+
 ## [0.99.270] - 2026-07-04
 
 ### Added

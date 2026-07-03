@@ -62,6 +62,7 @@ from core.cli.tool_handlers.single_tool import (
     _build_notification_handlers,
     _build_offload_handlers,
     _build_output_handlers,
+    _build_use_skill_handler,
 )
 from core.cli.tool_handlers.system import _build_system_handlers
 from core.cli.tool_handlers.task import _build_task_handlers
@@ -132,7 +133,8 @@ def _build_tool_handlers(
 
     Each handler receives tool_input kwargs and returns a dict result.
     ``mcp_manager`` is used by install_mcp_server.
-    ``skill_registry`` is used by generate_report for skill-enhanced narrative.
+    ``skill_registry`` is used by generate_report (skill-enhanced narrative)
+    and use_skill (model-side skill body loading).
 
     Delegates to group-specific builder functions and merges the results.
     """
@@ -159,4 +161,5 @@ def _build_tool_handlers(
     handlers.update(_build_computer_use_handler())
     handlers.update(_build_audit_handlers())
     handlers.update(_build_observability_handlers())
+    handlers.update(_build_use_skill_handler(skill_registry))
     return handlers
