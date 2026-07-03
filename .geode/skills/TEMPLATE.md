@@ -9,10 +9,8 @@
 name: skill-name
 description: One-line description of what this skill does
 visibility: public          # public | private | unlisted
-triggers:
-  - keyword1
-  - keyword2
-  - keyword3
+triggers: [keyword1, keyword2, keyword3]   # inline list or comma-string only
+                                            # (multi-line YAML lists are not parsed)
 ```
 
 ### Visibility Levels

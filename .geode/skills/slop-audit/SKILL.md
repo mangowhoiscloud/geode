@@ -1,12 +1,13 @@
 ---
 name: slop-audit
-description: 6-lens slop prevention audit — unused imports, dead private fns, duplicate signatures, abandoned TODOs, lint bypass markers, stale refs. Baseline-gated growth check. Triggers — slop, dead code, unused, audit, duplicate, todo, noqa, stale.
+visibility: public
+triggers: slop, dead code, unused, audit, duplicate, todo, noqa, stale
+description: 6-lens slop prevention audit — unused imports, dead private fns, duplicate signatures, abandoned TODOs, lint bypass markers, stale refs. Baseline-gated growth check.
 ---
 
 # Slop Prevention Audit
 
-Recurring 6-lens scan of `core/` / `plugins/` / `autoresearch/` /
-`scripts/` to catch the patterns that accumulate during long PR
+Recurring 6-lens scan of `core/` / `plugins/` / `scripts/` to catch the patterns that accumulate during long PR
 sequences and rot codebase health when nobody is grepping for them.
 
 ## When to run
