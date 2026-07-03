@@ -270,6 +270,8 @@ See `geode-gitflow` skill. **Flow**: `feature → develop` **squash-merged** (on
 
 > **Before EVERY `develop → main` merge, sync `main → develop` first** (`gh pr create --base develop --head main` → merge) so develop ⊇ main and never merges while lagging. The only recurring main-only drift is the kanban (`docs/progress.md`, committed on main post-merge); the pre-sync pulls the prior cycle's kanban into develop each time, so it self-heals and never accumulates. *This replaces the deleted `auto-backmerge.yml` workflow, which fired on every push to main and piled up unmerged main→develop PRs (10 open at once, 2026-06-14) because the feature/main divergence is never a fast-forward. Manual pre-sync is the single, deliberate back-merge per cycle.*
 
+> **Concurrent-session drift is expected, not an anomaly.** While your feature PR is open, another session (Tau2 promotion, a scheduled routine) may merge to develop — your PR then goes `CONFLICTING`/`DIRTY` (usually a CHANGELOG top-entry collision) and/or your version number gets taken. Recover per `geode-gitflow` skill § "Concurrent-session drift & CI-trigger recovery": merge `origin/develop`, **fold** the concurrent `[Unreleased]`/entry into your release version (never leave `[Unreleased]`), re-verify the version number is still free, then **regenerate the derived version SoT** (`sync-stats.mjs` + `check_llms_version.py --fix`) or the CI ratchet blocks on a stale `changelog.ts`. Separately, a freshly-opened PR that attaches **0 CI checks** (webhook miss — verify with `gh api commits/<sha>/check-runs .total_count`, not `gh pr checks` alone) is re-triggered by `gh pr close <N> && gh pr reopen <N>`; don't leave a monitor spinning on the repeating "no checks" error.
+
 **PR Body Template (MANDATORY):**
 
 ```

@@ -85,6 +85,14 @@ functional change.
   page's tail survives the char budget instead of being lost to the blind
   10k head-truncation. Ported idea: GenericAgent `simphtml` cutlist.
 
+### Fixed
+
+- **tau2 benchmark adapter action strictness.** GEODE's tau2-bench adapter now
+  instructs the agent not to invent optional tool arguments that the user,
+  policy, or prior tool results did not supply, preventing verifier drift from
+  extra inferred fields such as task descriptions. (Folded from develop's
+  `[Unreleased]` when this release absorbed concurrent work.)
+
 ## [0.99.269] - 2026-07-03
 
 ### Added

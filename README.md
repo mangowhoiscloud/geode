@@ -32,6 +32,37 @@ A general-purpose autonomous agent that also rewrites the scaffolding it runs on
 
 ---
 
+## Benchmark snapshot — Tau2 native user-simulator track
+
+GEODE keeps benchmark numbers tied to the exact runtime and model route that
+produced them. The 2026-07-03/04 Tau2 run below used **GEODE v0.99.269** with
+the public `plugins/benchmark_harness` tau2 adapter, `sierra-research/tau2-bench@1901a30`
+(`tau2==1.0.0`), `gpt-5.2` through OpenAI **PAYG**, agent reasoning effort
+`high`, `max_steps=200`, and tau2's native `user_simulator` using
+`gpt-4.1-2025-04-14` with effort `medium`.
+
+| Domain | Tasks | Reward / pass^1 | Notable action checks | Duration |
+|---|---:|---:|---|---:|
+| Airline base | 50 | **0.8200** (41 / 50) | read 81/91, write 33/49 | avg 284.10s / max 979.65s |
+| Retail base | 114 | **0.7632** (87 / 114) | read 320/354, write 140/174 | avg 206.52s / max 873.92s |
+| Telecom base | 114 | **0.8772** (100 / 114) | write 471/496, generic 20/20 | avg 252.87s / max 818.58s |
+| **Weighted total** | **278** | **0.8201** (228 / 278) | domain action schemas differ | - |
+
+Artifacts are preserved under
+`artifacts/eval/harnesses/tau2-bench/data/simulations/geode-gpt-5-2-high-native-user-*-base-20260703/results.json`.
+These numbers are directly comparable to GEODE reruns with the same harness,
+split, user simulator, model route, and max-step settings. They should not be
+mixed with the earlier `geode_user` smoke rows. Compared with frontier Tau2
+headlines, this is an independently run GEODE adapter measurement, not the
+providers' internal research setup.
+
+The current weak spot is not gross tool availability. It is **required action
+coverage under compound tasks**: Retail failures often miss DB/write side
+effects, while Telecom failures cluster around MMS/APN/app-permission/roaming
+combinations where one necessary user or agent action is omitted.
+
+---
+
 ## The self-improving loop
 
 GEODE is a self-evolving agent on the **non-parametric branch**: it improves by mutating its own scaffolding (system prompt, tool policy, task decomposition, reflection, skills, agent contracts, tool descriptions), never the model weights. Fitness is an adversarial **safety** audit, not a capability benchmark: Petri-grade, multi-dimensional, with a hard floor on critical safety dimensions, so any change that regresses one is rejected. The **selection** seeds co-evolve — a co-scientist pipeline grows adversarial seeds alongside the agent — so they apply moving selection pressure, not a stable ruler. Cross-generation fitness is measured on a separate **version-frozen held-out bench** that never mutates; only that held-out curve counts as evidence of real improvement.

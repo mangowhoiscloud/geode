@@ -318,6 +318,201 @@ const tau2MockSmoke: BenchmarkMeasurement = {
   ],
 };
 
+const tau2NativeAirlineBase: BenchmarkMeasurement = {
+  id: "tau2-airline-base-20260703-geode-099269-gpt52-high-payg",
+  group: "tau2",
+  title: "airline/base native user_simulator",
+  measuredAt: "2026-07-03 KST",
+  suite: "airline / base",
+  status: "complete",
+  model: "gpt-5.2",
+  provider: "openai",
+  source: "payg",
+  effort: "agent high / user medium",
+  route: "geode_agent + native tau2 user_simulator",
+  harness: "sierra-research/tau2-bench@1901a30, tau2==1.0.0, GEODE v0.99.269",
+  artifact:
+    "artifacts/eval/harnesses/tau2-bench/data/simulations/geode-gpt-5-2-high-native-user-airline-base-20260703/results.json",
+  scoreLabel: "Reward / pass^1",
+  scoreValue: "0.8200 / 0.820 (41 / 50)",
+  secondary: [
+    "DB match 42 / 50",
+    "Read actions 81 / 91",
+    "Write actions 33 / 49",
+    "Termination user_stop 50 / 50",
+    "Duration total 14205.02s / avg 284.10s / max 979.65s",
+  ],
+  command: `uv run python scripts/eval/tau2_geode_agent.py \\
+  --harness-dir artifacts/eval/harnesses/tau2-bench \\
+  --domain airline \\
+  --task-split-name base \\
+  --num-tasks 50 \\
+  --num-trials 1 \\
+  --max-concurrency 2 \\
+  --max-steps 200 \\
+  --timeout 3600 \\
+  --model gpt-5.2 \\
+  --provider openai \\
+  --source payg \\
+  --effort high \\
+  --time-budget-s 600 \\
+  --user user_simulator \\
+  --user-llm gpt-4.1-2025-04-14 \\
+  --user-provider openai \\
+  --user-source payg \\
+  --user-effort medium \\
+  --user-time-budget-s 120 \\
+  --save-to geode-gpt-5-2-high-native-user-airline-base-20260703 \\
+  --log-level INFO \\
+  --auto-resume`,
+  notes: [
+    "GEODE version at measurement: v0.99.269.",
+    "This is the native tau2 user_simulator comparator track, not the GEODE geode_user smoke track.",
+    "Airline is retained for internal trend comparison; OpenAI's GPT-5.2 announcement excludes Airline from its Tau2 headline due to lower-quality ground truth grading.",
+  ],
+};
+
+const tau2NativeRetailBase: BenchmarkMeasurement = {
+  id: "tau2-retail-base-20260703-geode-099269-gpt52-high-payg",
+  group: "tau2",
+  title: "retail/base native user_simulator",
+  measuredAt: "2026-07-03 KST",
+  suite: "retail / base",
+  status: "complete",
+  model: "gpt-5.2",
+  provider: "openai",
+  source: "payg",
+  effort: "agent high / user medium",
+  route: "geode_agent + native tau2 user_simulator",
+  harness: "sierra-research/tau2-bench@1901a30, tau2==1.0.0, GEODE v0.99.269",
+  artifact:
+    "artifacts/eval/harnesses/tau2-bench/data/simulations/geode-gpt-5-2-high-native-user-retail-base-20260703/results.json",
+  scoreLabel: "Reward / pass^1",
+  scoreValue: "0.7632 / 0.763 (87 / 114)",
+  secondary: [
+    "DB match 88 / 113",
+    "Read actions 320 / 354",
+    "Write actions 140 / 174",
+    "Termination user_stop 113 / 114, too_many_errors 1 / 114",
+    "Duration total 23543.64s / avg 206.52s / max 873.92s",
+  ],
+  command: `uv run python scripts/eval/tau2_geode_agent.py \\
+  --harness-dir artifacts/eval/harnesses/tau2-bench \\
+  --domain retail \\
+  --task-split-name base \\
+  --num-tasks 114 \\
+  --num-trials 1 \\
+  --max-concurrency 2 \\
+  --max-steps 200 \\
+  --timeout 3600 \\
+  --model gpt-5.2 \\
+  --provider openai \\
+  --source payg \\
+  --effort high \\
+  --time-budget-s 600 \\
+  --user user_simulator \\
+  --user-llm gpt-4.1-2025-04-14 \\
+  --user-provider openai \\
+  --user-source payg \\
+  --user-effort medium \\
+  --user-time-budget-s 120 \\
+  --save-to geode-gpt-5-2-high-native-user-retail-base-20260703 \\
+  --log-level INFO \\
+  --auto-resume`,
+  notes: [
+    "GEODE version at measurement: v0.99.269.",
+    "The main failure mode was missing required side-effect actions even when the natural-language response looked plausible.",
+    "One task terminated with too_many_errors; the remaining failures ended with user_stop but failed verifier assertions.",
+  ],
+};
+
+const tau2NativeTelecomBase: BenchmarkMeasurement = {
+  id: "tau2-telecom-base-20260703-geode-099269-gpt52-high-payg",
+  group: "tau2",
+  title: "telecom/base native user_simulator",
+  measuredAt: "2026-07-04 03:45 KST",
+  suite: "telecom / base",
+  status: "complete",
+  model: "gpt-5.2",
+  provider: "openai",
+  source: "payg",
+  effort: "agent high / user medium",
+  route: "geode_agent + native tau2 user_simulator",
+  harness: "sierra-research/tau2-bench@1901a30, tau2==1.0.0, GEODE v0.99.269",
+  artifact:
+    "artifacts/eval/harnesses/tau2-bench/data/simulations/geode-gpt-5-2-high-native-user-telecom-base-20260703/results.json",
+  scoreLabel: "Reward / pass^1",
+  scoreValue: "0.8772 / 0.877 (100 / 114)",
+  secondary: [
+    "DB match 31 / 114",
+    "Write actions 471 / 496",
+    "Generic actions 20 / 20",
+    "Termination user_stop 114 / 114",
+    "Duration total 28827.72s / avg 252.87s / max 818.58s",
+  ],
+  command: `uv run python scripts/eval/tau2_geode_agent.py \\
+  --harness-dir artifacts/eval/harnesses/tau2-bench \\
+  --domain telecom \\
+  --task-split-name base \\
+  --num-tasks 114 \\
+  --num-trials 1 \\
+  --max-concurrency 4 \\
+  --max-steps 200 \\
+  --timeout 3600 \\
+  --model gpt-5.2 \\
+  --provider openai \\
+  --source payg \\
+  --effort high \\
+  --time-budget-s 600 \\
+  --user user_simulator \\
+  --user-llm gpt-4.1-2025-04-14 \\
+  --user-provider openai \\
+  --user-source payg \\
+  --user-effort medium \\
+  --user-time-budget-s 120 \\
+  --save-to geode-gpt-5-2-high-native-user-telecom-base-20260703 \\
+  --log-level INFO \\
+  --auto-resume`,
+  notes: [
+    "GEODE version at measurement: v0.99.269.",
+    "Concurrency was raised from 2 to 4 mid-run and resumed from tau2 checkpoints; no rate-limit, quota, or billing errors were observed.",
+    "Failures clustered around multi-issue MMS/mobile-data/service cases where one required APN, permission, roaming, or data-refuel action was omitted.",
+  ],
+};
+
+const tau2NativeAggregate: BenchmarkMeasurement = {
+  id: "tau2-base-aggregate-20260703-geode-099269-gpt52-high-payg",
+  group: "tau2",
+  title: "base aggregate native user_simulator",
+  measuredAt: "2026-07-04 03:45 KST",
+  suite: "airline + retail + telecom / base",
+  status: "complete",
+  model: "gpt-5.2",
+  provider: "openai",
+  source: "payg",
+  effort: "agent high / user medium",
+  route: "geode_agent + native tau2 user_simulator",
+  harness: "sierra-research/tau2-bench@1901a30, tau2==1.0.0, GEODE v0.99.269",
+  artifact:
+    "artifacts/eval/harnesses/tau2-bench/data/simulations/geode-gpt-5-2-high-native-user-{airline,retail,telecom}-base-20260703/results.json",
+  scoreLabel: "Weighted reward / pass^1",
+  scoreValue: "0.8201 / 0.820 (228 / 278)",
+  secondary: [
+    "Airline 0.8200 (41 / 50)",
+    "Retail 0.7632 (87 / 114)",
+    "Telecom 0.8772 (100 / 114)",
+    "Native user simulator gpt-4.1-2025-04-14",
+    "GEODE recorded gpt-5.2 PAYG usage locally; user simulator cost is visible through OpenAI billing, not GEODE's usage ledger.",
+  ],
+  command: `# Aggregate of the three per-domain native tau2 runs listed above.
+# Do not average this with mock smoke or GEODE geode_user rows.`,
+  notes: [
+    "This weighted aggregate is for internal Agent-World-style comparison only.",
+    "The run spec differs from OpenAI's official GPT-5.2 Tau2 headline, which used an internal research setup and excludes Airline.",
+    "The run spec differs from the earlier GEODE geode_user smoke matrix.",
+  ],
+};
+
 export const BENCHMARK_GROUPS: BenchmarkGroup[] = [
   {
     id: "mcpmark",
@@ -384,11 +579,37 @@ export const BENCHMARK_GROUPS: BenchmarkGroup[] = [
         measurementId: tau2MockSmoke.id,
         note: "reward 1.0, pass^1 1.000",
       },
-      { label: "Retail", value: "planned", note: "Full domain run pending" },
-      { label: "Telecom", value: "planned", note: "Next small run target" },
-      { label: "Airline", value: "planned", note: "Later HAL/tau-bench comparator path" },
-      { label: "Avg.", value: "1.000", note: "Measured surfaces only: Mock" },
+      {
+        label: "Retail",
+        value: "0.763",
+        measurementId: tau2NativeRetailBase.id,
+        note: "base, 114 tasks, native user_simulator",
+      },
+      {
+        label: "Telecom",
+        value: "0.877",
+        measurementId: tau2NativeTelecomBase.id,
+        note: "base, 114 tasks, native user_simulator",
+      },
+      {
+        label: "Airline",
+        value: "0.820",
+        measurementId: tau2NativeAirlineBase.id,
+        note: "base, 50 tasks, native user_simulator",
+      },
+      {
+        label: "Avg.",
+        value: "0.820",
+        measurementId: tau2NativeAggregate.id,
+        note: "weighted across airline+retail+telecom, excludes mock",
+      },
     ],
-    measurements: [tau2MockSmoke],
+    measurements: [
+      tau2NativeAggregate,
+      tau2NativeTelecomBase,
+      tau2NativeRetailBase,
+      tau2NativeAirlineBase,
+      tau2MockSmoke,
+    ],
   },
 ];
