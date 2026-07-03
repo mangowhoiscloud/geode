@@ -296,6 +296,7 @@ class IPCClient:
                 "subagent_dispatch",
                 "subagent_progress",
                 "subagent_complete",
+                "subagent_state",  # Stage 1 fleet view — per-agent live state
                 "session_cost",
                 # AgenticLoop state events
                 "model_switch_required",

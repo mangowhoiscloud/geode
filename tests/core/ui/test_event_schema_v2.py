@@ -640,6 +640,162 @@ class TestEventRendererV2:
         assert "\033[1A\033[2K" not in out
 
 
+class TestFleetView:
+    """Stage 1 fleet view — subagent_state emit + handler + one-line summary."""
+
+    def test_emit_subagent_state_sends_ipc_event(self) -> None:
+        from core.ui.agentic_ui import _ipc_writer_local, emit_subagent_state
+
+        mock_writer = MagicMock()
+        _ipc_writer_local.writer = mock_writer
+        try:
+            emit_subagent_state("delegate_1_0", "repo_researcher", "running", "scan repo", 0, 0.0)
+            mock_writer.send_event.assert_called_once_with(
+                "subagent_state",
+                task_id="delegate_1_0",
+                role="repo_researcher",
+                status="running",
+                description="scan repo",
+                tokens=0,
+                elapsed_s=0.0,
+            )
+        finally:
+            _ipc_writer_local.writer = None
+
+    def test_emit_subagent_state_console_fallback_terminal_only(self) -> None:
+        """No IPC writer → running is silent; terminal transitions print one line."""
+        from core.ui.agentic_ui import _ipc_writer_local, emit_subagent_state
+
+        _ipc_writer_local.writer = None
+        # running with no writer must not crash and must not require a writer.
+        emit_subagent_state("t1", "patcher", "running", "do a thing", 0, 0.0)
+        emit_subagent_state("t1", "patcher", "done", "do a thing", 100, 2.0)  # no crash
+
+    def _renderer(self):
+        import io
+
+        from core.ui.event_renderer import EventRenderer
+
+        r = EventRenderer()
+        r._out = io.StringIO()
+        return r
+
+    def test_handler_feeds_registry(self) -> None:
+        renderer = self._renderer()
+        renderer.on_event(
+            {
+                "type": "subagent_state",
+                "task_id": "d0",
+                "role": "repo_researcher",
+                "status": "running",
+                "description": "scan",
+                "tokens": 0,
+                "elapsed_s": 0.0,
+            }
+        )
+        snap = renderer._fleet.snapshot()
+        assert len(snap) == 1
+        assert snap[0].task_id == "d0"
+        assert snap[0].role == "repo_researcher"
+        assert snap[0].is_running is True
+
+    def test_fleet_summary_line_appears_when_running(self) -> None:
+        from core.ui import spinner_glyph
+
+        renderer = self._renderer()
+        renderer.on_event(
+            {
+                "type": "subagent_state",
+                "task_id": "d0",
+                "role": "repo_researcher",
+                "status": "running",
+                "description": "scan",
+            }
+        )
+        renderer.on_event(
+            {
+                "type": "subagent_state",
+                "task_id": "d1",
+                "role": "patcher",
+                "status": "running",
+                "description": "patch",
+            }
+        )
+        out = renderer._out.getvalue()
+        assert "Fleet · 2 running" in out
+        assert "repo_researcher" in out
+        assert "patcher" in out
+        assert spinner_glyph.GLYPH in out  # rose GEODE mark for running
+
+    def test_fleet_summary_absent_when_none_running(self) -> None:
+        renderer = self._renderer()
+        renderer.on_event(
+            {
+                "type": "subagent_state",
+                "task_id": "d0",
+                "role": "repo_researcher",
+                "status": "running",
+                "description": "scan",
+            }
+        )
+        renderer.on_event(
+            {
+                "type": "subagent_state",
+                "task_id": "d0",
+                "role": "repo_researcher",
+                "status": "done",
+                "description": "scan",
+                "tokens": 500,
+                "elapsed_s": 3.0,
+            }
+        )
+        # The summary line updates in place; the LAST render must carry no fleet line.
+        assert renderer._fleet_summary_line() == ""
+        assert "Fleet ·" not in "".join(renderer._render_activity_lines())
+
+    def test_no_emoji_in_fleet_line(self) -> None:
+        renderer = self._renderer()
+        renderer.on_event(
+            {
+                "type": "subagent_state",
+                "task_id": "d0",
+                "role": "verifier",
+                "status": "running",
+                "description": "verify",
+            }
+        )
+        line = renderer._fleet_summary_line()
+        # House style: rose GEODE mark only, no decorative emoji.
+        for emoji in ("🚀", "🤖", "✨", "🛰"):
+            assert emoji not in line
+
+    def test_legacy_subagent_events_still_render(self) -> None:
+        renderer = self._renderer()
+        renderer.on_event(
+            {"type": "subagent_dispatch", "task_id": "d0", "description": "legacy dispatch"}
+        )
+        renderer.on_event(
+            {
+                "type": "subagent_progress",
+                "completed": 1,
+                "total": 2,
+                "name": "x",
+                "duration_s": 1.0,
+            }
+        )
+        renderer.on_event({"type": "subagent_complete", "count": 2, "elapsed_s": 5.0})
+        out = renderer._out.getvalue()
+        assert "delegate_task" in out
+        assert "1/2" in out or "[1/2]" in out
+        assert "2 sub-agents completed" in out
+
+    def test_subagent_state_in_ipc_allowlist(self) -> None:
+        from pathlib import Path
+
+        source = Path("core/cli/ipc_client.py").read_text()
+        assert '"subagent_state"' in source
+
+
 class TestIPCClientEventWhitelist:
     """All 28 event types are in IPCClient's event whitelist."""
 

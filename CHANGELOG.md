@@ -90,6 +90,24 @@ functional change.
   exposed MCP tool descriptions, and offloading source EOF preservation from
   model turns into the MCP dispatch layer for same-name text writes.
 
+## [0.99.267] - 2026-07-03
+
+### Added
+
+- **Multi-agent fleet view — data layer + turn-time summary (Stage 1).** A new
+  additive `subagent_state` IPC event carries per-sub-agent state keyed by
+  `task_id` (role, running/done/error/timeout status, elapsed, final token
+  count) so the thin client can track each delegated sub-agent independently.
+  A client-side `FleetRegistry` (`core/ui/fleet.py`) ingests these events, and
+  the existing activity live region now shows a single compact
+  `◆ Fleet · N running · role_a, role_b` line while sub-agents are in flight
+  (rose GEODE mark, no emoji, truncated to terminal width). The aggregate
+  `subagent_dispatch`/`progress`/`complete` events are unchanged. Live per-agent
+  tool text is deferred to Stage 1.5 (child subprocesses run `quiet=True`, so
+  mid-run activity is not plumbed and is honestly left blank rather than faked);
+  the interactive full-screen view is Stage 2. Design SOT:
+  `docs/plans/2026-07-03-fleet-view.md`.
+
 ## [0.99.266] - 2026-07-03
 
 ### Fixed

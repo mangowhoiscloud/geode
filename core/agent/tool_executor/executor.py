@@ -529,17 +529,51 @@ class ToolExecutor:
         total_count = len(sub_tasks)
         _start_ts = time.time()
         _task_starts: dict[str, float] = {t.task_id: time.time() for t in sub_tasks}
+        # Stage 1 fleet view — per-task role for the subagent_state feed. The
+        # SubResult passed to _on_progress carries no role, so map it here.
+        _task_roles: dict[str, str] = {t.task_id: t.role for t in sub_tasks}
+
+        # Fleet view: announce each sub-agent as `running` at dispatch so the
+        # thin client's FleetRegistry has a per-agent row before any completes.
+        # tokens=0 / elapsed=0 at this point (mid-run token counts are not
+        # plumbed — the child subprocess runs quiet=True; see fleet-view doc).
+        from core.ui.agentic_ui import emit_subagent_state
+
+        for _sub in sub_tasks:
+            emit_subagent_state(_sub.task_id, _sub.role, "running", _sub.description, 0, 0.0)
+
+        _progressed_ids: set[str] = set()
 
         def _on_progress(result: Any) -> None:
             nonlocal completed_count
             completed_count += 1
+            _progressed_ids.add(str(getattr(result, "task_id", "") or ""))
             task_elapsed = time.time() - _task_starts.get(result.task_id, _start_ts)
-            from core.ui.agentic_ui import render_subagent_progress
+            from core.ui.agentic_ui import emit_subagent_state, render_subagent_progress
 
             render_subagent_progress(
                 completed_count,
                 total_count,
                 result.description or result.task_id,
+                task_elapsed,
+            )
+            # Fleet view: per-agent terminal state with the final token count
+            # (0 for subscription/CLI calls — SubResult never fabricates usage).
+            tokens = int(getattr(result, "prompt_tokens", 0)) + int(
+                getattr(result, "completion_tokens", 0)
+            )
+            if getattr(result, "success", False):
+                status = "done"
+            elif "timeout" in str(getattr(result, "error", "") or "").lower():
+                status = "timeout"
+            else:
+                status = "error"
+            emit_subagent_state(
+                result.task_id,
+                _task_roles.get(result.task_id, ""),
+                status,
+                result.description or result.task_id,
+                tokens,
                 task_elapsed,
             )
 
@@ -548,6 +582,27 @@ class ToolExecutor:
         results = await self._sub_agent_manager.adelegate(
             sub_tasks, on_progress=_on_progress, announce=False, default_model=default_model
         )
+
+        # Fleet view: guarantee a terminal state for EVERY dispatched task.
+        # Pre-spawn failures (depth-limit / session-cap) return a SubResult
+        # without ever calling on_progress, so a "running" row would leak
+        # forever and the summary would lie ("N running"). Emit the terminal
+        # status for any result the progress callback didn't already cover.
+        for r in results:
+            tid = getattr(r, "task_id", None)
+            if tid is None or tid in _progressed_ids:
+                continue
+            elapsed = time.time() - _task_starts.get(tid, _start_ts)
+            tokens = int(getattr(r, "prompt_tokens", 0)) + int(getattr(r, "completion_tokens", 0))
+            if getattr(r, "success", False):
+                term = "done"
+            elif "timeout" in str(getattr(r, "error", "") or "").lower():
+                term = "timeout"
+            else:
+                term = "error"
+            emit_subagent_state(
+                tid, _task_roles.get(tid, ""), term, r.description or tid, tokens, elapsed
+            )
 
         # Final summary line
         from core.ui.agentic_ui import render_subagent_complete
