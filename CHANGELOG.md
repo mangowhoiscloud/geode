@@ -68,6 +68,13 @@ functional change.
 
 ### Fixed
 
+- **Codex OAuth runtime cache refresh.** The `codex-oauth` adapter and
+  legacy Codex provider now fingerprint the resolved OAuth token and rebuild
+  cached OpenAI SDK clients when `~/.codex/auth.json` or GEODE auth state
+  changes, preventing daemon restarts from being required after Codex CLI
+  refreshes an expired ChatGPT token. `/login refresh` also invalidates the
+  Codex CLI credential reader and legacy Codex client cache.
+
 - **MCP filesystem argument compatibility.** MCP tool dispatch now normalizes
   common schema mismatches before server calls, including mapping `file_path`
   to `path` when the MCP schema requires `path`, dropping conflicting

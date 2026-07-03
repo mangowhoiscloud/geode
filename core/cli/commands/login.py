@@ -145,6 +145,8 @@ def cmd_login(args: str) -> None:
         # (Codex CLI OAuth) which never appear in auth.toml.
         try:
             from core.auth.auth_toml import auth_toml_path, load_auth_toml
+            from core.auth.codex_cli_oauth import invalidate_cache as invalidate_codex_cli_cache
+            from core.llm.providers.codex import reset_codex_client
             from core.llm.strategies.plan_registry import get_plan_registry
             from core.wiring.container import ensure_profile_store
 
@@ -153,6 +155,8 @@ def cmd_login(args: str) -> None:
             plans_before = {p.id for p in registry.list_all()}
             profiles_before = {p.name for p in store.list_all()}
             ok = load_auth_toml()
+            invalidate_codex_cli_cache()
+            reset_codex_client()
             plans_after = {p.id for p in registry.list_all()}
             profiles_after = {p.name for p in store.list_all()}
             new_plans = plans_after - plans_before
