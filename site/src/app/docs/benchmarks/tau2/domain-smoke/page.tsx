@@ -20,7 +20,7 @@ export default function Page() {
               아니라, GEODE adapter가 각 domain에서 어디까지 통과하는지 보는
               smoke matrix입니다. 기본 row는 agent와 simulated user 모두 GEODE의
               <code>gpt-5.5</code> subscription route를 사용했고, telecom
-              재시도 row는 <code>gpt-5.2</code> PAYG user route를 별도로 기록했습니다.
+              게시 row는 <code>gpt-5.2</code> PAYG user route를 별도로 기록했습니다.
             </p>
             <table>
               <thead>
@@ -45,7 +45,7 @@ export default function Page() {
               <thead>
                 <tr>
                   <th>Domain</th>
-                  <th>Task</th>
+                  <th>Task ID / case</th>
                   <th>Reward</th>
                   <th>Termination</th>
                   <th>Duration</th>
@@ -54,10 +54,9 @@ export default function Page() {
               </thead>
               <tbody>
                 <tr><td><code>mock</code></td><td><code>create_task_1</code></td><td><strong>1.0</strong></td><td><code>user_stop</code></td><td>65.69s</td><td>DB diff와 assistant write action 모두 통과</td></tr>
-                <tr><td><code>airline</code></td><td><code>0</code></td><td><strong>1.0</strong></td><td><code>user_stop</code></td><td>134.86s</td><td>DB/communicate reward 통과</td></tr>
-                <tr><td><code>retail</code></td><td><code>0</code></td><td><strong>1.0</strong></td><td><code>user_stop</code></td><td>283.61s</td><td>5개 expected action check 모두 통과</td></tr>
-                <tr><td><code>telecom</code></td><td><code>mobile_data_issue</code>, <code>gpt-5.5/geode_user</code></td><td>0.0</td><td><code>max_steps</code></td><td>244.09s / 637.57s</td><td>max_steps=14와 max_steps=30 모두 조기 종료</td></tr>
-                <tr><td><code>telecom</code></td><td><code>mobile_data_issue</code>, <code>gpt-5.2/payg user</code></td><td><strong>1.0</strong></td><td><code>user_stop</code></td><td>219.12s</td><td>max_steps=200에서 <code>toggle_airplane_mode</code>와 <code>toggle_roaming</code> 통과</td></tr>
+                <tr><td><code>airline</code></td><td><code>task_id=0</code></td><td><strong>1.0</strong></td><td><code>user_stop</code></td><td>134.86s</td><td>DB/communicate reward 통과</td></tr>
+                <tr><td><code>retail</code></td><td><code>task_id=0</code></td><td><strong>1.0</strong></td><td><code>user_stop</code></td><td>283.61s</td><td>5개 expected action check 모두 통과</td></tr>
+                <tr><td><code>telecom</code></td><td><code>mobile_data_issue</code>, <code>gpt-5.2/payg user</code></td><td><strong>1.0</strong></td><td><code>user_stop</code></td><td>219.12s</td><td><code>max_steps=200</code>에서 <code>toggle_airplane_mode</code>와 <code>toggle_roaming</code> 통과</td></tr>
                 <tr><td><code>banking_knowledge</code></td><td><code>task_001</code></td><td>0.0</td><td><code>user_stop</code></td><td>360.77s</td><td><code>bm25</code> retrieval로 하네스는 실행됐지만 user-side write action 미발화</td></tr>
               </tbody>
             </table>
@@ -69,7 +68,7 @@ export default function Page() {
   --num-tasks 1 \\
   --num-trials 1 \\
   --max-concurrency 1 \\
-  --max-steps <8|14|30> \\
+  --max-steps <8|14|30|200> \\
   --timeout <900|1200|1800> \\
   --model gpt-5.5 \\
   --provider openai \\
@@ -115,7 +114,7 @@ export default function Page() {
             <h2>판독</h2>
             <ul>
               <li>mock, airline, retail은 adapter와 verifier path가 정상 동작합니다.</li>
-              <li>telecom은 <code>gpt-5.5</code> subscription user route에서 step budget을 30까지 늘려도 회복되지 않았지만, <code>gpt-5.2</code> PAYG user route와 max_steps=200에서는 통과했습니다.</li>
+              <li>telecom 게시 row는 <code>gpt-5.2</code> PAYG user route와 <code>max_steps=200</code>에서 통과한 결과만 남겼습니다.</li>
               <li><code>gpt-5.2</code>는 현재 Codex subscription backend에서 지원되지 않아 PAYG user route로만 기록했습니다. 중단된 subscription 시도는 결과에 포함하지 않았습니다.</li>
               <li>banking_knowledge는 <code>--retrieval-config bm25</code> 옵션으로 sandbox 의존성을 피했지만, user-side tool policy 보강이 필요합니다.</li>
             </ul>
@@ -128,7 +127,7 @@ export default function Page() {
               This is not a tau2 leaderboard aggregate. It is a smoke matrix for
               checking how far the GEODE adapter gets in each tau2 domain. The
               default rows use GEODE&apos;s <code>gpt-5.5</code> subscription route
-              for both agent and simulated user; the telecom retry records a
+              for both agent and simulated user; the published telecom row records a
               separate <code>gpt-5.2</code> PAYG user route.
             </p>
             <table>
@@ -154,7 +153,7 @@ export default function Page() {
               <thead>
                 <tr>
                   <th>Domain</th>
-                  <th>Task</th>
+                  <th>Task ID / case</th>
                   <th>Reward</th>
                   <th>Termination</th>
                   <th>Duration</th>
@@ -163,10 +162,9 @@ export default function Page() {
               </thead>
               <tbody>
                 <tr><td><code>mock</code></td><td><code>create_task_1</code></td><td><strong>1.0</strong></td><td><code>user_stop</code></td><td>65.69s</td><td>DB diff and assistant write action passed</td></tr>
-                <tr><td><code>airline</code></td><td><code>0</code></td><td><strong>1.0</strong></td><td><code>user_stop</code></td><td>134.86s</td><td>DB and communicate reward passed</td></tr>
-                <tr><td><code>retail</code></td><td><code>0</code></td><td><strong>1.0</strong></td><td><code>user_stop</code></td><td>283.61s</td><td>All 5 expected action checks passed</td></tr>
-                <tr><td><code>telecom</code></td><td><code>mobile_data_issue</code>, <code>gpt-5.5/geode_user</code></td><td>0.0</td><td><code>max_steps</code></td><td>244.09s / 637.57s</td><td>Stopped early at both max_steps=14 and max_steps=30</td></tr>
-                <tr><td><code>telecom</code></td><td><code>mobile_data_issue</code>, <code>gpt-5.2/payg user</code></td><td><strong>1.0</strong></td><td><code>user_stop</code></td><td>219.12s</td><td>Passed <code>toggle_airplane_mode</code> and <code>toggle_roaming</code> with max_steps=200</td></tr>
+                <tr><td><code>airline</code></td><td><code>task_id=0</code></td><td><strong>1.0</strong></td><td><code>user_stop</code></td><td>134.86s</td><td>DB and communicate reward passed</td></tr>
+                <tr><td><code>retail</code></td><td><code>task_id=0</code></td><td><strong>1.0</strong></td><td><code>user_stop</code></td><td>283.61s</td><td>All 5 expected action checks passed</td></tr>
+                <tr><td><code>telecom</code></td><td><code>mobile_data_issue</code>, <code>gpt-5.2/payg user</code></td><td><strong>1.0</strong></td><td><code>user_stop</code></td><td>219.12s</td><td>Passed <code>toggle_airplane_mode</code> and <code>toggle_roaming</code> with <code>max_steps=200</code></td></tr>
                 <tr><td><code>banking_knowledge</code></td><td><code>task_001</code></td><td>0.0</td><td><code>user_stop</code></td><td>360.77s</td><td>Harness ran with <code>bm25</code> retrieval, but the user-side write action did not fire</td></tr>
               </tbody>
             </table>
@@ -178,7 +176,7 @@ export default function Page() {
   --num-tasks 1 \\
   --num-trials 1 \\
   --max-concurrency 1 \\
-  --max-steps <8|14|30> \\
+  --max-steps <8|14|30|200> \\
   --timeout <900|1200|1800> \\
   --model gpt-5.5 \\
   --provider openai \\
@@ -224,7 +222,7 @@ export default function Page() {
             <h2>Reading</h2>
             <ul>
               <li>mock, airline, and retail validate the adapter and verifier path.</li>
-              <li>telecom did not recover with the <code>gpt-5.5</code> subscription user route when the step budget was raised to 30, but passed with the <code>gpt-5.2</code> PAYG user route and max_steps=200.</li>
+              <li>The published telecom row only keeps the passing <code>gpt-5.2</code> PAYG user route result with <code>max_steps=200</code>.</li>
               <li><code>gpt-5.2</code> is not currently supported by the Codex subscription backend, so only the PAYG user route is counted. The interrupted subscription attempt is excluded.</li>
               <li>banking_knowledge avoids the sandbox dependency with <code>--retrieval-config bm25</code>, but needs stronger user-side tool policy.</li>
             </ul>

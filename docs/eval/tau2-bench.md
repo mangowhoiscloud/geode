@@ -204,16 +204,15 @@ Comparability:
 
 These rows are adapter calibration records, not tau2 leaderboard scores. The
 default rows run both agent and simulated user through GEODE's `gpt-5.5`
-subscription route. The telecom GPT-5.2 row is a separate PAYG user-route
-retry, not averaged with the subscription-only smoke rows.
+subscription route. The published telecom GPT-5.2 row is a separate PAYG
+user-route retry, not averaged with the subscription-only smoke rows.
 
-| Domain | Task | Reward | Termination | Duration | Reading |
+| Domain | Task ID / case | Reward | Termination | Duration | Reading |
 |---|---|---:|---|---:|---|
 | `mock` | `create_task_1` | 1.0 | `user_stop` | 65.69s | DB diff and assistant write action passed |
-| `airline` | `0` | 1.0 | `user_stop` | 134.86s | DB/communicate reward passed |
-| `retail` | `0` | 1.0 | `user_stop` | 283.61s | 5 expected action checks passed |
-| `telecom` | `mobile_data_issue`, `gpt-5.5/geode_user` | 0.0 | `max_steps` | 244.09s / 637.57s | max_steps=14 and max_steps=30 both stopped before completion |
-| `telecom` | `mobile_data_issue`, `gpt-5.2/payg user` | 1.0 | `user_stop` | 219.12s | max_steps=200 passed; `toggle_airplane_mode` and `toggle_roaming` write actions matched |
+| `airline` | `task_id=0` | 1.0 | `user_stop` | 134.86s | DB/communicate reward passed |
+| `retail` | `task_id=0` | 1.0 | `user_stop` | 283.61s | 5 expected action checks passed |
+| `telecom` | `mobile_data_issue`, `gpt-5.2/payg user` | 1.0 | `user_stop` | 219.12s | `max_steps=200` passed; `toggle_airplane_mode` and `toggle_roaming` write actions matched |
 | `banking_knowledge` | `task_001` | 0.0 | `user_stop` | 360.77s | `--retrieval-config bm25` avoided the shell sandbox dependency, but user-side write action did not fire |
 
 Artifacts:
