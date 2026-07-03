@@ -16,8 +16,11 @@ and OpenClaw (openai-codex-provider.ts).
 
 from __future__ import annotations
 
+import hashlib
 import logging
 import threading
+import time
+from dataclasses import dataclass
 from typing import Any
 
 from core.auth.jwt_claims import decode_jwt_claims
@@ -31,9 +34,28 @@ log = logging.getLogger(__name__)
 # imports so a routing.toml reload is seen without a restart.
 
 _codex_client: Any = None
+_codex_client_fingerprint = ""
 _codex_lock = threading.Lock()
 _async_codex_client: Any = None
+_async_codex_client_fingerprint = ""
 _async_codex_lock = threading.Lock()
+
+
+@dataclass(frozen=True)
+class _ResolvedCodexToken:
+    """Runtime Codex OAuth token plus cache identity metadata."""
+
+    token: str
+    source: str
+    expires_at: float = 0.0
+
+    @property
+    def fingerprint(self) -> str:
+        return hashlib.sha256(self.token.encode("utf-8")).hexdigest()[:16]
+
+    @property
+    def has_expired(self) -> bool:
+        return self.expires_at > 0 and time.time() >= self.expires_at
 
 
 def _extract_account_id(token: str) -> str:
@@ -58,8 +80,8 @@ def build_codex_oauth_headers(token: str) -> dict[str, str]:
     return headers
 
 
-def _resolve_codex_token() -> str:
-    """Resolve Codex OAuth token.
+def _resolve_codex_token_info(*, force_refresh: bool = False) -> _ResolvedCodexToken | None:
+    """Resolve Codex OAuth token with cache metadata.
 
     v0.52.4 — checks two sources, GEODE-issued first:
       1. ProfileStore for an ``openai-codex`` profile (the one created
@@ -71,6 +93,12 @@ def _resolve_codex_token() -> str:
     Without (1) the geode-registered ``openai-codex-geode`` plan would
     be invisible to the actual LLM call path and the OAuth login wizard
     would do nothing for users who don't also run Codex CLI.
+
+    v0.99.x — returns token identity metadata so SDK clients can be
+    rebuilt when Codex CLI refreshes ``~/.codex/auth.json`` after the
+    daemon has already cached a client. This mirrors Hermes' credential
+    pool resync pattern: when the backing auth store changes, stale
+    runtime entries are replaced instead of kept until process restart.
     """
     try:
         from core.wiring.container import get_profile_store
@@ -90,79 +118,119 @@ def _resolve_codex_token() -> str:
                     and profile.key
                     and not profile.managed_by
                 ):
-                    return profile.key
+                    return _ResolvedCodexToken(
+                        token=profile.key,
+                        source=f"profile:{profile.name}",
+                        expires_at=float(profile.expires_at or 0.0),
+                    )
             for profile in store.list_all():
                 if profile.provider == "openai-codex" and profile.is_available and profile.key:
-                    return profile.key
+                    return _ResolvedCodexToken(
+                        token=profile.key,
+                        source=f"profile:{profile.name}",
+                        expires_at=float(profile.expires_at or 0.0),
+                    )
     except Exception:
         log.debug("GEODE openai-codex profile lookup failed", exc_info=True)
 
     try:
         from core.auth.codex_cli_oauth import read_codex_cli_credentials
 
-        creds = read_codex_cli_credentials()
+        creds = read_codex_cli_credentials(force_refresh=force_refresh)
         if creds:
-            return creds["access_token"]
+            resolved = _ResolvedCodexToken(
+                token=creds["access_token"],
+                source="codex-cli:~/.codex/auth.json",
+                expires_at=float(creds.get("expires_at", 0.0) or 0.0),
+            )
+            if resolved.has_expired:
+                log.warning("Codex CLI OAuth token is expired; refusing stale runtime token")
+                return None
+            return resolved
     except Exception:
         log.debug("Codex CLI token resolution failed", exc_info=True)
-    return ""
+    return None
+
+
+def _resolve_codex_token() -> str:
+    """Resolve Codex OAuth token."""
+    resolved = _resolve_codex_token_info(force_refresh=True)
+    return resolved.token if resolved else ""
 
 
 def _get_codex_client() -> Any:
     """Lazy import and return cached Codex client (thread-safe)."""
-    global _codex_client
-    if _codex_client is None:
-        with _codex_lock:
-            if _codex_client is None:
-                import openai
+    global _codex_client, _codex_client_fingerprint
+    resolved = _resolve_codex_token_info(force_refresh=True)
+    if not resolved:
+        log.warning("Codex OAuth token not available")
+        return None
+    with _codex_lock:
+        if _codex_client is not None and _codex_client_fingerprint == resolved.fingerprint:
+            return _codex_client
 
-                token = _resolve_codex_token()
-                if not token:
-                    log.warning("Codex OAuth token not available")
-                    return None
+        import openai
 
-                _codex_client = openai.OpenAI(
-                    api_key=token,
-                    base_url=CODEX_BASE_URL,
-                    default_headers=build_codex_oauth_headers(token),
-                    max_retries=0,  # PR-ADAPTER-TIMEOUT-AND-SERIALIZATION
-                )
+        _codex_client = openai.OpenAI(
+            api_key=resolved.token,
+            base_url=CODEX_BASE_URL,
+            default_headers=build_codex_oauth_headers(resolved.token),
+            max_retries=0,  # PR-ADAPTER-TIMEOUT-AND-SERIALIZATION
+        )
+        _codex_client_fingerprint = resolved.fingerprint
+        log.info(
+            "Codex OAuth client rebuilt from %s token=%s",
+            resolved.source,
+            resolved.fingerprint,
+        )
     return _codex_client
 
 
 def _get_async_codex_client() -> Any:
     """Lazy import and return cached async Codex client (thread-safe)."""
-    global _async_codex_client
-    if _async_codex_client is None:
-        with _async_codex_lock:
-            if _async_codex_client is None:
-                import openai
+    global _async_codex_client, _async_codex_client_fingerprint
+    resolved = _resolve_codex_token_info(force_refresh=True)
+    if not resolved:
+        log.warning("Codex OAuth token not available")
+        return None
+    with _async_codex_lock:
+        if (
+            _async_codex_client is not None
+            and _async_codex_client_fingerprint == resolved.fingerprint
+        ):
+            return _async_codex_client
 
-                token = _resolve_codex_token()
-                if not token:
-                    log.warning("Codex OAuth token not available")
-                    return None
+        import openai
 
-                # PR-CODEX-OUTPUT-NULL (2026-05-28) — mirror the adapter
-                # builder: install the parse_response workaround so the
-                # legacy provider path is also safe on openai >= 2.26.
-                from core.llm.adapters._codex_sdk_workaround import install as _install
+        # PR-CODEX-OUTPUT-NULL (2026-05-28) — mirror the adapter
+        # builder: install the parse_response workaround so the
+        # legacy provider path is also safe on openai >= 2.26.
+        from core.llm.adapters._codex_sdk_workaround import install as _install
 
-                _install()
+        _install()
 
-                _async_codex_client = openai.AsyncOpenAI(
-                    api_key=token,
-                    base_url=CODEX_BASE_URL,
-                    default_headers=build_codex_oauth_headers(token),
-                    max_retries=0,  # PR-ADAPTER-TIMEOUT-AND-SERIALIZATION
-                )
+        _async_codex_client = openai.AsyncOpenAI(
+            api_key=resolved.token,
+            base_url=CODEX_BASE_URL,
+            default_headers=build_codex_oauth_headers(resolved.token),
+            max_retries=0,  # PR-ADAPTER-TIMEOUT-AND-SERIALIZATION
+        )
+        _async_codex_client_fingerprint = resolved.fingerprint
+        log.info(
+            "Async Codex OAuth client rebuilt from %s token=%s",
+            resolved.source,
+            resolved.fingerprint,
+        )
     return _async_codex_client
 
 
 def reset_codex_client() -> None:
     """Reset cached client (e.g. after token refresh)."""
-    global _async_codex_client, _codex_client
+    global _async_codex_client, _async_codex_client_fingerprint, _codex_client
+    global _codex_client_fingerprint
     with _codex_lock:
         _codex_client = None
+        _codex_client_fingerprint = ""
     with _async_codex_lock:
         _async_codex_client = None
+        _async_codex_client_fingerprint = ""

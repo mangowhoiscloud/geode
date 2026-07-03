@@ -45,6 +45,277 @@ functional change.
 
 ---
 
+## [0.99.272] - 2026-07-04
+
+### Fixed
+
+Three defects found by the 2026-07-03 trajectory audit — each one a broken
+link in the "declared / recorded / joined" observability chain.
+
+- **Finalize evidence-check gate closes the preflight chain.** Task preflight
+  declared `required_evidence` kinds at session start and the runtime appended
+  evidence rows as it went, but nothing ever compared the two — a session that
+  promised `source_url` / `gui_trajectory` evidence and delivered none finished
+  indistinguishable from one that delivered all of it. The finalize path
+  (`_prepare_final_result`, after `append_final`) now appends a
+  `kind="evidence_check"` ledger row with the present / missing lists,
+  resolving the two aliased names (`preflight` → `task_preflight`,
+  `final_answer` → `final_result`) via `REQUIRED_EVIDENCE_KIND_ALIASES`.
+- **Usage rows join back to sessions.** `UsageRecord` carried a `session`
+  column since inception but `TokenTracker._persist_usage` never populated it,
+  so `~/.geode/usage/*.jsonl` could not be joined to transcripts / evidence
+  ledgers / checkpoints (all keyed by session_id). The writer now stamps the
+  active session id from the existing carriers — the `cognitive_state_ctx`
+  ContextVar bound by `AgenticLoop.arun`, falling back to the
+  `SessionMetrics` scope for non-loop runners. No new global; unscoped
+  callers keep the pre-fix row shape (falsy `session` omitted).
+- **Subprocess sub-agents keep their tool trajectory.** `worker._run_agentic`
+  built its AgenticLoop with `hooks=None`, so every subprocess sub-agent ran
+  with zero hook consumers: TOOL_EXEC_ENDED was never observed (no Episode
+  rows for the child's tool calls) and no run-log rows were written. A new
+  minimal bundle (`build_worker_hooks`) injects only the two trajectory rails
+  — the run-log `"*"` wildcard writer and the episodic recorder (extracted to
+  the shared `make_episodic_recorder_handler` factory) — deliberately NOT the
+  full `build_hooks` bundle, which would re-run plugin discovery per spawn and
+  double-write session stores the parent owns.
+
+## [0.99.271] - 2026-07-04
+
+### Added
+
+- **`use_skill` tool — model-side skill invocation (Progressive Disclosure Tier 2).**
+  The system prompt advertises `<available_skills>` metadata only; until now the
+  only paths that loaded a skill body were the CLI surfaces (`/skills`,
+  `geode skill show`), so headless (Gateway / DAEMON / sub-agent) sessions could
+  see skills but never use them. `use_skill` renders a skill body on demand with
+  `$ARGUMENTS` substitution, is always-loaded in the tool-search defer set, and
+  falls back to the same 3-tier `SkillLoader` scan when built without daemon
+  wiring (worker path). Guard: `tests/core/cli/test_tool_handlers_use_skill.py`.
+- **Bundled runtime skill: `long-task-watcher`.** Ported from the Claude Code
+  scaffold to the bundled tier in runtime-adapted form.
+
+### Fixed
+
+- **Skill loader honors the `triggers:` frontmatter key.** `TEMPLATE.md`
+  documented `triggers:` but the loader only parsed the description-embedded
+  `"kw" 키워드로 트리거` pattern, so every bundled skill loaded with zero
+  triggers. The frontmatter key (inline list or comma-string) now unions with
+  the legacy pattern, and `<available_skills>` emits a `triggers="…"` attribute
+  plus a `use_skill` usage hint so the metadata has a runtime consumer.
+  `TEMPLATE.md`'s multi-line list example (never parsed by the line-based
+  frontmatter parser) corrected to the inline form.
+- **Bundled runtime skills swept.** `geode-context` de-versioned (was pinned to
+  v0.99.247 facts: stale metrics, removed `subagent.py` constants, stale
+  headless-deny path); `slop-audit` stale `autoresearch/` scan target removed;
+  `triggers:` keys added across bundled skills. Removed from the bundled tier:
+  `seed-generation-cycle` (completed Session-63 dev scaffold; frontmatter name
+  had drifted from its directory) and `codex-mcp-verify` (Claude Code scaffold
+  doc duplicated into the runtime tier).
+- **Doc-vs-code drift swept in `GEODE.md` / `AGENTS.md` / `CLAUDE.md`.**
+  Measured corrections: hook events 63/81 → 65, tool count 60 → 66, GLM primary
+  `glm-5.1` → `glm-5.2`, unbound `gpt-5.4` secondary row dropped, headless deny
+  path → `core/agent/safety.py:HEADLESS_DENIED_TOOLS`, skills discovery
+  5-tier → 3-tier, `_PINNED_HASHES` 18 → 4, prompt templates 15+ → 3, petri
+  seeds 22 → 20, `core/runtime/bootstrap.py` → `core/wiring/bootstrap.py`,
+  stale line refs, 4-layer → 5-layer stack label.
+
+## [0.99.270] - 2026-07-04
+
+### Added
+
+- **Real-Chrome browser control over CDP — `browser_scan` / `browser_execute_js`.**
+  A new tool pair (`core/tools/browser_tools.py`) attaches to the operator's own
+  Chrome via the DevTools Protocol debug endpoint (`--remote-debugging-port`),
+  so pages that block headless automation (login walls, SPAs, CAPTCHA risk
+  scoring) behave as they do for a human — the real profile, cookies, and
+  fingerprint are used and attaching does not set `navigator.webdriver`.
+  `browser_scan` lists tabs and returns compacted page text (reusing `web_fetch`
+  compaction); `browser_execute_js` runs arbitrary JS (top-level await
+  supported) for full control. Uses the already-installed `websockets` client —
+  no Chrome extension to build/install, no Playwright/Selenium. The live CDP
+  round-trip is `unverified — live test required` (needs a Chrome launched with
+  the debug port); connection errors return the launch command as a hint.
+  Ported approach from GenericAgent's TMWebdriver, via CDP-attach instead of a
+  bundled extension.
+- **Structured macOS accessibility perception — `ui_probe`.** A new tool
+  (`core/tools/ui_probe.py`) reads a native macOS app's accessibility (AX) tree
+  — each control's role, title, value, enabled state, and on-screen rectangle —
+  as compact text, a cheaper and more reliable first rung than a `computer_use`
+  screenshot (which ships a ~1.5k-token JPEG per step). Screenshots remain the
+  fallback when AX is unavailable (games, custom-drawn canvases). pyobjc is a
+  soft dependency (opt-in `[desktop]` extra, macOS-only); absent it or the
+  Accessibility permission, the tool returns an actionable error. The AX
+  rectangle→click-coordinate mapping (Retina dpr calibration) is
+  `unverified — live test required` and rectangles are tagged
+  `coord_space="ax_points"`; the structured readout is the verified deliverable.
+  Perception ladder mirrored from GenericAgent (`computer_use.md`).
+
+### Changed
+
+- **`web_fetch` collapses repeated list runs before truncation.**
+  `WebFetchTool._html_to_text` now detects runs of structurally-identical
+  siblings (search results, feed items, table rows) and keeps a small sample
+  plus an honest `[... N more <tag> items omitted ...]` marker, so a list
+  page's tail survives the char budget instead of being lost to the blind
+  10k head-truncation. Ported idea: GenericAgent `simphtml` cutlist.
+
+### Fixed
+
+- **tau2 benchmark adapter action strictness.** GEODE's tau2-bench adapter now
+  instructs the agent not to invent optional tool arguments that the user,
+  policy, or prior tool results did not supply, preventing verifier drift from
+  extra inferred fields such as task descriptions. (Folded from develop's
+  `[Unreleased]` when this release absorbed concurrent work.)
+
+## [0.99.269] - 2026-07-03
+
+### Added
+
+- **Fleet view Stage 2 — interactive full-screen `/fleet` picker.** A new
+  `prompt_toolkit` full-screen view (`core/ui/fleet_view.py`) lists every
+  sub-agent from the most recent turn (running first), moves a selection with
+  ↑/↓, opens a per-agent detail pane on Enter (task_id, role, description,
+  status, elapsed, tokens, current activity), and exits back to the REPL on
+  Esc/q. Each row renders `<glyph> <role> · <activity> · <elapsed> · <↓tokens>`
+  with the GEODE rose mark for running agents (no emoji, dense list). Opened
+  with the `/fleet` slash command, which runs THIN (in the thin client where
+  the terminal + the snapshot holder live). Data source: a session-scoped
+  last-snapshot holder (`fleet.set_last_fleet_snapshot` /
+  `get_last_fleet_snapshot`) that `EventRenderer.stop` writes at the end of
+  every turn that dispatched ≥1 sub-agent — the honest between-turns scope,
+  since the blocking REPL cannot open a full-screen app *during* a turn.
+  Live-during-turn interactivity is a deferred follow-up. Empty snapshot prints
+  "No sub-agents this session." without spinning an app.
+
+## [0.99.268] - 2026-07-03
+
+### Added
+
+- **Public benchmark harness plugin.** Added `plugins/benchmark_harness/` as
+  the public-safe home for GEODE-owned MCPMark and tau2-bench adapters, pinned
+  upstream harness coordinates, setup/preflight helpers, and redacted env
+  checks. Third-party benchmark repositories remain ignored local checkouts
+  under `artifacts/eval/harnesses/`; the legacy tau2 script now delegates to
+  the plugin adapter.
+- **Fleet view Stage 1.5 — live per-agent activity plumbing.** Sub-agent workers
+  can now stream their *current* tool and a best-effort mid-run cumulative token
+  count to the parent while they run, so the fleet view's
+  `FleetAgent.current_activity` is populated live instead of always `""`. The
+  worker→parent stdout protocol is extended from "exactly one result line" to
+  "zero or more `{"type":"activity",…}` lines, then exactly one result line
+  (last)". The parent reader (`IsolatedRunner._aexecute_subprocess`) now reads
+  stdout line-by-line and forwards activity to an `on_activity` callback, keeping
+  the last result line as the `IsolationResult`. Backward compatible: a worker
+  that emits only a bare legacy result line (no `type` key) still parses — the
+  classifier treats any non-activity JSON object as the terminal result. The
+  feature is gated behind `WorkerRequest.emit_activity` (default `False`); only the
+  interactive `delegate_task` turn path opts in, so seed-generation / headless
+  spawns keep the pure single-result-line contract. The child emits via a
+  process-local activity sink (`core/agent/activity_channel.py`) hooked at the
+  `ToolExecutor` per-tool boundary, throttled to skip consecutive duplicate tool
+  names; token counts are `0` for subscription / CLI calls and never fabricated.
+  The `subagent_state` event gains an additive `activity` field.
+- **tau2 GEODE benchmark runner.** Added `scripts/eval/tau2_geode_agent.py`, a
+  reproducible runner that registers GEODE as an in-process tau2
+  `HalfDuplexAgent` and `HalfDuplexUser`, wraps tau2 domain tools into
+  GEODE's `ToolRegistry` and `ToolExecutor`, and preserves tau2's native
+  evaluator/output path while letting both agent and simulated user run through
+  the subscription route. The runner also exposes tau2 retrieval configuration
+  flags for domains such as `banking_knowledge`.
+- **GPT-5.2 OpenAI model metadata.** Added `gpt-5.2` to the OpenAI model spec
+  and pricing/context catalogue so PAYG benchmark runs use the GPT-5-family
+  request shape instead of the legacy fallback.
+
+### Changed
+
+- **CLI live task surface compacted.** The IPC event renderer now treats
+  `update_plan` like a Claude Code-scale task list: at most five visible tasks
+  around the active item, a `Tasks · done/total` header, and no phase-start
+  plan reprint. Thinking/tool phases carry the active step in the spinner label
+  and flow below a single checklist that is drawn once per state change,
+  avoiding the repeated `Plan:` blocks seen in long runs. The REPL prompt now
+  renders as `geode >` instead of a bare chevron.
+
+### Fixed
+
+- **Serve CLI channel startup order.** `geode serve` now starts the local thin
+  CLI Unix socket before external gateway pollers, so blocking gateway adapters
+  cannot prevent `geode` clients from reconnecting after a daemon restart.
+
+- **Codex OAuth runtime cache refresh.** The `codex-oauth` adapter and
+  legacy Codex provider now fingerprint the resolved OAuth token and rebuild
+  cached OpenAI SDK clients when `~/.codex/auth.json` or GEODE auth state
+  changes, preventing daemon restarts from being required after Codex CLI
+  refreshes an expired ChatGPT token. `/login refresh` also invalidates the
+  Codex CLI credential reader and legacy Codex client cache.
+
+- **MCP filesystem argument compatibility.** MCP tool dispatch now normalizes
+  common schema mismatches before server calls, including mapping `file_path`
+  to `path` when the MCP schema requires `path`, dropping conflicting
+  `read_text_file` `head`/`tail` pairs, annotating exact-read caveats in
+  exposed MCP tool descriptions, and offloading source EOF preservation from
+  model turns into the MCP dispatch layer for same-name text writes.
+
+## [0.99.267] - 2026-07-03
+
+### Added
+
+- **Multi-agent fleet view — data layer + turn-time summary (Stage 1).** A new
+  additive `subagent_state` IPC event carries per-sub-agent state keyed by
+  `task_id` (role, running/done/error/timeout status, elapsed, final token
+  count) so the thin client can track each delegated sub-agent independently.
+  A client-side `FleetRegistry` (`core/ui/fleet.py`) ingests these events, and
+  the existing activity live region now shows a single compact
+  `◆ Fleet · N running · role_a, role_b` line while sub-agents are in flight
+  (rose GEODE mark, no emoji, truncated to terminal width). The aggregate
+  `subagent_dispatch`/`progress`/`complete` events are unchanged. Live per-agent
+  tool text is deferred to Stage 1.5 (child subprocesses run `quiet=True`, so
+  mid-run activity is not plumbed and is honestly left blank rather than faked);
+  the interactive full-screen view is Stage 2. Design SOT:
+  `docs/plans/2026-07-03-fleet-view.md`.
+
+## [0.99.266] - 2026-07-03
+
+### Fixed
+
+- **Plan checklist no longer re-stacks across thinking/tool rounds.** The IPC
+  event renderer previously re-rendered the whole `update_plan` checklist at
+  every `thinking_end`/`tool_end`, so a multi-round turn stacked N identical
+  `Tasks · …` blocks down the transcript (6+ copies on long runs). Plan
+  rendering is now split from the activity block: the checklist is drawn only
+  from plan events (`progress_plan` / `plan_step` / `replan` /
+  `goal_decomposition`) and deduped against the last drawn state (identical
+  steps, statuses, and explanation → no reprint), while thinking/tool phases
+  redraw only the activity summary and flow below the checklist, which scrolls
+  up with the transcript like a Claude Code todo list. The checklist header
+  also switches from mint (`1;36m`) to the signature rose. Guards:
+  `tests/core/ui/test_event_schema_v2.py` (regression, dedup, header colour)
+  and `tests/core/ui/test_agentic_ui.py` (plan not re-emitted during phases).
+
+## [0.99.265] - 2026-07-03
+
+### Changed
+- **`/model` picker context guard consumes ContextBudgetPolicy** — the primary-role downgrade guard warned when the conversation exceeded a bare `MODEL_CONTEXT_WINDOW * 0.8` literal; it now resolves the model's tiered `ContextBudgetPolicy` and warns at `policy.warning_tokens` (small windows warn earlier, large windows keep the absolute ceiling), so the picker and the running loop agree on when a window is too full. The warning message now names the tier. Follow-up on PR-CONTEXT-BUDGET (Codex LOW). Guard: `tests/core/cli/test_picker_context_guard.py`.
+
+## [0.99.263] - 2026-07-03
+
+### Fixed
+- **Tool-diversity guard no longer false-positives on healthy research** — the `AgenticLoop` diversity guard now keys on `(tool_name, args_signature)` identity instead of tool name alone, so it fires only on a genuine no-progress loop (the same tool with identical arguments repeated N=5 times). Three compounding bugs are resolved: (1) the `_DIVERSITY_EXEMPT` list was dead — 6 of its 9 names (`read_file`, `read_text_file`, `search_files`, `list_directory`, `web_search`, `sequentialthinking`) are not registered tools, so the real repetitive workhorses (`grep_files`, `web_fetch`, etc.) were never exempt; (2) name-only matching tripped on 5 `grep_files` calls with 5 different patterns and falsely claimed "similar results"; (3) counting per tool_use block meant a single response fanning out 5 parallel greps read as "5 consecutive". Distinct calls within one response are now deduped so a parallel fan-out counts by distinct-signature, and the exempt list is removed entirely (args identity makes it unnecessary). The hint text now reads "called N times with identical arguments — repeating this exact call is unlikely to add new evidence" (accurate for the reachable case: same args, evolving result — the identical-result loop is already caught earlier by the repeated-success guard).
+
+## [0.99.264] - 2026-07-03
+
+### Documentation
+- **Docs-site outdated sweep: routing prefixes, context-budget tiers, dreaming/memory-lifecycle, CLI experience.** Updated the config reference `[routing.prefixes]` cells (KO + EN) to the real shipped prefix set (`claude-`/`glm-`/`gpt-`/`o3`/`o4` only; dropped the removed `gemini-`/`deepseek-`/`llama-`/`qwen-` families) and noted that unknown families fall through to the OpenAI-compatible `fallback_provider` with a once-per-model warning. Rewrote the context page's overflow section to the tiered `ContextBudgetPolicy` resolver (small ≤256K warn 50%, standard ≤512K warn 70%, large warn 80%, all critical 90%) with the non-Anthropic three-stage pressure response (cheap tool compression → structured LLM compaction → adaptive prune), replacing the pre-policy fixed 80/95 framing while keeping the absolute 200K ceiling. Documented `context_artifacts` + background dreaming (`DreamingService`, TURN_COMPLETED) and the `geode memory-lifecycle` evidence-based decay + HITL promotion pipeline. Added a CLI welcome-screen + live-status section (pixel-art Geodi mascot, signature shimmer spinner, contextual thinking label, pinned plan checklist, HITL approval prompt).
+
+## [0.99.262] - 2026-07-03
+
+### Changed
+- **Welcome Geodi cropped to a round face** — operator review: even forehead-trimmed, the full body sat too tall beside the 3-line welcome text. `GEODI_PIXELS` is now the head-down-to-mouth crop of the source (22x12 → 6 half-block rows): 3 separated gill stalks per side, 2px eyes with catchlights, cheek blush, mouth, and a rounded chin close — belly patch and feet removed so the face reads level with the welcome block. `GEODI_SOURCE_PIXELS` (full 22x20 body) unchanged.
+## [0.99.261] - 2026-07-03
+
+### Changed
+- **Welcome Geodi keeps the full 0.99.256 detail, minus the forehead** — operator review: the 14x8 chibi traded away too much character. `GEODI_PIXELS` is now the 22x20 source art with two forehead rows removed (one head-top rounding row, one upper-gill thickness row) → 22x18, rendering 9 half-block rows. All source detail retained: 3 separated gill stalks per side, 2px eyes with catchlights, blush, smile, belly, feet.
+
 ## [0.99.260] - 2026-07-03
 
 ### Added
@@ -81,38 +352,6 @@ functional change.
   (`budget_usd=0.0`); LLM synthesis is a follow-up.
 - **`ScheduledJob.budget_usd`.** Per-job spend-ceiling field, serialization
   round-trips (legacy stores default to `0.0`).
-### Fixed
-
-Three defects found by the 2026-07-03 trajectory audit — each one a broken
-link in the "declared / recorded / joined" observability chain.
-
-- **Finalize evidence-check gate closes the preflight chain.** Task preflight
-  declared `required_evidence` kinds at session start and the runtime appended
-  evidence rows as it went, but nothing ever compared the two — a session that
-  promised `source_url` / `gui_trajectory` evidence and delivered none finished
-  indistinguishable from one that delivered all of it. The finalize path
-  (`_prepare_final_result`, after `append_final`) now appends a
-  `kind="evidence_check"` ledger row with the present / missing lists,
-  resolving the two aliased names (`preflight` → `task_preflight`,
-  `final_answer` → `final_result`) via `REQUIRED_EVIDENCE_KIND_ALIASES`.
-- **Usage rows join back to sessions.** `UsageRecord` carried a `session`
-  column since inception but `TokenTracker._persist_usage` never populated it,
-  so `~/.geode/usage/*.jsonl` could not be joined to transcripts / evidence
-  ledgers / checkpoints (all keyed by session_id). The writer now stamps the
-  active session id from the existing carriers — the `cognitive_state_ctx`
-  ContextVar bound by `AgenticLoop.arun`, falling back to the
-  `SessionMetrics` scope for non-loop runners. No new global; unscoped
-  callers keep the pre-fix row shape (falsy `session` omitted).
-- **Subprocess sub-agents keep their tool trajectory.** `worker._run_agentic`
-  built its AgenticLoop with `hooks=None`, so every subprocess sub-agent ran
-  with zero hook consumers: TOOL_EXEC_ENDED was never observed (no Episode
-  rows for the child's tool calls) and no run-log rows were written. A new
-  minimal bundle (`build_worker_hooks`) injects only the two trajectory rails
-  — the run-log `"*"` wildcard writer and the episodic recorder (extracted to
-  the shared `make_episodic_recorder_handler` factory) — deliberately NOT the
-  full `build_hooks` bundle, which would re-run plugin discovery per spawn and
-  double-write session stores the parent owns.
-
 ## [0.99.259] - 2026-07-03
 
 ### Fixed
@@ -128,7 +367,6 @@ link in the "declared / recorded / joined" observability chain.
   that preserves the original round head, six gill stalks, eye catchlights,
   cheek blush, belly patch, and feet. Tests now pin both the source grid and the
   compact silhouette cues.
-
 ## [0.99.257] - 2026-07-02
 
 ### Changed

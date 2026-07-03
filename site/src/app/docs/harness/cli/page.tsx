@@ -46,6 +46,51 @@ export default function Page() {
               (<code>core/server/ipc_server/poller.py</code>)입니다.
             </p>
 
+            <h2>환영 화면과 라이브 상태</h2>
+            <p>
+              bare <code>geode</code>가 띄우는 환영 화면은{" "}
+              <code>core/cli/welcome.py</code>의 <code>_welcome_screen</code>이
+              그립니다. 먼저 Geodi 브랜드 블록(<code>core/ui/mascot.py</code>의{" "}
+              <code>render_mascot</code>)이 나옵니다. 손으로 찍은 픽셀아트
+              Geodi(로즈 아졸로틀, <code>core/ui/geodi_art.py</code>)를 truecolor
+              하프블록 스프라이트로 그리고, 오른쪽에{" "}
+              <code>◆ GEODE v{`{version}`}</code> 마크, <code>모델 · cwd</code>,{" "}
+              <code>/help for commands · type naturally</code> 힌트, 그리고
+              라우팅이 초기화돼 있으면 활성 플랜/쿼터 한 줄을 붙입니다. 이어서{" "}
+              <code>.env</code> 자동 생성, ChatGPT 구독 OAuth 감지, readiness
+              점검(문제만 표시 — 조용하면 정상), 프로젝트 기억과 사용자 프로파일
+              초기화가 돌아갑니다.
+            </p>
+            <p>
+              실행 중 라이브 상태는 <code>core/ui/event_renderer.py</code>가
+              그리고, 스피너는 <code>core/ui/spinner_glyph.py</code> 단일
+              소스에서 옵니다(direct 모드 <code>GeodeStatus</code>와 IPC
+              thin-client 트래커가 공유). 시그니처 스피너는 모양이 바뀌지 않는
+              로즈 젬 <code>◆</code>입니다. 글리프를 회전시키는 대신 raised-cosine
+              밝기 밴드가 라벨 위를 2초 주기로 좌→우로 활강합니다(단일 색조,
+              무지개 아님 — 모양을 순환시키는 글리프는 기계적으로 읽힌다는
+              Codex/Claude Code의 교훈).
+            </p>
+            <p>
+              생각 라벨은 맥락을 따릅니다(<code>_thinking_label</code>):
+              reflection &gt; 활성 플랜 스텝 &gt; 위트 순서로, 리플렉션 중에는{" "}
+              <code>Reflecting…</code>, 그다음 진행 중인 플랜 스텝 텍스트(잘림),
+              없으면 턴 시작 시각으로 시드된 안정적 위트 동명사(Crystallizing,
+              Faceting …) 하나가 턴 내내 유지됩니다. <code>(round N)</code>{" "}
+              접미사와 라이브 <code>(12s)</code> 타이머가 붙습니다.
+              plan_step/replan 이벤트가 오면 진행 플랜 체크리스트(completed /
+              in_progress / pending)가 그려지고, 해당 페이즈 동안 thinking·tool
+              출력 위에 고정(pinned)된 채 그 아래에 라이브 활동 영역(도구 통계,
+              알림)이 갱신됩니다.
+            </p>
+            <p>
+              HITL 승인 프롬프트(<code>core/cli/ipc_client.py</code>의{" "}
+              <code>_handle_approval_request</code>)는 스피너를 잠시 멈추고{" "}
+              <code>◆ Approval · &lt;tool&gt; (&lt;category&gt;)</code> 헤더에 한
+              줄 요약, 그리고 <code>y allow · n deny · a always-allow</code> 키
+              안내를 로즈 색으로 띄웁니다.
+            </p>
+
             <h2>최상위 명령</h2>
             <table>
               <thead>
@@ -229,6 +274,55 @@ export default function Page() {
               concurrent starts). The thin REPL then attaches over IPC. The
               protocol is line-delimited JSON; the server-side peer is{" "}
               <code>CLIPoller</code> (<code>core/server/ipc_server/poller.py</code>).
+            </p>
+
+            <h2>Welcome screen and live status</h2>
+            <p>
+              The welcome screen bare <code>geode</code> shows is drawn by{" "}
+              <code>_welcome_screen</code> in <code>core/cli/welcome.py</code>.
+              First comes the Geodi brand block (<code>render_mascot</code> in{" "}
+              <code>core/ui/mascot.py</code>): a hand-authored pixel-art Geodi
+              (the rose axolotl, <code>core/ui/geodi_art.py</code>) rendered as a
+              truecolor half-block sprite, with a brand block to its right — an{" "}
+              <code>◆ GEODE v{`{version}`}</code> mark, <code>model · cwd</code>,
+              the <code>/help for commands · type naturally</code> hint, and an
+              optional active plan/quota line when routing is initialized. Then
+              it auto-generates <code>.env</code>, detects ChatGPT subscription
+              OAuth, runs the readiness check (surfacing problems only — silence
+              means healthy), and initializes project memory and the user
+              profile.
+            </p>
+            <p>
+              Live status during a run is drawn by{" "}
+              <code>core/ui/event_renderer.py</code>, and the spinner comes from
+              the single source <code>core/ui/spinner_glyph.py</code> (shared by
+              the direct-mode <code>GeodeStatus</code> and the IPC thin-client
+              tracker). The signature spinner is a rose gem <code>◆</code> whose
+              shape never changes: instead of spinning a glyph, a raised-cosine
+              brightness band shimmers left→right across the label on a 2s
+              period (one hue, no rainbow — the Codex/Claude Code lesson that a
+              shape-cycling glyph reads as mechanical).
+            </p>
+            <p>
+              The thinking label is contextual (<code>_thinking_label</code>),
+              with precedence reflection &gt; active plan step &gt; whimsy:{" "}
+              <code>Reflecting…</code> during reflection, else the in-progress
+              plan-step text (truncated), else a stable whimsical gerund
+              (Crystallizing, Faceting, …) seeded by the turn start and held for
+              the whole turn. A <code>(round N)</code> suffix and a live{" "}
+              <code>(12s)</code> timer follow. On plan_step/replan events a
+              progress-plan checklist (completed / in_progress / pending)
+              renders and stays pinned above the thinking and tool output for
+              the whole phase, with a live activity region (tool stats, notices)
+              refreshing below it.
+            </p>
+            <p>
+              The HITL approval prompt (<code>_handle_approval_request</code> in{" "}
+              <code>core/cli/ipc_client.py</code>) suspends the spinners and
+              shows a rose-styled{" "}
+              <code>◆ Approval · &lt;tool&gt; (&lt;category&gt;)</code> header
+              with a one-line detail and the key legend{" "}
+              <code>y allow · n deny · a always-allow</code>.
             </p>
 
             <h2>Top-level commands</h2>

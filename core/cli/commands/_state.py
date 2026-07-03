@@ -237,6 +237,7 @@ COMMAND_MAP: dict[str, str] = {
     "/sched": "schedule",
     "/trigger": "trigger",
     "/status": "status",
+    "/fleet": "fleet",
     "/mcp": "mcp",
     "/skills": "skills",
     "/skill": "skill_invoke",
@@ -279,6 +280,7 @@ def show_help() -> None:
     console.print("  [label]/schedule[/label]           — Manage scheduled automations")
     console.print("  [label]/trigger[/label]            — Manage event/cron triggers")
     console.print("  [label]/status[/label]             — Show system status")
+    console.print("  [label]/fleet[/label]              — Interactive sub-agent fleet view")
     console.print("  [label]/cost[/label]               — LLM cost dashboard")
     console.print("  [label]/mcp[/label]                — MCP server status/tools/add")
     console.print("  [label]/skills[/label]             — List/add/reload skills")

@@ -1,7 +1,8 @@
 ---
 name: arxiv-digest
 visibility: public
-description: Auto-search and summarize latest AI/agent papers. Triggers: 'paper', '논문', 'arxiv', 'research', '연구', '최신 연구', '학회'.
+triggers: paper, 논문, arxiv, research, 연구, 최신 연구, 학회
+description: Auto-search and summarize latest AI/agent papers.
 tools: web_search, web_fetch, memory_save
 risk: safe
 ---

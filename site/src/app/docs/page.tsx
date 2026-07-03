@@ -39,7 +39,7 @@ export default function DocsIndex() {
               아니라 <strong>적대적 안전 감사</strong>(Petri 급의 다차원
               감사)로 측정하며, 핵심 안전 차원에는 하한선이 있어 그 선을 넘어
               후퇴하는 변화는 거부합니다. 평가에 쓰는 seed도 고정돼 있지
-              않습니다. co-scientist 파이프라인이 에이전트와 나란히 적대적 seed
+              않습니다. Seed Scenario Generation 파이프라인이 에이전트와 나란히 적대적 seed
               분포를 키웁니다.
             </p>
             <h2>두 개의 루프</h2>
@@ -55,7 +55,7 @@ export default function DocsIndex() {
               </li>
               <li>
                 <strong>Outer loop (Self-Improving Loop)</strong>. 작업을 처리하는
-                시스템 자체를 다듬는 폐루프입니다. 스캐폴드를 변형하고, 감사하고,
+                시스템 자체를 다듬는 Closed-Loop입니다. 스캐폴드를 변형하고, 감사하고,
                 결과를 귀속한 뒤, 실제 이득이 있을 때만 승격하고 아니면 되돌립니다.
                 정직한 (1+1) champion chain입니다.
               </li>
@@ -92,7 +92,7 @@ export default function DocsIndex() {
               multi-dimensional), not a capability benchmark, and critical
               safety dimensions sit behind a hard floor: a change that
               regresses them is rejected. The evaluation seeds are not fixed
-              either. A co-scientist pipeline grows an adversarial seed
+              either. A Seed Scenario Generation pipeline grows an adversarial seed
               distribution alongside the agent.
             </p>
             <h2>Two loops</h2>
@@ -127,7 +127,7 @@ export default function DocsIndex() {
             <h2>레퍼런스: GEODE의 좌표부터</h2>
             <p>
               레퍼런스의 진입점은 검증 절차가 아니라{" "}
-              <strong>자기개선 폐루프의 계보와 좌표</strong>입니다. GEODE가 어떤
+              <strong>자기개선 Closed-Loop의 계보와 좌표</strong>입니다. GEODE가 어떤
               프론티어 시스템에서 무엇을 빌려오고, 어디서 갈라지는지부터 짚습니다.
             </p>
             <ul>
@@ -140,7 +140,7 @@ export default function DocsIndex() {
                 self-evolving agents 문헌에서 어디에 위치하는지.
               </li>
               <li>
-                <a href="/geode/docs/capabilities/co-scientist">Co-scientist 루프</a>.
+                <a href="/geode/docs/capabilities/co-scientist">Seed Scenario Generation</a>.
                 적대적 seed 분포를 함께 진화시키는 다중 역할 루프.
               </li>
               <li>
@@ -169,7 +169,7 @@ export default function DocsIndex() {
                 Where this loop sits in the self-evolving agents literature.
               </li>
               <li>
-                <a href="/geode/docs/capabilities/co-scientist">Co-scientist loop</a>.
+                <a href="/geode/docs/capabilities/co-scientist">Seed Scenario Generation</a>.
                 The multi-role loop that co-evolves the adversarial seed distribution.
               </li>
               <li>
@@ -222,7 +222,7 @@ export default function DocsIndex() {
                 문서가 기대는 멘탈 모델입니다.
               </li>
               <li>
-                <a href="/geode/docs/capabilities/autoresearch">자기개선 루프(폐루프)</a>.
+                <a href="/geode/docs/capabilities/autoresearch">자기개선 Closed-Loop</a>.
                 스캐폴드를 변형하고, 감사하고, 승격하거나 되돌리는 바깥쪽 루프입니다.
               </li>
               <li>

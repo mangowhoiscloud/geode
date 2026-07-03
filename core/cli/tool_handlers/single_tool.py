@@ -374,3 +374,50 @@ def _build_calendar_handlers() -> dict[str, Any]:
         "calendar_create_event": handle_calendar_create_event,
         "calendar_sync_scheduler": handle_calendar_sync_scheduler,
     }
+
+
+# ---------------------------------------------------------------------------
+# skills — use_skill (Progressive Disclosure Tier 2)
+# ---------------------------------------------------------------------------
+
+
+def _build_use_skill_handler(skill_registry: Any = None) -> dict[str, Any]:
+    """Build the use_skill handler — load a skill's full instructions.
+
+    The system prompt advertises skill metadata only (``<available_skills>``);
+    this handler is the model-side path that loads a skill body on demand.
+    When no registry is supplied (sub-agent workers build handlers outside the
+    daemon wiring), fall back to a fresh ``SkillLoader`` scan with the same
+    3-tier discovery the daemon uses.
+    """
+
+    def handle_use_skill(**kwargs: Any) -> dict[str, Any]:
+        from core.skills.skills import SkillLoader, SkillRegistry
+        from core.tools.base import tool_error
+
+        name = str(kwargs.get("name", "")).strip()
+        arguments = str(kwargs.get("arguments", "") or "")
+        registry = skill_registry
+        if registry is None:
+            registry = SkillRegistry()
+            SkillLoader().load_all(registry=registry)
+        skill = registry.get(name) if name else None
+        if skill is None:
+            available = ", ".join(registry.list_all()) or "(none discovered)"
+            return tool_error(
+                f"Unknown skill: {name!r}.",
+                error_type="not_found",
+                recoverable=True,
+                hint=f"Available skills: {available}",
+            )
+        instructions = skill.render(arguments=arguments)
+        if not instructions:
+            return tool_error(
+                f"Skill {name!r} has an empty body.",
+                error_type="dependency",
+                recoverable=False,
+                hint="The SKILL.md file has frontmatter but no instructions.",
+            )
+        return {"result": {"name": skill.name, "instructions": instructions}}
+
+    return {"use_skill": handle_use_skill}

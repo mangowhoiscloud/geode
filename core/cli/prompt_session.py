@@ -114,7 +114,7 @@ def _build_prompt_session() -> Any:
 
     session: Any = PromptSession(
         history=FileHistory(str(history_path)),
-        message=HTML("<b>&gt;</b> "),
+        message=HTML("<b>geode</b> &gt; "),
         enable_history_search=True,
         multiline=True,
         key_bindings=kb,

@@ -1,32 +1,43 @@
 import { DocsShell, Bi } from "@/components/geode-docs/docs-shell";
 
-export const metadata = { title: "Co-scientist seed generation — GEODE Docs" };
+export const metadata = { title: "Seed Scenario Generation — GEODE Docs" };
 
 export default function Page() {
   return (
     <DocsShell
       slug="capabilities/co-scientist"
-      title="Co-scientist seed generation"
-      titleKo="Co-scientist seed 생성"
-      summary="A nine-role agent loop that grows the evaluation seed corpus. Supervisor, literature review, generator, proximity, critic, pilot, ranker, evolver, meta-reviewer."
-      summaryKo="평가용 seed 코퍼스를 키우는 9-역할 에이전트 루프입니다. supervisor, literature review, generator, proximity, critic, pilot, ranker, evolver, meta-reviewer로 이어집니다."
+      title="Seed Scenario Generation"
+      titleKo="Seed Scenario Generation"
+      summary="A nine-role generation loop that grows the evaluation scenario corpus. Supervisor, literature review, generator, proximity, critic, pilot, ranker, evolver, meta-reviewer."
+      summaryKo="평가용 scenario corpus를 키우는 9-역할 생성 루프입니다. supervisor, literature review, generator, proximity, critic, pilot, ranker, evolver, meta-reviewer로 이어집니다."
     >
       <Bi
         ko={
           <>
-            <h2>왜 seed를 에이전트가 만드나</h2>
+            <h2>왜 scenario를 에이전트가 만드나</h2>
             <p>
-              고정된 벤치마크는 루프가 돌수록 포화됩니다. 폐루프가 스캐폴드를
+              고정된 벤치마크는 루프가 돌수록 포화됩니다. Closed-Loop가 스캐폴드를
               개선하는 동안 테스트 분포도 함께 자라야 측정 여유가
-              남습니다. 그래서 GEODE는 Google AI Co-Scientist의 generate,
-              review, rank, evolve 멀티 에이전트 흐름을 Petri seed 생성에
-              이식했습니다. 한 target dimension(예:{" "}
-              <code>broken_tool_use</code>)에 대해 후보 seed를 생성하고,
+              남습니다. GEODE는 Google AI Co-Scientist에서 참조한 generate,
+              review, rank, evolve 멀티 에이전트 흐름을 Petri scenario 생성에
+              맞게 적용했습니다. 한 target dimension(예:{" "}
+              <code>broken_tool_use</code>)에 대해 후보 scenario를 생성하고,
               토너먼트로 순위를 매기고, 생존자를 진화시켜 다음 세대로
               넘깁니다. <code>plugins/seed_generation/orchestrator.py</code>의{" "}
               <code>Pipeline.arun</code>이 phase 순서대로 sub-agent를
               fan-out합니다.
             </p>
+            <figure>
+              <img
+                src="/geode/diagrams/seed-scenario-generation-cycle.svg"
+                alt="Seed Scenario Generation cycle. target dimension에서 후보 scenario를 만들고, clustering과 critique, pilot audit, Elo tournament, survivor evolution, seed pool, Closed-Loop audit으로 이어진다"
+              />
+              <figcaption>
+                Seed Scenario Generation은 후보를 만들고 평가한 뒤 생존자를
+                seed pool로 넘깁니다. Closed-Loop는 그 pool을 다음 측정 입력으로
+                소비합니다.
+              </figcaption>
+            </figure>
 
             <h2>9개 역할</h2>
             <p>
@@ -97,25 +108,36 @@ geode audit-seeds config`}</pre>
             <ul>
               <li><a href="/geode/docs/capabilities/seed-pipeline">Seed 파이프라인</a>. picker, manifest, 비용 미리보기, blend 선택식.</li>
               <li><a href="/geode/docs/petri/seeds">Seed 생성 런</a>. 세대별 결과 대시보드.</li>
-              <li><a href="/geode/docs/petri/scenarios">시나리오</a>. 만들어진 seed가 들어가는 코퍼스.</li>
+              <li><a href="/geode/docs/petri/scenarios">시나리오</a>. 만들어진 scenario가 들어가는 코퍼스.</li>
             </ul>
           </>
         }
         en={
           <>
-            <h2>Why agents generate the seeds</h2>
+            <h2>Why agents generate scenarios</h2>
             <p>
-              A fixed benchmark saturates as the loop runs. While the closed
-              loop improves the scaffold, the test distribution has to grow
-              alongside it or measurement runs out of headroom. So GEODE ports
-              Google AI Co-Scientist&apos;s generate, review, rank, evolve
-              multi-agent flow onto Petri seed generation. For one target
-              dimension (say <code>broken_tool_use</code>) it drafts candidate
-              seeds, ranks them in a tournament, and evolves the survivors into
-              the next generation. <code>Pipeline.arun</code> in{" "}
+              A fixed benchmark saturates as the loop runs. While the
+              Closed-Loop improves the scaffold, the test distribution has to grow
+              alongside it or measurement runs out of headroom. GEODE adapts
+              the generate, review, rank, evolve multi-agent flow referenced
+              from Google AI Co-Scientist for Petri scenario generation. For one
+              target dimension (say <code>broken_tool_use</code>) it drafts
+              candidate scenarios, ranks them in a tournament, and evolves the
+              survivors into the next generation. <code>Pipeline.arun</code> in{" "}
               <code>plugins/seed_generation/orchestrator.py</code> fans out one
               sub-agent per phase, in order.
             </p>
+            <figure>
+              <img
+                src="/geode/diagrams/seed-scenario-generation-cycle.svg"
+                alt="Seed Scenario Generation cycle: target dimension, candidate scenarios, clustering and critique, pilot audit, Elo tournament, survivor evolution, seed pools, and Closed-Loop audit"
+              />
+              <figcaption>
+                Seed Scenario Generation drafts, measures, ranks, and evolves
+                candidates before handing survivors to the seed pools consumed
+                by the Closed-Loop.
+              </figcaption>
+            </figure>
 
             <h2>The nine roles</h2>
             <p>
@@ -190,7 +212,7 @@ geode audit-seeds config`}</pre>
             <ul>
               <li><a href="/geode/docs/capabilities/seed-pipeline">Seed pipeline</a>. Picker, manifest, cost preview, and the blend formula.</li>
               <li><a href="/geode/docs/petri/seeds">Seed-generation runs</a>. The per-generation results dashboard.</li>
-              <li><a href="/geode/docs/petri/scenarios">Scenarios</a>. The corpus the generated seeds feed.</li>
+              <li><a href="/geode/docs/petri/scenarios">Scenarios</a>. The corpus the generated scenarios feed.</li>
             </ul>
           </>
         }

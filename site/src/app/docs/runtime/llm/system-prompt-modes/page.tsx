@@ -121,7 +121,7 @@ export default function Page() {
             <ul>
               <li><a href="/geode/docs/runtime/llm/prompt-system">프롬프트 조립</a>. 레이어 전체 구조.</li>
               <li><a href="/geode/docs/runtime/llm/prompt-caching">프롬프트 캐싱</a>. static/dynamic 경계의 비용 면.</li>
-              <li><a href="/geode/docs/capabilities/autoresearch">폐루프</a>. wrapper를 진화시키는 바깥 루프.</li>
+              <li><a href="/geode/docs/capabilities/autoresearch">Closed-Loop</a>. wrapper를 진화시키는 바깥 루프.</li>
             </ul>
           </>
         }
@@ -239,7 +239,7 @@ export default function Page() {
             <ul>
               <li><a href="/geode/docs/runtime/llm/prompt-system">Prompt assembly</a>. The full layer structure.</li>
               <li><a href="/geode/docs/runtime/llm/prompt-caching">Prompt caching</a>. The cost side of the static/dynamic boundary.</li>
-              <li><a href="/geode/docs/capabilities/autoresearch">The closed loop</a>. The outer loop that evolves the wrapper.</li>
+              <li><a href="/geode/docs/capabilities/autoresearch">Closed-Loop</a>. The outer loop that evolves the wrapper.</li>
             </ul>
           </>
         }

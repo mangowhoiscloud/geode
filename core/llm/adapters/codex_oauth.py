@@ -20,6 +20,7 @@ Pair with :class:`OpenAIPaygAdapter` (same provider, API key path) and
 from __future__ import annotations
 
 import logging
+import threading
 from collections.abc import AsyncIterator
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -102,6 +103,8 @@ class CodexOAuthAdapter:
     _clients: LoopAffineClientCache = field(
         default_factory=lambda: LoopAffineClientCache("codex-oauth"), init=False, repr=False
     )
+    _token_fingerprint: str = field(default="", init=False, repr=False)
+    _token_lock: threading.Lock = field(default_factory=threading.Lock, init=False, repr=False)
 
     def computer_tool_param(
         self, *, display_width: int, display_height: int
@@ -120,10 +123,10 @@ class CodexOAuthAdapter:
         return None
 
     def _get_client(self) -> Any:
-        from core.llm.providers.codex import _resolve_codex_token
+        from core.llm.providers.codex import _resolve_codex_token_info
 
-        token = _resolve_codex_token()
-        if not token:
+        resolved = _resolve_codex_token_info(force_refresh=True)
+        if not resolved:
             raise RuntimeError(
                 "CodexOAuthAdapter: ChatGPT OAuth not found. Looked in GEODE "
                 f"ProfileStore ('openai-codex' profile) and {CODEX_AUTH_PATH}. "
@@ -131,7 +134,17 @@ class CodexOAuthAdapter:
                 "Codex CLI to provision credentials, or use the openai-payg / "
                 "codex-cli adapter."
             )
-        return self._clients.get(lambda: build_async_codex_client(token))
+        with self._token_lock:
+            if self._token_fingerprint != resolved.fingerprint:
+                if self._token_fingerprint:
+                    log.info(
+                        "codex-oauth: token changed (%s -> %s); invalidating clients",
+                        self._token_fingerprint,
+                        resolved.fingerprint,
+                    )
+                self._clients.invalidate()
+                self._token_fingerprint = resolved.fingerprint
+        return self._clients.get(lambda: build_async_codex_client(resolved.token))
 
     async def acomplete(self, req: AdapterCallRequest) -> AdapterCallResult:
         """Single Codex Responses API call (streamed; final aggregated).
