@@ -200,6 +200,72 @@ Comparability:
   tau2 tool projection, tau2 DB diff, artifact preservation, and docs
   publication.
 
+## 2026-07-03 GEODE subscription-only domain smoke matrix
+
+These rows are adapter calibration records, not tau2 leaderboard scores. The
+default rows run both agent and simulated user through GEODE's `gpt-5.5`
+subscription route. The telecom GPT-5.2 row is a separate PAYG user-route
+retry, not averaged with the subscription-only smoke rows.
+
+| Domain | Task | Reward | Termination | Duration | Reading |
+|---|---|---:|---|---:|---|
+| `mock` | `create_task_1` | 1.0 | `user_stop` | 65.69s | DB diff and assistant write action passed |
+| `airline` | `0` | 1.0 | `user_stop` | 134.86s | DB/communicate reward passed |
+| `retail` | `0` | 1.0 | `user_stop` | 283.61s | 5 expected action checks passed |
+| `telecom` | `mobile_data_issue`, `gpt-5.5/geode_user` | 0.0 | `max_steps` | 244.09s / 637.57s | max_steps=14 and max_steps=30 both stopped before completion |
+| `telecom` | `mobile_data_issue`, `gpt-5.2/payg user` | 1.0 | `user_stop` | 219.12s | max_steps=200 passed; `toggle_airplane_mode` and `toggle_roaming` write actions matched |
+| `banking_knowledge` | `task_001` | 0.0 | `user_stop` | 360.77s | `--retrieval-config bm25` avoided the shell sandbox dependency, but user-side write action did not fire |
+
+Artifacts:
+
+```text
+artifacts/eval/harnesses/tau2-bench/data/simulations/geode-gpt-5-5-xhigh-geode-user-*/results.json
+artifacts/eval/harnesses/tau2-bench/data/simulations/geode-gpt-5-5-xhigh-geode-user-gpt-5-2-payg-telecom-mobile-data-20260703-max200/results.json
+```
+
+Adapter notes:
+
+- `banking_knowledge` default `alltools` retrieval requires the upstream
+  agentic shell sandbox. GEODE runner now exposes `--retrieval-config` and
+  `--retrieval-config-kwargs` so `bm25` and other tau2 retrieval configs can be
+  selected explicitly.
+- `telecom` did not recover when the step budget was raised to 30. Repetitive
+  tool policy and empty-output recovery for subscription-backed routes need
+  work before it is useful as a quality ratchet.
+- The same telecom `mobile_data_issue` task passed with `gpt-5.2` on the PAYG
+  user route and `max_steps=200`, including both expected user write actions.
+  The failed `gpt-5.2` subscription attempt is excluded because the Codex
+  subscription backend rejected that model for this account.
+- GEODE now registers `gpt-5.2` in the OpenAI model spec, pricing catalogue,
+  and context-window catalogue so PAYG benchmark runs use the GPT-5-family
+  request shape instead of the legacy fallback.
+
+GPT-5.2 PAYG telecom retry command:
+
+```bash
+uv run python scripts/eval/tau2_geode_agent.py \
+  --harness-dir artifacts/eval/harnesses/tau2-bench \
+  --domain telecom \
+  --task-ids '[mobile_data_issue]airplane_mode_on|user_abroad_roaming_enabled_off[PERSONA:None]' \
+  --num-trials 1 \
+  --max-concurrency 1 \
+  --max-steps 200 \
+  --timeout 3600 \
+  --model gpt-5.5 \
+  --provider openai \
+  --source subscription \
+  --effort xhigh \
+  --time-budget-s 600 \
+  --user geode_user \
+  --user-llm gpt-5.2 \
+  --user-provider openai \
+  --user-source payg \
+  --user-effort high \
+  --user-time-budget-s 300 \
+  --save-to geode-gpt-5-5-xhigh-geode-user-gpt-5-2-payg-telecom-mobile-data-20260703-max200 \
+  --log-level INFO
+```
+
 ## 참고
 
 - [τ-bench paper (NeurIPS '24)](https://arxiv.org/pdf/2406.12045)

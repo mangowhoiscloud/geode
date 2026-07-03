@@ -463,6 +463,15 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--log-level", default="INFO")
     parser.add_argument("--auto-resume", action="store_true")
     parser.add_argument("--verbose-logs", action="store_true")
+    parser.add_argument(
+        "--retrieval-config",
+        default=None,
+        help=(
+            "tau2 retrieval config name, useful for banking_knowledge. "
+            "Example: bm25 avoids the default alltools shell sandbox."
+        ),
+    )
+    parser.add_argument("--retrieval-config-kwargs", default="{}")
     return parser.parse_args()
 
 
@@ -508,6 +517,8 @@ def main() -> int:
         log_level=args.log_level,
         auto_resume=args.auto_resume,
         verbose_logs=args.verbose_logs,
+        retrieval_config=args.retrieval_config,
+        retrieval_config_kwargs=json.loads(args.retrieval_config_kwargs),
     )
     run_domain(config)
     return 0
