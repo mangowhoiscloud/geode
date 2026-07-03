@@ -1,5 +1,8 @@
 """UI Probe — structured macOS accessibility (AX) perception.
 
+"AX" throughout is Apple's macOS **Accessibility** framework (the ``AX``-prefixed
+UI API: ``AXUIElement``, ``AXIsProcessTrusted``, ``kAXRoleAttribute``, ...).
+
 A cheaper, more reliable way to learn "what is on screen" than a screenshot.
 The ``computer_use`` harness perceives the desktop as pixels: every step ships a
 1280x800 JPEG (~1.5k tokens) to the model, and the model clicks by eyeballing
