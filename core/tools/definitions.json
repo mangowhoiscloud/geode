@@ -1948,5 +1948,27 @@
         "abstract"
       ]
     }
+  },
+  {
+    "name": "use_skill",
+    "description": "Load the full instructions of a skill listed in <available_skills>. The system prompt carries only skill names and descriptions; call this to get the skill's complete body (workflow steps, templates, rules) before applying it. Optional arguments are substituted into the body ($ARGUMENTS).",
+    "category": "discovery",
+    "cost_tier": "free",
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string",
+          "description": "Skill name exactly as shown in <available_skills>"
+        },
+        "arguments": {
+          "type": "string",
+          "description": "Optional argument string substituted into the skill body"
+        }
+      },
+      "required": [
+        "name"
+      ]
+    }
   }
 ]

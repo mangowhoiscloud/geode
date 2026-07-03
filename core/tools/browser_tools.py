@@ -19,10 +19,14 @@ already an installed dependency. The one manual step is symmetric: launch
 Chrome with ``--remote-debugging-port=9222`` instead of dragging an extension
 into ``chrome://extensions``.
 
-live-status: unverified — live test required. The CDP round-trip is exercised
-only against a mocked transport in tests; end-to-end CAPTCHA/login survival
-needs a live Chrome launched with the debug port (see ``hint`` on connection
-errors).
+live-status: the CDP round-trip is verified end-to-end (2026-07-04). Against a
+live Chrome launched with ``--remote-debugging-port=9222``, ``browser_scan``
+read the open tab's DOM and ``browser_execute_js`` evaluated JS in it (returning
+real values), both by direct call and driven by the agent (gpt-5.5). CAPTCHA /
+login survival is inherent to CDP-attach (the operator's real cookies and
+fingerprint are used) but is realised only when the operator launches their OWN
+Chrome profile with the debug port; a fresh-profile instance verifies the
+mechanics, not the logged-in benefit.
 
 Two tools:
 - ``browser_scan``     — list tabs + return a compacted text view of a page.
