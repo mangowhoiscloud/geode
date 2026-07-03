@@ -65,34 +65,54 @@ export default function Page() {
               루프는 매 라운드 진입 시{" "}
               <code>core/agent/context_manager.py</code>의{" "}
               <code>ContextWindowManager</code>에 오버플로 점검을 위임합니다.
-              전략은 프로바이더별로 다릅니다.
+              임계값은 고정된 80/95가 아니라{" "}
+              <code>core/orchestration/context_budget.py</code>의{" "}
+              <code>resolve_context_budget_policy</code>가 모델의 컨텍스트
+              윈도에 맞춰 계산합니다. 반환된 <code>ContextBudgetPolicy</code>가
+              세 티어 중 하나를 고릅니다.
             </p>
             <table>
               <thead>
-                <tr><th>프로바이더</th><th>80% 이상</th><th>95% 이상</th></tr>
+                <tr><th>티어</th><th>윈도 범위</th><th>경고 임계</th><th>임계</th></tr>
               </thead>
               <tbody>
-                <tr>
-                  <td>Anthropic</td>
-                  <td>서버 측 압축(context management)이 처리</td>
-                  <td>클라이언트가 비상 정리(emergency prune)만 수행</td>
-                </tr>
-                <tr>
-                  <td>OpenAI / GLM</td>
-                  <td>클라이언트 LLM 기반 압축</td>
-                  <td>비상 정리</td>
-                </tr>
+                <tr><td>small</td><td>≤ 256K</td><td>50%</td><td>90%</td></tr>
+                <tr><td>standard</td><td>≤ 512K</td><td>70%</td><td>90%</td></tr>
+                <tr><td>large</td><td>&gt; 512K</td><td>80%</td><td>90%</td></tr>
               </tbody>
             </table>
+            <p>
+              퍼센트는 raw 윈도가 아니라 <em>유효 프롬프트 예산</em>
+              (<code>effective_prompt_budget_tokens</code> = 윈도에서 출력
+              예비분 약 20K를 뺀 값) 기준입니다. 실제 대응은 프로바이더에 따라
+              갈립니다.
+            </p>
             <ul>
               <li>
-                컨텍스트 윈도가 200K를 넘는 모델이라도 절대 200K 토큰 천장을
-                둡니다. rate-limit 풀 분리를 피하기 위한 조치로, 도구 결과
-                요약과 압축을 강제합니다.
+                <strong>Anthropic</strong>. 경고 수준 압력은 서버 측 context
+                management가 처리하므로 클라이언트는 개입하지 않습니다. 임계
+                수준에서만 클라이언트가 비상 정리(prune)를 수행합니다.
+              </li>
+              <li>
+                <strong>OpenAI / GLM</strong>. 서버 측 압축이 없어 클라이언트가
+                3단계 압력 대응을 순차 실행합니다. (1) 값싼 도구 압축 — 오래된
+                관측 마스킹(<code>mask_stale_observations</code>)과 큰 도구
+                결과 요약(<code>summarize_tool_results</code>, LLM 호출 없음),
+                (2) 구조화 LLM 압축(<code>compact_conversation</code>),
+                (3) 압축으로 부족하거나 실패하면 적응형
+                정리(<code>adaptive_prune</code>).
+              </li>
+            </ul>
+            <ul>
+              <li>
+                컨텍스트 윈도가 200K를 넘는 모델에는 별도로 절대 200K 토큰
+                천장(<code>absolute_ceiling_tokens</code>)이 걸립니다. 퍼센트
+                임계와 무관하게 rate-limit 풀 분리를 피하려는 조치로, 도구 결과
+                요약 후 필요하면 압축을 강제합니다.
               </li>
               <li>
                 전략 선택은 <code>CONTEXT_OVERFLOW_ACTION</code> 훅 핸들러에
-                위임되고, 등록된 핸들러가 없으면 하드코딩 폴백이 동작합니다.
+                위임되고, 등록된 핸들러가 없으면 해석된 policy가 폴백입니다.
                 임계 상태에서는 <code>CONTEXT_CRITICAL</code> 훅이 발화합니다.
               </li>
               <li>
@@ -107,8 +127,10 @@ export default function Page() {
             </ul>
             <p>
               압축 장비는 <code>core/orchestration/compaction.py</code>와{" "}
-              <code>core/orchestration/context_monitor.py</code>에 있습니다.
-              모델별 컨텍스트 윈도 값은 <code>core/llm/token_tracker.py</code>의{" "}
+              <code>core/orchestration/context_monitor.py</code>에 있고, 티어
+              경계와 임계 상수는 <code>core/orchestration/context_budget.py</code>가
+              SoT입니다. 모델별 컨텍스트 윈도 값은{" "}
+              <code>core/llm/token_tracker.py</code>의{" "}
               <code>MODEL_CONTEXT_WINDOW</code>가 SoT입니다
               (<code>core/llm/model_pricing.toml</code>이 뒷받침).
             </p>
@@ -122,6 +144,30 @@ export default function Page() {
               컨텍스트에는 요약과 <code>ref_id</code>만 남깁니다. 모델은 필요할
               때 <code>recall_tool_result(ref_id)</code> 경로로 원본을 다시 가져옵니다. 오프로드
               시 <code>TOOL_RESULT_OFFLOADED</code> 훅이 발화합니다.
+            </p>
+
+            <h2>장기 컨텍스트 아티팩트: dreaming</h2>
+            <p>
+              메시지 트랜스크립트와 별개로, 프로젝트별{" "}
+              <code>sessions.db</code>(SQLite)에는 <code>context_artifacts</code>{" "}
+              행이 쌓입니다. 합성된 장기 컨텍스트 기록으로, 턴 경로 밖에서
+              만들어집니다. <code>core/memory/dreaming.py</code>의{" "}
+              <code>DreamingService</code>가 <code>TURN_COMPLETED</code> 훅에서
+              백그라운드로 동작합니다(best-effort — 포그라운드 턴을 절대 막지
+              않습니다). 트랜스크립트를 증거로 삼아 지속 사실, 결정, 미해결 작업,
+              낡은 리스크, 유용한 recall 질의, 인용을 정해진 헤딩으로 요약하고,{" "}
+              <code>dream</code> 종류의 아티팩트로 되씁니다.{" "}
+              <code>source_end_seq</code> 기준으로 멱등이라 새 메시지가 없으면
+              건너뛰고, LLM을 못 쓰면 LLM 없는 로컬 요약으로 폴백합니다.
+            </p>
+            <p>
+              주입은 경계가 있습니다. <code>ContextAssembler</code>의{" "}
+              <code>_inject_long_context_artifacts</code>가 최신{" "}
+              <code>compaction_summary</code>/<code>dream</code> 아티팩트 최대
+              3개를 각 500자로 잘라 <code>_long_context_summary</code>로 넣습니다.{" "}
+              <code>session_search</code> 도구는 <code>include_artifacts=true</code>
+              (선택적 <code>artifact_kinds</code> 필터)로 FTS5 메시지 검색과 함께
+              이 합성 아티팩트도 뒤집니다.
             </p>
 
             <h2>캐시를 깨지 않는 주입</h2>
@@ -218,36 +264,58 @@ export default function Page() {
             <p>
               At each round entry the loop delegates the overflow check to{" "}
               <code>ContextWindowManager</code> in{" "}
-              <code>core/agent/context_manager.py</code>. The strategy is
-              provider-aware.
+              <code>core/agent/context_manager.py</code>. Thresholds are not a
+              fixed 80/95: <code>resolve_context_budget_policy</code> in{" "}
+              <code>core/orchestration/context_budget.py</code> sizes a{" "}
+              <code>ContextBudgetPolicy</code> to the model's context window and
+              picks one of three tiers.
             </p>
             <table>
               <thead>
-                <tr><th>Provider</th><th>At 80%+</th><th>At 95%+</th></tr>
+                <tr><th>Tier</th><th>Window range</th><th>Warning</th><th>Critical</th></tr>
               </thead>
               <tbody>
-                <tr>
-                  <td>Anthropic</td>
-                  <td>Server-side compaction (context management) handles it</td>
-                  <td>Client performs an emergency prune only</td>
-                </tr>
-                <tr>
-                  <td>OpenAI / GLM</td>
-                  <td>Client-side LLM-based compaction</td>
-                  <td>Emergency prune</td>
-                </tr>
+                <tr><td>small</td><td>≤ 256K</td><td>50%</td><td>90%</td></tr>
+                <tr><td>standard</td><td>≤ 512K</td><td>70%</td><td>90%</td></tr>
+                <tr><td>large</td><td>&gt; 512K</td><td>80%</td><td>90%</td></tr>
               </tbody>
             </table>
+            <p>
+              The percentages are taken against the <em>effective prompt
+              budget</em> (<code>effective_prompt_budget_tokens</code> = window
+              minus a ~20K output reserve), not the raw window. The response
+              itself is provider-aware.
+            </p>
             <ul>
               <li>
-                Even for models whose window exceeds 200K, an absolute 200K-token
-                ceiling applies. It avoids rate-limit pool separation by forcing
-                tool-result summarization and compaction.
+                <strong>Anthropic</strong>. Warning-level pressure is handled by
+                server-side context management, so the client stays out. Only at
+                critical pressure does the client step in with an emergency
+                prune.
+              </li>
+              <li>
+                <strong>OpenAI / GLM</strong>. No server-side compaction, so the
+                client runs a three-stage escalation under pressure.
+                (1) Cheap tool compression — mask stale observations
+                (<code>mask_stale_observations</code>) and summarize large tool
+                results (<code>summarize_tool_results</code>), no LLM call;
+                (2) structured LLM compaction (<code>compact_conversation</code>);
+                (3) adaptive prune (<code>adaptive_prune</code>) when compaction
+                is not enough or fails.
+              </li>
+            </ul>
+            <ul>
+              <li>
+                For models whose window exceeds 200K, a separate absolute
+                200K-token ceiling (<code>absolute_ceiling_tokens</code>)
+                applies. Independent of the percentage thresholds, it avoids
+                rate-limit pool separation by summarizing tool results and then
+                compacting if needed.
               </li>
               <li>
                 Strategy resolution is delegated to a{" "}
-                <code>CONTEXT_OVERFLOW_ACTION</code> hook handler, with a
-                hardcoded fallback when none is registered. A{" "}
+                <code>CONTEXT_OVERFLOW_ACTION</code> hook handler; when none is
+                registered, the resolved policy is the fallback. A{" "}
                 <code>CONTEXT_CRITICAL</code> hook fires on critical pressure.
               </li>
               <li>
@@ -264,7 +332,9 @@ export default function Page() {
             <p>
               The compaction machinery lives in{" "}
               <code>core/orchestration/compaction.py</code> and{" "}
-              <code>core/orchestration/context_monitor.py</code>. Per-model
+              <code>core/orchestration/context_monitor.py</code>; the tier
+              boundaries and thresholds are owned by{" "}
+              <code>core/orchestration/context_budget.py</code>. Per-model
               context windows come from <code>MODEL_CONTEXT_WINDOW</code> in{" "}
               <code>core/llm/token_tracker.py</code>, backed by{" "}
               <code>core/llm/model_pricing.toml</code>.
@@ -280,6 +350,34 @@ export default function Page() {
               The model re-fetches the original with{" "}
               <code>recall_tool_result(ref_id)</code> when needed. Each offload fires the{" "}
               <code>TOOL_RESULT_OFFLOADED</code> hook.
+            </p>
+
+            <h2>Long-context artifacts: dreaming</h2>
+            <p>
+              Separate from the message transcript, the per-project{" "}
+              <code>sessions.db</code> (SQLite) accumulates{" "}
+              <code>context_artifacts</code> rows — synthesized long-context
+              records built off the turn path. <code>DreamingService</code> in{" "}
+              <code>core/memory/dreaming.py</code> runs on the{" "}
+              <code>TURN_COMPLETED</code> hook in the background (best-effort; it
+              never blocks the foreground turn). Using the transcript as
+              evidence, it synthesizes durable facts, decisions, unresolved
+              tasks, stale risks, useful recall queries, and citations under
+              fixed headings, and writes them back as a <code>dream</code>{" "}
+              artifact. It is idempotent by <code>source_end_seq</code> (skips
+              when there is nothing new) and falls back to a local, LLM-free
+              summary when no LLM is available.
+            </p>
+            <p>
+              Injection is bounded. <code>_inject_long_context_artifacts</code>{" "}
+              in <code>ContextAssembler</code> pulls the latest three{" "}
+              <code>compaction_summary</code>/<code>dream</code> artifacts,
+              truncates each to 500 chars, and feeds them as{" "}
+              <code>_long_context_summary</code>. The <code>session_search</code>
+              {" "}tool surfaces them too: with{" "}
+              <code>include_artifacts=true</code> (and an optional{" "}
+              <code>artifact_kinds</code> filter) it searches these synthesized
+              artifacts alongside the FTS5 message hits.
             </p>
 
             <h2>Injection that does not break caching</h2>

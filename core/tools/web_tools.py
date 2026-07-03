@@ -121,6 +121,56 @@ class WebFetchTool:
         """Run blocking HTTP fetch off the event loop."""
         return await asyncio.to_thread(self._execute_sync, **kwargs)
 
+    # Repeated-list collapse thresholds. A list/feed/table page can carry
+    # hundreds of structurally-identical siblings; feeding them all in blows
+    # the char budget so the *blind* head-truncation drops the page tail
+    # entirely. Keep a representative sample + an honest omission marker so
+    # the tail survives and the model can re-fetch specifics if it needs them.
+    # (Ported idea: GenericAgent simphtml `cutlist`.)
+    _LIST_COLLAPSE_MIN = 6  # only collapse runs this long or longer
+    _LIST_COLLAPSE_KEEP = 3  # sample size to retain
+    _LIST_COLLAPSE_MIN_TEXT = 30  # skip trivial repeats (nav chips, spacers)
+
+    @staticmethod
+    def _collapse_repeated_lists(soup: Any) -> None:
+        """Collapse long runs of structurally-identical siblings in place.
+
+        Groups each element's direct Tag children by (tag name, class set);
+        for any group at/above ``_LIST_COLLAPSE_MIN`` carrying real text,
+        keeps the first ``_LIST_COLLAPSE_KEEP`` and replaces the rest with a
+        single ``[... N more <tag> items omitted ...]`` text marker.
+        """
+        from bs4 import Tag
+
+        # find_all materialises a static list, so decomposing children of
+        # not-yet-visited parents is safe (a decomposed parent just yields
+        # no children when we reach it).
+        for parent in soup.find_all(True):
+            groups: dict[tuple[str, tuple[str, ...]], list[Any]] = {}
+            for child in parent.find_all(recursive=False):
+                if not isinstance(child, Tag):
+                    continue
+                # bs4 returns list for multi-valued "class", str for a lone
+                # value, None when absent — normalise to a sorted tuple.
+                cls: Any = child.get("class") or []
+                classes = (cls,) if isinstance(cls, str) else tuple(sorted(cls))
+                sig = (child.name, classes)
+                groups.setdefault(sig, []).append(child)
+            for (tag_name, _classes), items in groups.items():
+                if len(items) < WebFetchTool._LIST_COLLAPSE_MIN:
+                    continue
+                if max(len(it.get_text(strip=True)) for it in items) < (
+                    WebFetchTool._LIST_COLLAPSE_MIN_TEXT
+                ):
+                    continue
+                dropped = items[WebFetchTool._LIST_COLLAPSE_KEEP :]
+                marker = soup.new_string(
+                    f"\n[... {len(dropped)} more <{tag_name}> items omitted ...]\n"
+                )
+                items[WebFetchTool._LIST_COLLAPSE_KEEP - 1].insert_after(marker)
+                for it in dropped:
+                    it.decompose()
+
     @staticmethod
     def _html_to_text(html: str) -> str:
         """Convert HTML to Markdown, preserving structure.
@@ -129,6 +179,9 @@ class WebFetchTool:
         headings, code blocks). Falls back to BeautifulSoup text
         extraction if markdownify unavailable.
         Claude Code pattern: Turndown HTML→MD before context injection.
+        Repeated-list runs are collapsed first (see
+        :meth:`_collapse_repeated_lists`) so a list page's tail is not lost
+        to the downstream char budget.
         """
         try:
             from bs4 import BeautifulSoup
@@ -136,6 +189,7 @@ class WebFetchTool:
             soup = BeautifulSoup(html, "html.parser")
             for tag in soup(["script", "style", "nav", "footer", "header"]):
                 tag.decompose()
+            WebFetchTool._collapse_repeated_lists(soup)
             cleaned = str(soup)
         except ImportError:
             cleaned = html

@@ -98,6 +98,30 @@ export default function Page() {
                 </tr>
               </tbody>
             </table>
+            <p>
+              <code>sessions.db</code>에는 트랜스크립트 외에{" "}
+              <code>context_artifacts</code>도 있습니다. dreaming 서비스가 턴
+              경로 밖에서 합성해 되쓰는 <code>dream</code> 레코드로, 조립 상세는{" "}
+              <a href="/geode/docs/runtime/context">컨텍스트 조립</a>에서
+              다룹니다.
+            </p>
+
+            <h2>기억 수명주기: 증거 기반 소멸</h2>
+            <p>
+              프로젝트 기억은 시간이 아니라 증거로 정리됩니다.{" "}
+              <code>geode memory-lifecycle</code>
+              (<code>core/cli/commands/memory_lifecycle.py</code>)는 두 가지를
+              합니다. (1) 소멸 — <code>resolution.guard_test</code>가 아직 트리에
+              존재하는 항목은 <code>.geode/memory/_archive/</code>로
+              아카이빙하고(주입에서 제외), 가드 테스트가 사라진 항목은 다시
+              떠오릅니다(WARNING). 시간 기반 소멸은 없습니다. (2) 승격 제안 —
+              dreaming이 남긴 <code>context_artifacts</code>(<code>dream</code>)와
+              활성 항목을 클러스터링해, 서로 다른 세션 3개 이상에 걸친 클러스터를{" "}
+              <code>.geode/memory/_proposals/</code> 아래 HITL 제안 파일로 씁니다.
+              규칙은 블라스트 반경이 크므로 절대 자동 기록하지 않습니다. 기본은
+              dry-run이고, <code>--apply</code>가 파일을 옮기고 제안을 쓰며{" "}
+              <code>MEMORY_PROMOTION_PROPOSED</code> 훅을 발화합니다.
+            </p>
 
             <h2>sessions.jsonl: 런 메트릭</h2>
             <p>
@@ -228,6 +252,32 @@ export default function Page() {
                 </tr>
               </tbody>
             </table>
+            <p>
+              Beyond transcripts, <code>sessions.db</code> also holds{" "}
+              <code>context_artifacts</code>: <code>dream</code> records the
+              dreaming service synthesizes off the turn path and writes back. The
+              assembly detail lives in{" "}
+              <a href="/geode/docs/runtime/context">Context assembly</a>.
+            </p>
+
+            <h2>Memory lifecycle: evidence-based decay</h2>
+            <p>
+              Project memory is pruned by evidence, not time.{" "}
+              <code>geode memory-lifecycle</code>
+              (<code>core/cli/commands/memory_lifecycle.py</code>) does two
+              things. (1) Decay — an entry whose{" "}
+              <code>resolution.guard_test</code> still exists in the tree is
+              archived to <code>.geode/memory/_archive/</code> (excluded from
+              injection); an entry whose guard test vanished resurfaces
+              (WARNING). There is no time-based decay. (2) Promotion proposals —
+              the <code>context_artifacts</code> (<code>dream</code>) rows left by
+              dreaming plus active entries are clustered, and clusters spanning
+              &gt;= 3 distinct sessions become HITL proposal files under{" "}
+              <code>.geode/memory/_proposals/</code>. Rules are never written
+              automatically (high blast radius). It is dry-run by default;{" "}
+              <code>--apply</code> moves files, writes proposals, and fires the{" "}
+              <code>MEMORY_PROMOTION_PROPOSED</code> hook.
+            </p>
 
             <h2>sessions.jsonl: run metrics</h2>
             <p>

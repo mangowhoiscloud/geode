@@ -26,7 +26,7 @@ export default function Page() {
               두 루프의 구조 자체가 처음이라면{" "}
               <a href="/geode/docs/concepts/two-loops">두 개의 루프</a>를 먼저
               읽으세요. 바깥쪽 루프의 전체 흐름은{" "}
-              <a href="/geode/docs/capabilities/autoresearch">폐루프</a>에
+              <a href="/geode/docs/capabilities/autoresearch">Closed-Loop</a>에
               있습니다.
             </p>
 
@@ -137,7 +137,7 @@ scaffolding   DGM, ADAS, STOP,        <- 거의 비어 있음
               </li>
               <li>
                 <strong>고정 벤치마크 → 공진화하는 적대적 seed</strong>.
-                co-scientist seed 생성 파이프라인이 에이전트와 나란히 테스트
+                Seed Scenario Generation 파이프라인이 에이전트와 나란히 테스트
                 분포를 키웁니다.
               </li>
             </ol>
@@ -149,7 +149,7 @@ scaffolding   DGM, ADAS, STOP,        <- 거의 비어 있음
             </p>
             <p>
               이 치환들이 코드에서 어떻게 도는지는{" "}
-              <a href="/geode/docs/capabilities/autoresearch">폐루프</a>에서,
+              <a href="/geode/docs/capabilities/autoresearch">Closed-Loop</a>에서,
               감사에 쓰는 평가 프레임워크는{" "}
               <a href="/geode/docs/petri/overview">Petri × GEODE</a>에서 다룹니다.
             </p>
@@ -245,7 +245,7 @@ scaffolding   DGM, ADAS, STOP,        <- 거의 비어 있음
               If the two-loop structure itself is new to you, read{" "}
               <a href="/geode/docs/concepts/two-loops">The two loops</a> first,
               and{" "}
-              <a href="/geode/docs/capabilities/autoresearch">The closed loop</a>{" "}
+              <a href="/geode/docs/capabilities/autoresearch">Closed-Loop</a>{" "}
               for the outer loop end to end. This page reads better after them.
             </p>
 
@@ -356,7 +356,7 @@ weight update  (RLHF family)             Constitutional AI, MART, Self-MOA`}</pr
               </li>
               <li>
                 <strong>fixed benchmark to co-evolved adversarial seeds</strong>.
-                A co-scientist seed-generation pipeline grows the test
+                A Seed Scenario Generation pipeline grows the test
                 distribution alongside the agent.
               </li>
             </ol>
@@ -368,7 +368,7 @@ weight update  (RLHF family)             Constitutional AI, MART, Self-MOA`}</pr
             </p>
             <p>
               For how these substitutions run in code, see{" "}
-              <a href="/geode/docs/capabilities/autoresearch">The closed loop</a>.
+              <a href="/geode/docs/capabilities/autoresearch">Closed-Loop</a>.
               For the evaluation framework that does the auditing, see{" "}
               <a href="/geode/docs/petri/overview">Petri × GEODE</a>.
             </p>

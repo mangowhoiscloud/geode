@@ -20,16 +20,17 @@ class TestGeodiPixels:
         assert all(len(row) == 22 for row in GEODI_SOURCE_PIXELS)
 
     def test_grid_dimensions(self) -> None:
-        assert len(GEODI_PIXELS) == 8  # even row count — pairs into half-blocks
-        assert all(len(row) == 14 for row in GEODI_PIXELS)
+        assert len(GEODI_PIXELS) == 12  # even row count — pairs into half-blocks
+        assert all(len(row) == 22 for row in GEODI_PIXELS)
 
     def test_only_palette_chars(self) -> None:
         assert set("".join(GEODI_SOURCE_PIXELS + GEODI_PIXELS)) <= set(GEODI_PALETTE)
 
     def test_character_canon(self) -> None:
         joined = "".join(GEODI_PIXELS)
-        # Deep-rose gills/blush, dark eyes/smile, light belly patch present.
-        assert "r" in joined and "e" in joined and "l" in joined
+        # Deep-rose gills/blush, dark eyes/mouth present (belly/feet cropped
+        # in the face-only welcome derivative).
+        assert "r" in joined and "e" in joined
         assert joined.count("w") == 2  # one 1px catchlight per eye
 
     def test_exactly_three_separated_gill_stalks_per_side(self) -> None:
@@ -47,9 +48,9 @@ class TestGeodiPixels:
 
     def test_pixel_lines_render_constant_width(self) -> None:
         lines = geodi_pixel_lines()
-        assert len(lines) == 4  # 8 px tall -> 4 half-block rows, beside 3 text lines
+        assert len(lines) == 6  # 12 px tall -> 6 half-block rows (face-only: head to mouth)
         for line in lines:
-            assert len(_ANSI.sub("", line)) == 14  # text can align beside it
+            assert len(_ANSI.sub("", line)) == 22  # text can align beside it
             assert "▀" in line or "▄" in line or " " in line
         # Truecolor body rose must appear (244;155;196 = #F49BC4).
         assert any("38;2;244;155;196" in line for line in lines)
@@ -57,8 +58,8 @@ class TestGeodiPixels:
     def test_sprite_stays_compact(self) -> None:
         """Keep the welcome mascot as a Claude Code-scale accent, not a splash panel."""
         lines = geodi_pixel_lines()
-        assert len(lines) <= 7
-        assert max(len(_ANSI.sub("", line)) for line in lines) <= 14
+        assert len(lines) <= 6
+        assert max(len(_ANSI.sub("", line)) for line in lines) <= 22
 
     def test_compact_keeps_source_silhouette_cues(self) -> None:
         """The compact grid should read like the original, not a redesigned mascot."""
@@ -66,11 +67,11 @@ class TestGeodiPixels:
         assert GEODI_SOURCE_PIXELS[5].startswith(".rrr")
         assert "ppew" in GEODI_SOURCE_PIXELS[8]
         assert "llllll" in "".join(GEODI_SOURCE_PIXELS)
-        # Compact derivative (14x8): gill rows hug the edges, eyes keep the
-        # e+w catchlight pair twice, belly patch present.
-        assert sum(1 for row in GEODI_PIXELS if row.startswith("rr.")) == 3
+        # Face-only derivative (22x12, head→mouth): 3 separated gill rows per
+        # side, e+w catchlight pair twice, mouth (ee) present; belly/feet cropped.
+        assert sum(1 for row in GEODI_PIXELS if row.lstrip(".").startswith("rr")) == 3
         assert "".join(GEODI_PIXELS).count("ew") == 2
-        assert "llll" in "".join(GEODI_PIXELS)
+        assert "ppeepp" in "".join(GEODI_PIXELS)  # mouth row
 
 
 class TestMascotBrandBlock:

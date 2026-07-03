@@ -56,19 +56,41 @@ def _make_text_response(text: str = "done") -> MagicMock:
     return resp
 
 
-def _make_tool_response(tool_name: str = "web_search", tool_id: str = "toolu_1") -> MagicMock:
+def _make_tool_block(tool_name: str, tool_id: str, tool_input: dict[str, Any]) -> MagicMock:
+    """Create a single mock tool_use block."""
+    block = MagicMock()
+    block.type = "tool_use"
+    block.name = tool_name
+    block.input = tool_input
+    block.id = tool_id
+    return block
+
+
+def _make_tool_response(
+    tool_name: str = "web_search",
+    tool_id: str = "toolu_1",
+    tool_input: dict[str, Any] | None = None,
+) -> MagicMock:
     """Create a mock LLM response with a single tool_use block."""
     resp = MagicMock()
     resp.stop_reason = "tool_use"
     resp.usage = MagicMock()
     resp.usage.input_tokens = 100
     resp.usage.output_tokens = 50
-    block = MagicMock()
-    block.type = "tool_use"
-    block.name = tool_name
-    block.input = {"query": "test"}
-    block.id = tool_id
-    resp.content = [block]
+    resp.content = [_make_tool_block(tool_name, tool_id, tool_input or {"query": "test"})]
+    return resp
+
+
+def _make_parallel_tool_response(tool_name: str, inputs: list[dict[str, Any]]) -> MagicMock:
+    """Create ONE mock LLM response fanning out several parallel tool_use blocks."""
+    resp = MagicMock()
+    resp.stop_reason = "tool_use"
+    resp.usage = MagicMock()
+    resp.usage.input_tokens = 100
+    resp.usage.output_tokens = 50
+    resp.content = [
+        _make_tool_block(tool_name, f"toolu_par_{i}", inp) for i, inp in enumerate(inputs)
+    ]
     return resp
 
 
@@ -227,99 +249,150 @@ class TestConvergenceBreak:
 
 
 class TestDiversityForcing:
-    """Verify that same tool called 5x consecutively triggers diversity hint."""
+    """The guard must fire only on a genuine no-progress loop: the SAME tool
+    called with IDENTICAL arguments N times. It folds args into the call
+    identity (name-only tripped on healthy fan-out research), deduplicates a
+    parallel batch to its distinct-signature count, and no longer special-cases
+    any "naturally repetitive" tool via an exempt list.
+    """
 
     @pytest.fixture
     def context(self) -> ConversationContext:
-        return ConversationContext(max_turns=10)
+        return ConversationContext(max_turns=30)
 
     @pytest.fixture
     def executor(self) -> ToolExecutor:
         handler = MagicMock(return_value={"status": "ok"})
-        return ToolExecutor(action_handlers={"web_search": handler})
+        return ToolExecutor(action_handlers={"grep_files": handler})
 
-    def test_diversity_hint_injected(
-        self, context: ConversationContext, executor: ToolExecutor
-    ) -> None:
-        """After 5 consecutive same-tool calls, a diversity hint should be injected."""
-        loop = AgenticLoop(context, executor, max_rounds=7)
+    @staticmethod
+    def _drive(loop: AgenticLoop, responses: list[Any]) -> tuple[Any, MagicMock]:
+        """Run ``loop.arun`` against a scripted LLM response sequence.
 
-        # Pre-fill 4 calls to the same tool
-        loop._consecutive_tool_tracker = ["web_search"] * 4
-
-        call_count = 0
-        tool_resp = _make_tool_response("web_search", "toolu_div")
-        text_resp = _make_text_response("Done")
-
-        captured_messages: list[Any] = []
+        Tool results carry a per-call counter so their success fingerprint
+        varies each round — that keeps the *repeated-success-no-progress* guard
+        (which keys on tool+input+result) from pre-empting the diversity guard
+        under test, isolating the behaviour we mean to assert.
+        """
+        seq = list(responses)
+        counter = {"n": 0}
 
         async def fake_call_llm(system_prompt: str, messages: list, **kwargs: Any) -> Any:
-            nonlocal call_count
-            call_count += 1
-            captured_messages.clear()
-            captured_messages.extend(messages)
-            if call_count <= 1:
-                return tool_resp
-            return text_resp
+            return seq.pop(0) if seq else _make_text_response("Done")
 
-        tool_result_item = {
-            "type": "tool_result",
-            "tool_use_id": "toolu_div",
-            "content": '{"status": "ok"}',
-        }
+        def fake_process(response: Any) -> list[dict[str, Any]]:
+            results: list[dict[str, Any]] = []
+            for idx, block in enumerate(getattr(response, "content", []) or []):
+                if getattr(block, "type", None) == "tool_use":
+                    counter["n"] += 1
+                    results.append(
+                        {
+                            "type": "tool_result",
+                            "tool_use_id": getattr(block, "id", "") or f"t{idx}",
+                            "content": f'{{"status": "ok", "n": {counter["n"]}}}',
+                        }
+                    )
+            return results
 
         with (
             patch.object(loop, "_call_llm", side_effect=fake_call_llm),
             patch.object(loop, "_track_usage"),
-            patch.object(loop._tool_processor, "process", return_value=[tool_result_item]),
+            patch.object(loop._tool_processor, "process", side_effect=fake_process),
+            patch("core.ui.agentic_ui.emit_tool_diversity_forced") as mock_emit,
         ):
-            result = asyncio.run(loop.arun("search something"))
+            result = asyncio.run(loop.arun("go"))
+        return result, mock_emit
 
-        # Verify diversity hint was injected (tracker was cleared)
-        assert loop._consecutive_tool_tracker == []  # Cleared after hint
-        assert result.termination_reason == "natural"
-
-    def test_no_diversity_hint_under_threshold(
+    def test_distinct_args_across_turns_no_hint(
         self, context: ConversationContext, executor: ToolExecutor
     ) -> None:
-        """Under 5 consecutive calls, no diversity hint should be injected."""
+        """(a) 5 grep_files with DIFFERENT patterns across turns must NOT fire."""
         loop = AgenticLoop(context, executor)
-        loop._consecutive_tool_tracker = ["web_search"] * 3  # Only 3
-
-        # Running the diversity check logic manually
-        # After adding one more "web_search", tracker has 4 — still under 5
-        loop._consecutive_tool_tracker.append("web_search")
-        assert len(loop._consecutive_tool_tracker) == 4
-        # No hint should be needed (check inline)
-        last_5 = (
-            loop._consecutive_tool_tracker[-5:] if len(loop._consecutive_tool_tracker) >= 5 else []
-        )
-        assert len(last_5) == 0 or len(set(last_5)) != 1
-
-    def test_diverse_tools_no_hint(
-        self, context: ConversationContext, executor: ToolExecutor
-    ) -> None:
-        """Different tools should not trigger diversity hint even after 5 calls."""
-        loop = AgenticLoop(context, executor)
-        loop._consecutive_tool_tracker = [
-            "web_search",
-            "memory_load",
-            "web_search",
-            "run_bash",
-            "web_search",
+        responses = [
+            _make_tool_response("grep_files", f"t{i}", {"pattern": f"pat_{i}"}) for i in range(5)
         ]
-        last_5 = loop._consecutive_tool_tracker[-5:]
-        assert len(set(last_5)) > 1  # Multiple distinct tools — no hint needed
+        _result, mock_emit = self._drive(loop, responses)
+
+        mock_emit.assert_not_called()
+        # 5 distinct (name, args_sig) accumulated, none cleared
+        assert len(loop._consecutive_tool_tracker) == 5
+        assert len({sig for _name, sig in loop._consecutive_tool_tracker}) == 5
+
+    def test_identical_args_across_turns_fires(
+        self, context: ConversationContext, executor: ToolExecutor
+    ) -> None:
+        """(b) 5 grep_files with IDENTICAL args across turns MUST fire."""
+        loop = AgenticLoop(context, executor)
+        same = {"pattern": "the_same_pattern"}
+        responses = [_make_tool_response("grep_files", f"t{i}", same) for i in range(5)]
+        _result, mock_emit = self._drive(loop, responses)
+
+        mock_emit.assert_called_once_with("grep_files", 5)
+        assert loop._consecutive_tool_tracker == []  # cleared after firing
+
+    def test_parallel_batch_distinct_no_hint(
+        self, context: ConversationContext, executor: ToolExecutor
+    ) -> None:
+        """(c) ONE response fanning out 5 distinct parallel calls must NOT fire."""
+        loop = AgenticLoop(context, executor)
+        parallel = _make_parallel_tool_response(
+            "grep_files", [{"pattern": f"pat_{i}"} for i in range(5)]
+        )
+        _result, mock_emit = self._drive(loop, [parallel])
+
+        mock_emit.assert_not_called()
+        # one batch of 5 distinct sigs adds 5 distinct entries, never trips
+        assert len(loop._consecutive_tool_tracker) == 5
+        assert len({sig for _name, sig in loop._consecutive_tool_tracker}) == 5
+
+    def test_parallel_batch_identical_deduped_no_hint(
+        self, context: ConversationContext, executor: ToolExecutor
+    ) -> None:
+        """A single parallel batch of 5 IDENTICAL calls dedups to one occurrence."""
+        loop = AgenticLoop(context, executor)
+        parallel = _make_parallel_tool_response(
+            "grep_files", [{"pattern": "dup"} for _ in range(5)]
+        )
+        _result, mock_emit = self._drive(loop, [parallel])
+
+        mock_emit.assert_not_called()
+        assert len(loop._consecutive_tool_tracker) == 1  # deduped within the batch
+
+    def test_formerly_exempt_tool_not_special_cased(
+        self, context: ConversationContext, executor: ToolExecutor
+    ) -> None:
+        """(d) A tool that used to be on the exempt list (general_web_search)
+        now fires on identical args like any other — no special-casing remains.
+        """
+        loop = AgenticLoop(context, executor)
+        same = {"query": "same question"}
+        responses = [_make_tool_response("general_web_search", f"t{i}", same) for i in range(5)]
+        _result, mock_emit = self._drive(loop, responses)
+
+        # Previously this name sat in _DIVERSITY_EXEMPT and was cleared without
+        # firing; with the exempt list removed it fires on identical args.
+        mock_emit.assert_called_once_with("general_web_search", 5)
+
+    def test_args_signature_distinguishes_inputs(self) -> None:
+        """The args signature separates different inputs and matches identical ones."""
+        from core.agent.loop.agent_loop import _tool_args_signature
+
+        assert _tool_args_signature({"pattern": "a"}) != _tool_args_signature({"pattern": "b"})
+        # order-independent (sort_keys) and stable across calls
+        assert _tool_args_signature({"a": 1, "b": 2}) == _tool_args_signature({"b": 2, "a": 1})
 
     def test_tracker_capped_at_10(
         self, context: ConversationContext, executor: ToolExecutor
     ) -> None:
-        """Tracker should keep at most 10 entries."""
+        """Tracker keeps at most 10 (name, args_sig) entries."""
         loop = AgenticLoop(context, executor)
-        loop._consecutive_tool_tracker = ["tool_a"] * 12
-        # Cap logic: if > 10, trim to last 10
-        if len(loop._consecutive_tool_tracker) > 10:
-            loop._consecutive_tool_tracker = loop._consecutive_tool_tracker[-10:]
+        # 12 distinct-arg calls across turns: never fires, but caps at 10
+        responses = [
+            _make_tool_response("grep_files", f"t{i}", {"pattern": f"p{i}"}) for i in range(12)
+        ]
+        _result, mock_emit = self._drive(loop, responses)
+
+        mock_emit.assert_not_called()
         assert len(loop._consecutive_tool_tracker) == 10
 
 

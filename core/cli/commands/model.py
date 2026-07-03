@@ -119,7 +119,8 @@ def _apply_model(
     roles (reflection / mutator) are daemon-global and always write env.
 
     Includes context window guard: blocks downgrade when current context
-    exceeds 80% of the target model's window (primary role only —
+    exceeds the target model's tiered warning budget (ContextBudgetPolicy;
+    primary role only —
     reflection runs on a separate cheap model and doesn't share the
     main loop's context).
     """
@@ -159,19 +160,22 @@ def _apply_model(
     if role_def.name == "primary":
         ctx = _pkg.get_conversation_context()
         if ctx is not None and ctx.messages:
-            from core.llm.token_tracker import MODEL_CONTEXT_WINDOW
+            from core.orchestration.context_budget import resolve_context_budget_policy
             from core.orchestration.context_monitor import estimate_message_tokens
 
             current_tokens = estimate_message_tokens(ctx.messages)
-            target_window = MODEL_CONTEXT_WINDOW.get(selected.id, 200_000)
-            threshold = int(target_window * 0.8)
+            # Consume the same tiered ContextBudgetPolicy the loop uses, not a
+            # bare 80% literal — small windows warn earlier, large windows keep
+            # the absolute ceiling (Codex LOW follow-up on PR-CONTEXT-BUDGET).
+            policy = resolve_context_budget_policy(selected.id)
+            threshold = policy.warning_tokens
 
             if current_tokens > threshold:
                 _pkg.console.print()
                 _pkg.console.print(
                     f"  [warning]Context guard: {current_tokens:,} tokens "
-                    f"exceeds {selected.label} limit "
-                    f"({target_window:,} x 80% = {threshold:,})[/warning]"
+                    f"exceeds {selected.label}'s {policy.tier.name}-tier warning "
+                    f"budget ({threshold:,} tokens)[/warning]"
                 )
                 _pkg.console.print(
                     "  [muted]Run /compact or /clear first, then retry /model.[/muted]"
