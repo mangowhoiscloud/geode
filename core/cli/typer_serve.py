@@ -238,11 +238,9 @@ def serve(
         except Exception as _wh_exc:
             log.warning("Webhook server failed to start: %s", _wh_exc)
 
-    # Start pollers
-    gateway.start()
-    console.print("  [success]Gateway started. Listening...[/success]")
-
-    # CLI Channel — Unix socket for thin CLI client IPC
+    # CLI Channel — Unix socket for thin CLI client IPC.
+    # Start this before external gateway pollers: some gateway adapters run a
+    # blocking poll loop from start(), but thin CLI clients still need a socket.
     _cli_poller = None
     try:
         from core.server.ipc_server.poller import CLIPoller
@@ -252,6 +250,10 @@ def serve(
         console.print(f"  [success]CLI channel: {_cli_poller.socket_path}[/success]")
     except Exception:
         log.warning("CLI channel init failed", exc_info=True)
+
+    # Start gateway pollers
+    gateway.start()
+    console.print("  [success]Gateway started. Listening...[/success]")
 
     console.print()
 
