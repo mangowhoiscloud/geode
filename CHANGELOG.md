@@ -60,7 +60,28 @@ functional change.
   and pricing/context catalogue so PAYG benchmark runs use the GPT-5-family
   request shape instead of the legacy fallback.
 
+### Changed
+
+- **CLI live task surface compacted.** The IPC event renderer now treats
+  `update_plan` like a Claude Code-scale task list: at most five visible tasks
+  around the active item, a `Tasks · done/total` header, and no phase-start
+  plan reprint. Thinking/tool phases carry the active step in the spinner label
+  and flow below a single checklist that is drawn once per state change,
+  avoiding the repeated `Plan:` blocks seen in long runs. The REPL prompt now
+  renders as `geode >` instead of a bare chevron.
+
 ### Fixed
+
+- **Serve CLI channel startup order.** `geode serve` now starts the local thin
+  CLI Unix socket before external gateway pollers, so blocking gateway adapters
+  cannot prevent `geode` clients from reconnecting after a daemon restart.
+
+- **Codex OAuth runtime cache refresh.** The `codex-oauth` adapter and
+  legacy Codex provider now fingerprint the resolved OAuth token and rebuild
+  cached OpenAI SDK clients when `~/.codex/auth.json` or GEODE auth state
+  changes, preventing daemon restarts from being required after Codex CLI
+  refreshes an expired ChatGPT token. `/login refresh` also invalidates the
+  Codex CLI credential reader and legacy Codex client cache.
 
 - **MCP filesystem argument compatibility.** MCP tool dispatch now normalizes
   common schema mismatches before server calls, including mapping `file_path`
@@ -68,6 +89,24 @@ functional change.
   `read_text_file` `head`/`tail` pairs, annotating exact-read caveats in
   exposed MCP tool descriptions, and offloading source EOF preservation from
   model turns into the MCP dispatch layer for same-name text writes.
+
+## [0.99.266] - 2026-07-03
+
+### Fixed
+
+- **Plan checklist no longer re-stacks across thinking/tool rounds.** The IPC
+  event renderer previously re-rendered the whole `update_plan` checklist at
+  every `thinking_end`/`tool_end`, so a multi-round turn stacked N identical
+  `Tasks · …` blocks down the transcript (6+ copies on long runs). Plan
+  rendering is now split from the activity block: the checklist is drawn only
+  from plan events (`progress_plan` / `plan_step` / `replan` /
+  `goal_decomposition`) and deduped against the last drawn state (identical
+  steps, statuses, and explanation → no reprint), while thinking/tool phases
+  redraw only the activity summary and flow below the checklist, which scrolls
+  up with the transcript like a Claude Code todo list. The checklist header
+  also switches from mint (`1;36m`) to the signature rose. Guards:
+  `tests/core/ui/test_event_schema_v2.py` (regression, dedup, header colour)
+  and `tests/core/ui/test_agentic_ui.py` (plan not re-emitted during phases).
 
 ## [0.99.265] - 2026-07-03
 

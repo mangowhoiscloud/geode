@@ -267,12 +267,12 @@ class TestEventRendererV2:
 
         renderer.on_event({"type": "goal_decomposition", "steps": ["a", "b"], "count": 2})
         out = renderer._out.getvalue()
-        assert "Plan" in out
+        assert "Tasks" in out
         assert "2 steps" in out
         assert spinner_glyph.GLYPH in out  # active step carries the rose GEODE mark
         assert "a" in out
 
-    def test_progress_plan_first_render_is_full_checklist(self, renderer) -> None:
+    def test_progress_plan_first_render_is_compact_task_list(self, renderer) -> None:
         renderer.on_event(
             {
                 "type": "progress_plan",
@@ -285,7 +285,7 @@ class TestEventRendererV2:
             }
         )
         out = renderer._out.getvalue()
-        assert "Plan · implementation" in out
+        assert "Tasks · 1/3 done · implementation" in out
         assert "✓" in out
         assert "Inspect UX" in out
         assert "Patch renderer" in out
@@ -309,9 +309,9 @@ class TestEventRendererV2:
         assert "\033[" in out and "A" in out
         assert "Second plan" in out
 
-    def test_progress_plan_after_tool_output_rerenders_full_checklist(self, renderer) -> None:
-        """Live-region policy: after other output obscures the plan, the next
-        update re-renders the FULL checklist at the bottom (the old copy was
+    def test_progress_plan_after_tool_output_rerenders_compact_task_list(self, renderer) -> None:
+        """Live-region policy: after other output obscures the task list, the
+        next update re-renders the compact list at the bottom (the old copy was
         erased before the obscuring output printed — never stacked)."""
         renderer.on_event(
             {
@@ -333,10 +333,10 @@ class TestEventRendererV2:
             }
         )
         out = renderer._out.getvalue()
-        tail = out[out.rindex("Plan · fallback") :]
+        tail = out[out.rindex("Tasks · 1/3 done · fallback") :]
         assert "Already done" in tail
         assert "Direct verification" in tail
-        assert "Pending tail step" in tail  # full checklist re-rendered
+        assert "Pending tail step" in tail
         assert "Plan updated" not in out  # compact breadcrumb path removed
 
     def test_plan_step(self, renderer) -> None:
@@ -353,7 +353,7 @@ class TestEventRendererV2:
         )
         out = renderer._out.getvalue()
         assert "\033[" in out and "A" in out
-        assert "Plan" in out
+        assert "Tasks" in out
         assert "step 2/2" in out
         assert "verify the renderer" in out
         assert "✓" in out
@@ -366,18 +366,103 @@ class TestEventRendererV2:
         )
         out = renderer._out.getvalue()
         assert "\033[" in out and "A" in out
-        assert "Plan · revised" in out
+        assert "Tasks · 0/3 done · revised" in out
         assert "verify_fail" in out
         assert "3 steps" in out
 
-    def test_replan_after_tool_output_rerenders_full_checklist(self, renderer) -> None:
+    def test_replan_after_tool_output_rerenders_compact_task_list(self, renderer) -> None:
         renderer.on_event({"type": "goal_decomposition", "steps": ["inspect", "patch"], "count": 2})
         renderer.on_event({"type": "subagent_complete", "count": 2, "elapsed_s": 5.0})
         renderer.on_event({"type": "replan", "trigger": "cadence", "step_count": 2, "revision": 1})
         out = renderer._out.getvalue()
-        tail = out[out.rindex("Plan · revised") :]
+        tail = out[out.rindex("Tasks · 0/2 done · revised") :]
         assert "revised · cadence · 2 steps · rev 1" in tail
-        assert "inspect" in tail  # full checklist re-rendered with revision header
+        assert "inspect" in tail
+
+    def test_plan_not_restacked_across_thinking_rounds(self, renderer) -> None:
+        """Regression: a plan drawn once must NOT be re-emitted on every thinking
+        round. Before the fix this stacked N identical 'Tasks ·' blocks down the
+        transcript (one per round); now the checklist appears exactly once."""
+        renderer._tty = True
+        renderer.on_event(
+            {
+                "type": "progress_plan",
+                "explanation": "implementation",
+                "plan": [
+                    {"step": "Inspect UX", "status": "completed"},
+                    {"step": "Patch renderer", "status": "in_progress"},
+                    {"step": "Run tests", "status": "pending"},
+                ],
+            }
+        )
+        # 5 thinking rounds with an UNCHANGED plan, with a round-transition
+        # stream between them (this is what pushed the block up / at_bottom=False
+        # so the old in-place erase could not keep up and copies stacked).
+        for i in range(5):
+            renderer.on_event({"type": "thinking_start", "model": "m", "round": i + 1})
+            renderer.on_event({"type": "thinking_end"})
+            renderer.on_stream("assistant round text\n")
+        renderer.stop()
+
+        out = renderer._out.getvalue()
+        assert out.count("Tasks ·") == 1  # exactly one checklist, not 6+
+        assert out.count("Patch renderer") == 1  # the plan step text, once
+
+    def test_plan_redraws_on_changed_status(self, renderer) -> None:
+        """A second progress_plan with a CHANGED status draws a new checklist."""
+        renderer._tty = True
+        renderer.on_event(
+            {
+                "type": "progress_plan",
+                "plan": [
+                    {"step": "Inspect UX", "status": "in_progress"},
+                    {"step": "Run tests", "status": "pending"},
+                ],
+            }
+        )
+        renderer.on_stream("tool output\n")  # push it up so a fresh copy is drawn
+        renderer.on_event(
+            {
+                "type": "progress_plan",
+                "plan": [
+                    {"step": "Inspect UX", "status": "completed"},
+                    {"step": "Run tests", "status": "in_progress"},
+                ],
+            }
+        )
+        out = renderer._out.getvalue()
+        assert out.count("Tasks ·") == 2  # genuine state change → new checklist
+
+    def test_plan_dedups_identical_consecutive_state(self, renderer) -> None:
+        """A second progress_plan with the SAME state does NOT add a checklist."""
+        renderer._tty = True
+        plan_event = {
+            "type": "progress_plan",
+            "explanation": "same",
+            "plan": [
+                {"step": "Inspect UX", "status": "in_progress"},
+                {"step": "Run tests", "status": "pending"},
+            ],
+        }
+        renderer.on_event(dict(plan_event))
+        renderer.on_stream("tool output\n")  # even after being pushed up…
+        renderer.on_event(dict(plan_event))  # …an identical plan is deduped
+        out = renderer._out.getvalue()
+        assert out.count("Tasks ·") == 1
+
+    def test_plan_header_uses_rose_not_mint(self, renderer) -> None:
+        """Header uses the signature rose SGR, never the old mint '1;36m'."""
+        from core.ui import spinner_glyph
+
+        renderer.on_event(
+            {
+                "type": "progress_plan",
+                "plan": [{"step": "Only step", "status": "in_progress"}],
+            }
+        )
+        out = renderer._out.getvalue()
+        assert spinner_glyph.ROSE in out
+        assert "\033[1;36m" not in out  # no mint on the plan surface
 
     def test_tool_backpressure(self, renderer) -> None:
         renderer.on_event({"type": "tool_backpressure", "consecutive_errors": 3})

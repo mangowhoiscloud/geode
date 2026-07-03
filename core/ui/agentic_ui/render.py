@@ -142,17 +142,46 @@ def render_progress_plan(plan: list[dict[str, str]], *, explanation: str = "") -
         "in_progress": (spinner_glyph.GLYPH, f"bold {spinner_glyph.ROSE_HEX}", "bold"),
         "completed": ("✓", "success", "dim strike"),
     }
+    total = len(plan)
+    completed = sum(1 for item in plan if item.get("status") == "completed")
     _pkg.console.print()
-    header = "Plan"
+    header = f"Tasks · {completed}/{total} done"
     if explanation:
-        header = f"Plan · {explanation}"
+        header = f"{header} · {explanation}"
     _pkg.console.print(f"  [header]{header}[/header]")
-    for item in plan:
+    visible, hidden_before, hidden_after = _progress_plan_window(plan, max_items=5)
+    if hidden_before:
+        _pkg.console.print(f"    [dim]… {hidden_before} earlier[/dim]")
+    for item in visible:
         status = item.get("status", "pending")
         symbol, style, text_style = status_style.get(status, ("○", "dim", "dim"))
         step = item.get("step", "")
         _pkg.console.print(f"    [{style}]{symbol}[/{style}] [{text_style}]{step}[/{text_style}]")
+    if hidden_after:
+        _pkg.console.print(f"    [dim]… {hidden_after} later[/dim]")
     _pkg.console.print()
+
+
+def _progress_plan_window(
+    plan: list[dict[str, str]], *, max_items: int
+) -> tuple[list[dict[str, str]], int, int]:
+    """Select the visible task-list window around the active item."""
+    if len(plan) <= max_items:
+        return plan, 0, 0
+    active_idx = next(
+        (idx for idx, item in enumerate(plan) if item.get("status") == "in_progress"),
+        -1,
+    )
+    if active_idx < 0:
+        active_idx = next(
+            (idx for idx, item in enumerate(plan) if item.get("status", "pending") == "pending"),
+            len(plan) - 1,
+        )
+    half = max_items // 2
+    start = max(0, active_idx - half)
+    end = min(len(plan), start + max_items)
+    start = max(0, end - max_items)
+    return plan[start:end], start, len(plan) - end
 
 
 def render_subagent_dispatch(task_id: str, task_type: str, description: str) -> None:
