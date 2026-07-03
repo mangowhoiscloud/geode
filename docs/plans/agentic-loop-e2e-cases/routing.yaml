@@ -1,0 +1,154 @@
+suite: agentic_loop_routing_matrix
+phase: 2
+goal: "Prevent regressions in tool selection by intent."
+case_count: 30
+cases:
+  - id: route_001_help_menu
+    intent: explicit_command_help
+    turns: [{user: "명령어 목록 보여줘"}]
+    expect: {tools: {includes: [show_help], excludes: [general_web_search]}}
+
+  - id: route_002_direct_concept_no_tool
+    intent: direct_knowledge
+    turns: [{user: "ReAct 패턴을 짧게 설명해줘"}]
+    expect: {tools: {exact: []}}
+
+  - id: route_003_status_mcp
+    intent: system_status
+    turns: [{user: "어떤 MCP 서버가 연결돼 있어?"}]
+    expect: {tools: {includes: [check_status], excludes: [show_help, general_web_search]}}
+
+  - id: route_004_read_local_file
+    intent: read_file
+    turns: [{user: "pyproject.toml 읽고 프로젝트 버전 알려줘"}]
+    expect: {tools: {includes: [read_document], excludes: [run_bash]}}
+
+  - id: route_005_glob_discovery
+    intent: file_discovery
+    turns: [{user: "tests 아래 pytest 파일 찾아줘"}]
+    expect: {tools: {includes: [glob_files], excludes: [run_bash, grep_files]}}
+
+  - id: route_006_content_search
+    intent: content_search
+    turns: [{user: "AgenticResult 클래스가 어디 있는지 찾아줘"}]
+    expect: {tools: {includes: [grep_files], excludes: [run_bash]}}
+
+  - id: route_007_write_new_file
+    intent: create_file
+    turns: [{user: "tests/tmp/e2e_note.txt 파일을 만들고 hello라고 써줘"}]
+    expect: {tools: {includes: [write_file], excludes: [run_bash, edit_file]}}
+
+  - id: route_008_edit_existing_file
+    intent: edit_file
+    turns: [{user: "기존 README.md에서 GEODE라는 단어 하나를 테스트용 문자열로 바꿔줘"}]
+    expect: {tools: {includes: [edit_file], excludes: [run_bash, write_file]}}
+
+  - id: route_009_shell_system_check
+    intent: shell_command
+    turns: [{user: "현재 git status 확인해줘"}]
+    expect: {tools: {includes: [run_bash]}}
+
+  - id: route_010_specific_url_fetch
+    intent: url_fetch
+    turns: [{user: "https://example.com 페이지 읽어줘"}]
+    expect: {tools: {includes: [web_fetch], excludes: [general_web_search, browser_navigate]}}
+
+  - id: route_011_current_web_search
+    intent: current_info_search
+    turns: [{user: "2026년 최신 LangGraph 릴리스 소식 찾아봐"}]
+    expect: {tools: {includes: [general_web_search], excludes: [web_fetch]}}
+
+  - id: route_012_docs_llms_first
+    intent: documentation_site_research
+    turns: [{user: "Anthropic API docs에서 tool use 문서 찾아서 요약해줘"}]
+    expect: {tools: {includes: [llms_txt_index], excludes: [general_web_search]}}
+
+  - id: route_013_save_user_note
+    intent: save_user_note
+    turns: [{user: "내 주차 위치는 B2라고 기억해"}]
+    expect: {tools: {includes: [note_save], excludes: [memory_save]}}
+
+  - id: route_014_read_user_note
+    intent: read_user_note
+    turns: [{user: "내 주차 위치로 기억한 것 알려줘"}]
+    expect: {tools: {includes: [note_read], excludes: [memory_search]}}
+
+  - id: route_015_search_curated_memory
+    intent: search_geode_memory
+    turns: [{user: "GEODE가 이전에 배운 E2E 관련 insight 찾아줘"}]
+    expect: {tools: {includes: [memory_search], excludes: [note_read]}}
+
+  - id: route_016_session_transcript_search
+    intent: search_prior_transcript
+    turns: [{user: "지난 대화에서 병렬 테스트 얘기한 부분 찾아줘"}]
+    expect: {tools: {includes: [session_search], excludes: [memory_search, note_read]}}
+
+  - id: route_017_generate_report_from_findings
+    intent: report_generation
+    turns: [{user: "방금 찾은 결과를 markdown 보고서로 만들어줘"}]
+    expect: {tools: {includes: [generate_report], excludes: [export_json]}}
+
+  - id: route_018_export_json
+    intent: json_export
+    turns: [{user: "이 결과를 JSON 파일로 저장해줘"}]
+    expect: {tools: {includes: [export_json], excludes: [generate_report]}}
+
+  - id: route_019_sample_data
+    intent: synthetic_data
+    turns: [{user: "테스트용 더미 유저 데이터 5개 만들어줘"}]
+    expect: {tools: {includes: [generate_data], excludes: [general_web_search]}}
+
+  - id: route_020_schedule_agent_job
+    intent: scheduled_agent_action
+    turns: [{user: "매일 오전 9시에 AI 뉴스 찾아서 요약해줘"}]
+    expect: {tools: {includes: [schedule_job], excludes: [calendar_create_event]}}
+
+  - id: route_021_calendar_event
+    intent: calendar_create
+    turns: [{user: "내일 오후 3시에 E2E 리뷰 회의 캘린더에 추가해줘"}]
+    expect: {tools: {includes: [calendar_create_event], excludes: [schedule_job]}}
+
+  - id: route_022_calendar_list
+    intent: calendar_list
+    turns: [{user: "이번 주 내 일정 보여줘"}]
+    expect: {tools: {includes: [calendar_list_events], excludes: [schedule_job]}}
+
+  - id: route_023_notification
+    intent: external_notification
+    turns: [{user: "Slack에 E2E smoke 완료됐다고 알려줘"}]
+    expect: {tools: {includes: [send_notification]}}
+
+  - id: route_024_profile_show
+    intent: user_profile_show
+    turns: [{user: "GEODE가 내 프로필을 어떻게 알고 있어?"}]
+    expect: {tools: {includes: [profile_show], excludes: [memory_search]}}
+
+  - id: route_025_profile_update
+    intent: user_profile_update
+    turns: [{user: "내 역할을 AI Platform Engineer로 바꿔줘"}]
+    expect: {tools: {includes: [profile_update], excludes: [profile_preference]}}
+
+  - id: route_026_profile_preference
+    intent: user_preference_update
+    turns: [{user: "앞으로 답변은 간결한 한국어로 해줘"}]
+    expect: {tools: {includes: [profile_preference], excludes: [profile_update]}}
+
+  - id: route_027_model_switch
+    intent: model_switch
+    turns: [{user: "모델을 opus로 바꿔줘"}]
+    expect: {tools: {includes: [switch_model], excludes: [manage_login]}}
+
+  - id: route_028_login_or_plan
+    intent: credentials_plan
+    turns: [{user: "ChatGPT Plus 로그인 설정해줘"}]
+    expect: {tools: {includes: [manage_login], excludes: [set_api_key, switch_model]}}
+
+  - id: route_029_parallel_delegation
+    intent: parallel_research
+    turns: [{user: "42dot, Upstage, Furiosa를 병렬로 조사해줘"}]
+    expect: {tools: {includes: [delegate_task], excludes: [general_web_search]}}
+
+  - id: route_030_complex_plan_first
+    intent: plan_first
+    turns: [{user: "국내 AI 스타트업 10곳을 조사하고 비교 보고서까지 만들어줘"}]
+    expect: {tools: {includes: [create_plan], excludes: [general_web_search, generate_report]}}
