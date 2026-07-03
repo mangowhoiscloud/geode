@@ -49,6 +49,12 @@ functional change.
 
 ### Added
 
+- **Public benchmark harness plugin.** Added `plugins/benchmark_harness/` as
+  the public-safe home for GEODE-owned MCPMark and tau2-bench adapters, pinned
+  upstream harness coordinates, setup/preflight helpers, and redacted env
+  checks. Third-party benchmark repositories remain ignored local checkouts
+  under `artifacts/eval/harnesses/`; the legacy tau2 script now delegates to
+  the plugin adapter.
 - **Fleet view Stage 1.5 — live per-agent activity plumbing.** Sub-agent workers
   can now stream their *current* tool and a best-effort mid-run cumulative token
   count to the parent while they run, so the fleet view's

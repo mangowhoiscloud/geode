@@ -395,6 +395,14 @@ extend_exclude = [
 known_first_party = ["core", "plugins"]
 
 [tool.deptry.per_rule_ignores]
+# DEP001 — imported module is provided by an opt-in external benchmark checkout,
+# not by GEODE's default dependency set.
+DEP001 = [
+    # tau2-bench is installed under artifacts/eval/harnesses/tau2-bench by the
+    # benchmark_harness plugin when live tau2 measurement is requested.
+    "tau2",
+]
+
 # DEP002 — declared as dep but not imported anywhere by deptry's static scan.
 # All entries below are confirmed-needed:
 #   openai-agents: kept for Responses-API runtime path even when no static
@@ -549,6 +557,15 @@ ignore_missing_imports = true
 # and do not ship stubs in GEODE's default CI environment. Keep the relaxation
 # scoped to this opt-in runner instead of disabling checks for scripts/eval.
 module = ["scripts.eval.tau2_geode_agent"]
+disallow_subclassing_any = false
+
+[[tool.mypy.overrides]]
+# Public benchmark adapters subclass base classes supplied by opt-in external
+# harness checkouts. The checkout is installed only for live benchmark runs.
+module = [
+    "plugins.benchmark_harness.mcpmark_geode_agent",
+    "plugins.benchmark_harness.tau2_geode_agent",
+]
 disallow_subclassing_any = false
 
 [[tool.mypy.overrides]]
