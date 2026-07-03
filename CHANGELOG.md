@@ -45,6 +45,26 @@ functional change.
 
 ---
 
+## [0.99.269] - 2026-07-03
+
+### Added
+
+- **Fleet view Stage 2 — interactive full-screen `/fleet` picker.** A new
+  `prompt_toolkit` full-screen view (`core/ui/fleet_view.py`) lists every
+  sub-agent from the most recent turn (running first), moves a selection with
+  ↑/↓, opens a per-agent detail pane on Enter (task_id, role, description,
+  status, elapsed, tokens, current activity), and exits back to the REPL on
+  Esc/q. Each row renders `<glyph> <role> · <activity> · <elapsed> · <↓tokens>`
+  with the GEODE rose mark for running agents (no emoji, dense list). Opened
+  with the `/fleet` slash command, which runs THIN (in the thin client where
+  the terminal + the snapshot holder live). Data source: a session-scoped
+  last-snapshot holder (`fleet.set_last_fleet_snapshot` /
+  `get_last_fleet_snapshot`) that `EventRenderer.stop` writes at the end of
+  every turn that dispatched ≥1 sub-agent — the honest between-turns scope,
+  since the blocking REPL cannot open a full-screen app *during* a turn.
+  Live-during-turn interactivity is a deferred follow-up. Empty snapshot prints
+  "No sub-agents this session." without spinning an app.
+
 ## [0.99.268] - 2026-07-03
 
 ### Added

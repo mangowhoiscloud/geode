@@ -25,7 +25,7 @@ from typing import Any
 
 from core.time_format import format_elapsed
 from core.ui import spinner_glyph
-from core.ui.fleet import FleetRegistry
+from core.ui.fleet import FleetRegistry, set_last_fleet_snapshot
 from core.ui.tool_tracker import ToolCallTracker, _truncate_display
 
 log = logging.getLogger(__name__)
@@ -248,6 +248,12 @@ class EventRenderer:
             self._activity_surface.at_bottom = False
         # Render accumulated turn status (Claude Code style)
         self._render_turn_status()
+        # Persist this turn's fleet for the between-turns `/fleet` view. Only
+        # when the turn actually dispatched sub-agents, so a later plain turn
+        # never wipes the most recent real fleet (see fleet.set_last_fleet_snapshot).
+        fleet_snapshot = self._fleet.snapshot()
+        if fleet_snapshot:
+            set_last_fleet_snapshot(fleet_snapshot)
 
     # -- Core event handlers --------------------------------------------------
 
