@@ -57,8 +57,8 @@ functional change.
   `$ARGUMENTS` substitution, is always-loaded in the tool-search defer set, and
   falls back to the same 3-tier `SkillLoader` scan when built without daemon
   wiring (worker path). Guard: `tests/core/cli/test_tool_handlers_use_skill.py`.
-- **Bundled runtime skills: `long-task-watcher`, `tech-blog-writer`.** Ported
-  from the Claude Code scaffold to the bundled tier in runtime-adapted form.
+- **Bundled runtime skill: `long-task-watcher`.** Ported from the Claude Code
+  scaffold to the bundled tier in runtime-adapted form.
 
 ### Fixed
 
