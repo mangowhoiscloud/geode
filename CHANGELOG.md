@@ -54,7 +54,11 @@ functional change.
   `HalfDuplexAgent` and `HalfDuplexUser`, wraps tau2 domain tools into
   GEODE's `ToolRegistry` and `ToolExecutor`, and preserves tau2's native
   evaluator/output path while letting both agent and simulated user run through
-  the subscription route.
+  the subscription route. The runner also exposes tau2 retrieval configuration
+  flags for domains such as `banking_knowledge`.
+- **GPT-5.2 OpenAI model metadata.** Added `gpt-5.2` to the OpenAI model spec
+  and pricing/context catalogue so PAYG benchmark runs use the GPT-5-family
+  request shape instead of the legacy fallback.
 
 ### Fixed
 
