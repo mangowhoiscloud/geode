@@ -54,7 +54,7 @@ class _ResolvedCodexToken:
         return hashlib.sha256(self.token.encode("utf-8")).hexdigest()[:16]
 
     @property
-    def is_expired(self) -> bool:
+    def has_expired(self) -> bool:
         return self.expires_at > 0 and time.time() >= self.expires_at
 
 
@@ -143,7 +143,7 @@ def _resolve_codex_token_info(*, force_refresh: bool = False) -> _ResolvedCodexT
                 source="codex-cli:~/.codex/auth.json",
                 expires_at=float(creds.get("expires_at", 0.0) or 0.0),
             )
-            if resolved.is_expired:
+            if resolved.has_expired:
                 log.warning("Codex CLI OAuth token is expired; refusing stale runtime token")
                 return None
             return resolved
