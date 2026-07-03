@@ -1,6 +1,6 @@
 [project]
 name = "geode-agent"
-version = "0.99.269"
+version = "0.99.270"
 description = "GEODE — 범용 자율 실행 에이전트"
 license = "Apache-2.0"
 readme = "README.md"
@@ -20,6 +20,10 @@ dependencies = [
     # so the build never relies on a dep that could vanish.
     "markdown-it-py>=3.0",
     "httpx>=0.27.0",
+    # websockets — direct import in core/tools/browser_tools.py's CDP client.
+    # Was only transitively present; declared explicitly so the browser tools
+    # never rely on a dep that could vanish (cf. markdown-it-py precedent).
+    "websockets>=12.0",
     "openai>=2.26.0",
     "openai-agents>=0.13.0",
     "prompt-toolkit>=3.0.52",
@@ -72,7 +76,14 @@ claude-code = "plugins.petri_audit"
 
 [project.optional-dependencies]
 mcp = ["mcp>=1.0.0"]
-desktop = ["pyautogui>=0.9.54", "Pillow>=10.0.0"]
+desktop = [
+    "pyautogui>=0.9.54",
+    "Pillow>=10.0.0",
+    # PR-AX-UI-PROBE — macOS accessibility (AX) bridge for ui_probe. macOS-only;
+    # soft-imported so non-desktop installs and other platforms are unaffected.
+    "pyobjc-framework-ApplicationServices>=10.0; sys_platform == 'darwin'",
+    "pyobjc-framework-Cocoa>=10.0; sys_platform == 'darwin'",
+]
 # Petri × GEODE alignment audit (PoC, P2-a). Opt-in via `uv sync --extra audit`.
 # Pinned to inspect_petri main commit because v3.0 has no release tag yet
 # (latest tagged release is v2.0.0 from 2026-01-22; v3.0.x lives on main).
@@ -458,6 +469,11 @@ pyyaml = "yaml"
 # opentelemetry-api's top-level import is `opentelemetry` (then
 # `opentelemetry.trace`). Same DEP001 mismatch otherwise.
 "opentelemetry-api" = "opentelemetry"
+# pyobjc frameworks ([desktop] extra) expose CapWords import names that differ
+# from the pip names, so deptry would otherwise flag both DEP001 (import has no
+# source) and DEP002 (package unused) for core/tools/ui_probe.py's AX access.
+"pyobjc-framework-ApplicationServices" = "ApplicationServices"
+"pyobjc-framework-Cocoa" = "AppKit"
 
 # codespell — typo detection in identifiers/strings/comments. Run via pre-commit.
 [tool.codespell]
@@ -549,6 +565,13 @@ module = [
     # tau2-bench harness lives under artifacts/eval/harnesses and is opt-in.
     # CI default sync does not install tau2 or its untyped in-tree modules.
     "tau2.*",
+    # PR-BROWSER-CDP-BRIDGE — websockets ships no py.typed; used only by the
+    # CDP client in core/tools/browser_tools.py (already an installed dep).
+    "websockets.*",
+    # PR-AX-UI-PROBE — pyobjc frameworks ship no stubs; macOS-only, soft-imported
+    # in core/tools/ui_probe.py (opt-in [desktop] extra, absent in CI's env).
+    "ApplicationServices.*",
+    "AppKit.*",
 ]
 ignore_missing_imports = true
 

@@ -8,12 +8,12 @@
 
 A general-purpose autonomous execution agent. The core runtime is an **AgenticLoop** (`while tool_use`) — sub-agents, plans, and batches are all instances of the same loop. Autonomously performs research, analysis, automation, and scheduling.
 
-- **Version**: 0.99.269
+- **Version**: 0.99.270
 - **Python**: >= 3.12
 - **Package Manager**: uv
 - **Entry Points**: `geode` (`core.cli:app`, Typer) / `geode-mcp` (`core.mcp_server:main`)
-- **Modules**: 403 core + 71 plugins = 474
-- **Tests**: 9018 (+1 live)
+- **Modules**: 405 core + 77 plugins = 482
+- **Tests**: 9258 (+1 live)
 - **CHANGELOG**: `CHANGELOG.md` (Keep a Changelog + SemVer)
 
 ## Quick Start
@@ -270,6 +270,8 @@ See `geode-gitflow` skill. **Flow**: `feature → develop` **squash-merged** (on
 
 > **Before EVERY `develop → main` merge, sync `main → develop` first** (`gh pr create --base develop --head main` → merge) so develop ⊇ main and never merges while lagging. The only recurring main-only drift is the kanban (`docs/progress.md`, committed on main post-merge); the pre-sync pulls the prior cycle's kanban into develop each time, so it self-heals and never accumulates. *This replaces the deleted `auto-backmerge.yml` workflow, which fired on every push to main and piled up unmerged main→develop PRs (10 open at once, 2026-06-14) because the feature/main divergence is never a fast-forward. Manual pre-sync is the single, deliberate back-merge per cycle.*
 
+> **Concurrent-session drift is expected, not an anomaly.** While your feature PR is open, another session (Tau2 promotion, a scheduled routine) may merge to develop — your PR then goes `CONFLICTING`/`DIRTY` (usually a CHANGELOG top-entry collision) and/or your version number gets taken. Recover per `geode-gitflow` skill § "Concurrent-session drift & CI-trigger recovery": merge `origin/develop`, **fold** the concurrent `[Unreleased]`/entry into your release version (never leave `[Unreleased]`), re-verify the version number is still free, then **regenerate the derived version SoT** (`sync-stats.mjs` + `check_llms_version.py --fix`) or the CI ratchet blocks on a stale `changelog.ts`. Separately, a freshly-opened PR that attaches **0 CI checks** (webhook miss — verify with `gh api commits/<sha>/check-runs .total_count`, not `gh pr checks` alone) is re-triggered by `gh pr close <N> && gh pr reopen <N>`; don't leave a monitor spinning on the repeating "no checks" error.
+
 **PR Body Template (MANDATORY):**
 
 ```
@@ -394,7 +396,7 @@ Update project tracking from main. Backlog → In Progress → Done.
 | Format | `uv run ruff format --check core/ tests/ plugins/ scripts/` | 0 reformats |
 | Type | `uv run mypy core/ plugins/` | 0 errors |
 | Imports | `uv run lint-imports` | contracts kept |
-| Test | `uv run pytest tests/ -m "not live"` | 3900+ pass |
+| Test | `uv run pytest tests/ -m "not live"` | 9200+ pass |
 | CLI smoke | `uv run geode version` | version prints |
 
 > 게이트 명령을 파이프로 감싸지 말 것 — `ruff check … \| tail -1` 은 zsh 기본
@@ -406,7 +408,7 @@ Update project tracking from main. Backlog → In Progress → Done.
 
 Skills used by Scaffold during GEODE development (`.claude/skills/`). Separate from GEODE runtime's `core/skills/` SkillRegistry.
 
-> `.claude/skills/` is gitignored (scaffold-local); the rows below are the repo-tracked set that ships with a clone. Additional local-only skills (e.g. `model-onboarding`, `codex-mcp-verify`, `smoke-green-loop`, `workflow-orchestrator`) may exist per machine and are intentionally not listed.
+> `.claude/skills/` is gitignored (scaffold-local); the rows below are the repo-tracked set that ships with a clone. Additional local-only skills (e.g. `model-onboarding`, `codex-mcp-verify`, `smoke-green-loop`) may exist per machine and are intentionally not listed.
 
 | Skill | Triggers | Content |
 |-------|----------|---------|
