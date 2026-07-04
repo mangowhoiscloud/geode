@@ -45,6 +45,22 @@ functional change.
 
 ---
 
+## [0.99.275] - 2026-07-05
+
+### Changed
+
+- **Geodi dot-art canon is now the face-only sprite.** The hand-authored
+  22x12 face grid (`GEODI_PIXELS`) — already what the welcome screen
+  renders — is promoted to the single canonical Geodi sprite; hand-edits
+  now go to it directly.
+
+### Removed
+
+- **Full-body Geodi source grid.** The 22x20 `GEODI_SOURCE_PIXELS`
+  (belly/feet variant) and the now-unused belly-patch palette entry
+  (`l`) are deleted; the face-only sprite no longer derives from a
+  body-included source.
+
 ## [0.99.274] - 2026-07-04
 
 ### Added
