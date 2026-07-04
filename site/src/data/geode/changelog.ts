@@ -2,7 +2,7 @@
  * GEODE CHANGELOG, auto-synced from the GEODE repo via `npm run sync-stats`.
  * Do not edit manually. Edit CHANGELOG.md in the GEODE repo and re-run sync.
  *
- * Last sync: 2026-07-03
+ * Last sync: 2026-07-04
  *
  * Each entry's `body` is the raw markdown between two version headings.
  * The Changelog page renders the body with a minimal markdown renderer
@@ -16,6 +16,11 @@ export type ChangelogEntry = {
 };
 
 export const CHANGELOG: ChangelogEntry[] = [
+  {
+    "version": "0.99.275",
+    "date": "2026-07-05",
+    "body": "### Changed\n\n- **Geodi dot-art canon is now the face-only sprite.** The hand-authored\n  22x12 face grid (`GEODI_PIXELS`) — already what the welcome screen\n  renders — is promoted to the single canonical Geodi sprite; hand-edits\n  now go to it directly.\n\n### Removed\n\n- **Full-body Geodi source grid.** The 22x20 `GEODI_SOURCE_PIXELS`\n  (belly/feet variant) and the now-unused belly-patch palette entry\n  (`l`) are deleted; the face-only sprite no longer derives from a\n  body-included source."
+  },
   {
     "version": "0.99.274",
     "date": "2026-07-04",
@@ -2093,4 +2098,4 @@ export const CHANGELOG: ChangelogEntry[] = [
   }
 ];
 
-export const CHANGELOG_SYNCED_AT = "2026-07-03";
+export const CHANGELOG_SYNCED_AT = "2026-07-04";
