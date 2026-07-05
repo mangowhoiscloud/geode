@@ -89,10 +89,10 @@ functional change.
   token was sent as `x-api-key` (401 → route as `Authorization: Bearer` +
   `oauth-2025-04-20` beta); sonnet/opus are gated behind the Claude Code
   identity as an exact standalone first system block (concatenated → bare
-  429 → two-block rewrite at the adapter, haiku exempt); the loop-affine
-  client cache ignored token rotation, 401-ing until process death
-  (sha256-fingerprint invalidation, mirroring codex_oauth). All surfaced
-  running the tau2 harness under GEODE.
+  429 → two-block rewrite at the adapter, including text-completion and
+  web-search helper paths; haiku exempt); the loop-affine client cache ignored
+  token rotation, 401-ing until process death (sha256-fingerprint invalidation,
+  mirroring codex_oauth). All surfaced running the tau2 harness under GEODE.
 
 ### Known Issues
 

@@ -25,7 +25,7 @@ stochastic hill climbing.
 - **API 창 현황**: payg(gpt-5.2)=billing 차단 / Codex 구독=07-07 16:53 리셋 / 옛 Claude 20x=
   07-11 리셋 / **새 계정 Claude Max 5x = 여유(5h 6%·7d 1%)**. 단 5x는 opus 대량엔 빠듯.
 - **오늘 코드 반영**: 브랜치 `feature/crucible-tau2-harness` (main 미머지, push 안 함) —
-  인프라 버그 5종 수정 2커밋 + Crucible 문서·sequential_gate 1커밋 + CHANGELOG 0.99.275.
+  인프라 버그 5종 수정 2커밋 + Crucible 문서·sequential_gate + handoff + PR-prep hardening.
   §4 참조.
 
 **S5 판정을 진전시키려면 새 τ² 실측이 필요하나, 지금은 불가.** 유효 경로 후보:
@@ -56,13 +56,15 @@ infrastructure_error 제외 ∧ 메시지 error ≥3 제외.
 
 ## 4. 코드 반영 상태 (2026-07-06)
 
-**브랜치 `feature/crucible-tau2-harness` (main 미머지, push 안 함) — 4커밋:**
+**브랜치 `feature/crucible-tau2-harness` (main 미머지, push 안 함) — 6커밋:**
 | 커밋 | 내용 |
 |---|---|
 | `ee8c5ffde` fix(codex-oauth) | ① `_codex_sdk_workaround.py` install() 무락 레이스 → 동시성 RecursionError (락+클로저 캡처+멱등 마커) |
 | `c9b9566e0` fix(anthropic-oauth) | ②③④ 구독 경로 3결함: x-api-key→Bearer(oauth-2025-04-20 베타) / 신원 독립 첫 system 블록(연결형 429) / 토큰 회전 sha256 무효화 |
 | `e63f21676` docs(crucible) | crucible.md·crucible-handoff.md·`scripts/eval/sequential_gate.py` |
 | `0b6faef08` docs(changelog) | 0.99.275 — Architecture/Added/Fixed/Known Issues |
+| `a371a2ad8` docs(crucible) | 세션 간 핸드오프 최신화 — 트랙 차단·결정 대기·업계 지형 반영 |
+| latest fix/docs | PR-prep hardening — OAuth identity block을 text-completion/web-search helper 경로까지 적용, `sequential_gate.py` 출력/기본 경로 정리, 테스트 보강 |
 
 - 실험 코드(S5 종료 가드·S1 프롬프트)는 main에 **미반입** — 판정 미완/기각이라 champion chain
   규율상 코어 진입 불가. 브랜치 아카이브로만 보존(§5).

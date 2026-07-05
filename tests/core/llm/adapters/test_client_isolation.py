@@ -17,12 +17,16 @@ The invariants (updated for PR-LOOP-POLLUTION-FIX, 2026-06-12):
 
 from __future__ import annotations
 
+import asyncio
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 from core.llm.adapters.anthropic_oauth import (
+    CLAUDE_CODE_IDENTITY,
     CLAUDE_OAUTH_TOKEN_PATH,
     AnthropicOAuthAdapter,
+    _apply_claude_code_identity,
 )
 from core.llm.adapters.anthropic_payg import AnthropicPaygAdapter
 from core.llm.adapters.openai_payg import OpenAIPaygAdapter
@@ -143,3 +147,71 @@ def test_anthropic_oauth_raises_without_token_file(
     with pytest.raises(RuntimeError, match="Claude OAuth token not found"):
         a._get_client()
     assert CLAUDE_OAUTH_TOKEN_PATH
+
+
+def test_anthropic_oauth_identity_block_is_independent() -> None:
+    kwargs = _apply_claude_code_identity({"system": f"{CLAUDE_CODE_IDENTITY}\nrest"})
+
+    assert kwargs["system"] == [
+        {"type": "text", "text": CLAUDE_CODE_IDENTITY},
+        {"type": "text", "text": "rest"},
+    ]
+
+
+def test_anthropic_oauth_complete_text_uses_identity_block(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    seen: list[dict] = []
+
+    class _Messages:
+        async def create(self, **kwargs: object) -> object:
+            seen.append(dict(kwargs))
+            return SimpleNamespace(
+                content=[SimpleNamespace(text="ok")],
+                usage=SimpleNamespace(input_tokens=1, output_tokens=1),
+            )
+
+    class _Client:
+        messages = _Messages()
+
+    monkeypatch.setattr(AnthropicOAuthAdapter, "_get_client", lambda self: _Client())
+
+    async def _exercise() -> None:
+        result = await AnthropicOAuthAdapter().acomplete_text(
+            "prompt", system="payload", model="claude-sonnet-4-6"
+        )
+        assert result.text == "ok"
+
+    asyncio.run(_exercise())
+
+    assert seen[0]["system"] == [
+        {"type": "text", "text": CLAUDE_CODE_IDENTITY},
+        {"type": "text", "text": "payload"},
+    ]
+
+
+def test_anthropic_oauth_web_search_uses_identity_block(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    seen: list[dict] = []
+
+    class _Messages:
+        async def create(self, **kwargs: object) -> object:
+            seen.append(dict(kwargs))
+            return SimpleNamespace(
+                content=[SimpleNamespace(text="ok")],
+                usage=SimpleNamespace(input_tokens=1, output_tokens=1),
+            )
+
+    class _Client:
+        messages = _Messages()
+
+    monkeypatch.setattr(AnthropicOAuthAdapter, "_get_client", lambda self: _Client())
+
+    async def _exercise() -> None:
+        result = await AnthropicOAuthAdapter().aweb_search("query", model="claude-sonnet-4-6")
+        assert result.text == "ok"
+
+    asyncio.run(_exercise())
+
+    assert seen[0]["system"] == [{"type": "text", "text": CLAUDE_CODE_IDENTITY}]

@@ -53,9 +53,7 @@ def build_async_anthropic_client(
     401 ``invalid x-api-key`` (sub-claude track incident, 2026-07-05).
     """
     if bool(api_key) == bool(auth_token):
-        raise ValueError(
-            "build_async_anthropic_client: exactly one of api_key/auth_token required"
-        )
+        raise ValueError("build_async_anthropic_client: exactly one of api_key/auth_token required")
     import anthropic
     import httpx
 

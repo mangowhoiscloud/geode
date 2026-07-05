@@ -50,7 +50,7 @@ CLAUDE_OAUTH_TOKEN_PATH = Path.home() / ".claude" / "oauth-token.json"
 CLAUDE_CODE_IDENTITY = "You are Claude Code, Anthropic's official CLI for Claude."
 
 
-def _apply_claude_code_identity(kwargs: dict) -> dict:
+def _apply_claude_code_identity(kwargs: dict[str, Any]) -> dict[str, Any]:
     """Rewrite ``system`` into the two-block shape the OAuth path requires.
 
     The ``oauth-2025-04-20`` beta gates sonnet/opus behind the Claude Code
@@ -62,20 +62,19 @@ def _apply_claude_code_identity(kwargs: dict) -> dict:
     """
     identity_block = {"type": "text", "text": CLAUDE_CODE_IDENTITY}
     sp = kwargs.get("system")
-    blocks: list = [identity_block]
+    blocks: list[dict[str, Any]] = [identity_block]
     if isinstance(sp, str) and sp:
-        rest = sp[len(CLAUDE_CODE_IDENTITY):].lstrip() if sp.startswith(CLAUDE_CODE_IDENTITY) else sp
+        rest = (
+            sp[len(CLAUDE_CODE_IDENTITY) :].lstrip() if sp.startswith(CLAUDE_CODE_IDENTITY) else sp
+        )
         if rest:
             blocks.append({"type": "text", "text": rest})
     elif isinstance(sp, list):
         blocks.extend(
-            b for b in sp
-            if not (isinstance(b, dict) and b.get("text") == CLAUDE_CODE_IDENTITY)
+            b for b in sp if isinstance(b, dict) and b.get("text") != CLAUDE_CODE_IDENTITY
         )
     kwargs["system"] = blocks
     return kwargs
-
-
 
 
 @dataclass
@@ -149,7 +148,9 @@ class AnthropicOAuthAdapter:
         lane_key = f"anthropic-oauth:{req.model}"
         async with acquire_anthropic_api_lane_async(lane_key):
             try:
-                response = await client.messages.create(**_apply_claude_code_identity(build_create_kwargs(req)))
+                response = await client.messages.create(
+                    **_apply_claude_code_identity(build_create_kwargs(req))
+                )
             except Exception as exc:
                 self._last_error = exc
                 log.warning(
@@ -174,6 +175,7 @@ class AnthropicOAuthAdapter:
             max_results=max_results,
             model=resolve_web_search_model(model),
             adapter_name=self.name,
+            prepare_kwargs=_apply_claude_code_identity,
         )
 
     async def acomplete_text(
@@ -193,11 +195,14 @@ class AnthropicOAuthAdapter:
             system=system,
             model=model or ANTHROPIC_PRIMARY,
             max_tokens=max_tokens,
+            prepare_kwargs=_apply_claude_code_identity,
         )
 
     async def astream(self, req: AdapterCallRequest) -> AsyncIterator[StreamEvent]:
         client = self._get_client()
-        async with client.messages.stream(**_apply_claude_code_identity(build_stream_kwargs(req))) as stream:
+        async with client.messages.stream(
+            **_apply_claude_code_identity(build_stream_kwargs(req))
+        ) as stream:
             async for text_chunk in stream.text_stream:
                 yield StreamEvent(kind="text", payload={"text": text_chunk})
             final = await stream.get_final_message()

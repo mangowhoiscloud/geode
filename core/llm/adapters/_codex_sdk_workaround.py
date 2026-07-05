@@ -123,8 +123,6 @@ def install() -> None:
         log.debug("codex-sdk-workaround: parse_response patched for output=None coercion")
 
 
-
-
 def _for_test_restore() -> None:
     """Restore the original ``parse_response`` for unit tests that need
     to exercise the unpatched crash. Re-call :func:`install` afterwards

@@ -39,6 +39,12 @@ MC_SAMPLES = 4000
 RNG_SEED = 20260706  # fixed — Date/random reproducibility
 
 
+def _default_simulations_dir() -> Path:
+    return (
+        Path(__file__).resolve().parents[2] / "artifacts/eval/harnesses/tau2-bench/data/simulations"
+    )
+
+
 def _clean_rewards(results_path: Path) -> dict[str, float]:
     """task_id → reward, keeping only clean, user_stop-terminated tasks."""
     d = json.loads(results_path.read_text())
@@ -131,11 +137,11 @@ def run(base_path: Path, s5_path: Path, n_total: int = N_TOTAL_DEFAULT) -> GateS
                 f"P(final>+3pp)={final_p:.3f}"
             )
             return st
+    suffix = " | discordant p-value(one-sided) needs more pairs" if st.n_disc < 12 else ""
     print(
         f"[end of clean data @ {st.n_seen} seen] {final_v} — "
         f"flip {st.n_flip} reg {st.n_reg} conc {st.n_conc} | "
-        f"P(final>+3pp)={final_p:.3f} | discordant p-value(one-sided) "
-        f"needs more pairs" if st.n_disc < 12 else ""
+        f"P(final>+3pp)={final_p:.3f}{suffix}"
     )
     return st
 
@@ -144,10 +150,7 @@ if __name__ == "__main__":
     if len(sys.argv) >= 3:
         run(Path(sys.argv[1]), Path(sys.argv[2]))
     else:
-        SIMS = Path(
-            "/Users/mango/workspace/geode/artifacts/eval/harnesses/tau2-bench/"
-            "data/simulations"
-        )
+        SIMS = _default_simulations_dir()
         for dom in ("retail", "telecom"):
             print(f"\n===== clop48 {dom.upper()} (clean, sequential) =====")
             run(
