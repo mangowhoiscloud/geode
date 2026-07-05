@@ -56,8 +56,8 @@ def test_payg_and_oauth_anthropic_get_distinct_clients(
     # Stub the SDK boundary so we don't hit anthropic.AsyncAnthropic.
     seen_keys: list[str] = []
 
-    def _fake_build(api_key: str) -> object:
-        seen_keys.append(api_key)
+    def _fake_build(api_key: str = "", *, auth_token: str = "") -> object:
+        seen_keys.append(api_key or auth_token)
         return object()  # opaque marker — unique per call
 
     monkeypatch.setattr(_anthropic_common, "build_async_anthropic_client", _fake_build)
@@ -93,7 +93,7 @@ def test_payg_client_cached_per_instance_within_loop(
 
     built: list[object] = []
 
-    def _fake_build(api_key: str) -> object:
+    def _fake_build(api_key: str = "", *, auth_token: str = "") -> object:
         marker = object()
         built.append(marker)
         return marker
