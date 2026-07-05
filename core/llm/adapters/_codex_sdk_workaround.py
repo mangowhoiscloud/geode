@@ -40,6 +40,7 @@ upstream — see CHANGELOG entry).
 from __future__ import annotations
 
 import logging
+import threading
 from typing import Any
 
 log = logging.getLogger(__name__)
@@ -47,6 +48,13 @@ log = logging.getLogger(__name__)
 
 _PATCHED: bool = False
 _ORIGINAL_PARSE_RESPONSE: Any = None
+# install() is reached concurrently when a multi-threaded harness (e.g.
+# tau2 at max_concurrency>1) fires its first Codex calls at once. The
+# unlocked check-then-act let a second thread capture the already-patched
+# function as "original" and rebind the module global to it — every
+# subsequent call then recursed into itself (RecursionError, 2026-07-04
+# sub55 incident). The lock + closure capture below close both holes.
+_INSTALL_LOCK = threading.Lock()
 
 
 def install() -> None:
@@ -59,52 +67,62 @@ def install() -> None:
     """
     global _PATCHED, _ORIGINAL_PARSE_RESPONSE
 
-    if _PATCHED:
-        return
+    with _INSTALL_LOCK:
+        if _PATCHED:
+            return
 
-    try:
-        import openai.lib._parsing._responses as _parse_mod
-        import openai.lib.streaming.responses._responses as _stream_mod
-    except ImportError:
-        log.debug("openai SDK not installed; skipping Codex workaround patch")
-        return
+        try:
+            import openai.lib._parsing._responses as _parse_mod
+            import openai.lib.streaming.responses._responses as _stream_mod
+        except ImportError:
+            log.debug("openai SDK not installed; skipping Codex workaround patch")
+            return
 
-    _ORIGINAL_PARSE_RESPONSE = _parse_mod.parse_response
+        current = _parse_mod.parse_response
+        if getattr(current, "_geode_codex_null_output_patch", False):
+            _PATCHED = True
+            return
 
-    def _patched(*, text_format: Any, input_tools: Any, response: Any) -> Any:
-        if getattr(response, "output", None) is None:
-            # In-place mutation is safe: the SDK constructs ``event.response``
-            # fresh per ``response.completed`` event and the SDK consumer
-            # (``accumulate_event`` at line 360 of the streaming module)
-            # only forwards the parsed return value, never re-reads the
-            # mutated input.
-            try:
-                response.output = []
-            except (AttributeError, TypeError, ValueError):
-                # Pydantic v2 may reject the attribute set on a frozen model
-                # — fall back to a model_copy with the field overridden.
+        _ORIGINAL_PARSE_RESPONSE = current
+        original = current
+
+        def _patched(*, text_format: Any, input_tools: Any, response: Any) -> Any:
+            if getattr(response, "output", None) is None:
+                # In-place mutation is safe: the SDK constructs ``event.response``
+                # fresh per ``response.completed`` event and the SDK consumer
+                # (``accumulate_event`` at line 360 of the streaming module)
+                # only forwards the parsed return value, never re-reads the
+                # mutated input.
                 try:
-                    response = response.model_copy(update={"output": []})
-                except Exception:
-                    log.warning(
-                        "codex-sdk-workaround: failed to coerce response.output "
-                        "from None to []; parse_response will likely raise"
-                    )
-        return _ORIGINAL_PARSE_RESPONSE(
-            text_format=text_format,
-            input_tools=input_tools,
-            response=response,
-        )
+                    response.output = []
+                except (AttributeError, TypeError, ValueError):
+                    # Pydantic v2 may reject the attribute set on a frozen model
+                    # — fall back to a model_copy with the field overridden.
+                    try:
+                        response = response.model_copy(update={"output": []})
+                    except Exception:
+                        log.warning(
+                            "codex-sdk-workaround: failed to coerce response.output "
+                            "from None to []; parse_response will likely raise"
+                        )
+            return original(
+                text_format=text_format,
+                input_tools=input_tools,
+                response=response,
+            )
 
-    _parse_mod.parse_response = _patched
-    # The streaming module imports ``parse_response`` at module load
-    # (``from ..._parsing._responses import ..., parse_response``) so
-    # patching only the source isn't enough — the streaming module's
-    # local reference must be rebound too. ``setattr`` keeps mypy
-    # quiet about the private-attribute access.
-    setattr(_stream_mod, "parse_response", _patched)  # noqa: B010
-    _PATCHED = True
-    log.debug("codex-sdk-workaround: parse_response patched for output=None coercion")
+        _patched._geode_codex_null_output_patch = True  # type: ignore[attr-defined]
+        _parse_mod.parse_response = _patched
+        # The streaming module imports ``parse_response`` at module load
+        # (``from ..._parsing._responses import ..., parse_response``) so
+        # patching only the source isn't enough — the streaming module's
+        # local reference must be rebound too. ``setattr`` keeps mypy
+        # quiet about the private-attribute access.
+        setattr(_stream_mod, "parse_response", _patched)  # noqa: B010
+        _PATCHED = True
+        log.debug("codex-sdk-workaround: parse_response patched for output=None coercion")
+
+
 
 
 def _for_test_restore() -> None:
