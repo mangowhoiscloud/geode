@@ -2,7 +2,7 @@
  * GEODE CHANGELOG, auto-synced from the GEODE repo via `npm run sync-stats`.
  * Do not edit manually. Edit CHANGELOG.md in the GEODE repo and re-run sync.
  *
- * Last sync: 2026-07-03
+ * Last sync: 2026-07-05
  *
  * Each entry's `body` is the raw markdown between two version headings.
  * The Changelog page renders the body with a minimal markdown renderer
@@ -16,6 +16,16 @@ export type ChangelogEntry = {
 };
 
 export const CHANGELOG: ChangelogEntry[] = [
+  {
+    "version": "0.99.276",
+    "date": "2026-07-06",
+    "body": "### Architecture\n\n- **Crucible — capability-axis self-evolving loop on tau2-bench.** A sibling\n  to the Petri/safety self-improving loop, sharing the promotion protocol\n  (champion chain, paired verdict, frozen ruler) but swapping the verifier:\n  the agent harness/policy is evolved against tau2-bench deterministic\n  task-success instead of the adversarial safety audit. Design SOT in\n  `docs/architecture/crucible.md` (gate ladder v2, mutation surface, signal\n  3-axis), execution state in `crucible-handoff.md`. First-cycle conclusion:\n  the loop did not prove self-improvement; it proved the promotion protocol\n  and exposed **verification throughput as the limiting reagent** — the next\n  target is a cheaper evaluator cascade, not a smarter mutator. Two mutations\n  ran the gate ladder end-to-end: S1 (prompt action-completion discipline)\n  was rejected on a full paired run; S5 (deterministic termination guard, the\n  first EVOLVE-BLOCK) is pending — a subscription cross-family re-measure was\n  invalidated by rate-limit contamination, and the clean subset favours S5.\n  Alignment with the field (AlphaEvolve, ShinkaEvolve, FlashEvolve, AutoPass,\n  KernelAgent): pluggable evaluators, non-parametric artifact evolution, and\n  async parallel evaluation already exist; the open contribution is\n  statistically rigorous early rejection on a **noisy** verifier.\n\n### Added\n\n- **`scripts/eval/sequential_gate.py` — G3b Bayesian futility early-stop.**\n  Observes discordant paired outcomes (flip / regression) one at a time and,\n  after each, renders a Beta-Binomial verdict so a hopeless mutation dies\n  before a full 114×2 paired run is spent (reject-only; full benchmark stays\n  the promotion authority). Contamination filter built in\n  (rate-limit-injection, non-`user_stop` terminations). This is the loop's\n  reject accelerator against expensive τ² runs.\n\n### Fixed\n\n- **codex-oauth SDK workaround install race.** `install()`'s unlocked\n  check-then-act let concurrent first Codex calls (a benchmark harness at\n  `max_concurrency>1`) rebind the patched `parse_response` as its own\n  \"original\", recursing into itself (RecursionError). Add install lock,\n  closure-captured original, idempotency marker.\n- **anthropic-oauth subscription path — three defects.** The OAuth access\n  token was sent as `x-api-key` (401 → route as `Authorization: Bearer` +\n  `oauth-2025-04-20` beta); sonnet/opus are gated behind the Claude Code\n  identity as an exact standalone first system block (concatenated → bare\n  429 → two-block rewrite at the adapter, including text-completion and\n  web-search helper paths; haiku exempt); the loop-affine client cache ignored\n  token rotation, 401-ing until process death (sha256-fingerprint invalidation,\n  mirroring codex_oauth). All surfaced running the tau2 harness under GEODE.\n\n### Known Issues\n\n- **Rate-limit errors leak into transcripts.** A quota exhaustion mid-run is\n  injected as a user-turn message rather than isolated as\n  `infrastructure_error`, so the task terminates as `max_steps` and passes\n  the termination filter — mis-readable as a mutation effect. The Crucible\n  contamination filter drops these post-hoc; adapter-level isolation is the\n  proper fix (pending)."
+  },
+  {
+    "version": "0.99.275",
+    "date": "2026-07-05",
+    "body": "### Changed\n\n- **Geodi dot-art canon is now the face-only sprite.** The hand-authored\n  22x12 face grid (`GEODI_PIXELS`) — already what the welcome screen\n  renders — is promoted to the single canonical Geodi sprite; hand-edits\n  now go to it directly.\n\n### Removed\n\n- **Full-body Geodi source grid.** The 22x20 `GEODI_SOURCE_PIXELS`\n  (belly/feet variant) and the now-unused belly-patch palette entry\n  (`l`) are deleted; the face-only sprite no longer derives from a\n  body-included source."
+  },
   {
     "version": "0.99.274",
     "date": "2026-07-04",
@@ -2093,4 +2103,4 @@ export const CHANGELOG: ChangelogEntry[] = [
   }
 ];
 
-export const CHANGELOG_SYNCED_AT = "2026-07-03";
+export const CHANGELOG_SYNCED_AT = "2026-07-05";

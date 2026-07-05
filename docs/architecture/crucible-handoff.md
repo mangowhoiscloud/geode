@@ -62,7 +62,7 @@ infrastructure_error 제외 ∧ 메시지 error ≥3 제외.
 | `ee8c5ffde` fix(codex-oauth) | ① `_codex_sdk_workaround.py` install() 무락 레이스 → 동시성 RecursionError (락+클로저 캡처+멱등 마커) |
 | `c9b9566e0` fix(anthropic-oauth) | ②③④ 구독 경로 3결함: x-api-key→Bearer(oauth-2025-04-20 베타) / 신원 독립 첫 system 블록(연결형 429) / 토큰 회전 sha256 무효화 |
 | `e63f21676` docs(crucible) | crucible.md·crucible-handoff.md·`scripts/eval/sequential_gate.py` |
-| `0b6faef08` docs(changelog) | 0.99.275 — Architecture/Added/Fixed/Known Issues |
+| `0b6faef08` docs(changelog) | 0.99.276 — Architecture/Added/Fixed/Known Issues |
 | `a371a2ad8` docs(crucible) | 세션 간 핸드오프 최신화 — 트랙 차단·결정 대기·업계 지형 반영 |
 | latest fix/docs | PR-prep hardening — OAuth identity block을 text-completion/web-search helper 경로까지 적용, `sequential_gate.py` 출력/기본 경로 정리, 테스트 보강 |
 

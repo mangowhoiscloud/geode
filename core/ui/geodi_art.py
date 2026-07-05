@@ -1,22 +1,20 @@
 """Geodi pixel art — the hand-authored native sprite (no image protocol).
 
-Character canon: a round rose axolotl with EXACTLY six gill stalks (three per
-side, deeper rose, visibly separated), simple symmetric 2x2 dark eyes with a
-1px white catchlight in the top-right corner of each, a tiny 2px mouth, a
-lighter belly patch, and a subtle deep-rose cheek blush beside the eyes.
+Character canon: a round rose axolotl FACE with EXACTLY six gill stalks
+(three per side, deeper rose, visibly separated), simple symmetric 2x2 dark
+eyes with a 1px white catchlight in the top-right corner of each, a subtle
+deep-rose cheek blush beside the eyes, and a tiny 2px mouth. The face-only
+sprite IS the canon — no full-body (belly/feet) variant is kept.
 
-The canonical sprite is authored as a 22x20 pixel grid
-(``GEODI_SOURCE_PIXELS``). The welcome screen renders a face-only 22x12 pixel
-derivative (``GEODI_PIXELS``) that preserves the original silhouette while
-matching the adjacent three-line brand block. Pixels render as truecolor
-half-blocks — ``▀`` with fg = upper pixel, bg = lower pixel, two pixels per
-terminal cell — so the mascot draws as 22 cols x 6 rows — the head down to the mouth, cropped
-to a round face (belly/feet removed) so it sits level with the 3-line welcome — in ANY
+The sprite is authored as a 22x12 pixel grid (``GEODI_PIXELS``). Pixels
+render as truecolor half-blocks — ``▀`` with fg = upper pixel, bg = lower
+pixel, two pixels per terminal cell — so the mascot draws as 22 cols x 6
+rows, sitting level with the three-line welcome brand block in ANY
 truecolor terminal. Transparent pixels reset to the terminal's default
 background.
 
-Hand-edit ``GEODI_SOURCE_PIXELS`` first; keep ``GEODI_PIXELS`` as a compact
-derivative of that shape. Every compact row must stay exactly 22 chars.
+Hand-edit ``GEODI_PIXELS`` directly; every row must stay exactly 22 chars
+and the row count must stay even (rows pair into half-block cells).
 Live preview: ``python -m core.ui.geodi_art``.
 """
 
@@ -29,43 +27,17 @@ GEODI_PALETTE: dict[str, str | None] = {
     ".": None,
     "p": "#F49BC4",  # body — signature Axolotl Rose
     "r": "#E0699F",  # deep rose — gill stalks, cheek blush
-    "l": "#FCD9E8",  # light rose — belly patch
-    "e": "#2B2233",  # near-black — eyes, smile
+    "e": "#2B2233",  # near-black — eyes, mouth
     "w": "#FFFFFF",  # white — eye catchlight
 }
 
-# 22 wide x 20 tall. Full-detail source retained to prevent the compact welcome
-# mascot from drifting into a different character.
-GEODI_SOURCE_PIXELS: list[str] = [
-    "........pppppp........",
-    "......pppppppppp......",
-    ".rr..pppppppppppp..rr.",
-    "..rrpppppppppppppprr..",
-    "....pppppppppppppp....",
-    ".rrrpppppppppppppprrr.",
-    "....pppppppppppppp....",
-    "..rrpppppppppppppprr..",
-    "....pppewppppewppp....",
-    "....pppeeppppeeppp....",
-    "....prrpppppppprrp....",
-    "....ppppppeepppppp....",
-    "....ppppllllllpppp....",
-    "....pppllllllllppp....",
-    "....pppllllllllppp....",
-    ".....pppllllllppp.....",
-    "......pppppppppp......",
-    ".......pppppppp.......",
-    "......ppp....ppp......",
-    "......ppp....ppp......",
-]
-
-# 16 wide x 14 tall. Rows pair top/bottom into half-block cells (7 rows out).
-# Gills: THREE stalks per side — upper diagonal (r2-r3), middle (r5), lower
-# (r7) — with fully transparent side rows (r4, r6) between them so each
-# counts visually. Face (kawaii): symmetric 2x2 dark eyes (r8-r9) with the
-# 1px catchlight in the TOP-RIGHT corner of each, nothing above them but
-# body; cheek blush one row below the eyes (r10); ONE tiny 2px mouth row
-# (r11, cols 8-9). No other dark pixels on the face.
+# 22 wide x 12 tall. Rows pair top/bottom into half-block cells (6 rows out).
+# Gills: THREE stalks per side — upper (r1), middle (r3), lower (r5) — each
+# separated by a gill-free row so the three stalks stay visually distinct.
+# Face (kawaii): symmetric 2x2 dark eyes (r6-r7) with the 1px catchlight in
+# the TOP-RIGHT corner of each, cheek blush beside the eyes (r8), ONE tiny
+# 2px mouth (r9, cols 10-11), rounded chin (r10-r11). No other dark pixels
+# on the face.
 GEODI_PIXELS: list[str] = [
     "........pppppp........",
     ".rr..pppppppppppp..rr.",

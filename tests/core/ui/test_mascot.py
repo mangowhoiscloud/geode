@@ -6,7 +6,7 @@ import re
 from io import StringIO
 from pathlib import Path
 
-from core.ui.geodi_art import GEODI_PALETTE, GEODI_PIXELS, GEODI_SOURCE_PIXELS, geodi_pixel_lines
+from core.ui.geodi_art import GEODI_PALETTE, GEODI_PIXELS, geodi_pixel_lines
 from core.ui.mascot import _collapse_home, _spec_lines, render_mascot
 
 _ANSI = re.compile(r"\x1b\[[0-9;]*m")
@@ -15,21 +15,16 @@ _ANSI = re.compile(r"\x1b\[[0-9;]*m")
 class TestGeodiPixels:
     """The hand-authored sprite grid stays well-formed."""
 
-    def test_source_grid_dimensions(self) -> None:
-        assert len(GEODI_SOURCE_PIXELS) == 20
-        assert all(len(row) == 22 for row in GEODI_SOURCE_PIXELS)
-
     def test_grid_dimensions(self) -> None:
         assert len(GEODI_PIXELS) == 12  # even row count — pairs into half-blocks
         assert all(len(row) == 22 for row in GEODI_PIXELS)
 
     def test_only_palette_chars(self) -> None:
-        assert set("".join(GEODI_SOURCE_PIXELS + GEODI_PIXELS)) <= set(GEODI_PALETTE)
+        assert set("".join(GEODI_PIXELS)) <= set(GEODI_PALETTE)
 
     def test_character_canon(self) -> None:
         joined = "".join(GEODI_PIXELS)
-        # Deep-rose gills/blush, dark eyes/mouth present (belly/feet cropped
-        # in the face-only welcome derivative).
+        # Deep-rose gills/blush, dark eyes/mouth present (face-only canon).
         assert "r" in joined and "e" in joined
         assert joined.count("w") == 2  # one 1px catchlight per eye
 
@@ -61,17 +56,17 @@ class TestGeodiPixels:
         assert len(lines) <= 6
         assert max(len(_ANSI.sub("", line)) for line in lines) <= 22
 
-    def test_compact_keeps_source_silhouette_cues(self) -> None:
-        """The compact grid should read like the original, not a redesigned mascot."""
-        assert GEODI_SOURCE_PIXELS[2].startswith(".rr..")
-        assert GEODI_SOURCE_PIXELS[5].startswith(".rrr")
-        assert "ppew" in GEODI_SOURCE_PIXELS[8]
-        assert "llllll" in "".join(GEODI_SOURCE_PIXELS)
-        # Face-only derivative (22x12, head→mouth): 3 separated gill rows per
-        # side, e+w catchlight pair twice, mouth (ee) present; belly/feet cropped.
+    def test_canon_silhouette_cues(self) -> None:
+        """The face-only canon keeps Geodi's identifying features in place."""
+        assert GEODI_PIXELS[1].startswith(".rr..")  # upper gill stalk
+        assert GEODI_PIXELS[3].startswith(".rrr")  # middle gill stalk
+        assert "ppew" in GEODI_PIXELS[6]  # eye with top-right catchlight
+        # 3 separated gill rows per side, e+w catchlight pair twice, mouth
+        # (ee) present; no belly/feet pixels in the face-only canon.
         assert sum(1 for row in GEODI_PIXELS if row.lstrip(".").startswith("rr")) == 3
         assert "".join(GEODI_PIXELS).count("ew") == 2
         assert "ppeepp" in "".join(GEODI_PIXELS)  # mouth row
+        assert "l" not in "".join(GEODI_PIXELS)  # belly patch stays cropped
 
 
 class TestMascotBrandBlock:
