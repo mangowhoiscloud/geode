@@ -45,6 +45,64 @@ functional change.
 
 ---
 
+## [0.99.275] - 2026-07-06
+
+### Architecture
+
+- **Crucible — capability-axis self-evolving loop on tau2-bench.** A sibling
+  to the Petri/safety self-improving loop, sharing the promotion protocol
+  (champion chain, paired verdict, frozen ruler) but swapping the verifier:
+  the agent harness/policy is evolved against tau2-bench deterministic
+  task-success instead of the adversarial safety audit. Design SOT in
+  `docs/architecture/crucible.md` (gate ladder v2, mutation surface, signal
+  3-axis), execution state in `crucible-handoff.md`. First-cycle conclusion:
+  the loop did not prove self-improvement; it proved the promotion protocol
+  and exposed **verification throughput as the limiting reagent** — the next
+  target is a cheaper evaluator cascade, not a smarter mutator. Two mutations
+  ran the gate ladder end-to-end: S1 (prompt action-completion discipline)
+  was rejected on a full paired run; S5 (deterministic termination guard, the
+  first EVOLVE-BLOCK) is pending — a subscription cross-family re-measure was
+  invalidated by rate-limit contamination, and the clean subset favours S5.
+  Alignment with the field (AlphaEvolve, ShinkaEvolve, FlashEvolve, AutoPass,
+  KernelAgent): pluggable evaluators, non-parametric artifact evolution, and
+  async parallel evaluation already exist; the open contribution is
+  statistically rigorous early rejection on a **noisy** verifier.
+
+### Added
+
+- **`scripts/eval/sequential_gate.py` — G3b Bayesian futility early-stop.**
+  Observes discordant paired outcomes (flip / regression) one at a time and,
+  after each, renders a Beta-Binomial verdict so a hopeless mutation dies
+  before a full 114×2 paired run is spent (reject-only; full benchmark stays
+  the promotion authority). Contamination filter built in
+  (rate-limit-injection, non-`user_stop` terminations). This is the loop's
+  reject accelerator against expensive τ² runs.
+
+### Fixed
+
+- **codex-oauth SDK workaround install race.** `install()`'s unlocked
+  check-then-act let concurrent first Codex calls (a benchmark harness at
+  `max_concurrency>1`) rebind the patched `parse_response` as its own
+  "original", recursing into itself (RecursionError). Add install lock,
+  closure-captured original, idempotency marker.
+- **anthropic-oauth subscription path — three defects.** The OAuth access
+  token was sent as `x-api-key` (401 → route as `Authorization: Bearer` +
+  `oauth-2025-04-20` beta); sonnet/opus are gated behind the Claude Code
+  identity as an exact standalone first system block (concatenated → bare
+  429 → two-block rewrite at the adapter, haiku exempt); the loop-affine
+  client cache ignored token rotation, 401-ing until process death
+  (sha256-fingerprint invalidation, mirroring codex_oauth). All surfaced
+  running the tau2 harness under GEODE.
+
+### Known Issues
+
+- **Rate-limit errors leak into transcripts.** A quota exhaustion mid-run is
+  injected as a user-turn message rather than isolated as
+  `infrastructure_error`, so the task terminates as `max_steps` and passes
+  the termination filter — mis-readable as a mutation effect. The Crucible
+  contamination filter drops these post-hoc; adapter-level isolation is the
+  proper fix (pending).
+
 ## [0.99.274] - 2026-07-04
 
 ### Added
