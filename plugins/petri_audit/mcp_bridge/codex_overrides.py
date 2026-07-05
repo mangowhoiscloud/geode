@@ -95,14 +95,17 @@ def extract_codex_tool_calls(events: list[dict[str, Any]]) -> list[Any]:
     Returns an empty list when no function_call items are present —
     the caller treats that as "model emitted text only, no tools".
     """
+    tool_call_cls: Any | None
     try:
-        from inspect_ai.tool import ToolCall
+        from inspect_ai import tool as inspect_tool
     except ImportError:
         # inspect_ai is part of the [audit] extra; without it we can
         # still parse but cannot construct ToolCall instances. Return
         # the raw dicts so callers in test contexts can introspect.
         log.debug("inspect_ai unavailable — returning raw tool_call dicts")
-        ToolCall = None
+        tool_call_cls = None
+    else:
+        tool_call_cls = inspect_tool.ToolCall
 
     from plugins.petri_audit.mcp_bridge.lifecycle import strip_mcp_prefix
 
@@ -131,7 +134,7 @@ def extract_codex_tool_calls(events: list[dict[str, Any]]) -> list[Any]:
 
         call_id = item.get("call_id") or item.get("id") or ""
 
-        if ToolCall is None:
+        if tool_call_cls is None:
             calls.append(
                 {
                     "id": call_id,
@@ -143,7 +146,7 @@ def extract_codex_tool_calls(events: list[dict[str, Any]]) -> list[Any]:
             )
         else:
             calls.append(
-                ToolCall(
+                tool_call_cls(
                     id=call_id,
                     function=bare_name,
                     arguments=arguments,
