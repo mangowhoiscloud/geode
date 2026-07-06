@@ -439,7 +439,7 @@ def _build_model_card(model: str) -> str:
         # surfaces. Aligned with claw + hermes which carry no identity
         # assertion in their system prompt.
         parts: list[str] = [
-            f"You are {model} ({provider}).",
+            f"Model: {model} ({provider}).",
         ]
 
         if ctx_window:

@@ -92,6 +92,46 @@ class TestHandlerActionForwarding:
         assert result["error_type"] == "permission"
         assert "blocked key combo" in result["error"]
 
+    def test_locate_openai_subscription_does_not_call_glm(self) -> None:
+        from core.tools.base import ToolContext
+        from core.tools.computer_use import execute_emulated_computer_use
+
+        h = ComputerUseHarness()
+
+        async def fake_execute(action: str, **_params: object) -> dict[str, object]:
+            assert action == "screenshot"
+            return {
+                "result": "success",
+                "action": "screenshot",
+                "screenshot": "BASE64DATA",
+                "observation": {"screenshot_sha256": "abc"},
+            }
+
+        with (
+            patch.object(h, "aexecute", new=fake_execute),
+            patch("core.tools.computer_grounding.glm_locate", new=AsyncMock()) as glm_locate,
+        ):
+            result = asyncio.run(
+                execute_emulated_computer_use(
+                    h,
+                    action="locate",
+                    instruction="the TextEdit close button",
+                    _tool_context=ToolContext(
+                        provider="openai",
+                        source="subscription",
+                        model="gpt-5.5",
+                        adapter_name="codex-oauth",
+                    ),
+                )
+            )
+
+        glm_locate.assert_not_awaited()
+        assert result["error_type"] == "dependency"
+        assert result["grounding"]["provider"] == "openai"
+        assert result["grounding"]["source"] == "subscription"
+        assert "implicit GLM fallback is disabled" in result["error"]
+        assert "screenshot" not in result
+
 
 class TestOpenAIBatchedActions:
     """OpenAI Responses GA ``computer_call`` delivers a BATCHED ``actions[]``
@@ -383,6 +423,13 @@ class TestCoordinateScaling:
 
 
 class TestExecuteDispatch:
+    @pytest.fixture(autouse=True)
+    def _force_python_driver(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        from core.config import settings
+
+        monkeypatch.setattr(settings, "computer_use_env", "host", raising=False)
+        monkeypatch.setattr(settings, "computer_use_driver", "python", raising=False)
+
     def test_unknown_action(self):
         h = ComputerUseHarness()
         result = asyncio.run(h.aexecute("nonexistent_action"))

@@ -81,9 +81,16 @@ def _build_prompt_session() -> Any:
     """
     from prompt_toolkit import PromptSession
     from prompt_toolkit.filters import is_done
-    from prompt_toolkit.formatted_text import HTML
+    from prompt_toolkit.formatted_text import FormattedText
     from prompt_toolkit.history import FileHistory
     from prompt_toolkit.key_binding import KeyBindings
+
+    from core.ui import spinner_glyph
+    from core.unicode_safety import replace_lone_surrogates
+
+    class _SurrogateSafeFileHistory(FileHistory):
+        def store_string(self, string: str) -> None:
+            super().store_string(replace_lone_surrogates(string))
 
     kb = KeyBindings()
 
@@ -113,8 +120,8 @@ def _build_prompt_session() -> Any:
     _toolbar_render = bottom_toolbar
 
     session: Any = PromptSession(
-        history=FileHistory(str(history_path)),
-        message=HTML("<b>geode</b> &gt; "),
+        history=_SurrogateSafeFileHistory(str(history_path)),
+        message=FormattedText([(f"bold fg:{spinner_glyph.ROSE_HEX}", "> ")]),
         enable_history_search=True,
         multiline=True,
         key_bindings=kb,

@@ -59,6 +59,9 @@ def test_no_tools_no_tool_choice() -> None:
         tool_choice="none",  # would normally translate, but no tools → skip
         max_tokens=4096,
     )
-    kwargs = build_create_kwargs(req)
+    from unittest.mock import patch
+
+    with patch("core.llm.providers.anthropic.is_computer_use_enabled", return_value=False):
+        kwargs = build_create_kwargs(req)
     assert "tools" not in kwargs
     assert "tool_choice" not in kwargs

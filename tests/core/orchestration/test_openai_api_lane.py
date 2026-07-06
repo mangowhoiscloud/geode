@@ -24,7 +24,8 @@ from core.orchestration.openai_api_lane import (
 
 
 @pytest.fixture(autouse=True)
-def _reset_lane() -> None:
+def _reset_lane(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.delenv(OPENAI_API_LANE_MAX_ENV, raising=False)
     reset_openai_api_lane_for_tests()
     yield
     reset_openai_api_lane_for_tests()

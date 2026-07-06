@@ -132,6 +132,13 @@ _LOCAL_COMMANDS = frozenset({"/help", "/fleet"})
 _TTY_LOCAL_COMMANDS = frozenset({"/model"})
 
 
+def _fullscreen_enabled(env_value: str | None, *, stdin_isatty: bool) -> bool:
+    """Return whether the experimental full-screen CLI should start."""
+    if not stdin_isatty:
+        return False
+    return (env_value or "").lower() in {"1", "true", "on", "yes"}
+
+
 def _thin_interactive_loop(
     *,
     resume_session: str = "",
@@ -175,6 +182,24 @@ def _thin_interactive_loop(
         else:
             console.print(f"  [warning]{result.get('message', 'Resume failed')}[/warning]")
     console.print()
+
+    import os as _os
+    import sys as _sys
+
+    if _fullscreen_enabled(
+        _os.environ.get("GEODE_CLI_FULLSCREEN"),
+        stdin_isatty=_sys.stdin.isatty(),
+    ):
+        try:
+            from core.cli.fullscreen_app import FullscreenThinCli
+
+            FullscreenThinCli(client).run()
+            return
+        except Exception:
+            log.warning("fullscreen CLI failed; falling back to legacy prompt", exc_info=True)
+            console.print(
+                "  [warning]Experimental full-screen UI failed; using legacy prompt.[/warning]"
+            )
 
     try:
         while True:
@@ -285,7 +310,11 @@ def _thin_interactive_loop(
             # Free text → relay as prompt (client-side direct rendering)
             from core.ui.event_renderer import EventRenderer
 
-            _renderer = EventRenderer()
+            # The legacy prompt_toolkit prompt owns the input line. Keep this
+            # renderer append-only so cursor-up live regions never fight the
+            # prompt while a turn is running; the opt-in full-screen TUI owns
+            # the stable composer/live-pane experience.
+            _renderer = EventRenderer(live_regions=False)
             _stream_started = False
             _r = _renderer  # bind for closures (B023)
 

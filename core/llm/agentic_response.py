@@ -96,6 +96,11 @@ class AgenticResponse:
     stop_details: dict[str, Any] | None = None
     usage: ResponseUsage = field(default_factory=ResponseUsage)
     codex_reasoning_items: list[dict[str, Any]] | None = None
+    # OpenAI Responses official state-management surface. When manually
+    # managing context, prior ``response.output`` items can be passed back into
+    # the next ``input`` array. Codex adapters populate this with JSON-safe
+    # output items; other providers leave it ``None``.
+    codex_output_items: list[dict[str, Any]] | None = None
     # v0.57.0 R6 — reasoning summaries for the "live thinking..." UI
     # surface. Per-item granularity to avoid thread-local IPC writer
     # complexity (the streaming loop runs in ``asyncio.to_thread``).

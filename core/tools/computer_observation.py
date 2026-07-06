@@ -67,6 +67,7 @@ def build_screen_observation(
     target_size: tuple[int, int],
     screen_size: tuple[int, int] = (0, 0),
     env: str,
+    driver: str = "pyautogui",
     cursor: tuple[int, int] | None = None,
     grounding: dict[str, Any] | None = None,
 ) -> ScreenObservation:
@@ -78,7 +79,7 @@ def build_screen_observation(
         "target_width": target_size[0],
         "target_height": target_size[1],
         "env": env,
-        "driver": "pyautogui",
+        "driver": driver,
         "surface": "desktop",
         "action": action,
         "timestamp": time.time(),
@@ -141,12 +142,15 @@ def enrich_computer_result(
     enriched = dict(result)
     screenshot = enriched.get("screenshot")
     if isinstance(screenshot, str) and screenshot and "observation" not in enriched:
+        raw_driver = enriched.get("driver")
+        driver = raw_driver if isinstance(raw_driver, str) else "pyautogui"
         enriched["observation"] = build_screen_observation(
             screenshot,
             action=action,
             target_size=target_size,
             screen_size=screen_size,
             env=env,
+            driver=driver,
             cursor=cursor,
             grounding=grounding,
         )
