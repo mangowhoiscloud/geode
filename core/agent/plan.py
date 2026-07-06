@@ -374,13 +374,16 @@ def should_replan(
     plan: Plan | None,
     verify_failed: bool,
     verify_should_retry: bool,
+    low_confidence: bool = False,
 ) -> str | None:
     """Decide whether to call replan this round.
 
-    Returns the trigger name (``"verify_fail"`` / ``"cadence"``) when
-    replan should fire, ``None`` otherwise. Dual-trigger policy per
-    operator decision (PR-CL-A1 plan): verify FAIL takes priority,
-    cadence is a secondary safety net.
+    Returns the trigger name (``"verify_fail"`` / ``"low_confidence"`` /
+    ``"cadence"``) when replan should fire, ``None`` otherwise. Trigger
+    priority: verify FAIL (concrete failure evidence) > low_confidence
+    (the reflection node's belief dropped — the loop computes the edge
+    condition, this pure function only ranks it) > cadence (secondary
+    safety net, PR-CL-A1).
 
     The pure-function signature lets tests assert the trigger logic
     without instantiating the loop.
@@ -399,6 +402,10 @@ def should_replan(
     # without a plan to revise.
     if plan is None:
         return None
+    # Low-confidence trigger — same no-plan guard as cadence: a belief
+    # drop revises an existing plan, it does not synthesize one.
+    if low_confidence:
+        return "low_confidence"
     interval = _replan_interval()
     if interval > 0 and round_idx > 0 and round_idx % interval == 0:
         return "cadence"

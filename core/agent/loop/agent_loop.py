@@ -48,6 +48,17 @@ from ._tool_factory import (
 )
 from .models import AgenticResult, _context_exhausted_message, _ContextExhaustedError
 
+# Confidence-adaptive compute allocation — the reflection node's
+# ``CognitiveState.confidence`` (0..1) steers how much extra LLM compute
+# the loop spends on itself. High stable confidence stretches the
+# reflection cadence (fewer belief-update calls); low confidence forces
+# a reflection every round and edge-triggers a replan. Thresholds are
+# deliberately module constants, not settings knobs — one adaptive
+# on/off knob exists (``cognitive_reflection_adaptive``).
+REFLECTION_STRETCH_CONFIDENCE = 0.8  # confidence >= → interval doubled
+REFLECTION_FORCE_CONFIDENCE = 0.4  # confidence < → reflect every round
+REPLAN_LOW_CONFIDENCE = 0.4  # confidence < → edge-triggered replan
+
 if TYPE_CHECKING:
     from core.agent.capability_graph import CapabilityGraph
     from core.agent.task_preflight import TaskPreflight
@@ -294,6 +305,11 @@ class AgenticLoop:
         # Adaptive compute: track consecutive text-only rounds for overthinking detection
         self._consecutive_text_only_rounds = 0
         self._total_empty_rounds = 0
+        # Low-confidence replan is edge-triggered: fires once when
+        # confidence drops below REPLAN_LOW_CONFIDENCE, re-arms only
+        # after confidence recovers — prevents a replan storm while
+        # confidence stays low.
+        self._low_confidence_replan_armed = True
         self._cost_budget = cost_budget
         self._loop_start_time: float = 0.0
         # No explicit model → prefer settings.act_model (Plan/Act split),
@@ -624,6 +640,19 @@ class AgenticLoop:
         if not settings.cognitive_reflection_enabled:
             return
         interval = max(1, int(settings.cognitive_reflection_interval))
+        # Confidence-adaptive cadence: high stable confidence buys fewer
+        # belief-update calls (interval doubled), low confidence forces a
+        # reflection every round. Reads the LAST reflection's confidence —
+        # staleness during a stretch is the accepted trade (verify still
+        # watches every turn). None (no reflection yet) → base interval.
+        confidence = self.cognitive_state.confidence
+        if getattr(settings, "cognitive_reflection_adaptive", True) and isinstance(
+            confidence, int | float
+        ):
+            if confidence >= REFLECTION_STRETCH_CONFIDENCE:
+                interval *= 2
+            elif confidence < REFLECTION_FORCE_CONFIDENCE:
+                interval = 1
         # round_count is 1-based (record_round ran just before this);
         # (round_count - 1) % interval == 0 → rounds 1, 1+N, 1+2N, ...
         round_count = self.cognitive_state.round_count
@@ -891,14 +920,34 @@ class AgenticLoop:
             from core.observability.session_metrics import current_session_metrics
 
             metrics = current_session_metrics()
+            # Low-confidence replan (edge-triggered; see constructor
+            # comment on _low_confidence_replan_armed). Re-arm on
+            # recovery, fire only on an armed drop below threshold.
+            # getattr tolerates stub loops (same convention as
+            # _check_round_guards' handoff check).
+            raw_confidence = getattr(getattr(self, "cognitive_state", None), "confidence", None)
+            confidence: float | None = (
+                float(raw_confidence) if isinstance(raw_confidence, int | float) else None
+            )
+            if confidence is not None and confidence >= REPLAN_LOW_CONFIDENCE:
+                self._low_confidence_replan_armed = True
+            low_confidence = (
+                getattr(self, "_low_confidence_replan_armed", True)
+                and confidence is not None
+                and confidence < REPLAN_LOW_CONFIDENCE
+            )
             trigger = should_replan(
                 round_idx=round_idx,
                 plan=metrics.active_plan,
                 verify_failed=not metrics.last_verify_passed,
                 verify_should_retry=metrics.last_verify_should_retry,
+                low_confidence=low_confidence,
             )
             if trigger is None:
                 return
+            if trigger == "low_confidence":
+                # consume the edge — no refire until confidence recovers
+                self._low_confidence_replan_armed = False
             # Abandon path: a verify_fail past replan_max_attempts on one
             # step advances the plan instead of calling the planner (step
             # is stuck). The cadence trigger isn't capped.

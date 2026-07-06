@@ -97,6 +97,21 @@ class Settings(BaseSettings):
             "with no extra LLM call. PR-3 C-2."
         ),
     )
+    cognitive_reflection_adaptive: bool = Field(
+        default=True,
+        validation_alias=AliasChoices(
+            "cognitive_reflection_adaptive",
+            "GEODE_COGNITIVE_REFLECTION_ADAPTIVE",
+        ),
+        description=(
+            "When True (default) the reflection cadence adapts to the "
+            "last reflection's confidence: >= 0.8 doubles the effective "
+            "interval (fewer belief-update calls), < 0.4 forces a "
+            "reflection every round. Thresholds are module constants in "
+            "core/agent/loop/agent_loop.py. When False the fixed "
+            "cognitive_reflection_interval applies unconditionally."
+        ),
+    )
     cognitive_reflection_model: str = Field(
         default="",
         validation_alias=AliasChoices(
