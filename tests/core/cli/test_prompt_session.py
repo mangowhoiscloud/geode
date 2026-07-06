@@ -18,12 +18,30 @@ from unittest.mock import MagicMock
 
 import core.cli.prompt_session as prompt_session_mod
 import pytest
+from core.cli import _fullscreen_enabled
 from core.cli.prompt_session import (
     _apply_toolbar_visibility,
     _build_prompt_session,
     _invalidate_on_text_changed,
     _read_multiline_input,
 )
+
+
+def test_fullscreen_cli_is_opt_in_by_default() -> None:
+    assert _fullscreen_enabled(None, stdin_isatty=True) is False
+    assert _fullscreen_enabled("", stdin_isatty=True) is False
+    assert _fullscreen_enabled("0", stdin_isatty=True) is False
+
+
+def test_fullscreen_cli_can_be_enabled_explicitly() -> None:
+    assert _fullscreen_enabled("1", stdin_isatty=True) is True
+    assert _fullscreen_enabled("true", stdin_isatty=True) is True
+    assert _fullscreen_enabled("on", stdin_isatty=True) is True
+    assert _fullscreen_enabled("yes", stdin_isatty=True) is True
+
+
+def test_fullscreen_cli_never_starts_for_non_tty() -> None:
+    assert _fullscreen_enabled("1", stdin_isatty=False) is False
 
 
 def _binding_keys(binding: Any) -> tuple[str, ...]:
@@ -57,9 +75,18 @@ class _FakePromptSession:
         self.default_buffer = _FakeBuffer()
 
 
+class _FakeFileHistory:
+    def __init__(self, path: str) -> None:
+        self.path = path
+        self.strings: list[str] = []
+
+    def store_string(self, string: str) -> None:
+        self.strings.append(string)
+
+
 def _build_with_fakes(monkeypatch: pytest.MonkeyPatch) -> Any:
     monkeypatch.setattr("prompt_toolkit.PromptSession", _FakePromptSession)
-    monkeypatch.setattr("prompt_toolkit.history.FileHistory", lambda path: path)
+    monkeypatch.setattr("prompt_toolkit.history.FileHistory", _FakeFileHistory)
     return _build_prompt_session()
 
 
@@ -93,11 +120,18 @@ def test_prompt_session_attaches_text_changed_repaint_hook(
     assert _invalidate_on_text_changed in session.default_buffer.on_text_changed
 
 
-def test_prompt_session_uses_named_geode_prompt(monkeypatch: pytest.MonkeyPatch) -> None:
-    """The idle prompt names the REPL instead of showing a bare chevron."""
+def test_prompt_session_uses_compact_geode_colored_prompt(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The idle prompt is a compact GEODE-coloured bare marker."""
+    from core.ui import spinner_glyph
+
     _build_with_fakes(monkeypatch)
 
-    assert "geode" in str(_FakePromptSession.captured["message"])
+    message = str(_FakePromptSession.captured["message"])
+    assert "geode" not in message.lower()
+    assert "> " in message
+    assert spinner_glyph.ROSE_HEX in message
 
 
 def test_invalidate_on_text_changed_invalidates_running_app(

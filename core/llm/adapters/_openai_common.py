@@ -27,6 +27,7 @@ from __future__ import annotations
 import hashlib
 import json
 import logging
+import os
 import re
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
@@ -489,6 +490,12 @@ def build_codex_input(req: AdapterCallRequest) -> list[dict[str, Any]]:
     - User ``tool_result`` blocks → ``{"type": "function_call_output",
       "call_id", "output"}`` typed items.
 
+    Official Responses API state management: when an assistant
+    :class:`Message` carries ``codex_output_items`` copied from a prior
+    ``response.output``, those output items are replayed directly. This keeps
+    reasoning, message, and function_call output items in the same structure
+    the API returned.
+
     A2 (v0.99.44): when an assistant :class:`Message` carries
     ``codex_reasoning_items`` (captured from a prior Codex turn), those
     items are prepended **immediately before** that assistant's entries
@@ -501,8 +508,14 @@ def build_codex_input(req: AdapterCallRequest) -> list[dict[str, Any]]:
     composed with :func:`core.llm.agentic_response.inject_reasoning_replay`.
     """
     out: list[dict[str, Any]] = []
+    disable_output_replay = os.environ.get(
+        "GEODE_CODEX_DISABLE_OUTPUT_REPLAY", ""
+    ).strip().lower() in {"1", "true", "yes", "on"}
     for m in req.messages:
         if m.role == "assistant":
+            if m.codex_output_items and not disable_output_replay:
+                out.extend(_responses_input_safe_output_item(item) for item in m.codex_output_items)
+                continue
             # Replay this turn's encrypted reasoning items (id-stripped)
             # right before the assistant's converted entries.
             for ri in m.codex_reasoning_items:
@@ -1133,6 +1146,7 @@ def translate_codex_response(
         raw_response=response,
         reasoning_items=tuple(reasoning_items),
         reasoning_summaries=tuple(reasoning_summaries),
+        codex_output_items=tuple(_json_safe(item) for item in items_source),
         assistant_phase=assistant_phase,
     )
 
@@ -1197,7 +1211,25 @@ def _json_safe(value: Any) -> Any:
                 return _json_safe(dict(dump(**kwargs)))
             except Exception as exc:
                 log.debug("%s.model_dump(%r) failed: %s", type(value).__name__, kwargs, exc)
+    raw_dict = getattr(value, "__dict__", None)
+    if isinstance(raw_dict, dict):
+        return {k: _json_safe(v) for k, v in raw_dict.items() if not k.startswith("_")}
     return value
+
+
+def _responses_input_safe_output_item(item: dict[str, Any]) -> dict[str, Any]:
+    """Return a prior Responses output item in the shape Codex accepts as input.
+
+    OpenAI documents manual context management as passing prior ``response.output``
+    items into the next ``input`` array. The Codex subscription validator rejects
+    top-level ``status`` on replayed reasoning items, even though that field is
+    populated on API-returned output items. Preserve the semantic payload and
+    item ids, but drop return-only lifecycle metadata before sending it back.
+    """
+    safe = _json_safe(dict(item))
+    if isinstance(safe, dict):
+        return {k: v for k, v in safe.items() if k != "status" and v is not None}
+    return dict(item)
 
 
 def _normalize_computer_call(item: Any) -> dict[str, Any]:
@@ -1378,14 +1410,11 @@ def build_responses_kwargs(
       :func:`core.llm.adapters._openai_common.get_openai_model_spec`)
       omit ``temperature`` and add ``reasoning`` + ``include:
       ["reasoning.encrypted_content"]``
-    - A2 (v0.99.44): previous-turn reasoning items replay inline via
-      :func:`build_codex_input` — each assistant :class:`Message` carries
-      its own ``codex_reasoning_items`` (populated by the bridge from the
-      Anthropic-shape assistant message dict's ``codex_reasoning_items``
-      key) and ``build_codex_input`` prepends those entries at the
-      correct ordinal position. The legacy whole-input prepend approach
-      lost per-turn association for multi-assistant histories — Codex
-      MCP A2 BLOCKER 3.
+    - Official Responses state management: previous-turn ``response.output``
+      items replay inline via :func:`build_codex_input` when an assistant
+      :class:`Message` carries ``codex_output_items``. Legacy
+      ``codex_reasoning_items`` replay remains as a fallback for transcripts
+      created before full output-item capture.
     - PR-DRIFT-CUT (2026-05-24): replaced ``req.model.startswith("gpt-5")``
       heuristic with explicit registry lookup so o3 / o4-mini / new
       reasoning models go through the same branch automatically.

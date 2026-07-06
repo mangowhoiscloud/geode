@@ -19,6 +19,11 @@ from plugins.seed_generation.agents.ranker import (
 )
 
 
+@pytest.fixture(autouse=True)
+def _clear_ranker_env(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.delenv(RANKER_MAX_INFLIGHT_MATCHES_ENV, raising=False)
+
+
 def test_default_is_three() -> None:
     """The default cap is 3 — PR-LANE-CAP-TIGHTER (v0.99.76,
     2026-05-27) lowered from 5 to 3 because cap 5 still required ~3 GB

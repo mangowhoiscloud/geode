@@ -165,8 +165,9 @@ class EventRenderer:
     _MAX_ACTIVITY_NOTICE_LINES = 2
     _MAX_PLAN_VISIBLE_ITEMS = 5
 
-    def __init__(self) -> None:
-        self._tool_tracker = ToolCallTracker()
+    def __init__(self, *, live_regions: bool = True) -> None:
+        self._live_regions = live_regions
+        self._tool_tracker = ToolCallTracker(live_updates=live_regions)
         self._thinking = False
         self._thinking_thread: threading.Thread | None = None
         self._thinking_model = ""
@@ -174,7 +175,7 @@ class EventRenderer:
         self._thinking_reflection = False
         self._thinking_region: _ThinkingRegion | None = None
         self._render_lock = threading.RLock()
-        self._tty = sys.stdout.isatty()
+        self._tty = sys.stdout.isatty() and live_regions
         self._stdin_stop = threading.Event()
         self._stdin_thread: threading.Thread | None = None
         self._out = sys.stdout
@@ -201,6 +202,8 @@ class EventRenderer:
         self._clearable_stream_parts: list[str] = []
         self._progress_plan = _ProgressPlanSurface()
         self._activity_surface = _ActivitySurface()
+        self._activity_spinner_line = ""
+        self._activity_spinner_at_bottom = False
         self._activity_seq = 0
         # Stage 1 fleet view — per-sub-agent live state fed by subagent_state
         # events; read by the one-line fleet summary in the activity region.
@@ -210,6 +213,12 @@ class EventRenderer:
 
     def start_activity(self) -> None:
         """Start persistent activity spinner. Call before send_prompt()."""
+        if not self._live_regions:
+            self._out.write(f"  {spinner_glyph.ROSE}{spinner_glyph.GLYPH}{RESET} Working...\n")
+            self._out.flush()
+            return
+        if not self._tty:
+            return
         self._activity = True
         self._activity_suppressed = False
         self._activity_thread = threading.Thread(target=self._animate_activity, daemon=True)
@@ -270,8 +279,11 @@ class EventRenderer:
         if self._activity_thread:
             self._activity_thread.join(timeout=0.3)
             self._activity_thread = None
-        # Clear any leftover spinner line
-        self._out.write(f"\r{ERASE_LINE}")
+        # Clear any leftover spinner line.
+        with self._render_lock:
+            self._erase_activity_locked()
+            if self._live_regions:
+                self._out.write(f"\r{ERASE_LINE}")
         # Clear the transient Markdown stream region BEFORE any live-region
         # render — _flush_repeat may redraw the region at the cursor, and the
         # upward stream-erase would eat those fresh rows if it ran after.
@@ -284,7 +296,7 @@ class EventRenderer:
         # already sits in scrollback, so it is never redrawn here.
         with self._render_lock:
             if self._activity_surface.tool_stats or self._activity_surface.notices:
-                self._render_activity_region()
+                self._render_activity_region(force=True)
             self._progress_plan.at_bottom = False
             self._activity_surface.at_bottom = False
         # Render accumulated turn status (Claude Code style)
@@ -313,6 +325,8 @@ class EventRenderer:
             self._thinking_model = str(event.get("model", ""))
             self._thinking_round = int(event.get("round", 1))
             self._thinking_reflection = bool(event.get("reflection", False))
+        if not self._live_regions:
+            return
         self._start_stdin_reader()
         self._thinking_thread = threading.Thread(target=self._animate_thinking, daemon=True)
         self._thinking_thread.start()
@@ -1023,7 +1037,10 @@ class EventRenderer:
                 # would corrupt the cursor position the erase math depends on.
                 with self._render_lock:
                     if self._activity and not self._activity_suppressed:
-                        self._out.write(f"\r{ERASE_LINE}  {body}")
+                        line = f"  {body}"
+                        self._out.write(f"\r{ERASE_LINE}{line}")
+                        self._activity_spinner_line = line
+                        self._activity_spinner_at_bottom = True
                         self._out.flush()
             time.sleep(0.05)
 
@@ -1054,6 +1071,8 @@ class EventRenderer:
         return spinner_glyph.gerund(self._turn_start)
 
     def _render_thinking_frame(self) -> None:
+        if not self._live_regions:
+            return
         with self._render_lock:
             if not self._thinking:
                 return
@@ -1074,9 +1093,10 @@ class EventRenderer:
             if self._thinking_thread:
                 self._thinking_thread.join(timeout=0.3)
                 self._thinking_thread = None
-            with self._render_lock:
-                self._out.write(f"\r{ERASE_LINE}")
-                self._out.flush()
+            if self._live_regions:
+                with self._render_lock:
+                    self._out.write(f"\r{ERASE_LINE}")
+                    self._out.flush()
 
     # -- Thinking collapse / Ctrl+O -------------------------------------------
 
@@ -1228,6 +1248,10 @@ class EventRenderer:
 
     def _erase_activity_locked(self) -> None:
         """Cursor-up erase the activity block if it is still the bottom-most row."""
+        if self._activity_spinner_at_bottom and self._activity_spinner_line:
+            self._erase_lines_locked([self._activity_spinner_line])
+            self._activity_spinner_line = ""
+            self._activity_spinner_at_bottom = False
         surface = self._activity_surface
         if surface.at_bottom and surface.visible_lines:
             self._erase_lines_locked(surface.visible_lines)
@@ -1267,13 +1291,15 @@ class EventRenderer:
             plan.rendered = True
             self._out.flush()
 
-    def _render_activity_region(self) -> None:
+    def _render_activity_region(self, *, force: bool = False) -> None:
         """Redraw the bottom-anchored activity block (tool/thought summary) in place.
 
         The activity block legitimately updates as tools/thoughts accumulate, so
         it keeps its own single moving copy. It never carries the plan checklist,
         which is drawn separately by plan events and scrolls up independently.
         """
+        if not self._live_regions and not force:
+            return
         with self._render_lock:
             self._erase_activity_locked()
             activity_lines = self._render_activity_lines()
@@ -1478,14 +1504,20 @@ class EventRenderer:
         self._activity_suppressed = True
         self._stop_thinking()
         self._tool_tracker.suspend()
-        self._out.write(f"\r{ERASE_LINE}")
-        self._out.flush()
+        with self._render_lock:
+            self._erase_activity_locked()
+            if self._live_regions:
+                self._out.write(f"\r{ERASE_LINE}")
+            self._out.flush()
 
     def _clear_activity_line(self) -> None:
         """Clear the activity spinner line before writing a permanent line."""
         if self._activity and not self._activity_suppressed:
-            self._out.write(f"\r{ERASE_LINE}")
-            self._out.flush()
+            with self._render_lock:
+                self._erase_activity_locked()
+                if self._live_regions:
+                    self._out.write(f"\r{ERASE_LINE}")
+                self._out.flush()
 
     @staticmethod
     def _is_clearable_plain_stream(data: str) -> bool:

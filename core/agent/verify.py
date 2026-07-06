@@ -89,7 +89,13 @@ DEFAULT_MIN_TEXT_CHARS: int = 10
 # (cost cap / billing) so retry would just burn more tokens. The other
 # three codes are recoverable via a different prompt or tool path.
 _RETRYABLE_MISSES: frozenset[str] = frozenset(
-    {"empty_turn", "short_output", "tool_error", "step_expected_mismatch"}
+    {
+        "empty_turn",
+        "short_output",
+        "tool_error",
+        "step_expected_mismatch",
+        "manual_checklist_without_action",
+    }
 )
 
 
@@ -208,6 +214,58 @@ def _min_text_chars() -> int:
     return value if value >= 0 else DEFAULT_MIN_TEXT_CHARS
 
 
+def _truthy_env(name: str) -> bool:
+    """Return True when an opt-in env knob is explicitly enabled."""
+    return os.environ.get(name, "").strip().lower() in {"1", "true", "yes", "on"}
+
+
+def _action_before_talk_enabled() -> bool:
+    """Opt-in verifier pressure for benchmark tasks with available tools.
+
+    Normal GEODE chat can legitimately ask users to inspect local state. Tau2
+    telecom runs are different: the benchmark exposes tools for those checks,
+    so manual phone-setting checklists before tool action are usually wasted
+    turns. Keep this behind an env knob so the rule only applies when a
+    benchmark harness requests it.
+    """
+    return _truthy_env("GEODE_VERIFY_ACTION_BEFORE_TALK")
+
+
+def _looks_like_manual_checklist(text: str) -> bool:
+    """Detect phone-setting checklist talk that should have been tool action."""
+    lower = text.lower()
+    if not lower:
+        return False
+    manual_markers = (
+        "check your phone",
+        "phone settings",
+        "open your phone",
+        "quick settings",
+        "control center",
+        "go to your cellular",
+        "go to your mobile",
+        "please check",
+        "tell me whether",
+        "try sending",
+        "try to send",
+        "restart the phone",
+        "reboot the phone",
+    )
+    blocker_markers = (
+        "airplane",
+        "mobile data",
+        "cellular",
+        "sim",
+        "network mode",
+        "apn",
+        "mms",
+        "picture message",
+    )
+    return any(marker in lower for marker in manual_markers) and any(
+        marker in lower for marker in blocker_markers
+    )
+
+
 def _check_step_expected_match(text: str) -> bool:
     """PR-CL-A1 (2026-05-23) — verify the just-finished turn's text against
     the active :class:`PlanStep.expected_outcome`.
@@ -262,6 +320,10 @@ def _verify_rule_based(result: AgenticResult) -> VerifyResult:
       :class:`PlanStep.expected_outcome`. Fires only when a Plan is
       active AND the current step has a non-empty expected_outcome.
       Treated as retryable so PR-CL-A1 replan can revise the plan.
+    - ``manual_checklist_without_action``: opt-in benchmark rule
+      (``GEODE_VERIFY_ACTION_BEFORE_TALK=1``) for cases where the turn
+      asks the user to manually inspect phone/network state without making
+      an available tool call first.
 
     Reason code list is intentionally short — verbal RL hints are stronger
     when they cite a concrete failure category, not a long checklist.
@@ -290,6 +352,14 @@ def _verify_rule_based(result: AgenticResult) -> VerifyResult:
     # flagged) and the active step has a concrete expected_outcome.
     if text_len > 0 and not _check_step_expected_match(text):
         misses.append("step_expected_mismatch")
+
+    if (
+        text_len > 0
+        and not tool_calls
+        and _action_before_talk_enabled()
+        and _looks_like_manual_checklist(text)
+    ):
+        misses.append("manual_checklist_without_action")
 
     passed = not misses
     hint = "" if passed else synthesize_failure_reflection_hint(tuple(misses))

@@ -7,6 +7,7 @@ of the dashboard string output.
 
 from __future__ import annotations
 
+from pathlib import Path
 from unittest.mock import patch
 
 import pytest
@@ -19,7 +20,7 @@ from core.llm.strategies.plans import GLM_CODING_TIERS, default_plan_for_payg
 
 
 @pytest.fixture(autouse=True)
-def _scrub_real_provider_keys(monkeypatch: pytest.MonkeyPatch) -> None:
+def _scrub_real_provider_keys(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     """Isolate the machine's real credentials from the auth/profile store.
 
     ``build_auth`` seeds ``<provider>-payg:env`` profiles from
@@ -42,7 +43,12 @@ def _scrub_real_provider_keys(monkeypatch: pytest.MonkeyPatch) -> None:
 
     for _var in ("OPENAI_API_KEY", "ANTHROPIC_API_KEY", "ZAI_API_KEY"):
         monkeypatch.setenv(_var, "")
+    monkeypatch.setenv("GEODE_AUTH_TOML", str(tmp_path / "auth.toml"))
     monkeypatch.setattr(cfg, "_settings_instance", None, raising=False)
+    settings = cfg.settings
+    monkeypatch.setattr(settings, "openai_api_key", "", raising=False)
+    monkeypatch.setattr(settings, "anthropic_api_key", "", raising=False)
+    monkeypatch.setattr(settings, "zai_api_key", "", raising=False)
 
 
 def _reset_state() -> None:

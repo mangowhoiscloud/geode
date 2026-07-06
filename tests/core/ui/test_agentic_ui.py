@@ -1068,6 +1068,35 @@ class TestPlanSurfaceVisualLanguage:
         # The daemon output printed after the plan (plan scrolls up, not erased).
         assert after.index("only step") < after.index("some daemon output")
 
+    def test_activity_spinner_and_summary_are_erased_before_foreign_output(self) -> None:
+        """The bottom Working line is separate from the Activity block.
+
+        When a permanent stream/event arrives, GEODE must clear the bottom
+        spinner first, then the activity block, so no stale Working row remains
+        overprinted in the transcript.
+        """
+        r = self._renderer()
+        r._tty = True
+        r._activity_surface.visible_lines = [
+            "\n",
+            "  \033[2mActivity · 1 tool calls\033[0m\n",
+            "    \033[32m✓ read_file\033[0m → ok\n",
+        ]
+        r._activity_surface.at_bottom = True
+        r._activity_spinner_line = "  ◆ Working…"
+        r._activity_spinner_at_bottom = True
+
+        r.on_stream("assistant output\n")
+
+        assert r._activity_spinner_line == ""
+        assert r._activity_spinner_at_bottom is False
+        assert r._activity_surface.visible_lines == []
+        assert r._activity_surface.at_bottom is False
+        out = r._out.getvalue()
+        assert "\033[1A" in out
+        assert "\033[3A" in out
+        assert out.endswith("assistant output\n")
+
 
 class TestPlanNotReemittedDuringPhases:
     """The plan is drawn once by its own events and scrolls up; thinking/tool
@@ -1137,6 +1166,42 @@ class TestPlanNotReemittedDuringPhases:
         assert out.count("Tasks ·") == 1  # plan drawn once, never re-emitted
         assert "tool step" in out[out.rindex("Tasks") :]
         assert "Activity" in out  # activity summary rendered on its own surface
+
+
+def test_event_renderer_can_run_append_only_without_live_regions() -> None:
+    """Legacy prompt_toolkit CLI must not repaint over its input line."""
+    import io
+
+    from core.ui.event_renderer import EventRenderer
+
+    r = EventRenderer(live_regions=False)
+    r._out = io.StringIO()
+
+    r.start_activity()
+    r.on_event(
+        {
+            "type": "progress_plan",
+            "plan": [{"step": "inspect renderer", "status": "in_progress"}],
+        }
+    )
+    r.on_event({"type": "tool_start", "name": "read_file"})
+    r.on_event({"type": "tool_end", "name": "read_file", "summary": "ok", "duration_s": 0.1})
+    r.on_event({"type": "tool_start", "name": "run_tests"})
+    r.on_event({"type": "tool_end", "name": "run_tests", "summary": "ok", "duration_s": 0.2})
+
+    before_stop = r._out.getvalue()
+    assert "Working..." in before_stop
+    assert "Tasks" in before_stop
+    assert "Activity" not in before_stop
+
+    r.stop()
+    out = r._out.getvalue()
+    assert out.count("Activity") == 1
+    assert "read_file" in out
+    assert "run_tests" in out
+    assert "\033[A" not in out
+    assert "\033[1A" not in out
+    assert "\033[2A" not in out
 
 
 def test_tool_tracker_running_row_uses_signature_shimmer() -> None:

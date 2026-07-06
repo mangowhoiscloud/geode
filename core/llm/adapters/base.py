@@ -87,6 +87,11 @@ class Message:
     content: str | list[dict[str, Any]]
     tool_use_id: str | None = None
     codex_reasoning_items: tuple[dict[str, Any], ...] = ()
+    # Responses API official state-management path: prior assistant output
+    # items may be passed back into the next ``input`` array when the caller
+    # manages state manually. Codex/OpenAI Responses adapters populate this
+    # with JSON-safe copies of the previous ``response.output`` items.
+    codex_output_items: tuple[dict[str, Any], ...] = ()
     # PR-CODEX-MULTITURN-PHASE-PRESERVE (Sprint H follow-up, 2026-05-26)
     # — per-message phase attribution captured from the prior Codex
     # turn. OpenAI Responses API's ``ResponseOutputMessage`` carries
@@ -196,6 +201,11 @@ class AdapterCallResult:
     raw_response: Any = None
     reasoning_items: tuple[dict[str, Any], ...] = ()
     reasoning_summaries: tuple[str, ...] = ()
+    # JSON-safe copy of the OpenAI Responses ``response.output`` items.
+    # When present, next-turn Codex input should replay these official output
+    # items instead of reconstructing assistant messages from lossy text/tool
+    # blocks.
+    codex_output_items: tuple[dict[str, Any], ...] = ()
     # PR-CODEX-MULTITURN-PHASE-PRESERVE (Sprint H follow-up, 2026-05-26)
     # — per-response phase attribution from the Codex Responses API
     # ``ResponseOutputMessage.phase`` field

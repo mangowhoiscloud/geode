@@ -18,7 +18,10 @@ Public surface:
 from __future__ import annotations
 
 import logging
+import platform
 import re
+import subprocess
+from pathlib import Path
 from typing import Any
 
 from core.config.env_io import mask_key as _mask_key
@@ -215,6 +218,107 @@ def configure_bash_sandbox() -> None:
 
     path = persist_toml_section("bash_sandbox", {"mode": answer})
     console.print(f"  [success]Command sandbox set to {answer}[/success] [muted]({path})[/muted]\n")
+
+
+# ---------------------------------------------------------------------------
+# macOS Computer Use Helper setup
+# ---------------------------------------------------------------------------
+
+
+def _computer_helper_build_script() -> Path:
+    root = Path(__file__).resolve().parents[2]
+    return root / "scripts" / "macos" / "build_computer_helper.sh"
+
+
+def configure_computer_use_helper() -> None:
+    """Interactive macOS helper setup for CLI-safe desktop computer use.
+
+    The helper is an app bundle so macOS TCC has a stable permission subject
+    (``GEODE Computer Use Helper.app``) instead of whichever terminal/Python
+    process launched GEODE. It is optional, macOS-only, and reachable from
+    ``geode setup`` for both source checkouts and wheel installs.
+    """
+    if platform.system() != "Darwin":
+        return
+
+    from core.tools.computer_use import (
+        computer_use_driver,
+        computer_use_helper_path,
+        computer_use_helper_status,
+    )
+
+    console.print("\n  [header]Computer Use helper (macOS)[/header]")
+    console.print(
+        "  [muted]Builds a small GEODE app bundle that owns Accessibility and\n"
+        "  Screen Recording permissions for desktop computer-use.[/muted]"
+    )
+
+    helper = computer_use_helper_path()
+    if helper is not None:
+        status = computer_use_helper_status()
+        ax = "trusted" if status.get("ax_trusted") else "not trusted"
+        screen = "ok" if status.get("screenshot_ok") else "not granted"
+        console.print(
+            f"  [success]Helper installed[/success] [muted]({helper})[/muted]\n"
+            f"  [muted]Accessibility: {ax}; Screen Recording: {screen}; "
+            f"driver={computer_use_driver()}[/muted]"
+        )
+        return
+
+    build_script = _computer_helper_build_script()
+    if not build_script.exists():
+        console.print(
+            "  [warning]Helper build assets are missing from this install.[/warning]\n"
+            "  [muted]Install from a GEODE source checkout or a wheel that includes "
+            "scripts/macos/.[/muted]\n"
+        )
+        return
+
+    try:
+        answer = (
+            console.input(
+                "  Build and enable GEODE Computer Use Helper now? [cyan]y[/cyan]/[cyan]N[/cyan]: "
+            )
+            .strip()
+            .lower()
+        )
+    except (KeyboardInterrupt, EOFError):
+        console.print("  [muted]Skipped.[/muted]\n")
+        return
+
+    if answer not in {"y", "yes"}:
+        console.print("  [muted]Skipped.[/muted]\n")
+        return
+
+    try:
+        proc = subprocess.run(  # noqa: S603
+            [str(build_script)],
+            capture_output=True,
+            text=True,
+            timeout=120,
+            check=False,
+        )
+    except (OSError, subprocess.TimeoutExpired) as exc:
+        console.print(f"  [warning]Helper build failed:[/warning] {exc}\n")
+        return
+
+    if proc.returncode != 0:
+        detail = (proc.stderr or proc.stdout).strip()
+        console.print(f"  [warning]Helper build failed:[/warning] {detail}\n")
+        return
+
+    helper_bin = proc.stdout.strip().splitlines()[-1] if proc.stdout.strip() else ""
+    updates = {"driver": "helper"}
+    if helper_bin:
+        updates["helper_path"] = helper_bin
+    path = persist_toml_section("computer_use", updates)
+    console.print(
+        "  [success]Computer Use Helper built and enabled.[/success]\n"
+        f"  [muted]{helper_bin or 'helper path detected from default location'}[/muted]\n"
+        f"  [muted]Config updated: {path}[/muted]\n"
+        "  [muted]Next: grant Accessibility and Screen Recording to "
+        "`GEODE Computer Use Helper.app`, then run `geode doctor`.[/muted]\n"
+    )
 
 
 # ---------------------------------------------------------------------------

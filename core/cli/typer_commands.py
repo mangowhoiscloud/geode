@@ -115,7 +115,11 @@ def setup(
     prompting for API keys. Use ``--reset`` to clear existing
     credentials and start over.
     """
-    from core.cli.onboarding import configure_bash_sandbox, env_setup_wizard
+    from core.cli.onboarding import (
+        configure_bash_sandbox,
+        configure_computer_use_helper,
+        env_setup_wizard,
+    )
     from core.wiring.startup import _has_any_llm_key, detect_subscription_oauth
 
     if reset:
@@ -142,6 +146,7 @@ def setup(
         env_setup_wizard()
 
     configure_bash_sandbox()
+    configure_computer_use_helper()
 
 
 def doctor(

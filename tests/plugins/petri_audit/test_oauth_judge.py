@@ -99,6 +99,7 @@ def test_to_inspect_model_claude_routes_when_oauth_available() -> None:
     with (
         patch("plugins.petri_audit.adapters.openai_codex_oauth.is_available", return_value=True),
         patch("plugins.petri_audit.adapters.claude_cli_backend.is_available", return_value=True),
+        patch("plugins.petri_audit.user_overrides.read_role_override", return_value={}),
     ):
         # CSA-3 flip — was claude-code/, now claude-cli/.
         assert (
@@ -218,6 +219,7 @@ def test_run_audit_uses_oauth_when_token_present() -> None:
     with (
         patch("plugins.petri_audit.adapters.openai_codex_oauth.is_available", return_value=True),
         patch("plugins.petri_audit.adapters.claude_cli_backend.is_available", return_value=True),
+        patch("plugins.petri_audit.user_overrides.read_role_override", return_value={}),
     ):
         report = run_audit(
             judge="gpt-5.5",

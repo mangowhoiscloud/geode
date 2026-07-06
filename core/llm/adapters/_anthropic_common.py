@@ -37,16 +37,23 @@ if TYPE_CHECKING:
     import anthropic
 
 
-def build_async_anthropic_client(api_key: str) -> anthropic.AsyncAnthropic:
-    """Construct a fresh ``AsyncAnthropic`` bound to ``api_key``.
+def build_async_anthropic_client(
+    api_key: str = "", *, auth_token: str = ""
+) -> anthropic.AsyncAnthropic:
+    """Construct a fresh ``AsyncAnthropic`` bound to ``api_key`` or ``auth_token``.
 
     Each adapter owns its client — bypassing the module-level singleton in
     ``core.llm.providers.anthropic`` which is keyed solely by the first
     caller's resolved key. Same httpx limits/timeout/event-hooks as the
     singleton so the response-header banner pipeline keeps working.
+
+    ``auth_token`` routes subscription OAuth tokens as ``Authorization:
+    Bearer`` + the ``oauth-2025-04-20`` beta header — the Claude.ai OAuth
+    access token is NOT an API key, and sending it as ``x-api-key`` returns
+    401 ``invalid x-api-key`` (sub-claude track incident, 2026-07-05).
     """
-    if not api_key:
-        raise ValueError("build_async_anthropic_client: api_key is empty")
+    if bool(api_key) == bool(auth_token):
+        raise ValueError("build_async_anthropic_client: exactly one of api_key/auth_token required")
     import anthropic
     import httpx
 
@@ -61,6 +68,13 @@ def build_async_anthropic_client(api_key: str) -> anthropic.AsyncAnthropic:
         timeout=_build_httpx_timeout(),
         event_hooks={"response": [_async_response_hook]},
     )
+    if auth_token:
+        return anthropic.AsyncAnthropic(
+            auth_token=auth_token,
+            default_headers={"anthropic-beta": "oauth-2025-04-20"},
+            max_retries=0,  # app-level retry handles this
+            http_client=http_client,
+        )
     return anthropic.AsyncAnthropic(
         api_key=api_key,
         max_retries=0,  # app-level retry handles this

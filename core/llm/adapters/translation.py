@@ -70,11 +70,15 @@ def build_adapter_request(
         # legacy ``inject_reasoning_replay`` walker depends on (Codex MCP
         # A2 BLOCKER 3).
         reasoning_items: tuple[dict[str, Any], ...] = ()
+        output_items: tuple[dict[str, Any], ...] = ()
         phase: str = ""
         if role == "assistant":
             raw = m.get("codex_reasoning_items")
             if isinstance(raw, list):
                 reasoning_items = tuple(item for item in raw if isinstance(item, dict))
+            raw_output = m.get("codex_output_items")
+            if isinstance(raw_output, list):
+                output_items = tuple(item for item in raw_output if isinstance(item, dict))
             # PR-CODEX-MULTITURN-PHASE-PRESERVE (Sprint H follow-up,
             # 2026-05-26) — forward the per-message phase attribution
             # the AgenticLoop persisted from a prior Codex response so
@@ -90,6 +94,7 @@ def build_adapter_request(
                 content=content,
                 tool_use_id=tool_use_id,
                 codex_reasoning_items=reasoning_items,
+                codex_output_items=output_items,
                 phase=phase,
             )
         )
@@ -160,11 +165,15 @@ def agentic_response_from_adapter_result(result: AdapterCallResult) -> AgenticRe
         [dict(item) for item in result.reasoning_items] if result.reasoning_items else None
     )
     reasoning_summaries = list(result.reasoning_summaries) if result.reasoning_summaries else None
+    codex_output_items = (
+        [dict(item) for item in result.codex_output_items] if result.codex_output_items else None
+    )
     return AgenticResponse(
         content=blocks,
         stop_reason=_translate_stop_reason(result.stop_reason, bool(result.tool_uses)),
         usage=usage,
         codex_reasoning_items=codex_reasoning_items,
+        codex_output_items=codex_output_items,
         reasoning_summaries=reasoning_summaries,
         assistant_phase=result.assistant_phase,
     )

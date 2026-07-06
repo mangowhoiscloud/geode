@@ -65,7 +65,7 @@ class ToolCallTracker:
     Output is suppressed when stdout is not a TTY (e.g., pytest, CI, pipes).
     """
 
-    def __init__(self) -> None:
+    def __init__(self, *, live_updates: bool = True) -> None:
         self._tools: list[dict[str, str | bool | float]] = []
         self._lock = threading.Lock()
         self._spinner_thread: threading.Thread | None = None
@@ -73,7 +73,7 @@ class ToolCallTracker:
         self._line_count = 0  # how many lines we've printed
         self._visual_row_count = 0
         self._rendered_lines: list[str] = []
-        self._tty = sys.stdout.isatty()  # suppress ANSI output in non-TTY contexts
+        self._tty = sys.stdout.isatty() and live_updates
 
     def on_tool_start(self, event: dict[str, object]) -> None:
         """Handle a tool_start event from serve."""

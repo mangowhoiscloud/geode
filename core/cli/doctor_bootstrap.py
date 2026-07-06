@@ -12,10 +12,12 @@ from __future__ import annotations
 
 import logging
 import os
+import platform
 import shutil
 import socket
 import sys
 from dataclasses import dataclass, field
+from importlib.util import find_spec
 from pathlib import Path
 
 log = logging.getLogger(__name__)
@@ -239,6 +241,149 @@ def _check_bash_sandbox() -> CheckResult:
     return CheckResult(name="run_bash sandbox", ok=True, detail=detail)
 
 
+def _check_desktop_computer_use() -> CheckResult:
+    """Report desktop computer-use dependency and macOS AX readiness."""
+    try:
+        from core.config import settings
+        from core.tools.computer_use import (
+            computer_use_driver,
+            computer_use_env,
+            computer_use_helper_path,
+            computer_use_helper_status,
+        )
+    except Exception as exc:
+        return CheckResult(
+            name="computer-use desktop",
+            ok=False,
+            detail=f"config probe failed: {exc}",
+            fix="Run `uv sync --extra desktop --group dev`, then retry `geode doctor`.",
+        )
+
+    if not getattr(settings, "computer_use_enabled", False):
+        return CheckResult(
+            name="computer-use desktop",
+            ok=True,
+            detail="disabled by config",
+        )
+
+    env = computer_use_env()
+    if env == "sandbox":
+        return CheckResult(
+            name="computer-use desktop",
+            ok=True,
+            detail="computer_use_env=sandbox; host desktop dependencies are not required",
+        )
+
+    driver = computer_use_driver()
+    helper_path = computer_use_helper_path()
+    if driver == "helper" or (driver == "auto" and helper_path is not None):
+        if helper_path is None:
+            return CheckResult(
+                name="computer-use desktop",
+                ok=False,
+                detail="computer_use_driver=helper but GEODE Computer Use Helper is not installed",
+                fix=(
+                    "Build it with `scripts/macos/build_computer_helper.sh`, "
+                    "then retry `geode doctor`."
+                ),
+            )
+        status = computer_use_helper_status()
+        if status.get("error"):
+            return CheckResult(
+                name="computer-use desktop",
+                ok=False,
+                detail=f"helper probe failed: {status.get('error')}",
+                fix=(
+                    "Rebuild with `scripts/macos/build_computer_helper.sh`, "
+                    "then retry `geode doctor`."
+                ),
+            )
+        ax_trusted = bool(status.get("ax_trusted"))
+        screenshot_ok = bool(status.get("screenshot_ok"))
+        if platform.system() == "Darwin" and not ax_trusted:
+            return CheckResult(
+                name="computer-use desktop",
+                ok=False,
+                detail=(
+                    "GEODE Computer Use Helper is installed; macOS Accessibility "
+                    "permission is not trusted"
+                ),
+                fix=(
+                    "Grant Accessibility permission to `GEODE Computer Use Helper.app` "
+                    "in System Settings, restart the helper path, then retry."
+                ),
+            )
+        if platform.system() == "Darwin" and not screenshot_ok:
+            return CheckResult(
+                name="computer-use desktop",
+                ok=False,
+                detail="GEODE Computer Use Helper is installed but screen capture failed",
+                fix=(
+                    "Grant Screen Recording permission to `GEODE Computer Use Helper.app` "
+                    "in System Settings, restart the helper path, then retry."
+                ),
+            )
+        return CheckResult(
+            name="computer-use desktop",
+            ok=True,
+            detail=f"helper driver ready ({helper_path})",
+        )
+
+    missing = [module for module in ("pyautogui", "PIL") if find_spec(module) is None]
+    if missing:
+        return CheckResult(
+            name="computer-use desktop",
+            ok=False,
+            detail=f"missing host dependency: {', '.join(missing)}",
+            fix="Install the desktop extra: `uv sync --extra desktop --group dev`.",
+        )
+
+    if platform.system() != "Darwin":
+        return CheckResult(
+            name="computer-use desktop",
+            ok=True,
+            detail=f"host dependencies present; AX check skipped on {platform.system()}",
+        )
+
+    missing_ax = [
+        module for module in ("ApplicationServices", "AppKit") if find_spec(module) is None
+    ]
+    if missing_ax:
+        return CheckResult(
+            name="computer-use desktop",
+            ok=False,
+            detail=f"missing macOS AX bridge: {', '.join(missing_ax)}",
+            fix="Install the desktop extra: `uv sync --extra desktop --group dev`.",
+        )
+
+    try:
+        from ApplicationServices import AXIsProcessTrusted
+    except Exception as exc:
+        return CheckResult(
+            name="computer-use desktop",
+            ok=False,
+            detail=f"AX trust probe failed: {exc}",
+            fix="Install the desktop extra: `uv sync --extra desktop --group dev`.",
+        )
+
+    if not AXIsProcessTrusted():
+        return CheckResult(
+            name="computer-use desktop",
+            ok=False,
+            detail="dependencies present; macOS Accessibility permission is not trusted",
+            fix=(
+                "Grant Accessibility permission to the app launching GEODE "
+                "(Terminal/iTerm/Codex), then restart that app and retry."
+            ),
+        )
+
+    return CheckResult(
+        name="computer-use desktop",
+        ok=True,
+        detail="host dependencies present; macOS Accessibility trusted",
+    )
+
+
 def run_bootstrap_doctor() -> BootstrapReport:
     """Run all bootstrap checks and return the aggregated report."""
     report = BootstrapReport()
@@ -249,6 +394,7 @@ def run_bootstrap_doctor() -> BootstrapReport:
     report.checks.append(_check_codex_oauth())
     report.checks.append(_check_profile_store())
     report.checks.append(_check_bash_sandbox())
+    report.checks.append(_check_desktop_computer_use())
     report.checks.append(_check_serve_socket())
     return report
 

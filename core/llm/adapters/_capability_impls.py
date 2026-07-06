@@ -14,6 +14,7 @@ via :func:`core.llm.errors.is_billing_fatal`.
 from __future__ import annotations
 
 import logging
+from collections.abc import Callable
 from typing import Any
 
 from core.llm.adapters.base import (
@@ -44,15 +45,21 @@ ANTHROPIC_WEB_SEARCH_TIMEOUT_S = 100.0
 
 
 async def anthropic_web_search(
-    client: Any, *, query: str, max_results: int, model: str, adapter_name: str
+    client: Any,
+    *,
+    query: str,
+    max_results: int,
+    model: str,
+    adapter_name: str,
+    prepare_kwargs: Callable[[dict[str, Any]], dict[str, Any]] | None = None,
 ) -> WebSearchResult:
     """Anthropic native ``web_search_20260209`` tool — same shape on PAYG and
     OAuth subscription endpoints."""
-    response = await client.messages.create(
-        model=model,
-        max_tokens=1024,
-        tools=[{"type": "web_search_20260209", "name": "web_search"}],
-        messages=[
+    kwargs: dict[str, Any] = {
+        "model": model,
+        "max_tokens": 1024,
+        "tools": [{"type": "web_search_20260209", "name": "web_search"}],
+        "messages": [
             {
                 "role": "user",
                 "content": (
@@ -61,8 +68,11 @@ async def anthropic_web_search(
                 ),
             }
         ],
-        timeout=ANTHROPIC_WEB_SEARCH_TIMEOUT_S,
-    )
+        "timeout": ANTHROPIC_WEB_SEARCH_TIMEOUT_S,
+    }
+    if prepare_kwargs is not None:
+        kwargs = prepare_kwargs(kwargs)
+    response = await client.messages.create(**kwargs)
     text_parts: list[str] = []
     source_urls: list[str] = []
     for block in getattr(response, "content", []) or []:
@@ -88,6 +98,7 @@ async def anthropic_complete_text(
     system: str,
     model: str,
     max_tokens: int,
+    prepare_kwargs: Callable[[dict[str, Any]], dict[str, Any]] | None = None,
 ) -> TextCompletionResult:
     """Single-turn Anthropic ``messages.create`` — used by compaction / extraction."""
     kwargs: dict[str, Any] = {
@@ -98,6 +109,8 @@ async def anthropic_complete_text(
     }
     if system:
         kwargs["system"] = system
+    if prepare_kwargs is not None:
+        kwargs = prepare_kwargs(kwargs)
     response = await client.messages.create(**kwargs)
     text_parts: list[str] = []
     for block in getattr(response, "content", []) or []:

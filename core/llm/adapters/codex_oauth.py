@@ -20,6 +20,7 @@ Pair with :class:`OpenAIPaygAdapter` (same provider, API key path) and
 from __future__ import annotations
 
 import logging
+import os
 import threading
 from collections.abc import AsyncIterator
 from dataclasses import dataclass, field
@@ -223,7 +224,7 @@ class CodexOAuthAdapter:
         # / stop_reason) without re-running the cycle, and log the dump
         # path on the warning line that surfaces alongside the
         # worker-level failure.
-        if not result.text:
+        if not result.text and not result.tool_uses:
             dump_path = _dump_empty_text_postmortem(model=req.model, result=result)
             log.warning(
                 "codex-oauth: empty output_text model=%s "
@@ -234,6 +235,12 @@ class CodexOAuthAdapter:
                 result.stop_reason,
                 dump_path or "<dump failed>",
             )
+            if _fail_on_empty_text_enabled():
+                raise RuntimeError(
+                    "codex-oauth: empty output_text "
+                    f"model={req.model} stop_reason={result.stop_reason} "
+                    f"dump={dump_path or '<dump failed>'}"
+                )
         return result
 
     async def acomplete_text(
@@ -490,6 +497,13 @@ def _dump_empty_text_postmortem(
             },
             "reasoning_items_count": len(result.reasoning_items),
             "reasoning_summaries_count": len(result.reasoning_summaries),
+            "codex_output_items_count": len(result.codex_output_items),
+            "codex_output_item_types": [
+                str(item.get("type", "<missing>"))
+                for item in result.codex_output_items
+                if isinstance(item, dict)
+            ],
+            "codex_output_items": list(result.codex_output_items),
             "reasoning_items": list(result.reasoning_items),
             "reasoning_summaries": list(result.reasoning_summaries),
         }
@@ -501,6 +515,11 @@ def _dump_empty_text_postmortem(
     except OSError as exc:
         log.debug("codex-oauth: postmortem dump write failed: %s", exc)
         return None
+
+
+def _fail_on_empty_text_enabled() -> bool:
+    raw = os.environ.get("GEODE_CODEX_OAUTH_FAIL_EMPTY_TEXT", "").strip().lower()
+    return raw in {"1", "true", "yes", "on"}
 
 
 def _log_codex_input_shape(resp_input: Any, *, cap: int = 30) -> None:

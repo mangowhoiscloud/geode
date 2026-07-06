@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import os
 from typing import TYPE_CHECKING, Any
 
 from core.agent.conversation import ConversationContext
@@ -1803,6 +1804,8 @@ class AgenticLoop:
                 # the next-turn input array (other adapters ignore the field)
                 if getattr(response, "codex_reasoning_items", None):
                     _assistant_msg["codex_reasoning_items"] = response.codex_reasoning_items
+                if getattr(response, "codex_output_items", None):
+                    _assistant_msg["codex_output_items"] = response.codex_output_items
                 # Codex phase for the next-turn replay (other adapters ignore)
                 _phase = getattr(response, "assistant_phase", "")
                 if _phase:
@@ -1936,6 +1939,8 @@ class AgenticLoop:
             # Codex reasoning passthrough (same as the end_turn branch)
             if getattr(response, "codex_reasoning_items", None):
                 _assistant_msg["codex_reasoning_items"] = response.codex_reasoning_items
+            if getattr(response, "codex_output_items", None):
+                _assistant_msg["codex_output_items"] = response.codex_output_items
             # Codex phase on tool-use rounds
             _phase = getattr(response, "assistant_phase", "")
             if _phase:
@@ -2154,6 +2159,13 @@ class AgenticLoop:
                 adapter_name,
                 exc,
             )
+            if os.environ.get("GEODE_LLM_FAIL_FAST_ON_ADAPTER_ERROR", "").strip().lower() in {
+                "1",
+                "true",
+                "yes",
+                "on",
+            }:
+                raise
             response = None
             if self._hooks:
                 try:

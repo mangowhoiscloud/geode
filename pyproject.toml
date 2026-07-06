@@ -1,6 +1,6 @@
 [project]
 name = "geode-agent"
-version = "0.99.279"
+version = "0.99.280"
 description = "GEODE — 범용 자율 실행 에이전트"
 license = "Apache-2.0"
 readme = "README.md"
@@ -154,6 +154,9 @@ allow-direct-references = true
 [tool.hatch.build.targets.wheel]
 packages = ["core", "plugins"]
 
+[tool.hatch.build.targets.wheel.force-include]
+"scripts/macos" = "scripts/macos"
+
 [tool.hatch.build.targets.sdist]
 include = [
     "/pyproject.toml",
@@ -164,6 +167,7 @@ include = [
     "/NOTICE",
     "/core",
     "/plugins",
+    "/scripts/macos",
 ]
 
 [tool.pytest.ini_options]

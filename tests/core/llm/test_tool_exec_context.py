@@ -389,3 +389,27 @@ def test_web_search_via_adapters_no_fallback_on_billing(
 
     selected.aweb_search.assert_called_once()
     fallback.aweb_search.assert_not_called()
+
+
+def test_select_adapter_normalizes_prefer_provider_variant_id(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A caller forwarding ``loop._provider='openai-codex'`` verbatim must
+    still match the ``openai``-family adapter (fast-chat incident,
+    2026-07-06 — unnormalized prefer_provider missed every registered
+    adapter and broke codex-subscription fast-chat turns)."""
+    from core.llm.adapters.dispatch import _select_adapter
+
+    cands = [
+        _fake_adapter("codex-oauth", "openai", "subscription"),
+        _fake_adapter("openai-payg", "openai", "payg"),
+    ]
+    monkeypatch.setattr("core.llm.adapters.dispatch.list_adapters", lambda: cands)
+
+    picked = _select_adapter(
+        "supports_web_search",
+        prefer_provider="openai-codex",
+        prefer_source="subscription",
+        provider_order=("openai",),
+    )
+    assert picked is not None and picked.name == "codex-oauth"

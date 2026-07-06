@@ -10,7 +10,9 @@ from __future__ import annotations
 import asyncio
 from unittest.mock import AsyncMock, MagicMock, patch
 
+import pytest
 from core.tools import computer_grounding as cg
+from core.tools.base import ToolContext
 
 
 class TestBboxCenterToTarget:
@@ -86,3 +88,37 @@ class TestGlmLocate:
         with patch("core.llm.providers.glm._get_async_glm_client", return_value=client):
             coord = asyncio.run(cg.glm_locate("B64", "nonexistent"))
         assert coord is None
+
+
+class TestLocateWithActiveProvider:
+    def test_glm_context_uses_glm_grounding(self) -> None:
+        with patch.object(cg, "glm_locate", new=AsyncMock(return_value=(11, 22))) as glm_locate:
+            coord = asyncio.run(
+                cg.locate_with_active_provider(
+                    "B64",
+                    "submit",
+                    tool_context=ToolContext(provider="glm", source="payg"),
+                )
+            )
+
+        assert coord == (11, 22)
+        glm_locate.assert_awaited_once()
+
+    def test_openai_subscription_refuses_implicit_glm_fallback(self) -> None:
+        with (
+            patch.object(cg, "glm_locate", new=AsyncMock()) as glm_locate,
+            pytest.raises(cg.VisualGroundingUnavailableError) as raised,
+        ):
+            asyncio.run(
+                cg.locate_with_active_provider(
+                    "B64",
+                    "submit",
+                    tool_context=ToolContext(provider="openai", source="subscription"),
+                )
+            )
+
+        exc = raised.value
+        assert exc.provider == "openai"
+        assert exc.source == "subscription"
+        assert "implicit GLM fallback is disabled" in str(exc)
+        glm_locate.assert_not_awaited()
