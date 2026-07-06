@@ -45,6 +45,23 @@ functional change.
 
 ---
 
+## [0.99.277] - 2026-07-06
+
+### Added
+
+- **Reflection confidence now steers compute allocation.** The
+  reflection node's `CognitiveState.confidence` (produced every round
+  since PR-3 but consumed only by the CLI session display) gains two
+  control-flow consumers: (1) confidence-adaptive reflection cadence —
+  `>= 0.8` doubles the effective `cognitive_reflection_interval`
+  (fewer belief-update LLM calls while the loop is on track), `< 0.4`
+  forces a reflection every round; opt-out via the new
+  `cognitive_reflection_adaptive` knob (`cognitive.reflection_adaptive`).
+  (2) A `low_confidence` replan trigger — edge-triggered on the drop
+  below 0.4 (re-arms only after recovery, so a persistently unsure
+  session replans once, not every round). Trigger priority:
+  `verify_fail` > `low_confidence` > `cadence`.
+
 ## [0.99.276] - 2026-07-06
 
 ### Fixed
