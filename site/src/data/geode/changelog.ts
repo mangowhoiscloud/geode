@@ -17,6 +17,11 @@ export type ChangelogEntry = {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    "version": "0.99.277",
+    "date": "2026-07-06",
+    "body": "### Added\n\n- **Reflection confidence now steers compute allocation.** The\n  reflection node's `CognitiveState.confidence` (produced every round\n  since PR-3 but consumed only by the CLI session display) gains two\n  control-flow consumers: (1) confidence-adaptive reflection cadence —\n  `>= 0.8` doubles the effective `cognitive_reflection_interval`\n  (fewer belief-update LLM calls while the loop is on track), `< 0.4`\n  forces a reflection every round; opt-out via the new\n  `cognitive_reflection_adaptive` knob (`cognitive.reflection_adaptive`).\n  (2) A `low_confidence` replan trigger — edge-triggered on the drop\n  below 0.4 (re-arms only after recovery, so a persistently unsure\n  session replans once, not every round). Trigger priority:\n  `verify_fail` > `low_confidence` > `cadence`."
+  },
+  {
     "version": "0.99.276",
     "date": "2026-07-06",
     "body": "### Fixed\n\n- **`cost_limit_usd` now reaches the enforced loop guard.** The config\n  knob (`cost.limit_usd` / `GEODE_COST_LIMIT_USD`) previously only fired\n  the COST_WARNING / COST_LIMIT_EXCEEDED hook events; the AgenticLoop's\n  enforced cost guard (80% warn, 100% hard stop) was reachable only via\n  the constructor's `cost_budget` param, which no config path seeded\n  outside the supervised daemon's monthly-budget wiring. The loop now\n  falls back to `settings.cost_limit_usd` when no explicit `cost_budget`\n  is given, so setting the knob alone hard-stops a runaway session\n  (`termination_reason=\"cost_budget_exceeded\"`). An explicit caller\n  value still wins."
