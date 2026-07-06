@@ -23,6 +23,7 @@ from typing import Any
 from core.llm.router import LLMUsageAccumulator, get_usage_accumulator
 from core.ui import spinner_glyph
 from core.ui.console import console
+from core.ui.palette import DIM, ERASE_LINE, GLYPH_OK, RESET
 
 # Generic messages that hand the spinner line over to a whimsical gerund \u2014
 # ONE word per spinner lifetime, seeded by its start time (Claude Code parity).
@@ -84,7 +85,7 @@ class TextSpinner:
             meta = spinner_glyph.elapsed(el)
             meta += f" · {self._model}" if self._model else ""
             out = self._out()
-            out.write(f"\r\x1b[2K  {body} {spinner_glyph.DIM}({meta}){spinner_glyph.RST}")
+            out.write(f"\r{ERASE_LINE}  {body} {DIM}({meta}){RESET}")
             out.flush()
             time.sleep(0.05)
 
@@ -95,7 +96,7 @@ class TextSpinner:
         if self._thread:
             self._thread.join(timeout=0.2)
         out = self._out()
-        out.write("\r\x1b[2K")
+        out.write(f"\r{ERASE_LINE}")
         if final_message:
             out.write(f"  {final_message}\n")
         out.flush()
@@ -168,7 +169,7 @@ class GeodeStatus:
         elapsed = time.monotonic() - self._start_time
         delta = self._get_token_delta()
 
-        parts = [f"  [bold green]✓[/bold green] {summary}"]
+        parts = [f"  [bold green]{GLYPH_OK}[/bold green] {summary}"]
         if delta.input_tokens > 0 or delta.output_tokens > 0:
             parts.append(f"[dim]↓{_fmt(delta.input_tokens)} ↑{_fmt(delta.output_tokens)}[/dim]")
         if delta.cost_usd > 0:
@@ -186,7 +187,7 @@ class GeodeStatus:
                 self._spinner.stop()
                 self._spinner = None
             delta = self._get_token_delta()
-            parts = ["  [bold green]✓[/bold green] done"]
+            parts = [f"  [bold green]{GLYPH_OK}[/bold green] done"]
             if delta.input_tokens > 0 or delta.output_tokens > 0:
                 parts.append(f"[dim]↓{_fmt(delta.input_tokens)} ↑{_fmt(delta.output_tokens)}[/dim]")
             if delta.cost_usd > 0:

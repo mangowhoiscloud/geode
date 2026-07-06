@@ -45,6 +45,28 @@ functional change.
 
 ---
 
+## [0.99.279] - 2026-07-06
+
+### Architecture
+
+- **CLI style SoT: `core/ui/palette.py`.** The CLI had two disconnected
+  style systems — the Rich brand theme in `console.py` and a raw-ANSI
+  thin-client path (`event_renderer` / `tool_tracker` / `status`) that
+  inlined 150+ escape literals across 17 distinct SGR codes, including
+  the same style written two ways (`36;1` vs `1;36`). All brand hexes,
+  SGR style/control tokens, the renderer glyph vocabulary, and
+  truncation/width metrics now live in one palette module: `console.py`
+  derives the Rich theme from the same hex anchors, `spinner_glyph`
+  keeps only its animation-owned dynamic rose, and every swept renderer
+  emits palette tokens. Token values are byte-identical to the literals
+  they replaced (zero visual diff by construction — full
+  `tests/core/ui` suite green unchanged); re-skinning the raw path onto
+  the brand truecolor identity is now a one-line-per-semantic value
+  change. Drift ratchets in `tests/core/ui/test_style_sot.py`: new
+  inline `\033[`/`\x1b[` literals in the swept modules fail CI, hex
+  restatement in `console.py` fails, token/glyph values are pinned, and
+  denormalized SGR spellings are banned.
+
 ## [0.99.278] - 2026-07-06
 
 ### Added

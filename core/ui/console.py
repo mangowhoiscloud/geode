@@ -29,12 +29,12 @@ from rich.theme import Theme
 
 from core.ui.context_local import ContextLocal
 
-# -- Brand palette (terminal-safe, toned-down) --
-_CORAL = "#d4a0a0"  # axolotl body (muted rose)
-_GOLD = "#e0b040"  # headlamp (warm amber)
-_CYAN = "#5f9ea0"  # crystals / tech (calm cadet)
-_MAGENTA = "#9775c4"  # gills / accent (soft iris)
-_CRYSTAL = "#a88fd4"  # geode crystal (muted lavender)
+# -- Brand palette — hex SoT lives in core.ui.palette (drift-pinned) --
+from core.ui.palette import CORAL as _CORAL
+from core.ui.palette import CRYSTAL as _CRYSTAL
+from core.ui.palette import CYAN as _CYAN
+from core.ui.palette import GOLD as _GOLD
+from core.ui.palette import MAGENTA as _MAGENTA
 
 GEODE_THEME = Theme(
     {
