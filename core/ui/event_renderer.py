@@ -1355,9 +1355,11 @@ class EventRenderer:
             for line in plan_lines:
                 self._out.write(line)
             plan.visible_lines = plan_lines
-            # Non-TTY (piped/log) output is append-only: never mark at_bottom,
-            # so no cursor-up erase sequences are ever emitted into a pipe.
-            plan.at_bottom = self._tty
+            # Piped/log output stays append-only. In the default prompt_toolkit
+            # CLI, however, the carriage-return inline status line is the only
+            # thing below the plan; once that line is cleared, the plan is still
+            # renderer-owned bottom content and can update in place.
+            plan.at_bottom = self._tty or self._inline_status_enabled
             plan.signature = signature
             plan.rendered = True
             self._out.flush()

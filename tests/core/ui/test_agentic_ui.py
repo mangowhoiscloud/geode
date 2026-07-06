@@ -1249,6 +1249,50 @@ def test_event_renderer_restores_tty_inline_status_without_cursor_up() -> None:
     assert "\033[2A" not in out
 
 
+def test_event_renderer_updates_plan_in_place_with_tty_inline_status() -> None:
+    """Default TTY CLI should update the visible plan instead of stacking copies."""
+    from core.ui.event_renderer import EventRenderer
+
+    class TtyStringIO(io.StringIO):
+        def isatty(self) -> bool:
+            return True
+
+    r = EventRenderer(live_regions=False)
+    r._out = TtyStringIO()
+
+    try:
+        r.start_activity()
+        r._render_inline_status_frame()
+        r.on_event(
+            {
+                "type": "progress_plan",
+                "plan": [
+                    {"step": "first step", "status": "in_progress"},
+                    {"step": "second step", "status": "pending"},
+                ],
+            }
+        )
+        assert r._progress_plan.at_bottom is True
+        r._render_inline_status_frame()
+        r.on_event(
+            {
+                "type": "progress_plan",
+                "plan": [
+                    {"step": "first step", "status": "completed"},
+                    {"step": "second step", "status": "in_progress"},
+                ],
+            }
+        )
+    finally:
+        r.stop()
+
+    out = r._out.getvalue()
+    plain = _strip_ansi(out)
+    assert "first step" in plain
+    assert "second step" in plain
+    assert re.search(r"\x1b\[\d+A", out)
+
+
 def test_tool_tracker_running_row_uses_signature_shimmer() -> None:
     """Running tool rows render via spinner_glyph (single spinner source)."""
     from core.ui import spinner_glyph

@@ -45,6 +45,17 @@ functional change.
 
 ---
 
+## [0.99.283] - 2026-07-07
+
+### Fixed
+
+- **Default CLI plan updates refresh in place.** In TTY sessions using the
+  prompt-safe inline `Working...` status, progress-plan updates now keep the
+  plan as renderer-owned bottom content and redraw it in place after clearing
+  the status line. This prevents updated plans from stacking duplicate
+  checklist blocks in the transcript while preserving append-only output for
+  pipes and logs.
+
 ## [0.99.282] - 2026-07-07
 
 ### Fixed
