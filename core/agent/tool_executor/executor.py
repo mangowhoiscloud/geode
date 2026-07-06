@@ -518,6 +518,27 @@ class ToolExecutor:
                 }
             ]
 
+        # Best-of-N candidate sampling (single-task mode only) — expand the
+        # one task into N copies, each with a distinct diversity lens, then
+        # judge-select the winner after the fan-out (GAP 2+4, 2026-07-06).
+        # ``bool`` excluded: True would silently mean best_of=1.
+        raw_best_of = tool_input.get("best_of", 1)
+        best_of = (
+            raw_best_of if isinstance(raw_best_of, int) and not isinstance(raw_best_of, bool) else 1
+        )
+        from core.agent.candidate_sampling import MAX_BEST_OF, lensed_description
+
+        best_of = max(1, min(best_of, MAX_BEST_OF))
+        if best_of > 1 and len(tasks_raw) == 1:
+            base_task = tasks_raw[0]
+            base_description = base_task.get("task_description", "")
+            tasks_raw = [
+                {**base_task, "task_description": lensed_description(base_description, i)}
+                for i in range(best_of)
+            ]
+        else:
+            best_of = 1  # batch mode: ignored (schema documents this)
+
         # Batch items may carry their own ``role``; the top-level ``role``
         # is the default for items that don't declare one.
         default_role = tool_input.get("role", "")
@@ -661,12 +682,64 @@ class ToolExecutor:
         for r in results:
             status = "ok" if r.success else "error"
             summary_parts.append(f"{r.task_id}:{status}")
-        return {
+        payload: dict[str, Any] = {
             "tasks": [r.to_dict() for r in results],
             "total": len(results),
             "succeeded": succeeded,
             "summary": f"{succeeded}/{len(results)} tasks completed. [{', '.join(summary_parts)}]",
         }
+        if best_of > 1:
+            payload["best_of"] = await self._select_best_candidate(
+                task_description=tool_input.get("task_description", ""),
+                results=results,
+                judge_model=default_model,
+            )
+        return payload
+
+    async def _select_best_candidate(
+        self,
+        *,
+        task_description: str,
+        results: list[Any],
+        judge_model: str,
+    ) -> dict[str, Any]:
+        """Judge-select the winner among best-of-N candidate SubResults.
+
+        Judges only the SUCCESSFUL candidates; the winner block carries
+        the winning candidate's full ``to_dict()`` so the model reads
+        the selected result without re-scanning ``tasks``. Judge model
+        precedence mirrors verify's llm_judge: ``settings.judge_model``
+        → the delegating loop's live model → ``settings.model``. All
+        failure shapes are observable (``judge_error``), never silent.
+        """
+        successful = [r for r in results if getattr(r, "success", False)]
+        if not successful:
+            return {
+                "n": len(results),
+                "winner": None,
+                "judge_error": "no successful candidates to judge",
+            }
+        from core.agent.candidate_sampling import judge_candidates
+        from core.config import settings
+
+        model = (
+            (getattr(settings, "judge_model", "") or "").strip()
+            or judge_model
+            or getattr(settings, "model", "")
+        )
+        candidate_texts = [str(getattr(r, "output", "") or "") for r in successful]
+        verdict = await judge_candidates(task_description, candidate_texts, model=model)
+        winner = successful[verdict.winner_index]
+        block: dict[str, Any] = {
+            "n": len(results),
+            "judged": len(successful),
+            "winner_task_id": winner.task_id,
+            "winner": winner.to_dict(),
+            "reason": verdict.reason,
+        }
+        if verdict.judge_error:
+            block["judge_error"] = verdict.judge_error
+        return block
 
     async def _request_approval_async(
         self, command: str, reason: str, record: ApprovalRecord | None = None
