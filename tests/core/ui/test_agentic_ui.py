@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import io
+import re
 import time
 from typing import Any
 from unittest.mock import patch
@@ -23,6 +25,12 @@ from core.ui.agentic_ui import (
     render_tool_result,
     render_turn_summary,
 )
+
+_ANSI_ESCAPE_RE = re.compile(r"\x1b\[[0-?]*[ -/]*[@-~]")
+
+
+def _strip_ansi(text: str) -> str:
+    return _ANSI_ESCAPE_RE.sub("", text)
 
 
 class TestFmtTokens:
@@ -1170,8 +1178,6 @@ class TestPlanNotReemittedDuringPhases:
 
 def test_event_renderer_can_run_append_only_without_live_regions() -> None:
     """Legacy prompt_toolkit CLI must not repaint over its input line."""
-    import io
-
     from core.ui.event_renderer import EventRenderer
 
     r = EventRenderer(live_regions=False)
@@ -1201,6 +1207,43 @@ def test_event_renderer_can_run_append_only_without_live_regions() -> None:
     assert out.count("Activity") >= 1
     assert "read_file" in out
     assert "run_tests" in out
+    assert "\033[A" not in out
+    assert "\033[1A" not in out
+
+
+def test_event_renderer_restores_tty_inline_status_without_cursor_up() -> None:
+    """Default CLI gets a live status line without prompt-overpaint cursor-up."""
+    from core.ui.event_renderer import EventRenderer
+
+    class TtyStringIO(io.StringIO):
+        def isatty(self) -> bool:
+            return True
+
+    r = EventRenderer(live_regions=False)
+    r._out = TtyStringIO()
+
+    try:
+        r.start_activity()
+        r._render_inline_status_frame()
+        r.on_event(
+            {
+                "type": "progress_plan",
+                "plan": [{"step": "inspect renderer", "status": "in_progress"}],
+            }
+        )
+        r.on_event({"type": "tool_start", "name": "read_file"})
+        r._render_inline_status_frame()
+        r.on_event({"type": "tool_end", "name": "read_file", "summary": "ok", "duration_s": 0.1})
+    finally:
+        r.stop()
+
+    out = r._out.getvalue()
+    plain = _strip_ansi(out)
+    assert "Working" in plain
+    assert "Running read_file" in plain
+    assert "Tasks" in plain
+    assert "Activity" in plain
+    assert "\r" in out
     assert "\033[A" not in out
     assert "\033[1A" not in out
     assert "\033[2A" not in out
