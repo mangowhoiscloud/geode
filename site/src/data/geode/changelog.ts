@@ -17,6 +17,11 @@ export type ChangelogEntry = {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    "version": "0.99.280",
+    "date": "2026-07-06",
+    "body": "### Fixed\n\n- **Adapter lookups normalize provider vocabulary at the boundary.**\n  `resolve_for` and `_select_adapter` now accept BOTH the adapter\n  registry's family names (`openai` / `glm`) and the routing layer's\n  variant ids (`openai-codex` / `glm-coding` / `zhipuai`), translating\n  via `normalize_registry_provider` at the lookup entry instead of\n  relying on every caller to translate first. Incident: a fast-chat\n  path forwarded `loop._provider='openai-codex'` verbatim as\n  `prefer_provider`, matched zero registered adapters, and every\n  codex-subscription fast-chat turn failed with\n  AdapterUnavailableError (2026-07-06). `glm-coding` (a live provider\n  value in strategy plans and auth config) joins the normalization map;\n  the drift-anchor pin is updated deliberately."
+  },
+  {
     "version": "0.99.279",
     "date": "2026-07-06",
     "body": "### Architecture\n\n- **CLI style SoT: `core/ui/palette.py`.** The CLI had two disconnected\n  style systems — the Rich brand theme in `console.py` and a raw-ANSI\n  thin-client path (`event_renderer` / `tool_tracker` / `status`) that\n  inlined 150+ escape literals across 17 distinct SGR codes, including\n  the same style written two ways (`36;1` vs `1;36`). All brand hexes,\n  SGR style/control tokens, the renderer glyph vocabulary, and\n  truncation/width metrics now live in one palette module: `console.py`\n  derives the Rich theme from the same hex anchors, `spinner_glyph`\n  keeps only its animation-owned dynamic rose, and every swept renderer\n  emits palette tokens. Token values are byte-identical to the literals\n  they replaced (zero visual diff by construction — full\n  `tests/core/ui` suite green unchanged); re-skinning the raw path onto\n  the brand truecolor identity is now a one-line-per-semantic value\n  change. Drift ratchets in `tests/core/ui/test_style_sot.py`: new\n  inline `\\033[`/`\\x1b[` literals in the swept modules fail CI, hex\n  restatement in `console.py` fails, token/glyph values are pinned, and\n  denormalized SGR spellings are banned."

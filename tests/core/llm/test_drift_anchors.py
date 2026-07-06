@@ -30,6 +30,11 @@ class TestProviderNormalizationAnchor:
 
         assert PROVIDER_REGISTRY_NORMALIZATION == {
             "openai-codex": "openai",
+            # PR-ADAPTER-BOUNDARY-NORMALIZE (2026-07-06) — glm-coding is a
+            # live provider value (strategies/plans.py, auth_toml.py); folded
+            # to its family alongside the boundary normalization in
+            # resolve_for/_select_adapter.
+            "glm-coding": "glm",
             "zhipuai": "glm",
         }
 
@@ -37,6 +42,7 @@ class TestProviderNormalizationAnchor:
         from core.llm.adapters.registry import normalize_registry_provider
 
         assert normalize_registry_provider("openai-codex") == "openai"
+        assert normalize_registry_provider("glm-coding") == "glm"
         assert normalize_registry_provider("zhipuai") == "glm"
         assert normalize_registry_provider("anthropic") == "anthropic"
         assert normalize_registry_provider("glm") == "glm"

@@ -58,7 +58,7 @@ from core.llm.adapters.base import (
     TextCompletionResult,
     WebSearchResult,
 )
-from core.llm.adapters.registry import list_adapters
+from core.llm.adapters.registry import list_adapters, normalize_registry_provider
 from core.llm.errors import BillingError, is_billing_fatal
 
 log = logging.getLogger(__name__)
@@ -247,7 +247,15 @@ def _select_adapter(
     through to the default-resolved path, which contradicted the
     docstring claim that partial preferences raise unavailable and was an
     uncovered widening surface.
+
+    ``prefer_provider`` accepts both the registry family names and the
+    routing layer's variant ids (``openai-codex`` / ``glm-coding`` /
+    ``zhipuai``) — normalized here so a caller forwarding
+    ``loop._provider`` verbatim cannot miss every registered adapter
+    (fast-chat incident, 2026-07-06).
     """
+    if prefer_provider:
+        prefer_provider = normalize_registry_provider(prefer_provider)
     capable = _capability_adapters(capability_attr)
     if not capable:
         return None
