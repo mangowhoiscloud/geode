@@ -555,6 +555,12 @@
           ],
           "description": "Optional built-in capability role. Restricts the sub-agent to the role's tool allowlist and validates its result against the role's output schema (repo_researcher: read-only research findings; patcher: file edits + patch list; verifier: run_bash checks + pass/fail; reviewer: read-only review findings). Omit for the default unrestricted sub-agent."
         },
+        "best_of": {
+          "type": "integer",
+          "minimum": 2,
+          "maximum": 4,
+          "description": "Single-task mode only: run N candidates of the SAME task in parallel, each with a distinct built-in reasoning lens, then return the judge-selected winner in a 'best_of' result block alongside all candidates. Costs N sub-agent runs plus one judge LLM call — use when the task is verification-friendly (clear correctness criteria) and worth the extra compute. Ignored in batch mode."
+        },
         "tasks": {
           "type": "array",
           "description": "Batch mode: array of tasks to run in parallel",
