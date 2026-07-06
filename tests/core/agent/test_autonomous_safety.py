@@ -140,9 +140,15 @@ class TestCostBudgetAutoStop:
         assert "1.50" in result.text
 
     def test_cost_budget_zero_no_check(
-        self, context: ConversationContext, executor: ToolExecutor
+        self,
+        context: ConversationContext,
+        executor: ToolExecutor,
+        monkeypatch: pytest.MonkeyPatch,
     ) -> None:
-        """When cost_budget=0 (default), no cost check should happen."""
+        """When cost_budget=0 AND settings.cost_limit_usd=0, no cost check happens."""
+        from core.config import settings
+
+        monkeypatch.setattr(settings, "cost_limit_usd", 0.0, raising=False)
         loop = AgenticLoop(context, executor, cost_budget=0.0)
         assert loop._cost_budget == 0.0
 
@@ -154,6 +160,58 @@ class TestCostBudgetAutoStop:
             result = asyncio.run(loop.arun("test no budget"))
 
         assert result.termination_reason == "natural"
+
+    def test_cost_limit_usd_seeds_budget(
+        self,
+        context: ConversationContext,
+        executor: ToolExecutor,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """No explicit cost_budget → settings.cost_limit_usd seeds the enforced guard."""
+        from core.config import settings
+
+        monkeypatch.setattr(settings, "cost_limit_usd", 2.5, raising=False)
+        loop = AgenticLoop(context, executor)
+        assert loop._cost_budget == 2.5
+
+    def test_explicit_cost_budget_wins_over_settings(
+        self,
+        context: ConversationContext,
+        executor: ToolExecutor,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """An explicit caller cost_budget overrides settings.cost_limit_usd."""
+        from core.config import settings
+
+        monkeypatch.setattr(settings, "cost_limit_usd", 2.5, raising=False)
+        loop = AgenticLoop(context, executor, cost_budget=7.0)
+        assert loop._cost_budget == 7.0
+
+    def test_cost_limit_usd_terminates_loop(
+        self,
+        context: ConversationContext,
+        executor: ToolExecutor,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """The config knob alone (no constructor param) hard-stops the loop."""
+        from core.config import settings
+
+        monkeypatch.setattr(settings, "cost_limit_usd", 1.00, raising=False)
+        loop = AgenticLoop(context, executor)
+
+        mock_tracker = MagicMock()
+        mock_tracker.accumulator.total_cost_usd = 1.50
+
+        response = _make_text_response("Hello")
+        mock_module = MagicMock(get_tracker=lambda: mock_tracker)
+        with (
+            patch.object(loop, "_call_llm", return_value=response),
+            patch.object(loop, "_track_usage_async"),
+            patch.dict("sys.modules", {"core.llm.token_tracker": mock_module}),
+        ):
+            result = asyncio.run(loop.arun("test cost via settings"))
+
+        assert result.termination_reason == "cost_budget_exceeded"
 
     def test_cost_budget_under_limit_continues(
         self, context: ConversationContext, executor: ToolExecutor

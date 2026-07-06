@@ -2,7 +2,7 @@
  * GEODE CHANGELOG, auto-synced from the GEODE repo via `npm run sync-stats`.
  * Do not edit manually. Edit CHANGELOG.md in the GEODE repo and re-run sync.
  *
- * Last sync: 2026-07-04
+ * Last sync: 2026-07-06
  *
  * Each entry's `body` is the raw markdown between two version headings.
  * The Changelog page renders the body with a minimal markdown renderer
@@ -16,6 +16,21 @@ export type ChangelogEntry = {
 };
 
 export const CHANGELOG: ChangelogEntry[] = [
+  {
+    "version": "0.99.278",
+    "date": "2026-07-06",
+    "body": "### Added\n\n- **`delegate_task` best-of-N candidate sampling with diversity\n  lenses.** New opt-in `best_of` parameter (2..4, single-task mode):\n  the same task runs as N parallel sub-agent candidates, each with a\n  distinct built-in reasoning lens\n  (`core/agent/candidate_sampling.py:DIVERSITY_LENSES` — lens forcing\n  is bundled because N clones of one model+prompt fail together), then\n  one structured-output judge call (`select_candidate` tool;\n  `settings.judge_model` → delegating loop's model precedence) picks\n  the winner. The tool result carries a `best_of` block (`n`, `judged`,\n  `winner`, `reason`); every judge failure shape is an observable\n  fallback (`judge_error`), never silent. This gives the runtime\n  same-task width — buying accuracy with parallel compute where\n  verification is cheap — alongside the existing task-decomposition\n  fan-out, and gives `settings.judge_model` its first in-loop consumer\n  beyond the per-turn verify mode."
+  },
+  {
+    "version": "0.99.277",
+    "date": "2026-07-06",
+    "body": "### Added\n\n- **Reflection confidence now steers compute allocation.** The\n  reflection node's `CognitiveState.confidence` (produced every round\n  since PR-3 but consumed only by the CLI session display) gains two\n  control-flow consumers: (1) confidence-adaptive reflection cadence —\n  `>= 0.8` doubles the effective `cognitive_reflection_interval`\n  (fewer belief-update LLM calls while the loop is on track), `< 0.4`\n  forces a reflection every round; opt-out via the new\n  `cognitive_reflection_adaptive` knob (`cognitive.reflection_adaptive`).\n  (2) A `low_confidence` replan trigger — edge-triggered on the drop\n  below 0.4 (re-arms only after recovery, so a persistently unsure\n  session replans once, not every round). Trigger priority:\n  `verify_fail` > `low_confidence` > `cadence`."
+  },
+  {
+    "version": "0.99.276",
+    "date": "2026-07-06",
+    "body": "### Fixed\n\n- **`cost_limit_usd` now reaches the enforced loop guard.** The config\n  knob (`cost.limit_usd` / `GEODE_COST_LIMIT_USD`) previously only fired\n  the COST_WARNING / COST_LIMIT_EXCEEDED hook events; the AgenticLoop's\n  enforced cost guard (80% warn, 100% hard stop) was reachable only via\n  the constructor's `cost_budget` param, which no config path seeded\n  outside the supervised daemon's monthly-budget wiring. The loop now\n  falls back to `settings.cost_limit_usd` when no explicit `cost_budget`\n  is given, so setting the knob alone hard-stops a runaway session\n  (`termination_reason=\"cost_budget_exceeded\"`). An explicit caller\n  value still wins."
+  },
   {
     "version": "0.99.275",
     "date": "2026-07-05",
@@ -2098,4 +2113,4 @@ export const CHANGELOG: ChangelogEntry[] = [
   }
 ];
 
-export const CHANGELOG_SYNCED_AT = "2026-07-04";
+export const CHANGELOG_SYNCED_AT = "2026-07-06";
