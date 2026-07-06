@@ -89,11 +89,15 @@ def _maybe_reflect_runner(
     recorder: _Recorder,
     *,
     interval: int,
+    adaptive: bool = False,
 ) -> None:
-    """Synchronous helper — stamps interval, runs _maybe_reflect."""
+    """Synchronous helper — stamps interval + adaptive knob, runs
+    _maybe_reflect. ``adaptive=False`` default keeps the pre-existing
+    fixed-interval tests deterministic regardless of state.confidence."""
     from core.config import settings
 
     object.__setattr__(settings, "cognitive_reflection_interval", interval)
+    object.__setattr__(settings, "cognitive_reflection_adaptive", adaptive)
 
     # Build a minimal stub for AgenticLoop._maybe_reflect — bypass
     # __init__ (which wires the entire runtime). Bind the bound
@@ -208,3 +212,85 @@ def test_maybe_reflect_reads_interval_setting() -> None:
     # a future refactor doesn't accidentally flip to ``round_count %
     # interval`` (which would skip round 1).
     assert "(round_count - 1) % interval" in src or "(round_count-1) % interval" in src
+
+
+# ---------------------------------------------------------------------------
+# Confidence-adaptive cadence (GAP 1 — confidence consumers)
+# ---------------------------------------------------------------------------
+
+
+def test_settings_carries_reflection_adaptive_default_true() -> None:
+    from core.config._settings import Settings
+
+    fields = Settings.model_fields
+    assert "cognitive_reflection_adaptive" in fields
+    assert fields["cognitive_reflection_adaptive"].default is True
+
+
+def test_toml_map_carries_reflection_adaptive_key() -> None:
+    from core.config import _TOML_TO_SETTINGS
+
+    assert _TOML_TO_SETTINGS["cognitive.reflection_adaptive"] == "cognitive_reflection_adaptive"
+
+
+def test_high_confidence_stretches_interval(
+    monkeypatch: pytest.MonkeyPatch, _stub_reflect_async: _Recorder
+) -> None:
+    """confidence >= 0.8 doubles the effective interval (3 → 6):
+    reflections land on rounds 1, 7 instead of 1, 4, 7, 10."""
+    state = CognitiveState()
+    state.confidence = 0.9
+    for r in range(1, 11):
+        state.round_count = r
+        _maybe_reflect_runner(state, monkeypatch, _stub_reflect_async, interval=3, adaptive=True)
+    assert _stub_reflect_async.calls == [1, 7]
+
+
+def test_low_confidence_forces_every_round(
+    monkeypatch: pytest.MonkeyPatch, _stub_reflect_async: _Recorder
+) -> None:
+    """confidence < 0.4 collapses the interval to 1 — belief updates
+    every round while the loop is unsure."""
+    state = CognitiveState()
+    state.confidence = 0.2
+    for r in range(1, 6):
+        state.round_count = r
+        _maybe_reflect_runner(state, monkeypatch, _stub_reflect_async, interval=5, adaptive=True)
+    assert _stub_reflect_async.calls == [1, 2, 3, 4, 5]
+
+
+def test_mid_confidence_keeps_base_interval(
+    monkeypatch: pytest.MonkeyPatch, _stub_reflect_async: _Recorder
+) -> None:
+    """0.4 <= confidence < 0.8 — neither stretch nor force."""
+    state = CognitiveState()
+    state.confidence = 0.6
+    for r in range(1, 8):
+        state.round_count = r
+        _maybe_reflect_runner(state, monkeypatch, _stub_reflect_async, interval=3, adaptive=True)
+    assert _stub_reflect_async.calls == [1, 4, 7]
+
+
+def test_confidence_none_uses_base_interval(
+    monkeypatch: pytest.MonkeyPatch, _stub_reflect_async: _Recorder
+) -> None:
+    """No reflection has run yet (confidence None) — base interval."""
+    state = CognitiveState()
+    assert state.confidence is None
+    for r in range(1, 5):
+        state.round_count = r
+        _maybe_reflect_runner(state, monkeypatch, _stub_reflect_async, interval=3, adaptive=True)
+    assert _stub_reflect_async.calls == [1, 4]
+
+
+def test_adaptive_off_ignores_confidence(
+    monkeypatch: pytest.MonkeyPatch, _stub_reflect_async: _Recorder
+) -> None:
+    """cognitive_reflection_adaptive=False — fixed interval wins even
+    at high confidence."""
+    state = CognitiveState()
+    state.confidence = 0.95
+    for r in range(1, 8):
+        state.round_count = r
+        _maybe_reflect_runner(state, monkeypatch, _stub_reflect_async, interval=3, adaptive=False)
+    assert _stub_reflect_async.calls == [1, 4, 7]

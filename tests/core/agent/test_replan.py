@@ -280,6 +280,99 @@ def test_should_replan_cadence_off_when_interval_zero(monkeypatch: pytest.Monkey
     )
 
 
+def test_should_replan_low_confidence_with_plan() -> None:
+    trigger = should_replan(
+        round_idx=2,  # not a cadence boundary
+        plan=_make_plan("s1"),
+        verify_failed=False,
+        verify_should_retry=False,
+        low_confidence=True,
+    )
+    assert trigger == "low_confidence"
+
+
+def test_should_replan_verify_fail_beats_low_confidence() -> None:
+    trigger = should_replan(
+        round_idx=2,
+        plan=_make_plan("s1"),
+        verify_failed=True,
+        verify_should_retry=True,
+        low_confidence=True,
+    )
+    assert trigger == "verify_fail"
+
+
+def test_should_replan_low_confidence_requires_plan() -> None:
+    """Same no-plan guard as cadence — belief drop revises, never synthesizes."""
+    assert (
+        should_replan(
+            round_idx=2,
+            plan=None,
+            verify_failed=False,
+            verify_should_retry=False,
+            low_confidence=True,
+        )
+        is None
+    )
+
+
+def test_should_replan_low_confidence_beats_cadence(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("GEODE_REPLAN_INTERVAL", "3")
+    trigger = should_replan(
+        round_idx=3,  # cadence boundary AND low confidence
+        plan=_make_plan("s1"),
+        verify_failed=False,
+        verify_should_retry=False,
+        low_confidence=True,
+    )
+    assert trigger == "low_confidence"
+
+
+# -- low-confidence edge trigger (loop side) ---------------------------
+
+
+def test_low_confidence_replan_edge_trigger(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The loop fires low_confidence ONCE per drop below threshold and
+    re-arms only after confidence recovers — no replan storm while
+    confidence stays low."""
+    import asyncio
+
+    from core.agent import plan as plan_mod
+    from core.agent.cognitive_state import CognitiveState
+    from core.agent.loop.agent_loop import AgenticLoop
+    from core.observability.session_metrics import session_metrics_scope
+
+    observed_flags: list[bool] = []
+
+    def fake_should_replan(**kwargs: object) -> str | None:
+        low = bool(kwargs["low_confidence"])
+        observed_flags.append(low)
+        return "low_confidence" if low else None
+
+    async def fake_replan_async(*_args: object, **_kwargs: object) -> None:
+        return None  # planner "fails" — edge must still be consumed
+
+    monkeypatch.setattr(plan_mod, "should_replan", fake_should_replan)
+    monkeypatch.setattr(plan_mod, "replan_async", fake_replan_async)
+
+    state = CognitiveState()
+
+    class _StubSelf:
+        cognitive_state = state
+        _low_confidence_replan_armed = True
+
+    stub = _StubSelf()
+    bound = AgenticLoop._maybe_replan_async.__get__(stub, _StubSelf)
+
+    with session_metrics_scope():
+        for conf in (0.2, 0.2, 0.9, 0.2):
+            state.confidence = conf
+            asyncio.run(bound(1))
+
+    # drop → fire; still low → silent; recovered → re-armed; drop → fire
+    assert observed_flags == [True, False, False, True]
+
+
 def test_should_replan_verify_fail_without_should_retry_is_skipped() -> None:
     """Hard fail (e.g. model_action_required) → no retry recommended →
     no replan even though verify_failed is True."""
