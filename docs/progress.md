@@ -18,6 +18,7 @@
 <!-- Move items here when work begins. -->
 <!-- 3-Checkpoint: (1) alloc → (2) merge (CI 5/5) → (3) verify -->
 
+- [ ] CLI UI/UX 품질 트랙 (2026-07-06, hermes-이상 목표, fullscreen 제외) — 인벤토리 3소스(hermes-agent 실측 / GEODE 일반 출력 전수 / frontier-ui-ux-catalog) 교차 감사 완료. 근본원인 3: ① 일반 REPL `live_regions=False`로 폴리시 휴면 ② render.py/events.py(Rich 폴백) ↔ event_renderer.py(raw ANSI) 이중 구현 드리프트 ③ ANSI 경로 무팔레트(이스케이프 147개·색 17종 인라인). 플랜 P0 출력배관(run_in_terminal 라우팅+live_regions 활성) / P1 팔레트·심볼 SoT / P2 렌더러 단일화 / P3 plan 라이브 위젯(Claude Code식, 운영자 지정) / P4 상태줄·피드 폴리시. 제약: GEODE 상징색 유지(구조만 hermes 규율). **진행: P1 착수(`feature/ui-style-sot`) — 단일 hex SoT → Rich+SGR 양방출, 심볼 어휘, 잘림/폭 상수 통합, raw 이스케이프 ratchet 가드.**
 - [ ] v1.0.0 스탬프 — 게이트=computer-use 보강 + 프롬프트(둘 다 1.0 범위, 운영자 2026-06-17). **★ 기능 게이트 전부 정리(v0.99.230): computer-use A/C/E/F + D(3사 배선 완성)·Anthropic+OpenAI Platform 라이브검증, 프롬프트 P2-b/P3.** punch-list #1~#4 닫힘, 0 boot-frozen. SoT=`docs/plans/2026-06-17-v1.0.0-release-readiness.md` + `docs/v1.0.0-stability-contract.md`. **잔여 = 전부 post-1.0 deferred(B' zoom·전체 GLM GUI-agent 루프·E 컨테이너 라이브·D 라이브 grounding=glm 잔액·Petri computer-use 감사 dim) + cut 방식(main 직접 vs RC) 미결.** → **다음 = 1.0 cut 결정(운영자, 외부 공개 릴리스).**
 - [ ] H1 — 데몬 client-cwd 세션 해석(별도 결정 대기). (H11-tail 전체 완료: call-path 해동=PR-PRE10-H11-TAIL v0.99.220, 마지막 `_state.py` 피커 사이트 해동=PR-PRE10-H11-PICKER v0.99.222 → 0 boot-frozen routing-constant 사이트 잔존)
 
