@@ -206,7 +206,7 @@ class TestCostBudgetAutoStop:
         mock_module = MagicMock(get_tracker=lambda: mock_tracker)
         with (
             patch.object(loop, "_call_llm", return_value=response),
-            patch.object(loop, "_track_usage"),
+            patch.object(loop, "_track_usage_async"),
             patch.dict("sys.modules", {"core.llm.token_tracker": mock_module}),
         ):
             result = asyncio.run(loop.arun("test cost via settings"))
