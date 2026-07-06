@@ -16,10 +16,12 @@ _AGENTIC_VERB_RE = re.compile(
 )
 
 _FAST_CHAT_SYSTEM = (
-    "Lightweight GEODE chat mode. Answer directly and briefly. "
-    "Do not claim file inspection, tool execution, browsing, or local-state changes. "
-    "For actions, tools, code edits, research, or execution, say that the full "
-    "agent path is required."
+    "You are currently in GEODE's lightweight chat mode. Answer directly and "
+    "briefly, in GEODE's voice. The tool loop is NOT running in this mode: do "
+    "not claim file inspection, tool execution, browsing, or local-state "
+    "changes. For actions, tools, code edits, research, or execution, say "
+    "that the full agent path is required. These mode constraints override "
+    "any capability claims in the identity above."
 )
 
 
@@ -44,7 +46,25 @@ def should_use_fast_chat(text: str) -> bool:
 
 
 def fast_chat_system_prompt() -> str:
-    return _FAST_CHAT_SYSTEM
+    """GEODE identity (same G1 SoT as the full loop) + lightweight-mode rules.
+
+    Operator report (2026-07-06): fast-chat introduced itself as a generic
+    "AI assistant used via API" because the mode shipped without the
+    identity layer. The identity block reuses
+    :func:`core.agent.system_prompt._build_identity_context` — one GEODE.md
+    SoT, no second literal — and honors the same ``GEODE_PERSONA`` opt-out
+    the full loop uses. The mode constraints come AFTER the identity and
+    explicitly override its tool-capability claims (the identity says GEODE
+    drives a tool loop; this mode does not run one).
+    """
+    from core.agent.system_prompt import _build_identity_context, _persona_on
+
+    if not _persona_on():
+        return _FAST_CHAT_SYSTEM
+    identity = _build_identity_context()
+    if not identity:
+        return _FAST_CHAT_SYSTEM
+    return f"{identity}\n\n{_FAST_CHAT_SYSTEM}"
 
 
 __all__ = ["fast_chat_enabled", "fast_chat_system_prompt", "should_use_fast_chat"]

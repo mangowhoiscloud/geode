@@ -17,6 +17,11 @@ export type ChangelogEntry = {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    "version": "0.99.281",
+    "date": "2026-07-06",
+    "body": "### Fixed\n\n- **Fast-chat now speaks as GEODE.** The lightweight chat mode shipped\n  without the identity layer, so it introduced itself as a generic \"AI\n  assistant used via API\" (operator report, 2026-07-06).\n  `fast_chat_system_prompt()` now composes the same GEODE.md identity\n  block the full loop injects (G1 SoT via\n  `core.agent.system_prompt._build_identity_context` — no second\n  literal), honors the `GEODE_PERSONA` opt-out, and keeps the\n  lightweight-mode constraints AFTER the identity so they override its\n  tool-capability claims (the mode still never pretends to run tools)."
+  },
+  {
     "version": "0.99.280",
     "date": "2026-07-06",
     "body": "### Fixed\n\n- **Adapter lookups normalize provider vocabulary at the boundary.**\n  `resolve_for` and `_select_adapter` now accept BOTH the adapter\n  registry's family names (`openai` / `glm`) and the routing layer's\n  variant ids (`openai-codex` / `glm-coding` / `zhipuai`), translating\n  via `normalize_registry_provider` at the lookup entry instead of\n  relying on every caller to translate first. Incident: a fast-chat\n  path forwarded `loop._provider='openai-codex'` verbatim as\n  `prefer_provider`, matched zero registered adapters, and every\n  codex-subscription fast-chat turn failed with\n  AdapterUnavailableError (2026-07-06). `glm-coding` (a live provider\n  value in strategy plans and auth config) joins the normalization map;\n  the drift-anchor pin is updated deliberately."
