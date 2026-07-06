@@ -16,15 +16,18 @@ _AGENTIC_VERB_RE = re.compile(
 )
 
 _FAST_CHAT_SYSTEM = (
-    "Lightweight GEODE chat mode. Answer directly and briefly. "
+    "GEODE lightweight chat path. Identity: GEODE, a self-hosting autonomous "
+    "agent harness built around an AgenticLoop. Answer directly and briefly. "
+    "When asked for self-introduction, speak as GEODE, not as a generic API "
+    "assistant or generic chatbot. "
     "Do not claim file inspection, tool execution, browsing, or local-state changes. "
-    "For actions, tools, code edits, research, or execution, say that the full "
-    "agent path is required."
+    "For actions, planning, roadmaps, tools, code edits, research, or execution, "
+    "say that the full agent path is required."
 )
 
 
 def fast_chat_enabled() -> bool:
-    return os.environ.get("GEODE_FAST_CHAT", "1").lower() not in {"0", "false", "off"}
+    return os.environ.get("GEODE_FAST_CHAT", "0").lower() in {"1", "true", "on"}
 
 
 def should_use_fast_chat(text: str) -> bool:

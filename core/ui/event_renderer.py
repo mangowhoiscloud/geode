@@ -123,6 +123,7 @@ class _ActivitySurface:
     thought_count: int = 0
     thought_items: int = 0
     at_bottom: bool = False
+    append_signature: str = ""
 
 
 class EventRenderer:
@@ -159,6 +160,7 @@ class EventRenderer:
             "thinking_start",
             "thinking_end",
             "tokens",
+            "fast_chat_start",
         }
     )
     _MAX_ACTIVITY_TOOL_LINES = 5
@@ -312,6 +314,16 @@ class EventRenderer:
 
     def _handle_round_start(self, event: dict[str, Any]) -> None:
         self._clear_activity_line()
+
+    def _handle_fast_chat_start(self, event: dict[str, Any]) -> None:
+        model = str(event.get("model", "") or "")
+        provider = str(event.get("provider", "") or "")
+        source = str(event.get("source", "") or "")
+        route = " / ".join(part for part in (provider, source) if part)
+        detail = f" · {route}" if route else ""
+        label = f"Fast chat · {model}{detail}" if model else f"Fast chat{detail}"
+        self._append_activity_notice(label)
+        self._render_activity_region()
 
     def _handle_thinking_start(self, event: dict[str, Any]) -> None:
         self._activity_suppressed = True
@@ -1298,16 +1310,26 @@ class EventRenderer:
         it keeps its own single moving copy. It never carries the plan checklist,
         which is drawn separately by plan events and scrolls up independently.
         """
-        if not self._live_regions and not force:
-            return
         with self._render_lock:
-            self._erase_activity_locked()
             activity_lines = self._render_activity_lines()
             if not activity_lines:
                 return
+            surface = self._activity_surface
+            if not self._live_regions:
+                signature = "".join(_ANSI_ESCAPE.sub("", line) for line in activity_lines)
+                if signature == surface.append_signature:
+                    return
+                for line in activity_lines:
+                    self._out.write(line)
+                surface.visible_lines = []
+                surface.at_bottom = False
+                surface.append_signature = signature
+                self._progress_plan.at_bottom = False
+                self._out.flush()
+                return
+            self._erase_activity_locked()
             for line in activity_lines:
                 self._out.write(line)
-            surface = self._activity_surface
             surface.visible_lines = activity_lines
             # Non-TTY (piped/log) output is append-only: never mark at_bottom.
             surface.at_bottom = self._tty

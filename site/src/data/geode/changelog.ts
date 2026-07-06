@@ -17,6 +17,11 @@ export type ChangelogEntry = {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    "version": "0.99.281",
+    "date": "2026-07-07",
+    "body": "### Fixed\n\n- **Fast chat is opt-in again.** The IPC simple-chat path is now disabled\n  unless `GEODE_FAST_CHAT=1` is set, so normal CLI prompts always use the\n  full AgenticLoop identity, plan, tool, and activity event path. The\n  opt-in fast-chat prompt still preserves GEODE identity and avoids generic\n  API-assistant self-introductions.\n- **Append-only CLI activity visibility.** The default thin CLI now renders\n  Activity updates as append-only transcript rows during a turn instead of\n  hiding tool/thought status until the final stop hook. This restores visible\n  run/tool progress without reintroducing cursor-up repainting over the input\n  prompt."
+  },
+  {
     "version": "0.99.280",
     "date": "2026-07-06",
     "body": "### Fixed\n\n- **Adapter lookups normalize provider vocabulary at the boundary.**\n  `resolve_for` and `_select_adapter` now accept BOTH the adapter\n  registry's family names (`openai` / `glm`) and the routing layer's\n  variant ids (`openai-codex` / `glm-coding` / `zhipuai`), translating\n  via `normalize_registry_provider` at the lookup entry instead of\n  relying on every caller to translate first. Incident: a fast-chat\n  path forwarded `loop._provider='openai-codex'` verbatim as\n  `prefer_provider`, matched zero registered adapters, and every\n  codex-subscription fast-chat turn failed with\n  AdapterUnavailableError (2026-07-06). `glm-coding` (a live provider\n  value in strategy plans and auth config) joins the normalization map;\n  the drift-anchor pin is updated deliberately."

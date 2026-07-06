@@ -1192,11 +1192,13 @@ def test_event_renderer_can_run_append_only_without_live_regions() -> None:
     before_stop = r._out.getvalue()
     assert "Working..." in before_stop
     assert "Tasks" in before_stop
-    assert "Activity" not in before_stop
+    assert "Activity" in before_stop
+    assert "read_file" in before_stop
+    assert "run_tests" in before_stop
 
     r.stop()
     out = r._out.getvalue()
-    assert out.count("Activity") == 1
+    assert out.count("Activity") >= 1
     assert "read_file" in out
     assert "run_tests" in out
     assert "\033[A" not in out
