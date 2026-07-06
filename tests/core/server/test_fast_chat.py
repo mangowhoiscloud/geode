@@ -18,8 +18,39 @@ def test_fast_chat_rejects_agentic_actions() -> None:
     assert should_use_fast_chat("계획 세워서 진행해") is False
 
 
-def test_fast_chat_system_prompt_avoids_identity_declaration() -> None:
-    assert "You are" not in fast_chat_system_prompt()
+def test_fast_chat_system_prompt_carries_geode_identity(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Operator report 2026-07-06 — fast-chat introduced itself as a generic
+    'AI assistant used via API'. The prompt must carry the same GEODE.md
+    identity block the full loop injects (G1 SoT), followed by the
+    lightweight-mode constraints."""
+    monkeypatch.delenv("GEODE_PERSONA", raising=False)
+    prompt = fast_chat_system_prompt()
+    assert "<agent_identity>" in prompt
+    assert "GEODE" in prompt
+    # mode constraints must FOLLOW the identity so they override its
+    # tool-capability claims
+    assert prompt.index("<agent_identity>") < prompt.index("lightweight chat mode")
+
+
+def test_fast_chat_system_prompt_keeps_no_tool_claims_rule() -> None:
+    """The original intent of the pre-identity pin — fast-chat must never
+    claim tool execution — survives the identity injection."""
+    prompt = fast_chat_system_prompt()
+    assert "do not claim file inspection" in prompt.lower()
+    assert "full agent path" in prompt.lower()
+
+
+def test_fast_chat_system_prompt_honors_persona_opt_out(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """GEODE_PERSONA=off (thin-wrapper mode) strips the identity block from
+    fast-chat exactly as it does from the full loop."""
+    monkeypatch.setenv("GEODE_PERSONA", "off")
+    prompt = fast_chat_system_prompt()
+    assert "<agent_identity>" not in prompt
+    assert "lightweight chat mode" in prompt
 
 
 def test_ipc_poller_fast_chat_uses_text_completion(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -62,4 +93,6 @@ def test_ipc_poller_fast_chat_uses_text_completion(monkeypatch: pytest.MonkeyPat
     kwargs = cast(dict[str, object], calls["kwargs"])
     assert kwargs["prefer_provider"] == "openai"
     assert kwargs["prefer_source"] == "subscription"
-    assert "You are" not in str(kwargs["system"])
+    # identity ships with the turn; the no-tool-claims rule rides after it
+    assert "GEODE" in str(kwargs["system"])
+    assert "do not claim file inspection" in str(kwargs["system"]).lower()

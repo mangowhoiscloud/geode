@@ -45,6 +45,20 @@ functional change.
 
 ---
 
+## [0.99.281] - 2026-07-06
+
+### Fixed
+
+- **Fast-chat now speaks as GEODE.** The lightweight chat mode shipped
+  without the identity layer, so it introduced itself as a generic "AI
+  assistant used via API" (operator report, 2026-07-06).
+  `fast_chat_system_prompt()` now composes the same GEODE.md identity
+  block the full loop injects (G1 SoT via
+  `core.agent.system_prompt._build_identity_context` — no second
+  literal), honors the `GEODE_PERSONA` opt-out, and keeps the
+  lightweight-mode constraints AFTER the identity so they override its
+  tool-capability claims (the mode still never pretends to run tools).
+
 ## [0.99.280] - 2026-07-06
 
 ### Fixed
