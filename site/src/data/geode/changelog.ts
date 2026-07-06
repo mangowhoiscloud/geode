@@ -2,7 +2,7 @@
  * GEODE CHANGELOG, auto-synced from the GEODE repo via `npm run sync-stats`.
  * Do not edit manually. Edit CHANGELOG.md in the GEODE repo and re-run sync.
  *
- * Last sync: 2026-07-04
+ * Last sync: 2026-07-06
  *
  * Each entry's `body` is the raw markdown between two version headings.
  * The Changelog page renders the body with a minimal markdown renderer
@@ -16,6 +16,11 @@ export type ChangelogEntry = {
 };
 
 export const CHANGELOG: ChangelogEntry[] = [
+  {
+    "version": "0.99.276",
+    "date": "2026-07-06",
+    "body": "### Fixed\n\n- **`cost_limit_usd` now reaches the enforced loop guard.** The config\n  knob (`cost.limit_usd` / `GEODE_COST_LIMIT_USD`) previously only fired\n  the COST_WARNING / COST_LIMIT_EXCEEDED hook events; the AgenticLoop's\n  enforced cost guard (80% warn, 100% hard stop) was reachable only via\n  the constructor's `cost_budget` param, which no config path seeded\n  outside the supervised daemon's monthly-budget wiring. The loop now\n  falls back to `settings.cost_limit_usd` when no explicit `cost_budget`\n  is given, so setting the knob alone hard-stops a runaway session\n  (`termination_reason=\"cost_budget_exceeded\"`). An explicit caller\n  value still wins."
+  },
   {
     "version": "0.99.275",
     "date": "2026-07-05",
@@ -2098,4 +2103,4 @@ export const CHANGELOG: ChangelogEntry[] = [
   }
 ];
 
-export const CHANGELOG_SYNCED_AT = "2026-07-04";
+export const CHANGELOG_SYNCED_AT = "2026-07-06";

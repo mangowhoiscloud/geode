@@ -294,6 +294,21 @@ class AgenticLoop:
         # Adaptive compute: track consecutive text-only rounds for overthinking detection
         self._consecutive_text_only_rounds = 0
         self._total_empty_rounds = 0
+        # No explicit cost_budget → fall back to settings.cost_limit_usd so
+        # the config knob (`cost.limit_usd`) reaches the enforced guard 3
+        # (80% warn / 100% hard stop), not just the COST_WARNING /
+        # COST_LIMIT_EXCEEDED hook events. An explicit caller value (e.g.
+        # supervised services' monthly-budget wiring) always wins.
+        if cost_budget <= 0.0:
+            try:
+                from core.config import settings as _settings
+
+                limit_raw = getattr(_settings, "cost_limit_usd", 0.0)
+                # isinstance filters MagicMock auto-attrs in fixtures
+                if isinstance(limit_raw, int | float) and limit_raw > 0:
+                    cost_budget = float(limit_raw)
+            except Exception:
+                log.debug("settings.cost_limit_usd read failed", exc_info=True)
         self._cost_budget = cost_budget
         self._loop_start_time: float = 0.0
         # No explicit model → prefer settings.act_model (Plan/Act split),

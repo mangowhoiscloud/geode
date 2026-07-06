@@ -45,6 +45,21 @@ functional change.
 
 ---
 
+## [0.99.276] - 2026-07-06
+
+### Fixed
+
+- **`cost_limit_usd` now reaches the enforced loop guard.** The config
+  knob (`cost.limit_usd` / `GEODE_COST_LIMIT_USD`) previously only fired
+  the COST_WARNING / COST_LIMIT_EXCEEDED hook events; the AgenticLoop's
+  enforced cost guard (80% warn, 100% hard stop) was reachable only via
+  the constructor's `cost_budget` param, which no config path seeded
+  outside the supervised daemon's monthly-budget wiring. The loop now
+  falls back to `settings.cost_limit_usd` when no explicit `cost_budget`
+  is given, so setting the knob alone hard-stops a runaway session
+  (`termination_reason="cost_budget_exceeded"`). An explicit caller
+  value still wins.
+
 ## [0.99.275] - 2026-07-05
 
 ### Changed
