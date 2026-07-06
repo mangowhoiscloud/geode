@@ -60,6 +60,7 @@ from core.ui.palette import (
     RESET,
     SECTION,
     TRUNCATE_FLEET_ROLE,
+    TRUNCATE_REASONING,
     TRUNCATE_SUMMARY,
     TRUNCATE_THINKING_LABEL,
     WARN,
@@ -492,8 +493,8 @@ class EventRenderer:
         wants to display the complete summary.
         """
         text = str(event.get("text", "")).strip().replace("\n", " ")
-        if len(text) > 240:
-            text = text[:237] + "…"
+        if len(text) > TRUNCATE_REASONING:
+            text = text[: TRUNCATE_REASONING - 3] + "…"
         if not text:
             return
         # ANSI 90 = bright black (muted); matches console.print muted style.
@@ -695,7 +696,7 @@ class EventRenderer:
         count = int(event.get("count", 0))
         self._append_activity_notice(
             f"{WARN}{GLYPH_CYCLE} Diversity: {tool} called {count}x"
-            " \u2014 hinting alternate path{RESET}"
+            f" \u2014 hinting alternate path{RESET}"
         )
         self._render_activity_region()
 

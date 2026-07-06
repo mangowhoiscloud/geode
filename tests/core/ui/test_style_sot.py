@@ -24,7 +24,9 @@ from core.ui import palette
 _REPO = Path(__file__).parents[3]
 _UI = _REPO / "core" / "ui"
 
-_ESCAPE_LITERAL = re.compile(r"\\033\[|\\x1b\[")
+# source spellings AND a literal ESC byte; chr(27)/split-concat bypasses are
+# noted as accepted porosity (no cheap static catch) — reviewers watch those.
+_ESCAPE_LITERAL = re.compile(r"\\033\[|\\x1b\[|\\u001b\[|\x1b\[|chr\(27\)")
 
 # file → substrings identifying the ONLY lines allowed to carry a raw escape
 _SWEPT: dict[str, tuple[str, ...]] = {
