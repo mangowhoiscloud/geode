@@ -1293,6 +1293,53 @@ def test_event_renderer_updates_plan_in_place_with_tty_inline_status() -> None:
     assert re.search(r"\x1b\[\d+A", out)
 
 
+def test_update_plan_tool_does_not_displace_live_plan_surface() -> None:
+    """update_plan is plan state, not activity history between plan renders."""
+    from core.ui.event_renderer import EventRenderer
+
+    class TtyStringIO(io.StringIO):
+        def isatty(self) -> bool:
+            return True
+
+    r = EventRenderer(live_regions=False)
+    r._out = TtyStringIO()
+
+    try:
+        r.start_activity()
+        r._render_inline_status_frame()
+        r.on_event(
+            {
+                "type": "progress_plan",
+                "plan": [
+                    {"step": "inspect HITL", "status": "in_progress"},
+                    {"step": "fix approval input", "status": "pending"},
+                ],
+            }
+        )
+        assert r._progress_plan.at_bottom is True
+        r.on_event({"type": "tool_start", "name": "update_plan"})
+        r.on_event({"type": "tool_end", "name": "update_plan", "summary": "ok", "duration_s": 0.0})
+        assert r._progress_plan.at_bottom is True
+        r.on_event(
+            {
+                "type": "progress_plan",
+                "plan": [
+                    {"step": "inspect HITL", "status": "completed"},
+                    {"step": "fix approval input", "status": "in_progress"},
+                ],
+            }
+        )
+    finally:
+        r.stop()
+
+    out = r._out.getvalue()
+    plain = _strip_ansi(out)
+    assert "Activity" not in plain
+    assert "update_plan" not in plain
+    assert "fix approval input" in plain
+    assert re.search(r"\x1b\[\d+A", out)
+
+
 def test_tool_tracker_running_row_uses_signature_shimmer() -> None:
     """Running tool rows render via spinner_glyph (single spinner source)."""
     from core.ui import spinner_glyph

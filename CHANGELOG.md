@@ -45,6 +45,22 @@ functional change.
 
 ---
 
+## [0.99.284] - 2026-07-07
+
+### Fixed
+
+- **HITL approval input no longer swallows Enter.** The thin IPC client now
+  restores cooked terminal mode and reads approval choices directly from
+  stdin instead of Rich `console.input()`, so approval prompts accept Enter
+  normally even after prompt_toolkit raw-mode interaction. Carriage-return
+  bytes are stripped before parsing, and approval suspend/resume callbacks
+  now run in a `finally` block so the renderer cannot stay stranded if
+  approval input fails.
+- **`update_plan` no longer displaces the live plan UI.** Plan updates are
+  treated as renderer state rather than normal tool activity, so they do not
+  create `Activity · update_plan -> ok` blocks or push the checklist out of
+  its in-place update surface.
+
 ## [0.99.283] - 2026-07-07
 
 ### Fixed

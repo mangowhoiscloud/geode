@@ -17,6 +17,11 @@ export type ChangelogEntry = {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    "version": "0.99.284",
+    "date": "2026-07-07",
+    "body": "### Fixed\n\n- **HITL approval input no longer swallows Enter.** The thin IPC client now\n  restores cooked terminal mode and reads approval choices directly from\n  stdin instead of Rich `console.input()`, so approval prompts accept Enter\n  normally even after prompt_toolkit raw-mode interaction. Carriage-return\n  bytes are stripped before parsing, and approval suspend/resume callbacks\n  now run in a `finally` block so the renderer cannot stay stranded if\n  approval input fails.\n- **`update_plan` no longer displaces the live plan UI.** Plan updates are\n  treated as renderer state rather than normal tool activity, so they do not\n  create `Activity · update_plan -> ok` blocks or push the checklist out of\n  its in-place update surface."
+  },
+  {
     "version": "0.99.283",
     "date": "2026-07-07",
     "body": "### Fixed\n\n- **Default CLI plan updates refresh in place.** In TTY sessions using the\n  prompt-safe inline `Working...` status, progress-plan updates now keep the\n  plan as renderer-owned bottom content and redraw it in place after clearing\n  the status line. This prevents updated plans from stacking duplicate\n  checklist blocks in the transcript while preserving append-only output for\n  pipes and logs."
