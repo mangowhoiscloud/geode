@@ -259,3 +259,113 @@ def test_best_of_all_failed_reports_observable_error() -> None:
     block = payload["best_of"]
     assert block["winner"] is None
     assert "no successful candidates" in block["judge_error"]
+
+
+def test_best_of_ignored_for_one_item_batch(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A one-item ``tasks`` array is STILL batch mode — best_of must not
+    multiply it (Codex MCP MED, 2026-07-06)."""
+    manager = _FakeSubAgentManager()
+    executor = _make_executor(manager)
+
+    async def _explode(*_a: Any, **_k: Any) -> None:
+        raise AssertionError("judge must not run in batch mode")
+
+    monkeypatch.setattr(cs, "judge_candidates", _explode)
+
+    payload = asyncio.run(
+        executor._aexecute_delegate(
+            {"tasks": [{"task_description": "a"}], "best_of": 4}, context=None
+        )
+    )
+    assert "best_of" not in payload
+    assert payload["total"] == 1
+
+
+def test_best_of_bool_true_means_disabled() -> None:
+    """``best_of: true`` (bool is an int subclass) must not expand."""
+    manager = _FakeSubAgentManager()
+    executor = _make_executor(manager)
+    payload = asyncio.run(
+        executor._aexecute_delegate({"task_description": "solve X", "best_of": True}, context=None)
+    )
+    assert "best_of" not in payload
+    assert payload["total"] == 1
+
+
+def test_best_of_winner_maps_through_failed_candidates(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Judge indexes the SUCCESSFUL subset — with candidate 0 failed,
+    judged index 1 must map to the third dispatched task overall."""
+
+    class _FirstFailsManager(_FakeSubAgentManager):
+        async def adelegate(self, tasks: list[Any], **_kwargs: Any) -> list[Any]:
+            from core.agent.sub_agent import SubResult
+
+            self.dispatched = list(tasks)
+            return [
+                SubResult(
+                    task_id=t.task_id,
+                    description=t.description,
+                    success=(i != 0),
+                    output={"text": f"answer {i}"},
+                )
+                for i, t in enumerate(tasks)
+            ]
+
+    manager = _FirstFailsManager()
+    executor = _make_executor(manager)
+
+    async def _fake_judge(
+        _desc: str, candidates: list[str], *, model: str, **_k: Any
+    ) -> CandidateVerdict:
+        assert candidates == ["answer 1", "answer 2"]
+        return CandidateVerdict(1, "second of the successful")
+
+    monkeypatch.setattr(cs, "judge_candidates", _fake_judge)
+
+    payload = asyncio.run(
+        executor._aexecute_delegate({"task_description": "solve X", "best_of": 3}, context=None)
+    )
+    block = payload["best_of"]
+    assert block["judged"] == 2
+    assert block["winner_task_id"] == manager.dispatched[2].task_id
+
+
+def test_best_of_judge_inherits_tool_context_route(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """When no judge_model is pinned, the judge call must carry the
+    ToolContext's live model + provider + source (Codex MCP MED)."""
+    from core.config import settings
+
+    monkeypatch.setattr(settings, "judge_model", "", raising=False)
+    manager = _FakeSubAgentManager()
+    executor = _make_executor(manager)
+    seen: dict[str, Any] = {}
+
+    async def _fake_judge(
+        _desc: str, candidates: list[str], *, model: str, **kwargs: Any
+    ) -> CandidateVerdict:
+        seen["model"] = model
+        seen["provider"] = kwargs.get("provider")
+        seen["source"] = kwargs.get("source")
+        return CandidateVerdict(0, "ok")
+
+    monkeypatch.setattr(cs, "judge_candidates", _fake_judge)
+
+    live_route = SimpleNamespace(model="claude-opus-4-8", provider="anthropic", source="oauth")
+    asyncio.run(
+        executor._aexecute_delegate(
+            {"task_description": "solve X", "best_of": 2}, context=live_route
+        )
+    )
+    assert seen == {"model": "claude-opus-4-8", "provider": "anthropic", "source": "oauth"}
+
+
+def test_candidate_text_prefers_text_keys_over_dict_repr() -> None:
+    assert cs.candidate_text({"text": "the answer"}) == "the answer"
+    assert cs.candidate_text({"summary": "s"}) == "s"
+    as_json = cs.candidate_text({"count": 3})
+    assert as_json == '{"count": 3}'
+    assert cs.candidate_text(None) == ""

@@ -506,6 +506,10 @@ class ToolExecutor:
         default_model = getattr(context, "model", "") or ""
 
         tasks_raw: list[dict[str, Any]] = tool_input.get("tasks", [])
+        # ``best_of`` applies ONLY to single-task mode. Keyed on the caller's
+        # actual call shape, not len(tasks_raw) — a one-item ``tasks`` batch is
+        # still batch mode (Codex MCP MED, 2026-07-06).
+        single_task_mode = not tasks_raw
         if not tasks_raw:
             tasks_raw = [
                 {
@@ -518,9 +522,9 @@ class ToolExecutor:
                 }
             ]
 
-        # Best-of-N candidate sampling (single-task mode only) — expand the
-        # one task into N copies, each with a distinct diversity lens, then
-        # judge-select the winner after the fan-out (GAP 2+4, 2026-07-06).
+        # Best-of-N candidate sampling — expand the one task into N copies,
+        # each with a distinct diversity lens, then judge-select the winner
+        # after the fan-out (GAP 2+4, 2026-07-06).
         # ``bool`` excluded: True would silently mean best_of=1.
         raw_best_of = tool_input.get("best_of", 1)
         best_of = (
@@ -529,7 +533,7 @@ class ToolExecutor:
         from core.agent.candidate_sampling import MAX_BEST_OF, lensed_description
 
         best_of = max(1, min(best_of, MAX_BEST_OF))
-        if best_of > 1 and len(tasks_raw) == 1:
+        if best_of > 1 and single_task_mode:
             base_task = tasks_raw[0]
             base_description = base_task.get("task_description", "")
             tasks_raw = [
@@ -692,7 +696,7 @@ class ToolExecutor:
             payload["best_of"] = await self._select_best_candidate(
                 task_description=tool_input.get("task_description", ""),
                 results=results,
-                judge_model=default_model,
+                context=context,
             )
         return payload
 
@@ -701,7 +705,7 @@ class ToolExecutor:
         *,
         task_description: str,
         results: list[Any],
-        judge_model: str,
+        context: ToolContext | None,
     ) -> dict[str, Any]:
         """Judge-select the winner among best-of-N candidate SubResults.
 
@@ -709,8 +713,14 @@ class ToolExecutor:
         the winning candidate's full ``to_dict()`` so the model reads
         the selected result without re-scanning ``tasks``. Judge model
         precedence mirrors verify's llm_judge: ``settings.judge_model``
-        → the delegating loop's live model → ``settings.model``. All
-        failure shapes are observable (``judge_error``), never silent.
+        → the delegating loop's live model → ``settings.model``. When
+        the judge INHERITS the loop model, the ToolContext's live
+        provider/source route is forwarded so the judge cannot land on
+        a different credential source than the session's main calls
+        (Codex MCP MED, 2026-07-06); an operator-pinned judge_model
+        re-infers its own route (same rule as the reflection node's
+        configured-model path). All failure shapes are observable
+        (``judge_error``), never silent.
         """
         successful = [r for r in results if getattr(r, "success", False)]
         if not successful:
@@ -719,16 +729,23 @@ class ToolExecutor:
                 "winner": None,
                 "judge_error": "no successful candidates to judge",
             }
-        from core.agent.candidate_sampling import judge_candidates
+        from core.agent.candidate_sampling import candidate_text, judge_candidates
         from core.config import settings
 
-        model = (
-            (getattr(settings, "judge_model", "") or "").strip()
-            or judge_model
-            or getattr(settings, "model", "")
+        pinned_judge_model = (getattr(settings, "judge_model", "") or "").strip()
+        context_model = getattr(context, "model", "") or ""
+        model = pinned_judge_model or context_model or getattr(settings, "model", "")
+        inherits_loop_model = not pinned_judge_model and bool(context_model)
+        judge_provider = getattr(context, "provider", None) if inherits_loop_model else None
+        judge_source = getattr(context, "source", None) if inherits_loop_model else None
+        candidate_texts = [candidate_text(getattr(r, "output", None)) for r in successful]
+        verdict = await judge_candidates(
+            task_description,
+            candidate_texts,
+            model=model,
+            provider=judge_provider,
+            source=judge_source,
         )
-        candidate_texts = [str(getattr(r, "output", "") or "") for r in successful]
-        verdict = await judge_candidates(task_description, candidate_texts, model=model)
         winner = successful[verdict.winner_index]
         block: dict[str, Any] = {
             "n": len(results),

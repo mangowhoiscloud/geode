@@ -42,6 +42,7 @@ __all__ = [
     "DIVERSITY_LENSES",
     "MAX_BEST_OF",
     "CandidateVerdict",
+    "candidate_text",
     "judge_candidates",
     "lensed_description",
 ]
@@ -136,14 +137,43 @@ def _extract_verdict_input(result: Any) -> dict[str, Any] | None:
     return None
 
 
+def candidate_text(output: Any) -> str:
+    """Extract judge-readable text from a ``SubResult.output`` payload.
+
+    Prefers the common text-carrying keys; falls back to compact JSON so
+    the judge reads content, not a Python dict repr (Codex MCP LOW,
+    2026-07-06).
+    """
+    if isinstance(output, dict):
+        for key in ("text", "summary", "raw", "result"):
+            val = output.get(key)
+            if isinstance(val, str) and val.strip():
+                return val
+        try:
+            import json
+
+            return json.dumps(output, ensure_ascii=False, default=str)
+        except Exception:
+            return str(output)
+    return str(output or "")
+
+
 async def judge_candidates(
     task_description: str,
     candidates: list[str],
     *,
     model: str,
+    provider: str | None = None,
+    source: str | None = None,
     max_tokens: int = 512,
 ) -> CandidateVerdict:
     """Pick the best of *candidates* with one judge LLM call.
+
+    ``provider`` / ``source`` should carry the delegating loop's live
+    adapter route (``ToolContext``) so the judge does not re-run
+    resolution and land on a different credential source than the
+    session's main calls (Codex MCP MED, 2026-07-06); ``None`` falls
+    back to settings-driven inference like the reflection node.
 
     Never raises. Every failure path (adapter error, tool declined,
     non-int / out-of-range index) returns the candidate-0 fallback with
@@ -153,10 +183,11 @@ async def judge_candidates(
     if len(candidates) == 1:
         return CandidateVerdict(0, "only one successful candidate; judge call skipped")
     try:
-        provider = _resolve_provider(model)
+        provider = provider or _resolve_provider(model)
         from core.llm.adapters._source_inference import infer_source
 
-        adapter = resolve_for(normalize_registry_provider(provider), infer_source(provider))
+        resolved_source = source or infer_source(provider)
+        adapter = resolve_for(normalize_registry_provider(provider), resolved_source)
         user_prompt = _build_judge_prompt(task_description, candidates)
         log.info(
             "candidate judge dispatch: model=%s provider=%s n=%d",
