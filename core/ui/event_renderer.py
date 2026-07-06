@@ -75,6 +75,7 @@ _ANSI_ESCAPE = re.compile(r"\x1b\[[0-?]*[ -/]*[@-~]")
 _MARKDOWN_TEXT_MARKER = re.compile(
     r"(\*\*[^*\n][\s\S]*?\*\*|__[^_\n][\s\S]*?__|`[^`\n]+`|^#{1,6}\s|\n#{1,6}\s)"
 )
+_PLAN_STATE_TOOLS = frozenset({"update_plan"})
 
 
 def _fmt_tokens(n: int) -> str:
@@ -378,9 +379,17 @@ class EventRenderer:
 
     def _handle_tool_start(self, event: dict[str, Any]) -> None:
         name = str(event.get("name", ""))
+        if name in _PLAN_STATE_TOOLS:
+            self._stop_thinking()
+            self._set_inline_status("Updating plan...")
+            return
 
         # Detect repeat onset: same tool as last single-tool batch
-        if self._last_batch_tool and name == self._last_batch_tool:
+        if (
+            name not in _PLAN_STATE_TOOLS
+            and self._last_batch_tool
+            and name == self._last_batch_tool
+        ):
             # Enter repeat mode — suppress this tool_start
             self._in_repeat = True
             self._repeat_name = name
@@ -397,7 +406,11 @@ class EventRenderer:
 
     def _handle_tool_end(self, event: dict[str, Any]) -> None:
         name = str(event.get("name", ""))
-        self._record_tool_activity(event)
+        if name in _PLAN_STATE_TOOLS:
+            self._set_inline_status("Working...")
+            return
+        if name not in _PLAN_STATE_TOOLS:
+            self._record_tool_activity(event)
         self._tool_tracker.on_tool_end(event)
         # Resume activity when all tools done
         with self._tool_tracker._lock:
@@ -414,7 +427,7 @@ class EventRenderer:
             # The plan is not re-emitted at phase end (it lives in scrollback).
             self._render_activity_region()
             # Track last single-tool batch for repeat detection
-            if is_single:
+            if is_single and name not in _PLAN_STATE_TOOLS:
                 dur = event.get("duration_s")
                 self._last_batch_tool = name
                 self._repeat_count = 1

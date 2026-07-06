@@ -201,12 +201,81 @@ class TestDecisionParse:
         from core.cli.ipc_client import IPCClient
 
         client = IPCClient.__new__(IPCClient)
-        with patch("core.ui.console.console") as mock_console:
-            mock_console.input.return_value = typed
+        with (
+            patch.object(client, "_restore_terminal"),
+            patch.object(client, "_read_approval_line", return_value=typed),
+            patch("core.ui.console.console"),
+        ):
             decision = client._handle_approval_request(
                 {"tool_name": "memory_save", "detail": "", "safety_level": "write"}
             )
         assert decision == parse_decision(typed)[0]
+
+    def test_thin_client_strips_carriage_returns_from_approval_input(self) -> None:
+        """Raw terminal Enter can surface as CR bytes; HITL still accepts it."""
+        from core.cli.ipc_client import IPCClient
+
+        client = IPCClient.__new__(IPCClient)
+        with (
+            patch.object(client, "_restore_terminal"),
+            patch.object(client, "_read_approval_line", return_value="a\r\r\n"),
+            patch("core.ui.console.console"),
+        ):
+            decision = client._handle_approval_request(
+                {"tool_name": "browser_navigate", "detail": "", "safety_level": "mcp"}
+            )
+        assert decision == "a"
+
+    def test_thin_client_denies_approval_on_eof(self) -> None:
+        """EOF is not the same as pressing Enter; fail closed."""
+        from core.cli.ipc_client import IPCClient
+
+        client = IPCClient.__new__(IPCClient)
+        with (
+            patch.object(client, "_restore_terminal"),
+            patch.object(client, "_read_approval_line", side_effect=EOFError),
+            patch("core.ui.console.console"),
+        ):
+            decision = client._handle_approval_request(
+                {"tool_name": "browser_navigate", "detail": "", "safety_level": "mcp"}
+            )
+        assert decision == "n"
+
+    def test_thin_client_resumes_renderer_if_approval_callback_raises(self) -> None:
+        """Approval suspend must not strand the renderer if input handling fails."""
+        from core.cli.ipc_client import IPCClient
+
+        client = IPCClient.__new__(IPCClient)
+        client._sock = object()
+        sent: list[dict[str, Any]] = []
+        ended: list[bool] = []
+
+        def fail_approval(_msg: dict[str, Any]) -> str:
+            raise RuntimeError("approval input failed")
+
+        with (
+            patch.object(client, "_send_client_capability"),
+            patch.object(client, "_send", side_effect=sent.append),
+            patch.object(
+                client,
+                "_recv",
+                return_value={
+                    "type": "approval_request",
+                    "approval_id": "approval-1",
+                    "tool_name": "browser_navigate",
+                },
+            ),
+            pytest.raises(RuntimeError, match="approval input failed"),
+        ):
+            client.send_prompt(
+                "use browser",
+                on_approval_start=lambda: None,
+                on_approval_end=lambda: ended.append(True),
+                on_approval_request=fail_approval,
+            )
+
+        assert ended == [True]
+        assert sent == [{"type": "prompt", "text": "use browser"}]
 
 
 # ---------------------------------------------------------------------------

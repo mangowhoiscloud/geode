@@ -13,6 +13,7 @@ import json
 import logging
 import os
 import socket
+import sys
 from pathlib import Path
 from typing import Any
 
@@ -270,12 +271,14 @@ class IPCClient:
             if rtype == "approval_request":
                 if on_approval_start is not None:
                     on_approval_start()
-                if on_approval_request is not None:
-                    decision = str(on_approval_request(response))
-                else:
-                    decision = self._handle_approval_request(response)
-                if on_approval_end is not None:
-                    on_approval_end()
+                try:
+                    if on_approval_request is not None:
+                        decision = str(on_approval_request(response))
+                    else:
+                        decision = self._handle_approval_request(response)
+                finally:
+                    if on_approval_end is not None:
+                        on_approval_end()
                 # Echo the approval_id so the serve side can match this reply
                 # to the exact prompt it answers — a stale reply from a
                 # previous (timed-out) prompt is discarded instead of
@@ -375,6 +378,23 @@ class IPCClient:
         except (ValueError, OSError, termios.error) as exc:
             log.warning("HITL: _restore_terminal failed: %s", exc)
 
+    def _read_approval_line(self, prompt: str) -> str:
+        """Read one HITL approval line from the real terminal.
+
+        Rich ``console.input`` can inherit a raw prompt_toolkit terminal state,
+        where Enter arrives as a literal carriage return instead of submitting
+        the line. The thin client owns this prompt, so keep the read path
+        deliberately simple: restore cooked mode, write a plain prompt, then
+        read one line from stdin.
+        """
+        self._restore_terminal()
+        sys.stdout.write(prompt)
+        sys.stdout.flush()
+        line = sys.stdin.readline()
+        if line == "":
+            raise EOFError
+        return line
+
     def _handle_approval_request(self, msg: dict[str, Any]) -> str:
         """Display approval prompt to user."""
         import time
@@ -411,7 +431,7 @@ class IPCClient:
 
         t0 = time.monotonic()
         try:
-            resp = c.input("  [muted]y allow · n deny · a always-allow[/muted] ").strip().lower()
+            resp = self._read_approval_line("  y allow · n deny · a always-allow > ")
         except (KeyboardInterrupt, EOFError):
             c.print()
             log.info(
@@ -422,6 +442,7 @@ class IPCClient:
             return "n"
 
         elapsed = time.monotonic() - t0
+        resp = resp.replace("\r", "").strip().lower()
         if resp in ("a", "always"):
             decision = "a"
         elif resp in ("", "y", "yes"):
