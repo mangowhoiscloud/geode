@@ -17,6 +17,11 @@ export type ChangelogEntry = {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    "version": "0.99.283",
+    "date": "2026-07-07",
+    "body": "### Fixed\n\n- **Default CLI plan updates refresh in place.** In TTY sessions using the\n  prompt-safe inline `Working...` status, progress-plan updates now keep the\n  plan as renderer-owned bottom content and redraw it in place after clearing\n  the status line. This prevents updated plans from stacking duplicate\n  checklist blocks in the transcript while preserving append-only output for\n  pipes and logs."
+  },
+  {
     "version": "0.99.282",
     "date": "2026-07-07",
     "body": "### Fixed\n\n- **Default CLI live activity restoration.** The thin CLI now restores the\n  live `Working...` / `Running <tool>...` status in TTY sessions with a\n  carriage-return-only inline renderer, while keeping plan and activity output\n  append-only. This preserves the pre-full-screen interaction feel without\n  reintroducing cursor-up prompt overpaint.\n- **Plan rendering no longer suppresses activity status.** Progress-plan\n  updates clear only the renderer-owned current status line before printing\n  transcript rows, so the live status resumes under the updated plan instead\n  of disappearing for the rest of the turn."
