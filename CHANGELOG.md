@@ -45,6 +45,21 @@ functional change.
 
 ---
 
+## [0.99.281] - 2026-07-07
+
+### Fixed
+
+- **Fast chat is opt-in again.** The IPC simple-chat path is now disabled
+  unless `GEODE_FAST_CHAT=1` is set, so normal CLI prompts always use the
+  full AgenticLoop identity, plan, tool, and activity event path. The
+  opt-in fast-chat prompt still preserves GEODE identity and avoids generic
+  API-assistant self-introductions.
+- **Append-only CLI activity visibility.** The default thin CLI now renders
+  Activity updates as append-only transcript rows during a turn instead of
+  hiding tool/thought status until the final stop hook. This restores visible
+  run/tool progress without reintroducing cursor-up repainting over the input
+  prompt.
+
 ## [0.99.280] - 2026-07-06
 
 ### Fixed

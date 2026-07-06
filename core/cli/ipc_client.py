@@ -292,6 +292,7 @@ class IPCClient:
             if rtype in (
                 "tool_start",
                 "tool_end",
+                "fast_chat_start",
                 "tokens",
                 "round_start",
                 "thinking_start",
