@@ -45,6 +45,20 @@ functional change.
 
 ---
 
+## [0.99.282] - 2026-07-07
+
+### Fixed
+
+- **Default CLI live activity restoration.** The thin CLI now restores the
+  live `Working...` / `Running <tool>...` status in TTY sessions with a
+  carriage-return-only inline renderer, while keeping plan and activity output
+  append-only. This preserves the pre-full-screen interaction feel without
+  reintroducing cursor-up prompt overpaint.
+- **Plan rendering no longer suppresses activity status.** Progress-plan
+  updates clear only the renderer-owned current status line before printing
+  transcript rows, so the live status resumes under the updated plan instead
+  of disappearing for the rest of the turn.
+
 ## [0.99.281] - 2026-07-07
 
 ### Fixed
