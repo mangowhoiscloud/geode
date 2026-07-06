@@ -24,6 +24,21 @@ import time
 import unicodedata
 
 from core.ui import spinner_glyph
+from core.ui.palette import (
+    DIM,
+    ERASE_LINE,
+    FAIL,
+    FALLBACK_TERMINAL,
+    GLYPH_ARROW,
+    GLYPH_FAIL,
+    GLYPH_OK,
+    MIN_RENDER_WIDTH,
+    OK,
+    RESET,
+    TRUNCATE_SUMMARY,
+    TRUNCATE_TOOL_ARGS,
+    cursor_up,
+)
 
 _ANSI_ESCAPE = re.compile(r"\x1b\[[0-?]*[ -/]*[@-~]")
 
@@ -140,7 +155,7 @@ class ToolCallTracker:
             if self._visual_row_count > 0 and self._tty:
                 out = sys.stdout
                 for _ in range(self._visual_row_count):
-                    out.write("\033[A\033[2K")
+                    out.write(cursor_up(1) + ERASE_LINE)
                 out.write("\r")
                 out.flush()
             self._line_count = 0
@@ -177,7 +192,7 @@ class ToolCallTracker:
             return
         out = sys.stdout
         if previous_rows > 0:
-            out.write(f"\033[{previous_rows}A")
+            out.write(cursor_up(previous_rows))
 
         output = "\n".join(lines)
         if lines:
@@ -187,7 +202,7 @@ class ToolCallTracker:
         # If this redraw rendered fewer rows than the previous frame
         # (for example after a large batch collapses), wipe the stale tail.
         for _ in range(max(0, previous_rows - current_rows)):
-            out.write("\r\033[2K\n")
+            out.write(f"\r{ERASE_LINE}\n")
 
         out.flush()
 
@@ -203,7 +218,7 @@ class ToolCallTracker:
 
         return [
             *lines[:_VISIBLE_TOOL_HEAD],
-            f"\r\033[2K  \033[2m… +{omitted} tool calls collapsed\033[0m",
+            f"\r{ERASE_LINE}  {DIM}… +{omitted} tool calls collapsed{RESET}",
             *lines[-_VISIBLE_TOOL_TAIL:],
         ]
 
@@ -217,18 +232,18 @@ class ToolCallTracker:
         if tool["done"]:
             dur = f" ({float(tool['duration']):.1f}s)"
             if tool["error"]:
-                err = _truncate_display(str(tool["error"]), 60)
-                return f"\r\033[2K  \033[31m\u2717 {name}\033[0m — {err}{dur}"
-            summary = _truncate_display(str(tool["summary"]), 60)
-            return f"\r\033[2K  \033[32m\u2713 {name}\033[0m → {summary}{dur}"
+                err = _truncate_display(str(tool["error"]), TRUNCATE_SUMMARY)
+                return f"\r{ERASE_LINE}  {FAIL}{GLYPH_FAIL} {name}{RESET} — {err}{dur}"
+            summary = _truncate_display(str(tool["summary"]), TRUNCATE_SUMMARY)
+            return f"\r{ERASE_LINE}  {OK}{GLYPH_OK} {name}{RESET} {GLYPH_ARROW} {summary}{dur}"
 
         args = str(tool["args"]).replace("\n", " ")
-        args = _truncate_display(args, 50)
+        args = _truncate_display(args, TRUNCATE_TOOL_ARGS)
         body = spinner_glyph.shimmer(f"{spinner_glyph.GLYPH} {name}", now)
-        return f"\r\033[2K  {body}\033[2m({args})\033[0m"
+        return f"\r{ERASE_LINE}  {body}{DIM}({args}){RESET}"
 
     def _terminal_width(self) -> int:
-        return max(20, shutil.get_terminal_size(fallback=(80, 24)).columns)
+        return max(MIN_RENDER_WIDTH, shutil.get_terminal_size(fallback=FALLBACK_TERMINAL).columns)
 
     def _visual_rows(self, lines: list[str], width: int | None = None) -> int:
         width = width or self._terminal_width()

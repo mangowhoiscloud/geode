@@ -209,6 +209,40 @@ def test_telecom_roaming_recovery_repairs_known_roaming_before_terminal_mms() ->
     assert 'enable_roaming(customer_id="C1001", line_id="L1002")' in correction
 
 
+def test_telecom_proactive_roaming_repairs_account_before_apn_only_followup() -> None:
+    scaffold = build_workflow_order_scaffold("telecom-mms-proactive-roaming-v1")
+
+    assert isinstance(scaffold, TelecomMmsWorkflowOrder)
+    assert scaffold.proactive_roaming is True
+    scaffold.observe_tool_output(
+        "get_customer_by_phone",
+        '{"customer_id": "C1001", "phone_number": "555-123-2002"}',
+    )
+    scaffold.observe_tool_output(
+        "get_details_by_id",
+        '{"line_id": "L1002", "phone_number": "555-123-2002", "roaming_enabled": false}',
+    )
+    scaffold.observe_tool_output(
+        "",
+        "Airplane Mode: OFF\n"
+        "SIM Card Status: active\n"
+        "Cellular Network Type: 5G\n"
+        "Mobile Data Enabled: Yes\n"
+        "Data Roaming Enabled: No",
+    )
+
+    hint = scaffold.prompt_hint()
+    correction = scaffold.branch_correction_prompt(
+        "Before trying the MMS send test, please run check_apn_settings and confirm MMSC URL."
+    )
+
+    assert scaffold.account_roaming_repair_due() is True
+    assert 'enable_roaming(customer_id="C1001", line_id="L1002")' in hint
+    assert "Before terminal can_send_mms" in hint
+    assert correction is not None
+    assert 'enable_roaming(customer_id="C1001", line_id="L1002")' in correction
+
+
 def test_telecom_workflow_order_tracks_user_tool_outputs_without_names() -> None:
     scaffold = build_workflow_order_scaffold("telecom-mms-roaming-recovery-v1")
 

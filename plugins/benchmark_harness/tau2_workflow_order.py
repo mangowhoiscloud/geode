@@ -78,6 +78,7 @@ class TelecomMmsWorkflowOrder:
     step_economy: bool = False
     bounded_bundle: bool = False
     roaming_recovery: bool = False
+    proactive_roaming: bool = False
     phased_recovery: bool = False
     airplane_off: bool | None = None
     sim_active: bool | None = None
@@ -217,6 +218,17 @@ class TelecomMmsWorkflowOrder:
             and self.mms_verified is not True
         )
 
+    def account_roaming_repair_due(self) -> bool:
+        """Return True when a known account roaming blocker should be fixed now."""
+        return (
+            self.roaming_recovery
+            and self.proactive_roaming
+            and self.account_roaming_enabled is False
+            and self.active_customer_id is not None
+            and self.active_line_id is not None
+            and self.mms_verified is not True
+        )
+
     def premature_terminal_tool(self, tool_name: str) -> bool:
         """Return True when a terminal verifier is being used too early."""
         return tool_name == "can_send_mms" and not self.blockers_clear()
@@ -272,7 +284,11 @@ class TelecomMmsWorkflowOrder:
                 "then one concise status update that states whether MMSC URL is set. "
                 "Do not ask for roaming or MMS verification in this phase."
             )
-        if self.roaming_repair_due() or self.mms_failed_after_prereqs:
+        if (
+            self.account_roaming_repair_due()
+            or self.roaming_repair_due()
+            or self.mms_failed_after_prereqs
+        ):
             account_action = (
                 f'enable_roaming(customer_id="{self.active_customer_id}", '
                 f'line_id="{self.active_line_id}")'
@@ -280,12 +296,11 @@ class TelecomMmsWorkflowOrder:
                 else "enable_roaming with the observed active customer_id and line_id"
             )
             return (
-                "Phase 5 roaming recovery: can_send_mms failed after basic blockers were "
-                f"clear. First repair account roaming with {account_action} if the active "
-                "line details show roaming_enabled=false. Then ask the user simulator for "
-                "exactly one phone-side roaming action: turn_roaming_on or toggle_roaming "
-                "if Data Roaming is OFF. After that, ask for exactly one separate "
-                "can_send_mms terminal verification."
+                "Phase 5 roaming recovery: active line roaming_enabled=false is known. "
+                f"First repair account roaming with {account_action}. Then ask the user "
+                "simulator for exactly one phone-side roaming action: turn_roaming_on or "
+                "toggle_roaming if Data Roaming is OFF. After APN/MMSC is configured, ask "
+                "for exactly one separate can_send_mms terminal verification."
             )
         if self.mms_verified is None:
             return (
@@ -297,7 +312,9 @@ class TelecomMmsWorkflowOrder:
     def branch_correction_prompt(self, assistant_text: str) -> str | None:
         """Return a retry prompt when the assistant skips required roaming repair."""
         if not self.roaming_recovery or not (
-            self.roaming_repair_due() or self.mms_failed_after_prereqs
+            self.account_roaming_repair_due()
+            or self.roaming_repair_due()
+            or self.mms_failed_after_prereqs
         ):
             return None
         if self.account_roaming_enabled is not False:
@@ -318,6 +335,8 @@ class TelecomMmsWorkflowOrder:
                 "run the mms",
                 "try sending an mms",
                 "can_send_mms",
+                "check_apn_settings",
+                "mmsc url",
             )
         )
         if not forbidden_branch or "enable_roaming" in text:
@@ -331,11 +350,12 @@ class TelecomMmsWorkflowOrder:
             required = "enable_roaming with the observed active customer_id and line_id"
         return (
             "Your previous draft violated Crucible telecom roaming recovery order. "
-            "MMS failed after the basic blockers were clear, and the active line still has "
-            "roaming_enabled=false. Do not ask about Wi-Fi calling, app permissions, "
-            f"escalation, or broad diagnostics yet. Instead, call {required}. After account "
-            "roaming is repaired, ask the user for one phone-side Data Roaming ON action, "
-            "then ask for one separate can_send_mms verification."
+            "The active line still has roaming_enabled=false. Do not ask about Wi-Fi "
+            "calling, app permissions, escalation, broad diagnostics, APN-only follow-up, "
+            f"or terminal MMS yet. Instead, call {required}. After account roaming is "
+            "repaired, ask the user for a bounded phone-side follow-up that covers Data "
+            "Roaming ON, APN/MMSC confirmation if still unknown, and then one separate "
+            "can_send_mms verification."
         )
 
     def prompt_hint(self) -> str:
@@ -388,7 +408,11 @@ class TelecomMmsWorkflowOrder:
             )
         if not self.bounded_bundle:
             return step_hint
-        if self.roaming_recovery and (self.roaming_repair_due() or self.mms_failed_after_prereqs):
+        if self.roaming_recovery and (
+            self.account_roaming_repair_due()
+            or self.roaming_repair_due()
+            or self.mms_failed_after_prereqs
+        ):
             account_action = (
                 f'enable_roaming(customer_id="{self.active_customer_id}", '
                 f'line_id="{self.active_line_id}")'
@@ -398,12 +422,13 @@ class TelecomMmsWorkflowOrder:
             return (
                 f"{step_hint}\n"
                 "Roaming recovery protocol v1: active line roaming_enabled=false is a "
-                "known blocker. Before terminal can_send_mms, Wi-Fi calling, app "
-                "permissions, escalation, or repeated broad diagnostics, repair roaming. "
-                f"Call {account_action}. After account roaming is repaired, ask the user "
-                "simulator for one bounded phone-side action: turn Data Roaming ON using "
-                "turn_roaming_on or toggle_roaming if needed. Then ask for one separate "
-                "can_send_mms terminal verification."
+                "known blocker. Before terminal can_send_mms, APN-only follow-up, Wi-Fi "
+                "calling, app permissions, escalation, or repeated broad diagnostics, "
+                f"repair roaming. Call {account_action}. After account roaming is repaired, "
+                "ask the user simulator for one bounded phone-side follow-up: turn Data "
+                "Roaming ON using turn_roaming_on or toggle_roaming if needed; confirm "
+                "APN/MMSC if still unknown; then perform one separate can_send_mms terminal "
+                "verification."
             )
         if safe_actions == "none":
             bundle_instruction = (
@@ -438,6 +463,13 @@ def build_workflow_order_scaffold(name: str) -> TelecomMmsWorkflowOrder | None:
             step_economy=True,
             bounded_bundle=True,
             roaming_recovery=True,
+        )
+    if name == "telecom-mms-proactive-roaming-v1":
+        return TelecomMmsWorkflowOrder(
+            step_economy=True,
+            bounded_bundle=True,
+            roaming_recovery=True,
+            proactive_roaming=True,
         )
     if name == "telecom-mms-phased-recovery-v1":
         return TelecomMmsWorkflowOrder(

@@ -151,7 +151,9 @@ functional change.
   telecom tool names from user-side tau2 result text when half-duplex execution
   exposes tool results to GEODE's agent state without the original user
   `tool_calls`; this preserves blocker tracking for APN and terminal MMS
-  results inside the main-loop scaffold.
+  results inside the main-loop scaffold. The follow-up
+  `telecom-mms-proactive-roaming-v1` variant repairs known account-side
+  `roaming_enabled=false` before APN-only follow-up or terminal MMS checks.
 - **Telecom workflow gate recovery semantics.** `scripts/eval/telecom_workflow_gate.py`
   now treats `can_send_mms=false` after basic blockers as recoverable if a later
   `can_send_mms=true` appears, so hidden blockers such as roaming can be repaired
@@ -187,7 +189,9 @@ functional change.
   bypass the full AgenticLoop harness and route through adapter text completion
   with a compact Fable-style behavioural prompt. This keeps quick answers from
   paying the full project/tool/memory prompt tax; action, file, search, code,
-  build, and execution requests still use the full loop.
+  build, and execution requests still use the full loop. Provider routing is
+  normalized before dispatch, so subscription aliases such as `openai-codex`
+  still prefer the OpenAI text-completion adapter instead of falling through.
 
 ### Fixed
 
@@ -249,6 +253,26 @@ functional change.
   the termination filter — mis-readable as a mutation effect. The Crucible
   contamination filter drops these post-hoc; adapter-level isolation is the
   proper fix (pending).
+
+### Infrastructure
+
+- **CLI style SoT: `core/ui/palette.py`.** The CLI had two disconnected
+  style systems — the Rich brand theme in `console.py` and a raw-ANSI
+  thin-client path (`event_renderer` / `tool_tracker` / `status`) that
+  inlined 150+ escape literals across 17 distinct SGR codes, including
+  the same style written two ways (`36;1` vs `1;36`). All brand hexes,
+  SGR style/control tokens, the renderer glyph vocabulary, and
+  truncation/width metrics now live in one palette module: `console.py`
+  derives the Rich theme from the same hex anchors, `spinner_glyph`
+  keeps only its animation-owned dynamic rose, and every swept renderer
+  emits palette tokens. Token values are byte-identical to the literals
+  they replaced (zero visual diff by construction — full
+  `tests/core/ui` suite green unchanged); re-skinning the raw path onto
+  the brand truecolor identity is now a one-line-per-semantic value
+  change. Drift ratchets in `tests/core/ui/test_style_sot.py`: new
+  inline `\033[`/`\x1b[` literals in the swept modules fail CI, hex
+  restatement in `console.py` fails, token/glyph values are pinned, and
+  denormalized SGR spellings are banned.
 
 ## [0.99.278] - 2026-07-06
 

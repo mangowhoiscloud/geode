@@ -48,7 +48,7 @@ def test_ipc_poller_fast_chat_uses_text_completion(monkeypatch: pytest.MonkeyPat
     loop = type(
         "Loop",
         (),
-        {"model": "gpt-5.5", "_provider": "openai", "_source": "subscription"},
+        {"model": "gpt-5.5", "_provider": "openai-codex", "_source": "subscription"},
     )()
 
     result = asyncio.run(poller._run_fast_chat_async("자기소개 부탁해", loop, None))
@@ -59,4 +59,7 @@ def test_ipc_poller_fast_chat_uses_text_completion(monkeypatch: pytest.MonkeyPat
     assert result["tool_calls"] == []
     assert result["fast_path"] == "simple_chat"
     assert calls["prompt"] == "자기소개 부탁해"
-    assert "You are" not in str(calls["kwargs"]["system"])  # type: ignore[index]
+    kwargs = cast(dict[str, object], calls["kwargs"])
+    assert kwargs["prefer_provider"] == "openai"
+    assert kwargs["prefer_source"] == "subscription"
+    assert "You are" not in str(kwargs["system"])

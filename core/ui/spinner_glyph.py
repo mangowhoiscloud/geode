@@ -25,8 +25,8 @@ from __future__ import annotations
 
 import math
 
-RST = "\x1b[0m"
-DIM = "\x1b[2m"
+from core.ui.palette import DIM, ERASE_LINE
+from core.ui.palette import RESET as RST
 
 GLYPH = "◆"  # the GEODE mark: a rose gem (never changes shape — the wave carries motion)
 
@@ -141,8 +141,8 @@ if __name__ == "__main__":
         while True:
             el = time.monotonic() - start
             body = shimmer(f"{GLYPH} {word}…", el)
-            sys.stdout.write(f"\r\x1b[2K  {body} {DIM}({elapsed(el)}){RST}")
+            sys.stdout.write(f"\r{ERASE_LINE}  {body} {DIM}({elapsed(el)}){RST}")
             sys.stdout.flush()
             time.sleep(0.05)
     except KeyboardInterrupt:
-        sys.stdout.write("\r\x1b[2K")
+        sys.stdout.write(f"\r{ERASE_LINE}")

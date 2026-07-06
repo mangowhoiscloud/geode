@@ -26,6 +26,47 @@ from typing import Any
 from core.time_format import format_elapsed
 from core.ui import spinner_glyph
 from core.ui.fleet import FleetRegistry, set_last_fleet_snapshot
+from core.ui.palette import (
+    ACCENT,
+    BOLD,
+    DELEGATE,
+    DIM,
+    DONE_STRIKE,
+    ERASE_EOL,
+    ERASE_LINE,
+    ERROR,
+    FAIL,
+    FAINT,
+    FALLBACK_TERMINAL,
+    GLYPH_ARROW,
+    GLYPH_CANCEL,
+    GLYPH_CYCLE,
+    GLYPH_DELEGATE,
+    GLYPH_FAIL,
+    GLYPH_OK,
+    GLYPH_REASONING,
+    GLYPH_RESULT,
+    GLYPH_SWITCH,
+    GLYPH_THOUGHT,
+    GLYPH_TODO,
+    GLYPH_TURN,
+    HIGHLIGHT,
+    INFO,
+    LINK,
+    MIN_RENDER_WIDTH,
+    NOTICE,
+    OK,
+    OK_BOLD,
+    RESET,
+    SECTION,
+    TRUNCATE_FLEET_ROLE,
+    TRUNCATE_REASONING,
+    TRUNCATE_SUMMARY,
+    TRUNCATE_THINKING_LABEL,
+    WARN,
+    cursor_down,
+    cursor_up,
+)
 from core.ui.tool_tracker import ToolCallTracker, _truncate_display
 
 log = logging.getLogger(__name__)
@@ -173,9 +214,7 @@ class EventRenderer:
     def start_activity(self) -> None:
         """Start persistent activity spinner. Call before send_prompt()."""
         if not self._live_regions:
-            self._out.write(
-                f"  {spinner_glyph.ROSE}{spinner_glyph.GLYPH}{spinner_glyph.RST} Working...\n"
-            )
+            self._out.write(f"  {spinner_glyph.ROSE}{spinner_glyph.GLYPH}{RESET} Working...\n")
             self._out.flush()
             return
         if not self._tty:
@@ -240,11 +279,11 @@ class EventRenderer:
         if self._activity_thread:
             self._activity_thread.join(timeout=0.3)
             self._activity_thread = None
-        # Clear any leftover spinner line
+        # Clear any leftover spinner line.
         with self._render_lock:
             self._erase_activity_locked()
             if self._live_regions:
-                self._out.write("\r\033[2K")
+                self._out.write(f"\r{ERASE_LINE}")
         # Clear the transient Markdown stream region BEFORE any live-region
         # render — _flush_repeat may redraw the region at the cursor, and the
         # upward stream-erase would eat those fresh rows if it ran after.
@@ -371,13 +410,13 @@ class EventRenderer:
         removed = int(event.get("removed", before - after))
         tokens_est = int(event.get("tokens_estimate", removed * 250))
         if action == "exhausted":
-            self._out.write("  \033[1;33m\u27f3 Context exhausted\033[0m\n")
+            self._out.write(f"  {WARN}{GLYPH_CYCLE} Context exhausted{RESET}\n")
         else:
             label = "compacted" if action == "compact" else "pruned"
             tok_str = f", ~{tokens_est // 1000}k tokens freed" if tokens_est >= 1000 else ""
             self._out.write(
-                f"  \033[2m\u27f3 Context {label}: {before} \u2192 {after} messages"
-                f" ({removed} removed{tok_str})\033[0m\n"
+                f"  {DIM}{GLYPH_CYCLE} Context {label}: {before} {GLYPH_ARROW} {after} messages"
+                f" ({removed} removed{tok_str}){RESET}\n"
             )
         self._out.flush()
 
@@ -388,8 +427,8 @@ class EventRenderer:
         # exclusively by the per-task `subagent_state` events, which carry a
         # matching terminal transition. Feeding on_dispatch here would create a
         # row the aggregate `subagent_complete` (no per-task id) can never
-        # clear \u2192 a permanently-"running" fleet row (Codex catch).
-        self._out.write(f'  \033[34;1m\u25b8 delegate_task\033[0m("{desc}")\n')
+        # clear → a permanently-"running" fleet row (Codex catch).
+        self._out.write(f'  {DELEGATE}{GLYPH_DELEGATE} delegate_task{RESET}("{desc}")\n')
         self._out.flush()
 
     def _handle_subagent_state(self, event: dict[str, Any]) -> None:
@@ -422,14 +461,14 @@ class EventRenderer:
         total = int(event.get("total", 0))
         name = str(event.get("name", ""))
         dur = float(event.get("duration_s", 0))
-        mark = "\033[2m\u23bf\033[0m \033[32m\u2713\033[0m"
+        mark = f"{DIM}{GLYPH_RESULT}{RESET} {OK}{GLYPH_OK}{RESET}"
         self._out.write(f"  {mark} {name} ({dur:.1f}s)  [{completed}/{total}]\n")
         self._out.flush()
 
     def _handle_subagent_complete(self, event: dict[str, Any]) -> None:
         count = int(event.get("count", 0))
         elapsed = float(event.get("elapsed_s", 0))
-        self._out.write(f"  \033[32m\u2713 {count} sub-agents completed\033[0m ({elapsed:.1f}s)\n")
+        self._out.write(f"  {OK}{GLYPH_OK} {count} sub-agents completed{RESET} ({elapsed:.1f}s)\n")
         self._out.flush()
 
     def _handle_session_cost(self, event: dict[str, Any]) -> None:
@@ -442,9 +481,9 @@ class EventRenderer:
         in_str = _fmt_tokens(in_tok)
         out_str = _fmt_tokens(out_tok)
         self._out.write(
-            f"\n  \033[2mSession: {calls} calls \u00b7 "
+            f"\n  {DIM}Session: {calls} calls \u00b7 "
             f"\u2193{in_str} \u2191{out_str} \u00b7 "
-            f"\033[0m\033[1;33m${cost:.4f}\033[0m\n\n"
+            f"{RESET}{WARN}${cost:.4f}{RESET}\n\n"
         )
         self._out.flush()
 
@@ -456,8 +495,7 @@ class EventRenderer:
         actual = float(event.get("actual", 0))
         pct = float(event.get("pct", 0))
         self._out.write(
-            f"  \033[1;33m$ Budget warning: ${actual:.2f} / ${budget:.2f}"
-            f" ({pct:.0f}% used)\033[0m\n"
+            f"  {WARN}$ Budget warning: ${actual:.2f} / ${budget:.2f} ({pct:.0f}% used){RESET}\n"
         )
         self._out.flush()
 
@@ -469,12 +507,12 @@ class EventRenderer:
         wants to display the complete summary.
         """
         text = str(event.get("text", "")).strip().replace("\n", " ")
-        if len(text) > 240:
-            text = text[:237] + "…"
+        if len(text) > TRUNCATE_REASONING:
+            text = text[: TRUNCATE_REASONING - 3] + "…"
         if not text:
             return
         # ANSI 90 = bright black (muted); matches console.print muted style.
-        line = f"  \033[90m∙ thinking · {text}\033[0m\n"
+        line = f"  {FAINT}{GLYPH_REASONING} thinking · {text}{RESET}\n"
         with self._render_lock:
             self._clear_activity_line()
             region = self._thinking_region
@@ -494,9 +532,9 @@ class EventRenderer:
         delay = float(event.get("delay_s", 0))
         elapsed = float(event.get("elapsed_s", 0))
         self._out.write(
-            f"  \033[1;33m~ Retrying in {delay:.1f}s... "
+            f"  {WARN}~ Retrying in {delay:.1f}s... "
             f"[{model} \u00b7 {attempt}/{max_r} \u00b7 {elapsed:.0f}s elapsed] "
-            f"(Ctrl+C to skip)\033[0m\n"
+            f"(Ctrl+C to skip){RESET}\n"
         )
         self._out.flush()
 
@@ -506,11 +544,11 @@ class EventRenderer:
         hint = str(event.get("hint", "LLM error"))
         model = str(event.get("model", ""))
         elapsed = float(event.get("elapsed_s", 0))
-        # Severity -> ANSI color: critical/error=31(red), warning=33(yellow), info=2(dim)
-        color = {"critical": "1;31", "error": "1;31", "warning": "1;33"}.get(severity, "2")
+        # Severity -> style token (palette SoT)
+        color = {"critical": ERROR, "error": ERROR, "warning": WARN}.get(severity, DIM)
         symbol = {"critical": "!!", "error": "!", "warning": "~"}.get(severity, "\u00b7")
         suffix = f" [{model} \u00b7 {elapsed:.1f}s]" if model else ""
-        self._out.write(f"  \033[{color}m{symbol} {hint}{suffix}\033[0m\n")
+        self._out.write(f"  {color}{symbol} {hint}{suffix}{RESET}\n")
         self._out.flush()
 
     def _handle_model_switch_required(self, event: dict[str, Any]) -> None:
@@ -529,8 +567,8 @@ class EventRenderer:
             f" \u2014 try /model {' | '.join(suggestions)}" if suggestions else " \u2014 run /model"
         )
         self._out.write(
-            f"  \033[1;33m\u2715 Model switch required: {model} hit {error_type} "
-            f"after {attempts} attempts{suffix}\033[0m\n"
+            f"  {WARN}{GLYPH_CANCEL} Model switch required: {model} hit {error_type} "
+            f"after {attempts} attempts{suffix}{RESET}\n"
         )
         self._out.flush()
 
@@ -538,9 +576,7 @@ class EventRenderer:
         self._clear_activity_line()
         budget = float(event.get("budget", 0))
         actual = float(event.get("actual", 0))
-        self._out.write(
-            f"  \033[1;31m$ Cost budget exceeded: ${actual:.2f} / ${budget:.2f}\033[0m\n"
-        )
+        self._out.write(f"  {ERROR}$ Cost budget exceeded: ${actual:.2f} / ${budget:.2f}{RESET}\n")
         self._out.flush()
 
     def _handle_time_budget_expired(self, event: dict[str, Any]) -> None:
@@ -549,8 +585,8 @@ class EventRenderer:
         elapsed = float(event.get("elapsed_s", 0))
         rounds = int(event.get("rounds", 0))
         self._out.write(
-            f"  \033[1;33m\u23f1 Time expired: {elapsed:.0f}s / {budget:.0f}s"
-            f" ({rounds} rounds)\033[0m\n"
+            f"  {WARN}\u23f1 Time expired: {elapsed:.0f}s / {budget:.0f}s"
+            f" ({rounds} rounds){RESET}\n"
         )
         self._out.flush()
 
@@ -558,7 +594,7 @@ class EventRenderer:
         self._clear_activity_line()
         rounds = int(event.get("rounds", 0))
         self._out.write(
-            f"  \033[1;31m\u27f3 Convergence: repeating failure after {rounds} rounds\033[0m\n"
+            f"  {ERROR}{GLYPH_CYCLE} Convergence: repeating failure after {rounds} rounds{RESET}\n"
         )
         self._out.flush()
 
@@ -568,8 +604,8 @@ class EventRenderer:
         streak = int(event.get("streak", 0))
         rounds = int(event.get("rounds", 0))
         self._out.write(
-            f"  \033[1;33m\u27f3 No progress: {tool} returned the same success"
-            f" {streak}x ({rounds} rounds)\033[0m\n"
+            f"  {WARN}{GLYPH_CYCLE} No progress: {tool} returned the same success"
+            f" {streak}x ({rounds} rounds){RESET}\n"
         )
         self._out.flush()
 
@@ -666,15 +702,15 @@ class EventRenderer:
     def _handle_tool_backpressure(self, event: dict[str, Any]) -> None:
         self._clear_activity_line()
         n = int(event.get("consecutive_errors", 0))
-        self._out.write(f"  \033[1;33m\u23f8 Backpressure: {n} consecutive tool errors\033[0m\n")
+        self._out.write(f"  {WARN}\u23f8 Backpressure: {n} consecutive tool errors{RESET}\n")
         self._out.flush()
 
     def _handle_tool_diversity_forced(self, event: dict[str, Any]) -> None:
         tool = str(event.get("tool", ""))
         count = int(event.get("count", 0))
         self._append_activity_notice(
-            f"\033[1;33m\u27f3 Diversity: {tool} called {count}x"
-            " \u2014 hinting alternate path\033[0m"
+            f"{WARN}{GLYPH_CYCLE} Diversity: {tool} called {count}x"
+            f" \u2014 hinting alternate path{RESET}"
         )
         self._render_activity_region()
 
@@ -688,7 +724,7 @@ class EventRenderer:
         # mid-turn.
         reason = str(event.get("reason", ""))
         suffix = f"  ({reason})" if reason else ""
-        self._out.write(f"  \033[2m\u21c4 Model: {frm} \u2192 {to}{suffix}\033[0m\n")
+        self._out.write(f"  {DIM}{GLYPH_SWITCH} Model: {frm} {GLYPH_ARROW} {to}{suffix}{RESET}\n")
         self._out.flush()
 
     def _handle_checkpoint_saved(self, event: dict[str, Any]) -> None:
@@ -709,26 +745,26 @@ class EventRenderer:
         uri = str(event.get("verification_uri", ""))
         code = str(event.get("user_code", ""))
         self._out.write("\n")
-        self._out.write(f"  \033[1;36m{provider} OAuth Login\033[0m\n")
+        self._out.write(f"  {SECTION}{provider} OAuth Login{RESET}\n")
         self._out.write("\n")
         self._out.write("  1. Open this URL in your browser:\n")
-        self._out.write(f"     \033[94m{uri}\033[0m\n")
+        self._out.write(f"     {LINK}{uri}{RESET}\n")
         self._out.write("\n")
         self._out.write("  2. Enter this code:\n")
-        self._out.write(f"     \033[1;93m{code}\033[0m\n")
+        self._out.write(f"     {HIGHLIGHT}{code}{RESET}\n")
         self._out.write("\n")
         if uri:
-            self._out.write("  \033[2mPress [Enter] to open the URL in your browser.\033[0m\n")
+            self._out.write(f"  {DIM}Press [Enter] to open the URL in your browser.{RESET}\n")
             from core.ui.oauth_browser import start_oauth_browser_watcher
 
             start_oauth_browser_watcher(uri)
-        self._out.write("  \033[2mWaiting for sign-in... (Ctrl+C to cancel)\033[0m\n")
+        self._out.write(f"  {DIM}Waiting for sign-in... (Ctrl+C to cancel){RESET}\n")
         self._out.flush()
 
     def _handle_oauth_login_pending(self, event: dict[str, Any]) -> None:
         """Heartbeat — overwrite a single 'Waiting…' line in place."""
         elapsed = int(event.get("elapsed_s", 0))
-        self._out.write(f"\r  \033[2mWaiting... ({elapsed}s)\033[0m\033[K")
+        self._out.write(f"\r  {DIM}Waiting... ({elapsed}s){RESET}{ERASE_EOL}")
         self._out.flush()
 
     def _handle_oauth_login_success(self, event: dict[str, Any]) -> None:
@@ -738,22 +774,22 @@ class EventRenderer:
         plan_type = str(event.get("plan_type", ""))
         stored_at = str(event.get("stored_at", ""))
         # Wipe the heartbeat line, then announce success.
-        self._out.write("\r\033[2K\n")
-        self._out.write(f"  \033[1;32m✓ {provider} login successful\033[0m\n")
+        self._out.write(f"\r{ERASE_LINE}\n")
+        self._out.write(f"  {OK_BOLD}{GLYPH_OK} {provider} login successful{RESET}\n")
         if email or account_id:
-            self._out.write(f"  \033[2m  Account:\033[0m {email or account_id}\n")
+            self._out.write(f"  {DIM}  Account:{RESET} {email or account_id}\n")
         if plan_type:
-            self._out.write(f"  \033[2m  Plan:\033[0m {plan_type}\n")
+            self._out.write(f"  {DIM}  Plan:{RESET} {plan_type}\n")
         if stored_at:
-            self._out.write(f"  \033[2m  Stored:\033[0m {stored_at}\n")
+            self._out.write(f"  {DIM}  Stored:{RESET} {stored_at}\n")
         self._out.write("\n")
         self._out.flush()
 
     def _handle_oauth_login_failed(self, event: dict[str, Any]) -> None:
         provider = str(event.get("provider", ""))
         reason = str(event.get("reason", ""))
-        self._out.write("\r\033[2K\n")
-        self._out.write(f"  \033[1;31m✗ {provider} login failed:\033[0m {reason}\n\n")
+        self._out.write(f"\r{ERASE_LINE}\n")
+        self._out.write(f"  {ERROR}{GLYPH_FAIL} {provider} login failed:{RESET} {reason}\n\n")
         self._out.flush()
 
     # -- Billing error (v0.51.1 IPC parity) -----------------------------------
@@ -761,7 +797,7 @@ class EventRenderer:
     def _handle_billing_error(self, event: dict[str, Any]) -> None:
         message = str(event.get("message", ""))
         self._clear_activity_line()
-        self._out.write(f"\n  \033[1;31m✗ Billing error\033[0m — {message}\n\n")
+        self._out.write(f"\n  {ERROR}{GLYPH_FAIL} Billing error{RESET} — {message}\n\n")
         self._out.flush()
 
     def _handle_quota_exhausted(self, event: dict[str, Any]) -> None:
@@ -780,28 +816,28 @@ class EventRenderer:
 
         self._clear_activity_line()
         label = plan_label or provider or "Provider"
-        self._out.write(f"\n  \033[1;31m⚠ {label} quota exhausted\033[0m\n")
+        self._out.write(f"\n  {ERROR}⚠ {label} quota exhausted{RESET}\n")
         if message:
             self._out.write(f"  {message}\n")
         if plan_id and plan_id != plan_label:
-            self._out.write(f"  Plan: \033[1m{plan_id}\033[0m\n")
+            self._out.write(f"  Plan: {BOLD}{plan_id}{RESET}\n")
         if resets_in > 0:
             mins = resets_in // 60
             ttl = f"{mins // 60}h {mins % 60}m" if mins >= 60 else f"{mins}m"
-            self._out.write(f"  Resets in: \033[1m{ttl}\033[0m\n")
-        self._out.write("\n  \033[1mOptions:\033[0m\n")
+            self._out.write(f"  Resets in: {BOLD}{ttl}{RESET}\n")
+        self._out.write(f"\n  {BOLD}Options:{RESET}\n")
         self._out.write("    1. Wait for quota reset\n")
         if provider:
             self._out.write(
-                f"    2. Switch auth: \033[36m/login set-key {provider} <api-key>\033[0m\n"
+                f"    2. Switch auth: {INFO}/login set-key {provider} <api-key>{RESET}\n"
             )
         else:
             self._out.write(
-                "    2. Switch auth: \033[36m/login set-key <provider> <api-key>\033[0m\n"
+                f"    2. Switch auth: {INFO}/login set-key <provider> <api-key>{RESET}\n"
             )
-        self._out.write("    3. Switch provider: \033[36m/model <other-model>\033[0m\n")
+        self._out.write(f"    3. Switch provider: {INFO}/model <other-model>{RESET}\n")
         if upgrade_url:
-            self._out.write(f"    4. Upgrade plan: \033[36m{upgrade_url}\033[0m\n")
+            self._out.write(f"    4. Upgrade plan: {INFO}{upgrade_url}{RESET}\n")
         self._out.write("\n")
         self._out.flush()
 
@@ -813,8 +849,8 @@ class EventRenderer:
         mode = str(event.get("pipeline_mode", ""))
         model = str(event.get("model", ""))
         ver = str(event.get("version", ""))
-        self._out.write(f"\n  \033[1;36mGEODE v{ver}\033[0m\n")
-        self._out.write(f"  Subject: \033[1m{subject}\033[0m\n")
+        self._out.write(f"\n  {SECTION}GEODE v{ver}{RESET}\n")
+        self._out.write(f"  Subject: {BOLD}{subject}{RESET}\n")
         self._out.write(f"  Pipeline: {mode} | Model: {model}\n\n")
         self._out.flush()
 
@@ -825,7 +861,7 @@ class EventRenderer:
         source = str(event.get("source", ""))
         metrics = event.get("metrics", {})
         signals = event.get("signals", {})
-        self._out.write(f"  \033[36;1m\u25b8 GATHER\033[0m {name}")
+        self._out.write(f"  {SECTION}{GLYPH_DELEGATE} GATHER{RESET} {name}")
         if subject_type:
             self._out.write(f" ({subject_type})")
         if source:
@@ -833,28 +869,28 @@ class EventRenderer:
         self._out.write("\n")
         if isinstance(metrics, dict) and metrics:
             parts = [f"{k}={v}" for k, v in list(metrics.items())[:4]]
-            self._out.write(f"    \033[2m{' | '.join(parts)}\033[0m\n")
+            self._out.write(f"    {DIM}{' | '.join(parts)}{RESET}\n")
         if isinstance(signals, dict) and signals:
             parts = [f"{k}={v}" for k, v in list(signals.items())[:4]]
-            self._out.write(f"    \033[2mSignals: {' | '.join(parts)}\033[0m\n")
+            self._out.write(f"    {DIM}Signals: {' | '.join(parts)}{RESET}\n")
         self._out.flush()
 
     def _handle_pipeline_analysis(self, event: dict[str, Any]) -> None:
         self._suppress_all_spinners()
         analysts = event.get("analysts", [])
-        self._out.write(f"  \033[36;1m\u25b8 ANALYZE\033[0m {len(analysts)} analysts\n")
+        self._out.write(f"  {SECTION}{GLYPH_DELEGATE} ANALYZE{RESET} {len(analysts)} analysts\n")
         for a in analysts:
             name = str(a.get("analyst", ""))
             score = float(a.get("score", 0))
             finding = str(a.get("finding", ""))[:50]
-            color = "32" if score >= 4.0 else "33" if score >= 3.0 else "31"
-            self._out.write(f"    {name:<18} \033[{color}m{score:.1f}\033[0m  {finding}\n")
+            color = OK if score >= 4.0 else NOTICE if score >= 3.0 else FAIL
+            self._out.write(f"    {name:<18} {color}{score:.1f}{RESET}  {finding}\n")
         self._out.flush()
 
     def _handle_pipeline_evaluation(self, event: dict[str, Any]) -> None:
         self._suppress_all_spinners()
         evals = event.get("evaluators", {})
-        self._out.write(f"  \033[36;1m\u25b8 EVALUATE\033[0m {len(evals)} evaluators\n")
+        self._out.write(f"  {SECTION}{GLYPH_DELEGATE} EVALUATE{RESET} {len(evals)} evaluators\n")
         if isinstance(evals, dict):
             labels = {
                 "quality_judge": "Quality",
@@ -865,10 +901,8 @@ class EventRenderer:
                 label = labels.get(key, key.replace("_", " ").title())
                 score = float(val.get("score", 0)) if isinstance(val, dict) else 0
                 rationale = str(val.get("rationale", ""))[:50] if isinstance(val, dict) else ""
-                color = "32" if score >= 80 else "33" if score >= 60 else "31"
-                self._out.write(
-                    f"    {label:<18} \033[{color}m{score:.0f}/100\033[0m  {rationale}\n"
-                )
+                color = OK if score >= 80 else NOTICE if score >= 60 else FAIL
+                self._out.write(f"    {label:<18} {color}{score:.0f}/100{RESET}  {rationale}\n")
         self._out.flush()
 
     def _handle_pipeline_score(self, event: dict[str, Any]) -> None:
@@ -876,22 +910,26 @@ class EventRenderer:
         score = float(event.get("final_score", 0))
         conf = float(event.get("confidence", 0))
         subscores = event.get("subscores", {})
-        self._out.write(f"  \033[36;1m\u25b8 SCORE\033[0m {score:.1f}/100")
+        self._out.write(f"  {SECTION}{GLYPH_DELEGATE} SCORE{RESET} {score:.1f}/100")
         if conf > 0:
             self._out.write(f" \u00b7 confidence {conf:.1f}%")
         self._out.write("\n")
         if isinstance(subscores, dict) and subscores:
             parts = [f"{k}={v:.1f}" for k, v in subscores.items()]
-            self._out.write(f"    \033[2m{' | '.join(parts)}\033[0m\n")
+            self._out.write(f"    {DIM}{' | '.join(parts)}{RESET}\n")
         self._out.flush()
 
     def _handle_pipeline_verification(self, event: dict[str, Any]) -> None:
         self._suppress_all_spinners()
-        g = "\033[32m\u2713\033[0m" if event.get("guardrails_pass") else "\033[31m\u2717\033[0m"
-        self._out.write(f"  \033[36;1m\u25b8 VERIFY\033[0m Guardrails {g}\n")
+        g = (
+            f"{OK}{GLYPH_OK}{RESET}"
+            if event.get("guardrails_pass")
+            else f"{FAIL}{GLYPH_FAIL}{RESET}"
+        )
+        self._out.write(f"  {SECTION}{GLYPH_DELEGATE} VERIFY{RESET} Guardrails {g}\n")
         details = event.get("details", [])
         for d in details[:3]:
-            self._out.write(f"    \033[33m- {d}\033[0m\n")
+            self._out.write(f"    {NOTICE}- {d}{RESET}\n")
         self._out.flush()
 
     def _handle_feedback_loop(self, event: dict[str, Any]) -> None:
@@ -900,8 +938,8 @@ class EventRenderer:
         conf = float(event.get("confidence", 0))
         threshold = float(event.get("threshold", 0))
         self._out.write(
-            f"  \033[2m\u27f3 Feedback loop #{iteration}:"
-            f" confidence {conf:.1f}% < {threshold:.1f}%\033[0m\n"
+            f"  {DIM}{GLYPH_CYCLE} Feedback loop #{iteration}:"
+            f" confidence {conf:.1f}% < {threshold:.1f}%{RESET}\n"
         )
         self._out.flush()
 
@@ -909,7 +947,7 @@ class EventRenderer:
         self._suppress_all_spinners()
         node = str(event.get("node", ""))
         reason = str(event.get("reason", ""))
-        self._out.write(f"  \033[2m\u2933 Skipped: {node} ({reason})\033[0m\n")
+        self._out.write(f"  {DIM}\u2933 Skipped: {node} ({reason}){RESET}\n")
         self._out.flush()
 
     def _handle_pipeline_result(self, event: dict[str, Any]) -> None:
@@ -920,20 +958,20 @@ class EventRenderer:
         narrative = str(event.get("narrative", ""))
         segment = str(event.get("target_segment", ""))
         action = str(event.get("action", "")).replace("_", " ").title()
-        tier_color = {"S": "1;35", "A": "1;32", "B": "1;33", "C": "1;31"}.get(tier, "1")
-        self._out.write("\n  \033[36;1m\u25b8 RESULT\033[0m\n")
-        self._out.write(f"    \033[{tier_color}m{tier}\033[0m  {score:.1f} pts  |  {cause}\n")
+        tier_color = {"S": ACCENT, "A": OK_BOLD, "B": WARN, "C": ERROR}.get(tier, BOLD)
+        self._out.write(f"\n  {SECTION}{GLYPH_DELEGATE} RESULT{RESET}\n")
+        self._out.write(f"    {tier_color}{tier}{RESET}  {score:.1f} pts  |  {cause}\n")
         if narrative:
             self._out.write(f"    {narrative}\n")
         if segment:
-            self._out.write(f"    \033[2mTarget:\033[0m {segment}\n")
+            self._out.write(f"    {DIM}Target:{RESET} {segment}\n")
         if action:
-            self._out.write(f"    \033[2mAction:\033[0m {action}\n")
+            self._out.write(f"    {DIM}Action:{RESET} {action}\n")
         errors = event.get("errors", [])
         if errors:
-            self._out.write(f"    \033[1;33m\u26a0 {len(errors)} warnings\033[0m\n")
+            self._out.write(f"    {WARN}\u26a0 {len(errors)} warnings{RESET}\n")
             for err in errors[:5]:
-                self._out.write(f"      \033[33m- {err}\033[0m\n")
+                self._out.write(f"      {NOTICE}- {err}{RESET}\n")
         self._out.write("\n")
         self._out.flush()
 
@@ -946,14 +984,14 @@ class EventRenderer:
         elapsed = time.monotonic() - self._turn_start
         in_str = _fmt_tokens(self._turn_in_tokens)
         out_str = _fmt_tokens(self._turn_out_tokens)
-        parts = [f"\u2722 Worked for {format_elapsed(elapsed)}"]
+        parts = [f"{GLYPH_TURN} Worked for {format_elapsed(elapsed)}"]
         if self._turn_model:
             parts.append(self._turn_model)
         parts.append(f"\u2193{in_str} \u2191{out_str}")
         if self._turn_cost > 0:
             parts.append(f"${self._turn_cost:.4f}")
         line = " \u00b7 ".join(parts)
-        self._out.write(f"\n  \033[2m{line}\033[0m\n")
+        self._out.write(f"\n  {DIM}{line}{RESET}\n")
         self._out.flush()
         # Reset so duplicate stop() calls don't double-render
         self._turn_in_tokens = 0
@@ -1000,7 +1038,7 @@ class EventRenderer:
                 with self._render_lock:
                     if self._activity and not self._activity_suppressed:
                         line = f"  {body}"
-                        self._out.write(f"\r\033[2K{line}")
+                        self._out.write(f"\r{ERASE_LINE}{line}")
                         self._activity_spinner_line = line
                         self._activity_spinner_at_bottom = True
                         self._out.flush()
@@ -1029,7 +1067,7 @@ class EventRenderer:
             "",
         )
         if active:
-            return _truncate_display(active, 48)
+            return _truncate_display(active, TRUNCATE_THINKING_LABEL)
         return spinner_glyph.gerund(self._turn_start)
 
     def _render_thinking_frame(self) -> None:
@@ -1044,12 +1082,8 @@ class EventRenderer:
             if self._thinking_round > 1:
                 word += f" (round {self._thinking_round})"
             body = spinner_glyph.shimmer(f"{spinner_glyph.GLYPH} {word}", el)
-            meta = (
-                f" {spinner_glyph.DIM}({spinner_glyph.elapsed(el)}){spinner_glyph.RST}"
-                if region is not None
-                else ""
-            )
-            self._out.write(f"\r\033[2K  {body}{meta}")
+            meta = f" {DIM}({spinner_glyph.elapsed(el)}){RESET}" if region is not None else ""
+            self._out.write(f"\r{ERASE_LINE}  {body}{meta}")
             self._out.flush()
 
     def _stop_thinking(self) -> None:
@@ -1061,7 +1095,7 @@ class EventRenderer:
                 self._thinking_thread = None
             if self._live_regions:
                 with self._render_lock:
-                    self._out.write("\r\033[2K")
+                    self._out.write(f"\r{ERASE_LINE}")
                     self._out.flush()
 
     # -- Thinking collapse / Ctrl+O -------------------------------------------
@@ -1169,30 +1203,30 @@ class EventRenderer:
         self._erase_visual_rows_locked(self._visual_rows(lines))
 
     def _erase_visual_rows_locked(self, rows: int) -> None:
-        self._out.write("\r\033[2K")
+        self._out.write(f"\r{ERASE_LINE}")
         if rows <= 0:
             return
-        self._out.write(f"\033[{rows}A")
+        self._out.write(cursor_up(rows))
         for idx in range(rows):
-            self._out.write("\r\033[2K")
+            self._out.write(f"\r{ERASE_LINE}")
             if idx < rows - 1:
-                self._out.write("\033[1B")
+                self._out.write(cursor_down(1))
         if rows > 1:
-            self._out.write(f"\033[{rows - 1}A")
+            self._out.write(cursor_up(rows - 1))
 
     def _thinking_header(self, region: _ThinkingRegion, *, still_running: bool) -> str:
         elapsed = time.monotonic() - region.start_ts
         suffix = " \u2026 (still running)" if still_running else ""
         return (
-            f"  \033[90m\u2726 Thought for {format_elapsed(elapsed)} \u00b7 "
-            f"{len(region.items)} items{suffix}\033[0m\n"
+            f"  {FAINT}{GLYPH_THOUGHT} Thought for {format_elapsed(elapsed)} \u00b7 "
+            f"{len(region.items)} items{suffix}{RESET}\n"
         )
 
     def _thinking_visual_rows(self, lines: list[str]) -> int:
         return self._visual_rows(lines)
 
     def _visual_rows(self, lines: list[str]) -> int:
-        width = max(20, shutil.get_terminal_size(fallback=(80, 24)).columns)
+        width = max(MIN_RENDER_WIDTH, shutil.get_terminal_size(fallback=FALLBACK_TERMINAL).columns)
         rows = 0
         for line in lines:
             plain = _ANSI_ESCAPE.sub("", line).rstrip("\n")
@@ -1340,14 +1374,14 @@ class EventRenderer:
 
         lines: list[str] = []
         if parts or surface.notices:
-            lines.append(f"\n  \033[2mActivity · {' · '.join(parts) or 'updated'}\033[0m\n")
+            lines.append(f"\n  {DIM}Activity · {' · '.join(parts) or 'updated'}{RESET}\n")
             stats = sorted(
                 surface.tool_stats.items(),
                 key=lambda item: (-item[1].count, -item[1].last_seq, item[0]),
             )
             for name, stat in stats[: self._MAX_ACTIVITY_TOOL_LINES]:
-                symbol = "\u2717" if stat.errors else "\u2713"
-                color = "31" if stat.errors else "32"
+                symbol = GLYPH_FAIL if stat.errors else GLYPH_OK
+                color = FAIL if stat.errors else OK
                 count = f" \u00d7{stat.count}" if stat.count > 1 else ""
                 duration = f" ({stat.duration_s:.1f}s)" if stat.duration_s > 0 else ""
                 if stat.errors:
@@ -1356,15 +1390,15 @@ class EventRenderer:
                     summary = stat.error or f"{stat.errors}/{stat.count} failed \u00b7 last ok"
                 else:
                     summary = stat.summary or "ok"
-                summary = _truncate_display(summary, 60)
+                summary = _truncate_display(summary, TRUNCATE_SUMMARY)
                 lines.append(
-                    f"    \033[{color}m{symbol} {name}\033[0m{count} \u2192 {summary}{duration}\n"
+                    f"    {color}{symbol} {name}{RESET}{count} {GLYPH_ARROW} {summary}{duration}\n"
                 )
             omitted = len(stats) - self._MAX_ACTIVITY_TOOL_LINES
             if omitted > 0:
-                lines.append(f"    \033[2m\u2026 +{omitted} tool types\033[0m\n")
+                lines.append(f"    {DIM}\u2026 +{omitted} tool types{RESET}\n")
             for notice in surface.notices[-self._MAX_ACTIVITY_NOTICE_LINES :]:
-                lines.append(f"    \033[2m{notice}\033[0m\n")
+                lines.append(f"    {DIM}{notice}{RESET}\n")
         if fleet_line:
             # A leading blank row only when the fleet line stands alone (no
             # Activity header above it), so it is not glued to prior output.
@@ -1387,22 +1421,22 @@ class EventRenderer:
         if not running:
             return ""
         labels = [
-            agent.role or _truncate_display(agent.description, 24) or agent.task_id
+            agent.role or _truncate_display(agent.description, TRUNCATE_FLEET_ROLE) or agent.task_id
             for agent in running
         ]
-        # Single running agent with a known live tool \u2192 surface it inline (one
+        # Single running agent with a known live tool → surface it inline (one
         # line, still width-truncated below). Kept to the single-agent case so
         # the comma-joined multi-agent list never turns into an ambiguous soup.
         if len(running) == 1 and running[0].current_activity:
             labels[0] = f"{labels[0]} \u00b7 {running[0].current_activity}"
         prefix = f"Fleet \u00b7 {len(running)} running \u00b7 "
-        width = max(20, shutil.get_terminal_size(fallback=(80, 24)).columns)
+        width = max(MIN_RENDER_WIDTH, shutil.get_terminal_size(fallback=FALLBACK_TERMINAL).columns)
         # Budget: total width minus the 2-space indent, the rose mark + space,
         # and the prefix; the remainder is for the comma-joined role names.
         budget = max(8, width - 2 - 2 - len(prefix))
         names = _truncate_display(", ".join(labels), budget)
-        mark = f"{spinner_glyph.ROSE}{spinner_glyph.GLYPH}{spinner_glyph.RST}"
-        return f"{mark} \033[2m{prefix}{names}\033[0m"
+        mark = f"{spinner_glyph.ROSE}{spinner_glyph.GLYPH}{RESET}"
+        return f"{mark} {DIM}{prefix}{names}{RESET}"
 
     def _render_full_progress_plan(
         self, items: list[dict[Any, Any]], explanation: str
@@ -1414,17 +1448,17 @@ class EventRenderer:
             header = f"{header} · {explanation}"
         # Signature rose (not mint) for the checklist header — the plan surface
         # shares GEODE's one hue with the spinner and the active-step mark.
-        lines = ["\n", f"  {spinner_glyph.ROSE}{header}\033[0m\n"]
+        lines = ["\n", f"  {spinner_glyph.ROSE}{header}{RESET}\n"]
         visible_items, hidden_before, hidden_after = self._visible_plan_window(items)
         if hidden_before:
-            lines.append(f"    \033[2m… {hidden_before} earlier\033[0m\n")
+            lines.append(f"    {DIM}… {hidden_before} earlier{RESET}\n")
         for item in visible_items:
             status = str(item.get("status", "pending"))
             step = str(item.get("step", ""))
             symbol, style, text_style = self._progress_plan_symbol(status)
-            lines.append(f"    {style}{symbol}\033[0m {text_style}{step}\033[0m\n")
+            lines.append(f"    {style}{symbol}{RESET} {text_style}{step}{RESET}\n")
         if hidden_after:
-            lines.append(f"    \033[2m… {hidden_after} later\033[0m\n")
+            lines.append(f"    {DIM}… {hidden_after} later{RESET}\n")
         lines.append("\n")
         return lines
 
@@ -1460,10 +1494,10 @@ class EventRenderer:
         in bold, pending = quiet. SGR 9 (strike) degrades to plain dim where unsupported.
         """
         if status == "completed":
-            return "✓", "\033[32m", "\033[2;9m"
+            return GLYPH_OK, OK, DONE_STRIKE
         if status == "in_progress":
-            return spinner_glyph.GLYPH, spinner_glyph.ROSE, "\033[1m"
-        return "○", "\033[2m", "\033[2m"
+            return spinner_glyph.GLYPH, spinner_glyph.ROSE, BOLD
+        return GLYPH_TODO, DIM, DIM
 
     def _suppress_all_spinners(self) -> None:
         """Stop thinking + tool spinners, clear line for new content."""
@@ -1472,7 +1506,8 @@ class EventRenderer:
         self._tool_tracker.suspend()
         with self._render_lock:
             self._erase_activity_locked()
-            self._out.write("\r\033[2K")
+            if self._live_regions:
+                self._out.write(f"\r{ERASE_LINE}")
             self._out.flush()
 
     def _clear_activity_line(self) -> None:
@@ -1480,7 +1515,8 @@ class EventRenderer:
         if self._activity and not self._activity_suppressed:
             with self._render_lock:
                 self._erase_activity_locked()
-                self._out.write("\r\033[2K")
+                if self._live_regions:
+                    self._out.write(f"\r{ERASE_LINE}")
                 self._out.flush()
 
     @staticmethod
@@ -1502,7 +1538,7 @@ class EventRenderer:
             return
 
         visual_lines = len(text.splitlines()) or 1
-        self._out.write("\r\033[2K")
+        self._out.write(f"\r{ERASE_LINE}")
         moves = visual_lines if text.endswith("\n") else max(visual_lines - 1, 0)
         for _ in range(moves):
-            self._out.write("\033[1A\033[2K")
+            self._out.write(cursor_up(1) + ERASE_LINE)

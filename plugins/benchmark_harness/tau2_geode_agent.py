@@ -61,6 +61,7 @@ CRUCIBLE_WORKFLOW_ORDERS = (
     "telecom-mms-step-economy-v1",
     "telecom-mms-bounded-bundle-v1",
     "telecom-mms-roaming-recovery-v1",
+    "telecom-mms-proactive-roaming-v1",
     "telecom-mms-phased-recovery-v1",
 )
 

@@ -982,10 +982,12 @@ class CLIPoller:
         """Run a short conversational turn without the AgenticLoop harness."""
         self._propagate_contextvars()
         from core.llm.adapters.dispatch import complete_text_via_adapters
+        from core.llm.adapters.registry import normalize_registry_provider
         from core.server.ipc_server.fast_chat import fast_chat_system_prompt
 
         model = str(getattr(loop, "model", "") or "")
-        provider = str(getattr(loop, "_provider", "") or "") or None
+        provider_raw = str(getattr(loop, "_provider", "") or "")
+        provider = normalize_registry_provider(provider_raw) if provider_raw else None
         source = str(getattr(loop, "_source", "") or "") or None
         result = await complete_text_via_adapters(
             text,
