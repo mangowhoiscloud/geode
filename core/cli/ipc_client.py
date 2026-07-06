@@ -17,6 +17,7 @@ from pathlib import Path
 from typing import Any
 
 from core.paths import CLI_SOCKET_PATH
+from core.unicode_safety import sanitize_jsonable
 
 log = logging.getLogger(__name__)
 
@@ -235,6 +236,7 @@ class IPCClient:
         on_event: Any = None,
         on_approval_start: Any = None,
         on_approval_end: Any = None,
+        on_approval_request: Any = None,
     ) -> dict[str, Any]:
         """Send a prompt and wait for the result.
 
@@ -268,7 +270,10 @@ class IPCClient:
             if rtype == "approval_request":
                 if on_approval_start is not None:
                     on_approval_start()
-                decision = self._handle_approval_request(response)
+                if on_approval_request is not None:
+                    decision = str(on_approval_request(response))
+                else:
+                    decision = self._handle_approval_request(response)
                 if on_approval_end is not None:
                     on_approval_end()
                 # Echo the approval_id so the serve side can match this reply
@@ -474,7 +479,7 @@ class IPCClient:
     def _send(self, data: dict[str, Any]) -> None:
         """Send line-delimited JSON."""
         assert self._sock is not None
-        payload = json.dumps(data, ensure_ascii=False) + "\n"
+        payload = json.dumps(sanitize_jsonable(data), ensure_ascii=False) + "\n"
         self._sock.sendall(payload.encode("utf-8"))
 
     def _recv(self) -> dict[str, Any] | None:

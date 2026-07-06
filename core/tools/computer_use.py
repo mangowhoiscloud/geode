@@ -22,8 +22,12 @@ from __future__ import annotations
 import asyncio
 import base64
 import io
+import json
 import logging
 import re
+import shutil
+import subprocess
+from pathlib import Path
 from typing import Any
 
 from core.tools.computer_observation import enrich_computer_result
@@ -98,6 +102,111 @@ def _sandbox_url() -> str:
     from core.config import settings
 
     return str(getattr(settings, "computer_use_sandbox_url", "") or "").rstrip("/")
+
+
+def computer_use_driver() -> str:
+    """Resolve host computer-use driver: auto | python | helper."""
+    from core.config import settings
+
+    driver = str(getattr(settings, "computer_use_driver", "") or "auto").strip().lower()
+    if driver in {"auto", "python", "helper"}:
+        return driver
+    log.warning("computer_use_driver=%r is invalid — falling back to 'auto'", driver)
+    return "auto"
+
+
+def _default_helper_path() -> Path:
+    repo_root = Path(__file__).resolve().parents[2]
+    return (
+        repo_root
+        / ".geode"
+        / "ComputerUseHelper"
+        / "GEODE Computer Use Helper.app"
+        / "Contents"
+        / "MacOS"
+        / "geode-computer-helper"
+    )
+
+
+def computer_use_helper_path() -> Path | None:
+    """Return the configured/default helper executable path, if present."""
+    from core.config import settings
+
+    explicit = str(getattr(settings, "computer_use_helper_path", "") or "").strip()
+    if explicit:
+        path = Path(explicit).expanduser()
+        return path if path.exists() else None
+    default = _default_helper_path()
+    if default.exists():
+        return default
+    found = shutil.which("geode-computer-helper")
+    return Path(found) if found else None
+
+
+def _helper_request_sync(
+    action: str,
+    params: dict[str, Any] | None = None,
+    *,
+    target_width: int = TARGET_WIDTH,
+    target_height: int = TARGET_HEIGHT,
+    timeout_s: float = 30.0,
+) -> dict[str, Any]:
+    helper = computer_use_helper_path()
+    if helper is None:
+        return {
+            "error": "computer-use helper is not installed",
+            "error_type": "dependency",
+            "driver": "macos_helper",
+            "hint": "Build it with: scripts/macos/build_computer_helper.sh",
+        }
+    payload = {
+        "action": action,
+        "params": params or {},
+        "target_width": target_width,
+        "target_height": target_height,
+    }
+    try:
+        proc = subprocess.run(  # noqa: S603
+            [str(helper)],
+            input=json.dumps(payload).encode("utf-8"),
+            capture_output=True,
+            timeout=timeout_s,
+            check=False,
+        )
+    except (OSError, subprocess.TimeoutExpired) as exc:
+        return {
+            "error": f"computer-use helper failed to run: {exc}",
+            "error_type": "dependency",
+            "driver": "macos_helper",
+        }
+    stdout = proc.stdout.decode("utf-8", errors="replace").strip()
+    if not stdout:
+        stderr = proc.stderr.decode("utf-8", errors="replace").strip()
+        return {
+            "error": f"computer-use helper returned no JSON (exit={proc.returncode}): {stderr}",
+            "error_type": "dependency",
+            "driver": "macos_helper",
+        }
+    try:
+        result = json.loads(stdout)
+    except ValueError:
+        return {
+            "error": f"computer-use helper returned invalid JSON: {stdout[:240]}",
+            "error_type": "dependency",
+            "driver": "macos_helper",
+        }
+    if not isinstance(result, dict):
+        return {
+            "error": f"computer-use helper returned non-object JSON: {str(result)[:120]}",
+            "error_type": "dependency",
+            "driver": "macos_helper",
+        }
+    return result
+
+
+def computer_use_helper_status() -> dict[str, Any]:
+    """Probe the macOS helper without touching Python pyautogui/pyobjc."""
+    return _helper_request_sync("status", timeout_s=10.0)
 
 
 def _canon_key_combo(keys: str) -> frozenset[str]:
@@ -488,7 +597,31 @@ class ComputerUseHarness:
         """
         if computer_use_env() == "sandbox":
             return await asyncio.to_thread(self._sandbox_execute_sync, action, params)
+        driver = computer_use_driver()
+        if driver == "helper" or (driver == "auto" and computer_use_helper_path() is not None):
+            return await asyncio.to_thread(self._helper_execute_sync, action, params)
         return await asyncio.to_thread(self._execute_sync, action, **params)
+
+    def _helper_execute_sync(self, action: str, params: dict[str, Any]) -> dict[str, Any]:
+        """Dispatch one host action to the signed macOS helper app.
+
+        The helper is the CLI-friendly equivalent of an app/plugin permission
+        owner: macOS TCC grants Accessibility / Screen Recording to the helper
+        bundle, while GEODE continues to run as a CLI/daemon and talks to it via
+        stdin/stdout JSON.
+        """
+        result = _helper_request_sync(
+            action,
+            params,
+            target_width=self._target_width,
+            target_height=self._target_height,
+        )
+        width = result.get("screen_width")
+        height = result.get("screen_height")
+        if isinstance(width, int) and isinstance(height, int):
+            self._screen_width = width
+            self._screen_height = height
+        return self._enrich_result(result, action=action, params=params, env="host-helper")
 
     def _sandbox_execute_sync(self, action: str, params: dict[str, Any]) -> dict[str, Any]:
         """POST one action to the in-container shim and return its result.
@@ -581,6 +714,7 @@ async def execute_emulated_computer_use(
     end_y: int | None = None,
     ms: int = 1000,
     capture_after: bool = True,
+    _tool_context: Any | None = None,
 ) -> dict[str, Any]:
     """Run a model-agnostic computer-use action through the local harness.
 
@@ -623,13 +757,37 @@ async def execute_emulated_computer_use(
                 }
             )
         try:
-            from core.tools.computer_grounding import glm_locate
+            from core.tools.computer_grounding import (
+                VisualGroundingUnavailableError,
+                locate_with_active_provider,
+            )
 
-            point = await glm_locate(
+            point = await locate_with_active_provider(
                 screenshot_b64,
                 instruction,
                 target_width=harness._target_width,
                 target_height=harness._target_height,
+                tool_context=_tool_context,
+            )
+        except VisualGroundingUnavailableError as exc:
+            log.info("computer_use locate unavailable: %s", exc)
+            return _strip_screenshot(
+                {
+                    **shot,
+                    "error": str(exc),
+                    "error_type": "dependency",
+                    "recoverable": True,
+                    "grounding": {
+                        "provider": exc.provider,
+                        "source": exc.source,
+                        "status": "unsupported_for_active_source",
+                    },
+                    "hint": (
+                        "Use ui_probe for macOS Accessibility structure when available, "
+                        "or use capture plus safe keyboard navigation. To use GLM visual "
+                        "grounding, route the turn through a GLM provider/source explicitly."
+                    ),
+                }
             )
         except Exception as exc:
             log.warning("computer_use locate failed: %s", exc)
@@ -639,8 +797,9 @@ async def execute_emulated_computer_use(
                     "error": f"visual grounding failed: {exc}",
                     "error_type": "dependency",
                     "hint": (
-                        "GLM-5V grounding is unavailable. Try a simpler coordinate-based "
-                        "action only if the target is known."
+                        "The active provider's visual grounding path is unavailable. "
+                        "Try ui_probe, keyboard navigation, or a coordinate-based action "
+                        "only if the target is known."
                     ),
                 }
             )

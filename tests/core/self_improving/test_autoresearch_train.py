@@ -568,6 +568,7 @@ def test_real_mode_invokes_subprocess_with_override_env(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
     monkeypatch.setattr(auto_train, "RUN_LOG", tmp_path / "state" / "run.log")
+    monkeypatch.setattr(measure, "_resolve_eval_archive_path", lambda: None)
 
     captured: dict[str, Any] = {}
 
@@ -603,6 +604,7 @@ def test_real_mode_parses_dim_stderr_when_emitted(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
     monkeypatch.setattr(auto_train, "RUN_LOG", tmp_path / "state" / "run.log")
+    monkeypatch.setattr(measure, "_resolve_eval_archive_path", lambda: None)
 
     def _fake_run(argv: list[str], **kwargs: Any) -> MagicMock:
         result = MagicMock()
@@ -629,6 +631,7 @@ def test_real_mode_raises_when_summary_json_missing(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
     monkeypatch.setattr(auto_train, "RUN_LOG", tmp_path / "state" / "run.log")
+    monkeypatch.setattr(measure, "_resolve_eval_archive_path", lambda: None)
 
     def _fake_run(argv: list[str], **kwargs: Any) -> MagicMock:
         result = MagicMock()

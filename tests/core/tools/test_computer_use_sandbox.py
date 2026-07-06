@@ -23,6 +23,8 @@ def _env(monkeypatch: pytest.MonkeyPatch):
     def _set(env: str, url: str = "http://127.0.0.1:8787") -> None:
         monkeypatch.setattr(settings, "computer_use_env", env, raising=False)
         monkeypatch.setattr(settings, "computer_use_sandbox_url", url, raising=False)
+        monkeypatch.setattr(settings, "computer_use_driver", "python", raising=False)
+        monkeypatch.setattr(settings, "computer_use_helper_path", "", raising=False)
 
     return _set
 
@@ -78,6 +80,81 @@ class TestExecuteBranch:
         sx.assert_called_once()
         ex.assert_not_called()  # host execution path never invoked
         assert out["result"] == "success"
+
+    def test_helper_driver_uses_helper_not_pyautogui(self, _env, monkeypatch) -> None:
+        from core.config import settings
+
+        _env("host")
+        monkeypatch.setattr(settings, "computer_use_driver", "helper", raising=False)
+        h = ComputerUseHarness()
+        with (
+            patch(
+                "core.tools.computer_use._helper_request_sync",
+                return_value={
+                    "result": "success",
+                    "action": "screenshot",
+                    "driver": "macos_helper",
+                    "screen_width": 3420,
+                    "screen_height": 2214,
+                    "screenshot": "B64",
+                },
+            ) as hx,
+            patch.object(h, "_execute_sync") as ex,
+        ):
+            out = _run(h.aexecute("screenshot"))
+
+        hx.assert_called_once()
+        ex.assert_not_called()
+        assert out["result"] == "success"
+        assert out["driver"] == "macos_helper"
+        assert out["observation"]["env"] == "host-helper"
+        assert out["observation"]["driver"] == "macos_helper"
+        assert out["observation"]["screen_width"] == 3420
+
+    def test_auto_driver_prefers_installed_helper(self, _env, monkeypatch, tmp_path) -> None:
+        from core.config import settings
+
+        helper = tmp_path / "geode-computer-helper"
+        helper.write_text("#!/bin/sh\n")
+        _env("host")
+        monkeypatch.setattr(settings, "computer_use_driver", "auto", raising=False)
+        monkeypatch.setattr(settings, "computer_use_helper_path", str(helper), raising=False)
+        h = ComputerUseHarness()
+        with (
+            patch(
+                "core.tools.computer_use._helper_request_sync",
+                return_value={
+                    "result": "success",
+                    "action": "screenshot",
+                    "driver": "macos_helper",
+                    "screen_width": 100,
+                    "screen_height": 100,
+                    "screenshot": "B64",
+                },
+            ) as hx,
+            patch.object(h, "_execute_sync") as ex,
+        ):
+            out = _run(h.aexecute("screenshot"))
+
+        hx.assert_called_once()
+        ex.assert_not_called()
+        assert out["driver"] == "macos_helper"
+
+    def test_required_helper_missing_is_dependency_error(self, _env, monkeypatch) -> None:
+        from core.config import settings
+
+        _env("host")
+        monkeypatch.setattr(settings, "computer_use_driver", "helper", raising=False)
+        h = ComputerUseHarness()
+        with (
+            patch("core.tools.computer_use.computer_use_helper_path", return_value=None),
+            patch.object(h, "_execute_sync") as ex,
+        ):
+            out = _run(h.aexecute("screenshot"))
+
+        ex.assert_not_called()
+        assert out["error_type"] == "dependency"
+        assert "helper is not installed" in out["error"]
 
 
 class _FakeResp:

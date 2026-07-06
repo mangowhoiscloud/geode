@@ -154,6 +154,9 @@ allow-direct-references = true
 [tool.hatch.build.targets.wheel]
 packages = ["core", "plugins"]
 
+[tool.hatch.build.targets.wheel.force-include]
+"scripts/macos" = "scripts/macos"
+
 [tool.hatch.build.targets.sdist]
 include = [
     "/pyproject.toml",
@@ -164,6 +167,7 @@ include = [
     "/NOTICE",
     "/core",
     "/plugins",
+    "/scripts/macos",
 ]
 
 [tool.pytest.ini_options]

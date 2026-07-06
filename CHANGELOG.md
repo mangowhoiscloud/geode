@@ -77,9 +77,149 @@ functional change.
   the promotion authority). Contamination filter built in
   (rate-limit-injection, non-`user_stop` terminations). This is the loop's
   reject accelerator against expensive τ² runs.
+- **Crucible subscription-only G1/G2 preparation.**
+  `scripts/eval/build_failure_manifest.py` materializes the 41 clean
+  retail/telecom failures plus 187 matched pass controls, and
+  `scripts/eval/trace_replay_gate.py` runs a zero-live-call G1 replay verdict
+  for R1/T1 before spending subscription quota. The tau2 GEODE runner now
+  accepts `--agent-guard {none,r1,t1}` plus custom prompt append files, records
+  the active guard in raw tau2 messages, and snapshots raw trajectories with a
+  fixed `<run-id>.trajectory.json` / `<run-id>.snapshot.json` convention when
+  `--save-to` is set. Empty visible GEODE turns with no projected tau2 tool call
+  now hard-fail as route-readiness infrastructure errors by default, with
+  `--allow-empty-geode-turn` reserved for debugging. The runner also enables
+  `GEODE_CODEX_OAUTH_FAIL_EMPTY_TEXT=1` by default so codex-oauth empty
+  subscription responses in internal reflection/recovery calls abort the run
+  before tau2 checkpoints contamination as a scored simulation, sets
+  `GEODE_LLM_FAIL_FAST_ON_ADAPTER_ERROR=1` so AgenticLoop propagates adapter
+  exceptions instead of retrying contaminated prompts, disables AgenticLoop
+  cognitive reflection by default for tau2 runs, preserves and replays Codex
+  `response.output` items across turns per the official Responses API manual
+  context-management surface, sanitizes replayed output items for the Codex
+  subscription input validator (`status` and top-level `None` fields), treats
+  empty visible text as an infra failure only when no tool calls were emitted,
+  and scans for new `codex-oauth-empty-text` diagnostic dumps after trajectory
+  snapshots have been written.
+  The runner exposes `--max-retries` and defaults it to 0 so tau2 does not retry
+  infrastructure failures as stochastic task failures. It also exposes
+  `--user-prompt-append-file` for cheap user-simulator prompt probes and records
+  telecom cheaploop probes showing that prompt-only T1/T2/T3 guards still fail
+  on `max_steps` or infra contamination, so the next gate should be a
+  deterministic telecom trajectory state machine rather than another scored G2
+  run.
+- **`scripts/eval/telecom_workflow_gate.py` — deterministic telecom G2 surrogate.**
+  This zero-live-call reject gate reads tau2 `results.json` trajectories and
+  rejects MMS/no-service candidates that call `can_send_mms` before blockers are
+  cleared, exceed message/tool budgets, miss terminal `can_send_mms == true`, or
+  contain infrastructure contamination. It also enforces an action-before-talk
+  quality gate: manual phone checklist loops are rejected unless a projected
+  tau2 environment tool call appears first. It currently classifies the
+  baseline and T1/T3/planner-capped cheaploop runs as `REJECT_SURROGATE` and T2
+  as `INVALID_INFRA`, preventing another scored G2 spend on prompt-only or
+  low-action telecom guards.
+- **GEODE main-loop action-before-talk verifier.** `core.agent.verify` now has
+  an opt-in `GEODE_VERIFY_ACTION_BEFORE_TALK=1` rule that marks manual
+  phone/network checklist turns without tool calls as retryable
+  `manual_checklist_without_action` failures. The tau2 runner enables it by
+  default for benchmark runs and records the setting in trajectory snapshots,
+  so Crucible tests the GEODE loop's runtime policy surface instead of relying
+  on a separate planner as the source of behavior.
+- **Tau2 telecom workflow-order scaffold.**
+  `plugins.benchmark_harness.tau2_workflow_order` tracks MMS blocker state from
+  tau2 telecom tool outputs and renders a compact `<crucible_workflow_order>`
+  dynamic context block for GEODE agent turns. The tau2 runner exposes
+  `--agent-workflow-order telecom-mms-v1` and
+  `--agent-workflow-order telecom-mms-step-economy-v1`, plus
+  `--agent-workflow-order telecom-mms-bounded-bundle-v1`, recording the active
+  surface in trajectory snapshots. This keeps the next candidate aligned with
+  GEODE's main loop: `can_send_mms` is treated as a terminal verifier that
+  should be delayed until airplane mode, SIM, mobile data/network mode, and
+  APN/MMSC blockers are known clear. The bounded-bundle variant limits
+  step-economy pressure to one allowlisted prerequisite bundle, excludes
+  `can_send_mms` from that bundle, and requires a separate terminal verifier
+  after tracked blockers are clear. `scripts/eval/telecom_user_bounded_bundle_guard.md`
+  is available for diagnostic-only user-route coupling checks; it is explicitly
+  not promotion evidence because it changes the evaluator route. The follow-up
+  `--agent-workflow-order telecom-mms-roaming-recovery-v1` opens a conditional
+  roaming-recovery phase only after terminal `can_send_mms` fails with the basic
+  MMS blockers clear. `--agent-workflow-order telecom-mms-phased-recovery-v1`
+  tests a smaller native-user phase protocol before falling back to hard
+  ordering gates.
+- **Telecom workflow gate recovery semantics.** `scripts/eval/telecom_workflow_gate.py`
+  now treats `can_send_mms=false` after basic blockers as recoverable if a later
+  `can_send_mms=true` appears, so hidden blockers such as roaming can be repaired
+  without the reject-only surrogate permanently failing the trajectory.
+- **`scripts/eval/telecom_action_planner.py` — zero-live planner candidate.**
+  Adds a deterministic MMS blocker planner that bundles safe phone actions in
+  the required order and delays `can_send_mms` until blockers are known clear.
+  Its synthetic trajectory passes `telecom_workflow_gate.py` as
+  `PASS_SURROGATE`, creating the next candidate shape to wire into a tiny live
+  probe.
+- **Tau2 planner/cost probe controls.** The tau2 GEODE runner now accepts
+  `--agent-planner telecom-mms-v1`, `--agent-max-rounds`,
+  `--user-max-rounds`, and `--disable-tool-search-defer`. The first
+  capped/no-defer live probe bounded the conversation to 15 messages but
+  produced zero projected tau2 tool calls and still ended `max_steps`, so it is
+  recorded as a useful reject signal: raw short-turn pressure is not enough;
+  future telecom candidates need an action-before-talk quality gate.
+- **macOS GEODE Computer Use Helper.** Added a Swift helper app bundle scaffold
+  plus `scripts/macos/build_computer_helper.sh` so CLI installs can own
+  Accessibility / Screen Recording permissions through a stable
+  `GEODE Computer Use Helper.app` subject. `geode setup` now offers to build and
+  enable it on macOS, and wheel/sdist packaging includes the helper assets.
+- **Experimental full-screen thin CLI surface.** GEODE includes an opt-in
+  prompt_toolkit full-screen application with append-only transcript, fixed plan
+  pane, and a Codex-style bottom stack: GEODE-accent status, one-line compose
+  bar, and model/cwd footer. User input and transcript text keep the terminal's
+  high-contrast foreground instead of inheriting GEODE pink; the animated status
+  line repaints on a bounded timer so elapsed/model/tool/cost state keeps moving
+  even between daemon events. The legacy prompt/EventRenderer surface remains
+  the default while full-screen UI quality continues to settle. Set
+  `GEODE_CLI_FULLSCREEN=1` to try the experimental surface.
+- **IPC simple-chat fast path.** Short non-action conversational prompts now
+  bypass the full AgenticLoop harness and route through adapter text completion
+  with a compact Fable-style behavioural prompt. This keeps quick answers from
+  paying the full project/tool/memory prompt tax; action, file, search, code,
+  build, and execution requests still use the full loop.
 
 ### Fixed
 
+- **Full-screen plan pane parity.** The full-screen CLI plan surface now reuses
+  the pre-full-screen GEODE task-list language: `Tasks · n/m done`, checked
+  completed steps, GEODE-rose active step, pending circles, active-centered
+  windowing, and support for `goal_decomposition`, `plan_step`, and `replan`
+  events. The same surface now updates in place for `update_plan` without
+  duplicating raw transcript rows, while tools/thoughts render in an Activity
+  pane. Transcript history supports Markdown rendering, keyboard and mouse
+  scrolling, and Ctrl+O progress collapse/expand in the full-screen UI.
+- **Prompt wording avoids identity assertions.** GEODE's fast-chat prompt,
+  router/commentary/decomposer templates, and model metadata line no longer use
+  `You are ...` identity declarations; they use Fable-style behavioural and
+  metadata phrasing instead.
+- **Computer-use locate respects provider/source isolation.** The emulated
+  `computer_use` locate path now consumes the loop `ToolContext` and refuses
+  implicit GLM visual-grounding fallback on OpenAI/Codex subscription sessions,
+  preventing unexpected Z.ai resource use. Capability reporting no longer
+  advertises visual grounding for OpenAI subscription emulation.
+- **Computer-use desktop readiness diagnostics.** `geode doctor` now reports
+  host Python dependencies, sandbox bypass, and macOS helper permission status
+  separately, so operators can tell whether GEODE is waiting on helper build,
+  Accessibility, or Screen Recording rather than a model/provider issue.
+- **Thin CLI activity bar rendering.** The IPC renderer now tracks the bottom
+  `Working…` spinner separately from the Activity summary block and clears both
+  before permanent output, preventing stale status rows from being overprinted
+  as agent rounds advance.
+- **Legacy thin CLI live-region stability.** The default prompt_toolkit CLI now
+  runs the IPC event renderer in append-only mode and leaves cursor-up live
+  repainting to the opt-in full-screen TUI. This prevents the `Working…`,
+  Activity, and per-tool spinner rows from fighting the input prompt and
+  appearing to jump or erase the compose line during a turn.
+- **Thin CLI prompt marker.** The interactive prompt now uses a compact
+  GEODE-rose `>` marker instead of the heavier `geode >` label, preparing the
+  surface for the future bordered input pane.
+- **Thin CLI UTF-8 boundary hardening.** Prompt history and IPC payloads now
+  replace lone surrogate code points before UTF-8 encoding, so malformed pasted
+  input cannot crash the REPL or daemon socket send path.
 - **codex-oauth SDK workaround install race.** `install()`'s unlocked
   check-then-act let concurrent first Codex calls (a benchmark harness at
   `max_concurrency>1`) rebind the patched `parse_response` as its own

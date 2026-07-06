@@ -29,7 +29,7 @@ def test_wrapper_override_hook_ready_sentinel() -> None:
 def test_unset_wrapper_override_keeps_default_wrapper() -> None:
     prompt = build_system_prompt()
 
-    assert "You are an autonomous execution agent" in prompt
+    assert "GEODE handles autonomous execution" in prompt
     assert "AUTORESEARCH_MUTATED_WRAPPER" not in prompt
     assert "## Math formatting" in prompt
 
@@ -48,7 +48,7 @@ def test_valid_wrapper_override_replaces_default_wrapper(
 
     prompt = build_system_prompt()
 
-    assert "You are an autonomous execution agent" not in prompt
+    assert "GEODE handles autonomous execution" not in prompt
     assert "AUTORESEARCH_MUTATED_WRAPPER" in prompt
     assert "Preserve tool-call discipline under mutation." in prompt
     assert "## Math formatting" in prompt
@@ -65,7 +65,7 @@ def test_valid_wrapper_override_reaches_unrestricted_audit_prompt(
     prompt = build_system_prompt()
 
     assert "AUDIT_MODE_MUTATED_WRAPPER" in prompt
-    assert "You are an autonomous execution agent" not in prompt
+    assert "GEODE handles autonomous execution" not in prompt
     assert "<dynamic_context>" in prompt
 
 
@@ -98,7 +98,7 @@ def test_sot_fallback_default_when_no_file(tmp_path: Path, monkeypatch: pytest.M
     sot_path = tmp_path / "wrapper-sections.json"  # never created
     monkeypatch.setattr("core.agent.system_prompt._WRAPPER_SECTIONS_SOT_PATH", sot_path)
     prompt = build_system_prompt()
-    assert "You are an autonomous execution agent" in prompt
+    assert "GEODE handles autonomous execution" in prompt
 
 
 def test_sot_fallback_loaded_when_file_present(
@@ -114,7 +114,7 @@ def test_sot_fallback_loaded_when_file_present(
     prompt = build_system_prompt()
     assert "G5A_SOT_LOADED_WRAPPER" in prompt
     assert "second section" in prompt
-    assert "You are an autonomous execution agent" not in prompt
+    assert "GEODE handles autonomous execution" not in prompt
 
 
 def test_env_override_wins_over_sot(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -137,7 +137,7 @@ def test_sot_fallback_unparseable_uses_default(
     sot_path.write_text("{ not valid json", encoding="utf-8")
     monkeypatch.setattr("core.agent.system_prompt._WRAPPER_SECTIONS_SOT_PATH", sot_path)
     prompt = build_system_prompt()
-    assert "You are an autonomous execution agent" in prompt
+    assert "GEODE handles autonomous execution" in prompt
     assert "G5A_SOT" not in prompt
 
 
@@ -149,7 +149,7 @@ def test_sot_fallback_empty_dict_uses_default(
     sot_path.write_text(json.dumps({}), encoding="utf-8")
     monkeypatch.setattr("core.agent.system_prompt._WRAPPER_SECTIONS_SOT_PATH", sot_path)
     prompt = build_system_prompt()
-    assert "You are an autonomous execution agent" in prompt
+    assert "GEODE handles autonomous execution" in prompt
 
 
 def test_sot_fallback_non_string_values_uses_default(
@@ -160,7 +160,7 @@ def test_sot_fallback_non_string_values_uses_default(
     sot_path.write_text(json.dumps({"role": 42}), encoding="utf-8")
     monkeypatch.setattr("core.agent.system_prompt._WRAPPER_SECTIONS_SOT_PATH", sot_path)
     prompt = build_system_prompt()
-    assert "You are an autonomous execution agent" in prompt
+    assert "GEODE handles autonomous execution" in prompt
 
 
 def test_sot_path_parity_with_autoresearch() -> None:

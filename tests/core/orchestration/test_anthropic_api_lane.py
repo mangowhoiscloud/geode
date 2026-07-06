@@ -25,9 +25,10 @@ from core.orchestration.anthropic_api_lane import (
 
 
 @pytest.fixture(autouse=True)
-def _reset_lane() -> None:
+def _reset_lane(monkeypatch: pytest.MonkeyPatch) -> None:
     """Drop the lane singleton before + after each test so env override
     edits take effect and the next test starts with a clean lane."""
+    monkeypatch.delenv(ANTHROPIC_API_LANE_MAX_ENV, raising=False)
     reset_anthropic_api_lane_for_tests()
     yield
     reset_anthropic_api_lane_for_tests()

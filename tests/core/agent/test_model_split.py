@@ -37,6 +37,7 @@ from core.agent.verify import (
 @pytest.fixture(autouse=True)
 def reset_env(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.delenv("GEODE_VERIFY_MODE", raising=False)
+    monkeypatch.delenv("GEODE_VERIFY_ACTION_BEFORE_TALK", raising=False)
     monkeypatch.delenv("GEODE_ACT_MODEL", raising=False)
     monkeypatch.delenv("GEODE_JUDGE_MODEL", raising=False)
 
@@ -53,6 +54,56 @@ def _make_result(
         rounds=1,
         termination_reason=termination_reason,
     )
+
+
+# -- Rule-based tau2 action-before-talk verifier ----------------------
+
+
+def test_action_before_talk_verify_disabled_by_default() -> None:
+    """Manual checklist text is allowed unless the benchmark opts in."""
+    vr = verify_turn(
+        _make_result(
+            text=(
+                "Please check your phone settings: airplane mode, mobile data, "
+                "SIM status, APN, and try sending an MMS again."
+            )
+        )
+    )
+    assert vr.passed is True
+    assert "manual_checklist_without_action" not in vr.rubric_misses
+
+
+def test_action_before_talk_verify_flags_checklist_without_tool(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Tau2 telecom runs should retry when the loop talks instead of acting."""
+    monkeypatch.setenv("GEODE_VERIFY_ACTION_BEFORE_TALK", "1")
+    vr = verify_turn(
+        _make_result(
+            text=(
+                "Please check your phone settings: airplane mode, mobile data, "
+                "SIM status, network mode, APN, and try sending an MMS again."
+            )
+        )
+    )
+    assert vr.passed is False
+    assert "manual_checklist_without_action" in vr.rubric_misses
+    assert vr.should_retry is True
+
+
+def test_action_before_talk_verify_allows_tool_action(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The rule only catches no-action checklist turns."""
+    monkeypatch.setenv("GEODE_VERIFY_ACTION_BEFORE_TALK", "1")
+    vr = verify_turn(
+        _make_result(
+            text="I will inspect the network state first, then continue troubleshooting.",
+            tool_calls=[{"name": "check_network_status", "arguments": {}}],
+        )
+    )
+    assert vr.passed is True
+    assert "manual_checklist_without_action" not in vr.rubric_misses
 
 
 # -- Settings knob defaults --------------------------------------------

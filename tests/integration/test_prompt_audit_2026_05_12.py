@@ -127,7 +127,7 @@ def test_g10_router_md_no_geode_name_in_baseline() -> None:
     from core.llm.prompts import ROUTER_SYSTEM
 
     assert "You are GEODE" not in ROUTER_SYSTEM
-    assert "autonomous execution agent" in ROUTER_SYSTEM
+    assert "GEODE handles autonomous execution" in ROUTER_SYSTEM
 
 
 def test_fable5_followup_policies_present() -> None:

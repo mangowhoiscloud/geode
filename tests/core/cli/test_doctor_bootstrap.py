@@ -10,12 +10,14 @@ from __future__ import annotations
 
 import sys
 from pathlib import Path
+from types import SimpleNamespace
 from unittest.mock import patch
 
 from core.cli.doctor_bootstrap import (
     BootstrapReport,
     CheckResult,
     _check_codex_oauth,
+    _check_desktop_computer_use,
     _check_env_file,
     _check_geode_on_path,
     _check_local_bin_on_path,
@@ -148,6 +150,94 @@ class TestCheckLocalBinOnPath:
             result = _check_local_bin_on_path()
         assert result.ok is False
         assert "PATH" in result.fix
+
+
+class TestCheckDesktopComputerUse:
+    def test_disabled_config_passes(self):
+        fake_settings = type("Settings", (), {"computer_use_enabled": False})()
+        with patch("core.config.settings", fake_settings):
+            result = _check_desktop_computer_use()
+        assert result.ok is True
+        assert "disabled" in result.detail
+
+    def test_missing_host_dependency_fails(self):
+        fake_settings = type("Settings", (), {"computer_use_enabled": True})()
+
+        def fake_find_spec(name: str):
+            if name == "pyautogui":
+                return None
+            return object()
+
+        with (
+            patch("core.config.settings", fake_settings),
+            patch("core.tools.computer_use.computer_use_env", return_value="host"),
+            patch("core.tools.computer_use.computer_use_driver", return_value="python"),
+            patch("core.cli.doctor_bootstrap.find_spec", side_effect=fake_find_spec),
+        ):
+            result = _check_desktop_computer_use()
+        assert result.ok is False
+        assert "pyautogui" in result.detail
+        assert "uv sync --extra desktop" in result.fix
+
+    def test_macos_ax_untrusted_fails_after_dependencies_present(self):
+        fake_settings = type("Settings", (), {"computer_use_enabled": True})()
+
+        with (
+            patch("core.config.settings", fake_settings),
+            patch("core.tools.computer_use.computer_use_env", return_value="host"),
+            patch("core.tools.computer_use.computer_use_driver", return_value="python"),
+            patch("core.cli.doctor_bootstrap.find_spec", return_value=object()),
+            patch("core.cli.doctor_bootstrap.platform.system", return_value="Darwin"),
+            patch.dict(
+                "sys.modules",
+                {"ApplicationServices": SimpleNamespace(AXIsProcessTrusted=lambda: False)},
+            ),
+        ):
+            result = _check_desktop_computer_use()
+        assert result.ok is False
+        assert "Accessibility" in result.detail
+        assert "Grant Accessibility" in result.fix
+
+    def test_required_helper_missing_fails_with_build_command(self):
+        fake_settings = type("Settings", (), {"computer_use_enabled": True})()
+
+        with (
+            patch("core.config.settings", fake_settings),
+            patch("core.tools.computer_use.computer_use_env", return_value="host"),
+            patch("core.tools.computer_use.computer_use_driver", return_value="helper"),
+            patch("core.tools.computer_use.computer_use_helper_path", return_value=None),
+        ):
+            result = _check_desktop_computer_use()
+        assert result.ok is False
+        assert "Helper is not installed" in result.detail
+        assert "build_computer_helper.sh" in result.fix
+
+    def test_helper_untrusted_reports_helper_app_permission(self, tmp_path):
+        fake_settings = type("Settings", (), {"computer_use_enabled": True})()
+        helper_path = tmp_path / "GEODE Computer Use Helper.app" / "Contents" / "MacOS" / "helper"
+
+        with (
+            patch("core.config.settings", fake_settings),
+            patch("core.tools.computer_use.computer_use_env", return_value="host"),
+            patch("core.tools.computer_use.computer_use_driver", return_value="helper"),
+            patch(
+                "core.tools.computer_use.computer_use_helper_path",
+                return_value=helper_path,
+            ),
+            patch(
+                "core.tools.computer_use.computer_use_helper_status",
+                return_value={
+                    "result": "success",
+                    "ax_trusted": False,
+                    "screenshot_ok": True,
+                },
+            ),
+            patch("core.cli.doctor_bootstrap.platform.system", return_value="Darwin"),
+        ):
+            result = _check_desktop_computer_use()
+        assert result.ok is False
+        assert "GEODE Computer Use Helper is installed" in result.detail
+        assert "GEODE Computer Use Helper.app" in result.fix
 
 
 class TestRunAndFormat:

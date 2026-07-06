@@ -120,9 +120,9 @@ _log.debug("Prompt versions loaded (%d): %s", len(PROMPT_VERSIONS), PROMPT_VERSI
 #     print(dict(sorted(V.items())))"
 _PINNED_HASHES: dict[str, str] = {
     "AGENTIC_SUFFIX": "8bd0f9061a2a",
-    "COMMENTARY_SYSTEM": "9a0936efe790",
+    "COMMENTARY_SYSTEM": "4dbd522d0d5b",
     "COMMENTARY_USER": "2024ac4eba69",
-    "ROUTER_SYSTEM": "a944cdc73e4f",
+    "ROUTER_SYSTEM": "6e86f4dc622c",
 }
 
 

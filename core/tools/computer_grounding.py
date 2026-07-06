@@ -45,6 +45,25 @@ _BBOX_RE = re.compile(
 )
 
 
+class VisualGroundingUnavailableError(RuntimeError):
+    """Raised when no source-safe grounding backend exists for this turn."""
+
+    def __init__(self, message: str, *, provider: str = "", source: str = "") -> None:
+        super().__init__(message)
+        self.provider = provider
+        self.source = source
+
+
+def _context_provider_source(tool_context: Any | None) -> tuple[str, str]:
+    provider = str(getattr(tool_context, "provider", "") or "").strip().lower()
+    source = str(getattr(tool_context, "source", "") or "").strip().lower()
+    if provider == "openai-codex":
+        provider = "openai"
+    if provider == "zhipuai":
+        provider = "glm"
+    return provider, source
+
+
 def bbox_center_to_target(
     bbox_2d: list[int] | tuple[int, int, int, int],
     *,
@@ -153,4 +172,44 @@ async def glm_locate(
         return None
     return bbox_center_to_target(
         boxes[0]["bbox_2d"], target_width=target_width, target_height=target_height
+    )
+
+
+async def locate_with_active_provider(
+    screenshot_b64: str,
+    instruction: str,
+    *,
+    target_width: int = TARGET_WIDTH,
+    target_height: int = TARGET_HEIGHT,
+    tool_context: Any | None = None,
+) -> tuple[int, int] | None:
+    """Ground a screenshot through the active loop provider/source.
+
+    The old emulated ``computer_use locate`` path always called GLM-5V. That
+    crossed the billing/source boundary for OpenAI subscription sessions: a
+    ChatGPT/Codex-backed loop could unexpectedly spend or fail on Z.ai credits.
+    This dispatcher is intentionally strict:
+
+    - active ``glm``/``zhipuai`` routes use GLM-5V grounding;
+    - missing context keeps the legacy direct-call GLM behaviour for tests and
+      utility invocations outside an AgenticLoop;
+    - every other active provider/source returns a structured unavailable
+      error to the caller instead of silently falling across providers.
+    """
+    provider, source = _context_provider_source(tool_context)
+    if not provider or provider == "glm":
+        return await glm_locate(
+            screenshot_b64,
+            instruction,
+            target_width=target_width,
+            target_height=target_height,
+        )
+    raise VisualGroundingUnavailableError(
+        (
+            "visual grounding is not configured for "
+            f"provider={provider or '<unknown>'} source={source or '<unknown>'}; "
+            "implicit GLM fallback is disabled to preserve provider/source isolation"
+        ),
+        provider=provider,
+        source=source,
     )

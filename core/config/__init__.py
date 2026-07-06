@@ -129,6 +129,8 @@ _TOML_TO_SETTINGS: dict[str, str] = {
     "computer_use.enabled": "computer_use_enabled",
     "computer_use.env": "computer_use_env",
     "computer_use.sandbox_url": "computer_use_sandbox_url",
+    "computer_use.driver": "computer_use_driver",
+    "computer_use.helper_path": "computer_use_helper_path",
     "bash_sandbox.mode": "bash_sandbox",
     "tools.package_install_guard": "package_install_guard",
     "cost.limit_usd": "cost_limit_usd",

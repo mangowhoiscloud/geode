@@ -434,6 +434,16 @@ class Settings(BaseSettings):
             raise ValueError(f"computer_use_env must be 'host' or 'sandbox', got {v!r}")
         return normalized
 
+    @field_validator("computer_use_driver")
+    @classmethod
+    def _validate_computer_use_driver(cls, v: str) -> str:
+        normalized = str(v or "").strip().lower()
+        if normalized not in {"auto", "python", "helper"}:
+            raise ValueError(
+                f"computer_use_driver must be 'auto', 'python', or 'helper', got {v!r}"
+            )
+        return normalized
+
     # Cost guard — session-level cost limit (0 = no limit)
     cost_limit_usd: float = 0.0  # fires COST_WARNING at 80%, COST_LIMIT_EXCEEDED at 100%
 
@@ -449,6 +459,15 @@ class Settings(BaseSettings):
     computer_use_env: str = "host"
     # Container shim endpoint for computer_use_env="sandbox".
     computer_use_sandbox_url: str = "http://127.0.0.1:8787"
+    # Host-mode desktop driver:
+    # - auto: prefer signed GEODE helper when installed, else Python pyautogui.
+    # - python: legacy in-process pyautogui/pyobjc path.
+    # - helper: require the macOS helper executable (fail-loud if unavailable).
+    computer_use_driver: str = "auto"
+    # Optional explicit helper executable path. When empty, GEODE looks for the
+    # project-local helper bundle built by scripts/macos/build_computer_helper.sh
+    # and then PATH's geode-computer-helper.
+    computer_use_helper_path: str = ""
 
     # run_bash command sandbox (Phase F) — "off" (default, compat) | "on" | "strict".
     # "on": wrap commands in the OS sandbox (macOS sandbox-exec / Linux bwrap) when

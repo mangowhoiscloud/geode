@@ -133,11 +133,14 @@ def build_capability_graph(
         else "Use GEODE PDF ingest/OCR tools before sending compact context to this provider."
     )
 
-    visual_grounding = effective_provider == "glm" or emulated_computer
+    visual_grounding = effective_provider == "glm"
     visual_reason = (
-        "GLM/Z.ai vision grounding or GEODE's emulated computer locate path can ground screenshots."
+        "GLM/Z.ai vision grounding can ground screenshots for this active provider."
         if visual_grounding
-        else "No visual grounding path is visible; use text extraction or a different provider."
+        else (
+            "No source-safe visual grounding path is visible for this provider/source; "
+            "use ui_probe, text extraction, keyboard navigation, or route through GLM explicitly."
+        )
     )
 
     warnings: list[str] = []

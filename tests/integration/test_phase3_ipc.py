@@ -11,8 +11,8 @@ import json
 import time
 from contextlib import asynccontextmanager
 from pathlib import Path
-from typing import Any
-from unittest.mock import AsyncMock, MagicMock
+from typing import Any, cast
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
@@ -78,6 +78,26 @@ class TestIPCClient:
         result = client.send_prompt("test")
         assert result["type"] == "error"
         assert "Not connected" in result["message"]
+
+    def test_client_send_sanitizes_lone_surrogates(self) -> None:
+        from core.cli.ipc_client import IPCClient
+
+        class FakeSock:
+            def __init__(self) -> None:
+                self.payload = b""
+
+            def sendall(self, payload: bytes) -> None:
+                self.payload += payload
+
+        sock = FakeSock()
+        client = IPCClient()
+        cast(Any, client)._sock = sock
+
+        client._send({"type": "prompt", "text": "bad:\udcff"})
+
+        decoded = sock.payload.decode("utf-8")
+        assert "\udcff" not in decoded
+        assert json.loads(decoded)["text"].startswith("bad:")
 
 
 # ---------------------------------------------------------------------------
@@ -350,7 +370,8 @@ class TestCLIChannelIntegration:
             client = IPCClient(socket_path=sock_path)
             client.connect()
 
-            result = client.send_prompt("do something")
+            with patch("core.server.ipc_server.fast_chat.should_use_fast_chat", return_value=False):
+                result = client.send_prompt("do something")
             assert result["type"] == "error"
             assert "API key" in result["message"]
             mock_loop.run.assert_not_called()
@@ -415,9 +436,10 @@ class TestCLIChannelIntegration:
             client = IPCClient(socket_path=sock_path)
             client.connect()
 
-            client.send_prompt("first")
-            client.send_prompt("second")
-            client.send_prompt("third")
+            with patch("core.server.ipc_server.fast_chat.should_use_fast_chat", return_value=False):
+                client.send_prompt("first")
+                client.send_prompt("second")
+                client.send_prompt("third")
 
             assert mock_loop.arun.await_count == 3
             mock_loop.run.assert_not_called()
@@ -669,7 +691,8 @@ class TestCLIChannelIntegration:
                 assert client.connect()
             time.sleep(0.05)  # let daemon process client_capability
 
-            client.send_prompt("hello")
+            with patch("core.server.ipc_server.fast_chat.should_use_fast_chat", return_value=False):
+                client.send_prompt("hello")
             assert captured.get("is_terminal") is False
             assert captured.get("width") == 80
             client.close()

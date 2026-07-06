@@ -65,6 +65,8 @@ def test_translate_codex_response_extracts_reasoning_items() -> None:
     assert len(result.reasoning_items) == 1
     assert result.reasoning_items[0]["encrypted_content"] == "blob_1"
     assert result.reasoning_summaries == ("thought 1",)
+    assert result.codex_output_items[0]["type"] == "reasoning"
+    assert result.codex_output_items[0]["encrypted_content"] == "blob_1"
     assert len(result.tool_uses) == 1
     assert result.tool_uses[0]["name"] == "search"
 
@@ -122,6 +124,27 @@ def test_legacy_bridge_forwards_reasoning_items() -> None:
     assert len(resp.codex_reasoning_items) == 2
     assert resp.codex_reasoning_items[0]["encrypted_content"] == "blob_1"
     assert resp.reasoning_summaries == ["thought 1", "thought 2"]
+
+
+def test_legacy_bridge_forwards_codex_output_items() -> None:
+    result = AdapterCallResult(
+        text="hi",
+        usage=UsageSummary(),
+        stop_reason="completed",
+        codex_output_items=(
+            {
+                "type": "message",
+                "role": "assistant",
+                "content": [{"type": "output_text", "text": "hi"}],
+            },
+        ),
+    )
+
+    resp = agentic_response_from_adapter_result(result)
+
+    assert resp.codex_output_items == [
+        {"type": "message", "role": "assistant", "content": [{"type": "output_text", "text": "hi"}]}
+    ]
 
 
 def test_legacy_bridge_empty_reasoning_to_none() -> None:
@@ -204,6 +227,107 @@ def test_codex_call_kwargs_replays_reasoning_at_assistant_turn() -> None:
     assert "id" not in kwargs["input"][1]
     assert kwargs["input"][2] == {"role": "assistant", "content": "answer 1"}
     assert kwargs["input"][3] == {"role": "user", "content": "next"}
+
+
+def test_codex_call_kwargs_replays_prior_output_items_before_legacy_reasoning() -> None:
+    """Official Responses state management prefers replaying prior response.output items."""
+    from core.llm.adapters.base import AdapterCallRequest, Message
+
+    req = AdapterCallRequest(
+        model="gpt-5.5",
+        system_prompt="be brief",
+        messages=[
+            Message(role="user", content="first"),
+            Message(
+                role="assistant",
+                content=[{"type": "text", "text": "answer 1"}],
+                codex_reasoning_items=(
+                    {"type": "reasoning", "encrypted_content": "blob_prior", "id": "rs_1"},
+                ),
+                codex_output_items=(
+                    {
+                        "id": "rs_official",
+                        "type": "reasoning",
+                        "encrypted_content": "blob_from_output",
+                        "summary": [],
+                        "status": "completed",
+                    },
+                    {
+                        "id": "msg_official",
+                        "type": "message",
+                        "role": "assistant",
+                        "content": [{"type": "output_text", "text": "answer 1"}],
+                        "status": "completed",
+                    },
+                    {
+                        "id": "ts_1",
+                        "type": "tool_search_call",
+                        "content": None,
+                    },
+                ),
+            ),
+            Message(role="user", content="next"),
+        ],
+    )
+
+    kwargs = build_responses_kwargs(req, backend="codex", adapter_name="codex-oauth")
+
+    assert kwargs["input"] == [
+        {"role": "user", "content": "first"},
+        {
+            "id": "rs_official",
+            "type": "reasoning",
+            "encrypted_content": "blob_from_output",
+            "summary": [],
+        },
+        {
+            "id": "msg_official",
+            "type": "message",
+            "role": "assistant",
+            "content": [{"type": "output_text", "text": "answer 1"}],
+        },
+        {
+            "id": "ts_1",
+            "type": "tool_search_call",
+        },
+        {"role": "user", "content": "next"},
+    ]
+
+
+def test_codex_call_kwargs_can_disable_output_replay(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Debug override falls back to legacy reasoning+assistant reconstruction."""
+    from core.llm.adapters.base import AdapterCallRequest, Message
+
+    monkeypatch.setenv("GEODE_CODEX_DISABLE_OUTPUT_REPLAY", "1")
+    req = AdapterCallRequest(
+        model="gpt-5.5",
+        system_prompt="be brief",
+        messages=[
+            Message(role="user", content="first"),
+            Message(
+                role="assistant",
+                content=[{"type": "text", "text": "answer 1"}],
+                codex_reasoning_items=(
+                    {"type": "reasoning", "encrypted_content": "blob_prior", "id": "rs_1"},
+                ),
+                codex_output_items=(
+                    {
+                        "id": "rs_official",
+                        "type": "reasoning",
+                        "encrypted_content": "blob_from_output",
+                        "summary": [],
+                    },
+                ),
+            ),
+        ],
+    )
+
+    kwargs = build_responses_kwargs(req, backend="codex", adapter_name="codex-oauth")
+
+    assert kwargs["input"][1]["encrypted_content"] == "blob_prior"
+    assert kwargs["input"][2] == {"role": "assistant", "content": "answer 1"}
 
 
 def test_codex_call_kwargs_no_reasoning_when_empty() -> None:

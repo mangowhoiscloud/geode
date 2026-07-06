@@ -7,6 +7,8 @@ must be able to enable it on any machine. These pin both surfaces.
 
 from __future__ import annotations
 
+from types import SimpleNamespace
+
 import pytest
 from core.cli import doctor_bootstrap as db
 from core.cli import onboarding as ob
@@ -156,3 +158,56 @@ class TestPersistAndConfigure:
         )
         ob.configure_bash_sandbox()
         assert not cfg.exists()  # no binary → no prompt, no write
+
+
+class TestComputerUseHelperSetup:
+    def test_non_macos_skips_without_prompt(self, monkeypatch) -> None:
+        monkeypatch.setattr(ob.platform, "system", lambda: "Linux")
+        monkeypatch.setattr(
+            ob.console,
+            "input",
+            lambda *a, **k: (_ for _ in ()).throw(AssertionError("should not prompt")),
+        )
+        ob.configure_computer_use_helper()
+
+    def test_missing_build_assets_skips_write(self, tmp_path, monkeypatch) -> None:
+        cfg = tmp_path / "config.toml"
+        monkeypatch.setenv("GEODE_CONFIG_TOML", str(cfg))
+        monkeypatch.setattr(ob.platform, "system", lambda: "Darwin")
+        monkeypatch.setattr("core.tools.computer_use.computer_use_helper_path", lambda: None)
+        monkeypatch.setattr(
+            ob,
+            "_computer_helper_build_script",
+            lambda: tmp_path / "missing-build-script.sh",
+        )
+
+        ob.configure_computer_use_helper()
+
+        assert not cfg.exists()
+
+    def test_build_and_enable_persists_helper_config(self, tmp_path, monkeypatch) -> None:
+        cfg = tmp_path / "config.toml"
+        helper_bin = tmp_path / "GEODE Computer Use Helper.app" / "Contents" / "MacOS" / "helper"
+        build_script = tmp_path / "build_computer_helper.sh"
+        build_script.write_text("#!/usr/bin/env bash\n")
+        monkeypatch.setenv("GEODE_CONFIG_TOML", str(cfg))
+        monkeypatch.setattr(ob.platform, "system", lambda: "Darwin")
+        monkeypatch.setattr("core.tools.computer_use.computer_use_helper_path", lambda: None)
+        monkeypatch.setattr(ob, "_computer_helper_build_script", lambda: build_script)
+        monkeypatch.setattr(ob.console, "input", lambda *a, **k: "y")
+        monkeypatch.setattr(
+            ob.subprocess,
+            "run",
+            lambda *a, **k: SimpleNamespace(
+                returncode=0,
+                stdout=f"{helper_bin}\n",
+                stderr="",
+            ),
+        )
+
+        ob.configure_computer_use_helper()
+
+        text = cfg.read_text()
+        assert "[computer_use]" in text
+        assert 'driver = "helper"' in text
+        assert f'helper_path = "{helper_bin!s}"' in text

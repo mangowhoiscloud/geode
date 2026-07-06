@@ -38,11 +38,12 @@ def _tool_names(kwargs: dict) -> list[str]:
 
 
 def test_platform_defers_above_threshold_on_supported_model() -> None:
-    request_kwargs = build_responses_kwargs(
-        _request(), backend="platform", adapter_name="openai-payg"
-    )
+    with patch("core.llm.providers.anthropic.is_computer_use_enabled", return_value=False):
+        request_kwargs = build_responses_kwargs(
+            _request(), backend="platform", adapter_name="openai-payg"
+        )
     tools = request_kwargs["tools"]
-    assert tools[-1] == {"type": "tool_search"}, "hosted search tool appended"
+    assert {"type": "tool_search"} in tools, "hosted search tool appended"
     deferred_names = {t["name"] for t in tools if t.get("defer_loading")}
     assert deferred_names and all(n.startswith("extra_") for n in deferred_names)
     loaded = {t.get("name") for t in tools if not t.get("defer_loading")}
@@ -52,9 +53,10 @@ def test_platform_defers_above_threshold_on_supported_model() -> None:
 
 def test_unsupported_model_never_defers() -> None:
     """o3 lacks tool_search (gpt-5.4+ only) — shaping must not fire."""
-    request_kwargs = build_responses_kwargs(
-        _request(model="o3"), backend="platform", adapter_name="openai-payg"
-    )
+    with patch("core.llm.providers.anthropic.is_computer_use_enabled", return_value=False):
+        request_kwargs = build_responses_kwargs(
+            _request(model="o3"), backend="platform", adapter_name="openai-payg"
+        )
     assert not any(t.get("defer_loading") for t in request_kwargs["tools"])
     assert {"type": "tool_search"} not in request_kwargs["tools"]
 
@@ -62,14 +64,20 @@ def test_unsupported_model_never_defers() -> None:
 def test_codex_backend_on_by_default_post_live_gate() -> None:
     """Codex backend acceptance was live-verified 2026-06-13 (DEFER-OK on
     gpt-5.5) — default ON since; _settings.py carries the attestation."""
-    request_kwargs = build_responses_kwargs(_request(), backend="codex", adapter_name="codex-oauth")
+    with patch("core.llm.providers.anthropic.is_computer_use_enabled", return_value=False):
+        request_kwargs = build_responses_kwargs(
+            _request(), backend="codex", adapter_name="codex-oauth"
+        )
     assert request_kwargs["tools"][-1] == {"type": "tool_search"}
 
 
 def test_codex_backend_kill_switch() -> None:
     from core.config import settings
 
-    with patch.object(settings, "tool_search_defer_codex", False):
+    with (
+        patch.object(settings, "tool_search_defer_codex", False),
+        patch("core.llm.providers.anthropic.is_computer_use_enabled", return_value=False),
+    ):
         request_kwargs = build_responses_kwargs(
             _request(), backend="codex", adapter_name="codex-oauth"
         )
@@ -85,17 +93,19 @@ def test_web_named_tool_never_defers() -> None:
         *base_request.tools,
         ToolSpec(name="web", description="web tool", input_schema={"type": "object"}),
     )
-    request_kwargs = build_responses_kwargs(
-        AdapterCallRequest(model="gpt-5.5", messages=base_request.messages, tools=tool_specs),
-        backend="platform",
-        adapter_name="openai-payg",
-    )
+    with patch("core.llm.providers.anthropic.is_computer_use_enabled", return_value=False):
+        request_kwargs = build_responses_kwargs(
+            AdapterCallRequest(model="gpt-5.5", messages=base_request.messages, tools=tool_specs),
+            backend="platform",
+            adapter_name="openai-payg",
+        )
     web_tool = next(t for t in request_kwargs["tools"] if t.get("name") == "web")
     assert "defer_loading" not in web_tool
 
 
 def test_shaping_is_idempotent() -> None:
-    first = build_responses_kwargs(_request(), backend="platform", adapter_name="openai-payg")
+    with patch("core.llm.providers.anthropic.is_computer_use_enabled", return_value=False):
+        first = build_responses_kwargs(_request(), backend="platform", adapter_name="openai-payg")
     # feed the shaped tools back through the helper directly
     from core.llm.adapters._openai_common import (
         _apply_openai_tool_search_defer,

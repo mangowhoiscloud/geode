@@ -412,7 +412,7 @@
   },
   {
     "name": "computer_use",
-    "description": "Emulated desktop control through a normal function-call tool, used when the active model/backend cannot use a provider-native computer tool. Requires user approval and computer-use opt-in. Workflow: call action='capture' to record a compact screen observation; when visual targeting is needed, call action='locate' with a concise instruction to use the configured API vision/grounding path and return coordinates; then use click/type/key/scroll/drag and verify with capture_after. This tool intentionally omits raw screenshot base64 from results to keep normal function-call contexts small and wire-safe.",
+    "description": "Emulated desktop control through a normal function-call tool, used when the active model/backend cannot use a provider-native computer tool. Requires user approval and computer-use opt-in. Workflow: call action='capture' to record a compact screen observation; when visual targeting is needed, call action='locate' with a concise instruction. Locate uses only the active provider/source's configured grounding path and will not silently fall across providers (for example, OpenAI subscription will not spend GLM credits). Then use click/type/key/scroll/drag and verify with capture_after. This tool intentionally omits raw screenshot base64 from results to keep normal function-call contexts small and wire-safe.",
     "category": "external",
     "cost_tier": "cheap",
     "input_schema": {

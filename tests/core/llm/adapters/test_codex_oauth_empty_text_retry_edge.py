@@ -16,9 +16,9 @@ The retry edge case unfolds at the adapter boundary as:
 
 These tests pin the *adapter half* of the cycle:
 
-- The empty-text dump fires when ``output_text == ""`` regardless of
-  whether ``response_schema`` was wired (PR-CODEX-OAUTH-EMPTY-TEXT-DUMP
-  #78 forensic surface preserved).
+- The empty-text dump fires when ``output_text == ""`` and the response
+  contains no tool calls, regardless of whether ``response_schema`` was wired
+  (PR-CODEX-OAUTH-EMPTY-TEXT-DUMP #78 forensic surface preserved).
 - The request kwargs **shape changes** when ``response_schema`` is
   wired — the new ``text.format`` block forces the server to enforce
   the schema (PR-CODEX-OAUTH-RESPONSE-SCHEMA — this PR).
@@ -38,6 +38,7 @@ from types import SimpleNamespace
 from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
 
+import pytest
 from core.llm.adapters._openai_common import build_responses_kwargs
 from core.llm.adapters.base import AdapterCallRequest, Message
 from core.llm.adapters.codex_oauth import CodexOAuthAdapter
@@ -148,6 +149,71 @@ def test_acomplete_empty_response_no_schema_dumps_and_returns_empty(
         "block somehow — investigate, because the smoke-17 reproduction is "
         "broken."
     )
+
+
+def test_acomplete_empty_response_env_fail_fast_still_dumps(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Benchmark routes can opt into treating empty output_text as infra failure."""
+    client, _capture = _build_mock_codex_client_empty_response()
+    adapter = CodexOAuthAdapter()
+    adapter._get_client = lambda: client  # type: ignore[method-assign]
+    monkeypatch.setenv("GEODE_CODEX_OAUTH_FAIL_EMPTY_TEXT", "1")
+
+    with (
+        patch("core.paths.GLOBAL_DIAGNOSTICS_DIR", tmp_path),
+        pytest.raises(RuntimeError, match="empty output_text"),
+    ):
+        asyncio.run(adapter.acomplete(_voter_req(schema=None)))
+
+    dumps = list((tmp_path / "codex-oauth-empty-text").glob("*-gpt-5.5.json"))
+    assert len(dumps) == 1
+
+
+def test_acomplete_empty_text_with_function_call_is_not_empty_failure(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Responses tool-use turns usually have empty visible text.
+
+    Crucible readiness runs caught a false positive where Codex returned a
+    valid ``function_call`` item with ``output_text=""`` and the adapter raised
+    the empty-text infra gate before AgenticLoop could execute the tool.
+    """
+    final = SimpleNamespace(
+        output_text="",
+        output=[
+            SimpleNamespace(
+                type="function_call",
+                id="fc_1",
+                call_id="call_1",
+                name="get_customer_by_phone",
+                arguments='{"phone_number":"555-123-2002"}',
+                status="completed",
+            )
+        ],
+        usage=SimpleNamespace(input_tokens=1292, output_tokens=26),
+        status="completed",
+    )
+
+    def _create_stream(**_kwargs: Any) -> _MockStream:
+        return _MockStream(final)
+
+    client = MagicMock()
+    client.responses.stream = MagicMock(side_effect=_create_stream)
+    adapter = CodexOAuthAdapter()
+    adapter._get_client = lambda: client  # type: ignore[method-assign]
+    monkeypatch.setenv("GEODE_CODEX_OAUTH_FAIL_EMPTY_TEXT", "1")
+
+    with patch("core.paths.GLOBAL_DIAGNOSTICS_DIR", tmp_path):
+        result = asyncio.run(adapter.acomplete(_voter_req(schema=None)))
+
+    assert result.text == ""
+    assert len(result.tool_uses) == 1
+    assert result.tool_uses[0]["name"] == "get_customer_by_phone"
+    dump_dir = tmp_path / "codex-oauth-empty-text"
+    assert not dump_dir.exists() or list(dump_dir.glob("*.json")) == []
 
 
 # --- Edge case 2: empty response WITH schema (defense in depth) -------------

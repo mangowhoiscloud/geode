@@ -33,6 +33,8 @@ import threading
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
+from core.unicode_safety import sanitize_jsonable
+
 log = logging.getLogger(__name__)
 
 if TYPE_CHECKING:
@@ -102,7 +104,7 @@ class _AsyncClientEndpoint:
         self._width = 120
 
     async def send_json_async(self, obj: dict[str, Any]) -> None:
-        payload = json.dumps(obj, ensure_ascii=False) + "\n"
+        payload = json.dumps(sanitize_jsonable(obj), ensure_ascii=False) + "\n"
         async with self._write_lock:
             self._writer.write(payload.encode("utf-8"))
             await self._writer.drain()
@@ -684,6 +686,10 @@ class CLIPoller:
             if not text:
                 return {"type": "error", "message": "Empty prompt"}
             try:
+                from core.server.ipc_server.fast_chat import should_use_fast_chat
+
+                if should_use_fast_chat(text):
+                    return await self._run_fast_chat_async(text, loop, msg.get("_client"))
                 return await self._run_prompt_streaming_async(
                     text,
                     loop,
@@ -967,6 +973,53 @@ class CLIPoller:
 
         return self._build_prompt_result(loop, result)
 
+    async def _run_fast_chat_async(
+        self,
+        text: str,
+        loop: Any,
+        client: _AsyncClientEndpoint | None,
+    ) -> dict[str, Any]:
+        """Run a short conversational turn without the AgenticLoop harness."""
+        self._propagate_contextvars()
+        from core.llm.adapters.dispatch import complete_text_via_adapters
+        from core.server.ipc_server.fast_chat import fast_chat_system_prompt
+
+        model = str(getattr(loop, "model", "") or "")
+        provider = str(getattr(loop, "_provider", "") or "") or None
+        source = str(getattr(loop, "_source", "") or "") or None
+        result = await complete_text_via_adapters(
+            text,
+            system=fast_chat_system_prompt(),
+            model=model,
+            max_tokens=512,
+            prefer_provider=provider,
+            prefer_source=source,
+        )
+        if client is not None:
+            await client.send_json_async(
+                {
+                    "type": "tokens",
+                    "model": model,
+                    "input": result.usage.input_tokens,
+                    "output": result.usage.output_tokens,
+                    "cost": 0,
+                }
+            )
+            await client.drain_pending_sends()
+        return {
+            "type": "result",
+            "text": result.text,
+            "rounds": 0,
+            "tool_calls": [],
+            "termination": "fast_chat",
+            "model": model,
+            "summary": "fast_chat",
+            "fast_path": "simple_chat",
+            "adapter": result.adapter_name,
+            "adapter_provider": result.adapter_provider,
+            "adapter_source": result.adapter_source,
+        }
+
     def _run_prompt_streaming(
         self,
         text: str,
@@ -1228,7 +1281,7 @@ class CLIPoller:
             client.send_json_threadsafe(data)
             return
         try:
-            payload = json.dumps(data, ensure_ascii=False) + "\n"
+            payload = json.dumps(sanitize_jsonable(data), ensure_ascii=False) + "\n"
             client.sendall(payload.encode("utf-8"))
         except (BrokenPipeError, ConnectionResetError, OSError):
             log.debug("CLI send failed — client disconnected")

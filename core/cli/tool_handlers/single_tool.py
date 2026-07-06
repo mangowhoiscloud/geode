@@ -245,7 +245,6 @@ def _build_computer_use_handler() -> dict[str, Any]:
                 "error_type": "permission",
                 "hint": "Enable computer_use_enabled and configure host or sandbox execution.",
             }
-        kwargs.pop("_tool_context", None)
         return await execute_emulated_computer_use(harness, **kwargs)
 
     return {"computer": handle_computer, "computer_use": handle_computer_use}
