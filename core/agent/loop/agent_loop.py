@@ -257,7 +257,7 @@ class AgenticLoop:
         thinking_budget: int = 0,  # 0 = disabled; >0 = Extended Thinking tokens (legacy)
         effort: str = "high",  # "low" | "medium" | "high" | "max" (adaptive thinking)
         time_budget_s: float = 0.0,  # 0 = no time limit (OpenClaw pattern)
-        cost_budget: float = 0.0,  # 0 = no cost limit (Karpathy P3)
+        cost_budget: float = 0.0,  # 0 = defer to settings.cost_limit_usd (0 there too = no limit)
         model: str | None = None,
         provider: str = "anthropic",
         tool_registry: ToolRegistry | None = None,
@@ -294,6 +294,24 @@ class AgenticLoop:
         # Adaptive compute: track consecutive text-only rounds for overthinking detection
         self._consecutive_text_only_rounds = 0
         self._total_empty_rounds = 0
+        # No positive cost_budget → fall back to settings.cost_limit_usd so
+        # the config knob (`cost.limit_usd`) reaches the enforced guard 3
+        # (80% warn / 100% hard stop), not just the COST_WARNING /
+        # COST_LIMIT_EXCEEDED hook events. A positive caller value (e.g.
+        # supervised services' monthly-budget wiring) always wins; there is
+        # deliberately no "explicit 0 disables the settings knob" escape.
+        # Snapshot at construction is intentional (session-bound budget);
+        # the hook path in _response.py live-reads the knob instead.
+        if cost_budget <= 0.0:
+            try:
+                from core.config import settings as _settings
+
+                limit_raw = getattr(_settings, "cost_limit_usd", 0.0)
+                # isinstance filters MagicMock auto-attrs in fixtures
+                if isinstance(limit_raw, int | float) and limit_raw > 0:
+                    cost_budget = float(limit_raw)
+            except Exception:
+                log.debug("settings.cost_limit_usd read failed", exc_info=True)
         self._cost_budget = cost_budget
         self._loop_start_time: float = 0.0
         # No explicit model → prefer settings.act_model (Plan/Act split),

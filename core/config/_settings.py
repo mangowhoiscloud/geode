@@ -434,8 +434,11 @@ class Settings(BaseSettings):
             raise ValueError(f"computer_use_env must be 'host' or 'sandbox', got {v!r}")
         return normalized
 
-    # Cost guard — session-level cost limit (0 = no limit)
-    cost_limit_usd: float = 0.0  # fires COST_WARNING at 80%, COST_LIMIT_EXCEEDED at 100%
+    # Cost guard — session-level cost limit (0 = no limit). Fires
+    # COST_WARNING at 80% / COST_LIMIT_EXCEEDED at 100%, AND seeds
+    # AgenticLoop's enforced cost guard (hard stop) when the loop gets no
+    # explicit cost_budget (core/agent/loop/agent_loop.py guard 3).
+    cost_limit_usd: float = 0.0
 
     # Computer Use — desktop automation (requires pyautogui)
     computer_use_enabled: bool = True  # default on; pyautogui import guard handles missing dep
