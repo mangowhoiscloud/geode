@@ -128,6 +128,7 @@ def adapter_health(name: str) -> EnvironmentReport:
 # sync'd. Add new aliases HERE only.
 PROVIDER_REGISTRY_NORMALIZATION: dict[str, str] = {
     "openai-codex": "openai",
+    "glm-coding": "glm",
     "zhipuai": "glm",
 }
 
@@ -141,6 +142,17 @@ def normalize_registry_provider(provider: str) -> str:
 def resolve_for(provider: str, source: str) -> LLMAdapter:
     """Find the unique adapter matching ``(provider, source)``.
 
+    ``provider`` accepts BOTH vocabularies — the registry's family names
+    (``openai`` / ``glm``) and the routing layer's variant ids
+    (``openai-codex`` / ``glm-coding`` / ``zhipuai``) — normalized here at
+    the boundary. Callers used to be responsible for calling
+    :func:`normalize_registry_provider` themselves; the fast-chat incident
+    (2026-07-06 — ``loop._provider='openai-codex'`` passed through
+    unnormalized, every codex-subscription fast-chat turn failed with
+    AdapterUnavailableError) showed convention-enforced translation does
+    not survive new callers. Normalizing at the lookup entry kills the
+    bug class.
+
     ``source`` MUST be a concrete value (one of
     ``core.llm.adapters.base.CONCRETE_SOURCES``). The picker collapses
     ``"auto"`` → concrete before calling. Passing ``"auto"`` here raises
@@ -149,6 +161,7 @@ def resolve_for(provider: str, source: str) -> LLMAdapter:
 
     Raises :class:`AdapterNotFoundError` when no adapter matches.
     """
+    provider = normalize_registry_provider(provider)
     if source == SOURCE_AUTO:
         raise ValueError(
             "resolve_for: source='auto' is a picker sentinel — collapse it to a "

@@ -45,6 +45,23 @@ functional change.
 
 ---
 
+## [0.99.280] - 2026-07-06
+
+### Fixed
+
+- **Adapter lookups normalize provider vocabulary at the boundary.**
+  `resolve_for` and `_select_adapter` now accept BOTH the adapter
+  registry's family names (`openai` / `glm`) and the routing layer's
+  variant ids (`openai-codex` / `glm-coding` / `zhipuai`), translating
+  via `normalize_registry_provider` at the lookup entry instead of
+  relying on every caller to translate first. Incident: a fast-chat
+  path forwarded `loop._provider='openai-codex'` verbatim as
+  `prefer_provider`, matched zero registered adapters, and every
+  codex-subscription fast-chat turn failed with
+  AdapterUnavailableError (2026-07-06). `glm-coding` (a live provider
+  value in strategy plans and auth config) joins the normalization map;
+  the drift-anchor pin is updated deliberately.
+
 ## [0.99.279] - 2026-07-06
 
 ### Architecture

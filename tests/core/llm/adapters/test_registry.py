@@ -256,3 +256,18 @@ def test_adapter_health_runs_on_every_builtin() -> None:
             f"adapter_health({adapter.name!r}) returned {type(report).__name__}; "
             "every built-in must honor the EnvironmentReport contract."
         )
+
+
+def test_resolve_for_normalizes_routing_variant_ids() -> None:
+    """Boundary normalization (fast-chat incident 2026-07-06) — the
+    routing layer's variant vocabulary resolves without the caller
+    translating first."""
+    codex = _Stub("codex-oauth", "openai", SOURCE_SUBSCRIPTION)
+    glm = _Stub("glm-coding-plan", "glm", SOURCE_SUBSCRIPTION)
+    register_adapter(codex)
+    register_adapter(glm)
+    assert resolve_for("openai-codex", SOURCE_SUBSCRIPTION) is codex
+    assert resolve_for("glm-coding", SOURCE_SUBSCRIPTION) is glm
+    assert resolve_for("zhipuai", SOURCE_SUBSCRIPTION) is glm
+    # identity for already-normalized family names
+    assert resolve_for("openai", SOURCE_SUBSCRIPTION) is codex
