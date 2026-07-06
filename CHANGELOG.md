@@ -45,6 +45,26 @@ functional change.
 
 ---
 
+## [0.99.278] - 2026-07-06
+
+### Added
+
+- **`delegate_task` best-of-N candidate sampling with diversity
+  lenses.** New opt-in `best_of` parameter (2..4, single-task mode):
+  the same task runs as N parallel sub-agent candidates, each with a
+  distinct built-in reasoning lens
+  (`core/agent/candidate_sampling.py:DIVERSITY_LENSES` — lens forcing
+  is bundled because N clones of one model+prompt fail together), then
+  one structured-output judge call (`select_candidate` tool;
+  `settings.judge_model` → delegating loop's model precedence) picks
+  the winner. The tool result carries a `best_of` block (`n`, `judged`,
+  `winner`, `reason`); every judge failure shape is an observable
+  fallback (`judge_error`), never silent. This gives the runtime
+  same-task width — buying accuracy with parallel compute where
+  verification is cheap — alongside the existing task-decomposition
+  fan-out, and gives `settings.judge_model` its first in-loop consumer
+  beyond the per-turn verify mode.
+
 ## [0.99.277] - 2026-07-06
 
 ### Added
