@@ -378,7 +378,8 @@ class SessionMetrics:
 
     def record_replan(self, trigger: str) -> None:
         """PR-CL-A1 — increment the replan counter and remember the
-        trigger ("verify_fail" or "cadence") for telemetry.
+        trigger ("verify_fail" / "low_confidence" / "cadence") for
+        telemetry.
 
         Does NOT reset ``replan_attempts_on_current_step`` — the caller
         controls reset semantics via :meth:`set_active_plan`'s

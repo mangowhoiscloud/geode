@@ -209,6 +209,39 @@ def test_telecom_roaming_recovery_repairs_known_roaming_before_terminal_mms() ->
     assert 'enable_roaming(customer_id="C1001", line_id="L1002")' in correction
 
 
+def test_telecom_workflow_order_tracks_user_tool_outputs_without_names() -> None:
+    scaffold = build_workflow_order_scaffold("telecom-mms-roaming-recovery-v1")
+
+    assert isinstance(scaffold, TelecomMmsWorkflowOrder)
+    scaffold.observe_tool_output(
+        "get_customer_by_phone",
+        '{"customer_id": "C1001", "phone_number": "555-123-2002"}',
+    )
+    scaffold.observe_tool_output(
+        "get_details_by_id",
+        '{"line_id": "L1002", "phone_number": "555-123-2002", "roaming_enabled": false}',
+    )
+    scaffold.observe_tool_output(
+        "",
+        "Airplane Mode: OFF\n"
+        "SIM Card Status: active\n"
+        "Cellular Network Type: 5G\n"
+        "Mobile Data Enabled: Yes\n"
+        "Data Roaming Enabled: No",
+    )
+    scaffold.observe_tool_output(
+        "",
+        "Current APN Name: internet\n"
+        "MMSC URL (for picture messages): http://mms.carrier.com/mms/wapenc",
+    )
+    scaffold.observe_tool_output("", "Your messaging app cannot send MMS messages.")
+
+    assert scaffold.blockers_clear() is True
+    assert scaffold.mms_failed_after_prereqs is True
+    assert scaffold.roaming_repair_due() is True
+    assert 'enable_roaming(customer_id="C1001", line_id="L1002")' in scaffold.prompt_hint()
+
+
 def test_telecom_phased_recovery_scaffold_advances_small_native_user_phases() -> None:
     scaffold = build_workflow_order_scaffold("telecom-mms-phased-recovery-v1")
 

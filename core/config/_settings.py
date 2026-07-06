@@ -97,6 +97,21 @@ class Settings(BaseSettings):
             "with no extra LLM call. PR-3 C-2."
         ),
     )
+    cognitive_reflection_adaptive: bool = Field(
+        default=True,
+        validation_alias=AliasChoices(
+            "cognitive_reflection_adaptive",
+            "GEODE_COGNITIVE_REFLECTION_ADAPTIVE",
+        ),
+        description=(
+            "When True (default) the reflection cadence adapts to the "
+            "last reflection's confidence: >= 0.8 doubles the effective "
+            "interval (fewer belief-update calls), < 0.4 forces a "
+            "reflection every round. Thresholds are module constants in "
+            "core/agent/loop/agent_loop.py. When False the fixed "
+            "cognitive_reflection_interval applies unconditionally."
+        ),
+    )
     cognitive_reflection_model: str = Field(
         default="",
         validation_alias=AliasChoices(
@@ -444,8 +459,11 @@ class Settings(BaseSettings):
             )
         return normalized
 
-    # Cost guard — session-level cost limit (0 = no limit)
-    cost_limit_usd: float = 0.0  # fires COST_WARNING at 80%, COST_LIMIT_EXCEEDED at 100%
+    # Cost guard — session-level cost limit (0 = no limit). Fires
+    # COST_WARNING at 80% / COST_LIMIT_EXCEEDED at 100%, AND seeds
+    # AgenticLoop's enforced cost guard (hard stop) when the loop gets no
+    # explicit cost_budget (core/agent/loop/agent_loop.py guard 3).
+    cost_limit_usd: float = 0.0
 
     # Computer Use — desktop automation (requires pyautogui)
     computer_use_enabled: bool = True  # default on; pyautogui import guard handles missing dep

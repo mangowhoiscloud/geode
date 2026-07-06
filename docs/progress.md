@@ -18,6 +18,7 @@
 <!-- Move items here when work begins. -->
 <!-- 3-Checkpoint: (1) alloc → (2) merge (CI 5/5) → (3) verify -->
 
+- [ ] test-time compute 배분 GAP 해소 3분할 (2026-07-06) — 런타임 루프의 추론 컴퓨트 배분 레버 점검(레버 6종 스코어카드)에서 나온 GAP: ① cost budget이 hook 이벤트만 발화하고 루프를 못 멈춤 → 종료 가드 합류(`feature/loop-cost-budget-guard`) ② reflection confidence가 CLI 표시 외 소비처 0 → verify/replan 합류 + confidence-적응 reflection 캐던스(`feature/loop-confidence-consumers`) ③ 같은 과제 N후보+judge 선별 부재, judge_model 런타임 미소비 → delegate_task best-of-N 옵인 + 다양성 렌즈(`feature/subagent-candidate-sampling`). 난이도-적응 배분(정책 레이어)은 deferred — ②의 적응 캐던스가 최소 슬라이스.
 - [ ] v1.0.0 스탬프 — 게이트=computer-use 보강 + 프롬프트(둘 다 1.0 범위, 운영자 2026-06-17). **★ 기능 게이트 전부 정리(v0.99.230): computer-use A/C/E/F + D(3사 배선 완성)·Anthropic+OpenAI Platform 라이브검증, 프롬프트 P2-b/P3.** punch-list #1~#4 닫힘, 0 boot-frozen. SoT=`docs/plans/2026-06-17-v1.0.0-release-readiness.md` + `docs/v1.0.0-stability-contract.md`. **잔여 = 전부 post-1.0 deferred(B' zoom·전체 GLM GUI-agent 루프·E 컨테이너 라이브·D 라이브 grounding=glm 잔액·Petri computer-use 감사 dim) + cut 방식(main 직접 vs RC) 미결.** → **다음 = 1.0 cut 결정(운영자, 외부 공개 릴리스).**
 - [ ] H1 — 데몬 client-cwd 세션 해석(별도 결정 대기). (H11-tail 전체 완료: call-path 해동=PR-PRE10-H11-TAIL v0.99.220, 마지막 `_state.py` 피커 사이트 해동=PR-PRE10-H11-PICKER v0.99.222 → 0 boot-frozen routing-constant 사이트 잔존)
 

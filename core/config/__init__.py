@@ -77,6 +77,7 @@ _TOML_TO_SETTINGS: dict[str, str] = {
     "cognitive.reflection_model": "cognitive_reflection_model",
     "cognitive.reflection_max_tokens": "cognitive_reflection_max_tokens",
     "cognitive.reflection_interval": "cognitive_reflection_interval",
+    "cognitive.reflection_adaptive": "cognitive_reflection_adaptive",
     "output.verbose": "verbose",
     "agentic.thinking_budget": "agentic_thinking_budget",
     "agentic.effort": "agentic_effort",

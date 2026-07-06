@@ -37,6 +37,40 @@ def _string_or_none(value: Any) -> str | None:
     return text or None
 
 
+def _infer_tool_name_from_output(output: Any) -> str:
+    """Infer a tau2 telecom tool name when only the result message is visible."""
+    content = _text(output)
+    parsed = _loads_json(output)
+    if isinstance(parsed, dict):
+        if "customer_id" in parsed and "phone_number" in parsed:
+            return "get_customer_by_phone"
+        if "line_id" in parsed and "roaming_enabled" in parsed:
+            return "get_details_by_id"
+    if "your messaging app cannot send mms" in content or "can send mms" in content:
+        return "can_send_mms"
+    if "airplane mode:" in content and "sim card status:" in content:
+        return "check_network_status"
+    if "airplane mode is now" in content:
+        return "toggle_airplane_mode"
+    if "sim card re-seated successfully" in content:
+        return "reseat_sim_card"
+    if "no sim card detected" in content or "your sim card is active" in content:
+        return "check_sim_status"
+    if "mobile data is now" in content:
+        return "toggle_data"
+    if "preferred network mode set to" in content:
+        return "set_network_mode_preference"
+    if "network mode preference:" in content:
+        return "check_network_mode_preference"
+    if "current apn name:" in content and "mmsc url" in content:
+        return "check_apn_settings"
+    if "apn settings will reset at reboot" in content:
+        return "reset_apn_settings"
+    if "data roaming is now" in content:
+        return "toggle_roaming"
+    return ""
+
+
 @dataclass
 class TelecomMmsWorkflowOrder:
     """Track MMS blocker state and render a main-loop workflow-order hint."""
@@ -75,6 +109,8 @@ class TelecomMmsWorkflowOrder:
 
     def observe_tool_output(self, name: str, output: Any) -> None:
         """Update state from one tau2 telecom tool output."""
+        if not name:
+            name = _infer_tool_name_from_output(output)
         content = _text(output)
         if not content:
             return
@@ -352,9 +388,7 @@ class TelecomMmsWorkflowOrder:
             )
         if not self.bounded_bundle:
             return step_hint
-        if self.roaming_recovery and (
-            self.roaming_repair_due() or self.mms_failed_after_prereqs
-        ):
+        if self.roaming_recovery and (self.roaming_repair_due() or self.mms_failed_after_prereqs):
             account_action = (
                 f'enable_roaming(customer_id="{self.active_customer_id}", '
                 f'line_id="{self.active_line_id}")'

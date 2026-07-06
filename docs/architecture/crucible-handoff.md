@@ -330,6 +330,28 @@ already cover most of that surface:
    change is a hard ordering gate: after `mms_failed_after_prereqs=true` and active-line
    `roaming_enabled=false`, block Wi-Fi/app-permission/escalation branches until roaming is repaired
    or explicitly ruled out. Do not spend more live probes before that gate exists.
+   Hard ordering gate attempt now exists:
+   `crucible-tau2-cheaploop-telecom-diagnostic-roaminghardgate-userguard-openai-sub-gpt55-high-openai-sub-gpt55-high-n1k1-20260706-a`
+   and `...-20260706-b` both remained `REJECT_SURROGATE`. The `b` run was clean route-wise but too
+   expensive for a cheap loop: 325.74s, 40 messages, 21 calls, `max_steps`, no terminal success.
+   Root cause found after trajectory inspection: `TelecomMmsWorkflowOrder` tracked assistant tool
+   outputs by pending tool-name queue, but GEODE's agent state only receives user-side tool result
+   messages after the tau2 orchestrator executes user tools. It therefore lost names for user-side
+   `check_apn_settings` / `can_send_mms`, failed to mark `apn_valid` and
+   `mms_failed_after_prereqs`, and did not fire the roaming branch correction. A local scaffold fix
+   now infers safe telecom tool names from user-side result text when tau2 does not expose the call
+   name to the agent state. Verification includes the tau2 adapter tests,
+   telecom workflow gate tests, ruff, mypy, and the non-live suite before merge.
+   Follow-up `c` probe now exists:
+   `crucible-tau2-cheaploop-telecom-diagnostic-roaminghardgate-userguard-openai-sub-gpt55-high-openai-sub-gpt55-high-n1k1-20260706-c`
+   → `REJECT_SURROGATE`, no usage-exhaustion evidence, 207.40s, 24 messages / 10 calls, reasons
+   `max_steps` and missing terminal `can_send_mms=true`. This is an improvement over `b`
+   (325.74s, 40 messages / 21 calls) and preserved terminal-verifier discipline. It did not reach
+   `enable_roaming`: the run stopped immediately after reboot, with the assistant asking for
+   `check_apn_settings`. Current blocker is now late-stage APN/roaming compression under the step
+   budget, not early workflow order. Next candidate should compress the post-reboot APN check and
+   roaming repair into one bounded phase, or raise `max_steps` only as a diagnostic, not as promotion
+   evidence. Promotion/scored G2 remains blocked.
 12. After a workflow-order candidate passes the tiny live surrogate: run T1/T3 replacement
    G2 micro-sim first; then R1
    G2 micro-sim with control task IDs 2, 46, 64, 73 included as canaries before any targeted mini run.

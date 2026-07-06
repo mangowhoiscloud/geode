@@ -45,7 +45,7 @@ functional change.
 
 ---
 
-## [0.99.276] - 2026-07-06
+## [0.99.279] - 2026-07-06
 
 ### Architecture
 
@@ -144,7 +144,14 @@ functional change.
   roaming-recovery phase only after terminal `can_send_mms` fails with the basic
   MMS blockers clear. `--agent-workflow-order telecom-mms-phased-recovery-v1`
   tests a smaller native-user phase protocol before falling back to hard
-  ordering gates.
+  ordering gates. The scaffold now treats known active-line
+  `roaming_enabled=false` as a pre-terminal blocker and can issue a hard
+  branch correction toward account-side `enable_roaming(customer_id, line_id)`
+  before Wi-Fi/app-permission/escalation branches. It also infers conservative
+  telecom tool names from user-side tau2 result text when half-duplex execution
+  exposes tool results to GEODE's agent state without the original user
+  `tool_calls`; this preserves blocker tracking for APN and terminal MMS
+  results inside the main-loop scaffold.
 - **Telecom workflow gate recovery semantics.** `scripts/eval/telecom_workflow_gate.py`
   now treats `can_send_mms=false` after basic blockers as recoverable if a later
   `can_send_mms=true` appears, so hidden blockers such as roaming can be repaired
@@ -242,6 +249,59 @@ functional change.
   the termination filter — mis-readable as a mutation effect. The Crucible
   contamination filter drops these post-hoc; adapter-level isolation is the
   proper fix (pending).
+
+## [0.99.278] - 2026-07-06
+
+### Added
+
+- **`delegate_task` best-of-N candidate sampling with diversity
+  lenses.** New opt-in `best_of` parameter (2..4, single-task mode):
+  the same task runs as N parallel sub-agent candidates, each with a
+  distinct built-in reasoning lens
+  (`core/agent/candidate_sampling.py:DIVERSITY_LENSES` — lens forcing
+  is bundled because N clones of one model+prompt fail together), then
+  one structured-output judge call (`select_candidate` tool;
+  `settings.judge_model` → delegating loop's model precedence) picks
+  the winner. The tool result carries a `best_of` block (`n`, `judged`,
+  `winner`, `reason`); every judge failure shape is an observable
+  fallback (`judge_error`), never silent. This gives the runtime
+  same-task width — buying accuracy with parallel compute where
+  verification is cheap — alongside the existing task-decomposition
+  fan-out, and gives `settings.judge_model` its first in-loop consumer
+  beyond the per-turn verify mode.
+
+## [0.99.277] - 2026-07-06
+
+### Added
+
+- **Reflection confidence now steers compute allocation.** The
+  reflection node's `CognitiveState.confidence` (produced every round
+  since PR-3 but consumed only by the CLI session display) gains two
+  control-flow consumers: (1) confidence-adaptive reflection cadence —
+  `>= 0.8` doubles the effective `cognitive_reflection_interval`
+  (fewer belief-update LLM calls while the loop is on track), `< 0.4`
+  forces a reflection every round; opt-out via the new
+  `cognitive_reflection_adaptive` knob (`cognitive.reflection_adaptive`).
+  (2) A `low_confidence` replan trigger — edge-triggered on the drop
+  below 0.4 (re-arms only after recovery, so a persistently unsure
+  session replans once, not every round). Trigger priority:
+  `verify_fail` > `low_confidence` > `cadence`.
+
+## [0.99.276] - 2026-07-06
+
+### Fixed
+
+- **`cost_limit_usd` now reaches the enforced loop guard.** The config
+  knob (`cost.limit_usd` / `GEODE_COST_LIMIT_USD`) previously only fired
+  the COST_WARNING / COST_LIMIT_EXCEEDED hook events; the AgenticLoop's
+  enforced cost guard (80% warn, 100% hard stop) was reachable only via
+  the constructor's `cost_budget` param, which no config path seeded
+  outside the supervised daemon's monthly-budget wiring. The loop now
+  falls back to `settings.cost_limit_usd` when no explicit `cost_budget`
+  is given, so setting the knob alone hard-stops a runaway session
+  (`termination_reason="cost_budget_exceeded"`). An explicit caller
+  value still wins.
+
 
 ## [0.99.275] - 2026-07-05
 
