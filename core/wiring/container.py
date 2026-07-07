@@ -109,7 +109,12 @@ def build_default_registry() -> ToolRegistry:
     Specialized tools are expected to be provided by external packages.
     """
     registry = ToolRegistry()
-    # Data (3)
+    # Analysis (1)
+    from core.tools.math_tools import CalculateTool
+
+    registry.register(CalculateTool())
+
+    # Data (1)
     from core.tools.data_tools import GenerateDataTool
 
     registry.register(GenerateDataTool())

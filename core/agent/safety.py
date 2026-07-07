@@ -46,6 +46,7 @@ def current_skip_permissions() -> bool:
 SAFE_TOOLS: frozenset[str] = frozenset(
     {
         "check_status",
+        "calculate",
         "memory_search",
         "manage_rule",
         "web_fetch",

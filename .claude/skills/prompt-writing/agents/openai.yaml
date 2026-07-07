@@ -1,0 +1,4 @@
+interface:
+  display_name: "Prompt Writing"
+  short_description: "GEODE prompt standards and identity-assertion guard."
+  default_prompt: "Use the prompt-writing skill to revise this GEODE prompt so it follows metadata/behavioral prompt style and avoids identity assertions."

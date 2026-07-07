@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import io
+import re
 import time
 from typing import Any
 from unittest.mock import patch
@@ -23,6 +25,12 @@ from core.ui.agentic_ui import (
     render_tool_result,
     render_turn_summary,
 )
+
+_ANSI_ESCAPE_RE = re.compile(r"\x1b\[[0-?]*[ -/]*[@-~]")
+
+
+def _strip_ansi(text: str) -> str:
+    return _ANSI_ESCAPE_RE.sub("", text)
 
 
 class TestFmtTokens:
@@ -1170,8 +1178,6 @@ class TestPlanNotReemittedDuringPhases:
 
 def test_event_renderer_can_run_append_only_without_live_regions() -> None:
     """Legacy prompt_toolkit CLI must not repaint over its input line."""
-    import io
-
     from core.ui.event_renderer import EventRenderer
 
     r = EventRenderer(live_regions=False)
@@ -1192,16 +1198,146 @@ def test_event_renderer_can_run_append_only_without_live_regions() -> None:
     before_stop = r._out.getvalue()
     assert "Working..." in before_stop
     assert "Tasks" in before_stop
-    assert "Activity" not in before_stop
+    assert "Activity" in before_stop
+    assert "read_file" in before_stop
+    assert "run_tests" in before_stop
 
     r.stop()
     out = r._out.getvalue()
-    assert out.count("Activity") == 1
+    assert out.count("Activity") >= 1
     assert "read_file" in out
     assert "run_tests" in out
     assert "\033[A" not in out
     assert "\033[1A" not in out
+
+
+def test_event_renderer_restores_tty_inline_status_without_cursor_up() -> None:
+    """Default CLI gets a live status line without prompt-overpaint cursor-up."""
+    from core.ui.event_renderer import EventRenderer
+
+    class TtyStringIO(io.StringIO):
+        def isatty(self) -> bool:
+            return True
+
+    r = EventRenderer(live_regions=False)
+    r._out = TtyStringIO()
+
+    try:
+        r.start_activity()
+        r._render_inline_status_frame()
+        r.on_event(
+            {
+                "type": "progress_plan",
+                "plan": [{"step": "inspect renderer", "status": "in_progress"}],
+            }
+        )
+        r.on_event({"type": "tool_start", "name": "read_file"})
+        r._render_inline_status_frame()
+        r.on_event({"type": "tool_end", "name": "read_file", "summary": "ok", "duration_s": 0.1})
+    finally:
+        r.stop()
+
+    out = r._out.getvalue()
+    plain = _strip_ansi(out)
+    assert "Working" in plain
+    assert "Running read_file" in plain
+    assert "Tasks" in plain
+    assert "Activity" in plain
+    assert "\r" in out
+    assert "\033[A" not in out
+    assert "\033[1A" not in out
     assert "\033[2A" not in out
+
+
+def test_event_renderer_updates_plan_in_place_with_tty_inline_status() -> None:
+    """Default TTY CLI should update the visible plan instead of stacking copies."""
+    from core.ui.event_renderer import EventRenderer
+
+    class TtyStringIO(io.StringIO):
+        def isatty(self) -> bool:
+            return True
+
+    r = EventRenderer(live_regions=False)
+    r._out = TtyStringIO()
+
+    try:
+        r.start_activity()
+        r._render_inline_status_frame()
+        r.on_event(
+            {
+                "type": "progress_plan",
+                "plan": [
+                    {"step": "first step", "status": "in_progress"},
+                    {"step": "second step", "status": "pending"},
+                ],
+            }
+        )
+        assert r._progress_plan.at_bottom is True
+        r._render_inline_status_frame()
+        r.on_event(
+            {
+                "type": "progress_plan",
+                "plan": [
+                    {"step": "first step", "status": "completed"},
+                    {"step": "second step", "status": "in_progress"},
+                ],
+            }
+        )
+    finally:
+        r.stop()
+
+    out = r._out.getvalue()
+    plain = _strip_ansi(out)
+    assert "first step" in plain
+    assert "second step" in plain
+    assert re.search(r"\x1b\[\d+A", out)
+
+
+def test_update_plan_tool_does_not_displace_live_plan_surface() -> None:
+    """update_plan is plan state, not activity history between plan renders."""
+    from core.ui.event_renderer import EventRenderer
+
+    class TtyStringIO(io.StringIO):
+        def isatty(self) -> bool:
+            return True
+
+    r = EventRenderer(live_regions=False)
+    r._out = TtyStringIO()
+
+    try:
+        r.start_activity()
+        r._render_inline_status_frame()
+        r.on_event(
+            {
+                "type": "progress_plan",
+                "plan": [
+                    {"step": "inspect HITL", "status": "in_progress"},
+                    {"step": "fix approval input", "status": "pending"},
+                ],
+            }
+        )
+        assert r._progress_plan.at_bottom is True
+        r.on_event({"type": "tool_start", "name": "update_plan"})
+        r.on_event({"type": "tool_end", "name": "update_plan", "summary": "ok", "duration_s": 0.0})
+        assert r._progress_plan.at_bottom is True
+        r.on_event(
+            {
+                "type": "progress_plan",
+                "plan": [
+                    {"step": "inspect HITL", "status": "completed"},
+                    {"step": "fix approval input", "status": "in_progress"},
+                ],
+            }
+        )
+    finally:
+        r.stop()
+
+    out = r._out.getvalue()
+    plain = _strip_ansi(out)
+    assert "Activity" not in plain
+    assert "update_plan" not in plain
+    assert "fix approval input" in plain
+    assert re.search(r"\x1b\[\d+A", out)
 
 
 def test_tool_tracker_running_row_uses_signature_shimmer() -> None:

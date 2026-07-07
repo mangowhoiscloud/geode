@@ -2,7 +2,7 @@
  * GEODE CHANGELOG, auto-synced from the GEODE repo via `npm run sync-stats`.
  * Do not edit manually. Edit CHANGELOG.md in the GEODE repo and re-run sync.
  *
- * Last sync: 2026-07-06
+ * Last sync: 2026-07-07
  *
  * Each entry's `body` is the raw markdown between two version headings.
  * The Changelog page renders the body with a minimal markdown renderer
@@ -17,9 +17,29 @@ export type ChangelogEntry = {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    "version": "0.99.285",
+    "date": "2026-07-07",
+    "body": "### Fixed\n\n- **Adapter lookups normalize provider vocabulary at the boundary.**\n  `resolve_for` and `_select_adapter` now accept both registry family names\n  (`openai` / `glm`) and routing variant ids (`openai-codex` / `glm-coding` /\n  `zhipuai`), preventing codex-subscription fast-chat paths from failing with\n  `AdapterUnavailableError` when the loop forwards `openai-codex`.\n- **Computer-use incident hardening.** Native computer-use screenshots are no\n  longer persisted in session checkpoints, SQLite message mirrors, or tool logs;\n  durable state keeps compact digests/refs instead. Successful desktop actions\n  now explicitly report dispatch status separately from postcondition\n  verification, so click/type/key success cannot be mistaken for proven UI state.\n- **Fast-chat GEODE identity without roleplay framing.** The lightweight chat\n  prompt now speaks as GEODE through Fable-style metadata/behavior clauses\n  (`Agent:`, `Runtime:`, `Mode:`, `Scope:`) instead of `You are ...` identity\n  assertions, keeps fast-chat opt-in, and still honors `GEODE_PERSONA=off`.\n\n### Added\n\n- **Exact-first `calculate` tool.** GEODE now has a local, read-only\n  calculator for deterministic arithmetic instead of falling back to\n  `run_bash`, ad hoc Python, or an external MCP. It evaluates a bounded AST\n  allowlist, returns exact rational results when possible, and marks\n  approximate decimal results explicitly.\n- **Prompt-writing scaffold skill.** `.claude/skills/prompt-writing/` defines\n  GEODE's prompt-writing standard: model-facing prompt text should use\n  metadata/behavioral clauses and avoid `You are ...` / `Act as ...` roleplay\n  framing. `CLAUDE.md` and `AGENTS.md` now point prompt edits to that skill."
+  },
+  {
+    "version": "0.99.284",
+    "date": "2026-07-07",
+    "body": "### Fixed\n\n- **HITL approval input no longer swallows Enter.** The thin IPC client now\n  restores cooked terminal mode and reads approval choices directly from\n  stdin instead of Rich `console.input()`, so approval prompts accept Enter\n  normally even after prompt_toolkit raw-mode interaction. Carriage-return\n  bytes are stripped before parsing, and approval suspend/resume callbacks\n  now run in a `finally` block so the renderer cannot stay stranded if\n  approval input fails.\n- **`update_plan` no longer displaces the live plan UI.** Plan updates are\n  treated as renderer state rather than normal tool activity, so they do not\n  create `Activity · update_plan -> ok` blocks or push the checklist out of\n  its in-place update surface."
+  },
+  {
+    "version": "0.99.283",
+    "date": "2026-07-07",
+    "body": "### Fixed\n\n- **Default CLI plan updates refresh in place.** In TTY sessions using the\n  prompt-safe inline `Working...` status, progress-plan updates now keep the\n  plan as renderer-owned bottom content and redraw it in place after clearing\n  the status line. This prevents updated plans from stacking duplicate\n  checklist blocks in the transcript while preserving append-only output for\n  pipes and logs."
+  },
+  {
+    "version": "0.99.282",
+    "date": "2026-07-07",
+    "body": "### Fixed\n\n- **Default CLI live activity restoration.** The thin CLI now restores the\n  live `Working...` / `Running <tool>...` status in TTY sessions with a\n  carriage-return-only inline renderer, while keeping plan and activity output\n  append-only. This preserves the pre-full-screen interaction feel without\n  reintroducing cursor-up prompt overpaint.\n- **Plan rendering no longer suppresses activity status.** Progress-plan\n  updates clear only the renderer-owned current status line before printing\n  transcript rows, so the live status resumes under the updated plan instead\n  of disappearing for the rest of the turn."
+  },
+  {
     "version": "0.99.281",
-    "date": "2026-07-06",
-    "body": "### Fixed\n\n- **Fast-chat now speaks as GEODE.** The lightweight chat mode shipped\n  without the identity layer, so it introduced itself as a generic \"AI\n  assistant used via API\" (operator report, 2026-07-06).\n  `fast_chat_system_prompt()` now composes the same GEODE.md identity\n  block the full loop injects (G1 SoT via\n  `core.agent.system_prompt._build_identity_context` — no second\n  literal), honors the `GEODE_PERSONA` opt-out, and keeps the\n  lightweight-mode constraints AFTER the identity so they override its\n  tool-capability claims (the mode still never pretends to run tools)."
+    "date": "2026-07-07",
+    "body": "### Fixed\n\n- **Fast chat is opt-in again.** The IPC simple-chat path is now disabled\n  unless `GEODE_FAST_CHAT=1` is set, so normal CLI prompts always use the\n  full AgenticLoop identity, plan, tool, and activity event path. The\n  opt-in fast-chat prompt still preserves GEODE identity and avoids generic\n  API-assistant self-introductions.\n- **Append-only CLI activity visibility.** The default thin CLI now renders\n  Activity updates as append-only transcript rows during a turn instead of\n  hiding tool/thought status until the final stop hook. This restores visible\n  run/tool progress without reintroducing cursor-up repainting over the input\n  prompt."
   },
   {
     "version": "0.99.280",
@@ -2128,4 +2148,4 @@ export const CHANGELOG: ChangelogEntry[] = [
   }
 ];
 
-export const CHANGELOG_SYNCED_AT = "2026-07-06";
+export const CHANGELOG_SYNCED_AT = "2026-07-07";

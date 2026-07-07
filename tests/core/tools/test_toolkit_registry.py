@@ -178,14 +178,16 @@ class TestDefaultRegistry:
         assert "general_web_search" in web
         assert "web_fetch" in web
         assert "read_document" in web  # via common_read
-        # data_analysis — read + search + memory, no write.
+        # data_analysis — read + calculation + search + memory, no write.
         analysis = reg.resolve("data_analysis")
+        assert "calculate" in analysis
         assert "general_web_search" in analysis
         assert "memory_search" in analysis
         assert "write_file" not in analysis  # read-only
         # general_purpose — broad-surface orchestrator kit.
         general = reg.resolve("general_purpose")
         assert {
+            "calculate",
             "general_web_search",
             "web_fetch",
             "memory_save",

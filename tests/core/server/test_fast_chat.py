@@ -7,50 +7,53 @@ import pytest
 from core.server.ipc_server.fast_chat import fast_chat_system_prompt, should_use_fast_chat
 
 
-def test_fast_chat_accepts_short_conversational_prompt() -> None:
+def test_fast_chat_disabled_by_default(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.delenv("GEODE_FAST_CHAT", raising=False)
+    assert should_use_fast_chat("자기소개 부탁해") is False
+
+
+def test_fast_chat_accepts_short_conversational_prompt_when_enabled(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("GEODE_FAST_CHAT", "1")
     assert should_use_fast_chat("자기소개 부탁해") is True
     assert should_use_fast_chat("what is GEODE?") is True
 
 
-def test_fast_chat_rejects_agentic_actions() -> None:
+def test_fast_chat_rejects_agentic_actions_when_enabled(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("GEODE_FAST_CHAT", "1")
     assert should_use_fast_chat("파일을 읽고 수정해") is False
     assert should_use_fast_chat("search the web and summarize") is False
     assert should_use_fast_chat("계획 세워서 진행해") is False
 
 
-def test_fast_chat_system_prompt_carries_geode_identity(
+def test_fast_chat_system_prompt_uses_fable_style_geode_metadata(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Operator report 2026-07-06 — fast-chat introduced itself as a generic
-    'AI assistant used via API'. The prompt must carry the same GEODE.md
-    identity block the full loop injects (G1 SoT), followed by the
-    lightweight-mode constraints."""
     monkeypatch.delenv("GEODE_PERSONA", raising=False)
-    prompt = fast_chat_system_prompt()
-    assert "<agent_identity>" in prompt
-    assert "GEODE" in prompt
-    # mode constraints must FOLLOW the identity so they override its
-    # tool-capability claims
-    assert prompt.index("<agent_identity>") < prompt.index("lightweight chat mode")
+    system = fast_chat_system_prompt()
+    assert "Agent: GEODE" in system
+    assert "Runtime:" in system
+    assert "AgenticLoop" in system
+    assert "generic API assistant" in system
+    assert "You are" not in system
+    assert "Act as" not in system
 
 
 def test_fast_chat_system_prompt_keeps_no_tool_claims_rule() -> None:
-    """The original intent of the pre-identity pin — fast-chat must never
-    claim tool execution — survives the identity injection."""
-    prompt = fast_chat_system_prompt()
-    assert "do not claim file inspection" in prompt.lower()
-    assert "full agent path" in prompt.lower()
+    system = fast_chat_system_prompt()
+    assert "Tool loop: inactive" in system
+    assert "full agent path" in system
 
 
 def test_fast_chat_system_prompt_honors_persona_opt_out(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """GEODE_PERSONA=off (thin-wrapper mode) strips the identity block from
-    fast-chat exactly as it does from the full loop."""
     monkeypatch.setenv("GEODE_PERSONA", "off")
-    prompt = fast_chat_system_prompt()
-    assert "<agent_identity>" not in prompt
-    assert "lightweight chat mode" in prompt
+    system = fast_chat_system_prompt()
+    assert "Agent: GEODE" not in system
+    assert "Mode: lightweight chat path" in system
+    assert "Tool loop: inactive" in system
 
 
 def test_ipc_poller_fast_chat_uses_text_completion(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -93,6 +96,52 @@ def test_ipc_poller_fast_chat_uses_text_completion(monkeypatch: pytest.MonkeyPat
     kwargs = cast(dict[str, object], calls["kwargs"])
     assert kwargs["prefer_provider"] == "openai"
     assert kwargs["prefer_source"] == "subscription"
-    # identity ships with the turn; the no-tool-claims rule rides after it
-    assert "GEODE" in str(kwargs["system"])
-    assert "do not claim file inspection" in str(kwargs["system"]).lower()
+    assert "Agent: GEODE" in str(kwargs["system"])
+    assert "Tool loop: inactive" in str(kwargs["system"])
+    assert "You are" not in str(kwargs["system"])
+
+
+def test_ipc_poller_fast_chat_emits_visible_status_event(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from core.llm.adapters.base import TextCompletionResult, UsageSummary
+    from core.server.ipc_server.poller import CLIPoller
+
+    async def fake_complete_text(_prompt: str, **_kwargs: object) -> TextCompletionResult:
+        return TextCompletionResult(
+            text="짧은 답변",
+            usage=UsageSummary(input_tokens=10, output_tokens=3),
+            adapter_name="fake",
+            adapter_provider="openai",
+            adapter_source="subscription",
+        )
+
+    class FakeClient:
+        def __init__(self) -> None:
+            self.events: list[dict[str, object]] = []
+
+        async def send_json_async(self, payload: dict[str, object]) -> None:
+            self.events.append(payload)
+
+        async def drain_pending_sends(self) -> None:
+            return None
+
+    monkeypatch.setattr(
+        "core.llm.adapters.dispatch.complete_text_via_adapters",
+        fake_complete_text,
+    )
+
+    poller = CLIPoller(services=cast(Any, object()))
+    loop = type(
+        "Loop",
+        (),
+        {"model": "gpt-5.5", "_provider": "openai-codex", "_source": "subscription"},
+    )()
+    client = FakeClient()
+
+    result = asyncio.run(poller._run_fast_chat_async("자기소개 부탁해", loop, cast(Any, client)))
+
+    assert result["type"] == "result"
+    assert client.events[0]["type"] == "fast_chat_start"
+    assert client.events[0]["provider"] == "openai"
+    assert client.events[1]["type"] == "tokens"

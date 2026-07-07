@@ -26,6 +26,7 @@ class TestServeToolExecution:
 
         boot = bootstrap_geode(load_env=True)
         assert len(boot.tool_handlers) >= 44
+        assert "calculate" in boot.tool_handlers
         assert "web_fetch" in boot.tool_handlers
         assert "general_web_search" in boot.tool_handlers
         assert "generate_data" in boot.tool_handlers
@@ -93,6 +94,21 @@ class TestServeToolExecution:
         assert "error" not in result
         assert result["result"]["count"] == 2
         assert result["result"]["records"][0]["label"] == "demo-1"
+
+    def test_executor_calculate(self) -> None:
+        from core.agent.tool_executor import ToolExecutor
+        from core.cli.bootstrap import bootstrap_geode
+
+        boot = bootstrap_geode(load_env=True)
+        executor = ToolExecutor(
+            action_handlers=boot.tool_handlers,
+            mcp_manager=boot.mcp_manager,
+            hitl_level=0,
+        )
+        result = _run_executor(executor, "calculate", {"expression": "1/8 + 0.125"})
+        assert "error" not in result
+        assert result["result"]["value"] == "1/4"
+        assert result["result"]["exact"] is True
 
     def test_executor_output_tools(self, tmp_path: Path) -> None:
         """Serve bootstrap must wire output tools exposed to AgenticLoop."""

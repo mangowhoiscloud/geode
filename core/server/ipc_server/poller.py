@@ -989,6 +989,15 @@ class CLIPoller:
         provider_raw = str(getattr(loop, "_provider", "") or "")
         provider = normalize_registry_provider(provider_raw) if provider_raw else None
         source = str(getattr(loop, "_source", "") or "") or None
+        if client is not None:
+            await client.send_json_async(
+                {
+                    "type": "fast_chat_start",
+                    "model": model,
+                    "provider": provider or "",
+                    "source": source or "",
+                }
+            )
         result = await complete_text_via_adapters(
             text,
             system=fast_chat_system_prompt(),
