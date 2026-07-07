@@ -55,7 +55,9 @@ functional change.
   model, instead of defaulting through Anthropic → OpenAI → GLM. `delegate_task`
   now forwards the parent source into spawned sub-agents so child web searches
   and other LLM-backed tools inherit the session route rather than re-resolving
-  to unrelated PAYG credentials.
+  to unrelated PAYG credentials. Live-session model sync also tolerates
+  lightweight loop objects that do not expose a source axis while still keeping
+  full AgenticLoop source propagation intact.
 - **Runtime prompts now follow metadata-style identity clauses.** GEODE-owned
   system prompts, model/platform hints, benchmark prompts, and seed-generation
   agent prompts now use `Agent:`, `Role:`, `Task:`, or `Surface:` clauses
