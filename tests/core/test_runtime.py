@@ -120,17 +120,17 @@ class TestRuntimePolicyChain:
     def test_full_pipeline_blocks_notification(self, tmp_path: Path):
         runtime = GeodeRuntime.create("Project Atlas", log_dir=tmp_path)
         tools = runtime.get_available_tools(mode="full_pipeline")
-        # 17 total registered (PR-Hermes-1d +session_search) − send_notification = 16
-        assert len(tools) == 13  # bespoke ToolSearchTool deleted (PR-TOOL-SEARCH-WIRE)
+        # send_notification is blocked in full_pipeline; read-only calculation stays available.
+        assert len(tools) == 14
         assert "send_notification" not in tools
 
 
 class TestRuntimeToolRegistry:
     def test_registry_has_all_tools(self, tmp_path: Path):
         runtime = GeodeRuntime.create("Project Atlas", log_dir=tmp_path)
-        assert (
-            len(runtime.tool_registry) == 14
-        )  # bespoke ToolSearchTool deleted (PR-TOOL-SEARCH-WIRE)
+        assert len(runtime.tool_registry) == 15
+        # Analysis tools
+        assert "calculate" in runtime.tool_registry
         # Data tools
         assert "generate_data" in runtime.tool_registry
         # Search tools
@@ -167,7 +167,7 @@ class TestDefaultBuilders:
 
     def test_default_registry(self):
         registry = _build_default_registry()
-        assert len(registry) == 14  # bespoke ToolSearchTool deleted (PR-TOOL-SEARCH-WIRE)
+        assert len(registry) == 15
 
     def test_make_run_log_handler(self, tmp_path: Path):
         run_log = RunLog("test_session", log_dir=tmp_path)

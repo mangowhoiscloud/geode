@@ -76,7 +76,7 @@ assertions such as `You are ...`.
 
 ### `core/tools/`
 
-66 tools. Deferred loading lives at the provider adapters (official defer_loading + hosted tool_search), not in the registry.
+67 tools. Deferred loading lives at the provider adapters (official defer_loading + hosted tool_search), not in the registry.
 
 - `base.py:35` — `Tool` Protocol.
 - `core/llm/tool_defer.py` — `TOOL_SEARCH_ALWAYS_LOADED` frozenset (12 tools).
@@ -292,7 +292,7 @@ Add a GAP Audit table when the PR was driven by a plan, audit, or cleanup.
 
 Each subsystem has `tests/test_<name>.py`. Live tests are marked `-m live`.
 
-Total: 9264 standard plus 1 live (see `site/src/data/geode/sot.ts`).
+Total: 9272 standard plus 1 live (see `site/src/data/geode/sot.ts`).
 
 ## Frontier sources
 

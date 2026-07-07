@@ -19,6 +19,7 @@ adds a search round-trip for no context saving."""
 
 TOOL_SEARCH_ALWAYS_LOADED: frozenset[str] = frozenset(
     {
+        "calculate",
         "memory_search",
         "memory_save",
         "note_read",

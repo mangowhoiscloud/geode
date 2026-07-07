@@ -30,6 +30,25 @@ from core.tools.computer_observation import (
 )
 
 # ---------------------------------------------------------------------------
+# math — calculate
+# ---------------------------------------------------------------------------
+
+
+def _build_math_handlers() -> dict[str, Any]:
+    """Build exact-first math tool handlers."""
+    from core.tools.math_tools import CalculateTool
+
+    calculate_tool = CalculateTool()
+
+    async def handle_calculate(**kwargs: Any) -> dict[str, Any]:
+        return await calculate_tool.aexecute(**kwargs)
+
+    return {
+        "calculate": handle_calculate,
+    }
+
+
+# ---------------------------------------------------------------------------
 # data — generate_data
 # ---------------------------------------------------------------------------
 

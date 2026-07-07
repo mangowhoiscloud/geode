@@ -66,6 +66,11 @@ functional change.
 
 ### Added
 
+- **Exact-first `calculate` tool.** GEODE now has a local, read-only
+  calculator for deterministic arithmetic instead of falling back to
+  `run_bash`, ad hoc Python, or an external MCP. It evaluates a bounded AST
+  allowlist, returns exact rational results when possible, and marks
+  approximate decimal results explicitly.
 - **Prompt-writing scaffold skill.** `.claude/skills/prompt-writing/` defines
   GEODE's prompt-writing standard: model-facing prompt text should use
   metadata/behavioral clauses and avoid `You are ...` / `Act as ...` roleplay

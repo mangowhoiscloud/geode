@@ -58,14 +58,15 @@ tools = [
 ]
 
 [toolkits.data_analysis]
-description = "Read-only analysis kit with web + memory context."
+description = "Read-only analysis kit with calculation, web, and memory context."
 includes = ["common_read"]
-tools = ["general_web_search", "memory_search"]
+tools = ["calculate", "general_web_search", "memory_search"]
 
 [toolkits.general_purpose]
 description = "Broad-surface kit for orchestrator-style agents — read/write + web + notes. Distinct from ``_default`` (which is the *fallback* minimal safety net for undeclared agents); ``general_purpose`` is a *declared* full-research surface."
 includes = ["common_read", "common_write"]
 tools = [
+    "calculate",
     "general_web_search",
     "web_fetch",
     "llms_txt_index",
