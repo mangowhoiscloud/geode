@@ -45,6 +45,16 @@ functional change.
 
 ---
 
+## [Unreleased]
+
+### Fixed
+
+- **Computer-use incident hardening.** Native computer-use screenshots are no
+  longer persisted in session checkpoints, SQLite message mirrors, or tool logs;
+  durable state keeps compact digests/refs instead. Successful desktop actions
+  now explicitly report dispatch status separately from postcondition
+  verification, so click/type/key success cannot be mistaken for proven UI state.
+
 ## [0.99.281] - 2026-07-06
 
 ### Fixed
