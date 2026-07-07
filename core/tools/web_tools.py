@@ -217,11 +217,9 @@ class GeneralWebSearchTool:
     bypassed the adapter registry and PR-SOURCE-ROUTING's
     :func:`infer_source` flow. The tool now delegates to
     :func:`core.llm.adapters.dispatch.web_search_via_adapters`, which
-    enumerates registered adapters with ``supports_web_search=True`` and
-    orders them by (provider preference) × (operator's source preference
-    via :func:`infer_source`) — so the same ``/login`` choice that switches
-    the agent loop's main LLM dispatch now also switches the web_search
-    tool. Billing-fatal failures surface as :class:`BillingError` with the
+    requires the loop's resolved provider/source route or derives a single
+    route from the active model. It never scans a provider fallback order.
+    Billing-fatal failures surface as :class:`BillingError` with the
     actionable hint instead of six silent retries.
     """
 

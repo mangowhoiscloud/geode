@@ -49,6 +49,20 @@ functional change.
 
 ### Fixed
 
+- **LLM-backed tools no longer scan a cross-provider fallback order.**
+  Capability dispatch for web search and text completion now requires the
+  active `(provider, source)` route, or derives one route from the active
+  model, instead of defaulting through Anthropic → OpenAI → GLM. `delegate_task`
+  now forwards the parent source into spawned sub-agents so child web searches
+  and other LLM-backed tools inherit the session route rather than re-resolving
+  to unrelated PAYG credentials. Live-session model sync also tolerates
+  lightweight loop objects that do not expose a source axis while still keeping
+  full AgenticLoop source propagation intact.
+- **Runtime prompts now follow metadata-style identity clauses.** GEODE-owned
+  system prompts, model/platform hints, benchmark prompts, and seed-generation
+  agent prompts now use `Agent:`, `Role:`, `Task:`, or `Surface:` clauses
+  instead of direct `You are ...` role assertions, with an integration guard on
+  the assembled runtime prompt.
 - **First-run credential paths now use the global secret store.** Setup, key,
   and login API-key writers now default to `~/.geode/.env` instead of the
   current working directory, while stale dotenv cleanup scrubs both global and

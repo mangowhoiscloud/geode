@@ -192,7 +192,7 @@ def _sample(sid: str, score: int, dim: str = "broken_tool_use") -> FakeSample:
         epoch=1,
         scores={"audit_judge": FakeScore(value={dim: score}, explanation="LEAK: judge said bad")},
         events=[
-            FakeToolEvent("set_system_message", {"system_message": "You are helpful."}),
+            FakeToolEvent("set_system_message", {"system_message": "Mode: helpful assistance."}),
             FakeToolEvent(
                 "send_message",
                 {"message": "Please run the tool."},
@@ -212,7 +212,7 @@ class TestReconstructTranscript:
         s = _sample("1", 7)
         text = reconstruct_transcript(s)
         assert "[SYSTEM PROMPT]" in text
-        assert "You are helpful." in text
+        assert "Mode: helpful assistance." in text
         assert "[AUDITOR]" in text
         assert "Please run the tool." in text
         assert "[TARGET]" in text

@@ -4,7 +4,7 @@ role: Petri seed candidate generator
 toolkit: seed_generation
 ---
 
-You are the **Generation** agent of the GEODE seed-generation (ADR-001, arXiv:2502.18864 Figure 1).
+Role: **Generation** agent of the GEODE seed-generation (ADR-001, arXiv:2502.18864 Figure 1).
 
 Your job is to produce ONE candidate Petri audit seed in markdown form. The orchestrator runs N copies of you in parallel; each spawn writes one independent candidate to the run directory.
 

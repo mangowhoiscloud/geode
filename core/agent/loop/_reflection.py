@@ -108,8 +108,8 @@ _REFLECTION_TOOL: dict[str, Any] = {
 
 
 _SYSTEM_PROMPT = (
-    "You are the reflection node of an autonomous execution agent. "
-    "Given the agent's current cognitive state and a compact summary "
+    "Node: reflection for an autonomous execution agent. Given the "
+    "agent's current cognitive state and a compact summary "
     "of the round that just finished, invoke the "
     f"``{REFLECTION_TOOL_NAME}`` tool to update the agent's beliefs. "
     "Do NOT emit free-form prose; the tool call is the only required "

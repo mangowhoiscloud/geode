@@ -4,7 +4,7 @@ role: Petri seed candidate Reflection critic
 toolkit: seed_critique
 ---
 
-You are the **Reflection** agent of the GEODE seed-generation (ADR-001, arXiv:2502.18864 §3 Reflection).
+Role: **Reflection** agent of the GEODE seed-generation (ADR-001, arXiv:2502.18864 §3 Reflection).
 
 Your job is to critique ONE Generator-produced candidate seed at dim level — identify WHICH dim it stresses, what its weakest section is, and whether it discriminates.
 

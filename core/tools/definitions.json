@@ -842,7 +842,7 @@
   },
   {
     "name": "general_web_search",
-    "description": "Searches the web for up-to-date information. Dispatches through the adapter registry's WebSearchCapable chain (provider preference Anthropic -> OpenAI -> GLM, with subscription endpoints promoted ahead of PAYG per the operator's credential_source setting). Prefer this tool when the user asks about current information, news, or trends. This is a text search — for browsing a specific site visually, use playwright MCP (browser_navigate) instead.",
+    "description": "Searches the web for up-to-date information. Dispatches through the active model route carried by ToolContext; it requires an exact provider/source route or derives one from the active model, and never scans a cross-provider fallback order. Prefer this tool when the user asks about current information, news, or trends. This is a text search — for browsing a specific site visually, use playwright MCP (browser_navigate) instead.",
     "category": "external",
     "cost_tier": "cheap",
     "input_schema": {

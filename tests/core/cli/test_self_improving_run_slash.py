@@ -34,7 +34,7 @@ def _build_test_runner(
     tmp_path: Path,
     *,
     target_section: str = "role.intro",
-    new_value: str = "You are improved.",
+    new_value: str = "Mode: improved.",
     target_kind: str = "prompt",
 ) -> Any:
     """Construct a SelfImprovingLoopRunner with a canned LLM response
@@ -57,7 +57,7 @@ def _build_test_runner(
     def _fake_context() -> Any:
         from core.self_improving.loop.mutate.runner import RunnerContext
 
-        return RunnerContext(current_sections={"role.intro": "You are baseline."})
+        return RunnerContext(current_sections={"role.intro": "Mode: baseline."})
 
     monkeypatch.setattr(runner_mod, "build_runner_context", _fake_context)
 
@@ -87,9 +87,9 @@ def test_propose_returns_proposal_with_unmutated_target_sections(
     runner = _build_test_runner(monkeypatch, tmp_path)
     proposal = runner.propose()
     assert proposal.mutation.target_section == "role.intro"
-    assert proposal.mutation.new_value == "You are improved."
+    assert proposal.mutation.new_value == "Mode: improved."
     # original_sections is the pre-write snapshot
-    assert proposal.original_sections == {"role.intro": "You are baseline."}
+    assert proposal.original_sections == {"role.intro": "Mode: baseline."}
     # target_sections starts equal to original
     assert proposal.target_sections == proposal.original_sections
     # IDs must differ — apply_mutation mutates target_sections in place

@@ -36,7 +36,7 @@ class TestAgentDefinition:
     def test_to_system_message(self):
         agent = AgentDefinition(name="a", role="Analyst", system_prompt="Analyze things.")
         msg = agent.to_system_message()
-        assert "You are a Analyst" in msg
+        assert "Role: Analyst" in msg
         assert "Analyze things." in msg
 
 
@@ -126,7 +126,7 @@ class TestSubagentLoader:
     def test_load_file(self, tmp_path: Path):
         md = (
             "---\nname: loader_test\nrole: Test Role\n"
-            "tools: [search]\nmodel: gpt-4\n---\nYou are a test agent."
+            "tools: [search]\nmodel: gpt-4\n---\nRole: test agent."
         )
         path = tmp_path / "test_agent.md"
         path.write_text(md)

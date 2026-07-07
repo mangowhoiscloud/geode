@@ -12,7 +12,7 @@ Static + behavioural pins:
 1. ``ToolContext`` carries the four LLM-identity fields with empty-string
    defaults (so callers outside an AgenticLoop are not forced to fill them).
 2. The dispatch helpers accept ``prefer_provider`` / ``prefer_source``
-   keyword params and stable-reorder candidates accordingly.
+   keyword params and require exact-route matching.
 3. ``GeneralWebSearchTool.aexecute`` + ``WebSearchTool.aexecute`` read
    ``_tool_context`` from kwargs and forward the preference (source-level
    pin so future refactors that silently drop the wiring fail visibly).
@@ -109,7 +109,6 @@ def test_select_adapter_exact_match_required_with_prefer(
         "supports_web_search",
         prefer_provider="anthropic",
         prefer_source="subscription",
-        provider_order=("anthropic", "openai", "glm"),
     )
     assert picked is not None and picked.name == "anthropic-oauth"
 
@@ -119,16 +118,15 @@ def test_select_adapter_exact_match_required_with_prefer(
         "supports_web_search",
         prefer_provider="openai",
         prefer_source="subscription",
-        provider_order=("anthropic", "openai", "glm"),
     )
     assert picked is None
 
 
-def test_select_adapter_default_resolved_uses_infer_source(
+def test_select_adapter_without_route_returns_none(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Without preference, ``_select_adapter`` picks the first provider in
-    order with an adapter whose source equals ``infer_source(provider)``."""
+    """Without route or model, ``_select_adapter`` refuses to scan provider
+    order and returns ``None``."""
     from core.llm.adapters.dispatch import _select_adapter
 
     cands = [
@@ -137,18 +135,39 @@ def test_select_adapter_default_resolved_uses_infer_source(
         _fake_adapter("openai-payg", "openai", "payg"),
     ]
     monkeypatch.setattr("core.llm.adapters.dispatch.list_adapters", lambda: cands)
+
+    picked = _select_adapter(
+        "supports_web_search",
+        prefer_provider=None,
+        prefer_source=None,
+    )
+    assert picked is None
+
+
+def test_select_adapter_model_derives_provider_source(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A model hint can derive one route; it must not scan unrelated
+    providers."""
+    from core.llm.adapters.dispatch import _select_adapter
+
+    cands = [
+        _fake_adapter("anthropic-payg", "anthropic", "payg"),
+        _fake_adapter("codex-oauth", "openai", "subscription"),
+    ]
+    monkeypatch.setattr("core.llm.adapters.dispatch.list_adapters", lambda: cands)
     monkeypatch.setattr(
         "core.llm.adapters._source_inference.infer_source",
-        lambda provider: "subscription" if provider == "anthropic" else "payg",
+        lambda provider: "subscription" if provider == "openai" else "payg",
     )
 
     picked = _select_adapter(
         "supports_web_search",
         prefer_provider=None,
         prefer_source=None,
-        provider_order=("anthropic", "openai", "glm"),
+        model="gpt-5.5",
     )
-    assert picked is not None and picked.name == "anthropic-oauth"
+    assert picked is not None and picked.name == "codex-oauth"
 
 
 def test_select_adapter_returns_none_when_no_capable_registered(
@@ -161,7 +180,6 @@ def test_select_adapter_returns_none_when_no_capable_registered(
         "supports_web_search",
         prefer_provider=None,
         prefer_source=None,
-        provider_order=("anthropic", "openai", "glm"),
     )
     assert picked is None
 
@@ -385,7 +403,7 @@ def test_web_search_via_adapters_no_fallback_on_billing(
     monkeypatch.setattr("core.llm.adapters._source_inference.infer_source", lambda provider: "payg")
 
     with pytest.raises(BillingError, match=r"anthropic-payg .* credit exhausted"):
-        asyncio.run(web_search_via_adapters("q"))
+        asyncio.run(web_search_via_adapters("q", prefer_provider="anthropic", prefer_source="payg"))
 
     selected.aweb_search.assert_called_once()
     fallback.aweb_search.assert_not_called()
@@ -410,6 +428,5 @@ def test_select_adapter_normalizes_prefer_provider_variant_id(
         "supports_web_search",
         prefer_provider="openai-codex",
         prefer_source="subscription",
-        provider_order=("openai",),
     )
     assert picked is not None and picked.name == "codex-oauth"

@@ -188,7 +188,9 @@ def test_connection_transient_retries_same_adapter_and_succeeds(
     sibling = _HealthySiblingAdapter()
     _install_stubs(monkeypatch, [flaky, sibling])
 
-    result = asyncio.run(web_search_via_adapters("test query"))
+    result = asyncio.run(
+        web_search_via_adapters("test query", prefer_provider="anthropic", prefer_source="payg")
+    )
 
     assert result.adapter_name == "anthropic-payg"
     assert flaky.calls == 2, "exactly one retry on the SAME adapter"
@@ -205,7 +207,9 @@ def test_connection_transient_retry_is_bounded(monkeypatch: pytest.MonkeyPatch) 
     _install_stubs(monkeypatch, [flaky, sibling])
 
     with pytest.raises(AdapterDispatchError, match=r"anthropic-payg .*failed"):
-        asyncio.run(web_search_via_adapters("test query"))
+        asyncio.run(
+            web_search_via_adapters("test query", prefer_provider="anthropic", prefer_source="payg")
+        )
 
     assert flaky.calls == _CONNECTION_TRANSIENT_RETRIES + 1
     assert sibling.calls == 0
@@ -224,7 +228,9 @@ def test_retry_fires_transient_attempt_then_success(monkeypatch: pytest.MonkeyPa
     )
     _install_stubs(monkeypatch, [_FlakyWebSearchAdapter(fail_first_n=1)])
 
-    asyncio.run(web_search_via_adapters("test query"))
+    asyncio.run(
+        web_search_via_adapters("test query", prefer_provider="anthropic", prefer_source="payg")
+    )
 
     assert outcomes == ["transient", "success"]
 
@@ -246,7 +252,9 @@ def test_persistent_failure_fires_exactly_two_transient_attempts(
     _install_stubs(monkeypatch, [_FlakyWebSearchAdapter(fail_first_n=99)])
 
     with pytest.raises(AdapterDispatchError):
-        asyncio.run(web_search_via_adapters("test query"))
+        asyncio.run(
+            web_search_via_adapters("test query", prefer_provider="anthropic", prefer_source="payg")
+        )
 
     assert outcomes == ["transient", "transient"]
 
@@ -262,7 +270,9 @@ def test_billing_error_is_never_retried(monkeypatch: pytest.MonkeyPatch) -> None
     _install_stubs(monkeypatch, [billing])
 
     with pytest.raises(BillingError):
-        asyncio.run(web_search_via_adapters("test query"))
+        asyncio.run(
+            web_search_via_adapters("test query", prefer_provider="anthropic", prefer_source="payg")
+        )
 
     assert billing.calls == 1, "billing-fatal must surface immediately — never retried"
 
@@ -277,7 +287,9 @@ def test_billing_fatal_wins_over_connection_error_name(monkeypatch: pytest.Monke
     _install_stubs(monkeypatch, [flaky])
 
     with pytest.raises(BillingError):
-        asyncio.run(web_search_via_adapters("test query"))
+        asyncio.run(
+            web_search_via_adapters("test query", prefer_provider="anthropic", prefer_source="payg")
+        )
 
     assert flaky.calls == 1
 
@@ -292,7 +304,9 @@ def test_non_connection_transient_is_never_retried(monkeypatch: pytest.MonkeyPat
     _install_stubs(monkeypatch, [flaky])
 
     with pytest.raises(AdapterDispatchError):
-        asyncio.run(web_search_via_adapters("test query"))
+        asyncio.run(
+            web_search_via_adapters("test query", prefer_provider="anthropic", prefer_source="payg")
+        )
 
     assert flaky.calls == 1
 
@@ -316,7 +330,14 @@ def test_parallel_batch_recovers_from_one_poisoned_connection(
 
     async def _batch() -> list[WebSearchResult]:
         return list(
-            await asyncio.gather(*(web_search_via_adapters(f"query {i}") for i in range(4)))
+            await asyncio.gather(
+                *(
+                    web_search_via_adapters(
+                        f"query {i}", prefer_provider="anthropic", prefer_source="payg"
+                    )
+                    for i in range(4)
+                )
+            )
         )
 
     results = asyncio.run(_batch())
@@ -393,7 +414,9 @@ def test_dispatch_error_message_carries_transport_cause(
     _install_stubs(monkeypatch, [_FlakyWebSearchAdapter(fail_first_n=99)])
 
     with pytest.raises(AdapterDispatchError) as excinfo:
-        asyncio.run(web_search_via_adapters("test query"))
+        asyncio.run(
+            web_search_via_adapters("test query", prefer_provider="anthropic", prefer_source="payg")
+        )
 
     message = str(excinfo.value)
     assert "APIConnectionError" in message
@@ -419,7 +442,9 @@ def test_complete_text_retries_connection_transient_once(
     flaky = _FlakyTextCompletionAdapter(fail_first_n=1)
     _install_stubs(monkeypatch, [flaky])
 
-    result = asyncio.run(complete_text_via_adapters("prompt"))
+    result = asyncio.run(
+        complete_text_via_adapters("prompt", prefer_provider="anthropic", prefer_source="payg")
+    )
 
     assert result.text == "completed by anthropic-payg"
     assert flaky.calls == 2

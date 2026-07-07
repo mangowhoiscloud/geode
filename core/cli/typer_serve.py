@@ -79,7 +79,7 @@ def serve(
 
     _GATEWAY_SUFFIX = (
         "## Gateway mode\n"
-        "You are responding via an external messaging channel (Slack/Discord/Telegram).\n"
+        "Surface: external messaging channel (Slack/Discord/Telegram).\n"
         "- Do NOT echo or quote the user's message. Respond directly.\n"
         "- Use tools aggressively to answer thoroughly. Do not give up early.\n"
         "- For complex questions, break them down and use multiple tool calls.\n"

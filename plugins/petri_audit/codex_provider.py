@@ -352,7 +352,7 @@ def register() -> None:
             # When no system message was present in the input (e.g. petri's
             # judge call uses tool_choice instead of a system prompt), fall
             # back to a minimal placeholder so the field is non-empty.
-            request["instructions"] = instructions or "You are a helpful assistant."
+            request["instructions"] = instructions or "Mode: general assistance."
             if len(tools) > 0 and "parallel_tool_calls" not in request:
                 request["parallel_tool_calls"] = (
                     True if config.parallel_tool_calls is None else config.parallel_tool_calls

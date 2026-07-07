@@ -149,18 +149,26 @@ def _apply_model_update(
             from core.llm.adapters._source_inference import infer_source
 
             new_source = infer_source(new_provider)
-            if new_source != loop._source:
+            old_source = getattr(loop, "_source", "")
+            if new_source != old_source:
                 log.info(
                     "AgenticLoop source re-inferred on provider switch: %s (%s) -> %s (%s)",
-                    loop._source,
+                    old_source,
                     old_model,
                     new_source,
                     model,
                 )
                 loop._source = new_source
-        loop._new_adapter = _resolve_path_b_adapter(new_provider, loop._source)
+        loop._new_adapter = _resolve_path_b_adapter(new_provider, getattr(loop, "_source", ""))
     loop.model = model
     loop._tool_processor._model = model
+    loop._tool_processor._provider = getattr(
+        loop._new_adapter, "provider", getattr(loop, "_provider", "")
+    )
+    loop._tool_processor._source = getattr(
+        loop._new_adapter, "source", getattr(loop, "_source", "")
+    )
+    loop._tool_processor._adapter_name = getattr(loop._new_adapter, "name", "")
     if old_model != model:
         loop._prompt_dirty = True
         refresh_tools = getattr(loop, "refresh_tools", None)
@@ -192,10 +200,10 @@ def _inject_model_switch_breadcrumb(loop: AgenticLoop, old_model: str, model: st
     purged = loop._purge_stale_model_switch_acks()
     loop.context.add_user_message(
         f"[system] Model switched: {old_model} -> {model}. "
-        "You are now the new model. Do not reference the previous "
-        "model's responses as current state."
+        "Current model identity has changed. Do not reference the "
+        "previous model's responses as current state."
     )
-    loop.context.add_assistant_message(f"Understood. I am now {model}.")
+    loop.context.add_assistant_message(f"Understood. Current model: {model}.")
     return purged
 
 

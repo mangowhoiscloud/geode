@@ -60,7 +60,7 @@ def _voter_req(*, schema: dict[str, Any] | None = None) -> AdapterCallRequest:
     return AdapterCallRequest(
         model="gpt-5.5",
         messages=[Message(role="user", content="Judge match A vs B")],
-        system_prompt="You are a ranker voter.",
+        system_prompt="Role: ranker voter.",
         max_tokens=1024,
         response_schema=schema,
     )
@@ -309,7 +309,7 @@ def test_acomplete_with_schema_preserves_codex_backend_invariants() -> None:
     )
     # Pre-PR invariants (must coexist with the new text block).
     assert kwargs["store"] is False
-    assert kwargs["instructions"] == "You are a ranker voter."
+    assert kwargs["instructions"] == "Role: ranker voter."
     assert "max_output_tokens" not in kwargs
     assert "max_tokens" not in kwargs
     assert "temperature" not in kwargs  # gpt-5.5 reasoning model

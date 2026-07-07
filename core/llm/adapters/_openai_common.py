@@ -1423,7 +1423,7 @@ def build_responses_kwargs(
     resp_input = build_codex_input(req)
     kwargs: dict[str, Any] = {
         "model": req.model,
-        "instructions": req.system_prompt or "You are a helpful assistant.",
+        "instructions": req.system_prompt or "Mode: general assistance.",
         "input": resp_input or [{"role": "user", "content": "hello"}],
         "store": False,
     }

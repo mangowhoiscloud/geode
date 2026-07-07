@@ -23,7 +23,7 @@ def test_prompt_assembler_class_removed_but_math_helper_remains() -> None:
 
 
 def test_with_math_output_formatting_appends_instruction() -> None:
-    system = "You are a test analyst."
+    system = "Role: test analyst."
 
     result = with_math_output_formatting(system)
 
@@ -35,6 +35,6 @@ def test_with_math_output_formatting_appends_instruction() -> None:
 
 
 def test_with_math_output_formatting_is_idempotent() -> None:
-    system = "You are a test analyst.\n\n" + MATH_OUTPUT_FORMATTING_INSTRUCTION
+    system = "Role: test analyst.\n\n" + MATH_OUTPUT_FORMATTING_INSTRUCTION
 
     assert with_math_output_formatting(system) == system

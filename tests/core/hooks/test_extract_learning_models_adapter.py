@@ -14,7 +14,7 @@ finally migrated to the adapter registry's
    into the user's language. Previously ``anthropic.Anthropic`` only —
    silently returned the English ``_EXHAUSTED_FALLBACK`` for any
    operator without an Anthropic key (the entire localisation point
-   defeated). Now async + 3-provider dispatch.
+   defeated). Now async + model-routed dispatch.
 
 Both sites become async; their call paths (``agent_loop.py:1562 / 1627
 / 1682`` for the context-exhausted message, ``HookSystem.trigger_async``
@@ -71,18 +71,16 @@ def test_extract_helpers_no_longer_import_provider_sdks_directly() -> None:
     assert "complete_text_via_adapters" in src
 
 
-def test_extract_dispatch_uses_glm_first_provider_order() -> None:
-    """Preserve the historic preference: GLM-flash (free tier) first,
-    Haiku second, OpenAI third (newly accessible to Codex-subscription-
-    only operators)."""
+def test_extract_dispatch_uses_learning_extract_model_route() -> None:
+    """Extraction must route through ``settings.learning_extract_model``
+    rather than scanning a cross-provider order."""
     src = (
         Path(__file__).resolve().parents[3] / "core" / "hooks" / "llm_extract_learning.py"
     ).read_text(encoding="utf-8")
-    assert '("glm", "anthropic", "openai")' in src, (
-        "Provider order in _call_budget_llm changed; preserve "
-        '("glm", "anthropic", "openai") so the free-tier-first '
-        "extraction policy stays intact."
-    )
+    assert "_resolve_provider(settings.learning_extract_model)" in src
+    assert "prefer_provider=provider" in src
+    assert "prefer_source=source" in src
+    assert "provider_order" not in src
 
 
 # ---------------------------------------------------------------------------
@@ -132,11 +130,13 @@ def test_context_exhausted_call_sites_are_awaited() -> None:
     )
 
 
-def test_context_exhausted_dispatch_uses_anthropic_first_provider_order() -> None:
-    """Preserve the historic Haiku-first preference for the language-
-    matched notice; add OpenAI + GLM as fallbacks so Codex-subscription-
-    only operators get a localised notice for the first time."""
+def test_context_exhausted_dispatch_uses_settings_model_route() -> None:
+    """Context-exhausted localisation must follow the configured model
+    route instead of trying an Anthropic-first fallback order."""
     src = (Path(__file__).resolve().parents[3] / "core" / "agent" / "loop" / "models.py").read_text(
         encoding="utf-8"
     )
-    assert '("anthropic", "openai", "glm")' in src
+    assert "_resolve_provider(model)" in src
+    assert "prefer_provider=provider" in src
+    assert "prefer_source=source" in src
+    assert "provider_order" not in src
