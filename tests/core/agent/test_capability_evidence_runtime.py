@@ -45,6 +45,8 @@ def test_task_preflight_routes_pdf_gui_research_code() -> None:
         source="subscription",
         visible_tool_names={
             "computer_use",
+            "ui_probe",
+            "browser_snapshot",
             "ingest_pdf",
             "general_web_search",
             "web_fetch",
@@ -62,9 +64,30 @@ def test_task_preflight_routes_pdf_gui_research_code() -> None:
     assert preflight["task_kinds"] == ["pdf", "gui", "research", "code"]
     assert "ingest_pdf" in preflight["recommended_tools"]
     assert "computer_use" in preflight["recommended_tools"]
+    assert "ui_probe" in preflight["recommended_tools"]
+    assert "browser_snapshot" in preflight["recommended_tools"]
     assert "source_url" in preflight["required_evidence"]
     assert "gui_trajectory" in preflight["required_evidence"]
-    assert "computer_use" in render_preflight_hint(preflight)
+    rendered = render_preflight_hint(preflight)
+    assert "computer_use" in rendered
+    assert "visual locate is not source-safe" in rendered
+    assert "ui_probe" in rendered
+
+
+def test_task_preflight_keeps_locate_only_when_visual_grounding_supported() -> None:
+    graph = build_capability_graph(
+        model="glm-5",
+        provider="glm",
+        source="payg",
+        visible_tool_names={"computer_use", "ui_probe"},
+        computer_use_enabled=True,
+    )
+
+    preflight = plan_task_preflight("화면에서 Submit 버튼 클릭해줘", graph)
+
+    assert "computer_use" in preflight["recommended_tools"]
+    assert "ui_probe" in preflight["recommended_tools"]
+    assert any("capture -> locate -> action -> verify" in n for n in preflight["route_notes"])
 
 
 def test_evidence_ledger_redacts_and_hashes_payload(tmp_path) -> None:

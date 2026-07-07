@@ -47,6 +47,34 @@ def classify_task(user_input: str) -> list[TaskKind]:
     return kinds or ["general"]
 
 
+def _gui_fallback_tools(visible: set[str]) -> list[str]:
+    """Return source-safe GUI helper tools visible in this loop."""
+    fallbacks: list[str] = []
+    if "ui_probe" in visible:
+        fallbacks.append("ui_probe")
+
+    # Playwright MCP and the bundled browser helpers expose DOM/snapshot
+    # structure. Prefer exact names when present, then fall back to a compact
+    # browser_* bucket so the hint still points at the available surface.
+    for name in (
+        "browser_snapshot",
+        "browser_scan",
+        "browser_execute_js",
+        "browser_evaluate",
+        "browser_click",
+    ):
+        if name in visible and name not in fallbacks:
+            fallbacks.append(name)
+    if not any(name.startswith("browser_") for name in fallbacks) and any(
+        name.startswith("browser_") or name.startswith("playwright__browser_") for name in visible
+    ):
+        fallbacks.append("browser_dom_tools")
+
+    if any(name == "playwriter" or name.startswith("playwriter") for name in visible):
+        fallbacks.append("playwriter")
+    return fallbacks
+
+
 def plan_task_preflight(user_input: str, graph: CapabilityGraph) -> TaskPreflight:
     """Return a provider-aware execution preflight for a user request."""
     kinds = classify_task(user_input)
@@ -74,7 +102,17 @@ def plan_task_preflight(user_input: str, graph: CapabilityGraph) -> TaskPrefligh
             notes.append("Prefer provider-native computer-use when the hosted tool is visible.")
         elif features["emulated_computer_use"]["supported"]:
             recommended.append("computer_use")
-            notes.append("Use capture -> locate -> action -> verify for emulated computer-use.")
+            fallback_tools = _gui_fallback_tools(visible)
+            recommended.extend(fallback_tools)
+            if features["visual_grounding"]["supported"]:
+                notes.append("Use capture -> locate -> action -> verify for emulated computer-use.")
+            else:
+                notes.append(
+                    "Emulated computer_use can capture and act, but visual locate is not "
+                    "source-safe on this provider/source. Prefer ui_probe, browser DOM tools, "
+                    "playwriter for login-required browser sessions, or keyboard navigation; "
+                    "route through GLM explicitly when visual locate is required."
+                )
         else:
             warnings.append("GUI task requested but no computer-use route is visible.")
 

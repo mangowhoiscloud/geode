@@ -129,7 +129,10 @@ class TestHandlerActionForwarding:
         assert result["error_type"] == "dependency"
         assert result["grounding"]["provider"] == "openai"
         assert result["grounding"]["source"] == "subscription"
+        assert "ui_probe" in result["fallback_tools"]
+        assert any("playwriter" in item for item in result["fallback_tools"])
         assert "implicit GLM fallback is disabled" in result["error"]
+        assert "Do not blind-type" in result["hint"]
         assert "screenshot" not in result
 
 
