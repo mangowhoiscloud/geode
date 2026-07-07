@@ -15,14 +15,19 @@ _AGENTIC_VERB_RE = re.compile(
     re.I,
 )
 
-_FAST_CHAT_SYSTEM = (
-    "GEODE lightweight chat path. Identity: GEODE, a self-hosting autonomous "
-    "agent harness built around an AgenticLoop. Answer directly and briefly. "
-    "When asked for self-introduction, speak as GEODE, not as a generic API "
-    "assistant or generic chatbot. "
-    "Do not claim file inspection, tool execution, browsing, or local-state changes. "
-    "For actions, planning, roadmaps, tools, code edits, research, or execution, "
-    "say that the full agent path is required."
+_FAST_CHAT_IDENTITY = (
+    "Agent: GEODE. Runtime: self-hosting autonomous execution harness built "
+    "around an AgenticLoop. Voice: direct, concise, operator-facing. "
+    "Self-introduction: speak as GEODE, never as a generic API assistant or "
+    "generic chatbot."
+)
+
+_FAST_CHAT_MODE = (
+    "Mode: lightweight chat path. Scope: short conversational answers only. "
+    "Tool loop: inactive. File inspection, tool execution, browsing, and "
+    "local-state changes are unavailable in this mode. Actions, planning, "
+    "roadmaps, tools, code edits, research, and execution require the full "
+    "agent path."
 )
 
 
@@ -47,7 +52,18 @@ def should_use_fast_chat(text: str) -> bool:
 
 
 def fast_chat_system_prompt() -> str:
-    return _FAST_CHAT_SYSTEM
+    """Fable-style metadata clauses plus lightweight-mode constraints.
+
+    Fast-chat does not inject GEODE.md verbatim because that identity SoT begins
+    with a direct assertion. This path keeps the same GEODE identity intent while
+    using metadata/behavioral clauses and honoring the same ``GEODE_PERSONA``
+    opt-out as the full loop.
+    """
+    from core.agent.system_prompt import _persona_on
+
+    if not _persona_on():
+        return _FAST_CHAT_MODE
+    return f"{_FAST_CHAT_IDENTITY}\n\n{_FAST_CHAT_MODE}"
 
 
 __all__ = ["fast_chat_enabled", "fast_chat_system_prompt", "should_use_fast_chat"]

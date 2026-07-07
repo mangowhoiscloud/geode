@@ -2,7 +2,7 @@
  * GEODE CHANGELOG, auto-synced from the GEODE repo via `npm run sync-stats`.
  * Do not edit manually. Edit CHANGELOG.md in the GEODE repo and re-run sync.
  *
- * Last sync: 2026-07-06
+ * Last sync: 2026-07-07
  *
  * Each entry's `body` is the raw markdown between two version headings.
  * The Changelog page renders the body with a minimal markdown renderer
@@ -16,6 +16,11 @@ export type ChangelogEntry = {
 };
 
 export const CHANGELOG: ChangelogEntry[] = [
+  {
+    "version": "0.99.285",
+    "date": "2026-07-07",
+    "body": "### Fixed\n\n- **Adapter lookups normalize provider vocabulary at the boundary.**\n  `resolve_for` and `_select_adapter` now accept both registry family names\n  (`openai` / `glm`) and routing variant ids (`openai-codex` / `glm-coding` /\n  `zhipuai`), preventing codex-subscription fast-chat paths from failing with\n  `AdapterUnavailableError` when the loop forwards `openai-codex`.\n- **Computer-use incident hardening.** Native computer-use screenshots are no\n  longer persisted in session checkpoints, SQLite message mirrors, or tool logs;\n  durable state keeps compact digests/refs instead. Successful desktop actions\n  now explicitly report dispatch status separately from postcondition\n  verification, so click/type/key success cannot be mistaken for proven UI state.\n- **Fast-chat GEODE identity without roleplay framing.** The lightweight chat\n  prompt now speaks as GEODE through Fable-style metadata/behavior clauses\n  (`Agent:`, `Runtime:`, `Mode:`, `Scope:`) instead of `You are ...` identity\n  assertions, keeps fast-chat opt-in, and still honors `GEODE_PERSONA=off`.\n\n### Added\n\n- **Exact-first `calculate` tool.** GEODE now has a local, read-only\n  calculator for deterministic arithmetic instead of falling back to\n  `run_bash`, ad hoc Python, or an external MCP. It evaluates a bounded AST\n  allowlist, returns exact rational results when possible, and marks\n  approximate decimal results explicitly.\n- **Prompt-writing scaffold skill.** `.claude/skills/prompt-writing/` defines\n  GEODE's prompt-writing standard: model-facing prompt text should use\n  metadata/behavioral clauses and avoid `You are ...` / `Act as ...` roleplay\n  framing. `CLAUDE.md` and `AGENTS.md` now point prompt edits to that skill."
+  },
   {
     "version": "0.99.284",
     "date": "2026-07-07",
@@ -2143,4 +2148,4 @@ export const CHANGELOG: ChangelogEntry[] = [
   }
 ];
 
-export const CHANGELOG_SYNCED_AT = "2026-07-06";
+export const CHANGELOG_SYNCED_AT = "2026-07-07";

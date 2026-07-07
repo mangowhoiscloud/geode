@@ -13,6 +13,8 @@ from core.wiring.container import (
 )
 
 ALL_TOOL_NAMES = {
+    # Analysis (1)
+    "calculate",
     # Data (1) — Cortex stubs deleted (PR-V1-PRE-CLEANUP 2026-06-13)
     "generate_data",
     # Search (2)
@@ -66,7 +68,7 @@ class TestPolicyChainDryRun:
 
     def test_dry_run_allows_data_tools(self) -> None:
         chain = _build_default_policies()
-        for tool in ("generate_data",):
+        for tool in ("calculate", "generate_data"):
             assert chain.is_allowed(tool, mode="dry_run") is True
 
     def test_dry_run_allows_memory_tools(self) -> None:
@@ -108,6 +110,7 @@ class TestPolicyFilterIntegration:
         dry_tools = runtime.get_available_tools(mode="dry_run")
         assert "send_notification" not in dry_tools
         assert "memory_search" in dry_tools
+        assert "calculate" in dry_tools
         assert "generate_data" in dry_tools
 
     def test_runtime_full_pipeline_filtering(self, tmp_path: Path) -> None:

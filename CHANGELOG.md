@@ -45,6 +45,37 @@ functional change.
 
 ---
 
+## [0.99.285] - 2026-07-07
+
+### Fixed
+
+- **Adapter lookups normalize provider vocabulary at the boundary.**
+  `resolve_for` and `_select_adapter` now accept both registry family names
+  (`openai` / `glm`) and routing variant ids (`openai-codex` / `glm-coding` /
+  `zhipuai`), preventing codex-subscription fast-chat paths from failing with
+  `AdapterUnavailableError` when the loop forwards `openai-codex`.
+- **Computer-use incident hardening.** Native computer-use screenshots are no
+  longer persisted in session checkpoints, SQLite message mirrors, or tool logs;
+  durable state keeps compact digests/refs instead. Successful desktop actions
+  now explicitly report dispatch status separately from postcondition
+  verification, so click/type/key success cannot be mistaken for proven UI state.
+- **Fast-chat GEODE identity without roleplay framing.** The lightweight chat
+  prompt now speaks as GEODE through Fable-style metadata/behavior clauses
+  (`Agent:`, `Runtime:`, `Mode:`, `Scope:`) instead of `You are ...` identity
+  assertions, keeps fast-chat opt-in, and still honors `GEODE_PERSONA=off`.
+
+### Added
+
+- **Exact-first `calculate` tool.** GEODE now has a local, read-only
+  calculator for deterministic arithmetic instead of falling back to
+  `run_bash`, ad hoc Python, or an external MCP. It evaluates a bounded AST
+  allowlist, returns exact rational results when possible, and marks
+  approximate decimal results explicitly.
+- **Prompt-writing scaffold skill.** `.claude/skills/prompt-writing/` defines
+  GEODE's prompt-writing standard: model-facing prompt text should use
+  metadata/behavioral clauses and avoid `You are ...` / `Act as ...` roleplay
+  framing. `CLAUDE.md` and `AGENTS.md` now point prompt edits to that skill.
+
 ## [0.99.284] - 2026-07-07
 
 ### Fixed

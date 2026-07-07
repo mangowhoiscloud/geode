@@ -56,6 +56,7 @@ def test_core_set_and_natives_stay_loaded() -> None:
     shaped = apply_tool_search_defer(_big_toolset())
     loaded_names = {t["name"] for t in shaped if not t.get("defer_loading")}
     assert "web_search" in loaded_names, "hosted/native (type-carrying) entries never defer"
+    assert "calculate" in TOOL_SEARCH_ALWAYS_LOADED
     for name in sorted(TOOL_SEARCH_ALWAYS_LOADED)[:4]:
         assert name in loaded_names
     # API invariant: at least one non-deferred tool must remain.

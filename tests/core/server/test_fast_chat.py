@@ -27,12 +27,33 @@ def test_fast_chat_rejects_agentic_actions_when_enabled(monkeypatch: pytest.Monk
     assert should_use_fast_chat("계획 세워서 진행해") is False
 
 
-def test_fast_chat_system_prompt_preserves_geode_identity_without_you_are() -> None:
+def test_fast_chat_system_prompt_uses_fable_style_geode_metadata(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.delenv("GEODE_PERSONA", raising=False)
     system = fast_chat_system_prompt()
-    assert "GEODE" in system
+    assert "Agent: GEODE" in system
+    assert "Runtime:" in system
     assert "AgenticLoop" in system
     assert "generic API assistant" in system
     assert "You are" not in system
+    assert "Act as" not in system
+
+
+def test_fast_chat_system_prompt_keeps_no_tool_claims_rule() -> None:
+    system = fast_chat_system_prompt()
+    assert "Tool loop: inactive" in system
+    assert "full agent path" in system
+
+
+def test_fast_chat_system_prompt_honors_persona_opt_out(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("GEODE_PERSONA", "off")
+    system = fast_chat_system_prompt()
+    assert "Agent: GEODE" not in system
+    assert "Mode: lightweight chat path" in system
+    assert "Tool loop: inactive" in system
 
 
 def test_ipc_poller_fast_chat_uses_text_completion(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -75,7 +96,8 @@ def test_ipc_poller_fast_chat_uses_text_completion(monkeypatch: pytest.MonkeyPat
     kwargs = cast(dict[str, object], calls["kwargs"])
     assert kwargs["prefer_provider"] == "openai"
     assert kwargs["prefer_source"] == "subscription"
-    assert "GEODE" in str(kwargs["system"])
+    assert "Agent: GEODE" in str(kwargs["system"])
+    assert "Tool loop: inactive" in str(kwargs["system"])
     assert "You are" not in str(kwargs["system"])
 
 

@@ -17,8 +17,8 @@ Handler groups:
 - :mod:`task`           — task_create/update/get/list/stop
 - :mod:`audit`          — view_audit_log / audit-trail surface
 - :mod:`observability`  — observability tools
-- :mod:`single_tool`    — six handlers that each wrap exactly one
-                           tool class: generate_data, send_notification,
+- :mod:`single_tool`    — handlers that each wrap exactly one
+                           tool class: calculate, generate_data, send_notification,
                            generate_report/export_json,
                            recall_tool_result, computer (env-gated),
                            calendar_list/create_event/sync_scheduler
@@ -59,6 +59,7 @@ from core.cli.tool_handlers.single_tool import (
     _build_calendar_handlers,
     _build_computer_use_handler,
     _build_data_handlers,
+    _build_math_handlers,
     _build_notification_handlers,
     _build_offload_handlers,
     _build_output_handlers,
@@ -78,6 +79,7 @@ __all__ = [
     "_build_delegated_handlers",
     "_build_execution_handlers",
     "_build_hitl_handlers",
+    "_build_math_handlers",
     "_build_mcp_handler",
     "_build_memory_handlers",
     "_build_notification_handlers",
@@ -149,6 +151,7 @@ def _build_tool_handlers(
     handlers.update(_build_hitl_handlers())
     handlers.update(_build_system_handlers(readiness, force_dry, mcp_manager))
     handlers.update(_build_execution_handlers())
+    handlers.update(_build_math_handlers())
     handlers.update(_build_data_handlers())
     handlers.update(_build_delegated_handlers())
     handlers.update(_build_output_handlers())

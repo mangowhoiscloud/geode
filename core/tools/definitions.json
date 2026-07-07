@@ -305,6 +305,30 @@
     }
   },
   {
+    "name": "calculate",
+    "description": "Compute bounded arithmetic exactly-first in GEODE's local runtime. Use for deterministic numeric calculation instead of run_bash or ad hoc Python. Supports +, -, *, /, //, %, **, parentheses, abs(), and sqrt(); returns exact fractions when possible and decimal output at requested precision.",
+    "category": "analysis",
+    "cost_tier": "free",
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "expression": {
+          "type": "string",
+          "description": "Arithmetic expression to evaluate, e.g. '(2 + 3) / 7'."
+        },
+        "precision": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 100,
+          "description": "Decimal digits for approximate output. Default 50."
+        }
+      },
+      "required": [
+        "expression"
+      ]
+    }
+  },
+  {
     "name": "generate_data",
     "description": "Generate synthetic sample data for testing or demos. Use ONLY when the user explicitly asks for test, sample, mock, or dummy data. Never use it to answer a real question or fetch real data — use general_web_search or a real source for that.",
     "category": "data",

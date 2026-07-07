@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import base64
 import hashlib
+import json
 import time
 from typing import Any, Literal, TypedDict
 
@@ -58,6 +59,61 @@ def screenshot_digest(screenshot_b64: str) -> str:
     except Exception:
         raw = screenshot_b64.encode("utf-8", errors="replace")
     return hashlib.sha256(raw).hexdigest()
+
+
+def _omitted_screenshot(value: str) -> dict[str, Any]:
+    digest = screenshot_digest(value)
+    return {
+        "screenshot_omitted": True,
+        "screenshot_sha256": digest,
+        "screenshot_ref": f"screen:{digest[:16]}",
+        "omitted_reason": "computer-use screenshots are not persisted in checkpoints/tool logs",
+    }
+
+
+def sanitize_computer_payload(value: Any) -> Any:
+    """Return a checkpoint/tool-log safe copy with screenshot bytes removed.
+
+    Native computer-use must send screenshots to the model as image blocks in
+    memory, but persistent resume state should retain only compact provenance.
+    This function strips harness-level ``screenshot`` fields and image content
+    blocks nested under tool results, without touching ordinary user-supplied
+    image attachments.
+    """
+    return _sanitize_computer_payload(value, in_tool_result=False)
+
+
+def _sanitize_computer_payload(value: Any, *, in_tool_result: bool) -> Any:
+    if isinstance(value, list):
+        return [_sanitize_computer_payload(item, in_tool_result=in_tool_result) for item in value]
+    if not isinstance(value, dict):
+        return value
+
+    current_in_tool_result = in_tool_result or value.get("type") == "tool_result"
+    if current_in_tool_result and value.get("type") == "image":
+        source = value.get("source")
+        if isinstance(source, dict) and isinstance(source.get("data"), str):
+            omitted = _omitted_screenshot(source["data"])
+            return {
+                "type": "text",
+                "text": json.dumps(
+                    {
+                        "image_omitted": True,
+                        "media_type": source.get("media_type", "image/jpeg"),
+                        **omitted,
+                    },
+                    ensure_ascii=False,
+                    sort_keys=True,
+                ),
+            }
+
+    out: dict[str, Any] = {}
+    for key, item in value.items():
+        if key == "screenshot" and isinstance(item, str):
+            out.update(_omitted_screenshot(item))
+            continue
+        out[key] = _sanitize_computer_payload(item, in_tool_result=current_in_tool_result)
+    return out
 
 
 def build_screen_observation(
@@ -128,6 +184,22 @@ def recovery_hint(error_kind: ErrorKind) -> dict[str, Any]:
     }
 
 
+_MUTATING_ACTIONS = {
+    "click",
+    "double_click",
+    "left_click",
+    "right_click",
+    "middle_click",
+    "triple_click",
+    "move",
+    "scroll",
+    "drag",
+    "type",
+    "key",
+    "keypress",
+}
+
+
 def enrich_computer_result(
     result: dict[str, Any],
     *,
@@ -159,6 +231,20 @@ def enrich_computer_result(
         kind = classify_computer_error(error)
         enriched.setdefault("error_kind", kind)
         enriched.setdefault("recovery", recovery_hint(kind))
+    else:
+        enriched.setdefault("action_status", "dispatched")
+        requires_verification = action in _MUTATING_ACTIONS
+        enriched.setdefault("requires_verification", requires_verification)
+        enriched.setdefault("postcondition_verified", False)
+        if requires_verification:
+            enriched.setdefault(
+                "verification_hint",
+                (
+                    "The desktop action was dispatched and observed, but target "
+                    "application state is not proven. Verify with DOM/AX/app state "
+                    "or a task-specific visual check before claiming completion."
+                ),
+            )
     return enriched
 
 

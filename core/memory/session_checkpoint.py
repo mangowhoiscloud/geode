@@ -13,11 +13,12 @@ from __future__ import annotations
 import json
 import logging
 import time
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import Any
 
 from core.memory.atomic_write import atomic_write_json
+from core.tools.computer_observation import sanitize_computer_payload
 
 log = logging.getLogger(__name__)
 
@@ -101,25 +102,30 @@ class SessionCheckpoint:
         atomic_write_json(state_file, data, indent=2)
 
         self._sync_cognitive_state_to_db(state)
+        persisted_state = replace(
+            state,
+            messages=sanitize_computer_payload(state.messages),
+            tool_log=sanitize_computer_payload(state.tool_log),
+        )
 
         # Phase 1b: SoT lives in SQLite ``messages`` table. Mirror the
         # *full* message list into the DB **first** so a JSON-only failure
         # below (disk full, write race) cannot leave the SoT with a stale
         # message count.
-        self._sync_messages_to_db(state)
+        self._sync_messages_to_db(persisted_state)
 
         # Write messages.json as a hot cache (full list, no trim). Old
         # offline tooling can still read this; the runtime ``load()`` path
         # prefers the DB.
         msg_file = session_path / "messages.json"
-        atomic_write_json(msg_file, state.messages)
+        atomic_write_json(msg_file, persisted_state.messages)
 
         # Write tools.json hot cache when tool log exists. The structured
         # ``tool_calls`` column on each ``messages`` row is now the SoT,
         # so this is a convenience copy only.
-        if state.tool_log:
+        if persisted_state.tool_log:
             tools_file = session_path / "tools.json"
-            atomic_write_json(tools_file, state.tool_log[-50:])
+            atomic_write_json(tools_file, persisted_state.tool_log[-50:])
 
         # Update active.json pointer
         self._dir.mkdir(parents=True, exist_ok=True)
