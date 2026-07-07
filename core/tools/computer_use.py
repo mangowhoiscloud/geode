@@ -244,7 +244,8 @@ def _strip_screenshot(result: dict[str, Any]) -> dict[str, Any]:
         out["screenshot_omitted_reason"] = (
             "computer_use is a normal function tool; screenshots are reduced to "
             "observation metadata to avoid base64 context bloat. Use action='locate' "
-            "with an instruction when a visual target must be grounded."
+            "only when visual grounding is supported for the active provider/source; "
+            "otherwise use ui_probe, browser DOM tools, playwriter, or keyboard navigation."
         )
     return out
 
@@ -782,10 +783,19 @@ async def execute_emulated_computer_use(
                         "source": exc.source,
                         "status": "unsupported_for_active_source",
                     },
+                    "fallback_tools": [
+                        "ui_probe",
+                        "browser DOM tools (browser_snapshot/browser_execute_js)",
+                        "playwriter for login-required Chrome sessions",
+                        "keyboard navigation",
+                        "GLM route for visual locate",
+                    ],
                     "hint": (
                         "Use ui_probe for macOS Accessibility structure when available, "
-                        "or use capture plus safe keyboard navigation. To use GLM visual "
-                        "grounding, route the turn through a GLM provider/source explicitly."
+                        "browser DOM tools for web pages, playwriter for login-required "
+                        "Chrome sessions, or safe keyboard navigation. To use GLM visual "
+                        "grounding, route the turn through a GLM provider/source explicitly. "
+                        "Do not blind-type until focus/target has been independently verified."
                     ),
                 }
             )

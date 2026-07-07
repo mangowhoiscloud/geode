@@ -143,25 +143,24 @@ def test_arun_calls_check_round_guards() -> None:
     blocks must NOT remain in ``arun``."""
     src = inspect.getsource(AgenticLoop.arun)
     # Helper is invoked
-    assert "self._check_round_guards(round_idx)" in src
+    assert "guard_reason = self._check_round_guards(round_idx)" in src
     # Inline guards removed
     assert "Guard 1: Round limit" not in src
     assert "Guard 2: Time budget" not in src
 
 
-def test_arun_breaks_on_non_none_guard_response() -> None:
-    """Pin the break semantics — non-None return → ``break`` (not
-    ``return``). The loop's downstream wrap-up code (final
-    AgenticResult construction + finalize_and_return) must still
-    run, matching pre-refactor behaviour."""
+def test_arun_preserves_non_none_guard_response() -> None:
+    """Pin the break semantics and the reason propagation.
+
+    A triggered guard must still break to the shared wrap-up path, but the
+    exact guard reason must be preserved so session-budget handoff/expiry is
+    not mislabeled as max_rounds.
+    """
     src = inspect.getsource(AgenticLoop.arun)
-    # The exact pattern arun uses (newline-tolerant via string
-    # split — the exact whitespace shape is rendered by ruff format
-    # and may shift; pin the semantic instead).
-    assert "if self._check_round_guards(round_idx) is not None:" in src
-    # The very next non-blank line in arun must be ``break``.
-    # Find the guard call site and walk forward.
-    idx = src.index("if self._check_round_guards(round_idx) is not None:")
+    assert "guard_reason = self._check_round_guards(round_idx)" in src
+    assert "if guard_reason is not None:" in src
+    assert "self._guard_exit_result(" in src
+    idx = src.index("if guard_reason is not None:")
     after = src[idx:].splitlines()[1:5]  # next 4 lines
     next_nonblank = next((ln.strip() for ln in after if ln.strip()), "")
     assert next_nonblank == "break", (
@@ -169,6 +168,30 @@ def test_arun_breaks_on_non_none_guard_response() -> None:
         "the loop's wrap-up code constructs the AgenticResult — "
         f"got {next_nonblank!r}"
     )
+
+
+def test_guard_exit_result_keeps_session_budget_reasons() -> None:
+    stub = _StubLoop(time_budget_s=1.0)
+    bound = AgenticLoop._guard_exit_result.__get__(stub, _StubLoop)
+
+    assert bound("round_limit", rounds=3) == (
+        "max_rounds",
+        "Max agentic rounds reached. Please try a more specific request.",
+    )
+    assert bound("time_budget", rounds=2) == (
+        "time_budget_expired",
+        "Time budget (1s) expired after 2 rounds.",
+    )
+
+    reason, text = bound("session_time_budget_handoff", rounds=0)
+    assert reason == "session_time_budget_handoff"
+    assert "handoff window" in text
+    assert "Max agentic rounds" not in text
+
+    reason, text = bound("session_time_budget_expired", rounds=0)
+    assert reason == "session_time_budget_expired"
+    assert "Session time budget expired" in text
+    assert "Max agentic rounds" not in text
 
 
 # ---------------------------------------------------------------------------
