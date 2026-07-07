@@ -69,7 +69,10 @@ LLM router, providers, prompt assembly, hashing.
 - `postprocess/html_output.py` — strips OpenAI data-URL HTML.
 
 Read this first when changing prompt content (will break the hash ratchet),
-adding a provider, or touching cache/tool-choice/streaming behaviour.
+adding a provider, or touching cache/tool-choice/streaming behaviour. Also read
+`.claude/skills/prompt-writing/` before creating or editing model-facing prompt
+text: GEODE prompts use metadata/behavioral clauses, not direct identity
+assertions such as `You are ...`.
 
 ### `core/tools/`
 
@@ -196,6 +199,10 @@ Claude Code compatible scaffold.
   entry.
 - **Prompt hashes are pinned**: changing any prompt under `core/llm/prompts/`
   requires updating `_PINNED_HASHES` in the same commit.
+- **Prompt wording avoids identity assertions**: model-facing prompt text must
+  follow `.claude/skills/prompt-writing/`. Prefer metadata/behavioral clauses
+  (`Agent:`, `Runtime:`, `Mode:`, `Scope:`) over `You are ...`, `Act as ...`,
+  or similar roleplay framing.
 - **No `# type: ignore` proliferation**: fix the type error.
 - **No live tests by default**: tests marked `-m live` require explicit user
   approval because they may spend money or call external services.

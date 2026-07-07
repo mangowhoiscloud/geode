@@ -45,7 +45,7 @@ functional change.
 
 ---
 
-## [Unreleased]
+## [0.99.285] - 2026-07-07
 
 ### Fixed
 
@@ -54,20 +54,73 @@ functional change.
   durable state keeps compact digests/refs instead. Successful desktop actions
   now explicitly report dispatch status separately from postcondition
   verification, so click/type/key success cannot be mistaken for proven UI state.
+- **Fast-chat GEODE identity without roleplay framing.** The lightweight chat
+  prompt now speaks as GEODE through Fable-style metadata/behavior clauses
+  (`Agent:`, `Runtime:`, `Mode:`, `Scope:`) instead of `You are ...` identity
+  assertions, keeps fast-chat opt-in, and still honors `GEODE_PERSONA=off`.
 
-## [0.99.281] - 2026-07-06
+### Added
+
+- **Prompt-writing scaffold skill.** `.claude/skills/prompt-writing/` defines
+  GEODE's prompt-writing standard: model-facing prompt text should use
+  metadata/behavioral clauses and avoid `You are ...` / `Act as ...` roleplay
+  framing. `CLAUDE.md` and `AGENTS.md` now point prompt edits to that skill.
+
+## [0.99.284] - 2026-07-07
 
 ### Fixed
 
-- **Fast-chat now speaks as GEODE.** The lightweight chat mode shipped
-  without the identity layer, so it introduced itself as a generic "AI
-  assistant used via API" (operator report, 2026-07-06).
-  `fast_chat_system_prompt()` now composes the same GEODE.md identity
-  block the full loop injects (G1 SoT via
-  `core.agent.system_prompt._build_identity_context` — no second
-  literal), honors the `GEODE_PERSONA` opt-out, and keeps the
-  lightweight-mode constraints AFTER the identity so they override its
-  tool-capability claims (the mode still never pretends to run tools).
+- **HITL approval input no longer swallows Enter.** The thin IPC client now
+  restores cooked terminal mode and reads approval choices directly from
+  stdin instead of Rich `console.input()`, so approval prompts accept Enter
+  normally even after prompt_toolkit raw-mode interaction. Carriage-return
+  bytes are stripped before parsing, and approval suspend/resume callbacks
+  now run in a `finally` block so the renderer cannot stay stranded if
+  approval input fails.
+- **`update_plan` no longer displaces the live plan UI.** Plan updates are
+  treated as renderer state rather than normal tool activity, so they do not
+  create `Activity · update_plan -> ok` blocks or push the checklist out of
+  its in-place update surface.
+
+## [0.99.283] - 2026-07-07
+
+### Fixed
+
+- **Default CLI plan updates refresh in place.** In TTY sessions using the
+  prompt-safe inline `Working...` status, progress-plan updates now keep the
+  plan as renderer-owned bottom content and redraw it in place after clearing
+  the status line. This prevents updated plans from stacking duplicate
+  checklist blocks in the transcript while preserving append-only output for
+  pipes and logs.
+
+## [0.99.282] - 2026-07-07
+
+### Fixed
+
+- **Default CLI live activity restoration.** The thin CLI now restores the
+  live `Working...` / `Running <tool>...` status in TTY sessions with a
+  carriage-return-only inline renderer, while keeping plan and activity output
+  append-only. This preserves the pre-full-screen interaction feel without
+  reintroducing cursor-up prompt overpaint.
+- **Plan rendering no longer suppresses activity status.** Progress-plan
+  updates clear only the renderer-owned current status line before printing
+  transcript rows, so the live status resumes under the updated plan instead
+  of disappearing for the rest of the turn.
+
+## [0.99.281] - 2026-07-07
+
+### Fixed
+
+- **Fast chat is opt-in again.** The IPC simple-chat path is now disabled
+  unless `GEODE_FAST_CHAT=1` is set, so normal CLI prompts always use the
+  full AgenticLoop identity, plan, tool, and activity event path. The
+  opt-in fast-chat prompt still preserves GEODE identity and avoids generic
+  API-assistant self-introductions.
+- **Append-only CLI activity visibility.** The default thin CLI now renders
+  Activity updates as append-only transcript rows during a turn instead of
+  hiding tool/thought status until the final stop hook. This restores visible
+  run/tool progress without reintroducing cursor-up repainting over the input
+  prompt.
 
 ## [0.99.280] - 2026-07-06
 
