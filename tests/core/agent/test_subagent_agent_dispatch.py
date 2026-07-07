@@ -24,7 +24,7 @@ def seed_generator_registry() -> AgentRegistry:
         AgentDefinition(
             name="seed_generator",
             role="Petri seed candidate generator",
-            system_prompt="You are the Generation agent of the seed-generation.",
+            system_prompt="Role: Generation agent of the seed-generation.",
             tools=["read_document", "write_file", "grep_files"],
             model="claude-sonnet-4-6",
         )
@@ -288,3 +288,25 @@ def test_delegate_dispatch_forwards_tool_context_model() -> None:
     asyncio.run(executor.aexecute("delegate_task", {"task_description": "do a thing"}, context=ctx))
     assert mgr.adelegate.await_count == 1
     assert mgr.adelegate.await_args.kwargs.get("default_model") == "claude-opus-4-8"
+
+
+def test_delegate_dispatch_forwards_tool_context_source() -> None:
+    """Sub-agent tasks must inherit the parent credential source so their
+    own LLM-backed tools cannot re-resolve into an unrelated provider lane."""
+    import asyncio
+    from unittest.mock import AsyncMock
+
+    from core.agent.tool_executor import ToolExecutor
+    from core.tools.base import ToolContext
+
+    mgr = _make_manager(AgentRegistry())
+    mgr.adelegate = AsyncMock(return_value=[])  # type: ignore[method-assign]
+    executor = ToolExecutor(sub_agent_manager=mgr, auto_approve=True, hitl_level=0)
+    ctx = ToolContext(
+        provider="openai", source="subscription", model="gpt-5.5", adapter_name="codex-oauth"
+    )
+    asyncio.run(executor.aexecute("delegate_task", {"task_description": "do a thing"}, context=ctx))
+
+    tasks = mgr.adelegate.await_args.args[0]
+    assert tasks[0].source == "subscription"
+    assert tasks[0].model == ""

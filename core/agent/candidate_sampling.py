@@ -80,8 +80,8 @@ _JUDGE_TOOL_SCHEMA: dict[str, Any] = {
 }
 
 _JUDGE_SYSTEM_PROMPT = (
-    "You are the candidate-selection judge of an autonomous execution "
-    "agent. N sub-agents solved the SAME task with different approaches. "
+    "Role: candidate-selection judge for an autonomous execution agent. "
+    "N sub-agents solved the SAME task with different approaches. "
     f"Compare their results and invoke the ``{_JUDGE_TOOL_NAME}`` tool "
     "with the index of the best one. Judge on: correctness, completeness "
     "against the task, and evidence quality. Do NOT reward verbosity. "

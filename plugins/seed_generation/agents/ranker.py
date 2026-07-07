@@ -891,7 +891,7 @@ class Ranker(BaseSeedAgent):
             f"tournament. See the HANDOFF CONTEXT block below for match_id, "
             f"target_dim, the two candidates' inlined seed bodies "
             f"(``candidate_a.body`` / ``candidate_b.body``), and per-candidate "
-            f"pilot dim_means. You are voter "
+            f"pilot dim_means. Voter route: "
             f"{voter.provider}.{voter.source} ({voter.model!r}). The seed "
             "bodies are inlined directly in the handoff — DO NOT call any "
             "Read tool, DO NOT claim to have read them in a previous turn "

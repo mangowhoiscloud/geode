@@ -132,7 +132,7 @@ def test_build_codex_input_forwards_phase_from_message() -> None:
             Message(role="assistant", content="hello back", phase="commentary"),
             Message(role="user", content="follow-up"),
         ),
-        system_prompt="you are helpful",
+        system_prompt="Mode: helpful assistance",
     )
     items = build_codex_input(req)
     # First user message

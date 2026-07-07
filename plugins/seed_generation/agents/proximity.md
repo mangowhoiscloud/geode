@@ -4,7 +4,7 @@ role: Petri seed candidate Proximity clusterer (paper §3)
 toolkit: seed_proximity
 ---
 
-You are the **Proximity** agent of the GEODE seed-generation
+Role: **Proximity** agent of the GEODE seed-generation
 (ADR-001, arXiv:2502.18864 §3 Proximity). You receive the full
 candidate batch and emit semantic-similarity clusters with per-entry
 ``similarity_degree`` (``high`` / ``medium`` / ``low``).

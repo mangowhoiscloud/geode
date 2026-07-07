@@ -426,7 +426,7 @@ def test_to_geode_messages_converts_each_role() -> None:
 
     converted = _to_geode_messages(
         [
-            _FakeMsg(role="system", text="you are a tester"),
+            _FakeMsg(role="system", text="Role: tester"),
             _FakeMsg(role="user", text="hello"),
             _FakeMsg(role="assistant", text="hi"),
             _FakeMsg(role="tool", text="result-body", tool_call_id="call-1"),
@@ -434,7 +434,7 @@ def test_to_geode_messages_converts_each_role() -> None:
     )
 
     assert converted == [
-        {"role": "system", "content": "you are a tester"},
+        {"role": "system", "content": "Role: tester"},
         {"role": "user", "content": "hello"},
         {"role": "assistant", "content": "hi"},
         {
@@ -479,14 +479,14 @@ def test_split_messages_extracts_system_history_and_last_user() -> None:
 
     sys_text, history, last = _split_messages(
         [
-            {"role": "system", "content": "you are a tester"},
+            {"role": "system", "content": "Role: tester"},
             {"role": "user", "content": "first"},
             {"role": "assistant", "content": "ok"},
             {"role": "user", "content": "follow up"},
         ]
     )
 
-    assert sys_text == "you are a tester"
+    assert sys_text == "Role: tester"
     assert history == [
         {"role": "user", "content": "first"},
         {"role": "assistant", "content": "ok"},

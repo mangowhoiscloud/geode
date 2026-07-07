@@ -372,7 +372,7 @@ def test_axis_family_dedup_counts_only_same_kind_and_section() -> None:
         _StubApplyRecord(
             target_kind="prompt",
             target_section="role",
-            new_value="You are GEODE.",
+            new_value="Agent: GEODE.",
             mutation_id="cy11",
         ),
     ]

@@ -25,8 +25,8 @@ _MAX_CONTEXT_CHARS = 3000  # recent conversation to send to LLM
 _MAX_PER_SESSION = 10  # LLM extractions per session (raised from 5)
 
 _EXTRACT_PROMPT = """\
-You are a learning extraction agent. Analyze the recent conversation
-and identify what should be remembered for future sessions.
+Task: learning extraction. Analyze the recent conversation and identify
+what should be remembered for future sessions.
 
 Extract ONLY items that are:
 - User corrections ("don't do X", "that's wrong")
@@ -83,33 +83,33 @@ async def _call_budget_llm(prompt: str) -> str | None:
     transient handling. Returns ``None`` (graceful) when every capable
     adapter fails so the caller treats extraction as a soft hint.
 
-    Provider preference defaults to ``("glm", "anthropic", "openai")``
-    — preserves the original "GLM-flash free tier first, Haiku second"
-    ordering. The third slot (``openai``) is new: a Codex-subscription
-    operator with no Anthropic/GLM credentials now gets an extraction
-    path via the GPT-5 Responses endpoint, matching the operator-facing
-    intent the v0.99.79 sprint chase ("config-driven switching across
-    every LLM-touching site").
+    The extraction model determines the provider route. Dispatch no
+    longer scans a provider order, so an unavailable extraction adapter
+    degrades cleanly instead of trying unrelated credentials.
     """
-    from core.config import settings
+    from core.config import _resolve_provider, settings
+    from core.llm.adapters._source_inference import infer_source
     from core.llm.adapters.dispatch import (
         AdapterDispatchError,
         AdapterUnavailableError,
         complete_text_via_adapters,
     )
+    from core.llm.adapters.registry import normalize_registry_provider
     from core.llm.errors import BillingError
 
-    # PR-NO-FALLBACK (2026-05-28) — strict single-adapter dispatch tries
-    # exactly one adapter (the operator-default-resolved first match of
-    # ``provider_order``) and never silently widens. Returning ``None`` on
-    # any failure keeps the extraction hook a soft hint — the loop's
-    # main path is unaffected. Per-attempt observability lands in the
-    # serve log via dispatch's ``ADAPTER_DISPATCH_ATTEMPT`` hook.
+    provider = normalize_registry_provider(_resolve_provider(settings.learning_extract_model))
+    source = infer_source(provider)
+    # Strict single-adapter dispatch tries exactly the extraction model's
+    # route and never silently widens. Returning ``None`` on any failure
+    # keeps the extraction hook a soft hint — the loop's main path is
+    # unaffected.
     try:
         result = await complete_text_via_adapters(
             prompt,
+            model=settings.learning_extract_model,
             max_tokens=300,
-            provider_order=("glm", "anthropic", "openai"),
+            prefer_provider=provider,
+            prefer_source=source,
             model_by_provider={"glm": settings.learning_extract_model},
         )
     except BillingError:

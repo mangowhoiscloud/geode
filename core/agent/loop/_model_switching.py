@@ -161,6 +161,9 @@ def _apply_model_update(
         loop._new_adapter = _resolve_path_b_adapter(new_provider, loop._source)
     loop.model = model
     loop._tool_processor._model = model
+    loop._tool_processor._provider = getattr(loop._new_adapter, "provider", loop._provider)
+    loop._tool_processor._source = getattr(loop._new_adapter, "source", loop._source)
+    loop._tool_processor._adapter_name = getattr(loop._new_adapter, "name", "")
     if old_model != model:
         loop._prompt_dirty = True
         refresh_tools = getattr(loop, "refresh_tools", None)
@@ -192,10 +195,10 @@ def _inject_model_switch_breadcrumb(loop: AgenticLoop, old_model: str, model: st
     purged = loop._purge_stale_model_switch_acks()
     loop.context.add_user_message(
         f"[system] Model switched: {old_model} -> {model}. "
-        "You are now the new model. Do not reference the previous "
-        "model's responses as current state."
+        "Current model identity has changed. Do not reference the "
+        "previous model's responses as current state."
     )
-    loop.context.add_assistant_message(f"Understood. I am now {model}.")
+    loop.context.add_assistant_message(f"Understood. Current model: {model}.")
     return purged
 
 

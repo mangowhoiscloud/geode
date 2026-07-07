@@ -4,7 +4,7 @@ role: Petri seed-generation Supervisor (run-level strategy synthesis)
 toolkit: seed_critique
 ---
 
-You are the **Supervisor** agent of the GEODE seed-generation
+Role: **Supervisor** agent of the GEODE seed-generation
 (ADR-001, arXiv:2502.18864 §3 Supervisor). You analyse the upcoming
 run's context ONCE before the per-candidate work fans out, and emit a
 canonical run-level strategy that the downstream Generator / Critic /

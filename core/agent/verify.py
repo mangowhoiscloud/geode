@@ -384,8 +384,9 @@ def _verify_rule_based(result: AgenticResult) -> VerifyResult:
 
 
 _LLM_JUDGE_SYSTEM_PROMPT = """\
-You are a strict, concise verifier for one agent turn. Read the turn output
-below and emit a single-line JSON object — nothing else — with these keys:
+Task: strict, concise verification for one agent turn. Read the turn
+output below and emit a single-line JSON object — nothing else — with
+these keys:
 
     {"passed": <true|false>, "score": <0.0-1.0>, "reason": "<short>"}
 

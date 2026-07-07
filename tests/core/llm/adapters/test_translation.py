@@ -22,7 +22,7 @@ from core.llm.adapters.translation import (
 def test_build_request_translates_user_message() -> None:
     req = build_adapter_request(
         model="claude-haiku-4-5",
-        system="You are helpful.",
+        system="Mode: helpful assistance.",
         messages=[{"role": "user", "content": "hi"}],
         tools=[],
         tool_choice="auto",
@@ -32,7 +32,7 @@ def test_build_request_translates_user_message() -> None:
         effort="medium",
     )
     assert req.model == "claude-haiku-4-5"
-    assert req.system_prompt == "You are helpful."
+    assert req.system_prompt == "Mode: helpful assistance."
     assert len(req.messages) == 1
     assert req.messages[0].role == "user"
     assert req.messages[0].content == "hi"

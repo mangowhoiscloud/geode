@@ -2,11 +2,12 @@
 
 PR-NO-FALLBACK (2026-05-28). Replaces the prior fallback-chain pattern
 that silently walked PAYG → Subscription, Anthropic → OpenAI → GLM until
-something succeeded. The operator's explicit ``/login source`` choice is
-the **sole** switch — silent cross-provider / cross-source fallback
-exposes the operator to unexpected billing (a Codex-subscription user
-should never have web_search silently land on a GLM coding plan they
-happen to have configured for a different workflow).
+something succeeded. The operator's explicit route is the **sole** switch:
+callers must provide a concrete ``(provider, source)`` pair, or at least a
+model from which that single pair can be derived. Silent cross-provider /
+cross-source fallback exposes the operator to unexpected billing (a
+Codex-subscription user should never have web_search silently land on a
+GLM coding plan they happen to have configured for a different workflow).
 
 Each dispatch call:
 
@@ -17,9 +18,10 @@ Each dispatch call:
       :class:`core.tools.base.ToolContext` from PR-TOOL-EXEC-CONTEXT).
       An exact ``(provider, source)`` match is required; partial /
       unmatched preferences raise :class:`AdapterUnavailableError`.
-   b. Operator's default-resolved adapter (``infer_source`` + provider
-      order) when no preference — for hook / compaction callers
-      outside the tool-dispatch flow.
+   b. ``model`` when a caller has no concrete route but is still anchored
+      to a specific model. Dispatch derives provider from the model and
+      source from ``infer_source(provider)``. There is no provider-order
+      scan.
 
 2. **Tries that single adapter — and only that adapter.** No fallback to
    other adapters even on failure. One exception class gets a bounded
@@ -62,9 +64,6 @@ from core.llm.adapters.registry import list_adapters, normalize_registry_provide
 from core.llm.errors import BillingError, is_billing_fatal
 
 log = logging.getLogger(__name__)
-
-
-_DEFAULT_PROVIDER_ORDER: tuple[str, ...] = ("anthropic", "openai", "glm")
 
 
 # ---------------------------------------------------------------------------
@@ -225,7 +224,7 @@ def _select_adapter(
     *,
     prefer_provider: str | None,
     prefer_source: str | None,
-    provider_order: tuple[str, ...],
+    model: str = "",
 ) -> Any | None:
     """Return exactly one adapter or ``None`` (strict — no fallback chain).
 
@@ -234,19 +233,13 @@ def _select_adapter(
     - **Both** ``prefer_provider`` and ``prefer_source`` set: exact match
       required. No match → ``None`` (caller raises
       :class:`AdapterUnavailableError` with the available adapters list).
-    - **Partial preference** (only one of the two set): treated identically
-      to "no match" — strict mode never silently widens to a different
-      provider or source. Returns ``None``. The AgenticLoop always supplies
-      both via ``ToolContext``, so partial preference indicates a caller
-      bug worth surfacing rather than papering over.
-    - **Neither set** (hook / compaction / orphan callers): operator's
-      default-resolved adapter — first provider in ``provider_order`` for
-      which ``infer_source`` resolves to a registered capable adapter.
-
-    Codex MCP audit (2026-05-28) — pre-PR partial preference fell
-    through to the default-resolved path, which contradicted the
-    docstring claim that partial preferences raise unavailable and was an
-    uncovered widening surface.
+    - **Partial preference + model**: fill the missing provider from the
+      model or the missing source from ``infer_source(provider)``.
+    - **No preference + model**: derive provider from the model and source
+      from ``infer_source(provider)``.
+    - **No route**: return ``None``. Strict mode never scans a provider
+      order because that made orphan tool calls land on unrelated PAYG
+      adapters.
 
     ``prefer_provider`` accepts both the registry family names and the
     routing layer's variant ids (``openai-codex`` / ``glm-coding`` /
@@ -254,36 +247,53 @@ def _select_adapter(
     ``loop._provider`` verbatim cannot miss every registered adapter
     (fast-chat incident, 2026-07-06).
     """
-    if prefer_provider:
-        prefer_provider = normalize_registry_provider(prefer_provider)
+    prefer_provider, prefer_source = _resolve_dispatch_route(
+        prefer_provider=prefer_provider,
+        prefer_source=prefer_source,
+        model=model,
+    )
     capable = _capability_adapters(capability_attr)
     if not capable:
         return None
 
-    # Partial-or-full preference path. Exact match required; partial =
-    # missing-half = no match (strict mode never silently widens).
-    if prefer_provider or prefer_source:
-        if not (prefer_provider and prefer_source):
-            return None
-        for adapter in capable:
-            if adapter.provider == prefer_provider and adapter.source == prefer_source:
-                return adapter
+    if not (prefer_provider and prefer_source):
         return None
-
-    # Default-resolved path — operator settings + ProfileStore + provider order.
-    from core.llm.adapters._source_inference import infer_source
-
-    for provider in provider_order:
-        provider_pool = [a for a in capable if a.provider == provider]
-        if not provider_pool:
-            continue
-        resolved_source = infer_source(provider)
-        for adapter in provider_pool:
-            if adapter.source == resolved_source:
-                return adapter
-        # No exact source match for this provider's resolved source — refuse
-        # to widen. Move to next provider in operator-configured order.
+    for adapter in capable:
+        if adapter.provider == prefer_provider and adapter.source == prefer_source:
+            return adapter
     return None
+
+
+def _resolve_dispatch_route(
+    *,
+    prefer_provider: str | None,
+    prefer_source: str | None,
+    model: str = "",
+) -> tuple[str | None, str | None]:
+    """Resolve the single allowed adapter route for capability dispatch.
+
+    This is deliberately not a fallback chain. A caller can provide the
+    resolved route directly, or provide a model that maps to one provider;
+    source inference then resolves that provider's configured source.
+    """
+    provider = (prefer_provider or "").strip()
+    source = (prefer_source or "").strip()
+    model = (model or "").strip()
+    if provider:
+        provider = normalize_registry_provider(provider)
+    elif model:
+        from core.config import _resolve_provider
+
+        provider = normalize_registry_provider(_resolve_provider(model))
+    if provider and not source:
+        from core.llm.adapters._source_inference import infer_source
+
+        source = infer_source(provider)
+    if source and not provider and model:
+        from core.config import _resolve_provider
+
+        provider = normalize_registry_provider(_resolve_provider(model))
+    return (provider or None, source or None)
 
 
 def _registered_adapter_summary() -> str:
@@ -499,7 +509,7 @@ async def web_search_via_adapters(
         capability,
         prefer_provider=prefer_provider,
         prefer_source=prefer_source,
-        provider_order=_DEFAULT_PROVIDER_ORDER,
+        model=model,
     )
     if adapter is None:
         raise AdapterUnavailableError(
@@ -631,7 +641,6 @@ async def complete_text_via_adapters(
     system: str = "",
     model: str = "",
     max_tokens: int = 1024,
-    provider_order: tuple[str, ...] = _DEFAULT_PROVIDER_ORDER,
     model_by_provider: dict[str, str] | None = None,
     prefer_provider: str | None = None,
     prefer_source: str | None = None,
@@ -648,16 +657,16 @@ async def complete_text_via_adapters(
     fallback any more.
 
     ``prefer_provider`` / ``prefer_source`` flow from the AgenticLoop's
-    :class:`core.tools.base.ToolContext` for tool-dispatch callers;
-    hook / compaction callers (outside the tool flow) leave them ``None``
-    and the dispatch resolves via operator's ``infer_source`` settings.
+    :class:`core.tools.base.ToolContext` for tool-dispatch callers. Hook /
+    compaction callers outside the tool flow must pass an explicit route
+    or a concrete model; dispatch will not scan provider order.
     """
     capability = "supports_text_completion"
     adapter = _select_adapter(
         capability,
         prefer_provider=prefer_provider,
         prefer_source=prefer_source,
-        provider_order=provider_order,
+        model=model,
     )
     if adapter is None:
         raise AdapterUnavailableError(

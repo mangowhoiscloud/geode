@@ -56,7 +56,7 @@ VALID_FAMILIES: frozenset[str] = frozenset(
 
 MODEL_GUIDANCE: dict[str, str] = {
     FAMILY_ANTHROPIC: (
-        "You are a Claude model. Tool calls use the Anthropic ``tool_use`` "
+        "Model family: Claude. Tool calls use the Anthropic ``tool_use`` "
         "block grammar — input is a dict, not a JSON string. Parallel tool "
         "calls are supported within one response; emit multiple "
         "``tool_use`` blocks when their inputs are independent. When "
@@ -64,25 +64,25 @@ MODEL_GUIDANCE: dict[str, str] = {
         "operator — be honest, not performative."
     ),
     FAMILY_OPENAI: (
-        "You are a GPT model. Tool calls use the OpenAI Responses API "
+        "Model family: GPT. Tool calls use the OpenAI Responses API "
         "``function`` call grammar — arguments are a JSON-encoded string, "
         "not a dict. Parallel tool calls obey ``parallel_tool_calls``. "
         "Reasoning traces are hidden by default; the operator sees only "
         "the final response unless ``reasoning.summary`` is requested."
     ),
     FAMILY_GOOGLE: (
-        "You are a Gemini model. Tool calls follow Google's function-call "
+        "Model family: Gemini. Tool calls follow Google's function-call "
         "grammar — verify the schema by name. Reasoning visibility is "
         "model-dependent; assume it is visible unless told otherwise. "
         "Computer-use is not yet supported on this provider."
     ),
     FAMILY_XAI: (
-        "You are a Grok model. Tool contract is minimal — emit a single "
+        "Model family: Grok. Tool contract is minimal — emit a single "
         "structured response per turn. Reasoning is verbose by default; "
         "keep the final answer block concise for the operator."
     ),
     FAMILY_GLM: (
-        "You are a GLM-5+ model (Zhipu — 744B sparse-attention, optimised "
+        "Model family: GLM-5+ (Zhipu — 744B sparse-attention, optimised "
         "for long-horizon agentic tasks). Tool calls follow the "
         "OpenAI-compatible ``/v1/chat/completions`` schema — emit a "
         "``tool_calls`` array whose ``function.arguments`` is a "

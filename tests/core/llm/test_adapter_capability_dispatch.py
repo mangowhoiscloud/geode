@@ -20,8 +20,8 @@ These tests pin:
      ``test_dispatch_transient_retry_guardrails.py``
    - raises :class:`AdapterUnavailableError` when no adapter matches
 3. ``complete_text_via_adapters`` mirrors the same semantics.
-4. Adapter selection honours the operator's ``infer_source`` resolution
-   so the dispatch lands on the operator-configured source.
+4. Adapter selection requires an exact route or a model-derived route; it
+   never scans a provider order.
 5. ``GeneralWebSearchTool`` + ``WebSearchTool`` delegate to the dispatch
    helper (source-level pin — no direct SDK imports).
 """
@@ -216,9 +216,9 @@ def test_web_search_via_adapters_returns_selected_adapter_result(
             _StubWebSearchAdapter(name="openai-payg", provider="openai", source="payg", mode="ok"),
         ],
     )
-    result = asyncio.run(web_search_via_adapters("test query"))
-    # Strict default-resolved: first provider in DEFAULT_PROVIDER_ORDER
-    # whose infer_source matches a registered adapter — anthropic-payg.
+    result = asyncio.run(
+        web_search_via_adapters("test query", prefer_provider="anthropic", prefer_source="payg")
+    )
     assert result.adapter_name == "anthropic-payg"
 
 
@@ -246,7 +246,9 @@ def test_web_search_via_adapters_raises_dispatch_error_on_transient_no_fallback(
         ],
     )
     with pytest.raises(AdapterDispatchError, match=r"anthropic-payg .*failed"):
-        asyncio.run(web_search_via_adapters("test query"))
+        asyncio.run(
+            web_search_via_adapters("test query", prefer_provider="anthropic", prefer_source="payg")
+        )
 
 
 def test_web_search_via_adapters_raises_billing_on_selected_adapter_no_fallback(
@@ -267,7 +269,9 @@ def test_web_search_via_adapters_raises_billing_on_selected_adapter_no_fallback(
         ],
     )
     with pytest.raises(BillingError, match=r"anthropic-payg .* credit exhausted"):
-        asyncio.run(web_search_via_adapters("test"))
+        asyncio.run(
+            web_search_via_adapters("test", prefer_provider="anthropic", prefer_source="payg")
+        )
 
 
 def test_web_search_via_adapters_raises_unavailable_with_no_candidates(
@@ -307,7 +311,7 @@ def test_web_search_via_adapters_prefer_exact_match_routes_to_subscription(
 ) -> None:
     """When the AgenticLoop's adapter is anthropic-oauth, dispatch must
     route web_search to anthropic-oauth — even though anthropic-payg is
-    also registered and would be the default-resolved pick."""
+    also registered."""
     _force_payg_first(monkeypatch)
     _install_stubs(
         monkeypatch,
@@ -329,16 +333,29 @@ def test_web_search_via_adapters_prefer_exact_match_routes_to_subscription(
     assert result.adapter_name == "anthropic-oauth"
 
 
-def test_web_search_via_adapters_default_uses_infer_source_resolution(
+def test_web_search_via_adapters_without_route_is_unavailable(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """When no preference, dispatch picks the adapter whose source equals
-    ``infer_source(provider)`` for the first provider in provider_order
-    that has a capable adapter. ``infer_source`` returning ``subscription``
-    for anthropic → anthropic-oauth is the selected adapter."""
+    _install_stubs(
+        monkeypatch,
+        [
+            _StubWebSearchAdapter(
+                name="anthropic-payg", provider="anthropic", source="payg", mode="ok"
+            ),
+        ],
+    )
+    with pytest.raises(AdapterUnavailableError, match="no adapter registered matching"):
+        asyncio.run(web_search_via_adapters("test"))
+
+
+def test_web_search_via_adapters_model_derives_single_route(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """When only model is provided, dispatch derives that model's provider
+    and source. It does not scan unrelated providers."""
     monkeypatch.setattr(
         "core.llm.adapters._source_inference.infer_source",
-        lambda provider: "subscription" if provider == "anthropic" else "payg",
+        lambda provider: "subscription" if provider == "openai" else "payg",
     )
     _install_stubs(
         monkeypatch,
@@ -347,15 +364,15 @@ def test_web_search_via_adapters_default_uses_infer_source_resolution(
                 name="anthropic-payg", provider="anthropic", source="payg", mode="ok"
             ),
             _StubWebSearchAdapter(
-                name="anthropic-oauth",
-                provider="anthropic",
+                name="codex-oauth",
+                provider="openai",
                 source="subscription",
                 mode="ok",
             ),
         ],
     )
-    result = asyncio.run(web_search_via_adapters("test"))
-    assert result.adapter_name == "anthropic-oauth"
+    result = asyncio.run(web_search_via_adapters("test", model="gpt-5.5"))
+    assert result.adapter_name == "codex-oauth"
 
 
 # ---------------------------------------------------------------------------
@@ -375,18 +392,19 @@ def test_complete_text_via_adapters_returns_first_success(
             ),
         ],
     )
-    result = asyncio.run(complete_text_via_adapters("prompt", system="sys"))
+    result = asyncio.run(
+        complete_text_via_adapters(
+            "prompt", system="sys", prefer_provider="anthropic", prefer_source="payg"
+        )
+    )
     assert "completed by anthropic-payg" in result.text
 
 
-def test_complete_text_via_adapters_provider_order_picks_first_capable(
+def test_complete_text_via_adapters_model_derives_route(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """PR-NO-FALLBACK — caller-supplied ``provider_order`` is the *preference
-    seed* for the operator-default-resolved path. Dispatch picks the first
-    provider in the order with a registered capable adapter, then tries
-    only that single adapter (no fallback on failure)."""
-    _force_payg_first(monkeypatch)
+    """A model-derived route selects that model's provider/source only."""
+    monkeypatch.setattr("core.llm.adapters._source_inference.infer_source", lambda _p: "payg")
     _install_stubs(
         monkeypatch,
         [
@@ -398,9 +416,7 @@ def test_complete_text_via_adapters_provider_order_picks_first_capable(
             ),
         ],
     )
-    result = asyncio.run(
-        complete_text_via_adapters("prompt", provider_order=("openai", "anthropic", "glm"))
-    )
+    result = asyncio.run(complete_text_via_adapters("prompt", model="gpt-5.5"))
     assert result.text.endswith("openai-payg")
 
 
@@ -423,7 +439,9 @@ def test_complete_text_via_adapters_raises_billing_no_fallback(
         ],
     )
     with pytest.raises(BillingError, match=r"anthropic-payg .* credit exhausted"):
-        asyncio.run(complete_text_via_adapters("prompt"))
+        asyncio.run(
+            complete_text_via_adapters("prompt", prefer_provider="anthropic", prefer_source="payg")
+        )
 
 
 # ---------------------------------------------------------------------------
