@@ -49,6 +49,11 @@ functional change.
 
 ### Fixed
 
+- **Adapter lookups normalize provider vocabulary at the boundary.**
+  `resolve_for` and `_select_adapter` now accept both registry family names
+  (`openai` / `glm`) and routing variant ids (`openai-codex` / `glm-coding` /
+  `zhipuai`), preventing codex-subscription fast-chat paths from failing with
+  `AdapterUnavailableError` when the loop forwards `openai-codex`.
 - **Computer-use incident hardening.** Native computer-use screenshots are no
   longer persisted in session checkpoints, SQLite message mirrors, or tool logs;
   durable state keeps compact digests/refs instead. Successful desktop actions
