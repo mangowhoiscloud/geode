@@ -21,6 +21,7 @@ from core.agent.safety import (
     WRITE_TOOLS,
 )
 from core.hooks.system import HookEvent
+from core.tools.computer_observation import sanitize_computer_payload
 
 from .executor import ToolExecutor
 from .result_token_guard import _compute_model_tool_limit, _guard_tool_result
@@ -145,11 +146,16 @@ class ToolCallProcessor:
                         entity_id=tool_use_id or "computer",
                     )
 
+        stored_result = (
+            sanitize_computer_payload(result)
+            if tool_name in {"computer", "computer_use"} and isinstance(result, dict)
+            else result
+        )
         self._tool_log.append(
             {
                 "tool": tool_name,
                 "input": tool_input,
-                "result": result,
+                "result": stored_result,
                 "tool_use_id": tool_use_id,
             }
         )

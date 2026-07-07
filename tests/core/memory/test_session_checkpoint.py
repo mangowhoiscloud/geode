@@ -203,6 +203,63 @@ class TestSessionCheckpoint:
         assert len(loaded.tool_log) == 1
         assert loaded.tool_log[0]["name"] == "search"
 
+    def test_computer_screenshots_are_omitted_from_checkpoint_cache(self, tmp_path):
+        import json
+
+        cp = SessionCheckpoint(tmp_path / "session")
+        state = SessionState(
+            session_id="computer-redact",
+            messages=[
+                {
+                    "role": "user",
+                    "content": [
+                        {
+                            "type": "tool_result",
+                            "tool_use_id": "tu1",
+                            "content": [
+                                {"type": "text", "text": '{"result":"success"}'},
+                                {
+                                    "type": "image",
+                                    "source": {
+                                        "type": "base64",
+                                        "media_type": "image/jpeg",
+                                        "data": "BASE64DATA",
+                                    },
+                                },
+                            ],
+                        }
+                    ],
+                }
+            ],
+            tool_log=[
+                {
+                    "tool": "computer",
+                    "result": {
+                        "result": "success",
+                        "screenshot": "BASE64DATA",
+                        "observation": {"screenshot_sha256": "abc"},
+                    },
+                }
+            ],
+        )
+
+        cp.save(state)
+
+        session_dir = tmp_path / "session" / "computer-redact"
+        messages_raw = (session_dir / "messages.json").read_text(encoding="utf-8")
+        tools_raw = (session_dir / "tools.json").read_text(encoding="utf-8")
+        assert "BASE64DATA" not in messages_raw
+        assert "BASE64DATA" not in tools_raw
+        assert "screenshot_omitted" in tools_raw
+        assert "image_omitted" in messages_raw
+
+        loaded = cp.load("computer-redact")
+        assert loaded is not None
+        assert "BASE64DATA" not in json.dumps(
+            {"messages": loaded.messages, "tool_log": loaded.tool_log}
+        )
+        assert loaded.tool_log[0]["result"]["screenshot_omitted"] is True
+
 
 class TestPhase1bDbFirst:
     """Phase 1b — load() reads messages from the SQLite SoT first; JSON is a

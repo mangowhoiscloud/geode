@@ -395,6 +395,65 @@ class TestComputerResultImageBlock:
         assert "screenshot" not in payload
         assert "BASE64DATA" not in str(payload)
 
+    def test_computer_tool_log_omits_screenshot_bytes(self) -> None:
+        from core.agent.tool_executor.processor import ToolCallProcessor
+
+        proc = ToolCallProcessor(
+            executor=MagicMock(), op_logger=MagicMock(), error_recovery=MagicMock()
+        )
+        proc._record_tool_activity(
+            "computer",
+            {"action": "screenshot"},
+            {
+                "result": "success",
+                "action": "screenshot",
+                "screenshot": "BASE64DATA",
+                "observation": {"screenshot_sha256": "abc"},
+            },
+            visible=True,
+            tool_use_id="tu6",
+        )
+
+        stored = proc.tool_log[0]["result"]
+        assert stored["screenshot_omitted"] is True
+        assert "screenshot" not in stored
+        assert "BASE64DATA" not in str(proc.tool_log)
+
+    def test_sanitizer_preserves_non_tool_user_images(self) -> None:
+        from core.tools.computer_observation import sanitize_computer_payload
+
+        payload = [
+            {
+                "role": "user",
+                "content": [
+                    {
+                        "type": "image",
+                        "source": {"type": "base64", "data": "USER_IMAGE"},
+                    }
+                ],
+            },
+            {
+                "role": "user",
+                "content": [
+                    {
+                        "type": "tool_result",
+                        "content": [
+                            {
+                                "type": "image",
+                                "source": {"type": "base64", "data": "TOOL_SCREEN"},
+                            }
+                        ],
+                    }
+                ],
+            },
+        ]
+
+        sanitized = sanitize_computer_payload(payload)
+
+        assert sanitized[0]["content"][0]["source"]["data"] == "USER_IMAGE"
+        assert "TOOL_SCREEN" not in str(sanitized)
+        assert "image_omitted" in sanitized[1]["content"][0]["content"][0]["text"]
+
 
 class TestCoordinateScaling:
     def test_scale_to_screen(self):
@@ -444,6 +503,9 @@ class TestExecuteDispatch:
         with patch.object(h, "screenshot", return_value="base64data"):
             result = asyncio.run(h.aexecute("screenshot"))
         assert result["result"] == "success"
+        assert result["action_status"] == "dispatched"
+        assert result["requires_verification"] is False
+        assert result["postcondition_verified"] is False
         assert result["screenshot"] == "base64data"
         assert result["observation"]["screenshot_sha256"]
         assert result["observation"]["target_width"] == 1280
@@ -454,6 +516,10 @@ class TestExecuteDispatch:
         with patch.object(h, "click", return_value="base64data"):
             result = asyncio.run(h.aexecute("click", x=100, y=200, button="left"))
         assert result["result"] == "success"
+        assert result["action_status"] == "dispatched"
+        assert result["requires_verification"] is True
+        assert result["postcondition_verified"] is False
+        assert "target application state is not proven" in result["verification_hint"]
 
     def test_type_action(self):
         h = ComputerUseHarness()
