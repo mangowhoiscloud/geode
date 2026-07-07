@@ -45,6 +45,17 @@ functional change.
 
 ---
 
+## [Unreleased]
+
+### Fixed
+
+- **Computer-use guard and subscription routing diagnostics.** AgenticLoop now
+  preserves session budget handoff/expiry guard reasons instead of surfacing
+  them as `Max agentic rounds reached`, and OpenAI subscription GUI preflight
+  now routes unsupported visual `locate` work toward source-safe helpers such
+  as `ui_probe`, browser DOM tools, `playwriter`, keyboard navigation, or an
+  explicit GLM route.
+
 ## [0.99.285] - 2026-07-07
 
 ### Fixed

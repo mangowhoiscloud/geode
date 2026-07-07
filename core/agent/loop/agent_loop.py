@@ -891,6 +891,66 @@ class AgenticLoop:
                 return handoff_reason
         return None
 
+    def _guard_exit_result(
+        self,
+        guard_reason: str | None,
+        *,
+        rounds: int,
+    ) -> tuple[str, str]:
+        """Map a loop-entry guard reason to a terminal result.
+
+        The guard helper returns precise internal reasons. Preserve that
+        precision here so session-wide budget handoff/expiry does not leak as
+        the unrelated legacy "max rounds" fallback.
+        """
+        if guard_reason == "time_budget":
+            return (
+                "time_budget_expired",
+                f"Time budget ({self._time_budget_s:.0f}s) expired after {rounds} rounds.",
+            )
+        if guard_reason in {"session_time_budget_handoff", "session_time_budget_expired"}:
+            remaining = None
+            total = None
+            try:
+                from core.observability.session_metrics import current_session_metrics
+
+                metrics = current_session_metrics()
+                remaining = metrics.time_budget_remaining_s()
+                total = metrics.time_budget_total_s
+            except Exception:
+                log.debug("session budget summary unavailable for guard exit", exc_info=True)
+
+            if guard_reason == "session_time_budget_handoff":
+                if remaining is not None and total is not None and total > 0:
+                    text = (
+                        "Session time budget is in the handoff window "
+                        f"({remaining:.0f}s remaining of {total:.0f}s). "
+                        "Start a new GEODE session or restart GEODE to continue safely."
+                    )
+                else:
+                    text = (
+                        "Session time budget is in the handoff window. "
+                        "Start a new GEODE session or restart GEODE to continue safely."
+                    )
+                return "session_time_budget_handoff", text
+
+            if remaining is not None and total is not None and total > 0:
+                text = (
+                    "Session time budget expired "
+                    f"({abs(min(remaining, 0.0)):.0f}s over the {total:.0f}s budget). "
+                    "Start a new GEODE session or restart GEODE to continue."
+                )
+            else:
+                text = (
+                    "Session time budget expired. "
+                    "Start a new GEODE session or restart GEODE to continue."
+                )
+            return "session_time_budget_expired", text
+
+        # Back-compat: an exhausted positive max_rounds cap keeps the legacy
+        # result text/termination reason.
+        return "max_rounds", "Max agentic rounds reached. Please try a more specific request."
+
     def _persist_handoff_request(self) -> None:
         """Flip the ``sessions`` row to ``handoff_state='pending'`` via the
         DB CAS helper (once per session at the T-threshold crossing).
@@ -1416,8 +1476,10 @@ class AgenticLoop:
 
         self._usage_snapshot = _get_tracker().snapshot()
         round_idx = 0
+        guard_reason: str | None = None
         while True:
-            if self._check_round_guards(round_idx) is not None:
+            guard_reason = self._check_round_guards(round_idx)
+            if guard_reason is not None:
                 break
 
             is_last_round = (self.max_rounds > 0) and (round_idx == self.max_rounds - 1)
@@ -1952,15 +2014,14 @@ class AgenticLoop:
         # Loop exited via guard — determine reason
         self._op_logger.finalize()
         elapsed = _time.monotonic() - self._loop_start_time
-        if self._time_budget_s > 0 and elapsed >= self._time_budget_s:
+        if guard_reason == "time_budget":
             from core.ui.agentic_ui import emit_time_budget_expired
 
             emit_time_budget_expired(self._time_budget_s, elapsed, round_idx)
-            reason = "time_budget_expired"
-            text = f"Time budget ({self._time_budget_s:.0f}s) expired after {round_idx} rounds."
-        else:
-            reason = "max_rounds"
-            text = "Max agentic rounds reached. Please try a more specific request."
+        reason, text = self._guard_exit_result(
+            guard_reason,
+            rounds=round_idx,
+        )
         messages.append(
             {
                 "role": "assistant",
