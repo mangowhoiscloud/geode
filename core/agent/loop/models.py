@@ -41,35 +41,37 @@ async def _context_exhausted_message(user_input: str) -> str:
     ChatGPT-subscription-only operator (no Anthropic key) finally gets
     a language-matched notice. The previous direct ``anthropic.Anthropic``
     instantiation returned the static English fallback for that operator
-    every time, defeating the localisation intent. Provider preference
-    ``("anthropic", "openai", "glm")`` preserves the historic Haiku-
-    first ordering while opening the gpt-5.x + GLM paths.
+    every time, defeating the localisation intent. The helper now routes
+    through the current configured model's provider/source only; it never
+    scans a cross-provider order.
 
     Returns the static ``_EXHAUSTED_FALLBACK`` on every failure (billing,
     transient, no-credential) — graceful by design, the loop surfaces
     SOME message to the user even on a fully-degraded credential surface.
     """
-    from core.config import ANTHROPIC_BUDGET
+    from core.config import _resolve_provider, settings
+    from core.llm.adapters._source_inference import infer_source
     from core.llm.adapters.dispatch import (
         AdapterDispatchError,
         AdapterUnavailableError,
         complete_text_via_adapters,
     )
+    from core.llm.adapters.registry import normalize_registry_provider
     from core.llm.errors import BillingError
 
-    # PR-NO-FALLBACK (2026-05-28) — strict single-adapter dispatch picks
-    # the first provider in this order whose ``infer_source`` resolves to
-    # a registered adapter, then tries that single adapter. The static
-    # ``_EXHAUSTED_FALLBACK`` covers every failure mode; the dispatch
-    # layer's INFO log records exactly which adapter was tried and why
-    # it failed so operators see honest per-attempt observability.
+    model = settings.model
+    provider = normalize_registry_provider(_resolve_provider(model))
+    source = infer_source(provider)
+    # The static ``_EXHAUSTED_FALLBACK`` covers every failure mode; the
+    # dispatch layer records exactly which adapter was tried.
     try:
         result = await complete_text_via_adapters(
             user_input[:200],
             system=_EXHAUSTED_SYSTEM,
+            model=model,
             max_tokens=150,
-            provider_order=("anthropic", "openai", "glm"),
-            model_by_provider={"anthropic": ANTHROPIC_BUDGET},
+            prefer_provider=provider,
+            prefer_source=source,
         )
     except BillingError:
         log.debug("Exhausted message: adapter credit exhausted — static fallback")

@@ -48,7 +48,7 @@ class AgentDefinition(BaseModel):
 
     def to_system_message(self) -> str:
         """Format as a system message combining role and prompt."""
-        return f"You are a {self.role}.\n\n{self.system_prompt}"
+        return f"Role: {self.role}.\n\n{self.system_prompt}"
 
 
 # ---------------------------------------------------------------------------
@@ -69,7 +69,7 @@ _DEFAULT_AGENTS: list[dict[str, Any]] = [
         "name": "research_assistant",
         "role": "Research Specialist",
         "system_prompt": (
-            "You are a research specialist. Gather and synthesize information "
+            "Task: research specialist. Gather and synthesize information "
             "from multiple sources — web, documents, and databases. "
             "Provide well-structured summaries with key findings and evidence."
         ),
@@ -80,7 +80,7 @@ _DEFAULT_AGENTS: list[dict[str, Any]] = [
         "name": "data_analyst",
         "role": "Data Analysis Specialist",
         "system_prompt": (
-            "You are a data analyst. Analyze datasets, identify trends and patterns, "
+            "Task: data analysis. Analyze datasets, identify trends and patterns, "
             "compute statistics, and generate visualizations. "
             "Provide data-driven insights with clear methodology."
         ),
@@ -91,7 +91,7 @@ _DEFAULT_AGENTS: list[dict[str, Any]] = [
         "name": "web_researcher",
         "role": "Web Research & Monitoring Specialist",
         "system_prompt": (
-            "You are a web researcher specializing in monitoring trends, "
+            "Task: web research and monitoring. Track trends, "
             "tracking updates, and aggregating information from online sources. "
             "Provide timely summaries with source attribution."
         ),
@@ -184,7 +184,7 @@ class SubagentLoader:
         tools: [web_search, web_fetch, read_document]
         model: claude-sonnet-4-5-20250929
         ---
-        You are a research specialist...
+        Role: research specialist...
     """
 
     def __init__(

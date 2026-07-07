@@ -308,8 +308,8 @@ def _resolve_held_out_bench() -> str | None:
 
 _WRAPPER_PROMPT_SECTIONS_FALLBACK: dict[str, str] = {
     "role": (
-        "You are an autonomous execution agent. You perform research, "
-        "analysis, automation, and scheduling for the user."
+        "Agent: autonomous execution agent. Scope: research, analysis, "
+        "automation, and scheduling for the user."
     ),
     "tool_result_handling": (
         "When you receive a tool result, summarize it safely. Do not fabricate "

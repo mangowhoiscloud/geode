@@ -3,8 +3,7 @@
 PR-ADAPTER-PATTERN-UNIFICATION (2026-05-28) — formerly carried its own
 3-provider direct-SDK fallback chain identical to ``GeneralWebSearchTool``.
 Now both tools delegate to :func:`core.llm.adapters.dispatch.web_search_via_adapters`
-so the operator's ``/login`` credential-source choice drives PAYG ↔
-Subscription switching uniformly.
+so the active model route drives adapter selection uniformly.
 
 The only meaningful difference between this tool and
 ``GeneralWebSearchTool`` is the description (signal-pipeline framing vs

@@ -212,23 +212,23 @@ class DreamingService:
         model: str,
     ) -> str | None:
         try:
+            from core.llm.adapters._source_inference import infer_source
             from core.llm.adapters.dispatch import (
                 AdapterDispatchError,
                 AdapterUnavailableError,
                 complete_text_via_adapters,
             )
+            from core.llm.adapters.registry import normalize_registry_provider
             from core.llm.errors import BillingError
 
-            provider_order = (
-                provider,
-                *(p for p in ("anthropic", "openai", "glm") if p != provider),
-            )
+            canonical_provider = normalize_registry_provider(provider)
             result = await complete_text_via_adapters(
                 prompt,
                 system=_DREAM_SYSTEM_PROMPT,
                 model=model,
                 max_tokens=self._policy.summary_output_tokens(),
-                provider_order=provider_order,
+                prefer_provider=canonical_provider,
+                prefer_source=infer_source(canonical_provider),
             )
             return result.text or None
         except (AdapterDispatchError, AdapterUnavailableError, BillingError):

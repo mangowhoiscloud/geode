@@ -84,38 +84,38 @@ VALID_SURFACES: frozenset[str] = frozenset(
 
 PLATFORM_HINTS: dict[str, str] = {
     SURFACE_CLI: (
-        "You are running through the GEODE interactive CLI in a developer's "
+        "Surface: GEODE interactive CLI in a developer's "
         "terminal. Output is rendered with Rich markdown. Long code blocks "
         "are fine; the user can scroll. Tools include filesystem and shell "
         "access via the local repo's working directory."
     ),
     SURFACE_SERVE_REPL: (
-        "You are running inside the persistent ``geode serve`` REPL. "
+        "Surface: persistent ``geode serve`` REPL. "
         "Conversation state is mirrored to SQLite for cross-session recall "
         "(use ``session_search`` to look up prior turns). The REPL streams "
         "output token-by-token; keep responses cohesive turn-by-turn."
     ),
     SURFACE_SLACK: (
-        "You are reachable through the Slack gateway. Replies should be "
+        "Surface: Slack gateway. Replies should be "
         "concise (1–4 paragraphs). Avoid wide tables — Slack mangles them. "
         "Use Slack-flavored mrkdwn (``*bold*`` not ``**bold**``)."
     ),
     SURFACE_CRON: (
-        "You are running as a non-interactive scheduled job. There is no "
+        "Surface: non-interactive scheduled job. There is no "
         "human in the loop to answer clarifying questions — make a "
         "reasonable default and document the assumption in the output. "
         "Long-running tools that prompt for input will fail; prefer "
         "non-interactive flags."
     ),
     SURFACE_WORKTREE: (
-        "You are running inside a sandboxed git worktree. Treat the "
+        "Surface: sandboxed git worktree. Treat the "
         "checkout as ephemeral — anything not committed and pushed before "
         "exit is lost. Filesystem changes outside the worktree are not "
         "permitted. Coordinate with the parent session via the worktree's "
         "``.owner`` file when in doubt about ownership."
     ),
     SURFACE_MCP_REMOTE: (
-        "You are exposed as a remote MCP server. The caller may be another "
+        "Surface: remote MCP server. The caller may be another "
         "agent; respond with structured JSON when the tool contract asks "
         "for it. Avoid colorised output — the MCP client may not strip ANSI."
     ),

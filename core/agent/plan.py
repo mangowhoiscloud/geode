@@ -270,7 +270,7 @@ def render_plan_for_prompt(plan: Plan) -> str:
         return ""
     lines = ["<plan>"]
     lines.append(
-        f"You are executing step {plan.current + 1}/{len(plan.steps)} "
+        f"Current execution step: {plan.current + 1}/{len(plan.steps)} "
         f"(revision {plan.revision}): {cur.description}"
     )
     if cur.expected_outcome:
@@ -417,8 +417,8 @@ def should_replan(
 # ----------------------------------------------------------------------
 
 _REPLAN_SYSTEM_PROMPT = """\
-You are a re-planning assistant. Given the agent's current plan,
-the just-finished turn's result, and a failure signal, propose a
+Task: re-planning. Given the agent's current plan, the just-finished
+turn's result, and a failure signal, propose a
 revised plan covering the remaining work. Reply with a single-line
 JSON object — no prose:
 

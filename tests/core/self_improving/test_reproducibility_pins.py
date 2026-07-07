@@ -88,7 +88,7 @@ def test_compose_wrapper_prompt_coerces_non_str_values() -> None:
 
 def test_build_run_provenance_full_cycle() -> None:
     fields = build_run_provenance(
-        wrapper_sections={"role": "you are an agent"},
+        wrapper_sections={"role": "Role: agent"},
         applied_target_section="tool.web_search.description",
         applied_new_value="search the web carefully",
         applied_target_kind="tool_policy",

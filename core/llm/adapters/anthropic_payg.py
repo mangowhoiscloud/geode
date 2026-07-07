@@ -51,7 +51,7 @@ class AnthropicPaygAdapter:
     source: str = SOURCE_PAYG
     billing_type: AdapterBillingType = AdapterBillingType.API
     # PR-ADAPTER-PATTERN-UNIFICATION (2026-05-28) — capability flags consumed by
-    # ``core.llm.adapters.dispatch`` for tool-side fallback chains.
+    # ``core.llm.adapters.dispatch`` for exact-route tool-side dispatch.
     supports_web_search: bool = True
     supports_text_completion: bool = True
     # ComputerUseCapable — injected on the live request path

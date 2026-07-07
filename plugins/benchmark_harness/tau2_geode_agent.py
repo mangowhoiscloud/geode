@@ -242,7 +242,7 @@ def _agent_system_prompt(
     guard_text: str = "",
 ) -> str:
     prompt = (
-        "You are the GEODE agent running inside tau2-bench.\n"
+        "Agent: GEODE running inside tau2-bench.\n"
         "Follow the domain policy exactly. Use the provided tools to change the "
         "environment state when the user asks for an operation. Do not invent "
         "tool results or missing user facts. When calling a tool, provide every "
@@ -348,8 +348,8 @@ def _user_system_prompt(
 
     guidelines = get_global_user_sim_guidelines(use_tools=use_tools)
     prompt = (
-        "You are the simulated tau2 benchmark user running through GEODE.\n"
-        "You are NOT the assistant. You are the customer/user in the scenario.\n"
+        "Role: simulated tau2 benchmark user running through GEODE.\n"
+        "Boundary: not the assistant; customer/user in the scenario.\n"
         "Follow the scenario and simulator guidelines exactly. If the task is "
         "complete or the conversation should end, use tau2's required stop token "
         "when the guidelines call for it.\n\n"

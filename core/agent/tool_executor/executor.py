@@ -493,10 +493,10 @@ class ToolExecutor:
         SubAgentManager.adelegate(...)`` so the parent ToolExecutor's
         event loop is not pinned during sub-agent fan-out.
 
-        ``context`` carries the loop's live LLM identity; its ``model`` is
-        forwarded as the sub-agent's default model so delegation inherits
-        the current ``/model`` (PR-SUBAGENT-MODEL-ALIGN). Per-task and
-        AgentDefinition model overrides still win over this default.
+        ``context`` carries the loop's live LLM identity; its ``model`` and
+        ``source`` are forwarded so delegation inherits the current
+        ``/model`` and credential route. Per-task and AgentDefinition model
+        overrides still win over this default.
         """
         from core.agent.sub_agent import SubTask
 
@@ -504,6 +504,7 @@ class ToolExecutor:
             return {"error": "SubAgentManager not configured"}
 
         default_model = getattr(context, "model", "") or ""
+        default_source = getattr(context, "source", "") or ""
 
         tasks_raw: list[dict[str, Any]] = tool_input.get("tasks", [])
         # ``best_of`` applies ONLY to single-task mode. Keyed on the caller's
@@ -516,6 +517,8 @@ class ToolExecutor:
                     "task_description": tool_input.get("task_description", ""),
                     "task_type": tool_input.get("task_type", "analyze"),
                     "args": tool_input.get("args", {}),
+                    "model": tool_input.get("model", ""),
+                    "source": tool_input.get("source", ""),
                     # PR-SUBAGENT-ROLES (2026-07-02) — optional built-in
                     # capability role (see core/agent/subagent_roles.py).
                     "role": tool_input.get("role", ""),
@@ -554,6 +557,8 @@ class ToolExecutor:
                 task_type=t.get("task_type", "analyze"),
                 args=t.get("args", {}),
                 role=str(t.get("role") or default_role or ""),
+                model=str(t.get("model") or ""),
+                source=str(t.get("source") or default_source or ""),
             )
             for i, t in enumerate(tasks_raw)
         ]

@@ -399,7 +399,7 @@ def test_serialise_multi_turn_order_preserved() -> None:
     from plugins.petri_audit.claude_cli_provider import serialise_messages_to_prompt
 
     msgs = [
-        SimpleNamespace(role="system", content="You are helpful."),
+        SimpleNamespace(role="system", content="Mode: helpful assistance."),
         SimpleNamespace(role="user", content="What is 2+2?"),
         SimpleNamespace(role="assistant", content="4"),
         SimpleNamespace(role="user", content="And 3+3?"),

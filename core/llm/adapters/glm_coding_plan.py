@@ -66,7 +66,7 @@ class GlmCodingPlanAdapter:
     # web_search + text_completion both work. The frontier audit
     # (2026-05-28) did not directly confirm Coding Plan web_search support,
     # but z.ai's Coding Plan terms state full PAYG-API parity; we advertise
-    # both capabilities and let the dispatch fallback chain skip on actual
+    # both capabilities and let exact-route dispatch surface actual
     # 400 / 1113 errors if support diverges.
     supports_web_search: bool = True
     supports_text_completion: bool = True

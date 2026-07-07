@@ -27,6 +27,9 @@ from core.agent.loop import _model_switching
 
 class _FakeToolProcessor:
     _model = ""
+    _provider = ""
+    _source = ""
+    _adapter_name = ""
 
 
 class _FakeLoop:
@@ -51,7 +54,14 @@ def _patched_resolution(monkeypatch: pytest.MonkeyPatch) -> dict[str, Any]:
     monkeypatch.setattr(
         _model_switching,
         "_resolve_path_b_adapter",
-        lambda provider, source: calls["resolved"].append((provider, source)) or object(),
+        lambda provider, source: (
+            calls["resolved"].append((provider, source))
+            or type(
+                "Adapter",
+                (),
+                {"provider": provider, "source": source, "name": f"{provider}-{source}"},
+            )()
+        ),
         raising=False,
     )
     monkeypatch.setattr(
@@ -76,6 +86,10 @@ def test_cross_provider_switch_reinfers_inferred_source(
     assert _patched_resolution["resolved"] == [("openai", "subscription")], (
         "the Path-B adapter must be resolved with the RE-INFERRED source"
     )
+    assert loop._tool_processor._model == "gpt-5.5"
+    assert loop._tool_processor._provider == "openai"
+    assert loop._tool_processor._source == "subscription"
+    assert loop._tool_processor._adapter_name == "openai-subscription"
 
 
 def test_cross_provider_switch_keeps_explicit_source(
@@ -87,6 +101,8 @@ def test_cross_provider_switch_keeps_explicit_source(
 
     assert loop._source == "payg", "explicit caller pin must survive the switch"
     assert _patched_resolution["resolved"] == [("openai", "payg")]
+    assert loop._tool_processor._provider == "openai"
+    assert loop._tool_processor._source == "payg"
 
 
 def test_same_provider_switch_does_not_touch_source(

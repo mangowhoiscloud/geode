@@ -453,7 +453,7 @@ _MUTATION_CONTRACT_SUFFIX = (
     "## Mutation Contract (runner-specific, on top of program.md)\n"
     "\n"
     "For THIS invocation, ignore the broader autoresearch loop instructions "
-    "in program.md and act as a single-shot mutator with these constraints:\n"
+    "in program.md and follow this single-shot mutator contract:\n"
     "\n"
     "- Change exactly ONE section of the chosen policy SoT (the dict "
     "selected by ``target_kind`` — defaults to WRAPPER_PROMPT_SECTIONS "

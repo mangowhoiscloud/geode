@@ -336,9 +336,9 @@ class LLMAdapter(Protocol):
 # Paperclip-pattern alignment (``packages/adapter-utils/src/types.ts:349``):
 # adapters declare optional capabilities (web_search, text_completion,
 # instructions_bundle, ...) via mixin Protocols + explicit ``supports_*``
-# boolean flags. Centralised fallback chains (``core/llm/adapters/dispatch.py``)
-# iterate registered adapters by source preference (subscription > payg) and
-# pick the first that advertises the capability.
+# boolean flags. Centralised exact-route dispatch
+# (``core/llm/adapters/dispatch.py``) picks only the adapter matching the
+# caller's resolved provider/source route.
 #
 # Why split the Protocol: the core ``LLMAdapter`` stays minimal (one method)
 # so adding an adapter only requires implementing ``acomplete`` + identity

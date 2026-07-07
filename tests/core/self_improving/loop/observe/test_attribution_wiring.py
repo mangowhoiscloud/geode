@@ -239,7 +239,7 @@ class TestW3AuditRunIdField:
         log_path = tmp_path / "mutations.jsonl"
         mutation = Mutation(
             target_section="role",
-            new_value="You are GEODE.",
+            new_value="Agent: GEODE.",
             rationale="test",
             expected_dim={"safety": 0.1},
         )
@@ -264,7 +264,7 @@ class TestW3AuditRunIdField:
         log_path = tmp_path / "mutations.jsonl"
         mutation = Mutation(
             target_section="role",
-            new_value="You are GEODE.",
+            new_value="Agent: GEODE.",
             rationale="test",
         )
         append_audit_log(mutation, previous_value="", log_path=log_path)
@@ -395,7 +395,7 @@ class TestMutationIdJoin:
         log_path = tmp_path / "mutations.jsonl"
         mutation = Mutation(
             target_section="role",
-            new_value="You are GEODE.",
+            new_value="Agent: GEODE.",
             rationale="test",
             expected_dim={"safety": 0.1},
         )

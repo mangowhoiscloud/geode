@@ -13,6 +13,8 @@ Each test pins a specific behaviour discovered or established by the audit:
 
 from __future__ import annotations
 
+import re
+
 import pytest
 from core.agent.system_injection import append_system_reminder
 from core.agent.system_prompt import (
@@ -22,6 +24,11 @@ from core.agent.system_prompt import (
     build_system_prompt,
 )
 from core.llm.prompts import _load_template
+
+_DIRECT_ASSERTION_RE = re.compile(
+    r"\b(?:You are (?:GEODE|a |an |the |running|responding|reachable|"
+    r"exposed|currently|now|executing|compacting|evaluating|helpful)|Act as)\b"
+)
 
 # ---------------------------------------------------------------------------
 # G9 — learned-pattern context-leak sanitize
@@ -114,14 +121,24 @@ def test_g10_persona_default_injects_geode_identity(monkeypatch: pytest.MonkeyPa
     monkeypatch.delenv("GEODE_AUDIT_UNRESTRICTED", raising=False)
     out = build_system_prompt(model="claude-opus-4-8")
     assert "<agent_identity>" in out
-    assert "You are GEODE" in out
+    assert "Agent: GEODE" in out
+    assert "You are GEODE" not in out
     assert "RUNTIME CANNOT" in out
 
 
-def test_g10_router_md_no_geode_name_in_baseline() -> None:
-    """G11 — the router.md baseline must NOT carry 'You are GEODE'.
+def test_runtime_prompt_uses_metadata_style_identity(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Prompt-writing standard: runtime prompts use metadata clauses, not direct roleplay assertions."""
+    monkeypatch.delenv("GEODE_PERSONA", raising=False)
+    monkeypatch.delenv("GEODE_AUDIT_UNRESTRICTED", raising=False)
+    out = build_system_prompt(model="claude-opus-4-8")
+    assert "Agent: GEODE" in out
+    assert _DIRECT_ASSERTION_RE.search(out) is None
 
-    The GEODE-identity assertion lives only in the <agent_identity> layer
+
+def test_g10_router_md_no_geode_name_in_baseline() -> None:
+    """G11 — the router.md baseline must NOT carry a GEODE identity clause.
+
+    The GEODE identity lives only in the <agent_identity> layer
     (G10, default-on), so the router baseline itself reads neutrally.
     """
     from core.llm.prompts import ROUTER_SYSTEM
@@ -147,7 +164,7 @@ def test_wrapper_fallback_role_is_generic_not_geode_persona() -> None:
     """Mirror of G11 for the self-improving wrapper baseline.
 
     The always-on ``_WRAPPER_PROMPT_SECTIONS_FALLBACK['role']`` must read
-    neutrally, not leak the 'You are GEODE' persona — that identity belongs
+    neutrally, not leak the GEODE persona — that identity belongs
     only to the opt-in ``<agent_identity>`` layer (GEODE_PERSONA-gated). The
     mutator may still *propose* a GEODE-named role; this pins only the
     shipped baseline so GEODE_PERSONA=off stays a thin wrapper.

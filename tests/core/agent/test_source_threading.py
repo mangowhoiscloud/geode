@@ -15,7 +15,7 @@ from core.agent.worker import WorkerRequest
 
 
 def test_subtask_default_source_is_empty_legacy() -> None:
-    """Unset source means legacy routing — no behaviour change for old callers."""
+    """Unset source means the worker may infer from its selected provider."""
     task = SubTask(task_id="t1", description="d", task_type="analyze")
     assert task.source == ""
 

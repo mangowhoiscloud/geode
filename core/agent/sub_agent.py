@@ -269,7 +269,7 @@ class SubTask:
     # the parse site. Empty / unknown role = legacy behaviour unchanged
     # (opt-in registry).
     role: str = ""
-    source: str = ""  # adapter source; empty falls back to "payg"
+    source: str = ""  # adapter source; empty lets worker infer from provider
     # PR-VOTER-PROVIDER-WIRE (2026-05-25) — per-task model override.
     # Pre-fix every SubTask inherited ``worker_model = settings.model``
     # (or the AgentDefinition's model if ``agent_ctx`` resolved). That
