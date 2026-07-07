@@ -53,8 +53,8 @@ DIM = "\033[2m"  # secondary metadata, gutters, timings
 FAINT = "\033[90m"  # collapsed-thinking header, reasoning dot
 DONE_STRIKE = "\033[2;9m"  # completed plan step in the windowed checklist
 
-OK = "\033[32m"  # tool/subagent success marks
-OK_BOLD = "\033[1;32m"  # OAuth success line
+OK = "\033[36m"  # tool/subagent success marks (GEODE cyan)
+OK_BOLD = "\033[1;36m"  # OAuth success line (GEODE cyan)
 FAIL = "\033[31m"  # per-item failure marks
 ERROR = "\033[1;31m"  # critical: billing, cost exceeded, convergence
 NOTICE = "\033[33m"  # context exhausted, soft cautions

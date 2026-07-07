@@ -7,7 +7,7 @@ subscription quota usage against the
 ``[self_improving_loop] warn_threshold`` / ``abort_threshold`` from
 :mod:`core.config.self_improving`:
 
-- **green**  — usage < warn_threshold (subscription healthy)
+- **blue**   — usage < warn_threshold (subscription healthy)
 - **yellow** — warn ≤ usage < abort (approaching limit)
 - **red**    — usage ≥ abort, *or* an abort was triggered (e.g. by a
   ``CredentialResolutionError(subscription_only=True)`` raised inside
@@ -69,7 +69,7 @@ class QuotaAbortError(RuntimeError):
         self.reason = reason
 
 
-Tier = Literal["green", "yellow", "red"]
+Tier = Literal["blue", "yellow", "red"]
 
 
 @dataclass(frozen=True)
@@ -238,14 +238,14 @@ class SubscriptionQuotaBanner:
             return "red"
         if ratio >= self._warn:
             return "yellow"
-        return "green"
+        return "blue"
 
     def render(self) -> str:
         """Return a prompt_toolkit HTML string for ``bottom_toolbar``.
 
         Format::
 
-            ⬤ green   subscription healthy (12% used)
+            ⬤ blue    subscription healthy (12% used)
             ⬤ yellow  approaching limit (62% of <provider>)
             ⬤ red     aborted — see /status
 
@@ -275,7 +275,7 @@ class SubscriptionQuotaBanner:
                 f"{state.provider}: {pct}% used"
                 f" — approaching {int(self._abort * 100)}% limit"
             )
-        return f'<style fg="green"> ⬤ </style>{state.provider}: {pct}% used — healthy'
+        return f'<style fg="#5f9ea0"> ⬤ </style>{state.provider}: {pct}% used — healthy'
 
 
 # Module-level singleton + ContextVar accessor.

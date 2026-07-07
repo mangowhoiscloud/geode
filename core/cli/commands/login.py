@@ -243,7 +243,7 @@ def _login_help() -> None:
         "\n"
         "  [label]/login[/label]                       Show all plans, profiles, routing\n"
         "  [label]/login openai[/label]                OAuth flow (ChatGPT subscription quota)\n"
-        "  [label]/login anthropic[/label]             OAuth flow (Claude subscription)\n"
+        "  [label]/login anthropic[/label]             Explain Anthropic API-key setup\n"
         "  [label]/login add[/label]                   Interactive wizard\n"
         "  [label]/login source[/label] <prov> <type>   Pick credential source per provider\n"
         "  [label]/login set-key[/label] <plan> <key>  Update a plan's API key\n"
@@ -406,7 +406,7 @@ def _login_show_status() -> None:
 
                     rem = int(p.expires_at - _t.time())
                     expiry = f" · expires {rem // 60}m" if rem > 0 else " · [error]expired[/error]"
-                # Eligibility badge — green ✓ when ok, yellow/red with reason otherwise.
+                # Eligibility badge — success ✓ when ok, warning/error with reason otherwise.
                 reason = verdicts_by_name.get(p.name, "ok")
                 if reason == "ok":
                     badge_str = "[success]✓[/success]"

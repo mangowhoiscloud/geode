@@ -85,7 +85,7 @@ def memory_lifecycle(
         )
     if apply and pending:
         moves = apply_decay(verdicts, memory_dir=target_dir)
-        console.print(f"[green]decay: moved {len(moves)} entr(y/ies)[/green]")
+        console.print(f"[success]decay: moved {len(moves)} entr(y/ies)[/success]")
     else:
         console.print(
             f"decay: {len(pending)} pending move(s), {len(verdicts)} entr(y/ies) evaluated"

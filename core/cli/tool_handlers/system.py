@@ -38,8 +38,8 @@ def _build_system_handlers(
         console.print(f"  [header]GEODE v{geode_version}[/header]")
         console.print(f"  Model: [bold]{settings.model}[/bold]")
         console.print(f"  Ensemble: [bold]{settings.ensemble_mode}[/bold]")
-        ant_status = "[green]configured[/green]" if ant_ok else "[red]not set[/red]"
-        oai_status = "[green]configured[/green]" if oai_ok else "[red]not set[/red]"
+        ant_status = "[success]configured[/success]" if ant_ok else "[red]not set[/red]"
+        oai_status = "[success]configured[/success]" if oai_ok else "[red]not set[/red]"
         console.print(f"  Anthropic API: {ant_status}")
         console.print(f"  OpenAI API: {oai_status}")
         console.print(f"  Mode: [bold]{mode}[/bold]")
@@ -57,7 +57,7 @@ def _build_system_handlers(
         if active:
             for srv in active:
                 desc = f" -- {srv['description']}" if srv["description"] else ""
-                console.print(f"    [green]OK[/green] {srv['name']} [dim]{desc}[/dim]")
+                console.print(f"    [success]OK[/success] {srv['name']} [dim]{desc}[/dim]")
         else:
             console.print("    [muted]No active servers[/muted]")
 

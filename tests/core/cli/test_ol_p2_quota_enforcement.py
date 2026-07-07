@@ -36,7 +36,7 @@ def test_set_state_below_warn_does_not_trip() -> None:
     banner = SubscriptionQuotaBanner(warn_threshold=0.5, abort_threshold=0.9)
     banner.set_state(provider="anthropic", used_tokens=10, total_tokens=100)
     assert banner.state.aborted is False
-    assert banner.tier() == "green"
+    assert banner.tier() == "blue"
 
 
 def test_set_state_between_warn_and_abort_does_not_trip() -> None:

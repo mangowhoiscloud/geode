@@ -48,7 +48,7 @@ def serve(
 
     if not settings.gateway_enabled:
         console.print("  [warning]Gateway is disabled.[/warning]")
-        console.print("  [dim]Set GEODE_GATEWAY_ENABLED=true in ~/.geode/.env[/dim]")
+        console.print("  [dim]Set [gateway] enabled = true in ~/.geode/config.toml[/dim]")
         raise typer.Exit(1)
 
     console.print()

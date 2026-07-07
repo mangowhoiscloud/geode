@@ -49,6 +49,14 @@ functional change.
 
 ### Fixed
 
+- **First-run credential paths now use the global secret store.** Setup, key,
+  and login API-key writers now default to `~/.geode/.env` instead of the
+  current working directory, while stale dotenv cleanup scrubs both global and
+  project `.env` files. README/setup docs now separate secrets, behavior
+  config, auth profiles, workspace context, and runtime state.
+- **CLI success styling now uses GEODE cyan instead of green.** Rich semantic
+  `success`/`step` styles, raw ANSI success tokens, and the healthy quota
+  banner now render in GEODE's blue-cyan palette.
 - **Computer-use guard and subscription routing diagnostics.** AgenticLoop now
   preserves session budget handoff/expiry guard reasons instead of surfacing
   them as `Max agentic rounds reached`, and OpenAI subscription GUI preflight

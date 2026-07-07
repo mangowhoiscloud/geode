@@ -68,8 +68,8 @@ def init(
     if not global_env.exists():
         global_env.write_text(
             "# GEODE global API keys (shared across all projects)\n"
-            "# Keys here are used when project-local .env is absent.\n"
-            "# Priority: env vars > CWD/.env > ~/.geode/.env\n\n"
+            "# Keys here are authoritative; project .env only fills missing keys.\n"
+            "# Priority: env vars > ~/.geode/.env > CWD/.env\n\n"
             "# ANTHROPIC_API_KEY=sk-ant-...\n"
             "# OPENAI_API_KEY=sk-proj-...\n"
             "# BRAVE_API_KEY=...\n",
@@ -252,4 +252,4 @@ def init(
 
     # 8. .gitignore entry
     _ensure_gitignore_entry(".geode/", "# GEODE")
-    console.print("[green]GEODE project initialized.[/green]")
+    console.print("[success]GEODE project initialized.[/success]")

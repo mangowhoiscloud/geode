@@ -169,7 +169,7 @@ class GeodeStatus:
         elapsed = time.monotonic() - self._start_time
         delta = self._get_token_delta()
 
-        parts = [f"  [bold green]{GLYPH_OK}[/bold green] {summary}"]
+        parts = [f"  [success]{GLYPH_OK}[/success] {summary}"]
         if delta.input_tokens > 0 or delta.output_tokens > 0:
             parts.append(f"[dim]↓{_fmt(delta.input_tokens)} ↑{_fmt(delta.output_tokens)}[/dim]")
         if delta.cost_usd > 0:
@@ -187,7 +187,7 @@ class GeodeStatus:
                 self._spinner.stop()
                 self._spinner = None
             delta = self._get_token_delta()
-            parts = [f"  [bold green]{GLYPH_OK}[/bold green] done"]
+            parts = [f"  [success]{GLYPH_OK}[/success] done"]
             if delta.input_tokens > 0 or delta.output_tokens > 0:
                 parts.append(f"[dim]↓{_fmt(delta.input_tokens)} ↑{_fmt(delta.output_tokens)}[/dim]")
             if delta.cost_usd > 0:
