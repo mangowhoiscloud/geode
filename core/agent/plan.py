@@ -270,7 +270,7 @@ def render_plan_for_prompt(plan: Plan) -> str:
         return ""
     lines = ["<plan>"]
     lines.append(
-        f"Current execution step: {plan.current + 1}/{len(plan.steps)} "
+        f"Current step {plan.current + 1}/{len(plan.steps)} "
         f"(revision {plan.revision}): {cur.description}"
     )
     if cur.expected_outcome:
