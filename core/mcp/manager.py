@@ -450,15 +450,17 @@ class MCPServerManager:
     def _load_dotenv_cache(self) -> None:
         """Populate dotenv cache if empty.
 
-        Cascade: ~/.geode/.env (global) → CWD/.env (project, non-empty only).
+        Cascade: project .env fills gaps, then ~/.geode/.env wins.
         """
         if not self._dotenv_cache:
-            if _GLOBAL_DOTENV_PATH.exists():
-                self._dotenv_cache.update(dotenv_values(str(_GLOBAL_DOTENV_PATH)))
             project_dotenv = get_project_root() / ".env"
             if project_dotenv.exists():
                 for k, v in dotenv_values(str(project_dotenv)).items():
-                    if v:  # skip empty/None — must not clobber global keys
+                    if v:  # skip empty/None — must not clobber real values
+                        self._dotenv_cache[k] = v
+            if _GLOBAL_DOTENV_PATH.exists():
+                for k, v in dotenv_values(str(_GLOBAL_DOTENV_PATH)).items():
+                    if v:
                         self._dotenv_cache[k] = v
 
     def _resolve_env(self, env: dict[str, str]) -> dict[str, str]:

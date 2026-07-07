@@ -68,6 +68,9 @@ def test_theme_brand_styles_derive_from_palette() -> None:
     assert palette.GOLD in str(GEODE_THEME.styles["brand.gold"].color.name)
     assert palette.CRYSTAL in str(GEODE_THEME.styles["brand.crystal"].color.name)
     assert palette.CYAN in str(GEODE_THEME.styles["header"].color.name)
+    assert palette.CYAN in str(GEODE_THEME.styles["success"].color.name)
+    assert palette.CYAN in str(GEODE_THEME.styles["step"].color.name)
+    assert palette.CYAN in str(GEODE_THEME.styles["tier_b"].bgcolor.name)
 
 
 def test_sgr_token_values_pinned() -> None:
@@ -78,8 +81,8 @@ def test_sgr_token_values_pinned() -> None:
     assert palette.DIM == "\033[2m"
     assert palette.FAINT == "\033[90m"
     assert palette.DONE_STRIKE == "\033[2;9m"
-    assert palette.OK == "\033[32m"
-    assert palette.OK_BOLD == "\033[1;32m"
+    assert palette.OK == "\033[36m"
+    assert palette.OK_BOLD == "\033[1;36m"
     assert palette.FAIL == "\033[31m"
     assert palette.ERROR == "\033[1;31m"
     assert palette.NOTICE == "\033[33m"

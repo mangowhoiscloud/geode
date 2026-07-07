@@ -1,0 +1,287 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>GEODE Context and Config Paths</title>
+  <link href="https://fonts.googleapis.com/css2?family=Instrument+Serif&family=Geist:wght@400;500;600&family=Geist+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --paper: #f5f5f5;
+      --ink: #2d3142;
+      --muted: #4f5d75;
+      --soft: #7a8399;
+      --rule: rgba(45, 49, 66, 0.18);
+      --accent: #eb6c36;
+      --accent-tint: rgba(235, 108, 54, 0.08);
+      --link: #2e5aa8;
+    }
+    body {
+      margin: 0;
+      background: var(--paper);
+      color: var(--ink);
+      font-family: "Geist", system-ui, sans-serif;
+    }
+    main {
+      max-width: 1120px;
+      margin: 0 auto;
+      padding: 32px 24px 40px;
+    }
+    h1 {
+      margin: 0 0 4px;
+      font-family: "Instrument Serif", Georgia, serif;
+      font-size: 34px;
+      font-weight: 400;
+      letter-spacing: 0;
+    }
+    p {
+      margin: 0 0 24px;
+      color: var(--muted);
+      font-size: 14px;
+      line-height: 1.5;
+    }
+    svg {
+      display: block;
+      width: 100%;
+      height: auto;
+      background: var(--paper);
+    }
+    .boundary {
+      fill: transparent;
+      stroke: var(--rule);
+      stroke-width: 1;
+      stroke-dasharray: 6 5;
+    }
+    .boundary-label {
+      fill: var(--muted);
+      font-family: "Geist Mono", monospace;
+      font-size: 10px;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+    }
+    .node {
+      fill: #fff;
+      stroke: var(--ink);
+      stroke-width: 1;
+    }
+    .store {
+      fill: rgba(45, 49, 66, 0.05);
+      stroke: var(--muted);
+    }
+    .focal {
+      fill: var(--accent-tint);
+      stroke: var(--accent);
+      stroke-width: 1.2;
+    }
+    .optional {
+      fill: rgba(45, 49, 66, 0.02);
+      stroke: rgba(45, 49, 66, 0.32);
+      stroke-dasharray: 4 3;
+    }
+    .tag {
+      fill: transparent;
+      stroke: currentColor;
+      stroke-width: 0.8;
+      opacity: 0.55;
+    }
+    .tag-text {
+      font-family: "Geist Mono", monospace;
+      font-size: 7px;
+      font-weight: 500;
+      letter-spacing: 0.14em;
+      text-anchor: middle;
+    }
+    .name {
+      fill: var(--ink);
+      font-size: 13px;
+      font-weight: 600;
+      text-anchor: middle;
+    }
+    .sub {
+      fill: var(--muted);
+      font-family: "Geist Mono", monospace;
+      font-size: 9px;
+      text-anchor: middle;
+    }
+    .line {
+      fill: none;
+      stroke: var(--muted);
+      stroke-width: 1.1;
+      marker-end: url(#arrow);
+    }
+    .line-accent {
+      stroke: var(--accent);
+      marker-end: url(#arrow-accent);
+    }
+    .line-link {
+      stroke: var(--link);
+      marker-end: url(#arrow-link);
+    }
+    .label-mask {
+      fill: var(--paper);
+    }
+    .arrow-label {
+      fill: var(--muted);
+      font-family: "Geist Mono", monospace;
+      font-size: 8px;
+      letter-spacing: 0.06em;
+      text-anchor: middle;
+    }
+  </style>
+</head>
+<body>
+<main>
+  <h1>GEODE Context and Config Paths</h1>
+  <p>Secrets have one user-global home; behavior can be overridden per project; runtime state stays private; repo-tracked SoT remains versioned.</p>
+
+  <svg viewBox="0 0 1080 760" role="img" aria-labelledby="title desc">
+    <title id="title">GEODE context and config path architecture</title>
+    <desc id="desc">Diagram showing os.environ, GEODE_HOME, workspace .geode, repo tracked state, Settings, Context Assembly, and AgenticLoop.</desc>
+    <defs>
+      <marker id="arrow" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto">
+        <polygon points="0 0, 8 3, 0 6" fill="#4f5d75"/>
+      </marker>
+      <marker id="arrow-accent" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto">
+        <polygon points="0 0, 8 3, 0 6" fill="#eb6c36"/>
+      </marker>
+      <marker id="arrow-link" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto">
+        <polygon points="0 0, 8 3, 0 6" fill="#2e5aa8"/>
+      </marker>
+    </defs>
+
+    <rect class="boundary" x="48" y="104" width="304" height="432" rx="8"/>
+    <rect class="label-mask" x="72" y="96" width="188" height="18"/>
+    <text class="boundary-label" x="84" y="109">GEODE_HOME / ~/.geode</text>
+
+    <rect class="boundary" x="400" y="104" width="304" height="432" rx="8"/>
+    <rect class="label-mask" x="424" y="96" width="210" height="18"/>
+    <text class="boundary-label" x="436" y="109">WORKSPACE / .geode</text>
+
+    <rect class="boundary" x="752" y="104" width="280" height="256" rx="8"/>
+    <rect class="label-mask" x="776" y="96" width="166" height="18"/>
+    <text class="boundary-label" x="788" y="109">REPO TRACKED</text>
+
+    <path class="line line-accent" d="M 200 80 C 200 108 200 116 200 144"/>
+    <path class="line" d="M 200 504 C 200 602 456 610 536 610"/>
+    <path class="line" d="M 552 504 C 552 548 552 572 552 590"/>
+    <path class="line-link" d="M 892 312 C 892 604 740 622 624 622"/>
+    <path class="line" d="M 296 220 C 360 220 380 220 432 220"/>
+    <path class="line" d="M 296 312 C 360 312 380 312 432 312"/>
+    <path class="line" d="M 648 220 C 724 220 746 220 792 220"/>
+    <path class="line line-accent" d="M 616 610 C 692 610 728 610 800 610"/>
+
+    <g transform="translate(96 36)">
+      <rect class="focal" width="208" height="52" rx="6"/>
+      <rect class="tag" x="10" y="8" width="38" height="13" rx="2"/>
+      <text class="tag-text" x="29" y="18">ENV</text>
+      <text class="name" x="104" y="29">os.environ</text>
+      <text class="sub" x="104" y="43">session override; never written</text>
+    </g>
+
+    <g transform="translate(88 144)">
+      <rect class="focal" width="224" height="68" rx="6"/>
+      <rect class="tag" x="10" y="8" width="44" height="13" rx="2"/>
+      <text class="tag-text" x="32" y="18">SECRET</text>
+      <text class="name" x="112" y="34">.env</text>
+      <text class="sub" x="112" y="50">API keys, channel tokens</text>
+    </g>
+
+    <g transform="translate(88 236)">
+      <rect class="store" width="224" height="68" rx="6"/>
+      <rect class="tag" x="10" y="8" width="40" height="13" rx="2"/>
+      <text class="tag-text" x="30" y="18">CFG</text>
+      <text class="name" x="112" y="34">config.toml</text>
+      <text class="sub" x="112" y="50">global behavior defaults</text>
+    </g>
+
+    <g transform="translate(88 328)">
+      <rect class="store" width="224" height="68" rx="6"/>
+      <rect class="tag" x="10" y="8" width="42" height="13" rx="2"/>
+      <text class="tag-text" x="31" y="18">AUTH</text>
+      <text class="name" x="112" y="34">auth.toml</text>
+      <text class="sub" x="112" y="50">profiles, plans, OAuth metadata</text>
+    </g>
+
+    <g transform="translate(88 420)">
+      <rect class="store" width="224" height="84" rx="6"/>
+      <rect class="tag" x="10" y="8" width="52" height="13" rx="2"/>
+      <text class="tag-text" x="36" y="18">PRIVATE</text>
+      <text class="name" x="112" y="38">runtime state</text>
+      <text class="sub" x="112" y="54">usage, logs, transcripts</text>
+      <text class="sub" x="112" y="68">projects/&lt;encoded-cwd&gt;</text>
+    </g>
+
+    <g transform="translate(440 144)">
+      <rect class="optional" width="224" height="68" rx="6"/>
+      <rect class="tag" x="10" y="8" width="44" height="13" rx="2"/>
+      <text class="tag-text" x="32" y="18">SECRET</text>
+      <text class="name" x="112" y="34">./.env</text>
+      <text class="sub" x="112" y="50">fills missing global only</text>
+    </g>
+
+    <g transform="translate(440 236)">
+      <rect class="focal" width="224" height="68" rx="6"/>
+      <rect class="tag" x="10" y="8" width="40" height="13" rx="2"/>
+      <text class="tag-text" x="30" y="18">CFG</text>
+      <text class="name" x="112" y="34">.geode/config.toml</text>
+      <text class="sub" x="112" y="50">project behavior overrides</text>
+    </g>
+
+    <g transform="translate(440 328)">
+      <rect class="store" width="224" height="68" rx="6"/>
+      <rect class="tag" x="10" y="8" width="52" height="13" rx="2"/>
+      <text class="tag-text" x="36" y="18">CONTEXT</text>
+      <text class="name" x="112" y="34">memory, rules, skills</text>
+      <text class="sub" x="112" y="50">project context tier</text>
+    </g>
+
+    <g transform="translate(440 420)">
+      <rect class="store" width="224" height="84" rx="6"/>
+      <rect class="tag" x="10" y="8" width="52" height="13" rx="2"/>
+      <text class="tag-text" x="36" y="18">OUTPUT</text>
+      <text class="name" x="112" y="38">reports + scheduler</text>
+      <text class="sub" x="112" y="54">workspace-bound artifacts</text>
+      <text class="sub" x="112" y="68">that can travel with project</text>
+    </g>
+
+    <g transform="translate(792 144)">
+      <rect class="store" width="200" height="68" rx="6"/>
+      <rect class="tag" x="10" y="8" width="52" height="13" rx="2"/>
+      <text class="tag-text" x="36" y="18">CONTEXT</text>
+      <text class="name" x="100" y="34">GEODE.md / AGENTS.md</text>
+      <text class="sub" x="100" y="50">identity and contributor rules</text>
+    </g>
+
+    <g transform="translate(792 256)">
+      <rect class="store" width="200" height="68" rx="6"/>
+      <rect class="tag" x="10" y="8" width="30" height="13" rx="2"/>
+      <text class="tag-text" x="25" y="18">SOT</text>
+      <text class="name" x="100" y="34">self_improving/state</text>
+      <text class="sub" x="100" y="50">versioned autoresearch inputs</text>
+    </g>
+
+    <g transform="translate(448 590)">
+      <rect class="node" width="168" height="64" rx="6"/>
+      <rect class="tag" x="10" y="8" width="54" height="13" rx="2"/>
+      <text class="tag-text" x="37" y="18">ASSEMBLE</text>
+      <text class="name" x="84" y="34">Settings + Context</text>
+      <text class="sub" x="84" y="50">one cascade, five tiers</text>
+    </g>
+
+    <g transform="translate(800 578)">
+      <rect class="node" width="184" height="88" rx="6"/>
+      <rect class="tag" x="10" y="8" width="36" height="13" rx="2"/>
+      <text class="tag-text" x="28" y="18">LOOP</text>
+      <text class="name" x="92" y="40">AgenticLoop</text>
+      <text class="sub" x="92" y="56">while(tool_use)</text>
+      <text class="sub" x="92" y="70">observable runtime</text>
+    </g>
+
+    <rect class="label-mask" x="326" y="212" width="76" height="14" rx="2"/>
+    <text class="arrow-label" x="364" y="222">fills only</text>
+    <rect class="label-mask" x="696" y="602" width="72" height="14" rx="2"/>
+    <text class="arrow-label" x="732" y="612">executes</text>
+  </svg>
+</main>
+</body>
+</html>

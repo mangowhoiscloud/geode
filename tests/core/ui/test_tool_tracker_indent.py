@@ -74,8 +74,8 @@ def test_redraw_output_resets_column_per_line(monkeypatch) -> None:
     # both tool lines must carry the CR-prefixed clear sequence
     assert out.count("\r\033[2K") == 2
     # and no tool line content appears without a preceding CR
-    assert "  \033[32m✓ memory_search" in out
-    assert "  \033[32m✓ glob_files" in out
+    assert "  \033[36m✓ memory_search" in out
+    assert "  \033[36m✓ glob_files" in out
 
 
 def test_large_tool_batches_collapse_to_bounded_view() -> None:

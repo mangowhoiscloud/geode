@@ -60,13 +60,14 @@ ZAI_API_KEY=...                    # https://open.bigmodel.cn/usercenter/apikeys
 SLACK_BOT_TOKEN=xoxb-...           # https://api.slack.com/apps → OAuth & Permissions
 SLACK_TEAM_ID=T...                 # Slack workspace 설정
 
-# Gateway 토글
-GEODE_GATEWAY_ENABLED=true
 EOF
 chmod 600 ~/.geode/.env
 ```
 
-**Key 우선순위**: Environment variable > Project `.env` > `~/.geode/.env`
+**Secret 우선순위**: 수동 env export > 전역 `~/.geode/.env` > 프로젝트 `.env`.
+전역 파일이 권위를 갖는 secret store이고, 프로젝트 `.env`는 전역에 없는 키만
+채웁니다. Behavior 설정은 반대로 project `./.geode/config.toml` 이 global
+`~/.geode/config.toml` 을 덮습니다.
 
 ### 2. 프로젝트 설정
 
@@ -75,7 +76,8 @@ chmod 600 ~/.geode/.env
 uv run geode init
 
 # 또는 수동으로
-cp .env.example .env       # project-local keys (비어있지 않은 값만 override)
+mkdir -p .geode
+touch .geode/config.toml
 ```
 
 ### 3. Global CLI 설치
@@ -164,6 +166,9 @@ cp .geode/config.toml.example .geode/config.toml
 ```
 
 ```toml
+[gateway]
+enabled = true
+
 [gateway.bindings]
 
 [[gateway.bindings.rules]]
@@ -264,6 +269,11 @@ geode serve [-p 3.0]                   # Headless daemon
 
 ## 설정 레퍼런스
 
+Secret 은 user-global `~/.geode/.env` 에 둡니다. Project `./.env` 는
+global secret 이 없을 때만 채우는 고급 fallback 입니다. Behavior 는
+`config.toml` 에 두며, project `./.geode/config.toml` 이
+`~/.geode/config.toml` 보다 우선합니다.
+
 `.env` 변수 (전체 목록: `core/config.py`):
 
 | 변수 | 기본값 | 설명 |
@@ -272,10 +282,10 @@ geode serve [-p 3.0]                   # Headless daemon
 | `ANTHROPIC_API_KEY` | | Claude API key |
 | `OPENAI_API_KEY` | | GPT API key (OpenAI adapter) |
 | `ZAI_API_KEY` | | ZhipuAI GLM key |
-| `GEODE_MODEL` | `claude-opus-4-6` | 기본 LLM 모델 |
-| `GEODE_ENSEMBLE_MODE` | `single` | 앙상블 모드 (`single` / `cross`) |
+| `GEODE_MODEL` | `claude-opus-4-6` | 수동 session override 전용; 지속 설정은 `config.toml` 사용 |
+| `GEODE_ENSEMBLE_MODE` | `single` | 수동 session override 전용; 지속 설정은 `config.toml` 사용 |
 | **Gateway** | | |
-| `GEODE_GATEWAY_ENABLED` | `false` | Slack/Discord gateway 활성화 |
+| `GEODE_GATEWAY_ENABLED` | `false` | 수동 session override; 지속 설정은 `config.toml` 의 `[gateway] enabled = true` 권장 |
 | `SLACK_BOT_TOKEN` | | Slack bot token |
 | `SLACK_TEAM_ID` | | Slack workspace ID |
 | **Pipeline** | | |

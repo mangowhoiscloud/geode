@@ -88,8 +88,8 @@ def _handle_command(
         console.print(f"  Ensemble: [bold]{settings.ensemble_mode}[/bold]")
         ant_ok = bool(settings.anthropic_api_key)
         oai_ok = bool(settings.openai_api_key)
-        ant_status = "[green]configured[/green]" if ant_ok else "[red]not set[/red]"
-        oai_status = "[green]configured[/green]" if oai_ok else "[red]not set[/red]"
+        ant_status = "[success]configured[/success]" if ant_ok else "[red]not set[/red]"
+        oai_status = "[success]configured[/success]" if oai_ok else "[red]not set[/red]"
         console.print(f"  Anthropic API: {ant_status}")
         console.print(f"  OpenAI API: {oai_status}")
         readiness = _get_readiness()
@@ -102,7 +102,7 @@ def _handle_command(
         console.print("  [header]MCP Servers[/header]")
         for srv in _mcp_st["active"]:
             _desc = f" -- {srv['description']}" if srv["description"] else ""
-            console.print(f"    [green]OK[/green] {srv['name']} [dim]{_desc}[/dim]")
+            console.print(f"    [success]OK[/success] {srv['name']} [dim]{_desc}[/dim]")
         if not _mcp_st["active"]:
             console.print("    [muted]No active servers[/muted]")
         console.print()

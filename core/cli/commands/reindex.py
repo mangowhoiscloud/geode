@@ -62,11 +62,11 @@ def reindex(projects_root: Path | None = _PROJECTS_ROOT_OPTION) -> None:
 
     table = Table(title="Cross-project search index — rebuild summary")
     table.add_column("project_id", style="cyan")
-    table.add_column("rows_indexed", justify="right", style="green")
+    table.add_column("rows_indexed", justify="right", style="cyan")
     total = 0
     for project_id in sorted(stats):
         rows = stats[project_id]
         total += rows
         table.add_row(project_id, str(rows))
     console.print(table)
-    console.print(f"[green]Indexed {total} messages across {len(stats)} projects.[/green]")
+    console.print(f"[success]Indexed {total} messages across {len(stats)} projects.[/success]")

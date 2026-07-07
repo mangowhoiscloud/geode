@@ -60,8 +60,8 @@ def env_setup_wizard() -> bool:
         Panel(
             "[bold]Welcome to GEODE.[/bold]\n\n"
             "Pick how you want to talk to the model:\n"
-            "  [cyan]1[/cyan]  ChatGPT subscription (Plus / Pro / Business / Edu / Enterprise) "
-            "or Claude subscription (Pro / Max ×5 / Max ×20 / Team / Enterprise)\n"
+            "  [cyan]1[/cyan]  ChatGPT subscription via Codex CLI OAuth "
+            "(Plus / Pro / Business / Edu / Enterprise)\n"
             "  [cyan]2[/cyan]  API key (Anthropic / OpenAI / ZhipuAI GLM)\n"
             "  [cyan]3[/cyan]  Skip — explore in dry-run mode (fixture data, no LLM)\n\n"
             "[muted]Press Ctrl+C to abort at any time.[/muted]",
@@ -123,6 +123,7 @@ def _wizard_api_key_path() -> bool:
     from core.config import settings
 
     any_set = False
+    last_env_path: Path | None = None
     providers = [
         (
             "Anthropic",
@@ -151,13 +152,13 @@ def _wizard_api_key_path() -> bool:
             console.print(f"  [muted]{label}: skipped[/muted]")
             continue
 
-        _upsert_env(env_var, value)
+        last_env_path = _upsert_env(env_var, value)
         object.__setattr__(settings, settings_field, value)
         console.print(f"  [success]{label} key set[/success]  {_mask_key(value)}")
         any_set = True
 
     if any_set:
-        console.print("\n  [success].env updated with your API keys.[/success]")
+        console.print(f"\n  [success]API keys saved[/success] [muted]({last_env_path})[/muted]")
     console.print()
     return any_set
 
@@ -406,7 +407,6 @@ def key_registration_gate() -> str | None:
             "  [cyan]/login add[/cyan]                — Interactive wizard "
             "(plans + keys + OAuth)\n"
             "  [cyan]/login openai[/cyan]             — ChatGPT subscription OAuth\n"
-            "  [cyan]/login anthropic[/cyan]          — Claude subscription OAuth\n"
             "  [cyan]/key <sk-ant-...>[/cyan]        — Quick paste (Anthropic)\n"
             "  [cyan]/key openai <sk-...>[/cyan]     — Quick paste (OpenAI)\n"
             "  [cyan]/key glm <key>[/cyan]           — Quick paste (GLM PAYG)\n"

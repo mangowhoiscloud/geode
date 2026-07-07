@@ -13,6 +13,7 @@ from __future__ import annotations
 import os
 import re
 from pathlib import Path
+from typing import Literal
 
 # C-3 (2026-06-11) — behavior(model-pick) env keys. These are SESSION-scoped
 # manual overrides only: tools never write them (C-2), the serve daemon drops
@@ -85,8 +86,27 @@ def load_env_files(*, skip_behavior_keys: bool = False) -> None:
             os.environ[key] = val
 
 
-def upsert_env(var_name: str, value: str) -> None:
-    """Insert or update a variable in the CWD ``.env``. Creates it if absent.
+EnvScope = Literal["global", "project"]
+
+
+def _env_path_for_scope(scope: EnvScope) -> Path:
+    """Return the dotenv path for a durable secrets scope."""
+    from core.paths import GLOBAL_ENV_FILE
+
+    if scope == "global":
+        return GLOBAL_ENV_FILE
+    if scope == "project":
+        return Path(".env")
+    raise ValueError(f"unknown env scope: {scope!r}")
+
+
+def upsert_env(var_name: str, value: str, *, scope: EnvScope = "global") -> Path:
+    """Insert or update a secret in the selected ``.env`` file.
+
+    The default target is the user-global ``~/.geode/.env``. That mirrors
+    Hermes' ``{APP}_HOME`` pattern and keeps first-run setup portable across
+    workspaces. Project ``./.env`` remains available as an explicit advanced
+    scope for credentials that should fill only this workspace.
 
     C-2 contract (config-unification, 2026-06-11): the ``.env`` layer is
     **secrets-only** — API keys and credentials. Behavior settings (model
@@ -96,7 +116,8 @@ def upsert_env(var_name: str, value: str) -> None:
     (hazards H3/H4). Manual ``GEODE_*`` exports remain a power-user
     session override — by hand only.
     """
-    env_path = Path(".env")
+    env_path = _env_path_for_scope(scope)
+    env_path.parent.mkdir(parents=True, exist_ok=True)
     lines: list[str] = []
     found = False
 
@@ -116,6 +137,7 @@ def upsert_env(var_name: str, value: str) -> None:
     # Keep os.environ in sync so Settings() re-instantiation picks up
     # the new value (Pydantic reads os.environ before .env file).
     os.environ[var_name] = value
+    return env_path.resolve()
 
 
 def upsert_config_toml(section: str, key: str, value: str, *, scope: str = "project") -> None:
@@ -206,24 +228,44 @@ def is_glm_key(value: str) -> bool:
 
 
 def remove_env(var_name: str) -> bool:
-    """Remove ``var_name`` from the CWD ``.env`` (and ``os.environ``).
+    """Remove ``var_name`` from durable dotenv files and ``os.environ``.
 
     C-2 stale-mask cleanup: earlier releases' ``/model`` wrote model picks
     into ``.env``; those lines outrank every toml edit forever. The picker
-    now calls this after its toml write so a tool-created mask is removed
-    by the tool. Returns True when a line was removed.
+    now calls this after its toml write so a tool-created mask is removed by
+    the tool. Since old releases wrote project ``./.env`` and current setup
+    writes global ``~/.geode/.env``, scrub both locations. Returns True when a
+    line was removed.
     """
-    env_path = Path(".env")
     removed = False
-    if env_path.exists():
+
+    paths: list[Path] = []
+    seen: set[Path] = set()
+    scopes: tuple[EnvScope, ...] = ("global", "project")
+    for scope in scopes:
+        path = _env_path_for_scope(scope)
+        try:
+            resolved = path.resolve()
+        except OSError:
+            resolved = path.absolute()
+        if resolved in seen:
+            continue
+        seen.add(resolved)
+        paths.append(path)
+
+    for env_path in paths:
+        if not env_path.exists():
+            continue
         kept: list[str] = []
+        path_removed = False
         for line in env_path.read_text(encoding="utf-8").splitlines():
             if re.match(rf"^{re.escape(var_name)}\s*=", line):
-                removed = True
+                path_removed = True
                 continue
             kept.append(line)
-        if removed:
+        if path_removed:
             env_path.write_text("\n".join(kept) + ("\n" if kept else ""), encoding="utf-8")
+            removed = True
     if os.environ.pop(var_name, None) is not None:
         removed = True
     return removed

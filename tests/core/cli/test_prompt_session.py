@@ -227,7 +227,7 @@ def test_toolbar_shown_when_banner_has_content(monkeypatch: pytest.MonkeyPatch) 
     """Populated banner (render -> truthy) restores the render callable."""
 
     def _content_render() -> Any:
-        return "⬤ green"
+        return "⬤ blue"
 
     monkeypatch.setattr("core.cli.prompt_session._toolbar_render", _content_render)
     session = SimpleNamespace(bottom_toolbar=None)

@@ -50,10 +50,10 @@ def test_usage_ratio_clamps_below_zero() -> None:
 # ── tier transitions ──────────────────────────────────────────────────────
 
 
-def test_tier_green_below_warn() -> None:
+def test_tier_blue_below_warn() -> None:
     banner = SubscriptionQuotaBanner(warn_threshold=0.5, abort_threshold=0.9)
     banner.set_state(provider="anthropic", used_tokens=30, total_tokens=100)
-    assert banner.tier() == "green"
+    assert banner.tier() == "blue"
 
 
 def test_tier_yellow_between_warn_and_abort() -> None:
@@ -82,7 +82,7 @@ def test_clear_abort_returns_to_usage_tier() -> None:
     banner.trip_abort(reason="quota")
     assert banner.tier() == "red"
     banner.clear_abort()
-    assert banner.tier() == "green"
+    assert banner.tier() == "blue"
 
 
 # ── render ──────────────────────────────────────────────────────────────
@@ -94,11 +94,11 @@ def test_render_empty_on_cold_start() -> None:
     assert banner.render() == ""
 
 
-def test_render_green_format() -> None:
+def test_render_blue_format() -> None:
     banner = SubscriptionQuotaBanner()
     banner.set_state(provider="anthropic", used_tokens=10, total_tokens=100)
     out = banner.render()
-    assert "green" in out
+    assert "#5f9ea0" in out
     assert "anthropic" in out
     assert "10%" in out
 

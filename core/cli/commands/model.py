@@ -183,9 +183,9 @@ def _apply_model(
                 _pkg.console.print()
                 return
 
-    # v0.61.0 — picker choices now persist to BOTH .env (session) and
-    # .geode/config.toml (durable). 3-codebase consensus (Hermes/Codex/
-    # Claude Code all persist picker choices to durable config).
+    # Model picker choices persist to config.toml only. 3-codebase consensus
+    # (Hermes/Codex/Claude Code) is that durable picker choices belong in
+    # durable config, not the secret layer.
     if not same_model:
         # Pydantic v2 ``Settings`` is frozen on instance attribute
         # writes via __setattr__; the legacy primary-model path used
@@ -209,12 +209,12 @@ def _apply_model(
                     exc_info=True,
                 )
         # C-2 (2026-06-11) — config.toml is the ONLY durable layer for model
-        # picks; the env write is gone entirely. It used to land in the CWD
-        # ``.env`` (NOT the documented ``~/.geode/.env`` — hazard H4) and,
-        # because the env layer outranks every toml layer, one switch left a
-        # permanent mask over all future toml edits (H3). The mutator-role
-        # env var additionally had zero readers (H6). Stale lines written by
-        # earlier releases are cleaned up below so old masks die too.
+        # picks; the env write is gone entirely. Legacy releases wrote model
+        # choices into project ``.env`` and, because the env layer outranks
+        # every toml layer, one switch left a permanent mask over all future
+        # toml edits (H3/H4). The mutator-role env var additionally had zero
+        # readers (H6). Stale lines written by earlier releases are cleaned
+        # up below so old masks die too.
         upsert_config_toml(role_def.toml_section, role_def.toml_key, selected.id, scope=scope)
         if _pkg.remove_env(role_def.env_var):
             _pkg.console.print(

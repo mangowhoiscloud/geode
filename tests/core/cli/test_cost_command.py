@@ -132,7 +132,7 @@ class TestCmdCost:
 
 
 class TestBudgetBar:
-    def test_budget_bar_green(self):
+    def test_budget_bar_success(self):
         from core.cli.commands import _budget_bar
 
         bar = _budget_bar(30.0)
