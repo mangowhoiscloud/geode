@@ -9,6 +9,61 @@ The decision drives both writers (where new data lands) and the
 migration runner at `core/wiring/layout_migrator.py` (where legacy data
 gets moved on the next boot).
 
+## Agent context / config graph
+
+```mermaid
+flowchart TB
+    shell["os.environ\nsession override\nnever written by GEODE"]
+
+    subgraph home["User-global: GEODE_HOME (default ~/.geode)"]
+        env[".env\nsecrets only\nAPI keys, channel tokens"]
+        config["config.toml\nglobal behavior defaults"]
+        auth["auth.toml\nplans, profiles, OAuth metadata"]
+        profile["identity/ + user_profile/\ncross-project user context"]
+        runtime["usage/, diagnostics/, logs/,\ntranscripts/, projects/<id>/,\nself-improving runtime"]
+    end
+
+    subgraph workspace["Workspace: <project>/.geode"]
+        project_config["config.toml\nproject behavior overrides"]
+        memory["memory/, rules/, skills/\nproject context"]
+        project_runtime["reports/, scheduler logs,\nresult_cache/"]
+    end
+
+    subgraph repo["Repo-tracked source"]
+        geode_md["GEODE.md / AGENTS.md\nagent + contributor constraints"]
+        sot["core/self_improving/state/\ntracked autoresearch SoT"]
+    end
+
+    shell --> settings["Settings / Context assembly"]
+    env --> settings
+    project_config --> settings
+    config --> settings
+    auth --> settings
+    profile --> context["LLM context tiers"]
+    memory --> context
+    geode_md --> context
+    sot --> context
+    runtime --> observe["diagnostics + history"]
+    project_runtime --> observe
+
+    settings --> loop["AgenticLoop"]
+    context --> loop
+```
+
+Standalone SVG version: [`docs/diagrams/geode-context-config-paths.html`](../diagrams/geode-context-config-paths.html).
+
+Read order and write targets are intentionally asymmetric:
+
+- Shell exports are the highest-precedence session override. GEODE never
+  writes them.
+- `~/.geode/.env` is the authoritative secret store. `./.env` is an explicit
+  advanced fallback that only fills missing global secrets.
+- `./.geode/config.toml` overrides `~/.geode/config.toml` for behavior because
+  behavior is often project-specific.
+- Runtime data that is user-private or machine-local stays under
+  `~/.geode/`. Project context that may travel with a workspace stays under
+  `<workspace>/.geode/`.
+
 ## Three frontier patterns
 
 | Harness | Policy | Reference |
@@ -42,12 +97,28 @@ The split is therefore deliberate, not accidental.
 | Question | Answer | Tier |
 |----------|--------|------|
 | Is it a credential / OAuth token? | yes | `~/.geode/auth.toml` |
+| Is it a raw API key or channel token? | yes | `~/.geode/.env` |
+| Is it a project-only secret fallback? | yes | `./.env` (explicit scope only; never shadows global) |
 | Is it cross-project user identity (career, preferences, learned memory)? | yes | `~/.geode/identity/`, `~/.geode/user_profile/` |
 | Is it agent operating state (LLM usage, session transcript, diagnostics)? | yes | `~/.geode/` top-level (`usage/`, `diagnostics/`, `approval_history.jsonl`) |
 | Is it project-bound but user-private (per-project session, snapshot, cache)? | yes | `~/.geode/projects/<encoded-cwd>/` (Claude Code parity) |
 | Is it project-bound + meant to be committed / team-shareable? | yes | `{workspace}/.geode/` (rules, skills, custom config) |
 | Is it project-bound + user-generated output? | yes | `{workspace}/.geode/reports/` |
 | Is it a project-scoped scheduled job? | yes | `{workspace}/.geode/scheduled_tasks.json` (the schedule travels with the workspace) |
+
+## Writer contract
+
+All new writers should import constants from `core.paths` instead of
+reconstructing path literals.
+
+| Writer intent | API / constant | Default target |
+|---------------|----------------|----------------|
+| Save API keys or channel tokens | `core.config.env_io.upsert_env()` | `~/.geode/.env` |
+| Save project-only secret fallback | `upsert_env(..., scope="project")` | `./.env` |
+| Remove stale dotenv masks | `core.config.env_io.remove_env()` | both `~/.geode/.env` and `./.env` |
+| Save behavior globally | `upsert_config_toml(..., scope="global")` | `~/.geode/config.toml` |
+| Save behavior for this workspace | `upsert_config_toml(..., scope="project")` | `./.geode/config.toml` |
+| Add new durable state | `core.paths.<NAMED_CONSTANT>` | choose by decision rules above |
 
 ## Concrete GEODE layout (current — verified correct)
 

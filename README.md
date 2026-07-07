@@ -191,7 +191,12 @@ chmod 600 ~/.geode/.env
 
 Want OpenAI or ZhipuAI GLM instead? Add `OPENAI_API_KEY=sk-proj-...` or `ZAI_API_KEY=...` to the same file. GEODE picks whichever is available.
 
-**What it costs in practice.** A single prompt runs around 3,000 tokens, about $0.01. A research session with ten tool calls usually lands between $0.05 and $0.30. Your $5 free credit lasts roughly 500 prompts. Set `cost_limit_usd=5` in `.env` if you want a hard cap.
+**What it costs in practice.** A single prompt runs around 3,000 tokens, about $0.01. A research session with ten tool calls usually lands between $0.05 and $0.30. Your $5 free credit lasts roughly 500 prompts. Set a hard cap in `~/.geode/config.toml`:
+
+```toml
+[cost]
+limit_usd = 5
+```
 
 ---
 
@@ -297,7 +302,7 @@ Once GEODE works in your terminal, you can let it answer on the messaging channe
 geode serve                          # starts the always-on Gateway daemon
 ```
 
-Configure channel bindings in `.geode/config.toml` (Slack bot token, Discord webhook, etc.). See [docs/setup.md → Gateway](docs/setup.md#gateway) for the full setup. After that, mentioning the bot in a channel routes the message into the same agent loop you use locally.
+Put channel secrets such as `SLACK_BOT_TOKEN` in `~/.geode/.env`; put channel bindings, poller choices, and project-specific Gateway behavior in `.geode/config.toml`. See [docs/setup.md → Gateway](docs/setup.md#gateway) for the full setup. After that, mentioning the bot in a channel routes the message into the same agent loop you use locally.
 
 ### Optional — Self-improving loop config (`~/.geode/config.toml`)
 
@@ -314,10 +319,12 @@ To run a campaign, start with the quick-start: [docs/self-improving/campaign-qui
 
 ## Configuration
 
-Secrets live in `.env`, behavior lives in `config.toml`. The two never collide, because `.env` is secrets-only and `config.toml` is behavior-only, so each has a single precedence rule.
+Secrets live in `.env`, behavior lives in `config.toml`. The two never collide, because `.env` is secrets-only and `config.toml` is behavior-only, so each has a single precedence rule. The detailed path design is in [docs/architecture/storage-hierarchy.md](docs/architecture/storage-hierarchy.md), with a standalone diagram at [docs/diagrams/geode-context-config-paths.html](docs/diagrams/geode-context-config-paths.html).
 
 - The global `~/.geode/.env` is the authoritative secret store. A project `./.env` fills only the keys it lacks and never shadows a global key. An `OPENAI_API_KEY` in `~/.geode/.env` wins even when a project `./.env` leaves it blank.
 - The project `./.geode/config.toml` overrides the global `~/.geode/config.toml`. Behavior is tuned per project.
+- `~/.geode/auth.toml` stores credential profiles, plan metadata, and OAuth-derived account state. Raw API keys still live in `~/.geode/.env`.
+- Runtime history, usage, diagnostics, daemon logs, and per-project private data live under `~/.geode/`. Project context that should travel with a workspace lives under `./.geode/`.
 
 Every field rides one ladder. Higher wins:
 
@@ -409,7 +416,7 @@ geode update                  # source checkout
 | **`while(tool_use)` loop** | The single primitive every behavior is built on. Sub-agents, plans, batches are all instances of the same loop |
 | **Self-improving outer loop** | Mutates GEODE's own scaffolding, audits each change against an adversarial safety rubric, and promotes only on a real gain. See [the closed loop](https://mangowhoiscloud.github.io/geode/docs/capabilities/autoresearch) |
 | **Agentic tools + MCP catalog** | Web search, file ops, scheduling, memory, calendar, Slack/Discord, Korean job-board search, plus the Anthropic-published MCP registry (cached at `~/.geode/mcp/registry-cache.json`). Auto-installed on first use |
-| **3-provider failover** | Anthropic + OpenAI + ZhipuAI. ChatGPT / Claude subscription OAuth auto-detected; pay-as-you-go API keys also work; failover is in-provider only (no surprise cross-vendor charges, v0.53.0 governance) |
+| **3-provider failover** | Anthropic + OpenAI + ZhipuAI. ChatGPT subscription OAuth is auto-detected through Codex CLI; Anthropic/OpenAI/ZhipuAI pay-as-you-go API keys also work. Failover is in-provider only (no surprise cross-vendor charges, v0.53.0 governance) |
 | **5-tier memory** | SOUL (0) → User Profile (0.5) → Organization (1) → Project (2) → Session (3). Persistent, survives daemon restarts |
 | **Progress plans + review checkpoints** | `update_plan` shows a Codex-style per-turn checklist without blocking execution. `create_plan` + `approve_plan` remain for explicit review checkpoints, persisted in `.geode/plans.json` |
 | **MCP server (`geode-mcp`)** | Exposes GEODE itself as an MCP server (stdio): `run_agent`, `self_improving_status`, `self_improving_propose`/`apply` (2-step confirm gate), `query_memory`, `get_health`. Registered for Claude Code via the repo-shipped `.mcp.json` |
@@ -538,7 +545,7 @@ graph LR
 
 | Layer | Core | Entry points |
 |-------|------|--------------|
-| **Agent** | AgenticLoop, SubAgentManager, CLIPoller, Gateway | `core/cli/`, `core/gateway/` |
+| **Agent** | AgenticLoop, SubAgentManager, CLIPoller, Gateway wiring | `core/cli/`, `core/server/`, `core/messaging/`, `core/integrations/messaging/`, `core/wiring/` |
 | **Harness** | SessionLane, LaneQueue, PolicyChain, TaskGraph, HookSystem | `core/orchestration/`, `core/hooks/` |
 | **Runtime** | Agentic tools, native ToolRegistry, MCP Catalog (Anthropic registry plus project-configured servers), runtime Skills, Memory (multi-tier), PlanStore | `core/tools/`, `core/memory/`, `core/orchestration/plan_store.py` |
 | **Model** | ClaudeAdapter, OpenAIAdapter, CodexAdapter, GLMAdapter | `core/llm/` |

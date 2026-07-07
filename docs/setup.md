@@ -59,9 +59,6 @@ ZAI_API_KEY=...                    # https://open.bigmodel.cn/usercenter/apikeys
 # Messaging (Slack Gateway)
 SLACK_BOT_TOKEN=xoxb-...           # https://api.slack.com/apps → OAuth & Permissions
 SLACK_TEAM_ID=T...                 # Slack workspace settings
-
-# Gateway toggle
-GEODE_GATEWAY_ENABLED=true
 EOF
 chmod 600 ~/.geode/.env
 ```
@@ -164,6 +161,9 @@ cp .geode/config.toml.example .geode/config.toml
 ```
 
 ```toml
+[gateway]
+enabled = true
+
 [gateway.bindings]
 
 [[gateway.bindings.rules]]
@@ -245,13 +245,14 @@ grep "Slack poller seeded" ~/.geode/logs/serve.log
 | `/compact` | | Compact context |
 | `/quit` | `/q` | Exit |
 
-**Model resolution** (precedence, highest first): CLI flag → env var / `.env`
+**Model resolution** (precedence, highest first): CLI flag → manual env export
 (`GEODE_MODEL`) → project `./.geode/config.toml` `[llm] primary_model` → global
 `~/.geode/config.toml` → routing default (`claude-opus-4-8`). Each session uses
 **its own project's** model — the thin CLI resolves the model at your working
 directory and the daemon adopts it, so the displayed model matches the executed
-model. A leftover `GEODE_MODEL` in a project `.env` (env layer) overrides the
-config files; clear it if a `/model` switch seems "stuck".
+model. A leftover `GEODE_MODEL` in any `.env` from older releases overrides the
+config files; clear it if a `/model` switch seems "stuck". Current GEODE tools
+write model choices to `config.toml`, not `.env`.
 
 ---
 
@@ -273,6 +274,11 @@ geode serve [-p 3.0]                   # Headless daemon
 
 ## Configuration Reference
 
+Secrets belong in the user-global `~/.geode/.env`. Project `./.env` is an
+advanced fallback that only fills missing global secrets. Behavior belongs in
+`config.toml`; project `./.geode/config.toml` overrides
+`~/.geode/config.toml`.
+
 `.env` variables (full list: `core/config.py`):
 
 | Variable | Default | Description |
@@ -281,10 +287,10 @@ geode serve [-p 3.0]                   # Headless daemon
 | `ANTHROPIC_API_KEY` | | Claude API key |
 | `OPENAI_API_KEY` | | GPT API key (OpenAI adapter) |
 | `ZAI_API_KEY` | | ZhipuAI GLM key |
-| `GEODE_MODEL` | `claude-opus-4-8` | Model override (env layer — outranks config files; see Model resolution) |
-| `GEODE_ENSEMBLE_MODE` | `single` | Ensemble mode (`single` / `cross`) |
+| `GEODE_MODEL` | `claude-opus-4-8` | Manual session override only; persist model choices in `config.toml` |
+| `GEODE_ENSEMBLE_MODE` | `single` | Manual session override only; prefer `config.toml` for durable behavior |
 | **Gateway** | | |
-| `GEODE_GATEWAY_ENABLED` | `false` | Enable Slack/Discord gateway |
+| `GEODE_GATEWAY_ENABLED` | `false` | Manual session override; prefer `[gateway] enabled = true` in `config.toml` |
 | `SLACK_BOT_TOKEN` | | Slack bot token |
 | `SLACK_TEAM_ID` | | Slack workspace ID |
 | **Pipeline** | | |

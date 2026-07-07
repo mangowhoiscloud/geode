@@ -212,7 +212,7 @@ def migrate_petri_toml(
     # interruption (KeyboardInterrupt, kill, power loss) so the operator
     # always sees either the old config intact or the new config in full.
     atomic_write_text(target, new_content)
-    _console.print(f"[green]Appended {len(plan)} role(s) to {target}.[/green]")
+    _console.print(f"[success]Appended {len(plan)} role(s) to {target}.[/success]")
     _console.print(
         "[muted]Legacy ~/.geode/petri.toml is unchanged — verify the new path "
         "via `geode audit` smoke, then delete the legacy file manually.[/muted]"

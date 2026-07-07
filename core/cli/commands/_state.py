@@ -269,7 +269,7 @@ def show_help() -> None:
     console.print("  [label]/verbose[/label]            — Toggle verbose mode")
     console.print("  [label]/login[/label]              — Plans + credentials dashboard (unified)")
     console.print("  [label]/login openai[/label]       — ChatGPT subscription OAuth")
-    console.print("  [label]/login anthropic[/label]    — Claude subscription OAuth")
+    console.print("  [label]/login anthropic[/label]    — Explain Anthropic API-key setup")
     console.print("  [label]/login add[/label]          — Interactive plan/key wizard")
     console.print("  [label]/key[/label] <value>        — Quick PAYG API key (legacy alias)")
     console.print("  [label]/model[/label]              — Show & switch LLM model")
