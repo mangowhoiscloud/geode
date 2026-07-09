@@ -45,7 +45,7 @@ functional change.
 
 ---
 
-## [Unreleased]
+## [0.99.286] - 2026-07-10
 
 ### Added
 
@@ -57,6 +57,17 @@ functional change.
 
 ### Changed
 
+- **Portfolio v10 — growth-log redesign.** `/portfolio` is rebuilt from the
+  agent-intro layout (archived to `site/src/app/portfolio/versions/v9/`) into
+  a character-sheet + growth-log surface. The hero renders the canonical CLI
+  pixel mascot from a transcription of `core/ui/geodi_art.py::GEODI_PIXELS`
+  (`site/src/components/geode/geodi-sprite.tsx`, 2-frame blink,
+  `prefers-reduced-motion` respected; grid/palette drift pinned by
+  `tests/test_geodi_sprite_parity.py`). The growth section derives every
+  number from the synced changelog at build time
+  (`site/src/app/portfolio/growth.ts`: release count, weekly cadence bars,
+  five growth eras with verified version anchors) instead of hand-written
+  prose. `GeodeNav` accepts per-page section items.
 - **document_ingest can read approved local PDFs outside the project.** The
   source PDF path now accepts user-approved local files from folders such as
   Downloads or iCloud Drive, while generated bundles and explicit `output_dir`
@@ -98,6 +109,20 @@ functional change.
   now routes unsupported visual `locate` work toward source-safe helpers such
   as `ui_probe`, browser DOM tools, `playwriter`, keyboard navigation, or an
   explicit GLM route.
+
+### Infrastructure
+
+- **Astryx design-system foundation for `/portfolio`.** Adds
+  `@astryxdesign/core` + `@astryxdesign/theme-neutral` (Meta's open-source
+  design system; precompiled StyleX CSS, tokens scoped to
+  `[data-astryx-theme]`). `site/src/app/portfolio/astryx-geode.css` remaps
+  the semantic tokens onto the GEODE Axolotl Rose palette (including the
+  progress-bar element-level `--color-accent: #0074e2` re-point), and
+  `site/src/app/globals.css` interleaves cascade layers
+  (`reset < astryx-theme < theme < base < astryx-base < components <
+  utilities`) so Astryx's scoped element reset stays below Tailwind
+  utilities while its component styles stay above preflight. Usage scope and
+  rules are documented in `site/DESIGN.md`.
 
 ## [0.99.285] - 2026-07-07
 

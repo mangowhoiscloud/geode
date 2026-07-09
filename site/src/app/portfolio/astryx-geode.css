@@ -1,0 +1,108 @@
+/*
+ * Astryx → GEODE Axolotl Rose theme bridge.
+ *
+ * The portfolio page mounts Astryx (@astryxdesign/core, Meta's open-source
+ * design system) as its component foundation. Astryx themes are CSS custom
+ * properties scoped to [data-astryx-theme]; this file loads AFTER
+ * theme-neutral/theme.css and remaps the semantic color/font tokens onto the
+ * site's DESIGN.md palette, so Astryx components render in GEODE's own
+ * identity (rose = identity, gold = action, aqua = information).
+ *
+ * Scope discipline: everything here is attribute-scoped except the
+ * :root color-scheme guard, which pins the site back to its single dark
+ * substrate (theme-neutral globally declares `color-scheme: light dark`).
+ */
+
+:root {
+  color-scheme: dark;
+}
+
+[data-astryx-theme="neutral"] {
+  color-scheme: dark;
+
+  /* substrate */
+  --color-background-body: var(--paper);
+  --color-background-surface: var(--paper-2);
+  --color-background-card: var(--paper-2);
+  --color-background-popover: var(--paper-2);
+  --color-background-muted: var(--paper-deep);
+
+  /* ink */
+  --color-text-primary: var(--ink-1);
+  --color-text-secondary: var(--ink-2);
+  --color-text-disabled: var(--ink-3);
+  --color-text-accent: var(--acc-artifact);
+
+  /* identity accent (Axolotl Rose) */
+  --color-accent: var(--acc-artifact);
+  --color-accent-muted: rgba(244, 155, 196, 0.14);
+  --color-on-accent: var(--paper);
+  --color-icon-accent: var(--acc-artifact);
+  --color-icon-primary: var(--ink-1);
+  --color-icon-secondary: var(--ink-2);
+  --color-icon-disabled: var(--ink-3);
+
+  /* hairlines: rose-tinted, never neutral gray */
+  --color-border: var(--rule);
+  --color-border-emphasized: rgba(244, 155, 196, 0.32);
+  --color-neutral: rgba(244, 155, 196, 0.1);
+  --color-overlay-hover: rgba(244, 155, 196, 0.07);
+  --color-overlay-pressed: rgba(244, 155, 196, 0.14);
+  --color-skeleton: var(--paper-2);
+  --color-tint-hover: var(--acc-soft);
+
+  /* status stays semantic but on-substrate */
+  --color-warning: var(--acc-line);
+
+  /* typography: site families, not Astryx defaults */
+  --font-family-heading: var(--font-display), var(--font-inter), system-ui, sans-serif;
+  --font-family-body: var(--font-inter), system-ui, sans-serif;
+  --font-family-mono: var(--font-fira-code), ui-monospace, monospace;
+}
+
+/* theme-neutral re-points --color-accent to a hard blue (#0074e2) on the
+   accent-variant progress bar element itself, which out-prioritizes any
+   ancestor-level override (custom properties resolve on the nearest
+   definition). Re-assert the signature rose at the same element. */
+[data-astryx-theme="neutral"] .astryx-progressbar.accent {
+  --color-accent: var(--acc-artifact);
+}
+
+/* ---- Geodi sprite blink (portfolio hero budget only) ------------------- */
+
+@keyframes geodi-blink {
+  0%,
+  93% {
+    opacity: 1;
+  }
+  94%,
+  98% {
+    opacity: 0;
+  }
+  99%,
+  100% {
+    opacity: 1;
+  }
+}
+
+.geodi-blink-eyes {
+  animation: geodi-blink 7s step-end infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .geodi-blink-eyes {
+    animation: none;
+  }
+}
+
+/* ---- release cadence chart --------------------------------------------- */
+
+.cadence-bar {
+  fill: var(--acc-artifact);
+  opacity: 0.75;
+  transition: opacity 120ms ease;
+}
+
+.cadence-bar:hover {
+  opacity: 1;
+}
