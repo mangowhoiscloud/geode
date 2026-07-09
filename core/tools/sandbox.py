@@ -283,6 +283,8 @@ def _path_in_allowed_roots(path: Path, allowed_roots: list[Path]) -> bool:
 
     for root in allowed_roots:
         normalized_root = normalize_macos_path(str(root)).lower()
+        if normalized_root == "/":
+            return normalized_path.startswith("/")
         # Check: path starts with root (with trailing separator for safety)
         if normalized_path == normalized_root:
             return True
