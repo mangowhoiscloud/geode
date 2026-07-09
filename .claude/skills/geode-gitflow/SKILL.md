@@ -691,3 +691,139 @@ git checkout develop && git merge feature/<name> --no-edit && git push origin de
 git checkout main && git merge develop --no-edit && git push origin main
 git checkout feature/<name> && git stash pop
 ```
+
+---
+
+## Worktree Allocation (Workflow Step 0)
+
+Record on the Progress Board, then allocate the worktree.
+
+```bash
+# 1) Record Backlog → In Progress on Progress Board (from main)
+
+# 2) Allocate Worktree
+git fetch origin
+# Verify main/develop sync (pull if out of sync)
+git worktree add .claude/worktrees/<task-name> -b feature/<branch-name> develop
+# Note: the target path IS the worktree checkout root; `.owner` is gitignored
+# (see /.owner in .gitignore) so the convention does not pollute feature branches.
+echo "session=$(date -Iseconds) task_id=<task-name>" > .claude/worktrees/<task-name>/.owner
+```
+
+On completion (after the PR merges) tear down all three stale artifacts — remote branch, worktree, local branch — per [Post-Merge Cleanup](#post-merge-cleanup-mandatory-after-every-merge) below.
+
+## PR Body Template (MANDATORY)
+
+```
+## Summary
+<1-3 bullet points: what changed and why>
+
+## Why
+<Problem statement — what broke, what was missing, what user reported>
+
+## Changes
+| File | Change |
+|------|--------|
+| `path/to/file.py` | description of change |
+
+## GAP Audit (if applicable)
+| Item | Status | Notes |
+|------|--------|-------|
+| ... | Implemented / Dropped / Already exists | ... |
+
+## Verification
+- [ ] ruff check clean
+- [ ] mypy clean
+- [ ] pytest pass (count)
+- [ ] E2E unchanged (if applicable)
+
+## Reference
+<Source: frontier codebase, PR, issue, serve log, etc.>
+```
+
+Minimum required sections: **Summary**, **Why**, **Changes**, **Verification**.
+develop → main PRs may use abbreviated form (Summary + Verification only).
+
+| Change | Cascading Updates |
+|--------|-------------------|
+| New tool | `definitions.json` + handlers + E2E |
+| LLM adapter | `core/llm/router/` + `core/llm/providers/` + E2E |
+
+## Post-Merge Cleanup (MANDATORY after every merge)
+
+A merged PR leaves three stale artifacts behind: the remote branch, the local
+worktree, and the local branch. Tear all three down — in this order, because
+the order is load-bearing:
+
+```bash
+# 1) Merge + delete the REMOTE branch in one option (never chain && git push --delete).
+#    feature → develop = --squash (one commit/feature); develop → main = --merge.
+gh pr merge <PR#> --squash --delete-branch       # feature→develop; cf. [[feedback_merge_then_delete]]
+
+# 2) Remove the WORKTREE first — `git branch -d` REFUSES to delete a branch a
+#    worktree still holds, so worktree-remove must precede branch-delete.
+git worktree remove .claude/worktrees/<task-name>   # add --force only if the tree has untracked build junk (.venv)
+
+# 3) Delete the LOCAL branch + prune the now-dangling remote-tracking ref
+git branch -d feature/<branch-name>              # -d (not -D): refuses if somehow unmerged
+git fetch origin --prune
+```
+
+> `gh pr merge --delete-branch` deletes the *remote* branch but leaves the
+> *local* branch + worktree — and it cannot delete the local branch while a
+> worktree still occupies it (you'll see `cannot delete branch '…' used by
+> worktree at …`). Always worktree-remove, then branch-delete.
+
+**Periodic bulk prune** (when merged branches have accumulated across sessions):
+delete every branch merged into `develop`, EXCLUDING `develop` / `main` /
+`release/*` and any branch a worktree still holds (those may belong to another
+live session — never delete another session's `.owner`-protected worktree or its
+branch). `git branch -d` / `--merged` make this safe — they refuse anything
+unmerged.
+
+```bash
+held=$(git worktree list --porcelain | awk '/^branch /{gsub("refs/heads/","",$2); print $2}')
+# local: merged into develop, not worktree-held, not develop/main
+git branch --merged develop --format='%(refname:short)' | grep -vE '^(develop|main)$' \
+  | while read b; do echo "$held" | grep -qxF "$b" || git branch -d "$b"; done
+# remote: same filter (+ skip release/*), batch the push --delete
+git branch -r --merged origin/develop --format='%(refname:short)' | sed 's#^origin/##' \
+  | grep -vE '^(develop|main|HEAD)$' | grep -vE '^release/' \
+  | while read b; do echo "$held" | grep -qxF "$b" || echo "$b"; done \
+  | xargs -n 40 git push origin --delete
+git fetch origin --prune
+```
+
+## Rebuild & Restart (Workflow Step 7)
+
+After merging to main, rebuild CLI and serve to update the runtime to the latest code.
+
+```bash
+# 1) Stop any running geode serve daemon(s). Use `pgrep -f`, NOT
+#    `ps aux | grep "geode serve"` — ps aux truncates the long python path
+#    before "geode serve", so the grep silently matches nothing, the kill is a
+#    no-op, and stale daemons survive a "rebuild" and then fight over
+#    ~/.geode/cli.sock (the multi-serve pathology behind the 2026-06-09
+#    model-resolution bug: banner shows one daemon's model, calls route through
+#    another). `geode serve stop` / `geode doctor` already use pgrep -f
+#    internally (core/cli/cmd_lifecycle.py, core/cli/doctor.py); this manual
+#    line should match.
+pkill -f "geode serve" || true   # no-op if none running; verify: pgrep -f "geode serve"
+
+# 2) Reinstall CLI as editable + sync dependencies.
+#    The [audit] extra (inspect_ai) is REQUIRED — the seed-generation pilot's
+#    petri_audit tool and the self-improving loop's audit subprocess both need
+#    it. Omitting it makes the pilot fail loudly ("petri_audit aborted —
+#    install the [audit] extra") instead of measuring; pre-fix it silently
+#    emitted all-zero dim_means (PR-PILOT-PETRI-AUDIT-WIRING, 2026-06-01).
+uv tool install -e ".[audit]" --force
+uv sync --extra audit
+
+# 3) Verify version + restart serve
+geode version          # Confirm version match
+geode serve &          # Restart in background
+```
+
+## Progress Board (Workflow Step 8)
+
+Update project tracking from main. Backlog → In Progress → Done.
