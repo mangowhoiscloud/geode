@@ -276,6 +276,15 @@ class TestValidatePath:
         result = sandbox.validate_path(str(target), write=False)
         assert isinstance(result, Path)
 
+    def test_explicit_filesystem_root_allows_absolute_read_path(self, tmp_path: Path):
+        target = tmp_path / "outside.pdf"
+        target.write_text("content")
+
+        result = sandbox.validate_path(str(target), write=False, allowed_roots=[Path("/")])
+
+        assert isinstance(result, Path)
+        assert result == target.resolve()
+
 
 # ---------------------------------------------------------------------------
 # Tilde expansion (G4 — bare ~ / ~/ expansion regression coverage)

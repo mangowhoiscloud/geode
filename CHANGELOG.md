@@ -49,6 +49,10 @@ functional change.
 
 ### Changed
 
+- **document_ingest can read approved local PDFs outside the project.** The
+  source PDF path now accepts user-approved local files from folders such as
+  Downloads or iCloud Drive, while generated bundles and explicit `output_dir`
+  paths remain constrained to the GEODE project sandbox.
 - **Runtime prompt modernization for GPT-family models.** GEODE now omits the
   dynamic current-date block and per-request date reminder for OpenAI GPT/Codex
   routes, while retaining the stale-year recency guard for Anthropic, GLM, and

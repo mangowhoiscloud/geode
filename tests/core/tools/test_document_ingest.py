@@ -24,7 +24,7 @@ def _fake_pdf(tmp_path: Path) -> Path:
 
 
 def _patch_paths(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(mod, "validate_path", lambda path, write=False: Path(path))
+    monkeypatch.setattr(mod, "validate_path", lambda path, **_kwargs: Path(path))
 
 
 def test_local_text_backend_writes_manifest_and_pages(
@@ -116,6 +116,22 @@ def test_page_chunk_size_must_be_positive(tmp_path: Path, monkeypatch: pytest.Mo
 
     assert result["error_type"] == "validation"
     assert "page_chunk_size" in result["error"]
+
+
+def test_input_pdf_may_be_outside_project(tmp_path: Path) -> None:
+    pdf = _fake_pdf(tmp_path)
+
+    result = mod._resolve_input_pdf_path(str(pdf))
+
+    assert isinstance(result, Path), f"expected Path, got: {result}"
+    assert result == pdf.resolve()
+
+
+def test_output_dir_remains_project_sandboxed(tmp_path: Path) -> None:
+    result = mod._resolve_output_dir(tmp_path / "external-bundle", "sample")
+
+    assert isinstance(result, dict)
+    assert result["error_type"] == "permission"
 
 
 def test_auto_backend_uses_provider_when_local_text_empty(
@@ -295,6 +311,10 @@ def test_document_ingest_is_wired() -> None:
     assert "openai_pdf" in definition["input_schema"]["properties"]["backend"]["enum"]
     assert "page_range" in definition["input_schema"]["properties"]
     assert definition["input_schema"]["properties"]["page_chunk_size"]["minimum"] == 1
+    assert (
+        "outside the project"
+        in definition["input_schema"]["properties"]["file_path"]["description"]
+    )
     assert "claude_pdf" in definition["description"]
     assert "zhipu_ocr" in definition["description"]
 
