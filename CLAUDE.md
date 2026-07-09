@@ -168,20 +168,7 @@ Anything not in CANNOT is freely permitted. Specifically:
 
 #### 0. Board + Worktree Alloc
 
-```bash
-# 1) Record Backlog → In Progress on Progress Board (from main)
-# Add/move work items in project tracking
-
-# 2) Allocate Worktree
-git fetch origin
-# Verify main/develop sync (pull if out of sync)
-git worktree add .claude/worktrees/<task-name> -b feature/<branch-name> develop
-# Note: the target path IS the worktree checkout root; `.owner` is gitignored
-# (see /.owner in .gitignore) so the convention does not pollute feature branches.
-echo "session=$(date -Iseconds) task_id=<task-name>" > .claude/worktrees/<task-name>/.owner
-```
-
-Record on Progress Board then allocate Worktree. On completion (after the PR merges): tear down all three stale artifacts — remote branch, worktree, local branch — per [§6 Post-Merge Cleanup](#post-merge-cleanup-mandatory-after-every-merge).
+Record on Progress Board, then allocate the worktree. Commands: `geode-gitflow` skill § "Worktree Allocation". On completion, tear down all three stale artifacts (remote branch, worktree, local branch) per that skill's § "Post-Merge Cleanup".
 
 #### 1. GAP Audit
 
@@ -273,117 +260,13 @@ See `geode-gitflow` skill. **Flow**: `feature → develop` **squash-merged** (on
 
 > **Concurrent-session drift is expected, not an anomaly.** While your feature PR is open, another session (Tau2 promotion, a scheduled routine) may merge to develop — your PR then goes `CONFLICTING`/`DIRTY` (usually a CHANGELOG top-entry collision) and/or your version number gets taken. Recover per `geode-gitflow` skill § "Concurrent-session drift & CI-trigger recovery": merge `origin/develop`, **fold** the concurrent `[Unreleased]`/entry into your release version (never leave `[Unreleased]`), re-verify the version number is still free, then **regenerate the derived version SoT** (`sync-stats.mjs` + `check_llms_version.py --fix`) or the CI ratchet blocks on a stale `changelog.ts`. Separately, a freshly-opened PR that attaches **0 CI checks** (webhook miss — verify with `gh api commits/<sha>/check-runs .total_count`, not `gh pr checks` alone) is re-triggered by `gh pr close <N> && gh pr reopen <N>`; don't leave a monitor spinning on the repeating "no checks" error.
 
-**PR Body Template (MANDATORY):**
+**PR Body Template (MANDATORY):** see `geode-gitflow` skill § "PR Body Template". Minimum required sections: **Summary**, **Why**, **Changes**, **Verification**. Cascading updates (new tool → `definitions.json` + handlers + E2E; LLM adapter → `core/llm/router/` + `core/llm/providers/` + E2E) are listed there too.
 
-```
-## Summary
-<1-3 bullet points: what changed and why>
-
-## Why
-<Problem statement — what broke, what was missing, what user reported>
-
-## Changes
-| File | Change |
-|------|--------|
-| `path/to/file.py` | description of change |
-
-## GAP Audit (if applicable)
-| Item | Status | Notes |
-|------|--------|-------|
-| ... | Implemented / Dropped / Already exists | ... |
-
-## Verification
-- [ ] ruff check clean
-- [ ] mypy clean
-- [ ] pytest pass (count)
-- [ ] E2E unchanged (if applicable)
-
-## Reference
-<Source: frontier codebase, PR, issue, serve log, etc.>
-```
-
-Minimum required sections: **Summary**, **Why**, **Changes**, **Verification**.
-develop → main PRs may use abbreviated form (Summary + Verification only).
-
-| Change | Cascading Updates |
-|--------|-------------------|
-| New tool | `definitions.json` + handlers + E2E |
-| LLM adapter | `core/llm/router/` + `core/llm/providers/` + E2E |
-
-##### Post-Merge Cleanup (MANDATORY after every merge)
-
-A merged PR leaves three stale artifacts behind: the remote branch, the local
-worktree, and the local branch. Tear all three down — in this order, because
-the order is load-bearing:
-
-```bash
-# 1) Merge + delete the REMOTE branch in one option (never chain && git push --delete).
-#    feature → develop = --squash (one commit/feature); develop → main = --merge.
-gh pr merge <PR#> --squash --delete-branch       # feature→develop; cf. [[feedback_merge_then_delete]]
-
-# 2) Remove the WORKTREE first — `git branch -d` REFUSES to delete a branch a
-#    worktree still holds, so worktree-remove must precede branch-delete.
-git worktree remove .claude/worktrees/<task-name>   # add --force only if the tree has untracked build junk (.venv)
-
-# 3) Delete the LOCAL branch + prune the now-dangling remote-tracking ref
-git branch -d feature/<branch-name>              # -d (not -D): refuses if somehow unmerged
-git fetch origin --prune
-```
-
-> `gh pr merge --delete-branch` deletes the *remote* branch but leaves the
-> *local* branch + worktree — and it cannot delete the local branch while a
-> worktree still occupies it (you'll see `cannot delete branch '…' used by
-> worktree at …`). Always worktree-remove, then branch-delete.
-
-**Periodic bulk prune** (when merged branches have accumulated across sessions):
-delete every branch merged into `develop`, EXCLUDING `develop` / `main` /
-`release/*` and any branch a worktree still holds (those may belong to another
-live session — never delete another session's `.owner`-protected worktree or its
-branch). `git branch -d` / `--merged` make this safe — they refuse anything
-unmerged.
-
-```bash
-held=$(git worktree list --porcelain | awk '/^branch /{gsub("refs/heads/","",$2); print $2}')
-# local: merged into develop, not worktree-held, not develop/main
-git branch --merged develop --format='%(refname:short)' | grep -vE '^(develop|main)$' \
-  | while read b; do echo "$held" | grep -qxF "$b" || git branch -d "$b"; done
-# remote: same filter (+ skip release/*), batch the push --delete
-git branch -r --merged origin/develop --format='%(refname:short)' | sed 's#^origin/##' \
-  | grep -vE '^(develop|main|HEAD)$' | grep -vE '^release/' \
-  | while read b; do echo "$held" | grep -qxF "$b" || echo "$b"; done \
-  | xargs -n 40 git push origin --delete
-git fetch origin --prune
-```
+**Post-Merge Cleanup is MANDATORY after every merge** — a merged PR leaves the remote branch, the worktree, and the local branch behind, and the teardown order is load-bearing. Commands and the periodic bulk prune: `geode-gitflow` skill § "Post-Merge Cleanup".
 
 #### 7. Rebuild & Restart
 
-After merging to main, rebuild CLI and serve to update the runtime to the latest code.
-
-```bash
-# 1) Stop any running geode serve daemon(s). Use `pgrep -f`, NOT
-#    `ps aux | grep "geode serve"` — ps aux truncates the long python path
-#    before "geode serve", so the grep silently matches nothing, the kill is a
-#    no-op, and stale daemons survive a "rebuild" and then fight over
-#    ~/.geode/cli.sock (the multi-serve pathology behind the 2026-06-09
-#    model-resolution bug: banner shows one daemon's model, calls route through
-#    another). `geode serve stop` / `geode doctor` already use pgrep -f
-#    internally (core/cli/cmd_lifecycle.py, core/cli/doctor.py); this manual
-#    line should match.
-pkill -f "geode serve" || true   # no-op if none running; verify: pgrep -f "geode serve"
-
-# 2) Reinstall CLI as editable + sync dependencies.
-#    The [audit] extra (inspect_ai) is REQUIRED — the seed-generation pilot's
-#    petri_audit tool and the self-improving loop's audit subprocess both need
-#    it. Omitting it makes the pilot fail loudly ("petri_audit aborted —
-#    install the [audit] extra") instead of measuring; pre-fix it silently
-#    emitted all-zero dim_means (PR-PILOT-PETRI-AUDIT-WIRING, 2026-06-01).
-uv tool install -e ".[audit]" --force
-uv sync --extra audit
-
-# 3) Verify version + restart serve
-geode version          # Confirm version match
-geode serve &          # Restart in background
-```
+After merging to main, rebuild CLI and serve. Commands: `geode-gitflow` skill § "Rebuild & Restart". Two traps live there: stop daemons with `pgrep -f` (never `ps aux | grep`), and install with the `[audit]` extra.
 
 #### 8. Progress Board
 
@@ -407,32 +290,7 @@ Update project tracking from main. Backlog → In Progress → Done.
 
 ## Custom Skills (Scaffold)
 
-Skills used by Scaffold during GEODE development (`.claude/skills/`). Separate from GEODE runtime's `core/skills/` SkillRegistry.
-
-> `.claude/skills/` is gitignored (scaffold-local); the rows below are the repo-tracked set that ships with a clone. Additional local-only skills (e.g. `model-onboarding`, `codex-mcp-verify`, `smoke-green-loop`) may exist per machine and are intentionally not listed.
-
-| Skill | Triggers | Content |
-|-------|----------|---------|
-| `geode-workflow` | workflow, scaffold, feature work, provider/model changes, GUI/computer-use, observability, verification | Evidence-first execution scaffold with progressive-disclosure references |
-| `prompt-writing` | prompt, system prompt, model-facing text, identity, You are, Fable | GEODE prompt-writing standard: metadata/behavioral clauses, no direct identity assertions |
-| `geode-gitflow` | branch, git, pr, merge, commit | Gitflow strategy, PR templates, CI fix loops |
-| `geode-changelog` | changelog, release, version, release | CHANGELOG management, SemVer versioning |
-| `agent-ops-debugging` | safe default, root cause, contextvar, multi-gap | Agent-ops debugging patterns — Safe Default anti-pattern, multi-gap root cause, ContextVar DI |
-| `architecture-patterns` | architecture, layering, pattern, design | Cross-harness architecture patterns reference |
-| `karpathy-patterns` | autoresearch, agenthub, ratchet, context budget | 10 autonomous agent design principles (P1-P10) |
-| `openclaw-patterns` | gateway, session, binding, lane, plugin | Agent system design patterns (OpenClaw) |
-| `frontier-harness-research` | research, gap, frontier, harness, case study | Frontier harness 4-system comparative research process |
-| `verification-team` | verification, review, verify, inspect | 5-persona verification (Beck/Karpathy/Steinberger/Cherny + Anti-Deception) |
-| `tech-blog-writer` | blog, posting, tech blog | Technical blog writing guide |
-| `explore-reason-act` | explore, reason, root cause, read before write | 3-phase explore-reason-act before code modification |
-| `anti-deception-checklist` | deception, fake success, regression | Fake success prevention verification checklist |
-| `code-review-quality` | quality, SOLID, dead code, resource leak | Python code quality 6-lens review |
-| `dependency-review` | dependency, import, layer, circular, lazy | 6-Layer dependency health review |
-| `kent-beck-review` | kent beck, simple design, simplify, god object, SRP | Simple Design 4-rule code review |
-| `codebase-audit` | audit, dead code, refactor, god object, duplication | Code audit + refactoring workflow (v0.24.0 proven) |
-| `geode-serve` | serve, gateway, slack, binding, poller, config.toml | Slack Gateway operations + debugging guide |
-| `long-task-watcher` | monitor, tail -F, progress, background, live audit, stdbuf, buffering | Long-running task watching patterns. Covers the Petri × GEODE N7' Monitor timeout case and stable watch patterns (cat-and-grep / stdbuf streaming / polling). |
-| `manim-scene-craft` | manim, scene, 영상, 비디오, 1080p60, EN/KO 렌더, GEODE_HERO_LANG | Manim Community Scene 작성 표준 — EN/KO 다국어 lang, Helvetica Neue + Pretendard 폰트 페어링, Anthropic-style 팔레트, layout ratchet + CI 가드. 4 검증 scene (`geode_hero` / `autoresearch_filewalk` / `autoresearch_compare` / `critical_floor`) 의 공통 패턴. |
-| `viz-frame-audit` | 노이즈, slop, 프레임 검수, 영상 audit, 글자 깨짐, 패딩 침범, frame extract, naive arrow | 영상 노이즈/slop 검수 워크플로우 — ffmpeg 프레임 추출 + Read 시각 확인 + 4 카테고리 결함 식별 (naive 화살표 / 패딩 침범 / 글자 깨짐 / 프레임 순서). 12+ 사례 카탈로그 (filewalk 7 + hero 7). |
-| `docs-link-audit` | broken link, 404, docs link, hyperlink, 링크 점검, 링크 깨짐, audit links, link checker | Docs-site (`site/` Next.js) body / JSX / markdown link audit. `scripts/check_docs_links.py` validates 4 categories (internal /docs / internal /other / anchor / external), build-time copy awareness, and exit-code-based CI guard wiring. Includes PR #1157/#1161 case studies. |
-| `baseline-epoch-partition` | baseline epoch, baseline 아카이빙, epoch partition, spec hash, content-addressed, margin_rule namespace, production logic 구분, baseline 하위 서빙 | Content-addressed baseline-archive epoch 분할 — baseline 산출+측정 명세(margin_rule + logic version tag + 4-role model/source + rubric/dim-set + bench + seed-pool identity)를 canonical 해시 → epoch 구분자. spec vs instance 분리, version-tag(소스해시 아님), write-time frozen hash + spec_schema_version, hash+label 병기. hub baseline-하위 epoch 적재(gen-* 미러). |
+Scaffold-side skills live in `.claude/skills/`; Claude Code lists them with their
+triggers automatically every session. Full catalog for human readers:
+[docs/scaffold-skills.md](docs/scaffold-skills.md). Separate from the GEODE
+runtime's `core/skills/` SkillRegistry.
