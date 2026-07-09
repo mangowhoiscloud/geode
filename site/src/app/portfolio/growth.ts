@@ -10,6 +10,12 @@ import { CHANGELOG } from "@/data/geode/changelog";
 // dated version entries count as releases.
 const releases = CHANGELOG.filter((entry) => /^\d{4}-\d{2}-\d{2}$/.test(entry.date));
 
+// Fail the build loudly instead of dereferencing undefined below — an empty
+// list means the changelog sync itself is broken.
+if (releases.length === 0) {
+  throw new Error("growth.ts: synced changelog contains no dated releases (broken sync-stats run?)");
+}
+
 export const releaseCount = releases.length;
 export const firstRelease = releases[releases.length - 1];
 export const latestRelease = releases[0];
