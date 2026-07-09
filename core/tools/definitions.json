@@ -902,7 +902,7 @@
       "properties": {
         "file_path": {
           "type": "string",
-          "description": "Path to a local PDF inside the GEODE file sandbox."
+          "description": "Path to a local PDF. May be outside the project after document_ingest approval."
         },
         "backend": {
           "type": "string",

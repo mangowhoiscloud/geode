@@ -97,7 +97,10 @@ class DocumentIngestTool:
             "properties": {
                 "file_path": {
                     "type": "string",
-                    "description": "Path to a local PDF inside the GEODE file sandbox.",
+                    "description": (
+                        "Path to a local PDF. May be outside the project after "
+                        "document_ingest approval."
+                    ),
                 },
                 "backend": {
                     "type": "string",
@@ -174,7 +177,7 @@ class DocumentIngestTool:
                 hint=f"Use one of: {', '.join(sorted(_BACKENDS))}.",
             )
 
-        path_result = validate_path(str(kwargs["file_path"]), write=False)
+        path_result = _resolve_input_pdf_path(str(kwargs["file_path"]))
         if isinstance(path_result, dict):
             return path_result
         pdf_path = path_result
@@ -250,6 +253,18 @@ class DocumentIngestTool:
             document=extracted,
         )
         return {"result": bundle}
+
+
+def _resolve_input_pdf_path(raw_path: str) -> Path | dict[str, Any]:
+    """Resolve a user-approved input PDF without forcing project containment.
+
+    `document_ingest` is a HITL-gated write/expensive tool that copies parsed
+    output into the project bundle. The source PDF is read-only input, so it can
+    come from Downloads, iCloud Drive, or another local document folder while
+    output_dir remains project-sandboxed through `_resolve_output_dir`.
+    """
+
+    return validate_path(raw_path, write=False, allowed_roots=[Path(os.path.abspath(os.sep))])
 
 
 def _validate_pdf_path(pdf_path: Path) -> dict[str, Any] | None:
