@@ -218,7 +218,7 @@ def test_decompose_async_inherits_loop_model(monkeypatch: pytest.MonkeyPatch) ->
     captured: dict[str, str] = {}
 
     async def _fake_call_llm(
-        _system: str, _msgs: list, *, model: str | None = None
+        _system: str, _msgs: list, *, model: str | None = None, **_kwargs: object
     ) -> SimpleNamespace:
         captured["model"] = model or ""
         # Return None so decompose_async early-exits without parsing
@@ -245,7 +245,7 @@ def test_decompose_async_ignores_removed_plan_model(
     captured: dict[str, str] = {}
 
     async def _fake_call_llm(
-        _system: str, _msgs: list, *, model: str | None = None
+        _system: str, _msgs: list, *, model: str | None = None, **_kwargs: object
     ) -> SimpleNamespace:
         captured["model"] = model or ""
         return None

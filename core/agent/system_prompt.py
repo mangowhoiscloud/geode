@@ -216,6 +216,26 @@ def _generic_static_prefix() -> str:
     return _SYSTEM_PROMPT_TEMPLATE.format()
 
 
+def _should_include_current_date(model: str = "") -> bool:
+    """Return whether the runtime prompt should inject ``<current_date>``.
+
+    OpenAI's current GPT guidance recommends leaving the current date out of
+    the prompt because the model already knows the current UTC date. Keep the
+    legacy date guard for Anthropic, GLM, and unknown providers, where it still
+    prevents stale-year assumptions during "latest" lookups.
+    """
+    if not model:
+        return True
+    try:
+        from core.config import _resolve_provider
+
+        provider = _resolve_provider(model)
+    except Exception:
+        log.debug("Failed to resolve provider for current-date policy", exc_info=True)
+        return True
+    return provider not in {"openai", "openai-codex"}
+
+
 def build_system_prompt(model: str = "") -> str:
     """Build the AgenticLoop system prompt.
 
@@ -227,7 +247,7 @@ def build_system_prompt(model: str = "") -> str:
       </static_context>
       <dynamic_context>    ──── changes per turn → no cache
         <model_card>       (always present when ``model`` argument set)
-        <current_date>     (always present)
+        <current_date>     (provider-gated; omitted for OpenAI GPT-family models)
         <project_memory>   (G2: from .geode/MEMORY.md if exists)
         <agent_learning>   (G3: from user_profile/learned.md if exists; format
                             sanitized per G9 — pattern + 1-line summary, not raw
@@ -240,7 +260,8 @@ def build_system_prompt(model: str = "") -> str:
 
     - ``GEODE_AUDIT_UNRESTRICTED=1`` (audit-mode, G3): strip every
       GEODE-specific layer — identity, memory, user_context — leaving
-      only model_card + current_date + the caller's ``system_suffix``.
+      only model_card + provider-gated current_date + the caller's
+      ``system_suffix``.
       Petri auditor controls the scenario's identity end-to-end.
     - ``GEODE_PERSONA`` (G10): inject GEODE identity (G1). Default ON so
       the declared soul + runtime guardrails ship; set ``=off`` for a thin
@@ -271,7 +292,8 @@ def build_system_prompt(model: str = "") -> str:
             mc = _build_model_card(model)
             if mc:
                 parts.append(mc)
-        parts.append(_build_date_context())
+        if _should_include_current_date(model):
+            parts.append(_build_date_context())
         dynamic = PROMPT_CACHE_BOUNDARY + "\n\n" + "\n\n".join(parts)
         _emit_scaffold_diag(wrapper_override, audit_mode=True)
         # PR-PROMPT-P2A — AGENTIC_SUFFIX is authored-static (cache zone) and
@@ -318,7 +340,8 @@ def build_system_prompt(model: str = "") -> str:
     if hint:
         dynamic_parts.append(hint)
 
-    dynamic_parts.append(_build_date_context())
+    if _should_include_current_date(model):
+        dynamic_parts.append(_build_date_context())
 
     # G2-G4: Memory hierarchy (may change between turns)
     g2 = _build_geode_memory_context()

@@ -78,6 +78,28 @@ def test_g3_audit_mode_strips_identity_memory_user(monkeypatch: pytest.MonkeyPat
     assert "<dynamic_context>" in out
 
 
+def test_current_date_omitted_for_openai_guidance(monkeypatch: pytest.MonkeyPatch) -> None:
+    """OpenAI GPT-family prompts omit current_date per current GPT guidance."""
+    monkeypatch.delenv("GEODE_AUDIT_UNRESTRICTED", raising=False)
+    monkeypatch.delenv("GEODE_PERSONA", raising=False)
+
+    out = build_system_prompt(model="gpt-5.5")
+
+    assert "<model_card>" in out
+    assert "<current_date>" not in out
+    assert "<dynamic_context>" in out
+
+
+def test_current_date_kept_for_anthropic_recency_guard(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Non-OpenAI prompts retain the stale-year guard."""
+    monkeypatch.delenv("GEODE_AUDIT_UNRESTRICTED", raising=False)
+    monkeypatch.delenv("GEODE_PERSONA", raising=False)
+
+    out = build_system_prompt(model="claude-opus-4-8")
+
+    assert "<current_date>" in out
+
+
 def test_g3_audit_mode_supersedes_persona(monkeypatch: pytest.MonkeyPatch) -> None:
     """Audit-mode forces persona OFF regardless of GEODE_PERSONA."""
     monkeypatch.setenv("GEODE_AUDIT_UNRESTRICTED", "1")

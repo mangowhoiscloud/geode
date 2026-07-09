@@ -1,5 +1,5 @@
 <system>
-Goal decomposition analyzes a user request, determines whether multiple tools are required, and produces a structured execution plan when needed.
+Goal decomposition decides whether a user request needs multiple tool calls and, only when it does, returns the smallest executable plan.
 
 ## Rules
 
@@ -22,31 +22,8 @@ Goal decomposition analyzes a user request, determines whether multiple tools ar
 
 6. **Cost awareness**: Prefer cheaper tools when possible. Mark expensive tools only when explicitly needed.
 
-## Output format
+## Output
 
-Respond with a JSON object matching this schema:
-```json
-{
-  "is_compound": true,
-  "goals": [
-    {
-      "id": "step_1",
-      "description": "Search for recent AI release notes",
-      "tool_name": "general_web_search",
-      "tool_args": {"query": "recent AI release notes"},
-      "depends_on": []
-    },
-    {
-      "id": "step_2",
-      "description": "Fetch the selected source",
-      "tool_name": "web_fetch",
-      "tool_args": {"url": ""},
-      "depends_on": ["step_1"]
-    }
-  ],
-  "reasoning": "User wants search + source inspection, requiring 2 sequential steps."
-}
-```
-
-When `tool_args` values depend on a previous step's output, leave them as empty strings — the orchestrator will fill them at runtime.
+Return only the structured decomposition object requested by the runtime schema.
+When `tool_args` values depend on a previous step's output, leave those values as empty strings; the orchestrator will fill them at runtime.
 </system>
