@@ -51,19 +51,22 @@ def build_system_reminder(
     """Build a system reminder string for end-adjacent injection.
 
     Assembles a concise context block containing:
-      - Current date/time (prevents year hallucination in tool calls)
-      - Active analysis rules (from ProjectMemory, if any)
-      - Round index (helps the model track progress)
-      - Extra context (caller-provided key-value pairs)
+
+    - Provider-gated current date/time (prevents year hallucination in tool
+      calls for models that need the guard)
+    - Active analysis rules (from ProjectMemory, if any)
+    - Round index (helps the model track progress)
+    - Extra context (caller-provided key-value pairs)
 
     Returns empty string if nothing meaningful to inject.
     """
     parts: list[str] = []
 
     # 1. Date context (shared helper — prevents stale year in searches)
-    from core.agent.system_prompt import format_current_date
+    from core.agent.system_prompt import _should_include_current_date, format_current_date
 
-    parts.append(f"Current date: {format_current_date()}")
+    if _should_include_current_date(model):
+        parts.append(f"Current date: {format_current_date()}")
 
     # 2. Round awareness
     if round_idx > 0:

@@ -746,6 +746,50 @@ def test_decompose_async_skips_no_compound(monkeypatch: pytest.MonkeyPatch) -> N
     assert called["hit"] is False
 
 
+def test_decompose_async_passes_response_schema() -> None:
+    """Planner uses runtime structured-output schema, not only prompt prose."""
+    import asyncio
+    import json
+
+    from core.agent.plan import decompose_async
+
+    seen: dict[str, Any] = {}
+
+    async def _fake_call_llm(*_args: Any, **kwargs: Any) -> Any:
+        seen.update(kwargs)
+        return SimpleNamespace(
+            text=json.dumps(
+                {
+                    "is_compound": True,
+                    "goals": [
+                        {
+                            "id": "step_1",
+                            "description": "Search for current release notes",
+                            "tool_name": "general_web_search",
+                            "tool_args": {"query": "current release notes"},
+                            "depends_on": [],
+                        },
+                        {
+                            "id": "step_2",
+                            "description": "Summarize the results",
+                            "tool_name": "summarize",
+                            "tool_args": {},
+                            "depends_on": ["step_1"],
+                        },
+                    ],
+                    "reasoning": "search then summarize",
+                }
+            )
+        )
+
+    loop = SimpleNamespace(_call_llm=_fake_call_llm, _tools=[], model="m")
+    result = asyncio.run(decompose_async(loop, "search release notes and summarize them"))
+
+    assert result is not None
+    assert seen["response_schema"]["title"] == "DecompositionResult"
+    assert "goals" in seen["response_schema"]["properties"]
+
+
 def test_step_expected_mismatch_in_retryable_set() -> None:
     """The new code is in the retryable allowlist so PR-CL-A1 replan
     can recover from it."""

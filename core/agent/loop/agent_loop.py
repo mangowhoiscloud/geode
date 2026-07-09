@@ -2108,6 +2108,7 @@ class AgenticLoop:
         *,
         round_idx: int = 0,
         model: str | None = None,
+        response_schema: dict[str, Any] | None = None,
     ) -> AgenticResponse | None:
         """Multi-provider LLM call via :class:`LLMAdapter` (P1 Gateway pattern).
 
@@ -2115,7 +2116,10 @@ class AgenticLoop:
         conversion, retry, failover). Returns a normalized
         ``AgenticResponse`` or None on failure. Raises ``UserCancelledError``
         on Ctrl+C (caught by ``arun()``). Optional ``model`` overrides the
-        request model for one call without mutating ``self.model``.
+        request model for one call without mutating ``self.model``. Optional
+        ``response_schema`` overrides the loop-level schema for this call only,
+        so auxiliary planner / judge calls can use structured outputs without
+        changing the main agent turn.
 
         Invariants:
           * the context-overflow check mutates the SHARED messages list in
@@ -2189,7 +2193,9 @@ class AgenticLoop:
             effort=adaptive_effort,
             resume_session_id=prior_session_id,
             # per-loop schema → claude-cli --json-schema / codex --output-schema
-            response_schema=self._response_schema,
+            response_schema=(
+                response_schema if response_schema is not None else self._response_schema
+            ),
         )
         # Fire LLM_CALL_STARTED/ENDED with usage+cost for the SQLite
         # token/cost accumulator.

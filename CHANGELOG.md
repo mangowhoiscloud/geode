@@ -47,6 +47,15 @@ functional change.
 
 ## [Unreleased]
 
+### Changed
+
+- **Runtime prompt modernization for GPT-family models.** GEODE now omits the
+  dynamic current-date block and per-request date reminder for OpenAI GPT/Codex
+  routes, while retaining the stale-year recency guard for Anthropic, GLM, and
+  unknown providers. The goal-decomposition planner now sends its
+  `DecompositionResult` schema through the runtime response-schema path instead
+  of relying only on an inline JSON example in the prompt.
+
 ### Fixed
 
 - **LLM-backed tools no longer scan a cross-provider fallback order.**
