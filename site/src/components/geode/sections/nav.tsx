@@ -3,7 +3,9 @@
 import { useState, useEffect, useRef } from "react";
 import { LocaleToggle } from "../ui/locale-toggle";
 
-const navItems = [
+type NavItem = { id: string; label: string };
+
+const defaultNavItems: NavItem[] = [
   { id: "hero", label: "Overview" },
   { id: "two-loops", label: "Two loops" },
   { id: "self-evolving", label: "Self-evolving" },
@@ -12,8 +14,8 @@ const navItems = [
   { id: "lineage", label: "Lineage" },
 ];
 
-export function GeodeNav() {
-  const [activeSection, setActiveSection] = useState("hero");
+export function GeodeNav({ items = defaultNavItems }: { items?: NavItem[] }) {
+  const [activeSection, setActiveSection] = useState(items[0]?.id ?? "hero");
   const [visible, setVisible] = useState(false);
   const observerRef = useRef<IntersectionObserver | null>(null);
 
@@ -32,7 +34,7 @@ export function GeodeNav() {
       { rootMargin: "-40% 0px -55% 0px" },
     );
 
-    navItems.forEach((it) => {
+    items.forEach((it) => {
       const el = document.getElementById(it.id);
       if (el) observerRef.current?.observe(el);
     });
@@ -41,7 +43,7 @@ export function GeodeNav() {
       window.removeEventListener("scroll", handleScroll);
       observerRef.current?.disconnect();
     };
-  }, []);
+  }, [items]);
 
   function scrollTo(id: string) {
     const el = document.getElementById(id);
@@ -60,7 +62,7 @@ export function GeodeNav() {
           GEODE
         </span>
         <div className="flex-1 flex items-center gap-0.5">
-          {navItems.map((it) => {
+          {items.map((it) => {
             const isActive = activeSection === it.id;
             return (
               <button
