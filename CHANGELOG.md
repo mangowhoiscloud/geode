@@ -47,6 +47,14 @@ functional change.
 
 ## [Unreleased]
 
+### Added
+
+- **Crucible tau2 retail workflow projectors.** Added retail-contingent tau2
+  workflow scaffolds and adapter projectors for guarded split-payment fallback,
+  delivered-order return completion, source-address bundle updates, pending
+  item variant changes, cancelled-order tracking responses, and write preflight
+  corrections.
+
 ### Changed
 
 - **document_ingest can read approved local PDFs outside the project.** The
