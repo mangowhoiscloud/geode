@@ -149,6 +149,7 @@ gradient; the no-gradient rule below stays intact.
 
 - Geodi PNG sits naturally on `--paper` (cool near-black) — no inset wrapper needed; the PNG was authored for dark mediums and matches the substrate. Placement budget: landing hero, quickstart finish, 404/empty states. Never inside docs prose.
 - 36×40px in hero, 32px in footer. Always static, never animated.
+- **Portfolio-hero exception (operator-approved 2026-07-10)**: the /portfolio character card renders the canonical pixel sprite via `GeodiSprite` (`src/components/geode/geodi-sprite.tsx`, grid transcribed from `core/ui/geodi_art.py::GEODI_PIXELS`) at large scale, with a 2-frame eye blink on a 7s `step-end` cycle (`prefers-reduced-motion` disables it). This is the only animated mascot placement; the pose PNGs (`geode-idle/discover/focus`) may additionally mark growth-era rows there at 44px with `image-rendering: pixelated`.
 
 ### Blockquotes
 
@@ -219,6 +220,19 @@ When asked to build or modify UI in this portfolio repo:
 - The legacy `--sea-*`, `--glow-*` palette references in new code. Existing references will migrate over time.
 
 **Reference DESIGN.md examples for similar aesthetic**: VoltAgent/awesome-design-md → Anthropic (dark variant inferred), Cursor, Linear (dark mode). Do not borrow gradient or neon patterns from any of them.
+
+**Astryx (scoped, operator-approved 2026-07-10).** `/portfolio` mounts
+`@astryxdesign/core` (Meta's open-source design system, React + precompiled
+StyleX CSS) as its component foundation: SegmentedControl, MetadataList,
+ProgressBar, Token. Astryx tokens are attribute-scoped
+(`[data-astryx-theme]`), and `src/app/portfolio/astryx-geode.css` remaps the
+semantic color/font tokens onto the §2 palette, so components render in
+GEODE identity, not Meta neutral. Rules: (1) Astryx components stay inside
+`data-astryx-theme` wrappers on /portfolio; do not spread them to docs
+pages without a new approval. (2) Never import `@astryxdesign/core/reset.css`
+(unscoped global reset). (3) `theme-neutral` globally sets
+`color-scheme: light dark`; the bridge CSS pins `:root { color-scheme: dark }`
+back. If the bridge file is removed, remove the theme import with it.
 
 ---
 
