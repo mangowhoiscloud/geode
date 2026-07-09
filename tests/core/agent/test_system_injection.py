@@ -31,8 +31,19 @@ class TestBuildSystemReminder:
     """Tests for build_system_reminder()."""
 
     def test_includes_date(self) -> None:
-        """Reminder always includes current date."""
+        """Reminder includes current date by default."""
         result = build_system_reminder()
+        assert "Current date:" in result
+
+    @patch("core.agent.system_prompt.get_active_rule_names", return_value=[])
+    def test_omits_date_for_openai_model(self, _mock: object) -> None:
+        """OpenAI GPT-family reminders inherit the no-current-date policy."""
+        result = build_system_reminder(model="gpt-5.5")
+        assert result == ""
+
+    def test_keeps_date_for_anthropic_model(self) -> None:
+        """Non-OpenAI reminders keep the recency guard."""
+        result = build_system_reminder(model="claude-opus-4-8")
         assert "Current date:" in result
 
     def test_includes_round_when_nonzero(self) -> None:
@@ -86,6 +97,13 @@ class TestAppendSystemReminder:
         assert result[0]["role"] == "user"
         assert f"<{_REMINDER_TAG}>" in result[0]["content"]
         assert f"</{_REMINDER_TAG}>" in result[0]["content"]
+
+    @patch("core.agent.system_prompt.get_active_rule_names", return_value=[])
+    def test_openai_without_other_context_appends_nothing(self, _mock: object) -> None:
+        """No empty reminder is appended after OpenAI date elision."""
+        messages = [{"role": "user", "content": "Hello"}]
+        result = append_system_reminder(messages, model="gpt-5.5")
+        assert result == messages
 
     def test_appends_after_latest_user_message(self) -> None:
         """Reminder is the LAST message, after all history."""

@@ -55,6 +55,7 @@ __all__ = [
     "_replan_max_attempts",
     "build_plan_from_decomposition",
     "decompose_async",
+    "decomposition_response_schema",
     "parse_replan_response",
     "render_plan_for_prompt",
     "replan_async",
@@ -104,6 +105,11 @@ class DecompositionResult(BaseModel):
         default_factory=list, description="Ordered list of sub-goals"
     )
     reasoning: str = PydanticField(default="", description="Brief explanation of the decomposition")
+
+
+def decomposition_response_schema() -> dict[str, Any]:
+    """Return the structured-output schema for goal decomposition."""
+    return DecompositionResult.model_json_schema()
 
 
 # Cadence interval (number of rounds between forced replan calls). ``0``
@@ -679,8 +685,9 @@ async def decompose_async(
     2. **System prompt**: ``load_prompt("decomposer", "system")`` +
        ``apply_decomposition_policy`` (ADR-012 SoT — preserves the
        operator-tunable policy surface; only the call site moves).
-    3. **LLM call**: ``loop._call_llm`` with the active loop model,
-       bounded by ``_DECOMPOSE_CALL_TIMEOUT_S``
+    3. **LLM call**: ``loop._call_llm`` with the active loop model and
+       the ``DecompositionResult`` response schema, bounded by
+       ``_DECOMPOSE_CALL_TIMEOUT_S``
        (180s post-PR-CHECKPOINT-RESUME-TIMEBUDGET, 2026-05-25).
     4. **Parse**: pydantic ``DecompositionResult.model_validate_json``
        — schema-validated, error-on-malformed.
@@ -723,6 +730,7 @@ async def decompose_async(
                 system_prompt,
                 [{"role": "user", "content": user_prompt}],
                 model=loop.model,
+                response_schema=decomposition_response_schema(),
             ),
             timeout=_DECOMPOSE_CALL_TIMEOUT_S,
         )
