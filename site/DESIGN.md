@@ -76,6 +76,7 @@ gradient; the no-gradient rule below stays intact.
 | `--font-inter` | Inter | 400, 500, 600, 700 | UI chrome, body sans |
 | `--font-display` | Outfit | 600, 700, 800 | Page titles (h1), section labels |
 | `--font-fira-code` | Fira Code | 400, 500 | Code blocks, file paths, version chips |
+| `--font-pixel` | Galmuri11 (OFL, vendored woff2 in `src/fonts/`) | 400, 700 | Character-facing display (operator-approved 2026-07-10): /portfolio h1/h2/era titles/stat numbers, docs-shell wordmark. Matches the GEODI_PIXELS dot mascot. Loads only on pages importing `src/fonts/galmuri.ts`; never for body prose. Always `letter-spacing: 0` (pixel glyphs break under negative tracking). |
 
 **Body is sans (Inter), not serif.** Editorial restraint comes from spacing, line-height, and color discipline — not from a serif body. A dark substrate and serif body together would feel funereal; Inter on near-black reads as a professional dossier.
 
@@ -149,7 +150,7 @@ gradient; the no-gradient rule below stays intact.
 
 - Geodi PNG sits naturally on `--paper` (cool near-black) — no inset wrapper needed; the PNG was authored for dark mediums and matches the substrate. Placement budget: landing hero, quickstart finish, 404/empty states. Never inside docs prose.
 - 36×40px in hero, 32px in footer. Always static, never animated.
-- **Portfolio-hero exception (operator-approved 2026-07-10)**: the /portfolio character card renders the canonical pixel sprite via `GeodiSprite` (`src/components/geode/geodi-sprite.tsx`, grid transcribed from `core/ui/geodi_art.py::GEODI_PIXELS`) at large scale, with a 2-frame eye blink on a 7s `step-end` cycle (`prefers-reduced-motion` disables it). This is the only animated mascot placement; the pose PNGs (`geode-idle/discover/focus`) may additionally mark growth-era rows there at 44px with `image-rendering: pixelated`.
+- **Portfolio-hero exception (operator-approved 2026-07-10)**: the /portfolio character card renders the canonical pixel sprite via `GeodiSprite` (`src/components/geode/geodi-sprite.tsx`, grid transcribed from `core/ui/geodi_art.py::GEODI_PIXELS`) at large scale, with a 2-frame eye blink on a 7s `step-end` cycle (`prefers-reduced-motion` disables it). Animated mascot budget (blink + 2-frame idle bob + prompt caret) is scoped to /portfolio; the pose PNGs (`geode-idle/discover/focus`) may mark growth-era rows and section dividers there at 44-52px with `image-rendering: pixelated`. The docs-shell header wordmark carries a STATIC `GeodiSprite` at scale 2 (operator-approved 2026-07-10) — the one docs-chrome mascot placement; still never inside docs prose.
 
 ### Blockquotes
 
@@ -190,6 +191,7 @@ gradient; the no-gradient rule below stays intact.
 - Don't introduce new accent colors. Rose for identity, gold for action, aqua for information, scoped petri-blue for the self-improving bridge, and that is it.
 - Don't use `dark-panel` or `mascot-inset` utilities — they were transitional and are removed in the dark-mode reset.
 - Don't add larger corner radii than `rounded-lg` (8px).
+- Don't append decorative arrows (`→`, `▸`) to links, CTAs, or stat values (operator 2026-07-10, slop signal). Link text alone carries the affordance; version/date ranges use `~`.
 
 ## 8. Responsive Behavior
 

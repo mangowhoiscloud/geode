@@ -26,13 +26,6 @@ export function GeodeFooter() {
             GitHub
           </Link>
           <Link
-            href="https://rooftopsnow.tistory.com/category/Harness"
-            target="_blank"
-            className="text-xs font-mono text-[var(--ink-2)] hover:text-[var(--ink)] transition-colors"
-          >
-            Dev Blog
-          </Link>
-          <Link
             href="/"
             className="text-xs font-mono text-[var(--ink-2)] hover:text-[var(--ink)] transition-colors"
           >

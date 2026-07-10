@@ -2,7 +2,7 @@
  * GEODE CHANGELOG, auto-synced from the GEODE repo via `npm run sync-stats`.
  * Do not edit manually. Edit CHANGELOG.md in the GEODE repo and re-run sync.
  *
- * Last sync: 2026-07-09
+ * Last sync: 2026-07-10
  *
  * Each entry's `body` is the raw markdown between two version headings.
  * The Changelog page renders the body with a minimal markdown renderer
@@ -16,6 +16,11 @@ export type ChangelogEntry = {
 };
 
 export const CHANGELOG: ChangelogEntry[] = [
+  {
+    "version": "0.99.287",
+    "date": "2026-07-10",
+    "body": "### Changed\n\n- **Portfolio v11 — landing-grade pass on the growth log (operator feedback\n  batch).** The hero is now centered with a terminal mock of the real CLI\n  welcome screen (`core/ui/mascot.py` line layout + `GEODI_PIXELS` sprite,\n  2-frame idle bob and blinking prompt caret, `prefers-reduced-motion`\n  respected), followed by a bento sheet band: the character-sheet aside, a\n  bench card rendering the synced tau2/MCPMark matrices\n  (`src/data/geode/benchmark-measurements.ts` — Retail 0.763 / Telecom 0.877 /\n  Airline 0.820 base runs, MCPMark filesystem/easy 100%), and a refreshed\n  tech-stack card (`tech-stack.ts` re-measured 2026-07-10; the stale\n  LangGraph/98-tests inventory is gone). Reference bar: the Claude Code\n  landing (product moment first, mascot as section divider, dated feed).\n- **Character-facing display font: Galmuri11.** The pixel font (SIL OFL,\n  woff2 vendored in `site/src/fonts/`) now carries /portfolio display\n  headings, era titles, stat numbers, and the docs-shell wordmark, matching\n  the dot mascot; body prose stays Inter. Korean headings use\n  `word-break: keep-all`.\n- **Docs shell carries the mascot.** The docs header brand renders a static\n  `GeodiSprite` beside the pixel wordmark; docs prose remains mascot-free.\n- **De-slop: decorative arrows and the dev-blog link are gone.** CTA/link\n  arrows (`→`, `▸`) are removed site-portfolio-wide (ranges now use `~`), and\n  the Dev Blog link is dropped from the portfolio hero and the shared footer.\n  Growth-log sections gain restrained scroll reveals (existing framer-motion\n  `ScrollReveal`)."
+  },
   {
     "version": "0.99.286",
     "date": "2026-07-10",
@@ -2153,4 +2158,4 @@ export const CHANGELOG: ChangelogEntry[] = [
   }
 ];
 
-export const CHANGELOG_SYNCED_AT = "2026-07-09";
+export const CHANGELOG_SYNCED_AT = "2026-07-10";

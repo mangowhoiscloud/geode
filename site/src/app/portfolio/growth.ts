@@ -84,8 +84,8 @@ export const eras: Era[] = [
   {
     id: "01",
     pose: "idle",
-    range: "v0.6.0 → v0.16.0",
-    period: "2026-03-10 → 03-17",
+    range: "v0.6.0 ~ v0.16.0",
+    period: "2026-03-10 ~ 03-17",
     titleKo: "부화. 그래프를 버리고 루프를 얻다",
     titleEn: "Hatch. Drop the graph, keep the loop",
     bodyKo:
@@ -101,8 +101,8 @@ export const eras: Era[] = [
   {
     id: "02",
     pose: "idle",
-    range: "v0.16.0 → v0.49.0",
-    period: "2026-03-17 → 04-23",
+    range: "v0.16.0 ~ v0.49.0",
+    period: "2026-03-17 ~ 04-23",
     titleKo: "골격. 루프 주변에 뼈대를 세우다",
     titleEn: "Skeleton. Building bone around the loop",
     bodyKo:
@@ -119,8 +119,8 @@ export const eras: Era[] = [
   {
     id: "03",
     pose: "discover",
-    range: "v0.49.0 → v0.99.0",
-    period: "2026-04-23 → 05-17",
+    range: "v0.49.0 ~ v0.99.0",
+    period: "2026-04-23 ~ 05-17",
     titleKo: "범용 전환. 도메인을 플러그인 밖으로",
     titleEn: "Generalization. Push the domain out to plugins",
     bodyKo:
@@ -137,8 +137,8 @@ export const eras: Era[] = [
   {
     id: "04",
     pose: "focus",
-    range: "v0.90.0 → v0.99.186",
-    period: "2026-05-11 → 06-12",
+    range: "v0.90.0 ~ v0.99.186",
+    period: "2026-05-11 ~ 06-12",
     titleKo: "자기개선 루프. 스스로를 실험 대상으로",
     titleEn: "Self-improving loop. Itself as the test subject",
     bodyKo:
@@ -154,8 +154,8 @@ export const eras: Era[] = [
   {
     id: "05",
     pose: "focus",
-    range: "v0.99.225 → 현재",
-    period: "2026-06-17 → ",
+    range: "v0.99.225 ~ 현재",
+    period: "2026-06-17 ~ ",
     titleKo: "능력 축. 안전 루프를 능력으로 복제",
     titleEn: "Capability axis. Cloning the loop for capability",
     bodyKo:

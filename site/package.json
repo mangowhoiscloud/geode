@@ -23,6 +23,7 @@
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "framer-motion": "^12.26.2",
+    "galmuri": "^2.40.3",
     "gray-matter": "^4.0.3",
     "katex": "^0.16.46",
     "lucide-react": "^0.563.0",

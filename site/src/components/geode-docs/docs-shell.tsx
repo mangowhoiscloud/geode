@@ -3,9 +3,11 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { type ReactNode, type CSSProperties } from "react";
+import { GeodiSprite } from "@/components/geode/geodi-sprite";
 import { useLocale, useSetLocale, t } from "@/components/geode/locale-context";
 import { DOCS_SITEMAP, adjacentPages, findPage, QUADRANT_META, type DocQuadrant } from "@/lib/geode-docs/sitemap";
 import { GEODE_SOT } from "@/data/geode/sot";
+import { galmuri } from "@/fonts/galmuri";
 
 const DOCS_BASE = "/docs";
 
@@ -207,8 +209,12 @@ export function DocsShell({
       <header className="sticky top-0 z-30 border-b border-[var(--rule-soft)] bg-[color-mix(in_srgb,var(--paper)_85%,transparent)] backdrop-blur">
         <div className="max-w-7xl mx-auto flex items-center justify-between px-6 py-4">
           <div className="flex items-center gap-6">
-            <span className="text-sm font-display font-bold tracking-wide">
-              {t(locale, "GEODE . 문서", "GEODE . Docs")}
+            <span className={`${galmuri.variable} flex items-center gap-2.5 text-sm font-bold`}>
+              {/* Docs brand carries the CLI mascot: same GEODI_PIXELS sprite, static (no blink outside the portfolio hero budget). */}
+              <GeodiSprite scale={2} />
+              <span style={{ fontFamily: "var(--font-pixel), var(--font-display), sans-serif" }}>
+                {t(locale, "GEODE . 문서", "GEODE . Docs")}
+              </span>
             </span>
           </div>
           <div className="flex items-center gap-4">

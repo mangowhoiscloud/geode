@@ -45,6 +45,34 @@ functional change.
 
 ---
 
+## [0.99.287] - 2026-07-10
+
+### Changed
+
+- **Portfolio v11 — landing-grade pass on the growth log (operator feedback
+  batch).** The hero is now centered with a terminal mock of the real CLI
+  welcome screen (`core/ui/mascot.py` line layout + `GEODI_PIXELS` sprite,
+  2-frame idle bob and blinking prompt caret, `prefers-reduced-motion`
+  respected), followed by a bento sheet band: the character-sheet aside, a
+  bench card rendering the synced tau2/MCPMark matrices
+  (`src/data/geode/benchmark-measurements.ts` — Retail 0.763 / Telecom 0.877 /
+  Airline 0.820 base runs, MCPMark filesystem/easy 100%), and a refreshed
+  tech-stack card (`tech-stack.ts` re-measured 2026-07-10; the stale
+  LangGraph/98-tests inventory is gone). Reference bar: the Claude Code
+  landing (product moment first, mascot as section divider, dated feed).
+- **Character-facing display font: Galmuri11.** The pixel font (SIL OFL,
+  woff2 vendored in `site/src/fonts/`) now carries /portfolio display
+  headings, era titles, stat numbers, and the docs-shell wordmark, matching
+  the dot mascot; body prose stays Inter. Korean headings use
+  `word-break: keep-all`.
+- **Docs shell carries the mascot.** The docs header brand renders a static
+  `GeodiSprite` beside the pixel wordmark; docs prose remains mascot-free.
+- **De-slop: decorative arrows and the dev-blog link are gone.** CTA/link
+  arrows (`→`, `▸`) are removed site-portfolio-wide (ranges now use `~`), and
+  the Dev Blog link is dropped from the portfolio hero and the shared footer.
+  Growth-log sections gain restrained scroll reveals (existing framer-motion
+  `ScrollReveal`).
+
 ## [0.99.286] - 2026-07-10
 
 ### Added

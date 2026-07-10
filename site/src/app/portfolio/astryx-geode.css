@@ -106,3 +106,50 @@
 .cadence-bar:hover {
   opacity: 1;
 }
+
+/* ---- pixel display font (Galmuri11, loaded via src/fonts/galmuri.ts) ---- */
+
+.font-pixel {
+  font-family: var(--font-pixel), var(--font-display), var(--font-inter), sans-serif;
+  letter-spacing: 0;
+  word-break: keep-all;
+}
+
+/* ---- terminal mock idle motion (2-frame, pixel-style) ------------------- */
+
+@keyframes geodi-bob {
+  0%,
+  49.9% {
+    transform: translateY(0);
+  }
+  50%,
+  100% {
+    transform: translateY(-2px);
+  }
+}
+
+.geodi-bob {
+  animation: geodi-bob 2.4s step-end infinite;
+}
+
+@keyframes geodi-caret {
+  0%,
+  49.9% {
+    opacity: 1;
+  }
+  50%,
+  100% {
+    opacity: 0;
+  }
+}
+
+.geodi-caret {
+  animation: geodi-caret 1.1s step-end infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .geodi-bob,
+  .geodi-caret {
+    animation: none;
+  }
+}
