@@ -45,6 +45,27 @@ functional change.
 
 ---
 
+## [0.99.295] - 2026-07-10
+
+### Fixed
+
+- **Docs trailing-slash URLs no longer 404.** The static export flips to
+  directory-style HTML (`trailingSlash: true`, `docs/<slug>/index.html`), so
+  GitHub Pages serves both `/geode/docs` and `/geode/docs/` (the slash form
+  previously hit the 404 page for every docs deep link). `export-docs-md.mjs`
+  and the lychee link-check paths follow the new layout.
+
+### Changed
+
+- **Self-improving hub sheds two UX-slop patterns (operator-directed).**
+  Transcript dialogue turns render open by default instead of demanding a
+  click per `<details>` toggle (sub-agent and hook-event payloads stay
+  collapsed), and the sidebar stops dumping flat ID walls: seed-generation
+  runs group under their campaign gen-tag with target-dim leaves, and audit
+  entries carry a MM-DD HH:MM timeline stamp.
+
+---
+
 ## [0.99.294] - 2026-07-10
 
 ### Fixed

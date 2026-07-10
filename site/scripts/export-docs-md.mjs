@@ -133,7 +133,8 @@ function absolutizeLinks(markdown) {
 }
 
 function htmlPathFor(slug) {
-  return slug ? resolve(OUT_DIR, "docs", `${slug}.html`) : resolve(OUT_DIR, "docs.html");
+  // trailingSlash: true exports directory-style HTML (docs/<slug>/index.html).
+  return slug ? resolve(OUT_DIR, "docs", slug, "index.html") : resolve(OUT_DIR, "docs", "index.html");
 }
 
 function mdPathFor(slug) {

@@ -9,7 +9,10 @@ const nextConfig: NextConfig = {
   images: {
     unoptimized: true,
   },
-  trailingSlash: false,
+  // Directory-style export (about/index.html): GitHub Pages serves both
+  // /geode/docs and /geode/docs/ (301 to the slash form). With `false` the
+  // slash form 404s — shared links with a trailing slash broke (2026-07-10).
+  trailingSlash: true,
 };
 
 export default nextConfig;

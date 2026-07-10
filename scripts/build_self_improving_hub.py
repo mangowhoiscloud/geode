@@ -747,7 +747,14 @@ def render_sidebar_petri(rows: list[PetriRow]) -> str:
     for row in rows[:PETRI_SIDEBAR_LIMIT]:
         task_short = row.task_id[:8] if row.task_id else "unknown"
         anchor = f"/geode/self-improving/petri-bundle/{inspect_log_route(row.log_file)}"
-        out.append(f'            <li><a href="{anchor}">audit_{html_escape(task_short)}</a></li>')
+        # MM-DD HH:MM stamp so the list reads as a timeline, not opaque IDs.
+        raw_stamp = row.started_at[5:16].replace("T", " ")
+        stamp = html_escape(raw_stamp) if len(row.started_at) >= 16 else ""
+        stamp_html = f' <span class="side-stamp">{stamp}</span>' if stamp else ""
+        out.append(
+            f'            <li><a href="{anchor}">audit_{html_escape(task_short)}'
+            f"{stamp_html}</a></li>"
+        )
     return "\n".join(out)
 
 
@@ -757,10 +764,21 @@ def render_sidebar_seedgen(rows: list[SeedGenRow]) -> str:
             '            <li><a href="/geode/self-improving/seed-generation/">'
             "<em>none yet</em></a></li>"
         )
-    out: list[str] = []
+    # Group runs under their campaign (gen_tag) so the sidebar reads as
+    # campaign -> target-dim leaves instead of a flat wall of long run IDs.
+    grouped: dict[str, list[SeedGenRow]] = {}
     for row in rows:
-        url = f"/geode/self-improving/seed-generation/{html_escape(row.run_id)}/"
-        out.append(f'            <li><a href="{url}">{html_escape(row.run_id)}</a></li>')
+        grouped.setdefault(row.gen_tag or "untagged", []).append(row)
+    out: list[str] = []
+    for gen_tag, tag_rows in grouped.items():
+        out.append(f'            <li class="side-group-label">{html_escape(gen_tag)}</li>')
+        for row in tag_rows:
+            url = f"/geode/self-improving/seed-generation/{html_escape(row.run_id)}/"
+            leaf = row.target_dim or row.run_id
+            out.append(
+                f'            <li class="side-group-leaf"><a href="{url}" '
+                f'title="{html_escape(row.run_id)}">{html_escape(leaf)}</a></li>'
+            )
     return "\n".join(out)
 
 
@@ -2047,14 +2065,14 @@ def _render_agent_detail_body(run_id: str, sa: dict[str, Any]) -> str:
         elif kind == "user_message":
             text = str(evt.get("text") or "")
             turns.append(
-                f'<details class="turn user"><summary>user — turn '
+                f'<details open class="turn user"><summary>user — turn '
                 f"{evt.get('seq', '?')} ({len(text)} chars)</summary>"
                 f'<pre class="msg">{html_escape(text)}</pre></details>'
             )
         elif kind == "assistant_message":
             text = str(evt.get("text") or "")
             turns.append(
-                f'<details class="turn assistant"><summary>assistant — turn '
+                f'<details open class="turn assistant"><summary>assistant — turn '
                 f"{evt.get('seq', '?')} ({len(text)} chars)</summary>"
                 f'<pre class="msg">{html_escape(text)}</pre></details>'
             )
