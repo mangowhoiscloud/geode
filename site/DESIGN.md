@@ -65,6 +65,41 @@ identity on exactly two surfaces: the 04-self-improving docs section
 docs.css) and the petri-bundle bridge pages. The vendored Inspect viewer
 cannot be re-skinned, so the section accent preserves continuity into it.
 
+**Generated art assets (PIL, reproducible).** `public/images/geode-lab-scene.png`
+— the representative character image (operator brief 2026-07-10: dot art x
+Lanthimos; Poor Things porthole sky + gold sun, The Favourite checkerboard
+marble in one-point perspective, Sacred Deer symmetric columns, the canonical
+GEODI_PIXELS sprite centered as the specimen; 240x300 pixel canvas, NEAREST
+x5, 6-color palette from §2 + gold) and `geode-gallery-blur.jpg`
+(gaussian-blur gallery band behind the floating terminal), plus
+`geode-etch-line.png` (white-line engraving variant, currently unmounted).
+Regeneration recipes live in the introducing PRs; keep inks inside §2.
+Motion (operator-approved): /portfolio uses framer-motion choreography —
+hero stagger, scene idle float, terminal rise, petri-dish spring, cadence-bar
+growth — all gated by `useReducedMotion`. The docs surface keeps the old
+motion budget.
+
+**Rose-and-white loop-punk composition (operator-directed 2026-07-10 final,
+supersedes the two-surface band rule).** /portfolio is one rose field
+(`--acc-artifact`) written in warm white `#FFF0F8` — two colors only; the
+terminal mock keeps its dark product-screenshot colors by standing exception.
+White appears three ways: as ink (serif statements, mono stamps, hairline
+grids at 55-75% alpha), as paper plates carrying rose line-art schematics,
+and as the stage of the finale. The distillation and the laboratory are one
+continuous sticky act: white token rain converges through dissolving-gradient
+hairline thresholds, fills the full-bleed pixel wordmark, and further scroll
+fades in the reveal — a white stage enters and the rose field becomes a
+specimen slide. LazyWeb formula (sharp corners, technical line-art, terminal
+hero) carried in the two-color register; hierarchy from white alpha, never a
+third hue. The one sanctioned exception is the terminal mock, which keeps its dark
+product-screenshot colors (`--paper-deep` + ink tokens) because it is a
+product artifact, not page chrome. Scroll is choreography, not paging:
+curtain-stack sections over a pinned hero, `StageLight` scroll-linked
+dimming, the distillation act (token rain converging band-by-band through
+hairline filters labeled with Astryx `Token` chips, piling onto the GEODE
+word as a top-down fill), and the wordmark-to-laboratory crossfade finale.
+The docs surface keeps the single dark substrate rule.
+
 **Texture.** `.rose-grid` (globals.css) is a 1px rose dot grid at 5% opacity,
 28px pitch — for the landing/hero surfaces only. It is a pattern, not a color
 gradient; the no-gradient rule below stays intact.
@@ -76,6 +111,8 @@ gradient; the no-gradient rule below stays intact.
 | `--font-inter` | Inter | 400, 500, 600, 700 | UI chrome, body sans |
 | `--font-display` | Outfit | 600, 700, 800 | Page titles (h1), section labels |
 | `--font-fira-code` | Fira Code | 400, 500 | Code blocks, file paths, version chips |
+| `--font-serif-display` | Noto Serif KR 600/900 (next/font/google, unicode-range 슬라이스) | 600, 900 | Editorial display (operator-approved 2026-07-10, Hermes-landing register): hero statements, section titles, chapter-band declarations. Pairs with pixel wordmark + mono labels. `word-break: keep-all`. |
+| `--font-pixel` | Galmuri11 (OFL, vendored woff2 in `src/fonts/`) | 400, 700 | Character-facing display (operator-approved 2026-07-10): /portfolio h1/h2/era titles/stat numbers, docs-shell wordmark. Matches the GEODI_PIXELS dot mascot. Loads only on pages importing `src/fonts/galmuri.ts`; never for body prose. Always `letter-spacing: 0` (pixel glyphs break under negative tracking). |
 
 **Body is sans (Inter), not serif.** Editorial restraint comes from spacing, line-height, and color discipline — not from a serif body. A dark substrate and serif body together would feel funereal; Inter on near-black reads as a professional dossier.
 
@@ -149,7 +186,7 @@ gradient; the no-gradient rule below stays intact.
 
 - Geodi PNG sits naturally on `--paper` (cool near-black) — no inset wrapper needed; the PNG was authored for dark mediums and matches the substrate. Placement budget: landing hero, quickstart finish, 404/empty states. Never inside docs prose.
 - 36×40px in hero, 32px in footer. Always static, never animated.
-- **Portfolio-hero exception (operator-approved 2026-07-10)**: the /portfolio character card renders the canonical pixel sprite via `GeodiSprite` (`src/components/geode/geodi-sprite.tsx`, grid transcribed from `core/ui/geodi_art.py::GEODI_PIXELS`) at large scale, with a 2-frame eye blink on a 7s `step-end` cycle (`prefers-reduced-motion` disables it). This is the only animated mascot placement; the pose PNGs (`geode-idle/discover/focus`) may additionally mark growth-era rows there at 44px with `image-rendering: pixelated`.
+- **Portfolio-hero exception (operator-approved 2026-07-10)**: the /portfolio character card renders the canonical pixel sprite via `GeodiSprite` (`src/components/geode/geodi-sprite.tsx`, grid transcribed from `core/ui/geodi_art.py::GEODI_PIXELS`) at large scale, with a 2-frame eye blink on a 7s `step-end` cycle (`prefers-reduced-motion` disables it). Animated mascot budget (blink + 2-frame idle bob + prompt caret) is scoped to /portfolio; the pose PNGs (`geode-idle/discover/focus`) may mark growth-era rows and section dividers there at 44-52px with `image-rendering: pixelated`. The docs-shell header wordmark carries a STATIC `GeodiSprite` at scale 2 (operator-approved 2026-07-10) — the one docs-chrome mascot placement; still never inside docs prose.
 
 ### Blockquotes
 
@@ -190,6 +227,7 @@ gradient; the no-gradient rule below stays intact.
 - Don't introduce new accent colors. Rose for identity, gold for action, aqua for information, scoped petri-blue for the self-improving bridge, and that is it.
 - Don't use `dark-panel` or `mascot-inset` utilities — they were transitional and are removed in the dark-mode reset.
 - Don't add larger corner radii than `rounded-lg` (8px).
+- Don't append decorative arrows (`→`, `▸`) to links, CTAs, or stat values (operator 2026-07-10, slop signal). Link text alone carries the affordance; version/date ranges use `~`.
 
 ## 8. Responsive Behavior
 

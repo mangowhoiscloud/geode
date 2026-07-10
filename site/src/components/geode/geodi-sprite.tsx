@@ -61,12 +61,15 @@ GEODI_PIXELS.forEach((row, y) => {
 export function GeodiSprite({
   scale = 8,
   blink = false,
+  silhouette,
   className,
 }: {
   /** Rendered size of one sprite pixel, in CSS px. */
   scale?: number;
   /** Enable the 2-frame eye blink (portfolio hero budget only). */
   blink?: boolean;
+  /** Render every pixel in one color (stencil mark for color-field bands). */
+  silhouette?: string;
   className?: string;
 }) {
   return (
@@ -80,11 +83,11 @@ export function GeodiSprite({
       className={className}
     >
       {basePixels.map((p) => (
-        <rect key={`${p.x}-${p.y}`} x={p.x} y={p.y} width={1} height={1} fill={p.fill} />
+        <rect key={`${p.x}-${p.y}`} x={p.x} y={p.y} width={1} height={1} fill={silhouette ?? p.fill} />
       ))}
-      <g className={blink ? "geodi-blink-eyes" : undefined}>
+      <g className={blink && !silhouette ? "geodi-blink-eyes" : undefined}>
         {openEyePixels.map((p) => (
-          <rect key={`eye-${p.x}-${p.y}`} x={p.x} y={p.y} width={1} height={1} fill={p.fill} />
+          <rect key={`eye-${p.x}-${p.y}`} x={p.x} y={p.y} width={1} height={1} fill={silhouette ?? p.fill} />
         ))}
       </g>
     </svg>
