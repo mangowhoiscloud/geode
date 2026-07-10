@@ -31,10 +31,12 @@ import { serifDisplay } from "@/fonts/serif";
  */
 
 const PAPER = "#FFF0F8";
-const PAPER_75 = "color-mix(in srgb, #FFF0F8 75%, transparent)";
+const PAPER_75 = "color-mix(in srgb, #FFF0F8 90%, transparent)";
 const PAPER_55 = "color-mix(in srgb, #FFF0F8 55%, transparent)";
-const ROSE = "var(--acc-artifact)";
-const ROSE_75 = "color-mix(in srgb, var(--acc-artifact) 88%, transparent)";
+// Deep-rose ink: same hue as the signature, darkened for legibility on the
+// white plates (~4.5:1 vs #FFF0F8; the signature itself is ~1.8:1 as ink).
+const ROSE_INK = "#C2447F";
+const ROSE_INK_70 = "color-mix(in srgb, #C2447F 72%, transparent)";
 
 const navItems = [
   { id: "hero", label: "Intro" },
@@ -108,7 +110,7 @@ function TerminalMock() {
           </div>
         </div>
       </div>
-      <figcaption className="mx-auto mt-3 w-fit rounded bg-[#FFF0F8] px-3 py-1 text-center font-mono text-[10.5px] text-[var(--acc-artifact)]">
+      <figcaption className="mx-auto mt-3 w-fit rounded bg-[#FFF0F8] px-3 py-1 text-center font-mono text-[10.5px] text-[#C2447F]">
         core/ui/mascot.py · geodi_art.py · {t(locale, "CLI 웰컴 스크린을 그대로 옮긴 화면", "the CLI welcome screen, transcribed")}
       </figcaption>
     </figure>
@@ -162,7 +164,7 @@ function HeroField() {
         <motion.div variants={heroItem} className="mt-9 flex flex-wrap items-center gap-x-7 gap-y-3">
           <Link
             href="/docs"
-            className="inline-flex touch-manipulation items-center rounded bg-[#FFF0F8] px-5 py-2.5 text-[14px] font-medium text-[var(--acc-artifact)] transition-opacity hover:opacity-85"
+            className="inline-flex touch-manipulation items-center rounded bg-[#FFF0F8] px-5 py-2.5 text-[14px] font-medium text-[#C2447F] transition-opacity hover:opacity-85"
           >
             {t(locale, "문서 읽기", "Read the docs")}
           </Link>
@@ -230,33 +232,33 @@ function LoopDiagram() {
       {/* depth: dotted echoes of the rail */}
       {[22, 44].map((inset) => (
         <rect key={inset} x={railL - inset} y={railT - inset} width={railR - railL + inset * 2}
-          height={railB - railT + inset * 2} fill="none" stroke={ROSE} strokeWidth="1"
+          height={railB - railT + inset * 2} fill="none" stroke={ROSE_INK} strokeWidth="1"
           strokeDasharray="1.5 5" opacity="0.45" shapeRendering="crispEdges" />
       ))}
       {/* the rail */}
       <rect x={railL} y={railT} width={railR - railL} height={railB - railT} fill="none"
-        stroke={ROSE} strokeWidth="1.2" shapeRendering="crispEdges" />
+        stroke={ROSE_INK} strokeWidth="1.2" shapeRendering="crispEdges" />
       {arrows.map((a, i) => (
-        <polygon key={i} points="-3.5,-4 4.5,0 -3.5,4" fill={ROSE}
+        <polygon key={i} points="-3.5,-4 4.5,0 -3.5,4" fill={ROSE_INK}
           transform={`translate(${a.x} ${a.y}) rotate(${a.deg})`} />
       ))}
       {/* center clause */}
-      <text x={midX} y={206} textAnchor="middle" fontSize="20" className="font-pixel" fill={ROSE}>while</text>
-      <text x={midX} y={230} textAnchor="middle" fontSize="20" className="font-pixel" fill={ROSE}>(tool_use)</text>
+      <text x={midX} y={206} textAnchor="middle" fontSize="20" className="font-pixel" fill={ROSE_INK}>while</text>
+      <text x={midX} y={230} textAnchor="middle" fontSize="20" className="font-pixel" fill={ROSE_INK}>(tool_use)</text>
       {/* exit through the bottom rail gap */}
-      <line x1={midX} y1={252} x2={midX} y2={424} stroke={ROSE} strokeWidth="1.2" strokeDasharray="3 4" />
-      <polygon points="-4,-3.5 0,4.5 4,-3.5" fill={ROSE} transform={`translate(${midX} ${424})`} />
+      <line x1={midX} y1={252} x2={midX} y2={424} stroke={ROSE_INK} strokeWidth="1.2" strokeDasharray="3 4" />
+      <polygon points="-4,-3.5 0,4.5 4,-3.5" fill={ROSE_INK} transform={`translate(${midX} ${424})`} />
       <text x={midX + 10} y={404} textAnchor="start" fontSize="9.5"
-        fontFamily="var(--font-fira-code), monospace" fill={ROSE_75}>no tool_use</text>
-      <rect x={midX - 48} y={428} width={96} height={28} fill={PAPER} stroke={ROSE} shapeRendering="crispEdges" />
-      <text x={midX} y={446} textAnchor="middle" fontSize="12" fontFamily="var(--font-fira-code), monospace" fill={ROSE}>finalize</text>
+        fontFamily="var(--font-fira-code), monospace" fill={ROSE_INK_70}>no tool_use</text>
+      <rect x={midX - 48} y={428} width={96} height={28} fill={PAPER} stroke={ROSE_INK} shapeRendering="crispEdges" />
+      <text x={midX} y={446} textAnchor="middle" fontSize="12" fontFamily="var(--font-fira-code), monospace" fill={ROSE_INK}>finalize</text>
       {/* stations */}
       {nodes.map((node) => (
         <g key={node.label}>
           <rect x={node.x - nodeW / 2} y={node.y - nodeH / 2} width={nodeW} height={nodeH}
-            fill={PAPER} stroke={ROSE} shapeRendering="crispEdges" />
+            fill={PAPER} stroke={ROSE_INK} shapeRendering="crispEdges" />
           <text x={node.x} y={node.y + 4} textAnchor="middle" fontSize="12"
-            fontFamily="var(--font-fira-code), monospace" fill={ROSE}>{node.label}</text>
+            fontFamily="var(--font-fira-code), monospace" fill={ROSE_INK}>{node.label}</text>
         </g>
       ))}
     </svg>
@@ -270,39 +272,39 @@ function AuditGateDiagram() {
   return (
     <svg viewBox="0 0 520 170" className="w-full max-w-[520px]" role="img"
       aria-label={t(locale, "감사 게이트 도식", "audit gate schematic")}>
-      <rect x="8" y="72" width="92" height="26" fill={PAPER} stroke={ROSE} shapeRendering="crispEdges" />
-      <text x="54" y="88" textAnchor="middle" fontSize="9.5" fontFamily="var(--font-fira-code), monospace" fill={ROSE}>
+      <rect x="8" y="72" width="92" height="26" fill={PAPER} stroke={ROSE_INK} shapeRendering="crispEdges" />
+      <text x="54" y="88" textAnchor="middle" fontSize="9.5" fontFamily="var(--font-fira-code), monospace" fill={ROSE_INK}>
         {t(locale, "scaffold 변이", "mutation")}
       </text>
-      <polygon points="-3,-3.5 4,0 -3,3.5" fill={ROSE} transform="translate(116 85)" />
-      <line x1="100" y1="85" x2="128" y2="85" stroke={ROSE} strokeWidth="1" />
-      <rect x="132" y="28" width="150" height="116" fill="none" stroke={ROSE} strokeDasharray="3 3" shapeRendering="crispEdges" />
-      <text x="207" y="20" textAnchor="middle" fontSize="9" fontFamily="var(--font-fira-code), monospace" fill={ROSE_75}>adversarial audit</text>
-      <rect x="147" y="40" width="120" height="22" fill={PAPER} stroke={ROSE} shapeRendering="crispEdges" />
-      <text x="207" y="54" textAnchor="middle" fontSize="10" fontFamily="var(--font-fira-code), monospace" fill={ROSE}>Petri auditor</text>
-      <rect x="147" y="108" width="120" height="22" fill={PAPER} stroke={ROSE} shapeRendering="crispEdges" />
-      <text x="207" y="122" textAnchor="middle" fontSize="10" fontFamily="var(--font-fira-code), monospace" fill={ROSE}>GEODE</text>
+      <polygon points="-3,-3.5 4,0 -3,3.5" fill={ROSE_INK} transform="translate(116 85)" />
+      <line x1="100" y1="85" x2="128" y2="85" stroke={ROSE_INK} strokeWidth="1" />
+      <rect x="132" y="28" width="150" height="116" fill="none" stroke={ROSE_INK} strokeDasharray="3 3" shapeRendering="crispEdges" />
+      <text x="207" y="20" textAnchor="middle" fontSize="9" fontFamily="var(--font-fira-code), monospace" fill={ROSE_INK_70}>adversarial audit</text>
+      <rect x="147" y="40" width="120" height="22" fill={PAPER} stroke={ROSE_INK} shapeRendering="crispEdges" />
+      <text x="207" y="54" textAnchor="middle" fontSize="10" fontFamily="var(--font-fira-code), monospace" fill={ROSE_INK}>Petri auditor</text>
+      <rect x="147" y="108" width="120" height="22" fill={PAPER} stroke={ROSE_INK} shapeRendering="crispEdges" />
+      <text x="207" y="122" textAnchor="middle" fontSize="10" fontFamily="var(--font-fira-code), monospace" fill={ROSE_INK}>GEODE</text>
       {[171, 207, 243].map((x) => (
-        <line key={x} x1={x} y1="64" x2={x} y2="106" stroke={ROSE} strokeWidth="1" strokeDasharray="2 2" />
+        <line key={x} x1={x} y1="64" x2={x} y2="106" stroke={ROSE_INK} strokeWidth="1" strokeDasharray="2 2" />
       ))}
-      <polygon points="-3,-3.5 4,0 -3,3.5" fill={ROSE} transform="translate(302 85)" />
-      <line x1="282" y1="85" x2="314" y2="85" stroke={ROSE} strokeWidth="1" />
+      <polygon points="-3,-3.5 4,0 -3,3.5" fill={ROSE_INK} transform="translate(302 85)" />
+      <line x1="282" y1="85" x2="314" y2="85" stroke={ROSE_INK} strokeWidth="1" />
       {dims.map((h, i) => (
         <rect key={i} x={320 + i * 13} y={104 - h} width={9} height={h}
-          fill={ROSE} opacity={i === 3 ? 1 : 0.55} shapeRendering="crispEdges" />
+          fill={ROSE_INK} opacity={i === 3 ? 1 : 0.55} shapeRendering="crispEdges" />
       ))}
-      <line x1="316" y1="76" x2="402" y2="76" stroke={ROSE} strokeWidth="1" strokeDasharray="4 2" />
-      <text x="359" y="120" textAnchor="middle" fontSize="8.5" fontFamily="var(--font-fira-code), monospace" fill={ROSE_75}>critical floor</text>
-      <line x1="406" y1="85" x2="430" y2="85" stroke={ROSE} strokeWidth="1" />
-      <line x1="430" y1="85" x2="446" y2="52" stroke={ROSE} strokeWidth="1" />
-      <polygon points="-3,-3.5 4,0 -3,3.5" fill={ROSE} transform="translate(448 49) rotate(-64)" />
-      <rect x="446" y="30" width="66" height="20" fill={PAPER} stroke={ROSE} shapeRendering="crispEdges" />
-      <text x="479" y="43" textAnchor="middle" fontSize="9.5" fontFamily="var(--font-fira-code), monospace" fill={ROSE}>promote</text>
-      <line x1="430" y1="85" x2="446" y2="118" stroke={ROSE} strokeWidth="1" />
-      <polygon points="-3,-3.5 4,0 -3,3.5" fill={ROSE} transform="translate(448 121) rotate(64)" />
-      <rect x="446" y="120" width="66" height="20" fill={PAPER} stroke={ROSE} shapeRendering="crispEdges" />
-      <text x="479" y="133" textAnchor="middle" fontSize="9.5" fontFamily="var(--font-fira-code), monospace" fill={ROSE}>reject</text>
-      <text x="470" y="90" textAnchor="middle" fontSize="8" fontFamily="var(--font-fira-code), monospace" fill={ROSE_75}>gate·random·never</text>
+      <line x1="316" y1="76" x2="402" y2="76" stroke={ROSE_INK} strokeWidth="1" strokeDasharray="4 2" />
+      <text x="359" y="120" textAnchor="middle" fontSize="8.5" fontFamily="var(--font-fira-code), monospace" fill={ROSE_INK_70}>critical floor</text>
+      <line x1="406" y1="85" x2="430" y2="85" stroke={ROSE_INK} strokeWidth="1" />
+      <line x1="430" y1="85" x2="446" y2="52" stroke={ROSE_INK} strokeWidth="1" />
+      <polygon points="-3,-3.5 4,0 -3,3.5" fill={ROSE_INK} transform="translate(448 49) rotate(-64)" />
+      <rect x="446" y="30" width="66" height="20" fill={PAPER} stroke={ROSE_INK} shapeRendering="crispEdges" />
+      <text x="479" y="43" textAnchor="middle" fontSize="9.5" fontFamily="var(--font-fira-code), monospace" fill={ROSE_INK}>promote</text>
+      <line x1="430" y1="85" x2="446" y2="118" stroke={ROSE_INK} strokeWidth="1" />
+      <polygon points="-3,-3.5 4,0 -3,3.5" fill={ROSE_INK} transform="translate(448 121) rotate(64)" />
+      <rect x="446" y="120" width="66" height="20" fill={PAPER} stroke={ROSE_INK} shapeRendering="crispEdges" />
+      <text x="479" y="133" textAnchor="middle" fontSize="9.5" fontFamily="var(--font-fira-code), monospace" fill={ROSE_INK}>reject</text>
+      <text x="470" y="90" textAnchor="middle" fontSize="8" fontFamily="var(--font-fira-code), monospace" fill={ROSE_INK_70}>gate·random·never</text>
     </svg>
   );
 }
@@ -317,31 +319,31 @@ function SeedgenDiagram() {
       aria-label={t(locale, "시드 생성 파이프라인 도식", "seed-generation pipeline schematic")}>
       {stages.map((stage, i) => (
         <g key={stage}>
-          <rect x={8 + i * 88} y="34" width="76" height="24" fill={PAPER} stroke={ROSE} shapeRendering="crispEdges" />
+          <rect x={8 + i * 88} y="34" width="76" height="24" fill={PAPER} stroke={ROSE_INK} shapeRendering="crispEdges" />
           <text x={46 + i * 88} y="49" textAnchor="middle" fontSize="10"
-            fontFamily="var(--font-fira-code), monospace" fill={ROSE}>{stage}</text>
+            fontFamily="var(--font-fira-code), monospace" fill={ROSE_INK}>{stage}</text>
           {i < 4 && (
             <g>
-              <line x1={84 + i * 88} y1="46" x2={96 + i * 88} y2="46" stroke={ROSE} strokeWidth="1" />
-              <polygon points="-3,-3.5 4,0 -3,3.5" fill={ROSE} transform={`translate(${95 + i * 88} 46)`} />
+              <line x1={84 + i * 88} y1="46" x2={96 + i * 88} y2="46" stroke={ROSE_INK} strokeWidth="1" />
+              <polygon points="-3,-3.5 4,0 -3,3.5" fill={ROSE_INK} transform={`translate(${95 + i * 88} 46)`} />
             </g>
           )}
           {Array.from({ length: seedCols[i] }).map((_, seed) => (
             <rect key={seed} x={30 + i * 88 + seed * 9} y="16" width="5" height="5"
-              fill={ROSE} opacity={i === 4 ? 1 : 0.7} shapeRendering="crispEdges" />
+              fill={ROSE_INK} opacity={i === 4 ? 1 : 0.7} shapeRendering="crispEdges" />
           ))}
           {i > 0 && i < 4 && (
             <g opacity="0.35">
-              <rect x={36 + i * 88} y="78" width="5" height="5" fill={ROSE} shapeRendering="crispEdges" />
-              <rect x={50 + i * 88} y="92" width="5" height="5" fill={ROSE} shapeRendering="crispEdges" />
+              <rect x={36 + i * 88} y="78" width="5" height="5" fill={ROSE_INK} shapeRendering="crispEdges" />
+              <rect x={50 + i * 88} y="92" width="5" height="5" fill={ROSE_INK} shapeRendering="crispEdges" />
             </g>
           )}
         </g>
       ))}
-      <text x="260" y="116" textAnchor="middle" fontSize="9" fontFamily="var(--font-fira-code), monospace" fill={ROSE_75}>
+      <text x="260" y="116" textAnchor="middle" fontSize="9" fontFamily="var(--font-fira-code), monospace" fill={ROSE_INK_70}>
         {t(locale, "후보는 단계마다 떨어지고, top-5 생존자만 시드 풀에 남습니다", "candidates drop at every stage; only the top-5 survivors reach the seed pool")}
       </text>
-      <text x="260" y="134" textAnchor="middle" fontSize="8.5" fontFamily="var(--font-fira-code), monospace" fill={ROSE_75}>
+      <text x="260" y="134" textAnchor="middle" fontSize="8.5" fontFamily="var(--font-fira-code), monospace" fill={ROSE_INK_70}>
         Elo + difficulty blend · co-evolving pool
       </text>
     </svg>
@@ -411,7 +413,7 @@ function RunRow() {
               <h2 className="font-serif-display mt-3 text-[28px] font-semibold text-[#FFF0F8]">
                 {locale === "en" ? mode.titleEn : mode.titleKo}
               </h2>
-              <p className="mx-auto mt-4 inline-block rounded bg-[#FFF0F8] px-4 py-2 font-mono text-[13px] text-[var(--acc-artifact)]">
+              <p className="mx-auto mt-4 inline-block rounded bg-[#FFF0F8] px-4 py-2 font-mono text-[13px] font-medium text-[#C2447F]">
                 {mode.cmd}
               </p>
               <p className="mx-auto mt-4 max-w-[260px] text-[13px] leading-[1.7]" style={{ color: PAPER_75 }}>
@@ -430,10 +432,10 @@ function RunRow() {
 function PerceiveBanner() {
   return (
     <div className="flex h-full w-full flex-col justify-center gap-2.5 px-6 font-mono text-[12px] leading-relaxed">
-      <p><span style={{ color: ROSE }}>context</span><span style={{ color: ROSE_75 }}> · per-turn time, memory, rules</span></p>
-      <p><span style={{ color: ROSE }}>documents</span><span style={{ color: ROSE_75 }}> · local pdf ingest</span></p>
-      <p><span style={{ color: ROSE }}>browser</span><span style={{ color: ROSE_75 }}> · your real chrome, over cdp</span></p>
-      <p><span style={{ color: ROSE }}>desktop</span><span style={{ color: ROSE_75 }}> · ax tree before pixels</span></p>
+      <p><span style={{ color: ROSE_INK }}>context</span><span style={{ color: ROSE_INK_70 }}> · per-turn time, memory, rules</span></p>
+      <p><span style={{ color: ROSE_INK }}>documents</span><span style={{ color: ROSE_INK_70 }}> · local pdf ingest</span></p>
+      <p><span style={{ color: ROSE_INK }}>browser</span><span style={{ color: ROSE_INK_70 }}> · your real chrome, over cdp</span></p>
+      <p><span style={{ color: ROSE_INK }}>desktop</span><span style={{ color: ROSE_INK_70 }}> · ax tree before pixels</span></p>
     </div>
   );
 }
@@ -446,12 +448,12 @@ function MeasureBanner() {
       <div className="flex items-baseline justify-center gap-6">
         {cells.map((cell) => (
           <div key={cell.label} className="text-center">
-            <p className="font-serif-display text-[26px] font-black" style={{ color: ROSE }}>{cell.value}</p>
-            <p className="mt-1 font-mono text-[10px] uppercase tracking-[0.2em]" style={{ color: ROSE_75 }}>{cell.label}</p>
+            <p className="font-serif-display text-[26px] font-black" style={{ color: ROSE_INK }}>{cell.value}</p>
+            <p className="mt-1 font-mono text-[10px] uppercase tracking-[0.2em]" style={{ color: ROSE_INK_70 }}>{cell.label}</p>
           </div>
         ))}
       </div>
-      <p className="text-center font-mono text-[10px] uppercase tracking-[0.14em]" style={{ color: ROSE_75 }}>
+      <p className="text-center font-mono text-[10px] uppercase tracking-[0.14em]" style={{ color: ROSE_INK_70 }}>
         tau2-bench base · gpt-5.5 · openai-codex subscription
       </p>
     </div>
@@ -463,8 +465,8 @@ function ConnectBanner() {
   return (
     <div className="flex h-full w-full flex-col items-center justify-center gap-4 px-6 text-center">
       <div className="font-mono text-[12px] leading-relaxed">
-        <p style={{ color: ROSE }}>one agent · one memory · every surface</p>
-        <p style={{ color: ROSE_75 }}>openai / codex · glm · oauth you own</p>
+        <p style={{ color: ROSE_INK }}>one agent · one memory · every surface</p>
+        <p style={{ color: ROSE_INK_70 }}>openai / codex · glm · oauth you own</p>
       </div>
       <div className="flex flex-wrap justify-center gap-1.5">
         {surfaceChips.map((chip) => (
@@ -490,7 +492,7 @@ function MemoryBanner() {
   return (
     <div className="flex h-full w-full items-center justify-center px-8">
       <div className="w-full max-w-[330px]">
-        <div className="overflow-hidden border" style={{ borderColor: "color-mix(in srgb, var(--acc-artifact) 55%, transparent)" }}>
+        <div className="overflow-hidden border" style={{ borderColor: ROSE_INK_70 }}>
           {tiers.map(({ tier, name, alpha }, i) => (
             <div
               key={tier}
@@ -500,19 +502,19 @@ function MemoryBanner() {
                 borderTop: i ? "1px solid color-mix(in srgb, var(--acc-artifact) 30%, transparent)" : undefined,
               }}
             >
-              <span style={{ color: ROSE_75 }}>{tier}</span>
-              <span style={{ color: ROSE }}>{name}</span>
+              <span style={{ color: ROSE_INK_70 }}>{tier}</span>
+              <span style={{ color: ROSE_INK }}>{name}</span>
             </div>
           ))}
-          <div className="flex items-baseline justify-between bg-[var(--acc-artifact)] px-4 py-[9px] font-mono text-[11px] text-[#FFF0F8]">
+          <div className="flex items-baseline justify-between bg-[#C2447F] px-4 py-[9px] font-mono text-[11px] text-[#FFF0F8]">
             <span style={{ opacity: 0.8 }}>tier 3</span>
             <span className="font-semibold">session</span>
           </div>
         </div>
-        <p className="mt-3 flex items-center justify-center gap-2 font-mono text-[10px] uppercase tracking-[0.2em]" style={{ color: ROSE_75 }}>
-          <span className="inline-block h-[5px] w-[5px] rotate-45 bg-[var(--acc-artifact)]" />
+        <p className="mt-3 flex items-center justify-center gap-2 font-mono text-[10px] uppercase tracking-[0.2em]" style={{ color: ROSE_INK_70 }}>
+          <span className="inline-block h-[5px] w-[5px] rotate-45 bg-[#C2447F]" />
           lower tiers override higher
-          <span className="inline-block h-[5px] w-[5px] rotate-45 bg-[var(--acc-artifact)]" />
+          <span className="inline-block h-[5px] w-[5px] rotate-45 bg-[#C2447F]" />
         </p>
       </div>
     </div>
@@ -522,10 +524,10 @@ function MemoryBanner() {
 function ScheduleBanner() {
   return (
     <div className="flex h-full w-full flex-col items-center justify-center gap-3.5 px-6 text-center font-mono">
-      <p className="rounded bg-[var(--acc-artifact)] px-4 py-2 text-[12px] text-[#FFF0F8]">
+      <p className="rounded bg-[#C2447F] px-4 py-2 text-[12px] text-[#FFF0F8]">
         $ geode &quot;schedule daily standup reminder at 9am&quot;
       </p>
-      <p className="text-[11px]" style={{ color: ROSE_75 }}>
+      <p className="text-[11px]" style={{ color: ROSE_INK_70 }}>
         cron · briefings · unattended through the gateway
       </p>
     </div>
@@ -536,17 +538,17 @@ function ScheduleBanner() {
 function DelegateDiagram() {
   return (
     <svg viewBox="0 0 340 200" className="w-full max-w-[340px]" role="img" aria-label="sub-agent fan-out">
-      <rect x="120" y="16" width="100" height="26" fill={PAPER} stroke={ROSE} shapeRendering="crispEdges" />
-      <text x="170" y="33" textAnchor="middle" fontSize="10.5" fontFamily="var(--font-fira-code), monospace" fill={ROSE}>while(tool_use)</text>
+      <rect x="120" y="16" width="100" height="26" fill={PAPER} stroke={ROSE_INK} shapeRendering="crispEdges" />
+      <text x="170" y="33" textAnchor="middle" fontSize="10.5" fontFamily="var(--font-fira-code), monospace" fill={ROSE_INK}>while(tool_use)</text>
       {[46, 170, 294].map((x) => (
         <g key={x}>
-          <line x1="170" y1="42" x2={x} y2="118" stroke={ROSE} strokeWidth="1" />
-          <polygon points="-3.5,-3 0,4.5 3.5,-3" fill={ROSE} transform={`translate(${x} ${120})`} />
-          <rect x={x - 50} y={124} width={100} height={26} fill={PAPER} stroke={ROSE} shapeRendering="crispEdges" />
-          <text x={x} y={141} textAnchor="middle" fontSize="10.5" fontFamily="var(--font-fira-code), monospace" fill={ROSE}>while(tool_use)</text>
+          <line x1="170" y1="42" x2={x} y2="118" stroke={ROSE_INK} strokeWidth="1" />
+          <polygon points="-3.5,-3 0,4.5 3.5,-3" fill={ROSE_INK} transform={`translate(${x} ${120})`} />
+          <rect x={x - 50} y={124} width={100} height={26} fill={PAPER} stroke={ROSE_INK} shapeRendering="crispEdges" />
+          <text x={x} y={141} textAnchor="middle" fontSize="10.5" fontFamily="var(--font-fira-code), monospace" fill={ROSE_INK}>while(tool_use)</text>
         </g>
       ))}
-      <text x="170" y="184" textAnchor="middle" fontSize="9" fontFamily="var(--font-fira-code), monospace" fill={ROSE_75}>sub-agents are the same loop, isolated per task</text>
+      <text x="170" y="184" textAnchor="middle" fontSize="9" fontFamily="var(--font-fira-code), monospace" fill={ROSE_INK_70}>sub-agents are the same loop, isolated per task</text>
     </svg>
   );
 }
@@ -659,20 +661,20 @@ function PlateCard({ feature }: { feature: (typeof features)[number] }) {
   return (
     <div className="flex flex-col bg-[#FFF0F8] p-4 pb-6" style={{ aspectRatio: "100/148" }}>
       <div className="flex items-start justify-between gap-3">
-        <p className="pt-1 font-mono text-[10.5px] uppercase tracking-[0.22em]" style={{ color: ROSE_75 }}>
+        <p className="pt-1 font-mono text-[10.5px] uppercase tracking-[0.22em]" style={{ color: ROSE_INK_70 }}>
           {feature.index}
         </p>
         <div
           className="flex h-12 w-11 shrink-0 items-center justify-center border border-dashed"
-          style={{ borderColor: "color-mix(in srgb, var(--acc-artifact) 55%, transparent)" }}
+          style={{ borderColor: ROSE_INK_70 }}
         >
-          <GeodiSprite scale={1.6} silhouette="var(--acc-artifact)" />
+          <GeodiSprite scale={1.6} silhouette={ROSE_INK} />
         </div>
       </div>
       <div
         className="mt-3 min-h-0 flex-1 overflow-hidden bg-cover bg-center"
         style={{
-          backgroundImage: `linear-gradient(rgba(255,240,248,0.62), rgba(255,240,248,0.62)), url(/geode/images/plate-bg-${feature.plate}.png)`,
+          backgroundImage: `linear-gradient(rgba(255,240,248,0.8), rgba(255,240,248,0.8)), url(/geode/images/plate-bg-${feature.plate}.png)`,
           imageRendering: "pixelated",
         }}
       >
@@ -680,11 +682,11 @@ function PlateCard({ feature }: { feature: (typeof features)[number] }) {
       </div>
       <h2
         className="font-serif-display mt-4 text-balance text-[24px] font-black uppercase leading-[1.12] sm:text-[26px]"
-        style={{ color: ROSE }}
+        style={{ color: ROSE_INK }}
       >
         {locale === "en" ? feature.headEn : feature.headKo}
       </h2>
-      <p className="mt-2 text-[12.5px] leading-[1.65]" style={{ color: ROSE_75 }}>
+      <p className="mt-2 text-[12.5px] leading-[1.65]" style={{ color: ROSE_INK_70 }}>
         {t(locale, feature.ko, feature.en)}
       </p>
     </div>
@@ -943,7 +945,7 @@ function DistillationAct() {
               <div className="mt-2 flex flex-wrap items-center justify-center gap-x-7 gap-y-3">
                 <Link
                   href="/docs"
-                  className="inline-flex touch-manipulation items-center rounded bg-[#FFF0F8] px-5 py-2.5 text-[14px] font-medium text-[var(--acc-artifact)] transition-opacity hover:opacity-85"
+                  className="inline-flex touch-manipulation items-center rounded bg-[#FFF0F8] px-5 py-2.5 text-[14px] font-medium text-[#C2447F] transition-opacity hover:opacity-85"
                 >
                   {t(locale, "문서 읽기", "Read the docs")}
                 </Link>
@@ -960,7 +962,7 @@ function DistillationAct() {
           </div>
           <div
             className="pointer-events-none absolute inset-x-0 bottom-0 z-10 flex items-end justify-between px-5 pb-3.5 font-mono text-[10px] uppercase tracking-[0.18em]"
-            style={{ color: ROSE }}
+            style={{ color: ROSE_INK }}
           >
             <span>specimen · geodi</span>
             <span>petri audit attached</span>
