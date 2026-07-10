@@ -45,6 +45,15 @@ functional change.
 
 ---
 
+## [0.99.293] - 2026-07-10
+
+### Fixed
+
+- **Portfolio finale credit reads "edited by".** The end-credit roll line
+  over the MANGO card is corrected from "edit by" (operator-directed).
+
+---
+
 ## [0.99.292] - 2026-07-10
 
 ### Changed
