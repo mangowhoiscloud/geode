@@ -50,7 +50,7 @@ geode serve (데몬)  ←  하나의 GeodeRuntime이 전부 소유`}</pre>
                 <tr><th>단계</th><th>만드는 것</th><th>코드</th></tr>
               </thead>
               <tbody>
-                <tr><td>1</td><td>HookSystem + run log 핸들러. 모든 프로덕션 훅이 여기서 등록됩니다.</td><td><code>core/wiring/bootstrap.py</code></td></tr>
+                <tr><td>1</td><td>HookSystem + SQLite event sink. 모든 프로덕션 훅과 teardown이 여기서 등록됩니다.</td><td><code>core/wiring/bootstrap.py</code></td></tr>
                 <tr><td>2</td><td>PolicyChain, ToolRegistry, LaneQueue, 인증 스토어</td><td><code>core/wiring/container.py</code></td></tr>
                 <tr><td>3</td><td>TriggerManager + SchedulerService</td><td><code>core/wiring/scheduling.py</code></td></tr>
                 <tr><td>4</td><td>MCP, 알림, 캘린더, 게이트웨이 어댑터</td><td><code>core/wiring/adapters.py</code></td></tr>

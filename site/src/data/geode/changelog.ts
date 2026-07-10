@@ -2,7 +2,7 @@
  * GEODE CHANGELOG, auto-synced from the GEODE repo via `npm run sync-stats`.
  * Do not edit manually. Edit CHANGELOG.md in the GEODE repo and re-run sync.
  *
- * Last sync: 2026-07-09
+ * Last sync: 2026-07-10
  *
  * Each entry's `body` is the raw markdown between two version headings.
  * The Changelog page renders the body with a minimal markdown renderer
@@ -16,6 +16,11 @@ export type ChangelogEntry = {
 };
 
 export const CHANGELOG: ChangelogEntry[] = [
+  {
+    "version": "0.99.287",
+    "date": "2026-07-10",
+    "body": "### Added\n\n- **Bounded SQLite hook-event store.** Production HookSystem dispatches now\n  write a typed, redacted envelope to project-local\n  `sessions.db:hook_events`, with indexed filters, payload hashes, retention\n  classes, incremental pruning, a 100,000-row cap, and selected active-run\n  transcript mirroring.\n\n### Changed\n\n- **Hook dispatch, persistence, and teardown are single-owner paths.** All six\n  sync/async trigger variants now produce one post-dispatch `HookDispatch`;\n  registrations return cancelable subscriptions, overlapping name collisions\n  fail loudly, matchers compile at registration, and `HookSystem.close()`\n  releases plugin, ContextVar, auxiliary SQLite, and sink resources. Recent-run\n  context and `geode adapters stats` now query SQLite; the latter replaces\n  `--runs-dir` with `--db-path`.\n- **Tool execution has one canonical terminal event and one result-transform\n  stage.** Blocks, recovery, and executor exceptions all complete\n  `TOOL_EXEC_STARTED` → `TOOL_EXEC_ENDED`; `TOOL_RESULT_TRANSFORM` owns result\n  rewriting, while compatibility failure/transform signals are delivered to\n  handlers without duplicate durable rows.\n- **In-memory and JSONL tails are bounded during append.** Latency percentile\n  samples, model series, per-run tool logs, and per-job scheduler JSONL history\n  now enforce fixed bounds without waiting for manual maintenance.\n\n### Fixed\n\n- **Notification and hook lifecycle leaks.** Built-in notification hooks are\n  no longer registered through both explicit wiring and filesystem discovery,\n  SubAgent failures await async notification handlers, dynamic plugin module\n  names do not leak through `sys.modules`, and runtime/serve/worker/one-shot\n  shutdown paths close their owned hook resources. Owner-aware cleanup uses\n  weak references instead of retaining HookSystem through a self-cycle, and\n  event-store operations close database/WAL/SHM descriptors before returning.\n  Sync hook deadlines no longer leave timed-out worker threads running.\n\n### Removed\n\n- **Disconnected per-session RunLog and approval-history API.** Hook\n  events no longer duplicate raw payloads into `~/.geode/runs/*.jsonl` or the\n  legacy approval tracker writer/reader. Existing run and approval JSONL files\n  remain operator archives subject to the existing layout migration/TTL\n  policies; scheduler job tails and explicit transcript/evidence ledgers\n  remain JSONL."
+  },
   {
     "version": "0.99.286",
     "date": "2026-07-10",
@@ -2153,4 +2158,4 @@ export const CHANGELOG: ChangelogEntry[] = [
   }
 ];
 
-export const CHANGELOG_SYNCED_AT = "2026-07-09";
+export const CHANGELOG_SYNCED_AT = "2026-07-10";

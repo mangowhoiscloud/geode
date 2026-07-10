@@ -23,8 +23,8 @@ Writer functions are designed to be called from HookSystem handlers:
   accumulates per-call usage into the cumulative totals.
 
 Failures are swallowed + warning-logged so a broken writer never blocks
-the upstream hook trigger (same contract as
-``activity_log._mirror_hook_to_active_transcript``).
+the upstream hook trigger (the same best-effort contract as
+``HookPersistenceSink``).
 """
 
 from __future__ import annotations

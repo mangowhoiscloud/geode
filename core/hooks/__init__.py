@@ -6,6 +6,28 @@ without depending on core.orchestration:
     from core.hooks import HookSystem, HookEvent
 """
 
-from core.hooks.system import HookEvent, HookResult, HookSystem, InterceptResult
+from core.hooks.system import (
+    DuplicateHookRegistrationError,
+    HookDispatch,
+    HookDispatchMode,
+    HookEvent,
+    HookExecutionTimeoutError,
+    HookResult,
+    HookSubscription,
+    HookSystem,
+    HookTimeoutUnsupportedError,
+    InterceptResult,
+)
 
-__all__ = ["HookEvent", "HookResult", "HookSystem", "InterceptResult"]
+__all__ = [
+    "DuplicateHookRegistrationError",
+    "HookDispatch",
+    "HookDispatchMode",
+    "HookEvent",
+    "HookExecutionTimeoutError",
+    "HookResult",
+    "HookSubscription",
+    "HookSystem",
+    "HookTimeoutUnsupportedError",
+    "InterceptResult",
+]

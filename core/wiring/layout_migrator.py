@@ -269,8 +269,8 @@ def _migrate_v0_to_v1() -> MigrationResult:
     1. ``~/.geode/serve.log`` → ``~/.geode/logs/serve.log``
        (``paths.py:SERVE_LOG_PATH`` already expects the new path)
     2. ``~/.geode/approve_history.json`` → ``~/.geode/approval_history.jsonl``
-       (paths.py used the old name; actual writer in
-       ``approval_tracker.py`` uses the new name — old file is stranded)
+       (paths.py used the old name; the historical writer used the new name —
+       old files would otherwise be stranded)
     3. ``~/.geode/mcp-registry-cache.json`` → ``~/.geode/mcp/registry-cache.json``
        (group with the rest of MCP state under the ``mcp/`` subdir)
 

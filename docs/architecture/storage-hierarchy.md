@@ -100,7 +100,8 @@ The split is therefore deliberate, not accidental.
 | Is it a raw API key or channel token? | yes | `~/.geode/.env` |
 | Is it a project-only secret fallback? | yes | `./.env` (explicit scope only; never shadows global) |
 | Is it cross-project user identity (career, preferences, learned memory)? | yes | `~/.geode/identity/`, `~/.geode/user_profile/` |
-| Is it agent operating state (LLM usage, session transcript, diagnostics)? | yes | `~/.geode/` top-level (`usage/`, `diagnostics/`, `approval_history.jsonl`) |
+| Is it queryable project runtime state or an operational event? | yes | `~/.geode/projects/<encoded-cwd>/sessions/sessions.db` |
+| Is it an append-only cost series, diagnostic log, or portable run artifact? | yes | the owning JSONL/log directory under `~/.geode/` |
 | Is it project-bound but user-private (per-project session, snapshot, cache)? | yes | `~/.geode/projects/<encoded-cwd>/` (Claude Code parity) |
 | Is it project-bound + meant to be committed / team-shareable? | yes | `{workspace}/.geode/` (rules, skills, custom config) |
 | Is it project-bound + user-generated output? | yes | `{workspace}/.geode/reports/` |
@@ -120,6 +121,11 @@ reconstructing path literals.
 | Save behavior for this workspace | `upsert_config_toml(..., scope="project")` | `./.geode/config.toml` |
 | Add new durable state | `core.paths.<NAMED_CONSTANT>` | choose by decision rules above |
 
+Hook persistence follows the more specific
+[`event-persistence.md`](event-persistence.md) contract: queryable events go
+to SQLite; JSONL remains only for ordered artifacts, bounded job tails, and
+git-reviewable evidence ledgers.
+
 ## Concrete GEODE layout (current — verified correct)
 
 ```
@@ -136,7 +142,7 @@ reconstructing path literals.
 │
 ├── usage/<YYYY-MM>.jsonl                  # LLM cost time-series
 ├── diagnostics/<YYYY-MM>.log              # fa4 cross-process append-only
-├── approval_history.jsonl                 # HITL audit
+├── approval_history.jsonl                 # legacy archive; runtime writer retired
 ├── logs/serve.log                         # serve daemon log
 │
 ├── mcp/                                   # MCP state (registry cache + traces)
@@ -146,11 +152,13 @@ reconstructing path literals.
 │
 ├── projects/<encoded-cwd>/                # per-project user-private state
 │   ├── journal/{runs,errors}.jsonl        # execution journal
-│   ├── sessions/                          # session transcripts
+│   ├── sessions/
+│   │   ├── sessions.db                    # sessions/messages/runtime/hook_events SoT
+│   │   └── ...                            # explicit dialogue artifacts
 │   ├── snapshots/snap-*.json              # langgraph checkpoints
 │   └── result_cache/                      # tool result memoization
 │
-├── runs/geode-<hash>.jsonl                # per-run log (TODO: bucket by YYYY-MM)
+├── runs/{*.jsonl,_archive/}               # legacy operator archives, TTL relocation only
 ├── workers/<task>.{result.json,stderr.log} # delegate worker output
 ├── scheduler/                             # legacy global scheduler (predates project-local)
 ├── vault/{general,research}/              # accumulated agent outputs (TTL TODO)
@@ -178,7 +186,7 @@ once-flag, dotfile marker `~/.geode/.layout-version`).
 |---------|------|--------|
 | v0 → v1 | Path reconciliation — `serve.log`, `approve_history.json`, `mcp-registry-cache.json` to canonical locations | done |
 | v1 → v2 | Vestigial constant cleanup — `PROJECT_EMBEDDING_CACHE` has no writer; remove if confirmed unused after one release window | this PR (marker bump only) |
-| v2 → v3 | TBD — bucket `~/.geode/runs/geode-*.jsonl` by `<YYYY-MM>/` (currently flat at 600+ files) | backlog |
+| schema-only | Add `sessions.db:hook_events`; leave legacy run JSONL untouched | additive `CREATE IF NOT EXISTS` (no layout marker bump) |
 | v3 → v4 | TBD — vault TTL policy (`~/.geode/vault/{general,research}/` currently 1800+ flat files) | backlog |
 
 Pattern for adding a new migration (mirrors Hermes

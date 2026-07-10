@@ -1,345 +1,147 @@
-# GEODE Hook System — 이벤트 기반 라이프사이클 제어
+# GEODE Hook System
 
 > [English](hook-system.en.md) | **한국어**
 
-> **모듈**: `core/hooks/` (cross-cutting concern, L0~L5 전 레이어에서 접근)
-> **진입점**: `from core.hooks import HookSystem, HookEvent`
-> **이벤트**: 65개 | **등록 핸들러**: 50+ (table count) | **플러그인**: YAML + class-based
-> **검증**: 마지막 doc ↔ 코드 정합성 audit — 2026-06-10 (PR-DEAD-PIPELINE: 죽은 분석-파이프라인 이벤트 패밀리 15종 + L4.5 자동화 체인 + StuckDetector/TaskGraphHookBridge 제거, 82 → 67; PR-AUDIT-AB 2026-06-10: VERIFICATION_PASS/FAIL + FALLBACK_CROSS_PROVIDER 삭제, 67 → 64; PR-LOOP-PRUNE 2026-06-13: 미구현 watcher 예약쌍 HANDOFF_COMPLETED/FAILED 삭제, 64 → 62; PR-HITL-APPROVAL-FSM 2026-07-02: APPROVAL_TRANSITION 추가, 63 → 64; PR-MEMORY-LIFECYCLE 2026-07-03: MEMORY_PROMOTION_PROPOSED 추가, 64 → 65)
+`core/hooks/`는 GEODE 런타임의 저장소 독립적인 이벤트 버스다. 65개
+`HookEvent` 호환 표면, 우선순위 핸들러, interceptor/feedback, 그리고
+post-dispatch sink를 제공한다. 영속성 정책은
+[`event-persistence.md`](event-persistence.md)에 별도로 정의한다.
 
----
+## 핵심 계약
 
-## Hook 성숙도 모델
+1. 핸들러는 낮은 priority부터 순차 실행한다.
+2. 한 핸들러의 예외는 이후 핸들러를 중단하지 않는다.
+3. observer/feedback 핸들러는 각각 top-level payload 복사본을 받는다.
+4. interceptor의 `modify`만 다음 핸들러의 입력에 명시적으로 반영된다.
+5. 한 trigger 호출은 완료 후 sink마다 정확히 한 `HookDispatch`를 보낸다.
+6. 이름 충돌은 묵시적으로 덮어쓰지 않는다. 의도적 교체는
+   `replace=True`가 필요하다.
+7. `HookSystem.close()`는 등록·전역 바인딩·sink를 결정적으로 해제하며
+   여러 번 호출해도 안전하다. SQLite 연결은 각 저장 연산이 반환되기
+   전에 닫힌다.
 
-Hook System은 단순한 이벤트 로깅을 넘어 **관측 → 반응 → 판단 → 자율**의 4단계로 진화한다.
+## 디스패치 구조
 
-```
-┌─────────────────────────────────────────────────────────────────┐
-│  L4 AUTONOMY   패턴에서 규칙을 자율 학습                          │
-│                                                                 │
-│  ○ hook-tool-approval    HITL 승인 이력 → 자동 승인 룰 학습       │
-│  ○ hook-model-switched   전환 사유 기록 → 자동 전환 정책 (L1 ✓)  │
-│  ○ hook-filesystem-plugin  .geode/hooks/ 자동 발견 + 등록        │
-├─────────────────────────────────────────────────────────────────┤
-│  L3 DECIDE     Hook이 행동 방향을 결정                            │
-│                                                                 │
-│  ✓ hook-context-action   CONTEXT_OVERFLOW_ACTION → 압축 전략 위임│
-│  ✓ hook-tool-exec-start  TOOL_EXEC_START interceptor (차단/수정) │
-│  ✓ hook-tool-exec-end    TOOL_EXEC_END feedback (결과 변환)      │
-│  ✓ hook-tool-transform   TOOL_RESULT_TRANSFORM (결과 변환 분리)  │
-│  ○ hook-session-start    SESSION_START → 동적 프롬프트 보강       │
-├─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─┤
-│                          ▲ CURRENT FRONTIER                     │
-│  L2 REACT      이벤트에 자동 반응                                │
-│                                                                 │
-│  ✓ turn_auto_memory        P85  TURN_COMPLETE → 인사이트 저장    │
-├─────────────────────────────────────────────────────────────────┤
-│  L1 OBSERVE    기록만, 상태 변경 없음                             │
-│                                                                 │
-│  ✓ RunLog             P50  ALL 65 events → JSONL                │
-│  ✓ JournalHook        P60  END/ERROR/SUBAGENT → journal         │
-│  ✓ NotificationHook  P200  SUBAGENT_FAILED → 알림               │
-│  ✓ TableLoggers ×20+  P90  tool exec / llm / cost → 구조화 로깅 │
-│  ✓ hook-llm-lifecycle  P55 LLM_CALL_END latency/cost 집계        │
-└─────────────────────────────────────────────────────────────────┘
-
-✓ = 구현 완료    ○ = 칸반 Backlog    ▲ = 현재 프론티어
+```text
+event source
+  -> exact + prefix handler resolve
+  -> priority sort / name dedup
+  -> handler chain
+  -> HookDispatch(final data, results, block state, timing)
+  -> post-dispatch sinks (once each)
+       -> HookPersistenceSink
+            -> sessions.db:hook_events
+            -> active run transcript (선별 mirror)
 ```
 
-> **다이어그램**: [`docs/diagrams/hook-maturity-model.mmd`](../diagrams/hook-maturity-model.mmd)
+`HookSystem` 자체는 `core.observability`를 import하지 않는다. 생산
+부트스트랩이 `HookPersistenceSink`를 등록하므로 단위 테스트나 임베디드
+사용자는 원하는 sink를 선택할 수 있다.
 
-### 핵심 인사이트
+## 트리거 모드
 
-새 hook 항목을 추가한다는 것은 **기존 이벤트에 더 높은 성숙도의 핸들러를 붙이는 것**이다.
-이벤트 자체는 변하지 않고, 핸들러 체인이 깊어진다.
+| 의미 | 동기 API | 비동기 API | 반환 |
+|---|---|---|---|
+| Observe | `trigger()` | `trigger_async()` | `list[HookResult]` |
+| Feedback | `trigger_with_result()` | `trigger_with_result_async()` | handler 반환 dict를 담은 결과 |
+| Interceptor | `trigger_interceptor()` | `trigger_interceptor_async()` | `InterceptResult` |
 
----
-
-## 리플 패턴 — 하나의 이벤트가 여러 레벨을 동시에 관통
-
-같은 이벤트가 L1(관측) + L2(반응) 핸들러를 동시에 트리거한다.
-Priority 순서로 실행되므로 관측이 먼저, 반응이 나중.
-
-```
-SUBAGENT_COMPLETED ─┬─ P50 RunLog      ─── L1 OBSERVE  (기록)
-                    └─ P60 JournalHook ─── L1 OBSERVE  (runs.jsonl)
-
-TURN_COMPLETE ─┬─ P50 RunLog         ─── L1 OBSERVE  (이벤트 기록)
-               └─ P85 TurnAutoMemory ─── L2 REACT    (인사이트 저장)
-
-CONTEXT_CRITICAL ─── P50 RunLog         ─── L1 OBSERVE  (이벤트 기록)
-
-CONTEXT_OVERFLOW_ACTION ── P50 ContextAction ── L3 DECIDE (압축 전략 위임)
-
-TOOL_EXEC_START ─┬─ P90 AuditLogger     ─── L1 OBSERVE  (시작 기록)
-                 └─ Pxx Interceptor      ─── L3 DECIDE   (차단/입력 수정)
-
-TOOL_EXEC_END ─┬─ P90 AuditLogger       ─── L1 OBSERVE  (완료 기록)
-               └─ Pxx Feedback           ─── L3 DECIDE   (결과 변환)
-```
-
-> **다이어그램**: [`docs/diagrams/hook-ripple-chains.mmd`](../diagrams/hook-ripple-chains.mmd)
-
----
-
-## 아키텍처
-
-```mermaid
-graph TB
-    subgraph "이벤트 소스"
-        AL["AgenticLoop<br/>(TURN_COMPLETE)"]
-        PA["PromptAssembler<br/>(PROMPT_ASSEMBLED)"]
-        SCH["Scheduler<br/>(TRIGGER_FIRED/POST_ANALYSIS)"]
-        SA["SubAgent<br/>(SUBAGENT_*)"]
-        GW["Gateway<br/>(GATEWAY_*)"]
-    end
-
-    subgraph "HookSystem (core/hooks/)"
-        HS["HookSystem<br/>register() / trigger()"]
-        RH["_RegisteredHook[]<br/>priority-sorted chain"]
-    end
-
-    subgraph "핸들러 체인 (우선순위 순)"
-        P50["P50: RunLog (ALL)"]
-        P60["P60: JournalHook"]
-        P85["P85: TurnAutoMemory"]
-        P90["P90: TableLoggers"]
-    end
-
-    AL --> HS
-    PA --> HS
-    SCH --> HS
-    SA --> HS
-    GW --> HS
-    HS --> P50 --> P60 --> P85 --> P90
-```
-
----
-
-## HookEvent 열거형 (65개)
-
-| 카테고리 | 이벤트 | 소스 | 핸들러 | 트리거 모드 | 성숙도 |
-|---|---|---|---|---|---|
-| **Scheduler** | `TRIGGER_FIRED` | TriggerManager, Scheduler | Logger | `trigger()` | L1 |
-| | `POST_ANALYSIS` | Triggers | RunLog | `trigger()` | L1 |
-| **Memory** | `MEMORY_SAVED` | MemorySaveTool | RunLog | `trigger()` | L1 |
-| | `MEMORY_PROMOTION_PROPOSED` | memory_lifecycle (`propose_memory_promotions`) | RunLog (wildcard) | `trigger()` | L1 |
-| | `RULE_CREATED` | RuleCreateTool | RunLog | `trigger()` | L1 |
-| | `RULE_UPDATED` | RuleUpdateTool | RunLog | `trigger()` | L1 |
-| | `RULE_DELETED` | RuleDeleteTool | RunLog | `trigger()` | L1 |
-| **Feedback** | `RESULT_FEEDBACK` | rate/accept/reject_result 도구 | RunLog | `trigger()` | L1 |
-| **Prompt** | `PROMPT_ASSEMBLED` | PromptAssembler | RunLog | `trigger()` | L1 |
-| **SubAgent** | `SUBAGENT_STARTED` | SubAgentManager | RunLog | `trigger()` | L1 |
-| | `SUBAGENT_COMPLETED` | SubAgentManager, IsolatedExec | Journal, RunLog | `trigger()` | L1 |
-| | `SUBAGENT_FAILED` | SubAgentManager | RunLog, Notification | `trigger()` | L1 |
-| **Tool Exec** | `TOOL_EXEC_START` | ToolCallProcessor | AuditLogger | `trigger_interceptor()` | **L3** |
-| | `TOOL_EXEC_END` | ToolCallProcessor | AuditLogger | `trigger_with_result()` | **L3** |
-| | `TOOL_RESULT_OFFLOADED` | ToolCallProcessor | RunLog | `trigger()` | L1 |
-| **Tool Recovery** | `TOOL_RECOVERY_ATTEMPTED` | ToolCallProcessor | RunLog | `trigger()` | L1 |
-| | `TOOL_RECOVERY_SUCCEEDED` | ToolCallProcessor | Metrics, RunLog | `trigger()` | L1 |
-| | `TOOL_RECOVERY_FAILED` | ToolCallProcessor | RunLog | `trigger()` | L1 |
-| **Tool Approval** | `TOOL_APPROVAL_REQUESTED` | ApprovalWorkflow | AuditLogger | `trigger()` | L1 |
-| | `TOOL_APPROVAL_GRANTED` | ApprovalWorkflow | ApprovalTracker | `trigger()` | L1 |
-| | `TOOL_APPROVAL_DENIED` | ApprovalWorkflow | ApprovalTracker | `trigger()` | L1 |
-| | `APPROVAL_TRANSITION` | ApprovalWorkflow (`record_transition`) | RunLog (wildcard) | `trigger()` | L1 |
-| **Turn** | `TURN_COMPLETE` | AgenticLoop | RunLog, AutoMemory, AutoLearn, LLMExtract | `trigger()` | L1+L2 |
-| **Context** | `CONTEXT_CRITICAL` | ContextWindowManager | AuditLogger, RunLog | `trigger()` | L1 |
-| | `CONTEXT_OVERFLOW_ACTION` | ContextWindowManager | ContextActionHandler | `trigger_with_result()` | **L3** |
-| **Session** | `SESSION_START` | AgenticLoop | SessionLifecycle, RunLog | `trigger()` | L1 |
-| | `SESSION_END` | AgenticLoop | SessionLifecycle, ToolOffloadCleanup, RunLog | `trigger()` | L1 |
-| **Model** | `MODEL_SWITCHED` | AgenticLoop | ModelSwitchLogger | `trigger()` | L1 |
-| **LLM Call** | `LLM_CALL_START` | LLM Router | AuditLogger, RunLog | `trigger()` | L1 |
-| | `LLM_CALL_END` | LLM Router | LLMSlowLogger, RunLog | `trigger()` | L1 |
-| | `LLM_CALL_FAILED` | AgenticLoop | AuditLogger, RunLog | `trigger()` | L1 |
-| | `LLM_CALL_RETRY` | AgenticLoop | AuditLogger, RunLog | `trigger()` | L1 |
-| **Cost** | `COST_WARNING` | AgenticLoop | AuditLogger, RunLog | `trigger()` | L1 |
-| | `COST_LIMIT_EXCEEDED` | AgenticLoop | AuditLogger, RunLog | `trigger()` | L1 |
-| **User Input** | `USER_INPUT_RECEIVED` | AgenticLoop | AuditLogger | `trigger_interceptor()` | **L3** |
-| **Serve** | `SHUTDOWN_STARTED` | CLI | AuditLogger, RunLog | `trigger()` | L1 |
-| | `CONFIG_RELOADED` | Bootstrap | AuditLogger, RunLog | `trigger()` | L1 |
-| **MCP** | `MCP_SERVER_CONNECTED` | MCP Manager | AuditLogger, RunLog | `trigger()` | L1 |
-| | `MCP_SERVER_FAILED` | MCP Manager | AuditLogger, RunLog | `trigger()` | L1 |
-| **Execution** | `EXECUTION_CANCELLED` | IsolatedExecution | AuditLogger, RunLog | `trigger()` | L1 |
-| **Reasoning** | `REASONING_METRICS` | AgenticLoop | AuditLogger, RunLog | `trigger()` | L1 |
-
----
-
-## 이벤트 발생 순서
-
-AgenticLoop 턴 경계:
-
-```
-1. USER_INPUT_RECEIVED    (interceptor — 차단 가능)
-2. SESSION_START           (session_id, model, provider)
-3. LLM_CALL_START → LLM_CALL_END (또는 LLM_CALL_FAILED → LLM_CALL_RETRY)
-4. TOOL_EXEC_START        (interceptor — 차단/입력 수정 가능)
-5. tool 실행
-6. TOOL_EXEC_END          (feedback — 결과 변환 가능)
-7. (tool 연속 실패 시) TOOL_RECOVERY_ATTEMPTED → SUCCEEDED | FAILED
-8. TURN_COMPLETE          (text, user_input, tool_calls, rounds)
-9. SESSION_END            (session_id, total_cost)
-```
-
----
-
-## 등록 핸들러 전체 목록
-
-| P | 핸들러명 | 구독 이벤트 | 등록 위치 | 성숙도 |
-|---|---|---|---|---|
-| **45** | `metrics_*` (2) | `LLM_CALL_END / TOOL_RECOVERY_SUCCEEDED` | `SessionMetrics` | L1 |
-| **50** | `run_log_writer` | **전체 65개** | `bootstrap.build_hooks()` | L1 |
-| **50** | `context_action_handler` | `CONTEXT_OVERFLOW_ACTION` | `bootstrap._reg_context_action()` | **L3** |
-| **55** | `llm_slow_logger` | `LLM_CALL_END` | `bootstrap.build_hooks()` | L1 |
-| **60** | `journal_subagent` | `SUBAGENT_COMPLETED` | `bootstrap.build_hooks()` | L1 |
-| **65** | `approval_tracker` (2) | `TOOL_APPROVAL_GRANTED/DENIED` | `bootstrap.build_hooks()` | L1 |
-| **82** | `turn_llm_extract` | `TURN_COMPLETE` | `llm_extract_learning` | L2 |
-| **84** | `turn_auto_learn` | `TURN_COMPLETE` | `auto_learn` | L2 |
-| **85** | `turn_auto_memory` | `TURN_COMPLETE` | `bootstrap.build_hooks()` | L2 |
-| **90** | `session_lifecycle` (2) | `SESSION_START/END` | `bootstrap.build_hooks()` | L1 |
-| **90** | `model_switch_logger` | `MODEL_SWITCHED` | `bootstrap.build_hooks()` | L1 |
-| **90** | `audit_loggers` (19) | 19 events (`_AL` table — context/subagent/llm/recovery/fallback/timeout/post_analysis/shutdown/config/mcp/user_input/tool_exec×4/cost×2) | `bootstrap.build_hooks()` | L1 |
-| **90** | `trigger_logger` | `TRIGGER_FIRED` | `scheduling.build_scheduling()` | L1 |
-| **95** | `tool_offload_cleanup` | `SESSION_END` | `bootstrap.build_hooks()` | L1 |
-| **200** | `notification_*` (1) | `SUBAGENT_FAILED` | `notification_hook plugin` (`register_notification_hooks`) | L1 |
-
-> **검증 메모 (2026-06-10)**: 위 표는 `core/wiring/bootstrap.py:build_hooks()`, `core/wiring/scheduling.py:build_scheduling()`, `core/hooks/plugins/notification_hook/hook.py:register_notification_hooks()` 의 실제 `hooks.register(...)` 사이트를 grep 으로 확인한 결과. drift 가 발견되면 본 표를 갱신할 것. 핵심 reference:
-> - RunLog wildcard 등록: `bootstrap.py:169-170` (`for event in HookEvent: hooks.register(event, ..., priority=50)`)
-> - audit_loggers 19 이벤트 등록: `bootstrap.py:406-484` (`_AL` table) + `bootstrap.py:494` (P90)
-> - notification priority: `notification_hook/hook.py:142` (`priority=200`)
-
----
-
-## 플러그인 확장
-
-`core/hooks/discovery.py`를 통해 외부 플러그인 추가 가능:
-
-### Class-based Plugin
+Interceptor 반환 규약:
 
 ```python
-# .geode/hooks/my_hook/hook.py
-from core.hooks.system import HookEvent
-from core.hooks.discovery import HookPlugin, HookPluginMetadata
-
-class MyHook:
-    @property
-    def metadata(self) -> HookPluginMetadata:
-        return HookPluginMetadata(
-            name="my_hook",
-            events=[HookEvent.SESSION_END],
-            priority=75,
-        )
-
-    def handle(self, event: HookEvent, data: dict) -> None:
-        # Custom logic
-        pass
+{"block": True, "reason": "policy"}
+{"modify": {"tool_input": {"path": "safe.txt"}}}
+None
 ```
 
-### YAML-based Plugin
+도구 결과 변경은 `TOOL_RESULT_TRANSFORM` 한 단계가 소유한다.
+`transformed_result`, 이전 호환 키인 `updated_result`,
+`additional_context`를 처리한 뒤 최종 `TOOL_EXEC_ENDED`가 발생한다.
+`TOOL_EXEC_FAILED`는 외부 핸들러 호환 신호이며 영속성에서는
+`TOOL_EXEC_ENDED(has_error=True)`와 중복 저장하지 않는다.
 
-```yaml
-# .geode/hooks/my_hook/hook.yaml
-name: my_hook
-events: [session_end, subagent_failed]
-priority: 75
-handler: my_hook.handler  # Python module path
-```
-
----
-
-## 트리거 모드 (3종)
-
-| 모드 | 메서드 | 반환값 | 용도 | 사용 이벤트 |
-|------|--------|--------|------|------------|
-| **L1 Observe** | `trigger()` | `list[HookResult]` (성공/실패만) | Fire-and-forget 관찰 | 대부분 (60+개) |
-| **L3 Feedback** | `trigger_with_result()` | `list[HookResult]` (data 포함) | 핸들러가 전략/값 반환 | `CONTEXT_OVERFLOW_ACTION`, `TOOL_EXEC_END` |
-| **L3 Interceptor** | `trigger_interceptor()` | `InterceptResult` (block/modify) | 실행 차단 또는 데이터 수정 | `USER_INPUT_RECEIVED`, `TOOL_EXEC_START` |
-
-### Interceptor 프로토콜 (Claude Code PreToolUse 패턴)
+## 등록과 해제
 
 ```python
-# 핸들러가 반환할 수 있는 값:
-{"block": True, "reason": "..."}           # 실행 차단
-{"modify": {"tool_input": {새 입력}}}       # 입력 수정
-None                                        # 통과 (관찰만)
+subscription = hooks.register(
+    HookEvent.SESSION_ENDED,
+    on_session_end,
+    name="session_index",
+    priority=60,
+)
+
+subscription.cancel()  # idempotent
 ```
 
-### Feedback 프로토콜 (Claude Code PostToolUse 패턴)
+- `register_prefix("SUBAGENT", ...)`는 `SUBAGENT_*`를 구독한다.
+- `register_prefix("*", ...)`는 모든 이벤트를 구독한다.
+- 같은 이름이 겹치는 exact/prefix 범위에서 서로 다른 핸들러를 가리키면
+  `DuplicateHookRegistrationError`가 발생한다.
+- tool matcher 정규식은 등록 시 compile된다. 잘못된 정규식은 fail-open이
+  아니라 즉시 `ValueError`다.
+- matcher가 있는 핸들러는 `tool_name`이 없는 payload에 실행되지 않는다.
 
-```python
-# 핸들러가 반환할 수 있는 값:
-{"updated_result": {변환된 결과}}            # 결과 교체
-{"additional_context": "추가 맥락"}          # 결과에 context 주입
-None                                        # 통과 (관찰만)
+## Timeout
+
+동기 Python 함수를 안전하게 강제 중단할 방법은 없다. 따라서
+`timeout_s > 0`인 동기 interceptor는 실행하지 않고
+`HookTimeoutUnsupportedError`를 `HookResult` 실패로 기록한다. 이전
+ThreadPoolExecutor 방식처럼 timeout 이후에도 버려진 thread가 살아남지 않는다.
+
+비동기 핸들러는 `asyncio.wait_for`로 취소되며
+`HookExecutionTimeoutError`로 분류된다.
+
+## 생산 영속성
+
+`build_hooks()`는 wildcard 기록 핸들러 대신 post-dispatch sink 하나를
+등록한다.
+
+- 쿼리·필터·보존 정책이 필요한 운영 이벤트: `sessions.db:hook_events`
+- 활성 autoresearch 실행의 portable timeline: `transcript.jsonl`
+- 호환 중복 이벤트: 핸들러에는 전달, SQL/transcript에는 미기록
+- raw `user_input`, prompt, tool input/result, cognitive snapshot, 인증 헤더:
+  미기록
+- payload: 깊이/문자열/collection/전체 bytes 제한 및 secret redaction
+- retention: high-volume 7일, standard 30일, audit 180일, 전체 100,000행
+
+최근 실행 컨텍스트도 더 이상 `runs/*.jsonl`을 scan하지 않고
+`hook_events`의 `SESSION_ENDED`를 조회한다.
+
+## 도구 라이프사이클
+
+모든 허용된 도구 시도는 다음 pair를 완결한다.
+
+```text
+TOOL_EXEC_STARTED (interceptor)
+  -> blocked | execute | adaptive recovery
+  -> TOOL_RESULT_TRANSFORM (feedback, transient)
+  -> TOOL_EXEC_ENDED (canonical terminal)
+  -> TOOL_EXEC_FAILED (error compatibility signal only)
 ```
 
----
+차단, 복구, executor 예외도 terminal event를 건너뛰지 않는다. 최종
+`has_error`는 transformation과 clarification guard가 끝난 뒤 계산한다.
 
-## Activity row 스키마 + timeline mirror (65/65 typed)
+## 플러그인
 
-모든 `trigger*()` 호출은 활성 `RunTranscript` 에 **typed Activity row** 한 줄로
-mirror 된다 (`core/observability/activity.py` + `activity_registry.py`,
-spec `docs/plans/2026-05-24-hookevent-activity-schema.md`). openclaw 의
-`z.discriminatedUnion("type")` 등가 — `action` 필드가 discriminator.
+외부 플러그인은 `.geode/hooks/<name>/hook.py` 또는 `hook.yaml`에서만
+자동 발견한다. `core/hooks/plugins/`의 built-in은 부트스트랩에서 명시적으로
+한 번 등록한다. 이 구분으로 notification 같은 built-in이 explicit wiring과
+filesystem discovery 양쪽에서 두 번 등록되는 문제를 막는다.
 
-| 항목 | 정책 |
-|------|------|
-| **커버리지** | 65 이벤트 전부 concrete typed row (19 lifecycle + 46 K-group). `GenericActivityRow` 는 *fail-soft 폴백 전용* — 정상 경로 목적지 아님 |
-| **details 스키마** | 25 공유 details 모델(패밀리당 1개: `CognitivePhaseDetails`×6, `MutationDetails`×4, `AutoTriggerDetails`×6 등), `frozen=True` + `extra="forbid"` |
-| **중앙화** | 45 K-group 은 선언적 `_TYPED_ROW_SPECS` 테이블 + 단일 `_build_from_spec` 빌더로 구성 (빌더 함수 45개 아님). details 필드명 = emit payload 키 → 키 교집합 추출 |
-| **mirror parity** | `trigger`/`trigger_async` 뿐 아니라 `trigger_with_result(_async)`/`trigger_interceptor(_async)` **4 변형 전부** mirror. feedback/interceptor 이벤트(USER_INPUT_RECEIVED 등)도 timeline 진입 |
-| **schema_version** | 모든 row 에 `schema_version: int`. 필드 추가/개명/변형 시 bump → JSONL 재독자가 key 유무 추측 대신 shape 분기 |
-| **dotted action** | `pipeline.*` / `tool.exec.*` / `cognitive.*` 네임스페이스 (wildcard 구독 prefix) |
+동적 모듈 로더는 임시 `sys.modules` 항목을 load 후 복원해 반복 reload 시
+module 객체를 누수하지 않는다.
 
-### 에러 / 프라이버시 정책 (silent fallback = 안티패턴)
+## 수명주기
 
-| 상황 | 처리 |
-|------|------|
-| typed 빌더가 malformed payload 만남 | `GenericActivityRow` 로 fail-soft + `_fallback_reason` 동봉 → timeline 에서 "강제 generic" 과 "의도된 generic" 구분 가능 (daemon log 만 아니라 row 자체에) |
-| mirror / dispatch / 학습 저장 실패 | **once-per-event `WARNING`** (dedup set, hot-loop 스팸 없음). debug-swallow 금지 — 죽은 observability sink 는 보여야 한다 |
-| identifier 키 누락 | 빈 identifier 로 조용히 출하 금지 — emit-site 키 오류를 1회 WARNING |
-| **raw 콘텐츠** | raw `user_input` / `cognitive_state` 스냅샷 / 전체 tool result 는 timeline JSONL 적재 **금지**. 파생 스칼라(`input_len`)만 (`_derive_input_len`). 프라이버시 + 크기 |
+`HookSystem.close()`는 다음 순서로 동작한다.
 
-> "always emit a row" 계약: typing 이 실패해도 timeline 은 완전하게 유지한다
-> (paperclip `logActivity` swallow-and-warn 등가). 단 swallow 는 **보이는**
-> swallow 여야 한다 — silent 가 아니라 WARNING + `_fallback_reason`.
+1. 새 등록을 차단하고 handler/prefix 참조를 제거한다.
+2. 역순 cleanup callback으로 router/MCP/tool ContextVar와 보조 SQLite
+   store를 해제한다. owner cleanup은 약한 참조를 사용해 자기 참조
+   cycle을 만들지 않는다.
+3. 역순 sink close로 `HookEventStore`를 비활성화한다. DB/WAL/SHM
+   descriptor는 이미 각 저장 연산이 끝날 때 닫힌 상태다.
 
----
-
-## 설계 원칙
-
-1. **비차단 실행**: 한 핸들러의 예외가 다른 핸들러를 중단하지 않음 (interceptor 예외도 비차단)
-2. **우선순위 정렬**: 낮은 수 = 높은 우선순위 (30 → 95)
-3. **메타데이터 전용 방출**: `PROMPT_ASSEMBLED`는 해시와 통계만 전달 (보안)
-4. **`HookResult` 반환**: 모든 핸들러의 성공/실패 결과 인트로스펙션 가능
-5. **Cross-cutting**: `core/hooks/`는 독립 모듈 — 어느 레이어에서든 import 가능
-6. **성숙도 진화**: 같은 이벤트에 L1(관측) → L2(반응) → L3(판단) → L4(자율) 핸들러를 점진 추가
-7. **플러그인 확장**: 코어 수정 없이 `.geode/hooks/` 디렉토리로 외부 확장
-8. **3종 트리거**: observe(기록) / feedback(값 반환) / interceptor(차단+수정) 용도에 맞게 선택
-
----
-
-## 커버리지 매트릭스
-
-> **다이어그램**: [`docs/diagrams/hook-coverage-matrix.mmd`](../diagrams/hook-coverage-matrix.mmd)
-
-| 이벤트 그룹 | L1 OBSERVE | L2 REACT | L3 DECIDE | L4 AUTONOMY |
-|---|:---:|:---:|:---:|:---:|
-| Scheduler (2) | ✓ Logger, RunLog | — | — | — |
-| Memory (4) | ✓ RunLog | — | — | — |
-| Prompt (1) | ✓ RunLog | — | — | — |
-| SubAgent (3) | ✓ Journal, RunLog, Notification | — | — | — |
-| Tool Exec (3) | ✓ AuditLogger | — | ✓ Interceptor, Feedback | — |
-| Tool Recovery (3) | ✓ RunLog, Metrics | — | — | — |
-| Tool Approval (3) | ✓ ApprovalTracker, AuditLogger | — | — | — |
-| Turn (1) | ✓ RunLog | ✓ AutoMemory, AutoLearn, LLMExtract | — | — |
-| Context (2) | ✓ AuditLogger | — | ✓ ContextActionHandler | — |
-| Session (2) | ✓ SessionLifecycle, RunLog | — | — | — |
-| Model (1) | ✓ ModelSwitchLogger | — | — | — |
-| LLM Call (4) | ✓ LLMSlowLogger, AuditLogger | — | — | — |
-| Cost (2) | ✓ AuditLogger | — | — | — |
-| User Input (1) | ✓ AuditLogger | — | ✓ Interceptor | — |
-| Cross-Provider (1) | ✓ AuditLogger | — | — | — |
-| Serve (2) | ✓ AuditLogger | — | — | — |
-| MCP (2) | ✓ AuditLogger | — | — | — |
-| Execution (1) | ✓ AuditLogger | — | — | — |
-| Reasoning (1) | ✓ AuditLogger | — | — | — |
+Runtime, serve, worker, 일회성 memory-lifecycle command는 각자 소유한
+HookSystem을 종료해야 한다.

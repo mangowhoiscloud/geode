@@ -16,7 +16,7 @@ schema 로 선언. M4.4 후속 PR 이 이 schema 를 inference path 에서 소�
   요약. baseline.json 의 worst dim → rubric → 해당 dim 의 *"이렇게
   하면 안됨"* directive.
 - ``tool_hints`` — T1 tool_descriptions 의 ``hints`` field 와 다른,
-  *최근 성공/실패* 에서 추출된 tool-specific 힌트. RunLog + episodic
+  *최근 성공/실패* 에서 추출된 tool-specific 힌트. SQL events + episodic
   memory 의 success_rate 로 rank.
 
 **SoT schema** (모든 slot optional, default = no-op):

@@ -124,7 +124,7 @@ export default function Page() {
                 <tr>
                   <td><code>read_document</code>나 <code>grep_files</code>가 반복 호출됨</td>
                   <td>핵심 읽기 도구는 항상 적재됨. tool cap에 숨은 것이 아니라 모델의 탐색 판단일 가능성이 큼</td>
-                  <td>run log에서 직전 <code>grep_files</code> 쿼리와 읽은 경로를 보고, 필요한 경우 질문에 파일 범위나 금지 경로를 명시합니다</td>
+                  <td>dialogue transcript에서 직전 <code>grep_files</code> 호출과 읽은 경로를 보고, 필요한 경우 질문에 파일 범위나 금지 경로를 명시합니다</td>
                 </tr>
                 <tr>
                   <td>서브에이전트가 도구 없이 동작</td>
@@ -261,7 +261,7 @@ export default function Page() {
                 <tr>
                   <td><code>read_document</code> or <code>grep_files</code> repeats</td>
                   <td>Core read tools are always loaded; this is usually exploration strategy, not the tool cap hiding alternatives</td>
-                  <td>Inspect the run log for the preceding <code>grep_files</code> query and read paths; constrain the file scope in the prompt when needed</td>
+                  <td>Inspect the dialogue transcript for the preceding <code>grep_files</code> call and read paths; constrain the file scope in the prompt when needed</td>
                 </tr>
                 <tr>
                   <td>A sub-agent runs without its tools</td>

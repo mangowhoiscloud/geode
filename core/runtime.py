@@ -1,7 +1,7 @@
 """Runtime — production wiring for GEODE infrastructure components.
 
 Centralizes creation and lifecycle of all infrastructure singletons:
-- HookSystem with RunLog handler
+- HookSystem with bounded SQLite event persistence
 - InMemorySessionStore
 - PolicyChain with default policies
 - ToolRegistry with analysis tools
@@ -39,6 +39,7 @@ if TYPE_CHECKING:
     from core.memory.organization import MonoLakeOrganizationMemory
     from core.memory.project import ProjectMemory
     from core.orchestration.hot_reload import ConfigWatcher
+    from core.orchestration.metrics import LatencyMetrics
     from core.orchestration.task_system import TaskGraph
     from core.scheduler.triggers import TriggerManager
 
@@ -48,9 +49,8 @@ from core.auth.rotation import ProfileRotator
 from core.hooks import HookSystem
 from core.memory.port import SessionStorePort
 from core.memory.session_key import build_session_key
-from core.observability.run_log import RunLog
+from core.observability.event_store import HookEventStore
 from core.orchestration.lane_queue import LaneQueue
-from core.paths import GLOBAL_RUNS_DIR
 from core.tools.policy import PolicyChain
 from core.tools.registry import ToolRegistry
 from core.wiring.bootstrap import get_plugin_status as get_plugin_status
@@ -62,9 +62,6 @@ log = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 
 DEFAULT_SESSION_TTL = 3600.0  # 1 hour
-DEFAULT_LOG_DIR = GLOBAL_RUNS_DIR  # P2 (v0.95.x) — was literal `Path.home() / ".geode" / "runs"`
-
-
 # ---------------------------------------------------------------------------
 # Config dataclasses — group __init__ parameters by concern
 # ---------------------------------------------------------------------------
@@ -78,7 +75,8 @@ class RuntimeCoreConfig:
     session_store: SessionStorePort
     policy_chain: PolicyChain
     tool_registry: ToolRegistry
-    run_log: RunLog
+    event_store: HookEventStore
+    hook_metrics: LatencyMetrics
     config_watcher: ConfigWatcher
     lane_queue: LaneQueue
     project_memory: ProjectMemory
@@ -135,7 +133,8 @@ class GeodeRuntime:
         self.session_store = core.session_store
         self.policy_chain = core.policy_chain
         self.tool_registry = core.tool_registry
-        self.run_log = core.run_log
+        self.event_store = core.event_store
+        self.hook_metrics = core.hook_metrics
         self.profile_store = core.profile_store
         self.profile_rotator = core.profile_rotator
         self.cooldown_tracker = core.cooldown_tracker or CooldownTracker()
@@ -146,6 +145,7 @@ class GeodeRuntime:
         self.subject_id = core.subject_id
         self.run_id = ""
         self.is_subagent: bool = False
+        self._shutdown = False
         # Unified bootstrap resources
         self.mcp_manager = core.mcp_manager
         self.skill_registry = core.skill_registry
@@ -207,6 +207,7 @@ class GeodeRuntime:
             bootstrap,
             core["hooks"],
             core["session_store"],
+            core["event_store"],
             session_key=session_key,
             subject_id=subject_id,
         )
@@ -225,7 +226,8 @@ class GeodeRuntime:
             session_store=core["session_store"],
             policy_chain=core["policy_chain"],
             tool_registry=core["tool_registry"],
-            run_log=core["run_log"],
+            event_store=core["event_store"],
+            hook_metrics=core["hook_metrics"],
             config_watcher=core["config_watcher"],
             lane_queue=core["lane_queue"],
             project_memory=memory["project_memory"],
@@ -259,7 +261,7 @@ class GeodeRuntime:
         session_ttl: float,
     ) -> dict[str, Any]:
         """Stage 1: Build core infrastructure (hooks, auth, LLM, lanes)."""
-        hooks, run_log, _session_metrics = bootstrap.build_hooks(
+        hooks, event_store, hook_metrics = bootstrap.build_hooks(
             session_key=session_key,
             run_id=run_id,
             log_dir=log_dir,
@@ -280,7 +282,8 @@ class GeodeRuntime:
         lane_queue = infra.build_default_lanes()
         return {
             "hooks": hooks,
-            "run_log": run_log,
+            "event_store": event_store,
+            "hook_metrics": hook_metrics,
             "session_store": session_store,
             "policy_chain": policy_chain,
             "tool_registry": tool_registry,
@@ -302,9 +305,10 @@ class GeodeRuntime:
         from core.wiring import adapters as adapter_wiring
 
         mcp_manager = bootstrap.build_mcp_manager()
-        from core.mcp.manager import set_mcp_hooks
+        from core.mcp.manager import clear_mcp_hooks, set_mcp_hooks
 
         set_mcp_hooks(hooks)
+        hooks.add_owner_cleanup("mcp_hooks", clear_mcp_hooks)
         skill_registry = bootstrap.build_skill_registry()
         readiness = bootstrap.build_readiness()
         bootstrap.build_tool_offload(session_id=session_key, hooks=hooks)
@@ -320,6 +324,7 @@ class GeodeRuntime:
         bootstrap: Any,
         hooks: Any,
         session_store: Any,
+        event_store: Any,
         *,
         session_key: str,
         subject_id: str,
@@ -332,7 +337,11 @@ class GeodeRuntime:
             organization_memory,
             context_assembler,
             _user_profile,
-        ) = bootstrap.build_memory(session_store=session_store, hooks=hooks)
+        ) = bootstrap.build_memory(
+            session_store=session_store,
+            hooks=hooks,
+            event_store=event_store,
+        )
 
         scheduling = scheduling_wiring.build_scheduling(hooks=hooks)
 
@@ -397,9 +406,13 @@ class GeodeRuntime:
         """Get tools available under the given pipeline mode."""
         return self.tool_registry.list_tools(policy=self.policy_chain, mode=mode)
 
+    def prune_events(self) -> int:
+        """Apply age and row-count retention to operational events."""
+        return self.event_store.prune()
+
     def prune_logs(self) -> int:
-        """Prune run logs if they exceed size limits."""
-        return self.run_log.prune()
+        """Compatibility alias for :meth:`prune_events`."""
+        return self.prune_events()
 
     def get_health(self) -> dict[str, Any]:
         """Aggregate health stats from all infrastructure components.
@@ -418,6 +431,11 @@ class GeodeRuntime:
             }
 
         health["lanes"] = self.lane_queue.list_lanes()
+        health["hook_events"] = {
+            "rows": self.event_store.count(),
+            "db_path": str(self.event_store.db_path),
+        }
+        health["hook_metrics"] = self.hook_metrics.summary()
 
         if self.task_graph is not None:
             health["task_graph"] = {
@@ -430,9 +448,27 @@ class GeodeRuntime:
 
     def shutdown(self) -> None:
         """Clean shutdown of background components."""
-        self.config_watcher.stop()
+        if self._shutdown:
+            return
+        self._shutdown = True
+        try:
+            self.config_watcher.stop()
+        except Exception:
+            log.warning("Config watcher shutdown failed", exc_info=True)
         if self.scheduler_service:
-            self.scheduler_service.save()
-            self.scheduler_service.stop()
+            try:
+                self.scheduler_service.save()
+                self.scheduler_service.stop()
+            except Exception:
+                log.warning("Scheduler service shutdown failed", exc_info=True)
         if self.trigger_manager:
-            self.trigger_manager.stop_scheduler()
+            try:
+                self.trigger_manager.stop_scheduler()
+            except Exception:
+                log.warning("Trigger manager shutdown failed", exc_info=True)
+        if self.mcp_manager is not None:
+            try:
+                self.mcp_manager.shutdown()
+            except Exception:
+                log.warning("MCP manager shutdown failed", exc_info=True)
+        self.hooks.close()

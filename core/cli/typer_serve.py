@@ -359,17 +359,16 @@ def serve(
             _sched_svc.save()
             _sched_svc.stop()
             log.info("Scheduler stopped, state saved")
-        # MCP cleanup
-        if runtime and runtime.mcp_manager:
-            try:
-                runtime.mcp_manager.shutdown()
-            except Exception:
-                log.debug("MCP shutdown error", exc_info=True)
         if _cli_poller is not None:
             _cli_poller.stop()
         if _webhook_server is not None:
             _webhook_server.shutdown()
         gateway.stop()
+        if runtime is not None:
+            try:
+                runtime.shutdown()
+            except Exception:
+                log.debug("Runtime shutdown error", exc_info=True)
         console.print()
         console.print("  [dim]Gateway stopped.[/dim]")
 

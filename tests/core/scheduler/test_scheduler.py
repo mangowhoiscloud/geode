@@ -637,16 +637,15 @@ class TestJobRunLog:
         rl.append("j1", {"x": 1})
         assert rl.prune("j1") == 0
 
-    def test_prune_over_limit(self, tmp_log_dir: Path) -> None:
+    def test_append_auto_prunes_over_limit(self, tmp_log_dir: Path) -> None:
         rl = JobRunLog(log_dir=tmp_log_dir)
         rl.MAX_BYTES = 100  # Very small to trigger
         rl.MAX_LINES = 3
         for i in range(20):
             rl.append("j1", {"i": i, "padding": "x" * 50})
-        removed = rl.prune("j1")
-        assert removed > 0
         remaining = rl.get_runs("j1", limit=9999)
         assert len(remaining) == 3
+        assert rl.prune("j1") == 0
 
     def test_prune_nonexistent(self, tmp_log_dir: Path) -> None:
         rl = JobRunLog(log_dir=tmp_log_dir)

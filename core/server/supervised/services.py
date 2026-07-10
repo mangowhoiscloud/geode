@@ -94,6 +94,7 @@ class SharedServices:
     mcp_manager: Any = None
     skill_registry: Any = None
     hook_system: Any = None  # HookSystem — never None after init
+    _owns_hook_system: bool = False
     lane_queue: Any = None  # Unified LaneQueue — single concurrency gate
     tool_handlers: dict[str, Any] = field(default_factory=dict)
 
@@ -111,6 +112,11 @@ class SharedServices:
     _cost_budget: float = 0.0
 
     # --- public API -----------------------------------------------------------
+
+    def close(self) -> None:
+        """Release resources created by :func:`build_shared_services`."""
+        if self._owns_hook_system and self.hook_system is not None:
+            self.hook_system.close()
 
     def create_session(
         self,
@@ -355,14 +361,14 @@ def build_shared_services(
     HookSystem is built via ``build_hooks()``.
     """
     # Build hooks if not provided
+    owns_hook_system = hook_system is None
     if hook_system is None:
-        from core.paths import GLOBAL_RUNS_DIR
         from core.wiring.bootstrap import build_hooks
 
-        hook_system, _run_log, _metrics = build_hooks(
+        hook_system, _event_store, _metrics = build_hooks(
             session_key=f"geode-{uuid.uuid4().hex[:8]}",
             run_id=uuid.uuid4().hex[:12],
-            log_dir=GLOBAL_RUNS_DIR,  # P2 — was `Path.home() / ".geode" / "runs"`
+            log_dir=None,
         )
 
     # P0: Tool result offloading
@@ -401,6 +407,7 @@ def build_shared_services(
         mcp_manager=mcp_manager,
         skill_registry=skill_registry,
         hook_system=hook_system,
+        _owns_hook_system=owns_hook_system,
         lane_queue=lane_queue,
         tool_handlers=tool_handlers,
         _cost_budget=cost_budget,

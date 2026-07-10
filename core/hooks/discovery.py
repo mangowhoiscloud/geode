@@ -85,14 +85,21 @@ class HookPlugin(Protocol):
 
 
 def _load_module_from_path(module_name: str, file_path: Path) -> types.ModuleType:
-    """Dynamically load a Python module from an arbitrary filesystem path."""
+    """Load a module without leaking its synthetic name into ``sys.modules``."""
     spec = importlib.util.spec_from_file_location(module_name, file_path)
     if spec is None or spec.loader is None:
         msg = f"Cannot create module spec from {file_path}"
         raise ImportError(msg)
     module = importlib.util.module_from_spec(spec)
+    previous = sys.modules.get(module_name)
     sys.modules[module_name] = module
-    spec.loader.exec_module(module)
+    try:
+        spec.loader.exec_module(module)
+    finally:
+        if previous is None:
+            sys.modules.pop(module_name, None)
+        else:
+            sys.modules[module_name] = previous
     return module
 
 

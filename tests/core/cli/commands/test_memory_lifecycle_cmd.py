@@ -64,8 +64,8 @@ def test_dry_run_default_moves_nothing(project: Path):
 
 
 def test_apply_moves_resolved_entry_to_archive(project: Path, monkeypatch: pytest.MonkeyPatch):
-    # Keep the test hermetic: the real build_hooks wires a RunLog under
-    # ~/.geode/runs/; a bare HookSystem is enough for the emit path.
+    # Keep the test hermetic: real bootstrap wires the project event database;
+    # a bare HookSystem is enough for the emit path.
     from core.hooks import HookSystem
 
     monkeypatch.setattr(
