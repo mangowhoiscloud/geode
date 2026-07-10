@@ -78,15 +78,20 @@ functional change.
   payg), and the character sheet records supported providers. Copy: "부화"
   retired for a "Birth" label, "장비" for "도구"; the growth log ends with an
   open "next act" row reserved for the first self-cut release.
-- **Loop-laboratory art direction (Hermes-landing reference).** The hero is
-  now a full-bleed Axolotl Rose color field (pixel wordmark and copy in
-  near-black) over a gallery band: the Geodi illustration with the CLI
-  welcome-screen terminal floating on top. A rose chapter-break band carries
-  the mascot as a one-color stencil (`GeodiSprite` gains a `silhouette` prop)
-  with the loop mantra, and the page eyebrow repositions from growth log to
-  "루프 실험실 / the loop laboratory". Loop-phase and perception tables are
-  de-boxed to hairline rows; section padding widens. Color-field budget is
-  documented in `site/DESIGN.md`.
+- **Loop-laboratory art direction, final pass (Hermes landing x Lanthimos).**
+  Full rewrite of the page's first act: a rose color-field hero in the Hermes
+  split composition (editorial Noto Serif KR black statement left, generated
+  white-line engraving of the mascot right — PIL FIND_EDGES + dither hatch,
+  edge-feathered into the field), pixel wordmark as the centered brand mark,
+  mono small-caps labels, print-edition corner stamps (version, license), and
+  a full-bleed blurred gallery band with the real CLI welcome terminal
+  floating at its center. The chapter break becomes a portal-style band:
+  ghost pixel watermark, serif declaration, and the mascot as a specimen in a
+  circular petri dish (the audit system is literally named Petri). Type
+  hierarchy is now serif = statements/section titles, pixel = wordmark and
+  character surfaces, mono = labels. The YouTube demo section is removed per
+  operator; frontend stack is confirmed as Next.js 16 + React 19 + Tailwind 4
+  + Astryx + Galmuri11 + Noto Serif KR.
 - **Perception and action, as implemented (operator PDF review).** The loop
   section now grounds four capabilities in their modules: the two-layer
   prompt (`<static_context>` cached / `<dynamic_context>` per-turn with

@@ -6,7 +6,6 @@ import "./astryx-geode.css";
 
 import { MetadataList, MetadataListItem } from "@astryxdesign/core/MetadataList";
 import { ProgressBar } from "@astryxdesign/core/ProgressBar";
-import { SegmentedControl, SegmentedControlItem } from "@astryxdesign/core/SegmentedControl";
 import { Token } from "@astryxdesign/core/Token";
 import Image from "next/image";
 import Link from "next/link";
@@ -21,6 +20,7 @@ import { BENCHMARK_GROUPS } from "@/data/geode/benchmark-measurements";
 import { GEODE_SOT } from "@/data/geode/sot";
 import { geodeTechCategories } from "@/data/geode/tech-stack";
 import { galmuri } from "@/fonts/galmuri";
+import { serifDisplay } from "@/fonts/serif";
 
 import { eras, firstRelease, latestRelease, peakWeek, releaseCount, weeklyCadence } from "./growth";
 
@@ -40,7 +40,6 @@ const navItems = [
   { id: "hero", label: "Character" },
   { id: "why", label: "Why" },
   { id: "sheet", label: "Sheet" },
-  { id: "demo", label: "Demo" },
   { id: "loop", label: "Loop" },
   { id: "growth", label: "Growth" },
   { id: "evolve", label: "Self-evolving" },
@@ -48,29 +47,6 @@ const navItems = [
 
 const surfaceChips = ["CLI", "MCP server", "Slack", "cron", "Gateway daemon"];
 
-const videoTabs = [
-  {
-    id: "demo-run",
-    labelKo: "에이전트 데모",
-    labelEn: "Agent demo",
-    src: "https://www.youtube.com/embed/1IftYShGxak",
-    title: "GEODE Agent Demo",
-  },
-  {
-    id: "computer-use",
-    labelKo: "Computer-use",
-    labelEn: "Computer-use",
-    src: "https://www.youtube.com/embed/BKg3D6pXwss",
-    title: "GEODE Computer-use Demo",
-  },
-  {
-    id: "intro",
-    labelKo: "소개 · 구조 · 발전사",
-    labelEn: "Intro · architecture · history",
-    src: "https://www.youtube.com/embed/Qt3jsR5zOcQ",
-    title: "GEODE Introduction",
-  },
-];
 
 const loopPhases: [string, string, string][] = [
   [
@@ -151,7 +127,7 @@ function SectionHeader({ eyebrow, title }: { eyebrow: string; title: string }) {
   return (
     <>
       <p className="mb-3 font-mono text-[11px] uppercase tracking-[0.18em] text-[var(--acc-aqua)]">{eyebrow}</p>
-      <h2 className="font-pixel max-w-3xl text-[26px] leading-[1.35] text-[var(--ink-1)] sm:text-[30px]">{title}</h2>
+      <h2 className="font-serif-display max-w-3xl text-[27px] font-black leading-[1.35] text-[var(--ink-1)] sm:text-[32px]">{title}</h2>
     </>
   );
 }
@@ -221,9 +197,9 @@ function TerminalMock() {
           </div>
         </div>
       </div>
-      <figcaption className="mt-3 text-center font-mono text-[10.5px] text-[var(--acc-aqua)]">
+      <figcaption className="mx-auto mt-3 w-fit rounded bg-[color-mix(in_srgb,var(--paper)_78%,transparent)] px-3 py-1 text-center font-mono text-[10.5px] text-[var(--acc-aqua)]">
         core/ui/mascot.py · geodi_art.py{" "}
-        <span className="text-[var(--ink-3)]">
+        <span className="text-[var(--ink-2)]">
           {t(locale, "CLI 웰컴 스크린을 그대로 옮긴 화면", "the CLI welcome screen, transcribed")}
         </span>
       </figcaption>
@@ -235,75 +211,85 @@ function HeroSection() {
   const locale = useLocale();
   return (
     <section id="hero">
-      {/* Axolotl Rose color field — the brand color as a full-bleed surface
-          (operator-approved 2026-07-10; the one section-level substrate
-          exception, documented in DESIGN.md). */}
-      <div className="bg-[var(--acc-artifact)] text-[var(--paper)]">
-        <div className="mx-auto max-w-6xl px-4 pb-44 pt-24 text-center sm:px-6 lg:pt-32">
-          <p className="font-mono text-[11px] uppercase tracking-[0.22em] text-[color-mix(in_srgb,var(--paper)_65%,transparent)]">
-            GEODE / {t(locale, "루프 실험실", "the loop laboratory")}
-          </p>
-          <h1 className="font-pixel mt-6 text-[clamp(3.2rem,10vw,6.5rem)] font-bold leading-none text-[var(--paper)]">GEODE</h1>
-          <p className="font-pixel mx-auto mt-5 max-w-2xl text-[clamp(1.05rem,2.4vw,1.5rem)] leading-[1.55] text-[var(--paper)]">
-            {t(
-              locale,
-              "일을 맡기면 끝까지 실행하고, 스스로를 고쳐 쓰는 자율 에이전트.",
-              "An autonomous agent that executes to completion and rewrites itself."
-            )}
-          </p>
-          <div className="mt-10 inline-block rounded bg-[var(--paper)] px-6 py-3.5 text-left font-mono text-[13px] text-[var(--ink-2)] sm:text-[14px]">
-            <span className="text-[var(--acc-artifact)]">$</span> uv run geode{" "}
-            <span className="text-[var(--code-string)]">
-              &quot;{t(locale, "이 레포 점검하고 릴리스 블로커 요약해줘", "inspect this repo and summarize release blockers")}&quot;
-            </span>
+      {/* Rose color field, Hermes split composition: editorial serif statement
+          left, white-line engraving of the mascot right, corner stamps. */}
+      <div className="relative overflow-hidden bg-[var(--acc-artifact)]">
+        <div className="relative z-10 mx-auto max-w-7xl px-5 pt-9 text-center sm:px-8">
+          <span className="font-pixel text-[19px] font-bold tracking-[0.06em] text-[var(--paper)]">GEODE</span>
+        </div>
+
+        <div className="relative mx-auto grid max-w-7xl items-center gap-6 px-5 pb-24 pt-10 sm:px-8 lg:grid-cols-[1.05fr_0.95fr] lg:pb-28 lg:pt-14">
+          <div className="relative z-10">
+            <p className="font-mono text-[10.5px] uppercase tracking-[0.3em] text-[color-mix(in_srgb,var(--paper)_62%,transparent)]">
+              open source · apache-2.0 · {t(locale, "루프 실험실", "the loop laboratory")}
+            </p>
+            <h1 className="font-serif-display mt-7 text-[clamp(2.5rem,5.8vw,4.4rem)] font-black leading-[1.12] text-[var(--paper)]">
+              {t(locale, "일을 맡기면 끝까지.", "Executes to the end.")}
+              <br />
+              {t(locale, "스스로를 고쳐 쓰는", "The agent that")}
+              <br />
+              {t(locale, "에이전트.", "rewrites itself.")}
+            </h1>
+
+            <p className="mt-10 font-mono text-[10.5px] uppercase tracking-[0.3em] text-[color-mix(in_srgb,var(--paper)_62%,transparent)]">
+              run via terminal
+            </p>
+            <div className="mt-3 inline-block rounded bg-[var(--paper)] px-5 py-3 text-left font-mono text-[12.5px] text-[var(--ink-2)] sm:text-[13.5px]">
+              <span className="text-[var(--acc-artifact)]">$</span> uv run geode{" "}
+              <span className="text-[var(--code-string)]">
+                &quot;{t(locale, "이 레포 점검하고 릴리스 블로커 요약해줘", "inspect this repo and summarize release blockers")}&quot;
+              </span>
+            </div>
+
+            <div className="mt-9 flex flex-wrap items-center gap-x-7 gap-y-3">
+              <Link
+                href="/docs"
+                className="inline-flex items-center rounded bg-[var(--paper)] px-5 py-2.5 text-[14px] font-medium text-[var(--acc-artifact)] transition-opacity hover:opacity-85"
+              >
+                {t(locale, "문서 읽기", "Read the docs")}
+              </Link>
+              <Link
+                href="https://github.com/mangowhoiscloud/geode"
+                target="_blank"
+                className="font-mono text-[13px] text-[var(--paper)] underline decoration-[color-mix(in_srgb,var(--paper)_40%,transparent)] underline-offset-4 transition-opacity hover:opacity-75"
+              >
+                GitHub
+              </Link>
+            </div>
           </div>
-          <div className="mt-8 flex flex-wrap items-center justify-center gap-x-7 gap-y-3">
-            <Link
-              href="/docs"
-              className="inline-flex items-center rounded bg-[var(--paper)] px-5 py-2.5 text-[14px] font-medium text-[var(--acc-artifact)] transition-opacity hover:opacity-85"
-            >
-              {t(locale, "문서 읽기", "Read the docs")}
-            </Link>
-            <Link
-              href="https://github.com/mangowhoiscloud/geode"
-              target="_blank"
-              className="font-mono text-[13px] text-[var(--paper)] underline decoration-[color-mix(in_srgb,var(--paper)_40%,transparent)] underline-offset-4 transition-opacity hover:opacity-80"
-            >
-              GitHub
-            </Link>
+
+          <div className="relative h-[280px] sm:h-[380px] lg:h-[560px]">
+            <Image
+              src="/geode/images/geode-etch-line.png"
+              alt=""
+              aria-hidden
+              fill
+              priority
+              sizes="(min-width: 1024px) 46vw, 100vw"
+              className="pointer-events-none select-none object-contain lg:scale-[1.22] lg:object-right"
+            />
           </div>
+        </div>
+
+        <div className="pointer-events-none absolute inset-x-0 bottom-0 z-10 flex items-end justify-between px-5 pb-4 font-mono text-[10px] uppercase tracking-[0.18em] text-[color-mix(in_srgb,var(--paper)_55%,transparent)] sm:px-8">
+          <span>geode v{GEODE_SOT.version}</span>
+          <span>apache-2.0 · 2026</span>
         </div>
       </div>
 
-      {/* Art band — GEODE's own illustration plays the gallery piece, with the
-          real CLI welcome screen floating over it (fine art x terminal). */}
-      <div className="mx-auto max-w-5xl px-4 sm:px-6">
-        <div className="-mt-28 overflow-hidden rounded-lg border border-[var(--rule)]">
-          <Image
-            src="/geode/images/geode-hero.png"
-            alt={t(
-              locale,
-              "책을 읽는 아홀로틀 탐사꾼 Geodi 일러스트",
-              "Illustration of Geodi, the axolotl explorer, reading a book"
-            )}
-            width={800}
-            height={533}
-            priority
-            className="h-[300px] w-full object-cover sm:h-[420px]"
-          />
-        </div>
-        <div className="relative z-10 -mt-24 sm:-mt-32">
+      {/* Full-bleed gallery band: the illustration blurred edge-to-edge, the
+          real CLI welcome screen floating at its center. */}
+      <div className="relative w-full">
+        <Image
+          src="/geode/images/geode-gallery-blur.jpg"
+          alt=""
+          aria-hidden
+          width={1600}
+          height={1066}
+          className="h-[480px] w-full select-none object-cover sm:h-[560px]"
+        />
+        <div className="absolute inset-0 flex items-center justify-center px-4 sm:px-6">
           <TerminalMock />
-        </div>
-        <div className="mt-10 flex flex-wrap items-center justify-center gap-2 border-b border-[var(--rule)] pb-14">
-          {surfaceChips.map((chip) => (
-            <span
-              key={chip}
-              className="rounded border border-[var(--rule)] px-2.5 py-1 font-mono text-[11.5px] text-[var(--ink-2)]"
-            >
-              {chip}
-            </span>
-          ))}
         </div>
       </div>
     </section>
@@ -365,7 +351,7 @@ function WhySection() {
           {whyPoints.map((point) => (
             <div key={point.id}>
               <p className="font-mono text-[11px] text-[var(--ink-3)]">{point.id}</p>
-              <h3 className="font-pixel mt-2 text-[17px] leading-snug text-[var(--ink-1)]">
+              <h3 className="font-serif-display mt-2 text-[19px] font-semibold leading-snug text-[var(--ink-1)]">
                 {locale === "en" ? point.titleEn : point.titleKo}
               </h3>
               <p className="mt-3 text-[13.5px] leading-[1.75] text-[var(--ink-2)]">
@@ -568,52 +554,6 @@ function SheetSection() {
   );
 }
 
-/* ---------------- demo -------------------------------------------------- */
-
-function DemoSection() {
-  const locale = useLocale();
-  const [activeVideo, setActiveVideo] = useState(videoTabs[0].id);
-  const activeTab = videoTabs.find((tab) => tab.id === activeVideo) ?? videoTabs[0];
-  return (
-    <section id="demo" className="border-b border-[var(--rule)]">
-      <div className="mx-auto max-w-4xl px-4 py-20 sm:px-6 sm:py-28">
-        <SectionHeader
-          eyebrow={t(locale, "03 / 실행 화면", "03 / see it run")}
-          title={t(locale, "말보다 실행 화면이 빠릅니다", "The run is faster than the pitch")}
-        />
-        <div className="mt-8">
-          <SegmentedControl
-            value={activeVideo}
-            onChange={setActiveVideo}
-            label={t(locale, "데모 영상 선택", "Select demo video")}
-            size="sm"
-          >
-            {videoTabs.map((tab) => (
-              <SegmentedControlItem
-                key={tab.id}
-                value={tab.id}
-                label={locale === "en" ? tab.labelEn : tab.labelKo}
-              />
-            ))}
-          </SegmentedControl>
-          <div
-            className="relative mt-4 overflow-hidden rounded-lg border border-[var(--rule)]"
-            style={{ paddingBottom: "56.25%" }}
-          >
-            <iframe
-              className="absolute inset-0 h-full w-full"
-              src={activeTab.src}
-              title={activeTab.title}
-              allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-              allowFullScreen
-            />
-          </div>
-        </div>
-      </div>
-    </section>
-  );
-}
-
 /* ---------------- loop --------------------------------------------------- */
 
 const LOOP_NODES = [
@@ -722,7 +662,7 @@ function LoopSection() {
     <section id="loop" className="border-b border-[var(--rule)]">
       <div className="mx-auto max-w-6xl px-4 py-20 sm:px-6 sm:py-28">
         <SectionHeader
-          eyebrow={t(locale, "04 / 본체", "04 / the body")}
+          eyebrow={t(locale, "03 / 본체", "03 / the body")}
           title={t(
             locale,
             "본체는 도구 호출이 멈출 때까지 도는 루프 하나입니다",
@@ -848,23 +788,38 @@ function CadenceChart() {
   );
 }
 
-/** Full-bleed chapter break — the mascot as a stencil on the brand field. */
+/** Portal-style chapter break: ghost type, the specimen dish, corner stamps. */
 function ChapterBand() {
   const locale = useLocale();
   return (
-    <div className="bg-[var(--acc-artifact)]">
-      <div className="mx-auto flex max-w-6xl flex-col items-center gap-6 px-6 py-20 text-center sm:py-24">
-        <GeodiSprite scale={6} silhouette="var(--paper)" />
-        <p className="font-mono text-[12px] uppercase tracking-[0.3em] text-[var(--paper)]">
+    <div className="relative overflow-hidden bg-[var(--acc-artifact)]">
+      <div aria-hidden className="pointer-events-none absolute inset-0 flex items-center justify-center">
+        <span className="font-pixel select-none text-[26vw] font-bold leading-none text-[var(--paper)] opacity-[0.06]">
+          GEODE
+        </span>
+      </div>
+      <div className="relative z-10 mx-auto flex max-w-6xl flex-col items-center gap-8 px-6 py-24 text-center sm:py-28">
+        <p className="font-mono text-[11px] uppercase tracking-[0.3em] text-[color-mix(in_srgb,var(--paper)_65%,transparent)]">
           plan · act · observe · verify · replan
         </p>
-        <p className="font-pixel max-w-xl text-[clamp(1.15rem,2.8vw,1.7rem)] leading-[1.5] text-[var(--paper)]">
+        <h2 className="font-serif-display text-[clamp(2.2rem,5.5vw,3.8rem)] font-black leading-[1.15] text-[var(--paper)]">
+          {t(locale, "루프 실험실", "The Loop Laboratory")}
+        </h2>
+        {/* the specimen dish — Petri, literally */}
+        <div className="flex h-44 w-44 items-center justify-center rounded-full border-2 border-[var(--paper)] sm:h-52 sm:w-52">
+          <GeodiSprite scale={5} silhouette="var(--paper)" />
+        </div>
+        <p className="font-serif-display max-w-xl text-[clamp(1.05rem,2.4vw,1.4rem)] font-semibold leading-[1.6] text-[var(--paper)]">
           {t(
             locale,
-            "이곳은 루프 실험실입니다. 실패를 기록하고, 스스로를 고쳐 씁니다.",
-            "This is the loop laboratory. It records failures, and rewrites itself."
+            "실패를 기록하고, 스스로를 고쳐 씁니다.",
+            "It records its failures, and rewrites itself."
           )}
         </p>
+      </div>
+      <div className="pointer-events-none absolute inset-x-0 bottom-0 z-10 flex items-end justify-between px-5 pb-4 font-mono text-[10px] uppercase tracking-[0.18em] text-[color-mix(in_srgb,var(--paper)_55%,transparent)] sm:px-8">
+        <span>specimen · geodi</span>
+        <span>petri audit attached</span>
       </div>
     </div>
   );
@@ -888,7 +843,7 @@ function GrowthSection() {
           />
         </div>
         <SectionHeader
-          eyebrow={t(locale, "05 / 성장 로그", "05 / growth log")}
+          eyebrow={t(locale, "04 / 성장 로그", "04 / growth log")}
           title={t(
             locale,
             `${weeks}주, ${releaseCount}번의 릴리스로 자랐습니다`,
@@ -943,7 +898,7 @@ function GrowthSection() {
                   <p className="font-mono text-[11px] tracking-[0.14em] text-[var(--acc-aqua)]">
                     {era.range} <span className="ml-2 text-[var(--ink-3)]">{era.period}</span>
                   </p>
-                  <h3 className="font-pixel mt-2 text-[17px] leading-snug text-[var(--ink-1)]">
+                  <h3 className="font-serif-display mt-2 text-[18px] font-semibold leading-snug text-[var(--ink-1)]">
                     {locale === "en" ? era.titleEn : era.titleKo}
                   </h3>
                   <p className="mt-2 max-w-2xl text-[14px] leading-[1.75] text-[var(--ink-2)]">
@@ -1143,7 +1098,7 @@ function EvolveSection() {
     <section id="evolve" className="border-b border-[var(--rule)]">
       <div className="mx-auto max-w-4xl px-4 py-20 sm:px-6 sm:py-28">
         <SectionHeader
-          eyebrow={t(locale, "06 / 자기개선", "06 / self-evolving")}
+          eyebrow={t(locale, "05 / 자기개선", "05 / self-evolving")}
           title={t(locale, "다음 레벨은 스스로 오릅니다", "It levels itself up")}
         />
         <div className="mt-6 max-w-3xl space-y-3 text-[15px] leading-[1.75] text-[var(--ink-2)]">
@@ -1168,7 +1123,7 @@ function EvolveSection() {
               <AuditGateDiagram />
             </div>
             <div>
-              <h3 className="font-pixel text-[17px] leading-snug text-[var(--ink-1)]">
+              <h3 className="font-serif-display text-[19px] font-semibold leading-snug text-[var(--ink-1)]">
                 {t(locale, "감사가 곧 게이트입니다", "The audit is the gate")}
               </h3>
               <p className="mt-3 text-[13.5px] leading-[1.75] text-[var(--ink-2)]">
@@ -1190,7 +1145,7 @@ function EvolveSection() {
 
           <div className="grid items-center gap-8 lg:grid-cols-[0.95fr_1.05fr]">
             <div className="order-2 lg:order-1">
-              <h3 className="font-pixel text-[17px] leading-snug text-[var(--ink-1)]">
+              <h3 className="font-serif-display text-[19px] font-semibold leading-snug text-[var(--ink-1)]">
                 {t(locale, "가설은 공장에서 옵니다", "Hypotheses come from a factory")}
               </h3>
               <p className="mt-3 text-[13.5px] leading-[1.75] text-[var(--ink-2)]">
@@ -1267,13 +1222,12 @@ export default function GeodePortfolioPage() {
     <LocaleProvider>
       <main
         data-astryx-theme="neutral"
-        className={`${galmuri.variable} min-h-screen overflow-x-hidden bg-[var(--paper)] text-[var(--ink)]`}
+        className={`${galmuri.variable} ${serifDisplay.variable} min-h-screen overflow-x-hidden bg-[var(--paper)] text-[var(--ink)]`}
       >
         <GeodeNav items={navItems} />
         <HeroSection />
         <WhySection />
         <SheetSection />
-        <DemoSection />
         <LoopSection />
         <ChapterBand />
         <GrowthSection />

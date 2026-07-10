@@ -195,3 +195,10 @@
     animation: none;
   }
 }
+
+/* editorial serif display (Noto Serif KR via src/fonts/serif.ts) */
+.font-serif-display {
+  font-family: var(--font-serif-display), "Apple SD Gothic Neo", "Noto Serif KR", serif;
+  letter-spacing: -0.01em;
+  word-break: keep-all;
+}

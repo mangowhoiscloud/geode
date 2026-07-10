@@ -65,6 +65,13 @@ identity on exactly two surfaces: the 04-self-improving docs section
 docs.css) and the petri-bundle bridge pages. The vendored Inspect viewer
 cannot be re-skinned, so the section accent preserves continuity into it.
 
+**Generated art assets (PIL, reproducible).** `public/images/geode-etch-line.png`
+(white-line engraving of geode-hero.png: FIND_EDGES + coarse FS-dither hatch,
+edge-feathered, rose-white ink on transparency — the Hermes engraving
+treatment in GEODE rose) and `geode-gallery-blur.jpg` (gaussian-blur gallery
+band behind the floating terminal). Regeneration recipes live in the PR that
+introduced them; keep ink colors inside the §2 palette.
+
 **Color-field bands (operator-approved 2026-07-10).** /portfolio may use the
 signature rose (`--acc-artifact`) as a full-bleed section substrate on exactly
 two surfaces: the hero field and the chapter-break band (Hermes-landing
@@ -85,6 +92,7 @@ gradient; the no-gradient rule below stays intact.
 | `--font-inter` | Inter | 400, 500, 600, 700 | UI chrome, body sans |
 | `--font-display` | Outfit | 600, 700, 800 | Page titles (h1), section labels |
 | `--font-fira-code` | Fira Code | 400, 500 | Code blocks, file paths, version chips |
+| `--font-serif-display` | Noto Serif KR 600/900 (next/font/google, unicode-range 슬라이스) | 600, 900 | Editorial display (operator-approved 2026-07-10, Hermes-landing register): hero statements, section titles, chapter-band declarations. Pairs with pixel wordmark + mono labels. `word-break: keep-all`. |
 | `--font-pixel` | Galmuri11 (OFL, vendored woff2 in `src/fonts/`) | 400, 700 | Character-facing display (operator-approved 2026-07-10): /portfolio h1/h2/era titles/stat numbers, docs-shell wordmark. Matches the GEODI_PIXELS dot mascot. Loads only on pages importing `src/fonts/galmuri.ts`; never for body prose. Always `letter-spacing: 0` (pixel glyphs break under negative tracking). |
 
 **Body is sans (Inter), not serif.** Editorial restraint comes from spacing, line-height, and color discipline — not from a serif body. A dark substrate and serif body together would feel funereal; Inter on near-black reads as a professional dossier.
