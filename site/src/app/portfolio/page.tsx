@@ -578,14 +578,21 @@ function RainBand({
   );
 }
 
-/** A filter is not drawn; it is only named. Hairline + a small label chip. */
+/**
+ * A filter is not drawn; it is only named. Hairlines dissolve toward the
+ * edges, a pixel diamond flanks each side of the whispered label — the rule
+ * reads as a threshold of light, not a drawn sieve.
+ */
 function FilterLine({ label }: { label: string }) {
   return (
-    <div aria-hidden className="relative mx-auto flex w-full max-w-4xl items-center justify-center px-6">
-      <div className="absolute inset-x-6 top-1/2 h-px bg-[color-mix(in_srgb,#FFF0F8_45%,transparent)]" />
-      <span className="relative z-10 bg-[var(--acc-artifact)] px-3">
-        <Token label={label} size="sm" />
+    <div aria-hidden className="relative mx-auto flex w-full max-w-5xl items-center gap-4 px-8">
+      <div className="h-px flex-1 bg-gradient-to-r from-transparent to-[rgba(255,240,248,0.55)]" />
+      <span className="h-[5px] w-[5px] rotate-45 bg-[#FFF0F8] opacity-80" />
+      <span className="font-mono text-[10.5px] uppercase tracking-[0.34em] text-[color-mix(in_srgb,#FFF0F8_88%,transparent)]">
+        {label}
       </span>
+      <span className="h-[5px] w-[5px] rotate-45 bg-[#FFF0F8] opacity-80" />
+      <div className="h-px flex-1 bg-gradient-to-l from-transparent to-[rgba(255,240,248,0.55)]" />
     </div>
   );
 }
@@ -622,31 +629,32 @@ function DistillationAct() {
         </div>
 
         <div className="flex min-h-0 flex-1 flex-col justify-center">
-          <RainBand keep={1} phase={0} height="16vh" dots={6} />
+          <RainBand keep={1} phase={0} height="12vh" dots={5} />
           <FilterLine label="critic" />
-          <RainBand keep={0.55} phase={1} height="13vh" converge={0.42} dots={5} />
+          <RainBand keep={0.55} phase={1} height="9vh" converge={0.42} dots={4} />
           <FilterLine label="petri gate" />
-          <RainBand keep={0.25} phase={2} height="10vh" converge={0.78} dots={4} />
+          <RainBand keep={0.25} phase={2} height="7vh" converge={0.78} dots={3} />
           <FilterLine label="held-out" />
-          <RainBand keep={0.18} phase={1} height="8vh" converge={0.92} dots={3} />
+          <RainBand keep={0.18} phase={1} height="5vh" converge={0.92} dots={3} />
         </div>
 
-        <div className="flex flex-col items-center px-6 pb-8">
-          <div className="relative">
-            <p className="font-pixel whitespace-nowrap text-[clamp(4rem,12vw,10rem)] font-bold leading-none text-[#FFF0F8] opacity-25">
+        <div className="flex flex-col items-center pb-8">
+          {/* the word takes the whole width — the distillate is the wordmark */}
+          <div className="relative w-full text-center">
+            <p className="font-pixel whitespace-nowrap text-[24vw] font-bold leading-[0.82] text-[#FFF0F8] opacity-25">
               GEODE
             </p>
             <motion.p
               aria-hidden
               style={{ clipPath: reduceMotion ? "inset(0 0 0 0)" : fill }}
-              className="font-pixel absolute inset-0 whitespace-nowrap text-[clamp(4rem,12vw,10rem)] font-bold leading-none text-[#FFF0F8]"
+              className="font-pixel absolute inset-0 whitespace-nowrap text-[24vw] font-bold leading-[0.82] text-[#FFF0F8]"
             >
               GEODE
             </motion.p>
           </div>
           <motion.div
             style={{ opacity: reduceMotion ? 1 : ledgerOp }}
-            className="mt-7 w-full max-w-3xl border-t border-[color-mix(in_srgb,#FFF0F8_50%,transparent)] pt-4"
+            className="mt-6 w-full max-w-3xl border-t border-[color-mix(in_srgb,#FFF0F8_50%,transparent)] px-6 pt-4"
           >
             <div className="flex flex-wrap items-baseline justify-center gap-x-7 gap-y-2 font-mono text-[11.5px]">
               <span className="uppercase tracking-[0.24em] text-[color-mix(in_srgb,#FFF0F8_75%,transparent)]">

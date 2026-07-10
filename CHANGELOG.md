@@ -58,9 +58,9 @@ functional change.
   (loop ring, audit gate, seed pipeline, tau2 numbers with the gpt-5.5 /
   openai-codex-subscription route). Two rose color acts carry the narrative:
   the distillation — one composed sticky screen where white token rain
-  converges band-by-band through hairline filters labeled with Astryx `Token`
-  chips (critic / petri gate / held-out) and fills the GEODE word top-down
-  over the honest baseline ledger (three REJECTs, crucible-S5 still PENDING)
+  converges band-by-band through dissolving-gradient hairline thresholds
+  (pixel-diamond flanked mono labels: critic / petri gate / held-out) and
+  fills the full-bleed 24vw GEODE wordmark over the honest baseline ledger (three REJECTs, crucible-S5 still PENDING)
   — and the finale, where the giant pixel wordmark fades into the black-stage
   laboratory reveal (rose field as a specimen slide, petri mark with the
   Geodi silhouette, "cultured since" stamp, CTAs in ink). The Astryx neutral
