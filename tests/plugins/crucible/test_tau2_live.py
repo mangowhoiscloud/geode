@@ -23,7 +23,7 @@ def test_command_evaluator_entrypoint_uses_the_frozen_uv_runtime() -> None:
         repository.joinpath("scripts/eval/crucible_tau2_evaluator.py")
         .read_text(encoding="utf-8")
         .splitlines()[0]
-        == "#!/usr/bin/env -S uv run --frozen python"
+        == "#!/usr/bin/env -S uv run --frozen --no-dev python"
     )
 
 

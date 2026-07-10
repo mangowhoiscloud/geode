@@ -326,9 +326,10 @@ candidate policy surface. `Tau2SealedEvaluator` reuses this exact execution path
 for the sole hidden attempt, passes both the disjoint test contract and its
 frozen train parent into the runner, and maps a missing artifact or non-zero
 runner exit to terminal infrastructure evidence instead of a task score.
-The command entrypoint uses `uv run --frozen`, so direct supervisor execution
-selects the repository's Python requirement and existing lock instead of the
-host's ambient `python3`.
+The command entrypoint uses `uv run --frozen --no-dev`, so direct supervisor
+execution selects the repository's Python requirement and existing lock instead
+of the host's ambient `python3`, without installing development-only tools in
+each disposable measurement checkout.
 
 ### Frozen rules, external calibration
 
