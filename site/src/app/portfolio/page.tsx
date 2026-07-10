@@ -193,57 +193,67 @@ function HeroField() {
 
 /* ---------------- diagrams: rose line-art on white plates ----------------- */
 
-const LOOP_NODES = [
-  { label: "Perceive" },
-  { label: "Plan" },
-  { label: "Act" },
-  { label: "Observe" },
-  { label: "Reflect" },
-  { label: "Verify" },
-  { label: "Replan" },
-];
-
-/** The while(tool_use) cycle — wide orbit ring with dotted concentric orbits. */
+/**
+ * The while(tool_use) cycle as a portrait circuit rail: seven stations on a
+ * rectangular track, clockwise arrows, the no-tool_use exit dropping through
+ * the bottom rail gap to finalize. Drawn for the postcard plate (portrait).
+ */
 function LoopDiagram() {
   const locale = useLocale();
-  const cx = 260;
-  const cy = 185;
-  const rx = 186;
-  const ry = 148;
-  const nodeW = 104;
+  const railL = 52;
+  const railR = 308;
+  const railT = 64;
+  const railB = 372;
+  const midX = (railL + railR) / 2;
+  const nodeW = 100;
   const nodeH = 30;
-  const points = LOOP_NODES.map((node, i) => {
-    const angle = ((-90 + (i * 360) / LOOP_NODES.length) * Math.PI) / 180;
-    return { ...node, x: cx + rx * Math.cos(angle), y: cy + ry * Math.sin(angle) };
-  });
+  const nodes: { label: string; x: number; y: number }[] = [
+    { label: "Perceive", x: midX, y: railT },
+    { label: "Plan", x: railR, y: 168 },
+    { label: "Act", x: railR, y: 272 },
+    { label: "Observe", x: 246, y: railB },
+    { label: "Reflect", x: 114, y: railB },
+    { label: "Verify", x: railL, y: 272 },
+    { label: "Replan", x: railL, y: 168 },
+  ];
+  // clockwise arrowheads on the rail between stations
+  const arrows: { x: number; y: number; deg: number }[] = [
+    { x: (midX + railR) / 2 + 24, y: railT, deg: 0 },
+    { x: railR, y: 220, deg: 90 },
+    { x: railR, y: 330, deg: 90 },
+    { x: midX, y: railB, deg: 180 },
+    { x: railL, y: 330, deg: 270 },
+    { x: railL, y: 220, deg: 270 },
+    { x: (railL + midX) / 2 - 24, y: railT, deg: 0 },
+  ];
   return (
-    <svg viewBox="0 0 520 430" className="h-full w-auto max-w-full" role="img"
+    <svg viewBox="0 0 360 470" className="h-full w-auto max-w-full" role="img"
       aria-label={t(locale, "while tool_use 루프 다이어그램", "while tool_use loop diagram")}>
-      {[0.55, 0.8, 1.12, 1.38].map((k) => (
-        <ellipse key={k} cx={cx} cy={cy} rx={rx * k} ry={ry * k} fill="none"
-          stroke={ROSE} strokeWidth="1" strokeDasharray="1.5 5" opacity="0.5" />
+      {/* depth: dotted echoes of the rail */}
+      {[22, 44].map((inset) => (
+        <rect key={inset} x={railL - inset} y={railT - inset} width={railR - railL + inset * 2}
+          height={railB - railT + inset * 2} fill="none" stroke={ROSE} strokeWidth="1"
+          strokeDasharray="1.5 5" opacity="0.45" shapeRendering="crispEdges" />
       ))}
-      {points.map((node, i) => {
-        const next = points[(i + 1) % points.length];
-        const mx = (node.x + next.x) / 2;
-        const my = (node.y + next.y) / 2;
-        const angleDeg = (Math.atan2(next.y - node.y, next.x - node.x) * 180) / Math.PI;
-        return (
-          <g key={`edge-${node.label}`}>
-            <line x1={node.x} y1={node.y} x2={next.x} y2={next.y} stroke={ROSE} strokeWidth="1.2" />
-            <polygon points="-3.5,-4 4.5,0 -3.5,4" fill={ROSE} transform={`translate(${mx} ${my}) rotate(${angleDeg})`} />
-          </g>
-        );
-      })}
-      <line x1={cx} y1={cy + 36} x2={cx} y2={386} stroke={ROSE} strokeWidth="1.2" strokeDasharray="3 4" />
-      <polygon points="-4,-3.5 0,4.5 4,-3.5" fill={ROSE} transform={`translate(${cx} ${386})`} />
-      <text x={cx + 12} y={cy + ry + 16} textAnchor="start" fontSize="10"
+      {/* the rail */}
+      <rect x={railL} y={railT} width={railR - railL} height={railB - railT} fill="none"
+        stroke={ROSE} strokeWidth="1.2" shapeRendering="crispEdges" />
+      {arrows.map((a, i) => (
+        <polygon key={i} points="-3.5,-4 4.5,0 -3.5,4" fill={ROSE}
+          transform={`translate(${a.x} ${a.y}) rotate(${a.deg})`} />
+      ))}
+      {/* center clause */}
+      <text x={midX} y={206} textAnchor="middle" fontSize="20" className="font-pixel" fill={ROSE}>while</text>
+      <text x={midX} y={230} textAnchor="middle" fontSize="20" className="font-pixel" fill={ROSE}>(tool_use)</text>
+      {/* exit through the bottom rail gap */}
+      <line x1={midX} y1={252} x2={midX} y2={424} stroke={ROSE} strokeWidth="1.2" strokeDasharray="3 4" />
+      <polygon points="-4,-3.5 0,4.5 4,-3.5" fill={ROSE} transform={`translate(${midX} ${424})`} />
+      <text x={midX + 10} y={404} textAnchor="start" fontSize="9.5"
         fontFamily="var(--font-fira-code), monospace" fill={ROSE_75}>no tool_use</text>
-      <rect x={cx - 48} y={390} width={96} height={26} fill={PAPER} stroke={ROSE} shapeRendering="crispEdges" />
-      <text x={cx} y={407} textAnchor="middle" fontSize="12" fontFamily="var(--font-fira-code), monospace" fill={ROSE}>finalize</text>
-      <text x={cx} y={cy - 8} textAnchor="middle" fontSize="19" className="font-pixel" fill={ROSE}>while</text>
-      <text x={cx} y={cy + 15} textAnchor="middle" fontSize="19" className="font-pixel" fill={ROSE}>(tool_use)</text>
-      {points.map((node) => (
+      <rect x={midX - 48} y={428} width={96} height={28} fill={PAPER} stroke={ROSE} shapeRendering="crispEdges" />
+      <text x={midX} y={446} textAnchor="middle" fontSize="12" fontFamily="var(--font-fira-code), monospace" fill={ROSE}>finalize</text>
+      {/* stations */}
+      {nodes.map((node) => (
         <g key={node.label}>
           <rect x={node.x - nodeW / 2} y={node.y - nodeH / 2} width={nodeW} height={nodeH}
             fill={PAPER} stroke={ROSE} shapeRendering="crispEdges" />
