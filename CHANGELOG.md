@@ -45,6 +45,20 @@ functional change.
 
 ---
 
+## [0.99.292] - 2026-07-10
+
+### Changed
+
+- **Docs surface aligned with the portfolio register (operator-directed).**
+  Docs page titles and prose h2 headings now carry the Noto Serif KR
+  editorial display (`--font-serif-display`, mounted via `docs-shell.tsx`)
+  over the existing dark substrate, matching the portfolio's serif register
+  while reference density stays sans. README.md drops every em-dash
+  (headings to colons, definition bullets to colons, prose clauses to
+  commas) per the dash-slop rule.
+
+---
+
 ## [0.99.291] - 2026-07-10
 
 ### Changed

@@ -10,9 +10,9 @@
 }
 
 .docs-prose h2 {
-  font-family: var(--font-display);
-  font-size: 1.6rem;
-  font-weight: 700;
+  font-family: var(--font-serif-display), "Apple SD Gothic Neo", "Noto Serif KR", serif;
+  font-size: 1.55rem;
+  font-weight: 600;
   margin-top: 3rem;
   margin-bottom: 1rem;
   color: var(--ink);
@@ -186,4 +186,13 @@
 }
 [data-doc-section="04-self-improving"] .docs-card:hover {
   border-color: color-mix(in srgb, var(--acc-si) 45%, transparent);
+}
+
+
+/* Editorial serif register shared with /portfolio (operator 결맞춤 2026-07-10):
+   page titles carry Noto Serif KR; prose h3+ stays sans for reference density. */
+.font-serif-docs {
+  font-family: var(--font-serif-display), "Apple SD Gothic Neo", "Noto Serif KR", serif;
+  letter-spacing: -0.01em;
+  word-break: keep-all;
 }
