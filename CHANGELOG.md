@@ -92,6 +92,16 @@ functional change.
   character surfaces, mono = labels. The YouTube demo section is removed per
   operator; frontend stack is confirmed as Next.js 16 + React 19 + Tailwind 4
   + Astryx + Galmuri11 + Noto Serif KR.
+- **Representative character image + motion pass (dot art x Lanthimos).**
+  `geode-lab-scene.png` is generated procedurally (PIL): Geodi centered in a
+  one-point-perspective laboratory hall — The Favourite's checkerboard
+  marble, Poor Things' porthole sky with a gold sun, Sacred Deer symmetry —
+  in a 6-color pixel palette, and mounts as the hero's right panel. The page
+  defaults to English (`LocaleProvider` gains `defaultLocale`; Korean copy
+  retained behind the toggle pending operator review), and framer-motion
+  choreography lands: hero stagger, scene idle float, terminal rise into the
+  gallery band, petri-dish spring, cadence bars growing on view — all gated
+  by `useReducedMotion`. Superseded etch/plate drafts removed.
 - **Perception and action, as implemented (operator PDF review).** The loop
   section now grounds four capabilities in their modules: the two-layer
   prompt (`<static_context>` cached / `<dynamic_context>` per-turn with

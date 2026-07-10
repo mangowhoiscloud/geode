@@ -65,12 +65,19 @@ identity on exactly two surfaces: the 04-self-improving docs section
 docs.css) and the petri-bundle bridge pages. The vendored Inspect viewer
 cannot be re-skinned, so the section accent preserves continuity into it.
 
-**Generated art assets (PIL, reproducible).** `public/images/geode-etch-line.png`
-(white-line engraving of geode-hero.png: FIND_EDGES + coarse FS-dither hatch,
-edge-feathered, rose-white ink on transparency — the Hermes engraving
-treatment in GEODE rose) and `geode-gallery-blur.jpg` (gaussian-blur gallery
-band behind the floating terminal). Regeneration recipes live in the PR that
-introduced them; keep ink colors inside the §2 palette.
+**Generated art assets (PIL, reproducible).** `public/images/geode-lab-scene.png`
+— the representative character image (operator brief 2026-07-10: dot art x
+Lanthimos; Poor Things porthole sky + gold sun, The Favourite checkerboard
+marble in one-point perspective, Sacred Deer symmetric columns, the canonical
+GEODI_PIXELS sprite centered as the specimen; 240x300 pixel canvas, NEAREST
+x5, 6-color palette from §2 + gold) and `geode-gallery-blur.jpg`
+(gaussian-blur gallery band behind the floating terminal), plus
+`geode-etch-line.png` (white-line engraving variant, currently unmounted).
+Regeneration recipes live in the introducing PRs; keep inks inside §2.
+Motion (operator-approved): /portfolio uses framer-motion choreography —
+hero stagger, scene idle float, terminal rise, petri-dish spring, cadence-bar
+growth — all gated by `useReducedMotion`. The docs surface keeps the old
+motion budget.
 
 **Color-field bands (operator-approved 2026-07-10).** /portfolio may use the
 signature rose (`--acc-artifact`) as a full-bleed section substrate on exactly

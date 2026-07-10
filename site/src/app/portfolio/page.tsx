@@ -7,6 +7,7 @@ import "./astryx-geode.css";
 import { MetadataList, MetadataListItem } from "@astryxdesign/core/MetadataList";
 import { ProgressBar } from "@astryxdesign/core/ProgressBar";
 import { Token } from "@astryxdesign/core/Token";
+import { motion, useReducedMotion } from "framer-motion";
 import Image from "next/image";
 import Link from "next/link";
 import { useState } from "react";
@@ -209,6 +210,7 @@ function TerminalMock() {
 
 function HeroSection() {
   const locale = useLocale();
+  const reduceMotion = useReducedMotion();
   return (
     <section id="hero">
       {/* Rose color field, Hermes split composition: editorial serif statement
@@ -219,29 +221,34 @@ function HeroSection() {
         </div>
 
         <div className="relative mx-auto grid max-w-7xl items-center gap-6 px-5 pb-24 pt-10 sm:px-8 lg:grid-cols-[1.05fr_0.95fr] lg:pb-28 lg:pt-14">
-          <div className="relative z-10">
-            <p className="font-mono text-[10.5px] uppercase tracking-[0.3em] text-[color-mix(in_srgb,var(--paper)_62%,transparent)]">
+          <motion.div
+            className="relative z-10"
+            initial={reduceMotion ? false : "hidden"}
+            animate="show"
+            variants={{ hidden: {}, show: { transition: { staggerChildren: 0.1, delayChildren: 0.05 } } }}
+          >
+            <motion.p variants={{ hidden: { opacity: 0, y: 24 }, show: { opacity: 1, y: 0, transition: { duration: 0.65, ease: [0.22, 1, 0.36, 1] } } }} className="font-mono text-[10.5px] uppercase tracking-[0.3em] text-[color-mix(in_srgb,var(--paper)_62%,transparent)]">
               open source · apache-2.0 · {t(locale, "루프 실험실", "the loop laboratory")}
-            </p>
-            <h1 className="font-serif-display mt-7 text-[clamp(2.5rem,5.8vw,4.4rem)] font-black leading-[1.12] text-[var(--paper)]">
-              {t(locale, "일을 맡기면 끝까지.", "Executes to the end.")}
+            </motion.p>
+            <motion.h1 variants={{ hidden: { opacity: 0, y: 24 }, show: { opacity: 1, y: 0, transition: { duration: 0.65, ease: [0.22, 1, 0.36, 1] } } }} className="font-serif-display mt-7 text-[clamp(2.5rem,5.8vw,4.4rem)] font-black leading-[1.12] text-[var(--paper)]">
+              {t(locale, "일을 맡기면", "The agent that")}
               <br />
-              {t(locale, "스스로를 고쳐 쓰는", "The agent that")}
+              {t(locale, "끝까지 실행하고,", "executes to the end,")}
               <br />
-              {t(locale, "에이전트.", "rewrites itself.")}
-            </h1>
+              {t(locale, "스스로를 고쳐 씁니다.", "and rewrites itself.")}
+            </motion.h1>
 
-            <p className="mt-10 font-mono text-[10.5px] uppercase tracking-[0.3em] text-[color-mix(in_srgb,var(--paper)_62%,transparent)]">
+            <motion.p variants={{ hidden: { opacity: 0, y: 24 }, show: { opacity: 1, y: 0, transition: { duration: 0.65, ease: [0.22, 1, 0.36, 1] } } }} className="mt-10 font-mono text-[10.5px] uppercase tracking-[0.3em] text-[color-mix(in_srgb,var(--paper)_62%,transparent)]">
               run via terminal
-            </p>
-            <div className="mt-3 inline-block rounded bg-[var(--paper)] px-5 py-3 text-left font-mono text-[12.5px] text-[var(--ink-2)] sm:text-[13.5px]">
+            </motion.p>
+            <motion.div variants={{ hidden: { opacity: 0, y: 24 }, show: { opacity: 1, y: 0, transition: { duration: 0.65, ease: [0.22, 1, 0.36, 1] } } }} className="mt-3 inline-block rounded bg-[var(--paper)] px-5 py-3 text-left font-mono text-[12.5px] text-[var(--ink-2)] sm:text-[13.5px]">
               <span className="text-[var(--acc-artifact)]">$</span> uv run geode{" "}
               <span className="text-[var(--code-string)]">
                 &quot;{t(locale, "이 레포 점검하고 릴리스 블로커 요약해줘", "inspect this repo and summarize release blockers")}&quot;
               </span>
-            </div>
+            </motion.div>
 
-            <div className="mt-9 flex flex-wrap items-center gap-x-7 gap-y-3">
+            <motion.div variants={{ hidden: { opacity: 0, y: 24 }, show: { opacity: 1, y: 0, transition: { duration: 0.65, ease: [0.22, 1, 0.36, 1] } } }} className="mt-9 flex flex-wrap items-center gap-x-7 gap-y-3">
               <Link
                 href="/docs"
                 className="inline-flex items-center rounded bg-[var(--paper)] px-5 py-2.5 text-[14px] font-medium text-[var(--acc-artifact)] transition-opacity hover:opacity-85"
@@ -255,20 +262,34 @@ function HeroSection() {
               >
                 GitHub
               </Link>
-            </div>
-          </div>
+            </motion.div>
+          </motion.div>
 
-          <div className="relative h-[280px] sm:h-[380px] lg:h-[560px]">
-            <Image
-              src="/geode/images/geode-etch-line.png"
-              alt=""
-              aria-hidden
-              fill
-              priority
-              sizes="(min-width: 1024px) 46vw, 100vw"
-              className="pointer-events-none select-none object-contain lg:scale-[1.22] lg:object-right"
-            />
-          </div>
+          <motion.div
+            className="relative mx-auto w-full max-w-[440px]"
+            initial={reduceMotion ? false : { opacity: 0, y: 30 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.9, delay: 0.3, ease: [0.22, 1, 0.36, 1] }}
+          >
+            <motion.div
+              animate={reduceMotion ? undefined : { y: [0, -7, 0] }}
+              transition={{ duration: 7, repeat: Infinity, ease: "easeInOut" }}
+            >
+              <Image
+                src="/geode/images/geode-lab-scene.png"
+                alt={t(
+                  locale,
+                  "체커보드 대리석 실험실 홀 중앙의 Geodi 도트 아트",
+                  "Pixel-art of Geodi centered in a checkerboard marble laboratory hall"
+                )}
+                width={1200}
+                height={1500}
+                priority
+                className="w-full select-none border border-[color-mix(in_srgb,var(--paper)_35%,transparent)]"
+                style={{ imageRendering: "pixelated" }}
+              />
+            </motion.div>
+          </motion.div>
         </div>
 
         <div className="pointer-events-none absolute inset-x-0 bottom-0 z-10 flex items-end justify-between px-5 pb-4 font-mono text-[10px] uppercase tracking-[0.18em] text-[color-mix(in_srgb,var(--paper)_55%,transparent)] sm:px-8">
@@ -288,9 +309,15 @@ function HeroSection() {
           height={1066}
           className="h-[480px] w-full select-none object-cover sm:h-[560px]"
         />
-        <div className="absolute inset-0 flex items-center justify-center px-4 sm:px-6">
+        <motion.div
+          className="absolute inset-0 flex items-center justify-center px-4 sm:px-6"
+          initial={reduceMotion ? false : { opacity: 0, y: 46 }}
+          whileInView={{ opacity: 1, y: 0 }}
+          viewport={{ once: true, margin: "-60px" }}
+          transition={{ duration: 0.85, ease: [0.22, 1, 0.36, 1] }}
+        >
           <TerminalMock />
-        </div>
+        </motion.div>
       </div>
     </section>
   );
@@ -758,7 +785,7 @@ function CadenceChart() {
         {weeklyCadence.map((bin, i) => {
           const h = max === 0 ? 0 : (bin.count / max) * (chartHeight - 8);
           return (
-            <rect
+            <motion.rect
               key={bin.start}
               className="cadence-bar"
               x={i * barSlot + 1}
@@ -766,9 +793,14 @@ function CadenceChart() {
               width={barSlot - 2}
               height={h}
               shapeRendering="crispEdges"
+              style={{ transformBox: "fill-box", transformOrigin: "bottom" }}
+              initial={{ scaleY: 0 }}
+              whileInView={{ scaleY: 1 }}
+              viewport={{ once: true, margin: "-60px" }}
+              transition={{ duration: 0.5, delay: i * 0.03, ease: [0.22, 1, 0.36, 1] }}
             >
               <title>{`${bin.start} · ${bin.count} releases`}</title>
-            </rect>
+            </motion.rect>
           );
         })}
         {monthTicks.map((tick) => (
@@ -791,6 +823,7 @@ function CadenceChart() {
 /** Portal-style chapter break: ghost type, the specimen dish, corner stamps. */
 function ChapterBand() {
   const locale = useLocale();
+  const reduceMotion = useReducedMotion();
   return (
     <div className="relative overflow-hidden bg-[var(--acc-artifact)]">
       <div aria-hidden className="pointer-events-none absolute inset-0 flex items-center justify-center">
@@ -806,9 +839,15 @@ function ChapterBand() {
           {t(locale, "루프 실험실", "The Loop Laboratory")}
         </h2>
         {/* the specimen dish — Petri, literally */}
-        <div className="flex h-44 w-44 items-center justify-center rounded-full border-2 border-[var(--paper)] sm:h-52 sm:w-52">
+        <motion.div
+          className="flex h-44 w-44 items-center justify-center rounded-full border-2 border-[var(--paper)] sm:h-52 sm:w-52"
+          initial={reduceMotion ? false : { scale: 0.82, opacity: 0 }}
+          whileInView={{ scale: 1, opacity: 1 }}
+          viewport={{ once: true, margin: "-80px" }}
+          transition={{ type: "spring", stiffness: 120, damping: 16 }}
+        >
           <GeodiSprite scale={5} silhouette="var(--paper)" />
-        </div>
+        </motion.div>
         <p className="font-serif-display max-w-xl text-[clamp(1.05rem,2.4vw,1.4rem)] font-semibold leading-[1.6] text-[var(--paper)]">
           {t(
             locale,
@@ -1219,7 +1258,7 @@ function EvolveSection() {
 
 export default function GeodePortfolioPage() {
   return (
-    <LocaleProvider>
+    <LocaleProvider defaultLocale="en">
       <main
         data-astryx-theme="neutral"
         className={`${galmuri.variable} ${serifDisplay.variable} min-h-screen overflow-x-hidden bg-[var(--paper)] text-[var(--ink)]`}
