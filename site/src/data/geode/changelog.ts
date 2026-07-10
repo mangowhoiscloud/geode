@@ -17,6 +17,11 @@ export type ChangelogEntry = {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    "version": "0.99.296",
+    "date": "2026-07-11",
+    "body": "### Changed\n\n- **Portfolio legibility pass: deep-rose ink grade (operator-directed).**\n  The signature rose `#F49BC4` read at ~1.8:1 as ink on the white postcards,\n  washing out every diagram; plates now write with a darkened same-hue ink\n  `#C2447F` (~4.5:1) across line-art strokes, titles, captions, chips, the\n  Geodi stamp, and the winning memory band, while the signature stays the\n  field and fill color. Plate textures drop behind an 80% paper scrim and\n  white copy on the rose field rises to 90% alpha."
+  },
+  {
     "version": "0.99.295",
     "date": "2026-07-10",
     "body": "### Fixed\n\n- **Docs trailing-slash URLs no longer 404.** The static export flips to\n  directory-style HTML (`trailingSlash: true`, `docs/<slug>/index.html`), so\n  GitHub Pages serves both `/geode/docs` and `/geode/docs/` (the slash form\n  previously hit the 404 page for every docs deep link). `export-docs-md.mjs`\n  and the lychee link-check paths follow the new layout.\n\n### Changed\n\n- **Self-improving hub sheds two UX-slop patterns (operator-directed).**\n  Transcript dialogue turns render open by default instead of demanding a\n  click per `<details>` toggle (sub-agent and hook-event payloads stay\n  collapsed), and the sidebar stops dumping flat ID walls: seed-generation\n  runs group under their campaign gen-tag with target-dim leaves, and audit\n  entries carry a MM-DD HH:MM timeline stamp."

@@ -91,7 +91,12 @@ hairline thresholds, fills the full-bleed pixel wordmark, and further scroll
 fades in the reveal — a white stage enters and the rose field becomes a
 specimen slide. LazyWeb formula (sharp corners, technical line-art, terminal
 hero) carried in the two-color register; hierarchy from white alpha, never a
-third hue. The one sanctioned exception is the terminal mock, which keeps its dark
+third hue. **Deep-rose ink `#C2447F` (2026-07-11 legibility pass)**: the
+signature `#F49BC4` fails as ink on the white plates (~1.8:1), so anything
+written on white (line-art strokes, plate titles/captions, command-chip
+text, the winning memory band) uses the darkened same-hue ink (~4.5:1);
+the signature stays the field/fill color. Plate textures sit behind an 80%
+paper scrim. The one sanctioned exception is the terminal mock, which keeps its dark
 product-screenshot colors (`--paper-deep` + ink tokens) because it is a
 product artifact, not page chrome. Scroll is choreography, not paging:
 curtain-stack sections over a pinned hero, `StageLight` scroll-linked
