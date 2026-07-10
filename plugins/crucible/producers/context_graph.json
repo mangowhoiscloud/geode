@@ -27,7 +27,7 @@
       "name": "AgenticLoop",
       "summary": "Runs model and tool rounds until the model emits a terminal action or the frozen time budget expires.",
       "tags": ["runtime", "while-tool-use"],
-      "contentSha256": "47877f4fa01b9704b5704a05c82db9915ff3d25765f833f3d9a0c1ad159c8d56"
+      "contentSha256": "054afe1a7e65064ec212330ee3b484e1aed0bf92776ca6038ac2fd7b1b521ca7"
     },
     {
       "id": "file:core/agent/tool_executor/processor.py",

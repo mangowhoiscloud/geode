@@ -715,6 +715,19 @@ input cannot ground a reproducible optimizer. The live producer now reads only
 its source-attested graph slice from the candidate parent revision; ambient
 graph paths no longer enter the campaign environment.
 
+Campaign r3 kept the same four-family pack, restored tau2's `max_steps=100`,
+removed the per-simulation timeout, and generated a three-line general policy
+candidate (`1a9e95a37e`). Its first baseline workflow advanced for roughly 46
+minutes before the evaluator-owned user stream raised `httpx.ReadTimeout`.
+Tau2 correctly recorded `infrastructure_error`; there was no paired evidence
+or verdict. Because the row had already made the attempt inadmissible, the
+operator stopped the remaining simulations. The incident exposed two
+orchestration gaps: strict evaluator fail-fast bypassed AgenticLoop's ordinary
+call retry, and four independent tasks were scheduled serially. Fail-fast now
+retries exactly one connection-class failure on the same adapter with the
+identical request before surfacing infrastructure. This retry happens before a
+model response reaches tool execution, so it cannot repeat a side effect.
+
 The strongest honest claims are:
 
 - the frozen external tau2 baseline identified concrete retail wrong-write and

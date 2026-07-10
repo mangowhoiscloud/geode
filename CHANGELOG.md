@@ -72,7 +72,10 @@ functional change.
   environments use the frozen non-dev dependency set. The producer's bounded
   knowledge subgraph now ships with the producer, verifies every referenced
   source file by content hash, and replaces the stale mutable graph path that
-  previously entered through ambient environment. Explicitly
+  previously entered through ambient environment. Strict evaluator calls now
+  retry one connection-class stream failure on the same adapter and identical
+  request before surfacing infrastructure; schema, billing, and persistent
+  transport failures still fail closed. Explicitly
   granted registry tools now replace a same-named global declarative schema, so
   an assay handler cannot receive arguments from GEODE's unrelated tool with
   the same name.

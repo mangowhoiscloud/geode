@@ -16,6 +16,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import os
+from collections.abc import Awaitable, Callable
 from typing import TYPE_CHECKING, Any
 
 from core.agent.conversation import ConversationContext
@@ -66,6 +67,51 @@ if TYPE_CHECKING:
     from core.tools.registry import ToolRegistry
 
 log = logging.getLogger(__name__)
+
+_FAIL_FAST_VALUES = frozenset({"1", "true", "yes", "on"})
+_FAIL_FAST_CONNECTION_RETRY_DELAY_S = 1.0
+
+
+def _fail_fast_adapter_errors_enabled() -> bool:
+    return (
+        os.environ.get("GEODE_LLM_FAIL_FAST_ON_ADAPTER_ERROR", "").strip().lower()
+        in _FAIL_FAST_VALUES
+    )
+
+
+async def _acomplete_with_fail_fast_connection_retry(
+    adapter: Any,
+    request: Any,
+    *,
+    on_retry: Callable[[Exception], Awaitable[None]] | None = None,
+) -> Any:
+    """Retry one transport failure without reopening completed tool work.
+
+    Normal AgenticLoop calls already retry after ``_call_llm`` returns
+    ``None``. Strict evaluator routes instead raise adapter errors immediately
+    so infrastructure cannot become semantic output. Preserve that boundary,
+    but give a connection-class stream failure one same-adapter retry of the
+    identical request before raising. No model response has reached the tool
+    executor at this point, so the retry cannot repeat a side effect.
+    """
+
+    try:
+        return await adapter.acomplete(request)
+    except Exception as exc:
+        if not _fail_fast_adapter_errors_enabled():
+            raise
+        from core.llm.adapters.dispatch import _is_connection_transient
+
+        if not _is_connection_transient(exc):
+            raise
+        log.warning(
+            "AgenticLoop: fail-fast transport error (%s); retrying the same adapter once",
+            type(exc).__name__,
+        )
+        if on_retry is not None:
+            await on_retry(exc)
+        await asyncio.sleep(_FAIL_FAST_CONNECTION_RETRY_DELAY_S)
+        return await adapter.acomplete(request)
 
 
 def _saved_cwd_matches_current(stored_cwd: str, current_cwd: str) -> bool:
@@ -2217,21 +2263,39 @@ class AgenticLoop:
             except Exception:
                 log.debug("LLM_CALL_STARTED hook trigger failed", exc_info=True)
 
+        async def _on_fail_fast_connection_retry(exc: Exception) -> None:
+            if self._hooks:
+                try:
+                    await self._hooks.trigger_async(
+                        HookEvent.LLM_CALL_RETRIED,
+                        {
+                            "model": effective_model,
+                            "provider": self._provider,
+                            "adapter": adapter_name,
+                            "error_type": type(exc).__name__,
+                            "delay_s": _FAIL_FAST_CONNECTION_RETRY_DELAY_S,
+                            "attempt": 1,
+                            "max_attempts": 2,
+                        },
+                    )
+                except Exception:
+                    log.debug("LLM_CALL_RETRIED hook trigger failed", exc_info=True)
+
         try:
-            result = await self._new_adapter.acomplete(req)
+            result = await _acomplete_with_fail_fast_connection_retry(
+                self._new_adapter,
+                req,
+                on_retry=_on_fail_fast_connection_retry,
+            )
         except Exception as exc:
-            self._last_llm_error = str(exc)
+            error_detail = str(exc) or type(exc).__name__
+            self._last_llm_error = error_detail
             log.warning(
                 "AgenticLoop: adapter.acomplete failed (adapter=%s): %s",
                 adapter_name,
-                exc,
+                error_detail,
             )
-            if os.environ.get("GEODE_LLM_FAIL_FAST_ON_ADAPTER_ERROR", "").strip().lower() in {
-                "1",
-                "true",
-                "yes",
-                "on",
-            }:
+            if _fail_fast_adapter_errors_enabled():
                 raise
             response = None
             if self._hooks:
@@ -2244,7 +2308,7 @@ class AgenticLoop:
                             "provider": self._provider,
                             "adapter": adapter_name,
                             "latency_ms": (_llm_call_time.monotonic() - _llm_t0) * 1000,
-                            "error": str(exc),
+                            "error": error_detail,
                         },
                     )
                 except Exception:
