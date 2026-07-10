@@ -8,6 +8,7 @@ import { useLocale, useSetLocale, t } from "@/components/geode/locale-context";
 import { DOCS_SITEMAP, adjacentPages, findPage, QUADRANT_META, type DocQuadrant } from "@/lib/geode-docs/sitemap";
 import { GEODE_SOT } from "@/data/geode/sot";
 import { galmuri } from "@/fonts/galmuri";
+import { serifDisplay } from "@/fonts/serif";
 
 const DOCS_BASE = "/docs";
 
@@ -236,7 +237,7 @@ export function DocsShell({
           <Sidebar />
         </aside>
 
-        <main className="flex-1 min-w-0 max-w-3xl">
+        <main className={`${serifDisplay.variable} flex-1 min-w-0 max-w-3xl`}>
           <div className="mb-10">
             {currentSection && (
               <div
@@ -251,7 +252,7 @@ export function DocsShell({
                 <QuadrantChip quadrant={quadrant} />
               </div>
             )}
-            <h1 className="text-3xl md:text-4xl font-display font-bold tracking-tight">
+            <h1 className="font-serif-docs text-3xl font-black md:text-4xl">
               {displayTitle}
             </h1>
             {displaySummary && (
