@@ -569,6 +569,10 @@ module = [
     # tau2-bench harness lives under artifacts/eval/harnesses and is opt-in.
     # CI default sync does not install tau2 or its untyped in-tree modules.
     "tau2.*",
+    # MCPMark harness modules resolve via MCPMARK_ROOT sys.path insertion in
+    # plugins/benchmark_harness/run_mcpmark.py; opt-in checkout, absent in CI.
+    "src.agents",
+    "pipeline",
     # PR-BROWSER-CDP-BRIDGE — websockets ships no py.typed; used only by the
     # CDP client in core/tools/browser_tools.py (already an installed dep).
     "websockets.*",

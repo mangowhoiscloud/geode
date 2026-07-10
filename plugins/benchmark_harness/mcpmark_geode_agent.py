@@ -33,12 +33,17 @@ def _normalize_tool_arguments(schema: dict[str, Any], kwargs: dict[str, Any]) ->
         kwargs["path"] = kwargs.pop("file_path")
     if "start_cursor" in properties and "start_cursor" in kwargs:
         cursor = kwargs["start_cursor"]
-        if cursor is None or cursor == 0 or str(cursor).strip().lower() in {
-            "",
-            "none",
-            "null",
-            "undefined",
-        }:
+        if (
+            cursor is None
+            or cursor == 0
+            or str(cursor).strip().lower()
+            in {
+                "",
+                "none",
+                "null",
+                "undefined",
+            }
+        ):
             kwargs.pop("start_cursor", None)
     return kwargs
 
