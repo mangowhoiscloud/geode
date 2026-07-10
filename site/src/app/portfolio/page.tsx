@@ -379,7 +379,7 @@ const runModes = [
   },
 ];
 
-/** The three entrances — normal flow, Hermes-style staggered reveal. */
+/** The three entrances — white plates in the postcard language. */
 function RunRow() {
   const locale = useLocale();
   const reduceMotion = useReducedMotion();
@@ -396,10 +396,7 @@ function RunRow() {
         >
           {t(locale, "세 가지 입구", "three ways in")}
         </motion.p>
-        <div
-          className="mt-10 grid gap-px overflow-hidden border md:grid-cols-3"
-          style={{ borderColor: PAPER_55, background: PAPER_55 }}
-        >
+        <div className="mt-10 grid gap-8 md:grid-cols-3">
           {runModes.map((mode, i) => (
             <motion.div
               key={mode.cmd}
@@ -407,16 +404,18 @@ function RunRow() {
               whileInView={{ opacity: 1, y: 0 }}
               viewport={{ once: true, margin: "-80px" }}
               transition={{ duration: 0.65, delay: i * 0.12, ease: [0.22, 1, 0.36, 1] }}
-              className="bg-[var(--acc-artifact)] px-7 py-9 text-center"
+              className="bg-[#FFF0F8] px-7 py-10 text-center"
             >
-              <p className="font-mono text-[10.5px] uppercase tracking-[0.28em]" style={{ color: PAPER_75 }}>{mode.eyebrow}</p>
-              <h2 className="font-serif-display mt-3 text-[28px] font-semibold text-[#FFF0F8]">
+              <p className="font-mono text-[10.5px] uppercase tracking-[0.28em]" style={{ color: ROSE_INK_70 }}>
+                {mode.eyebrow}
+              </p>
+              <h2 className="font-serif-display mt-3 text-[28px] font-semibold" style={{ color: ROSE_INK }}>
                 {locale === "en" ? mode.titleEn : mode.titleKo}
               </h2>
-              <p className="mx-auto mt-4 inline-block rounded bg-[#FFF0F8] px-4 py-2 font-mono text-[13px] font-medium text-[#C2447F]">
+              <p className="mx-auto mt-4 inline-block rounded bg-[#C2447F] px-4 py-2 font-mono text-[13px] font-medium text-[#FFF0F8]">
                 {mode.cmd}
               </p>
-              <p className="mx-auto mt-4 max-w-[260px] text-[13px] leading-[1.7]" style={{ color: PAPER_75 }}>
+              <p className="mx-auto mt-4 max-w-[280px] text-[13px] leading-[1.7]" style={{ color: ROSE_INK_70 }}>
                 {t(locale, mode.ko, mode.en)}
               </p>
             </motion.div>

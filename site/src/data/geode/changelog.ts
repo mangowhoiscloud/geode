@@ -17,6 +17,11 @@ export type ChangelogEntry = {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    "version": "0.99.298",
+    "date": "2026-07-11",
+    "body": "### Changed\n\n- **\"Three ways in\" joins the postcard language (operator-directed\n  legibility pass).** The rose-field hairline grid with white copy (~1.8:1)\n  is replaced by three white plates written in the deep-rose ink: serif\n  titles and captions in `#C2447F`, command chips flipped to deep-rose\n  fill with white text."
+  },
+  {
     "version": "0.99.297",
     "date": "2026-07-11",
     "body": "### Changed\n\n- **Portfolio defaults to Korean (operator-directed).** The page opens in\n  the KO register (`defaultLocale=\"ko\"`, matching the site-wide\n  `<html lang=\"ko\">`); the full KO copy deck was already wired through\n  `t(locale, ko, en)` pairs, and English stays one toggle away."
