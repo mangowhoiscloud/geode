@@ -1326,3 +1326,23 @@ pre.msg.cand-body {
   font-size: .82em;
   margin-left: .4rem;
 }
+
+/* sidebar grouping (2026-07-10 UX pass): campaign labels + indented leaves,
+   timeline stamps on audit entries — grouped nav instead of flat ID walls. */
+.sidebar .side-group-label {
+  margin-top: .55rem;
+  padding: 0 0 .15rem;
+  font-size: .68rem;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+  color: var(--ink-faint, #6b7280);
+  list-style: none;
+}
+.sidebar .side-group-leaf {
+  padding-left: .7rem;
+}
+.sidebar .side-stamp {
+  color: var(--ink-faint, #6b7280);
+  font-size: .78em;
+  margin-left: .3rem;
+}
