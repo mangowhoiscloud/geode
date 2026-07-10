@@ -28,6 +28,7 @@ Coverage map:
 
 from __future__ import annotations
 
+import asyncio
 import sqlite3
 from pathlib import Path
 from types import SimpleNamespace
@@ -43,7 +44,8 @@ from core.observability import agent_runtime_state as ars
 @pytest.fixture()
 def tmp_db(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     db = tmp_path / "sessions.db"
-    SessionManager(db_path=db)
+    manager = SessionManager(db_path=db)
+    manager.close()
     monkeypatch.setattr("core.memory.session_manager._get_default_db_path", lambda: db)
     ars._reset_for_tests(db_path=db)
     yield db
@@ -147,7 +149,7 @@ class TestSubagentCompletedPayloadEnrichment:
             success=True,
             output={"summary": "done"},
         )
-        sub._emit_hook(HookEvent.SUBAGENT_COMPLETED, task, sub_result=result)
+        asyncio.run(sub._emit_hook(HookEvent.SUBAGENT_COMPLETED, task, sub_result=result))
 
         assert len(captured) == 1
         assert captured[0]["component"] == "agentic_loop"
@@ -171,7 +173,14 @@ class TestSubagentCompletedPayloadEnrichment:
         sub = SubAgentManager(IsolatedRunner(), hooks=hooks)
         task = SubTask(task_id="t-fail", task_type="analyze", description="hi")
         result = SubResult(task_id="t-fail", description="hi", success=False, output={})
-        sub._emit_hook(HookEvent.SUBAGENT_FAILED, task, sub_result=result, error="boom")
+        asyncio.run(
+            sub._emit_hook(
+                HookEvent.SUBAGENT_FAILED,
+                task,
+                sub_result=result,
+                error="boom",
+            )
+        )
 
         assert len(captured) == 1
         assert captured[0]["status"] == "failed"
@@ -197,7 +206,7 @@ class TestSubagentCompletedPayloadEnrichment:
 
         sub = SubAgentManager(IsolatedRunner(), hooks=hooks)
         task = SubTask(task_id="t-start", task_type="analyze", description="hi")
-        sub._emit_hook(HookEvent.SUBAGENT_STARTED, task)
+        asyncio.run(sub._emit_hook(HookEvent.SUBAGENT_STARTED, task))
 
         assert len(captured) == 1
         assert "status" not in captured[0]

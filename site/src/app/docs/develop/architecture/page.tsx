@@ -46,7 +46,7 @@ Runtime         core/tools/           도구 레지스트리 + deferred loading 
                 core/skills/          스킬 레지스트리
                 core/llm/prompts/     프롬프트 템플릿 + 해시 핀
                 core/audit/           감사 결과 추출 (dim_extractor)
-                core/observability/   run log, session metrics, OTLP
+                core/observability/   SQLite events, transcripts, session metrics, OTLP
                 core/config/          Settings + 레이어 해석 (explain)
                 core/auth/            OAuth, 프로필, 쿨다운
 Model           core/llm/             라우터 + 어댑터 레지스트리
@@ -171,7 +171,7 @@ Runtime         core/tools/           tool registry + deferred loading + PolicyC
                 core/skills/          skill registry
                 core/llm/prompts/     prompt templates + hash pins
                 core/audit/           audit-result extraction (dim_extractor)
-                core/observability/   run log, session metrics, OTLP
+                core/observability/   SQLite events, transcripts, session metrics, OTLP
                 core/config/          Settings + layer resolution (explain)
                 core/auth/            OAuth, profiles, cooldown
 Model           core/llm/             router + adapter registry

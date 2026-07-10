@@ -234,11 +234,9 @@ async def _default_geode_runner(
     )
     # Booster E (2026-05-12) — diag() emission so the inspect_ai subprocess'
     # logs are also captured to ``~/.geode/diagnostics/<YYYY-MM>.log`` for
-    # cross-session post-mortem. Booster C — the runner's RunLog binding
-    # is documented here even though no RunLog session_key is wired yet;
-    # the timestamp + pid in each diag line lets us pair entry / exit
-    # with the inspect archive's timestamp. Live RunLog cross-link is a
-    # follow-up PR.
+    # cross-session post-mortem. The timestamp + pid in each line pairs
+    # entry / exit with the inspect archive without duplicating the vendored
+    # inspect trace into GEODE's operational hook-event database.
     diag(
         "petri.runner.entry",
         f"msg_count={len(messages)} last_user_chars={len(last_user)} "

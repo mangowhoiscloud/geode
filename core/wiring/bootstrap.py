@@ -19,7 +19,7 @@ if TYPE_CHECKING:
     from core.memory.port import SessionStorePort
     from core.memory.project import ProjectMemory
     from core.memory.user_profile import FileBasedUserProfile
-    from core.observability.run_log import RunLog
+    from core.observability.event_store import HookEventStore
     from core.orchestration.hot_reload import ConfigWatcher
     from core.orchestration.task_system import TaskGraph
 
@@ -28,57 +28,18 @@ from core.hooks import HookEvent, HookSystem
 log = logging.getLogger(__name__)
 
 
-# Module-level PEP 562 alias for legacy ``patch("core.wiring.bootstrap.X")``
-# sites (test_hooks / test_auto_learn / test_profile_wiring).  The classes
-# themselves live in their own modules and are imported lazily inside the
-# build_* functions; resolving them only on attribute access means cold-start
-# never pays for the orchestration / memory / hot-reload trees.
-def __getattr__(name: str) -> Any:
-    if name == "RunLog":
-        from core.observability.run_log import RunLog as _RunLog
-
-        return _RunLog
-    if name == "RunLogEntry":
-        from core.observability.run_log import RunLogEntry as _RunLogEntry
-
-        return _RunLogEntry
-    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
-
-
 # ---------------------------------------------------------------------------
 # Default configuration (re-exported from runtime.py constants)
 # ---------------------------------------------------------------------------
-from core.paths import GLOBAL_RUNS_DIR  # noqa: E402 — module sits below TYPE_CHECKING block
-
-DEFAULT_LOG_DIR: Path = GLOBAL_RUNS_DIR
 CONFIG_WATCHER_DEBOUNCE_MS = 300.0  # Avoid thrashing on rapid file changes
 
-# ---------------------------------------------------------------------------
-# RunLog hook handler — bridges HookSystem events -> JSONL log
-# ---------------------------------------------------------------------------
 
+def _build_hook_event_store(log_dir: Path | str | None) -> HookEventStore:
+    """Build the canonical event store, preserving explicit test isolation."""
+    from core.observability.event_store import HookEventStore
 
-def _make_run_log_handler(
-    run_log: RunLog,
-    session_key: str,
-    run_id: str,
-) -> tuple[str, Any]:
-    """Create a hook handler that writes events to RunLog."""
-    from core.observability.run_log import RunLogEntry
-
-    def _log_event(event: HookEvent, data: dict[str, Any]) -> None:
-        entry = RunLogEntry(
-            session_key=session_key,
-            event=event.value,
-            node=data.get("node", ""),
-            status="error" if "error" in data else "ok",
-            duration_ms=data.get("duration_ms", 0.0),
-            metadata={k: v for k, v in data.items() if k not in ("node", "duration_ms", "error")},
-            run_id=run_id,
-        )
-        run_log.append(entry)
-
-    return "run_log_writer", _log_event
+    db_path = Path(log_dir) / "events.db" if log_dir is not None else None
+    return HookEventStore(db_path=db_path)
 
 
 # ---------------------------------------------------------------------------
@@ -167,15 +128,12 @@ def build_worker_hooks(
 
     Trajectory audit 2026-07-03 — ``core.agent.worker._run_agentic`` built
     its AgenticLoop with ``hooks=None``, so every subprocess sub-agent ran
-    with ZERO hook consumers: no Episode rows (TOOL_EXEC_ENDED never
-    observed) and no run-log rows. The parent's episodic / run-log
-    trajectory simply lost everything the child did with its tools.
+    with ZERO hook consumers: no Episode rows and no operational events.
 
     Deliberately NOT :func:`build_hooks` — the worker is a short-lived
     subprocess and only needs the two trajectory rails:
 
-    * run-log wildcard writer (``"*"`` prefix, priority 50) — same shape
-      as the full bootstrap's registration;
+    * bounded SQLite event sink — same canonical envelope as full bootstrap;
     * episodic TOOL_EXEC_ENDED recorder (priority 70) — shared factory
       :func:`make_episodic_recorder_handler`.
 
@@ -183,12 +141,18 @@ def build_worker_hooks(
     discovery, agent_runtime_state SQLite writers) would re-run per spawn
     and double-write session-scoped stores the parent already owns.
     """
-    from core.observability.run_log import RunLog
+    from core.observability.hook_persistence import HookPersistenceSink
 
     hooks: HookSystem = HookSystem()
-    run_log = RunLog(session_key, log_dir=log_dir)
-    handler_name, handler_fn = _make_run_log_handler(run_log, session_key, run_id)
-    hooks.register_prefix("*", handler_fn, name=handler_name, priority=50)
+    event_store = _build_hook_event_store(log_dir)
+    hooks.register_sink(
+        HookPersistenceSink(
+            event_store,
+            session_key=session_key,
+            run_id=run_id,
+        ),
+        name="hook_persistence",
+    )
     episodic_name, episodic_fn = make_episodic_recorder_handler()
     hooks.register(
         HookEvent.TOOL_EXEC_ENDED,
@@ -246,21 +210,21 @@ def build_hooks(
     session_key: str,
     run_id: str,
     log_dir: Path | str | None,
-) -> tuple[HookSystem, RunLog, Any]:
-    """Build HookSystem with RunLog and LatencyMetrics."""
-    from core.observability.run_log import RunLog
+) -> tuple[HookSystem, HookEventStore, Any]:
+    """Build HookSystem with bounded SQLite persistence and metrics."""
+    from core.observability.hook_persistence import HookPersistenceSink
 
     hooks: HookSystem = HookSystem()
 
-    # Run log + hook handler
-    run_log = RunLog(session_key, log_dir=log_dir)
-    handler_name, handler_fn = _make_run_log_handler(run_log, session_key, run_id)
-    # PR-COMM-2 (2026-05-24) — replace the pre-fix 74-entry registration
-    # loop with a single ``"*"`` wildcard subscription. Adding a new
-    # HookEvent value now extends run_log coverage automatically instead
-    # of requiring a bootstrap edit (which was previously silent — the
-    # missing event simply never reached the run log).
-    hooks.register_prefix("*", handler_fn, name=handler_name, priority=50)
+    event_store = _build_hook_event_store(log_dir)
+    hooks.register_sink(
+        HookPersistenceSink(
+            event_store,
+            session_key=session_key,
+            run_id=run_id,
+        ),
+        name="hook_persistence",
+    )
 
     # PR-COMM-3b (2026-05-24) — wire the SQLite ``agent_runtime_state``
     # writers landed by PR-COMM-3 into the now-augmented SESSION_ENDED
@@ -387,6 +351,7 @@ def build_hooks(
             name="cognitive_state_store_recorder",
             priority=65,
         )
+        hooks.add_cleanup("cognitive_state_store", store.close)
 
     _register_plugin("cognitive_state_store", _reg_cognitive_state_store)
 
@@ -544,31 +509,12 @@ def build_hooks(
 
     # C5: LLM call lifecycle hooks (LLM_CALL_START/END -> slow call logging + journal cost)
     def _reg_llm_lifecycle() -> None:
-        from core.llm.router import set_router_hooks
-
-        # Session-level LLM call statistics accumulator
-        _llm_stats: dict[str, Any] = {
-            "total_calls": 0,
-            "total_errors": 0,
-            "total_latency_ms": 0.0,
-            "by_model": {},  # model -> {"calls": int, "total_latency_ms": float}
-        }
+        from core.llm.router import clear_router_hooks, set_router_hooks
 
         def _on_llm_end(event: HookEvent, data: dict[str, Any]) -> None:
             latency = data.get("latency_ms", 0.0)
             model = data.get("model", "?")
             error = data.get("error")
-
-            # Accumulate session stats
-            _llm_stats["total_calls"] += 1
-            _llm_stats["total_latency_ms"] += latency
-            if error:
-                _llm_stats["total_errors"] += 1
-            model_stats = _llm_stats["by_model"].setdefault(
-                model, {"calls": 0, "total_latency_ms": 0.0}
-            )
-            model_stats["calls"] += 1
-            model_stats["total_latency_ms"] += latency
 
             # Slow call / error logging
             if error:
@@ -594,6 +540,7 @@ def build_hooks(
 
         # Wire hooks into the LLM router module
         set_router_hooks(hooks)
+        hooks.add_owner_cleanup("llm_router_hooks", clear_router_hooks)
 
     _register_plugin("llm_lifecycle_hook", _reg_llm_lifecycle)
 
@@ -603,32 +550,18 @@ def build_hooks(
     # call :func:`_fire_hook` with the payload schema documented on
     # the ``HookEvent.MUTATION_*`` / ``BASELINE_PROMOTED`` enum.
     def _reg_self_improving_loop_hooks() -> None:
-        from core.self_improving.loop._hooks import set_self_improving_loop_hooks
+        from core.self_improving.loop._hooks import (
+            clear_self_improving_loop_hooks,
+            set_self_improving_loop_hooks,
+        )
 
         set_self_improving_loop_hooks(hooks)
+        hooks.add_owner_cleanup(
+            "self_improving_loop_hooks",
+            clear_self_improving_loop_hooks,
+        )
 
     _register_plugin("self_improving_loop_hooks", _reg_self_improving_loop_hooks)
-
-    # C6: Tool approval tracking hooks (HITL pattern learning → JSONL)
-    def _reg_tool_approval() -> None:
-        from core.hooks.approval_tracker import ApprovalTracker
-
-        tracker = ApprovalTracker()
-        handler_name, handler_fn = tracker.make_hook_handler(session_key=session_key)
-        hooks.register(
-            HookEvent.TOOL_APPROVAL_GRANTED,
-            handler_fn,
-            name=handler_name,
-            priority=65,
-        )
-        hooks.register(
-            HookEvent.TOOL_APPROVAL_DENIED,
-            handler_fn,
-            name=f"{handler_name}_denied",
-            priority=65,
-        )
-
-    _register_plugin("tool_approval_hook", _reg_tool_approval)
 
     # PR-4 C-3 — episodic action-outcome ledger. TOOL_EXEC_ENDED carries
     # (tool_name, tool_input, has_error, result, duration_ms); we record
@@ -656,15 +589,17 @@ def build_hooks(
 
     _register_plugin("episodic_memory_hook", _reg_episodic_memory)
 
-    # C8: Filesystem hook plugin auto-discovery (.geode/hooks/ + core/hooks/plugins/)
+    # C8: Filesystem hook plugin auto-discovery (.geode/hooks/ only).
+    # Built-ins are wired explicitly above; rediscovering their hook.yaml
+    # manifests registered the same notification handler twice.
     def _reg_filesystem_plugins() -> None:
         from core.hooks.discovery import HookPluginLoader
         from core.paths import PROJECT_HOOKS_DIR
 
         loader = HookPluginLoader()
-        plugin_dirs = [PROJECT_HOOKS_DIR, Path("core/hooks/plugins")]
-        loader.load_from_dirs(plugin_dirs)
+        loader.load_from_dirs([PROJECT_HOOKS_DIR])
         loader.register_all(hooks)
+        hooks.add_owner_cleanup("filesystem_hook_plugins", loader.unregister_all)
 
     _register_plugin("filesystem_hook_plugins", _reg_filesystem_plugins)
 
@@ -785,13 +720,14 @@ def build_hooks(
 
     _register_plugin("session_metrics", _reg_metrics)
 
-    return hooks, run_log, session_metrics
+    return hooks, event_store, session_metrics
 
 
 def build_memory(
     *,
     session_store: SessionStorePort,
     hooks: Any = None,
+    event_store: HookEventStore | None = None,
 ) -> tuple[ProjectMemory, MonoLakeOrganizationMemory, ContextAssembler, FileBasedUserProfile]:
     """Build L2 memory components: project, org, context assembler, user profile."""
     from core.config import settings
@@ -840,12 +776,14 @@ def build_memory(
         project_memory=project_memory,
         session_store=session_store,
         user_profile=user_profile,
-        run_log_dir=DEFAULT_LOG_DIR,
+        event_store=event_store,
         project_journal=project_journal,
         vault=vault,
         project_root=Path("."),
         session_manager=context_artifact_store,
     )
+    if isinstance(hooks, HookSystem):
+        hooks.add_cleanup("context_artifact_store", context_artifact_store.close)
 
     # Wire memory into memory tools via contextvars (P1 memory autonomy).
     # PR-AUDIT-AB (2026-06-10) — set_default_session_store was the one
@@ -854,6 +792,7 @@ def build_memory(
     # and still returned saved=True (fake success). The session_store
     # built at bootstrap is the same instance ContextAssembler reads.
     from core.tools.memory_tools import (
+        clear_memory_hooks,
         set_default_session_store,
         set_memory_hooks,
         set_org_memory,
@@ -864,13 +803,17 @@ def build_memory(
     set_project_memory(project_memory)
     set_org_memory(organization_memory)
     set_memory_hooks(hooks)
+    if isinstance(hooks, HookSystem):
+        hooks.add_owner_cleanup("memory_tool_hooks", clear_memory_hooks)
 
     # Shared tool-handler HookSystem injection (PR-PRE10-ROUND2) — lets
     # cross-layer tool handlers (e.g. HITL feedback in core.cli) persist events
     # without bootstrap importing the CLI layer (Server-never-CLI contract).
-    from core.hooks.tool_hooks import set_tool_hooks
+    from core.hooks.tool_hooks import clear_tool_hooks, set_tool_hooks
 
     set_tool_hooks(hooks)
+    if isinstance(hooks, HookSystem):
+        hooks.add_owner_cleanup("shared_tool_hooks", clear_tool_hooks)
 
     # Wire user profile into profile tools via contextvars
     from core.tools.profile_tools import set_user_profile

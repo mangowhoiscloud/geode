@@ -1,198 +1,134 @@
-"""Tests for Run History Context Injection (Karpathy P6)."""
+"""Tests for SQL-backed operational history context injection."""
+
+from __future__ import annotations
 
 import time
+from pathlib import Path
 
+from core.hooks.catalog import EventRetentionClass
 from core.memory.context import ContextAssembler
-from core.observability.run_log import RunLog, RunLogEntry
+from core.observability.event_store import HookEventStore, HookEventWrite
 from core.time_format import format_age as _format_age
 
 
 class TestFormatAge:
-    def test_now(self):
+    def test_now(self) -> None:
         assert _format_age(0) == "now"
 
-    def test_negative(self):
+    def test_negative(self) -> None:
         assert _format_age(-10) == "now"
 
-    def test_seconds(self):
+    def test_seconds(self) -> None:
         assert _format_age(30) == "now"
 
-    def test_minutes(self):
+    def test_minutes(self) -> None:
         assert _format_age(300) == "5m ago"
 
-    def test_hours(self):
+    def test_hours(self) -> None:
         assert _format_age(7200) == "2h ago"
 
-    def test_days(self):
+    def test_days(self) -> None:
         assert _format_age(172800) == "2d ago"
 
-    def test_one_minute(self):
+    def test_one_minute(self) -> None:
         assert _format_age(60) == "1m ago"
 
-    def test_one_hour(self):
+    def test_one_hour(self) -> None:
         assert _format_age(3600) == "1h ago"
 
-    def test_one_day(self):
+    def test_one_day(self) -> None:
         assert _format_age(86400) == "1d ago"
 
 
+def _append_event(
+    store: HookEventStore,
+    *,
+    occurred_at: float,
+    session_key: str,
+    event: str = "session_end",
+    status: str = "ok",
+) -> None:
+    store.append(
+        HookEventWrite(
+            occurred_at=occurred_at,
+            session_key=session_key,
+            run_id="run-1",
+            event=event,
+            dispatch_mode="observe",
+            status=status,
+            retention_class=EventRetentionClass.STANDARD,
+            handler_count=0,
+            handler_error_count=0,
+            blocked=False,
+            block_reason="",
+            actor_type="orchestrator",
+            actor_id="runtime",
+            action="session.ended",
+            entity_type="session",
+            entity_id="s-1",
+            task_id=None,
+            level="info",
+        )
+    )
+
+
 class TestRunHistoryInjection:
-    def test_no_run_log_dir(self):
-        """Without run_log_dir, no _run_history is injected."""
+    def test_no_event_store(self) -> None:
         assembler = ContextAssembler()
         ctx = assembler.assemble("sess-1", "Project Atlas")
         assert "_run_history" not in ctx
 
-    def test_empty_run_log_dir(self, tmp_path):
-        """Empty run_log_dir produces no _run_history."""
-        log_dir = tmp_path / "runs"
-        log_dir.mkdir()
-        assembler = ContextAssembler(run_log_dir=log_dir)
-        ctx = assembler.assemble("sess-1", "Project Atlas")
+    def test_empty_event_store(self, tmp_path: Path) -> None:
+        store = HookEventStore(tmp_path / "events.db")
+        assembler = ContextAssembler(event_store=store)
+        assert "_run_history" not in assembler.assemble("sess-1", "Project Atlas")
+        store.close()
+
+    def test_injects_session_end_entries(self, tmp_path: Path) -> None:
+        store = HookEventStore(tmp_path / "events.db")
+        _append_event(
+            store,
+            occurred_at=time.time() - 3600,
+            session_key="subject:demo:analysis",
+        )
+
+        ctx = ContextAssembler(event_store=store).assemble("sess-1", "demo")
+        assert "subject:demo:analysis completed (1h ago)" in ctx["_run_history"]
+        store.close()
+
+    def test_only_session_end_events_are_injected(self, tmp_path: Path) -> None:
+        store = HookEventStore(tmp_path / "events.db")
+        _append_event(
+            store,
+            occurred_at=time.time(),
+            session_key="subject:test:analysis",
+            event="tool_exec_end",
+        )
+        ctx = ContextAssembler(event_store=store).assemble("sess-1", "test")
         assert "_run_history" not in ctx
+        store.close()
 
-    def test_nonexistent_run_log_dir(self, tmp_path):
-        """Non-existent run_log_dir is handled gracefully."""
-        assembler = ContextAssembler(run_log_dir=tmp_path / "no_such_dir")
-        ctx = assembler.assemble("sess-1", "Project Atlas")
-        assert "_run_history" not in ctx
-
-    def test_injects_pipeline_end_entries(self, tmp_path):
-        """Pipeline end entries are injected as 1-line summary."""
-        log_dir = tmp_path / "runs"
-        log_dir.mkdir()
-
-        run_log = RunLog("subject_demo_analysis", log_dir=log_dir)
+    def test_history_is_newest_first_and_bounded(self, tmp_path: Path) -> None:
+        store = HookEventStore(tmp_path / "events.db")
         now = time.time()
-        run_log.append(
-            RunLogEntry(
-                session_key="subject_demo_analysis",
-                event="pipeline_end",
-                status="ok",
-                timestamp=now - 3600,  # 1h ago
-                metadata={"subject_id": "demo", "score": 81.3},
+        for index in range(5):
+            _append_event(
+                store,
+                occurred_at=now - index * 3600,
+                session_key=f"subject:{index}:analysis",
+                status="failed" if index == 0 else "ok",
             )
+
+        history = ContextAssembler(event_store=store).assemble("sess-1", "test")["_run_history"]
+        assert history.count("|") == 2
+        assert history.index("subject:0:analysis failed") < history.index(
+            "subject:1:analysis completed"
         )
+        assert "subject:3:analysis" not in history
+        store.close()
 
-        assembler = ContextAssembler(run_log_dir=log_dir)
-        ctx = assembler.assemble("sess-1", "demo")
-
-        assert "_run_history" in ctx
-        assert "demo" in ctx["_run_history"]
-        assert "score=81.3" in ctx["_run_history"]
-
-    def test_max_entries_limit(self, tmp_path):
-        """Only up to max_entries are injected."""
-        log_dir = tmp_path / "runs"
-        log_dir.mkdir()
-
-        run_log = RunLog("subject_all_analysis", log_dir=log_dir)
-        now = time.time()
-        for i in range(5):
-            run_log.append(
-                RunLogEntry(
-                    session_key="subject_all_analysis",
-                    event="pipeline_end",
-                    status="ok",
-                    timestamp=now - (i * 3600),
-                    metadata={"subject_id": f"subject_{i}", "score": 60 + i},
-                )
-            )
-
-        assembler = ContextAssembler(run_log_dir=log_dir)
-        ctx = assembler.assemble("sess-1", "Test")
-        history = ctx.get("_run_history", "")
-        # Default max is 3, so we should see at most 3 entries
-        assert history.count("|") <= 2  # 3 entries separated by 2 pipes
-
-    def test_non_pipeline_end_events_excluded(self, tmp_path):
-        """Only pipeline_end events are injected, not start or node events."""
-        log_dir = tmp_path / "runs"
-        log_dir.mkdir()
-
-        run_log = RunLog("subject_test_analysis", log_dir=log_dir)
-        now = time.time()
-        run_log.append(
-            RunLogEntry(
-                session_key="subject_test_analysis",
-                event="pipeline_start",
-                status="ok",
-                timestamp=now - 1800,
-                metadata={"subject_id": "Test"},
-            )
-        )
-        run_log.append(
-            RunLogEntry(
-                session_key="subject_test_analysis",
-                event="node_exit",
-                node="router",
-                status="ok",
-                timestamp=now - 1700,
-                metadata={"subject_id": "Test"},
-            )
-        )
-
-        assembler = ContextAssembler(run_log_dir=log_dir)
-        ctx = assembler.assemble("sess-1", "Test")
-        assert "_run_history" not in ctx
-
-    def test_multiple_log_files(self, tmp_path):
-        """Entries from multiple JSONL files are merged."""
-        log_dir = tmp_path / "runs"
-        log_dir.mkdir()
-
-        now = time.time()
-        log1 = RunLog("subject_demo_analysis", log_dir=log_dir)
-        log1.append(
-            RunLogEntry(
-                session_key="subject_demo_analysis",
-                event="pipeline_end",
-                timestamp=now - 3600,
-                metadata={"subject_id": "Demo A", "score": 81.3},
-            )
-        )
-        log2 = RunLog("subject_other_analysis", log_dir=log_dir)
-        log2.append(
-            RunLogEntry(
-                session_key="subject_other_analysis",
-                event="pipeline_end",
-                timestamp=now - 7200,
-                metadata={"subject_id": "Demo B", "score": 68.4},
-            )
-        )
-
-        assembler = ContextAssembler(run_log_dir=log_dir)
-        ctx = assembler.assemble("sess-1", "Test")
-        history = ctx["_run_history"]
-        assert "Demo A" in history
-        assert "Demo B" in history
-
-    def test_sorted_by_most_recent(self, tmp_path):
-        """Entries are sorted newest first."""
-        log_dir = tmp_path / "runs"
-        log_dir.mkdir()
-
-        now = time.time()
-        run_log = RunLog("subject_mixed_analysis", log_dir=log_dir)
-        run_log.append(
-            RunLogEntry(
-                session_key="subject_mixed_analysis",
-                event="pipeline_end",
-                timestamp=now - 86400,  # 1d ago
-                metadata={"subject_id": "Old", "score": 30.0},
-            )
-        )
-        run_log.append(
-            RunLogEntry(
-                session_key="subject_mixed_analysis",
-                event="pipeline_end",
-                timestamp=now - 60,  # 1m ago
-                metadata={"subject_id": "Recent", "score": 90.0},
-            )
-        )
-
-        assembler = ContextAssembler(run_log_dir=log_dir)
-        ctx = assembler.assemble("sess-1", "Test")
-        history = ctx["_run_history"]
-        # Recent should appear before Old
-        assert history.index("Recent") < history.index("Old")
+    def test_closed_store_fails_soft(self, tmp_path: Path) -> None:
+        store = HookEventStore(tmp_path / "events.db")
+        assembler = ContextAssembler(event_store=store)
+        store.close()
+        assert "_run_history" not in assembler.assemble("sess-1", "test")

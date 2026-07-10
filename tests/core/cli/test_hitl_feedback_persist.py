@@ -2,7 +2,7 @@
 
 Pre-PR the operator's rate/accept/reject verdict was written to a closure-local
 dict that nothing ever read. Now each handler fires
-``HookEvent.RESULT_FEEDBACK``, which the wildcard RunLog subscriber persists to
+``HookEvent.RESULT_FEEDBACK``, which the canonical SQLite event sink persists to
 the session JSONL. These assert the handlers fire the event with the right
 verdict payload (and don't fire on a missing subject).
 """

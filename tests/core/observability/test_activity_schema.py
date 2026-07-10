@@ -198,7 +198,7 @@ def test_i4_generic_accepts_arbitrary_action() -> None:
 
 
 # ---------------------------------------------------------------------------
-# I5 — all 74 HookEvent values produce a row
+# I5 — all HookEvent values produce a row
 # ---------------------------------------------------------------------------
 
 

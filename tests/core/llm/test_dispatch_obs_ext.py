@@ -9,8 +9,8 @@ strict-dispatch + ADAPTER_DISPATCH_ATTEMPT hook:
 2. ``begin_session_adapter_tracking`` + ``get_session_adapter_usage``
    provide a per-session ``{adapter_name: {outcome: count}}`` aggregate
    that ``SESSION_ENDED`` emits inline.
-3. ``geode adapters stats`` CLI parses ``ADAPTER_DISPATCH_ATTEMPT``
-   events from ``~/.geode/runs/*.jsonl`` into a (capability, adapter)
+3. ``geode adapters stats`` CLI queries ``ADAPTER_DISPATCH_ATTEMPT``
+   rows from project-local ``sessions.db`` into a (capability, adapter)
    table with per-outcome counts + p50/p95 latency.
 4. ``typer_serve`` restores the ``RotatingFileHandler`` at
    ``SERVE_LOG_PATH`` so the dispatch INFO logs land in
@@ -22,7 +22,6 @@ from __future__ import annotations
 
 import asyncio
 import inspect
-import json
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock
 
@@ -232,28 +231,28 @@ def test_end_session_adapter_tracking_clears_counter() -> None:
 
 
 # ---------------------------------------------------------------------------
-# 3. CLI `geode adapters stats` parses jsonl
+# 3. CLI `geode adapters stats` queries SQLite
 # ---------------------------------------------------------------------------
 
 
-def test_adapters_stats_parses_dispatch_attempts_from_jsonl(tmp_path: Path) -> None:
-    """End-to-end: write a synthetic ADAPTER_DISPATCH_ATTEMPT jsonl,
+def test_adapters_stats_queries_dispatch_attempts_from_sqlite(tmp_path: Path) -> None:
+    """End-to-end: write synthetic ADAPTER_DISPATCH_ATTEMPT rows,
     invoke the CLI command, parse the table from stdout."""
     import time
 
     from core.cli.commands.adapters import app
+    from core.hooks.catalog import EventRetentionClass
+    from core.observability.event_store import HookEventStore, HookEventWrite
     from typer.testing import CliRunner
 
-    runs_dir = tmp_path / "runs"
-    runs_dir.mkdir()
-    jsonl = runs_dir / "test.jsonl"
+    db_path = tmp_path / "sessions.db"
+    store = HookEventStore(db_path)
 
     now = time.time()
     events = [
         {
-            "event": "adapter_dispatch_attempt",
-            "timestamp": now - 60,  # 1 min ago — inside --since 1h window
-            "metadata": {
+            "occurred_at": now - 60,  # 1 min ago — inside --since 1h window
+            "payload": {
                 "adapter_name": "codex-oauth",
                 "provider": "openai",
                 "source": "subscription",
@@ -263,9 +262,8 @@ def test_adapters_stats_parses_dispatch_attempts_from_jsonl(tmp_path: Path) -> N
             },
         },
         {
-            "event": "adapter_dispatch_attempt",
-            "timestamp": now - 30,
-            "metadata": {
+            "occurred_at": now - 30,
+            "payload": {
                 "adapter_name": "glm-payg",
                 "provider": "glm",
                 "source": "payg",
@@ -276,9 +274,8 @@ def test_adapters_stats_parses_dispatch_attempts_from_jsonl(tmp_path: Path) -> N
         },
         # Outside window — should NOT appear in the --since 1h slice
         {
-            "event": "adapter_dispatch_attempt",
-            "timestamp": now - 7200,  # 2h ago
-            "metadata": {
+            "occurred_at": now - 7200,  # 2h ago
+            "payload": {
                 "adapter_name": "glm-payg",
                 "provider": "glm",
                 "source": "payg",
@@ -288,10 +285,34 @@ def test_adapters_stats_parses_dispatch_attempts_from_jsonl(tmp_path: Path) -> N
             },
         },
     ]
-    jsonl.write_text("\n".join(json.dumps(e) for e in events), encoding="utf-8")
+    for event in events:
+        store.append(
+            HookEventWrite(
+                occurred_at=event["occurred_at"],
+                session_key="subject:test:analysis",
+                run_id="run-1",
+                event="adapter_dispatch_attempt",
+                dispatch_mode="observe",
+                status="ok",
+                retention_class=EventRetentionClass.HIGH_VOLUME,
+                handler_count=0,
+                handler_error_count=0,
+                blocked=False,
+                block_reason="",
+                actor_type="system",
+                actor_id="dispatch",
+                action="adapter.dispatch.attempt",
+                entity_type="adapter",
+                entity_id=event["payload"]["adapter_name"],
+                task_id=None,
+                level="info",
+                payload=event["payload"],
+            )
+        )
+    store.close()
 
     runner = CliRunner()
-    result = runner.invoke(app, ["stats", "--since", "1h", "--runs-dir", str(runs_dir)])
+    result = runner.invoke(app, ["stats", "--since", "1h", "--db-path", str(db_path)])
     assert result.exit_code == 0, result.output
     assert "codex-oauth" in result.output
     assert "supports_web_search" in result.output
@@ -315,14 +336,14 @@ def test_adapters_stats_empty_window_message(tmp_path: Path) -> None:
     """When the window has zero events, the CLI prints a no-match message
     + the number of rows it scanned."""
     from core.cli.commands.adapters import app
+    from core.observability.event_store import HookEventStore
     from typer.testing import CliRunner
 
-    runs_dir = tmp_path / "runs"
-    runs_dir.mkdir()
-    (runs_dir / "empty.jsonl").write_text("", encoding="utf-8")
+    db_path = tmp_path / "sessions.db"
+    HookEventStore(db_path).close()
 
     runner = CliRunner()
-    result = runner.invoke(app, ["stats", "--since", "1h", "--runs-dir", str(runs_dir)])
+    result = runner.invoke(app, ["stats", "--since", "1h", "--db-path", str(db_path)])
     assert result.exit_code == 0
     assert "No ADAPTER_DISPATCH_ATTEMPT events" in result.output
 

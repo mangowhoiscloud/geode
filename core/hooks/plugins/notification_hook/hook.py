@@ -68,36 +68,6 @@ def _make_notification_handler(
     return handler
 
 
-async def handle(event: HookEvent, data: dict[str, Any]) -> None:
-    """Entry point for hook_discovery YAML plugin loader.
-
-    Uses default channel/recipient from config. For custom channels,
-    use register_notification_hooks() directly.
-    """
-    from core.mcp.notification_port import get_notification
-
-    adapter = get_notification()
-    if adapter is None:
-        return
-
-    # Determine channel/recipient from config settings
-    try:
-        from core.config import settings
-
-        channel = settings.notification_channel
-        recipient = settings.notification_recipient
-    except Exception:
-        channel = "slack"
-        recipient = "#geode-alerts"
-
-    if not await adapter.ais_available(channel):
-        return
-
-    severity = _SEVERITY_MAP.get(event, "info")
-    message = _format_message(event, data)
-    await adapter.asend_message(channel, recipient, message, severity=severity)
-
-
 def register_notification_hooks(
     hooks: HookSystem,
     *,

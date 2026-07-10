@@ -598,7 +598,7 @@ class SubAgentManager:
         per_task_setup: list[tuple[SubTask, Any, IsolationConfig]] = []
         for task in tasks:
             graph.mark_running(task.task_id)
-            self._emit_hook(HookEvent.SUBAGENT_STARTED, task)
+            await self._emit_hook(HookEvent.SUBAGENT_STARTED, task)
 
             child_key = build_subagent_session_key(
                 task.args.get("subject_id", task.args.get("subject", "unknown")), task.task_id
@@ -665,14 +665,14 @@ class SubAgentManager:
             sub_result = self._to_sub_result(task, isolation)
             if sub_result.success:
                 graph.mark_completed(task.task_id, result=sub_result.output)
-                self._emit_hook(HookEvent.SUBAGENT_COMPLETED, task, sub_result=sub_result)
+                await self._emit_hook(HookEvent.SUBAGENT_COMPLETED, task, sub_result=sub_result)
             else:
                 graph.mark_failed(task.task_id, error=sub_result.error or "unknown")
                 # PR-COMM-3b — pass ``sub_result`` so the agent_runtime_state
                 # writer receives ``status="failed"``. Pre-fix only ``error``
                 # was passed and the status field was silently missing on
                 # production failures (Codex MCP review catch).
-                self._emit_hook(
+                await self._emit_hook(
                     HookEvent.SUBAGENT_FAILED,
                     task,
                     sub_result=sub_result,
@@ -1006,7 +1006,7 @@ class SubAgentManager:
                 log.debug("Dedup: skipping duplicate task_id=%s", task.task_id)
         return unique
 
-    def _emit_hook(
+    async def _emit_hook(
         self,
         event: HookEvent,
         task: SubTask,
@@ -1054,7 +1054,7 @@ class SubAgentManager:
         if error is not None:
             data["error"] = error
         try:
-            self._hooks.trigger(event, data)
+            await self._hooks.trigger_async(event, data)
         except Exception:
             log.warning(
                 "Hook trigger failed for %s on task %s",

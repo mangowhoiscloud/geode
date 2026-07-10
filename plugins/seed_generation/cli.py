@@ -702,7 +702,7 @@ def run_audit_seeds(
     # elo_log.tsv, sub_agents/, transcript.jsonl — is co-located under
     # state/seed_generation/<run_id>/ and ``tar czf run.tgz state/
     # seed_generation/<run_id>/`` recovers the entire cycle. The
-    # cross-cutting hook journal / RunLog / monthly usage still live
+    # the project hook-event database and monthly usage ledger still live
     # under ~/.geode/ because they aren't run-scoped.
     run_dir = STATE_SEED_GENERATION_DIR / run_id
     run_dir.mkdir(parents=True, exist_ok=True)

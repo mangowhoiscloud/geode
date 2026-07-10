@@ -99,7 +99,7 @@ def append_jsonl(
     This is the L0 write companion to :func:`iter_jsonl` /
     :func:`read_jsonl`: callers get a shared, lock-serialised append
     primitive instead of open-coded ``open("a")`` writers. Higher-level
-    sinks such as ``JsonlAppendLog`` still own pruning and layout policy.
+    append-only sinks still own pruning and layout policy.
     """
     path = Path(path)
     line = json.dumps(
