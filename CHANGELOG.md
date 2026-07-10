@@ -59,7 +59,8 @@ functional change.
   and tool-contract checks, and emits the supervisor response. The one-shot
   sealed evaluator reuses that path, requires the frozen train parent for a
   disjoint test contract, and closes runner/process failures as infrastructure
-  rather than score evidence. Explicitly
+  rather than score evidence. Its executable entrypoint selects the locked
+  Python 3.12 project environment through `uv run --frozen`. Explicitly
   granted registry tools now replace a same-named global declarative schema, so
   an assay handler cannot receive arguments from GEODE's unrelated tool with
   the same name.

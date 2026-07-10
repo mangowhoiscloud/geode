@@ -16,6 +16,17 @@ TEST_TASKS = (
 )
 
 
+def test_command_evaluator_entrypoint_uses_the_frozen_uv_runtime() -> None:
+    repository = Path(__file__).parents[3]
+
+    assert (
+        repository.joinpath("scripts/eval/crucible_tau2_evaluator.py")
+        .read_text(encoding="utf-8")
+        .splitlines()[0]
+        == "#!/usr/bin/env -S uv run --frozen python"
+    )
+
+
 def _contract() -> ExperimentContract:
     assay = {
         "schema": "crucible.tau2-assay.v1",
