@@ -233,19 +233,14 @@ class TestProviderLabelMapping:
 class TestAuditLoggerCompleteness:
     """All 8 previously missing audit loggers are now registered."""
 
-    def test_all_asymmetry_loggers_registered(self):
-        from unittest.mock import patch as _patch
+    def test_all_asymmetry_loggers_registered(self, tmp_path):
+        from core.wiring.bootstrap import build_hooks
 
-        with (
-            _patch("core.wiring.bootstrap.RunLog"),
-        ):
-            from core.wiring.bootstrap import build_hooks
-
-            hooks, _, _ = build_hooks(
-                session_key="test",
-                run_id="test-run",
-                log_dir=None,
-            )
+        hooks, _, _ = build_hooks(
+            session_key="test",
+            run_id="test-run",
+            log_dir=tmp_path,
+        )
 
         all_hooks = hooks.list_hooks()
 
@@ -258,3 +253,4 @@ class TestAuditLoggerCompleteness:
         assert "approval_req" in all_hooks.get("tool_approval_requested", [])
         assert "memory_saved" in all_hooks.get("memory_saved", [])
         assert "reasoning_metrics" in all_hooks.get("reasoning_metrics", [])
+        hooks.close()

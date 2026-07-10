@@ -63,6 +63,15 @@ def set_mcp_hooks(hooks: Any) -> None:
     _mcp_hooks = hooks
 
 
+def clear_mcp_hooks(expected: Any) -> bool:
+    """Clear the binding only when it still points at ``expected``."""
+    global _mcp_hooks
+    if _mcp_hooks is not expected:
+        return False
+    _mcp_hooks = None
+    return True
+
+
 def _fire_mcp_hook(event: Any, data: dict[str, Any]) -> None:
     """Fire a hook event if HookSystem is available.
 

@@ -8,6 +8,7 @@ notification-worthy event.
 from __future__ import annotations
 
 import asyncio
+from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock
 
 from core.hooks import HookEvent, HookSystem
@@ -60,6 +61,18 @@ class TestNotificationHookRegistration:
 
         registered = hooks.list_hooks()
         assert "subagent_failed" in registered
+
+    def test_build_hooks_registers_notification_once(self, tmp_path: Path):
+        from core.wiring.bootstrap import build_hooks
+
+        hooks, _, _ = build_hooks(
+            session_key="test",
+            run_id="run-1",
+            log_dir=tmp_path,
+        )
+        names = hooks.list_hooks(HookEvent.SUBAGENT_FAILED)[HookEvent.SUBAGENT_FAILED.value]
+        assert names.count("notification_subagent_failed") == 1
+        hooks.close()
 
     def test_hooks_trigger_notification(self):
         """Verify hooks call NotificationPort.asend_message when triggered."""
@@ -145,4 +158,24 @@ class TestNotificationHookRegistration:
         assert call_args[0][0] == "discord"
         assert call_args[0][1] == "123456"
 
+        set_notification(None)
+
+    def test_subagent_emitter_awaits_notification_once(self):
+        from core.agent.sub_agent import SubAgentManager, SubTask
+        from core.orchestration.isolated_execution import IsolatedRunner
+
+        mock_adapter = MagicMock()
+        mock_adapter.ais_available = AsyncMock(return_value=True)
+        mock_adapter.asend_message = AsyncMock(
+            return_value=NotificationResult(success=True, channel="slack")
+        )
+        set_notification(mock_adapter)
+        hooks = HookSystem()
+        register_notification_hooks(hooks, channel="slack", recipient="#alerts")
+        manager = SubAgentManager(IsolatedRunner(), hooks=hooks)
+        task = SubTask(task_id="task-1", task_type="analyze", description="test")
+
+        asyncio.run(manager._emit_hook(HookEvent.SUBAGENT_FAILED, task, error="boom"))
+
+        mock_adapter.asend_message.assert_awaited_once()
         set_notification(None)

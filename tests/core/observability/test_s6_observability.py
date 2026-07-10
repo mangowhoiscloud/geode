@@ -3,7 +3,7 @@
 Pins the audit fixes: the sessions.jsonl row carries the run's
 SessionMetrics payload (``to_session_row`` had zero production callers),
 the run-scoped metrics instance is identity-seeded at train start, the
-two run-log classes share one JSONL base in one module, the
+scheduler JSONL tail has one home, the
 SessionMetrics/LatencyMetrics namespace collision is resolved, and the
 entry-point logging switchboard behaves per mode.
 """
@@ -59,16 +59,15 @@ def test_metrics_row_identity_keys_do_not_clobber() -> None:
 
 
 # ---------------------------------------------------------------------------
-# 2. run-log fold — one module, shared base
+# 2. scheduler run log — one module
 # ---------------------------------------------------------------------------
 
 
-def test_run_logs_share_single_module_and_base() -> None:
-    from core.observability.run_log import JobRunLog, JsonlAppendLog, RunLog
+def test_scheduler_run_log_has_single_home() -> None:
+    from core.observability.run_log import JobRunLog
 
-    assert issubclass(RunLog, JsonlAppendLog)
-    assert issubclass(JobRunLog, JsonlAppendLog)
-    # the two pre-fold module paths must be gone (no shim grace)
+    assert JobRunLog.__module__ == "core.observability.run_log"
+    # The two pre-fold module paths remain gone (no shim grace).
     assert not (REPO_ROOT / "core" / "orchestration" / "run_log.py").exists()
     assert not (REPO_ROOT / "core" / "scheduler" / "run_log.py").exists()
 
@@ -83,8 +82,8 @@ def test_job_run_log_prune_honors_live_class_attrs(tmp_path: Path) -> None:
     job_log.MAX_LINES = 3
     for i in range(20):
         job_log.append("j1", {"i": i, "padding": "x" * 50})
-    assert job_log.prune("j1") > 0
     assert len(job_log.get_runs("j1", limit=999)) == 3
+    assert job_log.prune("j1") == 0
 
 
 # ---------------------------------------------------------------------------

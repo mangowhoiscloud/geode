@@ -88,6 +88,13 @@ function buildTurndown() {
   });
   td.use(gfm);
   td.remove(["script", "style"]);
+  // Turndown's default <br> replacement is two trailing spaces + newline.
+  // That leaks whitespace into the committed llms-full.txt and breaks table
+  // cells across physical lines. Keep the break explicit and portable.
+  td.addRule("explicitLineBreak", {
+    filter: "br",
+    replacement: () => "<br>",
+  });
   // Docs code blocks are bare <pre> (no nested <code>) — turndown's default
   // fenced rule only fires on pre>code, so without this rule every shell
   // snippet flattens into plain paragraphs.
@@ -147,7 +154,8 @@ function exportPage(td, page) {
   if (article === null) {
     fail(`no <article class="docs-prose"> in ${htmlPath} — docs layout drifted`);
   }
-  const body = absolutizeLinks(td.turndown(article)).trim() + "\n";
+  const body =
+    absolutizeLinks(td.turndown(article)).replace(/[ \t]+$/gm, "").trim() + "\n";
   // The page h1 + summary live outside <article> (docs layout chrome), so
   // the twin gets a sitemap-derived header; llms-full.txt adds its own
   // per-page header and embeds the raw body instead.

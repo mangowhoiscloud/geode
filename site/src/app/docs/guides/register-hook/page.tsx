@@ -58,9 +58,9 @@ def on_tool_failed(event: HookEvent, data: dict) -> None:
               <code>build_hooks()</code>가 <code>HookSystem</code>을 만들고 모든
               핵심 핸들러를 붙이는 곳입니다. 거기서{" "}
               <code>hooks.register(event, handler, name=..., priority=...)</code>를
-              호출합니다. <code>name</code>은 고유해야 합니다. 같은 이름으로
-              재등록하면 기존 핸들러를 덮어쓰므로, 명시 등록과 파일시스템
-              디스커버리가 겹쳐도 이중 등록이 생기지 않습니다.
+              호출합니다. <code>name</code>은 겹치는 exact/prefix 범위에서
+              고유해야 합니다. 다른 핸들러를 같은 이름으로 등록하면 fail-loud하며,
+              의도적 교체만 <code>replace=True</code>를 사용합니다.
             </p>
             <pre>{`# core/wiring/bootstrap.py — build_hooks()
 hooks.register(
@@ -70,17 +70,16 @@ hooks.register(
     priority=60,
 )`}</pre>
             <p>
-              한 핸들러를 여러 이벤트(또는 모든 이벤트)에 한 번에 붙이려면{" "}
-              <code>register_prefix(&quot;*&quot;, handler, ...)</code>를 씁니다. run log
-              writer가 바로 이 방식으로 <code>&quot;*&quot;</code> 와일드카드를 구독해서, 새
-              <code>HookEvent</code>를 추가해도 자동으로 로그에 잡힙니다.
+              한 핸들러를 이벤트 family에 붙이려면{" "}
+              <code>register_prefix(&quot;SUBAGENT&quot;, handler, ...)</code>를 씁니다.
+              운영 이벤트 저장은 일반 핸들러가 아니라 post-dispatch sink가 담당합니다.
             </p>
 
             <h2>4. 우선순위 등급을 정합니다</h2>
             <p>
               <code>priority</code>는 낮을수록 먼저 실행됩니다(기본 100).
               데이터를 보강하는 인터셉터는 낮게, 단순 관측자는 높게 둡니다. 기존
-              bootstrap의 등급을 기준으로 삼으면 됩니다. run log writer는 50,
+              bootstrap의 등급을 기준으로 삼으면 됩니다. metrics는 45,
               agent_runtime_state 기록은 55, 세션 라이프사이클 로거는 90입니다.
               <code>trigger_interceptor()</code> 경로의 핸들러는{" "}
               <code>{`{"block": True}`}</code> 또는{" "}
@@ -159,9 +158,9 @@ def on_tool_failed(event: HookEvent, data: dict) -> None:
               <code>core/wiring/bootstrap.py</code> is where the{" "}
               <code>HookSystem</code> is created and every core handler is attached.
               Call <code>hooks.register(event, handler, name=..., priority=...)</code>{" "}
-              there. The <code>name</code> must be unique; re-registering under the
-              same name replaces the existing handler, so explicit registration and
-              filesystem discovery cannot double-register.
+              there. The <code>name</code> must be unique in overlapping exact/prefix
+              scopes. A different handler with the same name fails loudly; use
+              <code>replace=True</code> only for an intentional replacement.
             </p>
             <pre>{`# core/wiring/bootstrap.py — build_hooks()
 hooks.register(
@@ -171,18 +170,16 @@ hooks.register(
     priority=60,
 )`}</pre>
             <p>
-              To attach one handler to many events (or all events) at once, use{" "}
-              <code>register_prefix(&quot;*&quot;, handler, ...)</code>. The run log writer
-              subscribes exactly this way with the <code>&quot;*&quot;</code> wildcard, so
-              adding a new <code>HookEvent</code> extends log coverage
-              automatically.
+              To attach one handler to an event family, use{" "}
+              <code>register_prefix(&quot;SUBAGENT&quot;, handler, ...)</code>. Operational
+              persistence is a post-dispatch sink rather than a wildcard handler.
             </p>
 
             <h2>4. Choose a priority tier</h2>
             <p>
               Lower <code>priority</code> runs first (default 100). Put interceptors
               that enrich data low and plain observers high. Anchor to the existing
-              bootstrap tiers: the run log writer is 50, the agent_runtime_state
+              bootstrap tiers: metrics are 45, the agent_runtime_state
               recorders are 55, the session lifecycle loggers are 90. Handlers on the{" "}
               <code>trigger_interceptor()</code> path can return{" "}
               <code>{`{"block": True}`}</code> or{" "}

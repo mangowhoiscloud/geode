@@ -15,10 +15,10 @@ Three read-only subcommands:
   equivalent; reports the currently configured model + provenance from
   the adapter's ``detect_credential()`` hook.
 - ``geode adapters stats [--since 1h]`` — aggregate
-  ``ADAPTER_DISPATCH_ATTEMPT`` hook events from ``~/.geode/runs/*.jsonl``
+  ``ADAPTER_DISPATCH_ATTEMPT`` rows from project-local ``sessions.db``
   by ``(capability, adapter_name)`` with per-outcome counts + p50/p95
   latency. Operators answer "what did dispatch actually route through in
-  the last N minutes?" without grepping jsonl by hand
+  the last N minutes?" without grepping files by hand
   (PR-DISPATCH-OBS-EXT 2026-05-28).
 
 UI: dense aligned table, plain text. No box-card / no emoji (per
@@ -117,79 +117,57 @@ def adapters_stats(
     since: str = typer.Option(
         "1h", "--since", help="Time window (1h / 30m / 24h / 7d). Default: 1h."
     ),
-    runs_dir: str = typer.Option(
+    db_path: str = typer.Option(
         "",
-        "--runs-dir",
-        help="Override runs directory. Defaults to ~/.geode/runs/.",
+        "--db-path",
+        help="Override sessions.db path. Defaults to the current project database.",
     ),
 ) -> None:
-    """Aggregate ADAPTER_DISPATCH_ATTEMPT events from ``~/.geode/runs/*.jsonl``
+    """Aggregate ADAPTER_DISPATCH_ATTEMPT rows from ``sessions.db``
     by ``(capability, adapter_name)``.
 
     PR-DISPATCH-OBS-EXT (2026-05-28) — operator-facing answer to "what
     did dispatch actually route through in the last N minutes/hours/days?"
-    without having to grep through jsonl manually. Reads only the
+    without having to grep files manually. Reads only the
     structured ``ADAPTER_DISPATCH_ATTEMPT`` rows the dispatch layer
     emits — no LLM call needed.
     """
-    import json
     import time
     from pathlib import Path
+
+    from core.hooks import HookEvent
+    from core.observability.event_store import HookEventStore
 
     window_s = _parse_since(since)
     cutoff = time.time() - window_s
 
-    if runs_dir:
-        runs_path = Path(runs_dir).expanduser()
-    else:
-        from core.paths import GLOBAL_RUNS_DIR
-
-        runs_path = GLOBAL_RUNS_DIR
-    if not runs_path.exists():
-        typer.echo(f"runs dir not found: {runs_path}")
-        raise typer.Exit(code=1)
+    store = HookEventStore(Path(db_path).expanduser() if db_path else None)
 
     # Key = (capability, adapter_name, provider, source) → list of (outcome, elapsed_ms)
     buckets: dict[tuple[str, str, str, str], list[tuple[str, float]]] = {}
-    rows_scanned = 0
-    for jsonl in sorted(runs_path.glob("*.jsonl")):
-        try:
-            with jsonl.open(encoding="utf-8") as fh:
-                for line in fh:
-                    rows_scanned += 1
-                    # Cheap pre-filter — production gateway uses compact
-                    # ``json.dumps`` (no spaces) but test-injected fixtures
-                    # often use the default spaced form. Match the event
-                    # name only, both forms include it.
-                    if "adapter_dispatch_attempt" not in line:
-                        continue
-                    try:
-                        d = json.loads(line)
-                    except json.JSONDecodeError:
-                        # Malformed jsonl line — count via rows_scanned, skip
-                        # rather than abort the whole window analysis. ruff
-                        # S112 / bandit B112 are satisfied by the narrow
-                        # exception type (not bare ``Exception``).
-                        continue
-                    if d.get("timestamp", 0) < cutoff:
-                        continue
-                    md = d.get("metadata", {}) or {}
-                    key = (
-                        str(md.get("capability", "")),
-                        str(md.get("adapter_name", "")),
-                        str(md.get("provider", "")),
-                        str(md.get("source", "")),
-                    )
-                    buckets.setdefault(key, []).append(
-                        (str(md.get("outcome", "")), float(md.get("elapsed_ms", 0.0)))
-                    )
-        except OSError:
-            continue
+    try:
+        rows = store.read(
+            limit=100_000,
+            event_filter=HookEvent.ADAPTER_DISPATCH_ATTEMPT.value,
+            occurred_after=cutoff,
+        )
+    finally:
+        store.close()
+    for row in rows:
+        details = row.payload
+        key = (
+            str(details.get("capability", "")),
+            str(details.get("adapter_name", "")),
+            str(details.get("provider", "")),
+            str(details.get("source", "")),
+        )
+        buckets.setdefault(key, []).append(
+            (str(details.get("outcome", "")), float(details.get("elapsed_ms", 0.0)))
+        )
 
     if not buckets:
-        n_files = len(list(runs_path.glob("*.jsonl")))
-        typer.echo(f"No ADAPTER_DISPATCH_ATTEMPT events in {runs_path} within --since {since}.")
-        typer.echo(f"  (scanned {rows_scanned} jsonl rows across {n_files} files)")
+        typer.echo(f"No ADAPTER_DISPATCH_ATTEMPT events within --since {since}.")
+        typer.echo(f"  (database: {store.db_path})")
         raise typer.Exit()
 
     header = (

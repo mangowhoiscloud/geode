@@ -1,9 +1,8 @@
 """HITL (Human-in-the-Loop) tool handlers: rate/accept/reject_result.
 
 The feedback handlers persist the operator's verdict by firing
-``HookEvent.RESULT_FEEDBACK``, which the wildcard RunLog subscriber
-(``core/wiring/bootstrap.py``) writes to the session JSONL — surfaced by
-``geode history``. Pre-PR-PRE10-ROUND2 the verdict was written to a
+``HookEvent.RESULT_FEEDBACK``, which the canonical SQLite event sink
+persists for indexed history. Pre-PR-PRE10-ROUND2 the verdict was written to a
 closure-local dict that nothing ever read.
 """
 
@@ -36,7 +35,7 @@ def _build_hitl_handlers() -> dict[str, Any]:
             {"subject": subject, "verdict": "rated", "rating": rating, "comment": comment},
         )
         console.print(f"  [success]✓ Rating saved for {subject}: {rating}/5[/success]")
-        log.info("HITL rating: %s = %d/5", subject, rating)
+        log.info("HITL rating recorded: subject_chars=%d rating=%d", len(str(subject)), rating)
         return {
             "status": "ok",
             "action": "rate_result",
@@ -50,7 +49,7 @@ def _build_hitl_handlers() -> dict[str, Any]:
             return _clarify("accept_result", ["subject"], "어떤 결과를 수락할까요?")
         fire_tool_hook(HookEvent.RESULT_FEEDBACK, {"subject": subject, "verdict": "accepted"})
         console.print(f"  [success]✓ Result accepted: {subject}[/success]")
-        log.info("HITL accept: %s", subject)
+        log.info("HITL acceptance recorded: subject_chars=%d", len(str(subject)))
         return {
             "status": "ok",
             "action": "accept_result",
@@ -67,7 +66,11 @@ def _build_hitl_handlers() -> dict[str, Any]:
             {"subject": subject, "verdict": "rejected", "reason": reason},
         )
         console.print(f"  [warning]✗ Result rejected: {subject}[/warning]")
-        log.info("HITL reject: %s (reason=%s)", subject, reason or "(none)")
+        log.info(
+            "HITL rejection recorded: subject_chars=%d reason_chars=%d",
+            len(str(subject)),
+            len(str(reason)),
+        )
         return {
             "status": "ok",
             "action": "reject_result",

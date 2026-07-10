@@ -13,87 +13,19 @@ Supports three trigger modes:
 from __future__ import annotations
 
 import asyncio
-import concurrent.futures
 import dataclasses
 import inspect
 import logging
 import re
 import threading
+import time
+import weakref
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
-from enum import Enum
+from enum import Enum, StrEnum
 from typing import Any
 
 log = logging.getLogger(__name__)
-
-
-_MIRROR_FAILURE_WARNED: set[str] = set()
-
-
-def _mirror_hook_to_active_transcript(event: HookEvent, data: dict[str, Any]) -> None:
-    """Mirror a HookSystem trigger into the active RunTranscript as a
-    paperclip-style activity_log row.
-
-    PR-COMM-1 (2026-05-24, spec doc §4). Pre-PR-COMM-1 the pipeline
-    transcript only carried 4 SessionTranscript mirrors (record_user_message
-    / record_assistant_message / record_tool_call / record_tool_result)
-    from PR-U + orchestrator phase events from cli.py. The remaining 70
-    HookEvent triggers were invisible in the unified timeline. Routing
-    every trigger through this helper closes that gap.
-
-    No-op when no orchestrator is bound (REPL / gateway / tests). Any
-    builder / registry / append failure is swallow-and-warn so a failed
-    mirror never breaks the upstream caller — same contract paperclip's
-    ``logActivity`` uses (``activity-log.ts:65``).
-    """
-    try:
-        from core.observability.activity_registry import map_hook_to_activity
-        from core.self_improving.loop.observe.run_transcript import current_run_transcript
-
-        run_transcript = current_run_transcript()
-        if run_transcript is None:
-            return
-        row = map_hook_to_activity(event, data, run_id=run_transcript.session_id)
-        # Coerce details to a plain dict for the JSONL row. ``details``
-        # lives on every concrete ``ActivityRowBase`` subclass (typed
-        # rows carry pydantic ``BaseModel`` sub-schemas; generic rows
-        # carry a free-form ``dict``); we access via ``getattr`` so
-        # mypy doesn't trip over the base class's missing field.
-        row_details = getattr(row, "details", None)
-        details_payload: dict[str, Any]
-        if row_details is None:
-            details_payload = {}
-        elif hasattr(row_details, "model_dump"):
-            details_payload = row_details.model_dump()
-        elif isinstance(row_details, dict):
-            details_payload = row_details
-        else:
-            details_payload = {"_repr": repr(row_details)}
-        run_transcript.append(
-            event=event.value,
-            actor_type=row.actor_type,
-            actor_id=row.actor_id,
-            action=row.action,
-            entity_type=row.entity_type,
-            entity_id=row.entity_id,
-            task_id=row.task_id,
-            level=row.level,
-            payload=details_payload,
-        )
-    except Exception as exc:
-        # PR-OBS-CONTRACT — a dead observability sink must be VISIBLE.
-        # debug-level swallow meant a broken transcript writer dropped
-        # timeline rows with zero operator signal (silent-fallback
-        # anti-pattern). WARN once per event type to avoid hot-loop spam.
-        if event.value not in _MIRROR_FAILURE_WARNED:
-            _MIRROR_FAILURE_WARNED.add(event.value)
-            log.warning(
-                "HookEvent -> ActivityRow mirror failed for %s (suppressing repeats): %s",
-                event.value,
-                exc,
-            )
-        else:
-            log.debug("HookEvent -> ActivityRow mirror failed for %s: %s", event.value, exc)
 
 
 class HookEvent(Enum):
@@ -116,9 +48,8 @@ class HookEvent(Enum):
     RULE_CREATED = "rule_created"
     RULE_UPDATED = "rule_updated"
     RULE_DELETED = "rule_deleted"
-    # Human result feedback (rate/accept/reject_result tool handlers). Flows to
-    # RunLog via the wildcard subscriber so operator verdicts are persisted and
-    # surfaced in `geode history`, not dropped into an in-memory dict.
+    # Human result feedback (rate/accept/reject_result tool handlers). The
+    # canonical SQLite sink persists operator verdicts for indexed history.
     RESULT_FEEDBACK = "result_feedback"
 
     # Prompt Assembly (ADR-007) + Drift Detection (Karpathy P4)
@@ -166,8 +97,8 @@ class HookEvent(Enum):
     # target ``state`` (requested / displayed / user_selected / parsed /
     # granted / denied / propagated / executed / skipped) in the payload
     # instead of nine enums. Fired by ``ApprovalWorkflow.record_transition``
-    # (emit-only; no bootstrap handler required — the wildcard RunLog
-    # subscriber persists it). See ``core/agent/approval_fsm.py``.
+    # (emit-only; the canonical event sink persists it). See
+    # ``core/agent/approval_fsm.py``.
     APPROVAL_TRANSITION = "approval_transition"
 
     # Per-adapter dispatch attempt — fired by
@@ -281,18 +212,10 @@ class HookEvent(Enum):
     TURN_VERIFY_PASSED = "turn_verify_passed"
     TURN_VERIFY_FAILED = "turn_verify_failed"
 
-    # Autoresearch mutation lifecycle (PR-HOOKEVENT-RESERVE, 2026-05-26).
-    # Reserved as the shared event namespace between two concurrent
-    # sprints: (a) autoresearch attribution sprint Phase G
-    # (PR-SOT-REVERT-ON-REJECT, PR-SOT-REVERT-ON-AUDIT-FAIL) — the
-    # writers will emit these once the SoT-revert paths land in
-    # ``core/self_improving/train.py:2407-2455`` + ``runner.py:1882-1888``;
-    # (b) observability central SoT sprint PR-5 wildcard firehose +
-    # PR-10 autoresearch indexer — the wildcard listener captures
-    # every event into ``events`` SQLite, the autoresearch_indexer
-    # cross-references against ``core/self_improving/state/mutations.jsonl``
-    # by ``mutation_id``. Reserving the names + values up-front avoids
-    # value drift once both sprints start emitting concurrently.
+    # Autoresearch mutation lifecycle. Writers emit these after the
+    # corresponding state transition succeeds. The canonical event sink
+    # stores the bounded activity projection in ``hook_events``; the
+    # self-improving mutation ledger remains the domain provenance source.
     #
     # Payload schema (every variant):
     #   {"mutation_id": str, "target_kind": str, "target_path": str,
@@ -326,7 +249,7 @@ class HookEvent(Enum):
     # dedup cluster of dream artifacts + project-memory entries crosses the
     # >=3-distinct-sessions gate and a HITL proposal file is written to
     # ``.geode/memory/_proposals/<slug>.md``. Emit-only (APPROVAL_TRANSITION
-    # pattern) — the P50 wildcard RunLog subscriber persists it; promotion
+    # pattern) — the canonical event sink persists it; promotion
     # into ``.geode/rules/`` stays a human decision, never a handler.
     # Payload: ``{"slug": str, "proposal_path": str, "session_ids": list[str],
     #             "source_count": int, "ts": float}``.
@@ -362,12 +285,56 @@ class InterceptResult:
     data: dict[str, Any] = field(default_factory=dict)
 
 
+class HookDispatchMode(StrEnum):
+    """Semantic dispatch channel used for handlers and durable records."""
+
+    OBSERVE = "observe"
+    FEEDBACK = "feedback"
+    INTERCEPTOR = "interceptor"
+
+
 HookReturn = dict[str, Any] | None
 # Type alias for hook handlers. Most handlers return None (fire-and-forget),
 # but feedback-style hooks (e.g. CONTEXT_OVERFLOW_ACTION) return a dict
 # that trigger_with_result() captures in HookResult.data. Async handlers are
 # supported by the trigger_*_async APIs.
 HookHandler = Callable[[HookEvent, dict[str, Any]], HookReturn | Awaitable[HookReturn]]
+
+
+class DuplicateHookRegistrationError(ValueError):
+    """Raised when a name collision would silently replace another hook."""
+
+
+class HookTimeoutUnsupportedError(RuntimeError):
+    """Raised when a hard timeout is requested for a synchronous handler."""
+
+
+class HookExecutionTimeoutError(TimeoutError):
+    """Raised when an awaitable hook exceeds its cooperative timeout."""
+
+
+@dataclass(frozen=True)
+class HookDispatch:
+    """One completed dispatch, delivered once to each registered sink.
+
+    ``data`` is the final event payload after interceptor modifications.
+    Handler return payloads are deliberately kept in ``results`` and are not
+    folded into ``data`` for observer/feedback modes.
+    """
+
+    event: HookEvent
+    mode: HookDispatchMode
+    data: dict[str, Any]
+    started_at: float
+    completed_at: float
+    results: tuple[HookResult, ...] = ()
+    blocked: bool = False
+    block_reason: str = ""
+    blocked_by: str = ""
+
+
+HookSink = Callable[[HookDispatch], Any]
+CleanupCallback = Callable[[], Any]
 
 
 @dataclass
@@ -378,6 +345,29 @@ class _RegisteredHook:
     name: str
     priority: int  # Lower = higher priority (runs first)
     matcher: str  # Regex pattern for tool_name filtering ("" = match all)
+    compiled_matcher: re.Pattern[str] | None = None
+
+
+@dataclass
+class HookSubscription:
+    """Cancelable registration handle returned by ``register*`` methods."""
+
+    _owner: weakref.ReferenceType[HookSystem]
+    kind: str
+    key: HookEvent | str | None
+    name: str
+    identity: Any
+    _cancelled: bool = False
+
+    def cancel(self) -> bool:
+        """Remove the registration once; return whether it was present."""
+        if self._cancelled:
+            return False
+        self._cancelled = True
+        owner = self._owner()
+        if owner is None:
+            return False
+        return owner._cancel_subscription(self)
 
 
 class HookSystem:
@@ -407,6 +397,10 @@ class HookSystem:
         # / ``SUBAGENT_FAILED`` without matching ``SUBAGENT_RUNNERV2`` if such
         # a value is ever added.
         self._prefix_hooks: dict[str, list[_RegisteredHook]] = {}
+        self._sinks: dict[str, HookSink] = {}
+        self._cleanups: dict[str, CleanupCallback] = {}
+        self._sink_failure_warned: set[tuple[str, str]] = set()
+        self._closed = False
         self._lock = threading.Lock()
 
     def register(
@@ -417,7 +411,8 @@ class HookSystem:
         name: str | None = None,
         priority: int = 100,
         matcher: str = "",
-    ) -> None:
+        replace: bool = False,
+    ) -> HookSubscription:
         """Register a hook handler for an event.
 
         Args:
@@ -430,18 +425,47 @@ class HookSystem:
                 Only evaluated for ``TOOL_EXEC_*`` and ``TOOL_RESULT_TRANSFORM``
                 events; ignored for other events.
         """
-        hook_name = name or handler.__name__
-        entry = _RegisteredHook(handler=handler, name=hook_name, priority=priority, matcher=matcher)
+        hook_name = name or self._default_callable_name(handler)
+        try:
+            compiled_matcher = re.compile(matcher) if matcher else None
+        except re.error as exc:
+            raise ValueError(
+                f"Invalid matcher regex {matcher!r} for hook {hook_name!r}: {exc}"
+            ) from exc
+        entry = _RegisteredHook(
+            handler=handler,
+            name=hook_name,
+            priority=priority,
+            matcher=matcher,
+            compiled_matcher=compiled_matcher,
+        )
 
         with self._lock:
-            if event not in self._hooks:
-                self._hooks[event] = []
-            # Dedup: replace existing handler with same name (prevents
-            # double-registration from explicit + filesystem discovery)
-            self._hooks[event] = [h for h in self._hooks[event] if h.name != hook_name]
-            self._hooks[event].append(entry)
+            self._assert_open_locked()
+            existing = next((h for h in self._hooks.get(event, []) if h.name == hook_name), None)
+            if existing is not None:
+                if self._registration_is_identical(existing, entry):
+                    return HookSubscription(weakref.ref(self), "event", event, hook_name, existing)
+                if not replace:
+                    raise DuplicateHookRegistrationError(
+                        f"Hook {hook_name!r} is already registered for {event.value}; "
+                        "pass replace=True for an intentional replacement"
+                    )
+            for prefix, prefix_hooks in self._prefix_hooks.items():
+                if not self._matches_prefix(prefix, event):
+                    continue
+                overlap = next((h for h in prefix_hooks if h.name == hook_name), None)
+                if overlap is not None and not self._registration_is_identical(overlap, entry):
+                    raise DuplicateHookRegistrationError(
+                        f"Hook name {hook_name!r} already overlaps {event.value} via "
+                        f"prefix {prefix!r}; use a distinct name or unregister it first"
+                    )
+            hooks = [h for h in self._hooks.get(event, []) if h.name != hook_name]
+            hooks.append(entry)
             # Keep sorted by priority (stable sort)
-            self._hooks[event].sort(key=lambda h: h.priority)
+            hooks.sort(key=lambda h: h.priority)
+            self._hooks[event] = hooks
+        return HookSubscription(weakref.ref(self), "event", event, hook_name, entry)
 
     def register_prefix(
         self,
@@ -450,7 +474,8 @@ class HookSystem:
         *,
         name: str | None = None,
         priority: int = 100,
-    ) -> None:
+        replace: bool = False,
+    ) -> HookSubscription:
         """Register a handler for every :class:`HookEvent` whose name matches ``prefix``.
 
         Match rule (see :meth:`_matches_prefix`):
@@ -469,36 +494,197 @@ class HookSystem:
             priority: Lower runs first (default 100). Priorities are
                 merged across exact + wildcard subscribers at trigger time.
         """
-        hook_name = name or handler.__name__
+        if not prefix or (prefix != "*" and prefix.endswith("_")):
+            raise ValueError("Hook prefix must be '*' or a non-empty enum-name fragment")
+        hook_name = name or self._default_callable_name(handler)
         entry = _RegisteredHook(handler=handler, name=hook_name, priority=priority, matcher="")
 
         with self._lock:
-            if prefix not in self._prefix_hooks:
-                self._prefix_hooks[prefix] = []
-            # Dedup against the SAME prefix (mirrors :meth:`register`'s
-            # per-event dedup). Cross-prefix duplicate names are
-            # resolved at trigger time by :meth:`_resolve_hooks_for`.
-            self._prefix_hooks[prefix] = [
-                h for h in self._prefix_hooks[prefix] if h.name != hook_name
-            ]
-            self._prefix_hooks[prefix].append(entry)
-            self._prefix_hooks[prefix].sort(key=lambda h: h.priority)
+            self._assert_open_locked()
+            existing = next(
+                (h for h in self._prefix_hooks.get(prefix, []) if h.name == hook_name), None
+            )
+            if existing is not None:
+                if self._registration_is_identical(existing, entry):
+                    return HookSubscription(
+                        weakref.ref(self), "prefix", prefix, hook_name, existing
+                    )
+                if not replace:
+                    raise DuplicateHookRegistrationError(
+                        f"Hook {hook_name!r} is already registered for prefix {prefix!r}; "
+                        "pass replace=True for an intentional replacement"
+                    )
+            for event, exact_hooks in self._hooks.items():
+                if not self._matches_prefix(prefix, event):
+                    continue
+                overlap = next((h for h in exact_hooks if h.name == hook_name), None)
+                if overlap is not None and not self._registration_is_identical(overlap, entry):
+                    raise DuplicateHookRegistrationError(
+                        f"Hook name {hook_name!r} already overlaps prefix {prefix!r} via "
+                        f"event {event.value}; use a distinct name or unregister it first"
+                    )
+            for other_prefix, prefix_hooks in self._prefix_hooks.items():
+                if other_prefix == prefix or not any(
+                    self._matches_prefix(prefix, event)
+                    and self._matches_prefix(other_prefix, event)
+                    for event in HookEvent
+                ):
+                    continue
+                overlap = next((h for h in prefix_hooks if h.name == hook_name), None)
+                if overlap is not None and not self._registration_is_identical(overlap, entry):
+                    raise DuplicateHookRegistrationError(
+                        f"Hook name {hook_name!r} overlaps prefixes {prefix!r} and "
+                        f"{other_prefix!r}; use a distinct name or unregister it first"
+                    )
+            hooks = [h for h in self._prefix_hooks.get(prefix, []) if h.name != hook_name]
+            hooks.append(entry)
+            hooks.sort(key=lambda h: h.priority)
+            self._prefix_hooks[prefix] = hooks
+        return HookSubscription(weakref.ref(self), "prefix", prefix, hook_name, entry)
+
+    def register_sink(
+        self,
+        sink: HookSink,
+        *,
+        name: str | None = None,
+        replace: bool = False,
+    ) -> HookSubscription:
+        """Register one post-dispatch sink.
+
+        Sinks are synchronous, receive exactly one :class:`HookDispatch` per
+        trigger, and are closed by :meth:`close` when they expose ``close()``.
+        """
+        sink_name = name or self._default_callable_name(sink)
+        replaced: HookSink | None = None
+        with self._lock:
+            self._assert_open_locked()
+            existing = self._sinks.get(sink_name)
+            if existing is not None and existing is not sink and not replace:
+                raise DuplicateHookRegistrationError(
+                    f"Hook sink {sink_name!r} is already registered; "
+                    "pass replace=True for an intentional replacement"
+                )
+            if existing is not None and existing is not sink:
+                replaced = existing
+            self._sinks[sink_name] = sink
+        if replaced is not None:
+            self._close_sink(sink_name, replaced)
+        return HookSubscription(weakref.ref(self), "sink", None, sink_name, sink)
+
+    def add_cleanup(
+        self,
+        name: str,
+        callback: CleanupCallback,
+        *,
+        replace: bool = False,
+    ) -> HookSubscription:
+        """Register an idempotent callback run during :meth:`close`."""
+        with self._lock:
+            self._assert_open_locked()
+            existing = self._cleanups.get(name)
+            if existing is not None and existing is not callback and not replace:
+                raise DuplicateHookRegistrationError(
+                    f"Hook cleanup {name!r} is already registered; "
+                    "pass replace=True for an intentional replacement"
+                )
+            self._cleanups[name] = callback
+        return HookSubscription(weakref.ref(self), "cleanup", None, name, callback)
+
+    def add_owner_cleanup(
+        self,
+        name: str,
+        callback: Callable[[HookSystem], Any],
+        *,
+        replace: bool = False,
+    ) -> HookSubscription:
+        """Register a cleanup that receives this system without retaining it.
+
+        Module-level hook bridges commonly need compare-and-clear teardown:
+        ``clear_binding(active_hooks)``. Storing a closure that directly
+        captures ``self`` creates a reference cycle and can delay release of
+        SQLite connections and other sink resources until cyclic GC runs.
+        This helper keeps only a weak reference while preserving the same
+        identity-safe cleanup contract.
+        """
+        owner_ref = weakref.ref(self)
+
+        def _cleanup() -> None:
+            owner = owner_ref()
+            if owner is not None:
+                callback(owner)
+
+        return self.add_cleanup(name, _cleanup, replace=replace)
+
+    def _cancel_subscription(self, subscription: HookSubscription) -> bool:
+        """Cancel only the generation represented by ``subscription``."""
+        sink_to_close: HookSink | None = None
+        removed = False
+        with self._lock:
+            if subscription.kind == "event" and isinstance(subscription.key, HookEvent):
+                hooks = self._hooks.get(subscription.key, [])
+                remaining = [hook for hook in hooks if hook is not subscription.identity]
+                removed = len(remaining) < len(hooks)
+                if remaining:
+                    self._hooks[subscription.key] = remaining
+                else:
+                    self._hooks.pop(subscription.key, None)
+            elif subscription.kind == "prefix" and isinstance(subscription.key, str):
+                hooks = self._prefix_hooks.get(subscription.key, [])
+                remaining = [hook for hook in hooks if hook is not subscription.identity]
+                removed = len(remaining) < len(hooks)
+                if remaining:
+                    self._prefix_hooks[subscription.key] = remaining
+                else:
+                    self._prefix_hooks.pop(subscription.key, None)
+            elif subscription.kind == "sink":
+                current_sink = self._sinks.get(subscription.name)
+                if current_sink is subscription.identity:
+                    sink_to_close = self._sinks.pop(subscription.name)
+                    removed = True
+            elif subscription.kind == "cleanup":
+                current_cleanup = self._cleanups.get(subscription.name)
+                if current_cleanup is subscription.identity:
+                    self._cleanups.pop(subscription.name)
+                    removed = True
+        if sink_to_close is not None:
+            self._close_sink(subscription.name, sink_to_close)
+        return removed
 
     def unregister(self, event: HookEvent, name: str) -> bool:
         """Remove a named hook. Returns True if found and removed."""
         with self._lock:
             hooks = self._hooks.get(event, [])
             before = len(hooks)
-            self._hooks[event] = [h for h in hooks if h.name != name]
-            return len(self._hooks[event]) < before
+            remaining = [h for h in hooks if h.name != name]
+            if remaining:
+                self._hooks[event] = remaining
+            else:
+                self._hooks.pop(event, None)
+            return len(remaining) < before
 
     def unregister_prefix(self, prefix: str, name: str) -> bool:
         """Remove a named wildcard hook. Returns True if found and removed."""
         with self._lock:
             hooks = self._prefix_hooks.get(prefix, [])
             before = len(hooks)
-            self._prefix_hooks[prefix] = [h for h in hooks if h.name != name]
-            return len(self._prefix_hooks[prefix]) < before
+            remaining = [h for h in hooks if h.name != name]
+            if remaining:
+                self._prefix_hooks[prefix] = remaining
+            else:
+                self._prefix_hooks.pop(prefix, None)
+            return len(remaining) < before
+
+    def unregister_sink(self, name: str) -> bool:
+        with self._lock:
+            sink = self._sinks.pop(name, None)
+        if sink is None:
+            return False
+        self._close_sink(name, sink)
+        return True
+
+    def unregister_cleanup(self, name: str) -> bool:
+        with self._lock:
+            return self._cleanups.pop(name, None) is not None
 
     @staticmethod
     def _matches_prefix(prefix: str, event: HookEvent) -> bool:
@@ -528,36 +714,8 @@ class HookSystem:
 
         Returns list of HookResults. Errors in one hook don't stop others.
         """
-        data = data or {}
-        results: list[HookResult] = []
-        hooks = self._resolve_hooks_for(event)
-        hooks = self._filter_by_matcher(hooks, event, data)
-
-        for hook in hooks:
-            try:
-                self._call_handler(hook, event, data)
-                results.append(HookResult(success=True, event=event, handler_name=hook.name))
-            except Exception as exc:
-                log.warning("Hook '%s' failed on %s: %s", hook.name, event.value, exc)
-                results.append(
-                    HookResult(
-                        success=False,
-                        event=event,
-                        handler_name=hook.name,
-                        error=str(exc),
-                    )
-                )
-
-        # PR-COMM-1 (2026-05-24, spec doc §4 union channel wiring) —
-        # mirror this trigger into the active RunTranscript as a typed
-        # ActivityRow so the pipeline transcript carries every hook
-        # event, not just the 4 SessionTranscript record_* mirrors PR-U
-        # landed. No-op when no orchestrator is bound (REPL / gateway /
-        # tests). Failures are silent + warning-logged so the union
-        # channel never breaks an upstream hook handler.
-        _mirror_hook_to_active_transcript(event, data)
-
-        return results
+        dispatch = self._dispatch_sync(event, data, HookDispatchMode.OBSERVE)
+        return list(dispatch.results)
 
     async def trigger_async(
         self, event: HookEvent, data: dict[str, Any] | None = None
@@ -567,32 +725,8 @@ class HookSystem:
         Awaitable handlers are awaited in priority order. Sync handlers run
         inline to preserve hook data mutation semantics.
         """
-        data = data or {}
-        results: list[HookResult] = []
-        hooks = self._resolve_hooks_for(event)
-        hooks = self._filter_by_matcher(hooks, event, data)
-
-        for hook in hooks:
-            try:
-                await self._call_handler_async(hook, event, data)
-                results.append(HookResult(success=True, event=event, handler_name=hook.name))
-            except Exception as exc:
-                log.warning("Hook '%s' failed on %s: %s", hook.name, event.value, exc)
-                results.append(
-                    HookResult(
-                        success=False,
-                        event=event,
-                        handler_name=hook.name,
-                        error=str(exc),
-                    )
-                )
-
-        # PR-COMM-1 (2026-05-24) — async-path parity with the sync
-        # mirror call in :meth:`trigger` so both dispatch paths produce
-        # the same unified timeline.
-        _mirror_hook_to_active_transcript(event, data)
-
-        return results
+        dispatch = await self._dispatch_async(event, data, HookDispatchMode.OBSERVE)
+        return list(dispatch.results)
 
     def trigger_with_result(
         self, event: HookEvent, data: dict[str, Any] | None = None
@@ -603,80 +737,15 @@ class HookSystem:
         corresponding HookResult.data field. This enables hooks that feed
         recommendations back to the caller (e.g. CONTEXT_OVERFLOW_ACTION).
         """
-        data = data or {}
-        results: list[HookResult] = []
-        hooks = self._resolve_hooks_for(event)
-        hooks = self._filter_by_matcher(hooks, event, data)
-
-        for hook in hooks:
-            try:
-                ret = self._call_handler(hook, event, data)
-                result_data = ret if isinstance(ret, dict) else {}
-                results.append(
-                    HookResult(
-                        success=True,
-                        event=event,
-                        handler_name=hook.name,
-                        data=result_data,
-                    )
-                )
-            except Exception as exc:
-                log.warning("Hook '%s' failed on %s: %s", hook.name, event.value, exc)
-                results.append(
-                    HookResult(
-                        success=False,
-                        event=event,
-                        handler_name=hook.name,
-                        error=str(exc),
-                    )
-                )
-
-        # PR-OBS-CONTRACT (2026-06-13) — mirror parity. Pre-fix only
-        # ``trigger``/``trigger_async`` mirrored to the timeline, so the
-        # feedback-pattern events (CONTEXT_OVERFLOW_ACTION,
-        # PROGRAM_MD_UNREADABLE, TOOL_RESULT_TRANSFORM) fired via
-        # ``trigger_with_result`` were invisible — a half-connected
-        # "every hook event → one row" contract. Mirroring here closes it.
-        _mirror_hook_to_active_transcript(event, data)
-
-        return results
+        dispatch = self._dispatch_sync(event, data, HookDispatchMode.FEEDBACK)
+        return list(dispatch.results)
 
     async def trigger_with_result_async(
         self, event: HookEvent, data: dict[str, Any] | None = None
     ) -> list[HookResult]:
         """Async variant of trigger_with_result()."""
-        data = data or {}
-        results: list[HookResult] = []
-        hooks = self._resolve_hooks_for(event)
-        hooks = self._filter_by_matcher(hooks, event, data)
-
-        for hook in hooks:
-            try:
-                ret = await self._call_handler_async(hook, event, data)
-                result_data = ret if isinstance(ret, dict) else {}
-                results.append(
-                    HookResult(
-                        success=True,
-                        event=event,
-                        handler_name=hook.name,
-                        data=result_data,
-                    )
-                )
-            except Exception as exc:
-                log.warning("Hook '%s' failed on %s: %s", hook.name, event.value, exc)
-                results.append(
-                    HookResult(
-                        success=False,
-                        event=event,
-                        handler_name=hook.name,
-                        error=str(exc),
-                    )
-                )
-
-        # PR-OBS-CONTRACT (2026-06-13) — async-path mirror parity.
-        _mirror_hook_to_active_transcript(event, data)
-
-        return results
+        dispatch = await self._dispatch_async(event, data, HookDispatchMode.FEEDBACK)
+        return list(dispatch.results)
 
     def trigger_interceptor(
         self, event: HookEvent, data: dict[str, Any] | None = None, *, timeout_s: float = 0
@@ -696,67 +765,212 @@ class HookSystem:
         Returns:
             InterceptResult with blocked status, reason, and final data.
         """
-        data = dict(data) if data else {}  # defensive copy
-        hooks = self._resolve_hooks_for(event)
-        hooks = self._filter_by_matcher(hooks, event, data)
-
-        for hook in hooks:
-            try:
-                ret = self._call_handler(hook, event, data, timeout_s=timeout_s)
-                if isinstance(ret, dict):
-                    if ret.get("block"):
-                        # PR-OBS-CONTRACT — mirror the blocked interception
-                        # too: a blocked USER_INPUT_RECEIVED is a timeline
-                        # event, not a non-event.
-                        _mirror_hook_to_active_transcript(event, data)
-                        return InterceptResult(
-                            blocked=True,
-                            reason=ret.get("reason", f"Blocked by {hook.name}"),
-                            data=data,
-                        )
-                    modifications = ret.get("modify")
-                    if isinstance(modifications, dict):
-                        data.update(modifications)
-            except Exception as exc:
-                log.warning("Interceptor '%s' failed on %s: %s", hook.name, event.value, exc)
-                # Interceptor errors are non-blocking — continue chain
-
-        # PR-OBS-CONTRACT (2026-06-13) — interceptor mirror parity (the
-        # interceptor-pattern event USER_INPUT_RECEIVED was timeline-invisible).
-        _mirror_hook_to_active_transcript(event, data)
-        return InterceptResult(blocked=False, data=data)
+        dispatch = self._dispatch_sync(
+            event,
+            data,
+            HookDispatchMode.INTERCEPTOR,
+            timeout_s=timeout_s,
+        )
+        return InterceptResult(
+            blocked=dispatch.blocked,
+            reason=dispatch.block_reason,
+            data=dict(dispatch.data),
+        )
 
     async def trigger_interceptor_async(
         self, event: HookEvent, data: dict[str, Any] | None = None, *, timeout_s: float = 0
     ) -> InterceptResult:
         """Async variant of trigger_interceptor()."""
-        data = dict(data) if data else {}
-        hooks = self._resolve_hooks_for(event)
-        hooks = self._filter_by_matcher(hooks, event, data)
+        dispatch = await self._dispatch_async(
+            event,
+            data,
+            HookDispatchMode.INTERCEPTOR,
+            timeout_s=timeout_s,
+        )
+        return InterceptResult(
+            blocked=dispatch.blocked,
+            reason=dispatch.block_reason,
+            data=dict(dispatch.data),
+        )
+
+    # -- Internal helpers ------------------------------------------------------
+
+    def _dispatch_sync(
+        self,
+        event: HookEvent,
+        data: dict[str, Any] | None,
+        mode: HookDispatchMode,
+        *,
+        timeout_s: float = 0,
+    ) -> HookDispatch:
+        started_at = time.time()
+        working = dict(data) if data is not None else {}
+        if self.closed:
+            return HookDispatch(
+                event=event,
+                mode=mode,
+                data=working,
+                started_at=started_at,
+                completed_at=time.time(),
+            )
+        hooks = self._filter_by_matcher(self._resolve_hooks_for(event), event, working)
+        results: list[HookResult] = []
+        blocked = False
+        block_reason = ""
+        blocked_by = ""
 
         for hook in hooks:
             try:
-                ret = await self._call_handler_async(hook, event, data, timeout_s=timeout_s)
-                if isinstance(ret, dict):
-                    if ret.get("block"):
-                        # PR-OBS-CONTRACT — mirror the blocked interception.
-                        _mirror_hook_to_active_transcript(event, data)
-                        return InterceptResult(
-                            blocked=True,
-                            reason=ret.get("reason", f"Blocked by {hook.name}"),
-                            data=data,
-                        )
+                ret = self._call_handler(hook, event, dict(working), timeout_s=timeout_s)
+                result_data = (
+                    ret if mode is HookDispatchMode.FEEDBACK and isinstance(ret, dict) else {}
+                )
+                results.append(
+                    HookResult(
+                        success=True,
+                        event=event,
+                        handler_name=hook.name,
+                        data=result_data,
+                    )
+                )
+                if mode is HookDispatchMode.INTERCEPTOR and isinstance(ret, dict):
                     modifications = ret.get("modify")
                     if isinstance(modifications, dict):
-                        data.update(modifications)
+                        working.update(modifications)
+                    if ret.get("block"):
+                        blocked = True
+                        blocked_by = hook.name
+                        block_reason = str(ret.get("reason") or f"Blocked by {hook.name}")
+                        break
             except Exception as exc:
-                log.warning("Interceptor '%s' failed on %s: %s", hook.name, event.value, exc)
+                log.warning("Hook '%s' failed on %s: %s", hook.name, event.value, exc)
+                results.append(
+                    HookResult(
+                        success=False,
+                        event=event,
+                        handler_name=hook.name,
+                        error=str(exc),
+                    )
+                )
 
-        # PR-OBS-CONTRACT (2026-06-13) — async interceptor mirror parity.
-        _mirror_hook_to_active_transcript(event, data)
-        return InterceptResult(blocked=False, data=data)
+        dispatch = HookDispatch(
+            event=event,
+            mode=mode,
+            data=dict(working),
+            started_at=started_at,
+            completed_at=time.time(),
+            results=tuple(results),
+            blocked=blocked,
+            block_reason=block_reason,
+            blocked_by=blocked_by,
+        )
+        self._notify_sinks(dispatch)
+        return dispatch
 
-    # -- Internal helpers ------------------------------------------------------
+    async def _dispatch_async(
+        self,
+        event: HookEvent,
+        data: dict[str, Any] | None,
+        mode: HookDispatchMode,
+        *,
+        timeout_s: float = 0,
+    ) -> HookDispatch:
+        started_at = time.time()
+        working = dict(data) if data is not None else {}
+        if self.closed:
+            return HookDispatch(
+                event=event,
+                mode=mode,
+                data=working,
+                started_at=started_at,
+                completed_at=time.time(),
+            )
+        hooks = self._filter_by_matcher(self._resolve_hooks_for(event), event, working)
+        results: list[HookResult] = []
+        blocked = False
+        block_reason = ""
+        blocked_by = ""
+
+        for hook in hooks:
+            try:
+                ret = await self._call_handler_async(
+                    hook,
+                    event,
+                    dict(working),
+                    timeout_s=timeout_s,
+                )
+                result_data = (
+                    ret if mode is HookDispatchMode.FEEDBACK and isinstance(ret, dict) else {}
+                )
+                results.append(
+                    HookResult(
+                        success=True,
+                        event=event,
+                        handler_name=hook.name,
+                        data=result_data,
+                    )
+                )
+                if mode is HookDispatchMode.INTERCEPTOR and isinstance(ret, dict):
+                    modifications = ret.get("modify")
+                    if isinstance(modifications, dict):
+                        working.update(modifications)
+                    if ret.get("block"):
+                        blocked = True
+                        blocked_by = hook.name
+                        block_reason = str(ret.get("reason") or f"Blocked by {hook.name}")
+                        break
+            except Exception as exc:
+                log.warning("Hook '%s' failed on %s: %s", hook.name, event.value, exc)
+                results.append(
+                    HookResult(
+                        success=False,
+                        event=event,
+                        handler_name=hook.name,
+                        error=str(exc),
+                    )
+                )
+
+        dispatch = HookDispatch(
+            event=event,
+            mode=mode,
+            data=dict(working),
+            started_at=started_at,
+            completed_at=time.time(),
+            results=tuple(results),
+            blocked=blocked,
+            block_reason=block_reason,
+            blocked_by=blocked_by,
+        )
+        self._notify_sinks(dispatch)
+        return dispatch
+
+    def _notify_sinks(self, dispatch: HookDispatch) -> None:
+        with self._lock:
+            sinks = list(self._sinks.items())
+        for sink_name, sink in sinks:
+            try:
+                ret = sink(dispatch)
+                if inspect.isawaitable(ret):
+                    if inspect.iscoroutine(ret):
+                        ret.close()
+                    raise TypeError(f"Hook sink {sink_name!r} must be synchronous")
+            except Exception as exc:
+                warning_key = (sink_name, dispatch.event.value)
+                if warning_key not in self._sink_failure_warned:
+                    self._sink_failure_warned.add(warning_key)
+                    log.warning(
+                        "Hook sink '%s' failed on %s (suppressing repeats): %s",
+                        sink_name,
+                        dispatch.event.value,
+                        exc,
+                    )
+                else:
+                    log.debug(
+                        "Hook sink '%s' failed on %s: %s",
+                        sink_name,
+                        dispatch.event.value,
+                        exc,
+                    )
 
     @staticmethod
     def _filter_by_matcher(
@@ -771,20 +985,16 @@ class HookSystem:
         """
         if event not in HookSystem._TOOL_EVENTS:
             return hooks
-        tool_name = data.get("tool_name", "")
+        tool_name = str(data.get("tool_name", "") or "")
         if not tool_name:
-            return hooks
+            return [hook for hook in hooks if hook.compiled_matcher is None]
         result: list[_RegisteredHook] = []
         for hook in hooks:
-            if not hook.matcher:
+            if hook.compiled_matcher is None:
                 result.append(hook)
                 continue
-            try:
-                if re.search(hook.matcher, tool_name):
-                    result.append(hook)
-            except re.error:
-                log.warning("Invalid matcher regex '%s' in hook '%s'", hook.matcher, hook.name)
-                result.append(hook)  # fail-open: invalid regex matches all
+            if hook.compiled_matcher.search(tool_name):
+                result.append(hook)
         return result
 
     @staticmethod
@@ -795,27 +1005,13 @@ class HookSystem:
         *,
         timeout_s: float = 0,
     ) -> dict[str, Any] | None:
-        """Call a hook handler with optional timeout.
-
-        When timeout_s > 0, the handler runs in a thread pool with a deadline.
-        On timeout, logs a warning and returns None (non-blocking skip).
-        """
-        if timeout_s <= 0:
-            return HookSystem._resolve_sync_return(hook.handler(event, data), hook, event)
-
-        with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
-            future = pool.submit(hook.handler, event, data)
-            try:
-                ret = future.result(timeout=timeout_s)
-                return HookSystem._resolve_sync_return(ret, hook, event)
-            except concurrent.futures.TimeoutError:
-                log.warning(
-                    "Hook '%s' timed out on %s (%.1fs limit)",
-                    hook.name,
-                    event.value,
-                    timeout_s,
-                )
-                return None
+        """Call a synchronous hook without creating abandoned worker threads."""
+        if timeout_s > 0:
+            raise HookTimeoutUnsupportedError(
+                f"Sync hook {hook.name!r} cannot guarantee a {timeout_s:.3f}s timeout; "
+                "use an async handler with trigger_*_async"
+            )
+        return HookSystem._resolve_sync_return(hook.handler(event, data), hook, event)
 
     @staticmethod
     async def _call_handler_async(
@@ -836,16 +1032,18 @@ class HookSystem:
         if timeout_s <= 0:
             return await invoke()
 
+        if not HookSystem._is_async_callable(hook.handler):
+            raise HookTimeoutUnsupportedError(
+                f"Sync hook {hook.name!r} cannot guarantee a {timeout_s:.3f}s timeout; "
+                "declare it async or omit timeout_s"
+            )
+
         try:
             return await asyncio.wait_for(invoke(), timeout_s)
         except TimeoutError:
-            log.warning(
-                "Hook '%s' timed out on %s (%.1fs limit)",
-                hook.name,
-                event.value,
-                timeout_s,
-            )
-            return None
+            raise HookExecutionTimeoutError(
+                f"Hook {hook.name!r} timed out on {event.value} after {timeout_s:.3f}s"
+            ) from None
 
     @staticmethod
     def _resolve_sync_return(
@@ -865,9 +1063,39 @@ class HookSystem:
         )
 
     @staticmethod
-    async def _await_awaitable(ret: Awaitable[HookReturn]) -> dict[str, Any] | None:
-        """Coroutine wrapper for sync APIs that need to run an awaitable handler."""
-        return await ret
+    def _is_async_callable(handler: HookHandler) -> bool:
+        return inspect.iscoroutinefunction(handler) or inspect.iscoroutinefunction(
+            type(handler).__call__
+        )
+
+    @staticmethod
+    def _default_callable_name(callback: Callable[..., Any]) -> str:
+        return str(getattr(callback, "__name__", callback.__class__.__name__))
+
+    @staticmethod
+    def _same_handler(left: HookHandler, right: HookHandler) -> bool:
+        if left is right:
+            return True
+        return getattr(left, "__self__", None) is getattr(right, "__self__", None) and getattr(
+            left, "__func__", left
+        ) is getattr(right, "__func__", right)
+
+    @classmethod
+    def _registration_is_identical(cls, left: _RegisteredHook, right: _RegisteredHook) -> bool:
+        return (
+            cls._same_handler(left.handler, right.handler)
+            and left.priority == right.priority
+            and left.matcher == right.matcher
+        )
+
+    def _assert_open_locked(self) -> None:
+        if self._closed:
+            raise RuntimeError("HookSystem is closed")
+
+    @property
+    def closed(self) -> bool:
+        with self._lock:
+            return self._closed
 
     def list_hooks(self, event: HookEvent | None = None) -> dict[str, list[str]]:
         """List registered hook names, optionally filtered by event.
@@ -890,6 +1118,11 @@ class HookSystem:
                 if hooks
             }
             return {**exact, **wildcard}
+
+    def list_sinks(self) -> list[str]:
+        """Return registered post-dispatch sink names in invocation order."""
+        with self._lock:
+            return list(self._sinks)
 
     def _resolve_hooks_for_locked(self, event: HookEvent) -> list[_RegisteredHook]:
         """Lock-free variant of :meth:`_resolve_hooks_for` for callers that
@@ -927,6 +1160,37 @@ class HookSystem:
             else:
                 self._hooks.clear()
                 self._prefix_hooks.clear()
+
+    def close(self) -> None:
+        """Deterministically release handlers, callbacks, and sink resources."""
+        with self._lock:
+            if self._closed:
+                return
+            self._closed = True
+            cleanups = list(reversed(self._cleanups.items()))
+            sinks = list(reversed(self._sinks.items()))
+            self._hooks.clear()
+            self._prefix_hooks.clear()
+            self._cleanups.clear()
+            self._sinks.clear()
+
+        for cleanup_name, callback in cleanups:
+            try:
+                callback()
+            except Exception:
+                log.warning("Hook cleanup '%s' failed", cleanup_name, exc_info=True)
+        for sink_name, sink in sinks:
+            self._close_sink(sink_name, sink)
+
+    @staticmethod
+    def _close_sink(name: str, sink: HookSink) -> None:
+        close = getattr(sink, "close", None)
+        if not callable(close):
+            return
+        try:
+            close()
+        except Exception:
+            log.warning("Hook sink '%s' close failed", name, exc_info=True)
 
 
 # Populate _TOOL_EVENTS after HookEvent members are available.

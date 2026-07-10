@@ -49,14 +49,13 @@ def test_append_event_updates_latest_and_preserves_event_stream(tmp_path):
 
 
 def test_bootstrap_cognitive_hook_records_to_store(tmp_path, monkeypatch):
-    import core.memory.cognitive_state_store as store_mod
     from core.hooks.system import HookEvent
     from core.wiring.bootstrap import build_hooks
 
     db_path = tmp_path / "sessions.db"
-    monkeypatch.setattr(store_mod, "_DEFAULT_DB_PATH", db_path)
+    monkeypatch.setattr("core.memory.session_manager._get_default_db_path", lambda: db_path)
 
-    hooks, _run_log, _metrics = build_hooks(
+    hooks, _event_store, _metrics = build_hooks(
         session_key="test-session",
         run_id="run-1",
         log_dir=tmp_path / "logs",

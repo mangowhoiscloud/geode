@@ -245,19 +245,15 @@ class TestAutoLearnHandler:
 
 
 class TestHookRegistration:
-    def test_auto_learn_registered_in_build_hooks(self):
-        from unittest.mock import patch
+    def test_auto_learn_registered_in_build_hooks(self, tmp_path):
+        from core.wiring.bootstrap import build_hooks
 
-        with (
-            patch("core.wiring.bootstrap.RunLog"),
-        ):
-            from core.wiring.bootstrap import build_hooks
-
-            hooks, _, _ = build_hooks(
-                session_key="test",
-                run_id="test-run",
-                log_dir=None,
-            )
+        hooks, _, _ = build_hooks(
+            session_key="test",
+            run_id="test-run",
+            log_dir=tmp_path,
+        )
 
         all_hooks = hooks.list_hooks()
         assert "turn_auto_learn" in all_hooks.get("turn_complete", [])
+        hooks.close()

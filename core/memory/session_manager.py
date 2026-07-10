@@ -616,6 +616,12 @@ class SessionManager:
         self._conn.execute(_CREATE_RUN_LINEAGE_AGENT_INDEX_SQL)
         self._conn.execute(_CREATE_RUN_LINEAGE_PARENT_INDEX_SQL)
         self._conn.execute(_CREATE_RUN_LINEAGE_ROOT_INDEX_SQL)
+        # Operational hook events share the project-local sessions.db so
+        # session/message/runtime/event queries have one transactional SoT.
+        # The helper is additive and also used by the standalone event writer.
+        from core.observability.event_store import ensure_event_schema
+
+        ensure_event_schema(self._conn)
         # Phase 1c (Hermes absorption, 2026-05-22) — FTS5 indices.
         # unicode61 is always created. trigram is probed at runtime and
         # skipped on SQLite builds that don't ship it; ``self._has_trigram``

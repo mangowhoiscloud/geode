@@ -3,8 +3,15 @@
 import asyncio
 import time
 
+import pytest
 from core.agent.context_manager import ContextWindowManager
-from core.hooks import HookEvent, HookResult, HookSystem, InterceptResult
+from core.hooks import (
+    DuplicateHookRegistrationError,
+    HookEvent,
+    HookResult,
+    HookSystem,
+    InterceptResult,
+)
 
 
 class TestHookEvent:
@@ -23,7 +30,7 @@ class TestHookEvent:
         # 1 PR-NO-FALLBACK (ADAPTER_DISPATCH_ATTEMPT)
         # + 1 PR-HITL-APPROVAL-FSM (APPROVAL_TRANSITION)
         # + 1 PR-MEMORY-LIFECYCLE (MEMORY_PROMOTION_PROPOSED).
-        assert len(HookEvent) == 65  # +RESULT_FEEDBACK (PR-PRE10-ROUND2)
+        assert len(HookEvent) == 65
 
     def test_event_values(self):
         assert HookEvent.SESSION_STARTED.value == "session_start"
@@ -56,20 +63,15 @@ class TestHookEvent:
 class TestAuditLoggers:
     """Verify table-driven audit loggers register correctly."""
 
-    def test_audit_loggers_registered(self):
+    def test_audit_loggers_registered(self, tmp_path):
         """build_hooks() registers audit logger handlers."""
-        from unittest.mock import patch
+        from core.wiring.bootstrap import build_hooks
 
-        with (
-            patch("core.wiring.bootstrap.RunLog"),
-        ):
-            from core.wiring.bootstrap import build_hooks
-
-            hooks, _, _ = build_hooks(
-                session_key="test",
-                run_id="test-run",
-                log_dir=None,
-            )
+        hooks, _, _ = build_hooks(
+            session_key="test",
+            run_id="test-run",
+            log_dir=tmp_path,
+        )
 
         # Check a representative sample of audit loggers
         all_hooks = hooks.list_hooks()
@@ -77,21 +79,17 @@ class TestAuditLoggers:
         assert "llm_start" in all_hooks.get("llm_call_start", [])
         assert "shutdown" in all_hooks.get("shutdown_started", [])
         assert "mcp_fail" in all_hooks.get("mcp_server_failed", [])
+        hooks.close()
 
-    def test_p0_audit_loggers_registered(self):
+    def test_p0_audit_loggers_registered(self, tmp_path):
         """P0 production audit loggers are registered."""
-        from unittest.mock import patch
+        from core.wiring.bootstrap import build_hooks
 
-        with (
-            patch("core.wiring.bootstrap.RunLog"),
-        ):
-            from core.wiring.bootstrap import build_hooks
-
-            hooks, _, _ = build_hooks(
-                session_key="test",
-                run_id="test-run",
-                log_dir=None,
-            )
+        hooks, _, _ = build_hooks(
+            session_key="test",
+            run_id="test-run",
+            log_dir=tmp_path,
+        )
 
         all_hooks = hooks.list_hooks()
         assert "user_input" in all_hooks.get("user_input_received", [])
@@ -100,6 +98,7 @@ class TestAuditLoggers:
         assert "cost_warn" in all_hooks.get("cost_warning", [])
         assert "cost_exceeded" in all_hooks.get("cost_limit_exceeded", [])
         assert "exec_cancel" in all_hooks.get("execution_cancelled", [])
+        hooks.close()
 
 
 class TestMemoryToolHooks:
@@ -419,9 +418,8 @@ class TestRegisterPrefix:
         hooks = HookSystem()
         assert hooks.unregister_prefix("SESSION", "ghost") is False
 
-    def test_dedup_within_same_prefix_replaces_handler(self):
-        """Re-registering with the same name under the same prefix
-        replaces (matches :meth:`register`'s per-event dedup)."""
+    def test_dedup_within_same_prefix_requires_explicit_replace(self):
+        """Name collisions fail loud unless replacement is intentional."""
         hooks = HookSystem()
         seen: list[str] = []
 
@@ -432,7 +430,9 @@ class TestRegisterPrefix:
             seen.append("v2")
 
         hooks.register_prefix("SESSION", v1, name="versioned")
-        hooks.register_prefix("SESSION", v2, name="versioned")
+        with pytest.raises(DuplicateHookRegistrationError):
+            hooks.register_prefix("SESSION", v2, name="versioned")
+        hooks.register_prefix("SESSION", v2, name="versioned", replace=True)
 
         hooks.trigger(HookEvent.SESSION_STARTED)
 
@@ -477,11 +477,11 @@ class TestRegisterPrefix:
         def watcher(_e, _d):
             pass
 
-        hooks.register_prefix("*", watcher, name="run_log_handler")
+        hooks.register_prefix("*", watcher, name="wildcard_handler")
 
         all_hooks = hooks.list_hooks()
         assert "**" in all_hooks
-        assert "run_log_handler" in all_hooks["**"]
+        assert "wildcard_handler" in all_hooks["**"]
 
     def test_list_hooks_event_specific_includes_matching_wildcards(self):
         """When ``list_hooks(event)`` is called, the result lists every
@@ -548,7 +548,7 @@ class TestRegisterPrefix:
         def handler(_event, _data):
             call_count[0] += 1
 
-        hooks.register_prefix("*", handler, name="run_log_handler")
+        hooks.register_prefix("*", handler, name="wildcard_handler")
 
         for event in HookEvent:
             hooks.trigger(event)
@@ -915,9 +915,12 @@ class TestHookTimeout:
 
         hooks.register(HookEvent.USER_INPUT_RECEIVED, slow_handler, name="slow")
 
+        started = time.monotonic()
         result = hooks.trigger_interceptor(HookEvent.USER_INPUT_RECEIVED, {"x": 1}, timeout_s=0.1)
+        elapsed = time.monotonic() - started
         assert result.blocked is False
         assert "slow" not in result.data  # handler was skipped
+        assert elapsed < 0.5
 
     def test_no_timeout_runs_normally(self):
         """Without timeout, handler runs to completion."""
@@ -1078,20 +1081,16 @@ class TestMatcher:
         hooks.trigger(HookEvent.TOOL_EXEC_FAILED, {"tool_name": "web_search", "error": "404"})
         assert calls == ["run_bash"]
 
-    def test_invalid_regex_fails_open(self):
-        """Invalid regex matcher fails open (matches all)."""
+    def test_invalid_regex_rejected_at_registration(self):
+        """Invalid matcher configuration fails before runtime dispatch."""
         hooks = HookSystem()
-        calls: list[str] = []
-
-        hooks.register(
-            HookEvent.TOOL_EXEC_STARTED,
-            lambda e, d: calls.append("fired"),
-            name="bad_regex",
-            matcher="[invalid",
-        )
-
-        hooks.trigger(HookEvent.TOOL_EXEC_STARTED, {"tool_name": "any_tool"})
-        assert calls == ["fired"]
+        with pytest.raises(ValueError, match="Invalid matcher regex"):
+            hooks.register(
+                HookEvent.TOOL_EXEC_STARTED,
+                lambda e, d: None,
+                name="bad_regex",
+                matcher="[invalid",
+            )
 
     def test_mixed_matcher_and_no_matcher(self):
         """Handlers with and without matchers coexist correctly."""
@@ -1194,20 +1193,16 @@ class TestToolResultTransformEvent:
 class TestNewAuditLoggers:
     """Verify new events have audit loggers registered."""
 
-    def test_tool_failed_and_transform_audit_loggers(self):
-        from unittest.mock import patch
+    def test_tool_failed_and_transform_audit_loggers(self, tmp_path):
+        from core.wiring.bootstrap import build_hooks
 
-        with (
-            patch("core.wiring.bootstrap.RunLog"),
-        ):
-            from core.wiring.bootstrap import build_hooks
-
-            hooks, _, _ = build_hooks(
-                session_key="test",
-                run_id="test-run",
-                log_dir=None,
-            )
+        hooks, _, _ = build_hooks(
+            session_key="test",
+            run_id="test-run",
+            log_dir=tmp_path,
+        )
 
         all_hooks = hooks.list_hooks()
         assert "tool_failed" in all_hooks.get("tool_exec_failed", [])
         assert "tool_transform" in all_hooks.get("tool_result_transform", [])
+        hooks.close()

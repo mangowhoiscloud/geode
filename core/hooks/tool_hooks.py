@@ -24,6 +24,14 @@ def set_tool_hooks(hooks: Any) -> None:
     _tool_hooks_ctx.set(hooks)
 
 
+def clear_tool_hooks(expected: Any) -> bool:
+    """Clear the current-context binding when it still matches ``expected``."""
+    if _tool_hooks_ctx.get() is not expected:
+        return False
+    _tool_hooks_ctx.set(None)
+    return True
+
+
 def fire_tool_hook(event: HookEvent, data: dict[str, Any]) -> None:
     """Fire a hook via the ContextVar-bound HookSystem (no-op if unset)."""
     fire_hook(_tool_hooks_ctx.get(), event, data)

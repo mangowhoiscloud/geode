@@ -11,7 +11,7 @@ Thin Typer command over :mod:`core.memory.memory_lifecycle`:
   ``.geode/memory/_proposals/``. Rules are never written automatically.
 
 Dry-run by default; ``--apply`` moves files, writes proposals, and fires
-``MEMORY_PROMOTION_PROPOSED`` into a RunLog-wired HookSystem.
+``MEMORY_PROMOTION_PROPOSED`` into a persistence-wired HookSystem.
 """
 
 from __future__ import annotations
@@ -98,7 +98,7 @@ def memory_lifecycle(
 
         from core.wiring.bootstrap import build_hooks
 
-        hooks, _run_log, _latency = build_hooks(
+        hooks, _event_store, _latency = build_hooks(
             session_key="memory-lifecycle",
             run_id=uuid.uuid4().hex[:12],
             log_dir=None,
@@ -106,6 +106,8 @@ def memory_lifecycle(
     try:
         session_manager = SessionManager()
     except Exception as exc:  # pragma: no cover — env-specific sqlite failure
+        if hooks is not None:
+            hooks.close()
         console.print(f"[red]sessions.db unavailable:[/red] {exc}")
         raise typer.Exit(code=1) from exc
     try:
@@ -118,6 +120,8 @@ def memory_lifecycle(
         )
     finally:
         session_manager.close()
+        if hooks is not None:
+            hooks.close()
 
     for proposal in proposals:
         console.print(

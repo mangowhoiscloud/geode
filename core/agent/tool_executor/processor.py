@@ -43,6 +43,7 @@ class ToolCallProcessor:
 
     MAX_CONSECUTIVE_FAILURES = 2
     MAX_CLARIFICATION_ROUNDS = 3
+    MAX_TOOL_LOG_ENTRIES = 1_000
 
     def __init__(
         self,
@@ -121,7 +122,7 @@ class ToolCallProcessor:
         """Log result, record transcript events, and append to tool_log."""
         # Progressive log: show tool result summary (skip if already logged)
         if isinstance(result, dict):
-            skip_log = result.get("skipped") or result.get("recovery_attempted")
+            skip_log = result.get("skipped")
             if not skip_log:
                 self._op_logger.log_tool_result(tool_name, result, visible=visible)
 
@@ -159,6 +160,8 @@ class ToolCallProcessor:
                 "tool_use_id": tool_use_id,
             }
         )
+        if len(self._tool_log) > self.MAX_TOOL_LOG_ENTRIES:
+            del self._tool_log[: len(self._tool_log) - self.MAX_TOOL_LOG_ENTRIES]
 
     @staticmethod
     def _computer_gui_payload(
@@ -298,36 +301,41 @@ class ToolCallProcessor:
 
         log.info("ToolCallProcessor: tool_use %s(%s)", tool_name, tool_input)
 
-        # Check consecutive failure count
+        # Every accepted tool attempt has one start and one terminal end,
+        # including interceptor blocks, adaptive recovery, and exceptions.
         fail_count = self._consecutive_failures.get(tool_name, 0)
+        visible = self._op_logger.log_tool_call(tool_name, tool_input)
+        started_at = time.monotonic()
+        intercept = await self._fire_interceptor(
+            HookEvent.TOOL_EXEC_STARTED,
+            {"tool_name": tool_name, "tool_input": tool_input},
+        )
+        if intercept is not None:
+            modified_input = intercept.data.get("tool_input")
+            if isinstance(modified_input, dict):
+                tool_input = modified_input
 
         last_recoverable = self._last_error_recoverable.get(tool_name, True)
-        if fail_count >= self.MAX_CONSECUTIVE_FAILURES and last_recoverable:
-            # Adaptive recovery: try recovery chain instead of auto-skip
-            result = await self._attempt_recovery(tool_name, tool_input, fail_count)
-            visible = self._op_logger.log_tool_call(tool_name, tool_input)
-            self._op_logger.log_tool_result(tool_name, result, visible=visible)
+        if intercept is not None and intercept.blocked:
+            log.info("Tool %s blocked by TOOL_EXEC_START hook: %s", tool_name, intercept.reason)
+            result: Any = {
+                "error": intercept.reason,
+                "error_type": "hook_blocked",
+                "blocked_by_hook": True,
+                "recoverable": False,
+            }
+        elif fail_count >= self.MAX_CONSECUTIVE_FAILURES and last_recoverable:
+            try:
+                result = await self._attempt_recovery(tool_name, tool_input, fail_count)
+            except Exception as exc:
+                log.exception("Tool recovery raised for %s", tool_name)
+                result = {
+                    "error": str(exc),
+                    "error_type": type(exc).__name__,
+                    "recoverable": False,
+                    "recovery_attempted": True,
+                }
         else:
-            # Progressive log: show tool call before execution
-            visible = self._op_logger.log_tool_call(tool_name, tool_input)
-
-            # Hook: TOOL_EXEC_START (interceptor — can block or modify input)
-            intercept = await self._fire_interceptor(
-                HookEvent.TOOL_EXEC_STARTED, {"tool_name": tool_name, "tool_input": tool_input}
-            )
-            if intercept is not None and intercept.blocked:
-                log.info("Tool %s blocked by TOOL_EXEC_START hook: %s", tool_name, intercept.reason)
-                result = {"error": intercept.reason, "blocked_by_hook": True}
-                self._op_logger.log_tool_result(tool_name, result, visible=visible)
-                self._record_tool_activity(tool_name, tool_input, result, visible, block.id)
-                return await self._serialize_tool_result(result, block.id, tool_name)
-
-            # Apply input modifications from interceptor hook
-            if intercept is not None:
-                modified_input = intercept.data.get("tool_input")
-                if isinstance(modified_input, dict):
-                    tool_input = modified_input
-
             # Execute via ToolExecutor async path. Legacy sync handlers are
             # adapted inside the executor instead of wrapping the whole
             # executor call in a worker thread.
@@ -347,64 +355,84 @@ class ToolCallProcessor:
                 model=self._model,
                 adapter_name=self._adapter_name,
             )
-            _t0 = time.monotonic()
-            result = await self._executor.aexecute(tool_name, tool_input, context=tool_ctx)
-            _elapsed_ms = (time.monotonic() - _t0) * 1000
+            try:
+                result = await self._executor.aexecute(tool_name, tool_input, context=tool_ctx)
+            except Exception as exc:
+                log.exception("Tool execution raised for %s", tool_name)
+                result = {
+                    "error": str(exc),
+                    "error_type": type(exc).__name__,
+                    "recoverable": False,
+                }
 
-            # Hook: TOOL_EXEC_END (feedback — fires for all completions)
-            _has_error = isinstance(result, dict) and bool(result.get("error"))
-            _post_data = {
+        # One feedback stage owns result rewriting. Legacy ``updated_result``
+        # and ``additional_context`` keys are accepted here during migration;
+        # TOOL_EXEC_ENDED is now a terminal observer, not a second transformer.
+        preliminary_error = isinstance(result, dict) and bool(result.get("error"))
+        transform_results = await self._fire_with_result(
+            HookEvent.TOOL_RESULT_TRANSFORM,
+            {
                 "tool_name": tool_name,
                 "tool_input": tool_input,
-                "duration_ms": _elapsed_ms,
-                "has_error": _has_error,
                 "result": result,
-            }
-            post_results = await self._fire_with_result(HookEvent.TOOL_EXEC_ENDED, _post_data)
-            # Apply result modifications from PostToolUse-style handlers
-            for hr in post_results:
-                if hr.success and isinstance(hr.data, dict):
-                    updated = hr.data.get("updated_result")
-                    if isinstance(updated, dict):
-                        result = updated
-                    extra_ctx = hr.data.get("additional_context")
-                    if extra_ctx and isinstance(result, dict):
-                        prev = result.get("additional_context", "")
-                        result["additional_context"] = f"{prev}\n{extra_ctx}" if prev else extra_ctx
+                "has_error": preliminary_error,
+            },
+        )
+        for hook_result in transform_results:
+            if not hook_result.success or not isinstance(hook_result.data, dict):
+                continue
+            transformed = hook_result.data.get("transformed_result")
+            if not isinstance(transformed, dict):
+                transformed = hook_result.data.get("updated_result")
+            if isinstance(transformed, dict):
+                result = transformed
+            extra_ctx = hook_result.data.get("additional_context")
+            if extra_ctx and isinstance(result, dict):
+                previous = result.get("additional_context", "")
+                result["additional_context"] = f"{previous}\n{extra_ctx}" if previous else extra_ctx
 
-            # Hook: TOOL_EXEC_FAILED (observer — fires only on error)
-            if _has_error:
-                await self._fire_hook(
-                    HookEvent.TOOL_EXEC_FAILED,
-                    {
-                        "tool_name": tool_name,
-                        "tool_input": tool_input,
-                        "duration_ms": _elapsed_ms,
-                        "error": result.get("error") if isinstance(result, dict) else str(result),
-                        "error_type": result.get("error_type", "unknown")
-                        if isinstance(result, dict)
-                        else "unknown",
-                        "recoverable": result.get("recoverable", True)
-                        if isinstance(result, dict)
-                        else False,
-                    },
-                )
+        # Apply clarification guard before the terminal event so persisted
+        # status always reflects the value returned to the model.
+        if isinstance(result, dict) and result.get("clarification_needed"):
+            self._clarification_count += 1
+            if self._clarification_count > self.MAX_CLARIFICATION_ROUNDS:
+                result = {
+                    "error": (
+                        "Too many clarification attempts. Please provide all required parameters."
+                    ),
+                    "error_type": "max_clarifications_exceeded",
+                    "max_clarifications_exceeded": True,
+                    "recoverable": False,
+                }
 
-            # Hook: TOOL_RESULT_TRANSFORM (feedback — result rewriting, post-observation)
-            transform_results = await self._fire_with_result(
-                HookEvent.TOOL_RESULT_TRANSFORM,
+        elapsed_ms = (time.monotonic() - started_at) * 1_000
+        has_error = isinstance(result, dict) and bool(result.get("error"))
+        await self._fire_hook(
+            HookEvent.TOOL_EXEC_ENDED,
+            {
+                "tool_name": tool_name,
+                "tool_input": tool_input,
+                "duration_ms": elapsed_ms,
+                "has_error": has_error,
+                "result": result,
+            },
+        )
+        if has_error:
+            await self._fire_hook(
+                HookEvent.TOOL_EXEC_FAILED,
                 {
                     "tool_name": tool_name,
                     "tool_input": tool_input,
-                    "result": result,
-                    "has_error": _has_error,
+                    "duration_ms": elapsed_ms,
+                    "error": result.get("error") if isinstance(result, dict) else str(result),
+                    "error_type": result.get("error_type", "unknown")
+                    if isinstance(result, dict)
+                    else "unknown",
+                    "recoverable": result.get("recoverable", True)
+                    if isinstance(result, dict)
+                    else False,
                 },
             )
-            for hr in transform_results:
-                if hr.success and isinstance(hr.data, dict):
-                    transformed = hr.data.get("transformed_result")
-                    if isinstance(transformed, dict):
-                        result = transformed
 
         # Track consecutive failures + recoverability breadcrumb
         if isinstance(result, dict) and result.get("error"):
@@ -414,17 +442,6 @@ class ToolCallProcessor:
         else:
             self._consecutive_failures[tool_name] = 0
             self._last_error_recoverable.pop(tool_name, None)
-
-        # Track clarification rounds to prevent infinite loops
-        if isinstance(result, dict) and result.get("clarification_needed"):
-            self._clarification_count += 1
-            if self._clarification_count > self.MAX_CLARIFICATION_ROUNDS:
-                result = {
-                    "error": (
-                        "Too many clarification attempts. Please provide all required parameters."
-                    ),
-                    "max_clarifications_exceeded": True,
-                }
 
         self._record_tool_activity(tool_name, tool_input, result, visible, block.id)
         return await self._serialize_tool_result(result, block.id, tool_name)

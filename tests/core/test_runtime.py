@@ -5,15 +5,16 @@ from __future__ import annotations
 from pathlib import Path
 
 from core.hooks import HookEvent, HookSystem
+from core.hooks.catalog import event_persistence_spec
 from core.memory.session import InMemorySessionStore
-from core.observability.run_log import RunLog
+from core.observability.event_store import HookEventStore
 from core.orchestration.hot_reload import ConfigWatcher
 from core.orchestration.lane_queue import LaneQueue
 from core.orchestration.task_system import TaskGraph
 from core.runtime import GeodeRuntime
 from core.tools.policy import PolicyChain
 from core.tools.registry import ToolRegistry
-from core.wiring.bootstrap import _make_run_log_handler
+from core.wiring.bootstrap import build_hooks
 from core.wiring.container import (
     build_default_lanes as _build_default_lanes,
 )
@@ -34,15 +35,15 @@ class TestGeodeRuntimeCreate:
         assert isinstance(runtime.session_store, InMemorySessionStore)
         assert isinstance(runtime.policy_chain, PolicyChain)
         assert isinstance(runtime.tool_registry, ToolRegistry)
-        assert isinstance(runtime.run_log, RunLog)
+        assert isinstance(runtime.event_store, HookEventStore)
 
     def test_create_custom_phase(self, tmp_path: Path):
         runtime = GeodeRuntime.create("Demo Subject", phase="scoring", log_dir=tmp_path)
         assert runtime.session_key == "subject:demo_subject:scoring"
 
 
-class TestRuntimeHooksRunLog:
-    def test_hooks_write_to_run_log(self, tmp_path: Path):
+class TestRuntimeHookEvents:
+    def test_hooks_write_to_event_store(self, tmp_path: Path):
         runtime = GeodeRuntime.create("Project Atlas", log_dir=tmp_path)
 
         # Trigger lifecycle events
@@ -55,16 +56,11 @@ class TestRuntimeHooksRunLog:
             {"node": "router", "tool_name": "web_search", "duration_ms": 42.0},
         )
 
-        # Verify our events exist in the run log
-        # (other hooks like scheduler/trigger may add cascading entries)
-        entries = runtime.run_log.read(limit=20)
+        entries = runtime.event_store.read(limit=20)
         assert len(entries) >= 2
-        node_events = [e for e in entries if e.node == "router"]
-        assert len(node_events) == 2
-        exit_entry = next(e for e in node_events if e.event == "tool_exec_end")
-        assert exit_entry.duration_ms == 42.0
-        enter_entry = next(e for e in node_events if e.event == "tool_exec_start")
-        assert enter_entry.node == "router"
+        exit_entry = next(e for e in entries if e.event == "tool_exec_end")
+        assert exit_entry.payload["duration_ms"] == 42.0
+        assert next(e for e in entries if e.event == "tool_exec_start")
 
     def test_all_hook_events_logged(self, tmp_path: Path):
         runtime = GeodeRuntime.create("Project Atlas", log_dir=tmp_path)
@@ -73,24 +69,28 @@ class TestRuntimeHooksRunLog:
         for event in HookEvent:
             runtime.hooks.trigger(event, {"node": "test"})
 
-        entries = runtime.run_log.read(limit=100)
-        # All direct events + any cascading hook entries
-        assert len(entries) >= len(HookEvent)
+        entries = runtime.event_store.read(limit=200)
+        expected = sum(event_persistence_spec(event).persist_sql for event in HookEvent)
+        assert len(entries) >= expected
 
     def test_error_events_logged_with_error_status(self, tmp_path: Path):
         runtime = GeodeRuntime.create("Project Atlas", log_dir=tmp_path)
 
         runtime.hooks.trigger(
-            HookEvent.TOOL_EXEC_FAILED,
-            {"node": "router", "error": "connection timeout"},
+            HookEvent.TOOL_EXEC_ENDED,
+            {
+                "tool_name": "web_search",
+                "duration_ms": 1.0,
+                "has_error": True,
+                "result": {"error": "connection timeout"},
+            },
         )
 
-        # Find the tool_exec_failed entry (cascading hooks may add others)
-        entries = runtime.run_log.read(limit=10)
-        error_entries = [e for e in entries if e.event == "tool_exec_failed"]
+        entries = runtime.event_store.read(limit=10)
+        error_entries = [e for e in entries if e.event == "tool_exec_end"]
         assert len(error_entries) >= 1
-        assert error_entries[0].status == "error"
-        assert error_entries[0].node == "router"
+        assert error_entries[0].status == "failed"
+        assert "result" not in error_entries[0].payload
 
 
 class TestRuntimeSessionStore:
@@ -150,10 +150,10 @@ class TestRuntimeToolRegistry:
         assert "send_notification" in runtime.tool_registry
 
 
-class TestRunLogPruning:
+class TestEventPruning:
     def test_prune_logs(self, tmp_path: Path):
         runtime = GeodeRuntime.create("Project Atlas", log_dir=tmp_path)
-        # Just verify it doesn't error on empty log
+        # Just verify it doesn't error on a small event table.
         removed = runtime.prune_logs()
         assert removed == 0
 
@@ -169,15 +169,18 @@ class TestDefaultBuilders:
         registry = _build_default_registry()
         assert len(registry) == 15
 
-    def test_make_run_log_handler(self, tmp_path: Path):
-        run_log = RunLog("test_session", log_dir=tmp_path)
-        name, handler = _make_run_log_handler(run_log, "test_session", "run-001")
-        assert name == "run_log_writer"
-
-        handler(HookEvent.SESSION_STARTED, {"node": "router"})
-        entries = run_log.read(limit=1)
+    def test_build_hooks_wires_event_sink(self, tmp_path: Path):
+        hooks, event_store, _metrics = build_hooks(
+            session_key="test_session",
+            run_id="run-001",
+            log_dir=tmp_path,
+        )
+        assert hooks.list_sinks() == ["hook_persistence"]
+        hooks.trigger(HookEvent.SESSION_STARTED, {"session_id": "s-1"})
+        entries = event_store.read(limit=1)
         assert len(entries) == 1
         assert entries[0].event == "session_start"
+        hooks.close()
 
     def test_default_lanes(self):
         queue = _build_default_lanes()
@@ -213,6 +216,20 @@ class TestRuntimeNewComponents:
     def test_shutdown(self, tmp_path: Path):
         runtime = GeodeRuntime.create("Project Atlas", log_dir=tmp_path)
         runtime.shutdown()  # Should not raise
+        assert runtime.hooks.closed is True
+        assert runtime.event_store.closed is True
+
+    def test_shutdown_closes_hooks_when_other_components_fail(self, tmp_path: Path):
+        from unittest.mock import patch
+
+        runtime = GeodeRuntime.create("Project Atlas", log_dir=tmp_path)
+        with (
+            patch.object(runtime.config_watcher, "stop", side_effect=RuntimeError("watcher")),
+            patch.object(runtime.mcp_manager, "shutdown", side_effect=RuntimeError("mcp")),
+        ):
+            runtime.shutdown()
+        assert runtime.hooks.closed is True
+        assert runtime.event_store.closed is True
 
 
 class TestGetHealth:
@@ -223,6 +240,8 @@ class TestGetHealth:
         assert "triggers" in health
         assert "scheduler_running" in health
         assert "lanes" in health
+        assert "hook_events" in health
+        assert "hook_metrics" in health
 
     def test_get_health_stats_types(self, tmp_path: Path):
         runtime = GeodeRuntime.create("Project Atlas", log_dir=tmp_path)

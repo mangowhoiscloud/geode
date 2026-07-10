@@ -32,6 +32,9 @@ from ._hooks import (
     _fire_hook as _fire_hook,
 )
 from ._hooks import (
+    clear_router_hooks as clear_router_hooks,
+)
+from ._hooks import (
     set_router_hooks as set_router_hooks,
 )
 from .calls import (

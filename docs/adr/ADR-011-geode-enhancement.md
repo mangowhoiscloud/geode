@@ -2,7 +2,10 @@
 
 ## Status
 
-Proposed (2026-03-17)
+Partially superseded (2026-07-10). The original proposal is retained below;
+its RunLog-based execution-history sections are replaced by the project-local
+`sessions.db:hook_events` design in
+[`../architecture/event-persistence.md`](../architecture/event-persistence.md).
 
 ## Context
 
