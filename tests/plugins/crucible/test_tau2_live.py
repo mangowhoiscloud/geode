@@ -3,7 +3,7 @@ from pathlib import Path
 
 import pytest
 from plugins.crucible.contract import ContractError, ExperimentContract, TaskUnit, task_pack_sha256
-from plugins.crucible.producers.codex_kg import knowledge_context
+from plugins.crucible.producers.codex_kg import _prompt, knowledge_context
 from plugins.crucible.tau2_live import tau2_command, tau2_trace_checks
 
 TASKS = (
@@ -270,3 +270,16 @@ def test_codex_producer_uses_bounded_local_graph_slice(tmp_path: Path) -> None:
 
     assert {node["name"] for node in context["nodes"]} == {"Tau2 policy", "Tau2 runner"}
     assert "unrelated" not in json.dumps(context)
+
+
+def test_codex_producer_prompt_uses_can_cannot_policy_clauses() -> None:
+    prompt = _prompt(
+        objective="Improve complete workflows.",
+        surfaces=("plugins/benchmark_harness/tau2_agent_policy.md",),
+        feedback=None,
+        graph_context="{}",
+    )
+
+    assert "CANNOT add task IDs" in prompt
+    assert "CANNOT run live/provider tests" in prompt
+    assert "do not" not in prompt.casefold()

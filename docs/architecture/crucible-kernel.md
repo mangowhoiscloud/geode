@@ -314,6 +314,9 @@ candidate-owned file is `plugins/benchmark_harness/tau2_agent_policy.md`.
 `plugins.crucible.producers.codex_kg` asks GPT-5.4 subscription for one small
 edit using closed failure codes and a bounded architecture-graph slice; it
 cannot read raw tasks, trajectories, evaluator artifacts, or sealed state.
+The shipped objective, model, and reasoning effort are source defaults. The
+measured campaign omits their environment overrides, keeping those controls in
+the committed producer rather than an unhashed shell value.
 `scripts/eval/crucible_tau2_evaluator.py` and `plugins.crucible.tau2_live` own
 the paired baseline/candidate execution. They derive the complete argv from the
 contract, isolate per-arm state, retain raw evidence, and compute trace checks

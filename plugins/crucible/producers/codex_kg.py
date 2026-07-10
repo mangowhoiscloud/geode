@@ -16,6 +16,11 @@ _REQUEST_SCHEMA = "crucible.proposal-request.v3"
 _CANDIDATE_SCHEMA = "crucible.candidate.v2"
 _GRAPH_LIMIT = 128 * 1024 * 1024
 _CONTEXT_NODE_LIMIT = 16
+_DEFAULT_OBJECTIVE = (
+    "Improve completion of multi-step tool workflows by reducing serial "
+    "back-and-forth and requiring terminal verification, without weakening "
+    "confirmation or safety."
+)
 
 
 class ProducerError(RuntimeError):
@@ -193,7 +198,10 @@ def run() -> int:
     request_path = Path(os.environ["CRUCIBLE_PROPOSAL_REQUEST"])
     output_path = Path(os.environ["CRUCIBLE_CANDIDATE_OUTPUT"])
     graph_path = Path(os.environ["CRUCIBLE_KNOWLEDGE_GRAPH"])
-    objective = _text(os.environ.get("CRUCIBLE_PRODUCER_OBJECTIVE"), "producer objective")
+    objective = _text(
+        os.environ.get("CRUCIBLE_PRODUCER_OBJECTIVE", _DEFAULT_OBJECTIVE),
+        "producer objective",
+    )
     request = _load_object(request_path, "proposal request")
     if request.get("schema") != _REQUEST_SCHEMA:
         raise ProducerError(f"proposal request must use {_REQUEST_SCHEMA}")
