@@ -67,9 +67,9 @@ def _contract() -> ExperimentContract:
             "mutations": [{"surface": "core/agent/verify.py", "hypothesis": "fewer misses"}],
             "evaluator_paths": ["plugins/benchmark_harness", "plugins/crucible"],
             "promotion": {
-                "method": "paired_bootstrap.v1",
+                "method": "paired_bootstrap.v2",
                 "primary_metric": "reward",
-                "minimum_improvement": 0.1,
+                "materiality_pp": 0.1,
                 "minimum_candidate_mean": 0.5,
                 "minimum_tasks": 2,
                 "confidence_level": 0.95,

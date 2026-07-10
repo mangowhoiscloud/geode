@@ -45,6 +45,30 @@ functional change.
 
 ---
 
+## [0.99.289] - 2026-07-10
+
+### Added
+
+- **Crucible calibration: derived gate parameters.** New
+  `plugins.crucible.calibration` fits a per-task flakiness model from a null
+  paired run or trial counts, Beta effect priors from replay-screening counts
+  (pinned to the task-pack hash they were measured against, refusing stale
+  priors), and searches pack size and trial count by Monte Carlo to minimise
+  expected cost per true KEEP under an explicit cost model that includes
+  quota-window ceilings. The derivation is emitted as a content-hashed
+  `crucible.parameter-derivation.v1` block; contracts refuse stamped numbers
+  that do not equal their derivation. A power self-test replays synthetic
+  effects through the real scorer so an unopenable gate fails in CI.
+
+### Changed
+
+- **Crucible promotion rule v2.** `paired_bootstrap.v2` splits the roles the
+  v1 threshold conflated: the paired-bootstrap lower bound must exceed zero at
+  the contract's confidence level, while the point estimate clears an economic
+  `materiality_pp` floor (zero allowed for train stages). The v1 rule demanded
+  the lower bound clear the improvement threshold itself, which a power audit
+  showed required a 10-30pp true effect at documented pack scales.
+
 ## [0.99.288] - 2026-07-10
 
 ### Added

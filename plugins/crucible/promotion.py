@@ -331,10 +331,10 @@ def decide(
         reasons.append("insufficient_tasks")
     if candidate_mean < contract.promotion.minimum_candidate_mean:
         reasons.append("candidate_below_absolute_floor")
-    if paired_improvement < contract.promotion.minimum_improvement:
-        reasons.append("point_improvement_below_threshold")
-    if lower_bound < contract.promotion.minimum_improvement:
-        reasons.append("confidence_bound_below_threshold")
+    if paired_improvement < contract.promotion.materiality_pp:
+        reasons.append("improvement_below_materiality")
+    if lower_bound <= 0:
+        reasons.append("confidence_bound_not_positive")
 
     keep = not reasons and all(veto_results.values())
     verdict: Literal["KEEP", "REJECT"] = "KEEP" if keep else "REJECT"
