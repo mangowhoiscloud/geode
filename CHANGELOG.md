@@ -78,6 +78,23 @@ functional change.
   payg), and the character sheet records supported providers. Copy: "부화"
   retired for a "Birth" label, "장비" for "도구"; the growth log ends with an
   open "next act" row reserved for the first self-cut release.
+- **Perception and action, as implemented (operator PDF review).** The loop
+  section now grounds four capabilities in their modules: the two-layer
+  prompt (`<static_context>` cached / `<dynamic_context>` per-turn with
+  provider-gated current date, `core/agent/system_prompt.py`), local PDF
+  ingest (`core/tools/document_ingest.py`), real-Chrome CDP browser use
+  (`core/tools/browser_tools.py`), and the provider-agnostic computer-use
+  harness with the AX-tree first rung (`core/tools/computer_use.py` ·
+  `ui_probe.py`). Loop copy adds the explicit termination-reason catalog.
+- **Self-evolving apparatus, drawn (Hermes-landing style feature visuals).**
+  Two pixel schematics join the loop diagram: the audit-gate diagram
+  (scaffold mutation, adversarial Petri arena, dimension bars with the
+  critical floor, promote/reject branches with the gate·random·never arms)
+  and the seed-hypothesis factory (generator, critic, pilot, ranker, evolver
+  with candidates culled per stage, Elo + difficulty survivor blend). An
+  honest attempt-history log records what did not work: the zero-promotion
+  saturation finding and Crucible cycle 1's "proved the protocol, not
+  self-improvement" conclusion, with dates and version anchors.
 - **Identity details.** The site favicon is now the canonical GEODI_PIXELS
   sprite (generated `src/app/icon.png` + `favicon.ico`), a mascot-budgeted
   404 page lands at `src/app/not-found.tsx`, and the hero/card sprites react
