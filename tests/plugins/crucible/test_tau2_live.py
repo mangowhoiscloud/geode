@@ -8,6 +8,7 @@ from plugins.crucible.producers.codex_kg import (
     _DEFAULT_GRAPH_PATH,
     ProducerError,
     _prompt,
+    _validate_policy_grammar,
     knowledge_context,
 )
 from plugins.crucible.tau2_live import tau2_command, tau2_trace_checks
@@ -334,5 +335,15 @@ def test_codex_producer_prompt_uses_can_cannot_policy_clauses() -> None:
 
     assert "CANNOT add task IDs" in prompt
     assert "CANNOT run live/provider tests" in prompt
+    assert "every behavior bullet starts with exactly `- CAN` or `- CANNOT`" in prompt
     legacy_negative = " ".join(("do", "not"))
     assert legacy_negative not in prompt.casefold()
+
+
+def test_codex_producer_enforces_can_cannot_output_grammar() -> None:
+    _validate_policy_grammar(
+        "Mode: assay.\nBehavior:\n- CAN use tools.\n- CANNOT invent results.\n"
+    )
+
+    with pytest.raises(ProducerError, match="CAN/CANNOT"):
+        _validate_policy_grammar("Mode: assay.\nBehavior:\n- SHOULD batch tool calls.\n")

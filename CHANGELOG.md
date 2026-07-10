@@ -75,7 +75,10 @@ functional change.
   previously entered through ambient environment. Strict evaluator calls now
   retry one connection-class stream failure on the same adapter and identical
   request before surfacing infrastructure; schema, billing, and persistent
-  transport failures still fail closed. Explicitly
+  transport failures still fail closed. Candidate policy clauses are
+  machine-checked as `CAN`/`CANNOT` before commit, and the tau2 runtime profile
+  rejects thread-pool concurrency for `geode_agent` until the Codex streaming
+  path has direct parallel-safety evidence. Explicitly
   granted registry tools now replace a same-named global declarative schema, so
   an assay handler cannot receive arguments from GEODE's unrelated tool with
   the same name.

@@ -47,6 +47,21 @@ def _text(value: object, field: str) -> str:
     return value.strip()
 
 
+def _validate_policy_grammar(policy: str) -> None:
+    """Keep the candidate surface on one machine-checkable clause grammar."""
+
+    lines = policy.splitlines()
+    if lines.count("Behavior:") != 1:
+        raise ProducerError("candidate policy requires exactly one Behavior section")
+    behavior_index = lines.index("Behavior:")
+    clauses = [line for line in lines[behavior_index + 1 :] if line.strip()]
+    if not clauses:
+        raise ProducerError("candidate policy requires behavior clauses")
+    invalid = [line for line in clauses if not line.startswith(("- CAN ", "- CANNOT "))]
+    if invalid:
+        raise ProducerError("candidate policy clauses must use CAN/CANNOT grammar")
+
+
 def _git(*args: str) -> str:
     executable = shutil.which("git")
     if executable is None:
@@ -221,6 +236,7 @@ Prior closed failure codes: {json.dumps(failure_codes)}
 
 Constraints:
 - Edit exactly one allowed file and no other file.
+- Output grammar: every behavior bullet starts with exactly `- CAN` or `- CANNOT`.
 - Keep the change general across tasks and domains; CANNOT add task IDs, expected
   answers, scenario literals, row-specific branches, or benchmark-specific facts.
 - Preserve safety, confirmation, and tool-contract requirements.
@@ -308,6 +324,7 @@ def run() -> int:
         raise ProducerError("candidate surface must remain a regular file")
     if surface_path.stat().st_size > 16 * 1024:
         raise ProducerError("candidate surface exceeds 16384 bytes")
+    _validate_policy_grammar(surface_path.read_text(encoding="utf-8"))
     _git("add", "--", *surfaces)
     _git("commit", "-qm", f"crucible: candidate {request['iteration']}")
     candidate_sha = _git("rev-parse", "HEAD")

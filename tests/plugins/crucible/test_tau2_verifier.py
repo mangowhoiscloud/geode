@@ -139,6 +139,14 @@ def _assay_config() -> dict[str, object]:
     }
 
 
+def test_tau2_geode_agent_rejects_unattested_thread_pool_concurrency() -> None:
+    config = _assay_config()
+    config["max_concurrency"] = 2
+
+    with pytest.raises(ContractError, match="geode_agent supports max_concurrency<=1"):
+        TAU2_ADAPTER.validate_config(config)
+
+
 def _contract() -> ExperimentContract:
     return ExperimentContract.from_mapping(
         {

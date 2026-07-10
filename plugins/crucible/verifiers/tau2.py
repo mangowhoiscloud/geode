@@ -43,6 +43,7 @@ class Tau2AssayAdapter:
         ("geode_user", "candidate"),
         ("user_simulator", "evaluator"),
     )
+    agent_concurrency_limits: tuple[tuple[str, int], ...] = (("geode_agent", 1),)
 
     def classify_termination(self, reason: str) -> Literal["semantic", "infra"]:
         try:
@@ -157,6 +158,19 @@ class Tau2AssayAdapter:
         if owner != "evaluator":
             raise ContractError(
                 "contract-backed tau2 evidence requires a user runtime isolated from candidate code"
+            )
+        agent = _mapping(config.get("agent"), "assay_config.agent")
+        implementation = str(agent.get("implementation") or "")
+        concurrency_limit = dict(self.agent_concurrency_limits).get(implementation)
+        max_concurrency = config.get("max_concurrency")
+        if concurrency_limit is not None and (
+            isinstance(max_concurrency, bool)
+            or not isinstance(max_concurrency, int)
+            or max_concurrency < 1
+            or max_concurrency > concurrency_limit
+        ):
+            raise ContractError(
+                f"tau2 {implementation} supports max_concurrency<={concurrency_limit}"
             )
 
     def normalize(

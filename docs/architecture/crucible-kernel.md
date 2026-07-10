@@ -728,6 +728,17 @@ retries exactly one connection-class failure on the same adapter with the
 identical request before surfacing infrastructure. This retry happens before a
 model response reaches tool execution, so it cannot repeat a side effect.
 
+Campaign r4 then tested tau2's thread-pool concurrency. It was stopped before
+scoring for two independent reasons. The generated one-line candidate used a
+`SHOULD` clause instead of the required `CAN`/`CANNOT` grammar, and four
+concurrent Codex streams returned SDK event payloads as raw dictionaries. All
+four baseline rows became `infrastructure_error` (`dict` has no `to_dict` or
+`output`), so concurrency was not an admissible throughput optimization. The
+producer now rejects any behavior clause outside the two-token grammar before
+committing a candidate. Tau2's adapter-owned runtime profile also caps
+`geode_agent` at concurrency one; a future parallel implementation must first
+replace that profile with direct thread-safety evidence.
+
 The strongest honest claims are:
 
 - the frozen external tau2 baseline identified concrete retail wrong-write and
