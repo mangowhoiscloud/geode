@@ -18,8 +18,6 @@ import { GEODE_SOT } from "@/data/geode/sot";
 import { galmuri } from "@/fonts/galmuri";
 import { serifDisplay } from "@/fonts/serif";
 
-import { firstRelease, latestRelease, releaseCount } from "./growth";
-
 /**
  * GEODE portfolio v26 — The Fixed Point, in rose and white.
  *
@@ -928,9 +926,6 @@ function DistillationAct() {
           </div>
           <div className="absolute inset-x-2 bottom-12 top-2 sm:inset-x-3 sm:top-3">
             <div className="relative z-10 mx-auto flex h-full max-w-5xl flex-col items-center justify-center gap-7 px-6 text-center">
-              <p className="font-mono text-[11px] uppercase tracking-[0.3em]" style={{ color: PAPER_75 }}>
-                cultured since {firstRelease.date} · release #{releaseCount} · v{latestRelease.version}
-              </p>
               <div>
                 <p className="font-mono text-[10.5px] uppercase tracking-[0.42em]" style={{ color: PAPER_75 }}>
                   edited by

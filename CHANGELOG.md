@@ -45,6 +45,17 @@ functional change.
 
 ---
 
+## [0.99.294] - 2026-07-10
+
+### Fixed
+
+- **Portfolio finale drops the cultured-since stamp.** On mobile the stamp
+  line above the MANGO credit collided with the pinned top-left distillation
+  headline; the finale now opens directly with the end-credit
+  (operator-directed).
+
+---
+
 ## [0.99.293] - 2026-07-10
 
 ### Fixed
