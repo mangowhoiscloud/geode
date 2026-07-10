@@ -237,7 +237,7 @@ export function DocsShell({
           <Sidebar />
         </aside>
 
-        <main className="flex-1 min-w-0 max-w-3xl">
+        <main className={`${serifDisplay.variable} flex-1 min-w-0 max-w-3xl`}>
           <div className="mb-10">
             {currentSection && (
               <div
@@ -252,16 +252,14 @@ export function DocsShell({
                 <QuadrantChip quadrant={quadrant} />
               </div>
             )}
-            <h1
-              className={`${serifDisplay.variable} font-serif-docs text-3xl font-black md:text-4xl`}
-            >
+            <h1 className="font-serif-docs text-3xl font-black md:text-4xl">
               {displayTitle}
             </h1>
             {displaySummary && (
               <p className="mt-2 text-[var(--ink-2)] text-base leading-relaxed">{displaySummary}</p>
             )}
           </div>
-          <article className={`${serifDisplay.variable} docs-prose`}>{children}</article>
+          <article className="docs-prose">{children}</article>
           <PrevNext slug={slug} />
         </main>
       </div>
