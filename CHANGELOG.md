@@ -45,10 +45,22 @@ functional change.
 
 ---
 
-## [0.99.287] - 2026-07-10
+## [0.99.288] - 2026-07-10
 
 ### Changed
 
+- **Portfolio v17 — two-color loop-punk art direction (operator-directed).**
+  The page commits to pink `#F49BC4` x white `#FFF0F8` only (the terminal mock
+  keeps its dark product colors by explicit exception): a pinned hero field
+  with serif statement, curtain-stack sections under scroll-linked stage
+  lighting (`StageLight`), a distillation act where token rain converges
+  band-by-band through hairline filters labeled with Astryx `Token` chips
+  (critic / petri gate / held-out) and piles onto the GEODE word as a
+  top-down fill over the honest baseline ledger (REJECT rows plus the still
+  pending crucible-S5 drop), and a finale where the giant pixel wordmark
+  crossfades into the petri-dish laboratory plate ("cultured since" stamp,
+  release count, CTAs). Literal funnel drawings (mesh sieve, drainpipe) were
+  removed in favor of the converging rain itself.
 - **Portfolio v11 — landing-grade pass on the growth log (operator feedback
   batch).** The hero is now centered with a terminal mock of the real CLI
   welcome screen (`core/ui/mascot.py` line layout + `GEODI_PIXELS` sprite,
@@ -205,6 +217,11 @@ functional change.
   the Dev Blog link is dropped from the portfolio hero and the shared footer.
   Growth-log sections gain restrained scroll reveals (existing framer-motion
   `ScrollReveal`).
+
+---
+
+## [0.99.287] - 2026-07-10
+
 ### Added
 
 - **Bounded SQLite hook-event store.** Production HookSystem dispatches now

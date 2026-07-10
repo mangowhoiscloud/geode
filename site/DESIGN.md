@@ -79,14 +79,19 @@ hero stagger, scene idle float, terminal rise, petri-dish spring, cadence-bar
 growth — all gated by `useReducedMotion`. The docs surface keeps the old
 motion budget.
 
-**Color-field bands (operator-approved 2026-07-10).** /portfolio may use the
-signature rose (`--acc-artifact`) as a full-bleed section substrate on exactly
-two surfaces: the hero field and the chapter-break band (Hermes-landing
-treatment: color field + gallery art + floating terminal). Text on the field
-is `--paper` (near-black, ~10:1) set via explicit utilities (the Astryx
-element reset would otherwise repaint headings light); the mascot appears as
-a one-color `silhouette` stencil. Everywhere else the single dark substrate
-rule stands.
+**Two-color loop-punk field (operator-directed 2026-07-10, supersedes the
+two-surface band rule).** /portfolio is a single composition in exactly two
+colors: signature rose `#F49BC4` (`--acc-artifact`) as the page substrate and
+warm white `#FFF0F8` for ink, slabs, and stencils. Tone comes from dither
+density in the generated art, hierarchy from opacity — never from a third
+hue. The one sanctioned exception is the terminal mock, which keeps its dark
+product-screenshot colors (`--paper-deep` + ink tokens) because it is a
+product artifact, not page chrome. Scroll is choreography, not paging:
+curtain-stack sections over a pinned hero, `StageLight` scroll-linked
+dimming, the distillation act (token rain converging band-by-band through
+hairline filters labeled with Astryx `Token` chips, piling onto the GEODE
+word as a top-down fill), and the wordmark-to-laboratory crossfade finale.
+The docs surface keeps the single dark substrate rule.
 
 **Texture.** `.rose-grid` (globals.css) is a 1px rose dot grid at 5% opacity,
 28px pitch — for the landing/hero surfaces only. It is a pattern, not a color

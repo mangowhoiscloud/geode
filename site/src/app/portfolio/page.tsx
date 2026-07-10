@@ -77,7 +77,7 @@ function TerminalMock() {
               />
             ))}
           </span>
-          <span className="ml-2 font-mono text-[11px] text-[color-mix(in_srgb,var(--acc-artifact)_75%,transparent)]">geode</span>
+          <span className="ml-2 font-mono text-[11px] text-[var(--ink-3)]">geode</span>
         </div>
         <div className="px-5 py-5 sm:px-7">
           <div className="flex items-center gap-6">
@@ -86,16 +86,16 @@ function TerminalMock() {
               <p>
                 <span className="text-[var(--acc-artifact)]">◆</span>{" "}
                 <span className="font-semibold text-[var(--acc-artifact)]">GEODE</span>{" "}
-                <span className="text-[var(--acc-artifact)]">v{GEODE_SOT.version}</span>
+                <span className="text-[var(--ink-2)]">v{GEODE_SOT.version}</span>
               </p>
-              <p className="text-[color-mix(in_srgb,var(--acc-artifact)_75%,transparent)]">claude-opus-4-8 · ~/workspace/geode</p>
-              <p className="text-[color-mix(in_srgb,var(--acc-artifact)_75%,transparent)]">/help for commands · type naturally</p>
+              <p className="text-[var(--ink-3)]">claude-opus-4-8 · ~/workspace/geode</p>
+              <p className="text-[var(--ink-3)]">/help for commands · type naturally</p>
             </div>
           </div>
           <div className="mt-4 border-t border-[var(--rule-soft)] pt-4 font-mono text-[12px] sm:text-[13px]">
             <p className="break-words">
               <span className="text-[var(--acc-artifact)]">&gt;</span>{" "}
-              <span className="text-[var(--acc-artifact)]">
+              <span className="text-[var(--ink-2)]">
                 {t(
                   locale,
                   "이 레포 점검하고 릴리스 블로커 요약해줘",
@@ -117,27 +117,12 @@ function TerminalMock() {
   );
 }
 
-/** Crisp pixel cloud that drifts across (and past) frames. */
-function PixelCloud({ className, flip = false }: { className?: string; flip?: boolean }) {
-  return (
-    <div
-      aria-hidden
-      className={`geodi-drift pointer-events-none absolute z-20 flex flex-col ${flip ? "items-start" : "items-center"} ${className ?? ""}`}
-    >
-      <div className="h-[8px] w-[30px] bg-[var(--acc-artifact)]" />
-      <div className="h-[8px] w-[54px] bg-[var(--acc-artifact)]" />
-    </div>
-  );
-}
-
 function HeroField() {
   const locale = useLocale();
   const reduceMotion = useReducedMotion();
   const { scrollY } = useScroll();
   const fieldOpacity = useTransform(scrollY, [0, 700], [1, 0.25]);
   const fieldScale = useTransform(scrollY, [0, 700], [1, 0.965]);
-  // The Lanthimos zoom: scroll pushes the camera into the theatre.
-  const sceneZoom = useTransform(scrollY, [0, 900], [1, 1.22]);
   // Reduced motion keeps the fades but drops movement/scale.
   const heroItem = {
     hidden: { opacity: 0, y: reduceMotion ? 0 : 24 },
@@ -163,7 +148,7 @@ function HeroField() {
           <span className="font-pixel text-[19px] font-bold tracking-[0.06em] text-[#FFF0F8]">GEODE</span>
         </div>
 
-        <div className="relative z-10 mx-auto grid max-w-7xl items-center gap-6 px-5 pb-24 pt-10 sm:px-8 lg:grid-cols-[1.05fr_0.95fr] lg:pb-28 lg:pt-14">
+        <div className="relative z-10 mx-auto max-w-7xl px-5 pb-14 pt-10 sm:px-8 lg:pb-16 lg:pt-14">
           <motion.div
             className="relative z-10"
             initial="hidden"
@@ -174,11 +159,11 @@ function HeroField() {
               open source · apache-2.0 · {t(locale, "루프 실험실", "the loop laboratory")}
             </motion.p>
             <motion.h1 variants={heroItem} className="font-serif-display mt-7 text-balance text-[clamp(2.5rem,5.8vw,4.4rem)] font-black leading-[1.12] text-[#FFF0F8]">
-              {t(locale, "컴퓨터의 모든 일을", "The agentic OS")}
+              {t(locale, "일을 맡기면", "The agent that")}
               <br />
-              {t(locale, "모델로 실행하고,", "that runs everything,")}
+              {t(locale, "끝까지 실행하고,", "executes to the end,")}
               <br />
-              {t(locale, "스스로를 고쳐 쓰는 OS.", "and rewrites itself.")}
+              {t(locale, "스스로를 고쳐 씁니다.", "and rewrites itself.")}
             </motion.h1>
 
             <motion.p variants={heroItem} className="mt-10 font-mono text-[10.5px] uppercase tracking-[0.3em] text-[color-mix(in_srgb,#FFF0F8_70%,transparent)]">
@@ -208,36 +193,6 @@ function HeroField() {
             </motion.div>
           </motion.div>
 
-          <motion.div
-            className="relative mx-auto w-full max-w-[440px]"
-            initial={{ opacity: 0, y: reduceMotion ? 0 : 30 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.9, delay: 0.3, ease: [0.22, 1, 0.36, 1] }}
-          >
-            <PixelCloud className="-left-7 top-14" />
-            <PixelCloud className="-right-6 bottom-24" flip />
-            <motion.div
-              animate={reduceMotion ? undefined : { y: [0, -7, 0] }}
-              transition={{ duration: 7, repeat: Infinity, ease: "easeInOut" }}
-              className="overflow-hidden"
-            >
-              <motion.div className="bg-[var(--acc-artifact)]" style={{ scale: reduceMotion ? 1 : sceneZoom, transformOrigin: "50% 78%" }}>
-              <Image
-                src="/geode/images/geode-etch-line.png"
-                alt={t(
-                  locale,
-                  "체커보드 대리석 실험실 홀 중앙의 Geodi 도트 아트",
-                  "Pixel-art of Geodi centered in a checkerboard marble laboratory hall"
-                )}
-                width={1200}
-                height={1500}
-                priority
-                className="w-full select-none border border-[color-mix(in_srgb,var(--paper)_35%,transparent)]"
-                style={{ imageRendering: "pixelated" }}
-              />
-              </motion.div>
-            </motion.div>
-          </motion.div>
         </div>
 
         <div className="pointer-events-none absolute inset-x-0 bottom-0 z-10 flex items-end justify-between px-5 pb-4 font-mono text-[10px] uppercase tracking-[0.18em] text-[color-mix(in_srgb,#FFF0F8_60%,transparent)] sm:px-8">
@@ -250,29 +205,13 @@ function HeroField() {
   );
 }
 
-/** Full-bleed gallery band: the theatre hall with the CLI terminal on stage. */
+/** Product band: the CLI welcome terminal floating on the field. */
 function GalleryBand() {
   const locale = useLocale();
   const reduceMotion = useReducedMotion();
-  const bandRef = useRef<HTMLDivElement | null>(null);
-  const { scrollYProgress } = useScroll({ target: bandRef, offset: ["start end", "end start"] });
-  // Camera pulls back as the act arrives, then keeps drifting.
-  const hallScale = useTransform(scrollYProgress, [0, 0.5, 1], [1.28, 1.06, 1]);
   return (
-      <div ref={bandRef} className="relative w-full overflow-hidden">
-        <motion.div style={{ scale: reduceMotion ? 1 : hallScale, transformOrigin: "50% 42%" }}>
-          <Image
-            src="/geode/images/geode-ripples-wide.png"
-            alt=""
-            aria-hidden
-            width={2400}
-            height={750}
-            className="h-[480px] w-full select-none object-cover sm:h-[560px]"
-            style={{ imageRendering: "pixelated" }}
-          />
-        </motion.div>
+      <div className="relative flex h-[480px] w-full items-center justify-center bg-[var(--acc-artifact)] px-4 sm:h-[560px] sm:px-6">
         <motion.div
-          className="absolute inset-0 flex items-center justify-center px-4 sm:px-6"
           initial={{ opacity: 0, y: reduceMotion ? 0 : 46 }}
           whileInView={{ opacity: 1, y: 0 }}
           viewport={{ once: true, margin: "-60px" }}
@@ -284,16 +223,33 @@ function GalleryBand() {
   );
 }
 
+/** Scroll-driven stage lighting (opacity-only, RM-safe). */
+function StageLight({ children, className }: { children: React.ReactNode; className?: string }) {
+  const lightRef = useRef<HTMLDivElement | null>(null);
+  const { scrollYProgress } = useScroll({ target: lightRef, offset: ["start end", "end start"] });
+  const shade = useTransform(scrollYProgress, [0, 0.22, 0.78, 1], [0.5, 0, 0, 0.5]);
+  return (
+    <div ref={lightRef} className={`relative ${className ?? ""}`}>
+      {children}
+      <motion.div
+        aria-hidden
+        className="pointer-events-none absolute inset-0 z-30 bg-[var(--acc-artifact)]"
+        style={{ opacity: shade }}
+      />
+    </div>
+  );
+}
+
 const LOOP_NODES = [
-  { label: "Perceive", color: "var(--acc-artifact)" },
-  { label: "Plan", color: "var(--acc-artifact)" },
-  { label: "Act", color: "var(--acc-artifact)" },
-  { label: "Observe", color: "var(--acc-artifact)" },
-  { label: "Verify", color: "var(--acc-artifact)" },
-  { label: "Replan", color: "var(--acc-artifact)" },
+  { label: "Perceive" },
+  { label: "Plan" },
+  { label: "Act" },
+  { label: "Observe" },
+  { label: "Verify" },
+  { label: "Replan" },
 ];
 
-/** The while(tool_use) cycle as a pixel-styled hexagon ring (section 03 visual). */
+/** The while(tool_use) cycle as a rose-ink ring on the white plate. */
 function LoopDiagram() {
   const locale = useLocale();
   const cx = 170;
@@ -306,16 +262,8 @@ function LoopDiagram() {
     return { ...node, x: cx + r * Math.cos(angle), y: cy + r * Math.sin(angle) };
   });
   return (
-    <svg
-      viewBox="0 0 340 300"
-      className="w-full max-w-[380px]"
-      role="img"
-      aria-label={t(
-        locale,
-        "while tool_use 루프 다이어그램. Perceive, Plan, Act, Observe, Verify, Replan이 순환하고, tool_use가 멈추면 finalize로 나갑니다.",
-        "while tool_use loop diagram. Perceive, Plan, Act, Observe, Verify, Replan cycle; when tool_use stops it exits to finalize."
-      )}
-    >
+    <svg viewBox="0 0 340 300" className="w-full max-w-[380px]" role="img"
+      aria-label={t(locale, "while tool_use 루프 다이어그램", "while tool_use loop diagram")}>
       {points.map((node, i) => {
         const next = points[(i + 1) % points.length];
         const mx = (node.x + next.x) / 2;
@@ -324,232 +272,109 @@ function LoopDiagram() {
         return (
           <g key={`edge-${node.label}`}>
             <line x1={node.x} y1={node.y} x2={next.x} y2={next.y} stroke="var(--acc-artifact)" strokeWidth="1" />
-            <polygon
-              points="-3,-3.5 4,0 -3,3.5"
-              fill="color-mix(in_srgb,var(--acc-artifact)_75%,transparent)"
-              transform={`translate(${mx} ${my}) rotate(${angleDeg})`}
-            />
+            <polygon points="-3,-3.5 4,0 -3,3.5" fill="var(--acc-artifact)" transform={`translate(${mx} ${my}) rotate(${angleDeg})`} />
           </g>
         );
       })}
-      {/* exit: model answers without tool_use */}
-      <line x1={cx} y1={cy + 30} x2={cx} y2={262} stroke="var(--ink-3)" strokeWidth="1" strokeDasharray="2 3" />
-      <polygon points="-3.5,-3 0,4 3.5,-3" fill="color-mix(in_srgb,var(--acc-artifact)_75%,transparent)" transform={`translate(${cx} ${262})`} />
-      <rect
-        x={cx - 38}
-        y={264}
-        width={76}
-        height={22}
-        fill="#FFF0F8"
-        stroke="var(--acc-artifact)"
-        shapeRendering="crispEdges"
-      />
-      <text x={cx} y={279} textAnchor="middle" fontSize="10.5" fontFamily="var(--font-fira-code), monospace" fill="var(--acc-artifact)">
-        finalize
-      </text>
-      <text x={cx + 8} y={cy + 66} textAnchor="start" fontSize="8" fontFamily="var(--font-fira-code), monospace" fill="color-mix(in_srgb,var(--acc-artifact)_75%,transparent)">
-        no tool_use
-      </text>
-      {/* center */}
-      <text x={cx} y={cy - 4} textAnchor="middle" fontSize="15" className="font-pixel" fill="var(--acc-artifact)">
-        while
-      </text>
-      <text x={cx} y={cy + 14} textAnchor="middle" fontSize="15" className="font-pixel" fill="var(--acc-artifact)">
-        (tool_use)
-      </text>
+      <line x1={cx} y1={cy + 30} x2={cx} y2={262} stroke="var(--acc-artifact)" strokeWidth="1" strokeDasharray="2 3" />
+      <polygon points="-3.5,-3 0,4 3.5,-3" fill="var(--acc-artifact)" transform={`translate(${cx} ${262})`} />
+      <rect x={cx - 38} y={264} width={76} height={22} fill="#FFF0F8" stroke="var(--acc-artifact)" shapeRendering="crispEdges" />
+      <text x={cx} y={279} textAnchor="middle" fontSize="10.5" fontFamily="var(--font-fira-code), monospace" fill="var(--acc-artifact)">finalize</text>
+      <text x={cx + 8} y={cy + 66} textAnchor="start" fontSize="8" fontFamily="var(--font-fira-code), monospace" fill="var(--acc-artifact)">no tool_use</text>
+      <text x={cx} y={cy - 4} textAnchor="middle" fontSize="15" className="font-pixel" fill="var(--acc-artifact)">while</text>
+      <text x={cx} y={cy + 14} textAnchor="middle" fontSize="15" className="font-pixel" fill="var(--acc-artifact)">(tool_use)</text>
       {points.map((node) => (
         <g key={node.label}>
-          <rect
-            x={node.x - nodeW / 2}
-            y={node.y - nodeH / 2}
-            width={nodeW}
-            height={nodeH}
-            fill="#FFF0F8"
-            stroke="var(--acc-artifact)"
-            shapeRendering="crispEdges"
-          />
-          <text
-            x={node.x}
-            y={node.y + 3.5}
-            textAnchor="middle"
-            fontSize="10.5"
-            fontFamily="var(--font-fira-code), monospace"
-            fill={node.color}
-          >
-            {node.label}
-          </text>
+          <rect x={node.x - nodeW / 2} y={node.y - nodeH / 2} width={nodeW} height={nodeH}
+            fill="#FFF0F8" stroke="var(--acc-artifact)" shapeRendering="crispEdges" />
+          <text x={node.x} y={node.y + 3.5} textAnchor="middle" fontSize="10.5"
+            fontFamily="var(--font-fira-code), monospace" fill="var(--acc-artifact)">{node.label}</text>
         </g>
       ))}
     </svg>
   );
 }
 
-/* ---------------- growth ------------------------------------------------- */
-
-
-/** Adversarial audit as a promotion gate — pixel schematic. */
+/** Adversarial audit as a promotion gate — rose ink schematic. */
 function AuditGateDiagram() {
   const locale = useLocale();
   const dims = [26, 34, 20, 38, 30, 42];
   return (
-    <svg
-      viewBox="0 0 520 170"
-      className="w-full max-w-[520px]"
-      role="img"
-      aria-label={t(
-        locale,
-        "감사 게이트 도식. scaffold 변이가 적대적 Petri 감사를 거쳐 차원 점수화되고, critical 하한선을 넘으면 기각, 통과하면 champion으로 승격합니다.",
-        "Audit gate schematic. A scaffold mutation passes an adversarial Petri audit, gets scored per dimension, is rejected on any critical-floor breach, and promotes to champion otherwise."
-      )}
-    >
-      {/* candidate */}
+    <svg viewBox="0 0 520 170" className="w-full max-w-[520px]" role="img"
+      aria-label={t(locale, "감사 게이트 도식", "audit gate schematic")}>
       <rect x="8" y="72" width="92" height="26" fill="#FFF0F8" stroke="var(--acc-artifact)" shapeRendering="crispEdges" />
-      <text x="54" y="88" textAnchor="middle" fontSize="10" fontFamily="var(--font-fira-code), monospace" fill="var(--acc-artifact)">
-        scaffold 변이
-      </text>
-      <polygon points="-3,-3.5 4,0 -3,3.5" fill="color-mix(in_srgb,var(--acc-artifact)_75%,transparent)" transform="translate(116 85)" />
+      <text x="54" y="88" textAnchor="middle" fontSize="10" fontFamily="var(--font-fira-code), monospace" fill="var(--acc-artifact)">scaffold 변이</text>
+      <polygon points="-3,-3.5 4,0 -3,3.5" fill="var(--acc-artifact)" transform="translate(116 85)" />
       <line x1="100" y1="85" x2="128" y2="85" stroke="var(--acc-artifact)" strokeWidth="1" />
-
-      {/* adversarial arena */}
       <rect x="132" y="28" width="150" height="116" fill="none" stroke="var(--acc-artifact)" strokeDasharray="3 3" shapeRendering="crispEdges" />
-      <text x="207" y="20" textAnchor="middle" fontSize="9" fontFamily="var(--font-fira-code), monospace" fill="color-mix(in_srgb,var(--acc-artifact)_75%,transparent)">
-        adversarial audit
-      </text>
+      <text x="207" y="20" textAnchor="middle" fontSize="9" fontFamily="var(--font-fira-code), monospace" fill="var(--acc-artifact)">adversarial audit</text>
       <rect x="147" y="40" width="120" height="22" fill="#FFF0F8" stroke="var(--acc-artifact)" shapeRendering="crispEdges" />
-      <text x="207" y="54" textAnchor="middle" fontSize="10" fontFamily="var(--font-fira-code), monospace" fill="var(--acc-artifact)">
-        Petri auditor
-      </text>
+      <text x="207" y="54" textAnchor="middle" fontSize="10" fontFamily="var(--font-fira-code), monospace" fill="var(--acc-artifact)">Petri auditor</text>
       <rect x="147" y="108" width="120" height="22" fill="#FFF0F8" stroke="var(--acc-artifact)" shapeRendering="crispEdges" />
-      <text x="207" y="122" textAnchor="middle" fontSize="10" fontFamily="var(--font-fira-code), monospace" fill="var(--acc-artifact)">
-        GEODE
-      </text>
+      <text x="207" y="122" textAnchor="middle" fontSize="10" fontFamily="var(--font-fira-code), monospace" fill="var(--acc-artifact)">GEODE</text>
       {[171, 207, 243].map((x) => (
         <line key={x} x1={x} y1="64" x2={x} y2="106" stroke="var(--acc-artifact)" strokeWidth="1" strokeDasharray="2 2" />
       ))}
-
-      <polygon points="-3,-3.5 4,0 -3,3.5" fill="color-mix(in_srgb,var(--acc-artifact)_75%,transparent)" transform="translate(302 85)" />
+      <polygon points="-3,-3.5 4,0 -3,3.5" fill="var(--acc-artifact)" transform="translate(302 85)" />
       <line x1="282" y1="85" x2="314" y2="85" stroke="var(--acc-artifact)" strokeWidth="1" />
-
-      {/* dimension bars + critical floor */}
       {dims.map((h, i) => (
-        <rect
-          key={i}
-          x={320 + i * 13}
-          y={104 - h}
-          width={9}
-          height={h}
-          fill={i === 3 ? "var(--acc-artifact)" : "var(--rule)"}
-          shapeRendering="crispEdges"
-        />
+        <rect key={i} x={320 + i * 13} y={104 - h} width={9} height={h}
+          fill="var(--acc-artifact)" opacity={i === 3 ? 1 : 0.55} shapeRendering="crispEdges" />
       ))}
       <line x1="316" y1="76" x2="402" y2="76" stroke="var(--acc-artifact)" strokeWidth="1" strokeDasharray="4 2" />
-      <text x="359" y="120" textAnchor="middle" fontSize="8.5" fontFamily="var(--font-fira-code), monospace" fill="color-mix(in_srgb,var(--acc-artifact)_75%,transparent)">
-        critical floor
-      </text>
-
-      {/* gate branches */}
+      <text x="359" y="120" textAnchor="middle" fontSize="8.5" fontFamily="var(--font-fira-code), monospace" fill="var(--acc-artifact)">critical floor</text>
       <line x1="406" y1="85" x2="430" y2="85" stroke="var(--acc-artifact)" strokeWidth="1" />
       <line x1="430" y1="85" x2="446" y2="52" stroke="var(--acc-artifact)" strokeWidth="1" />
       <polygon points="-3,-3.5 4,0 -3,3.5" fill="var(--acc-artifact)" transform="translate(448 49) rotate(-64)" />
       <rect x="446" y="30" width="66" height="20" fill="#FFF0F8" stroke="var(--acc-artifact)" shapeRendering="crispEdges" />
-      <text x="479" y="43" textAnchor="middle" fontSize="9.5" fontFamily="var(--font-fira-code), monospace" fill="var(--acc-artifact)">
-        promote
-      </text>
-      <line x1="430" y1="85" x2="446" y2="118" stroke="var(--ink-3)" strokeWidth="1" />
-      <polygon points="-3,-3.5 4,0 -3,3.5" fill="color-mix(in_srgb,var(--acc-artifact)_75%,transparent)" transform="translate(448 121) rotate(64)" />
+      <text x="479" y="43" textAnchor="middle" fontSize="9.5" fontFamily="var(--font-fira-code), monospace" fill="var(--acc-artifact)">promote</text>
+      <line x1="430" y1="85" x2="446" y2="118" stroke="var(--acc-artifact)" strokeWidth="1" />
+      <polygon points="-3,-3.5 4,0 -3,3.5" fill="var(--acc-artifact)" transform="translate(448 121) rotate(64)" />
       <rect x="446" y="120" width="66" height="20" fill="#FFF0F8" stroke="var(--acc-artifact)" shapeRendering="crispEdges" />
-      <text x="479" y="133" textAnchor="middle" fontSize="9.5" fontFamily="var(--font-fira-code), monospace" fill="color-mix(in_srgb,var(--acc-artifact)_75%,transparent)">
-        reject
-      </text>
-      <text x="470" y="90" textAnchor="middle" fontSize="8" fontFamily="var(--font-fira-code), monospace" fill="color-mix(in_srgb,var(--acc-artifact)_75%,transparent)">
-        gate·random·never
-      </text>
+      <text x="479" y="133" textAnchor="middle" fontSize="9.5" fontFamily="var(--font-fira-code), monospace" fill="var(--acc-artifact)">reject</text>
+      <text x="470" y="90" textAnchor="middle" fontSize="8" fontFamily="var(--font-fira-code), monospace" fill="var(--acc-artifact)">gate·random·never</text>
     </svg>
   );
 }
 
-/** Seed hypothesis factory — candidates culled stage by stage. */
+/** Seed hypothesis factory — rose ink pipeline. */
 function SeedgenDiagram() {
   const locale = useLocale();
   const stages = ["generator", "critic", "pilot", "ranker", "evolver"];
   const seedCols = [4, 3, 2, 2, 5];
   return (
-    <svg
-      viewBox="0 0 520 150"
-      className="w-full max-w-[520px]"
-      role="img"
-      aria-label={t(
-        locale,
-        "시드 생성 파이프라인 도식. generator, critic, pilot, ranker, evolver를 거치며 후보가 단계마다 걸러지고 생존자만 시드 풀로 들어갑니다.",
-        "Seed-generation pipeline schematic. Candidates pass generator, critic, pilot, ranker, evolver, culled at each stage; only survivors enter the seed pool."
-      )}
-    >
+    <svg viewBox="0 0 520 150" className="w-full max-w-[520px]" role="img"
+      aria-label={t(locale, "시드 생성 파이프라인 도식", "seed-generation pipeline schematic")}>
       {stages.map((stage, i) => (
         <g key={stage}>
           <rect x={8 + i * 88} y="34" width="76" height="24" fill="#FFF0F8" stroke="var(--acc-artifact)" shapeRendering="crispEdges" />
-          <text
-            x={46 + i * 88}
-            y="49"
-            textAnchor="middle"
-            fontSize="10"
-            fontFamily="var(--font-fira-code), monospace"
-            fill="var(--acc-artifact)"
-          >
-            {stage}
-          </text>
+          <text x={46 + i * 88} y="49" textAnchor="middle" fontSize="10"
+            fontFamily="var(--font-fira-code), monospace" fill="var(--acc-artifact)">{stage}</text>
           {i < 4 && (
             <g>
               <line x1={84 + i * 88} y1="46" x2={96 + i * 88} y2="46" stroke="var(--acc-artifact)" strokeWidth="1" />
-              <polygon points="-3,-3.5 4,0 -3,3.5" fill="color-mix(in_srgb,var(--acc-artifact)_75%,transparent)" transform={`translate(${95 + i * 88} 46)`} />
+              <polygon points="-3,-3.5 4,0 -3,3.5" fill="var(--acc-artifact)" transform={`translate(${95 + i * 88} 46)`} />
             </g>
           )}
-          {/* seeds in flight above each stage */}
           {Array.from({ length: seedCols[i] }).map((_, seed) => (
-            <rect
-              key={seed}
-              x={30 + i * 88 + seed * 9}
-              y="16"
-              width="5"
-              height="5"
-              fill={i === 4 ? "var(--acc-artifact)" : "var(--acc-artifact)"}
-              shapeRendering="crispEdges"
-            />
+            <rect key={seed} x={30 + i * 88 + seed * 9} y="16" width="5" height="5"
+              fill="var(--acc-artifact)" opacity={i === 4 ? 1 : 0.7} shapeRendering="crispEdges" />
           ))}
-          {/* culled seeds falling below critic/pilot/ranker */}
           {i > 0 && i < 4 && (
-            <g opacity="0.3">
+            <g opacity="0.35">
               <rect x={36 + i * 88} y="78" width="5" height="5" fill="var(--acc-artifact)" shapeRendering="crispEdges" />
               <rect x={50 + i * 88} y="92" width="5" height="5" fill="var(--acc-artifact)" shapeRendering="crispEdges" />
             </g>
           )}
         </g>
       ))}
-      <text x="260" y="116" textAnchor="middle" fontSize="9" fontFamily="var(--font-fira-code), monospace" fill="color-mix(in_srgb,var(--acc-artifact)_75%,transparent)">
+      <text x="260" y="116" textAnchor="middle" fontSize="9" fontFamily="var(--font-fira-code), monospace" fill="var(--acc-artifact)">
         {t(locale, "후보는 단계마다 떨어지고, top-5 생존자만 시드 풀에 남습니다", "candidates drop at every stage; only the top-5 survivors reach the seed pool")}
       </text>
       <text x="260" y="134" textAnchor="middle" fontSize="8.5" fontFamily="var(--font-fira-code), monospace" fill="var(--acc-artifact)">
         Elo + difficulty blend · co-evolving pool
       </text>
     </svg>
-  );
-}
-
-
-/** Scroll-driven stage lighting: an act brightens as it takes center stage
-    and falls back into the dark as it leaves (opacity-only, RM-safe). */
-function StageLight({ children, className }: { children: React.ReactNode; className?: string }) {
-  const lightRef = useRef<HTMLDivElement | null>(null);
-  const { scrollYProgress } = useScroll({ target: lightRef, offset: ["start end", "end start"] });
-  const shade = useTransform(scrollYProgress, [0, 0.28, 0.72, 1], [0.78, 0, 0, 0.78]);
-  return (
-    <div ref={lightRef} className={`relative ${className ?? ""}`}>
-      {children}
-      <motion.div
-        aria-hidden
-        className="pointer-events-none absolute inset-0 z-30 bg-[var(--acc-artifact)]"
-        style={{ opacity: shade }}
-      />
-    </div>
   );
 }
 
@@ -593,7 +418,7 @@ function RunRow() {
             <h2 className="font-serif-display mt-3 text-[30px] font-semibold text-[var(--acc-artifact)]">
               {locale === "en" ? mode.titleEn : mode.titleKo}
             </h2>
-            <p className="mx-auto mt-3 inline-block rounded bg-[var(--acc-artifact)] px-4 py-2 font-mono text-[13px] text-[var(--acc-artifact)]">
+            <p className="mx-auto mt-3 inline-block rounded bg-[var(--acc-artifact)] px-4 py-2 font-mono text-[13px] text-[#FFF0F8]">
               {mode.cmd}
             </p>
             <p className="mx-auto mt-3 max-w-[260px] text-[13px] leading-[1.7] text-[var(--acc-artifact)]">
@@ -781,22 +606,31 @@ function FeaturesGrid() {
   );
 }
 
-/* ---------------- the distillation: tokens filtered to one drop ---------- */
+/* ---------------- the distillation: rain, sieves, drainpipe, the word ---- */
 
 const RAIN_COLS = [7, 16, 24, 33, 41, 52, 60, 69, 77, 86, 93] as const;
 
-function RainBand({ keep, phase }: { keep: number; phase: number }) {
-  // keep: fraction of columns that survive into this band (deterministic).
+function RainBand({
+  keep,
+  phase,
+  height = "34vh",
+  converge = 0,
+}: {
+  keep: number;
+  phase: number;
+  height?: string;
+  converge?: number;
+}) {
   const cols = RAIN_COLS.filter((_, i) => (i * 7 + phase * 3) % 10 < keep * 10);
   return (
-    <div aria-hidden className="relative h-[52vh] w-full overflow-hidden">
+    <div aria-hidden className="relative w-full overflow-hidden" style={{ height }}>
       {cols.map((left, i) => (
         <div
           key={left}
           className="geodi-rain absolute top-[-8%] flex h-[116%] flex-col justify-between"
-          style={{ left: `${left}%`, animationDelay: `${(i * 0.37 + phase * 0.19) % 2.4}s` }}
+          style={{ left: `${left + (50 - left) * converge}%`, animationDelay: `${(i * 0.37 + phase * 0.19) % 2.4}s` }}
         >
-          {Array.from({ length: 7 }).map((_, k) => (
+          {Array.from({ length: 13 }).map((_, k) => (
             <span key={k} className="h-[6px] w-[6px] bg-[#FFF0F8]" style={{ opacity: k % 3 === phase % 3 ? 1 : 0.55 }} />
           ))}
         </div>
@@ -805,26 +639,26 @@ function RainBand({ keep, phase }: { keep: number; phase: number }) {
   );
 }
 
-function FilterRule({ label }: { label: string }) {
+/** A filter is not drawn; it is only named. Hairline + a small label chip. */
+function FilterLine({ label }: { label: string }) {
   return (
-    <div className="relative flex w-full items-center" aria-hidden>
-      <div className="h-[2px] flex-1 bg-[repeating-linear-gradient(90deg,#FFF0F8_0,#FFF0F8_14px,transparent_14px,transparent_26px)]" />
-      <span className="ml-4 font-mono text-[10.5px] uppercase tracking-[0.3em] text-[color-mix(in_srgb,#FFF0F8_75%,transparent)]">
-        {label}
+    <div aria-hidden className="relative mx-auto flex w-full max-w-4xl items-center justify-center px-6">
+      <div className="absolute inset-x-6 top-1/2 h-px bg-[color-mix(in_srgb,#FFF0F8_45%,transparent)]" />
+      <span className="relative z-10 bg-[var(--acc-artifact)] px-3">
+        <Token label={label} size="sm" />
       </span>
     </div>
   );
 }
 
-/** Tokens pour like water over the baseline ledger; three filters thin the
-    rain until a single drop of improvement is left — still forming, as the
-    record honestly stands. Scroll descends the funnel. */
+/** Rain through sieves, down the drainpipe, filling the word itself. */
 function DistillationAct() {
   const locale = useLocale();
   const reduceMotion = useReducedMotion();
   const wrapRef = useRef<HTMLDivElement | null>(null);
   const { scrollYProgress } = useScroll({ target: wrapRef, offset: ["start start", "end end"] });
-  const descend = useTransform(scrollYProgress, [0, 1], ["0vh", "-158vh"]);
+  const descend = useTransform(scrollYProgress, [0.04, 1], ["0vh", "-118vh"]);
+  const fill = useTransform(scrollYProgress, [0.55, 0.92], ["inset(0 0 100% 0)", "inset(0 0 0% 0)"]);
   const ledger: { id: string; verdict: string; keep?: boolean }[] = [
     { id: "gen-2606-i1-004", verdict: "REJECT · margin < floor" },
     { id: "gen-2606-i2-001", verdict: "REJECT · critical regress" },
@@ -832,7 +666,7 @@ function DistillationAct() {
     { id: "crucible-S5", verdict: "EVOLVE-BLOCK · pending", keep: true },
   ];
   return (
-    <section ref={wrapRef} className="relative h-[280vh] bg-[var(--acc-artifact)]">
+    <section ref={wrapRef} className="relative h-[260vh] bg-[var(--acc-artifact)]">
       <div className="sticky top-0 h-screen overflow-hidden">
         <div className="pointer-events-none absolute left-5 top-8 z-20 max-w-[320px] text-left sm:left-10 sm:top-12">
           <p className="font-mono text-[10.5px] uppercase tracking-[0.3em] text-[color-mix(in_srgb,#FFF0F8_70%,transparent)]">
@@ -841,25 +675,42 @@ function DistillationAct() {
           <h2 className="font-serif-display mt-3 text-balance text-[clamp(1.5rem,3vw,2.2rem)] font-black leading-[1.25] text-[#FFF0F8]">
             {t(
               locale,
-              "천 번의 토큰이 한 방울이 될 때까지.",
-              "A thousand tokens, filtered to a single drop."
+              "천 번의 토큰이 한 단어가 될 때까지.",
+              "A thousand tokens, distilled into one word."
             )}
           </h2>
         </div>
 
-        <motion.div style={{ y: reduceMotion ? "-158vh" : descend }} className="relative">
+        <motion.div style={{ y: reduceMotion ? "-118vh" : descend }} className="relative">
           <RainBand keep={1} phase={0} />
-          <div className="mx-auto max-w-5xl px-6"><FilterRule label="critic" /></div>
-          <RainBand keep={0.55} phase={1} />
-          <div className="mx-auto max-w-5xl px-6"><FilterRule label="petri gate" /></div>
-          <RainBand keep={0.25} phase={2} />
-          <div className="mx-auto max-w-5xl px-6"><FilterRule label="held-out" /></div>
-
-          {/* the last chamber: one drop, still forming, above the ledger */}
-          <div className="flex h-[100vh] flex-col items-center justify-center gap-10 px-6">
-            <div className="flex flex-col items-center gap-2" aria-hidden>
-              <span className="geodi-drop h-[7px] w-[7px] bg-[#FFF0F8]" />
-              <span className="h-[10px] w-[2px] bg-[color-mix(in_srgb,#FFF0F8_45%,transparent)]" />
+          <FilterLine label="critic" />
+          <RainBand keep={0.55} phase={1} converge={0.42} />
+          <FilterLine label="petri gate" />
+          <RainBand keep={0.25} phase={2} height="30vh" converge={0.78} />
+          <FilterLine label="held-out" />
+          
+          {/* the survivors keep falling onto the word — shaved-ice piling */}
+          <div className="flex h-[78vh] flex-col items-center justify-center gap-12 px-6">
+            <div className="relative">
+              <div aria-hidden className="absolute inset-x-0 -top-[26vh] flex h-[26vh] justify-center gap-14 overflow-hidden">
+                {[0, 1, 2].map((i) => (
+                  <div key={i} className="geodi-rain flex h-[120%] flex-col justify-between" style={{ animationDelay: `${i * 0.8}s` }}>
+                    {Array.from({ length: 5 }).map((_, k) => (
+                      <span key={k} className="h-[6px] w-[6px] bg-[#FFF0F8]" style={{ opacity: k % 2 ? 0.6 : 1 }} />
+                    ))}
+                  </div>
+                ))}
+              </div>
+              <p className="font-pixel whitespace-nowrap text-[13vw] font-bold leading-none text-[#FFF0F8] opacity-25">
+                GEODE
+              </p>
+              <motion.p
+                aria-hidden
+                style={{ clipPath: reduceMotion ? "inset(0 0 0 0)" : fill }}
+                className="font-pixel absolute inset-0 whitespace-nowrap text-[13vw] font-bold leading-none text-[#FFF0F8]"
+              >
+                GEODE
+              </motion.p>
             </div>
             <div className="w-full max-w-xl border-t border-[color-mix(in_srgb,#FFF0F8_50%,transparent)]">
               <p className="mt-3 font-mono text-[10.5px] uppercase tracking-[0.3em] text-[color-mix(in_srgb,#FFF0F8_70%,transparent)]">
@@ -892,81 +743,79 @@ function DistillationAct() {
   );
 }
 
-/* ---------------- giant wordmark band ------------------------------------ */
+/* ---------------- wordmark -> laboratory crossfade ----------------------- */
 
-function WordmarkBand() {
+function WordToLab() {
+  const locale = useLocale();
+  const reduceMotion = useReducedMotion();
+  const xRef = useRef<HTMLDivElement | null>(null);
+  const { scrollYProgress } = useScroll({ target: xRef, offset: ["start start", "end end"] });
+  const wordOp = useTransform(scrollYProgress, [0.18, 0.5], [1, 0]);
+  const labOp = useTransform(scrollYProgress, [0.42, 0.72], [0, 1]);
+  const ghostScale = useTransform(scrollYProgress, [0.4, 1], [1.12, 0.98]);
   return (
-    <div aria-hidden className="select-none overflow-hidden bg-[var(--acc-artifact)]">
-      <p className="font-pixel -mb-[0.16em] -mt-[0.02em] whitespace-nowrap text-center text-[24.5vw] font-bold leading-[0.9] text-[#FFF0F8]">
-        GEODE
-      </p>
+    <div id="lab" ref={xRef} className="relative h-[240vh] bg-[var(--acc-artifact)]">
+      <div className="sticky top-0 h-screen overflow-hidden">
+        {/* act 1: the word, fading as the lab arrives */}
+        <motion.div
+          aria-hidden
+          style={{ opacity: reduceMotion ? 0 : wordOp }}
+          className="absolute inset-0 flex select-none items-center justify-center"
+        >
+          <p className="font-pixel whitespace-nowrap text-[24.5vw] font-bold leading-[0.9] text-[#FFF0F8]">GEODE</p>
+        </motion.div>
+
+        {/* act 2: the circular mark and the laboratory */}
+        <motion.div style={{ opacity: reduceMotion ? 1 : labOp }} className="absolute inset-0">
+          <div aria-hidden className="pointer-events-none absolute inset-0 flex items-center justify-center">
+            <motion.span
+              style={{ scale: reduceMotion ? 1 : ghostScale }}
+              className="font-pixel select-none text-[24vw] font-bold leading-none text-[#FFF0F8] opacity-[0.12]"
+            >
+              GEODE
+            </motion.span>
+          </div>
+          <div className="relative z-10 mx-auto flex h-full max-w-5xl flex-col items-center justify-center gap-7 px-6 text-center">
+            <p className="font-mono text-[11px] uppercase tracking-[0.3em] text-[color-mix(in_srgb,#FFF0F8_70%,transparent)]">
+              cultured since {firstRelease.date} · release #{releaseCount} · v{latestRelease.version}
+            </p>
+            <h2 className="font-serif-display text-balance text-[clamp(2.4rem,6vw,4.2rem)] font-black leading-[1.1] text-[#FFF0F8]">
+              {t(locale, "루프 실험실", "The Loop Laboratory")}
+            </h2>
+            <div className="flex h-44 w-44 items-center justify-center rounded-full border-2 border-[#FFF0F8] sm:h-52 sm:w-52">
+              <GeodiSprite scale={5} silhouette="#FFF0F8" />
+            </div>
+            <p className="font-serif-display max-w-xl text-[clamp(1.05rem,2.4vw,1.4rem)] font-semibold leading-[1.6] text-[#FFF0F8]">
+              {t(locale, "실패를 기록하고, 스스로를 고쳐 씁니다.", "It records its failures, and rewrites itself.")}
+            </p>
+            <div className="mt-2 flex flex-wrap items-center justify-center gap-x-7 gap-y-3">
+              <Link
+                href="/docs"
+                className="inline-flex touch-manipulation items-center rounded bg-[#FFF0F8] px-5 py-2.5 text-[14px] font-medium text-[var(--acc-artifact)] transition-opacity hover:opacity-85"
+              >
+                {t(locale, "문서 읽기", "Read the docs")}
+              </Link>
+              <a
+                href="https://github.com/mangowhoiscloud/geode/blob/main/CHANGELOG.md"
+                target="_blank"
+                rel="noreferrer"
+                className="font-mono text-[13px] text-[#FFF0F8] underline decoration-[color-mix(in_srgb,#FFF0F8_45%,transparent)] underline-offset-4 transition-opacity hover:opacity-75"
+              >
+                {t(locale, "전체 기록 보기", "View the full record")}
+              </a>
+            </div>
+          </div>
+          <div className="pointer-events-none absolute inset-x-0 bottom-0 z-10 flex items-end justify-between px-5 pb-4 font-mono text-[10px] uppercase tracking-[0.18em] text-[color-mix(in_srgb,#FFF0F8_60%,transparent)] sm:px-8">
+            <span>specimen · geodi</span>
+            <span>petri audit attached</span>
+          </div>
+        </motion.div>
+      </div>
     </div>
   );
 }
 
-/* ---------------- finale: the specimen ----------------------------------- */
-
-function LabFinale() {
-  const locale = useLocale();
-  const reduceMotion = useReducedMotion();
-  const finaleRef = useRef<HTMLElement | null>(null);
-  const { scrollYProgress } = useScroll({ target: finaleRef, offset: ["start end", "end start"] });
-  const ghostScale = useTransform(scrollYProgress, [0, 1], [1.16, 0.94]);
-  return (
-    <section id="lab" ref={finaleRef} className="relative overflow-hidden bg-[var(--acc-artifact)]">
-      <div aria-hidden className="pointer-events-none absolute inset-0 flex items-center justify-center">
-        <motion.span
-          style={{ scale: reduceMotion ? 1 : ghostScale }}
-          className="font-pixel select-none text-[24vw] font-bold leading-none text-[#FFF0F8] opacity-[0.06]"
-        >
-          GEODE
-        </motion.span>
-      </div>
-      <div className="relative z-10 mx-auto flex max-w-5xl flex-col items-center gap-7 px-6 py-24 text-center sm:py-32">
-        <p className="font-mono text-[11px] uppercase tracking-[0.3em] text-[color-mix(in_srgb,#FFF0F8_70%,transparent)]">
-          cultured since {firstRelease.date} · release #{releaseCount} · v{latestRelease.version}
-        </p>
-        <h2 className="font-serif-display text-balance text-[clamp(2.4rem,6vw,4.2rem)] font-black leading-[1.1] text-[#FFF0F8]">
-          {t(locale, "루프 실험실", "The Loop Laboratory")}
-        </h2>
-        <motion.div
-          className="flex h-44 w-44 items-center justify-center rounded-full border-2 border-[var(--paper)] sm:h-52 sm:w-52"
-          initial={{ opacity: 0, scale: reduceMotion ? 1 : 0.82 }}
-          whileInView={{ opacity: 1, scale: 1 }}
-          viewport={{ once: true, margin: "-80px" }}
-          transition={{ type: "spring", stiffness: 120, damping: 16 }}
-        >
-          <GeodiSprite scale={5} silhouette="var(--paper)" />
-        </motion.div>
-        <p className="font-serif-display max-w-xl text-[clamp(1.05rem,2.4vw,1.4rem)] font-semibold leading-[1.6] text-[#FFF0F8]">
-          {t(locale, "실패를 기록하고, 스스로를 고쳐 씁니다.", "It records its failures, and rewrites itself.")}
-        </p>
-        <div className="mt-2 flex flex-wrap items-center justify-center gap-x-7 gap-y-3">
-          <Link
-            href="/docs"
-            className="inline-flex touch-manipulation items-center rounded bg-[#FFF0F8] px-5 py-2.5 text-[14px] font-medium text-[var(--acc-artifact)] transition-opacity hover:opacity-85"
-          >
-            {t(locale, "문서 읽기", "Read the docs")}
-          </Link>
-          <a
-            href="https://github.com/mangowhoiscloud/geode/blob/main/CHANGELOG.md"
-            target="_blank"
-            rel="noreferrer"
-            className="font-mono text-[13px] text-[#FFF0F8] underline decoration-[color-mix(in_srgb,#FFF0F8_45%,transparent)] underline-offset-4 transition-opacity hover:opacity-75"
-          >
-            {t(locale, "전체 기록 보기", "View the full record")}
-          </a>
-        </div>
-      </div>
-      <div className="pointer-events-none absolute inset-x-0 bottom-0 z-10 flex items-end justify-between px-5 pb-4 font-mono text-[10px] uppercase tracking-[0.18em] text-[color-mix(in_srgb,#FFF0F8_60%,transparent)] sm:px-8">
-        <span>specimen · geodi</span>
-        <span>petri audit attached</span>
-      </div>
-    </section>
-  );
-}
-
-/* ---------------- page ---------------------------------------------------- */
+/* ---------------- page ---------------------------------------------------- *//* ---------------- page ---------------------------------------------------- */
 
 
 export default function GeodePortfolioPage() {
@@ -993,10 +842,7 @@ export default function GeodePortfolioPage() {
             <FeaturesGrid />
           </StageLight>
           <DistillationAct />
-          <WordmarkBand />
-          <StageLight>
-            <LabFinale />
-          </StageLight>
+          <WordToLab />
         </div>
       </main>
     </LocaleProvider>
