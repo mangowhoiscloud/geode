@@ -688,6 +688,25 @@ rows are infrastructure-contaminated and cannot be reused as baseline or
 candidate evidence; a new campaign ID and newly frozen evaluator hash are
 required.
 
+The follow-up r2 campaign completed one valid paired measurement but hit a
+transport defect before scoring: all four canonical tau2 task IDs exceeded the
+old 100-character feedback item cap. Pure scorer recomputation over its frozen
+evidence is REJECT (0.0 baseline and candidate means, all vetoes clean), but no
+supervisor verdict was committed. The operator stopped attempt 2 before another
+paired measurement because the same parser defect was deterministic. Feedback
+now uses a 64 KiB aggregate ID budget and relies on exact membership in the
+frozen train contract; r2 remains non-promotional and a fresh campaign is
+required.
+
+The r2 review also found an assay-design error rather than a candidate-runtime
+error: its frozen `max_steps=24` was far below tau2's upstream text-run default
+of `100`. Tau2 counts projected tool-result messages in that budget, so all four
+candidate trajectories were cut off before workflow completion and the added
+verification calls consumed the short budget faster. The paired zero remains a
+valid result for that exact contract, but it is too insensitive to guide the
+next search. A successor campaign must freeze the upstream step budget instead
+of reusing r2 as calibration evidence.
+
 The strongest honest claims are:
 
 - the frozen external tau2 baseline identified concrete retail wrong-write and

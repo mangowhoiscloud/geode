@@ -776,6 +776,20 @@ def test_failure_feedback_v3_carries_bounded_train_task_identity() -> None:
     assert feedback.failure_codes == ("state_correctness",)
 
 
+def test_failure_feedback_v3_accepts_long_ids_owned_by_the_contract() -> None:
+    task_id = "[workflow]" + "step|" * 100
+
+    feedback = FailureFeedback.from_mapping(
+        {
+            "schema": "crucible.failure-feedback.v3",
+            "failure_codes": ["workflow_completion"],
+            "failed_task_ids": [task_id],
+        }
+    )
+
+    assert feedback.failed_task_ids == (task_id,)
+
+
 def test_failure_feedback_v3_rejects_retired_v2_schema() -> None:
     with pytest.raises(SupervisorError, match=r"crucible\.failure-feedback\.v3"):
         FailureFeedback.from_mapping(
@@ -793,6 +807,14 @@ def test_failure_feedback_v3_enforces_transport_caps() -> None:
                 "schema": "crucible.failure-feedback.v3",
                 "failure_codes": [],
                 "failed_task_ids": [f"task-{i}" for i in range(65)],
+            }
+        )
+    with pytest.raises(SupervisorError, match="failed_task_ids"):
+        FailureFeedback.from_mapping(
+            {
+                "schema": "crucible.failure-feedback.v3",
+                "failure_codes": [],
+                "failed_task_ids": ["x" * (64 * 1024 + 1)],
             }
         )
 

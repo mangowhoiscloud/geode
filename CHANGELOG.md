@@ -66,8 +66,10 @@ functional change.
   reader now honors `CODEX_HOME` under an isolated evaluator `HOME`, and tau2
   task identity normalizes the optional null fields materialized by runtime
   serialization so source packs and finalized results share one canonical
-  hash. Disposable producer/evaluator environments use the frozen non-dev
-  dependency set. Explicitly
+  hash. Feedback now validates long benchmark task IDs against the frozen
+  contract under one aggregate transport cap instead of rejecting valid tau2
+  IDs at an arbitrary 100-character boundary. Disposable producer/evaluator
+  environments use the frozen non-dev dependency set. Explicitly
   granted registry tools now replace a same-named global declarative schema, so
   an assay handler cannot receive arguments from GEODE's unrelated tool with
   the same name.

@@ -82,6 +82,8 @@ _FAILURE_CODES = frozenset(
         "workflow_completion",
     }
 )
+_FEEDBACK_MAX_TASK_IDS = 64
+_FEEDBACK_MAX_TASK_ID_BYTES = 64 * 1024
 
 
 class SupervisorError(ValueError):
@@ -615,7 +617,11 @@ class FailureFeedback:
             "feedback.failed_task_ids",
             allow_empty=True,
         )
-        if len(failed_task_ids) > 64 or any(len(item) > 100 for item in failed_task_ids):
+        encoded_task_id_bytes = sum(len(item.encode("utf-8")) for item in failed_task_ids)
+        if (
+            len(failed_task_ids) > _FEEDBACK_MAX_TASK_IDS
+            or encoded_task_id_bytes > _FEEDBACK_MAX_TASK_ID_BYTES
+        ):
             raise SupervisorError("feedback.failed_task_ids exceeds its boundary")
         return cls(
             failure_codes=codes,
