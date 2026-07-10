@@ -29,24 +29,26 @@ export function LocaleProvider({
 }) {
   const [locale, setLocale] = useState<Locale>(defaultLocale);
 
-  // Read ?lang=en from URL on mount
+  // Explicit ?lang= param only — never the browser locale. The param wins
+  // over the surface default (portfolio defaults en, docs defaults ko).
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const lang = params.get("lang");
-    if (lang === "en") setLocale("en");
+    if (lang === "en" || lang === "ko") setLocale(lang);
   }, []);
 
-  // Update html lang attribute + URL param
+  // Update html lang attribute + URL param (param present only when the
+  // locale differs from this surface's default, so default URLs stay clean).
   useEffect(() => {
     document.documentElement.lang = locale;
     const url = new URL(window.location.href);
-    if (locale === "en") {
-      url.searchParams.set("lang", "en");
+    if (locale !== defaultLocale) {
+      url.searchParams.set("lang", locale);
     } else {
       url.searchParams.delete("lang");
     }
     window.history.replaceState({}, "", url.toString());
-  }, [locale]);
+  }, [locale, defaultLocale]);
 
   return (
     <LocaleContext.Provider value={locale}>
