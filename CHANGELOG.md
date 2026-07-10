@@ -45,6 +45,22 @@ functional change.
 
 ---
 
+## [0.99.299] - 2026-07-11
+
+### Changed
+
+- **Plates vii-viii shed the self-gaming reading (operator-directed).**
+  "스스로를 감사합니다" was a mistranslated audit (reads as self-thanking)
+  and "시험도 스스로 만듭니다" invited a self-testing suspicion; the plates
+  now lead with the external judge: "모든 변이는 심판대에 / EVERY MUTATION
+  ON TRIAL" ("it does not grade its own hand") and "시험은 점점 어려워집니다
+  / THE EXAM EVOLVES TOO", whose caption states the pipeline's purpose
+  (draft scenarios in bulk, keep only the high-quality ones, raise the
+  measurement headroom) and that scoring belongs to the version-frozen
+  held-out bench.
+
+---
+
 ## [0.99.298] - 2026-07-11
 
 ### Changed
