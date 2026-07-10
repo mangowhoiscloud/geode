@@ -1,6 +1,6 @@
 [project]
 name = "geode-agent"
-version = "0.99.287"
+version = "0.99.288"
 description = "GEODE — 범용 자율 실행 에이전트"
 license = "Apache-2.0"
 readme = "README.md"
@@ -416,6 +416,10 @@ DEP001 = [
     # tau2-bench is installed under artifacts/eval/harnesses/tau2-bench by the
     # benchmark_harness plugin when live tau2 measurement is requested.
     "tau2",
+    # MCPMark harness modules resolve via MCPMARK_ROOT sys.path insertion in
+    # plugins/benchmark_harness/run_mcpmark.py; opt-in checkout, absent by default.
+    "src",
+    "pipeline",
 ]
 
 # DEP002 — declared as dep but not imported anywhere by deptry's static scan.
@@ -569,6 +573,10 @@ module = [
     # tau2-bench harness lives under artifacts/eval/harnesses and is opt-in.
     # CI default sync does not install tau2 or its untyped in-tree modules.
     "tau2.*",
+    # MCPMark harness modules resolve via MCPMARK_ROOT sys.path insertion in
+    # plugins/benchmark_harness/run_mcpmark.py; opt-in checkout, absent in CI.
+    "src.agents",
+    "pipeline",
     # PR-BROWSER-CDP-BRIDGE — websockets ships no py.typed; used only by the
     # CDP client in core/tools/browser_tools.py (already an installed dep).
     "websockets.*",
