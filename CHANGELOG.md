@@ -49,13 +49,40 @@ functional change.
 
 ### Added
 
-- **Crucible tau2 retail workflow projectors.** Added retail-contingent tau2
-  workflow scaffolds and adapter projectors for guarded split-payment fallback,
-  delivered-order return completion, source-address bundle updates, pending
-  item variant changes, cancelled-order tracking responses, and write preflight
-  corrections.
+- **Crucible frozen evidence kernel.** Added a small train/test contract that
+  pins one mutation, the champion ref, full candidate/baseline revisions, actual evaluator/
+  harness/task-pack hashes, resolved assay configuration, routes, ordered
+  task/trial pairs, declared budgets, and a paired-bootstrap promotion rule.
+  Immutable evidence envelopes bind raw artifact hashes, metrics, independent
+  checks, failure class, and resource usage to one arm. The assay-neutral
+  scorer emits only `KEEP`, `REJECT`, or `INVALID`; train `KEEP` has no core
+  authority, and test verdicts remain authority-neutral until sealed lineage
+  is implemented. A packaged `python -m plugins.crucible` CLI normalizes tau2
+  evidence and writes paired verdicts without overwriting existing artifacts.
+
+- **Standalone Crucible train supervisor.** Added a bounded outer loop with
+  subprocess/file boundaries for candidate production and trusted evaluation;
+  a supervisor-owned train plan freezes measurement, the evaluator returns
+  paired evidence/raw artifacts, and the supervisor computes the verdict. Each
+  candidate runs in a no-remote disposable checkout, actual diff and
+  measurement bytes are preflighted, and train `KEEP` advances only a private
+  compare-and-swap ref. The frozen evaluator entrypoint is executed directly,
+  while role-specific exchange directories and
+  process-group cleanup keep producer output out of evaluator evidence.
+  The loop persists a replayable state snapshot and append-only ledger, forwards
+  schema-bounded failure feedback, and closes over-budget candidates before
+  advancing the search head.
+  It has no import dependency on `core/self_improving` and cannot authorize
+  sealed or repository promotion.
 
 ### Changed
+
+- **Crucible returned to a git-native autoresearch kernel.** The target
+  promotion contract is one committed mutation measured by a frozen evaluator
+  and task pack, producing one primary score plus non-exchangeable vetoes.
+  Exposed retail/telecom rows are development counterexamples rather than
+  held-out evidence. Harness-specific termination and participant cases now
+  live in versioned `AssayAdapter` profiles instead of growing core branches.
 
 - **document_ingest can read approved local PDFs outside the project.** The
   source PDF path now accepts user-approved local files from folders such as
@@ -70,6 +97,17 @@ functional change.
 
 ### Fixed
 
+- **Tau2 adapter state survives the Crucible pruning.** Required empty retail
+  `address2` values are preserved and enum-like message roles are normalized.
+
+- **Crucible comparisons freeze the actual assay.** Contract-backed tau2 runs
+  now bind domain/split, trial and concurrency settings, seed, step/error/
+  timeout limits, actor configuration, user arguments, retrieval options, and
+  per-turn agent budgets. The simulated user must be evaluator-owned rather
+  than running through candidate GEODE code. Snapshots record a raw SHA-256 and
+  become `complete` only after post-run route checks; partial or contaminated
+  runs remain `invalid`. Sealed-test lineage also rejects budget drift.
+
 - **LLM-backed tools no longer scan a cross-provider fallback order.**
   Capability dispatch for web search and text completion now requires the
   active `(provider, source)` route, or derives one route from the active
@@ -79,6 +117,7 @@ functional change.
   to unrelated PAYG credentials. Live-session model sync also tolerates
   lightweight loop objects that do not expose a source axis while still keeping
   full AgenticLoop source propagation intact.
+
 - **Runtime prompts now follow metadata-style identity clauses.** GEODE-owned
   system prompts, model/platform hints, benchmark prompts, and seed-generation
   agent prompts now use `Agent:`, `Role:`, `Task:`, or `Surface:` clauses
@@ -98,6 +137,16 @@ functional change.
   now routes unsupported visual `locate` work toward source-safe helpers such
   as `ui_probe`, browser DOM tools, `playwriter`, keyboard navigation, or an
   explicit GLM route.
+
+### Removed
+
+- **Unpromoted tau2 workflow projectors and candidate ladders.** Removed the
+  benchmark-specific retail projectors, oracle literals, telecom v1-v72
+  runtime choices, the telecom-specific core action-before-talk heuristic, and
+  their version-by-version tests. The post-hoc trace/surrogate/sequential gate
+  scripts and prompt/planner probes were retired with the G0-G7 ladder.
+  Historical candidates remain available through git and artifacts instead of
+  accumulating in the active harness.
 
 ## [0.99.285] - 2026-07-07
 
