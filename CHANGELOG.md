@@ -54,8 +54,10 @@ functional change.
   and "시험도 스스로 만듭니다" invited a self-testing suspicion; the plates
   now lead with the external judge: "모든 변이는 심판대에 / EVERY MUTATION
   ON TRIAL" ("it does not grade its own hand") and "시험은 점점 어려워집니다
-  / THE EXAM EVOLVES TOO", whose caption states that scoring belongs to the
-  version-frozen held-out bench.
+  / THE EXAM EVOLVES TOO", whose caption states the pipeline's purpose
+  (draft scenarios in bulk, keep only the high-quality ones, raise the
+  measurement headroom) and that scoring belongs to the version-frozen
+  held-out bench.
 
 ---
 

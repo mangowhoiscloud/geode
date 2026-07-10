@@ -19,7 +19,7 @@ export const CHANGELOG: ChangelogEntry[] = [
   {
     "version": "0.99.299",
     "date": "2026-07-11",
-    "body": "### Changed\n\n- **Plates vii-viii shed the self-gaming reading (operator-directed).**\n  \"스스로를 감사합니다\" was a mistranslated audit (reads as self-thanking)\n  and \"시험도 스스로 만듭니다\" invited a self-testing suspicion; the plates\n  now lead with the external judge: \"모든 변이는 심판대에 / EVERY MUTATION\n  ON TRIAL\" (\"it does not grade its own hand\") and \"시험은 점점 어려워집니다\n  / THE EXAM EVOLVES TOO\", whose caption states that scoring belongs to the\n  version-frozen held-out bench."
+    "body": "### Changed\n\n- **Plates vii-viii shed the self-gaming reading (operator-directed).**\n  \"스스로를 감사합니다\" was a mistranslated audit (reads as self-thanking)\n  and \"시험도 스스로 만듭니다\" invited a self-testing suspicion; the plates\n  now lead with the external judge: \"모든 변이는 심판대에 / EVERY MUTATION\n  ON TRIAL\" (\"it does not grade its own hand\") and \"시험은 점점 어려워집니다\n  / THE EXAM EVOLVES TOO\", whose caption states the pipeline's purpose\n  (draft scenarios in bulk, keep only the high-quality ones, raise the\n  measurement headroom) and that scoring belongs to the version-frozen\n  held-out bench."
   },
   {
     "version": "0.99.298",

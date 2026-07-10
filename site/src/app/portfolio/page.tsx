@@ -638,8 +638,8 @@ const features: {
     index: "#8 breed",
     headKo: "시험은 점점 어려워집니다",
     headEn: "THE EXAM EVOLVES TOO",
-    ko: "generator, critic, pilot, ranker, evolver. 적대 시드 풀이 에이전트를 공격하며 나란히 자랍니다. 채점은 변이되지 않는 held-out 벤치의 몫입니다.",
-    en: "Generator, critic, pilot, ranker, evolver. An adversarial seed pool grows against the agent; scoring belongs to a held-out bench that never mutates.",
+    ko: "generator, critic, pilot, ranker, evolver. 시나리오를 대량으로 초안하고 양질만 선정해, 개선이 보일 측정 headroom을 계속 높입니다. 채점은 변이되지 않는 held-out 벤치의 몫입니다.",
+    en: "Generator, critic, pilot, ranker, evolver. It drafts scenarios in bulk and keeps only the sharpest, raising the headroom that keeps improvement measurable; scoring belongs to a held-out bench that never mutates.",
     banner: <SeedgenDiagram />,
   },
   {
