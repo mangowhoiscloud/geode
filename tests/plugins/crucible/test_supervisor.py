@@ -158,9 +158,9 @@ def _train_plan(repo: Path, harness: Path) -> TrainPlan:
             "assay_config": {"schema": "fixture.v1"},
             "evaluator_paths": ["evaluator.py"],
             "promotion": {
-                "method": "paired_bootstrap.v1",
+                "method": "paired_bootstrap.v2",
                 "primary_metric": "reward",
-                "minimum_improvement": 0.1,
+                "materiality_pp": 0.1,
                 "minimum_candidate_mean": 0.7,
                 "minimum_tasks": 4,
                 "confidence_level": 0.95,
