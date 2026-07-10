@@ -2,7 +2,7 @@
  * GEODE CHANGELOG, auto-synced from the GEODE repo via `npm run sync-stats`.
  * Do not edit manually. Edit CHANGELOG.md in the GEODE repo and re-run sync.
  *
- * Last sync: 2026-07-09
+ * Last sync: 2026-07-10
  *
  * Each entry's `body` is the raw markdown between two version headings.
  * The Changelog page renders the body with a minimal markdown renderer
@@ -16,6 +16,11 @@ export type ChangelogEntry = {
 };
 
 export const CHANGELOG: ChangelogEntry[] = [
+  {
+    "version": "0.99.287",
+    "date": "2026-07-10",
+    "body": "### Added\n\n- **Crucible frozen evidence kernel.** Added a small train/test contract that\n  pins one mutation, the champion ref, full candidate/baseline revisions,\n  actual evaluator/harness/task-pack hashes, resolved assay configuration,\n  routes, ordered task/trial pairs, declared budgets, and a paired-bootstrap\n  promotion rule. Immutable evidence envelopes bind raw artifact hashes,\n  metrics, independent checks, failure class, and resource usage to one arm.\n  The assay-neutral scorer emits only `KEEP`, `REJECT`, or `INVALID`; train\n  `KEEP` has no core authority, and test verdicts remain authority-neutral\n  until sealed lineage is implemented. A packaged `python -m plugins.crucible`\n  CLI normalizes tau2 evidence and writes paired verdicts without overwriting\n  existing artifacts.\n- **Standalone Crucible train supervisor.** Added a bounded outer loop with\n  subprocess/file boundaries for candidate production and trusted evaluation;\n  a supervisor-owned train plan freezes measurement, the evaluator returns\n  paired evidence/raw artifacts, and the supervisor computes the verdict. Each\n  candidate runs in a no-remote disposable checkout, actual diff and\n  measurement bytes are preflighted, and train `KEEP` advances only a private\n  compare-and-swap ref. The frozen evaluator entrypoint is executed directly,\n  while role-specific exchange directories and process-group cleanup keep\n  producer output out of evaluator evidence. The loop persists a replayable\n  state snapshot and append-only ledger, forwards schema-bounded failure\n  feedback, and closes over-budget candidates before advancing the search\n  head. It has no import dependency on `core/self_improving` and cannot\n  authorize sealed or repository promotion.\n\n### Changed\n\n- **Crucible returned to a git-native autoresearch kernel.** The target\n  promotion contract is one committed mutation measured by a frozen evaluator\n  and task pack, producing one primary score plus non-exchangeable vetoes.\n  Exposed retail/telecom rows are development counterexamples rather than\n  held-out evidence. Harness-specific termination and participant cases now\n  live in versioned `AssayAdapter` profiles instead of growing core branches.\n\n### Fixed\n\n- **Tau2 adapter state survives the Crucible pruning.** Required empty retail\n  `address2` values are preserved and enum-like message roles are normalized.\n- **Crucible comparisons freeze the actual assay.** Contract-backed tau2 runs\n  now bind domain/split, trial and concurrency settings, seed, step/error/\n  timeout limits, actor configuration, user arguments, retrieval options, and\n  per-turn agent budgets. The simulated user must be evaluator-owned rather\n  than running through candidate GEODE code. Snapshots record a raw SHA-256 and\n  become `complete` only after post-run route checks; partial or contaminated\n  runs remain `invalid`. Sealed-test lineage also rejects budget drift.\n\n### Removed\n\n- **Unpromoted tau2 workflow projectors and candidate ladders.** Removed the\n  benchmark-specific retail projectors, oracle literals, telecom v1-v72\n  runtime choices, the telecom-specific core action-before-talk heuristic, and\n  their version-by-version tests. The post-hoc trace/surrogate/sequential gate\n  scripts and prompt/planner probes were retired with the G0-G7 ladder.\n  Historical candidates remain available through git and artifacts instead of\n  accumulating in the active harness."
+  },
   {
     "version": "0.99.286",
     "date": "2026-07-10",
@@ -2153,4 +2158,4 @@ export const CHANGELOG: ChangelogEntry[] = [
   }
 ];
 
-export const CHANGELOG_SYNCED_AT = "2026-07-09";
+export const CHANGELOG_SYNCED_AT = "2026-07-10";
