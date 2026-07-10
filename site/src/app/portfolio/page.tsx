@@ -108,7 +108,7 @@ function TerminalMock() {
           </div>
         </div>
       </div>
-      <figcaption className="mx-auto mt-3 w-fit rounded bg-[color-mix(in_srgb,var(--paper)_78%,transparent)] px-3 py-1 text-center font-mono text-[10.5px] text-[var(--acc-aqua)]">
+      <figcaption className="mx-auto mt-3 w-fit rounded bg-[color-mix(in_srgb,var(--paper)_78%,transparent)] px-3 py-1 text-center font-mono text-[10.5px] text-[var(--acc-artifact)]">
         core/ui/mascot.py · geodi_art.py{" "}
         <span className="text-[var(--ink-2)]">
           {t(locale, "CLI 웰컴 스크린을 그대로 옮긴 화면", "the CLI welcome screen, transcribed")}
@@ -187,7 +187,7 @@ function HeroField() {
             </motion.p>
             <motion.div variants={heroItem} className="mt-3 inline-block rounded bg-[var(--paper)] px-5 py-3 text-left font-mono text-[12.5px] text-[var(--ink-2)] sm:text-[13.5px]">
               <span className="text-[var(--acc-artifact)]">$</span> uv run geode{" "}
-              <span className="text-[var(--code-string)]">
+              <span className="text-[#FFF0F8]">
                 &quot;{t(locale, "이 레포 점검하고 릴리스 블로커 요약해줘", "inspect this repo and summarize release blockers")}&quot;
               </span>
             </motion.div>
@@ -288,9 +288,9 @@ function GalleryBand() {
 const LOOP_NODES = [
   { label: "Perceive", color: "var(--ink-2)" },
   { label: "Plan", color: "var(--ink-2)" },
-  { label: "Act", color: "var(--acc-line)" },
+  { label: "Act", color: "#FFF0F8" },
   { label: "Observe", color: "var(--ink-2)" },
-  { label: "Verify", color: "var(--acc-aqua)" },
+  { label: "Verify", color: "var(--acc-artifact)" },
   { label: "Replan", color: "var(--ink-2)" },
 ];
 
@@ -443,17 +443,17 @@ function AuditGateDiagram() {
           shapeRendering="crispEdges"
         />
       ))}
-      <line x1="316" y1="76" x2="402" y2="76" stroke="var(--acc-line)" strokeWidth="1" strokeDasharray="4 2" />
+      <line x1="316" y1="76" x2="402" y2="76" stroke="#FFF0F8" strokeWidth="1" strokeDasharray="4 2" />
       <text x="359" y="120" textAnchor="middle" fontSize="8.5" fontFamily="var(--font-fira-code), monospace" fill="var(--ink-3)">
         critical floor
       </text>
 
       {/* gate branches */}
       <line x1="406" y1="85" x2="430" y2="85" stroke="var(--rule)" strokeWidth="1" />
-      <line x1="430" y1="85" x2="446" y2="52" stroke="var(--acc-line)" strokeWidth="1" />
-      <polygon points="-3,-3.5 4,0 -3,3.5" fill="var(--acc-line)" transform="translate(448 49) rotate(-64)" />
-      <rect x="446" y="30" width="66" height="20" fill="var(--paper-2)" stroke="var(--acc-line)" shapeRendering="crispEdges" />
-      <text x="479" y="43" textAnchor="middle" fontSize="9.5" fontFamily="var(--font-fira-code), monospace" fill="var(--acc-line)">
+      <line x1="430" y1="85" x2="446" y2="52" stroke="#FFF0F8" strokeWidth="1" />
+      <polygon points="-3,-3.5 4,0 -3,3.5" fill="#FFF0F8" transform="translate(448 49) rotate(-64)" />
+      <rect x="446" y="30" width="66" height="20" fill="var(--paper-2)" stroke="#FFF0F8" shapeRendering="crispEdges" />
+      <text x="479" y="43" textAnchor="middle" fontSize="9.5" fontFamily="var(--font-fira-code), monospace" fill="#FFF0F8">
         promote
       </text>
       <line x1="430" y1="85" x2="446" y2="118" stroke="var(--ink-3)" strokeWidth="1" />
@@ -512,7 +512,7 @@ function SeedgenDiagram() {
               y="16"
               width="5"
               height="5"
-              fill={i === 4 ? "var(--acc-line)" : "var(--acc-artifact)"}
+              fill={i === 4 ? "#FFF0F8" : "var(--acc-artifact)"}
               shapeRendering="crispEdges"
             />
           ))}
@@ -528,13 +528,31 @@ function SeedgenDiagram() {
       <text x="260" y="116" textAnchor="middle" fontSize="9" fontFamily="var(--font-fira-code), monospace" fill="var(--ink-3)">
         {t(locale, "후보는 단계마다 떨어지고, top-5 생존자만 시드 풀에 남습니다", "candidates drop at every stage; only the top-5 survivors reach the seed pool")}
       </text>
-      <text x="260" y="134" textAnchor="middle" fontSize="8.5" fontFamily="var(--font-fira-code), monospace" fill="var(--acc-aqua)">
+      <text x="260" y="134" textAnchor="middle" fontSize="8.5" fontFamily="var(--font-fira-code), monospace" fill="var(--acc-artifact)">
         Elo + difficulty blend · co-evolving pool
       </text>
     </svg>
   );
 }
 
+
+/** Scroll-driven stage lighting: an act brightens as it takes center stage
+    and falls back into the dark as it leaves (opacity-only, RM-safe). */
+function StageLight({ children, className }: { children: React.ReactNode; className?: string }) {
+  const lightRef = useRef<HTMLDivElement | null>(null);
+  const { scrollYProgress } = useScroll({ target: lightRef, offset: ["start end", "end start"] });
+  const shade = useTransform(scrollYProgress, [0, 0.28, 0.72, 1], [0.78, 0, 0, 0.78]);
+  return (
+    <div ref={lightRef} className={`relative ${className ?? ""}`}>
+      {children}
+      <motion.div
+        aria-hidden
+        className="pointer-events-none absolute inset-0 z-30 bg-[var(--paper)]"
+        style={{ opacity: shade }}
+      />
+    </div>
+  );
+}
 
 /* ---------------- run row: three ways in --------------------------------- */
 
@@ -576,7 +594,7 @@ function RunRow() {
             <h2 className="font-serif-display mt-3 text-[30px] font-semibold text-[var(--ink-1)]">
               {locale === "en" ? mode.titleEn : mode.titleKo}
             </h2>
-            <p className="mx-auto mt-3 inline-block rounded bg-[var(--paper-deep)] px-4 py-2 font-mono text-[13px] text-[var(--acc-line)]">
+            <p className="mx-auto mt-3 inline-block rounded bg-[var(--paper-deep)] px-4 py-2 font-mono text-[13px] text-[#FFF0F8]">
               {mode.cmd}
             </p>
             <p className="mx-auto mt-3 max-w-[260px] text-[13px] leading-[1.7] text-[var(--ink-2)]">
@@ -598,10 +616,10 @@ const SLAB_ACCENT = "#8E3A66";
 function PerceiveBanner() {
   return (
     <div className="flex h-full w-full flex-col justify-center gap-2.5 px-6 font-mono text-[12px] leading-relaxed">
-      <p><span className="text-[var(--acc-aqua)]">context</span><span className="text-[var(--ink-3)]"> · per-turn time, memory, rules</span></p>
-      <p><span className="text-[var(--acc-aqua)]">documents</span><span className="text-[var(--ink-3)]"> · local pdf ingest</span></p>
-      <p><span className="text-[var(--acc-aqua)]">browser</span><span className="text-[var(--ink-3)]"> · your real chrome, over cdp</span></p>
-      <p><span className="text-[var(--acc-aqua)]">desktop</span><span className="text-[var(--ink-3)]"> · ax tree before pixels</span></p>
+      <p><span className="text-[var(--acc-artifact)]">context</span><span className="text-[var(--ink-3)]"> · per-turn time, memory, rules</span></p>
+      <p><span className="text-[var(--acc-artifact)]">documents</span><span className="text-[var(--ink-3)]"> · local pdf ingest</span></p>
+      <p><span className="text-[var(--acc-artifact)]">browser</span><span className="text-[var(--ink-3)]"> · your real chrome, over cdp</span></p>
+      <p><span className="text-[var(--acc-artifact)]">desktop</span><span className="text-[var(--ink-3)]"> · ax tree before pixels</span></p>
     </div>
   );
 }
@@ -614,7 +632,7 @@ function MeasureBanner() {
       <div className="flex items-baseline justify-center gap-6">
         {cells.map((cell) => (
           <div key={cell.label} className="text-center">
-            <p className="font-serif-display text-[26px] font-black text-[var(--acc-line)]">{cell.value}</p>
+            <p className="font-serif-display text-[26px] font-black text-[#FFF0F8]">{cell.value}</p>
             <p className="mt-1 font-mono text-[10px] uppercase tracking-[0.2em] text-[var(--ink-3)]">{cell.label}</p>
           </div>
         ))}
@@ -856,15 +874,23 @@ export default function GeodePortfolioPage() {
           <HeroField />
         </div>
         <div className="relative z-10">
-          <GalleryBand />
-          <RunRow />
-          <FeaturesGrid />
+          <StageLight>
+            <GalleryBand />
+          </StageLight>
+          <StageLight>
+            <RunRow />
+          </StageLight>
+          <StageLight>
+            <FeaturesGrid />
+          </StageLight>
           <div className="relative">
             <div className="sticky top-0 z-0">
               <WordmarkBand />
             </div>
             <div className="relative z-10">
-              <LabFinale />
+              <StageLight>
+                <LabFinale />
+              </StageLight>
             </div>
           </div>
           <div className="relative z-10 bg-[var(--paper)]">

@@ -92,6 +92,15 @@ functional change.
   character surfaces, mono = labels. The YouTube demo section is removed per
   operator; frontend stack is confirmed as Next.js 16 + React 19 + Tailwind 4
   + Astryx + Galmuri11 + Noto Serif KR.
+- **Two-ink discipline + stage lighting (operator: Hermes uses exactly two
+  colors).** The whole portfolio surface reduces to two inks on the dark
+  substrate — Axolotl Rose and rose-white — with tone carried by dither
+  density, exactly the Hermes engraving trick: both scenes regenerated as
+  strict duotone (gold/aqua leave the artwork; the sun, rims, and auditor
+  lenses become rose-white), and every UI accent sweeps with them (command
+  strings, bench figures, diagram highlights). Scroll gains the recorded
+  Hermes effect: StageLight overlays brighten each act as it takes center
+  stage and sink it back into darkness as it leaves (opacity-only).
 - **Void theatre refinement (operator: signature colors only).** Orb lamps,
   the striped dado, and the backdrop porthole are removed; both scenes reduce
   to the essential loop-punk image — a single gold point radiating dotted
