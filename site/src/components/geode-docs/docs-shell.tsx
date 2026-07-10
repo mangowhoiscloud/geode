@@ -207,7 +207,14 @@ export function DocsShell({
       <header className="sticky top-0 z-30 border-b border-[var(--rule-soft)] bg-[color-mix(in_srgb,var(--paper)_85%,transparent)] backdrop-blur">
         <div className="max-w-7xl mx-auto flex items-center justify-between px-6 py-4">
           <div className="flex items-center gap-6">
-            <span className="text-sm font-display font-bold tracking-wide">
+            <span className="flex items-center gap-2.5 text-sm font-display font-bold tracking-wide">
+              {/* Geodi dot mascot — baked from core/ui/geodi_art.py GEODI_PIXELS */}
+              <img
+                src="/geode/images/geodi-dot.svg"
+                alt=""
+                aria-hidden="true"
+                className="h-5 w-auto"
+              />
               {t(locale, "GEODE . 문서", "GEODE . Docs")}
             </span>
           </div>
