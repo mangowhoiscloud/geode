@@ -57,10 +57,29 @@ functional change.
   metadata. Evaluation and failure feedback v3 expose only closed failure codes
   and frozen train task IDs to the next producer, reject free-text oracle
   channels, and forward no evaluator signal from INVALID evidence. Experiment
-  contracts, evidence envelopes, and verdicts v2 mark the incompatible cleanup,
-  rename the ID/trial digest to `task_layout_sha256`, and distinguish paired
-  rows from independent task units. Actual task bytes remain bound by the clean
-  harness tree hash.
+  contracts, evidence envelopes, and verdicts v3 now bind ordered task IDs,
+  adapter-derived workflow families, canonical task-content hashes, and trial
+  count under `task_pack_sha256`. Tau2 verifies those identities against the
+  exact resolved task objects and rejects usage manifests below the resource
+  floor observable in raw messages. Promotion bootstraps family means rather
+  than treating repeated trials or related tasks as independent units.
+- **Crucible sealed promotion is a separate one-shot boundary.** A canonical
+  promotion bundle rebuilds one complete supervisor attempt and verifies its
+  current search ref, train KEEP evidence, proposal lineage, canonical record,
+  and durable CAS journal. Search-ref advancement atomically creates a
+  record-bound `refs/crucible/applied/*` witness. The record and ref intent are
+  persisted before the authority mutation. Search and eligible refs use
+  recoverable compare-and-swap receipts. Sealed test packs are content/family
+  disjoint; their claim and sole attempt live below the Git common directory,
+  while raw-validated evidence and verdict are fixed as a pack-specific Git
+  blob ref and recomputed on recovery. Hidden-task failures are never retried,
+  and local state rollback cannot reopen a pack. At most a private
+  `refs/crucible/eligible/*` candidate is published. The decision retains
+  `release_authority=none`; reusable `score` no longer accepts test contracts.
+- **Tau2 task-pack and usage manifests are adapter-owned.** New
+  `tau2-task-pack` and `tau2-usage` CLI commands emit compact hash identities
+  and raw-message usage floors outside core promotion logic, keeping assay
+  cases in the versioned tau2 adapter instead of adding core `if/elif` gates.
 - **Tau2 tool projection follows upstream metadata.** The GEODE participant
   reads tau2's decorated mutability marker instead of inferring side effects
   from tool-name prefixes, and preserves explicitly supplied empty arguments

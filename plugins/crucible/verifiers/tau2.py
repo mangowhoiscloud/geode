@@ -10,10 +10,10 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Literal
 
-from plugins.crucible.contract import ContractError, ExperimentContract
+from plugins.crucible.contract import ContractError, ExperimentContract, TaskUnit
 from plugins.crucible.evidence import EVIDENCE_SCHEMA, EvidenceEnvelope, ResourceUsage
 
-_SNAPSHOT_SCHEMA = "crucible_tau2_trajectory_snapshot.v2"
+_SNAPSHOT_SCHEMA = "crucible_tau2_trajectory_snapshot.v3"
 
 
 @dataclass(frozen=True)
@@ -201,6 +201,118 @@ def _number(value: object, field: str) -> float:
     return float(value)
 
 
+def _non_negative_integer(value: object, field: str) -> int:
+    if isinstance(value, bool) or not isinstance(value, int) or value < 0:
+        raise ContractError(f"{field} must be a non-negative integer")
+    return value
+
+
+def _canonical_task_sha256(value: Mapping[str, Any], field: str) -> str:
+    content = dict(value)
+    content.pop("id", None)
+    try:
+        encoded = json.dumps(
+            content,
+            allow_nan=False,
+            ensure_ascii=False,
+            separators=(",", ":"),
+            sort_keys=True,
+        ).encode("utf-8")
+    except (TypeError, ValueError) as exc:
+        raise ContractError(f"{field} must contain canonical JSON values") from exc
+    return hashlib.sha256(encoded).hexdigest()
+
+
+def _tau2_family_sha256(value: Mapping[str, Any], field: str) -> str:
+    """Hash the executable workflow shape without task-specific oracle values."""
+
+    criteria = _mapping(value.get("evaluation_criteria"), f"{field}.evaluation_criteria")
+    actions = criteria.get("actions")
+    if not isinstance(actions, list):
+        raise ContractError(f"{field}.evaluation_criteria.actions must be a list")
+    action_names: list[str] = []
+    for index, action in enumerate(actions):
+        row = _mapping(action, f"{field}.evaluation_criteria.actions[{index}]")
+        name = str(row.get("name") or "").strip()
+        if not name:
+            raise ContractError(f"{field}.evaluation_criteria.actions[{index}].name is required")
+        action_names.append(name)
+
+    raw_user_tools = value.get("user_tools")
+    if raw_user_tools is None:
+        user_tool_names: list[str] = []
+    elif isinstance(raw_user_tools, list):
+        user_tool_names = []
+        for index, tool in enumerate(raw_user_tools):
+            if isinstance(tool, str):
+                name = tool.strip()
+            else:
+                row = _mapping(tool, f"{field}.user_tools[{index}]")
+                name = str(row.get("name") or "").strip()
+            if not name:
+                raise ContractError(f"{field}.user_tools[{index}] name is required")
+            user_tool_names.append(name)
+    else:
+        raise ContractError(f"{field}.user_tools must be a list or null")
+
+    active_criteria = sorted(
+        str(name) for name, criterion in criteria.items() if criterion not in (None, [], {}, "")
+    )
+    encoded = json.dumps(
+        {
+            "action_names": action_names,
+            "active_criteria": active_criteria,
+            "user_tool_names": user_tool_names,
+        },
+        ensure_ascii=False,
+        separators=(",", ":"),
+        sort_keys=True,
+    ).encode("utf-8")
+    return hashlib.sha256(encoded).hexdigest()
+
+
+def tau2_task_unit(value: Mapping[str, Any], field: str = "tau2 task") -> TaskUnit:
+    """Build the content and family identity expected in a tau2 contract."""
+
+    raw_id = value.get("id")
+    task_id = str(raw_id).strip() if raw_id is not None else ""
+    if not task_id:
+        raise ContractError(f"{field}.id is required")
+    return TaskUnit(
+        task_id=task_id,
+        family_id=_tau2_family_sha256(value, field),
+        content_sha256=_canonical_task_sha256(value, field),
+    )
+
+
+def _verify_tau2_tasks(contract: ExperimentContract, raw: Mapping[str, Any]) -> None:
+    raw_tasks = raw.get("tasks")
+    if not isinstance(raw_tasks, list):
+        raise ContractError("tau2 results tasks must be a list")
+    observed: list[TaskUnit] = []
+    observed_ids: set[str] = set()
+    for index, value in enumerate(raw_tasks):
+        field = f"tau2.tasks[{index}]"
+        raw_task = _mapping(value, field)
+        task = tau2_task_unit(raw_task, field)
+        if task.task_id in observed_ids:
+            raise ContractError(f"tau2 results tasks repeat id {task.task_id!r}")
+        observed.append(task)
+        observed_ids.add(task.task_id)
+
+    if tuple(task.task_id for task in observed) != contract.task_ids:
+        raise ContractError("tau2 task order/coverage does not match the frozen contract tasks")
+    for expected, actual in zip(contract.tasks, observed, strict=True):
+        if actual.content_sha256 != expected.content_sha256:
+            raise ContractError(
+                f"tau2 task {expected.task_id!r} content_sha256 does not match the frozen contract"
+            )
+        if actual.family_id != expected.family_id:
+            raise ContractError(
+                f"tau2 task {expected.task_id!r} family_id does not match the frozen contract"
+            )
+
+
 def _verify_snapshot(
     contract: ExperimentContract,
     *,
@@ -215,7 +327,7 @@ def _verify_snapshot(
         "experiment_contract_id": contract.contract_id,
         "evaluator_sha256": contract.evaluator_sha256,
         "harness_sha256": contract.harness_sha256,
-        "task_layout_sha256": contract.task_layout_sha256,
+        "task_pack_sha256": contract.task_pack_sha256,
         "assay_config_sha256": contract.assay_config_sha256,
         "arm": arm,
     }
@@ -279,6 +391,80 @@ def _verify_tau2_info(contract: ExperimentContract, raw: Mapping[str, Any]) -> N
         raise ContractError("tau2 retrieval kwargs do not match assay_config")
 
 
+def tau2_resource_usage_floor(raw: Mapping[str, Any]) -> ResourceUsage:
+    """Derive the minimum observable arm usage embedded in tau2 messages."""
+
+    simulations = raw.get("simulations")
+    if not isinstance(simulations, list):
+        raise ContractError("tau2 results simulations must be a list")
+    wall_seconds = 0.0
+    calls = 0
+    tokens = 0
+    cost_usd = 0.0
+    for sim_index, value in enumerate(simulations):
+        sim = _mapping(value, f"tau2.simulations[{sim_index}]")
+        duration = sim.get("duration")
+        if duration is not None:
+            observed_duration = _number(duration, f"tau2.simulations[{sim_index}].duration")
+            if observed_duration < 0:
+                raise ContractError(f"tau2.simulations[{sim_index}].duration must not be negative")
+            wall_seconds = max(wall_seconds, observed_duration)
+        messages = sim.get("messages", [])
+        if not isinstance(messages, list):
+            raise ContractError(f"tau2.simulations[{sim_index}].messages must be a list")
+        for message_index, message_value in enumerate(messages):
+            message = _mapping(
+                message_value,
+                f"tau2.simulations[{sim_index}].messages[{message_index}]",
+            )
+            raw_usage = message.get("usage")
+            if raw_usage is None:
+                continue
+            message_usage = _mapping(
+                raw_usage,
+                f"tau2.simulations[{sim_index}].messages[{message_index}].usage",
+            )
+            input_tokens = _non_negative_integer(
+                message_usage.get("input_tokens"),
+                f"tau2.simulations[{sim_index}].messages[{message_index}].usage.input_tokens",
+            )
+            output_tokens = _non_negative_integer(
+                message_usage.get("output_tokens"),
+                f"tau2.simulations[{sim_index}].messages[{message_index}].usage.output_tokens",
+            )
+            observed_cost = _number(
+                message_usage.get("cost_usd"),
+                f"tau2.simulations[{sim_index}].messages[{message_index}].usage.cost_usd",
+            )
+            if observed_cost < 0:
+                raise ContractError("tau2 message usage cost_usd must not be negative")
+            calls += 1
+            tokens += input_tokens + output_tokens
+            cost_usd += observed_cost
+    return ResourceUsage(
+        wall_seconds=wall_seconds,
+        calls=calls,
+        tokens=tokens,
+        cost_usd=cost_usd,
+    )
+
+
+def _verify_usage_floor(declared: ResourceUsage, observed: ResourceUsage) -> None:
+    underreported = []
+    if declared.wall_seconds + 1e-9 < observed.wall_seconds:
+        underreported.append("wall_seconds")
+    if declared.calls < observed.calls:
+        underreported.append("calls")
+    if declared.tokens < observed.tokens:
+        underreported.append("tokens")
+    if declared.cost_usd + 1e-9 < observed.cost_usd:
+        underreported.append("cost_usd")
+    if underreported:
+        raise ContractError(
+            "usage manifest underreports tau2 raw usage: " + ", ".join(underreported)
+        )
+
+
 def normalize_tau2_results(
     contract: ExperimentContract,
     *,
@@ -302,6 +488,7 @@ def normalize_tau2_results(
         raise ContractError(f"cannot parse tau2 results {results_path}: {exc}") from exc
     if not isinstance(raw, dict):
         raise ContractError("tau2 results must be a JSON object")
+    _verify_usage_floor(usage, tau2_resource_usage_floor(raw))
     snapshot = _load_object(snapshot_path, "tau2 snapshot")
     execution_status, failure_class = _verify_snapshot(
         contract,
@@ -310,6 +497,7 @@ def normalize_tau2_results(
         snapshot=snapshot,
     )
     _verify_tau2_info(contract, raw)
+    _verify_tau2_tasks(contract, raw)
 
     simulations = raw.get("simulations")
     if not isinstance(simulations, list):
@@ -366,7 +554,7 @@ def normalize_tau2_results(
         "revision_sha": revision_sha,
         "evaluator_sha256": contract.evaluator_sha256,
         "harness_sha256": contract.harness_sha256,
-        "task_layout_sha256": contract.task_layout_sha256,
+        "task_pack_sha256": contract.task_pack_sha256,
         "assay_config_sha256": contract.assay_config_sha256,
         "raw_artifact_sha256": raw_sha256,
         "execution_status": execution_status,

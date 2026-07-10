@@ -564,7 +564,7 @@ def _write_trajectory_snapshot(
     shutil.copy2(results_path, trajectory_path)
     raw_artifact_sha256 = hashlib.sha256(trajectory_path.read_bytes()).hexdigest()
     snapshot = {
-        "schema": "crucible_tau2_trajectory_snapshot.v2",
+        "schema": "crucible_tau2_trajectory_snapshot.v3",
         "filename_convention": {
             "run_id": (
                 "crucible-tau2-<stage>-<domain>-<arm>-"
@@ -1120,7 +1120,7 @@ def main() -> int:
                 "candidate_sha": experiment_contract.candidate_sha,
                 "evaluator_sha256": experiment_contract.evaluator_sha256,
                 "harness_sha256": experiment_contract.harness_sha256,
-                "task_layout_sha256": experiment_contract.task_layout_sha256,
+                "task_pack_sha256": experiment_contract.task_pack_sha256,
                 "assay_config_sha256": experiment_contract.assay_config_sha256,
                 "contract_validation": "identity_preflight",
                 "promotion_authority": "none",

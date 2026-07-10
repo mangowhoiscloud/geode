@@ -44,9 +44,10 @@ from .contract import (
 )
 from .evidence import EvidenceEnvelope, ResourceUsage, load_evidence
 from .promotion import PromotionVerdict, decide
+from .ref_journal import RefIntent, persist_intent, reconcile_ref_update
 
-CONFIG_SCHEMA = "crucible.supervisor.v3"
-TRAIN_PLAN_SCHEMA = "crucible.train-plan.v2"
+CONFIG_SCHEMA = "crucible.supervisor.v4"
+TRAIN_PLAN_SCHEMA = "crucible.train-plan.v3"
 REQUEST_SCHEMA = "crucible.proposal-request.v3"
 PROPOSAL_SCHEMA = "crucible.candidate.v2"
 EVALUATION_SCHEMA = "crucible.train-evaluation.v3"
@@ -924,9 +925,6 @@ class GitWorkspace:
         self.run("update-ref", ref, baseline_sha, _ZERO_SHA)
         return ref
 
-    def advance(self, candidate_sha: str, parent_sha: str) -> None:
-        self.run("update-ref", self.search_ref, candidate_sha, parent_sha)
-
     def assert_head(self, expected_sha: str) -> None:
         if self.run("rev-parse", "--verify", self.search_ref) != expected_sha:
             raise SupervisorError("campaign search ref changed outside the supervisor")
@@ -1421,14 +1419,30 @@ class PromotionSupervisor:
             }
             record_id = _hash(record_payload)
             record = {**record_payload, "record_id": record_id}
-            if outcome == "KEEP":
-                workspace.advance(next_head, head)
-                head = next_head
-            else:
-                workspace.assert_head(head)
             write_exclusive_json(feedback_path, feedback_payload)
             feedback = feedback_payload
             write_exclusive_json(attempt_dir / "record.json", record)
+            if outcome == "KEEP":
+                intent_path = attempt_dir / "search-ref.intent.json"
+                receipt_path = attempt_dir / "search-ref.receipt.json"
+                persist_intent(
+                    intent_path,
+                    RefIntent(
+                        ref=workspace.search_ref,
+                        expected_old_sha=head,
+                        new_sha=next_head,
+                        subject_id=record_id,
+                        witness_ref=(f"refs/crucible/applied/{config.campaign_id}/{record_id}"),
+                    ),
+                )
+                reconcile_ref_update(
+                    config.repository,
+                    intent_path=intent_path,
+                    receipt_path=receipt_path,
+                )
+                head = next_head
+            else:
+                workspace.assert_head(head)
             append_jsonl(config.state_dir / "ledger.jsonl", record)
             previous_record = record_id
             counts["attempts"] += 1

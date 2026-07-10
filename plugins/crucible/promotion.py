@@ -18,7 +18,7 @@ from .evidence import (
     validate_evidence_identity,
 )
 
-VERDICT_SCHEMA = "crucible.verdict.v2"
+VERDICT_SCHEMA = "crucible.verdict.v3"
 _COMPUTED_VETOES = frozenset({"budget", "infra_clean", "task_coverage"})
 
 
@@ -74,6 +74,7 @@ class PromotionVerdict:
     usage: ResourceUsage
     pair_count: int
     task_count: int
+    family_count: int
     trials_per_task: int
     baseline_mean: float | None = None
     candidate_mean: float | None = None
@@ -84,6 +85,7 @@ class PromotionVerdict:
         metric: dict[str, float | int | None] = {
             "paired_rows": self.pair_count,
             "task_units": self.task_count,
+            "family_units": self.family_count,
             "trials_per_task": self.trials_per_task,
             "baseline_mean": self.baseline_mean,
             "candidate_mean": self.candidate_mean,
@@ -148,6 +150,9 @@ class PromotionVerdict:
         task_units = metric.get("task_units")
         if isinstance(task_units, bool) or not isinstance(task_units, int) or task_units < 0:
             raise ContractError("verdict.metric.task_units must be non-negative")
+        family_units = metric.get("family_units")
+        if isinstance(family_units, bool) or not isinstance(family_units, int) or family_units < 0:
+            raise ContractError("verdict.metric.family_units must be non-negative")
         trials_per_task = metric.get("trials_per_task")
         if (
             isinstance(trials_per_task, bool)
@@ -189,6 +194,7 @@ class PromotionVerdict:
             usage=ResourceUsage.from_mapping(value.get("usage")),
             pair_count=pairs,
             task_count=task_units,
+            family_count=family_units,
             trials_per_task=trials_per_task,
             baseline_mean=optional_float("baseline_mean"),
             candidate_mean=optional_float("candidate_mean"),
@@ -268,6 +274,7 @@ def decide(
             usage=usage,
             pair_count=0,
             task_count=0,
+            family_count=0,
             trials_per_task=contract.trials_per_task,
         )
 
@@ -315,6 +322,7 @@ def decide(
             usage=usage,
             pair_count=len(expected),
             task_count=0,
+            family_count=0,
             trials_per_task=contract.trials_per_task,
         )
 
@@ -325,8 +333,24 @@ def decide(
         if not veto_results[veto]:
             reasons.append(f"veto_failed:{veto}")
 
-    baseline_values = [_mean(baseline_by_task_values[task_id]) for task_id in contract.task_ids]
-    candidate_values = [_mean(candidate_by_task_values[task_id]) for task_id in contract.task_ids]
+    baseline_task_means = {
+        task_id: _mean(baseline_by_task_values[task_id]) for task_id in contract.task_ids
+    }
+    candidate_task_means = {
+        task_id: _mean(candidate_by_task_values[task_id]) for task_id in contract.task_ids
+    }
+    family_order = tuple(dict.fromkeys(contract.family_ids))
+    tasks_by_family: dict[str, list[str]] = {family_id: [] for family_id in family_order}
+    for task in contract.tasks:
+        tasks_by_family[task.family_id].append(task.task_id)
+    baseline_values = [
+        _mean([baseline_task_means[task_id] for task_id in tasks_by_family[family_id]])
+        for family_id in family_order
+    ]
+    candidate_values = [
+        _mean([candidate_task_means[task_id] for task_id in tasks_by_family[family_id]])
+        for family_id in family_order
+    ]
     baseline_mean = _mean(baseline_values)
     candidate_mean = _mean(candidate_values)
     deltas = [
@@ -349,6 +373,8 @@ def decide(
 
     if len(contract.task_ids) < contract.promotion.minimum_tasks:
         reasons.append("insufficient_tasks")
+    if len(family_order) < contract.promotion.minimum_families:
+        reasons.append("insufficient_families")
     if candidate_mean < contract.promotion.minimum_candidate_mean:
         reasons.append("candidate_below_absolute_floor")
     if paired_improvement < contract.promotion.materiality_pp:
@@ -372,6 +398,7 @@ def decide(
         usage=usage,
         pair_count=len(expected),
         task_count=len(contract.task_ids),
+        family_count=len(family_order),
         trials_per_task=contract.trials_per_task,
         baseline_mean=baseline_mean,
         candidate_mean=candidate_mean,

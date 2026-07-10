@@ -11,20 +11,22 @@ from pathlib import Path
 from typing import Literal
 
 import pytest
+from plugins.crucible.bundle import PromotionBundle
 from plugins.crucible.cli import main as crucible_main
 from plugins.crucible.contract import (
     ExperimentContract,
     Mutation,
+    TaskUnit,
     content_sha256,
     load_contract,
-    task_layout_sha256,
+    task_pack_sha256,
     tracked_tree_sha256,
 )
 from plugins.crucible.evidence import EvidenceEnvelope, ResourceUsage
+from plugins.crucible.ref_journal import load_receipt
 from plugins.crucible.supervisor import (
     CandidateProposal,
     FailureFeedback,
-    GitWorkspace,
     LoopLimits,
     PromotionSupervisor,
     ProposalRequest,
@@ -58,13 +60,13 @@ EVALUATOR_SCRIPT = "#!/usr/bin/env python3\n" + textwrap.dedent(
             sort_keys=True,
         ).encode()
         return {
-            "schema": "crucible.evidence.v2",
+            "schema": "crucible.evidence.v3",
             "contract_id": contract["contract_id"],
             "arm": arm,
             "revision_sha": revision,
             "evaluator_sha256": contract["evaluator_sha256"],
             "harness_sha256": contract["harness_sha256"],
-            "task_layout_sha256": contract["task_layout_sha256"],
+            "task_pack_sha256": contract["task_pack_sha256"],
             "assay_config_sha256": hashlib.sha256(assay_config).hexdigest(),
             "raw_artifact_sha256": raw_hash,
             "execution_status": "complete",
@@ -83,7 +85,7 @@ EVALUATOR_SCRIPT = "#!/usr/bin/env python3\n" + textwrap.dedent(
                     "metrics": {"reward": reward},
                     "checks": {"safety": True},
                 }
-                for task_id in contract["task_ids"]
+                for task_id in (task["task_id"] for task in contract["tasks"])
             ],
         }
 
@@ -146,17 +148,19 @@ def _init_repo(path: Path, files: dict[str, str]) -> str:
 
 
 def _train_plan(repo: Path, harness: Path) -> TrainPlan:
-    task_ids = ["task-1", "task-2", "task-3", "task-4"]
+    tasks = tuple(
+        TaskUnit(f"task-{index}", f"family-{index}", f"{index:064x}") for index in range(1, 5)
+    )
     return TrainPlan.from_mapping(
         {
-            "schema": "crucible.train-plan.v2",
+            "schema": "crucible.train-plan.v3",
             "name": "supervisor-fixture",
             "evaluator_sha256": content_sha256(repo, ["evaluator.py"]),
             "harness_sha256": tracked_tree_sha256(harness),
-            "task_layout_sha256": task_layout_sha256(task_ids),
+            "task_pack_sha256": task_pack_sha256(tasks),
             "agent_route": "fixture-agent",
             "user_route": "fixture-user",
-            "task_ids": task_ids,
+            "tasks": [task.to_dict() for task in tasks],
             "trials_per_task": 1,
             "assay_config": {"schema": "fixture.v1"},
             "evaluator_paths": ["evaluator.py"],
@@ -165,6 +169,7 @@ def _train_plan(repo: Path, harness: Path) -> TrainPlan:
                 "primary_metric": "reward",
                 "materiality_pp": 0.1,
                 "minimum_candidate_mean": 0.7,
+                "minimum_families": 4,
                 "minimum_tasks": 4,
                 "confidence_level": 0.95,
                 "bootstrap_samples": 1_000,
@@ -292,13 +297,13 @@ class _Evaluator:
     ) -> EvidenceEnvelope:
         revision = contract.baseline_sha if arm == "baseline" else contract.candidate_sha
         payload: dict[str, object] = {
-            "schema": "crucible.evidence.v2",
+            "schema": "crucible.evidence.v3",
             "contract_id": contract.contract_id,
             "arm": arm,
             "revision_sha": revision,
             "evaluator_sha256": contract.evaluator_sha256,
             "harness_sha256": contract.harness_sha256,
-            "task_layout_sha256": contract.task_layout_sha256,
+            "task_pack_sha256": contract.task_pack_sha256,
             "assay_config_sha256": contract.assay_config_sha256,
             "raw_artifact_sha256": raw_hash,
             "execution_status": "invalid" if invalid else "complete",
@@ -449,7 +454,14 @@ def test_standalone_loop_advances_only_private_search_ref_on_train_keep(
     assert _git(config.repository, "rev-parse", summary.search_ref) == first_keep
     first_attempt = sorted((config.state_dir / "attempts").iterdir())[0]
     first_contract = load_contract(first_attempt / "contract.json")
+    first_receipt = load_receipt(first_attempt / "search-ref.receipt.json")
     assert _git(config.repository, "rev-parse", first_contract.champion_ref) == baseline
+    assert first_receipt.ref == summary.search_ref
+    assert first_receipt.subject_id == ledger[0]["record_id"]
+    assert first_receipt.expected_old_sha == baseline
+    assert first_receipt.new_sha == first_keep
+    bundle = PromotionBundle.build_from_attempt(config.repository, first_attempt)
+    assert bundle.candidate_sha == first_keep
     assert producer.worktree_roots
     assert all(not path.exists() for path in producer.worktree_roots)
     assert [row["outcome"] for row in ledger] == ["KEEP", "REJECT", "INVALID"]
@@ -623,20 +635,23 @@ def test_config_rejects_unknown_top_level_fields(tmp_path: Path) -> None:
         SupervisorConfig.load(path)
 
 
-def test_failed_keep_cas_does_not_commit_a_keep_record(
+def test_failed_keep_cas_leaves_a_record_but_no_receipt_or_ledger(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     config, baseline = _config(tmp_path, attempts=1)
 
-    def fail_advance(
-        _workspace: GitWorkspace,
-        _candidate_sha: str,
-        _parent_sha: str,
+    def fail_reconcile(
+        _repository: Path,
+        *,
+        intent_path: Path,
+        receipt_path: Path,
     ) -> None:
+        assert intent_path.name == "search-ref.intent.json"
+        assert receipt_path.name == "search-ref.receipt.json"
         raise SupervisorError("fixture CAS conflict")
 
-    monkeypatch.setattr(GitWorkspace, "advance", fail_advance)
+    monkeypatch.setattr("plugins.crucible.supervisor.reconcile_ref_update", fail_reconcile)
     with pytest.raises(SupervisorError, match="CAS conflict"):
         PromotionSupervisor(
             config,
@@ -646,7 +661,11 @@ def test_failed_keep_cas_does_not_commit_a_keep_record(
 
     attempt = next((config.state_dir / "attempts").iterdir())
     assert not (config.state_dir / "ledger.jsonl").exists()
-    assert not (attempt / "record.json").exists()
+    record = json.loads((attempt / "record.json").read_text())
+    intent = json.loads((attempt / "search-ref.intent.json").read_text())
+    assert record["outcome"] == "KEEP"
+    assert intent["subject_id"] == record["record_id"]
+    assert not (attempt / "search-ref.receipt.json").exists()
     assert _git(config.repository, "rev-parse", "refs/crucible/search/fixture-campaign") == baseline
 
 

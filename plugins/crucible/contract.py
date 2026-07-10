@@ -23,8 +23,8 @@ from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
 from typing import Any, Literal, cast
 
-EXPERIMENT_SCHEMA = "crucible.experiment.v2"
-SHARD_SCHEMA = "crucible.shard.v2"
+EXPERIMENT_SCHEMA = "crucible.experiment.v3"
+SHARD_SCHEMA = "crucible.shard.v3"
 REQUIRED_VETOES = frozenset({"budget", "infra_clean", "safety", "task_coverage"})
 _GIT_SHA_RE = re.compile(r"^[0-9a-f]{40}$")
 _SHA256_RE = re.compile(r"^[0-9a-f]{64}$")
@@ -176,12 +176,51 @@ def _paths_overlap(left: str, right: str) -> bool:
     )
 
 
-def task_layout_sha256(task_ids: Sequence[str], trials_per_task: int = 1) -> str:
-    """Hash ordered task IDs and trial cardinality, not task-definition bytes."""
+@dataclass(frozen=True)
+class TaskUnit:
+    """One frozen task identity and its statistical family."""
+
+    task_id: str
+    family_id: str
+    content_sha256: str
+
+    @classmethod
+    def from_mapping(cls, value: object, *, field: str = "tasks[]") -> TaskUnit:
+        row = _require_mapping(value, field)
+        _require_keys(
+            row,
+            field=field,
+            required={"content_sha256", "family_id", "task_id"},
+        )
+        return cls(
+            task_id=_non_empty_string(row["task_id"], f"{field}.task_id"),
+            family_id=_non_empty_string(row["family_id"], f"{field}.family_id"),
+            content_sha256=_sha256(row["content_sha256"], f"{field}.content_sha256"),
+        )
+
+    def to_dict(self) -> dict[str, str]:
+        return {
+            "task_id": self.task_id,
+            "family_id": self.family_id,
+            "content_sha256": self.content_sha256,
+        }
+
+
+def task_pack_sha256(tasks: Sequence[TaskUnit], trials_per_task: int = 1) -> str:
+    """Hash ordered task identities, canonical content hashes, and trial count."""
+
+    if not tasks:
+        raise ContractError("tasks must be a non-empty sequence")
     if trials_per_task <= 0:
         raise ContractError("trials_per_task must be a positive integer")
+    for index, task in enumerate(tasks):
+        if not isinstance(task, TaskUnit):
+            raise ContractError(f"tasks[{index}] must be a TaskUnit")
     encoded = json.dumps(
-        {"task_ids": list(task_ids), "trials_per_task": trials_per_task},
+        {
+            "tasks": [task.to_dict() for task in tasks],
+            "trials_per_task": trials_per_task,
+        },
         ensure_ascii=False,
         separators=(",", ":"),
         sort_keys=True,
@@ -400,6 +439,7 @@ class PromotionRule:
     materiality_pp: float
     minimum_candidate_mean: float
     minimum_tasks: int
+    minimum_families: int
     confidence_level: float
     bootstrap_samples: int
 
@@ -415,6 +455,7 @@ class PromotionRule:
                 "materiality_pp",
                 "method",
                 "minimum_candidate_mean",
+                "minimum_families",
                 "minimum_tasks",
                 "primary_metric",
             },
@@ -443,6 +484,10 @@ class PromotionRule:
                 "promotion.minimum_candidate_mean",
             ),
             minimum_tasks=_positive_int(row["minimum_tasks"], "promotion.minimum_tasks"),
+            minimum_families=_positive_int(
+                row["minimum_families"],
+                "promotion.minimum_families",
+            ),
             confidence_level=_probability(
                 row["confidence_level"],
                 "promotion.confidence_level",
@@ -457,6 +502,7 @@ class PromotionRule:
             "materiality_pp": self.materiality_pp,
             "minimum_candidate_mean": self.minimum_candidate_mean,
             "minimum_tasks": self.minimum_tasks,
+            "minimum_families": self.minimum_families,
             "confidence_level": self.confidence_level,
             "bootstrap_samples": self.bootstrap_samples,
         }
@@ -473,10 +519,10 @@ class ExperimentContract:
     candidate_sha: str
     evaluator_sha256: str
     harness_sha256: str
-    task_layout_sha256: str
+    task_pack_sha256: str
     agent_route: str
     user_route: str
-    task_ids: tuple[str, ...]
+    tasks: tuple[TaskUnit, ...]
     trials_per_task: int
     assay_config_json: str
     mutation: Mutation
@@ -504,8 +550,8 @@ class ExperimentContract:
             "promotion",
             "schema",
             "stage",
-            "task_ids",
-            "task_layout_sha256",
+            "task_pack_sha256",
+            "tasks",
             "trials_per_task",
             "user_route",
             "vetoes",
@@ -554,15 +600,27 @@ class ExperimentContract:
         if stage == "test" and parent_contract_id is None:
             raise ContractError("test contracts require the frozen train parent_contract_id")
 
-        task_ids = _string_tuple(row["task_ids"], "task_ids")
-        trials_per_task = _positive_int(row["trials_per_task"], "trials_per_task")
-        supplied_task_layout_sha = _sha256(
-            row["task_layout_sha256"],
-            "task_layout_sha256",
+        raw_tasks = row["tasks"]
+        if not isinstance(raw_tasks, list) or not raw_tasks:
+            raise ContractError("tasks must be a non-empty list")
+        tasks = tuple(
+            TaskUnit.from_mapping(item, field=f"tasks[{index}]")
+            for index, item in enumerate(raw_tasks)
         )
-        if supplied_task_layout_sha != task_layout_sha256(task_ids, trials_per_task):
+        task_ids = tuple(task.task_id for task in tasks)
+        if len(set(task_ids)) != len(task_ids):
+            raise ContractError("tasks must not contain duplicate task_id values")
+        content_hashes = tuple(task.content_sha256 for task in tasks)
+        if len(set(content_hashes)) != len(content_hashes):
+            raise ContractError("tasks must not contain duplicate content_sha256 values")
+        trials_per_task = _positive_int(row["trials_per_task"], "trials_per_task")
+        supplied_task_pack_sha = _sha256(
+            row["task_pack_sha256"],
+            "task_pack_sha256",
+        )
+        if supplied_task_pack_sha != task_pack_sha256(tasks, trials_per_task):
             raise ContractError(
-                "task_layout_sha256 does not match the ordered task_ids and trials_per_task"
+                "task_pack_sha256 does not match the ordered tasks and trials_per_task"
             )
 
         contract = cls(
@@ -573,10 +631,10 @@ class ExperimentContract:
             candidate_sha=candidate_sha,
             evaluator_sha256=_sha256(row["evaluator_sha256"], "evaluator_sha256"),
             harness_sha256=_sha256(row["harness_sha256"], "harness_sha256"),
-            task_layout_sha256=supplied_task_layout_sha,
+            task_pack_sha256=supplied_task_pack_sha,
             agent_route=_non_empty_string(row["agent_route"], "agent_route"),
             user_route=_non_empty_string(row["user_route"], "user_route"),
-            task_ids=task_ids,
+            tasks=tasks,
             trials_per_task=trials_per_task,
             assay_config_json=_canonical_json(row["assay_config"], "assay_config"),
             mutation=mutation,
@@ -601,10 +659,10 @@ class ExperimentContract:
             "candidate_sha": self.candidate_sha,
             "evaluator_sha256": self.evaluator_sha256,
             "harness_sha256": self.harness_sha256,
-            "task_layout_sha256": self.task_layout_sha256,
+            "task_pack_sha256": self.task_pack_sha256,
             "agent_route": self.agent_route,
             "user_route": self.user_route,
-            "task_ids": list(self.task_ids),
+            "tasks": [task.to_dict() for task in self.tasks],
             "trials_per_task": self.trials_per_task,
             "assay_config": self.assay_config,
             "mutations": [self.mutation.to_dict()],
@@ -623,6 +681,18 @@ class ExperimentContract:
         if not isinstance(value, dict):  # pragma: no cover - constructor invariant
             raise AssertionError("canonical assay_config is not an object")
         return value
+
+    @property
+    def task_ids(self) -> tuple[str, ...]:
+        return tuple(task.task_id for task in self.tasks)
+
+    @property
+    def family_ids(self) -> tuple[str, ...]:
+        return tuple(task.family_id for task in self.tasks)
+
+    @property
+    def task_content_sha256s(self) -> tuple[str, ...]:
+        return tuple(task.content_sha256 for task in self.tasks)
 
     @property
     def assay_config_sha256(self) -> str:
@@ -827,9 +897,21 @@ def validate_test_parent(
     for field, (test_value, train_value) in frozen_pairs.items():
         if test_value != train_value:
             raise ContractError(f"test and train contracts differ on {field}")
-    overlap = sorted(set(contract.task_ids) & set(parent.task_ids))
-    if overlap:
-        raise ContractError("test task pack overlaps exposed train tasks: " + ", ".join(overlap))
+    disjoint_fields = (
+        ("task IDs", contract.task_ids, parent.task_ids),
+        ("task families", contract.family_ids, parent.family_ids),
+        (
+            "task content hashes",
+            contract.task_content_sha256s,
+            parent.task_content_sha256s,
+        ),
+    )
+    for label, test_values, train_values in disjoint_fields:
+        overlap = sorted(set(test_values) & set(train_values))
+        if overlap:
+            raise ContractError(
+                f"test task pack overlaps exposed train {label}: " + ", ".join(overlap)
+            )
 
 
 def validate_shards(
@@ -851,7 +933,7 @@ def validate_shards(
             "revision_sha": revision_sha,
             "evaluator_sha256": contract.evaluator_sha256,
             "harness_sha256": contract.harness_sha256,
-            "task_layout_sha256": contract.task_layout_sha256,
+            "task_pack_sha256": contract.task_pack_sha256,
             "assay_config_sha256": contract.assay_config_sha256,
             "trials_per_task": contract.trials_per_task,
         }

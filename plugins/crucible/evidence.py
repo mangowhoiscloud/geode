@@ -13,7 +13,7 @@ from typing import Any, Literal, cast
 from .artifacts import load_json_object
 from .contract import ContractError, ExperimentContract
 
-EVIDENCE_SCHEMA = "crucible.evidence.v2"
+EVIDENCE_SCHEMA = "crucible.evidence.v3"
 
 
 def _mapping(value: object, field: str) -> Mapping[str, Any]:
@@ -235,7 +235,7 @@ class EvidenceEnvelope:
     revision_sha: str
     evaluator_sha256: str
     harness_sha256: str
-    task_layout_sha256: str
+    task_pack_sha256: str
     assay_config_sha256: str
     raw_artifact_sha256: str
     execution_status: Literal["complete", "invalid"]
@@ -260,7 +260,7 @@ class EvidenceEnvelope:
                 "revision_sha",
                 "rows",
                 "schema",
-                "task_layout_sha256",
+                "task_pack_sha256",
                 "usage",
             },
             optional={"evidence_id", "failure_class"},
@@ -296,7 +296,7 @@ class EvidenceEnvelope:
             revision_sha=_git_sha(row["revision_sha"], "evidence.revision_sha"),
             evaluator_sha256=_sha256(row["evaluator_sha256"], "evidence.evaluator_sha256"),
             harness_sha256=_sha256(row["harness_sha256"], "evidence.harness_sha256"),
-            task_layout_sha256=_sha256(row["task_layout_sha256"], "evidence.task_layout_sha256"),
+            task_pack_sha256=_sha256(row["task_pack_sha256"], "evidence.task_pack_sha256"),
             assay_config_sha256=_sha256(
                 row["assay_config_sha256"],
                 "evidence.assay_config_sha256",
@@ -326,7 +326,7 @@ class EvidenceEnvelope:
             "revision_sha": self.revision_sha,
             "evaluator_sha256": self.evaluator_sha256,
             "harness_sha256": self.harness_sha256,
-            "task_layout_sha256": self.task_layout_sha256,
+            "task_pack_sha256": self.task_pack_sha256,
             "assay_config_sha256": self.assay_config_sha256,
             "raw_artifact_sha256": self.raw_artifact_sha256,
             "execution_status": self.execution_status,
@@ -378,7 +378,7 @@ def validate_evidence_identity(
         "revision_sha": expected_revision,
         "evaluator_sha256": contract.evaluator_sha256,
         "harness_sha256": contract.harness_sha256,
-        "task_layout_sha256": contract.task_layout_sha256,
+        "task_pack_sha256": contract.task_pack_sha256,
         "assay_config_sha256": contract.assay_config_sha256,
     }
     observed = {
@@ -387,7 +387,7 @@ def validate_evidence_identity(
         "revision_sha": evidence.revision_sha,
         "evaluator_sha256": evidence.evaluator_sha256,
         "harness_sha256": evidence.harness_sha256,
-        "task_layout_sha256": evidence.task_layout_sha256,
+        "task_pack_sha256": evidence.task_pack_sha256,
         "assay_config_sha256": evidence.assay_config_sha256,
     }
     for field, value in expected.items():
