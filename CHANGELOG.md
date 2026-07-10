@@ -64,11 +64,11 @@ functional change.
   (sub-agents as instances of the same loop, `core/agent/sub_agent.py`), then
   audits-itself, breeds-its-own-tests, keeps-honest-score; three new
   procedural dither textures (strata / clock ticks / fan-out rays) join the
-  plate set. The distillation is re-choreographed: the corner headline stays
-  pinned while the full-bleed wordmark scrolls up from below, docks at
-  center, and only then fills top-down under the 198-flake token snowfall
-  (per-flake speed/size/opacity/sway); the ledger and the laboratory reveal
-  follow on the same sticky screen. "Three ways in" pins and recedes
+  plate set. The distillation keeps the corner headline pinned over the
+  198-flake token snowfall (per-flake speed/size/opacity/sway) with the
+  full-bleed wordmark filling top-down at the base of the screen; the
+  ledger and the laboratory reveal follow on the same sticky screen. The
+  hero's top pixel wordmark is removed (the statement carries the name). "Three ways in" pins and recedes
   backward as the plates slide over it; the terminal mock keeps its dark
   product colors and macOS traffic lights by standing exception.
 - **De-slop: decorative arrows and the dev-blog link are gone.** CTA/link

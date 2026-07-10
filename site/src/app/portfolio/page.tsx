@@ -138,11 +138,8 @@ function HeroField() {
         className="pointer-events-none select-none object-cover opacity-90"
         style={{ imageRendering: "pixelated" }}
       />
-      <div className="relative z-10 mx-auto max-w-7xl px-5 pt-9 text-center sm:px-8">
-        <span className="font-pixel text-[19px] font-bold tracking-[0.06em] text-[var(--acc-artifact)]">GEODE</span>
-      </div>
       <motion.div
-        className="relative z-10 mx-auto max-w-7xl px-5 pb-16 pt-12 sm:px-8 lg:pt-16"
+        className="relative z-10 mx-auto max-w-7xl px-5 pb-16 pt-14 sm:px-8 lg:pt-20"
         initial="hidden"
         animate="show"
         variants={{ hidden: {}, show: { transition: { staggerChildren: 0.1, delayChildren: 0.05 } } }}
@@ -768,13 +765,10 @@ function DistillationAct() {
   const reduceMotion = useReducedMotion();
   const wrapRef = useRef<HTMLDivElement | null>(null);
   const { scrollYProgress } = useScroll({ target: wrapRef, offset: ["start start", "end end"] });
-  // Act order: the word scrolls up from below until it reaches center
-  // (wordY), only then the fill begins. The corner headline stays pinned.
-  const wordY = useTransform(scrollYProgress, [0.02, 0.22], ["85vh", "0vh"]);
   // Clip extends 15% past the line box: leading-[0.82] lets the pixel glyphs
   // overflow it, and a box-bounded clip would leave the letter caps unfilled.
-  const fill = useTransform(scrollYProgress, [0.28, 0.58], ["inset(-15% 0 115% 0)", "inset(-15% 0 -15% 0)"]);
-  const ledgerOp = useTransform(scrollYProgress, [0.52, 0.66], [0, 1]);
+  const fill = useTransform(scrollYProgress, [0.18, 0.55], ["inset(-15% 0 115% 0)", "inset(-15% 0 -15% 0)"]);
+  const ledgerOp = useTransform(scrollYProgress, [0.48, 0.64], [0, 1]);
   const labOp = useTransform(scrollYProgress, [0.74, 0.9], [0, 1]);
   const labPointer = useTransform(labOp, (v) => (v > 0.55 ? "auto" : "none") as "auto" | "none");
   const ledger: { id: string; verdict: string; keep?: boolean }[] = [
@@ -797,20 +791,17 @@ function DistillationAct() {
           </h2>
         </div>
 
-        <div aria-hidden className="absolute inset-0 flex flex-col justify-center">
-          <RainBand phase={0} height="14vh" flakes={96} />
+        <div className="flex min-h-0 flex-1 flex-col justify-center">
+          <RainBand phase={0} height="12vh" flakes={96} />
           <FilterLine label="critic" />
-          <RainBand phase={1} height="11vh" converge={0.42} flakes={56} />
+          <RainBand phase={1} height="9vh" converge={0.42} flakes={56} />
           <FilterLine label="petri gate" />
-          <RainBand phase={2} height="9vh" converge={0.78} flakes={30} />
+          <RainBand phase={2} height="7vh" converge={0.78} flakes={30} />
           <FilterLine label="held-out" />
-          <RainBand phase={1} height="7vh" converge={0.92} flakes={16} />
+          <RainBand phase={1} height="5vh" converge={0.92} flakes={16} />
         </div>
 
-        <motion.div
-          style={{ y: reduceMotion ? "0vh" : wordY }}
-          className="absolute inset-0 z-10 flex flex-col items-center justify-center"
-        >
+        <div className="flex flex-col items-center pb-8">
           {/* the word takes the whole width — the distillate is the wordmark */}
           <div className="relative w-full text-center">
             <p className="font-pixel whitespace-nowrap text-[24vw] font-bold leading-[0.82] text-[#FFF0F8] opacity-25">
@@ -846,33 +837,37 @@ function DistillationAct() {
               )}
             </p>
           </motion.div>
-        </motion.div>
+        </div>
 
         {/* final act: white enters — the rose field becomes a specimen slide on a paper stage */}
         <motion.div style={{ opacity: labOp, pointerEvents: labPointer }} className="absolute inset-0 bg-[#FFF0F8]">
           <div className="absolute inset-x-2 bottom-12 top-2 bg-[var(--acc-artifact)] sm:inset-x-3 sm:top-3" />
-          {/* ghost distillate: same centered geometry as the visible act,
-              so the crossfade keeps the word at identical coordinates */}
-          <div aria-hidden className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center overflow-hidden">
-            <p className="font-pixel w-full whitespace-nowrap text-center text-[24vw] font-bold leading-[0.82] text-[#FFF0F8] opacity-[0.16]">
-              GEODE
-            </p>
-            <div className="invisible mt-6 w-full max-w-3xl border-t px-6 pt-4">
-              <div className="flex flex-wrap items-baseline justify-center gap-x-7 gap-y-2 font-mono text-[11.5px]">
-                <span className="uppercase tracking-[0.24em]">baseline ledger</span>
-                {ledger.map((row) => (
-                  <span key={`ghost-${row.id}`}>
-                    {row.id} · {row.verdict}
-                  </span>
-                ))}
-              </div>
-              <p className="font-serif-display mt-4 text-center text-[15px] font-semibold leading-[1.6]">
-                {t(
-                  locale,
-                  "첫 방울은 아직 매달려 있습니다. 기록은 그 무게까지 답니다.",
-                  "The first drop is still forming. The ledger weighs even that."
-                )}
+          {/* ghost distillate: replicates the visible act's column layout so the
+              crossfade keeps the word at identical coordinates — keep the
+              invisible spacers in sync with the markup above */}
+          <div aria-hidden className="pointer-events-none absolute inset-0 flex flex-col overflow-hidden">
+            <div className="min-h-0 flex-1" />
+            <div className="flex flex-col items-center pb-8">
+              <p className="font-pixel w-full whitespace-nowrap text-center text-[24vw] font-bold leading-[0.82] text-[#FFF0F8] opacity-[0.16]">
+                GEODE
               </p>
+              <div className="invisible mt-6 w-full max-w-3xl border-t px-6 pt-4">
+                <div className="flex flex-wrap items-baseline justify-center gap-x-7 gap-y-2 font-mono text-[11.5px]">
+                  <span className="uppercase tracking-[0.24em]">baseline ledger</span>
+                  {ledger.map((row) => (
+                    <span key={`ghost-${row.id}`}>
+                      {row.id} · {row.verdict}
+                    </span>
+                  ))}
+                </div>
+                <p className="font-serif-display mt-4 text-center text-[15px] font-semibold leading-[1.6]">
+                  {t(
+                    locale,
+                    "첫 방울은 아직 매달려 있습니다. 기록은 그 무게까지 답니다.",
+                    "The first drop is still forming. The ledger weighs even that."
+                  )}
+                </p>
+              </div>
             </div>
           </div>
           <div className="absolute inset-x-2 bottom-12 top-2 sm:inset-x-3 sm:top-3">
