@@ -1,3 +1,11 @@
+/* Interleave Astryx's cascade layers (loaded per-page on /portfolio) with
+   Tailwind's. Layer priority follows first-declaration order, so this single
+   statement fixes both directions: Astryx's scoped element reset
+   (@layer reset :where(h1){font-size:...}) stays BELOW Tailwind utilities,
+   while Astryx component styles (astryx-base) stay ABOVE Tailwind's
+   base/preflight (which would otherwise strip Astryx buttons/controls). */
+@layer reset, astryx-theme, theme, base, astryx-base, components, utilities;
+
 @import "tailwindcss";
 
 /* ===== GEODE Editorial — warm paper, restrained type, layer-aware ===== */
