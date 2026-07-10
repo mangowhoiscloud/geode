@@ -320,7 +320,7 @@ class HookEventStore:
                     SELECT * FROM hook_events{where_sql}
                     ORDER BY occurred_at DESC, id DESC
                     LIMIT ? OFFSET ?
-                    """,  # noqa: S608 - columns and clauses are fixed above; values stay parameterized
+                    """,  # noqa: S608 - clauses fixed above; values parameterized  # nosec B608
                     params,
                 ).fetchall()
             finally:
