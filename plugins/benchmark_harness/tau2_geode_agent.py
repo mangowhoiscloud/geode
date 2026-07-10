@@ -244,19 +244,29 @@ def _tool_mutates_state(tool: Any) -> bool:
     return marker if isinstance(marker, bool) else True
 
 
+_AGENT_POLICY_PATH = Path(__file__).with_name("tau2_agent_policy.md")
+
+
+def _agent_policy() -> str:
+    """Load the candidate-owned agent policy from one bounded regular file."""
+
+    info = _AGENT_POLICY_PATH.lstat()
+    if not _AGENT_POLICY_PATH.is_file() or _AGENT_POLICY_PATH.is_symlink():
+        raise RuntimeError("tau2 agent policy must be a regular file")
+    if info.st_size > 16 * 1024:
+        raise RuntimeError("tau2 agent policy exceeds 16384 bytes")
+    policy = _AGENT_POLICY_PATH.read_text(encoding="utf-8").strip()
+    if not policy:
+        raise RuntimeError("tau2 agent policy must not be empty")
+    return policy
+
+
 def _agent_system_prompt(
     domain_policy: str,
 ) -> str:
     return (
         "Agent: GEODE running inside tau2-bench.\n"
-        "Follow the domain policy exactly. Use the provided tools to change the "
-        "environment state when the user asks for an operation. Do not invent "
-        "tool results or missing user facts. When calling a tool, provide every "
-        "required argument, but leave optional arguments unset unless the user, "
-        "the policy, or a prior tool result explicitly supplied that value. Do "
-        "not add inferred descriptions, notes, dates, preferences, quantities, "
-        "or metadata. When the requested state change is complete, answer the "
-        "user concisely and do not ask for unrelated follow-up details.\n\n"
+        f"{_agent_policy()}\n\n"
         "<policy>\n"
         f"{domain_policy}\n"
         "</policy>"
@@ -534,6 +544,10 @@ def register_geode_tau2_participants(
 
     registry.register_agent_factory(create_geode_agent, "geode_agent")
     registry.register_user(GeodeTau2User, "geode_user")
+    # Same frozen implementation, but contract runs use a distinct registry
+    # identity so the adapter can attest that the candidate mutation surface
+    # does not own the user runtime.
+    registry.register_user(GeodeTau2User, "crucible_user")
 
 
 def _slug(value: str) -> str:

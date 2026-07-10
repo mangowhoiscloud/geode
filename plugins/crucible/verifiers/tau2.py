@@ -38,6 +38,7 @@ class Tau2AssayAdapter:
         ("user_stop", "semantic"),
     )
     user_runtime_owners: tuple[tuple[str, Literal["candidate", "evaluator"]], ...] = (
+        ("crucible_user", "evaluator"),
         ("dummy_user", "evaluator"),
         ("geode_user", "candidate"),
         ("user_simulator", "evaluator"),
@@ -64,6 +65,8 @@ class Tau2AssayAdapter:
         native_model: str,
         candidate_route: str,
     ) -> str:
+        if implementation == "crucible_user":
+            return f"evaluator-{candidate_route}"
         if self.user_runtime_owner(implementation) == "candidate":
             return candidate_route
         return f"tau2-{implementation}-{native_model}"
@@ -130,6 +133,12 @@ class Tau2AssayAdapter:
                 "route": self.user_route_from_args(args),
                 "llm": args.user_llm,
                 "llm_args": dict(user_llm_args),
+                "provider": args.user_provider,
+                "source": args.user_source,
+                "effort": args.user_effort,
+                "time_budget_s": args.user_time_budget_s,
+                "max_tokens": args.user_max_tokens,
+                "max_rounds": args.user_max_rounds,
             },
             "retrieval": {
                 "config": args.retrieval_config,

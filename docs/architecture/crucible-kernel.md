@@ -309,6 +309,18 @@ never moved. Each contract names a separate immutable
 `refs/crucible/baselines/<campaign>/<attempt>` ref, so later search-head
 advances do not invalidate historical preflight.
 
+The shipped live path keeps the treatment smaller than the evaluator. The only
+candidate-owned file is `plugins/benchmark_harness/tau2_agent_policy.md`.
+`plugins.crucible.producers.codex_kg` asks GPT-5.4 subscription for one small
+edit using closed failure codes and a bounded architecture-graph slice; it
+cannot read raw tasks, trajectories, evaluator artifacts, or sealed state.
+`scripts/eval/crucible_tau2_evaluator.py` and `plugins.crucible.tau2_live` own
+the paired baseline/candidate execution. They derive the complete argv from the
+contract, isolate per-arm state, retain raw evidence, and compute trace checks
+separately from reward. The `crucible_user` registry identity uses the same
+subscription route as the agent but lives in frozen evaluator code, outside the
+candidate policy surface.
+
 ### Frozen rules, external calibration
 
 The train plan preregisters pack size, trials, confidence, materiality, quality
@@ -359,11 +371,15 @@ The independent train loop is started from one JSON configuration:
   "repository": ".",
   "harness_root": "../frozen-harness",
   "state_dir": "../crucible-runs/verify-claims-01",
-  "allowed_surfaces": ["core/agent/verify.py"],
-  "producer_command": ["candidate-producer", "--mode", "one-change"],
-  "evaluator_entrypoint": "<frozen-executable-evaluator>",
-  "producer_environment": ["OPENAI_API_KEY"],
-  "evaluator_environment": ["OPENAI_API_KEY", "ANTHROPIC_API_KEY"],
+  "allowed_surfaces": ["plugins/benchmark_harness/tau2_agent_policy.md"],
+  "producer_command": ["python", "-m", "plugins.crucible.producers.codex_kg"],
+  "evaluator_entrypoint": "scripts/eval/crucible_tau2_evaluator.py",
+  "producer_environment": [
+    "CODEX_HOME",
+    "CRUCIBLE_KNOWLEDGE_GRAPH",
+    "CRUCIBLE_PRODUCER_OBJECTIVE"
+  ],
+  "evaluator_environment": ["CODEX_HOME", "CRUCIBLE_TAU2_HARNESS_ROOT"],
   "train_plan": {
     "schema": "crucible.train-plan.v3",
     "name": "verify-claims-train",
@@ -381,7 +397,11 @@ The independent train loop is started from one JSON configuration:
     ],
     "trials_per_task": 1,
     "assay_config": {"schema": "<assay-schema>"},
-    "evaluator_paths": ["plugins/benchmark_harness", "plugins/crucible"],
+    "evaluator_paths": [
+      "scripts/eval/crucible_tau2_evaluator.py",
+      "plugins/benchmark_harness/tau2_geode_agent.py",
+      "plugins/crucible"
+    ],
     "promotion": {
       "method": "paired_bootstrap.v2",
       "primary_metric": "reward",
@@ -425,9 +445,9 @@ promotion rule, contract, or campaign budget. The trusted evaluator receives
 the canonical candidate and supervisor-written contract through
 `CRUCIBLE_CANDIDATE` and `CRUCIBLE_CONTRACT`. The supervisor executes the frozen
 regular-file `evaluator_entrypoint` directly; its executable mode and bytes are
-part of `evaluator_sha256`. The placeholder above is supplied by an assay
-integration and must implement the evaluation-response protocol below. Crucible
-does not currently ship a generic live-provider evaluator command.
+part of `evaluator_sha256`. The shipped tau2 entrypoint implements this protocol
+for OpenAI subscription runs. Other assays still supply a separate frozen
+entrypoint rather than adding branches to the supervisor.
 
 The Git refs and common directory above are the monotonic authority store for
 this implementation. A fresh clone, rollback or deletion of that store, or an

@@ -30,9 +30,10 @@ from plugins.benchmark_harness.tau2_geode_agent import (
 def test_tau2_agent_prompt_blocks_inferred_optional_tool_args() -> None:
     prompt = _agent_system_prompt("Policy body")
 
-    assert "leave optional arguments unset" in prompt
+    assert "CAN leave optional tool arguments unset" in prompt
     assert "unless the user, the policy, or a prior tool result explicitly supplied" in prompt
-    assert "Do not add inferred descriptions" in prompt
+    assert "CANNOT add inferred descriptions" in prompt
+    assert "do not" not in prompt.lower()
     assert "Policy body" in prompt
 
 

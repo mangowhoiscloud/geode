@@ -124,9 +124,18 @@ def get_agentic_tools(
     existing_names = {t["name"] for t in tools}
     if registry:
         for tool_def in registry.to_anthropic_tools():
-            if tool_def["name"] not in existing_names:
-                existing_names.add(tool_def["name"])
-                tools.append(tool_def)
+            name = tool_def["name"]
+            if name in existing_names:
+                # An explicit toolkit/assay grant owns both execution and the
+                # advertised schema.  Keeping the declarative global schema
+                # here can pair one handler with another tool's arguments when
+                # names collide (for example, tau2's ``calculate`` versus the
+                # richer GEODE calculator).
+                if force_include and name in force_include:
+                    tools = [tool_def if item.get("name") == name else item for item in tools]
+                continue
+            existing_names.add(name)
+            tools.append(tool_def)
     # Merge MCP tools into the unified list (dedup across servers)
     if mcp_tools:
         existing_names = {t["name"] for t in tools}

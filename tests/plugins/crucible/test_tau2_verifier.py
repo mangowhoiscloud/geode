@@ -115,6 +115,12 @@ def _assay_config() -> dict[str, object]:
             "route": "tau2-user_simulator-gpt-5.2",
             "llm": "gpt-5.2",
             "llm_args": {"temperature": 0.0},
+            "provider": "openai",
+            "source": "payg",
+            "effort": "high",
+            "time_budget_s": 120.0,
+            "max_tokens": 8192,
+            "max_rounds": 0,
         },
         "retrieval": {"config": None, "kwargs": {}},
     }
@@ -395,6 +401,31 @@ def test_tau2_profile_rejects_candidate_coupled_user_runtime() -> None:
 
     with pytest.raises(ContractError, match="isolated from candidate code"):
         TAU2_ADAPTER.validate_config(config)
+
+
+def test_tau2_profile_accepts_frozen_subscription_user_runtime() -> None:
+    config = _assay_config()
+    user = config["user"]
+    assert isinstance(user, dict)
+    user.update(
+        {
+            "implementation": "crucible_user",
+            "runtime_owner": "evaluator",
+            "route": "evaluator-openai-subscription-gpt-5.4-high",
+            "llm": "gpt-5.4",
+            "source": "subscription",
+        }
+    )
+
+    TAU2_ADAPTER.validate_config(config)
+    assert (
+        TAU2_ADAPTER.user_route(
+            implementation="crucible_user",
+            native_model="gpt-5.4",
+            candidate_route="openai-subscription-gpt-5.4-high",
+        )
+        == "evaluator-openai-subscription-gpt-5.4-high"
+    )
 
 
 def test_tau2_task_pack_cli_emits_only_ordered_hash_identities(tmp_path: Path) -> None:

@@ -49,6 +49,17 @@ functional change.
 
 ### Changed
 
+- **Crucible can now execute a real GPT-5.4 paired train campaign.** The
+  candidate surface is one bounded agent-policy file; the thin Codex producer
+  receives only closed train feedback plus a bounded knowledge-graph slice and
+  commits one general mutation in the disposable checkout. A frozen tau2
+  evaluator rematerializes the baseline, derives every runner argument from the
+  contract, isolates arm state, uses the evaluator-owned `crucible_user`
+  subscription runtime, preserves raw trajectories, derives independent safety
+  and tool-contract checks, and emits the supervisor response. Explicitly
+  granted registry tools now replace a same-named global declarative schema, so
+  an assay handler cannot receive arguments from GEODE's unrelated tool with
+  the same name.
 - **Crucible measurement checkout is now the executable boundary.** Candidate
   generation still runs in a no-remote disposable repository, but the command
   evaluator now runs only in the fresh checkout rematerialized from authority

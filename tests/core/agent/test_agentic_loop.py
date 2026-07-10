@@ -789,6 +789,26 @@ class TestAgenticLoop:
         tools = get_agentic_tools(mock_registry)
         assert len(tools) == len(AGENTIC_TOOLS)  # no extra
 
+    def test_force_included_registry_tool_owns_colliding_schema(self) -> None:
+        """An explicit assay/toolkit grant advertises its matching handler schema."""
+        mock_registry = MagicMock()
+        registry_definition = {
+            "name": "calculate",
+            "description": "Assay-local calculator",
+            "input_schema": {
+                "type": "object",
+                "properties": {"expression": {"type": "string"}},
+                "required": ["expression"],
+            },
+        }
+        mock_registry.to_anthropic_tools.return_value = [registry_definition]
+
+        tools = get_agentic_tools(mock_registry, force_include={"calculate"})
+        calculate = next(tool for tool in tools if tool["name"] == "calculate")
+
+        assert calculate == registry_definition
+        assert sum(tool["name"] == "calculate" for tool in tools) == 1
+
     def test_computer_use_hidden_by_default(self) -> None:
         names = {t["name"] for t in get_agentic_tools(None)}
         assert "computer_use" not in names
