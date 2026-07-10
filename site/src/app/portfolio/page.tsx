@@ -8,7 +8,7 @@ import { Token } from "@astryxdesign/core/Token";
 import { motion, useReducedMotion, useScroll, useTransform } from "framer-motion";
 import Image from "next/image";
 import Link from "next/link";
-import { useState } from "react";
+import { useRef, useState } from "react";
 
 import { GeodiSprite } from "@/components/geode/geodi-sprite";
 import { LocaleProvider, t, useLocale } from "@/components/geode/locale-context";
@@ -137,6 +137,8 @@ function HeroField() {
   const { scrollY } = useScroll();
   const fieldOpacity = useTransform(scrollY, [0, 700], [1, 0.25]);
   const fieldScale = useTransform(scrollY, [0, 700], [1, 0.965]);
+  // The Lanthimos zoom: scroll pushes the camera into the theatre.
+  const sceneZoom = useTransform(scrollY, [0, 900], [1, 1.22]);
   // Reduced motion keeps the fades but drops movement/scale.
   const heroItem = {
     hidden: { opacity: 0, y: reduceMotion ? 0 : 24 },
@@ -218,7 +220,9 @@ function HeroField() {
             <motion.div
               animate={reduceMotion ? undefined : { y: [0, -7, 0] }}
               transition={{ duration: 7, repeat: Infinity, ease: "easeInOut" }}
+              className="overflow-hidden"
             >
+              <motion.div style={{ scale: reduceMotion ? 1 : sceneZoom, transformOrigin: "50% 78%" }}>
               <Image
                 src="/geode/images/geode-lab-scene.png"
                 alt={t(
@@ -232,6 +236,7 @@ function HeroField() {
                 className="w-full select-none border border-[color-mix(in_srgb,var(--paper)_35%,transparent)]"
                 style={{ imageRendering: "pixelated" }}
               />
+              </motion.div>
             </motion.div>
           </motion.div>
         </div>
@@ -246,21 +251,27 @@ function HeroField() {
   );
 }
 
-/** Full-bleed gallery band: blurred illustration with the CLI terminal. */
+/** Full-bleed gallery band: the theatre hall with the CLI terminal on stage. */
 function GalleryBand() {
   const locale = useLocale();
   const reduceMotion = useReducedMotion();
+  const bandRef = useRef<HTMLDivElement | null>(null);
+  const { scrollYProgress } = useScroll({ target: bandRef, offset: ["start end", "end start"] });
+  // Camera pulls back as the act arrives, then keeps drifting.
+  const hallScale = useTransform(scrollYProgress, [0, 0.5, 1], [1.28, 1.06, 1]);
   return (
-      <div className="relative w-full">
-        <Image
-          src="/geode/images/geode-hall-wide.png"
-          alt=""
-          aria-hidden
-          width={2400}
-          height={750}
-          className="h-[480px] w-full select-none object-cover sm:h-[560px]"
-          style={{ imageRendering: "pixelated" }}
-        />
+      <div ref={bandRef} className="relative w-full overflow-hidden">
+        <motion.div style={{ scale: reduceMotion ? 1 : hallScale, transformOrigin: "50% 42%" }}>
+          <Image
+            src="/geode/images/geode-hall-wide.png"
+            alt=""
+            aria-hidden
+            width={2400}
+            height={750}
+            className="h-[480px] w-full select-none object-cover sm:h-[560px]"
+            style={{ imageRendering: "pixelated" }}
+          />
+        </motion.div>
         <motion.div
           className="absolute inset-0 flex items-center justify-center px-4 sm:px-6"
           initial={{ opacity: 0, y: reduceMotion ? 0 : 46 }}
@@ -698,8 +709,12 @@ const features: {
 
 function FeaturesGrid() {
   const locale = useLocale();
+  const reduceMotion = useReducedMotion();
+  const slabRef = useRef<HTMLDivElement | null>(null);
+  const { scrollYProgress } = useScroll({ target: slabRef, offset: ["start end", "end start"] });
+  const bannerDrift = useTransform(scrollYProgress, [0, 1], [26, -26]);
   return (
-    <section id="features" style={{ backgroundColor: "#FFF0F8" }}>
+    <section id="features" ref={slabRef} style={{ backgroundColor: "#FFF0F8" }}>
       <div className="mx-auto max-w-7xl px-6 py-20 sm:py-28">
         <div className="grid gap-x-8 gap-y-16 md:grid-cols-2 xl:grid-cols-3">
           {features.map((feature) => (
@@ -713,8 +728,13 @@ function FeaturesGrid() {
               >
                 {locale === "en" ? feature.headEn : feature.headKo}
               </h2>
-              <div className="mt-5 flex h-[230px] items-center justify-center overflow-hidden rounded-sm bg-[var(--paper)] px-2">
-                {feature.banner}
+              <div className="mt-5 h-[230px] overflow-hidden rounded-sm bg-[var(--paper)]">
+                <motion.div
+                  className="flex h-full items-center justify-center px-2"
+                  style={{ y: reduceMotion ? 0 : bannerDrift }}
+                >
+                  {feature.banner}
+                </motion.div>
               </div>
               <p className="mt-4 max-w-[380px] text-[13px] leading-[1.75]" style={{ color: SLAB_INK }}>
                 {t(locale, feature.ko, feature.en)}
@@ -737,14 +757,22 @@ function FeaturesGrid() {
 /* ---------------- giant wordmark band ------------------------------------ */
 
 function WordmarkBand() {
+  const reduceMotion = useReducedMotion();
+  const bandRef = useRef<HTMLDivElement | null>(null);
+  const { scrollYProgress } = useScroll({ target: bandRef, offset: ["start end", "end start"] });
+  const loom = useTransform(scrollYProgress, [0, 1], [0.9, 1.12]);
   return (
     <div
+      ref={bandRef}
       aria-hidden
       className="flex h-screen select-none items-center justify-center overflow-hidden bg-[var(--paper)]"
     >
-      <p className="font-pixel whitespace-nowrap text-center text-[23.5vw] font-bold leading-[0.86] text-[var(--acc-artifact)]">
+      <motion.p
+        style={{ scale: reduceMotion ? 1 : loom }}
+        className="font-pixel whitespace-nowrap text-center text-[23.5vw] font-bold leading-[0.86] text-[var(--acc-artifact)]"
+      >
         GEODE
-      </p>
+      </motion.p>
     </div>
   );
 }
@@ -754,12 +782,18 @@ function WordmarkBand() {
 function LabFinale() {
   const locale = useLocale();
   const reduceMotion = useReducedMotion();
+  const finaleRef = useRef<HTMLElement | null>(null);
+  const { scrollYProgress } = useScroll({ target: finaleRef, offset: ["start end", "end start"] });
+  const ghostScale = useTransform(scrollYProgress, [0, 1], [1.16, 0.94]);
   return (
-    <section id="lab" className="relative overflow-hidden bg-[var(--acc-artifact)]">
+    <section id="lab" ref={finaleRef} className="relative overflow-hidden bg-[var(--acc-artifact)]">
       <div aria-hidden className="pointer-events-none absolute inset-0 flex items-center justify-center">
-        <span className="font-pixel select-none text-[24vw] font-bold leading-none text-[var(--paper)] opacity-[0.06]">
+        <motion.span
+          style={{ scale: reduceMotion ? 1 : ghostScale }}
+          className="font-pixel select-none text-[24vw] font-bold leading-none text-[var(--paper)] opacity-[0.06]"
+        >
           GEODE
-        </span>
+        </motion.span>
       </div>
       <div className="relative z-10 mx-auto flex max-w-5xl flex-col items-center gap-7 px-6 py-24 text-center sm:py-32">
         <p className="font-mono text-[11px] uppercase tracking-[0.3em] text-[color-mix(in_srgb,var(--paper)_65%,transparent)]">

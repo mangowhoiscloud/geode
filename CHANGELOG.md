@@ -92,6 +92,17 @@ functional change.
   character surfaces, mono = labels. The YouTube demo section is removed per
   operator; frontend stack is confirmed as Next.js 16 + React 19 + Tailwind 4
   + Astryx + Galmuri11 + Noto Serif KR.
+- **The anatomical theatre + scroll-as-camera (Lanthimos impression pass).**
+  The checkerboard floors are gone: both generated scenes are rebuilt around
+  Poor Things' anatomical theatre — concentric tiered rings around the
+  specimen stage (petri rings = loop rings), sparse dark auditor silhouettes
+  watching from the tiers (the Petri panel), orb lamps flanking; in the wide
+  hall the floating CLI terminal itself becomes the specimen (Geodi sits in
+  the audience watching its own run). Scroll now drives the cinematography:
+  the hero scene push-zooms toward the specimen (the Lanthimos slow zoom),
+  the hall pulls back as its act arrives, the pinned wordmark looms, feature
+  banners drift in parallax, and the finale ghost counter-zooms — all
+  transform-only, reduced-motion gated.
 - **Set dressing pass (operator: less lo-fi, more Lanthimos + Hermes).**
   The hero scene gains engraving-style rays radiating from the gold sun,
   arched gallery windows with tracery, a striped dado (the Poor Things bar
