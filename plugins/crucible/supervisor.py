@@ -657,6 +657,10 @@ def _run_process(
                 os.killpg(process.pid, 0)
             except ProcessLookupError:
                 break
+            except PermissionError:
+                # macOS reports EPERM for a group member mid exec/exit
+                # transition; the group still exists, so keep waiting.
+                pass
             time.sleep(0.01)
         else:
             with suppress(ProcessLookupError, PermissionError):
@@ -718,6 +722,12 @@ class GitWorkspace:
 
         path.mkdir()
         self.run_at(path, "init", "-q")
+        # Producer processes run with an isolated HOME, so ambient git
+        # identity/signing config is unavailable by design; candidate commits
+        # need a checkout-local identity to succeed at all.
+        self.run_at(path, "config", "user.name", "crucible-producer")
+        self.run_at(path, "config", "user.email", "crucible-producer@localhost")
+        self.run_at(path, "config", "commit.gpgsign", "false")
         self.run_at(
             path,
             "fetch",
