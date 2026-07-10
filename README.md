@@ -1,10 +1,13 @@
 <p align="center">
-  <img src="assets/geode-mascot.png" alt="GEODE — Autonomous Execution Harness" width="360" />
+  <img src="assets/geodi-dot.svg" alt="Geodi — GEODE's dot mascot" width="320" />
+</p>
+<p align="center">
+  <sub>Geodi · 22×12 dot sprite · <code>core/ui/geodi_art.py</code></sub>
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/while(tool__use)-agentic%20loop-1e293b?style=flat-square" alt="while(tool_use)">
-  <img src="https://img.shields.io/badge/self--improving-non--parametric-1e293b?style=flat-square" alt="Self-improving (non-parametric)">
+  <img src="https://img.shields.io/badge/while(tool__use)-agentic%20loop-E0699F?style=flat-square" alt="while(tool_use)">
+  <img src="https://img.shields.io/badge/self--improving-non--parametric-E0699F?style=flat-square" alt="Self-improving (non-parametric)">
   <a href="https://github.com/mangowhoiscloud/geode/actions"><img src="https://img.shields.io/github/actions/workflow/status/mangowhoiscloud/geode/ci.yml?style=flat-square&label=ci&logo=github&logoColor=white" alt="CI"></a>
 </p>
 
@@ -60,6 +63,30 @@ The current weak spot is not gross tool availability. It is **required action
 coverage under compound tasks**: Retail failures often miss DB/write side
 effects, while Telecom failures cluster around MMS/APN/app-permission/roaming
 combinations where one necessary user or agent action is omitted.
+
+## Benchmark snapshot — MCPMark Verified available-services track
+
+The 2026-07-04 MCPMark run used **GEODE v0.99.269-era code** on branch
+`feature/mcpmark-agentworld-run`, `eval-sys/mcpmark@cd45b7f`, GEODE's public
+`plugins/benchmark_harness` MCPMark adapter, `gpt-5.5` through the OpenAI
+**Codex subscription** route, and reasoning effort `xhigh`.
+
+This is not a full MCPMark Verified leaderboard score. It covers the standard
+service slices that were runnable in the local environment; Notion was blocked
+by missing `notion_state.json`, and Playwright/WebArena was blocked by missing
+Docker images/browser service stack.
+
+| MCPMark service | Tasks | Passed | Accuracy | Notes |
+|---|---:|---:|---:|---|
+| Filesystem standard | 30 | 25 | **83.3%** | `papers/author_folders` counted as a failed no-result transport run after two attempts |
+| Postgres standard | 21 | 20 | **95.2%** | Uses `postgres-mcp==0.3.0` in unrestricted mode |
+| GitHub standard | 23 | 19 | **82.6%** | Uses `ghcr.io/github/github-mcp-server:v0.15.0`; transient repos cleaned up |
+| **Measured total** | **74** | **64** | **86.5%** | filesystem + postgres + github only |
+
+Artifacts are preserved under
+`artifacts/eval/harnesses/mcpmark/results-geode-agentworld/geode-gpt55-xhigh-20260704-mcpmark-verified-*`.
+These rows are directly comparable only to the same MCPMark commit, service
+set, GEODE adapter, model route, and timeout settings.
 
 ---
 
