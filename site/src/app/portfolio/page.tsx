@@ -933,7 +933,7 @@ function DistillationAct() {
               </p>
               <div>
                 <p className="font-mono text-[10.5px] uppercase tracking-[0.42em]" style={{ color: PAPER_75 }}>
-                  edit by
+                  edited by
                 </p>
                 <h2 className="font-serif-display mt-2 text-balance text-[clamp(2.6rem,6.4vw,4.5rem)] font-black leading-[1.05] tracking-[0.04em] text-[#FFF0F8]">
                   MANGO
