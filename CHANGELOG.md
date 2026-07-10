@@ -49,21 +49,26 @@ functional change.
 
 ### Changed
 
-- **Portfolio v22 — the loop laboratory in rose and white (operator-directed
-  final palette).** The whole page is one rose field written in warm white
-  `#FFF0F8`; the terminal mock keeps its dark product colors by standing
-  exception. Hero restores the white dither sky over the rose field with the
-  serif statement; "three ways in" is a white hairline grid; plates i-vi are
-  white paper panels carrying rose line-art schematics (loop ring, audit
-  gate, seed pipeline, tau2 numbers with the gpt-5.5 / openai-codex
-  subscription route). The distillation and the finale are now one
-  continuous act: white token rain converges through dissolving-gradient
-  hairline thresholds (pixel-diamond flanked labels: critic / petri gate /
-  held-out), fills the full-bleed 24vw GEODE wordmark over the honest
-  baseline ledger (three REJECTs, crucible-S5 still PENDING), and further
-  scroll reveals the laboratory — a white stage enters and the rose field
-  becomes a specimen slide (petri mark, Geodi silhouette, "cultured since"
-  stamp, CTAs). Astryx Token chips carry surface labels; the shared nav
+- **Portfolio v23 — The Rewrite Laboratory, in rose and white
+  (operator-directed final art direction).** The page is one rose field
+  written in warm white `#FFF0F8`; the terminal mock keeps its dark product
+  colors by standing exception. The lab is renamed from "The Loop
+  Laboratory" to **The Rewrite Laboratory** (loop is the commodity claim;
+  rewriting itself is the differentiator) across hero eyebrow, plates stamp,
+  finale title, and footer tagline. Hero: white dither sky over the rose
+  field, serif statement, CLI terminal mock. "Three ways in": white panel
+  with rose hairline grid. Plates i-vi restore the dither-texture banners
+  under a legibility scrim (rose ink raised to 88%); the loop ring gains the
+  grounded **Reflect** node (`core/agent/loop/_reflection.py` — per-round
+  belief update of hypotheses/confidence), and the subscriptions plate drops
+  Anthropic (OpenAI/Codex · GLM). The distillation and the laboratory are
+  one continuous sticky act: converging white token rain through
+  dissolving-gradient thresholds fills the full-bleed 24vw wordmark (clip
+  extended past the line box so pixel-glyph caps fill too) over the honest
+  baseline ledger, and further scroll fades in the reveal — a white stage
+  enters, the rose field becomes a specimen slide, and the ghost wordmark
+  replicates the distillate's exact column layout so the crossfade holds the
+  word in place. Astryx Token chips carry surface labels; the shared nav
   gains a rose chrome variant.
 - **De-slop: decorative arrows and the dev-blog link are gone.** CTA/link
   arrows (`→`, `▸`) are removed site-portfolio-wide (ranges now use `~`), and

@@ -10,7 +10,7 @@ export function GeodeFooter() {
       <div className="max-w-5xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-6">
         <div>
           <div className="text-sm font-semibold text-white/50">GEODE</div>
-          <div className="text-xs text-[var(--ink-2)]">The loop laboratory.</div>
+          <div className="text-xs text-[var(--ink-2)]">The rewrite laboratory.</div>
         </div>
 
         <div className="flex items-center gap-4">

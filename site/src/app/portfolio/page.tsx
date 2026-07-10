@@ -21,7 +21,7 @@ import { serifDisplay } from "@/fonts/serif";
 import { firstRelease, latestRelease, releaseCount } from "./growth";
 
 /**
- * GEODE portfolio v22 — the loop laboratory in rose and white.
+ * GEODE portfolio v23 — the rewrite laboratory in rose and white.
  *
  * Palette (operator-directed 2026-07-10): the whole page is one rose field
  * (`--acc-artifact`) written in warm white `#FFF0F8` — two colors only. The
@@ -36,7 +36,7 @@ const PAPER = "#FFF0F8";
 const PAPER_75 = "color-mix(in srgb, #FFF0F8 75%, transparent)";
 const PAPER_55 = "color-mix(in srgb, #FFF0F8 55%, transparent)";
 const ROSE = "var(--acc-artifact)";
-const ROSE_75 = "color-mix(in srgb, var(--acc-artifact) 75%, transparent)";
+const ROSE_75 = "color-mix(in srgb, var(--acc-artifact) 88%, transparent)";
 
 const navItems = [
   { id: "hero", label: "Intro" },
@@ -157,7 +157,7 @@ function HeroField() {
           className="font-mono text-[10.5px] uppercase tracking-[0.3em]"
           style={{ color: PAPER_75 }}
         >
-          open source · apache-2.0 · {t(locale, "루프 실험실", "the loop laboratory")}
+          open source · apache-2.0 · {t(locale, "고쳐 쓰는 실험실", "the rewrite laboratory")}
         </motion.p>
         <motion.h1
           variants={heroItem}
@@ -206,6 +206,7 @@ const LOOP_NODES = [
   { label: "Plan" },
   { label: "Act" },
   { label: "Observe" },
+  { label: "Reflect" },
   { label: "Verify" },
   { label: "Replan" },
 ];
@@ -219,7 +220,7 @@ function LoopDiagram() {
   const nodeW = 76;
   const nodeH = 22;
   const points = LOOP_NODES.map((node, i) => {
-    const angle = ((-90 + i * 60) * Math.PI) / 180;
+    const angle = ((-90 + (i * 360) / LOOP_NODES.length) * Math.PI) / 180;
     return { ...node, x: cx + r * Math.cos(angle), y: cy + r * Math.sin(angle) };
   });
   return (
@@ -373,25 +374,25 @@ const runModes = [
 function RunRow() {
   const locale = useLocale();
   return (
-    <section id="run" className="border-t" style={{ borderColor: PAPER_55 }}>
+    <section id="run" className="bg-[#FFF0F8]">
       <div className="mx-auto max-w-6xl px-6 py-16 sm:py-20">
-        <p className="text-center font-mono text-[10.5px] uppercase tracking-[0.3em]" style={{ color: PAPER_75 }}>
+        <p className="text-center font-mono text-[10.5px] uppercase tracking-[0.3em]" style={{ color: ROSE_75 }}>
           {t(locale, "세 가지 입구", "three ways in")}
         </p>
         <div
           className="mt-10 grid gap-px overflow-hidden border md:grid-cols-3"
-          style={{ borderColor: PAPER_55, background: PAPER_55 }}
+          style={{ borderColor: ROSE_75, background: ROSE_75 }}
         >
           {runModes.map((mode) => (
-            <div key={mode.cmd} className="bg-[var(--acc-artifact)] px-7 py-9 text-center">
-              <p className="font-mono text-[10.5px] uppercase tracking-[0.28em]" style={{ color: PAPER_75 }}>{mode.eyebrow}</p>
-              <h2 className="font-serif-display mt-3 text-[28px] font-semibold text-[#FFF0F8]">
+            <div key={mode.cmd} className="bg-[#FFF0F8] px-7 py-9 text-center">
+              <p className="font-mono text-[10.5px] uppercase tracking-[0.28em]" style={{ color: ROSE_75 }}>{mode.eyebrow}</p>
+              <h2 className="font-serif-display mt-3 text-[28px] font-semibold" style={{ color: ROSE }}>
                 {locale === "en" ? mode.titleEn : mode.titleKo}
               </h2>
-              <p className="mx-auto mt-4 inline-block rounded bg-[#FFF0F8] px-4 py-2 font-mono text-[13px] text-[var(--acc-artifact)]">
+              <p className="mx-auto mt-4 inline-block rounded bg-[var(--acc-artifact)] px-4 py-2 font-mono text-[13px] text-[#FFF0F8]">
                 {mode.cmd}
               </p>
-              <p className="mx-auto mt-4 max-w-[260px] text-[13px] leading-[1.7]" style={{ color: PAPER_75 }}>
+              <p className="mx-auto mt-4 max-w-[260px] text-[13px] leading-[1.7]" style={{ color: ROSE }}>
                 {t(locale, mode.ko, mode.en)}
               </p>
             </div>
@@ -439,7 +440,7 @@ function ResideBanner() {
   return (
     <div className="flex h-full w-full flex-col items-center justify-center gap-4 px-6">
       <div className="font-mono text-[12px] leading-relaxed">
-        <p style={{ color: ROSE }}>anthropic · openai / codex · glm</p>
+        <p style={{ color: ROSE }}>openai / codex · glm</p>
         <p className="text-center" style={{ color: ROSE_75 }}>oauth you own · provider-isolated</p>
       </div>
       <div className="flex flex-wrap justify-center gap-1.5">
@@ -453,6 +454,7 @@ function ResideBanner() {
 
 const features: {
   id: string;
+  plate: number;
   index: string;
   headKo: string;
   headEn: string;
@@ -462,15 +464,17 @@ const features: {
 }[] = [
   {
     id: "execute",
+    plate: 1,
     index: "#1 execute",
     headKo: "루프를 돌립니다",
     headEn: "RUNS THE LOOP",
-    ko: "계획, 실행, 관찰, 검증, 재계획. 도구 호출이 멈출 때까지. 예산은 프롬프트 문구가 아니라 루프의 탈출 조건입니다.",
-    en: "Plan, act, observe, verify, replan — until tool calls stop. Budgets are exit conditions, not prompt wording.",
+    ko: "계획, 실행, 관찰, 성찰, 검증, 재계획. 도구 호출이 멈출 때까지. 매 라운드 reflection이 가설과 확신도를 갱신합니다.",
+    en: "Plan, act, observe, reflect, verify, replan — until tool calls stop. Each round a reflection call updates hypotheses and confidence.",
     banner: <LoopDiagram />,
   },
   {
     id: "perceive",
+    plate: 2,
     index: "#2 perceive",
     headKo: "세계를 읽습니다",
     headEn: "SEES YOUR WORLD",
@@ -480,6 +484,7 @@ const features: {
   },
   {
     id: "audit",
+    plate: 3,
     index: "#3 audit",
     headKo: "스스로를 감사합니다",
     headEn: "AUDITS ITSELF",
@@ -489,6 +494,7 @@ const features: {
   },
   {
     id: "breed",
+    plate: 4,
     index: "#4 breed",
     headKo: "시험도 스스로 만듭니다",
     headEn: "BREEDS ITS OWN TESTS",
@@ -498,6 +504,7 @@ const features: {
   },
   {
     id: "measure",
+    plate: 5,
     index: "#5 measure",
     headKo: "정직하게 잽니다",
     headEn: "KEEPS HONEST SCORE",
@@ -507,11 +514,12 @@ const features: {
   },
   {
     id: "reside",
+    plate: 6,
     index: "#6 reside",
     headKo: "당신의 구독으로 상주합니다",
     headEn: "ON YOUR SUBSCRIPTIONS",
-    ko: "Anthropic, OpenAI/Codex, GLM을 직접 소유한 OAuth로. 프로바이더 격리를 지키며 모든 표면에 상주합니다.",
-    en: "Anthropic, OpenAI/Codex, and GLM over OAuth you own — provider-isolated, resident on every surface.",
+    ko: "OpenAI/Codex, GLM을 직접 소유한 OAuth로. 프로바이더 격리를 지키며 모든 표면에 상주합니다.",
+    en: "OpenAI/Codex and GLM over OAuth you own — provider-isolated, resident on every surface.",
     banner: <ResideBanner />,
   },
 ];
@@ -533,7 +541,13 @@ function FeaturesGrid() {
               <h2 className="font-serif-display mt-3 text-balance text-[28px] font-black uppercase leading-[1.08] text-[#FFF0F8] sm:text-[32px]">
                 {locale === "en" ? feature.headEn : feature.headKo}
               </h2>
-              <div className="mt-5 flex h-[240px] items-center justify-center overflow-hidden bg-[#FFF0F8] px-4 py-3">
+              <div
+                className="mt-5 flex h-[240px] items-center justify-center overflow-hidden bg-[#FFF0F8] bg-cover bg-center px-4 py-3"
+                style={{
+                  backgroundImage: `linear-gradient(rgba(255,240,248,0.62), rgba(255,240,248,0.62)), url(/geode/images/plate-bg-${feature.plate}.png)`,
+                  imageRendering: "pixelated",
+                }}
+              >
                 {feature.banner}
               </div>
               <p className="mt-4 max-w-[380px] text-[13px] leading-[1.75]" style={{ color: PAPER_75 }}>
@@ -546,7 +560,7 @@ function FeaturesGrid() {
           className="mt-16 flex items-end justify-between font-mono text-[10px] uppercase tracking-[0.18em]"
           style={{ color: PAPER_55 }}
         >
-          <span>the loop laboratory · plates i-vi</span>
+          <span>the rewrite laboratory · plates i-vi</span>
           <span>evidence: core/ · plugins/</span>
         </div>
       </div>
@@ -619,11 +633,12 @@ function DistillationAct() {
   const reduceMotion = useReducedMotion();
   const wrapRef = useRef<HTMLDivElement | null>(null);
   const { scrollYProgress } = useScroll({ target: wrapRef, offset: ["start start", "end end"] });
-  const fill = useTransform(scrollYProgress, [0.18, 0.55], ["inset(0 0 100% 0)", "inset(0 0 0% 0)"]);
+  // Clip extends 15% past the line box: leading-[0.82] lets the pixel glyphs
+  // overflow it, and a box-bounded clip would leave the letter caps unfilled.
+  const fill = useTransform(scrollYProgress, [0.18, 0.55], ["inset(-15% 0 115% 0)", "inset(-15% 0 -15% 0)"]);
   const ledgerOp = useTransform(scrollYProgress, [0.48, 0.64], [0, 1]);
   const labOp = useTransform(scrollYProgress, [0.74, 0.9], [0, 1]);
   const labPointer = useTransform(labOp, (v) => (v > 0.55 ? "auto" : "none") as "auto" | "none");
-  const ghostScale = useTransform(scrollYProgress, [0.74, 1], [1.08, 0.98]);
   const ledger: { id: string; verdict: string; keep?: boolean }[] = [
     { id: "gen-2606-i1-004", verdict: "REJECT" },
     { id: "gen-2606-i2-001", verdict: "REJECT" },
@@ -662,7 +677,7 @@ function DistillationAct() {
             </p>
             <motion.p
               aria-hidden
-              style={{ clipPath: reduceMotion ? "inset(0 0 0 0)" : fill }}
+              style={{ clipPath: reduceMotion ? "inset(-15% 0 -15% 0)" : fill }}
               className="font-pixel absolute inset-0 whitespace-nowrap text-[24vw] font-bold leading-[0.82] text-[#FFF0F8]"
             >
               GEODE
@@ -694,21 +709,48 @@ function DistillationAct() {
 
         {/* final act: white enters — the rose field becomes a specimen slide on a paper stage */}
         <motion.div style={{ opacity: labOp, pointerEvents: labPointer }} className="absolute inset-0 bg-[#FFF0F8]">
-          <div className="absolute inset-x-2 bottom-12 top-2 bg-[var(--acc-artifact)] sm:inset-x-3 sm:top-3">
-            <div aria-hidden className="pointer-events-none absolute inset-0 flex items-center justify-center overflow-hidden">
-              <motion.span
-                style={{ scale: reduceMotion ? 1 : ghostScale }}
-                className="font-pixel select-none whitespace-nowrap text-[24vw] font-bold leading-none text-[#FFF0F8] opacity-[0.14]"
-              >
-                GEODE
-              </motion.span>
+          <div className="absolute inset-x-2 bottom-12 top-2 bg-[var(--acc-artifact)] sm:inset-x-3 sm:top-3" />
+          {/* ghost distillate: replicates the visible act's column layout so the
+              crossfade keeps the word at identical coordinates — keep the
+              invisible spacers in sync with the markup above */}
+          <div aria-hidden className="pointer-events-none absolute inset-0 flex flex-col overflow-hidden">
+            <div className="invisible px-6 pt-10 text-center sm:pt-12">
+              <p className="font-mono text-[10.5px] uppercase tracking-[0.3em]">.</p>
+              <h2 className="font-serif-display mx-auto mt-3 max-w-2xl text-balance text-[clamp(1.5rem,3vw,2.1rem)] font-black leading-[1.25]">
+                {t(locale, "천 번의 토큰이 한 단어가 될 때까지.", "A thousand tokens, distilled into one word.")}
+              </h2>
             </div>
+            <div className="min-h-0 flex-1" />
+            <div className="flex flex-col items-center pb-8">
+              <p className="font-pixel w-full whitespace-nowrap text-center text-[24vw] font-bold leading-[0.82] text-[#FFF0F8] opacity-[0.16]">
+                GEODE
+              </p>
+              <div className="invisible mt-6 w-full max-w-3xl border-t px-6 pt-4">
+                <div className="flex flex-wrap items-baseline justify-center gap-x-7 gap-y-2 font-mono text-[11.5px]">
+                  <span className="uppercase tracking-[0.24em]">baseline ledger</span>
+                  {ledger.map((row) => (
+                    <span key={`ghost-${row.id}`}>
+                      {row.id} · {row.verdict}
+                    </span>
+                  ))}
+                </div>
+                <p className="font-serif-display mt-4 text-center text-[15px] font-semibold leading-[1.6]">
+                  {t(
+                    locale,
+                    "첫 방울은 아직 매달려 있습니다. 기록은 그 무게까지 답니다.",
+                    "The first drop is still forming. The ledger weighs even that."
+                  )}
+                </p>
+              </div>
+            </div>
+          </div>
+          <div className="absolute inset-x-2 bottom-12 top-2 sm:inset-x-3 sm:top-3">
             <div className="relative z-10 mx-auto flex h-full max-w-5xl flex-col items-center justify-center gap-7 px-6 text-center">
               <p className="font-mono text-[11px] uppercase tracking-[0.3em]" style={{ color: PAPER_75 }}>
                 cultured since {firstRelease.date} · release #{releaseCount} · v{latestRelease.version}
               </p>
               <h2 className="font-serif-display text-balance text-[clamp(2.4rem,6vw,4.2rem)] font-black leading-[1.1] text-[#FFF0F8]">
-                {t(locale, "루프 실험실", "The Loop Laboratory")}
+                {t(locale, "고쳐 쓰는 실험실", "The Rewrite Laboratory")}
               </h2>
               <div className="flex h-48 w-48 items-center justify-center rounded-full border border-[#FFF0F8] sm:h-56 sm:w-56">
                 <GeodiSprite scale={4} silhouette="#FFF0F8" />
