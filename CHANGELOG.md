@@ -49,23 +49,27 @@ functional change.
 
 ### Changed
 
-- **Portfolio v23 — The Rewrite Laboratory, in rose and white
-  (operator-directed final art direction).** The page is one rose field
+- **Portfolio v24 — The Final Cut, in rose and white (operator-directed
+  final art direction).** The page is one rose field
   written in warm white `#FFF0F8`; the terminal mock keeps its dark product
   colors by standing exception. The lab is renamed from "The Loop
-  Laboratory" to **The Rewrite Laboratory** (loop is the commodity claim;
-  rewriting itself is the differentiator) across hero eyebrow, plates stamp,
-  finale title, and footer tagline. Hero: white dither sky over the rose
+  Laboratory" to **The Final Cut** (cinema language for convergence: many
+  takes, one surviving cut — loop is the commodity claim) across hero
+  eyebrow, plates stamp, finale title, and footer tagline. Hero: white dither sky over the rose
   field, serif statement, CLI terminal mock. "Three ways in": white panel
   with rose hairline grid. Plates i-vi restore the dither-texture banners
-  under a legibility scrim (rose ink raised to 88%); the loop ring gains the
+  under a legibility scrim (rose ink raised to 88%); the loop ring is redrawn as a wide
+  orbit diagram (dotted concentric ellipses, 300px plates) and gains the
   grounded **Reflect** node (`core/agent/loop/_reflection.py` — per-round
   belief update of hypotheses/confidence), and the subscriptions plate drops
-  Anthropic (OpenAI/Codex · GLM). The distillation and the laboratory are
-  one continuous sticky act: converging white token rain through
-  dissolving-gradient thresholds fills the full-bleed 24vw wordmark (clip
+  Anthropic (OpenAI/Codex · GLM). The terminal mock regains its
+  macOS traffic lights. The distillation and the laboratory are one
+  continuous sticky act: token snowfall (per-flake deterministic speed,
+  size, opacity, and lateral sway — organic drift, not marching columns)
+  converges through dissolving-gradient thresholds and fills the full-bleed 24vw wordmark (clip
   extended past the line box so pixel-glyph caps fill too) over the honest
-  baseline ledger, and further scroll fades in the reveal — a white stage
+  baseline ledger under the corner headline "A thousand tokens, filtered to
+  a single drop.", and further scroll fades in the reveal — a white stage
   enters, the rose field becomes a specimen slide, and the ghost wordmark
   replicates the distillate's exact column layout so the crossfade holds the
   word in place. Astryx Token chips carry surface labels; the shared nav

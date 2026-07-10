@@ -266,3 +266,39 @@
     animation: none;
   }
 }
+
+/* token snowfall (the distillation) — per-flake fall + lateral sway */
+@keyframes geodi-snow-fall {
+  from {
+    transform: translateY(-12%);
+  }
+  to {
+    transform: translateY(112%);
+  }
+}
+
+.geodi-snow {
+  animation: geodi-snow-fall 7s linear infinite;
+  will-change: transform;
+}
+
+@keyframes geodi-snow-sway {
+  0%,
+  100% {
+    transform: translateX(calc(var(--sway, 8px) * -1));
+  }
+  50% {
+    transform: translateX(var(--sway, 8px));
+  }
+}
+
+.geodi-snow-sway {
+  animation: geodi-snow-sway 3s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .geodi-snow,
+  .geodi-snow-sway {
+    animation: none;
+  }
+}

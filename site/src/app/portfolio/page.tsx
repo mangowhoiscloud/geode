@@ -21,7 +21,7 @@ import { serifDisplay } from "@/fonts/serif";
 import { firstRelease, latestRelease, releaseCount } from "./growth";
 
 /**
- * GEODE portfolio v23 — the rewrite laboratory in rose and white.
+ * GEODE portfolio v24 — The Final Cut, in rose and white.
  *
  * Palette (operator-directed 2026-07-10): the whole page is one rose field
  * (`--acc-artifact`) written in warm white `#FFF0F8` — two colors only. The
@@ -76,11 +76,8 @@ function TerminalMock() {
       <div className="overflow-hidden rounded-lg border border-[color-mix(in_srgb,#FFF0F8_35%,transparent)] bg-[var(--paper-deep)] text-left">
         <div className="flex items-center gap-2 border-b border-[var(--rule-soft)] px-4 py-2.5">
           <span className="flex gap-1.5">
-            {[0, 1, 2].map((dot) => (
-              <span
-                key={dot}
-                className="h-[9px] w-[9px] rounded-full border border-[var(--rule)] bg-[var(--paper-2)]"
-              />
+            {["#FF5F57", "#FEBC2E", "#28C840"].map((light) => (
+              <span key={light} className="h-[9px] w-[9px] rounded-full" style={{ background: light }} />
             ))}
           </span>
           <span className="ml-2 font-mono text-[11px] text-[var(--ink-3)]">geode</span>
@@ -142,9 +139,7 @@ function HeroField() {
         style={{ imageRendering: "pixelated" }}
       />
       <div className="relative z-10 mx-auto max-w-7xl px-5 pt-9 text-center sm:px-8">
-        <span className="font-pixel inline-block rounded-sm bg-[var(--acc-artifact)] px-3 py-1 text-[19px] font-bold tracking-[0.06em] text-[#FFF0F8]">
-          GEODE
-        </span>
+        <span className="font-pixel text-[19px] font-bold tracking-[0.06em] text-[var(--acc-artifact)]">GEODE</span>
       </div>
       <motion.div
         className="relative z-10 mx-auto max-w-7xl px-5 pb-16 pt-12 sm:px-8 lg:pt-16"
@@ -157,7 +152,7 @@ function HeroField() {
           className="font-mono text-[10.5px] uppercase tracking-[0.3em]"
           style={{ color: PAPER_75 }}
         >
-          open source · apache-2.0 · {t(locale, "고쳐 쓰는 실험실", "the rewrite laboratory")}
+          open source · apache-2.0 · {t(locale, "파이널 컷", "the final cut")}
         </motion.p>
         <motion.h1
           variants={heroItem}
@@ -211,21 +206,26 @@ const LOOP_NODES = [
   { label: "Replan" },
 ];
 
-/** The while(tool_use) cycle as a rose-ink ring on the white plate. */
+/** The while(tool_use) cycle — wide orbit ring with dotted concentric orbits. */
 function LoopDiagram() {
   const locale = useLocale();
-  const cx = 170;
-  const cy = 138;
-  const r = 96;
-  const nodeW = 76;
-  const nodeH = 22;
+  const cx = 260;
+  const cy = 148;
+  const rx = 186;
+  const ry = 102;
+  const nodeW = 104;
+  const nodeH = 30;
   const points = LOOP_NODES.map((node, i) => {
     const angle = ((-90 + (i * 360) / LOOP_NODES.length) * Math.PI) / 180;
-    return { ...node, x: cx + r * Math.cos(angle), y: cy + r * Math.sin(angle) };
+    return { ...node, x: cx + rx * Math.cos(angle), y: cy + ry * Math.sin(angle) };
   });
   return (
-    <svg viewBox="0 0 340 300" className="w-full max-w-[380px]" role="img"
+    <svg viewBox="0 0 520 348" className="h-full w-auto max-w-full" role="img"
       aria-label={t(locale, "while tool_use 루프 다이어그램", "while tool_use loop diagram")}>
+      {[0.55, 0.8, 1.18, 1.5].map((k) => (
+        <ellipse key={k} cx={cx} cy={cy} rx={rx * k} ry={ry * k} fill="none"
+          stroke={ROSE} strokeWidth="1" strokeDasharray="1.5 5" opacity="0.5" />
+      ))}
       {points.map((node, i) => {
         const next = points[(i + 1) % points.length];
         const mx = (node.x + next.x) / 2;
@@ -233,23 +233,24 @@ function LoopDiagram() {
         const angleDeg = (Math.atan2(next.y - node.y, next.x - node.x) * 180) / Math.PI;
         return (
           <g key={`edge-${node.label}`}>
-            <line x1={node.x} y1={node.y} x2={next.x} y2={next.y} stroke={ROSE} strokeWidth="1" />
-            <polygon points="-3,-3.5 4,0 -3,3.5" fill={ROSE} transform={`translate(${mx} ${my}) rotate(${angleDeg})`} />
+            <line x1={node.x} y1={node.y} x2={next.x} y2={next.y} stroke={ROSE} strokeWidth="1.2" />
+            <polygon points="-3.5,-4 4.5,0 -3.5,4" fill={ROSE} transform={`translate(${mx} ${my}) rotate(${angleDeg})`} />
           </g>
         );
       })}
-      <line x1={cx} y1={cy + 30} x2={cx} y2={262} stroke={ROSE} strokeWidth="1" strokeDasharray="2 3" />
-      <polygon points="-3.5,-3 0,4 3.5,-3" fill={ROSE} transform={`translate(${cx} ${262})`} />
-      <rect x={cx - 38} y={264} width={76} height={22} fill={PAPER} stroke={ROSE} shapeRendering="crispEdges" />
-      <text x={cx} y={279} textAnchor="middle" fontSize="10.5" fontFamily="var(--font-fira-code), monospace" fill={ROSE}>finalize</text>
-      <text x={cx + 8} y={cy + 66} textAnchor="start" fontSize="8" fontFamily="var(--font-fira-code), monospace" fill={ROSE_75}>no tool_use</text>
-      <text x={cx} y={cy - 4} textAnchor="middle" fontSize="15" className="font-pixel" fill={ROSE}>while</text>
-      <text x={cx} y={cy + 14} textAnchor="middle" fontSize="15" className="font-pixel" fill={ROSE}>(tool_use)</text>
+      <line x1={cx} y1={cy + 36} x2={cx} y2={306} stroke={ROSE} strokeWidth="1.2" strokeDasharray="3 4" />
+      <polygon points="-4,-3.5 0,4.5 4,-3.5" fill={ROSE} transform={`translate(${cx} ${306})`} />
+      <text x={cx + 12} y={cy + ry + 16} textAnchor="start" fontSize="10"
+        fontFamily="var(--font-fira-code), monospace" fill={ROSE_75}>no tool_use</text>
+      <rect x={cx - 48} y={310} width={96} height={26} fill={PAPER} stroke={ROSE} shapeRendering="crispEdges" />
+      <text x={cx} y={327} textAnchor="middle" fontSize="12" fontFamily="var(--font-fira-code), monospace" fill={ROSE}>finalize</text>
+      <text x={cx} y={cy - 8} textAnchor="middle" fontSize="19" className="font-pixel" fill={ROSE}>while</text>
+      <text x={cx} y={cy + 15} textAnchor="middle" fontSize="19" className="font-pixel" fill={ROSE}>(tool_use)</text>
       {points.map((node) => (
         <g key={node.label}>
           <rect x={node.x - nodeW / 2} y={node.y - nodeH / 2} width={nodeW} height={nodeH}
             fill={PAPER} stroke={ROSE} shapeRendering="crispEdges" />
-          <text x={node.x} y={node.y + 3.5} textAnchor="middle" fontSize="10.5"
+          <text x={node.x} y={node.y + 4} textAnchor="middle" fontSize="12"
             fontFamily="var(--font-fira-code), monospace" fill={ROSE}>{node.label}</text>
         </g>
       ))}
@@ -542,7 +543,7 @@ function FeaturesGrid() {
                 {locale === "en" ? feature.headEn : feature.headKo}
               </h2>
               <div
-                className="mt-5 flex h-[240px] items-center justify-center overflow-hidden bg-[#FFF0F8] bg-cover bg-center px-4 py-3"
+                className="mt-5 flex h-[300px] items-center justify-center overflow-hidden bg-[#FFF0F8] bg-cover bg-center px-4 py-3"
                 style={{
                   backgroundImage: `linear-gradient(rgba(255,240,248,0.62), rgba(255,240,248,0.62)), url(/geode/images/plate-bg-${feature.plate}.png)`,
                   imageRendering: "pixelated",
@@ -560,7 +561,7 @@ function FeaturesGrid() {
           className="mt-16 flex items-end justify-between font-mono text-[10px] uppercase tracking-[0.18em]"
           style={{ color: PAPER_55 }}
         >
-          <span>the rewrite laboratory · plates i-vi</span>
+          <span>the final cut · plates i-vi</span>
           <span>evidence: core/ · plugins/</span>
         </div>
       </div>
@@ -570,33 +571,56 @@ function FeaturesGrid() {
 
 /* ---------------- the distillation, ending in the laboratory -------------- */
 
-const RAIN_COLS = [7, 16, 24, 33, 41, 52, 60, 69, 77, 86, 93] as const;
-
+/**
+ * Token snowfall: every flake gets its own deterministic fall speed, phase,
+ * size, opacity, and lateral sway — organic drift instead of marching
+ * columns. `converge` pulls spawn points toward the center (the funnel).
+ */
 function RainBand({
-  keep,
   phase,
   height,
   converge = 0,
-  dots = 8,
+  flakes = 24,
 }: {
-  keep: number;
   phase: number;
   height: string;
   converge?: number;
-  dots?: number;
+  flakes?: number;
 }) {
-  const cols = RAIN_COLS.filter((_, i) => (i * 7 + phase * 3) % 10 < keep * 10);
+  const items = Array.from({ length: flakes }, (_, i) => {
+    const a = ((i * 73 + phase * 131) % 97) / 97;
+    const b = ((i * 149 + phase * 61) % 89) / 89;
+    const c = ((i * 31 + phase * 17) % 83) / 83;
+    return {
+      left: a * 100,
+      dur: 5 + b * 5,
+      delay: -(c * 10),
+      size: 4 + Math.round(b * 2),
+      sway: 5 + c * 11,
+      swayDur: 2.4 + a * 2.6,
+      op: 0.45 + c * 0.55,
+    };
+  });
   return (
     <div aria-hidden className="relative w-full overflow-hidden" style={{ height }}>
-      {cols.map((left, i) => (
-        <div
-          key={left}
-          className="geodi-rain absolute top-[-8%] flex h-[116%] flex-col justify-between"
-          style={{ left: `${left + (50 - left) * converge}%`, animationDelay: `${(i * 0.37 + phase * 0.19) % 2.4}s` }}
-        >
-          {Array.from({ length: dots }).map((_, k) => (
-            <span key={k} className="h-[6px] w-[6px] bg-[#FFF0F8]" style={{ opacity: k % 3 === phase % 3 ? 1 : 0.55 }} />
-          ))}
+      {items.map((f, i) => (
+        <div key={i} className="absolute inset-y-0" style={{ left: `${f.left + (50 - f.left) * converge}%` }}>
+          <div
+            className="geodi-snow h-full"
+            style={{ animationDuration: `${f.dur}s`, animationDelay: `${f.delay}s` }}
+          >
+            <span
+              className="geodi-snow-sway block bg-[#FFF0F8]"
+              style={{
+                width: f.size,
+                height: f.size,
+                opacity: f.op,
+                animationDuration: `${f.swayDur}s`,
+                animationDelay: `${f.delay / 2}s`,
+                ["--sway" as string]: `${f.sway}px`,
+              }}
+            />
+          </div>
         </div>
       ))}
     </div>
@@ -650,23 +674,23 @@ function DistillationAct() {
       {/* nav anchor: jumping to #lab lands where the laboratory has revealed */}
       <div id="lab" aria-hidden className="absolute left-0 top-[76%] h-px w-px" />
       <div className="sticky top-0 flex h-screen flex-col overflow-hidden">
-        <div className="px-6 pt-10 text-center sm:pt-12">
+        <div className="pointer-events-none absolute left-5 top-8 z-20 max-w-[360px] text-left sm:left-10 sm:top-12">
           <p className="font-mono text-[10.5px] uppercase tracking-[0.3em]" style={{ color: PAPER_75 }}>
             {t(locale, "증류", "the distillation")}
           </p>
-          <h2 className="font-serif-display mx-auto mt-3 max-w-2xl text-balance text-[clamp(1.5rem,3vw,2.1rem)] font-black leading-[1.25] text-[#FFF0F8]">
-            {t(locale, "천 번의 토큰이 한 단어가 될 때까지.", "A thousand tokens, distilled into one word.")}
+          <h2 className="font-serif-display mt-3 text-balance text-[clamp(1.6rem,3.1vw,2.3rem)] font-black leading-[1.22] text-[#FFF0F8]">
+            {t(locale, "천 번의 토큰을 걸러, 한 방울로.", "A thousand tokens, filtered to a single drop.")}
           </h2>
         </div>
 
         <div className="flex min-h-0 flex-1 flex-col justify-center">
-          <RainBand keep={1} phase={0} height="12vh" dots={5} />
+          <RainBand phase={0} height="12vh" flakes={30} />
           <FilterLine label="critic" />
-          <RainBand keep={0.55} phase={1} height="9vh" converge={0.42} dots={4} />
+          <RainBand phase={1} height="9vh" converge={0.42} flakes={18} />
           <FilterLine label="petri gate" />
-          <RainBand keep={0.25} phase={2} height="7vh" converge={0.78} dots={3} />
+          <RainBand phase={2} height="7vh" converge={0.78} flakes={10} />
           <FilterLine label="held-out" />
-          <RainBand keep={0.18} phase={1} height="5vh" converge={0.92} dots={3} />
+          <RainBand phase={1} height="5vh" converge={0.92} flakes={6} />
         </div>
 
         <div className="flex flex-col items-center pb-8">
@@ -714,12 +738,6 @@ function DistillationAct() {
               crossfade keeps the word at identical coordinates — keep the
               invisible spacers in sync with the markup above */}
           <div aria-hidden className="pointer-events-none absolute inset-0 flex flex-col overflow-hidden">
-            <div className="invisible px-6 pt-10 text-center sm:pt-12">
-              <p className="font-mono text-[10.5px] uppercase tracking-[0.3em]">.</p>
-              <h2 className="font-serif-display mx-auto mt-3 max-w-2xl text-balance text-[clamp(1.5rem,3vw,2.1rem)] font-black leading-[1.25]">
-                {t(locale, "천 번의 토큰이 한 단어가 될 때까지.", "A thousand tokens, distilled into one word.")}
-              </h2>
-            </div>
             <div className="min-h-0 flex-1" />
             <div className="flex flex-col items-center pb-8">
               <p className="font-pixel w-full whitespace-nowrap text-center text-[24vw] font-bold leading-[0.82] text-[#FFF0F8] opacity-[0.16]">
@@ -750,7 +768,7 @@ function DistillationAct() {
                 cultured since {firstRelease.date} · release #{releaseCount} · v{latestRelease.version}
               </p>
               <h2 className="font-serif-display text-balance text-[clamp(2.4rem,6vw,4.2rem)] font-black leading-[1.1] text-[#FFF0F8]">
-                {t(locale, "고쳐 쓰는 실험실", "The Rewrite Laboratory")}
+                {t(locale, "파이널 컷", "The Final Cut")}
               </h2>
               <div className="flex h-48 w-48 items-center justify-center rounded-full border border-[#FFF0F8] sm:h-56 sm:w-56">
                 <GeodiSprite scale={4} silhouette="#FFF0F8" />
