@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="assets/geodi-dot.svg" alt="Geodi — GEODE's dot mascot" width="320" />
+  <img src="assets/geodi-dot.svg" alt="Geodi, GEODE's dot mascot" width="320" />
 </p>
 <p align="center">
   <sub>Geodi · 22×12 dot sprite · <code>core/ui/geodi_art.py</code></sub>
@@ -25,7 +25,7 @@
   <a href="README.ko.md">한국어</a>
 </p>
 
-# GEODE v0.99.291 — A Self-improving Autonomous Execution Agent
+# GEODE v0.99.292: A Self-improving Autonomous Execution Agent
 
 A general-purpose autonomous agent that also rewrites the scaffolding it runs on. You ask in plain language; GEODE plans, calls tools, and reports, for one prompt or a long-running session. Underneath, an outer loop keeps tuning the system that runs your tasks.
 
@@ -35,7 +35,7 @@ A general-purpose autonomous agent that also rewrites the scaffolding it runs on
 
 ---
 
-## Benchmark snapshot — Tau2 native user-simulator track
+## Benchmark snapshot: Tau2 native user-simulator track
 
 GEODE keeps benchmark numbers tied to the exact runtime and model route that
 produced them. The 2026-07-03/04 Tau2 run below used **GEODE v0.99.269** with
@@ -64,7 +64,7 @@ coverage under compound tasks**: Retail failures often miss DB/write side
 effects, while Telecom failures cluster around MMS/APN/app-permission/roaming
 combinations where one necessary user or agent action is omitted.
 
-## Benchmark snapshot — MCPMark Verified available-services track
+## Benchmark snapshot: MCPMark Verified available-services track
 
 The 2026-07-04 MCPMark run used **GEODE v0.99.269-era code** on branch
 `feature/mcpmark-agentworld-run`, `eval-sys/mcpmark@cd45b7f`, GEODE's public
@@ -92,15 +92,15 @@ set, GEODE adapter, model route, and timeout settings.
 
 ## The self-improving loop
 
-GEODE is a self-evolving agent on the **non-parametric branch**: it improves by mutating its own scaffolding (system prompt, tool policy, task decomposition, reflection, skills, agent contracts, tool descriptions), never the model weights. Fitness is an adversarial **safety** audit, not a capability benchmark: Petri-grade, multi-dimensional, with a hard floor on critical safety dimensions, so any change that regresses one is rejected. The **selection** seeds co-evolve — a co-scientist pipeline grows adversarial seeds alongside the agent — so they apply moving selection pressure, not a stable ruler. Cross-generation fitness is measured on a separate **version-frozen held-out bench** that never mutates; only that held-out curve counts as evidence of real improvement.
+GEODE is a self-evolving agent on the **non-parametric branch**: it improves by mutating its own scaffolding (system prompt, tool policy, task decomposition, reflection, skills, agent contracts, tool descriptions), never the model weights. Fitness is an adversarial **safety** audit, not a capability benchmark: Petri-grade, multi-dimensional, with a hard floor on critical safety dimensions, so any change that regresses one is rejected. The **selection** seeds co-evolve, a co-scientist pipeline grows adversarial seeds alongside the agent, so they apply moving selection pressure, not a stable ruler. Cross-generation fitness is measured on a separate **version-frozen held-out bench** that never mutates; only that held-out curve counts as evidence of real improvement.
 
 Selection is an honest **(1+1) champion chain**: mutate, audit, promote on a real gain, otherwise revert. Two loops run together. An inner agentic loop runs a task; an outer loop tunes the system that runs tasks. The loop lineage (Promptbreeder, STOP, ADAS, DGM, GEPA) is well established. GEODE re-aims it from capability to safety, from weights to scaffolding, on co-evolved adversarial seeds. A recombination occupying an empty cell, not a new primitive.
 
-- **[The closed loop →](https://mangowhoiscloud.github.io/geode/docs/capabilities/autoresearch)** — autoresearch, mutate / audit / promote / revert end to end
-- **[Two loops →](https://mangowhoiscloud.github.io/geode/docs/concepts/two-loops)** — the inner-vs-outer mental model
-- **[Lineage and positioning →](https://mangowhoiscloud.github.io/geode/docs/capabilities/lineage)** — where GEODE sits among prior self-improving loops
-- **[Self-improving hub →](https://mangowhoiscloud.github.io/geode/self-improving/)** — live generations, mutations, and promotion decisions
-- **[Petri bundle →](https://mangowhoiscloud.github.io/geode/self-improving/petri-bundle/)** — the live safety-audit transcript viewer
+- **[The closed loop →](https://mangowhoiscloud.github.io/geode/docs/capabilities/autoresearch)**: autoresearch, mutate / audit / promote / revert end to end
+- **[Two loops →](https://mangowhoiscloud.github.io/geode/docs/concepts/two-loops)**: the inner-vs-outer mental model
+- **[Lineage and positioning →](https://mangowhoiscloud.github.io/geode/docs/capabilities/lineage)**: where GEODE sits among prior self-improving loops
+- **[Self-improving hub →](https://mangowhoiscloud.github.io/geode/self-improving/)**: live generations, mutations, and promotion decisions
+- **[Petri bundle →](https://mangowhoiscloud.github.io/geode/self-improving/petri-bundle/)**: the live safety-audit transcript viewer
 
 ---
 
@@ -122,14 +122,14 @@ GEODE chooses the right tools (web search, file ops, MCP servers, sub-agents), r
 
 ## Setup in 5 minutes
 
-### Prerequisites — what you need first
+### Prerequisites: what you need first
 
 <details>
 <summary><strong>Don't know what these are?</strong> Click here for a 1-line explainer of each.</summary>
 
-- **Python 3.12+** — the language GEODE is written in. Most laptops don't have a recent enough version. Install from [python.org/downloads](https://www.python.org/downloads/) (download the macOS or Windows installer, click through).
-- **Git** — how you copy GEODE's source code from GitHub. Mac: comes with Xcode Command Line Tools (`xcode-select --install`). Windows: [git-scm.com](https://git-scm.com/) installer.
-- **uv** — a fast Python package manager (replaces pip). One-line install: copy the `curl` command below into Terminal/PowerShell.
+- **Python 3.12+**: the language GEODE is written in. Most laptops don't have a recent enough version. Install from [python.org/downloads](https://www.python.org/downloads/) (download the macOS or Windows installer, click through).
+- **Git**: how you copy GEODE's source code from GitHub. Mac: comes with Xcode Command Line Tools (`xcode-select --install`). Windows: [git-scm.com](https://git-scm.com/) installer.
+- **uv**: a fast Python package manager (replaces pip). One-line install: copy the `curl` command below into Terminal/PowerShell.
 
 If any of these fail, see [Troubleshooting](#troubleshooting) below.
 </details>
@@ -140,7 +140,7 @@ If any of these fail, see [Troubleshooting](#troubleshooting) below.
 | Git | [git-scm.com](https://git-scm.com/) | `git --version` |
 | uv | `curl -LsSf https://astral.sh/uv/install.sh \| sh` | `uv --version` |
 
-### Step 1 — Install GEODE
+### Step 1: Install GEODE
 
 GEODE's PyPI distribution is **`geode-agent`**. It installs the **`geode`** command.
 
@@ -158,7 +158,7 @@ uv sync                              # installs dependencies (~30s)
 uv tool install -e . --force         # makes `geode` available everywhere
 ```
 
-### Step 2 — Run the setup wizard
+### Step 2: Run the setup wizard
 
 ```bash
 geode setup
@@ -166,15 +166,15 @@ geode setup
 
 The wizard offers three paths: ChatGPT subscription (auto-detects `codex auth login` if you've already done it), API key (paste and go), or skip into dry-run mode for now. Pick whichever fits.
 
-If you already ran `codex auth login` before installing GEODE, you can skip this step entirely — the next `geode` invocation will detect the token and start.
+If you already ran `codex auth login` before installing GEODE, you can skip this step entirely, the next `geode` invocation will detect the token and start.
 
-### Step 3 — Pick a path (manual reference)
+### Step 3: Pick a path (manual reference)
 
 The wizard above covers everything below; this section exists as a manual reference for what each path actually does.
 
 ---
 
-#### Path A — ChatGPT subscription (the recommended path for OpenAI users)
+#### Path A: ChatGPT subscription (the recommended path for OpenAI users)
 
 Codex CLI signs you in once. GEODE picks up the token from `~/.codex/auth.json` and uses it for every call. Your subscription pays the bill; nothing extra to set up.
 
@@ -199,9 +199,9 @@ When the token nears expiry, GEODE refreshes it on its own (120 seconds before, 
 
 ---
 
-#### Path B — API key (pay-as-you-go)
+#### Path B: API key (pay-as-you-go)
 
-For Anthropic users (any tier, including Claude Pro / Max — OAuth isn't available), ChatGPT Team users, and anyone without a paid OpenAI subscription. You buy API credits directly. New Anthropic accounts get $5 in free credits, enough for hundreds of prompts.
+For Anthropic users (any tier, including Claude Pro / Max, OAuth isn't available), ChatGPT Team users, and anyone without a paid OpenAI subscription. You buy API credits directly. New Anthropic accounts get $5 in free credits, enough for hundreds of prompts.
 
 **Get an Anthropic API key** (4 clicks):
 
@@ -227,7 +227,7 @@ limit_usd = 5
 
 ---
 
-### Step 4 — Run
+### Step 4: Run
 
 ```bash
 geode                                                # interactive chat
@@ -321,7 +321,7 @@ pgrep -f "geode serve"    # should print nothing
 
 ---
 
-### Optional — Hook into Slack / Discord / Telegram
+### Optional: Hook into Slack / Discord / Telegram
 
 Once GEODE works in your terminal, you can let it answer on the messaging channels you already use:
 
@@ -331,9 +331,9 @@ geode serve                          # starts the always-on Gateway daemon
 
 Put channel secrets such as `SLACK_BOT_TOKEN` in `~/.geode/.env`; put channel bindings, poller choices, and project-specific Gateway behavior in `.geode/config.toml`. See [docs/setup.md → Gateway](docs/setup.md#gateway) for the full setup. After that, mentioning the bot in a channel routes the message into the same agent loop you use locally.
 
-### Optional — Self-improving loop config (`~/.geode/config.toml`)
+### Optional: Self-improving loop config (`~/.geode/config.toml`)
 
-Tune the autoresearch / seed-generation / petri audit drivers — model picks, dim set, banner thresholds, PAYG fallback policy — by copying the `[self_improving_loop.*]` sections from [`docs/examples/self_improving_loop.config.toml.example`](docs/examples/self_improving_loop.config.toml.example) into `~/.geode/config.toml`. Absent sections fall back to documented defaults. To migrate per-role entries from the legacy `~/.geode/petri.toml`:
+Tune the autoresearch / seed-generation / petri audit drivers, model picks, dim set, banner thresholds, PAYG fallback policy, by copying the `[self_improving_loop.*]` sections from [`docs/examples/self_improving_loop.config.toml.example`](docs/examples/self_improving_loop.config.toml.example) into `~/.geode/config.toml`. Absent sections fall back to documented defaults. To migrate per-role entries from the legacy `~/.geode/petri.toml`:
 
 ```bash
 geode config migrate-petri-toml          # dry-run preview
@@ -381,34 +381,34 @@ When a change does not take effect, run `geode config explain <KEY>`. It prints 
 
 ## Troubleshooting
 
-Run `geode doctor` first. It checks Python version, `geode` PATH, `~/.geode/.env`, Codex CLI OAuth, ProfileStore, the serve socket, and `~/.local/bin` PATH — and prints a concrete fix command for each failure. The expanders below cover the same ground in narrative form.
+Run `geode doctor` first. It checks Python version, `geode` PATH, `~/.geode/.env`, Codex CLI OAuth, ProfileStore, the serve socket, and `~/.local/bin` PATH, and prints a concrete fix command for each failure. The expanders below cover the same ground in narrative form.
 
 <details>
-<summary><strong>"command not found: python3"</strong> — Python isn't installed or isn't on your PATH.</summary>
+<summary><strong>"command not found: python3"</strong>, Python isn't installed or isn't on your PATH.</summary>
 
-Mac: `xcode-select --install` then `brew install python@3.12`. Windows: download the installer from [python.org](https://www.python.org/downloads/) and check "Add Python to PATH" during setup. Verify with `python3 --version` — must be 3.12 or higher.
+Mac: `xcode-select --install` then `brew install python@3.12`. Windows: download the installer from [python.org](https://www.python.org/downloads/) and check "Add Python to PATH" during setup. Verify with `python3 --version`, must be 3.12 or higher.
 </details>
 
 <details>
-<summary><strong>"command not found: uv"</strong> — uv isn't on your PATH yet.</summary>
+<summary><strong>"command not found: uv"</strong>, uv isn't on your PATH yet.</summary>
 
 The install script writes uv to `~/.local/bin`. Either restart your terminal, or run `source ~/.bashrc` (bash) / `source ~/.zshrc` (zsh). Verify with `uv --version`.
 </details>
 
 <details>
-<summary><strong>"command not found: geode"</strong> — the global install hasn't run.</summary>
+<summary><strong>"command not found: geode"</strong>, the global install hasn't run.</summary>
 
 For a PyPI install, run `uv tool install geode-agent`. For a source checkout, run `uv tool install -e . --force` from the `geode/` directory. Both paths put the `geode` command in `~/.local/bin/`. If that directory isn't on your PATH, add `export PATH="$HOME/.local/bin:$PATH"` to your shell config.
 </details>
 
 <details>
-<summary><strong>"401 Unauthorized" or "Invalid API key"</strong> — wrong key, expired key, or wrong file location.</summary>
+<summary><strong>"401 Unauthorized" or "Invalid API key"</strong>, wrong key, expired key, or wrong file location.</summary>
 
 Check `cat ~/.geode/.env` and confirm the key starts with `sk-ant-` (Anthropic), `sk-proj-` (OpenAI), or `id.secret` (ZhipuAI GLM). Make sure there are no extra spaces or quote characters. If you used the ChatGPT subscription path (Path A), re-run `codex auth login` to refresh the OAuth token.
 </details>
 
 <details>
-<summary><strong>"Address already in use" when running `geode serve`</strong> — daemon is already running.</summary>
+<summary><strong>"Address already in use" when running `geode serve`</strong>, daemon is already running.</summary>
 
 `ps aux | grep "geode serve"` to find the PID, then `kill <PID>`. Or use `geode serve --port <other>` to pick a different port.
 </details>
@@ -416,7 +416,7 @@ Check `cat ~/.geode/.env` and confirm the key starts with `sk-ant-` (Anthropic),
 <details>
 <summary><strong>The model doesn't seem to use my tools / runs in circles.</strong></summary>
 
-Check `geode model` — some models are better at tool use than others. Default is `claude-opus-4-8` (best). If you're on `gpt-5.5`, set `effort: "high"` in `.geode/config.toml`. Run `tail -f ~/.geode/logs/serve.log` to see what the model is actually doing.
+Check `geode model`, some models are better at tool use than others. Default is `claude-opus-4-8` (best). If you're on `gpt-5.5`, set `effort: "high"` in `.geode/config.toml`. Run `tail -f ~/.geode/logs/serve.log` to see what the model is actually doing.
 </details>
 
 <details>
@@ -454,7 +454,7 @@ geode update                  # source checkout
 
 ### Using GEODE as an MCP server
 
-`geode-mcp` (installed with the CLI) speaks MCP over stdio, so any MCP client — Claude Code, Claude Desktop, Cursor — can drive GEODE as a tool. This repo ships `.mcp.json`, so Claude Code sessions opened in this project pick the server up automatically; elsewhere register it with `claude mcp add geode -- geode-mcp`.
+`geode-mcp` (installed with the CLI) speaks MCP over stdio, so any MCP client, Claude Code, Claude Desktop, Cursor, can drive GEODE as a tool. This repo ships `.mcp.json`, so Claude Code sessions opened in this project pick the server up automatically; elsewhere register it with `claude mcp add geode -- geode-mcp`.
 
 Verified 2026-06-11 against the live runtime (initialize handshake, `tools/list`, tool calls):
 
@@ -462,11 +462,11 @@ Verified 2026-06-11 against the live runtime (initialize handshake, `tools/list`
 |-------|--------|
 | Handshake + 6 tools listed | pass |
 | `self_improving_status` / `get_health` / `query_memory` | pass (live data) |
-| Server version in handshake | was the mcp SDK's "1.26.0" — now reports GEODE's version (the SDK's `FastMCP.__init__` exposes no `version` kwarg; pinned by `tests/core/test_mcp_server_tools.py`) |
-| `get_health` credential honesty | `*_configured` only meant "API key present" and read false on OAuth/CLI-lane setups — now also reports `*_credential_source` |
+| Server version in handshake | was the mcp SDK's "1.26.0", now reports GEODE's version (the SDK's `FastMCP.__init__` exposes no `version` kwarg; pinned by `tests/core/test_mcp_server_tools.py`) |
+| `get_health` credential honesty | `*_configured` only meant "API key present" and read false on OAuth/CLI-lane setups, now also reports `*_credential_source` |
 | `run_agent`, `self_improving_propose`/`apply` | not exercised in the automated check (token cost / mutation side effects); `apply` is gated behind a 2-step proposal confirm |
 
-**Remote access (v0.99.171):** `geode-mcp --http [--host H] [--port P]` serves the same tools over the MCP streamable-HTTP transport. Auth is a bearer token from `GEODE_MCP_TOKEN` (a secret — put it in `~/.geode/.env`); clients pass `Authorization: Bearer <token>`. A non-loopback bind without a token is refused at startup — `run_agent` reaches GEODE's full tool surface, so an open bind is a remote-execution surface. For personal cross-device use, SSH needs no setup at all: `claude mcp add geode -- ssh <host> geode-mcp`.
+**Remote access (v0.99.171):** `geode-mcp --http [--host H] [--port P]` serves the same tools over the MCP streamable-HTTP transport. Auth is a bearer token from `GEODE_MCP_TOKEN` (a secret, put it in `~/.geode/.env`); clients pass `Authorization: Bearer <token>`. A non-loopback bind without a token is refused at startup, `run_agent` reaches GEODE's full tool surface, so an open bind is a remote-execution surface. For personal cross-device use, SSH needs no setup at all: `claude mcp add geode -- ssh <host> geode-mcp`.
 
 ---
 
@@ -475,12 +475,12 @@ Verified 2026-06-11 against the live runtime (initialize handshake, `tools/list`
 A qualitative read on where GEODE sits next to the frontier harnesses (Claude Code, Codex CLI, OpenClaw) as of May 2026. This is about posture, not benchmarks. Marker legend: ✅✅ leader on the axis · ✅ supported · ⚠️ partial / qualified · ❌ absent · n/a not applicable.
 
 <details>
-<summary><strong>A. Runtime posture</strong> — how the agent stays alive</summary>
+<summary><strong>A. Runtime posture</strong>, how the agent stays alive</summary>
 
 | | Claude Code | Codex CLI | OpenClaw | **GEODE** |
 |---|---|---|---|---|
 | Always-on daemon | ❌ per-invocation | ⚠️ opt-in `codex remote-control` | ✅✅ launchd / systemd control plane | ✅ `geode serve` daemon |
-| Native scheduler (cron) | ⚠️ scheduled cloud agents (`/schedule`, cloud-executed) | ❌ (Codex Cloud Automations only — [issue #8317](https://github.com/openai/codex/issues/8317)) | ✅ `cron add/edit/list` CLI | ✅ cron + event triggers |
+| Native scheduler (cron) | ⚠️ scheduled cloud agents (`/schedule`, cloud-executed) | ❌ (Codex Cloud Automations only, [issue #8317](https://github.com/openai/codex/issues/8317)) | ✅ `cron add/edit/list` CLI | ✅ cron + event triggers |
 | Thin CLI ↔ daemon IPC | ❌ | ⚠️ remote-control server mode | ✅ Gateway / Agent split | ✅ IPC server |
 | Sub-agent isolation | ✅ Agent tool + `run_in_background` | ✅ `multi_agent` feature | ✅✅ Lane Queue + Session bindings | ✅ Lane + depth / cost guard |
 | Session resume / fork | ✅ JSONL transcripts | ✅ `/resume` + `/fork` slash commands | ✅ Session bindings with TTL | ✅ session resume |
@@ -488,7 +488,7 @@ A qualitative read on where GEODE sits next to the frontier harnesses (Claude Co
 </details>
 
 <details>
-<summary><strong>B. Channels & UX surfaces</strong> — how it reaches users</summary>
+<summary><strong>B. Channels & UX surfaces</strong>, how it reaches users</summary>
 
 | | Claude Code | Codex CLI | OpenClaw | **GEODE** |
 |---|---|---|---|---|
@@ -506,7 +506,7 @@ A qualitative read on where GEODE sits next to the frontier harnesses (Claude Co
 | | Claude Code | Codex CLI | OpenClaw | **GEODE** |
 |---|---|---|---|---|
 | Multi-provider failover | ✅ Anthropic + AWS Bedrock + Google Vertex (env routing) | ✅✅ OpenAI + Azure + Bedrock + Ollama + any OpenAI-compatible (`model_providers` config) | ✅ `auth.order` cooldown-based auto-failover | ✅ Anthropic + OpenAI + ZhipuAI, in-provider only |
-| Subscription OAuth tier | ✅ Pro / Max | ✅✅ Plus · Pro · Business · Edu · Enterprise | ⚠️ OpenAI + Gemini onboarding | ⚠️ ChatGPT only (Plus / Pro / Business / Edu / Enterprise) — Anthropic ToS (2026-01-09) blocks third-party Claude OAuth |
+| Subscription OAuth tier | ✅ Pro / Max | ✅✅ Plus · Pro · Business · Edu · Enterprise | ⚠️ OpenAI + Gemini onboarding | ⚠️ ChatGPT only (Plus / Pro / Business / Edu / Enterprise), Anthropic ToS (2026-01-09) blocks third-party Claude OAuth |
 | Token / cost budget guard | ⚠️ cache token tracking only | ⚠️ retry caps (`request_max_retries`) | ⚠️ partial | ✅ explicit token + cost budget governance |
 | Context overflow handling | ✅ autocompaction | ⚠️ skills progressive disclosure + fork | ✅ compaction + transcript streaming | ✅✅ layered context-overflow handling |
 | Cross-vendor failover policy | ❌ | ⚠️ manual `model_providers` switch | ✅ automatic | ❌ by design (no surprise cross-vendor charges) |
@@ -533,7 +533,7 @@ A qualitative read on where GEODE sits next to the frontier harnesses (Claude Co
 |---|---|---|---|---|
 | Plugin / extension surfaces | ✅ manifest + marketplace (user / project / local scopes) | ✅ `/plugins` slash command + plugin sharing | ✅✅ extension points (Channel · Tool · Skill · Hook) via `@openclaw/plugin-sdk` | ✅ runtime SkillRegistry + MCP/tool surfaces |
 | Skill system | ✅ Deferred tools + SKILL.md manifest | ✅ SKILL.md + progressive disclosure (`.agents/skills/`) | ✅ skill filter + archive upload | ✅ runtime `SkillRegistry` across bundled/global/project scopes |
-| **Swappable pipeline DAG** | ❌ | ❌ | ⚠️ flows (channel-setup / doctor / provider — not a DAG abstraction) | ⚠️ external package responsibility; GEODE core no longer ships a pipeline port |
+| **Swappable pipeline DAG** | ❌ | ❌ | ⚠️ flows (channel-setup / doctor / provider, not a DAG abstraction) | ⚠️ external package responsibility; GEODE core no longer ships a pipeline port |
 | Trace / replay / Run Log | ✅ `tengu_*` telemetry + `/insights` HTML | ⚠️ `/status` + `/debug-config` only | ✅ ACP session lineage + Task Registry | ✅ Native RunLog + Petri eval integration |
 | Self-improving safety loop | ❌ | ❌ | ❌ | ✅✅ outer loop: scaffold mutation + adversarial safety audit + (1+1) promote/revert |
 | Cross-provider review | ❌ | ❌ | ❌ | ⚠️ multi-voter cross-provider ranking panel (≥2 providers, `plugins/seed_generation/agents/ranker.py`) in the self-improving loop; agreement calibration is WIP |
@@ -544,7 +544,7 @@ A qualitative read on where GEODE sits next to the frontier harnesses (Claude Co
 
 Use **Claude Code** or **Codex** for short coding sessions inside an IDE or via cloud sync. Use **OpenClaw** to run a multi-channel chat agent fleet across many messaging surfaces. Use **GEODE** when an agent must work over hours or days with multi-tier memory, multi-layer verification, scheduling, and daemon-backed tool execution, and when you want that agent to keep improving its own scaffolding under a safety floor.
 
-> Sources — Claude Code (reverse-engineered reference). Codex CLI release notes + [developers.openai.com/codex/config-reference](https://developers.openai.com/codex/config-reference) + [github.com/openai/codex](https://github.com/openai/codex). OpenClaw (TypeScript). GEODE — `CHANGELOG.md` and the [self-improving hub](https://mangowhoiscloud.github.io/geode/self-improving/).
+> Sources, Claude Code (reverse-engineered reference). Codex CLI release notes + [developers.openai.com/codex/config-reference](https://developers.openai.com/codex/config-reference) + [github.com/openai/codex](https://github.com/openai/codex). OpenClaw (TypeScript). GEODE, `CHANGELOG.md` and the [self-improving hub](https://mangowhoiscloud.github.io/geode/self-improving/).
 
 ---
 
@@ -553,8 +553,8 @@ Use **Claude Code** or **Codex** for short coding sessions inside an IDE or via 
 
 GEODE has two control layers:
 
-- **Scaffold (production)** — Claude Code + `CLAUDE.md` + development Skills + CI Hooks. The external harness that produces GEODE's code and guarantees quality. The self-improving outer loop also mutates parts of this scaffold.
-- **GEODE Runtime (agent)** — `while(tool_use)` loop + agentic tools + native ToolRegistry + runtime Skills + runtime Hooks + multi-layer Verification. The internal system of the autonomously executing agent.
+- **Scaffold (production)**: Claude Code + `CLAUDE.md` + development Skills + CI Hooks. The external harness that produces GEODE's code and guarantees quality. The self-improving outer loop also mutates parts of this scaffold.
+- **GEODE Runtime (agent)**: `while(tool_use)` loop + agentic tools + native ToolRegistry + runtime Skills + runtime Hooks + multi-layer Verification. The internal system of the autonomously executing agent.
 
 4-Layer Stack (Model → Runtime → Harness → Agent) + Sub-Agent System + 5-Tier Memory.
 
@@ -577,14 +577,14 @@ graph LR
 | **Runtime** | Agentic tools, native ToolRegistry, MCP Catalog (Anthropic registry plus project-configured servers), runtime Skills, Memory (multi-tier), PlanStore | `core/tools/`, `core/memory/`, `core/orchestration/plan_store.py` |
 | **Model** | ClaudeAdapter, OpenAIAdapter, CodexAdapter, GLMAdapter | `core/llm/` |
 
-`.geode/` — agent context lifecycle (5-tier hierarchy assembled into every LLM call):
+`.geode/`, agent context lifecycle (5-tier hierarchy assembled into every LLM call):
 
 ```
-Tier 0    SOUL            GEODE.md — agent identity + constraints
-Tier 0.5  User Profile    ~/.geode/user_profile/ — role, expertise, language
+Tier 0    SOUL            GEODE.md, agent identity + constraints
+Tier 0.5  User Profile    ~/.geode/user_profile/, role, expertise, language
 Tier 1    Organization    Cross-project data (signals, history)
-Tier 2    Project         .geode/memory/PROJECT.md — analysis history (LRU-50)
-Tier 3    Session         In-memory — conversation, tool results, plans
+Tier 2    Project         .geode/memory/PROJECT.md, analysis history (LRU-50)
+Tier 3    Session         In-memory, conversation, tool results, plans
 ```
 
 ```
@@ -618,11 +618,11 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) and [docs/workflow.md](docs/workflow.md).
 </details>
 
 <details>
-<summary><strong>Why — motivation</strong></summary>
+<summary><strong>Why, motivation</strong></summary>
 
-In 2026, AI coding agents have made remarkable progress. They read, write, fix, and test code autonomously. But how much of real work is actually coding? Research, document analysis, scheduling, notifications, data pipelines, multi-axis evaluation for decision-making — the space requiring autonomous execution *beyond* coding is far broader.
+In 2026, AI coding agents have made remarkable progress. They read, write, fix, and test code autonomously. But how much of real work is actually coding? Research, document analysis, scheduling, notifications, data pipelines, multi-axis evaluation for decision-making, the space requiring autonomous execution *beyond* coding is far broader.
 
-Yet the core of all autonomous behavior is surprisingly simple: an LLM calls tools, observes results, decides the next action — a `while(tool_use)` loop. Claude Code, Codex, OpenClaw — all frontier harnesses stand on this primitive. GEODE generalizes it into a daemon-backed, memoryful runtime for long-running tool work.
+Yet the core of all autonomous behavior is surprisingly simple: an LLM calls tools, observes results, decides the next action, a `while(tool_use)` loop. Claude Code, Codex, OpenClaw, all frontier harnesses stand on this primitive. GEODE generalizes it into a daemon-backed, memoryful runtime for long-running tool work.
 
 </details>
 
@@ -630,4 +630,4 @@ Yet the core of all autonomous behavior is surprisingly simple: an LLM calls too
 
 ## License
 
-Apache License 2.0 — [LICENSE](./LICENSE)
+Apache License 2.0, [LICENSE](./LICENSE)

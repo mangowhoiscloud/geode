@@ -8,6 +8,7 @@ import { useLocale, useSetLocale, t } from "@/components/geode/locale-context";
 import { DOCS_SITEMAP, adjacentPages, findPage, QUADRANT_META, type DocQuadrant } from "@/lib/geode-docs/sitemap";
 import { GEODE_SOT } from "@/data/geode/sot";
 import { galmuri } from "@/fonts/galmuri";
+import { serifDisplay } from "@/fonts/serif";
 
 const DOCS_BASE = "/docs";
 
@@ -251,14 +252,16 @@ export function DocsShell({
                 <QuadrantChip quadrant={quadrant} />
               </div>
             )}
-            <h1 className="text-3xl md:text-4xl font-display font-bold tracking-tight">
+            <h1
+              className={`${serifDisplay.variable} font-serif-docs text-3xl font-black md:text-4xl`}
+            >
               {displayTitle}
             </h1>
             {displaySummary && (
               <p className="mt-2 text-[var(--ink-2)] text-base leading-relaxed">{displaySummary}</p>
             )}
           </div>
-          <article className="docs-prose">{children}</article>
+          <article className={`${serifDisplay.variable} docs-prose`}>{children}</article>
           <PrevNext slug={slug} />
         </main>
       </div>
