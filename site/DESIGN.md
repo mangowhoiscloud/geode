@@ -65,6 +65,15 @@ identity on exactly two surfaces: the 04-self-improving docs section
 docs.css) and the petri-bundle bridge pages. The vendored Inspect viewer
 cannot be re-skinned, so the section accent preserves continuity into it.
 
+**Color-field bands (operator-approved 2026-07-10).** /portfolio may use the
+signature rose (`--acc-artifact`) as a full-bleed section substrate on exactly
+two surfaces: the hero field and the chapter-break band (Hermes-landing
+treatment: color field + gallery art + floating terminal). Text on the field
+is `--paper` (near-black, ~10:1) set via explicit utilities (the Astryx
+element reset would otherwise repaint headings light); the mascot appears as
+a one-color `silhouette` stencil. Everywhere else the single dark substrate
+rule stands.
+
 **Texture.** `.rose-grid` (globals.css) is a 1px rose dot grid at 5% opacity,
 28px pitch — for the landing/hero surfaces only. It is a pattern, not a color
 gradient; the no-gradient rule below stays intact.
