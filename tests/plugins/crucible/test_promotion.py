@@ -39,9 +39,9 @@ def _contract_payload(*, stage: str = "train") -> dict[str, object]:
         "mutations": [{"surface": "core/agent/verify.py", "hypothesis": "fewer misses"}],
         "evaluator_paths": ["plugins/benchmark_harness", "plugins/crucible"],
         "promotion": {
-            "method": "paired_bootstrap.v1",
+            "method": "paired_bootstrap.v2",
             "primary_metric": "reward",
-            "minimum_improvement": 0.1,
+            "materiality_pp": 0.1,
             "minimum_candidate_mean": 0.7,
             "minimum_tasks": 4,
             "confidence_level": 0.95,
@@ -159,7 +159,7 @@ def test_metric_floor_and_safety_veto_cannot_be_averaged_away() -> None:
 
     assert low_metric.verdict == "REJECT"
     assert "candidate_below_absolute_floor" in low_metric.reasons
-    assert "confidence_bound_below_threshold" in low_metric.reasons
+    assert "improvement_below_materiality" in low_metric.reasons
     assert unsafe.verdict == "REJECT"
     assert dict(unsafe.vetoes)["safety"] is False
 

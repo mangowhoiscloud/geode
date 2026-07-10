@@ -105,6 +105,44 @@ def _finite_float(value: object, field: str) -> float:
     return float(value)
 
 
+def _non_negative_float(value: object, field: str) -> float:
+    number = _finite_float(value, field)
+    if number < 0:
+        raise ContractError(f"{field} must not be negative")
+    return number
+
+
+def canonical_sha256(payload: Mapping[str, Any]) -> str:
+    """Content hash of a JSON-canonicalised mapping (shared with calibration)."""
+    encoded = json.dumps(payload, ensure_ascii=False, separators=(",", ":"), sort_keys=True)
+    return hashlib.sha256(encoded.encode("utf-8")).hexdigest()
+
+
+def _validated_parameter_derivation(value: object) -> dict[str, Any]:
+    """Validate a ``crucible.parameter-derivation.v1`` block's integrity.
+
+    The block's inputs are content-hashed so a stamped contract number can be
+    traced to the calibration evidence that produced it; a block whose hash
+    does not match its inputs is corrupt or hand-edited.
+    """
+    row = _require_mapping(value, "promotion.parameter_derivation")
+    if row.get("schema") != "crucible.parameter-derivation.v1":
+        raise ContractError(
+            "promotion.parameter_derivation.schema must be 'crucible.parameter-derivation.v1'"
+        )
+    inputs = _require_mapping(row.get("inputs"), "promotion.parameter_derivation.inputs")
+    derived = _require_mapping(row.get("derived"), "promotion.parameter_derivation.derived")
+    stamped_hash = _sha256(
+        row.get("inputs_sha256"),
+        "promotion.parameter_derivation.inputs_sha256",
+    )
+    if canonical_sha256(inputs) != stamped_hash:
+        raise ContractError("promotion.parameter_derivation inputs do not match inputs_sha256")
+    if not derived:
+        raise ContractError("promotion.parameter_derivation.derived is empty")
+    return dict(row)
+
+
 def _probability(value: object, field: str) -> float:
     number = _finite_float(value, field)
     if not 0.5 < number < 1.0:
@@ -378,15 +416,25 @@ class Budget:
 
 @dataclass(frozen=True)
 class PromotionRule:
-    """Preregistered paired comparison for one higher-is-better metric."""
+    """Preregistered paired comparison for one higher-is-better metric.
 
-    method: Literal["paired_bootstrap.v1"]
+    ``v2`` splits the two roles the retired ``v1`` threshold conflated: the
+    bootstrap lower bound must merely exceed zero at ``confidence_level``
+    (existence of an improvement), while ``materiality_pp`` is the economic
+    floor on the point estimate — zero is an honest value for train stages.
+    When a ``parameter_derivation`` block is present, its derived values must
+    match the stamped fields; the numbers then trace to hashed calibration
+    inputs instead of being asserted.
+    """
+
+    method: Literal["paired_bootstrap.v2"]
     primary_metric: str
-    minimum_improvement: float
+    materiality_pp: float
     minimum_candidate_mean: float
     minimum_tasks: int
     confidence_level: float
     bootstrap_samples: int
+    parameter_derivation: Mapping[str, Any] | None = None
 
     @classmethod
     def from_mapping(cls, value: object) -> PromotionRule:
@@ -397,31 +445,35 @@ class PromotionRule:
             required={
                 "bootstrap_samples",
                 "confidence_level",
+                "materiality_pp",
                 "method",
                 "minimum_candidate_mean",
-                "minimum_improvement",
                 "minimum_tasks",
                 "primary_metric",
             },
+            optional={"parameter_derivation"},
         )
         method = _non_empty_string(row["method"], "promotion.method")
-        if method != "paired_bootstrap.v1":
-            raise ContractError("promotion.method must be 'paired_bootstrap.v1'")
+        if method != "paired_bootstrap.v2":
+            raise ContractError("promotion.method must be 'paired_bootstrap.v2'")
         bootstrap_samples = _positive_int(
             row["bootstrap_samples"],
             "promotion.bootstrap_samples",
         )
         if bootstrap_samples < 1_000:
             raise ContractError("promotion.bootstrap_samples must be at least 1000")
-        return cls(
-            method="paired_bootstrap.v1",
+        derivation: dict[str, Any] | None = None
+        if "parameter_derivation" in row:
+            derivation = _validated_parameter_derivation(row["parameter_derivation"])
+        rule = cls(
+            method="paired_bootstrap.v2",
             primary_metric=_non_empty_string(
                 row["primary_metric"],
                 "promotion.primary_metric",
             ),
-            minimum_improvement=_positive_float(
-                row["minimum_improvement"],
-                "promotion.minimum_improvement",
+            materiality_pp=_non_negative_float(
+                row["materiality_pp"],
+                "promotion.materiality_pp",
             ),
             minimum_candidate_mean=_finite_float(
                 row["minimum_candidate_mean"],
@@ -433,18 +485,42 @@ class PromotionRule:
                 "promotion.confidence_level",
             ),
             bootstrap_samples=bootstrap_samples,
+            parameter_derivation=derivation,
         )
+        rule._assert_matches_derivation()
+        return rule
 
-    def to_dict(self) -> dict[str, float | int | str]:
-        return {
+    def _assert_matches_derivation(self) -> None:
+        if self.parameter_derivation is None:
+            return
+        derived = self.parameter_derivation["derived"]
+        stamped = {
+            "minimum_tasks": self.minimum_tasks,
+            "confidence_level": self.confidence_level,
+            "materiality_pp": self.materiality_pp,
+        }
+        for key, stamped_value in stamped.items():
+            derived_value = derived.get(key)
+            if derived_value is None or abs(float(derived_value) - float(stamped_value)) > 1e-9:
+                raise ContractError(
+                    f"promotion.{key}={stamped_value} does not match its "
+                    f"parameter_derivation value {derived_value} — a stamped "
+                    "number must equal its derivation"
+                )
+
+    def to_dict(self) -> dict[str, Any]:
+        row: dict[str, Any] = {
             "method": self.method,
             "primary_metric": self.primary_metric,
-            "minimum_improvement": self.minimum_improvement,
+            "materiality_pp": self.materiality_pp,
             "minimum_candidate_mean": self.minimum_candidate_mean,
             "minimum_tasks": self.minimum_tasks,
             "confidence_level": self.confidence_level,
             "bootstrap_samples": self.bootstrap_samples,
         }
+        if self.parameter_derivation is not None:
+            row["parameter_derivation"] = dict(self.parameter_derivation)
+        return row
 
 
 @dataclass(frozen=True)
@@ -571,6 +647,14 @@ class ExperimentContract:
         supplied_id = row.get("contract_id")
         if supplied_id is not None and _sha256(supplied_id, "contract_id") != contract.contract_id:
             raise ContractError("contract_id does not match the canonical contract payload")
+        derivation = contract.promotion.parameter_derivation
+        if derivation is not None:
+            derived_trials = derivation["derived"].get("trials_per_task")
+            if derived_trials is not None and int(derived_trials) != contract.trials_per_task:
+                raise ContractError(
+                    f"trials_per_task={contract.trials_per_task} does not match its "
+                    f"parameter_derivation value {derived_trials}"
+                )
         return contract
 
     def canonical_payload(self) -> dict[str, Any]:

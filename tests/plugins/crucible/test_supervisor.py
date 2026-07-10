@@ -104,7 +104,7 @@ EVALUATOR_SCRIPT = "#!/usr/bin/env python3\n" + textwrap.dedent(
         "baseline_raw": baseline_raw_path.name,
         "candidate_raw": candidate_raw_path.name,
         "feedback": {
-            "schema": "crucible.failure-feedback.v1",
+            "schema": "crucible.failure-feedback.v2",
             "summary": "fixture complete",
             "failure_classes": [],
         },
@@ -158,9 +158,9 @@ def _train_plan(repo: Path, harness: Path) -> TrainPlan:
             "assay_config": {"schema": "fixture.v1"},
             "evaluator_paths": ["evaluator.py"],
             "promotion": {
-                "method": "paired_bootstrap.v1",
+                "method": "paired_bootstrap.v2",
                 "primary_metric": "reward",
-                "minimum_improvement": 0.1,
+                "materiality_pp": 0.1,
                 "minimum_candidate_mean": 0.7,
                 "minimum_tasks": 4,
                 "confidence_level": 0.95,
@@ -654,3 +654,38 @@ def test_packaged_cli_runs_isolated_producer_and_evaluator_processes(
     child_pid = int(child_pid_path.read_text(encoding="utf-8"))
     with pytest.raises(ProcessLookupError):
         os.kill(child_pid, 0)
+
+
+def test_failure_feedback_v2_carries_bounded_self_observations() -> None:
+    feedback = FailureFeedback.from_mapping(
+        {
+            "schema": "crucible.failure-feedback.v2",
+            "summary": "wrong-write on task-3",
+            "failure_classes": ["false_success"],
+            "failed_task_ids": ["task-3", "task-9"],
+            "trajectory_excerpts": ["I have updated the address."],
+        }
+    )
+    assert feedback.failed_task_ids == ("task-3", "task-9")
+    assert feedback.to_dict()["trajectory_excerpts"] == ["I have updated the address."]
+
+
+def test_failure_feedback_v2_enforces_transport_caps() -> None:
+    with pytest.raises(SupervisorError, match="failed_task_ids"):
+        FailureFeedback.from_mapping(
+            {
+                "schema": "crucible.failure-feedback.v2",
+                "summary": "x",
+                "failure_classes": [],
+                "failed_task_ids": [f"task-{i}" for i in range(65)],
+            }
+        )
+    with pytest.raises(SupervisorError, match="trajectory_excerpts"):
+        FailureFeedback.from_mapping(
+            {
+                "schema": "crucible.failure-feedback.v2",
+                "summary": "x",
+                "failure_classes": [],
+                "trajectory_excerpts": ["y" * 2_001],
+            }
+        )

@@ -236,12 +236,16 @@ validates the pinned upstream result schema without importing the harness.
 `infrastructure_error`, `user_error`, and `unexpected_error` invalidate the
 evidence.
 
-`plugins.crucible.promotion.decide()` is the assay-neutral screening rule. It
-requires exact paired coverage, computes baseline/candidate means and a
-deterministic one-sided paired-bootstrap lower bound over task-level trial
-means, checks the absolute
-candidate floor and minimum improvement, aggregates both arms' wall/call/token/
-cash usage, and applies non-exchangeable checks. A train-stage `KEEP` only
+`plugins.crucible.promotion.decide()` is the assay-neutral screening rule
+(`paired_bootstrap.v2`). It requires exact paired coverage, computes
+baseline/candidate means and a deterministic one-sided paired-bootstrap lower
+bound over task-level trial means, and keeps only when the lower bound
+exceeds zero at the contract's confidence level, the point improvement
+reaches the economic `materiality_pp` floor, and the candidate clears the
+absolute floor; it aggregates both arms' wall/call/token/cash usage and
+applies non-exchangeable checks. The v1 rule, which required the lower bound
+itself to clear the improvement threshold, was retired after a power
+self-audit showed it demanded a 10-30pp effect at documented pack scales. A train-stage `KEEP` only
 advances a campaign search head and has `promotion_authority=none`. Test-stage
 verdicts also remain authority-neutral until parent-train-KEEP binding and a
 one-shot committed test-pack protocol are implemented.
@@ -258,6 +262,23 @@ the pure scorer locally. Only an admissible train `KEEP` advances
 branch is never moved. Each contract names a separate immutable
 `refs/crucible/baselines/<campaign>/<attempt>` ref, so later search-head
 advances do not invalidate historical preflight.
+
+### Derived parameters, not magic numbers
+
+`plugins.crucible.calibration` derives every gate number a train plan stamps.
+A `NoiseModel` is fitted from a null paired run or per-task trial counts; a
+`MutationClassPrior` (Beta posteriors on fix and regression rates) is fitted
+from replay-screening counts and pinned to the task-pack hash it was measured
+against — deriving against a different pack fails loudly. A `CostModel`
+carries the only operator judgements: the downstream cost of a false train
+KEEP, the retry cost, a quota-window conversation ceiling, and the economic
+`materiality_pp`. A Monte Carlo search over (pack size, trials) minimises
+expected cost per true KEEP and emits a `crucible.parameter-derivation.v1`
+block whose inputs are content-hashed; `PromotionRule` refuses a contract
+whose stamped numbers do not equal their derivation. The power self-test
+(`tests/plugins/crucible/test_promotion_power.py`) replays synthetic effects
+through the real `decide()` so a gate that cannot open — or cannot stay shut —
+fails in CI rather than in a campaign.
 
 The packaged operational surface is:
 
@@ -302,13 +323,14 @@ The independent train loop is started from one JSON configuration:
     "assay_config": {"schema": "<assay-schema>"},
     "evaluator_paths": ["plugins/benchmark_harness", "plugins/crucible"],
     "promotion": {
-      "method": "paired_bootstrap.v1",
+      "method": "paired_bootstrap.v2",
       "primary_metric": "reward",
-      "minimum_improvement": 0.05,
-      "minimum_candidate_mean": 0.7,
-      "minimum_tasks": 1,
-      "confidence_level": 0.95,
-      "bootstrap_samples": 10000
+      "materiality_pp": 0.0,
+      "minimum_candidate_mean": 0.3,
+      "minimum_tasks": 20,
+      "confidence_level": 0.885,
+      "bootstrap_samples": 10000,
+      "parameter_derivation": {"schema": "crucible.parameter-derivation.v1", "...": "emitted by plugins.crucible.calibration"}
     },
     "budget": {
       "max_wall_seconds": 1800,
@@ -377,16 +399,22 @@ artifacts:
   "baseline_raw": "baseline.results.json",
   "candidate_raw": "candidate.results.json",
   "feedback": {
-    "schema": "crucible.failure-feedback.v1",
+    "schema": "crucible.failure-feedback.v2",
     "summary": "bounded train failure summary",
-    "failure_classes": ["tool_contract"]
+    "failure_classes": ["tool_contract"],
+    "failed_task_ids": ["task-42"],
+    "trajectory_excerpts": ["candidate-authored turn text, oracle-scrubbed"]
   }
 }
 ```
 
-The raw-file digests must match both evidence envelopes. Free-form traces,
-prompts, task payloads, and sealed rows are not forwarded to the next producer;
-only the bounded feedback schema and mechanical verdict reasons are retained.
+The raw-file digests must match both evidence envelopes. Oracle content —
+gold actions, expected values, task payloads, and sealed rows — is never
+forwarded to the next producer. The candidate's own observations are: the
+bounded feedback schema may carry failed task IDs and excerpts of text the
+candidate itself emitted (scrubbing is the evaluator's contractual duty),
+alongside mechanical verdict reasons and paired flip counts. Watching one's
+own behaviour is a learning signal, not contamination.
 
 Each fresh campaign directory contains `config.json`, an atomically replaced
 `state.json`, append-only `ledger.jsonl`, immutable per-attempt artifacts, and

@@ -45,6 +45,51 @@ functional change.
 
 ---
 
+## [0.99.290] - 2026-07-10
+
+### Added
+
+- **Crucible class-prior store and campaign fold writer.** Tracked
+  `plugins/crucible/priors/` holds one Beta-posterior file per mutation class,
+  pinned to the task-pack hash its evidence was measured against.
+  `python -m plugins.crucible priors-update` folds a campaign ledger's
+  measured flips into the fix-rate posterior (INVALID rows excluded,
+  foreign-pack ledgers refused), closing the read-write parity gap between
+  calibration's prior reads and campaign evidence.
+
+### Changed
+
+- **Crucible failure feedback v2 opens self-observations.** The bounded
+  producer feedback now carries failed task IDs and excerpts of text the
+  candidate itself emitted (oracle content remains excluded; scrubbing is the
+  evaluator's contractual duty). The supervisor ledger and per-attempt
+  feedback additionally emit paired flip/regression counts and the task-pack
+  hash — the inputs the prior writer and the target hit-rate metric consume.
+
+## [0.99.289] - 2026-07-10
+
+### Added
+
+- **Crucible calibration: derived gate parameters.** New
+  `plugins.crucible.calibration` fits a per-task flakiness model from a null
+  paired run or trial counts, Beta effect priors from replay-screening counts
+  (pinned to the task-pack hash they were measured against, refusing stale
+  priors), and searches pack size and trial count by Monte Carlo to minimise
+  expected cost per true KEEP under an explicit cost model that includes
+  quota-window ceilings. The derivation is emitted as a content-hashed
+  `crucible.parameter-derivation.v1` block; contracts refuse stamped numbers
+  that do not equal their derivation. A power self-test replays synthetic
+  effects through the real scorer so an unopenable gate fails in CI.
+
+### Changed
+
+- **Crucible promotion rule v2.** `paired_bootstrap.v2` splits the roles the
+  v1 threshold conflated: the paired-bootstrap lower bound must exceed zero at
+  the contract's confidence level, while the point estimate clears an economic
+  `materiality_pp` floor (zero allowed for train stages). The v1 rule demanded
+  the lower bound clear the improvement threshold itself, which a power audit
+  showed required a 10-30pp true effect at documented pack scales.
+
 ## [0.99.288] - 2026-07-10
 
 ### Added

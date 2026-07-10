@@ -331,10 +331,10 @@ def decide(
         reasons.append("insufficient_tasks")
     if candidate_mean < contract.promotion.minimum_candidate_mean:
         reasons.append("candidate_below_absolute_floor")
-    if paired_improvement < contract.promotion.minimum_improvement:
-        reasons.append("point_improvement_below_threshold")
-    if lower_bound < contract.promotion.minimum_improvement:
-        reasons.append("confidence_bound_below_threshold")
+    if paired_improvement < contract.promotion.materiality_pp:
+        reasons.append("improvement_below_materiality")
+    if lower_bound <= 0:
+        reasons.append("confidence_bound_not_positive")
 
     keep = not reasons and all(veto_results.values())
     verdict: Literal["KEEP", "REJECT"] = "KEEP" if keep else "REJECT"
@@ -356,3 +356,38 @@ def decide(
         paired_improvement=paired_improvement,
         improvement_lower_bound=lower_bound,
     )
+
+
+def paired_flip_counts(
+    contract: ExperimentContract,
+    baseline: EvidenceEnvelope,
+    candidate: EvidenceEnvelope,
+) -> tuple[int, int]:
+    """(flips, regressions) over task-level trial means of the primary metric.
+
+    A flip is a task whose candidate mean strictly exceeds its baseline mean;
+    a regression is the reverse. This is the loop-health emit consumed by the
+    class-prior writer and the target hit-rate metric; it renders no verdict.
+    """
+    metric_name = contract.promotion.primary_metric
+    baseline_by_task: dict[str, list[float]] = {task_id: [] for task_id in contract.task_ids}
+    candidate_by_task: dict[str, list[float]] = {task_id: [] for task_id in contract.task_ids}
+    for envelope, bucket in ((baseline, baseline_by_task), (candidate, candidate_by_task)):
+        for row in envelope.rows:
+            value = row.metric(metric_name)
+            if value is not None and row.task_id in bucket:
+                bucket[row.task_id].append(value)
+    flips = 0
+    regressions = 0
+    for task_id in contract.task_ids:
+        baseline_values = baseline_by_task[task_id]
+        candidate_values = candidate_by_task[task_id]
+        if not baseline_values or not candidate_values:
+            continue
+        baseline_mean = _mean(baseline_values)
+        candidate_mean = _mean(candidate_values)
+        if candidate_mean > baseline_mean:
+            flips += 1
+        elif candidate_mean < baseline_mean:
+            regressions += 1
+    return flips, regressions

@@ -52,9 +52,9 @@ def _payload() -> dict[str, object]:
         ],
         "evaluator_paths": ["plugins/benchmark_harness", "scripts/eval"],
         "promotion": {
-            "method": "paired_bootstrap.v1",
+            "method": "paired_bootstrap.v2",
             "primary_metric": "reward",
-            "minimum_improvement": 0.01,
+            "materiality_pp": 0.01,
             "minimum_candidate_mean": 0.5,
             "minimum_tasks": 2,
             "confidence_level": 0.95,
@@ -110,9 +110,9 @@ def test_contract_rejects_non_finite_numbers_and_wrong_task_hash() -> None:
     payload = _payload()
     promotion = deepcopy(payload["promotion"])
     assert isinstance(promotion, dict)
-    promotion["minimum_improvement"] = float("nan")
+    promotion["materiality_pp"] = float("nan")
     payload["promotion"] = promotion
-    with pytest.raises(ContractError, match="greater than zero"):
+    with pytest.raises(ContractError, match="finite number"):
         ExperimentContract.from_mapping(payload)
 
     payload = _payload()

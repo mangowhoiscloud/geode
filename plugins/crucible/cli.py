@@ -12,6 +12,7 @@ from typing import Any
 from .artifacts import load_json_object, write_exclusive_json
 from .contract import ContractError, load_contract, validate_test_parent
 from .evidence import EvidenceEnvelope, ResourceUsage, load_evidence
+from .priors import update_prior_from_campaign
 from .promotion import PromotionVerdict, decide
 from .supervisor import SupervisorError, run_supervisor
 from .verifiers import get_assay_adapter
@@ -73,12 +74,22 @@ def _add_loop(subparsers: Any) -> None:
     parser.add_argument("config", type=Path)
 
 
+def _add_priors_update(subparsers: Any) -> None:
+    parser = subparsers.add_parser(
+        "priors-update",
+        help="fold a campaign's measured flips into a class-prior file",
+    )
+    parser.add_argument("prior", type=Path)
+    parser.add_argument("--state-dir", type=Path, required=True)
+
+
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     subparsers = parser.add_subparsers(dest="command", required=True)
     _add_tau2_evidence(subparsers)
     _add_score(subparsers)
     _add_loop(subparsers)
+    _add_priors_update(subparsers)
     return parser.parse_args(argv)
 
 
@@ -132,6 +143,10 @@ def main(argv: list[str] | None = None) -> int:
         if args.command == "loop":
             summary = run_supervisor(args.config)
             print(json.dumps(summary.to_dict(), sort_keys=True))
+            return 0
+        if args.command == "priors-update":
+            updated = update_prior_from_campaign(args.prior, args.state_dir)
+            print(json.dumps(updated.to_dict(), sort_keys=True))
             return 0
         verdict = _score(args)
         print(json.dumps(verdict.to_dict(), sort_keys=True))
