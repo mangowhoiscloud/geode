@@ -92,6 +92,12 @@ functional change.
   character surfaces, mono = labels. The YouTube demo section is removed per
   operator; frontend stack is confirmed as Next.js 16 + React 19 + Tailwind 4
   + Astryx + Galmuri11 + Noto Serif KR.
+- **Nacreous sky field + frame-breaks (Poor Things trailer review).** The
+  hero's flat rose field becomes a generated pixel sky (`geode-sky.png`:
+  domain-warped sine swirls dithered into white crests and deep-rose shadows,
+  with a calmed zone behind the statement text), and crisp pixel clouds
+  drift across — and past — the lab-scene frame (`PixelCloud`, steps()
+  animation, reduced-motion gated).
 - **Representative character image + motion pass (dot art x Lanthimos).**
   `geode-lab-scene.png` is generated procedurally (PIL): Geodi centered in a
   one-point-perspective laboratory hall — The Favourite's checkerboard

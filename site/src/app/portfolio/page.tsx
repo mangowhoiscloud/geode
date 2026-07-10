@@ -208,6 +208,19 @@ function TerminalMock() {
   );
 }
 
+/** Crisp pixel cloud that drifts across (and past) frames. */
+function PixelCloud({ className, flip = false }: { className?: string; flip?: boolean }) {
+  return (
+    <div
+      aria-hidden
+      className={`geodi-drift pointer-events-none absolute z-20 flex flex-col ${flip ? "items-start" : "items-center"} ${className ?? ""}`}
+    >
+      <div className="h-[8px] w-[30px] bg-[#FFF0F8]" />
+      <div className="h-[8px] w-[54px] bg-[#FFF0F8]" />
+    </div>
+  );
+}
+
 function HeroSection() {
   const locale = useLocale();
   const reduceMotion = useReducedMotion();
@@ -216,11 +229,21 @@ function HeroSection() {
       {/* Rose color field, Hermes split composition: editorial serif statement
           left, white-line engraving of the mascot right, corner stamps. */}
       <div className="relative overflow-hidden bg-[var(--acc-artifact)]">
+        <Image
+          src="/geode/images/geode-sky.png"
+          alt=""
+          aria-hidden
+          fill
+          priority
+          sizes="100vw"
+          className="pointer-events-none select-none object-cover"
+          style={{ imageRendering: "pixelated" }}
+        />
         <div className="relative z-10 mx-auto max-w-7xl px-5 pt-9 text-center sm:px-8">
           <span className="font-pixel text-[19px] font-bold tracking-[0.06em] text-[var(--paper)]">GEODE</span>
         </div>
 
-        <div className="relative mx-auto grid max-w-7xl items-center gap-6 px-5 pb-24 pt-10 sm:px-8 lg:grid-cols-[1.05fr_0.95fr] lg:pb-28 lg:pt-14">
+        <div className="relative z-10 mx-auto grid max-w-7xl items-center gap-6 px-5 pb-24 pt-10 sm:px-8 lg:grid-cols-[1.05fr_0.95fr] lg:pb-28 lg:pt-14">
           <motion.div
             className="relative z-10"
             initial={reduceMotion ? false : "hidden"}
@@ -271,6 +294,8 @@ function HeroSection() {
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.9, delay: 0.3, ease: [0.22, 1, 0.36, 1] }}
           >
+            <PixelCloud className="-left-7 top-14" />
+            <PixelCloud className="-right-6 bottom-24" flip />
             <motion.div
               animate={reduceMotion ? undefined : { y: [0, -7, 0] }}
               transition={{ duration: 7, repeat: Infinity, ease: "easeInOut" }}

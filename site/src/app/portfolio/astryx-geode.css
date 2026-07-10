@@ -202,3 +202,26 @@
   letter-spacing: -0.01em;
   word-break: keep-all;
 }
+
+/* drifting pixel clouds (hero frame-break) */
+@keyframes geodi-drift {
+  0% {
+    transform: translateX(0);
+  }
+  50% {
+    transform: translateX(14px);
+  }
+  100% {
+    transform: translateX(0);
+  }
+}
+
+.geodi-drift {
+  animation: geodi-drift 11s steps(7, end) infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .geodi-drift {
+    animation: none;
+  }
+}
