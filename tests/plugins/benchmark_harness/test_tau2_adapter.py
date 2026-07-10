@@ -16,6 +16,7 @@ from plugins.benchmark_harness.tau2_geode_agent import (
     _resolve_num_tasks,
     _restore_tau2_data_root,
     _tau2_tool_calls,
+    _tool_mutates_state,
     _trajectory_snapshot_paths,
     _user_system_prompt,
     _validate_contract_output_paths,
@@ -100,11 +101,23 @@ def test_tau2_data_root_ignores_ambient_override(
     assert os.environ["TAU2_DATA_DIR"] == str(tmp_path / "ambient")
 
 
-@pytest.mark.parametrize(
-    "tool_name",
-    ["modify_pending_order_address", "modify_user_address"],
-)
-def test_tau2_tool_calls_preserves_required_empty_address2(
+def test_tau2_tool_mutability_uses_upstream_marker_and_fails_safe() -> None:
+    read_tool = SimpleNamespace(
+        name="unconventional_query",
+        _func=SimpleNamespace(__mutates_state__=False),
+    )
+    write_tool = SimpleNamespace(
+        name="get_but_mutate",
+        _func=SimpleNamespace(__mutates_state__=True),
+    )
+
+    assert _tool_mutates_state(read_tool) is False
+    assert _tool_mutates_state(write_tool) is True
+    assert _tool_mutates_state(SimpleNamespace(name="get_unknown")) is True
+
+
+@pytest.mark.parametrize("tool_name", ["modify_user_address", "future_required_empty"])
+def test_tau2_tool_calls_preserves_explicit_empty_arguments(
     monkeypatch: pytest.MonkeyPatch,
     tool_name: str,
 ) -> None:

@@ -13,7 +13,7 @@ from typing import Any, Literal
 from plugins.crucible.contract import ContractError, ExperimentContract
 from plugins.crucible.evidence import EVIDENCE_SCHEMA, EvidenceEnvelope, ResourceUsage
 
-_SNAPSHOT_SCHEMA = "crucible_tau2_trajectory_snapshot.v1"
+_SNAPSHOT_SCHEMA = "crucible_tau2_trajectory_snapshot.v2"
 
 
 @dataclass(frozen=True)
@@ -215,7 +215,7 @@ def _verify_snapshot(
         "experiment_contract_id": contract.contract_id,
         "evaluator_sha256": contract.evaluator_sha256,
         "harness_sha256": contract.harness_sha256,
-        "task_pack_sha256": contract.task_pack_sha256,
+        "task_layout_sha256": contract.task_layout_sha256,
         "assay_config_sha256": contract.assay_config_sha256,
         "arm": arm,
     }
@@ -366,7 +366,7 @@ def normalize_tau2_results(
         "revision_sha": revision_sha,
         "evaluator_sha256": contract.evaluator_sha256,
         "harness_sha256": contract.harness_sha256,
-        "task_pack_sha256": contract.task_pack_sha256,
+        "task_layout_sha256": contract.task_layout_sha256,
         "assay_config_sha256": contract.assay_config_sha256,
         "raw_artifact_sha256": raw_sha256,
         "execution_status": execution_status,

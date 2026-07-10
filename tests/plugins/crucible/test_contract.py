@@ -7,7 +7,7 @@ from plugins.crucible.contract import (
     ContractError,
     ExperimentContract,
     content_sha256,
-    task_pack_sha256,
+    task_layout_sha256,
     tracked_tree_sha256,
     validate_candidate_diff,
     validate_shards,
@@ -18,12 +18,12 @@ BASELINE_SHA = "1" * 40
 CANDIDATE_SHA = "2" * 40
 EVALUATOR_SHA = "a" * 64
 HARNESS_SHA = "b" * 64
-TASK_PACK_SHA = task_pack_sha256(["retail-1", "retail-2"], 1)
+TASK_LAYOUT_SHA = task_layout_sha256(["retail-1", "retail-2"], 1)
 
 
 def _payload() -> dict[str, object]:
     return {
-        "schema": "crucible.experiment.v1",
+        "schema": "crucible.experiment.v2",
         "name": "retail-write-invariant",
         "stage": "train",
         "champion_ref": "refs/heads/develop",
@@ -31,7 +31,7 @@ def _payload() -> dict[str, object]:
         "candidate_sha": CANDIDATE_SHA,
         "evaluator_sha256": EVALUATOR_SHA,
         "harness_sha256": HARNESS_SHA,
-        "task_pack_sha256": TASK_PACK_SHA,
+        "task_layout_sha256": TASK_LAYOUT_SHA,
         "agent_route": "openai/subscription/gpt-5.5/high",
         "user_route": "tau2-user_simulator-gpt-5.2",
         "task_ids": ["retail-1", "retail-2"],
@@ -77,12 +77,12 @@ def _contract() -> ExperimentContract:
 
 def _shard(contract: ExperimentContract, task_ids: list[str]) -> dict[str, object]:
     return {
-        "schema": "crucible.shard.v1",
+        "schema": "crucible.shard.v2",
         "contract_id": contract.contract_id,
         "revision_sha": contract.candidate_sha,
         "evaluator_sha256": contract.evaluator_sha256,
         "harness_sha256": contract.harness_sha256,
-        "task_pack_sha256": contract.task_pack_sha256,
+        "task_layout_sha256": contract.task_layout_sha256,
         "assay_config_sha256": contract.assay_config_sha256,
         "trials_per_task": contract.trials_per_task,
         "task_ids": task_ids,
@@ -106,6 +106,14 @@ def test_contract_requires_exactly_one_mutation() -> None:
         ExperimentContract.from_mapping(payload)
 
 
+def test_contract_rejects_retired_v1_schema() -> None:
+    payload = _payload()
+    payload["schema"] = "crucible.experiment.v1"
+
+    with pytest.raises(ContractError, match=r"crucible\.experiment\.v2"):
+        ExperimentContract.from_mapping(payload)
+
+
 def test_contract_rejects_non_finite_numbers_and_wrong_task_hash() -> None:
     payload = _payload()
     promotion = deepcopy(payload["promotion"])
@@ -124,7 +132,7 @@ def test_contract_rejects_non_finite_numbers_and_wrong_task_hash() -> None:
         ExperimentContract.from_mapping(payload)
 
     payload = _payload()
-    payload["task_pack_sha256"] = "c" * 64
+    payload["task_layout_sha256"] = "c" * 64
     with pytest.raises(ContractError, match="ordered task_ids and trials_per_task"):
         ExperimentContract.from_mapping(payload)
 
@@ -154,7 +162,7 @@ def test_sealed_test_parent_must_match_candidate_and_be_disjoint() -> None:
     payload = _payload()
     payload["stage"] = "test"
     payload["task_ids"] = ["retail-3"]
-    payload["task_pack_sha256"] = task_pack_sha256(["retail-3"], 1)
+    payload["task_layout_sha256"] = task_layout_sha256(["retail-3"], 1)
     payload["parent_contract_id"] = parent.contract_id
     child = ExperimentContract.from_mapping(payload)
 

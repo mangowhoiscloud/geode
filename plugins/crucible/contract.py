@@ -23,8 +23,8 @@ from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
 from typing import Any, Literal, cast
 
-EXPERIMENT_SCHEMA = "crucible.experiment.v1"
-SHARD_SCHEMA = "crucible.shard.v1"
+EXPERIMENT_SCHEMA = "crucible.experiment.v2"
+SHARD_SCHEMA = "crucible.shard.v2"
 REQUIRED_VETOES = frozenset({"budget", "infra_clean", "safety", "task_coverage"})
 _GIT_SHA_RE = re.compile(r"^[0-9a-f]{40}$")
 _SHA256_RE = re.compile(r"^[0-9a-f]{64}$")
@@ -112,37 +112,6 @@ def _non_negative_float(value: object, field: str) -> float:
     return number
 
 
-def canonical_sha256(payload: Mapping[str, Any]) -> str:
-    """Content hash of a JSON-canonicalised mapping (shared with calibration)."""
-    encoded = json.dumps(payload, ensure_ascii=False, separators=(",", ":"), sort_keys=True)
-    return hashlib.sha256(encoded.encode("utf-8")).hexdigest()
-
-
-def _validated_parameter_derivation(value: object) -> dict[str, Any]:
-    """Validate a ``crucible.parameter-derivation.v1`` block's integrity.
-
-    The block's inputs are content-hashed so a stamped contract number can be
-    traced to the calibration evidence that produced it; a block whose hash
-    does not match its inputs is corrupt or hand-edited.
-    """
-    row = _require_mapping(value, "promotion.parameter_derivation")
-    if row.get("schema") != "crucible.parameter-derivation.v1":
-        raise ContractError(
-            "promotion.parameter_derivation.schema must be 'crucible.parameter-derivation.v1'"
-        )
-    inputs = _require_mapping(row.get("inputs"), "promotion.parameter_derivation.inputs")
-    derived = _require_mapping(row.get("derived"), "promotion.parameter_derivation.derived")
-    stamped_hash = _sha256(
-        row.get("inputs_sha256"),
-        "promotion.parameter_derivation.inputs_sha256",
-    )
-    if canonical_sha256(inputs) != stamped_hash:
-        raise ContractError("promotion.parameter_derivation inputs do not match inputs_sha256")
-    if not derived:
-        raise ContractError("promotion.parameter_derivation.derived is empty")
-    return dict(row)
-
-
 def _probability(value: object, field: str) -> float:
     number = _finite_float(value, field)
     if not 0.5 < number < 1.0:
@@ -207,8 +176,8 @@ def _paths_overlap(left: str, right: str) -> bool:
     )
 
 
-def task_pack_sha256(task_ids: Sequence[str], trials_per_task: int = 1) -> str:
-    """Hash ordered task IDs and trial cardinality as one measurement unit."""
+def task_layout_sha256(task_ids: Sequence[str], trials_per_task: int = 1) -> str:
+    """Hash ordered task IDs and trial cardinality, not task-definition bytes."""
     if trials_per_task <= 0:
         raise ContractError("trials_per_task must be a positive integer")
     encoded = json.dumps(
@@ -422,9 +391,8 @@ class PromotionRule:
     bootstrap lower bound must merely exceed zero at ``confidence_level``
     (existence of an improvement), while ``materiality_pp`` is the economic
     floor on the point estimate — zero is an honest value for train stages.
-    When a ``parameter_derivation`` block is present, its derived values must
-    match the stamped fields; the numbers then trace to hashed calibration
-    inputs instead of being asserted.
+    Pilot selection and power analysis remain external evidence; the contract
+    freezes the chosen rule but does not pretend to validate a fitted model.
     """
 
     method: Literal["paired_bootstrap.v2"]
@@ -434,7 +402,6 @@ class PromotionRule:
     minimum_tasks: int
     confidence_level: float
     bootstrap_samples: int
-    parameter_derivation: Mapping[str, Any] | None = None
 
     @classmethod
     def from_mapping(cls, value: object) -> PromotionRule:
@@ -451,7 +418,6 @@ class PromotionRule:
                 "minimum_tasks",
                 "primary_metric",
             },
-            optional={"parameter_derivation"},
         )
         method = _non_empty_string(row["method"], "promotion.method")
         if method != "paired_bootstrap.v2":
@@ -462,10 +428,7 @@ class PromotionRule:
         )
         if bootstrap_samples < 1_000:
             raise ContractError("promotion.bootstrap_samples must be at least 1000")
-        derivation: dict[str, Any] | None = None
-        if "parameter_derivation" in row:
-            derivation = _validated_parameter_derivation(row["parameter_derivation"])
-        rule = cls(
+        return cls(
             method="paired_bootstrap.v2",
             primary_metric=_non_empty_string(
                 row["primary_metric"],
@@ -485,31 +448,10 @@ class PromotionRule:
                 "promotion.confidence_level",
             ),
             bootstrap_samples=bootstrap_samples,
-            parameter_derivation=derivation,
         )
-        rule._assert_matches_derivation()
-        return rule
-
-    def _assert_matches_derivation(self) -> None:
-        if self.parameter_derivation is None:
-            return
-        derived = self.parameter_derivation["derived"]
-        stamped = {
-            "minimum_tasks": self.minimum_tasks,
-            "confidence_level": self.confidence_level,
-            "materiality_pp": self.materiality_pp,
-        }
-        for key, stamped_value in stamped.items():
-            derived_value = derived.get(key)
-            if derived_value is None or abs(float(derived_value) - float(stamped_value)) > 1e-9:
-                raise ContractError(
-                    f"promotion.{key}={stamped_value} does not match its "
-                    f"parameter_derivation value {derived_value} — a stamped "
-                    "number must equal its derivation"
-                )
 
     def to_dict(self) -> dict[str, Any]:
-        row: dict[str, Any] = {
+        return {
             "method": self.method,
             "primary_metric": self.primary_metric,
             "materiality_pp": self.materiality_pp,
@@ -518,9 +460,6 @@ class PromotionRule:
             "confidence_level": self.confidence_level,
             "bootstrap_samples": self.bootstrap_samples,
         }
-        if self.parameter_derivation is not None:
-            row["parameter_derivation"] = dict(self.parameter_derivation)
-        return row
 
 
 @dataclass(frozen=True)
@@ -534,7 +473,7 @@ class ExperimentContract:
     candidate_sha: str
     evaluator_sha256: str
     harness_sha256: str
-    task_pack_sha256: str
+    task_layout_sha256: str
     agent_route: str
     user_route: str
     task_ids: tuple[str, ...]
@@ -566,7 +505,7 @@ class ExperimentContract:
             "schema",
             "stage",
             "task_ids",
-            "task_pack_sha256",
+            "task_layout_sha256",
             "trials_per_task",
             "user_route",
             "vetoes",
@@ -617,10 +556,13 @@ class ExperimentContract:
 
         task_ids = _string_tuple(row["task_ids"], "task_ids")
         trials_per_task = _positive_int(row["trials_per_task"], "trials_per_task")
-        supplied_task_pack_sha = _sha256(row["task_pack_sha256"], "task_pack_sha256")
-        if supplied_task_pack_sha != task_pack_sha256(task_ids, trials_per_task):
+        supplied_task_layout_sha = _sha256(
+            row["task_layout_sha256"],
+            "task_layout_sha256",
+        )
+        if supplied_task_layout_sha != task_layout_sha256(task_ids, trials_per_task):
             raise ContractError(
-                "task_pack_sha256 does not match the ordered task_ids and trials_per_task"
+                "task_layout_sha256 does not match the ordered task_ids and trials_per_task"
             )
 
         contract = cls(
@@ -631,7 +573,7 @@ class ExperimentContract:
             candidate_sha=candidate_sha,
             evaluator_sha256=_sha256(row["evaluator_sha256"], "evaluator_sha256"),
             harness_sha256=_sha256(row["harness_sha256"], "harness_sha256"),
-            task_pack_sha256=supplied_task_pack_sha,
+            task_layout_sha256=supplied_task_layout_sha,
             agent_route=_non_empty_string(row["agent_route"], "agent_route"),
             user_route=_non_empty_string(row["user_route"], "user_route"),
             task_ids=task_ids,
@@ -647,14 +589,6 @@ class ExperimentContract:
         supplied_id = row.get("contract_id")
         if supplied_id is not None and _sha256(supplied_id, "contract_id") != contract.contract_id:
             raise ContractError("contract_id does not match the canonical contract payload")
-        derivation = contract.promotion.parameter_derivation
-        if derivation is not None:
-            derived_trials = derivation["derived"].get("trials_per_task")
-            if derived_trials is not None and int(derived_trials) != contract.trials_per_task:
-                raise ContractError(
-                    f"trials_per_task={contract.trials_per_task} does not match its "
-                    f"parameter_derivation value {derived_trials}"
-                )
         return contract
 
     def canonical_payload(self) -> dict[str, Any]:
@@ -667,7 +601,7 @@ class ExperimentContract:
             "candidate_sha": self.candidate_sha,
             "evaluator_sha256": self.evaluator_sha256,
             "harness_sha256": self.harness_sha256,
-            "task_pack_sha256": self.task_pack_sha256,
+            "task_layout_sha256": self.task_layout_sha256,
             "agent_route": self.agent_route,
             "user_route": self.user_route,
             "task_ids": list(self.task_ids),
@@ -917,7 +851,7 @@ def validate_shards(
             "revision_sha": revision_sha,
             "evaluator_sha256": contract.evaluator_sha256,
             "harness_sha256": contract.harness_sha256,
-            "task_pack_sha256": contract.task_pack_sha256,
+            "task_layout_sha256": contract.task_layout_sha256,
             "assay_config_sha256": contract.assay_config_sha256,
             "trials_per_task": contract.trials_per_task,
         }

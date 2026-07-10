@@ -18,7 +18,7 @@ from .evidence import (
     validate_evidence_identity,
 )
 
-VERDICT_SCHEMA = "crucible.verdict.v1"
+VERDICT_SCHEMA = "crucible.verdict.v2"
 _COMPUTED_VETOES = frozenset({"budget", "infra_clean", "task_coverage"})
 
 
@@ -73,6 +73,8 @@ class PromotionVerdict:
     vetoes: tuple[tuple[str, bool], ...]
     usage: ResourceUsage
     pair_count: int
+    task_count: int
+    trials_per_task: int
     baseline_mean: float | None = None
     candidate_mean: float | None = None
     paired_improvement: float | None = None
@@ -80,7 +82,9 @@ class PromotionVerdict:
 
     def canonical_payload(self) -> dict[str, Any]:
         metric: dict[str, float | int | None] = {
-            "pairs": self.pair_count,
+            "paired_rows": self.pair_count,
+            "task_units": self.task_count,
+            "trials_per_task": self.trials_per_task,
             "baseline_mean": self.baseline_mean,
             "candidate_mean": self.candidate_mean,
             "paired_improvement": self.paired_improvement,
@@ -138,9 +142,19 @@ class PromotionVerdict:
         metric = value.get("metric")
         if not isinstance(metric, Mapping):
             raise ContractError("verdict.metric must be an object")
-        pairs = metric.get("pairs")
+        pairs = metric.get("paired_rows")
         if isinstance(pairs, bool) or not isinstance(pairs, int) or pairs < 0:
-            raise ContractError("verdict.metric.pairs must be non-negative")
+            raise ContractError("verdict.metric.paired_rows must be non-negative")
+        task_units = metric.get("task_units")
+        if isinstance(task_units, bool) or not isinstance(task_units, int) or task_units < 0:
+            raise ContractError("verdict.metric.task_units must be non-negative")
+        trials_per_task = metric.get("trials_per_task")
+        if (
+            isinstance(trials_per_task, bool)
+            or not isinstance(trials_per_task, int)
+            or trials_per_task <= 0
+        ):
+            raise ContractError("verdict.metric.trials_per_task must be positive")
 
         def optional_float(field: str) -> float | None:
             raw = metric.get(field)
@@ -174,6 +188,8 @@ class PromotionVerdict:
             vetoes=tuple(sorted(vetoes_raw.items())),
             usage=ResourceUsage.from_mapping(value.get("usage")),
             pair_count=pairs,
+            task_count=task_units,
+            trials_per_task=trials_per_task,
             baseline_mean=optional_float("baseline_mean"),
             candidate_mean=optional_float("candidate_mean"),
             paired_improvement=optional_float("paired_improvement"),
@@ -251,6 +267,8 @@ def decide(
             vetoes=tuple(sorted(veto_results.items())),
             usage=usage,
             pair_count=0,
+            task_count=0,
+            trials_per_task=contract.trials_per_task,
         )
 
     baseline_by_pair = {row.pair_id: row for row in baseline.rows}
@@ -296,6 +314,8 @@ def decide(
             vetoes=tuple(sorted(veto_results.items())),
             usage=usage,
             pair_count=len(expected),
+            task_count=0,
+            trials_per_task=contract.trials_per_task,
         )
 
     for veto in custom_vetoes:
@@ -351,43 +371,10 @@ def decide(
         vetoes=tuple(sorted(veto_results.items())),
         usage=usage,
         pair_count=len(expected),
+        task_count=len(contract.task_ids),
+        trials_per_task=contract.trials_per_task,
         baseline_mean=baseline_mean,
         candidate_mean=candidate_mean,
         paired_improvement=paired_improvement,
         improvement_lower_bound=lower_bound,
     )
-
-
-def paired_flip_counts(
-    contract: ExperimentContract,
-    baseline: EvidenceEnvelope,
-    candidate: EvidenceEnvelope,
-) -> tuple[int, int]:
-    """(flips, regressions) over task-level trial means of the primary metric.
-
-    A flip is a task whose candidate mean strictly exceeds its baseline mean;
-    a regression is the reverse. This is the loop-health emit consumed by the
-    class-prior writer and the target hit-rate metric; it renders no verdict.
-    """
-    metric_name = contract.promotion.primary_metric
-    baseline_by_task: dict[str, list[float]] = {task_id: [] for task_id in contract.task_ids}
-    candidate_by_task: dict[str, list[float]] = {task_id: [] for task_id in contract.task_ids}
-    for envelope, bucket in ((baseline, baseline_by_task), (candidate, candidate_by_task)):
-        for row in envelope.rows:
-            value = row.metric(metric_name)
-            if value is not None and row.task_id in bucket:
-                bucket[row.task_id].append(value)
-    flips = 0
-    regressions = 0
-    for task_id in contract.task_ids:
-        baseline_values = baseline_by_task[task_id]
-        candidate_values = candidate_by_task[task_id]
-        if not baseline_values or not candidate_values:
-            continue
-        baseline_mean = _mean(baseline_values)
-        candidate_mean = _mean(candidate_values)
-        if candidate_mean > baseline_mean:
-            flips += 1
-        elif candidate_mean < baseline_mean:
-            regressions += 1
-    return flips, regressions

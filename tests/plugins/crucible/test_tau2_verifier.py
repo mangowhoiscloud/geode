@@ -3,7 +3,7 @@ import json
 from pathlib import Path
 
 import pytest
-from plugins.crucible.contract import ContractError, ExperimentContract, task_pack_sha256
+from plugins.crucible.contract import ContractError, ExperimentContract, task_layout_sha256
 from plugins.crucible.evidence import ResourceUsage
 from plugins.crucible.verifiers.tau2 import TAU2_ADAPTER, normalize_tau2_results
 
@@ -50,7 +50,7 @@ def _contract() -> ExperimentContract:
     task_ids = ["1", "2"]
     return ExperimentContract.from_mapping(
         {
-            "schema": "crucible.experiment.v1",
+            "schema": "crucible.experiment.v2",
             "name": "tau2-retail",
             "stage": "train",
             "champion_ref": "refs/heads/develop",
@@ -58,7 +58,7 @@ def _contract() -> ExperimentContract:
             "candidate_sha": "2" * 40,
             "evaluator_sha256": "a" * 64,
             "harness_sha256": "b" * 64,
-            "task_pack_sha256": task_pack_sha256(task_ids, 1),
+            "task_layout_sha256": task_layout_sha256(task_ids, 1),
             "agent_route": "openai-subscription-gpt-5.5-high",
             "user_route": "tau2-user_simulator-gpt-5.2",
             "task_ids": task_ids,
@@ -136,13 +136,13 @@ def _write_artifacts(
     raw_sha = hashlib.sha256(results.read_bytes()).hexdigest()
     snapshot = tmp_path / "snapshot.json"
     payload: dict[str, object] = {
-        "schema": "crucible_tau2_trajectory_snapshot.v1",
+        "schema": "crucible_tau2_trajectory_snapshot.v2",
         "experiment_contract_id": contract.contract_id,
         "baseline_sha": contract.baseline_sha,
         "candidate_sha": contract.candidate_sha,
         "evaluator_sha256": contract.evaluator_sha256,
         "harness_sha256": contract.harness_sha256,
-        "task_pack_sha256": contract.task_pack_sha256,
+        "task_layout_sha256": contract.task_layout_sha256,
         "assay_config_sha256": contract.assay_config_sha256,
         "assay_config": contract.assay_config,
         "arm": "candidate",

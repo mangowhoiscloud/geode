@@ -45,6 +45,41 @@ functional change.
 
 ---
 
+## [Unreleased]
+
+### Changed
+
+- **Crucible measurement checkout is now the executable boundary.** Candidate
+  generation still runs in a no-remote disposable repository, but the command
+  evaluator now runs only in the fresh checkout rematerialized from authority
+  objects. Proposal request v3 no longer exposes a checkout path, preventing an
+  evaluator from accidentally following producer-local ignored files or Git
+  metadata. Evaluation and failure feedback v3 expose only closed failure codes
+  and frozen train task IDs to the next producer, reject free-text oracle
+  channels, and forward no evaluator signal from INVALID evidence. Experiment
+  contracts, evidence envelopes, and verdicts v2 mark the incompatible cleanup,
+  rename the ID/trial digest to `task_layout_sha256`, and distinguish paired
+  rows from independent task units. Actual task bytes remain bound by the clean
+  harness tree hash.
+- **Tau2 tool projection follows upstream metadata.** The GEODE participant
+  reads tau2's decorated mutability marker instead of inferring side effects
+  from tool-name prefixes, and preserves explicitly supplied empty arguments
+  without address-tool special cases.
+
+### Removed
+
+- **Withdrawn unvalidated adaptive calibration and class-prior folding.** The
+  Monte Carlo scaffold recorded noise and regression priors that did not affect
+  its design, omitted its search space from provenance, and could accept a
+  derivation from a different contract pack. The campaign writer also treated
+  correlated score flips as independent causal fixes and could fold the same
+  campaign repeatedly or into an unrelated mutation class. Promotion v2 keeps
+  its frozen confidence/materiality rule, while parameter choice returns to
+  explicit external pilot evidence until a validated estimator and idempotent
+  evidence binding exist.
+
+---
+
 ## [0.99.297] - 2026-07-11
 
 ### Changed
@@ -53,9 +88,6 @@ functional change.
   the KO register (`defaultLocale="ko"`, matching the site-wide
   `<html lang="ko">`); the full KO copy deck was already wired through
   `t(locale, ko, en)` pairs, and English stays one toggle away.
-
----
-
 ## [0.99.296] - 2026-07-11
 
 ### Changed
@@ -172,7 +204,7 @@ functional change.
   `ScrollReveal`).
 
 ---
-=======
+
 ## [0.99.290] - 2026-07-10
 
 ### Added

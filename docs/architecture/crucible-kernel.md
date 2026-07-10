@@ -24,7 +24,7 @@ The supervisor is independent from `core/self_improving`; neither package
 imports the other. Existing or future optimizers may participate only by
 implementing the producer file protocol. Git and the artifact store retain
 candidate history. A result row belongs to exactly one candidate commit,
-evaluator hash, harness hash, and task-pack hash. Sealed test and repository
+evaluator hash, harness hash, and task-layout hash. Sealed test and repository
 promotion remain outside the adaptive train loop.
 
 ## Lineage and technical foundations
@@ -64,7 +64,7 @@ The technical roots impose concrete boundaries:
 |---|---|---|
 | [Hoare logic](https://dl.acm.org/doi/10.1145/363235.363259) and executable test oracles | correctness is expressed as preconditions, postconditions, and invariants | scalar reward never substitutes for safety, coverage, or state vetoes |
 | [QuickCheck](https://doi.org/10.1145/351240.351266), metamorphic and differential testing | examples are supplemented by generated properties and cross-checks | verifier fixtures must include known-good, known-bad, and perturbation cases |
-| [Bazel hermeticity](https://bazel.build/concepts/hermeticity) and [SLSA provenance](https://slsa.dev/spec/v1.2/provenance) | inputs and build/execution identity are content-addressed | revision, harness, evaluator, resolved assay config, raw artifact, and task pack are frozen together |
+| [Bazel hermeticity](https://bazel.build/concepts/hermeticity) and [SLSA provenance](https://slsa.dev/spec/v1.2/provenance) | inputs and build/execution identity are content-addressed | revision, harness including task bytes, evaluator, resolved assay config, raw artifact, and task layout are frozen together |
 | paired randomized blocks and [adaptive holdout](https://pubmed.ncbi.nlm.nih.gov/26250683/) | compare both arms on the same units; exposed tests become training data | task/trial pairs are atomic, and opened sealed rows are never reused as held-out evidence |
 | [Gym](https://arxiv.org/abs/1606.01540) and [PettingZoo](https://papers.neurips.cc/paper_files/paper/2021/hash/803f7c4c3ff61b71be53a0c803bfb57f-Abstract.html) | agent, environment, actor order, termination, and truncation are explicit | infrastructure failure is not converted into task failure, and user/environment runtimes are evaluator-owned |
 | CEGIS and [autoresearch](https://github.com/karpathy/autoresearch) | one mutation is tested, failures become counterexamples, git retains the ratchet | one candidate commit and one frozen rule produce KEEP, REJECT, or INVALID |
@@ -158,7 +158,7 @@ The contract fixes:
 
 - a full champion ref plus baseline and candidate git SHAs; preflight requires
   the ref to resolve to the declared baseline;
-- evaluator, harness, and task-pack SHA-256 values;
+- evaluator and harness content SHA-256 values plus a task-layout SHA-256;
 - agent and user routes;
 - ordered task IDs and trials per task;
 - a canonical resolved assay configuration covering environment, actor,
@@ -171,13 +171,16 @@ The contract fixes:
 - required vetoes;
 - for sealed test, the parent train contract ID.
 
-The preflight computes the task-pack hash from the ordered IDs; hashes actual
-evaluator and external-harness paths, bytes, executable modes, and symlink
-targets; verifies the clean checkout SHA; and inspects the baseline-to-candidate
-diff. The diff must touch the declared mutation surface, cannot touch frozen
-evaluator paths or other production surfaces, and must stay inside the
-changed-line cap. A test contract must name a matching train parent and use a
-disjoint task pack.
+The preflight computes the task-layout hash from the ordered IDs and trial
+cardinality. It is intentionally not called a content hash. Actual task,
+policy, environment, and verifier bytes must live inside the clean external
+harness tree, whose tracked content is hashed separately. Loading assay data
+from outside that tree is not a valid integration. Preflight also hashes actual
+evaluator paths, verifies the clean checkout SHA, and inspects the
+baseline-to-candidate diff. The diff must touch the declared mutation surface,
+cannot touch frozen evaluator paths or other production surfaces, and must stay
+inside the changed-line cap. A test contract must name a matching train parent
+and use a disjoint task pack.
 
 For tau2 runs, the declared evaluator bundle must cover both the GEODE tau2
 adapter and the contract validator. The external harness checkout must also be
@@ -230,7 +233,7 @@ lineage, and exact shard identity. Contract-backed tau2 runs additionally:
   run or route failures are preserved as `invalid`, never `complete`.
 
 `plugins.crucible.evidence` defines an immutable normalized envelope for one
-arm. It binds contract, revision, evaluator, harness, assay config, task pack,
+arm. It binds contract, revision, evaluator, harness, assay config, task layout,
 and raw bytes; records task/trial metrics, independent checks, termination and
 infrastructure status; and carries whole-arm resource totals. The tau2 adapter
 validates the pinned upstream result schema without importing the harness.
@@ -245,7 +248,9 @@ bound over task-level trial means, and keeps only when the lower bound
 exceeds zero at the contract's confidence level, the point improvement
 reaches the economic `materiality_pp` floor, and the candidate clears the
 absolute floor; it aggregates both arms' wall/call/token/cash usage and
-applies non-exchangeable checks. The v1 rule, which required the lower bound
+applies non-exchangeable checks. Verdict v2 records paired rows, task units,
+and trials per task separately so repeated trials are not mistaken for
+independent bootstrap units. The v1 rule, which required the lower bound
 itself to clear the improvement threshold, was retired after a power
 self-audit showed it demanded a 10-30pp effect at documented pack scales. A train-stage `KEEP` only
 advances a campaign search head and has `promotion_authority=none`. Test-stage
@@ -256,31 +261,30 @@ one-shot committed test-pack protocol are implemented.
 train plan and creates a disposable, no-remote Git checkout from its private
 search ref. The producer can commit inside that checkout but cannot see the
 authority repository's refs. The supervisor imports the resulting commit only
-after structural preflight, constructs the contract itself, and verifies the
-actual diff plus evaluator and harness bytes. The evaluator returns paired
-evidence and raw artifacts; the supervisor verifies their digests and invokes
-the pure scorer locally. Only an admissible train `KEEP` advances
+after validating its proposal identity and declared surface. It then validates
+the imported parentage against authority objects, does not reuse any
+producer-local Git metadata or ignored files, and creates a second fresh
+checkout from authority objects for diff preflight and measurement. The frozen
+evaluator runs with that second checkout as its process directory. It returns
+paired evidence and raw artifacts; the supervisor verifies their digests and
+invokes the pure scorer locally. Only an admissible train `KEEP` advances
 `refs/crucible/search/<campaign>` with compare-and-swap. The active repository
 branch is never moved. Each contract names a separate immutable
 `refs/crucible/baselines/<campaign>/<attempt>` ref, so later search-head
 advances do not invalidate historical preflight.
 
-### Derived parameters, not magic numbers
+### Frozen rules, external calibration
 
-`plugins.crucible.calibration` derives every gate number a train plan stamps.
-A `NoiseModel` is fitted from a null paired run or per-task trial counts; a
-`MutationClassPrior` (Beta posteriors on fix and regression rates) is fitted
-from replay-screening counts and pinned to the task-pack hash it was measured
-against — deriving against a different pack fails loudly. A `CostModel`
-carries the only operator judgements: the downstream cost of a false train
-KEEP, the retry cost, a quota-window conversation ceiling, and the economic
-`materiality_pp`. A Monte Carlo search over (pack size, trials) minimises
-expected cost per true KEEP and emits a `crucible.parameter-derivation.v1`
-block whose inputs are content-hashed; `PromotionRule` refuses a contract
-whose stamped numbers do not equal their derivation. The power self-test
-(`tests/plugins/crucible/test_promotion_power.py`) replays synthetic effects
-through the real `decide()` so a gate that cannot open — or cannot stay shut —
-fails in CI rather than in a campaign.
+The train plan preregisters pack size, trials, confidence, materiality, quality
+floor, and budget. Crucible validates and freezes those choices; it does not
+claim to derive them from a fitted model. The first calibration scaffold was
+removed because its declared noise and regression priors did not affect the
+search, its synthetic constants confirmed their own assumptions, and adaptive
+repeated tasks could not be treated as independent posterior observations.
+Parameter selection therefore remains explicit pilot evidence outside the
+adaptive loop until a versioned calibration dataset and validated estimator
+exist. This is less automatic, but it keeps unsupported statistical authority
+out of the promotion contract.
 
 The packaged operational surface is:
 
@@ -301,7 +305,7 @@ The independent train loop is started from one JSON configuration:
 
 ```json
 {
-  "schema": "crucible.supervisor.v2",
+  "schema": "crucible.supervisor.v3",
   "campaign_id": "verify-claims-01",
   "initial_search_head_sha": "<40-char-sha>",
   "repository": ".",
@@ -313,11 +317,11 @@ The independent train loop is started from one JSON configuration:
   "producer_environment": ["OPENAI_API_KEY"],
   "evaluator_environment": ["OPENAI_API_KEY", "ANTHROPIC_API_KEY"],
   "train_plan": {
-    "schema": "crucible.train-plan.v1",
+    "schema": "crucible.train-plan.v2",
     "name": "verify-claims-train",
     "evaluator_sha256": "<sha256>",
     "harness_sha256": "<sha256>",
-    "task_pack_sha256": "<sha256>",
+    "task_layout_sha256": "<sha256>",
     "agent_route": "<route>",
     "user_route": "<route>",
     "task_ids": ["<train-task-id>"],
@@ -331,8 +335,7 @@ The independent train loop is started from one JSON configuration:
       "minimum_candidate_mean": 0.3,
       "minimum_tasks": 20,
       "confidence_level": 0.885,
-      "bootstrap_samples": 10000,
-      "parameter_derivation": {"schema": "crucible.parameter-derivation.v1", "...": "emitted by plugins.crucible.calibration"}
+      "bootstrap_samples": 10000
     },
     "budget": {
       "max_wall_seconds": 1800,
@@ -358,9 +361,10 @@ The independent train loop is started from one JSON configuration:
 uv run python -m plugins.crucible loop supervisor.json
 ```
 
-The request contains the supervisor-created disposable checkout, current search
-SHA, allowed surface, previous compact feedback, and remaining campaign budget. The
-producer receives only `CRUCIBLE_PROPOSAL_REQUEST` and
+The producer process starts in the supervisor-created disposable checkout. Its
+request contains the current search SHA, allowed surface, previous compact
+feedback, and remaining campaign budget, but no artifact-store or checkout
+path. The producer receives only `CRUCIBLE_PROPOSAL_REQUEST` and
 `CRUCIBLE_CANDIDATE_OUTPUT`; it never chooses the task pack, evaluator,
 promotion rule, contract, or campaign budget. The trusted evaluator receives
 the canonical candidate and supervisor-written contract through
@@ -392,7 +396,7 @@ artifacts:
 
 ```json
 {
-  "schema": "crucible.train-evaluation.v2",
+  "schema": "crucible.train-evaluation.v3",
   "attempt_id": "<request attempt>",
   "request_id": "<request hash>",
   "proposal_id": "<proposal hash>",
@@ -401,30 +405,31 @@ artifacts:
   "baseline_raw": "baseline.results.json",
   "candidate_raw": "candidate.results.json",
   "feedback": {
-    "schema": "crucible.failure-feedback.v2",
-    "summary": "bounded train failure summary",
-    "failure_classes": ["tool_contract"],
-    "failed_task_ids": ["task-42"],
-    "trajectory_excerpts": ["candidate-authored turn text, oracle-scrubbed"]
+    "schema": "crucible.failure-feedback.v3",
+    "failure_codes": ["tool_contract"],
+    "failed_task_ids": ["task-42"]
   }
 }
 ```
 
-The raw-file digests must match both evidence envelopes. Oracle content —
-gold actions, expected values, task payloads, and sealed rows — is never
-forwarded to the next producer. The candidate's own observations are: the
-bounded feedback schema may carry failed task IDs and excerpts of text the
-candidate itself emitted (scrubbing is the evaluator's contractual duty),
-alongside mechanical verdict reasons and paired flip counts. Watching one's
-own behaviour is a learning signal, not contamination.
+The raw-file digests must match both evidence envelopes. Oracle content — gold
+actions, expected values, task payloads, sealed rows, and free-form trajectory
+excerpts — is never forwarded to the next producer. The bounded feedback may
+name only task IDs from the frozen train contract plus one of the closed,
+domain-neutral failure codes. It has no free-text field. INVALID evidence
+forwards neither task IDs nor evaluator failure codes. Parser and preflight
+details stay in operator-only `error.json`; the producer receives only the
+closed `invalid_attempt` reason, so rejected evaluator text cannot be reflected
+through an error message.
 
 Each fresh campaign directory contains `config.json`, an atomically replaced
 `state.json`, append-only `ledger.jsonl`, immutable per-attempt artifacts, and
 one `summary.json`. The private search-ref compare-and-swap is the `KEEP` commit
-point; `ledger.jsonl` and `state.json` are reconstructable observations of that
-Git state. Candidate commits are pinned under private refs after their
+point; `ledger.jsonl` and `state.json` are secondary observations of that Git
+state. Candidate commits are pinned under private refs after their
 disposable checkouts are removed. Existing campaign directories are never
-resumed or overwritten in this first implementation.
+resumed or overwritten in this first implementation, so automatic
+reconciliation after a post-CAS crash remains an explicit gap.
 
 Producer and evaluator environments are allowlisted and receive isolated
 `HOME`, temporary, and `GEODE_STATE_ROOT` directories. Adaptive/held-out/test
@@ -442,9 +447,12 @@ The remaining executable gap is **in-run** aggregate budget cancellation. The
 scorer and supervisor reject an overrun after finalized evidence, but the
 runner does not yet interrupt both arms the instant the whole-experiment
 call/token/cash budget is crossed. A crashed evaluator can also fail before it
-emits final usage. Resource and independent safety manifests remain explicit
-adapter inputs rather than inferred from tau2 reward. No live provider run or
-current core promotion is implied by this implementation.
+emits final usage. Calls, tokens, and cash are attestations from the configured
+producer/evaluator wrappers, not OS-level meters; an untrusted wrapper can
+under-report them. Resource and independent safety manifests therefore remain
+explicit trusted-adapter inputs rather than values inferred from tau2 reward.
+No live provider run or current core promotion is implied by this
+implementation.
 
 ## Operating loop
 
@@ -452,12 +460,14 @@ current core promotion is implied by this implementation.
 2. Choose one causal failure signature and one mutation surface.
 3. Make the smallest change that could alter that signature.
 4. Commit the candidate. Do not measure a dirty worktree.
-5. Freeze `experiment.json`, including the evaluator and task-pack hashes and
-   the entire experiment budget.
+5. Freeze `experiment.json`, including evaluator/harness content hashes, task
+   layout, and the entire experiment budget.
 6. Run baseline and candidate on the same task order. Interleave paired rows
    when the harness supports it.
-7. Stop during execution on budget exhaustion, infrastructure contamination,
-   or sequential futility. `max_steps` is a task failure, not a row to drop.
+7. The current runner enforces its wall timeout and rejects finalized evidence
+   that exceeds the frozen aggregate budget. In-run call/token/cash cancellation
+   and sequential-futility stopping remain execution-substrate work.
+   `max_steps` is a task failure, not a row to drop.
 8. Normalize both raw artifacts into immutable evidence envelopes. Identity,
    coverage, or infrastructure defects produce INVALID and no performance
    comparison.
@@ -482,7 +492,7 @@ current core promotion is implied by this implementation.
   policy. Retry after semantic failure is a new candidate and a new contract.
 - Contract-backed shards use fresh run IDs. Resume remains disabled until a
   checkpoint sidecar can prove the same contract, revision, evaluator, harness,
-  and task-pack hashes before loading any row.
+  and task-layout hashes before loading any row.
 - Historical candidates live in git, not in CLI choices such as v1 through
   v72.
 
@@ -490,6 +500,46 @@ current core promotion is implied by this implementation.
 
 The existing telecom v1-v72 and retail rows 0-112 have been exposed during
 candidate development. They are train/counterexample evidence only.
+
+A filesystem audit on 2026-07-10 found 79 legacy trajectory metadata snapshots,
+79 copied trajectories, and one cost preregistration under
+`artifacts/eval/runs/crucible`. The snapshots point to 106 tau2 simulation rows:
+46 ended with reward 1, 54 hit `max_steps` with reward 0, and 6 ended in
+infrastructure error. Sixty-seven rows repeat one telecom task. Only six rows
+are labelled baseline; the remaining 100 are candidate diagnostics spread over
+multiple stages and runtime variants.
+
+Including the v9 worktree archive and temporary copies, the audit covered
+1,638 physical files with 1,283 unique SHA-256 contents. The root durable set
+is a subset of the v9 archive, and the v9 temporary set is wholly duplicated;
+temporary files add scratch evidence, not another independent population. All
+302 parseable tau2 raw results remain diagnostic: 225 have exact declared
+task/trial coverage, numeric rewards, and no infrastructure termination, but
+none is bound to a current contract/evidence/verdict chain. Of 626 legacy gate
+JSONs, none carries the current identity chain; all 15 G7 verdicts explicitly
+allow at most a scoped harness surface while blocking core promotion.
+
+Those artifacts preserve useful failure traces, and all referenced raw result
+and copied trajectory files were present at audit time. They are not Crucible
+promotion evidence:
+
+- no experiment contract, normalized evidence envelope, verdict, campaign
+  ledger, loop summary, or `refs/crucible/*` authority exists beside them; zero
+  historical JSON files load as a current contract, evidence envelope, or
+  verdict;
+- the legacy snapshot schema records no candidate revision, evaluator hash,
+  harness hash, task-layout hash, raw-artifact hash, finalization status, usage,
+  or contract ID;
+- the rows span three repository commits and were not measured as one frozen
+  paired baseline/candidate population;
+- the cost preregistration explicitly has no promotion authority and references
+  a task-pack path that is no longer present.
+
+The raw tau2 files also contain task payloads and evaluation criteria. They are
+operator-only incident evidence and must never be copied into producer
+feedback. A future run must create v2 contracts and verdicts plus v3 evaluation
+feedback from a fresh campaign; the older artifacts are not migrated or
+rescored into that protocol.
 
 The strongest honest claims are:
 

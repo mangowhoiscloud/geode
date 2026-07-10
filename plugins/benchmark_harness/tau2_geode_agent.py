@@ -237,19 +237,11 @@ def _message_to_prompt(message: Any, *, recipient: str) -> str:
     return f"Message to {recipient} from {role}: [empty]"
 
 
-def _tool_mutates_state(tool_name: str) -> bool:
-    non_mutating_prefixes = (
-        "get_",
-        "list_",
-        "search_",
-        "find_",
-        "lookup_",
-        "read_",
-        "check_",
-        "validate_",
-    )
-    non_mutating_exact = {"transfer_to_human_agents"}
-    return not (tool_name in non_mutating_exact or tool_name.startswith(non_mutating_prefixes))
+def _tool_mutates_state(tool: Any) -> bool:
+    """Read tau2's decorated mutability marker; unknown tools fail safe."""
+
+    marker = getattr(getattr(tool, "_func", None), "__mutates_state__", None)
+    return marker if isinstance(marker, bool) else True
 
 
 def _agent_system_prompt(
@@ -312,7 +304,7 @@ def _build_loop(
     tool_registry = ToolRegistry()
     handlers: dict[str, Any] = {}
     for tau2_tool in tools or []:
-        wrapped = Tau2GeodeTool(tau2_tool, mutates_state=_tool_mutates_state(str(tau2_tool.name)))
+        wrapped = Tau2GeodeTool(tau2_tool, mutates_state=_tool_mutates_state(tau2_tool))
         tool_registry.register(wrapped)
         handlers[wrapped.name] = wrapped.aexecute
 
@@ -364,14 +356,7 @@ def _tau2_tool_calls(result: Any, *, requestor: str) -> list[Any]:
         tool_input = entry.get("input")
         if not tool_name or not isinstance(tool_input, dict):
             continue
-        projected_args = {
-            key: value for key, value in tool_input.items() if value is not None and value != ""
-        }
-        if (
-            tool_name in {"modify_pending_order_address", "modify_user_address"}
-            and "address2" not in projected_args
-        ):
-            projected_args["address2"] = ""
+        projected_args = {key: value for key, value in tool_input.items() if value is not None}
         calls.append(
             ToolCall(
                 id=str(entry.get("tool_use_id") or f"geode_{requestor}_{idx}"),
@@ -579,7 +564,7 @@ def _write_trajectory_snapshot(
     shutil.copy2(results_path, trajectory_path)
     raw_artifact_sha256 = hashlib.sha256(trajectory_path.read_bytes()).hexdigest()
     snapshot = {
-        "schema": "crucible_tau2_trajectory_snapshot.v1",
+        "schema": "crucible_tau2_trajectory_snapshot.v2",
         "filename_convention": {
             "run_id": (
                 "crucible-tau2-<stage>-<domain>-<arm>-"
@@ -1135,7 +1120,7 @@ def main() -> int:
                 "candidate_sha": experiment_contract.candidate_sha,
                 "evaluator_sha256": experiment_contract.evaluator_sha256,
                 "harness_sha256": experiment_contract.harness_sha256,
-                "task_pack_sha256": experiment_contract.task_pack_sha256,
+                "task_layout_sha256": experiment_contract.task_layout_sha256,
                 "assay_config_sha256": experiment_contract.assay_config_sha256,
                 "contract_validation": "identity_preflight",
                 "promotion_authority": "none",

@@ -4,7 +4,7 @@ from pathlib import Path
 
 import pytest
 from plugins.crucible.cli import main as crucible_main
-from plugins.crucible.contract import ContractError, ExperimentContract, task_pack_sha256
+from plugins.crucible.contract import ContractError, ExperimentContract, task_layout_sha256
 from plugins.crucible.evidence import EvidenceEnvelope
 from plugins.crucible.promotion import PromotionVerdict, decide
 
@@ -15,7 +15,7 @@ CANDIDATE_SHA = "2" * 40
 def _contract_payload(*, stage: str = "train") -> dict[str, object]:
     task_ids = ["task-1", "task-2", "task-3", "task-4"]
     payload: dict[str, object] = {
-        "schema": "crucible.experiment.v1",
+        "schema": "crucible.experiment.v2",
         "name": "paired-core-promotion",
         "stage": stage,
         "champion_ref": "refs/heads/develop",
@@ -23,7 +23,7 @@ def _contract_payload(*, stage: str = "train") -> dict[str, object]:
         "candidate_sha": CANDIDATE_SHA,
         "evaluator_sha256": "a" * 64,
         "harness_sha256": "b" * 64,
-        "task_pack_sha256": task_pack_sha256(task_ids, 1),
+        "task_layout_sha256": task_layout_sha256(task_ids, 1),
         "agent_route": "candidate-agent-route",
         "user_route": "tau2-user_simulator-fixed-user",
         "task_ids": task_ids,
@@ -95,13 +95,13 @@ def _evidence(
     if omit_last:
         rows.pop()
     payload: dict[str, object] = {
-        "schema": "crucible.evidence.v1",
+        "schema": "crucible.evidence.v2",
         "contract_id": contract.contract_id,
         "arm": arm,
         "revision_sha": revision,
         "evaluator_sha256": contract.evaluator_sha256,
         "harness_sha256": contract.harness_sha256,
-        "task_pack_sha256": contract.task_pack_sha256,
+        "task_layout_sha256": contract.task_layout_sha256,
         "assay_config_sha256": contract.assay_config_sha256,
         "raw_artifact_sha256": ("c" if arm == "baseline" else "d") * 64,
         "execution_status": execution_status,
@@ -249,7 +249,7 @@ def test_bootstrap_is_task_clustered_and_independent_of_candidate_identity() -> 
     payload["trials_per_task"] = 2
     task_ids = payload["task_ids"]
     assert isinstance(task_ids, list) and all(isinstance(item, str) for item in task_ids)
-    payload["task_pack_sha256"] = task_pack_sha256(task_ids, 2)
+    payload["task_layout_sha256"] = task_layout_sha256(task_ids, 2)
     first = ExperimentContract.from_mapping(payload)
     second_payload = deepcopy(payload)
     second_payload["candidate_sha"] = "3" * 40
@@ -269,6 +269,8 @@ def test_bootstrap_is_task_clustered_and_independent_of_candidate_identity() -> 
     )
 
     assert first_verdict.pair_count == 8
+    assert first_verdict.task_count == 4
+    assert first_verdict.trials_per_task == 2
     assert first_verdict.improvement_lower_bound == second_verdict.improvement_lower_bound
 
 

@@ -5,6 +5,7 @@ import shutil
 import subprocess
 import sys
 import textwrap
+from collections.abc import Mapping
 from dataclasses import replace
 from pathlib import Path
 from typing import Literal
@@ -16,7 +17,7 @@ from plugins.crucible.contract import (
     Mutation,
     content_sha256,
     load_contract,
-    task_pack_sha256,
+    task_layout_sha256,
     tracked_tree_sha256,
 )
 from plugins.crucible.evidence import EvidenceEnvelope, ResourceUsage
@@ -44,6 +45,9 @@ EVALUATOR_SCRIPT = "#!/usr/bin/env python3\n" + textwrap.dedent(
     request = json.loads(Path(os.environ["CRUCIBLE_PROPOSAL_REQUEST"]).read_text())
     candidate = json.loads(Path(os.environ["CRUCIBLE_CANDIDATE"]).read_text())
     contract = json.loads(Path(os.environ["CRUCIBLE_CONTRACT"]).read_text())
+    assert "worktree" not in request
+    assert not (Path.cwd() / ".venv").exists()
+    assert (Path.cwd() / "surface.txt").read_text() == "candidate\\n"
 
     def evidence(arm, reward, raw_hash):
         revision = contract[f"{arm}_sha"]
@@ -54,13 +58,13 @@ EVALUATOR_SCRIPT = "#!/usr/bin/env python3\n" + textwrap.dedent(
             sort_keys=True,
         ).encode()
         return {
-            "schema": "crucible.evidence.v1",
+            "schema": "crucible.evidence.v2",
             "contract_id": contract["contract_id"],
             "arm": arm,
             "revision_sha": revision,
             "evaluator_sha256": contract["evaluator_sha256"],
             "harness_sha256": contract["harness_sha256"],
-            "task_pack_sha256": contract["task_pack_sha256"],
+            "task_layout_sha256": contract["task_layout_sha256"],
             "assay_config_sha256": hashlib.sha256(assay_config).hexdigest(),
             "raw_artifact_sha256": raw_hash,
             "execution_status": "complete",
@@ -95,7 +99,7 @@ EVALUATOR_SCRIPT = "#!/usr/bin/env python3\n" + textwrap.dedent(
     baseline_path.write_text(json.dumps(evidence("baseline", 0.2, baseline_raw_hash)))
     candidate_path.write_text(json.dumps(evidence("candidate", 0.9, candidate_raw_hash)))
     payload = {
-        "schema": "crucible.train-evaluation.v2",
+        "schema": "crucible.train-evaluation.v3",
         "attempt_id": request["attempt_id"],
         "request_id": request["request_id"],
         "proposal_id": candidate["proposal_id"],
@@ -104,9 +108,8 @@ EVALUATOR_SCRIPT = "#!/usr/bin/env python3\n" + textwrap.dedent(
         "baseline_raw": baseline_raw_path.name,
         "candidate_raw": candidate_raw_path.name,
         "feedback": {
-            "schema": "crucible.failure-feedback.v2",
-            "summary": "fixture complete",
-            "failure_classes": [],
+            "schema": "crucible.failure-feedback.v3",
+            "failure_codes": [],
         },
     }
     output.write_text(json.dumps(payload))
@@ -146,11 +149,11 @@ def _train_plan(repo: Path, harness: Path) -> TrainPlan:
     task_ids = ["task-1", "task-2", "task-3", "task-4"]
     return TrainPlan.from_mapping(
         {
-            "schema": "crucible.train-plan.v1",
+            "schema": "crucible.train-plan.v2",
             "name": "supervisor-fixture",
             "evaluator_sha256": content_sha256(repo, ["evaluator.py"]),
             "harness_sha256": tracked_tree_sha256(harness),
-            "task_pack_sha256": task_pack_sha256(task_ids),
+            "task_layout_sha256": task_layout_sha256(task_ids),
             "agent_route": "fixture-agent",
             "user_route": "fixture-user",
             "task_ids": task_ids,
@@ -234,10 +237,12 @@ class _Producer:
         self.extra_path = extra_path
         self.calls = calls
         self.worktree_roots: list[Path] = []
+        self.feedbacks: list[Mapping[str, object] | None] = []
 
     def propose(self, request: ProposalRequest, *, timeout: float) -> CandidateProposal:
         assert timeout > 0
         assert _git(request.worktree, "remote") == ""
+        self.feedbacks.append(request.feedback)
         self.worktree_roots.append(request.worktree.parent)
         surface = request.worktree / "surface.txt"
         surface.write_text(f"candidate {request.iteration}\n", encoding="utf-8")
@@ -262,9 +267,18 @@ class _Producer:
 
 
 class _Evaluator:
-    def __init__(self, verdicts: list[VerdictName], *, calls_per_arm: int = 1) -> None:
+    def __init__(
+        self,
+        verdicts: list[VerdictName],
+        *,
+        calls_per_arm: int = 1,
+        dirty_after_response: bool = False,
+        feedback_code: str = "quality",
+    ) -> None:
         self.verdicts = verdicts
         self.calls_per_arm = calls_per_arm
+        self.dirty_after_response = dirty_after_response
+        self.feedback_code = feedback_code
         self.calls = 0
 
     def _evidence(
@@ -278,13 +292,13 @@ class _Evaluator:
     ) -> EvidenceEnvelope:
         revision = contract.baseline_sha if arm == "baseline" else contract.candidate_sha
         payload: dict[str, object] = {
-            "schema": "crucible.evidence.v1",
+            "schema": "crucible.evidence.v2",
             "contract_id": contract.contract_id,
             "arm": arm,
             "revision_sha": revision,
             "evaluator_sha256": contract.evaluator_sha256,
             "harness_sha256": contract.harness_sha256,
-            "task_pack_sha256": contract.task_pack_sha256,
+            "task_layout_sha256": contract.task_layout_sha256,
             "assay_config_sha256": contract.assay_config_sha256,
             "raw_artifact_sha256": raw_hash,
             "execution_status": "invalid" if invalid else "complete",
@@ -358,7 +372,7 @@ class _Evaluator:
         response.write_text(
             json.dumps(
                 {
-                    "schema": "crucible.train-evaluation.v2",
+                    "schema": "crucible.train-evaluation.v3",
                     "attempt_id": request.attempt_id,
                     "request_id": request.request_id,
                     "proposal_id": proposal.proposal_id,
@@ -367,13 +381,14 @@ class _Evaluator:
                     "baseline_raw": baseline_raw.name,
                     "candidate_raw": candidate_raw.name,
                     "feedback": FailureFeedback(
-                        summary=f"fixture {verdict.lower()}",
-                        failure_classes=(verdict.lower(),),
+                        failure_codes=(self.feedback_code,),
                     ).to_dict(),
                 }
             ),
             encoding="utf-8",
         )
+        if self.dirty_after_response:
+            (checkout / "evaluator-residue.txt").write_text("dirty\n", encoding="utf-8")
         return response
 
 
@@ -446,6 +461,42 @@ def test_standalone_loop_advances_only_private_search_ref_on_train_keep(
     assert summary.usage.cost_usd == pytest.approx(1.8)
 
 
+def test_invalid_evidence_feedback_is_not_forwarded(tmp_path: Path) -> None:
+    config, _baseline = _config(tmp_path, attempts=2)
+    producer = _Producer()
+    PromotionSupervisor(
+        config,
+        producer=producer,
+        evaluator=_Evaluator(["INVALID", "REJECT"]),
+    ).run()
+
+    assert producer.feedbacks[0] is None
+    assert producer.feedbacks[1] is not None
+    assert producer.feedbacks[1]["outcome"] == "INVALID"
+    assert "evaluator" not in producer.feedbacks[1]
+    first_attempt = sorted((config.state_dir / "attempts").iterdir())[0]
+    persisted_feedback = json.loads((first_attempt / "feedback.json").read_text())
+    assert "evaluator" not in persisted_feedback
+
+
+def test_invalid_parser_detail_is_operator_only(tmp_path: Path) -> None:
+    config, _baseline = _config(tmp_path, attempts=2)
+    producer = _Producer()
+    oracle = "gold_action_toggle_everything"
+    PromotionSupervisor(
+        config,
+        producer=producer,
+        evaluator=_Evaluator(["REJECT", "REJECT"], feedback_code=oracle),
+    ).run()
+
+    assert producer.feedbacks[1] is not None
+    assert producer.feedbacks[1]["reasons"] == ["invalid_attempt"]
+    assert oracle not in json.dumps(producer.feedbacks[1])
+    first_attempt = sorted((config.state_dir / "attempts").iterdir())[0]
+    operator_error = json.loads((first_attempt / "error.json").read_text())
+    assert oracle in operator_error["message"]
+
+
 def test_uncommitted_producer_residue_cannot_contaminate_measurement(
     tmp_path: Path,
 ) -> None:
@@ -478,7 +529,12 @@ def test_candidate_cannot_change_production_outside_declared_surface(
     assert summary.invalids == 1
     assert summary.final_search_head_sha == baseline
     assert evaluator.calls == 0
-    assert "outside the mutation surface" in str(_ledger(config)[0]["reasons"])
+    assert _ledger(config)[0]["reasons"] == ["invalid_attempt"]
+    attempt = next((config.state_dir / "attempts").iterdir())
+    assert (
+        "outside the mutation surface"
+        in json.loads((attempt / "error.json").read_text())["message"]
+    )
 
 
 def test_producer_git_replace_cannot_spoof_one_child_history(tmp_path: Path) -> None:
@@ -493,7 +549,9 @@ def test_producer_git_replace_cannot_spoof_one_child_history(tmp_path: Path) -> 
     assert summary.invalids == 1
     assert summary.final_search_head_sha == baseline
     assert evaluator.calls == 0
-    assert "single-parent" in str(_ledger(config)[0]["reasons"])
+    assert _ledger(config)[0]["reasons"] == ["invalid_attempt"]
+    attempt = next((config.state_dir / "attempts").iterdir())
+    assert "single-parent" in json.loads((attempt / "error.json").read_text())["message"]
 
 
 def test_campaign_budget_overrun_blocks_an_evaluator_keep(tmp_path: Path) -> None:
@@ -509,6 +567,21 @@ def test_campaign_budget_overrun_blocks_an_evaluator_keep(tmp_path: Path) -> Non
     assert summary.stop_reason == "call_budget"
     assert summary.final_search_head_sha == baseline
     assert "campaign_budget_exceeded" in _ledger(config)[0]["reasons"]
+
+
+def test_postflight_failure_still_charges_attested_evaluator_usage(tmp_path: Path) -> None:
+    config, baseline = _config(tmp_path, attempts=1)
+    summary = PromotionSupervisor(
+        config,
+        producer=_Producer(calls=1),
+        evaluator=_Evaluator(["KEEP"], calls_per_arm=2, dirty_after_response=True),
+    ).run()
+
+    assert summary.invalids == 1
+    assert summary.final_search_head_sha == baseline
+    assert summary.usage.calls == 5
+    assert summary.usage.tokens == 210
+    assert summary.usage.cost_usd == pytest.approx(0.6)
 
 
 def test_existing_state_directory_is_never_reused(tmp_path: Path) -> None:
@@ -536,6 +609,17 @@ def test_config_rejects_adaptive_or_sealed_environment_for_train_roles(
     path.write_text(json.dumps(payload), encoding="utf-8")
 
     with pytest.raises(SupervisorError, match="sealed state"):
+        SupervisorConfig.load(path)
+
+
+def test_config_rejects_unknown_top_level_fields(tmp_path: Path) -> None:
+    config, _baseline = _config(tmp_path)
+    path = tmp_path / "supervisor.json"
+    payload = config.to_dict()
+    payload["max_attemps"] = 10
+    path.write_text(json.dumps(payload), encoding="utf-8")
+
+    with pytest.raises(SupervisorError, match="unknown fields: max_attemps"):
         SupervisorConfig.load(path)
 
 
@@ -585,23 +669,28 @@ def test_packaged_cli_runs_isolated_producer_and_evaluator_processes(
 
             request = json.loads(Path(os.environ["CRUCIBLE_PROPOSAL_REQUEST"]).read_text())
             assert "attempt_dir" not in request
+            assert "worktree" not in request
+            checkout = Path.cwd()
             assert subprocess.run(
                 ["git", "remote"],
-                cwd=request["worktree"],
+                cwd=checkout,
                 check=True,
                 capture_output=True,
                 text=True,
             ).stdout.strip() == ""
-            (Path(request["worktree"]).parent / "evaluation-response.json").write_text(
+            (checkout.parent / "evaluation-response.json").write_text(
                 "producer poison"
             )
+            poison = checkout / ".venv" / "bin" / "python"
+            poison.parent.mkdir(parents=True)
+            poison.write_text("candidate controlled")
             child = subprocess.Popen([
                 sys.executable,
                 "-c",
                 "import time; time.sleep(30)",
             ])
             Path(os.environ["CRUCIBLE_TEST_CHILD_PID"]).write_text(str(child.pid))
-            surface = Path(request["worktree"]) / "surface.txt"
+            surface = checkout / "surface.txt"
             surface.write_text("candidate\\n", encoding="utf-8")
             subprocess.run(["git", "add", "surface.txt"], cwd=surface.parent, check=True)
             subprocess.run(
@@ -656,36 +745,62 @@ def test_packaged_cli_runs_isolated_producer_and_evaluator_processes(
         os.kill(child_pid, 0)
 
 
-def test_failure_feedback_v2_carries_bounded_self_observations() -> None:
+def test_failure_feedback_v3_carries_bounded_train_task_identity() -> None:
     feedback = FailureFeedback.from_mapping(
         {
-            "schema": "crucible.failure-feedback.v2",
-            "summary": "wrong-write on task-3",
-            "failure_classes": ["false_success"],
+            "schema": "crucible.failure-feedback.v3",
+            "failure_codes": ["state_correctness"],
             "failed_task_ids": ["task-3", "task-9"],
-            "trajectory_excerpts": ["I have updated the address."],
         }
     )
     assert feedback.failed_task_ids == ("task-3", "task-9")
-    assert feedback.to_dict()["trajectory_excerpts"] == ["I have updated the address."]
+    assert feedback.failure_codes == ("state_correctness",)
 
 
-def test_failure_feedback_v2_enforces_transport_caps() -> None:
+def test_failure_feedback_v3_rejects_retired_v2_schema() -> None:
+    with pytest.raises(SupervisorError, match=r"crucible\.failure-feedback\.v3"):
+        FailureFeedback.from_mapping(
+            {
+                "schema": "crucible.failure-feedback.v2",
+                "failure_codes": [],
+            }
+        )
+
+
+def test_failure_feedback_v3_enforces_transport_caps() -> None:
     with pytest.raises(SupervisorError, match="failed_task_ids"):
         FailureFeedback.from_mapping(
             {
-                "schema": "crucible.failure-feedback.v2",
-                "summary": "x",
-                "failure_classes": [],
+                "schema": "crucible.failure-feedback.v3",
+                "failure_codes": [],
                 "failed_task_ids": [f"task-{i}" for i in range(65)],
             }
         )
-    with pytest.raises(SupervisorError, match="trajectory_excerpts"):
+
+
+@pytest.mark.parametrize("field", ["summary", "trajectory_excerpts"])
+def test_failure_feedback_v3_rejects_free_text_oracle_channels(field: str) -> None:
+    with pytest.raises(SupervisorError, match=f"unknown fields: {field}"):
         FailureFeedback.from_mapping(
             {
-                "schema": "crucible.failure-feedback.v2",
-                "summary": "x",
-                "failure_classes": [],
-                "trajectory_excerpts": ["y" * 2_001],
+                "schema": "crucible.failure-feedback.v3",
+                "failure_codes": [],
+                field: "oracle text",
             }
         )
+
+
+def test_failure_feedback_v3_rejects_task_ids_outside_contract(tmp_path: Path) -> None:
+    config, _baseline = _config(tmp_path)
+    contract = config.train_plan.contract(
+        champion_ref="refs/crucible/test",
+        baseline_sha="1" * 40,
+        candidate_sha="2" * 40,
+        mutation=Mutation(surface="surface.txt", hypothesis="fixture"),
+    )
+    feedback = FailureFeedback(
+        failure_codes=("quality",),
+        failed_task_ids=("outside-pack",),
+    )
+    with pytest.raises(SupervisorError, match="outside the train contract"):
+        feedback.validate_for(contract)
