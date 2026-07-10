@@ -119,10 +119,6 @@ const recognition = [
     label: "Nexon AI Engineer 면접 진출",
     detail: "코딩 과제 합격, 면접 탈락. GEODE의 시작점이 된 전형",
   },
-  {
-    label: "기술 블로그 / YouTube",
-    detail: "rooftopsnow.tistory.com / Harness 카테고리",
-  },
 ];
 
 const influences = [
@@ -357,7 +353,6 @@ export default function Home() {
           <div className="flex flex-wrap gap-2">
             {[
               { label: "GitHub",   href: "https://github.com/mangowhoiscloud" },
-              { label: "Blog",     href: "https://rooftopsnow.tistory.com/category/Harness" },
               { label: "YouTube",  href: "https://youtube.com/@mango_fr" },
               { label: "LinkedIn", href: "https://www.linkedin.com/in/jihwan-ryu-b6b04a202/" },
             ].map((b) => (

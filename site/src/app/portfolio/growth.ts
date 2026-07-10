@@ -63,6 +63,8 @@ export const peakWeek = weeklyCadence.reduce((a, b) => (b.count > a.count ? b : 
 
 export type Era = {
   id: string;
+  /** Not yet written: rendered muted, no chips. */
+  open?: boolean;
   /** Which pixel pose marks this stage of growth. */
   pose: "idle" | "discover" | "focus";
   range: string;
@@ -84,10 +86,10 @@ export const eras: Era[] = [
   {
     id: "01",
     pose: "idle",
-    range: "v0.6.0 → v0.16.0",
-    period: "2026-03-10 → 03-17",
-    titleKo: "부화. 그래프를 버리고 루프를 얻다",
-    titleEn: "Hatch. Drop the graph, keep the loop",
+    range: "v0.6.0 ~ v0.16.0",
+    period: "2026-03-10 ~ 03-17",
+    titleKo: "시작. 그래프를 버리고 루프를 얻다",
+    titleEn: "Start. Drop the graph, keep the loop",
     bodyKo:
       "LangGraph StateGraph 실행 DAG로 시작한 첫 주입니다. 일주일 만에 그래프를 걷어내고, 도구 호출이 멈출 때까지 도는 while(tool_use) AgenticLoop를 본체로 정했습니다. 이후 모든 것(서브에이전트, 플랜, 배치)은 이 루프의 인스턴스입니다.",
     bodyEn:
@@ -101,8 +103,8 @@ export const eras: Era[] = [
   {
     id: "02",
     pose: "idle",
-    range: "v0.16.0 → v0.49.0",
-    period: "2026-03-17 → 04-23",
+    range: "v0.16.0 ~ v0.49.0",
+    period: "2026-03-17 ~ 04-23",
     titleKo: "골격. 루프 주변에 뼈대를 세우다",
     titleEn: "Skeleton. Building bone around the loop",
     bodyKo:
@@ -119,8 +121,8 @@ export const eras: Era[] = [
   {
     id: "03",
     pose: "discover",
-    range: "v0.49.0 → v0.99.0",
-    period: "2026-04-23 → 05-17",
+    range: "v0.49.0 ~ v0.99.0",
+    period: "2026-04-23 ~ 05-17",
     titleKo: "범용 전환. 도메인을 플러그인 밖으로",
     titleEn: "Generalization. Push the domain out to plugins",
     bodyKo:
@@ -137,8 +139,8 @@ export const eras: Era[] = [
   {
     id: "04",
     pose: "focus",
-    range: "v0.90.0 → v0.99.186",
-    period: "2026-05-11 → 06-12",
+    range: "v0.90.0 ~ v0.99.186",
+    period: "2026-05-11 ~ 06-12",
     titleKo: "자기개선 루프. 스스로를 실험 대상으로",
     titleEn: "Self-improving loop. Itself as the test subject",
     bodyKo:
@@ -154,8 +156,8 @@ export const eras: Era[] = [
   {
     id: "05",
     pose: "focus",
-    range: "v0.99.225 → 현재",
-    period: "2026-06-17 → ",
+    range: "v0.99.225 ~ 현재",
+    period: "2026-06-17 ~ ",
     titleKo: "능력 축. 안전 루프를 능력으로 복제",
     titleEn: "Capability axis. Cloning the loop for capability",
     bodyKo:
@@ -167,5 +169,19 @@ export const eras: Era[] = [
       { v: "v0.99.269", ko: "fleet view", en: "fleet view" },
       { v: "v0.99.279", ko: "Crucible", en: "Crucible" },
     ],
+  },
+  {
+    id: "06",
+    pose: "idle",
+    open: true,
+    range: "v1.0.0 ~",
+    period: "",
+    titleKo: "다음 막. 스스로 쓰는 중",
+    titleEn: "Next act. Being written by itself",
+    bodyKo:
+      "이 로그의 다음 항목은 사람이 쓰지 않을 수도 있습니다. 캠페인 게이트를 통과한 변이가 자기 릴리스를 만들면, 그 기록이 여기에 올라옵니다.",
+    bodyEn:
+      "The next entry here may not be written by a human. When a mutation passes the campaign gate and cuts its own release, that record lands in this log.",
+    chips: [],
   },
 ];

@@ -45,6 +45,54 @@ functional change.
 
 ---
 
+## [0.99.291] - 2026-07-10
+
+### Changed
+
+- **Portfolio v27 — The Fixed Point, edited by MANGO (operator-directed art
+  direction, rose x white).** The deploy link `mangowhoiscloud.github.io/geode`
+  now serves the portfolio directly (`src/app/page.tsx` re-exports it;
+  `/portfolio` stays as an alias; docs remain at `/docs`). The convergence is
+  named **the fixed point** (hero eyebrow, plates stamp, footer tagline); the
+  finale card is a film end-credit: "edit by / MANGO" over the specimen slide.
+  Plates expand to **i-ix in canon order (body first, signature after)**:
+  runs-the-loop (orbit ring with the grounded Reflect node), sees-your-world,
+  lives-everywhere (surfaces + OAuth, Anthropic dropped per operator),
+  persistent-memory (the real 5-tier ladder from `core/memory/context.py`:
+  identity, user profile, organization, project, session), focused-automation
+  (natural-language scheduling through the resident gateway), tasks-multiplied
+  (sub-agents as instances of the same loop, `core/agent/sub_agent.py`), then
+  audits-itself, breeds-its-own-tests, keeps-honest-score; three new
+  procedural dither textures (strata / clock ticks / fan-out rays) join the
+  plate set. The distillation keeps the corner headline pinned over the
+  198-flake token snowfall (per-flake speed/size/opacity/sway) with the
+  full-bleed wordmark filling top-down at the base of the screen; the
+  ledger and the laboratory reveal follow on the same sticky screen. The
+  hero's top pixel wordmark is removed (the statement carries the name). "Three ways in" and the plates flow
+  normally with Hermes-style staggered in-view reveals (the sticky
+  card-over-card curtain is removed); the terminal cell reads bare `$ geode`
+  with the start options spelled out. Plate titles are original (no Hermes
+  verbatim): one-agent-every-surface, memory-that-compounds (organization-
+  and person-scoped tiers accumulated in SQLite), works-while-you're-away,
+  many-hands-one-loop; the loop diagram is redrawn as a portrait circuit rail for the
+  postcard plate (seven stations on a rectangular track, clockwise rail
+  arrows, dotted echo frames, the no-tool_use exit dropping through the
+  bottom rail gap to finalize) and em-dashes are
+  stripped from all rendered copy. Plates are set as portrait postcards
+  (100:148, white card carrying index, a perforated Geodi stamp, the
+  textured art, rose serif title and caption) revealed one row of three per
+  scroll; the memory plate's five tiers render as a core sample whose
+  sediment deepens downward, the winning session tier solid rose. The
+  terminal mock keeps its dark product colors and macOS traffic lights by
+  standing exception.
+- **De-slop: decorative arrows and the dev-blog link are gone.** CTA/link
+  arrows (`→`, `▸`) are removed site-portfolio-wide (ranges now use `~`), and
+  the Dev Blog link is dropped from the portfolio hero and the shared footer.
+  Growth-log sections gain restrained scroll reveals (existing framer-motion
+  `ScrollReveal`).
+
+---
+=======
 ## [0.99.290] - 2026-07-10
 
 ### Added

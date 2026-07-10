@@ -20,8 +20,14 @@ export function t(locale: Locale, ko: string, en: string): string {
   return locale === "en" ? en : ko;
 }
 
-export function LocaleProvider({ children }: { children: ReactNode }) {
-  const [locale, setLocale] = useState<Locale>("ko");
+export function LocaleProvider({
+  children,
+  defaultLocale = "ko",
+}: {
+  children: ReactNode;
+  defaultLocale?: Locale;
+}) {
+  const [locale, setLocale] = useState<Locale>(defaultLocale);
 
   // Read ?lang=en from URL on mount
   useEffect(() => {

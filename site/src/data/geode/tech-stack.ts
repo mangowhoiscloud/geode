@@ -3,29 +3,34 @@ export interface TechCategory {
   items: string[];
 }
 
+/**
+ * GEODE tech stack — verified against the repo on 2026-07-10.
+ * pytest count from `pytest --co` on the same date; keep values measured,
+ * never aspirational.
+ */
 export const geodeTechCategories: TechCategory[] = [
   {
-    title: "Core",
-    items: ["Python 3.12", "LangGraph", "Pydantic v2", "TypedDict"],
+    title: "Runtime",
+    items: ["Python 3.12", "AgenticLoop (while tool_use)", "Pydantic v2", "Typer", "Rich"],
   },
   {
-    title: "LLM",
-    items: ["Claude Opus", "Anthropic SDK", "Structured Output", "JSON Mode"],
+    title: "Providers",
+    items: ["Anthropic", "OpenAI / Codex", "GLM", "OAuth subscription routing"],
   },
   {
-    title: "CLI / UI",
-    items: ["Typer", "Rich", "Rich Live", "Rich Panel"],
+    title: "Surfaces",
+    items: ["CLI", "MCP server", "Slack", "cron scheduler", "Gateway daemon"],
   },
   {
-    title: "Testing",
-    items: ["pytest", "pytest-asyncio", "unittest.mock", "98 tests"],
+    title: "Evolving",
+    items: ["Petri (inspect_ai)", "tau2-bench", "seed generation", "campaign gate"],
   },
   {
     title: "Quality",
-    items: ["mypy", "ruff", "Type Hints", "Strict Mode"],
+    items: ["pytest 9,479", "mypy", "ruff", "import-linter"],
   },
   {
-    title: "Architecture",
-    items: ["Port/Adapter", "Factory", "DI", "Clean Architecture"],
+    title: "Site",
+    items: ["Next.js 16", "React 19", "Tailwind 4", "Astryx", "Galmuri11"],
   },
 ];

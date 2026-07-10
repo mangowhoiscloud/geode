@@ -18,41 +18,43 @@
 }
 
 [data-astryx-theme="neutral"] {
-  color-scheme: dark;
+  /* The portfolio is the only Astryx mount, and it is a light three-color
+     composition (paper #FFF0F8, record ink #141016, rose accent). */
+  color-scheme: light;
 
   /* substrate */
-  --color-background-body: var(--paper);
-  --color-background-surface: var(--paper-2);
-  --color-background-card: var(--paper-2);
-  --color-background-popover: var(--paper-2);
-  --color-background-muted: var(--paper-deep);
+  --color-background-body: #fff0f8;
+  --color-background-surface: #fff0f8;
+  --color-background-card: #fff0f8;
+  --color-background-popover: #fff0f8;
+  --color-background-muted: rgba(20, 16, 22, 0.05);
 
   /* ink */
-  --color-text-primary: var(--ink-1);
-  --color-text-secondary: var(--ink-2);
-  --color-text-disabled: var(--ink-3);
+  --color-text-primary: #141016;
+  --color-text-secondary: rgba(20, 16, 22, 0.6);
+  --color-text-disabled: rgba(20, 16, 22, 0.42);
   --color-text-accent: var(--acc-artifact);
 
   /* identity accent (Axolotl Rose) */
   --color-accent: var(--acc-artifact);
-  --color-accent-muted: rgba(244, 155, 196, 0.14);
-  --color-on-accent: var(--paper);
+  --color-accent-muted: rgba(244, 155, 196, 0.2);
+  --color-on-accent: #141016;
   --color-icon-accent: var(--acc-artifact);
-  --color-icon-primary: var(--ink-1);
-  --color-icon-secondary: var(--ink-2);
-  --color-icon-disabled: var(--ink-3);
+  --color-icon-primary: #141016;
+  --color-icon-secondary: rgba(20, 16, 22, 0.6);
+  --color-icon-disabled: rgba(20, 16, 22, 0.42);
 
-  /* hairlines: rose-tinted, never neutral gray */
-  --color-border: var(--rule);
-  --color-border-emphasized: rgba(244, 155, 196, 0.32);
-  --color-neutral: rgba(244, 155, 196, 0.1);
-  --color-overlay-hover: rgba(244, 155, 196, 0.07);
-  --color-overlay-pressed: rgba(244, 155, 196, 0.14);
-  --color-skeleton: var(--paper-2);
-  --color-tint-hover: var(--acc-soft);
+  /* hairlines: ink at low alpha on the paper field */
+  --color-border: rgba(20, 16, 22, 0.16);
+  --color-border-emphasized: rgba(20, 16, 22, 0.3);
+  --color-neutral: rgba(20, 16, 22, 0.07);
+  --color-overlay-hover: rgba(20, 16, 22, 0.05);
+  --color-overlay-pressed: rgba(20, 16, 22, 0.1);
+  --color-skeleton: rgba(20, 16, 22, 0.07);
+  --color-tint-hover: rgba(244, 155, 196, 0.2);
 
   /* status stays semantic but on-substrate */
-  --color-warning: var(--acc-line);
+  --color-warning: var(--acc-artifact);
 
   /* typography: site families, not Astryx defaults */
   --font-family-heading: var(--font-display), var(--font-inter), system-ui, sans-serif;
@@ -105,4 +107,198 @@
 
 .cadence-bar:hover {
   opacity: 1;
+}
+
+/* ---- pixel display font (Galmuri11, loaded via src/fonts/galmuri.ts) ---- */
+
+.font-pixel {
+  font-family: var(--font-pixel), var(--font-display), var(--font-inter), sans-serif;
+  letter-spacing: 0;
+  word-break: keep-all;
+}
+
+/* ---- terminal mock idle motion (2-frame, pixel-style) ------------------- */
+
+@keyframes geodi-bob {
+  0%,
+  49.9% {
+    transform: translateY(0);
+  }
+  50%,
+  100% {
+    transform: translateY(-2px);
+  }
+}
+
+.geodi-bob {
+  animation: geodi-bob 2.4s step-end infinite;
+}
+
+@keyframes geodi-caret {
+  0%,
+  49.9% {
+    opacity: 1;
+  }
+  50%,
+  100% {
+    opacity: 0;
+  }
+}
+
+.geodi-caret {
+  animation: geodi-caret 1.1s step-end infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .geodi-bob,
+  .geodi-caret {
+    animation: none;
+  }
+}
+
+/* three quick pixel hops on click (PlayfulSprite) */
+@keyframes geodi-hop {
+  0%,
+  12% {
+    transform: translateY(0);
+  }
+  13%,
+  25% {
+    transform: translateY(-6px);
+  }
+  26%,
+  38% {
+    transform: translateY(0);
+  }
+  39%,
+  50% {
+    transform: translateY(-4px);
+  }
+  51%,
+  63% {
+    transform: translateY(0);
+  }
+  64%,
+  75% {
+    transform: translateY(-2px);
+  }
+  76%,
+  100% {
+    transform: translateY(0);
+  }
+}
+
+.geodi-hop {
+  animation: geodi-hop 0.75s step-end;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .geodi-hop {
+    animation: none;
+  }
+}
+
+/* editorial serif display (Noto Serif KR via src/fonts/serif.ts) */
+.font-serif-display {
+  font-family: var(--font-serif-display), "Apple SD Gothic Neo", "Noto Serif KR", serif;
+  letter-spacing: -0.01em;
+  word-break: keep-all;
+}
+
+/* drifting pixel clouds (hero frame-break) */
+@keyframes geodi-drift {
+  0% {
+    transform: translateX(0);
+  }
+  50% {
+    transform: translateX(14px);
+  }
+  100% {
+    transform: translateX(0);
+  }
+}
+
+.geodi-drift {
+  animation: geodi-drift 11s steps(7, end) infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .geodi-drift {
+    animation: none;
+  }
+}
+
+/* token rain (the distillation) */
+@keyframes geodi-rain {
+  0% {
+    transform: translateY(-14%);
+  }
+  100% {
+    transform: translateY(14%);
+  }
+}
+
+.geodi-rain {
+  animation: geodi-rain 2.6s steps(9, end) infinite;
+}
+
+@keyframes geodi-drop {
+  0%,
+  62% {
+    transform: translateY(0) scaleY(1);
+  }
+  72% {
+    transform: translateY(2px) scaleY(1.5);
+  }
+  80%,
+  100% {
+    transform: translateY(0) scaleY(1);
+  }
+}
+
+.geodi-drop {
+  animation: geodi-drop 3.4s step-end infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .geodi-rain,
+  .geodi-drop {
+    animation: none;
+  }
+}
+
+/* token snowfall (the distillation) — per-flake fall + lateral sway */
+@keyframes geodi-snow-fall {
+  from {
+    transform: translateY(-12%);
+  }
+  to {
+    transform: translateY(112%);
+  }
+}
+
+.geodi-snow {
+  animation: geodi-snow-fall 7s linear infinite;
+  will-change: transform;
+}
+
+@keyframes geodi-snow-sway {
+  0%,
+  100% {
+    transform: translateX(calc(var(--sway, 8px) * -1));
+  }
+  50% {
+    transform: translateX(var(--sway, 8px));
+  }
+}
+
+.geodi-snow-sway {
+  animation: geodi-snow-sway 3s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .geodi-snow,
+  .geodi-snow-sway {
+    animation: none;
+  }
 }
