@@ -92,6 +92,17 @@ functional change.
   character surfaces, mono = labels. The YouTube demo section is removed per
   operator; frontend stack is confirmed as Next.js 16 + React 19 + Tailwind 4
   + Astryx + Galmuri11 + Noto Serif KR.
+- **Content demolition — the Hermes screen-recording grammar (operator
+  directive).** The dossier sections (why/sheet/loop/growth/evolve with their
+  tables and logs) are torn down and rebuilt as: a three-way RUN row
+  (Terminal / MCP Server / Daemon with command chips), six numbered
+  editorial plates on a rose-white print slab (#1 RUNS THE LOOP .. #6 ON
+  YOUR SUBSCRIPTIONS — serif-caps headlines over dark art banners reusing
+  the loop/audit/seedgen diagrams, tau2 figures, and perception lines), a
+  giant edge-to-edge pixel GEODE wordmark band, and a Loop Laboratory
+  finale (specimen dish, birth/release stats, docs + full-record CTAs,
+  corner stamps). Astryx Token remains on the reside plate; the measured
+  claims survive in distilled form.
 - **Nacreous sky field + frame-breaks (Poor Things trailer review).** The
   hero's flat rose field becomes a generated pixel sky (`geode-sky.png`:
   domain-warped sine swirls dithered into white crests and deep-rose shadows,
