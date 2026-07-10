@@ -2,7 +2,7 @@
 
 > GEODE is a self-evolving autonomous execution agent: an inner agentic loop runs tasks (research, analysis, automation, scheduling) and an outer self-improving loop (Petri audit -> fitness gate) tunes the system that runs them.
 
-Version v0.99.294. Last sync 2026-07-10. Full content of every docs page, one file (llms-full.txt convention). Per-page index: /llms.txt.
+Version v0.99.295. Last sync 2026-07-10. Full content of every docs page, one file (llms-full.txt convention). Per-page index: /llms.txt.
 
 ## Overview . 개요
 
@@ -37,7 +37,27 @@ GEODE 를 가르는 핵심은 **두 개의 루프**입니다.
 
 ## 섹션
 
-[01-overview개요GEODE 소개, GEODE가 작업을 처리하는 흐름, 5-계층 스택](https://mangowhoiscloud.github.io/geode/docs.md)[02-start시작하기빠른 시작, 경로 선택, 프로바이더 설정, 데몬으로 실행](https://mangowhoiscloud.github.io/geode/docs/quick-start.md)[03-concepts핵심 개념두 개의 루프, 안쪽 agentic 루프, 컨텍스트 조립, 메모리 계층, …](https://mangowhoiscloud.github.io/geode/docs/concepts/two-loops.md)[04-self-improving자기개선 루프Closed-Loop, Seed Scenario Generation, Seed 파이프라인, 아우터 루프 설정, …](https://mangowhoiscloud.github.io/geode/docs/capabilities/autoresearch.md)[05-operateGEODE 운영Serve와 게이트웨이, 메신저 연동, 작업 예약, 스케줄러 내부, …](https://mangowhoiscloud.github.io/geode/docs/harness/serve-gateway.md)[06-benchmarks벤치마크Benchmark publishing cycle, Benchmark measurements, Benchmark queue, MCPMark: filesystem/easy, …](https://mangowhoiscloud.github.io/geode/docs/benchmarks/publishing-cycle.md)[07-guides가이드도구 작성, 훅 등록, LLM 어댑터 추가, 바인딩 설정, …](https://mangowhoiscloud.github.io/geode/docs/guides/custom-tool.md)[08-config설정설정 기초, config.toml 레퍼런스, 인증과 OAuth, OAuth 토큰 회전, …](https://mangowhoiscloud.github.io/geode/docs/config/basics.md)[09-reference레퍼런스프론티어 비교, 외부 참고, CLI와 슬래시 명령, 리서치·탐색과 llms.txt, …](https://mangowhoiscloud.github.io/geode/docs/reference/frontier-comparison.md)[10-develop개발과 아키텍처아키텍처 심화, 시스템 색인, 왜 5계층인가, 왜 self-hosting 하네스인가, …](https://mangowhoiscloud.github.io/geode/docs/develop/architecture.md)[10-codebase-map코드베이스 지도레이어 아키텍처 그래프](https://mangowhoiscloud.github.io/geode/docs/codebase-map/layer-graph.md)
+[01-overview개요GEODE 소개, GEODE가 작업을 처리하는 흐름, 5-계층 스택](https://mangowhoiscloud.github.io/geode/docs.md)
+
+[02-start시작하기빠른 시작, 경로 선택, 프로바이더 설정, 데몬으로 실행](https://mangowhoiscloud.github.io/geode/docs/quick-start.md)
+
+[03-concepts핵심 개념두 개의 루프, 안쪽 agentic 루프, 컨텍스트 조립, 메모리 계층, …](https://mangowhoiscloud.github.io/geode/docs/concepts/two-loops.md)
+
+[04-self-improving자기개선 루프Closed-Loop, Seed Scenario Generation, Seed 파이프라인, 아우터 루프 설정, …](https://mangowhoiscloud.github.io/geode/docs/capabilities/autoresearch.md)
+
+[05-operateGEODE 운영Serve와 게이트웨이, 메신저 연동, 작업 예약, 스케줄러 내부, …](https://mangowhoiscloud.github.io/geode/docs/harness/serve-gateway.md)
+
+[06-benchmarks벤치마크Benchmark publishing cycle, Benchmark measurements, Benchmark queue, MCPMark: filesystem/easy, …](https://mangowhoiscloud.github.io/geode/docs/benchmarks/publishing-cycle.md)
+
+[07-guides가이드도구 작성, 훅 등록, LLM 어댑터 추가, 바인딩 설정, …](https://mangowhoiscloud.github.io/geode/docs/guides/custom-tool.md)
+
+[08-config설정설정 기초, config.toml 레퍼런스, 인증과 OAuth, OAuth 토큰 회전, …](https://mangowhoiscloud.github.io/geode/docs/config/basics.md)
+
+[09-reference레퍼런스프론티어 비교, 외부 참고, CLI와 슬래시 명령, 리서치·탐색과 llms.txt, …](https://mangowhoiscloud.github.io/geode/docs/reference/frontier-comparison.md)
+
+[10-develop개발과 아키텍처아키텍처 심화, 시스템 색인, 왜 5계층인가, 왜 self-hosting 하네스인가, …](https://mangowhoiscloud.github.io/geode/docs/develop/architecture.md)
+
+[10-codebase-map코드베이스 지도레이어 아키텍처 그래프](https://mangowhoiscloud.github.io/geode/docs/codebase-map/layer-graph.md)
 
 ## 다음에 어디로
 
@@ -2755,9 +2775,137 @@ MCP tool-use measurements grouped by MCP surface. The matrix follows the Agent-W
 
 | File | GitHub | Notion | Playwright | Postgres | Avg. |
 | --- | --- | --- | --- | --- | --- |
-| [**100.0%**](#mcpmark-filesystem-easy-parallel-20260703-gpt55-xhigh)<br>filesystem/easy, 10 tasks, category-parallel rerun | [**blocked**](#mcpmark-github-blocked-20260703)<br>GITHUB\_TOKENS and eval org required | [**blocked**](#mcpmark-notion-blocked-20260703)<br>source/eval Notion workspace credentials required | [**blocked**](#mcpmark-playwright-blocked-20260703)<br>browser/WebArena service setup required | [**blocked**](#mcpmark-postgres-blocked-20260703)<br>Docker Postgres and backup restore required | 100.0%<br>Measured surfaces only: File |
+| [**83.3%**](#mcpmark-verified-filesystem-20260704-gpt55-xhigh)<br>standard, 25 / 30 | [**82.6%**](#mcpmark-verified-github-20260704-gpt55-xhigh)<br>standard, 19 / 23 | [**unmeasured**](#mcpmark-notion-unblock-smoke-20260710)<br>unblocked 2026-07-10 (easy smoke 1/1); standard 28 tasks not yet measured | [**unmeasured**](#mcpmark-playwright-blocked-20260703)<br>live-web subset runnable since 2026-07-10; WebArena subset needs ~100GB images (local disk exceeded) | [**95.2%**](#mcpmark-verified-postgres-20260704-gpt55-xhigh)<br>standard, 20 / 21 | [**86.5%**](#mcpmark-verified-available-20260704-gpt55-xhigh)<br>Measured available services only: filesystem+postgres+github |
 
 ### Run list
+
+**Verified available-services aggregate** · 2026-07-04 KST · gpt-5.5 · subscription · xhigh
+
+<table><tbody><tr><td>Status</td><td><code>complete</code></td></tr><tr><td>Suite/domain</td><td><code>filesystem + postgres + github / standard</code></td></tr><tr><td>Model</td><td><code>gpt-5.5</code></td></tr><tr><td>Provider</td><td><code>openai-codex</code></td></tr><tr><td>Source</td><td><code>subscription</code></td></tr><tr><td>Effort</td><td><code>xhigh</code></td></tr><tr><td>Route</td><td>GEODE local MCPMark adapter</td></tr><tr><td>Harness</td><td><code>eval-sys/mcpmark@cd45b7f, GEODE feature/mcpmark-agentworld-run</code></td></tr><tr><td>Accuracy</td><td><strong>86.5% (64 / 74)</strong></td></tr><tr><td>Artifact</td><td><code>artifacts/eval/harnesses/mcpmark/results-geode-agentworld/geode-gpt55-xhigh-20260704-mcpmark-verified-*</code></td></tr></tbody></table>
+
+-   Filesystem standard: 25 / 30, 83.3%
+-   Postgres standard: 20 / 21, 95.2%
+-   GitHub standard: 19 / 23, 82.6%
+-   Recorded task execution time: filesystem 13580.6s over 29 recorded tasks, postgres 8765.7s, github 16476.3s
+-   Notion was not included: no notion\_state.json in the local harness environment.
+-   Playwright/WebArena was not included: required Docker images/service stack were absent.
+
+```
+cd artifacts/eval/harnesses/mcpmark
+# Run each available MCP service through the GEODE adapter.
+GEODE_REPO_ROOT=<geode-worktree> \
+PYTHONPATH=<geode-worktree>:<geode-site-packages> \
+GITHUB_EVAL_ORG=mangowhoiscloud \
+GEODE_MCPMARK_GITHUB_REPO_VISIBILITY=public \
+.venv/bin/python pipeline.py \
+  --mcp <filesystem|postgres|github> \
+  --task-suite standard \
+  --models geode-gpt-5.5 \
+  --agent geode \
+  --reasoning-effort xhigh \
+  --k 1 \
+  --timeout 1500 \
+  --exp-name geode-gpt55-xhigh-20260704-mcpmark-verified-<service> \
+  --output-dir ./results-geode-agentworld
+```
+
+-   This is not the full MCPMark Verified leaderboard aggregate. It covers only services that were runnable in the local environment: filesystem, postgres, and github.
+-   The OpenAI model route was the GEODE Codex subscription route, not MCPMark's native LiteLLM OpenAI API route.
+-   GitHub fixture repositories were made public during execution so the Docker GitHub MCP server could use normal public-repo semantics; all transient repos were deleted by cleanup.
+-   The filesystem score counts papers/author\_folders as a failed no-result transport run after two attempts without meta output.
+
+**Verified github standard slice** · 2026-07-04 KST · gpt-5.5 · subscription · xhigh
+
+<table><tbody><tr><td>Status</td><td><code>complete</code></td></tr><tr><td>Suite/domain</td><td><code>github/standard</code></td></tr><tr><td>Model</td><td><code>gpt-5.5</code></td></tr><tr><td>Provider</td><td><code>openai-codex</code></td></tr><tr><td>Source</td><td><code>subscription</code></td></tr><tr><td>Effort</td><td><code>xhigh</code></td></tr><tr><td>Route</td><td>GEODE local MCPMark adapter + GitHub MCP Docker server</td></tr><tr><td>Harness</td><td><code>eval-sys/mcpmark@cd45b7f, ghcr.io/github/github-mcp-server:v0.15.0</code></td></tr><tr><td>Accuracy</td><td><strong>82.6% (19 / 23)</strong></td></tr><tr><td>Artifact</td><td><code>artifacts/eval/harnesses/mcpmark/results-geode-agentworld/geode-gpt55-xhigh-20260704-mcpmark-verified-github*</code></td></tr></tbody></table>
+
+-   Total task execution time 16476.3s
+-   Average task execution time 716.4s
+-   Failures: claude-code/label\_color\_standardization, mcpmark-cicd/deployment\_status\_workflow, missing-semester/assign\_contributor\_labels, missing-semester/find\_salient\_file
+-   All transient GitHub repositories were deleted by MCPMark cleanup.
+
+```
+cd artifacts/eval/harnesses/mcpmark
+# Run each available MCP service through the GEODE adapter.
+GEODE_REPO_ROOT=<geode-worktree> \
+PYTHONPATH=<geode-worktree>:<geode-site-packages> \
+GITHUB_EVAL_ORG=mangowhoiscloud \
+GEODE_MCPMARK_GITHUB_REPO_VISIBILITY=public \
+.venv/bin/python pipeline.py \
+  --mcp github \
+  --task-suite standard \
+  --models geode-gpt-5.5 \
+  --agent geode \
+  --reasoning-effort xhigh \
+  --k 1 \
+  --timeout 1500 \
+  --exp-name geode-gpt55-xhigh-20260704-mcpmark-verified-<service> \
+  --output-dir ./results-geode-agentworld
+```
+
+-   The first label\_color\_standardization record is a fixture setup failure from GitHub state duplication; the retry produced an agent-level verification failure.
+-   The assign\_contributor\_labels failure used suffixed transient usernames in labels instead of canonical contributor labels.
+-   The find\_salient\_file failure did not create ANSWER.md on the required master branch.
+
+**Verified postgres standard slice** · 2026-07-04 KST · gpt-5.5 · subscription · xhigh
+
+<table><tbody><tr><td>Status</td><td><code>complete</code></td></tr><tr><td>Suite/domain</td><td><code>postgres/standard</code></td></tr><tr><td>Model</td><td><code>gpt-5.5</code></td></tr><tr><td>Provider</td><td><code>openai-codex</code></td></tr><tr><td>Source</td><td><code>subscription</code></td></tr><tr><td>Effort</td><td><code>xhigh</code></td></tr><tr><td>Route</td><td>GEODE local MCPMark adapter + postgres-mcp</td></tr><tr><td>Harness</td><td><code>eval-sys/mcpmark@cd45b7f, postgres-mcp==0.3.0</code></td></tr><tr><td>Accuracy</td><td><strong>95.2% (20 / 21)</strong></td></tr><tr><td>Artifact</td><td><code>artifacts/eval/harnesses/mcpmark/results-geode-agentworld/geode-gpt55-xhigh-20260704-mcpmark-verified-postgres</code></td></tr></tbody></table>
+
+-   Total task execution time 8765.7s
+-   Average task execution time 417.4s
+-   Failure: employees/employee\_performance\_analysis
+
+```
+cd artifacts/eval/harnesses/mcpmark
+# Run each available MCP service through the GEODE adapter.
+GEODE_REPO_ROOT=<geode-worktree> \
+PYTHONPATH=<geode-worktree>:<geode-site-packages> \
+GITHUB_EVAL_ORG=mangowhoiscloud \
+GEODE_MCPMARK_GITHUB_REPO_VISIBILITY=public \
+.venv/bin/python pipeline.py \
+  --mcp postgres \
+  --task-suite standard \
+  --models geode-gpt-5.5 \
+  --agent geode \
+  --reasoning-effort xhigh \
+  --k 1 \
+  --timeout 1500 \
+  --exp-name geode-gpt55-xhigh-20260704-mcpmark-verified-<service> \
+  --output-dir ./results-geode-agentworld
+```
+
+-   The GEODE adapter overrides MCPMark's default postgres server with postgres-mcp==0.3.0 in unrestricted mode.
+-   A final NoEventLoopError appeared during async cleanup after result writing; it did not affect the recorded verifier result.
+
+**Verified filesystem standard slice** · 2026-07-04 KST · gpt-5.5 · subscription · xhigh
+
+<table><tbody><tr><td>Status</td><td><code>complete</code></td></tr><tr><td>Suite/domain</td><td><code>filesystem/standard</code></td></tr><tr><td>Model</td><td><code>gpt-5.5</code></td></tr><tr><td>Provider</td><td><code>openai-codex</code></td></tr><tr><td>Source</td><td><code>subscription</code></td></tr><tr><td>Effort</td><td><code>xhigh</code></td></tr><tr><td>Route</td><td>GEODE local MCPMark adapter</td></tr><tr><td>Harness</td><td><code>eval-sys/mcpmark@cd45b7f</code></td></tr><tr><td>Accuracy</td><td><strong>83.3% (25 / 30)</strong></td></tr><tr><td>Artifact</td><td><code>artifacts/eval/harnesses/mcpmark/results-geode-agentworld/geode-gpt55-xhigh-20260704-mcpmark-verified-filesystem-*</code></td></tr></tbody></table>
+
+-   Recorded task execution time 13580.6s over 29 recorded tasks
+-   Average recorded task execution time 468.3s
+-   Failures: desktop\_template/budget\_computation, papers/author\_folders, papers/find\_math\_paper, student\_database/english\_talent, threestudio/output\_analysis
+
+```
+cd artifacts/eval/harnesses/mcpmark
+# Run each available MCP service through the GEODE adapter.
+GEODE_REPO_ROOT=<geode-worktree> \
+PYTHONPATH=<geode-worktree>:<geode-site-packages> \
+GITHUB_EVAL_ORG=mangowhoiscloud \
+GEODE_MCPMARK_GITHUB_REPO_VISIBILITY=public \
+.venv/bin/python pipeline.py \
+  --mcp filesystem \
+  --task-suite standard \
+  --models geode-gpt-5.5 \
+  --agent geode \
+  --reasoning-effort xhigh \
+  --k 1 \
+  --timeout 1500 \
+  --exp-name geode-gpt55-xhigh-20260704-mcpmark-verified-<service> \
+  --output-dir ./results-geode-agentworld
+```
+
+-   filesystem/standard is a materially harder slice than filesystem/easy.
+-   papers/author\_folders is counted as a failed no-result transport run because both attempts hung before meta output.
+-   The adapter now aliases file\_path to path when the MCP schema expects path, which fixed write\_file failures seen in the first filesystem pass.
 
 **filesystem/easy category-parallel rerun** · 2026-07-03 05:11 KST · gpt-5.5 · subscription · xhigh
 
@@ -2823,26 +2971,28 @@ OPENAI_API_KEY=dummy \
 -   This is not the MCPMark Verified aggregate used by frontier leaderboards.
 -   OPENAI\_API\_KEY=dummy satisfied the harness environment check; model calls used the GEODE subscription route.
 
-**github blocked prerequisite record** · 2026-07-03 KST · gpt-5.5 · subscription · xhigh
+**notion unblock smoke (easy, single task)** · 2026-07-10 KST · gpt-5.5 · subscription · xhigh
 
-<table><tbody><tr><td>Status</td><td><code>blocked</code></td></tr><tr><td>Suite/domain</td><td><code>github/easy</code></td></tr><tr><td>Model</td><td><code>gpt-5.5</code></td></tr><tr><td>Provider</td><td><code>openai-codex</code></td></tr><tr><td>Source</td><td><code>subscription</code></td></tr><tr><td>Effort</td><td><code>xhigh</code></td></tr><tr><td>Route</td><td>GEODE local MCPMark adapter</td></tr><tr><td>Harness</td><td><code>eval-sys/mcpmark@cd45b7f</code></td></tr><tr><td>Accuracy</td><td><strong>blocked</strong></td></tr><tr><td>Artifact</td><td><code>not created</code></td></tr></tbody></table>
+<table><tbody><tr><td>Status</td><td><code>complete</code></td></tr><tr><td>Suite/domain</td><td><code>notion/easy</code></td></tr><tr><td>Model</td><td><code>gpt-5.5</code></td></tr><tr><td>Provider</td><td><code>openai-codex</code></td></tr><tr><td>Source</td><td><code>subscription</code></td></tr><tr><td>Effort</td><td><code>xhigh</code></td></tr><tr><td>Route</td><td>GEODE local MCPMark adapter</td></tr><tr><td>Harness</td><td><code>eval-sys/mcpmark@cd45b7f</code></td></tr><tr><td>Accuracy</td><td><strong>1 / 1</strong></td></tr><tr><td>Artifact</td><td><code>artifacts/eval/harnesses/mcpmark/results-geode-agentworld/geode-gpt55-xhigh-20260710-notion-smoke-unblock-r2/geode-gpt-5-5-xhigh__notion-easy/run-1</code></td></tr></tbody></table>
 
--   No GitHub MCPMark score was produced in this cycle.
--   The harness requires GITHUB\_TOKENS and an evaluation organization.
+-   State duplication 58.9s; agent 216.8s over 8 rounds; 62.8k input / 8.0k output tokens.
+-   The 2026-07-04 stall was an expired browser session: duplication page.goto to app.notion.com timed out at 120s per retry.
+-   Re-login used a real-Chrome-channel persistent context (Google OAuth rejects automation-flagged browsers); the session cookie lives on .app.notion.com.
 
 ```
-GEODE_REPO_ROOT=<geode-worktree> \
+set -a; source .mcp_env; set +a
 OPENAI_API_KEY=dummy \
-.venv/bin/python pipeline.py \
-  --mcp github \
+.venv/bin/python -m plugins.benchmark_harness.run_mcpmark \
+  --mcp notion \
   --task-suite easy \
+  --tasks toronto_guide/simple__change_color \
   --models geode-gpt-5.5 \
   --agent geode \
   --reasoning-effort xhigh
 ```
 
--   Blocked before live execution because the local harness environment has no .mcp\_env credentials.
--   Record a measured score only after the GitHub evaluation org and token set are provisioned.
+-   Verifier-backed single-task smoke proving the notion service is runnable end to end; not a notion standard score.
+-   The task embeds a Notion API trap: updating a select option color returns validation\_error; the agent passed by redefining options via a database schema update.
 
 **notion blocked prerequisite record** · 2026-07-03 KST · gpt-5.5 · subscription · xhigh
 
@@ -2885,27 +3035,6 @@ OPENAI_API_KEY=dummy \
 
 -   Blocked before live execution because the browser-backed service stack was not running.
 -   Record a measured score only after the browser environment is provisioned and health checked.
-
-**postgres blocked prerequisite record** · 2026-07-03 KST · gpt-5.5 · subscription · xhigh
-
-<table><tbody><tr><td>Status</td><td><code>blocked</code></td></tr><tr><td>Suite/domain</td><td><code>postgres/easy</code></td></tr><tr><td>Model</td><td><code>gpt-5.5</code></td></tr><tr><td>Provider</td><td><code>openai-codex</code></td></tr><tr><td>Source</td><td><code>subscription</code></td></tr><tr><td>Effort</td><td><code>xhigh</code></td></tr><tr><td>Route</td><td>GEODE local MCPMark adapter</td></tr><tr><td>Harness</td><td><code>eval-sys/mcpmark@cd45b7f</code></td></tr><tr><td>Accuracy</td><td><strong>blocked</strong></td></tr><tr><td>Artifact</td><td><code>not created</code></td></tr></tbody></table>
-
--   No Postgres MCPMark score was produced in this cycle.
--   Docker-dependent Postgres restore and service setup were not available.
-
-```
-GEODE_REPO_ROOT=<geode-worktree> \
-OPENAI_API_KEY=dummy \
-.venv/bin/python pipeline.py \
-  --mcp postgres \
-  --task-suite easy \
-  --models geode-gpt-5.5 \
-  --agent geode \
-  --reasoning-effort xhigh
-```
-
--   Blocked before live execution because Docker service discovery did not complete in the local benchmark environment.
--   Record a measured score only after the Postgres container, backup restore, and verifier setup pass health checks.
 
 ## Tau2
 
@@ -3275,36 +3404,39 @@ Markdown: https://mangowhoiscloud.github.io/geode/docs/benchmarks/mcpmark/servic
 | Model route | `gpt-5.5`, provider `openai-codex`, source `subscription`, effort `xhigh` |
 | Verified run | `filesystem/easy` 10 / 10 published separately |
 | Single-task rerun | `file_context/uppercase` 1 / 1, 165.7s, 8 tools / 4 rounds |
+| Notion unblock smoke | `toronto_guide/simple__change_color` 1 / 1, duplication 58.9s, agent 216.8s / 8 rounds (2026-07-10) |
 
 ## Service coverage
 
 | Service | Easy | Standard | Adapter 상태 | Blocker |
 | --- | --- | --- | --- | --- |
 | `filesystem` | 10 | 30 | 실측 가능 | 없음. easy 10/10 게시 |
-| `notion` | 10 | 28 | stdio adapter 준비 | `SOURCE_NOTION_API_KEY`, `EVAL_NOTION_API_KEY`, parent page 설정 필요 |
-| `github` | 10 | 23 | Docker stdio adapter 준비 | `GITHUB_TOKENS` 필요 |
-| `postgres` | 10 | 21 | stdio adapter 준비 | DB bootstrap과 `DATABASE_URI` 필요 |
-| `playwright` | 0 | 4 | stdio adapter 준비 | 브라우저 runtime smoke 필요 |
-| `playwright_webarena` | 10 | 21 | stdio adapter 준비 | WebArena fixture/server 준비 필요 |
+| `notion` | 10 | 28 | 실측 가능 (easy smoke 1/1, 2026-07-10) | 없음. 07-04 스톨 원인은 브라우저 세션 만료로 확정, 재발급 절차 확립. standard 28건 미측정 |
+| `github` | 10 | 23 | standard run 완료 | 19 / 23, Docker GitHub MCP server. State Duplication Error 6건의 원인(`GITHUB_EVAL_ORG` 미영속)은 2026-07-10 제거, 재실행 가능 |
+| `postgres` | 10 | 21 | standard run 완료 | 20 / 21, `postgres-mcp==0.3.0` |
+| `playwright` | 0 | 4 | 실행 준비 완료 (2026-07-10) | 없음. live-web 태스크, `@playwright/mcp@0.0.68` 기동 확인. 4건 미측정 |
+| `playwright_webarena` | 10 | 21 | stdio adapter 준비 | WebArena Docker 이미지 tar 실측 119GiB(shopping 62 + admin 8 + reddit 49) vs 로컬 여유 13GiB. 외장 볼륨 또는 VM 필요 (2026-07-10 실측) |
 | `insforge` | 확인 필요 | 확인 필요 | 조사 중 | `INSFORGE_API_KEY`, `INSFORGE_BACKEND_URL`, task manager 인자 호환성 확인 필요 |
 | `supabase` | 확인 필요 | 확인 필요 | 미지원 | MCPMark HTTP MCP transport. GEODE `MCPServerManager`는 현재 stdio 중심 |
 
 ## 실행 명령
 
+에이전트 등록은 커밋된 런처 `plugins/benchmark_harness/run_mcpmark.py`가 담당합니다. upstream `pipeline.py`는 패치하지 않습니다.
+
 ```
 cd artifacts/eval/harnesses/mcpmark
-GEODE_REPO_ROOT=<geode-worktree> \
+set -a; source .mcp_env; set +a
 OPENAI_API_KEY=dummy \
-.venv/bin/python pipeline.py \
+.venv/bin/python -m plugins.benchmark_harness.run_mcpmark \
   --mcp <service> \
   --task-suite <easy|standard> \
   --models geode-gpt-5.5 \
   --agent geode \
   --reasoning-effort xhigh \
   --k 1 \
-  --timeout 900 \
+  --timeout 1200 \
   --exp-name <stable-run-id> \
-  --output-dir ./results-geode-live
+  --output-dir ./results-geode-agentworld
 ```
 
 ## Artifact
@@ -3315,8 +3447,9 @@ Single-task rerun:<br>`artifacts/eval/harnesses/mcpmark/results-geode-live-rerun
 
 ## 판독
 
--   GEODE가 현재 안정적으로 공개 점수를 낼 수 있는 MCPMark service는 `filesystem`입니다.
--   Notion, GitHub, Postgres, Playwright 계열은 adapter는 준비됐지만 credential/fixture smoke가 먼저 필요합니다.
+-   2026-07-10 기준 5개 service(filesystem, notion, github, postgres, playwright)가 실행 가능 상태입니다. Notion은 세션 만료가 07-04 스톨의 원인이었고, 재로그인 후 easy smoke 1/1로 duplication→실행→검증 전 구간을 확인했습니다.
+-   `playwright_webarena`만 남은 blocked로, WebArena 이미지 용량(실측 119GiB)이 로컬 디스크를 초과합니다.
+-   subscription 쿼터(429 usage\_limit\_reached)가 full-suite 연속 실행을 리셋 창 단위로 분할시킵니다. 429 실패는 점수에 포함하지 않고 해당 태스크를 재실행합니다.
 -   Supabase는 HTTP MCP transport 대응 없이는 GEODE adapter에서 바로 실행하지 않습니다.
 
 ---
@@ -4991,7 +5124,7 @@ Tier 2  latex2sympy2 + sympy.pretty  블록 전용. 분수·적분을 2D Unicode
 URL: https://mangowhoiscloud.github.io/geode/docs/reference/changelog
 Markdown: https://mangowhoiscloud.github.io/geode/docs/reference/changelog.md
 
-(body omitted from llms-full: 1390 KB — fetch the Markdown twin above for the complete page)
+(body omitted from llms-full: 1401 KB — fetch the Markdown twin above for the complete page)
 
 ---
 
