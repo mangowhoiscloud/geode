@@ -467,25 +467,46 @@ function ConnectBanner() {
   );
 }
 
-/** 5-tier context assembly, transcribed from core/memory/context.py. */
+/**
+ * 5-tier context assembly as a core sample (core/memory/context.py):
+ * sediment deepens toward the bottom, and the winning tier (session,
+ * lower-overrides-higher) is solid rose.
+ */
 function MemoryBanner() {
-  const tiers: [string, string][] = [
-    ["tier 0", "identity"],
-    ["tier 0.5", "user profile"],
-    ["tier 1", "organization"],
-    ["tier 2", "project"],
-    ["tier 3", "session"],
+  const tiers: { tier: string; name: string; alpha: number }[] = [
+    { tier: "tier 0", name: "identity", alpha: 0.08 },
+    { tier: "tier 0.5", name: "user profile", alpha: 0.13 },
+    { tier: "tier 1", name: "organization", alpha: 0.19 },
+    { tier: "tier 2", name: "project", alpha: 0.27 },
   ];
   return (
-    <div className="flex h-full w-full flex-col justify-center gap-1.5 px-12 font-mono text-[11.5px]">
-      {tiers.map(([tier, name], i) => (
-        <p key={tier} style={{ color: i >= 3 ? ROSE : ROSE_75, paddingLeft: i * 16 }}>
-          {tier} · {name}
+    <div className="flex h-full w-full items-center justify-center px-8">
+      <div className="w-full max-w-[330px]">
+        <div className="overflow-hidden border" style={{ borderColor: "color-mix(in srgb, var(--acc-artifact) 55%, transparent)" }}>
+          {tiers.map(({ tier, name, alpha }, i) => (
+            <div
+              key={tier}
+              className="flex items-baseline justify-between px-4 py-[9px] font-mono text-[11px]"
+              style={{
+                background: `color-mix(in srgb, var(--acc-artifact) ${alpha * 100}%, transparent)`,
+                borderTop: i ? "1px solid color-mix(in srgb, var(--acc-artifact) 30%, transparent)" : undefined,
+              }}
+            >
+              <span style={{ color: ROSE_75 }}>{tier}</span>
+              <span style={{ color: ROSE }}>{name}</span>
+            </div>
+          ))}
+          <div className="flex items-baseline justify-between bg-[var(--acc-artifact)] px-4 py-[9px] font-mono text-[11px] text-[#FFF0F8]">
+            <span style={{ opacity: 0.8 }}>tier 3</span>
+            <span className="font-semibold">session</span>
+          </div>
+        </div>
+        <p className="mt-3 flex items-center justify-center gap-2 font-mono text-[10px] uppercase tracking-[0.2em]" style={{ color: ROSE_75 }}>
+          <span className="inline-block h-[5px] w-[5px] rotate-45 bg-[var(--acc-artifact)]" />
+          lower tiers override higher
+          <span className="inline-block h-[5px] w-[5px] rotate-45 bg-[var(--acc-artifact)]" />
         </p>
-      ))}
-      <p className="mt-2" style={{ color: ROSE_75 }}>
-        lower tiers override higher
-      </p>
+      </div>
     </div>
   );
 }
@@ -624,42 +645,70 @@ const features: {
   },
 ];
 
+/** One plate as a postcard: index, perforated Geodi stamp, art, caption. */
+function PlateCard({ feature }: { feature: (typeof features)[number] }) {
+  const locale = useLocale();
+  return (
+    <div className="flex flex-col bg-[#FFF0F8] p-4 pb-6" style={{ aspectRatio: "100/148" }}>
+      <div className="flex items-start justify-between gap-3">
+        <p className="pt-1 font-mono text-[10.5px] uppercase tracking-[0.22em]" style={{ color: ROSE_75 }}>
+          {feature.index}
+        </p>
+        <div
+          className="flex h-12 w-11 shrink-0 items-center justify-center border border-dashed"
+          style={{ borderColor: "color-mix(in srgb, var(--acc-artifact) 55%, transparent)" }}
+        >
+          <GeodiSprite scale={1.6} silhouette="var(--acc-artifact)" />
+        </div>
+      </div>
+      <div
+        className="mt-3 min-h-0 flex-1 overflow-hidden bg-cover bg-center"
+        style={{
+          backgroundImage: `linear-gradient(rgba(255,240,248,0.62), rgba(255,240,248,0.62)), url(/geode/images/plate-bg-${feature.plate}.png)`,
+          imageRendering: "pixelated",
+        }}
+      >
+        <div className="flex h-full w-full items-center justify-center px-2 py-3">{feature.banner}</div>
+      </div>
+      <h2
+        className="font-serif-display mt-4 text-balance text-[24px] font-black uppercase leading-[1.12] sm:text-[26px]"
+        style={{ color: ROSE }}
+      >
+        {locale === "en" ? feature.headEn : feature.headKo}
+      </h2>
+      <p className="mt-2 text-[12.5px] leading-[1.65]" style={{ color: ROSE_75 }}>
+        {t(locale, feature.ko, feature.en)}
+      </p>
+    </div>
+  );
+}
+
 function FeaturesGrid() {
   const locale = useLocale();
+  const reduceMotion = useReducedMotion();
+  const rows = [features.slice(0, 3), features.slice(3, 6), features.slice(6, 9)];
   return (
     <section id="features" className="bg-[var(--acc-artifact)]">
       <div className="mx-auto max-w-7xl px-6 py-16 sm:py-24">
         <p className="text-center font-mono text-[10.5px] uppercase tracking-[0.3em]" style={{ color: PAPER_75 }}>
           {t(locale, "도판 i-ix", "plates i-ix")}
         </p>
-        <div className="mt-12 grid gap-x-8 gap-y-14 md:grid-cols-2 xl:grid-cols-3">
-          {features.map((feature, i) => (
-            <motion.div
-              key={feature.id}
-              initial={{ opacity: 0, y: 26 }}
-              whileInView={{ opacity: 1, y: 0 }}
-              viewport={{ once: true, margin: "-70px" }}
-              transition={{ duration: 0.65, delay: (i % 3) * 0.1, ease: [0.22, 1, 0.36, 1] }}
-            >
-              <p className="font-mono text-[11px] uppercase tracking-[0.26em]" style={{ color: PAPER_75 }}>
-                {feature.index}
-              </p>
-              <h2 className="font-serif-display mt-3 text-balance text-[28px] font-black uppercase leading-[1.08] text-[#FFF0F8] sm:text-[32px]">
-                {locale === "en" ? feature.headEn : feature.headKo}
-              </h2>
-              <div
-                className="mt-5 flex h-[350px] items-center justify-center overflow-hidden bg-[#FFF0F8] bg-cover bg-center px-4 py-3"
-                style={{
-                  backgroundImage: `linear-gradient(rgba(255,240,248,0.62), rgba(255,240,248,0.62)), url(/geode/images/plate-bg-${feature.plate}.png)`,
-                  imageRendering: "pixelated",
-                }}
-              >
-                {feature.banner}
-              </div>
-              <p className="mt-4 max-w-[380px] text-[13px] leading-[1.75]" style={{ color: PAPER_75 }}>
-                {t(locale, feature.ko, feature.en)}
-              </p>
-            </motion.div>
+        {/* one postcard row per scroll step: the row rises as a unit */}
+        <div className="mt-12 space-y-10">
+          {rows.map((row, rowIndex) => (
+            <div key={rowIndex} className="grid gap-8 md:grid-cols-2 xl:grid-cols-3">
+              {row.map((feature, i) => (
+                <motion.div
+                  key={feature.id}
+                  initial={{ opacity: 0, y: reduceMotion ? 0 : 46 }}
+                  whileInView={{ opacity: 1, y: 0 }}
+                  viewport={{ once: true, margin: "-140px" }}
+                  transition={{ duration: 0.7, delay: i * 0.1, ease: [0.22, 1, 0.36, 1] }}
+                >
+                  <PlateCard feature={feature} />
+                </motion.div>
+              ))}
+            </div>
           ))}
         </div>
         <div

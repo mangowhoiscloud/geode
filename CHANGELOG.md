@@ -74,8 +74,12 @@ functional change.
   with the start options spelled out. Plate titles are original (no Hermes
   verbatim): one-agent-every-surface, memory-that-compounds (organization-
   and person-scoped tiers accumulated in SQLite), works-while-you're-away,
-  many-hands-one-loop; the loop orbit is redrawn taller (520x430 viewBox,
-  350px plates) and em-dashes are stripped from all rendered copy. The
+  many-hands-one-loop; the loop orbit is redrawn taller (520x430 viewBox) and em-dashes are
+  stripped from all rendered copy. Plates are set as portrait postcards
+  (100:148, white card carrying index, a perforated Geodi stamp, the
+  textured art, rose serif title and caption) revealed one row of three per
+  scroll; the memory plate's five tiers render as a core sample whose
+  sediment deepens downward, the winning session tier solid rose. The
   terminal mock keeps its dark product colors and macOS traffic lights by
   standing exception.
 - **De-slop: decorative arrows and the dev-blog link are gone.** CTA/link
