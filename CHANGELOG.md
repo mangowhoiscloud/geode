@@ -49,33 +49,28 @@ functional change.
 
 ### Changed
 
-- **Portfolio v24 — The Final Cut, in rose and white (operator-directed
-  final art direction).** The page is one rose field
-  written in warm white `#FFF0F8`; the terminal mock keeps its dark product
-  colors by standing exception. The lab is renamed from "The Loop
-  Laboratory" to **The Final Cut** (cinema language for convergence: many
-  takes, one surviving cut — loop is the commodity claim) across hero
-  eyebrow, plates stamp, finale title, and footer tagline. Hero: white dither sky over the rose
-  field, serif statement, CLI terminal mock. "Three ways in": white panel
-  with rose hairline grid. Plates i-vi restore the dither-texture banners
-  under a legibility scrim (rose ink raised to 88%); the loop ring is redrawn as a wide
-  orbit diagram (dotted concentric ellipses, 300px plates) and gains the
-  grounded **Reflect** node (`core/agent/loop/_reflection.py` — per-round
-  belief update of hypotheses/confidence), and the subscriptions plate drops
-  Anthropic (OpenAI/Codex · GLM). The terminal mock regains its
-  macOS traffic lights. "Three ways in" pins on the rose field and recedes
-  backward (scale + fade, synced to the plates' approach) as plates i-vi
-  slide over it. The distillation and the laboratory are one
-  continuous sticky act: token snowfall (198 flakes with per-flake deterministic speed,
-  size, opacity, and lateral sway — organic drift, not marching columns)
-  converges through dissolving-gradient thresholds and fills the full-bleed 24vw wordmark (clip
-  extended past the line box so pixel-glyph caps fill too) over the honest
-  baseline ledger under the corner headline "A thousand tokens, filtered to
-  a single drop.", and further scroll fades in the reveal — a white stage
-  enters, the rose field becomes a specimen slide, and the ghost wordmark
-  replicates the distillate's exact column layout so the crossfade holds the
-  word in place. Astryx Token chips carry surface labels; the shared nav
-  gains a rose chrome variant.
+- **Portfolio v27 — The Fixed Point, edited by MANGO (operator-directed art
+  direction, rose x white).** The deploy link `mangowhoiscloud.github.io/geode`
+  now serves the portfolio directly (`src/app/page.tsx` re-exports it;
+  `/portfolio` stays as an alias; docs remain at `/docs`). The convergence is
+  named **the fixed point** (hero eyebrow, plates stamp, footer tagline); the
+  finale card is a film end-credit: "edit by / MANGO" over the specimen slide.
+  Plates expand to **i-ix in canon order (body first, signature after)**:
+  runs-the-loop (orbit ring with the grounded Reflect node), sees-your-world,
+  lives-everywhere (surfaces + OAuth, Anthropic dropped per operator),
+  persistent-memory (the real 5-tier ladder from `core/memory/context.py`:
+  identity, user profile, organization, project, session), focused-automation
+  (natural-language scheduling through the resident gateway), tasks-multiplied
+  (sub-agents as instances of the same loop, `core/agent/sub_agent.py`), then
+  audits-itself, breeds-its-own-tests, keeps-honest-score; three new
+  procedural dither textures (strata / clock ticks / fan-out rays) join the
+  plate set. The distillation is re-choreographed: the corner headline stays
+  pinned while the full-bleed wordmark scrolls up from below, docks at
+  center, and only then fills top-down under the 198-flake token snowfall
+  (per-flake speed/size/opacity/sway); the ledger and the laboratory reveal
+  follow on the same sticky screen. "Three ways in" pins and recedes
+  backward as the plates slide over it; the terminal mock keeps its dark
+  product colors and macOS traffic lights by standing exception.
 - **De-slop: decorative arrows and the dev-blog link are gone.** CTA/link
   arrows (`→`, `▸`) are removed site-portfolio-wide (ranges now use `~`), and
   the Dev Blog link is dropped from the portfolio hero and the shared footer.

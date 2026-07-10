@@ -21,7 +21,7 @@ import { serifDisplay } from "@/fonts/serif";
 import { firstRelease, latestRelease, releaseCount } from "./growth";
 
 /**
- * GEODE portfolio v24 — The Final Cut, in rose and white.
+ * GEODE portfolio v26 — The Fixed Point, in rose and white.
  *
  * Palette (operator-directed 2026-07-10): the whole page is one rose field
  * (`--acc-artifact`) written in warm white `#FFF0F8` — two colors only. The
@@ -152,7 +152,7 @@ function HeroField() {
           className="font-mono text-[10.5px] uppercase tracking-[0.3em]"
           style={{ color: PAPER_75 }}
         >
-          open source · apache-2.0 · {t(locale, "파이널 컷", "the final cut")}
+          open source · apache-2.0 · {t(locale, "고정점", "the fixed point")}
         </motion.p>
         <motion.h1
           variants={heroItem}
@@ -462,12 +462,13 @@ function MeasureBanner() {
   );
 }
 
-function ResideBanner() {
+
+function ConnectBanner() {
   return (
-    <div className="flex h-full w-full flex-col items-center justify-center gap-4 px-6">
+    <div className="flex h-full w-full flex-col items-center justify-center gap-4 px-6 text-center">
       <div className="font-mono text-[12px] leading-relaxed">
-        <p style={{ color: ROSE }}>openai / codex · glm</p>
-        <p className="text-center" style={{ color: ROSE_75 }}>oauth you own · provider-isolated</p>
+        <p style={{ color: ROSE }}>one agent · one memory · every surface</p>
+        <p style={{ color: ROSE_75 }}>openai / codex · glm — oauth you own</p>
       </div>
       <div className="flex flex-wrap justify-center gap-1.5">
         {surfaceChips.map((chip) => (
@@ -475,6 +476,61 @@ function ResideBanner() {
         ))}
       </div>
     </div>
+  );
+}
+
+/** 5-tier context assembly, transcribed from core/memory/context.py. */
+function MemoryBanner() {
+  const tiers: [string, string][] = [
+    ["tier 0", "identity"],
+    ["tier 0.5", "user profile"],
+    ["tier 1", "organization"],
+    ["tier 2", "project"],
+    ["tier 3", "session"],
+  ];
+  return (
+    <div className="flex h-full w-full flex-col justify-center gap-1.5 px-12 font-mono text-[11.5px]">
+      {tiers.map(([tier, name], i) => (
+        <p key={tier} style={{ color: i >= 3 ? ROSE : ROSE_75, paddingLeft: i * 16 }}>
+          {tier} · {name}
+        </p>
+      ))}
+      <p className="mt-2" style={{ color: ROSE_75 }}>
+        lower tiers override higher
+      </p>
+    </div>
+  );
+}
+
+function ScheduleBanner() {
+  return (
+    <div className="flex h-full w-full flex-col items-center justify-center gap-3.5 px-6 text-center font-mono">
+      <p className="rounded bg-[var(--acc-artifact)] px-4 py-2 text-[12px] text-[#FFF0F8]">
+        $ geode &quot;schedule daily standup reminder at 9am&quot;
+      </p>
+      <p className="text-[11px]" style={{ color: ROSE_75 }}>
+        cron · briefings · unattended through the gateway
+      </p>
+    </div>
+  );
+}
+
+/** Sub-agents are instances of the same loop (core/agent/sub_agent.py). */
+function DelegateDiagram() {
+  return (
+    <svg viewBox="0 0 340 200" className="w-full max-w-[340px]" role="img" aria-label="sub-agent fan-out">
+      <rect x="120" y="16" width="100" height="26" fill={PAPER} stroke={ROSE} shapeRendering="crispEdges" />
+      <text x="170" y="33" textAnchor="middle" fontSize="10.5" fontFamily="var(--font-fira-code), monospace" fill={ROSE}>while(tool_use)</text>
+      {[46, 170, 294].map((x) => (
+        <g key={x}>
+          <line x1="170" y1="42" x2={x} y2="118" stroke={ROSE} strokeWidth="1" />
+          <polygon points="-3.5,-3 0,4.5 3.5,-3" fill={ROSE} transform={`translate(${x} ${120})`} />
+          <rect x={x - 50} y={124} width={100} height={26} fill={PAPER} stroke={ROSE} shapeRendering="crispEdges" />
+          <text x={x} y={141} textAnchor="middle" fontSize="10.5" fontFamily="var(--font-fira-code), monospace" fill={ROSE}>while(tool_use)</text>
+        </g>
+      ))}
+      <text x="170" y="184" textAnchor="middle" fontSize="9" fontFamily="var(--font-fira-code), monospace" fill={ROSE_75}>sub-agents are the same loop, isolated per task</text>
+    </svg>
   );
 }
 
@@ -509,9 +565,49 @@ const features: {
     banner: <PerceiveBanner />,
   },
   {
+    id: "connect",
+    plate: 6,
+    index: "#3 connect",
+    headKo: "어디에나 상주합니다",
+    headEn: "LIVES EVERYWHERE",
+    ko: "CLI, MCP 서버, Slack, cron 게이트웨이. 하나의 에이전트가 하나의 메모리로 모든 표면에, 직접 소유한 OAuth로 상주합니다.",
+    en: "CLI, MCP server, Slack, and the cron gateway — one agent with one memory on every surface, over OAuth you own.",
+    banner: <ConnectBanner />,
+  },
+  {
+    id: "remember",
+    plate: 7,
+    index: "#4 remember",
+    headKo: "잊지 않습니다",
+    headEn: "PERSISTENT MEMORY",
+    ko: "다섯 층의 메모리가 턴마다 컨텍스트를 조립합니다. identity, profile, organization, project, session. 아래 층이 위 층을 덮습니다.",
+    en: "Five memory tiers assemble every turn's context — identity, profile, organization, project, session — lower overriding higher.",
+    banner: <MemoryBanner />,
+  },
+  {
+    id: "schedule",
+    plate: 8,
+    index: "#5 schedule",
+    headKo: "잠든 사이에도 일합니다",
+    headEn: "FOCUSED AUTOMATION",
+    ko: "보고서와 브리핑을 자연어로 예약합니다. 상주 게이트웨이가 무인으로 수행합니다.",
+    en: "Natural-language scheduling for reports and briefings, running unattended through the resident gateway.",
+    banner: <ScheduleBanner />,
+  },
+  {
+    id: "delegate",
+    plate: 9,
+    index: "#6 delegate",
+    headKo: "일을 나눕니다",
+    headEn: "TASKS MULTIPLIED",
+    ko: "서브 에이전트, 플랜, 배치는 모두 같은 루프의 인스턴스입니다. 격리된 컨텍스트, 하나의 규율.",
+    en: "Sub-agents, plans, and batches are all instances of the same loop — isolated contexts, one discipline.",
+    banner: <DelegateDiagram />,
+  },
+  {
     id: "audit",
     plate: 3,
-    index: "#3 audit",
+    index: "#7 audit",
     headKo: "스스로를 감사합니다",
     headEn: "AUDITS ITSELF",
     ko: "모든 스캐폴드 변이는 적대적 Petri 감사를 통과해야 합니다. critical 축이 한 번이라도 후퇴하면 승격은 거부됩니다.",
@@ -521,7 +617,7 @@ const features: {
   {
     id: "breed",
     plate: 4,
-    index: "#4 breed",
+    index: "#8 breed",
     headKo: "시험도 스스로 만듭니다",
     headEn: "BREEDS ITS OWN TESTS",
     ko: "generator, critic, pilot, ranker, evolver. 평가 시드 풀이 에이전트와 나란히 자랍니다.",
@@ -531,22 +627,12 @@ const features: {
   {
     id: "measure",
     plate: 5,
-    index: "#5 measure",
+    index: "#9 measure",
     headKo: "정직하게 잽니다",
     headEn: "KEEPS HONEST SCORE",
     ko: "개선에 실패한 캠페인도 기록에 남습니다. 0 승격의 원인 규명까지가 실측 자산입니다.",
     en: "The campaigns that failed to improve it stay on the record — including why zero got promoted.",
     banner: <MeasureBanner />,
-  },
-  {
-    id: "reside",
-    plate: 6,
-    index: "#6 reside",
-    headKo: "당신의 구독으로 상주합니다",
-    headEn: "ON YOUR SUBSCRIPTIONS",
-    ko: "OpenAI/Codex, GLM을 직접 소유한 OAuth로. 프로바이더 격리를 지키며 모든 표면에 상주합니다.",
-    en: "OpenAI/Codex and GLM over OAuth you own — provider-isolated, resident on every surface.",
-    banner: <ResideBanner />,
   },
 ];
 
@@ -556,7 +642,7 @@ function FeaturesGrid() {
     <section id="features" className="relative z-10 bg-[var(--acc-artifact)]">
       <div className="mx-auto max-w-7xl px-6 py-16 sm:py-24">
         <p className="text-center font-mono text-[10.5px] uppercase tracking-[0.3em]" style={{ color: PAPER_75 }}>
-          {t(locale, "도판 i-vi", "plates i-vi")}
+          {t(locale, "도판 i-ix", "plates i-ix")}
         </p>
         <div className="mt-12 grid gap-x-8 gap-y-14 md:grid-cols-2 xl:grid-cols-3">
           {features.map((feature) => (
@@ -586,7 +672,7 @@ function FeaturesGrid() {
           className="mt-16 flex items-end justify-between font-mono text-[10px] uppercase tracking-[0.18em]"
           style={{ color: PAPER_55 }}
         >
-          <span>the final cut · plates i-vi</span>
+          <span>the fixed point · plates i-ix</span>
           <span>evidence: core/ · plugins/</span>
         </div>
       </div>
@@ -682,10 +768,13 @@ function DistillationAct() {
   const reduceMotion = useReducedMotion();
   const wrapRef = useRef<HTMLDivElement | null>(null);
   const { scrollYProgress } = useScroll({ target: wrapRef, offset: ["start start", "end end"] });
+  // Act order: the word scrolls up from below until it reaches center
+  // (wordY), only then the fill begins. The corner headline stays pinned.
+  const wordY = useTransform(scrollYProgress, [0.02, 0.22], ["85vh", "0vh"]);
   // Clip extends 15% past the line box: leading-[0.82] lets the pixel glyphs
   // overflow it, and a box-bounded clip would leave the letter caps unfilled.
-  const fill = useTransform(scrollYProgress, [0.18, 0.55], ["inset(-15% 0 115% 0)", "inset(-15% 0 -15% 0)"]);
-  const ledgerOp = useTransform(scrollYProgress, [0.48, 0.64], [0, 1]);
+  const fill = useTransform(scrollYProgress, [0.28, 0.58], ["inset(-15% 0 115% 0)", "inset(-15% 0 -15% 0)"]);
+  const ledgerOp = useTransform(scrollYProgress, [0.52, 0.66], [0, 1]);
   const labOp = useTransform(scrollYProgress, [0.74, 0.9], [0, 1]);
   const labPointer = useTransform(labOp, (v) => (v > 0.55 ? "auto" : "none") as "auto" | "none");
   const ledger: { id: string; verdict: string; keep?: boolean }[] = [
@@ -708,17 +797,20 @@ function DistillationAct() {
           </h2>
         </div>
 
-        <div className="flex min-h-0 flex-1 flex-col justify-center">
-          <RainBand phase={0} height="12vh" flakes={96} />
+        <div aria-hidden className="absolute inset-0 flex flex-col justify-center">
+          <RainBand phase={0} height="14vh" flakes={96} />
           <FilterLine label="critic" />
-          <RainBand phase={1} height="9vh" converge={0.42} flakes={56} />
+          <RainBand phase={1} height="11vh" converge={0.42} flakes={56} />
           <FilterLine label="petri gate" />
-          <RainBand phase={2} height="7vh" converge={0.78} flakes={30} />
+          <RainBand phase={2} height="9vh" converge={0.78} flakes={30} />
           <FilterLine label="held-out" />
-          <RainBand phase={1} height="5vh" converge={0.92} flakes={16} />
+          <RainBand phase={1} height="7vh" converge={0.92} flakes={16} />
         </div>
 
-        <div className="flex flex-col items-center pb-8">
+        <motion.div
+          style={{ y: reduceMotion ? "0vh" : wordY }}
+          className="absolute inset-0 z-10 flex flex-col items-center justify-center"
+        >
           {/* the word takes the whole width — the distillate is the wordmark */}
           <div className="relative w-full text-center">
             <p className="font-pixel whitespace-nowrap text-[24vw] font-bold leading-[0.82] text-[#FFF0F8] opacity-25">
@@ -754,37 +846,33 @@ function DistillationAct() {
               )}
             </p>
           </motion.div>
-        </div>
+        </motion.div>
 
         {/* final act: white enters — the rose field becomes a specimen slide on a paper stage */}
         <motion.div style={{ opacity: labOp, pointerEvents: labPointer }} className="absolute inset-0 bg-[#FFF0F8]">
           <div className="absolute inset-x-2 bottom-12 top-2 bg-[var(--acc-artifact)] sm:inset-x-3 sm:top-3" />
-          {/* ghost distillate: replicates the visible act's column layout so the
-              crossfade keeps the word at identical coordinates — keep the
-              invisible spacers in sync with the markup above */}
-          <div aria-hidden className="pointer-events-none absolute inset-0 flex flex-col overflow-hidden">
-            <div className="min-h-0 flex-1" />
-            <div className="flex flex-col items-center pb-8">
-              <p className="font-pixel w-full whitespace-nowrap text-center text-[24vw] font-bold leading-[0.82] text-[#FFF0F8] opacity-[0.16]">
-                GEODE
-              </p>
-              <div className="invisible mt-6 w-full max-w-3xl border-t px-6 pt-4">
-                <div className="flex flex-wrap items-baseline justify-center gap-x-7 gap-y-2 font-mono text-[11.5px]">
-                  <span className="uppercase tracking-[0.24em]">baseline ledger</span>
-                  {ledger.map((row) => (
-                    <span key={`ghost-${row.id}`}>
-                      {row.id} · {row.verdict}
-                    </span>
-                  ))}
-                </div>
-                <p className="font-serif-display mt-4 text-center text-[15px] font-semibold leading-[1.6]">
-                  {t(
-                    locale,
-                    "첫 방울은 아직 매달려 있습니다. 기록은 그 무게까지 답니다.",
-                    "The first drop is still forming. The ledger weighs even that."
-                  )}
-                </p>
+          {/* ghost distillate: same centered geometry as the visible act,
+              so the crossfade keeps the word at identical coordinates */}
+          <div aria-hidden className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center overflow-hidden">
+            <p className="font-pixel w-full whitespace-nowrap text-center text-[24vw] font-bold leading-[0.82] text-[#FFF0F8] opacity-[0.16]">
+              GEODE
+            </p>
+            <div className="invisible mt-6 w-full max-w-3xl border-t px-6 pt-4">
+              <div className="flex flex-wrap items-baseline justify-center gap-x-7 gap-y-2 font-mono text-[11.5px]">
+                <span className="uppercase tracking-[0.24em]">baseline ledger</span>
+                {ledger.map((row) => (
+                  <span key={`ghost-${row.id}`}>
+                    {row.id} · {row.verdict}
+                  </span>
+                ))}
               </div>
+              <p className="font-serif-display mt-4 text-center text-[15px] font-semibold leading-[1.6]">
+                {t(
+                  locale,
+                  "첫 방울은 아직 매달려 있습니다. 기록은 그 무게까지 답니다.",
+                  "The first drop is still forming. The ledger weighs even that."
+                )}
+              </p>
             </div>
           </div>
           <div className="absolute inset-x-2 bottom-12 top-2 sm:inset-x-3 sm:top-3">
@@ -792,9 +880,14 @@ function DistillationAct() {
               <p className="font-mono text-[11px] uppercase tracking-[0.3em]" style={{ color: PAPER_75 }}>
                 cultured since {firstRelease.date} · release #{releaseCount} · v{latestRelease.version}
               </p>
-              <h2 className="font-serif-display text-balance text-[clamp(2.4rem,6vw,4.2rem)] font-black leading-[1.1] text-[#FFF0F8]">
-                {t(locale, "파이널 컷", "The Final Cut")}
-              </h2>
+              <div>
+                <p className="font-mono text-[10.5px] uppercase tracking-[0.42em]" style={{ color: PAPER_75 }}>
+                  edit by
+                </p>
+                <h2 className="font-serif-display mt-2 text-balance text-[clamp(2.6rem,6.4vw,4.5rem)] font-black leading-[1.05] tracking-[0.04em] text-[#FFF0F8]">
+                  MANGO
+                </h2>
+              </div>
               <div className="flex h-48 w-48 items-center justify-center rounded-full border border-[#FFF0F8] sm:h-56 sm:w-56">
                 <GeodiSprite scale={4} silhouette="#FFF0F8" />
               </div>
