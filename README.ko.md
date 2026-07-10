@@ -1,10 +1,13 @@
 <p align="center">
-  <img src="assets/geode-mascot.png" alt="GEODE — Autonomous Execution Harness" width="360" />
+  <img src="assets/geodi-dot.svg" alt="Geodi — GEODE's dot mascot" width="320" />
+</p>
+<p align="center">
+  <sub>Geodi · 22×12 dot sprite · <code>core/ui/geodi_art.py</code></sub>
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/while(tool__use)-agentic%20loop-1e293b?style=flat-square" alt="while(tool_use)">
-  <img src="https://img.shields.io/badge/self--improving-non--parametric-1e293b?style=flat-square" alt="Self-improving (non-parametric)">
+  <img src="https://img.shields.io/badge/while(tool__use)-agentic%20loop-E0699F?style=flat-square" alt="while(tool_use)">
+  <img src="https://img.shields.io/badge/self--improving-non--parametric-E0699F?style=flat-square" alt="Self-improving (non-parametric)">
   <a href="https://github.com/mangowhoiscloud/geode/actions"><img src="https://img.shields.io/github/actions/workflow/status/mangowhoiscloud/geode/ci.yml?style=flat-square&label=ci&logo=github&logoColor=white" alt="CI"></a>
 </p>
 
@@ -22,7 +25,7 @@
   <a href="README.md">English</a>
 </p>
 
-# GEODE v0.99.288 — A Self-improving Autonomous Execution Agent
+# GEODE v0.99.291 — A Self-improving Autonomous Execution Agent
 
 자기 자신이 올라탄 scaffold 를 스스로 고쳐쓰는 범용 자율 에이전트. 자연어로 물으면 GEODE 가 계획을 세우고, 도구를 호출해, 결과를 보고합니다. 1회성 프롬프트도, 장시간 세션도 동일하게. 그 아래에서는 outer loop 가 작업을 수행하는 시스템 자체를 계속 다듬습니다.
 

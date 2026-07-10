@@ -45,7 +45,7 @@ functional change.
 
 ---
 
-## [0.99.288] - 2026-07-10
+## [0.99.291] - 2026-07-10
 
 ### Changed
 
@@ -92,6 +92,111 @@ functional change.
   `ScrollReveal`).
 
 ---
+=======
+## [0.99.290] - 2026-07-10
+
+### Added
+
+- **Crucible class-prior store and campaign fold writer.** Tracked
+  `plugins/crucible/priors/` holds one Beta-posterior file per mutation class,
+  pinned to the task-pack hash its evidence was measured against.
+  `python -m plugins.crucible priors-update` folds a campaign ledger's
+  measured flips into the fix-rate posterior (INVALID rows excluded,
+  foreign-pack ledgers refused), closing the read-write parity gap between
+  calibration's prior reads and campaign evidence.
+
+### Changed
+
+- **Crucible failure feedback v2 opens self-observations.** The bounded
+  producer feedback now carries failed task IDs and excerpts of text the
+  candidate itself emitted (oracle content remains excluded; scrubbing is the
+  evaluator's contractual duty). The supervisor ledger and per-attempt
+  feedback additionally emit paired flip/regression counts and the task-pack
+  hash — the inputs the prior writer and the target hit-rate metric consume.
+
+## [0.99.289] - 2026-07-10
+
+### Added
+
+- **Crucible calibration: derived gate parameters.** New
+  `plugins.crucible.calibration` fits a per-task flakiness model from a null
+  paired run or trial counts, Beta effect priors from replay-screening counts
+  (pinned to the task-pack hash they were measured against, refusing stale
+  priors), and searches pack size and trial count by Monte Carlo to minimise
+  expected cost per true KEEP under an explicit cost model that includes
+  quota-window ceilings. The derivation is emitted as a content-hashed
+  `crucible.parameter-derivation.v1` block; contracts refuse stamped numbers
+  that do not equal their derivation. A power self-test replays synthetic
+  effects through the real scorer so an unopenable gate fails in CI.
+
+### Changed
+
+- **Crucible promotion rule v2.** `paired_bootstrap.v2` splits the roles the
+  v1 threshold conflated: the paired-bootstrap lower bound must exceed zero at
+  the contract's confidence level, while the point estimate clears an economic
+  `materiality_pp` floor (zero allowed for train stages). The v1 rule demanded
+  the lower bound clear the improvement threshold itself, which a power audit
+  showed required a 10-30pp true effect at documented pack scales.
+
+## [0.99.288] - 2026-07-10
+
+### Added
+
+- **Crucible frozen evidence kernel.** Added a small train/test contract that
+  pins one mutation, the champion ref, full candidate/baseline revisions,
+  actual evaluator/harness/task-pack hashes, resolved assay configuration,
+  routes, ordered task/trial pairs, declared budgets, and a paired-bootstrap
+  promotion rule. Immutable evidence envelopes bind raw artifact hashes,
+  metrics, independent checks, failure class, and resource usage to one arm.
+  The assay-neutral scorer emits only `KEEP`, `REJECT`, or `INVALID`; train
+  `KEEP` has no core authority, and test verdicts remain authority-neutral
+  until sealed lineage is implemented. A packaged `python -m plugins.crucible`
+  CLI normalizes tau2 evidence and writes paired verdicts without overwriting
+  existing artifacts.
+- **Standalone Crucible train supervisor.** Added a bounded outer loop with
+  subprocess/file boundaries for candidate production and trusted evaluation;
+  a supervisor-owned train plan freezes measurement, the evaluator returns
+  paired evidence/raw artifacts, and the supervisor computes the verdict. Each
+  candidate runs in a no-remote disposable checkout, actual diff and
+  measurement bytes are preflighted, and train `KEEP` advances only a private
+  compare-and-swap ref. The frozen evaluator entrypoint is executed directly,
+  while role-specific exchange directories and process-group cleanup keep
+  producer output out of evaluator evidence. The loop persists a replayable
+  state snapshot and append-only ledger, forwards schema-bounded failure
+  feedback, and closes over-budget candidates before advancing the search
+  head. It has no import dependency on `core/self_improving` and cannot
+  authorize sealed or repository promotion.
+
+### Changed
+
+- **Crucible returned to a git-native autoresearch kernel.** The target
+  promotion contract is one committed mutation measured by a frozen evaluator
+  and task pack, producing one primary score plus non-exchangeable vetoes.
+  Exposed retail/telecom rows are development counterexamples rather than
+  held-out evidence. Harness-specific termination and participant cases now
+  live in versioned `AssayAdapter` profiles instead of growing core branches.
+
+### Fixed
+
+- **Tau2 adapter state survives the Crucible pruning.** Required empty retail
+  `address2` values are preserved and enum-like message roles are normalized.
+- **Crucible comparisons freeze the actual assay.** Contract-backed tau2 runs
+  now bind domain/split, trial and concurrency settings, seed, step/error/
+  timeout limits, actor configuration, user arguments, retrieval options, and
+  per-turn agent budgets. The simulated user must be evaluator-owned rather
+  than running through candidate GEODE code. Snapshots record a raw SHA-256 and
+  become `complete` only after post-run route checks; partial or contaminated
+  runs remain `invalid`. Sealed-test lineage also rejects budget drift.
+
+### Removed
+
+- **Unpromoted tau2 workflow projectors and candidate ladders.** Removed the
+  benchmark-specific retail projectors, oracle literals, telecom v1-v72
+  runtime choices, the telecom-specific core action-before-talk heuristic, and
+  their version-by-version tests. The post-hoc trace/surrogate/sequential gate
+  scripts and prompt/planner probes were retired with the G0-G7 ladder.
+  Historical candidates remain available through git and artifacts instead of
+  accumulating in the active harness.
 
 ## [0.99.287] - 2026-07-10
 
@@ -776,6 +881,12 @@ link in the "declared / recorded / joined" observability chain.
 
 ### Fixed
 
+- **MCPMark GEODE adapter runtime bootstrap.** The public benchmark harness
+  adapter now bootstraps GEODE LLM adapters when imported from an upstream
+  MCPMark checkout, uses the official GitHub MCP server container, runs the
+  PostgreSQL MCP server with the active Python runtime, and supports
+  opt-in public transient GitHub fixtures via
+  `GEODE_MCPMARK_GITHUB_REPO_VISIBILITY=public`.
 - **tau2 benchmark adapter action strictness.** GEODE's tau2-bench adapter now
   instructs the agent not to invent optional tool arguments that the user,
   policy, or prior tool results did not supply, preventing verifier drift from

@@ -1,5 +1,12 @@
 # Crucible — 개선을 불로 시험하는 게이트 루프
 
+> **2026-07-10 correction:** the frozen three-class evidence contract in
+> [`crucible-kernel.md`](crucible-kernel.md) supersedes the G0-G7 campaign
+> procedure below. The remainder of this file is retained as the experiment and
+> incident record; it is not permission to stitch rows across candidate
+> revisions, tune on exposed held-out rows, or merge diagnostic projectors.
+> CLI candidate names mentioned below are historical and are no longer active.
+
 > 상태: 설계 v2 정렬(2026-07-06), M1 기각·S5 판정 보류·iteration-cost 재설계 중. 선행: `docs/architecture/autoresearch.md`(v1 SOT),
 > `docs/adr/ADR-012-self-improvement-surface-tiers.md`(§S6), `core/self_improving/program.md`.
 > 명명: crucible(도가니) — 광석을 녹여 불로 시험하는 그릇, 관용적으로 '혹독한 시험'.
@@ -169,7 +176,7 @@ cheap, and verifier throughput governs the economics of experimentation.**
 |---|---|---|---|
 | LLM+evaluator discovery | AlphaEvolve, FunSearch | LLM produces executable code/function candidates; automated evaluators verify them; only strong candidates enter the archive/prompt material | The core asset is not the mutator. It is the archive + evaluator + selection loop. Full τ² must not be the default inner-loop evaluator |
 | Compiler/kernel autotuning | AutoTVM, Ansor, TVM MetaSchedule, Triton | Huge schedule/search spaces are reduced with cost models, evolutionary search, and staged measurement | The standard semiconductor treatment for iteration cost is surrogate/cost-model/staged measurement. τ² needs trace replay, micro-sim, and targeted subsets before full runs |
-| Chip design automation | Google RL floorplanning/AlphaChip, NVIDIA ChipNeMo | Peripheral loops with PPA/EDA verifiers are automated: placement, EDA scripts, bug summarization/analysis | Automating harness/triage/script loops has higher ROI than mutating core behavior first. This aligns with Furiosa AX-style roles |
+| Chip design automation | Google RL floorplanning/AlphaChip, NVIDIA ChipNeMo | Peripheral loops with PPA/EDA verifiers are automated: placement, EDA scripts, bug summarization/analysis | Automating harness/triage/script loops has higher ROI than mutating core behavior first. This also fits production accelerator-platform agent systems. |
 | Software engineering agent eval | SWE-bench, SWE-agent, OpenHands, Agentless | Real issues are verified by unit tests or patch validation. Agent-computer interface and localization dominate performance | More agentic is not always better. Accurate failure localization and cheap patch validation come first |
 | Iteration-cost theory | Hyperband, multi-fidelity BO, sequential testing | Many candidates get small budgets; promising or uncertain candidates receive larger budgets; runs stop before fixed sample size once evidence is sufficient | `sequential_gate.py` is the right direction, but the next missing piece is candidate-level value-of-information budget scheduling |
 | Physical AI uncertainty | Conformal prediction + SIL/HIL/real-world cascade | Physical evaluation is expensive and risky, so humans/real-world verifiers are called only when uncertainty is high | τ² is also an expensive world. Only uncertain candidates should reach the full verifier |
@@ -371,25 +378,28 @@ rate-limit 없는 태스크는 전부 user_stop 정상 종료했고 **순수 미
 
 ### 5.1 First-Cycle Conclusion — The Limiting Reagent (2026-07-06)
 
-The first Crucible cycle did not prove self-improvement. It **proved the promotion protocol and
-exposed verification throughput as the limiting reagent.** The next engineering target is not a
-smarter mutator; it is a cheaper evaluator cascade.
+The first Crucible cycle did not prove self-improvement. At the time it was
+interpreted as validating the promotion protocol and exposing verifier
+throughput as the limiting reagent. The 2026-07-10 contract audit supersedes
+that interpretation: candidate revisions, evaluator state, and held-out rows
+were not frozen together, so the cycle validated neither monotonicity nor the
+promotion protocol.
 
-- What worked: frozen ruler, paired comparison, held-out regression, blocking plausible-looking
-  changes before core merge, and recording rejection as evidence.
+- What remained useful: executable failures, paired-run diagnostics, blocked
+  merges, and rejection traces now classified as train/incident evidence.
 - What failed: iteration cost was too high (clop48 ~175M tokens and ~$837), K=1 pass^1 noise gave low
   detection power (~8pt floor), quota shaped the experiment, cheap gates were not discriminative
   enough, and one mutation consumed too much full simulation.
-- Treatment: §4.2 Gate Ladder v2 — stronger G0 static reject, G1 trace replay with no LLM, G2
-  reject-only micro-sim, G3a targeted mini, G3b sequential SPRT/Bayesian futility, and G3c full only
-  immediately before promotion. The core is a reject accelerator that preserves full τ² budget.
+- Historical treatment: §4.2 Gate Ladder v2. It is retained below as incident
+  history, not as the active procedure; `crucible-kernel.md` replaces it with a
+  frozen contract, normalized evidence, and one paired decision.
 
 ### 5.2 Current Design Assessment — Keep, Revise, Hold
 
-**Keep.** The promotion protocol was correct. The frozen ruler, champion chain, paired comparison,
-contamination filter, held-out regression, and "do not average binary veto signals" rule prevented
-S1/S5 from entering core prematurely. The first win of the loop is not a self-improvement promotion;
-it is **false-promotion prevention**.
+**Retrospective correction.** S1/S5 did not enter core, but that historical
+outcome does not prove the protocol was correct. Row stitching, evaluator
+coupling, and reuse of exposed tasks left false-promotion risk unmeasured. The
+non-exchangeable-veto principle survives; the old evidence claim does not.
 
 **Revise.** The reclassified failures show that S5's "write nudge before ending" is too broad. Retail's
 dominant failure is wrong-write, so it needs R1 commit-plan guard. Telecom needs T1

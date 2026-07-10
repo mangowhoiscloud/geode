@@ -1,6 +1,7 @@
 "use client";
 
 import { DocsShell, Bi } from "@/components/geode-docs/docs-shell";
+import { FallIn } from "@/components/geode-docs/fall-in";
 import { DOCS_SITEMAP } from "@/lib/geode-docs/sitemap";
 import { useLocale, t } from "@/components/geode/locale-context";
 
@@ -183,28 +184,33 @@ export default function DocsIndex() {
 
       <h2>{t(locale, "섹션", "Sections")}</h2>
       <div className="not-prose mt-3 border-t border-[var(--rule)]">
-        {DOCS_SITEMAP.map((section) => (
-          <a
+        {DOCS_SITEMAP.map((section, idx) => (
+          <FallIn
             key={section.id}
-            href={`/geode/docs/${section.pages[0]?.slug ?? ""}`}
-            className="flex flex-col gap-0.5 border-b border-[var(--rule)] py-3 group"
+            delay={idx * 0.07}
+            tilt={idx % 2 === 0 ? -0.9 : 0.9}
           >
-            <span className="font-display font-semibold text-[var(--ink)] group-hover:text-[var(--acc-soft)]">
-              <span className="mr-2 text-[10px] uppercase tracking-[0.18em] text-[var(--ink-3)]">
-                {section.id}
-              </span>
-              {t(locale, section.titleKo, section.title)}
-            </span>
-            <span className="text-sm text-[var(--ink-2)]">
-              {section.pages.slice(0, 4).map((p, i) => (
-                <span key={p.slug}>
-                  {i > 0 && ", "}
-                  {t(locale, p.titleKo, p.title)}
+            <a
+              href={`/geode/docs/${section.pages[0]?.slug ?? ""}`}
+              className="flex flex-col gap-0.5 border-b border-[var(--rule)] py-3 group"
+            >
+              <span className="font-display font-semibold text-[var(--ink)] group-hover:text-[var(--acc-soft)]">
+                <span className="mr-2 text-[10px] uppercase tracking-[0.18em] text-[var(--ink-3)]">
+                  {section.id}
                 </span>
-              ))}
-              {section.pages.length > 4 && ", …"}
-            </span>
-          </a>
+                {t(locale, section.titleKo, section.title)}
+              </span>
+              <span className="text-sm text-[var(--ink-2)]">
+                {section.pages.slice(0, 4).map((p, i) => (
+                  <span key={p.slug}>
+                    {i > 0 && ", "}
+                    {t(locale, p.titleKo, p.title)}
+                  </span>
+                ))}
+                {section.pages.length > 4 && ", …"}
+              </span>
+            </a>
+          </FallIn>
         ))}
       </div>
 

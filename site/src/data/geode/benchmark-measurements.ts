@@ -130,37 +130,151 @@ wait`,
   ],
 };
 
-const mcpmarkGithubBlocked: BenchmarkMeasurement = {
-  id: "mcpmark-github-blocked-20260703",
+const mcpmarkVerifiedAvailable: BenchmarkMeasurement = {
+  id: "mcpmark-verified-available-20260704-gpt55-xhigh",
   group: "mcpmark",
-  title: "github blocked prerequisite record",
-  measuredAt: "2026-07-03 KST",
-  suite: "github/easy",
-  status: "blocked",
+  title: "Verified available-services aggregate",
+  measuredAt: "2026-07-04 KST",
+  suite: "filesystem + postgres + github / standard",
+  status: "complete",
+  model: "gpt-5.5",
+  provider: "openai-codex",
+  source: "subscription",
+  effort: "xhigh",
+  route: "GEODE local MCPMark adapter",
+  harness: "eval-sys/mcpmark@cd45b7f, GEODE feature/mcpmark-agentworld-run",
+  artifact:
+    "artifacts/eval/harnesses/mcpmark/results-geode-agentworld/geode-gpt55-xhigh-20260704-mcpmark-verified-*",
+  scoreLabel: "Accuracy",
+  scoreValue: "86.5% (64 / 74)",
+  secondary: [
+    "Filesystem standard: 25 / 30, 83.3%",
+    "Postgres standard: 20 / 21, 95.2%",
+    "GitHub standard: 19 / 23, 82.6%",
+    "Recorded task execution time: filesystem 13580.6s over 29 recorded tasks, postgres 8765.7s, github 16476.3s",
+    "Notion was not included: no notion_state.json in the local harness environment.",
+    "Playwright/WebArena was not included: required Docker images/service stack were absent.",
+  ],
+  command: `cd artifacts/eval/harnesses/mcpmark
+# Run each available MCP service through the GEODE adapter.
+GEODE_REPO_ROOT=<geode-worktree> \\
+PYTHONPATH=<geode-worktree>:<geode-site-packages> \\
+GITHUB_EVAL_ORG=mangowhoiscloud \\
+GEODE_MCPMARK_GITHUB_REPO_VISIBILITY=public \\
+.venv/bin/python pipeline.py \\
+  --mcp <filesystem|postgres|github> \\
+  --task-suite standard \\
+  --models geode-gpt-5.5 \\
+  --agent geode \\
+  --reasoning-effort xhigh \\
+  --k 1 \\
+  --timeout 1500 \\
+  --exp-name geode-gpt55-xhigh-20260704-mcpmark-verified-<service> \\
+  --output-dir ./results-geode-agentworld`,
+  notes: [
+    "This is not the full MCPMark Verified leaderboard aggregate. It covers only services that were runnable in the local environment: filesystem, postgres, and github.",
+    "The OpenAI model route was the GEODE Codex subscription route, not MCPMark's native LiteLLM OpenAI API route.",
+    "GitHub fixture repositories were made public during execution so the Docker GitHub MCP server could use normal public-repo semantics; all transient repos were deleted by cleanup.",
+    "The filesystem score counts papers/author_folders as a failed no-result transport run after two attempts without meta output.",
+  ],
+};
+
+const mcpmarkVerifiedFilesystem: BenchmarkMeasurement = {
+  id: "mcpmark-verified-filesystem-20260704-gpt55-xhigh",
+  group: "mcpmark",
+  title: "Verified filesystem standard slice",
+  measuredAt: "2026-07-04 KST",
+  suite: "filesystem/standard",
+  status: "complete",
   model: "gpt-5.5",
   provider: "openai-codex",
   source: "subscription",
   effort: "xhigh",
   route: "GEODE local MCPMark adapter",
   harness: "eval-sys/mcpmark@cd45b7f",
-  artifact: "not created",
+  artifact:
+    "artifacts/eval/harnesses/mcpmark/results-geode-agentworld/geode-gpt55-xhigh-20260704-mcpmark-verified-filesystem-*",
   scoreLabel: "Accuracy",
-  scoreValue: "blocked",
+  scoreValue: "83.3% (25 / 30)",
   secondary: [
-    "No GitHub MCPMark score was produced in this cycle.",
-    "The harness requires GITHUB_TOKENS and an evaluation organization.",
+    "Recorded task execution time 13580.6s over 29 recorded tasks",
+    "Average recorded task execution time 468.3s",
+    "Failures: desktop_template/budget_computation, papers/author_folders, papers/find_math_paper, student_database/english_talent, threestudio/output_analysis",
   ],
-  command: `GEODE_REPO_ROOT=<geode-worktree> \\
-OPENAI_API_KEY=dummy \\
-.venv/bin/python pipeline.py \\
-  --mcp github \\
-  --task-suite easy \\
-  --models geode-gpt-5.5 \\
-  --agent geode \\
-  --reasoning-effort xhigh`,
+  command: mcpmarkVerifiedAvailable.command.replace(
+    "<filesystem|postgres|github>",
+    "filesystem",
+  ),
   notes: [
-    "Blocked before live execution because the local harness environment has no .mcp_env credentials.",
-    "Record a measured score only after the GitHub evaluation org and token set are provisioned.",
+    "filesystem/standard is a materially harder slice than filesystem/easy.",
+    "papers/author_folders is counted as a failed no-result transport run because both attempts hung before meta output.",
+    "The adapter now aliases file_path to path when the MCP schema expects path, which fixed write_file failures seen in the first filesystem pass.",
+  ],
+};
+
+const mcpmarkVerifiedPostgres: BenchmarkMeasurement = {
+  id: "mcpmark-verified-postgres-20260704-gpt55-xhigh",
+  group: "mcpmark",
+  title: "Verified postgres standard slice",
+  measuredAt: "2026-07-04 KST",
+  suite: "postgres/standard",
+  status: "complete",
+  model: "gpt-5.5",
+  provider: "openai-codex",
+  source: "subscription",
+  effort: "xhigh",
+  route: "GEODE local MCPMark adapter + postgres-mcp",
+  harness: "eval-sys/mcpmark@cd45b7f, postgres-mcp==0.3.0",
+  artifact:
+    "artifacts/eval/harnesses/mcpmark/results-geode-agentworld/geode-gpt55-xhigh-20260704-mcpmark-verified-postgres",
+  scoreLabel: "Accuracy",
+  scoreValue: "95.2% (20 / 21)",
+  secondary: [
+    "Total task execution time 8765.7s",
+    "Average task execution time 417.4s",
+    "Failure: employees/employee_performance_analysis",
+  ],
+  command: mcpmarkVerifiedAvailable.command.replace(
+    "<filesystem|postgres|github>",
+    "postgres",
+  ),
+  notes: [
+    "The GEODE adapter overrides MCPMark's default postgres server with postgres-mcp==0.3.0 in unrestricted mode.",
+    "A final NoEventLoopError appeared during async cleanup after result writing; it did not affect the recorded verifier result.",
+  ],
+};
+
+const mcpmarkVerifiedGithub: BenchmarkMeasurement = {
+  id: "mcpmark-verified-github-20260704-gpt55-xhigh",
+  group: "mcpmark",
+  title: "Verified github standard slice",
+  measuredAt: "2026-07-04 KST",
+  suite: "github/standard",
+  status: "complete",
+  model: "gpt-5.5",
+  provider: "openai-codex",
+  source: "subscription",
+  effort: "xhigh",
+  route: "GEODE local MCPMark adapter + GitHub MCP Docker server",
+  harness: "eval-sys/mcpmark@cd45b7f, ghcr.io/github/github-mcp-server:v0.15.0",
+  artifact:
+    "artifacts/eval/harnesses/mcpmark/results-geode-agentworld/geode-gpt55-xhigh-20260704-mcpmark-verified-github*",
+  scoreLabel: "Accuracy",
+  scoreValue: "82.6% (19 / 23)",
+  secondary: [
+    "Total task execution time 16476.3s",
+    "Average task execution time 716.4s",
+    "Failures: claude-code/label_color_standardization, mcpmark-cicd/deployment_status_workflow, missing-semester/assign_contributor_labels, missing-semester/find_salient_file",
+    "All transient GitHub repositories were deleted by MCPMark cleanup.",
+  ],
+  command: mcpmarkVerifiedAvailable.command.replace(
+    "<filesystem|postgres|github>",
+    "github",
+  ),
+  notes: [
+    "The first label_color_standardization record is a fixture setup failure from GitHub state duplication; the retry produced an agent-level verification failure.",
+    "The assign_contributor_labels failure used suffixed transient usernames in labels instead of canonical contributor labels.",
+    "The find_salient_file failure did not create ANSWER.md on the required master branch.",
   ],
 };
 
@@ -198,6 +312,43 @@ OPENAI_API_KEY=dummy \\
   ],
 };
 
+const mcpmarkNotionUnblockSmoke: BenchmarkMeasurement = {
+  id: "mcpmark-notion-unblock-smoke-20260710",
+  group: "mcpmark",
+  title: "notion unblock smoke (easy, single task)",
+  measuredAt: "2026-07-10 KST",
+  suite: "notion/easy",
+  status: "complete",
+  model: "gpt-5.5",
+  provider: "openai-codex",
+  source: "subscription",
+  effort: "xhigh",
+  route: "GEODE local MCPMark adapter",
+  harness: "eval-sys/mcpmark@cd45b7f",
+  artifact:
+    "artifacts/eval/harnesses/mcpmark/results-geode-agentworld/geode-gpt55-xhigh-20260710-notion-smoke-unblock-r2/geode-gpt-5-5-xhigh__notion-easy/run-1",
+  scoreLabel: "Accuracy",
+  scoreValue: "1 / 1",
+  secondary: [
+    "State duplication 58.9s; agent 216.8s over 8 rounds; 62.8k input / 8.0k output tokens.",
+    "The 2026-07-04 stall was an expired browser session: duplication page.goto to app.notion.com timed out at 120s per retry.",
+    "Re-login used a real-Chrome-channel persistent context (Google OAuth rejects automation-flagged browsers); the session cookie lives on .app.notion.com.",
+  ],
+  command: `set -a; source .mcp_env; set +a
+OPENAI_API_KEY=dummy \\
+.venv/bin/python -m plugins.benchmark_harness.run_mcpmark \\
+  --mcp notion \\
+  --task-suite easy \\
+  --tasks toronto_guide/simple__change_color \\
+  --models geode-gpt-5.5 \\
+  --agent geode \\
+  --reasoning-effort xhigh`,
+  notes: [
+    "Verifier-backed single-task smoke proving the notion service is runnable end to end; not a notion standard score.",
+    "The task embeds a Notion API trap: updating a select option color returns validation_error; the agent passed by redefining options via a database schema update.",
+  ],
+};
+
 const mcpmarkPlaywrightBlocked: BenchmarkMeasurement = {
   id: "mcpmark-playwright-blocked-20260703",
   group: "mcpmark",
@@ -229,40 +380,6 @@ OPENAI_API_KEY=dummy \\
   notes: [
     "Blocked before live execution because the browser-backed service stack was not running.",
     "Record a measured score only after the browser environment is provisioned and health checked.",
-  ],
-};
-
-const mcpmarkPostgresBlocked: BenchmarkMeasurement = {
-  id: "mcpmark-postgres-blocked-20260703",
-  group: "mcpmark",
-  title: "postgres blocked prerequisite record",
-  measuredAt: "2026-07-03 KST",
-  suite: "postgres/easy",
-  status: "blocked",
-  model: "gpt-5.5",
-  provider: "openai-codex",
-  source: "subscription",
-  effort: "xhigh",
-  route: "GEODE local MCPMark adapter",
-  harness: "eval-sys/mcpmark@cd45b7f",
-  artifact: "not created",
-  scoreLabel: "Accuracy",
-  scoreValue: "blocked",
-  secondary: [
-    "No Postgres MCPMark score was produced in this cycle.",
-    "Docker-dependent Postgres restore and service setup were not available.",
-  ],
-  command: `GEODE_REPO_ROOT=<geode-worktree> \\
-OPENAI_API_KEY=dummy \\
-.venv/bin/python pipeline.py \\
-  --mcp postgres \\
-  --task-suite easy \\
-  --models geode-gpt-5.5 \\
-  --agent geode \\
-  --reasoning-effort xhigh`,
-  notes: [
-    "Blocked before live execution because Docker service discovery did not complete in the local benchmark environment.",
-    "Record a measured score only after the Postgres container, backup restore, and verifier setup pass health checks.",
   ],
 };
 
@@ -525,43 +642,51 @@ export const BENCHMARK_GROUPS: BenchmarkGroup[] = [
     matrix: [
       {
         label: "File",
-        value: "100.0%",
-        measurementId: mcpmarkFilesystemEasyParallel.id,
-        note: "filesystem/easy, 10 tasks, category-parallel rerun",
+        value: "83.3%",
+        measurementId: mcpmarkVerifiedFilesystem.id,
+        note: "standard, 25 / 30",
       },
       {
         label: "GitHub",
-        value: "blocked",
-        measurementId: mcpmarkGithubBlocked.id,
-        note: "GITHUB_TOKENS and eval org required",
+        value: "82.6%",
+        measurementId: mcpmarkVerifiedGithub.id,
+        note: "standard, 19 / 23",
       },
       {
         label: "Notion",
-        value: "blocked",
-        measurementId: mcpmarkNotionBlocked.id,
-        note: "source/eval Notion workspace credentials required",
+        value: "unmeasured",
+        measurementId: mcpmarkNotionUnblockSmoke.id,
+        note: "unblocked 2026-07-10 (easy smoke 1/1); standard 28 tasks not yet measured",
       },
       {
         label: "Playwright",
-        value: "blocked",
+        value: "unmeasured",
         measurementId: mcpmarkPlaywrightBlocked.id,
-        note: "browser/WebArena service setup required",
+        note: "live-web subset runnable since 2026-07-10; WebArena subset needs ~100GB images (local disk exceeded)",
       },
       {
         label: "Postgres",
-        value: "blocked",
-        measurementId: mcpmarkPostgresBlocked.id,
-        note: "Docker Postgres and backup restore required",
+        value: "95.2%",
+        measurementId: mcpmarkVerifiedPostgres.id,
+        note: "standard, 20 / 21",
       },
-      { label: "Avg.", value: "100.0%", note: "Measured surfaces only: File" },
+      {
+        label: "Avg.",
+        value: "86.5%",
+        measurementId: mcpmarkVerifiedAvailable.id,
+        note: "Measured available services only: filesystem+postgres+github",
+      },
     ],
     measurements: [
+      mcpmarkVerifiedAvailable,
+      mcpmarkVerifiedGithub,
+      mcpmarkVerifiedPostgres,
+      mcpmarkVerifiedFilesystem,
       mcpmarkFilesystemEasyParallel,
       mcpmarkFilesystemEasy,
-      mcpmarkGithubBlocked,
+      mcpmarkNotionUnblockSmoke,
       mcpmarkNotionBlocked,
       mcpmarkPlaywrightBlocked,
-      mcpmarkPostgresBlocked,
     ],
   },
   {

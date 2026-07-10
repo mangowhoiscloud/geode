@@ -222,7 +222,7 @@ gradient; the no-gradient rule below stays intact.
 - Don't introduce a light mode. The substrate is fixed.
 - Don't use pure black `#000` or pure white `#fff` — both are too cold.
 - Don't introduce gradients (text or background).
-- Don't add motion beyond `transition-colors`. No spring, no slide, no fade-in beyond the once-per-page-load 0.4s opacity fade.
+- Don't add motion beyond `transition-colors`, with ONE sanctioned exception: the `FallIn` scroll-entrance (`src/components/geode-docs/fall-in.tsx`, hermes-agent landing style — element drops from above and spring-settles ONCE when it first scrolls into view, honors `prefers-reduced-motion`, stagger ≤0.1s per item, tilt ≤1°). Use `FallIn` for card/list entrances; do not hand-roll other springs, slides, or fade-ins beyond the once-per-page-load 0.4s opacity fade.
 - Don't add emojis to UI chrome (titles, headings, labels).
 - Don't introduce new accent colors. Rose for identity, gold for action, aqua for information, scoped petri-blue for the self-improving bridge, and that is it.
 - Don't use `dark-panel` or `mascot-inset` utilities — they were transitional and are removed in the dark-mode reset.
