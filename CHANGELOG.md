@@ -45,6 +45,19 @@ functional change.
 
 ---
 
+## [0.99.300] - 2026-07-11
+
+### Changed
+
+- **Portfolio serves Korean only on explicit `?lang=ko` (operator-directed).**
+  The default register returns to English; the `lang` query parameter is the
+  sole switch (both `ko` and `en` accepted, never the browser locale), the
+  URL carries the parameter only when the locale differs from the surface
+  default, and the docs surface keeps its Korean default with `?lang=en`
+  unchanged.
+
+---
+
 ## [0.99.299] - 2026-07-11
 
 ### Changed

@@ -976,7 +976,7 @@ function DistillationAct() {
 
 export default function GeodePortfolioPage() {
   return (
-    <LocaleProvider defaultLocale="ko">
+    <LocaleProvider defaultLocale="en">
       <main
         data-astryx-theme="neutral"
         className={`${galmuri.variable} ${serifDisplay.variable} min-h-screen overflow-x-clip bg-[var(--acc-artifact)] text-[#FFF0F8]`}
