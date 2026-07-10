@@ -45,6 +45,20 @@ functional change.
 
 ---
 
+## [0.99.296] - 2026-07-11
+
+### Changed
+
+- **Portfolio legibility pass: deep-rose ink grade (operator-directed).**
+  The signature rose `#F49BC4` read at ~1.8:1 as ink on the white postcards,
+  washing out every diagram; plates now write with a darkened same-hue ink
+  `#C2447F` (~4.5:1) across line-art strokes, titles, captions, chips, the
+  Geodi stamp, and the winning memory band, while the signature stays the
+  field and fill color. Plate textures drop behind an 80% paper scrim and
+  white copy on the rose field rises to 90% alpha.
+
+---
+
 ## [0.99.295] - 2026-07-10
 
 ### Fixed
