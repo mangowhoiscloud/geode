@@ -12,7 +12,6 @@ import { useRef, useState } from "react";
 
 import { GeodiSprite } from "@/components/geode/geodi-sprite";
 import { LocaleProvider, t, useLocale } from "@/components/geode/locale-context";
-import { GeodeFooter } from "@/components/geode/sections/footer";
 import { GeodeNav } from "@/components/geode/sections/nav";
 import { BENCHMARK_GROUPS } from "@/data/geode/benchmark-measurements";
 import { GEODE_SOT } from "@/data/geode/sot";
@@ -68,7 +67,7 @@ function TerminalMock() {
   const locale = useLocale();
   return (
     <figure className="mx-auto w-full max-w-2xl">
-      <div className="overflow-hidden rounded-lg border border-[var(--rule)] bg-[var(--paper-deep)] text-left">
+      <div className="overflow-hidden rounded-lg border border-[color-mix(in_srgb,#FFF0F8_35%,transparent)] bg-[var(--paper-deep)] text-left">
         <div className="flex items-center gap-2 border-b border-[var(--rule-soft)] px-4 py-2.5">
           <span className="flex gap-1.5">
             {[0, 1, 2].map((dot) => (
@@ -78,7 +77,7 @@ function TerminalMock() {
               />
             ))}
           </span>
-          <span className="ml-2 font-mono text-[11px] text-[color-mix(in_srgb,var(--acc-artifact)_55%,transparent)]">geode</span>
+          <span className="ml-2 font-mono text-[11px] text-[color-mix(in_srgb,var(--acc-artifact)_75%,transparent)]">geode</span>
         </div>
         <div className="px-5 py-5 sm:px-7">
           <div className="flex items-center gap-6">
@@ -87,16 +86,16 @@ function TerminalMock() {
               <p>
                 <span className="text-[var(--acc-artifact)]">◆</span>{" "}
                 <span className="font-semibold text-[var(--acc-artifact)]">GEODE</span>{" "}
-                <span className="text-[color-mix(in_srgb,var(--acc-artifact)_78%,transparent)]">v{GEODE_SOT.version}</span>
+                <span className="text-[var(--acc-artifact)]">v{GEODE_SOT.version}</span>
               </p>
-              <p className="text-[color-mix(in_srgb,var(--acc-artifact)_55%,transparent)]">claude-opus-4-8 · ~/workspace/geode</p>
-              <p className="text-[color-mix(in_srgb,var(--acc-artifact)_55%,transparent)]">/help for commands · type naturally</p>
+              <p className="text-[color-mix(in_srgb,var(--acc-artifact)_75%,transparent)]">claude-opus-4-8 · ~/workspace/geode</p>
+              <p className="text-[color-mix(in_srgb,var(--acc-artifact)_75%,transparent)]">/help for commands · type naturally</p>
             </div>
           </div>
           <div className="mt-4 border-t border-[var(--rule-soft)] pt-4 font-mono text-[12px] sm:text-[13px]">
             <p className="break-words">
               <span className="text-[var(--acc-artifact)]">&gt;</span>{" "}
-              <span className="text-[color-mix(in_srgb,var(--acc-artifact)_78%,transparent)]">
+              <span className="text-[var(--acc-artifact)]">
                 {t(
                   locale,
                   "이 레포 점검하고 릴리스 블로커 요약해줘",
@@ -108,9 +107,9 @@ function TerminalMock() {
           </div>
         </div>
       </div>
-      <figcaption className="mx-auto mt-3 w-fit rounded bg-[color-mix(in_srgb,var(--paper)_78%,transparent)] px-3 py-1 text-center font-mono text-[10.5px] text-[var(--acc-artifact)]">
+      <figcaption className="mx-auto mt-3 w-fit rounded bg-[#FFF0F8] px-3 py-1 text-center font-mono text-[10.5px] text-[var(--acc-artifact)]">
         core/ui/mascot.py · geodi_art.py{" "}
-        <span className="text-[color-mix(in_srgb,var(--acc-artifact)_78%,transparent)]">
+        <span className="text-[var(--acc-artifact)]">
           {t(locale, "CLI 웰컴 스크린을 그대로 옮긴 화면", "the CLI welcome screen, transcribed")}
         </span>
       </figcaption>
@@ -161,7 +160,7 @@ function HeroField() {
           style={{ imageRendering: "pixelated" }}
         />
         <div className="relative z-10 mx-auto max-w-7xl px-5 pt-9 text-center sm:px-8">
-          <span className="font-pixel text-[19px] font-bold tracking-[0.06em] text-[var(--paper)]">GEODE</span>
+          <span className="font-pixel text-[19px] font-bold tracking-[0.06em] text-[#FFF0F8]">GEODE</span>
         </div>
 
         <div className="relative z-10 mx-auto grid max-w-7xl items-center gap-6 px-5 pb-24 pt-10 sm:px-8 lg:grid-cols-[1.05fr_0.95fr] lg:pb-28 lg:pt-14">
@@ -171,21 +170,21 @@ function HeroField() {
             animate="show"
             variants={{ hidden: {}, show: { transition: { staggerChildren: 0.1, delayChildren: 0.05 } } }}
           >
-            <motion.p variants={heroItem} className="font-mono text-[10.5px] uppercase tracking-[0.3em] text-[color-mix(in_srgb,var(--paper)_62%,transparent)]">
+            <motion.p variants={heroItem} className="font-mono text-[10.5px] uppercase tracking-[0.3em] text-[color-mix(in_srgb,#FFF0F8_70%,transparent)]">
               open source · apache-2.0 · {t(locale, "루프 실험실", "the loop laboratory")}
             </motion.p>
-            <motion.h1 variants={heroItem} className="font-serif-display mt-7 text-balance text-[clamp(2.5rem,5.8vw,4.4rem)] font-black leading-[1.12] text-[var(--paper)]">
-              {t(locale, "일을 맡기면", "The agent that")}
+            <motion.h1 variants={heroItem} className="font-serif-display mt-7 text-balance text-[clamp(2.5rem,5.8vw,4.4rem)] font-black leading-[1.12] text-[#FFF0F8]">
+              {t(locale, "컴퓨터의 모든 일을", "The agentic OS")}
               <br />
-              {t(locale, "끝까지 실행하고,", "executes to the end,")}
+              {t(locale, "모델로 실행하고,", "that runs everything,")}
               <br />
-              {t(locale, "스스로를 고쳐 씁니다.", "and rewrites itself.")}
+              {t(locale, "스스로를 고쳐 쓰는 OS.", "and rewrites itself.")}
             </motion.h1>
 
-            <motion.p variants={heroItem} className="mt-10 font-mono text-[10.5px] uppercase tracking-[0.3em] text-[color-mix(in_srgb,var(--paper)_62%,transparent)]">
+            <motion.p variants={heroItem} className="mt-10 font-mono text-[10.5px] uppercase tracking-[0.3em] text-[color-mix(in_srgb,#FFF0F8_70%,transparent)]">
               run via terminal
             </motion.p>
-            <motion.div variants={heroItem} className="mt-3 inline-block rounded bg-[var(--paper)] px-5 py-3 text-left font-mono text-[12.5px] text-[color-mix(in_srgb,var(--acc-artifact)_78%,transparent)] sm:text-[13.5px]">
+            <motion.div variants={heroItem} className="mt-3 inline-block rounded bg-[#FFF0F8] px-5 py-3 text-left font-mono text-[12.5px] text-[var(--acc-artifact)] sm:text-[13.5px]">
               <span className="text-[var(--acc-artifact)]">$</span> uv run geode{" "}
               <span className="text-[var(--acc-artifact)]">
                 &quot;{t(locale, "이 레포 점검하고 릴리스 블로커 요약해줘", "inspect this repo and summarize release blockers")}&quot;
@@ -195,14 +194,14 @@ function HeroField() {
             <motion.div variants={heroItem} className="mt-9 flex flex-wrap items-center gap-x-7 gap-y-3">
               <Link
                 href="/docs"
-                className="inline-flex touch-manipulation items-center rounded bg-[var(--paper)] px-5 py-2.5 text-[14px] font-medium text-[var(--acc-artifact)] transition-opacity hover:opacity-85"
+                className="inline-flex touch-manipulation items-center rounded bg-[#FFF0F8] px-5 py-2.5 text-[14px] font-medium text-[var(--acc-artifact)] transition-opacity hover:opacity-85"
               >
                 {t(locale, "문서 읽기", "Read the docs")}
               </Link>
               <Link
                 href="https://github.com/mangowhoiscloud/geode"
                 target="_blank"
-                className="font-mono text-[13px] text-[var(--paper)] underline decoration-[color-mix(in_srgb,var(--paper)_40%,transparent)] underline-offset-4 transition-opacity hover:opacity-75"
+                className="font-mono text-[13px] text-[#FFF0F8] underline decoration-[color-mix(in_srgb,#FFF0F8_45%,transparent)] underline-offset-4 transition-opacity hover:opacity-75"
               >
                 GitHub
               </Link>
@@ -222,9 +221,9 @@ function HeroField() {
               transition={{ duration: 7, repeat: Infinity, ease: "easeInOut" }}
               className="overflow-hidden"
             >
-              <motion.div style={{ scale: reduceMotion ? 1 : sceneZoom, transformOrigin: "50% 78%" }}>
+              <motion.div className="bg-[var(--acc-artifact)]" style={{ scale: reduceMotion ? 1 : sceneZoom, transformOrigin: "50% 78%" }}>
               <Image
-                src="/geode/images/geode-lab-scene.png"
+                src="/geode/images/geode-etch-line.png"
                 alt={t(
                   locale,
                   "체커보드 대리석 실험실 홀 중앙의 Geodi 도트 아트",
@@ -241,7 +240,7 @@ function HeroField() {
           </motion.div>
         </div>
 
-        <div className="pointer-events-none absolute inset-x-0 bottom-0 z-10 flex items-end justify-between px-5 pb-4 font-mono text-[10px] uppercase tracking-[0.18em] text-[color-mix(in_srgb,var(--paper)_55%,transparent)] sm:px-8">
+        <div className="pointer-events-none absolute inset-x-0 bottom-0 z-10 flex items-end justify-between px-5 pb-4 font-mono text-[10px] uppercase tracking-[0.18em] text-[color-mix(in_srgb,#FFF0F8_60%,transparent)] sm:px-8">
           <span>geode v{GEODE_SOT.version}</span>
           <span>apache-2.0 · 2026</span>
         </div>
@@ -263,7 +262,7 @@ function GalleryBand() {
       <div ref={bandRef} className="relative w-full overflow-hidden">
         <motion.div style={{ scale: reduceMotion ? 1 : hallScale, transformOrigin: "50% 42%" }}>
           <Image
-            src="/geode/images/geode-hall-wide.png"
+            src="/geode/images/geode-ripples-wide.png"
             alt=""
             aria-hidden
             width={2400}
@@ -286,12 +285,12 @@ function GalleryBand() {
 }
 
 const LOOP_NODES = [
-  { label: "Perceive", color: "color-mix(in_srgb,var(--acc-artifact)_78%,transparent)" },
-  { label: "Plan", color: "color-mix(in_srgb,var(--acc-artifact)_78%,transparent)" },
+  { label: "Perceive", color: "var(--acc-artifact)" },
+  { label: "Plan", color: "var(--acc-artifact)" },
   { label: "Act", color: "var(--acc-artifact)" },
-  { label: "Observe", color: "color-mix(in_srgb,var(--acc-artifact)_78%,transparent)" },
+  { label: "Observe", color: "var(--acc-artifact)" },
   { label: "Verify", color: "var(--acc-artifact)" },
-  { label: "Replan", color: "color-mix(in_srgb,var(--acc-artifact)_78%,transparent)" },
+  { label: "Replan", color: "var(--acc-artifact)" },
 ];
 
 /** The while(tool_use) cycle as a pixel-styled hexagon ring (section 03 visual). */
@@ -324,10 +323,10 @@ function LoopDiagram() {
         const angleDeg = (Math.atan2(next.y - node.y, next.x - node.x) * 180) / Math.PI;
         return (
           <g key={`edge-${node.label}`}>
-            <line x1={node.x} y1={node.y} x2={next.x} y2={next.y} stroke="var(--rule)" strokeWidth="1" />
+            <line x1={node.x} y1={node.y} x2={next.x} y2={next.y} stroke="var(--acc-artifact)" strokeWidth="1" />
             <polygon
               points="-3,-3.5 4,0 -3,3.5"
-              fill="color-mix(in_srgb,var(--acc-artifact)_55%,transparent)"
+              fill="color-mix(in_srgb,var(--acc-artifact)_75%,transparent)"
               transform={`translate(${mx} ${my}) rotate(${angleDeg})`}
             />
           </g>
@@ -335,20 +334,20 @@ function LoopDiagram() {
       })}
       {/* exit: model answers without tool_use */}
       <line x1={cx} y1={cy + 30} x2={cx} y2={262} stroke="var(--ink-3)" strokeWidth="1" strokeDasharray="2 3" />
-      <polygon points="-3.5,-3 0,4 3.5,-3" fill="color-mix(in_srgb,var(--acc-artifact)_55%,transparent)" transform={`translate(${cx} ${262})`} />
+      <polygon points="-3.5,-3 0,4 3.5,-3" fill="color-mix(in_srgb,var(--acc-artifact)_75%,transparent)" transform={`translate(${cx} ${262})`} />
       <rect
         x={cx - 38}
         y={264}
         width={76}
         height={22}
-        fill="var(--paper-2)"
-        stroke="var(--rule)"
+        fill="#FFF0F8"
+        stroke="var(--acc-artifact)"
         shapeRendering="crispEdges"
       />
-      <text x={cx} y={279} textAnchor="middle" fontSize="10.5" fontFamily="var(--font-fira-code), monospace" fill="color-mix(in_srgb,var(--acc-artifact)_78%,transparent)">
+      <text x={cx} y={279} textAnchor="middle" fontSize="10.5" fontFamily="var(--font-fira-code), monospace" fill="var(--acc-artifact)">
         finalize
       </text>
-      <text x={cx + 8} y={cy + 66} textAnchor="start" fontSize="8" fontFamily="var(--font-fira-code), monospace" fill="color-mix(in_srgb,var(--acc-artifact)_55%,transparent)">
+      <text x={cx + 8} y={cy + 66} textAnchor="start" fontSize="8" fontFamily="var(--font-fira-code), monospace" fill="color-mix(in_srgb,var(--acc-artifact)_75%,transparent)">
         no tool_use
       </text>
       {/* center */}
@@ -365,8 +364,8 @@ function LoopDiagram() {
             y={node.y - nodeH / 2}
             width={nodeW}
             height={nodeH}
-            fill="var(--paper-2)"
-            stroke="var(--rule)"
+            fill="#FFF0F8"
+            stroke="var(--acc-artifact)"
             shapeRendering="crispEdges"
           />
           <text
@@ -404,32 +403,32 @@ function AuditGateDiagram() {
       )}
     >
       {/* candidate */}
-      <rect x="8" y="72" width="92" height="26" fill="var(--paper-2)" stroke="var(--rule)" shapeRendering="crispEdges" />
-      <text x="54" y="88" textAnchor="middle" fontSize="10" fontFamily="var(--font-fira-code), monospace" fill="color-mix(in_srgb,var(--acc-artifact)_78%,transparent)">
+      <rect x="8" y="72" width="92" height="26" fill="#FFF0F8" stroke="var(--acc-artifact)" shapeRendering="crispEdges" />
+      <text x="54" y="88" textAnchor="middle" fontSize="10" fontFamily="var(--font-fira-code), monospace" fill="var(--acc-artifact)">
         scaffold 변이
       </text>
-      <polygon points="-3,-3.5 4,0 -3,3.5" fill="color-mix(in_srgb,var(--acc-artifact)_55%,transparent)" transform="translate(116 85)" />
-      <line x1="100" y1="85" x2="128" y2="85" stroke="var(--rule)" strokeWidth="1" />
+      <polygon points="-3,-3.5 4,0 -3,3.5" fill="color-mix(in_srgb,var(--acc-artifact)_75%,transparent)" transform="translate(116 85)" />
+      <line x1="100" y1="85" x2="128" y2="85" stroke="var(--acc-artifact)" strokeWidth="1" />
 
       {/* adversarial arena */}
-      <rect x="132" y="28" width="150" height="116" fill="none" stroke="var(--rule)" strokeDasharray="3 3" shapeRendering="crispEdges" />
-      <text x="207" y="20" textAnchor="middle" fontSize="9" fontFamily="var(--font-fira-code), monospace" fill="color-mix(in_srgb,var(--acc-artifact)_55%,transparent)">
+      <rect x="132" y="28" width="150" height="116" fill="none" stroke="var(--acc-artifact)" strokeDasharray="3 3" shapeRendering="crispEdges" />
+      <text x="207" y="20" textAnchor="middle" fontSize="9" fontFamily="var(--font-fira-code), monospace" fill="color-mix(in_srgb,var(--acc-artifact)_75%,transparent)">
         adversarial audit
       </text>
-      <rect x="147" y="40" width="120" height="22" fill="var(--paper-2)" stroke="var(--rule)" shapeRendering="crispEdges" />
-      <text x="207" y="54" textAnchor="middle" fontSize="10" fontFamily="var(--font-fira-code), monospace" fill="color-mix(in_srgb,var(--acc-artifact)_78%,transparent)">
+      <rect x="147" y="40" width="120" height="22" fill="#FFF0F8" stroke="var(--acc-artifact)" shapeRendering="crispEdges" />
+      <text x="207" y="54" textAnchor="middle" fontSize="10" fontFamily="var(--font-fira-code), monospace" fill="var(--acc-artifact)">
         Petri auditor
       </text>
-      <rect x="147" y="108" width="120" height="22" fill="var(--paper-2)" stroke="var(--rule)" shapeRendering="crispEdges" />
+      <rect x="147" y="108" width="120" height="22" fill="#FFF0F8" stroke="var(--acc-artifact)" shapeRendering="crispEdges" />
       <text x="207" y="122" textAnchor="middle" fontSize="10" fontFamily="var(--font-fira-code), monospace" fill="var(--acc-artifact)">
         GEODE
       </text>
       {[171, 207, 243].map((x) => (
-        <line key={x} x1={x} y1="64" x2={x} y2="106" stroke="var(--rule)" strokeWidth="1" strokeDasharray="2 2" />
+        <line key={x} x1={x} y1="64" x2={x} y2="106" stroke="var(--acc-artifact)" strokeWidth="1" strokeDasharray="2 2" />
       ))}
 
-      <polygon points="-3,-3.5 4,0 -3,3.5" fill="color-mix(in_srgb,var(--acc-artifact)_55%,transparent)" transform="translate(302 85)" />
-      <line x1="282" y1="85" x2="314" y2="85" stroke="var(--rule)" strokeWidth="1" />
+      <polygon points="-3,-3.5 4,0 -3,3.5" fill="color-mix(in_srgb,var(--acc-artifact)_75%,transparent)" transform="translate(302 85)" />
+      <line x1="282" y1="85" x2="314" y2="85" stroke="var(--acc-artifact)" strokeWidth="1" />
 
       {/* dimension bars + critical floor */}
       {dims.map((h, i) => (
@@ -444,25 +443,25 @@ function AuditGateDiagram() {
         />
       ))}
       <line x1="316" y1="76" x2="402" y2="76" stroke="var(--acc-artifact)" strokeWidth="1" strokeDasharray="4 2" />
-      <text x="359" y="120" textAnchor="middle" fontSize="8.5" fontFamily="var(--font-fira-code), monospace" fill="color-mix(in_srgb,var(--acc-artifact)_55%,transparent)">
+      <text x="359" y="120" textAnchor="middle" fontSize="8.5" fontFamily="var(--font-fira-code), monospace" fill="color-mix(in_srgb,var(--acc-artifact)_75%,transparent)">
         critical floor
       </text>
 
       {/* gate branches */}
-      <line x1="406" y1="85" x2="430" y2="85" stroke="var(--rule)" strokeWidth="1" />
+      <line x1="406" y1="85" x2="430" y2="85" stroke="var(--acc-artifact)" strokeWidth="1" />
       <line x1="430" y1="85" x2="446" y2="52" stroke="var(--acc-artifact)" strokeWidth="1" />
       <polygon points="-3,-3.5 4,0 -3,3.5" fill="var(--acc-artifact)" transform="translate(448 49) rotate(-64)" />
-      <rect x="446" y="30" width="66" height="20" fill="var(--paper-2)" stroke="var(--acc-artifact)" shapeRendering="crispEdges" />
+      <rect x="446" y="30" width="66" height="20" fill="#FFF0F8" stroke="var(--acc-artifact)" shapeRendering="crispEdges" />
       <text x="479" y="43" textAnchor="middle" fontSize="9.5" fontFamily="var(--font-fira-code), monospace" fill="var(--acc-artifact)">
         promote
       </text>
       <line x1="430" y1="85" x2="446" y2="118" stroke="var(--ink-3)" strokeWidth="1" />
-      <polygon points="-3,-3.5 4,0 -3,3.5" fill="color-mix(in_srgb,var(--acc-artifact)_55%,transparent)" transform="translate(448 121) rotate(64)" />
-      <rect x="446" y="120" width="66" height="20" fill="var(--paper-2)" stroke="var(--rule)" shapeRendering="crispEdges" />
-      <text x="479" y="133" textAnchor="middle" fontSize="9.5" fontFamily="var(--font-fira-code), monospace" fill="color-mix(in_srgb,var(--acc-artifact)_55%,transparent)">
+      <polygon points="-3,-3.5 4,0 -3,3.5" fill="color-mix(in_srgb,var(--acc-artifact)_75%,transparent)" transform="translate(448 121) rotate(64)" />
+      <rect x="446" y="120" width="66" height="20" fill="#FFF0F8" stroke="var(--acc-artifact)" shapeRendering="crispEdges" />
+      <text x="479" y="133" textAnchor="middle" fontSize="9.5" fontFamily="var(--font-fira-code), monospace" fill="color-mix(in_srgb,var(--acc-artifact)_75%,transparent)">
         reject
       </text>
-      <text x="470" y="90" textAnchor="middle" fontSize="8" fontFamily="var(--font-fira-code), monospace" fill="color-mix(in_srgb,var(--acc-artifact)_55%,transparent)">
+      <text x="470" y="90" textAnchor="middle" fontSize="8" fontFamily="var(--font-fira-code), monospace" fill="color-mix(in_srgb,var(--acc-artifact)_75%,transparent)">
         gate·random·never
       </text>
     </svg>
@@ -487,21 +486,21 @@ function SeedgenDiagram() {
     >
       {stages.map((stage, i) => (
         <g key={stage}>
-          <rect x={8 + i * 88} y="34" width="76" height="24" fill="var(--paper-2)" stroke="var(--rule)" shapeRendering="crispEdges" />
+          <rect x={8 + i * 88} y="34" width="76" height="24" fill="#FFF0F8" stroke="var(--acc-artifact)" shapeRendering="crispEdges" />
           <text
             x={46 + i * 88}
             y="49"
             textAnchor="middle"
             fontSize="10"
             fontFamily="var(--font-fira-code), monospace"
-            fill="color-mix(in_srgb,var(--acc-artifact)_78%,transparent)"
+            fill="var(--acc-artifact)"
           >
             {stage}
           </text>
           {i < 4 && (
             <g>
-              <line x1={84 + i * 88} y1="46" x2={96 + i * 88} y2="46" stroke="var(--rule)" strokeWidth="1" />
-              <polygon points="-3,-3.5 4,0 -3,3.5" fill="color-mix(in_srgb,var(--acc-artifact)_55%,transparent)" transform={`translate(${95 + i * 88} 46)`} />
+              <line x1={84 + i * 88} y1="46" x2={96 + i * 88} y2="46" stroke="var(--acc-artifact)" strokeWidth="1" />
+              <polygon points="-3,-3.5 4,0 -3,3.5" fill="color-mix(in_srgb,var(--acc-artifact)_75%,transparent)" transform={`translate(${95 + i * 88} 46)`} />
             </g>
           )}
           {/* seeds in flight above each stage */}
@@ -525,7 +524,7 @@ function SeedgenDiagram() {
           )}
         </g>
       ))}
-      <text x="260" y="116" textAnchor="middle" fontSize="9" fontFamily="var(--font-fira-code), monospace" fill="color-mix(in_srgb,var(--acc-artifact)_55%,transparent)">
+      <text x="260" y="116" textAnchor="middle" fontSize="9" fontFamily="var(--font-fira-code), monospace" fill="color-mix(in_srgb,var(--acc-artifact)_75%,transparent)">
         {t(locale, "후보는 단계마다 떨어지고, top-5 생존자만 시드 풀에 남습니다", "candidates drop at every stage; only the top-5 survivors reach the seed pool")}
       </text>
       <text x="260" y="134" textAnchor="middle" fontSize="8.5" fontFamily="var(--font-fira-code), monospace" fill="var(--acc-artifact)">
@@ -547,7 +546,7 @@ function StageLight({ children, className }: { children: React.ReactNode; classN
       {children}
       <motion.div
         aria-hidden
-        className="pointer-events-none absolute inset-0 z-30 bg-[var(--paper)]"
+        className="pointer-events-none absolute inset-0 z-30 bg-[var(--acc-artifact)]"
         style={{ opacity: shade }}
       />
     </div>
@@ -586,18 +585,18 @@ const runModes = [
 function RunRow() {
   const locale = useLocale();
   return (
-    <section id="run" className="border-b border-[var(--rule)] bg-[var(--paper)]">
+    <section id="run" className="bg-[#FFF0F8]">
       <div className="mx-auto grid max-w-6xl gap-12 px-6 py-20 text-center sm:py-24 md:grid-cols-3">
         {runModes.map((mode) => (
           <div key={mode.cmd}>
-            <p className="font-mono text-[10.5px] uppercase tracking-[0.3em] text-[color-mix(in_srgb,var(--acc-artifact)_55%,transparent)]">{mode.eyebrow}</p>
+            <p className="font-mono text-[10.5px] uppercase tracking-[0.3em] text-[color-mix(in_srgb,var(--acc-artifact)_75%,transparent)]">{mode.eyebrow}</p>
             <h2 className="font-serif-display mt-3 text-[30px] font-semibold text-[var(--acc-artifact)]">
               {locale === "en" ? mode.titleEn : mode.titleKo}
             </h2>
-            <p className="mx-auto mt-3 inline-block rounded bg-[var(--paper-deep)] px-4 py-2 font-mono text-[13px] text-[var(--acc-artifact)]">
+            <p className="mx-auto mt-3 inline-block rounded bg-[var(--acc-artifact)] px-4 py-2 font-mono text-[13px] text-[var(--acc-artifact)]">
               {mode.cmd}
             </p>
-            <p className="mx-auto mt-3 max-w-[260px] text-[13px] leading-[1.7] text-[color-mix(in_srgb,var(--acc-artifact)_78%,transparent)]">
+            <p className="mx-auto mt-3 max-w-[260px] text-[13px] leading-[1.7] text-[var(--acc-artifact)]">
               {t(locale, mode.ko, mode.en)}
             </p>
           </div>
@@ -610,16 +609,16 @@ function RunRow() {
 /* ---------------- features: numbered plates on the print slab ------------ */
 
 /** Print-slab (rose-white) surface colors — art-plate scope only. */
-const SLAB_INK = "var(--paper)";
-const SLAB_ACCENT = "color-mix(in srgb, var(--paper) 62%, transparent)";
+const SLAB_INK = "#FFF0F8";
+const SLAB_ACCENT = "color-mix(in srgb, #FFF0F8 72%, transparent)";
 
 function PerceiveBanner() {
   return (
     <div className="flex h-full w-full flex-col justify-center gap-2.5 px-6 font-mono text-[12px] leading-relaxed">
-      <p><span className="text-[var(--acc-artifact)]">context</span><span className="text-[color-mix(in_srgb,var(--acc-artifact)_55%,transparent)]"> · per-turn time, memory, rules</span></p>
-      <p><span className="text-[var(--acc-artifact)]">documents</span><span className="text-[color-mix(in_srgb,var(--acc-artifact)_55%,transparent)]"> · local pdf ingest</span></p>
-      <p><span className="text-[var(--acc-artifact)]">browser</span><span className="text-[color-mix(in_srgb,var(--acc-artifact)_55%,transparent)]"> · your real chrome, over cdp</span></p>
-      <p><span className="text-[var(--acc-artifact)]">desktop</span><span className="text-[color-mix(in_srgb,var(--acc-artifact)_55%,transparent)]"> · ax tree before pixels</span></p>
+      <p><span className="text-[var(--acc-artifact)]">context</span><span className="text-[color-mix(in_srgb,var(--acc-artifact)_75%,transparent)]"> · per-turn time, memory, rules</span></p>
+      <p><span className="text-[var(--acc-artifact)]">documents</span><span className="text-[color-mix(in_srgb,var(--acc-artifact)_75%,transparent)]"> · local pdf ingest</span></p>
+      <p><span className="text-[var(--acc-artifact)]">browser</span><span className="text-[color-mix(in_srgb,var(--acc-artifact)_75%,transparent)]"> · your real chrome, over cdp</span></p>
+      <p><span className="text-[var(--acc-artifact)]">desktop</span><span className="text-[color-mix(in_srgb,var(--acc-artifact)_75%,transparent)]"> · ax tree before pixels</span></p>
     </div>
   );
 }
@@ -633,11 +632,11 @@ function MeasureBanner() {
         {cells.map((cell) => (
           <div key={cell.label} className="text-center">
             <p className="font-serif-display text-[26px] font-black text-[var(--acc-artifact)]">{cell.value}</p>
-            <p className="mt-1 font-mono text-[10px] uppercase tracking-[0.2em] text-[color-mix(in_srgb,var(--acc-artifact)_55%,transparent)]">{cell.label}</p>
+            <p className="mt-1 font-mono text-[10px] uppercase tracking-[0.2em] text-[color-mix(in_srgb,var(--acc-artifact)_75%,transparent)]">{cell.label}</p>
           </div>
         ))}
       </div>
-      <p className="text-center font-mono text-[10px] uppercase tracking-[0.14em] text-[color-mix(in_srgb,var(--acc-artifact)_55%,transparent)]">
+      <p className="text-center font-mono text-[10px] uppercase tracking-[0.14em] text-[color-mix(in_srgb,var(--acc-artifact)_75%,transparent)]">
         tau2-bench base · native user_simulator
       </p>
     </div>
@@ -647,9 +646,9 @@ function MeasureBanner() {
 function ResideBanner() {
   return (
     <div className="flex h-full w-full flex-col items-center justify-center gap-4 px-6">
-      <div className="font-mono text-[12px] leading-relaxed text-[color-mix(in_srgb,var(--acc-artifact)_78%,transparent)]">
+      <div className="font-mono text-[12px] leading-relaxed text-[var(--acc-artifact)]">
         <p>anthropic · openai / codex · glm</p>
-        <p className="text-center text-[color-mix(in_srgb,var(--acc-artifact)_55%,transparent)]">oauth you own · provider-isolated</p>
+        <p className="text-center text-[color-mix(in_srgb,var(--acc-artifact)_75%,transparent)]">oauth you own · provider-isolated</p>
       </div>
       <div className="flex flex-wrap justify-center gap-1.5">
         {surfaceChips.map((chip) => (
@@ -754,7 +753,7 @@ function FeaturesGrid() {
                 {locale === "en" ? feature.headEn : feature.headKo}
               </h2>
               <div
-                className="mt-5 h-[240px] overflow-hidden rounded-sm bg-[var(--paper)] bg-cover bg-center"
+                className="mt-5 h-[240px] overflow-hidden rounded-sm bg-[#FFF0F8] bg-cover bg-center"
                 style={{ backgroundImage: `url(/geode/images/plate-bg-${feature.plate}.png)`, imageRendering: "pixelated" }}
               >
                 <motion.div
@@ -782,25 +781,125 @@ function FeaturesGrid() {
   );
 }
 
+/* ---------------- the distillation: tokens filtered to one drop ---------- */
+
+const RAIN_COLS = [7, 16, 24, 33, 41, 52, 60, 69, 77, 86, 93] as const;
+
+function RainBand({ keep, phase }: { keep: number; phase: number }) {
+  // keep: fraction of columns that survive into this band (deterministic).
+  const cols = RAIN_COLS.filter((_, i) => (i * 7 + phase * 3) % 10 < keep * 10);
+  return (
+    <div aria-hidden className="relative h-[52vh] w-full overflow-hidden">
+      {cols.map((left, i) => (
+        <div
+          key={left}
+          className="geodi-rain absolute top-[-8%] flex h-[116%] flex-col justify-between"
+          style={{ left: `${left}%`, animationDelay: `${(i * 0.37 + phase * 0.19) % 2.4}s` }}
+        >
+          {Array.from({ length: 7 }).map((_, k) => (
+            <span key={k} className="h-[6px] w-[6px] bg-[#FFF0F8]" style={{ opacity: k % 3 === phase % 3 ? 1 : 0.55 }} />
+          ))}
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function FilterRule({ label }: { label: string }) {
+  return (
+    <div className="relative flex w-full items-center" aria-hidden>
+      <div className="h-[2px] flex-1 bg-[repeating-linear-gradient(90deg,#FFF0F8_0,#FFF0F8_14px,transparent_14px,transparent_26px)]" />
+      <span className="ml-4 font-mono text-[10.5px] uppercase tracking-[0.3em] text-[color-mix(in_srgb,#FFF0F8_75%,transparent)]">
+        {label}
+      </span>
+    </div>
+  );
+}
+
+/** Tokens pour like water over the baseline ledger; three filters thin the
+    rain until a single drop of improvement is left — still forming, as the
+    record honestly stands. Scroll descends the funnel. */
+function DistillationAct() {
+  const locale = useLocale();
+  const reduceMotion = useReducedMotion();
+  const wrapRef = useRef<HTMLDivElement | null>(null);
+  const { scrollYProgress } = useScroll({ target: wrapRef, offset: ["start start", "end end"] });
+  const descend = useTransform(scrollYProgress, [0, 1], ["0vh", "-158vh"]);
+  const ledger: { id: string; verdict: string; keep?: boolean }[] = [
+    { id: "gen-2606-i1-004", verdict: "REJECT · margin < floor" },
+    { id: "gen-2606-i2-001", verdict: "REJECT · critical regress" },
+    { id: "crucible-S1", verdict: "REJECT · full paired run" },
+    { id: "crucible-S5", verdict: "EVOLVE-BLOCK · pending", keep: true },
+  ];
+  return (
+    <section ref={wrapRef} className="relative h-[280vh] bg-[var(--acc-artifact)]">
+      <div className="sticky top-0 h-screen overflow-hidden">
+        <div className="pointer-events-none absolute left-5 top-8 z-20 max-w-[320px] text-left sm:left-10 sm:top-12">
+          <p className="font-mono text-[10.5px] uppercase tracking-[0.3em] text-[color-mix(in_srgb,#FFF0F8_70%,transparent)]">
+            {t(locale, "증류", "the distillation")}
+          </p>
+          <h2 className="font-serif-display mt-3 text-balance text-[clamp(1.5rem,3vw,2.2rem)] font-black leading-[1.25] text-[#FFF0F8]">
+            {t(
+              locale,
+              "천 번의 토큰이 한 방울이 될 때까지.",
+              "A thousand tokens, filtered to a single drop."
+            )}
+          </h2>
+        </div>
+
+        <motion.div style={{ y: reduceMotion ? "-158vh" : descend }} className="relative">
+          <RainBand keep={1} phase={0} />
+          <div className="mx-auto max-w-5xl px-6"><FilterRule label="critic" /></div>
+          <RainBand keep={0.55} phase={1} />
+          <div className="mx-auto max-w-5xl px-6"><FilterRule label="petri gate" /></div>
+          <RainBand keep={0.25} phase={2} />
+          <div className="mx-auto max-w-5xl px-6"><FilterRule label="held-out" /></div>
+
+          {/* the last chamber: one drop, still forming, above the ledger */}
+          <div className="flex h-[100vh] flex-col items-center justify-center gap-10 px-6">
+            <div className="flex flex-col items-center gap-2" aria-hidden>
+              <span className="geodi-drop h-[7px] w-[7px] bg-[#FFF0F8]" />
+              <span className="h-[10px] w-[2px] bg-[color-mix(in_srgb,#FFF0F8_45%,transparent)]" />
+            </div>
+            <div className="w-full max-w-xl border-t border-[color-mix(in_srgb,#FFF0F8_50%,transparent)]">
+              <p className="mt-3 font-mono text-[10.5px] uppercase tracking-[0.3em] text-[color-mix(in_srgb,#FFF0F8_70%,transparent)]">
+                baseline ledger
+              </p>
+              <div className="mt-4 space-y-2.5 font-mono text-[12.5px]">
+                {ledger.map((row) => (
+                  <div key={row.id} className="flex items-baseline justify-between gap-4">
+                    <span className={row.keep ? "text-[#FFF0F8]" : "text-[color-mix(in_srgb,#FFF0F8_55%,transparent)]"}>
+                      {row.id}
+                    </span>
+                    <span className={row.keep ? "text-[#FFF0F8]" : "text-[color-mix(in_srgb,#FFF0F8_55%,transparent)]"}>
+                      {row.verdict}
+                    </span>
+                  </div>
+                ))}
+              </div>
+              <p className="mt-6 font-serif-display text-[15.5px] font-semibold leading-[1.6] text-[#FFF0F8]">
+                {t(
+                  locale,
+                  "첫 방울은 아직 매달려 있습니다. 기록은 그 무게까지 답니다.",
+                  "The first drop is still forming. The ledger weighs even that."
+                )}
+              </p>
+            </div>
+          </div>
+        </motion.div>
+      </div>
+    </section>
+  );
+}
+
 /* ---------------- giant wordmark band ------------------------------------ */
 
 function WordmarkBand() {
-  const reduceMotion = useReducedMotion();
-  const bandRef = useRef<HTMLDivElement | null>(null);
-  const { scrollYProgress } = useScroll({ target: bandRef, offset: ["start end", "end start"] });
-  const loom = useTransform(scrollYProgress, [0, 1], [0.94, 1.1]);
   return (
-    <div
-      ref={bandRef}
-      aria-hidden
-      className="pointer-events-none flex h-screen select-none items-center justify-center overflow-hidden"
-    >
-      <motion.p
-        style={{ scale: reduceMotion ? 1 : loom, mixBlendMode: "difference" }}
-        className="font-pixel whitespace-nowrap text-center text-[23.5vw] font-bold leading-[0.86] text-[var(--acc-artifact)]"
-      >
+    <div aria-hidden className="select-none overflow-hidden bg-[var(--acc-artifact)]">
+      <p className="font-pixel -mb-[0.16em] -mt-[0.02em] whitespace-nowrap text-center text-[24.5vw] font-bold leading-[0.9] text-[#FFF0F8]">
         GEODE
-      </motion.p>
+      </p>
     </div>
   );
 }
@@ -818,16 +917,16 @@ function LabFinale() {
       <div aria-hidden className="pointer-events-none absolute inset-0 flex items-center justify-center">
         <motion.span
           style={{ scale: reduceMotion ? 1 : ghostScale }}
-          className="font-pixel select-none text-[24vw] font-bold leading-none text-[var(--paper)] opacity-[0.06]"
+          className="font-pixel select-none text-[24vw] font-bold leading-none text-[#FFF0F8] opacity-[0.06]"
         >
           GEODE
         </motion.span>
       </div>
       <div className="relative z-10 mx-auto flex max-w-5xl flex-col items-center gap-7 px-6 py-24 text-center sm:py-32">
-        <p className="font-mono text-[11px] uppercase tracking-[0.3em] text-[color-mix(in_srgb,var(--paper)_65%,transparent)]">
+        <p className="font-mono text-[11px] uppercase tracking-[0.3em] text-[color-mix(in_srgb,#FFF0F8_70%,transparent)]">
           cultured since {firstRelease.date} · release #{releaseCount} · v{latestRelease.version}
         </p>
-        <h2 className="font-serif-display text-balance text-[clamp(2.4rem,6vw,4.2rem)] font-black leading-[1.1] text-[var(--paper)]">
+        <h2 className="font-serif-display text-balance text-[clamp(2.4rem,6vw,4.2rem)] font-black leading-[1.1] text-[#FFF0F8]">
           {t(locale, "루프 실험실", "The Loop Laboratory")}
         </h2>
         <motion.div
@@ -839,13 +938,13 @@ function LabFinale() {
         >
           <GeodiSprite scale={5} silhouette="var(--paper)" />
         </motion.div>
-        <p className="font-serif-display max-w-xl text-[clamp(1.05rem,2.4vw,1.4rem)] font-semibold leading-[1.6] text-[var(--paper)]">
+        <p className="font-serif-display max-w-xl text-[clamp(1.05rem,2.4vw,1.4rem)] font-semibold leading-[1.6] text-[#FFF0F8]">
           {t(locale, "실패를 기록하고, 스스로를 고쳐 씁니다.", "It records its failures, and rewrites itself.")}
         </p>
         <div className="mt-2 flex flex-wrap items-center justify-center gap-x-7 gap-y-3">
           <Link
             href="/docs"
-            className="inline-flex touch-manipulation items-center rounded bg-[var(--paper)] px-5 py-2.5 text-[14px] font-medium text-[var(--acc-artifact)] transition-opacity hover:opacity-85"
+            className="inline-flex touch-manipulation items-center rounded bg-[#FFF0F8] px-5 py-2.5 text-[14px] font-medium text-[var(--acc-artifact)] transition-opacity hover:opacity-85"
           >
             {t(locale, "문서 읽기", "Read the docs")}
           </Link>
@@ -853,13 +952,13 @@ function LabFinale() {
             href="https://github.com/mangowhoiscloud/geode/blob/main/CHANGELOG.md"
             target="_blank"
             rel="noreferrer"
-            className="font-mono text-[13px] text-[var(--paper)] underline decoration-[color-mix(in_srgb,var(--paper)_40%,transparent)] underline-offset-4 transition-opacity hover:opacity-75"
+            className="font-mono text-[13px] text-[#FFF0F8] underline decoration-[color-mix(in_srgb,#FFF0F8_45%,transparent)] underline-offset-4 transition-opacity hover:opacity-75"
           >
             {t(locale, "전체 기록 보기", "View the full record")}
           </a>
         </div>
       </div>
-      <div className="pointer-events-none absolute inset-x-0 bottom-0 z-10 flex items-end justify-between px-5 pb-4 font-mono text-[10px] uppercase tracking-[0.18em] text-[color-mix(in_srgb,var(--paper)_55%,transparent)] sm:px-8">
+      <div className="pointer-events-none absolute inset-x-0 bottom-0 z-10 flex items-end justify-between px-5 pb-4 font-mono text-[10px] uppercase tracking-[0.18em] text-[color-mix(in_srgb,#FFF0F8_60%,transparent)] sm:px-8">
         <span>specimen · geodi</span>
         <span>petri audit attached</span>
       </div>
@@ -893,20 +992,11 @@ export default function GeodePortfolioPage() {
           <StageLight>
             <FeaturesGrid />
           </StageLight>
-          <div className="relative">
-            <div className="sticky top-0 z-20">
-              <WordmarkBand />
-            </div>
-            <div className="relative z-10 -mt-[100vh]">
-              <div className="h-screen" aria-hidden />
-              <StageLight>
-                <LabFinale />
-              </StageLight>
-            </div>
-          </div>
-          <div className="relative z-10 bg-[var(--paper)]">
-            <GeodeFooter />
-          </div>
+          <DistillationAct />
+          <WordmarkBand />
+          <StageLight>
+            <LabFinale />
+          </StageLight>
         </div>
       </main>
     </LocaleProvider>

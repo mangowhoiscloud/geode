@@ -225,3 +225,42 @@
     animation: none;
   }
 }
+
+/* token rain (the distillation) */
+@keyframes geodi-rain {
+  0% {
+    transform: translateY(-14%);
+  }
+  100% {
+    transform: translateY(14%);
+  }
+}
+
+.geodi-rain {
+  animation: geodi-rain 2.6s steps(9, end) infinite;
+}
+
+@keyframes geodi-drop {
+  0%,
+  62% {
+    transform: translateY(0) scaleY(1);
+  }
+  72% {
+    transform: translateY(2px) scaleY(1.5);
+  }
+  80%,
+  100% {
+    transform: translateY(0) scaleY(1);
+  }
+}
+
+.geodi-drop {
+  animation: geodi-drop 3.4s step-end infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .geodi-rain,
+  .geodi-drop {
+    animation: none;
+  }
+}
