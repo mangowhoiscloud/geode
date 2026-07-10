@@ -17,6 +17,11 @@ export type ChangelogEntry = {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    "version": "0.99.294",
+    "date": "2026-07-10",
+    "body": "### Fixed\n\n- **Portfolio finale drops the cultured-since stamp.** On mobile the stamp\n  line above the MANGO credit collided with the pinned top-left distillation\n  headline; the finale now opens directly with the end-credit\n  (operator-directed)."
+  },
+  {
     "version": "0.99.293",
     "date": "2026-07-10",
     "body": "### Fixed\n\n- **Portfolio finale credit reads \"edited by\".** The end-credit roll line\n  over the MANGO card is corrected from \"edit by\" (operator-directed)."
