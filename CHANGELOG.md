@@ -49,175 +49,22 @@ functional change.
 
 ### Changed
 
-- **Portfolio v20 — loop-punk in three colors (operator-directed; LazyWeb x
-  Hermes synthesis).** Paper `#FFF0F8` substrate, record ink `#141016`, and
-  the signature rose as sole accent (the terminal mock keeps its dark product
-  colors by exception). Paper acts follow the agent-first-site formula:
-  centered serif statement over a real CLI terminal mock, a hairline-grid
-  "three ways in" row, and six numbered plates with rose line-art schematics
-  (loop ring, audit gate, seed pipeline, tau2 numbers with the gpt-5.5 /
-  openai-codex-subscription route). Two rose color acts carry the narrative:
-  the distillation — one composed sticky screen where white token rain
-  converges band-by-band through dissolving-gradient hairline thresholds
-  (pixel-diamond flanked mono labels: critic / petri gate / held-out) and
-  fills the full-bleed 24vw GEODE wordmark over the honest baseline ledger (three REJECTs, crucible-S5 still PENDING)
-  — and the finale, where the giant pixel wordmark fades into the black-stage
-  laboratory reveal (rose field as a specimen slide, petri mark with the
-  Geodi silhouette, "cultured since" stamp, CTAs in ink). The Astryx neutral
-  theme is remapped to the light ink-on-paper palette; the shared nav gains a
-  `light` chrome variant. Literal funnel drawings (mesh sieve, drainpipe) were
-  removed in favor of the converging rain itself.
-- **Portfolio v11 — landing-grade pass on the growth log (operator feedback
-  batch).** The hero is now centered with a terminal mock of the real CLI
-  welcome screen (`core/ui/mascot.py` line layout + `GEODI_PIXELS` sprite,
-  2-frame idle bob and blinking prompt caret, `prefers-reduced-motion`
-  respected), followed by a bento sheet band: the character-sheet aside, a
-  bench card rendering the synced tau2/MCPMark matrices
-  (`src/data/geode/benchmark-measurements.ts` — Retail 0.763 / Telecom 0.877 /
-  Airline 0.820 base runs, MCPMark filesystem/easy 100%), and a refreshed
-  tech-stack card (`tech-stack.ts` re-measured 2026-07-10; the stale
-  LangGraph/98-tests inventory is gone). Reference bar: the Claude Code
-  landing (product moment first, mascot as section divider, dated feed).
-- **Character-facing display font: Galmuri11.** The pixel font (SIL OFL,
-  woff2 vendored in `site/src/fonts/`) now carries /portfolio display
-  headings, era titles, stat numbers, and the docs-shell wordmark, matching
-  the dot mascot; body prose stays Inter. Korean headings use
-  `word-break: keep-all`.
-- **Docs shell carries the mascot.** The docs header brand renders a static
-  `GeodiSprite` beside the pixel wordmark; docs prose remains mascot-free.
-- **Selling points over inventory counts (operator feedback).** A "why geode"
-  section leads the page with the three differentiators (safety-gated
-  self-improvement, an execution-owning loop, subscription-resident
-  multi-provider), each pinned to a code path; the hero paragraph now sells
-  the essence instead of release counts. Section 03's body loop gains a
-  pixel-styled hexagon cycle diagram (while(tool_use) ring, finalize exit);
-  bench matrices gain per-value bars plus explicit model · provider · source
-  route lines (gpt-5.5 · openai-codex · subscription / gpt-5.2 · openai ·
-  payg), and the character sheet records supported providers. Copy: "부화"
-  retired for a "Birth" label, "장비" for "도구"; the growth log ends with an
-  open "next act" row reserved for the first self-cut release.
-- **Loop-laboratory art direction, final pass (Hermes landing x Lanthimos).**
-  Full rewrite of the page's first act: a rose color-field hero in the Hermes
-  split composition (editorial Noto Serif KR black statement left, generated
-  white-line engraving of the mascot right — PIL FIND_EDGES + dither hatch,
-  edge-feathered into the field), pixel wordmark as the centered brand mark,
-  mono small-caps labels, print-edition corner stamps (version, license), and
-  a full-bleed blurred gallery band with the real CLI welcome terminal
-  floating at its center. The chapter break becomes a portal-style band:
-  ghost pixel watermark, serif declaration, and the mascot as a specimen in a
-  circular petri dish (the audit system is literally named Petri). Type
-  hierarchy is now serif = statements/section titles, pixel = wordmark and
-  character surfaces, mono = labels. The YouTube demo section is removed per
-  operator; frontend stack is confirmed as Next.js 16 + React 19 + Tailwind 4
-  + Astryx + Galmuri11 + Noto Serif KR.
-- **The sea, strictly two colors, and the straddle (operator direction).**
-  The theatre floor gives way to the preferred sea image: a mirror-still
-  rose sea under the ray-scattering point sun — broken reflection column,
-  drifting dash ripples, petri ripple rings around the specimen standing on
-  the water, distant watchers with their reflections (Geodi sits mid-water
-  in the wide band while the terminal hovers over its own ripples). The
-  palette tightens to exactly two colors — Axolotl Rose and the near-black
-  substrate — across art AND chrome (rose-white leaves; hierarchy is rose at
-  opacity steps; the features slab becomes a rose field with near-black
-  ink). The recorded scroll effect lands as intended: the giant pixel GEODE
-  now straddles the seam on a transparent band with mix-blend difference,
-  so the finale rises from behind the letters and the glyphs invert as the
-  rose field passes through them. Feature banners become plate artworks:
-  six generated two-color dither textures (orbit rings, scan ripples,
-  spotlight rays, falling seeds, bar field, orbit arcs) behind the
-  diagrams, with parallax tamed to stop clipping.
-- **Two-ink discipline + stage lighting (operator: Hermes uses exactly two
-  colors).** The whole portfolio surface reduces to two inks on the dark
-  substrate — Axolotl Rose and rose-white — with tone carried by dither
-  density, exactly the Hermes engraving trick: both scenes regenerated as
-  strict duotone (gold/aqua leave the artwork; the sun, rims, and auditor
-  lenses become rose-white), and every UI accent sweeps with them (command
-  strings, bench figures, diagram highlights). Scroll gains the recorded
-  Hermes effect: StageLight overlays brighten each act as it takes center
-  stage and sink it back into darkness as it leaves (opacity-only).
-- **Void theatre refinement (operator: signature colors only).** Orb lamps,
-  the striped dado, and the backdrop porthole are removed; both scenes reduce
-  to the essential loop-punk image — a single gold point radiating dotted
-  rays into the void above the concentric rose amphitheatre, the specimen on
-  its pale stage, and dark auditors on the tiers, a third of them now
-  carrying a single aqua lens pixel (rose = identity, gold = action, aqua =
-  information — the full signature triad and nothing else).
-- **The anatomical theatre + scroll-as-camera (Lanthimos impression pass).**
-  The checkerboard floors are gone: both generated scenes are rebuilt around
-  Poor Things' anatomical theatre — concentric tiered rings around the
-  specimen stage (petri rings = loop rings), sparse dark auditor silhouettes
-  watching from the tiers (the Petri panel), orb lamps flanking; in the wide
-  hall the floating CLI terminal itself becomes the specimen (Geodi sits in
-  the audience watching its own run). Scroll now drives the cinematography:
-  the hero scene push-zooms toward the specimen (the Lanthimos slow zoom),
-  the hall pulls back as its act arrives, the pinned wordmark looms, feature
-  banners drift in parallax, and the finale ghost counter-zooms — all
-  transform-only, reduced-motion gated.
-- **Set dressing pass (operator: less lo-fi, more Lanthimos + Hermes).**
-  The hero scene gains engraving-style rays radiating from the gold sun,
-  arched gallery windows with tracery, a striped dado (the Poor Things bar
-  counter), stacked glowing orb lamps, and a specimen dais inlaid beneath
-  the mascot; the gallery blur is replaced by a generated wide pixel hall
-  (`geode-hall-wide.png`, three portholes + colonnade) so the floating
-  terminal sits in front of the central porthole. Reduced-motion now keeps
-  opacity fades (movement/scale only are dropped) so choreography survives
-  macOS Reduce Motion; dead CadenceChart code removed.
-- **Act-curtain page transitions.** Scrolling now changes acts instead of
-  sliding one long page: the hero field pins beneath the flow and dims/scales
-  back as the gallery band rides over it, and the giant wordmark pins as a
-  full-screen act that the rose finale then covers (pure position: sticky
-  stacking + framer scroll transforms — no scroll hijack, fully
-  interruptible, reduced-motion gated). Vercel web-interface-guidelines pass:
-  text-balance on display headings, touch-action on primary CTAs; finale
-  eyebrow reads "cultured since" (lab tone) instead of "birth".
-- **Content demolition — the Hermes screen-recording grammar (operator
-  directive).** The dossier sections (why/sheet/loop/growth/evolve with their
-  tables and logs) are torn down and rebuilt as: a three-way RUN row
-  (Terminal / MCP Server / Daemon with command chips), six numbered
-  editorial plates on a rose-white print slab (#1 RUNS THE LOOP .. #6 ON
-  YOUR SUBSCRIPTIONS — serif-caps headlines over dark art banners reusing
-  the loop/audit/seedgen diagrams, tau2 figures, and perception lines), a
-  giant edge-to-edge pixel GEODE wordmark band, and a Loop Laboratory
-  finale (specimen dish, birth/release stats, docs + full-record CTAs,
-  corner stamps). Astryx Token remains on the reside plate; the measured
-  claims survive in distilled form.
-- **Nacreous sky field + frame-breaks (Poor Things trailer review).** The
-  hero's flat rose field becomes a generated pixel sky (`geode-sky.png`:
-  domain-warped sine swirls dithered into white crests and deep-rose shadows,
-  with a calmed zone behind the statement text), and crisp pixel clouds
-  drift across — and past — the lab-scene frame (`PixelCloud`, steps()
-  animation, reduced-motion gated).
-- **Representative character image + motion pass (dot art x Lanthimos).**
-  `geode-lab-scene.png` is generated procedurally (PIL): Geodi centered in a
-  one-point-perspective laboratory hall — The Favourite's checkerboard
-  marble, Poor Things' porthole sky with a gold sun, Sacred Deer symmetry —
-  in a 6-color pixel palette, and mounts as the hero's right panel. The page
-  defaults to English (`LocaleProvider` gains `defaultLocale`; Korean copy
-  retained behind the toggle pending operator review), and framer-motion
-  choreography lands: hero stagger, scene idle float, terminal rise into the
-  gallery band, petri-dish spring, cadence bars growing on view — all gated
-  by `useReducedMotion`. Superseded etch/plate drafts removed.
-- **Perception and action, as implemented (operator PDF review).** The loop
-  section now grounds four capabilities in their modules: the two-layer
-  prompt (`<static_context>` cached / `<dynamic_context>` per-turn with
-  provider-gated current date, `core/agent/system_prompt.py`), local PDF
-  ingest (`core/tools/document_ingest.py`), real-Chrome CDP browser use
-  (`core/tools/browser_tools.py`), and the provider-agnostic computer-use
-  harness with the AX-tree first rung (`core/tools/computer_use.py` ·
-  `ui_probe.py`). Loop copy adds the explicit termination-reason catalog.
-- **Self-evolving apparatus, drawn (Hermes-landing style feature visuals).**
-  Two pixel schematics join the loop diagram: the audit-gate diagram
-  (scaffold mutation, adversarial Petri arena, dimension bars with the
-  critical floor, promote/reject branches with the gate·random·never arms)
-  and the seed-hypothesis factory (generator, critic, pilot, ranker, evolver
-  with candidates culled per stage, Elo + difficulty survivor blend). An
-  honest attempt-history log records what did not work: the zero-promotion
-  saturation finding and Crucible cycle 1's "proved the protocol, not
-  self-improvement" conclusion, with dates and version anchors.
-- **Identity details.** The site favicon is now the canonical GEODI_PIXELS
-  sprite (generated `src/app/icon.png` + `favicon.ico`), a mascot-budgeted
-  404 page lands at `src/app/not-found.tsx`, and the hero/card sprites react
-  to clicks with a three-hop pixel bounce (`prefers-reduced-motion` guarded).
+- **Portfolio v22 — the loop laboratory in rose and white (operator-directed
+  final palette).** The whole page is one rose field written in warm white
+  `#FFF0F8`; the terminal mock keeps its dark product colors by standing
+  exception. Hero restores the white dither sky over the rose field with the
+  serif statement; "three ways in" is a white hairline grid; plates i-vi are
+  white paper panels carrying rose line-art schematics (loop ring, audit
+  gate, seed pipeline, tau2 numbers with the gpt-5.5 / openai-codex
+  subscription route). The distillation and the finale are now one
+  continuous act: white token rain converges through dissolving-gradient
+  hairline thresholds (pixel-diamond flanked labels: critic / petri gate /
+  held-out), fills the full-bleed 24vw GEODE wordmark over the honest
+  baseline ledger (three REJECTs, crucible-S5 still PENDING), and further
+  scroll reveals the laboratory — a white stage enters and the rose field
+  becomes a specimen slide (petri mark, Geodi silhouette, "cultured since"
+  stamp, CTAs). Astryx Token chips carry surface labels; the shared nav
+  gains a rose chrome variant.
 - **De-slop: decorative arrows and the dev-blog link are gone.** CTA/link
   arrows (`→`, `▸`) are removed site-portfolio-wide (ranges now use `~`), and
   the Dev Blog link is dropped from the portfolio hero and the shared footer.

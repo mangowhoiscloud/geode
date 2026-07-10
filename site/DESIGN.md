@@ -79,17 +79,19 @@ hero stagger, scene idle float, terminal rise, petri-dish spring, cadence-bar
 growth — all gated by `useReducedMotion`. The docs surface keeps the old
 motion budget.
 
-**Three-color loop-punk composition (operator-directed 2026-07-10, supersedes
-the two-surface band rule).** /portfolio uses exactly three colors: warm white
-`#FFF0F8` as the paper substrate, near-black `#141016` as record ink, and
-signature rose `#F49BC4` (`--acc-artifact`) as the single accent (line-art
-plates, terminal caret, sprite) and as the full-bleed field of the two color
-acts — the distillation (rose field, white token rain converging through
-hairline filters into the GEODE word) and the finale (giant white wordmark
-fading into the black-stage laboratory reveal where the rose field becomes a
-specimen slide and all copy turns to ink). LazyWeb formula on the paper acts:
-near-monochrome, sharp corners, technical line-art, terminal hero; hierarchy
-from ink alpha, never a fourth hue. The one sanctioned exception is the terminal mock, which keeps its dark
+**Rose-and-white loop-punk composition (operator-directed 2026-07-10 final,
+supersedes the two-surface band rule).** /portfolio is one rose field
+(`--acc-artifact`) written in warm white `#FFF0F8` — two colors only; the
+terminal mock keeps its dark product-screenshot colors by standing exception.
+White appears three ways: as ink (serif statements, mono stamps, hairline
+grids at 55-75% alpha), as paper plates carrying rose line-art schematics,
+and as the stage of the finale. The distillation and the laboratory are one
+continuous sticky act: white token rain converges through dissolving-gradient
+hairline thresholds, fills the full-bleed pixel wordmark, and further scroll
+fades in the reveal — a white stage enters and the rose field becomes a
+specimen slide. LazyWeb formula (sharp corners, technical line-art, terminal
+hero) carried in the two-color register; hierarchy from white alpha, never a
+third hue. The one sanctioned exception is the terminal mock, which keeps its dark
 product-screenshot colors (`--paper-deep` + ink tokens) because it is a
 product artifact, not page chrome. Scroll is choreography, not paging:
 curtain-stack sections over a pinned hero, `StageLight` scroll-linked

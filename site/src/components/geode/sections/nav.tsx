@@ -60,7 +60,7 @@ export function GeodeNav({
   if (!visible) return null;
 
   const chrome = light
-    ? { bg: "rgba(255,240,248,0.88)", border: "rgba(20,16,22,0.12)", brand: "rgba(20,16,22,0.55)" }
+    ? { bg: "rgba(244,155,196,0.92)", border: "rgba(255,240,248,0.3)", brand: "rgba(255,240,248,0.8)" }
     : { bg: "color-mix(in srgb, var(--paper) 85%, transparent)", border: "var(--rule)", brand: "var(--ink-3)" };
   return (
     <nav
@@ -88,12 +88,16 @@ export function GeodeNav({
                 style={{
                   color: isActive
                     ? light
-                      ? "#141016"
+                      ? "#FFF0F8"
                       : "var(--acc-artifact)"
                     : light
-                      ? "rgba(20,16,22,0.5)"
+                      ? "rgba(255,240,248,0.65)"
                       : "var(--ink-3)",
-                  background: isActive ? "color-mix(in srgb, var(--acc-artifact) 18%, transparent)" : "transparent",
+                  background: isActive
+                    ? light
+                      ? "rgba(255,240,248,0.22)"
+                      : "color-mix(in srgb, var(--acc-artifact) 18%, transparent)"
+                    : "transparent",
                 }}
               >
                 {it.label}
