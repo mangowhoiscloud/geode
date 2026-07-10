@@ -57,6 +57,7 @@ from .supervisor import (
     TrustedEvaluator,
     run_supervisor,
 )
+from .tau2_live import Tau2SealedEvaluator
 
 __all__ = [
     "Budget",
@@ -89,6 +90,7 @@ __all__ = [
     "SupervisorSummary",
     "TaskEvidence",
     "TaskUnit",
+    "Tau2SealedEvaluator",
     "TrainPlan",
     "TrustedEvaluator",
     "commit_ref_update",

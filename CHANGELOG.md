@@ -56,7 +56,10 @@ functional change.
   evaluator rematerializes the baseline, derives every runner argument from the
   contract, isolates arm state, uses the evaluator-owned `crucible_user`
   subscription runtime, preserves raw trajectories, derives independent safety
-  and tool-contract checks, and emits the supervisor response. Explicitly
+  and tool-contract checks, and emits the supervisor response. The one-shot
+  sealed evaluator reuses that path, requires the frozen train parent for a
+  disjoint test contract, and closes runner/process failures as infrastructure
+  rather than score evidence. Explicitly
   granted registry tools now replace a same-named global declarative schema, so
   an assay handler cannot receive arguments from GEODE's unrelated tool with
   the same name.

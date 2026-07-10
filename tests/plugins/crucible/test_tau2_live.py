@@ -1,13 +1,18 @@
 import json
 from pathlib import Path
 
-from plugins.crucible.contract import ExperimentContract, TaskUnit, task_pack_sha256
+import pytest
+from plugins.crucible.contract import ContractError, ExperimentContract, TaskUnit, task_pack_sha256
 from plugins.crucible.producers.codex_kg import knowledge_context
 from plugins.crucible.tau2_live import tau2_command, tau2_trace_checks
 
 TASKS = (
     TaskUnit("task-1", "1" * 64, "a" * 64),
     TaskUnit("task-2", "2" * 64, "b" * 64),
+)
+TEST_TASKS = (
+    TaskUnit("test-1", "3" * 64, "c" * 64),
+    TaskUnit("test-2", "4" * 64, "d" * 64),
 )
 
 
@@ -108,6 +113,21 @@ def _contract() -> ExperimentContract:
     )
 
 
+def _test_contract(parent: ExperimentContract) -> ExperimentContract:
+    payload = parent.to_dict()
+    payload.pop("contract_id")
+    payload.update(
+        {
+            "name": "live-tau2-sealed-fixture",
+            "stage": "test",
+            "parent_contract_id": parent.contract_id,
+            "tasks": [task.to_dict() for task in TEST_TASKS],
+            "task_pack_sha256": task_pack_sha256(TEST_TASKS, 1),
+        }
+    )
+    return ExperimentContract.from_mapping(payload)
+
+
 def test_tau2_command_is_fully_derived_from_frozen_subscription_config(tmp_path: Path) -> None:
     command = tau2_command(
         _contract(),
@@ -126,6 +146,35 @@ def test_tau2_command_is_fully_derived_from_frozen_subscription_config(tmp_path:
     assert "--disable-tool-search-defer" not in command
     assert "--max-retries" in command
     assert command[command.index("--max-retries") + 1] == "0"
+
+
+def test_tau2_test_command_binds_the_frozen_train_parent(tmp_path: Path) -> None:
+    parent = _contract()
+    contract = _test_contract(parent)
+    parent_path = tmp_path / "train-contract.json"
+
+    command = tau2_command(
+        contract,
+        arm="candidate",
+        checkout=tmp_path / "candidate",
+        harness_root=tmp_path / "harness",
+        contract_path=tmp_path / "test-contract.json",
+        parent_contract_path=parent_path,
+        snapshot_dir=tmp_path / "snapshots",
+        run_id="sealed-candidate",
+    )
+
+    assert command[command.index("--parent-experiment-contract") + 1] == str(parent_path)
+    with pytest.raises(ContractError, match="frozen train contract"):
+        tau2_command(
+            contract,
+            arm="candidate",
+            checkout=tmp_path / "candidate",
+            harness_root=tmp_path / "harness",
+            contract_path=tmp_path / "test-contract.json",
+            snapshot_dir=tmp_path / "snapshots",
+            run_id="missing-parent",
+        )
 
 
 def test_tau2_trace_checks_are_independent_of_reward() -> None:

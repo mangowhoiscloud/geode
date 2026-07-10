@@ -319,7 +319,10 @@ the paired baseline/candidate execution. They derive the complete argv from the
 contract, isolate per-arm state, retain raw evidence, and compute trace checks
 separately from reward. The `crucible_user` registry identity uses the same
 subscription route as the agent but lives in frozen evaluator code, outside the
-candidate policy surface.
+candidate policy surface. `Tau2SealedEvaluator` reuses this exact execution path
+for the sole hidden attempt, passes both the disjoint test contract and its
+frozen train parent into the runner, and maps a missing artifact or non-zero
+runner exit to terminal infrastructure evidence instead of a task score.
 
 ### Frozen rules, external calibration
 

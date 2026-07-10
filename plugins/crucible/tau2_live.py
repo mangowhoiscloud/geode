@@ -13,13 +13,16 @@ import re
 import shutil
 import subprocess
 import sys
-from collections.abc import Mapping, Sequence
+import tempfile
+from collections.abc import Iterator, Mapping, Sequence
+from contextlib import contextmanager
 from pathlib import Path
 from typing import Any, Literal
 
 from .artifacts import load_json_object, write_exclusive_json
-from .contract import ContractError, ExperimentContract, load_contract
+from .contract import ContractError, ExperimentContract, load_contract, validate_test_parent
 from .evidence import EvidenceEnvelope
+from .sealed import SEALED_RESPONSE_SCHEMA, SealedInfrastructureError, SealedPlan
 from .supervisor import CandidateProposal, FailureFeedback
 from .verifiers.tau2 import TAU2_ADAPTER, normalize_tau2_results, tau2_resource_usage_floor
 
@@ -45,6 +48,10 @@ _AFFIRMATIVE = re.compile(
     r"\b(?:yes|correct|confirmed|go ahead|proceed|please do|sounds good|do it)\b",
     re.IGNORECASE,
 )
+
+
+class Tau2InfrastructureError(RuntimeError):
+    """The frozen tau2 process failed before it could yield valid artifacts."""
 
 
 def _mapping(value: object, field: str) -> Mapping[str, Any]:
@@ -73,6 +80,7 @@ def tau2_command(
     contract_path: Path,
     snapshot_dir: Path,
     run_id: str,
+    parent_contract_path: Path | None = None,
 ) -> list[str]:
     """Derive the complete runner argv from the frozen assay configuration."""
 
@@ -165,6 +173,12 @@ def tau2_command(
         raise ContractError("contract runner requires codex_output_replay=true")
     if agent.get("tool_search_defer") is not True:
         raise ContractError("contract runner requires tool_search_defer=true")
+    if contract.stage == "test":
+        if parent_contract_path is None:
+            raise ContractError("test contract runner requires its frozen train contract")
+        command.extend(("--parent-experiment-contract", str(parent_contract_path)))
+    elif parent_contract_path is not None:
+        raise ContractError("train contract runner cannot receive a parent contract")
     return command
 
 
@@ -256,6 +270,7 @@ def _run_arm(
     output_dir: Path,
     run_id: str,
     timeout: float,
+    parent_contract_path: Path | None = None,
 ) -> tuple[EvidenceEnvelope, Path]:
     snapshot_dir = output_dir / "snapshots"
     snapshot_dir.mkdir(exist_ok=True)
@@ -280,9 +295,10 @@ def _run_arm(
         contract_path=contract_path,
         snapshot_dir=snapshot_dir,
         run_id=run_id,
+        parent_contract_path=parent_contract_path,
     )
     try:
-        subprocess.run(  # noqa: S603 - frozen evaluator derives complete argv
+        completed = subprocess.run(  # noqa: S603 - frozen evaluator derives complete argv
             command,
             cwd=checkout,
             env=environment,
@@ -291,10 +307,14 @@ def _run_arm(
         )
     except subprocess.TimeoutExpired as exc:
         raise TimeoutError(f"tau2 {arm} arm timed out") from exc
+    if completed.returncode:
+        raise Tau2InfrastructureError(f"tau2 {arm} arm exited with status {completed.returncode}")
     source_raw = harness_root / "data" / "simulations" / run_id / "results.json"
     snapshot = snapshot_dir / f"{run_id}.snapshot.json"
     if not source_raw.is_file() or not snapshot.is_file():
-        raise ContractError(f"tau2 {arm} arm did not produce finalized raw and snapshot files")
+        raise Tau2InfrastructureError(
+            f"tau2 {arm} arm did not produce finalized raw and snapshot files"
+        )
     raw_path = output_dir / f"{arm}.raw.json"
     shutil.copyfile(source_raw, raw_path)
     raw = load_json_object(raw_path, f"tau2 {arm} raw", max_bytes=512 * 1024 * 1024)
@@ -313,6 +333,114 @@ def _run_arm(
 
 def _relative(path: Path, root: Path) -> str:
     return path.resolve().relative_to(root.resolve()).as_posix()
+
+
+@contextmanager
+def _paired_checkouts(
+    repository: Path,
+    *,
+    baseline_sha: str,
+    candidate_sha: str,
+) -> Iterator[tuple[Path, Path]]:
+    root = Path(tempfile.mkdtemp(prefix="crucible-tau2-sealed-"))
+    checkouts = (
+        (root / "baseline", baseline_sha),
+        (root / "candidate", candidate_sha),
+    )
+    added: list[Path] = []
+    try:
+        for checkout, revision in checkouts:
+            _git(repository, "worktree", "add", "--detach", str(checkout), revision)
+            added.append(checkout)
+        yield checkouts[0][0], checkouts[1][0]
+    finally:
+        executable = shutil.which("git")
+        if executable is not None:
+            for checkout in reversed(added):
+                subprocess.run(  # noqa: S603 - fixed git executable, cleanup-only argv
+                    [executable, "worktree", "remove", "--force", str(checkout)],
+                    cwd=repository,
+                    check=False,
+                    capture_output=True,
+                )
+        shutil.rmtree(root, ignore_errors=True)
+
+
+class Tau2SealedEvaluator:
+    """Run the frozen test pack once through the same paired tau2 machinery."""
+
+    def __init__(
+        self,
+        *,
+        repository: Path,
+        harness_root: Path,
+        train_contract_path: Path,
+    ) -> None:
+        self.repository = repository.resolve()
+        self.harness_root = harness_root.resolve()
+        self.train_contract_path = train_contract_path.resolve()
+
+    def evaluate(
+        self,
+        plan: SealedPlan,
+        contract: ExperimentContract,
+        *,
+        attempt_number: int,
+        evaluation_dir: Path,
+        timeout: float,
+    ) -> Path:
+        parent = load_contract(self.train_contract_path)
+        validate_test_parent(contract, parent)
+        test_contract_path = evaluation_dir / "test-contract.json"
+        parent_contract_path = evaluation_dir / "train-contract.json"
+        write_exclusive_json(test_contract_path, contract.to_dict())
+        write_exclusive_json(parent_contract_path, parent.to_dict())
+        per_arm = max(1.0, timeout / 2.0)
+        try:
+            with _paired_checkouts(
+                self.repository,
+                baseline_sha=plan.baseline_sha,
+                candidate_sha=plan.candidate_sha,
+            ) as (baseline_checkout, candidate_checkout):
+                _baseline, baseline_raw = _run_arm(
+                    contract,
+                    arm="baseline",
+                    checkout=baseline_checkout,
+                    harness_root=self.harness_root,
+                    contract_path=test_contract_path,
+                    parent_contract_path=parent_contract_path,
+                    output_dir=evaluation_dir,
+                    run_id=f"crucible-test-{plan.plan_id[:16]}-{attempt_number}-baseline",
+                    timeout=per_arm,
+                )
+                _candidate, candidate_raw = _run_arm(
+                    contract,
+                    arm="candidate",
+                    checkout=candidate_checkout,
+                    harness_root=self.harness_root,
+                    contract_path=test_contract_path,
+                    parent_contract_path=parent_contract_path,
+                    output_dir=evaluation_dir,
+                    run_id=f"crucible-test-{plan.plan_id[:16]}-{attempt_number}-candidate",
+                    timeout=per_arm,
+                )
+        except Tau2InfrastructureError as exc:
+            raise SealedInfrastructureError("tau2_infrastructure_error") from exc
+        response_path = evaluation_dir / "response.json"
+        write_exclusive_json(
+            response_path,
+            {
+                "schema": SEALED_RESPONSE_SCHEMA,
+                "plan_id": plan.plan_id,
+                "contract_id": contract.contract_id,
+                "attempt_number": attempt_number,
+                "baseline": _relative(evaluation_dir / "baseline.evidence.json", evaluation_dir),
+                "candidate": _relative(evaluation_dir / "candidate.evidence.json", evaluation_dir),
+                "baseline_raw": _relative(baseline_raw, evaluation_dir),
+                "candidate_raw": _relative(candidate_raw, evaluation_dir),
+            },
+        )
+        return response_path
 
 
 def run_command_evaluator() -> int:
@@ -427,6 +555,8 @@ def evaluator_sha256(checkout: Path, paths: Sequence[str]) -> str:
 
 
 __all__ = [
+    "Tau2InfrastructureError",
+    "Tau2SealedEvaluator",
     "evaluator_sha256",
     "run_command_evaluator",
     "tau2_command",
