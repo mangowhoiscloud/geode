@@ -236,8 +236,7 @@ jobs:
             --exclude 'self-improving'
             --exclude 'linkedin\.com'
             site/out/index.html
-            site/out/docs.html
-            site/out/about.html
+            site/out/about/index.html
             'site/out/docs/**/*.html'
             'site/out/portfolio/**/*.html'
           fail: true

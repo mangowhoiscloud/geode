@@ -17,6 +17,11 @@ export type ChangelogEntry = {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    "version": "0.99.295",
+    "date": "2026-07-10",
+    "body": "### Fixed\n\n- **Docs trailing-slash URLs no longer 404.** The static export flips to\n  directory-style HTML (`trailingSlash: true`, `docs/<slug>/index.html`), so\n  GitHub Pages serves both `/geode/docs` and `/geode/docs/` (the slash form\n  previously hit the 404 page for every docs deep link). `export-docs-md.mjs`\n  and the lychee link-check paths follow the new layout.\n\n### Changed\n\n- **Self-improving hub sheds two UX-slop patterns (operator-directed).**\n  Transcript dialogue turns render open by default instead of demanding a\n  click per `<details>` toggle (sub-agent and hook-event payloads stay\n  collapsed), and the sidebar stops dumping flat ID walls: seed-generation\n  runs group under their campaign gen-tag with target-dim leaves, and audit\n  entries carry a MM-DD HH:MM timeline stamp."
+  },
+  {
     "version": "0.99.294",
     "date": "2026-07-10",
     "body": "### Fixed\n\n- **Portfolio finale drops the cultured-since stamp.** On mobile the stamp\n  line above the MANGO credit collided with the pinned top-left distillation\n  headline; the finale now opens directly with the end-credit\n  (operator-directed)."

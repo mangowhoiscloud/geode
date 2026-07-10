@@ -222,3 +222,4 @@ site/tsconfig.tsbuildinfo
 # RUNTIME scratch (per-run seed_generation/, handoff/, baseline.json, run.log,
 # campaign-progress.log, wrapper-override.json, prepare-report.txt) lives
 # OUT-OF-REPO under ``~/.geode/self-improving`` (GEODE_STATE_ROOT) — not in git.
+.next/

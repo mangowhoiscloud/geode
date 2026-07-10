@@ -323,7 +323,7 @@ function SeedDetail(props: DetailProps) {
               <th>parent_id</th>
               <td>
                 {candidatePageExists(seed.run_id, seed.parent_id) ? (
-                  <a href={`./${seed.parent_id}`}><code>{seed.parent_id}</code></a>
+                  <a href={`/geode/docs/petri/seeds/${seed.run_id}/${seed.parent_id}`}><code>{seed.parent_id}</code></a>
                 ) : (
                   <code>{seed.parent_id}</code>
                 )}
@@ -336,7 +336,7 @@ function SeedDetail(props: DetailProps) {
               <td>
                 {seed.evolved_children.map((c) =>
                   candidatePageExists(seed.run_id, c) ? (
-                    <a key={c} href={`./${c}`} className="mr-2"><code>{c}</code></a>
+                    <a key={c} href={`/geode/docs/petri/seeds/${seed.run_id}/${c}`} className="mr-2"><code>{c}</code></a>
                   ) : (
                     <code key={c} className="mr-2">{c}</code>
                   )
