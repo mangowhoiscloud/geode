@@ -92,6 +92,22 @@ functional change.
   character surfaces, mono = labels. The YouTube demo section is removed per
   operator; frontend stack is confirmed as Next.js 16 + React 19 + Tailwind 4
   + Astryx + Galmuri11 + Noto Serif KR.
+- **The sea, strictly two colors, and the straddle (operator direction).**
+  The theatre floor gives way to the preferred sea image: a mirror-still
+  rose sea under the ray-scattering point sun — broken reflection column,
+  drifting dash ripples, petri ripple rings around the specimen standing on
+  the water, distant watchers with their reflections (Geodi sits mid-water
+  in the wide band while the terminal hovers over its own ripples). The
+  palette tightens to exactly two colors — Axolotl Rose and the near-black
+  substrate — across art AND chrome (rose-white leaves; hierarchy is rose at
+  opacity steps; the features slab becomes a rose field with near-black
+  ink). The recorded scroll effect lands as intended: the giant pixel GEODE
+  now straddles the seam on a transparent band with mix-blend difference,
+  so the finale rises from behind the letters and the glyphs invert as the
+  rose field passes through them. Feature banners become plate artworks:
+  six generated two-color dither textures (orbit rings, scan ripples,
+  spotlight rays, falling seeds, bar field, orbit arcs) behind the
+  diagrams, with parallax tamed to stop clipping.
 - **Two-ink discipline + stage lighting (operator: Hermes uses exactly two
   colors).** The whole portfolio surface reduces to two inks on the dark
   substrate — Axolotl Rose and rose-white — with tone carried by dither
