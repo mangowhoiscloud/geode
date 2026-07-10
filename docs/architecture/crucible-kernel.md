@@ -519,8 +519,8 @@ producer/evaluator wrappers, not OS-level meters. Tau2 raw-message usage now
 sets a non-underreportable floor on the final manifest, but it is still not an
 in-run cancellation meter. Resource and independent safety manifests therefore
 remain explicit trusted-adapter inputs rather than values inferred from tau2
-reward. This implementation does not itself imply a live provider result or a
-current core promotion.
+reward. The diagnostic live result below exercises this path but does not imply
+a current core promotion.
 
 ## Operating loop
 
@@ -610,6 +610,36 @@ feedback. A future run must create v3 contracts, evidence, and verdicts plus v3 
 feedback from a fresh campaign; the older artifacts are not migrated or
 rescored into that protocol.
 
+### GPT-5.4 subscription diagnostic canary
+
+An operator-approved canary completed on 2026-07-11 using
+[GPT-5.4](https://openai.com/index/introducing-gpt-5-4/) at high reasoning for
+both GEODE participants. It repeated the exposed retail task109 assay once with
+seed 300, `max_steps=36`, `max_errors=1`, and `max_retries=0`:
+
+- GEODE commit `4e676f9933e12208bb7d2be5082929d6e1d7dfcd`; frozen external
+  tau2 harness commit `1901a301961cbbe3fd11f3e84a2a376530c759e3`;
+- task pack `c8a9d5a984c7d9afee4197fb7fac265a3d69cf2a26b331b3463a018ce7b13768`,
+  containing one task and one adapter-derived family;
+- reward 1.0, DB reward 1.0, all 3 write-action checks passed, normal
+  `user_stop`, no provider or infrastructure error, 114.754 seconds;
+- raw/trajectory SHA-256
+  `e3512ebed43956933d08070d09f99664ea99d51131a105ea15d5f913eac07d49`;
+  metadata SHA-256
+  `24215a9ffe29ae0a91a6512e7385d662e7b64a25e4bc25a3f7b38126a5a6679f`;
+- raw-message resource floor: 9 observable calls, 128,720 tokens, and
+  $0.242212 normalized cost. The isolated local usage-store window recorded 17
+  calls across 2 sessions with the same token and normalized-cost totals,
+  including 60,928 cached-read tokens. These dollar values are price-normalized
+  accounting, not an incremental subscription charge.
+
+The snapshot deliberately records `arm=diagnostic`,
+`candidate_surface=unfrozen_git`, and `promotion_authority=none`. The task was
+already exposed, the pack has one family, and `geode_user` is candidate-owned.
+The previous task109 run used another model and an unsealed historical checkout.
+The observed 0→1 reward change is therefore not a causal candidate comparison
+and cannot enter a promotion bundle.
+
 The strongest honest claims are:
 
 - the frozen external tau2 baseline identified concrete retail wrong-write and
@@ -622,7 +652,8 @@ The strongest honest claims are:
 - no current candidate has sealed-test authority for core promotion.
 
 A future promotion requires a clean committed candidate and a new disjoint
-sealed test pack. No live run is implied by this architecture change.
+sealed test pack with an evaluator-owned user runtime. The diagnostic canary
+does not satisfy that requirement.
 
 ## Explicit non-goals
 
