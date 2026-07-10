@@ -1,9 +1,15 @@
+import hashlib
 import json
 from pathlib import Path
 
 import pytest
 from plugins.crucible.contract import ContractError, ExperimentContract, TaskUnit, task_pack_sha256
-from plugins.crucible.producers.codex_kg import _prompt, knowledge_context
+from plugins.crucible.producers.codex_kg import (
+    _DEFAULT_GRAPH_PATH,
+    ProducerError,
+    _prompt,
+    knowledge_context,
+)
 from plugins.crucible.tau2_live import tau2_command, tau2_trace_checks
 
 TASKS = (
@@ -227,10 +233,24 @@ def test_tau2_trace_checks_are_independent_of_reward() -> None:
 
 
 def test_codex_producer_uses_bounded_local_graph_slice(tmp_path: Path) -> None:
+    sources = {
+        "plugins/benchmark_harness/tau2_agent_policy.md": "policy\n",
+        "plugins/benchmark_harness/tau2_geode_agent.py": "runner\n",
+        "core/gateway/slack.py": "unrelated\n",
+    }
+    for relative, content in sources.items():
+        source = tmp_path / relative
+        source.parent.mkdir(parents=True, exist_ok=True)
+        source.write_text(content, encoding="utf-8")
+
+    def digest(relative: str) -> str:
+        return hashlib.sha256(sources[relative].encode()).hexdigest()
+
     graph_path = tmp_path / "knowledge-graph.json"
     graph_path.write_text(
         json.dumps(
             {
+                "schema": "crucible.producer-graph.v1",
                 "project": {"name": "GEODE", "description": "agent harness"},
                 "nodes": [
                     {
@@ -239,6 +259,7 @@ def test_codex_producer_uses_bounded_local_graph_slice(tmp_path: Path) -> None:
                         "name": "Tau2 policy",
                         "summary": "candidate-owned behavior contract",
                         "tags": ["prompt"],
+                        "contentSha256": digest("plugins/benchmark_harness/tau2_agent_policy.md"),
                     },
                     {
                         "id": "runner",
@@ -246,6 +267,7 @@ def test_codex_producer_uses_bounded_local_graph_slice(tmp_path: Path) -> None:
                         "name": "Tau2 runner",
                         "summary": "loads the policy",
                         "tags": ["benchmark"],
+                        "contentSha256": digest("plugins/benchmark_harness/tau2_geode_agent.py"),
                     },
                     {
                         "id": "unrelated",
@@ -253,6 +275,7 @@ def test_codex_producer_uses_bounded_local_graph_slice(tmp_path: Path) -> None:
                         "name": "Slack",
                         "summary": "unrelated",
                         "tags": ["gateway"],
+                        "contentSha256": digest("core/gateway/slack.py"),
                     },
                 ],
                 "edges": [{"source": "runner", "target": "policy", "type": "reads_from"}],
@@ -265,11 +288,40 @@ def test_codex_producer_uses_bounded_local_graph_slice(tmp_path: Path) -> None:
         knowledge_context(
             graph_path,
             ("plugins/benchmark_harness/tau2_agent_policy.md",),
+            repository=tmp_path,
         )
     )
 
     assert {node["name"] for node in context["nodes"]} == {"Tau2 policy", "Tau2 runner"}
     assert "unrelated" not in json.dumps(context)
+
+    (tmp_path / "plugins/benchmark_harness/tau2_geode_agent.py").write_text(
+        "changed\n",
+        encoding="utf-8",
+    )
+    with pytest.raises(ProducerError, match="knowledge graph source changed"):
+        knowledge_context(
+            graph_path,
+            ("plugins/benchmark_harness/tau2_agent_policy.md",),
+            repository=tmp_path,
+        )
+
+
+def test_codex_producer_source_graph_attests_the_current_policy_path() -> None:
+    repository = Path(__file__).parents[3]
+
+    context = json.loads(
+        knowledge_context(
+            _DEFAULT_GRAPH_PATH,
+            ("plugins/benchmark_harness/tau2_agent_policy.md",),
+            repository=repository,
+        )
+    )
+
+    names = {node["name"] for node in context["nodes"]}
+    assert "Tau2 agent policy" in names
+    assert "Tau2 GEODE adapter" in names
+    assert "AgenticLoop" in names
 
 
 def test_codex_producer_prompt_uses_can_cannot_policy_clauses() -> None:

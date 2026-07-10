@@ -69,7 +69,10 @@ functional change.
   hash. Feedback now validates long benchmark task IDs against the frozen
   contract under one aggregate transport cap instead of rejecting valid tau2
   IDs at an arbitrary 100-character boundary. Disposable producer/evaluator
-  environments use the frozen non-dev dependency set. Explicitly
+  environments use the frozen non-dev dependency set. The producer's bounded
+  knowledge subgraph now ships with the producer, verifies every referenced
+  source file by content hash, and replaces the stale mutable graph path that
+  previously entered through ambient environment. Explicitly
   granted registry tools now replace a same-named global declarative schema, so
   an assay handler cannot receive arguments from GEODE's unrelated tool with
   the same name.

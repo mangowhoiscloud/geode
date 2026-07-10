@@ -314,9 +314,13 @@ candidate-owned file is `plugins/benchmark_harness/tau2_agent_policy.md`.
 `plugins.crucible.producers.codex_kg` asks GPT-5.4 subscription for one small
 edit using closed failure codes and a bounded architecture-graph slice; it
 cannot read raw tasks, trajectories, evaluator artifacts, or sealed state.
-The shipped objective, model, and reasoning effort are source defaults. The
-measured campaign omits their environment overrides, keeping those controls in
-the committed producer rather than an unhashed shell value.
+The graph slice is committed beside the producer and attests every referenced
+source file by content hash. The producer validates all nodes and edges before
+selecting the candidate surface and its one-hop neighbors. The shipped graph,
+objective, model, and reasoning effort are therefore source defaults. The
+measured campaign omits graph, objective, model, and effort environment
+overrides, keeping those controls in the candidate's parent revision rather
+than an unhashed shell value.
 `scripts/eval/crucible_tau2_evaluator.py` and `plugins.crucible.tau2_live` own
 the paired baseline/candidate execution. They derive the complete argv from the
 contract, isolate per-arm state, retain raw evidence, and compute trace checks
@@ -384,10 +388,7 @@ The independent train loop is started from one JSON configuration:
   "allowed_surfaces": ["plugins/benchmark_harness/tau2_agent_policy.md"],
   "producer_command": ["python", "-m", "plugins.crucible.producers.codex_kg"],
   "evaluator_entrypoint": "scripts/eval/crucible_tau2_evaluator.py",
-  "producer_environment": [
-    "CODEX_HOME",
-    "CRUCIBLE_KNOWLEDGE_GRAPH"
-  ],
+  "producer_environment": ["CODEX_HOME"],
   "evaluator_environment": ["CODEX_HOME", "CRUCIBLE_TAU2_HARNESS_ROOT"],
   "train_plan": {
     "schema": "crucible.train-plan.v3",
@@ -706,6 +707,13 @@ verification calls consumed the short budget faster. The paired zero remains a
 valid result for that exact contract, but it is too insensitive to guide the
 next search. A successor campaign must freeze the upstream step budget instead
 of reusing r2 as calibration evidence.
+
+The same review found that r2's external knowledge graph was nine days and
+2,021 changed files behind the candidate parent, contained no Crucible/Tau2
+nodes, and was supplied through an unhashed absolute environment path. That
+input cannot ground a reproducible optimizer. The live producer now reads only
+its source-attested graph slice from the candidate parent revision; ambient
+graph paths no longer enter the campaign environment.
 
 The strongest honest claims are:
 

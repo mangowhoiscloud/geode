@@ -9,17 +9,21 @@ import subprocess
 import sys
 import time
 from collections.abc import Mapping
+from hashlib import sha256
 from pathlib import Path, PurePosixPath
 from typing import Any
 
 _REQUEST_SCHEMA = "crucible.proposal-request.v3"
 _CANDIDATE_SCHEMA = "crucible.candidate.v2"
-_GRAPH_LIMIT = 128 * 1024 * 1024
+_GRAPH_SCHEMA = "crucible.producer-graph.v1"
+_GRAPH_LIMIT = 256 * 1024
 _CONTEXT_NODE_LIMIT = 16
+_DEFAULT_GRAPH_PATH = Path(__file__).with_name("context_graph.json")
 _DEFAULT_OBJECTIVE = (
-    "Improve completion of multi-step tool workflows by reducing serial "
-    "back-and-forth and requiring terminal verification, without weakening "
-    "confirmation or safety."
+    "Complete multi-step tool workflows with the fewest non-redundant calls: "
+    "batch causally ready work, request only unavailable user actions or "
+    "required confirmation, and verify the real terminal state once while "
+    "preserving safety."
 )
 
 
@@ -63,10 +67,31 @@ def _node_path(node: Mapping[str, Any]) -> str:
     return raw.strip() if isinstance(raw, str) else ""
 
 
-def knowledge_context(path: Path, surfaces: tuple[str, ...]) -> str:
-    """Select local and one-hop graph summaries without exposing task artifacts."""
+def _source_digest(repository: Path, relative: str) -> str:
+    candidate = PurePosixPath(relative)
+    if candidate.is_absolute() or ".." in candidate.parts:
+        raise ProducerError(f"knowledge graph source is not repository-relative: {relative}")
+    source = (repository / relative).resolve()
+    try:
+        source.relative_to(repository)
+    except ValueError as exc:
+        raise ProducerError(f"knowledge graph source escapes the repository: {relative}") from exc
+    if source.is_symlink() or not source.is_file():
+        raise ProducerError(f"knowledge graph source is not a regular file: {relative}")
+    return sha256(source.read_bytes()).hexdigest()
+
+
+def knowledge_context(
+    path: Path,
+    surfaces: tuple[str, ...],
+    *,
+    repository: Path | None = None,
+) -> str:
+    """Select a source-attested local and one-hop architecture subgraph."""
 
     graph = _load_object(path, "knowledge graph", limit=_GRAPH_LIMIT)
+    if graph.get("schema") != _GRAPH_SCHEMA:
+        raise ProducerError(f"knowledge graph must use {_GRAPH_SCHEMA}")
     raw_nodes = graph.get("nodes")
     raw_edges = graph.get("edges")
     if not isinstance(raw_nodes, list) or not isinstance(raw_edges, list):
@@ -77,6 +102,26 @@ def knowledge_context(path: Path, surfaces: tuple[str, ...]) -> str:
         for node in nodes
         if isinstance(node.get("id"), str) and node.get("id")
     }
+    if len(by_id) != len(nodes):
+        raise ProducerError("knowledge graph node IDs must be unique non-empty strings")
+    source_root = (repository or Path.cwd()).resolve()
+    for node_id, node in by_id.items():
+        relative = _node_path(node)
+        expected = node.get("contentSha256")
+        if (
+            not relative
+            or not isinstance(expected, str)
+            or len(expected) != 64
+            or any(character not in "0123456789abcdef" for character in expected)
+        ):
+            raise ProducerError(f"knowledge graph node is not source-attested: {node_id}")
+        if _source_digest(source_root, relative) != expected:
+            raise ProducerError(f"knowledge graph source changed: {relative}")
+    for edge in raw_edges:
+        if not isinstance(edge, Mapping):
+            raise ProducerError("knowledge graph edges must be objects")
+        if edge.get("source") not in by_id or edge.get("target") not in by_id:
+            raise ProducerError("knowledge graph edge references an unknown node")
     surface_parents = {PurePosixPath(surface).parent.as_posix() for surface in surfaces}
     selected_ids = {
         node_id
@@ -84,6 +129,8 @@ def knowledge_context(path: Path, surfaces: tuple[str, ...]) -> str:
         if _node_path(node) in surfaces
         or PurePosixPath(_node_path(node)).parent.as_posix() in surface_parents
     }
+    if not any(_node_path(by_id[node_id]) in surfaces for node_id in selected_ids):
+        raise ProducerError("knowledge graph does not attest the candidate surface")
     neighbor_ids: set[str] = set()
     for edge in raw_edges:
         if not isinstance(edge, Mapping):
@@ -197,7 +244,6 @@ def _write_exclusive(path: Path, payload: Mapping[str, Any]) -> None:
 def run() -> int:
     request_path = Path(os.environ["CRUCIBLE_PROPOSAL_REQUEST"])
     output_path = Path(os.environ["CRUCIBLE_CANDIDATE_OUTPUT"])
-    graph_path = Path(os.environ["CRUCIBLE_KNOWLEDGE_GRAPH"])
     objective = _text(
         os.environ.get("CRUCIBLE_PRODUCER_OBJECTIVE", _DEFAULT_OBJECTIVE),
         "producer objective",
@@ -218,7 +264,11 @@ def run() -> int:
         objective=objective,
         surfaces=surfaces,
         feedback=request.get("feedback"),
-        graph_context=knowledge_context(graph_path, surfaces),
+        graph_context=knowledge_context(
+            _DEFAULT_GRAPH_PATH,
+            surfaces,
+            repository=Path.cwd(),
+        ),
     )
     model = os.environ.get("CRUCIBLE_CODEX_MODEL", "gpt-5.4")
     effort = os.environ.get("CRUCIBLE_CODEX_EFFORT", "high")
