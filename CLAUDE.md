@@ -13,7 +13,7 @@ A general-purpose autonomous execution agent. The core runtime is an **AgenticLo
 - **Package Manager**: uv
 - **Entry Points**: `geode` (`core.cli:app`, Typer) / `geode-mcp` (`core.mcp_server:main`)
 - **Modules**: 413 core + 89 plugins = 502
-- **Tests**: 9479
+- **Tests**: 9497 (+1 live)
 - **CHANGELOG**: `CHANGELOG.md` (Keep a Changelog + SemVer)
 
 ## Quick Start
