@@ -92,6 +92,13 @@ functional change.
   character surfaces, mono = labels. The YouTube demo section is removed per
   operator; frontend stack is confirmed as Next.js 16 + React 19 + Tailwind 4
   + Astryx + Galmuri11 + Noto Serif KR.
+- **Void theatre refinement (operator: signature colors only).** Orb lamps,
+  the striped dado, and the backdrop porthole are removed; both scenes reduce
+  to the essential loop-punk image — a single gold point radiating dotted
+  rays into the void above the concentric rose amphitheatre, the specimen on
+  its pale stage, and dark auditors on the tiers, a third of them now
+  carrying a single aqua lens pixel (rose = identity, gold = action, aqua =
+  information — the full signature triad and nothing else).
 - **The anatomical theatre + scroll-as-camera (Lanthimos impression pass).**
   The checkerboard floors are gone: both generated scenes are rebuilt around
   Poor Things' anatomical theatre — concentric tiered rings around the
