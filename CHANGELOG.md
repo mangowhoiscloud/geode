@@ -728,6 +728,12 @@ link in the "declared / recorded / joined" observability chain.
 
 ### Fixed
 
+- **MCPMark GEODE adapter runtime bootstrap.** The public benchmark harness
+  adapter now bootstraps GEODE LLM adapters when imported from an upstream
+  MCPMark checkout, uses the official GitHub MCP server container, runs the
+  PostgreSQL MCP server with the active Python runtime, and supports
+  opt-in public transient GitHub fixtures via
+  `GEODE_MCPMARK_GITHUB_REPO_VISIBILITY=public`.
 - **tau2 benchmark adapter action strictness.** GEODE's tau2-bench adapter now
   instructs the agent not to invent optional tool arguments that the user,
   policy, or prior tool results did not supply, preventing verifier drift from

@@ -1,10 +1,13 @@
 <p align="center">
-  <img src="assets/geode-mascot.png" alt="GEODE — Autonomous Execution Harness" width="360" />
+  <img src="assets/geodi-dot.svg" alt="Geodi — GEODE's dot mascot" width="320" />
+</p>
+<p align="center">
+  <sub>Geodi · 22×12 dot sprite · <code>core/ui/geodi_art.py</code></sub>
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/while(tool__use)-agentic%20loop-1e293b?style=flat-square" alt="while(tool_use)">
-  <img src="https://img.shields.io/badge/self--improving-non--parametric-1e293b?style=flat-square" alt="Self-improving (non-parametric)">
+  <img src="https://img.shields.io/badge/while(tool__use)-agentic%20loop-E0699F?style=flat-square" alt="while(tool_use)">
+  <img src="https://img.shields.io/badge/self--improving-non--parametric-E0699F?style=flat-square" alt="Self-improving (non-parametric)">
   <a href="https://github.com/mangowhoiscloud/geode/actions"><img src="https://img.shields.io/github/actions/workflow/status/mangowhoiscloud/geode/ci.yml?style=flat-square&label=ci&logo=github&logoColor=white" alt="CI"></a>
 </p>
 

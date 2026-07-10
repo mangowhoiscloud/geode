@@ -510,6 +510,109 @@ Interpretation:
 - Token usage averages 26,678 tokens per task. The run is suitable as a
   smoke/regression baseline, but not as a cost-efficient CI gate.
 
+### Live GEODE MCPMark Verified Available Services
+
+Run date: 2026-07-04.
+
+This is a verifier-backed GEODE result for the MCPMark standard services that
+were runnable in the local environment. It is not a full MCPMark Verified
+leaderboard score because Notion and Playwright/WebArena were blocked by local
+service prerequisites.
+
+| Field | Value |
+|---|---|
+| Suite | `filesystem/standard` + `postgres/standard` + `github/standard` |
+| Model route | GEODE `gpt-5.5`, provider `openai-codex`, source `subscription` |
+| Reasoning effort | `xhigh` |
+| Harness | `eval-sys/mcpmark@cd45b7f` |
+| Result path | `artifacts/eval/harnesses/mcpmark/results-geode-agentworld/geode-gpt55-xhigh-20260704-mcpmark-verified-*` |
+| Measured total | 64 / 74 |
+| Accuracy | 86.5% |
+
+Service-level results:
+
+| Service | Tasks | Passed | Accuracy | Recorded time |
+|---|---:|---:|---:|---:|
+| `filesystem/standard` | 30 | 25 | 83.3% | 13580.6s over 29 recorded tasks |
+| `postgres/standard` | 21 | 20 | 95.2% | 8765.7s |
+| `github/standard` | 23 | 19 | 82.6% | 16476.3s |
+
+Blocked services:
+
+| Service | Reason |
+|---|---|
+| `notion` | No `notion_state.json` was available in the local harness environment. |
+| `playwright` / WebArena | Required Docker images and browser service stack were absent. |
+
+Notable failures:
+
+| Service | Task | Failure |
+|---|---|---|
+| `filesystem` | `desktop_template/budget_computation` | verifier failed |
+| `filesystem` | `papers/author_folders` | two attempts ended without meta output; counted as a failed no-result transport run |
+| `filesystem` | `papers/find_math_paper` | verifier failed |
+| `filesystem` | `student_database/english_talent` | verifier failed |
+| `filesystem` | `threestudio/output_analysis` | verifier failed |
+| `postgres` | `employees/employee_performance_analysis` | verifier failed |
+| `github` | `claude-code/label_color_standardization` | fixture duplication first, then agent-level verification failure on retry |
+| `github` | `mcpmark-cicd/deployment_status_workflow` | verifier failed |
+| `github` | `missing-semester/assign_contributor_labels` | used suffixed transient usernames instead of canonical contributor labels |
+| `github` | `missing-semester/find_salient_file` | `ANSWER.md` was not created on the required master branch |
+
+Adapter/runtime changes required for this run:
+
+- Bootstrap GEODE LLM adapter registry inside the MCPMark import context.
+- Alias `file_path` to `path` when MCP tool schemas expect `path`.
+- Override GitHub execution to use `ghcr.io/github/github-mcp-server:v0.15.0`.
+- Override Postgres execution to use `postgres-mcp==0.3.0` with the MCPMark
+  database URI.
+- Add `GEODE_MCPMARK_GITHUB_REPO_VISIBILITY=public` for transient GitHub
+  fixture repos when measuring through the Docker GitHub MCP server.
+
+### MCPMark Environment Unblock (2026-07-10)
+
+Goal: make the services blocked on 2026-07-04 runnable so a single-cycle
+measurement can be compared against Agent-World Table 1 (File / Github /
+Notion / Play / Post). Operational runbook:
+`docs/eval/mcpmark-agentworld-comparison-runbook.md`.
+
+Root causes and fixes:
+
+| Blocked case (07-04) | Root cause | Fix (07-10) |
+|---|---|---|
+| `github` State Duplication Error 6 tasks | `GITHUB_EVAL_ORG` unset in `.mcp_env`; upstream default `mcpleague-eval` is not writable by the local token | Persisted `GITHUB_EVAL_ORG=mangowhoiscloud` (the value the successful 07-04 retry used); token re-validated |
+| `notion` Stage 1 stall (all runs aborted) | Expired browser session in `notion_state.json`; duplication `page.goto` to `app.notion.com` timed out at 120s per retry | Re-login and saved a fresh session. Google OAuth rejects automation browsers, so login used a real-Chrome channel persistent context with `--disable-blink-features=AutomationControlled`; the session cookie (`token_v2`) lives on `.app.notion.com`, not the `notion.so`/`notion.com` marketing hosts |
+| `postgres` container down | Host restart; `mcpmark-postgres` Exited(255) | Restarted; WAL auto-recovery clean; all 5 sample DBs and default credentials verified |
+| `--agent geode` not registered | 07-04 runs relied on an unsaved local patch to `src/agents/__init__.py` | Committed launcher `plugins/benchmark_harness/run_mcpmark.py` registers the agent before `pipeline.main()`; upstream stays unpatched |
+| `playwright` never run | Assumed to need WebArena | The 4 standard tasks are live-web; `@playwright/mcp@0.0.68` launch verified, browsers installed. No fixture needed |
+| `playwright_webarena` never run | WebArena Docker images (~100GB for shopping / shopping_admin / reddit) exceed the 13GB free local disk | Still blocked locally; needs an external volume or a VM |
+
+Notion unblock smoke (verifier-backed):
+
+| Field | Value |
+|---|---|
+| Task | `notion/easy/toronto_guide/simple__change_color` |
+| Model route | GEODE `gpt-5.5`, provider `openai-codex`, source `subscription`, effort `xhigh` |
+| Result | 1 / 1 PASS |
+| State duplication | 58.9s |
+| Agent execution | 216.8s, 8 rounds |
+| Token usage | 62,834 input / 8,013 output |
+| Result path | `artifacts/eval/harnesses/mcpmark/results-geode-agentworld/geode-gpt55-xhigh-20260710-notion-smoke-unblock-r2/geode-gpt-5-5-xhigh__notion-easy/run-1` |
+
+The task embeds a Notion API trap: updating an existing select option color
+returns `validation_error` (`Cannot update color of select with id: ...`).
+The agent received the structured error and passed the verifier by redefining
+the select options through a database schema update. This is an API
+limitation, not a plan/pricing restriction.
+
+Subscription quota note: the first full-cycle attempt on 2026-07-10 hit
+`429 usage_limit_reached` (plan `prolite`) on its first task. The run was
+stopped immediately and the one contaminated task result was deleted, because
+the harness resume logic treats a failed task with a non-retryable error
+message as final and would otherwise skip it forever. Full-suite runs must be
+scheduled inside quota reset windows, and 429 failures are never counted as
+task failures.
+
 ### Required GEODE Adapter Work
 
 MCPMark's native agents call models directly through LiteLLM. Running the

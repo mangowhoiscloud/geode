@@ -34,7 +34,7 @@ Telecom small run 이후로 둔다.
 
 | 순위 | 벤치 | 첫 목표 | 완료 기준 |
 |---:|---|---|---|
-| 1 | MCPMark Verified | `easy` across available MCPs, then Verified filesystem slice | GEODE adapter로 verifier-backed result 생성, MCPMark Verified와 `filesystem/easy`를 분리 기록 |
+| 1 | MCPMark Verified | available local standard services, then blocked services as infra follow-up | GEODE adapter로 filesystem/postgres/github verifier-backed result 생성, MCPMark Verified와 `filesystem/easy`를 분리 기록 |
 | 2 | τ²-bench | `mock` smoke with `geode_agent` + `geode_user` over subscription, then Telecom small run; native tau2 `gpt-4.1` / `gpt-5.2` user-simulator runs are optional comparator tracks | tau2 result directory와 domain split을 보존하고, user route / trial 수를 public page에 명시 |
 | 3 | BFCL V4 | Agentic subset first | native/prompt function-calling route와 aggregation을 고정한 뒤 result/score artifact 보존 |
 | 4 | HAL Reliability | tau-bench airline single-rerun smoke | τ² adapter 재사용 여부와 rerun consistency schema 확인 |
@@ -61,6 +61,7 @@ Current public routes:
 | Route | Role |
 |---|---|
 | `/docs/benchmarks/mcpmark/filesystem-easy` | reference detailed run record |
+| `/docs/benchmarks/mcpmark/verified-available` | MCPMark standard filesystem/postgres/github available-services run |
 | `/docs/benchmarks/mcpmark/service-matrix` | MCP task counts, credentials, infra blockers, adapter coverage |
 | `/docs/benchmarks/tau2/mock-smoke` | single mock verifier-backed run |
 | `/docs/benchmarks/tau2/domain-smoke` | multi-domain smoke matrix and caveats |
@@ -114,7 +115,9 @@ Verified 다음에 τ²-bench를 둔다.
 
 | 일자 | 변경 |
 |---|---|
+| 2026-07-10 | MCPMark blocked 사례 해소: notion 세션 만료 원인 확정·재발급 후 easy smoke 1/1, github `GITHUB_EVAL_ORG` 영속화(State Duplication Error 6건 원인 제거), postgres 컨테이너 복구, `--agent geode` 커밋 런처 추가, playwright 실행 준비 확인. 잔여 blocked=`playwright_webarena`(WebArena 이미지 ~100GB, 로컬 디스크 초과). Agent-World 비교 런북 추가 |
 | 2026-07-03 | 남은 벤치마크 측정 큐를 추가하고 `tau2-bench`를 2순위로 승격 |
+| 2026-07-04 | MCPMark standard available-services run 추가: filesystem 25/30, postgres 20/21, github 19/23, measured total 64/74 |
 | 2026-07-03 | Benchmark serving page contract와 MCPMark/tau2 coverage 페이지 계획 추가 |
 | 2026-07-03 | 최신 tau2 하네스의 `gpt-5.2` user simulator 권장 설정을 별도 비교군으로 보정 |
 | 2026-07-03 | Benchmark Publishing Cycle 스캐폴드와 run-record 템플릿 추가 |
