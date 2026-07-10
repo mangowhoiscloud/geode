@@ -45,6 +45,18 @@ functional change.
 
 ---
 
+## [0.99.298] - 2026-07-11
+
+### Changed
+
+- **"Three ways in" joins the postcard language (operator-directed
+  legibility pass).** The rose-field hairline grid with white copy (~1.8:1)
+  is replaced by three white plates written in the deep-rose ink: serif
+  titles and captions in `#C2447F`, command chips flipped to deep-rose
+  fill with white text.
+
+---
+
 ## [0.99.297] - 2026-07-11
 
 ### Changed
