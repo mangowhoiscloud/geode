@@ -295,7 +295,7 @@ advanced fallback that only fills missing global secrets. Behavior belongs in
 | `SLACK_TEAM_ID` | | Slack workspace ID |
 | **Pipeline** | | |
 | **Observability** | | |
-| _(no env vars — built-in hook + RunLog)_ | | LLM_CALL_START/END events flow into `~/.geode/runs/<session>.jsonl` automatically |
+| _(no env vars — built-in event sink)_ | | Lifecycle events flow into project-local `sessions.db:hook_events`; active autoresearch runs also mirror sanitized rows to `transcript.jsonl` |
 
 ---
 

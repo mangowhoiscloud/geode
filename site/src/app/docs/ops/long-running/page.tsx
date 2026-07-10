@@ -111,7 +111,7 @@ OpenAI/GLM  80%   클라이언트 LLM 기반 compaction
             <p>
               실행이 어디서 어떻게 끝났는지는{" "}
               <a href="/geode/docs/guides/debug-stuck-run">멈춘 실행 디버깅</a>의
-              transcript와 run log 절차로 추적합니다.
+              transcript와 SQL event timeline 절차로 추적합니다.
             </p>
 
             <h2>다음</h2>

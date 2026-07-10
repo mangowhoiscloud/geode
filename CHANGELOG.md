@@ -205,6 +205,51 @@ functional change.
   the Dev Blog link is dropped from the portfolio hero and the shared footer.
   Growth-log sections gain restrained scroll reveals (existing framer-motion
   `ScrollReveal`).
+### Added
+
+- **Bounded SQLite hook-event store.** Production HookSystem dispatches now
+  write a typed, redacted envelope to project-local
+  `sessions.db:hook_events`, with indexed filters, payload hashes, retention
+  classes, incremental pruning, a 100,000-row cap, and selected active-run
+  transcript mirroring.
+
+### Changed
+
+- **Hook dispatch, persistence, and teardown are single-owner paths.** All six
+  sync/async trigger variants now produce one post-dispatch `HookDispatch`;
+  registrations return cancelable subscriptions, overlapping name collisions
+  fail loudly, matchers compile at registration, and `HookSystem.close()`
+  releases plugin, ContextVar, auxiliary SQLite, and sink resources. Recent-run
+  context and `geode adapters stats` now query SQLite; the latter replaces
+  `--runs-dir` with `--db-path`.
+- **Tool execution has one canonical terminal event and one result-transform
+  stage.** Blocks, recovery, and executor exceptions all complete
+  `TOOL_EXEC_STARTED` → `TOOL_EXEC_ENDED`; `TOOL_RESULT_TRANSFORM` owns result
+  rewriting, while compatibility failure/transform signals are delivered to
+  handlers without duplicate durable rows.
+- **In-memory and JSONL tails are bounded during append.** Latency percentile
+  samples, model series, per-run tool logs, and per-job scheduler JSONL history
+  now enforce fixed bounds without waiting for manual maintenance.
+
+### Fixed
+
+- **Notification and hook lifecycle leaks.** Built-in notification hooks are
+  no longer registered through both explicit wiring and filesystem discovery,
+  SubAgent failures await async notification handlers, dynamic plugin module
+  names do not leak through `sys.modules`, and runtime/serve/worker/one-shot
+  shutdown paths close their owned hook resources. Owner-aware cleanup uses
+  weak references instead of retaining HookSystem through a self-cycle, and
+  event-store operations close database/WAL/SHM descriptors before returning.
+  Sync hook deadlines no longer leave timed-out worker threads running.
+
+### Removed
+
+- **Disconnected per-session RunLog and approval-history API.** Hook
+  events no longer duplicate raw payloads into `~/.geode/runs/*.jsonl` or the
+  legacy approval tracker writer/reader. Existing run and approval JSONL files
+  remain operator archives subject to the existing layout migration/TTL
+  policies; scheduler job tails and explicit transcript/evidence ledgers
+  remain JSONL.
 
 ## [0.99.286] - 2026-07-10
 

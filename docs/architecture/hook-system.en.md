@@ -1,277 +1,139 @@
-# GEODE Hook System — Event-Driven Lifecycle Control
+# GEODE Hook System
 
 > **English** | [한국어](hook-system.md)
 
-> **Module**: `core/hooks/` (cross-cutting concern, accessible from all layers L0-L5)
-> **Entry point**: `from core.hooks import HookSystem, HookEvent`
-> **Events**: 65 | **Registered handlers**: 60+ (table count) | **Plugins**: YAML + class-based
-> **Verified**: last doc ↔ code consistency audit — 2026-05-13 (PR feature/hook-doc-verify)
+`core/hooks/` is GEODE's storage-agnostic runtime event bus. It exposes the
+65-event `HookEvent` compatibility surface, ordered handlers,
+interceptor/feedback modes, and post-dispatch sinks. Persistence policy is
+documented separately in [`event-persistence.md`](event-persistence.md).
 
----
+## Core contract
 
-## Hook Maturity Model
+1. Handlers run sequentially from lower to higher priority.
+2. One handler failure does not stop later handlers.
+3. Observer and feedback handlers each receive a top-level payload copy.
+4. Only interceptor `modify` results explicitly flow into later handlers.
+5. One trigger sends exactly one completed `HookDispatch` to every sink.
+6. Name collisions never overwrite silently; intentional replacement requires
+   `replace=True`.
+7. `HookSystem.close()` deterministically releases registrations, global
+   bindings, and sinks, and is idempotent. Each SQLite operation closes its
+   connection before returning.
 
-The Hook System evolves beyond simple event logging through 4 stages: **Observe, React, Decide, Autonomy**.
+## Dispatch shape
 
-```
-┌─────────────────────────────────────────────────────────────────┐
-│  L4 AUTONOMY   Autonomous rule learning from patterns           │
-│                                                                 │
-│  ○ hook-tool-approval    HITL approval history → auto-approve   │
-│  ○ hook-model-switched   Switch reason logging → auto policy    │
-│                          (L1 ✓)                                 │
-│  ○ hook-filesystem-plugin  .geode/hooks/ auto-discovery +       │
-│                            registration                         │
-├─────────────────────────────────────────────────────────────────┤
-│  L3 DECIDE     Hooks determine action direction                 │
-│                                                                 │
-│  ○ hook-context-action   CONTEXT_CRITICAL → delegate            │
-│                          compression strategy                   │
-│  ○ hook-session-start    SESSION_START → dynamic prompt          │
-│                          enrichment                              │
-├─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─┤
-│                          ▲ CURRENT FRONTIER                     │
-│  L2 REACT      Automatic reaction to events                     │
-│                                                                 │
-│  ✓ turn_auto_memory        P85  TURN_COMPLETE → save insights   │
-├─────────────────────────────────────────────────────────────────┤
-│  L1 OBSERVE    Record only, no state changes                    │
-│                                                                 │
-│  ✓ RunLog             P50  ALL 65 events → JSONL                │
-│  ✓ JournalHook        P60  END/ERROR/SUBAGENT → journal         │
-│  ✓ NotificationHook  P200  SUBAGENT_FAILED → Slack             │
-│  ✓ TableLoggers ×20+  P90  tool exec / llm / cost → struct log  │
-│  ✓ hook-llm-lifecycle  P55 LLM_CALL_END latency/cost aggregation│
-└─────────────────────────────────────────────────────────────────┘
-
-✓ = Implemented    ○ = Kanban Backlog    ▲ = Current Frontier
+```text
+event source
+  -> resolve exact + prefix handlers
+  -> priority sort / name dedup
+  -> handler chain
+  -> HookDispatch(final data, results, block state, timing)
+  -> post-dispatch sinks (once each)
+       -> HookPersistenceSink
+            -> sessions.db:hook_events
+            -> active run transcript (selected mirror)
 ```
 
-> **Diagram**: [`docs/diagrams/hook-maturity-model.mmd`](../diagrams/hook-maturity-model.mmd)
+`HookSystem` does not import `core.observability`. Production bootstrap opts
+into `HookPersistenceSink`; unit tests and embedded users may choose another
+sink or no persistence at all.
 
-### Key Insight
+## Trigger modes
 
-Adding a new hook item means **attaching a higher-maturity handler to an existing event**.
-The event itself does not change; the handler chain deepens.
+| Meaning | Sync API | Async API | Result |
+|---|---|---|---|
+| Observe | `trigger()` | `trigger_async()` | `list[HookResult]` |
+| Feedback | `trigger_with_result()` | `trigger_with_result_async()` | handler result dicts |
+| Interceptor | `trigger_interceptor()` | `trigger_interceptor_async()` | `InterceptResult` |
 
----
-
-## Ripple Pattern — A Single Event Penetrates Multiple Levels
-
-The same event triggers L1 (Observe) + L2 (React) handlers simultaneously.
-They execute in priority order, so observation comes first, reaction after.
-
-```
-SUBAGENT_COMPLETED ─┬─ P50 RunLog      ─── L1 OBSERVE  (record)
-                    └─ P60 JournalHook ─── L1 OBSERVE  (runs.jsonl)
-
-TURN_COMPLETE ─┬─ P50 RunLog         ─── L1 OBSERVE  (event record)
-               └─ P85 TurnAutoMemory ─── L2 REACT    (save insights)
-
-CONTEXT_CRITICAL ─┬─ P50 RunLog      ─── L1 OBSERVE  (event record)
-                  └─ P70 ContextAction ── L3 DECIDE   (compression strategy) ← planned
-```
-
-> **Diagram**: [`docs/diagrams/hook-ripple-chains.mmd`](../diagrams/hook-ripple-chains.mmd)
-
----
-
-## Architecture
-
-```mermaid
-graph TB
-    subgraph "Event Sources"
-        AL["AgenticLoop<br/>(TURN_COMPLETE)"]
-        PA["PromptAssembler<br/>(PROMPT_ASSEMBLED)"]
-        SCH["Scheduler<br/>(TRIGGER_FIRED/POST_ANALYSIS)"]
-        SA["SubAgent<br/>(SUBAGENT_*)"]
-        GW["Gateway<br/>(GATEWAY_*)"]
-    end
-
-    subgraph "HookSystem (core/hooks/)"
-        HS["HookSystem<br/>register() / trigger()"]
-        RH["_RegisteredHook[]<br/>priority-sorted chain"]
-    end
-
-    subgraph "Handler Chain (priority order)"
-        P50["P50: RunLog (ALL)"]
-        P60["P60: JournalHook"]
-        P70["P70: TriggerManager"]
-        P80["P80: SnapshotManager"]
-        P85["P85: MemoryWriteBack / TurnAutoMemory"]
-        P90["P90: TableLoggers ×20+"]
-    end
-
-    AL --> HS
-    PA --> HS
-    SCH --> HS
-    SA --> HS
-    GW --> HS
-    HS --> P50 --> P60 --> P70 --> P80 --> P85 --> P90
-```
-
----
-
-## HookEvent Enum (65 events)
-
-| Category | Event | Source | Handler | Maturity |
-|---|---|---|---|---|
-| | `TRIGGER_FIRED` | TriggerManager | Logger | L1 |
-| | `POST_ANALYSIS` | (reserved) | — | — |
-| **Memory** | `MEMORY_SAVED` | (planned) | — | — |
-| | `MEMORY_PROMOTION_PROPOSED` | memory_lifecycle (`propose_memory_promotions`) | RunLog (wildcard) | L1 |
-| | `RULE_CREATED/UPDATED/DELETED` | (planned) | — | — |
-| **Feedback** | `RESULT_FEEDBACK` | rate/accept/reject_result tools | RunLog | L1 |
-| **Prompt** | `PROMPT_ASSEMBLED` | PromptAssembler | RunLog | L1 |
-| | `PROMPT_DRIFT_DETECTED` | (reserved) | — | — |
-| **SubAgent** | `SUBAGENT_STARTED` | SubAgentManager | RunLog | L1 |
-| | `SUBAGENT_COMPLETED` | SubAgentManager | Journal, RunLog | L1 |
-| | `SUBAGENT_FAILED` | SubAgentManager | RunLog | L1 |
-| **Tool Recovery** | `TOOL_RECOVERY_*` (3) | ToolCallProcessor | RunLog | L1 |
-| **Gateway** | `GATEWAY_MESSAGE_RECEIVED` | (planned) | — | — |
-| | `GATEWAY_RESPONSE_SENT` | (planned) | — | — |
-| **MCP** | `MCP_SERVER_STARTED/STOPPED` | (reserved) | RunLog | L1 |
-| **Turn** | `TURN_COMPLETE` | AgenticLoop | RunLog, TurnAutoMemory | L1+L2 |
-| **Context** | `CONTEXT_WARNING` | (reserved) | RunLog | L1 |
-| | `CONTEXT_CRITICAL` | (planned) | ContextAction | L3 |
-| | `CONTEXT_OVERFLOW_ACTION` | ContextManager | ContextAction | L3 |
-| **Session** | `SESSION_START` | AgenticLoop | session_start_logger | L1 |
-| | `SESSION_END` | AgenticLoop | session_end_logger | L1 |
-| **Model** | `MODEL_SWITCHED` | AgenticLoop | model_switch_logger | L1 |
-| **LLM Call** | `LLM_CALL_START` | LLM Router | RunLog | L1 |
-| | `LLM_CALL_END` | LLM Router | llm_slow_logger, RunLog | L1 |
-| **Tool Approval** | `TOOL_APPROVAL_REQUESTED` | ToolCallProcessor | RunLog | L1 |
-| | `TOOL_APPROVAL_GRANTED` | ToolCallProcessor | ApprovalTracker | L1 |
-| | `TOOL_APPROVAL_DENIED` | ToolCallProcessor | ApprovalTracker | L1 |
-| | `APPROVAL_TRANSITION` | ApprovalWorkflow (`record_transition`) | RunLog (wildcard) | L1 |
-
----
-
-## Event Firing Order
-
-AgenticLoop turn boundary:
-
-```
-1. user_input received
-2. LLM call → tool_use loop
-3. Turn end determination
-4. TURN_COMPLETE          (text, user_input, tool_calls, rounds)
-```
-
----
-
-## Full Registered Handler List
-
-| P | Handler Name | Subscribed Events | Registration Location | Maturity |
-|---|---|---|---|---|
-| **50** | `run_log_writer` | **All 65 events** | `bootstrap.build_hooks()` | L1 |
-| **60** | `journal_subagent` | `SUBAGENT_COMPLETED` | `bootstrap.build_hooks()` | L1 |
-| **85** | `turn_auto_memory` | `TURN_COMPLETE` | `bootstrap.build_hooks()` | L2 |
-| **90** | `trigger_logger` | `TRIGGER_FIRED` | `scheduling.build_scheduling()` | L1 |
-| **90** | `model_switch_logger` | `MODEL_SWITCHED` | `bootstrap.build_hooks()` | L1 |
-| **200** | `notification_*` (1) | `SUBAGENT_FAILED` | `notification_hook plugin` (`register_notification_hooks`) | L1 |
-
-> **Verification note (2026-05-13)**: This table reflects actual `hooks.register(...)` sites grepped from `core/wiring/bootstrap.py:build_hooks()`, `core/wiring/automation.py:wire_automation_hooks()`, `core/hooks/plugins/notification_hook/hook.py:register_notification_hooks()`, and `core/orchestration/{task_bridge,stuck_detection}.py`. Key references:
-> - RunLog wildcard registration: `bootstrap.py:169-170` (`for event in HookEvent: hooks.register(event, ..., priority=50)`)
-> - audit_loggers 19-event coverage: `bootstrap.py:406-484` (`_AL` table) + `bootstrap.py:494` (P90)
-> - notification priority: `notification_hook/hook.py:142` (`priority=200`)
-
-> **Note**: The Korean doc (`hook-system.md`) carries the fully-enumerated 30-row handler table. This English version retains the abridged headline list above — sync deferred until the bilingual doc-build pipeline is in place.
-
----
-
-## Plugin Extension
-
-External plugins can be added via `core/hooks/discovery.py`:
-
-### Class-based Plugin
+Interceptor protocol:
 
 ```python
-# .geode/hooks/my_hook/hook.py
-from core.hooks.system import HookEvent
-from core.hooks.discovery import HookPlugin, HookPluginMetadata
-
-class MyHook:
-    @property
-    def metadata(self) -> HookPluginMetadata:
-        return HookPluginMetadata(
-            name="my_hook",
-            events=[HookEvent.SESSION_END],
-            priority=75,
-        )
-
-    def handle(self, event: HookEvent, data: dict) -> None:
-        # Custom logic
-        pass
+{"block": True, "reason": "policy"}
+{"modify": {"tool_input": {"path": "safe.txt"}}}
+None
 ```
 
-### YAML-based Plugin
+`TOOL_RESULT_TRANSFORM` is the single tool-result feedback stage. It accepts
+`transformed_result`, the migration key `updated_result`, and
+`additional_context`; canonical `TOOL_EXEC_ENDED` fires afterward.
+`TOOL_EXEC_FAILED` remains a handler compatibility signal but is not persisted
+beside `TOOL_EXEC_ENDED(has_error=True)`.
 
-```yaml
-# .geode/hooks/my_hook/hook.yaml
-name: my_hook
-events: [session_end, subagent_failed]
-priority: 75
-handler: my_hook.handler  # Python module path
+## Registration and teardown
+
+```python
+subscription = hooks.register(
+    HookEvent.SESSION_ENDED,
+    on_session_end,
+    name="session_index",
+    priority=60,
+)
+subscription.cancel()  # idempotent
 ```
 
----
+- `register_prefix("SUBAGENT", ...)` subscribes to `SUBAGENT_*`.
+- `register_prefix("*", ...)` subscribes to all events.
+- A different callable with the same name in overlapping exact/prefix scopes
+  raises `DuplicateHookRegistrationError`.
+- Tool matcher regexes compile at registration. Invalid patterns raise
+  `ValueError` instead of failing open.
+- A matcher-scoped handler does not run when `tool_name` is absent.
 
-## Activity row schema + timeline mirror (65/65 typed)
+## Timeouts
 
-Every `trigger*()` call mirrors as one **typed Activity row** into the active
-`RunTranscript` (`core/observability/activity.py` + `activity_registry.py`,
-spec `docs/plans/2026-05-24-hookevent-activity-schema.md`) — the equivalent of
-openclaw's `z.discriminatedUnion("type")`, with `action` as the discriminator.
+Python cannot safely terminate an arbitrary synchronous function. A sync
+interceptor with `timeout_s > 0` is therefore skipped and records
+`HookTimeoutUnsupportedError`; no abandoned worker thread survives the
+deadline. Async handlers use `asyncio.wait_for` and classify expiration as
+`HookExecutionTimeoutError`.
 
-| Item | Policy |
-|------|--------|
-| **Coverage** | All 65 events map to a concrete typed row (19 lifecycle + 46 K-group). `GenericActivityRow` is a *fail-soft fallback only*, never a routine destination |
-| **details schema** | 24 shared details models (one per family: `CognitivePhaseDetails`×6, `MutationDetails`×4, `AutoTriggerDetails`×6, ...), `frozen=True` + `extra="forbid"` |
-| **Centralization** | The 44 K-group rows are built from a single declarative `_TYPED_ROW_SPECS` table + one `_build_from_spec` builder (not 44 functions); details field names match emit payload keys → key-intersection pull |
-| **Mirror parity** | Mirrors from all 4 trigger variants — `trigger(_async)` AND `trigger_with_result(_async)` / `trigger_interceptor(_async)` — so feedback/interceptor events (e.g. USER_INPUT_RECEIVED) also land in the timeline |
-| **schema_version** | Every row carries `schema_version: int`; bump on field add/rename/retype so JSONL re-readers branch on shape, not key presence |
+## Production persistence
 
-### Error / privacy policy (silent fallback = anti-pattern)
+`build_hooks()` registers one post-dispatch sink instead of a wildcard JSONL
+handler.
 
-| Situation | Handling |
-|-----------|----------|
-| Typed builder meets a malformed payload | Fail-soft to `GenericActivityRow` carrying `_fallback_reason` — a forced-generic row is distinguishable from an intentional one in the timeline itself, not only the daemon log |
-| Mirror / dispatch / learning-save failure | **Once-per-event `WARNING`** (dedup set, no hot-loop spam). No debug-swallow — a dead observability sink must be visible |
-| Missing identifier key | No silent empty-identifier ship — warn once on the emit-site key error |
-| **Raw content** | Raw `user_input` / `cognitive_state` snapshots / full tool results are NEVER written to the timeline JSONL — only derived scalars (`input_len`) via `_derive_input_len` (privacy + size) |
+- Queryable operational events: `sessions.db:hook_events`
+- Portable active autoresearch timeline: `transcript.jsonl`
+- Compatibility duplicates: delivered to handlers, omitted from SQL/transcript
+- Raw user input, prompts, tool inputs/results, cognitive snapshots, and auth
+  headers: never persisted
+- Payloads: bounded by depth, string length, collection size, total bytes, and
+  secret redaction
+- Retention: high-volume 7 days, standard 30 days, audit 180 days, global cap
+  100,000 rows
 
-> "Always emit a row" contract: the timeline stays complete even when typing
-> fails (paperclip `logActivity` swallow-and-warn equivalent) — but the swallow
-> must be VISIBLE: a `WARNING` + `_fallback_reason`, never silent.
+Recent-run context now queries SQL `SESSION_ENDED` rows rather than scanning
+legacy `runs/*.jsonl` files.
 
----
+## Tool lifecycle
 
-## Design Principles
+Every accepted tool attempt completes this pair, including blocks, recovery,
+and executor exceptions:
 
-1. **Non-blocking execution**: One handler's exception does not interrupt other handlers
-2. **Priority-sorted**: Lower number = higher priority (30 → 90)
-3. **Metadata-only emission**: `PROMPT_ASSEMBLED` passes only hashes and statistics (security)
-4. **`HookResult` return**: Introspection of success/failure results from all handlers
-5. **Cross-cutting**: `core/hooks/` is an independent module — importable from any layer
-6. **Maturity evolution**: Progressively add L1 (Observe) → L2 (React) → L3 (Decide) → L4 (Autonomy) handlers to the same event
-7. **Plugin extension**: External extension via `.geode/hooks/` directory without core modification
+```text
+TOOL_EXEC_STARTED (interceptor)
+  -> blocked | execute | adaptive recovery
+  -> TOOL_RESULT_TRANSFORM (feedback, transient)
+  -> TOOL_EXEC_ENDED (canonical terminal)
+  -> TOOL_EXEC_FAILED (error compatibility signal only)
+```
 
----
+Final `has_error` is computed after transformation and the clarification guard.
 
-## Coverage Matrix
+## Plugins
 
-> **Diagram**: [`docs/diagrams/hook-coverage-matrix.mmd`](../diagrams/hook-coverage-matrix.mmd)
+Only `.geode/hooks/<name>/hook.py` or `hook.yaml` is auto-discovered. Built-ins
+under `core/hooks/plugins/` are wired explicitly once, preventing duplicate
+notification registration. Dynamic loader names are restored or removed from
+`sys.modules` after load to avoid module retention across reloads.
 
-| Event Group | L1 OBSERVE | L2 REACT | L3 DECIDE | L4 AUTONOMY |
-|---|:---:|:---:|:---:|:---:|
-| Pipeline (3) | ✓ 5 handlers | ✓ 2 handlers | — | — |
-| Automation (5) | ✓ 6 handlers | ✓ 2 handlers | — | — |
-| Turn (1) | ✓ RunLog | ✓ AutoMemory | — | — |
-| SubAgent (3) | ✓ 2 handlers | — | — | — |
-| Context (2) | ✓ RunLog | — | ○ planned | — |
-| Gateway (2) | — | — | — | — |
-| MCP (2) | ✓ RunLog | — | — | — |
-| Tool Recovery (3) | ✓ RunLog | — | — | — |
-| Memory (4) | — | — | — | — |
-| Prompt (2) | ✓ RunLog | — | — | — |
+## Lifecycle
+
+`HookSystem.close()` blocks new registration, clears handler references, runs
+cleanup callbacks in reverse order, then closes sinks in reverse order.
+Owner-aware cleanups hold only a weak HookSystem reference, so registering
+teardown cannot create a self-cycle. `HookEventStore` retains no database/WAL/
+SHM descriptor between operations; sink close marks it unavailable to future
+writers. Runtime, serve, worker, and one-shot commands close the HookSystem
+they own.

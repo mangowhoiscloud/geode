@@ -485,9 +485,9 @@ def _run_agentic(request: WorkerRequest) -> WorkerResult:
     # 5.5 Minimal hook bundle (trajectory audit 2026-07-03) — pre-fix the
     # loop below was built with ``hooks=None``, so the subprocess
     # sub-agent's tool trajectory vanished: TOOL_EXEC_ENDED had no
-    # consumer (no Episode rows for the child's tool calls) and no run-log
-    # rows were written. Inject only the two trajectory rails (episodic
-    # recorder + run-log wildcard) via ``build_worker_hooks`` — the FULL
+    # consumer (no Episode rows for the child's tool calls) and no durable
+    # operational rows were written. Inject only the two trajectory rails
+    # (episodic recorder + SQLite event sink) via ``build_worker_hooks`` — the FULL
     # ``build_hooks`` bundle is deliberately avoided (per-spawn plugin
     # discovery + double-writing session stores the parent owns).
     # Best-effort: a hook bootstrap failure must never take down the
@@ -658,7 +658,7 @@ def _run_agentic(request: WorkerRequest) -> WorkerResult:
         completion_tokens = usage.output_tokens
         usd_spent = usage.cost_usd
 
-    return WorkerResult(
+    result = WorkerResult(
         task_id=request.task_id,
         success=success,
         output=text,
@@ -668,6 +668,9 @@ def _run_agentic(request: WorkerRequest) -> WorkerResult:
         completion_tokens=completion_tokens,
         usd_spent=usd_spent,
     )
+    if worker_hooks is not None:
+        worker_hooks.close()
+    return result
 
 
 # PR-DEFECT-AB (2026-05-24) — propagate AgenticLoop failures past the

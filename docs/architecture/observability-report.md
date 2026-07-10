@@ -2,6 +2,12 @@
 
 > Audit date: 2026-04-03 (Session 56)
 > Scope: All tracking, monitoring, logging, and metrics systems across `core/`
+>
+> **Historical snapshot.** The HookSystem/RunLog inventory below describes the
+> 2026-04 implementation and is not a current storage contract. Operational
+> events now live in `sessions.db:hook_events`; see
+> [Event persistence contract](event-persistence.md) and
+> [Hook System](hook-system.en.md).
 
 ---
 

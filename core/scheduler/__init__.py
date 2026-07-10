@@ -8,7 +8,7 @@ Sub-modules:
 - :mod:`models`         — `ScheduleKind`, `Schedule`, `ActiveHours`,
                           `ScheduledJob`, `OnJobFired`, constants
 - :mod:`serialization`  — `_job_to_dict`, `_job_from_dict`
-- :mod:`run_log`        — `JobRunLog` (per-job JSONL with auto-pruning)
+- :mod:`core.observability.run_log` — `JobRunLog` (bounded per-job JSONL)
 - :mod:`lock`           — `SchedulerLock`, `_is_pid_alive` (O_EXCL pattern)
 - :mod:`jitter`         — `_compute_jitter_frac`, `_jittered_next_run`
 - :mod:`timezone`       — `_parse_hhmm`, `_now_minutes`, `_cron_tuple_for_tz`

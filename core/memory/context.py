@@ -25,7 +25,7 @@ log = logging.getLogger(__name__)
 # Context freshness threshold (seconds) — data older than this is stale
 DEFAULT_FRESHNESS_THRESHOLD_S = 3600.0  # 1 hour
 
-# Maximum run history entries to inject
+# Maximum operational history entries to inject
 DEFAULT_RUN_HISTORY_MAX_ENTRIES = 3
 
 
@@ -53,7 +53,7 @@ class ContextAssembler:
         session_store: SessionStorePort | None = None,
         user_profile: FileBasedUserProfile | None = None,
         freshness_threshold_s: float = DEFAULT_FRESHNESS_THRESHOLD_S,
-        run_log_dir: Path | str | None = None,
+        event_store: Any | None = None,
         project_journal: Any | None = None,
         vault: Any | None = None,
         project_root: Path | str | None = None,
@@ -65,7 +65,7 @@ class ContextAssembler:
         self._user_profile = user_profile
         self._freshness_threshold = freshness_threshold_s
         self._last_assembly_time: float = 0.0
-        self._run_log_dir: Path | None = Path(run_log_dir) if run_log_dir else None
+        self._event_store = event_store
         self._project_journal = project_journal  # C2: ProjectJournal
         self._vault = vault  # V0: Vault (artifact storage)
         self._project_root: Path | None = Path(project_root) if project_root else None
@@ -207,41 +207,31 @@ class ContextAssembler:
         context: dict[str, Any],
         max_entries: int = DEFAULT_RUN_HISTORY_MAX_ENTRIES,
     ) -> None:
-        """P6 Context Budget L3: inject recent run results as 1-line summary.
+        """P6 Context Budget L3: inject recent SQL session outcomes.
 
-        Format: "Recent: subject score=81.3 (2h ago) | research done (1d ago)"
+        The former JSONL ``pipeline_end`` scan was disconnected after that
+        event family was removed. ``hook_events`` is now the queryable SoT.
         """
-        if not self._run_log_dir:
+        if self._event_store is None:
             return
 
         try:
-            from core.observability.run_log import RunLog
+            from core.hooks import HookEvent
 
-            # Scan all JSONL files in run_log_dir for pipeline_end events
-            if not self._run_log_dir.exists():
+            recent = self._event_store.read(
+                limit=max_entries,
+                event_filter=HookEvent.SESSION_ENDED.value,
+            )
+            if not recent:
                 return
-
-            all_entries = []
-            for jsonl_file in self._run_log_dir.glob("*.jsonl"):
-                session_key = jsonl_file.stem.replace("_", ":")
-                run_log = RunLog(session_key, log_dir=self._run_log_dir)
-                entries = run_log.read(limit=max_entries, event_filter="pipeline_end")
-                all_entries.extend(entries)
-
-            if not all_entries:
-                return
-
-            # Sort by timestamp descending, take most recent
-            all_entries.sort(key=lambda e: e.timestamp, reverse=True)
-            recent = all_entries[:max_entries]
 
             now = time.time()
             summaries = []
             for entry in recent:
-                score = entry.metadata.get("score", "?")
-                age = format_age(now - entry.timestamp)
-                name = entry.metadata.get("subject_id", subject_id)
-                summaries.append(f"{name} score={score} ({age})")
+                age = format_age(now - entry.occurred_at)
+                name = entry.session_key or subject_id
+                outcome = "failed" if entry.status == "failed" else "completed"
+                summaries.append(f"{name} {outcome} ({age})")
 
             context["_run_history"] = " | ".join(summaries)
         except Exception:

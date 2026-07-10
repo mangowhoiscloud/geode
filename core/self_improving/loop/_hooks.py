@@ -42,6 +42,15 @@ def set_self_improving_loop_hooks(hooks: Any) -> None:
     _hooks_ctx = hooks
 
 
+def clear_self_improving_loop_hooks(expected: Any) -> bool:
+    """Clear the binding only when it still points at ``expected``."""
+    global _hooks_ctx
+    if _hooks_ctx is not expected:
+        return False
+    _hooks_ctx = None
+    return True
+
+
 def _fire_hook(event: HookEvent, data: dict[str, Any]) -> None:
     """Fire a mutation lifecycle event when the HookSystem is wired.
 

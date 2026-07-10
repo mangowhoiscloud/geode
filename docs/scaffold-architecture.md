@@ -66,9 +66,10 @@ Orchestration → Agent → Pipeline
 0.System Base → 1.Skill Injection → 2.Tool Context → 3.Memory Context → 4.Agentic Suffix
 ```
 
-#### 2.5 HookSystem (36 이벤트)
-- PIPELINE_*, NODE_*, ANALYST_*, SUBAGENT_*, CONTEXT_*, GATEWAY_*, MCP_*, TOOL_RECOVERY_*
-- 구독자: RunLog, DriftDetector, AgentReflection, ProjectJournal, NotificationHook
+#### 2.5 HookSystem (65 이벤트)
+- observe / feedback / interceptor + sync/async parity
+- 구독자: SQLite event sink, ProjectJournal, NotificationHook, metrics, memory handlers
+- exact/prefix 이름 충돌 fail-loud, cancelable subscription, deterministic close
 
 #### 2.6 큐 체인
 ```
@@ -196,19 +197,22 @@ orchestration/
 ├── lane_queue.py        # ★ LaneQueue (세마포어 동시성)
 ├── plan_mode.py         # 플랜 모드
 ├── planner.py           # 플래너
-├── run_log.py           # 실행 로그
 ├── stuck_detection.py   # 스턱 감지
 ├── task_bridge.py       # 태스크 브릿지
 └── task_system.py       # ★ TaskGraph DAG (13-task)
 ```
 
+운영 이벤트 영속성은 `core/observability/event_store.py`와
+`hook_persistence.py`가 담당한다. `core/observability/run_log.py`는
+스케줄러의 bounded `JobRunLog` JSONL만 유지한다.
+
 ### Layer 5 — Extensibility (`core/hooks/`, `core/skills/`, `core/tools/`)
 ```
 hooks/
-├── approval_tracker.py  # 승인 추적
+├── catalog.py           # 보존 등급 + canonical event 정책
 ├── context_action.py    # 컨텍스트 액션
 ├── discovery.py         # 훅 디스커버리
-├── system.py            # ★ HookSystem (36 이벤트)
+├── system.py            # ★ HookSystem (65 이벤트)
 └── plugins/notification_hook/  # 알림 훅 플러그인
 
 skills/

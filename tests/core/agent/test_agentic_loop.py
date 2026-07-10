@@ -271,10 +271,10 @@ class TestToolExecutor:
 
         async def rewrite_result(_event: HookEvent, _data: dict[str, Any]) -> dict[str, Any]:
             await asyncio.sleep(0)
-            return {"updated_result": {"status": "hooked"}}
+            return {"transformed_result": {"status": "hooked"}}
 
         hooks.register(HookEvent.TOOL_EXEC_STARTED, rewrite_input, name="rewrite_input")
-        hooks.register(HookEvent.TOOL_EXEC_ENDED, rewrite_result, name="rewrite_result")
+        hooks.register(HookEvent.TOOL_RESULT_TRANSFORM, rewrite_result, name="rewrite_result")
 
         processor = ToolCallProcessor(
             executor=executor,
