@@ -45,6 +45,27 @@ functional change.
 
 ---
 
+## [0.99.290] - 2026-07-10
+
+### Added
+
+- **Crucible class-prior store and campaign fold writer.** Tracked
+  `plugins/crucible/priors/` holds one Beta-posterior file per mutation class,
+  pinned to the task-pack hash its evidence was measured against.
+  `python -m plugins.crucible priors-update` folds a campaign ledger's
+  measured flips into the fix-rate posterior (INVALID rows excluded,
+  foreign-pack ledgers refused), closing the read-write parity gap between
+  calibration's prior reads and campaign evidence.
+
+### Changed
+
+- **Crucible failure feedback v2 opens self-observations.** The bounded
+  producer feedback now carries failed task IDs and excerpts of text the
+  candidate itself emitted (oracle content remains excluded; scrubbing is the
+  evaluator's contractual duty). The supervisor ledger and per-attempt
+  feedback additionally emit paired flip/regression counts and the task-pack
+  hash — the inputs the prior writer and the target hit-rate metric consume.
+
 ## [0.99.289] - 2026-07-10
 
 ### Added

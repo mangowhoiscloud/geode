@@ -43,14 +43,14 @@ from .contract import (
     validate_measurement_files,
 )
 from .evidence import EvidenceEnvelope, ResourceUsage, load_evidence
-from .promotion import PromotionVerdict, decide
+from .promotion import PromotionVerdict, decide, paired_flip_counts
 
 CONFIG_SCHEMA = "crucible.supervisor.v2"
 TRAIN_PLAN_SCHEMA = "crucible.train-plan.v1"
 REQUEST_SCHEMA = "crucible.proposal-request.v2"
 PROPOSAL_SCHEMA = "crucible.candidate.v2"
 EVALUATION_SCHEMA = "crucible.train-evaluation.v2"
-FEEDBACK_SCHEMA = "crucible.failure-feedback.v1"
+FEEDBACK_SCHEMA = "crucible.failure-feedback.v2"
 SUPERVISOR_FEEDBACK_SCHEMA = "crucible.supervisor-feedback.v2"
 RECORD_SCHEMA = "crucible.loop-record.v2"
 STATE_SCHEMA = "crucible.loop-state.v2"
@@ -498,8 +498,21 @@ class CandidateProposal:
 
 @dataclass(frozen=True)
 class FailureFeedback:
+    """Bounded evaluator feedback forwarded to the next producer.
+
+    v2 opens the candidate's own observations — which frozen tasks failed and
+    excerpts of its own trajectory — while still excluding oracle content
+    (gold actions, expected values, task payloads). Watching one's own
+    behaviour is a learning signal, not contamination; the caps below are
+    transport/DoS protocol limits, not gate parameters. Oracle scrubbing is
+    the evaluator's contractual duty: only text the candidate itself emitted
+    may appear in ``trajectory_excerpts``.
+    """
+
     summary: str
     failure_classes: tuple[str, ...]
+    failed_task_ids: tuple[str, ...] = ()
+    trajectory_excerpts: tuple[str, ...] = ()
 
     @classmethod
     def from_mapping(cls, value: object) -> FailureFeedback:
@@ -515,14 +528,38 @@ class FailureFeedback:
         )
         if len(classes) > 32 or any(len(item) > 100 for item in classes):
             raise SupervisorError("feedback.failure_classes exceeds its boundary")
-        return cls(summary=summary, failure_classes=classes)
+        failed_task_ids = _strings(
+            value.get("failed_task_ids", []),
+            "feedback.failed_task_ids",
+            allow_empty=True,
+        )
+        if len(failed_task_ids) > 64 or any(len(item) > 100 for item in failed_task_ids):
+            raise SupervisorError("feedback.failed_task_ids exceeds its boundary")
+        excerpts = _strings(
+            value.get("trajectory_excerpts", []),
+            "feedback.trajectory_excerpts",
+            allow_empty=True,
+        )
+        if len(excerpts) > 8 or any(len(item) > 2_000 for item in excerpts):
+            raise SupervisorError("feedback.trajectory_excerpts exceeds its boundary")
+        return cls(
+            summary=summary,
+            failure_classes=classes,
+            failed_task_ids=failed_task_ids,
+            trajectory_excerpts=excerpts,
+        )
 
     def to_dict(self) -> dict[str, Any]:
-        return {
+        row: dict[str, Any] = {
             "schema": FEEDBACK_SCHEMA,
             "summary": self.summary,
             "failure_classes": list(self.failure_classes),
         }
+        if self.failed_task_ids:
+            row["failed_task_ids"] = list(self.failed_task_ids)
+        if self.trajectory_excerpts:
+            row["trajectory_excerpts"] = list(self.trajectory_excerpts)
+        return row
 
 
 @dataclass(frozen=True)
@@ -1098,6 +1135,8 @@ class PromotionSupervisor:
             evaluator_feedback: FailureFeedback | None = None
             candidate_ref: str | None = None
             baseline_ref: str | None = None
+            target_flips: int | None = None
+            target_regressions: int | None = None
             attempt_usage = zero
             outcome: Literal["KEEP", "REJECT", "INVALID"] = "INVALID"
             reasons: tuple[str, ...] = ()
@@ -1162,6 +1201,11 @@ class PromotionSupervisor:
                 )
                 self._preflight(workspace, measurement_checkout, proposal, contract)
                 verdict = decide(contract, artifacts.baseline, artifacts.candidate)
+                target_flips, target_regressions = paired_flip_counts(
+                    contract,
+                    artifacts.baseline,
+                    artifacts.candidate,
+                )
                 write_exclusive_json(
                     attempt_dir / "baseline.attested.json",
                     artifacts.baseline.to_dict(),
@@ -1197,6 +1241,8 @@ class PromotionSupervisor:
                 "outcome": outcome,
                 "reasons": list(reasons),
                 "search_head_sha": next_head,
+                "target_flips": target_flips,
+                "target_regressions": target_regressions,
             }
             if evaluator_feedback is not None:
                 feedback_payload["evaluator"] = evaluator_feedback.to_dict()
@@ -1220,6 +1266,11 @@ class PromotionSupervisor:
                 "search_head_after": next_head,
                 "usage": attempt_usage.to_dict(),
                 "wall_seconds": attempt_elapsed,
+                # Loop-health emits: class-prior writer + target hit-rate inputs.
+                "task_count": len(contract.task_ids) if contract else None,
+                "task_pack_sha256": contract.task_pack_sha256 if contract else None,
+                "target_flips": target_flips,
+                "target_regressions": target_regressions,
             }
             record_id = _hash(record_payload)
             record = {**record_payload, "record_id": record_id}

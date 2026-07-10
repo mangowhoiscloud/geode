@@ -399,16 +399,22 @@ artifacts:
   "baseline_raw": "baseline.results.json",
   "candidate_raw": "candidate.results.json",
   "feedback": {
-    "schema": "crucible.failure-feedback.v1",
+    "schema": "crucible.failure-feedback.v2",
     "summary": "bounded train failure summary",
-    "failure_classes": ["tool_contract"]
+    "failure_classes": ["tool_contract"],
+    "failed_task_ids": ["task-42"],
+    "trajectory_excerpts": ["candidate-authored turn text, oracle-scrubbed"]
   }
 }
 ```
 
-The raw-file digests must match both evidence envelopes. Free-form traces,
-prompts, task payloads, and sealed rows are not forwarded to the next producer;
-only the bounded feedback schema and mechanical verdict reasons are retained.
+The raw-file digests must match both evidence envelopes. Oracle content —
+gold actions, expected values, task payloads, and sealed rows — is never
+forwarded to the next producer. The candidate's own observations are: the
+bounded feedback schema may carry failed task IDs and excerpts of text the
+candidate itself emitted (scrubbing is the evaluator's contractual duty),
+alongside mechanical verdict reasons and paired flip counts. Watching one's
+own behaviour is a learning signal, not contamination.
 
 Each fresh campaign directory contains `config.json`, an atomically replaced
 `state.json`, append-only `ledger.jsonl`, immutable per-attempt artifacts, and
