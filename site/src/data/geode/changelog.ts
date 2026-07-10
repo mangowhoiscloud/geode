@@ -17,6 +17,11 @@ export type ChangelogEntry = {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    "version": "0.99.293",
+    "date": "2026-07-10",
+    "body": "### Fixed\n\n- **Portfolio finale credit reads \"edited by\".** The end-credit roll line\n  over the MANGO card is corrected from \"edit by\" (operator-directed)."
+  },
+  {
     "version": "0.99.292",
     "date": "2026-07-10",
     "body": "### Changed\n\n- **Docs surface aligned with the portfolio register (operator-directed).**\n  Docs page titles and prose h2 headings now carry the Noto Serif KR\n  editorial display (`--font-serif-display`, mounted via `docs-shell.tsx`)\n  over the existing dark substrate, matching the portfolio's serif register\n  while reference density stays sans. README.md drops every em-dash\n  (headings to colons, definition bullets to colons, prose clauses to\n  commas) per the dash-slop rule."
