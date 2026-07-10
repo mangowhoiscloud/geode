@@ -68,9 +68,16 @@ functional change.
   198-flake token snowfall (per-flake speed/size/opacity/sway) with the
   full-bleed wordmark filling top-down at the base of the screen; the
   ledger and the laboratory reveal follow on the same sticky screen. The
-  hero's top pixel wordmark is removed (the statement carries the name). "Three ways in" pins and recedes
-  backward as the plates slide over it; the terminal mock keeps its dark
-  product colors and macOS traffic lights by standing exception.
+  hero's top pixel wordmark is removed (the statement carries the name). "Three ways in" and the plates flow
+  normally with Hermes-style staggered in-view reveals (the sticky
+  card-over-card curtain is removed); the terminal cell reads bare `$ geode`
+  with the start options spelled out. Plate titles are original (no Hermes
+  verbatim): one-agent-every-surface, memory-that-compounds (organization-
+  and person-scoped tiers accumulated in SQLite), works-while-you're-away,
+  many-hands-one-loop; the loop orbit is redrawn taller (520x430 viewBox,
+  350px plates) and em-dashes are stripped from all rendered copy. The
+  terminal mock keeps its dark product colors and macOS traffic lights by
+  standing exception.
 - **De-slop: decorative arrows and the dev-blog link are gone.** CTA/link
   arrows (`→`, `▸`) are removed site-portfolio-wide (ranges now use `~`), and
   the Dev Blog link is dropped from the portfolio hero and the shared footer.

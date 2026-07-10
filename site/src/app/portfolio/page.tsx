@@ -207,9 +207,9 @@ const LOOP_NODES = [
 function LoopDiagram() {
   const locale = useLocale();
   const cx = 260;
-  const cy = 148;
+  const cy = 185;
   const rx = 186;
-  const ry = 102;
+  const ry = 148;
   const nodeW = 104;
   const nodeH = 30;
   const points = LOOP_NODES.map((node, i) => {
@@ -217,9 +217,9 @@ function LoopDiagram() {
     return { ...node, x: cx + rx * Math.cos(angle), y: cy + ry * Math.sin(angle) };
   });
   return (
-    <svg viewBox="0 0 520 348" className="h-full w-auto max-w-full" role="img"
+    <svg viewBox="0 0 520 430" className="h-full w-auto max-w-full" role="img"
       aria-label={t(locale, "while tool_use 루프 다이어그램", "while tool_use loop diagram")}>
-      {[0.55, 0.8, 1.18, 1.5].map((k) => (
+      {[0.55, 0.8, 1.12, 1.38].map((k) => (
         <ellipse key={k} cx={cx} cy={cy} rx={rx * k} ry={ry * k} fill="none"
           stroke={ROSE} strokeWidth="1" strokeDasharray="1.5 5" opacity="0.5" />
       ))}
@@ -235,12 +235,12 @@ function LoopDiagram() {
           </g>
         );
       })}
-      <line x1={cx} y1={cy + 36} x2={cx} y2={306} stroke={ROSE} strokeWidth="1.2" strokeDasharray="3 4" />
-      <polygon points="-4,-3.5 0,4.5 4,-3.5" fill={ROSE} transform={`translate(${cx} ${306})`} />
+      <line x1={cx} y1={cy + 36} x2={cx} y2={386} stroke={ROSE} strokeWidth="1.2" strokeDasharray="3 4" />
+      <polygon points="-4,-3.5 0,4.5 4,-3.5" fill={ROSE} transform={`translate(${cx} ${386})`} />
       <text x={cx + 12} y={cy + ry + 16} textAnchor="start" fontSize="10"
         fontFamily="var(--font-fira-code), monospace" fill={ROSE_75}>no tool_use</text>
-      <rect x={cx - 48} y={310} width={96} height={26} fill={PAPER} stroke={ROSE} shapeRendering="crispEdges" />
-      <text x={cx} y={327} textAnchor="middle" fontSize="12" fontFamily="var(--font-fira-code), monospace" fill={ROSE}>finalize</text>
+      <rect x={cx - 48} y={390} width={96} height={26} fill={PAPER} stroke={ROSE} shapeRendering="crispEdges" />
+      <text x={cx} y={407} textAnchor="middle" fontSize="12" fontFamily="var(--font-fira-code), monospace" fill={ROSE}>finalize</text>
       <text x={cx} y={cy - 8} textAnchor="middle" fontSize="19" className="font-pixel" fill={ROSE}>while</text>
       <text x={cx} y={cy + 15} textAnchor="middle" fontSize="19" className="font-pixel" fill={ROSE}>(tool_use)</text>
       {points.map((node) => (
@@ -347,9 +347,9 @@ const runModes = [
     eyebrow: "any terminal",
     titleKo: "터미널",
     titleEn: "Terminal",
-    cmd: "$ uv run geode",
-    ko: "자연어로 맡기면 루프가 끝까지 실행합니다.",
-    en: "Hand it a sentence; the loop executes to the end.",
+    cmd: "$ geode",
+    ko: "그대로 치면 대화형 세션. geode \"한 문장\"은 그 일을 끝까지 실행하고, serve 데몬은 알아서 기동합니다.",
+    en: "Bare geode opens the session; geode \"a sentence\" runs that one job to the end. The serve daemon auto-starts.",
   },
   {
     eyebrow: "any mcp client",
@@ -369,60 +369,51 @@ const runModes = [
   },
 ];
 
-/** The three entrances, as stage content (pinned by RunThenPlates). */
-function RunRowContent() {
+/** The three entrances — normal flow, Hermes-style staggered reveal. */
+function RunRow() {
   const locale = useLocale();
-  return (
-    <div className="mx-auto w-full max-w-6xl px-6">
-      <p className="text-center font-mono text-[10.5px] uppercase tracking-[0.3em]" style={{ color: PAPER_75 }}>
-        {t(locale, "세 가지 입구", "three ways in")}
-      </p>
-      <div
-        className="mt-10 grid gap-px overflow-hidden border md:grid-cols-3"
-        style={{ borderColor: PAPER_55, background: PAPER_55 }}
-      >
-        {runModes.map((mode) => (
-          <div key={mode.cmd} className="bg-[var(--acc-artifact)] px-7 py-9 text-center">
-            <p className="font-mono text-[10.5px] uppercase tracking-[0.28em]" style={{ color: PAPER_75 }}>{mode.eyebrow}</p>
-            <h2 className="font-serif-display mt-3 text-[28px] font-semibold text-[#FFF0F8]">
-              {locale === "en" ? mode.titleEn : mode.titleKo}
-            </h2>
-            <p className="mx-auto mt-4 inline-block rounded bg-[#FFF0F8] px-4 py-2 font-mono text-[13px] text-[var(--acc-artifact)]">
-              {mode.cmd}
-            </p>
-            <p className="mx-auto mt-4 max-w-[260px] text-[13px] leading-[1.7]" style={{ color: PAPER_75 }}>
-              {t(locale, mode.ko, mode.en)}
-            </p>
-          </div>
-        ))}
-      </div>
-    </div>
-  );
-}
-
-/**
- * Curtain pair: the three entrances pin beneath (z-0) and recede backward
- * (scale + fade) exactly in sync with the plates section sliding over them
- * (z-10). Recede is driven by the plates' approach, so pin and push-back
- * never desynchronize.
- */
-function RunThenPlates() {
   const reduceMotion = useReducedMotion();
-  const platesRef = useRef<HTMLDivElement | null>(null);
-  const { scrollYProgress } = useScroll({ target: platesRef, offset: ["start end", "start start"] });
-  const recedeScale = useTransform(scrollYProgress, [0, 1], [1, 0.88]);
-  const recedeOp = useTransform(scrollYProgress, [0, 1], [1, 0.2]);
   return (
-    <>
-      <div id="run" className="sticky top-0 z-0 flex h-screen items-center bg-[var(--acc-artifact)]">
-        <motion.div style={{ scale: reduceMotion ? 1 : recedeScale, opacity: recedeOp }} className="w-full">
-          <RunRowContent />
-        </motion.div>
+    <section id="run" className="bg-[var(--acc-artifact)]">
+      <div className="mx-auto w-full max-w-6xl px-6 py-20 sm:py-28">
+        <motion.p
+          initial={{ opacity: 0, y: reduceMotion ? 0 : 16 }}
+          whileInView={{ opacity: 1, y: 0 }}
+          viewport={{ once: true, margin: "-80px" }}
+          transition={{ duration: 0.6, ease: [0.22, 1, 0.36, 1] }}
+          className="text-center font-mono text-[10.5px] uppercase tracking-[0.3em]"
+          style={{ color: PAPER_75 }}
+        >
+          {t(locale, "세 가지 입구", "three ways in")}
+        </motion.p>
+        <div
+          className="mt-10 grid gap-px overflow-hidden border md:grid-cols-3"
+          style={{ borderColor: PAPER_55, background: PAPER_55 }}
+        >
+          {runModes.map((mode, i) => (
+            <motion.div
+              key={mode.cmd}
+              initial={{ opacity: 0, y: reduceMotion ? 0 : 26 }}
+              whileInView={{ opacity: 1, y: 0 }}
+              viewport={{ once: true, margin: "-80px" }}
+              transition={{ duration: 0.65, delay: i * 0.12, ease: [0.22, 1, 0.36, 1] }}
+              className="bg-[var(--acc-artifact)] px-7 py-9 text-center"
+            >
+              <p className="font-mono text-[10.5px] uppercase tracking-[0.28em]" style={{ color: PAPER_75 }}>{mode.eyebrow}</p>
+              <h2 className="font-serif-display mt-3 text-[28px] font-semibold text-[#FFF0F8]">
+                {locale === "en" ? mode.titleEn : mode.titleKo}
+              </h2>
+              <p className="mx-auto mt-4 inline-block rounded bg-[#FFF0F8] px-4 py-2 font-mono text-[13px] text-[var(--acc-artifact)]">
+                {mode.cmd}
+              </p>
+              <p className="mx-auto mt-4 max-w-[260px] text-[13px] leading-[1.7]" style={{ color: PAPER_75 }}>
+                {t(locale, mode.ko, mode.en)}
+              </p>
+            </motion.div>
+          ))}
+        </div>
       </div>
-      <div ref={platesRef} className="relative z-10">
-        <FeaturesGrid />
-      </div>
-    </>
+    </section>
   );
 }
 
@@ -465,7 +456,7 @@ function ConnectBanner() {
     <div className="flex h-full w-full flex-col items-center justify-center gap-4 px-6 text-center">
       <div className="font-mono text-[12px] leading-relaxed">
         <p style={{ color: ROSE }}>one agent · one memory · every surface</p>
-        <p style={{ color: ROSE_75 }}>openai / codex · glm — oauth you own</p>
+        <p style={{ color: ROSE_75 }}>openai / codex · glm · oauth you own</p>
       </div>
       <div className="flex flex-wrap justify-center gap-1.5">
         {surfaceChips.map((chip) => (
@@ -548,7 +539,7 @@ const features: {
     headKo: "루프를 돌립니다",
     headEn: "RUNS THE LOOP",
     ko: "계획, 실행, 관찰, 성찰, 검증, 재계획. 도구 호출이 멈출 때까지. 매 라운드 reflection이 가설과 확신도를 갱신합니다.",
-    en: "Plan, act, observe, reflect, verify, replan — until tool calls stop. Each round a reflection call updates hypotheses and confidence.",
+    en: "Plan, act, observe, reflect, verify, replan, until tool calls stop. Each round a reflection call updates hypotheses and confidence.",
     banner: <LoopDiagram />,
   },
   {
@@ -565,28 +556,28 @@ const features: {
     id: "connect",
     plate: 6,
     index: "#3 connect",
-    headKo: "어디에나 상주합니다",
-    headEn: "LIVES EVERYWHERE",
+    headKo: "하나의 에이전트, 모든 표면",
+    headEn: "ONE AGENT, EVERY SURFACE",
     ko: "CLI, MCP 서버, Slack, cron 게이트웨이. 하나의 에이전트가 하나의 메모리로 모든 표면에, 직접 소유한 OAuth로 상주합니다.",
-    en: "CLI, MCP server, Slack, and the cron gateway — one agent with one memory on every surface, over OAuth you own.",
+    en: "CLI, MCP server, Slack, and the cron gateway. One agent with one memory on every surface, over OAuth you own.",
     banner: <ConnectBanner />,
   },
   {
     id: "remember",
     plate: 7,
     index: "#4 remember",
-    headKo: "잊지 않습니다",
-    headEn: "PERSISTENT MEMORY",
-    ko: "다섯 층의 메모리가 턴마다 컨텍스트를 조립합니다. identity, profile, organization, project, session. 아래 층이 위 층을 덮습니다.",
-    en: "Five memory tiers assemble every turn's context — identity, profile, organization, project, session — lower overriding higher.",
+    headKo: "쌓이는 기억",
+    headEn: "MEMORY THAT COMPOUNDS",
+    ko: "조직과 개인으로 층을 나눈 메모리를 SQL에 축적합니다. 세션을 넘어 당신과 프로젝트를 배우고, 턴마다 컨텍스트로 조립됩니다.",
+    en: "Organization- and person-scoped memory tiers, accumulated in SQLite. It learns you and your projects across sessions, assembled into every turn.",
     banner: <MemoryBanner />,
   },
   {
     id: "schedule",
     plate: 8,
     index: "#5 schedule",
-    headKo: "잠든 사이에도 일합니다",
-    headEn: "FOCUSED AUTOMATION",
+    headKo: "자리 비운 사이에도",
+    headEn: "WORKS WHILE YOU'RE AWAY",
     ko: "보고서와 브리핑을 자연어로 예약합니다. 상주 게이트웨이가 무인으로 수행합니다.",
     en: "Natural-language scheduling for reports and briefings, running unattended through the resident gateway.",
     banner: <ScheduleBanner />,
@@ -595,10 +586,10 @@ const features: {
     id: "delegate",
     plate: 9,
     index: "#6 delegate",
-    headKo: "일을 나눕니다",
-    headEn: "TASKS MULTIPLIED",
+    headKo: "손은 여럿, 루프는 하나",
+    headEn: "MANY HANDS, ONE LOOP",
     ko: "서브 에이전트, 플랜, 배치는 모두 같은 루프의 인스턴스입니다. 격리된 컨텍스트, 하나의 규율.",
-    en: "Sub-agents, plans, and batches are all instances of the same loop — isolated contexts, one discipline.",
+    en: "Sub-agents, plans, and batches are all instances of the same loop. Isolated contexts, one discipline.",
     banner: <DelegateDiagram />,
   },
   {
@@ -628,7 +619,7 @@ const features: {
     headKo: "정직하게 잽니다",
     headEn: "KEEPS HONEST SCORE",
     ko: "개선에 실패한 캠페인도 기록에 남습니다. 0 승격의 원인 규명까지가 실측 자산입니다.",
-    en: "The campaigns that failed to improve it stay on the record — including why zero got promoted.",
+    en: "The campaigns that failed to improve it stay on the record, including why zero got promoted.",
     banner: <MeasureBanner />,
   },
 ];
@@ -636,14 +627,20 @@ const features: {
 function FeaturesGrid() {
   const locale = useLocale();
   return (
-    <section id="features" className="relative z-10 bg-[var(--acc-artifact)]">
+    <section id="features" className="bg-[var(--acc-artifact)]">
       <div className="mx-auto max-w-7xl px-6 py-16 sm:py-24">
         <p className="text-center font-mono text-[10.5px] uppercase tracking-[0.3em]" style={{ color: PAPER_75 }}>
           {t(locale, "도판 i-ix", "plates i-ix")}
         </p>
         <div className="mt-12 grid gap-x-8 gap-y-14 md:grid-cols-2 xl:grid-cols-3">
-          {features.map((feature) => (
-            <div key={feature.id}>
+          {features.map((feature, i) => (
+            <motion.div
+              key={feature.id}
+              initial={{ opacity: 0, y: 26 }}
+              whileInView={{ opacity: 1, y: 0 }}
+              viewport={{ once: true, margin: "-70px" }}
+              transition={{ duration: 0.65, delay: (i % 3) * 0.1, ease: [0.22, 1, 0.36, 1] }}
+            >
               <p className="font-mono text-[11px] uppercase tracking-[0.26em]" style={{ color: PAPER_75 }}>
                 {feature.index}
               </p>
@@ -651,7 +648,7 @@ function FeaturesGrid() {
                 {locale === "en" ? feature.headEn : feature.headKo}
               </h2>
               <div
-                className="mt-5 flex h-[300px] items-center justify-center overflow-hidden bg-[#FFF0F8] bg-cover bg-center px-4 py-3"
+                className="mt-5 flex h-[350px] items-center justify-center overflow-hidden bg-[#FFF0F8] bg-cover bg-center px-4 py-3"
                 style={{
                   backgroundImage: `linear-gradient(rgba(255,240,248,0.62), rgba(255,240,248,0.62)), url(/geode/images/plate-bg-${feature.plate}.png)`,
                   imageRendering: "pixelated",
@@ -662,7 +659,7 @@ function FeaturesGrid() {
               <p className="mt-4 max-w-[380px] text-[13px] leading-[1.75]" style={{ color: PAPER_75 }}>
                 {t(locale, feature.ko, feature.en)}
               </p>
-            </div>
+            </motion.div>
           ))}
         </div>
         <div
@@ -931,7 +928,8 @@ export default function GeodePortfolioPage() {
       >
         <GeodeNav items={navItems} light />
         <HeroField />
-        <RunThenPlates />
+        <RunRow />
+        <FeaturesGrid />
         <DistillationAct />
       </main>
     </LocaleProvider>
