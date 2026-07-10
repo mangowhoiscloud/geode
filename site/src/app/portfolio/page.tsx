@@ -19,7 +19,7 @@ import { GEODE_SOT } from "@/data/geode/sot";
 import { galmuri } from "@/fonts/galmuri";
 import { serifDisplay } from "@/fonts/serif";
 
-import { firstRelease, latestRelease, peakWeek, releaseCount, weeklyCadence } from "./growth";
+import { firstRelease, latestRelease, releaseCount } from "./growth";
 
 /**
  * GEODE portfolio v11 — growth log, landing-grade pass.
@@ -42,15 +42,6 @@ const navItems = [
 
 const surfaceChips = ["CLI", "MCP server", "Slack", "cron", "Gateway daemon"];
 
-
-const MONTH_LABELS: Record<string, string> = {
-  "03": "Mar",
-  "04": "Apr",
-  "05": "May",
-  "06": "Jun",
-  "07": "Jul",
-  "08": "Aug",
-};
 
 /** Sprite with a discoverable click reaction: three quick pixel hops. */
 function PlayfulSprite({ scale, blink, className }: { scale?: number; blink?: boolean; className?: string }) {
@@ -146,12 +137,17 @@ function HeroField() {
   const { scrollY } = useScroll();
   const fieldOpacity = useTransform(scrollY, [0, 700], [1, 0.25]);
   const fieldScale = useTransform(scrollY, [0, 700], [1, 0.965]);
+  // Reduced motion keeps the fades but drops movement/scale.
+  const heroItem = {
+    hidden: { opacity: 0, y: reduceMotion ? 0 : 24 },
+    show: { opacity: 1, y: 0, transition: { duration: 0.65, ease: [0.22, 1, 0.36, 1] as const } },
+  };
   return (
     <section id="hero">
       {/* Rose color field, Hermes split composition: editorial serif statement
           left, white-line engraving of the mascot right, corner stamps. */}
       <div className="relative overflow-hidden bg-[var(--acc-artifact)]">
-        <motion.div style={{ opacity: reduceMotion ? 1 : fieldOpacity, scale: reduceMotion ? 1 : fieldScale }}>
+        <motion.div style={{ opacity: fieldOpacity, scale: reduceMotion ? 1 : fieldScale }}>
         <Image
           src="/geode/images/geode-sky.png"
           alt=""
@@ -169,14 +165,14 @@ function HeroField() {
         <div className="relative z-10 mx-auto grid max-w-7xl items-center gap-6 px-5 pb-24 pt-10 sm:px-8 lg:grid-cols-[1.05fr_0.95fr] lg:pb-28 lg:pt-14">
           <motion.div
             className="relative z-10"
-            initial={reduceMotion ? false : "hidden"}
+            initial="hidden"
             animate="show"
             variants={{ hidden: {}, show: { transition: { staggerChildren: 0.1, delayChildren: 0.05 } } }}
           >
-            <motion.p variants={{ hidden: { opacity: 0, y: 24 }, show: { opacity: 1, y: 0, transition: { duration: 0.65, ease: [0.22, 1, 0.36, 1] } } }} className="font-mono text-[10.5px] uppercase tracking-[0.3em] text-[color-mix(in_srgb,var(--paper)_62%,transparent)]">
+            <motion.p variants={heroItem} className="font-mono text-[10.5px] uppercase tracking-[0.3em] text-[color-mix(in_srgb,var(--paper)_62%,transparent)]">
               open source · apache-2.0 · {t(locale, "루프 실험실", "the loop laboratory")}
             </motion.p>
-            <motion.h1 variants={{ hidden: { opacity: 0, y: 24 }, show: { opacity: 1, y: 0, transition: { duration: 0.65, ease: [0.22, 1, 0.36, 1] } } }} className="font-serif-display mt-7 text-balance text-[clamp(2.5rem,5.8vw,4.4rem)] font-black leading-[1.12] text-[var(--paper)]">
+            <motion.h1 variants={heroItem} className="font-serif-display mt-7 text-balance text-[clamp(2.5rem,5.8vw,4.4rem)] font-black leading-[1.12] text-[var(--paper)]">
               {t(locale, "일을 맡기면", "The agent that")}
               <br />
               {t(locale, "끝까지 실행하고,", "executes to the end,")}
@@ -184,17 +180,17 @@ function HeroField() {
               {t(locale, "스스로를 고쳐 씁니다.", "and rewrites itself.")}
             </motion.h1>
 
-            <motion.p variants={{ hidden: { opacity: 0, y: 24 }, show: { opacity: 1, y: 0, transition: { duration: 0.65, ease: [0.22, 1, 0.36, 1] } } }} className="mt-10 font-mono text-[10.5px] uppercase tracking-[0.3em] text-[color-mix(in_srgb,var(--paper)_62%,transparent)]">
+            <motion.p variants={heroItem} className="mt-10 font-mono text-[10.5px] uppercase tracking-[0.3em] text-[color-mix(in_srgb,var(--paper)_62%,transparent)]">
               run via terminal
             </motion.p>
-            <motion.div variants={{ hidden: { opacity: 0, y: 24 }, show: { opacity: 1, y: 0, transition: { duration: 0.65, ease: [0.22, 1, 0.36, 1] } } }} className="mt-3 inline-block rounded bg-[var(--paper)] px-5 py-3 text-left font-mono text-[12.5px] text-[var(--ink-2)] sm:text-[13.5px]">
+            <motion.div variants={heroItem} className="mt-3 inline-block rounded bg-[var(--paper)] px-5 py-3 text-left font-mono text-[12.5px] text-[var(--ink-2)] sm:text-[13.5px]">
               <span className="text-[var(--acc-artifact)]">$</span> uv run geode{" "}
               <span className="text-[var(--code-string)]">
                 &quot;{t(locale, "이 레포 점검하고 릴리스 블로커 요약해줘", "inspect this repo and summarize release blockers")}&quot;
               </span>
             </motion.div>
 
-            <motion.div variants={{ hidden: { opacity: 0, y: 24 }, show: { opacity: 1, y: 0, transition: { duration: 0.65, ease: [0.22, 1, 0.36, 1] } } }} className="mt-9 flex flex-wrap items-center gap-x-7 gap-y-3">
+            <motion.div variants={heroItem} className="mt-9 flex flex-wrap items-center gap-x-7 gap-y-3">
               <Link
                 href="/docs"
                 className="inline-flex touch-manipulation items-center rounded bg-[var(--paper)] px-5 py-2.5 text-[14px] font-medium text-[var(--acc-artifact)] transition-opacity hover:opacity-85"
@@ -213,7 +209,7 @@ function HeroField() {
 
           <motion.div
             className="relative mx-auto w-full max-w-[440px]"
-            initial={reduceMotion ? false : { opacity: 0, y: 30 }}
+            initial={{ opacity: 0, y: reduceMotion ? 0 : 30 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.9, delay: 0.3, ease: [0.22, 1, 0.36, 1] }}
           >
@@ -257,16 +253,17 @@ function GalleryBand() {
   return (
       <div className="relative w-full">
         <Image
-          src="/geode/images/geode-gallery-blur.jpg"
+          src="/geode/images/geode-hall-wide.png"
           alt=""
           aria-hidden
-          width={1600}
-          height={1066}
+          width={2400}
+          height={750}
           className="h-[480px] w-full select-none object-cover sm:h-[560px]"
+          style={{ imageRendering: "pixelated" }}
         />
         <motion.div
           className="absolute inset-0 flex items-center justify-center px-4 sm:px-6"
-          initial={reduceMotion ? false : { opacity: 0, y: 46 }}
+          initial={{ opacity: 0, y: reduceMotion ? 0 : 46 }}
           whileInView={{ opacity: 1, y: 0 }}
           viewport={{ once: true, margin: "-60px" }}
           transition={{ duration: 0.85, ease: [0.22, 1, 0.36, 1] }}
@@ -379,79 +376,6 @@ function LoopDiagram() {
 
 /* ---------------- growth ------------------------------------------------- */
 
-function CadenceChart() {
-  const locale = useLocale();
-  const max = peakWeek.count;
-  const barSlot = 10;
-  const chartHeight = 100;
-  const width = weeklyCadence.length * barSlot;
-  let lastMonth = "";
-  const monthTicks: { x: number; label: string }[] = [];
-  weeklyCadence.forEach((bin, i) => {
-    const month = bin.start.slice(5, 7);
-    if (month !== lastMonth) {
-      monthTicks.push({ x: i * barSlot + 1, label: MONTH_LABELS[month] ?? month });
-      lastMonth = month;
-    }
-  });
-  return (
-    <figure className="mt-8">
-      <div className="flex items-baseline justify-between">
-        <figcaption className="font-mono text-[11px] uppercase tracking-[0.18em] text-[var(--ink-3)]">
-          {t(locale, "주간 릴리스 수", "releases per week")}
-        </figcaption>
-        <span className="font-mono text-[11px] text-[var(--ink-3)]">
-          {t(locale, `최대 ${max}`, `peak ${max}`)}
-        </span>
-      </div>
-      <svg
-        viewBox={`0 0 ${width} ${chartHeight + 14}`}
-        className="mt-2 w-full"
-        role="img"
-        aria-label={t(
-          locale,
-          `주간 릴리스 수 막대 차트, 최대 주 ${max}건`,
-          `Bar chart of releases per week, peaking at ${max}`
-        )}
-      >
-        <line x1="0" y1={chartHeight + 0.5} x2={width} y2={chartHeight + 0.5} stroke="var(--rule)" strokeWidth="1" />
-        {weeklyCadence.map((bin, i) => {
-          const h = max === 0 ? 0 : (bin.count / max) * (chartHeight - 8);
-          return (
-            <motion.rect
-              key={bin.start}
-              className="cadence-bar"
-              x={i * barSlot + 1}
-              y={chartHeight - h}
-              width={barSlot - 2}
-              height={h}
-              shapeRendering="crispEdges"
-              style={{ transformBox: "fill-box", transformOrigin: "bottom" }}
-              initial={{ scaleY: 0 }}
-              whileInView={{ scaleY: 1 }}
-              viewport={{ once: true, margin: "-60px" }}
-              transition={{ duration: 0.5, delay: i * 0.03, ease: [0.22, 1, 0.36, 1] }}
-            >
-              <title>{`${bin.start} · ${bin.count} releases`}</title>
-            </motion.rect>
-          );
-        })}
-        {monthTicks.map((tick) => (
-          <text
-            key={tick.label}
-            x={tick.x}
-            y={chartHeight + 11}
-            fontSize="5.5"
-            fontFamily="var(--font-fira-code), monospace"
-            fill="var(--ink-3)"
-          >
-            {tick.label}
-          </text>
-        ))}
-      </svg>
-    </figure>
-  );
-}
 
 /** Adversarial audit as a promotion gate — pixel schematic. */
 function AuditGateDiagram() {
@@ -846,8 +770,8 @@ function LabFinale() {
         </h2>
         <motion.div
           className="flex h-44 w-44 items-center justify-center rounded-full border-2 border-[var(--paper)] sm:h-52 sm:w-52"
-          initial={reduceMotion ? false : { scale: 0.82, opacity: 0 }}
-          whileInView={{ scale: 1, opacity: 1 }}
+          initial={{ opacity: 0, scale: reduceMotion ? 1 : 0.82 }}
+          whileInView={{ opacity: 1, scale: 1 }}
           viewport={{ once: true, margin: "-80px" }}
           transition={{ type: "spring", stiffness: 120, damping: 16 }}
         >

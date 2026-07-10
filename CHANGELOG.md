@@ -92,6 +92,15 @@ functional change.
   character surfaces, mono = labels. The YouTube demo section is removed per
   operator; frontend stack is confirmed as Next.js 16 + React 19 + Tailwind 4
   + Astryx + Galmuri11 + Noto Serif KR.
+- **Set dressing pass (operator: less lo-fi, more Lanthimos + Hermes).**
+  The hero scene gains engraving-style rays radiating from the gold sun,
+  arched gallery windows with tracery, a striped dado (the Poor Things bar
+  counter), stacked glowing orb lamps, and a specimen dais inlaid beneath
+  the mascot; the gallery blur is replaced by a generated wide pixel hall
+  (`geode-hall-wide.png`, three portholes + colonnade) so the floating
+  terminal sits in front of the central porthole. Reduced-motion now keeps
+  opacity fades (movement/scale only are dropped) so choreography survives
+  macOS Reduce Motion; dead CadenceChart code removed.
 - **Act-curtain page transitions.** Scrolling now changes acts instead of
   sliding one long page: the hero field pins beneath the flow and dims/scales
   back as the gallery band rides over it, and the giant wordmark pins as a
