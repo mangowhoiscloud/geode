@@ -5,7 +5,7 @@ import "@astryxdesign/core/astryx.css";
 import "./astryx-geode.css";
 
 import { Token } from "@astryxdesign/core/Token";
-import { motion, useReducedMotion } from "framer-motion";
+import { motion, useReducedMotion, useScroll, useTransform } from "framer-motion";
 import Image from "next/image";
 import Link from "next/link";
 import { useState } from "react";
@@ -60,7 +60,7 @@ function PlayfulSprite({ scale, blink, className }: { scale?: number; blink?: bo
       type="button"
       aria-label="Geodi"
       title="Geodi"
-      className={`cursor-pointer ${className ?? ""}`}
+      className={`cursor-pointer touch-manipulation ${className ?? ""}`}
       onClick={() => {
         setHopping(true);
         window.setTimeout(() => setHopping(false), 750);
@@ -140,14 +140,18 @@ function PixelCloud({ className, flip = false }: { className?: string; flip?: bo
   );
 }
 
-function HeroSection() {
+function HeroField() {
   const locale = useLocale();
   const reduceMotion = useReducedMotion();
+  const { scrollY } = useScroll();
+  const fieldOpacity = useTransform(scrollY, [0, 700], [1, 0.25]);
+  const fieldScale = useTransform(scrollY, [0, 700], [1, 0.965]);
   return (
     <section id="hero">
       {/* Rose color field, Hermes split composition: editorial serif statement
           left, white-line engraving of the mascot right, corner stamps. */}
       <div className="relative overflow-hidden bg-[var(--acc-artifact)]">
+        <motion.div style={{ opacity: reduceMotion ? 1 : fieldOpacity, scale: reduceMotion ? 1 : fieldScale }}>
         <Image
           src="/geode/images/geode-sky.png"
           alt=""
@@ -172,7 +176,7 @@ function HeroSection() {
             <motion.p variants={{ hidden: { opacity: 0, y: 24 }, show: { opacity: 1, y: 0, transition: { duration: 0.65, ease: [0.22, 1, 0.36, 1] } } }} className="font-mono text-[10.5px] uppercase tracking-[0.3em] text-[color-mix(in_srgb,var(--paper)_62%,transparent)]">
               open source · apache-2.0 · {t(locale, "루프 실험실", "the loop laboratory")}
             </motion.p>
-            <motion.h1 variants={{ hidden: { opacity: 0, y: 24 }, show: { opacity: 1, y: 0, transition: { duration: 0.65, ease: [0.22, 1, 0.36, 1] } } }} className="font-serif-display mt-7 text-[clamp(2.5rem,5.8vw,4.4rem)] font-black leading-[1.12] text-[var(--paper)]">
+            <motion.h1 variants={{ hidden: { opacity: 0, y: 24 }, show: { opacity: 1, y: 0, transition: { duration: 0.65, ease: [0.22, 1, 0.36, 1] } } }} className="font-serif-display mt-7 text-balance text-[clamp(2.5rem,5.8vw,4.4rem)] font-black leading-[1.12] text-[var(--paper)]">
               {t(locale, "일을 맡기면", "The agent that")}
               <br />
               {t(locale, "끝까지 실행하고,", "executes to the end,")}
@@ -193,7 +197,7 @@ function HeroSection() {
             <motion.div variants={{ hidden: { opacity: 0, y: 24 }, show: { opacity: 1, y: 0, transition: { duration: 0.65, ease: [0.22, 1, 0.36, 1] } } }} className="mt-9 flex flex-wrap items-center gap-x-7 gap-y-3">
               <Link
                 href="/docs"
-                className="inline-flex items-center rounded bg-[var(--paper)] px-5 py-2.5 text-[14px] font-medium text-[var(--acc-artifact)] transition-opacity hover:opacity-85"
+                className="inline-flex touch-manipulation items-center rounded bg-[var(--paper)] px-5 py-2.5 text-[14px] font-medium text-[var(--acc-artifact)] transition-opacity hover:opacity-85"
               >
                 {t(locale, "문서 읽기", "Read the docs")}
               </Link>
@@ -240,10 +244,17 @@ function HeroSection() {
           <span>geode v{GEODE_SOT.version}</span>
           <span>apache-2.0 · 2026</span>
         </div>
+        </motion.div>
       </div>
+    </section>
+  );
+}
 
-      {/* Full-bleed gallery band: the illustration blurred edge-to-edge, the
-          real CLI welcome screen floating at its center. */}
+/** Full-bleed gallery band: blurred illustration with the CLI terminal. */
+function GalleryBand() {
+  const locale = useLocale();
+  const reduceMotion = useReducedMotion();
+  return (
       <div className="relative w-full">
         <Image
           src="/geode/images/geode-gallery-blur.jpg"
@@ -263,7 +274,6 @@ function HeroSection() {
           <TerminalMock />
         </motion.div>
       </div>
-    </section>
   );
 }
 
@@ -623,7 +633,7 @@ const runModes = [
 function RunRow() {
   const locale = useLocale();
   return (
-    <section id="run" className="border-b border-[var(--rule)]">
+    <section id="run" className="border-b border-[var(--rule)] bg-[var(--paper)]">
       <div className="mx-auto grid max-w-6xl gap-12 px-6 py-20 text-center sm:py-24 md:grid-cols-3">
         {runModes.map((mode) => (
           <div key={mode.cmd}>
@@ -774,7 +784,7 @@ function FeaturesGrid() {
                 {feature.index}
               </p>
               <h2
-                className="font-serif-display mt-3 text-[30px] font-black uppercase leading-[1.08] sm:text-[34px]"
+                className="font-serif-display mt-3 text-balance text-[30px] font-black uppercase leading-[1.08] sm:text-[34px]"
                 style={{ color: SLAB_INK }}
               >
                 {locale === "en" ? feature.headEn : feature.headKo}
@@ -804,8 +814,11 @@ function FeaturesGrid() {
 
 function WordmarkBand() {
   return (
-    <div aria-hidden className="select-none overflow-hidden border-y border-[var(--rule)] bg-[var(--paper)]">
-      <p className="font-pixel -my-[0.06em] whitespace-nowrap text-center text-[23.5vw] font-bold leading-[0.86] text-[var(--acc-artifact)]">
+    <div
+      aria-hidden
+      className="flex h-screen select-none items-center justify-center overflow-hidden bg-[var(--paper)]"
+    >
+      <p className="font-pixel whitespace-nowrap text-center text-[23.5vw] font-bold leading-[0.86] text-[var(--acc-artifact)]">
         GEODE
       </p>
     </div>
@@ -826,9 +839,9 @@ function LabFinale() {
       </div>
       <div className="relative z-10 mx-auto flex max-w-5xl flex-col items-center gap-7 px-6 py-24 text-center sm:py-32">
         <p className="font-mono text-[11px] uppercase tracking-[0.3em] text-[color-mix(in_srgb,var(--paper)_65%,transparent)]">
-          birth {firstRelease.date} · release #{releaseCount} · v{latestRelease.version}
+          cultured since {firstRelease.date} · release #{releaseCount} · v{latestRelease.version}
         </p>
-        <h2 className="font-serif-display text-[clamp(2.4rem,6vw,4.2rem)] font-black leading-[1.1] text-[var(--paper)]">
+        <h2 className="font-serif-display text-balance text-[clamp(2.4rem,6vw,4.2rem)] font-black leading-[1.1] text-[var(--paper)]">
           {t(locale, "루프 실험실", "The Loop Laboratory")}
         </h2>
         <motion.div
@@ -846,7 +859,7 @@ function LabFinale() {
         <div className="mt-2 flex flex-wrap items-center justify-center gap-x-7 gap-y-3">
           <Link
             href="/docs"
-            className="inline-flex items-center rounded bg-[var(--paper)] px-5 py-2.5 text-[14px] font-medium text-[var(--acc-artifact)] transition-opacity hover:opacity-85"
+            className="inline-flex touch-manipulation items-center rounded bg-[var(--paper)] px-5 py-2.5 text-[14px] font-medium text-[var(--acc-artifact)] transition-opacity hover:opacity-85"
           >
             {t(locale, "문서 읽기", "Read the docs")}
           </Link>
@@ -879,12 +892,27 @@ export default function GeodePortfolioPage() {
         className={`${galmuri.variable} ${serifDisplay.variable} min-h-screen overflow-x-hidden bg-[var(--paper)] text-[var(--ink)]`}
       >
         <GeodeNav items={navItems} />
-        <HeroSection />
-        <RunRow />
-        <FeaturesGrid />
-        <WordmarkBand />
-        <LabFinale />
-        <GeodeFooter />
+        {/* Act curtain stack: the hero field pins beneath the flow; every
+            later act carries a solid background and slides over it. */}
+        <div className="sticky top-0 z-0">
+          <HeroField />
+        </div>
+        <div className="relative z-10">
+          <GalleryBand />
+          <RunRow />
+          <FeaturesGrid />
+          <div className="relative">
+            <div className="sticky top-0 z-0">
+              <WordmarkBand />
+            </div>
+            <div className="relative z-10">
+              <LabFinale />
+            </div>
+          </div>
+          <div className="relative z-10 bg-[var(--paper)]">
+            <GeodeFooter />
+          </div>
+        </div>
       </main>
     </LocaleProvider>
   );

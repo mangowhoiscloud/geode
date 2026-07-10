@@ -92,6 +92,14 @@ functional change.
   character surfaces, mono = labels. The YouTube demo section is removed per
   operator; frontend stack is confirmed as Next.js 16 + React 19 + Tailwind 4
   + Astryx + Galmuri11 + Noto Serif KR.
+- **Act-curtain page transitions.** Scrolling now changes acts instead of
+  sliding one long page: the hero field pins beneath the flow and dims/scales
+  back as the gallery band rides over it, and the giant wordmark pins as a
+  full-screen act that the rose finale then covers (pure position: sticky
+  stacking + framer scroll transforms — no scroll hijack, fully
+  interruptible, reduced-motion gated). Vercel web-interface-guidelines pass:
+  text-balance on display headings, touch-action on primary CTAs; finale
+  eyebrow reads "cultured since" (lab tone) instead of "birth".
 - **Content demolition — the Hermes screen-recording grammar (operator
   directive).** The dossier sections (why/sheet/loop/growth/evolve with their
   tables and logs) are torn down and rebuilt as: a three-way RUN row
