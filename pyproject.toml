@@ -416,6 +416,10 @@ DEP001 = [
     # tau2-bench is installed under artifacts/eval/harnesses/tau2-bench by the
     # benchmark_harness plugin when live tau2 measurement is requested.
     "tau2",
+    # MCPMark harness modules resolve via MCPMARK_ROOT sys.path insertion in
+    # plugins/benchmark_harness/run_mcpmark.py; opt-in checkout, absent by default.
+    "src",
+    "pipeline",
 ]
 
 # DEP002 — declared as dep but not imported anywhere by deptry's static scan.
