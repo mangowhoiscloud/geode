@@ -153,3 +153,45 @@
     animation: none;
   }
 }
+
+/* three quick pixel hops on click (PlayfulSprite) */
+@keyframes geodi-hop {
+  0%,
+  12% {
+    transform: translateY(0);
+  }
+  13%,
+  25% {
+    transform: translateY(-6px);
+  }
+  26%,
+  38% {
+    transform: translateY(0);
+  }
+  39%,
+  50% {
+    transform: translateY(-4px);
+  }
+  51%,
+  63% {
+    transform: translateY(0);
+  }
+  64%,
+  75% {
+    transform: translateY(-2px);
+  }
+  76%,
+  100% {
+    transform: translateY(0);
+  }
+}
+
+.geodi-hop {
+  animation: geodi-hop 0.75s step-end;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .geodi-hop {
+    animation: none;
+  }
+}

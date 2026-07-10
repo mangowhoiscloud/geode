@@ -67,6 +67,21 @@ functional change.
   `word-break: keep-all`.
 - **Docs shell carries the mascot.** The docs header brand renders a static
   `GeodiSprite` beside the pixel wordmark; docs prose remains mascot-free.
+- **Selling points over inventory counts (operator feedback).** A "why geode"
+  section leads the page with the three differentiators (safety-gated
+  self-improvement, an execution-owning loop, subscription-resident
+  multi-provider), each pinned to a code path; the hero paragraph now sells
+  the essence instead of release counts. Section 03's body loop gains a
+  pixel-styled hexagon cycle diagram (while(tool_use) ring, finalize exit);
+  bench matrices gain per-value bars plus explicit model · provider · source
+  route lines (gpt-5.5 · openai-codex · subscription / gpt-5.2 · openai ·
+  payg), and the character sheet records supported providers. Copy: "부화"
+  retired for a "Birth" label, "장비" for "도구"; the growth log ends with an
+  open "next act" row reserved for the first self-cut release.
+- **Identity details.** The site favicon is now the canonical GEODI_PIXELS
+  sprite (generated `src/app/icon.png` + `favicon.ico`), a mascot-budgeted
+  404 page lands at `src/app/not-found.tsx`, and the hero/card sprites react
+  to clicks with a three-hop pixel bounce (`prefers-reduced-motion` guarded).
 - **De-slop: decorative arrows and the dev-blog link are gone.** CTA/link
   arrows (`→`, `▸`) are removed site-portfolio-wide (ranges now use `~`), and
   the Dev Blog link is dropped from the portfolio hero and the shared footer.

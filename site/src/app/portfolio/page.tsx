@@ -38,6 +38,7 @@ import { eras, firstRelease, latestRelease, peakWeek, releaseCount, weeklyCadenc
 
 const navItems = [
   { id: "hero", label: "Character" },
+  { id: "why", label: "Why" },
   { id: "sheet", label: "Sheet" },
   { id: "demo", label: "Demo" },
   { id: "loop", label: "Loop" },
@@ -127,6 +128,25 @@ function SectionHeader({ eyebrow, title }: { eyebrow: string; title: string }) {
   );
 }
 
+/** Sprite with a discoverable click reaction: three quick pixel hops. */
+function PlayfulSprite({ scale, blink, className }: { scale?: number; blink?: boolean; className?: string }) {
+  const [hopping, setHopping] = useState(false);
+  return (
+    <button
+      type="button"
+      aria-label="Geodi"
+      title="Geodi"
+      className={`cursor-pointer ${className ?? ""}`}
+      onClick={() => {
+        setHopping(true);
+        window.setTimeout(() => setHopping(false), 750);
+      }}
+    >
+      <GeodiSprite scale={scale} blink={blink} className={hopping ? "geodi-hop" : undefined} />
+    </button>
+  );
+}
+
 /* ---------------- hero: terminal product moment -------------------------- */
 
 function TerminalMock() {
@@ -147,7 +167,7 @@ function TerminalMock() {
         </div>
         <div className="px-5 py-5 sm:px-7">
           <div className="flex items-center gap-6">
-            <GeodiSprite scale={5} blink className="geodi-bob shrink-0" />
+            <PlayfulSprite scale={5} blink className="geodi-bob shrink-0" />
             <div className="min-w-0 font-mono text-[12px] leading-[1.9] sm:text-[13px]">
               <p>
                 <span className="text-[var(--acc-artifact)]">◆</span>{" "}
@@ -204,8 +224,8 @@ function HeroSection() {
         <p className="mx-auto mt-6 max-w-xl text-[15px] leading-[1.75] text-[var(--ink-2)]">
           {t(
             locale,
-            `${firstRelease.date} v${firstRelease.version}에서 부화해 ${releaseCount}번의 릴리스를 지나 v${latestRelease.version}까지 왔습니다. 이 페이지는 그 성장 기록이고, 아래 터미널의 도트 캐릭터는 실제 CLI가 그리는 스프라이트입니다.`,
-            `Hatched at v${firstRelease.version} on ${firstRelease.date}, grown through ${releaseCount} releases to v${latestRelease.version}. This page is that growth record, and the pixel character in the terminal below is the sprite the real CLI draws.`
+            "실행을 끝까지 소유하는 루프, 적대적 안전 감사 뒤에서만 이루어지는 자기개선, 당신의 구독으로 도는 멀티 프로바이더. 아래 터미널의 도트 캐릭터는 실제 CLI가 그리는 스프라이트입니다.",
+            "A loop that owns execution to the end, self-improvement gated behind an adversarial safety audit, and multi-provider routing on your own subscriptions. The pixel character in the terminal below is the sprite the real CLI draws."
           )}
         </p>
 
@@ -242,6 +262,78 @@ function HeroSection() {
   );
 }
 
+/* ---------------- why: the three selling points -------------------------- */
+
+const whyPoints: {
+  id: string;
+  titleKo: string;
+  titleEn: string;
+  bodyKo: string;
+  bodyEn: string;
+  evidence: string;
+}[] = [
+  {
+    id: "01",
+    titleKo: "안전 게이트 뒤의 자기개선",
+    titleEn: "Self-improvement behind a safety gate",
+    bodyKo:
+      "모델 가중치가 아니라 스스로의 스캐폴드(시스템 프롬프트, 도구 정책)를 변이시키고, 적대적 안전 감사(Petri)를 fitness로 잽니다. critical 축이 한 번이라도 후퇴하면 승격 자체가 거부되고, 능력 축은 tau2-bench 위 Crucible이 같은 승격 프로토콜로 검증합니다.",
+    bodyEn:
+      "It mutates its own scaffold (system prompt, tool policy), never model weights, and measures each mutation with an adversarial safety audit (Petri) as fitness. One critical-axis regression vetoes promotion; on the capability axis, Crucible applies the same promotion protocol on tau2-bench.",
+    evidence: "core/self_improving/gate.py",
+  },
+  {
+    id: "02",
+    titleKo: "끝까지 실행하는 본체 루프",
+    titleEn: "A body loop that executes to the end",
+    bodyKo:
+      "말로 계획하는 래퍼가 아니라 plan, act, verify, replan을 소유하는 실행 루프입니다. verify 실패는 기계가 읽는 신호로 남아 replan을 트리거하고, round·time·cost 예산이 프롬프트 문구가 아닌 루프의 탈출 조건으로 박혀 있습니다.",
+    bodyEn:
+      "Not a wrapper that plans in prose: an execution loop that owns plan, act, verify, replan. Verify failures persist as machine-readable signals that trigger replanning, and round, time, and cost budgets are compiled in as the loop's exit conditions, not prompt wording.",
+    evidence: "core/agent/loop/",
+  },
+  {
+    id: "03",
+    titleKo: "당신의 구독으로 상주",
+    titleEn: "Resident, on your subscriptions",
+    bodyKo:
+      "Anthropic, OpenAI/Codex, GLM 구독을 OAuth로 직접 소유하고 프로바이더 간 격리를 지킵니다. CLI, MCP 서버, Slack, cron으로 상주하고, 데스크톱 computer-use 왕복까지 라이브 E2E로 검증했습니다.",
+    bodyEn:
+      "It owns Anthropic, OpenAI/Codex, and GLM subscriptions directly over OAuth and keeps providers isolated. It lives in the CLI, as an MCP server, in Slack and cron, with desktop computer-use round-trips verified live end-to-end.",
+    evidence: "core/llm/providers/",
+  },
+];
+
+function WhySection() {
+  const locale = useLocale();
+  return (
+    <section id="why" className="border-b border-[var(--rule)]">
+      <div className="mx-auto max-w-6xl px-4 py-16 sm:px-6 sm:py-20">
+        <SectionHeader
+          eyebrow={t(locale, "01 / 왜 GEODE인가", "01 / why geode")}
+          title={t(locale, "성장보다 먼저, 무엇이 다른가", "Before the growth, what is different")}
+        />
+        <div className="mt-8 grid gap-x-8 gap-y-8 border-t border-[var(--rule)] pt-8 md:grid-cols-3">
+          {whyPoints.map((point) => (
+            <div key={point.id}>
+              <p className="font-mono text-[11px] text-[var(--ink-3)]">{point.id}</p>
+              <h3 className="font-pixel mt-2 text-[17px] leading-snug text-[var(--ink-1)]">
+                {locale === "en" ? point.titleEn : point.titleKo}
+              </h3>
+              <p className="mt-3 text-[13.5px] leading-[1.75] text-[var(--ink-2)]">
+                {locale === "en" ? point.bodyEn : point.bodyKo}
+              </p>
+              <code className="mt-3 inline-block rounded bg-[var(--paper-deep)] px-1.5 py-0.5 font-mono text-[11px] text-[var(--acc-aqua)]">
+                {point.evidence}
+              </code>
+            </div>
+          ))}
+        </div>
+      </div>
+    </section>
+  );
+}
+
 /* ---------------- bento: character sheet + bench + stack ----------------- */
 
 function CharacterCard() {
@@ -256,7 +348,7 @@ function CharacterCard() {
       </div>
 
       <div className="rose-grid flex flex-col items-center px-5 pb-4 pt-8">
-        <GeodiSprite scale={8} blink />
+        <PlayfulSprite scale={8} blink />
         <p className="mt-4 font-mono text-[10.5px] text-[var(--acc-aqua)]">
           core/ui/geodi_art.py · GEODI_PIXELS 22x12
         </p>
@@ -268,7 +360,7 @@ function CharacterCard() {
           <MetadataListItem label={t(locale, "클래스", "Class")}>
             {t(locale, "자율 실행 하네스", "autonomous execution harness")}
           </MetadataListItem>
-          <MetadataListItem label={t(locale, "부화", "Hatched")}>
+          <MetadataListItem label={"Birth"}>
             {firstRelease.date} (v{firstRelease.version})
           </MetadataListItem>
           <MetadataListItem label={t(locale, "레벨", "Level")}>
@@ -276,6 +368,9 @@ function CharacterCard() {
           </MetadataListItem>
           <MetadataListItem label={t(locale, "본체", "Body")}>while(tool_use) AgenticLoop</MetadataListItem>
           <MetadataListItem label={t(locale, "서식지", "Habitat")}>CLI · MCP · Slack · cron</MetadataListItem>
+          <MetadataListItem label={t(locale, "프로바이더", "Providers")}>
+            Anthropic · OpenAI / Codex · GLM
+          </MetadataListItem>
           <MetadataListItem label={t(locale, "기록", "Record")}>
             {/* measured 2026-07-10: find core|plugins -name '*.py' / pytest --co */}
             {t(locale, "492 모듈 · 9,479 테스트", "492 modules · 9,479 tests")}
@@ -302,6 +397,20 @@ function CharacterCard() {
   );
 }
 
+/** "0.763" -> 0.763, "100.0% (10/10)" -> 1.0, "blocked" -> null. */
+function benchRatio(value: string): number | null {
+  const numeric = parseFloat(value);
+  if (Number.isNaN(numeric)) return null;
+  const ratio = value.includes("%") ? numeric / 100 : numeric;
+  return ratio >= 0 && ratio <= 1 ? ratio : null;
+}
+
+/** Distinct model · provider · source routes behind a bench group's numbers. */
+function groupRoutes(group: (typeof BENCHMARK_GROUPS)[number]): string {
+  const routes = new Set(group.measurements.map((m) => `${m.model} · ${m.provider} · ${m.source}`));
+  return [...routes].join("  /  ");
+}
+
 function BenchCard() {
   const locale = useLocale();
   return (
@@ -315,16 +424,30 @@ function BenchCard() {
         {BENCHMARK_GROUPS.map((group) => (
           <div key={group.id} className="border-b border-[var(--rule-soft)] py-3 first:pt-0 last:border-b-0 last:pb-0">
             <h3 className="font-pixel text-[15px] text-[var(--ink-1)]">{group.title}</h3>
+            <p className="mt-0.5 font-mono text-[10px] text-[var(--ink-3)]">{groupRoutes(group)}</p>
             <div className="mt-2 space-y-1.5">
-              {group.matrix.map((cell) => (
-                <div key={cell.label} className="grid grid-cols-[96px_72px_1fr] items-baseline gap-2">
-                  <span className="font-mono text-[12px] text-[var(--ink-2)]">{cell.label}</span>
-                  <span className="font-mono text-[13px] text-[var(--acc-line)]">{cell.value}</span>
-                  <span className="truncate font-mono text-[10.5px] text-[var(--ink-3)]" title={cell.note}>
-                    {cell.note ?? ""}
-                  </span>
-                </div>
-              ))}
+              {group.matrix.map((cell) => {
+                const ratio = benchRatio(cell.value);
+                return (
+                  <div key={cell.label} className="grid grid-cols-[88px_56px_56px_1fr] items-center gap-2">
+                    <span className="font-mono text-[12px] text-[var(--ink-2)]">{cell.label}</span>
+                    <span className="font-mono text-[12.5px] text-[var(--acc-line)]">{cell.value.split(" ")[0]}</span>
+                    {ratio === null ? (
+                      <span />
+                    ) : (
+                      <span className="h-[7px] w-full bg-[var(--rule-soft)]">
+                        <span
+                          className="block h-full bg-[var(--acc-artifact)] opacity-80"
+                          style={{ width: `${Math.round(ratio * 100)}%` }}
+                        />
+                      </span>
+                    )}
+                    <span className="truncate font-mono text-[10.5px] text-[var(--ink-3)]" title={cell.note}>
+                      {cell.note ?? ""}
+                    </span>
+                  </div>
+                );
+              })}
             </div>
           </div>
         ))}
@@ -376,8 +499,8 @@ function SheetSection() {
     <section id="sheet" className="border-b border-[var(--rule)]">
       <div className="mx-auto max-w-6xl px-4 py-16 sm:px-6 sm:py-20">
         <SectionHeader
-          eyebrow={t(locale, "01 / 시트", "01 / the sheet")}
-          title={t(locale, "캐릭터, 지표, 장비", "Character, measurements, equipment")}
+          eyebrow={t(locale, "02 / 시트", "02 / the sheet")}
+          title={t(locale, "캐릭터, 지표, 도구", "Character, measurements, tools")}
         />
         <div className="mt-8 grid gap-4 lg:grid-cols-[0.9fr_1.1fr]">
           <ScrollReveal y={24}>
@@ -407,7 +530,7 @@ function DemoSection() {
     <section id="demo" className="border-b border-[var(--rule)]">
       <div className="mx-auto max-w-4xl px-4 py-16 sm:px-6 sm:py-20">
         <SectionHeader
-          eyebrow={t(locale, "02 / 실행 화면", "02 / see it run")}
+          eyebrow={t(locale, "03 / 실행 화면", "03 / see it run")}
           title={t(locale, "말보다 실행 화면이 빠릅니다", "The run is faster than the pitch")}
         />
         <div className="mt-8">
@@ -445,13 +568,113 @@ function DemoSection() {
 
 /* ---------------- loop --------------------------------------------------- */
 
+const LOOP_NODES = [
+  { label: "Perceive", color: "var(--ink-2)" },
+  { label: "Plan", color: "var(--ink-2)" },
+  { label: "Act", color: "var(--acc-line)" },
+  { label: "Observe", color: "var(--ink-2)" },
+  { label: "Verify", color: "var(--acc-aqua)" },
+  { label: "Replan", color: "var(--ink-2)" },
+];
+
+/** The while(tool_use) cycle as a pixel-styled hexagon ring (section 03 visual). */
+function LoopDiagram() {
+  const locale = useLocale();
+  const cx = 170;
+  const cy = 138;
+  const r = 96;
+  const nodeW = 76;
+  const nodeH = 22;
+  const points = LOOP_NODES.map((node, i) => {
+    const angle = ((-90 + i * 60) * Math.PI) / 180;
+    return { ...node, x: cx + r * Math.cos(angle), y: cy + r * Math.sin(angle) };
+  });
+  return (
+    <svg
+      viewBox="0 0 340 300"
+      className="w-full max-w-[380px]"
+      role="img"
+      aria-label={t(
+        locale,
+        "while tool_use 루프 다이어그램. Perceive, Plan, Act, Observe, Verify, Replan이 순환하고, tool_use가 멈추면 finalize로 나갑니다.",
+        "while tool_use loop diagram. Perceive, Plan, Act, Observe, Verify, Replan cycle; when tool_use stops it exits to finalize."
+      )}
+    >
+      {points.map((node, i) => {
+        const next = points[(i + 1) % points.length];
+        const mx = (node.x + next.x) / 2;
+        const my = (node.y + next.y) / 2;
+        const angleDeg = (Math.atan2(next.y - node.y, next.x - node.x) * 180) / Math.PI;
+        return (
+          <g key={`edge-${node.label}`}>
+            <line x1={node.x} y1={node.y} x2={next.x} y2={next.y} stroke="var(--rule)" strokeWidth="1" />
+            <polygon
+              points="-3,-3.5 4,0 -3,3.5"
+              fill="var(--ink-3)"
+              transform={`translate(${mx} ${my}) rotate(${angleDeg})`}
+            />
+          </g>
+        );
+      })}
+      {/* exit: model answers without tool_use */}
+      <line x1={cx} y1={cy + 30} x2={cx} y2={262} stroke="var(--ink-3)" strokeWidth="1" strokeDasharray="2 3" />
+      <polygon points="-3.5,-3 0,4 3.5,-3" fill="var(--ink-3)" transform={`translate(${cx} ${262})`} />
+      <rect
+        x={cx - 38}
+        y={264}
+        width={76}
+        height={22}
+        fill="var(--paper-2)"
+        stroke="var(--rule)"
+        shapeRendering="crispEdges"
+      />
+      <text x={cx} y={279} textAnchor="middle" fontSize="10.5" fontFamily="var(--font-fira-code), monospace" fill="var(--ink-2)">
+        finalize
+      </text>
+      <text x={cx + 8} y={cy + 66} textAnchor="start" fontSize="8" fontFamily="var(--font-fira-code), monospace" fill="var(--ink-3)">
+        no tool_use
+      </text>
+      {/* center */}
+      <text x={cx} y={cy - 4} textAnchor="middle" fontSize="15" className="font-pixel" fill="var(--acc-artifact)">
+        while
+      </text>
+      <text x={cx} y={cy + 14} textAnchor="middle" fontSize="15" className="font-pixel" fill="var(--acc-artifact)">
+        (tool_use)
+      </text>
+      {points.map((node) => (
+        <g key={node.label}>
+          <rect
+            x={node.x - nodeW / 2}
+            y={node.y - nodeH / 2}
+            width={nodeW}
+            height={nodeH}
+            fill="var(--paper-2)"
+            stroke="var(--rule)"
+            shapeRendering="crispEdges"
+          />
+          <text
+            x={node.x}
+            y={node.y + 3.5}
+            textAnchor="middle"
+            fontSize="10.5"
+            fontFamily="var(--font-fira-code), monospace"
+            fill={node.color}
+          >
+            {node.label}
+          </text>
+        </g>
+      ))}
+    </svg>
+  );
+}
+
 function LoopSection() {
   const locale = useLocale();
   return (
     <section id="loop" className="border-b border-[var(--rule)]">
       <div className="mx-auto max-w-6xl px-4 py-16 sm:px-6 sm:py-20">
         <SectionHeader
-          eyebrow={t(locale, "03 / 본체", "03 / the body")}
+          eyebrow={t(locale, "04 / 본체", "04 / the body")}
           title={t(
             locale,
             "본체는 도구 호출이 멈출 때까지 도는 루프 하나입니다",
@@ -459,15 +682,9 @@ function LoopSection() {
           )}
         />
         <div className="mt-8 grid gap-4 lg:grid-cols-[0.9fr_1.1fr]">
-          <pre className="overflow-x-auto rounded-lg border border-[var(--rule)] bg-[var(--paper-deep)] p-5 font-mono text-[12.5px] leading-[1.8] text-[var(--ink-2)]">
-            {`while true:
-  check round/time/cost guards
-  maybe_replan(verify_fail | cadence)
-  assemble_prompt(memory + plan)
-  response = call_model(tools)
-  if not tool_use: finalize
-  observe(execute_tools(response))`}
-          </pre>
+          <div className="flex items-center justify-center rounded-lg border border-[var(--rule)] bg-[var(--paper-deep)] p-5">
+            <LoopDiagram />
+          </div>
           <div className="rounded-lg border border-[var(--rule)] bg-[var(--paper-2)]">
             {loopPhases.map(([phase, ko, en]) => (
               <div
@@ -581,7 +798,7 @@ function GrowthSection() {
           />
         </div>
         <SectionHeader
-          eyebrow={t(locale, "04 / 성장 로그", "04 / growth log")}
+          eyebrow={t(locale, "05 / 성장 로그", "05 / growth log")}
           title={t(
             locale,
             `${weeks}주, ${releaseCount}번의 릴리스로 자랐습니다`,
@@ -600,7 +817,7 @@ function GrowthSection() {
           <div className="mt-8 grid gap-3 border-t border-[var(--rule)] pt-6 sm:grid-cols-3">
             {[
               [String(releaseCount), t(locale, "릴리스", "releases")],
-              [firstRelease.date, t(locale, "부화일", "hatch date")],
+              [firstRelease.date, "Birth"],
               [
                 String(peakWeek.count),
                 t(locale, `최다 주간 릴리스 (${peakWeek.start} 주)`, `peak week (${peakWeek.start})`),
@@ -619,14 +836,16 @@ function GrowthSection() {
         <div className="mt-14">
           {eras.map((era, index) => (
             <ScrollReveal key={era.id} y={28} delay={index * 0.04}>
-              <article className="grid gap-4 border-t border-[var(--rule-soft)] py-8 first:border-t-[var(--rule)] sm:grid-cols-[72px_1fr]">
+              <article
+                className={`grid gap-4 border-t border-[var(--rule-soft)] py-8 first:border-t-[var(--rule)] sm:grid-cols-[72px_1fr] ${era.open ? "opacity-60" : ""}`}
+              >
                 <div className="flex flex-row items-center gap-3 sm:flex-col sm:items-start sm:gap-2">
                   <Image
                     src={`/geode/images/geode-${era.pose}.png`}
                     alt={`Geodi ${era.pose} pose`}
                     width={44}
                     height={44}
-                    style={{ imageRendering: "pixelated" }}
+                    style={{ imageRendering: "pixelated", opacity: era.open ? 0.5 : 1 }}
                   />
                   <span className="font-mono text-[11px] text-[var(--ink-3)]">{era.id}</span>
                 </div>
@@ -663,7 +882,7 @@ function EvolveSection() {
     <section id="evolve" className="border-b border-[var(--rule)]">
       <div className="mx-auto max-w-4xl px-4 py-16 sm:px-6 sm:py-20">
         <SectionHeader
-          eyebrow={t(locale, "05 / 자기개선", "05 / self-evolving")}
+          eyebrow={t(locale, "06 / 자기개선", "06 / self-evolving")}
           title={t(locale, "다음 레벨은 스스로 오릅니다", "It levels itself up")}
         />
         <div className="mt-6 max-w-3xl space-y-3 text-[15px] leading-[1.75] text-[var(--ink-2)]">
@@ -729,6 +948,7 @@ export default function GeodePortfolioPage() {
       >
         <GeodeNav items={navItems} />
         <HeroSection />
+        <WhySection />
         <SheetSection />
         <DemoSection />
         <LoopSection />
