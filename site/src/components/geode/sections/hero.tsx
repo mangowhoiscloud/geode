@@ -83,13 +83,6 @@ export function HeroSection() {
             >
               Source
             </Link>
-            <Link
-              href="https://rooftopsnow.tistory.com/category/Harness"
-              target="_blank"
-              className="text-[var(--ink-2)] hover:text-[var(--acc-artifact)] transition-colors"
-            >
-              {t(locale, "개발 블로그", "Dev Blog")}
-            </Link>
           </div>
         </div>
       </div>

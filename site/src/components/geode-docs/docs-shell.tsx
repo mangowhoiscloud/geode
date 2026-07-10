@@ -112,7 +112,7 @@ function PrevNext({ slug }: { slug: string }) {
               {t(locale, "이전", "Previous")}
             </div>
             <div className="text-[var(--ink)] font-medium group-hover:text-[var(--acc-soft)]">
-              ← {t(locale, prev.titleKo, prev.title)}
+              {t(locale, prev.titleKo, prev.title)}
             </div>
           </Link>
         )}
@@ -127,7 +127,7 @@ function PrevNext({ slug }: { slug: string }) {
               {t(locale, "다음", "Next")}
             </div>
             <div className="text-[var(--ink)] font-medium group-hover:text-[var(--acc-soft)]">
-              {t(locale, next.titleKo, next.title)} →
+              {t(locale, next.titleKo, next.title)}
             </div>
           </Link>
         )}

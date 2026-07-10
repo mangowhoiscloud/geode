@@ -158,7 +158,6 @@ $ geode
           <div className="flex flex-wrap gap-2">
             {[
               { label: "GitHub", href: "https://github.com/mangowhoiscloud/geode" },
-              { label: "Dev Blog", href: "https://rooftopsnow.tistory.com/category/Harness" },
               { label: "YouTube", href: "https://youtube.com/@mango_fr" },
               { label: "LinkedIn", href: "https://www.linkedin.com/in/jihwan-ryu-b6b04a202/" },
             ].map((b) => (
