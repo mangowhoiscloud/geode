@@ -79,12 +79,14 @@ hero stagger, scene idle float, terminal rise, petri-dish spring, cadence-bar
 growth — all gated by `useReducedMotion`. The docs surface keeps the old
 motion budget.
 
-**Two-color loop-punk field (operator-directed 2026-07-10, supersedes the
-two-surface band rule).** /portfolio is a single composition in exactly two
-colors: signature rose `#F49BC4` (`--acc-artifact`) as the page substrate and
-warm white `#FFF0F8` for ink, slabs, and stencils. Tone comes from dither
-density in the generated art, hierarchy from opacity — never from a third
-hue. The one sanctioned exception is the terminal mock, which keeps its dark
+**Three-color loop-punk field (operator-directed 2026-07-10, supersedes the
+two-surface band rule).** /portfolio is a single composition in three colors:
+signature rose `#F49BC4` (`--acc-artifact`) as the page substrate, warm white
+`#FFF0F8` for ink, slabs, and stencils, and near-black `#141016` as the
+record ink that enters only in the final act (the laboratory reveal frames
+the pink field as a specimen slide on a dark stage; title, dish, statement,
+and CTAs turn to black ink there). Tone comes from dither density in the
+generated art, hierarchy from opacity — never from a fourth hue. The one sanctioned exception is the terminal mock, which keeps its dark
 product-screenshot colors (`--paper-deep` + ink tokens) because it is a
 product artifact, not page chrome. Scroll is choreography, not paging:
 curtain-stack sections over a pinned hero, `StageLight` scroll-linked

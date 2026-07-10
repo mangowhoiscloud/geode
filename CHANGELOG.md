@@ -49,8 +49,9 @@ functional change.
 
 ### Changed
 
-- **Portfolio v17 — two-color loop-punk art direction (operator-directed).**
-  The page commits to pink `#F49BC4` x white `#FFF0F8` only (the terminal mock
+- **Portfolio v17 — loop-punk art direction (operator-directed).**
+  The page commits to pink `#F49BC4` x white `#FFF0F8`, plus near-black
+  `#141016` record ink that enters only in the final act (the terminal mock
   keeps its dark product colors by explicit exception): a pinned hero field
   with serif statement, curtain-stack sections under scroll-linked stage
   lighting (`StageLight`), a distillation act where token rain converges
@@ -58,8 +59,9 @@ functional change.
   (critic / petri gate / held-out) and piles onto the GEODE word as a
   top-down fill over the honest baseline ledger (REJECT rows plus the still
   pending crucible-S5 drop), and a finale where the giant pixel wordmark
-  crossfades into the petri-dish laboratory plate ("cultured since" stamp,
-  release count, CTAs). Literal funnel drawings (mesh sieve, drainpipe) were
+  fades out into the laboratory reveal: black enters, framing the pink field
+  as a specimen slide on a dark stage — circular petri mark with the Geodi
+  silhouette, "cultured since" stamp, and CTAs all in black ink. Literal funnel drawings (mesh sieve, drainpipe) were
   removed in favor of the converging rain itself.
 - **Portfolio v11 — landing-grade pass on the growth log (operator feedback
   batch).** The hero is now centered with a terminal mock of the real CLI

@@ -765,47 +765,49 @@ function WordToLab() {
           <p className="font-pixel whitespace-nowrap text-[24.5vw] font-bold leading-[0.9] text-[#FFF0F8]">GEODE</p>
         </motion.div>
 
-        {/* act 2: the circular mark and the laboratory */}
-        <motion.div style={{ opacity: reduceMotion ? 1 : labOp }} className="absolute inset-0">
-          <div aria-hidden className="pointer-events-none absolute inset-0 flex items-center justify-center">
-            <motion.span
-              style={{ scale: reduceMotion ? 1 : ghostScale }}
-              className="font-pixel select-none text-[24vw] font-bold leading-none text-[#FFF0F8] opacity-[0.12]"
-            >
-              GEODE
-            </motion.span>
-          </div>
-          <div className="relative z-10 mx-auto flex h-full max-w-5xl flex-col items-center justify-center gap-7 px-6 text-center">
-            <p className="font-mono text-[11px] uppercase tracking-[0.3em] text-[color-mix(in_srgb,#FFF0F8_70%,transparent)]">
-              cultured since {firstRelease.date} · release #{releaseCount} · v{latestRelease.version}
-            </p>
-            <h2 className="font-serif-display text-balance text-[clamp(2.4rem,6vw,4.2rem)] font-black leading-[1.1] text-[#FFF0F8]">
-              {t(locale, "루프 실험실", "The Loop Laboratory")}
-            </h2>
-            <div className="flex h-44 w-44 items-center justify-center rounded-full border-2 border-[#FFF0F8] sm:h-52 sm:w-52">
-              <GeodiSprite scale={5} silhouette="#FFF0F8" />
-            </div>
-            <p className="font-serif-display max-w-xl text-[clamp(1.05rem,2.4vw,1.4rem)] font-semibold leading-[1.6] text-[#FFF0F8]">
-              {t(locale, "실패를 기록하고, 스스로를 고쳐 씁니다.", "It records its failures, and rewrites itself.")}
-            </p>
-            <div className="mt-2 flex flex-wrap items-center justify-center gap-x-7 gap-y-3">
-              <Link
-                href="/docs"
-                className="inline-flex touch-manipulation items-center rounded bg-[#FFF0F8] px-5 py-2.5 text-[14px] font-medium text-[var(--acc-artifact)] transition-opacity hover:opacity-85"
+        {/* act 2: black enters — the pink field becomes a specimen slide on a dark stage */}
+        <motion.div style={{ opacity: reduceMotion ? 1 : labOp }} className="absolute inset-0 bg-[#141016]">
+          <div className="absolute inset-x-2 bottom-12 top-2 bg-[var(--acc-artifact)] sm:inset-x-3 sm:top-3">
+            <div aria-hidden className="pointer-events-none absolute inset-0 flex items-center justify-center overflow-hidden">
+              <motion.span
+                style={{ scale: reduceMotion ? 1 : ghostScale }}
+                className="font-pixel select-none whitespace-nowrap text-[24vw] font-bold leading-none text-[#141016] opacity-[0.08]"
               >
-                {t(locale, "문서 읽기", "Read the docs")}
-              </Link>
-              <a
-                href="https://github.com/mangowhoiscloud/geode/blob/main/CHANGELOG.md"
-                target="_blank"
-                rel="noreferrer"
-                className="font-mono text-[13px] text-[#FFF0F8] underline decoration-[color-mix(in_srgb,#FFF0F8_45%,transparent)] underline-offset-4 transition-opacity hover:opacity-75"
-              >
-                {t(locale, "전체 기록 보기", "View the full record")}
-              </a>
+                GEODE
+              </motion.span>
+            </div>
+            <div className="relative z-10 mx-auto flex h-full max-w-5xl flex-col items-center justify-center gap-7 px-6 text-center">
+              <p className="font-mono text-[11px] uppercase tracking-[0.3em] text-[color-mix(in_srgb,#141016_72%,transparent)]">
+                cultured since {firstRelease.date} · release #{releaseCount} · v{latestRelease.version}
+              </p>
+              <h2 className="font-serif-display text-balance text-[clamp(2.4rem,6vw,4.2rem)] font-black leading-[1.1] text-[#141016]">
+                {t(locale, "루프 실험실", "The Loop Laboratory")}
+              </h2>
+              <div className="flex h-48 w-48 items-center justify-center rounded-full border border-[#141016] sm:h-56 sm:w-56">
+                <GeodiSprite scale={4} silhouette="#141016" />
+              </div>
+              <p className="font-serif-display max-w-xl text-[clamp(1.05rem,2.4vw,1.4rem)] font-semibold leading-[1.6] text-[#141016]">
+                {t(locale, "실패를 기록하고, 스스로를 고쳐 씁니다.", "It records its failures, and rewrites itself.")}
+              </p>
+              <div className="mt-2 flex flex-wrap items-center justify-center gap-x-7 gap-y-3">
+                <Link
+                  href="/docs"
+                  className="inline-flex touch-manipulation items-center rounded bg-[#141016] px-5 py-2.5 text-[14px] font-medium text-[#FFF0F8] transition-opacity hover:opacity-85"
+                >
+                  {t(locale, "문서 읽기", "Read the docs")}
+                </Link>
+                <a
+                  href="https://github.com/mangowhoiscloud/geode/blob/main/CHANGELOG.md"
+                  target="_blank"
+                  rel="noreferrer"
+                  className="font-mono text-[13px] text-[#141016] underline decoration-[color-mix(in_srgb,#141016_45%,transparent)] underline-offset-4 transition-opacity hover:opacity-70"
+                >
+                  {t(locale, "전체 기록 보기", "View the full record")}
+                </a>
+              </div>
             </div>
           </div>
-          <div className="pointer-events-none absolute inset-x-0 bottom-0 z-10 flex items-end justify-between px-5 pb-4 font-mono text-[10px] uppercase tracking-[0.18em] text-[color-mix(in_srgb,#FFF0F8_60%,transparent)] sm:px-8">
+          <div className="pointer-events-none absolute inset-x-0 bottom-0 z-10 flex items-end justify-between px-5 pb-3.5 font-mono text-[10px] uppercase tracking-[0.18em] text-[color-mix(in_srgb,#FFF0F8_55%,transparent)] sm:px-8">
             <span>specimen · geodi</span>
             <span>petri audit attached</span>
           </div>
