@@ -385,8 +385,7 @@ The independent train loop is started from one JSON configuration:
   "evaluator_entrypoint": "scripts/eval/crucible_tau2_evaluator.py",
   "producer_environment": [
     "CODEX_HOME",
-    "CRUCIBLE_KNOWLEDGE_GRAPH",
-    "CRUCIBLE_PRODUCER_OBJECTIVE"
+    "CRUCIBLE_KNOWLEDGE_GRAPH"
   ],
   "evaluator_environment": ["CODEX_HOME", "CRUCIBLE_TAU2_HARNESS_ROOT"],
   "train_plan": {
@@ -668,6 +667,25 @@ already exposed, the pack has one family, and `geode_user` is candidate-owned.
 The previous task109 run used another model and an unsealed historical checkout.
 The observed 0→1 reward change is therefore not a causal candidate comparison
 and cannot enter a promotion bundle.
+
+### First paired GPT-5.4 campaign: infrastructure INVALID
+
+The first supervisor-backed live campaign,
+`tau2-telecom-gpt54-train-20260711-r1`, preregistered four exposed train tasks
+from four workflow families. Both bounded attempts terminated `INVALID` before
+candidate scoring. The private search ref remained at
+`cb5f003c806a19f024e63195974737e1b9604b73`; the summary records zero KEEP,
+zero REJECT, and two INVALID attempts.
+
+The failures exposed two evaluator-boundary defects rather than agent
+performance: the isolated evaluator `HOME` hid the credential even though
+`CODEX_HOME` was allowlisted, and tau2's finalized Pydantic task objects added
+three optional null fields omitted by the source JSON, producing unequal
+content hashes. The OAuth reader now resolves `CODEX_HOME`, and the task adapter
+normalizes those runtime-materialized defaults before hashing. The r1 reward
+rows are infrastructure-contaminated and cannot be reused as baseline or
+candidate evidence; a new campaign ID and newly frozen evaluator hash are
+required.
 
 The strongest honest claims are:
 

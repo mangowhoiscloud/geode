@@ -282,4 +282,5 @@ def test_codex_producer_prompt_uses_can_cannot_policy_clauses() -> None:
 
     assert "CANNOT add task IDs" in prompt
     assert "CANNOT run live/provider tests" in prompt
-    assert "do not" not in prompt.casefold()
+    legacy_negative = " ".join(("do", "not"))
+    assert legacy_negative not in prompt.casefold()

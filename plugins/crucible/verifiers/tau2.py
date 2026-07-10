@@ -219,6 +219,11 @@ def _non_negative_integer(value: object, field: str) -> int:
 def _canonical_task_sha256(value: Mapping[str, Any], field: str) -> str:
     content = dict(value)
     content.pop("id", None)
+    # tau2's Pydantic result serialization materializes these omitted Task
+    # defaults as null. Normalize the source-file and runtime shapes before
+    # hashing so only executable task content contributes to identity.
+    for optional_field in ("issues", "required_documents", "user_tools"):
+        content.setdefault(optional_field, None)
     try:
         encoded = json.dumps(
             content,

@@ -17,6 +17,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
+from core.auth.codex_cli_oauth import codex_auth_path
 from core.auth.jwt_claims import decode_jwt_claims
 
 log = logging.getLogger(__name__)
@@ -142,7 +143,7 @@ def resolve_local_chatgpt_plan_label() -> str:
     "Plus" hard-code.
     """
     # Source 1: external Codex CLI auth file (most common).
-    codex_auth = Path.home() / ".codex" / "auth.json"
+    codex_auth = codex_auth_path()
     try:
         raw = codex_auth.read_text(encoding="utf-8")
         payload = json.loads(raw)

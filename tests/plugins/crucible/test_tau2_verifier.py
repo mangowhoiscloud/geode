@@ -63,6 +63,19 @@ def test_tau2_task_content_hash_excludes_only_top_level_id() -> None:
     )
 
 
+def test_tau2_task_hash_normalizes_runtime_materialized_optional_defaults() -> None:
+    source = dict(_raw_tasks()[0])
+    source.pop("user_tools")
+    runtime = {
+        **source,
+        "issues": None,
+        "required_documents": None,
+        "user_tools": None,
+    }
+
+    assert tau2_task_unit(source) == tau2_task_unit(runtime)
+
+
 def test_tau2_family_is_derived_from_workflow_shape_not_task_values() -> None:
     task = _raw_tasks()[0]
     same_workflow = {
