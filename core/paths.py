@@ -531,10 +531,9 @@ GLOBAL_WORKERS_DIR = GEODE_HOME / "workers"
 # Legacy ``~/.geode/mcp-registry-cache.json`` migrated by
 # ``core.wiring.layout_migrator._migrate_v0_to_v1`` on first bootstrap.
 MCP_REGISTRY_CACHE = GEODE_HOME / "mcp" / "registry-cache.json"
-# v0.95.x layout migration v1 — renamed to match the actual writer
-# (``core.hooks.approval_tracker``, which has always used ``approval_history.jsonl``).
-# Legacy ``~/.geode/approve_history.json`` (paths.py-side typo) migrated by
-# ``core.wiring.layout_migrator._migrate_v0_to_v1``.
+# v0.95.x layout migration v1 — renamed to match the historical writer.
+# The writer is retired; this path remains so migration and cleanup tooling can
+# preserve the legacy operator archive without silently deleting user data.
 APPROVE_HISTORY = GEODE_HOME / "approval_history.jsonl"
 
 # ---------------------------------------------------------------------------

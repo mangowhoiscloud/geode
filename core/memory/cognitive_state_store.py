@@ -18,16 +18,12 @@ from typing import Any
 
 log = logging.getLogger(__name__)
 
-_DEFAULT_DB_PATH: Path | None = None
-
 
 def _get_default_db_path() -> Path:
-    global _DEFAULT_DB_PATH
-    if _DEFAULT_DB_PATH is None:
-        from core.paths import resolve_sessions_dir
+    """Resolve SessionManager's canonical database without a second cache."""
+    from core.memory.session_manager import _get_default_db_path as resolve_default_db_path
 
-        _DEFAULT_DB_PATH = resolve_sessions_dir() / "sessions.db"
-    return _DEFAULT_DB_PATH
+    return resolve_default_db_path()
 
 
 _CREATE_LATEST_TABLE_SQL = """\

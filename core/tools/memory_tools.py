@@ -63,6 +63,14 @@ def set_memory_hooks(hooks: Any) -> None:
     _hooks_ctx.set(hooks)
 
 
+def clear_memory_hooks(expected: Any) -> bool:
+    """Clear the current-context binding when it still matches ``expected``."""
+    if _hooks_ctx.get() is not expected:
+        return False
+    _hooks_ctx.set(None)
+    return True
+
+
 def _fire_hook(event: HookEvent, data: dict[str, Any]) -> None:
     """Fire a hook event using the ContextVar-bound HookSystem (or no-op)."""
     fire_hook(_hooks_ctx.get(), event, data)

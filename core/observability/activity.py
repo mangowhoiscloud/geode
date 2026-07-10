@@ -19,7 +19,7 @@ Structure (PR-OBS-CONTRACT, 2026-06-13 — full coverage):
     event family, e.g. ``CognitivePhaseDetails`` for 6 cognitive phases)
   - ``GenericActivityRow`` is now ONLY a fail-soft fallback (a typed
     builder that hits a malformed payload), never a routine destination —
-    every one of the 64 events has a concrete typed row.
+    every one of the 65 events has a concrete typed row.
 
 Construction is centralized in ``activity_registry.py``: 19 lifecycle
 curry-builders + a single declarative ``_TYPED_ROW_SPECS`` table that drives
@@ -147,11 +147,10 @@ __all__ = [
 class ActivityRowBase(BaseModel):
     """paperclip ``PluginEvent`` envelope equivalent + GEODE run metadata.
 
-    Every ``HookSystem.trigger()`` call produces exactly one of the 74
-    concrete subclasses (when typed) or :class:`GenericActivityRow`
-    (fall-through). The pipeline transcript at
-    ``<run_dir>/transcript.jsonl`` carries a row for every hook event,
-    not just the 4 SessionTranscript mirrors PR-U landed.
+    Every mapped HookEvent produces one of 65 concrete subclasses or a
+    :class:`GenericActivityRow` fail-soft fallback. ``HookPersistenceSink``
+    uses this envelope as its projection; the catalog excludes compatibility
+    duplicates before SQL or active-run transcript persistence.
 
     Field semantics mirror paperclip's
     ``packages/db/src/schema/activity_log.ts:6`` ``activity_log`` table:
@@ -244,13 +243,10 @@ class LifecycleRetriedRow(ActivityRowBase):
 
 
 class GenericActivityRow(ActivityRowBase):
-    """Group K — fall-through for the 18+ non-lifecycle events that
-    don't have a concrete subclass yet (PROMPT_ASSEMBLED /
-    TRIGGER_FIRED / etc.). The ``details`` dict is
-    free-form — subsequent PRs will tighten high-volume events.
+    """Fail-soft row for malformed payloads or an unregistered future event.
 
-    Also serves as the ValidationError fall-through path so a typed
-    builder failure never silences a hook trigger."""
+    The ``details`` dict is free-form, but the registry and persistence sink
+    scrub and bound it before it reaches a durable surface."""
 
     details: dict[str, Any] = Field(default_factory=dict)
 

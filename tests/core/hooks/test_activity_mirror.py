@@ -8,15 +8,36 @@ from __future__ import annotations
 
 import json
 import tempfile
+from collections.abc import Iterator
+from contextlib import contextmanager
 from pathlib import Path
 
 from core.hooks.system import HookEvent, HookSystem
+from core.observability.event_store import HookEventStore
+from core.observability.hook_persistence import HookPersistenceSink
 from core.observability.run_dir import run_dir_scope
 from core.self_improving.loop.observe.run_transcript import RunTranscript, run_transcript_scope
 
 
 def _read_rows(transcript_path: Path) -> list[dict]:
     return [json.loads(line) for line in transcript_path.read_text().splitlines() if line.strip()]
+
+
+@contextmanager
+def _persistent_hooks(root: Path) -> Iterator[HookSystem]:
+    hooks = HookSystem()
+    hooks.register_sink(
+        HookPersistenceSink(
+            HookEventStore(root / "events.db"),
+            session_key="test-session",
+            run_id="test-run",
+        ),
+        name="hook_persistence",
+    )
+    try:
+        yield hooks
+    finally:
+        hooks.close()
 
 
 def test_m1_trigger_appends_one_activity_row() -> None:
@@ -31,8 +52,7 @@ def test_m1_trigger_appends_one_activity_row() -> None:
             component="seed-generation",
             path=Path(tmp) / "transcript.jsonl",
         )
-        with run_transcript_scope(journal):
-            hs = HookSystem()
+        with run_transcript_scope(journal), _persistent_hooks(Path(tmp)) as hs:
             hs.trigger(
                 HookEvent.SUBAGENT_STARTED,
                 {"task_id": "gen-gen1-001", "task_type": "seed_generator"},
@@ -56,13 +76,11 @@ def test_m1_typed_lifecycle_event_carries_typed_details() -> None:
             component="seed-generation",
             path=Path(tmp) / "transcript.jsonl",
         )
-        with run_transcript_scope(journal):
-            hs = HookSystem()
+        with run_transcript_scope(journal), _persistent_hooks(Path(tmp)) as hs:
             hs.trigger(
-                HookEvent.LLM_CALL_FAILED,
+                HookEvent.TOOL_RECOVERY_FAILED,
                 {
-                    "session_id": "s1",
-                    "call_id": "c1",
+                    "tool_call_id": "tc1",
                     "error_type": "rate_limit",
                     "message": "429 Too Many Requests",
                 },
@@ -70,10 +88,10 @@ def test_m1_typed_lifecycle_event_carries_typed_details() -> None:
         rows = _read_rows(Path(tmp) / "transcript.jsonl")
         assert len(rows) == 1
         row = rows[0]
-        assert row["action"] == "llm.call.failed"
+        assert row["action"] == "tool.recovery.failed"
         assert row["level"] == "error"
         assert row["payload"]["error_type"] == "rate_limit"
-        assert "429" in row["payload"]["message"]
+        assert "message" not in row["payload"]
 
 
 def test_m1_non_lifecycle_event_falls_through_to_generic() -> None:
@@ -87,8 +105,7 @@ def test_m1_non_lifecycle_event_falls_through_to_generic() -> None:
             component="seed-generation",
             path=Path(tmp) / "transcript.jsonl",
         )
-        with run_transcript_scope(journal):
-            hs = HookSystem()
+        with run_transcript_scope(journal), _persistent_hooks(Path(tmp)) as hs:
             hs.trigger(HookEvent.MEMORY_SAVED, {"key": "recipe-pho", "persistent": True})
         rows = _read_rows(Path(tmp) / "transcript.jsonl")
         assert len(rows) == 1
@@ -96,7 +113,9 @@ def test_m1_non_lifecycle_event_falls_through_to_generic() -> None:
         assert row["action"] == "memory.saved"
         assert row["actor_type"] == "agent"
         # Typed details schema — only declared fields, validated.
-        assert row["payload"] == {"key": "recipe-pho", "persistent": True}
+        assert row["payload"]["key"] == "recipe-pho"
+        assert row["payload"]["persistent"] is True
+        assert row["payload"]["_dispatch_duration_ms"] >= 0
         assert row["entity_id"] == "recipe-pho"
 
 
@@ -112,8 +131,7 @@ def test_m1b_builder_failure_falls_through_to_distinguishable_generic() -> None:
             component="seed-generation",
             path=Path(tmp) / "transcript.jsonl",
         )
-        with run_transcript_scope(journal):
-            hs = HookSystem()
+        with run_transcript_scope(journal), _persistent_hooks(Path(tmp)) as hs:
             # MUTATION_APPLIED requires ``mutation_id`` — omit it.
             hs.trigger(HookEvent.MUTATION_APPLIED, {"target_kind": "prompt"})
         rows = _read_rows(Path(tmp) / "transcript.jsonl")
@@ -130,9 +148,9 @@ def test_m2_mirror_no_op_outside_run_transcript_scope() -> None:
     the mirror is a silent no-op — the trigger must NOT raise and
     no file should be created."""
     with tempfile.TemporaryDirectory() as tmp:
-        hs = HookSystem()
-        # No run_transcript_scope active.
-        hs.trigger(HookEvent.SUBAGENT_STARTED, {"task_id": "ghost"})
+        with _persistent_hooks(Path(tmp)) as hs:
+            # No run_transcript_scope active.
+            hs.trigger(HookEvent.SUBAGENT_STARTED, {"task_id": "ghost"})
         # No transcript file expected in tmp (which was never bound).
         assert not (Path(tmp) / "transcript.jsonl").exists()
 
@@ -150,14 +168,13 @@ def test_m3_malformed_payload_still_produces_a_row() -> None:
             component="seed-generation",
             path=Path(tmp) / "transcript.jsonl",
         )
-        with run_transcript_scope(journal):
-            hs = HookSystem()
+        with run_transcript_scope(journal), _persistent_hooks(Path(tmp)) as hs:
             # Empty payload — registry builder fills defaults.
-            hs.trigger(HookEvent.LLM_CALL_FAILED, {})
+            hs.trigger(HookEvent.TOOL_RECOVERY_FAILED, {})
         rows = _read_rows(Path(tmp) / "transcript.jsonl")
         assert len(rows) == 1
         row = rows[0]
-        assert row["action"] == "llm.call.failed"
+        assert row["action"] == "tool.recovery.failed"
         # Defaults present so the row is still classifier-clean.
         assert row["payload"].get("error_type") == "unknown"
         assert row["level"] == "error"
@@ -178,8 +195,7 @@ def test_m3_malformed_value_still_produces_a_row() -> None:
             component="seed-generation",
             path=Path(tmp) / "transcript.jsonl",
         )
-        with run_transcript_scope(journal):
-            hs = HookSystem()
+        with run_transcript_scope(journal), _persistent_hooks(Path(tmp)) as hs:
             # ``duration_ms="bad"`` triggers ValueError inside the
             # _lifecycle_completed builder. Pre-Codex-catch the row
             # would have been dropped entirely.
@@ -209,8 +225,7 @@ def test_m1_async_mirror_appends_one_row() -> None:
             component="seed-generation",
             path=Path(tmp) / "transcript.jsonl",
         )
-        with run_transcript_scope(journal):
-            hs = HookSystem()
+        with run_transcript_scope(journal), _persistent_hooks(Path(tmp)) as hs:
             asyncio.run(
                 hs.trigger_async(
                     HookEvent.SUBAGENT_STARTED,
@@ -234,8 +249,7 @@ def test_m1_hook_handler_failure_does_not_break_mirror() -> None:
             component="seed-generation",
             path=Path(tmp) / "transcript.jsonl",
         )
-        with run_transcript_scope(journal):
-            hs = HookSystem()
+        with run_transcript_scope(journal), _persistent_hooks(Path(tmp)) as hs:
 
             def _broken_handler(event: HookEvent, data: dict) -> None:
                 raise RuntimeError("simulated handler bug")

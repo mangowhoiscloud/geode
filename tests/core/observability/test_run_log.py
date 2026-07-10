@@ -1,151 +1,31 @@
-"""Tests for JSONL Run Log with auto-pruning."""
+"""Tests for the remaining bounded scheduler JSONL tail."""
 
 from __future__ import annotations
 
-import json
 from pathlib import Path
 
-import pytest
-from core.observability.run_log import RunLog, RunLogEntry
+from core.observability.run_log import JobRunLog
 
 
-@pytest.fixture
-def tmp_log_dir(tmp_path: Path) -> Path:
-    return tmp_path / "runs"
+def test_append_reads_newest_first(tmp_path: Path) -> None:
+    log = JobRunLog(tmp_path)
+    log.append("job:1", {"seq": 1})
+    log.append("job:1", {"seq": 2})
+    assert log.get_runs("job:1") == [{"seq": 2}, {"seq": 1}]
 
 
-class TestRunLogEntry:
-    def test_to_json(self):
-        entry = RunLogEntry(
-            session_key="subject:demo:router",
-            event="pipeline_start",
-            node="router",
-        )
-        raw = entry.to_json()
-        data = json.loads(raw)
-        assert data["session_key"] == "subject:demo:router"
-        assert data["event"] == "pipeline_start"
-        assert data["status"] == "ok"
+def test_append_auto_prunes_with_live_bounds(tmp_path: Path) -> None:
+    log = JobRunLog(tmp_path)
+    log.MAX_BYTES = 100
+    log.MAX_LINES = 3
+    for index in range(20):
+        log.append("job-1", {"seq": index, "padding": "x" * 50})
 
-    def test_from_json_roundtrip(self):
-        original = RunLogEntry(
-            session_key="subject:test:analysis",
-            event="node_exit",
-            node="router",
-            duration_ms=123.4,
-            metadata={"subject_id": "test"},
-        )
-        raw = original.to_json()
-        restored = RunLogEntry.from_json(raw)
-        assert restored.session_key == original.session_key
-        assert restored.event == original.event
-        assert restored.duration_ms == original.duration_ms
-
-    def test_default_status_ok(self):
-        entry = RunLogEntry(session_key="x", event="y")
-        assert entry.status == "ok"
-
-    def test_timestamp_auto_set(self):
-        entry = RunLogEntry(session_key="x", event="y")
-        assert entry.timestamp > 0
+    assert [row["seq"] for row in log.get_runs("job-1", limit=99)] == [19, 18, 17]
+    assert log.prune("job-1") == 0
 
 
-class TestRunLog:
-    def test_append_and_read(self, tmp_log_dir: Path):
-        log = RunLog("subject:demo:full", log_dir=tmp_log_dir)
-        log.append(RunLogEntry(session_key="subject:demo:full", event="start"))
-        log.append(RunLogEntry(session_key="subject:demo:full", event="end"))
-
-        entries = log.read(limit=10)
-        assert len(entries) == 2
-        # Newest first
-        assert entries[0].event == "end"
-        assert entries[1].event == "start"
-
-    def test_read_empty_log(self, tmp_log_dir: Path):
-        log = RunLog("nonexistent", log_dir=tmp_log_dir)
-        assert log.read() == []
-
-    def test_read_with_limit(self, tmp_log_dir: Path):
-        log = RunLog("subject:test:full", log_dir=tmp_log_dir)
-        for i in range(10):
-            log.append(RunLogEntry(session_key="subject:test:full", event=f"event_{i}"))
-
-        entries = log.read(limit=3)
-        assert len(entries) == 3
-        assert entries[0].event == "event_9"
-
-    def test_read_with_offset(self, tmp_log_dir: Path):
-        log = RunLog("subject:test:full", log_dir=tmp_log_dir)
-        for i in range(5):
-            log.append(RunLogEntry(session_key="subject:test:full", event=f"event_{i}"))
-
-        entries = log.read(limit=2, offset=2)
-        assert len(entries) == 2
-        assert entries[0].event == "event_2"
-
-    def test_count(self, tmp_log_dir: Path):
-        log = RunLog("subject:test:count", log_dir=tmp_log_dir)
-        assert log.count() == 0
-
-        log.append(RunLogEntry(session_key="x", event="a"))
-        log.append(RunLogEntry(session_key="x", event="b"))
-        assert log.count() == 2
-
-    def test_clear(self, tmp_log_dir: Path):
-        log = RunLog("subject:test:clear", log_dir=tmp_log_dir)
-        log.append(RunLogEntry(session_key="x", event="a"))
-        assert log.count() == 1
-
-        log.clear()
-        assert log.count() == 0
-        assert not log.file_path.exists()
-
-    def test_prune_under_limit_noop(self, tmp_log_dir: Path):
-        log = RunLog("subject:test:prune", log_dir=tmp_log_dir, max_bytes=1024 * 1024)
-        log.append(RunLogEntry(session_key="x", event="a"))
-        removed = log.prune()
-        assert removed == 0
-
-    def test_prune_over_limit(self, tmp_log_dir: Path):
-        # Very small max_bytes to trigger pruning
-        log = RunLog("subject:test:prune2", log_dir=tmp_log_dir, max_bytes=100, keep_lines=3)
-        for i in range(20):
-            log.append(
-                RunLogEntry(
-                    session_key="subject:test:prune2",
-                    event=f"event_{i}",
-                    metadata={"padding": "x" * 50},
-                )
-            )
-
-        removed = log.prune()
-        assert removed > 0
-        assert log.count() == 3
-
-    def test_prune_uses_atomic_write(self, tmp_log_dir: Path):
-        log = RunLog("subject:test:atomic", log_dir=tmp_log_dir, max_bytes=100, keep_lines=2)
-        for i in range(10):
-            log.append(
-                RunLogEntry(
-                    session_key="subject:test:atomic",
-                    event=f"event_{i}",
-                    metadata={"padding": "x" * 50},
-                )
-            )
-
-        # Tmp file should not exist after prune
-        tmp_file = log.file_path.with_suffix(".jsonl.tmp")
-        log.prune()
-        assert not tmp_file.exists()
-        assert log.file_path.exists()
-
-    def test_file_path_sanitized(self, tmp_log_dir: Path):
-        log = RunLog("subject:demo:full_pipeline", log_dir=tmp_log_dir)
-        assert log.file_path.name == "subject_demo_full_pipeline.jsonl"
-
-    def test_creates_directory(self, tmp_log_dir: Path):
-        nested = tmp_log_dir / "deep" / "nested"
-        log = RunLog("subject:test:dir", log_dir=nested)
-        log.append(RunLogEntry(session_key="x", event="y"))
-        assert nested.exists()
+def test_malformed_rows_are_skipped(tmp_path: Path) -> None:
+    path = tmp_path / "job-1.jsonl"
+    path.write_text('{"seq":1}\nnot-json\n{"seq":2}\n', encoding="utf-8")
+    assert JobRunLog(tmp_path).get_runs("job-1") == [{"seq": 2}, {"seq": 1}]

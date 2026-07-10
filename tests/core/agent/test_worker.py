@@ -909,7 +909,7 @@ class TestSchemaAwareRetryWiring:
 
 class TestWorkerHookBundle:
     """Subprocess sub-agents previously ran with ``hooks=None`` so their
-    tool trajectory (Episode rows + run-log rows) was silently lost.
+    tool trajectory (Episode rows + operational event rows) was silently lost.
     ``build_worker_hooks`` injects only the two trajectory rails."""
 
     def test_run_agentic_injects_worker_hooks(self) -> None:
@@ -921,7 +921,7 @@ class TestWorkerHookBundle:
         assert "build_worker_hooks" in src
         assert "hooks=worker_hooks" in src
 
-    def test_build_worker_hooks_records_episode_and_run_log(self, tmp_path: Path) -> None:
+    def test_build_worker_hooks_records_episode_and_event(self, tmp_path: Path) -> None:
         from core.agent.cognitive_state_ctx import set_session_id
         from core.hooks import HookEvent
         from core.memory.episodic import EpisodicStore, set_episodic_store
@@ -953,19 +953,19 @@ class TestWorkerHookBundle:
             assert episode["session_id"] == "wk-hooks-1"
             assert episode["success"] is True
 
-            # Run-log rail — the wildcard writer captured the same event.
-            run_log_lines = (
-                (tmp_path / "wk-hooks-1.jsonl").read_text(encoding="utf-8").strip().splitlines()
-            )
-            events = [json.loads(line)["event"] for line in run_log_lines]
-            assert "tool_exec_end" in events
+            # SQL rail — the canonical sink captured the same event.
+            from core.observability.event_store import HookEventStore
+
+            reader = HookEventStore(tmp_path / "events.db")
+            assert [row.event for row in reader.read()] == ["tool_exec_end"]
+            reader.close()
+            hooks.close()
         finally:
             set_episodic_store(None)
             set_session_id("")
 
-    def test_build_worker_hooks_run_log_covers_all_events(self, tmp_path: Path) -> None:
-        """The run-log handler is a ``"*"`` wildcard — lifecycle events
-        beyond TOOL_EXEC_ENDED (e.g. SESSION_ENDED) also land."""
+    def test_build_worker_hooks_event_sink_covers_all_events(self, tmp_path: Path) -> None:
+        """Lifecycle events beyond TOOL_EXEC_ENDED also land in SQLite."""
         from core.hooks import HookEvent
         from core.wiring.bootstrap import build_worker_hooks
 
@@ -976,8 +976,10 @@ class TestWorkerHookBundle:
         )
         hooks.trigger(HookEvent.SESSION_ENDED, {"session_id": "wk-hooks-2"})
 
-        run_log_lines = (
-            (tmp_path / "wk-hooks-2.jsonl").read_text(encoding="utf-8").strip().splitlines()
-        )
-        events = [json.loads(line)["event"] for line in run_log_lines]
+        from core.observability.event_store import HookEventStore
+
+        reader = HookEventStore(tmp_path / "events.db")
+        events = [row.event for row in reader.read()]
         assert HookEvent.SESSION_ENDED.value in events
+        reader.close()
+        hooks.close()

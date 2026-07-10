@@ -1,6 +1,6 @@
 """pytest configuration — load .env before any module imports.
 
-Hook-based observability (RunLog + LLM_CALL_START/END events) needs no
+Hook-based observability (SQLite events + LLM_CALL_START/END) needs no
 special test-time setup; the hook system is wired only when an
 HookSystem instance is present.
 """
