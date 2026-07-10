@@ -18,41 +18,43 @@
 }
 
 [data-astryx-theme="neutral"] {
-  color-scheme: dark;
+  /* The portfolio is the only Astryx mount, and it is a light three-color
+     composition (paper #FFF0F8, record ink #141016, rose accent). */
+  color-scheme: light;
 
   /* substrate */
-  --color-background-body: var(--paper);
-  --color-background-surface: var(--paper-2);
-  --color-background-card: var(--paper-2);
-  --color-background-popover: var(--paper-2);
-  --color-background-muted: var(--paper-deep);
+  --color-background-body: #fff0f8;
+  --color-background-surface: #fff0f8;
+  --color-background-card: #fff0f8;
+  --color-background-popover: #fff0f8;
+  --color-background-muted: rgba(20, 16, 22, 0.05);
 
   /* ink */
-  --color-text-primary: var(--ink-1);
-  --color-text-secondary: var(--ink-2);
-  --color-text-disabled: var(--ink-3);
+  --color-text-primary: #141016;
+  --color-text-secondary: rgba(20, 16, 22, 0.6);
+  --color-text-disabled: rgba(20, 16, 22, 0.42);
   --color-text-accent: var(--acc-artifact);
 
   /* identity accent (Axolotl Rose) */
   --color-accent: var(--acc-artifact);
-  --color-accent-muted: rgba(244, 155, 196, 0.14);
-  --color-on-accent: var(--paper);
+  --color-accent-muted: rgba(244, 155, 196, 0.2);
+  --color-on-accent: #141016;
   --color-icon-accent: var(--acc-artifact);
-  --color-icon-primary: var(--ink-1);
-  --color-icon-secondary: var(--ink-2);
-  --color-icon-disabled: var(--ink-3);
+  --color-icon-primary: #141016;
+  --color-icon-secondary: rgba(20, 16, 22, 0.6);
+  --color-icon-disabled: rgba(20, 16, 22, 0.42);
 
-  /* hairlines: rose-tinted, never neutral gray */
-  --color-border: var(--rule);
-  --color-border-emphasized: rgba(244, 155, 196, 0.32);
-  --color-neutral: rgba(244, 155, 196, 0.1);
-  --color-overlay-hover: rgba(244, 155, 196, 0.07);
-  --color-overlay-pressed: rgba(244, 155, 196, 0.14);
-  --color-skeleton: var(--paper-2);
-  --color-tint-hover: var(--acc-soft);
+  /* hairlines: ink at low alpha on the paper field */
+  --color-border: rgba(20, 16, 22, 0.16);
+  --color-border-emphasized: rgba(20, 16, 22, 0.3);
+  --color-neutral: rgba(20, 16, 22, 0.07);
+  --color-overlay-hover: rgba(20, 16, 22, 0.05);
+  --color-overlay-pressed: rgba(20, 16, 22, 0.1);
+  --color-skeleton: rgba(20, 16, 22, 0.07);
+  --color-tint-hover: rgba(244, 155, 196, 0.2);
 
   /* status stays semantic but on-substrate */
-  --color-warning: var(--acc-line);
+  --color-warning: var(--acc-artifact);
 
   /* typography: site families, not Astryx defaults */
   --font-family-heading: var(--font-display), var(--font-inter), system-ui, sans-serif;

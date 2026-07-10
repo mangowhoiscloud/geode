@@ -14,7 +14,14 @@ const defaultNavItems: NavItem[] = [
   { id: "lineage", label: "Lineage" },
 ];
 
-export function GeodeNav({ items = defaultNavItems }: { items?: NavItem[] }) {
+export function GeodeNav({
+  items = defaultNavItems,
+  light = false,
+}: {
+  items?: NavItem[];
+  /** Light chrome for the white-substrate portfolio surface. */
+  light?: boolean;
+}) {
   const [activeSection, setActiveSection] = useState(items[0]?.id ?? "hero");
   const [visible, setVisible] = useState(false);
   const observerRef = useRef<IntersectionObserver | null>(null);
@@ -52,13 +59,22 @@ export function GeodeNav({ items = defaultNavItems }: { items?: NavItem[] }) {
 
   if (!visible) return null;
 
+  const chrome = light
+    ? { bg: "rgba(255,240,248,0.88)", border: "rgba(20,16,22,0.12)", brand: "rgba(20,16,22,0.55)" }
+    : { bg: "color-mix(in srgb, var(--paper) 85%, transparent)", border: "var(--rule)", brand: "var(--ink-3)" };
   return (
-    <nav className="fixed top-0 left-0 right-0 z-50 bg-[var(--paper)]/85 backdrop-blur-md border-b border-[var(--rule)]">
+    <nav
+      className="fixed top-0 left-0 right-0 z-50 backdrop-blur-md border-b"
+      style={{ background: chrome.bg, borderColor: chrome.border }}
+    >
       <div
         className="max-w-5xl mx-auto px-4 py-2 flex items-center gap-0.5 overflow-x-auto"
         style={{ scrollbarWidth: "none" }}
       >
-        <span className="font-mono text-[11px] tracking-[0.18em] uppercase text-[var(--ink-3)] shrink-0 mr-4">
+        <span
+          className="font-mono text-[11px] tracking-[0.18em] uppercase shrink-0 mr-4"
+          style={{ color: chrome.brand }}
+        >
           GEODE
         </span>
         <div className="flex-1 flex items-center gap-0.5">
@@ -70,8 +86,14 @@ export function GeodeNav({ items = defaultNavItems }: { items?: NavItem[] }) {
                 onClick={() => scrollTo(it.id)}
                 className="px-2.5 py-1 rounded font-mono text-[11px] transition-colors duration-200 shrink-0"
                 style={{
-                  color: isActive ? "var(--acc-artifact)" : "var(--ink-3)",
-                  background: isActive ? "color-mix(in srgb, var(--acc-artifact) 10%, transparent)" : "transparent",
+                  color: isActive
+                    ? light
+                      ? "#141016"
+                      : "var(--acc-artifact)"
+                    : light
+                      ? "rgba(20,16,22,0.5)"
+                      : "var(--ink-3)",
+                  background: isActive ? "color-mix(in srgb, var(--acc-artifact) 18%, transparent)" : "transparent",
                 }}
               >
                 {it.label}

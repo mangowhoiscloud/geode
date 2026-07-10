@@ -79,14 +79,17 @@ hero stagger, scene idle float, terminal rise, petri-dish spring, cadence-bar
 growth — all gated by `useReducedMotion`. The docs surface keeps the old
 motion budget.
 
-**Three-color loop-punk field (operator-directed 2026-07-10, supersedes the
-two-surface band rule).** /portfolio is a single composition in three colors:
-signature rose `#F49BC4` (`--acc-artifact`) as the page substrate, warm white
-`#FFF0F8` for ink, slabs, and stencils, and near-black `#141016` as the
-record ink that enters only in the final act (the laboratory reveal frames
-the pink field as a specimen slide on a dark stage; title, dish, statement,
-and CTAs turn to black ink there). Tone comes from dither density in the
-generated art, hierarchy from opacity — never from a fourth hue. The one sanctioned exception is the terminal mock, which keeps its dark
+**Three-color loop-punk composition (operator-directed 2026-07-10, supersedes
+the two-surface band rule).** /portfolio uses exactly three colors: warm white
+`#FFF0F8` as the paper substrate, near-black `#141016` as record ink, and
+signature rose `#F49BC4` (`--acc-artifact`) as the single accent (line-art
+plates, terminal caret, sprite) and as the full-bleed field of the two color
+acts — the distillation (rose field, white token rain converging through
+hairline filters into the GEODE word) and the finale (giant white wordmark
+fading into the black-stage laboratory reveal where the rose field becomes a
+specimen slide and all copy turns to ink). LazyWeb formula on the paper acts:
+near-monochrome, sharp corners, technical line-art, terminal hero; hierarchy
+from ink alpha, never a fourth hue. The one sanctioned exception is the terminal mock, which keeps its dark
 product-screenshot colors (`--paper-deep` + ink tokens) because it is a
 product artifact, not page chrome. Scroll is choreography, not paging:
 curtain-stack sections over a pinned hero, `StageLight` scroll-linked

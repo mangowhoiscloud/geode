@@ -49,19 +49,23 @@ functional change.
 
 ### Changed
 
-- **Portfolio v17 — loop-punk art direction (operator-directed).**
-  The page commits to pink `#F49BC4` x white `#FFF0F8`, plus near-black
-  `#141016` record ink that enters only in the final act (the terminal mock
-  keeps its dark product colors by explicit exception): a pinned hero field
-  with serif statement, curtain-stack sections under scroll-linked stage
-  lighting (`StageLight`), a distillation act where token rain converges
-  band-by-band through hairline filters labeled with Astryx `Token` chips
-  (critic / petri gate / held-out) and piles onto the GEODE word as a
-  top-down fill over the honest baseline ledger (REJECT rows plus the still
-  pending crucible-S5 drop), and a finale where the giant pixel wordmark
-  fades out into the laboratory reveal: black enters, framing the pink field
-  as a specimen slide on a dark stage — circular petri mark with the Geodi
-  silhouette, "cultured since" stamp, and CTAs all in black ink. Literal funnel drawings (mesh sieve, drainpipe) were
+- **Portfolio v20 — loop-punk in three colors (operator-directed; LazyWeb x
+  Hermes synthesis).** Paper `#FFF0F8` substrate, record ink `#141016`, and
+  the signature rose as sole accent (the terminal mock keeps its dark product
+  colors by exception). Paper acts follow the agent-first-site formula:
+  centered serif statement over a real CLI terminal mock, a hairline-grid
+  "three ways in" row, and six numbered plates with rose line-art schematics
+  (loop ring, audit gate, seed pipeline, tau2 numbers with the gpt-5.5 /
+  openai-codex-subscription route). Two rose color acts carry the narrative:
+  the distillation — one composed sticky screen where white token rain
+  converges band-by-band through hairline filters labeled with Astryx `Token`
+  chips (critic / petri gate / held-out) and fills the GEODE word top-down
+  over the honest baseline ledger (three REJECTs, crucible-S5 still PENDING)
+  — and the finale, where the giant pixel wordmark fades into the black-stage
+  laboratory reveal (rose field as a specimen slide, petri mark with the
+  Geodi silhouette, "cultured since" stamp, CTAs in ink). The Astryx neutral
+  theme is remapped to the light ink-on-paper palette; the shared nav gains a
+  `light` chrome variant. Literal funnel drawings (mesh sieve, drainpipe) were
   removed in favor of the converging rain itself.
 - **Portfolio v11 — landing-grade pass on the growth log (operator feedback
   batch).** The hero is now centered with a terminal mock of the real CLI
