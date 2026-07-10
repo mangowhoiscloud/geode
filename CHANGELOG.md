@@ -45,6 +45,17 @@ functional change.
 
 ---
 
+## [0.99.297] - 2026-07-11
+
+### Changed
+
+- **Portfolio defaults to Korean (operator-directed).** The page opens in
+  the KO register (`defaultLocale="ko"`, matching the site-wide
+  `<html lang="ko">`); the full KO copy deck was already wired through
+  `t(locale, ko, en)` pairs, and English stays one toggle away.
+
+---
+
 ## [0.99.296] - 2026-07-11
 
 ### Changed
