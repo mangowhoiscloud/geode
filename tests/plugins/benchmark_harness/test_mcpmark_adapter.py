@@ -52,7 +52,9 @@ def test_normalize_tool_arguments_drops_empty_start_cursor() -> None:
     schema = {"inputSchema": {"properties": {"start_cursor": {"type": "string"}}}}
 
     for empty_cursor in ("", "undefined", "null", "none", None, 0):
-        assert _normalize_tool_arguments(schema, {"start_cursor": empty_cursor, "page_size": 100}) == {
+        assert _normalize_tool_arguments(
+            schema, {"start_cursor": empty_cursor, "page_size": 100}
+        ) == {
             "page_size": 100,
         }
 
