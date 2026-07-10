@@ -372,35 +372,60 @@ const runModes = [
   },
 ];
 
-function RunRow() {
+/** The three entrances, as stage content (pinned by RunThenPlates). */
+function RunRowContent() {
   const locale = useLocale();
   return (
-    <section id="run" className="bg-[#FFF0F8]">
-      <div className="mx-auto max-w-6xl px-6 py-16 sm:py-20">
-        <p className="text-center font-mono text-[10.5px] uppercase tracking-[0.3em]" style={{ color: ROSE_75 }}>
-          {t(locale, "세 가지 입구", "three ways in")}
-        </p>
-        <div
-          className="mt-10 grid gap-px overflow-hidden border md:grid-cols-3"
-          style={{ borderColor: ROSE_75, background: ROSE_75 }}
-        >
-          {runModes.map((mode) => (
-            <div key={mode.cmd} className="bg-[#FFF0F8] px-7 py-9 text-center">
-              <p className="font-mono text-[10.5px] uppercase tracking-[0.28em]" style={{ color: ROSE_75 }}>{mode.eyebrow}</p>
-              <h2 className="font-serif-display mt-3 text-[28px] font-semibold" style={{ color: ROSE }}>
-                {locale === "en" ? mode.titleEn : mode.titleKo}
-              </h2>
-              <p className="mx-auto mt-4 inline-block rounded bg-[var(--acc-artifact)] px-4 py-2 font-mono text-[13px] text-[#FFF0F8]">
-                {mode.cmd}
-              </p>
-              <p className="mx-auto mt-4 max-w-[260px] text-[13px] leading-[1.7]" style={{ color: ROSE }}>
-                {t(locale, mode.ko, mode.en)}
-              </p>
-            </div>
-          ))}
-        </div>
+    <div className="mx-auto w-full max-w-6xl px-6">
+      <p className="text-center font-mono text-[10.5px] uppercase tracking-[0.3em]" style={{ color: PAPER_75 }}>
+        {t(locale, "세 가지 입구", "three ways in")}
+      </p>
+      <div
+        className="mt-10 grid gap-px overflow-hidden border md:grid-cols-3"
+        style={{ borderColor: PAPER_55, background: PAPER_55 }}
+      >
+        {runModes.map((mode) => (
+          <div key={mode.cmd} className="bg-[var(--acc-artifact)] px-7 py-9 text-center">
+            <p className="font-mono text-[10.5px] uppercase tracking-[0.28em]" style={{ color: PAPER_75 }}>{mode.eyebrow}</p>
+            <h2 className="font-serif-display mt-3 text-[28px] font-semibold text-[#FFF0F8]">
+              {locale === "en" ? mode.titleEn : mode.titleKo}
+            </h2>
+            <p className="mx-auto mt-4 inline-block rounded bg-[#FFF0F8] px-4 py-2 font-mono text-[13px] text-[var(--acc-artifact)]">
+              {mode.cmd}
+            </p>
+            <p className="mx-auto mt-4 max-w-[260px] text-[13px] leading-[1.7]" style={{ color: PAPER_75 }}>
+              {t(locale, mode.ko, mode.en)}
+            </p>
+          </div>
+        ))}
       </div>
-    </section>
+    </div>
+  );
+}
+
+/**
+ * Curtain pair: the three entrances pin beneath (z-0) and recede backward
+ * (scale + fade) exactly in sync with the plates section sliding over them
+ * (z-10). Recede is driven by the plates' approach, so pin and push-back
+ * never desynchronize.
+ */
+function RunThenPlates() {
+  const reduceMotion = useReducedMotion();
+  const platesRef = useRef<HTMLDivElement | null>(null);
+  const { scrollYProgress } = useScroll({ target: platesRef, offset: ["start end", "start start"] });
+  const recedeScale = useTransform(scrollYProgress, [0, 1], [1, 0.88]);
+  const recedeOp = useTransform(scrollYProgress, [0, 1], [1, 0.2]);
+  return (
+    <>
+      <div id="run" className="sticky top-0 z-0 flex h-screen items-center bg-[var(--acc-artifact)]">
+        <motion.div style={{ scale: reduceMotion ? 1 : recedeScale, opacity: recedeOp }} className="w-full">
+          <RunRowContent />
+        </motion.div>
+      </div>
+      <div ref={platesRef} className="relative z-10">
+        <FeaturesGrid />
+      </div>
+    </>
   );
 }
 
@@ -528,7 +553,7 @@ const features: {
 function FeaturesGrid() {
   const locale = useLocale();
   return (
-    <section id="features" className="border-t" style={{ borderColor: PAPER_55 }}>
+    <section id="features" className="relative z-10 bg-[var(--acc-artifact)]">
       <div className="mx-auto max-w-7xl px-6 py-16 sm:py-24">
         <p className="text-center font-mono text-[10.5px] uppercase tracking-[0.3em]" style={{ color: PAPER_75 }}>
           {t(locale, "도판 i-vi", "plates i-vi")}
@@ -684,13 +709,13 @@ function DistillationAct() {
         </div>
 
         <div className="flex min-h-0 flex-1 flex-col justify-center">
-          <RainBand phase={0} height="12vh" flakes={30} />
+          <RainBand phase={0} height="12vh" flakes={96} />
           <FilterLine label="critic" />
-          <RainBand phase={1} height="9vh" converge={0.42} flakes={18} />
+          <RainBand phase={1} height="9vh" converge={0.42} flakes={56} />
           <FilterLine label="petri gate" />
-          <RainBand phase={2} height="7vh" converge={0.78} flakes={10} />
+          <RainBand phase={2} height="7vh" converge={0.78} flakes={30} />
           <FilterLine label="held-out" />
-          <RainBand phase={1} height="5vh" converge={0.92} flakes={6} />
+          <RainBand phase={1} height="5vh" converge={0.92} flakes={16} />
         </div>
 
         <div className="flex flex-col items-center pb-8">
@@ -818,8 +843,7 @@ export default function GeodePortfolioPage() {
       >
         <GeodeNav items={navItems} light />
         <HeroField />
-        <RunRow />
-        <FeaturesGrid />
+        <RunThenPlates />
         <DistillationAct />
       </main>
     </LocaleProvider>

@@ -63,8 +63,10 @@ functional change.
   grounded **Reflect** node (`core/agent/loop/_reflection.py` — per-round
   belief update of hypotheses/confidence), and the subscriptions plate drops
   Anthropic (OpenAI/Codex · GLM). The terminal mock regains its
-  macOS traffic lights. The distillation and the laboratory are one
-  continuous sticky act: token snowfall (per-flake deterministic speed,
+  macOS traffic lights. "Three ways in" pins on the rose field and recedes
+  backward (scale + fade, synced to the plates' approach) as plates i-vi
+  slide over it. The distillation and the laboratory are one
+  continuous sticky act: token snowfall (198 flakes with per-flake deterministic speed,
   size, opacity, and lateral sway — organic drift, not marching columns)
   converges through dissolving-gradient thresholds and fills the full-bleed 24vw wordmark (clip
   extended past the line box so pixel-glyph caps fill too) over the honest
