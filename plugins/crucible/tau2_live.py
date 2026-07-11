@@ -335,6 +335,30 @@ def _relative(path: Path, root: Path) -> str:
     return path.resolve().relative_to(root.resolve()).as_posix()
 
 
+def _train_evaluation_response(
+    request: Mapping[str, Any],
+    candidate: Mapping[str, Any],
+    *,
+    output_dir: Path,
+    baseline_raw: Path,
+    candidate_raw: Path,
+    feedback: Mapping[str, Any] | None,
+) -> dict[str, Any]:
+    payload: dict[str, Any] = {
+        "schema": "crucible.train-evaluation.v3",
+        "attempt_id": request["attempt_id"],
+        "request_id": request["request_id"],
+        "proposal_id": candidate["proposal_id"],
+        "baseline": _relative(output_dir / "baseline.evidence.json", output_dir),
+        "candidate": _relative(output_dir / "candidate.evidence.json", output_dir),
+        "baseline_raw": _relative(baseline_raw, output_dir),
+        "candidate_raw": _relative(candidate_raw, output_dir),
+    }
+    if feedback is not None:
+        payload["feedback"] = dict(feedback)
+    return payload
+
+
 @contextmanager
 def _paired_checkouts(
     repository: Path,
@@ -457,7 +481,6 @@ def run_command_evaluator() -> int:
     harness_root = Path(os.environ["CRUCIBLE_TAU2_HARNESS_ROOT"]).resolve()
     candidate_checkout = Path.cwd().resolve()
     output_dir = response_path.parent.resolve()
-    attempt_root = output_dir.parent.resolve()
     baseline_checkout = Path(os.environ["TMPDIR"]).resolve() / "baseline-checkout"
     _git(
         candidate_checkout,
@@ -510,19 +533,17 @@ def run_command_evaluator() -> int:
     feedback = (
         FailureFeedback(("workflow_completion",), failed_ids).to_dict() if failed_ids else None
     )
-    payload: dict[str, Any] = {
-        "schema": "crucible.train-evaluation.v3",
-        "attempt_id": request["attempt_id"],
-        "request_id": request["request_id"],
-        "proposal_id": candidate_row["proposal_id"],
-        "baseline": _relative(output_dir / "baseline.evidence.json", attempt_root),
-        "candidate": _relative(output_dir / "candidate.evidence.json", attempt_root),
-        "baseline_raw": _relative(baseline_raw, attempt_root),
-        "candidate_raw": _relative(candidate_raw, attempt_root),
-    }
-    if feedback is not None:
-        payload["feedback"] = feedback
-    write_exclusive_json(response_path, payload)
+    write_exclusive_json(
+        response_path,
+        _train_evaluation_response(
+            request,
+            candidate_row,
+            output_dir=output_dir,
+            baseline_raw=baseline_raw,
+            candidate_raw=candidate_raw,
+            feedback=feedback,
+        ),
+    )
     return 0
 
 

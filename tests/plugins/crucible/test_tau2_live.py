@@ -3,7 +3,12 @@ import json
 from pathlib import Path
 
 import pytest
-from plugins.crucible.contract import ContractError, ExperimentContract, TaskUnit, task_pack_sha256
+from plugins.crucible.contract import (
+    ContractError,
+    ExperimentContract,
+    TaskUnit,
+    task_pack_sha256,
+)
 from plugins.crucible.producers.codex_kg import (
     _DEFAULT_GRAPH_PATH,
     ProducerError,
@@ -11,7 +16,11 @@ from plugins.crucible.producers.codex_kg import (
     _validate_policy_grammar,
     knowledge_context,
 )
-from plugins.crucible.tau2_live import tau2_command, tau2_trace_checks
+from plugins.crucible.tau2_live import (
+    _train_evaluation_response,
+    tau2_command,
+    tau2_trace_checks,
+)
 
 TASKS = (
     TaskUnit("task-1", "1" * 64, "a" * 64),
@@ -32,6 +41,30 @@ def test_command_evaluator_entrypoint_uses_the_frozen_uv_runtime() -> None:
         .splitlines()[0]
         == "#!/usr/bin/env -S uv run --frozen --no-dev python"
     )
+
+
+def test_command_evaluator_emits_paths_relative_to_response_directory(
+    tmp_path: Path,
+) -> None:
+    evaluation_dir = tmp_path / "attempt" / "evaluation"
+    response = _train_evaluation_response(
+        {"attempt_id": "0001-fixture", "request_id": "request-id"},
+        {"proposal_id": "proposal-id"},
+        output_dir=evaluation_dir,
+        baseline_raw=evaluation_dir / "baseline.raw.json",
+        candidate_raw=evaluation_dir / "candidate.raw.json",
+        feedback=None,
+    )
+
+    assert {
+        field: response[field]
+        for field in ("baseline", "candidate", "baseline_raw", "candidate_raw")
+    } == {
+        "baseline": "baseline.evidence.json",
+        "candidate": "candidate.evidence.json",
+        "baseline_raw": "baseline.raw.json",
+        "candidate_raw": "candidate.raw.json",
+    }
 
 
 def _contract() -> ExperimentContract:

@@ -43,7 +43,7 @@
       "name": "Paired tau2 evaluator",
       "summary": "Derives frozen runner arguments, isolates both arms, and returns normalized evidence plus closed feedback.",
       "tags": ["crucible", "evaluator", "paired"],
-      "contentSha256": "f35e55d43589601d62a92a407ef0219bf5a3394dbeabda6b17cc2f1fa0a286ed"
+      "contentSha256": "5b206b461b735dc703c4833d9688294a38c3550440dc5592ed2f880ec598edb1"
     },
     {
       "id": "file:plugins/crucible/supervisor.py",

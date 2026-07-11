@@ -145,6 +145,17 @@ functional change.
   the KO register (`defaultLocale="ko"`, matching the site-wide
   `<html lang="ko">`); the full KO copy deck was already wired through
   `t(locale, ko, en)` pairs, and English stays one toggle away.
+
+### Fixed
+
+- **Crucible train evaluators now name evidence relative to their response.**
+  The live tau2 evaluator previously emitted attempt-relative paths while the
+  supervisor's bounded artifact reader correctly resolved response-relative
+  paths. That duplicated the evaluation-directory segment after a completed
+  paired run and mislabeled valid score evidence as `INVALID`. Train responses
+  now follow the documented local-name contract, with a response-contract
+  regression test covering evidence and raw artifacts.
+
 ## [0.99.296] - 2026-07-11
 
 ### Changed

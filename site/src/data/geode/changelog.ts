@@ -24,7 +24,7 @@ export const CHANGELOG: ChangelogEntry[] = [
   {
     "version": "0.99.297",
     "date": "2026-07-11",
-    "body": "### Changed\n\n- **Portfolio defaults to Korean (operator-directed).** The page opens in\n  the KO register (`defaultLocale=\"ko\"`, matching the site-wide\n  `<html lang=\"ko\">`); the full KO copy deck was already wired through\n  `t(locale, ko, en)` pairs, and English stays one toggle away."
+    "body": "### Changed\n\n- **Portfolio defaults to Korean (operator-directed).** The page opens in\n  the KO register (`defaultLocale=\"ko\"`, matching the site-wide\n  `<html lang=\"ko\">`); the full KO copy deck was already wired through\n  `t(locale, ko, en)` pairs, and English stays one toggle away.\n\n### Fixed\n\n- **Crucible train evaluators now name evidence relative to their response.**\n  The live tau2 evaluator previously emitted attempt-relative paths while the\n  supervisor's bounded artifact reader correctly resolved response-relative\n  paths. That duplicated the evaluation-directory segment after a completed\n  paired run and mislabeled valid score evidence as `INVALID`. Train responses\n  now follow the documented local-name contract, with a response-contract\n  regression test covering evidence and raw artifacts."
   },
   {
     "version": "0.99.296",
