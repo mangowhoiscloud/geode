@@ -43,6 +43,19 @@ export default function Page() {
               <code>geode audit-seeds resume</code>이 체크포인트에서 이어
               갑니다.
             </p>
+            <figure>
+              <img
+                src="/geode/diagrams/seed-pipeline-run.svg"
+                alt="Seed pipeline 런 흐름. geode audit-seeds가 picker, cost preview와 confirm, pre-flight를 지나 9-역할 파이프라인으로 들어가고, blend 생존자 선택을 거쳐 cycle-input 풀과 번들로 나뉘며, meta-review priors가 다음 런의 picker로 되돌아간다"
+              />
+              <figcaption>
+                한 런의 진행. 좌측 사다리(picker, cost preview, pre-flight)를
+                지나 9-역할 파이프라인이 돌고, 생존자는 blend 선택을 거쳐
+                cycle-input 풀과 공개 번들로 갈라집니다. held-out 벤치는 점선
+                아래에서 변이되지 않고, meta-review의 prior만 다음 런의
+                picker로 돌아갑니다.
+              </figcaption>
+            </figure>
 
             <h2>생존자 선택: blend가 기본</h2>
             <p>
@@ -131,6 +144,20 @@ confidence = pilot stderr 기반 가중치      # 노이즈가 크면 자동 감
               preview, pre-flight, confirm, then the pipeline;{" "}
               <code>geode audit-seeds resume</code> continues from checkpoints.
             </p>
+            <figure>
+              <img
+                src="/geode/diagrams/seed-pipeline-run.svg"
+                alt="Seed pipeline run flow: geode audit-seeds passes picker, cost preview and confirm, pre-flight, enters the nine-role pipeline, then blend survivor selection splits into the cycle-input pool and the published bundle, with meta-review priors looping back to the picker"
+              />
+              <figcaption>
+                One run, end to end. The left ladder (picker, cost preview,
+                pre-flight) leads into the nine-role pipeline; survivors pass
+                the blend selection and split into the cycle-input pool and
+                the published bundle. The held-out bench stays below the
+                dashed line, never mutated; only meta-review priors loop back
+                to the next run&apos;s picker.
+              </figcaption>
+            </figure>
 
             <h2>Survivor selection: blend by default</h2>
             <p>

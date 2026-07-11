@@ -2,7 +2,7 @@
 
 > GEODE is a self-evolving autonomous execution agent: an inner agentic loop runs tasks (research, analysis, automation, scheduling) and an outer self-improving loop (Petri audit -> fitness gate) tunes the system that runs them.
 
-Version v0.99.300. Last sync 2026-07-10. Full content of every docs page, one file (llms-full.txt convention). Per-page index: /llms.txt.
+Version v0.99.301. Last sync 2026-07-11. Full content of every docs page, one file (llms-full.txt convention). Per-page index: /llms.txt.
 
 ## Overview . 개요
 
@@ -1365,6 +1365,10 @@ Markdown: https://mangowhoiscloud.github.io/geode/docs/capabilities/seed-pipelin
 | `bundle_sync.py` | 완료 런을 `docs/self-improving/petri-bundle/seeds/<run_id>/`로 동기화 |
 
 `geode audit-seeds generate`는 picker → cost preview → pre-flight → confirm → pipeline 순서로 진행하고, `geode audit-seeds resume`이 체크포인트에서 이어 갑니다.
+
+![Seed pipeline 런 흐름. geode audit-seeds가 picker, cost preview와 confirm, pre-flight를 지나 9-역할 파이프라인으로 들어가고, blend 생존자 선택을 거쳐 cycle-input 풀과 번들로 나뉘며, meta-review priors가 다음 런의 picker로 되돌아간다](https://mangowhoiscloud.github.io/geode/diagrams/seed-pipeline-run.svg)
+
+한 런의 진행. 좌측 사다리(picker, cost preview, pre-flight)를 지나 9-역할 파이프라인이 돌고, 생존자는 blend 선택을 거쳐 cycle-input 풀과 공개 번들로 갈라집니다. held-out 벤치는 점선 아래에서 변이되지 않고, meta-review의 prior만 다음 런의 picker로 돌아갑니다.
 
 ## 생존자 선택: blend가 기본
 
