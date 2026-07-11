@@ -97,17 +97,6 @@ def _add_tau2_curate_pack(subparsers: Any) -> None:
     parser.add_argument("--maximum-per-persona", type=int, required=True)
     parser.add_argument("--trials-per-task", type=int, default=1)
     parser.add_argument("--exclude-pack", type=Path, action="append", default=[])
-    parser.add_argument(
-        "--priority-task-id",
-        action="append",
-        default=[],
-        help="front-load this task in the frozen execution order (repeatable)",
-    )
-    parser.add_argument(
-        "--priority-from-evidence",
-        type=Path,
-        help="front-load every task whose trials all scored zero in this evidence envelope",
-    )
     parser.add_argument("--selection-output", type=Path, required=True)
     parser.add_argument("--pack-output", type=Path, required=True)
 
@@ -278,25 +267,7 @@ def _tau2_usage(args: argparse.Namespace) -> ResourceUsage:
     return usage
 
 
-def _failed_task_ids_from_evidence(path: Path) -> tuple[str, ...]:
-    """Task IDs whose every trial scored the metric floor in one arm's evidence."""
-    envelope = load_evidence(path)
-    rewards: dict[str, list[float]] = {}
-    for row in envelope.rows:
-        value = row.metric("reward")
-        if value is not None:
-            rewards.setdefault(row.task_id, []).append(value)
-    return tuple(
-        task_id
-        for task_id, values in rewards.items()
-        if values and all(value <= 0 for value in values)
-    )
-
-
 def _tau2_curate_pack(args: argparse.Namespace) -> dict[str, Any]:
-    priority: list[str] = list(args.priority_task_id)
-    if args.priority_from_evidence is not None:
-        priority.extend(_failed_task_ids_from_evidence(args.priority_from_evidence))
     return curate_tau2_pack(
         tasks_path=args.tasks,
         split_path=args.task_split,
@@ -312,7 +283,6 @@ def _tau2_curate_pack(args: argparse.Namespace) -> dict[str, Any]:
         exclude_packs=tuple(args.exclude_pack),
         selection_output=args.selection_output,
         pack_output=args.pack_output,
-        priority_task_ids=tuple(priority),
     )
 
 
