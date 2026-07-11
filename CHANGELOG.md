@@ -47,6 +47,22 @@ functional change.
 
 ## [Unreleased]
 
+### Added
+
+- **Crucible run economics: row cache, priority ordering, window preflight.**
+  A hash-bound row cache salvages finalized tau2 simulations across
+  relaunches: rows are stored with their full measurement identity (revision,
+  evaluator/harness/task-pack/assay hashes) plus a payload hash, interrupted
+  runs donate completed rows at harvest, full-cache arms synthesize results
+  without spending conversations, and partial hits re-run only unfinished
+  tasks — implementing the checkpoint sidecar the kernel's resume rule
+  required. Pack curation accepts preregistered `priority_task_ids`
+  (`--priority-from-evidence` derives them from a baseline envelope) so the
+  improvement zone runs before the concordant tail. A window preflight script
+  gates launches on measured campaign costs versus remaining quota. Motivated
+  by r23: a quota death at pair 7/12 burned 75% of a run's compute for zero
+  verdict bits.
+
 ### Changed
 
 - **Crucible tau2 runs now use an external half-duplex turn supervisor.**

@@ -158,3 +158,67 @@ def test_curator_errors_do_not_disclose_selected_task_ids(tmp_path: Path) -> Non
         _curate(tmp_path, tasks_path, split_path, take=1)
 
     assert secret_id not in str(captured.value)
+
+
+def test_priority_task_ids_front_load_the_frozen_execution_order(tmp_path: Path) -> None:
+    tasks = [
+        _task(0, intent="ADD_LINE", persona="EASY"),
+        _task(1, intent="MOVE_PLAN", persona="HARD"),
+        _task(2, intent="CANCEL", persona="EASY"),
+        _task(3, intent="UPGRADE", persona="HARD"),
+        _task(4, intent="SUSPEND", persona="MEDIUM"),
+        _task(5, intent="RESUME", persona="MEDIUM"),
+    ]
+    tasks_path, split_path = _write_sources(tmp_path, tasks)
+    plain_dir = tmp_path / "plain"
+    plain_dir.mkdir()
+    curate_tau2_pack(
+        tasks_path=tasks_path,
+        split_path=split_path,
+        split_name="base",
+        domain="telecom",
+        purpose="train",
+        salt="sealed-salt-v1",
+        fault_tokens=3,
+        take=4,
+        maximum_per_intent=2,
+        maximum_per_persona=2,
+        trials_per_task=1,
+        exclude_packs=(),
+        selection_output=plain_dir / "selection.json",
+        pack_output=plain_dir / "pack.json",
+    )
+    plain_pack = json.loads((plain_dir / "pack.json").read_text(encoding="utf-8"))
+    plain_order = [task["task_id"] for task in plain_pack["tasks"]]
+    # The prior champion's failure sits at the tail of the upstream order —
+    # exactly the r23 shape where quota death truncated the improvement zone.
+    failure_id = plain_order[-1]
+
+    priority_dir = tmp_path / "priority"
+    priority_dir.mkdir()
+    curate_tau2_pack(
+        tasks_path=tasks_path,
+        split_path=split_path,
+        split_name="base",
+        domain="telecom",
+        purpose="train",
+        salt="sealed-salt-v1",
+        fault_tokens=3,
+        take=4,
+        maximum_per_intent=2,
+        maximum_per_persona=2,
+        trials_per_task=1,
+        exclude_packs=(),
+        selection_output=priority_dir / "selection.json",
+        pack_output=priority_dir / "pack.json",
+        priority_task_ids=(failure_id, "task-never-selected"),
+    )
+    priority_pack = json.loads((priority_dir / "pack.json").read_text(encoding="utf-8"))
+    priority_order = [task["task_id"] for task in priority_pack["tasks"]]
+    assert priority_order[0] == failure_id
+    assert sorted(priority_order) == sorted(plain_order)  # selection unchanged, order moved
+    selection = json.loads((priority_dir / "selection.json").read_text(encoding="utf-8"))
+    assert selection["rule"]["execution_order"] == "priority_task_ids_first+upstream_tasks_file"
+    assert selection["rule"]["front_loaded_task_ids"] == [failure_id]
+    # The reorder changes the frozen pack hash: ordering is preregistered identity.
+    assert priority_pack["task_pack_sha256"] != plain_pack["task_pack_sha256"]

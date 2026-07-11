@@ -133,8 +133,18 @@ def curate_tau2_pack(
     exclude_packs: Sequence[Path],
     selection_output: Path,
     pack_output: Path,
+    priority_task_ids: Sequence[str] = (),
 ) -> dict[str, Any]:
-    """Select a frozen pack while returning only counts and hashes to the caller."""
+    """Select a frozen pack while returning only counts and hashes to the caller.
+
+    ``priority_task_ids`` front-loads the listed tasks (typically the prior
+    champion's failures) in the frozen execution order. A quota death then
+    truncates the low-information concordant tail instead of the improvement
+    zone — the r23 incident burned 75% of a run's compute measuring pairs the
+    baseline already passed. Ordering is preregistered in the selection rule
+    and cannot bias the verdict: scoring still requires exact full coverage.
+    Selection itself is unchanged; only execution order moves.
+    """
 
     for number, field in (
         (fault_tokens, "fault_tokens"),
@@ -230,7 +240,14 @@ def curate_tau2_pack(
             f"selection constraints admit {len(selected)} tasks, fewer than requested take={take}"
         )
 
-    selected.sort(key=lambda item: item["source_index"])
+    priority = tuple(
+        dict.fromkeys(str(item).strip() for item in priority_task_ids if str(item).strip())
+    )
+    priority_set = set(priority)
+    selected.sort(key=lambda item: (item["unit"].task_id not in priority_set, item["source_index"]))
+    front_loaded = tuple(
+        row["unit"].task_id for row in selected if row["unit"].task_id in priority_set
+    )
     selected_units = tuple(row["unit"] for row in selected)
     pack_hash = task_pack_sha256(selected_units, trials_per_task)
     pack = {
@@ -253,7 +270,13 @@ def curate_tau2_pack(
             "maximum_per_intent": maximum_per_intent,
             "maximum_per_persona": maximum_per_persona,
             "take": take,
-            "execution_order": "upstream_tasks_file",
+            "execution_order": (
+                "priority_task_ids_first+upstream_tasks_file"
+                if front_loaded
+                else "upstream_tasks_file"
+            ),
+            "priority_task_ids": list(priority),
+            "front_loaded_task_ids": list(front_loaded),
         },
         "eligible_tasks": len(eligible),
         "eligible_families": eligible_family_count,
