@@ -239,6 +239,7 @@ class CodexOAuthAdapter:
                     f"model={req.model} stop_reason={result.stop_reason} "
                     f"dump={dump_path or '<dump failed>'}",
                     mark_recovered=lambda: _mark_empty_text_recovered(dump_path),
+                    mark_actionable=lambda: _mark_empty_text_actionable(dump_path),
                 )
         return result
 
@@ -529,6 +530,16 @@ def _mark_empty_text_recovered(dump_path: str | None) -> None:
     from pathlib import Path
 
     Path(f"{dump_path}.recovered").touch(exist_ok=False)
+
+
+def _mark_empty_text_actionable(dump_path: str | None) -> None:
+    """Attest that an earlier tool action made the empty continuation usable."""
+
+    if dump_path is None:
+        raise RuntimeError("cannot attest actionable empty output without its diagnostic dump")
+    from pathlib import Path
+
+    Path(f"{dump_path}.actionable").touch(exist_ok=False)
 
 
 def _log_codex_input_shape(resp_input: Any, *, cap: int = 30) -> None:

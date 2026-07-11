@@ -852,6 +852,32 @@ while three consecutive empty responses leave every dump unmarked and keep the
 arm invalid. This is a bounded transport recovery, not a task replay or a score
 salvage path.
 
+Campaign r13 tested that three-attempt boundary against the same replayed
+candidate. The baseline was route-clean after one marked recovery and completed
+as `[1, 1, 1, 1, 1, 0]`. The candidate later encountered two separate
+three-empty clusters, in its first and sixth rows. Its other observed rows were
+not admitted as performance feedback: the normalized candidate envelope is
+`invalid/route_contamination`, the ordinary verdict is
+`INVALID/infrastructure_contamination` with zero paired rows, and the search
+head remained `63f004c55`. The run used 242 observable calls, 2,898,399 tokens,
+and $3.391357; the campaign lasted 3,418.0 seconds. Its evidence IDs are
+`541d1e7390eb` and `a10758299280`, and verdict ID `d43494bb14cb` binds the
+scoreless outcome. The preregistered sealed pack was retired unopened.
+
+The r13 traces also exposed why increasing the retry count again would be the
+wrong abstraction. Each persistent empty occurred in the evaluator-owned user
+simulator after the same `AgenticLoop.arun()` had already emitted usable tool
+actions. The empty continuation raised out of the loop and discarded those
+actions, even though tau2 accepts a tool-call turn without visible text. The
+runtime now has a default-off actionable-partial boundary. Only the frozen
+`crucible_user` opts in: after the bounded identical retries are exhausted, a
+turn with at least one successful tool action returns those actions with
+`termination_reason=actionable_partial`, and every empty diagnostic receives an
+append-only `.actionable` marker. Empty output before any usable action remains
+a hard infrastructure failure, the measured assistant agent retains the strict
+default, and marker failure is fatal. This preserves model-emitted work; it
+does not fabricate text, replay a task, or admit an invalid score.
+
 The strongest honest claims are:
 
 - the frozen external tau2 baseline identified concrete retail wrong-write and

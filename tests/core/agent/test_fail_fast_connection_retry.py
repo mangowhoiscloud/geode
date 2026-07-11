@@ -38,10 +38,10 @@ def test_fail_fast_retries_one_read_timeout_with_the_identical_request(
     request = object()
     expected = object()
     adapter = _Adapter([httpx.ReadTimeout("stream stalled"), expected])
-    retried: list[Exception] = []
+    retried: list[tuple[Exception, int, int]] = []
 
-    async def record_retry(exc: Exception) -> None:
-        retried.append(exc)
+    async def record_retry(exc: Exception, attempt: int, max_attempts: int) -> None:
+        retried.append((exc, attempt, max_attempts))
 
     result = asyncio.run(
         _acomplete_with_fail_fast_pre_execution_retry(
@@ -53,7 +53,9 @@ def test_fail_fast_retries_one_read_timeout_with_the_identical_request(
 
     assert result is expected
     assert adapter.requests == [request, request]
-    assert [type(exc).__name__ for exc in retried] == ["ReadTimeout"]
+    assert [(type(exc).__name__, attempt, maximum) for exc, attempt, maximum in retried] == [
+        ("ReadTimeout", 2, 2)
+    ]
 
 
 def test_fail_fast_retries_one_empty_model_output_with_the_identical_request(
@@ -89,6 +91,7 @@ def test_fail_fast_empty_output_recovers_after_two_identical_retries(
     request = object()
     expected = object()
     recovered: list[str] = []
+    retries: list[tuple[int, int]] = []
     adapter = _Adapter(
         [
             EmptyModelOutputError(
@@ -103,11 +106,21 @@ def test_fail_fast_empty_output_recovers_after_two_identical_retries(
         ]
     )
 
-    result = asyncio.run(_acomplete_with_fail_fast_pre_execution_retry(adapter, request))
+    async def record_retry(_exc: Exception, attempt: int, max_attempts: int) -> None:
+        retries.append((attempt, max_attempts))
+
+    result = asyncio.run(
+        _acomplete_with_fail_fast_pre_execution_retry(
+            adapter,
+            request,
+            on_retry=record_retry,
+        )
+    )
 
     assert result is expected
     assert adapter.requests == [request, request, request]
     assert recovered == ["first", "second"]
+    assert retries == [(2, 3), (3, 3)]
 
 
 def test_fail_fast_connection_retry_is_bounded(
@@ -134,22 +147,32 @@ def test_fail_fast_empty_output_retry_is_bounded(
     monkeypatch.setenv("GEODE_LLM_FAIL_FAST_ON_ADAPTER_ERROR", "true")
     _no_delay(monkeypatch)
     recovered: list[bool] = []
+    actionable: list[str] = []
     adapter = _Adapter(
         [
             EmptyModelOutputError(
                 "first empty response",
                 mark_recovered=lambda: recovered.append(True),
+                mark_actionable=lambda: actionable.append("first"),
             ),
-            EmptyModelOutputError("second empty response"),
-            EmptyModelOutputError("third empty response"),
+            EmptyModelOutputError(
+                "second empty response",
+                mark_actionable=lambda: actionable.append("second"),
+            ),
+            EmptyModelOutputError(
+                "third empty response",
+                mark_actionable=lambda: actionable.append("third"),
+            ),
         ]
     )
 
-    with pytest.raises(EmptyModelOutputError, match="third empty response"):
+    with pytest.raises(EmptyModelOutputError, match="third empty response") as error:
         asyncio.run(_acomplete_with_fail_fast_pre_execution_retry(adapter, object()))
 
     assert len(adapter.requests) == 3
     assert recovered == []
+    error.value.mark_actionable()
+    assert actionable == ["first", "second", "third"]
 
 
 def test_fail_fast_empty_output_recovery_attestation_failure_is_fatal(
@@ -175,6 +198,13 @@ def test_fail_fast_empty_output_recovery_attestation_failure_is_fatal(
         asyncio.run(_acomplete_with_fail_fast_pre_execution_retry(adapter, object()))
 
     assert len(adapter.requests) == 2
+
+
+def test_empty_output_cannot_be_actionable_without_attestation() -> None:
+    error = EmptyModelOutputError("unattested empty")
+
+    with pytest.raises(RuntimeError, match="without a marker"):
+        error.mark_actionable()
 
 
 @pytest.mark.parametrize(

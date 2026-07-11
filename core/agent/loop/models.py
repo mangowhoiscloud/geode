@@ -116,6 +116,8 @@ class AgenticResult:
     # | "user_clarification_needed" — overthinking detected (consecutive
     #   high-token text-only rounds with no tool use). Loop stops and asks
     #   the user to narrow the request.
+    # | "actionable_partial" — an opted-in evaluator caller preserves tool
+    #   actions from completed rounds after an empty continuation.
     termination_reason: str = "unknown"
     summary: str = ""  # Tier 1 compact action summary (auto-generated)
     reasoning_metrics: dict[str, object] | None = None

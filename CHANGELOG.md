@@ -94,6 +94,15 @@ functional change.
   granted registry tools now replace a same-named global declarative schema, so
   an assay handler cannot receive arguments from GEODE's unrelated tool with
   the same name.
+- **Evaluator-owned tau2 users preserve actionable work across an empty
+  continuation.** The default AgenticLoop contract still fails closed after
+  three empty subscription responses. The frozen `crucible_user` alone can
+  return successful tool actions emitted earlier in that same turn, using the
+  audited `actionable_partial` termination and an append-only `.actionable`
+  marker for every exhausted response. Empty-before-action and marker failure
+  remain infrastructure errors, while the measured assistant keeps the strict
+  default. Retry hooks now report the actual attempt/max pair, and the touched
+  model-facing backpressure clause uses `CANNOT` grammar consistently.
 - **Crucible measurement checkout is now the executable boundary.** Candidate
   generation still runs in a no-remote disposable repository, but the command
   evaluator now runs only in the fresh checkout rematerialized from authority

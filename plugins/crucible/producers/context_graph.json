@@ -17,17 +17,17 @@
       "id": "file:plugins/benchmark_harness/tau2_geode_agent.py",
       "filePath": "plugins/benchmark_harness/tau2_geode_agent.py",
       "name": "Tau2 GEODE adapter",
-      "summary": "Builds the AgenticLoop, loads the policy, and projects complete tool-call batches to the tau2 orchestrator.",
+      "summary": "Builds the AgenticLoop, loads the policy, projects tool-call batches, and opts only the evaluator-owned user into actionable-partial recovery.",
       "tags": ["adapter", "benchmark", "tool-projection"],
-      "contentSha256": "863be0e717e66a6351d5f0010691fe039eb0ec926d7de47d7df2a4d510a318dc"
+      "contentSha256": "92568369a8f8ead730775a304348ec8b9ce2f8a201db1542dfe5c0022e20af44"
     },
     {
       "id": "file:core/agent/loop/agent_loop.py",
       "filePath": "core/agent/loop/agent_loop.py",
       "name": "AgenticLoop",
-      "summary": "Runs model and tool rounds until termination, with bounded pre-execution recovery for strict-route transport and empty-output failures.",
+      "summary": "Runs model and tool rounds until termination, with bounded strict-route retries and default-off preservation of prior tool work after an empty continuation.",
       "tags": ["runtime", "while-tool-use"],
-      "contentSha256": "4c2598048925dcd3badc5e3e950e415b7aba2f7cd313ae12df5327373e42ce72"
+      "contentSha256": "70c26575a608e7439fffef0eb189a478c546d191ff505ed2e91b31ded5777ceb"
     },
     {
       "id": "file:core/agent/tool_executor/processor.py",

@@ -85,7 +85,7 @@ async def _acomplete_with_fail_fast_pre_execution_retry(
     adapter: Any,
     request: Any,
     *,
-    on_retry: Callable[[Exception], Awaitable[None]] | None = None,
+    on_retry: Callable[[Exception, int, int], Awaitable[None]] | None = None,
 ) -> Any:
     """Retry bounded pre-execution failures without reopening completed tool work.
 
@@ -116,13 +116,18 @@ async def _acomplete_with_fail_fast_pre_execution_retry(
                     _FAIL_FAST_EMPTY_OUTPUT_MAX_ATTEMPTS,
                 )
                 if on_retry is not None:
-                    await on_retry(empty_errors[-1])
+                    await on_retry(
+                        empty_errors[-1],
+                        attempt,
+                        _FAIL_FAST_EMPTY_OUTPUT_MAX_ATTEMPTS,
+                    )
                 await asyncio.sleep(_FAIL_FAST_RETRY_DELAY_S * (attempt - 1))
                 try:
                     result = await adapter.acomplete(request)
                 except EmptyModelOutputError as retry_error:
                     empty_errors.append(retry_error)
                     if attempt == _FAIL_FAST_EMPTY_OUTPUT_MAX_ATTEMPTS:
+                        retry_error.include_actionable_attempts(empty_errors[:-1])
                         raise
                     continue
                 for empty_error in empty_errors:
@@ -136,7 +141,7 @@ async def _acomplete_with_fail_fast_pre_execution_retry(
             type(exc).__name__,
         )
         if on_retry is not None:
-            await on_retry(exc)
+            await on_retry(exc, 2, 2)
         await asyncio.sleep(_FAIL_FAST_RETRY_DELAY_S)
         return await adapter.acomplete(request)
 
@@ -360,6 +365,7 @@ class AgenticLoop:
         source: str = "",
         session_id: str = "",
         response_schema: dict[str, Any] | None = None,
+        allow_actionable_partial_on_empty: bool = False,
     ) -> None:
         self.context = context
         self.executor = tool_executor
@@ -371,6 +377,10 @@ class AgenticLoop:
         # sub-agents off their own role contract.
         self._system_prompt_override = system_prompt_override
         self._quiet = quiet  # suppress spinner (sub-agent, headless)
+        # Evaluator-owned simulators can preserve tool actions from a completed
+        # round when the following model continuation is irrecoverably empty.
+        # Ordinary agents retain the strict exception boundary by default.
+        self._allow_actionable_partial_on_empty = allow_actionable_partial_on_empty
         self.max_rounds = max_rounds
         self.max_tokens = max_tokens
         self._thinking_budget = thinking_budget
@@ -1362,6 +1372,43 @@ class AgenticLoop:
             termination_reason="model_action_required",
         )
 
+    async def _afinalize_actionable_partial_on_empty(
+        self,
+        exc: EmptyModelOutputError,
+        *,
+        messages: list[dict[str, Any]],
+        user_input: str,
+        round_idx: int,
+    ) -> AgenticResult | None:
+        """Preserve prior tool work when an opted-in continuation is empty."""
+
+        usable_tool_actions = any(
+            not isinstance(entry.get("result"), dict) or not entry["result"].get("error")
+            for entry in self._tool_processor.tool_log
+        )
+        if not self._allow_actionable_partial_on_empty or not usable_tool_actions:
+            return None
+        # The current continuation is empty, but an earlier round in this
+        # same turn already emitted executable tool work. Preserve that work
+        # and attest every exhausted empty attempt. Empty-before-action stays
+        # a hard infrastructure failure.
+        exc.mark_actionable()
+        log.warning(
+            "AgenticLoop: finalized actionable partial turn after empty "
+            "continuation (rounds=%d tools=%d)",
+            round_idx,
+            len(self._tool_processor.tool_log),
+        )
+        self._op_logger.finalize()
+        self._sync_messages_to_context(messages)
+        result = AgenticResult(
+            text="",
+            tool_calls=list(self._tool_processor.tool_log),
+            rounds=round_idx,
+            termination_reason="actionable_partial",
+        )
+        return await self._afinalize_and_return(result, user_input, round_idx)
+
     async def _finalize_context_exhausted(
         self,
         user_input: str,
@@ -1617,6 +1664,16 @@ class AgenticLoop:
                 if isinstance(_llm_outcome, AgenticResult):
                     return _llm_outcome
                 response = _llm_outcome
+            except EmptyModelOutputError as exc:
+                partial = await self._afinalize_actionable_partial_on_empty(
+                    exc,
+                    messages=messages,
+                    user_input=user_input,
+                    round_idx=round_idx,
+                )
+                if partial is None:
+                    raise
+                return partial
             except _ContextExhaustedError as exc:
                 _spinner.stop()
                 log.warning("Context exhausted: %s — attempting aggressive recovery", exc)
@@ -2017,7 +2074,7 @@ class AgenticLoop:
                         "Consider a different approach. "
                         "If you cannot verify the answer through tools, "
                         "tell the user what failed and what remains unverified. "
-                        "Do NOT silently answer from training data."
+                        "CANNOT silently answer from training data."
                     ),
                 }
                 tool_results.append(backpressure_hint)
@@ -2290,7 +2347,11 @@ class AgenticLoop:
             except Exception:
                 log.debug("LLM_CALL_STARTED hook trigger failed", exc_info=True)
 
-        async def _on_fail_fast_pre_execution_retry(exc: Exception) -> None:
+        async def _on_fail_fast_pre_execution_retry(
+            exc: Exception,
+            attempt: int,
+            max_attempts: int,
+        ) -> None:
             if self._hooks:
                 try:
                     await self._hooks.trigger_async(
@@ -2301,8 +2362,8 @@ class AgenticLoop:
                             "adapter": adapter_name,
                             "error_type": type(exc).__name__,
                             "delay_s": _FAIL_FAST_RETRY_DELAY_S,
-                            "attempt": 1,
-                            "max_attempts": 2,
+                            "attempt": attempt,
+                            "max_attempts": max_attempts,
                         },
                     )
                 except Exception:

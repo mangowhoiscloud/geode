@@ -21,6 +21,7 @@ from core.agent.tool_executor import (
     ToolExecutor,
 )
 from core.hooks import HookEvent, HookSystem
+from core.llm.adapters.base import EmptyModelOutputError
 from core.orchestration.isolated_execution import IsolatedRunner
 from core.tools.base import ToolContext
 from core.tools.bash_tool import BashResult, BashTool
@@ -602,6 +603,67 @@ class TestAgenticLoop:
         assert result.tool_calls[0]["tool"] == "list_subjects"
         assert result.error is None
         assert result.termination_reason == "natural"
+
+    def test_actionable_partial_preserves_prior_tool_work_after_empty_continuation(
+        self,
+        context: ConversationContext,
+        executor: ToolExecutor,
+    ) -> None:
+        loop = AgenticLoop(
+            context,
+            executor,
+            quiet=True,
+            enable_goal_decomposition=False,
+            allow_actionable_partial_on_empty=True,
+        )
+        tool_response = MagicMock()
+        tool_response.stop_reason = "tool_use"
+        tool_response.usage = MagicMock(input_tokens=100, output_tokens=50)
+        tool_block = MagicMock()
+        tool_block.type = "tool_use"
+        tool_block.name = "list_subjects"
+        tool_block.input = {}
+        tool_block.id = "toolu_partial"
+        tool_response.content = [tool_block]
+        marked: list[bool] = []
+        empty = EmptyModelOutputError(
+            "empty continuation",
+            mark_actionable=lambda: marked.append(True),
+        )
+
+        with (
+            patch.object(loop, "_call_llm", side_effect=[tool_response, empty]),
+            patch.object(loop, "_track_usage"),
+        ):
+            result = asyncio.run(loop.arun("run one tool"))
+
+        assert result.text == ""
+        assert result.error is None
+        assert result.rounds == 1
+        assert result.termination_reason == "actionable_partial"
+        assert [entry["tool"] for entry in result.tool_calls] == ["list_subjects"]
+        assert marked == [True]
+        assert context.turn_count >= 1
+
+    def test_actionable_partial_cannot_mask_empty_before_any_tool(
+        self,
+        context: ConversationContext,
+        executor: ToolExecutor,
+    ) -> None:
+        loop = AgenticLoop(
+            context,
+            executor,
+            quiet=True,
+            enable_goal_decomposition=False,
+            allow_actionable_partial_on_empty=True,
+        )
+        empty = EmptyModelOutputError("empty before action")
+
+        with (
+            patch.object(loop, "_call_llm", side_effect=empty),
+            pytest.raises(EmptyModelOutputError, match="empty before action"),
+        ):
+            asyncio.run(loop.arun("no action yet"))
 
     def test_run_max_rounds(self, context: ConversationContext, executor: ToolExecutor) -> None:
         """Test max rounds limit."""

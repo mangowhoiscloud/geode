@@ -60,15 +60,31 @@ class EmptyModelOutputError(RuntimeError):
         message: str,
         *,
         mark_recovered: Callable[[], None] | None = None,
+        mark_actionable: Callable[[], None] | None = None,
     ) -> None:
         super().__init__(message)
         self._mark_recovered = mark_recovered
+        self._mark_actionable_callbacks = [mark_actionable] if mark_actionable is not None else []
 
     def mark_recovered(self) -> None:
         """Attest that an identical retry returned usable model output."""
 
         if self._mark_recovered is not None:
             self._mark_recovered()
+
+    def include_actionable_attempts(self, prior: Sequence[EmptyModelOutputError]) -> None:
+        """Carry prior empty-attempt attestations onto the terminal error."""
+
+        callbacks = [callback for error in prior for callback in error._mark_actionable_callbacks]
+        self._mark_actionable_callbacks = callbacks + self._mark_actionable_callbacks
+
+    def mark_actionable(self) -> None:
+        """Attest that earlier tool actions made every empty attempt usable."""
+
+        if not self._mark_actionable_callbacks:
+            raise RuntimeError("cannot attest actionable empty output without a marker")
+        for callback in self._mark_actionable_callbacks:
+            callback()
 
 
 @dataclass(frozen=True)

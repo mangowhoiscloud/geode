@@ -376,6 +376,21 @@ def test_tau2_codex_empty_text_dump_backstop_accepts_recovered_retry(
     _raise_on_new_codex_empty_text_dumps(before)
 
 
+def test_tau2_codex_empty_text_dump_backstop_accepts_actionable_partial(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr("core.paths.GLOBAL_DIAGNOSTICS_DIR", tmp_path)
+    dump_dir = tmp_path / "codex-oauth-empty-text"
+    dump_dir.mkdir()
+    before = _codex_empty_text_dumps()
+    actionable = dump_dir / "2-gpt-5.5.json"
+    actionable.write_text("{}\n")
+    Path(f"{actionable}.actionable").touch()
+
+    _raise_on_new_codex_empty_text_dumps(before)
+
+
 def test_tau2_trajectory_snapshot_paths_sanitize_run_id() -> None:
     trajectory, snapshot = _trajectory_snapshot_paths(
         Path("snapshots"),

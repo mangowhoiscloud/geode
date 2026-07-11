@@ -1,15 +1,9 @@
 #!/usr/bin/env python3
 """Run tau2 with GEODE as the agent under test.
 
-This script intentionally does not patch the upstream tau2 checkout. It imports
-the harness from ``--harness-dir``, registers ``geode_agent`` and
-``geode_user`` implementations in tau2's in-process registry, and then calls
-``tau2.run.run_domain``.
-
-The resulting run still uses tau2's domain tools, world-state diff evaluator,
-and output layout. Diagnostic runs may route the user through GEODE, but a
-contract-backed comparison requires tau2's native user implementation so a
-candidate core mutation cannot change both the agent and its assay.
+The adapter leaves upstream unchanged, registers GEODE participants in tau2's
+in-process registry, and retains tau2's tools, evaluator, and output layout.
+Contract runs bind the user runtime outside the candidate mutation surface.
 """
 
 from __future__ import annotations
@@ -305,6 +299,7 @@ def _build_loop(
     time_budget_s: float,
     max_tokens: int,
     max_rounds: int,
+    allow_actionable_partial_on_empty: bool = False,
 ) -> Any:
     from core.agent.conversation import ConversationContext
     from core.agent.loop import AgenticLoop
@@ -335,6 +330,7 @@ def _build_loop(
         system_prompt_override=system_prompt,
         quiet=True,
         enable_goal_decomposition=False,
+        allow_actionable_partial_on_empty=allow_actionable_partial_on_empty,
     )
 
 
@@ -469,6 +465,8 @@ def register_geode_tau2_participants(
         return GeodeTau2Agent(tools=tools, domain_policy=domain_policy)
 
     class GeodeTau2User(HalfDuplexUser[GeodeTau2State]):
+        allow_actionable_partial_on_empty = False
+
         def __init__(
             self,
             instructions: str | None = None,
@@ -491,6 +489,7 @@ def register_geode_tau2_participants(
                 time_budget_s=user_time_budget_s,
                 max_tokens=user_max_tokens,
                 max_rounds=user_max_rounds,
+                allow_actionable_partial_on_empty=self.allow_actionable_partial_on_empty,
             )
             state = GeodeTau2State(loop=loop)
             if message_history:
@@ -542,12 +541,12 @@ def register_geode_tau2_participants(
         def set_seed(self, seed: int) -> None:
             return None
 
+    class CrucibleTau2User(GeodeTau2User):
+        allow_actionable_partial_on_empty = True
+
     registry.register_agent_factory(create_geode_agent, "geode_agent")
     registry.register_user(GeodeTau2User, "geode_user")
-    # Same frozen implementation, but contract runs use a distinct registry
-    # identity so the adapter can attest that the candidate mutation surface
-    # does not own the user runtime.
-    registry.register_user(GeodeTau2User, "crucible_user")
+    registry.register_user(CrucibleTau2User, "crucible_user")
 
 
 def _slug(value: str) -> str:
@@ -644,14 +643,16 @@ def _codex_empty_text_dumps() -> set[Path]:
     from core.paths import GLOBAL_DIAGNOSTICS_DIR
 
     dump_dir = GLOBAL_DIAGNOSTICS_DIR / "codex-oauth-empty-text"
-    if not dump_dir.exists():
-        return set()
-    return {path.resolve() for path in dump_dir.glob("*.json") if path.is_file()}
+    paths = dump_dir.glob("*.json") if dump_dir.exists() else ()
+    return {path.resolve() for path in paths if path.is_file()}
 
 
 def _raise_on_new_codex_empty_text_dumps(before: set[Path]) -> None:
-    after = _codex_empty_text_dumps()
-    new_dumps = sorted(path for path in after - before if not Path(f"{path}.recovered").is_file())
+    new_dumps = sorted(
+        path
+        for path in _codex_empty_text_dumps() - before
+        if not Path(f"{path}.recovered").is_file() and not Path(f"{path}.actionable").is_file()
+    )
     if not new_dumps:
         return
     sample = ", ".join(str(path) for path in new_dumps[:3])
