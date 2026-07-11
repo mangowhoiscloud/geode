@@ -68,11 +68,24 @@
       "summary": "Gives GPT-5.4 a bounded one-hop architecture subgraph and accepts one general policy edit.",
       "tags": ["crucible", "producer", "knowledge-graph"],
       "contentSha256": "963ad6f272517a704eebe17688a84a079bc3dc5045dae50d317d8a90234df103"
+    },
+    {
+      "id": "file:plugins/crucible/producers/replay.py",
+      "filePath": "plugins/crucible/producers/replay.py",
+      "name": "Candidate replay producer",
+      "summary": "Reapplies one preregistered candidate diff after infrastructure-only invalidation without resampling the optimizer.",
+      "tags": ["crucible", "producer", "measurement-retry"],
+      "contentSha256": "d79f69aa8c8e919a8428e91d14f44d08f9e51863e99c18e36ad2fe9ee23e05c2"
     }
   ],
   "edges": [
     {
       "source": "file:plugins/crucible/producers/codex_kg.py",
+      "target": "file:plugins/benchmark_harness/tau2_agent_policy.md",
+      "type": "writes_to"
+    },
+    {
+      "source": "file:plugins/crucible/producers/replay.py",
       "target": "file:plugins/benchmark_harness/tau2_agent_policy.md",
       "type": "writes_to"
     },

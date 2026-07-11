@@ -165,6 +165,11 @@ functional change.
   identical retry writes an append-only recovery marker beside its diagnostic;
   the tau2 backstop excludes only marked dumps, while hidden, repeated, and
   unmarked empty responses remain contamination.
+- **Infrastructure-invalid candidates can be replayed without a second search.**
+  Crucible's deterministic replay producer reapplies only the prior single-commit
+  candidate surface when its baseline blob still matches the current search head.
+  It rejects extra paths and drift, preserves CAN/CANNOT policy grammar, and
+  records zero model calls so exploration remains separate from measurement retry.
 
 ## [0.99.296] - 2026-07-11
 

@@ -356,6 +356,7 @@ def test_codex_producer_source_graph_attests_the_current_policy_path() -> None:
     assert "Tau2 agent policy" in names
     assert "Tau2 GEODE adapter" in names
     assert "AgenticLoop" in names
+    assert "Candidate replay producer" in names
 
 
 def test_codex_producer_prompt_uses_can_cannot_policy_clauses() -> None:
