@@ -2,7 +2,7 @@
  * GEODE CHANGELOG, auto-synced from the GEODE repo via `npm run sync-stats`.
  * Do not edit manually. Edit CHANGELOG.md in the GEODE repo and re-run sync.
  *
- * Last sync: 2026-07-10
+ * Last sync: 2026-07-11
  *
  * Each entry's `body` is the raw markdown between two version headings.
  * The Changelog page renders the body with a minimal markdown renderer
@@ -16,6 +16,11 @@ export type ChangelogEntry = {
 };
 
 export const CHANGELOG: ChangelogEntry[] = [
+  {
+    "version": "0.99.301",
+    "date": "2026-07-11",
+    "body": "### Added\n\n- **Seed-pipeline run diagram in the docs (operator-directed).** The\n  `capabilities/seed-pipeline` page gains a hand-drawn SVG in the docs\n  signature language (`site/public/diagrams/seed-pipeline-run.svg`): the\n  entry ladder (picker, cost preview and confirm, pre-flight), the nine-role\n  pipeline frame with per-phase checkpoints, blend survivor selection\n  splitting into the cycle-input pool and the published bundle, the\n  version-frozen held-out bench below a dashed line, and the meta-review\n  priors looping back to the next run's picker. Mounted in both locales\n  with alt text and captions."
+  },
   {
     "version": "0.99.300",
     "date": "2026-07-11",
@@ -2223,4 +2228,4 @@ export const CHANGELOG: ChangelogEntry[] = [
   }
 ];
 
-export const CHANGELOG_SYNCED_AT = "2026-07-10";
+export const CHANGELOG_SYNCED_AT = "2026-07-11";
