@@ -946,6 +946,17 @@ set `tool_choice=none` plus low effort. r16 is an incomplete diagnostic, its
 sealed pack remains unopened, and none of its rows can enter promotion. The
 default-off post-tool yield replaces that overloaded round cap.
 
+r17 then failed before campaign initialization because its configuration named
+a syntactically valid but nonexistent full commit SHA. It made no provider
+call, created no attempt or campaign ref, and did not claim the sealed pack;
+its partial state directory is preflight incident evidence, not a run. The
+supervisor had validated the commit only after writing `config.json`. Startup
+now performs the same exact-commit, clean-repository, and fresh-ref checks as a
+read-only preflight before any state directory is created, then rechecks them
+at the authority-ref transition. Successor configurations take the full SHA
+only from `git rev-parse HEAD` rather than reconstructing it from an abbreviated
+log entry.
+
 The strongest honest claims are:
 
 - the frozen external tau2 baseline identified concrete retail wrong-write and

@@ -608,6 +608,21 @@ def test_existing_state_directory_is_never_reused(tmp_path: Path) -> None:
         ).run()
 
 
+def test_unknown_initial_head_is_rejected_before_state_creation(tmp_path: Path) -> None:
+    config, _baseline = _config(tmp_path)
+    config = replace(config, initial_search_head_sha="f" * 40)
+
+    with pytest.raises(SupervisorError, match="does not resolve to a commit"):
+        PromotionSupervisor(
+            config,
+            producer=_Producer(),
+            evaluator=_Evaluator(["KEEP"]),
+        ).run()
+
+    assert not config.state_dir.exists()
+    assert not (config.repository / ".git/refs/crucible/search/fixture-campaign").exists()
+
+
 @pytest.mark.parametrize("field", ["producer_environment", "evaluator_environment"])
 def test_config_rejects_adaptive_or_sealed_environment_for_train_roles(
     tmp_path: Path,

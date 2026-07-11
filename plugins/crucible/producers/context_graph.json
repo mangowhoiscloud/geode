@@ -57,9 +57,9 @@
       "id": "file:plugins/crucible/supervisor.py",
       "filePath": "plugins/crucible/supervisor.py",
       "name": "Promotion supervisor",
-      "summary": "Owns candidate isolation, experiment contracts, evidence validation, pure verdicts, and the monotone search ref.",
+      "summary": "Preflights authority inputs before state creation, then owns candidate isolation, experiment contracts, evidence validation, pure verdicts, and the monotone search ref.",
       "tags": ["crucible", "supervisor", "promotion"],
-      "contentSha256": "8800afb6bbaba06cf4f22f901dc2d5704d8e0ebe3e82c5921ed2c5816bb211a8"
+      "contentSha256": "6498cf783ccfc9e9086d2cf92394a9e341967c1e43c0e535ac1c1030953e9ce8"
     },
     {
       "id": "file:scripts/eval/crucible_tau2_evaluator.py",

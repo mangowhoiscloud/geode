@@ -58,7 +58,9 @@ functional change.
   participant calls; arm evidence records actual subprocess elapsed time
   instead of only the longest raw row. The task-independent supervisor is
   source-attested in the producer knowledge graph and kept under its own size
-  ratchet.
+  ratchet. Campaign startup now resolves the exact initial commit and checks
+  authority-ref availability before writing any state, so an invalid revision
+  cannot leave a directory that resembles an attempted run.
 - **Crucible can now execute a real GPT-5.4 paired train campaign.** The
   candidate surface is one bounded agent-policy file; the thin Codex producer
   receives only closed train feedback plus a bounded knowledge-graph slice and

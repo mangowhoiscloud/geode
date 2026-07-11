@@ -843,16 +843,29 @@ class GitWorkspace:
             raise SupervisorError(reason)
         return result.stdout.strip()
 
-    def initialize(self, initial_sha: str) -> None:
+    def validate_initial_head(self, initial_sha: str) -> None:
+        """Validate campaign authority inputs without changing repository state."""
+
         if not self.repository.is_dir():
             raise SupervisorError("repository does not exist")
         if self.run("status", "--porcelain", "--untracked-files=all"):
             raise SupervisorError("campaign repository must be clean")
-        resolved = self.run("rev-parse", "--verify", f"{initial_sha}^{{commit}}")
+        resolved = self.run(
+            "rev-parse",
+            "--verify",
+            "--quiet",
+            f"{initial_sha}^{{commit}}",
+            check=False,
+        )
+        if not resolved:
+            raise SupervisorError("initial_search_head_sha does not resolve to a commit")
         if resolved != initial_sha:
             raise SupervisorError("initial_search_head_sha is not the resolved commit")
         if self.run("rev-parse", "--verify", "--quiet", self.search_ref, check=False):
             raise SupervisorError("campaign search ref already exists")
+
+    def initialize(self, initial_sha: str) -> None:
+        self.validate_initial_head(initial_sha)
         self.run("update-ref", self.search_ref, initial_sha, _ZERO_SHA)
 
     def create_candidate_checkout(self, path: Path, head: str) -> None:
@@ -1335,6 +1348,7 @@ class PromotionSupervisor:
             raise SupervisorError("state_dir already exists; choose a fresh campaign")
 
         workspace = GitWorkspace(config.repository, config.campaign_id)
+        workspace.validate_initial_head(config.initial_search_head_sha)
         config.state_dir.mkdir(parents=True)
         attempts_root = config.state_dir / "attempts"
         attempts_root.mkdir()
