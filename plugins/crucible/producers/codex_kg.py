@@ -23,6 +23,7 @@ _CONTEXT_NODE_LIMIT = 16
 _CLOSED_FAILURE_CODES = frozenset(
     {
         "quality",
+        "required_user_action",
         "safety",
         "state_correctness",
         "termination",
@@ -32,10 +33,9 @@ _CLOSED_FAILURE_CODES = frozenset(
 )
 _DEFAULT_GRAPH_PATH = Path(__file__).with_name("context_graph.json")
 _DEFAULT_OBJECTIVE = (
-    "Complete multi-step tool workflows with the fewest non-redundant calls: "
-    "batch causally ready work, request only unavailable user actions or "
-    "required confirmation, and verify the real terminal state once while "
-    "preserving safety."
+    "Complete every policy-required step in multi-step tool workflows, including "
+    "required user actions, confirmations, state changes, and terminal verification, "
+    "without redundant repetition."
 )
 
 
@@ -251,6 +251,8 @@ Constraints:
 - Keep the change general across tasks and domains; CANNOT add task IDs, expected
   answers, scenario literals, row-specific branches, or benchmark-specific facts.
 - Preserve safety, confirmation, and tool-contract requirements.
+- CANNOT trade a required user action, confirmation, or terminal check for a
+  shorter trajectory.
 - Prefer deleting or tightening wording over adding a large policy ladder.
 - CANNOT run live/provider tests; CANNOT commit because the producer wrapper owns commit.
 

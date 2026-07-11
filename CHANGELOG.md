@@ -100,6 +100,18 @@ functional change.
   pre-execution retry by count and exception class; normalization validates
   that telemetry and closes the arm as infrastructure-contaminated instead of
   treating the extra provider sample and elapsed time as semantic score.
+  After a complete train baseline, the evaluator now proves whether a perfect
+  candidate could still clear the frozen metric floor, materiality threshold,
+  and paired-bootstrap bound. An unreachable experiment closes as a zero-call
+  screening REJECT, cannot enter a promotion bundle, and cannot masquerade as
+  a replayable infrastructure retry. Tau2 reward is correspondingly pinned to
+  its unit interval. Candidate failure feedback now derives `termination`,
+  `required_user_action`, safety, tool-contract, and state-correctness codes
+  from generic result structure instead of collapsing every failed row to
+  `workflow_completion`; task and tool identities remain outside the producer.
+  The source-frozen producer objective now prioritizes completion of required
+  user actions, confirmations, state changes, and terminal verification rather
+  than prescribing the failed batching/question-deferral tactic.
   Deterministic replay remains closed to ordinary scored rejects; a reject can
   be replayed only when its source contract is content-attested and the current
   evaluator digest has actually changed. A finalized invalid arm now

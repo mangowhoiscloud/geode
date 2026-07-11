@@ -75,6 +75,7 @@ _ZERO_SHA = "0" * 40
 _FAILURE_CODES = frozenset(
     {
         "quality",
+        "required_user_action",
         "safety",
         "state_correctness",
         "termination",

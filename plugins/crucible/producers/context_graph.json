@@ -49,9 +49,9 @@
       "id": "file:plugins/crucible/tau2_live.py",
       "filePath": "plugins/crucible/tau2_live.py",
       "name": "Paired tau2 evaluator",
-      "summary": "Derives frozen runner arguments, isolates both arms, records actual subprocess wall time, preserves finalized invalid evidence, and returns closed feedback.",
+      "summary": "Derives frozen runner arguments, screens unreachable train arms at zero candidate cost, isolates measurement state, and projects structural failure codes.",
       "tags": ["crucible", "evaluator", "paired"],
-      "contentSha256": "dd54a72bd75920b08a61aae1d1e5828b5cc9d0d6a016fbec8ddb3a62507f149b"
+      "contentSha256": "ef83ebf745a0fa134cf8b65da9a6622cd93cb0cf49cc69725a3ae9914bd9a5f6"
     },
     {
       "id": "file:plugins/crucible/supervisor.py",
@@ -59,7 +59,7 @@
       "name": "Promotion supervisor",
       "summary": "Preflights authority inputs, retains task identity only in its audit request, projects closed feedback to producers, and owns evidence plus the monotone search ref.",
       "tags": ["crucible", "supervisor", "promotion"],
-      "contentSha256": "9e8139b858a87e0a89279217319edb1364f6de76a0787ca611fe58ea1d17b63c"
+      "contentSha256": "69ad67950dbe2e3b556de32d43324d0f23023c6c704860544e8026dcba1f4b09"
     },
     {
       "id": "file:scripts/eval/crucible_tau2_evaluator.py",
@@ -73,9 +73,9 @@
       "id": "file:plugins/crucible/producers/codex_kg.py",
       "filePath": "plugins/crucible/producers/codex_kg.py",
       "name": "Codex KG producer",
-      "summary": "Gives GPT-5.4 a bounded one-hop architecture subgraph plus closed failure codes, hides supervisor protocol paths, and accepts one general policy edit.",
+      "summary": "Gives GPT-5.4 a bounded one-hop architecture subgraph plus structural closed failure codes, hides supervisor protocol paths, and accepts one general policy edit.",
       "tags": ["crucible", "producer", "knowledge-graph"],
-      "contentSha256": "46955c8f89090dd11aa0a88d91a2e12dd7907de3274bcdc1de617652e269f64c"
+      "contentSha256": "c8f082f8d918ba6a68e28e23ceacfc2e47c0a92644774d9ff0a2d41d639fc058"
     },
     {
       "id": "file:plugins/crucible/producers/replay.py",

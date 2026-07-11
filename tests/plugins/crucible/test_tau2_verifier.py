@@ -323,6 +323,25 @@ def test_tau2_adapter_keeps_max_steps_as_semantic_zero(tmp_path: Path) -> None:
     assert evidence.rows[1].metric("reward") == 0.0
 
 
+def test_tau2_adapter_rejects_reward_outside_the_unit_interval(tmp_path: Path) -> None:
+    contract = _contract()
+    raw = _raw_results()
+    simulations = raw["simulations"]
+    assert isinstance(simulations, list)
+    simulations[0]["reward_info"]["reward"] = 1.1
+    results, snapshot = _write_artifacts(tmp_path, contract, raw=raw)
+
+    with pytest.raises(ContractError, match=r"within \[0, 1\]"):
+        normalize_tau2_results(
+            contract,
+            arm="candidate",
+            results_path=results,
+            snapshot_path=snapshot,
+            usage=_usage(),
+            checks_by_pair=_checks(),
+        )
+
+
 def test_tau2_adapter_marks_upstream_infrastructure_error_invalid(tmp_path: Path) -> None:
     contract = _contract()
     results, snapshot = _write_artifacts(

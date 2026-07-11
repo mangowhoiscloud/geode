@@ -25,7 +25,7 @@ from .evidence import (
     load_evidence,
     validate_evidence_identity,
 )
-from .promotion import PromotionVerdict, decide
+from .promotion import PromotionReachability, PromotionVerdict, decide, promotion_reachability
 from .ref_journal import (
     RefIntent,
     RefJournalError,
@@ -72,6 +72,7 @@ __all__ = [
     "LoopLimits",
     "Mutation",
     "PromotionBundle",
+    "PromotionReachability",
     "PromotionRule",
     "PromotionSupervisor",
     "PromotionVerdict",
@@ -98,6 +99,7 @@ __all__ = [
     "decide",
     "load_contract",
     "load_evidence",
+    "promotion_reachability",
     "reconcile_ref_update",
     "run_supervisor",
     "task_pack_sha256",

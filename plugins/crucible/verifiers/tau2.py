@@ -44,6 +44,12 @@ class Tau2AssayAdapter:
         ("user_simulator", "evaluator"),
     )
     agent_concurrency_limits: tuple[tuple[str, int], ...] = (("geode_agent", 1),)
+    metric_bounds: tuple[tuple[str, float, float], ...] = (("reward", 0.0, 1.0),)
+    normal_completion_reasons: tuple[str, ...] = ("user_stop",)
+    feedback_codes_by_requestor: tuple[tuple[str, str], ...] = (
+        ("assistant", "state_correctness"),
+        ("user", "required_user_action"),
+    )
 
     def classify_termination(self, reason: str) -> Literal["semantic", "infra"]:
         try:
@@ -58,6 +64,25 @@ class Tau2AssayAdapter:
             raise ContractError(
                 f"unclassified tau2 user implementation: {implementation!r}"
             ) from exc
+
+    def metric_bound(self, metric: str) -> tuple[float, float]:
+        try:
+            lower, upper = {
+                name: (minimum, maximum) for name, minimum, maximum in self.metric_bounds
+            }[metric]
+        except KeyError as exc:
+            raise ContractError(f"unbounded tau2 metric: {metric!r}") from exc
+        return lower, upper
+
+    def feedback_code_for_requestor(self, requestor: object) -> str | None:
+        return next(
+            (
+                failure_code
+                for owner, failure_code in self.feedback_codes_by_requestor
+                if requestor == owner
+            ),
+            None,
+        )
 
     def user_route(
         self,
@@ -607,6 +632,13 @@ def normalize_tau2_results(
             reward = _number(
                 reward_row.get("reward"),
                 f"tau2.simulations[{index}].reward_info.reward",
+            )
+        reward_minimum, reward_maximum = TAU2_ADAPTER.metric_bound("reward")
+        if not reward_minimum <= reward <= reward_maximum:
+            raise ContractError(
+                "tau2.simulations"
+                f"[{index}].reward_info.reward must be within "
+                f"[{reward_minimum:g}, {reward_maximum:g}]"
             )
         checks = checks_by_pair.get((task_id, trial))
         if checks is None:

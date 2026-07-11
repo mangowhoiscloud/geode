@@ -570,9 +570,13 @@ a current core promotion.
 6. Run baseline and candidate on the same task order. Interleave paired rows
    when the harness supports it.
 7. The current runner enforces its wall timeout and rejects finalized evidence
-   that exceeds the frozen aggregate budget. In-run call/token/cash cancellation
-   and sequential-futility stopping remain execution-substrate work.
-   `max_steps` is a task failure, not a row to drop.
+   that exceeds the frozen aggregate budget. After a complete train baseline,
+   the evaluator computes the best possible candidate vector under the assay's
+   metric ceiling; if even that vector cannot clear the frozen materiality,
+   absolute-floor, and confidence rules, it records a zero-call screening
+   REJECT instead of spending the candidate arm. In-run call/token/cash
+   cancellation and pairwise sequential stopping remain execution-substrate
+   work. `max_steps` is a task failure, not a row to drop.
 8. Normalize both raw artifacts into immutable evidence envelopes. Identity,
    coverage, or infrastructure defects produce INVALID and no performance
    comparison.
@@ -1004,6 +1008,43 @@ by content hash and requires the current evaluator digest to differ from r19.
 It cannot resample an ordinary reject under the same evaluator. A clean replay
 measures the policy, while another retry closes as infrastructure without
 consuming the sealed pack.
+
+r20 attempted that corrective replay after the evaluator revision but reached
+the GPT-5.4 subscription hard limit before any model response. All six baseline
+rows were infrastructure errors, the candidate arm was skipped, and the
+ordinary verdict was scoreless `INVALID`; the exact candidate and unopened
+sealed pack therefore remained eligible for an ordinary measurement retry.
+
+r21 completed that exact retry without a recovered transport event. Baseline
+rewards were `[1, 1, 1, 1, 1, 0]`; candidate rewards were
+`[0, 1, 1, 1, 0, 0]`. Verdict `307a9b10a295` is a clean `REJECT`, with means
+`0.8333 -> 0.50`, paired improvement `-0.3333`, lower bound `-0.50`, and no
+promotion authority. All 479 raw participant messages carried retry telemetry;
+their retry count summed to zero. The run consumed 479 calls, 3,847,427 tokens,
+$4.519926 of normalized accounting, and 3,227.6 attested wall seconds. The
+search ref stayed at `6d2240bf6a9d`, and the sealed pack remained unopened.
+
+Two external-loop defects were now measurable rather than hypothetical. First,
+the completed baseline already made KEEP impossible: even a perfect candidate
+could improve only `+0.1667`, below the frozen `+0.25` materiality floor, and
+its best possible paired-bootstrap lower bound was zero. Candidate execution
+therefore spent 231 calls and 1,864,709 tokens after the decision had become
+immutable. Train evaluation now computes that best-case ceiling after the
+baseline and emits a separately attested, zero-call screening REJECT when any
+necessary promotion condition is unreachable. The screen grants no score or
+authority, cannot enter a promotion bundle, and cannot be replayed as an
+infrastructure retry.
+
+Second, the evaluator reduced three candidate failures to the single code
+`workflow_completion`. The r21 raw structure distinguishes one unmatched
+required user action and two `max_steps` terminations without consulting task
+IDs, tool names, scenario text, or gold values. Tau2 feedback now derives the
+closed codes `required_user_action`, `termination`, and `workflow_completion`
+from only termination class, candidate checks, and unmatched action ownership.
+The producer still receives no task identity or trace. Its default objective
+has also been reduced from the failed call-minimization/batching prescription
+to the outcome boundary: complete every required user action, confirmation,
+state change, and terminal verification without redundant repetition.
 
 The strongest honest claims are:
 

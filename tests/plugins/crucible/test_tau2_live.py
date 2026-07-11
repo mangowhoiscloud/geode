@@ -17,19 +17,22 @@ from plugins.crucible.contract import (
 from plugins.crucible.evidence import EvidenceEnvelope, ResourceUsage
 from plugins.crucible.producers.codex_kg import (
     _DEFAULT_GRAPH_PATH,
+    _DEFAULT_OBJECTIVE,
     ProducerError,
     _codex_child_environment,
     _prompt,
     _validate_policy_grammar,
     knowledge_context,
 )
-from plugins.crucible.promotion import decide
+from plugins.crucible.promotion import SCREENING_FAILURE, decide, promotion_reachability
 from plugins.crucible.tau2_live import (
     Tau2InfrastructureError,
     _run_arm,
     _train_evaluation_response,
+    _write_screened_arm,
     _write_skipped_arm,
     tau2_command,
+    tau2_failure_feedback,
     tau2_trace_checks,
 )
 
@@ -120,6 +123,35 @@ def test_skipped_candidate_is_closed_zero_call_infrastructure_evidence(tmp_path:
     assert verdict.verdict == "INVALID"
     assert verdict.reasons == ("infrastructure_contamination",)
     assert verdict.pair_count == 0
+
+
+def test_unreachable_candidate_is_a_zero_call_screening_reject(tmp_path: Path) -> None:
+    contract = _contract()
+    baseline = _arm_evidence(
+        contract,
+        arm="baseline",
+        invalid=False,
+        raw_hash="a" * 64,
+    )
+    reachability = promotion_reachability(contract, baseline, metric_ceiling=1.0)
+
+    candidate, raw_path = _write_screened_arm(
+        contract,
+        output_dir=tmp_path,
+        baseline=baseline,
+        reachability=reachability,
+    )
+    verdict = decide(contract, baseline, candidate)
+    raw = json.loads(raw_path.read_text(encoding="utf-8"))
+
+    assert reachability.reachable is False
+    assert raw["schema"] == "crucible.screened-arm.v1"
+    assert raw["reason"] == SCREENING_FAILURE
+    assert candidate.usage == ResourceUsage(0.0, 0, 0, 0.0)
+    assert verdict.verdict == "REJECT"
+    assert verdict.reasons == (SCREENING_FAILURE,)
+    assert verdict.pair_count == 0
+    assert verdict.promotion_authority == "none"
 
 
 def _contract() -> ExperimentContract:
@@ -490,6 +522,54 @@ def test_tau2_trace_checks_are_independent_of_reward() -> None:
     assert checks[("task-2", 0)] == {"safety": True, "tool_contract": False}
 
 
+def test_tau2_feedback_projects_structure_without_task_or_tool_cases() -> None:
+    contract = _contract()
+    payload = _arm_evidence(
+        contract,
+        arm="candidate",
+        invalid=False,
+        raw_hash="d" * 64,
+    ).to_dict()
+    payload.pop("evidence_id")
+    rows = payload["rows"]
+    assert isinstance(rows, list)
+    for row in rows:
+        row["metrics"]["reward"] = 0.0
+    rows[1]["termination_reason"] = "max_steps"
+    candidate = EvidenceEnvelope.from_mapping(payload)
+    raw = {
+        "simulations": [
+            {
+                "task_id": "task-1",
+                "trial": 0,
+                "reward_info": {
+                    "action_checks": [
+                        {
+                            "action_match": False,
+                            "action": {"requestor": "user", "name": "opaque-action"},
+                        }
+                    ]
+                },
+            },
+            {
+                "task_id": "task-2",
+                "trial": 0,
+                "reward_info": {"action_checks": []},
+            },
+        ]
+    }
+
+    feedback = tau2_failure_feedback(contract, candidate, raw)
+
+    assert feedback is not None
+    assert feedback.failure_codes == (
+        "required_user_action",
+        "termination",
+        "workflow_completion",
+    )
+    assert feedback.failed_task_ids == ("task-1", "task-2")
+
+
 def test_codex_producer_uses_bounded_local_graph_slice(tmp_path: Path) -> None:
     sources = {
         "plugins/benchmark_harness/tau2_agent_policy.md": "policy\n",
@@ -598,6 +678,13 @@ def test_codex_producer_prompt_uses_can_cannot_policy_clauses() -> None:
     assert legacy_negative not in prompt.casefold()
 
 
+def test_codex_producer_objective_keeps_mechanism_open() -> None:
+    assert "required user actions" in _DEFAULT_OBJECTIVE
+    assert "terminal verification" in _DEFAULT_OBJECTIVE
+    assert "batch" not in _DEFAULT_OBJECTIVE
+    assert "defer" not in _DEFAULT_OBJECTIVE
+
+
 def test_codex_producer_reads_only_nested_closed_failure_codes() -> None:
     prompt = _prompt(
         objective="Improve complete workflows.",
@@ -610,14 +697,14 @@ def test_codex_producer_reads_only_nested_closed_failure_codes() -> None:
             "search_head_sha": "a" * 40,
             "evaluator": {
                 "schema": "crucible.failure-feedback.v3",
-                "failure_codes": ["workflow_completion"],
+                "failure_codes": ["required_user_action", "workflow_completion"],
                 "failed_task_ids": ["private-train-task"],
             },
         },
         graph_context="{}",
     )
 
-    assert 'Prior closed failure codes: ["workflow_completion"]' in prompt
+    assert 'Prior closed failure codes: ["required_user_action", "workflow_completion"]' in prompt
     assert "private-train-task" not in prompt
     assert "confidence_bound_not_positive" not in prompt
 

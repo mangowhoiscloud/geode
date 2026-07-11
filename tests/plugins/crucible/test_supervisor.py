@@ -873,12 +873,12 @@ def test_failure_feedback_v3_carries_bounded_train_task_identity() -> None:
     feedback = FailureFeedback.from_mapping(
         {
             "schema": "crucible.failure-feedback.v3",
-            "failure_codes": ["state_correctness"],
+            "failure_codes": ["required_user_action", "state_correctness"],
             "failed_task_ids": ["task-3", "task-9"],
         }
     )
     assert feedback.failed_task_ids == ("task-3", "task-9")
-    assert feedback.failure_codes == ("state_correctness",)
+    assert feedback.failure_codes == ("required_user_action", "state_correctness")
 
 
 def test_failure_feedback_v3_accepts_long_ids_owned_by_the_contract() -> None:

@@ -24,6 +24,7 @@ from typing import Any, Literal
 from .artifacts import load_json_object, write_exclusive_json
 from .contract import ContractError, ExperimentContract, load_contract, validate_test_parent
 from .evidence import EvidenceEnvelope, ResourceUsage, expected_pairs
+from .promotion import SCREENING_FAILURE, PromotionReachability, promotion_reachability
 from .sealed import SEALED_RESPONSE_SCHEMA, SealedInfrastructureError, SealedPlan
 from .supervisor import CandidateProposal, FailureFeedback
 from .verifiers.tau2 import TAU2_ADAPTER, normalize_tau2_results, tau2_resource_usage_floor
@@ -52,6 +53,7 @@ _AFFIRMATIVE = re.compile(
 )
 _SKIPPED_ARM_SCHEMA = "crucible.skipped-arm.v1"
 _SKIPPED_ARM_FAILURE = "paired_arm_skipped"
+_SCREENED_ARM_SCHEMA = "crucible.screened-arm.v1"
 
 
 class Tau2InfrastructureError(RuntimeError):
@@ -407,6 +409,130 @@ def _write_skipped_arm(
     return evidence, raw_path
 
 
+def _write_screened_arm(
+    contract: ExperimentContract,
+    *,
+    output_dir: Path,
+    baseline: EvidenceEnvelope,
+    reachability: PromotionReachability,
+) -> tuple[EvidenceEnvelope, Path]:
+    """Attest a zero-call candidate arm whose metric ceiling cannot train-KEEP."""
+
+    if baseline.execution_status != "complete" or reachability.reachable:
+        raise ContractError("a screened arm requires a complete unreachable baseline")
+    raw_path = output_dir / "candidate.raw.json"
+    write_exclusive_json(
+        raw_path,
+        {
+            "schema": _SCREENED_ARM_SCHEMA,
+            "contract_id": contract.contract_id,
+            "arm": "candidate",
+            "revision_sha": contract.candidate_sha,
+            "status": "screened",
+            "reason": SCREENING_FAILURE,
+            "triggering_evidence_id": baseline.evidence_id,
+            "reachability": reachability.to_dict(),
+        },
+    )
+    evidence = EvidenceEnvelope.from_mapping(
+        {
+            "schema": "crucible.evidence.v3",
+            "contract_id": contract.contract_id,
+            "arm": "candidate",
+            "revision_sha": contract.candidate_sha,
+            "evaluator_sha256": contract.evaluator_sha256,
+            "harness_sha256": contract.harness_sha256,
+            "task_pack_sha256": contract.task_pack_sha256,
+            "assay_config_sha256": contract.assay_config_sha256,
+            "raw_artifact_sha256": hashlib.sha256(raw_path.read_bytes()).hexdigest(),
+            "execution_status": "invalid",
+            "failure_class": SCREENING_FAILURE,
+            "usage": ResourceUsage(0.0, 0, 0, 0.0).to_dict(),
+            "rows": [
+                {
+                    "task_id": task_id,
+                    "trial": trial,
+                    "status": "infrastructure_error",
+                    "termination_reason": SCREENING_FAILURE,
+                    "failure_class": SCREENING_FAILURE,
+                    "metrics": {},
+                    "checks": {},
+                }
+                for task_id, trial in expected_pairs(contract)
+            ],
+        }
+    )
+    write_exclusive_json(output_dir / "candidate.evidence.json", evidence.to_dict())
+    return evidence, raw_path
+
+
+def tau2_failure_feedback(
+    contract: ExperimentContract,
+    candidate: EvidenceEnvelope,
+    raw: Mapping[str, Any],
+) -> FailureFeedback | None:
+    """Project failed tau2 rows onto task-independent closed failure codes."""
+
+    if candidate.execution_status != "complete":
+        return None
+    simulations = raw.get("simulations")
+    if not isinstance(simulations, list):
+        raise ContractError("tau2 feedback requires simulations")
+    by_pair: dict[tuple[str, int], Mapping[str, Any]] = {}
+    for index, value in enumerate(simulations):
+        simulation_row = _mapping(value, f"tau2.simulations[{index}]")
+        task_id = _string(simulation_row.get("task_id"), f"tau2.simulations[{index}].task_id")
+        trial = simulation_row.get("trial")
+        if isinstance(trial, bool) or not isinstance(trial, int) or trial < 0:
+            raise ContractError(f"tau2.simulations[{index}].trial must be non-negative")
+        pair = (task_id, trial)
+        if pair in by_pair:
+            raise ContractError("tau2 feedback simulations contain duplicate pairs")
+        by_pair[pair] = simulation_row
+
+    failed_rows = [
+        row
+        for row in candidate.rows
+        if (metric := row.metric(contract.promotion.primary_metric)) is None or metric < 1.0
+    ]
+    if not failed_rows:
+        return None
+    codes = {"workflow_completion"}
+    for row in failed_rows:
+        if row.termination_reason not in TAU2_ADAPTER.normal_completion_reasons:
+            codes.add("termination")
+        if row.check("safety") is False:
+            codes.add("safety")
+        if row.check("tool_contract") is False:
+            codes.add("tool_contract")
+        matched = by_pair.get(row.pair_id)
+        if matched is None:
+            raise ContractError("tau2 feedback requires exact simulation coverage")
+        reward_info = matched.get("reward_info")
+        if not isinstance(reward_info, Mapping):
+            continue
+        checks: list[object] = []
+        for field in ("action_checks", "env_assertions"):
+            values = reward_info.get(field)
+            if isinstance(values, list):
+                checks.extend(values)
+        for value in checks:
+            if not isinstance(value, Mapping):
+                continue
+            unmatched = value.get("action_match") is False or value.get("met") is False
+            if not unmatched:
+                continue
+            detail = value.get("action") or value.get("env_assertion")
+            if not isinstance(detail, Mapping):
+                continue
+            requestor = detail.get("requestor") or detail.get("env_type")
+            failure_code = TAU2_ADAPTER.feedback_code_for_requestor(requestor)
+            if failure_code is not None:
+                codes.add(failure_code)
+    failed_task_ids = tuple(dict.fromkeys(row.task_id for row in failed_rows))
+    return FailureFeedback(tuple(sorted(codes)), failed_task_ids)
+
+
 def _relative(path: Path, root: Path) -> str:
     return path.resolve().relative_to(root.resolve()).as_posix()
 
@@ -598,16 +724,29 @@ def run_command_evaluator() -> int:
                 trigger=baseline,
             )
         else:
-            candidate, candidate_raw = _run_arm(
+            reachability = promotion_reachability(
                 contract,
-                arm="candidate",
-                checkout=candidate_checkout,
-                harness_root=harness_root,
-                contract_path=contract_path,
-                output_dir=output_dir,
-                run_id=f"crucible-{contract.stage}-{request['attempt_id']}-candidate",
-                timeout=per_arm,
+                baseline,
+                metric_ceiling=TAU2_ADAPTER.metric_bound(contract.promotion.primary_metric)[1],
             )
+            if contract.stage == "train" and not reachability.reachable:
+                candidate, candidate_raw = _write_screened_arm(
+                    contract,
+                    output_dir=output_dir,
+                    baseline=baseline,
+                    reachability=reachability,
+                )
+            else:
+                candidate, candidate_raw = _run_arm(
+                    contract,
+                    arm="candidate",
+                    checkout=candidate_checkout,
+                    harness_root=harness_root,
+                    contract_path=contract_path,
+                    output_dir=output_dir,
+                    run_id=f"crucible-{contract.stage}-{request['attempt_id']}-candidate",
+                    timeout=per_arm,
+                )
     finally:
         executable = shutil.which("git")
         if executable is not None:
@@ -617,18 +756,15 @@ def run_command_evaluator() -> int:
                 check=False,
                 capture_output=True,
             )
-    failed_ids = (
-        tuple(
-            row.task_id
-            for row in candidate.rows
-            if row.metric(contract.promotion.primary_metric) in {None, 0.0}
+    feedback = None
+    if baseline.execution_status == candidate.execution_status == "complete":
+        candidate_raw_payload = load_json_object(
+            candidate_raw,
+            "candidate raw",
+            max_bytes=64 * 1024 * 1024,
         )
-        if baseline.execution_status == candidate.execution_status == "complete"
-        else ()
-    )
-    feedback = (
-        FailureFeedback(("workflow_completion",), failed_ids).to_dict() if failed_ids else None
-    )
+        projected = tau2_failure_feedback(contract, candidate, candidate_raw_payload)
+        feedback = projected.to_dict() if projected is not None else None
     write_exclusive_json(
         response_path,
         _train_evaluation_response(

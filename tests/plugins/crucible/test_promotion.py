@@ -11,7 +11,7 @@ from plugins.crucible.contract import (
     task_pack_sha256,
 )
 from plugins.crucible.evidence import EvidenceEnvelope
-from plugins.crucible.promotion import PromotionVerdict, decide
+from plugins.crucible.promotion import PromotionVerdict, decide, promotion_reachability
 
 BASELINE_SHA = "1" * 40
 CANDIDATE_SHA = "2" * 40
@@ -282,6 +282,48 @@ def test_bootstrap_is_family_clustered_and_independent_of_candidate_identity() -
     assert first_verdict.family_count == 4
     assert first_verdict.trials_per_task == 2
     assert first_verdict.improvement_lower_bound == second_verdict.improvement_lower_bound
+
+
+def test_reachability_prunes_only_a_mathematically_impossible_baseline() -> None:
+    payload = _contract_payload()
+    tasks = tuple(
+        TaskUnit(f"task-{index}", f"family-{index}", f"{index:064x}") for index in range(1, 7)
+    )
+    payload["tasks"] = [task.to_dict() for task in tasks]
+    payload["task_pack_sha256"] = task_pack_sha256(tasks)
+    promotion = deepcopy(payload["promotion"])
+    assert isinstance(promotion, dict)
+    promotion.update(
+        {
+            "materiality_pp": 0.25,
+            "minimum_tasks": 6,
+            "minimum_families": 6,
+            "confidence_level": 0.885,
+            "bootstrap_samples": 10_000,
+        }
+    )
+    payload["promotion"] = promotion
+    contract = ExperimentContract.from_mapping(payload)
+
+    unreachable = promotion_reachability(
+        contract,
+        _evidence(contract, arm="baseline", rewards=[1.0] * 5 + [0.0]),
+        metric_ceiling=1.0,
+    )
+    reachable = promotion_reachability(
+        contract,
+        _evidence(contract, arm="baseline", rewards=[1.0] * 4 + [0.0] * 2),
+        metric_ceiling=1.0,
+    )
+
+    assert unreachable.reachable is False
+    assert unreachable.paired_improvement_ceiling == pytest.approx(1 / 6)
+    assert unreachable.reasons == (
+        "improvement_ceiling_below_materiality",
+        "confidence_ceiling_not_positive",
+    )
+    assert reachable.reachable is True
+    assert reachable.reasons == ()
 
 
 def test_many_tasks_in_one_family_are_one_inference_unit() -> None:
