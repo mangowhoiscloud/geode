@@ -104,7 +104,8 @@ async def _acomplete_with_fail_fast_pre_execution_retry(
             raise
         from core.llm.adapters.dispatch import _is_connection_transient
 
-        empty_output = isinstance(exc, EmptyModelOutputError)
+        empty_output_error = exc if isinstance(exc, EmptyModelOutputError) else None
+        empty_output = empty_output_error is not None
         if not empty_output and not _is_connection_transient(exc):
             raise
         failure_kind = "empty model output" if empty_output else "transport error"
@@ -116,7 +117,10 @@ async def _acomplete_with_fail_fast_pre_execution_retry(
         if on_retry is not None:
             await on_retry(exc)
         await asyncio.sleep(_FAIL_FAST_RETRY_DELAY_S)
-        return await adapter.acomplete(request)
+        result = await adapter.acomplete(request)
+        if empty_output_error is not None:
+            empty_output_error.mark_recovered()
+        return result
 
 
 def _saved_cwd_matches_current(stored_cwd: str, current_cwd: str) -> bool:

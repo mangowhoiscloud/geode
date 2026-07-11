@@ -783,6 +783,15 @@ the same boundary as connection-class failures; a second empty response remains
 infrastructure. Because the first response reached no tool execution, the retry
 cannot duplicate environment state changes.
 
+Campaign r9 live-confirmed the typed retry: one baseline call produced an empty
+completion, the identical retry returned usable output, and the task completed
+with reward `1.0`. The arm later finished all six rows as
+`[1, 1, 0, 0, 0, 0]`, but the legacy diagnostics backstop treated the recovered
+dump as contamination and invalidated the attempt before the candidate arm.
+Successful retries now write a sibling `.recovered` marker. The backstop ignores
+only that explicitly acknowledged dump; a second empty response, a swallowed
+hidden-path error, or a marker-write failure remains inadmissible.
+
 The strongest honest claims are:
 
 - the frozen external tau2 baseline identified concrete retail wrong-write and

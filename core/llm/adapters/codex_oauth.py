@@ -237,7 +237,8 @@ class CodexOAuthAdapter:
                 raise EmptyModelOutputError(
                     "codex-oauth: empty output_text "
                     f"model={req.model} stop_reason={result.stop_reason} "
-                    f"dump={dump_path or '<dump failed>'}"
+                    f"dump={dump_path or '<dump failed>'}",
+                    mark_recovered=lambda: _mark_empty_text_recovered(dump_path),
                 )
         return result
 
@@ -518,6 +519,16 @@ def _dump_empty_text_postmortem(
 def _fail_on_empty_text_enabled() -> bool:
     raw = os.environ.get("GEODE_CODEX_OAUTH_FAIL_EMPTY_TEXT", "").strip().lower()
     return raw in {"1", "true", "yes", "on"}
+
+
+def _mark_empty_text_recovered(dump_path: str | None) -> None:
+    """Create an append-only marker only after the identical retry succeeds."""
+
+    if dump_path is None:
+        raise RuntimeError("cannot attest empty-output recovery without its diagnostic dump")
+    from pathlib import Path
+
+    Path(f"{dump_path}.recovered").touch(exist_ok=False)
 
 
 def _log_codex_input_shape(resp_input: Any, *, cap: int = 30) -> None:

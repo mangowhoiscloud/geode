@@ -16,7 +16,7 @@ design and the deprecation roster for Layer 2 direct callers.
 
 from __future__ import annotations
 
-from collections.abc import AsyncIterator, Sequence
+from collections.abc import AsyncIterator, Callable, Sequence
 from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any, Protocol, runtime_checkable
@@ -54,6 +54,21 @@ CONCRETE_SOURCES: frozenset[str] = frozenset({SOURCE_PAYG, SOURCE_SUBSCRIPTION, 
 
 class EmptyModelOutputError(RuntimeError):
     """A completed adapter response carried neither text nor a tool call."""
+
+    def __init__(
+        self,
+        message: str,
+        *,
+        mark_recovered: Callable[[], None] | None = None,
+    ) -> None:
+        super().__init__(message)
+        self._mark_recovered = mark_recovered
+
+    def mark_recovered(self) -> None:
+        """Attest that an identical retry returned usable model output."""
+
+        if self._mark_recovered is not None:
+            self._mark_recovered()
 
 
 @dataclass(frozen=True)

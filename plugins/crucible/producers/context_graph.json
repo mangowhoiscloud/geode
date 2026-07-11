@@ -19,7 +19,7 @@
       "name": "Tau2 GEODE adapter",
       "summary": "Builds the AgenticLoop, loads the policy, and projects complete tool-call batches to the tau2 orchestrator.",
       "tags": ["adapter", "benchmark", "tool-projection"],
-      "contentSha256": "0c766a501b6d0519988c9310a16ea62f477282b34a32f0fa1ace625f1b56997e"
+      "contentSha256": "863be0e717e66a6351d5f0010691fe039eb0ec926d7de47d7df2a4d510a318dc"
     },
     {
       "id": "file:core/agent/loop/agent_loop.py",
@@ -27,7 +27,7 @@
       "name": "AgenticLoop",
       "summary": "Runs model and tool rounds until the model emits a terminal action or the frozen time budget expires.",
       "tags": ["runtime", "while-tool-use"],
-      "contentSha256": "7cb7819fecb0cfcd54bbb1079bfabef96c45f46da87f8f01422c3727990bd53f"
+      "contentSha256": "182e0be39a03a3393d3c110f28a38af9c6ee03fbdae81684da1bc3f389dd0476"
     },
     {
       "id": "file:core/agent/tool_executor/processor.py",

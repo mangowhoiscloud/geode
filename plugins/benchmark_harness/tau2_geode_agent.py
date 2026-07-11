@@ -651,7 +651,7 @@ def _codex_empty_text_dumps() -> set[Path]:
 
 def _raise_on_new_codex_empty_text_dumps(before: set[Path]) -> None:
     after = _codex_empty_text_dumps()
-    new_dumps = sorted(after - before)
+    new_dumps = sorted(path for path in after - before if not Path(f"{path}.recovered").is_file())
     if not new_dumps:
         return
     sample = ", ".join(str(path) for path in new_dumps[:3])

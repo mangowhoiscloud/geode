@@ -161,7 +161,10 @@ functional change.
   Codex subscription adapter now raises a typed empty-output error only when a
   completed response carries neither text nor tool calls. AgenticLoop's strict
   fail-fast boundary retries that identical, still side-effect-free request
-  once, then surfaces a repeated empty response as infrastructure.
+  once, then surfaces a repeated empty response as infrastructure. A successful
+  identical retry writes an append-only recovery marker beside its diagnostic;
+  the tau2 backstop excludes only marked dumps, while hidden, repeated, and
+  unmarked empty responses remain contamination.
 
 ## [0.99.296] - 2026-07-11
 

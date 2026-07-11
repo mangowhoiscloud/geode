@@ -63,12 +63,22 @@ def test_fail_fast_retries_one_empty_model_output_with_the_identical_request(
     _no_delay(monkeypatch)
     request = object()
     expected = object()
-    adapter = _Adapter([EmptyModelOutputError("reasoning-only response"), expected])
+    recovered: list[bool] = []
+    adapter = _Adapter(
+        [
+            EmptyModelOutputError(
+                "reasoning-only response",
+                mark_recovered=lambda: recovered.append(True),
+            ),
+            expected,
+        ]
+    )
 
     result = asyncio.run(_acomplete_with_fail_fast_pre_execution_retry(adapter, request))
 
     assert result is expected
     assert adapter.requests == [request, request]
+    assert recovered == [True]
 
 
 def test_fail_fast_connection_retry_is_bounded(
@@ -94,14 +104,44 @@ def test_fail_fast_empty_output_retry_is_bounded(
 ) -> None:
     monkeypatch.setenv("GEODE_LLM_FAIL_FAST_ON_ADAPTER_ERROR", "true")
     _no_delay(monkeypatch)
+    recovered: list[bool] = []
     adapter = _Adapter(
         [
-            EmptyModelOutputError("first empty response"),
+            EmptyModelOutputError(
+                "first empty response",
+                mark_recovered=lambda: recovered.append(True),
+            ),
             EmptyModelOutputError("second empty response"),
         ]
     )
 
     with pytest.raises(EmptyModelOutputError, match="second empty response"):
+        asyncio.run(_acomplete_with_fail_fast_pre_execution_retry(adapter, object()))
+
+    assert len(adapter.requests) == 2
+    assert recovered == []
+
+
+def test_fail_fast_empty_output_recovery_attestation_failure_is_fatal(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("GEODE_LLM_FAIL_FAST_ON_ADAPTER_ERROR", "true")
+    _no_delay(monkeypatch)
+
+    def fail_attestation() -> None:
+        raise RuntimeError("marker write failed")
+
+    adapter = _Adapter(
+        [
+            EmptyModelOutputError(
+                "first empty response",
+                mark_recovered=fail_attestation,
+            ),
+            object(),
+        ]
+    )
+
+    with pytest.raises(RuntimeError, match="marker write failed"):
         asyncio.run(_acomplete_with_fail_fast_pre_execution_retry(adapter, object()))
 
     assert len(adapter.requests) == 2
