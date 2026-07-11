@@ -17,6 +17,11 @@ export type ChangelogEntry = {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    "version": "0.99.302",
+    "date": "2026-07-12",
+    "body": "### Added\n\n- **Portfolio finale links the experiment records (operator-directed).**\n  Under the finale CTAs a mono row labeled \"experiment records · zero\n  promotions included\" links to the self-improving hub and the Petri audit\n  archive, and the bottom-right \"petri audit attached\" stamp becomes a live\n  link into the bundle viewer. The framing stays honest: these are published\n  as experiments, zero-promotion campaigns included."
+  },
+  {
     "version": "0.99.301",
     "date": "2026-07-11",
     "body": "### Added\n\n- **Seed-pipeline run diagram in the docs (operator-directed).** The\n  `capabilities/seed-pipeline` page gains a hand-drawn SVG in the docs\n  signature language (`site/public/diagrams/seed-pipeline-run.svg`): the\n  entry ladder (picker, cost preview and confirm, pre-flight), the nine-role\n  pipeline frame with per-phase checkpoints, blend survivor selection\n  splitting into the cycle-input pool and the published bundle, the\n  version-frozen held-out bench below a dashed line, and the meta-review\n  priors looping back to the next run's picker. Mounted in both locales\n  with alt text and captions."

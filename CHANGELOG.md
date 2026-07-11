@@ -45,6 +45,19 @@ functional change.
 
 ---
 
+## [0.99.302] - 2026-07-12
+
+### Added
+
+- **Portfolio finale links the experiment records (operator-directed).**
+  Under the finale CTAs a mono row labeled "experiment records · zero
+  promotions included" links to the self-improving hub and the Petri audit
+  archive, and the bottom-right "petri audit attached" stamp becomes a live
+  link into the bundle viewer. The framing stays honest: these are published
+  as experiments, zero-promotion campaigns included.
+
+---
+
 ## [0.99.301] - 2026-07-11
 
 ### Added
