@@ -41,9 +41,9 @@
       "id": "file:plugins/crucible/tau2_live.py",
       "filePath": "plugins/crucible/tau2_live.py",
       "name": "Paired tau2 evaluator",
-      "summary": "Derives frozen runner arguments, isolates both arms, and returns normalized evidence plus closed feedback.",
+      "summary": "Derives frozen runner arguments, isolates both arms, preserves finalized invalid evidence, and returns closed feedback.",
       "tags": ["crucible", "evaluator", "paired"],
-      "contentSha256": "5b206b461b735dc703c4833d9688294a38c3550440dc5592ed2f880ec598edb1"
+      "contentSha256": "c683b6226e0f314084ffda8edb9139c1612df2244d7ef16373e7d64419398ccb"
     },
     {
       "id": "file:plugins/crucible/supervisor.py",

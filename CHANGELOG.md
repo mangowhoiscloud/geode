@@ -77,7 +77,12 @@ functional change.
   identical request before surfacing infrastructure. This covers both a
   connection-class stream failure and a completed subscription response with
   neither text nor tool calls; schema, billing, repeated empty output, and
-  persistent transport failures still fail closed. Candidate policy clauses are
+  persistent transport failures still fail closed. A finalized invalid arm now
+  survives the runner's non-zero exit as structured evidence. Train evaluation
+  writes a zero-call skipped counterpart instead of running the other arm, so
+  the supervisor records a scoreless infrastructure verdict with the original
+  failure class rather than collapsing it to a generic subprocess error.
+  Candidate policy clauses are
   machine-checked as `CAN`/`CANNOT` before commit, and the tau2 runtime profile
   rejects thread-pool concurrency for `geode_agent` until the Codex streaming
   path has direct parallel-safety evidence. Task-pack construction can now bind

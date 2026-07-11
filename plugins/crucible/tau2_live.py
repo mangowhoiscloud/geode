@@ -7,6 +7,7 @@ trace checks, usage normalization, and the command-evaluator response.
 
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import re
@@ -21,7 +22,7 @@ from typing import Any, Literal
 
 from .artifacts import load_json_object, write_exclusive_json
 from .contract import ContractError, ExperimentContract, load_contract, validate_test_parent
-from .evidence import EvidenceEnvelope
+from .evidence import EvidenceEnvelope, ResourceUsage, expected_pairs
 from .sealed import SEALED_RESPONSE_SCHEMA, SealedInfrastructureError, SealedPlan
 from .supervisor import CandidateProposal, FailureFeedback
 from .verifiers.tau2 import TAU2_ADAPTER, normalize_tau2_results, tau2_resource_usage_floor
@@ -48,6 +49,8 @@ _AFFIRMATIVE = re.compile(
     r"\b(?:yes|correct|confirmed|go ahead|proceed|please do|sounds good|do it)\b",
     re.IGNORECASE,
 )
+_SKIPPED_ARM_SCHEMA = "crucible.skipped-arm.v1"
+_SKIPPED_ARM_FAILURE = "paired_arm_skipped"
 
 
 class Tau2InfrastructureError(RuntimeError):
@@ -307,11 +310,13 @@ def _run_arm(
         )
     except subprocess.TimeoutExpired as exc:
         raise TimeoutError(f"tau2 {arm} arm timed out") from exc
-    if completed.returncode:
-        raise Tau2InfrastructureError(f"tau2 {arm} arm exited with status {completed.returncode}")
     source_raw = harness_root / "data" / "simulations" / run_id / "results.json"
     snapshot = snapshot_dir / f"{run_id}.snapshot.json"
     if not source_raw.is_file() or not snapshot.is_file():
+        if completed.returncode:
+            raise Tau2InfrastructureError(
+                f"tau2 {arm} arm exited with status {completed.returncode}"
+            )
         raise Tau2InfrastructureError(
             f"tau2 {arm} arm did not produce finalized raw and snapshot files"
         )
@@ -328,6 +333,67 @@ def _run_arm(
     )
     evidence_path = output_dir / f"{arm}.evidence.json"
     write_exclusive_json(evidence_path, evidence.to_dict())
+    if completed.returncode and evidence.execution_status != "invalid":
+        raise Tau2InfrastructureError(f"tau2 {arm} arm exited with status {completed.returncode}")
+    return evidence, raw_path
+
+
+def _write_skipped_arm(
+    contract: ExperimentContract,
+    *,
+    arm: Literal["baseline", "candidate"],
+    output_dir: Path,
+    trigger: EvidenceEnvelope,
+) -> tuple[EvidenceEnvelope, Path]:
+    """Attest that one arm was intentionally skipped after paired infrastructure failure."""
+
+    if trigger.execution_status != "invalid":
+        raise ContractError("a skipped arm requires invalid triggering evidence")
+    revision_sha = contract.baseline_sha if arm == "baseline" else contract.candidate_sha
+    raw_path = output_dir / f"{arm}.raw.json"
+    write_exclusive_json(
+        raw_path,
+        {
+            "schema": _SKIPPED_ARM_SCHEMA,
+            "contract_id": contract.contract_id,
+            "arm": arm,
+            "revision_sha": revision_sha,
+            "status": "skipped",
+            "reason": "paired_infrastructure_failure",
+            "triggering_arm": trigger.arm,
+            "triggering_evidence_id": trigger.evidence_id,
+            "triggering_failure_class": trigger.failure_class,
+        },
+    )
+    evidence = EvidenceEnvelope.from_mapping(
+        {
+            "schema": "crucible.evidence.v3",
+            "contract_id": contract.contract_id,
+            "arm": arm,
+            "revision_sha": revision_sha,
+            "evaluator_sha256": contract.evaluator_sha256,
+            "harness_sha256": contract.harness_sha256,
+            "task_pack_sha256": contract.task_pack_sha256,
+            "assay_config_sha256": contract.assay_config_sha256,
+            "raw_artifact_sha256": hashlib.sha256(raw_path.read_bytes()).hexdigest(),
+            "execution_status": "invalid",
+            "failure_class": _SKIPPED_ARM_FAILURE,
+            "usage": ResourceUsage(0.0, 0, 0, 0.0).to_dict(),
+            "rows": [
+                {
+                    "task_id": task_id,
+                    "trial": trial,
+                    "status": "infrastructure_error",
+                    "termination_reason": _SKIPPED_ARM_FAILURE,
+                    "failure_class": _SKIPPED_ARM_FAILURE,
+                    "metrics": {},
+                    "checks": {},
+                }
+                for task_id, trial in expected_pairs(contract)
+            ],
+        }
+    )
+    write_exclusive_json(output_dir / f"{arm}.evidence.json", evidence.to_dict())
     return evidence, raw_path
 
 
@@ -426,7 +492,7 @@ class Tau2SealedEvaluator:
                 baseline_sha=plan.baseline_sha,
                 candidate_sha=plan.candidate_sha,
             ) as (baseline_checkout, candidate_checkout):
-                _baseline, baseline_raw = _run_arm(
+                baseline, baseline_raw = _run_arm(
                     contract,
                     arm="baseline",
                     checkout=baseline_checkout,
@@ -437,7 +503,11 @@ class Tau2SealedEvaluator:
                     run_id=f"crucible-test-{plan.plan_id[:16]}-{attempt_number}-baseline",
                     timeout=per_arm,
                 )
-                _candidate, candidate_raw = _run_arm(
+                if baseline.execution_status != "complete":
+                    raise Tau2InfrastructureError(
+                        f"tau2 baseline arm is invalid: {baseline.failure_class}"
+                    )
+                candidate, candidate_raw = _run_arm(
                     contract,
                     arm="candidate",
                     checkout=candidate_checkout,
@@ -448,6 +518,10 @@ class Tau2SealedEvaluator:
                     run_id=f"crucible-test-{plan.plan_id[:16]}-{attempt_number}-candidate",
                     timeout=per_arm,
                 )
+                if candidate.execution_status != "complete":
+                    raise Tau2InfrastructureError(
+                        f"tau2 candidate arm is invalid: {candidate.failure_class}"
+                    )
         except Tau2InfrastructureError as exc:
             raise SealedInfrastructureError("tau2_infrastructure_error") from exc
         response_path = evaluation_dir / "response.json"
@@ -506,16 +580,24 @@ def run_command_evaluator() -> int:
             run_id=f"crucible-{contract.stage}-{request['attempt_id']}-baseline",
             timeout=per_arm,
         )
-        candidate, candidate_raw = _run_arm(
-            contract,
-            arm="candidate",
-            checkout=candidate_checkout,
-            harness_root=harness_root,
-            contract_path=contract_path,
-            output_dir=output_dir,
-            run_id=f"crucible-{contract.stage}-{request['attempt_id']}-candidate",
-            timeout=per_arm,
-        )
+        if baseline.execution_status == "invalid":
+            candidate, candidate_raw = _write_skipped_arm(
+                contract,
+                arm="candidate",
+                output_dir=output_dir,
+                trigger=baseline,
+            )
+        else:
+            candidate, candidate_raw = _run_arm(
+                contract,
+                arm="candidate",
+                checkout=candidate_checkout,
+                harness_root=harness_root,
+                contract_path=contract_path,
+                output_dir=output_dir,
+                run_id=f"crucible-{contract.stage}-{request['attempt_id']}-candidate",
+                timeout=per_arm,
+            )
     finally:
         executable = shutil.which("git")
         if executable is not None:
@@ -525,10 +607,14 @@ def run_command_evaluator() -> int:
                 check=False,
                 capture_output=True,
             )
-    failed_ids = tuple(
-        row.task_id
-        for row in candidate.rows
-        if row.metric(contract.promotion.primary_metric) in {None, 0.0}
+    failed_ids = (
+        tuple(
+            row.task_id
+            for row in candidate.rows
+            if row.metric(contract.promotion.primary_metric) in {None, 0.0}
+        )
+        if baseline.execution_status == candidate.execution_status == "complete"
+        else ()
     )
     feedback = (
         FailureFeedback(("workflow_completion",), failed_ids).to_dict() if failed_ids else None

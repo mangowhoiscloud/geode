@@ -1,5 +1,6 @@
 import hashlib
 import json
+import subprocess
 from pathlib import Path
 
 import pytest
@@ -9,6 +10,7 @@ from plugins.crucible.contract import (
     TaskUnit,
     task_pack_sha256,
 )
+from plugins.crucible.evidence import EvidenceEnvelope, ResourceUsage
 from plugins.crucible.producers.codex_kg import (
     _DEFAULT_GRAPH_PATH,
     ProducerError,
@@ -16,8 +18,12 @@ from plugins.crucible.producers.codex_kg import (
     _validate_policy_grammar,
     knowledge_context,
 )
+from plugins.crucible.promotion import decide
 from plugins.crucible.tau2_live import (
+    Tau2InfrastructureError,
+    _run_arm,
     _train_evaluation_response,
+    _write_skipped_arm,
     tau2_command,
     tau2_trace_checks,
 )
@@ -65,6 +71,38 @@ def test_command_evaluator_emits_paths_relative_to_response_directory(
         "baseline_raw": "baseline.raw.json",
         "candidate_raw": "candidate.raw.json",
     }
+
+
+def test_skipped_candidate_is_closed_zero_call_infrastructure_evidence(tmp_path: Path) -> None:
+    contract = _contract()
+    trigger = _arm_evidence(
+        contract,
+        arm="baseline",
+        invalid=True,
+        raw_hash="a" * 64,
+    )
+
+    candidate, raw_path = _write_skipped_arm(
+        contract,
+        arm="candidate",
+        output_dir=tmp_path,
+        trigger=trigger,
+    )
+
+    raw = json.loads(raw_path.read_text(encoding="utf-8"))
+    assert raw["schema"] == "crucible.skipped-arm.v1"
+    assert raw["triggering_evidence_id"] == trigger.evidence_id
+    assert candidate.execution_status == "invalid"
+    assert candidate.failure_class == "paired_arm_skipped"
+    assert candidate.usage == ResourceUsage(0.0, 0, 0, 0.0)
+    assert [row.pair_id for row in candidate.rows] == [
+        (task_id, 0) for task_id in contract.task_ids
+    ]
+    assert all(row.status == "infrastructure_error" for row in candidate.rows)
+    verdict = decide(contract, trigger, candidate)
+    assert verdict.verdict == "INVALID"
+    assert verdict.reasons == ("infrastructure_contamination",)
+    assert verdict.pair_count == 0
 
 
 def _contract() -> ExperimentContract:
@@ -177,6 +215,132 @@ def _test_contract(parent: ExperimentContract) -> ExperimentContract:
         }
     )
     return ExperimentContract.from_mapping(payload)
+
+
+def _arm_evidence(
+    contract: ExperimentContract,
+    *,
+    arm: str,
+    invalid: bool,
+    raw_hash: str,
+) -> EvidenceEnvelope:
+    revision = contract.baseline_sha if arm == "baseline" else contract.candidate_sha
+    return EvidenceEnvelope.from_mapping(
+        {
+            "schema": "crucible.evidence.v3",
+            "contract_id": contract.contract_id,
+            "arm": arm,
+            "revision_sha": revision,
+            "evaluator_sha256": contract.evaluator_sha256,
+            "harness_sha256": contract.harness_sha256,
+            "task_pack_sha256": contract.task_pack_sha256,
+            "assay_config_sha256": contract.assay_config_sha256,
+            "raw_artifact_sha256": raw_hash,
+            "execution_status": "invalid" if invalid else "complete",
+            "failure_class": "route_contamination" if invalid else None,
+            "usage": ResourceUsage(1.0, 1, 10, 0.0).to_dict(),
+            "rows": [
+                {
+                    "task_id": task_id,
+                    "trial": 0,
+                    "status": "infrastructure_error" if invalid else "completed",
+                    "termination_reason": "empty_output" if invalid else "done",
+                    "failure_class": "route_contamination" if invalid else None,
+                    "metrics": {} if invalid else {"reward": 1.0},
+                    "checks": {} if invalid else {"safety": True, "tool_contract": True},
+                }
+                for task_id in contract.task_ids
+            ],
+        }
+    )
+
+
+def _prepared_arm(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    *,
+    invalid: bool,
+) -> tuple[ExperimentContract, Path, Path, Path]:
+    contract = _contract()
+    checkout = tmp_path / "checkout"
+    harness = tmp_path / "harness"
+    output = tmp_path / "output"
+    checkout.mkdir()
+    raw = harness / "data" / "simulations" / "fixture-run" / "results.json"
+    raw.parent.mkdir(parents=True)
+    raw.write_text("{}\n", encoding="utf-8")
+    snapshot = output / "snapshots" / "fixture-run.snapshot.json"
+    snapshot.parent.mkdir(parents=True)
+    snapshot.write_text("{}\n", encoding="utf-8")
+    evidence = _arm_evidence(
+        contract,
+        arm="baseline",
+        invalid=invalid,
+        raw_hash=hashlib.sha256(raw.read_bytes()).hexdigest(),
+    )
+    monkeypatch.setattr(
+        "plugins.crucible.tau2_live.subprocess.run",
+        lambda *args, **kwargs: subprocess.CompletedProcess(args=[], returncode=1),
+    )
+    monkeypatch.setattr(
+        "plugins.crucible.tau2_live.tau2_resource_usage_floor",
+        lambda raw: ResourceUsage(1.0, 1, 10, 0.0),
+    )
+    monkeypatch.setattr("plugins.crucible.tau2_live.tau2_trace_checks", lambda raw: {})
+    monkeypatch.setattr(
+        "plugins.crucible.tau2_live.normalize_tau2_results",
+        lambda *args, **kwargs: evidence,
+    )
+    return contract, checkout, harness, output
+
+
+def test_run_arm_preserves_finalized_invalid_evidence_after_nonzero_exit(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    contract, checkout, harness, output = _prepared_arm(
+        tmp_path,
+        monkeypatch,
+        invalid=True,
+    )
+
+    evidence, raw_path = _run_arm(
+        contract,
+        arm="baseline",
+        checkout=checkout,
+        harness_root=harness,
+        contract_path=tmp_path / "contract.json",
+        output_dir=output,
+        run_id="fixture-run",
+        timeout=10.0,
+    )
+
+    assert evidence.execution_status == "invalid"
+    assert raw_path == output / "baseline.raw.json"
+    assert (output / "baseline.evidence.json").is_file()
+
+
+def test_run_arm_rejects_nonzero_exit_with_complete_evidence(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    contract, checkout, harness, output = _prepared_arm(
+        tmp_path,
+        monkeypatch,
+        invalid=False,
+    )
+
+    with pytest.raises(Tau2InfrastructureError, match="exited with status 1"):
+        _run_arm(
+            contract,
+            arm="baseline",
+            checkout=checkout,
+            harness_root=harness,
+            contract_path=tmp_path / "contract.json",
+            output_dir=output,
+            run_id="fixture-run",
+            timeout=10.0,
+        )
 
 
 def test_tau2_command_is_fully_derived_from_frozen_subscription_config(tmp_path: Path) -> None:

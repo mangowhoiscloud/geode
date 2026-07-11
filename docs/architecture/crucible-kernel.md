@@ -803,6 +803,27 @@ INVALID with no search-head movement. The replay uses no model call and rejects
 extra paths, merge commits, or surface drift. Provider recovery can therefore
 retry the same hypothesis instead of silently resampling the search.
 
+Campaign r11 replayed that exact one-line candidate with zero producer calls.
+The baseline completed six rows as `[1, 1, 1, 0, infrastructure_error, 0]`.
+The fifth row received two consecutive completed GPT-5.4 responses whose
+`output_text` was empty; both dumps remained unmarked. A separate empty response
+in the sixth row recovered on the identical retry and carries the expected
+`.recovered` marker. The distinction therefore worked: one recovered anomaly
+did not contaminate the row, while the repeated empty response invalidated the
+arm. The candidate arm was never started, the search head did not move, and the
+2,004.8-second attempt contains no promotion evidence.
+
+The arm snapshot already recorded `execution_status=invalid` and
+`failure_class=route_contamination`, but the runner's final non-zero exit caused
+the command supervisor to retain only `invalid_attempt`. Finalized invalid raw
+and snapshot artifacts now pass through normalization even after a non-zero
+runner exit. Train evaluation emits a zero-call `paired_arm_skipped` counterpart
+for every frozen pair and returns both envelopes to the ordinary promotion
+gate. The resulting verdict remains `INVALID` with zero paired rows and no
+candidate execution, while preserving the infrastructure cause for deterministic
+replay. A non-zero exit without valid finalized artifacts, or with evidence
+claiming `complete`, still fails as a hard evaluator error.
+
 The strongest honest claims are:
 
 - the frozen external tau2 baseline identified concrete retail wrong-write and
