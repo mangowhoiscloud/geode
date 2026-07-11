@@ -957,14 +957,39 @@ function DistillationAct() {
                   {t(locale, "전체 기록 보기", "View the full record")}
                 </a>
               </div>
+              <div className="mt-6 flex flex-col items-center gap-2.5">
+                <p className="font-mono text-[10px] uppercase tracking-[0.3em]" style={{ color: PAPER_75 }}>
+                  {t(locale, "실험 기록 · 승격 0회까지 그대로", "experiment records · zero promotions included")}
+                </p>
+                <div className="flex flex-wrap items-center justify-center gap-x-6 gap-y-2 font-mono text-[12px]">
+                  <a
+                    href="/geode/self-improving/"
+                    className="text-[#FFF0F8] underline decoration-[color-mix(in_srgb,#FFF0F8_45%,transparent)] underline-offset-4 transition-opacity hover:opacity-75"
+                  >
+                    {t(locale, "self-improving 허브", "self-improving hub")}
+                  </a>
+                  <a
+                    href="/geode/self-improving/petri-bundle/"
+                    className="text-[#FFF0F8] underline decoration-[color-mix(in_srgb,#FFF0F8_45%,transparent)] underline-offset-4 transition-opacity hover:opacity-75"
+                  >
+                    {t(locale, "petri 감사 아카이브", "petri audit archive")}
+                  </a>
+                </div>
+              </div>
             </div>
           </div>
           <div
-            className="pointer-events-none absolute inset-x-0 bottom-0 z-10 flex items-end justify-between px-5 pb-3.5 font-mono text-[10px] uppercase tracking-[0.18em]"
+            className="absolute inset-x-0 bottom-0 z-10 flex items-end justify-between px-5 pb-3.5 font-mono text-[10px] uppercase tracking-[0.18em]"
             style={{ color: ROSE_INK }}
           >
-            <span>specimen · geodi</span>
-            <span>petri audit attached</span>
+            <span className="pointer-events-none">specimen · geodi</span>
+            <a
+              href="/geode/self-improving/petri-bundle/"
+              className="underline decoration-[color-mix(in_srgb,#C2447F_45%,transparent)] underline-offset-4 transition-opacity hover:opacity-75"
+              style={{ color: ROSE_INK }}
+            >
+              petri audit attached
+            </a>
           </div>
         </motion.div>
       </div>
