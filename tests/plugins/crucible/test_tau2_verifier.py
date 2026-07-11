@@ -474,3 +474,57 @@ def test_tau2_task_pack_cli_emits_only_ordered_hash_identities(tmp_path: Path) -
     assert [task["task_id"] for task in payload["tasks"]] == ["2", "1"]
     assert all(set(task) == {"task_id", "family_id", "content_sha256"} for task in payload["tasks"])
     assert "description" not in json.dumps(payload)
+
+
+def test_tau2_task_pack_cli_rejects_tasks_outside_frozen_split(tmp_path: Path) -> None:
+    tasks_path = tmp_path / "tasks.json"
+    split_path = tmp_path / "split_tasks.json"
+    output = tmp_path / "pack.json"
+    tasks_path.write_text(json.dumps(_raw_tasks()), encoding="utf-8")
+    split_path.write_text(json.dumps({"base": ["1"]}), encoding="utf-8")
+
+    assert (
+        crucible_main(
+            [
+                "tau2-task-pack",
+                str(tasks_path),
+                "--task-id",
+                "2",
+                "--task-split",
+                str(split_path),
+                "--task-split-name",
+                "base",
+                "--output",
+                str(output),
+            ]
+        )
+        == 2
+    )
+    assert not output.exists()
+
+
+def test_tau2_task_pack_cli_accepts_tasks_inside_frozen_split(tmp_path: Path) -> None:
+    tasks_path = tmp_path / "tasks.json"
+    split_path = tmp_path / "split_tasks.json"
+    output = tmp_path / "pack.json"
+    tasks_path.write_text(json.dumps(_raw_tasks()), encoding="utf-8")
+    split_path.write_text(json.dumps({"base": ["2", "1"]}), encoding="utf-8")
+
+    assert (
+        crucible_main(
+            [
+                "tau2-task-pack",
+                str(tasks_path),
+                "--task-id",
+                "2",
+                "--task-split",
+                str(split_path),
+                "--task-split-name",
+                "base",
+                "--output",
+                str(output),
+            ]
+        )
+        == 0
+    )
+    assert [task["task_id"] for task in json.loads(output.read_text())["tasks"]] == ["2"]

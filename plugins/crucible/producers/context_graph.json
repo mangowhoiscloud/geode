@@ -19,7 +19,7 @@
       "name": "Tau2 GEODE adapter",
       "summary": "Builds the AgenticLoop, loads the policy, and projects complete tool-call batches to the tau2 orchestrator.",
       "tags": ["adapter", "benchmark", "tool-projection"],
-      "contentSha256": "28be26939db32e41b75422a168af00c102f442808ba74340ae50f4d3e78d2986"
+      "contentSha256": "0c766a501b6d0519988c9310a16ea62f477282b34a32f0fa1ace625f1b56997e"
     },
     {
       "id": "file:core/agent/loop/agent_loop.py",

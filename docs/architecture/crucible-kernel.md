@@ -176,9 +176,13 @@ The contract fixes:
 The preflight computes the task-pack hash from ordered task IDs, family IDs,
 canonical per-task content hashes, and trial cardinality. Relabeling the same
 task does not change its content hash, and duplicate content inside one pack is
-invalid. Actual task, policy, environment, and verifier bytes must also live
-inside the clean external harness tree, whose tracked content is hashed
-separately. Loading assay data from outside that tree is not a valid
+invalid. Tau2 pack construction can additionally bind selection to the
+upstream split manifest and rejects any requested ID outside that split. At
+runtime the adapter loads the configured task set and split, then compares the
+ordered task IDs, content hashes, and workflow-family hashes with the contract
+before a provider call. Actual task, policy, environment, and verifier bytes
+must also live inside the clean external harness tree, whose tracked content is
+hashed separately. Loading assay data from outside that tree is not a valid
 integration. Preflight also hashes actual evaluator paths, verifies the clean
 checkout SHA, and inspects the baseline-to-candidate diff. The diff must touch
 the declared mutation surface,
@@ -236,9 +240,10 @@ lineage, and exact shard identity. Contract-backed tau2 runs additionally:
 - require an evaluator-owned native user runtime instead of the candidate's
   GEODE loop, so a core mutation changes only the agent arm;
 - use a fresh, atomically reserved run ID and a pinned harness data root;
-- verify the exact top-level tau2 task objects loaded during execution against
-  the frozen content hashes; the adapter derives workflow-family hashes from
-  criterion kinds and tool-action names rather than core `if/elif` cases;
+- verify the exact top-level tau2 task objects loaded during preflight against
+  the frozen IDs, content hashes, and workflow-family hashes; the adapter
+  derives families from criterion kinds and tool-action names rather than core
+  `if/elif` cases;
 - write the raw artifact SHA-256 and an atomic snapshot finalization status;
   run or route failures are preserved as `invalid`, never `complete`.
 
@@ -354,7 +359,9 @@ The packaged operational surface is:
 # Derive opaque task/content/family identities from the frozen harness task
 # file. The emitted manifest contains no scenario or oracle text.
 uv run python -m plugins.crucible tau2-task-pack tasks.json \
-  --task-id 17 --task-id 42 --output train.pack.json
+  --task-id 17 --task-id 42 \
+  --task-split split_tasks.json --task-split-name base \
+  --output train.pack.json
 
 # Normalize each finalized arm. Usage and safety/tool checks are independent
 # manifests; reward is not allowed to imply those checks.
@@ -738,6 +745,18 @@ producer now rejects any behavior clause outside the two-token grammar before
 committing a candidate. Tau2's adapter-owned runtime profile also caps
 `geode_agent` at concurrency one; a future parallel implementation must first
 replace that profile with direct thread-safety evidence.
+
+Campaign r5 retained that serial profile and generated a valid one-line
+`CAN`/`CANNOT` candidate (`4e2f53818a`). Its baseline never reached a provider
+call: the external selection had ranked two-fault rows from all 2,285 telecom
+tasks while the contract fixed the 114-row `base` split. Only one of four
+selected IDs belonged to that split, so tau2 rejected the pack before
+measurement. The supervisor recorded attempt 1 as `INVALID`; the operator
+stopped attempt 2 during proposal because the frozen evaluator would encounter
+the same deterministic defect. The task-pack CLI now validates requested IDs
+against the upstream split manifest, and runtime preflight independently
+recomputes all loaded task identities. r5 contains no paired performance
+evidence and cannot inform a promotion decision.
 
 The strongest honest claims are:
 

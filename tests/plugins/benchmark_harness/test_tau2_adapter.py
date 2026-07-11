@@ -25,6 +25,8 @@ from plugins.benchmark_harness.tau2_geode_agent import (
     _validate_tau2_task_order,
     _write_trajectory_snapshot,
 )
+from plugins.crucible.contract import TaskUnit
+from plugins.crucible.verifiers.tau2 import tau2_task_unit
 
 
 def test_tau2_agent_prompt_blocks_inferred_optional_tool_args() -> None:
@@ -84,6 +86,76 @@ def test_tau2_explicit_task_pack_rejects_loader_reordering(
 
     with pytest.raises(ValueError, match="loader order"):
         _validate_tau2_task_order(config)
+
+
+def test_tau2_explicit_task_pack_rejects_loaded_content_drift(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    raw_task = {
+        "id": "task-A",
+        "description": {"purpose": "actual"},
+        "evaluation_criteria": {"actions": [{"name": "lookup"}]},
+        "user_tools": None,
+    }
+    loaded = SimpleNamespace(
+        id="task-A",
+        model_dump=lambda **_kwargs: raw_task,
+    )
+    fake_tau2 = ModuleType("tau2")
+    fake_registry_module = ModuleType("tau2.registry")
+    fake_helpers = ModuleType("tau2.runner.helpers")
+    fake_registry_module.registry = SimpleNamespace(get_agent_task_filter=lambda _agent: None)
+    fake_helpers.get_tasks = lambda **_kwargs: [loaded]
+    monkeypatch.setitem(sys.modules, "tau2", fake_tau2)
+    monkeypatch.setitem(sys.modules, "tau2.registry", fake_registry_module)
+    monkeypatch.setitem(sys.modules, "tau2.runner.helpers", fake_helpers)
+    config = SimpleNamespace(
+        task_ids=["task-A"],
+        task_set_name="retail",
+        domain="retail",
+        task_split_name="base",
+        effective_agent="geode_agent",
+    )
+    actual = tau2_task_unit(raw_task)
+    contract = SimpleNamespace(
+        tasks=(TaskUnit(actual.task_id, actual.family_id, "0" * 64),),
+    )
+
+    with pytest.raises(ValueError, match="loaded task identities"):
+        _validate_tau2_task_order(config, contract)
+
+
+def test_tau2_explicit_task_pack_accepts_exact_loaded_identities(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    raw_task = {
+        "id": "task-A",
+        "description": {"purpose": "actual"},
+        "evaluation_criteria": {"actions": [{"name": "lookup"}]},
+        "user_tools": None,
+    }
+    loaded = SimpleNamespace(
+        id="task-A",
+        model_dump=lambda **_kwargs: raw_task,
+    )
+    fake_tau2 = ModuleType("tau2")
+    fake_registry_module = ModuleType("tau2.registry")
+    fake_helpers = ModuleType("tau2.runner.helpers")
+    fake_registry_module.registry = SimpleNamespace(get_agent_task_filter=lambda _agent: None)
+    fake_helpers.get_tasks = lambda **_kwargs: [loaded]
+    monkeypatch.setitem(sys.modules, "tau2", fake_tau2)
+    monkeypatch.setitem(sys.modules, "tau2.registry", fake_registry_module)
+    monkeypatch.setitem(sys.modules, "tau2.runner.helpers", fake_helpers)
+    config = SimpleNamespace(
+        task_ids=["task-A"],
+        task_set_name="retail",
+        domain="retail",
+        task_split_name="base",
+        effective_agent="geode_agent",
+    )
+    contract = SimpleNamespace(tasks=(tau2_task_unit(raw_task),))
+
+    _validate_tau2_task_order(config, contract)
 
 
 def test_tau2_data_root_ignores_ambient_override(
@@ -148,6 +220,8 @@ def test_tau2_tool_calls_preserves_explicit_empty_arguments(
 def test_tau2_contract_run_must_match_frozen_identity_axes() -> None:
     assay_config = {
         "schema": "crucible.tau2-assay.v1",
+        "max_concurrency": 1,
+        "agent": {"implementation": "geode_agent"},
         "user": {
             "implementation": "user_simulator",
             "runtime_owner": "evaluator",

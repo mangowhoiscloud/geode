@@ -78,7 +78,10 @@ functional change.
   transport failures still fail closed. Candidate policy clauses are
   machine-checked as `CAN`/`CANNOT` before commit, and the tau2 runtime profile
   rejects thread-pool concurrency for `geode_agent` until the Codex streaming
-  path has direct parallel-safety evidence. Explicitly
+  path has direct parallel-safety evidence. Task-pack construction can now bind
+  selected IDs to the upstream split manifest, and runtime preflight compares
+  the exact loaded task IDs, content hashes, and workflow-family hashes with
+  the frozen contract before any provider call. Explicitly
   granted registry tools now replace a same-named global declarative schema, so
   an assay handler cannot receive arguments from GEODE's unrelated tool with
   the same name.
@@ -111,8 +114,10 @@ functional change.
   `release_authority=none`; reusable `score` no longer accepts test contracts.
 - **Tau2 task-pack and usage manifests are adapter-owned.** New
   `tau2-task-pack` and `tau2-usage` CLI commands emit compact hash identities
-  and raw-message usage floors outside core promotion logic, keeping assay
-  cases in the versioned tau2 adapter instead of adding core `if/elif` gates.
+  and raw-message usage floors outside core promotion logic. Task-pack creation
+  optionally requires an upstream split manifest and split key, preventing a
+  contract from naming tasks its configured runtime split cannot load. Assay
+  cases remain in the versioned tau2 adapter instead of core `if/elif` gates.
 - **Tau2 tool projection follows upstream metadata.** The GEODE participant
   reads tau2's decorated mutability marker instead of inferring side effects
   from tool-name prefixes, and preserves explicitly supplied empty arguments

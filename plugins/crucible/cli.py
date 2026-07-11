@@ -66,6 +66,15 @@ def _add_tau2_task_pack(subparsers: Any) -> None:
     )
     parser.add_argument("tasks", type=Path)
     parser.add_argument("--task-id", action="append", required=True)
+    parser.add_argument(
+        "--task-split",
+        type=Path,
+        help="upstream split manifest that must contain every selected task",
+    )
+    parser.add_argument(
+        "--task-split-name",
+        help="split key to validate in --task-split",
+    )
     parser.add_argument("--trials-per-task", type=int, default=1)
     parser.add_argument("--output", type=Path, required=True)
 
@@ -179,6 +188,36 @@ def _tau2_task_pack(args: argparse.Namespace) -> dict[str, Any]:
     requested = tuple(str(task_id) for task_id in args.task_id)
     if len(set(requested)) != len(requested):
         raise ContractError("--task-id must not contain duplicates")
+    if (args.task_split is None) != (args.task_split_name is None):
+        raise ContractError("--task-split and --task-split-name must be provided together")
+    if args.task_split is not None:
+        try:
+            split_info = args.task_split.lstat()
+        except OSError as exc:
+            raise ContractError(f"cannot read tau2 task split {args.task_split}: {exc}") from exc
+        if not stat.S_ISREG(split_info.st_mode) or split_info.st_size > 8 * 1024 * 1024:
+            raise ContractError("tau2 task split must be a regular file no larger than 8 MiB")
+        try:
+            split_manifest = json.loads(args.task_split.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError) as exc:
+            raise ContractError(f"cannot read tau2 task split {args.task_split}: {exc}") from exc
+        if not isinstance(split_manifest, Mapping):
+            raise ContractError("tau2 task split must be a JSON object")
+        split_ids = split_manifest.get(args.task_split_name)
+        if not isinstance(split_ids, list) or not all(
+            isinstance(task_id, str) and task_id for task_id in split_ids
+        ):
+            raise ContractError(
+                f"tau2 task split {args.task_split_name!r} must be a list of task IDs"
+            )
+        if len(set(split_ids)) != len(split_ids):
+            raise ContractError(f"tau2 task split {args.task_split_name!r} repeats task IDs")
+        outside_split = [task_id for task_id in requested if task_id not in set(split_ids)]
+        if outside_split:
+            raise ContractError(
+                f"tau2 task IDs are outside split {args.task_split_name!r}: "
+                + ", ".join(outside_split)
+            )
     missing = [task_id for task_id in requested if task_id not in indexed]
     if missing:
         raise ContractError("tau2 task IDs are missing: " + ", ".join(missing))

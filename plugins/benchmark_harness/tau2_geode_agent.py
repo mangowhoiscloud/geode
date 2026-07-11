@@ -38,7 +38,7 @@ from plugins.crucible.contract import (
     validate_measurement_files,
     validate_test_parent,
 )
-from plugins.crucible.verifiers.tau2 import TAU2_ADAPTER
+from plugins.crucible.verifiers.tau2 import TAU2_ADAPTER, tau2_task_unit
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_HARNESS_DIR = REPO_ROOT / "artifacts" / "eval" / "harnesses" / "tau2-bench"
@@ -681,8 +681,11 @@ def _resolve_num_tasks(task_ids: list[str] | None, num_tasks: int | None) -> int
     return num_tasks
 
 
-def _validate_tau2_task_order(config: Any) -> None:
-    """Fail when tau2's loader would reorder an explicitly frozen task pack."""
+def _validate_tau2_task_order(
+    config: Any,
+    contract: ExperimentContract | None = None,
+) -> None:
+    """Fail when tau2 cannot reproduce the ordered frozen task pack."""
     requested = tuple(config.task_ids or ())
     if not requested:
         return
@@ -703,6 +706,20 @@ def _validate_tau2_task_order(config: Any) -> None:
         raise ValueError(
             "tau2 loader order does not match ordered --task-ids "
             f"(requested={requested!r}, selected={actual!r})"
+        )
+    if contract is None:
+        return
+    observed = tuple(
+        tau2_task_unit(
+            task.model_dump(mode="json"),
+            field=f"tau2 loaded task[{index}]",
+        )
+        for index, task in enumerate(selected)
+    )
+    if observed != contract.tasks:
+        raise ContractError(
+            "tau2 loaded task identities do not match the frozen contract "
+            "(task ID, content, or workflow family changed)"
         )
 
 
@@ -1052,8 +1069,8 @@ def main() -> int:
         retrieval_config_kwargs=retrieval_config_kwargs,
     )
     try:
-        _validate_tau2_task_order(config)
-    except ValueError as exc:
+        _validate_tau2_task_order(config, experiment_contract)
+    except (ContractError, ValueError) as exc:
         _restore_tau2_data_root(previous_tau2_data_dir)
         raise SystemExit(str(exc)) from exc
     previous_fail_empty_text = os.environ.get("GEODE_CODEX_OAUTH_FAIL_EMPTY_TEXT")
