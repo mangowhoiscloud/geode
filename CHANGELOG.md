@@ -45,6 +45,22 @@ functional change.
 
 ---
 
+## [0.99.301] - 2026-07-11
+
+### Added
+
+- **Seed-pipeline run diagram in the docs (operator-directed).** The
+  `capabilities/seed-pipeline` page gains a hand-drawn SVG in the docs
+  signature language (`site/public/diagrams/seed-pipeline-run.svg`): the
+  entry ladder (picker, cost preview and confirm, pre-flight), the nine-role
+  pipeline frame with per-phase checkpoints, blend survivor selection
+  splitting into the cycle-input pool and the published bundle, the
+  version-frozen held-out bench below a dashed line, and the meta-review
+  priors looping back to the next run's picker. Mounted in both locales
+  with alt text and captions.
+
+---
+
 ## [0.99.300] - 2026-07-11
 
 ### Changed
