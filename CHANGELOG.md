@@ -99,8 +99,10 @@ functional change.
   still fail closed. Tau2 raw messages now preserve every recovered
   pre-execution retry by count and exception class; normalization validates
   that telemetry and closes the arm as infrastructure-contaminated instead of
-  treating the extra provider sample and elapsed time as semantic score. A
-  finalized invalid arm now
+  treating the extra provider sample and elapsed time as semantic score.
+  Deterministic replay remains closed to ordinary scored rejects; a reject can
+  be replayed only when its source contract is content-attested and the current
+  evaluator digest has actually changed. A finalized invalid arm now
   survives the runner's non-zero exit as structured evidence. Train evaluation
   writes a zero-call skipped counterpart instead of running the other arm, so
   the supervisor records a scoreless infrastructure verdict with the original

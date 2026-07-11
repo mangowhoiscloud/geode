@@ -7,6 +7,7 @@ import subprocess
 from pathlib import Path
 
 import pytest
+from plugins.crucible.contract import content_sha256
 from plugins.crucible.producers.codex_kg import ProducerError
 from plugins.crucible.producers.replay import _attested_object, replay_candidate
 
@@ -62,6 +63,7 @@ def _commit(repository: Path, message: str) -> str:
 def _source(repository: Path, *, extra_change: bool = False) -> tuple[str, str]:
     _init(repository)
     _write_policy(repository, POLICY)
+    (repository / "runtime.py").write_text("VERSION = 1\n", encoding="utf-8")
     baseline = _commit(repository, "baseline")
     _write_policy(repository, IMPROVED_POLICY)
     if extra_change:
@@ -70,10 +72,18 @@ def _source(repository: Path, *, extra_change: bool = False) -> tuple[str, str]:
     return baseline, candidate
 
 
-def _target(repository: Path, *, policy: str = POLICY) -> str:
+def _target(
+    repository: Path,
+    *,
+    policy: str = POLICY,
+    runtime_version: int = 2,
+) -> str:
     _init(repository)
     _write_policy(repository, policy)
-    (repository / "runtime.py").write_text("VERSION = 2\n", encoding="utf-8")
+    (repository / "runtime.py").write_text(
+        f"VERSION = {runtime_version}\n",
+        encoding="utf-8",
+    )
     return _commit(repository, "new runtime baseline")
 
 
@@ -96,14 +106,43 @@ def _request(path: Path, parent_sha: str) -> None:
 def _source_attempt(
     path: Path,
     *,
+    source_repository: Path,
     parent_sha: str,
     candidate_sha: str,
     outcome: str = "INVALID",
+    evaluator_revision: bool = False,
 ) -> dict[str, str]:
     path.mkdir()
     proposal_id = "a" * 64
     verdict_id = "b" * 64
-    payloads = {
+    contract_payload: dict[str, object] | None = None
+    contract_id = "c" * 64
+    if evaluator_revision:
+        contract_payload = {
+            "schema": "crucible.experiment.v3",
+            "stage": "train",
+            "baseline_sha": parent_sha,
+            "candidate_sha": candidate_sha,
+            "evaluator_sha256": content_sha256(source_repository, ("runtime.py",)),
+            "evaluator_paths": ["runtime.py"],
+            "mutations": [{"surface": "plugins/benchmark_harness/tau2_agent_policy.md"}],
+        }
+        contract_id = hashlib.sha256(
+            json.dumps(
+                contract_payload,
+                ensure_ascii=False,
+                separators=(",", ":"),
+                sort_keys=True,
+            ).encode("utf-8")
+        ).hexdigest()
+        contract_payload["contract_id"] = contract_id
+    reasons = (
+        ["improvement_below_materiality"]
+        if evaluator_revision
+        else ["infrastructure_contamination"]
+    )
+    paired_rows = 2 if evaluator_revision else 0
+    payloads: dict[str, dict[str, object]] = {
         "candidate": {
             "schema": "crucible.candidate.v2",
             "attempt_id": "source-attempt",
@@ -121,24 +160,30 @@ def _source_attempt(
             "schema": "crucible.verdict.v3",
             "verdict": outcome,
             "verdict_id": verdict_id,
-            "reasons": ["infrastructure_contamination"],
-            "metric": {"paired_rows": 0},
+            "contract_id": contract_id,
+            "promotion_authority": "none",
+            "reasons": reasons,
+            "metric": {"paired_rows": paired_rows},
         },
         "record": {
             "schema": "crucible.loop-record.v2",
             "outcome": outcome,
-            "reasons": ["infrastructure_contamination"],
+            "contract_id": contract_id,
+            "reasons": reasons,
             "proposal_id": proposal_id,
             "verdict_id": verdict_id,
             "search_head_before": parent_sha,
             "search_head_after": parent_sha,
         },
     }
+    if contract_payload is not None:
+        payloads["contract"] = contract_payload
     digests: dict[str, str] = {}
     for name, payload in payloads.items():
         artifact = path / f"{name}.json"
         artifact.write_text(json.dumps(payload), encoding="utf-8")
-        digests[f"{name}_sha256"] = hashlib.sha256(artifact.read_bytes()).hexdigest()
+        key = "source_contract_sha256" if name == "contract" else f"{name}_sha256"
+        digests[key] = hashlib.sha256(artifact.read_bytes()).hexdigest()
     return digests
 
 
@@ -150,13 +195,16 @@ def _replay(
     source_candidate: str,
     source_parent: str,
     outcome: str = "INVALID",
+    evaluator_revision: bool = False,
 ) -> None:
     attempt = source.parent / f"attempt-{outcome.lower()}"
     digests = _source_attempt(
         attempt,
+        source_repository=source,
         parent_sha=source_parent,
         candidate_sha=source_candidate,
         outcome=outcome,
+        evaluator_revision=evaluator_revision,
     )
     replay_candidate(
         request_path=request,
@@ -268,6 +316,60 @@ def test_replay_candidate_rejects_a_scored_source_attempt(
             source_candidate=source_candidate,
             source_parent=source_parent,
             outcome="REJECT",
+        )
+
+
+def test_replay_candidate_allows_reject_only_after_evaluator_digest_changes(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    source = tmp_path / "source"
+    source_parent, source_candidate = _source(source)
+    target = tmp_path / "target"
+    parent = _target(target, runtime_version=2)
+    request = tmp_path / "request.json"
+    output = tmp_path / "candidate.json"
+    _request(request, parent)
+    monkeypatch.chdir(target)
+
+    _replay(
+        request=request,
+        output=output,
+        source=source,
+        source_candidate=source_candidate,
+        source_parent=source_parent,
+        outcome="REJECT",
+        evaluator_revision=True,
+    )
+
+    proposal = json.loads(output.read_text(encoding="utf-8"))
+    assert proposal["usage"]["calls"] == 0
+    assert (target / "plugins/benchmark_harness/tau2_agent_policy.md").read_text(
+        encoding="utf-8"
+    ) == IMPROVED_POLICY
+
+
+def test_replay_candidate_rejects_reject_when_evaluator_digest_is_unchanged(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    source = tmp_path / "source"
+    source_parent, source_candidate = _source(source)
+    target = tmp_path / "target"
+    parent = _target(target, runtime_version=1)
+    request = tmp_path / "request.json"
+    _request(request, parent)
+    monkeypatch.chdir(target)
+
+    with pytest.raises(ProducerError, match="requires a changed evaluator digest"):
+        _replay(
+            request=request,
+            output=tmp_path / "candidate.json",
+            source=source,
+            source_candidate=source_candidate,
+            source_parent=source_parent,
+            outcome="REJECT",
+            evaluator_revision=True,
         )
 
 

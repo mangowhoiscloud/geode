@@ -81,9 +81,9 @@
       "id": "file:plugins/crucible/producers/replay.py",
       "filePath": "plugins/crucible/producers/replay.py",
       "name": "Candidate replay producer",
-      "summary": "Reapplies one preregistered candidate diff after infrastructure-only invalidation without resampling the optimizer.",
+      "summary": "Reapplies one attested candidate after infrastructure invalidation, or after a source-contract-bound evaluator digest change.",
       "tags": ["crucible", "producer", "measurement-retry"],
-      "contentSha256": "02175a1809141a1fc28c11842ad8edc9c060799ea0d52af27b0e21ae10bc2708"
+      "contentSha256": "95d44a88ed49fffe81f10502e118ccf3cc01be193531b17fec5e197eca498ea5"
     }
   ],
   "edges": [

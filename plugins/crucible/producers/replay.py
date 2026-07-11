@@ -1,4 +1,4 @@
-"""Deterministically replay one preregistered candidate after invalid measurement."""
+"""Replay one preregistered candidate after invalid measurement or evaluator repair."""
 
 from __future__ import annotations
 
@@ -13,6 +13,8 @@ import time
 from collections.abc import Sequence
 from pathlib import Path, PurePosixPath
 from typing import Any
+
+from plugins.crucible.contract import ContractError, content_sha256
 
 from .codex_kg import (
     ProducerError,
@@ -83,8 +85,9 @@ def _source_attempt(
     candidate_sha256: str,
     verdict_sha256: str,
     record_sha256: str,
-) -> tuple[str, str, str, str]:
-    """Return the source commit contract only for a scoreless infra INVALID."""
+    source_contract_sha256: str | None,
+) -> tuple[str, str, str, str, str | None, tuple[str, ...]]:
+    """Return an attested replay source and any evaluator-revision boundary."""
 
     candidate = _attested_object(path / "candidate.json", candidate_sha256, "source candidate")
     verdict = _attested_object(path / "verdict.json", verdict_sha256, "source verdict")
@@ -99,8 +102,22 @@ def _source_attempt(
     record_reasons = record.get("reasons")
     metric = verdict.get("metric")
     paired_rows = metric.get("paired_rows") if isinstance(metric, dict) else None
-    eligible = (
-        verdict.get("verdict") == "INVALID"
+    linked = (
+        record.get("search_head_before") == record.get("search_head_after")
+        and record.get("proposal_id") == candidate.get("proposal_id")
+        and record.get("verdict_id") == verdict.get("verdict_id")
+        and candidate.get("parent_sha") == record.get("search_head_before")
+    )
+    mutation = candidate.get("mutation")
+    if not isinstance(mutation, dict):
+        raise ProducerError("source candidate mutation must be an object")
+    candidate_sha = _sha(candidate.get("candidate_sha"), "source candidate_sha")
+    parent_sha = _sha(candidate.get("parent_sha"), "source parent_sha")
+    surface = _text(mutation.get("surface"), "source mutation surface")
+    hypothesis = _text(mutation.get("hypothesis"), "source mutation hypothesis")
+    invalid_retry = (
+        linked
+        and verdict.get("verdict") == "INVALID"
         and record.get("outcome") == "INVALID"
         and isinstance(reasons, list)
         and "infrastructure_contamination" in reasons
@@ -109,22 +126,73 @@ def _source_attempt(
         and isinstance(paired_rows, int)
         and not isinstance(paired_rows, bool)
         and paired_rows == 0
-        and record.get("search_head_before") == record.get("search_head_after")
-        and record.get("proposal_id") == candidate.get("proposal_id")
-        and record.get("verdict_id") == verdict.get("verdict_id")
-        and candidate.get("parent_sha") == record.get("search_head_before")
     )
-    if not eligible:
-        raise ProducerError("source attempt is not a scoreless infrastructure INVALID")
-    mutation = candidate.get("mutation")
-    if not isinstance(mutation, dict):
-        raise ProducerError("source candidate mutation must be an object")
-    return (
-        _sha(candidate.get("candidate_sha"), "source candidate_sha"),
-        _sha(candidate.get("parent_sha"), "source parent_sha"),
-        _text(mutation.get("surface"), "source mutation surface"),
-        _text(mutation.get("hypothesis"), "source mutation hypothesis"),
+    if invalid_retry:
+        return candidate_sha, parent_sha, surface, hypothesis, None, ()
+    if source_contract_sha256 is None:
+        raise ProducerError(
+            "source attempt is not a scoreless infrastructure INVALID; "
+            "evaluator-revision replay requires an attested source contract"
+        )
+
+    contract = _attested_object(
+        path / "contract.json",
+        source_contract_sha256,
+        "source contract",
     )
+    contract_id = contract.get("contract_id")
+    canonical_contract_id = hashlib.sha256(
+        json.dumps(
+            {key: value for key, value in contract.items() if key != "contract_id"},
+            ensure_ascii=False,
+            separators=(",", ":"),
+            sort_keys=True,
+        ).encode("utf-8")
+    ).hexdigest()
+    evaluator_sha = contract.get("evaluator_sha256")
+    evaluator_paths_raw = contract.get("evaluator_paths")
+    mutations = contract.get("mutations")
+    correction_eligible = (
+        linked
+        and verdict.get("verdict") == "REJECT"
+        and record.get("outcome") == "REJECT"
+        and verdict.get("promotion_authority") == "none"
+        and isinstance(reasons, list)
+        and bool(reasons)
+        and isinstance(record_reasons, list)
+        and record_reasons == reasons
+        and isinstance(paired_rows, int)
+        and not isinstance(paired_rows, bool)
+        and paired_rows > 0
+        and contract.get("schema") == "crucible.experiment.v3"
+        and contract.get("stage") == "train"
+        and isinstance(contract_id, str)
+        and _FULL_SHA256.fullmatch(contract_id) is not None
+        and contract_id == canonical_contract_id
+        and verdict.get("contract_id") == contract_id
+        and record.get("contract_id") == contract_id
+        and contract.get("baseline_sha") == parent_sha
+        and contract.get("candidate_sha") == candidate_sha
+        and isinstance(evaluator_sha, str)
+        and _FULL_SHA256.fullmatch(evaluator_sha) is not None
+        and isinstance(mutations, list)
+        and len(mutations) == 1
+        and isinstance(mutations[0], dict)
+        and mutations[0].get("surface") == surface
+    )
+    if not correction_eligible:
+        raise ProducerError("source attempt is not eligible for evaluator-revision replay")
+    if not isinstance(evaluator_paths_raw, list) or not evaluator_paths_raw:
+        raise ProducerError("source contract evaluator_paths must be a non-empty list")
+    evaluator_paths: list[str] = []
+    for value in evaluator_paths_raw:
+        if not isinstance(value, str) or not value.strip():
+            raise ProducerError("source contract evaluator_paths must contain strings")
+        path_value = PurePosixPath(value)
+        if path_value.is_absolute() or ".." in path_value.parts:
+            raise ProducerError("source contract evaluator_paths must be repository-relative")
+        evaluator_paths.append(value)
+    return candidate_sha, parent_sha, surface, hypothesis, evaluator_sha, tuple(evaluator_paths)
 
 
 def replay_candidate(
@@ -136,6 +204,7 @@ def replay_candidate(
     candidate_sha256: str,
     verdict_sha256: str,
     record_sha256: str,
+    source_contract_sha256: str | None = None,
 ) -> None:
     """Reapply an attested source diff only when its baseline blob still matches."""
 
@@ -145,11 +214,19 @@ def replay_candidate(
         raise ProducerError(f"proposal request must use {_REQUEST_SCHEMA}")
     surface = _surface(request)
     parent_sha = _sha(request.get("parent_sha"), "request parent_sha")
-    source_candidate, claimed_source_parent, source_surface, hypothesis = _source_attempt(
+    (
+        source_candidate,
+        claimed_source_parent,
+        source_surface,
+        hypothesis,
+        source_evaluator_sha,
+        source_evaluator_paths,
+    ) = _source_attempt(
         source_attempt_dir.resolve(),
         candidate_sha256=candidate_sha256,
         verdict_sha256=verdict_sha256,
         record_sha256=record_sha256,
+        source_contract_sha256=source_contract_sha256,
     )
     if source_surface != surface:
         raise ProducerError("source mutation surface does not match the allowed surface")
@@ -160,6 +237,13 @@ def replay_candidate(
         raise ProducerError("candidate checkout must start clean")
     if _git("rev-parse", "HEAD") != parent_sha:
         raise ProducerError("candidate checkout HEAD must match request parent_sha")
+    if source_evaluator_sha is not None:
+        try:
+            current_evaluator_sha = content_sha256(Path.cwd(), source_evaluator_paths)
+        except ContractError as exc:
+            raise ProducerError(f"cannot attest current evaluator: {exc}") from exc
+        if current_evaluator_sha == source_evaluator_sha:
+            raise ProducerError("evaluator-revision replay requires a changed evaluator digest")
 
     _git(
         "fetch",
@@ -253,6 +337,7 @@ def _parser() -> argparse.ArgumentParser:
     parser.add_argument("--candidate-sha256", required=True)
     parser.add_argument("--verdict-sha256", required=True)
     parser.add_argument("--record-sha256", required=True)
+    parser.add_argument("--source-contract-sha256")
     return parser
 
 
@@ -266,6 +351,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         candidate_sha256=args.candidate_sha256,
         verdict_sha256=args.verdict_sha256,
         record_sha256=args.record_sha256,
+        source_contract_sha256=args.source_contract_sha256,
     )
     return 0
 

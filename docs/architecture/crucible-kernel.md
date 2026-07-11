@@ -999,8 +999,11 @@ Any recovered pre-execution retry makes that row an infrastructure error and
 the paired verdict scoreless `INVALID`; it cannot be learned as a semantic
 failure or success. Historical r19 artifacts remain immutable. Its exact
 candidate is eligible for a preregistered replay under the corrected evaluator:
-a clean replay measures the policy, while another retry closes as infrastructure
-without consuming the sealed pack.
+the replay producer binds the source candidate, verdict, record, and contract
+by content hash and requires the current evaluator digest to differ from r19.
+It cannot resample an ordinary reject under the same evaluator. A clean replay
+measures the policy, while another retry closes as infrastructure without
+consuming the sealed pack.
 
 The strongest honest claims are:
 
