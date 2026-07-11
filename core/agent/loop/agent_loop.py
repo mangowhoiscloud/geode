@@ -71,6 +71,7 @@ log = logging.getLogger(__name__)
 
 _FAIL_FAST_VALUES = frozenset({"1", "true", "yes", "on"})
 _FAIL_FAST_RETRY_DELAY_S = 1.0
+_FAIL_FAST_EMPTY_OUTPUT_MAX_ATTEMPTS = 3
 
 
 def _fail_fast_adapter_errors_enabled() -> bool:
@@ -86,15 +87,15 @@ async def _acomplete_with_fail_fast_pre_execution_retry(
     *,
     on_retry: Callable[[Exception], Awaitable[None]] | None = None,
 ) -> Any:
-    """Retry one pre-execution failure without reopening completed tool work.
+    """Retry bounded pre-execution failures without reopening completed tool work.
 
     Normal AgenticLoop calls already retry after ``_call_llm`` returns
     ``None``. Strict evaluator routes instead raise adapter errors immediately
     so infrastructure cannot become semantic output. Preserve that boundary
-    while giving either a connection-class stream failure or a completed model
-    response with neither text nor tool calls one same-adapter retry of the
-    identical request before raising. Neither case has reached the tool
-    executor, so the retry cannot repeat a side effect.
+    while giving a connection-class stream failure one same-adapter retry. An
+    empty completed response gets at most three total attempts because repeated
+    GPT-5.4 subscription empties have occurred at the previous two-attempt
+    boundary. Every attempt uses the identical request before tool execution.
     """
 
     try:
@@ -104,23 +105,40 @@ async def _acomplete_with_fail_fast_pre_execution_retry(
             raise
         from core.llm.adapters.dispatch import _is_connection_transient
 
-        empty_output_error = exc if isinstance(exc, EmptyModelOutputError) else None
-        empty_output = empty_output_error is not None
-        if not empty_output and not _is_connection_transient(exc):
+        if isinstance(exc, EmptyModelOutputError):
+            empty_errors = [exc]
+            for attempt in range(2, _FAIL_FAST_EMPTY_OUTPUT_MAX_ATTEMPTS + 1):
+                log.warning(
+                    "AgenticLoop: fail-fast empty model output (%s); "
+                    "retrying the same adapter (attempt %d/%d)",
+                    type(empty_errors[-1]).__name__,
+                    attempt,
+                    _FAIL_FAST_EMPTY_OUTPUT_MAX_ATTEMPTS,
+                )
+                if on_retry is not None:
+                    await on_retry(empty_errors[-1])
+                await asyncio.sleep(_FAIL_FAST_RETRY_DELAY_S * (attempt - 1))
+                try:
+                    result = await adapter.acomplete(request)
+                except EmptyModelOutputError as retry_error:
+                    empty_errors.append(retry_error)
+                    if attempt == _FAIL_FAST_EMPTY_OUTPUT_MAX_ATTEMPTS:
+                        raise
+                    continue
+                for empty_error in empty_errors:
+                    empty_error.mark_recovered()
+                return result
+            raise AssertionError("bounded empty-output retry loop did not terminate") from exc
+        if not _is_connection_transient(exc):
             raise
-        failure_kind = "empty model output" if empty_output else "transport error"
         log.warning(
-            "AgenticLoop: fail-fast %s (%s); retrying the same adapter once",
-            failure_kind,
+            "AgenticLoop: fail-fast transport error (%s); retrying the same adapter once",
             type(exc).__name__,
         )
         if on_retry is not None:
             await on_retry(exc)
         await asyncio.sleep(_FAIL_FAST_RETRY_DELAY_S)
-        result = await adapter.acomplete(request)
-        if empty_output_error is not None:
-            empty_output_error.mark_recovered()
-        return result
+        return await adapter.acomplete(request)
 
 
 def _saved_cwd_matches_current(stored_cwd: str, current_cwd: str) -> bool:

@@ -72,12 +72,14 @@ functional change.
   environments use the frozen non-dev dependency set. The producer's bounded
   knowledge subgraph now ships with the producer, verifies every referenced
   source file by content hash, and replaces the stale mutable graph path that
-  previously entered through ambient environment. Strict evaluator calls now
-  retry one side-effect-safe pre-execution failure on the same adapter and
-  identical request before surfacing infrastructure. This covers both a
-  connection-class stream failure and a completed subscription response with
-  neither text nor tool calls; schema, billing, repeated empty output, and
-  persistent transport failures still fail closed. A finalized invalid arm now
+  previously entered through ambient environment. Strict evaluator calls retry
+  one connection-class failure on the same adapter and identical request before
+  surfacing infrastructure. Completed responses with neither text nor tool
+  calls now receive at most two identical retries, for three total attempts,
+  after live campaigns repeatedly reached the old two-attempt ceiling. A
+  successful retry marks every preceding empty dump as recovered; three empty
+  responses, schema or billing failures, and persistent transport failures
+  still fail closed. A finalized invalid arm now
   survives the runner's non-zero exit as structured evidence. Train evaluation
   writes a zero-call skipped counterpart instead of running the other arm, so
   the supervisor records a scoreless infrastructure verdict with the original

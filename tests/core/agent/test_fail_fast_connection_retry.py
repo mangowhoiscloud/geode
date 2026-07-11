@@ -1,4 +1,4 @@
-"""Fail-fast evaluator calls retain one side-effect-safe transport retry."""
+"""Fail-fast evaluator calls retain bounded side-effect-safe retries."""
 
 from __future__ import annotations
 
@@ -81,6 +81,35 @@ def test_fail_fast_retries_one_empty_model_output_with_the_identical_request(
     assert recovered == [True]
 
 
+def test_fail_fast_empty_output_recovers_after_two_identical_retries(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("GEODE_LLM_FAIL_FAST_ON_ADAPTER_ERROR", "1")
+    _no_delay(monkeypatch)
+    request = object()
+    expected = object()
+    recovered: list[str] = []
+    adapter = _Adapter(
+        [
+            EmptyModelOutputError(
+                "first empty response",
+                mark_recovered=lambda: recovered.append("first"),
+            ),
+            EmptyModelOutputError(
+                "second empty response",
+                mark_recovered=lambda: recovered.append("second"),
+            ),
+            expected,
+        ]
+    )
+
+    result = asyncio.run(_acomplete_with_fail_fast_pre_execution_retry(adapter, request))
+
+    assert result is expected
+    assert adapter.requests == [request, request, request]
+    assert recovered == ["first", "second"]
+
+
 def test_fail_fast_connection_retry_is_bounded(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -112,13 +141,14 @@ def test_fail_fast_empty_output_retry_is_bounded(
                 mark_recovered=lambda: recovered.append(True),
             ),
             EmptyModelOutputError("second empty response"),
+            EmptyModelOutputError("third empty response"),
         ]
     )
 
-    with pytest.raises(EmptyModelOutputError, match="second empty response"):
+    with pytest.raises(EmptyModelOutputError, match="third empty response"):
         asyncio.run(_acomplete_with_fail_fast_pre_execution_retry(adapter, object()))
 
-    assert len(adapter.requests) == 2
+    assert len(adapter.requests) == 3
     assert recovered == []
 
 

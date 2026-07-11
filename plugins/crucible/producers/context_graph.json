@@ -25,9 +25,9 @@
       "id": "file:core/agent/loop/agent_loop.py",
       "filePath": "core/agent/loop/agent_loop.py",
       "name": "AgenticLoop",
-      "summary": "Runs model and tool rounds until the model emits a terminal action or the frozen time budget expires.",
+      "summary": "Runs model and tool rounds until termination, with bounded pre-execution recovery for strict-route transport and empty-output failures.",
       "tags": ["runtime", "while-tool-use"],
-      "contentSha256": "182e0be39a03a3393d3c110f28a38af9c6ee03fbdae81684da1bc3f389dd0476"
+      "contentSha256": "4c2598048925dcd3badc5e3e950e415b7aba2f7cd313ae12df5327373e42ce72"
     },
     {
       "id": "file:core/agent/tool_executor/processor.py",

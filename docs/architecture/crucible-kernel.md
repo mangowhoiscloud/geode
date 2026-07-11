@@ -824,6 +824,34 @@ candidate execution, while preserving the infrastructure cause for deterministic
 replay. A non-zero exit without valid finalized artifacts, or with evidence
 claiming `complete`, still fails as a hard evaluator error.
 
+Campaign r12 live-confirmed that boundary. The replay producer again used zero
+model calls, and the baseline finished as
+`[1, infrastructure_error, 0, infrastructure_error, 0, 1]`. One empty GPT-5.4
+completion recovered on the identical retry, while two other rows each reached
+the two-attempt ceiling; their four dumps remained unmarked. The evaluator
+therefore wrote an invalid baseline with `route_contamination`, a zero-call
+candidate envelope with `paired_arm_skipped`, and an ordinary verdict with
+`infrastructure_contamination`, zero paired rows, and no promotion authority.
+Only the baseline simulation directory exists. The search head remained at
+`7071cb281`, and the sealed pack preregistered for r12 was retired without being
+opened.
+
+The attempt used 104 observable calls, 1,248,582 tokens, and $1.376436 of
+normalized accounting over 1,343.1 wall seconds. Its sixth baseline row also
+repeated the same successful final-state check 13 times before recovery logic
+moved the conversation forward. That trace supports the candidate's general
+non-redundancy hypothesis, but the contaminated arm is not candidate feedback
+or score evidence. The route defect must be removed before the candidate is
+measured.
+
+Empty completed responses now receive at most three total attempts at the
+strict pre-execution boundary. Connection failures retain their existing two
+total attempts. Every empty retry uses the same adapter and identical request
+before tool execution; a later success marks all preceding dumps as recovered,
+while three consecutive empty responses leave every dump unmarked and keep the
+arm invalid. This is a bounded transport recovery, not a task replay or a score
+salvage path.
+
 The strongest honest claims are:
 
 - the frozen external tau2 baseline identified concrete retail wrong-write and
