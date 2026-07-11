@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import json
 import shutil
 import subprocess
@@ -7,7 +8,7 @@ from pathlib import Path
 
 import pytest
 from plugins.crucible.producers.codex_kg import ProducerError
-from plugins.crucible.producers.replay import replay_candidate
+from plugins.crucible.producers.replay import _attested_object, replay_candidate
 
 POLICY = """\
 Mode: executable assay.
@@ -92,13 +93,86 @@ def _request(path: Path, parent_sha: str) -> None:
     )
 
 
+def _source_attempt(
+    path: Path,
+    *,
+    parent_sha: str,
+    candidate_sha: str,
+    outcome: str = "INVALID",
+) -> dict[str, str]:
+    path.mkdir()
+    proposal_id = "a" * 64
+    verdict_id = "b" * 64
+    payloads = {
+        "candidate": {
+            "schema": "crucible.candidate.v2",
+            "attempt_id": "source-attempt",
+            "request_id": "source-request",
+            "parent_sha": parent_sha,
+            "candidate_sha": candidate_sha,
+            "proposal_id": proposal_id,
+            "mutation": {
+                "surface": "plugins/benchmark_harness/tau2_agent_policy.md",
+                "hypothesis": "Batch causally ready tool calls.",
+            },
+            "usage": {"wall_seconds": 1.0, "calls": 1, "tokens": 10, "cost_usd": 0.0},
+        },
+        "verdict": {
+            "schema": "crucible.verdict.v3",
+            "verdict": outcome,
+            "verdict_id": verdict_id,
+            "reasons": ["infrastructure_contamination"],
+            "metric": {"paired_rows": 0},
+        },
+        "record": {
+            "schema": "crucible.loop-record.v2",
+            "outcome": outcome,
+            "reasons": ["infrastructure_contamination"],
+            "proposal_id": proposal_id,
+            "verdict_id": verdict_id,
+            "search_head_before": parent_sha,
+            "search_head_after": parent_sha,
+        },
+    }
+    digests: dict[str, str] = {}
+    for name, payload in payloads.items():
+        artifact = path / f"{name}.json"
+        artifact.write_text(json.dumps(payload), encoding="utf-8")
+        digests[f"{name}_sha256"] = hashlib.sha256(artifact.read_bytes()).hexdigest()
+    return digests
+
+
+def _replay(
+    *,
+    request: Path,
+    output: Path,
+    source: Path,
+    source_candidate: str,
+    source_parent: str,
+    outcome: str = "INVALID",
+) -> None:
+    attempt = source.parent / f"attempt-{outcome.lower()}"
+    digests = _source_attempt(
+        attempt,
+        parent_sha=source_parent,
+        candidate_sha=source_candidate,
+        outcome=outcome,
+    )
+    replay_candidate(
+        request_path=request,
+        output_path=output,
+        source_repository=source,
+        source_attempt_dir=attempt,
+        **digests,
+    )
+
+
 def test_replay_candidate_reapplies_only_the_preregistered_surface(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     source = tmp_path / "source"
-    _source(source)
-    source_candidate = _git(source, "rev-parse", "HEAD")
+    source_parent, source_candidate = _source(source)
     target = tmp_path / "target"
     parent = _target(target)
     request = tmp_path / "request.json"
@@ -106,11 +180,12 @@ def test_replay_candidate_reapplies_only_the_preregistered_surface(
     _request(request, parent)
     monkeypatch.chdir(target)
 
-    replay_candidate(
-        request_path=request,
-        output_path=output,
-        source_repository=source,
+    _replay(
+        request=request,
+        output=output,
+        source=source,
         source_candidate=source_candidate,
+        source_parent=source_parent,
     )
 
     proposal = json.loads(output.read_text(encoding="utf-8"))
@@ -134,7 +209,7 @@ def test_replay_candidate_rejects_a_source_with_extra_changes(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     source = tmp_path / "source"
-    _source(source, extra_change=True)
+    source_parent, source_candidate = _source(source, extra_change=True)
     target = tmp_path / "target"
     parent = _target(target)
     request = tmp_path / "request.json"
@@ -142,11 +217,12 @@ def test_replay_candidate_rejects_a_source_with_extra_changes(
     monkeypatch.chdir(target)
 
     with pytest.raises(ProducerError, match="must change exactly"):
-        replay_candidate(
-            request_path=request,
-            output_path=tmp_path / "candidate.json",
-            source_repository=source,
-            source_candidate=_git(source, "rev-parse", "HEAD"),
+        _replay(
+            request=request,
+            output=tmp_path / "candidate.json",
+            source=source,
+            source_candidate=source_candidate,
+            source_parent=source_parent,
         )
 
 
@@ -155,7 +231,7 @@ def test_replay_candidate_rejects_current_surface_drift(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     source = tmp_path / "source"
-    _source(source)
+    source_parent, source_candidate = _source(source)
     target = tmp_path / "target"
     parent = _target(target, policy=POLICY.replace("use tools", "use trusted tools"))
     request = tmp_path / "request.json"
@@ -163,9 +239,41 @@ def test_replay_candidate_rejects_current_surface_drift(
     monkeypatch.chdir(target)
 
     with pytest.raises(ProducerError, match="baseline differs"):
-        replay_candidate(
-            request_path=request,
-            output_path=tmp_path / "candidate.json",
-            source_repository=source,
-            source_candidate=_git(source, "rev-parse", "HEAD"),
+        _replay(
+            request=request,
+            output=tmp_path / "candidate.json",
+            source=source,
+            source_candidate=source_candidate,
+            source_parent=source_parent,
         )
+
+
+def test_replay_candidate_rejects_a_scored_source_attempt(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    source = tmp_path / "source"
+    source_parent, source_candidate = _source(source)
+    target = tmp_path / "target"
+    parent = _target(target)
+    request = tmp_path / "request.json"
+    _request(request, parent)
+    monkeypatch.chdir(target)
+
+    with pytest.raises(ProducerError, match="scoreless infrastructure INVALID"):
+        _replay(
+            request=request,
+            output=tmp_path / "candidate.json",
+            source=source,
+            source_candidate=source_candidate,
+            source_parent=source_parent,
+            outcome="REJECT",
+        )
+
+
+def test_replay_candidate_rejects_a_source_artifact_hash_mismatch(tmp_path: Path) -> None:
+    artifact = tmp_path / "candidate.json"
+    artifact.write_text("{}", encoding="utf-8")
+
+    with pytest.raises(ProducerError, match="sha256 does not match"):
+        _attested_object(artifact, "0" * 64, "source candidate")

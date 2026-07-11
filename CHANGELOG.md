@@ -168,8 +168,9 @@ functional change.
 - **Infrastructure-invalid candidates can be replayed without a second search.**
   Crucible's deterministic replay producer reapplies only the prior single-commit
   candidate surface when its baseline blob still matches the current search head.
-  It rejects extra paths and drift, preserves CAN/CANNOT policy grammar, and
-  records zero model calls so exploration remains separate from measurement retry.
+  It hash-pins the prior candidate, verdict, and record; requires a scoreless
+  infrastructure INVALID with an unchanged search head; rejects extra paths and
+  drift; preserves CAN/CANNOT policy grammar; and records zero model calls.
 
 ## [0.99.296] - 2026-07-11
 

@@ -797,9 +797,11 @@ could produce a score. Both arms were correctly marked as infrastructure, but
 the supervisor immediately began generating a second candidate. That mixed the
 exploration loop with a measurement retry. A separate deterministic replay
 producer now carries the preregistered one-commit policy diff forward only when
-the candidate surface's baseline blob is unchanged. It uses no model call and
-rejects extra paths, merge commits, or surface drift. Provider recovery can
-therefore retry the same hypothesis instead of silently resampling the search.
+the candidate surface's baseline blob is unchanged. The prior candidate,
+verdict, and record are hash-pinned and must prove a scoreless infrastructure
+INVALID with no search-head movement. The replay uses no model call and rejects
+extra paths, merge commits, or surface drift. Provider recovery can therefore
+retry the same hypothesis instead of silently resampling the search.
 
 The strongest honest claims are:
 

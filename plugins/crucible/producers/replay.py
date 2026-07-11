@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
+import json
 import os
 import re
 import shutil
@@ -22,10 +24,10 @@ from .codex_kg import (
 
 _REQUEST_SCHEMA = "crucible.proposal-request.v3"
 _CANDIDATE_SCHEMA = "crucible.candidate.v2"
+_VERDICT_SCHEMA = "crucible.verdict.v3"
+_RECORD_SCHEMA = "crucible.loop-record.v2"
 _FULL_SHA = re.compile(r"[0-9a-f]{40}")
-_DEFAULT_HYPOTHESIS = (
-    "Replay the preregistered candidate after an infrastructure-only invalidation."
-)
+_FULL_SHA256 = re.compile(r"[0-9a-f]{64}")
 
 
 def _git(*args: str) -> str:
@@ -60,13 +62,80 @@ def _surface(request: dict[str, Any]) -> str:
     return surface
 
 
+def _attested_object(path: Path, expected_sha256: str, field: str) -> dict[str, Any]:
+    if _FULL_SHA256.fullmatch(expected_sha256) is None:
+        raise ProducerError(f"{field} sha256 must be a full digest")
+    info = path.lstat()
+    if path.is_symlink() or not path.is_file() or info.st_size > 1024 * 1024:
+        raise ProducerError(f"{field} must be a bounded regular file")
+    payload = path.read_bytes()
+    if hashlib.sha256(payload).hexdigest() != expected_sha256:
+        raise ProducerError(f"{field} sha256 does not match")
+    value = json.loads(payload)
+    if not isinstance(value, dict):
+        raise ProducerError(f"{field} must be an object")
+    return value
+
+
+def _source_attempt(
+    path: Path,
+    *,
+    candidate_sha256: str,
+    verdict_sha256: str,
+    record_sha256: str,
+) -> tuple[str, str, str, str]:
+    """Return the source commit contract only for a scoreless infra INVALID."""
+
+    candidate = _attested_object(path / "candidate.json", candidate_sha256, "source candidate")
+    verdict = _attested_object(path / "verdict.json", verdict_sha256, "source verdict")
+    record = _attested_object(path / "record.json", record_sha256, "source record")
+    if candidate.get("schema") != _CANDIDATE_SCHEMA:
+        raise ProducerError(f"source candidate must use {_CANDIDATE_SCHEMA}")
+    if verdict.get("schema") != _VERDICT_SCHEMA:
+        raise ProducerError(f"source verdict must use {_VERDICT_SCHEMA}")
+    if record.get("schema") != _RECORD_SCHEMA:
+        raise ProducerError(f"source record must use {_RECORD_SCHEMA}")
+    reasons = verdict.get("reasons")
+    record_reasons = record.get("reasons")
+    metric = verdict.get("metric")
+    paired_rows = metric.get("paired_rows") if isinstance(metric, dict) else None
+    eligible = (
+        verdict.get("verdict") == "INVALID"
+        and record.get("outcome") == "INVALID"
+        and isinstance(reasons, list)
+        and "infrastructure_contamination" in reasons
+        and isinstance(record_reasons, list)
+        and "infrastructure_contamination" in record_reasons
+        and isinstance(paired_rows, int)
+        and not isinstance(paired_rows, bool)
+        and paired_rows == 0
+        and record.get("search_head_before") == record.get("search_head_after")
+        and record.get("proposal_id") == candidate.get("proposal_id")
+        and record.get("verdict_id") == verdict.get("verdict_id")
+        and candidate.get("parent_sha") == record.get("search_head_before")
+    )
+    if not eligible:
+        raise ProducerError("source attempt is not a scoreless infrastructure INVALID")
+    mutation = candidate.get("mutation")
+    if not isinstance(mutation, dict):
+        raise ProducerError("source candidate mutation must be an object")
+    return (
+        _sha(candidate.get("candidate_sha"), "source candidate_sha"),
+        _sha(candidate.get("parent_sha"), "source parent_sha"),
+        _text(mutation.get("surface"), "source mutation surface"),
+        _text(mutation.get("hypothesis"), "source mutation hypothesis"),
+    )
+
+
 def replay_candidate(
     *,
     request_path: Path,
     output_path: Path,
     source_repository: Path,
-    source_candidate: str,
-    hypothesis: str = _DEFAULT_HYPOTHESIS,
+    source_attempt_dir: Path,
+    candidate_sha256: str,
+    verdict_sha256: str,
+    record_sha256: str,
 ) -> None:
     """Reapply an attested source diff only when its baseline blob still matches."""
 
@@ -76,8 +145,14 @@ def replay_candidate(
         raise ProducerError(f"proposal request must use {_REQUEST_SCHEMA}")
     surface = _surface(request)
     parent_sha = _sha(request.get("parent_sha"), "request parent_sha")
-    source_candidate = _sha(source_candidate, "source candidate")
-    hypothesis = _text(hypothesis, "hypothesis")
+    source_candidate, claimed_source_parent, source_surface, hypothesis = _source_attempt(
+        source_attempt_dir.resolve(),
+        candidate_sha256=candidate_sha256,
+        verdict_sha256=verdict_sha256,
+        record_sha256=record_sha256,
+    )
+    if source_surface != surface:
+        raise ProducerError("source mutation surface does not match the allowed surface")
     source_repository = source_repository.resolve()
     if not source_repository.is_dir():
         raise ProducerError("source repository must exist")
@@ -108,6 +183,8 @@ def replay_candidate(
     if len(ancestry) != 2 or ancestry[0] != source_candidate:
         raise ProducerError("source candidate must be one single-parent commit")
     source_parent = ancestry[1]
+    if source_parent != claimed_source_parent:
+        raise ProducerError("source candidate parent does not match its proposal")
     source_paths = tuple(
         path
         for path in _git(
@@ -172,8 +249,10 @@ def replay_candidate(
 def _parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--source-repository", type=Path, required=True)
-    parser.add_argument("--source-candidate", required=True)
-    parser.add_argument("--hypothesis", default=_DEFAULT_HYPOTHESIS)
+    parser.add_argument("--source-attempt-dir", type=Path, required=True)
+    parser.add_argument("--candidate-sha256", required=True)
+    parser.add_argument("--verdict-sha256", required=True)
+    parser.add_argument("--record-sha256", required=True)
     return parser
 
 
@@ -183,8 +262,10 @@ def main(argv: Sequence[str] | None = None) -> int:
         request_path=Path(os.environ["CRUCIBLE_PROPOSAL_REQUEST"]),
         output_path=Path(os.environ["CRUCIBLE_CANDIDATE_OUTPUT"]),
         source_repository=args.source_repository,
-        source_candidate=args.source_candidate,
-        hypothesis=args.hypothesis,
+        source_attempt_dir=args.source_attempt_dir,
+        candidate_sha256=args.candidate_sha256,
+        verdict_sha256=args.verdict_sha256,
+        record_sha256=args.record_sha256,
     )
     return 0
 

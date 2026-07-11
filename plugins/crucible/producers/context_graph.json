@@ -75,7 +75,7 @@
       "name": "Candidate replay producer",
       "summary": "Reapplies one preregistered candidate diff after infrastructure-only invalidation without resampling the optimizer.",
       "tags": ["crucible", "producer", "measurement-retry"],
-      "contentSha256": "d79f69aa8c8e919a8428e91d14f44d08f9e51863e99c18e36ad2fe9ee23e05c2"
+      "contentSha256": "02175a1809141a1fc28c11842ad8edc9c060799ea0d52af27b0e21ae10bc2708"
     }
   ],
   "edges": [
