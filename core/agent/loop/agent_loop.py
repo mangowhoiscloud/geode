@@ -366,6 +366,7 @@ class AgenticLoop:
         session_id: str = "",
         response_schema: dict[str, Any] | None = None,
         allow_actionable_partial_on_empty: bool = False,
+        yield_after_tool_round: bool = False,
     ) -> None:
         self.context = context
         self.executor = tool_executor
@@ -381,6 +382,10 @@ class AgenticLoop:
         # round when the following model continuation is irrecoverably empty.
         # Ordinary agents retain the strict exception boundary by default.
         self._allow_actionable_partial_on_empty = allow_actionable_partial_on_empty
+        # External half-duplex orchestrators can own the next model turn. The
+        # default AgenticLoop contract remains while(tool_use); opted-in callers
+        # yield only after one completed tool batch has been recorded.
+        self._yield_after_tool_round = yield_after_tool_round
         self.max_rounds = max_rounds
         self.max_tokens = max_tokens
         self._thinking_budget = thinking_budget
@@ -1436,6 +1441,43 @@ class AgenticLoop:
         )
         return await self._afinalize_and_return(result, user_input, round_idx + 1)
 
+    async def _afinalize_tool_round_yield(
+        self,
+        *,
+        messages: list[dict[str, Any]],
+        user_input: str,
+        round_idx: int,
+    ) -> AgenticResult:
+        """Yield one completed tool batch to an external turn orchestrator."""
+
+        self._op_logger.finalize()
+        self._sync_messages_to_context(messages)
+        result = AgenticResult(
+            text="",
+            tool_calls=list(self._tool_processor.tool_log),
+            rounds=round_idx + 1,
+            termination_reason="tool_use_yield",
+        )
+        return await self._afinalize_and_return(result, user_input, round_idx + 1)
+
+    def _tool_round_assistant_message(self, response: AgenticResponse) -> dict[str, Any]:
+        """Serialize one tool-use response with provider replay sidecars."""
+
+        message: dict[str, Any] = {
+            "role": "assistant",
+            "content": self._serialize_content(response.content),
+        }
+        reasoning_items = getattr(response, "codex_reasoning_items", None)
+        output_items = getattr(response, "codex_output_items", None)
+        phase = getattr(response, "assistant_phase", "")
+        if reasoning_items:
+            message["codex_reasoning_items"] = reasoning_items
+        if output_items:
+            message["codex_output_items"] = output_items
+        if phase:
+            message["phase"] = phase
+        return message
+
     # ------------------------------------------------------------------
     # Tool list refresh — delegate to ``_response``
     # ------------------------------------------------------------------
@@ -2126,19 +2168,14 @@ class AgenticLoop:
                     )
 
             # accumulate serialized messages for the next round
-            assistant_content = self._serialize_content(response.content)
-            _assistant_msg = {"role": "assistant", "content": assistant_content}
-            # Codex reasoning passthrough (same as the end_turn branch)
-            if getattr(response, "codex_reasoning_items", None):
-                _assistant_msg["codex_reasoning_items"] = response.codex_reasoning_items
-            if getattr(response, "codex_output_items", None):
-                _assistant_msg["codex_output_items"] = response.codex_output_items
-            # Codex phase on tool-use rounds
-            _phase = getattr(response, "assistant_phase", "")
-            if _phase:
-                _assistant_msg["phase"] = _phase
-            messages.append(_assistant_msg)
+            messages.append(self._tool_round_assistant_message(response))
             messages.append({"role": "user", "content": tool_results})
+            if self._yield_after_tool_round:
+                return await self._afinalize_tool_round_yield(
+                    messages=messages,
+                    user_input=user_input,
+                    round_idx=round_idx,
+                )
             round_idx += 1
 
         # Loop exited via guard — determine reason

@@ -19,23 +19,23 @@
       "name": "Tau2 GEODE adapter",
       "summary": "Builds GEODE participants and delegates half-duplex turn control to the external supervisor.",
       "tags": ["adapter", "benchmark", "tool-projection"],
-      "contentSha256": "5847684fbd6d26b1485bf2d2e253c98c148a902f63497eb9f06fe41d19051a92"
+      "contentSha256": "021d0d20e0658228846c249f33fe41bb8db26389ea4f595a421c97a25c2c5a66"
     },
     {
       "id": "file:plugins/benchmark_harness/tau2_turn_supervisor.py",
       "filePath": "plugins/benchmark_harness/tau2_turn_supervisor.py",
       "name": "Tau2 turn supervisor",
-      "summary": "Yields one model round per half-duplex turn, projects each cumulative tool call once, maps generic no-progress, and enforces the simulation deadline outside AgenticLoop.",
+      "summary": "Owns the half-duplex deadline and stop mapping while AgenticLoop yields after each completed tool batch.",
       "tags": ["benchmark", "deadline", "external-loop", "tool-projection"],
-      "contentSha256": "f46a6e426be17cbb306ff3e238545c647b7f7f2540cd31758a3446a2146dd9f6"
+      "contentSha256": "f1326f12d710301fd16352c37330aed39b8b0dc00f5111f302e2da46c75c0335"
     },
     {
       "id": "file:core/agent/loop/agent_loop.py",
       "filePath": "core/agent/loop/agent_loop.py",
       "name": "AgenticLoop",
-      "summary": "Runs model and tool rounds until termination, with bounded strict-route retries and default-off preservation of prior tool work after an empty continuation.",
+      "summary": "Runs model and tool rounds until termination, with default-off boundaries for actionable empty continuations and external post-tool yields.",
       "tags": ["runtime", "while-tool-use"],
-      "contentSha256": "70c26575a608e7439fffef0eb189a478c546d191ff505ed2e91b31ded5777ceb"
+      "contentSha256": "5427ad16835d90b8afd27e8bded32efefc5623aa39c5b60442402534a09e2b6d"
     },
     {
       "id": "file:core/agent/tool_executor/processor.py",

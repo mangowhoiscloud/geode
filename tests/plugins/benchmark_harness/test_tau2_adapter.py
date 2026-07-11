@@ -23,9 +23,7 @@ from plugins.benchmark_harness.tau2_geode_agent import (
 from plugins.benchmark_harness.tau2_turn_supervisor import (
     GeodeTau2State,
     _agent_system_prompt,
-    _consume_half_duplex_round_limit,
     _message_to_prompt,
-    _new_tau2_tool_calls,
     _run_geode_turn,
     _tau2_terminal_token,
     _tau2_tool_calls,
@@ -225,7 +223,7 @@ def test_tau2_tool_calls_preserves_explicit_empty_arguments(
     assert calls[0].arguments["address2"] == ""
 
 
-def test_tau2_tool_projection_emits_only_the_new_cumulative_suffix(
+def test_tau2_tool_projection_is_scoped_to_each_agentic_run(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     fake_tau2 = ModuleType("tau2")
@@ -235,14 +233,18 @@ def test_tau2_tool_projection_emits_only_the_new_cumulative_suffix(
     monkeypatch.setitem(sys.modules, "tau2", fake_tau2)
     monkeypatch.setitem(sys.modules, "tau2.data_model", fake_data_model)
     monkeypatch.setitem(sys.modules, "tau2.data_model.message", fake_message)
-    result = SimpleNamespace(
+    first = SimpleNamespace(
         tool_calls=[
             {
                 "tool_use_id": "call_1",
                 "tool": "lookup_account",
                 "input": {"account_id": "A"},
                 "result": {"ok": True},
-            },
+            }
+        ]
+    )
+    second = SimpleNamespace(
+        tool_calls=[
             {
                 "tool_use_id": "call_2",
                 "tool": "reset_settings",
@@ -251,21 +253,12 @@ def test_tau2_tool_projection_emits_only_the_new_cumulative_suffix(
             },
         ]
     )
-    state = GeodeTau2State(loop=object(), projected_tool_calls=1)
 
-    calls = _new_tau2_tool_calls(result, state, requestor="assistant")
+    first_calls = _tau2_tool_calls(first, requestor="assistant")
+    second_calls = _tau2_tool_calls(second, requestor="assistant")
 
-    assert [call.id for call in calls] == ["call_2"]
-    assert state.projected_tool_calls == 2
-    assert _new_tau2_tool_calls(result, state, requestor="assistant") == []
-
-
-def test_tau2_tool_projection_rejects_a_regressed_cumulative_log() -> None:
-    state = GeodeTau2State(loop=object(), projected_tool_calls=2)
-    result = SimpleNamespace(tool_calls=[{"tool_use_id": "call_1"}])
-
-    with pytest.raises(RuntimeError, match="projection cursor"):
-        _new_tau2_tool_calls(result, state, requestor="assistant")
+    assert [call.id for call in first_calls] == ["call_1"]
+    assert [call.id for call in second_calls] == ["call_2"]
 
 
 def test_tau2_progress_supervisor_maps_only_generic_repeated_success() -> None:
@@ -274,24 +267,6 @@ def test_tau2_progress_supervisor_maps_only_generic_repeated_success() -> None:
         == "###STOP###"
     )
     assert _tau2_terminal_token(SimpleNamespace(termination_reason="max_rounds")) is None
-
-
-def test_tau2_half_duplex_boundary_consumes_only_the_synthetic_round_notice() -> None:
-    notice = "Max agentic rounds reached. Please try a more specific request."
-    messages = [
-        {"role": "assistant", "content": [{"type": "tool_use", "id": "call_1"}]},
-        {"role": "user", "content": [{"type": "tool_result", "tool_use_id": "call_1"}]},
-        {"role": "assistant", "content": [{"type": "text", "text": notice}]},
-    ]
-    state = GeodeTau2State(loop=SimpleNamespace(context=SimpleNamespace(messages=messages)))
-    result = SimpleNamespace(text=notice, termination_reason="max_rounds")
-
-    _consume_half_duplex_round_limit(result, state, projected_tool_calls=[object()])
-
-    assert messages == [
-        {"role": "assistant", "content": [{"type": "tool_use", "id": "call_1"}]},
-        {"role": "user", "content": [{"type": "tool_result", "tool_use_id": "call_1"}]},
-    ]
 
 
 def test_tau2_external_deadline_stops_before_an_expired_participant_call() -> None:
@@ -307,11 +282,11 @@ def test_tau2_contract_run_must_match_frozen_identity_axes() -> None:
         "schema": "crucible.tau2-assay.v1",
         "max_concurrency": 1,
         "timeout": 600.0,
-        "agent": {"implementation": "geode_agent", "max_rounds": 1},
+        "agent": {"implementation": "geode_agent", "max_rounds": 0},
         "user": {
             "implementation": "user_simulator",
             "runtime_owner": "evaluator",
-            "max_rounds": 1,
+            "max_rounds": 0,
         },
     }
     contract = SimpleNamespace(
@@ -376,9 +351,9 @@ def test_tau2_contract_run_must_match_frozen_identity_axes() -> None:
 
 def test_tau2_contract_run_rejects_runtime_candidate_knobs() -> None:
     args = SimpleNamespace(
-        agent_max_rounds=1,
+        agent_max_rounds=0,
         max_retries=0,
-        user_max_rounds=1,
+        user_max_rounds=0,
         user="user_simulator",
         allow_empty_geode_turn=False,
         auto_resume=False,
@@ -396,8 +371,8 @@ def test_tau2_contract_run_rejects_runtime_candidate_knobs() -> None:
         _validate_contract_runtime_policy(args)
 
     args.max_retries = 0
-    args.agent_max_rounds = 0
-    with pytest.raises(ValueError, match="--agent-max-rounds=1"):
+    args.agent_max_rounds = 1
+    with pytest.raises(ValueError, match="--agent-max-rounds=0"):
         _validate_contract_runtime_policy(args)
 
 

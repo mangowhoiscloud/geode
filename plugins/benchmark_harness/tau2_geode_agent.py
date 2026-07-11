@@ -26,12 +26,11 @@ from typing import Any
 from plugins.benchmark_harness.tau2_turn_supervisor import (
     GeodeTau2State,
     _agent_system_prompt,
-    _consume_half_duplex_round_limit,
     _jsonish,
     _message_to_prompt,
-    _new_tau2_tool_calls,
     _run_geode_turn,
     _tau2_terminal_token,
+    _tau2_tool_calls,
     _Tau2TurnDeadlineError,
     _tool_mutates_state,
     _usage_dict,
@@ -242,6 +241,7 @@ def _build_loop(
         quiet=True,
         enable_goal_decomposition=False,
         allow_actionable_partial_on_empty=allow_actionable_partial_on_empty,
+        yield_after_tool_round=True,
     )
 
 
@@ -315,12 +315,7 @@ def register_geode_tau2_participants(
                 return assistant, state
             state.messages_seen += 1
             terminal_token = _tau2_terminal_token(result)
-            tool_calls = _new_tau2_tool_calls(result, state, requestor="assistant")
-            _consume_half_duplex_round_limit(
-                result,
-                state,
-                projected_tool_calls=tool_calls,
-            )
+            tool_calls = _tau2_tool_calls(result, requestor="assistant")
             if terminal_token is not None:
                 tool_calls = []
             if fail_on_empty_geode_turn:
@@ -437,12 +432,7 @@ def register_geode_tau2_participants(
                 return user_message, state
             state.messages_seen += 1
             terminal_token = _tau2_terminal_token(result)
-            tool_calls = _new_tau2_tool_calls(result, state, requestor="user")
-            _consume_half_duplex_round_limit(
-                result,
-                state,
-                projected_tool_calls=tool_calls,
-            )
+            tool_calls = _tau2_tool_calls(result, requestor="user")
             if terminal_token is not None:
                 tool_calls = []
             if fail_on_empty_geode_turn:
@@ -732,9 +722,9 @@ def _validate_contract_runtime_policy(args: argparse.Namespace) -> None:
     """
     violations: list[str] = []
     exact_defaults = {
-        "agent_max_rounds": 1,
+        "agent_max_rounds": 0,
         "max_retries": 0,
-        "user_max_rounds": 1,
+        "user_max_rounds": 0,
     }
     for field, expected in exact_defaults.items():
         if getattr(args, field) != expected:

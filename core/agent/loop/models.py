@@ -118,6 +118,8 @@ class AgenticResult:
     #   the user to narrow the request.
     # | "actionable_partial" — an opted-in evaluator caller preserves tool
     #   actions from completed rounds after an empty continuation.
+    # | "tool_use_yield" — an opted-in external orchestrator owns the next
+    #   model turn after one completed tool batch.
     termination_reason: str = "unknown"
     summary: str = ""  # Tier 1 compact action summary (auto-generated)
     reasoning_metrics: dict[str, object] | None = None

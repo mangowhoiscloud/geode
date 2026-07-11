@@ -604,6 +604,45 @@ class TestAgenticLoop:
         assert result.error is None
         assert result.termination_reason == "natural"
 
+    def test_external_orchestrator_yields_after_one_tool_round_without_round_cap(
+        self,
+        context: ConversationContext,
+        executor: ToolExecutor,
+    ) -> None:
+        loop = AgenticLoop(
+            context,
+            executor,
+            max_rounds=0,
+            yield_after_tool_round=True,
+            quiet=True,
+            enable_goal_decomposition=False,
+        )
+        tool_response = MagicMock()
+        tool_response.stop_reason = "tool_use"
+        tool_response.usage = MagicMock(input_tokens=100, output_tokens=50)
+        tool_block = MagicMock()
+        tool_block.type = "tool_use"
+        tool_block.name = "list_subjects"
+        tool_block.input = {}
+        tool_block.id = "toolu_external_yield"
+        tool_response.content = [tool_block]
+
+        with (
+            patch.object(loop, "_call_llm", return_value=tool_response) as call_llm,
+            patch.object(loop, "_track_usage"),
+        ):
+            result = asyncio.run(loop.arun("run one externally orchestrated tool round"))
+
+        call_llm.assert_called_once()
+        assert result.text == ""
+        assert result.error is None
+        assert result.rounds == 1
+        assert result.termination_reason == "tool_use_yield"
+        assert [entry["tool"] for entry in result.tool_calls] == ["list_subjects"]
+        assert context.messages[-1]["role"] == "user"
+        assert isinstance(context.messages[-1]["content"], list)
+        assert not any("Max agentic rounds reached" in str(row) for row in context.messages)
+
     def test_actionable_partial_preserves_prior_tool_work_after_empty_continuation(
         self,
         context: ConversationContext,

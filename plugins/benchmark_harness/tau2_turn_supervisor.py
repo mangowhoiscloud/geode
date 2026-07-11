@@ -24,7 +24,6 @@ def _jsonish(value: Any) -> str:
 class GeodeTau2State:
     loop: Any
     messages_seen: int = 0
-    projected_tool_calls: int = 0
     deadline_at: float | None = None
 
 
@@ -132,16 +131,14 @@ def _usage_dict(result: Any) -> dict[str, Any] | None:
     return {str(key): value for key, value in raw.items()} if isinstance(raw, dict) else None
 
 
-def _tau2_tool_calls(result: Any, *, requestor: str, start: int = 0) -> list[Any]:
+def _tau2_tool_calls(result: Any, *, requestor: str) -> list[Any]:
     entries = getattr(result, "tool_calls", []) or []
     if not isinstance(entries, list):
         raise RuntimeError("GEODE tau2 tool log must be a list")
-    if start < 0 or start > len(entries):
-        raise RuntimeError("GEODE tau2 tool projection cursor is outside the cumulative log")
     from tau2.data_model.message import ToolCall
 
     calls = []
-    for idx, entry in enumerate(entries[start:], start=start):
+    for idx, entry in enumerate(entries):
         if not isinstance(entry, dict):
             continue
         result_payload = entry.get("result")
@@ -169,54 +166,6 @@ def _tau2_terminal_token(result: Any) -> str | None:
     if getattr(result, "termination_reason", None) == "repeated_success_no_progress":
         return "###STOP###"
     return None
-
-
-def _new_tau2_tool_calls(
-    result: Any,
-    state: GeodeTau2State,
-    *,
-    requestor: str,
-) -> list[Any]:
-    """Project each cumulative AgenticLoop tool-log entry exactly once."""
-
-    entries = getattr(result, "tool_calls", []) or []
-    if not isinstance(entries, list):
-        raise RuntimeError("GEODE tau2 tool log must be a list")
-    calls = _tau2_tool_calls(
-        result,
-        requestor=requestor,
-        start=state.projected_tool_calls,
-    )
-    state.projected_tool_calls = len(entries)
-    return calls
-
-
-def _consume_half_duplex_round_limit(
-    result: Any,
-    state: GeodeTau2State,
-    *,
-    projected_tool_calls: list[Any],
-) -> None:
-    """Remove the expected inner-loop cap notice after yielding tool calls.
-
-    ``max_rounds=1`` is an orchestration boundary here, not a user-visible
-    failure. The provider-valid assistant/tool-result pair remains in context;
-    only AgenticLoop's synthetic terminal notice is consumed before the real
-    tau2 environment result arrives on the next participant turn.
-    """
-
-    if not projected_tool_calls or getattr(result, "termination_reason", None) != "max_rounds":
-        return
-    context = getattr(state.loop, "context", None)
-    messages = getattr(context, "messages", None)
-    expected = [{"type": "text", "text": str(getattr(result, "text", ""))}]
-    if (
-        not isinstance(messages, list)
-        or not messages
-        or messages[-1] != {"role": "assistant", "content": expected}
-    ):
-        raise RuntimeError("GEODE tau2 half-duplex round-limit boundary drifted")
-    messages.pop()
 
 
 def _run_geode_turn(state: GeodeTau2State, prompt: str) -> Any:

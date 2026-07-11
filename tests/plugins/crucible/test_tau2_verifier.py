@@ -117,7 +117,7 @@ def _assay_config() -> dict[str, object]:
             "effort": "high",
             "time_budget_s": 180.0,
             "max_tokens": 32768,
-            "max_rounds": 1,
+            "max_rounds": 0,
             "cognitive_reflection": False,
             "codex_output_replay": True,
             "tool_search_defer": True,
@@ -133,7 +133,7 @@ def _assay_config() -> dict[str, object]:
             "effort": "high",
             "time_budget_s": 120.0,
             "max_tokens": 8192,
-            "max_rounds": 1,
+            "max_rounds": 0,
         },
         "retrieval": {"config": None, "kwargs": {}},
     }
@@ -157,13 +157,13 @@ def test_tau2_contract_requires_positive_per_simulation_timeout(timeout: object)
 
 
 @pytest.mark.parametrize("role", ["agent", "user"])
-def test_tau2_contract_requires_one_model_round_per_half_duplex_turn(role: str) -> None:
+def test_tau2_contract_leaves_round_yield_to_the_external_boundary(role: str) -> None:
     config = _assay_config()
     participant = config[role]
     assert isinstance(participant, dict)
-    participant["max_rounds"] = 0
+    participant["max_rounds"] = 1
 
-    with pytest.raises(ContractError, match=rf"{role} requires max_rounds=1"):
+    with pytest.raises(ContractError, match=rf"{role} requires max_rounds=0"):
         TAU2_ADAPTER.validate_config(config)
 
 

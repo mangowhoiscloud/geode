@@ -902,13 +902,13 @@ boundary preserved evidence without manufacturing a pass.
 The post-run trajectory audit found two evaluator defects that cannot alter
 that closed REJECT but must change the next evaluator identity:
 
-- `AgenticResult.tool_calls` is cumulative for a persistent `AgenticLoop`, while
-  the tau2 adapter projected the whole log on every participant turn. Earlier
-  environment actions could therefore be emitted again. Unlimited inner
-  rounds also let the model continue against placeholder write results before
-  the official tau2 environment replied. The candidate's sealed first row ran
-  for 1,156.8 seconds and ended at `max_steps`; another row repeated the same
-  successful state-changing call many times.
+- Unlimited inner rounds let the model continue against placeholder write
+  results before the official tau2 environment replied. The candidate's
+  sealed first row ran for 1,156.8 seconds and ended at `max_steps`; another
+  row repeated the same successful state-changing call many times. Source
+  audit confirmed that `ToolCallProcessor.reset()` clears its log at every
+  `arun()` boundary, so this was model behavior inside one inner run, not
+  cross-turn adapter replay.
 - Evidence used the maximum single-simulation duration as each arm's wall
   usage. The six baseline simulations actually summed to 2,347.3 seconds and
   the six candidate simulations to 3,320.3 seconds, while their envelopes
@@ -918,17 +918,33 @@ that closed REJECT but must change the next evaluator identity:
   remains immutable rather than being rescored.
 
 The successor boundary is a small external half-duplex supervisor, separate
-from `AgenticLoop` and from candidate policy. It freezes one model round per
-tau2 participant turn, advances an exact-once cursor over the cumulative tool
-log, consumes only the expected inner round-limit notice, and maps GEODE's
-generic repeated-success/no-progress termination to tau2's native stop token.
-An absolute per-simulation deadline now wraps in-flight participant calls, and
-paired evidence records measured subprocess elapsed time while retaining raw
-token, call, and cost floors. Contract-backed runs require a positive timeout
-and `max_rounds=1` for both participants. These rules depend only on protocol
-state; they contain no task ID, tool name, workflow, or score case. The source-
-attested knowledge graph records the supervisor as a separate node, and size
-ratchets keep the runner below 1,200 lines and the supervisor below 300.
+from candidate policy. A default-off AgenticLoop option yields immediately
+after one completed tool batch; ordinary callers retain `while(tool_use)`.
+Tau2 keeps `max_rounds=0`, so the first model call preserves `tool_choice=auto`
+and high effort, then projects the current `arun()` tool log once and lets the
+official environment own the next response. The external supervisor also maps
+GEODE's generic repeated-success/no-progress termination to tau2's native stop
+token. An absolute per-simulation deadline wraps in-flight participant calls,
+and paired evidence records measured subprocess elapsed time while retaining
+raw token, call, and cost floors. Contract-backed runs require a positive
+timeout and unlimited inner round configuration; the code-owned yield supplies
+the actual one-batch boundary. These rules depend only on protocol state; they
+contain no task ID, tool name, workflow, or score case. The source-attested
+knowledge graph records the supervisor as a separate node, and size ratchets
+keep the runner below 1,200 lines and the supervisor below 300.
+
+The first successor attempts found the remaining boundary mistake without
+creating score evidence. r15 generated a one-line candidate, then all six
+baseline rows hit the subscription hard limit before any model response;
+candidate execution was skipped and the verdict is scoreless `INVALID`. r16
+replayed that candidate with zero producer calls after reset. Its first
+baseline row ran 600.1 seconds as 90 alternating text messages with zero tool
+calls and closed as tau2's native `timeout`; the next row was operator-stopped
+at 210 seconds. The cause was using `max_rounds=1` as the initial yield signal:
+AgenticLoop's wrap-up policy correctly interpreted its only round as final and
+set `tool_choice=none` plus low effort. r16 is an incomplete diagnostic, its
+sealed pack remains unopened, and none of its rows can enter promotion. The
+default-off post-tool yield replaces that overloaded round cap.
 
 The strongest honest claims are:
 

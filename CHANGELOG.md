@@ -50,14 +50,15 @@ functional change.
 ### Changed
 
 - **Crucible tau2 runs now use an external half-duplex turn supervisor.**
-  Contract-backed participants execute one GEODE model round per tau2 turn,
-  project each entry in the cumulative tool log exactly once, consume the
-  expected inner round-limit notice, and translate generic repeated-success
-  convergence into tau2's native stop boundary. A positive per-simulation
-  timeout is mandatory and now wraps in-flight participant calls; arm evidence
-  records actual subprocess elapsed time instead of only the longest raw row.
-  The task-independent supervisor is source-attested in the producer knowledge
-  graph and kept under its own size ratchet.
+  A default-off AgenticLoop boundary yields after one completed tool batch;
+  tau2 keeps unlimited round configuration so the first call retains automatic
+  tool choice and high reasoning effort. Each per-run tool log is projected
+  once, and generic repeated-success convergence becomes tau2's native stop
+  boundary. A positive per-simulation timeout is mandatory and wraps in-flight
+  participant calls; arm evidence records actual subprocess elapsed time
+  instead of only the longest raw row. The task-independent supervisor is
+  source-attested in the producer knowledge graph and kept under its own size
+  ratchet.
 - **Crucible can now execute a real GPT-5.4 paired train campaign.** The
   candidate surface is one bounded agent-policy file; the thin Codex producer
   receives only closed train feedback plus a bounded knowledge-graph slice and

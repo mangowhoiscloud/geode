@@ -171,9 +171,10 @@ class Tau2AssayAdapter:
             )
         agent = _mapping(config.get("agent"), "assay_config.agent")
         for role, participant in (("agent", agent), ("user", user)):
-            if participant.get("max_rounds") != 1:
+            if participant.get("max_rounds") != 0:
                 raise ContractError(
-                    f"contract-backed tau2 {role} requires max_rounds=1 at the half-duplex boundary"
+                    f"contract-backed tau2 {role} requires max_rounds=0; "
+                    "the external half-duplex boundary owns the yield"
                 )
         implementation = str(agent.get("implementation") or "")
         concurrency_limit = dict(self.agent_concurrency_limits).get(implementation)

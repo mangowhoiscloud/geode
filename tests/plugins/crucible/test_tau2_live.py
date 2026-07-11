@@ -127,7 +127,7 @@ def _contract() -> ExperimentContract:
             "effort": "high",
             "time_budget_s": 180.0,
             "max_tokens": 32768,
-            "max_rounds": 1,
+            "max_rounds": 0,
             "cognitive_reflection": False,
             "codex_output_replay": True,
             "tool_search_defer": True,
@@ -143,7 +143,7 @@ def _contract() -> ExperimentContract:
             "effort": "high",
             "time_budget_s": 120.0,
             "max_tokens": 8192,
-            "max_rounds": 1,
+            "max_rounds": 0,
         },
         "retrieval": {"config": None, "kwargs": {}},
     }
@@ -402,8 +402,8 @@ def test_tau2_command_is_fully_derived_from_frozen_subscription_config(tmp_path:
     assert "--disable-tool-search-defer" not in command
     assert "--max-retries" in command
     assert command[command.index("--max-retries") + 1] == "0"
-    assert command[command.index("--agent-max-rounds") + 1] == "1"
-    assert command[command.index("--user-max-rounds") + 1] == "1"
+    assert command[command.index("--agent-max-rounds") + 1] == "0"
+    assert command[command.index("--user-max-rounds") + 1] == "0"
 
 
 def test_tau2_test_command_binds_the_frozen_train_parent(tmp_path: Path) -> None:
