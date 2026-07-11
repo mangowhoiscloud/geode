@@ -435,6 +435,41 @@ def _verify_tau2_info(contract: ExperimentContract, raw: Mapping[str, Any]) -> N
         raise ContractError("tau2 retrieval kwargs do not match assay_config")
 
 
+def _pre_execution_retry_errors(sim: Mapping[str, Any], *, index: int) -> tuple[str, ...]:
+    """Read source-attested GEODE retry telemetry from one tau2 row."""
+
+    messages = sim.get("messages", [])
+    if not isinstance(messages, list):
+        raise ContractError(f"tau2.simulations[{index}].messages must be a list")
+    observed: list[str] = []
+    for message_index, message_value in enumerate(messages):
+        message = _mapping(
+            message_value,
+            f"tau2.simulations[{index}].messages[{message_index}]",
+        )
+        raw_data = message.get("raw_data")
+        if raw_data is None:
+            continue
+        telemetry = _mapping(
+            raw_data,
+            f"tau2.simulations[{index}].messages[{message_index}].raw_data",
+        )
+        count_raw = telemetry.get("geode_pre_execution_retry_count")
+        errors_raw = telemetry.get("geode_pre_execution_retry_errors")
+        if count_raw is None and errors_raw is None:
+            continue
+        if isinstance(count_raw, bool) or not isinstance(count_raw, int) or count_raw < 0:
+            raise ContractError("tau2 GEODE pre-execution retry count must be non-negative")
+        if not isinstance(errors_raw, list) or any(
+            not isinstance(value, str) or not value for value in errors_raw
+        ):
+            raise ContractError("tau2 GEODE pre-execution retry errors must be strings")
+        if len(errors_raw) != count_raw:
+            raise ContractError("tau2 GEODE pre-execution retry telemetry is inconsistent")
+        observed.extend(errors_raw)
+    return tuple(observed)
+
+
 def tau2_resource_usage_floor(raw: Mapping[str, Any]) -> ResourceUsage:
     """Derive the minimum observable arm usage embedded in tau2 messages."""
 
@@ -556,9 +591,10 @@ def normalize_tau2_results(
         trial = _integer(sim.get("trial"), f"tau2.simulations[{index}].trial")
         termination = str(sim.get("termination_reason") or "").strip()
         termination_class = TAU2_ADAPTER.classify_termination(termination)
-        if termination_class == "infra":
+        retry_errors = _pre_execution_retry_errors(sim, index=index)
+        if termination_class == "infra" or retry_errors:
             status = "infrastructure_error"
-            row_failure = f"tau2_{termination}"
+            row_failure = "tau2_pre_execution_retry" if retry_errors else f"tau2_{termination}"
             saw_infrastructure_error = True
         else:
             status = "completed"

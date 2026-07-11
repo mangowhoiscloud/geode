@@ -980,6 +980,28 @@ from the model-owned Codex child environment. This carries a completed train
 lesson across campaign boundaries without exposing task IDs, trajectories,
 free text, sealed state, or score authority to the optimizer.
 
+r19 exercised that corrected feedback boundary with a fresh GPT-5.4 proposal.
+The producer saw only the closed `workflow_completion` code and added one
+general `CAN` policy clause. On the same six frozen train rows, baseline
+scored `[1, 1, 1, 1, 0, 0]` and candidate scored `[1, 0, 1, 1, 1, 1]`.
+The candidate recovered both multi-message workflows but regressed one mobile
+data workflow, so paired improvement was `+0.1667` with lower bound `-0.1667`;
+verdict `e1c6abe1ac88` remained `REJECT` under the frozen r19 evaluator.
+
+The raw transport trace limits what that verdict can mean. The regressed
+candidate row incurred a GPT-5.4 `APITimeoutError`, recovered through the
+bounded identical-request retry, and then reached the 600-second row deadline.
+Tau2 persisted only the final timeout, so evidence incorrectly reported
+`infra_clean=true`. AgenticLoop now exposes the exception classes observed by
+each current run, the external turn boundary copies their count and identity
+into every tau2 raw message, and normalization rejects inconsistent telemetry.
+Any recovered pre-execution retry makes that row an infrastructure error and
+the paired verdict scoreless `INVALID`; it cannot be learned as a semantic
+failure or success. Historical r19 artifacts remain immutable. Its exact
+candidate is eligible for a preregistered replay under the corrected evaluator:
+a clean replay measures the policy, while another retry closes as infrastructure
+without consuming the sealed pack.
+
 The strongest honest claims are:
 
 - the frozen external tau2 baseline identified concrete retail wrong-write and

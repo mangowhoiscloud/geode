@@ -131,6 +131,17 @@ def _usage_dict(result: Any) -> dict[str, Any] | None:
     return {str(key): value for key, value in raw.items()} if isinstance(raw, dict) else None
 
 
+def _pre_execution_retry_telemetry(loop: Any) -> dict[str, Any]:
+    """Project per-turn retry identity into tau2's persisted raw messages."""
+
+    raw = getattr(loop, "pre_execution_retry_errors", ())
+    errors = tuple(value for value in raw if isinstance(value, str) and value)
+    return {
+        "geode_pre_execution_retry_count": len(errors),
+        "geode_pre_execution_retry_errors": list(errors),
+    }
+
+
 def _tau2_tool_calls(result: Any, *, requestor: str) -> list[Any]:
     entries = getattr(result, "tool_calls", []) or []
     if not isinstance(entries, list):

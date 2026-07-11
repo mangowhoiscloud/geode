@@ -567,6 +567,7 @@ class AgenticLoop:
         # model_action_required so the user picks a model via /model.
         self._consecutive_llm_failures: int = 0
         self._LLM_RETRY_CAP: int = 5  # max retries before giving up
+        self._pre_execution_retry_errors: list[str] = []
 
         from core.agent.context_manager import ContextWindowManager
 
@@ -604,6 +605,12 @@ class AgenticLoop:
     # ------------------------------------------------------------------
     # Lifecycle / metrics — delegate to ``_lifecycle``
     # ------------------------------------------------------------------
+
+    @property
+    def pre_execution_retry_errors(self) -> tuple[str, ...]:
+        """Connection/empty-output retries observed in the current arun."""
+
+        return tuple(self._pre_execution_retry_errors)
 
     def _save_checkpoint(self, user_input: str, round_idx: int = 0) -> None:
         """Delegates to :func:`_lifecycle.save_checkpoint`."""
@@ -1573,6 +1580,7 @@ class AgenticLoop:
         """Run the agentic loop until LLM emits end_turn or max rounds."""
         self._tool_processor.reset()
         self._op_logger.reset()
+        self._pre_execution_retry_errors.clear()
 
         # Wire conversation context so /model command guard can check size
         from core.cli.commands import set_conversation_context
@@ -2389,6 +2397,7 @@ class AgenticLoop:
             attempt: int,
             max_attempts: int,
         ) -> None:
+            self._pre_execution_retry_errors.append(type(exc).__name__)
             if self._hooks:
                 try:
                     await self._hooks.trigger_async(

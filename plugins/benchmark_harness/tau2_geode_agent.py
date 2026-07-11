@@ -28,6 +28,7 @@ from plugins.benchmark_harness.tau2_turn_supervisor import (
     _agent_system_prompt,
     _jsonish,
     _message_to_prompt,
+    _pre_execution_retry_telemetry,
     _run_geode_turn,
     _tau2_terminal_token,
     _tau2_tool_calls,
@@ -309,6 +310,7 @@ def register_geode_tau2_participants(
                         "geode_termination_reason": "external_deadline",
                         "geode_tool_call_count": 0,
                         "geode_progress_supervisor": "tau2_deadline",
+                        **_pre_execution_retry_telemetry(state.loop),
                     },
                     generation_time_seconds=time.monotonic() - started,
                 )
@@ -333,6 +335,7 @@ def register_geode_tau2_participants(
                         "geode_termination_reason": getattr(result, "termination_reason", ""),
                         "geode_tool_call_count": 0,
                         "geode_progress_supervisor": "tau2_stop",
+                        **_pre_execution_retry_telemetry(state.loop),
                     },
                     generation_time_seconds=time.monotonic() - started,
                 )
@@ -347,6 +350,7 @@ def register_geode_tau2_participants(
                         "geode_termination_reason": getattr(result, "termination_reason", ""),
                         "geode_tool_call_count": len(tool_calls),
                         "geode_tool_projection": "tau2_orchestrator",
+                        **_pre_execution_retry_telemetry(state.loop),
                     },
                     generation_time_seconds=time.monotonic() - started,
                 )
@@ -358,6 +362,7 @@ def register_geode_tau2_participants(
                     "geode_rounds": getattr(result, "rounds", 0),
                     "geode_termination_reason": getattr(result, "termination_reason", ""),
                     "geode_tool_call_count": len(getattr(result, "tool_calls", []) or []),
+                    **_pre_execution_retry_telemetry(state.loop),
                 },
                 generation_time_seconds=time.monotonic() - started,
             )
@@ -426,6 +431,7 @@ def register_geode_tau2_participants(
                         "geode_termination_reason": "external_deadline",
                         "geode_tool_call_count": 0,
                         "geode_progress_supervisor": "tau2_deadline",
+                        **_pre_execution_retry_telemetry(state.loop),
                     },
                     generation_time_seconds=time.monotonic() - started,
                 )
@@ -451,6 +457,7 @@ def register_geode_tau2_participants(
                         "geode_termination_reason": getattr(result, "termination_reason", ""),
                         "geode_tool_call_count": 0,
                         "geode_progress_supervisor": "tau2_stop",
+                        **_pre_execution_retry_telemetry(state.loop),
                     },
                     generation_time_seconds=time.monotonic() - started,
                 )
@@ -466,6 +473,7 @@ def register_geode_tau2_participants(
                         "geode_termination_reason": getattr(result, "termination_reason", ""),
                         "geode_tool_call_count": len(tool_calls),
                         "geode_tool_projection": "tau2_orchestrator",
+                        **_pre_execution_retry_telemetry(state.loop),
                     },
                     generation_time_seconds=time.monotonic() - started,
                 )
@@ -478,6 +486,7 @@ def register_geode_tau2_participants(
                     "geode_rounds": getattr(result, "rounds", 0),
                     "geode_termination_reason": getattr(result, "termination_reason", ""),
                     "geode_tool_call_count": len(getattr(result, "tool_calls", []) or []),
+                    **_pre_execution_retry_telemetry(state.loop),
                 },
                 generation_time_seconds=time.monotonic() - started,
             )

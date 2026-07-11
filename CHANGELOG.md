@@ -96,7 +96,11 @@ functional change.
   after live campaigns repeatedly reached the old two-attempt ceiling. A
   successful retry marks every preceding empty dump as recovered; three empty
   responses, schema or billing failures, and persistent transport failures
-  still fail closed. A finalized invalid arm now
+  still fail closed. Tau2 raw messages now preserve every recovered
+  pre-execution retry by count and exception class; normalization validates
+  that telemetry and closes the arm as infrastructure-contaminated instead of
+  treating the extra provider sample and elapsed time as semantic score. A
+  finalized invalid arm now
   survives the runner's non-zero exit as structured evidence. Train evaluation
   writes a zero-call skipped counterpart instead of running the other arm, so
   the supervisor records a scoreless infrastructure verdict with the original

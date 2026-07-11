@@ -6,7 +6,10 @@ import asyncio
 
 import httpx
 import pytest
-from core.agent.loop.agent_loop import _acomplete_with_fail_fast_pre_execution_retry
+from core.agent.loop.agent_loop import (
+    AgenticLoop,
+    _acomplete_with_fail_fast_pre_execution_retry,
+)
 from core.llm.adapters.base import EmptyModelOutputError
 
 
@@ -21,6 +24,17 @@ class _Adapter:
         if isinstance(outcome, Exception):
             raise outcome
         return outcome
+
+
+def test_agent_loop_exposes_current_run_retry_identity_as_an_immutable_view() -> None:
+    loop = object.__new__(AgenticLoop)
+    loop._pre_execution_retry_errors = ["ReadTimeout"]
+
+    observed = loop.pre_execution_retry_errors
+    loop._pre_execution_retry_errors.append("EmptyModelOutputError")
+
+    assert observed == ("ReadTimeout",)
+    assert loop.pre_execution_retry_errors == ("ReadTimeout", "EmptyModelOutputError")
 
 
 def _no_delay(monkeypatch: pytest.MonkeyPatch) -> None:

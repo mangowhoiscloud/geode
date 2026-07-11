@@ -17,25 +17,25 @@
       "id": "file:plugins/benchmark_harness/tau2_geode_agent.py",
       "filePath": "plugins/benchmark_harness/tau2_geode_agent.py",
       "name": "Tau2 GEODE adapter",
-      "summary": "Builds GEODE participants and delegates half-duplex turn control to the external supervisor.",
+      "summary": "Builds GEODE participants, delegates half-duplex turn control, and persists per-turn pre-execution retry identity.",
       "tags": ["adapter", "benchmark", "tool-projection"],
-      "contentSha256": "021d0d20e0658228846c249f33fe41bb8db26389ea4f595a421c97a25c2c5a66"
+      "contentSha256": "0ad48f845a2eb6de47d7214e4f232f3e123a3b9037bd6ea7f07984ec74e3e9d2"
     },
     {
       "id": "file:plugins/benchmark_harness/tau2_turn_supervisor.py",
       "filePath": "plugins/benchmark_harness/tau2_turn_supervisor.py",
       "name": "Tau2 turn supervisor",
-      "summary": "Owns the half-duplex deadline and stop mapping while AgenticLoop yields after each completed tool batch.",
+      "summary": "Owns the half-duplex deadline, stop mapping, and retry-telemetry projection while AgenticLoop yields after each completed tool batch.",
       "tags": ["benchmark", "deadline", "external-loop", "tool-projection"],
-      "contentSha256": "f1326f12d710301fd16352c37330aed39b8b0dc00f5111f302e2da46c75c0335"
+      "contentSha256": "8266ae29e8adaaad7c9649074b00e6a8a480a6197b2339f64f8a71f4007cd05d"
     },
     {
       "id": "file:core/agent/loop/agent_loop.py",
       "filePath": "core/agent/loop/agent_loop.py",
       "name": "AgenticLoop",
-      "summary": "Runs model and tool rounds until termination, with default-off boundaries for actionable empty continuations and external post-tool yields.",
+      "summary": "Runs model and tool rounds until termination, with default-off external boundaries and current-run pre-execution retry identity for evaluator attestation.",
       "tags": ["runtime", "while-tool-use"],
-      "contentSha256": "5427ad16835d90b8afd27e8bded32efefc5623aa39c5b60442402534a09e2b6d"
+      "contentSha256": "8c8ec6c0ca273317d92e08a12b9ba1a82a6cd8fd3ab17b3e315d6c34cb91d783"
     },
     {
       "id": "file:core/agent/tool_executor/processor.py",

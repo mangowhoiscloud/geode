@@ -344,6 +344,81 @@ def test_tau2_adapter_marks_upstream_infrastructure_error_invalid(tmp_path: Path
     assert evidence.failure_class == "tau2_infrastructure_error"
 
 
+def test_tau2_adapter_marks_recovered_llm_retry_as_infrastructure_invalid(
+    tmp_path: Path,
+) -> None:
+    contract = _contract()
+    raw = _raw_results()
+    simulations = raw["simulations"]
+    assert isinstance(simulations, list)
+    first = simulations[0]
+    assert isinstance(first, dict)
+    messages = first["messages"]
+    assert isinstance(messages, list)
+    message = messages[0]
+    assert isinstance(message, dict)
+    message["raw_data"] = {
+        "geode_pre_execution_retry_count": 1,
+        "geode_pre_execution_retry_errors": ["APITimeoutError"],
+    }
+    results, snapshot = _write_artifacts(tmp_path, contract, raw=raw)
+
+    evidence = normalize_tau2_results(
+        contract,
+        arm="candidate",
+        results_path=results,
+        snapshot_path=snapshot,
+        usage=_usage(),
+        checks_by_pair=_checks(),
+    )
+
+    assert evidence.execution_status == "invalid"
+    assert evidence.failure_class == "tau2_infrastructure_error"
+    assert evidence.rows[0].status == "infrastructure_error"
+    assert evidence.rows[0].failure_class == "tau2_pre_execution_retry"
+
+
+@pytest.mark.parametrize(
+    ("count", "errors"),
+    [
+        (True, ["APITimeoutError"]),
+        (1, []),
+        (0, ["APITimeoutError"]),
+        (1, [""]),
+    ],
+)
+def test_tau2_adapter_rejects_malformed_retry_telemetry(
+    tmp_path: Path,
+    count: object,
+    errors: object,
+) -> None:
+    contract = _contract()
+    raw = _raw_results()
+    simulations = raw["simulations"]
+    assert isinstance(simulations, list)
+    first = simulations[0]
+    assert isinstance(first, dict)
+    messages = first["messages"]
+    assert isinstance(messages, list)
+    message = messages[0]
+    assert isinstance(message, dict)
+    message["raw_data"] = {
+        "geode_pre_execution_retry_count": count,
+        "geode_pre_execution_retry_errors": errors,
+    }
+    results, snapshot = _write_artifacts(tmp_path, contract, raw=raw)
+
+    with pytest.raises(ContractError, match="pre-execution retry"):
+        normalize_tau2_results(
+            contract,
+            arm="candidate",
+            results_path=results,
+            snapshot_path=snapshot,
+            usage=_usage(),
+            checks_by_pair=_checks(),
+        )
+
+
 def test_tau2_usage_manifest_cannot_underreport_raw_messages(tmp_path: Path) -> None:
     raw = _raw_results()
     observed = tau2_resource_usage_floor(raw)

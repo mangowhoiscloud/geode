@@ -2,8 +2,12 @@ import hashlib
 import json
 import subprocess
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
+from plugins.benchmark_harness.tau2_turn_supervisor import (
+    _pre_execution_retry_telemetry,
+)
 from plugins.crucible.contract import (
     ContractError,
     ExperimentContract,
@@ -37,6 +41,18 @@ TEST_TASKS = (
     TaskUnit("test-1", "3" * 64, "c" * 64),
     TaskUnit("test-2", "4" * 64, "d" * 64),
 )
+
+
+def test_tau2_turn_projects_pre_execution_retry_identity() -> None:
+    loop = SimpleNamespace(pre_execution_retry_errors=("APITimeoutError", "EmptyModelOutputError"))
+
+    assert _pre_execution_retry_telemetry(loop) == {
+        "geode_pre_execution_retry_count": 2,
+        "geode_pre_execution_retry_errors": [
+            "APITimeoutError",
+            "EmptyModelOutputError",
+        ],
+    }
 
 
 def test_command_evaluator_entrypoint_uses_the_frozen_uv_runtime() -> None:
