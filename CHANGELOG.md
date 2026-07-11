@@ -63,9 +63,9 @@ functional change.
   cannot leave a directory that resembles an attempted run. Fresh campaigns
   can seed the first proposal with bounded v3 train feedback, and the Codex
   producer now unwraps the supervisor envelope before projecting only its
-  closed failure codes. Its model-owned child process receives no supervisor
-  protocol paths, so task IDs and verdict reasons remain outside both its
-  prompt and readable environment.
+  closed failure codes. Command producers receive a projected request without
+  task identity or verdict reasons, and the model-owned child process receives
+  no supervisor protocol paths.
 - **Crucible can now execute a real GPT-5.4 paired train campaign.** The
   candidate surface is one bounded agent-policy file; the thin Codex producer
   receives only closed train feedback plus a bounded knowledge-graph slice and

@@ -57,9 +57,9 @@
       "id": "file:plugins/crucible/supervisor.py",
       "filePath": "plugins/crucible/supervisor.py",
       "name": "Promotion supervisor",
-      "summary": "Preflights authority inputs before state creation, can seed bounded train feedback, then owns candidate isolation, experiment contracts, evidence validation, pure verdicts, and the monotone search ref.",
+      "summary": "Preflights authority inputs, retains task identity only in its audit request, projects closed feedback to producers, and owns evidence plus the monotone search ref.",
       "tags": ["crucible", "supervisor", "promotion"],
-      "contentSha256": "a87d06b4df86b30e9a884aaa42f90f7e10e6f5d5429f99ca3a67ee7bfd303db5"
+      "contentSha256": "9e8139b858a87e0a89279217319edb1364f6de76a0787ca611fe58ea1d17b63c"
     },
     {
       "id": "file:scripts/eval/crucible_tau2_evaluator.py",

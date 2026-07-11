@@ -514,6 +514,51 @@ def test_initial_closed_feedback_is_forwarded_to_the_first_producer(tmp_path: Pa
     assert SupervisorConfig.load(persisted_path).initial_feedback == initial_feedback
 
 
+def test_command_producer_view_cannot_carry_task_identity_or_verdict_reasons(
+    tmp_path: Path,
+) -> None:
+    request = ProposalRequest(
+        campaign_id="campaign",
+        config_id="a" * 64,
+        attempt_id="attempt",
+        iteration=2,
+        parent_sha="b" * 40,
+        allowed_surfaces=("surface.txt",),
+        attempt_dir=tmp_path / "attempt",
+        worktree=tmp_path / "checkout",
+        producer_dir=tmp_path / "producer",
+        feedback={
+            "schema": "crucible.supervisor-feedback.v3",
+            "attempt_id": "previous",
+            "outcome": "REJECT",
+            "reasons": ["confidence_bound_not_positive"],
+            "search_head_sha": "c" * 40,
+            "evaluator": {
+                "schema": "crucible.failure-feedback.v3",
+                "failure_codes": ["workflow_completion"],
+                "failed_task_ids": ["private-train-task"],
+            },
+        },
+        remaining_budget={
+            "wall_seconds": 60.0,
+            "calls": 10,
+            "tokens": 1_000,
+            "cost_usd": 1.0,
+        },
+    )
+
+    producer_view = request.to_producer_dict()
+    serialized = json.dumps(producer_view)
+
+    assert producer_view["request_id"] == request.request_id
+    assert producer_view["feedback"] == {
+        "schema": "crucible.failure-feedback.v3",
+        "failure_codes": ["workflow_completion"],
+    }
+    assert "private-train-task" not in serialized
+    assert "confidence_bound_not_positive" not in serialized
+
+
 def test_initial_feedback_cannot_name_a_task_outside_the_train_pack(
     tmp_path: Path,
 ) -> None:

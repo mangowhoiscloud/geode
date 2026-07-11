@@ -525,6 +525,30 @@ class ProposalRequest:
     def to_dict(self) -> dict[str, Any]:
         return {**self.payload(), "request_id": self.request_id}
 
+    def to_producer_dict(self) -> dict[str, Any]:
+        """Return the authority-bound request without evaluator task identity."""
+
+        payload = self.to_dict()
+        feedback: object = self.feedback
+        if isinstance(feedback, Mapping) and feedback.get("schema") == SUPERVISOR_FEEDBACK_SCHEMA:
+            feedback = feedback.get("evaluator")
+        raw_codes = (
+            feedback.get("failure_codes")
+            if isinstance(feedback, Mapping) and feedback.get("schema") == FEEDBACK_SCHEMA
+            else None
+        )
+        payload["feedback"] = (
+            {
+                "schema": FEEDBACK_SCHEMA,
+                "failure_codes": [
+                    code for code in raw_codes if isinstance(code, str) and code in _FAILURE_CODES
+                ],
+            }
+            if isinstance(raw_codes, list)
+            else None
+        )
+        return payload
+
 
 @dataclass(frozen=True)
 class CandidateProposal:
@@ -990,7 +1014,7 @@ class CommandProducer:
         request.producer_dir.mkdir()
         request_path = request.producer_dir / "request.json"
         output = request.producer_dir / "candidate-response.json"
-        write_exclusive_json(request_path, request.to_dict())
+        write_exclusive_json(request_path, request.to_producer_dict())
         if output.exists() or output.is_symlink():
             raise SupervisorError("candidate response already exists")
         environment = _role_environment(
