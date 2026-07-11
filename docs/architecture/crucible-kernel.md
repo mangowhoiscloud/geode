@@ -973,9 +973,11 @@ and therefore saw an empty list. The producer now projects either direct v3
 feedback or the nested supervisor envelope onto the same closed failure-code
 set. A fresh campaign may preregister bounded `initial_feedback`; its failed
 task IDs must belong to the frozen train pack, while only failure codes enter
-the model prompt. This carries a completed train lesson across campaign
-boundaries without exposing trajectories, free text, sealed state, or score
-authority.
+the model prompt. The producer also removes every supervisor-protocol path from
+the model-owned Codex child environment; reading the raw request is therefore
+not an alternate input channel. This carries a completed train lesson across
+campaign boundaries without exposing task IDs, trajectories, free text, sealed
+state, or score authority to the optimizer.
 
 The strongest honest claims are:
 

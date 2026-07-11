@@ -277,6 +277,16 @@ def _closed_failure_codes(feedback: object) -> list[str]:
     return [code for code in raw if isinstance(code, str) and code in _CLOSED_FAILURE_CODES]
 
 
+def _codex_child_environment() -> dict[str, str]:
+    """Keep supervisor protocol paths outside the model-owned subprocess."""
+
+    return {
+        name: value
+        for name, value in os.environ.items()
+        if not name.startswith("CRUCIBLE_") and name != "GEODE_STATE_ROOT"
+    }
+
+
 def _write_exclusive(path: Path, payload: Mapping[str, Any]) -> None:
     descriptor = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
     with os.fdopen(descriptor, "w", encoding="utf-8") as handle:
@@ -337,6 +347,7 @@ def run() -> int:
         text=True,
         capture_output=True,
         check=False,
+        env=_codex_child_environment(),
         timeout=float(request["remaining_budget"]["wall_seconds"]),
     )
     wall_seconds = time.monotonic() - started

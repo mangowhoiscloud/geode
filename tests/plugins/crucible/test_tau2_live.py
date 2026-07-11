@@ -14,6 +14,7 @@ from plugins.crucible.evidence import EvidenceEnvelope, ResourceUsage
 from plugins.crucible.producers.codex_kg import (
     _DEFAULT_GRAPH_PATH,
     ProducerError,
+    _codex_child_environment,
     _prompt,
     _validate_policy_grammar,
     knowledge_context,
@@ -603,6 +604,22 @@ def test_codex_producer_reads_only_nested_closed_failure_codes() -> None:
     assert 'Prior closed failure codes: ["workflow_completion"]' in prompt
     assert "private-train-task" not in prompt
     assert "confidence_bound_not_positive" not in prompt
+
+
+def test_codex_child_cannot_read_supervisor_protocol_paths(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("CODEX_HOME", "/trusted/codex-home")
+    monkeypatch.setenv("CRUCIBLE_PROPOSAL_REQUEST", "/private/request.json")
+    monkeypatch.setenv("CRUCIBLE_CANDIDATE_OUTPUT", "/private/candidate.json")
+    monkeypatch.setenv("CRUCIBLE_ROLE", "producer")
+    monkeypatch.setenv("GEODE_STATE_ROOT", "/private/state")
+
+    environment = _codex_child_environment()
+
+    assert environment["CODEX_HOME"] == "/trusted/codex-home"
+    assert all(not name.startswith("CRUCIBLE_") for name in environment)
+    assert "GEODE_STATE_ROOT" not in environment
 
 
 def test_codex_producer_enforces_can_cannot_output_grammar() -> None:
