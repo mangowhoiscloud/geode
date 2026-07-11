@@ -127,7 +127,7 @@ def _contract() -> ExperimentContract:
             "effort": "high",
             "time_budget_s": 180.0,
             "max_tokens": 32768,
-            "max_rounds": 0,
+            "max_rounds": 1,
             "cognitive_reflection": False,
             "codex_output_replay": True,
             "tool_search_defer": True,
@@ -143,7 +143,7 @@ def _contract() -> ExperimentContract:
             "effort": "high",
             "time_budget_s": 120.0,
             "max_tokens": 8192,
-            "max_rounds": 0,
+            "max_rounds": 1,
         },
         "retrieval": {"config": None, "kwargs": {}},
     }
@@ -320,6 +320,47 @@ def test_run_arm_preserves_finalized_invalid_evidence_after_nonzero_exit(
     assert (output / "baseline.evidence.json").is_file()
 
 
+def test_run_arm_accounts_for_actual_subprocess_elapsed_time(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    contract, checkout, harness, output = _prepared_arm(
+        tmp_path,
+        monkeypatch,
+        invalid=True,
+    )
+    evidence = _arm_evidence(
+        contract,
+        arm="baseline",
+        invalid=True,
+        raw_hash="a" * 64,
+    )
+    captured: dict[str, ResourceUsage] = {}
+
+    def normalize(*args: object, **kwargs: object) -> EvidenceEnvelope:
+        usage = kwargs["usage"]
+        assert isinstance(usage, ResourceUsage)
+        captured["usage"] = usage
+        return evidence
+
+    moments = iter((10.0, 13.5))
+    monkeypatch.setattr("plugins.crucible.tau2_live.time.monotonic", lambda: next(moments))
+    monkeypatch.setattr("plugins.crucible.tau2_live.normalize_tau2_results", normalize)
+
+    _run_arm(
+        contract,
+        arm="baseline",
+        checkout=checkout,
+        harness_root=harness,
+        contract_path=tmp_path / "contract.json",
+        output_dir=output,
+        run_id="fixture-run",
+        timeout=10.0,
+    )
+
+    assert captured["usage"] == ResourceUsage(3.5, 1, 10, 0.0)
+
+
 def test_run_arm_rejects_nonzero_exit_with_complete_evidence(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -361,6 +402,8 @@ def test_tau2_command_is_fully_derived_from_frozen_subscription_config(tmp_path:
     assert "--disable-tool-search-defer" not in command
     assert "--max-retries" in command
     assert command[command.index("--max-retries") + 1] == "0"
+    assert command[command.index("--agent-max-rounds") + 1] == "1"
+    assert command[command.index("--user-max-rounds") + 1] == "1"
 
 
 def test_tau2_test_command_binds_the_frozen_train_parent(tmp_path: Path) -> None:

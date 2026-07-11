@@ -106,7 +106,7 @@ def _assay_config() -> dict[str, object]:
         "max_steps": 20,
         "max_errors": 1,
         "max_retries": 0,
-        "timeout": None,
+        "timeout": 600.0,
         "seed": 300,
         "agent": {
             "implementation": "geode_agent",
@@ -117,7 +117,7 @@ def _assay_config() -> dict[str, object]:
             "effort": "high",
             "time_budget_s": 180.0,
             "max_tokens": 32768,
-            "max_rounds": 0,
+            "max_rounds": 1,
             "cognitive_reflection": False,
             "codex_output_replay": True,
             "tool_search_defer": True,
@@ -133,7 +133,7 @@ def _assay_config() -> dict[str, object]:
             "effort": "high",
             "time_budget_s": 120.0,
             "max_tokens": 8192,
-            "max_rounds": 0,
+            "max_rounds": 1,
         },
         "retrieval": {"config": None, "kwargs": {}},
     }
@@ -144,6 +144,26 @@ def test_tau2_geode_agent_rejects_unattested_thread_pool_concurrency() -> None:
     config["max_concurrency"] = 2
 
     with pytest.raises(ContractError, match="geode_agent supports max_concurrency<=1"):
+        TAU2_ADAPTER.validate_config(config)
+
+
+@pytest.mark.parametrize("timeout", [None, 0, -1.0, float("inf"), True])
+def test_tau2_contract_requires_positive_per_simulation_timeout(timeout: object) -> None:
+    config = _assay_config()
+    config["timeout"] = timeout
+
+    with pytest.raises(ContractError, match="positive per-simulation timeout"):
+        TAU2_ADAPTER.validate_config(config)
+
+
+@pytest.mark.parametrize("role", ["agent", "user"])
+def test_tau2_contract_requires_one_model_round_per_half_duplex_turn(role: str) -> None:
+    config = _assay_config()
+    participant = config[role]
+    assert isinstance(participant, dict)
+    participant["max_rounds"] = 0
+
+    with pytest.raises(ContractError, match=rf"{role} requires max_rounds=1"):
         TAU2_ADAPTER.validate_config(config)
 
 

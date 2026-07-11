@@ -17,9 +17,17 @@
       "id": "file:plugins/benchmark_harness/tau2_geode_agent.py",
       "filePath": "plugins/benchmark_harness/tau2_geode_agent.py",
       "name": "Tau2 GEODE adapter",
-      "summary": "Builds the AgenticLoop, loads the policy, projects tool-call batches, and opts only the evaluator-owned user into actionable-partial recovery.",
+      "summary": "Builds GEODE participants and delegates half-duplex turn control to the external supervisor.",
       "tags": ["adapter", "benchmark", "tool-projection"],
-      "contentSha256": "92568369a8f8ead730775a304348ec8b9ce2f8a201db1542dfe5c0022e20af44"
+      "contentSha256": "5847684fbd6d26b1485bf2d2e253c98c148a902f63497eb9f06fe41d19051a92"
+    },
+    {
+      "id": "file:plugins/benchmark_harness/tau2_turn_supervisor.py",
+      "filePath": "plugins/benchmark_harness/tau2_turn_supervisor.py",
+      "name": "Tau2 turn supervisor",
+      "summary": "Yields one model round per half-duplex turn, projects each cumulative tool call once, maps generic no-progress, and enforces the simulation deadline outside AgenticLoop.",
+      "tags": ["benchmark", "deadline", "external-loop", "tool-projection"],
+      "contentSha256": "f46a6e426be17cbb306ff3e238545c647b7f7f2540cd31758a3446a2146dd9f6"
     },
     {
       "id": "file:core/agent/loop/agent_loop.py",
@@ -41,9 +49,9 @@
       "id": "file:plugins/crucible/tau2_live.py",
       "filePath": "plugins/crucible/tau2_live.py",
       "name": "Paired tau2 evaluator",
-      "summary": "Derives frozen runner arguments, isolates both arms, preserves finalized invalid evidence, and returns closed feedback.",
+      "summary": "Derives frozen runner arguments, isolates both arms, records actual subprocess wall time, preserves finalized invalid evidence, and returns closed feedback.",
       "tags": ["crucible", "evaluator", "paired"],
-      "contentSha256": "c683b6226e0f314084ffda8edb9139c1612df2244d7ef16373e7d64419398ccb"
+      "contentSha256": "dd54a72bd75920b08a61aae1d1e5828b5cc9d0d6a016fbec8ddb3a62507f149b"
     },
     {
       "id": "file:plugins/crucible/supervisor.py",
@@ -93,6 +101,11 @@
       "source": "file:plugins/benchmark_harness/tau2_geode_agent.py",
       "target": "file:plugins/benchmark_harness/tau2_agent_policy.md",
       "type": "reads_from"
+    },
+    {
+      "source": "file:plugins/benchmark_harness/tau2_geode_agent.py",
+      "target": "file:plugins/benchmark_harness/tau2_turn_supervisor.py",
+      "type": "delegates_to"
     },
     {
       "source": "file:plugins/benchmark_harness/tau2_geode_agent.py",

@@ -15,6 +15,7 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import time
 from collections.abc import Iterator, Mapping, Sequence
 from contextlib import contextmanager
 from pathlib import Path
@@ -300,6 +301,7 @@ def _run_arm(
         run_id=run_id,
         parent_contract_path=parent_contract_path,
     )
+    started = time.monotonic()
     try:
         completed = subprocess.run(  # noqa: S603 - frozen evaluator derives complete argv
             command,
@@ -310,6 +312,7 @@ def _run_arm(
         )
     except subprocess.TimeoutExpired as exc:
         raise TimeoutError(f"tau2 {arm} arm timed out") from exc
+    elapsed = time.monotonic() - started
     source_raw = harness_root / "data" / "simulations" / run_id / "results.json"
     snapshot = snapshot_dir / f"{run_id}.snapshot.json"
     if not source_raw.is_file() or not snapshot.is_file():
@@ -323,12 +326,19 @@ def _run_arm(
     raw_path = output_dir / f"{arm}.raw.json"
     shutil.copyfile(source_raw, raw_path)
     raw = load_json_object(raw_path, f"tau2 {arm} raw", max_bytes=512 * 1024 * 1024)
+    observed_usage = tau2_resource_usage_floor(raw)
+    arm_usage = ResourceUsage(
+        wall_seconds=max(elapsed, observed_usage.wall_seconds),
+        calls=observed_usage.calls,
+        tokens=observed_usage.tokens,
+        cost_usd=observed_usage.cost_usd,
+    )
     evidence = normalize_tau2_results(
         contract,
         arm=arm,
         results_path=raw_path,
         snapshot_path=snapshot,
-        usage=tau2_resource_usage_floor(raw),
+        usage=arm_usage,
         checks_by_pair=tau2_trace_checks(raw),
     )
     evidence_path = output_dir / f"{arm}.evidence.json"

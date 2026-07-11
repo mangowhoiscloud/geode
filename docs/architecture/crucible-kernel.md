@@ -878,6 +878,58 @@ a hard infrastructure failure, the measured assistant agent retains the strict
 default, and marker failure is fatal. This preserves model-emitted work; it
 does not fabricate text, replay a task, or admit an invalid score.
 
+Campaign r14 was the first attempt to pass train and consume its preregistered
+sealed pack. The replayed one-line policy candidate
+(`ae2678cce91fa76cd80c08ac345dd4613aa1e60d`) changed only the general batching
+clause. Train rewards moved from `[1, 0, 0, 1, 1, 0]` to
+`[1, 1, 1, 1, 1, 0]`; the pure train verdict was `KEEP`, with means
+`0.50 -> 0.8333`, paired improvement `0.3333`, lower bound `0.1667`, and
+`promotion_authority=none`. This opened exactly one six-family, task-disjoint
+sealed attempt.
+
+The sealed result did not replicate. Baseline rewards were
+`[1, 0, 1, 1, 0, 0]`; candidate rewards were `[0, 1, 1, 1, 0, 0]`. Both means
+were `0.50`, paired improvement was zero, and the lower bound was `-0.3333`.
+Verdict `21d574b725b7` is therefore `REJECT` for
+`improvement_below_materiality` and `confidence_bound_not_positive`; decision
+`d3cb91bc5abe` retains `release_authority=none`. No eligible ref exists. The
+pack-specific attestation ref is durable, the attempt count is one, and the
+sealed pack cannot be reopened. Three exhausted empty responses in one
+candidate row received `.actionable` markers and preserved a real tool action,
+but that row still scored zero because the workflow remained incomplete. The
+boundary preserved evidence without manufacturing a pass.
+
+The post-run trajectory audit found two evaluator defects that cannot alter
+that closed REJECT but must change the next evaluator identity:
+
+- `AgenticResult.tool_calls` is cumulative for a persistent `AgenticLoop`, while
+  the tau2 adapter projected the whole log on every participant turn. Earlier
+  environment actions could therefore be emitted again. Unlimited inner
+  rounds also let the model continue against placeholder write results before
+  the official tau2 environment replied. The candidate's sealed first row ran
+  for 1,156.8 seconds and ended at `max_steps`; another row repeated the same
+  successful state-changing call many times.
+- Evidence used the maximum single-simulation duration as each arm's wall
+  usage. The six baseline simulations actually summed to 2,347.3 seconds and
+  the six candidate simulations to 3,320.3 seconds, while their envelopes
+  recorded only 675.6 and 1,156.8 seconds. The honest combined subprocess floor
+  is therefore about 5,667.5 seconds, not 1,832.5. This correction would not
+  change r14's budget veto because the frozen ceiling was 10,800 seconds; r14
+  remains immutable rather than being rescored.
+
+The successor boundary is a small external half-duplex supervisor, separate
+from `AgenticLoop` and from candidate policy. It freezes one model round per
+tau2 participant turn, advances an exact-once cursor over the cumulative tool
+log, consumes only the expected inner round-limit notice, and maps GEODE's
+generic repeated-success/no-progress termination to tau2's native stop token.
+An absolute per-simulation deadline now wraps in-flight participant calls, and
+paired evidence records measured subprocess elapsed time while retaining raw
+token, call, and cost floors. Contract-backed runs require a positive timeout
+and `max_rounds=1` for both participants. These rules depend only on protocol
+state; they contain no task ID, tool name, workflow, or score case. The source-
+attested knowledge graph records the supervisor as a separate node, and size
+ratchets keep the runner below 1,200 lines and the supervisor below 300.
+
 The strongest honest claims are:
 
 - the frozen external tau2 baseline identified concrete retail wrong-write and

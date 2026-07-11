@@ -150,6 +150,16 @@ class Tau2AssayAdapter:
     def validate_config(self, config: Mapping[str, Any]) -> None:
         if config.get("schema") != self.schema:
             raise ContractError(f"tau2 assay schema must be {self.schema!r}")
+        timeout = config.get("timeout")
+        if (
+            isinstance(timeout, bool)
+            or not isinstance(timeout, (int, float))
+            or not math.isfinite(timeout)
+            or timeout <= 0
+        ):
+            raise ContractError(
+                "contract-backed tau2 evidence requires a positive per-simulation timeout"
+            )
         user = _mapping(config.get("user"), "assay_config.user")
         implementation = str(user.get("implementation") or "")
         owner = self.user_runtime_owner(implementation)
@@ -160,6 +170,11 @@ class Tau2AssayAdapter:
                 "contract-backed tau2 evidence requires a user runtime isolated from candidate code"
             )
         agent = _mapping(config.get("agent"), "assay_config.agent")
+        for role, participant in (("agent", agent), ("user", user)):
+            if participant.get("max_rounds") != 1:
+                raise ContractError(
+                    f"contract-backed tau2 {role} requires max_rounds=1 at the half-duplex boundary"
+                )
         implementation = str(agent.get("implementation") or "")
         concurrency_limit = dict(self.agent_concurrency_limits).get(implementation)
         max_concurrency = config.get("max_concurrency")
