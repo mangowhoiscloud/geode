@@ -36,7 +36,7 @@ def _run(*argv: str) -> subprocess.CompletedProcess[str]:
     )
 
 
-def test_guaranteed_when_remaining_covers_the_hard_cap(tmp_path: Path) -> None:
+def test_cap_fit_when_remaining_covers_the_hard_cap(tmp_path: Path) -> None:
     completed = _run(
         str(_config(tmp_path)),
         "--history",
@@ -46,11 +46,12 @@ def test_guaranteed_when_remaining_covers_the_hard_cap(tmp_path: Path) -> None:
     )
     verdict = json.loads(completed.stdout)
     assert completed.returncode == 0
-    assert verdict["fit"] == "guaranteed"
+    assert verdict["schema"] == "crucible.window-preflight.v2"
+    assert verdict["fit"] == "cap_fit"
     assert verdict["history_completed_runs"] == 2
 
 
-def test_probable_when_remaining_covers_only_the_measured_worst(tmp_path: Path) -> None:
+def test_history_fit_when_remaining_covers_only_the_measured_worst(tmp_path: Path) -> None:
     completed = _run(
         str(_config(tmp_path)),
         "--history",
@@ -60,7 +61,7 @@ def test_probable_when_remaining_covers_only_the_measured_worst(tmp_path: Path) 
     )
     verdict = json.loads(completed.stdout)
     assert completed.returncode == 1
-    assert verdict["fit"] == "probable"
+    assert verdict["fit"] == "history_fit"
     assert verdict["history_worst_tokens"] == 5_103_000
 
 

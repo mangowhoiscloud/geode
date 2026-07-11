@@ -8,12 +8,17 @@ opened?* — using measured campaign costs, not guesses.
 
 Decision tiers (exit codes; the launcher picks its policy):
 
-- 0 ``guaranteed``: remaining tokens cover the campaign's own hard cap
-  (``limits.max_tokens``) — cannot die of quota.
-- 1 ``probable``: remaining covers the historical worst completed campaign
-  but not the hard cap.
+- 0 ``cap_fit``: the estimated remaining token budget covers the campaign's
+  own hard cap (``limits.max_tokens``).
+- 1 ``history_fit``: the estimate covers the historical worst completed
+  campaign but not the hard cap.
 - 3 ``defer``: remaining does not cover even the historical worst — launching
   reproduces r23.
+
+These are launch-capacity estimates, not provider guarantees. Subscription
+quota can use non-token accounting or change independently of the local hard
+cap. The preflight therefore reports its source and arithmetic while the
+evaluator still treats any provider limit as infrastructure contamination.
 
 Every number is sourced: the cap from the campaign config, history from
 completed campaign summaries, remaining from the operator or a live Codex
@@ -85,13 +90,13 @@ def decide(
 ) -> dict[str, object]:
     worst_completed = max(history_tokens) if history_tokens else None
     if remaining_tokens >= hard_cap_tokens:
-        fit, exit_code = "guaranteed", 0
+        fit, exit_code = "cap_fit", 0
     elif worst_completed is not None and remaining_tokens >= worst_completed:
-        fit, exit_code = "probable", 1
+        fit, exit_code = "history_fit", 1
     else:
         fit, exit_code = "defer", 3
     return {
-        "schema": "crucible.window-preflight.v1",
+        "schema": "crucible.window-preflight.v2",
         "fit": fit,
         "exit_code": exit_code,
         "hard_cap_tokens": hard_cap_tokens,

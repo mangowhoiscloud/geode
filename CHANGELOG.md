@@ -52,16 +52,26 @@ functional change.
 - **Crucible run economics: row cache and window preflight.** A hash-bound
   row cache salvages finalized tau2 simulations across relaunches: rows are
   stored with their full measurement identity (revision, evaluator/harness/
-  task-pack/assay hashes) plus a payload hash, interrupted runs donate
-  completed rows at harvest, full-cache arms synthesize results without
-  spending conversations, and partial hits re-run only unfinished tasks —
-  implementing the checkpoint sidecar the kernel's resume rule required. A
-  window preflight script gates launches on measured campaign costs versus
-  remaining quota. Motivated by r23: a quota death at pair 7/12 burned 75% of
-  a run's compute for zero verdict bits. A failure-first pack-ordering
+  task-pack/assay hashes) plus row and v2 context payload hashes, interrupted runs
+  donate only semantic completed rows at harvest, full-cache arms synthesize
+  results without spending conversations, and partial hits re-run only
+  unfinished tasks while preserving the first finalized realization —
+  implementing the checkpoint sidecar the kernel's resume rule required.
+  Tau2 infrastructure placeholders remain missing work rather than becoming
+  cached failures. A window preflight script gates launches on measured
+  campaign costs versus remaining quota and reports `cap_fit`, `history_fit`,
+  or `defer` as estimates rather than provider guarantees. Motivated by r23: a
+  quota death at pair 7/12 burned 75% of a run's compute for zero verdict bits.
+  A failure-first pack-ordering
   intervention was prototyped and retired the same day: live validation
   showed tau2 executes in upstream file order and the contract runner
   enforces it, so pack curation now documents that pin instead.
+- **Crucible's producer program is a tracked Markdown source again.**
+  `plugins/crucible/program.md` centralizes the autoresearch-style
+  experimentation protocol, enforced constraints, search preferences, setup,
+  and closed dynamic-feedback boundary. `codex_kg` renders only its bounded
+  model-facing section; `tau2_agent_policy.md` remains the `train.py`-like
+  mutation target rather than a second source of operating rules.
 
 ### Changed
 

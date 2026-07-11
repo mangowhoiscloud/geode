@@ -81,6 +81,36 @@ def _string(value: object, field: str) -> str:
     return value.strip()
 
 
+def _index_simulations(
+    raw: Mapping[str, Any],
+    field: str,
+) -> dict[tuple[str, int], Mapping[str, Any]]:
+    """Index raw rows without silently dropping malformed or duplicate evidence."""
+
+    simulations = raw.get("simulations")
+    if not isinstance(simulations, list):
+        raise Tau2InfrastructureError(f"{field}.simulations must be a list")
+    rows: dict[tuple[str, int], Mapping[str, Any]] = {}
+    for index, row in enumerate(simulations):
+        if not isinstance(row, Mapping):
+            raise Tau2InfrastructureError(f"{field}.simulations[{index}] must be an object")
+        task_id = row.get("task_id")
+        trial = row.get("trial")
+        if (
+            not isinstance(task_id, (str, int))
+            or isinstance(trial, bool)
+            or not isinstance(trial, int)
+        ):
+            raise Tau2InfrastructureError(
+                f"{field}.simulations[{index}] requires task_id and integer trial"
+            )
+        pair = (str(task_id), trial)
+        if pair in rows:
+            raise Tau2InfrastructureError(f"{field} contains duplicate pair {pair!r}")
+        rows[pair] = row
+    return rows
+
+
 def _optional_flag(command: list[str], name: str, value: object) -> None:
     if value is not None:
         command.extend((name, str(value)))
@@ -411,12 +441,12 @@ def _run_arm(
             )
         fresh = load_json_object(source_raw, f"tau2 {arm} raw", max_bytes=512 * 1024 * 1024)
         if salvage_context is not None and salvaged:
-            fresh_rows = {
-                (str(row["task_id"]), int(row["trial"])): row
-                for row in fresh.get("simulations", [])
-                if isinstance(row, Mapping)
-            }
-            raw = merge_results(salvage_context, {**salvaged, **fresh_rows})
+            fresh_rows = _index_simulations(fresh, f"tau2 {arm} partial-cache raw")
+            # A task with one missing trial must be re-run as a whole because
+            # tau2 accepts task IDs rather than individual pairs.  Preserve
+            # any identity-proven original trial instead of silently replacing
+            # it with the repeated realization.
+            raw = merge_results(salvage_context, {**fresh_rows, **salvaged})
             write_exclusive_json(raw_path, raw)
             snapshot = snapshot_dir / f"{run_id}.merged.snapshot.json"
             write_exclusive_json(

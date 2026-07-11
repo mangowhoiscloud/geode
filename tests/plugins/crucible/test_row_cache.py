@@ -32,11 +32,17 @@ class _StubContract:
         object.__setattr__(self, "assay_config", {"schema": "crucible.tau2-assay.v1"})
 
 
-def _simulation(task_id: str, trial: int, *, reward: float = 0.0) -> dict:
+def _simulation(
+    task_id: str,
+    trial: int,
+    *,
+    reward: float = 0.0,
+    termination_reason: str = "user_stop",
+) -> dict:
     return {
         "task_id": task_id,
         "trial": trial,
-        "termination_reason": "user_stop",
+        "termination_reason": termination_reason,
         "reward_info": {"reward": reward},
         "messages": [],
     }
@@ -82,6 +88,42 @@ def test_harvest_lookup_roundtrip_from_partial_results(tmp_path: Path) -> None:
     assert missing_task_ids(contract, rows) == ["task-a", "task-c"]
 
 
+def test_harvest_excludes_r23_infrastructure_placeholders(tmp_path: Path) -> None:
+    contract = _StubContract(trials_per_task=1)
+    stored = harvest_arm_rows(
+        tmp_path,
+        contract,
+        revision_sha=contract.candidate_sha,
+        raw_results=_partial_raw(
+            [
+                _simulation("task-b", 0, reward=1.0),
+                _simulation("task-a", 0, termination_reason="infrastructure_error"),
+                _simulation("task-c", 0, termination_reason="unexpected_error"),
+            ]
+        ),
+    )
+
+    assert stored == 1
+    rows = cached_rows(tmp_path, contract, revision_sha=contract.candidate_sha)
+    assert set(rows) == {("task-b", 0)}
+    assert missing_task_ids(contract, rows) == ["task-a", "task-c"]
+
+
+def test_harvest_ignores_unknown_termination_instead_of_masking_abort(tmp_path: Path) -> None:
+    contract = _StubContract(trials_per_task=1)
+    stored = harvest_arm_rows(
+        tmp_path,
+        contract,
+        revision_sha=contract.candidate_sha,
+        raw_results=_partial_raw(
+            [_simulation("task-b", 0, termination_reason="new_upstream_reason")]
+        ),
+    )
+
+    assert stored == 0
+    assert cached_rows(tmp_path, contract, revision_sha=contract.candidate_sha) == {}
+
+
 def test_rows_from_a_different_identity_are_ignored(tmp_path: Path) -> None:
     contract = _StubContract()
     harvest_arm_rows(
@@ -125,6 +167,22 @@ def test_tampered_cached_row_is_refused(tmp_path: Path) -> None:
     assert cached_rows(tmp_path, contract, revision_sha=contract.baseline_sha) == {}
 
 
+def test_tampered_cached_context_is_refused(tmp_path: Path) -> None:
+    contract = _StubContract()
+    harvest_arm_rows(
+        tmp_path,
+        contract,
+        revision_sha=contract.baseline_sha,
+        raw_results=_partial_raw([_simulation("task-a", 0)]),
+    )
+    context_path = next(tmp_path.rglob("context.json"))
+    stored = json.loads(context_path.read_text())
+    stored["info"]["seed"] = 999
+    context_path.write_text(json.dumps(stored))
+
+    assert cached_context(tmp_path, contract, revision_sha=contract.baseline_sha) is None
+
+
 def test_merge_rebuilds_full_results_in_stable_order(tmp_path: Path) -> None:
     contract = _StubContract()
     harvest_arm_rows(
@@ -152,7 +210,14 @@ def test_merge_rebuilds_full_results_in_stable_order(tmp_path: Path) -> None:
     assert context is not None
     merged = merge_results(context, {**rows, **fresh})
     pairs = [(row["task_id"], row["trial"]) for row in merged["simulations"]]
-    assert pairs == sorted(pairs)
+    assert pairs == [
+        ("task-b", 0),
+        ("task-b", 1),
+        ("task-a", 0),
+        ("task-a", 1),
+        ("task-c", 0),
+        ("task-c", 1),
+    ]
     assert len(merged["tasks"]) == 3
     assert not missing_task_ids(
         contract,

@@ -34,10 +34,10 @@ from typing import Any, Literal
 from .artifacts import load_json_object, write_exclusive_json
 from .contract import ContractError, ExperimentContract
 from .evidence import expected_pairs
-from .verifiers.tau2 import SNAPSHOT_SCHEMA
+from .verifiers.tau2 import SNAPSHOT_SCHEMA, TAU2_ADAPTER
 
 ROW_SCHEMA = "crucible.cached-row.v1"
-CONTEXT_SCHEMA = "crucible.cached-arm-context.v1"
+CONTEXT_SCHEMA = "crucible.cached-arm-context.v2"
 
 _UNSAFE = re.compile(r"[^A-Za-z0-9._-]")
 
@@ -62,10 +62,21 @@ def _shard_dir(cache_root: Path, contract: ExperimentContract, revision_sha: str
 
 
 def _row_filename(task_id: str, trial: int) -> str:
-    return f"{_UNSAFE.sub('_', task_id)}__{trial}.json"
+    safe = _UNSAFE.sub("_", task_id)[:160]
+    digest = hashlib.sha256(task_id.encode("utf-8")).hexdigest()[:12]
+    return f"{safe}__{digest}__{trial}.json"
 
 
 def _completed_simulations(raw: Mapping[str, Any]) -> list[Mapping[str, Any]]:
+    """Return only finalized semantic rows that may be reused as measurements.
+
+    Tau2 writes ``infrastructure_error`` placeholders for the active and
+    unstarted tail when a batch aborts.  Presence of ``termination_reason`` is
+    therefore not sufficient evidence that a task ran.  Reuse the adapter's
+    frozen termination taxonomy so the cache cannot turn r23-style quota
+    placeholders into completed rows.
+    """
+
     simulations = raw.get("simulations")
     if not isinstance(simulations, list):
         return []
@@ -75,12 +86,30 @@ def _completed_simulations(raw: Mapping[str, Any]) -> list[Mapping[str, Any]]:
             continue
         if not isinstance(row.get("task_id"), (str, int)):
             continue
-        if not isinstance(row.get("trial"), int):
+        if isinstance(row.get("trial"), bool) or not isinstance(row.get("trial"), int):
             continue
-        if row.get("termination_reason") is None:
+        reason = str(row.get("termination_reason") or "").strip()
+        if not reason:
+            continue
+        try:
+            termination_class = TAU2_ADAPTER.classify_termination(reason)
+        except ContractError:
+            continue
+        if termination_class == "infra":
             continue
         rows.append(row)
     return rows
+
+
+def _context_payload(raw_results: Mapping[str, Any]) -> dict[str, Any] | None:
+    info = raw_results.get("info")
+    tasks = raw_results.get("tasks")
+    if not isinstance(info, Mapping) or not isinstance(tasks, list):
+        return None
+    return {
+        "info": json.loads(json.dumps(info)),
+        "tasks": json.loads(json.dumps(tasks)),
+    }
 
 
 def harvest_arm_rows(
@@ -101,14 +130,15 @@ def harvest_arm_rows(
     shard.mkdir(parents=True, exist_ok=True)
     identity = _identity(contract, revision_sha)
     context_path = shard / "context.json"
-    if not context_path.exists() and isinstance(raw_results.get("tasks"), list):
+    context_payload = _context_payload(raw_results)
+    if not context_path.exists() and context_payload is not None:
         write_exclusive_json(
             context_path,
             {
                 "schema": CONTEXT_SCHEMA,
                 **identity,
-                "info": raw_results.get("info"),
-                "tasks": raw_results.get("tasks"),
+                "context_sha256": _canonical_sha256(context_payload),
+                **context_payload,
             },
         )
     stored = 0
@@ -144,6 +174,12 @@ def _verified_row(path: Path, identity: Mapping[str, str]) -> Mapping[str, Any] 
             return None
     simulation = stored.get("simulation")
     if not isinstance(simulation, Mapping):
+        return None
+    task_id = simulation.get("task_id")
+    trial = simulation.get("trial")
+    if not isinstance(task_id, (str, int)) or isinstance(trial, bool) or not isinstance(trial, int):
+        return None
+    if stored.get("task_id") != str(task_id) or stored.get("trial") != trial:
         return None
     if stored.get("row_sha256") != _canonical_sha256(json.loads(json.dumps(simulation))):
         return None
@@ -190,7 +226,10 @@ def cached_context(
     for field, value in _identity(contract, revision_sha).items():
         if stored.get(field) != value:
             return None
-    if not isinstance(stored.get("tasks"), list) or not isinstance(stored.get("info"), Mapping):
+    context_payload = _context_payload(stored)
+    if context_payload is None:
+        return None
+    if stored.get("context_sha256") != _canonical_sha256(context_payload):
         return None
     return stored
 
@@ -200,7 +239,18 @@ def merge_results(
     rows: Mapping[tuple[str, int], Mapping[str, Any]],
 ) -> dict[str, Any]:
     """Rebuild a tau2 results payload from a context blob plus cached/fresh rows."""
-    ordered = [rows[key] for key in sorted(rows, key=lambda pair: (pair[0], pair[1]))]
+    task_order = {
+        str(task.get("id")): index
+        for index, task in enumerate(context["tasks"])
+        if isinstance(task, Mapping) and task.get("id") is not None
+    }
+    ordered = [
+        rows[key]
+        for key in sorted(
+            rows,
+            key=lambda pair: (task_order.get(pair[0], len(task_order)), pair[1], pair[0]),
+        )
+    ]
     return {
         "info": json.loads(json.dumps(context["info"])),
         "tasks": json.loads(json.dumps(context["tasks"])),

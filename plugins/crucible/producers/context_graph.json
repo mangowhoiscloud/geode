@@ -74,7 +74,19 @@
         "evaluator",
         "paired"
       ],
-      "contentSha256": "0c51517a7000d2442e7a2ea06210220c010cf2d7914360126403821553c6eda4"
+      "contentSha256": "c08c196d938ed32938a2f316f7fd86f1fa171e2fe437d11b9ccb280c70a5ef48"
+    },
+    {
+      "id": "file:plugins/crucible/row_cache.py",
+      "filePath": "plugins/crucible/row_cache.py",
+      "name": "Hash-bound row cache",
+      "summary": "Reuses only semantic tau2 rows whose full measurement identity and row/context payload hashes verify; infrastructure placeholders remain missing work.",
+      "tags": [
+        "cache",
+        "crucible",
+        "recovery"
+      ],
+      "contentSha256": "0d00c23707464900c956fd280c77406a7e825520b1cb866ec3c79b1b9a79043a"
     },
     {
       "id": "file:plugins/crucible/supervisor.py",
@@ -109,7 +121,19 @@
         "producer",
         "knowledge-graph"
       ],
-      "contentSha256": "c8f082f8d918ba6a68e28e23ceacfc2e47c0a92644774d9ff0a2d41d639fc058"
+      "contentSha256": "518afc3e012627d86442231f3b26d8103018fa81a0bb62f256b07e64c4f567ef"
+    },
+    {
+      "id": "file:plugins/crucible/program.md",
+      "filePath": "plugins/crucible/program.md",
+      "name": "Crucible program",
+      "summary": "Centralizes experimentation, constraints, preferences, setup, and the closed dynamic-feedback boundary; only its candidate_program section is model-facing.",
+      "tags": [
+        "crucible",
+        "producer",
+        "program"
+      ],
+      "contentSha256": "29c42f4296343582fd991f2db944640c73a6dea14d734a760f8867d57164280d"
     },
     {
       "id": "file:plugins/crucible/producers/replay.py",
@@ -125,6 +149,11 @@
     }
   ],
   "edges": [
+    {
+      "source": "file:plugins/crucible/producers/codex_kg.py",
+      "target": "file:plugins/crucible/program.md",
+      "type": "reads_from"
+    },
     {
       "source": "file:plugins/crucible/producers/codex_kg.py",
       "target": "file:plugins/benchmark_harness/tau2_agent_policy.md",
@@ -159,6 +188,11 @@
       "source": "file:plugins/crucible/tau2_live.py",
       "target": "file:plugins/benchmark_harness/tau2_geode_agent.py",
       "type": "calls"
+    },
+    {
+      "source": "file:plugins/crucible/tau2_live.py",
+      "target": "file:plugins/crucible/row_cache.py",
+      "type": "depends_on"
     },
     {
       "source": "file:scripts/eval/crucible_tau2_evaluator.py",
