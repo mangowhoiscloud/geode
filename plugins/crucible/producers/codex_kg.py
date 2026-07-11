@@ -16,8 +16,20 @@ from typing import Any
 _REQUEST_SCHEMA = "crucible.proposal-request.v3"
 _CANDIDATE_SCHEMA = "crucible.candidate.v2"
 _GRAPH_SCHEMA = "crucible.producer-graph.v1"
+_FEEDBACK_SCHEMA = "crucible.failure-feedback.v3"
+_SUPERVISOR_FEEDBACK_SCHEMA = "crucible.supervisor-feedback.v3"
 _GRAPH_LIMIT = 256 * 1024
 _CONTEXT_NODE_LIMIT = 16
+_CLOSED_FAILURE_CODES = frozenset(
+    {
+        "quality",
+        "safety",
+        "state_correctness",
+        "termination",
+        "tool_contract",
+        "workflow_completion",
+    }
+)
 _DEFAULT_GRAPH_PATH = Path(__file__).with_name("context_graph.json")
 _DEFAULT_OBJECTIVE = (
     "Complete multi-step tool workflows with the fewest non-redundant calls: "
@@ -224,8 +236,7 @@ def _prompt(
     feedback: object,
     graph_context: str,
 ) -> str:
-    feedback_row = feedback if isinstance(feedback, Mapping) else {}
-    failure_codes = feedback_row.get("failure_codes", [])
+    failure_codes = _closed_failure_codes(feedback)
     return f"""\
 Task: propose one small, task-independent agent-policy improvement.
 Runtime: Crucible candidate producer in a disposable no-remote checkout.
@@ -248,6 +259,22 @@ Bounded architecture context:
 
 Inspect the allowed file and its caller, then make the smallest defensible edit.
 """
+
+
+def _closed_failure_codes(feedback: object) -> list[str]:
+    """Project supervisor feedback onto the closed optimizer vocabulary."""
+
+    if not isinstance(feedback, Mapping):
+        return []
+    row: object = feedback
+    if feedback.get("schema") == _SUPERVISOR_FEEDBACK_SCHEMA:
+        row = feedback.get("evaluator")
+    if not isinstance(row, Mapping) or row.get("schema") != _FEEDBACK_SCHEMA:
+        return []
+    raw = row.get("failure_codes")
+    if not isinstance(raw, list):
+        return []
+    return [code for code in raw if isinstance(code, str) and code in _CLOSED_FAILURE_CODES]
 
 
 def _write_exclusive(path: Path, payload: Mapping[str, Any]) -> None:

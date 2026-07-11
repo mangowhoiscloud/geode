@@ -581,6 +581,30 @@ def test_codex_producer_prompt_uses_can_cannot_policy_clauses() -> None:
     assert legacy_negative not in prompt.casefold()
 
 
+def test_codex_producer_reads_only_nested_closed_failure_codes() -> None:
+    prompt = _prompt(
+        objective="Improve complete workflows.",
+        surfaces=("plugins/benchmark_harness/tau2_agent_policy.md",),
+        feedback={
+            "schema": "crucible.supervisor-feedback.v3",
+            "attempt_id": "attempt-1",
+            "outcome": "REJECT",
+            "reasons": ["confidence_bound_not_positive"],
+            "search_head_sha": "a" * 40,
+            "evaluator": {
+                "schema": "crucible.failure-feedback.v3",
+                "failure_codes": ["workflow_completion"],
+                "failed_task_ids": ["private-train-task"],
+            },
+        },
+        graph_context="{}",
+    )
+
+    assert 'Prior closed failure codes: ["workflow_completion"]' in prompt
+    assert "private-train-task" not in prompt
+    assert "confidence_bound_not_positive" not in prompt
+
+
 def test_codex_producer_enforces_can_cannot_output_grammar() -> None:
     _validate_policy_grammar(
         "Mode: assay.\nBehavior:\n- CAN use tools.\n- CANNOT invent results.\n"

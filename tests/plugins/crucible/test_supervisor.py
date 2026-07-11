@@ -491,6 +491,51 @@ def test_invalid_evidence_feedback_is_not_forwarded(tmp_path: Path) -> None:
     assert "evaluator" not in persisted_feedback
 
 
+def test_initial_closed_feedback_is_forwarded_to_the_first_producer(tmp_path: Path) -> None:
+    config, _baseline = _config(tmp_path, attempts=1)
+    task_id = str(config.train_plan.payload["tasks"][0]["task_id"])
+    initial_feedback = FailureFeedback(
+        failure_codes=("workflow_completion",),
+        failed_task_ids=(task_id,),
+    )
+    config = replace(config, initial_feedback=initial_feedback)
+    producer = _Producer()
+
+    PromotionSupervisor(
+        config,
+        producer=producer,
+        evaluator=_Evaluator(["REJECT"]),
+    ).run()
+
+    assert producer.feedbacks == [initial_feedback.to_dict()]
+    persisted_path = config.state_dir / "config.json"
+    persisted = json.loads(persisted_path.read_text())
+    assert persisted["initial_feedback"] == initial_feedback.to_dict()
+    assert SupervisorConfig.load(persisted_path).initial_feedback == initial_feedback
+
+
+def test_initial_feedback_cannot_name_a_task_outside_the_train_pack(
+    tmp_path: Path,
+) -> None:
+    config, _baseline = _config(tmp_path, attempts=1)
+    config = replace(
+        config,
+        initial_feedback=FailureFeedback(
+            failure_codes=("workflow_completion",),
+            failed_task_ids=("outside-task",),
+        ),
+    )
+
+    with pytest.raises(SupervisorError, match="outside the train contract"):
+        PromotionSupervisor(
+            config,
+            producer=_Producer(),
+            evaluator=_Evaluator(["REJECT"]),
+        ).run()
+
+    assert not config.state_dir.exists()
+
+
 def test_invalid_parser_detail_is_operator_only(tmp_path: Path) -> None:
     config, _baseline = _config(tmp_path, attempts=2)
     producer = _Producer()

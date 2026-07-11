@@ -356,6 +356,7 @@ class SupervisorConfig:
     evaluator_environment: tuple[str, ...]
     train_plan: TrainPlan
     limits: LoopLimits
+    initial_feedback: FailureFeedback | None = None
 
     @classmethod
     def load(cls, path: Path) -> SupervisorConfig:
@@ -378,7 +379,7 @@ class SupervisorConfig:
                 "state_dir",
                 "train_plan",
             },
-            optional={"config_id"},
+            optional={"config_id", "initial_feedback"},
         )
         if row.get("schema") != CONFIG_SCHEMA:
             raise SupervisorError(f"schema must be {CONFIG_SCHEMA!r}")
@@ -419,6 +420,11 @@ class SupervisorConfig:
             evaluator_environment=evaluator_environment,
             train_plan=TrainPlan.from_mapping(row.get("train_plan")),
             limits=LoopLimits.from_mapping(row.get("limits")),
+            initial_feedback=(
+                None
+                if row.get("initial_feedback") is None
+                else FailureFeedback.from_mapping(row.get("initial_feedback"))
+            ),
         )
         config.validate()
         supplied_id = row.get("config_id")
@@ -454,9 +460,11 @@ class SupervisorConfig:
                 for frozen in validation_contract.evaluator_paths
             ):
                 raise SupervisorError("evaluator_entrypoint is not in evaluator_paths")
+        if self.initial_feedback is not None:
+            self.initial_feedback.validate_for(validation_contract)
 
     def payload(self) -> dict[str, Any]:
-        return {
+        payload: dict[str, Any] = {
             "schema": CONFIG_SCHEMA,
             "campaign_id": self.campaign_id,
             "initial_search_head_sha": self.initial_search_head_sha,
@@ -471,6 +479,9 @@ class SupervisorConfig:
             "train_plan": self.train_plan.to_dict(),
             "limits": self.limits.to_dict(),
         }
+        if self.initial_feedback is not None:
+            payload["initial_feedback"] = self.initial_feedback.to_dict()
+        return payload
 
     @property
     def config_id(self) -> str:
@@ -1358,7 +1369,9 @@ class PromotionSupervisor:
         zero = ResourceUsage(0.0, 0, 0, 0.0)
         usage = zero
         head = config.initial_search_head_sha
-        feedback: Mapping[str, Any] | None = None
+        feedback: Mapping[str, Any] | None = (
+            config.initial_feedback.to_dict() if config.initial_feedback is not None else None
+        )
         previous_record: str | None = None
         counts = {"attempts": 0, "keeps": 0, "rejects": 0, "invalids": 0}
         invalid_streak = 0

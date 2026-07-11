@@ -60,7 +60,10 @@ functional change.
   source-attested in the producer knowledge graph and kept under its own size
   ratchet. Campaign startup now resolves the exact initial commit and checks
   authority-ref availability before writing any state, so an invalid revision
-  cannot leave a directory that resembles an attempted run.
+  cannot leave a directory that resembles an attempted run. Fresh campaigns
+  can seed the first proposal with bounded v3 train feedback, and the Codex
+  producer now unwraps the supervisor envelope before projecting only its
+  closed failure codes; task IDs and verdict reasons remain outside its prompt.
 - **Crucible can now execute a real GPT-5.4 paired train campaign.** The
   candidate surface is one bounded agent-policy file; the thin Codex producer
   receives only closed train feedback plus a bounded knowledge-graph slice and

@@ -957,6 +957,26 @@ at the authority-ref transition. Successor configurations take the full SHA
 only from `git rev-parse HEAD` rather than reconstructing it from an abbreviated
 log entry.
 
+r18 completed the first clean paired run under the corrected boundary. The
+baseline was `[1, 1, 1, 1, 0, 0]` (mean `0.6667`); the replayed batching
+candidate was `[1, 0, 1, 1, 0, 0]` (mean `0.50`). Verdict
+`fdec8a79737a` is `REJECT`, with paired improvement `-0.1667`, lower bound
+`-0.3333`, and all budget, infrastructure, safety, coverage, and tool-contract
+vetoes clear. The run used 478 calls, 3,855,030 tokens, $4.5585585, and
+4,256.7 attested wall seconds. Search authority stayed at `7bd12d10208d`; the
+successor sealed pack remains unopened.
+
+That REJECT exposed a feedback transport bug rather than an evaluator defect.
+The supervisor correctly persisted its next-producer envelope with nested
+`evaluator.failure_codes`, but the Codex producer read only a top-level field
+and therefore saw an empty list. The producer now projects either direct v3
+feedback or the nested supervisor envelope onto the same closed failure-code
+set. A fresh campaign may preregister bounded `initial_feedback`; its failed
+task IDs must belong to the frozen train pack, while only failure codes enter
+the model prompt. This carries a completed train lesson across campaign
+boundaries without exposing trajectories, free text, sealed state, or score
+authority.
+
 The strongest honest claims are:
 
 - the frozen external tau2 baseline identified concrete retail wrong-write and
