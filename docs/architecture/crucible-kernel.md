@@ -1076,6 +1076,74 @@ evaluator received a row, but the stronger unopened-manifest claim is no longer
 made: that pack is conservatively retired with zero sealed attempts. The
 replacement pack is separately selected before r23 candidate generation.
 
+r23 expanded the exposed train surface to twelve disjoint families and measured
+the first producer candidate on that frozen order. Candidate `0030ddd96393`
+tightened the completion boundary to cover required actions, confirmations,
+state changes, and terminal verification. The baseline completed as
+`[1, 1, 1, 1, 1, 1, 0, 1, 0, 0, 1, 0]`. The first six candidate rows also
+completed with reward one, after which the GPT-5.4 subscription hard limit made
+the remaining six rows infrastructure errors. Verdict `23fa4ccf00ef` is
+therefore a scoreless `INVALID`, not a partial six-row success. The evaluator
+used 624 calls, 5,004,929 tokens, $5.774251, and 4,213.5 attested wall seconds;
+the producer brings the outer attempt to 625 calls and 5,103,196 tokens. All
+observed pre-execution retry counts were zero, so the invalidity is the explicit
+provider limit rather than a recovered retry.
+
+r24 made the only allowed corrective replay of that exact one-line policy under
+the same twelve-row assay. Baseline rewards were
+`[1, 1, 1, 1, 1, 1, 0, 1, 0, 0, 0, 0]`; candidate rewards were
+`[1, 1, 1, 1, 1, 0, 0, 1, 0, 0, 0, 0]`. Verdict `97f21538e229` is a clean
+`REJECT`: means `0.5833 -> 0.50`, paired improvement `-0.0833`, and lower bound
+`-0.1667`, with every veto true. All 922 provider-call messages carried zero
+retry telemetry. The run used 7,498,490 tokens, $8.256135, and 5,747.3 attested
+wall seconds. The stronger completion wording delayed some premature stops but
+did not make progress monotone: one previously passing row regressed, another
+reached four of five required actions without a binary pass, and three rows
+still exhausted `max_steps`.
+
+r25 used those closed failure codes to generate one new, first-valid candidate.
+It added one general CAN clause for consuming unresolved actions and checks one
+at a time while reusing confirmed successes, and tightened the completion
+CANNOT clause. Before candidate execution, however, the same frozen twelve-row
+baseline completed as `[0, 1, 1, 1, 1, 1, 1, 1, 0, 1, 1, 1]`, or `0.8333`.
+Even a perfect candidate could improve only `+0.1667`; its best possible
+family-bootstrap lower bound was `+0.0833`, below the frozen `+0.25`
+materiality floor. The reachability screen emitted verdict `b84dd21a36ac` and
+a zero-call `crucible.screened-arm.v1` candidate artifact. Baseline evaluation
+used 546 calls, 4,403,707 tokens, $5.161777, and 3,575.3 seconds; the producer
+brings the outer attempt to 547 calls and 4,504,216 tokens. Every one of the 546
+raw provider messages carried zero retry count and an empty retry-error list.
+
+The r24/r25 baseline shift from seven to ten passes on identical tasks, routes,
+seed, and evaluator is the next bitter lesson. Re-running the screened r25
+candidate until a lower baseline happens to make the arm reachable would
+condition candidate measurement on a favorable baseline fluctuation and invite
+regression-to-the-mean promotion. The next assay instead uses the already
+implemented replication primitive. Trials are averaged within each task,
+tasks are averaged within each workflow family, and only family deltas enter
+the bootstrap; repeats therefore reduce within-task noise without pretending
+to create independent families.
+
+The post-r25 audit also found that its manually written sealed preregistration
+copied a non-existent `79968339d765...` digest instead of the receipt-bound
+`79968339c58a...` task-pack digest. Train REJECT prevented any sealed attempt,
+but the bad declaration would have failed closed after a KEEP. While confirming
+that mismatch, an operator process parsed the pack file for metadata before
+KEEP. It emitted no task ID, selected row, or task content, but it violated the
+stronger trusted-runner-only access claim, so that six-family pack is
+conservatively retired with zero evaluator attempts.
+
+r26 replaces it from a preregistered salt-ranked three-fault stratum. The first
+`intent <= 2` and `persona <= 2` rule failed closed at five admissible rows and
+wrote no pack. A separately preregistered `<= 3` rule selected six of the
+remaining fifteen families; the operator-visible receipt binds task-pack digest
+`6c4ceb0f8ddc` and artifact digest `d6c80617a73e`, while the selected-row
+manifest stays outside the optimizer view. After excluding every exposed or
+retired pack plus that replacement test pack, exactly nine three-fault families
+remain. All nine, rather than an outcome-selected subset, form the r26 train
+pack with two trials per task and digest `06f7321b6e2e`. This changes the assay
+through frozen configuration only; it adds no second optimizer or scoring path.
+
 The strongest honest claims are:
 
 - the frozen external tau2 baseline identified concrete retail wrong-write and
