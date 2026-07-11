@@ -38,6 +38,7 @@ from core.llm.adapters.base import (
     AdapterCallRequest,
     AdapterCallResult,
     CredentialDetection,
+    EmptyModelOutputError,
     EnvironmentReport,
     Message,
     ModelSpec,
@@ -233,7 +234,7 @@ class CodexOAuthAdapter:
                 dump_path or "<dump failed>",
             )
             if _fail_on_empty_text_enabled():
-                raise RuntimeError(
+                raise EmptyModelOutputError(
                     "codex-oauth: empty output_text "
                     f"model={req.model} stop_reason={result.stop_reason} "
                     f"dump={dump_path or '<dump failed>'}"

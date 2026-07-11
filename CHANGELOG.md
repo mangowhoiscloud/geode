@@ -73,9 +73,11 @@ functional change.
   knowledge subgraph now ships with the producer, verifies every referenced
   source file by content hash, and replaces the stale mutable graph path that
   previously entered through ambient environment. Strict evaluator calls now
-  retry one connection-class stream failure on the same adapter and identical
-  request before surfacing infrastructure; schema, billing, and persistent
-  transport failures still fail closed. Candidate policy clauses are
+  retry one side-effect-safe pre-execution failure on the same adapter and
+  identical request before surfacing infrastructure. This covers both a
+  connection-class stream failure and a completed subscription response with
+  neither text nor tool calls; schema, billing, repeated empty output, and
+  persistent transport failures still fail closed. Candidate policy clauses are
   machine-checked as `CAN`/`CANNOT` before commit, and the tau2 runtime profile
   rejects thread-pool concurrency for `geode_agent` until the Codex streaming
   path has direct parallel-safety evidence. Task-pack construction can now bind
@@ -155,6 +157,11 @@ functional change.
   paired run and mislabeled valid score evidence as `INVALID`. Train responses
   now follow the documented local-name contract, with a response-contract
   regression test covering evidence and raw artifacts.
+- **Strict evaluator routes recover one completed empty model response.** The
+  Codex subscription adapter now raises a typed empty-output error only when a
+  completed response carries neither text nor tool calls. AgenticLoop's strict
+  fail-fast boundary retries that identical, still side-effect-free request
+  once, then surfaces a repeated empty response as infrastructure.
 
 ## [0.99.296] - 2026-07-11
 

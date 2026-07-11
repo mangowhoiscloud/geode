@@ -758,6 +758,31 @@ against the upstream split manifest, and runtime preflight independently
 recomputes all loaded task identities. r5 contains no paired performance
 evidence and cannot inform a promotion decision.
 
+Campaign r6 corrected the split membership but exposed an environment boundary:
+the isolated subprocess `HOME` could not see the host Codex credential store
+unless `CODEX_HOME` was explicitly forwarded. Both attempts ended with 401
+before candidate-task exposure, so r6 contains no performance evidence. The
+next campaign fixed that route input rather than weakening isolation.
+
+Campaign r7 completed the first clean paired measurement. Its baseline rewards
+were `[1, 1, 1, 0]`; the one-line candidate produced `[0, 0, 1, 0]`. Direct
+adjudication is `REJECT` with means `0.75 -> 0.25` and paired improvement
+`-0.50`. The supervisor initially mislabeled it `INVALID` because the tau2
+writer emitted attempt-relative artifact paths while the documented reader
+resolved them from the response directory. The writer now emits local names,
+and a response-contract test fixes that boundary.
+
+Campaign r8 expanded the same deterministic train selection to all six rows
+admitted by the family, intent, and persona caps. It then exposed the other
+pre-execution failure shape: a baseline model call completed with reasoning
+output but neither visible text nor a tool call. The Codex adapter correctly
+failed the strict route, but its generic `RuntimeError` sat outside the
+connection-only retry classifier. Empty completed responses now carry a typed
+adapter error. Strict AgenticLoop calls retry that identical request once, at
+the same boundary as connection-class failures; a second empty response remains
+infrastructure. Because the first response reached no tool execution, the retry
+cannot duplicate environment state changes.
+
 The strongest honest claims are:
 
 - the frozen external tau2 baseline identified concrete retail wrong-write and

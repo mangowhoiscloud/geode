@@ -26,6 +26,7 @@ from core.agent.tool_executor import (
     ToolExecutor,
 )
 from core.hooks import HookEvent, HookSystem
+from core.llm.adapters.base import EmptyModelOutputError
 from core.llm.agentic_response import AgenticResponse
 from core.llm.errors import BillingError, UserCancelledError
 from core.ui.agentic_ui import OperationLogger
@@ -69,7 +70,7 @@ if TYPE_CHECKING:
 log = logging.getLogger(__name__)
 
 _FAIL_FAST_VALUES = frozenset({"1", "true", "yes", "on"})
-_FAIL_FAST_CONNECTION_RETRY_DELAY_S = 1.0
+_FAIL_FAST_RETRY_DELAY_S = 1.0
 
 
 def _fail_fast_adapter_errors_enabled() -> bool:
@@ -79,20 +80,21 @@ def _fail_fast_adapter_errors_enabled() -> bool:
     )
 
 
-async def _acomplete_with_fail_fast_connection_retry(
+async def _acomplete_with_fail_fast_pre_execution_retry(
     adapter: Any,
     request: Any,
     *,
     on_retry: Callable[[Exception], Awaitable[None]] | None = None,
 ) -> Any:
-    """Retry one transport failure without reopening completed tool work.
+    """Retry one pre-execution failure without reopening completed tool work.
 
     Normal AgenticLoop calls already retry after ``_call_llm`` returns
     ``None``. Strict evaluator routes instead raise adapter errors immediately
-    so infrastructure cannot become semantic output. Preserve that boundary,
-    but give a connection-class stream failure one same-adapter retry of the
-    identical request before raising. No model response has reached the tool
-    executor at this point, so the retry cannot repeat a side effect.
+    so infrastructure cannot become semantic output. Preserve that boundary
+    while giving either a connection-class stream failure or a completed model
+    response with neither text nor tool calls one same-adapter retry of the
+    identical request before raising. Neither case has reached the tool
+    executor, so the retry cannot repeat a side effect.
     """
 
     try:
@@ -102,15 +104,18 @@ async def _acomplete_with_fail_fast_connection_retry(
             raise
         from core.llm.adapters.dispatch import _is_connection_transient
 
-        if not _is_connection_transient(exc):
+        empty_output = isinstance(exc, EmptyModelOutputError)
+        if not empty_output and not _is_connection_transient(exc):
             raise
+        failure_kind = "empty model output" if empty_output else "transport error"
         log.warning(
-            "AgenticLoop: fail-fast transport error (%s); retrying the same adapter once",
+            "AgenticLoop: fail-fast %s (%s); retrying the same adapter once",
+            failure_kind,
             type(exc).__name__,
         )
         if on_retry is not None:
             await on_retry(exc)
-        await asyncio.sleep(_FAIL_FAST_CONNECTION_RETRY_DELAY_S)
+        await asyncio.sleep(_FAIL_FAST_RETRY_DELAY_S)
         return await adapter.acomplete(request)
 
 
@@ -2263,7 +2268,7 @@ class AgenticLoop:
             except Exception:
                 log.debug("LLM_CALL_STARTED hook trigger failed", exc_info=True)
 
-        async def _on_fail_fast_connection_retry(exc: Exception) -> None:
+        async def _on_fail_fast_pre_execution_retry(exc: Exception) -> None:
             if self._hooks:
                 try:
                     await self._hooks.trigger_async(
@@ -2273,7 +2278,7 @@ class AgenticLoop:
                             "provider": self._provider,
                             "adapter": adapter_name,
                             "error_type": type(exc).__name__,
-                            "delay_s": _FAIL_FAST_CONNECTION_RETRY_DELAY_S,
+                            "delay_s": _FAIL_FAST_RETRY_DELAY_S,
                             "attempt": 1,
                             "max_attempts": 2,
                         },
@@ -2282,10 +2287,10 @@ class AgenticLoop:
                     log.debug("LLM_CALL_RETRIED hook trigger failed", exc_info=True)
 
         try:
-            result = await _acomplete_with_fail_fast_connection_retry(
+            result = await _acomplete_with_fail_fast_pre_execution_retry(
                 self._new_adapter,
                 req,
-                on_retry=_on_fail_fast_connection_retry,
+                on_retry=_on_fail_fast_pre_execution_retry,
             )
         except Exception as exc:
             error_detail = str(exc) or type(exc).__name__

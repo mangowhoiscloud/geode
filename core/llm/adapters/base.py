@@ -52,6 +52,10 @@ SOURCE_AUTO = "auto"  # picker sentinel
 CONCRETE_SOURCES: frozenset[str] = frozenset({SOURCE_PAYG, SOURCE_SUBSCRIPTION, SOURCE_ADAPTER})
 
 
+class EmptyModelOutputError(RuntimeError):
+    """A completed adapter response carried neither text nor a tool call."""
+
+
 @dataclass(frozen=True)
 class ToolSpec:
     """Tool descriptor passed to the adapter call.

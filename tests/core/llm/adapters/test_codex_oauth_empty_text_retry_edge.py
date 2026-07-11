@@ -40,7 +40,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from core.llm.adapters._openai_common import build_responses_kwargs
-from core.llm.adapters.base import AdapterCallRequest, Message
+from core.llm.adapters.base import AdapterCallRequest, EmptyModelOutputError, Message
 from core.llm.adapters.codex_oauth import CodexOAuthAdapter
 
 _VOTE_SCHEMA: dict[str, Any] = {
@@ -163,7 +163,7 @@ def test_acomplete_empty_response_env_fail_fast_still_dumps(
 
     with (
         patch("core.paths.GLOBAL_DIAGNOSTICS_DIR", tmp_path),
-        pytest.raises(RuntimeError, match="empty output_text"),
+        pytest.raises(EmptyModelOutputError, match="empty output_text"),
     ):
         asyncio.run(adapter.acomplete(_voter_req(schema=None)))
 
