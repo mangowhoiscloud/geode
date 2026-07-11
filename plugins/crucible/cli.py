@@ -13,6 +13,7 @@ from typing import Any
 from .artifacts import load_json_object, write_exclusive_json
 from .bundle import PromotionBundle
 from .contract import ContractError, load_contract, task_pack_sha256
+from .curation import curate_tau2_pack
 from .evidence import EvidenceEnvelope, ResourceUsage, load_evidence
 from .promotion import PromotionVerdict, decide
 from .ref_journal import reconcile_ref_update
@@ -79,6 +80,27 @@ def _add_tau2_task_pack(subparsers: Any) -> None:
     parser.add_argument("--output", type=Path, required=True)
 
 
+def _add_tau2_curate_pack(subparsers: Any) -> None:
+    parser = subparsers.add_parser(
+        "tau2-curate-pack",
+        help="select a deterministic tau2 pack and print only opaque hashes/counts",
+    )
+    parser.add_argument("tasks", type=Path)
+    parser.add_argument("--task-split", type=Path, required=True)
+    parser.add_argument("--task-split-name", required=True)
+    parser.add_argument("--domain", required=True)
+    parser.add_argument("--purpose", choices=("train", "test"), required=True)
+    parser.add_argument("--salt", required=True)
+    parser.add_argument("--fault-tokens", type=int, required=True)
+    parser.add_argument("--take", type=int, required=True)
+    parser.add_argument("--maximum-per-intent", type=int, required=True)
+    parser.add_argument("--maximum-per-persona", type=int, required=True)
+    parser.add_argument("--trials-per-task", type=int, default=1)
+    parser.add_argument("--exclude-pack", type=Path, action="append", default=[])
+    parser.add_argument("--selection-output", type=Path, required=True)
+    parser.add_argument("--pack-output", type=Path, required=True)
+
+
 def _add_tau2_usage(subparsers: Any) -> None:
     parser = subparsers.add_parser(
         "tau2-usage",
@@ -132,6 +154,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     subparsers = parser.add_subparsers(dest="command", required=True)
     _add_tau2_evidence(subparsers)
     _add_tau2_task_pack(subparsers)
+    _add_tau2_curate_pack(subparsers)
     _add_tau2_usage(subparsers)
     _add_score(subparsers)
     _add_loop(subparsers)
@@ -244,6 +267,25 @@ def _tau2_usage(args: argparse.Namespace) -> ResourceUsage:
     return usage
 
 
+def _tau2_curate_pack(args: argparse.Namespace) -> dict[str, Any]:
+    return curate_tau2_pack(
+        tasks_path=args.tasks,
+        split_path=args.task_split,
+        split_name=args.task_split_name,
+        domain=args.domain,
+        purpose=args.purpose,
+        salt=args.salt,
+        fault_tokens=args.fault_tokens,
+        take=args.take,
+        maximum_per_intent=args.maximum_per_intent,
+        maximum_per_persona=args.maximum_per_persona,
+        trials_per_task=args.trials_per_task,
+        exclude_packs=tuple(args.exclude_pack),
+        selection_output=args.selection_output,
+        pack_output=args.pack_output,
+    )
+
+
 def _score(args: argparse.Namespace) -> PromotionVerdict:
     contract = load_contract(args.contract)
     if contract.stage == "test":
@@ -274,6 +316,10 @@ def main(argv: list[str] | None = None) -> int:
         if args.command == "tau2-task-pack":
             pack = _tau2_task_pack(args)
             print(json.dumps(pack, sort_keys=True))
+            return 0
+        if args.command == "tau2-curate-pack":
+            curation_summary = _tau2_curate_pack(args)
+            print(json.dumps(curation_summary, sort_keys=True))
             return 0
         if args.command == "tau2-usage":
             usage = _tau2_usage(args)

@@ -171,6 +171,10 @@ functional change.
   optionally requires an upstream split manifest and split key, preventing a
   contract from naming tasks its configured runtime split cannot load. Assay
   cases remain in the versioned tau2 adapter instead of core `if/elif` gates.
+  The companion `tau2-curate-pack` command selects a salt-ranked, split-bound,
+  family-distinct pack under declarative intent/persona caps, excludes frozen
+  task/family/content identities, writes immutable full manifests, and returns
+  only counts and hashes so preregistration does not expose sealed row IDs.
 - **Tau2 tool projection follows upstream metadata.** The GEODE participant
   reads tau2's decorated mutability marker instead of inferring side effects
   from tool-name prefixes, and preserves explicitly supplied empty arguments

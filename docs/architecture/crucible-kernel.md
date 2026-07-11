@@ -1046,6 +1046,36 @@ has also been reduced from the failed call-minimization/batching prescription
 to the outcome boundary: complete every required user action, confirmation,
 state change, and terminal verification without redundant repetition.
 
+r22 live-confirmed the reachability screen on a fresh GPT-5.4 proposal. Its
+baseline completed as `[1, 1, 1, 1, 0, 1]`; the perfect candidate ceiling was
+again only `+0.1667`, with a zero confidence lower bound. The evaluator emitted
+candidate artifact `crucible.screened-arm.v1`, zero candidate calls, and train
+REJECT `898428aac9bb` with no promotion authority. The baseline used 207 calls,
+1,656,079 tokens, $1.873952 of normalized accounting, and 1,390.2 attested wall
+seconds. All 207 provider-call messages carried retry telemetry and summed to
+zero retries. The producer's single 99,623-token proposal call brings the outer
+attempt total to 208 calls and 1,755,702 tokens. Raw hashes match both evidence
+envelopes, the search ref stayed at `3e326a1bd`, and candidate measurement was
+never started.
+
+That result also closes the six-row pack as a useful search surface: two clean
+baselines each scored five of six, so the frozen confidence/materiality rule
+usually becomes unreachable before a candidate can be measured. The next
+campaign therefore takes the complete union of that exposed pack and r14's
+already-consumed sealed pack. All twelve task, family, and content identities
+are disjoint across the two sources; none is selected by outcome, and execution
+returns to upstream task-file order. A new adapter-side curator salt-ranks an
+independent three-fault stratum for sealed confirmation and returns only counts
+and hashes to the operator. Its full selected-row manifest remains outside the
+optimizer view.
+
+During the transition, an operator audit parsed the prior `423b03c3` ID-only
+manifest before train KEEP to recompute a disjointness fact already present in
+preregistration. No selected ID or task content was emitted and no optimizer or
+evaluator received a row, but the stronger unopened-manifest claim is no longer
+made: that pack is conservatively retired with zero sealed attempts. The
+replacement pack is separately selected before r23 candidate generation.
+
 The strongest honest claims are:
 
 - the frozen external tau2 baseline identified concrete retail wrong-write and
@@ -1057,7 +1087,7 @@ The strongest honest claims are:
   promotion protocol;
 - no current candidate has sealed-test authority for core promotion.
 
-A future promotion requires a clean committed candidate and a new disjoint
+A future promotion requires a clean committed candidate and the new disjoint
 sealed test pack with an evaluator-owned user runtime. The diagnostic canary
 does not satisfy that requirement.
 
