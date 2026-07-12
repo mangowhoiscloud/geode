@@ -122,6 +122,11 @@ class CodexCliAdapter:
                 raise RuntimeError(f"codex-cli subprocess exited rc={rc}: {err_excerpt}")
             return AdapterCallResult(
                 text=stdout,
+                # Plain-text ``codex exec`` stdout carries no usage block, so
+                # this stays honestly zero. Capture requires migrating to the
+                # CLI's ``--json`` event stream (``turn.completed.usage`` —
+                # parsed by plugins/petri_audit/codex_cli_provider.py) —
+                # unverified for this adapter's text path, live test required.
                 usage=UsageSummary(),
                 stop_reason="end_turn",
             )

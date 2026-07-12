@@ -246,12 +246,26 @@ class ClaudeCliAdapter:
         # next turn's ``resume_session_id`` (cross-call cache hit).
         from plugins.petri_audit.claude_cli_provider import (
             extract_session_id_from_events,
+            extract_usage_from_events,
         )
 
         emitted_session_id = extract_session_id_from_events(stream_events)
+        # PR-CLI-USAGE-CAPTURE (2026-07-13) — the claude CLI's terminal
+        # ``result`` stream-json event carries real token usage even on the
+        # subscription path (petri's parser, live-verified against claude
+        # CLI 2.1.140). Wiring it closes the seed-generation per-phase
+        # "uncaptured role" gap: tokens flow AdapterCallResult → translation
+        # → TokenTracker → session_end → per_phase_costs.json. Counts are
+        # read from the event, never fabricated; a stream without a result
+        # event still yields zeros.
+        usage_tokens = extract_usage_from_events(stream_events)
         return AdapterCallResult(
             text=assistant_text,
-            usage=UsageSummary(),  # subscription path does not expose token usage
+            usage=UsageSummary(
+                input_tokens=usage_tokens["input_tokens"],
+                output_tokens=usage_tokens["output_tokens"],
+                cached_input_tokens=usage_tokens["cache_read_input_tokens"],
+            ),
             stop_reason=stop_reason,
             session_id=emitted_session_id,
         )

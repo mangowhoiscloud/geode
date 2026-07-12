@@ -902,7 +902,7 @@ def _extract_stop_reason(events: list[StreamJsonEvent]) -> str:
     return mapping.get(raw, "unknown")
 
 
-def _extract_usage(events: list[StreamJsonEvent]) -> dict[str, int]:
+def extract_usage_from_events(events: list[StreamJsonEvent]) -> dict[str, int]:
     """Sum input/output tokens across the event stream.
 
     claude CLI emits ``usage`` on multiple events (``message_start``,
@@ -1109,7 +1109,7 @@ def register() -> None:
                 )
             text = _extract_assistant_text(events)
             stop_reason = _extract_stop_reason(events)
-            usage = _build_usage(_extract_usage(events))
+            usage = _build_usage(extract_usage_from_events(events))
             choice = ChatCompletionChoice(
                 message=ChatMessageAssistant(content=text),
                 stop_reason=stop_reason,
@@ -1165,7 +1165,7 @@ def register() -> None:
                 # inspect_ai-blessed sentinel for the solver's
                 # tool-dispatch path.
                 stop_reason = "tool_calls" if tool_calls else _extract_stop_reason(events)
-                usage = _build_usage(_extract_usage(events))
+                usage = _build_usage(extract_usage_from_events(events))
                 choice = ChatCompletionChoice(
                     message=ChatMessageAssistant(
                         content=text,

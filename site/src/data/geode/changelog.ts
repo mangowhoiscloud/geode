@@ -17,6 +17,11 @@ export type ChangelogEntry = {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    "version": "0.99.314",
+    "date": "2026-07-13",
+    "body": "### Fixed\n\n- **claude-cli sub-agents no longer report zero usage (cost-audit gap\n  closed).** The adapter returned an empty `UsageSummary()` with a stale\n  \"subscription path does not expose token usage\" comment, leaving every\n  claude-cli-backed seed-generation role flagged \"uncaptured\" on the hub.\n  The claude CLI's terminal `result` stream-json event does carry token\n  usage (petri's parser, live-verified against CLI 2.1.140) — the petri\n  extractor is now public (`extract_usage_from_events`, one parser for both\n  registries) and the adapter surfaces input/output/cache-read tokens, which\n  flow through translation and TokenTracker into `session_end` and\n  `per_phase_costs.json`. codex-cli stays honestly at zero: plain-text\n  `codex exec` stdout has no usage block (JSON-mode migration noted as\n  unverified, live test required). Stale capture-coverage comments in\n  worker.py, _lifecycle.py, and transcript.py corrected."
+  },
+  {
     "version": "0.99.313",
     "date": "2026-07-13",
     "body": "### Changed\n\n- **Seed-generation cost granularity extended to the sub-index and per-run\n  pages (cost-audit follow-up).** The \"All runs\" table cell and the hub index\n  now share the same tokens-and-USD cell; the run page's phase table replaces\n  the never-wired samples/score dash columns with agents / tokens / cost read\n  from `per_phase_costs.json` (dagger on roles that ran agents without usage\n  capture); the run-page cost grid falls back to per-phase sums for runs that\n  never wrote state.json usage and gains a `usd (metered floor)` row; the\n  index usage rollup adds USD ($18.61 floor) and the uncaptured-role count."

@@ -146,6 +146,89 @@ def test_adapter_returns_parsed_text_not_raw_stdout() -> None:
     assert result.stop_reason == "stop"
 
 
+def test_adapter_captures_usage_from_result_event() -> None:
+    """PR-CLI-USAGE-CAPTURE (2026-07-13) — the terminal ``result``
+    stream-json event carries real token usage on the subscription path;
+    the adapter must surface it (previously always an empty
+    ``UsageSummary()``, leaving every claude-cli sub-agent phase
+    "uncaptured" in the seed-generation per-phase cost grid)."""
+    from core.llm.adapters.claude_cli import ClaudeCliAdapter
+
+    adapter = ClaudeCliAdapter()
+    stdout = _make_stream_json(
+        [
+            {
+                "type": "assistant",
+                "message": {"content": [{"type": "text", "text": "ok"}]},
+            },
+            {
+                "type": "result",
+                "stop_reason": "end_turn",
+                "result": "ok",
+                "usage": {
+                    "input_tokens": 1200,
+                    "output_tokens": 340,
+                    "cache_read_input_tokens": 900,
+                    "cache_creation_input_tokens": 0,
+                },
+            },
+        ]
+    )
+    with (
+        patch(
+            "plugins.petri_audit.claude_cli_provider._resolve_claude_binary",
+            return_value="/fake/claude",
+        ),
+        patch(
+            "plugins.petri_audit.claude_cli_provider._run_claude_subprocess",
+            return_value=(stdout, "", 0),
+        ),
+        patch(
+            "core.orchestration.claude_cli_lane.acquire_claude_cli_lane_async",
+            _passthrough_lane,
+        ),
+    ):
+        result = asyncio.run(adapter.acomplete(_build_request()))
+    assert result.usage.input_tokens == 1200
+    assert result.usage.output_tokens == 340
+    assert result.usage.cached_input_tokens == 900
+
+
+def test_adapter_usage_zero_without_result_usage() -> None:
+    """A stream whose result event has no usage block stays honestly at
+    zero — counts are never fabricated."""
+    from core.llm.adapters.claude_cli import ClaudeCliAdapter
+
+    adapter = ClaudeCliAdapter()
+    stdout = _make_stream_json(
+        [
+            {
+                "type": "assistant",
+                "message": {"content": [{"type": "text", "text": "ok"}]},
+            },
+            {"type": "result", "stop_reason": "end_turn", "result": "ok"},
+        ]
+    )
+    with (
+        patch(
+            "plugins.petri_audit.claude_cli_provider._resolve_claude_binary",
+            return_value="/fake/claude",
+        ),
+        patch(
+            "plugins.petri_audit.claude_cli_provider._run_claude_subprocess",
+            return_value=(stdout, "", 0),
+        ),
+        patch(
+            "core.orchestration.claude_cli_lane.acquire_claude_cli_lane_async",
+            _passthrough_lane,
+        ),
+    ):
+        result = asyncio.run(adapter.acomplete(_build_request()))
+    assert result.usage.input_tokens == 0
+    assert result.usage.output_tokens == 0
+    assert result.usage.cached_input_tokens == 0
+
+
 def test_adapter_raises_when_rc_zero_no_events() -> None:
     """rc=0 + empty stdout is the silent-empty-content path —
     must fail loud rather than return ``text=""`` as a normal reply."""
