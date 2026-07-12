@@ -136,6 +136,8 @@ geode_checkpoints.db-wal
 .claude/skills/*
 !.claude/skills/geode-workflow/
 !.claude/skills/geode-workflow/**
+!.claude/skills/geode-distribution/
+!.claude/skills/geode-distribution/**
 .claude/workflow-state.json
 .claude/worktrees/
 .claude/MEMORY.md
