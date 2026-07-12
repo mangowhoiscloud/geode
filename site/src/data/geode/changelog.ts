@@ -17,6 +17,11 @@ export type ChangelogEntry = {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    "version": "0.99.308",
+    "date": "2026-07-12",
+    "body": "### Changed\n\n- **The distillation headline recedes under the finale (operator-directed).**\n  While the \"edited by MANGO\" reveal rises, the pinned corner headline fades\n  and blurs back (opacity to 0.12, 6px blur over the same scroll window as\n  the reveal), so the two pinned layers never compete; reduced motion keeps\n  the fade and drops the blur."
+  },
+  {
     "version": "0.99.307",
     "date": "2026-07-12",
     "body": "### Changed\n\n- **Tau2 slip separates the agentic harness from the eval harness\n  (operator-directed).** The measurement slip gains labeled sections so the\n  claim reads unambiguously: what is measured is gpt-5.2 wrapped in the\n  GEODE loop (agentic harness: loop geode v0.99.269, model gpt-5.2 high ·\n  payg); the ruler is tau2-bench (eval harness: bench @ 1901a30, user-sim\n  gpt-4.1 · pass^1 k=1, airline trend-reference); the control is the same\n  model with no loop (Agent-World vanilla 0.802) before the verdict band.\n  The plate caption restates it in both locales."
