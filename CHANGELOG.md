@@ -45,6 +45,44 @@ functional change.
 
 ---
 
+## [0.99.308] - 2026-07-12
+
+### Added
+
+- **Crucible frozen experiment kernel, reconciled and centralized.** Lands the
+  full unmerged kernel lineage on develop as the single reconcile base:
+  sealed one-shot promotion (pack claim + attempt burn + eligible refs, ref
+  journal with write-ahead intent), task content/family binding with
+  family-mean paired bootstrap and the reachability screen, opaque pack
+  curation, the GPT-5.4 knowledge-graph producer with source attestation, and
+  the tau2 live evaluator glue (`plugins/crucible/`).
+- **Run economics.** Row cache with identity-verified reuse and interrupted-run
+  harvest (`plugins/crucible/row_cache.py`), window preflight decision moved
+  into `plugins/crucible/preflight.py` with the launcher script as a thin CLI.
+- **Centralized preparation.** `python -m plugins.crucible prepare <spec>`
+  assembles and round-trip validates one campaign config; the spec may carry a
+  `curation` block in place of `pack_file`, and `--history/--remaining-tokens`
+  fold the launch-capacity verdict into the prepare report.
+- **program.md as the producer SoT.** The default search objective now lives
+  only in `plugins/crucible/program.md` (`## Objective` blockquote); the module
+  reads it at import and a drift test pins the literal out of the code.
+
+### Fixed
+
+- **Row cache is train-only.** A cache root in the environment is refused for
+  sealed (test-stage) measurements — observable via `row-cache-disabled.json`
+  in the arm state directory — so one-shot verdicts never replay frozen noise
+  realisations.
+- **Producer failure retention.** Structured Codex errors survive into
+  attempt artifacts; the monotone producer objective is frozen with tests.
+
+### Removed
+
+- **Task-level gate derivation.** `plugins/crucible/calibration.py` and
+  `priors.py` leave with the lineage decision that recorded their restoration
+  bar: the old task-level derivation does not describe the family-mean
+  contract, and a family-aware rederivation is tracked as follow-up work.
+
 ## [0.99.307] - 2026-07-12
 
 ### Added
