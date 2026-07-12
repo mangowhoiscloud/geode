@@ -139,7 +139,7 @@
           <th scope="col">draft &rarr; surv</th>
           <th scope="col">evolved</th>
           <th scope="col">iterations</th>
-          <th scope="col">tokens</th>
+          <th scope="col">tokens &middot; cost</th>
         </tr>
       </thead>
       <tbody>
@@ -151,7 +151,7 @@
           <td class="num">8 &rarr; 5</td>
           <td class="num">5</td>
           <td class="muted">—</td>
-          <td class="num">262,486</td>
+          <td class="num">262,486 tok &middot; $1.50 <span class="muted" title="3 roles ran agents without usage capture; totals are a metered floor">&dagger;</span></td>
         </tr>
         <tr>
           <td class="id"><a href="/geode/self-improving/seed-generation/gen-2605-1-redundant_tool_invocation/">gen-2605-1-redundant_tool_invocation</a> <span class="bucket seedgen">seedgen</span></td>
@@ -161,7 +161,7 @@
           <td class="num">9 &rarr; 5</td>
           <td class="num">5</td>
           <td class="muted">—</td>
-          <td class="num">0</td>
+          <td class="num">0 tok &middot; $1.88 <span class="muted" title="4 roles ran agents without usage capture; totals are a metered floor">&dagger;</span></td>
         </tr>
         <tr>
           <td class="id"><a href="/geode/self-improving/seed-generation/gen-2605-2-redundant_tool_invocation/">gen-2605-2-redundant_tool_invocation</a> <span class="bucket seedgen">seedgen</span></td>
@@ -171,7 +171,7 @@
           <td class="num">13 &rarr; 5</td>
           <td class="num">5</td>
           <td class="muted">—</td>
-          <td class="num">0</td>
+          <td class="num">0 tok &middot; $3.52 <span class="muted" title="4 roles ran agents without usage capture; totals are a metered floor">&dagger;</span></td>
         </tr>
         <tr>
           <td class="id"><a href="/geode/self-improving/seed-generation/gen-2605-3-broken_tool_use/">gen-2605-3-broken_tool_use</a> <span class="bucket seedgen">seedgen</span></td>
@@ -181,7 +181,7 @@
           <td class="num">11 &rarr; 5</td>
           <td class="num">5</td>
           <td class="muted">—</td>
-          <td class="num">0</td>
+          <td class="num">0 tok &middot; $2.91 <span class="muted" title="4 roles ran agents without usage capture; totals are a metered floor">&dagger;</span></td>
         </tr>
         <tr>
           <td class="id"><a href="/geode/self-improving/seed-generation/gen-2605-4-unfaithful_thinking/">gen-2605-4-unfaithful_thinking</a> <span class="bucket seedgen">seedgen</span></td>
@@ -191,7 +191,7 @@
           <td class="num">11 &rarr; 5</td>
           <td class="num">5</td>
           <td class="muted">—</td>
-          <td class="num">0</td>
+          <td class="num">0 tok &middot; $2.88 <span class="muted" title="4 roles ran agents without usage capture; totals are a metered floor">&dagger;</span></td>
         </tr>
         <tr>
           <td class="id"><a href="/geode/self-improving/seed-generation/gen1-broken_tool_use/">gen1-broken_tool_use</a> <span class="bucket seedgen">seedgen</span></td>
@@ -201,7 +201,7 @@
           <td class="num">15 &rarr; 4</td>
           <td class="num">5</td>
           <td class="muted">—</td>
-          <td class="num">0</td>
+          <td class="num">0 tok &middot; $0.00 <span class="muted" title="5 roles ran agents without usage capture; totals are a metered floor">&dagger;</span></td>
         </tr>
         <tr>
           <td class="id"><a href="/geode/self-improving/seed-generation/gen1-redundant_tool_invocation/">gen1-redundant_tool_invocation</a> <span class="bucket seedgen">seedgen</span></td>
@@ -211,7 +211,7 @@
           <td class="num">2 &rarr; 2</td>
           <td class="num">1</td>
           <td class="muted">—</td>
-          <td class="num">0</td>
+          <td class="num">0 tok &middot; $5.93 <span class="muted" title="4 roles ran agents without usage capture; totals are a metered floor">&dagger;</span></td>
         </tr>
       </tbody>
     </table>
@@ -236,7 +236,7 @@
       <dd>Coverage report + next_gen_priors for the next iteration. 1 call.</dd>
     </dl>
 
-    <h2 class="section"><span>Token rollup &middot; across all runs</span></h2>
+    <h2 class="section"><span>Usage rollup &middot; across all runs</span></h2>
     <dl class="cost-grid">
       <dt>total tokens</dt>
       <dd>262,486</dd>
@@ -244,6 +244,10 @@
       <dd>253,054</dd>
       <dt>completion_tk</dt>
       <dd>9,432</dd>
+      <dt>usd (metered floor)</dt>
+      <dd>$18.61</dd>
+      <dt>uncaptured roles</dt>
+      <dd>28</dd>
       <dt>runs</dt>
       <dd>7</dd>
     </dl>
@@ -259,7 +263,7 @@
         <span class="chip geode">GEODE</span>self-target wrapper.
       </p>
       <p class="version-stamp">
-        Rendered against GEODE <code>v0.99.311</code> &middot; DESIGN.md schema 1 &middot; built 2026-07-12 22:07.
+        Rendered against GEODE <code>v0.99.311</code> &middot; DESIGN.md schema 1 &middot; built 2026-07-12 22:40.
         Dim subset: 22 (geode_5axes). Pipeline phases: 8. Baseline schema: v2 (PR-2).
       </p>
     </div>
