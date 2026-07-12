@@ -45,6 +45,19 @@ functional change.
 
 ---
 
+## [0.99.304] - 2026-07-12
+
+### Changed
+
+- **Tau2 spec block reset as a measurement slip (operator-directed design
+  pass).** The centered text lines become the same key-value table object
+  as the memory core sample: hairline-separated mono rows (measured,
+  harness, agent, user-sim, airline, control) closing on a solid deep-rose
+  VERDICT row ("same band · ±8pt limit"), so the comparison verdict reads
+  like the winning band of a lab record instead of a floating caption.
+
+---
+
 ## [0.99.303] - 2026-07-12
 
 ### Fixed

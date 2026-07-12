@@ -439,36 +439,54 @@ function PerceiveBanner() {
   );
 }
 
+/**
+ * Tau2 numbers over a measurement slip: the same key-value table object as
+ * the memory core sample, ending in control/verdict rows so the comparison
+ * band lives inside the record instead of a floating caption. Values from
+ * benchmark-measurements.ts and docs/architecture/crucible.md §2.
+ */
 function MeasureBanner() {
   const tau2 = BENCHMARK_GROUPS.find((group) => group.id === "tau2");
   const cells = (tau2?.matrix ?? []).filter((cell) => ["Retail", "Telecom", "Airline"].includes(cell.label));
-  // Environment spec + comparison band, transcribed from the measurement
-  // records (benchmark-measurements.ts) and docs/architecture/crucible.md §2.
-  const spec = [
-    "measured 2026-07-03 · tau2@1901a30 · geode v0.99.269",
-    "agent gpt-5.2 high (payg) · user-sim gpt-4.1 · pass^1 k=1",
-    "airline: trend-reference (ground-truth quality)",
+  const slip: { key: string; value: string; verdict?: boolean }[] = [
+    { key: "measured", value: "2026-07-03 · geode v0.99.269" },
+    { key: "harness", value: "tau2 @ 1901a30" },
+    { key: "agent", value: "gpt-5.2 high · payg" },
+    { key: "user-sim", value: "gpt-4.1 · pass^1 k=1" },
+    { key: "airline", value: "trend-reference" },
+    { key: "control", value: "agent-world vanilla 0.802" },
+    { key: "verdict", value: "same band · ±8pt limit", verdict: true },
   ];
   return (
-    <div className="flex h-full w-full flex-col justify-center gap-3.5 px-6">
+    <div className="flex h-full w-full flex-col items-center justify-center gap-4 px-6">
       <div className="flex items-baseline justify-center gap-6">
         {cells.map((cell) => (
           <div key={cell.label} className="text-center">
-            <p className="font-serif-display text-[26px] font-black" style={{ color: ROSE_INK }}>{cell.value}</p>
-            <p className="mt-1 font-mono text-[10px] uppercase tracking-[0.2em]" style={{ color: ROSE_INK_70 }}>{cell.label}</p>
+            <p className="font-serif-display text-[24px] font-black" style={{ color: ROSE_INK }}>{cell.value}</p>
+            <p className="mt-1 font-mono text-[9.5px] uppercase tracking-[0.2em]" style={{ color: ROSE_INK_70 }}>{cell.label}</p>
           </div>
         ))}
       </div>
-      <div className="space-y-1" style={{ color: ROSE_INK_70 }}>
-        {spec.map((line) => (
-          <p key={line} className="text-center font-mono text-[9.5px] leading-[1.5]">
-            {line}
-          </p>
+      <div className="w-full max-w-[300px] overflow-hidden border" style={{ borderColor: ROSE_INK_70 }}>
+        {slip.map(({ key, value, verdict }, i) => (
+          <div
+            key={key}
+            className={`flex items-baseline justify-between gap-3 px-3 py-[5px] font-mono text-[9.5px] ${verdict ? "bg-[#C2447F] text-[#FFF0F8]" : ""}`}
+            style={
+              verdict
+                ? undefined
+                : { borderTop: i ? "1px solid color-mix(in srgb, #C2447F 25%, transparent)" : undefined }
+            }
+          >
+            <span className="uppercase tracking-[0.14em]" style={verdict ? { opacity: 0.85 } : { color: ROSE_INK_70 }}>
+              {key}
+            </span>
+            <span className={verdict ? "font-semibold" : ""} style={verdict ? undefined : { color: ROSE_INK }}>
+              {value}
+            </span>
+          </div>
         ))}
       </div>
-      <p className="border-t pt-2 text-center font-mono text-[9.5px]" style={{ color: ROSE_INK, borderColor: "color-mix(in srgb, #C2447F 30%, transparent)" }}>
-        vs agent-world gpt-5.2 vanilla 0.802: same band, ±8pt detection limit
-      </p>
     </div>
   );
 }
