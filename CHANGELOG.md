@@ -45,7 +45,7 @@ functional change.
 
 ---
 
-## [0.99.308] - 2026-07-12
+## [0.99.309] - 2026-07-12
 
 ### Added
 
@@ -82,6 +82,20 @@ functional change.
   `priors.py` leave with the lineage decision that recorded their restoration
   bar: the old task-level derivation does not describe the family-mean
   contract, and a family-aware rederivation is tracked as follow-up work.
+
+---
+
+## [0.99.308] - 2026-07-12
+
+### Changed
+
+- **The distillation headline recedes under the finale (operator-directed).**
+  While the "edited by MANGO" reveal rises, the pinned corner headline fades
+  and blurs back (opacity to 0.12, 6px blur over the same scroll window as
+  the reveal), so the two pinned layers never compete; reduced motion keeps
+  the fade and drops the blur.
+
+---
 
 ## [0.99.307] - 2026-07-12
 

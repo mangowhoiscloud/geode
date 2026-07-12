@@ -17,9 +17,14 @@ export type ChangelogEntry = {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
-    "version": "0.99.308",
+    "version": "0.99.309",
     "date": "2026-07-12",
     "body": "### Added\n\n- **Crucible frozen experiment kernel, reconciled and centralized.** Lands the\n  full unmerged kernel lineage on develop as the single reconcile base:\n  sealed one-shot promotion (pack claim + attempt burn + eligible refs, ref\n  journal with write-ahead intent), task content/family binding with\n  family-mean paired bootstrap and the reachability screen, opaque pack\n  curation, the GPT-5.4 knowledge-graph producer with source attestation, and\n  the tau2 live evaluator glue (`plugins/crucible/`).\n- **Run economics.** Row cache with identity-verified reuse and interrupted-run\n  harvest (`plugins/crucible/row_cache.py`), window preflight decision moved\n  into `plugins/crucible/preflight.py` with the launcher script as a thin CLI.\n- **Centralized preparation.** `python -m plugins.crucible prepare <spec>`\n  assembles and round-trip validates one campaign config; the spec may carry a\n  `curation` block in place of `pack_file`, and `--history/--remaining-tokens`\n  fold the launch-capacity verdict into the prepare report.\n- **program.md as the producer SoT.** The default search objective now lives\n  only in `plugins/crucible/program.md` (`## Objective` blockquote); the module\n  reads it at import and a drift test pins the literal out of the code.\n\n### Fixed\n\n- **Row cache is train-only.** A cache root in the environment is refused for\n  sealed (test-stage) measurements — observable via `row-cache-disabled.json`\n  in the arm state directory — so one-shot verdicts never replay frozen noise\n  realisations.\n- **Producer failure retention.** Structured Codex errors survive into\n  attempt artifacts; the monotone producer objective is frozen with tests.\n\n### Removed\n\n- **Task-level gate derivation.** `plugins/crucible/calibration.py` and\n  `priors.py` leave with the lineage decision that recorded their restoration\n  bar: the old task-level derivation does not describe the family-mean\n  contract, and a family-aware rederivation is tracked as follow-up work."
+  },
+  {
+    "version": "0.99.308",
+    "date": "2026-07-12",
+    "body": "### Changed\n\n- **The distillation headline recedes under the finale (operator-directed).**\n  While the \"edited by MANGO\" reveal rises, the pinned corner headline fades\n  and blurs back (opacity to 0.12, 6px blur over the same scroll window as\n  the reveal), so the two pinned layers never compete; reduced motion keeps\n  the fade and drops the blur."
   },
   {
     "version": "0.99.307",
