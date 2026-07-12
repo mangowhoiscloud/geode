@@ -17,6 +17,11 @@ export type ChangelogEntry = {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    "version": "0.99.305",
+    "date": "2026-07-12",
+    "body": "### Fixed\n\n- **Release package gate carves out `scripts/macos/`.** The gate banned the\n  whole `scripts/` prefix while `pyproject.toml` deliberately force-includes\n  the computer-use helper source (`build_computer_helper.sh`,\n  `geode_computer_helper.swift`), a runtime asset consumed by onboarding and\n  doctor; the 0.99.304 release dispatch failed on exactly this. The gate now\n  allows the `scripts/macos/` prefix and keeps banning the rest."
+  },
+  {
     "version": "0.99.304",
     "date": "2026-07-12",
     "body": "### Changed\n\n- **Tau2 spec block reset as a measurement slip (operator-directed design\n  pass).** The centered text lines become the same key-value table object\n  as the memory core sample: hairline-separated mono rows (measured,\n  harness, agent, user-sim, airline, control) closing on a solid deep-rose\n  VERDICT row (\"same band · ±8pt limit\"), so the comparison verdict reads\n  like the winning band of a lab record instead of a floating caption."
