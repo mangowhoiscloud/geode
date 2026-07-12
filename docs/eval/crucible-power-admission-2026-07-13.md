@@ -81,3 +81,15 @@ merged develop SHA, a passing quota-window preflight, and explicit live-test
 approval. Statistical power is conditional on the two named scenarios and all
 non-statistical vetoes passing; it is not the probability that the producer
 will invent a real improvement.
+
+## External artifact disposition
+
+The canonical raw store is
+[`mangowhoiscloud/geode-eval-artifacts`](https://github.com/mangowhoiscloud/geode-eval-artifacts)
+(observed main revision
+`7e6a4374ba6af7f576700046d42fb6efff42abc7` during this audit). This record is
+safe to publish, as are the two identifier-free power reports. The unopened
+sealed pack, selected-row manifest, and deterministic selection preregistration
+remain withheld: publishing any of them would reveal or make derivable the
+one-shot test rows before use. After the sealed claim is consumed, publication
+requires a separate disclosure review and append-only artifact-repository PR.
