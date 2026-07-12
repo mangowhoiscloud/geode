@@ -17,6 +17,11 @@ export type ChangelogEntry = {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    "version": "0.99.314",
+    "date": "2026-07-13",
+    "body": "### Added\n\n- **GPT-5.6 family model support (Sol/Terra/Luna).** `/model` picker,\n  adapter request-shaping, pricing, and routing for OpenAI's GPT-5.6\n  series (GA 2026-07-09): `gpt-5.6-sol`, `gpt-5.6-terra`, `gpt-5.6-luna`\n  route through the Codex OAuth lane (slugs artifact-verified against\n  `openai/codex` `models-manager/models.json`); the bare `gpt-5.6`\n  Platform alias keeps the PAYG prefix route and stays off the picker.\n  Spec entries carry the new `max` reasoning-effort level (doc-verified),\n  1.05M-token context windows, and short-context pricing with the >272K\n  long-context tier noted. Computer-use GA membership is deliberately\n  excluded as `unverified — live test required` (gpt-5.4 doc-vs-backend\n  precedent). Guard: `tests/core/llm/test_gpt56_support.py`.\n\n### Changed\n\n- **Effort picker: per-family OpenAI effort enums.** `gpt-5.6*` models\n  surface the documented `max` level above `xhigh`; older gpt-5.x\n  families keep the existing enum. Added the missing `claude-fable-5`\n  picker description (functional Fable 5 support landed in June)."
+  },
+  {
     "version": "0.99.313",
     "date": "2026-07-13",
     "body": "### Changed\n\n- **Seed-generation cost granularity extended to the sub-index and per-run\n  pages (cost-audit follow-up).** The \"All runs\" table cell and the hub index\n  now share the same tokens-and-USD cell; the run page's phase table replaces\n  the never-wired samples/score dash columns with agents / tokens / cost read\n  from `per_phase_costs.json` (dagger on roles that ran agents without usage\n  capture); the run-page cost grid falls back to per-phase sums for runs that\n  never wrote state.json usage and gains a `usd (metered floor)` row; the\n  index usage rollup adds USD ($18.61 floor) and the uncaptured-role count."

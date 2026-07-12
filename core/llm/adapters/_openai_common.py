@@ -147,6 +147,48 @@ _OPENAI_MODELS: dict[str, OpenAIModelSpec] = {
         context_window=_catalog_context_window("gpt-5.5"),
         supports_tool_search=True,
     ),
+    # GPT-5.6 family (GA 2026-07-09). Effort levels incl. the new "max" are
+    # doc-verified: developers.openai.com/api/docs/models lists
+    # "Reasoning levels: none, low, medium, high, xhigh, max" for all three
+    # tiers (fetched 2026-07-13). Codex-backend acceptance of the three full
+    # slugs is artifact-verified: openai/codex
+    # codex-rs/models-manager/models.json defines gpt-5.6-{sol,terra,luna}
+    # (ctx7 /openai/codex, 2026-07-13). Bare "gpt-5.6" is the documented
+    # Platform-API alias for sol and is NOT in the Codex models.json —
+    # Platform-only id. Computer-use GA membership is handled separately
+    # (see _OPENAI_COMPUTER_USE_GA_MODELS).
+    "gpt-5.6": OpenAIModelSpec(
+        model_id="gpt-5.6",
+        uses_max_completion_tokens=True,
+        accepts_temperature=False,
+        reasoning_effort_values=("none", "low", "medium", "high", "xhigh", "max"),
+        context_window=_catalog_context_window("gpt-5.6"),
+        supports_tool_search=True,
+    ),
+    "gpt-5.6-luna": OpenAIModelSpec(
+        model_id="gpt-5.6-luna",
+        uses_max_completion_tokens=True,
+        accepts_temperature=False,
+        reasoning_effort_values=("none", "low", "medium", "high", "xhigh", "max"),
+        context_window=_catalog_context_window("gpt-5.6-luna"),
+        supports_tool_search=True,
+    ),
+    "gpt-5.6-sol": OpenAIModelSpec(
+        model_id="gpt-5.6-sol",
+        uses_max_completion_tokens=True,
+        accepts_temperature=False,
+        reasoning_effort_values=("none", "low", "medium", "high", "xhigh", "max"),
+        context_window=_catalog_context_window("gpt-5.6-sol"),
+        supports_tool_search=True,
+    ),
+    "gpt-5.6-terra": OpenAIModelSpec(
+        model_id="gpt-5.6-terra",
+        uses_max_completion_tokens=True,
+        accepts_temperature=False,
+        reasoning_effort_values=("none", "low", "medium", "high", "xhigh", "max"),
+        context_window=_catalog_context_window("gpt-5.6-terra"),
+        supports_tool_search=True,
+    ),
     "gpt-5-mini": OpenAIModelSpec(
         model_id="gpt-5-mini",
         uses_max_completion_tokens=True,
@@ -217,6 +259,51 @@ def get_openai_model_spec(model_id: str) -> OpenAIModelSpec:
             model_id,
         )
     return _OPENAI_LEGACY_DEFAULT
+
+
+# Canonical effort ladder (weakest → strongest) for cross-model clamping.
+# "max" exists only on gpt-5.6+; "minimal" only on pre-5.5 families.
+_EFFORT_LADDER: tuple[str, ...] = ("none", "minimal", "low", "medium", "high", "xhigh", "max")
+
+# One-shot dedup per (model_id, requested effort) so a persisted effort
+# from another model's picker session doesn't spam every call.
+_EFFORT_CLAMP_WARNED: set[tuple[str, str]] = set()
+
+
+def clamp_reasoning_effort(effort: str | None, *, spec: OpenAIModelSpec) -> str | None:
+    """Clamp a requested reasoning effort to what ``spec`` supports.
+
+    The effort setting persists across model switches (picker → config),
+    so a value valid on one model can reach another that rejects it —
+    e.g. ``max`` picked on gpt-5.6-sol then sent to gpt-5.5, or
+    ``minimal`` sent to a gpt-5.6 spec that doesn't list it. The wire
+    must only carry values in ``spec.reasoning_effort_values``; clamp to
+    the nearest supported level below the request (above when nothing
+    weaker exists) instead of gambling a backend 400.
+    """
+    values = spec.reasoning_effort_values
+    if effort is None or values is None or effort in values:
+        return effort
+    key = (spec.model_id, effort)
+    clamped: str
+    try:
+        idx = _EFFORT_LADDER.index(effort)
+    except ValueError:
+        clamped = values[len(values) // 2]  # unknown label — mid-ladder default
+    else:
+        weaker = [v for v in _EFFORT_LADDER[:idx] if v in values]
+        stronger = [v for v in _EFFORT_LADDER[idx + 1 :] if v in values]
+        clamped = weaker[-1] if weaker else (stronger[0] if stronger else values[0])
+    if key not in _EFFORT_CLAMP_WARNED:
+        _EFFORT_CLAMP_WARNED.add(key)
+        log.warning(
+            "reasoning effort %r unsupported on %s (allowed: %s) — clamped to %r",
+            effort,
+            spec.model_id,
+            "/".join(values),
+            clamped,
+        )
+    return clamped
 
 
 def cap_tools(
@@ -567,6 +654,14 @@ def build_codex_input(req: AdapterCallRequest) -> list[dict[str, Any]]:
 # GA gate: only models in this frozenset get the tool. A non-GA OpenAI model
 # (e.g. gpt-5.4) must never be offered ``{type: "computer"}`` — the backend
 # rejects it, and the preview shape is deliberately out of scope.
+#
+# gpt-5.6 family: the official model pages list "Computer use" among the
+# Responses tools (developers.openai.com/api/docs/models, 2026-07-13), but
+# the same page listed it for models the Platform backend then rejected
+# live (the gpt-5.4 precedent above) — the docs row is a tool-catalog, not
+# an acceptance contract. Membership stays ``unverified — live test
+# required``: run the Phase-C Platform round-trip on gpt-5.6-sol before
+# adding it here (same protocol as the 2026-06-17 gpt-5.5 verification).
 _OPENAI_COMPUTER_USE_GA_MODELS: frozenset[str] = frozenset({"gpt-5.5"})
 
 
@@ -1466,7 +1561,10 @@ def build_responses_kwargs(
         # Reasoning-model branch — encrypted reasoning passthrough +
         # reasoning effort. Temperature is dropped per spec.
         kwargs["include"] = ["reasoning.encrypted_content"]
-        kwargs["reasoning"] = {"effort": req.effort, "summary": "auto"}
+        kwargs["reasoning"] = {
+            "effort": clamp_reasoning_effort(req.effort, spec=spec),
+            "summary": "auto",
+        }
     elif req.temperature is not None and spec.accepts_temperature:
         kwargs["temperature"] = req.temperature
     # PR-CODEX-OAUTH-RESPONSE-SCHEMA (2026-05-25) — Responses API

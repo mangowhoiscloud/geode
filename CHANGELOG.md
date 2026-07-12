@@ -45,6 +45,29 @@ functional change.
 
 ---
 
+## [0.99.314] - 2026-07-13
+
+### Added
+
+- **GPT-5.6 family model support (Sol/Terra/Luna).** `/model` picker,
+  adapter request-shaping, pricing, and routing for OpenAI's GPT-5.6
+  series (GA 2026-07-09): `gpt-5.6-sol`, `gpt-5.6-terra`, `gpt-5.6-luna`
+  route through the Codex OAuth lane (slugs artifact-verified against
+  `openai/codex` `models-manager/models.json`); the bare `gpt-5.6`
+  Platform alias keeps the PAYG prefix route and stays off the picker.
+  Spec entries carry the new `max` reasoning-effort level (doc-verified),
+  1.05M-token context windows, and short-context pricing with the >272K
+  long-context tier noted. Computer-use GA membership is deliberately
+  excluded as `unverified — live test required` (gpt-5.4 doc-vs-backend
+  precedent). Guard: `tests/core/llm/test_gpt56_support.py`.
+
+### Changed
+
+- **Effort picker: per-family OpenAI effort enums.** `gpt-5.6*` models
+  surface the documented `max` level above `xhigh`; older gpt-5.x
+  families keep the existing enum. Added the missing `claude-fable-5`
+  picker description (functional Fable 5 support landed in June).
+
 ## [0.99.313] - 2026-07-13
 
 ### Changed

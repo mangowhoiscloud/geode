@@ -79,7 +79,7 @@ def _context_window(model: str, provider: str) -> int | None:
             return 1_000_000
         return None
     if provider in {"openai", "openai-codex"}:
-        if any(token in lower for token in ("gpt-5.5", "gpt-5.4", "gpt-5.3")):
+        if any(token in lower for token in ("gpt-5.6", "gpt-5.5", "gpt-5.4", "gpt-5.3")):
             return 1_000_000
         return None
     return None

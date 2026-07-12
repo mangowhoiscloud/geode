@@ -72,8 +72,20 @@ glm = []
 # Codex-only models — OAuth-only path (chatgpt.com/backend-api/codex). The
 # resolver checks this list before the prefix table so gpt-5.5 routes to
 # openai-codex rather than openai.
+#
+# gpt-5.6-{sol,terra,luna}: Codex-lane slugs artifact-verified against
+# openai/codex codex-rs/models-manager/models.json (ctx7, 2026-07-13).
+# The bare "gpt-5.6" Platform alias is deliberately NOT listed — it is
+# absent from the Codex models.json, so it keeps the gpt- prefix route
+# to the PAYG openai lane where the alias is documented.
 [routing]
-codex_only_models = ["gpt-5.5", "gpt-5.5-pro"]
+codex_only_models = [
+    "gpt-5.5",
+    "gpt-5.5-pro",
+    "gpt-5.6-sol",
+    "gpt-5.6-terra",
+    "gpt-5.6-luna",
+]
 # Suffix-based codex matches — *-codex, *-codex-max, *-codex-mini.
 codex_suffixes = ["-codex", "-codex-max", "-codex-mini"]
 # Fallback provider when no rule matches (preserves legacy "openai" default).

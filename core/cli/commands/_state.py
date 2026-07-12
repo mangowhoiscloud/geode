@@ -88,6 +88,14 @@ def get_model_profiles() -> list[ModelProfile]:
         # must match so the /model picker label is honest about which
         # auth-mode the user's pick will actually consume.
         ModelProfile(OPENAI_PRIMARY, "openai-codex", "GPT-5.5", "$$"),
+        # GPT-5.6 family (GA 2026-07-09) — Codex-lane slugs per openai/codex
+        # models-manager/models.json (ctx7-verified 2026-07-13); routed via
+        # [routing].codex_only_models, so provider must be "openai-codex"
+        # (same honesty rule as the gpt-5.5 note above). The bare "gpt-5.6"
+        # Platform alias stays off the picker — PAYG lane is operator-excluded.
+        ModelProfile("gpt-5.6-sol", "openai-codex", "GPT-5.6 Sol", "$$"),
+        ModelProfile("gpt-5.6-terra", "openai-codex", "GPT-5.6 Terra", "$$"),
+        ModelProfile("gpt-5.6-luna", "openai-codex", "GPT-5.6 Luna", "$"),
         ModelProfile("gpt-5.4", "openai", "GPT-5.4", "$$"),
         ModelProfile("gpt-5.4-mini", "openai", "GPT-5.4 Mini", "$"),
         ModelProfile("gpt-5.3-codex", "openai-codex", "GPT-5.3 Codex", "$$"),
