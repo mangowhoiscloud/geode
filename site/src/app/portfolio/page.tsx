@@ -504,25 +504,26 @@ function PerceiveBanner() {
 }
 
 /**
- * Tau2 numbers over a measurement slip: the same key-value table object as
- * the memory core sample, ending in control/verdict rows so the comparison
- * band lives inside the record instead of a floating caption. Values from
- * benchmark-measurements.ts and docs/architecture/crucible.md §2.
+ * Tau2 numbers over a measurement slip that separates what is being
+ * measured (the agentic harness: GEODE's loop wrapped around a vanilla
+ * model) from the ruler (the tau2-bench eval harness), closing on the
+ * control and verdict. Values from benchmark-measurements.ts and
+ * docs/architecture/crucible.md §2.
  */
 function MeasureBanner() {
   const tau2 = BENCHMARK_GROUPS.find((group) => group.id === "tau2");
   const cells = (tau2?.matrix ?? []).filter((cell) => ["Retail", "Telecom", "Airline"].includes(cell.label));
-  const slip: { key: string; value: string; verdict?: boolean }[] = [
-    { key: "measured", value: "2026-07-03 · geode v0.99.269" },
-    { key: "harness", value: "tau2 @ 1901a30" },
-    { key: "agent", value: "gpt-5.2 high · payg" },
+  const slip: { key: string; value: string; section?: string; verdict?: boolean }[] = [
+    { key: "loop", value: "geode v0.99.269", section: "agentic harness · measured" },
+    { key: "model", value: "gpt-5.2 high · payg" },
+    { key: "bench", value: "tau2 @ 1901a30 · 2026-07-03", section: "eval harness · the ruler" },
     { key: "user-sim", value: "gpt-4.1 · pass^1 k=1" },
     { key: "airline", value: "trend-reference" },
-    { key: "control", value: "agent-world vanilla 0.802" },
+    { key: "control", value: "gpt-5.2 vanilla · no loop · 0.802", section: "agent-world reference" },
     { key: "verdict", value: "same band · ±8pt limit", verdict: true },
   ];
   return (
-    <div className="flex h-full w-full flex-col items-center justify-center gap-4 px-6">
+    <div className="flex h-full w-full flex-col items-center justify-center gap-3.5 px-6">
       <div className="flex items-baseline justify-center gap-6">
         {cells.map((cell) => (
           <div key={cell.label} className="text-center">
@@ -531,23 +532,38 @@ function MeasureBanner() {
           </div>
         ))}
       </div>
-      <div className="w-full max-w-[300px] overflow-hidden border" style={{ borderColor: ROSE_INK_70 }}>
-        {slip.map(({ key, value, verdict }, i) => (
-          <div
-            key={key}
-            className={`flex items-baseline justify-between gap-3 px-3 py-[5px] font-mono text-[9.5px] ${verdict ? "bg-[#C2447F] text-[#FFF0F8]" : ""}`}
-            style={
-              verdict
-                ? undefined
-                : { borderTop: i ? "1px solid color-mix(in srgb, #C2447F 25%, transparent)" : undefined }
-            }
-          >
-            <span className="uppercase tracking-[0.14em]" style={verdict ? { opacity: 0.85 } : { color: ROSE_INK_70 }}>
-              {key}
-            </span>
-            <span className={verdict ? "font-semibold" : ""} style={verdict ? undefined : { color: ROSE_INK }}>
-              {value}
-            </span>
+      <div className="w-full max-w-[310px] overflow-hidden border" style={{ borderColor: ROSE_INK_70 }}>
+        {slip.map(({ key, value, section, verdict }, i) => (
+          <div key={key}>
+            {section && (
+              <p
+                className="px-3 pb-[2px] pt-[6px] text-left font-mono text-[8px] uppercase tracking-[0.22em]"
+                style={{
+                  color: ROSE_INK_70,
+                  background: "color-mix(in srgb, #C2447F 8%, transparent)",
+                  borderTop: i ? "1px solid color-mix(in srgb, #C2447F 25%, transparent)" : undefined,
+                }}
+              >
+                {section}
+              </p>
+            )}
+            <div
+              className={`flex items-baseline justify-between gap-3 px-3 py-[4px] font-mono text-[9.5px] ${verdict ? "bg-[#C2447F] text-[#FFF0F8]" : ""}`}
+              style={
+                verdict || section
+                  ? section && !verdict
+                    ? { background: "color-mix(in srgb, #C2447F 8%, transparent)" }
+                    : undefined
+                  : { borderTop: i ? "1px solid color-mix(in srgb, #C2447F 18%, transparent)" : undefined }
+              }
+            >
+              <span className="uppercase tracking-[0.14em]" style={verdict ? { opacity: 0.85 } : { color: ROSE_INK_70 }}>
+                {key}
+              </span>
+              <span className={verdict ? "font-semibold" : ""} style={verdict ? undefined : { color: ROSE_INK }}>
+                {value}
+              </span>
+            </div>
           </div>
         ))}
       </div>
@@ -743,8 +759,8 @@ const features: {
     index: "#9 measure",
     headKo: "정직하게 잽니다",
     headEn: "KEEPS HONEST SCORE",
-    ko: "개선에 실패한 캠페인도 기록에 남습니다. 비교군은 Agent-World의 gpt-5.2 바닐라. pass^1 검출 한계 안에서 같은 밴드입니다.",
-    en: "The campaigns that failed to improve it stay on the record. The comparison group is Agent-World's vanilla gpt-5.2; within the pass^1 detection limit the bands match.",
+    ko: "재는 것은 GEODE 루프를 씌운 gpt-5.2, 재는 자는 tau2-bench. 비교군은 루프 없는 같은 모델(Agent-World 바닐라)이고, pass^1 검출 한계 안에서 같은 밴드입니다.",
+    en: "Measured: gpt-5.2 wrapped in the GEODE loop. Ruler: tau2-bench. The control is the same model without the loop (Agent-World vanilla); within the pass^1 detection limit the bands match.",
     banner: <MeasureBanner />,
   },
 ];

@@ -17,6 +17,11 @@ export type ChangelogEntry = {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    "version": "0.99.307",
+    "date": "2026-07-12",
+    "body": "### Changed\n\n- **Tau2 slip separates the agentic harness from the eval harness\n  (operator-directed).** The measurement slip gains labeled sections so the\n  claim reads unambiguously: what is measured is gpt-5.2 wrapped in the\n  GEODE loop (agentic harness: loop geode v0.99.269, model gpt-5.2 high ·\n  payg); the ruler is tau2-bench (eval harness: bench @ 1901a30, user-sim\n  gpt-4.1 · pass^1 k=1, airline trend-reference); the control is the same\n  model with no loop (Agent-World vanilla 0.802) before the verdict band.\n  The plate caption restates it in both locales."
+  },
+  {
     "version": "0.99.306",
     "date": "2026-07-12",
     "body": "### Added\n\n- **GEODE ships on Homebrew, and the hero replays the install\n  (operator-directed).** New tap `mangowhoiscloud/homebrew-tap` carries a\n  `geode` formula (GitHub source tarball into an isolated python@3.12\n  virtualenv, `geode` + `geode-mcp` symlinked; `brew audit` clean, fetch and\n  sha256 verified; the same venv+pip path smoke-tested via an isolated uv\n  sandbox: `geode version` prints). The portfolio hero terminal replaces the\n  static welcome with the abridged real transcript — brew install, first\n  launch, welcome screen, first prompt — revealed line by line with\n  auto-scroll when lines stack; reduced motion renders the finished\n  transcript statically."
