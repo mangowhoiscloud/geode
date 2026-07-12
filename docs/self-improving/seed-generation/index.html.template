@@ -50,6 +50,11 @@
         <li><a href="/geode/self-improving/autoresearch/policies/">Policies</a></li>
       </ul>
 
+      <div class="nav-section">Crucible <span class="count">ledger</span></div>
+      <ul class="nav-list">
+        <li><a href="/geode/docs/architecture/crucible-kernel">Kernel architecture (docs)</a></li>
+      </ul>
+
       <div class="nav-section">Docs</div>
       <ul class="nav-list">
         <li><a href="/geode/docs/petri/overview">Petri overview</a></li>

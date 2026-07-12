@@ -45,6 +45,32 @@ functional change.
 
 ---
 
+## [0.99.311] - 2026-07-13
+
+### Fixed
+
+- **Hub cost records audited; the seed-generation listing no longer
+  publishes $0.00 for measured runs (operator-directed).** Six of seven
+  published runs showed zero cost because `build_seeds_listing.py` read only
+  `state.json` top-level fields that older runs never wrote; the listing now
+  falls back to summing `per_phase_costs.json` (real spends $1.88 to $5.93
+  surface) and carries an `uncaptured_roles` count for subprocess roles that
+  ran agents without usage capture.
+
+### Changed
+
+- **SIL and Crucible cost granularity raised on the hub.** The
+  seed-generation table shows tokens and USD together with a dagger marking
+  metered-floor totals, and a new Crucible section renders the append-only
+  campaign ledgers per attempt (campaign, outcome, tokens, cost, wall) with
+  honest flags: 8 early attempts carry tokens but no cost (pricing wired
+  mid-campaign) and one attempt lost usage capture; the totals row (26
+  attempts, 42,399,285 tokens, $47.16) is labeled a floor. `artifacts/` is
+  gitignored, so the loader takes `GEODE_CRUCIBLE_CAMPAIGNS_DIR` for
+  worktree builds and degrades to an explanatory row when absent.
+
+---
+
 ## [0.99.310] - 2026-07-13
 
 ### Added

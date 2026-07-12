@@ -17,6 +17,11 @@ export type ChangelogEntry = {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    "version": "0.99.311",
+    "date": "2026-07-13",
+    "body": "### Fixed\n\n- **Hub cost records audited; the seed-generation listing no longer\n  publishes $0.00 for measured runs (operator-directed).** Six of seven\n  published runs showed zero cost because `build_seeds_listing.py` read only\n  `state.json` top-level fields that older runs never wrote; the listing now\n  falls back to summing `per_phase_costs.json` (real spends $1.88 to $5.93\n  surface) and carries an `uncaptured_roles` count for subprocess roles that\n  ran agents without usage capture.\n\n### Changed\n\n- **SIL and Crucible cost granularity raised on the hub.** The\n  seed-generation table shows tokens and USD together with a dagger marking\n  metered-floor totals, and a new Crucible section renders the append-only\n  campaign ledgers per attempt (campaign, outcome, tokens, cost, wall) with\n  honest flags: 8 early attempts carry tokens but no cost (pricing wired\n  mid-campaign) and one attempt lost usage capture; the totals row (26\n  attempts, 42,399,285 tokens, $47.16) is labeled a floor. `artifacts/` is\n  gitignored, so the loader takes `GEODE_CRUCIBLE_CAMPAIGNS_DIR` for\n  worktree builds and degrades to an explanatory row when absent."
+  },
+  {
     "version": "0.99.310",
     "date": "2026-07-13",
     "body": "### Added\n\n- **Crucible triad surfaces pinned.** The loop's three fixed surfaces are now\n  a package-level declaration (`TRIAD_PROGRAM`, `TRIAD_TRAIN_SURFACE`,\n  `TRIAD_PREPARE` in `plugins/crucible/__init__`) with drift tests: the\n  producer program path, the harness policy path, and the prepare entrypoint\n  can no longer silently re-fragment (`test_triad_surfaces.py`).\n- **Prepare provenance.** `prepare_campaign` stamps `prepared_by`\n  (`crucible.prepare-provenance.v1` with the spec content hash) into every\n  config it writes; the supervisor loader accepts and preserves the stamp\n  while keeping it out of the `config_id` identity hash, and inherited stamps\n  from template configs are replaced. Hand-written configs stay first-class."

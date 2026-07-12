@@ -49,6 +49,11 @@
         <li><a href="/geode/self-improving/autoresearch/runs/">Runs</a></li>
         <li><a href="/geode/self-improving/autoresearch/policies/">Policies</a></li>
       </ul>
+      <div class="nav-section">Crucible <span class="count">{{ crucible_count_label }}</span></div>
+      <ul class="nav-list">
+        <li><a href="/geode/docs/architecture/crucible-kernel">Kernel architecture (docs)</a></li>
+      </ul>
+
 
       <div class="nav-section">Docs</div>
       <ul class="nav-list">
@@ -97,6 +102,20 @@
       </thead>
       <tbody>
 {{ autoresearch_rows }}
+      </tbody>
+    </table>
+
+    <h2 class="section"><span>Crucible &middot; campaign ledger &middot; {{ crucible_count_label }}</span></h2>
+    <p class="muted">Per-attempt usage from the append-only campaign ledgers
+      (<code>state/ledger.jsonl</code>). Totals are a metered floor: early attempts
+      recorded tokens before pricing was wired, and a failed capture leaves an
+      attempt with wall time but no usage.</p>
+    <table class="records">
+      <thead>
+        <tr><th>campaign</th><th>outcome</th><th>tokens</th><th>cost</th><th>wall / flags</th></tr>
+      </thead>
+      <tbody>
+{{ crucible_rows }}
       </tbody>
     </table>
 
