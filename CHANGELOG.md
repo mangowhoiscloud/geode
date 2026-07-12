@@ -45,6 +45,26 @@ functional change.
 
 ---
 
+## [0.99.314] - 2026-07-13
+
+### Fixed
+
+- **claude-cli sub-agents no longer report zero usage (cost-audit gap
+  closed).** The adapter returned an empty `UsageSummary()` with a stale
+  "subscription path does not expose token usage" comment, leaving every
+  claude-cli-backed seed-generation role flagged "uncaptured" on the hub.
+  The claude CLI's terminal `result` stream-json event does carry token
+  usage (petri's parser, live-verified against CLI 2.1.140) — the petri
+  extractor is now public (`extract_usage_from_events`, one parser for both
+  registries) and the adapter surfaces input/output/cache-read tokens, which
+  flow through translation and TokenTracker into `session_end` and
+  `per_phase_costs.json`. codex-cli stays honestly at zero: plain-text
+  `codex exec` stdout has no usage block (JSON-mode migration noted as
+  unverified, live test required). Stale capture-coverage comments in
+  worker.py, _lifecycle.py, and transcript.py corrected.
+
+---
+
 ## [0.99.313] - 2026-07-13
 
 ### Changed

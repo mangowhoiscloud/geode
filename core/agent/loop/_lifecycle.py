@@ -77,10 +77,10 @@ def record_transcript_end(loop: AgenticLoop, result: Any) -> None:
         # Read accumulated cost + tokens from TokenTracker (was missing →
         # always $0 / 0 tokens). PR-SEEDGEN-TOKENS (2026-05-30) adds the
         # token reads so the session_end event carries prompt/completion
-        # tokens for the seed-generation per-phase cost grid. These are 0
-        # for subscription / CLI calls (the subscription adapters return an
-        # empty UsageSummary — usage is not exposed), so the accumulator
-        # only reflects API-key / payg calls. Never fabricated.
+        # tokens for the seed-generation per-phase cost grid. payg and
+        # claude-cli calls populate real numbers (PR-CLI-USAGE-CAPTURE,
+        # 2026-07-13); codex-cli remains 0 (plain-text stdout carries no
+        # usage block). Never fabricated.
         total_cost = 0.0
         prompt_tokens = 0
         completion_tokens = 0
