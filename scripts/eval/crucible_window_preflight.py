@@ -49,7 +49,10 @@ def main(argv: list[str] | None = None) -> int:
     if args.auto_codex:
         if not args.window_capacity_tokens or args.window_capacity_tokens <= 0:
             parser.error("--auto-codex requires a positive --window-capacity-tokens")
-        remaining, source_detail = remaining_from_codex(args.window_capacity_tokens)
+        try:
+            remaining, source_detail = remaining_from_codex(args.window_capacity_tokens)
+        except ContractError as error:
+            raise SystemExit(str(error)) from error
     else:
         if args.remaining_tokens is None or args.remaining_tokens < 0:
             parser.error("--remaining-tokens must be non-negative")

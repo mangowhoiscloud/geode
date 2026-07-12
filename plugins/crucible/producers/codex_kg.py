@@ -62,11 +62,14 @@ def _objective_from_program(path: Path = _DEFAULT_PROGRAM_PATH) -> str:
     if section is None:
         raise ProducerError("program.md must define an '## Objective' section")
     quoted = [
-        line.lstrip(">").strip() for line in section.group(1).splitlines() if line.startswith(">")
+        stripped.lstrip(">").strip()
+        for stripped in (line.strip() for line in section.group(1).splitlines())
+        if stripped.startswith(">")
     ]
-    if not quoted:
+    objective = " ".join(part for part in quoted if part)
+    if not objective:
         raise ProducerError("program.md '## Objective' must quote the default objective")
-    return " ".join(quoted)
+    return objective
 
 
 _DEFAULT_OBJECTIVE = _objective_from_program()

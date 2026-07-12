@@ -121,7 +121,7 @@
         "producer",
         "knowledge-graph"
       ],
-      "contentSha256": "ff42eb0036ae78d32db64d89c0d247b89876b024b22caaf966599363d3bd38bb"
+      "contentSha256": "0d8230237dcd0cca5aeaaf816b03f00c17e26109941e0572653f97918480b829"
     },
     {
       "id": "file:plugins/crucible/program.md",

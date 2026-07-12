@@ -270,6 +270,8 @@ def prepare_campaign(
         raise
     window: dict[str, Any] | None = None
     if remaining_tokens is not None:
+        if remaining_tokens < 0:
+            raise ContractError("remaining_tokens must be non-negative")
         history = completed_campaign_tokens(history_root) if history_root else []
         window = dict(
             decide(
