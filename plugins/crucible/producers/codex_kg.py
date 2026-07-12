@@ -289,6 +289,30 @@ def _codex_child_environment() -> dict[str, str]:
     }
 
 
+def _codex_error_detail(stdout: str, stderr: str) -> str:
+    """Extract one bounded structured Codex error without retaining model output."""
+
+    direct = " ".join(stderr.split())
+    if direct:
+        return direct[:2_000]
+    for line in reversed(stdout.splitlines()):
+        try:
+            event = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+        if not isinstance(event, Mapping) or event.get("type") not in {
+            "error",
+            "turn.failed",
+        }:
+            continue
+        candidate: object = event.get("message")
+        if candidate is None and isinstance(event.get("error"), Mapping):
+            candidate = event["error"].get("message")
+        if isinstance(candidate, str) and candidate.strip():
+            return " ".join(candidate.split())[:2_000]
+    return ""
+
+
 def _write_exclusive(path: Path, payload: Mapping[str, Any]) -> None:
     descriptor = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
     with os.fdopen(descriptor, "w", encoding="utf-8") as handle:
@@ -354,7 +378,7 @@ def run() -> int:
     )
     wall_seconds = time.monotonic() - started
     if result.returncode:
-        detail = " ".join(result.stderr.split())[:2_000]
+        detail = _codex_error_detail(result.stdout, result.stderr)
         raise ProducerError(detail or f"codex exited with status {result.returncode}")
     changed = tuple(path for path in _git("diff", "--name-only", "--").splitlines() if path.strip())
     if changed != surfaces:

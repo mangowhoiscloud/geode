@@ -1144,6 +1144,15 @@ remain. All nine, rather than an outcome-selected subset, form the r26 train
 pack with two trials per task and digest `06f7321b6e2e`. This changes the assay
 through frozen configuration only; it adds no second optimizer or scoring path.
 
+The first r26 attempt stopped before candidate creation or evaluation because
+the Codex subscription producer hit its usage limit. It recorded zero measured
+calls and no contract, candidate, baseline, or sealed attempt. The producer
+previously inspected only stderr on a non-zero Codex exit, while this CLI emits
+its structured error on JSON stdout; the resulting supervisor artifact retained
+only `codex exited with status 1`. The wrapper now extracts one bounded message
+from `error` or `turn.failed` events without retaining model output. The frozen
+train and hidden packs remain unconsumed for a fresh campaign after reset.
+
 The strongest honest claims are:
 
 - the frozen external tau2 baseline identified concrete retail wrong-write and

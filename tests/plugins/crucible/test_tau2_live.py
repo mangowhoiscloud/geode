@@ -20,6 +20,7 @@ from plugins.crucible.producers.codex_kg import (
     _DEFAULT_OBJECTIVE,
     ProducerError,
     _codex_child_environment,
+    _codex_error_detail,
     _prompt,
     _validate_policy_grammar,
     knowledge_context,
@@ -685,6 +686,20 @@ def test_codex_producer_objective_requires_monotone_progress() -> None:
     assert "stop only when none remain" in _DEFAULT_OBJECTIVE
     assert "batch" not in _DEFAULT_OBJECTIVE
     assert "defer" not in _DEFAULT_OBJECTIVE
+
+
+def test_codex_producer_extracts_bounded_structured_stdout_error() -> None:
+    stdout = "\n".join(
+        (
+            '{"type":"thread.started","thread_id":"opaque"}',
+            '{"type":"error","message":"earlier error"}',
+            '{"type":"turn.failed","error":{"message":" usage  limit \\n reset "}}',
+        )
+    )
+
+    assert _codex_error_detail(stdout, "") == "usage limit reset"
+    assert _codex_error_detail(stdout, " explicit stderr ") == "explicit stderr"
+    assert _codex_error_detail("not-json", "") == ""
 
 
 def test_codex_producer_reads_only_nested_closed_failure_codes() -> None:

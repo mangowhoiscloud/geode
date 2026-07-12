@@ -82,7 +82,9 @@ functional change.
   of supplied as unhashed campaign environment values. Reject feedback now
   narrows that source-frozen objective to monotone consumption of unresolved
   actions and terminal checks, with confirmed successes reused instead of
-  repeated. The managed Codex OAuth
+  repeated. Non-zero Codex producer exits now preserve one bounded structured
+  error from JSON stdout when stderr is empty, so subscription limits remain
+  diagnosable without retaining model output. The managed Codex OAuth
   reader now honors `CODEX_HOME` under an isolated evaluator `HOME`, and tau2
   task identity normalizes the optional null fields materialized by runtime
   serialization so source packs and finalized results share one canonical
