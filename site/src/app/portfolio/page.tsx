@@ -442,8 +442,15 @@ function PerceiveBanner() {
 function MeasureBanner() {
   const tau2 = BENCHMARK_GROUPS.find((group) => group.id === "tau2");
   const cells = (tau2?.matrix ?? []).filter((cell) => ["Retail", "Telecom", "Airline"].includes(cell.label));
+  // Environment spec + comparison band, transcribed from the measurement
+  // records (benchmark-measurements.ts) and docs/architecture/crucible.md §2.
+  const spec = [
+    "measured 2026-07-03 · tau2@1901a30 · geode v0.99.269",
+    "agent gpt-5.2 high (payg) · user-sim gpt-4.1 · pass^1 k=1",
+    "airline: trend-reference (ground-truth quality)",
+  ];
   return (
-    <div className="flex h-full w-full flex-col justify-center gap-4 px-6">
+    <div className="flex h-full w-full flex-col justify-center gap-3.5 px-6">
       <div className="flex items-baseline justify-center gap-6">
         {cells.map((cell) => (
           <div key={cell.label} className="text-center">
@@ -452,13 +459,19 @@ function MeasureBanner() {
           </div>
         ))}
       </div>
-      <p className="text-center font-mono text-[10px] uppercase tracking-[0.14em]" style={{ color: ROSE_INK_70 }}>
-        tau2-bench base · gpt-5.5 · openai-codex subscription
+      <div className="space-y-1" style={{ color: ROSE_INK_70 }}>
+        {spec.map((line) => (
+          <p key={line} className="text-center font-mono text-[9.5px] leading-[1.5]">
+            {line}
+          </p>
+        ))}
+      </div>
+      <p className="border-t pt-2 text-center font-mono text-[9.5px]" style={{ color: ROSE_INK, borderColor: "color-mix(in srgb, #C2447F 30%, transparent)" }}>
+        vs agent-world gpt-5.2 vanilla 0.802: same band, ±8pt detection limit
       </p>
     </div>
   );
 }
-
 
 function ConnectBanner() {
   return (
@@ -648,8 +661,8 @@ const features: {
     index: "#9 measure",
     headKo: "정직하게 잽니다",
     headEn: "KEEPS HONEST SCORE",
-    ko: "개선에 실패한 캠페인도 기록에 남습니다. 0 승격의 원인 규명까지가 실측 자산입니다.",
-    en: "The campaigns that failed to improve it stay on the record, including why zero got promoted.",
+    ko: "개선에 실패한 캠페인도 기록에 남습니다. 비교군은 Agent-World의 gpt-5.2 바닐라. pass^1 검출 한계 안에서 같은 밴드입니다.",
+    en: "The campaigns that failed to improve it stay on the record. The comparison group is Agent-World's vanilla gpt-5.2; within the pass^1 detection limit the bands match.",
     banner: <MeasureBanner />,
   },
 ];
