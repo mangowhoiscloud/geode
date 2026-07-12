@@ -45,6 +45,46 @@ functional change.
 
 ---
 
+## [0.99.309] - 2026-07-12
+
+### Added
+
+- **Crucible frozen experiment kernel, reconciled and centralized.** Lands the
+  full unmerged kernel lineage on develop as the single reconcile base:
+  sealed one-shot promotion (pack claim + attempt burn + eligible refs, ref
+  journal with write-ahead intent), task content/family binding with
+  family-mean paired bootstrap and the reachability screen, opaque pack
+  curation, the GPT-5.4 knowledge-graph producer with source attestation, and
+  the tau2 live evaluator glue (`plugins/crucible/`).
+- **Run economics.** Row cache with identity-verified reuse and interrupted-run
+  harvest (`plugins/crucible/row_cache.py`), window preflight decision moved
+  into `plugins/crucible/preflight.py` with the launcher script as a thin CLI.
+- **Centralized preparation.** `python -m plugins.crucible prepare <spec>`
+  assembles and round-trip validates one campaign config; the spec may carry a
+  `curation` block in place of `pack_file`, and `--history/--remaining-tokens`
+  fold the launch-capacity verdict into the prepare report.
+- **program.md as the producer SoT.** The default search objective now lives
+  only in `plugins/crucible/program.md` (`## Objective` blockquote); the module
+  reads it at import and a drift test pins the literal out of the code.
+
+### Fixed
+
+- **Row cache is train-only.** A cache root in the environment is refused for
+  sealed (test-stage) measurements — observable via `row-cache-disabled.json`
+  in the arm state directory — so one-shot verdicts never replay frozen noise
+  realisations.
+- **Producer failure retention.** Structured Codex errors survive into
+  attempt artifacts; the monotone producer objective is frozen with tests.
+
+### Removed
+
+- **Task-level gate derivation.** `plugins/crucible/calibration.py` and
+  `priors.py` leave with the lineage decision that recorded their restoration
+  bar: the old task-level derivation does not describe the family-mean
+  contract, and a family-aware rederivation is tracked as follow-up work.
+
+---
+
 ## [0.99.308] - 2026-07-12
 
 ### Changed
@@ -58,6 +98,45 @@ functional change.
 ---
 
 ## [0.99.307] - 2026-07-12
+
+### Added
+
+- **Crucible prepare: one-command campaign assembly.** `python -m
+  plugins.crucible prepare <spec>` centralizes the fragmented measurement
+  apparatus (autoresearch's `prepare.py` role): it merges a declarative
+  campaign spec over a template config, recomputes — never inherits — the
+  evaluator hash (over a pristine checkout of the campaign head), the harness
+  tree hash, and the task-pack hash, and round-trip validates the emitted
+  config through the same `SupervisorConfig.load` the loop uses. The three
+  launch-time fail-louds paid for live on 2026-07-12 (feedback outside the
+  pack, reused campaign search ref, stale state_dir) now fail at prepare
+  time. Hand-written configs remain first-class; the loop is unchanged.
+
+### Added
+
+- **Crucible run economics: row cache and window preflight.** A hash-bound
+  row cache salvages finalized tau2 simulations across relaunches: rows are
+  stored with their full measurement identity (revision, evaluator/harness/
+  task-pack/assay hashes) plus row and v2 context payload hashes, interrupted runs
+  donate only semantic completed rows at harvest, full-cache arms synthesize
+  results without spending conversations, and partial hits re-run only
+  unfinished tasks while preserving the first finalized realization —
+  implementing the checkpoint sidecar the kernel's resume rule required.
+  Tau2 infrastructure placeholders remain missing work rather than becoming
+  cached failures. A window preflight script gates launches on measured
+  campaign costs versus remaining quota and reports `cap_fit`, `history_fit`,
+  or `defer` as estimates rather than provider guarantees. Motivated by r23: a
+  quota death at pair 7/12 burned 75% of a run's compute for zero verdict bits.
+  A failure-first pack-ordering
+  intervention was prototyped and retired the same day: live validation
+  showed tau2 executes in upstream file order and the contract runner
+  enforces it, so pack curation now documents that pin instead.
+- **Crucible's producer program is a tracked Markdown source again.**
+  `plugins/crucible/program.md` centralizes the autoresearch-style
+  experimentation protocol, enforced constraints, search preferences, setup,
+  and closed dynamic-feedback boundary. `codex_kg` renders only its bounded
+  model-facing section; `tau2_agent_policy.md` remains the `train.py`-like
+  mutation target rather than a second source of operating rules.
 
 ### Changed
 

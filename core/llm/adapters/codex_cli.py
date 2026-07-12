@@ -17,6 +17,7 @@ import shutil
 from collections.abc import AsyncIterator
 from dataclasses import dataclass, field
 
+from core.auth.codex_cli_oauth import codex_auth_path
 from core.llm.adapters._subprocess_common import build_subprocess_stdin
 from core.llm.adapters.base import (
     SOURCE_ADAPTER,
@@ -145,9 +146,7 @@ class CodexCliAdapter:
                     "and ensure it's on PATH.",
                 ),
             )
-        from pathlib import Path
-
-        auth = Path.home() / ".codex" / "auth.json"
+        auth = codex_auth_path()
         if not auth.is_file():
             return EnvironmentReport(
                 ok=False,
@@ -198,7 +197,7 @@ class CodexCliAdapter:
         return CredentialDetection(
             model=CODEX_PRIMARY,
             provider=self.provider,
-            source_path=f"{binary} (subscription via ~/.codex/auth.json)",
+            source_path=f"{binary} (subscription via {codex_auth_path()})",
         )
 
 

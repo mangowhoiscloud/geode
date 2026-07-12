@@ -18,6 +18,14 @@ from unittest.mock import patch
 
 import pytest
 
+
+@pytest.fixture(autouse=True)
+def _isolate_mock_cli_from_live_oauth_usage(monkeypatch: pytest.MonkeyPatch) -> None:
+    from core.llm.codex_oauth_usage import CODEX_OAUTH_POLL_DISABLED_ENV
+
+    monkeypatch.setenv(CODEX_OAUTH_POLL_DISABLED_ENV, "1")
+
+
 # ---------------------------------------------------------------------------
 # Binary resolution
 # ---------------------------------------------------------------------------

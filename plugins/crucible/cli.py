@@ -4,18 +4,22 @@ from __future__ import annotations
 
 import argparse
 import json
+import stat
 import sys
 from collections.abc import Mapping
 from pathlib import Path
 from typing import Any
 
 from .artifacts import load_json_object, write_exclusive_json
-from .contract import ContractError, load_contract, validate_test_parent
+from .bundle import PromotionBundle
+from .contract import ContractError, load_contract, task_pack_sha256
+from .curation import curate_tau2_pack
 from .evidence import EvidenceEnvelope, ResourceUsage, load_evidence
-from .priors import update_prior_from_campaign
+from .prepare import prepare_campaign
 from .promotion import PromotionVerdict, decide
+from .ref_journal import reconcile_ref_update
 from .supervisor import SupervisorError, run_supervisor
-from .verifiers import get_assay_adapter
+from .verifiers import get_assay_adapter, tau2_resource_usage_floor, tau2_task_unit
 
 
 def _load_checks(path: Path) -> dict[tuple[str, int], Mapping[str, bool]]:
@@ -57,12 +61,64 @@ def _add_tau2_evidence(subparsers: Any) -> None:
     parser.add_argument("--output", type=Path, required=True)
 
 
+def _add_tau2_task_pack(subparsers: Any) -> None:
+    parser = subparsers.add_parser(
+        "tau2-task-pack",
+        help="derive content and workflow-family identities from frozen tau2 tasks",
+    )
+    parser.add_argument("tasks", type=Path)
+    parser.add_argument("--task-id", action="append", required=True)
+    parser.add_argument(
+        "--task-split",
+        type=Path,
+        help="upstream split manifest that must contain every selected task",
+    )
+    parser.add_argument(
+        "--task-split-name",
+        help="split key to validate in --task-split",
+    )
+    parser.add_argument("--trials-per-task", type=int, default=1)
+    parser.add_argument("--output", type=Path, required=True)
+
+
+def _add_tau2_curate_pack(subparsers: Any) -> None:
+    parser = subparsers.add_parser(
+        "tau2-curate-pack",
+        help="select a deterministic tau2 pack and print only opaque hashes/counts",
+    )
+    parser.add_argument("tasks", type=Path)
+    parser.add_argument("--task-split", type=Path, required=True)
+    parser.add_argument("--task-split-name", required=True)
+    parser.add_argument("--domain", required=True)
+    parser.add_argument("--purpose", choices=("train", "test"), required=True)
+    parser.add_argument("--salt", required=True)
+    parser.add_argument("--fault-tokens", type=int, required=True)
+    parser.add_argument("--take", type=int, required=True)
+    parser.add_argument("--maximum-per-intent", type=int, required=True)
+    parser.add_argument("--maximum-per-persona", type=int, required=True)
+    parser.add_argument("--trials-per-task", type=int, default=1)
+    parser.add_argument("--exclude-pack", type=Path, action="append", default=[])
+    parser.add_argument("--selection-output", type=Path, required=True)
+    parser.add_argument("--pack-output", type=Path, required=True)
+
+
+def _add_tau2_usage(subparsers: Any) -> None:
+    parser = subparsers.add_parser(
+        "tau2-usage",
+        help="derive the minimum observable resource usage from finalized tau2 results",
+    )
+    parser.add_argument("results", type=Path)
+    parser.add_argument("--output", type=Path)
+
+
 def _add_score(subparsers: Any) -> None:
-    parser = subparsers.add_parser("score", help="produce one paired KEEP/REJECT/INVALID verdict")
+    parser = subparsers.add_parser(
+        "score",
+        help="produce one authority-neutral train KEEP/REJECT/INVALID verdict",
+    )
     parser.add_argument("contract", type=Path)
     parser.add_argument("--baseline", type=Path, required=True)
     parser.add_argument("--candidate", type=Path, required=True)
-    parser.add_argument("--parent-contract", type=Path)
     parser.add_argument("--output", type=Path)
 
 
@@ -74,22 +130,57 @@ def _add_loop(subparsers: Any) -> None:
     parser.add_argument("config", type=Path)
 
 
-def _add_priors_update(subparsers: Any) -> None:
+def _add_bundle(subparsers: Any) -> None:
     parser = subparsers.add_parser(
-        "priors-update",
-        help="fold a campaign's measured flips into a class-prior file",
+        "bundle",
+        help="bind one applied train KEEP chain for sealed evaluation",
     )
-    parser.add_argument("prior", type=Path)
-    parser.add_argument("--state-dir", type=Path, required=True)
+    parser.add_argument("repository", type=Path)
+    parser.add_argument("attempt", type=Path)
+    parser.add_argument("--output", type=Path, required=True)
+
+
+def _add_reconcile_ref(subparsers: Any) -> None:
+    parser = subparsers.add_parser(
+        "reconcile-ref",
+        help="recover one persisted private Crucible ref intent",
+    )
+    parser.add_argument("repository", type=Path)
+    parser.add_argument("--intent", type=Path, required=True)
+    parser.add_argument("--receipt", type=Path, required=True)
+
+
+def _add_prepare(subparsers: Any) -> None:
+    parser = subparsers.add_parser(
+        "prepare",
+        help="assemble and validate one campaign config from a declarative spec",
+    )
+    parser.add_argument("spec", type=Path)
+    parser.add_argument("--output", type=Path)
+    parser.add_argument(
+        "--history",
+        type=Path,
+        help="campaigns root holding */state/summary.json for the window verdict",
+    )
+    parser.add_argument(
+        "--remaining-tokens",
+        type=int,
+        help="remaining window tokens; enables the launch-capacity verdict",
+    )
 
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     subparsers = parser.add_subparsers(dest="command", required=True)
     _add_tau2_evidence(subparsers)
+    _add_tau2_task_pack(subparsers)
+    _add_tau2_curate_pack(subparsers)
+    _add_tau2_usage(subparsers)
     _add_score(subparsers)
     _add_loop(subparsers)
-    _add_priors_update(subparsers)
+    _add_prepare(subparsers)
+    _add_bundle(subparsers)
+    _add_reconcile_ref(subparsers)
     return parser.parse_args(argv)
 
 
@@ -115,14 +206,111 @@ def _tau2_evidence(args: argparse.Namespace) -> EvidenceEnvelope:
     return evidence
 
 
+def _tau2_task_pack(args: argparse.Namespace) -> dict[str, Any]:
+    try:
+        info = args.tasks.lstat()
+    except OSError as exc:
+        raise ContractError(f"cannot read tau2 tasks {args.tasks}: {exc}") from exc
+    if not stat.S_ISREG(info.st_mode) or info.st_size > 64 * 1024 * 1024:
+        raise ContractError("tau2 tasks must be a regular file no larger than 64 MiB")
+    try:
+        raw = json.loads(args.tasks.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        raise ContractError(f"cannot read tau2 tasks {args.tasks}: {exc}") from exc
+    if not isinstance(raw, list):
+        raise ContractError("tau2 tasks must be a JSON list")
+    indexed: dict[str, Mapping[str, Any]] = {}
+    for index, value in enumerate(raw):
+        if not isinstance(value, Mapping):
+            raise ContractError(f"tau2 tasks[{index}] must be an object")
+        task_id = str(value.get("id") if value.get("id") is not None else "").strip()
+        if not task_id:
+            raise ContractError(f"tau2 tasks[{index}].id is required")
+        if task_id in indexed:
+            raise ContractError(f"tau2 tasks repeat id {task_id!r}")
+        indexed[task_id] = value
+    requested = tuple(str(task_id) for task_id in args.task_id)
+    if len(set(requested)) != len(requested):
+        raise ContractError("--task-id must not contain duplicates")
+    if (args.task_split is None) != (args.task_split_name is None):
+        raise ContractError("--task-split and --task-split-name must be provided together")
+    if args.task_split is not None:
+        try:
+            split_info = args.task_split.lstat()
+        except OSError as exc:
+            raise ContractError(f"cannot read tau2 task split {args.task_split}: {exc}") from exc
+        if not stat.S_ISREG(split_info.st_mode) or split_info.st_size > 8 * 1024 * 1024:
+            raise ContractError("tau2 task split must be a regular file no larger than 8 MiB")
+        try:
+            split_manifest = json.loads(args.task_split.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError) as exc:
+            raise ContractError(f"cannot read tau2 task split {args.task_split}: {exc}") from exc
+        if not isinstance(split_manifest, Mapping):
+            raise ContractError("tau2 task split must be a JSON object")
+        split_ids = split_manifest.get(args.task_split_name)
+        if not isinstance(split_ids, list) or not all(
+            isinstance(task_id, str) and task_id for task_id in split_ids
+        ):
+            raise ContractError(
+                f"tau2 task split {args.task_split_name!r} must be a list of task IDs"
+            )
+        if len(set(split_ids)) != len(split_ids):
+            raise ContractError(f"tau2 task split {args.task_split_name!r} repeats task IDs")
+        outside_split = [task_id for task_id in requested if task_id not in set(split_ids)]
+        if outside_split:
+            raise ContractError(
+                f"tau2 task IDs are outside split {args.task_split_name!r}: "
+                + ", ".join(outside_split)
+            )
+    missing = [task_id for task_id in requested if task_id not in indexed]
+    if missing:
+        raise ContractError("tau2 task IDs are missing: " + ", ".join(missing))
+    tasks = tuple(tau2_task_unit(indexed[task_id]) for task_id in requested)
+    pack = {
+        "schema": "crucible.task-pack.v1",
+        "task_pack_sha256": task_pack_sha256(tasks, args.trials_per_task),
+        "trials_per_task": args.trials_per_task,
+        "tasks": [task.to_dict() for task in tasks],
+    }
+    write_exclusive_json(args.output, pack)
+    return pack
+
+
+def _tau2_usage(args: argparse.Namespace) -> ResourceUsage:
+    raw = load_json_object(
+        args.results,
+        "tau2 results",
+        max_bytes=512 * 1024 * 1024,
+    )
+    usage = tau2_resource_usage_floor(raw)
+    if args.output is not None:
+        write_exclusive_json(args.output, usage.to_dict())
+    return usage
+
+
+def _tau2_curate_pack(args: argparse.Namespace) -> dict[str, Any]:
+    return curate_tau2_pack(
+        tasks_path=args.tasks,
+        split_path=args.task_split,
+        split_name=args.task_split_name,
+        domain=args.domain,
+        purpose=args.purpose,
+        salt=args.salt,
+        fault_tokens=args.fault_tokens,
+        take=args.take,
+        maximum_per_intent=args.maximum_per_intent,
+        maximum_per_persona=args.maximum_per_persona,
+        trials_per_task=args.trials_per_task,
+        exclude_packs=tuple(args.exclude_pack),
+        selection_output=args.selection_output,
+        pack_output=args.pack_output,
+    )
+
+
 def _score(args: argparse.Namespace) -> PromotionVerdict:
     contract = load_contract(args.contract)
     if contract.stage == "test":
-        if args.parent_contract is None:
-            raise ContractError("sealed-test scoring requires --parent-contract")
-        validate_test_parent(contract, load_contract(args.parent_contract))
-    elif args.parent_contract is not None:
-        raise ContractError("--parent-contract is only valid for sealed-test scoring")
+        raise ContractError("sealed-test scoring requires the one-shot sealed supervisor")
     verdict = decide(
         contract,
         load_evidence(args.baseline),
@@ -133,6 +321,12 @@ def _score(args: argparse.Namespace) -> PromotionVerdict:
     return verdict
 
 
+def _bundle(args: argparse.Namespace) -> PromotionBundle:
+    bundle = PromotionBundle.build_from_attempt(args.repository, args.attempt)
+    write_exclusive_json(args.output, bundle.to_dict())
+    return bundle
+
+
 def main(argv: list[str] | None = None) -> int:
     args = parse_args(argv)
     try:
@@ -140,13 +334,42 @@ def main(argv: list[str] | None = None) -> int:
             evidence = _tau2_evidence(args)
             print(json.dumps(evidence.to_dict(), sort_keys=True))
             return 0 if evidence.execution_status == "complete" else 2
+        if args.command == "tau2-task-pack":
+            pack = _tau2_task_pack(args)
+            print(json.dumps(pack, sort_keys=True))
+            return 0
+        if args.command == "tau2-curate-pack":
+            curation_summary = _tau2_curate_pack(args)
+            print(json.dumps(curation_summary, sort_keys=True))
+            return 0
+        if args.command == "tau2-usage":
+            usage = _tau2_usage(args)
+            print(json.dumps(usage.to_dict(), sort_keys=True))
+            return 0
+        if args.command == "prepare":
+            report = prepare_campaign(
+                args.spec,
+                output=args.output,
+                history_root=args.history,
+                remaining_tokens=args.remaining_tokens,
+            )
+            print(json.dumps(report, sort_keys=True))
+            return 0
         if args.command == "loop":
             summary = run_supervisor(args.config)
             print(json.dumps(summary.to_dict(), sort_keys=True))
             return 0
-        if args.command == "priors-update":
-            updated = update_prior_from_campaign(args.prior, args.state_dir)
-            print(json.dumps(updated.to_dict(), sort_keys=True))
+        if args.command == "bundle":
+            bundle = _bundle(args)
+            print(json.dumps(bundle.to_dict(), sort_keys=True))
+            return 0
+        if args.command == "reconcile-ref":
+            receipt = reconcile_ref_update(
+                args.repository,
+                intent_path=args.intent,
+                receipt_path=args.receipt,
+            )
+            print(json.dumps(receipt.to_dict(), sort_keys=True))
             return 0
         verdict = _score(args)
         print(json.dumps(verdict.to_dict(), sort_keys=True))

@@ -24,9 +24,9 @@ import os
 import threading
 from collections.abc import AsyncIterator
 from dataclasses import dataclass, field
-from pathlib import Path
 from typing import Any
 
+from core.auth.codex_cli_oauth import codex_auth_path
 from core.llm.adapters._openai_common import (
     build_async_codex_client,
     build_responses_kwargs,
@@ -38,6 +38,7 @@ from core.llm.adapters.base import (
     AdapterCallRequest,
     AdapterCallResult,
     CredentialDetection,
+    EmptyModelOutputError,
     EnvironmentReport,
     Message,
     ModelSpec,
@@ -50,9 +51,6 @@ from core.llm.loop_affinity import LoopAffineClientCache
 from core.orchestration.openai_api_lane import acquire_openai_api_lane_async
 
 log = logging.getLogger(__name__)
-
-
-CODEX_AUTH_PATH = Path.home() / ".codex" / "auth.json"
 
 
 @dataclass
@@ -130,7 +128,7 @@ class CodexOAuthAdapter:
         if not resolved:
             raise RuntimeError(
                 "CodexOAuthAdapter: ChatGPT OAuth not found. Looked in GEODE "
-                f"ProfileStore ('openai-codex' profile) and {CODEX_AUTH_PATH}. "
+                f"ProfileStore ('openai-codex' profile) and {codex_auth_path()}. "
                 "Run ``/login openai`` in GEODE or ``codex auth login`` in the "
                 "Codex CLI to provision credentials, or use the openai-payg / "
                 "codex-cli adapter."
@@ -236,10 +234,12 @@ class CodexOAuthAdapter:
                 dump_path or "<dump failed>",
             )
             if _fail_on_empty_text_enabled():
-                raise RuntimeError(
+                raise EmptyModelOutputError(
                     "codex-oauth: empty output_text "
                     f"model={req.model} stop_reason={result.stop_reason} "
-                    f"dump={dump_path or '<dump failed>'}"
+                    f"dump={dump_path or '<dump failed>'}",
+                    mark_recovered=lambda: _mark_empty_text_recovered(dump_path),
+                    mark_actionable=lambda: _mark_empty_text_actionable(dump_path),
                 )
         return result
 
@@ -393,7 +393,7 @@ class CodexOAuthAdapter:
                     ("geode_profile_store", "no openai-codex profile"),
                     (
                         "codex_auth_file",
-                        "missing" if not CODEX_AUTH_PATH.is_file() else "unreadable",
+                        "missing" if not codex_auth_path().is_file() else "unreadable",
                     ),
                 ),
                 hints=(
@@ -439,8 +439,8 @@ class CodexOAuthAdapter:
         # detect_credential only reports the source path — exact provenance
         # (GEODE profile vs Codex CLI file) is on EnvironmentReport's checks.
         source_path = (
-            str(CODEX_AUTH_PATH)
-            if CODEX_AUTH_PATH.is_file()
+            str(codex_auth_path())
+            if codex_auth_path().is_file()
             else "GEODE ProfileStore (openai-codex)"
         )
         return CredentialDetection(
@@ -520,6 +520,26 @@ def _dump_empty_text_postmortem(
 def _fail_on_empty_text_enabled() -> bool:
     raw = os.environ.get("GEODE_CODEX_OAUTH_FAIL_EMPTY_TEXT", "").strip().lower()
     return raw in {"1", "true", "yes", "on"}
+
+
+def _mark_empty_text_recovered(dump_path: str | None) -> None:
+    """Create an append-only marker only after the identical retry succeeds."""
+
+    if dump_path is None:
+        raise RuntimeError("cannot attest empty-output recovery without its diagnostic dump")
+    from pathlib import Path
+
+    Path(f"{dump_path}.recovered").touch(exist_ok=False)
+
+
+def _mark_empty_text_actionable(dump_path: str | None) -> None:
+    """Attest that an earlier tool action made the empty continuation usable."""
+
+    if dump_path is None:
+        raise RuntimeError("cannot attest actionable empty output without its diagnostic dump")
+    from pathlib import Path
+
+    Path(f"{dump_path}.actionable").touch(exist_ok=False)
 
 
 def _log_codex_input_shape(resp_input: Any, *, cap: int = 30) -> None:
