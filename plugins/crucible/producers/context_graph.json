@@ -75,7 +75,7 @@
       "name": "Codex KG producer",
       "summary": "Gives GPT-5.4 a bounded one-hop architecture subgraph plus structural closed failure codes, hides supervisor protocol paths, and accepts one general policy edit.",
       "tags": ["crucible", "producer", "knowledge-graph"],
-      "contentSha256": "c8f082f8d918ba6a68e28e23ceacfc2e47c0a92644774d9ff0a2d41d639fc058"
+      "contentSha256": "4ae52929dca0e7a6bbb8966f75076fb3895c3daf3fab2315e970ff5225ebc634"
     },
     {
       "id": "file:plugins/crucible/producers/replay.py",

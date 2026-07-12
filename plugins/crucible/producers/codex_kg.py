@@ -33,9 +33,9 @@ _CLOSED_FAILURE_CODES = frozenset(
 )
 _DEFAULT_GRAPH_PATH = Path(__file__).with_name("context_graph.json")
 _DEFAULT_OBJECTIVE = (
-    "Complete every policy-required step in multi-step tool workflows, including "
-    "required user actions, confirmations, state changes, and terminal verification, "
-    "without redundant repetition."
+    "Keep every multi-step tool workflow monotone: maintain the unresolved "
+    "policy-required actions and terminal checks, consume them one at a time, reuse "
+    "confirmed successes without repeating them, and stop only when none remain."
 )
 
 

@@ -678,9 +678,11 @@ def test_codex_producer_prompt_uses_can_cannot_policy_clauses() -> None:
     assert legacy_negative not in prompt.casefold()
 
 
-def test_codex_producer_objective_keeps_mechanism_open() -> None:
-    assert "required user actions" in _DEFAULT_OBJECTIVE
-    assert "terminal verification" in _DEFAULT_OBJECTIVE
+def test_codex_producer_objective_requires_monotone_progress() -> None:
+    assert "workflow monotone" in _DEFAULT_OBJECTIVE
+    assert "unresolved policy-required actions and terminal checks" in _DEFAULT_OBJECTIVE
+    assert "reuse confirmed successes without repeating them" in _DEFAULT_OBJECTIVE
+    assert "stop only when none remain" in _DEFAULT_OBJECTIVE
     assert "batch" not in _DEFAULT_OBJECTIVE
     assert "defer" not in _DEFAULT_OBJECTIVE
 

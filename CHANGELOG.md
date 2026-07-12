@@ -79,7 +79,10 @@ functional change.
   rather than score evidence. Its executable entrypoint selects the locked
   Python 3.12 project environment through `uv run --frozen`; the default
   producer objective, GPT-5.4 model, and high effort are source-frozen instead
-  of supplied as unhashed campaign environment values. The managed Codex OAuth
+  of supplied as unhashed campaign environment values. Reject feedback now
+  narrows that source-frozen objective to monotone consumption of unresolved
+  actions and terminal checks, with confirmed successes reused instead of
+  repeated. The managed Codex OAuth
   reader now honors `CODEX_HOME` under an isolated evaluator `HOME`, and tau2
   task identity normalizes the optional null fields materialized by runtime
   serialization so source packs and finalized results share one canonical
