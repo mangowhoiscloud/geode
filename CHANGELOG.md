@@ -45,6 +45,21 @@ functional change.
 
 ---
 
+## [0.99.310] - 2026-07-13
+
+### Added
+
+- **Crucible triad surfaces pinned.** The loop's three fixed surfaces are now
+  a package-level declaration (`TRIAD_PROGRAM`, `TRIAD_TRAIN_SURFACE`,
+  `TRIAD_PREPARE` in `plugins/crucible/__init__`) with drift tests: the
+  producer program path, the harness policy path, and the prepare entrypoint
+  can no longer silently re-fragment (`test_triad_surfaces.py`).
+- **Prepare provenance.** `prepare_campaign` stamps `prepared_by`
+  (`crucible.prepare-provenance.v1` with the spec content hash) into every
+  config it writes; the supervisor loader accepts and preserves the stamp
+  while keeping it out of the `config_id` identity hash, and inherited stamps
+  from template configs are replaced. Hand-written configs stay first-class.
+
 ## [0.99.309] - 2026-07-12
 
 ### Added

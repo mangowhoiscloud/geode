@@ -98,7 +98,7 @@
         "supervisor",
         "promotion"
       ],
-      "contentSha256": "69ad67950dbe2e3b556de32d43324d0f23023c6c704860544e8026dcba1f4b09"
+      "contentSha256": "c37d775f02d3ee4e62337d61383ca0daa87ced25c4053d4f45a8dea6aa377359"
     },
     {
       "id": "file:scripts/eval/crucible_tau2_evaluator.py",
@@ -121,7 +121,7 @@
         "producer",
         "knowledge-graph"
       ],
-      "contentSha256": "0d8230237dcd0cca5aeaaf816b03f00c17e26109941e0572653f97918480b829"
+      "contentSha256": "53696892a57b7435573337a6b8d9ce066f6844c991880c8fc8458db0c510452f"
     },
     {
       "id": "file:plugins/crucible/program.md",

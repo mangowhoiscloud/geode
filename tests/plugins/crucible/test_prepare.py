@@ -1,3 +1,4 @@
+import hashlib
 import json
 from pathlib import Path
 
@@ -164,3 +165,63 @@ def test_prepare_rejects_pack_file_and_curation_together(tmp_path: Path) -> None
     spec_path = _write_spec(tmp_path, config, curation={"tasks_file": "x"})
     with pytest.raises(ContractError, match="cannot carry both"):
         prepare_campaign(spec_path)
+
+
+def test_prepare_stamps_provenance_outside_the_identity_hash(tmp_path: Path) -> None:
+    config, _baseline = _config(tmp_path)
+    spec_path = _write_spec(tmp_path, config)
+    report = prepare_campaign(spec_path)
+
+    saved = json.loads(Path(report["config_path"]).read_text(encoding="utf-8"))
+    provenance = saved["prepared_by"]
+    assert provenance["schema"] == "crucible.prepare-provenance.v1"
+    assert provenance["entry"] == "plugins.crucible.prepare"
+    assert provenance["spec_sha256"] == hashlib.sha256(spec_path.read_bytes()).hexdigest()
+    assert report["spec_sha256"] == provenance["spec_sha256"]
+
+    prepared = SupervisorConfig.load(Path(report["config_path"]))
+    assert prepared.prepared_by == provenance
+    assert prepared.to_dict()["prepared_by"] == provenance
+    # Identity stays provenance-free: the same experiment prepared from two
+    # different specs must keep one config_id.
+    assert "prepared_by" not in prepared.payload()
+
+    round_trip_path = tmp_path / "round-trip.config.json"
+    round_trip_path.write_text(json.dumps(prepared.to_dict()), encoding="utf-8")
+    round_tripped = SupervisorConfig.load(round_trip_path)
+    assert round_tripped.prepared_by == provenance
+    assert round_tripped.config_id == prepared.config_id
+
+    mutated = {
+        **prepared.to_dict(),
+        "prepared_by": {
+            "schema": "crucible.prepare-provenance.v1",
+            "entry": "hand",
+            "spec_sha256": "0" * 64,
+        },
+    }
+    mutated_path = tmp_path / "mutated.config.json"
+    mutated_path.write_text(json.dumps(mutated), encoding="utf-8")
+    assert SupervisorConfig.load(mutated_path).config_id == prepared.config_id
+
+
+def test_prepare_replaces_inherited_provenance(tmp_path: Path) -> None:
+    config, _baseline = _config(tmp_path)
+    template_path = tmp_path / "template.config.json"
+    stale = {**config.to_dict(), "prepared_by": {"schema": "stale", "entry": "hand"}}
+    template_path.write_text(json.dumps(stale), encoding="utf-8")
+    spec = {
+        "schema": "crucible.campaign-spec.v1",
+        "campaign_id": "prepared-campaign",
+        "template_config": str(template_path),
+        "head_sha": config.initial_search_head_sha,
+        "pack_file": str(_write_pack(tmp_path, config)),
+        "state_root": str(tmp_path / "campaigns"),
+    }
+    spec_path = tmp_path / "spec.json"
+    spec_path.write_text(json.dumps(spec), encoding="utf-8")
+
+    report = prepare_campaign(spec_path)
+    saved = json.loads(Path(report["config_path"]).read_text(encoding="utf-8"))
+    assert saved["prepared_by"]["entry"] == "plugins.crucible.prepare"
+    assert saved["prepared_by"]["schema"] == "crucible.prepare-provenance.v1"
