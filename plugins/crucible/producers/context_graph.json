@@ -121,7 +121,7 @@
         "producer",
         "knowledge-graph"
       ],
-      "contentSha256": "844b4161b463cf5fb6301ad4c64fc0271af9e5db7745e8be5eb6a7da96370948"
+      "contentSha256": "f0cbd12f351fc4b1fc3e4f26291cdb7e648cc98570bacc67ad94aef07d06865e"
     },
     {
       "id": "file:plugins/crucible/program.md",
@@ -133,7 +133,7 @@
         "producer",
         "program"
       ],
-      "contentSha256": "29c42f4296343582fd991f2db944640c73a6dea14d734a760f8867d57164280d"
+      "contentSha256": "a7cf8d4721e58fd49e944303588900bdb985ea96a56bc2778c332709e02641d1"
     },
     {
       "id": "file:plugins/crucible/producers/replay.py",

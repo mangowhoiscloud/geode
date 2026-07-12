@@ -8,6 +8,17 @@ setup, and dynamic-feedback boundary in one tracked document.
 test—the analogue of autoresearch's `train.py`. It is not this program and
 cannot define its own evaluator, budget, or promotion rule.
 
+## Objective
+
+The default campaign objective. ``search.objective`` in a supervisor config
+overrides it per campaign; absent an override, the producer consumes exactly
+the quoted text below.
+
+> Keep every multi-step tool workflow monotone: maintain the unresolved
+> policy-required actions and terminal checks, consume them one at a time,
+> reuse confirmed successes without repeating them, and stop only when none
+> remain.
+
 ## Experimentation
 
 Only the body of `<candidate_program>` is sent to the producer model. The

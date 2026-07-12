@@ -825,6 +825,12 @@ def test_codex_producer_prompt_uses_can_cannot_policy_clauses() -> None:
 
 
 def test_codex_producer_objective_requires_monotone_progress() -> None:
+    # The objective's single source of truth is program.md; the code module
+    # must not carry the literal (dual-SoT drift pin).
+    import plugins.crucible.producers.codex_kg as _codex_kg_module
+
+    module_source = Path(_codex_kg_module.__file__).read_text(encoding="utf-8")
+    assert "workflow monotone" not in module_source
     assert "workflow monotone" in _DEFAULT_OBJECTIVE
     assert "unresolved policy-required actions and terminal checks" in _DEFAULT_OBJECTIVE
     assert "reuse confirmed successes without repeating them" in _DEFAULT_OBJECTIVE
@@ -836,6 +842,7 @@ def test_codex_producer_program_is_tracked_model_facing_source() -> None:
     source = _DEFAULT_PROGRAM_PATH.read_text(encoding="utf-8")
 
     assert _DEFAULT_PROGRAM_PATH.name == "program.md"
+    assert "## Objective" in source
     assert "## Experimentation" in source
     assert "## Constraints" in source
     assert "## Preferences" in source

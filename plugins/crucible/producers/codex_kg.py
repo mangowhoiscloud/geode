@@ -47,15 +47,29 @@ _PROGRAM_TOKENS = frozenset(
         "{{surfaces_json}}",
     }
 )
-_DEFAULT_OBJECTIVE = (
-    "Keep every multi-step tool workflow monotone: maintain the unresolved "
-    "policy-required actions and terminal checks, consume them one at a time, reuse "
-    "confirmed successes without repeating them, and stop only when none remain."
-)
-
-
 class ProducerError(RuntimeError):
     """A candidate cannot be emitted without violating the producer contract."""
+
+
+def _objective_from_program(path: Path = _DEFAULT_PROGRAM_PATH) -> str:
+    """Read the default objective from ``program.md`` (P7): changing search
+    behaviour is a document edit, not a code edit. Only the blockquote under
+    ``## Objective`` is consumed, so the section can carry operator prose."""
+    source = path.read_text(encoding="utf-8")
+    section = re.search(r"^## Objective$(.*?)(?=^## |\Z)", source, flags=re.M | re.S)
+    if section is None:
+        raise ProducerError("program.md must define an '## Objective' section")
+    quoted = [
+        line.lstrip(">").strip()
+        for line in section.group(1).splitlines()
+        if line.startswith(">")
+    ]
+    if not quoted:
+        raise ProducerError("program.md '## Objective' must quote the default objective")
+    return " ".join(quoted)
+
+
+_DEFAULT_OBJECTIVE = _objective_from_program()
 
 
 def _load_object(path: Path, field: str, *, limit: int = 1024 * 1024) -> dict[str, Any]:
