@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import time
+from pathlib import Path
 from unittest.mock import patch
 
 import pytest
@@ -90,6 +91,34 @@ class TestParseCodexCredentials:
 
 
 class TestReadCodexCredentials:
+    def test_codex_home_override_survives_an_isolated_home(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        codex_home = tmp_path / "codex"
+        codex_home.mkdir()
+        codex_home.joinpath("auth.json").write_text(
+            json.dumps(
+                {
+                    "tokens": {
+                        "access_token": "override-token",
+                        "refresh_token": "override-refresh",
+                    }
+                }
+            ),
+            encoding="utf-8",
+        )
+        isolated_home = tmp_path / "isolated"
+        isolated_home.mkdir()
+        monkeypatch.setenv("HOME", str(isolated_home))
+        monkeypatch.setenv("CODEX_HOME", str(codex_home))
+
+        result = read_codex_cli_credentials(force_refresh=True)
+
+        assert result is not None
+        assert result["access_token"] == "override-token"
+
     def test_file_read_success(self):
         fake_data = {
             "tokens": {

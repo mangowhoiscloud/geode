@@ -2,7 +2,17 @@
 
 > Action/tool-execution 4종 벤치마크. GEODE의 quality ratchet(P4)에 통합 예정.
 > 각 문서는 **사례 + 필요 인프라 + 4-Phase 진행 시나리오**를 담음.
-> 마지막 갱신: 2026-07-03
+> 마지막 갱신: 2026-07-13
+
+## Raw artifact repository
+
+Heavy verifier output, transcripts, and Crucible campaign state live in the
+separate append-only
+[`mangowhoiscloud/geode-eval-artifacts`](https://github.com/mangowhoiscloud/geode-eval-artifacts)
+repository. GEODE keeps interpretation, comparison boundaries, and digest
+pointers under `docs/eval/`; the artifact repository keeps the bytes behind
+those claims. See [External Evaluation Artifact Repository](external-artifact-repository.md)
+for path mappings, disclosure rules, and the publication manifest scaffold.
 
 ## 채택 4종
 

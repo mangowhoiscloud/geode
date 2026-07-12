@@ -11,20 +11,26 @@ import json
 import logging
 import threading
 import time
+from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
 log = logging.getLogger(__name__)
 
 
-def read_json_credentials_file(relative_path: str) -> dict[str, Any] | None:
-    """Read & json-parse a credentials file under ``$HOME/<relative_path>``.
+def _credential_path(value: str | Path | Callable[[], Path]) -> Path:
+    path = value() if callable(value) else Path(value)
+    return path if path.is_absolute() else Path.home() / path
+
+
+def read_json_credentials_file(path: str | Path) -> dict[str, Any] | None:
+    """Read and parse an absolute path or a path relative to ``$HOME``.
 
     Returns the parsed dict, or ``None`` if the file is missing, unreadable,
     invalid JSON, or not a JSON object. Callers extract the field they need.
     """
     try:
-        raw = (Path.home() / relative_path).read_text(encoding="utf-8")
+        raw = _credential_path(path).read_text(encoding="utf-8")
         data = json.loads(raw)
     except (OSError, json.JSONDecodeError):
         return None
@@ -42,18 +48,26 @@ class CredentialCache:
         ttl_s: Cache lifetime in seconds (default 15 min).
     """
 
-    def __init__(self, file_path: str, ttl_s: float = _DEFAULT_TTL_S) -> None:
+    def __init__(
+        self,
+        file_path: str | Path | Callable[[], Path],
+        ttl_s: float = _DEFAULT_TTL_S,
+    ) -> None:
         self._file_path = file_path
         self._ttl_s = ttl_s
         self._lock = threading.Lock()
         self._value: Any = None
         self._read_at: float = 0.0
         self._mtime: float = 0.0
+        self._resolved_path: Path | None = None
+
+    def file_path(self) -> Path:
+        return _credential_path(self._file_path)
 
     def get_file_mtime(self) -> float:
         """Get mtime of the tracked file (0.0 if not found)."""
         try:
-            return (Path.home() / self._file_path).stat().st_mtime
+            return self.file_path().stat().st_mtime
         except OSError:
             return 0.0
 
@@ -62,6 +76,8 @@ class CredentialCache:
         if self._value is None:
             return False
         if (time.time() - self._read_at) >= self._ttl_s:
+            return False
+        if self._resolved_path != self.file_path():
             return False
         current_mtime = self.get_file_mtime()
         return not (current_mtime > 0 and current_mtime != self._mtime)
@@ -79,6 +95,7 @@ class CredentialCache:
             self._value = value
             self._read_at = time.time()
             self._mtime = mtime
+            self._resolved_path = self.file_path()
 
     def invalidate(self) -> None:
         """Force next read to bypass cache."""
@@ -86,6 +103,7 @@ class CredentialCache:
             self._value = None
             self._read_at = 0.0
             self._mtime = 0.0
+            self._resolved_path = None
 
 
 def refresh_managed_token(

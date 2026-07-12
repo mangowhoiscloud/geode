@@ -13,7 +13,7 @@ from typing import Any, Literal, cast
 from .artifacts import load_json_object
 from .contract import ContractError, ExperimentContract
 
-EVIDENCE_SCHEMA = "crucible.evidence.v1"
+EVIDENCE_SCHEMA = "crucible.evidence.v3"
 
 
 def _mapping(value: object, field: str) -> Mapping[str, Any]:

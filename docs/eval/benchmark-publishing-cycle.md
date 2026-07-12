@@ -12,7 +12,7 @@ One complete cycle has six gates:
 |---|---|
 | 1. Scope | Benchmark, suite, model route, reasoning setting, budget, and live-test approval are written down |
 | 2. Harness | Upstream source, version, local path, install command, and smoke result are recorded |
-| 3. Run | Raw result artifacts, verifier outputs, transcripts, token/time totals, and failures are preserved |
+| 3. Run | Raw result artifacts, verifier outputs, transcripts, token/time totals, and failures are preserved locally, then admitted to the external artifact repository |
 | 4. Interpret | Comparability boundaries and external baselines are separated from GEODE scores |
 | 5. Publish | Internal ledger and public docs page are updated from the same run record |
 | 6. Deploy | Feature PR merges to `develop`, `develop` merges to `main`, Pages deploy succeeds, live URL is checked |
@@ -53,6 +53,14 @@ docs/eval/<benchmark-or-cluster>.md          # internal evidence ledger
 site/src/app/docs/benchmarks/<...>/page.tsx  # public page
 ```
 
+Published raw bytes are copied append-only to
+[`mangowhoiscloud/geode-eval-artifacts`](https://github.com/mangowhoiscloud/geode-eval-artifacts)
+using the mapping and disclosure contract in
+[`external-artifact-repository.md`](external-artifact-repository.md). Start
+each publication from `artifact-publish-manifest.template.json`; record the
+artifact-repository commit in the GEODE run ledger. Local ignored paths alone
+are not a durable public citation.
+
 Do not publish machine-local absolute paths, API keys, OAuth tokens, or copied
 subscription credentials. Public docs should use `<geode-worktree>` and route
 labels such as `source=subscription` instead.
@@ -86,6 +94,9 @@ labels such as `source=subscription` instead.
    argument normalization or EOF offload.
 5. If a task fails, keep the failure as data unless the harness setup itself is
    invalid.
+6. Classify every artifact as public or withheld before copying. Unopened
+   Crucible sealed packs, selected-row manifests, and selection salts remain
+   withheld until the one-shot claim is consumed and disclosure is reviewed.
 
 ### 4. Interpret
 
@@ -99,11 +110,14 @@ labels such as `source=subscription` instead.
 
 ### 5. Publish
 
-1. Update the internal ledger in `docs/eval/`.
-2. Add or update a public docs page under `site/src/app/docs/benchmarks/`.
-3. Add the page to `site/src/lib/geode-docs/sitemap.ts`.
-4. If a public page includes commands, scrub local usernames and secrets.
-5. Run site checks before opening the PR.
+1. Build and verify an artifact publication manifest.
+2. Copy only public entries to `geode-eval-artifacts` through its own PR; keep
+   the destination commit and paths.
+3. Update the internal ledger in `docs/eval/` with those immutable links.
+4. Add or update a public docs page under `site/src/app/docs/benchmarks/`.
+5. Add the page to `site/src/lib/geode-docs/sitemap.ts`.
+6. If a public page includes commands, scrub local usernames and secrets.
+7. Run site checks before opening the GEODE PR.
 
 ### 6. Merge and Deploy
 
@@ -151,6 +165,8 @@ curl -L https://mangowhoiscloud.github.io/geode/docs/benchmarks/<path> | rg "<sc
 A benchmark publishing cycle is done when all of these are true:
 
 - Raw artifacts are preserved in an ignored artifact directory.
+- Public raw artifacts are mirrored append-only to `geode-eval-artifacts`, and
+  the GEODE ledger records the artifact-repository commit.
 - Internal ledger explains setup, result, and comparability.
 - Public docs page exposes the score, command, artifact pointer, and caveats.
 - CI passed on the feature PR.

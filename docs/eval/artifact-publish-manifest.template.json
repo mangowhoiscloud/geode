@@ -1,0 +1,41 @@
+{
+  "artifact_repository": {
+    "base_revision": "<full-sha-before-publication>",
+    "destination_prefix": "<mcpmark|tau2|crucible/path>",
+    "url": "https://github.com/mangowhoiscloud/geode-eval-artifacts"
+  },
+  "entries": [
+    {
+      "bytes": 0,
+      "classification": "public",
+      "local_path": "<repo-relative-or-artifact-root-relative-path>",
+      "remote_path": "<destination-relative-path>",
+      "sha256": "<64-lowercase-hex>"
+    },
+    {
+      "bytes": 0,
+      "classification": "withheld-sealed",
+      "local_path": "<withheld-local-path>",
+      "reason": "unopened one-shot holdout",
+      "remote_path": null,
+      "sha256": "<64-lowercase-hex>"
+    }
+  ],
+  "geode": {
+    "repository": "https://github.com/mangowhoiscloud/geode",
+    "revision": "<full-geode-sha>",
+    "run_record": "docs/eval/<record>.md"
+  },
+  "publication": {
+    "artifact_merge_revision": null,
+    "published_at": null,
+    "status": "prepared"
+  },
+  "run_id": "<stable-run-id>",
+  "schema": "geode.eval-artifact-publication.v1",
+  "verification": {
+    "local_identity_scrubbed": false,
+    "secret_scan_passed": false,
+    "source_hashes_verified": false
+  }
+}

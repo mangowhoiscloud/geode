@@ -5,33 +5,43 @@ from types import ModuleType, SimpleNamespace
 
 import pytest
 from plugins.benchmark_harness.tau2_geode_agent import (
-    _agent_system_prompt,
     _assert_tau2_route_ready,
     _codex_empty_text_dumps,
-    _message_to_prompt,
     _pin_tau2_data_root,
     _raise_on_new_codex_empty_text_dumps,
     _require_contract_snapshot,
     _reserve_contract_run_id,
     _resolve_num_tasks,
     _restore_tau2_data_root,
-    _tau2_tool_calls,
     _trajectory_snapshot_paths,
-    _user_system_prompt,
     _validate_contract_output_paths,
     _validate_contract_run_args,
     _validate_contract_runtime_policy,
     _validate_tau2_task_order,
     _write_trajectory_snapshot,
 )
+from plugins.benchmark_harness.tau2_turn_supervisor import (
+    GeodeTau2State,
+    _agent_system_prompt,
+    _message_to_prompt,
+    _run_geode_turn,
+    _tau2_terminal_token,
+    _tau2_tool_calls,
+    _Tau2TurnDeadlineError,
+    _tool_mutates_state,
+    _user_system_prompt,
+)
+from plugins.crucible.contract import TaskUnit
+from plugins.crucible.verifiers.tau2 import tau2_task_unit
 
 
 def test_tau2_agent_prompt_blocks_inferred_optional_tool_args() -> None:
     prompt = _agent_system_prompt("Policy body")
 
-    assert "leave optional arguments unset" in prompt
+    assert "CAN leave optional tool arguments unset" in prompt
     assert "unless the user, the policy, or a prior tool result explicitly supplied" in prompt
-    assert "Do not add inferred descriptions" in prompt
+    assert "CANNOT add inferred descriptions" in prompt
+    assert "do not" not in prompt.lower()
     assert "Policy body" in prompt
 
 
@@ -84,6 +94,76 @@ def test_tau2_explicit_task_pack_rejects_loader_reordering(
         _validate_tau2_task_order(config)
 
 
+def test_tau2_explicit_task_pack_rejects_loaded_content_drift(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    raw_task = {
+        "id": "task-A",
+        "description": {"purpose": "actual"},
+        "evaluation_criteria": {"actions": [{"name": "lookup"}]},
+        "user_tools": None,
+    }
+    loaded = SimpleNamespace(
+        id="task-A",
+        model_dump=lambda **_kwargs: raw_task,
+    )
+    fake_tau2 = ModuleType("tau2")
+    fake_registry_module = ModuleType("tau2.registry")
+    fake_helpers = ModuleType("tau2.runner.helpers")
+    fake_registry_module.registry = SimpleNamespace(get_agent_task_filter=lambda _agent: None)
+    fake_helpers.get_tasks = lambda **_kwargs: [loaded]
+    monkeypatch.setitem(sys.modules, "tau2", fake_tau2)
+    monkeypatch.setitem(sys.modules, "tau2.registry", fake_registry_module)
+    monkeypatch.setitem(sys.modules, "tau2.runner.helpers", fake_helpers)
+    config = SimpleNamespace(
+        task_ids=["task-A"],
+        task_set_name="retail",
+        domain="retail",
+        task_split_name="base",
+        effective_agent="geode_agent",
+    )
+    actual = tau2_task_unit(raw_task)
+    contract = SimpleNamespace(
+        tasks=(TaskUnit(actual.task_id, actual.family_id, "0" * 64),),
+    )
+
+    with pytest.raises(ValueError, match="loaded task identities"):
+        _validate_tau2_task_order(config, contract)
+
+
+def test_tau2_explicit_task_pack_accepts_exact_loaded_identities(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    raw_task = {
+        "id": "task-A",
+        "description": {"purpose": "actual"},
+        "evaluation_criteria": {"actions": [{"name": "lookup"}]},
+        "user_tools": None,
+    }
+    loaded = SimpleNamespace(
+        id="task-A",
+        model_dump=lambda **_kwargs: raw_task,
+    )
+    fake_tau2 = ModuleType("tau2")
+    fake_registry_module = ModuleType("tau2.registry")
+    fake_helpers = ModuleType("tau2.runner.helpers")
+    fake_registry_module.registry = SimpleNamespace(get_agent_task_filter=lambda _agent: None)
+    fake_helpers.get_tasks = lambda **_kwargs: [loaded]
+    monkeypatch.setitem(sys.modules, "tau2", fake_tau2)
+    monkeypatch.setitem(sys.modules, "tau2.registry", fake_registry_module)
+    monkeypatch.setitem(sys.modules, "tau2.runner.helpers", fake_helpers)
+    config = SimpleNamespace(
+        task_ids=["task-A"],
+        task_set_name="retail",
+        domain="retail",
+        task_split_name="base",
+        effective_agent="geode_agent",
+    )
+    contract = SimpleNamespace(tasks=(tau2_task_unit(raw_task),))
+
+    _validate_tau2_task_order(config, contract)
+
+
 def test_tau2_data_root_ignores_ambient_override(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -100,11 +180,23 @@ def test_tau2_data_root_ignores_ambient_override(
     assert os.environ["TAU2_DATA_DIR"] == str(tmp_path / "ambient")
 
 
-@pytest.mark.parametrize(
-    "tool_name",
-    ["modify_pending_order_address", "modify_user_address"],
-)
-def test_tau2_tool_calls_preserves_required_empty_address2(
+def test_tau2_tool_mutability_uses_upstream_marker_and_fails_safe() -> None:
+    read_tool = SimpleNamespace(
+        name="unconventional_query",
+        _func=SimpleNamespace(__mutates_state__=False),
+    )
+    write_tool = SimpleNamespace(
+        name="get_but_mutate",
+        _func=SimpleNamespace(__mutates_state__=True),
+    )
+
+    assert _tool_mutates_state(read_tool) is False
+    assert _tool_mutates_state(write_tool) is True
+    assert _tool_mutates_state(SimpleNamespace(name="get_unknown")) is True
+
+
+@pytest.mark.parametrize("tool_name", ["modify_user_address", "future_required_empty"])
+def test_tau2_tool_calls_preserves_explicit_empty_arguments(
     monkeypatch: pytest.MonkeyPatch,
     tool_name: str,
 ) -> None:
@@ -131,12 +223,70 @@ def test_tau2_tool_calls_preserves_required_empty_address2(
     assert calls[0].arguments["address2"] == ""
 
 
+def test_tau2_tool_projection_is_scoped_to_each_agentic_run(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    fake_tau2 = ModuleType("tau2")
+    fake_data_model = ModuleType("tau2.data_model")
+    fake_message = ModuleType("tau2.data_model.message")
+    fake_message.ToolCall = SimpleNamespace
+    monkeypatch.setitem(sys.modules, "tau2", fake_tau2)
+    monkeypatch.setitem(sys.modules, "tau2.data_model", fake_data_model)
+    monkeypatch.setitem(sys.modules, "tau2.data_model.message", fake_message)
+    first = SimpleNamespace(
+        tool_calls=[
+            {
+                "tool_use_id": "call_1",
+                "tool": "lookup_account",
+                "input": {"account_id": "A"},
+                "result": {"ok": True},
+            }
+        ]
+    )
+    second = SimpleNamespace(
+        tool_calls=[
+            {
+                "tool_use_id": "call_2",
+                "tool": "reset_settings",
+                "input": {"account_id": "A"},
+                "result": {"ok": True},
+            },
+        ]
+    )
+
+    first_calls = _tau2_tool_calls(first, requestor="assistant")
+    second_calls = _tau2_tool_calls(second, requestor="assistant")
+
+    assert [call.id for call in first_calls] == ["call_1"]
+    assert [call.id for call in second_calls] == ["call_2"]
+
+
+def test_tau2_progress_supervisor_maps_only_generic_repeated_success() -> None:
+    assert (
+        _tau2_terminal_token(SimpleNamespace(termination_reason="repeated_success_no_progress"))
+        == "###STOP###"
+    )
+    assert _tau2_terminal_token(SimpleNamespace(termination_reason="max_rounds")) is None
+
+
+def test_tau2_external_deadline_stops_before_an_expired_participant_call() -> None:
+    loop = SimpleNamespace(arun=lambda _prompt: None)
+    state = GeodeTau2State(loop=loop, deadline_at=0.0)
+
+    with pytest.raises(_Tau2TurnDeadlineError, match="deadline elapsed"):
+        _run_geode_turn(state, "next turn")
+
+
 def test_tau2_contract_run_must_match_frozen_identity_axes() -> None:
     assay_config = {
         "schema": "crucible.tau2-assay.v1",
+        "max_concurrency": 1,
+        "timeout": 600.0,
+        "agent": {"implementation": "geode_agent", "max_rounds": 0},
         "user": {
             "implementation": "user_simulator",
             "runtime_owner": "evaluator",
+            "max_rounds": 0,
         },
     }
     contract = SimpleNamespace(
@@ -201,7 +351,9 @@ def test_tau2_contract_run_must_match_frozen_identity_axes() -> None:
 
 def test_tau2_contract_run_rejects_runtime_candidate_knobs() -> None:
     args = SimpleNamespace(
+        agent_max_rounds=0,
         max_retries=0,
+        user_max_rounds=0,
         user="user_simulator",
         allow_empty_geode_turn=False,
         auto_resume=False,
@@ -216,6 +368,11 @@ def test_tau2_contract_run_rejects_runtime_candidate_knobs() -> None:
 
     args.max_retries = 1
     with pytest.raises(ValueError, match="code-only runtime policy"):
+        _validate_contract_runtime_policy(args)
+
+    args.max_retries = 0
+    args.agent_max_rounds = 1
+    with pytest.raises(ValueError, match="--agent-max-rounds=0"):
         _validate_contract_runtime_policy(args)
 
 
@@ -271,6 +428,36 @@ def test_tau2_codex_empty_text_dump_backstop_detects_new_dump(
 
     with pytest.raises(RuntimeError, match="empty output_text"):
         _raise_on_new_codex_empty_text_dumps(before)
+
+
+def test_tau2_codex_empty_text_dump_backstop_accepts_recovered_retry(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr("core.paths.GLOBAL_DIAGNOSTICS_DIR", tmp_path)
+    dump_dir = tmp_path / "codex-oauth-empty-text"
+    dump_dir.mkdir()
+    before = _codex_empty_text_dumps()
+    recovered = dump_dir / "2-gpt-5.5.json"
+    recovered.write_text("{}\n")
+    Path(f"{recovered}.recovered").touch()
+
+    _raise_on_new_codex_empty_text_dumps(before)
+
+
+def test_tau2_codex_empty_text_dump_backstop_accepts_actionable_partial(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr("core.paths.GLOBAL_DIAGNOSTICS_DIR", tmp_path)
+    dump_dir = tmp_path / "codex-oauth-empty-text"
+    dump_dir.mkdir()
+    before = _codex_empty_text_dumps()
+    actionable = dump_dir / "2-gpt-5.5.json"
+    actionable.write_text("{}\n")
+    Path(f"{actionable}.actionable").touch()
+
+    _raise_on_new_codex_empty_text_dumps(before)
 
 
 def test_tau2_trajectory_snapshot_paths_sanitize_run_id() -> None:

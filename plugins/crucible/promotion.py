@@ -6,7 +6,7 @@ import hashlib
 import json
 import math
 import random
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from typing import Any, Literal, cast
 
@@ -18,8 +18,9 @@ from .evidence import (
     validate_evidence_identity,
 )
 
-VERDICT_SCHEMA = "crucible.verdict.v1"
+VERDICT_SCHEMA = "crucible.verdict.v3"
 _COMPUTED_VETOES = frozenset({"budget", "infra_clean", "task_coverage"})
+SCREENING_FAILURE = "promotion_unreachable_from_baseline"
 
 
 def _canonical_hash(payload: dict[str, Any]) -> str:
@@ -59,6 +60,137 @@ def _paired_bootstrap_lower_bound(
     return bootstrap_means[index]
 
 
+def paired_bootstrap_lower_bound(
+    deltas: Sequence[float],
+    *,
+    samples: int,
+    confidence_level: float,
+) -> float:
+    """Return the production lower bound independent of arbitrary family order."""
+
+    canonical_deltas = sorted(float(delta) for delta in deltas)
+    seed_payload = json.dumps(canonical_deltas, separators=(",", ":")).encode("utf-8")
+    seed = int(hashlib.sha256(seed_payload).hexdigest()[:16], 16)
+    return _paired_bootstrap_lower_bound(
+        canonical_deltas,
+        samples=samples,
+        confidence_level=confidence_level,
+        seed=seed,
+    )
+
+
+def _paired_lower_bound(contract: ExperimentContract, deltas: list[float]) -> float:
+    return paired_bootstrap_lower_bound(
+        deltas,
+        samples=contract.promotion.bootstrap_samples,
+        confidence_level=contract.promotion.confidence_level,
+    )
+
+
+@dataclass(frozen=True)
+class PromotionReachability:
+    """Best possible metric outcome after one complete baseline arm."""
+
+    metric_ceiling: float
+    baseline_mean: float
+    candidate_mean_ceiling: float
+    paired_improvement_ceiling: float
+    improvement_lower_bound_ceiling: float
+    reasons: tuple[str, ...]
+
+    @property
+    def reachable(self) -> bool:
+        return not self.reasons
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "schema": "crucible.promotion-reachability.v1",
+            "reachable": self.reachable,
+            "metric_ceiling": self.metric_ceiling,
+            "baseline_mean": self.baseline_mean,
+            "candidate_mean_ceiling": self.candidate_mean_ceiling,
+            "paired_improvement_ceiling": self.paired_improvement_ceiling,
+            "improvement_lower_bound_ceiling": self.improvement_lower_bound_ceiling,
+            "reasons": list(self.reasons),
+        }
+
+
+def promotion_reachability(
+    contract: ExperimentContract,
+    baseline: EvidenceEnvelope,
+    *,
+    metric_ceiling: float,
+) -> PromotionReachability:
+    """Prove whether any candidate metric vector can still clear the frozen rule.
+
+    This is a necessary-condition screen, not a score.  It assumes the best
+    possible candidate value for every frozen pair and ignores candidate vetoes.
+    A reachable result therefore grants no authority; an unreachable result can
+    safely avoid an arm whose outcome cannot change the train decision.
+    """
+
+    if (
+        isinstance(metric_ceiling, bool)
+        or not isinstance(metric_ceiling, (int, float))
+        or not math.isfinite(metric_ceiling)
+    ):
+        raise ContractError("metric_ceiling must be finite")
+    ceiling = float(metric_ceiling)
+    validate_evidence_identity(contract, baseline, arm="baseline")
+    expected = expected_pairs(contract)
+    if baseline.execution_status != "complete" or any(
+        row.status != "completed" for row in baseline.rows
+    ):
+        raise ContractError("promotion reachability requires a complete baseline")
+    baseline_by_pair = {row.pair_id: row for row in baseline.rows}
+    if set(baseline_by_pair) != set(expected):
+        raise ContractError("promotion reachability requires exact baseline coverage")
+
+    metric_name = contract.promotion.primary_metric
+    by_task: dict[str, list[float]] = {task_id: [] for task_id in contract.task_ids}
+    for pair_id in expected:
+        value = baseline_by_pair[pair_id].metric(metric_name)
+        if value is None:
+            raise ContractError(f"promotion reachability requires baseline metric {metric_name!r}")
+        if value > ceiling:
+            raise ContractError("baseline metric exceeds the declared metric ceiling")
+        task_id, _trial = pair_id
+        by_task[task_id].append(value)
+
+    task_means = {task_id: _mean(values) for task_id, values in by_task.items()}
+    family_order = tuple(dict.fromkeys(contract.family_ids))
+    tasks_by_family: dict[str, list[str]] = {family_id: [] for family_id in family_order}
+    for task in contract.tasks:
+        tasks_by_family[task.family_id].append(task.task_id)
+    baseline_values = [
+        _mean([task_means[task_id] for task_id in tasks_by_family[family_id]])
+        for family_id in family_order
+    ]
+    deltas = [ceiling - value for value in baseline_values]
+    baseline_mean = _mean(baseline_values)
+    improvement_ceiling = _mean(deltas)
+    lower_bound_ceiling = _paired_lower_bound(contract, deltas)
+    reasons: list[str] = []
+    if len(contract.task_ids) < contract.promotion.minimum_tasks:
+        reasons.append("insufficient_tasks")
+    if len(family_order) < contract.promotion.minimum_families:
+        reasons.append("insufficient_families")
+    if ceiling < contract.promotion.minimum_candidate_mean:
+        reasons.append("candidate_ceiling_below_absolute_floor")
+    if improvement_ceiling < contract.promotion.materiality_pp:
+        reasons.append("improvement_ceiling_below_materiality")
+    if lower_bound_ceiling <= 0:
+        reasons.append("confidence_ceiling_not_positive")
+    return PromotionReachability(
+        metric_ceiling=ceiling,
+        baseline_mean=baseline_mean,
+        candidate_mean_ceiling=ceiling,
+        paired_improvement_ceiling=improvement_ceiling,
+        improvement_lower_bound_ceiling=lower_bound_ceiling,
+        reasons=tuple(reasons),
+    )
+
+
 @dataclass(frozen=True)
 class PromotionVerdict:
     """Immutable KEEP/REJECT/INVALID decision with no side effects."""
@@ -73,6 +205,9 @@ class PromotionVerdict:
     vetoes: tuple[tuple[str, bool], ...]
     usage: ResourceUsage
     pair_count: int
+    task_count: int
+    family_count: int
+    trials_per_task: int
     baseline_mean: float | None = None
     candidate_mean: float | None = None
     paired_improvement: float | None = None
@@ -80,7 +215,10 @@ class PromotionVerdict:
 
     def canonical_payload(self) -> dict[str, Any]:
         metric: dict[str, float | int | None] = {
-            "pairs": self.pair_count,
+            "paired_rows": self.pair_count,
+            "task_units": self.task_count,
+            "family_units": self.family_count,
+            "trials_per_task": self.trials_per_task,
             "baseline_mean": self.baseline_mean,
             "candidate_mean": self.candidate_mean,
             "paired_improvement": self.paired_improvement,
@@ -138,9 +276,22 @@ class PromotionVerdict:
         metric = value.get("metric")
         if not isinstance(metric, Mapping):
             raise ContractError("verdict.metric must be an object")
-        pairs = metric.get("pairs")
+        pairs = metric.get("paired_rows")
         if isinstance(pairs, bool) or not isinstance(pairs, int) or pairs < 0:
-            raise ContractError("verdict.metric.pairs must be non-negative")
+            raise ContractError("verdict.metric.paired_rows must be non-negative")
+        task_units = metric.get("task_units")
+        if isinstance(task_units, bool) or not isinstance(task_units, int) or task_units < 0:
+            raise ContractError("verdict.metric.task_units must be non-negative")
+        family_units = metric.get("family_units")
+        if isinstance(family_units, bool) or not isinstance(family_units, int) or family_units < 0:
+            raise ContractError("verdict.metric.family_units must be non-negative")
+        trials_per_task = metric.get("trials_per_task")
+        if (
+            isinstance(trials_per_task, bool)
+            or not isinstance(trials_per_task, int)
+            or trials_per_task <= 0
+        ):
+            raise ContractError("verdict.metric.trials_per_task must be positive")
 
         def optional_float(field: str) -> float | None:
             raw = metric.get(field)
@@ -174,6 +325,9 @@ class PromotionVerdict:
             vetoes=tuple(sorted(vetoes_raw.items())),
             usage=ResourceUsage.from_mapping(value.get("usage")),
             pair_count=pairs,
+            task_count=task_units,
+            family_count=family_units,
+            trials_per_task=trials_per_task,
             baseline_mean=optional_float("baseline_mean"),
             candidate_mean=optional_float("candidate_mean"),
             paired_improvement=optional_float("paired_improvement"),
@@ -213,12 +367,29 @@ def decide(
     if not coverage_clean:
         reasons.append("task_coverage_incomplete")
 
+    baseline_complete = baseline.execution_status == "complete" and all(
+        row.status == "completed" for row in baseline.rows
+    )
+    screening_rejection = (
+        identity_clean
+        and coverage_clean
+        and baseline_complete
+        and candidate.execution_status == "invalid"
+        and candidate.failure_class == SCREENING_FAILURE
+        and candidate.usage == ResourceUsage(0.0, 0, 0, 0.0)
+        and all(
+            row.status == "infrastructure_error"
+            and row.failure_class == SCREENING_FAILURE
+            and row.termination_reason == SCREENING_FAILURE
+            for row in candidate.rows
+        )
+    )
     infra_clean = (
         baseline.execution_status == "complete"
         and candidate.execution_status == "complete"
         and all(row.status == "completed" for row in (*baseline.rows, *candidate.rows))
     )
-    if not infra_clean:
+    if not infra_clean and not screening_rejection:
         reasons.append("infrastructure_contamination")
 
     budget_clean = (
@@ -237,6 +408,27 @@ def decide(
     }
     custom_vetoes = sorted(set(contract.vetoes) - _COMPUTED_VETOES)
 
+    if screening_rejection:
+        veto_results["infra_clean"] = True
+        veto_results["task_coverage"] = False
+        for veto in custom_vetoes:
+            veto_results[veto] = False
+        return PromotionVerdict(
+            contract_id=contract.contract_id,
+            stage=contract.stage,
+            baseline_evidence_id=baseline.evidence_id,
+            candidate_evidence_id=candidate.evidence_id,
+            verdict="REJECT",
+            promotion_authority="none",
+            reasons=(SCREENING_FAILURE, *tuple(reasons)),
+            vetoes=tuple(sorted(veto_results.items())),
+            usage=usage,
+            pair_count=0,
+            task_count=len(contract.task_ids),
+            family_count=len(set(contract.family_ids)),
+            trials_per_task=contract.trials_per_task,
+        )
+
     if not identity_clean or not coverage_clean or not infra_clean:
         for veto in custom_vetoes:
             veto_results[veto] = False
@@ -251,6 +443,9 @@ def decide(
             vetoes=tuple(sorted(veto_results.items())),
             usage=usage,
             pair_count=0,
+            task_count=0,
+            family_count=0,
+            trials_per_task=contract.trials_per_task,
         )
 
     baseline_by_pair = {row.pair_id: row for row in baseline.rows}
@@ -296,6 +491,9 @@ def decide(
             vetoes=tuple(sorted(veto_results.items())),
             usage=usage,
             pair_count=len(expected),
+            task_count=0,
+            family_count=0,
+            trials_per_task=contract.trials_per_task,
         )
 
     for veto in custom_vetoes:
@@ -305,8 +503,24 @@ def decide(
         if not veto_results[veto]:
             reasons.append(f"veto_failed:{veto}")
 
-    baseline_values = [_mean(baseline_by_task_values[task_id]) for task_id in contract.task_ids]
-    candidate_values = [_mean(candidate_by_task_values[task_id]) for task_id in contract.task_ids]
+    baseline_task_means = {
+        task_id: _mean(baseline_by_task_values[task_id]) for task_id in contract.task_ids
+    }
+    candidate_task_means = {
+        task_id: _mean(candidate_by_task_values[task_id]) for task_id in contract.task_ids
+    }
+    family_order = tuple(dict.fromkeys(contract.family_ids))
+    tasks_by_family: dict[str, list[str]] = {family_id: [] for family_id in family_order}
+    for task in contract.tasks:
+        tasks_by_family[task.family_id].append(task.task_id)
+    baseline_values = [
+        _mean([baseline_task_means[task_id] for task_id in tasks_by_family[family_id]])
+        for family_id in family_order
+    ]
+    candidate_values = [
+        _mean([candidate_task_means[task_id] for task_id in tasks_by_family[family_id]])
+        for family_id in family_order
+    ]
     baseline_mean = _mean(baseline_values)
     candidate_mean = _mean(candidate_values)
     deltas = [
@@ -318,17 +532,12 @@ def decide(
         )
     ]
     paired_improvement = _mean(deltas)
-    seed_payload = json.dumps(deltas, separators=(",", ":")).encode("utf-8")
-    bootstrap_seed = int(hashlib.sha256(seed_payload).hexdigest()[:16], 16)
-    lower_bound = _paired_bootstrap_lower_bound(
-        deltas,
-        samples=contract.promotion.bootstrap_samples,
-        confidence_level=contract.promotion.confidence_level,
-        seed=bootstrap_seed,
-    )
+    lower_bound = _paired_lower_bound(contract, deltas)
 
     if len(contract.task_ids) < contract.promotion.minimum_tasks:
         reasons.append("insufficient_tasks")
+    if len(family_order) < contract.promotion.minimum_families:
+        reasons.append("insufficient_families")
     if candidate_mean < contract.promotion.minimum_candidate_mean:
         reasons.append("candidate_below_absolute_floor")
     if paired_improvement < contract.promotion.materiality_pp:
@@ -351,43 +560,11 @@ def decide(
         vetoes=tuple(sorted(veto_results.items())),
         usage=usage,
         pair_count=len(expected),
+        task_count=len(contract.task_ids),
+        family_count=len(family_order),
+        trials_per_task=contract.trials_per_task,
         baseline_mean=baseline_mean,
         candidate_mean=candidate_mean,
         paired_improvement=paired_improvement,
         improvement_lower_bound=lower_bound,
     )
-
-
-def paired_flip_counts(
-    contract: ExperimentContract,
-    baseline: EvidenceEnvelope,
-    candidate: EvidenceEnvelope,
-) -> tuple[int, int]:
-    """(flips, regressions) over task-level trial means of the primary metric.
-
-    A flip is a task whose candidate mean strictly exceeds its baseline mean;
-    a regression is the reverse. This is the loop-health emit consumed by the
-    class-prior writer and the target hit-rate metric; it renders no verdict.
-    """
-    metric_name = contract.promotion.primary_metric
-    baseline_by_task: dict[str, list[float]] = {task_id: [] for task_id in contract.task_ids}
-    candidate_by_task: dict[str, list[float]] = {task_id: [] for task_id in contract.task_ids}
-    for envelope, bucket in ((baseline, baseline_by_task), (candidate, candidate_by_task)):
-        for row in envelope.rows:
-            value = row.metric(metric_name)
-            if value is not None and row.task_id in bucket:
-                bucket[row.task_id].append(value)
-    flips = 0
-    regressions = 0
-    for task_id in contract.task_ids:
-        baseline_values = baseline_by_task[task_id]
-        candidate_values = candidate_by_task[task_id]
-        if not baseline_values or not candidate_values:
-            continue
-        baseline_mean = _mean(baseline_values)
-        candidate_mean = _mean(candidate_values)
-        if candidate_mean > baseline_mean:
-            flips += 1
-        elif candidate_mean < baseline_mean:
-            regressions += 1
-    return flips, regressions

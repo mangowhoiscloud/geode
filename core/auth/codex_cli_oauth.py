@@ -13,7 +13,9 @@ Token source: ~/.codex/auth.json
 from __future__ import annotations
 
 import logging
+import os
 import time
+from pathlib import Path
 from typing import Any, TypedDict
 
 from core.auth.credential_cache import (
@@ -25,9 +27,16 @@ from core.auth.jwt_claims import decode_jwt_claims
 
 log = logging.getLogger(__name__)
 
-_CODEX_AUTH_PATH = ".codex/auth.json"
 
-_cache = CredentialCache(_CODEX_AUTH_PATH)
+def codex_auth_path() -> Path:
+    """Resolve the Codex CLI credential under ``$CODEX_HOME`` or ``~/.codex``."""
+
+    configured = os.environ.get("CODEX_HOME", "").strip()
+    root = Path(configured).expanduser().resolve() if configured else Path.home() / ".codex"
+    return root / "auth.json"
+
+
+_cache = CredentialCache(codex_auth_path)
 
 
 class CodexCliCredentials(TypedDict, total=False):
@@ -51,8 +60,8 @@ def _decode_jwt_expiry(token: str) -> float | None:
 
 
 def _read_from_file() -> dict[str, Any] | None:
-    """Read tokens from ~/.codex/auth.json."""
-    data = read_json_credentials_file(_CODEX_AUTH_PATH)
+    """Read tokens from the resolved Codex CLI credential path."""
+    data = read_json_credentials_file(codex_auth_path())
     return data if data is not None and "tokens" in data else None
 
 

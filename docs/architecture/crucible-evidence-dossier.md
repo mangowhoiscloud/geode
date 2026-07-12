@@ -1,8 +1,12 @@
 # Crucible evidence dossier — 2026-07-10 deep research
 
-> Companion to [`crucible-kernel.md`](crucible-kernel.md). This file preserves
-> the externally sourced evidence behind the v0.99.289/290 gate redesign so
-> the claims outlive the session that gathered them. Method: a deep-research
+> Historical companion to [`crucible-kernel.md`](crucible-kernel.md), which is
+> the normative current design. This file preserves the externally sourced
+> evidence gathered around v0.99.289/290 so the research survives the later
+> withdrawal of those implementations. The fitted calibration, rich excerpt
+> feedback, and class-prior writer were removed by the standalone-kernel
+> hardening; their measurements below are hypotheses, not current promotion
+> evidence. Method: a deep-research
 > harness (102 agents: 5 search angles, 20 sources fetched, 97 claims
 > extracted, top 25 adversarially verified by 3 independent refuters each;
 > 4 verifier agents lost to a session limit). Tier 1 claims survived 3-0 or
@@ -14,11 +18,11 @@
 | Evidence cluster | Design consequence | Landed in |
 |---|---|---|
 | Paired designs halve sample size; question-level pairing is "free" variance reduction | Paired evaluator kept, unchanged | kernel v1 (validated) |
-| tau2-scale packs are severely underpowered for 5pp at fixed 95%; v1 gate needed 10-30pp (our measurement) | `paired_bootstrap.v2`: LB > 0 existence test + economic materiality floor; all thresholds derived per design | #2601 |
-| Every successful self-improvement loop feeds rich self-observation back; zero evidence for starving the producer | `failure-feedback.v2`: failed task IDs + candidate-authored excerpts (oracle still excluded) | #2602 |
+| tau2-scale packs are severely underpowered for 5pp at fixed 95%; v1 gate needed 10-30pp (our measurement) | `paired_bootstrap.v2` kept the LB > 0 existence test plus an explicit economic materiality floor; the unvalidated threshold-derivation scaffold was withdrawn, and inference now uses preregistered independent families | v2 scorer retained; #2601 derivation withdrawn |
+| Successful self-improvement systems expose useful evaluation signals, but richer feedback also widens contamination channels | Current feedback v3 exposes only closed failure codes and frozen train task IDs; candidate-authored excerpts and all INVALID evaluator feedback were withdrawn | #2602 approach narrowed by hardening |
 | Single-lineage loops stall (SICA documented); but the strongest "archives are decisive" claims were REFUTED | Minimal archive only: campaign seeding over pinned baseline refs, no in-process population | policy (kernel non-goals kept) |
 | Offline KEEP does not imply online gain; canary + guardrails is the standard bridge | KEEP = canary candidacy, not promotion; Stage 4 protocol adopted | roadmap (post-PR-D) |
-| Benchmark task packs themselves carry defects (tau2 expected-action policy violations; SWE-bench memorization) | tau2-bench-verified pack adoption planned via task-pack hash swap; priors pinned to pack hashes (phantom-prior guard) | #2601/#2602 + task #5 |
+| Benchmark task packs themselves carry defects (tau2 expected-action policy violations; SWE-bench memorization) | Exact task content and adapter-owned family identities are bound by `task_pack_sha256`; train/test overlap is rejected by ID, family, and content hash. The class-prior store was withdrawn | current kernel + task #5 |
 
 ## Tier 1 — adversarially verified claims (vote ≥ 2-1)
 
@@ -133,21 +137,27 @@ before load-bearing use.
   with probe/SLO gates, feature flags, kill-switch; concept drift shows in
   the first 24-72h, so canary holds must span that window. (arXiv:2411.13768)
 
-## Tier 3 — our measurements (code-grounded, reproducible)
+## Tier 3 — historical measurements and hypotheses
+
+These measurements explain why the earlier gate was questioned, but they are
+not a current calibration dataset and do not authorize parameter choice or
+promotion. The synthetic estimator, prior store, and their pinning tests were
+removed; reproducing a claim now requires checking out the historical code and
+rebuilding its inputs.
 
 - **v1 gate power audit** (real `_paired_bootstrap_lower_bound` import):
   KEEP required +30pp at n=10, ~17-23pp at n=30, ~10pp at n=115 — the gate
-  was arithmetically closed. Pinned since by
-  `tests/plugins/crucible/test_promotion_power.py`.
+  was arithmetically closed under that audit's assumptions. The v2 role split
+  remains, but the former power-test scaffold is no longer active authority.
 - **Noise fit**: M1 null run (flips 12 / regressions 10 / n=114, p=0.416)
   → discordance 0.193 (Wilson95 0.131-0.275) → π_flaky ≈ 0.386 at K=1.
 - **Guard-class prior**: G1 trace replay 24/27 supported, 4/87 controls
   falsely blocked → fix rate ~Beta(24.5, 3.5), regression ~Beta(4.5, 83.5).
-- **Derived design headline**: guard-class candidates need only n=15, k=2
+- **Historical derived-design hypothesis**: guard-class candidates need only n=15, k=2
   (~60 conversations/attempt) at ~full power; weak/prompt-class candidates
   are unmeasurable at any reasonable budget (power ≤ 0.45 at n=40, k=6) —
   replay-layer class priors decide whether live measurement is worth buying.
-- **Derived train α\***: cost-ratio derivation gives α ≈ 0.115-0.207 (sealed
+- **Historical train α\* hypothesis**: cost-ratio derivation gives α ≈ 0.115-0.207 (sealed
   test is the economic backstop), replacing the 0.95-confidence tradition.
 
 ## Source index
