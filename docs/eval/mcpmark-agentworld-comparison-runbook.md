@@ -92,3 +92,10 @@ xhigh 기준 리셋 창 여러 개에 걸친다.
 schema를 따른다. Agent-World 비교 표에 넣을 때 최소 라벨: harness commit,
 suite(Verified/standard), k, route(`openai-subscription/codex`), effort(xhigh),
 그리고 "decoding params not controllable" 주석.
+
+원시 실로그는 공개 저장소에 스냅샷으로 게시한다:
+<https://github.com/mangowhoiscloud/geode-eval-artifacts> (MCPMark run
+디렉토리 전체 + 파이프라인 로그 + tau2 simulations). 로컬
+`artifacts/eval/harnesses/**` 경로를 인용하는 run record는 이 저장소의 동일
+상대 경로에서 원본을 볼 수 있다. 게시 전 시크릿 스캔이 게이트이며, 스냅샷은
+append-only로 유지한다.
