@@ -14,6 +14,8 @@ from hashlib import sha256
 from pathlib import Path, PurePosixPath
 from typing import Any
 
+from plugins.crucible import TRIAD_PROGRAM
+
 _REQUEST_SCHEMA = "crucible.proposal-request.v3"
 _CANDIDATE_SCHEMA = "crucible.candidate.v2"
 _GRAPH_SCHEMA = "crucible.producer-graph.v1"
@@ -34,7 +36,7 @@ _CLOSED_FAILURE_CODES = frozenset(
     }
 )
 _DEFAULT_GRAPH_PATH = Path(__file__).with_name("context_graph.json")
-_DEFAULT_PROGRAM_PATH = Path(__file__).parent.parent / "program.md"
+_DEFAULT_PROGRAM_PATH = TRIAD_PROGRAM
 _PROGRAM_TOKEN_RE: re.Pattern[str] = re.compile(r"\{\{[a-z_]+\}\}")
 _PROGRAM_SECTION_RE: re.Pattern[str] = re.compile(
     r"<candidate_program>(.*?)</candidate_program>", re.DOTALL

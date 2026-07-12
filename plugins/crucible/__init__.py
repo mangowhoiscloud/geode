@@ -1,4 +1,16 @@
-"""Frozen experiment contracts for Crucible campaigns."""
+"""Frozen experiment contracts for Crucible campaigns.
+
+The loop's three fixed surfaces (the autoresearch projection) are declared
+here and pinned by ``tests/plugins/crucible/test_triad_surfaces.py`` so the
+triad cannot silently re-fragment:
+
+- ``TRIAD_PROGRAM`` — the producer's instruction document (program.md);
+- ``TRIAD_TRAIN_SURFACE`` — the single mutable artifact under test;
+- ``TRIAD_PREPARE`` — the one preparation entrypoint, stamped into every
+  prepared config as ``prepared_by`` provenance.
+"""
+
+from pathlib import Path as _Path
 
 from .bundle import PromotionBundle
 from .contract import (
@@ -59,7 +71,14 @@ from .supervisor import (
 )
 from .tau2_live import Tau2SealedEvaluator
 
+TRIAD_PROGRAM = _Path(__file__).with_name("program.md")
+TRIAD_PREPARE = "plugins.crucible.prepare"
+TRIAD_TRAIN_SURFACE = "plugins/benchmark_harness/tau2_agent_policy.md"
+
 __all__ = [
+    "TRIAD_PREPARE",
+    "TRIAD_PROGRAM",
+    "TRIAD_TRAIN_SURFACE",
     "Budget",
     "CandidateProducer",
     "CandidateProposal",
