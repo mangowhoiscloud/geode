@@ -15,6 +15,7 @@ from .bundle import PromotionBundle
 from .contract import ContractError, load_contract, task_pack_sha256
 from .curation import curate_tau2_pack
 from .evidence import EvidenceEnvelope, ResourceUsage, load_evidence
+from .prepare import prepare_campaign
 from .promotion import PromotionVerdict, decide
 from .ref_journal import reconcile_ref_update
 from .supervisor import SupervisorError, run_supervisor
@@ -149,6 +150,15 @@ def _add_reconcile_ref(subparsers: Any) -> None:
     parser.add_argument("--receipt", type=Path, required=True)
 
 
+def _add_prepare(subparsers: Any) -> None:
+    parser = subparsers.add_parser(
+        "prepare",
+        help="assemble and validate one campaign config from a declarative spec",
+    )
+    parser.add_argument("spec", type=Path)
+    parser.add_argument("--output", type=Path)
+
+
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     subparsers = parser.add_subparsers(dest="command", required=True)
@@ -158,6 +168,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     _add_tau2_usage(subparsers)
     _add_score(subparsers)
     _add_loop(subparsers)
+    _add_prepare(subparsers)
     _add_bundle(subparsers)
     _add_reconcile_ref(subparsers)
     return parser.parse_args(argv)
@@ -324,6 +335,10 @@ def main(argv: list[str] | None = None) -> int:
         if args.command == "tau2-usage":
             usage = _tau2_usage(args)
             print(json.dumps(usage.to_dict(), sort_keys=True))
+            return 0
+        if args.command == "prepare":
+            report = prepare_campaign(args.spec, output=args.output)
+            print(json.dumps(report, sort_keys=True))
             return 0
         if args.command == "loop":
             summary = run_supervisor(args.config)

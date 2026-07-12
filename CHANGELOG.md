@@ -49,6 +49,19 @@ functional change.
 
 ### Added
 
+- **Crucible prepare: one-command campaign assembly.** `python -m
+  plugins.crucible prepare <spec>` centralizes the fragmented measurement
+  apparatus (autoresearch's `prepare.py` role): it merges a declarative
+  campaign spec over a template config, recomputes — never inherits — the
+  evaluator hash (over a pristine checkout of the campaign head), the harness
+  tree hash, and the task-pack hash, and round-trip validates the emitted
+  config through the same `SupervisorConfig.load` the loop uses. The three
+  launch-time fail-louds paid for live on 2026-07-12 (feedback outside the
+  pack, reused campaign search ref, stale state_dir) now fail at prepare
+  time. Hand-written configs remain first-class; the loop is unchanged.
+
+### Added
+
 - **Crucible run economics: row cache and window preflight.** A hash-bound
   row cache salvages finalized tau2 simulations across relaunches: rows are
   stored with their full measurement identity (revision, evaluator/harness/
