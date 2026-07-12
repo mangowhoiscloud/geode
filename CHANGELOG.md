@@ -45,7 +45,32 @@ functional change.
 
 ---
 
-## [Unreleased]
+## [0.99.313] - 2026-07-13
+
+### Changed
+
+- **Seed-generation cost granularity extended to the sub-index and per-run
+  pages (cost-audit follow-up).** The "All runs" table cell and the hub index
+  now share the same tokens-and-USD cell; the run page's phase table replaces
+  the never-wired samples/score dash columns with agents / tokens / cost read
+  from `per_phase_costs.json` (dagger on roles that ran agents without usage
+  capture); the run-page cost grid falls back to per-phase sums for runs that
+  never wrote state.json usage and gains a `usd (metered floor)` row; the
+  index usage rollup adds USD ($18.61 floor) and the uncaptured-role count.
+
+---
+
+## [0.99.312] - 2026-07-13
+
+### Fixed
+
+- **Serve daemon startup regression.** The launchd unit crashed at bootstrap
+  with `DuplicateHookRegistrationError` for `tool_offload_cleanup`: after the
+  hook-lifecycle unification (#2593), runtime bootstrap and supervised
+  services both wire tool offload onto one bus. The cleanup hook now follows
+  the same last-wins semantic as `set_offload_store` (`replace=True`), with a
+  double-wire regression test. The failure had been masked since 2026-07-10
+  by a manually started daemon holding the CLI socket.
 
 ### Added
 
@@ -78,21 +103,6 @@ functional change.
   windows. Corrected-evaluator replay still creates a fresh child. Bootstrap
   seeding now canonicalizes family deltas, so arbitrary frozen family order
   cannot change a future verdict.
-
-## [0.99.312] - 2026-07-13
-
-### Changed
-
-- **Seed-generation cost granularity extended to the sub-index and per-run
-  pages (cost-audit follow-up).** The "All runs" table cell and the hub index
-  now share the same tokens-and-USD cell; the run page's phase table replaces
-  the never-wired samples/score dash columns with agents / tokens / cost read
-  from `per_phase_costs.json` (dagger on roles that ran agents without usage
-  capture); the run-page cost grid falls back to per-phase sums for runs that
-  never wrote state.json usage and gains a `usd (metered floor)` row; the
-  index usage rollup adds USD ($18.61 floor) and the uncaptured-role count.
-
----
 
 ## [0.99.311] - 2026-07-13
 
