@@ -313,6 +313,14 @@ by a recoverable compare-and-swap journal. The active repository branch is
 never moved. Each contract names a separate immutable
 `refs/crucible/baselines/<campaign>/<attempt>` ref, so later search-head
 advances do not invalidate historical preflight.
+After an admissible KEEP or REJECT, the supervisor also stores a compact Git
+blob receipt under `refs/crucible/candidate-fingerprints/<sha256>`. The digest
+binds the stable patch to its baseline and frozen evaluator, harness, task pack,
+assay, routes, promotion rule, budget, and veto set. Recommitting that same
+treatment cannot
+buy another stochastic train-gate ticket; it receives a zero-evaluator-call
+`duplicate_candidate` REJECT. INVALID attempts do not write the receipt, and a
+changed measurement or decision identity remains eligible for explicit replay.
 
 The shipped live path keeps the treatment smaller than the evaluator. The only
 candidate-owned file is `plugins/benchmark_harness/tau2_agent_policy.md`.
@@ -354,6 +362,12 @@ complete set, and then passes through the normal snapshot and evidence
 verifiers. Exact full coverage remains mandatory. The launch-side window
 preflight reports `cap_fit`, `history_fit`, or `defer` from explicit quota
 estimates and measured history; none is represented as a provider guarantee.
+Evidence keeps the historical calls, tokens, cash, and wall time that produced
+its rows so verdict and bundle reconstruction remain unchanged. The evaluator
+separately reports `marginal_usage` for work performed in the current launch;
+only that value consumes campaign limits and feeds later window history. A
+full-cache synthesis therefore keeps its attested evidence usage but has zero
+marginal calls, tokens, and cash.
 
 ### Frozen rules, external calibration
 
@@ -412,6 +426,9 @@ The independent train loop is started from one JSON configuration:
   "evaluator_entrypoint": "scripts/eval/crucible_tau2_evaluator.py",
   "producer_environment": ["CODEX_HOME"],
   "evaluator_environment": ["CODEX_HOME", "CRUCIBLE_TAU2_HARNESS_ROOT"],
+  "search": {
+    "objective": "Keep multi-step tool workflows monotone."
+  },
   "train_plan": {
     "schema": "crucible.train-plan.v3",
     "name": "verify-claims-train",
@@ -470,9 +487,11 @@ uv run python -m plugins.crucible loop supervisor.json
 
 The producer process starts in the supervisor-created disposable checkout. Its
 request contains the current search SHA, allowed surface, previous compact
-feedback, and remaining campaign budget, but no artifact-store or checkout
-path. The producer receives only `CRUCIBLE_PROPOSAL_REQUEST` and
-`CRUCIBLE_CANDIDATE_OUTPUT`; it never chooses the task pack, evaluator,
+feedback, remaining campaign budget, and any explicit `search.objective`, but
+no artifact-store or checkout path. The tracked program default is bound by the
+parent revision when no override is present. Ambient objective environment
+variables are ignored. The producer receives only supervisor-owned request,
+output, and structured-error paths; it never chooses the task pack, evaluator,
 promotion rule, contract, or campaign budget. The trusted evaluator receives
 the canonical candidate and supervisor-written contract through
 `CRUCIBLE_CANDIDATE` and `CRUCIBLE_CONTRACT`. The supervisor executes the frozen
@@ -518,6 +537,12 @@ artifacts:
   "candidate": "candidate.evidence.json",
   "baseline_raw": "baseline.results.json",
   "candidate_raw": "candidate.results.json",
+  "marginal_usage": {
+    "wall_seconds": 30.0,
+    "calls": 4,
+    "tokens": 12000,
+    "cost_usd": 0.02
+  },
   "feedback": {
     "schema": "crucible.failure-feedback.v3",
     "failure_codes": ["tool_contract"],
@@ -577,8 +602,9 @@ a current core promotion.
 ## Operating loop
 
 1. Before launch, compare the frozen campaign cap and completed-run history to
-   the explicitly sourced quota estimate. Defer when neither the cap nor the
-   measured worst run fits.
+   the explicitly sourced quota estimate. `prepare` returns exit 3 on `defer`,
+   so `prepare && loop` cannot launch when neither the cap nor the measured
+   worst run fits.
 2. Start from the current search-head commit. This is not a core-promotion ref.
 3. Choose one causal failure signature and one mutation surface through the
    tracked `plugins/crucible/program.md` contract.
@@ -590,7 +616,10 @@ a current core promotion.
    preserves upstream order. An identity-proven row cache may satisfy complete
    pairs or narrow execution to missing tasks; it cannot alter coverage or
    verdict rules.
-8. The current runner enforces its wall timeout and rejects finalized evidence
+8. Reject a candidate without evaluator calls when the same stable patch,
+   baseline, and frozen measurement/decision identity already has an
+   admissible train verdict. Infrastructure INVALID attempts remain retryable.
+9. The current runner enforces its wall timeout and rejects finalized evidence
    that exceeds the frozen aggregate budget. After a complete train baseline,
    the evaluator computes the best possible candidate vector under the assay's
    metric ceiling; if even that vector cannot clear the frozen materiality,
@@ -598,14 +627,14 @@ a current core promotion.
    REJECT instead of spending the candidate arm. In-run call/token/cash
    cancellation and pairwise sequential stopping remain execution-substrate
    work. `max_steps` is a task failure, not a row to drop.
-9. Normalize both raw artifacts into immutable evidence envelopes. Identity,
+10. Normalize both raw artifacts into immutable evidence envelopes. Identity,
    coverage, or infrastructure defects produce INVALID and no performance
    comparison.
-10. KEEP only when the paired confidence bound and absolute floor clear the
+11. KEEP only when the paired confidence bound and absolute floor clear the
    preregistered rule and every candidate veto passes. Otherwise REJECT and
    leave the search head unchanged. Train KEEP still requires a disjoint sealed
    test before any release claim.
-11. Complexity remains bounded by the frozen changed-line limit; no separate
+12. Complexity remains bounded by the frozen changed-line limit; no separate
     model-judged simplicity gate is used.
 
 ### Core promotion boundary

@@ -25,6 +25,7 @@ from plugins.crucible.producers.codex_kg import (
     _load_program,
     _prompt,
     _validate_policy_grammar,
+    _write_error_sidecar,
     knowledge_context,
 )
 from plugins.crucible.promotion import SCREENING_FAILURE, decide, promotion_reachability
@@ -84,6 +85,7 @@ def test_command_evaluator_emits_paths_relative_to_response_directory(
         output_dir=evaluation_dir,
         baseline_raw=evaluation_dir / "baseline.raw.json",
         candidate_raw=evaluation_dir / "candidate.raw.json",
+        marginal_usage=ResourceUsage(0.25, 2, 300, 0.3),
         feedback=None,
     )
 
@@ -96,6 +98,7 @@ def test_command_evaluator_emits_paths_relative_to_response_directory(
         "baseline_raw": "baseline.raw.json",
         "candidate_raw": "candidate.raw.json",
     }
+    assert response["marginal_usage"] == ResourceUsage(0.25, 2, 300, 0.3).to_dict()
 
 
 def test_skipped_candidate_is_closed_zero_call_infrastructure_evidence(tmp_path: Path) -> None:
@@ -107,7 +110,7 @@ def test_skipped_candidate_is_closed_zero_call_infrastructure_evidence(tmp_path:
         raw_hash="a" * 64,
     )
 
-    candidate, raw_path = _write_skipped_arm(
+    candidate, raw_path, marginal_usage = _write_skipped_arm(
         contract,
         arm="candidate",
         output_dir=tmp_path,
@@ -120,6 +123,10 @@ def test_skipped_candidate_is_closed_zero_call_infrastructure_evidence(tmp_path:
     assert candidate.execution_status == "invalid"
     assert candidate.failure_class == "paired_arm_skipped"
     assert candidate.usage == ResourceUsage(0.0, 0, 0, 0.0)
+    assert marginal_usage.calls == 0
+    assert marginal_usage.tokens == 0
+    assert marginal_usage.cost_usd == 0.0
+    assert marginal_usage.wall_seconds >= 0.0
     assert [row.pair_id for row in candidate.rows] == [
         (task_id, 0) for task_id in contract.task_ids
     ]
@@ -140,7 +147,7 @@ def test_unreachable_candidate_is_a_zero_call_screening_reject(tmp_path: Path) -
     )
     reachability = promotion_reachability(contract, baseline, metric_ceiling=1.0)
 
-    candidate, raw_path = _write_screened_arm(
+    candidate, raw_path, marginal_usage = _write_screened_arm(
         contract,
         output_dir=tmp_path,
         baseline=baseline,
@@ -153,6 +160,7 @@ def test_unreachable_candidate_is_a_zero_call_screening_reject(tmp_path: Path) -
     assert raw["schema"] == "crucible.screened-arm.v1"
     assert raw["reason"] == SCREENING_FAILURE
     assert candidate.usage == ResourceUsage(0.0, 0, 0, 0.0)
+    assert marginal_usage == ResourceUsage(0.0, 0, 0, 0.0)
     assert verdict.verdict == "REJECT"
     assert verdict.reasons == (SCREENING_FAILURE,)
     assert verdict.pair_count == 0
@@ -374,7 +382,7 @@ def test_run_arm_preserves_finalized_invalid_evidence_after_nonzero_exit(
         invalid=True,
     )
 
-    evidence, raw_path = _run_arm(
+    evidence, raw_path, _marginal_usage = _run_arm(
         contract,
         arm="baseline",
         checkout=checkout,
@@ -537,7 +545,7 @@ def test_run_arm_partial_cache_reruns_missing_task_and_keeps_original_trial(
         lambda *args, **kwargs: evidence,
     )
 
-    _, merged_path = _run_arm(
+    _, merged_path, marginal_usage = _run_arm(
         contract,
         arm="baseline",
         checkout=checkout,
@@ -564,6 +572,77 @@ def test_run_arm_partial_cache_reruns_missing_task_and_keeps_original_trial(
     }
     merged_snapshot = output / "snapshots" / f"{run_id}.merged.snapshot.json"
     assert json.loads(merged_snapshot.read_text())["row_cache"]["synthesized"] is True
+    assert marginal_usage.calls == 0
+    assert marginal_usage.tokens == 0
+    assert marginal_usage.cost_usd == 0.0
+    assert marginal_usage.wall_seconds >= 0.0
+
+
+def test_run_arm_full_cache_spends_zero_marginal_usage(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    contract = _contract()
+    checkout = tmp_path / "checkout"
+    checkout.mkdir()
+    harness = tmp_path / "harness"
+    harness.mkdir()
+    output = tmp_path / "output"
+    output.mkdir()
+    cache = tmp_path / "cache"
+    raw = {
+        "info": {"environment_info": {"domain_name": "telecom"}},
+        "tasks": [{"id": task_id} for task_id in contract.task_ids],
+        "simulations": [
+            {
+                "task_id": task_id,
+                "trial": 0,
+                "termination_reason": "user_stop",
+                "reward_info": {"reward": 1.0},
+                "messages": [],
+            }
+            for task_id in contract.task_ids
+        ],
+    }
+    harvest_arm_rows(
+        cache,
+        contract,
+        revision_sha=contract.baseline_sha,
+        raw_results=raw,
+    )
+    evidence = _arm_evidence(
+        contract,
+        arm="baseline",
+        invalid=False,
+        raw_hash="a" * 64,
+    )
+    monkeypatch.setenv("CRUCIBLE_ROW_CACHE_ROOT", str(cache))
+    monkeypatch.setattr(
+        "plugins.crucible.tau2_live.subprocess.run",
+        lambda *args, **kwargs: pytest.fail("a full-cache arm must not launch tau2"),
+    )
+    monkeypatch.setattr(
+        "plugins.crucible.tau2_live.tau2_resource_usage_floor",
+        lambda _raw: ResourceUsage(900.0, 152, 1_238_603, 1.24225),
+    )
+    monkeypatch.setattr("plugins.crucible.tau2_live.tau2_trace_checks", lambda _raw: {})
+    monkeypatch.setattr(
+        "plugins.crucible.tau2_live.normalize_tau2_results",
+        lambda *args, **kwargs: evidence,
+    )
+
+    _attested, _raw_path, marginal_usage = _run_arm(
+        contract,
+        arm="baseline",
+        checkout=checkout,
+        harness_root=harness,
+        contract_path=tmp_path / "contract.json",
+        output_dir=output,
+        run_id="full-cache-run",
+        timeout=10.0,
+    )
+
+    assert marginal_usage == ResourceUsage(0.0, 0, 0, 0.0)
 
 
 def test_run_arm_ignores_row_cache_outside_train_stage(
@@ -935,6 +1014,19 @@ def test_codex_producer_objective_requires_monotone_progress() -> None:
     assert "stop only when none remain" in _DEFAULT_OBJECTIVE
 
 
+def test_codex_producer_objective_comes_from_the_bound_request(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from plugins.crucible.producers.codex_kg import _request_objective
+
+    monkeypatch.setenv("CRUCIBLE_PRODUCER_OBJECTIVE", "ambient drift")
+
+    assert _request_objective({}) == _DEFAULT_OBJECTIVE
+    assert _request_objective({"objective": "Bound campaign objective."}) == (
+        "Bound campaign objective."
+    )
+
+
 def test_codex_producer_program_is_tracked_model_facing_source() -> None:
     program = _load_program()
     source = _DEFAULT_PROGRAM_PATH.read_text(encoding="utf-8")
@@ -966,6 +1058,23 @@ def test_codex_producer_extracts_bounded_structured_stdout_error() -> None:
     assert _codex_error_detail(stdout, "") == "usage limit reset"
     assert _codex_error_detail(stdout, " explicit stderr ") == "explicit stderr"
     assert _codex_error_detail("not-json", "") == ""
+
+
+def test_codex_producer_writes_bounded_error_sidecar(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    output = tmp_path / "producer-error.json"
+    monkeypatch.setenv("CRUCIBLE_ERROR_OUTPUT", str(output))
+
+    _write_error_sidecar(ProducerError(" usage  limit \n reset "))
+
+    payload = json.loads(output.read_text(encoding="utf-8"))
+    assert payload == {
+        "schema": "crucible.producer-error.v1",
+        "error_type": "ProducerError",
+        "message": "usage limit reset",
+    }
 
 
 def test_codex_producer_reads_only_nested_closed_failure_codes() -> None:

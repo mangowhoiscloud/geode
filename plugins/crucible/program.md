@@ -60,7 +60,9 @@ The Markdown explains the boundary; executable validators remain authoritative
 and fail closed when prose and bytes disagree.
 
 - `SupervisorConfig` admits one declared mutation surface, bounded process
-  environments, one frozen train plan, and a finite campaign budget.
+  environments, one frozen train plan, a finite campaign budget, and an
+  optional `search.objective` whose bytes are part of `config_id` and every
+  proposal request. Ambient objective environment variables have no authority.
 - `ExperimentContract` binds the parent and candidate revisions, evaluator,
   harness, assay, ordered task pack, mutation, changed-line cap, and promotion
   rule. Candidate and evaluator paths cannot overlap.
@@ -71,6 +73,11 @@ and fail closed when prose and bytes disagree.
   branch or release.
 - Cached rows are reusable only when revision, evaluator, harness, task pack,
   and assay hashes match and both row and context payload hashes verify.
+- A baseline-bound stable patch receives one valid train verdict per frozen
+  evaluator, harness, task pack, assay, and promotion world. Its receipt lives
+  under `refs/crucible/candidate-fingerprints/*`; a repeat is a closed
+  `duplicate_candidate` REJECT, while an infrastructure INVALID remains
+  retryable.
 
 ## Preferences
 
@@ -89,12 +96,14 @@ and fail closed when prose and bytes disagree.
 2. Build a `crucible.supervisor.v4` config from one search-head revision and
    record evaluator, harness, assay, pack, promotion, and budget identities.
 3. Run the quota-window preflight. `cap_fit` and `history_fit` are capacity
-   estimates; `defer` blocks launch. None is a provider guarantee.
+   estimates; `defer` makes `prepare` exit 3 and blocks chained launch. None is
+   a provider guarantee.
 4. Run the supervisor. Baseline executes first, and an unreachable promotion
    rejects the candidate arm without spending it.
 5. With `CRUCIBLE_ROW_CACHE_ROOT` explicitly allowlisted, identity-proven
    semantic rows may be reused. Missing tasks run again and exact full coverage
-   remains mandatory.
+   remains mandatory. Historical evidence usage stays attached to the verdict;
+   only fresh marginal usage consumes the current campaign budget.
 6. Build a train bundle only after `KEEP`. Burn the sealed test attempt once,
    then require a separate human-reviewed core promotion change.
 

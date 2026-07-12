@@ -354,7 +354,8 @@ def main(argv: list[str] | None = None) -> int:
                 remaining_tokens=args.remaining_tokens,
             )
             print(json.dumps(report, sort_keys=True))
-            return 0
+            window = report.get("window")
+            return 3 if isinstance(window, Mapping) and window.get("fit") == "defer" else 0
         if args.command == "loop":
             summary = run_supervisor(args.config)
             print(json.dumps(summary.to_dict(), sort_keys=True))

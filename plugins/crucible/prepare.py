@@ -63,6 +63,7 @@ _CONFIG_OVERRIDES = (
     "harness_root",
     "limits",
     "initial_feedback",
+    "search",
 )
 # Spec keys applied inside train_plan when present.
 _PLAN_OVERRIDES = ("assay_config", "promotion", "budget", "evaluator_paths", "trials_per_task")
@@ -202,6 +203,8 @@ def prepare_campaign(
         raise ContractError("campaign spec requires pack_file or a curation block")
     if spec.get("pack_file") and isinstance(spec.get("curation"), Mapping):
         raise ContractError("campaign spec cannot carry both pack_file and curation")
+    if remaining_tokens is not None and remaining_tokens < 0:
+        raise ContractError("remaining_tokens must be non-negative")
 
     campaign_id = str(spec["campaign_id"])
     template = load_json_object(Path(str(spec["template_config"])).expanduser(), "template config")
@@ -265,21 +268,19 @@ def prepare_campaign(
         # The workflow-preservation guarantee: the exact loader the loop uses
         # must accept the prepared config, or preparation failed.
         SupervisorConfig.load(output_path)
+        window: dict[str, Any] | None = None
+        if remaining_tokens is not None:
+            history = completed_campaign_tokens(history_root) if history_root else []
+            window = dict(
+                decide(
+                    hard_cap_tokens=campaign_token_cap(output_path),
+                    remaining_tokens=remaining_tokens,
+                    history_tokens=history,
+                )
+            )
     except (ContractError, SupervisorError):
         output_path.unlink(missing_ok=True)
         raise
-    window: dict[str, Any] | None = None
-    if remaining_tokens is not None:
-        if remaining_tokens < 0:
-            raise ContractError("remaining_tokens must be non-negative")
-        history = completed_campaign_tokens(history_root) if history_root else []
-        window = dict(
-            decide(
-                hard_cap_tokens=campaign_token_cap(output_path),
-                remaining_tokens=remaining_tokens,
-                history_tokens=history,
-            )
-        )
     return {
         "schema": PREPARE_REPORT_SCHEMA,
         "campaign_id": campaign_id,

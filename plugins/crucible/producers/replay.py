@@ -9,6 +9,7 @@ import os
 import re
 import shutil
 import subprocess
+import sys
 import time
 from collections.abc import Sequence
 from pathlib import Path, PurePosixPath
@@ -21,6 +22,7 @@ from .codex_kg import (
     _load_object,
     _text,
     _validate_policy_grammar,
+    _write_error_sidecar,
     _write_exclusive,
 )
 
@@ -343,16 +345,28 @@ def _parser() -> argparse.ArgumentParser:
 
 def main(argv: Sequence[str] | None = None) -> int:
     args = _parser().parse_args(argv)
-    replay_candidate(
-        request_path=Path(os.environ["CRUCIBLE_PROPOSAL_REQUEST"]),
-        output_path=Path(os.environ["CRUCIBLE_CANDIDATE_OUTPUT"]),
-        source_repository=args.source_repository,
-        source_attempt_dir=args.source_attempt_dir,
-        candidate_sha256=args.candidate_sha256,
-        verdict_sha256=args.verdict_sha256,
-        record_sha256=args.record_sha256,
-        source_contract_sha256=args.source_contract_sha256,
-    )
+    try:
+        replay_candidate(
+            request_path=Path(os.environ["CRUCIBLE_PROPOSAL_REQUEST"]),
+            output_path=Path(os.environ["CRUCIBLE_CANDIDATE_OUTPUT"]),
+            source_repository=args.source_repository,
+            source_attempt_dir=args.source_attempt_dir,
+            candidate_sha256=args.candidate_sha256,
+            verdict_sha256=args.verdict_sha256,
+            record_sha256=args.record_sha256,
+            source_contract_sha256=args.source_contract_sha256,
+        )
+    except (
+        ContractError,
+        KeyError,
+        OSError,
+        ValueError,
+        json.JSONDecodeError,
+        ProducerError,
+    ) as exc:
+        _write_error_sidecar(exc)
+        print(f"crucible replay producer failed: {exc}", file=sys.stderr)
+        return 2
     return 0
 
 

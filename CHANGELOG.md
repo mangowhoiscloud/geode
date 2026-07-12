@@ -45,6 +45,21 @@ functional change.
 
 ---
 
+## [Unreleased]
+
+### Fixed
+
+- **Crucible campaign integrity follow-up.** Central prepare now exits 3 on a
+  quota-window `defer` and leaves no launchable config after invalid window
+  input. Producer objectives are bound by the tracked parent program or
+  optional `search.objective`, never an ambient override. Baseline-bound stable
+  candidate patches receive one admissible train verdict per frozen
+  measurement world, preventing stochastic re-ticketing while keeping INVALID
+  retries and evaluator-revision replay available. Cached evidence usage is
+  separated from current marginal spend for budget and window accounting, and
+  bounded producer failures survive the subprocess boundary through a
+  structured sidecar.
+
 ## [0.99.309] - 2026-07-12
 
 ### Added

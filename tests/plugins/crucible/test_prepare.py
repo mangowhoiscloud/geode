@@ -2,6 +2,7 @@ import json
 from pathlib import Path
 
 import pytest
+from plugins.crucible.cli import main as crucible_main
 from plugins.crucible.contract import ContractError, TaskUnit, task_pack_sha256
 from plugins.crucible.prepare import prepare_campaign
 from plugins.crucible.supervisor import SupervisorConfig
@@ -126,6 +127,42 @@ def test_prepare_reports_window_verdict_from_history(tmp_path: Path) -> None:
     assert window["fit"] == "history_fit"
     assert window["history_worst_tokens"] == 1_000_000
     # 판정을 요청하지 않으면 window는 None으로 남는다 (별도 캠페인 id로 재실행)
+
+
+def test_prepare_cli_returns_defer_exit_code(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    config, _baseline = _config(tmp_path)
+    code = crucible_main(
+        [
+            "prepare",
+            str(_write_spec(tmp_path, config)),
+            "--remaining-tokens",
+            "1",
+        ]
+    )
+
+    report = json.loads(capsys.readouterr().out)
+    assert code == 3
+    assert report["window"]["fit"] == "defer"
+
+
+def test_prepare_rejects_invalid_window_input_without_leaving_config(tmp_path: Path) -> None:
+    config, _baseline = _config(tmp_path)
+    with pytest.raises(ContractError, match="remaining_tokens must be non-negative"):
+        prepare_campaign(_write_spec(tmp_path, config), remaining_tokens=-1)
+
+    assert not (tmp_path / "campaigns" / "prepared-campaign" / "config.json").exists()
+
+
+def test_prepare_binds_search_objective_into_the_supervisor_config(tmp_path: Path) -> None:
+    config, _baseline = _config(tmp_path)
+    objective = "Preserve completed work before requesting the next required action."
+    report = prepare_campaign(_write_spec(tmp_path, config, search={"objective": objective}))
+
+    prepared = SupervisorConfig.load(Path(report["config_path"]))
+    assert prepared.producer_objective == objective
+    assert prepared.to_dict()["search"] == {"objective": objective}
 
 
 def test_prepare_curates_pack_when_spec_carries_curation(
