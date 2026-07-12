@@ -566,6 +566,108 @@ def test_run_arm_partial_cache_reruns_missing_task_and_keeps_original_trial(
     assert json.loads(merged_snapshot.read_text())["row_cache"]["synthesized"] is True
 
 
+def test_run_arm_ignores_row_cache_outside_train_stage(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Sealed one-shots must stay fresh: a cache root in the environment is
+    refused (observably) for any non-train stage instead of replaying rows."""
+    import dataclasses
+
+    contract = dataclasses.replace(_contract(), stage="test")
+    checkout = tmp_path / "checkout"
+    checkout.mkdir()
+    harness = tmp_path / "harness"
+    output = tmp_path / "output"
+    output.mkdir()
+    cache = tmp_path / "cache"
+    run_id = "sealed-fresh-run"
+
+    def simulation(task_id: str, trial: int, reward: float) -> dict:
+        return {
+            "task_id": task_id,
+            "trial": trial,
+            "termination_reason": "user_stop",
+            "reward_info": {"reward": reward},
+            "messages": [],
+        }
+
+    context = {
+        "info": {"environment_info": {"domain_name": "telecom"}},
+        "tasks": [{"id": task_id} for task_id in contract.task_ids],
+    }
+    harvest_arm_rows(
+        cache,
+        dataclasses.replace(_contract(), stage="train"),
+        revision_sha=contract.baseline_sha,
+        raw_results={
+            **context,
+            "simulations": [
+                simulation(task_id, 0, 1.0) for task_id in contract.task_ids
+            ],
+        },
+    )
+
+    source_raw = harness / "data" / "simulations" / run_id / "results.json"
+    source_raw.parent.mkdir(parents=True)
+    source_raw.write_text(
+        json.dumps(
+            {
+                **context,
+                "simulations": [
+                    simulation(task_id, 0, 1.0) for task_id in contract.task_ids
+                ],
+            }
+        ),
+        encoding="utf-8",
+    )
+    commands: list[list[str]] = []
+
+    def run(command: list[str], **kwargs: object) -> subprocess.CompletedProcess[str]:
+        commands.append(command)
+        snapshot_dir = Path(command[command.index("--trajectory-snapshot-dir") + 1])
+        snapshot_dir.mkdir(parents=True, exist_ok=True)
+        (snapshot_dir / f"{run_id}.snapshot.json").write_text("{}\n", encoding="utf-8")
+        return subprocess.CompletedProcess(args=command, returncode=0)
+
+    evidence = _arm_evidence(
+        contract,
+        arm="baseline",
+        invalid=False,
+        raw_hash="a" * 64,
+    )
+    monkeypatch.setenv("CRUCIBLE_ROW_CACHE_ROOT", str(cache))
+    monkeypatch.setattr("plugins.crucible.tau2_live.subprocess.run", run)
+    monkeypatch.setattr(
+        "plugins.crucible.tau2_live.tau2_resource_usage_floor",
+        lambda raw: ResourceUsage(0.0, 0, 0, 0.0),
+    )
+    monkeypatch.setattr("plugins.crucible.tau2_live.tau2_trace_checks", lambda raw: {})
+    monkeypatch.setattr(
+        "plugins.crucible.tau2_live.normalize_tau2_results",
+        lambda *args, **kwargs: evidence,
+    )
+
+    _run_arm(
+        contract,
+        arm="baseline",
+        checkout=checkout,
+        harness_root=harness,
+        contract_path=tmp_path / "contract.json",
+        output_dir=output,
+        run_id=run_id,
+        timeout=600.0,
+        parent_contract_path=tmp_path / "train-contract.json",
+    )
+
+    # A live tau2 command ran: the fully-populated cache was not synthesized.
+    assert commands, "sealed arm must execute a fresh measurement"
+    marker = output / "state" / "baseline" / "row-cache-disabled.json"
+    disabled = json.loads(marker.read_text(encoding="utf-8"))
+    assert disabled["schema"] == "crucible.row-cache-disabled.v1"
+    assert disabled["stage"] == "test"
+
+
 def test_partial_cache_index_rejects_duplicate_or_malformed_rows() -> None:
     row = {"task_id": "task-1", "trial": 0}
     with pytest.raises(Tau2InfrastructureError, match="duplicate pair"):

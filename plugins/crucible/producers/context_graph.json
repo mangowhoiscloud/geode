@@ -74,7 +74,7 @@
         "evaluator",
         "paired"
       ],
-      "contentSha256": "c08c196d938ed32938a2f316f7fd86f1fa171e2fe437d11b9ccb280c70a5ef48"
+      "contentSha256": "d1b30b1f34c0bb350477a63cb74cc2805b63c1f44c17f657dc19c2c5cad1b328"
     },
     {
       "id": "file:plugins/crucible/row_cache.py",

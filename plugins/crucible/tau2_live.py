@@ -366,6 +366,22 @@ def _run_arm(
     )
     revision_sha = contract.baseline_sha if arm == "baseline" else contract.candidate_sha
     cache_root_value = os.environ.get("CRUCIBLE_ROW_CACHE_ROOT")
+    if cache_root_value and contract.stage != "train":
+        # Row reuse would freeze a past noise realisation into a sealed
+        # one-shot; sealed measurements stay fresh. Refusing (instead of
+        # raising) protects the already-burned attempt, and the marker file
+        # keeps the override observable in the arm's state directory.
+        (state_root / "row-cache-disabled.json").write_text(
+            json.dumps(
+                {
+                    "schema": "crucible.row-cache-disabled.v1",
+                    "reason": "row cache is train-only",
+                    "stage": contract.stage,
+                }
+            ),
+            encoding="utf-8",
+        )
+        cache_root_value = None
     cache_root = Path(cache_root_value).resolve() if cache_root_value else None
     salvaged: dict[tuple[str, int], Mapping[str, Any]] = {}
     salvage_context: Mapping[str, Any] | None = None
