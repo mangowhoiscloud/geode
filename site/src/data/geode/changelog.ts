@@ -17,6 +17,11 @@ export type ChangelogEntry = {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    "version": "0.99.304",
+    "date": "2026-07-12",
+    "body": "### Changed\n\n- **Tau2 spec block reset as a measurement slip (operator-directed design\n  pass).** The centered text lines become the same key-value table object\n  as the memory core sample: hairline-separated mono rows (measured,\n  harness, agent, user-sim, airline, control) closing on a solid deep-rose\n  VERDICT row (\"same band · ±8pt limit\"), so the comparison verdict reads\n  like the winning band of a lab record instead of a floating caption."
+  },
+  {
     "version": "0.99.303",
     "date": "2026-07-12",
     "body": "### Fixed\n\n- **Tau2 bench card carries the real environment spec and comparison group\n  (operator-directed).** The measure plate's route line previously read\n  \"gpt-5.5 · openai-codex subscription\", which described the MCPMark runs,\n  not the tau2 base runs; the card now transcribes the measurement records\n  (`benchmark-measurements.ts`, crucible.md §2): measured 2026-07-03,\n  tau2@1901a30, GEODE v0.99.269, agent gpt-5.2 high (PAYG), native user-sim\n  gpt-4.1, pass^1 k=1, airline flagged trend-reference. A separated rule\n  line names the comparison group: Agent-World's vanilla gpt-5.2 (0.802),\n  same band within the ±8pt pass^1 detection limit; the plate caption\n  repeats the band claim in both locales."
