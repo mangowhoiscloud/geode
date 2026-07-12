@@ -40,11 +40,273 @@ const ROSE_INK_70 = "color-mix(in srgb, #C2447F 72%, transparent)";
 
 const navItems = [
   { id: "hero", label: "Intro" },
+  { id: "install", label: "Install" },
   { id: "run", label: "Run" },
   { id: "features", label: "Features" },
   { id: "distill", label: "Distill" },
   { id: "lab", label: "Specimen" },
 ];
+
+/* ---------------- install: every channel, typed live ---------------------- */
+
+/**
+ * Every distribution channel as a replayed terminal: the command types in
+ * character by character (operator direction 2026-07-13), then output
+ * reveals line by line exactly like the hero terminal. Transcripts are
+ * abridged from the real 2026-07-13 publication runs (brew source build,
+ * uv tool install, uvx ephemeral env); reduced motion renders the finished
+ * transcript statically.
+ */
+type InstallLine = { kind: "cmd" | "out" | "ok"; text: string };
+
+const installChannels: {
+  id: string;
+  labelKo: string;
+  labelEn: string;
+  noteKo: string;
+  noteEn: string;
+  copy: string;
+  lines: InstallLine[];
+}[] = [
+  {
+    id: "brew",
+    labelKo: "Homebrew",
+    labelEn: "Homebrew",
+    noteKo: "macOS 사용자용. 탭에서 릴리스 태그를 빌드해 설치합니다.",
+    noteEn: "For macOS users. Builds the pinned release tag from the tap.",
+    copy: "brew install mangowhoiscloud/tap/geode",
+    lines: [
+      { kind: "cmd", text: "brew install mangowhoiscloud/tap/geode" },
+      { kind: "out", text: "==> Fetching downloads for: geode" },
+      { kind: "out", text: "==> Installing geode from mangowhoiscloud/tap" },
+      { kind: "out", text: "==> Caveats: hermetic virtualenv under Cellar" },
+      { kind: "cmd", text: "geode version" },
+      { kind: "ok", text: "" },
+    ],
+  },
+  {
+    id: "uv-tool",
+    labelKo: "uv tool",
+    labelEn: "uv tool",
+    noteKo: "파이썬 툴체인 사용자용. 릴리스 태그를 격리 환경에 설치합니다.",
+    noteEn: "For Python-toolchain users. Installs the release tag into an isolated env.",
+    copy: 'uv tool install "geode-agent @ git+https://github.com/mangowhoiscloud/geode"',
+    lines: [
+      { kind: "cmd", text: 'uv tool install "geode-agent @ git+https://github.com/mangowhoiscloud/geode"' },
+      { kind: "out", text: "Installed 2 executables: geode, geode-mcp" },
+      { kind: "cmd", text: "geode version" },
+      { kind: "ok", text: "" },
+    ],
+  },
+  {
+    id: "uvx",
+    labelKo: "uvx · 설치 없이",
+    labelEn: "uvx · no install",
+    noteKo: "설치 없이 1회 실행. 일회성 환경을 만들고 지웁니다.",
+    noteEn: "One-shot run without installing. Ephemeral env, then gone.",
+    copy: "uvx --from git+https://github.com/mangowhoiscloud/geode geode",
+    lines: [
+      { kind: "cmd", text: "uvx --from git+https://github.com/mangowhoiscloud/geode geode version" },
+      { kind: "out", text: "Installed 64 packages in 434ms" },
+      { kind: "ok", text: "" },
+    ],
+  },
+  {
+    id: "source",
+    labelKo: "소스",
+    labelEn: "Source",
+    noteKo: "개발·기여용. 클론한 트리에서 바로 실행합니다.",
+    noteEn: "For development and contributions. Runs straight from the clone.",
+    copy: "git clone https://github.com/mangowhoiscloud/geode && cd geode && uv sync",
+    lines: [
+      { kind: "cmd", text: "git clone https://github.com/mangowhoiscloud/geode && cd geode" },
+      { kind: "out", text: "Cloning into 'geode'..." },
+      { kind: "cmd", text: "uv sync" },
+      { kind: "out", text: "Installed 120 packages in 256ms" },
+      { kind: "cmd", text: "uv run geode version" },
+      { kind: "ok", text: "" },
+    ],
+  },
+];
+
+const TYPE_MS = 26;
+const LINE_MS = 520;
+const CMD_SETTLE_MS = 380;
+const REPLAY_MS = 4800;
+
+function InstallTerminal({ lines }: { lines: InstallLine[] }) {
+  const reduceMotion = useReducedMotion();
+  const [lineIndex, setLineIndex] = useState(reduceMotion ? lines.length : 0);
+  const [charCount, setCharCount] = useState(0);
+  const bodyRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    // Initial state already reflects reduceMotion; the terminal remounts per
+    // channel (key), so the effect never needs a synchronous reset.
+    if (reduceMotion) return;
+    let line = 0;
+    let chars = 0;
+    let timer: number;
+    const step = () => {
+      if (line >= lines.length) {
+        timer = window.setTimeout(() => {
+          line = 0;
+          chars = 0;
+          setLineIndex(0);
+          setCharCount(0);
+          timer = window.setTimeout(step, 600);
+        }, REPLAY_MS);
+        return;
+      }
+      const current = lines[line];
+      if (current.kind === "cmd" && chars < current.text.length) {
+        chars += 1;
+        setCharCount(chars);
+        timer = window.setTimeout(step, TYPE_MS);
+        return;
+      }
+      line += 1;
+      chars = 0;
+      setLineIndex(line);
+      setCharCount(0);
+      timer = window.setTimeout(step, current.kind === "cmd" ? CMD_SETTLE_MS : LINE_MS);
+    };
+    timer = window.setTimeout(step, 500);
+    return () => window.clearTimeout(timer);
+  }, [lines, reduceMotion]);
+
+  useEffect(() => {
+    const body = bodyRef.current;
+    if (body) body.scrollTop = body.scrollHeight;
+  }, [lineIndex, charCount]);
+
+  const renderLine = (line: InstallLine, i: number, partial: boolean) => {
+    if (line.kind === "cmd") {
+      const shown = partial ? line.text.slice(0, charCount) : line.text;
+      return (
+        <p key={i} className="py-[3px] font-mono text-[12px] sm:text-[13px]">
+          <span className="text-[var(--acc-artifact)]">$</span>{" "}
+          <span className="text-[var(--ink-1)]">{shown}</span>
+          {partial ? (
+            <span className="geodi-caret ml-[2px] inline-block h-[13px] w-[7px] translate-y-[2px] bg-[var(--acc-artifact)]" />
+          ) : null}
+        </p>
+      );
+    }
+    if (line.kind === "ok") {
+      return (
+        <p key={i} className="py-[3px] font-mono text-[12px] sm:text-[13px]">
+          <span className="text-[var(--acc-artifact)]">◆</span>{" "}
+          <span className="font-semibold text-[var(--acc-artifact)]">GEODE</span>{" "}
+          <span className="text-[var(--ink-2)]">v{GEODE_SOT.version}</span>
+        </p>
+      );
+    }
+    return (
+      <p key={i} className="py-[3px] font-mono text-[12px] text-[var(--ink-3)] sm:text-[13px]">
+        {line.text}
+      </p>
+    );
+  };
+
+  return (
+    <div className="overflow-hidden rounded-lg border border-[color-mix(in_srgb,#FFF0F8_35%,transparent)] bg-[var(--paper-deep)] text-left">
+      <div className="flex items-center gap-2 border-b border-[var(--rule-soft)] px-4 py-2.5">
+        <span className="flex gap-1.5">
+          {["#FF5F57", "#FEBC2E", "#28C840"].map((light) => (
+            <span key={light} className="h-[9px] w-[9px] rounded-full" style={{ background: light }} />
+          ))}
+        </span>
+        <span className="ml-2 font-mono text-[11px] text-[var(--ink-3)]">install</span>
+      </div>
+      <div ref={bodyRef} className="h-[218px] overflow-hidden px-5 py-4 sm:px-7">
+        {lines.slice(0, lineIndex).map((line, i) => renderLine(line, i, false))}
+        {lineIndex < lines.length && lines[lineIndex].kind === "cmd" && charCount > 0
+          ? renderLine(lines[lineIndex], lineIndex, true)
+          : null}
+      </div>
+    </div>
+  );
+}
+
+function InstallChannels() {
+  const locale = useLocale();
+  const reduceMotion = useReducedMotion();
+  const [activeChannel, setActiveChannel] = useState("brew");
+  const [copied, setCopied] = useState(false);
+  const channel = installChannels.find((c) => c.id === activeChannel) ?? installChannels[0];
+
+  const handleCopy = async () => {
+    try {
+      await navigator.clipboard.writeText(channel.copy);
+      setCopied(true);
+      window.setTimeout(() => setCopied(false), 1600);
+    } catch {
+      /* clipboard unavailable: the command stays selectable below */
+    }
+  };
+
+  return (
+    <section id="install" className="bg-[var(--acc-artifact)]">
+      <div className="mx-auto w-full max-w-3xl px-6 py-20 sm:py-24">
+        <motion.p
+          initial={{ opacity: 0, y: reduceMotion ? 0 : 16 }}
+          whileInView={{ opacity: 1, y: 0 }}
+          viewport={{ once: true, margin: "-80px" }}
+          transition={{ duration: 0.6, ease: [0.22, 1, 0.36, 1] }}
+          className="text-center font-mono text-[10.5px] uppercase tracking-[0.3em]"
+          style={{ color: PAPER_75 }}
+        >
+          {t(locale, "네 갈래 설치", "every way to install")}
+        </motion.p>
+        <motion.div
+          initial={{ opacity: 0, y: reduceMotion ? 0 : 22 }}
+          whileInView={{ opacity: 1, y: 0 }}
+          viewport={{ once: true, margin: "-80px" }}
+          transition={{ duration: 0.65, delay: 0.08, ease: [0.22, 1, 0.36, 1] }}
+          className="mt-8"
+        >
+          <div className="flex flex-wrap justify-center gap-x-1 gap-y-2 border-b border-[color-mix(in_srgb,#FFF0F8_30%,transparent)]">
+            {installChannels.map((entry) => (
+              <button
+                key={entry.id}
+                onClick={() => {
+                  setActiveChannel(entry.id);
+                  setCopied(false);
+                }}
+                className="touch-manipulation px-4 py-2 font-mono text-[12.5px] transition-colors"
+                style={{
+                  color: activeChannel === entry.id ? "#FFF0F8" : PAPER_75,
+                  borderBottom: `2px solid ${activeChannel === entry.id ? "#FFF0F8" : "transparent"}`,
+                  marginBottom: "-1px",
+                }}
+              >
+                {locale === "en" ? entry.labelEn : entry.labelKo}
+              </button>
+            ))}
+          </div>
+          <div className="mt-6">
+            <InstallTerminal key={channel.id} lines={channel.lines} />
+          </div>
+          <div className="mt-4 flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
+            <p className="font-mono text-[12px]" style={{ color: PAPER_75 }}>
+              {t(locale, channel.noteKo, channel.noteEn)}
+            </p>
+            <button
+              onClick={handleCopy}
+              className="touch-manipulation rounded border border-[color-mix(in_srgb,#FFF0F8_45%,transparent)] px-3 py-1 font-mono text-[11px] text-[#FFF0F8] transition-opacity hover:opacity-75"
+            >
+              {copied ? t(locale, "복사됨", "copied") : t(locale, "명령 복사", "copy command")}
+            </button>
+          </div>
+          <p className="mt-2 select-all break-all font-mono text-[11.5px]" style={{ color: PAPER_75 }}>
+            {channel.copy}
+          </p>
+        </motion.div>
+      </div>
+    </section>
+  );
+}
 
 const surfaceChips = ["CLI", "MCP server", "Slack", "cron", "Gateway daemon"];
 
@@ -1126,6 +1388,7 @@ export default function GeodePortfolioPage() {
       >
         <GeodeNav items={navItems} light />
         <HeroField />
+        <InstallChannels />
         <RunRow />
         <FeaturesGrid />
         <DistillationAct />
