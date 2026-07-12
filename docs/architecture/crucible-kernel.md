@@ -1255,6 +1255,21 @@ command to the opaque hidden pack before any provider call. Both audits may use
 the frozen pilot evidence as an explicit assumption source but cannot silently
 reintroduce the removed task-level derivation.
 
+The 2026-07-13 admission audit then rejected the unconsumed r26 cardinalities
+before any provider call. Across 20,000 deterministic simulations per scenario,
+the 9-family × 2-trial train design had a 95% Monte Carlo power lower bound of
+`0.7617–0.7623`, and the 6-family × 1-trial sealed design had
+`0.6425–0.6446`; neither met the preregistered `0.80` minimum. Keeping the
+same ordered task identities while increasing train to three trials and sealed
+to two produced lower-bound ranges of `0.8367–0.8404` and
+`0.8082–0.8092`. The two replacement packs have zero task, content, and
+family overlap, and the opaque sealed selection digest is unchanged from r26.
+Central prepare round-tripped the train packet through the production config
+loader at feature revision `76a09a394`; that draft config is assembly evidence,
+not launch authority, and must be regenerated against the merged develop SHA.
+The digest-bound record is preserved in
+[`docs/eval/crucible-power-admission-2026-07-13.md`](../eval/crucible-power-admission-2026-07-13.md).
+
 The strongest honest claims are:
 
 - the frozen external tau2 baseline identified concrete retail wrong-write and
