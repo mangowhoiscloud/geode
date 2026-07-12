@@ -45,6 +45,23 @@ functional change.
 
 ---
 
+## [0.99.303] - 2026-07-12
+
+### Fixed
+
+- **Tau2 bench card carries the real environment spec and comparison group
+  (operator-directed).** The measure plate's route line previously read
+  "gpt-5.5 · openai-codex subscription", which described the MCPMark runs,
+  not the tau2 base runs; the card now transcribes the measurement records
+  (`benchmark-measurements.ts`, crucible.md §2): measured 2026-07-03,
+  tau2@1901a30, GEODE v0.99.269, agent gpt-5.2 high (PAYG), native user-sim
+  gpt-4.1, pass^1 k=1, airline flagged trend-reference. A separated rule
+  line names the comparison group: Agent-World's vanilla gpt-5.2 (0.802),
+  same band within the ±8pt pass^1 detection limit; the plate caption
+  repeats the band claim in both locales.
+
+---
+
 ## [0.99.302] - 2026-07-12
 
 ### Added
