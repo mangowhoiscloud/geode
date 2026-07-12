@@ -45,7 +45,17 @@ functional change.
 
 ---
 
-## [Unreleased]
+## [0.99.312] - 2026-07-13
+
+### Fixed
+
+- **Serve daemon startup regression.** The launchd unit crashed at bootstrap
+  with `DuplicateHookRegistrationError` for `tool_offload_cleanup`: after the
+  hook-lifecycle unification (#2593), runtime bootstrap and supervised
+  services both wire tool offload onto one bus. The cleanup hook now follows
+  the same last-wins semantic as `set_offload_store` (`replace=True`), with a
+  double-wire regression test. The failure had been masked since 2026-07-10
+  by a manually started daemon holding the CLI socket.
 
 ### Added
 
