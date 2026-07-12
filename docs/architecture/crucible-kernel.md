@@ -316,6 +316,11 @@ advances do not invalidate historical preflight.
 
 The shipped live path keeps the treatment smaller than the evaluator. The only
 candidate-owned file is `plugins/benchmark_harness/tau2_agent_policy.md`.
+That file is the mutable treatment—the analogue of autoresearch's `train.py`—
+not the search program. `plugins/crucible/program.md` is the tracked central
+program for experimentation, constraints, preferences, setup, and the closed
+dynamic-feedback channel. `codex_kg` renders only its bounded
+`<candidate_program>` section; executable validators remain authoritative.
 `plugins.crucible.producers.codex_kg` asks GPT-5.4 subscription for one small
 edit using closed failure codes and a bounded architecture-graph slice; it
 cannot read raw tasks, trajectories, evaluator artifacts, or sealed state.
@@ -339,6 +344,16 @@ The command entrypoint uses `uv run --frozen --no-dev`, so direct supervisor
 execution selects the repository's Python requirement and existing lock instead
 of the host's ambient `python3`, without installing development-only tools in
 each disposable measurement checkout.
+
+The opt-in row cache is an execution-economy layer, never a scoring shortcut.
+It binds each reusable semantic row to revision, evaluator, harness, task-pack,
+and assay hashes plus row and context payload hashes. Tau2 infrastructure
+placeholders remain missing work. A partial hit re-runs only unfinished tasks,
+keeps the first finalized realization of an already observed pair, merges the
+complete set, and then passes through the normal snapshot and evidence
+verifiers. Exact full coverage remains mandatory. The launch-side window
+preflight reports `cap_fit`, `history_fit`, or `defer` from explicit quota
+estimates and measured history; none is represented as a provider guarantee.
 
 ### Frozen rules, external calibration
 
@@ -561,15 +576,21 @@ a current core promotion.
 
 ## Operating loop
 
-1. Start from the current search-head commit. This is not a core-promotion ref.
-2. Choose one causal failure signature and one mutation surface.
-3. Make the smallest change that could alter that signature.
-4. Commit the candidate. Do not measure a dirty worktree.
-5. Freeze `experiment.json`, including evaluator/harness content hashes, task
+1. Before launch, compare the frozen campaign cap and completed-run history to
+   the explicitly sourced quota estimate. Defer when neither the cap nor the
+   measured worst run fits.
+2. Start from the current search-head commit. This is not a core-promotion ref.
+3. Choose one causal failure signature and one mutation surface through the
+   tracked `plugins/crucible/program.md` contract.
+4. Make the smallest change that could alter that signature.
+5. Commit the candidate. Never measure a dirty worktree.
+6. Freeze `experiment.json`, including evaluator/harness content hashes, task
    pack, family assignments, and the entire experiment budget.
-6. Run baseline and candidate on the same task order. Interleave paired rows
-   when the harness supports it.
-7. The current runner enforces its wall timeout and rejects finalized evidence
+7. Run baseline and candidate on the same frozen task order. The tau2 adapter
+   preserves upstream order. An identity-proven row cache may satisfy complete
+   pairs or narrow execution to missing tasks; it cannot alter coverage or
+   verdict rules.
+8. The current runner enforces its wall timeout and rejects finalized evidence
    that exceeds the frozen aggregate budget. After a complete train baseline,
    the evaluator computes the best possible candidate vector under the assay's
    metric ceiling; if even that vector cannot clear the frozen materiality,
@@ -577,15 +598,34 @@ a current core promotion.
    REJECT instead of spending the candidate arm. In-run call/token/cash
    cancellation and pairwise sequential stopping remain execution-substrate
    work. `max_steps` is a task failure, not a row to drop.
-8. Normalize both raw artifacts into immutable evidence envelopes. Identity,
+9. Normalize both raw artifacts into immutable evidence envelopes. Identity,
    coverage, or infrastructure defects produce INVALID and no performance
    comparison.
-9. KEEP only when the paired confidence bound and absolute floor clear the
+10. KEEP only when the paired confidence bound and absolute floor clear the
    preregistered rule and every candidate veto passes. Otherwise REJECT and
    leave the search head unchanged. Train KEEP still requires a disjoint sealed
    test before any release claim.
-10. Complexity remains bounded by the frozen changed-line limit; no separate
+11. Complexity remains bounded by the frozen changed-line limit; no separate
     model-judged simplicity gate is used.
+
+### Core promotion boundary
+
+The current tau2 policy campaign discovers and tests a behavioral clause under
+an evaluator-owned `system_prompt_override`. A train or sealed KEEP therefore
+does not authorize copying that Markdown file into production core. The default
+AgenticLoop prompt is assembled separately through
+`core/llm/prompts/router.md` and its `AGENTIC_SUFFIX`.
+
+A final core-promotion experiment must first partition the frozen evaluator
+from one declared candidate-owned core surface. The present contracts hash
+`core/` as evaluator code and intentionally reject overlap, so core mutation is
+closed until that partition is implemented and tested. For the current
+workflow-completion hypothesis, the narrow expected behavior surface is the
+completion criteria in `core/llm/prompts/router.md`; the eventual release PR
+would add only the mechanically required pin update in
+`core/llm/prompts/__init__.py`, focused prompt/runtime tests, and the changelog.
+`core/agent/loop` is outside that scope unless a separate measured hypothesis
+shows that prompt policy cannot express the behavior.
 
 ## Boundary rules
 
@@ -600,9 +640,10 @@ a current core promotion.
 - A sealed pack is never retried after evaluator access: infrastructure or
   semantic failure consumes its sole attempt. Train-only retries remain an
   execution-substrate policy and carry no promotion authority.
-- Contract-backed shards use fresh run IDs. Resume remains disabled until a
-  checkpoint sidecar can prove the same contract, revision, evaluator, harness,
-  and task-pack hashes before loading any row.
+- Contract-backed shards use fresh run IDs. The checkpoint sidecar may load
+  only semantic rows whose revision, evaluator, harness, task-pack, assay, and
+  payload hashes verify. Infrastructure placeholders and in-flight rows remain
+  missing; scoring still requires exact full coverage.
 - Historical candidates live in git, not in CLI choices such as v1 through
   v72.
 

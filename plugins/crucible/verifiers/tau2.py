@@ -14,6 +14,9 @@ from plugins.crucible.contract import ContractError, ExperimentContract, TaskUni
 from plugins.crucible.evidence import EVIDENCE_SCHEMA, EvidenceEnvelope, ResourceUsage
 
 _SNAPSHOT_SCHEMA = "crucible_tau2_trajectory_snapshot.v3"
+# Public alias: the row cache synthesizes snapshots the verifier must accept,
+# so both sides must share one schema constant rather than drifting literals.
+SNAPSHOT_SCHEMA = _SNAPSHOT_SCHEMA
 
 
 @dataclass(frozen=True)

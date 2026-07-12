@@ -18,16 +18,20 @@ from plugins.crucible.evidence import EvidenceEnvelope, ResourceUsage
 from plugins.crucible.producers.codex_kg import (
     _DEFAULT_GRAPH_PATH,
     _DEFAULT_OBJECTIVE,
+    _DEFAULT_PROGRAM_PATH,
     ProducerError,
     _codex_child_environment,
     _codex_error_detail,
+    _load_program,
     _prompt,
     _validate_policy_grammar,
     knowledge_context,
 )
 from plugins.crucible.promotion import SCREENING_FAILURE, decide, promotion_reachability
+from plugins.crucible.row_cache import harvest_arm_rows
 from plugins.crucible.tau2_live import (
     Tau2InfrastructureError,
+    _index_simulations,
     _run_arm,
     _train_evaluation_response,
     _write_screened_arm,
@@ -252,6 +256,22 @@ def _contract() -> ExperimentContract:
     )
 
 
+def _contract_with_trials(trials: int) -> ExperimentContract:
+    payload = _contract().to_dict()
+    payload.pop("contract_id")
+    assay = dict(payload["assay_config"])
+    assay["num_trials"] = trials
+    payload.update(
+        {
+            "name": f"live-tau2-fixture-k{trials}",
+            "trials_per_task": trials,
+            "task_pack_sha256": task_pack_sha256(TASKS, trials),
+            "assay_config": assay,
+        }
+    )
+    return ExperimentContract.from_mapping(payload)
+
+
 def _test_contract(parent: ExperimentContract) -> ExperimentContract:
     payload = parent.to_dict()
     payload.pop("contract_id")
@@ -431,6 +451,131 @@ def test_run_arm_rejects_nonzero_exit_with_complete_evidence(
             output_dir=output,
             run_id="fixture-run",
             timeout=10.0,
+        )
+
+
+def test_run_arm_partial_cache_reruns_missing_task_and_keeps_original_trial(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    contract = _contract_with_trials(2)
+    checkout = tmp_path / "checkout"
+    checkout.mkdir()
+    harness = tmp_path / "harness"
+    output = tmp_path / "output"
+    output.mkdir()
+    cache = tmp_path / "cache"
+    run_id = "partial-cache-run"
+
+    def simulation(task_id: str, trial: int, reward: float) -> dict:
+        return {
+            "task_id": task_id,
+            "trial": trial,
+            "termination_reason": "user_stop",
+            "reward_info": {"reward": reward},
+            "messages": [],
+        }
+
+    context = {
+        "info": {"environment_info": {"domain_name": "telecom"}},
+        "tasks": [{"id": task_id} for task_id in contract.task_ids],
+    }
+    harvest_arm_rows(
+        cache,
+        contract,
+        revision_sha=contract.baseline_sha,
+        raw_results={
+            **context,
+            "simulations": [
+                simulation("task-1", 0, 1.0),
+                simulation("task-2", 0, 1.0),
+                simulation("task-2", 1, 1.0),
+            ],
+        },
+    )
+
+    source_raw = harness / "data" / "simulations" / run_id / "results.json"
+    source_raw.parent.mkdir(parents=True)
+    source_raw.write_text(
+        json.dumps(
+            {
+                **context,
+                "simulations": [
+                    # tau2 re-runs the complete task when only one trial was
+                    # missing.  The cached original must win this duplicate.
+                    simulation("task-1", 0, 0.0),
+                    simulation("task-1", 1, 1.0),
+                ],
+            }
+        ),
+        encoding="utf-8",
+    )
+    commands: list[list[str]] = []
+
+    def run(command: list[str], **kwargs: object) -> subprocess.CompletedProcess[str]:
+        commands.append(command)
+        snapshot_dir = Path(command[command.index("--trajectory-snapshot-dir") + 1])
+        snapshot_dir.mkdir(parents=True, exist_ok=True)
+        (snapshot_dir / f"{run_id}.snapshot.json").write_text("{}\n", encoding="utf-8")
+        return subprocess.CompletedProcess(args=command, returncode=0)
+
+    evidence = _arm_evidence(
+        contract,
+        arm="baseline",
+        invalid=False,
+        raw_hash="a" * 64,
+    )
+    monkeypatch.setenv("CRUCIBLE_ROW_CACHE_ROOT", str(cache))
+    monkeypatch.setattr("plugins.crucible.tau2_live.subprocess.run", run)
+    monkeypatch.setattr(
+        "plugins.crucible.tau2_live.tau2_resource_usage_floor",
+        lambda raw: ResourceUsage(0.0, 0, 0, 0.0),
+    )
+    monkeypatch.setattr("plugins.crucible.tau2_live.tau2_trace_checks", lambda raw: {})
+    monkeypatch.setattr(
+        "plugins.crucible.tau2_live.normalize_tau2_results",
+        lambda *args, **kwargs: evidence,
+    )
+
+    _, merged_path = _run_arm(
+        contract,
+        arm="baseline",
+        checkout=checkout,
+        harness_root=harness,
+        contract_path=tmp_path / "contract.json",
+        output_dir=output,
+        run_id=run_id,
+        timeout=10.0,
+    )
+
+    command = commands[0]
+    task_slice = command[command.index("--task-ids") + 1 : command.index("--num-tasks")]
+    assert task_slice == ["task-1"]
+    merged = json.loads(merged_path.read_text(encoding="utf-8"))
+    rewards = {
+        (row["task_id"], row["trial"]): row["reward_info"]["reward"]
+        for row in merged["simulations"]
+    }
+    assert rewards == {
+        ("task-1", 0): 1.0,
+        ("task-1", 1): 1.0,
+        ("task-2", 0): 1.0,
+        ("task-2", 1): 1.0,
+    }
+    merged_snapshot = output / "snapshots" / f"{run_id}.merged.snapshot.json"
+    assert json.loads(merged_snapshot.read_text())["row_cache"]["synthesized"] is True
+
+
+def test_partial_cache_index_rejects_duplicate_or_malformed_rows() -> None:
+    row = {"task_id": "task-1", "trial": 0}
+    with pytest.raises(Tau2InfrastructureError, match="duplicate pair"):
+        _index_simulations({"simulations": [row, row]}, "fresh")
+    with pytest.raises(Tau2InfrastructureError, match="must be an object"):
+        _index_simulations({"simulations": [None]}, "fresh")
+    with pytest.raises(Tau2InfrastructureError, match="integer trial"):
+        _index_simulations(
+            {"simulations": [{"task_id": "task-1", "trial": True}]},
+            "fresh",
         )
 
 
@@ -684,6 +829,22 @@ def test_codex_producer_objective_requires_monotone_progress() -> None:
     assert "unresolved policy-required actions and terminal checks" in _DEFAULT_OBJECTIVE
     assert "reuse confirmed successes without repeating them" in _DEFAULT_OBJECTIVE
     assert "stop only when none remain" in _DEFAULT_OBJECTIVE
+
+
+def test_codex_producer_program_is_tracked_model_facing_source() -> None:
+    program = _load_program()
+    source = _DEFAULT_PROGRAM_PATH.read_text(encoding="utf-8")
+
+    assert _DEFAULT_PROGRAM_PATH.name == "program.md"
+    assert "## Experimentation" in source
+    assert "## Constraints" in source
+    assert "## Preferences" in source
+    assert "## Setup" in source
+    assert "## Dynamic feedback" in source
+    assert "tau2_agent_policy.md" in source
+    assert "{{graph_context}}" in program
+    assert "You are " not in program
+    assert "Act as " not in program
     assert "batch" not in _DEFAULT_OBJECTIVE
     assert "defer" not in _DEFAULT_OBJECTIVE
 

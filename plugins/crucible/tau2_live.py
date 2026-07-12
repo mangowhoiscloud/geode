@@ -25,8 +25,17 @@ from .artifacts import load_json_object, write_exclusive_json
 from .contract import ContractError, ExperimentContract, load_contract, validate_test_parent
 from .evidence import EvidenceEnvelope, ResourceUsage, expected_pairs
 from .promotion import SCREENING_FAILURE, PromotionReachability, promotion_reachability
+from .row_cache import (
+    cached_context,
+    cached_rows,
+    harvest_arm_rows,
+    merge_results,
+    missing_task_ids,
+    selected_expected_rows,
+    synthesized_snapshot,
+)
 from .sealed import SEALED_RESPONSE_SCHEMA, SealedInfrastructureError, SealedPlan
-from .supervisor import CandidateProposal, FailureFeedback
+from .supervisor import CandidateProposal, FailureFeedback, _file_sha256
 from .verifiers.tau2 import TAU2_ADAPTER, normalize_tau2_results, tau2_resource_usage_floor
 
 _WRITE_PREFIXES = (
@@ -72,6 +81,36 @@ def _string(value: object, field: str) -> str:
     return value.strip()
 
 
+def _index_simulations(
+    raw: Mapping[str, Any],
+    field: str,
+) -> dict[tuple[str, int], Mapping[str, Any]]:
+    """Index raw rows without silently dropping malformed or duplicate evidence."""
+
+    simulations = raw.get("simulations")
+    if not isinstance(simulations, list):
+        raise Tau2InfrastructureError(f"{field}.simulations must be a list")
+    rows: dict[tuple[str, int], Mapping[str, Any]] = {}
+    for index, row in enumerate(simulations):
+        if not isinstance(row, Mapping):
+            raise Tau2InfrastructureError(f"{field}.simulations[{index}] must be an object")
+        task_id = row.get("task_id")
+        trial = row.get("trial")
+        if (
+            not isinstance(task_id, (str, int))
+            or isinstance(trial, bool)
+            or not isinstance(trial, int)
+        ):
+            raise Tau2InfrastructureError(
+                f"{field}.simulations[{index}] requires task_id and integer trial"
+            )
+        pair = (str(task_id), trial)
+        if pair in rows:
+            raise Tau2InfrastructureError(f"{field} contains duplicate pair {pair!r}")
+        rows[pair] = row
+    return rows
+
+
 def _optional_flag(command: list[str], name: str, value: object) -> None:
     if value is not None:
         command.extend((name, str(value)))
@@ -87,11 +126,21 @@ def tau2_command(
     snapshot_dir: Path,
     run_id: str,
     parent_contract_path: Path | None = None,
+    task_ids_override: Sequence[str] | None = None,
 ) -> list[str]:
-    """Derive the complete runner argv from the frozen assay configuration."""
+    """Derive the complete runner argv from the frozen assay configuration.
+
+    ``task_ids_override`` narrows execution to a subset of the frozen pack —
+    used only by the row cache to re-run the tasks a prior interrupted run
+    did not finalize. The subset must come from ``contract.task_ids``.
+    """
 
     config = contract.assay_config
     TAU2_ADAPTER.validate_config(config)
+    if task_ids_override is not None:
+        frozen_ids = set(contract.task_ids)
+        if not task_ids_override or any(task not in frozen_ids for task in task_ids_override):
+            raise ContractError("task_ids_override must be a non-empty subset of the frozen pack")
     agent = _mapping(config.get("agent"), "assay_config.agent")
     user = _mapping(config.get("user"), "assay_config.user")
     retrieval = _mapping(config.get("retrieval"), "assay_config.retrieval")
@@ -108,9 +157,9 @@ def tau2_command(
         "--task-split-name",
         _string(config.get("task_split_name"), "assay_config.task_split_name"),
         "--task-ids",
-        *contract.task_ids,
+        *(task_ids_override if task_ids_override is not None else contract.task_ids),
         "--num-tasks",
-        str(len(contract.tasks)),
+        str(len(task_ids_override) if task_ids_override is not None else len(contract.tasks)),
         "--num-trials",
         str(contract.trials_per_task),
         "--max-concurrency",
@@ -266,6 +315,28 @@ def _git(checkout: Path, *args: str) -> str:
     return result.stdout.strip()
 
 
+def _harvest_partial(
+    cache_root: Path | None,
+    contract: ExperimentContract,
+    revision_sha: str,
+    harness_root: Path,
+    run_id: str,
+) -> None:
+    """Best-effort salvage of finalized simulations from an interrupted run."""
+    if cache_root is None:
+        return
+    source_raw = harness_root / "data" / "simulations" / run_id / "results.json"
+    if not source_raw.is_file():
+        return
+    try:
+        partial = load_json_object(
+            source_raw, f"tau2 partial {run_id}", max_bytes=512 * 1024 * 1024
+        )
+        harvest_arm_rows(cache_root, contract, revision_sha=revision_sha, raw_results=partial)
+    except (ContractError, OSError):
+        return
+
+
 def _run_arm(
     contract: ExperimentContract,
     *,
@@ -293,40 +364,101 @@ def _run_arm(
             "TMPDIR": str(temp_root),
         }
     )
-    command = tau2_command(
-        contract,
-        arm=arm,
-        checkout=checkout,
-        harness_root=harness_root,
-        contract_path=contract_path,
-        snapshot_dir=snapshot_dir,
-        run_id=run_id,
-        parent_contract_path=parent_contract_path,
+    revision_sha = contract.baseline_sha if arm == "baseline" else contract.candidate_sha
+    cache_root_value = os.environ.get("CRUCIBLE_ROW_CACHE_ROOT")
+    cache_root = Path(cache_root_value).resolve() if cache_root_value else None
+    salvaged: dict[tuple[str, int], Mapping[str, Any]] = {}
+    salvage_context: Mapping[str, Any] | None = None
+    if cache_root is not None:
+        salvaged = selected_expected_rows(
+            contract,
+            cached_rows(cache_root, contract, revision_sha=revision_sha),
+        )
+        salvage_context = cached_context(cache_root, contract, revision_sha=revision_sha)
+    unfinished_ids = (
+        missing_task_ids(contract, salvaged)
+        if salvage_context is not None
+        else list(contract.task_ids)
     )
-    started = time.monotonic()
-    try:
-        completed = subprocess.run(  # noqa: S603 - frozen evaluator derives complete argv
-            command,
-            cwd=checkout,
-            env=environment,
-            check=False,
-            timeout=timeout,
-        )
-    except subprocess.TimeoutExpired as exc:
-        raise TimeoutError(f"tau2 {arm} arm timed out") from exc
-    elapsed = time.monotonic() - started
-    source_raw = harness_root / "data" / "simulations" / run_id / "results.json"
-    snapshot = snapshot_dir / f"{run_id}.snapshot.json"
-    if not source_raw.is_file() or not snapshot.is_file():
-        if completed.returncode:
-            raise Tau2InfrastructureError(
-                f"tau2 {arm} arm exited with status {completed.returncode}"
-            )
-        raise Tau2InfrastructureError(
-            f"tau2 {arm} arm did not produce finalized raw and snapshot files"
-        )
     raw_path = output_dir / f"{arm}.raw.json"
-    shutil.copyfile(source_raw, raw_path)
+    elapsed = 0.0
+    runner_returncode = 0
+    if salvage_context is not None and not unfinished_ids:
+        # Every expected row is identity-proven in the cache: rebuild the
+        # results file without spending a single conversation.
+        raw = merge_results(salvage_context, salvaged)
+        write_exclusive_json(raw_path, raw)
+        snapshot = snapshot_dir / f"{run_id}.snapshot.json"
+        write_exclusive_json(
+            snapshot,
+            synthesized_snapshot(
+                contract, arm=arm, raw_sha256=_file_sha256(raw_path, f"{arm} rebuilt raw")
+            ),
+        )
+    else:
+        command = tau2_command(
+            contract,
+            arm=arm,
+            checkout=checkout,
+            harness_root=harness_root,
+            contract_path=contract_path,
+            snapshot_dir=snapshot_dir,
+            run_id=run_id,
+            parent_contract_path=parent_contract_path,
+            task_ids_override=(
+                unfinished_ids
+                if salvage_context is not None and len(unfinished_ids) < len(contract.task_ids)
+                else None
+            ),
+        )
+        started = time.monotonic()
+        try:
+            completed = subprocess.run(  # noqa: S603 - frozen evaluator derives complete argv
+                command,
+                cwd=checkout,
+                env=environment,
+                check=False,
+                timeout=timeout,
+            )
+        except subprocess.TimeoutExpired as exc:
+            _harvest_partial(cache_root, contract, revision_sha, harness_root, run_id)
+            raise TimeoutError(f"tau2 {arm} arm timed out") from exc
+        elapsed = time.monotonic() - started
+        runner_returncode = completed.returncode
+        source_raw = harness_root / "data" / "simulations" / run_id / "results.json"
+        snapshot = snapshot_dir / f"{run_id}.snapshot.json"
+        if not source_raw.is_file() or not snapshot.is_file():
+            # tau2 finalizes each simulation into results.json incrementally;
+            # an interrupted arm still donates its completed rows (r23: 18
+            # finished executions were discarded for want of this line).
+            _harvest_partial(cache_root, contract, revision_sha, harness_root, run_id)
+            if completed.returncode:
+                raise Tau2InfrastructureError(
+                    f"tau2 {arm} arm exited with status {completed.returncode}"
+                )
+            raise Tau2InfrastructureError(
+                f"tau2 {arm} arm did not produce finalized raw and snapshot files"
+            )
+        fresh = load_json_object(source_raw, f"tau2 {arm} raw", max_bytes=512 * 1024 * 1024)
+        if salvage_context is not None and salvaged:
+            fresh_rows = _index_simulations(fresh, f"tau2 {arm} partial-cache raw")
+            # A task with one missing trial must be re-run as a whole because
+            # tau2 accepts task IDs rather than individual pairs.  Preserve
+            # any identity-proven original trial instead of silently replacing
+            # it with the repeated realization.
+            raw = merge_results(salvage_context, {**fresh_rows, **salvaged})
+            write_exclusive_json(raw_path, raw)
+            snapshot = snapshot_dir / f"{run_id}.merged.snapshot.json"
+            write_exclusive_json(
+                snapshot,
+                synthesized_snapshot(
+                    contract, arm=arm, raw_sha256=_file_sha256(raw_path, f"{arm} rebuilt raw")
+                ),
+            )
+        else:
+            shutil.copyfile(source_raw, raw_path)
+        if cache_root is not None:
+            harvest_arm_rows(cache_root, contract, revision_sha=revision_sha, raw_results=fresh)
     raw = load_json_object(raw_path, f"tau2 {arm} raw", max_bytes=512 * 1024 * 1024)
     observed_usage = tau2_resource_usage_floor(raw)
     arm_usage = ResourceUsage(
@@ -345,8 +477,8 @@ def _run_arm(
     )
     evidence_path = output_dir / f"{arm}.evidence.json"
     write_exclusive_json(evidence_path, evidence.to_dict())
-    if completed.returncode and evidence.execution_status != "invalid":
-        raise Tau2InfrastructureError(f"tau2 {arm} arm exited with status {completed.returncode}")
+    if runner_returncode and evidence.execution_status != "invalid":
+        raise Tau2InfrastructureError(f"tau2 {arm} arm exited with status {runner_returncode}")
     return evidence, raw_path
 
 

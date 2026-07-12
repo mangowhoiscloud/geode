@@ -134,7 +134,15 @@ def curate_tau2_pack(
     selection_output: Path,
     pack_output: Path,
 ) -> dict[str, Any]:
-    """Select a frozen pack while returning only counts and hashes to the caller."""
+    """Select a frozen pack while returning only counts and hashes to the caller.
+
+    Execution order is pinned to the upstream tasks file: tau2 loads and runs
+    tasks in file order regardless of ``--task-ids`` order, and the contract
+    runner hard-fails on any mismatch (verified live, crucible-rowcache-live-a
+    2026-07-12, zero tokens spent). Failure-first ordering is therefore
+    unimplementable without patching the upstream harness; run-economics
+    salvage belongs to the row cache instead.
+    """
 
     for number, field in (
         (fault_tokens, "fault_tokens"),

@@ -158,3 +158,25 @@ def test_curator_errors_do_not_disclose_selected_task_ids(tmp_path: Path) -> Non
         _curate(tmp_path, tasks_path, split_path, take=1)
 
     assert secret_id not in str(captured.value)
+
+
+def test_pack_execution_order_stays_pinned_to_the_upstream_tasks_file(tmp_path: Path) -> None:
+    """tau2 executes in upstream file order and the contract runner enforces it
+    (live INVALID, crucible-rowcache-live-a 2026-07-12) — the pack must never
+    reorder selected tasks away from their source indices."""
+    tasks = [
+        _task(0, intent="ADD_LINE", persona="EASY"),
+        _task(1, intent="MOVE_PLAN", persona="HARD"),
+        _task(2, intent="CANCEL", persona="EASY"),
+        _task(3, intent="UPGRADE", persona="HARD"),
+        _task(4, intent="SUSPEND", persona="MEDIUM"),
+        _task(5, intent="RESUME", persona="MEDIUM"),
+    ]
+    tasks_path, split_path = _write_sources(tmp_path, tasks)
+    _curate(tmp_path, tasks_path, split_path)
+    pack = json.loads((tmp_path / "pack.json").read_text(encoding="utf-8"))
+    source_order = [str(task["id"]) for task in tasks]
+    pack_order = [task["task_id"] for task in pack["tasks"]]
+    assert pack_order == sorted(pack_order, key=source_order.index)
+    selection = json.loads((tmp_path / "selection.json").read_text(encoding="utf-8"))
+    assert selection["rule"]["execution_order"] == "upstream_tasks_file"

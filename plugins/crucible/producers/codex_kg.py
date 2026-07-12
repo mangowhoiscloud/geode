@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -19,6 +20,7 @@ _GRAPH_SCHEMA = "crucible.producer-graph.v1"
 _FEEDBACK_SCHEMA = "crucible.failure-feedback.v3"
 _SUPERVISOR_FEEDBACK_SCHEMA = "crucible.supervisor-feedback.v3"
 _GRAPH_LIMIT = 256 * 1024
+_PROGRAM_LIMIT = 64 * 1024
 _CONTEXT_NODE_LIMIT = 16
 _CLOSED_FAILURE_CODES = frozenset(
     {
@@ -32,6 +34,19 @@ _CLOSED_FAILURE_CODES = frozenset(
     }
 )
 _DEFAULT_GRAPH_PATH = Path(__file__).with_name("context_graph.json")
+_DEFAULT_PROGRAM_PATH = Path(__file__).parent.parent / "program.md"
+_PROGRAM_TOKEN_RE: re.Pattern[str] = re.compile(r"\{\{[a-z_]+\}\}")
+_PROGRAM_SECTION_RE: re.Pattern[str] = re.compile(
+    r"<candidate_program>(.*?)</candidate_program>", re.DOTALL
+)
+_PROGRAM_TOKENS = frozenset(
+    {
+        "{{failure_codes_json}}",
+        "{{graph_context}}",
+        "{{objective}}",
+        "{{surfaces_json}}",
+    }
+)
 _DEFAULT_OBJECTIVE = (
     "Keep every multi-step tool workflow monotone: maintain the unresolved "
     "policy-required actions and terminal checks, consume them one at a time, reuse "
@@ -72,6 +87,46 @@ def _validate_policy_grammar(policy: str) -> None:
     invalid = [line for line in clauses if not line.startswith(("- CAN ", "- CANNOT "))]
     if invalid:
         raise ProducerError("candidate policy clauses must use CAN/CANNOT grammar")
+
+
+def _load_program(path: Path = _DEFAULT_PROGRAM_PATH) -> str:
+    """Load the model-facing section of the tracked central program."""
+
+    info = path.lstat()
+    if path.is_symlink() or not path.is_file() or info.st_size > _PROGRAM_LIMIT:
+        raise ProducerError("candidate program must be a bounded regular file")
+    source = path.read_text(encoding="utf-8")
+    sections = _PROGRAM_SECTION_RE.findall(source)
+    if len(sections) != 1:
+        raise ProducerError("candidate program requires exactly one candidate_program section")
+    program = str(sections[0]).strip()
+    observed = _PROGRAM_TOKEN_RE.findall(program)
+    if set(observed) != _PROGRAM_TOKENS or any(
+        observed.count(token) != 1 for token in _PROGRAM_TOKENS
+    ):
+        raise ProducerError(
+            "candidate program placeholders do not match the frozen template contract"
+        )
+    return program
+
+
+def _render_program(
+    *,
+    objective: str,
+    surfaces: tuple[str, ...],
+    failure_codes: list[str],
+    graph_context: str,
+) -> str:
+    program = _load_program()
+    replacements = {
+        "{{failure_codes_json}}": json.dumps(failure_codes),
+        "{{graph_context}}": graph_context,
+        "{{objective}}": objective,
+        "{{surfaces_json}}": json.dumps(surfaces),
+    }
+    for token, value in replacements.items():
+        program = program.replace(token, value)
+    return program
 
 
 def _git(*args: str) -> str:
@@ -237,30 +292,12 @@ def _prompt(
     graph_context: str,
 ) -> str:
     failure_codes = _closed_failure_codes(feedback)
-    return f"""\
-Task: propose one small, task-independent agent-policy improvement.
-Runtime: Crucible candidate producer in a disposable no-remote checkout.
-Model target: GPT-5.4 subscription, high reasoning.
-Objective: {objective}
-Allowed mutation surface: {json.dumps(surfaces)}
-Prior closed failure codes: {json.dumps(failure_codes)}
-
-Constraints:
-- Edit exactly one allowed file and no other file.
-- Output grammar: every behavior bullet starts with exactly `- CAN` or `- CANNOT`.
-- Keep the change general across tasks and domains; CANNOT add task IDs, expected
-  answers, scenario literals, row-specific branches, or benchmark-specific facts.
-- Preserve safety, confirmation, and tool-contract requirements.
-- CANNOT trade a required user action, confirmation, or terminal check for a
-  shorter trajectory.
-- Prefer deleting or tightening wording over adding a large policy ladder.
-- CANNOT run live/provider tests; CANNOT commit because the producer wrapper owns commit.
-
-Bounded architecture context:
-{graph_context}
-
-Inspect the allowed file and its caller, then make the smallest defensible edit.
-"""
+    return _render_program(
+        objective=objective,
+        surfaces=surfaces,
+        failure_codes=failure_codes,
+        graph_context=graph_context,
+    )
 
 
 def _closed_failure_codes(feedback: object) -> list[str]:
