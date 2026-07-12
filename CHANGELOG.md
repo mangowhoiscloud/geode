@@ -45,6 +45,21 @@ functional change.
 
 ---
 
+## [0.99.307] - 2026-07-12
+
+### Changed
+
+- **Tau2 slip separates the agentic harness from the eval harness
+  (operator-directed).** The measurement slip gains labeled sections so the
+  claim reads unambiguously: what is measured is gpt-5.2 wrapped in the
+  GEODE loop (agentic harness: loop geode v0.99.269, model gpt-5.2 high ·
+  payg); the ruler is tau2-bench (eval harness: bench @ 1901a30, user-sim
+  gpt-4.1 · pass^1 k=1, airline trend-reference); the control is the same
+  model with no loop (Agent-World vanilla 0.802) before the verdict band.
+  The plate caption restates it in both locales.
+
+---
+
 ## [0.99.306] - 2026-07-12
 
 ### Added
