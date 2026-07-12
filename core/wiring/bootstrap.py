@@ -946,11 +946,17 @@ def build_tool_offload(
         def _cleanup_offload(_event: Any, _data: Any) -> None:
             store.cleanup_session()
 
+        # The serve daemon wires offload twice on one bus (runtime bootstrap,
+        # then supervised services with its own session store). Last store
+        # wins for set_offload_store, so the cleanup hook must follow the
+        # same last-wins semantic instead of crashing the daemon at startup
+        # (EX_CONFIG regression after the hook-lifecycle unification, #2593).
         hooks.register(
             HookEvent.SESSION_ENDED,
             _cleanup_offload,
             name="tool_offload_cleanup",
             priority=95,
+            replace=True,
         )
     log.info(
         "Tool offload enabled: threshold=%d tokens, ttl=%.1fh",
