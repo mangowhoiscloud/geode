@@ -240,6 +240,13 @@ coordinates, pinned commits, preflight env names, and GEODE adapters. The
 third-party benchmark repositories themselves are still fetched under ignored
 local artifacts so GEODE does not vendor external harness code.
 
+Raw run logs cited by this ledger are published as append-only snapshots at
+<https://github.com/mangowhoiscloud/geode-eval-artifacts> (MCPMark result
+directories with per-task `meta.json` / `messages.json` / verifier output,
+pipeline logs, and GEODE-owned tau2 simulation JSONs). Local
+`artifacts/eval/harnesses/**` paths cited below map to the same relative paths
+in that repository. A secret scan gates every upload.
+
 The benchmark harnesses were fetched under ignored local artifacts so they can
 be used for setup and smoke testing without vendoring third-party repos into
 GEODE:
