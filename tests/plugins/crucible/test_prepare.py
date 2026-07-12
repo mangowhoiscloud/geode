@@ -186,6 +186,24 @@ def test_prepare_stamps_provenance_outside_the_identity_hash(tmp_path: Path) -> 
     # different specs must keep one config_id.
     assert "prepared_by" not in prepared.payload()
 
+    round_trip_path = tmp_path / "round-trip.config.json"
+    round_trip_path.write_text(json.dumps(prepared.to_dict()), encoding="utf-8")
+    round_tripped = SupervisorConfig.load(round_trip_path)
+    assert round_tripped.prepared_by == provenance
+    assert round_tripped.config_id == prepared.config_id
+
+    mutated = {
+        **prepared.to_dict(),
+        "prepared_by": {
+            "schema": "crucible.prepare-provenance.v1",
+            "entry": "hand",
+            "spec_sha256": "0" * 64,
+        },
+    }
+    mutated_path = tmp_path / "mutated.config.json"
+    mutated_path.write_text(json.dumps(mutated), encoding="utf-8")
+    assert SupervisorConfig.load(mutated_path).config_id == prepared.config_id
+
 
 def test_prepare_replaces_inherited_provenance(tmp_path: Path) -> None:
     config, _baseline = _config(tmp_path)

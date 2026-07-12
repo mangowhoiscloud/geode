@@ -5,6 +5,8 @@ steps and program.md into code literals, with nothing failing. These tests
 make the triad declaration in ``plugins/crucible/__init__`` load-bearing.
 """
 
+import subprocess
+import sys
 from pathlib import Path
 
 from plugins.benchmark_harness.tau2_turn_supervisor import _AGENT_POLICY_PATH
@@ -34,3 +36,17 @@ def test_train_surface_matches_the_harness_policy_path() -> None:
 def test_prepare_entry_matches_the_provenance_stamp() -> None:
     assert TRIAD_PREPARE == "plugins.crucible.prepare"
     assert PREPARE_PROVENANCE_SCHEMA == "crucible.prepare-provenance.v1"
+
+
+def test_codex_kg_imports_cold_as_the_first_crucible_import() -> None:
+    """The producer module pulls TRIAD_PROGRAM from the package root, which
+    eagerly imports the whole kernel — a cycle would only surface on a cold
+    interpreter, not inside this already-warmed test session."""
+    result = subprocess.run(  # noqa: S603 - fixed interpreter and argv
+        [sys.executable, "-c", "import plugins.crucible.producers.codex_kg"],
+        cwd=_REPO_ROOT,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert result.returncode == 0, result.stderr
