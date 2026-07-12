@@ -88,14 +88,17 @@ def get_model_profiles() -> list[ModelProfile]:
         # must match so the /model picker label is honest about which
         # auth-mode the user's pick will actually consume.
         ModelProfile(OPENAI_PRIMARY, "openai-codex", "GPT-5.5", "$$"),
-        # GPT-5.6 family (GA 2026-07-09) — Codex-lane slugs per openai/codex
-        # models-manager/models.json (ctx7-verified 2026-07-13); routed via
-        # [routing].codex_only_models, so provider must be "openai-codex"
-        # (same honesty rule as the gpt-5.5 note above). The bare "gpt-5.6"
-        # Platform alias stays off the picker — PAYG lane is operator-excluded.
-        ModelProfile("gpt-5.6-sol", "openai-codex", "GPT-5.6 Sol", "$$"),
-        ModelProfile("gpt-5.6-terra", "openai-codex", "GPT-5.6 Terra", "$$"),
-        ModelProfile("gpt-5.6-luna", "openai-codex", "GPT-5.6 Luna", "$"),
+        # GPT-5.6 family (GA 2026-07-09) — DUAL-LANE: Platform API GA
+        # (developers.openai.com/api/docs/models) and Codex slugs
+        # (openai/codex models-manager/models.json, ctx7 2026-07-13), so
+        # they stay off codex_only_models, resolve_provider returns the
+        # "openai" family via the gpt- prefix, and infer_source (login
+        # state: oauth ↔ api_key) picks the backend per call. The bare
+        # "gpt-5.6" Platform alias stays off the picker — it aliases sol
+        # on the API and is absent from the Codex models.json.
+        ModelProfile("gpt-5.6-sol", "openai", "GPT-5.6 Sol", "$$"),
+        ModelProfile("gpt-5.6-terra", "openai", "GPT-5.6 Terra", "$$"),
+        ModelProfile("gpt-5.6-luna", "openai", "GPT-5.6 Luna", "$"),
         ModelProfile("gpt-5.4", "openai", "GPT-5.4", "$$"),
         ModelProfile("gpt-5.4-mini", "openai", "GPT-5.4 Mini", "$"),
         ModelProfile("gpt-5.3-codex", "openai-codex", "GPT-5.3 Codex", "$$"),

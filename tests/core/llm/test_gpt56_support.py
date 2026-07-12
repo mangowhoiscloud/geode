@@ -57,14 +57,19 @@ def test_gpt56_pricing_and_context_windows() -> None:
         assert data["context_windows"][model_id] == 1_050_000
 
 
-def test_codex_lane_routing() -> None:
-    """Full slugs are Codex-lane (models.json-verified); the bare Platform
-    alias stays on the PAYG openai prefix route."""
+def test_dual_lane_routing() -> None:
+    """gpt-5.6 is served by BOTH backends (Platform API GA + Codex
+    models.json), so the slugs must stay OFF codex_only_models — the gpt-
+    prefix resolves them to the "openai" family and infer_source (login
+    state) picks oauth vs api_key per call. Membership in codex_only would
+    force the OAuth lane and cut off documented API access."""
+    from core.config.routing_manifest import resolve_provider
+
     manifest = tomllib.loads((REPO_ROOT / "core" / "config" / "routing.toml").read_text())
     codex_only = manifest["routing"]["codex_only_models"]
-    for slug in SLUGS:
-        assert slug in codex_only, slug
-    assert "gpt-5.6" not in codex_only  # Platform-only alias — not a Codex slug
+    for model_id in ALL_IDS:
+        assert model_id not in codex_only, model_id
+        assert resolve_provider(model_id) == "openai"
 
 
 def test_model_picker_offers_gpt56_family() -> None:
@@ -73,9 +78,10 @@ def test_model_picker_offers_gpt56_family() -> None:
     profiles = {p.id: p for p in get_model_profiles()}
     for slug in SLUGS:
         assert slug in profiles, slug
-        # Provider label must match the codex_only_models routing lane.
-        assert profiles[slug].provider == "openai-codex"
-    assert "gpt-5.6" not in profiles  # PAYG alias deliberately off the picker
+        # Provider label must match resolve_provider — "openai" family
+        # (dual-lane; the credential source picks the backend).
+        assert profiles[slug].provider == "openai"
+    assert "gpt-5.6" not in profiles  # sol alias — redundant picker row
 
 
 def test_effort_picker_offers_max() -> None:

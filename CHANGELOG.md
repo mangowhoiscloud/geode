@@ -49,12 +49,16 @@ functional change.
 
 ### Added
 
-- **GPT-5.6 family model support (Sol/Terra/Luna).** `/model` picker,
-  adapter request-shaping, pricing, and routing for OpenAI's GPT-5.6
-  series (GA 2026-07-09): `gpt-5.6-sol`, `gpt-5.6-terra`, `gpt-5.6-luna`
-  route through the Codex OAuth lane (slugs artifact-verified against
-  `openai/codex` `models-manager/models.json`); the bare `gpt-5.6`
-  Platform alias keeps the PAYG prefix route and stays off the picker.
+- **GPT-5.6 family model support (Sol/Terra/Luna), dual-lane.** `/model`
+  picker, adapter request-shaping, pricing, and routing for OpenAI's
+  GPT-5.6 series (GA 2026-07-09): `gpt-5.6-sol`, `gpt-5.6-terra`,
+  `gpt-5.6-luna` resolve to the `openai` family and the operator's
+  credential source picks the backend per call — subscription OAuth
+  (slugs artifact-verified against `openai/codex`
+  `models-manager/models.json`) or Platform API key (models GA on the
+  API). The bare `gpt-5.6` Platform alias is registered for spec and
+  pricing but stays off the picker (aliases sol; absent from the Codex
+  models.json).
   Spec entries carry the new `max` reasoning-effort level (doc-verified),
   1.05M-token context windows, and short-context pricing with the >272K
   long-context tier noted. Computer-use GA membership is deliberately
